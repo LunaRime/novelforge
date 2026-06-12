@@ -1,0 +1,51 @@
+# 依赖（electron-builder 会自动包含生产依赖到 asar 中）
+node_modules
+
+# 源代码（只需要构建产物 dist/ 和 dist-electron/）
+src/
+electron/
+
+# 开发工具
+.git/
+.github/
+.storybook/
+.vscode/
+.idea/
+.claude/
+
+# 测试
+tests/
+*.test.*
+*.spec.*
+
+# 文档
+docs/
+*.md
+!README.md
+
+# 配置文件（构建时不需要）
+tsconfig.json
+tsconfig.node.json
+vite.config.ts
+tailwind.config.*
+postcss.config.*
+eslint.config.*
+.gitignore
+.npmrc
+pnpm-lock.yaml
+pnpm-workspace.yaml
+
+# 日志
+logs/
+*.log
+
+# 系统文件
+.DS_Store
+Thumbs.db
+
+# 临时文件
+*.local
+dist-ssr
+
+# 发布目录（避免循环打包）
+release/

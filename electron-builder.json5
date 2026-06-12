@@ -15,10 +15,29 @@
     "output": "release/${version}"
   },
   "files": [
-    "dist",
-    "dist-electron",
-    "build",
-    "public/buyme"
+    "**/*",
+    "build/**/*",
+    "!src",
+    "!electron",
+    "!.git",
+    "!.github",
+    "!.storybook",
+    "!.vscode",
+    "!.idea",
+    "!.claude",
+    "!tests",
+    "!docs",
+    "!release",
+    "!*.md",
+    "!tsconfig.json",
+    "!tsconfig.node.json",
+    "!vite.config.ts",
+    "!pnpm-lock.yaml",
+    "!pnpm-workspace.yaml",
+    "!.gitignore",
+    "!.npmignore",
+    "!.npmrc",
+    "!node_modules/.cache"
   ],
   "mac": {
     "target": ["dmg"],
