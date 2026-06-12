@@ -2,7 +2,7 @@ import type { WorkflowDefinition } from '../../stores/workflow-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
-import { stripThinkingTags } from './workflow-utils'
+import { stripThinkingTags, extractAndRepairJSON, parseMarkdownTable } from './workflow-utils'
 
 // ==========================================
 // 1. 结构与类型导出 (保留对外的向后兼容)
@@ -35,42 +35,100 @@ export interface DirectoryWorkflowParams {
 // 2. 蓝图文件访问与工具函数
 // ==========================================
 
-export function parseTextBlueprints(content: string, startNum: number, endNum: number): ChapterBlueprint[] {
-  let result: ChapterBlueprint[] = []
+/**
+ * 从已解析的 JSON 数据中提取蓝图数组并转换为 ChapterBlueprint[]
+ * 供 parseTextBlueprints 和 directory.command 的修复重试路径共同使用
+ */
+export function parseTextBlueprintsFromParsed(
+  parsed: unknown,
+  startNum: number,
+  endNum: number,
+): ChapterBlueprint[] {
+  const result: ChapterBlueprint[] = []
 
-  try {
-    const cleanContent = stripThinkingTags(content)
-    const jsonStr = cleanContent.replace(/```json?\n?/g, '').replace(/```\n?/g, '').trim()
-    const startIndex = jsonStr.indexOf('{')
-    const endIndex = jsonStr.lastIndexOf('}')
+  // 辅助：获取章节号（前置定义，后面提取阶段也需要用）
+  const getChapterNum = (p: Record<string, unknown>): number => {
+    const n = Number(p.chapterNumber ?? p.chapter_number ?? p.chapter ?? p.number ?? p.chapterNum ?? p.id ?? 0)
+    return isNaN(n) ? 0 : n
+  }
 
-    if (startIndex !== -1 && endIndex !== -1) {
-      const arrayStr = jsonStr.substring(startIndex, endIndex + 1)
-      let parsed = JSON.parse(arrayStr)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed) && parsed.blueprints) {
-        parsed = parsed.blueprints
-      }
-      if (Array.isArray(parsed)) {
-        result = parsed
-          .filter((p: Record<string, unknown>) => {
-            const n = Number(p.chapterNumber || p.chapter_number)
-            return n >= startNum && n <= endNum
-          })
-          .map((p: Record<string, unknown>) => ({
-            ...EMPTY_BLUEPRINT,
-            chapterNumber: Number(p.chapterNumber || p.chapter_number || 0),
-            title: String(p.title || `第${p.chapterNumber}章`),
-            role: String(p.role || '发展'),
-            purpose: String(p.purpose || ''),
-            keyEvents: String(p.keyEvents || p.key_events || ''),
-            characters: Array.isArray(p.characters) ? p.characters : [],
-            suspenseHook: String(p.suspenseHook || p.suspense_hook || ''),
-            userGuidance: '',
-          }))
+  // 辅助：从对象中提取蓝图数组
+  const extractArrayFromObject = (obj: Record<string, unknown>): unknown[] | null => {
+    for (const key of ['blueprints', 'chapters', 'chapterBlueprints', 'data', 'results', 'list']) {
+      if (Array.isArray(obj[key])) {
+        return obj[key] as unknown[]
       }
     }
-  } catch {
-    console.error('Failed to parse blueprint JSON', content)
+    for (const val of Object.values(obj)) {
+      if (Array.isArray(val) && val.length > 0) {
+        return val as unknown[]
+      }
+    }
+    return null
+  }
+
+  // 1. 统一提取蓝图数组（支持多种 wrapper key 和嵌套结构）
+  let blueprintArray: unknown[] | null = null
+
+  if (Array.isArray(parsed)) {
+    // ★ 检查数组元素是否直接是蓝图对象（有 chapterNumber），还是 wrapper 对象
+    const firstItem = parsed[0]
+    if (firstItem && typeof firstItem === 'object' && !Array.isArray(firstItem)) {
+      const obj = firstItem as Record<string, unknown>
+      // 如果第一个元素有 chapterNumber，直接作为蓝图数组
+      if (getChapterNum(obj) > 0) {
+        blueprintArray = parsed
+      } else {
+        // ★ 否则尝试从每个 wrapper 对象中提取 blueprints 数组并合并
+        const allChapters: unknown[] = []
+        for (const item of parsed) {
+          if (item && typeof item === 'object' && !Array.isArray(item)) {
+            const arr = extractArrayFromObject(item as Record<string, unknown>)
+            if (arr) allChapters.push(...arr)
+          }
+        }
+        blueprintArray = allChapters.length > 0 ? allChapters : parsed
+      }
+    } else {
+      blueprintArray = parsed
+    }
+  } else if (parsed && typeof parsed === 'object') {
+    blueprintArray = extractArrayFromObject(parsed as Record<string, unknown>)
+  }
+
+  if (!blueprintArray || blueprintArray.length === 0) {
+    return []
+  }
+
+  for (const item of blueprintArray) {
+    if (!item || typeof item !== 'object') continue
+    const p = item as Record<string, unknown>
+    const chNum = getChapterNum(p)
+
+    if (chNum <= 0) continue
+    if (chNum < startNum || chNum > endNum) continue
+
+    const chars = p.characters ?? p.characterList ?? p.character_list ?? []
+    // ★ 容错：AI 可能返回字符串 "角色A, 角色B" 而非数组
+    let characterArray: string[]
+    if (Array.isArray(chars)) {
+      characterArray = chars.map(String)
+    } else if (typeof chars === 'string' && chars.trim().length > 0) {
+      characterArray = chars.split(/[,，、\s]+/).filter(Boolean)
+    } else {
+      characterArray = []
+    }
+    result.push({
+      ...EMPTY_BLUEPRINT,
+      chapterNumber: chNum,
+      title: String(p.title ?? p.chapterTitle ?? p.chapter_title ?? `第${chNum}章`),
+      role: String(p.role ?? '发展'),
+      purpose: String(p.purpose ?? p.goal ?? ''),
+      keyEvents: String(p.keyEvents ?? p.key_events ?? p.events ?? ''),
+      characters: characterArray,
+      suspenseHook: String(p.suspenseHook ?? p.suspense_hook ?? p.hook ?? ''),
+      userGuidance: '',
+    })
   }
 
   const distinctMap = new Map<number, ChapterBlueprint>()
@@ -79,6 +137,117 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
   }
 
   return Array.from(distinctMap.values()).sort((a, b) => a.chapterNumber - b.chapterNumber)
+}
+
+/**
+ * 从 Markdown 表格解析结果转换为 ChapterBlueprint[]
+ * 与 parseTextBlueprintsFromParsed 逻辑对等，但输入是 table row 而非 JSON
+ */
+export function parseTextBlueprintsFromTable(
+  rows: Array<Record<string, string>>,
+  startNum: number,
+  endNum: number,
+): ChapterBlueprint[] {
+  const result: ChapterBlueprint[] = []
+
+  for (const row of rows) {
+    const chNum = Number(row.chapterNumber)
+    if (isNaN(chNum) || chNum <= 0) continue
+    if (chNum < startNum || chNum > endNum) continue
+
+    // 解析角色列表：支持逗号、中文逗号、顿号分隔
+    const charStr = row.characters || ''
+    const characterArray = charStr
+      .split(/[,，、\s]+/)
+      .map(s => s.trim())
+      .filter(Boolean)
+
+    result.push({
+      ...EMPTY_BLUEPRINT,
+      chapterNumber: chNum,
+      title: row.title || `第${chNum}章`,
+      role: row.role || '发展',
+      purpose: row.purpose || '',
+      keyEvents: row.keyEvents || '',
+      characters: characterArray,
+      suspenseHook: row.suspenseHook || '',
+      userGuidance: '',
+    })
+  }
+
+  // 去重：同一章节号只保留第一条
+  const distinctMap = new Map<number, ChapterBlueprint>()
+  for (const item of result) {
+    if (!distinctMap.has(item.chapterNumber)) {
+      distinctMap.set(item.chapterNumber, item)
+    }
+  }
+
+  return Array.from(distinctMap.values()).sort((a, b) => a.chapterNumber - b.chapterNumber)
+}
+
+export function parseTextBlueprints(content: string, startNum: number, endNum: number): ChapterBlueprint[] {
+  try {
+    const cleanContent = stripThinkingTags(content)
+
+    // ==== PATH 1: Markdown 表格（主路径）====
+    const tableRows = parseMarkdownTable(cleanContent)
+    if (tableRows && tableRows.length > 0) {
+      const result = parseTextBlueprintsFromTable(tableRows, startNum, endNum)
+      if (result.length > 0) {
+        console.log(`[parseTextBlueprints] Markdown 表格解析成功: ${result.length} 章蓝图`)
+        return result
+      }
+    }
+
+    // ==== PATH 2: JSON（fallback 路径）====
+    console.log('[parseTextBlueprints] Markdown 表格未产生结果，回落 JSON 解析...')
+
+    // 预处理：移除 AI 常见的前导/后随说明文本（在第一个 { 之前和最后一个 } 之后的文本）
+    let jsonContent = cleanContent
+    const firstBrace = jsonContent.indexOf('{')
+    const firstBracket = jsonContent.indexOf('[')
+    const lastBrace = jsonContent.lastIndexOf('}')
+    const lastBracket = jsonContent.lastIndexOf(']')
+    const start = firstBrace !== -1 ? firstBrace : firstBracket
+    const end = lastBrace !== -1 ? lastBrace : lastBracket
+    if (start !== -1 && end !== -1 && end > start) {
+      jsonContent = jsonContent.substring(start, end + 1)
+    }
+
+    // 多层级提取 + 修复引擎（代码块提取 → 字符清洗 → JSON修复 → 逐对象兜底）
+    let { parsed, repaired } = extractAndRepairJSON(jsonContent, false)
+    if (!parsed) {
+      const arrayResult = extractAndRepairJSON(jsonContent, true)
+      parsed = arrayResult.parsed
+      repaired = repaired || arrayResult.repaired
+    }
+
+    if (!parsed) {
+      console.error('[parseTextBlueprints] JSON 解析完全失败\n原始内容前500字:', cleanContent.slice(0, 500))
+      return []
+    }
+
+    if (repaired) {
+      console.log('[parseTextBlueprints] JSON 经过修复后成功解析，解析到顶层类型:', Array.isArray(parsed) ? `数组(${parsed.length}项)` : `对象(${Object.keys(parsed as object).length}键)`)
+    }
+
+    const result = parseTextBlueprintsFromParsed(parsed, startNum, endNum)
+
+    if (result.length === 0) {
+      console.warn(
+        `[parseTextBlueprints] 从已解析数据中未提取到有效蓝图 ` +
+        `(期望章节范围 ${startNum}-${endNum})`,
+        '\n解析类型:', Array.isArray(parsed) ? '数组' : typeof parsed,
+        '\n解析结果:', JSON.stringify(parsed).slice(0, 500),
+      )
+    }
+
+    return result
+  } catch (e) {
+    console.error('[parseTextBlueprints] 未预期异常:', e, '\n原始内容前500字:', content.slice(0, 500))
+    return []
+  }
 }
 
 export async function loadDirectoryBlueprints(): Promise<ChapterBlueprint[]> {
@@ -91,11 +260,17 @@ export async function loadDirectoryBlueprints(): Promise<ChapterBlueprint[]> {
 }
 
 export async function saveChapterBlueprint(blueprint: ChapterBlueprint): Promise<void> {
-  await ipc.invoke('db:blueprint-upsert', blueprint)
+  const result = await ipc.invoke('db:blueprint-upsert', blueprint)
+  if (!result.success) {
+    throw new Error(`蓝图保存失败 (第${blueprint.chapterNumber}章): ${result.error || '未知错误'}`)
+  }
 }
 
 export async function saveAllBlueprints(blueprints: ChapterBlueprint[]): Promise<void> {
-  await ipc.invoke('db:blueprint-upsert-many', blueprints)
+  const result = await ipc.invoke('db:blueprint-upsert-many', blueprints)
+  if (!result.success) {
+    throw new Error(`批量蓝图保存失败: ${result.error || '未知错误'}`)
+  }
 }
 
 export async function getBlueprintCount(): Promise<number> {
@@ -172,8 +347,28 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
           let merged: ChapterBlueprint[]
           if (params.mode === 'full') {
             merged = newBlueprints
-            // TODO: 若需要清理冗余蓝图，可考虑添加 db:blueprint-delete-all 以严格符合全量替换的意图。
-            // 在当前 upsert-many 中，仅覆盖更新
+            // 全量模式：删除不在新列表中的旧蓝图（仅删除无关联草稿的，避免孤立数据）
+            // ★ 安全检查：仅在新蓝图覆盖率 >= 50% 时才删除旧蓝图，防止 AI 部分生成失败导致数据丢失
+            const newChapterNums = new Set(newBlueprints.map(b => b.chapterNumber))
+            const allExisting = await loadDirectoryBlueprints()
+            const coverageRatio = allExisting.length > 0
+              ? newBlueprints.length / Math.max(allExisting.length, newBlueprints.length)
+              : 1
+
+            if (coverageRatio >= 0.5 || newBlueprints.length >= project.novelConfig.totalChapters * 0.8) {
+              for (const existing of allExisting) {
+                if (!newChapterNums.has(existing.chapterNumber)) {
+                  try {
+                    await ipc.invoke('db:blueprint-delete', existing.chapterNumber)
+                  } catch {
+                    // 若有关联草稿，删除会失败，保留蓝图
+                    callbacks.log(`  ⚠️ 第 ${existing.chapterNumber} 章旧蓝图保留（有关联草稿）`)
+                  }
+                }
+              }
+            } else {
+              callbacks.log(`  ⚠️ 新蓝图仅覆盖 ${(coverageRatio * 100).toFixed(0)}% 章节（${newBlueprints.length}/${allExisting.length}），保留全部旧蓝图防止数据丢失`)
+            }
           } else {
             const existingMap = new Map(existingBlueprints.map(b => [b.chapterNumber, b]))
             for (const nb of newBlueprints) existingMap.set(nb.chapterNumber, nb)

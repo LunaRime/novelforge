@@ -88,6 +88,11 @@ export default function ChapterCardEditor() {
 
   const selected = blueprints[selectedIdx] ?? null
 
+  // 下一章待写蓝图（仅在对应蓝图存在时非 null）
+  const nextWriteBlueprint = nextWriteChapter !== null
+    ? blueprints.find(b => b.chapterNumber === nextWriteChapter)
+    : null
+
   /** 更新选中章节蓝图的字段 */
   const updateField = <K extends keyof ChapterBlueprint>(key: K, value: ChapterBlueprint[K]) => {
     setBlueprints(prev =>
@@ -100,24 +105,35 @@ export default function ChapterCardEditor() {
   const handleSaveOne = async () => {
     if (!currentProject || !selected) return
     setSaving(true)
-    await saveChapterBlueprint(selected)
+    try {
+      await saveChapterBlueprint(selected)
+      useProjectStore.getState().refreshFileTree()
+      setDirty(false)
+      addLog('info', `✅ 第 ${selected.chapterNumber} 章蓝图已保存`)
+    } catch (e) {
+      addLog('error', `保存失败: ${String(e)}`)
+    }
     setSaving(false)
-    setDirty(false)
-    addLog('info', `✅ 第 ${selected.chapterNumber} 章蓝图已保存`)
   }
 
-  /** 全量保存（每章写入独立 JSON 文件） */
+  /** 全量保存 */
   const handleSaveAll = async () => {
     if (!currentProject) return
     setSaving(true)
-    await saveAllBlueprints(blueprints)
+    try {
+      await saveAllBlueprints(blueprints)
+      useProjectStore.getState().refreshFileTree()
+      setDirty(false)
+      addLog('info', `✅ 已保存全部 ${blueprints.length} 章蓝图`)
+    } catch (e) {
+      addLog('error', `全量保存失败: ${String(e)}`)
+    }
     setSaving(false)
-    setDirty(false)
-    addLog('info', `✅ 已保存全部 ${blueprints.length} 章蓝图`)
   }
 
   /** 新建空章节 */
-  const handleAddChapter = () => {
+  const handleAddChapter = async () => {
+    if (!currentProject) return
     const maxNum = blueprints.reduce((m, b) => Math.max(m, b.chapterNumber), 0)
     const newBlueprint: ChapterBlueprint = {
       chapterNumber: maxNum + 1,
@@ -133,6 +149,13 @@ export default function ChapterCardEditor() {
     }
     setBlueprints(prev => [...prev, newBlueprint])
     setSelectedIdx(blueprints.length)
+    // 自动保存到数据库
+    try {
+      await saveChapterBlueprint(newBlueprint)
+      useProjectStore.getState().refreshFileTree()
+    } catch {
+      addLog('error', '自动保存新章节蓝图失败')
+    }
     setDirty(true)
   }
 
@@ -145,10 +168,24 @@ export default function ChapterCardEditor() {
       danger: true,
     })
     if (!ok) return
+    try {
+      // ★ 立即从数据库删除，避免刷新后重新出现
+      const result = await ipc.invoke('db:blueprint-delete', selected.chapterNumber)
+      if (!result.success) {
+        addLog('error', `删除第 ${selected.chapterNumber} 章蓝图失败: ${result.error || '未知错误'}`)
+        return
+      }
+    } catch (e) {
+      addLog('error', `删除第 ${selected.chapterNumber} 章蓝图异常: ${String(e)}`)
+      return
+    }
     const newList = blueprints.filter((_, i) => i !== selectedIdx)
     setBlueprints(newList)
-    setSelectedIdx(Math.max(0, selectedIdx - 1))
-    setDirty(true)
+    // 删除后选中同一位置（如果已经是最后一项则选中新的最后一项）
+    const newIdx = Math.min(selectedIdx, newList.length - 1)
+    setSelectedIdx(Math.max(0, newIdx))
+    // 已经直接入库删除了，不需要标记 dirty
+    addLog('info', `✅ 已删除第 ${selected.chapterNumber} 章蓝图`)
   }
 
   /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
@@ -230,15 +267,12 @@ export default function ChapterCardEditor() {
           {dirty && <span className="text-[0.7rem]" style={{ color: 'var(--color-accent)' }}>● 未保存</span>}
         </div>
         <div className="flex items-center gap-1">
-          {/* 写作入口 — 仅下一章可写时显示 */}
-          {nextWriteChapter !== null && (
+          {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
+          {nextWriteBlueprint && (
             <Button
               variant="ai"
               size="sm"
-              onClick={() => {
-                const bp = blueprints.find(b => b.chapterNumber === nextWriteChapter)
-                if (bp) handleWriteChapter(bp)
-              }}
+              onClick={() => handleWriteChapter(nextWriteBlueprint)}
             >
               <PenLine size={12} />
               写作第{nextWriteChapter}章
@@ -350,7 +384,7 @@ export default function ChapterCardEditor() {
                 </h3>
                 <div className="flex items-center gap-1.5">
                   {/* 仅下一章允许写作 */}
-                  {nextWriteChapter !== null && selected.chapterNumber === nextWriteChapter && (
+                  {nextWriteBlueprint && selected === nextWriteBlueprint && (
                     <Button
                       variant="ai"
                       size="sm"
@@ -376,11 +410,20 @@ export default function ChapterCardEditor() {
                     <Label>章节号</Label>
                     <Input
                       type="number"
-                      value={selected.chapterNumber}
-                      onChange={e => updateField('chapterNumber', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
+                      value={selected.chapterNumber === 0 ? '' : selected.chapterNumber}
+                      onChange={e => {
+                        const raw = e.target.value
+                        if (raw === '') {
+                          updateField('chapterNumber', 0)
+                        } else {
+                          const n = parseInt(raw, 10)
+                          if (!isNaN(n)) updateField('chapterNumber', n)
+                        }
+                      }}
                       onBlur={() => {
-                        const v = Number(selected.chapterNumber);
-                        if (!v || v < 1) updateField('chapterNumber', 1)
+                        if (!selected.chapterNumber || selected.chapterNumber < 1) {
+                          updateField('chapterNumber', 1)
+                        }
                       }}
                     />
                   </div>
