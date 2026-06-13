@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
+import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
+
+/** 并发状态快照 */
+export interface ConcurrencyStatus {
+  activeCount: number
+  queueLength: number
+  maxConcurrent: number
+  maxQueueSize: number
+}
 
 /** 流式生成的回调 */
 interface StreamCallbacks {
@@ -20,6 +29,12 @@ interface LLMState {
   activeRequests: Map<string, { status: 'running' | 'done' | 'error'; text: string }>
   /** 是否已加载模型配置 */
   loaded: boolean
+  /** 并发状态 */
+  concurrencyStatus: ConcurrencyStatus
+  /** 模型路由器 */
+  modelRouter: ModelRouter | null
+  /** 模型路由配置 */
+  modelRoutes: ModelRouteConfig
 
   // ===== Actions =====
   /** 初始化（加载模型列表 + 默认模型 ID） */
@@ -38,19 +53,25 @@ interface LLMState {
   generate: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number }
   ) => Promise<LLMResponse>
   /** 流式生成 */
   generateStream: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     callbacks: StreamCallbacks,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number }
   ) => Promise<string>
   /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
   /** 测试模型连接 */
   testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
+  /** 刷新并发状态 */
+  refreshConcurrencyStatus: () => Promise<void>
+  /** 根据 purpose 获取最优模型 ID */
+  getModelForPurpose: (purpose: CallPurpose) => string | null
+  /** 更新模型路由配置 */
+  updateModelRoutes: (config: Partial<ModelRouteConfig>) => void
 }
 
 export const useLLMStore = create<LLMState>()((set, get) => ({
@@ -59,6 +80,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   defaultEmbeddingModelId: null,
   activeRequests: new Map(),
   loaded: false,
+  concurrencyStatus: { activeCount: 0, queueLength: 0, maxConcurrent: 3, maxQueueSize: 50 },
+  modelRouter: null,
+  modelRoutes: { ...DEFAULT_ROUTE_CONFIG },
 
   init: async () => {
     if (get().loaded) return
@@ -69,7 +93,16 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         ipc.invoke('llm:get-default-model'),
         ipc.invoke('llm:get-default-embedding-model'),
       ])
-      set({ defaultModelId: defaultId, defaultEmbeddingModelId: defaultEmbeddingId, loaded: true })
+      const models = get().models
+      const routeConfig = get().modelRoutes
+      const router = new ModelRouter(routeConfig, models)
+      set({
+        defaultModelId: defaultId,
+        defaultEmbeddingModelId: defaultEmbeddingId,
+        modelRouter: router,
+        modelRoutes: router.getConfig(),
+        loaded: true,
+      })
     } else {
       set({ loaded: true })
     }
@@ -78,7 +111,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   loadModels: async () => {
     if (!ipc.isElectron) return
     const models = await ipc.invoke('llm:list-models')
-    set({ models, loaded: true })
+    const routeConfig = get().modelRoutes
+    const router = new ModelRouter(routeConfig, models)
+    set({ models, modelRouter: router, modelRoutes: router.getConfig(), loaded: true })
   },
 
   saveModel: async (model) => {
@@ -124,7 +159,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       modelId: mid,
       messages,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-      thinking: options?.thinking
+      thinking: options?.thinking,
+      priority: options?.priority ?? 10,
     })
   },
 
@@ -178,7 +214,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       messages,
       stream: true,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
-      thinking: options?.thinking
+      thinking: options?.thinking,
+      priority: options?.priority ?? 10,
     })
 
     return requestId
@@ -190,5 +227,31 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   testConnection: async (model) => {
     return ipc.invoke('llm:test-connection', model)
+  },
+
+  refreshConcurrencyStatus: async () => {
+    if (!ipc.isElectron) return
+    try {
+      const status = await ipc.invoke('llm:concurrency-status')
+      set({ concurrencyStatus: status })
+    } catch {
+      // IPC 不可用时静默失败
+    }
+  },
+
+  getModelForPurpose: (purpose) => {
+    const { modelRouter } = get()
+    if (!modelRouter) return get().defaultModelId
+    return modelRouter.route(purpose) || get().defaultModelId
+  },
+
+  updateModelRoutes: (config) => {
+    const { modelRouter } = get()
+    if (modelRouter) {
+      modelRouter.updateConfig(config)
+      set((s) => ({
+        modelRoutes: modelRouter.getConfig(),
+      }))
+    }
   },
 }))

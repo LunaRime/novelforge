@@ -12,6 +12,8 @@ export interface LLMStreamOptions extends LLMGenerateOptions {
   onChunk: (chunk: string) => void
   onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => void
   onError: (error: string) => void
+  /** 实时 Token 用量回调（流式传输中可用时触发） */
+  onTokenUsage?: (usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void
 }
 
 export interface LLMResponse {

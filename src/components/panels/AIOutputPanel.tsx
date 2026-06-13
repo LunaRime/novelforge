@@ -16,18 +16,16 @@ export default function AIOutputPanel() {
   const activeRun = getActiveStreamingRun()
   const [viewRunId, setViewRunId] = useState<string | null>(null)
 
-  console.log('[AIOutputPanel] render: viewRunId=', viewRunId, 'activeRun=', activeRun?.id, activeRun?.status, 'activeRuns.len=', activeRuns.length)
+  // 开发环境日志（生产环境自动移除）
+  if (import.meta.env.DEV) {
+    console.debug('[AIOutputPanel] render: activeRuns=', activeRuns.length, 'activeRun=', activeRun?.status)
+  }
 
   // 自动跟随最新活跃任务
   useEffect(() => {
     if (activeRun) {
-      console.log('[AIOutputPanel] mount/useEffect activeRun:', activeRun.id, activeRun.status, 'steps:', activeRun.steps.map(s => s.status))
       setViewRunId(prev => prev === activeRun.id ? prev : activeRun.id)
-    } else {
-      console.log('[AIOutputPanel] mount/useEffect: no activeRun, activeRuns=', activeRuns.map(r => r.id + ':' + r.status), 'history=', history.slice(0, 2).map(r => r.id + ':' + r.status))
     }
-    // ✅ 只依赖 id 字符串，不依赖 activeRun 对象引用
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeRun?.id])
 
   const viewRun: WorkflowRun | undefined =
@@ -35,11 +33,6 @@ export default function AIOutputPanel() {
     history.find(r => r.id === viewRunId) ||
     activeRun ||
     undefined
-
-  // DEBUG: 面板切换时追踪状态
-  if (viewRun?.status === 'failed' && viewRun.steps.some(s => s.status === 'pending' || s.status === 'running')) {
-    console.log('[AIOutputPanel] viewRun out of sync! run.status=', viewRun.status, 'steps=', viewRun.steps.map(s => s.status))
-  }
 
   const recentHistory = history.slice(0, 10)
 

@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
 import { LLMFactory } from '../llm/llm-factory'
+import { llmConcurrencyController } from '../utils/concurrency-controller'
 
 const activeStreams = new Map<string, AbortController>()
 
@@ -39,25 +40,30 @@ function applyProxyConfig() {
 }
 
 export function registerLLMController() {
-  ipcMain.handle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean }) => {
-    try {
-      applyProxyConfig()
-      const model = getModelConfig(request.modelId)
-      if (!model) return { success: false, content: '', error: '未找到模型配置' }
+  ipcMain.handle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
+    return llmConcurrencyController.execute(
+      async () => {
+        applyProxyConfig()
+        const model = getModelConfig(request.modelId)
+        if (!model) return { success: false, content: '', error: '未找到模型配置' }
 
-      const provider = LLMFactory.getProvider(model)
-      return await provider.generate(model, request.messages, {
-        temperature: request.temperature ?? model.temperature,
-        maxTokens: request.maxTokens ?? model.maxTokens,
-        responseFormat: request.responseFormat,
-        thinking: request.thinking,
-      })
-    } catch (error) {
-      return { success: false, content: '', error: String(error) }
-    }
+        const provider = LLMFactory.getProvider(model)
+        return await provider.generate(model, request.messages, {
+          temperature: request.temperature ?? model.temperature,
+          maxTokens: request.maxTokens ?? model.maxTokens,
+          responseFormat: request.responseFormat,
+          thinking: request.thinking,
+        })
+      },
+      { priority: request.priority ?? 10 },
+    ).catch((error) => ({
+      success: false,
+      content: '',
+      error: error instanceof Error ? error.message : String(error),
+    }))
   })
 
-  ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean }) => {
+  ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
     applyProxyConfig()
     const model = getModelConfig(request.modelId)
     if (!model) return { requestId, started: false }
@@ -67,23 +73,45 @@ export function registerLLMController() {
     const win = BrowserWindow.fromWebContents(event.sender)
 
     const provider = LLMFactory.getProvider(model)
-    
-    // We do not await this globally since it's streaming independently
-    provider.generateStream(model, request.messages, {
-      temperature: request.temperature ?? model.temperature,
-      maxTokens: request.maxTokens ?? model.maxTokens,
-      responseFormat: request.responseFormat,
-      thinking: request.thinking,
-      signal: abortController.signal,
-      onChunk: (chunk: string) => win?.webContents.send('llm:stream-chunk', { requestId, chunk }),
-      onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => {
-        win?.webContents.send('llm:stream-done', { requestId, fullText, usage })
-        activeStreams.delete(requestId)
+
+    // 使用并发控制器执行流式请求
+    // 注意：流式请求的 execute 返回后流仍在进行，所以我们在内部获取槽位
+    llmConcurrencyController.execute(
+      async () => {
+        // 检查请求是否已被取消
+        if (abortController.signal.aborted) return { skipped: true }
+
+        return new Promise<void>((resolve, reject) => {
+          provider.generateStream(model, request.messages, {
+            temperature: request.temperature ?? model.temperature,
+            maxTokens: request.maxTokens ?? model.maxTokens,
+            responseFormat: request.responseFormat,
+            thinking: request.thinking,
+            signal: abortController.signal,
+            onChunk: (chunk: string) => {
+              if (!abortController.signal.aborted) {
+                win?.webContents.send('llm:stream-chunk', { requestId, chunk })
+              }
+            },
+            onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => {
+              win?.webContents.send('llm:stream-done', { requestId, fullText, usage })
+              activeStreams.delete(requestId)
+              resolve()
+            },
+            onError: (error: string) => {
+              win?.webContents.send('llm:stream-error', { requestId, error })
+              activeStreams.delete(requestId)
+              reject(new Error(error))
+            },
+          }).catch(reject)
+        }).catch(() => { /* 流式错误已通过 onError 回调处理 */ })
       },
-      onError: (error: string) => {
-        win?.webContents.send('llm:stream-error', { requestId, error })
+      { priority: request.priority ?? 10 },
+    ).catch((error) => {
+      if (error.message !== '请求已取消') {
+        win?.webContents.send('llm:stream-error', { requestId, error: String(error) })
         activeStreams.delete(requestId)
-      },
+      }
     })
 
     return { requestId, started: true }
@@ -159,10 +187,10 @@ export function registerLLMController() {
   ipcMain.handle('llm:test-connection', async (_event, model: ModelProfile) => {
     try {
       applyProxyConfig()
-      
+
       const messages = [{ role: 'user', content: 'Say "hello" and nothing else.' }]
       const provider = LLMFactory.getProvider(model)
-      
+
       let result = { success: true, error: undefined as undefined | string }
       if (model.purposes?.includes('embedding')) {
         const { generateEmbeddings } = await import('../embedding')
@@ -174,8 +202,23 @@ export function registerLLMController() {
         })
         result = { success: res.success, error: res.error }
       }
-      
+
       return { success: result.success, error: result.error }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // ===== 并发控制 =====
+
+  ipcMain.handle('llm:concurrency-status', async () => {
+    return llmConcurrencyController.getStatus()
+  })
+
+  ipcMain.handle('llm:concurrency-config', async (_event, config: { maxConcurrent?: number; maxQueueSize?: number }) => {
+    try {
+      llmConcurrencyController.updateConfig(config)
+      return { success: true }
     } catch (error) {
       return { success: false, error: String(error) }
     }

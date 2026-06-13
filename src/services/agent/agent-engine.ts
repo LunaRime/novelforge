@@ -12,6 +12,9 @@
  */
 
 import { toolRegistry, type ToolResult, type ToolArtifact } from './tool-registry'
+import { outputPostProcessor } from './output-post-processor'
+import { ProgressTracker, type AgentProgress } from './progress-tracker'
+import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 // ===== 常量 =====
 
@@ -21,8 +24,8 @@ const MAX_TOOL_ROUNDS = 8
 /** Tool 执行超时（毫秒） */
 const TOOL_TIMEOUT_MS = 30_000
 
-/** Tool 返回内容最大长度（字符） */
-const TOOL_RESULT_MAX_CHARS = 3000
+/** Tool 返回内容最大 Token 数 */
+const TOOL_RESULT_MAX_TOKENS = 800
 
 // ===== 类型 =====
 
@@ -48,6 +51,8 @@ export interface AgentEngineCallbacks {
   onToolCallComplete: (toolCall: ToolCallInfo) => void
   /** Tool 需要用户确认 */
   onToolCallConfirmRequired: (toolCall: ToolCallInfo) => Promise<boolean>
+  /** 进度更新 */
+  onProgress?: (progress: AgentProgress) => void
   /** 全部完成 */
   onDone: (fullText: string, toolCalls: ToolCallInfo[], artifacts: ToolArtifact[]) => void
   /** 错误 */
@@ -97,6 +102,10 @@ export async function runAgentLoop(
     { role: 'user', content: userMessage },
   ]
 
+  // 初始化进度追踪
+  const progress = new ProgressTracker()
+  progress.start(MAX_TOOL_ROUNDS)
+
   let rounds = 0
   let fullAssistantText = ''
 
@@ -143,7 +152,28 @@ export async function runAgentLoop(
 
     // 如果没有 tool_call，循环结束
     if (toolCalls.length === 0) {
-      callbacks.onDone(fullAssistantText, allToolCalls, allArtifacts)
+      progress.setPhase('generating')
+      callbacks.onProgress?.(progress.getProgress())
+
+      // 运行后处理管道
+      try {
+        const processed = await outputPostProcessor.process(fullAssistantText, {
+          artifacts: allArtifacts,
+          messages: messages,
+          modelId,
+        })
+        progress.complete()
+        callbacks.onProgress?.(progress.getProgress())
+        // 在最终文本前附加思考内容（可选）
+        const finalText = processed.thinkingContent
+          ? `_思考过程：_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
+          : processed.cleanedOutput
+        callbacks.onDone(finalText, allToolCalls, processed.extractedArtifacts)
+      } catch {
+        // 后处理失败不影响主流程
+        progress.complete()
+        callbacks.onDone(fullAssistantText, allToolCalls, allArtifacts)
+      }
       return
     }
 
@@ -152,6 +182,10 @@ export async function runAgentLoop(
 
     // 依次执行每个 tool_call
     const observationParts: string[] = []
+
+    progress.setPhase('tool_execution')
+    progress.setCurrentTool(toolCalls[0].name, toolCalls.length)
+    callbacks.onProgress?.(progress.getProgress())
 
     for (const tc of toolCalls) {
       const toolCallInfo: ToolCallInfo = {
@@ -198,7 +232,7 @@ export async function runAgentLoop(
         const result = await executeToolWithTimeout(tool.execute, tc.arguments, TOOL_TIMEOUT_MS)
 
         // 截断过长的结果
-        const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_CHARS)
+        const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)
 
         toolCallInfo.status = result.success ? 'completed' : 'failed'
         toolCallInfo.result = truncatedContent
@@ -231,7 +265,23 @@ export async function runAgentLoop(
     fullAssistantText += '\n\n⚠️ 已达到最大工具调用次数限制，自动停止。'
   }
 
-  callbacks.onDone(fullAssistantText, allToolCalls, allArtifacts)
+  // 运行后处理管道
+  try {
+    const processed = await outputPostProcessor.process(fullAssistantText, {
+      artifacts: allArtifacts,
+      messages: messages,
+      modelId,
+    })
+    progress.complete()
+    callbacks.onProgress?.(progress.getProgress())
+    const finalText = processed.thinkingContent
+      ? `_思考过程：_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
+      : processed.cleanedOutput
+    callbacks.onDone(finalText, allToolCalls, processed.extractedArtifacts)
+  } catch {
+    progress.complete()
+    callbacks.onDone(fullAssistantText, allToolCalls, allArtifacts)
+  }
 }
 
 // ===== 工具函数 =====
@@ -334,9 +384,10 @@ async function executeToolWithTimeout(
 }
 
 /**
- * 截断过长的 Tool 结果
+ * 截断过长的 Tool 结果（基于 Token 数）
  */
-function truncateResult(content: string, maxChars: number): string {
-  if (content.length <= maxChars) return content
-  return content.slice(0, maxChars) + `\n\n…（内容已截断，完整内容共 ${content.length} 字符。可使用 read_file 工具获取完整文件内容）`
+function truncateResult(content: string, maxTokens: number): string {
+  if (estimateTokens(content) <= maxTokens) return content
+  return truncateToTokenBudget(content, maxTokens) +
+    `\n\n…（内容已截断，完整内容约 ${estimateTokens(content)} tokens。可使用 read_file 工具获取完整文件内容）`
 }

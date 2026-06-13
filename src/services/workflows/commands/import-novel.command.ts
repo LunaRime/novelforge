@@ -325,6 +325,8 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           userGuidance: '',
           notes: '',
           notesUpdatedAt: '',
+          sortOrder: ch.number,
+          priority: 0,
         }
 
         await ipc.invoke('db:blueprint-upsert', finalBlueprint)

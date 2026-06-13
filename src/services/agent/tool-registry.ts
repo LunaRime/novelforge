@@ -28,11 +28,30 @@ export interface ToolInputSchema {
 
 /** Tool 执行产物（Agent 创建/修改的文件等） */
 export interface ToolArtifact {
-  type: 'file_created' | 'file_modified' | 'workflow_started' | 'tab_opened'
+  type:
+    | 'file_created'
+    | 'file_modified'
+    | 'workflow_started'
+    | 'tab_opened'
+    // 新增产物类型
+    | 'blueprint_generated'
+    | 'draft_generated'
+    | 'review_completed'
+    | 'character_extracted'
+    | 'summary_updated'
+    | 'verification_report'
+    | 'embedding_indexed'
+    | 'mutual_review_completed'
   /** 文件路径或资源标识 */
   path?: string
   /** 显示名称 */
   name: string
+  /** 单行摘要（UI 快速预览） */
+  summary?: string
+  /** 结构化元数据 */
+  metadata?: Record<string, unknown>
+  /** 创建时间戳 */
+  timestamp?: number
 }
 
 /** Tool 执行结果 */
