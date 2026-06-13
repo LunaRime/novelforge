@@ -17,6 +17,8 @@ import {
 } from '../../services/workflows/directory-workflow'
 import { guardDirectoryGeneration } from '../../services/workflow-guards'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
+import BlueprintSortBar from './BlueprintSortBar'
+import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
@@ -58,7 +60,14 @@ export default function ChapterCardEditor() {
     if (!currentProject) return
     setLoading(true)
     try {
-      const data = await loadDirectoryBlueprints()
+      const sortConfig = useBlueprintSortStore.getState().config
+      // 如果按章节号排序且升序，使用默认 get-all（最快路径）
+      let data: ChapterBlueprint[]
+      if (sortConfig.key === 'chapter_number' && sortConfig.direction === 'asc') {
+        data = await loadDirectoryBlueprints()
+      } else {
+        data = await ipc.invoke('db:blueprint-get-all-sorted', sortConfig) as ChapterBlueprint[]
+      }
       setBlueprints(data)
       if (data.length > 0) setSelectedIdx(0)
       // 获取下一个待写章节号
@@ -146,6 +155,8 @@ export default function ChapterCardEditor() {
       userGuidance: '',
       notes: '',
       notesUpdatedAt: '',
+      sortOrder: maxNum + 1,
+      priority: 0,
     }
     setBlueprints(prev => [...prev, newBlueprint])
     setSelectedIdx(blueprints.length)
@@ -278,6 +289,8 @@ export default function ChapterCardEditor() {
               写作第{nextWriteChapter}章
             </Button>
           )}
+          {/* 排序工具栏 */}
+          <BlueprintSortBar />
           {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
           <Button
             variant="ai"

@@ -108,6 +108,14 @@ export interface LLMChannels {
     args: [requestId: string]
     return: { success: boolean }
   }
+  'llm:concurrency-status': {
+    args: []
+    return: { activeCount: number; queueLength: number; maxConcurrent: number; maxQueueSize: number }
+  }
+  'llm:concurrency-config': {
+    args: [config: { maxConcurrent?: number; maxQueueSize?: number }]
+    return: { success: boolean }
+  }
   'llm:list-models': {
     args: []
     return: ModelProfile[]
@@ -191,6 +199,7 @@ export interface LLMRequest {
   stream?: boolean
   responseFormat?: { type: 'json_object' | 'text' }
   thinking?: boolean
+  priority?: number
 }
 
 export interface LLMResponse {
@@ -238,11 +247,16 @@ export interface DatabaseChannels {
 
   // 2. blueprints
   'db:blueprint-get-all': { args: []; return: BlueprintData[] }
+  'db:blueprint-get-all-sorted': { args: [config: { key: string; direction: string }]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }
   'db:blueprint-upsert': { args: [data: BlueprintData]; return: { success: boolean; error?: string } }
   'db:blueprint-upsert-many': { args: [items: BlueprintData[]]; return: { success: boolean; error?: string } }
   'db:blueprint-update-notes': { args: [chapterNumber: number, notes: string]; return: { success: boolean; error?: string } }
   'db:blueprint-delete': { args: [chapterNumber: number]; return: { success: boolean; error?: string } }
+  'db:blueprint-get-gaps': { args: [totalChapters: number]; return: number[] }
+  'db:blueprint-update-sort-order': { args: [orders: Array<{ chapterNumber: number; sortOrder: number }>]; return: { success: boolean; error?: string } }
+  'db:blueprint-update-priority': { args: [chapterNumber: number, priority: number]; return: { success: boolean; error?: string } }
+  'db:blueprint-update-priority-batch': { args: [items: Array<{ chapterNumber: number; priority: number }>]; return: { success: boolean; error?: string } }
 
   // 3. characters
   'db:character-get-all': { args: []; return: CharacterData[] }
@@ -280,6 +294,23 @@ export interface DatabaseChannels {
   'db:review-get-full': { args: [id: number]; return: ReviewFull | null }
   'db:review-next-index': { args: [baseDraftId: number]; return: number }
 
+  // 互评评价
+  'db:evaluation-create': {
+    args: [params: {
+      draftId: number
+      perspective: string
+      scores: string
+      overallScore: number
+      strengths: string
+      weaknesses: string
+      suggestions: string
+      rawResponse: string
+      tokensUsed: number
+    }]
+    return: { success: boolean; id?: number; error?: string }
+  }
+  'db:evaluation-list-by-draft': { args: [draftId: number]; return: unknown[] }
+
   // 7. post_process
   'db:post-process-create-run': { args: [params: { triggerSourceType: string; triggerSourceId: string; sourceLabel: string; steps: Array<{ key: string; label: string; critical: boolean }> }]; return: { success: boolean; id?: string; error?: string } }
   'db:post-process-get-latest-run': { args: [sourceType: string, sourceId: string]; return: PostProcessRunData | null }
@@ -310,6 +341,46 @@ export interface KnowledgeBaseChannels {
   'dialog:select-import-folder': { args: []; return: string | null }
   'kb:get-vectorless-count': { args: []; return: { count: number } }
   'kb:backfill-vectors': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
+}
+
+// ===== 向量嵌入 =====
+export interface EmbeddingChannels {
+  'embedding:generate': {
+    args: [text: string]
+    return: { success: boolean; vector?: number[]; tokens?: number; error?: string }
+  }
+  'embedding:generate-batch': {
+    args: [texts: string[]]
+    return: { success: boolean; vectors?: number[][]; tokens?: number; error?: string }
+  }
+  'embedding:compare': {
+    args: [query: string, candidates: string[]]
+    return: { success: boolean; similarities?: Array<{ text: string; score: number }>; error?: string }
+  }
+  'embedding:similarity-search': {
+    args: [queryVector: number[], candidates: Array<{ vector: number[]; metadata: unknown }>, topK: number, threshold?: number]
+    return: { success: boolean; results?: Array<{ similarity: number; metadata: unknown; index: number }>; error?: string }
+  }
+  'embedding:get-model': {
+    args: []
+    return: { modelId: string; protocol: string; modelName: string; baseUrl: string; apiKey: string; dimensions: number } | null
+  }
+  'embedding:set-model': {
+    args: [config: { modelId: string; protocol: string; modelName: string; baseUrl: string; apiKey: string; dimensions: number }]
+    return: { success: boolean; error?: string }
+  }
+  'embedding:list-models': {
+    args: []
+    return: Array<{ id: string; name: string; modelName: string; protocol: string; purposes?: string[] }>
+  }
+  'embedding:cache-stats': {
+    args: []
+    return: { size: number; hits: number; misses: number; hitRate: number }
+  }
+  'embedding:clear-cache': {
+    args: []
+    return: { success: boolean }
+  }
 }
 
 // ===== 导入小说 =====

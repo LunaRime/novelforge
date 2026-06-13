@@ -64,6 +64,11 @@ export default function App() {
       initProjectService()
     }).catch(e => console.warn('[ProjectService] 初始化失败:', e))
 
+    // 初始化 TransferHub — 中枢消息路由（中间件管道 + 请求响应）
+    import('./services/hub-service').then(({ initializeHub }) => {
+      initializeHub()
+    }).catch(e => console.warn('[HubService] 初始化失败:', e))
+
     // C) 工作流完成时弹出 ActionToast 通知（不依赖任何面板状态）
     const unsubActionToast = globalEventBus.on('WORKFLOW_COMPLETE', () => {
       const { history } = useWorkflowStore.getState()
@@ -80,6 +85,10 @@ export default function App() {
       // App 卸载时销毁 ProjectService（开发环境 HMR 时会触发）
       import('./services/project-service').then(({ disposeProjectService }) => {
         disposeProjectService()
+      }).catch(() => {})
+      // 销毁 TransferHub
+      import('./services/hub-service').then(({ destroyHub }) => {
+        destroyHub()
       }).catch(() => {})
       unsubActionToast()
     }

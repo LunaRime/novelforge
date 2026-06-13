@@ -21,6 +21,8 @@ const EMPTY_BLUEPRINT: ChapterBlueprint = {
   userGuidance: '',
   notes: '',
   notesUpdatedAt: '',
+  sortOrder: 0,
+  priority: 0,
 }
 
 export interface DirectoryWorkflowParams {

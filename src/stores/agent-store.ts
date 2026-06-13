@@ -7,6 +7,8 @@ import { skillRegistry } from '../services/agent/skill-registry'
 import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
 import type { ToolArtifact } from '../services/agent/tool-registry'
+import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
+import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 
 // ===== 类型定义 =====
 
@@ -159,6 +161,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     registerBuiltinTools()
     // 加载 Skill（内置 + 用户 + 项目级）
     skillRegistry.loadAll().catch(e => console.warn('[Agent] Skill 加载失败:', e))
+    // 初始化 Token 引擎（异步，不阻塞）
+    initTokenEngine().catch(e => console.warn('[Agent] Token 引擎初始化失败:', e))
     set({ toolsInitialized: true })
   },
 
@@ -369,21 +373,44 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       }
 
       // 构建系统提示词（包含项目上下文 + Tool 列表）
-      const systemPrompt = buildAgentSystemPrompt(currentConv.mode)
+      let systemPrompt = buildAgentSystemPrompt(currentConv.mode)
 
-      // ===== P1-5: @ 提及预取 =====
+      // ===== RAG 自动注入：向量搜索增强上下文 =====
+      try {
+        const ragResult = await retrieveContextForQuery(
+          content.trim(),
+          DEFAULT_RAG_CONFIG,
+        )
+        if (ragResult && ragResult.chunks.length > 0) {
+          systemPrompt += `\n\n---\n## 知识库相关上下文（自动检索）\n\n${ragResult.formattedContext}`
+          console.debug(`[Agent] ${getRAGSummary(ragResult)}`)
+        }
+      } catch {
+        // RAG 失败不影响主流程
+      }
+
+      // ===== P1-5: @ 提及预取（Token 感知限制） =====
+      const MENTION_MAX_TOKENS = 1200
       let enrichedUserMessage = content.trim()
       const mentions = parseMentions(enrichedUserMessage)
       if (mentions.length > 0) {
         const prefetchCalls = mentionsToToolCalls(mentions)
         const prefetchResults: string[] = []
+        let prefetchTokens = 0
         for (const call of prefetchCalls) {
+          if (prefetchTokens >= MENTION_MAX_TOKENS) break
           const tool = toolRegistry.get(call.toolName)
           if (tool) {
             try {
               const result = await tool.execute(call.args)
               if (result.success && result.content) {
-                prefetchResults.push(`[预加载上下文 @${call.toolName}]\n${result.content}`)
+                const availableBudget = MENTION_MAX_TOKENS - prefetchTokens
+                const content = availableBudget > 0
+                  ? truncateToTokenBudget(result.content, availableBudget)
+                  : result.content
+                const contentTokens = estimateTokens(content)
+                prefetchResults.push(`[预加载上下文 @${call.toolName}]\n${content}`)
+                prefetchTokens += contentTokens
               }
             } catch {
               // 预取失败不阻塞主流程
@@ -391,15 +418,24 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           }
         }
         if (prefetchResults.length > 0) {
-          enrichedUserMessage = `${enrichedUserMessage}\n\n---\n以下是用户 @ 引用的上下文数据（已自动获取）：\n\n${prefetchResults.join('\n\n---\n\n')}`
+          enrichedUserMessage = `${enrichedUserMessage}\n\n---\n以下是用户 @ 引用的上下文数据（已自动获取，约 ${prefetchTokens} tokens）：\n\n${prefetchResults.join('\n\n---\n\n')}`
         }
       }
 
-      // 构造历史消息（取最近 16 条非流式消息）
-      const historyMessages: LLMMessage[] = currentConv.messages
+      // 构造历史消息（Token 感知窗口：最多 4000 tokens）
+      const HISTORY_MAX_TOKENS = 4000
+      const candidateMessages = currentConv.messages
         .filter(m => !m.streaming && m.role !== 'system')
-        .slice(-16)
         .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+        .reverse() // 从最新到最旧
+      const historyMessages: LLMMessage[] = []
+      let historyTokens = 0
+      for (const msg of candidateMessages) {
+        const msgTokens = estimateTokens(msg.content)
+        if (historyTokens + msgTokens > HISTORY_MAX_TOKENS) break
+        historyMessages.unshift(msg) // 还原为正序
+        historyTokens += msgTokens
+      }
 
       // LLM 生成函数（封装为非流式调用，Agent 专用参数）
       const generateFn = async (messages: LLMMessage[], mid: string): Promise<string> => {
@@ -442,6 +478,22 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       set({ activeRequestId: assistantMsg.id })
 
       // 启动 ReAct 循环（使用预取增强后的用户消息）
+      // 分块缓冲：减少 React re-render 次数
+      let chunkBuffer = ''
+      let lastFlushTime = Date.now()
+      const FLUSH_INTERVAL_MS = 50
+      const FLUSH_SIZE_CHARS = 200
+
+      const flushChunkBuffer = () => {
+        if (!chunkBuffer) return
+        updateAssistantMsg(m => ({
+          ...m,
+          content: m.content + chunkBuffer,
+        }))
+        chunkBuffer = ''
+        lastFlushTime = Date.now()
+      }
+
       await runAgentLoop(
         systemPrompt,
         historyMessages,
@@ -457,10 +509,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               .replace(/<\/?tool_result[^>]*>/g, '')
               .trim()
             if (!cleaned) return
-            updateAssistantMsg(m => ({
-              ...m,
-              content: m.content + cleaned,
-            }))
+            chunkBuffer += cleaned
+            const now = Date.now()
+            if (chunkBuffer.length >= FLUSH_SIZE_CHARS || now - lastFlushTime >= FLUSH_INTERVAL_MS) {
+              flushChunkBuffer()
+            }
           },
           onToolCallStart: (toolCall) => {
             updateAssistantMsg(m => ({
@@ -491,6 +544,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             })
           },
           onDone: (fullText, toolCalls, artifacts) => {
+            // 刷新任何残留的缓冲区
+            flushChunkBuffer()
             // 最终文本全量清洗，去除所有形式的 tool_call / tool_result 标签
             const cleanedText = fullText
               .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')

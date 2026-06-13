@@ -65,6 +65,21 @@ class EventBus {
     this.target.dispatchEvent(new CustomEvent(type, { detail: payload }))
   }
 
+  /**
+   * 异步发射事件：返回 Promise，在所有监听器执行完成后 resolve。
+   * 适用于需要等待事件处理完成的场景。
+   */
+  async emitAsync<K extends GlobalEventType>(type: K, payload: EventPayloadMap[K]): Promise<void> {
+    // 使用 CustomEvent 同步分发，但包装在 Promise 中
+    // 注意：EventTarget 的 dispatchEvent 是同步的
+    // 如果监听器中有异步操作，需要监听器自行处理
+    return new Promise<void>((resolve) => {
+      this.emit(type, payload)
+      // 给微任务队列一个 tick 让同步监听器执行
+      setTimeout(resolve, 0)
+    })
+  }
+
   on<K extends GlobalEventType>(type: K, handler: (payload: EventPayloadMap[K]) => void): () => void {
     const listener = (event: Event) => {
       handler((event as CustomEvent).detail)
@@ -72,6 +87,24 @@ class EventBus {
     this.target.addEventListener(type, listener)
     // 返回解绑函数，便于清理
     return () => this.target.removeEventListener(type, listener)
+  }
+
+  /**
+   * 管道式事件处理：依次经过多个处理器，每个处理器可以转换 payload。
+   * 适用于需要多个模块依次处理同一事件的场景。
+   */
+  async pipeline<K extends GlobalEventType>(
+    type: K,
+    initialPayload: EventPayloadMap[K],
+    processors: Array<(payload: EventPayloadMap[K]) => EventPayloadMap[K] | Promise<EventPayloadMap[K]>>,
+  ): Promise<EventPayloadMap[K]> {
+    let payload = initialPayload
+    for (const processor of processors) {
+      payload = await processor(payload)
+    }
+    // 最后发出处理后的结果
+    this.emit(type, payload)
+    return payload
   }
 }
 

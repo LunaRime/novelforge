@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { closeProjectDatabase } from '../database'
+import { closeProjectDatabase, getProjectDb } from '../database'
 
 // 导入所有 Repository
 import { ProjectCoreRepository, ProjectCoreData } from '../repositories/project-core-repository'
@@ -78,6 +78,41 @@ export function registerDatabaseController() {
   ipcMain.handle('db:blueprint-delete', async (_event, chapterNumber: number) => {
     try {
       BlueprintRepository.delete(chapterNumber)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:blueprint-get-all-sorted', async (_event, config: { key: string; direction: string }) => {
+    return BlueprintRepository.getAllSorted(config as { key: 'chapter_number' | 'priority' | 'role' | 'custom'; direction: 'asc' | 'desc' })
+  })
+
+  ipcMain.handle('db:blueprint-get-gaps', async (_event, totalChapters: number) => {
+    return BlueprintRepository.getGaps(totalChapters)
+  })
+
+  ipcMain.handle('db:blueprint-update-sort-order', async (_event, orders: Array<{ chapterNumber: number; sortOrder: number }>) => {
+    try {
+      BlueprintRepository.updateSortOrder(orders)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:blueprint-update-priority', async (_event, chapterNumber: number, priority: number) => {
+    try {
+      BlueprintRepository.updatePriority(chapterNumber, priority)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:blueprint-update-priority-batch', async (_event, items: Array<{ chapterNumber: number; priority: number }>) => {
+    try {
+      BlueprintRepository.updatePriorityBatch(items)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
@@ -279,6 +314,50 @@ export function registerDatabaseController() {
 
   ipcMain.handle('db:review-next-index', async (_event, baseDraftId: number) => {
     return ReviewRepository.getNextIndex(baseDraftId)
+  })
+
+  // ============================================================
+  // 6b. evaluation_scores — AI 互评
+  // ============================================================
+  ipcMain.handle('db:evaluation-create', async (_event, params: {
+    draftId: number
+    perspective: string
+    scores: string
+    overallScore: number
+    strengths: string
+    weaknesses: string
+    suggestions: string
+    rawResponse: string
+    tokensUsed: number
+  }) => {
+    try {
+      const db = getProjectDb()
+      if (!db) return { success: false, error: '数据库未连接' }
+
+      const result = db.prepare(`
+        INSERT INTO evaluation_scores (
+          draft_id, reviewer_perspective, scores, overall_score,
+          strengths, weaknesses, suggestions, raw_response, tokens_used
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        params.draftId, params.perspective, params.scores,
+        params.overallScore, params.strengths, params.weaknesses,
+        params.suggestions, params.rawResponse, params.tokensUsed,
+      )
+
+      return { success: true, id: result.lastInsertRowid as number }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:evaluation-list-by-draft', async (_event, draftId: number) => {
+    const db = getProjectDb()
+    if (!db) return []
+
+    return db.prepare(
+      'SELECT * FROM evaluation_scores WHERE draft_id = ? ORDER BY created_at DESC'
+    ).all(draftId)
   })
 
   // ============================================================

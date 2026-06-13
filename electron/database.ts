@@ -47,7 +47,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 1
+const CURRENT_SCHEMA_VERSION = 2
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -104,6 +104,8 @@ function createTables(db: BetterSqlite3.Database) {
       user_guidance TEXT DEFAULT '',              -- 用户预设指导
       notes TEXT DEFAULT '',                      -- 后处理提取的章节要点
       notes_updated_at TEXT DEFAULT '',           -- notes 提取时间
+      sort_order INTEGER DEFAULT 0,              -- 自定义排序序号
+      priority INTEGER DEFAULT 0,                -- 优先级 (0=普通, 1=高, 2=关键)
       created_at TEXT DEFAULT (datetime('now')),
       updated_at TEXT DEFAULT (datetime('now'))
     );
@@ -290,5 +292,39 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   try {
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number)')
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at)')
+  } catch { /* 忽略 */ }
+
+  // 4. v2: blueprints 表：添加 sort_order, priority 列
+  try {
+    const bpCols = db.pragma('table_info(blueprints)') as Array<{ name: string }>
+    if (!bpCols.some(c => c.name === 'sort_order')) {
+      db.exec('ALTER TABLE blueprints ADD COLUMN sort_order INTEGER DEFAULT 0')
+      console.log('[Vela DB] 迁移: blueprints 表已添加 sort_order 列')
+    }
+    if (!bpCols.some(c => c.name === 'priority')) {
+      db.exec('ALTER TABLE blueprints ADD COLUMN priority INTEGER DEFAULT 0')
+      console.log('[Vela DB] 迁移: blueprints 表已添加 priority 列')
+    }
+  } catch { /* 忽略 */ }
+
+  // 5. v2: evaluation_scores 表（AI 互评）
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS evaluation_scores (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        draft_id INTEGER NOT NULL,
+        reviewer_perspective TEXT NOT NULL,
+        scores TEXT NOT NULL DEFAULT '{}',
+        overall_score REAL DEFAULT 0,
+        strengths TEXT DEFAULT '[]',
+        weaknesses TEXT DEFAULT '[]',
+        suggestions TEXT DEFAULT '[]',
+        raw_response TEXT DEFAULT '',
+        tokens_used INTEGER DEFAULT 0,
+        created_at TEXT DEFAULT (datetime('now')),
+        FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+      );
+    `)
+    console.log('[Vela DB] 迁移: evaluation_scores 表已创建')
   } catch { /* 忽略 */ }
 }

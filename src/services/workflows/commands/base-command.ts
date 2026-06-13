@@ -4,6 +4,7 @@ import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import { robustParseJSON } from '../workflow-utils'
+import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-context-provider'
 
 export interface CommandExecuteParams {
   step: unknown
@@ -177,6 +178,31 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     }
 
     return result as T
+  }
+
+  /**
+   * 统一的 RAG 上下文检索（供子类使用）
+   *
+   * @param query 搜索查询
+   * @param maxChunks 最大片段数
+   * @param chapterNumber 章节号（用于范围过滤）
+   * @returns 格式化的上下文文本，或空字符串
+   */
+  protected async retrieveRAGContext(
+    query: string,
+    maxChunks: number = 5,
+    chapterNumber?: number,
+  ): Promise<string> {
+    try {
+      const result = await retrieveContextForQuery(
+        query,
+        { ...DEFAULT_RAG_CONFIG, maxChunks },
+        chapterNumber,
+      )
+      return result?.formattedContext || ''
+    } catch {
+      return ''
+    }
   }
 
   /**

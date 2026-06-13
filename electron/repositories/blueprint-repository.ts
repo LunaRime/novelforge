@@ -17,6 +17,8 @@ export interface BlueprintRow {
     user_guidance: string
     notes: string
     notes_updated_at: string
+    sort_order: number
+    priority: number
     created_at: string
     updated_at: string
 }
@@ -33,6 +35,17 @@ export interface BlueprintData {
     userGuidance: string
     notes: string
     notesUpdatedAt: string
+    sortOrder: number
+    priority: number
+}
+
+/** 蓝图排序方式 */
+export type BlueprintSortKey = 'chapter_number' | 'priority' | 'role' | 'custom'
+export type SortDirection = 'asc' | 'desc'
+
+export interface BlueprintSortConfig {
+    key: BlueprintSortKey
+    direction: SortDirection
 }
 
 function rowToData(row: BlueprintRow): BlueprintData {
@@ -49,6 +62,8 @@ function rowToData(row: BlueprintRow): BlueprintData {
         userGuidance: row.user_guidance,
         notes: row.notes,
         notesUpdatedAt: row.notes_updated_at,
+        sortOrder: row.sort_order ?? 0,
+        priority: row.priority ?? 0,
     }
 }
 
@@ -63,6 +78,111 @@ export class BlueprintRepository {
         ).all() as BlueprintRow[]
 
         return rows.map(rowToData)
+    }
+
+    /** 按指定排序方式获取所有蓝图 */
+    static getAllSorted(config: BlueprintSortConfig): BlueprintData[] {
+        const db = getProjectDb()
+        if (!db) return []
+
+        let orderClause: string
+        switch (config.key) {
+            case 'priority':
+                orderClause = `priority ${config.direction === 'desc' ? 'DESC' : 'ASC'}, chapter_number ASC`
+                break
+            case 'role':
+                // 按章节定位排序：开端 → 发展 → 转折 → 高潮 → 结局
+                orderClause = `
+                    CASE role
+                        WHEN '开端' THEN 1
+                        WHEN '发展' THEN 2
+                        WHEN '转折' THEN 3
+                        WHEN '高潮' THEN 4
+                        WHEN '结局' THEN 5
+                        ELSE 6
+                    END ${config.direction === 'desc' ? 'DESC' : 'ASC'},
+                    chapter_number ASC
+                `
+                break
+            case 'custom':
+                orderClause = `sort_order ${config.direction === 'desc' ? 'DESC' : 'ASC'}, chapter_number ASC`
+                break
+            case 'chapter_number':
+            default:
+                orderClause = `chapter_number ${config.direction === 'desc' ? 'DESC' : 'ASC'}`
+                break
+        }
+
+        const rows = db.prepare(
+            `SELECT * FROM blueprints ORDER BY ${orderClause}`
+        ).all() as BlueprintRow[]
+
+        return rows.map(rowToData)
+    }
+
+    /** 检测缺失的章节号（缺口检测） */
+    static getGaps(totalChapters: number): number[] {
+        const db = getProjectDb()
+        if (!db) return []
+
+        const rows = db.prepare(
+            'SELECT chapter_number FROM blueprints ORDER BY chapter_number ASC'
+        ).all() as Array<{ chapter_number: number }>
+
+        const existing = new Set(rows.map(r => r.chapter_number))
+        const gaps: number[] = []
+
+        for (let i = 1; i <= totalChapters; i++) {
+            if (!existing.has(i)) {
+                gaps.push(i)
+            }
+        }
+
+        return gaps
+    }
+
+    /** 批量更新排序序号 */
+    static updateSortOrder(orders: Array<{ chapterNumber: number; sortOrder: number }>): void {
+        const db = getProjectDb()
+        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法更新排序')
+
+        const stmt = db.prepare(
+            'UPDATE blueprints SET sort_order = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+        )
+
+        const tx = db.transaction(() => {
+            for (const { chapterNumber, sortOrder } of orders) {
+                stmt.run(sortOrder, chapterNumber)
+            }
+        })
+        tx()
+    }
+
+    /** 批量更新优先级 */
+    static updatePriority(chapterNumber: number, priority: number): void {
+        const db = getProjectDb()
+        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法更新优先级')
+
+        db.prepare(
+            'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+        ).run(priority, chapterNumber)
+    }
+
+    /** 批量更新多个蓝图优先级 */
+    static updatePriorityBatch(items: Array<{ chapterNumber: number; priority: number }>): void {
+        const db = getProjectDb()
+        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法批量更新优先级')
+
+        const stmt = db.prepare(
+            'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+        )
+
+        const tx = db.transaction(() => {
+            for (const { chapterNumber, priority } of items) {
+                stmt.run(priority, chapterNumber)
+            }
+        })
+        tx()
     }
 
     /** 获取单个蓝图 */
@@ -97,8 +217,9 @@ export class BlueprintRepository {
         db.prepare(`
       INSERT INTO blueprints (
         chapter_number, title, role, purpose, key_events, characters,
-        suspense_hook, user_guidance, notes, notes_updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        suspense_hook, user_guidance, notes, notes_updated_at,
+        sort_order, priority
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chapter_number) DO UPDATE SET
         title = excluded.title,
         role = excluded.role,
@@ -109,6 +230,8 @@ export class BlueprintRepository {
         user_guidance = excluded.user_guidance,
         notes = excluded.notes,
         notes_updated_at = excluded.notes_updated_at,
+        sort_order = excluded.sort_order,
+        priority = excluded.priority,
         updated_at = datetime('now')
     `).run(
             data.chapterNumber,
@@ -121,6 +244,8 @@ export class BlueprintRepository {
             data.userGuidance,
             data.notes,
             data.notesUpdatedAt,
+            data.sortOrder ?? 0,
+            data.priority ?? 0,
         )
     }
 
