@@ -54,10 +54,26 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       .withNovelConfig(project.novelConfig)
       .withWordNumber(project.novelConfig.wordsPerChapter)
 
+    // 流派特化注入
+    const genreOverride = (await import('../../genre-overrides')).getGenreOverride(
+      project.novelConfig.genre,
+      project.novelConfig.subGenre,
+    )
+    if (genreOverride) {
+      const genreGuide = (await import('../../genre-overrides')).formatGenreOverrideForPrompt(genreOverride)
+      promptBuilder.withWritingStyle((project.novelConfig.writingStyle || '') + '\n\n' + genreGuide)
+      callbacks.log(`  已注入流派特化指导: ${project.novelConfig.genre}`)
+    }
+
     if (!isFirstChapter) {
-      // 从蓝图 JSON 的 notes 字段读取章节要点时间线（按序拼装，利于前缀缓存）
-      const chapterTimeline = await this.readChapterNotesTimeline(project.path, this.chapterInfo.chapterNumber)
-      callbacks.log(`  📋 已加载章节要点时间线（${chapterTimeline.length} 字）`)
+      // 智能上下文剪枝：按相关性排序只注入 top-3 最相关章节
+      const { pruneChapterContext } = await import('../../smart-context-pruner')
+      const pruned = await pruneChapterContext(
+        this.chapterInfo.chapterNumber,
+        { title: this.chapterInfo.title, keyEvents: this.chapterInfo.keyEvents, characters: this.chapterInfo.characters },
+      )
+      const chapterTimeline = pruned.text
+      callbacks.log(`  智能剪枝: ${pruned.tokensUsed}tokens (节省${pruned.tokensSaved})`)
 
       let previousEnding = ''
       try {
@@ -215,39 +231,4 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     } catch { return '（角色状态档案读取失败）' }
   }
 
-  /**
-   * 从蓝图 JSON 的 notes 字段读取章节要点时间线。
-   * 近 5 章完整收录；更早期仅保留标题行，控制总量 ≤ 3000 字。
-   * 按序拼装保证前缀稳定，最大化 LLM 上下文缓存命中。
-   */
-  private async readChapterNotesTimeline(_projectPath: string, currentChapter: number): Promise<string> {
-    const FULL_WINDOW = 5  // 近 N 章完整收录
-    const MAX_CHARS = 3000 // 总量上限
-    const lines: string[] = []
-
-    for (let i = 1; i < currentChapter; i++) {
-      try {
-        const bp = await ipc.invoke('db:blueprint-get', i)
-        if (!bp) continue
-        const isRecent = i >= currentChapter - FULL_WINDOW
-
-        if (isRecent && bp.notes?.trim()) {
-          // 近 N 章：完整收录要点
-          lines.push(`【第${i}章 ${bp.title || ''}】\n${bp.notes.trim()}`)
-        } else {
-          // 远期章节：仅保留标题行（节省 Token）
-          lines.push(`【第${i}章 ${bp.title || ''}】`)
-        }
-      } catch { /* 忽略单章读取失败 */ }
-    }
-
-    // Token 预算控制：超限时从最早的完整要点开始精简
-    let result = lines.join('\n\n')
-    if (result.length > MAX_CHARS) {
-      // 保留近章完整内容，远期章节已经是标题行了
-      result = result.slice(-MAX_CHARS)
-    }
-
-    return result || '（无章节要点）'
-  }
 }
