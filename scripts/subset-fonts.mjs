@@ -44,7 +44,7 @@ const JOBS = [
 // Ensure output directory
 fs.mkdirSync(OUTPUT_DIR, { recursive: true })
 
-let tool: 'pyftsubset' | 'npm' | 'none' = 'none'
+let tool = 'none'
 
 // Check for pyftsubset (Python fonttools)
 try {

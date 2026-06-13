@@ -5,6 +5,7 @@ import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import { robustParseJSON } from '../workflow-utils'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-context-provider'
+import { structureForCache, hashStaticContext, generateCacheKey, calculateCost, type CacheScope } from '../../llm/prompt-cache'
 
 export interface CommandExecuteParams {
   step: unknown
@@ -21,12 +22,12 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   /** 抽象执行入口 */
   abstract execute(params: CommandExecuteParams): Promise<TResult>
 
-  /** 获取 LLM 大模型连接代理（支持取消） */
+  /** 获取 LLM 大模型连接代理（支持取消 + Prompt 缓存） */
   protected async callLLM(
     prompt: string,
     systemPrompt: string,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; cacheScope?: CacheScope },
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
@@ -77,11 +78,14 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         }).catch(() => { /* 日志失败不影响主流程 */ })
       }
 
+      // 缓存优化：将稳定内容前置以最大化 API 缓存命中
+      const cacheKey = options?.cacheScope
+        ? generateCacheKey(options.cacheScope, modelId, hashStaticContext(systemPrompt + prompt.slice(0, 200)))
+        : undefined
+
+      const cachedMessages = structureForCache(systemPrompt, '', prompt)
       llmStore.generateStream(
-        [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: prompt }
-        ],
+        cachedMessages,
         {
           onChunk: (chunk) => {
             // 取消后不再追加输出
@@ -91,6 +95,19 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           },
           onDone: (text, usage) => {
             cleanup()
+            // 费用追踪
+            if (usage && model) {
+              const cost = calculateCost(model, usage.promptTokens, usage.completionTokens, !!cacheKey)
+              callbacks.log(`💰 $${cost.totalCost.toFixed(4)} (${cost.cached ? '缓存命中' : '全价'})`)
+              // 记录到全局用量 Store
+              import('../../../stores/usage-store').then(m =>
+                m.useUsageStore.getState().recordCall({
+                  model, promptTokens: usage.promptTokens,
+                  completionTokens: usage.completionTokens,
+                  cacheHit: !!cacheKey,
+                })
+              ).catch(() => {})
+            }
             // 取消后不 resolve，让 reject 生效
             if (context?.cancelled) {
               logLLMCall(false, '工作流已取消')

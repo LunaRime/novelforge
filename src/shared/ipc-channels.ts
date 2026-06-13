@@ -381,6 +381,27 @@ export interface EmbeddingChannels {
     args: []
     return: { success: boolean }
   }
+  // LLM 向量化
+  'embedding:get-llm-config': {
+    args: []
+    return: { enabled: boolean; model: ModelProfile | null; dimensions: number; promptTemplate: string }
+  }
+  'embedding:set-llm-config': {
+    args: [config: { enabled?: boolean; model?: ModelProfile | null; dimensions?: number; promptTemplate?: string }]
+    return: { success: boolean; error?: string }
+  }
+  'embedding:test-llm': {
+    args: [text: string]
+    return: { success: boolean; vector?: number[]; dimensions?: number; tokens?: number; error?: string }
+  }
+  'embedding:generate-with-llm': {
+    args: [texts: string[]]
+    return: { success: boolean; vectors?: number[][]; tokens?: number; error?: string }
+  }
+  'embedding:list-llm-candidates': {
+    args: []
+    return: ModelProfile[]
+  }
 }
 
 // ===== 导入小说 =====
@@ -411,7 +432,7 @@ export interface MCPChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & ImportChannels & MCPChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels
 export type AllEventChannels = LLMStreamEvents
 
 /** 提取 invoke 频道名 */

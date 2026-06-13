@@ -11,10 +11,8 @@
 import { useLLMStore } from '../../stores/llm-store'
 import {
   type EditorRole,
-  type EditorRoleConfig,
   EDITOR_ROLES,
   REVIEWER_ROLES,
-  ROLE_ICONS,
 } from './editor-roles'
 import type { CallPurpose } from '../llm/model-router'
 
@@ -108,12 +106,10 @@ export class EditorialOffice {
     onProgress?: (role: string, status: string) => void,
   ): Promise<EditorialReviewResult> {
     const llmStore = useLLMStore.getState()
-    const startTime = Date.now()
     let totalTokensUsed = 0
 
     // ==== 第一步：并行启动所有评审角色 ====
     const roleResults: RoleReviewResult[] = []
-    const reviewStartTime = Date.now()
 
     const reviewPromises = this.config.enabledRoles.map(async (role) => {
       const roleConfig = EDITOR_ROLES[role]
@@ -214,8 +210,6 @@ export class EditorialOffice {
     for (const r of results) {
       if (r) roleResults.push(r)
     }
-
-    const reviewElapsed = Date.now() - reviewStartTime
 
     // ==== 第二步：综合评分 ====
     let synthesis: ChiefSynthesis | null = null

@@ -12,6 +12,7 @@ import {
   type PostProcessStep,
 } from '../workflow-utils'
 import type { ChapterInfo } from '../chapter-workflow'
+import type { StepCallbacks } from '../../../stores/workflow-store'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -265,6 +266,41 @@ export function buildFinalizePostProcessSteps(
       },
     })
   }
+
+  // 步骤 3.5: 角色声音分析
+  steps.splice(steps.length - (chapterNumber % 5 === 0 ? 2 : 1), 0, {
+    key: 'voice_analysis',
+    label: '🎤 角色声音分析',
+    critical: false,
+    executor: async (callbacks: StepCallbacks) => {
+      callbacks.log('正在分析角色对话风格...')
+      try {
+        const { analyzeCharacterVoice } = await import('../../character-voice-analyzer')
+        const characters = await ipc.invoke('db:character-get-all') as Array<{ name: string; notes?: string }>
+        let analyzed = 0
+        for (const char of characters) {
+          if (!char.name) continue
+          try {
+            const profile = analyzeCharacterVoice(draftContent, char.name)
+            if (profile.topWords.length > 0) {
+              const voiceData = JSON.stringify(profile)
+              const updatedNotes = (char.notes || '') + `\n[VOICE:${char.name}]\n${voiceData}\n`
+              await ipc.invoke('db:character-upsert', {
+                name: char.name, role: 'supporting',
+                gender: '', age: '', appearance: '', personality: '', background: '',
+                abilities: '', motivation: '', relationships: '', arc: '', notes: updatedNotes,
+                currentState: { location: '', powerLevel: '', physicalState: '', mentalState: '', keyItems: '', recentEvents: '', updatedAtChapter: chapterNumber },
+              } as never)
+              analyzed++
+            }
+          } catch { /* skip */ }
+        }
+        callbacks.log(`角色声音分析完成 (${analyzed}/${characters.length})`)
+      } catch (e) {
+        callbacks.log(`⚠️ 角色声音分析失败: ${String(e)}`)
+      }
+    },
+  })
 
   return steps
 }

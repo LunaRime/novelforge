@@ -14,7 +14,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { AgentMode } from '../../stores/agent-store'
 import { toolRegistry } from './tool-registry'
-import { estimateTokens, truncateToTokenBudget, type TokenAllocation } from './token-budget'
+import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 // ===== 上下文构建 =====
 

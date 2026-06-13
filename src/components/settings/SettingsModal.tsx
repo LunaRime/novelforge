@@ -17,6 +17,7 @@ import { NativeSelect } from '../ui/NativeSelect'
 import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
 import { Switch } from '../ui/Switch'
+import VectorConfigSection from './VectorConfigSection'
 
 // 打赏/赞助 图片资源（通过 import 让 Vite 处理路径，确保打包后可正常加载）
 import wepayImg from '/buyme/wepay.jpg?url'
@@ -129,7 +130,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           {/* 区域内容 */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {section === 'llm' && <LLMSection purposes={['generation', 'refinement', 'summary']} purposeLabel="生成模型" />}
-            {section === 'embedding' && <LLMSection purposes={['embedding']} purposeLabel="向量模型" />}
+            {section === 'embedding' && <VectorConfigSection />}
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
             {section === 'prompts' && <PromptSettings />}

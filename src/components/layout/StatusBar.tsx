@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Wifi, BookOpen, CheckCircle2, FolderOpen } from 'lucide-react'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useUsageStore } from '../../stores/usage-store'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
 export default function StatusBar() {
@@ -55,8 +56,9 @@ export default function StatusBar() {
 
       </div>
 
-      {/* 右侧：AI 胶囊 + 模型名 */}
+      {/* 右侧：费用 + AI 胶囊 + 模型名 */}
       <div className="flex items-center h-full">
+        <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
 
@@ -91,6 +93,27 @@ export default function StatusBar() {
  * - 多任务时显示 "N个任务运行中"
  * - 完成后短暂显示 ✅ 然后淡出
  */
+/** 会话费用显示 */
+function SessionCost() {
+  const cost = useUsageStore(s => s.getFormattedCost())
+  const cacheHits = useUsageStore(s => s.cacheHits)
+  const sessionCost = useUsageStore(s => s.sessionCost)
+
+  if (sessionCost < 0.001) return null
+
+  return (
+    <div
+      className="flex items-center gap-1 px-2 h-full text-xs cursor-default"
+      style={{ color: 'var(--color-statusbar-text)' }}
+      title={`缓存命中: ${cacheHits} 次 | 点击重置`}
+      onClick={() => useUsageStore.getState().resetSession()}
+    >
+      <DollarSign size={10} className="opacity-60" />
+      <span className="opacity-80 tabular-nums">{cost}</span>
+    </div>
+  )
+}
+
 function AITaskCapsule() {
   // ✅ 使用 selector 精确订阅，避免 globalLogs 等高频字段导致被动重渲染
   const activeRuns = useWorkflowStore(s => s.activeRuns)

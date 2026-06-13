@@ -18,6 +18,9 @@ import { writeFileTool } from './write-file.tool'
 import { openEditorTool } from './open-editor.tool'
 import { startWorkflowTool } from './start-workflow.tool'
 import { updateConfigTool } from './update-config.tool'
+import { embedTextTool } from './embed-text.tool'
+import { compareTextsTool } from './compare-texts.tool'
+import { indexContentTool } from './index-content.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
@@ -30,11 +33,15 @@ export const builtinTools = [
   readProjectStateTool,
   readDraftsTool,
   listChaptersTool,
+  // 向量模块 Tool（只读，自动执行）
+  embedTextTool,
+  compareTextsTool,
   // 行动 Tool（需确认）
   writeFileTool,
   openEditorTool,
   startWorkflowTool,
   updateConfigTool,
+  indexContentTool, // 写入知识库，需确认
 ]
 
 /**

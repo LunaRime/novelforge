@@ -5,6 +5,8 @@ export interface LLMGenerateOptions {
   maxTokens: number
   responseFormat?: { type: string }
   thinking?: boolean
+  /** Prompt 缓存键（相同键的请求共享静态前缀缓存，节省 50% 输入费用） */
+  cacheKey?: string
 }
 
 export interface LLMStreamOptions extends LLMGenerateOptions {

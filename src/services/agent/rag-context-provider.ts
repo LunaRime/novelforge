@@ -11,6 +11,7 @@
 
 import { ipc } from '../ipc-client'
 import { estimateTokens } from './token-budget'
+import { useVectorConfigStore } from '../../stores/vector-config-store'
 
 // ===== 类型定义 =====
 
@@ -31,7 +32,7 @@ export interface RAGChunk {
   text: string
   score: number
   fileName: string
-  docId: string
+  docId?: string
 }
 
 export interface RAGInjectionResult {
@@ -65,6 +66,21 @@ export async function retrieveContextForQuery(
   chapterNumber?: number,
 ): Promise<RAGInjectionResult | null> {
   if (!config.enabled || !userQuery.trim()) return null
+
+  // 检查向量配置：如果全部禁用则跳过 RAG
+  const vectorConfig = useVectorConfigStore.getState()
+  if (!vectorConfig.isAnyVectorAvailable()) {
+    console.debug('[RAG] 向量功能已全部禁用，跳过 RAG 检索')
+    return null
+  }
+
+  // 记录当前使用的搜索模式（用于调试）
+  if (import.meta.env.DEV) {
+    console.debug(
+      '[RAG] 搜索模式:',
+      vectorConfig.canUseEmbeddingAPI() ? 'hybrid (向量+FTS)' : 'fts (纯文本)',
+    )
+  }
 
   try {
     // 构建搜索参数

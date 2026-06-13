@@ -61,15 +61,39 @@ async function importContent(
   // 2. 解析章节元数据（从文件名提取）
   const chapterMeta = parseChapterMetaFromFileName(fileName)
 
-  // 3. 可选：生成向量
+  // 3. 可选：生成向量（三级降级：Embedding API → LLM 向量化 → FTS-only）
   let vectors: number[][] | undefined
+  const embedMethod = model.apiKey ? 'Embedding API' : 'N/A'
+
   if (model.apiKey) {
     try {
-      options?.onProgress?.(20, `正在向量化 ${chunks.length} 个块...`)
+      options?.onProgress?.(20, `正在通过 ${embedMethod} 向量化 ${chunks.length} 个块...`)
       vectors = await generateEmbeddings(chunks, protocol, model)
     } catch (e) {
-      console.warn('[Vela KB] Embedding 调用失败，降级为 FTS-only:', e)
+      console.warn('[Vela KB] Embedding API 失败，尝试 LLM 向量化:', String(e))
     }
+  }
+
+  // Embedding API 失败或未配置 → 尝试 LLM 向量化
+  if (!vectors || vectors.length === 0 || vectors.every(v => v.length === 0)) {
+    try {
+      const { embeddingService } = await import('./embedding-service')
+      if (embeddingService.canUseLLMEmbedding()) {
+        options?.onProgress?.(25, `正在通过 LLM 向量化 ${chunks.length} 个块...`)
+        const results = await embeddingService.embedBatchWithLLM(chunks)
+        vectors = results.map(r => r.vector).filter(v => v.length > 0)
+        if (vectors.length > 0) {
+          console.log(`[Vela KB] LLM 向量化成功: ${vectors.length}/${chunks.length} 个块`)
+        }
+      }
+    } catch (e) {
+      console.warn('[Vela KB] LLM 向量化也失败，降级为 FTS-only（纯文本搜索）:', String(e))
+    }
+  }
+
+  // 全部失败 → FTS-only 模式（仍可全文搜索，但无语义搜索）
+  if (!vectors || vectors.length === 0) {
+    options?.onProgress?.(30, '⚠️ 向量化不可用，使用纯文本索引（FTS）')
   }
 
   // 4. 删除同名旧文档，确保幂等性
@@ -323,9 +347,34 @@ export async function backfillVectors(
       return { success: true, processed: 0, failed: 0 }
     }
 
-    // 批量生成向量
+    // 批量生成向量（三级降级：Embedding API → LLM 向量化 → FTS-only）
     const texts = allRecords.map(r => r.text)
-    const vectors = await generateEmbeddings(texts, protocol, model)
+    let vectors: number[][] = []
+
+    // 尝试 1：专用 Embedding API
+    try {
+      vectors = await generateEmbeddings(texts, protocol, model)
+    } catch (e) {
+      console.warn('[Vela KB] Embedding API 回填失败 (状态码可能为 404，API 不支持 /embeddings):', String(e))
+    }
+
+    // 尝试 2：LLM 向量化（Embedding API 失败或无有效结果时自动降级）
+    if (vectors.length === 0 || vectors.every(v => v.length === 0)) {
+      try {
+        const { embeddingService } = await import('./embedding-service')
+        if (embeddingService.canUseLLMEmbedding()) {
+          console.log(`[Vela KB] Embedding API 不可用，降级到 LLM 向量化 (${texts.length} 个块)`)
+          const llmResults = await embeddingService.embedBatchWithLLM(texts)
+          vectors = llmResults.map(r => r.vector)
+          const validCount = vectors.filter(v => v.length > 0).length
+          console.log(`[Vela KB] LLM 向量化完成: ${validCount}/${texts.length}`)
+        } else {
+          console.log('[Vela KB] LLM 向量化未启用，跳过向量生成（FTS 纯文本模式）')
+        }
+      } catch (e2) {
+        console.warn('[Vela KB] LLM 向量化也失败，使用 FTS 纯文本模式:', String(e2))
+      }
+    }
 
     // 构建更新后的完整数据
     const idToVector = new Map<string, number[]>()
