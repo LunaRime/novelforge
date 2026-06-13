@@ -249,9 +249,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     const { modelRouter } = get()
     if (modelRouter) {
       modelRouter.updateConfig(config)
-      set((s) => ({
-        modelRoutes: modelRouter.getConfig(),
-      }))
+      set({ modelRoutes: modelRouter.getConfig() })
     }
   },
 }))

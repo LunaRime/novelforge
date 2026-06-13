@@ -5,7 +5,7 @@
  */
 
 import { ipcMain } from 'electron'
-import { embeddingService, type EmbeddingConfig } from '../embedding-service'
+import { embeddingService, type EmbeddingConfig, type LLMEmbeddingConfig } from '../embedding-service'
 import { cosineSimilarity, findMostSimilar } from '../utils/vector-utils'
 import { readJsonFile, GLOBAL_CONFIG_PATH } from '../utils/config-utils'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
@@ -143,6 +143,70 @@ export function registerEmbeddingController() {
   ipcMain.handle('embedding:clear-cache', async () => {
     embeddingService.clearCache()
     return { success: true }
+  })
+
+  // 去重缓存统计
+  ipcMain.handle('embedding:dedup-stats', async () => {
+    return embeddingService.getDedupCacheStats()
+  })
+
+  // 清空去重缓存
+  ipcMain.handle('embedding:clear-dedup', async () => {
+    embeddingService.clearDedupCache()
+    return { success: true }
+  })
+
+  // ===== LLM 向量化 =====
+
+  // 获取 LLM 向量化配置
+  ipcMain.handle('embedding:get-llm-config', async () => {
+    return embeddingService.getLLMEmbeddingConfig()
+  })
+
+  // 设置 LLM 向量化配置
+  ipcMain.handle('embedding:set-llm-config', async (_event, config: Partial<LLMEmbeddingConfig>) => {
+    try {
+      embeddingService.configureLLMEmbedding(config)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // 测试 LLM 向量化
+  ipcMain.handle('embedding:test-llm', async (_event, text: string) => {
+    try {
+      const result = await embeddingService.embedWithLLM(text || '测试文本')
+      return {
+        success: true,
+        vector: result.vector.slice(0, 10), // 只返回前 10 维预览
+        dimensions: result.vector.length,
+        tokens: result.tokens,
+      }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // 通过 LLM 批量生成向量
+  ipcMain.handle('embedding:generate-with-llm', async (_event, texts: string[]) => {
+    try {
+      const results = await embeddingService.embedBatchWithLLM(texts)
+      return {
+        success: true,
+        vectors: results.map(r => r.vector),
+        tokens: results.reduce((sum, r) => sum + r.tokens, 0),
+      }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  // 获取可用作向量的 LLM 模型列表（从 models.json 中筛选）
+  ipcMain.handle('embedding:list-llm-candidates', async () => {
+    const models = getLLMModels()
+    // 排除已经是 embedding 用途的模型
+    return models.filter(m => !m.purposes?.includes('embedding'))
   })
 
   console.log('[EmbeddingController] 已注册 IPC 处理器')

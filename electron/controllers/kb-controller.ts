@@ -7,6 +7,7 @@ import {
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
+import { embeddingService } from '../embedding-service'
 
 function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
@@ -103,11 +104,97 @@ export function registerKBController() {
   })
 
   ipcMain.handle('kb:backfill-vectors', async () => {
-    const embConfig = getEmbeddingConfig()
-    if (!embConfig) return { success: false, processed: 0, failed: 0, error: '未配置 Embedding 模型' }
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: '未打开项目' }
-    return backfillVectors(projectPath, embConfig.protocol, embConfig.model)
+
+    // 判断可用的向量化方式
+    const embConfig = getEmbeddingConfig()
+    const canUseEmbeddingAPI = embConfig !== null
+    const canUseLLM = embeddingService.canUseLLMEmbedding()
+
+    // 方式 1：专用 Embedding API（内部已含 LLM 降级，失败会自动切换）
+    if (canUseEmbeddingAPI) {
+      console.log('[KB] 使用 Embedding API 重建向量索引（如失败将自动降级到 LLM 向量化）')
+      const result = await backfillVectors(projectPath, embConfig!.protocol, embConfig!.model)
+      // 如果 processed > 0 说明至少部分成功了
+      if (result.success || result.processed > 0) return result
+      // 完全失败 → 降级到 LLM 向量化
+      console.warn('[KB] Embedding API 完全失败，尝试 LLM 向量化:', result.error)
+    }
+
+    // 方式 2：LLM 向量化
+    if (canUseLLM) {
+      console.log('[KB] 使用 LLM 向量化重建向量索引')
+      try {
+        const { count } = await getVectorlessCount(projectPath)
+        if (count === 0) return { success: true, processed: 0, failed: 0 }
+
+        // 获取所有无向量的文本块
+        const { getConnection } = await import('../vector-store')
+        const db = await getConnection(projectPath)
+        const table = await db.openTable('chunks')
+        const rows = await table.query().select(['id', 'text']).toArray()
+        const vectorless = rows.filter((r: { vector?: unknown }) => !r.vector || !Array.isArray(r.vector) || (r.vector as unknown[]).length === 0)
+
+        if (vectorless.length === 0) return { success: true, processed: 0, failed: 0 }
+
+        // 批量 LLM 向量化（自动去重合并）
+        const texts = vectorless.map((r: { text: string }) => r.text)
+        const results = await embeddingService.embedBatchWithLLM(texts)
+
+        // 写入向量
+        let processed = 0
+        let failed = 0
+        if (results.length > 0) {
+          try {
+            const { getConnection: getConn } = await import('../vector-store')
+            const db2 = await getConn(projectPath)
+            const fullTable = await db2.openTable('chunks')
+            const allRows = await fullTable.query().toArray()
+
+            const idToVector = new Map<string, number[]>()
+            vectorless.forEach((r: { id: string }, i: number) => {
+              if (results[i] && results[i].vector.length > 0) {
+                idToVector.set(r.id, results[i].vector)
+                processed++
+              } else {
+                failed++
+              }
+            })
+
+            if (processed > 0) {
+              const updatedRows = allRows.map((r: { [key: string]: unknown }) => {
+                const v = idToVector.get(r.id as string)
+                return v ? { ...r, vector: v } : r
+              })
+              await db2.dropTable('chunks')
+              await db2.createTable('chunks', updatedRows)
+            }
+          } catch (e) {
+            failed = vectorless.length
+            return { success: false, processed: 0, failed, error: `LLM 向量写入失败: ${String(e)}` }
+          }
+        }
+
+        return { success: true, processed, failed }
+      } catch (error) {
+        console.warn('[KB] LLM 向量化回填失败:', error)
+      }
+    }
+
+    // 方式 3：全部不可用 — 标记为 FTS 模式
+    console.log('[KB] 无可用的向量化方式，文本块将保持 FTS 纯文本模式')
+    const { count } = await getVectorlessCount(projectPath)
+    return {
+      success: false,
+      processed: 0,
+      failed: count,
+      error:
+        '无可用的向量化方式。请至少配置以下其一：\n' +
+        '1. 在「设置 → 向量模型」中添加 Embedding 模型（如 text-embedding-3-small）\n' +
+        '2. 在「设置 → 向量模型」中开启 LLM 向量化并选择模型\n' +
+        '向量模块（本地 FTS 全文搜索）仍可用于搜索，但无法生成语义向量。',
+    }
   })
 
   ipcMain.handle('dialog:select-files', async () => {
