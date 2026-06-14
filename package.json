@@ -2,7 +2,7 @@
   "name": "novelforge",
   "version": "2.1.1",
   "description": "NovelForge - AI 深度驱动的小说创作 IDE",
-  "author": "yueyu-ku",
+  "author": "LunaRime",
   "private": true,
   "type": "module",
   "main": "dist-electron/main.js",
