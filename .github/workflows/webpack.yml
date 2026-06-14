@@ -13,7 +13,7 @@ jobs:
 
     strategy:
       matrix:
-        node-version: [18.x, 22.x]
+        node-version: [22.x]
 
     steps:
     - uses: actions/checkout@v4
@@ -24,6 +24,8 @@ jobs:
         node-version: ${{ matrix.node-version }}
 
     - name: Install dependencies
+      env:
+        ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       run: npm ci
 
     - name: Type check (TypeScript)
