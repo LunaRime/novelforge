@@ -58,12 +58,12 @@
 
 ## 🚀 安装
 
-前往 [Releases](https://github.com/yueyu-ku/novelforge/releases) 下载：
+前往 [Releases](https://github.com/LunaRime/novelforge/releases) 下载：
 - **Windows**: `NovelForge-2.0.0-setup.exe` 或便携版
 
 ```bash
 # 源码构建
-git clone https://github.com/yueyu-ku/novelforge.git
+git clone https://github.com/LunaRime/novelforge.git
 cd novelforge
 npm install && npm run dev
 ```
@@ -86,7 +86,7 @@ React 19 + TypeScript + Zustand | Electron 41 + Vite 8 | Tailwind CSS + Radix UI
 
 ## 📄 协议
 
-基于 GPL-3.0 开源。原始项目 [Vela](https://github.com/heider-x/vela) by heider-x，由 yueyu-ku 持续开发维护。
+基于 GPL-3.0 开源。原始项目 [Vela](https://github.com/heider-x/vela) by heider-x，由 LunaRime 持续开发维护。
 
 ---
 
