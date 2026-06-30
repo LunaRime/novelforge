@@ -182,6 +182,8 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   /**
    * 全局容错 JSON 解析器
    * 复用 workflow-utils 中的健壮解析逻辑，统一处理 AI 输出格式错误
+   *
+   * ★ AI 自检增强：解析失败时提供详细诊断信息，可反馈给 LLM 自我修正
    */
   protected parseJSON<T>(text: string): T {
     // 先尝试对象解析（AI 通常返回 JSON 对象），再尝试数组
@@ -191,10 +193,101 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     }
 
     if (result === null) {
-      throw new Error(`AI 返回的数据格式乱码，无法解析为有效层级结构。尝试解析内容末端: ${text.slice(-100)}`)
+      const diagnostic = this.buildJSONParseDiagnostic(text)
+      throw new Error(diagnostic)
     }
 
     return result as T
+  }
+
+  /**
+   * ★ AI 自检：构建 JSON 解析失败的详细诊断信息
+   *
+   * 分析 AI 输出中的常见问题并生成可操作的修复建议，
+   * 可用于抛错或反馈给 LLM 进行自我修正。
+   */
+  protected buildJSONParseDiagnostic(text: string): string {
+    const issues: string[] = []
+    const trimmed = text.trim()
+
+    // 检测常见问题
+    if (trimmed.includes("'''") || trimmed.includes('"""')) {
+      issues.push('• 使用了 Python 风格的三引号，应改用标准 JSON 双引号 (")')
+    }
+    if (trimmed.includes("'") && !trimmed.includes('"')) {
+      issues.push('• 使用了单引号，JSON 标准要求双引号 (")')
+    }
+    if (/,\s*[}\]]/.test(trimmed)) {
+      issues.push('• 存在尾随逗号（对象或数组末尾多余的逗号）')
+    }
+    if (/[{,]\s*['"]?\w+['"]?\s*:/g.test(trimmed) === false && trimmed.includes(':')) {
+      issues.push('• 可能缺少 JSON 根对象的花括号 {} 包裹')
+    }
+    if (trimmed.startsWith('```')) {
+      issues.push('• 内容被 Markdown 代码块包裹，应只输出纯 JSON')
+    }
+    const openBraces = (trimmed.match(/\{/g) || []).length
+    const closeBraces = (trimmed.match(/\}/g) || []).length
+    if (openBraces !== closeBraces) {
+      issues.push(`• 花括号不匹配（{${openBraces} 开 / ${closeBraces} 闭}），JSON 结构不完整`)
+    }
+    const openBrackets = (trimmed.match(/\[/g) || []).length
+    const closeBrackets = (trimmed.match(/\]/g) || []).length
+    if (openBrackets !== closeBrackets) {
+      issues.push(`• 方括号不匹配（[${openBrackets} 开 / ${closeBrackets} 闭]）`)
+    }
+
+    // 截取末端供人工排查
+    const tail = trimmed.length > 200 ? '…' + trimmed.slice(-200) : trimmed
+    const head = trimmed.length > 150 ? trimmed.slice(0, 150) + '…' : trimmed
+
+    let diagnostic = `AI 返回的数据格式无法解析为有效 JSON。\n\n`
+    diagnostic += `【内容头部】${head}\n`
+    diagnostic += `【内容尾部】${tail}\n`
+    if (issues.length > 0) {
+      diagnostic += `\n【检测到的问题】\n${issues.join('\n')}\n`
+    }
+    diagnostic += `\n【修复建议】请确保输出为标准 JSON 格式：使用双引号、无尾随逗号、正确闭合所有括号。`
+    return diagnostic
+  }
+
+  /**
+   * ★ AI 自检循环：带 LLM 反馈的 JSON 解析
+   *
+   * 当 parseJSON 失败时，将详细错误反馈给 LLM 并要求其重新输出，
+   * 最多重试 maxRetries 次。适用于对 JSON 格式要求严格的场景。
+   *
+   * @param text AI 原始输出
+   * @param retryLLM 重试时调用 LLM 的函数（接收错误反馈，返回修正后的输出）
+   * @param maxRetries 最大重试次数（默认 2）
+   * @returns 解析结果
+   */
+  protected async parseJSONWithSelfCheck<T>(
+    text: string,
+    retryLLM: (errorFeedback: string) => Promise<string>,
+    maxRetries: number = 2,
+  ): Promise<T> {
+    let currentText = text
+    let lastError = ''
+
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        return this.parseJSON<T>(currentText)
+      } catch (err) {
+        lastError = err instanceof Error ? err.message : String(err)
+        if (attempt >= maxRetries) break
+
+        // 构建反馈消息，让 LLM 自我修正
+        const feedback = `你上一次输出的 JSON 格式有误，请修正后重新输出。\n\n【解析错误诊断】\n${lastError}\n\n请只输出修正后的纯 JSON（不要包裹在 Markdown 代码块中，不要添加任何说明文字）。`
+        try {
+          currentText = await retryLLM(feedback)
+        } catch {
+          break // LLM 调用也失败了，不再重试
+        }
+      }
+    }
+
+    throw new Error(`JSON 解析失败（已重试 ${maxRetries} 次）: ${lastError}`)
   }
 
   /**
