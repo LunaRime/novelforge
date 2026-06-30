@@ -70,5 +70,10 @@
     "target": ["AppImage"],
     "artifactName": "${productName}-Linux-${version}.${ext}",
     "category": "Office"
+  },
+  "publish": {
+    "provider": "github",
+    "owner": "LunaRime",
+    "repo": "novelforge"
   }
 }
