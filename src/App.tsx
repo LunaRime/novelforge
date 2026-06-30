@@ -24,6 +24,7 @@ import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
 import { globalEventBus } from './shared/event-bus'
+import UpdateNotification from './components/UpdateNotification'
 
 /**
  * Vela 主应用组件
@@ -119,6 +120,9 @@ export default function App() {
     <div className="flex flex-col w-full h-full overflow-hidden">
       {/* 标题栏 */}
       <TitleBar />
+
+      {/* 更新通知栏 */}
+      <UpdateNotification />
 
       {/*
         主体：flex 行 = LeftBar | 纵向PanelGroup | RightBar

@@ -431,9 +431,66 @@ export interface MCPChannels {
   'mcp:get-config-path': { args: []; return: string }
 }
 
+// ===== 应用更新 =====
+export interface UpdateProgressInfo {
+  percent: number
+  bytesPerSecond: number
+  total: number
+  transferred: number
+}
+
+export interface UpdateInfo {
+  version: string
+  releaseDate: string
+  releaseNotes?: string
+  files: Array<{ url: string; size: number }>
+}
+
+export interface UpdateChannels {
+  'update:check': {
+    args: []
+    return: { hasUpdate: boolean; info?: UpdateInfo; error?: string }
+  }
+  'update:download': {
+    args: []
+    return: { success: boolean; error?: string }
+  }
+  'update:install': {
+    args: []
+    return: { success: boolean; error?: string }
+  }
+  'update:get-version': {
+    args: []
+    return: { currentVersion: string; appName: string }
+  }
+  'update:get-status': {
+    args: []
+    return: { status: UpdateStatus; info?: UpdateInfo; progress?: UpdateProgressInfo; error?: string }
+  }
+  'uninstall:trigger': {
+    args: []
+    return: { success: boolean; error?: string }
+  }
+  'uninstall:clean-user-data': {
+    args: []
+    return: { success: boolean; error?: string }
+  }
+  'update:open-releases': {
+    args: []
+    return: { success: boolean }
+  }
+}
+
+export type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'error' | 'no-update'
+
+export interface UpdateEvents {
+  'update:status-changed': { status: UpdateStatus; info?: UpdateInfo; error?: string }
+  'update:download-progress': { progress: UpdateProgressInfo }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels
-export type AllEventChannels = LLMStreamEvents
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels
+export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels
