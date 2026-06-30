@@ -134,7 +134,7 @@ export async function runAgentLoop(
     }
 
     // 解析 LLM 回复：分离文本和 tool_call
-    const { textParts, toolCalls } = parseToolCalls(llmResponse)
+    const { textParts, toolCalls, parseErrors } = parseToolCalls(llmResponse)
 
     // 输出文本部分（清理可能残留的 tool_call/tool_result 标记）
     let textContent = textParts.join('')
@@ -148,6 +148,19 @@ export async function runAgentLoop(
     if (textContent) {
       callbacks.onTextChunk(textContent)
       fullAssistantText += textContent
+    }
+
+    // ★ AI 自检：如果有解析失败但没有任何成功的 tool_call，
+    //    将详细错误注入为 observation，让 LLM 自我修正
+    if (parseErrors.length > 0 && toolCalls.length === 0) {
+      const errorFeedback = formatParseErrorsForLLM(parseErrors)
+      messages.push({ role: 'assistant', content: llmResponse })
+      messages.push({
+        role: 'user',
+        content: `[系统诊断 — tool_call 解析失败]\n\n${errorFeedback}\n\n请根据上述诊断修正后重新输出 tool_call。`,
+      })
+      console.warn('[AgentEngine] 注入解析错误反馈给 LLM，触发自我修正')
+      continue
     }
 
     // 如果没有 tool_call，循环结束
@@ -292,18 +305,31 @@ interface ParsedToolCall {
   arguments: Record<string, unknown>
 }
 
+/** Tool 调用解析错误详情（供 AI 自检反馈） */
+export interface ToolParseError {
+  /** 原始 tool_call 内容（截断到 300 字符） */
+  rawContent: string
+  /** 错误原因 */
+  reason: string
+  /** 修复建议 */
+  suggestion: string
+}
+
 /**
  * 从 LLM 输出中解析 <tool_call>...</tool_call> 标签
  *
- * 返回分离后的文本片段和 tool 调用列表。
- * 增强版：支持 JSON 前后有多余文字的容错解析。
+ * 返回分离后的文本片段、tool 调用列表和解析错误详情。
+ * 增强版：支持 JSON 前后有多余文字的容错解析 + 详细错误诊断。
  */
 export function parseToolCalls(text: string): {
   textParts: string[]
   toolCalls: ParsedToolCall[]
+  /** AI 自检：解析失败的错误详情，可反馈给 LLM 让其自我修正 */
+  parseErrors: ToolParseError[]
 } {
   const toolCalls: ParsedToolCall[] = []
   const textParts: string[] = []
+  const parseErrors: ToolParseError[] = []
 
   // 匹配 <tool_call>...</tool_call> 标签
   const regex = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g
@@ -318,7 +344,7 @@ export function parseToolCalls(text: string): {
     }
     lastIndex = regex.lastIndex
 
-    // 解析 JSON（增强容错）
+    // 解析 JSON（增强容错 + 详细错误诊断）
     const rawContent = match[1].trim()
     let parsed = false
 
@@ -328,11 +354,16 @@ export function parseToolCalls(text: string): {
       if (data.name && typeof data.name === 'string') {
         toolCalls.push({ name: data.name, arguments: data.arguments ?? {} })
         parsed = true
+      } else {
+        parseErrors.push({
+          rawContent: rawContent.slice(0, 300),
+          reason: 'JSON 解析成功但缺少必需的 "name" 字段',
+          suggestion: '请确保 tool_call 内包含 {"name": "工具名", "arguments": {...}} 格式的 JSON，name 字段为必填',
+        })
       }
-    } catch { /* 尝试容错解析 */ }
-
-    // 策略 2：从内容中提取 JSON 对象（LLM 可能在 JSON 前后加了额外文字）
-    if (!parsed) {
+    } catch (e1) {
+      const errMsg1 = e1 instanceof SyntaxError ? e1.message : String(e1)
+      // 策略 2：从内容中提取 JSON 对象（LLM 可能在 JSON 前后加了额外文字）
       const jsonMatch = rawContent.match(/\{[\s\S]*\}/)
       if (jsonMatch) {
         try {
@@ -340,16 +371,35 @@ export function parseToolCalls(text: string): {
           if (data.name && typeof data.name === 'string') {
             toolCalls.push({ name: data.name, arguments: data.arguments ?? {} })
             parsed = true
+          } else {
+            parseErrors.push({
+              rawContent: rawContent.slice(0, 300),
+              reason: `提取到 JSON 对象但缺少 "name" 字段: ${jsonMatch[0].slice(0, 100)}`,
+              suggestion: '请确保 JSON 对象包含 "name"（工具名）和 "arguments"（参数对象）两个字段',
+            })
           }
-        } catch {
-          console.warn('[AgentEngine] tool_call JSON 容错解析也失败:', rawContent)
+        } catch (e2) {
+          const errMsg2 = e2 instanceof SyntaxError ? e2.message : String(e2)
+          parseErrors.push({
+            rawContent: rawContent.slice(0, 300),
+            reason: `JSON 解析失败 — 直接解析: ${errMsg1.slice(0, 80)}；提取后解析: ${errMsg2.slice(0, 80)}`,
+            suggestion: `请检查：1) 所有字符串必须用双引号 2) 不能有尾随逗号 3) 键名必须加双引号。正确格式示例：{"name": "read_file", "arguments": {"path": "/path/to/file"}}`,
+          })
         }
+      } else {
+        parseErrors.push({
+          rawContent: rawContent.slice(0, 300),
+          reason: `内容中未找到有效 JSON 对象（无 {} 结构）: ${errMsg1.slice(0, 80)}`,
+          suggestion: 'tool_call 标签内必须包含一个 JSON 对象，格式为 {"name": "工具名", "arguments": {...}}',
+        })
       }
     }
 
-    // 完全解析失败，丢弃该标签（不再打回 textParts，避免泄露 XML）
     if (!parsed) {
-      console.warn('[AgentEngine] tool_call 标签解析失败，已丢弃:', rawContent)
+      console.warn('[AgentEngine] tool_call 标签解析失败，已诊断:', {
+        content: rawContent.slice(0, 100),
+        error: parseErrors[parseErrors.length - 1]?.reason,
+      })
     }
   }
 
@@ -364,7 +414,32 @@ export function parseToolCalls(text: string): {
     textParts.push(text)
   }
 
-  return { textParts, toolCalls }
+  return { textParts, toolCalls, parseErrors }
+}
+
+/**
+ * 将解析错误格式化为 LLM 可理解的反馈消息
+ * 用于注入到 observation 中，让 LLM 自我修正
+ */
+export function formatParseErrorsForLLM(parseErrors: ToolParseError[]): string {
+  if (parseErrors.length === 0) return ''
+
+  const parts = parseErrors.map((err, i) =>
+    `[错误 ${i + 1}]
+原始内容: ${err.rawContent}
+失败原因: ${err.reason}
+修复建议: ${err.suggestion}`
+  )
+
+  return `⚠️ 以下 tool_call 解析失败，请修正后重新调用：
+
+${parts.join('\n\n')}
+
+请根据上述诊断信息修正 JSON 格式后重新输出 tool_call。常见问题：
+- 键名和字符串值必须用双引号（"），不能使用单引号（'）
+- JSON 对象/数组末尾不能有尾随逗号
+- tool_call 内必须包含 {"name": "...", "arguments": {...}} 结构
+- 请勿在 JSON 前后添加额外说明文字`
 }
 
 /**
