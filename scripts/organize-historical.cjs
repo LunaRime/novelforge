@@ -1,16 +1,22 @@
 /**
- * 历史版本整理脚本 — 将旧版本 release/ 目录重组为 portable/ + installer/ 结构
+ * 历史版本整理脚本 — 将旧版本 release/ 目录重组为命名子文件夹
  *
- * 旧结构: release/X.Y.Z/win-unpacked/ + setup.exe + portable.exe + .yml + .blockmap
- * 新结构:
+ * 结构:
  *   release/X.Y.Z/
- *     ├── portable/   ← win-unpacked 内容
- *     └── installer/  ← 仅有安装程序 exe
+ *     ├── {productName}-{version}-Portable/   ← win-unpacked 内容
+ *     └── {productName}-{version}-Installer/  ← 仅有安装程序 exe
+ *
+ * 命名规则: 版本 < 2.0 → "Vela", >= 2.0 → "NovelForge"
  */
 const fs = require('node:fs');
 const path = require('node:path');
 
 const releaseDir = path.join(__dirname, '..', 'release');
+
+function getProductName(version) {
+  const major = parseInt(version.split('.')[0], 10);
+  return major >= 2 ? 'NovelForge' : 'Vela';
+}
 
 const versions = fs.readdirSync(releaseDir).filter(name => {
   const fullPath = path.join(releaseDir, name);
@@ -18,30 +24,28 @@ const versions = fs.readdirSync(releaseDir).filter(name => {
 });
 
 for (const version of versions) {
+  const productName = getProductName(version);
   const verDir = path.join(releaseDir, version);
 
-  // 1. win-unpacked → portable
+  // 1. win-unpacked → {productName}-{version}-Portable
   const winUnpacked = path.join(verDir, 'win-unpacked');
-  const portableDir = path.join(verDir, 'portable');
+  const portableDir = path.join(verDir, `${productName}-${version}-Portable`);
   if (fs.existsSync(winUnpacked)) {
     if (fs.existsSync(portableDir)) {
       fs.rmSync(portableDir, { recursive: true, force: true });
     }
     fs.renameSync(winUnpacked, portableDir);
-    console.log(`[${version}] win-unpacked → portable/`);
+    console.log(`[${version}] win-unpacked → ${productName}-${version}-Portable/`);
   } else if (!fs.existsSync(portableDir)) {
-    console.log(`[${version}] ⚠ 无 win-unpacked 也无 portable/`);
-  } else {
-    console.log(`[${version}] portable/ 已存在，跳过`);
+    console.log(`[${version}] ⚠ 无 win-unpacked 也无 Portable/`);
   }
 
-  // 2. 移动安装程序到 installer/
-  const installerDir = path.join(verDir, 'installer');
+  // 2. 移动安装程序到 {productName}-{version}-Installer/
+  const installerDir = path.join(verDir, `${productName}-${version}-Installer`);
   if (!fs.existsSync(installerDir)) {
     fs.mkdirSync(installerDir, { recursive: true });
   }
 
-  // 匹配 setup/installer exe
   const allFiles = fs.readdirSync(verDir).filter(f => {
     const fp = path.join(verDir, f);
     return fs.statSync(fp).isFile();
@@ -53,15 +57,9 @@ for (const version of versions) {
     if ((lower.includes('setup') || lower.includes('installer')) && lower.endsWith('.exe')) {
       const src = path.join(verDir, file);
       const dst = path.join(installerDir, file);
-      if (fs.existsSync(dst)) {
-        fs.unlinkSync(src);
-        console.log(`[${version}] ${file} 已在 installer/，删除源文件`);
-        movedCount++;
-      } else {
-        fs.renameSync(src, dst);
-        console.log(`[${version}] ${file} → installer/`);
-        movedCount++;
-      }
+      fs.renameSync(src, dst);
+      console.log(`[${version}] ${file} → ${productName}-${version}-Installer/`);
+      movedCount++;
     }
   }
   if (movedCount === 0) {
@@ -69,12 +67,7 @@ for (const version of versions) {
   }
 
   // 3. 清理不需要的文件
-  const cleanupPatterns = [
-    /\.blockmap$/,
-    /\.yml$/,
-    /\.yaml$/,
-    /-portable\.exe$/i,
-  ];
+  const cleanupPatterns = [/\.blockmap$/, /\.yml$/, /\.yaml$/, /-portable\.exe$/i];
 
   const remaining = fs.readdirSync(verDir).filter(f => {
     const fp = path.join(verDir, f);
@@ -83,8 +76,7 @@ for (const version of versions) {
 
   for (const file of remaining) {
     if (cleanupPatterns.some(p => p.test(file))) {
-      const fp = path.join(verDir, file);
-      fs.unlinkSync(fp);
+      fs.unlinkSync(path.join(verDir, file));
       console.log(`[${version}] 已清理 ${file}`);
     }
   }

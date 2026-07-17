@@ -54,7 +54,7 @@
     ]
   },
   "nsis": {
-    "artifactName": "installer/${productName}-${version}-Installer.${ext}",
+    "artifactName": "${productName}-${version}-Installer/${productName}-${version}-Installer.${ext}",
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
