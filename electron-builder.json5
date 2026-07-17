@@ -45,33 +45,20 @@
     "category": "public.app-category.productivity"
   },
   "win": {
+    "signAndEditExecutable": false,
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
-      },
-      {
-        "target": "portable",
-        "arch": ["x64"]
-      },
-      {
-        "target": "zip",
         "arch": ["x64"]
       }
     ]
   },
   "nsis": {
-    "artifactName": "${productName}-${version}-Installer.${ext}",
+    "artifactName": "installer/${productName}-${version}-Installer.${ext}",
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
     "deleteAppDataOnUninstall": false
-  },
-  "portable": {
-    "artifactName": "${productName}-${version}-Portable.${ext}"
-  },
-  "zip": {
-    "artifactName": "${productName}-${version}-Portable.zip"
   },
   "linux": {
     "target": ["AppImage"],

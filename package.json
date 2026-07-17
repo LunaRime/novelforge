@@ -4,11 +4,12 @@
   "description": "NovelForge - AI 深度驱动的小说创作 IDE",
   "author": "LunaRime",
   "private": true,
+  "packageManager": "pnpm@9.15.4",
   "type": "module",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "tsc && vite build && electron-builder && node scripts/organize-release.cjs",
     "typecheck": "tsc --noEmit",
     "build:vite": "vite build",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
