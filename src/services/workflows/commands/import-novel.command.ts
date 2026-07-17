@@ -27,8 +27,12 @@ export interface ImportedChapter {
 // =================================================================
 
 export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
+  /** 本次导入的幂等会话 ID */
+  private importSessionId: string
+
   constructor(private chapters: ImportedChapter[]) {
     super()
+    this.importSessionId = crypto.randomUUID?.() ?? `import_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
   }
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
@@ -36,11 +40,29 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
     if (!project) throw new Error('未打开项目')
 
     callbacks.log(`📖 开始作为定稿导入 ${this.chapters.length} 章正文到数据库...`)
+    callbacks.log(`🔑 导入会话 ID: ${this.importSessionId}`)
     callbacks.setProgress(5)
 
-    // 1. 批量创建草稿并标记为 finalized
+    // 获取已存在的章节号（幂等检测）
+    const existingChapters = await ipc.invoke('db:draft-get-all-chapter-numbers') as number[]
+    const existingSet = new Set(existingChapters)
+
+    // 1. 批量创建草稿并标记为 finalized（幂等保护）
+    let skippedCount = 0
     for (let i = 0; i < this.chapters.length; i++) {
       const ch = this.chapters[i]
+
+      // 幂等检测：如果该章节已有定稿（source='write'），跳过
+      if (existingSet.has(ch.number)) {
+        const latestDraft = await ipc.invoke('db:draft-get-latest', ch.number) as { source?: string } | null
+        if (latestDraft?.source === 'write') {
+          skippedCount++
+          if (skippedCount <= 3) {
+            callbacks.log(`  ⏭️ 第 ${ch.number} 章已存在（source=write），跳过导入`)
+          }
+          continue
+        }
+      }
 
       // 直接调用 DB 写库（来源设为 write）
       await ipc.invoke('db:draft-create', {
@@ -56,7 +78,9 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
         callbacks.log(`  ✍️ 已导入第 ${ch.number} 章（${ch.wordCount} 字）`)
       }
     }
-    callbacks.log(`✅ 全部 ${this.chapters.length} 章已作为定稿导入数据库`)
+
+    const importedCount = this.chapters.length - skippedCount
+    callbacks.log(`✅ 全部完成：导入 ${importedCount} 章` + (skippedCount > 0 ? `，跳过 ${skippedCount} 章（已存在）` : ''))
     callbacks.setProgress(45)
 
     // 2. 逐章导入知识库（向量化）
@@ -86,9 +110,10 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
     callbacks.log(`✅ 知识库构建完成（成功 ${successCount} 章，失败 ${failCount} 章）`)
     callbacks.setProgress(90)
 
-    // 将章节数据存入 context 供后续步骤使用
+    // 将章节数据 + 导入会话 ID 存入 context 供后续步骤使用
     context.data.chapters = this.chapters
     context.data.totalChapters = this.chapters.length
+    context.data.importSessionId = this.importSessionId
 
     // 刷新文件树
     useProjectStore.getState().refreshFileTree()

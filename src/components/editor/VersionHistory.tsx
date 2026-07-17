@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { DEFAULT_LOCALE } from '../../shared/locale'
 import { History, RotateCcw, ArrowLeftRight, RefreshCw } from 'lucide-react'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -36,7 +37,7 @@ export default function VersionHistory() {
         title: c.file_name,
         status: c.status || 'draft',
       })))
-    } catch { setChapters([]) }
+    } catch (e) { console.warn('[VersionHistory] 加载章节列表失败:', e); setChapters([]) }
     setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id])
@@ -53,7 +54,7 @@ export default function VersionHistory() {
     try {
       const vers = await getChapterVersions(chapterId)
       setVersions(vers)
-    } catch { setVersions([]) }
+    } catch (e) { console.warn('[VersionHistory] 加载版本列表失败:', e); setVersions([]) }
   }
 
   useEffect(() => {
@@ -190,7 +191,7 @@ export default function VersionHistory() {
                         {ver.word_count} 字
                       </span>
                       <span className="text-[0.7rem] text-[var(--color-text-muted)]">
-                        {new Date(ver.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(ver.created_at).toLocaleString(DEFAULT_LOCALE, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">

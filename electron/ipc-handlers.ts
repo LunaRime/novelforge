@@ -1,4 +1,5 @@
 import { ensureVelaHome, VELA_HOME } from './utils/config-utils'
+import { logger } from './utils/logger'
 
 import { registerConfigController } from './controllers/config-controller'
 import { registerProjectController } from './controllers/project-controller'
@@ -29,5 +30,5 @@ export function registerIPCHandlers() {
   registerEmbeddingController()
   registerUpdateController()
 
-  console.log(`[Vela IPC] 所有 Controller 已注册完成 | 全局工作区: ${VELA_HOME}`)
+  logger.info('IPC', `所有 Controller 已注册完成 | 全局工作区: ${VELA_HOME}`)
 }

@@ -10,6 +10,7 @@
 import { generateEmbeddings } from './embedding'
 import type { ModelProfile } from '../src/shared/ipc-channels'
 import { LLMFactory } from './llm/llm-factory'
+import { logger } from './utils/logger'
 import {
   optimizeForEmbedding,
   contentHash,
@@ -124,7 +125,7 @@ export class EmbeddingService {
   /** 配置嵌入服务（专用 Embedding API） */
   configure(config: EmbeddingConfig): void {
     this.config = config
-    console.log(`[EmbeddingService] Embedding API 已配置: ${config.modelName} (${config.protocol}, ${config.dimensions}d)`)
+    logger.info('Embedding', `Embedding API 已配置: ${config.modelName} (${config.protocol}, ${config.dimensions}d)`)
   }
 
   /** 获取当前 Embedding API 配置 */
@@ -152,7 +153,7 @@ export class EmbeddingService {
     const status = this.llmConfig.enabled && this.llmConfig.model
       ? `已启用 (模型: ${this.llmConfig.model.modelName}, ${this.llmConfig.dimensions}d)`
       : '已禁用'
-    console.log(`[EmbeddingService] LLM 向量化 ${status}`)
+    logger.info('Embedding', `LLM 向量化 ${status}`)
   }
 
   /** 获取 LLM 向量化配置 */
@@ -321,7 +322,7 @@ export class EmbeddingService {
       }
 
       // JSON 模式失败，记录原因
-      console.debug('[EmbeddingService] JSON 模式失败:', res1.error || '空响应', '→ 尝试纯文本模式')
+      logger.debug('Embedding', `JSON 模式失败: ${res1.error || '空响应'} → 尝试纯文本模式`)
     } catch {
       // provider.generate 抛出异常（如 API 不可达），继续尝试 2
     }
@@ -487,7 +488,7 @@ export class EmbeddingService {
         const tokens = Math.ceil(text.length * 0.75)
         return { vector, text, tokens, source: 'embedding_api' }
       } catch (error) {
-        console.warn('[EmbeddingService] Embedding API 失败，尝试 LLM 向量化:', String(error))
+        logger.warn('Embedding', `Embedding API 失败，尝试 LLM 向量化: ${String(error)}`)
         // 降级到 LLM 向量化
       }
     }

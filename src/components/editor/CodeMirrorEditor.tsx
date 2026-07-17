@@ -25,15 +25,18 @@ export type CodeMirrorEditorProps = {
   mode?: 'document' | 'prose'
 }
 
+/** AI 段落改写操作 — 接入 RefineParagraphsCommand 的 5 种模式 */
 const AI_ACTIONS = [
-  { key: 'refine', label: '润色', color: 'text-blue-400', prompt: '润色这部分，使其更具文学感和感染力。' },
-  { key: 'expand', label: '扩写', color: 'text-amber-400', prompt: '扩写这部分，增加更多细节描写和环境烘托。' },
-  { key: 'continue', label: '续写', color: 'text-purple-400', prompt: '根据上下文，合理续写接下来的情节。' },
-  { key: 'dialogue', label: '对话', color: 'text-emerald-400', prompt: '将这部分改写为更生动传神的对话形式。' },
+  { key: 'polish',  label: '润色', color: 'text-blue-400',   prompt: '润色选中段落，修正语病、优化措辞、提升流畅度。不改变情节和字数。' },
+  { key: 'expand',  label: '扩写', color: 'text-amber-400',  prompt: '扩写选中段落，增加细节描写和感官体验。保持原有情节不变。' },
+  { key: 'shrink',  label: '缩写', color: 'text-purple-400', prompt: '精简选中段落，删除冗余修饰。保留核心情节和关键对话。' },
+  { key: 'style',   label: '文风', color: 'text-emerald-400',prompt: '改变选中段落的表达风格。保持情节不变，改变叙述方式。' },
+  { key: 'conflict',label: '冲突', color: 'text-rose-400',   prompt: '增强选中段落的冲突感和张力。加入内心挣扎、外部压力或反转。' },
 ]
 
 export default function CodeMirrorEditor({
   content,
+  filePath,
   editable = true,
   onChange,
   onSave,
@@ -277,11 +280,32 @@ export default function CodeMirrorEditor({
     }
   }
 
-  const handleAcceptAI = () => {
+  const handleAcceptAI = async () => {
     if (selectionRange && aiResult && editorRef.current?.view) {
       const view = editorRef.current.view
+
+      // revision 跟踪：如果 filePath 指向数据库草稿，创建 revision 记录
+      if (filePath?.startsWith('vela://draft/')) {
+        try {
+          const draftId = parseInt(filePath.replace('vela://draft/', ''))
+          const { ipc } = await import('../../services/ipc-client')
+          const nextIdx = await ipc.invoke('db:revision-next-index', draftId) as number
+          await ipc.invoke('db:revision-create', {
+            baseDraftId: draftId,
+            revisionIndex: nextIdx,
+            revisionType: 'refine',
+            userPrompt: activeAIAction ? `气泡菜单 AI — ${activeAIAction}` : '气泡菜单 AI 改写',
+            content: aiResult,
+            wordCount: aiResult.length,
+          })
+        } catch { /* revision 创建失败不阻塞替换 */ }
+      }
+
+      // 替换文本 + 光标定位 + 滚动到替换位置
       view.dispatch({
-        changes: { from: selectionRange.from, to: selectionRange.to, insert: aiResult }
+        changes: { from: selectionRange.from, to: selectionRange.to, insert: aiResult },
+        selection: { anchor: selectionRange.from },
+        scrollIntoView: true,
       })
     }
     setAiResult(null)

@@ -13,6 +13,7 @@ import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schem
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { logger } from './utils/logger'
 
 // ===== 类型定义 =====
 
@@ -230,7 +231,7 @@ export async function addChunks(
 
     return { success: true, chunkCount: chunks.length }
   } catch (error) {
-    console.error('[Vela VectorStore] 写入失败:', error)
+    logger.error('VectorStore', `写入失败: ${error}`)
     return { success: false, chunkCount: 0, error: String(error) }
   }
 }
@@ -258,7 +259,7 @@ export async function removeDocument(
 
     return true
   } catch (error) {
-    console.error('[Vela VectorStore] 删除失败:', error)
+    logger.error('VectorStore', `删除失败: ${error}`)
     return false
   }
 }
@@ -347,11 +348,11 @@ export async function searchWithScope(
         fileName: r.fileName,
       }))
     } catch (e) {
-      console.warn('[Vela VectorStore] 纯文本检索失败:', e)
+      logger.warn('VectorStore', `纯文本检索失败: ${e}`)
       return []
     }
   } catch (error) {
-    console.error('[Vela VectorStore] 检索失败:', error)
+    logger.error('VectorStore', `检索失败: ${error}`)
     return []
   }
 }
@@ -457,7 +458,7 @@ export async function getChunksWithoutVectors(
     })
     return { count: missing.length }
   } catch (e) {
-    console.error('[Vela KB] getChunksWithoutVectors error:', e)
+    logger.error('VectorStore', `getChunksWithoutVectors error: ${e}`)
     return { count: 0 }
   }
 }
@@ -529,7 +530,7 @@ export async function updateChunkVectors(
             values: { vector: update.vector },
           })
         } catch (e) {
-          console.warn(`[Vela VectorStore] 更新块 ${update.id} 向量失败:`, e)
+          logger.warn('VectorStore', `更新块 ${update.id} 向量失败: ${e}`)
         }
       }
       return { success: true, count: updates.length }
@@ -566,13 +567,13 @@ export async function updateChunkVectors(
         const newTable = await db.openTable(TABLE_NAME)
         await newTable.createIndex('text', { config: lancedb.Index.fts() })
       } catch (e) {
-        console.warn('[Vela VectorStore] 回填覆写后 FTS 重建失败:', e)
+        logger.warn('VectorStore', `回填覆写后 FTS 重建失败: ${e}`)
       }
 
       return { success: true, count: updates.length }
     }
   } catch (error) {
-    console.error('[Vela VectorStore] 批量更新向量失败:', error)
+    logger.error('VectorStore', `批量更新向量失败: ${error}`)
     return { success: false, count: 0 }
   }
 }
@@ -590,7 +591,7 @@ export async function migrateFromJSON(
   }
 
   try {
-    console.log('[Vela VectorStore] 检测到旧 vectors.json，开始迁移...')
+    logger.info('VectorStore', '检测到旧 vectors.json，开始迁移...')
     const raw = fs.readFileSync(jsonPath, 'utf-8')
     const store = JSON.parse(raw) as {
       documents: Array<{ id: string; fileName: string; importedAt: string; chunkCount: number; filePath: string }>
@@ -632,11 +633,11 @@ export async function migrateFromJSON(
 
     // 迁移完成，重命名旧文件
     fs.renameSync(jsonPath, jsonPath + '.migrated')
-    console.log(`[Vela VectorStore] 迁移完成：${migrated} 个块已写入 LanceDB`)
+    logger.info('VectorStore', `迁移完成：${migrated} 个块已写入 LanceDB`)
 
     return { success: true, migrated }
   } catch (error) {
-    console.error('[Vela VectorStore] 迁移失败:', error)
+    logger.error('VectorStore', `迁移失败: ${error}`)
     return { success: false, migrated: 0, error: String(error) }
   }
 }

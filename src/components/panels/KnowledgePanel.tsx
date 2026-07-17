@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { DEFAULT_LOCALE } from '../../shared/locale'
 import {
   Database, RefreshCw, BookOpen,
 } from 'lucide-react'
@@ -25,7 +26,7 @@ export default function KnowledgePanel() {
       const { documents: docs, stats: s } = await loadKBData()
       setDocuments(docs)
       setStats(s)
-    } catch { /* 忽略 */ }
+    } catch (e) { console.warn('[KnowledgePanel] 加载知识库数据失败:', e) }
   }, [])
 
   useEffect(() => { 
@@ -68,7 +69,7 @@ export default function KnowledgePanel() {
                 title = firstLine.replace(/^#+\s*/, '').trim() || title
               }
             }
-          } catch { /* 忽略 */ }
+          } catch { /* 忽略 — 非关键路径，单个文档标题读取失败不影响整体 */ }
           newTitles[doc.id] = title
         })
       )
@@ -140,7 +141,7 @@ export default function KnowledgePanel() {
                     </div>
                     <div className="flex items-center gap-2 text-[0.7rem] text-[var(--color-text-muted)] mt-0.5">
                       <span>{doc.chunkCount} 块</span>
-                      <span>{new Date(doc.importedAt).toLocaleDateString('zh-CN')}</span>
+                      <span>{new Date(doc.importedAt).toLocaleDateString(DEFAULT_LOCALE)}</span>
                     </div>
                   </div>
                 </div>

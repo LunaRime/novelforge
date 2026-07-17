@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
+import { DEFAULT_LOCALE } from '../../shared/locale'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
   Sparkles, PenLine
@@ -537,7 +538,7 @@ export default function ChapterCardEditor() {
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {selected.notesUpdatedAt
-                        ? `（定稿后自动生成 — ${new Date(selected.notesUpdatedAt).toLocaleDateString('zh-CN')}）`
+                        ? `（定稿后自动生成 — ${new Date(selected.notesUpdatedAt).toLocaleDateString(DEFAULT_LOCALE)}）`
                         : '（定稿后自动生成，也可手动填写）'
                       }
                     </span>

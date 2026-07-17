@@ -6,6 +6,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 
 import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
 import { guardChapterWriting } from '../../services/workflow-guards'
+import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import {
@@ -42,7 +43,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
   const [characters, setCharacters] = useState('')
   const [userGuidance, setUserGuidance] = useState('')
   const [knowledgeHint, setKnowledgeHint] = useState('')
-  const [wordsTarget, setWordsTarget] = useState<number | ''>(3000)
+  const [wordsTarget, setWordsTarget] = useState<number | ''>(DEFAULT_WORDS_PER_CHAPTER)
   const [loadedFromHistory, setLoadedFromHistory] = useState(false)
   const [loadedFromBlueprint, setLoadedFromBlueprint] = useState(false)
   const [guardError, setGuardError] = useState<string | null>(null)
@@ -85,14 +86,14 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           setKeyEvents(last.keyEvents || '')
           setCharacters(last.characters || '')
           setUserGuidance(last.userGuidance || '')
-          setWordsTarget(last.wordsTarget || currentProject.novelConfig.wordsPerChapter || 3000)
+          setWordsTarget(last.wordsTarget || currentProject.novelConfig.wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER)
           setLoadedFromHistory(true)
           return
         }
       }
     } catch { /* 文件不存在，使用默认值 */ }
     // 默认值：根据已有稿件数量推断下一章节号
-    setWordsTarget(currentProject.novelConfig.wordsPerChapter || 3000)
+    setWordsTarget(currentProject.novelConfig.wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER)
     setChapterNumber(1)
     setLoadedFromHistory(false)
   }, [currentProject])
@@ -112,7 +113,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
         setKeyEvents(String(prefill.keyEvents || ''))
         setCharacters(String(prefill.characters || ''))
         setUserGuidance(String(prefill.userGuidance || ''))
-        setWordsTarget(currentProject.novelConfig.wordsPerChapter || 3000)
+        setWordsTarget(currentProject.novelConfig.wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER)
         setLoadedFromBlueprint(true)
         setLoadedFromHistory(false)
       } else {
@@ -247,9 +248,9 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                     onChange={(e) => setWordsTarget(e.target.value === '' ? '' : parseInt(e.target.value))}
                     onBlur={() => {
                       const v = Number(wordsTarget)
-                      if (!v || v < 100) setWordsTarget(3000)
+                      if (!v || v < 100) setWordsTarget(DEFAULT_WORDS_PER_CHAPTER)
                     }}
-                    placeholder="3000"
+                    placeholder="DEFAULT_WORDS_PER_CHAPTER"
                     min={100}
                     step={500}
                   />

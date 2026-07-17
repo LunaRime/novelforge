@@ -10,5 +10,13 @@ module.exports = {
       'warn',
       { allowConstantExport: true },
     ],
+    '@typescript-eslint/no-explicit-any': 'error',
   },
+  overrides: [
+    {
+      files: ['electron/**/*.ts'],
+      env: { node: true, browser: false, es2022: true },
+      rules: { 'no-console': 'off' },
+    },
+  ],
 }

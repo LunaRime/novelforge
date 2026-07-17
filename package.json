@@ -1,6 +1,6 @@
 {
   "name": "novelforge",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "NovelForge - AI 深度驱动的小说创作 IDE",
   "author": "LunaRime",
   "private": true,
@@ -9,6 +9,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build && electron-builder",
+    "typecheck": "tsc --noEmit",
+    "build:vite": "vite build",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
@@ -36,7 +38,6 @@
     "better-sqlite3": "^12.8.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "diff-match-patch": "^1.0.5",
     "electron-updater": "^6.8.9",
     "flatbuffers": "^25.9.23",
     "gpt-tokenizer": "^3.4.0",
@@ -46,7 +47,7 @@
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
     "react-resizable-panels": "^4.9.0",
-    "reflect-metadata": "^0.2.2",
+
     "rehype-raw": "^7.0.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
@@ -64,7 +65,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.2",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/diff-match-patch": "^1.0.36",
+
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
@@ -89,18 +90,5 @@
     "vite-plugin-electron": "^0.29.1",
     "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "^4.1.4"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "better-sqlite3",
-      "electron",
-      "electron-winstaller",
-      "esbuild"
-    ],
-    "extraDependencies": [
-      "apache-arrow",
-      "flatbuffers",
-      "reflect-metadata"
-    ]
   }
 }

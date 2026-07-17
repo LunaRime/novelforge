@@ -268,8 +268,8 @@ async function loadPendingForeshadowing(
         if (parsed.pendingForeshadowing && Array.isArray(parsed.pendingForeshadowing)) {
           return parsed.pendingForeshadowing
         }
-      } catch { /* ignore */ }
+      } catch { /* ignore — JSON 解析失败时退回到返回空数组 */ }
     }
-  } catch { /* ignore */ }
+  } catch { /* ignore — IPC 读取失败时退回到返回空数组 */ }
   return []
 }

@@ -7,6 +7,7 @@
 
 import { ipcMain } from 'electron'
 import { mcpManager } from './mcp-manager'
+import { logger } from '../utils/logger'
 
 /**
  * 注册所有 MCP IPC 处理器
@@ -78,5 +79,5 @@ export function registerMCPHandlers(): void {
     return mcpManager.getDefaultConfigPath()
   })
 
-  console.log('[MCP] IPC 处理器已注册')
+  logger.info('MCP', 'IPC 处理器已注册')
 }

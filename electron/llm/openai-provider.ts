@@ -1,5 +1,16 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
+import { withRetry } from './retry-handler'
+
+/** 带 HTTP 状态码的错误对象，用于重试判断 */
+class HttpError extends Error {
+  status: number
+  constructor(status: number, message: string) {
+    super(message)
+    this.name = 'HttpError'
+    this.status = status
+  }
+}
 
 export class OpenAIProvider implements ILLMProvider {
   private buildUrl(baseUrl: string): string {
@@ -13,56 +24,77 @@ export class OpenAIProvider implements ILLMProvider {
   }
 
   async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
-    const url = this.buildUrl(model.baseUrl)
+    return withRetry(async () => {
+      const url = this.buildUrl(model.baseUrl)
 
-    const body: Record<string, unknown> = {
-      model: model.modelName,
-      messages,
-      max_tokens: opts.maxTokens ?? model.maxTokens,
-      stream: false,
-    }
+      const body: Record<string, unknown> = {
+        model: model.modelName,
+        messages,
+        max_tokens: opts.maxTokens ?? model.maxTokens,
+        stream: false,
+      }
 
-    // 思考模式下 temperature/top_p 等参数不生效（DeepSeek 会静默忽略），仅在非思考模式下传递
-    if (opts.thinking) {
-      // thinking 参数直接放在请求体顶层（非 extra_body，那是 OpenAI SDK 层概念）
-      body.thinking = { type: 'enabled' }
-    } else {
-      body.temperature = opts.temperature ?? model.temperature
-    }
+      // 思考模式下 temperature/top_p 等参数不生效（DeepSeek 会静默忽略），仅在非思考模式下传递
+      if (opts.thinking) {
+        body.thinking = { type: 'enabled' }
+      } else {
+        body.temperature = opts.temperature ?? model.temperature
+      }
 
-    if (opts.responseFormat) body.response_format = opts.responseFormat
+      if (opts.responseFormat) body.response_format = opts.responseFormat
 
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${model.apiKey}`,
-      },
-      body: JSON.stringify(body),
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${model.apiKey}`,
+        },
+        body: JSON.stringify(body),
+      })
+
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        const errorMsg = `API 调用失败 (${res.status}): ${text}`
+        // 抛出 HttpError 供 withRetry 判断是否可重试
+        if (res.status === 429 || res.status === 503 || res.status >= 500) {
+          throw new HttpError(res.status, errorMsg)
+        }
+        // 4xx（除 429）不重试，直接返回错误
+        return { success: false, content: '', error: errorMsg }
+      }
+
+      const data = await res.json() as {
+        choices: Array<{ message: { content: string; reasoning_content?: string } }>
+        usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+      }
+
+      let finalContent = data.choices?.[0]?.message?.content ?? ''
+      finalContent = finalContent.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+
+      return {
+        success: true,
+        content: finalContent,
+        usage: data.usage ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens,
+        } : undefined,
+      }
+    }).catch((error) => {
+      // withRetry 耗尽重试后返回友好的错误
+      if (error instanceof HttpError) {
+        let errorMsg = error.message
+        if (error.status === 429) {
+          errorMsg = `请求过于频繁 (429)，已重试多次仍失败。请稍后重试或降低并发数。`
+        } else if (error.status === 503) {
+          errorMsg = `服务暂时不可用 (503)，已重试多次仍失败。请稍后重试。`
+        } else if (error.status >= 500) {
+          errorMsg = `服务器错误 (${error.status})，已重试多次仍失败。`
+        }
+        return { success: false, content: '', error: errorMsg }
+      }
+      return { success: false, content: '', error: String(error) }
     })
-
-    if (!res.ok) {
-      const text = await res.text()
-      return { success: false, content: '', error: `API 调用失败 (${res.status}): ${text}` }
-    }
-
-    const data = await res.json() as {
-      choices: Array<{ message: { content: string; reasoning_content?: string } }>
-      usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
-    }
-
-    let finalContent = data.choices?.[0]?.message?.content ?? ''
-    finalContent = finalContent.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
-
-    return {
-      success: true,
-      content: finalContent,
-      usage: data.usage ? {
-        promptTokens: data.usage.prompt_tokens,
-        completionTokens: data.usage.completion_tokens,
-        totalTokens: data.usage.total_tokens,
-      } : undefined,
-    }
   }
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {

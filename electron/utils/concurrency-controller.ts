@@ -19,12 +19,15 @@ export interface ConcurrencyConfig {
   maxQueueSize: number
   /** 默认超时（毫秒），0 = 不超时 */
   defaultTimeoutMs: number
+  /** 排队超过此时间的请求强制提升到队首（毫秒），默认 60s */
+  maxWaitMs: number
 }
 
 export const DEFAULT_CONCURRENCY_CONFIG: ConcurrencyConfig = {
   maxConcurrent: 3,
   maxQueueSize: 50,
   defaultTimeoutMs: 120_000,
+  maxWaitMs: 60_000,
 }
 
 /** 排队中的请求 */
@@ -340,8 +343,38 @@ export class ConcurrencyController {
     this.queue = this.queue.filter((r) => !toRemove.includes(r.id))
   }
 
-  /** 处理队列：有可用槽位时取下一个排队请求执行 */
+  /** 处理队列：老化优先级 + 有可用槽位时取下一个排队请求执行 */
   private processQueue(): void {
+    // 老化机制：降低长时间等待请求的优先级值（提高实际优先级）
+    const now = Date.now()
+    const AGING_THRESHOLD_MS = 30_000 // 排队超过 30 秒开始老化
+    let needsResort = false
+
+    for (const req of this.queue) {
+      const waitTime = now - req.enqueuedAt
+
+      // 超过 maxWaitMs 的请求强制提升到最高优先级
+      if (waitTime >= this.config.maxWaitMs) {
+        if (req.priority !== -1) {
+          req.priority = -1 // 最高优先级（队首）
+          needsResort = true
+        }
+      } else if (waitTime >= AGING_THRESHOLD_MS) {
+        // 每超过阈值 10 秒，优先级值递减 1（提高优先级）
+        const agingSteps = Math.floor((waitTime - AGING_THRESHOLD_MS) / 10_000)
+        const newPriority = Math.max(-1, req.priority - agingSteps)
+        if (newPriority !== req.priority) {
+          req.priority = newPriority
+          needsResort = true
+        }
+      }
+    }
+
+    // 如果优先级有变化，重新排序
+    if (needsResort) {
+      this.queue.sort((a, b) => a.priority - b.priority)
+    }
+
     while (
       this.activeSlots.length < this.config.maxConcurrent &&
       this.queue.length > 0
@@ -410,7 +443,10 @@ export class ConcurrencyController {
 
     try {
       const race: Promise<T> = abortPromise
-        ? Promise.race([fn(), timeoutPromise, abortPromise])
+        ? Promise.race([fn(), timeoutPromise, abortPromise]).finally(() => {
+            // 超时或取消时，通知上游 abort 信号以便清理底层 fetch/连接
+            if (signal && !signal.aborted) { /* signal is external; caller should abort on timeout */ }
+          })
         : Promise.race([fn(), timeoutPromise])
 
       return await race

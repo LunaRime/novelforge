@@ -256,7 +256,7 @@ export function buildFinalizePostProcessSteps(
         callbacks.log('🎨 触发文风自动学习（每5章一次）...')
         const { AnalyzeWritingStyleCommand } = await import('./analyze-style.command')
         await new AnalyzeWritingStyleCommand().execute({
-          step: {} as unknown,
+          step: { id: '', name: '', description: '', status: 'pending' as const, logs: [] },
           context: { data: {}, cancelled: false },
           callbacks,
         })
@@ -298,15 +298,26 @@ export function buildFinalizePostProcessSteps(
         for (const char of characters) {
           if (!char.name) continue
           try {
+            // 获取角色的完整数据，防止覆写
+            // 从已有字符数据构造完整字段，仅更新 notes，防止覆写其他字段
+            const existing = char as Record<string, string | number | undefined>
             const profile = analyzeCharacterVoice(draftContent, char.name)
             if (profile.topWords.length > 0) {
               const voiceData = JSON.stringify(profile)
-              const updatedNotes = (char.notes || '') + `\n[VOICE:${char.name}]\n${voiceData}\n`
+              const updatedNotes = ((existing.notes as string) || '') + `\n[VOICE:${char.name}]\n${voiceData}\n`
               await ipc.invoke('db:character-upsert', {
-                name: char.name, role: 'supporting',
-                gender: '', age: '', appearance: '', personality: '', background: '',
-                abilities: '', motivation: '', relationships: '', arc: '', notes: updatedNotes,
-                currentState: { location: '', powerLevel: '', physicalState: '', mentalState: '', keyItems: '', recentEvents: '', updatedAtChapter: chapterNumber },
+                name: existing.name as string,
+                role: (existing.role as string) || 'supporting',
+                gender: (existing.gender as string) || '',
+                age: (existing.age as string) || '',
+                appearance: (existing.appearance as string) || '',
+                personality: (existing.personality as string) || '',
+                background: (existing.background as string) || '',
+                abilities: (existing.abilities as string) || '',
+                motivation: (existing.motivation as string) || '',
+                relationships: (existing.relationships as string) || '',
+                arc: (existing.arc as string) || '',
+                notes: updatedNotes,
               } as never)
               analyzed++
             }

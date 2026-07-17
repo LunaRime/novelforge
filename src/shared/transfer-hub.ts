@@ -90,6 +90,8 @@ export class TransferHub {
       timeout: ReturnType<typeof setTimeout>
     }
   >()
+  /** 已投递的响应 ID 集合，防止双重投递 */
+  private deliveredResponses = new Set<string>()
   private initialized = false
   private msgCounter = 0
 
@@ -185,8 +187,7 @@ export class TransferHub {
 
     try {
       // 1. preProcess 中间件链
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      let processedMsg: HubMessage<any> = msg
+      let processedMsg: HubMessage<unknown> = msg as HubMessage<unknown>
       for (const mw of this.middlewares) {
         if (mw.preProcess) {
           const result = await mw.preProcess(processedMsg)
@@ -210,8 +211,9 @@ export class TransferHub {
 
       // 4. 向后兼容：发射到 globalEventBus（仅限 GlobalEventType）
       if (this.isGlobalEventType(type)) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        globalEventBus.emit(type as GlobalEventType, payload as any)
+        // TransferHub 泛型 payload 与 GlobalEventType 严格 payload 映射不对齐，需要类型断言
+        const emitFn = globalEventBus.emit as unknown as (type: string, payload: unknown) => void
+        emitFn(type, payload)
       }
     } catch (error) {
       console.error(`[TransferHub] emit 错误 (type=${type}):`, error)
@@ -267,12 +269,21 @@ export class TransferHub {
   /**
    * 响应一个请求。
    * 使用 correlationId 匹配原始请求。
+   *
+   * 双重投递防护：已投递的响应不会再次处理。
    */
   async respond<T = unknown>(
     requestMsg: HubMessage,
     payload: T,
   ): Promise<boolean> {
     const correlationId = requestMsg.id
+
+    // 防止双重投递：同一响应 ID 只处理一次
+    if (this.deliveredResponses.has(correlationId)) {
+      return false
+    }
+    this.deliveredResponses.add(correlationId)
+
     const pending = this.pendingRequests.get(correlationId)
 
     if (pending) {
@@ -282,7 +293,7 @@ export class TransferHub {
       return true
     }
 
-    // 如果没有找到对应的待处理请求，尝试通过 RESPONSE 事件发送
+    // pending 已被超时清除 → 仅发射 fire-and-forget RESPONSE 事件
     const responseType = requestMsg.type.replace(/^REQUEST:/, 'RESPONSE:')
     await this.emit(responseType, {
       correlationId,
@@ -361,6 +372,7 @@ export class TransferHub {
       pending.reject(new Error('TransferHub 已销毁'))
     }
     this.pendingRequests.clear()
+    this.deliveredResponses.clear()
 
     // 清理路由
     this.routes = []
@@ -445,17 +457,29 @@ export class TransferHub {
     }
   }
 
-  /** 检查是否为 GlobalEventType */
+  /**
+   * 全局事件前缀列表 — 匹配此前缀的事件将被转发到 globalEventBus
+   *
+   * 当新增 GlobalEventType 时，请在此列表中添加对应前缀。
+   * 支持通配符匹配：WORKFLOW_ 匹配所有 WORKFLOW_COMPLETE、WORKFLOW_ERROR 等。
+   */
+  private static readonly GLOBAL_EVENT_PREFIXES = [
+    'WORKFLOW_',
+    'FINALIZE_',
+    'ARCH_',
+    'PROJECT_',
+    'REFRESH_RESOURCE',
+    'CHAPTER_',
+    'DRAFT_',
+    'CHARACTER_',
+    'SYSTEM_',
+  ]
+
+  /** 检查是否为 GlobalEventType（通过前缀通配符匹配） */
   private isGlobalEventType(type: string): boolean {
-    // GlobalEventType 包含这些前缀
-    const globalTypes = [
-      'WORKFLOW_',
-      'FINALIZE_',
-      'ARCH_',
-      'PROJECT_',
-      'REFRESH_RESOURCE',
-    ]
-    return globalTypes.some((prefix) => type.startsWith(prefix))
+    return TransferHub.GLOBAL_EVENT_PREFIXES.some((prefix) =>
+      type.startsWith(prefix),
+    )
   }
 }
 

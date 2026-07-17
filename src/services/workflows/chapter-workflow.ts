@@ -243,7 +243,9 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
           try {
             const bp = await ipc.invoke('db:blueprint-get', params.chapterNumber)
             if (bp?.title) displayTitle = bp.title
-          } catch { /* 蓝图读取失败时回退到 params */ }
+          } catch (e) {
+            console.warn('[chapter-workflow] 蓝图标题读取失败，回退使用章节参数:', e)
+          }
           const dbPath = `vela://manuscript/${draftMeta.id}`
           useEditorStore.getState().openFile({
             id: dbPath,

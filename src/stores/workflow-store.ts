@@ -1,5 +1,45 @@
 import { create } from 'zustand'
+import { DEFAULT_LOCALE } from '../shared/locale'
 import { randomUUID } from '../utils/id'
+
+// ===== 工作流 Checkpoint 持久化 =====
+
+const CHECKPOINT_KEY = 'vela-workflow-checkpoint'
+
+interface CheckpointData {
+  activeRuns: WorkflowRun[]
+  waitingRuns: Record<string, { waitingForConfirm: boolean; waitingAfterStepIndex: number }>
+  savedAt: string
+}
+
+function saveCheckpoint(state: WorkflowState): void {
+  try {
+    const data: CheckpointData = {
+      activeRuns: state.activeRuns.filter(r => r.status === 'running' || r.status === 'waiting' || r.status === 'paused'),
+      waitingRuns: state.waitingRuns,
+      savedAt: new Date().toISOString(),
+    }
+    if (data.activeRuns.length > 0) {
+      localStorage.setItem(CHECKPOINT_KEY, JSON.stringify(data))
+    } else {
+      localStorage.removeItem(CHECKPOINT_KEY)
+    }
+  } catch { /* localStorage 不可用 */ }
+}
+
+function loadCheckpoint(): CheckpointData | null {
+  try {
+    const raw = localStorage.getItem(CHECKPOINT_KEY)
+    if (!raw) return null
+    return JSON.parse(raw) as CheckpointData
+  } catch {
+    return null
+  }
+}
+
+function clearCheckpoint(): void {
+  try { localStorage.removeItem(CHECKPOINT_KEY) } catch { /* ignore */ }
+}
 
 // ===== 工作流数据模型 =====
 
@@ -21,6 +61,8 @@ export interface WorkflowStep {
   startedAt?: string
   completedAt?: string
   logs: string[]
+  /** 允许命令注入额外属性（如 commandId, params 等） */
+  [extra: string]: unknown
 }
 
 /** 工作流运行实例 */
@@ -138,6 +180,10 @@ interface WorkflowState {
   addLog: (level: 'info' | 'warn' | 'error', message: string) => void
   /** 清空日志 */
   clearLogs: () => void
+  /** 从 checkpoint 恢复未完成的工作流（应用启动时调用） */
+  restoreCheckpoint: () => CheckpointData | null
+  /** 清除持久化的 checkpoint */
+  clearCheckpoint: () => void
 }
 
 /** 工作流上下文实例 Map（runId → context） */
@@ -284,6 +330,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           result: result || get().activeRuns.find(r => r.id === run.id)?.steps[i].result,
         })
         get().addLog('info', `✅ [${definition.title}] 步骤完成: ${stepDef.name}`)
+        saveCheckpoint(get())
 
         // 步进模式：非最后一步，且未取消 → 暂停等待用户确认
         if (stepByStep && i < definition.steps.length - 1 && !context.cancelled) {
@@ -314,6 +361,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     const finalRun = get().activeRuns.find(r => r.id === run.id)
     if (finalRun && finalRun.status === 'running') {
       updateRunById(set, run.id, { status: 'completed', completedAt: new Date().toISOString() })
+      saveCheckpoint(get())
       get().addLog('info', `🎉 工作流「${definition.title}」已完成`)
 
       // 通过 EventBus 广播工作流完成事件（替代 window.dispatchEvent）
@@ -357,6 +405,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     activeContexts.delete(run.id)
     continueResolveRefs.delete(run.id)
 
+    // 持久化 checkpoint
+    saveCheckpoint(get())
     return run.id
   },
 
@@ -385,6 +435,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
         }
       })
       get().addLog('warn', '⏹ 工作流已取消')
+      saveCheckpoint(get())
     } else {
       // 取消全部
       for (const [id, ctx] of activeContexts) {
@@ -406,18 +457,45 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
         }
       })
       get().addLog('warn', '⏹ 所有工作流已取消')
+      clearCheckpoint()
     }
   },
 
   addLog: (level, message) => {
-    const entry = { time: new Date().toLocaleTimeString('zh-CN'), level, message }
+    const entry = { time: new Date().toLocaleTimeString(DEFAULT_LOCALE), level, message }
     set((s) => ({
       globalLogs: [...s.globalLogs, entry].slice(-500), // 保留最近 500 条
     }))
   },
 
   clearLogs: () => set({ globalLogs: [] }),
+
+  // ===== Checkpoint 持久化 =====
+  restoreCheckpoint: () => {
+    const cp = loadCheckpoint()
+    if (cp && cp.activeRuns.length > 0) {
+      // 将 checkpoint 中的工作流恢复为 paused 状态
+      const restored = cp.activeRuns.map(r => ({
+        ...r,
+        status: 'paused' as const,
+      }))
+      set((s) => ({
+        activeRuns: [...s.activeRuns, ...restored],
+        waitingRuns: { ...s.waitingRuns, ...cp.waitingRuns },
+      }))
+    }
+    return cp
+  },
+
+  clearCheckpoint: () => clearCheckpoint(),
 }))
+
+// Auto-save checkpoint on beforeunload
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeunload', () => {
+    saveCheckpoint(useWorkflowStore.getState())
+  })
+}
 
 // ===== 工具函数（按 runId 操作） =====
 
@@ -466,7 +544,7 @@ function appendStepLogById(
       const steps = [...r.steps]
       steps[stepIndex] = {
         ...steps[stepIndex],
-        logs: [...steps[stepIndex].logs, `[${new Date().toLocaleTimeString('zh-CN')}] ${message}`],
+        logs: [...steps[stepIndex].logs, `[${new Date().toLocaleTimeString(DEFAULT_LOCALE)}] ${message}`],
       }
       return { ...r, steps }
     })

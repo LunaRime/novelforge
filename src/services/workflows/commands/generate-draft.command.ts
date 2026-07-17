@@ -35,7 +35,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       if (futureBlueprintsArr.length > 0) {
         futureBlueprintsStr = futureBlueprintsArr.map(b => `第${b.chapterNumber}章 ${b.title}：${b.keyEvents}`).join('\n')
       }
-    } catch { /* 忽略 */ }
+    } catch (e) {
+      console.warn('[generate-draft] 加载后续蓝图失败，将仅使用当前章节信息生成:', e)
+    }
 
     const isFirstChapter = this.chapterInfo.chapterNumber === 1
     const templateKey = isFirstChapter ? 'first_chapter_draft' : 'next_chapter_draft'

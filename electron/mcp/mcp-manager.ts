@@ -14,6 +14,7 @@ import { spawn, type ChildProcess } from 'child_process'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { app } from 'electron'
+import { logger } from '../utils/logger'
 
 // ===== 类型定义 =====
 
@@ -115,10 +116,11 @@ class MCPManagerImpl {
   /**
    * 加载 MCP 配置文件
    * 兼容 Claude Desktop 格式
+   *
+   * 注意：SSE 传输暂不支持，SSE 类型的配置会被过滤并记录警告。
    */
   async loadConfig(configPath?: string): Promise<MCPServerConfig[]> {
     const path = configPath ?? this.getDefaultConfigPath()
-
 
     try {
       const raw = await readFile(path, 'utf-8')
@@ -128,15 +130,37 @@ class MCPManagerImpl {
         return []
       }
 
-      return Object.entries(config.mcpServers).map(([id, cfg]) => ({
-        id,
-        name: id,
-        transport: cfg.url ? 'sse' as const : 'stdio' as const,
-        command: cfg.command,
-        args: cfg.args,
-        env: cfg.env,
-        url: cfg.url,
-      }))
+      const servers: MCPServerConfig[] = []
+      const skippedSSE: string[] = []
+
+      for (const [id, cfg] of Object.entries(config.mcpServers)) {
+        const transport: 'stdio' | 'sse' = cfg.url ? 'sse' : 'stdio'
+
+        if (transport === 'sse') {
+          skippedSSE.push(id)
+          continue
+        }
+
+        servers.push({
+          id,
+          name: id,
+          transport: 'stdio',
+          command: cfg.command,
+          args: cfg.args,
+          env: cfg.env,
+          url: cfg.url,
+        })
+      }
+
+      if (skippedSSE.length > 0) {
+        logger.warn(
+          'MCP',
+          `跳过 ${skippedSSE.length} 个 SSE 类型的服务器配置（SSE 传输暂不支持）: ` +
+          skippedSSE.join(', '),
+        )
+      }
+
+      return servers
     } catch {
       // 配置文件不存在或格式错误，静默处理
       return []
@@ -215,12 +239,12 @@ class MCPManagerImpl {
 
     // 监听 stderr（调试日志）
     proc.stderr?.on('data', (data: Buffer) => {
-      console.warn(`[MCP:${runtime.config.id}] stderr:`, data.toString())
+      logger.warn('MCP', `[${runtime.config.id}] stderr: ${data.toString()}`)
     })
 
     // 监听进程退出
     proc.on('exit', (code) => {
-      console.log(`[MCP:${runtime.config.id}] 进程退出，code=${code}`)
+      logger.info('MCP', `[${runtime.config.id}] 进程退出，code=${code}`)
       runtime.status = 'disconnected'
       this.notifyStatusChange(runtime.config.id, 'disconnected')
     })

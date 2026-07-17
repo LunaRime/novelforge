@@ -55,7 +55,7 @@ interface ProjectState {
   /** 项目文件树 */
   fileTree: FileNode[]
   /** 最近项目列表 */
-  recentProjects: Array<{ name: string; path: string; updatedAt: string }>
+  recentProjects: Array<{ name: string; path: string; updatedAt: number }>
   /** 是否正在加载 */
   loading: boolean
 

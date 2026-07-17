@@ -143,7 +143,7 @@ export class CharacterRepository {
         cs_key_items = excluded.cs_key_items,
         cs_recent_events = excluded.cs_recent_events,
         cs_updated_at_chapter = excluded.cs_updated_at_chapter,
-        updated_at = datetime('now')
+        updated_at = unixepoch() * 1000
     `).run(
             data.name,
             data.role,
@@ -197,7 +197,7 @@ export class CharacterRepository {
       UPDATE characters SET
         cs_location = ?, cs_power_level = ?, cs_physical_state = ?,
         cs_mental_state = ?, cs_key_items = ?, cs_recent_events = ?,
-        cs_updated_at_chapter = ?, updated_at = datetime('now')
+        cs_updated_at_chapter = ?, updated_at = unixepoch() * 1000
       WHERE name = ?
     `).run(
             state.location,

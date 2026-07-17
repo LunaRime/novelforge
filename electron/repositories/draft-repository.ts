@@ -16,8 +16,8 @@ export interface DraftMeta {
     source: string
     contentId: number
     wordCount: number
-    createdAt: string
-    updatedAt: string
+    createdAt: number
+    updatedAt: number
 }
 
 /** 草稿完整数据（含正文） */
@@ -35,8 +35,8 @@ function rowToMeta(row: Record<string, unknown>): DraftMeta {
         source: row.source as string,
         contentId: row.content_id as number,
         wordCount: row.word_count as number,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string,
+        createdAt: row.created_at as number,
+        updatedAt: row.updated_at as number,
     }
 }
 
@@ -98,13 +98,20 @@ export class DraftRepository {
         return row ? rowToMeta(row) : null
     }
 
-    /** 获取草稿完整数据（含正文） */
+    /** 获取草稿完整数据（含正文） — 单次 JOIN 查询替代 N+1 */
     static getFull(id: number): DraftFull | null {
-        const meta = DraftRepository.getMeta(id)
-        if (!meta) return null
+        const db = getProjectDb()
+        if (!db) return null
 
-        const body = ContentRepository.getBody(meta.contentId)
-        return { ...meta, content: body ?? '' }
+        const row = db.prepare(`
+      SELECT d.*, c.body FROM drafts d
+      JOIN contents c ON d.content_id = c.id
+      WHERE d.id = ?
+    `).get(id) as Record<string, unknown> | undefined
+
+        if (!row) return null
+        const meta = rowToMeta(row)
+        return { ...meta, content: (row.body as string) ?? '' }
     }
 
     /** 获取章节最新版本的草稿 */
@@ -176,31 +183,33 @@ export class DraftRepository {
 
         if (wordCount !== undefined) {
             db.prepare(`
-        UPDATE drafts SET status = ?, word_count = ?, updated_at = datetime('now')
+        UPDATE drafts SET status = ?, word_count = ?, updated_at = unixepoch() * 1000
         WHERE id = ?
       `).run(status, wordCount, id)
         } else {
             db.prepare(`
-        UPDATE drafts SET status = ?, updated_at = datetime('now')
+        UPDATE drafts SET status = ?, updated_at = unixepoch() * 1000
         WHERE id = ?
       `).run(status, id)
         }
     }
 
-    /** 更新草稿正文（同时更新 contents 表） */
+    /** 更新草稿正文（事务保护：contents + word_count 原子更新） */
     static updateContent(id: number, content: string, wordCount: number): void {
-        const meta = DraftRepository.getMeta(id)
-        if (!meta) return
-
-        ContentRepository.updateBody(meta.contentId, content)
-
         const db = getProjectDb()
         if (!db) return
 
-        db.prepare(`
-      UPDATE drafts SET word_count = ?, updated_at = datetime('now')
-      WHERE id = ?
-    `).run(wordCount, id)
+        const meta = DraftRepository.getMeta(id)
+        if (!meta) return
+
+        const tx = db.transaction(() => {
+            ContentRepository.updateBody(meta.contentId, content)
+            db.prepare(`
+          UPDATE drafts SET word_count = ?, updated_at = unixepoch() * 1000
+          WHERE id = ?
+        `).run(wordCount, id)
+        })
+        tx()
     }
 
     /** 删除草稿（级联删除 revisions/reviews，但 contents 需手动清理） */

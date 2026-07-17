@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { DEFAULT_LOCALE } from '../../shared/locale'
 import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle } from 'lucide-react'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -505,7 +506,7 @@ function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id:
               {run.title.replace(/^[^\s]+\s/, '')}
             </span>
             <span className="text-[0.6rem] flex-shrink-0 font-mono opacity-30">
-              {new Date(run.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+              {new Date(run.createdAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' })}
             </span>
           </button>
         ))}
