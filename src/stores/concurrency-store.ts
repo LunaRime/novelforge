@@ -47,8 +47,7 @@ export const useConcurrencyStore = create<ConcurrencyState>()((set, get) => ({
     if (!ipc.isElectron) return
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const status = await (ipc.invoke as any)('llm:concurrency-status') as ConcurrencyStatus | null
+      const status = await ipc.invoke('llm:concurrency-status')
       if (status) {
         set({ status })
       }
@@ -61,8 +60,7 @@ export const useConcurrencyStore = create<ConcurrencyState>()((set, get) => ({
     if (!ipc.isElectron) return false
 
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const result = await (ipc.invoke as any)('llm:concurrency-config', config) as { success: boolean }
+      const result = await ipc.invoke('llm:concurrency-config', config)
       if (result.success) {
         set((s) => ({
           status: {

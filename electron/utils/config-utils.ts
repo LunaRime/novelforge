@@ -31,7 +31,17 @@ export function readJsonFile<T>(filePath: string, fallback: T): T {
 
 export function writeJsonFile(filePath: string, data: unknown) {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), 'utf-8')
+  // 原子写入：先写临时文件，再 rename（避免并发写入导致数据截断）
+  const tmpPath = filePath + '.tmp.' + Date.now() + '.' + Math.random().toString(36).slice(2, 8)
+  try {
+    fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2), 'utf-8')
+    fs.renameSync(tmpPath, filePath)
+  } catch (error) {
+    // 清理临时文件
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+    console.error(`[Vela] 写入配置文件失败: ${filePath}`, error)
+    throw error
+  }
 }
 
 export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')

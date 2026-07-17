@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE } from '../../shared/locale'
 /**
  * 后处理状态面板 — 通用可内嵌组件
  *
@@ -165,7 +166,7 @@ export function PostProcessStatusPanel({
               <div className="flex items-center gap-1.5 shrink-0">
                 {step.ok ? (
                   <span className="text-[10px] text-[var(--color-text-muted)]">
-                    {step.completedAt ? new Date(step.completedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }) : ''}
+                    {step.completedAt ? new Date(step.completedAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
                 ) : (
                   <>
@@ -192,7 +193,7 @@ export function PostProcessStatusPanel({
             <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
               <Clock size={10} />
               <span>
-                上次尝试 {new Date(status.updatedAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                上次尝试 {new Date(status.updatedAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
             {onRetry && (

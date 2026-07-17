@@ -2,26 +2,22 @@
 
 declare namespace NodeJS {
   interface ProcessEnv {
-    /**
-     * The built directory structure
-     *
-     * ```tree
-     * ├─┬─┬ dist
-     * │ │ └── index.html
-     * │ │
-     * │ ├─┬ dist-electron
-     * │ │ ├── main.js
-     * │ │ └── preload.js
-     * │
-     * ```
-     */
+    /** 构建产物根目录 */
     APP_ROOT: string
     /** /dist/ or /public/ */
     VITE_PUBLIC: string
   }
 }
 
-// Used in Renderer process, expose in `preload.ts`
+// 通过 contextBridge 在 preload.ts 中暴露到渲染进程的 API
 interface Window {
-  ipcRenderer: import('electron').IpcRenderer
+  velaAPI: {
+    invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
+    on: (channel: string, callback: (...args: unknown[]) => void) => () => void
+    once: (channel: string, callback: (...args: unknown[]) => void) => void
+    send: (channel: string, ...args: unknown[]) => void
+    setZoomLevel: (level: number) => void
+    setZoomFactor: (factor: number) => void
+    getZoomLevel: () => number
+  }
 }

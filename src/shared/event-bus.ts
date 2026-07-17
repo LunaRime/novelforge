@@ -58,35 +58,83 @@ export interface EventPayloadMap {
 
 // ===== EventBus 实现 =====
 
+type AsyncListener<K extends GlobalEventType> = (
+  payload: EventPayloadMap[K],
+) => void | Promise<void>
+
 class EventBus {
   private target = new EventTarget()
+  /** 异步监听器列表（独立于 EventTarget，用于 emitAsync 收集 Promise） */
+  private asyncListeners = new Map<string, Set<AsyncListener<GlobalEventType>>>()
 
   emit<K extends GlobalEventType>(type: K, payload: EventPayloadMap[K]) {
     this.target.dispatchEvent(new CustomEvent(type, { detail: payload }))
   }
 
   /**
-   * 异步发射事件：返回 Promise，在所有监听器执行完成后 resolve。
-   * 适用于需要等待事件处理完成的场景。
+   * 异步发射事件：等待所有同步和异步监听器执行完成后 resolve。
+   * 适用于需要确保事件完全处理完毕后再继续的场景（如工作流步骤间通信）。
    */
-  async emitAsync<K extends GlobalEventType>(type: K, payload: EventPayloadMap[K]): Promise<void> {
-    // 使用 CustomEvent 同步分发，但包装在 Promise 中
-    // 注意：EventTarget 的 dispatchEvent 是同步的
-    // 如果监听器中有异步操作，需要监听器自行处理
-    return new Promise<void>((resolve) => {
-      this.emit(type, payload)
-      // 给微任务队列一个 tick 让同步监听器执行
-      setTimeout(resolve, 0)
-    })
+  async emitAsync<K extends GlobalEventType>(
+    type: K,
+    payload: EventPayloadMap[K],
+  ): Promise<void> {
+    // 1. 同步发射（EventTarget 同步分发）
+    this.target.dispatchEvent(new CustomEvent(type, { detail: payload }))
+
+    // 2. 收集所有异步监听器的 Promise 并等待
+    const asyncSet = this.asyncListeners.get(type)
+    if (asyncSet && asyncSet.size > 0) {
+      const promises = Array.from(asyncSet).map((handler) => {
+        try {
+          const result = handler(payload)
+          return result instanceof Promise ? result : Promise.resolve()
+        } catch (error) {
+          return Promise.reject(error)
+        }
+      })
+      await Promise.allSettled(promises)
+    }
   }
 
-  on<K extends GlobalEventType>(type: K, handler: (payload: EventPayloadMap[K]) => void): () => void {
+  on<K extends GlobalEventType>(
+    type: K,
+    handler: (payload: EventPayloadMap[K]) => void,
+  ): () => void {
     const listener = (event: Event) => {
       handler((event as CustomEvent).detail)
     }
-    this.target.addEventListener(type, listener)
-    // 返回解绑函数，便于清理
-    return () => this.target.removeEventListener(type, listener)
+    this.target.addEventListener(type as string, listener)
+    return () => this.target.removeEventListener(type as string, listener)
+  }
+
+  /**
+   * 注册异步监听器 — emitAsync 会等待此类监听器完成。
+   *
+   * 与 `on()` 的区别：`onAsync()` 注册的 handler 可以返回 Promise，
+   * emitAsync 会通过 Promise.allSettled 等待所有异步 handler 完成。
+   * 同步 `emit()` 也会触发异步 handler（fire-and-forget，不等待）。
+   */
+  onAsync<K extends GlobalEventType>(
+    type: K,
+    handler: AsyncListener<K>,
+  ): () => void {
+    const typedHandler = handler as AsyncListener<GlobalEventType>
+    if (!this.asyncListeners.has(type)) {
+      this.asyncListeners.set(type, new Set())
+    }
+    this.asyncListeners.get(type)!.add(typedHandler)
+
+    // 同时注册到 EventTarget 以便 emit() 也能触发（fire-and-forget）
+    const syncWrapper = (event: Event) => {
+      typedHandler((event as CustomEvent).detail)
+    }
+    this.target.addEventListener(type as string, syncWrapper)
+
+    return () => {
+      this.asyncListeners.get(type)?.delete(typedHandler)
+      this.target.removeEventListener(type as string, syncWrapper)
+    }
   }
 
   /**

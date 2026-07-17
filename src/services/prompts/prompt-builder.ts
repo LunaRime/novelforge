@@ -23,7 +23,10 @@ export class BasePromptBuilder {
     let result = this.template.content
     for (const [key, value] of Object.entries(this.variables)) {
       // 使用 replaceAll 避免正则注入风险，安全替换所有匹配项
-      const safeValue = value || ''
+      // 在用户输入值周围包裹指令边界分隔符，防御 prompt 注入攻击
+      const safeValue = value 
+        ? `\n=== USER_INPUT_START ===\n${value}\n=== USER_INPUT_END ===\n`
+        : ''
       result = result.replaceAll(`{{${key}}}`, safeValue)
     }
 

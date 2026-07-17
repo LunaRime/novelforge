@@ -3,15 +3,38 @@ import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DE
 import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
+import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
+import { logger } from '../utils/logger'
 
 const activeStreams = new Map<string, AbortController>()
 
 function loadModelConfigs(): ModelProfile[] {
-  return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  let migrated = false
+
+  for (const model of models) {
+    // 向后兼容：检测明文 key 并自动迁移到加密格式
+    if (isPlaintextKey(model.apiKey)) {
+      model.apiKey = encryptApiKey(model.apiKey)
+      migrated = true
+      logger.info('LLM', `自动迁移 API 密钥到加密格式: ${model.name} (${model.id})`)
+    }
+  }
+
+  // 如果有迁移，立即写回加密后的配置
+  if (migrated) {
+    writeJsonFile(MODELS_CONFIG_PATH, models)
+    logger.info('LLM', 'API 密钥加密迁移完成')
+  }
+
+  // 返回时解密 key 供运行时使用
+  return models.map((m) => ({ ...m, apiKey: decryptApiKey(m.apiKey) }))
 }
 
 function saveModelConfigs(models: ModelProfile[]) {
-  writeJsonFile(MODELS_CONFIG_PATH, models)
+  // 保存前加密所有 apiKey
+  const toSave = models.map((m) => ({ ...m, apiKey: encryptApiKey(m.apiKey) }))
+  writeJsonFile(MODELS_CONFIG_PATH, toSave)
 }
 
 function getModelConfig(modelId: string): ModelProfile | null {

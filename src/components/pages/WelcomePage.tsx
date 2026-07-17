@@ -1,17 +1,41 @@
-import { Sparkles, FolderOpen, Clock, BookOpen, FileUp } from 'lucide-react'
+import { useState } from 'react'
+import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
+
+const FIRST_RUN_KEY = 'vela-first-run'
+
+function isFirstRun(): boolean {
+  try {
+    return localStorage.getItem(FIRST_RUN_KEY) !== 'done'
+  } catch {
+    return true
+  }
+}
+
+function markFirstRunDone(): void {
+  try {
+    localStorage.setItem(FIRST_RUN_KEY, 'done')
+  } catch { /* ignore */ }
+}
 
 interface WelcomePageProps {
   onNewProject: () => void
   onOpenProject: () => void
   onImportNovel?: () => void
+  onOpenSettings?: () => void
 }
 
-/** 欢迎页面 — 无项目打开时显示 */
-export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel }: WelcomePageProps) {
+/** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导 */
+export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings }: WelcomePageProps) {
   const recentProjects = useProjectStore(s => s.recentProjects)
   const openProject = useProjectStore(s => s.openProject)
   const currentProject = useProjectStore(s => s.currentProject)
+  const [showGuide, setShowGuide] = useState(isFirstRun())
+
+  const dismissGuide = () => {
+    setShowGuide(false)
+    markFirstRunDone()
+  }
 
   return (
     <div
@@ -36,6 +60,55 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
             {currentProject ? currentProject.path : 'AI 深度驱动的小说创作 IDE'}
           </p>
         </div>
+
+        {/* 首次使用引导 — 3 步快速上手 */}
+        {showGuide && (
+          <div
+            className="mb-8 p-5 rounded-xl"
+            style={{
+              backgroundColor: 'var(--color-sidebar)',
+              border: '1px solid rgba(126, 200, 227, 0.3)',
+              boxShadow: '0 4px 24px rgba(126, 200, 227, 0.08)',
+            }}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
+                🚀 快速开始
+              </h2>
+              <button
+                onClick={dismissGuide}
+                className="p-0.5 rounded hover:opacity-70"
+                style={{ color: 'var(--color-text-muted)' }}
+                title="关闭引导"
+              >
+                <X size={14} />
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              <StepItem
+                step={1}
+                title="配置 AI 模型"
+                desc="设置 API 密钥和模型参数，启用 AI 创作能力"
+                icon={<Settings size={14} />}
+                action={onOpenSettings ? { label: '打开设置', onClick: onOpenSettings } : undefined}
+              />
+              <StepItem
+                step={2}
+                title="新建或打开项目"
+                desc="创建新小说工程，或继续之前的创作"
+                icon={<FolderOpen size={14} />}
+                action={{ label: '新建项目', onClick: onNewProject }}
+              />
+              <StepItem
+                step={3}
+                title="开始创作"
+                desc="使用 AI 辅助生成大纲、蓝图和章节内容"
+                icon={<PenLine size={14} />}
+              />
+            </div>
+          </div>
+        )}
 
         {/* 操作按钮 */}
         <div className="grid grid-cols-3 gap-3 mb-10">
@@ -175,6 +248,58 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
           </p>
         </div>
       </div>
+    </div>
+  )
+}
+
+/** 引导步骤条 */
+function StepItem({
+  step,
+  title,
+  desc,
+  icon,
+  action,
+}: {
+  step: number
+  title: string
+  desc: string
+  icon: React.ReactNode
+  action?: { label: string; onClick: () => void }
+}) {
+  return (
+    <div className="flex items-start gap-3">
+      <div
+        className="flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
+        style={{
+          backgroundColor: 'var(--color-accent)',
+          color: '#fff',
+          fontSize: '0.7rem',
+          fontWeight: 600,
+        }}
+      >
+        {step}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1.5">
+          <span style={{ color: 'var(--color-text-muted)' }}>{icon}</span>
+          <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{title}</span>
+        </div>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{desc}</p>
+      </div>
+      {action && (
+        <button
+          onClick={action.onClick}
+          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs flex-shrink-0 transition-colors"
+          style={{
+            backgroundColor: 'var(--color-hover)',
+            color: 'var(--color-accent)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          {action.label}
+          <ArrowRight size={10} />
+        </button>
+      )}
     </div>
   )
 }

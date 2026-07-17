@@ -1,3 +1,4 @@
+import { DEFAULT_LOCALE } from '../../shared/locale'
 /**
  * VectorConfigSection — 向量配置管理面板
  *
@@ -445,7 +446,7 @@ export default function VectorConfigSection() {
               }
             />
             <div className="text-[10px] text-muted-foreground text-right">
-              测试时间: {new Date(testResult.testedAt).toLocaleString('zh-CN')}
+              测试时间: {new Date(testResult.testedAt).toLocaleString(DEFAULT_LOCALE)}
             </div>
           </div>
         )}

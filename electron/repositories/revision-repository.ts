@@ -19,8 +19,8 @@ export interface RevisionMeta {
     reviewSourceId: number | null
     contentId: number
     wordCount: number
-    createdAt: string
-    updatedAt: string
+    createdAt: number
+    updatedAt: number
 }
 
 /** 修稿完整数据（含正文） */
@@ -40,8 +40,8 @@ function rowToMeta(row: Record<string, unknown>): RevisionMeta {
         reviewSourceId: (row.review_source_id as number | null) ?? null,
         contentId: row.content_id as number,
         wordCount: row.word_count as number,
-        createdAt: row.created_at as string,
-        updatedAt: row.updated_at as string,
+        createdAt: row.created_at as number,
+        updatedAt: row.updated_at as number,
     }
 }
 
@@ -109,19 +109,20 @@ export class RevisionRepository {
         return rows.map(rowToMeta)
     }
 
-    /** 获取修稿完整数据 */
+    /** 获取修稿完整数据 — 单次 JOIN 查询替代 N+1 */
     static getFull(id: number): RevisionFull | null {
         const db = getProjectDb()
         if (!db) return null
 
-        const row = db.prepare(
-            'SELECT * FROM revisions WHERE id = ?'
-        ).get(id) as Record<string, unknown> | undefined
+        const row = db.prepare(`
+      SELECT r.*, c.body FROM revisions r
+      JOIN contents c ON r.content_id = c.id
+      WHERE r.id = ?
+    `).get(id) as Record<string, unknown> | undefined
 
         if (!row) return null
         const meta = rowToMeta(row)
-        const body = ContentRepository.getBody(meta.contentId)
-        return { ...meta, content: body ?? '' }
+        return { ...meta, content: (row.body as string) ?? '' }
     }
 
     /** 获取下一个修稿序号 */
@@ -143,7 +144,7 @@ export class RevisionRepository {
 
         db.prepare(`
       UPDATE revisions
-      SET status = 'merged', merged_to_draft_id = ?, updated_at = datetime('now')
+      SET status = 'merged', merged_to_draft_id = ?, updated_at = unixepoch() * 1000
       WHERE id = ?
     `).run(mergedToDraftId, id)
     }
@@ -154,7 +155,7 @@ export class RevisionRepository {
         if (!db) return
 
         db.prepare(`
-      UPDATE revisions SET status = 'discarded', updated_at = datetime('now')
+      UPDATE revisions SET status = 'discarded', updated_at = unixepoch() * 1000
       WHERE id = ?
     `).run(id)
     }

@@ -244,14 +244,16 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
       .replace(/,\s*([}\]])/g, '$1')
       // 缺失冒号: "key" "value" 或 "key" value
       .replace(/"(\w+)"\s+"([^"]*)"/g, '"$1": "$2"')
-      // 单引号键/值（某些模型会混用）
-      .replace(/'/g, '"')
       // ★ 字符串值内的未转义换行（JSON 不允许字面换行）
       .replace(/"([^"]*?\n[^"]*?)"/g, (_, inner: string) => {
         return '"' + inner.replace(/\n/g, '\\n').replace(/\r/g, '\\r') + '"'
       })
       // ★ 缺失键名的前引号: { key": value → { "key": value
+      //   注意：必须在单引号→双引号替换之前执行，否则 key 中的单引号（如 character's_name）会先被破坏
       .replace(/([\[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":')
+      // 单引号键/值 → 双引号（某些模型会混用）
+      //   在键名补引号之后执行，避免破坏包含单引号的键名
+      .replace(/'/g, '"')
       // ★ 数字/布尔值后的意外逗号: 123, } → 123 }
       .replace(/(\d)\s*,\s*}/g, '$1 }')
       .replace(/(true|false|null)\s*,\s*}/g, '$1 }')
@@ -597,9 +599,9 @@ export interface PostProcessStatus {
   /** 来源描述，如 '第1章定稿' */
   sourceLabel: string
   /** 首次执行时间 */
-  createdAt: string
+  createdAt: number
   /** 最后更新时间 */
-  updatedAt: string
+  updatedAt: number
   /** 各步骤执行结果 */
   steps: Record<string, PostProcessStepResult>
   /** 所有关键步骤是否通过 */
@@ -730,6 +732,8 @@ export async function runPostProcessPipeline(
   const runSteps = await ipc.invoke('db:post-process-get-steps', runId)
   const stepMap = new Map((runSteps as unknown as Array<Record<string, unknown>>).map((s) => [s.stepKey, s]))
 
+  let hasCriticalFailure = false
+
   for (const step of steps) {
     const existingStep = stepMap.get(step.key)
 
@@ -745,7 +749,17 @@ export async function runPostProcessPipeline(
       await ipc.invoke('db:post-process-mark-step-ok', runId, step.key)
     } else {
       await ipc.invoke('db:post-process-mark-step-failed', runId, step.key, result.error || '未知错误')
+      if (step.critical) {
+        hasCriticalFailure = true
+        callbacks.log(`  🔴 关键步骤 ${step.label} 失败，管线中止`)
+        break
+      }
     }
+  }
+
+  // 事务边界：标记 run 最终状态（供 UI 判断是否需要回滚/重试）
+  if (hasCriticalFailure) {
+    callbacks.log('⚠️ 后处理管线因关键步骤失败而中止。已执行的步骤已记录，可重试修复。')
   }
 
   // 返回最终状态汇总供 UI 展示

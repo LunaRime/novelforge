@@ -1,4 +1,4 @@
-import type { WorkflowDefinition, WorkflowContext, StepCallbacks } from '../../stores/workflow-store'
+import type { WorkflowDefinition, WorkflowContext, StepCallbacks, WorkflowStep } from '../../stores/workflow-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
@@ -48,7 +48,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       name: '故事前提',
       key: 'premise',
       description: stepDesc('premise', '提炼故事前提与核心卖点'),
-      executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
+      executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateCoreSeedCommand } = await import('./commands/architecture.command')
         return new GenerateCoreSeedCommand().execute({ step, context, callbacks })
@@ -58,7 +58,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       name: '角色图谱',
       key: 'characters',
       description: stepDesc('characters', '构建核心角色关系网与角色弧光'),
-      executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
+      executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateCharactersCommand } = await import('./commands/architecture.command')
         return new GenerateCharactersCommand().execute({ step, context, callbacks })
@@ -68,7 +68,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       name: '世界观',
       key: 'worldbuilding',
       description: stepDesc('worldbuilding', '构建自带冲突引擎的世界观矩阵'),
-      executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
+      executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateWorldBuildingCommand } = await import('./commands/architecture.command')
         return new GenerateWorldBuildingCommand().execute({ step, context, callbacks })
@@ -78,7 +78,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       name: '情节大纲',
       key: 'synopsis',
       description: stepDesc('synopsis', '整合所有碎片，按选定结构模式生成情节大纲'),
-      executor: async (step: unknown, context: WorkflowContext, callbacks: StepCallbacks) => {
+      executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GeneratePlotArchitectureCommand } = await import('./commands/architecture.command')
         return new GeneratePlotArchitectureCommand(sel).execute({ step, context, callbacks })

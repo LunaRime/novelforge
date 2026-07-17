@@ -37,7 +37,7 @@ export default function KnowledgeOverview() {
       const { documents: docs, stats: s } = await loadKBData()
       setDocuments(docs)
       setStats(s)
-    } catch { /* 忽略 */ }
+    } catch (e) { console.warn('[KnowledgeOverview] 加载知识库数据失败:', e) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
@@ -45,7 +45,7 @@ export default function KnowledgeOverview() {
     if (!currentProject) return
     try {
       setVectorlessCount(await getVectorlessCount())
-    } catch { /* 忽略 */ }
+    } catch (e) { console.warn('[KnowledgeOverview] 查询无向量文本块数失败:', e) }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
@@ -104,7 +104,9 @@ export default function KnowledgeOverview() {
     try {
       const results = await searchKB(searchQuery, topK)
       setSearchResults(results)
-    } catch { /* 忽略 */ }
+    } catch (e) { 
+      console.warn('[KnowledgeOverview] 语义检索失败:', e)
+    }
     setSearching(false)
   }
 

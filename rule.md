@@ -18,11 +18,11 @@ trigger: always_on
 
 | 层级 | 技术 |
 |------|------|
-| 框架 | Electron 30 + Vite 5 |
-| 前端 | React 18 + TypeScript 5（strict 模式） |
-| 样式 | TailwindCSS 3 + CSS 变量主题系统 |
+| 框架 | Electron 41 + Vite 8 |
+| 前端 | React 19 + TypeScript 6（strict 模式） |
+| 样式 | TailwindCSS 4 + CSS 变量主题系统 |
 | 状态 | Zustand 5（无 Redux） |
-| 编辑器 | CodeMirror 6（已从 TipTap 迁移） |
+| 编辑器 | CodeMirror 6 + Monaco Editor（双编辑器架构） |
 | UI 原语 | Radix UI（Dialog、Tooltip、Select 等） |
 | 图标 | lucide-react |
 | IPC | Electron ipcMain/ipcRenderer + 类型安全封装 |

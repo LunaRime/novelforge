@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { closeProjectDatabase, getProjectDb } from '../database'
+import { logger } from '../utils/logger'
 
 // 导入所有 Repository
 import { ProjectCoreRepository, ProjectCoreData } from '../repositories/project-core-repository'
@@ -32,7 +33,7 @@ export function registerDatabaseController() {
       ProjectCoreRepository.update(data)
       return { success: true }
     } catch (err) {
-      console.error('[db:project-core-update] 失败:', err)
+      logger.error('DB:Controller', `project-core-update 失败: ${err}`)
       return { success: false, error: String(err) }
     }
   })
@@ -415,7 +416,7 @@ export function registerDatabaseController() {
       LLMHistoryRepository.logCall(call)
       return { success: true }
     } catch (error) {
-      console.error('[db:log-llm-call] Error:', error)
+      logger.error('DB:Controller', `log-llm-call 失败: ${error}`)
       return { success: false }
     }
   })

@@ -6,6 +6,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
 import { Button } from '../ui/Button'
+import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { NativeSelect } from '../ui/NativeSelect'
@@ -192,7 +193,7 @@ export default function NovelConfigEditor() {
                   onChange={(e) => update('wordsPerChapter', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
                   onBlur={() => {
                     const v = Number(config.wordsPerChapter)
-                    if (!v || v < 100) update('wordsPerChapter', 3000)
+                    if (!v || v < 100) update('wordsPerChapter', DEFAULT_WORDS_PER_CHAPTER)
                   }}
                   placeholder="3000"
                   min={100}

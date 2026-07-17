@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { DEFAULT_LOCALE } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
@@ -116,7 +117,7 @@ function readDirRecursive(dirPath: string): FileNode[] {
     .filter((e) => !e.name.startsWith('.'))
     .sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
-      return a.name.localeCompare(b.name, 'zh-CN')
+      return a.name.localeCompare(b.name, DEFAULT_LOCALE)
     })
     .map((entry) => {
       const fullPath = path.join(dirPath, entry.name)

@@ -7,6 +7,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
+import { toast } from '../ui/Toast'
 import { cn } from '../../lib/utils'
 
 /** 模型设置面板 — 在侧边栏 settings 视图中展示 */
@@ -206,8 +207,13 @@ function ModelForm({
             value={String(model.temperature)} 
             onChange={(e) => update('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)} 
             onBlur={() => {
-              const v = Number(model.temperature);
-              if (isNaN(v)) update('temperature', 0.7);
+              let v = Number(model.temperature);
+              if (isNaN(v)) { update('temperature', 0.7); return }
+              if (v < 0 || v > 2) {
+                v = Math.max(0, Math.min(2, v))
+                update('temperature', v)
+                toast.info(`Temperature 已限制在 0~2 范围内（当前: ${v}）`)
+              }
             }}
           />
         </div>
@@ -217,8 +223,13 @@ function ModelForm({
             value={String(model.maxTokens)} 
             onChange={(e) => update('maxTokens', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)} 
             onBlur={() => {
-              const v = Number(model.maxTokens);
-              if (!v || v < 1) update('maxTokens', 4096);
+              let v = Number(model.maxTokens);
+              if (!v || v < 1) { update('maxTokens', 4096); return }
+              if (v > 131072) {
+                v = 131072
+                update('maxTokens', v)
+                toast.info(`MaxTokens 已限制在 1~131072 范围内（当前: ${v}）`)
+              }
             }}
           />
         </div>

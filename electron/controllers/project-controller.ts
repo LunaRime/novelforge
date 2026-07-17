@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { logger } from '../utils/logger'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
 import { initProjectDatabase } from '../database'
@@ -11,7 +12,7 @@ import { ProjectCoreRepository } from '../repositories/project-core-repository'
 interface RecentProject {
   name: string
   path: string
-  updatedAt: string
+  updatedAt: number
 }
 
 function loadRecentProjects(): RecentProject[] {
@@ -70,8 +71,8 @@ export function registerProjectController() {
           globalGuidance: '',
         },
         characterStates: '',
-        createdAt: coreData?.createdAt || new Date().toISOString(),
-        updatedAt: coreData?.updatedAt || new Date().toISOString(),
+        createdAt: coreData?.createdAt || Date.now(),
+        updatedAt: coreData?.updatedAt || Date.now(),
       }
 
       // 添加到最近项目列表
@@ -128,8 +129,8 @@ export function registerProjectController() {
           referenceWorks: updatedCoreData.referenceWorks,
         },
         characterStates: updatedCoreData.characterStates,
-        createdAt: updatedCoreData.createdAt || new Date().toISOString(),
-        updatedAt: updatedCoreData.updatedAt || new Date().toISOString(),
+        createdAt: updatedCoreData.createdAt || Date.now(),
+        updatedAt: updatedCoreData.updatedAt || Date.now(),
       }
 
       addRecentProject({ name: projectData.name, path: projectPath, updatedAt: projectData.updatedAt })
@@ -178,12 +179,12 @@ export function registerProjectController() {
 
       // 单次批量更新
       ProjectCoreRepository.update(updateData)
-      console.log('[project:save] 配置已持久化，字段数:', Object.keys(updateData).length)
+      logger.info('Project', `配置已持久化，字段数: ${Object.keys(updateData).length}`)
 
       addRecentProject({
         name: data.name ?? 'Unknown',
         path: data.path,
-        updatedAt: new Date().toISOString(),
+        updatedAt: Date.now(),
       })
 
       return { success: true }

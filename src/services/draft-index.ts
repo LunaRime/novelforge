@@ -20,8 +20,8 @@ export interface DraftMeta {
   version: number
   status: DraftStatus
   wordCount?: number
-  createdAt: string
-  updatedAt?: string
+  createdAt: number
+  updatedAt?: number
   source: 'write' | 'rewrite'
 
   // 为了尽量不改 UI，我们伪造这两个字段
@@ -37,7 +37,7 @@ export interface RevisionEntry {
   revisionIndex: number
   type: 'refine' | 'review-fix'
   status: 'pending' | 'merged' | 'discarded'
-  createdAt: string
+  createdAt: number
   mergedToDraftId?: number
 
   // 虚拟文件路径字段，供 UI 展示或查内容使用
@@ -51,7 +51,7 @@ export interface ReviewEntry {
   baseDraftId: number
   baseVersion: number
   reviewIndex: number
-  createdAt: string
+  createdAt: number
 
   fileName: string
   baseDraft: string
@@ -289,6 +289,10 @@ export async function readDraftIndex() {
   return { chapterNumber: 0, chapterTitle: '', drafts: [], revisions: [], reviews: [] }
 }
 
-export function toDraftMeta() {
-  throw new Error('toDraftMeta is deprecated.')
+/**
+ * @deprecated 已废弃，请直接通过 IPC 查询 drafts 表获取 DraftMeta。
+ * 该函数将在下一主版本中移除。
+ */
+export function toDraftMeta(): never {
+  throw new Error('[toDraftMeta] 已废弃 — 请使用 ipc.invoke(\'db:draft-get-meta\', ...) 替代')
 }

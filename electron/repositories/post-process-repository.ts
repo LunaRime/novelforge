@@ -14,8 +14,8 @@ export interface PostProcessRunData {
     triggerSourceId: string
     sourceLabel: string
     allCriticalPassed: boolean
-    createdAt: string
-    updatedAt: string
+    createdAt: number
+    updatedAt: number
 }
 
 /** 步骤明细 */
@@ -86,8 +86,8 @@ export class PostProcessRepository {
             triggerSourceId: row.trigger_source_id as string,
             sourceLabel: row.source_label as string,
             allCriticalPassed: (row.all_critical_passed as number) === 1,
-            createdAt: row.created_at as string,
-            updatedAt: row.updated_at as string,
+            createdAt: row.created_at as number,
+            updatedAt: row.updated_at as number,
         }
     }
 
@@ -121,7 +121,7 @@ export class PostProcessRepository {
 
         db.prepare(`
       UPDATE post_process_steps
-      SET ok = 1, completed_at = datetime('now'), last_attempt_at = datetime('now'),
+      SET ok = 1, completed_at = unixepoch() * 1000, last_attempt_at = unixepoch() * 1000,
           attempt_count = attempt_count + 1
       WHERE run_id = ? AND step_key = ?
     `).run(runId, stepKey)
@@ -137,7 +137,7 @@ export class PostProcessRepository {
 
         db.prepare(`
       UPDATE post_process_steps
-      SET ok = 0, error_msg = ?, last_attempt_at = datetime('now'),
+      SET ok = 0, error_msg = ?, last_attempt_at = unixepoch() * 1000,
           attempt_count = attempt_count + 1
       WHERE run_id = ? AND step_key = ?
     `).run(errorMsg, runId, stepKey)
@@ -157,7 +157,7 @@ export class PostProcessRepository {
         const allPassed = failedCritical.cnt === 0 ? 1 : 0
         db.prepare(`
       UPDATE post_process_runs
-      SET all_critical_passed = ?, updated_at = datetime('now')
+      SET all_critical_passed = ?, updated_at = unixepoch() * 1000
       WHERE id = ?
     `).run(allPassed, runId)
     }

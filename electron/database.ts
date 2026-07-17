@@ -7,6 +7,8 @@
 import { createRequire } from 'node:module'
 import path from 'node:path'
 import fs from 'node:fs'
+import { dialog } from 'electron'
+import { logger } from './utils/logger'
 
 const require = createRequire(import.meta.url)
 const Database = require('better-sqlite3') as typeof import('better-sqlite3')
@@ -21,13 +23,72 @@ export function initProjectDatabase(projectPath: string): void {
   const dbPath = path.join(projectPath, '.vela', 'vela.db')
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
-  projectDb = new Database(dbPath)
+  try {
+    projectDb = new Database(dbPath)
+  } catch (error) {
+    const errMsg = error instanceof Error ? error.message : String(error)
+    const isCorrupt = errMsg.includes('SQLITE_CORRUPT') || errMsg.includes('SQLITE_NOTADB')
+
+    logger.error('DB', `打开数据库失败: ${errMsg}`)
+
+    if (isCorrupt) {
+      // 备份损坏的数据库文件
+      try {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
+        const backupPath = dbPath + `.corrupted.${timestamp}`
+        fs.renameSync(dbPath, backupPath)
+        logger.warn('DB', `损坏数据库已备份: ${backupPath}`)
+      } catch (backupErr) {
+        logger.error('DB', `备份损坏数据库失败: ${backupErr}`)
+      }
+
+      // 创建新数据库
+      try {
+        projectDb = new Database(dbPath)
+        logger.info('DB', '已创建新数据库替代损坏文件')
+      } catch (createErr) {
+        logger.error('DB', `创建新数据库失败: ${createErr}`)
+        throw createErr
+      }
+
+      // 通知用户
+      dialog.showMessageBox({
+        type: 'error',
+        title: '数据库损坏',
+        message: '项目数据库文件已损坏，已自动创建新数据库。',
+        detail: '损坏的数据库文件已备份（文件名后缀 .corrupted）。\n\n' +
+          '之前的数据可能已丢失。如果你有最近的备份，可以手动恢复。\n' +
+          '备份路径：' + path.dirname(dbPath),
+        buttons: ['确定'],
+      }).catch(() => { /* dialog may fail in headless */ })
+    } else {
+      throw error // 非损坏错误，继续抛出
+    }
+  }
+
+  // 数据库完整性检查
+  try {
+    const integrity = projectDb.pragma('integrity_check', { simple: true }) as string
+    if (integrity !== 'ok') {
+      logger.error('DB', `数据库完整性检查失败: ${integrity}`)
+      dialog.showMessageBox({
+        type: 'warning',
+        title: '数据库完整性警告',
+        message: '数据库完整性检查未通过，可能存在数据损坏。',
+        detail: `检查结果: ${integrity}\n\n建议备份项目数据后重新打开。`,
+        buttons: ['确定'],
+      }).catch(() => { /* ignore */ })
+    }
+  } catch (checkErr) {
+    logger.error('DB', `数据库完整性检查执行失败: ${checkErr}`)
+  }
+
   projectDb.pragma('journal_mode = WAL')
   projectDb.pragma('foreign_keys = ON')
 
   // 创建表结构
   createTables(projectDb)
-  console.log(`[Vela DB] 项目数据库已打开: ${dbPath}`)
+  logger.info('DB', `项目数据库已打开: ${dbPath}`)
 }
 
 /** 关闭项目数据库 */
@@ -47,19 +108,45 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 2
+const CURRENT_SCHEMA_VERSION = 5
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
   const currentVersion = db.pragma('user_version', { simple: true }) as number
   if (currentVersion >= CURRENT_SCHEMA_VERSION) return
 
-  console.log(`[Vela DB] Schema 迁移: v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`)
-  migrateExistingTables(db)
-  db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
+  logger.info('DB', `Schema 迁移: v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`)
+  try {
+    migrateExistingTables(db)
+    // 仅在全部迁移步骤成功后才递增版本号
+    db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
+    logger.info('DB', `Schema 迁移完成: v${CURRENT_SCHEMA_VERSION}`)
+  } catch (error) {
+    logger.error('DB', `Schema 迁移失败，数据库保持 v${currentVersion} 不变: ${error}`)
+    // 不递增版本号，下次启动时重新尝试迁移
+    throw new Error(
+      `数据库迁移 v${currentVersion}→v${CURRENT_SCHEMA_VERSION} 失败。` +
+      '请检查数据库文件完整性或手动删除 .vela/vela.db 后重新打开项目。'
+    )
+  }
 }
 function createTables(db: BetterSqlite3.Database) {
   db.exec(`
+    -- ============================================================
+    -- 1. project_core — 项目主台账（NovelConfig + 架构四大件）
+    -- ============================================================
+    -- ============================================================
+    -- 0. project_archives — 大文本归档（premise/worldbuilding/characters/synopsis）
+    -- ============================================================
+    CREATE TABLE IF NOT EXISTS project_archives (
+      id TEXT PRIMARY KEY,
+      project_id TEXT NOT NULL DEFAULT 'main',
+      field_key TEXT NOT NULL,
+      body TEXT DEFAULT '',
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_archive_field ON project_archives(project_id, field_key);
+
     -- ============================================================
     -- 1. project_core — 项目主台账（NovelConfig + 架构四大件）
     -- ============================================================
@@ -86,8 +173,8 @@ function createTables(db: BetterSqlite3.Database) {
       synopsis TEXT DEFAULT '',                   -- 情节总大纲
       -- [系统缓存]
       character_states TEXT DEFAULT '',           -- 全书角色动态快照
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- ============================================================
@@ -106,8 +193,8 @@ function createTables(db: BetterSqlite3.Database) {
       notes_updated_at TEXT DEFAULT '',           -- notes 提取时间
       sort_order INTEGER DEFAULT 0,              -- 自定义排序序号
       priority INTEGER DEFAULT 0,                -- 优先级 (0=普通, 1=高, 2=关键)
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- ============================================================
@@ -133,8 +220,8 @@ function createTables(db: BetterSqlite3.Database) {
       cs_key_items TEXT DEFAULT '',               -- 关键道具
       cs_recent_events TEXT DEFAULT '',           -- 最近事件
       cs_updated_at_chapter INTEGER DEFAULT 0,    -- 状态更新于第几章
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- ============================================================
@@ -143,8 +230,8 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE TABLE IF NOT EXISTS contents (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       body TEXT NOT NULL DEFAULT '',              -- 正文/报告内容
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- ============================================================
@@ -158,11 +245,14 @@ function createTables(db: BetterSqlite3.Database) {
       source TEXT DEFAULT 'write',                -- write/rewrite
       content_id INTEGER NOT NULL,                -- FK -> contents
       word_count INTEGER DEFAULT 0,               -- 字数缓存
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000),
       FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
     );
     CREATE INDEX IF NOT EXISTS idx_drafts_chapter ON drafts(chapter_number);
+    CREATE INDEX IF NOT EXISTS idx_drafts_content ON drafts(content_id);
+    CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
+    CREATE INDEX IF NOT EXISTS idx_drafts_chapter_status ON drafts(chapter_number, status);
     -- 注：chapter_number 与 blueprints 无硬 FK，因导入流程先建草稿后推演蓝图
 
     -- ============================================================
@@ -179,11 +269,14 @@ function createTables(db: BetterSqlite3.Database) {
       review_source_id INTEGER,                   -- 关联审稿 ID
       content_id INTEGER NOT NULL,                -- FK -> contents
       word_count INTEGER DEFAULT 0,               -- 字数缓存
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now')),
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000),
       FOREIGN KEY (base_draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
       FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
     );
+    CREATE INDEX IF NOT EXISTS idx_revisions_base_draft ON revisions(base_draft_id);
+    CREATE INDEX IF NOT EXISTS idx_revisions_content ON revisions(content_id);
+    CREATE INDEX IF NOT EXISTS idx_revisions_merged_to ON revisions(merged_to_draft_id);
 
     -- ============================================================
     -- 7. reviews — 审稿（派生自 draft）
@@ -193,10 +286,12 @@ function createTables(db: BetterSqlite3.Database) {
       base_draft_id INTEGER NOT NULL,             -- 审查对象 FK
       review_index INTEGER NOT NULL,              -- 审阅顺位
       content_id INTEGER NOT NULL,                -- FK -> contents
-      created_at TEXT DEFAULT (datetime('now')),
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
       FOREIGN KEY (base_draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
       FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
     );
+    CREATE INDEX IF NOT EXISTS idx_reviews_base_draft ON reviews(base_draft_id);
+    CREATE INDEX IF NOT EXISTS idx_reviews_content ON reviews(content_id);
 
     -- ============================================================
     -- 8. post_process_runs — 后处理跑批实例
@@ -207,8 +302,8 @@ function createTables(db: BetterSqlite3.Database) {
       trigger_source_id TEXT NOT NULL,             -- 章节号 / draft_id
       source_label TEXT DEFAULT '',               -- UI 标签
       all_critical_passed INTEGER DEFAULT 0,
-      created_at TEXT DEFAULT (datetime('now')),
-      updated_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
     CREATE INDEX IF NOT EXISTS idx_post_runs_source
       ON post_process_runs(trigger_source_type, trigger_source_id);
@@ -230,6 +325,7 @@ function createTables(db: BetterSqlite3.Database) {
       FOREIGN KEY (run_id) REFERENCES post_process_runs(id) ON DELETE CASCADE,
       UNIQUE(run_id, step_key)
     );
+    CREATE INDEX IF NOT EXISTS idx_post_steps_run ON post_process_steps(run_id);
 
     -- ============================================================
     -- 沿用表：LLM 调用记录
@@ -245,7 +341,7 @@ function createTables(db: BetterSqlite3.Database) {
       duration_ms INTEGER DEFAULT 0,
       success INTEGER DEFAULT 1,
       error_message TEXT DEFAULT '',
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- ============================================================
@@ -255,7 +351,7 @@ function createTables(db: BetterSqlite3.Database) {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       chapter_number INTEGER NOT NULL,
       character_states TEXT DEFAULT '',
-      created_at TEXT DEFAULT (datetime('now'))
+      created_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
     -- 索引
@@ -274,40 +370,52 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   try {
     const cols = db.pragma('table_info(contents)') as Array<{ name: string }>
     if (!cols.some(c => c.name === 'updated_at')) {
-      db.exec("ALTER TABLE contents ADD COLUMN updated_at TEXT DEFAULT (datetime('now'))")
-      console.log('[Vela DB] 迁移: contents 表已添加 updated_at 列')
+      db.exec("ALTER TABLE contents ADD COLUMN updated_at INTEGER DEFAULT (unixepoch() * 1000)")
+      logger.info('DB', '迁移: contents 表已添加 updated_at 列')
     }
-  } catch { /* 忽略 */ }
+  } catch (e) {
+    logger.error('DB', `迁移 contents.updated_at 失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (contents.updated_at): ${e}`)
+  }
 
-  // 2. post_process_steps 表：补加唯一约束（SQLite 不支持 ALTER ADD CONSTRAINT，用唯一索引代替）
+  // 2. post_process_steps 表：补加唯一约束
   try {
     const indexes = db.pragma('index_list(post_process_steps)') as Array<{ name: string }>
     if (!indexes.some(i => i.name === 'uq_post_steps_run_key')) {
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS uq_post_steps_run_key ON post_process_steps(run_id, step_key)')
-      console.log('[Vela DB] 迁移: post_process_steps 已添加唯一约束')
+      logger.info('DB', '迁移: post_process_steps 已添加唯一约束')
     }
-  } catch { /* 忽略 */ }
+  } catch (e) {
+    logger.error('DB', `迁移 post_process_steps 唯一约束失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (post_process_steps): ${e}`)
+  }
 
   // 3. summary_snapshots 表：补加索引
   try {
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number)')
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at)')
-  } catch { /* 忽略 */ }
+  } catch (e) {
+    logger.error('DB', `迁移 summary_snapshots 索引失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (summary_snapshots indexes): ${e}`)
+  }
 
   // 4. v2: blueprints 表：添加 sort_order, priority 列
   try {
     const bpCols = db.pragma('table_info(blueprints)') as Array<{ name: string }>
     if (!bpCols.some(c => c.name === 'sort_order')) {
       db.exec('ALTER TABLE blueprints ADD COLUMN sort_order INTEGER DEFAULT 0')
-      console.log('[Vela DB] 迁移: blueprints 表已添加 sort_order 列')
+      logger.info('DB', '迁移: blueprints 表已添加 sort_order 列')
     }
     if (!bpCols.some(c => c.name === 'priority')) {
       db.exec('ALTER TABLE blueprints ADD COLUMN priority INTEGER DEFAULT 0')
-      console.log('[Vela DB] 迁移: blueprints 表已添加 priority 列')
+      logger.info('DB', '迁移: blueprints 表已添加 priority 列')
     }
-  } catch { /* 忽略 */ }
+  } catch (e) {
+    logger.error('DB', `迁移 blueprints 列失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (blueprints): ${e}`)
+  }
 
-  // 5. v2: evaluation_scores 表（AI 互评）
+  // 5. v2: evaluation_scores 表
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS evaluation_scores (
@@ -321,10 +429,84 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         suggestions TEXT DEFAULT '[]',
         raw_response TEXT DEFAULT '',
         tokens_used INTEGER DEFAULT 0,
-        created_at TEXT DEFAULT (datetime('now')),
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
         FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE
       );
+      CREATE INDEX IF NOT EXISTS idx_evaluation_draft ON evaluation_scores(draft_id);
     `)
-    console.log('[Vela DB] 迁移: evaluation_scores 表已创建')
-  } catch { /* 忽略 */ }
+    logger.info('DB', '迁移: evaluation_scores 表 + draft_id 索引已创建')
+  } catch (e) {
+    logger.error('DB', `迁移 evaluation_scores 失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (evaluation_scores): ${e}`)
+  }
+
+  // 6. v4: project_archives 表 + 大文本字段迁移
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS project_archives (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL DEFAULT 'main',
+        field_key TEXT NOT NULL,
+        body TEXT DEFAULT '',
+        updated_at INTEGER DEFAULT (unixepoch() * 1000)
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_archive_field ON project_archives(project_id, field_key);
+    `)
+    // 迁移现有的 4 个大文本字段到 project_archives（保留原列以保持兼容）
+    const FIELDS = ['premise', 'worldbuilding', 'characters_arch', 'synopsis']
+    for (const field of FIELDS) {
+      const row = db.prepare(`SELECT ${field} FROM project_core WHERE id = 'main'`).get() as Record<string, string> | undefined
+      if (row?.[field]) {
+        db.prepare(`
+          INSERT OR REPLACE INTO project_archives (id, project_id, field_key, body)
+          VALUES (?, 'main', ?, ?)
+        `).run(`main_${field}`, field, row[field])
+      }
+    }
+    logger.info('DB', '迁移: project_archives 表已创建，大文本字段已归档')
+  } catch (e) {
+    logger.error('DB', `迁移 project_archives 失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (project_archives): ${e}`)
+  }
+
+  // 7. v5: 时间字段 TEXT → INTEGER 迁移（毫秒级 unix 时间戳）
+  try {
+    const TIME_COL_TABLES: Array<{ table: string; cols: string[] }> = [
+      { table: 'project_core', cols: ['created_at', 'updated_at'] },
+      { table: 'blueprints', cols: ['created_at', 'updated_at'] },
+      { table: 'characters', cols: ['created_at', 'updated_at'] },
+      { table: 'contents', cols: ['created_at', 'updated_at'] },
+      { table: 'drafts', cols: ['created_at', 'updated_at'] },
+      { table: 'revisions', cols: ['created_at', 'updated_at'] },
+      { table: 'reviews', cols: ['created_at'] },
+      { table: 'post_process_runs', cols: ['created_at', 'updated_at'] },
+      { table: 'post_process_steps', cols: ['created_at'] },
+      { table: 'llm_calls', cols: ['created_at'] },
+      { table: 'summary_snapshots', cols: ['created_at'] },
+      { table: 'project_archives', cols: ['updated_at'] },
+    ]
+
+    for (const { table, cols } of TIME_COL_TABLES) {
+      for (const col of cols) {
+        // 将旧的 TEXT 时间戳转换为 INTEGER 毫秒时间戳
+        const rows = db.prepare(
+          `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
+        ).all() as Array<{ rowid: number; [key: string]: unknown }>
+
+        for (const row of rows) {
+          const textVal = row[col] as string
+          if (textVal && typeof textVal === 'string') {
+            const parsed = Date.parse(textVal)
+            if (!isNaN(parsed)) {
+              db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
+            }
+          }
+        }
+      }
+    }
+    logger.info('DB', '迁移: 时间字段 TEXT→INTEGER 转换完成')
+  } catch (e) {
+    logger.error('DB', `时间字段迁移失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (time migration v5): ${e}`)
+  }
 }

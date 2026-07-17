@@ -12,7 +12,7 @@ export interface ReviewMeta {
     baseDraftId: number
     reviewIndex: number
     contentId: number
-    createdAt: string
+    createdAt: number
 }
 
 /** 审稿完整数据（含报告正文） */
@@ -26,7 +26,7 @@ function rowToMeta(row: Record<string, unknown>): ReviewMeta {
         baseDraftId: row.base_draft_id as number,
         reviewIndex: row.review_index as number,
         contentId: row.content_id as number,
-        createdAt: row.created_at as string,
+        createdAt: row.created_at as number,
     }
 }
 
@@ -66,36 +66,37 @@ export class ReviewRepository {
         return rows.map(rowToMeta)
     }
 
-    /** 获取某草稿的最新审稿 */
+    /** 获取某草稿的最新审稿 — 单次 JOIN 查询替代 N+1 */
     static getLatestByDraft(baseDraftId: number): ReviewFull | null {
         const db = getProjectDb()
         if (!db) return null
 
         const row = db.prepare(`
-      SELECT * FROM reviews
-      WHERE base_draft_id = ?
-      ORDER BY review_index DESC LIMIT 1
+      SELECT r.*, c.body FROM reviews r
+      JOIN contents c ON r.content_id = c.id
+      WHERE r.base_draft_id = ?
+      ORDER BY r.review_index DESC LIMIT 1
     `).get(baseDraftId) as Record<string, unknown> | undefined
 
         if (!row) return null
         const meta = rowToMeta(row)
-        const body = ContentRepository.getBody(meta.contentId)
-        return { ...meta, content: body ?? '' }
+        return { ...meta, content: (row.body as string) ?? '' }
     }
 
-    /** 获取审稿完整数据 */
+    /** 获取审稿完整数据 — 单次 JOIN 查询替代 N+1 */
     static getFull(id: number): ReviewFull | null {
         const db = getProjectDb()
         if (!db) return null
 
-        const row = db.prepare(
-            'SELECT * FROM reviews WHERE id = ?'
-        ).get(id) as Record<string, unknown> | undefined
+        const row = db.prepare(`
+      SELECT r.*, c.body FROM reviews r
+      JOIN contents c ON r.content_id = c.id
+      WHERE r.id = ?
+    `).get(id) as Record<string, unknown> | undefined
 
         if (!row) return null
         const meta = rowToMeta(row)
-        const body = ContentRepository.getBody(meta.contentId)
-        return { ...meta, content: body ?? '' }
+        return { ...meta, content: (row.body as string) ?? '' }
     }
 
     /** 获取下一个审稿序号 */

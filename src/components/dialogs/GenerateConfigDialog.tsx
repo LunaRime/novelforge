@@ -6,6 +6,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { useProjectStore } from '../../stores/project-store'
 import { createConfigGenerationWorkflow } from '../../services/workflows/architecture-workflow'
 import { confirm } from '../ui/Confirm'
+import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { toast } from '../ui/Toast'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -37,7 +38,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
 
   // 直接从 Store 读取规模参数 — 单一数据源，无需 local state 镜像
   const totalChapters = currentProject?.novelConfig.totalChapters ?? 100
-  const wordsPerChapter = currentProject?.novelConfig.wordsPerChapter ?? 3000
+  const wordsPerChapter = currentProject?.novelConfig.wordsPerChapter ?? DEFAULT_WORDS_PER_CHAPTER
 
   /** 修改总章数：直接写 Store，允许清空（失焦时由 Input 组件全局兜底） */
   const handleTotalChaptersChange = (val: string) => {
@@ -105,7 +106,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
         createConfigGenerationWorkflow({
           idea,
           totalChapters: totalChapters || 100,
-          wordsPerChapter: wordsPerChapter || 3000,
+          wordsPerChapter: wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER,
           onGenerated,
         })
       )
@@ -221,7 +222,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
                   onChange={e => handleWordsPerChapterChange(e.target.value)}
                   onBlur={() => {
                     if (!wordsPerChapter || wordsPerChapter < 100) {
-                      updateNovelConfig({ wordsPerChapter: 3000 })
+                      updateNovelConfig({ wordsPerChapter: DEFAULT_WORDS_PER_CHAPTER })
                     }
                   }}
                 />

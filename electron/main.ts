@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, shell } from 'electron'
+import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { closeProjectDatabase } from './database'
@@ -143,12 +143,73 @@ function createWindow() {
     },
   })
 
+  // 通过 session API 设置 Content-Security-Policy（Electron 推荐方式，防御 XSS）
+  const cspPolicy = [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: https:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.openai.com https://*.anthropic.com https://*.googleapis.com https://*.deepseek.com https://*.bigmodel.cn http://localhost:* http://127.0.0.1:*",
+    "media-src 'self'",
+  ].join('; ')
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        'Content-Security-Policy': [cspPolicy],
+      },
+    })
+  })
+
   if (process.platform === 'darwin') {
     app.dock?.setIcon(path.join(process.env.APP_ROOT!, 'build', 'icon.png'))
   }
 
   // 构建应用菜单
   buildAppMenu()
+
+  // 渲染进程崩溃检测 — 自动提示重载
+  win.webContents.on('render-process-gone', (_event, details) => {
+    logger.error('Main', `渲染进程终止 (reason=${details.reason}, exitCode=${details.exitCode})`)
+    dialog.showErrorBox(
+      '渲染进程意外终止',
+      '应用界面意外终止，点击确定后将尝试重新加载。\n如有未保存的工作可能会丢失。'
+    )
+    if (win && !win.isDestroyed()) {
+      win.webContents.reload()
+      win.focus()
+    }
+  })
+
+  // 关闭窗口前检查未保存内容
+  win.on('close', async (e) => {
+    try {
+      // 查询渲染进程是否有脏 tab
+      const hasDirty = await win?.webContents.executeJavaScript(
+        'window.__vela_hasDirtyTabs ? window.__vela_hasDirtyTabs() : false',
+      ).catch(() => false)
+
+      if (hasDirty) {
+        e.preventDefault()
+        const { response } = await dialog.showMessageBox(win!, {
+          type: 'warning',
+          title: '未保存的修改',
+          message: '你有未保存的修改内容。',
+          detail: '如果现在关闭，未保存的修改将会丢失。',
+          buttons: ['取消', '不保存并退出'],
+          defaultId: 0,
+          cancelId: 0,
+        })
+        if (response === 1) {
+          // 用户确认退出 — 强制关闭
+          win?.destroy()
+        }
+      }
+    } catch {
+      // IPC 不可用时正常关闭
+    }
+  })
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)

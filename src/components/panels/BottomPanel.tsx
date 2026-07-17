@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { DEFAULT_LOCALE } from '../../shared/locale'
 import {
   Trash2, ChevronsDown, Loader2, CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap,
@@ -172,7 +173,7 @@ function TaskRunView() {
                 </span>
                 {/* 时间 */}
                 <span className="text-[0.68rem] flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
-                  {new Date(run.createdAt).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(run.createdAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
@@ -555,7 +556,7 @@ function ModelsView() {
       const { stats: s, history: h } = await loadLLMData(30)
       setStats(s)
       setHistory(h)
-    } catch { /* 忽略 */ }
+    } catch (e) { console.warn('[BottomPanel] 加载 LLM 用量统计数据失败:', e) }
   }
 
   return (
@@ -605,7 +606,7 @@ function ModelsView() {
                   style={{ borderBottom: '1px solid var(--color-border)' }}
                 >
                   <td className="px-4 py-1 text-[var(--color-text-muted)]">
-                    {new Date(row.createdAt).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                    {new Date(row.createdAt).toLocaleString(DEFAULT_LOCALE, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.modelName || '-'}</td>
                   <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.purpose || '-'}</td>

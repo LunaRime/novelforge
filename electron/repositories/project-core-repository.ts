@@ -5,6 +5,7 @@
  * 始终只有一行数据 (id = 'main')。
  */
 import { getProjectDb } from '../database'
+import { logger } from '../utils/logger'
 
 /** project_core 表行类型 */
 export interface ProjectCoreRow {
@@ -26,8 +27,8 @@ export interface ProjectCoreRow {
     characters_arch: string
     synopsis: string
     character_states: string
-    created_at: string
-    updated_at: string
+    created_at: number
+    updated_at: number
 }
 
 /** 前端使用的驼峰命名接口 */
@@ -49,8 +50,8 @@ export interface ProjectCoreData {
     charactersArch: string
     synopsis: string
     characterStates: string
-    createdAt: string
-    updatedAt: string
+    createdAt: number
+    updatedAt: number
 }
 
 /** 数据库行 → 前端数据 */
@@ -106,7 +107,7 @@ export class ProjectCoreRepository {
     static update(data: Partial<ProjectCoreData>): void {
         const db = getProjectDb()
         if (!db) {
-            console.error('[ProjectCoreRepository] 数据库未连接，无法保存配置')
+            logger.error('ProjectCore', '数据库未连接，无法保存配置')
             throw new Error('项目数据库未连接，请关闭项目后重新打开')
         }
 
@@ -144,11 +145,46 @@ export class ProjectCoreRepository {
         if (setClauses.length === 0) return
 
         // 追加 updated_at
-        setClauses.push("updated_at = datetime('now')")
+        setClauses.push("updated_at = unixepoch() * 1000")
         values.push('main')
 
         db.prepare(`
       UPDATE project_core SET ${setClauses.join(', ')} WHERE id = ?
     `).run(...values)
+    }
+
+    // ===== project_archives 大文本字段读写（v4 schema） =====
+
+    /** 根据 key 读取存档字段（premise / worldbuilding / characters_arch / synopsis） */
+    static getArchiveField(key: string): string | null {
+        const db = getProjectDb()
+        if (!db) return null
+
+        try {
+            const row = db.prepare(`
+        SELECT body FROM project_archives WHERE project_id = 'main' AND field_key = ?
+      `).get(key) as { body: string } | undefined
+            return row?.body ?? null
+        } catch {
+            return null
+        }
+    }
+
+    /** 写入存档字段 */
+    static setArchiveField(key: string, body: string): void {
+        const db = getProjectDb()
+        if (!db) return
+
+        const id = `main_${key}`
+        try {
+            db.prepare(`
+        INSERT INTO project_archives (id, project_id, field_key, body, updated_at)
+        VALUES (?, 'main', ?, ?, unixepoch() * 1000)
+        ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = unixepoch() * 1000
+      `).run(id, key, body)
+        } catch (error) {
+            logger.error('ProjectCore', `setArchiveField(${key}) 失败: ${error}`)
+            throw error
+        }
     }
 }

@@ -1,4 +1,4 @@
-import type { WorkflowContext, StepCallbacks } from '../../../stores/workflow-store'
+import type { WorkflowContext, StepCallbacks, WorkflowStep } from '../../../stores/workflow-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
@@ -8,7 +8,7 @@ import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-con
 import { structureForCache, hashStaticContext, generateCacheKey, calculateCost, type CacheScope } from '../../llm/prompt-cache'
 
 export interface CommandExecuteParams {
-  step: unknown
+  step: Partial<WorkflowStep> & { [extra: string]: unknown }
   context: WorkflowContext
   callbacks: StepCallbacks
 }

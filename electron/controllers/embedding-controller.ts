@@ -7,28 +7,30 @@
 import { ipcMain } from 'electron'
 import { embeddingService, type EmbeddingConfig, type LLMEmbeddingConfig } from '../embedding-service'
 import { cosineSimilarity, findMostSimilar } from '../utils/vector-utils'
-import { readJsonFile, GLOBAL_CONFIG_PATH } from '../utils/config-utils'
+import { readJsonFile, MODELS_CONFIG_PATH } from '../utils/config-utils'
+import { decryptApiKey } from '../utils/secure-config'
+import { logger } from '../utils/logger'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 
-/** 从全局配置加载嵌入模型配置 */
+/** 从全局配置加载嵌入模型配置（自动解密 apiKey） */
 function loadEmbeddingModelConfig(): ModelProfile | null {
   try {
-    const config = readJsonFile<{ models?: ModelProfile[] }>(
-      GLOBAL_CONFIG_PATH.replace('config.json', 'models.json'),
-      { models: [] },
-    )
-    const models = config.models || []
-    return models.find((m) => m.purposes?.includes('embedding')) || null
+    const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+    const model = models.find((m) => m.purposes?.includes('embedding')) || null
+    if (model) {
+      model.apiKey = decryptApiKey(model.apiKey)
+    }
+    return model
   } catch {
     return null
   }
 }
 
-/** 获取 LLM model configs 文件 */
+/** 获取 LLM model configs 文件（自动解密 apiKey） */
 function getLLMModels(): ModelProfile[] {
   try {
-    const MODELS_CONFIG_PATH = GLOBAL_CONFIG_PATH.replace('config.json', 'models.json')
-    return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+    const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+    return models.map((m) => ({ ...m, apiKey: decryptApiKey(m.apiKey) }))
   } catch {
     return []
   }
@@ -209,5 +211,5 @@ export function registerEmbeddingController() {
     return models.filter(m => !m.purposes?.includes('embedding'))
   })
 
-  console.log('[EmbeddingController] 已注册 IPC 处理器')
+  logger.info('Embedding', '已注册 IPC 处理器')
 }

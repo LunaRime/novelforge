@@ -19,8 +19,8 @@ export interface BlueprintRow {
     notes_updated_at: string
     sort_order: number
     priority: number
-    created_at: string
-    updated_at: string
+    created_at: number
+    updated_at: number
 }
 
 /** 前端使用的驼峰接口 */
@@ -232,7 +232,7 @@ export class BlueprintRepository {
         notes_updated_at = excluded.notes_updated_at,
         sort_order = excluded.sort_order,
         priority = excluded.priority,
-        updated_at = datetime('now')
+        updated_at = unixepoch() * 1000
     `).run(
             data.chapterNumber,
             data.title,
@@ -277,7 +277,7 @@ export class BlueprintRepository {
 
         db.prepare(`
       UPDATE blueprints
-      SET notes = ?, notes_updated_at = datetime('now'), updated_at = datetime('now')
+      SET notes = ?, notes_updated_at = unixepoch() * 1000, updated_at = unixepoch() * 1000
       WHERE chapter_number = ?
     `).run(notes, chapterNumber)
     }

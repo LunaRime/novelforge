@@ -6,6 +6,8 @@ import {
   getVectorlessCount, backfillVectors,
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { decryptApiKey } from '../utils/secure-config'
+import { logger } from '../utils/logger'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { embeddingService } from '../embedding-service'
 
@@ -19,7 +21,11 @@ function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl
   if (!model) return null
   return {
     protocol: model.protocol as 'openai' | 'gemini',
-    model: { baseUrl: model.baseUrl, apiKey: model.apiKey, modelName: model.modelName },
+    model: {
+      baseUrl: model.baseUrl,
+      apiKey: decryptApiKey(model.apiKey),
+      modelName: model.modelName,
+    },
   }
 }
 
@@ -114,17 +120,17 @@ export function registerKBController() {
 
     // 方式 1：专用 Embedding API（内部已含 LLM 降级，失败会自动切换）
     if (canUseEmbeddingAPI) {
-      console.log('[KB] 使用 Embedding API 重建向量索引（如失败将自动降级到 LLM 向量化）')
+      logger.info('KB', '使用 Embedding API 重建向量索引（如失败将自动降级到 LLM 向量化）')
       const result = await backfillVectors(projectPath, embConfig!.protocol, embConfig!.model)
       // 如果 processed > 0 说明至少部分成功了
       if (result.success || result.processed > 0) return result
       // 完全失败 → 降级到 LLM 向量化
-      console.warn('[KB] Embedding API 完全失败，尝试 LLM 向量化:', result.error)
+      logger.warn('KB', `Embedding API 完全失败，尝试 LLM 向量化: ${result.error}`)
     }
 
     // 方式 2：LLM 向量化
     if (canUseLLM) {
-      console.log('[KB] 使用 LLM 向量化重建向量索引')
+      logger.info('KB', '使用 LLM 向量化重建向量索引')
       try {
         const { count } = await getVectorlessCount(projectPath)
         if (count === 0) return { success: true, processed: 0, failed: 0 }
@@ -178,12 +184,12 @@ export function registerKBController() {
 
         return { success: true, processed, failed }
       } catch (error) {
-        console.warn('[KB] LLM 向量化回填失败:', error)
+        logger.warn('KB', `LLM 向量化回填失败: ${error}`)
       }
     }
 
     // 方式 3：全部不可用 — 标记为 FTS 模式
-    console.log('[KB] 无可用的向量化方式，文本块将保持 FTS 纯文本模式')
+    logger.info('KB', '无可用的向量化方式，文本块将保持 FTS 纯文本模式')
     const { count } = await getVectorlessCount(projectPath)
     return {
       success: false,

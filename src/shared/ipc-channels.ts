@@ -54,7 +54,7 @@ export interface ProjectChannels {
   }
   'project:recent-list': {
     args: []
-    return: Array<{ name: string; path: string; updatedAt: string }>
+    return: Array<{ name: string; path: string; updatedAt: number }>
   }
   'dialog:select-folder': {
     args: []
@@ -163,8 +163,8 @@ export interface ProjectData {
   path: string
   novelConfig: NovelConfig
   characterStates: string
-  createdAt: string
-  updatedAt: string
+  createdAt: number
+  updatedAt: number
 }
 
 export interface NovelConfig {

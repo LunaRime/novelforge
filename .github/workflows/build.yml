@@ -1,4 +1,4 @@
-name: Build & Type Check
+name: Build & Lint
 
 on:
   push:
@@ -18,18 +18,26 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - uses: pnpm/action-setup@v4
+      with:
+        version: 9
+
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node-version }}
+        cache: 'pnpm'
 
     - name: Install dependencies
       env:
         ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
-      run: npm ci
+      run: pnpm install --frozen-lockfile
+
+    - name: Lint (ESLint)
+      run: pnpm run lint
 
     - name: Type check (TypeScript)
-      run: npx tsc --noEmit
+      run: pnpm tsc --noEmit
 
     - name: Build (Vite)
-      run: npx vite build
+      run: pnpm vite build

@@ -56,6 +56,11 @@ export default function App() {
     loadRecentProjects()
     // 初始化 MCP Store
     useMCPStore.getState().init().catch(e => console.warn('[MCP] 初始化失败:', e))
+    // 恢复未完成的工作流 checkpoint
+    const cp = useWorkflowStore.getState().restoreCheckpoint()
+    if (cp && cp.activeRuns.length > 0) {
+      console.log(`[Workflow] 检测到 ${cp.activeRuns.length} 个未完成工作流，已恢复为暂停状态（保存时间: ${cp.savedAt}）`)
+    }
     if (ipc.isElectron) {
       const savedZoom = localStorage.getItem('vela-zoom-level')
       if (savedZoom) ipc.setZoomLevel(parseFloat(savedZoom))

@@ -37,7 +37,7 @@ export class ContentRepository {
         if (!db) return
 
         db.prepare(`
-      UPDATE contents SET body = ?, updated_at = datetime('now') WHERE id = ?
+      UPDATE contents SET body = ?, updated_at = unixepoch() * 1000 WHERE id = ?
     `).run(body, id)
     }
 

@@ -4,4 +4,10 @@ allowBuilds:
   electron-winstaller: true
   esbuild: true
 onlyBuiltDependencies:
+  - better-sqlite3
+  - electron
   - electron-winstaller
+  - esbuild
+extraDependencies:
+  - apache-arrow
+  - flatbuffers

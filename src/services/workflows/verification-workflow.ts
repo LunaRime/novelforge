@@ -11,6 +11,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { loadDirectoryBlueprints, type ChapterBlueprint } from './directory-workflow'
 import { FillGapsCommand } from './commands/fill-gaps.command'
 import { generateVerificationReport, type BlueprintGap } from '../blueprint-verification-service'
+import type { ProjectCoreData } from '../../../electron/repositories/project-core-repository'
 
 export interface VerificationWorkflowParams {
   /** 是否自动补全缺口（true = 扫描 + 补全，false = 仅扫描） */
@@ -20,7 +21,6 @@ export interface VerificationWorkflowParams {
 export function createVerificationWorkflow(
   params: VerificationWorkflowParams = { autoFill: false },
 ): WorkflowDefinition {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const steps: WorkflowDefinition['steps'] = [
     {
       name: '加载蓝图',
@@ -35,8 +35,7 @@ export function createVerificationWorkflow(
           const core = await ipc.invoke('db:project-core-get')
           if (core) {
             const parts: string[] = []
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const c = core as any
+            const c = core as ProjectCoreData
             if (c.premise?.length > 50) parts.push(c.premise)
             if (c.charactersArch?.length > 50) parts.push(c.charactersArch)
             if (c.worldbuilding?.length > 50) parts.push(c.worldbuilding)
@@ -89,9 +88,8 @@ export function createVerificationWorkflow(
         }
 
         const cmd = new FillGapsCommand({ gaps })
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const filled = await cmd.execute({
-          step: _step as any,
+          step: _step,
           context,
           callbacks,
         })

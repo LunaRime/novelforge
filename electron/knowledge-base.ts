@@ -11,6 +11,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import { logger } from './utils/logger'
 import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
@@ -70,7 +71,7 @@ async function importContent(
       options?.onProgress?.(20, `正在通过 ${embedMethod} 向量化 ${chunks.length} 个块...`)
       vectors = await generateEmbeddings(chunks, protocol, model)
     } catch (e) {
-      console.warn('[Vela KB] Embedding API 失败，尝试 LLM 向量化:', String(e))
+      logger.warn('KB', `Embedding API 失败，尝试 LLM 向量化: ${String(e)}`)
     }
   }
 
@@ -83,11 +84,11 @@ async function importContent(
         const results = await embeddingService.embedBatchWithLLM(chunks)
         vectors = results.map(r => r.vector).filter(v => v.length > 0)
         if (vectors.length > 0) {
-          console.log(`[Vela KB] LLM 向量化成功: ${vectors.length}/${chunks.length} 个块`)
+          logger.info('KB', `LLM 向量化成功: ${vectors.length}/${chunks.length} 个块`)
         }
       }
     } catch (e) {
-      console.warn('[Vela KB] LLM 向量化也失败，降级为 FTS-only（纯文本搜索）:', String(e))
+      logger.warn('KB', `LLM 向量化也失败，降级为 FTS-only（纯文本搜索）: ${String(e)}`)
     }
   }
 
@@ -136,10 +137,17 @@ export async function importDocument(
     }
 
     onProgress?.(5, `正在读取 ${fileName}...`)
-    const content = fs.readFileSync(filePath, 'utf-8')
-    if (!content.trim()) {
-      return { success: false, error: '文件内容为空' }
+    // 文件大小检查：超过 50MB 的文件拒绝导入，防止 OOM
+    const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
+    const stat = fs.statSync(filePath)
+    if (stat.size > MAX_FILE_SIZE) {
+      const sizeMB = (stat.size / (1024 * 1024)).toFixed(1)
+      return { success: false, error: `文件过大 (${sizeMB} MB)，最大支持 50 MB。请拆分为多个小文件后分别导入。` }
     }
+    if (stat.size === 0) {
+      return { success: false, error: '文件为空，无法导入' }
+    }
+    const content = fs.readFileSync(filePath, 'utf-8')
 
     // 2. 委托核心导入逻辑
     return importContent(projectPath, fileName, content, protocol, model, { filePath, onProgress })
@@ -355,7 +363,7 @@ export async function backfillVectors(
     try {
       vectors = await generateEmbeddings(texts, protocol, model)
     } catch (e) {
-      console.warn('[Vela KB] Embedding API 回填失败 (状态码可能为 404，API 不支持 /embeddings):', String(e))
+      logger.warn('KB', `Embedding API 回填失败 (状态码可能为 404，API 不支持 /embeddings): ${String(e)}`)
     }
 
     // 尝试 2：LLM 向量化（Embedding API 失败或无有效结果时自动降级）
@@ -363,16 +371,16 @@ export async function backfillVectors(
       try {
         const { embeddingService } = await import('./embedding-service')
         if (embeddingService.canUseLLMEmbedding()) {
-          console.log(`[Vela KB] Embedding API 不可用，降级到 LLM 向量化 (${texts.length} 个块)`)
+          logger.info('KB', `Embedding API 不可用，降级到 LLM 向量化 (${texts.length} 个块)`)
           const llmResults = await embeddingService.embedBatchWithLLM(texts)
           vectors = llmResults.map(r => r.vector)
           const validCount = vectors.filter(v => v.length > 0).length
-          console.log(`[Vela KB] LLM 向量化完成: ${validCount}/${texts.length}`)
+          logger.info('KB', `LLM 向量化完成: ${validCount}/${texts.length}`)
         } else {
-          console.log('[Vela KB] LLM 向量化未启用，跳过向量生成（FTS 纯文本模式）')
+          logger.info('KB', 'LLM 向量化未启用，跳过向量生成（FTS 纯文本模式）')
         }
       } catch (e2) {
-        console.warn('[Vela KB] LLM 向量化也失败，使用 FTS 纯文本模式:', String(e2))
+        logger.warn('KB', `LLM 向量化也失败，使用 FTS 纯文本模式: ${String(e2)}`)
       }
     }
 
@@ -437,7 +445,7 @@ export async function backfillVectors(
 
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }
   } catch (error) {
-    console.error('[Vela KB] 向量回填异常:', error)
+    logger.error('KB', `向量回填异常: ${error}`)
     return { success: false, processed: 0, failed: 0, error: String(error) }
   }
 }

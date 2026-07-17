@@ -383,6 +383,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         onImportNovel={() => {
           useLayoutStore.getState().openImportNovel()
         }}
+        onOpenSettings={() => {
+          useLayoutStore.getState().openSettings()
+        }}
       />
     )
   }
