@@ -19,15 +19,14 @@ export default defineConfig({
   plugins: [tailwindcss(), react(), electron({
     main: {
       // Shortcut of `build.lib.entry`.
+      // 格式由 vite-plugin-electron 根据 package.json 的 type 字段自动选择。
+      // 移除 type:module 后自动输出 CJS，不再需要显式 format。
       entry: 'electron/main.ts',
       vite: {
         build: {
-          // 强制输出 CommonJS，保证 better-sqlite3 等 native 模块能正常加载
           rollupOptions: {
+            // 原生模块必须 externalize，Rolldown 无法打包 .node 二进制文件
             external: ['better-sqlite3', '@lancedb/lancedb'],
-            output: {
-              format: 'cjs'
-            }
           }
         }
       }
