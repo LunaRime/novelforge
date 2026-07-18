@@ -48,7 +48,7 @@ let tool = 'none'
 
 // Check for pyftsubset (Python fonttools)
 try {
-  execSync('pyftsubset --version', { stdio: 'pipe' })
+  execSync('pyftsubset --help', { stdio: 'pipe' })
   tool = 'pyftsubset'
   console.log('使用 pyftsubset (Python fonttools)')
 } catch {
