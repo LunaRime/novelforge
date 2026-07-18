@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles } from 'lucide-react'
+import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, PenLine } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
@@ -67,10 +67,17 @@ export default function TitleBar() {
     })
   }
   const openSettings = useLayoutStore(s => s.openSettings)
+  const { focusMode, toggleFocusMode } = useLayoutStore(s => ({ focusMode: s.focusMode, toggleFocusMode: s.toggleFocusMode }))
 
-  // 注册缩放快捷键：Cmd+= 放大，Cmd+- 缩小，Cmd+0 重置
+  // 注册快捷键：缩放 + 专注模式
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
+      // F11 — 专注模式（在所有平台上拦截，阻止浏览器默认全屏）
+      if (e.key === 'F11') {
+        e.preventDefault()
+        toggleFocusMode()
+        return
+      }
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
       if (e.key === '=' || e.key === '+') {
@@ -86,7 +93,7 @@ export default function TitleBar() {
     }
     window.addEventListener('keydown', handleKey)
     return () => window.removeEventListener('keydown', handleKey)
-  }, [zoomIn, zoomOut, zoomReset])
+  }, [zoomIn, zoomOut, zoomReset, toggleFocusMode])
 
   /** 百分比文字，如 "100%" */
   const zoomLabel = `${Math.round(zoom * 100)}%`
@@ -191,6 +198,20 @@ export default function TitleBar() {
             flexShrink: 0,
           }}
         />
+
+        {/* 专注写作模式 */}
+        <button
+          onClick={toggleFocusMode}
+          title={`${focusMode ? '退出专注模式' : '专注模式'} (F11)`}
+          className="icon-btn"
+          style={{
+            width: 24,
+            height: 22,
+            color: focusMode ? 'var(--color-accent)' : 'var(--color-text-muted)',
+          }}
+        >
+          <PenLine size={13} strokeWidth={1.5} />
+        </button>
 
         {/* 主题切换 */}
         <button

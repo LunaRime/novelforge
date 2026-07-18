@@ -58,6 +58,10 @@ interface LayoutState {
   setBottomPanelHeight: (height: number) => void
   openBottomTab: (tab: BottomTab) => void
 
+  // ===== 专注写作模式 =====
+  focusMode: boolean
+  toggleFocusMode: () => void
+
   // ===== 全局弹窗 Actions =====
   openSettings: () => void
   closeSettings: () => void
@@ -84,6 +88,9 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   bottomPanelOpen: true,
   bottomTab: 'tasks',
   bottomPanelHeight: 200,
+
+  focusMode: false,
+  toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
 
   // 全局弹窗默认关闭
   settingsOpen: false,

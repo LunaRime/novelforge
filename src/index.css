@@ -82,7 +82,7 @@
 /* ===== Tailwind v4 设计令牌（精简版 — 仅保留 Tailwind 需要的扩展） ===== */
 @theme {
   /* 字体栈 - Inter 几何无衬线，屏幕可读性优异 */
-  --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+  --font-sans: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   --font-writing: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
 
@@ -270,7 +270,7 @@
     --transition-spring: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
     /* 字体 */
-    --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-sans: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;
     --font-writing: 'LXGW WenKai', 'Noto Serif SC', serif;
   }
