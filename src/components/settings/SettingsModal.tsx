@@ -11,6 +11,8 @@ import type { ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
+import { switchLocale, useTranslation } from '../../hooks/useTranslation'
+import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../shared/locale'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
@@ -862,9 +864,32 @@ function FontSelect({
 
 function EditorSection() {
   const { writingFont, setWritingFont, uiFont, setUiFont } = useThemeStore()
+  const { locale } = useTranslation()
 
   return (
     <div className="max-w-md space-y-5">
+      {/* 界面语言 */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>界面语言</p>
+            <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              切换后立即生效，无需刷新
+            </p>
+          </div>
+        </div>
+        <NativeSelect
+          value={locale}
+          onChange={(e) => switchLocale(e.target.value as SupportedLocale)}
+        >
+          {SUPPORTED_LOCALES.map((loc) => (
+            <option key={loc} value={loc}>
+              {loc === 'zh-CN' ? '🇨🇳' : loc === 'en-US' ? '🇺🇸' : '🇷🇺'} {LOCALE_LABELS[loc]} ({loc})
+            </option>
+          ))}
+        </NativeSelect>
+      </div>
+
       {/* 界面字体 */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">
