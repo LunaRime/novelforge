@@ -13,7 +13,6 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
-import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
 import {
@@ -443,7 +442,8 @@ export async function backfillVectors(
     // 重建 FTS 索引
     const newTable = await db.openTable('chunks')
     try {
-      await newTable.createIndex('text', { config: lancedb.Index.fts() })
+      const { Index } = require('@lancedb/lancedb')
+      await newTable.createIndex('text', { config: Index.fts() })
     } catch { /* 索引可能已存在 */ }
 
     // 验证

@@ -8,13 +8,23 @@
  *
  * 存储位置：{projectPath}/.vela/lancedb/
  */
-import * as lancedb from '@lancedb/lancedb'
+import type * as LanceDB from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
+
+// 懒加载：避免 Electron 启动时同步 require 原生模块导致数秒无日志
+let _lancedb: typeof LanceDB | null = null
+function getLanceDB(): typeof LanceDB {
+  if (!_lancedb) {
+    _lancedb = require('@lancedb/lancedb')
+    logger.debug('VectorStore', 'LanceDB 原生模块已加载')
+  }
+  return _lancedb as typeof LanceDB
+}
 
 // ===== 类型定义 =====
 
@@ -119,10 +129,10 @@ function buildChunksSchema(vectorDim: number): ArrowSchema {
 
 // ===== 连接池（按项目路径缓存） =====
 
-const connectionPool = new Map<string, lancedb.Connection>()
+const connectionPool = new Map<string, LanceDB.Connection>()
 
 /** 获取 LanceDB 连接（惰性创建） */
-export async function getConnection(projectPath: string): Promise<lancedb.Connection> {
+export async function getConnection(projectPath: string): Promise<LanceDB.Connection> {
   const dbPath = path.join(projectPath, '.vela', 'lancedb')
 
   const cached = connectionPool.get(dbPath)
@@ -131,7 +141,7 @@ export async function getConnection(projectPath: string): Promise<lancedb.Connec
   // 确保目录存在
   fs.mkdirSync(dbPath, { recursive: true })
 
-  const db = await lancedb.connect(dbPath)
+  const db = await getLanceDB().connect(dbPath)
   connectionPool.set(dbPath, db)
   return db
 }
@@ -247,7 +257,7 @@ export async function addChunks(
     try {
       const chunksTable = await db.openTable(TABLE_NAME)
       await chunksTable.createIndex('text', {
-        config: lancedb.Index.fts(),
+        config: getLanceDB().Index.fts(),
       })
     } catch {
       // FTS 索引可能已存在，忽略错误
@@ -323,7 +333,7 @@ async function ensureVectorIndex(projectPath: string): Promise<void> {
 
     const numPartitions = Math.max(4, Math.floor(chunkCount / 1000))
     await table.createIndex('vector', {
-      config: lancedb.Index.ivfPq({
+      config: getLanceDB().Index.ivfPq({
         numPartitions,
         numSubVectors: 64,
       }),
@@ -639,7 +649,7 @@ export async function updateChunkVectors(
       // 重建 FTS 索引
       try {
         const newTable = await db.openTable(TABLE_NAME)
-        await newTable.createIndex('text', { config: lancedb.Index.fts() })
+        await newTable.createIndex('text', { config: getLanceDB().Index.fts() })
       } catch (e) {
         logger.warn('VectorStore', `回填覆写后 FTS 重建失败: ${e}`)
       }
