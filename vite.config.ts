@@ -27,6 +27,10 @@ export default defineConfig({
           rollupOptions: {
             // 原生模块必须 externalize，Rolldown 无法打包 .node 二进制文件
             external: ['better-sqlite3', '@lancedb/lancedb'],
+            output: {
+              banner: `console.log('[NovelForge] 正在启动...');`,
+              footer: `console.log('[NovelForge] 模块加载完成');`,
+            },
           }
         }
       }
