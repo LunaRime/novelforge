@@ -49,8 +49,7 @@
     "!.npmignore",
     "!.npmrc",
     "!package.json",
-    "!node_modules/.cache",
-    "!node_modules/**"
+    "!node_modules/.cache"
   ],
   "mac": {
     "target": ["dmg"],

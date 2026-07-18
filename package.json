@@ -9,7 +9,7 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "node scripts/subset-fonts.mjs && node scripts/verify-build-contract.cjs && tsc && vite build && electron-builder && node scripts/verify-packed-app.cjs && node scripts/organize-release.cjs",
+    "build": "node scripts/subset-fonts.mjs && node scripts/verify-build-contract.cjs && tsc && vite build && pnpm prune --prod && electron-builder && pnpm install --frozen-lockfile && node scripts/verify-packed-app.cjs && node scripts/organize-release.cjs",
     "typecheck": "tsc --noEmit",
     "build:vite": "vite build",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
