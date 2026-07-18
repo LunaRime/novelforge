@@ -133,3 +133,67 @@ export async function withRetry<T>(
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
+
+/**
+ * 流式生成重试包装器
+ *
+ * 与非流式 withRetry 的区别：
+ * - 流式生成不返回值（通过回调通信），故包装 void 函数
+ * - 网络错误时重新发起完整的流式请求
+ * - 仅重试网络层错误和可重试 HTTP 状态码（429/503/5xx）
+ * - 4xx（除 429）不重试，直接向上抛出
+ *
+ * @param streamFn - 流式生成函数，应在可重试错误时 throw（而非调用 onError）
+ * @param options - 重试选项（默认最多重试 2 次）
+ */
+export async function withStreamRetry(
+  streamFn: () => Promise<void>,
+  options: RetryOptions = {},
+): Promise<void> {
+  const {
+    maxRetries = 2,
+    baseDelayMs = 1000,
+    maxDelayMs = 30000,
+  } = options
+
+  let lastError: unknown
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await streamFn()
+    } catch (error) {
+      lastError = error
+
+      // 最后一次尝试已用完 → 抛出错误
+      if (attempt >= maxRetries) break
+
+      // 检查是否可重试
+      if (!isRetryableError(error)) {
+        logger.debug('LLM:StreamRetry', `不可重试的流错误，直接返回: ${String(error).slice(0, 200)}`)
+        throw error
+      }
+
+      // AbortError（用户取消）→ 不重试
+      if (error instanceof Error && error.name === 'AbortError') {
+        throw error
+      }
+
+      // 计算退避延迟
+      const jitter = Math.floor(Math.random() * 1001)
+      const delay = Math.min(baseDelayMs * Math.pow(2, attempt) + jitter, maxDelayMs)
+
+      const statusInfo = (error && typeof error === 'object' && 'status' in error)
+        ? ` (HTTP ${(error as { status: number }).status})`
+        : ''
+
+      logger.warn(
+        'LLM:StreamRetry',
+        `流式第 ${attempt + 1}/${maxRetries} 次重试，等待 ${delay}ms${statusInfo}: ${String(error).slice(0, 200)}`,
+      )
+
+      await sleep(delay)
+    }
+  }
+
+  throw lastError
+}

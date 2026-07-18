@@ -15,6 +15,7 @@ import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { app } from 'electron'
 import { logger } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
 
 // ===== 类型定义 =====
 
@@ -86,6 +87,7 @@ interface MCPServerRuntime {
   pendingRequests: Map<number, {
     resolve: (result: unknown) => void
     reject: (error: Error) => void
+    timerId: ReturnType<typeof setTimeout>
   }>
 }
 
@@ -212,7 +214,7 @@ class MCPManagerImpl {
       this.notifyToolsChange()
     } catch (error) {
       runtime.status = 'error'
-      runtime.error = String(error)
+      runtime.error = safeErrorMessage(error)
       this.notifyStatusChange(config.id, 'error', runtime.error)
     }
   }
@@ -282,6 +284,7 @@ class MCPManagerImpl {
       const pending = runtime.pendingRequests.get(msg.id as number)
       if (pending) {
         runtime.pendingRequests.delete(msg.id as number)
+        clearTimeout(pending.timerId)  // 清除超时定时器，防止泄漏
         if ('error' in msg) {
           const err = msg.error as { message?: string }
           pending.reject(new Error(err?.message ?? 'MCP error'))
@@ -297,7 +300,16 @@ class MCPManagerImpl {
   private sendRequest(runtime: MCPServerRuntime, method: string, params?: unknown): Promise<unknown> {
     return new Promise((resolve, reject) => {
       const id = runtime.nextRequestId++
-      runtime.pendingRequests.set(id, { resolve, reject })
+
+      // 超时定时器（响应到达或请求取消时清除，防止泄漏）
+      const timerId = setTimeout(() => {
+        if (runtime.pendingRequests.has(id)) {
+          runtime.pendingRequests.delete(id)
+          reject(new Error(`MCP 请求超时: ${method}`))
+        }
+      }, 10000)
+
+      runtime.pendingRequests.set(id, { resolve, reject, timerId })
 
       const msg = JSON.stringify({
         jsonrpc: '2.0',
@@ -307,14 +319,6 @@ class MCPManagerImpl {
       })
 
       runtime.process?.stdin?.write(msg + '\n')
-
-      // 超时 10 秒
-      setTimeout(() => {
-        if (runtime.pendingRequests.has(id)) {
-          runtime.pendingRequests.delete(id)
-          reject(new Error(`MCP 请求超时: ${method}`))
-        }
-      }, 10000)
     })
   }
 
@@ -389,7 +393,7 @@ class MCPManagerImpl {
 
       return { success: true, content: textParts }
     } catch (error) {
-      return { success: false, content: '', error: String(error) }
+      return { success: false, content: '', error: safeErrorMessage(error) }
     }
   }
 

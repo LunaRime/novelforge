@@ -577,6 +577,8 @@ export interface PostProcessStep {
   label: string
   /** 关键步骤（失败阻断下游工作流） */
   critical: boolean
+  /** 依赖的前置步骤 key 列表（空数组 = 无依赖，可与同级步骤并行） */
+  dependsOn?: string[]
   /** 步骤执行器 */
   executor: (callbacks: StepCallbacks) => Promise<void>
 }
@@ -732,29 +734,77 @@ export async function runPostProcessPipeline(
   const runSteps = await ipc.invoke('db:post-process-get-steps', runId)
   const stepMap = new Map((runSteps as unknown as Array<Record<string, unknown>>).map((s) => [s.stepKey, s]))
 
-  let hasCriticalFailure = false
-
+  // ===== DAG 拓扑排序 + 层级并行执行 =====
+  // 构建依赖图：key → 依赖它的步骤列表（反向边，用于判断下游阻断）
+  const reverseDeps = new Map<string, string[]>()
   for (const step of steps) {
-    const existingStep = stepMap.get(step.key)
-
-    // 修复模式：跳过已成功的步骤
-    if (onlyFailed && existingStep?.ok) {
-      callbacks.log(`  ⏭️ ${step.label} — 已成功，跳过`)
-      continue
+    const deps = step.dependsOn ?? []
+    for (const dep of deps) {
+      if (!reverseDeps.has(dep)) reverseDeps.set(dep, [])
+      reverseDeps.get(dep)!.push(step.key)
     }
+  }
 
-    const result = await withRetry(() => step.executor(callbacks), retryCount, step.label, callbacks)
+  // Kahn 算法拓扑排序，按层级分组
+  const inDegree = new Map<string, number>()
+  const pendingSteps = new Map<string, PostProcessStep>()
+  for (const step of steps) {
+    inDegree.set(step.key, (step.dependsOn ?? []).length)
+    pendingSteps.set(step.key, step)
+  }
 
-    if (result.ok) {
-      await ipc.invoke('db:post-process-mark-step-ok', runId, step.key)
-    } else {
-      await ipc.invoke('db:post-process-mark-step-failed', runId, step.key, result.error || '未知错误')
-      if (step.critical) {
-        hasCriticalFailure = true
-        callbacks.log(`  🔴 关键步骤 ${step.label} 失败，管线中止`)
-        break
+  const levels: PostProcessStep[][] = []
+  while (pendingSteps.size > 0) {
+    const level: PostProcessStep[] = []
+    for (const [key, step] of pendingSteps) {
+      if (inDegree.get(key) === 0) {
+        level.push(step)
       }
     }
+    if (level.length === 0) {
+      callbacks.log('⚠️ 依赖图存在循环引用，降级为顺序执行')
+      level.push(...pendingSteps.values())
+    }
+    for (const step of level) {
+      pendingSteps.delete(step.key)
+      // 解除后续步骤的入度
+      const downstream = reverseDeps.get(step.key) ?? []
+      for (const ds of downstream) {
+        inDegree.set(ds, (inDegree.get(ds) ?? 1) - 1)
+      }
+    }
+    levels.push(level)
+  }
+
+  let hasCriticalFailure = false
+
+  // 按层级依次执行（同层并行，跨层串行）
+  for (const level of levels) {
+    if (hasCriticalFailure) break
+
+    const levelPromises = level.map(async (step) => {
+      const existingStep = stepMap.get(step.key)
+
+      if (onlyFailed && existingStep?.ok) {
+        callbacks.log(`  ⏭️ ${step.label} — 已成功，跳过`)
+        return
+      }
+
+      callbacks.log(`  ▶ ${step.label}${(step.dependsOn ?? []).length > 0 ? ` (依赖: ${(step.dependsOn ?? []).join(', ')})` : ''}`)
+      const result = await withRetry(() => step.executor(callbacks), retryCount, step.label, callbacks)
+
+      if (result.ok) {
+        await ipc.invoke('db:post-process-mark-step-ok', runId, step.key)
+      } else {
+        await ipc.invoke('db:post-process-mark-step-failed', runId, step.key, result.error || '未知错误')
+        if (step.critical) {
+          hasCriticalFailure = true
+          callbacks.log(`  🔴 关键步骤 ${step.label} 失败，管线中止（阻断下游 ${(reverseDeps.get(step.key) ?? []).length} 个步骤）`)
+        }
+      }
+    })
+
+    await Promise.all(levelPromises)
   }
 
   // 事务边界：标记 run 最终状态（供 UI 判断是否需要回滚/重试）

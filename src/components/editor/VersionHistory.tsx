@@ -39,8 +39,7 @@ export default function VersionHistory() {
       })))
     } catch (e) { console.warn('[VersionHistory] 加载章节列表失败:', e); setChapters([]) }
     setLoading(false)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.id])
+  }, [currentProject?.id, getChapters])
 
   // 加载章节列表
   useEffect(() => {

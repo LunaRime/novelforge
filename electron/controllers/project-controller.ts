@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
@@ -80,7 +81,7 @@ export function registerProjectController() {
 
       return { success: true, projectId, projectPath: projectDir }
     } catch (error) {
-      return { success: false, projectId: '', error: String(error) }
+      return { success: false, projectId: '', error: safeErrorMessage(error) }
     }
   })
 
@@ -137,7 +138,7 @@ export function registerProjectController() {
 
       return { success: true, project: projectData }
     } catch (error) {
-      return { success: false, project: null, error: String(error) }
+      return { success: false, project: null, error: safeErrorMessage(error) }
     }
   })
 
@@ -189,7 +190,7 @@ export function registerProjectController() {
 
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -217,7 +218,7 @@ export function registerProjectController() {
       }
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 

@@ -7,6 +7,9 @@ import CodeMirrorEditor from './CodeMirrorEditor'
 import ThreeWayMerge from './ThreeWayMerge'
 import EditorToolbar from './EditorToolbar'
 import AIActionDialog, { REVIEW_DIMS } from './AIActionDialog'
+import { VELA } from '../../services/vela-protocol'
+import { useAutoSave } from '../../hooks/useAutoSave'
+import { useDirtyCheck } from '../../hooks/useDirtyCheck'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import {
@@ -55,7 +58,7 @@ export default function DraftEditor({ filePath, content }: Props) {
       const bps = await ipc.invoke('db:blueprint-get-all')
       const bp = Array.isArray(bps) ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber) : null
       setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : '未知标题', filePath, fileName: `v${m.version}`, createdAt: m.updatedAt ?? m.createdAt })
-      const chapterDir = `vela://draft/ch${m.chapterNumber}`
+      const chapterDir = `${VELA.DRAFT}ch${m.chapterNumber}`
       const pending = await getPendingRevisions(chapterDir, m.version)
       if (!cancelled) setPendingRevisions(pending)
       const reviews = await getReviewsForVersion(chapterDir, m.version)
@@ -81,38 +84,8 @@ export default function DraftEditor({ filePath, content }: Props) {
     Object.fromEntries(REVIEW_DIMS.map(d => [d.key, true]))
   )
   const [charCount, setCharCount] = useState(0)
-  const isDirty = useEditorStore(s => s.tabs.find(t => t.filePath === filePath)?.dirty ?? false)
+  const isDirty = useDirtyCheck(filePath)
   const currentBodyRef = useRef(content)
-
-  // 自动保存定时器
-  useEffect(() => {
-    let timer: ReturnType<typeof setInterval> | null = null
-    let cancelled = false
-
-    const initAutoSave = async () => {
-      try {
-        const config = await ipc.invoke('config:get')
-        const intervalMs = (config.autoSaveInterval || 30) * 1000
-        if (intervalMs <= 0) return
-
-        timer = setInterval(() => {
-          if (cancelled) return
-          const dirty = useEditorStore.getState().tabs.find(t => t.filePath === filePath)?.dirty
-          if (dirty) {
-            doSave(currentBodyRef.current)
-          }
-        }, intervalMs)
-      } catch { /* config:get 不可用时静默 */ }
-    }
-
-    initAutoSave()
-
-    return () => {
-      cancelled = true
-      if (timer) clearInterval(timer)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filePath])
 
   const currentProject = useProjectStore(s => s.currentProject)
 
@@ -120,8 +93,8 @@ export default function DraftEditor({ filePath, content }: Props) {
   const doSave = async (text: string) => {
     setSaving(true)
     try {
-      if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
-        const prefix = filePath.startsWith('vela://draft/') ? 'vela://draft/' : 'vela://manuscript/'
+      if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
+        const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
         const draftId = parseInt(filePath.replace(prefix, ''))
         await ipc.invoke('db:draft-update-content', draftId, text, text.length)
       } else {
@@ -137,6 +110,9 @@ export default function DraftEditor({ filePath, content }: Props) {
       setSaving(false)
     }
   }
+
+  // 自动保存定时器（通过 useAutoSave hook 复用）
+  useAutoSave(filePath, currentBodyRef, doSave)
 
   /** AI 修稿 */
   const doRefine = async () => {
@@ -219,7 +195,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   /** 打开待合并修稿 */
   const openPendingRevision = async (rev: RevisionEntry) => {
     if (!meta) return
-    const revPath = `vela://revision/${rev.id}`
+    const revPath = `${VELA.REVISION}${rev.id}`
     const [origContent, revContent] = await Promise.all([
       readDraftBody(filePath),
       readDraftBody(revPath),
@@ -231,7 +207,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   /** 合并完成回调 */
   const handleMergeComplete = async (mergedText: string) => {
     if (!meta || !mergeData) return
-    const chapterDir = `vela://draft/ch${meta.chapterNumber}`
+    const chapterDir = `${VELA.DRAFT}ch${meta.chapterNumber}`
     try {
       const { useDraftStore } = await import('../../stores/draft-store')
       const result = await useDraftStore.getState().applyMergedRevision(
@@ -255,11 +231,11 @@ export default function DraftEditor({ filePath, content }: Props) {
   /** 打开最新审稿报告 */
   const openLatestReview = async () => {
     if (!meta) return
-    const chapterDir = `vela://draft/ch${meta.chapterNumber}`
+    const chapterDir = `${VELA.DRAFT}ch${meta.chapterNumber}`
     const { getLatestReview } = await import('../../services/draft-index')
     const latest = await getLatestReview(chapterDir, meta.version)
     if (!latest) return
-    const reportContent = await readDraftBody(`vela://review/${latest.id}`)
+    const reportContent = await readDraftBody(`${VELA.REVIEW}${latest.id}`)
     if (!reportContent) return
     useEditorStore.getState().openFile({
       id: `review-report-${meta.chapterNumber}-${latest.id}`,

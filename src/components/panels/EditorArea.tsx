@@ -1,5 +1,6 @@
 import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -581,7 +582,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
       {/* 编辑区主体 */}
       <div className="flex-1 overflow-hidden">
-        {activeTab?.type === 'chapter' && activeTab.filePath?.startsWith('vela://draft/') && (
+        {activeTab?.type === 'chapter' && activeTab.filePath?.startsWith(VELA.DRAFT) && (
           // 草稿文件：使用 DraftEditor（工具栏含修稿/审稿/定稿按鈕）
           <DraftEditor
             key={activeTab.id}
@@ -589,7 +590,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             content={activeTab.content ?? ''}
           />
         )}
-        {activeTab?.type === 'chapter' && !activeTab.filePath?.startsWith('vela://draft/') && (
+        {activeTab?.type === 'chapter' && !activeTab.filePath?.startsWith(VELA.DRAFT) && (
           // 【DB 迁移备注】：终稿目前作为物理文件保存在 manuscript/ 目录是合理的（用于外部阅读器或最终打包编译导出）
           // 终稿文件（manuscript/）：用 ProseEditorWrapper（含字数信息栏）
           <ProseEditorWrapper

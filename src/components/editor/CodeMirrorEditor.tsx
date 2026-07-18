@@ -5,7 +5,8 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { EditorState } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
-import { Sparkles, Bold } from 'lucide-react'
+import { history, historyKeymap, undo, redo } from '@codemirror/commands'
+import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
@@ -200,9 +201,11 @@ export default function CodeMirrorEditor({
   // 构建扩展
   const extensions = useMemo(() => {
     const exts = [
+      history(),                    // 撤销/重做历史记录
       search({ top: true }),
       EditorView.lineWrapping,
       keymap.of([
+        ...historyKeymap,           // Ctrl+Z 撤销, Ctrl+Y/Ctrl+Shift+Z 重做
         {
           key: 'Tab',
           run: (target) => {
@@ -432,6 +435,37 @@ export default function CodeMirrorEditor({
             </div>
           ) : (
             <>
+              {/* 撤销 / 重做（Ctrl+Z / Ctrl+Y） */}
+              {editable && (
+                <>
+                  <button
+                    className="p-1 rounded"
+                    title="撤销 (Ctrl+Z)"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={() => {
+                      const view = editorRef.current?.view
+                      // @codemirror/commands v6.10.4 依赖 @codemirror/state v6.7+ — 项目用 v6.6，类型不兼容但运行时兼容
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      if (view) undo(view as any)
+                    }}
+                  ><Undo2 size={14} /></button>
+                  <button
+                    className="p-1 rounded"
+                    title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={() => {
+                      const view = editorRef.current?.view
+                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                      if (view) redo(view as any)
+                    }}
+                  ><Redo2 size={14} /></button>
+                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+                </>
+              )}
               {mode === 'document' && (
                 <>
                   <button
@@ -440,7 +474,6 @@ export default function CodeMirrorEditor({
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => {
-                      // document模式下的格式转换
                       if (selectionRange && editorRef.current?.view) {
                         const view = editorRef.current.view
                         const text = view.state.sliceDoc(selectionRange.from, selectionRange.to)

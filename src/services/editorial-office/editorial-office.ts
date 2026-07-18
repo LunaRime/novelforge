@@ -8,7 +8,7 @@
  * 4. 输出含共识/分歧/优先级的结构化评审报告
  */
 
-import { useLLMStore } from '../../stores/llm-store'
+import { llmStore } from '../store-facade'
 import {
   type EditorRole,
   EDITOR_ROLES,
@@ -105,7 +105,7 @@ export class EditorialOffice {
     },
     onProgress?: (role: string, status: string) => void,
   ): Promise<EditorialReviewResult> {
-    const llmStore = useLLMStore.getState()
+    const llmState = llmStore.getState()
     let totalTokensUsed = 0
 
     // ==== 第一步：并行启动所有评审角色 ====
@@ -118,7 +118,7 @@ export class EditorialOffice {
       onProgress?.(roleConfig.displayName, '评审中...')
 
       try {
-        const modelId = llmStore.getModelForPurpose(this.getPurposeForRole(role))
+        const modelId = llmState.getModelForPurpose(this.getPurposeForRole(role))
         if (!modelId) {
           onProgress?.(roleConfig.displayName, '❌ 无可用模型')
           return null
@@ -141,7 +141,7 @@ export class EditorialOffice {
         ].filter(Boolean).join('\n')
 
         // 调用 LLM
-        const response = await llmStore.generate(
+        const response = await llmState.generate(
           [
             { role: 'system', content: roleConfig.systemPrompt },
             { role: 'user', content: userPrompt },
@@ -218,7 +218,7 @@ export class EditorialOffice {
       onProgress?.('主编', '综合裁决中...')
 
       const chiefConfig = EDITOR_ROLES.chief_editor
-      const modelId = llmStore.getModelForPurpose('mutual_eval')
+      const modelId = llmState.getModelForPurpose('mutual_eval')
       if (modelId) {
         try {
           const reviewsText = roleResults
@@ -237,7 +237,7 @@ export class EditorialOffice {
             reviewsText,
           ].join('\n')
 
-          const response = await llmStore.generate(
+          const response = await llmState.generate(
             [
               { role: 'system', content: chiefConfig.systemPrompt },
               { role: 'user', content: chiefPrompt },
@@ -293,7 +293,7 @@ export class EditorialOffice {
 
     // 费用估算
     const estimatedCost = totalTokensUsed > 0
-      ? llmStore.modelRouter?.estimateCost('mutual_eval', totalTokensUsed * 0.7, totalTokensUsed * 0.3)?.totalCost || 0
+      ? llmState.modelRouter?.estimateCost('mutual_eval', totalTokensUsed * 0.7, totalTokensUsed * 0.3)?.totalCost || 0
       : 0
 
     return {

@@ -8,7 +8,7 @@
  * 由调用方选择展示方式（弹窗提示 / 日志输出）。
  */
 
-import { useProjectStore } from '../stores/project-store'
+import { projectStore } from './store-facade'
 import { ipc } from './ipc-client'
 
 import { readPostProcessStatus, getChapterFinalizeScope, getFailedStepLabels } from './workflows/workflow-utils'
@@ -28,7 +28,7 @@ export interface GuardResult {
  * 要求「核心大纲」或「主角人设」至少填写其中之一。
  */
 export function guardArchitectureGeneration(): GuardResult {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: '请先打开或新建一个项目。' }
   }
@@ -61,7 +61,7 @@ export function guardArchitectureGeneration(): GuardResult {
  * 建议 4 个都完成，但允许继续（仅提示警告）。
  */
 export async function guardDirectoryGeneration(): Promise<GuardResult> {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: '请先打开或新建一个项目。' }
   }
@@ -113,7 +113,7 @@ export async function guardDirectoryGeneration(): Promise<GuardResult> {
  * 2. 如果指定了章节号且 > 1，要求前一章已定稿（存在于 manuscript/ 中），否则上下文会断裂。
  */
 export async function guardChapterWriting(targetChapterNumber?: number): Promise<GuardResult> {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: '请先打开或新建一个项目。' }
   }
@@ -171,7 +171,7 @@ export async function guardChapterWriting(targetChapterNumber?: number): Promise
  * 否则会破坏已有蓝图/章节的角色状态链。
  */
 export async function guardCharacterRegeneration(): Promise<GuardResult> {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: '请先打开或新建一个项目。' }
   }
@@ -195,7 +195,7 @@ export async function guardCharacterRegeneration(): Promise<GuardResult> {
  * 回溯重跑历史章节会覆盖后续章节的角色状态。
  */
 export async function guardRepairPostProcess(chapterNumber: number): Promise<GuardResult> {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: '请先打开或新建一个项目。' }
   }

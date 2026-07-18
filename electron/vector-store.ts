@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
+import { safeErrorMessage } from './utils/error-utils'
 
 // ===== 类型定义 =====
 
@@ -63,6 +64,28 @@ export interface KBStats {
 
 const TABLE_NAME = 'chunks'
 const DOCS_TABLE_NAME = 'documents'
+
+/**
+ * 校验并转义 LanceDB 过滤表达式中使用的值，防止注入
+ * LanceDB 的 delete/update/filter 接受类 SQL 字符串，单引号是主要注入向量
+ */
+function sanitizeFilterValue(value: string, context: string): string {
+  if (!value || typeof value !== 'string') {
+    throw new Error(`VectorStore: ${context} 过滤值无效`)
+  }
+  // 移除可能导致注入的字符（反斜杠、NULL字节等），然后转义单引号
+  const cleaned = value.replace(/\\/g, '').replace(/\0/g, '')
+  return cleaned.replace(/'/g, "''")
+}
+
+/** UUID v4 格式校验（用于 docId/id 等内部 ID） */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+function validateUUID(value: string, context: string): void {
+  if (!UUID_RE.test(value)) {
+    logger.warn('VectorStore', `${context} 不是有效的 UUID 格式: ${value.slice(0, 50)}`)
+  }
+}
 
 /** 从第一个有效向量中检测维度；无向量时返回 0（表示纯 FTS 模式） */
 function detectVectorDim(records: ChunkRecord[]): number {
@@ -212,7 +235,8 @@ export async function addChunks(
       const docsTable = await db.openTable(DOCS_TABLE_NAME)
       // 先删除同名文档（幂等性），再添加新的
       try {
-        await docsTable.delete(`fileName = '${fileName.replace(/'/g, "''")}'`)
+        const safeName = sanitizeFilterValue(fileName, 'fileName')
+        await docsTable.delete(`fileName = '${safeName}'`)
       } catch { /* 表可能为空或无匹配 */ }
       await docsTable.add([docInfo])
     } else {
@@ -229,10 +253,13 @@ export async function addChunks(
       // FTS 索引可能已存在，忽略错误
     }
 
+    // 尝试创建向量 ANN 索引（IVF_PQ）
+    await ensureVectorIndex(projectPath)
+
     return { success: true, chunkCount: chunks.length }
   } catch (error) {
     logger.error('VectorStore', `写入失败: ${error}`)
-    return { success: false, chunkCount: 0, error: String(error) }
+    return { success: false, chunkCount: 0, error: safeErrorMessage(error) }
   }
 }
 
@@ -249,18 +276,63 @@ export async function removeDocument(
 
     if (tableNames.includes(TABLE_NAME)) {
       const table = await db.openTable(TABLE_NAME)
-      await table.delete(`docId = '${docId}'`)
+      validateUUID(docId, 'removeDocument.docId')
+      const safeDocId = sanitizeFilterValue(docId, 'docId')
+      await table.delete(`docId = '${safeDocId}'`)
     }
 
     if (tableNames.includes(DOCS_TABLE_NAME)) {
       const docsTable = await db.openTable(DOCS_TABLE_NAME)
-      await docsTable.delete(`id = '${docId}'`)
+      const safeId = sanitizeFilterValue(docId, 'id')
+      await docsTable.delete(`id = '${safeId}'`)
     }
 
     return true
   } catch (error) {
     logger.error('VectorStore', `删除失败: ${error}`)
     return false
+  }
+}
+
+/**
+ * 确保向量 ANN 索引存在（IVF_PQ）
+ * 仅在 chunk 数量超过阈值且有向量列时创建，避免小数据量下索引开销
+ */
+async function ensureVectorIndex(projectPath: string): Promise<void> {
+  try {
+    const db = await getConnection(projectPath)
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return
+
+    const table = await db.openTable(TABLE_NAME)
+    const chunkCount = await table.countRows()
+
+    // 仅当 chunk 数量 > 1000 时创建向量索引（小数据集暴力扫描更快）
+    const MIN_CHUNKS_FOR_INDEX = 1000
+    if (chunkCount < MIN_CHUNKS_FOR_INDEX) return
+
+    // 检查是否有 vector 列（纯 FTS 模式则跳过）
+    const schema = await table.schema()
+    const hasVectorCol = schema.fields.some(f => f.name === 'vector')
+    if (!hasVectorCol) return
+
+    // 检查是否已有向量索引
+    const existingIndices = await table.listIndices()
+    const hasVectorIndex = existingIndices.some(idx => idx.name === 'vector_idx')
+    if (hasVectorIndex) return
+
+    const numPartitions = Math.max(4, Math.floor(chunkCount / 1000))
+    await table.createIndex('vector', {
+      config: lancedb.Index.ivfPq({
+        numPartitions,
+        numSubVectors: 64,
+      }),
+      replace: true,
+    })
+    logger.info('VectorStore', `IVF_PQ 向量索引已创建 (chunks: ${chunkCount}, partitions: ${numPartitions})`)
+  } catch (e) {
+    // 索引创建失败不应阻断正常流程（可能 LanceDB 版本不支持 IVF_PQ）
+    logger.warn('VectorStore', `向量索引创建失败: ${String(e).slice(0, 200)}`)
   }
 }
 
@@ -533,6 +605,8 @@ export async function updateChunkVectors(
           logger.warn('VectorStore', `更新块 ${update.id} 向量失败: ${e}`)
         }
       }
+      // 回填后尝试创建向量索引
+      await ensureVectorIndex(projectPath)
       return { success: true, count: updates.length }
     } else {
       // 没有 vector 列，必须覆写全表以增加列
@@ -569,6 +643,9 @@ export async function updateChunkVectors(
       } catch (e) {
         logger.warn('VectorStore', `回填覆写后 FTS 重建失败: ${e}`)
       }
+
+      // 回填后尝试创建向量索引
+      await ensureVectorIndex(projectPath)
 
       return { success: true, count: updates.length }
     }
@@ -638,6 +715,6 @@ export async function migrateFromJSON(
     return { success: true, migrated }
   } catch (error) {
     logger.error('VectorStore', `迁移失败: ${error}`)
-    return { success: false, migrated: 0, error: String(error) }
+    return { success: false, migrated: 0, error: safeErrorMessage(error) }
   }
 }

@@ -8,6 +8,7 @@
 import { ipcMain } from 'electron'
 import { mcpManager } from './mcp-manager'
 import { logger } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
 
 /**
  * 注册所有 MCP IPC 处理器
@@ -20,7 +21,7 @@ export function registerMCPHandlers(): void {
       const configs = await mcpManager.loadConfig(configPath)
       return { success: true, configs }
     } catch (error) {
-      return { success: false, configs: [], error: String(error) }
+      return { success: false, configs: [], error: safeErrorMessage(error) }
     }
   })
 
@@ -30,7 +31,7 @@ export function registerMCPHandlers(): void {
       await mcpManager.connect(config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -40,7 +41,7 @@ export function registerMCPHandlers(): void {
       await mcpManager.disconnect(serverId)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -50,7 +51,7 @@ export function registerMCPHandlers(): void {
       await mcpManager.disconnectAll()
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 

@@ -8,6 +8,7 @@ import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
+import { VELA } from '../../services/vela-protocol'
 import { ipc } from '../../services/ipc-client'
 
 import { ARCH_CHARACTER_SCOPE, runArchCharacterExtract, createArchitectureWorkflow } from '../../services/workflows/architecture-workflow'
@@ -55,8 +56,6 @@ export default function WorldBuildingEditor() {
     setArchStatus(status)
     setWordCounts(counts)
     setLoading(false)
-    // ✅ 只依赖 path 字符串，避免 novelConfig 等变化导致 loadStatus 重建
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
   useEffect(() => { loadStatus() }, [loadStatus])
@@ -66,7 +65,6 @@ export default function WorldBuildingEditor() {
     if (!currentProject) return
     const s = await readPostProcessStatus(currentProject.path, ARCH_CHARACTER_SCOPE)
     setCharExtractStatus(s)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
   useEffect(() => { loadCharExtractStatus() }, [loadCharExtractStatus])
@@ -120,7 +118,7 @@ export default function WorldBuildingEditor() {
   /** 打开单个架构文件（arch-file 类型；若 tab 已存在则刷新磁盘内容） */
   const openArchFile = async (f: typeof ARCH_FILES[number]) => {
     if (!currentProject) return
-    const filePath = `vela://core/${f.key}`
+    const filePath = `${VELA.CORE}${f.key}`
     const core = (await ipc.invoke('db:project-core-get')) as Record<string, unknown> | null
     const propertyKey = f.key === 'characters' ? 'charactersArch' : f.key
     const content = (core && (core[propertyKey] as string)) || ''

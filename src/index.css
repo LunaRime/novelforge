@@ -557,6 +557,26 @@
   .paper ::-webkit-scrollbar-thumb:hover {
     background: rgba(120, 100, 80, 0.35);
   }
+
+  /* ===== 键盘可访问性：Tab 导航焦点指示器 ===== */
+  /* Tailwind outline-none 移除了浏览器默认焦点环，此样式为键盘用户恢复焦点感知 */
+  :focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
+    border-radius: var(--radius-sm);
+  }
+
+  /* ===== 尊重用户减少动画偏好 ===== */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
 }
 
 /* =====================================================================
@@ -668,6 +688,12 @@
 
   .config-input:focus {
     border-color: var(--color-accent);
+  }
+
+  /* 键盘 Tab 导航时显示焦点环（替代被 outline-none 移除的默认焦点样式） */
+  .config-input:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 1px;
   }
 
   .config-input::placeholder {

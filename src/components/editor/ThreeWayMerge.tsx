@@ -287,9 +287,9 @@ function HunkLines({ lines, padCount, cls, emptyLabel }: {
 /** contentEditable 子组件 — 仅在挂载时设置内容 */
 function EditableCell({ text, onChange }: { text: string; onChange: (t: string) => void }) {
   const ref = useRef<HTMLDivElement>(null)
+  const initialTextRef = useRef(text)
   useLayoutEffect(() => {
-    if (ref.current) ref.current.textContent = text || '\u00A0'
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (ref.current) ref.current.textContent = initialTextRef.current || '\u00A0'
   }, [])
   return (
     <div ref={ref} className="twm-editable" contentEditable

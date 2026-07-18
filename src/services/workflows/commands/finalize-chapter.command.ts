@@ -115,11 +115,12 @@ export function buildFinalizePostProcessSteps(
 ): PostProcessStep[] {
   const steps: PostProcessStep[] = []
 
-  // ─── 步骤 1: 导入知识库 ───────────────────────────────────────────
+  // ─── 步骤 1: 导入知识库（无依赖，可独立执行）─────────────────────
   steps.push({
     key: 'kb_import',
     label: '📚 导入知识库',
     critical: true,
+    dependsOn: [],
     executor: async (callbacks) => {
       const contentFileName = chapterTitle
         ? `第${chapterNumber}章 ${chapterTitle}.txt`
@@ -140,6 +141,7 @@ export function buildFinalizePostProcessSteps(
       key: 'chapter_notes',
       label: '📋 章节剧情要点',
       critical: true,
+      dependsOn: ['kb_import'],
       executor: async (callbacks) => {
         const notesBuilder = new PostProcessPromptBuilder(notesTemplate)
           .withChapterContent(draftContent)
@@ -162,6 +164,7 @@ export function buildFinalizePostProcessSteps(
       key: 'character_cards',
       label: '🎭 角色状态更新',
       critical: false,
+      dependsOn: ['kb_import'],  // 仅依赖 KB 导入完成，可与 chapter_notes 并行
       executor: async (callbacks) => {
         // 读取现有角色卡
         const allChars = (await ipc.invoke('db:character-get-all')) as unknown as Array<Record<string, unknown>>
@@ -252,6 +255,7 @@ export function buildFinalizePostProcessSteps(
       key: 'style_analysis',
       label: '🎨 文风自动学习',
       critical: false,
+      dependsOn: ['kb_import'],
       executor: async (callbacks) => {
         callbacks.log('🎨 触发文风自动学习（每5章一次）...')
         const { AnalyzeWritingStyleCommand } = await import('./analyze-style.command')
@@ -271,6 +275,7 @@ export function buildFinalizePostProcessSteps(
     key: 'foreshadowing_scan',
     label: '🔮 伏笔扫描',
     critical: false,
+    dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {
       try {
         const { scanNewForeshadowing, detectResolvedForeshadowing, loadAllForeshadowing, saveForeshadowing } = await import('../../foreshadowing-manager')
@@ -289,6 +294,7 @@ export function buildFinalizePostProcessSteps(
     key: 'voice_analysis',
     label: '🎤 角色声音分析',
     critical: false,
+    dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {
       callbacks.log('正在分析角色对话风格...')
       try {

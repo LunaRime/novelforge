@@ -7,6 +7,17 @@
 
 import { ipc } from './ipc-client'
 
+// ===== vela:// URI 协议常量 =====
+
+/** NovelForge 伪协议前缀常量 — 集中定义，消除 58+ 处硬编码 */
+export const VELA = {
+  DRAFT: 'vela://draft/',
+  MANUSCRIPT: 'vela://manuscript/',
+  CORE: 'vela://core/',
+  REVISION: 'vela://revision/',
+  REVIEW: 'vela://review/',
+} as const
+
 // ===== vela://core/ 架构字段映射 =====
 
 /** 路径 key → ProjectCoreData 中的驼峰字段名 */
@@ -19,14 +30,14 @@ export const CORE_FIELD_MAP: Record<string, string> = {
 
 /** 从 vela://core/ 路径中解析出 DB 字段名 */
 export function parseCoreField(velaPath: string): string | null {
-    if (!velaPath.startsWith('vela://core/')) return null
-    const key = velaPath.replace('vela://core/', '')
+    if (!velaPath.startsWith(VELA.CORE)) return null
+    const key = velaPath.replace(VELA.CORE, '')
     return CORE_FIELD_MAP[key] ?? null
 }
 
 /** 从 DB 读取 vela://core/ 路径对应的内容 */
 export async function readCoreContent(velaPath: string): Promise<string> {
-    const key = velaPath.replace('vela://core/', '')
+    const key = velaPath.replace(VELA.CORE, '')
     const core = await ipc.invoke('db:project-core-get')
     if (!core) return ''
     const fieldMap: Record<string, string> = {
@@ -50,26 +61,26 @@ export async function writeCoreContent(velaPath: string, content: string): Promi
 
 /** 读取 vela:// 伪协议路径的内容（统一入口） */
 export async function readVelaContent(filePath: string): Promise<string> {
-    if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
-        const prefix = filePath.startsWith('vela://draft/') ? 'vela://draft/' : 'vela://manuscript/'
+    if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
+        const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
         const draftId = parseInt(filePath.replace(prefix, ''))
         const full = await ipc.invoke('db:draft-get-full', draftId)
         return full?.content ?? ''
     }
 
-    if (filePath.startsWith('vela://revision/')) {
-        const revId = parseInt(filePath.replace('vela://revision/', ''))
+    if (filePath.startsWith(VELA.REVISION)) {
+        const revId = parseInt(filePath.replace(VELA.REVISION, ''))
         const full = await ipc.invoke('db:revision-get-full', revId)
         return full?.content ?? ''
     }
 
-    if (filePath.startsWith('vela://review/')) {
-        const revId = parseInt(filePath.replace('vela://review/', ''))
+    if (filePath.startsWith(VELA.REVIEW)) {
+        const revId = parseInt(filePath.replace(VELA.REVIEW, ''))
         const full = await ipc.invoke('db:review-get-full', revId)
         return full?.content ?? ''
     }
 
-    if (filePath.startsWith('vela://core/')) {
+    if (filePath.startsWith(VELA.CORE)) {
         return readCoreContent(filePath)
     }
 
@@ -78,6 +89,9 @@ export async function readVelaContent(filePath: string): Promise<string> {
 }
 
 /** 判断路径是否为 vela:// 伪协议 */
+/** 所有 vela:// 协议前缀 */
+const VELA_PREFIX = 'vela://'
+
 export function isVelaProtocol(path: string): boolean {
-    return path.startsWith('vela://')
+    return path.startsWith(VELA_PREFIX)
 }

@@ -6,6 +6,7 @@
  * - 审稿：多维度勾选
  */
 import { Sparkles } from 'lucide-react'
+import { memo } from 'react'
 import { Button } from '../ui/Button'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -39,7 +40,7 @@ export interface AIActionDialogProps {
   onConfirm: () => void
 }
 
-export default function AIActionDialog({
+export default memo(function AIActionDialog({
   action,
   chapterTitle,
   version,
@@ -139,4 +140,4 @@ export default function AIActionDialog({
       </DialogContent>
     </Dialog>
   )
-}
+})

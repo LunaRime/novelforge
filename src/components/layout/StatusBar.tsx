@@ -3,6 +3,7 @@ import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen } from 'lucide-rea
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { t } from '../../shared/locale'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useUsageStore } from '../../stores/usage-store'
 
@@ -105,7 +106,7 @@ function SessionCost() {
     <div
       className="flex items-center gap-1 px-2 h-full text-xs cursor-default"
       style={{ color: 'var(--color-statusbar-text)' }}
-      title={`缓存命中: ${cacheHits} 次 | 点击重置`}
+      title={`${t('statusbar.cacheHit')}: ${cacheHits} ${t('statusbar.calls')} | ${t('statusbar.clickReset')}`}
       onClick={() => useUsageStore.getState().resetSession()}
     >
       <DollarSign size={10} className="opacity-60" />

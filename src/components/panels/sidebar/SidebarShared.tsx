@@ -48,8 +48,8 @@ import { ipc } from '../../../services/ipc-client'
 export async function openArchFile(filePath: string, name: string) {
   let content = ''
   // 支持 vela://core/ 伪协议路径，从 DB 读取架构字段
-  if (filePath.startsWith('vela://core/')) {
-    const { readCoreContent } = await import('../../../services/vela-protocol')
+  const { VELA, readCoreContent } = await import('../../../services/vela-protocol')
+  if (filePath.startsWith(VELA.CORE)) {
     content = await readCoreContent(filePath)
   } else {
     const result = await ipc.invoke('fs:read-file', filePath)
@@ -80,8 +80,8 @@ export function openBuiltinEditor(id: string, name: string, type: 'chapter-card'
 /** 打开章节文件 */
 export async function openChapterFile(filePath: string, name: string) {
   let content = ''
-  if (filePath.startsWith('vela://')) {
-    const { readVelaContent } = await import('../../../services/vela-protocol')
+  const { isVelaProtocol, readVelaContent } = await import('../../../services/vela-protocol')
+  if (isVelaProtocol(filePath)) {
     content = await readVelaContent(filePath)
   } else {
     const result = await ipc.invoke('fs:read-file', filePath)

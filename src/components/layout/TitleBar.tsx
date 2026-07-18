@@ -3,6 +3,7 @@ import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles } from 'luci
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
+import { t } from '../../shared/locale'
 import { useLayoutStore } from '../../stores/layout-store'
 
 /** 检测是否为 macOS */
@@ -113,7 +114,7 @@ export default function TitleBar() {
         {/* 未保存警示灯：当存在 dirty tab 时显示橙色小圆点 */}
         {hasDirty && (
           <span
-            title="有未保存的修改"
+            title={t('statusbar.unsaved')}
             style={{
               display: 'inline-block',
               width: 7,
@@ -141,7 +142,7 @@ export default function TitleBar() {
         {/* 缩小 */}
         <button
           onClick={zoomOut}
-          title={`缩小 (${isMac ? '⌘' : 'Ctrl'}+-)`}
+          title={`${t('zoom.out')} (${isMac ? '⌘' : 'Ctrl'}+-)`}
           className="icon-btn"
           style={{ width: 22, height: 22 }}
         >
@@ -173,7 +174,7 @@ export default function TitleBar() {
         {/* 放大 */}
         <button
           onClick={zoomIn}
-          title={`放大 (${isMac ? '⌘' : 'Ctrl'}+=)`}
+          title={`${t('zoom.in')} (${isMac ? '⌘' : 'Ctrl'}+=)`}
           className="icon-btn"
           style={{ width: 22, height: 22 }}
         >
