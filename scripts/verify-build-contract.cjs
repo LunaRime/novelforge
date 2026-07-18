@@ -33,26 +33,36 @@ if (!viteConfig || !builderConfig || !mainTs || !pkgJson) {
   process.exit(1);
 }
 
-// ===== 检查 A：CJS 主进程 → extraMetadata 必须有 type 覆盖 =====
-const mainFormatCJS = /format:\s*['"]cjs['"]/.test(viteConfig);
-// 仅在 extraMetadata 块内搜索 type 字段（避免匹配注释中的 "type":"module"）
-const extraMetaBlock = builderConfig.match(/"extraMetadata"\s*:\s*\{([^}]+)\}/);
-const extraType = extraMetaBlock ? extraMetaBlock[1].match(/"type"\s*:\s*"([^"]+)"/) : null;
-const hasExtraTypeOverride = extraType && extraType[1] === 'commonjs';
+// ===== 检查 A：root package.json 不得含有 "type":"module" =====
+// R9 修复：移除 "type":"module" 后，vite-plugin-electron 自动输出 CJS，
+// 整个模块系统统一为 CommonJS。重新引入 "type":"module" 会导致：
+// 1. vite-plugin-electron 输出 ESM → 主进程 import 语句在 CJS 环境下崩溃
+// 2. Rolldown CJS shim 与 ESM 模块系统冲突
 const rootTypeModule = pkgJson.type === 'module';
 
-if (mainFormatCJS && rootTypeModule && !hasExtraTypeOverride) {
+if (rootTypeModule) {
   fail(
-    '主进程为 CJS 格式，但 root package.json 设为 "type":"module"，' +
-    '且 electron-builder.json5 的 extraMetadata 中缺少 "type":"commonjs" 覆盖。' +
-    '这会导致构建产物启动时 require 不可用而崩溃。'
+    '检查 A: root package.json 含有 "type":"module" — ' +
+    '这会导致 vite-plugin-electron 输出 ESM 格式的主进程代码，' +
+    '在 Electron CJS 运行时崩溃。请移除该字段（默认 CJS）。'
   );
-} else if (mainFormatCJS && rootTypeModule && hasExtraTypeOverride) {
-  ok('检查 A: extraMetadata 已正确覆盖 type 为 commonjs');
-} else if (!mainFormatCJS) {
-  ok('检查 A: 主进程非 CJS 格式，跳过 type 检查');
 } else {
-  ok('检查 A: root package.json 无 type:module，无需覆盖');
+  ok('检查 A: root package.json 无 type:module — vite-plugin-electron 输出 CJS');
+}
+
+// ===== 检查 A2：native 模块必须在 external 列表中 =====
+const externalMatch = viteConfig.match(/external:\s*\[([^\]]+)\]/);
+const hasBothNativeExternals = externalMatch &&
+  externalMatch[1].includes('better-sqlite3') &&
+  externalMatch[1].includes('@lancedb/lancedb');
+if (hasBothNativeExternals) {
+  ok('检查 A2: native 模块 better-sqlite3 + @lancedb/lancedb 已 externalize');
+} else {
+  fail(
+    '检查 A2: vite.config.ts 的 external 列表中缺少原生模块。' +
+    'Rolldown 无法打包 .node 二进制文件（better-sqlite3, @lancedb/lancedb），' +
+    '必须在 main.vite.build.rollupOptions.external 中声明。'
+  );
 }
 
 // ===== 检查 B：preload 文件名一致性 =====

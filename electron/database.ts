@@ -4,14 +4,11 @@
  * 负责 SQLite 实例的连接、生命周期与建表。
  * 具体业务逻辑由 /repositories 提供。
  */
-import { createRequire } from 'node:module'
+import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
 import { dialog } from 'electron'
 import { logger } from './utils/logger'
-
-const require = createRequire(import.meta.url)
-const Database = require('better-sqlite3') as typeof import('better-sqlite3')
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
