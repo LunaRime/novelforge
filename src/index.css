@@ -33,43 +33,11 @@
   font-display: swap;
 }
 
-/* ===== 本地内置中文写作字体（无需网络，放置于 public/fonts/） ===== */
-
-/* 霞鹜文楷 Regular — 楷体，温润典雅，适合小说写作 */
-@font-face {
-  font-family: 'LXGW WenKai';
-  src: url('/fonts/LXGWWenKai-Regular.ttf') format('truetype');
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* 霞鹜文楷 Medium — 较粗字重，阅读舒适感更强 */
-@font-face {
-  font-family: 'LXGW WenKai';
-  src: url('/fonts/LXGWWenKai-Medium.ttf') format('truetype');
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* 思源宋体 — 可变字体，支持 100-900 所有字重，印刷感强 */
-@font-face {
-  font-family: 'Noto Serif SC';
-  src: url('/fonts/NotoSerifSC-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
-
-/* 思源黑体 — 可变字体，支持 100-900 所有字重，现代简洁 */
-@font-face {
-  font-family: 'Noto Sans SC';
-  src: url('/fonts/NotoSansSC-VariableFont_wght.ttf') format('truetype');
-  font-weight: 100 900;
-  font-style: normal;
-  font-display: swap;
-}
+/* ===== 写作字体按需加载 =====
+ * LXGW WenKai / Noto Serif SC / Noto Sans SC 的 @font-face 声明
+ * 已移至 theme-store.ts 的 applyWritingFont()/applyUiFont() 中动态注入。
+ * 仅用户选择的字体才会下载，避免同时加载 4 套中文字体（~90MB）。
+ */
 
 /* ===== TailwindCSS v4 核心导入 ===== */
 @import "tailwindcss";
