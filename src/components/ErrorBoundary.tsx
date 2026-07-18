@@ -1,5 +1,6 @@
 import { Component, createContext } from 'react'
 import type { ReactNode, ErrorInfo, ContextType } from 'react'
+import { t } from '../shared/locale'
 
 interface Props {
   children: ReactNode
@@ -27,7 +28,7 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error('[ErrorBoundary] 组件崩溃:', error, info)
+    console.error('[ErrorBoundary]', t('error.renderFailed') + ':', error, info)
     this.setState({ componentStack: info.componentStack ?? '' })
   }
 
@@ -49,7 +50,7 @@ export class ErrorBoundary extends Component<Props, State> {
         >
           <span style={{ fontSize: 32 }}>⚠️</span>
           <p style={{ fontWeight: 600, fontSize: 14 }}>
-            {this.props.fallbackLabel || '组件渲染出错'}
+            {this.props.fallbackLabel || t('error.renderFailed')}
           </p>
           <pre
             style={{
@@ -83,7 +84,7 @@ export class ErrorBoundary extends Component<Props, State> {
             }}
             onClick={() => this.setState({ hasError: false, error: null, componentStack: '' })}
           >
-            重试
+            {t('action.retry')}
           </button>
         </div>
       )

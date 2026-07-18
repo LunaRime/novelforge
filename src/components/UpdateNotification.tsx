@@ -21,6 +21,12 @@ export default function UpdateNotification() {
   const [isChecking, setIsChecking] = useState(false)
   const [isDownloading, setIsDownloading] = useState(false)
 
+  const handleCheck = async () => {
+    setIsChecking(true)
+    await checkForUpdates()
+    setIsChecking(false)
+  }
+
   // 初始化更新监听
   useEffect(() => {
     const cleanup = init()
@@ -46,6 +52,7 @@ export default function UpdateNotification() {
       cleanup()
       menuCleanup?.()
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps — init/handleCheck are stable references from zustand
   }, [])
 
   // 重置 dismiss 状态当有新更新可用时
@@ -54,12 +61,6 @@ export default function UpdateNotification() {
       setDismissed(false)
     }
   }, [status])
-
-  const handleCheck = async () => {
-    setIsChecking(true)
-    await checkForUpdates()
-    setIsChecking(false)
-  }
 
   const handleDownload = async () => {
     setIsDownloading(true)

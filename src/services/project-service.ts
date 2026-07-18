@@ -16,6 +16,7 @@ import { globalEventBus } from '../shared/event-bus'
 import { useProjectStore } from '../stores/project-store'
 import { useCharacterStore } from '../stores/character-store'
 import { useDraftStore } from '../stores/draft-store'
+import { isVelaProtocol } from './vela-protocol'
 import { ipc } from './ipc-client'
 
 /** 存放解绑函数，用于 dispose 时清理 */
@@ -170,7 +171,7 @@ async function syncEditorTabsForChapter(chapterNumber: number): Promise<void> {
     for (const tab of relatedTabs) {
       if (!tab.filePath) continue
       let content = ''
-      if (tab.filePath.startsWith('vela://')) {
+      if (isVelaProtocol(tab.filePath)) {
         const { readDraftBody } = await import('../stores/draft-store')
         content = await readDraftBody(tab.filePath)
       } else {

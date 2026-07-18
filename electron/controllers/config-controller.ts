@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
 import { logger, LogLevel } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
 import { GlobalConfig } from '../../src/shared/ipc-channels'
 
 const LOG_DIR = path.join(VELA_HOME, 'logs')
@@ -21,7 +22,7 @@ export function registerConfigController() {
       writeJsonFile(GLOBAL_CONFIG_PATH, updated)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -73,7 +74,7 @@ export function registerConfigController() {
       }
       return { success: true, content: fs.readFileSync(filePath, 'utf-8') }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 

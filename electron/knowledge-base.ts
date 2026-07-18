@@ -12,6 +12,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
+import { safeErrorMessage } from './utils/error-utils'
 import * as lancedb from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
@@ -152,7 +153,7 @@ export async function importDocument(
     // 2. 委托核心导入逻辑
     return importContent(projectPath, fileName, content, protocol, model, { filePath, onProgress })
   } catch (error) {
-    return { success: false, error: String(error) }
+    return { success: false, error: safeErrorMessage(error) }
   }
 }
 
@@ -268,7 +269,7 @@ export async function importFolder(
 
     return { success: true, importedCount, failedFiles }
   } catch (error) {
-    return { success: false, importedCount: 0, failedFiles: [], error: String(error) }
+    return { success: false, importedCount: 0, failedFiles: [], error: safeErrorMessage(error) }
   }
 }
 
@@ -302,7 +303,7 @@ export async function importText(
     if (!text.trim()) return { success: false, error: '文本内容为空' }
     return importContent(projectPath, fileName, text, protocol, model)
   } catch (error) {
-    return { success: false, error: String(error) }
+    return { success: false, error: safeErrorMessage(error) }
   }
 }
 
@@ -422,9 +423,23 @@ export async function backfillVectors(
     )
     const arrowSchema = new ArrowSchema(arrowFields)
 
-    // 删除旧表，用带显式 schema 的 createTable 重新写入
+    // 先写入临时表，写入成功后再替换，防止 drop→create 中间中断导致数据丢失
+    const TEMP_TABLE = 'chunks_backfill'
+    try { await db.dropTable(TEMP_TABLE) } catch { /* 临时表不存在，忽略 */ }
+    await db.createTable(TEMP_TABLE, updatedRows, { schema: arrowSchema })
+
+    // 验证临时表写入成功
+    const tempTable = await db.openTable(TEMP_TABLE)
+    const tempCount = await tempTable.countRows()
+    if (tempCount === 0) {
+      return { success: false, processed: 0, failed: total, error: '临时表写入后为空' }
+    }
+
+    // 临时表写入成功 → 替换正式表
     await db.dropTable('chunks')
+    await db.dropTable(TEMP_TABLE)
     await db.createTable('chunks', updatedRows, { schema: arrowSchema })
+
     // 重建 FTS 索引
     const newTable = await db.openTable('chunks')
     try {
@@ -446,7 +461,7 @@ export async function backfillVectors(
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }
   } catch (error) {
     logger.error('KB', `向量回填异常: ${error}`)
-    return { success: false, processed: 0, failed: 0, error: String(error) }
+    return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
   }
 }
 

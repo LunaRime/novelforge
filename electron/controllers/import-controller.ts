@@ -1,7 +1,10 @@
 import { ipcMain, dialog } from 'electron'
 import { DEFAULT_LOCALE } from '../../src/shared/locale'
 import fs from 'node:fs'
+import fsPromises from 'node:fs/promises'
 import path from 'node:path'
+import readline from 'node:readline'
+import { safeErrorMessage } from '../utils/error-utils'
 
 /**
  * 导入小说控制器 — 处理文件选择与章节拆分
@@ -158,6 +161,80 @@ function hasChapterHeadings(content: string): boolean {
   return lines.some(line => isChapterHeading(line))
 }
 
+/** 大文件阈值：超过此大小的文件使用流式逐行解析（10MB） */
+const LARGE_FILE_THRESHOLD = 10 * 1024 * 1024
+
+/**
+ * 流式逐行解析大文件，避免内存峰值和主进程阻塞
+ * 边读边拆章，与 splitSingleFileContent 逻辑一致
+ */
+async function splitFileContentStream(
+  filePath: string,
+  fileSize: number,
+  onProgress?: (bytesRead: number) => void,
+): Promise<{ chapters: ParsedChapter[]; hasHeadings: boolean }> {
+  const readStream = fs.createReadStream(filePath, { encoding: 'utf-8', highWaterMark: 64 * 1024 })
+  const rl = readline.createInterface({ input: readStream, crlfDelay: Infinity })
+
+  const chapters: ParsedChapter[] = []
+  let currentChapter: { headerLine: string; lines: string[] } | null = null
+  let autoNumber = 0
+  let hasHeadings = false
+  let bytesRead = 0
+
+  for await (const line of rl) {
+    bytesRead += Buffer.byteLength(line, 'utf-8') + 1 // +1 for newline
+
+    if (isChapterHeading(line)) {
+      hasHeadings = true
+      // 保存上一个章节
+      if (currentChapter) {
+        autoNumber++
+        const num = extractChapterNumber(currentChapter.headerLine) || autoNumber
+        const text = currentChapter.lines.join('\n').trim()
+        if (text.length > 0) {
+          chapters.push({
+            number: num,
+            title: extractTitle(currentChapter.headerLine),
+            content: text,
+            wordCount: text.length,
+          })
+        }
+      }
+      currentChapter = { headerLine: line, lines: [] }
+    } else if (currentChapter) {
+      currentChapter.lines.push(line)
+    } else {
+      if (!currentChapter) {
+        currentChapter = { headerLine: line, lines: [] }
+      }
+    }
+
+    // 每 1MB 报告一次进度
+    if (onProgress && bytesRead % (1024 * 1024) < 64 * 1024) {
+      onProgress(bytesRead)
+    }
+  }
+
+  // 保存最后一个章节
+  if (currentChapter) {
+    autoNumber++
+    const num = extractChapterNumber(currentChapter.headerLine) || autoNumber
+    const text = currentChapter.lines.join('\n').trim()
+    if (text.length > 0) {
+      chapters.push({
+        number: num,
+        title: extractTitle(currentChapter.headerLine),
+        content: text,
+        wordCount: text.length,
+      })
+    }
+  }
+
+  if (onProgress) onProgress(fileSize)
+  return { chapters, hasHeadings }
+}
+
 export function registerImportController() {
   // ===== 文件选择对话框 =====
   ipcMain.handle('dialog:select-novel-files', async () => {
@@ -174,27 +251,53 @@ export function registerImportController() {
   })
 
   // ===== 读取并拆分章节 =====
-  ipcMain.handle('import:split-chapters', async (_event, filePaths: string[]) => {
+  ipcMain.handle('import:split-chapters', async (event, filePaths: string[]) => {
     try {
       const allChapters: ParsedChapter[] = []
 
       if (filePaths.length === 1) {
         // ===== 单文件模式 =====
         const filePath = filePaths[0]
-        const content = fs.readFileSync(filePath, 'utf-8')
+        const stat = await fsPromises.stat(filePath)
 
-        if (hasChapterHeadings(content)) {
-          // 文件内含章节标题 → 正则拆章
-          const chapters = splitSingleFileContent(content)
-          allChapters.push(...chapters)
+        if (stat.size > LARGE_FILE_THRESHOLD) {
+          // 大文件 → 流式逐行解析，避免主进程阻塞
+          event.sender.send('import:progress', { filePath, bytesRead: 0, totalBytes: stat.size })
+          const { chapters, hasHeadings } = await splitFileContentStream(
+            filePath,
+            stat.size,
+            (bytesRead) => {
+              event.sender.send('import:progress', { filePath, bytesRead, totalBytes: stat.size })
+            },
+          )
+
+          if (hasHeadings) {
+            allChapters.push(...chapters)
+          } else {
+            // 无章节标题 → 整文件视为一章（流式模式下内容已在 chapters 中）
+            const text = chapters[0]?.content || ''
+            allChapters.push({
+              number: 1,
+              title: path.basename(filePath, path.extname(filePath)),
+              content: text,
+              wordCount: text.length,
+            })
+          }
         } else {
-          // 无章节标题 → 整文件视为一章
-          allChapters.push({
-            number: 1,
-            title: path.basename(filePath, path.extname(filePath)),
-            content: content.trim(),
-            wordCount: content.trim().length,
-          })
+          // 普通文件 → 异步读取
+          const content = await fsPromises.readFile(filePath, 'utf-8')
+
+          if (hasChapterHeadings(content)) {
+            const chapters = splitSingleFileContent(content)
+            allChapters.push(...chapters)
+          } else {
+            allChapters.push({
+              number: 1,
+              title: path.basename(filePath, path.extname(filePath)),
+              content: content.trim(),
+              wordCount: content.trim().length,
+            })
+          }
         }
       } else {
         // ===== 多文件模式 =====
@@ -207,24 +310,52 @@ export function registerImportController() {
 
         for (let i = 0; i < sorted.length; i++) {
           const filePath = sorted[i]
-          const content = fs.readFileSync(filePath, 'utf-8').trim()
-          if (!content) continue
+          const stat = await fsPromises.stat(filePath)
 
-          // 尝试从文件内容中检测章节标题
-          if (hasChapterHeadings(content)) {
-            // 文件内含多章 → 拆分
-            const chapters = splitSingleFileContent(content)
-            allChapters.push(...chapters)
+          if (stat.size > LARGE_FILE_THRESHOLD) {
+            // 大文件 → 流式解析
+            event.sender.send('import:progress', { filePath, bytesRead: 0, totalBytes: stat.size })
+            const { chapters, hasHeadings } = await splitFileContentStream(
+              filePath,
+              stat.size,
+              (bytesRead) => {
+                event.sender.send('import:progress', { filePath, bytesRead, totalBytes: stat.size })
+              },
+            )
+
+            if (hasHeadings) {
+              allChapters.push(...chapters)
+            } else {
+              const text = chapters[0]?.content || ''
+              if (text) {
+                const fileName = path.basename(filePath, path.extname(filePath))
+                const num = extractChapterNumber(fileName) || (allChapters.length + 1)
+                allChapters.push({
+                  number: num,
+                  title: fileName,
+                  content: text,
+                  wordCount: text.length,
+                })
+              }
+            }
           } else {
-            // 文件内无章节标题 → 整文件视为一章
-            const fileName = path.basename(filePath, path.extname(filePath))
-            const num = extractChapterNumber(fileName) || (allChapters.length + 1)
-            allChapters.push({
-              number: num,
-              title: fileName,
-              content,
-              wordCount: content.length,
-            })
+            // 普通文件 → 异步读取
+            const content = await fsPromises.readFile(filePath, 'utf-8')
+            if (!content.trim()) continue
+
+            if (hasChapterHeadings(content)) {
+              const chapters = splitSingleFileContent(content)
+              allChapters.push(...chapters)
+            } else {
+              const fileName = path.basename(filePath, path.extname(filePath))
+              const num = extractChapterNumber(fileName) || (allChapters.length + 1)
+              allChapters.push({
+                number: num,
+                title: fileName,
+                content: content.trim(),
+                wordCount: content.trim().length,
+              })
+            }
           }
         }
       }
@@ -255,7 +386,7 @@ export function registerImportController() {
         success: false,
         chapters: [],
         totalWords: 0,
-        error: String(error),
+        error: safeErrorMessage(error),
       }
     }
   })

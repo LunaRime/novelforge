@@ -7,8 +7,7 @@
  * - 纯文本 TXT
  */
 import { ipc } from './ipc-client'
-import { useProjectStore } from '../stores/project-store'
-import { useWorkflowStore } from '../stores/workflow-store'
+import { projectStore, workflowStore } from './store-facade'
 
 
 export type ExportFormat = 'merged-md' | 'split-md' | 'txt'
@@ -22,10 +21,10 @@ interface ExportOptions {
 
 /** 导出全书 */
 export async function exportNovel(options: ExportOptions): Promise<{ success: boolean; path?: string; error?: string }> {
-  const project = useProjectStore.getState().currentProject
+  const project = projectStore.currentProject
   if (!project) return { success: false, error: '未打开项目' }
 
-  const addLog = useWorkflowStore.getState().addLog
+  const addLog = workflowStore.addLog
   addLog('info', `📦 开始导出（${formatLabel(options.format)}）...`)
 
   try {

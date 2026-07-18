@@ -9,6 +9,7 @@ import { embeddingService, type EmbeddingConfig, type LLMEmbeddingConfig } from 
 import { cosineSimilarity, findMostSimilar } from '../utils/vector-utils'
 import { readJsonFile, MODELS_CONFIG_PATH } from '../utils/config-utils'
 import { decryptApiKey } from '../utils/secure-config'
+import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 
@@ -55,7 +56,7 @@ export function registerEmbeddingController() {
         tokens: result.tokens,
       }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -69,7 +70,7 @@ export function registerEmbeddingController() {
         tokens: results.reduce((sum, r) => sum + r.tokens, 0),
       }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -91,7 +92,7 @@ export function registerEmbeddingController() {
 
         return { success: true, similarities }
       } catch (error) {
-        return { success: false, error: String(error) }
+        return { success: false, error: safeErrorMessage(error) }
       }
     },
   )
@@ -110,7 +111,7 @@ export function registerEmbeddingController() {
         const results = findMostSimilar(queryVector, candidates, topK, threshold)
         return { success: true, results }
       } catch (error) {
-        return { success: false, error: String(error) }
+        return { success: false, error: safeErrorMessage(error) }
       }
     },
   )
@@ -126,7 +127,7 @@ export function registerEmbeddingController() {
       embeddingService.configure(config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -171,7 +172,7 @@ export function registerEmbeddingController() {
       embeddingService.configureLLMEmbedding(config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -186,7 +187,7 @@ export function registerEmbeddingController() {
         tokens: result.tokens,
       }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -200,7 +201,7 @@ export function registerEmbeddingController() {
         tokens: results.reduce((sum, r) => sum + r.tokens, 0),
       }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 

@@ -42,10 +42,23 @@ function getAPI(): VelaAPI {
   return api
 }
 
+/** IPC 调用默认超时（毫秒），防止主进程挂起时渲染进程永久等待 */
+const IPC_TIMEOUT_MS = 30000
+
+/** 超时错误 */
+class IPCTimeoutError extends Error {
+  constructor(channel: string, timeoutMs: number) {
+    super(`IPC 调用超时 (${timeoutMs / 1000}s): ${channel}`)
+    this.name = 'IPCTimeoutError'
+  }
+}
+
 /** 类型安全的 IPC 客户端 */
 export const ipc = {
   /**
    * 调用主进程并等待返回值（类型安全）
+   *
+   * 内置超时保护：默认 30 秒超时，防止主进程挂起时渲染进程永久卡死。
    *
    * @example
    * const result = await ipc.invoke('project:create', { name: '我的小说', path: '/path', genre: '玄幻', targetAudience: '男频' })
@@ -54,9 +67,23 @@ export const ipc = {
     channel: C,
     ...args: AllInvokeChannels[C]['args']
   ): Promise<AllInvokeChannels[C]['return']> => {
-    console.log('[ipc-client.invoke] 调用通道:', channel, '参数数量:', args.length)
-    const result = await getAPI().invoke(channel, ...args) as Promise<AllInvokeChannels[C]['return']>
-    console.log('[ipc-client.invoke] 调用完成:', channel)
+    // 仅在开发模式下记录详细 IPC 日志，避免生产环境日志噪音和敏感数据泄露
+    if (process.env.NODE_ENV === 'development') {
+      performance.mark(`ipc:${channel}:start`)
+    }
+
+    const result = await Promise.race([
+      getAPI().invoke(channel, ...args) as Promise<AllInvokeChannels[C]['return']>,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new IPCTimeoutError(channel, IPC_TIMEOUT_MS)), IPC_TIMEOUT_MS)
+      ),
+    ])
+
+    if (process.env.NODE_ENV === 'development') {
+      performance.mark(`ipc:${channel}:end`)
+      const measure = performance.measure(`ipc:${channel}`, `ipc:${channel}:start`, `ipc:${channel}:end`)
+      console.debug(`[ipc-client] ${channel} — ${measure.duration.toFixed(1)}ms`)
+    }
     return result
   },
 

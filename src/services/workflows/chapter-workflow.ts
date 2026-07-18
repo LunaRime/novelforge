@@ -1,5 +1,6 @@
 import type { WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
+import { VELA } from '../vela-protocol'
 
 import type { DraftStatus } from '../../shared/draft-status'
 
@@ -60,11 +61,11 @@ export interface FinalizeOnlyParams {
 // ==========================================
 
 export function getDraftDir(_projectPath: string, chapterNumber: number): string {
-  return `vela://draft/ch${chapterNumber}`
+  return `${VELA.DRAFT}ch${chapterNumber}`
 }
 
 export function getDraftPath(_projectPath: string, chapterNumber: number, version: number): string {
-  return `vela://draft/ch${chapterNumber}/v${version}`
+  return `${VELA.DRAFT}ch${chapterNumber}/v${version}`
 }
 
 export async function parseDraftMeta(filePath: string): Promise<DraftMeta | null> {
@@ -81,7 +82,7 @@ export async function parseDraftMeta(filePath: string): Promise<DraftMeta | null
       status: dbMeta.status as DraftStatus,
       source: dbMeta.source as 'write' | 'rewrite',
       fileName: `draft_v${dbMeta.version}.md`,
-      filePath: `vela://draft/${dbMeta.id}`,
+      filePath: `${VELA.DRAFT}${dbMeta.id}`,
     } as unknown as DraftMeta
   }
 
@@ -246,7 +247,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
           } catch (e) {
             console.warn('[chapter-workflow] 蓝图标题读取失败，回退使用章节参数:', e)
           }
-          const dbPath = `vela://manuscript/${draftMeta.id}`
+          const dbPath = `${VELA.MANUSCRIPT}${draftMeta.id}`
           useEditorStore.getState().openFile({
             id: dbPath,
             name: `第${params.chapterNumber}章 ${displayTitle}`,

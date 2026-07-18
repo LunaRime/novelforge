@@ -1,6 +1,8 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
-import { withRetry } from './retry-handler'
+import { withRetry, withStreamRetry } from './retry-handler'
+import { logger } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -93,12 +95,12 @@ export class OpenAIProvider implements ILLMProvider {
         }
         return { success: false, content: '', error: errorMsg }
       }
-      return { success: false, content: '', error: String(error) }
+      return { success: false, content: '', error: safeErrorMessage(error) }
     })
   }
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
-    try {
+    await withStreamRetry(async () => {
       const url = this.buildUrl(model.baseUrl)
 
       const body: Record<string, unknown> = {
@@ -129,7 +131,13 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (!res.ok) {
         const text = await res.text()
-        opts.onError(`API 调用失败 (${res.status}): ${text}`)
+        const errorMsg = `API 调用失败 (${res.status}): ${text}`
+        // 可重试的 HTTP 状态码 → 抛出以便 withStreamRetry 处理
+        if (res.status === 429 || res.status === 503 || res.status >= 500) {
+          throw new HttpError(res.status, errorMsg)
+        }
+        // 不可重试的错误（4xx 如 401/403）→ 直接报错
+        opts.onError(errorMsg)
         return
       }
 
@@ -142,6 +150,7 @@ export class OpenAIProvider implements ILLMProvider {
       const decoder = new TextDecoder()
       let fullText = ''
       let isThinking = false
+      let failedChunkCount = 0
 
       const hasMore = true
       while (hasMore) {
@@ -169,8 +178,8 @@ export class OpenAIProvider implements ILLMProvider {
                 emitChunk += '<think>\n'
               }
               emitChunk += delta.reasoning_content
-            } 
-            
+            }
+
             // 如果开始输出正文
             if (delta?.content !== undefined && delta?.content !== null) {
               if (isThinking) {
@@ -186,8 +195,17 @@ export class OpenAIProvider implements ILLMProvider {
               fullText += emitChunk
               opts.onChunk(emitChunk)
             }
-          } catch {
-            // ignore
+          } catch (parseError) {
+            failedChunkCount++
+            const snippet = json.slice(0, 200)
+            logger.warn('LLM:Stream', `第 ${failedChunkCount} 次 chunk 解析失败: ${String(parseError).slice(0, 100)} | chunk: ${snippet}`)
+            // 连续失败超过 10 次 → 中止流并报错
+            if (failedChunkCount > 10) {
+              const msg = `流式解析连续失败 ${failedChunkCount} 次，已中止`
+              logger.error('LLM:Stream', msg)
+              opts.onError(msg)
+              return
+            }
           }
         }
       }
@@ -198,13 +216,27 @@ export class OpenAIProvider implements ILLMProvider {
         opts.onChunk(closeTag)
       }
 
+      if (failedChunkCount > 0) {
+        logger.warn('LLM:Stream', `流式生成完成，但有 ${failedChunkCount} 个 chunk 解析失败`)
+      }
       opts.onDone(fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim())
-    } catch (error) {
+    }).catch((error) => {
+      // withStreamRetry 重试耗尽后的最终错误处理
       if ((error as Error).name === 'AbortError') {
         opts.onError('已取消生成')
+      } else if (error instanceof HttpError) {
+        let errorMsg = error.message
+        if (error.status === 429) {
+          errorMsg = `请求过于频繁 (429)，已重试多次仍失败。请稍后重试或降低并发数。`
+        } else if (error.status === 503) {
+          errorMsg = `服务暂时不可用 (503)，已重试多次仍失败。请稍后重试。`
+        } else if (error.status >= 500) {
+          errorMsg = `服务器错误 (${error.status})，已重试多次仍失败。`
+        }
+        opts.onError(errorMsg)
       } else {
-        opts.onError(String(error))
+        opts.onError(safeErrorMessage(error))
       }
-    }
+    })
   }
 }

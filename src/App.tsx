@@ -1,11 +1,13 @@
 import { useEffect } from 'react'
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels'
+import { useShallow } from 'zustand/shallow'
 import { useThemeStore } from './stores/theme-store'
 import { useLayoutStore } from './stores/layout-store'
 import { useLLMStore } from './stores/llm-store'
 import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
+import { t } from './shared/locale'
 import { ipc } from './services/ipc-client'
 import TitleBar from './components/layout/TitleBar'
 import StatusBar from './components/layout/StatusBar'
@@ -32,20 +34,28 @@ import UpdateNotification from './components/UpdateNotification'
  */
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
-  const sidebarOpen = useLayoutStore(s => s.sidebarOpen)
-  const aiPanelOpen = useLayoutStore(s => s.aiPanelOpen)
-  const rightView = useLayoutStore(s => s.rightView)
-  const settingsOpen = useLayoutStore(s => s.settingsOpen)
-  const closeSettings = useLayoutStore(s => s.closeSettings)
-  const newProjectOpen = useLayoutStore(s => s.newProjectOpen)
-  const closeNewProject = useLayoutStore(s => s.closeNewProject)
-  const exportOpen = useLayoutStore(s => s.exportOpen)
-  const closeExport = useLayoutStore(s => s.closeExport)
-  const importNovelOpen = useLayoutStore(s => s.importNovelOpen)
-  const closeImportNovel = useLayoutStore(s => s.closeImportNovel)
-  const chapterCreationOpen = useLayoutStore(s => s.chapterCreationOpen)
-  const chapterCreationPrefill = useLayoutStore(s => s.chapterCreationPrefill)
-  const closeChapterCreation = useLayoutStore(s => s.closeChapterCreation)
+  // 合并 14 个 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
+  const {
+    sidebarOpen, aiPanelOpen, rightView, settingsOpen, closeSettings,
+    newProjectOpen, closeNewProject, exportOpen, closeExport,
+    importNovelOpen, closeImportNovel, chapterCreationOpen,
+    chapterCreationPrefill, closeChapterCreation,
+  } = useLayoutStore(useShallow(s => ({
+    sidebarOpen: s.sidebarOpen,
+    aiPanelOpen: s.aiPanelOpen,
+    rightView: s.rightView,
+    settingsOpen: s.settingsOpen,
+    closeSettings: s.closeSettings,
+    newProjectOpen: s.newProjectOpen,
+    closeNewProject: s.closeNewProject,
+    exportOpen: s.exportOpen,
+    closeExport: s.closeExport,
+    importNovelOpen: s.importNovelOpen,
+    closeImportNovel: s.closeImportNovel,
+    chapterCreationOpen: s.chapterCreationOpen,
+    chapterCreationPrefill: s.chapterCreationPrefill,
+    closeChapterCreation: s.closeChapterCreation,
+  })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
 
@@ -137,6 +147,14 @@ export default function App() {
         │   │     BottomPanel (全宽)        │   │
         └───┴──────────────────────────────┴───┘
       */}
+      {/* 键盘导航跳过链接（仅 focus 时可见），直达编辑区主内容 */}
+      <a
+        href="#main-editor-area"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded"
+      >
+        {t('tip.skipToContent')}
+      </a>
+
       <div className="flex flex-1 overflow-hidden">
 
         {/* 左侧工具窗口栏（全高，包括底部面板区域） */}
@@ -152,8 +170,8 @@ export default function App() {
               {/* 左侧边栏 */}
               {sidebarOpen && (
                 <>
-                  <Panel id="sidebar" defaultSize={20} minSize={10}>
-                    <ErrorBoundary fallbackLabel="侧边栏渲染失败">
+                  <Panel id="sidebar" defaultSize={20} minSize={10} aria-label={t('panel.sidebar')}>
+                    <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
                       <Sidebar />
                     </ErrorBoundary>
                   </Panel>
@@ -162,8 +180,9 @@ export default function App() {
               )}
 
               {/* 编辑区 */}
-              <Panel id="editor" defaultSize={60} minSize={10}>
-                <ErrorBoundary fallbackLabel="编辑区渲染失败">
+              <Panel id="editor" defaultSize={60} minSize={10} aria-label={t('panel.editor')}>
+                <div id="main-editor-area" />
+                <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
                   <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
                 </ErrorBoundary>
               </Panel>
@@ -172,8 +191,8 @@ export default function App() {
               {aiPanelOpen && (
                 <>
                   <PanelResizeHandle />
-                  <Panel id="ai-panel" defaultSize={20} minSize={10}>
-                    <ErrorBoundary fallbackLabel="AI 面板渲染失败">
+                  <Panel id="ai-panel" defaultSize={20} minSize={10} aria-label={t('panel.ai')}>
+                    <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                       {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
                     </ErrorBoundary>
                   </Panel>
@@ -184,8 +203,10 @@ export default function App() {
 
           {/* 下层：底部面板（铺满整个 PanelGroup 宽度）— 始终挂载，面板控制显隐 */}
           <PanelResizeHandle />
-          <Panel id="bottom" defaultSize={25} minSize={8}>
-            <BottomPanel />
+          <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>
+            <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
+              <BottomPanel />
+            </ErrorBoundary>
           </Panel>
         </PanelGroup>
 
@@ -197,29 +218,39 @@ export default function App() {
       {/* 状态栏（全宽） */}
       <StatusBar />
 
-      {/* 全局对话框 — 由 layout-store 控制开关，不再依赖 window.dispatchEvent */}
-      <NewProjectDialog
-        open={newProjectOpen}
-        onClose={closeNewProject}
-      />
-      <ImportNovelDialog
-        open={importNovelOpen}
-        onClose={closeImportNovel}
-      />
-      <ChapterCreationDialog
-        isOpen={chapterCreationOpen}
-        prefill={chapterCreationPrefill}
-        onClose={closeChapterCreation}
-      />
-      <ExportDialog
-        isOpen={exportOpen}
-        onClose={closeExport}
-      />
+      {/* 全局对话框 — 由 layout-store 控制开关，每个包裹独立 ErrorBoundary 防止单点崩溃 */}
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <NewProjectDialog
+          open={newProjectOpen}
+          onClose={closeNewProject}
+        />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <ImportNovelDialog
+          open={importNovelOpen}
+          onClose={closeImportNovel}
+        />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <ChapterCreationDialog
+          isOpen={chapterCreationOpen}
+          prefill={chapterCreationPrefill}
+          onClose={closeChapterCreation}
+        />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <ExportDialog
+          isOpen={exportOpen}
+          onClose={closeExport}
+        />
+      </ErrorBoundary>
       {/* 全屏设置弹窗 */}
-      <SettingsModal
-        open={settingsOpen}
-        onClose={closeSettings}
-      />
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <SettingsModal
+          open={settingsOpen}
+          onClose={closeSettings}
+        />
+      </ErrorBoundary>
 
     </div>
   )

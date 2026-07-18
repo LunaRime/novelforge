@@ -7,8 +7,8 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-2.1.1-green.svg)]()
-[![CI](https://github.com/LunaRime/novelforge/actions/workflows/webpack.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/webpack.yml)
+[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)]()
+[![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
 </div>
@@ -35,7 +35,8 @@
 | 🎤 角色声音一致性 | 定稿后分析角色对话风格，写稿时自动注入保持一致性 |
 | 📊 多稿对比择优 | 同章并行生成多版本，AI 自动评分选出最佳 |
 | 🔮 伏笔管理器 | 自动扫描新伏笔 + 检测回收旧伏笔，防止遗忘 |
-| 🔁 后期管线 | 正文入库 → 剧情提取 → 角色更新 → 伏笔扫描 → 声音分析 → 文风学习 |
+| 🔁 后期管线 | 正文入库 → 剧情提取 → 角色更新 → 伏笔扫描 → 声音分析 → 文风学习（DAG 并行） |
+| ↩️ 撤销/重做 | Ctrl+Z/Y 快捷键 + 工具栏按钮，CodeMirror 6 原生支持 |
 
 ### 🧠 百万字级本地知识库 + 向量引擎
 
@@ -43,7 +44,7 @@
 |---|---|
 | 🔍 LLM+向量融合检索 | 语义搜索 + 全文检索混合，自动注入 AI prompt |
 | 🧬 LLM 向量化 | 将 LLM 作为向量模型使用，无需专用 Embedding API |
-| ⚙️ 向量配置管理 | 模块/模型/LLM 三开关 + 连通性测试 |
+| 📊 IVF_PQ 向量索引 | LanceDB ANN 索引加速大规模向量检索 |
 | 🔒 纯本地存储 | SQLite + LanceDB，断网可用 |
 
 ### 💰 成本优化引擎
@@ -55,6 +56,15 @@
 | 📊 实时费用追踪 | StatusBar 实时显示会话费用 |
 | 📐 Token 预算引擎 | 智能截断，系统提示词上限控制 |
 
+### 🛡️ 安全加固（v2.3.0）
+
+| 能力 | 说明 |
+|---|---|
+| 🔒 Electron 沙箱 | `sandbox: true` + IPC 通道白名单 + 路径沙箱 |
+| 🔑 API 密钥加密 | Electron safeStorage 加密存储 |
+| 🔄 LLM 指数退避重试 | 429/503/5xx 自动重试 + 流式重试 |
+| ✅ 数据库完整性 | SQLite PRAGMA 检查 + 时间字段统一 + CHECK 约束 |
+
 ---
 
 ## 🚀 安装
@@ -62,7 +72,7 @@
 ### 📦 预构建版本（推荐）
 
 前往 [Releases](https://github.com/LunaRime/novelforge/releases) 下载最新安装包：
-- **Windows**: `NovelForge-2.1.1-setup.exe`（NSIS 安装程序，可选安装路径）
+- **Windows**: `NovelForge-2.3.0-Installer.exe`（NSIS 安装程序）
 
 ### 🔨 源码构建
 
@@ -70,8 +80,8 @@
 
 | 工具 | 版本 | 说明 |
 |------|------|------|
-| **Node.js** | `>= 22.x` | Electron 41 内置版本，CI 已验证 |
-| **npm** | `>= 10.x` | 随 Node.js 22 附带 |
+| **Node.js** | `>= 22.x` | Electron 41 内置版本 |
+| **pnpm** | `>= 9.x` | 包管理器（项目使用 pnpm workspace） |
 | **Python** | `>= 3.10` | 编译 `better-sqlite3` / `lancedb` 等原生模块 |
 | **C++ 工具链** | — | Windows: Visual Studio Build Tools · macOS: Xcode CLT · Linux: `build-essential` |
 
@@ -82,32 +92,34 @@
 git clone https://github.com/LunaRime/novelforge.git
 cd novelforge
 
-# 2. 安装依赖
-#    Windows 设置环境变量跳过 Electron 二进制下载（节省 ~180 MB）
-#    macOS / Linux 直接 npm install 即可
-set ELECTRON_SKIP_BINARY_DOWNLOAD=1   # Windows CMD
-# $env:ELECTRON_SKIP_BINARY_DOWNLOAD=1  # Windows PowerShell
-# export ELECTRON_SKIP_BINARY_DOWNLOAD=1  # macOS / Linux
+# 2. 安装依赖（使用 pnpm）
+pnpm install
 
-npm install
+# 3. 开发模式（Vite HMR 热更新）
+pnpm run dev
 
-# 3. 开发模式（Vite HMR 热更新，无需完整 Electron 构建）
-npm run dev
+# 4. 类型检查
+pnpm run typecheck
 
-# 4. 完整构建（TypeScript 检查 → Vite 打包 → Electron Builder 安装包）
-npm run build
+# 5. 运行测试
+pnpm run test
+
+# 6. 完整构建
+npm_config_user_agent="pnpm/9.15.4" \
+CSC_IDENTITY_AUTO_DISCOVERY=false \
+pnpm run build
 ```
+
+> **Windows 构建提示**：国内网络需设置 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 加速下载。详见 `.codewhale-plans/` 中的构建流程文档。
 
 #### 原生模块说明
 
-项目依赖 `better-sqlite3` 和 `@lancedb/lancedb` 两个原生模块。如果 `npm install` 后遇到模块加载错误，请执行：
+项目依赖 `better-sqlite3` 和 `@lancedb/lancedb` 两个原生模块：
 
 ```bash
 # 针对 Electron 内置 Node 版本重新编译原生模块
-npm run rebuild
+pnpm run rebuild
 ```
-
-> `rebuild` 实际运行 `electron-rebuild -f -w better-sqlite3`，确保原生模块与 Electron 41 的 Node.js 版本 ABI 匹配。
 
 ---
 
@@ -121,7 +133,24 @@ npm run rebuild
 
 ## 🏗️ 技术架构
 
-React 19 + TypeScript + Zustand | Electron 41 + Vite 8 | Tailwind CSS + Radix UI | better-sqlite3 + LanceDB | ReAct Agent + MCP
+| 层 | 技术栈 |
+|----|--------|
+| 前端 | React 19 + TypeScript + Zustand + Tailwind CSS + Radix UI |
+| 桌面 | Electron 41 + Vite 8 |
+| 数据 | better-sqlite3 (关系型) + LanceDB (向量) |
+| AI | OpenAI Protocol + Gemini Protocol + MCP + ReAct Agent |
+| 测试 | Vitest + Storybook |
+| CI/CD | GitHub Actions (ubuntu/windows/macos 矩阵) |
+
+---
+
+## 👥 撰稿人
+
+| 撰稿人 | 角色 |
+|--------|------|
+| [heider-x](https://github.com/heider-x) | 原始项目 Vela 作者 |
+| [LunaRime](https://github.com/LunaRime) | NovelForge 维护者 |
+| [yueyu-ku](https://github.com/yueyu-ku) | 安全加固 · i18n · 测试 · 架构优化 · R7 审计修复 |
 
 ---
 

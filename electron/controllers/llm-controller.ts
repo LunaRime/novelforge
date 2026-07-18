@@ -4,6 +4,7 @@ import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
 import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
+import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 
 const activeStreams = new Map<string, AbortController>()
@@ -82,7 +83,7 @@ export function registerLLMController() {
     ).catch((error) => ({
       success: false,
       content: '',
-      error: error instanceof Error ? error.message : String(error),
+      error: error instanceof Error ? error.message : safeErrorMessage(error),
     }))
   })
 
@@ -132,7 +133,7 @@ export function registerLLMController() {
       { priority: request.priority ?? 10 },
     ).catch((error) => {
       if (error.message !== '请求已取消') {
-        win?.webContents.send('llm:stream-error', { requestId, error: String(error) })
+        win?.webContents.send('llm:stream-error', { requestId, error: safeErrorMessage(error) })
         activeStreams.delete(requestId)
       }
     })
@@ -161,7 +162,7 @@ export function registerLLMController() {
       saveModelConfigs(models)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -171,7 +172,7 @@ export function registerLLMController() {
       saveModelConfigs(models)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -182,7 +183,7 @@ export function registerLLMController() {
       writeJsonFile(GLOBAL_CONFIG_PATH, config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -198,7 +199,7 @@ export function registerLLMController() {
       writeJsonFile(GLOBAL_CONFIG_PATH, config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -228,7 +229,7 @@ export function registerLLMController() {
 
       return { success: result.success, error: result.error }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 
@@ -243,7 +244,7 @@ export function registerLLMController() {
       llmConcurrencyController.updateConfig(config)
       return { success: true }
     } catch (error) {
-      return { success: false, error: String(error) }
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 }

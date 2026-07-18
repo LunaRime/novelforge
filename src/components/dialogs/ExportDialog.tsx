@@ -3,6 +3,7 @@ import { Download, FileText, Files, Type } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { exportNovel, type ExportFormat } from '../../services/export-service'
 import { ipc } from '../../services/ipc-client'
+import { t } from '../../shared/locale'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -48,7 +49,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
             <Download size={16} className="text-[var(--color-accent)]" />
             导出项目
           </DialogTitle>
-          <DialogDescription>选择导出格式和目标目录</DialogDescription>
+          <DialogDescription>{t('export.chooseFormat')}</DialogDescription>
         </DialogHeader>
 
         <div className="px-5 py-4 space-y-3">
@@ -82,7 +83,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
           {/* 选项 */}
           <label className="flex items-center gap-2 text-xs cursor-pointer text-[var(--color-text-secondary)]">
             <input type="checkbox" checked={includeOutline} onChange={(e) => setIncludeOutline(e.target.checked)} />
-            包含故事大纲
+            {t('export.includeOutline')}
           </label>
 
           {/* 结果 */}
@@ -99,7 +100,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
         <DialogFooter className="justify-end">
           <Button variant="default" onClick={handleExport} disabled={exporting}>
             <Download size={13} />
-            {exporting ? '导出中...' : '选择目录并导出'}
+            {exporting ? t('status.saving') : t('export.chooseAndExport')}
           </Button>
         </DialogFooter>
       </DialogContent>

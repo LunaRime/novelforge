@@ -140,6 +140,7 @@ function createWindow() {
       // 安全性设置
       nodeIntegration: false,
       contextIsolation: true,
+      sandbox: true,
     },
   })
 

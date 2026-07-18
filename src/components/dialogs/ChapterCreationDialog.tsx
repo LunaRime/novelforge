@@ -3,6 +3,7 @@ import { Sparkles, Play, AlertCircle } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 
 import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
 import { guardChapterWriting } from '../../services/workflow-guards'
@@ -152,7 +153,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
   const handleStart = async () => {
     if (!defaultModelId) {
-      addLog('error', '⚠️ 请先配置 AI 模型')
+      addLog('error', '⚠️ ' + t('chapter.pleaseConfigModel'))
       return
     }
     if (!currentProject) return
@@ -223,7 +224,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
         <div className="px-5 py-4 space-y-3">
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <Label>章节号</Label>
+                  <Label>{t('chapter.number')}</Label>
                   <Input
                     type="number"
                     value={chapterNumber}
@@ -237,11 +238,11 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                   />
                 </div>
                 <div>
-                  <Label>章节标题</Label>
+                  <Label>{t('chapter.title')}</Label>
                   <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="留空自动生成" />
                 </div>
                 <div>
-                  <Label>目标字数</Label>
+                  <Label>{t('chapter.wordTarget')}</Label>
                   <Input
                     type="number"
                     value={wordsTarget}
@@ -259,7 +260,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>章节定位</Label>
+                  <Label>{t('chapter.role')}</Label>
                   <NativeSelect value={role} onChange={(e) => setRole(e.target.value)}>
                     {['开篇', '铺垫', '发展', '冲突', '高潮', '转折', '收尾'].map((r) => (
                       <option key={r} value={r}>{r}</option>
@@ -267,13 +268,13 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                   </NativeSelect>
                 </div>
                 <div>
-                  <Label>出场角色</Label>
+                  <Label>{t('chapter.characters')}</Label>
                   <Input value={characters} onChange={(e) => setCharacters(e.target.value)} placeholder="用逗号或顿号分隔" />
                 </div>
               </div>
 
               <div>
-                <Label>章节目的</Label>
+                <Label>{t('chapter.purpose')}</Label>
                 <Textarea
                   value={purpose}
                   onChange={(e) => setPurpose(e.target.value)}
@@ -283,7 +284,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>关键事件</Label>
+                <Label>{t('chapter.keyEvents')}</Label>
                 <Textarea
                   value={keyEvents}
                   onChange={(e) => setKeyEvents(e.target.value)}
@@ -293,7 +294,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>作者微操指导 <span className="text-[0.7rem] opacity-50">（可选，写稿时最高优先级）</span></Label>
+                <Label>{t('chapter.authorGuidance')} <span className="text-[0.7rem] opacity-50">（{t('chapter.optional')}写稿时最高优先级）</span></Label>
                 <Textarea
                   value={userGuidance}
                   onChange={(e) => setUserGuidance(e.target.value)}
@@ -303,7 +304,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>知识库检索关键词 <span className="text-[0.7rem] opacity-50">（可选，追加到向量搜索 query）</span></Label>
+                <Label>{t('chapter.kbKeywords')} <span className="text-[0.7rem] opacity-50">（{t('chapter.optional')}追加到向量搜索 query）</span></Label>
                 <Input
                   value={knowledgeHint}
                   onChange={(e) => setKnowledgeHint(e.target.value)}
@@ -317,7 +318,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                 流程：一键写稿（修稿/审稿后续在工具栏处理）
               </span>
               <div className="flex items-center gap-2">
-                <Button variant="outline" onClick={onClose}>取消</Button>
+                <Button variant="outline" onClick={onClose}>{t('action.cancel')}</Button>
                 <Button variant="ai" size="lg" onClick={handleStart} disabled={isChapterRunning}>
                   {isChapterRunning ? (
                     <span className="flex items-center gap-2">

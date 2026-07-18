@@ -5,6 +5,7 @@
  * 保留原有函数名和数据接口结构，以便减少对 UI 层 (DraftEditor) 的破坏性修改。
  */
 import { ipc } from './ipc-client'
+import { VELA } from './vela-protocol'
 import type { DraftStatus } from '../shared/draft-status'
 
 // 导入后端的类型定义
@@ -68,7 +69,7 @@ function mapDraftMeta(dbMeta: DB_DraftMeta): DraftMeta {
     source: dbMeta.source as 'write' | 'rewrite',
     // 虚拟字段，UI通过 parse 得到版本号或者展示
     fileName: `draft_v${dbMeta.version}.md`,
-    filePath: `vela://draft/${dbMeta.id}`, // 特殊的伪协议路径，用于 editor-store
+    filePath: `${VELA.DRAFT}${dbMeta.id}`, // 伪协议路径，用于 editor-store
   }
 }
 

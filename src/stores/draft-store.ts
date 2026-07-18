@@ -5,6 +5,7 @@
  * .md 文件保持纯正文，元数据全部由 index.json 管理
  */
 import { create } from 'zustand'
+import { VELA } from '../services/vela-protocol'
 import { ipc } from '../services/ipc-client'
 import {
   updateDraftStatus as updateDraftStatusInIndex,
@@ -67,7 +68,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         status: m.status as DraftStatus,
         source: m.source as DraftMeta['source'],
         fileName: `draft_v${m.version}.md`,
-        filePath: `vela://draft/${m.id}`
+        filePath: `${VELA.DRAFT}${m.id}`
       }))
 
       // 按版本号排序（新 → 旧）
@@ -100,7 +101,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
           status: m.status as DraftStatus,
           source: m.source as DraftMeta['source'],
           fileName: `draft_v${m.version}.md`,
-          filePath: `vela://draft/${m.id}`
+          filePath: `${VELA.DRAFT}${m.id}`
         }))
 
         metas.sort((a, b) => b.version - a.version)
@@ -144,8 +145,8 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
 
       let targetDraftId: number | undefined
       // 统一通过 DB 更新草稿内容
-      if (filePath.startsWith('vela://draft/') || filePath.startsWith('vela://manuscript/')) {
-        const prefix = filePath.startsWith('vela://draft/') ? 'vela://draft/' : 'vela://manuscript/'
+      if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
+        const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
         targetDraftId = parseInt(filePath.replace(prefix, ''))
         await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedText.length)
       } else {

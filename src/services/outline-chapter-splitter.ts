@@ -5,7 +5,7 @@
  * 输出：建议章节数 + 分卷结构 + 每卷事件密度分析
  */
 
-import { useLLMStore } from '../stores/llm-store'
+import { llmStore } from './store-facade'
 
 export interface ChapterSplitSuggestion {
   /** 建议总章数 */
@@ -34,8 +34,8 @@ export async function analyzeOutlineForChapters(
   outline: string,
   genre: string,
 ): Promise<ChapterSplitSuggestion | null> {
-  const llmStore = useLLMStore.getState()
-  const modelId = llmStore.getModelForPurpose('config_gen')
+  const llmState = llmStore.getState()
+  const modelId = llmState.getModelForPurpose('config_gen')
   if (!modelId) return null
 
   const prompt = [
@@ -56,7 +56,7 @@ export async function analyzeOutlineForChapters(
   ].join('\n')
 
   try {
-    const response = await llmStore.generate(
+    const response = await llmState.generate(
       [
         { role: 'system', content: '你是网文策划专家。只输出 Markdown 表格，不要其他文字。' },
         { role: 'user', content: prompt },

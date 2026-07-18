@@ -108,7 +108,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 5
+const CURRENT_SCHEMA_VERSION = 6
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -190,7 +190,7 @@ function createTables(db: BetterSqlite3.Database) {
       suspense_hook TEXT DEFAULT '',              -- 悬念钩子
       user_guidance TEXT DEFAULT '',              -- 用户预设指导
       notes TEXT DEFAULT '',                      -- 后处理提取的章节要点
-      notes_updated_at TEXT DEFAULT '',           -- notes 提取时间
+      notes_updated_at INTEGER DEFAULT 0,           -- notes 提取时间（毫秒戳）
       sort_order INTEGER DEFAULT 0,              -- 自定义排序序号
       priority INTEGER DEFAULT 0,                -- 优先级 (0=普通, 1=高, 2=关键)
       created_at INTEGER DEFAULT (unixepoch() * 1000),
@@ -320,8 +320,8 @@ function createTables(db: BetterSqlite3.Database) {
       ok INTEGER DEFAULT 0,                       -- 是否完成
       error_msg TEXT DEFAULT '',
       attempt_count INTEGER DEFAULT 0,
-      completed_at TEXT DEFAULT '',
-      last_attempt_at TEXT DEFAULT '',
+      completed_at INTEGER DEFAULT 0,
+      last_attempt_at INTEGER DEFAULT 0,
       FOREIGN KEY (run_id) REFERENCES post_process_runs(id) ON DELETE CASCADE,
       UNIQUE(run_id, step_key)
     );
@@ -508,5 +508,95 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   } catch (e) {
     logger.error('DB', `时间字段迁移失败: ${e}`)
     throw new Error(`关键迁移步骤失败 (time migration v5): ${e}`)
+  }
+
+  // 8. v6: 补充遗漏的 TEXT 时间列 → INTEGER（post_process_steps + blueprints）
+  try {
+    const V6_TIME_TABLES: Array<{ table: string; cols: string[] }> = [
+      { table: 'post_process_steps', cols: ['completed_at', 'last_attempt_at'] },
+      { table: 'blueprints', cols: ['notes_updated_at'] },
+    ]
+
+    for (const { table, cols } of V6_TIME_TABLES) {
+      for (const col of cols) {
+        const rows = db.prepare(
+          `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
+        ).all() as Array<{ rowid: number; [key: string]: unknown }>
+
+        for (const row of rows) {
+          const textVal = row[col] as string
+          if (textVal && typeof textVal === 'string') {
+            const parsed = Date.parse(textVal)
+            if (!isNaN(parsed)) {
+              db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
+            } else {
+              // 无法解析的旧文本时间戳 → 重置为 0
+              db.prepare(`UPDATE ${table} SET ${col} = 0 WHERE rowid = ?`).run(row.rowid)
+            }
+          }
+        }
+      }
+    }
+    logger.info('DB', 'v6 迁移: post_process_steps/blueprints 遗留 TEXT→INTEGER 完成')
+  } catch (e) {
+    logger.error('DB', `v6 时间字段迁移失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (time migration v6): ${e}`)
+  }
+
+  // 9. v6: CHECK 约束触发器（SQLite 不支持 ALTER TABLE ADD CHECK，用触发器替代）
+  try {
+    // drafts.status 四值约束
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS check_draft_status_insert
+      BEFORE INSERT ON drafts
+      WHEN NEW.status NOT IN ('draft', 'revised', 'finalized', 'archived')
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid draft status: ' || NEW.status);
+      END;
+    `)
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS check_draft_status_update
+      BEFORE UPDATE ON drafts
+      WHEN NEW.status NOT IN ('draft', 'revised', 'finalized', 'archived')
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid draft status: ' || NEW.status);
+      END;
+    `)
+    // blueprints.priority 0/1/2 约束
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS check_blueprint_priority_insert
+      BEFORE INSERT ON blueprints
+      WHEN NEW.priority NOT IN (0, 1, 2)
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid blueprint priority: ' || NEW.priority);
+      END;
+    `)
+    db.exec(`
+      CREATE TRIGGER IF NOT EXISTS check_blueprint_priority_update
+      BEFORE UPDATE ON blueprints
+      WHEN NEW.priority NOT IN (0, 1, 2)
+      BEGIN
+        SELECT RAISE(ABORT, 'Invalid blueprint priority: ' || NEW.priority);
+      END;
+    `)
+    logger.info('DB', 'v6 迁移: CHECK 约束触发器已创建 (drafts.status + blueprints.priority)')
+  } catch (e) {
+    logger.error('DB', `CHECK 约束触发器创建失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (CHECK triggers v6): ${e}`)
+  }
+
+  // 10. v6: 删除 project_core 中已归档到 project_archives 的冗余大文本列
+  try {
+    const coreCols = db.pragma('table_info(project_core)') as Array<{ name: string }>
+    const archivedFields = ['premise', 'worldbuilding', 'characters_arch', 'synopsis']
+    for (const field of archivedFields) {
+      if (coreCols.some(c => c.name === field)) {
+        db.exec(`ALTER TABLE project_core DROP COLUMN ${field}`)
+        logger.info('DB', `v6 迁移: project_core.${field} 已删除（已归档到 project_archives）`)
+      }
+    }
+  } catch (e) {
+    // 非关键迁移，旧版 SQLite 可能不支持 DROP COLUMN，降级为警告
+    logger.warn('DB', `project_core 冗余列删除失败（可能 SQLite 版本过旧）: ${e}`)
   }
 }

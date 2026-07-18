@@ -38,3 +38,7 @@ tailwind.config.js.bak
 
 # Claude Code 计划书（不提交）
 .codewhale-plans/
+.codewhale/
+
+# 测试覆盖率
+coverage/

@@ -11,6 +11,7 @@ import { generateEmbeddings } from './embedding'
 import type { ModelProfile } from '../src/shared/ipc-channels'
 import { LLMFactory } from './llm/llm-factory'
 import { logger } from './utils/logger'
+import { safeErrorMessage } from './utils/error-utils'
 import {
   optimizeForEmbedding,
   contentHash,
@@ -245,7 +246,7 @@ export class EmbeddingService {
       const tokens = response.usage?.totalTokens || Math.ceil(promptText.length * 0.75)
       return { vector, text, tokens, source: 'llm' }
     } catch (error) {
-      throw new Error(`LLM 向量化异常: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`LLM 向量化异常: ${error instanceof Error ? error.message : safeErrorMessage(error)}`)
     }
   }
 
@@ -415,7 +416,7 @@ export class EmbeddingService {
 
     // 策略2：提取所有数字
     const allNums = rawContent
-      .split(/[,\s\n\[\]{}"]+/)
+      .split(/[,\s\n[\]{}"]+/)
       .map(s => parseFloat(s.trim()))
       .filter(n => !isNaN(n))
     if (allNums.length >= expectedDims * 0.8) {
@@ -488,7 +489,7 @@ export class EmbeddingService {
         const tokens = Math.ceil(text.length * 0.75)
         return { vector, text, tokens, source: 'embedding_api' }
       } catch (error) {
-        logger.warn('Embedding', `Embedding API 失败，尝试 LLM 向量化: ${String(error)}`)
+        logger.warn('Embedding', `Embedding API 失败，尝试 LLM 向量化: ${safeErrorMessage(error)}`)
         // 降级到 LLM 向量化
       }
     }

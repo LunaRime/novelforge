@@ -9,6 +9,8 @@
 import { ipcMain, app, BrowserWindow, shell } from 'electron'
 import { autoUpdater, UpdateInfo as EUUpdateInfo } from 'electron-updater'
 import path from 'node:path'
+import fs from 'node:fs'
+import os from 'node:os'
 import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
 
@@ -99,7 +101,6 @@ function triggerUninstall(): { success: boolean; error?: string } {
     const uninstallerPath = path.join(appDir, 'Uninstall NovelForge.exe')
 
     // 检查卸载程序是否存在
-    const fs = require('node:fs')
     if (!fs.existsSync(uninstallerPath)) {
       return {
         success: false,
@@ -130,8 +131,6 @@ function triggerUninstall(): { success: boolean; error?: string } {
  */
 function cleanUserData(): { success: boolean; error?: string } {
   try {
-    const fs = require('node:fs')
-    const os = require('node:os')
     const velaHome = path.join(os.homedir(), '.vela')
 
     if (fs.existsSync(velaHome)) {

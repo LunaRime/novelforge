@@ -1,18 +1,20 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { DEFAULT_LOCALE } from '../../shared/locale'
 import {
-  Trash2, ChevronsDown, Loader2, CheckCircle2, XCircle, Clock,
+  Loader2, CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap,
 } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
-import { Button } from '../ui/Button'
+import LogsView from './LogsView'
+import ModelsView from './ModelsView'
+import { t } from '../../shared/locale'
 
-/** 底部面板 Tab 名称映射 */
+/** 底部面板 Tab 名称映射（通过 i18n 字典统一管理） */
 const TAB_LABELS: Record<string, string> = {
-  tasks:  '任务',
-  log:    '日志',
-  models: '模型调用',
+  tasks:  t('panel.tasks'),
+  log:    t('panel.log'),
+  models: t('panel.models'),
 }
 
 /** 下方工具窗口 */
@@ -482,143 +484,4 @@ function StepStatusIcon({ status }: { status: WorkflowStep['status'] }) {
 }
 
 
-// ===== 日志视图 =====
-
-function LogsView() {
-  const globalLogs = useWorkflowStore(s => s.globalLogs)
-  const clearLogs = useWorkflowStore(s => s.clearLogs)
-  const scrollRef = useRef<HTMLDivElement>(null)
-  const [autoScroll, setAutoScroll] = useState(true)
-
-  useEffect(() => {
-    if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-    }
-  }, [globalLogs.length, autoScroll])
-
-  const levelColor = (level: string) => {
-    switch (level) {
-      case 'error': return 'var(--color-error)'
-      case 'warn':  return 'var(--color-warning)'
-      default:      return 'var(--color-text-secondary)'
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-end gap-1 px-2 py-1 flex-shrink-0">
-        <Button
-          variant="ghost" size="icon"
-          onClick={() => setAutoScroll(!autoScroll)}
-          title={autoScroll ? '自动滚动: 开' : '自动滚动: 关'}
-          className={autoScroll ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
-        >
-          <ChevronsDown size={13} />
-        </Button>
-        <Button variant="ghost" size="icon" onClick={clearLogs} title="清空日志">
-          <Trash2 size={13} />
-        </Button>
-      </div>
-
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-2 font-mono text-xs leading-5">
-        {globalLogs.length === 0 && (
-          <div className="text-center py-8 opacity-30">暂无日志</div>
-        )}
-        {globalLogs.map((log, i) => (
-          <div key={i} className="flex gap-2">
-            <span style={{ color: 'var(--color-text-muted)' }}>{log.time}</span>
-            <span style={{ color: levelColor(log.level) }}>{log.message}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  )
-}
-
-// ===== 模型调用视图 =====
-
-function ModelsView() {
-  const [stats, setStats] = useState<{
-    totalCalls: number; totalTokens: number
-    totalPromptTokens: number; totalCompletionTokens: number
-  } | null>(null)
-  const [history, setHistory] = useState<Array<{
-    id: number; modelName: string; purpose: string
-    promptTokens: number; completionTokens: number; totalTokens: number
-    durationMs: number; success: boolean; createdAt: string
-  }>>([])
-
-  useEffect(() => { loadData() }, [])
-
-  const loadData = async () => {
-    try {
-      const { loadLLMData } = await import('../../services/stats-service')
-      const { stats: s, history: h } = await loadLLMData(30)
-      setStats(s)
-      setHistory(h)
-    } catch (e) { console.warn('[BottomPanel] 加载 LLM 用量统计数据失败:', e) }
-  }
-
-  return (
-    <div className="h-full flex flex-col overflow-hidden">
-      {stats && (
-        <div
-          className="flex items-center gap-4 px-4 py-2 flex-shrink-0"
-          style={{ borderBottom: '1px solid var(--color-border)' }}
-        >
-          <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            <span className="font-bold text-sm text-[var(--color-text)]">{stats.totalCalls}</span> 次调用
-          </div>
-          <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            <span className="font-bold text-sm text-[var(--color-text)]">{(stats.totalTokens / 1000).toFixed(1)}k</span> Tokens
-          </div>
-          <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            输入 <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalPromptTokens / 1000).toFixed(1)}k</span>
-          </div>
-          <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            输出 <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalCompletionTokens / 1000).toFixed(1)}k</span>
-          </div>
-        </div>
-      )}
-      <div className="flex-1 overflow-y-auto font-mono text-xs">
-        {history.length === 0 ? (
-          <div className="flex items-center justify-center h-full opacity-30 text-sm">暂无调用记录</div>
-        ) : (
-          <table className="w-full">
-            <thead>
-              <tr
-                className="text-[0.7rem] text-[var(--color-text-muted)]"
-                style={{ borderBottom: '1px solid var(--color-border)' }}
-              >
-                <th className="text-left px-4 py-1 font-medium">时间</th>
-                <th className="text-left px-2 py-1 font-medium">模型</th>
-                <th className="text-left px-2 py-1 font-medium">用途</th>
-                <th className="text-right px-2 py-1 font-medium">Tokens</th>
-                <th className="text-right px-2 py-1 font-medium">耗时</th>
-                <th className="text-center px-2 py-1 font-medium">状态</th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.map((row) => (
-                <tr
-                  key={row.id}
-                  className="hover:bg-[var(--color-hover)] transition-colors"
-                  style={{ borderBottom: '1px solid var(--color-border)' }}
-                >
-                  <td className="px-4 py-1 text-[var(--color-text-muted)]">
-                    {new Date(row.createdAt).toLocaleString(DEFAULT_LOCALE, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
-                  </td>
-                  <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.modelName || '-'}</td>
-                  <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.purpose || '-'}</td>
-                  <td className="px-2 py-1 text-right text-[var(--color-text)]">{row.totalTokens.toLocaleString()}</td>
-                  <td className="px-2 py-1 text-right text-[var(--color-text-muted)]">{(row.durationMs / 1000).toFixed(1)}s</td>
-                  <td className="px-2 py-1 text-center">{row.success ? <CheckCircle2 size={12} style={{ color: 'var(--color-success)', display: 'inline' }} /> : <XCircle size={12} style={{ color: 'var(--color-error)', display: 'inline' }} />}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
-  )
-}
+// ModelsView 已提取到 ./ModelsView.tsx

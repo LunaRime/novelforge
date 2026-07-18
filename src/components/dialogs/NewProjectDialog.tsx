@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { FolderOpen, Sparkles } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../../services/ipc-client'
+import { t } from '../../shared/locale'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -57,16 +58,16 @@ export default function NewProjectDialog({ open, onClose }: NewProjectDialogProp
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={18} className="text-[var(--color-accent)]" />
-            新建小说项目
+            {t('dialog.newProject')}
           </DialogTitle>
-          <DialogDescription>填写作品名称和保存位置，其余配置在项目内完成</DialogDescription>
+          <DialogDescription>{t('project.createTitle')}</DialogDescription>
         </DialogHeader>
 
         {/* 表单 */}
         <div className="px-5 py-4 space-y-4">
           {/* 项目名称 */}
           <div>
-            <Label>作品名称</Label>
+            <Label>{t('project.workName')}</Label>
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -78,30 +79,30 @@ export default function NewProjectDialog({ open, onClose }: NewProjectDialogProp
 
           {/* 保存路径 */}
           <div>
-            <Label>保存位置</Label>
+            <Label>{t('project.saveLocation')}</Label>
             <div className="flex gap-2">
               <Input
                 value={path}
                 onChange={(e) => setPath(e.target.value)}
-                placeholder="选择项目保存目录"
+                placeholder={t('project.chooseDir')}
                 className="flex-1"
               />
               <Button variant="outline" onClick={handleSelectFolder}>
                 <FolderOpen size={14} />
-                选择
+                {t('form.selectFolder')}
               </Button>
             </div>
           </div>
         </div>
 
         <DialogFooter>
-          <Button variant="ghost" onClick={onClose}>取消</Button>
+          <Button variant="ghost" onClick={onClose}>{t('action.cancel')}</Button>
           <Button
             onClick={handleCreate}
             disabled={creating || !name.trim() || !path.trim()}
           >
             <Sparkles size={14} />
-            {creating ? '创建中...' : '创建项目'}
+            {creating ? t('project.creating') : t('project.creatingBtn')}
           </Button>
         </DialogFooter>
       </DialogContent>

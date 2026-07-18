@@ -4,6 +4,7 @@
  * 显示章节标题、版本号、字数统计、保存状态、AI 操作按钮、定稿按钮。
  * 从 DraftEditor 提取，减少父组件复杂度。
  */
+import { memo } from 'react'
 import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench } from 'lucide-react'
 import { Button } from '../ui/Button'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
@@ -45,7 +46,7 @@ export interface EditorToolbarProps {
   onOpenReview: () => void
 }
 
-export default function EditorToolbar({
+function EditorToolbar({
   meta,
   charCount,
   isDirty,
@@ -283,3 +284,5 @@ function ReadonlyActions({
     </div>
   )
 }
+
+export default memo(EditorToolbar)

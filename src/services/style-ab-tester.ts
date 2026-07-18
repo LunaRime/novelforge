@@ -5,8 +5,8 @@
  * AI 自动评分 + 段落级差异对比。
  */
 
-import { useLLMStore } from '../stores/llm-store'
-import { useUsageStore } from '../stores/usage-store'
+import { llmStore, usageStore } from './store-facade'
+import type { useLLMStore } from '../stores/llm-store'
 
 // ===== 类型定义 =====
 
@@ -65,8 +65,8 @@ export async function runStyleABTest(
   originalText: string,
   selectedStyles: string[] = ['hot_blood', 'refined', 'suspense'],
 ): Promise<ABTestResult> {
-  const llmStore = useLLMStore.getState()
-  const modelId = llmStore.getModelForPurpose('refine_chapter')
+  const llmState = llmStore.getState()
+  const modelId = llmState.getModelForPurpose('refine_chapter')
   if (!modelId) throw new Error('无可用模型')
 
   const styleConfigs = STYLE_PRESETS.filter(s => selectedStyles.includes(s.id))
@@ -75,7 +75,7 @@ export async function runStyleABTest(
   // 并行生成所有风格变体
   const promises = styleConfigs.map(async (style) => {
     try {
-      const response = await llmStore.generate(
+      const response = await llmState.generate(
         [
           { role: 'system', content: style.systemPrompt },
           {
@@ -89,10 +89,10 @@ export async function runStyleABTest(
 
       if (response.success && response.content) {
         // AI 评分
-        const score = await scoreVariant(originalText, response.content, style.name, llmStore, modelId)
+        const score = await scoreVariant(originalText, response.content, style.name, llmState, modelId)
 
-        useUsageStore.getState().recordCall({
-          model: llmStore.models.find(m => m.id === modelId)!,
+        usageStore.recordCall({
+          model: llmState.models.find(m => m.id === modelId)!,
           promptTokens: response.usage?.promptTokens || 0,
           completionTokens: response.usage?.completionTokens || 0,
           tier: 'standard',

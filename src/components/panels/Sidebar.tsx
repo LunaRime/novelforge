@@ -8,6 +8,7 @@
 import { useState, useEffect } from 'react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ContextMenu } from '../ui/ContextMenu'
+import { t } from '../../shared/locale'
 import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
@@ -30,10 +31,10 @@ export default function Sidebar() {
   }, [])
 
   const viewTitles: Record<string, string> = {
-    home:       '主页',
-    project:    '项目结构',
-    knowledge:  '知识库',
-    characters: '角色管理',
+    home:       t('nav.home'),
+    project:    t('nav.projectTree'),
+    knowledge:  t('nav.knowledgeBase'),
+    characters: t('nav.characters'),
   }
 
   return (
