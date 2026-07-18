@@ -8,6 +8,7 @@ import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import InlineAIToolbar from './InlineAIToolbar'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -378,6 +379,26 @@ export default function CodeMirrorEditor({
           />
         </div>
       </div>
+
+      {/* 行内 AI 快速工具条 — 选中文字后浮现，3 秒自动消失 */}
+      {bubbleOpen && bubblePos.top !== 0 && !aiResult && (
+        <InlineAIToolbar
+          x={bubblePos.left}
+          y={bubblePos.top}
+          selectedText={editorContent.slice(
+            selectionRange?.from ?? 0,
+            selectionRange?.to ?? 0,
+          )}
+          actions={AI_ACTIONS.map(a => ({
+            key: a.key,
+            label: a.label,
+            icon: '✨',
+            prompt: a.prompt,
+          }))}
+          onAction={(a) => handleAIAction(a.prompt, a.key)}
+          onClose={() => {}}
+        />
+      )}
 
       {/* Bubble Menu */}
       {bubbleOpen && bubblePos.top !== 0 && (
