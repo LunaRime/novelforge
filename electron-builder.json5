@@ -58,7 +58,10 @@
     "node_modules/@lancedb/lancedb-win32-*/**",
     "node_modules/@lancedb/lancedb-darwin-*/**",
     "node_modules/@lancedb/lancedb-linux-*/**",
-    "node_modules/apache-arrow/**"
+    "node_modules/apache-arrow/**",
+    "node_modules/flatbuffers/**",
+    "node_modules/tslib/**",
+    "node_modules/reflect-metadata/**"
   ],
   "mac": {
     "target": ["dmg"],
