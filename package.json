@@ -20,7 +20,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "gen:tokens": "node scripts/extract-tokens.cjs"
+    "gen:tokens": "node scripts/extract-tokens.cjs",
+    "check:native": "node scripts/detect-native-deps.cjs"
   },
   "dependencies": {
     "@lancedb/lancedb": "^0.27.2",
