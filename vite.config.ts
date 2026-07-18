@@ -55,26 +55,20 @@ export default defineConfig({
     rollupOptions: {
       output: {
         // vendor chunk 分割 — 减少首屏加载体积，提高浏览器缓存命中率
-        manualChunks: {
-          'vendor-react': ['react', 'react-dom'],
-          'vendor-editor': [
-            '@codemirror/lang-markdown',
-            '@codemirror/language',
-            '@codemirror/language-data',
-            '@codemirror/state',
-            '@codemirror/view',
-            '@uiw/react-codemirror',
-          ],
-          'vendor-ui': [
-            '@radix-ui/react-dialog',
-            '@radix-ui/react-label',
-            '@radix-ui/react-select',
-            '@radix-ui/react-separator',
-            '@radix-ui/react-slot',
-            '@radix-ui/react-tabs',
-            '@radix-ui/react-tooltip',
-            'lucide-react',
-          ],
+        // Vite 8 + Rolldown：manualChunks 必须为函数（不支持对象格式）
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return;
+          if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+            return 'vendor-react';
+          }
+          if (id.includes('@codemirror') || id.includes('@uiw/react-codemirror')) {
+            return 'vendor-editor';
+          }
+          if (id.includes('@radix-ui') || id.includes('lucide-react')) {
+            return 'vendor-ui';
+          }
+          // 其余第三方依赖归入 vendor 通用 chunk
+          return 'vendor';
         },
       },
       onwarn(warning, defaultHandler) {
