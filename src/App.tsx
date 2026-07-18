@@ -40,6 +40,7 @@ export default function App() {
     newProjectOpen, closeNewProject, exportOpen, closeExport,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
+    focusMode,
   } = useLayoutStore(useShallow(s => ({
     sidebarOpen: s.sidebarOpen,
     aiPanelOpen: s.aiPanelOpen,
@@ -55,6 +56,7 @@ export default function App() {
     chapterCreationOpen: s.chapterCreationOpen,
     chapterCreationPrefill: s.chapterCreationPrefill,
     closeChapterCreation: s.closeChapterCreation,
+    focusMode: s.focusMode,
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -167,8 +169,8 @@ export default function App() {
           <Panel id="top" defaultSize={75} minSize={30}>
             <PanelGroup orientation="horizontal" className="flex-1 h-full">
 
-              {/* 左侧边栏 */}
-              {sidebarOpen && (
+              {/* 左侧边栏 — 专注模式下隐藏 */}
+              {(sidebarOpen && !focusMode) && (
                 <>
                   <Panel id="sidebar" defaultSize={20} minSize={10} aria-label={t('panel.sidebar')}>
                     <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
@@ -179,16 +181,18 @@ export default function App() {
                 </>
               )}
 
-              {/* 编辑区 */}
+              {/* 编辑区 — 专注模式下居中 + 大字号 */}
               <Panel id="editor" defaultSize={60} minSize={10} aria-label={t('panel.editor')}>
                 <div id="main-editor-area" />
-                <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
-                  <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
-                </ErrorBoundary>
+                <div className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
+                  <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
+                    <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
+                  </ErrorBoundary>
+                </div>
               </Panel>
 
-              {/* 右侧面板（Agent 对话 / AI 输出） */}
-              {aiPanelOpen && (
+              {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
+              {(aiPanelOpen && !focusMode) && (
                 <>
                   <PanelResizeHandle />
                   <Panel id="ai-panel" defaultSize={20} minSize={10} aria-label={t('panel.ai')}>
@@ -201,17 +205,19 @@ export default function App() {
             </PanelGroup>
           </Panel>
 
-          {/* 下层：底部面板（铺满整个 PanelGroup 宽度）— 始终挂载，面板控制显隐 */}
-          <PanelResizeHandle />
-          <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>
-            <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
-              <BottomPanel />
-            </ErrorBoundary>
-          </Panel>
+          {/* 下层：底部面板 — 专注模式下隐藏 */}
+          {!focusMode && <PanelResizeHandle />}
+          {!focusMode && (
+            <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>
+              <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
+                <BottomPanel />
+              </ErrorBoundary>
+            </Panel>
+          )}
         </PanelGroup>
 
-        {/* 右侧工具窗口栏（全高，包括底部面板区域） */}
-        <RightToolWindowBar />
+        {/* 右侧工具窗口栏 — 专注模式下隐藏 */}
+        {!focusMode && <RightToolWindowBar />}
       </div>
 
 
