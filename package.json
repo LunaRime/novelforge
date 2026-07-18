@@ -28,7 +28,9 @@
     "apache-arrow": "^18.1.0",
     "better-sqlite3": "^12.8.0",
     "electron-updater": "^6.8.9",
-    "flatbuffers": "^25.9.23",
+    "flatbuffers": "^25.9.23"
+  },
+  "devDependencies": {
     "@chromatic-com/storybook": "^5.1.2",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.0",
@@ -65,6 +67,8 @@
     "@vitest/coverage-v8": "^4.1.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "electron": "^41.2.0",
+    "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "eslint": "^8.57.1",
     "eslint-plugin-react-hooks": "^7.0.1",
@@ -91,9 +95,5 @@
     "vite-plugin-electron-renderer": "^0.14.5",
     "vitest": "^4.1.4",
     "zustand": "^5.0.0"
-  },
-  "devDependencies": {
-    "electron": "^41.2.0",
-    "electron-builder": "^26.8.1"
   }
 }

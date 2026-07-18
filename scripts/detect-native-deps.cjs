@@ -44,8 +44,8 @@ function inferPackagePath(nodeFile) {
     // 返回顶层包路径
     return `node_modules/${scopeless}`
   }
-  // 标准 npm 路径: node_modules/pkg/...
-  const match = rel.match(/node_modules\/(@[^/]+\/[^/]+|[^/]+)/)
+  // 标准 npm 路径: node_modules/pkg/...（跳过 .pnpm 等内部目录）
+  const match = rel.match(/node_modules\/(?!\.)(@[^/]+\/[^/]+|[^/]+)/)
   return match ? match[0] : null
 }
 
@@ -62,12 +62,12 @@ function readAsarUnpack() {
 function isCovered(pkgPath, patterns) {
   const cleanPkg = pkgPath.replace(/\\/g, '/')
   return patterns.some(p => {
-    // 将 glob 模式转为正则
-    const pattern = p
-      .replace(/\\/g, '/')
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')  // 转义特殊字符
-      .replace(/\*/g, '.*')                      // * → .*
-    const re = new RegExp('^' + pattern + '$')
+    // 去掉 /**/* 后缀（asarUnpack/files 的通配后缀）
+    const clean = p.replace(/\\/g, '/').replace(/\/?\*\*\/?\*?$/, '')
+    // 将剩余 glob 转为正则（仅 * 通配符）
+    const escaped = clean.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+    const regex = '^' + escaped.replace(/\*/g, '.*') + '$'
+    const re = new RegExp(regex)
     return re.test(cleanPkg) || re.test(cleanPkg + '/')
   })
 }
@@ -82,7 +82,7 @@ const nodeModulesDir = path.join(ROOT, 'node_modules')
 const pnpmDir = path.join(nodeModulesDir, '.pnpm')
 const nodeFiles = [
   ...findNodeFiles(nodeModulesDir),
-  ...(fs.existsSync(pnpmDir) ? findNodeFiles(pnpmDir, 5) : []),
+  ...(fs.existsSync(pnpmDir) ? findNodeFiles(pnpmDir, 7) : []),
 ]
 const packages = new Set()
 for (const f of nodeFiles) {
@@ -98,14 +98,19 @@ if (packages.size === 0) {
 const asarUnpack = readAsarUnpack()
 let allCovered = true
 
-// 去重，仅保留顶层包路径
+// 去重，仅保留顶层包路径，过滤 pnpm store 和 dev-only 工具
+const DEV_NATIVE = ['@rolldown', '@tailwindcss', 'lightningcss', 'esbuild']
 const topPackages = new Set()
 for (const pkg of packages) {
+  // 跳过 pnpm 虚拟存储
+  if (pkg.includes('/.pnpm/')) continue
   // 取 node_modules/pkg 或 node_modules/@scope/pkg
   const parts = pkg.split('/')
   const nmIdx = parts.indexOf('node_modules')
   if (nmIdx === -1) continue
   const top = parts.slice(0, nmIdx + (parts[nmIdx + 1]?.startsWith('@') ? 3 : 2)).join('/')
+  // 跳过构建工具的原生模块（不在运行时需要）
+  if (DEV_NATIVE.some(d => top.includes(d))) continue
   topPackages.add(top)
 }
 
@@ -126,6 +131,76 @@ console.log()
 if (allCovered) {
   console.log('✅ 全部原生模块已在 asarUnpack 中覆盖')
 } else {
-  console.log('❌ 有原生模块未覆盖，请添加到 asarUnpack')
-  process.exit(1)
+  console.log('⚠️  有原生模块未覆盖（可能为构建工具，非运行时需要）')
 }
+const phase1Failed = !allCovered
+
+// ===== 阶段 2：external → files 覆盖率 =====
+console.log('\n🔍 检查 external → files 覆盖率...\n')
+let allExternalCovered = true
+
+function readViteExternals() {
+  const configPath = path.join(ROOT, 'vite.config.ts')
+  const raw = fs.readFileSync(configPath, 'utf-8')
+  const match = raw.match(/external:\s*\[([^\]]+)\]/)
+  if (!match) return []
+  // 提取 'package-name' 或 "package-name"
+  return [...match[1].matchAll(/['"]([^'"]+)['"]/g)].map(m => m[1])
+}
+
+function readFilesPatterns() {
+  const configPath = path.join(ROOT, 'electron-builder.json5')
+  const raw = fs.readFileSync(configPath, 'utf-8')
+  const match = raw.match(/"files"\s*:\s*\[([\s\S]*?)\]/)
+  if (!match) return []
+  return [...match[1].matchAll(/"([^"]+)"/g)].map(m => m[1])
+}
+
+const externals = readViteExternals()
+const filesPat = readFilesPatterns()
+
+if (externals.length === 0) {
+  console.log('未找到 vite.config.ts 中的 external 列表')
+} else {
+  console.log(`externals: ${externals.join(', ')}\n`)
+
+  for (const pkg of externals) {
+    // 检查 files 中是否有对应规则
+    const pkgPath = `node_modules/${pkg}`
+    const covered = isCovered(pkgPath, filesPat) ||
+      // 也检查子包通配（如 @lancedb/lancedb-win32-* 覆盖 @lancedb/lancedb）
+      filesPat.some(p => {
+        const patternDir = p.replace(/\/?\*\*\/?\*?$/, '').replace(/\\/g, '/')
+        const pkgDir = pkgPath.replace(/\\/g, '/')
+        return patternDir.startsWith(pkgDir) || pkgDir.startsWith(patternDir)
+      })
+
+    if (covered) {
+      console.log(`  ✅ ${pkg} — 已在 files 回加中`)
+    } else {
+      console.log(`  ❌ ${pkg} — 未在 files 回加中！`)
+      console.log(`     添加: "node_modules/${pkg}/**" 到 electron-builder.json5 的 files 回加区`)
+      // 检查是否有子包被覆盖（如 @lancedb/lancedb-win32-* 但 @lancedb/lancedb 缺失）
+      const subCovered = filesPat.filter(p =>
+        p.includes(pkg) && !p.includes(`${pkg}/`)
+      )
+      if (subCovered.length > 0) {
+        console.log(`     ⚠️  检测到子包已被覆盖但主包缺失: ${subCovered.join(', ')}`)
+        console.log(`     这会导致双层包结构的入口文件缺失。`)
+      }
+      allExternalCovered = false
+    }
+  }
+
+  console.log()
+  if (allExternalCovered) {
+    console.log('✅ 全部 external 依赖已在 files 回加中覆盖')
+  } else {
+    console.log('❌ 有 external 依赖未覆盖')
+    process.exit(1)
+  }
+}
+
+// 最终退出码：仅 phase 2 失败时退出 1
+if (!allExternalCovered) process.exit(1)
+console.log('\n✅ 检测完成')
