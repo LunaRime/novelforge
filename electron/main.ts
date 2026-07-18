@@ -1,5 +1,3 @@
-// 必须在所有其他导入之前，设置原生模块搜索路径
-import './setup-native-modules'
 import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'

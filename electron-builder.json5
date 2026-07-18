@@ -21,12 +21,13 @@
   "directories": {
     "output": "release/${version}"
   },
-  // files 白名单 — 明确指定打包内容，避免根 package.json（含 "type":"module"）进入 asar
+  // files 白名单 — electron-builder 按顺序评估，先排除后回加
   "files": [
     "dist/**/*",
     "dist-electron/**/*",
     "build/**/*",
     "index.html",
+    // 排除项
     "!src",
     "!electron",
     "!.git",
@@ -50,15 +51,14 @@
     "!.npmrc",
     "!package.json",
     "!node_modules/.cache",
-    "!node_modules/**"
-  ],
-  // 原生模块从 asar 排除后，通过 extraResources 放到 app 的 resources/ 目录
-  "extraResources": [
-    { "from": "node_modules/better-sqlite3", "to": "native_modules/better-sqlite3" },
-    { "from": "node_modules/@lancedb", "to": "native_modules/@lancedb" },
-    { "from": "node_modules/apache-arrow", "to": "native_modules/apache-arrow" },
-    { "from": "node_modules/flatbuffers", "to": "native_modules/flatbuffers" },
-    { "from": "node_modules/electron-updater", "to": "native_modules/electron-updater" }
+    "!node_modules/**",
+    // 回加：native 模块（.node 二进制无法被 Vite 打包）
+    "node_modules/better-sqlite3/**",
+    "node_modules/@lancedb/lancedb-win32-*/**",
+    "node_modules/@lancedb/lancedb-darwin-*/**",
+    "node_modules/@lancedb/lancedb-linux-*/**",
+    "node_modules/apache-arrow/**",
+    "node_modules/flatbuffers/**"
   ],
   "mac": {
     "target": ["dmg"],
