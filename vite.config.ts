@@ -53,6 +53,30 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
+      output: {
+        // vendor chunk 分割 — 减少首屏加载体积，提高浏览器缓存命中率
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom'],
+          'vendor-editor': [
+            '@codemirror/lang-markdown',
+            '@codemirror/language',
+            '@codemirror/language-data',
+            '@codemirror/state',
+            '@codemirror/view',
+            '@uiw/react-codemirror',
+          ],
+          'vendor-ui': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-label',
+            '@radix-ui/react-select',
+            '@radix-ui/react-separator',
+            '@radix-ui/react-slot',
+            '@radix-ui/react-tabs',
+            '@radix-ui/react-tooltip',
+            'lucide-react',
+          ],
+        },
+      },
       onwarn(warning, defaultHandler) {
         // 过滤掉已知的无害警告
         if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return;
