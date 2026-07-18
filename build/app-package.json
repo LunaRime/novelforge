@@ -1,0 +1,7 @@
+{
+  "name": "novelforge",
+  "version": "2.4.1",
+  "description": "NovelForge - AI 深度驱动的小说创作 IDE",
+  "author": "LunaRime",
+  "main": "dist-electron/main.js"
+}

@@ -35,7 +35,19 @@ export default defineConfig({
     preload: {
       // Shortcut of `build.rollupOptions.input`.
       // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-      input: path.join(__dirname, 'electron/preload.ts')
+      input: path.join(__dirname, 'electron/preload.ts'),
+      vite: {
+        build: {
+          rollupOptions: {
+            output: {
+              // 显式输出 CommonJS（Electron preload 沙箱环境天然支持 CJS require）
+              format: 'cjs',
+              // .cjs 扩展名与 CJS 格式匹配，避免 .mjs + require 的矛盾
+              entryFileNames: 'preload.cjs',
+            }
+          }
+        }
+      }
     }
   }), process.env.NODE_ENV !== 'test' && electronRenderer()],
   publicDir: 'public',

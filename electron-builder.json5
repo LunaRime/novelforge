@@ -6,17 +6,27 @@
   "asarUnpack": [
     "node_modules/apache-arrow/**/*",
     "node_modules/better-sqlite3/**/*",
+    "node_modules/flatbuffers/**/*",
     "node_modules/@lancedb/lancedb-darwin-*/**/*",
     "node_modules/@lancedb/lancedb-linux-*/**/*",
     "node_modules/@lancedb/lancedb-win32-*/**/*"
   ],
+  // 覆盖根 package.json 的 "type":"module"，确保主进程以 CommonJS 运行
+  // Electron 主进程使用 CJS require，ESM 模式会导致 Rolldown CJS shim 崩溃
+  "extraMetadata": {
+    "main": "dist-electron/main.js"
+  },
   "productName": "NovelForge",
   "directories": {
     "output": "release/${version}"
   },
+  // files 白名单 — 明确指定打包内容，避免根 package.json（含 "type":"module"）进入 asar
   "files": [
-    "**/*",
+    "dist/**/*",
+    "dist-electron/**/*",
     "build/**/*",
+    "public/**/*",
+    "index.html",
     "!src",
     "!electron",
     "!.git",
@@ -25,6 +35,7 @@
     "!.vscode",
     "!.idea",
     "!.claude",
+    "!.codewhale-plans",
     "!tests",
     "!docs",
     "!release",
@@ -37,6 +48,7 @@
     "!.gitignore",
     "!.npmignore",
     "!.npmrc",
+    "!package.json",
     "!node_modules/.cache"
   ],
   "mac": {
