@@ -18,6 +18,12 @@ export interface FontOption {
   family: string
   /** 预览文字（用该字体渲染，展示中英文效果） */
   preview: string
+  /** @font-face src 定义数组，仅非 system 字体需要；system 字体留空 */
+  fontFaces?: Array<{
+    src: string
+    fontWeight: string
+    fontStyle?: string
+  }>
 }
 
 /** 所有内置字体（界面 + 写作共用） */
@@ -29,6 +35,7 @@ export const FONT_OPTIONS: FontOption[] = [
     desc: '精心设计的现代 UI 字体，英文排版优秀，界面首选',
     family: "'Inter', system-ui, sans-serif",
     preview: 'Aa Bb 文字 123',
+    // Inter 在 index.css 中静态声明（UI 全局字体），无需动态注入
   },
   {
     id: 'noto-sans-sc',
@@ -37,6 +44,10 @@ export const FONT_OPTIONS: FontOption[] = [
     desc: '黑体风格，中英文兼顾，简洁现代，科幻都市题材适用',
     family: "'Noto Sans SC', sans-serif",
     preview: '思源黑体 Sans',
+    fontFaces: [{
+      src: "url('/fonts/NotoSansSC-VariableFont_wght.ttf') format('truetype')",
+      fontWeight: '100 900',
+    }],
   },
   {
     id: 'lxgw-wenkai',
@@ -45,6 +56,10 @@ export const FONT_OPTIONS: FontOption[] = [
     desc: '楷体风格，温润典雅，最适合中文小说写作',
     family: "'LXGW WenKai', serif",
     preview: '春花秋月何时了',
+    fontFaces: [
+      { src: "url('/fonts/LXGWWenKai-Regular.ttf') format('truetype')", fontWeight: '400' },
+      { src: "url('/fonts/LXGWWenKai-Medium.ttf') format('truetype')", fontWeight: '500' },
+    ],
   },
   {
     id: 'noto-serif-sc',
@@ -53,6 +68,10 @@ export const FONT_OPTIONS: FontOption[] = [
     desc: '宋体风格，字形端正，印刷质感强，正式文稿首选',
     family: "'Noto Serif SC', serif",
     preview: '往事如云烟，归零',
+    fontFaces: [{
+      src: "url('/fonts/NotoSerifSC-VariableFont_wght.ttf') format('truetype')",
+      fontWeight: '100 900',
+    }],
   },
   {
     id: 'system',
@@ -244,6 +263,7 @@ function applyWritingFont(font: FontId) {
   const opt = FONT_OPTIONS.find((o) => o.id === font)
   if (opt) {
     document.documentElement.style.setProperty('--font-writing', opt.family)
+    injectFontFace(opt)
   }
 }
 
@@ -252,5 +272,36 @@ function applyUiFont(font: FontId) {
   const opt = FONT_OPTIONS.find((o) => o.id === font)
   if (opt) {
     document.documentElement.style.setProperty('--font-sans', opt.family)
+    injectFontFace(opt)
+  }
+}
+
+// 跟踪已注入的字体，避免重复注入
+const injectedFonts = new Set<string>()
+
+/** 动态注入 @font-face，仅在字体首次使用时下载 */
+function injectFontFace(opt: FontOption) {
+  if (!opt.fontFaces || opt.fontFaces.length === 0) return
+  if (injectedFonts.has(opt.id)) return
+  injectedFonts.add(opt.id)
+
+  const style = document.createElement('style')
+  style.id = `font-${opt.id}`
+  // @font-face 注入到 body 确保优先级正确
+  for (const face of opt.fontFaces) {
+    const css = `@font-face {
+  font-family: '${opt.family.split("'")[1] || opt.family.split(',')[0].trim()}';
+  src: ${face.src};
+  font-weight: ${face.fontWeight};
+  font-style: ${face.fontStyle || 'normal'};
+  font-display: swap;
+}`
+    style.appendChild(document.createTextNode(css))
+  }
+  document.head.appendChild(style)
+
+  // 后台预加载字体文件
+  if (document.fonts) {
+    document.fonts.load(`1em ${opt.family}`).catch(() => { /* ignore */ })
   }
 }
