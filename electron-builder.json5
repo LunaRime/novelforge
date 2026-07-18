@@ -49,7 +49,16 @@
     "!.npmignore",
     "!.npmrc",
     "!package.json",
-    "!node_modules/.cache"
+    "!node_modules/.cache",
+    "!node_modules/**"
+  ],
+  // 原生模块从 asar 排除后，通过 extraResources 放到 app 的 resources/ 目录
+  "extraResources": [
+    { "from": "node_modules/better-sqlite3", "to": "native_modules/better-sqlite3" },
+    { "from": "node_modules/@lancedb", "to": "native_modules/@lancedb" },
+    { "from": "node_modules/apache-arrow", "to": "native_modules/apache-arrow" },
+    { "from": "node_modules/flatbuffers", "to": "native_modules/flatbuffers" },
+    { "from": "node_modules/electron-updater", "to": "native_modules/electron-updater" }
   ],
   "mac": {
     "target": ["dmg"],
