@@ -14,7 +14,8 @@
   // 覆盖根 package.json 的 "type":"module"，确保主进程以 CommonJS 运行
   // Electron 主进程使用 CJS require，ESM 模式会导致 Rolldown CJS shim 崩溃
   "extraMetadata": {
-    "main": "dist-electron/main.js"
+    "main": "dist-electron/main.js",
+    "type": "commonjs"
   },
   "productName": "NovelForge",
   "directories": {
