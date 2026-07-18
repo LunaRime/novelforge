@@ -44,6 +44,33 @@ jobs:
     - name: Build (Vite)
       run: pnpm vite build
 
+    - name: Smoke check — verify build output
+      if: ${{ !cancelled() }}
+      shell: bash
+      run: |
+        # 1. preload 文件存在且格式正确
+        PRELOAD=$(ls dist-electron/preload.* 2>/dev/null)
+        if [ -z "$PRELOAD" ]; then echo "❌ preload 缺失"; exit 1; fi
+        EXT="${PRELOAD##*.}"
+        if [ "$EXT" = "mjs" ] && grep -q 'require(' "$PRELOAD" 2>/dev/null; then
+          echo "❌ preload.mjs 包含 require() — 将在 ESM 模式下崩溃"
+          exit 1
+        fi
+        echo "   preload: $PRELOAD"
+
+        # 2. 主进程入口存在
+        if [ ! -f "dist-electron/main.js" ]; then echo "❌ main.js 缺失"; exit 1; fi
+        echo "   main: dist-electron/main.js"
+
+        # 3. 前端入口存在
+        if [ ! -f "dist/index.html" ]; then echo "❌ dist/index.html 缺失"; exit 1; fi
+        echo "   renderer: dist/index.html"
+
+        # 4. 运行构建契约检查
+        node scripts/verify-build-contract.cjs
+
+        echo "✅ CI smoke check 通过"
+
   # ===== Release 构建（仅 tag push 触发，Ubuntu 环境） =====
   release:
     if: startsWith(github.ref, 'refs/tags/v')
