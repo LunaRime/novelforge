@@ -26,7 +26,6 @@
     "dist/**/*",
     "dist-electron/**/*",
     "build/**/*",
-    "public/**/*",
     "index.html",
     "!src",
     "!electron",
@@ -50,7 +49,8 @@
     "!.npmignore",
     "!.npmrc",
     "!package.json",
-    "!node_modules/.cache"
+    "!node_modules/.cache",
+    "!node_modules/**"
   ],
   "mac": {
     "target": ["dmg"],

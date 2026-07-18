@@ -110,7 +110,8 @@ for (const f of rootFiles) {
 if (errors === 0) ok('检查 C: asar 不含开发/审计目录');
 
 // ===== 检查 D：preload 文件扩展名与内容一致 =====
-const preloadFile = files.find(f => f.match(/dist-electron\/preload\.\w+$/));
+// Unix 用 /, Windows asar 用 \ — 同时支持两种路径分隔符
+const preloadFile = files.find(f => f.match(/[\/\\]dist-electron[\/\\]preload\.\w+$/));
 if (!preloadFile) {
   fail('检查 D: asar 中未找到 dist-electron/preload.* 文件');
 } else {
