@@ -146,6 +146,7 @@ export class GeminiProvider implements ILLMProvider {
       const decoder = new TextDecoder()
       let fullText = ''
       let failedChunkCount = 0
+      let buffer = '' // 跨 read 边界的行缓冲
       let usage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
 
       const hasMore = true
@@ -153,8 +154,10 @@ export class GeminiProvider implements ILLMProvider {
         const { done, value } = await reader.read()
         if (done) break
 
-        const text = decoder.decode(value, { stream: true })
-        const lines = text.split('\n').filter((l) => l.startsWith('data: '))
+        buffer += decoder.decode(value, { stream: true })
+        const parts = buffer.split('\n')
+        buffer = parts.pop() ?? ''
+        const lines = parts.filter((l) => l.startsWith('data: '))
 
         for (const line of lines) {
           const json = line.slice(6).trim()

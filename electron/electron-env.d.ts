@@ -1,5 +1,9 @@
 /// <reference types="vite-plugin-electron/electron-env" />
 
+// Rolldown CJS 输出中的 Node.js 全局变量
+// TS 在 ESNext 模块模式下不自动识别 __dirname
+declare var __dirname: string
+
 declare namespace NodeJS {
   interface ProcessEnv {
     /** 构建产物根目录 */

@@ -127,8 +127,20 @@
           <div class="vela-core"></div>
         </div>
         <div class="vela-text">NovelForge 初始化中</div>
+        <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.35);font-family:monospace;letter-spacing:1px;"></div>
       </div>
     </div>
+    <!-- 启动计时：记录 HTML 解析完成时间，并在加载页实时显示耗时 -->
+    <script>
+      window.__VELA_HTML_READY = performance.now()
+      var timerEl = document.getElementById('vela-startup-timer')
+      if (timerEl) {
+        setInterval(function() {
+          var elapsed = ((performance.now() - window.__VELA_HTML_READY) / 1000).toFixed(1)
+          timerEl.textContent = '已耗时 ' + elapsed + 's'
+        }, 200)
+      }
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

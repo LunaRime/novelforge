@@ -4,12 +4,11 @@ import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger } from './utils/logger'
 
-import { fileURLToPath } from 'node:url'
 import path from 'node:path'
 import { exec } from 'node:child_process'
 
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
+// Rolldown CJS 输出中 __dirname 是 Node.js 原生全局变量
+// import.meta.url 在 CJS 中被错误转换为 {}.url，直接使用原生 __dirname 更可靠
 
 // 构建产物目录结构
 process.env.APP_ROOT = path.join(__dirname, '..')
@@ -145,9 +144,13 @@ function createWindow() {
   })
 
   // 通过 session API 设置 Content-Security-Policy（Electron 推荐方式，防御 XSS）
+  // 开发模式下需要 'unsafe-inline' 支持 Vite HMR 注入脚本 + index.html 内联脚本（主题检测/启动计时器）
+  // 生产模式下使用 loadFile (file://)，CSP 不经过 webRequest，此处仅影响 dev 模式
   const cspPolicy = [
     "default-src 'self'",
-    "script-src 'self'",
+    VITE_DEV_SERVER_URL
+      ? "script-src 'self' 'unsafe-inline'"
+      : "script-src 'self'",
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
     "font-src 'self' data:",
