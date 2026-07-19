@@ -3,26 +3,27 @@ import { getProjectDb } from '../database'
 export class LLMHistoryRepository {
   /** 记录一次 LLM 调用 */
   static logCall(call: {
-    modelId: string
-    modelName: string
+    model_id: string
+    model_name: string
     purpose: string
-    promptTokens: number
-    completionTokens: number
-    totalTokens: number
-    durationMs: number
+    prompt_tokens: number
+    completion_tokens: number
+    total_tokens: number
+    duration_ms: number
     success: boolean
-    errorMessage?: string
+    error_message?: string
   }): void {
     const db = getProjectDb()
     if (!db) return
 
+    const modelId = call.model_id || 'unknown'
     db.prepare(`
       INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      call.modelId, call.modelName, call.purpose,
-      call.promptTokens, call.completionTokens, call.totalTokens,
-      call.durationMs, call.success ? 1 : 0, call.errorMessage ?? ''
+      modelId, call.model_name || '', call.purpose,
+      call.prompt_tokens, call.completion_tokens, call.total_tokens,
+      call.duration_ms, call.success ? 1 : 0, call.error_message ?? ''
     )
   }
 

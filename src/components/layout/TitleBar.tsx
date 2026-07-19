@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, PenLine } from 'lucide-react'
+import { useShallow } from 'zustand/shallow'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
@@ -67,7 +68,7 @@ export default function TitleBar() {
     })
   }
   const openSettings = useLayoutStore(s => s.openSettings)
-  const { focusMode, toggleFocusMode } = useLayoutStore(s => ({ focusMode: s.focusMode, toggleFocusMode: s.toggleFocusMode }))
+  const { focusMode, toggleFocusMode } = useLayoutStore(useShallow(s => ({ focusMode: s.focusMode, toggleFocusMode: s.toggleFocusMode })))
 
   // 注册快捷键：缩放 + 专注模式
   useEffect(() => {

@@ -63,9 +63,15 @@ export default function App() {
 
   // 初始化：主题 + LLM 模型 + 最近项目 + 缩放级别
   useEffect(() => {
+    const t0 = performance.now()
     initTheme()
+    console.log(`[Startup] initTheme 完成: ${(performance.now() - t0).toFixed(0)}ms`)
+    const t1 = performance.now()
     initLLM()
+    console.log(`[Startup] initLLM 触发: ${(performance.now() - t1).toFixed(0)}ms`)
+    const t2 = performance.now()
     loadRecentProjects()
+    console.log(`[Startup] loadRecentProjects 触发: ${(performance.now() - t2).toFixed(0)}ms`)
     // 初始化 MCP Store
     useMCPStore.getState().init().catch(e => console.warn('[MCP] 初始化失败:', e))
     // 恢复未完成的工作流 checkpoint

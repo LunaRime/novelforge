@@ -151,14 +151,18 @@ export class OpenAIProvider implements ILLMProvider {
       let fullText = ''
       let isThinking = false
       let failedChunkCount = 0
+      let buffer = '' // 跨 read 边界的行缓冲
 
       const hasMore = true
       while (hasMore) {
         const { done, value } = await reader.read()
         if (done) break
 
-        const text = decoder.decode(value, { stream: true })
-        const lines = text.split('\n').filter((l) => l.startsWith('data: '))
+        buffer += decoder.decode(value, { stream: true })
+        // 按完整行分割，最后一段（可能不完整）留在 buffer 中
+        const parts = buffer.split('\n')
+        buffer = parts.pop() ?? ''
+        const lines = parts.filter((l) => l.startsWith('data: '))
 
         for (const line of lines) {
           const json = line.slice(6).trim()

@@ -357,12 +357,70 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at);
   `)
 
-  // ===== 旧表迁移（仅在新版本时执行） =====
-  ensureSchemaVersion(db)
+  // ===== 旧表迁移 =====
+  // 对于全新数据库（user_version=0），表结构已是最新版本，直接标记为当前版本
+  // 对于旧数据库（user_version<CURRENT_SCHEMA_VERSION），执行增量迁移补加缺失的列/约束
+  const currentVersion = db.pragma('user_version', { simple: true }) as number
+  if (currentVersion === 0) {
+    db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
+    logger.info('DB', `全新数据库，Schema 版本已标记为 v${CURRENT_SCHEMA_VERSION}`)
+  } else {
+    ensureSchemaVersion(db)
+  }
+}
+
+/**
+ * 确保旧版本数据库中所有表都包含当前 schema 所需的列。
+ * CREATE TABLE IF NOT EXISTS 不会修改已存在的表，
+ * 所以需要单独 ALTER TABLE ADD COLUMN 补加缺失的列。
+ */
+function ensureMigrationColumns(db: BetterSqlite3.Database) {
+  // post_process_steps — v1 表，后续版本新增列
+  safeAddColumn(db, 'post_process_steps', 'completed_at', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'post_process_steps', 'last_attempt_at', 'INTEGER DEFAULT 0')
+
+  // post_process_runs — v1 表，后续版本新增 updated_at
+  safeAddColumn(db, 'post_process_runs', 'updated_at', "INTEGER DEFAULT (unixepoch() * 1000)")
+
+  // blueprints — 后续版本新增列
+  safeAddColumn(db, 'blueprints', 'notes_updated_at', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'blueprints', 'sort_order', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'blueprints', 'priority', 'INTEGER DEFAULT 0')
+
+  // contents — v1 新增 updated_at
+  safeAddColumn(db, 'contents', 'updated_at', "INTEGER DEFAULT (unixepoch() * 1000)")
+
+  // project_core — v4 后新增列
+  safeAddColumn(db, 'project_core', 'writing_style', "TEXT DEFAULT ''")
+  safeAddColumn(db, 'project_core', 'reference_works', "TEXT DEFAULT ''")
+
+  logger.info('DB', '迁移列补齐检查完成')
+}
+
+/** 安全地给表添加列（列已存在则跳过） */
+function safeAddColumn(db: BetterSqlite3.Database, table: string, column: string, columnDef: string) {
+  try {
+    const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>
+    if (!cols.some(c => c.name === column)) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${columnDef}`)
+      logger.info('DB', `迁移: ${table}.${column} 列已补加`)
+    }
+  } catch (e) {
+    // 表不存在时静默跳过（后续 createTables 会处理）
+    logger.warn('DB', `补加列 ${table}.${column} 失败（表可能尚不存在）: ${e}`)
+  }
 }
 
 /** 为已存在的旧表补加缺失的列/约束（兼容性迁移） */
 function migrateExistingTables(db: BetterSqlite3.Database) {
+  // 0. 先补齐所有旧表可能缺失的列（后续步骤依赖这些列存在）
+  try {
+    ensureMigrationColumns(db)
+  } catch (e) {
+    logger.error('DB', `补加迁移列失败: ${e}`)
+    throw new Error(`关键迁移步骤失败 (ensure columns): ${e}`)
+  }
+
   // 1. contents 表：补加 updated_at 列
   try {
     const cols = db.pragma('table_info(contents)') as Array<{ name: string }>
@@ -477,7 +535,6 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       { table: 'revisions', cols: ['created_at', 'updated_at'] },
       { table: 'reviews', cols: ['created_at'] },
       { table: 'post_process_runs', cols: ['created_at', 'updated_at'] },
-      { table: 'post_process_steps', cols: ['created_at'] },
       { table: 'llm_calls', cols: ['created_at'] },
       { table: 'summary_snapshots', cols: ['created_at'] },
       { table: 'project_archives', cols: ['updated_at'] },
