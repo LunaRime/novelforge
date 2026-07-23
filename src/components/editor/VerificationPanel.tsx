@@ -9,6 +9,7 @@ import { AlertTriangle, CheckCircle, XCircle, Sparkles, RefreshCw } from 'lucide
 import type { VerificationReport, BlueprintGap } from '../../services/blueprint-verification-service'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
+import { useTranslation } from '../../hooks/useTranslation'
 
 interface VerificationPanelProps {
   report: VerificationReport | null
@@ -34,6 +35,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
   onFillAll,
   onClose,
 }) => {
+  const { t } = useTranslation()
   const [fillingGaps, setFillingGaps] = useState<Set<number>>(new Set())
   const [fillingAll, setFillingAll] = useState(false)
 
@@ -63,7 +65,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-sidebar">
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">蓝图校检</span>
+          <span className="text-sm font-medium">{t('verification.title')}</span>
           {severityConf && (
             <Badge variant="outline" className={`text-xs ${severityConf.color}`}>
               {severityConf.icon}

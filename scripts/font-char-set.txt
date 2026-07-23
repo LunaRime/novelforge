@@ -1,4 +1,4 @@
-# Vela 字体子集化 — 字符集
+# NovelForge 字体子集化 — 字符集
 # 包含：ASCII 可打印字符 + 中文标点 + 5000 最常用汉字
 # 用于 pyftsubset 或 subset-font 工具
 

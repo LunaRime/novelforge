@@ -11,6 +11,7 @@
 import React, { useState, useCallback, useRef, useMemo, useLayoutEffect } from 'react'
 import { Button } from '../ui/Button'
 import './three-way-merge.css'
+import { useTranslation } from '../../hooks/useTranslation'
 
 // ===== 类型定义 =====
 interface Hunk {
@@ -303,6 +304,7 @@ function EditableCell({ text, onChange }: { text: string; onChange: (t: string) 
 export default function ThreeWayMerge({
   originalContent, modifiedContent, onComplete, onCancel,
 }: ThreeWayMergeProps) {
+  const { t } = useTranslation()
   const segments = useMemo(() => computeSegments(originalContent, modifiedContent),
     [originalContent, modifiedContent])
   const hunks = useMemo(() => segments.filter(s => s.type === 'hunk').map(s => s.hunk!), [segments])
@@ -366,18 +368,18 @@ export default function ThreeWayMerge({
   return (
     <div className="three-way-merge">
       <div className="twm-toolbar">
-        <Button variant="ghost" size="sm" onClick={revertAll}>← 全部原稿</Button>
-        <Button variant="ghost" size="sm" onClick={applyAll}>全部修稿 →</Button>
-        <span className="twm-toolbar-progress">已采用 {processedCount}/{hunks.length} 处变更</span>
-        {onCancel && <Button variant="ghost" size="sm" onClick={onCancel}>取消</Button>}
-        <Button variant="success" size="sm" onClick={() => onComplete(buildMergedText())}>完成合并</Button>
+        <Button variant="ghost" size="sm" onClick={revertAll}>{t('merge.revertAll')}</Button>
+        <Button variant="ghost" size="sm" onClick={applyAll}>{t('merge.applyAll')}</Button>
+        <span className="twm-toolbar-progress">{t('merge.progress').replace('{n}', String(processedCount)).replace('{total}', String(hunks.length))}</span>
+        {onCancel && <Button variant="ghost" size="sm" onClick={onCancel}>{t('merge.cancel')}</Button>}
+        <Button variant="success" size="sm" onClick={() => onComplete(buildMergedText())}>{t('merge.complete')}</Button>
       </div>
 
       {/* 固定表头 */}
       <div className="twm-headers">
-        <div className="twm-header">原稿 <span className="twm-tag readonly">只读</span></div>
-        <div className="twm-header">合并结果 <span className="twm-tag editable">可编辑</span></div>
-        <div className="twm-header">修稿 <span className="twm-tag readonly">只读</span></div>
+        <div className="twm-header">{t('merge.original')} <span className="twm-tag readonly">{t('merge.readonly')}</span></div>
+        <div className="twm-header">{t('merge.result')} <span className="twm-tag editable">{t('merge.editable')}</span></div>
+        <div className="twm-header">{t('merge.revised')} <span className="twm-tag readonly">{t('merge.readonly')}</span></div>
       </div>
 
       {/* 单滚动容器 + CSS Grid 自动行高对齐 */}

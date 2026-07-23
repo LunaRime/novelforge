@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import ModelsView from '../components/panels/ModelsView'
 
 const meta = {
-  title: 'Vela Panels/ModelsView',
+  title: 'NovelForge Panels/ModelsView',
   component: ModelsView,
   tags: ['autodocs'],
   parameters: {

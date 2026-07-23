@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 /**
- * Vela Badge 标签组件
+ * NovelForge Badge 标签组件
  *
  * 轻量级标签组件，用于状态标识、分类标注等场景。
  * 支持多种语义变体，自动适配双主题。

@@ -1,5 +1,5 @@
 /**
- * Vela SQLite 数据库服务 — 主进程使用
+ * NovelForge SQLite 数据库服务 — 主进程使用
  *
  * 负责 SQLite 实例的连接、生命周期与建表。
  * 具体业务逻辑由 /repositories 提供。

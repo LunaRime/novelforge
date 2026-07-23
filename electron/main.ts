@@ -253,5 +253,5 @@ app.whenReady().then(() => {
   registerIPCHandlers()
   registerMCPHandlers()
   createWindow()
-  logger.info('Main', 'Vela 启动完成')
+  logger.info('Main', 'NovelForge 启动完成')
 })

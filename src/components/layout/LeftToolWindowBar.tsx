@@ -4,19 +4,20 @@ import {
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 
 /** 左侧侧边栏视图按钮配置（不含 Home，它单独渲染） */
 const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label: string }> = [
-  { id: 'project', icon: FolderOpen, label: '项目结构' },
-  { id: 'knowledge', icon: BookOpen, label: '知识库' },
-  { id: 'characters', icon: Users, label: '角色管理' },
+  { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
+  { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
+  { id: 'characters', icon: Users, label: t('nav.characters') },
 ]
 
 /** 底部面板 Tab 按钮配置 */
 const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
-  { id: 'tasks', icon: Zap, label: '任务' },
-  { id: 'log', icon: ScrollText, label: '日志' },
-  { id: 'models', icon: Cpu, label: '模型调用' },
+  { id: 'tasks', icon: Zap, label: t('panel.tasks') },
+  { id: 'log', icon: ScrollText, label: t('panel.log') },
+  { id: 'models', icon: Cpu, label: t('panel.models') },
 ]
 
 /**
@@ -51,7 +52,7 @@ export default function LeftToolWindowBar() {
         {/* Home 按钮 — 点击切换到主页视图 */}
         <button
           onClick={() => setSidebarView('home')}
-          title="欢迎页"
+          title={t('panel.welcome')}
           className="tool-btn"
           style={{
             height: 30,

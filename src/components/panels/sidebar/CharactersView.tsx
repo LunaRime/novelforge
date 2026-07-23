@@ -8,8 +8,10 @@ import { useCharacterStore, ROLE_LABELS } from '../../../stores/character-store'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { cn } from '../../../lib/utils'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 export default function CharactersView() {
+  const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
@@ -21,11 +23,11 @@ export default function CharactersView() {
 
   if (!currentProject) {
     return (
-      <EmptyState 
-        icon={<Users size={36} />} 
-        message="请先打开项目" 
-        className="pb-[15vh]" 
-        opacity={0.4} 
+      <EmptyState
+        icon={<Users size={36} />}
+        message={t('blueprint.openProjectFirst')}
+        className="pb-[15vh]"
+        opacity={0.4}
       />
     )
   }
@@ -36,13 +38,13 @@ export default function CharactersView() {
       <div className="flex items-center justify-between px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
         <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1">
           <Users size={13} />
-          角色列表 ({characters.length})
+          {t('charList.title')} ({characters.length})
         </span>
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => load()} title="刷新列表">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => load()} title={t('charList.refresh')}>
             <RefreshCw size={14} strokeWidth={2} />
           </Button>
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title="新建角色">
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>
             <Plus size={14} strokeWidth={2} />
           </Button>
         </div>
@@ -60,17 +62,17 @@ export default function CharactersView() {
             )}
             onClick={() => setSelectedName(c.name)}
           >
-            <div className="font-medium">{c.name || '未命名'}</div>
+            <div className="font-medium">{c.name || t('character.unnamed')}</div>
             <div className="text-[0.7rem] mt-0.5 opacity-60">{ROLE_LABELS[c.role]}</div>
             {c.currentState && (
               <div className="text-[0.65rem] mt-0.5 opacity-50">
-                第{c.currentState.updatedAtChapter}章更新
+                {t('charList.updatedAt').replace('{n}', String(c.currentState.updatedAtChapter))}
               </div>
             )}
           </div>
         ))}
         {characters.length === 0 && (
-          <div className="text-center py-6 opacity-30 text-xs">暂无角色</div>
+          <div className="text-center py-6 opacity-30 text-xs">{t('character.empty')}</div>
         )}
       </div>
     </div>

@@ -5,6 +5,7 @@ import { useLayoutStore } from '../../../stores/layout-store'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import { formatRelativeTime } from '../../../utils/time'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 /**
  * 对话区域主组件
@@ -33,6 +34,7 @@ export default function AgentConversation() {
 
 function EmptyState() {
   const { conversations, selectConversation } = useAgentStore()
+  const { t } = useTranslation()
   // 取最近 3 条历史会话（不包含当前空会话）
   const recentConvs = conversations
     .filter(c => c && c.messages.length > 0)
@@ -48,11 +50,24 @@ function EmptyState() {
       >
         {/* 标题 */}
         <div className="mb-1 pl-1 text-base font-semibold" style={{ color: 'var(--color-text)' }}>
-          Vela
+          NovelForge
         </div>
         {/* 副标题 */}
         <div className="mb-3 pl-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          你的 AI 创作助手 — 支持 <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>/</code> 命令和 <code className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>@</code> 引用
+          {(() => {
+            const text = t('agent.subtitle')
+            const parts: React.ReactNode[] = []
+            let last = 0
+            const re = /([/@])/g
+            let m: RegExpExecArray | null
+            while ((m = re.exec(text)) !== null) {
+              if (m.index > last) parts.push(text.slice(last, m.index))
+              parts.push(<code key={m.index} className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>{m[1]}</code>)
+              last = m.index + 1
+            }
+            if (last < text.length) parts.push(text.slice(last))
+            return <>{parts}</>
+          })()}
         </div>
 
         {/* 输入框 */}
@@ -82,7 +97,7 @@ function EmptyState() {
                 onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
                 onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
               >
-                查看全部对话
+                {t('action.loadMore')}
               </button>
             )}
           </div>
@@ -90,7 +105,7 @@ function EmptyState() {
 
         {/* 底部提示 */}
         <div className="pt-8 text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-          AI 生成内容仅供参考，重要信息请自行核实。
+          {t('agent.disclaimer')}
         </div>
       </div>
     </div>
@@ -101,6 +116,7 @@ function EmptyState() {
 
 function ActiveConversation() {
   const { getActiveConversation, generating } = useAgentStore()
+  const { t } = useTranslation()
   const activeConv = getActiveConversation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -164,7 +180,7 @@ function ActiveConversation() {
             border: '1px solid var(--color-border)',
             color: 'var(--color-text-secondary)',
           }}
-          title="回到底部"
+          title={t('tip.scrollBottom')}
           onMouseEnter={e => {
             e.currentTarget.style.borderColor = 'var(--color-accent)'
             e.currentTarget.style.color = 'var(--color-accent)'
@@ -201,6 +217,7 @@ function ActiveConversation() {
  */
 function AgentToolbar() {
   const openRightPanel = useLayoutStore(s => s.openRightPanel)
+  const { t } = useTranslation()
 
   return (
     <div className="flex items-center justify-end mb-1.5">
@@ -213,7 +230,7 @@ function AgentToolbar() {
           color: 'var(--color-text-muted)',
           border: '1px solid var(--color-border)',
         }}
-        title="切换到 AI 输出面板"
+        title={t('tip.switchAIOutput')}
         onMouseEnter={e => {
           e.currentTarget.style.backgroundColor = 'var(--color-hover)'
           e.currentTarget.style.color = 'var(--color-text)'
@@ -226,7 +243,7 @@ function AgentToolbar() {
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
         </svg>
-        AI 工作流
+        {t('agent.aiWorkflow')}
       </button>
     </div>
   )
@@ -236,6 +253,7 @@ function AgentToolbar() {
 
 function AgentHistoryPanel() {
   const { conversations, activeConversationId, selectConversation, deleteConversation, setShowHistory } = useAgentStore()
+  const { t } = useTranslation()
 
   // 按更新时间倒序排列
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
@@ -248,7 +266,7 @@ function AgentHistoryPanel() {
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
         <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          全部对话
+          {t('agent.allConversations')}
         </span>
         <button
           onClick={() => setShowHistory(false)}
@@ -257,7 +275,7 @@ function AgentHistoryPanel() {
           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
-          关闭
+          {t('action.close')}
         </button>
       </div>
 
@@ -265,7 +283,7 @@ function AgentHistoryPanel() {
       <div className="flex-1 overflow-y-auto px-2 py-2">
         {sorted.length === 0 ? (
           <div className="flex items-center justify-center h-24 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            暂无对话记录
+            {t('agent.noConversations')}
           </div>
         ) : (
           sorted.map(conv => (
@@ -299,6 +317,7 @@ function RecentConversationItem({
   onClick: () => void
   onDelete: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <button
       onClick={onClick}
@@ -326,7 +345,7 @@ function RecentConversationItem({
           }}
           className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded opacity-50 hover:opacity-100 transition-opacity"
           style={{ color: 'var(--color-text-secondary)' }}
-          title="删除对话"
+          title={t('agent.deleteConversation')}
         >
           <Trash2 size={12} />
         </button>

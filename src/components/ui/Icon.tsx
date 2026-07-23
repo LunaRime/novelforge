@@ -1,5 +1,5 @@
 /**
- * Vela Icon 组件
+ * NovelForge Icon 组件
  *
  * 统一 lucide-react 图标封装，提供标准化的尺寸系统。
  *

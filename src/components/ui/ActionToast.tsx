@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 /**
- * Vela ActionToast — 带操作按钮的增强通知
+ * NovelForge ActionToast — 带操作按钮的增强通知
  *
  * 用于 AI 工作流完成后弹出带操作按钮的通知（如「打开查看」「忽略」）。
  * 基于独立的 React Portal 渲染，不依赖 Toast.tsx 的容器。

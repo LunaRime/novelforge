@@ -40,7 +40,7 @@ const preview: Preview = {
   globalTypes: {
     theme: {
       name: 'Theme',
-      description: 'Vela theme for preview',
+      description: 'NovelForge theme for preview',
       defaultValue: 'light',
       toolbar: {
         icon: 'circlehollow',

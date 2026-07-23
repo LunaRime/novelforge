@@ -31,9 +31,9 @@ export default function StatusBar() {
     >
       {/* 左侧 */}
       <div className="flex items-center h-full">
-        <StatusBarSegment title="Vela IDE">
+        <StatusBarSegment title="NovelForge IDE">
           <BookOpen size={11} />
-          <span className="font-medium brand-gradient">Vela</span>
+          <span className="font-medium brand-gradient">NovelForge</span>
           <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
         </StatusBarSegment>
 
@@ -49,10 +49,10 @@ export default function StatusBar() {
 
         <StatusBarDivider />
         <StatusBarSegment
-          title="商业合作与赞助支持"
+          title={t('statusbar.sponsor')}
           onClick={openSettings}
         >
-          <span className="font-medium" style={{ color: '#ff4d4f' }}>❤️ 支持作者</span>
+          <span className="font-medium" style={{ color: '#ff4d4f' }}>❤️ {t('statusbar.sponsor')}</span>
         </StatusBarSegment>
 
       </div>
@@ -65,7 +65,7 @@ export default function StatusBar() {
 
         {defaultModel ? (
           <StatusBarSegment
-            title={`当前模型：${defaultModel.name}`}
+            title={`${t('statusbar.currentModel')}: ${defaultModel.name}`}
             onClick={openSettings}
           >
             <Wifi size={11} />
@@ -73,10 +73,10 @@ export default function StatusBar() {
           </StatusBarSegment>
         ) : (
           <StatusBarSegment
-            title="点击配置模型"
+            title={t('statusbar.clickToConfig')}
             onClick={openSettings}
           >
-            <span className="opacity-50">未配置模型</span>
+            <span className="opacity-50">{t('statusbar.noModel')}</span>
           </StatusBarSegment>
         )}
       </div>
@@ -157,7 +157,7 @@ function AITaskCapsule() {
         onClick={() => useLayoutStore.getState().openRightPanel('ai-output')}
       >
         <CheckCircle2 size={10} />
-        <span className="truncate">{completedTitle.replace(/^[^\s]+\s/, '')} 完成</span>
+        <span className="truncate">{completedTitle.replace(/^[^\s]+\s/, '')}{' '}{t('statusbar.done')}</span>
       </div>
     )
   }
@@ -173,14 +173,14 @@ function AITaskCapsule() {
       <div
         className="ai-task-capsule"
         onClick={() => useLayoutStore.getState().openRightPanel('ai-output')}
-        title="点击查看任务进度"
+        title={t('statusbar.clickToViewProgress')}
       >
         {/* 脉冲圆点 */}
         <span
           className="w-[5px] h-[5px] rounded-full animate-pulse flex-shrink-0"
           style={{ backgroundColor: 'var(--color-accent)' }}
         />
-        <span>{activeRuns.length}个任务运行中...</span>
+        <span>{activeRuns.length}{t('statusbar.tasksRunning')}</span>
       </div>
     )
   }
@@ -191,7 +191,7 @@ function AITaskCapsule() {
     <div
       className="ai-task-capsule"
       onClick={() => useLayoutStore.getState().openRightPanel('ai-output')}
-      title="点击查看 AI 输出详情"
+      title={t('statusbar.clickToViewAIDetail')}
     >
       {/* 脉冲圆点 */}
       <span

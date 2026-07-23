@@ -1,5 +1,5 @@
 /**
- * Vela Embedding Service — 统一向量嵌入服务
+ * NovelForge Embedding Service — 统一向量嵌入服务
  *
  * 包装 embedding.ts 的低级 API，提供：
  * 1. 缓存层（LRU）：避免重复嵌入相同文本

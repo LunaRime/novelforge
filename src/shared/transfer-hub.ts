@@ -1,5 +1,5 @@
 /**
- * Vela Transfer Hub — 中枢消息路由模块
+ * NovelForge Transfer Hub — 中枢消息路由模块
  *
  * 功能：
  * 1. 中间件管道：可插拔的消息预处理/后处理链

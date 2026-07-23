@@ -1,5 +1,5 @@
 /**
- * Vela Agent 进度追踪器 — 追踪 Agent 任务的执行进度
+ * NovelForge Agent 进度追踪器 — 追踪 Agent 任务的执行进度
  *
  * 提供：
  * 1. 阶段追踪（思考 / 工具执行 / 生成）

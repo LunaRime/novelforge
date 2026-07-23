@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { Badge } from '../components/ui/Badge'
 
 const meta = {
-  title: 'Vela UI/Badge',
+  title: 'NovelForge UI/Badge',
   component: Badge,
   tags: ['autodocs'],
   argTypes: {
@@ -16,7 +16,7 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: 'Vela badge component for status indicators and labels. Supports 6 semantic variants.',
+        component: 'NovelForge badge component for status indicators and labels. Supports 6 semantic variants.',
       },
     },
   },

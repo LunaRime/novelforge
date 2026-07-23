@@ -1,5 +1,5 @@
 /**
- * Vela Skeleton 骨架屏加载组件
+ * NovelForge Skeleton 骨架屏加载组件
  *
  * 用于面板/列表加载时的占位效果，带呼吸动画。
  * 使用 CSS 变量 --color-skeleton 自动适配深色/浅色主题。

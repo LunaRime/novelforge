@@ -18,7 +18,7 @@ export type GlobalEventType =
   | 'CHARACTER_EXTRACT_FAILED'
   // --- 架构文件单步更新（每步生成完触发） ---
   | 'ARCH_FILE_UPDATED'
-  // --- 定稿完成（替代原 vela:finalize-complete） ---
+  // --- 定稿完成 ---
   | 'FINALIZE_COMPLETE'
   // --- 项目级事件 ---
   | 'PROJECT_CHANGED'

@@ -10,6 +10,7 @@
 
 import { projectStore } from './store-facade'
 import { ipc } from './ipc-client'
+import { t } from '../shared/locale'
 
 import { readPostProcessStatus, getChapterFinalizeScope, getFailedStepLabels } from './workflows/workflow-utils'
 
@@ -30,7 +31,7 @@ export interface GuardResult {
 export function guardArchitectureGeneration(): GuardResult {
   const project = projectStore.currentProject
   if (!project) {
-    return { ok: false, message: '请先打开或新建一个项目。' }
+    return { ok: false, message: t('guard.noProject') }
   }
 
   const { coreOutline, protagonistProfile, worldSetting, genre } = project.novelConfig
@@ -63,7 +64,7 @@ export function guardArchitectureGeneration(): GuardResult {
 export async function guardDirectoryGeneration(): Promise<GuardResult> {
   const project = projectStore.currentProject
   if (!project) {
-    return { ok: false, message: '请先打开或新建一个项目。' }
+    return { ok: false, message: t('guard.noProject') }
   }
 
   const core = await ipc.invoke('db:project-core-get')
@@ -115,7 +116,7 @@ export async function guardDirectoryGeneration(): Promise<GuardResult> {
 export async function guardChapterWriting(targetChapterNumber?: number): Promise<GuardResult> {
   const project = projectStore.currentProject
   if (!project) {
-    return { ok: false, message: '请先打开或新建一个项目。' }
+    return { ok: false, message: t('guard.noProject') }
   }
 
   const blueprints = await ipc.invoke('db:blueprint-get-all')
@@ -173,7 +174,7 @@ export async function guardChapterWriting(targetChapterNumber?: number): Promise
 export async function guardCharacterRegeneration(): Promise<GuardResult> {
   const project = projectStore.currentProject
   if (!project) {
-    return { ok: false, message: '请先打开或新建一个项目。' }
+    return { ok: false, message: t('guard.noProject') }
   }
 
   const blueprints = await ipc.invoke('db:blueprint-get-all')
@@ -197,7 +198,7 @@ export async function guardCharacterRegeneration(): Promise<GuardResult> {
 export async function guardRepairPostProcess(chapterNumber: number): Promise<GuardResult> {
   const project = projectStore.currentProject
   if (!project) {
-    return { ok: false, message: '请先打开或新建一个项目。' }
+    return { ok: false, message: t('guard.noProject') }
   }
 
   // 从数据库获取最大的定稿章节号

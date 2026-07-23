@@ -7,6 +7,7 @@
 import { memo } from 'react'
 import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { useTranslation } from '../../hooks/useTranslation'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
 import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
@@ -64,6 +65,7 @@ function EditorToolbar({
   onOpenRevision,
   onOpenReview,
 }: EditorToolbarProps) {
+  const { t } = useTranslation()
   const status: DraftStatus = meta?.status ?? 'draft'
 
   return (
@@ -77,7 +79,7 @@ function EditorToolbar({
       {/* 左侧：章节标题 + 版本 */}
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-          {meta ? `第 ${meta.chapterNumber} 章 — ${meta.chapterTitle}` : '草稿'}
+          {meta ? t('editor.chapterLabel').replace('{n}', String(meta.chapterNumber)).replace('{title}', meta.chapterTitle ?? '') : t('editor.draft')}
         </span>
         {meta && (
           <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
@@ -149,12 +151,13 @@ function RightActions({
   onOpenRevision: (rev: RevisionEntry) => void
   onOpenReview: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-1.5 flex-shrink-0">
       {/* 字数 */}
       {charCount > 0 && (
         <span className="text-xs tabular-nums mr-1" style={{ color: 'var(--color-text-muted)' }}>
-          {charCount.toLocaleString()} 字
+          {charCount.toLocaleString()} {t('unit.chars')}
         </span>
       )}
 
@@ -163,15 +166,15 @@ function RightActions({
         <span
           className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-0.5"
           style={{ backgroundColor: 'var(--color-warning)' }}
-          title="有未保存的修改"
+          title={t('statusbar.unsaved')}
         />
       )}
 
       {/* 保存按钮 */}
       {isDirty && (
-        <Button variant="outline" size="sm" onClick={onSave} disabled={saving} title="保存（⌘S）">
+        <Button variant="outline" size="sm" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
           <Save size={12} />
-          {saving ? '保存中...' : '保存'}
+          {saving ? t('status.saving') : t('editor.save')}
         </Button>
       )}
 
@@ -191,10 +194,10 @@ function RightActions({
         <Button
           variant="outline" size="sm"
           onClick={() => onOpenRevision(pendingRevisions[0])}
-          title="有待合并的修稿，点击打开三栏合并视图"
+          title={t('tip.pendingMerge')}
         >
           <FileStack size={12} />
-          待合并({pendingRevisions.length})
+          {t('editor.pendingMergeBtn').replace('{n}', String(pendingRevisions.length))}
         </Button>
       )}
 
@@ -203,10 +206,10 @@ function RightActions({
         <Button
           variant="outline" size="sm"
           onClick={onOpenReview}
-          title="查看最新审稿报告"
+          title={t('tip.viewReviewReport')}
         >
           <FileText size={12} />
-          审稿报告({reviewCount})
+          {t('editor.reviewReportBtn').replace('{n}', String(reviewCount))}
         </Button>
       )}
 
@@ -215,10 +218,10 @@ function RightActions({
         variant="ai" size="sm"
         onClick={onRefine}
         disabled={isChapterBusy}
-        title="AI 修稿 — 大神级润色，生成修稿并打开合并视图"
+        title={t('tip.aiPolish')}
       >
         <Sparkles size={12} />
-        AI 修稿
+        {t('editor.aiPolishBtn')}
       </Button>
 
       {/* AI 审稿 */}
@@ -226,10 +229,10 @@ function RightActions({
         variant="ai" size="sm"
         onClick={onReview}
         disabled={isChapterBusy}
-        title="AI 审稿 — 一致性检查，生成审稿报告"
+        title={t('tip.aiReview')}
       >
         <Search size={12} />
-        AI 审稿
+        {t('editor.aiReviewBtn')}
       </Button>
 
       {/* 定稿 */}
@@ -237,10 +240,10 @@ function RightActions({
         variant="success" size="sm"
         onClick={onFinalize}
         disabled={isChapterBusy}
-        title="定稿 — 确认终稿并写入正文章节"
+        title={t('tip.finalize')}
       >
         <BadgeCheck size={12} />
-        定稿
+        {t('editor.finalizeBtn')}
       </Button>
     </div>
   )
@@ -260,25 +263,26 @@ function ReadonlyActions({
   status: DraftStatus
   onRepairFinalize: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-center gap-2 flex-shrink-0">
       {charCount > 0 && (
         <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-          {charCount.toLocaleString()} 字
+          {charCount.toLocaleString()} {t('unit.chars')}
         </span>
       )}
       <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        {status === 'finalized' ? '已定稿（只读）' : '已归档（只读）'}
+        {status === 'finalized' ? t('status.readOnly') : t('status.archived')}
       </span>
       {status === 'finalized' && hasProcessFailure && (
         <Button
           variant="outline" size="sm"
           onClick={onRepairFinalize}
           disabled={isChapterBusy}
-          title="重新执行失败的后处理步骤（角色卡、知识库等）"
+          title={t('tip.retryPostProcess')}
         >
           <Wrench size={11} />
-          修复定稿
+          {t('editor.repairBtn')}
         </Button>
       )}
     </div>

@@ -9,6 +9,7 @@ import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import InlineAIToolbar from './InlineAIToolbar'
+import { useTranslation } from '../../hooks/useTranslation'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -28,13 +29,24 @@ export type CodeMirrorEditorProps = {
 }
 
 /** AI 段落改写操作 — 接入 RefineParagraphsCommand 的 5 种模式 */
-const AI_ACTIONS = [
-  { key: 'polish',  label: '润色', color: 'text-blue-400',   prompt: '润色选中段落，修正语病、优化措辞、提升流畅度。不改变情节和字数。' },
-  { key: 'expand',  label: '扩写', color: 'text-amber-400',  prompt: '扩写选中段落，增加细节描写和感官体验。保持原有情节不变。' },
-  { key: 'shrink',  label: '缩写', color: 'text-purple-400', prompt: '精简选中段落，删除冗余修饰。保留核心情节和关键对话。' },
-  { key: 'style',   label: '文风', color: 'text-emerald-400',prompt: '改变选中段落的表达风格。保持情节不变，改变叙述方式。' },
-  { key: 'conflict',label: '冲突', color: 'text-rose-400',   prompt: '增强选中段落的冲突感和张力。加入内心挣扎、外部压力或反转。' },
-]
+const AI_ACTION_KEYS = ['polish', 'expand', 'shrink', 'style', 'conflict'] as const
+
+function getAIActions(t: (key: string) => string) {
+  const labelKeys: Record<string, string> = {
+    polish: 'ai.polish', expand: 'ai.expand', shrink: 'ai.shrink', style: 'ai.style', conflict: 'ai.conflict',
+  }
+  const prompts: Record<string, string> = {
+    polish: '润色选中段落，修正语病、优化措辞、提升流畅度。不改变情节和字数。',
+    expand: '扩写选中段落，增加细节描写和感官体验。保持原有情节不变。',
+    shrink: '精简选中段落，删除冗余修饰。保留核心情节和关键对话。',
+    style: '改变选中段落的表达风格。保持情节不变，改变叙述方式。',
+    conflict: '增强选中段落的冲突感和张力。加入内心挣扎、外部压力或反转。',
+  }
+  const colors: Record<string, string> = {
+    polish: 'text-blue-400', expand: 'text-amber-400', shrink: 'text-purple-400', style: 'text-emerald-400', conflict: 'text-rose-400',
+  }
+  return AI_ACTION_KEYS.map(k => ({ key: k, label: t(labelKeys[k]), color: colors[k], prompt: prompts[k] }))
+}
 
 export default function CodeMirrorEditor({
   content,
@@ -45,6 +57,8 @@ export default function CodeMirrorEditor({
   onCharCountChange,
   mode = 'document',
 }: CodeMirrorEditorProps) {
+  const { t } = useTranslation()
+  const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t])
   const editorRef = useRef<ReactCodeMirrorRef>(null)
 
   // 避免状态回路
@@ -223,26 +237,26 @@ export default function CodeMirrorEditor({
       ]),
       // 汉化 Search / UI 文本（涵盖官方大小写所有变种）
       EditorState.phrases.of({
-        "Find": "查找",
-        "find": "查找",
-        "Replace": "替换",
-        "replace": "替换",
-        "Replace all": "全部替换",
-        "replace all": "全部替换",
-        "Next": "下一个",
-        "next": "下一个",
-        "Previous": "上一个",
-        "previous": "上一个",
-        "All": "全部选中",
-        "all": "全部选中",
-        "Match case": "区分大小写",
-        "match case": "区分大小写",
-        "Regexp": "正则表达式",
-        "regexp": "正则表达式",
-        "by word": "全词匹配",
-        "By word": "全词匹配",
-        "Close": "关闭",
-        "close": "关闭"
+        "Find": "Find",
+        "find": "Find",
+        "Replace": "Replace",
+        "replace": "Replace",
+        "Replace all": "Replace All",
+        "replace all": "Replace All",
+        "Next": "Next",
+        "next": "Next",
+        "Previous": "Previous",
+        "previous": "Previous",
+        "All": "All",
+        "all": "All",
+        "Match case": "Match Case",
+        "match case": "Match Case",
+        "Regexp": "Regexp",
+        "regexp": "Regexp",
+        "by word": "By Word",
+        "By word": "By Word",
+        "Close": "Close",
+        "close": "Close"
       })
     ]
     if (mode === 'document') {
@@ -261,12 +275,12 @@ export default function CodeMirrorEditor({
       const { useLLMStore } = await import('../../stores/llm-store')
 
       // 初始化流式内容
-      setActiveAIAction(AI_ACTIONS.find(a => a.key === _actionKey)?.label || 'AI')
+      setActiveAIAction(aiActions.find(a => a.key === _actionKey)?.label || 'AI')
       setAiResult('')
 
       await useLLMStore.getState().generateStream(
         [
-          { role: 'system', content: '你是一个专业的小说编辑，请根据要求对文本进行处理，只返回处理后的文本，不要有任何解释。' },
+          { role: 'system', content: t('ai.systemPrompt') },
           { role: 'user', content: `要求：${prompt}\n\n文本：\n${selectedText}` },
         ],
         {
@@ -389,7 +403,7 @@ export default function CodeMirrorEditor({
             selectionRange?.from ?? 0,
             selectionRange?.to ?? 0,
           )}
-          actions={AI_ACTIONS.map(a => ({
+          actions={aiActions.map(a => ({
             key: a.key,
             label: a.label,
             icon: '✨',
@@ -443,7 +457,7 @@ export default function CodeMirrorEditor({
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                   onClick={handleRejectAI}
-                >取消</button>
+                >{t('editor.cancel')}</button>
                 <button
                   className="px-2.5 py-1 text-xs rounded-md font-medium transition-colors"
                   style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
@@ -451,7 +465,7 @@ export default function CodeMirrorEditor({
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                   disabled={aiResult === ''}
                   onClick={handleAcceptAI}
-                >✓ 替换</button>
+                >{t('editor.replace')}</button>
               </div>
             </div>
           ) : (
@@ -513,7 +527,7 @@ export default function CodeMirrorEditor({
               >
                 <Sparkles size={11} />AI
               </div>
-              {AI_ACTIONS.map(action => (
+              {aiActions.map(action => (
                 <button
                   key={action.key}
                   className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}

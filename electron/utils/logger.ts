@@ -1,5 +1,5 @@
 /**
- * Vela 日志模块 — 主进程使用
+ * NovelForge 日志模块 — 主进程使用
  *
  * 功能：
  * - 自动按日切割日志文件，存储于 ~/.vela/logs/vela-YYYY-MM-DD.log

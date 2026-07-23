@@ -3,7 +3,7 @@ import type { Meta, StoryObj } from '@storybook/react'
 import { Button } from '../components/ui/Button'
 
 const meta = {
-  title: 'Vela UI/Button',
+  title: 'NovelForge UI/Button',
   component: Button,
   tags: ['autodocs'],
   argTypes: {
@@ -25,7 +25,7 @@ const meta = {
   parameters: {
     docs: {
       description: {
-        component: 'Vela button component with CVA variants. Supports 6 visual variants and 4 sizes.',
+        component: 'NovelForge button component with CVA variants. Supports 6 visual variants and 4 sizes.',
       },
     },
   },

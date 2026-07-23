@@ -5,6 +5,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
+import { useTranslation } from '../../hooks/useTranslation'
 import {
   getChapters, getChapterVersions, getVersionContent, getChapterLatestContent, revertToVersion,
   type VersionRecord,
@@ -20,6 +21,7 @@ interface ChapterMeta {
 
 /** 版本历史面板 — 查看章节版本并与当前内容对比 */
 export default function VersionHistory() {
+  const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const [chapters, setChapters] = useState<ChapterMeta[]>([])
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null)
@@ -217,7 +219,7 @@ export default function VersionHistory() {
         ) : (
           <div className="flex flex-col items-center justify-center h-full gap-3 opacity-30">
             <History size={36} />
-            <span className="text-sm">选择一个章节</span>
+            <span className="text-sm">{t('version.selectChapter')}</span>
           </div>
         )}
       </div>

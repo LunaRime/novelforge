@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Save, RefreshCw, Sparkles, Loader2, AlertTriangle, FileText } from 'lucide-react'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
+import { useTranslation } from '../../hooks/useTranslation'
 
 import { useEditorStore } from '../../stores/editor-store'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
@@ -16,12 +17,20 @@ import { globalEventBus } from '../../shared/event-bus'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
-/** 与 Sidebar / WorldBuildingEditor 保持一致的架构文件元信息 */
-const ARCH_META: Record<ArchStepKey, { iconName: string; label: string; desc: string }> = {
-  premise: { iconName: 'target', label: '故事前提', desc: 'Logline、核心冲突、金手指定位' },
-  characters: { iconName: 'users', label: '角色图谱', desc: '角色弧光、关系网、矛盾交织' },
-  worldbuilding: { iconName: 'globe', label: '世界观', desc: '核心规则、阶层断层、深层危机' },
-  synopsis: { iconName: 'map', label: '情节大纲', desc: '三幕式情节骨架' },
+/** 与 Sidebar / WorldBuildingEditor 保持一致的架构文件元信息（i18n key 引用） */
+const ARCH_META_KEYS: Record<ArchStepKey, { iconName: string; labelKey: string; descKey: string }> = {
+  premise: { iconName: 'target', labelKey: 'arch.premise', descKey: 'arch.premiseDesc' },
+  characters: { iconName: 'users', labelKey: 'arch.characters', descKey: 'arch.charactersDesc' },
+  worldbuilding: { iconName: 'globe', labelKey: 'arch.worldbuilding', descKey: 'arch.worldbuildingDesc' },
+  synopsis: { iconName: 'map', labelKey: 'arch.synopsis', descKey: 'arch.synopsisDesc' },
+}
+
+function useArchMeta(stepKey: ArchStepKey | null) {
+  const { t } = useTranslation()
+  if (!stepKey) return null
+  const keys = ARCH_META_KEYS[stepKey]
+  if (!keys) return null
+  return { iconName: keys.iconName, label: t(keys.labelKey as never), desc: t(keys.descKey as never) }
 }
 
 /** 从文件路径推断出 ArchStepKey */
@@ -44,8 +53,9 @@ interface Props {
  * - 脏状态通过比较内容字符串判断，不依赖 onChange 时机
  */
 export default function ArchFileViewer({ filePath, content: initialContent }: Props) {
+  const { t } = useTranslation()
   const stepKey = detectStepKey(filePath)
-  const meta = stepKey ? ARCH_META[stepKey] : null
+  const meta = useArchMeta(stepKey)
 
   // 磁盘上的内容（已保存的基准）
   const savedContentRef = useRef(initialContent)
@@ -219,7 +229,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>{meta ? renderIcon(meta.iconName, 14) : <FileText size={14} />}</span>
           <span className="text-xs font-medium flex-shrink-0" style={{ color: 'var(--color-text-secondary)' }}>
-            {meta?.label ?? '架构文档'}
+            {meta?.label ?? t('arch.document')}
           </span>
           {meta && (
             <span className="text-xs truncate hidden sm:inline" style={{ color: 'var(--color-text-muted)' }}>
@@ -240,10 +250,10 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
 
           {/* 保存状态 */}
           {saving && (
-            <span className="text-xs" style={{ color: 'var(--color-accent)' }}>保存中...</span>
+            <span className="text-xs" style={{ color: 'var(--color-accent)' }}>{t('editor.saving')}</span>
           )}
           {isDirty && !saving && (
-            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--color-warning)' }} title="有未保存的修改" />
+            <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ backgroundColor: 'var(--color-warning)' }} title={t('arch.unsavedChanges')} />
           )}
 
           {/* 刷新按钮 */}
@@ -251,7 +261,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
             variant="ghost"
             size="icon"
             onClick={handleReload}
-            title="从磁盘重新加载（AI 生成完成后可点击刷新）"
+            title={t('arch.reloadFromDisk')}
             disabled={loading}
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
@@ -264,7 +274,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               size="sm"
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
-              title="保存（Cmd+S）"
+              title={t('arch.save')}
             >
               <Save size={12} />
               保存
@@ -278,13 +288,13 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               disabled={extracting}
               onClick={handleExtractCharacters}
               className="gap-1.5 bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm hover:from-red-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
-              title="角色档案为空，可能是因为上一次生成失败或被删除。点击重新提取"
+              title={t('arch.charExtractFailed')}
             >
               {extracting
                 ? <RefreshCw size={12} className="animate-spin opacity-90" />
                 : <AlertTriangle size={12} className="opacity-90" />
               }
-              {extracting ? '提取中...' : '提取角色卡'}
+              {extracting ? t('arch.extracting') : t('arch.extractChars')}
             </Button>
           )}
 
@@ -298,7 +308,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               title={`AI ${generated ? '重新生成' : '生成'}「${meta?.label}」`}
             >
               {checkingArch ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {generated ? 'AI 重新生成' : 'AI 生成'}
+              {generated ? t('arch.aiRegenerate') : t('arch.aiGenerate')}
             </Button>
           )}
         </div>
@@ -314,7 +324,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
           onSave={handleSave}
           onCharCountChange={setCharCount}
           hideStatusBar
-          placeholder="尚未生成内容，点击右上角「AI 生成」或直接在此编辑..."
+          placeholder={t('arch.emptyHint')}
         />
       </div>
 

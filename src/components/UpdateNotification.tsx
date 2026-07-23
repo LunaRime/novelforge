@@ -9,8 +9,10 @@ import { useEffect, useState } from 'react'
 import { Download, CheckCircle2, AlertCircle, X, RefreshCw, ExternalLink, Loader2 } from 'lucide-react'
 import { useUpdateStore } from '../stores/update-store'
 import type { UpdateProgressInfo } from '../shared/ipc-channels'
+import { useTranslation } from '../hooks/useTranslation'
 
 export default function UpdateNotification() {
+  const { t } = useTranslation()
   const {
     status, updateInfo, downloadProgress, error,
     checkForUpdates, downloadUpdate, installUpdate,
@@ -82,15 +84,15 @@ export default function UpdateNotification() {
       <UpdateBanner variant="error" onDismiss={() => setDismissed(true)}>
         <AlertCircle size={14} className="flex-shrink-0" />
         <span className="flex-1">
-          更新检查失败：{error || '未知错误'}
+          {t('update.checkFailed')}{error || t('status.unknown')}
         </span>
         <UpdateButton onClick={handleCheck} disabled={isChecking}>
           <RefreshCw size={12} className={isChecking ? 'animate-spin' : ''} />
-          重试
+          {t('action.retry')}
         </UpdateButton>
         <UpdateButton onClick={openReleasesPage} variant="ghost">
           <ExternalLink size={12} />
-          手动下载
+          {t('action.download')}
         </UpdateButton>
       </UpdateBanner>
     )
@@ -101,7 +103,7 @@ export default function UpdateNotification() {
     return (
       <UpdateBanner variant="info">
         <Loader2 size={14} className="animate-spin flex-shrink-0" />
-        <span>正在检查更新...</span>
+        <span>{t('status.checking')}</span>
       </UpdateBanner>
     )
   }
@@ -112,7 +114,7 @@ export default function UpdateNotification() {
       <UpdateBanner variant="info" onDismiss={() => setDismissed(true)}>
         <Download size={14} className="flex-shrink-0" />
         <span className="flex-1">
-          🎉 发现新版本 <strong>{updateInfo.version}</strong>
+          🎉 {t('update.newVersion')} <strong>{updateInfo.version}</strong>
           {updateInfo.releaseDate && (
             <span className="opacity-60 ml-1">({updateInfo.releaseDate})</span>
           )}
@@ -123,11 +125,11 @@ export default function UpdateNotification() {
           ) : (
             <Download size={12} />
           )}
-          {isDownloading ? '下载中...' : '立即更新'}
+          {isDownloading ? t('status.downloadingBtn') : t('update.installing')}
         </UpdateButton>
         <UpdateButton onClick={openReleasesPage} variant="ghost">
           <ExternalLink size={12} />
-          详情
+          {t('action.details')}
         </UpdateButton>
       </UpdateBanner>
     )
@@ -139,7 +141,7 @@ export default function UpdateNotification() {
       <UpdateBanner variant="info">
         <Loader2 size={14} className="animate-spin flex-shrink-0" />
         <span className="flex-1">
-          正在下载更新... {downloadProgress ? `${Math.round(downloadProgress.percent)}%` : ''}
+          {t('status.downloading')} {downloadProgress ? `${Math.round(downloadProgress.percent)}%` : ''}
         </span>
         {downloadProgress && <DownloadProgressBar progress={downloadProgress} />}
       </UpdateBanner>
@@ -152,11 +154,11 @@ export default function UpdateNotification() {
       <UpdateBanner variant="success">
         <CheckCircle2 size={14} className="flex-shrink-0" />
         <span className="flex-1">
-          ✅ 更新已下载完成！重启应用以安装新版本。
+          ✅ {t('update.downloaded')}
         </span>
         <UpdateButton onClick={handleInstall} variant="primary">
           <RefreshCw size={12} />
-          立即重启
+          {t('action.restart')}
         </UpdateButton>
       </UpdateBanner>
     )

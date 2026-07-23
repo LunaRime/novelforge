@@ -8,6 +8,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ipc } from '../../services/ipc-client'
+import { useTranslation } from '../../hooks/useTranslation'
 import {
   loadDirectoryBlueprints,
   saveChapterBlueprint,
@@ -42,6 +43,7 @@ const ROLE_COLORS: Record<string, string> = {
 
 /** 章节蓝图编辑器 — 读写 directory.json */
 export default function ChapterCardEditor() {
+  const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
   const startWorkflow = useWorkflowStore.getState().startWorkflow
@@ -254,7 +256,7 @@ export default function ChapterCardEditor() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40">
         <BookOpen size={36} />
-        <span className="text-sm">请先打开项目</span>
+        <span className="text-sm">{t('blueprint.openProjectFirst')}</span>
       </div>
     )
   }
@@ -276,7 +278,7 @@ export default function ChapterCardEditor() {
               </span>
             )}
           </span>
-          {dirty && <span className="text-[0.7rem]" style={{ color: 'var(--color-accent)' }}>● 未保存</span>}
+          {dirty && <span className="text-[0.7rem]" style={{ color: 'var(--color-accent)' }}>{t('blueprint.unsaved')}</span>}
         </div>
         <div className="flex items-center gap-1">
           {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
@@ -334,7 +336,7 @@ export default function ChapterCardEditor() {
           {blueprints.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 opacity-40 p-4">
               <BookOpen size={28} />
-              <span className="text-xs text-center">暂无蓝图，点击「AI 生成」开始</span>
+              <span className="text-xs text-center">{t('blueprint.emptyHint')}</span>
             </div>
           ) : (
           <div className="flex-1 overflow-y-auto p-1">
@@ -353,7 +355,7 @@ export default function ChapterCardEditor() {
                   <span className="font-mono text-[0.7rem] opacity-40 flex-shrink-0">
                     {bp.chapterNumber}
                   </span>
-                  <span className="font-medium truncate flex-1">{bp.title || '未命名'}</span>
+                  <span className="font-medium truncate flex-1">{bp.title || t('character.unnamed')}</span>
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className={cn(
@@ -421,7 +423,7 @@ export default function ChapterCardEditor() {
                 {/* 基本信息 */}
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <Label>章节号</Label>
+                    <Label>{t('blueprint.chapterNumber')}</Label>
                     <Input
                       type="number"
                       value={selected.chapterNumber === 0 ? '' : selected.chapterNumber}
@@ -442,7 +444,7 @@ export default function ChapterCardEditor() {
                     />
                   </div>
                   <div className="col-span-2">
-                    <Label>章节标题</Label>
+                    <Label>{t('blueprint.chapterTitle')}</Label>
                     <Input
                       value={selected.title}
                       onChange={e => updateField('title', e.target.value)}
@@ -453,13 +455,13 @@ export default function ChapterCardEditor() {
 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <Label>章节定位</Label>
+                    <Label>{t('blueprint.chapterPosition')}</Label>
                     <NativeSelect value={selected.role} onChange={e => updateField('role', e.target.value)}>
                       {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
                     </NativeSelect>
                   </div>
                   <div>
-                    <Label>出场关键人（逗号分隔）</Label>
+                    <Label>{t('blueprint.keyCharacters')}</Label>
                     <Input
                       value={selected.characters.join('、')}
                       onChange={e => updateField('characters', e.target.value.split(/[,，、\s]+/).filter(Boolean))}
@@ -469,7 +471,7 @@ export default function ChapterCardEditor() {
                 </div>
 
                 <div>
-                  <Label>主角小目标（本章最想解决的事）</Label>
+                  <Label>{t('blueprint.mcGoal')}</Label>
                   <Textarea
                     value={selected.purpose}
                     onChange={e => updateField('purpose', e.target.value)}
@@ -479,7 +481,7 @@ export default function ChapterCardEditor() {
                 </div>
 
                 <div>
-                  <Label>实质冲突与转折</Label>
+                  <Label>{t('blueprint.conflict')}</Label>
                   <Textarea
                     value={selected.keyEvents}
                     onChange={e => updateField('keyEvents', e.target.value)}
@@ -489,7 +491,7 @@ export default function ChapterCardEditor() {
                 </div>
 
                 <div>
-                  <Label>末尾悬念钩子</Label>
+                  <Label>{t('blueprint.cliffhanger')}</Label>
                   <Textarea
                     value={selected.suspenseHook}
                     onChange={e => updateField('suspenseHook', e.target.value)}
@@ -507,7 +509,7 @@ export default function ChapterCardEditor() {
                   }}
                 >
                   <Label className="flex items-center gap-1.5">
-                    <span>作者微操指导</span>
+                    <span>{t('blueprint.authorGuidance')}</span>
                     <span
                       className="text-[0.7rem] font-normal"
                       style={{ color: 'var(--color-text-muted)' }}
@@ -532,7 +534,7 @@ export default function ChapterCardEditor() {
                   }}
                 >
                   <Label className="flex items-center gap-1.5">
-                    <span>章节要点</span>
+                    <span>{t('blueprint.keyPoints')}</span>
                     <span
                       className="text-[0.7rem] font-normal"
                       style={{ color: 'var(--color-text-muted)' }}
@@ -555,7 +557,7 @@ export default function ChapterCardEditor() {
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 opacity-30">
               <BookOpen size={36} />
-              <span className="text-sm">在左侧选择一章开始编辑</span>
+              <span className="text-sm">{t('blueprint.selectChapter')}</span>
             </div>
           )}
         </div>

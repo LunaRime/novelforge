@@ -11,6 +11,7 @@ import {
   FileText, MessageCircle, RefreshCw, GitCompare,
 } from 'lucide-react'
 import type { ContextMenuEntry } from '../../ui/ContextMenu'
+import type { TextKey } from '../../../shared/locale'
 
 // ===== 右键菜单状态管理 =====
 
@@ -112,6 +113,16 @@ export const ARCH_FILES: ArchFile[] = [
   { key: 'worldbuilding', fileName: 'worldbuilding.md', label: '世界观', iconName: 'globe', desc: '核心规则、阶层断层、深层危机' },
   { key: 'synopsis', fileName: 'synopsis.md', label: '情节大纲', iconName: 'map', desc: '三幕式情节骨架' },
 ]
+
+/** 返回翻译后的架构文件列表（保留原 ARCH_FILES 作为未翻译 fallback） */
+export function getArchFiles(t: (key: TextKey) => string): ArchFile[] {
+  return [
+    { key: 'premise', fileName: 'premise.md', label: t('arch.storyPremise') || ARCH_FILES[0].label, iconName: 'target', desc: t('arch.storyPremiseDesc') || ARCH_FILES[0].desc },
+    { key: 'characters', fileName: 'characters.md', label: t('arch.characterMap') || ARCH_FILES[1].label, iconName: 'users', desc: t('arch.characterMapDesc') || ARCH_FILES[1].desc },
+    { key: 'worldbuilding', fileName: 'worldbuilding.md', label: t('arch.worldBuilding') || ARCH_FILES[2].label, iconName: 'globe', desc: t('arch.worldBuildingDesc') || ARCH_FILES[2].desc },
+    { key: 'synopsis', fileName: 'synopsis.md', label: t('arch.plotOutline') || ARCH_FILES[3].label, iconName: 'map', desc: t('arch.plotOutlineDesc') || ARCH_FILES[3].desc },
+  ]
+}
 
 /** iconName → Lucide 图标组件映射 */
 const ICON_MAP: Record<string, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {

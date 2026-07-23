@@ -1,6 +1,7 @@
 import type { WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
 import { VELA } from '../vela-protocol'
+import { t } from '../../shared/locale'
 
 import type { DraftStatus } from '../../shared/draft-status'
 
@@ -117,11 +118,11 @@ export async function updateDraftStatus(filePath: string, newStatus: DraftStatus
 export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: `✍️ 写稿 — 第 ${chapterInfo.chapterNumber} 章 · ${chapterInfo.title}`,
+    title: '✍️ ' + t('workflow.writeTitle').replace('{n}', String(chapterInfo.chapterNumber)).replace('{title}', chapterInfo.title),
     steps: [
       {
-        name: '写稿',
-        description: '基于架构 + 蓝图 + 上下文调用 Command 生成草稿',
+        name: t('workflow.write'),
+        description: t('workflow.writeDesc'),
         executor: async (step, context, callbacks) => {
           const { GenerateDraftCommand } = await import('./commands/generate-draft.command')
           const cmd = new GenerateDraftCommand(chapterInfo)
@@ -136,11 +137,11 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
 export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: `🔧 修稿 — 第${params.chapterNumber}章 ${params.chapterTitle}`,
+    title: '🔧 ' + t('workflow.polishTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
-        name: '修稿',
-        description: '将草稿提升到大神级质量，保存修稿并打开合并视图',
+        name: t('workflow.polish'),
+        description: t('workflow.polishDesc'),
         executor: async (step, context, callbacks) => {
           const { RefineDraftCommand } = await import('./commands/refine-draft.command')
           const cmd = new RefineDraftCommand({
@@ -161,11 +162,11 @@ export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefi
 export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: `🔧 审稿修复 — 第${params.chapterNumber}章 ${params.chapterTitle}`,
+    title: '🔧 ' + t('workflow.reviewFixTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
-        name: '审稿驱动修稿',
-        description: '根据审稿报告精准修复问题调用 Command',
+        name: t('workflow.reviewFix'),
+        description: t('workflow.reviewFixDesc'),
         executor: async (step, context, callbacks) => {
           const { RefineFromReviewCommand } = await import('./commands/refine-from-review.command')
           const cmd = new RefineFromReviewCommand({
@@ -187,11 +188,11 @@ export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): 
 export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: `🔍 审稿 — 第${params.chapterNumber}章 ${params.chapterTitle}`,
+    title: '🔍 ' + t('workflow.reviewTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
-        name: '审稿',
-        description: '一致性检查（角色/剧情/世界观），生成审稿报告',
+        name: t('workflow.review'),
+        description: t('workflow.reviewDesc'),
         executor: async (step, context, callbacks) => {
           const { ReviewChapterCommand } = await import('./commands/review-chapter.command')
           const cmd = new ReviewChapterCommand({
@@ -212,10 +213,10 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
   const chapterInfo = { chapterNumber: params.chapterNumber, title: params.chapterTitle, role: '', purpose: '', characters: [], keyEvents: '' }
   return {
     type: 'chapter_creation',
-    title: `✅ 定稿 — 第${params.chapterNumber}章 ${params.chapterTitle}`,
+    title: '✅ ' + t('workflow.finalizeTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
-        name: '定稿',
+        name: t('workflow.finalize'),
         description: '写入 manuscript/，开启后处理 Command 更新三路大纲',
         executor: async (step, context, callbacks) => {
           const { FinalizeChapterCommand } = await import('./commands/finalize-chapter.command')
@@ -268,11 +269,11 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
 export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: `🔧 修复后处理 — 第${chapterNumber}章`,
+    title: '🔧 ' + t('workflow.repairTitle').replace('{n}', String(chapterNumber)),
     steps: [
       {
-        name: '重跑失败步骤',
-        description: '仅重新执行失败的后处理步骤（章节要点/角色卡更新等）',
+        name: t('workflow.repair'),
+        description: t('workflow.repairDesc'),
         executor: async (_step, _context, callbacks) => {
           const { useProjectStore } = await import('../../stores/project-store')
           const { ipc } = await import('../ipc-client')

@@ -25,6 +25,7 @@ import { useLayoutStore } from '../../stores/layout-store'
 
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
+import { useTranslation } from '../../hooks/useTranslation'
 
 import { clearChapterTitleCache } from './Sidebar'
 import '../editor/novel-editor.css'
@@ -37,6 +38,7 @@ function ProseEditorWrapper({
   tab: EditorTab
   onSave: (text: string) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [wordCount, setWordCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const fileName = tab.name
@@ -71,7 +73,7 @@ function ProseEditorWrapper({
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {wordCount > 0 && (
             <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-              {wordCount.toLocaleString()} 字
+              {wordCount.toLocaleString()} {t('unit.chars')}
             </span>
           )}
           {/* 未保存圆点指示灯 */}
@@ -79,7 +81,7 @@ function ProseEditorWrapper({
             <span
               className="w-1.5 h-1.5 rounded-full"
               style={{ backgroundColor: 'var(--color-warning)' }}
-              title="有未保存的修改"
+              title={t('statusbar.unsaved')}
             />
           )}
           {/* 保存按钮（有改动时显示） */}
@@ -89,7 +91,7 @@ function ProseEditorWrapper({
               style={{ width: 24, height: 22 }}
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
-              title="保存（⌘S）"
+              title={t('tip.saveShortcut')}
             >
               <Save size={13} strokeWidth={1.5} />
             </button>
@@ -125,6 +127,7 @@ interface EditorAreaProps {
 
 /** 中间主编辑区 */
 export default function EditorArea({ onNewProject }: EditorAreaProps) {
+  const { t } = useTranslation()
   const currentProject = useProjectStore((s) => s.currentProject)
   const tabs = useEditorStore(s => s.tabs)
   const activeTabId = useEditorStore(s => s.activeTabId)
@@ -146,7 +149,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       // 从 store 直接取最新值，避免闭包陈旧
       const latestTabs = useEditorStore.getState().tabs
       if (latestTabs.length === 0) {
-        openFile({ id: 'config', name: '小说配置', type: 'config' })
+        openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -259,14 +262,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       return [
         {
           key: 'close',
-          label: '关闭',
+          label: t('action.close'),
           shortcut: '⌘W',
           disabled: tab?.pinned,
           onClick: () => tryCloseTab(tabId),
         },
         {
           key: 'close-others',
-          label: '关闭其他',
+          label: t('editor.closeOther'),
           disabled: !hasOthers || tab?.pinned,
           onClick: () => {
             const others = tabs
@@ -277,7 +280,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         },
         {
           key: 'close-right',
-          label: '关闭右侧所有',
+          label: t('editor.closeRight'),
           disabled: !hasRight,
           onClick: () => {
             const right = tabs
@@ -290,7 +293,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         { key: 'div1', type: 'divider' as const },
         {
           key: 'close-all',
-          label: '关闭所有',
+          label: t('editor.closeAll'),
           danger: true,
           onClick: () => {
             const all = tabs.filter(t => !t.pinned).map(t => t.id)
@@ -437,7 +440,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           <div className="text-center opacity-40">
             <PenTool size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5, display: 'block', margin: '0 auto 12px' }} />
             <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              在左侧项目树中单击文件开始编辑
+              {t('editor.noProject')}
             </span>
           </div>
         </div>
@@ -523,7 +526,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                 <span
                   className="relative w-3.5 h-3.5 flex items-center justify-center ml-0.5 flex-shrink-0 rounded group/close hover:bg-[var(--color-hover)] cursor-pointer transition-colors"
                   onClick={e => { e.stopPropagation(); tryCloseTab(tab.id) }}
-                  title="有未保存的修改，点击关闭"
+                  title={t('tip.closeWithoutSaving')}
                 >
                   {/* 默认显示实心圆点，颜色与标题栏警示灯一致 */}
                   <span
@@ -556,21 +559,21 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           <button
             className="icon-btn flex-shrink-0"
             onClick={() => switchTab('left')}
-            title="上一个编辑器"
+            title={t('tip.prevEditor')}
           >
             <ChevronLeft size={14} />
           </button>
           <button
             className="icon-btn flex-shrink-0"
             onClick={() => switchTab('right')}
-            title="下一个编辑器"
+            title={t('tip.nextEditor')}
           >
             <ChevronRight size={14} />
           </button>
           <button
             ref={moreButtonRef}
             className="icon-btn flex-shrink-0"
-            title="已打开的编辑器"
+            title={t('tip.openEditors')}
             onClick={() => setMoreMenuOpen(prev => !prev)}
           >
             <MoreHorizontal size={14} />
@@ -615,7 +618,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
               className="text-sm whitespace-pre-wrap font-mono leading-6"
               style={{ color: 'var(--color-text)' }}
             >
-              {activeTab.content || '加载中...'}
+              {activeTab.content || t('status.loading')}
             </pre>
           </div>
         )}
@@ -669,7 +672,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           >
             <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
               <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
-                修稿合并 — {activeTab?.name ?? '对比视图'}
+                {t('editor.mergeTitleShort').replace('{name}', activeTab?.name ?? '...')}
               </DialogTitle>
             </DialogHeader>
             <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>
@@ -696,14 +699,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
 
                         if (result.success) {
-                          toast.success('✅ 合并完成，草稿已更新')
+                          toast.success('✅ ' + t('editor.mergeComplete'))
                         } else {
-                          toast.error(`合并失败：${result.error}`)
+                          toast.error(t('error.mergeFailed').replace('{error}', result.error ?? ''))
                         }
                       }
                     } catch (e) {
 
-                      toast.error(`合并出错：${e}`)
+                      toast.error(t('error.mergeError').replace('{error}', String(e)))
                     } finally {
                       useEditorStore.getState().closeTab(activeTab.id)
                     }
@@ -745,14 +748,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       >
         <DialogContent className="max-w-[380px]">
           <DialogHeader>
-            <DialogTitle>关闭未保存的文件</DialogTitle>
+            <DialogTitle>{t('dialog.closeUnsaved')}</DialogTitle>
             <DialogDescription>
-              「{tabs.find(t => t.id === closeConfirm)?.name ?? '该文件'}」有未保存的修改。是否放弃修改并关闭？
+              {t('editor.fileHasUnsaved') + ' «' + (tabs.find(t => t.id === closeConfirm)?.name ?? '') + '» ' + t('editor.unsavedWarning')}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setCloseConfirm(null)}>
-              取消
+              {t('action.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -761,7 +764,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                 setCloseConfirm(null)
               }}
             >
-              放弃修改
+              {t('dialog.confirmDiscard')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -774,7 +777,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       >
         <DialogContent className="max-w-[400px]">
           <DialogHeader>
-            <DialogTitle>关闭多个文件</DialogTitle>
+            <DialogTitle>{t('dialog.closeMultiple')}</DialogTitle>
             <DialogDescription>
               {(() => {
                 const dirtyCount = (batchCloseConfirm ?? []).filter(
@@ -782,14 +785,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                 ).length
                 const total = (batchCloseConfirm ?? []).length
                 return dirtyCount > 0
-                  ? `即将关闭 ${total} 个文件，其中 ${dirtyCount} 个有未保存的修改。是否放弃修改并全部关闭？`
-                  : `即将关闭 ${total} 个文件。`
+                  ? (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + ', ' + dirtyCount + ' ' + t('editor.unsavedWarning'))
+                  : (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + '.')
               })()}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button variant="ghost" onClick={() => setBatchCloseConfirm(null)}>
-              取消
+              {t('action.cancel')}
             </Button>
             <Button
               variant="destructive"
@@ -800,7 +803,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                 setBatchCloseConfirm(null)
               }}
             >
-              放弃修改并关闭
+              {t('dialog.confirmDiscardClose')}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -7,6 +7,8 @@ import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool } from '
 import type { FileNode } from '../../../shared/ipc-channels'
 import { ipc } from '../../../services/ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
+import { t } from '../../../shared/locale'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 import { showSidebarMenu, openChapterFile } from './SidebarShared'
 
@@ -41,7 +43,7 @@ async function readChapterTitle(filePath: string, fallback: string, chapterNumbe
       if (project) {
         const bpResult = await ipc.invoke('db:blueprint-get', chapterNumber)
         if (bpResult) {
-          const display = `第${chapterNumber}章 ${bpResult.title}`
+          const display = `${t('chapter.label').replace('{n}', String(chapterNumber))} ${bpResult.title}`
           chapterTitleCache.set(filePath, display)
           return display
         }
@@ -71,6 +73,7 @@ async function readChapterTitle(filePath: string, fallback: string, chapterNumbe
 // ===== 正文章节组件 =====
 
 export default function ManuscriptGroup({ files }: { files: FileNode[]; projectPath: string }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(true)
   // 文件路径 → 显示名称的映射（异步加载）
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
@@ -89,7 +92,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
         missing.map(async (f) => {
           const rawName = f.name.replace(/\.[^.]+$/, '')
           const chMatch = rawName.match(/^chapter_(\d+)$/)
-          const fallback = chMatch ? `第${parseInt(chMatch[1], 10)}章` : rawName
+          const fallback = chMatch ? t('chapter.label').replace('{n}', String(parseInt(chMatch[1], 10))) : rawName
           const chNum = chMatch ? parseInt(chMatch[1], 10) : undefined
           entries[f.path] = await readChapterTitle(f.path, fallback, chNum)
         })
@@ -104,7 +107,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
     if (titleMap[f.path]) return titleMap[f.path]
     const rawName = f.name.replace(/\.[^.]+$/, '')
     const chMatch = rawName.match(/^chapter_(\d+)$/)
-    return chMatch ? `第${parseInt(chMatch[1], 10)}章` : rawName
+    return chMatch ? t('chapter.label').replace('{n}', String(parseInt(chMatch[1], 10))) : rawName
   }
 
   // 只显示正文章节（过滤掉旧的 _notes 文件）
@@ -122,10 +125,10 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
           : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
         }
         <PenTool size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>正文章节</span>
+        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('manuscript.title')}</span>
         {chapterFiles.length > 0 && (
           <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {chapterFiles.length} 章
+            {t('draftbox.count').replace('{n}', String(chapterFiles.length))}
           </span>
         )}
       </div>
@@ -133,7 +136,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
         <div>
           {chapterFiles.length === 0 ? (
             <div className="text-xs py-1" style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}>
-              暂无定稿章节
+              {t('manuscript.empty')}
             </div>
           ) : (
             chapterFiles.map(f => {
@@ -147,19 +150,19 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                   onContextMenu={e => showSidebarMenu([
                     {
                       key: 'open',
-                      label: '打开章节',
+                      label: t('action.openChapter'),
                       icon: <FolderOpen size={13} />,
                       onClick: () => openChapterFile(f.path, displayName),
                     },
                     { key: 'div1', type: 'divider' as const },
                     {
                       key: 'copy-path',
-                      label: '复制文件路径',
+                      label: t('action.copyPath'),
                       icon: <Copy size={13} />,
                       onClick: () => navigator.clipboard.writeText(f.path).catch(() => { }),
                     },
                   ], e)}
-                  title={`点击打开 — ${displayName}`}
+                  title={t('manuscript.tooltip').replace('{name}', displayName)}
                 >
                   <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
                   <span className="text-sm truncate" style={{ color: 'var(--color-text-secondary)' }}>

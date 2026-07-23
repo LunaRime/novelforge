@@ -4,12 +4,14 @@ import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle } 
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
+import { useTranslation } from '../../hooks/useTranslation'
 
 /**
  * 右侧面板「AI 输出」视图
  * 参考 Cursor Agent 风格：扁平化、极简文字驱动、可折叠思考区
  */
 export default function AIOutputPanel() {
+  const { t } = useTranslation()
   // ✅ 使用 selector 精确订阅，避免 globalLogs 高频更新导致整个面板重渲染
   const activeRuns = useWorkflowStore(s => s.activeRuns)
   const history = useWorkflowStore(s => s.history)
@@ -57,11 +59,11 @@ export default function AIOutputPanel() {
           className="text-xs font-medium uppercase tracking-widest"
           style={{ color: 'var(--color-text-muted)' }}
         >
-          AI 输出
+          {t('agent.aiOutput')}
         </span>
         <button
           onClick={() => useLayoutStore.getState().setRightView('agent')}
-          title="切换回 Agent"
+          title={t('agent.switchBack')}
           className="icon-btn"
           style={{ width: 20, height: 20 }}
         >
@@ -97,10 +99,11 @@ export default function AIOutputPanel() {
 // ===== 空状态 =====
 
 function EmptyState() {
+  const { t } = useTranslation()
   return (
     <div className="flex flex-col items-center justify-center h-full gap-2 px-6" style={{ color: 'var(--color-text-muted)' }}>
       <Sparkles size={20} style={{ opacity: 0.2 }} />
-      <span className="text-xs opacity-60">暂无输出</span>
+      <span className="text-xs opacity-60">{t('agent.noOutput')}</span>
     </div>
   )
 }
@@ -122,6 +125,7 @@ function ActiveRunView({
   const isActive = run.status === 'running' || run.status === 'waiting'
   const cancelWorkflow = useWorkflowStore.getState().cancelWorkflow
   const prevLenRef = useRef(0)
+  const { t } = useTranslation()
 
   // 提取当前步骤 + 内容
   const currentStep = run.steps[run.currentStepIndex] || run.steps[0]
@@ -228,7 +232,7 @@ function ActiveRunView({
               style={{ color: 'var(--color-success)', borderTop: '1px dashed var(--color-border)' }}
             >
               <CheckCircle2 size={12} />
-              整个工作流已全部完成
+              {t('agent.workflowComplete')}
             </div>
           )}
         </div>
@@ -260,7 +264,7 @@ function ActiveRunView({
             }}
           >
             <StopCircle size={13} />
-            <span className="font-medium tracking-wide">中止生成</span>
+            <span className="font-medium tracking-wide">{t('agent.abortGen')}</span>
           </button>
         </div>
       )}
@@ -271,6 +275,7 @@ function ActiveRunView({
 
 // ===== 新版渲染单步结果（支持查看所有历史步骤数据） =====
 function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { step: WorkflowStep; index: number; total: number; isActiveRun: boolean; isCurrentStep: boolean }) {
+  const { t } = useTranslation()
   const isRunning = step.status === 'running'
   const isCompleted = step.status === 'completed'
   const isFailed = step.status === 'failed'
@@ -321,7 +326,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
                  isFailed ? 'var(--color-error)' :
                  'var(--color-text-muted)',
         }}
-        title={rawText ? '点击查看该步骤的历史输出' : undefined}
+        title={rawText ? t('agent.stepHistoryTip') : undefined}
       >
         {/* 状态图标 */}
         <span className="flex-shrink-0 w-4 flex justify-center">
@@ -389,7 +394,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
       {/* 如果是单一正在执行等待，则显示一个等待骨架 */}
       {!rawText && isRunning && isActiveRun && (
         <div className="pl-[4px] pr-1 pt-1 pb-3 text-xs text-center" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
-          等待指令响应...
+          {t('agent.waitingResponse')}
         </div>
       )}
     </div>
@@ -400,6 +405,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
 // ===== 思考区块（Cursor "Worked for" 风格） =====
 
 function ThinkingBlock({ thinking, showCursor, hasContent }: { thinking: string; showCursor: boolean; hasContent: boolean }) {
+  const { t } = useTranslation()
   // 正文未开始时默认展开，正文开始后默认关闭
   const [expanded, setExpanded] = useState(!hasContent)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -448,7 +454,7 @@ function ThinkingBlock({ thinking, showCursor, hasContent }: { thinking: string;
           }}
         />
         <span>
-          {showCursor ? '思考中...' : '思考过程'}
+          {showCursor ? t('agent.thinking') : t('agent.thinkingToggle')}
         </span>
         {showCursor && !expanded && (
           <span className="ai-stream-cursor" style={{ height: 11, width: 3 }} />
@@ -481,13 +487,14 @@ function ThinkingBlock({ thinking, showCursor, hasContent }: { thinking: string;
 // ===== 历史列表 =====
 
 function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id: string) => void }) {
+  const { t } = useTranslation()
   return (
     <div>
       <p
         className="text-[0.68rem] font-medium mb-2 px-1 uppercase tracking-widest"
         style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
       >
-        历史
+        {t('agent.history')}
       </p>
       <div className="flex flex-col gap-0.5">
         {items.map(run => (

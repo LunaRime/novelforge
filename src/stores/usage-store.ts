@@ -1,5 +1,5 @@
 /**
- * Vela API 用量与费用追踪 Store
+ * NovelForge API 用量与费用追踪 Store
  *
  * 实时累计会话费用、按模型/tier 分类统计。
  */

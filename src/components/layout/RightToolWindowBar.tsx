@@ -1,6 +1,7 @@
 import { Bot, Sparkles } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 
 /**
  * 右侧工具窗口栏（RightToolWindowBar）
@@ -45,7 +46,7 @@ export default function RightToolWindowBar() {
       {/* AI Agent 面板按钮 */}
       <button
         onClick={() => handleClick('agent')}
-        title="AI Agent 面板"
+        title={t('agent.aiPanel')}
         className="tool-btn"
         style={{
           height: 30,
@@ -63,7 +64,7 @@ export default function RightToolWindowBar() {
       {/* AI 输出面板按钮 */}
       <button
         onClick={() => handleClick('ai-output')}
-        title="AI 输出"
+        title={t('agent.aiOutput')}
         className="tool-btn relative"
         style={{
           height: 30,

@@ -21,7 +21,7 @@ function withSampleLogs(Story: React.ComponentType) {
 }
 
 const meta = {
-  title: 'Vela Panels/LogsView',
+  title: 'NovelForge Panels/LogsView',
   component: LogsView,
   tags: ['autodocs'],
   parameters: {

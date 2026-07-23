@@ -16,12 +16,14 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
 import { NativeSelect } from '../ui/NativeSelect'
+import { useTranslation } from '../../hooks/useTranslation'
 
 /**
  * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
  * 从 character-store 读取选中角色，仅渲染编辑表单。
  */
 export default function CharacterEditor() {
+  const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const addLog = useWorkflowStore(s => s.addLog)
   const characters = useCharacterStore(s => s.characters)
@@ -164,13 +166,13 @@ export default function CharacterEditor() {
           <div className="max-w-2xl mx-auto px-6 py-4">
             <div className="space-y-3">
               <div className="grid grid-cols-3 gap-3">
-                <div><Label>姓名</Label><Input value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
-                <div><Label>性别</Label><Input value={selectedCard.gender} onChange={(e) => updateField(selectedCard.name, 'gender', e.target.value)} /></div>
-                <div><Label>年龄</Label><Input value={selectedCard.age} onChange={(e) => updateField(selectedCard.name, 'age', e.target.value)} /></div>
+                <div><Label>{t('character.name')}</Label><Input value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
+                <div><Label>{t('character.gender')}</Label><Input value={selectedCard.gender} onChange={(e) => updateField(selectedCard.name, 'gender', e.target.value)} /></div>
+                <div><Label>{t('character.age')}</Label><Input value={selectedCard.age} onChange={(e) => updateField(selectedCard.name, 'age', e.target.value)} /></div>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <Label>定位</Label>
+                  <Label>{t('character.position')}</Label>
                   <NativeSelect value={selectedCard.role} onChange={(e) => updateField(selectedCard.name, 'role', e.target.value as typeof selectedCard.role)}>
                     {Object.entries(ROLE_LABELS).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
@@ -178,14 +180,14 @@ export default function CharacterEditor() {
                   </NativeSelect>
                 </div>
               </div>
-              <div><Label>外貌描写</Label><Textarea value={selectedCard.appearance} onChange={(e) => updateField(selectedCard.name, 'appearance', e.target.value)} rows={3} placeholder="输入外貌描写..." /></div>
-              <div><Label>性格特征</Label><Textarea value={selectedCard.personality} onChange={(e) => updateField(selectedCard.name, 'personality', e.target.value)} rows={3} placeholder="输入性格特征..." /></div>
-              <div><Label>背景故事</Label><Textarea value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} placeholder="输入背景故事..." /></div>
-              <div><Label>能力/技能</Label><Textarea value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} placeholder="输入能力/技能..." /></div>
-              <div><Label>核心动机</Label><Textarea value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} placeholder="输入核心动机..." /></div>
-              <div><Label>关系网</Label><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder="输入关系网..." /></div>
-              <div><Label>成长轨迹</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} placeholder="输入成长轨迹..." /></div>
-              <div><Label>备注</Label><Textarea value={selectedCard.notes} onChange={(e) => updateField(selectedCard.name, 'notes', e.target.value)} rows={2} placeholder="输入备注..." /></div>
+              <div><Label>{t('character.appearance')}</Label><Textarea value={selectedCard.appearance} onChange={(e) => updateField(selectedCard.name, 'appearance', e.target.value)} rows={3} /></div>
+              <div><Label>{t('character.personality')}</Label><Textarea value={selectedCard.personality} onChange={(e) => updateField(selectedCard.name, 'personality', e.target.value)} rows={3} /></div>
+              <div><Label>{t('character.background')}</Label><Textarea value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} /></div>
+              <div><Label>{t('character.abilities')}</Label><Textarea value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} /></div>
+              <div><Label>{t('character.motivation')}</Label><Textarea value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} /></div>
+              <div><Label>{t('character.relationships')}</Label><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} /></div>
+              <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
+              <div><Label>{t('character.notes')}</Label><Textarea value={selectedCard.notes} onChange={(e) => updateField(selectedCard.name, 'notes', e.target.value)} rows={2} /></div>
             </div>
           </div>
         )}

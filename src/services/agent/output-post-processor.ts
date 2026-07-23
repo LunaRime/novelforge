@@ -1,5 +1,5 @@
 /**
- * Vela Agent 输出后处理器 — 可插拔的文本后处理管道
+ * NovelForge Agent 输出后处理器 — 可插拔的文本后处理管道
  *
  * 将 Agent 的原始输出经过一系列处理步骤，提取结构化信息：
  * 1. ThinkingDetectionStep — 检测并折叠 <think> 标签

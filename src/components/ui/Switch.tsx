@@ -1,5 +1,5 @@
 /**
- * Vela Switch 开关组件
+ * NovelForge Switch 开关组件
  *
  * 从 SettingsModal 中提取的通用开关组件，
  * 自动适配双主题、支持 disabled 态。

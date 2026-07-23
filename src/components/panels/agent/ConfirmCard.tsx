@@ -7,12 +7,14 @@
 import { ShieldAlert } from 'lucide-react'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useAgentStore } from '../../../stores/agent-store'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 interface Props {
   toolCall: ToolCallInfo
 }
 
 export default function ConfirmCard({ toolCall }: Props) {
+  const { t } = useTranslation()
   const { resolveToolConfirmation } = useAgentStore()
   const { id, toolName, arguments: args } = toolCall
 
@@ -24,7 +26,7 @@ export default function ConfirmCard({ toolCall }: Props) {
       {/* 头部 */}
       <div className="confirm-card-header">
         <ShieldAlert size={14} />
-        <span>需要确认操作</span>
+        <span>{t('agent.confirmAction')}</span>
       </div>
 
       {/* 内容 */}

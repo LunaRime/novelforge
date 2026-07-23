@@ -1,5 +1,5 @@
 /**
- * Vela LLM 嵌入优化器 — 三层优化引擎
+ * NovelForge LLM 嵌入优化器 — 三层优化引擎
  *
  * 层1（Token 压缩）：文本预处理 + HyDE + Top-K 截断
  * 层2（信息密度）：LLMLingua 风格压缩 + 检索后摘要

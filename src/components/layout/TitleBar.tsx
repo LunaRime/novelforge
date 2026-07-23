@@ -4,7 +4,7 @@ import { useShallow } from 'zustand/shallow'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
-import { t } from '../../shared/locale'
+import { useTranslation } from '../../hooks/useTranslation'
 import { useLayoutStore } from '../../stores/layout-store'
 
 /** 检测是否为 macOS */
@@ -20,6 +20,7 @@ const themeOrder: Theme[] = ['galaxy', 'dark', 'light', 'paper']
 
 /** 标题栏组件 — JetBrains 风格：36px 高，含缩放控制 */
 export default function TitleBar() {
+  const { t } = useTranslation()
   const projectName = useProjectStore((s) => s.currentProject?.name)
   const { theme, setTheme } = useThemeStore()
   const { zoom, zoomIn, zoomOut, zoomReset } = useThemeStore()
@@ -99,6 +100,9 @@ export default function TitleBar() {
   /** 百分比文字，如 "100%" */
   const zoomLabel = `${Math.round(zoom * 100)}%`
 
+  /** 当前主题的本地化名称 */
+  const themeName = theme === 'galaxy' ? t('theme.starry') : theme === 'paper' ? t('theme.paper') : theme === 'dark' ? t('theme.dark') : t('theme.light')
+
   return (
     <div
       className="no-select flex items-center"
@@ -112,7 +116,7 @@ export default function TitleBar() {
       {/* 左侧：macOS 留出交通灯位置 + 应用名 */}
       <div className="flex items-center flex-shrink-0" style={{ paddingLeft: isMac ? 78 : 12 }}>
         <span className="text-xs font-semibold tracking-wider brand-gradient">
-          Vela
+          NovelForge
         </span>
         {projectName && (
           <span className="text-xs ml-2 opacity-50" style={{ color: 'var(--color-titlebar-text)' }}>
@@ -160,7 +164,7 @@ export default function TitleBar() {
         {/* 缩放比例显示，点击可重置 */}
         <button
           onClick={zoomReset}
-          title={`重置缩放 (${isMac ? '⌘' : 'Ctrl'}+0)`}
+          title={`${t('zoom.reset')} (${isMac ? '⌘' : 'Ctrl'}+0)`}
           style={{
             fontSize: "0.7rem",
             fontFamily: 'var(--font-mono)',
@@ -203,7 +207,7 @@ export default function TitleBar() {
         {/* 专注写作模式 */}
         <button
           onClick={toggleFocusMode}
-          title={`${focusMode ? '退出专注模式' : '专注模式'} (F11)`}
+          title={`${focusMode ? t('focus.exit') : t('focus.enter')} (F11)`}
           className="icon-btn"
           style={{
             width: 24,
@@ -217,7 +221,7 @@ export default function TitleBar() {
         {/* 主题切换 */}
         <button
           onClick={cycleTheme}
-          title={`主题: ${theme === 'galaxy' ? '星空' : theme === 'paper' ? '纸质' : theme === 'dark' ? '黑夜' : '浅色'}`}
+          title={t('theme.label').replace('{theme}', themeName)}
           className="icon-btn"
           style={{ width: 24, height: 22 }}
         >
@@ -227,7 +231,7 @@ export default function TitleBar() {
         {/* 设置 */}
         <button
           onClick={openSettings}
-          title="设置"
+          title={t('dialog.settings')}
           className="icon-btn"
           style={{ width: 24, height: 22 }}
         >

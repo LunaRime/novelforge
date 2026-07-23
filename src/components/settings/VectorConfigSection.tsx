@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { DEFAULT_LOCALE, type TextKey } from '../../shared/locale'
 /**
  * VectorConfigSection — 向量配置管理面板
  *
@@ -17,6 +17,7 @@ import {
 } from 'lucide-react'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useLLMStore } from '../../stores/llm-store'
+import { useTranslation } from '../../hooks/useTranslation'
 import { Switch } from '../ui/Switch'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -27,36 +28,38 @@ import { randomUUID } from '../../utils/id'
 
 // ===== 工作模式配置 =====
 
-const MODE_INFO: Record<VectorWorkMode, {
+function getModeInfo(t: (key: TextKey) => string): Record<VectorWorkMode, {
   label: string
   icon: React.ReactNode
   desc: string
   color: string
-}> = {
-  auto: {
-    label: '智能分配',
-    icon: <Sparkles size={14} />,
-    desc: '向量模型处理语义搜索，本地模块处理快速比较，自动选择最优方案',
-    color: '#10b981',
-  },
-  model_only: {
-    label: '仅向量模型',
-    icon: <Cpu size={14} />,
-    desc: '仅使用 Embedding API 生成向量，本地模块已关闭',
-    color: '#3b82f6',
-  },
-  module_only: {
-    label: '仅本地模块',
-    icon: <Database size={14} />,
-    desc: '使用纯文本 FTS 搜索 + 本地余弦相似度，不调用 Embedding API',
-    color: '#f59e0b',
-  },
-  disabled: {
-    label: '已禁用',
-    icon: <WifiOff size={14} />,
-    desc: '所有向量功能已关闭，Agent 向量工具将返回错误提示',
-    color: '#ef4444',
-  },
+}> {
+  return {
+    auto: {
+      label: t('vector.smartDistribute'),
+      icon: <Sparkles size={14} />,
+      desc: t('vector.smartDistributeDesc'),
+      color: '#10b981',
+    },
+    model_only: {
+      label: t('vector.modelOnly'),
+      icon: <Cpu size={14} />,
+      desc: t('vector.modelOnlyDesc'),
+      color: '#3b82f6',
+    },
+    module_only: {
+      label: t('vector.localOnly'),
+      icon: <Database size={14} />,
+      desc: t('vector.localOnlyDesc'),
+      color: '#f59e0b',
+    },
+    disabled: {
+      label: t('vector.disabled'),
+      icon: <WifiOff size={14} />,
+      desc: t('vector.disabledDesc'),
+      color: '#ef4444',
+    },
+  }
 }
 
 // ===== 主组件 =====
@@ -64,6 +67,7 @@ const MODE_INFO: Record<VectorWorkMode, {
 export default function VectorConfigSection() {
   const store = useVectorConfigStore()
   const llmStore = useLLMStore()
+  const { t } = useTranslation()
   const [testResult, setTestResult] = useState<VectorTestResult | null>(
     store.lastTestResult,
   )
@@ -82,33 +86,33 @@ export default function VectorConfigSection() {
 
   // ===== 工作分配说明 =====
 
-  const distributionLogic = () => {
+  const distributionLogic = (t: (key: TextKey) => string) => {
     const parts: string[] = []
 
     if (!store.isAnyVectorAvailable()) {
-      return '所有向量功能已禁用。Agent 的 search_knowledge 将降级为纯文本匹配，compare_texts 和 embed_text 将不可用。'
+      return t('vector.distAllDisabled')
     }
 
     if (store.vectorModelEnabled) {
-      parts.push('向量模型 (Embedding API): 负责语义搜索 (search_knowledge)、文本嵌入 (embed_text)、语义比较 (compare_texts)')
+      parts.push(t('vector.distModelResp'))
     }
     if (store.llmEmbeddingEnabled) {
-      parts.push('LLM 向量化: 使用 LLM 生成语义向量，作为 Embedding API 的补充或替代方案。当 Embedding API 不可用时自动接管')
+      parts.push(t('vector.distLLMResp'))
     }
     if (store.vectorModuleEnabled) {
-      parts.push('本地模块 (LanceDB): 负责 FTS 全文搜索、快速文本匹配、本地相似度验证')
+      parts.push(t('vector.distModuleResp'))
     }
 
     // 说明降级顺序
     if (store.vectorModelEnabled && store.llmEmbeddingEnabled) {
-      parts.push('\n降级链: Embedding API → LLM 向量化 → 本地 FTS')
+      parts.push(t('vector.distChainLLM'))
     } else if (store.vectorModelEnabled) {
-      parts.push('\n降级链: Embedding API → 本地 FTS')
+      parts.push(t('vector.distChainModel'))
     } else if (store.llmEmbeddingEnabled) {
-      parts.push('\n降级链: LLM 向量化 → 本地 FTS')
+      parts.push(t('vector.distChainLLMOnly'))
     }
 
-    return parts.join('。\n')
+    return parts.join('\n')
   }
 
   // ===== 测试处理器 =====
@@ -143,7 +147,7 @@ export default function VectorConfigSection() {
     llmStore.saveModel(newModel)
   }
 
-  const modeInfo = MODE_INFO[store.workMode]
+  const modeInfo = getModeInfo(t)[store.workMode]
 
   return (
     <div className="flex flex-col gap-5 text-sm">
@@ -158,7 +162,7 @@ export default function VectorConfigSection() {
         <div style={{ color: modeInfo.color }}>{modeInfo.icon}</div>
         <div className="flex-1">
           <div className="font-medium" style={{ color: 'var(--color-text)' }}>
-            {modeInfo.label} 模式
+            {modeInfo.label}{t('vector.modeSuffix')}
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
             {modeInfo.desc}
@@ -177,7 +181,7 @@ export default function VectorConfigSection() {
             <div className="flex items-center gap-2">
               <Database size={16} style={{ color: 'var(--color-text)' }} />
               <span className="font-medium" style={{ color: 'var(--color-text)' }}>
-                向量模块
+                {t('vector.module')}
               </span>
             </div>
             <Switch
@@ -185,15 +189,13 @@ export default function VectorConfigSection() {
               onCheckedChange={store.toggleVectorModule}
             />
           </div>
-          <div className="text-xs text-muted-foreground">
-            LanceDB FTS 全文搜索 + 本地余弦相似度 + Top-K 查找。
-            <br />
-            不依赖外部 API，纯本地运行。
+          <div className="text-xs text-muted-foreground whitespace-pre-line">
+            {t('vector.moduleDesc')}
           </div>
           {!store.vectorModuleEnabled && (
             <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
               <AlertTriangle size={12} />
-              已关闭 — Agent 向量工具将降级
+              {t('vector.moduleOff')}
             </div>
           )}
         </div>
@@ -207,7 +209,7 @@ export default function VectorConfigSection() {
             <div className="flex items-center gap-2">
               <Cpu size={16} style={{ color: 'var(--color-text)' }} />
               <span className="font-medium" style={{ color: 'var(--color-text)' }}>
-                向量模型
+                {t('settings.vectorModel')}
               </span>
             </div>
             <Switch
@@ -215,15 +217,13 @@ export default function VectorConfigSection() {
               onCheckedChange={store.toggleVectorModel}
             />
           </div>
-          <div className="text-xs text-muted-foreground">
-            Embedding API（OpenAI / Gemini）— 语义搜索和文本嵌入。
-            <br />
-            需要配置 API Key 和网络连接。
+          <div className="text-xs text-muted-foreground whitespace-pre-line">
+            {t('vector.modelDesc')}
           </div>
           {!store.vectorModelEnabled && (
             <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
               <AlertTriangle size={12} />
-              已关闭 — 本地模块将接管工作
+              {t('vector.modelOff')}
             </div>
           )}
         </div>
@@ -239,10 +239,10 @@ export default function VectorConfigSection() {
       >
         <div className="flex items-center gap-1 font-medium mb-1" style={{ color: 'var(--color-text)' }}>
           <ArrowRight size={12} />
-          当前工作分配
+          {t('vector.workDistribution')}
         </div>
-        <div className="text-muted-foreground leading-relaxed">
-          {distributionLogic()}
+        <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
+          {distributionLogic(t)}
         </div>
       </div>
 
@@ -251,16 +251,16 @@ export default function VectorConfigSection() {
         <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
           <div className="flex items-center justify-between mb-3">
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
-              已配置的向量模型
+              {t('vector.configuredModels')}
             </h4>
             <Button variant="outline" size="sm" onClick={handleAddEmbeddingModel}>
-              + 添加
+              {t('vector.add')}
             </Button>
           </div>
 
           {embeddingModels.length === 0 ? (
             <div className="text-xs text-muted-foreground text-center py-3">
-              暂无向量模型，请添加一个 Embedding 模型
+              {t('vector.noModel')}
             </div>
           ) : (
             <div className="space-y-2">
@@ -289,7 +289,7 @@ export default function VectorConfigSection() {
                   </div>
                   <div className="flex items-center gap-1 ml-2 flex-shrink-0">
                     {model.id === defaultEmbeddingModelId ? (
-                      <Badge variant="success" className="text-[10px]">默认</Badge>
+                      <Badge variant="success" className="text-[10px]">{t('model.default')}</Badge>
                     ) : (
                       <Button
                         variant="ghost"
@@ -297,7 +297,7 @@ export default function VectorConfigSection() {
                         className="text-[10px] h-5"
                         onClick={() => handleSetDefaultEmbedding(model.id)}
                       >
-                        设为默认
+                        {t('model.setDefault')}
                       </Button>
                     )}
                   </div>
@@ -314,26 +314,24 @@ export default function VectorConfigSection() {
           <div className="flex items-center gap-2">
             <Brain size={16} style={{ color: 'var(--color-text)' }} />
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
-              LLM 向量化
+              {t('vector.llmVectorization')}
             </h4>
-            <Badge variant="outline" className="text-[10px]">实验性</Badge>
+            <Badge variant="outline" className="text-[10px]">{t('vector.experimental')}</Badge>
           </div>
           <Switch
             checked={store.llmEmbeddingEnabled}
             onCheckedChange={store.toggleLLMEmbedding}
           />
         </div>
-        <p className="text-xs text-muted-foreground mb-3">
-          将 LLM（如 GPT-4o、DeepSeek）作为向量模型使用。LLM 通过特殊 prompt 输出固定维度的语义向量。
-          <br />
-          适用于没有专用 Embedding API 但有 LLM API 的场景。
+        <p className="text-xs text-muted-foreground mb-3 whitespace-pre-line">
+          {t('vector.llmVectorDesc')}
         </p>
 
         {store.llmEmbeddingEnabled && (
           <div className="space-y-3 mt-3 pt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
             {/* LLM 模型选择 */}
             <div>
-              <Label>选择 LLM 模型</Label>
+              <Label>{t('vector.selectLLM')}</Label>
               <select
                 className="w-full mt-1 px-2 py-1.5 rounded border text-xs bg-background"
                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
@@ -342,9 +340,9 @@ export default function VectorConfigSection() {
                   store.setLLMEmbeddingSettings({ modelId: e.target.value || null })
                 }}
               >
-                <option value="">-- 选择 LLM 模型 --</option>
+                <option value="">{t('vector.selectLLMPlaceholder')}</option>
                 {store.llmCandidates.length === 0 && (
-                  <option value="" disabled>加载中...</option>
+                  <option value="" disabled>{t('status.loading')}</option>
                 )}
                 {store.llmCandidates.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -354,14 +352,14 @@ export default function VectorConfigSection() {
               </select>
               {store.llmCandidates.length === 0 && (
                 <p className="text-[10px] text-muted-foreground mt-1">
-                  未找到可用的 LLM 模型。请在「AI 生成模型」中添加非 embedding 用途的模型。
+                  {t('vector.noLLM')}
                 </p>
               )}
             </div>
 
             {/* 向量维度 */}
             <div>
-              <Label>输出向量维度: {store.llmEmbeddingSettings.dimensions}</Label>
+              <Label>{t('vector.outputDim').replace('{n}', String(store.llmEmbeddingSettings.dimensions))}</Label>
               <input
                 type="range"
                 min="64"
@@ -374,22 +372,20 @@ export default function VectorConfigSection() {
                 className="w-full mt-1"
               />
               <div className="flex justify-between text-[10px] text-muted-foreground">
-                <span>64 (低精度/低成本)</span>
-                <span>256 (推荐)</span>
-                <span>1024 (高精度/高成本)</span>
+                <span>64 ({t('vector.lowPrecision')})</span>
+                <span>256 ({t('vector.recommended')})</span>
+                <span>1024 ({t('vector.highPrecision')})</span>
               </div>
             </div>
 
             {/* 说明 */}
             <div className="p-2 rounded text-[10px]" style={{ backgroundColor: 'var(--color-hover)' }}>
-              <div className="font-medium mb-1" style={{ color: 'var(--color-text)' }}>工作原理</div>
-              <div className="text-muted-foreground leading-relaxed">
-                1. 向 LLM 发送特殊 prompt，要求输出固定维度的语义向量<br />
-                2. LLM 返回 JSON 浮点数组<br />
-                3. L2 归一化后存入缓存<br />
-                4. 后续搜索和比较使用此向量<br />
+              <div className="font-medium mb-1" style={{ color: 'var(--color-text)' }}>{t('vector.howItWorks')}</div>
+              <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
+                {t('vector.llmWorkSteps')}
                 <br />
-                <span className="text-yellow-600">注意：LLM 向量化比专用 Embedding API 慢 5-20 倍，且成本较高（每次嵌入消耗的 Token 约等于文本长度的 2-3 倍）。仅在无 Embedding API 时使用。</span>
+                <br />
+                <span className="text-yellow-600">{t('vector.llmWarning')}</span>
               </div>
             </div>
           </div>
@@ -401,10 +397,10 @@ export default function VectorConfigSection() {
         <div className="flex items-center justify-between mb-3">
           <div>
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
-              连通性测试
+              {t('vector.connectivityTest')}
             </h4>
             <p className="text-xs text-muted-foreground mt-0.5">
-              验证向量模块、向量模型、AI 工具调用三方是否正常
+              {t('vector.connectivityDesc')}
             </p>
           </div>
           <Button
@@ -414,7 +410,7 @@ export default function VectorConfigSection() {
             disabled={store.testing}
           >
             <RefreshCw size={12} className={store.testing ? 'animate-spin' : ''} />
-            {store.testing ? '测试中...' : '运行测试'}
+            {store.testing ? t('status.testing') : t('action.runTest')}
           </Button>
         </div>
 
@@ -422,38 +418,38 @@ export default function VectorConfigSection() {
         {testResult && (
           <div className="space-y-2 mt-2">
             <TestResultRow
-              label="向量模块 (LanceDB)"
+              label={t('vector.testModule')}
               ok={testResult.moduleOk}
               detail={testResult.moduleDetail}
             />
             <TestResultRow
-              label="向量模型 (Embedding API)"
+              label={t('vector.testModelAPI')}
               ok={testResult.modelOk}
               detail={testResult.modelDetail}
             />
             <TestResultRow
-              label="LLM 向量化"
+              label={t('vector.testLLMEmbedding')}
               ok={testResult.llmEmbeddingOk}
               detail={testResult.llmEmbeddingDetail}
             />
             <TestResultRow
-              label="AI 工具调用"
+              label={t('vector.testAITool')}
               ok={testResult.agentToolOk}
               detail={
                 testResult.agentToolOk
-                  ? 'Agent 可正常调用 search_knowledge / compare_texts / embed_text'
-                  : 'Agent 工具调用失败 — 请检查配置'
+                  ? t('vector.agentOk')
+                  : t('vector.agentFail')
               }
             />
             <div className="text-[10px] text-muted-foreground text-right">
-              测试时间: {new Date(testResult.testedAt).toLocaleString(DEFAULT_LOCALE)}
+              {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(DEFAULT_LOCALE)}
             </div>
           </div>
         )}
 
         {!testResult && !store.testing && (
           <div className="text-xs text-muted-foreground text-center py-3">
-            点击"运行测试"验证向量服务的连通性
+            {t('vector.runTestHint')}
           </div>
         )}
       </div>
@@ -472,6 +468,7 @@ function TestResultRow({
   ok: boolean
   detail: string
 }) {
+  const { t } = useTranslation()
   return (
     <div className="flex items-start gap-2 text-xs">
       {ok ? (
@@ -484,7 +481,7 @@ function TestResultRow({
           className="font-medium"
           style={{ color: ok ? '#16a34a' : '#dc2626' }}
         >
-          {label}: {ok ? '正常' : '异常'}
+          {label}: {ok ? t('status.normal') : t('status.abnormal')}
         </span>
         <div className="text-muted-foreground mt-0.5">{detail}</div>
       </div>

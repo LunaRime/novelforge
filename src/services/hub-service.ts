@@ -1,5 +1,5 @@
 /**
- * Vela Hub Service — TransferHub 初始化器
+ * NovelForge Hub Service — TransferHub 初始化器
  *
  * 负责在应用启动时初始化 TransferHub 并注册内置功能模块。
  * 各功能模块通过 hub-service 注册自己的路由处理器，实现解耦。

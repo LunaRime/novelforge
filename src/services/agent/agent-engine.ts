@@ -8,7 +8,7 @@
  * 4. 循环直到 LLM 不再调用 Tool 或达到最大循环次数
  *
  * 参考 Claude Code 的 query.ts 和 QueryEngine 设计，
- * 但简化为 Vela 的 Electron + React 架构。
+ * 但简化为 NovelForge 的 Electron + React 架构。
  */
 
 import { toolRegistry, type ToolResult, type ToolArtifact } from './tool-registry'

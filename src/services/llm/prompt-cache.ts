@@ -1,11 +1,11 @@
 /**
- * Vela Prompt Caching 工具
+ * NovelForge Prompt Caching 工具
  *
  * OpenAI/DeepSeek 等 API 的自动 prompt 缓存机制：
  * 如果请求的 messages 前缀与最近一次请求完全一致，API 自动命中缓存，
  * 输入 token 费用降低 50%。
  *
- * 本模块确保 Vela 的消息结构最大化缓存命中率。
+ * 本模块确保 NovelForge 的消息结构最大化缓存命中率。
  */
 
 import type { ModelProfile } from '../../shared/ipc-channels'
