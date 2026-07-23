@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Vela Font Subsetting Script
+ * NovelForge Font Subsetting Script
  *
  * Reduces Chinese font files from ~92MB to ~20MB by keeping only
  * the 5000 most common Chinese characters.

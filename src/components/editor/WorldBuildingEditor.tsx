@@ -3,6 +3,8 @@ import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTri
 import { useProjectStore } from '../../stores/project-store'
 import { useCharacterStore } from '../../stores/character-store'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
+import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 
@@ -17,18 +19,22 @@ import { globalEventBus } from '../../shared/event-bus'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
-const ARCH_FILES: Array<{
+type ArchFileItem = {
   key: ArchStepKey
   fileName: string
   label: string
   iconName: string
   desc: string
-}> = [
-    { key: 'premise', fileName: 'premise.md', label: '故事前提', iconName: 'target', desc: 'Logline · 核心冲突链 · 金手指定位 · 悬念骨架' },
-    { key: 'characters', fileName: 'characters.md', label: '角色图谱', iconName: 'users', desc: '角色弧光 · 关系网络 · 矛盾交织' },
-    { key: 'worldbuilding', fileName: 'worldbuilding.md', label: '世界观', iconName: 'globe', desc: '核心规则 · 阶层断层 · 深层危机' },
-    { key: 'synopsis', fileName: 'synopsis.md', label: '情节大纲', iconName: 'map', desc: '三幕结构 · 拐点节奏 · 伏笔闭环' },
+}
+
+function getArchFiles(t: (key: TextKey) => string): ArchFileItem[] {
+  return [
+    { key: 'premise', fileName: 'premise.md', label: t('arch.storyPremise'), iconName: 'target', desc: t('arch.premiseFileDesc') },
+    { key: 'characters', fileName: 'characters.md', label: t('arch.characterMap'), iconName: 'users', desc: t('arch.characterFileDesc') },
+    { key: 'worldbuilding', fileName: 'worldbuilding.md', label: t('arch.worldBuilding'), iconName: 'globe', desc: t('arch.worldBuildingFileDesc') },
+    { key: 'synopsis', fileName: 'synopsis.md', label: t('arch.plotOutline'), iconName: 'map', desc: t('arch.synopsisFileDesc') },
   ]
+}
 
 /** 故事架构编辑器 — 显示四个架构文件状态，并提供 AI 生成入口 */
 export default function WorldBuildingEditor() {
@@ -46,6 +52,9 @@ export default function WorldBuildingEditor() {
   const [, setPostProcessKey] = useState(0)
   // 角色卡后处理状态（用于控制卡片边框颜色）
   const [charExtractStatus, setCharExtractStatus] = useState<PostProcessStatus | null>(null)
+
+  const { t } = useTranslation()
+  const archFiles = getArchFiles(t)
 
   /** 加载各架构文件状态（通过 Service 层获取，不直接调 IPC） */
   const loadStatus = useCallback(async () => {
@@ -116,7 +125,7 @@ export default function WorldBuildingEditor() {
   }, [currentProject, extracting])
 
   /** 打开单个架构文件（arch-file 类型；若 tab 已存在则刷新磁盘内容） */
-  const openArchFile = async (f: typeof ARCH_FILES[number]) => {
+  const openArchFile = async (f: ArchFileItem) => {
     if (!currentProject) return
     const filePath = `${VELA.CORE}${f.key}`
     const core = (await ipc.invoke('db:project-core-get')) as Record<string, unknown> | null
@@ -159,18 +168,18 @@ export default function WorldBuildingEditor() {
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-              故事架构
+              {t('editor.storyArch')}
             </span>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto relative">
-          <EmptyState icon={<BookOpen size={36} />} message="请先打开项目" opacity={0.4} />
+          <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} opacity={0.4} />
         </div>
       </div>
     )
   }
 
-  const generatedCount = ARCH_FILES.filter(f => archStatus[f.key]).length
+  const generatedCount = archFiles.filter(f => archStatus[f.key]).length
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -182,10 +191,10 @@ export default function WorldBuildingEditor() {
         <div className="flex items-center gap-1.5">
           <FolderTree size={14} style={{ color: 'var(--color-text-muted)' }} />
           <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-            故事架构
+            {t('editor.storyArch')}
           </span>
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {generatedCount}/{ARCH_FILES.length} 已生成
+            {t('arch.progress').replace('{n}', String(generatedCount)).replace('{total}', String(archFiles.length))}
           </span>
         </div>
         <div className="flex items-center gap-1.5">
@@ -193,7 +202,7 @@ export default function WorldBuildingEditor() {
             variant="ghost"
             size="icon"
             onClick={loadStatus}
-            title="刷新状态"
+            title={t('tip.refreshStatus')}
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </Button>
@@ -202,17 +211,17 @@ export default function WorldBuildingEditor() {
             variant="ai"
             size="sm"
             onClick={() => setShowArchDialog(true)}
-            title="AI 生成故事架构（选择要生成的步骤）"
+            title={t('tip.regenerateArch')}
           >
             <Sparkles size={12} />
-            AI 生成架构
+            {t('arch.aiGenBtn')}
           </Button>
         </div>
       </div>
 
       {/* 文件卡片列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {ARCH_FILES.map(f => {
+        {archFiles.map(f => {
           const generated = archStatus[f.key]
           const words = wordCounts[f.key] ?? 0
           const isCharacters = f.key === 'characters'
@@ -236,7 +245,7 @@ export default function WorldBuildingEditor() {
                 onClick={() => openArchFile(f)}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = cardBorderColor}
-                title={`点击查看 — ${f.desc}`}
+                title={`${t('tip.clickView')} — ${f.desc}`}
               >
                 {/* 状态图标 */}
                 {generated
@@ -262,10 +271,10 @@ export default function WorldBuildingEditor() {
                   {generated ? (
                     <>
                       <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-green-500/10 text-green-600 dark:text-green-400">
-                        已生成
+                        {t('status.generated')}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        {words.toLocaleString()} 字符
+                        {words.toLocaleString()} {t('unit.characters')}
                       </span>
                     </>
                   ) : (
@@ -273,7 +282,7 @@ export default function WorldBuildingEditor() {
                       className="text-[0.7rem] px-1.5 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-accent-rgb,99 102 241),0.1)', color: 'var(--color-accent)' }}
                     >
-                      待生成
+                      {t('status.pendingGen')}
                     </span>
                   )}
                   {/* 角色图谱已生成但角色卡为空时，显示重新提取按钮（带质感的警告色） */}
@@ -286,19 +295,19 @@ export default function WorldBuildingEditor() {
                         e.stopPropagation()
                         handleExtractCharacters()
                       }}
-                      title="角色档案为空，可能是因为上一次生成失败或被删除。点击重新提取"
+                      title={t('arch.charArchiveEmptyRetry')}
                     >
                       {extracting
                         ? <RefreshCw size={12} className="animate-spin opacity-90" />
                         : <AlertTriangle size={12} className="opacity-90" />
                       }
-                      {extracting ? '提取中...' : '提取角色卡'}
+                      {extracting ? t('arch.charExtracting') : t('arch.charExtractBtn')}
                     </Button>
                   )}
                   {/* 查看箭头提示 */}
                   {generated && !(isCharacters && !loading && characterCount === 0) && (
                     <span className="text-[0.7rem] flex items-center gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                      <FileText size={10} /> 点击查看
+                      <FileText size={10} /> {t('tip.clickView')}
                     </span>
                   )}
                 </div>

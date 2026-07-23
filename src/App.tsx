@@ -29,7 +29,7 @@ import { globalEventBus } from './shared/event-bus'
 import UpdateNotification from './components/UpdateNotification'
 
 /**
- * Vela 主应用组件
+ * NovelForge 主应用组件
  * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局
  */
 export default function App() {

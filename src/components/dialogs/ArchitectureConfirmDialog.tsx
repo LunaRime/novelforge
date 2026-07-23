@@ -9,21 +9,25 @@ import {
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
 import { Textarea } from '../ui/Textarea'
+import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
-const ARCH_FILES: Array<{
+function getArchFiles(t: (key: TextKey) => string): Array<{
   key: ArchStepKey
   fileName: string
   label: string
   iconName: string
   desc: string
-}> = [
-  { key: 'premise',       fileName: 'premise.md',       label: '故事前提', iconName: 'target', desc: 'Logline、核心冲突、金手指定位' },
-  { key: 'characters',    fileName: 'characters.md',    label: '角色图谱', iconName: 'users',  desc: '角色弧光、关系网、矛盾交织' },
-  { key: 'worldbuilding', fileName: 'worldbuilding.md', label: '世界观',   iconName: 'globe',  desc: '核心规则、阶层断层、深层危机' },
-  { key: 'synopsis',      fileName: 'synopsis.md',      label: '情节大纲', iconName: 'map',    desc: '三幕式情节骨架' },
-]
+}> {
+  return [
+    { key: 'premise',       fileName: 'premise.md',       label: t('arch.storyPremise'), iconName: 'target', desc: t('archConfirm.premiseDesc') },
+    { key: 'characters',    fileName: 'characters.md',    label: t('arch.characterMap'),  iconName: 'users',  desc: t('archConfirm.charactersDesc') },
+    { key: 'worldbuilding', fileName: 'worldbuilding.md', label: t('arch.worldBuilding'), iconName: 'globe',  desc: t('archConfirm.worldbuildingDesc') },
+    { key: 'synopsis',      fileName: 'synopsis.md',      label: t('arch.plotOutline'),  iconName: 'map',    desc: t('archConfirm.synopsisDesc') },
+  ]
+}
 
 interface Props {
   isOpen: boolean
@@ -39,7 +43,9 @@ interface Props {
 export default function ArchitectureConfirmDialog({
   isOpen, onClose, archStatus, initialSelectedSteps, onConfirm,
 }: Props) {
+  const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const archFiles = getArchFiles(t)
 
   // 默认：未生成的全部勾选；或使用 initialSelectedSteps 覆盖
   const [checked, setChecked] = useState<Record<ArchStepKey, boolean>>(() => {
@@ -100,7 +106,7 @@ export default function ArchitectureConfirmDialog({
     if (noneSelected) return
     // 防重复：同类型工作流正在运行
     if (isArchRunning) {
-      toast.warning('已有架构生成任务正在执行，请等待完成后再试')
+      toast.warning(t('error.archInProgress'))
       return
     }
 
@@ -109,7 +115,7 @@ export default function ArchitectureConfirmDialog({
       // 前置校验 1：小说配置是否填写
       const configGuard = guardArchitectureGeneration()
       if (!configGuard.ok) {
-        setGuardError(configGuard.message || '配置校验失败')
+        setGuardError(configGuard.message || t('error.configCheckFailed'))
         return
       }
 
@@ -117,7 +123,7 @@ export default function ArchitectureConfirmDialog({
       if (selectedSteps.includes('characters') && archStatus.characters) {
         const charGuard = await guardCharacterRegeneration()
         if (!charGuard.ok) {
-          setGuardError(charGuard.message || '角色卡不可重新生成')
+          setGuardError(charGuard.message || t('error.charNoRegen'))
           return
         }
       }
@@ -125,8 +131,8 @@ export default function ArchitectureConfirmDialog({
       setGuardError(null)
       onConfirm(selectedSteps, stepGuidance)
       onClose()
-      const stepNames = selectedSteps.map(k => ARCH_FILES.find(f => f.key === k)?.label).filter(Boolean).join('、')
-      toast.info(`✨ 已提交：正在生成${stepNames}...`)
+      const stepNames = selectedSteps.map(k => archFiles.find(f => f.key === k)?.label).filter(Boolean).join('、')
+      toast.info(t('archConfirm.submittedToast').replace('{steps}', stepNames))
     } finally {
       setIsConfirming(false)
     }
@@ -146,10 +152,10 @@ export default function ArchitectureConfirmDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Wand2 size={16} className="text-[var(--color-accent)]" />
-            AI 生成故事架构
+            {t('dialog.aiGenArch')}
           </DialogTitle>
           <DialogDescription>
-            勾选要生成的步骤，未勾选的步骤将保留已有内容
+            {t('archConfirm.dialogDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -160,13 +166,13 @@ export default function ArchitectureConfirmDialog({
             style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}
           >
             <p className="font-medium text-[0.7rem] mb-2" style={{ color: 'var(--color-text-muted)' }}>
-              当前配置预览
+              {t('archConfirm.preview')}
             </p>
             <div className="grid grid-cols-2 gap-1">
-              <ConfigRow label="类型" value={[config.genre, config.subGenre].filter(Boolean).join(' · ')} />
-              <ConfigRow label="受众" value={config.targetAudience} />
-              <ConfigRow label="总章数" value={`${config.totalChapters} 章`} />
-              <ConfigRow label="每章字数" value={`${config.wordsPerChapter} 字`} />
+              <ConfigRow label={t('archConfirm.type')} value={[config.genre, config.subGenre].filter(Boolean).join(' · ')} placeholder={t('status.notConfigured')} />
+              <ConfigRow label={t('archConfirm.audience')} value={config.targetAudience} placeholder={t('status.notConfigured')} />
+              <ConfigRow label={t('novelConfig.totalChapters')} value={`${config.totalChapters} ${t('unit.chaptersCount')}`} placeholder={t('status.notConfigured')} />
+              <ConfigRow label={t('novelConfig.wordsPerChapter')} value={`${config.wordsPerChapter} ${t('unit.chars')}`} placeholder={t('status.notConfigured')} />
             </div>
             {config.coreOutline && (
               <p
@@ -185,18 +191,18 @@ export default function ArchitectureConfirmDialog({
           >
             <div className="flex items-center justify-between mb-1">
               <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                勾选要生成的步骤
+                {t('archConfirm.selectSteps')}
               </p>
               <button
                 onClick={() => setChecked({ premise: true, characters: true, worldbuilding: true, synopsis: true })}
                 className="text-xs underline"
                 style={{ color: 'var(--color-text-muted)' }}
               >
-                全选
+                {t('archConfirm.selectAll')}
               </button>
             </div>
 
-            {ARCH_FILES.map(f => {
+            {archFiles.map(f => {
               const exists = archStatus[f.key]
               const isChecked = checked[f.key]
               return (
@@ -238,7 +244,7 @@ export default function ArchitectureConfirmDialog({
                         : 'bg-[rgba(var(--color-accent-rgb),0.1)] text-[var(--color-accent)]'
                     }`}
                   >
-                    {exists ? (isChecked ? '将覆盖' : '保留') : '待生成'}
+                    {exists ? (isChecked ? t('archConfirm.willOverwrite') : t('archConfirm.willKeep')) : t('status.pendingGen')}
                   </span>
                 </label>
               )
@@ -257,11 +263,11 @@ export default function ArchitectureConfirmDialog({
                 onClick={() => setShowGuidance(!showGuidance)}
               >
                 {showGuidance ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                为每个步骤添加补充指导（可选）
+                {t('archConfirm.extraGuidance')}
               </button>
               {showGuidance && (
                 <div className="px-3 pb-3 space-y-3" style={{ backgroundColor: 'var(--color-panel)' }}>
-                  {ARCH_FILES.filter(f => checked[f.key]).map(f => (
+                  {archFiles.filter(f => checked[f.key]).map(f => (
                     <div key={f.key}>
                       <label className="text-[0.7rem] font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
                         {f.label}
@@ -269,7 +275,7 @@ export default function ArchitectureConfirmDialog({
                       <Textarea
                         value={stepGuidance[f.key] || ''}
                         onChange={e => setStepGuidance(prev => ({ ...prev, [f.key]: e.target.value }))}
-                        placeholder={`对「${f.label}」生成的特殊要求，如：“多强调金手指的限制”`}
+                        placeholder={t('archConfirm.guidancePlaceholderFull').replace('{label}', f.label)}
                         rows={2}
                         className="text-xs"
                       />
@@ -282,7 +288,7 @@ export default function ArchitectureConfirmDialog({
 
           {noneSelected && (
             <p className="text-xs px-3 py-2 rounded-lg bg-red-500/10 border border-red-500/20 text-red-600 dark:text-red-400">
-              ⚠️ 请至少勾选一个步骤
+              ⚠️ {t('error.selectStep')}
             </p>
           )}
           {/* 前置校验失败提示 */}
@@ -295,10 +301,10 @@ export default function ArchitectureConfirmDialog({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose} disabled={isConfirming}>取消</Button>
+          <Button variant="outline" onClick={onClose} disabled={isConfirming}>{t('action.cancel')}</Button>
           <Button variant="default" onClick={handleConfirm} disabled={noneSelected || isConfirming}>
             <Wand2 size={13} />
-            {isConfirming ? '校验中...' : `确认生成（${selectedSteps.length}/4）`}
+            {isConfirming ? t('status.verifying') : t('archConfirm.btn').replace('{n}', String(selectedSteps.length))}
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -306,11 +312,11 @@ export default function ArchitectureConfirmDialog({
   )
 }
 
-function ConfigRow({ label, value }: { label: string; value: string }) {
+function ConfigRow({ label, value, placeholder }: { label: string; value: string; placeholder: string }) {
   return (
     <div className="flex items-center gap-1 text-xs">
       <span style={{ color: 'var(--color-text-muted)' }}>{label}：</span>
-      <span style={{ color: 'var(--color-text)' }}>{value || '未填写'}</span>
+      <span style={{ color: 'var(--color-text)' }}>{value || placeholder}</span>
     </div>
   )
 }

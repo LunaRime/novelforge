@@ -28,7 +28,7 @@ function getAPI(): VelaAPI {
   const api = (window as unknown as { velaAPI: VelaAPI }).velaAPI
   if (!api) {
     // 浏览器模式下的降级处理（开发时直接浏览器打开的情况）
-    console.warn('[Vela IPC] velaAPI 未注入，可能不在 Electron 环境中运行')
+    console.warn('[NovelForge IPC] velaAPI 未注入，可能不在 Electron 环境中运行')
     return {
       invoke: async () => { throw new Error('不在 Electron 环境中') },
       on: () => () => {},

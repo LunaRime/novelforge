@@ -1,5 +1,5 @@
 /**
- * Vela 向量数据库封装 — 基于 LanceDB
+ * NovelForge 向量数据库封装 — 基于 LanceDB
  *
  * 提供本地嵌入式向量数据库能力，替代旧的 vectors.json 方案。
  * 支持两种检索模式：

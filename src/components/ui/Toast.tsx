@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 /**
- * Vela 全局 Toast 通知系统
+ * NovelForge 全局 Toast 通知系统
  *
  * 用于轻量、非阻塞的操作反馈（成功、警告，普通信息）。
  * 关键错误请使用 alertError() — 见 AlertDialog.tsx。

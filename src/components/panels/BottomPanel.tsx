@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { DEFAULT_LOCALE } from '../../shared/locale'
+import { useTranslation } from '../../hooks/useTranslation'
 import {
   Loader2, CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap,
@@ -90,7 +91,7 @@ export default function BottomPanel() {
         </div>
 
         {/* 右侧：关闭按钮 */}
-        <button onClick={toggleBottomPanel} title="关闭面板" className="icon-btn" style={{ width: 18, height: 18 }}>
+        <button onClick={toggleBottomPanel} title={t('tip.closePanel')} className="icon-btn" style={{ width: 18, height: 18 }}>
           <X size={12} strokeWidth={1.5} />
         </button>
       </div>
@@ -109,6 +110,7 @@ export default function BottomPanel() {
 // ===== ⚡ 任务视图（工作流进度主视图）— 支持多任务 =====
 
 function TaskRunView() {
+  const { t } = useTranslation()
   const activeRuns = useWorkflowStore(s => s.activeRuns)
   const history = useWorkflowStore(s => s.history)
   const waitingRuns = useWorkflowStore(s => s.waitingRuns)
@@ -121,7 +123,7 @@ function TaskRunView() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--color-text-muted)' }}>
         <Zap size={24} style={{ opacity: 0.5 }} />
-        <span className="text-xs">暂无任务，AI 工作流启动后会在这里展示进度</span>
+        <span className="text-xs">{t('empty.noTasks')}</span>
       </div>
     )
   }
@@ -152,7 +154,7 @@ function TaskRunView() {
       {history.length > 0 && (
         <div className="flex-shrink-0">
           <div className="px-4 pt-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
-            历史任务
+            {t('panel.taskHistory')}
           </div>
           <div className="px-2 pb-2">
             {history.map((run) => (
@@ -201,6 +203,7 @@ function ActiveRunPanel({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
 
   // 需要确认时自动展开
@@ -273,7 +276,7 @@ function ActiveRunPanel({
             onClick={(e) => { e.stopPropagation(); onCancel() }}
             className="icon-btn"
             style={{ width: 18, height: 18 }}
-            title="取消任务"
+            title={t('tip.cancelTask')}
           >
             <X size={11} />
           </button>
@@ -301,14 +304,14 @@ function ActiveRunPanel({
             >
               <Clock size={11} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
               <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                下一步：{nextStepName}
+                {t('panel.nextStep').replace('{name}', nextStepName)}
               </span>
               <button
                 onClick={onConfirm}
                 className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
                 style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
               >
-                <Play size={10} /> 继续
+                <Play size={10} /> {t('nextStep.continue')}
               </button>
             </div>
           )}
@@ -326,14 +329,14 @@ function ActiveRunPanel({
         >
           <Clock size={11} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
           <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
-            下一步：{nextStepName}
+            {t('panel.nextStep').replace('{name}', nextStepName)}
           </span>
           <button
             onClick={(e) => { e.stopPropagation(); onConfirm() }}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
             style={{ backgroundColor: 'var(--color-accent)', color: '#fff' }}
           >
-            <Play size={10} /> 继续
+            <Play size={10} /> {t('nextStep.continue')}
           </button>
         </div>
       )}
@@ -352,6 +355,7 @@ function WorkflowStepItem({
   index: number
   isLast: boolean
 }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   const hasDetail = !!step.error || step.logs.length > 0
 
@@ -425,7 +429,7 @@ function WorkflowStepItem({
           )}
           {/* 完成耗时（若有时间戳）或简单标记 */}
           {step.status === 'skipped' && (
-            <span className="text-[0.68rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>已跳过</span>
+            <span className="text-[0.68rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('status.aborted')}</span>
           )}
         </div>
 

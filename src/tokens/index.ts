@@ -1,5 +1,5 @@
 /**
- * Vela Design Tokens
+ * NovelForge Design Tokens
  * ⚠️ 由 scripts/extract-tokens.cjs 自动生成，请勿手动编辑
  *
  * 运行 pnpm gen:tokens 重新生成。

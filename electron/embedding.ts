@@ -1,5 +1,5 @@
 /**
- * Vela 嵌入服务 — 主进程使用
+ * NovelForge 嵌入服务 — 主进程使用
  *
  * 提供文本向量化能力（调用远程 Embedding API）
  * 支持 OpenAI 和 Gemini 两种 Embedding API

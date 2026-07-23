@@ -1,5 +1,5 @@
 /**
- * Vela Transfer Hub — 中间件接口定义
+ * NovelForge Transfer Hub — 中间件接口定义
  *
  * 中间件是 TransferHub 的可插拔处理单元。
  * 每个中间件可以在消息处理的不同阶段介入：

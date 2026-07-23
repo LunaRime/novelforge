@@ -1,5 +1,5 @@
 /**
- * Vela 模型路由器 — 按任务自动选择最优模型
+ * NovelForge 模型路由器 — 按任务自动选择最优模型
  *
  * 三层模型策略：
  * - Elite: 创意写作、架构规划 → GPT-4o, Claude Opus, DeepSeek-V3

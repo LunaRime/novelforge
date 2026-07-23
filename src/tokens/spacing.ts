@@ -1,5 +1,5 @@
 /**
- * Vela Spacing Scale
+ * NovelForge Spacing Scale
  *
  * Usage:
  *   import { spacing } from '@/tokens/spacing'

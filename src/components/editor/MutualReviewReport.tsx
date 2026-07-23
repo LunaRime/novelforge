@@ -8,6 +8,7 @@ import React from 'react'
 import { ThumbsUp, AlertCircle, Lightbulb, Zap } from 'lucide-react'
 import type { MutualReviewReport } from '../../services/workflows/commands/synthesize-scores.command'
 import { Badge } from '../ui/Badge'
+import { useTranslation } from '../../hooks/useTranslation'
 
 interface MutualReviewReportProps {
   report: MutualReviewReport
@@ -25,6 +26,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
   report,
   className = '',
 }) => {
+  const { t } = useTranslation()
   return (
     <div className={`flex flex-col gap-4 text-sm ${className}`}>
       {/* 总评分 */}
@@ -33,7 +35,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
           <div className="text-3xl font-bold text-accent">
             {report.finalScore.toFixed(1)}
           </div>
-          <div className="text-xs text-muted-foreground">综合评分/10</div>
+          <div className="text-xs text-muted-foreground">{t('review.overallScore')}</div>
         </div>
         <div className="flex-1">
           <div className="text-sm font-medium mb-2">
@@ -124,7 +126,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
           </h4>
           {ro.strengths.length > 0 && (
             <div className="mb-1">
-              <span className="text-xs text-green-600">优点: </span>
+              <span className="text-xs text-green-600">{t('review.pros')}</span>
               <span className="text-xs text-muted-foreground">
                 {ro.strengths.join('、')}
               </span>
@@ -132,7 +134,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
           )}
           {ro.weaknesses.length > 0 && (
             <div className="mb-1">
-              <span className="text-xs text-yellow-600">问题: </span>
+              <span className="text-xs text-yellow-600">{t('review.cons')}</span>
               <span className="text-xs text-muted-foreground">
                 {ro.weaknesses.join('、')}
               </span>

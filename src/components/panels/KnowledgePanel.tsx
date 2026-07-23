@@ -8,12 +8,14 @@ import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
+import { useTranslation } from '../../hooks/useTranslation'
 import { loadKBData, type KBDocument } from '../../services/knowledge-service'
 
 
 
 /** 知识库管理面板（侧栏）— 纯只读展示 + 搜索，数据由定稿自动驱动 */
 export default function KnowledgePanel() {
+  const { t } = useTranslation()
   const [documents, setDocuments] = useState<KBDocument[]>([])
   const [stats, setStats] = useState({ documentCount: 0, totalChunks: 0 })
   const [currentPage, setCurrentPage] = useState(1)
@@ -117,13 +119,13 @@ export default function KnowledgePanel() {
 
         {/* 已入库章节列表 */}
         <div className="px-3 py-1.5 text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
-          已入库章节
+          {t('knowledge.indexedChapters')}
         </div>
         {documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
             <BookOpen size={28} />
-            <span className="text-xs">暂无数据</span>
-            <span className="text-[0.7rem] text-center px-4">定稿后章节内容将自动入库</span>
+            <span className="text-xs">{t('knowledge.empty')}</span>
+            <span className="text-[0.7rem] text-center px-4">{t('knowledge.autoIndexHint')}</span>
           </div>
         ) : (
           <div className="pb-4">
@@ -140,7 +142,7 @@ export default function KnowledgePanel() {
                       {titleMap[doc.id] || doc.fileName}
                     </div>
                     <div className="flex items-center gap-2 text-[0.7rem] text-[var(--color-text-muted)] mt-0.5">
-                      <span>{doc.chunkCount} 块</span>
+                      <span>{t('knowledge.chunks').replace('{n}', String(doc.chunkCount))}</span>
                       <span>{new Date(doc.importedAt).toLocaleDateString(DEFAULT_LOCALE)}</span>
                     </div>
                   </div>
@@ -159,7 +161,7 @@ export default function KnowledgePanel() {
                     disabled={currentPage === 1}
                     onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
                   >
-                    上一页
+                    {t('knowledge.prevPage')}
                   </Button>
                   <Button
                     variant="outline" size="sm"
@@ -167,7 +169,7 @@ export default function KnowledgePanel() {
                     disabled={currentPage === Math.ceil(documents.length / pageSize)}
                     onClick={() => setCurrentPage(p => Math.min(Math.ceil(documents.length / pageSize), p + 1))}
                   >
-                    下一页
+                    {t('knowledge.nextPage')}
                   </Button>
                 </div>
               </div>

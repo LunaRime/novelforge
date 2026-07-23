@@ -1,5 +1,5 @@
 /**
- * Vela 并发状态 Store — 前端并发状态监控
+ * NovelForge 并发状态 Store — 前端并发状态监控
  *
  * 提供 API 并发状态的实时查询和配置接口。
  * 配合 electron/utils/concurrency-controller.ts 使用。

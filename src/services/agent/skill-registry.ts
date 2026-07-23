@@ -3,7 +3,7 @@
  *
  * 管理所有可用的 Skill（基于 SKILL.md 的模块化知识包）。
  * 支持：
- * - 内置 Skill（随 Vela 发布的预设 Skill）
+ * - 内置 Skill（随 NovelForge 发布的预设 Skill）
  * - 用户 Skill（用户放在 ~/.vela/skills/ 下的自定义 Skill）
  * - 项目 Skill（放在项目的 .vela/skills/ 下的项目级 Skill）
  *

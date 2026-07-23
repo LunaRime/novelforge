@@ -24,7 +24,7 @@ export function readJsonFile<T>(filePath: string, fallback: T): T {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
     }
   } catch (error) {
-    console.warn(`[Vela] 读取 ${filePath} 失败:`, error)
+    console.warn(`[NovelForge] 读取 ${filePath} 失败:`, error)
   }
   return fallback
 }
@@ -39,7 +39,7 @@ export function writeJsonFile(filePath: string, data: unknown) {
   } catch (error) {
     // 清理临时文件
     try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath) } catch { /* ignore */ }
-    console.error(`[Vela] 写入配置文件失败: ${filePath}`, error)
+    console.error(`[NovelForge] 写入配置文件失败: ${filePath}`, error)
     throw error
   }
 }

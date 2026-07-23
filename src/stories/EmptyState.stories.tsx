@@ -3,7 +3,7 @@ import { EmptyState } from '../components/ui/EmptyState'
 import { FileText, FolderOpen, Search } from 'lucide-react'
 
 const meta = {
-  title: 'Vela UI/EmptyState',
+  title: 'NovelForge UI/EmptyState',
   component: EmptyState,
   tags: ['autodocs'],
   argTypes: {

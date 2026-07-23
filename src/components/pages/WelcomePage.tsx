@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
+import { useTranslation } from '../../hooks/useTranslation'
 
 const FIRST_RUN_KEY = 'vela-first-run'
 
@@ -27,6 +28,7 @@ interface WelcomePageProps {
 
 /** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导 */
 export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings }: WelcomePageProps) {
+  const { t } = useTranslation()
   const recentProjects = useProjectStore(s => s.recentProjects)
   const openProject = useProjectStore(s => s.openProject)
   const currentProject = useProjectStore(s => s.currentProject)
@@ -54,10 +56,10 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
             <BookOpen size={36} color="#fff" style={{ position: 'relative', zIndex: 1 }} />
           </div>
           <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
-            {currentProject ? currentProject.name : '欢迎使用 Vela'}
+            {currentProject ? currentProject.name : t('welcome.title')}
           </h1>
           <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-            {currentProject ? currentProject.path : 'AI 深度驱动的小说创作 IDE'}
+            {currentProject ? currentProject.path : t('welcome.subtitle')}
           </p>
         </div>
 
@@ -73,13 +75,13 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                🚀 快速开始
+                🚀 {t('welcome.quickStart')}
               </h2>
               <button
                 onClick={dismissGuide}
                 className="p-0.5 rounded hover:opacity-70"
                 style={{ color: 'var(--color-text-muted)' }}
-                title="关闭引导"
+                title={t('welcome.dismissGuide')}
               >
                 <X size={14} />
               </button>
@@ -88,22 +90,22 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
             <div className="space-y-3">
               <StepItem
                 step={1}
-                title="配置 AI 模型"
-                desc="设置 API 密钥和模型参数，启用 AI 创作能力"
+                title={t('welcome.configAI')}
+                desc={t('welcome.configAIDesc')}
                 icon={<Settings size={14} />}
-                action={onOpenSettings ? { label: '打开设置', onClick: onOpenSettings } : undefined}
+                action={onOpenSettings ? { label: t('welcome.openSettings'), onClick: onOpenSettings } : undefined}
               />
               <StepItem
                 step={2}
-                title="新建或打开项目"
-                desc="创建新小说工程，或继续之前的创作"
+                title={t('welcome.newOrOpen')}
+                desc={t('welcome.newOrOpenDesc')}
                 icon={<FolderOpen size={14} />}
-                action={{ label: '新建项目', onClick: onNewProject }}
+                action={{ label: t('welcome.newProject'), onClick: onNewProject }}
               />
               <StepItem
                 step={3}
-                title="开始创作"
-                desc="使用 AI 辅助生成大纲、蓝图和章节内容"
+                title={t('welcome.startCreate')}
+                desc={t('welcome.startCreateDesc')}
                 icon={<PenLine size={14} />}
               />
             </div>
@@ -134,10 +136,10 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
               <Sparkles size={20} />
             </div>
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              新建项目
+              {t('welcome.newProject')}
             </span>
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              创建一部新的小说
+              {t('welcome.createNovel')}
             </span>
           </button>
 
@@ -164,10 +166,10 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
               <FolderOpen size={20} />
             </div>
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              打开项目
+              {t('welcome.openProject')}
             </span>
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              打开已有 Vela 项目
+              {t('welcome.openExisting')}
             </span>
           </button>
 
@@ -194,10 +196,10 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
               <FileUp size={20} />
             </div>
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              导入小说
+              {t('welcome.importNovel')}
             </span>
             <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              导入已有作品续写
+              {t('welcome.importExisting')}
             </span>
           </button>
         </div>
@@ -208,7 +210,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
             <div className="flex items-center gap-1.5 mb-3">
               <Clock size={14} style={{ color: 'var(--color-text-muted)' }} />
               <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                最近项目
+                {t('project.recent')}
               </span>
             </div>
             <div className="space-y-1">
@@ -244,7 +246,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
 
         <div className="text-center mt-12">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
-            Vela v0.1.0 · 七阶段 AI 驱动创作流水线 · 本地化数据安全
+            {t('welcome.footer')}
           </p>
         </div>
       </div>

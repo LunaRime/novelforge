@@ -35,11 +35,13 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
     setExporting(false)
   }
 
-  const FORMAT_OPTIONS: Array<{ value: ExportFormat; label: string; desc: string; icon: React.ReactNode }> = [
-    { value: 'merged-md', label: '合并 Markdown', desc: '全书合并为单个 .md 文件', icon: <FileText size={18} /> },
-    { value: 'split-md', label: '分章 Markdown', desc: '每章一个独立 .md 文件', icon: <Files size={18} /> },
-    { value: 'txt', label: '纯文本 TXT', desc: '去除格式标记的纯文本', icon: <Type size={18} /> },
-  ]
+  function getFormatOptions() {
+    return [
+      { value: 'merged-md' as ExportFormat, label: t('export.mergedMD'), desc: t('export.mergedDesc'), icon: <FileText size={18} /> },
+      { value: 'split-md' as ExportFormat, label: t('export.perChapterMD'), desc: t('export.perChapterDesc'), icon: <Files size={18} /> },
+      { value: 'txt' as ExportFormat, label: t('export.plainText'), desc: t('export.txtDesc'), icon: <Type size={18} /> },
+    ]
+  }
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
@@ -47,7 +49,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download size={16} className="text-[var(--color-accent)]" />
-            导出项目
+            {t('export.title')}
           </DialogTitle>
           <DialogDescription>{t('export.chooseFormat')}</DialogDescription>
         </DialogHeader>
@@ -55,7 +57,7 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
         <div className="px-5 py-4 space-y-3">
           {/* 格式选择 */}
           <div className="space-y-2">
-            {FORMAT_OPTIONS.map((opt) => (
+            {getFormatOptions().map((opt) => (
               <div
                 key={opt.value}
                 onClick={() => setFormat(opt.value)}
@@ -92,7 +94,10 @@ export default function ExportDialog({ isOpen, onClose }: Props) {
               'p-3 rounded-lg text-xs',
               result.success ? 'bg-green-500/10 text-green-500' : 'bg-red-500/10 text-red-500'
             )}>
-              {result.success ? `✅ 已导出到: ${result.path}` : `❌ ${result.error}`}
+              {result.success
+                ? `✅ ${t('export.success').replace('{path}', result.path ?? '')}`
+                : t('export.failed').replace('{error}', result.error ?? '')
+              }
             </div>
           )}
         </div>

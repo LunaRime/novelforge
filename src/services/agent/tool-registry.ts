@@ -1,5 +1,5 @@
 /**
- * Vela Agent Tool 注册表
+ * NovelForge Agent Tool 注册表
  *
  * 统一管理所有 Agent 可调用的工具（内置 Tool / MCP Tool / Skill Tool）。
  * 参考 Claude Code 的 Tool 系统设计，但针对小说创作场景做了精简。

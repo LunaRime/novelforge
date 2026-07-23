@@ -1,5 +1,5 @@
 /**
- * Vela 内置 Prompt 模板库
+ * NovelForge 内置 Prompt 模板库
  *
  * 包含全流程创作所需的全部提示词模板
  * 支持三级覆盖：内置 → 全局自定义 → 项目级覆盖
@@ -75,7 +75,7 @@ export async function loadCustomPrompts(): Promise<void> {
 
     await _loadPromptsFromDir(promptsDir, customPrompts)
     customPromptsLoaded = true
-    console.log(`[Vela Prompts] 已加载 ${customPrompts.size} 个全局自定义覆盖`)
+    console.log(`[NovelForge Prompts] 已加载 ${customPrompts.size} 个全局自定义覆盖`)
   } catch {
     // prompts 目录可能不存在，忽略
     customPromptsLoaded = true
@@ -89,7 +89,7 @@ export async function loadProjectCustomPrompts(projectPath: string): Promise<voi
     const promptsDir = `${projectPath}/.vela/prompts`
 
     await _loadPromptsFromDir(promptsDir, projectCustomPrompts)
-    console.log(`[Vela Prompts] 已加载 ${projectCustomPrompts.size} 个项目级自定义覆盖`)
+    console.log(`[NovelForge Prompts] 已加载 ${projectCustomPrompts.size} 个项目级自定义覆盖`)
   } catch {
     // 目录不存在时忽略
   }

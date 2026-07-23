@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 /**
- * Vela 弹窗报错组件 — JetBrains / VSCode 风格
+ * NovelForge 弹窗报错组件 — JetBrains / VSCode 风格
  *
  * 用于需要用户明确知晓的关键错误（如项目加载失败、文件读写错误等）。
  * 完全使用项目 CSS 变量，自动适配深色 / 浅色主题。
@@ -9,7 +9,7 @@
  *
  * 用法：
  *   import { alertError } from '@/components/ui/AlertDialog'
- *   alertError('不是有效的 Vela 项目目录', { title: '打开项目失败' })
+ *   alertError('不是有效的 NovelForge 项目目录', { title: '打开项目失败' })
  */
 
 import { createRoot } from 'react-dom/client'
@@ -175,7 +175,7 @@ function AlertDialog({
  * 也可以不 await，fire-and-forget。
  *
  * @example
- * await alertError('不是有效的 Vela 项目目录', { title: '打开项目失败' })
+ * await alertError('不是有效的 NovelForge 项目目录', { title: '打开项目失败' })
  * alertError('写入失败，请检查磁盘权限。')
  */
 export function alertError(

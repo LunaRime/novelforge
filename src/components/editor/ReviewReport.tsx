@@ -1,6 +1,8 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { AlertTriangle, CheckCircle, Info, Sparkles, HelpCircle, Quote } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -144,43 +146,57 @@ function parseLegacyReport(text: string): { issues: ReviewIssue[]; summary: stri
 
 // ===== 视觉配置 =====
 
-const SEVERITY_META: Record<ReviewIssue['severity'], {
+type TFunc = (key: TextKey) => string
+
+function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
   label: string
   emoji: string
   actionLabel: string
   colorClass: string
   bgClass: string
   borderClass: string
-}> = {
-  error: {
-    label: '严重问题',
-    emoji: '🔴',
-    actionLabel: '强烈建议修复',
-    colorClass: 'text-red-400',
-    bgClass: 'bg-red-500/10',
-    borderClass: 'border-red-500/30',
-  },
-  warning: {
-    label: '改进建议',
-    emoji: '🟡',
-    actionLabel: '建议酌情修复',
-    colorClass: 'text-yellow-400',
-    bgClass: 'bg-yellow-500/10',
-    borderClass: 'border-yellow-500/30',
-  },
-  pass: {
-    label: '检查通过',
-    emoji: '🟢',
-    actionLabel: '无需处理',
-    colorClass: 'text-green-400',
-    bgClass: 'bg-green-500/10',
-    borderClass: 'border-green-500/30',
-  },
+}> {
+  return {
+    error: {
+      label: t('review.critical'),
+      emoji: '🔴',
+      actionLabel: t('review.fixStrongly'),
+      colorClass: 'text-red-400',
+      bgClass: 'bg-red-500/10',
+      borderClass: 'border-red-500/30',
+    },
+    warning: {
+      label: t('review.suggestion'),
+      emoji: '🟡',
+      actionLabel: t('review.fixOptional'),
+      colorClass: 'text-yellow-400',
+      bgClass: 'bg-yellow-500/10',
+      borderClass: 'border-yellow-500/30',
+    },
+    pass: {
+      label: t('review.passed'),
+      emoji: '🟢',
+      actionLabel: t('review.noAction'),
+      colorClass: 'text-green-400',
+      bgClass: 'bg-green-500/10',
+      borderClass: 'border-green-500/30',
+    },
+  }
 }
 
 /** 审稿报告查看器 */
 export default function ReviewReport({ reportText, draftPath, chapterNumber, chapterDir }: ReviewReportProps) {
-  const { issues, summary } = parseReport(reportText)
+  const { t } = useTranslation()
+  const severityMeta = useMemo(() => getSeverityMeta(t), [t])
+
+  const { issues: rawIssues, summary } = parseReport(reportText)
+  // 将默认分类名「综合检查」替换为本地化文本
+  const comprehensiveCheckLabel = t('review.comprehensiveCheck')
+  const issues = useMemo(() => rawIssues.map(issue => ({
+    ...issue,
+    category: issue.category === '综合检查' ? comprehensiveCheckLabel : issue.category,
+  })), [rawIssues, comprehensiveCheckLabel])
+
   const [showRefineDialog, setShowRefineDialog] = useState(false)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
   const [processing, setProcessing] = useState(false)
@@ -256,27 +272,27 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
       <div className="max-w-2xl mx-auto px-6 py-4">
         {/* 统计栏 */}
         <div className="flex items-center gap-4 mb-4 pb-3 border-b border-[var(--color-border)]">
-          <h3 className="text-base font-bold text-[var(--color-text)]"> 审稿报告</h3>
+          <h3 className="text-base font-bold text-[var(--color-text)]">{t('review.title')}</h3>
           <div className="flex items-center gap-3 text-xs ml-auto">
             {errorCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-red-500/20 text-red-400">
-                🔴 {errorCount} 严重
+                🔴 {errorCount} {t('review.criticalCount')}
               </span>
             )}
             {warningCount > 0 && (
               <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-yellow-500/20 text-yellow-400">
-                🟡 {warningCount} 建议
+                🟡 {warningCount} {t('review.suggestionCount')}
               </span>
             )}
             <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-green-500/20 text-green-400">
-              🟢 {passCount} 通过
+              🟢 {passCount} {t('review.passedCount')}
             </span>
             {/* 图例帮助按钮 */}
             <button
               className="flex items-center justify-center rounded-full hover:bg-[var(--color-hover)] transition-colors"
               style={{ width: 22, height: 22 }}
               onClick={() => setShowLegend(!showLegend)}
-              title="颜色说明"
+              title={t('tip.colorLegend')}
             >
               <HelpCircle size={14} style={{ color: 'var(--color-text-muted)' }} />
             </button>
@@ -292,9 +308,9 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
               borderColor: 'var(--color-border)',
             }}
           >
-            <div className="font-medium text-[var(--color-text)] mb-1.5">颜色标记说明</div>
+            <div className="font-medium text-[var(--color-text)] mb-1.5">{t('review.colorLegend')}</div>
             {(['error', 'warning', 'pass'] as const).map(sev => {
-              const meta = SEVERITY_META[sev]
+              const meta = severityMeta[sev]
               return (
                 <div key={sev} className="flex items-center gap-2">
                   <span className={cn(
@@ -322,7 +338,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
               color: 'var(--color-text)',
             }}
           >
-            <span className="font-medium">总体评价：</span>
+            <span className="font-medium">{t('review.overallAssessment')}</span>
             <span style={{ color: 'var(--color-text-secondary)' }}>{summary}</span>
           </div>
         )}
@@ -331,7 +347,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         {issues.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
             <CheckCircle size={32} className="mx-auto mb-2 text-green-400" />
-            审稿通过，未发现问题
+            {t('review.allPassed')}
           </div>
         ) : (
           <div className="space-y-4">
@@ -343,7 +359,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
                 </h4>
                 <div className="space-y-1.5 pl-1">
                   {items.map((item, i) => {
-                    const meta = SEVERITY_META[item.severity]
+                    const meta = severityMeta[item.severity]
                     return (
                       <div
                         key={i}
@@ -388,7 +404,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         {/* 原始文本折叠 */}
         <details className="mt-6">
           <summary className="text-xs text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
-            查看原始审稿文本
+            {t('review.rawText')}
           </summary>
           <pre className="mt-2 text-xs whitespace-pre-wrap font-mono leading-5 text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
             {reportText}
@@ -405,10 +421,10 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
               disabled={processing}
             >
               <Sparkles size={14} className="mr-1" />
-              AI 一键修稿
+              {t('review.aiFixBtn')}
             </Button>
             <p className="text-[0.7rem] text-center mt-3" style={{ color: 'var(--color-text-muted)' }}>
-              AI 将根据上方审稿报告中发现的问题精准修复草稿，并为您生成对比视图
+              {t('review.aiFixDesc')}
             </p>
           </div>
         )}
@@ -420,20 +436,20 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles size={15} className="text-[var(--color-accent)]" />
-              根据审稿意见修稿
+              {t('review.aiFixTitle')}
             </DialogTitle>
             <DialogDescription>
-              AI 将根据审稿报告中的问题精准修复草稿
+              {t('review.aiFixDesc2')}
             </DialogDescription>
           </DialogHeader>
           <div className="px-5 py-2 text-sm space-y-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-            <div className="font-medium text-[var(--color-text)]">本次【审稿修稿】范围：</div>
-            <div>1. 重点修复审稿报告中指出的「严重问题」与「改进建议」。</div>
-            <div>2. 可在下方指定的额外修稿要求。</div>
+            <div className="font-medium text-[var(--color-text)]">{t('review.refineScope')}</div>
+            <div>{t('review.refineScopeItem1')}</div>
+            <div>{t('review.refineScopeItem2')}</div>
           </div>
           <div className="px-5 pb-2">
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-              额外修稿指导（可选）：
+              {t('review.extraFixLabel')}
             </label>
             <textarea
               className="w-full px-3 py-2 rounded-md text-sm"
@@ -445,15 +461,15 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
                 resize: 'vertical',
                 outline: 'none',
               }}
-              placeholder="例如：优先修复角色对白不一致的问题；忽略报告中关于节奏的建议，保持原有节奏..."
+              placeholder={t('review.extraFixPlaceholder')}
               value={userRefinePrompt}
               onChange={e => setUserRefinePrompt(e.target.value)}
             />
           </div>
           <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowRefineDialog(false)}>取消</Button>
+            <Button variant="ghost" onClick={() => setShowRefineDialog(false)}>{t('action.cancel')}</Button>
             <Button variant="ai" onClick={doRefineFromReview}>
-              确认修稿
+              {t('review.confirmPolish')}
             </Button>
           </DialogFooter>
         </DialogContent>

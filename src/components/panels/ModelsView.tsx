@@ -37,16 +37,16 @@ export default memo(function ModelsView() {
           style={{ borderBottom: '1px solid var(--color-border)' }}
         >
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            <span className="font-bold text-sm text-[var(--color-text)]">{stats.totalCalls}</span> 次调用
+            <span className="font-bold text-sm text-[var(--color-text)]">{stats.totalCalls}</span>{t('models.calls')}
           </div>
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
             <span className="font-bold text-sm text-[var(--color-text)]">{(stats.totalTokens / 1000).toFixed(1)}k</span> Tokens
           </div>
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            输入 <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalPromptTokens / 1000).toFixed(1)}k</span>
+            {t('models.input')} <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalPromptTokens / 1000).toFixed(1)}k</span>
           </div>
           <div className="text-[0.7rem] text-[var(--color-text-muted)]">
-            输出 <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalCompletionTokens / 1000).toFixed(1)}k</span>
+            {t('models.output')} <span className="font-mono text-[var(--color-text-secondary)]">{(stats.totalCompletionTokens / 1000).toFixed(1)}k</span>
           </div>
         </div>
       )}
@@ -60,12 +60,12 @@ export default memo(function ModelsView() {
                 className="text-[0.7rem] text-[var(--color-text-muted)]"
                 style={{ borderBottom: '1px solid var(--color-border)' }}
               >
-                <th className="text-left px-4 py-1 font-medium">时间</th>
-                <th className="text-left px-2 py-1 font-medium">模型</th>
-                <th className="text-left px-2 py-1 font-medium">用途</th>
+                <th className="text-left px-4 py-1 font-medium">{t('models.time')}</th>
+                <th className="text-left px-2 py-1 font-medium">{t('models.model')}</th>
+                <th className="text-left px-2 py-1 font-medium">{t('models.purpose')}</th>
                 <th className="text-right px-2 py-1 font-medium">Tokens</th>
-                <th className="text-right px-2 py-1 font-medium">耗时</th>
-                <th className="text-center px-2 py-1 font-medium">状态</th>
+                <th className="text-right px-2 py-1 font-medium">{t('models.duration')}</th>
+                <th className="text-center px-2 py-1 font-medium">{t('models.status')}</th>
               </tr>
             </thead>
             <tbody>

@@ -1,5 +1,5 @@
 /**
- * Vela 向量配置管理 Store
+ * NovelForge 向量配置管理 Store
  *
  * 管理向量模块（本地 LanceDB FTS + 相似度计算）和向量模型（Embedding API）的开关状态。
  *

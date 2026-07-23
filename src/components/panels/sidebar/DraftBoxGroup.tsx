@@ -11,6 +11,7 @@ import { confirm } from '../../ui/Confirm'
 import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
 import { showSidebarMenu } from './SidebarShared'
 import { ipc } from '../../../services/ipc-client'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 // ===== 草稿箱折叠组 =====
 
@@ -19,6 +20,7 @@ export default function DraftBoxGroup({
 }: {
   draftsByChapter: Record<number, DraftMeta[]>
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(true)
 
   // 所有章节号排序
@@ -38,17 +40,17 @@ export default function DraftBoxGroup({
         className="tree-item gap-1.5 cursor-pointer select-none"
         style={{ paddingLeft: 10 }}
         onClick={() => setOpen(v => !v)}
-        title="草稿箱：AI 生成后的章节草稿在此管理，定稿后进入正文章节"
+        title={t('tip.draftBox')}
       >
         {open
           ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
         }
         <FilePen size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>草稿箱</span>
+        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('draftbox.title')}</span>
         {activeChapterCount > 0 && (
           <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {activeChapterCount} 章
+            {t('draftbox.count').replace('{n}', String(activeChapterCount))}
           </span>
         )}
       </div>
@@ -60,7 +62,7 @@ export default function DraftBoxGroup({
               className="text-xs py-1"
               style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}
             >
-              暂无草稿（从章节蓝图点击「写作此章」创作）
+              {t('draftbox.empty')}
             </div>
           ) : (
             chapterNums.map(chNum => (
@@ -86,6 +88,7 @@ function DraftChapterGroup({
   chapterNumber: number
   drafts: DraftMeta[]
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(true)
 
   // 将 archived 草稿折叠，只显示活跃草稿（非 archived）
@@ -107,7 +110,9 @@ function DraftChapterGroup({
   // 已定稿的草稿存在时，章节显示绿色标记
   const hasFinalized = drafts.some(d => d.status === 'finalized')
   const baseTitle = bpTitle || drafts[0]?.chapterTitle || ''
-  const displayTitle = baseTitle.startsWith(`第${chapterNumber}章`) ? baseTitle : (baseTitle ? `第${chapterNumber}章 ${baseTitle}` : `第${chapterNumber}章`)
+  const chLabelCN = `第${chapterNumber}章`
+  const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
+  const displayTitle = baseTitle.startsWith(chLabelCN) ? baseTitle : (baseTitle ? `${chLabel} ${baseTitle}` : chLabel)
 
   return (
     <div>
@@ -130,7 +135,7 @@ function DraftChapterGroup({
           {displayTitle}
         </span>
         <span className="ml-auto text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {activeDrafts.length} 稿
+          {t('draftbox.revisionCount').replace('{n}', String(activeDrafts.length))}
         </span>
       </div>
 
@@ -153,7 +158,7 @@ function DraftChapterGroup({
               onClick={() => setShowArchived(v => !v)}
             >
               <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
-                {showArchived ? '▲ 隐藏' : `▼ ${archivedDrafts.length} 个已归档`}
+                {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
               </span>
             </div>
           )}
@@ -182,6 +187,8 @@ function DraftItem({
   chapterTitleText: string
   archived?: boolean
 }) {
+  const { t } = useTranslation()
+
   /** 打开草稿到编辑器 */
   const openDraft = async () => {
     const content = await readDraftBody(draft.filePath)
@@ -198,8 +205,8 @@ function DraftItem({
   const deleteDraft = async () => {
     if (isFinalized) return
     const ok = await confirm(
-      `归档草稿 "${chapterTitleText} v${draft.version}" 后可在草稿管理列表中展开已归档列表查看。`,
-      { title: '归档草稿', confirmText: '归档', danger: true }
+      t('draftbox.archiveConfirm').replace('{name}', `${chapterTitleText} v${draft.version}`),
+      { title: t('dialog.confirmArchive'), confirmText: t('draftbox.archiveAction'), danger: true }
     )
     if (!ok) return
     await useDraftStore.getState().markDraftStatus(draft.filePath, draft.chapterNumber, 'archived')
@@ -221,32 +228,35 @@ function DraftItem({
       onContextMenu={e => showSidebarMenu([
         {
           key: 'open',
-          label: '打开草稿',
+          label: t('action.openDraft'),
           icon: <FolderOpen size={13} />,
           onClick: openDraft,
         },
         { key: 'div1', type: 'divider' as const },
         {
           key: 'copy-path',
-          label: '复制文件路径',
+          label: t('action.copyPath'),
           icon: <Copy size={13} />,
           onClick: () => navigator.clipboard.writeText(draft.filePath).catch(() => { }),
         },
         { key: 'div2', type: 'divider' as const },
         {
           key: 'delete',
-          label: '删除草稿',
+          label: t('action.deleteDraft'),
           icon: <Trash2 size={13} />,
           danger: true,
           disabled: isFinalized,
           onClick: deleteDraft,
         },
       ], e)}
-      title={`点击打开 — ${chapterTitleText} v${draft.version}（${DRAFT_STATUS_LABEL[draft.status] || draft.status}）`}
+      title={t('draftbox.tooltip')
+        .replace('{title}', chapterTitleText)
+        .replace('{version}', String(draft.version))
+        .replace('{status}', DRAFT_STATUS_LABEL[draft.status] || draft.status)}
     >
       <FileText size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
       <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
-        草稿_v{draft.version}
+        {t('draftbox.label').replace('{version}', String(draft.version))}
       </span>
       {/* 状态标签（始终显示） */}
       <span

@@ -8,6 +8,7 @@
  */
 
 import { skillRegistry, type LoadedSkill } from './skill-registry'
+import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
@@ -47,39 +48,41 @@ export interface ParsedMention {
 
 // ===== / 命令管理 =====
 
-/** 内置 / 命令列表 */
-const BUILTIN_COMMANDS: SlashCommand[] = [
-  {
-    name: 'clear',
-    displayName: '清空对话',
-    description: '清空当前对话历史',
-    source: 'builtin_command',
-  },
-  {
-    name: 'new',
-    displayName: '新对话',
-    description: '开始一个新的对话',
-    source: 'builtin_command',
-  },
-  {
-    name: 'help',
-    displayName: '帮助',
-    description: '显示可用的命令和功能列表',
-    source: 'builtin_command',
-  },
-  {
-    name: 'status',
-    displayName: '项目状态',
-    description: '查看当前项目的状态和进度',
-    source: 'builtin_command',
-  },
-]
+/** 获取内置 / 命令列表（动态计算以支持 i18n） */
+function getBuiltinCommands(): SlashCommand[] {
+  return [
+    {
+      name: 'clear',
+      displayName: t('cmd.clearChat'),
+      description: t('cmd.clearChatDesc'),
+      source: 'builtin_command',
+    },
+    {
+      name: 'new',
+      displayName: t('cmd.newChat'),
+      description: t('cmd.newChatDesc'),
+      source: 'builtin_command',
+    },
+    {
+      name: 'help',
+      displayName: t('cmd.help'),
+      description: t('cmd.helpDesc'),
+      source: 'builtin_command',
+    },
+    {
+      name: 'status',
+      displayName: t('cmd.projectStatus'),
+      description: t('cmd.projectStatusDesc'),
+      source: 'builtin_command',
+    },
+  ]
+}
 
 /**
  * 获取所有可用的 / 命令（内置 + Skill）
  */
 export function getAllSlashCommands(): SlashCommand[] {
-  const commands: SlashCommand[] = [...BUILTIN_COMMANDS]
+  const commands: SlashCommand[] = [...getBuiltinCommands()]
 
   // 把所有 Skill 也注册为 / 命令
   for (const skill of skillRegistry.listAll()) {
@@ -145,12 +148,12 @@ export function parseSlashCommand(input: string): {
  */
 export function getAllMentionTargets(): MentionTarget[] {
   return [
-    { type: 'architecture', displayName: '故事架构', value: 'architecture', icon: '📐' },
-    { type: 'character', displayName: '角色卡', value: 'characters', icon: '👤' },
-    { type: 'blueprint', displayName: '章节蓝图', value: 'blueprints', icon: '📋' },
-    { type: 'knowledge', displayName: '知识库', value: 'knowledge', icon: '📚' },
-    { type: 'chapter', displayName: '当前章节', value: 'current_chapter', icon: '📝' },
-    { type: 'file', displayName: '项目文件', value: 'file', icon: '📄' },
+    { type: 'architecture', displayName: t('mention.storyArch'), value: 'architecture', icon: '📐' },
+    { type: 'character', displayName: t('mention.charCard'), value: 'characters', icon: '👤' },
+    { type: 'blueprint', displayName: t('mention.blueprint'), value: 'blueprints', icon: '📋' },
+    { type: 'knowledge', displayName: t('mention.knowledge'), value: 'knowledge', icon: '📚' },
+    { type: 'chapter', displayName: t('mention.currentChapter'), value: 'current_chapter', icon: '📝' },
+    { type: 'file', displayName: t('mention.projectFiles'), value: 'file', icon: '📄' },
   ]
 }
 

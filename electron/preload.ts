@@ -1,7 +1,7 @@
 import { ipcRenderer, contextBridge, webFrame } from 'electron'
 
 /**
- * Vela Preload Script — 安全地暴露 IPC 通信能力到渲染进程
+ * NovelForge Preload Script — 安全地暴露 IPC 通信能力到渲染进程
  *
  * 通过 contextBridge 暴露类型安全的 API，避免直接暴露 ipcRenderer
  * 所有 IPC 通道必须在此白名单中，防止 XSS 注入调用任意主进程功能

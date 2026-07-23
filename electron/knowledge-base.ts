@@ -1,5 +1,5 @@
 /**
- * Vela 知识库管理 — 主进程使用
+ * NovelForge 知识库管理 — 主进程使用
  *
  * 管理文档导入、向量化和检索
  * 底层存储已从 vectors.json 迁移至 LanceDB（{projectPath}/.vela/lancedb/）

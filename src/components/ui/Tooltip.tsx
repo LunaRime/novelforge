@@ -1,5 +1,5 @@
 /**
- * Vela Tooltip 组件
+ * NovelForge Tooltip 组件
  *
  * 基于 @radix-ui/react-tooltip 封装，自动适配深色/浅色主题。
  * 深色主题下显示浅色 Tooltip，浅色主题下显示深色 Tooltip。

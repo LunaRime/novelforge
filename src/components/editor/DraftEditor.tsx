@@ -1,12 +1,13 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
+import { useTranslation } from '../../hooks/useTranslation'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import CodeMirrorEditor from './CodeMirrorEditor'
 import ThreeWayMerge from './ThreeWayMerge'
 import EditorToolbar from './EditorToolbar'
-import AIActionDialog, { REVIEW_DIMS } from './AIActionDialog'
+import AIActionDialog, { getReviewDims } from './AIActionDialog'
 import { VELA } from '../../services/vela-protocol'
 import { useAutoSave } from '../../hooks/useAutoSave'
 import { useDirtyCheck } from '../../hooks/useDirtyCheck'
@@ -39,6 +40,7 @@ interface Props {
  * — 正文：CodeMirrorEditor + ThreeWayMerge
  */
 export default function DraftEditor({ filePath, content }: Props) {
+  const { t } = useTranslation()
   const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string; filePath?: string }) | null>(null)
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
@@ -57,7 +59,7 @@ export default function DraftEditor({ filePath, content }: Props) {
       const { ipc } = await import('../../services/ipc-client')
       const bps = await ipc.invoke('db:blueprint-get-all')
       const bp = Array.isArray(bps) ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber) : null
-      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : '未知标题', filePath, fileName: `v${m.version}`, createdAt: m.updatedAt ?? m.createdAt })
+      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : t('editor.unknownTitle'), filePath, fileName: `v${m.version}`, createdAt: m.updatedAt ?? m.createdAt })
       const chapterDir = `${VELA.DRAFT}ch${m.chapterNumber}`
       const pending = await getPendingRevisions(chapterDir, m.version)
       if (!cancelled) setPendingRevisions(pending)
@@ -81,7 +83,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
   const [reviewDims, setReviewDims] = useState<Record<string, boolean>>(
-    Object.fromEntries(REVIEW_DIMS.map(d => [d.key, true]))
+    Object.fromEntries(getReviewDims(t).map(d => [d.key, true]))
   )
   const [charCount, setCharCount] = useState(0)
   const isDirty = useDirtyCheck(filePath)
@@ -123,13 +125,13 @@ export default function DraftEditor({ filePath, content }: Props) {
       const body = await readDraftBody(filePath)
       useWorkflowStore.getState().startWorkflow(createRefineOnlyWorkflow({
         chapterNumber: meta.chapterNumber,
-        chapterTitle: meta.chapterTitle ?? '未知标题',
+        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
         draftPath: filePath,
         draftContent: body,
         userRefinePrompt: userRefinePrompt.trim() || undefined,
       }), false)
     } catch (e) {
-      toast.error(`修稿启动失败：${e}`)
+      toast.error(t('error.polishFailed').replace('{error}', String(e)))
     }
   }
 
@@ -142,13 +144,13 @@ export default function DraftEditor({ filePath, content }: Props) {
       const body = await readDraftBody(filePath)
       useWorkflowStore.getState().startWorkflow(createReviewOnlyWorkflow({
         chapterNumber: meta.chapterNumber,
-        chapterTitle: meta.chapterTitle ?? '未知标题',
+        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
         draftPath: filePath,
         draftContent: body,
-        reviewFocus: REVIEW_DIMS.filter(d => reviewDims[d.key]).map(d => d.label).join('、') || undefined,
+        reviewFocus: getReviewDims(t).filter(d => reviewDims[d.key]).map(d => d.label).join('、') || undefined,
       }), false)
     } catch (e) {
-      toast.error(`审稿启动失败：${e}`)
+      toast.error(t('error.reviewFailed').replace('{error}', String(e)))
     }
   }
 
@@ -156,8 +158,8 @@ export default function DraftEditor({ filePath, content }: Props) {
   const doFinalize = async () => {
     if (!meta || isChapterBusy) return
     const ok = await confirm(
-      `确定要将第 ${meta.chapterNumber} 章定稿吗？\n\n定稿后章节将标记为完成，不再支持修改和重新后处理。`,
-      { title: '确认定稿', confirmText: '确认定稿' }
+      t('editor.confirmFinalizeMsg').replace('{n}', String(meta.chapterNumber)),
+      { title: t('dialog.confirmFinalize'), confirmText: t('dialog.confirmFinalize') }
     )
     if (!ok) return
     try {
@@ -166,12 +168,12 @@ export default function DraftEditor({ filePath, content }: Props) {
       const body = await readDraftBody(filePath)
       useWorkflowStore.getState().startWorkflow(createFinalizeWorkflow({
         chapterNumber: meta.chapterNumber,
-        chapterTitle: meta.chapterTitle ?? '未知标题',
+        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
         draftPath: filePath,
         draftContent: body,
       }), false)
     } catch (e) {
-      toast.error(`定稿启动失败：${e}`)
+      toast.error(t('error.finalizeFailed').replace('{error}', String(e)))
     }
   }
 
@@ -181,14 +183,14 @@ export default function DraftEditor({ filePath, content }: Props) {
     try {
       const guard = await guardRepairPostProcess(meta.chapterNumber)
       if (!guard.ok) {
-        toast.error(guard.message || '无法执行修复')
+        toast.error(guard.message || t('error.noFixTarget'))
         return
       }
       const { useWorkflowStore } = await import('../../stores/workflow-store')
       const { createRepairFinalizeWorkflow } = await import('../../services/workflows/chapter-workflow')
       useWorkflowStore.getState().startWorkflow(createRepairFinalizeWorkflow(meta.chapterNumber), false)
     } catch (e) {
-      toast.error(`修复启动失败：${e}`)
+      toast.error(t('error.repairFailed').replace('{error}', String(e)))
     }
   }, [meta, isChapterBusy])
 
@@ -216,15 +218,15 @@ export default function DraftEditor({ filePath, content }: Props) {
       if (result.success) {
         setMergeData(null)
         setMeta(prev => prev ? { ...prev, status: 'revised' } : prev)
-        toast.success('✅ 合并完成，草稿已更新')
+        toast.success(t('editor.mergeSuccessToast'))
         const { getPendingRevisions } = await import('../../services/draft-index')
         const pending = await getPendingRevisions(chapterDir, meta.version)
         setPendingRevisions(pending)
       } else {
-        toast.error(`合并失败：${result.error}`)
+        toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
       }
     } catch (e) {
-      toast.error(`合并出错：${e}`)
+      toast.error(t('error.mergeError').replace('{error}', String(e)))
     }
   }
 
@@ -239,7 +241,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     if (!reportContent) return
     useEditorStore.getState().openFile({
       id: `review-report-${meta.chapterNumber}-${latest.id}`,
-      name: `审稿报告 v${meta.version}`,
+      name: t('editor.reviewTab').replace('{version}', String(meta.version)),
       type: 'review-report',
       content: reportContent,
       filePath,
@@ -327,7 +329,7 @@ export default function DraftEditor({ filePath, content }: Props) {
         >
           <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
             <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
-              修稿合并 — 第{meta?.chapterNumber}章 {meta?.chapterTitle}
+              {t('editor.mergeTitle').replace('{n}', String(meta?.chapterNumber)).replace('{title}', meta?.chapterTitle ?? '')}
             </DialogTitle>
           </DialogHeader>
           <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>

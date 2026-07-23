@@ -9,7 +9,7 @@ import { validatePath } from './safe-path'
 
 export const openEditorTool = buildAgentTool({
   name: 'open_editor',
-  description: '在 Vela 编辑器中打开指定文件的 Tab 页。用户可以直接在编辑器中查看和编辑内容。',
+  description: '在 NovelForge 编辑器中打开指定文件的 Tab 页。用户可以直接在编辑器中查看和编辑内容。',
   source: 'builtin',
   inputSchema: {
     type: 'object',

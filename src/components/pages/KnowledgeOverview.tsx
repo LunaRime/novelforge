@@ -10,6 +10,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
+import { useTranslation } from '../../hooks/useTranslation'
 import {
   loadKBData, getVectorlessCount, searchKB, backfillVectors,
   type KBDocument, type SearchResult, type KBStatsData,
@@ -30,6 +31,8 @@ export default function KnowledgeOverview() {
   const [backfilling, setBackfilling] = useState(false)
 
   const currentProject = useProjectStore(s => s.currentProject)
+
+  const { t } = useTranslation()
 
   const loadData = useCallback(async () => {
     if (!currentProject) return
@@ -73,7 +76,7 @@ export default function KnowledgeOverview() {
 
   // 判断检索模式
   const hasVectors = stats.vectorDimension > 0
-  const searchMode = hasVectors ? '混合检索' : 'BM25 全文检索'
+  const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
 
   if (!currentProject) {
     return (
@@ -87,12 +90,12 @@ export default function KnowledgeOverview() {
         >
           <div className="flex items-center gap-1.5 min-w-0">
             <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-              知识库
+              {t('nav.knowledgeBase')}
             </span>
           </div>
         </div>
         <div className="flex-1 overflow-y-auto relative">
-          <EmptyState icon={<BookOpen size={36} />} message="请先打开项目" opacity={0.4} />
+          <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} opacity={0.4} />
         </div>
       </div>
     )
@@ -116,12 +119,16 @@ export default function KnowledgeOverview() {
     try {
       const result = await backfillVectors()
       if (result.success) {
-        toast.success(`向量索引重建完成：已处理 ${result.processed} 块${result.failed > 0 ? `，${result.failed} 块失败` : ''}`)
+        if (result.failed > 0) {
+          toast.success(t('knowledge.rebuildPartialSuccess').replace('{processed}', String(result.processed)).replace('{failed}', String(result.failed)))
+        } else {
+          toast.success(t('knowledge.rebuildAllSuccess').replace('{processed}', String(result.processed)))
+        }
       } else {
-        toast.error(result.error || '向量回填失败')
+        toast.error(result.error || t('knowledge.backfillFailed'))
       }
     } catch (e) {
-      toast.error('向量回填失败: ' + String(e))
+      toast.error(t('error.vectorBackfillFailed').replace('{error}', String(e)))
     } finally {
       setBackfilling(false)
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
@@ -141,28 +148,28 @@ export default function KnowledgeOverview() {
             <Database size={20} className="text-white" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-[var(--color-text)]">知识库</h2>
+            <h2 className="text-lg font-bold text-[var(--color-text)]">{t('nav.knowledgeBase')}</h2>
             <p className="text-xs text-[var(--color-text-muted)]">
-              基于 LanceDB 的本地向量数据库，定稿后自动入库，为 AI 写作提供语义检索上下文
+              {t('knowledge.desc')}
             </p>
           </div>
         </div>
 
         {/* ===== 统计卡片 ===== */}
         <div className="grid grid-cols-4 gap-3 mb-6">
-          <StatCard icon={<FileText size={14} />} label="文档数量" value={stats.documentCount} />
-          <StatCard icon={<Layers size={14} />} label="知识切片" value={stats.totalChunks} />
+          <StatCard icon={<FileText size={14} />} label={t('knowledge.docCount')} value={stats.documentCount} />
+          <StatCard icon={<Layers size={14} />} label={t('knowledge.chunkCount')} value={stats.totalChunks} />
           <StatCard
             icon={<Server size={14} />}
-            label="存储引擎"
+            label={t('knowledge.storageEngine')}
             value="LanceDB"
             accent
           />
           <StatCard
             icon={<Activity size={14} />}
-            label="检索模式"
-            value={hasVectors ? 'FTS+向量' : 'FTS'}
-            badge={hasVectors ? '混合' : '基础'}
+            label={t('knowledge.retrievalMode')}
+            value={hasVectors ? t('knowledge.ftsVector') : t('knowledge.fts')}
+            badge={hasVectors ? t('knowledge.hybrid') : t('knowledge.basic')}
             badgeColor={hasVectors ? '#22c55e' : '#3b82f6'}
           />
         </div>
@@ -179,9 +186,9 @@ export default function KnowledgeOverview() {
                   <Zap size={16} className="text-amber-400" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-amber-300">向量索引待升级</div>
+                  <div className="text-sm font-medium text-amber-300">{t('knowledge.vectorUpgrade')}</div>
                   <div className="text-[0.7rem] text-amber-400/70">
-                    {vectorlessCount} 个文本块尚未生成向量嵌入，升级后可启用语义检索增强
+                    {t('knowledge.vectorUpgradeDesc').replace('{n}', String(vectorlessCount))}
                   </div>
                 </div>
               </div>
@@ -192,9 +199,9 @@ export default function KnowledgeOverview() {
                 disabled={backfilling}
               >
                 {backfilling ? (
-                  <><RefreshCw size={12} className="animate-spin mr-1.5" />重建中...</>
+                  <><RefreshCw size={12} className="animate-spin mr-1.5" />{t('knowledge.rebuilding')}</>
                 ) : (
-                  <>重建向量索引</>
+                  <>{t('knowledge.rebuildBtn')}</>
                 )}
               </Button>
             </div>
@@ -214,7 +221,7 @@ export default function KnowledgeOverview() {
         >
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
-            <span className="text-sm font-semibold text-[var(--color-text)]">语义检索</span>
+            <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
             {/* 检索模式标签 */}
             <span className={cn(
               'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
@@ -225,20 +232,20 @@ export default function KnowledgeOverview() {
               {searchMode}
             </span>
             <span className="text-[0.7rem] text-[var(--color-text-muted)] ml-auto">
-              {hasVectors ? 'BM25 + 向量近邻融合' : '配置 Embedding 模型后自动升级为混合检索'}
+              {hasVectors ? t('knowledge.fusionDesc') : t('knowledge.bm25Desc')}
             </span>
           </div>
           <div className="px-4 py-3">
             <div className="flex items-center gap-2">
               <Input
                 className="flex-1 h-9"
-                placeholder="输入查询内容，如：主角的能力体系、世界观核心设定..."
+                placeholder={t('knowledge.searchPlaceholder')}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
               <div className="flex items-center gap-1 flex-shrink-0">
-                <span className="text-[0.7rem] text-[var(--color-text-muted)]">Top</span>
+                <span className="text-[0.7rem] text-[var(--color-text-muted)]">{t('knowledge.topK')}</span>
                 <Input
                   type="number"
                   min={1}
@@ -254,7 +261,7 @@ export default function KnowledgeOverview() {
                 disabled={searching}
               >
                 {searching ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
-                检索
+                {t('knowledge.searchBtn')}
               </Button>
             </div>
           </div>
@@ -264,13 +271,13 @@ export default function KnowledgeOverview() {
             <div className="border-t border-[var(--color-border)]">
               <div className="px-4 py-2 flex items-center justify-between">
                 <span className="text-xs font-medium text-[var(--color-text-muted)]">
-                  检索结果 ({searchResults.length} 条)
+                  {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
                 </span>
                 <button
                   className="text-[0.7rem] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
                   onClick={() => setSearchResults([])}
                 >
-                  清除
+                  {t('knowledge.clear')}
                 </button>
               </div>
               <div className="max-h-[400px] overflow-y-auto">
@@ -290,7 +297,7 @@ export default function KnowledgeOverview() {
                         r.score > 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
                         'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                       )}>
-                        {r.score === 0.5 ? '全文匹配' : `相似度 ${(r.score * 100).toFixed(1)}%`}
+                        {r.score === 0.5 ? t('knowledge.fullTextMatch') : t('knowledge.similarity').replace('{percent}', (r.score * 100).toFixed(1))}
                       </span>
                     </div>
                     <p className="text-xs text-[var(--color-text-secondary)] leading-relaxed whitespace-pre-wrap">

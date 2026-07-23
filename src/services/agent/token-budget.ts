@@ -1,5 +1,5 @@
 /**
- * Vela Token 预算引擎 — 精确的 Token 计数与智能截断
+ * NovelForge Token 预算引擎 — 精确的 Token 计数与智能截断
  *
  * 替代所有基于字符长度的截断逻辑，提供：
  * 1. 精确 Token 估算（tiktoken for OpenAI，CJK 感知启发式 for 其他）

@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components */
 /**
- * Vela 异步确认对话框
+ * NovelForge 异步确认对话框
  *
  * 替代所有 window.confirm() 调用，返回 Promise<boolean>
  * 使用 CSS 动画（dialog-enter / dialog-exit / backdrop-enter）统一进出场效果。
@@ -13,6 +13,7 @@
 
 import { createRoot } from 'react-dom/client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { t } from '../../shared/locale'
 import { Button } from './Button'
 
 // ===== 内部组件 =====
@@ -30,10 +31,10 @@ interface ConfirmDialogProps extends ConfirmOptions {
 }
 
 function ConfirmDialog({
-  title = '确认操作',
+  title = t('dialog.confirmTitle'),
   message,
-  confirmText = '确认',
-  cancelText = '取消',
+  confirmText = t('dialog.confirm'),
+  cancelText = t('action.cancel'),
   danger = false,
   onResolve,
 }: ConfirmDialogProps) {

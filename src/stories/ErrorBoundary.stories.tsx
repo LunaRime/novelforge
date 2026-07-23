@@ -8,7 +8,7 @@ function BrokenComponent({ throws }: { throws?: boolean }) {
 }
 
 const meta = {
-  title: 'Vela UI/ErrorBoundary',
+  title: 'NovelForge UI/ErrorBoundary',
   component: ErrorBoundary,
   tags: ['autodocs'],
   argTypes: {
