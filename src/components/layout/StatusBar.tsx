@@ -52,7 +52,7 @@ export default function StatusBar() {
           title={t('statusbar.sponsor')}
           onClick={openSettings}
         >
-          <span className="font-medium" style={{ color: '#ff4d4f' }}>❤️ {t('statusbar.sponsor')}</span>
+          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('statusbar.sponsor')}</span>
         </StatusBarSegment>
 
       </div>

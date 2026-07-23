@@ -114,7 +114,7 @@ export default function UpdateNotification() {
       <UpdateBanner variant="info" onDismiss={() => setDismissed(true)}>
         <Download size={14} className="flex-shrink-0" />
         <span className="flex-1">
-          🎉 {t('update.newVersion')} <strong>{updateInfo.version}</strong>
+          {t('update.newVersion')} <strong>{updateInfo.version}</strong>
           {updateInfo.releaseDate && (
             <span className="opacity-60 ml-1">({updateInfo.releaseDate})</span>
           )}
@@ -154,7 +154,7 @@ export default function UpdateNotification() {
       <UpdateBanner variant="success">
         <CheckCircle2 size={14} className="flex-shrink-0" />
         <span className="flex-1">
-          ✅ {t('update.downloaded')}
+          {t('update.downloaded')}
         </span>
         <UpdateButton onClick={handleInstall} variant="primary">
           <RefreshCw size={12} />

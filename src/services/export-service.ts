@@ -25,7 +25,7 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
   if (!project) return { success: false, error: '未打开项目' }
 
   const addLog = workflowStore.addLog
-  addLog('info', `📦 开始导出（${formatLabel(options.format)}）...`)
+  addLog('info', `[Export] ${formatLabel(options.format)}`)
 
   try {
     // 遍历所有章节蓝图，取定稿内容
@@ -117,10 +117,10 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
       }
     }
 
-    addLog('info', `✅ 导出完成: ${outputPath}`)
+    addLog('info', `[Export] Done: ${outputPath}`)
     return { success: true, path: outputPath }
   } catch (error) {
-    addLog('error', `❌ 导出失败: ${error}`)
+    addLog('error', `[Export] Failed: ${error}`)
     return { success: false, error: String(error) }
   }
 }

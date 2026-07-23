@@ -52,7 +52,7 @@ export default function NovelConfigEditor() {
     setSaving(true)
     try {
       await saveProject()
-      addLog('info', `📝 ${t('novelConfig.saved')}`)
+      addLog('info', t('novelConfig.saved'))
     } catch (error) {
       console.error('[NovelConfigEditor] 保存失败:', error)
       addLog('error', t('error.saveFailed').replace('{error}', String(error)))
@@ -64,7 +64,7 @@ export default function NovelConfigEditor() {
   /** AI 生成配置 — 打开弹框 */
   const handleAIGenerate = () => {
     if (!defaultModelId) {
-      addLog('error', `⚠️ ${t('tip.configModelFirst')}`)
+      addLog('error', t('tip.configModelFirst'))
       return
     }
     setShowGenerateConfig(true)
@@ -73,7 +73,7 @@ export default function NovelConfigEditor() {
   /** 单字段 AI 生成 */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
     if (!defaultModelId) {
-      addLog('error', `⚠️ ${t('tip.configModelFirst')}`)
+      addLog('error', t('tip.configModelFirst'))
       return
     }
     if (generatingField) return // 防止并发

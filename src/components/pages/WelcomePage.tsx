@@ -75,7 +75,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
           >
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                🚀 {t('welcome.quickStart')}
+                {t('welcome.quickStart')}
               </h2>
               <button
                 onClick={dismissGuide}

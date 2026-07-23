@@ -121,7 +121,7 @@ export default function ChapterCardEditor() {
       await saveChapterBlueprint(selected)
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
-      addLog('info', `✅ 第 ${selected.chapterNumber} 章蓝图已保存`)
+      addLog('info', `Blueprint Ch.${selected.chapterNumber} saved`)
     } catch (e) {
       addLog('error', `保存失败: ${String(e)}`)
     }
@@ -136,7 +136,7 @@ export default function ChapterCardEditor() {
       await saveAllBlueprints(blueprints)
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
-      addLog('info', `✅ 已保存全部 ${blueprints.length} 章蓝图`)
+      addLog('info', `Saved all ${blueprints.length} blueprints`)
     } catch (e) {
       addLog('error', `全量保存失败: ${String(e)}`)
     }
@@ -199,7 +199,7 @@ export default function ChapterCardEditor() {
     const newIdx = Math.min(selectedIdx, newList.length - 1)
     setSelectedIdx(Math.max(0, newIdx))
     // 已经直接入库删除了，不需要标记 dirty
-    addLog('info', `✅ 已删除第 ${selected.chapterNumber} 章蓝图`)
+    addLog('info', `Blueprint Ch.${selected.chapterNumber} deleted`)
   }
 
   /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
@@ -210,7 +210,7 @@ export default function ChapterCardEditor() {
     const guard = await guardDirectoryGeneration()
     if (!guard.ok) {
       // 校验失败：阻断并提示
-      addLog('error', `⚠️ 前置条件未满足：${guard.message}`)
+      addLog('error', `Guard failed: ${guard.message}`)
       toast.warning(`无法出发\n\n${guard.message}`)
       return
     }
@@ -224,7 +224,7 @@ export default function ChapterCardEditor() {
     }
 
     startWorkflow(createDirectoryWorkflow(params))
-    addLog('info', '🚀 已启动章节蓝图生成')
+    addLog('info', 'Blueprint generation started')
   }
 
   /**

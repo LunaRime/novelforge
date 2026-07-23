@@ -40,7 +40,7 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'proxy', label: t('settings.proxy'), icon: <Globe size={16} />, description: t('settings.proxyDesc') },
     { id: 'editor', label: t('settings.editor'), icon: <Type size={16} />, description: t('settings.editorDesc') },
     { id: 'prompts', label: t('settings.promptTemplates'), icon: <MessageSquare size={16} />, description: t('settings.promptTemplatesDesc') },
-    { id: 'about', label: t('settings.about'), icon: <span style={{ color: '#ff4d4f', fontSize: 14 }}>❤️</span>, description: t('settings.aboutDesc') },
+    { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
   ]
 }
 
@@ -946,7 +946,7 @@ function AboutSection() {
           Every story deserves to be forged with care.
         </p>
         <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-muted)', color: 'var(--color-text-muted)' }}>
-          🖋️ AI 智能写作 IDE · 开源 · 为创作者而生
+          AI 智能写作 IDE · 开源 · 为创作者而生
         </p>
       </div>
 
