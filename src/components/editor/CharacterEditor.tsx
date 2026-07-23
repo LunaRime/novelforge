@@ -51,7 +51,7 @@ export default function CharacterEditor() {
   const handleSave = async () => {
     if (!currentProject) return
     await saveAll(currentProject.path)
-    addLog('info', `✅ 已保存 ${characters.length} 个角色卡`)
+    addLog('info', `Saved ${characters.length} character cards`)
   }
 
   // ===== 渲染 =====

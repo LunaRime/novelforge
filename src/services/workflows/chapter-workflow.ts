@@ -118,7 +118,7 @@ export async function updateDraftStatus(filePath: string, newStatus: DraftStatus
 export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: '✍️ ' + t('workflow.writeTitle').replace('{n}', String(chapterInfo.chapterNumber)).replace('{title}', chapterInfo.title),
+    title: t('workflow.writeTitle').replace('{n}', String(chapterInfo.chapterNumber)).replace('{title}', chapterInfo.title),
     steps: [
       {
         name: t('workflow.write'),
@@ -137,7 +137,7 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
 export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: '🔧 ' + t('workflow.polishTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
+    title: t('workflow.polishTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
         name: t('workflow.polish'),
@@ -162,7 +162,7 @@ export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefi
 export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: '🔧 ' + t('workflow.reviewFixTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
+    title: t('workflow.reviewFixTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
         name: t('workflow.reviewFix'),
@@ -188,7 +188,7 @@ export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): 
 export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: '🔍 ' + t('workflow.reviewTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
+    title: t('workflow.reviewTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
         name: t('workflow.review'),
@@ -213,7 +213,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
   const chapterInfo = { chapterNumber: params.chapterNumber, title: params.chapterTitle, role: '', purpose: '', characters: [], keyEvents: '' }
   return {
     type: 'chapter_creation',
-    title: '✅ ' + t('workflow.finalizeTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
+    title: t('workflow.finalizeTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
     steps: [
       {
         name: t('workflow.finalize'),
@@ -269,7 +269,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
 export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDefinition {
   return {
     type: 'chapter_creation',
-    title: '🔧 ' + t('workflow.repairTitle').replace('{n}', String(chapterNumber)),
+    title: t('workflow.repairTitle').replace('{n}', String(chapterNumber)),
     steps: [
       {
         name: t('workflow.repair'),

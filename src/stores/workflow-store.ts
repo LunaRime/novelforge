@@ -278,7 +278,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       const newRuns = [...s.activeRuns, run]
       return { activeRuns: newRuns, ...computeCompat(newRuns, s.waitingRuns) }
     })
-    get().addLog('info', `🚀 工作流「${definition.title}」已启动`)
+    get().addLog('info', `[Start] ${definition.title}`)
 
     // 自动联动：打开右侧面板的 AI 输出视图（非阻塞 import 避免循环依赖）
     import('./layout-store').then(m => m.useLayoutStore.getState().openRightPanel('ai-output')).catch(() => {})
@@ -292,7 +292,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       // 检查取消
       if (context.cancelled) {
         updateRunById(set, run.id, { status: 'failed' })
-        get().addLog('warn', `⏹ 工作流「${definition.title}」已取消`)
+        get().addLog('warn', `[Cancel] ${definition.title}`)
         break
       }
 
@@ -301,7 +301,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       // 标记当前步骤为运行中
       updateStepById(set, run.id, i, { status: 'running', startedAt: new Date().toISOString() })
       updateRunById(set, run.id, { currentStepIndex: i })
-      get().addLog('info', `▶ [${definition.title}] 执行步骤: ${stepDef.name}`)
+      get().addLog('info', `[${definition.title}] ${stepDef.name}`)
 
       // 创建步骤回调
       const callbacks: StepCallbacks = {
@@ -329,7 +329,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           progress: 100,
           result: result || get().activeRuns.find(r => r.id === run.id)?.steps[i].result,
         })
-        get().addLog('info', `✅ [${definition.title}] 步骤完成: ${stepDef.name}`)
+        get().addLog('info', `[${definition.title}] ${stepDef.name} — OK`)
         saveCheckpoint(get())
 
         // 步进模式：非最后一步，且未取消 → 暂停等待用户确认
@@ -339,7 +339,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
             const newWaiting = { ...s.waitingRuns, [run.id]: { waitingForConfirm: true, waitingAfterStepIndex: i } }
             return { waitingRuns: newWaiting, ...computeCompat(s.activeRuns, newWaiting) }
           })
-          get().addLog('info', `⏸ [${definition.title}] 等待确认继续第 ${i + 2} 步：${definition.steps[i + 1].name}`)
+          get().addLog('info', `[${definition.title}] Waiting: step ${i + 2} — ${definition.steps[i + 1].name}`)
           await new Promise<void>((resolve) => { continueResolveRefs.set(run.id, resolve) })
           if (context.cancelled) break
           updateRunById(set, run.id, { status: 'running' })
@@ -352,7 +352,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           completedAt: new Date().toISOString(),
         })
         updateRunById(set, run.id, { status: 'failed' })
-        get().addLog('error', `❌ [${definition.title}] 步骤失败: ${stepDef.name} — ${errorMsg}`)
+        get().addLog('error', `[${definition.title}] ${stepDef.name} — FAIL: ${errorMsg}`)
         break
       }
     }
@@ -362,7 +362,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     if (finalRun && finalRun.status === 'running') {
       updateRunById(set, run.id, { status: 'completed', completedAt: new Date().toISOString() })
       saveCheckpoint(get())
-      get().addLog('info', `🎉 工作流「${definition.title}」已完成`)
+      get().addLog('info', `[Done] ${definition.title}`)
 
       // 通过 EventBus 广播工作流完成事件（替代 window.dispatchEvent）
       import('../shared/event-bus').then(m => {
@@ -379,7 +379,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           }
           // silent 模式不做额外操作
         } catch (e) {
-          get().addLog('warn', `⚠️ onComplete 执行失败: ${e}`)
+          get().addLog('warn', `onComplete failed: ${e}`)
         }
       }
     }
@@ -434,7 +434,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           ...computeCompat(newRuns, newWaiting),
         }
       })
-      get().addLog('warn', '⏹ 工作流已取消')
+      get().addLog('warn', '[Cancel] Workflow cancelled')
       saveCheckpoint(get())
     } else {
       // 取消全部
@@ -456,7 +456,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           waitingAfterStepIndex: -1,
         }
       })
-      get().addLog('warn', '⏹ 所有工作流已取消')
+      get().addLog('warn', '[Cancel] All workflows cancelled')
       clearCheckpoint()
     }
   },
