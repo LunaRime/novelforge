@@ -222,7 +222,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // ===== 批量关闭确认：待关闭的 tabId 列表（含 dirty 的）
   const [batchCloseConfirm, setBatchCloseConfirm] = useState<string[] | null>(null)
 
-  // eslint-disable-next-line react-hooks/preserve-manual-memoization, react-hooks/exhaustive-deps
+
   /** 尝试关闭 Tab：如果有未保存修改则弹确认对话框 */
   const tryCloseTab = useCallback((tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
@@ -234,7 +234,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     } else {
       closeTab(tabId)
     }
-  }, [tabs, closeTab, setCloseConfirm]) // eslint-disable-line
+  }, [tabs, closeTab, setCloseConfirm])
 
   /** 尝试批量关闭 Tab：收集待关闭列表，若其中有 dirty tab 则弹确认弹窗 */
   const tryBatchClose = useCallback((tabIds: string[]) => {
@@ -249,7 +249,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     } else {
       cleanIds.forEach(id => closeTab(id))
     }
-  }, [tabs, closeTab, setBatchCloseConfirm]) // eslint-disable-line
+  }, [tabs, closeTab, setBatchCloseConfirm])
 
   /** 构建 Tab 右键菜单项 */
   const buildTabMenuItems = useCallback(
