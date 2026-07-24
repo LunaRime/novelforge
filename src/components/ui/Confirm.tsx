@@ -189,12 +189,12 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
   const [isExiting, setIsExiting] = useState(false)
   const deleteBtnRef = useRef<HTMLButtonElement>(null)
 
-  const handleAction = (action: DeleteAction) => {
+  const handleAction = useCallback((action: DeleteAction) => {
     setIsExiting(true)
     setTimeout(() => onResolve(action), 200)
-  }
+  }, [onResolve])
 
-  const handleCancel = useCallback(() => handleAction('cancel'), [])
+  const handleCancel = useCallback(() => handleAction('cancel'), [handleAction])
 
   useEffect(() => {
     deleteBtnRef.current?.focus()
@@ -244,7 +244,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
         onClick={e => e.stopPropagation()}
       >
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
-          删除项目
+          {t('project.deleteTitle')}
         </div>
         <div
           style={{
@@ -254,14 +254,14 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
             marginBottom: 20,
           }}
         >
-          请选择删除方式
+          {t('project.deleteMessage')}
         </div>
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
           <Button variant="ghost" size="sm" onClick={() => handleAction('cancel')}>
-            取消
+            {t('action.cancel')}
           </Button>
           <Button variant="ghost" size="sm" onClick={() => handleAction('remove')}>
-            仅移除历史记录
+            {t('project.removeRecent')}
           </Button>
           <Button
             ref={deleteBtnRef}
@@ -269,7 +269,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
             size="sm"
             onClick={() => handleAction('delete')}
           >
-            删除文件夹
+            {t('project.deleteFolder')}
           </Button>
         </div>
       </div>

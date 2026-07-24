@@ -242,7 +242,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
                   <button
                     className="opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer transition-opacity"
                     style={{ color: 'var(--color-text-muted)' }}
-                    title="删除项目"
+                    title={t('project.deleteTooltip')}
                     onClick={async (e) => {
                       e.stopPropagation()
                       const action = await confirmDeleteProject()
