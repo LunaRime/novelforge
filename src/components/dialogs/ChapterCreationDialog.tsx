@@ -211,7 +211,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           <DialogDescription>
             {t('chapter.configDialogDesc')}
             {loadedFromBlueprint && (
-              <span className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-600 dark:text-green-400">
+              <span className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}>
                 {t('chapter.prefilled')}
               </span>
             )}
@@ -342,8 +342,8 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
             </DialogFooter>
             {/* 前置校验失败提示（呈现在 Footer 下方） */}
             {guardError && (
-              <div className="mx-5 mb-4 flex items-start gap-2 px-3 py-2.5 rounded-lg text-xs bg-yellow-500/10 border border-yellow-500/30 text-yellow-600 dark:text-yellow-400">
-                <AlertCircle size={13} className="flex-shrink-0 mt-0.5 text-yellow-500" />
+              <div className="mx-5 mb-4 flex items-start gap-2 px-3 py-2.5 rounded-[var(--radius-md)] text-xs" style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.1)', borderColor: 'rgba(var(--color-warning-rgb), 0.3)', borderWidth: 1, color: 'var(--color-warning)' }}>
+                <AlertCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-warning)' }} />
                 <span className="whitespace-pre-line">{guardError}</span>
               </div>
             )}
