@@ -52,11 +52,13 @@ export default function KnowledgeOverview() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
-  useEffect(() => { 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     loadData()
     checkVectorless()
   }, [loadData, checkVectorless])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { checkVectorless() }, [checkVectorless, documents])
 
   // 通过 EventBus 监听资源刷新和定稿完成事件

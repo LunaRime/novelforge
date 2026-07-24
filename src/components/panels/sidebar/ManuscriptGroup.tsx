@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * ManuscriptGroup — 正文章节折叠组（已定稿章节列表）
  */
@@ -101,7 +102,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
     }
     load()
     return () => { cancelled = true }
-  }, [files, filesDep, titleMap])
+  }, [files, filesDep, titleMap, t])
 
   const getDisplay = (f: FileNode) => {
     if (titleMap[f.path]) return titleMap[f.path]

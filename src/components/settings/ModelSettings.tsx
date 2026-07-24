@@ -275,10 +275,6 @@ function ProxySettings() {
   }>({ enabled: false, type: 'http', host: '', port: 7890 })
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    loadProxy()
-  }, [])
-
   const loadProxy = async () => {
     try {
       const { ipc } = await import('../../services/ipc-client')
@@ -286,6 +282,12 @@ function ProxySettings() {
       if (config.proxy) setProxy(config.proxy)
     } catch { /* 忽略 */ }
   }
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadProxy()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSave = async () => {
     setSaving(true)

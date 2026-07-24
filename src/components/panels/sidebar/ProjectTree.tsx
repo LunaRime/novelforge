@@ -56,6 +56,7 @@ export default function ProjectTree() {
 
   // 项目切换时刷新
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (currentProject) refreshAll()
   }, [currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不每次都需重跑
 

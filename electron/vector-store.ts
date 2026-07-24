@@ -20,6 +20,7 @@ import { safeErrorMessage } from './utils/error-utils'
 let _lancedb: typeof LanceDB | null = null
 function getLanceDB(): typeof LanceDB {
   if (!_lancedb) {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
     _lancedb = require('@lancedb/lancedb')
     logger.debug('VectorStore', 'LanceDB 原生模块已加载')
   }

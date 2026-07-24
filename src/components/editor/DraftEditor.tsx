@@ -68,7 +68,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     }
     load()
     return () => { cancelled = true }
-  }, [filePath])
+  }, [filePath, t])
 
   const status: DraftStatus = meta?.status ?? 'draft'
   const isReadonly = status === 'finalized' || status === 'archived'
@@ -192,7 +192,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     } catch (e) {
       toast.error(t('error.repairFailed').replace('{error}', String(e)))
     }
-  }, [meta, isChapterBusy])
+  }, [meta, isChapterBusy, t])
 
   /** 打开待合并修稿 */
   const openPendingRevision = async (rev: RevisionEntry) => {

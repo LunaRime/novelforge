@@ -47,6 +47,7 @@ export default function InlineAIToolbar({
 
   // 初始计时 + 清理
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     resetTimer()
     return () => { if (timer) clearTimeout(timer) }
   }, [])  // eslint-disable-line react-hooks/exhaustive-deps

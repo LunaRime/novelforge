@@ -54,12 +54,13 @@ export default function UpdateNotification() {
       cleanup()
       menuCleanup?.()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps — init/handleCheck are stable references from zustand
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // 重置 dismiss 状态当有新更新可用时
   useEffect(() => {
     if (status === 'available' || status === 'downloaded') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDismissed(false)
     }
   }, [status])

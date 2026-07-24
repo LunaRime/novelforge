@@ -32,7 +32,7 @@ export function useTranslation() {
     getCurrentLocale,
   )
 
-  const t = useCallback((key: TextKey) => translate(key), [locale])
+  const t = useCallback((key: TextKey) => translate(key), [])
 
   return { t, locale }
 }

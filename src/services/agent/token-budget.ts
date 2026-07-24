@@ -65,7 +65,8 @@ export function estimateTokensHeuristic(text: string): number {
 /**
  * 精确 Token 计数（优先使用 tiktoken，否则启发式）
  */
-export function estimateTokens(text: string, _modelId?: string): number {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function estimateTokens(text: string, _?: string): number {
   if (!text) return 0
 
   // 优先使用精确编码器

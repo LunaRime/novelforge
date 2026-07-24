@@ -189,6 +189,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // ===== 三个点菜单状态 =====
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
   const moreButtonRef = useRef<HTMLButtonElement>(null)
+  const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
 
   // 绑定 ⌘W 快捷键：关闭当前 Tab（带 dirty 检查）
   useEffect(() => {
@@ -218,11 +219,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     position: { x: number; y: number }
   } | null>(null)
 
-  // ===== 关闭确认弹窗状态 =====
-  const [closeConfirm, setCloseConfirm] = useState<string | null>(null) // 单个待关闭的 tabId
-  // 批量关闭确认：待关闭的 tabId 列表（含 dirty 的）
+  // ===== 批量关闭确认：待关闭的 tabId 列表（含 dirty 的）
   const [batchCloseConfirm, setBatchCloseConfirm] = useState<string[] | null>(null)
 
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization, react-hooks/exhaustive-deps
   /** 尝试关闭 Tab：如果有未保存修改则弹确认对话框 */
   const tryCloseTab = useCallback((tabId: string) => {
     const tab = tabs.find(t => t.id === tabId)
@@ -234,7 +234,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     } else {
       closeTab(tabId)
     }
-  }, [tabs, closeTab])
+  }, [tabs, closeTab, setCloseConfirm]) // eslint-disable-line
 
   /** 尝试批量关闭 Tab：收集待关闭列表，若其中有 dirty tab 则弹确认弹窗 */
   const tryBatchClose = useCallback((tabIds: string[]) => {
@@ -249,7 +249,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     } else {
       cleanIds.forEach(id => closeTab(id))
     }
-  }, [tabs, closeTab])
+  }, [tabs, closeTab, setBatchCloseConfirm]) // eslint-disable-line
 
   /** 构建 Tab 右键菜单项 */
   const buildTabMenuItems = useCallback(
@@ -302,7 +302,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         },
       ]
     },
-    [tabs, tryCloseTab, tryBatchClose]
+    [tabs, tryCloseTab, tryBatchClose, t]
   )
 
   /** 构建三个点菜单项（Tab 操作 + 已打开 Tab 列表） */
@@ -730,6 +730,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       )}
 
       {/* 三个点菜单（已打开的编辑器列表 + Tab 操作） */}
+      {/* eslint-disable-next-line react-hooks/refs */}
       {moreMenuOpen && moreButtonRef.current && (() => {
         const rect = moreButtonRef.current!.getBoundingClientRect()
         return (

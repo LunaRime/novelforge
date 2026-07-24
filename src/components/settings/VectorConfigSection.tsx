@@ -76,7 +76,7 @@ export default function VectorConfigSection() {
   useEffect(() => {
     store.load()
     store.loadLLMCandidates()
-  }, [])
+  }, [store])
 
   // 模型列表（仅嵌入用途）
   const embeddingModels = llmStore.models.filter((m) =>

@@ -135,7 +135,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       const result = await ipc.invoke('uninstall:clean-user-data')
       return result.success
-    } catch (err) {
+    } catch {
       return false
     }
   },

@@ -162,7 +162,7 @@ async function getLatestDraft(chapterNumber: number): Promise<{
     const drafts = await ipc.invoke('db:draft-list', chapterNumber) as any[]
     if (!drafts || drafts.length === 0) return null
     // 取最新版本
-    const latest = drafts.sort((a: any, b: any) => (b.version as number) - (a.version as number))[0]
+    const latest = drafts.sort((a, b) => b.version - a.version)[0]
     const full = await ipc.invoke('db:draft-get-full', latest.id) as { content: string } | null
     if (!full) return null
     return {
