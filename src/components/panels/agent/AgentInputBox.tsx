@@ -217,7 +217,7 @@ export default function AgentInputBox() {
       {/* 上下文菜单（+ 按钮弹出） */}
       {showContextMenu && (
         <div
-          className="absolute bottom-[calc(100%+8px)] left-0 z-50 py-1 rounded-lg shadow-lg"
+          className="absolute bottom-[calc(100%+8px)] left-0 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
           style={{
             width: 180,
             backgroundColor: 'var(--color-sidebar)',
@@ -316,7 +316,7 @@ export default function AgentInputBox() {
             {/* 模式选择下拉 */}
             {showModeMenu && (
               <div
-                className="absolute bottom-full left-0 mb-1 z-50 py-1 rounded-lg shadow-lg"
+                className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
                 style={{
                   width: 240,
                   backgroundColor: 'var(--color-sidebar)',
@@ -377,7 +377,7 @@ export default function AgentInputBox() {
             {/* 模型选择下拉 */}
             {showModelMenu && (
               <div
-                className="absolute bottom-full left-0 mb-1 z-50 py-1 rounded-lg shadow-lg"
+                className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
                 style={{
                   width: 220,
                   backgroundColor: 'var(--color-sidebar)',
@@ -425,7 +425,7 @@ export default function AgentInputBox() {
                 : canSend
                 ? 'var(--color-accent)'
                 : 'rgba(128,128,128,0.3)',
-              color: '#ffffff',
+              color: 'var(--color-text)',
               cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
               opacity: !generating && !canSend ? 0.5 : 1,
             }}

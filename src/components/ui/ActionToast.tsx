@@ -86,7 +86,7 @@ function ActionToastContainer() {
         position: 'fixed',
         bottom: 48,
         right: 20,
-        zIndex: 9998,
+        zIndex: 'var(--z-toast)',
         display: 'flex',
         flexDirection: 'column',
         gap: 10,
@@ -232,7 +232,7 @@ function ActionToastCard({ item, onRemove }: { item: ActionToastItem; onRemove: 
                   : 'var(--color-accent)',
                 color: action.variant === 'ghost'
                   ? 'var(--color-text-secondary)'
-                  : '#fff',
+                  : 'var(--color-text)',
               }}
               onMouseEnter={e => {
                 if (action.variant === 'ghost') {

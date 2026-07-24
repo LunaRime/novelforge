@@ -17,9 +17,9 @@ interface MutualReviewReportProps {
 
 /** 视角颜色映射 */
 const PERSPECTIVE_COLORS: Record<string, string> = {
-  '情节逻辑性': '#3b82f6',
-  '角色一致性': '#8b5cf6',
-  '文笔流畅度': '#10b981',
+  '情节逻辑性': 'var(--color-info)',
+  '角色一致性': 'var(--color-accent)',
+  '文笔流畅度': 'var(--color-success)',
 }
 
 export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({

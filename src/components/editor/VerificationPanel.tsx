@@ -61,7 +61,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
   const severityConf = report ? SEVERITY_CONFIG[report.severity] : null
 
   return (
-    <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-background">
+    <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-[var(--color-bg)]">
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 py-2 border-b bg-sidebar">
         <div className="flex items-center gap-2">
@@ -121,7 +121,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                   {report.gaps.map((gap, idx) => (
                     <div
                       key={idx}
-                      className="border rounded p-2 text-xs bg-background"
+                      className="border rounded p-2 text-xs bg-[var(--color-bg)]"
                     >
                       <div className="flex items-center justify-between mb-1">
                         <span className="font-medium text-yellow-600">

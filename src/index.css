@@ -237,6 +237,15 @@
     --transition-normal: 0.25s cubic-bezier(0.16, 1, 0.3, 1);
     --transition-spring: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 
+    /* Z-Index 层级系统 */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 500;
+    --z-modal: 1000;
+    --z-toast: 1100;
+    --z-tooltip: 1200;
+
     /* 字体 */
     --font-sans: 'Inter', 'Roboto', system-ui, -apple-system, sans-serif;
     --font-mono: 'JetBrains Mono', 'Fira Code', monospace;

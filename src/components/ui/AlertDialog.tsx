@@ -67,7 +67,7 @@ function AlertDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 10000,
+        zIndex: 'var(--z-modal)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -53,7 +53,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
               boxShadow: '0 8px 32px rgba(126, 200, 227, 0.25), 0 0 60px rgba(155, 142, 200, 0.12)',
             }}
           >
-            <BookOpen size={36} color="#fff" style={{ position: 'relative', zIndex: 1 }} />
+            <BookOpen size={36} color="var(--color-text)" style={{ position: 'relative', zIndex: 1 }} />
           </div>
           <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
             {currentProject ? currentProject.name : t('welcome.title')}
@@ -191,7 +191,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
           >
             <div
               className="flex items-center justify-center w-10 h-10 rounded-xl transition-transform group-hover:scale-105"
-              style={{ backgroundColor: 'rgba(134, 193, 120, 0.12)', color: 'rgb(134, 193, 120)' }}
+              style={{ backgroundColor: 'rgba(134, 193, 120, 0.12)', color: 'var(--color-success)' }}
             >
               <FileUp size={20} />
             </div>
@@ -274,7 +274,7 @@ function StepItem({
         className="flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
         style={{
           backgroundColor: 'var(--color-accent)',
-          color: '#fff',
+          color: 'var(--color-text)',
           fontSize: '0.7rem',
           fontWeight: 600,
         }}

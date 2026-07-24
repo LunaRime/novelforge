@@ -42,6 +42,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
           'relative inline-flex items-center flex-shrink-0 cursor-pointer',
           'w-10 h-5 rounded-full',
           'transition-colors',
+          'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg)]',
           disabled && 'opacity-50 cursor-not-allowed',
           className
         )}

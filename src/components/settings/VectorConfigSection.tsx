@@ -39,25 +39,25 @@ function getModeInfo(t: (key: TextKey) => string): Record<VectorWorkMode, {
       label: t('vector.smartDistribute'),
       icon: <Sparkles size={14} />,
       desc: t('vector.smartDistributeDesc'),
-      color: '#10b981',
+      color: 'var(--color-success)',
     },
     model_only: {
       label: t('vector.modelOnly'),
       icon: <Cpu size={14} />,
       desc: t('vector.modelOnlyDesc'),
-      color: '#3b82f6',
+      color: 'var(--color-info)',
     },
     module_only: {
       label: t('vector.localOnly'),
       icon: <Database size={14} />,
       desc: t('vector.localOnlyDesc'),
-      color: '#f59e0b',
+      color: 'var(--color-warning)',
     },
     disabled: {
       label: t('vector.disabled'),
       icon: <WifiOff size={14} />,
       desc: t('vector.disabledDesc'),
-      color: '#ef4444',
+      color: 'var(--color-error)',
     },
   }
 }
@@ -164,7 +164,7 @@ export default function VectorConfigSection() {
           <div className="font-medium" style={{ color: 'var(--color-text)' }}>
             {modeInfo.label}{t('vector.modeSuffix')}
           </div>
-          <div className="text-xs text-muted-foreground mt-0.5">
+          <div className="text-xs text-[var(--color-text-muted)] mt-0.5">
             {modeInfo.desc}
           </div>
         </div>
@@ -189,11 +189,11 @@ export default function VectorConfigSection() {
               onCheckedChange={store.toggleVectorModule}
             />
           </div>
-          <div className="text-xs text-muted-foreground whitespace-pre-line">
+          <div className="text-xs text-[var(--color-text-muted)] whitespace-pre-line">
             {t('vector.moduleDesc')}
           </div>
           {!store.vectorModuleEnabled && (
-            <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
+            <div className="mt-2 flex items-center gap-1 text-xs text-[var(--color-warning)]">
               <AlertTriangle size={12} />
               {t('vector.moduleOff')}
             </div>
@@ -217,11 +217,11 @@ export default function VectorConfigSection() {
               onCheckedChange={store.toggleVectorModel}
             />
           </div>
-          <div className="text-xs text-muted-foreground whitespace-pre-line">
+          <div className="text-xs text-[var(--color-text-muted)] whitespace-pre-line">
             {t('vector.modelDesc')}
           </div>
           {!store.vectorModelEnabled && (
-            <div className="mt-2 flex items-center gap-1 text-xs text-yellow-600">
+            <div className="mt-2 flex items-center gap-1 text-xs text-[var(--color-warning)]">
               <AlertTriangle size={12} />
               {t('vector.modelOff')}
             </div>
@@ -241,7 +241,7 @@ export default function VectorConfigSection() {
           <ArrowRight size={12} />
           {t('vector.workDistribution')}
         </div>
-        <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
+        <div className="text-[var(--color-text-muted)] leading-relaxed whitespace-pre-line">
           {distributionLogic(t)}
         </div>
       </div>
@@ -259,7 +259,7 @@ export default function VectorConfigSection() {
           </div>
 
           {embeddingModels.length === 0 ? (
-            <div className="text-xs text-muted-foreground text-center py-3">
+            <div className="text-xs text-[var(--color-text-muted)] text-center py-3">
               {t('vector.noModel')}
             </div>
           ) : (
@@ -283,7 +283,7 @@ export default function VectorConfigSection() {
                     <div className="font-medium truncate" style={{ color: 'var(--color-text)' }}>
                       {model.name || model.modelName}
                     </div>
-                    <div className="text-muted-foreground truncate">
+                    <div className="text-[var(--color-text-muted)] truncate">
                       {model.provider} · {model.modelName}
                     </div>
                   </div>
@@ -323,7 +323,7 @@ export default function VectorConfigSection() {
             onCheckedChange={store.toggleLLMEmbedding}
           />
         </div>
-        <p className="text-xs text-muted-foreground mb-3 whitespace-pre-line">
+        <p className="text-xs text-[var(--color-text-muted)] mb-3 whitespace-pre-line">
           {t('vector.llmVectorDesc')}
         </p>
 
@@ -333,7 +333,7 @@ export default function VectorConfigSection() {
             <div>
               <Label>{t('vector.selectLLM')}</Label>
               <select
-                className="w-full mt-1 px-2 py-1.5 rounded border text-xs bg-background"
+                className="w-full mt-1 px-2 py-1.5 rounded border text-xs bg-[var(--color-bg)]"
                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
                 value={store.llmEmbeddingSettings.modelId || ''}
                 onChange={(e) => {
@@ -351,7 +351,7 @@ export default function VectorConfigSection() {
                 ))}
               </select>
               {store.llmCandidates.length === 0 && (
-                <p className="text-[10px] text-muted-foreground mt-1">
+                <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
                   {t('vector.noLLM')}
                 </p>
               )}
@@ -371,7 +371,7 @@ export default function VectorConfigSection() {
                 }}
                 className="w-full mt-1"
               />
-              <div className="flex justify-between text-[10px] text-muted-foreground">
+              <div className="flex justify-between text-[10px] text-[var(--color-text-muted)]">
                 <span>64 ({t('vector.lowPrecision')})</span>
                 <span>256 ({t('vector.recommended')})</span>
                 <span>1024 ({t('vector.highPrecision')})</span>
@@ -381,11 +381,11 @@ export default function VectorConfigSection() {
             {/* 说明 */}
             <div className="p-2 rounded text-[10px]" style={{ backgroundColor: 'var(--color-hover)' }}>
               <div className="font-medium mb-1" style={{ color: 'var(--color-text)' }}>{t('vector.howItWorks')}</div>
-              <div className="text-muted-foreground leading-relaxed whitespace-pre-line">
+              <div className="text-[var(--color-text-muted)] leading-relaxed whitespace-pre-line">
                 {t('vector.llmWorkSteps')}
                 <br />
                 <br />
-                <span className="text-yellow-600">{t('vector.llmWarning')}</span>
+                <span className="text-[var(--color-warning)]">{t('vector.llmWarning')}</span>
               </div>
             </div>
           </div>
@@ -399,7 +399,7 @@ export default function VectorConfigSection() {
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
               {t('vector.connectivityTest')}
             </h4>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
               {t('vector.connectivityDesc')}
             </p>
           </div>
@@ -441,14 +441,14 @@ export default function VectorConfigSection() {
                   : t('vector.agentFail')
               }
             />
-            <div className="text-[10px] text-muted-foreground text-right">
+            <div className="text-[10px] text-[var(--color-text-muted)] text-right">
               {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(DEFAULT_LOCALE)}
             </div>
           </div>
         )}
 
         {!testResult && !store.testing && (
-          <div className="text-xs text-muted-foreground text-center py-3">
+          <div className="text-xs text-[var(--color-text-muted)] text-center py-3">
             {t('vector.runTestHint')}
           </div>
         )}
@@ -483,7 +483,7 @@ function TestResultRow({
         >
           {label}: {ok ? t('status.normal') : t('status.abnormal')}
         </span>
-        <div className="text-muted-foreground mt-0.5">{detail}</div>
+        <div className="text-[var(--color-text-muted)] mt-0.5">{detail}</div>
       </div>
     </div>
   )
