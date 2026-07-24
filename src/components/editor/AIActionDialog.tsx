@@ -14,6 +14,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 
+/* eslint-disable react-refresh/only-export-components */
 export function getReviewDims(t: (key: TextKey) => string) {
   return [
     { key: 'continuity', label: t('review.continuity'), desc: t('review.continuityDesc') },

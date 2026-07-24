@@ -18,6 +18,7 @@ export function useAutoSave(
   defaultIntervalSec: number = 30,
 ) {
   const saveFnRef = useRef(saveFn)
+  // eslint-disable-next-line react-hooks/refs
   saveFnRef.current = saveFn
 
   useEffect(() => {
@@ -47,5 +48,5 @@ export function useAutoSave(
       cancelled = true
       if (timer) clearInterval(timer)
     }
-  }, [filePath, defaultIntervalSec])
+  }, [filePath, defaultIntervalSec, contentRef])
 }

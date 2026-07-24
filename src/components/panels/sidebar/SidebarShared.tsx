@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 /**
  * SidebarShared — 侧边栏共享工具函数、类型定义和常量
  *

@@ -27,9 +27,10 @@ export default function AIOutputPanel() {
   // 自动跟随最新活跃任务
   useEffect(() => {
     if (activeRun) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewRunId(prev => prev === activeRun.id ? prev : activeRun.id)
     }
-  }, [activeRun?.id])
+  }, [activeRun?.id, activeRun])
 
   const viewRun: WorkflowRun | undefined =
     activeRuns.find(r => r.id === viewRunId) ||

@@ -6,13 +6,14 @@ import { useEditorStore } from './stores/editor-store'
 
 // ===== 启动计时：诊断初始化瓶颈 =====
 const T0 = performance.now()
-const T_HTML = (window as any).__VELA_HTML_READY as number | undefined
+const T_HTML = window.__VELA_HTML_READY as number | undefined
 if (T_HTML) {
   console.log(`[Startup] HTML→JS 模块加载耗时: ${(T0 - T_HTML).toFixed(0)}ms`)
 }
 
 declare global {
   interface Window {
+    __VELA_HTML_READY?: number
     __vela_hasDirtyTabs?: () => boolean
   }
 }

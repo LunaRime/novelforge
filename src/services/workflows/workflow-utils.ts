@@ -218,7 +218,7 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
     return null // 无有效 JSON 结构
   }
 
-  let jsonStr = content.substring(extractStart, extractEnd + 1)
+  const jsonStr = content.substring(extractStart, extractEnd + 1)
 
   // 3. 尝试直接解析
   try {
@@ -233,13 +233,13 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
       // 尾随逗号: ,]  ,}
       .replace(/,(\s*[}\]])/g, '$1')
       // 缺失前引号的键: { key": → { "key":
-      .replace(/([\[{,]\s*)(\w+)":/g, '$1"$2":')
+      .replace(/([[{,]\s*)(\w+)":/g, '$1"$2":')
       // 连续字符串间缺逗号: "  " → ","
       .replace(/(")\s+(")/g, '$1,$2')
       // 连续逗号: ,,,,, → ,
       .replace(/,{2,}/g, ',')
       // 开头逗号: [, 或 {,
-      .replace(/([\[{])\s*,/g, '$1')
+      .replace(/([[{])\s*,/g, '$1')
       // 多余尾逗号（再次清理）
       .replace(/,\s*([}\]])/g, '$1')
       // 缺失冒号: "key" "value" 或 "key" value
@@ -250,7 +250,7 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
       })
       // ★ 缺失键名的前引号: { key": value → { "key": value
       //   注意：必须在单引号→双引号替换之前执行，否则 key 中的单引号（如 character's_name）会先被破坏
-      .replace(/([\[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":')
+      .replace(/([[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":')
       // 单引号键/值 → 双引号（某些模型会混用）
       //   在键名补引号之后执行，避免破坏包含单引号的键名
       .replace(/'/g, '"')
@@ -390,8 +390,9 @@ export function extractAndRepairJSON(
 function sanitizeJSONText(text: string): string {
   return text
     // BOM 头
-    .replace(/^﻿/, '')
+    .replace(/^\uFEFF/, '')
     // 控制字符（保留 \n \r \t）
+    // eslint-disable-next-line no-control-regex
     .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '')
     // 中文引号 → 英文引号（AI 偶尔混用）
     .replace(/[""]/g, '"')
@@ -400,7 +401,7 @@ function sanitizeJSONText(text: string): string {
     .replace(/，/g, ',')
     .replace(/：/g, ':')
     // 不可见零宽字符
-    .replace(/[​-‏﻿]/g, '')
+    .replace(/[\u200B-\u200F\uFEFF]/g, '')
     // 中文括号 → 英文（JSON 结构用）
     // 注意：仅替换用作 JSON 结构的全角符号，不影响字符串内容
     // 连续空白行
@@ -422,7 +423,6 @@ function extractIndividualObjects(text: string): Array<Record<string, unknown>> 
 
   // ★ 带字符串感知的括号深度追踪
   // 收集所有 { } 区间（start, end），不管嵌套层级
-  let depth = 0
   let inString = false
   let escapeNext = false
   const objectRanges: Array<[number, number]> = []
@@ -450,9 +450,7 @@ function extractIndividualObjects(text: string): Array<Record<string, unknown>> 
     if (!inString) {
       if (ch === '{') {
         startStack.push(i)
-        depth++
       } else if (ch === '}') {
-        depth--
         if (startStack.length > 0) {
           const start = startStack.pop()!
           objectRanges.push([start, i])

@@ -1,3 +1,4 @@
+// eslint-disable-next-line storybook/no-renderer-packages
 import type { Meta, StoryObj } from '@storybook/react'
 import { EmptyState } from '../components/ui/EmptyState'
 import { FileText, FolderOpen, Search } from 'lucide-react'

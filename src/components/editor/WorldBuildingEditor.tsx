@@ -65,8 +65,10 @@ export default function WorldBuildingEditor() {
     setArchStatus(status)
     setWordCounts(counts)
     setLoading(false)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadStatus() }, [loadStatus])
 
   /** 加载角色卡后处理状态 */
@@ -74,8 +76,10 @@ export default function WorldBuildingEditor() {
     if (!currentProject) return
     const s = await readPostProcessStatus(currentProject.path, ARCH_CHARACTER_SCOPE)
     setCharExtractStatus(s)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadCharExtractStatus() }, [loadCharExtractStatus])
 
   // 监听 EventBus 事件，刷新后处理状态面板

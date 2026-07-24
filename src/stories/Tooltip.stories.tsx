@@ -30,6 +30,7 @@ export const Default: StoryObj = {
 }
 
 export const AllPositions: StoryObj = {
+  // eslint-disable-next-line storybook/no-redundant-story-name
   name: 'All Positions',
   render: () => (
     <TooltipProvider>

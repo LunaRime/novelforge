@@ -8,6 +8,8 @@
  * 4. CodeBlockCleanupStep — 规范化 Markdown 代码块
  */
 
+/* eslint-disable @typescript-eslint/no-unused-vars */
+
 import type { ToolArtifact } from './tool-registry'
 import type { LLMMessage } from './agent-engine'
 
@@ -48,7 +50,7 @@ export interface PostProcessStep {
 /** 检测并折叠 <think> 标签 */
 const ThinkingDetectionStep: PostProcessStep = {
   name: 'thinking-detection',
-  process: async (input, _context) => {
+  process: async (input, _) => {
     const thinkRegex = /<think>([\s\S]*?)<\/think>/gi
     let thinkingContent = ''
     const matches = input.matchAll(thinkRegex)
@@ -76,7 +78,7 @@ const ThinkingDetectionStep: PostProcessStep = {
 /** 扫描输出中的结构化产物 */
 const ArtifactExtractionStep: PostProcessStep = {
   name: 'artifact-extraction',
-  process: async (input, _context) => {
+  process: async (input, _) => {
     const extracted: ToolArtifact[] = []
 
     // 检测可能含有的蓝图/章节标记
@@ -124,7 +126,7 @@ const ArtifactExtractionStep: PostProcessStep = {
 /** 提取内容摘要 */
 const SummaryGenerationStep: PostProcessStep = {
   name: 'summary-generation',
-  process: async (input, _context) => {
+  process: async (input, _) => {
     // 取前 200 字符作为摘要，在第一个句号或换行处截断
     let summary = input.slice(0, 200).replace(/\s+/g, ' ').trim()
     const sentenceEnd = Math.max(
@@ -149,7 +151,7 @@ const SummaryGenerationStep: PostProcessStep = {
 /** 规范化 Markdown 代码块 */
 const CodeBlockCleanupStep: PostProcessStep = {
   name: 'code-block-cleanup',
-  process: async (input, _context) => {
+  process: async (input, _) => {
     // 修复不完整的代码块标记
     let cleaned = input
     // 统计 ``` 数量，如果奇数则补一个

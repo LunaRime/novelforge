@@ -1,3 +1,4 @@
+// eslint-disable-next-line storybook/no-renderer-packages
 import { type Meta, type StoryObj } from '@storybook/react'
 import { useEffect } from 'react'
 import LogsView from '../components/panels/LogsView'

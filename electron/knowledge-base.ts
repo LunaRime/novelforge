@@ -442,6 +442,7 @@ export async function backfillVectors(
     // 重建 FTS 索引
     const newTable = await db.openTable('chunks')
     try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { Index } = require('@lancedb/lancedb')
       await newTable.createIndex('text', { config: Index.fts() })
     } catch { /* 索引可能已存在 */ }
