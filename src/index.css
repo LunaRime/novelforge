@@ -157,6 +157,10 @@
     --color-accent: #5B9ED6;
     --color-accent-hover: #4A8DC5;
     --color-accent-rgb: 91, 158, 214;
+    --color-info-rgb: 91, 158, 214;
+    --color-success-rgb: 16, 185, 129;
+    --color-warning-rgb: 245, 158, 11;
+    --color-error-rgb: 244, 63, 94;
 
     /* 品牌金色（Logo 星辰点睛） */
     --color-gold: #C9A76C;
@@ -275,6 +279,10 @@
     --color-accent: #7EC8E3;
     --color-accent-hover: #6AB8D8;
     --color-accent-rgb: 126, 200, 227;
+    --color-info-rgb: 126, 200, 227;
+    --color-success-rgb: 74, 222, 128;
+    --color-warning-rgb: 251, 191, 36;
+    --color-error-rgb: 251, 113, 133;
 
     /* 品牌金色 — Logo 星辰金 #C9A76C */
     --color-gold: #C9A76C;
@@ -320,6 +328,14 @@
     --shadow-lg: 0 12px 32px rgba(5, 10, 20, 0.7);
     --shadow-popover: 0 0 0 1px rgba(126, 200, 227, 0.06), 0 16px 40px -8px rgba(5, 10, 20, 0.85), 0 4px 16px -4px rgba(5, 10, 20, 0.7);
     --shadow-tooltip: 0 4px 12px rgba(5, 10, 20, 0.5);
+    /* Z-Index 层级（与 :root 保持一致） */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 500;
+    --z-modal: 1000;
+    --z-toast: 1100;
+    --z-tooltip: 1200;
   }
 
   /* 📜 纸质感主题 — 写作沉浸（温暖牛皮纸色调 + Logo 紫色强调） */
@@ -342,6 +358,10 @@
     --color-accent: #9B8EC8;
     --color-accent-hover: #8B7EB8;
     --color-accent-rgb: 155, 142, 200;
+    --color-info-rgb: 123, 146, 192;
+    --color-success-rgb: 77, 158, 114;
+    --color-warning-rgb: 200, 146, 58;
+    --color-error-rgb: 196, 91, 91;
 
     --color-gold: #C9A76C;
 
@@ -386,6 +406,14 @@
     --shadow-lg: 0 12px 32px rgba(44, 37, 32, 0.10);
     --shadow-popover: 0 16px 40px -8px rgba(44, 37, 32, 0.14), 0 4px 16px -4px rgba(44, 37, 32, 0.08);
     --shadow-tooltip: 0 4px 12px rgba(44, 37, 32, 0.18);
+    /* Z-Index 层级（与 :root 保持一致） */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 500;
+    --z-modal: 1000;
+    --z-toast: 1100;
+    --z-tooltip: 1200;
   }
 
   /* 🌃 黑夜主题 — VS Code / IDEA 深灰极客风（真正的暗黑模式） */
@@ -407,6 +435,10 @@
     --color-accent: #0E639C;
     --color-accent-hover: #1177BB;
     --color-accent-rgb: 14, 99, 156;
+    --color-info-rgb: 55, 148, 255;
+    --color-success-rgb: 137, 209, 133;
+    --color-warning-rgb: 204, 167, 0;
+    --color-error-rgb: 241, 76, 76;
 
     --color-gold: #C9A76C;
 
@@ -449,6 +481,14 @@
     --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
     --shadow-popover: 0 16px 40px -8px rgba(0, 0, 0, 0.7), 0 4px 16px -4px rgba(0, 0, 0, 0.5);
     --shadow-tooltip: 0 4px 12px rgba(0, 0, 0, 0.5);
+    /* Z-Index 层级（与 :root 保持一致） */
+    --z-base: 1;
+    --z-dropdown: 100;
+    --z-sticky: 200;
+    --z-overlay: 500;
+    --z-modal: 1000;
+    --z-toast: 1100;
+    --z-tooltip: 1200;
   }
 
   /* ===== 全局基础样式 ===== */

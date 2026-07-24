@@ -176,3 +176,127 @@ export function confirm(
     )
   })
 }
+
+// ===== 删除项目确认对话框 =====
+
+type DeleteAction = 'delete' | 'remove' | 'cancel'
+
+interface ConfirmDeleteProjectProps {
+  onResolve: (action: DeleteAction) => void
+}
+
+function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
+  const [isExiting, setIsExiting] = useState(false)
+  const deleteBtnRef = useRef<HTMLButtonElement>(null)
+
+  const handleAction = (action: DeleteAction) => {
+    setIsExiting(true)
+    setTimeout(() => onResolve(action), 200)
+  }
+
+  const handleCancel = useCallback(() => handleAction('cancel'), [])
+
+  useEffect(() => {
+    deleteBtnRef.current?.focus()
+  }, [])
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleCancel()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [handleCancel])
+
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 'var(--z-toast)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        backgroundColor: 'var(--color-backdrop)',
+        backdropFilter: 'blur(8px)',
+        pointerEvents: 'auto',
+        animation: isExiting
+          ? 'backdrop-exit 0.15s ease-out both'
+          : 'backdrop-enter 0.25s ease-out both',
+      }}
+      onClick={handleCancel}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        style={{
+          backgroundColor: 'var(--color-sidebar)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 'var(--radius-2xl)',
+          boxShadow: 'var(--shadow-popover)',
+          padding: '20px 24px',
+          minWidth: 380,
+          maxWidth: 460,
+          animation: isExiting
+            ? 'dialog-exit 0.15s ease-out both'
+            : 'dialog-enter 0.25s var(--transition-spring) both',
+        }}
+        onClick={e => e.stopPropagation()}
+      >
+        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
+          删除项目
+        </div>
+        <div
+          style={{
+            fontSize: 12,
+            color: 'var(--color-text-secondary)',
+            lineHeight: 1.65,
+            marginBottom: 20,
+          }}
+        >
+          请选择删除方式
+        </div>
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <Button variant="ghost" size="sm" onClick={() => handleAction('cancel')}>
+            取消
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => handleAction('remove')}>
+            仅移除历史记录
+          </Button>
+          <Button
+            ref={deleteBtnRef}
+            variant="destructive"
+            size="sm"
+            onClick={() => handleAction('delete')}
+          >
+            删除文件夹
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 显示删除项目确认对话框，返回用户选择的删除方式
+ *
+ * @example
+ * const action = await confirmDeleteProject()
+ * if (action === 'delete') deleteProjectFolder(path)
+ * else if (action === 'remove') removeRecentProject(path)
+ */
+export function confirmDeleteProject(): Promise<DeleteAction> {
+  return new Promise(resolve => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+
+    const root = createRoot(container)
+    const cleanup = (action: DeleteAction) => {
+      root.unmount()
+      document.body.removeChild(container)
+      resolve(action)
+    }
+
+    root.render(<ConfirmDeleteProjectDialog onResolve={cleanup} />)
+  })
+}

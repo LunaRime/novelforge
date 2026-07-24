@@ -56,17 +56,17 @@
 }
 
 .tool-call-source-badge.builtin {
-  background-color: rgba(59, 130, 246, 0.12);
+  background-color: rgba(var(--color-info-rgb), 0.12);
   color: var(--color-info);
 }
 
 .tool-call-source-badge.mcp {
-  background-color: rgba(168, 85, 247, 0.12);
+  background-color: rgba(var(--color-accent-rgb), 0.12);
   color: var(--color-accent);
 }
 
 .tool-call-source-badge.skill {
-  background-color: rgba(34, 197, 94, 0.12);
+  background-color: rgba(var(--color-success-rgb), 0.12);
   color: var(--color-success);
 }
 
@@ -156,7 +156,7 @@
   padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid var(--color-warning);
-  background: linear-gradient(135deg, rgba(245, 158, 11, 0.05), rgba(245, 158, 11, 0.02));
+  background: linear-gradient(135deg, rgba(var(--color-warning-rgb), 0.05), rgba(var(--color-warning-rgb), 0.02));
 }
 
 .confirm-card-header {
@@ -229,7 +229,7 @@
 
 .artifact-card:hover {
   border-color: var(--color-accent);
-  background-color: rgba(var(--accent-rgb, 99, 102, 241), 0.06);
+  background-color: rgba(var(--color-accent-rgb), 0.06);
 }
 
 .artifact-icon {

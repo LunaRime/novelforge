@@ -28,6 +28,12 @@ function addRecentProject(project: RecentProject) {
   writeJsonFile(RECENT_PROJECTS_PATH, trimmed)
 }
 
+function removeRecentProject(projectPath: string) {
+  const list = loadRecentProjects()
+  const filtered = list.filter((p) => p.path !== projectPath)
+  writeJsonFile(RECENT_PROJECTS_PATH, filtered)
+}
+
 export function registerProjectController() {
   // 创建新项目
   ipcMain.handle('project:create', async (_event, config: {
@@ -224,6 +230,37 @@ export function registerProjectController() {
 
   ipcMain.handle('project:recent-list', async () => {
     return loadRecentProjects()
+  })
+
+  ipcMain.handle('project:delete-folder', async (_event, projectPath: string) => {
+    try {
+      if (!fs.existsSync(projectPath)) {
+        return { success: false, error: '项目文件夹不存在' }
+      }
+      const stat = fs.statSync(projectPath)
+      if (!stat.isDirectory()) {
+        return { success: false, error: '路径不是文件夹' }
+      }
+      fs.rmSync(projectPath, { recursive: true, force: true })
+      // 同时从最近列表中移除
+      removeRecentProject(projectPath)
+      logger.info('Project', `[delete-folder] 已删除项目文件夹: ${projectPath}`)
+      return { success: true }
+    } catch (err) {
+      const msg = safeErrorMessage(err)
+      logger.error('Project', `[delete-folder] 删除失败: ${msg}`)
+      return { success: false, error: msg }
+    }
+  })
+
+  ipcMain.handle('project:remove-recent', async (_event, projectPath: string) => {
+    try {
+      removeRecentProject(projectPath)
+      logger.info('Project', `[remove-recent] 已移除历史记录: ${projectPath}`)
+      return { success: true }
+    } catch (err) {
+      return { success: false }
+    }
   })
 
   ipcMain.handle('dialog:select-folder', async () => {

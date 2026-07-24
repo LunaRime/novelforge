@@ -8,11 +8,12 @@ import {
   Clock,
   X,
   Home,
-  ChevronRight,
+  Trash2,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView } from '../../stores/layout-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
+import { confirmDeleteProject } from '../ui/Confirm'
 import { ipc } from '../../services/ipc-client'
 import { confirm } from '../../components/ui/Confirm'
 import { MenuItem } from '../../components/ui/MenuItem'
@@ -72,6 +73,17 @@ export default function ActivityBar() {
   const handleOpenRecent = async (path: string) => {
     setShowProjectMenu(false)
     await useProjectStore.getState().openProject(path)
+  }
+
+  /** 删除最近项目 */
+  const handleDeleteRecent = async (e: React.MouseEvent, projectPath: string) => {
+    e.stopPropagation()
+    const action = await confirmDeleteProject()
+    if (action === 'delete') {
+      await useProjectStore.getState().deleteProjectFolder(projectPath)
+    } else if (action === 'remove') {
+      await useProjectStore.getState().removeRecentProject(projectPath)
+    }
   }
 
   /** 关闭当前项目 */
@@ -237,7 +249,16 @@ export default function ActivityBar() {
                               {p.path}
                             </p>
                           </div>
-                          <ChevronRight size={11} className="opacity-0 group-hover:opacity-50 flex-shrink-0" />
+                          <button
+                            className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
+                            style={{ color: 'var(--color-text-muted)' }}
+                            title="删除项目"
+                            onClick={(e) => handleDeleteRecent(e, p.path)}
+                            onMouseEnter={e => e.currentTarget.style.color = 'var(--color-error)'}
+                            onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                          >
+                            <Trash2 size={13} />
+                          </button>
                         </button>
                       ))}
                     {recentProjects.filter(p => p.path !== currentProject?.path).length === 0 && (
