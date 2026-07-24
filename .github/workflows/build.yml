@@ -20,9 +20,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: pnpm/action-setup@v5
-      with:
-        version: 9
+    - name: Enable pnpm (via corepack)
+      run: corepack enable pnpm
 
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
@@ -80,9 +79,8 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - uses: pnpm/action-setup@v5
-      with:
-        version: 9
+    - name: Enable pnpm (via corepack)
+      run: corepack enable pnpm
 
     - name: Use Node.js 22.x
       uses: actions/setup-node@v4
