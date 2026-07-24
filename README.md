@@ -11,80 +11,13 @@
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
+[🇨🇳 中文] &nbsp; [🇬🇧 English](README.en.md)
+
 </div>
 
 ---
 
 > **NovelForge** 是一款开源、隐私优先的 AI 写作 IDE。将大语言模型驱动的全流程工作流与本地 RAG 知识库深度融合，为作者提供 IDE 级别的沉浸式创作体验。支持 **zh-CN / en-US / ru-RU** 三语界面。
-
----
-
-## 📖 English Introduction
-
-> **NovelForge** is an open-source, privacy-first AI writing IDE. It deeply integrates LLM-driven full workflows with a local RAG knowledge base, delivering an IDE-grade immersive writing experience. Supports **zh-CN / en-US / ru-RU** trilingual interface.
-
-### Why NovelForge?
-
-Writing a web novel is not just about typing words — it's about managing a complex system of characters, plot threads, worldbuilding rules, and chapter-level pacing across hundreds of chapters. Traditional writing tools treat this like a text document. NovelForge treats it like a software project.
-
-| Pain Point | NovelForge Solution |
-|------------|---------------------|
-| Losing track of characters across 100+ chapters | Character cards with cross-chapter dynamic tracking + voice consistency analysis |
-| Forgetting foreshadowing planted 50 chapters ago | Automatic foreshadowing scanner + resolution detector |
-| Spending $200+/month on AI API calls | Tiered model routing saves 50-70% + prompt caching cuts input costs by 50% |
-| Copy-pasting context between AI chat and editor | AI agent directly reads/writes your project — context is automatic |
-| No way to compare draft versions | Multi-draft parallel generation with AI auto-scoring |
-| Privacy concerns with cloud writing tools | 100% local storage: SQLite + LanceDB, works offline |
-
-### How It Works
-
-```
-┌─────────────────────────────────────────────────────┐
-│                    NovelForge                        │
-│                                                     │
-│  📋 Blueprint → ✍️ Draft → 🔍 Review → ✨ Finalize   │
-│       │            │           │           │         │
-│       ▼            ▼           ▼           ▼         │
-│  AI generates  AI writes  5 reviewers  Post-process  │
-│  chapter plan  chapter    score draft   pipeline     │
-│       │            │           │           │         │
-│       └────────────┴───────────┴───────────┘         │
-│                        │                             │
-│                  📚 Local RAG                        │
-│            (SQLite + LanceDB Vector)                 │
-└─────────────────────────────────────────────────────┘
-```
-
-### Key Features
-
-**AI Writing Pipeline**
-- World & setting management with cross-chapter character tracking
-- Automatic outline → chapter beats → scene/emotion/pacing requirements
-- Streaming chapter generation with context-aware prompting
-- Chapter transition engine: extracts scene cards from previous 3 chapters
-- Paragraph-level rewriting: expand / condense / style shift / conflict enhance / polish
-- Editorial board: 5-role parallel review (editor-in-chief / plot / prose / continuity / style) + weighted scoring
-- Multi-draft comparison with AI auto-scoring
-- Foreshadowing manager: auto-scan + resolution detection
-- Post-process DAG pipeline: ingest → plot extract → character update → foreshadowing → voice analysis
-
-**Local Knowledge Base**
-- Hybrid retrieval: semantic search + full-text search, auto-injected into AI prompts
-- LLM-as-embedding: use your AI model for vectorization, no dedicated embedding API needed
-- IVF_PQ vector index via LanceDB for large-scale ANN search
-- 100% local: SQLite + LanceDB, works offline
-
-**Cost Optimization**
-- Tiered model routing: elite / standard / budget — saves 50-70%
-- Prompt caching: cuts input costs by 50%
-- Real-time cost tracking in the status bar
-- Token budget engine with intelligent truncation
-
-**Privacy & Security**
-- Electron sandbox + IPC allowlist + path sandbox
-- API key encryption via Electron safeStorage
-- Exponential backoff retry for rate limits
-- SQLite integrity checks + CHECK constraints
 
 ---
 
