@@ -12,6 +12,7 @@ import {
   SORT_DIRECTION_LABELS,
 } from '../../stores/blueprint-sort-store'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { t } from '../../shared/locale'
 
 const SORT_OPTIONS: BlueprintSortKey[] = [
   'chapter_number',
@@ -27,17 +28,17 @@ export const BlueprintSortBar: React.FC = () => {
 
   return (
     <div className="flex items-center gap-2 px-2 py-1 text-xs">
-      <span className="text-muted-foreground flex items-center gap-1">
-        <ArrowUpDown className="w-3 h-3" />
-        排序:
+      <span className="flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
+        <ArrowUpDown size={12} />
+        {t('sort.label')}
       </span>
       <select
         value={config.key}
         onChange={(e) => setSortKey(e.target.value as BlueprintSortKey)}
-        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-xs
+        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs
                    text-[var(--color-text)] cursor-pointer hover:border-[var(--color-accent)]
-                   focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
-        title="选择排序方式"
+                   focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        title={t('sort.chooseMethod')}
       >
         {SORT_OPTIONS.map((key) => (
           <option key={key} value={key}>
@@ -47,14 +48,15 @@ export const BlueprintSortBar: React.FC = () => {
       </select>
       <button
         onClick={toggleDirection}
-        className="p-0.5 rounded hover:bg-accent/10 transition-colors"
-        title={`当前: ${SORT_DIRECTION_LABELS[config.direction]}，点击切换`}
-        aria-label="切换排序方向"
+        className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        title={t('sort.current').replace('{label}', SORT_DIRECTION_LABELS[config.direction])}
+        aria-label={t('sort.toggleDirection')}
+        style={{ color: 'var(--color-text-muted)' }}
       >
         {config.direction === 'asc' ? (
-          <ArrowUp className="w-3 h-3 text-muted-foreground" />
+          <ArrowUp size={12} />
         ) : (
-          <ArrowDown className="w-3 h-3 text-muted-foreground" />
+          <ArrowDown size={12} />
         )}
       </button>
     </div>

@@ -34,11 +34,11 @@ import { globalEventBus } from '../../shared/event-bus'
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
 
 const ROLE_COLORS: Record<string, string> = {
-  高潮: 'bg-red-500/20 text-red-400',
-  冲突: 'bg-orange-500/20 text-orange-400',
-  转折: 'bg-purple-500/20 text-purple-400',
-  建置: 'bg-blue-500/20 text-blue-400',
-  收尾: 'bg-green-500/20 text-green-400',
+  高潮: 'bg-[rgba(var(--color-error-rgb),0.2)] text-[var(--color-error)]',
+  冲突: 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]',
+  转折: 'bg-[rgba(var(--color-accent-rgb),0.2)] text-[var(--color-accent)]',
+  建置: 'bg-[rgba(var(--color-info-rgb),0.2)] text-[var(--color-info)]',
+  收尾: 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]',
 }
 
 /** 章节蓝图编辑器 — 读写 directory.json */
