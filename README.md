@@ -6,8 +6,8 @@
 
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-2.3.0-green.svg)]()
+[![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
+[![Version](https://img.shields.io/badge/Version-2.5.2-green.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -15,7 +15,7 @@
 
 ---
 
-> **NovelForge** 是一款开源、隐私优先的 AI 写作 IDE。将大语言模型驱动的全流程工作流与本地 RAG 知识库深度融合，为作者提供 IDE 级别的沉浸式创作体验。
+> **NovelForge** 是一款开源、隐私优先的 AI 写作 IDE。将大语言模型驱动的全流程工作流与本地 RAG 知识库深度融合，为作者提供 IDE 级别的沉浸式创作体验。支持 **zh-CN / en-US / ru-RU** 三语界面。
 
 ---
 
@@ -72,7 +72,8 @@
 ### 📦 预构建版本（推荐）
 
 前往 [Releases](https://github.com/LunaRime/novelforge/releases) 下载最新安装包：
-- **Windows**: `NovelForge-2.3.0-Installer.exe`（NSIS 安装程序）
+- **Windows**: `NovelForge-{version}-Installer.exe`（NSIS 安装程序）
+- **Windows**: `NovelForge-{version}-Portable.zip`（绿色便携版，解压即用）
 
 ### 🔨 源码构建
 
@@ -104,13 +105,30 @@ pnpm run typecheck
 # 5. 运行测试
 pnpm run test
 
-# 6. 完整构建
+# 6. 完整构建（Windows 下需设置镜像环境变量加速下载）
 npm_config_user_agent="pnpm/9.15.4" \
 CSC_IDENTITY_AUTO_DISCOVERY=false \
+ELECTRON_BUILDER_BINARIES_MIRROR="https://npmmirror.com/mirrors/electron-builder-binaries/" \
 pnpm run build
 ```
 
-> **Windows 构建提示**：国内网络需设置 `ELECTRON_BUILDER_BINARIES_MIRROR=https://npmmirror.com/mirrors/electron-builder-binaries/` 加速下载。详见 `.codewhale-plans/` 中的构建流程文档。
+> **构建环境变量说明**：
+> - `npm_config_user_agent` — 强制 electron-builder 识别 pnpm 包管理器
+> - `CSC_IDENTITY_AUTO_DISCOVERY=false` — 跳过代码签名（本地构建无需证书）
+> - `ELECTRON_BUILDER_BINARIES_MIRROR` — npmmirror 镜像加速（国内网络必需，避免 GitHub 下载超时）
+>
+> 构建产物位于 `release/{version}/`：
+> - `NovelForge-{version}-Portable/` — 绿色便携版
+> - `NovelForge-{version}-Installer/NovelForge-{version}-Installer.exe` — NSIS 安装程序
+
+#### 构建卡点（Windows）
+
+| 卡点 | 解决方案 |
+|------|---------|
+| winCodeSign 7z symlink 下载失败 | 手动下载解压到 `%LOCALAPPDATA%/electron-builder/Cache/winCodeSign/` |
+| NSIS 7z symlink 下载失败 | 同上，解压到 `%LOCALAPPDATA%/electron-builder/Cache/nsis/` |
+| pnpm 包管理器未检测 | 设置 `npm_config_user_agent=pnpm/9.15.4` |
+| GitHub 下载慢/超时 | 设置 `ELECTRON_BUILDER_BINARIES_MIRROR` 镜像 |
 
 #### 原生模块说明
 
@@ -141,16 +159,6 @@ pnpm run rebuild
 | AI | OpenAI Protocol + Gemini Protocol + MCP + ReAct Agent |
 | 测试 | Vitest + Storybook |
 | CI/CD | GitHub Actions (ubuntu/windows/macos 矩阵) |
-
----
-
-## 👥 撰稿人
-
-| 撰稿人 | 角色 |
-|--------|------|
-| [heider-x](https://github.com/heider-x) | 原始项目 Vela 作者 |
-| [LunaRime](https://github.com/LunaRime) | NovelForge 维护者 |
-| [yueyu-ku](https://github.com/yueyu-ku) | 安全加固 · i18n · 测试 · 架构优化 · R7 审计修复 |
 
 ---
 
