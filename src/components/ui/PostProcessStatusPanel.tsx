@@ -96,10 +96,9 @@ export function PostProcessStatusPanel({
   if (!hasFailure) {
     return (
       <div className={cn(
-        'flex items-center gap-1.5 px-2 py-1 rounded text-[10px] text-[var(--color-success,#22c55e)]',
-        'bg-green-500/8',
+        'flex items-center gap-1.5 px-2 py-1 rounded text-[10px]',
         className,
-      )}>
+      )} style={{ color: 'var(--color-success)', backgroundColor: 'rgba(var(--color-success-rgb), 0.08)' }}>
         <CheckCircle2 size={12} />
         <span>{status.sourceLabel} 完成（{successCount}/{totalCount}）</span>
       </div>
@@ -107,33 +106,31 @@ export function PostProcessStatusPanel({
   }
 
   // 有失败 → 显示带折叠的详情面板
+  const warnColor = 'var(--color-warning)'
+  const errorColor = 'var(--color-error)'
+  const borderColor = hasCriticalFailure ? 'rgba(var(--color-error-rgb), 0.3)' : 'rgba(var(--color-warning-rgb), 0.3)'
+  const bgColor = hasCriticalFailure ? 'rgba(var(--color-error-rgb), 0.08)' : 'rgba(var(--color-warning-rgb), 0.08)'
+
   return (
-    <div className={cn(
-      'rounded-md border overflow-hidden',
-      hasCriticalFailure
-        ? 'border-red-500 bg-red-500/8'
-        : 'border-amber-500 bg-amber-500/8',
-      className,
-    )}>
+    <div className={cn('rounded-[var(--radius-md)] border overflow-hidden', className)}
+      style={{ borderColor, backgroundColor: bgColor }}>
       {/* 折叠头部 */}
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center justify-between px-3 py-2 text-left cursor-pointer hover:opacity-80 transition-opacity"
+        className="w-full flex items-center justify-between px-3 py-2 text-left cursor-pointer hover:opacity-80 transition-opacity focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] rounded-t-[var(--radius-md)]"
       >
         <div className="flex items-center gap-1.5">
-          <AlertTriangle size={13} className={
-            hasCriticalFailure
-              ? 'text-[var(--color-error,#ef4444)]'
-              : 'text-[var(--color-warning,#f59e0b)]'
-          } />
-          <span className="text-[11px] font-medium text-[var(--color-text)]">
+          <AlertTriangle size={13} style={{ color: hasCriticalFailure ? errorColor : warnColor }} />
+          <span className="text-[11px] font-medium" style={{ color: 'var(--color-text)' }}>
             {status.sourceLabel} — {failedSteps.length} 个步骤失败
           </span>
-          <span className="text-[10px] text-[var(--color-text-muted)]">
+          <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
             ({successCount}/{totalCount})
           </span>
         </div>
-        {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        <span style={{ color: 'var(--color-text-muted)' }}>
+          {expanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+        </span>
       </button>
 
       {/* 展开详情 */}
@@ -146,18 +143,15 @@ export function PostProcessStatusPanel({
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 {step.ok ? (
-                  <CheckCircle2 size={12} className="text-[var(--color-success,#22c55e)] shrink-0" />
+                  <CheckCircle2 size={12} className="shrink-0" style={{ color: 'var(--color-success)' }} />
                 ) : (
-                  <XCircle size={12} className="text-[var(--color-error,#ef4444)] shrink-0" />
+                  <XCircle size={12} className="shrink-0" style={{ color: 'var(--color-error)' }} />
                 )}
-                <span className={cn(
-                  'truncate',
-                  step.ok ? 'text-[var(--color-text-secondary)]' : 'text-[var(--color-text)]',
-                )}>
+                <span className="truncate" style={{ color: step.ok ? 'var(--color-text-secondary)' : 'var(--color-text)' }}>
                   {step.label}
                 </span>
                 {step.critical && !step.ok && (
-                  <span className="shrink-0 px-1 py-0.5 rounded text-[9px] bg-red-500/15 text-red-400">
+                  <span className="shrink-0 px-1 py-0.5 rounded text-[9px]" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-error)' }}>
                     关键
                   </span>
                 )}
@@ -165,21 +159,21 @@ export function PostProcessStatusPanel({
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {step.ok ? (
-                  <span className="text-[10px] text-[var(--color-text-muted)]">
+                  <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
                     {step.completedAt ? new Date(step.completedAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
                 ) : (
                   <>
-                    <span className="text-[10px] text-[var(--color-error,#ef4444)] max-w-[120px] truncate" title={step.error}>
+                    <span className="text-[10px] max-w-[120px] truncate" title={step.error} style={{ color: 'var(--color-error)' }}>
                       {step.error || '失败'}
                     </span>
                     {onRetry && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onRetry(key) }}
-                        className="p-0.5 rounded hover:bg-[var(--color-hover)] transition-colors cursor-pointer"
+                        className="p-0.5 rounded hover:bg-[var(--color-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                         title="重试此步骤"
                       >
-                        <RefreshCw size={11} className="text-[var(--color-accent)]" />
+                        <RefreshCw size={11} style={{ color: 'var(--color-accent)' }} />
                       </button>
                     )}
                   </>
@@ -189,8 +183,8 @@ export function PostProcessStatusPanel({
           ))}
 
           {/* 底部操作栏 */}
-          <div className="flex items-center justify-between pt-1.5 border-t border-[var(--color-border)]">
-            <div className="flex items-center gap-1 text-[10px] text-[var(--color-text-muted)]">
+          <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
               <Clock size={10} />
               <span>
                 上次尝试 {new Date(status.updatedAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' })}
