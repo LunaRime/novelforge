@@ -106,7 +106,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                         if (!v || v < 1) setFrontN(50)
                         else setFrontN(Math.min(total, v))
                       }}
-                      className="w-16 h-6 text-xs px-2 py-0"
+                      className="w-16"
                       onClick={e => e.stopPropagation()}
                     />
                     {t('unit.chapters')}
@@ -128,7 +128,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                         if (!v || v < 1) setRangeStart(1)
                         else if (v > existingCount + 1) setRangeStart(existingCount + 1)
                       }}
-                      className="w-16 h-6 text-xs px-2 py-0"
+                      className="w-16"
                       onClick={e => e.stopPropagation()}
                     />
                     {t('blueprintGen.to')}
@@ -141,7 +141,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                         const start = Number(rangeStart) || 1
                         if (!v || v < start) setRangeEnd(start)
                       }}
-                      className="w-16 h-6 text-xs px-2 py-0"
+                      className="w-16"
                       onClick={e => e.stopPropagation()}
                     />
                     {t('unit.chapters')}
@@ -223,13 +223,13 @@ function RadioOption({
       onClick={onChange}
     >
       <div
-        className="w-3.5 h-3.5 rounded-full border flex items-center justify-center flex-shrink-0"
+        className="w-3.5 h-3.5 rounded-full border flex items-center justify-center flex-shrink-0 transition-colors"
         style={{
           borderColor: checked ? 'var(--color-accent)' : 'var(--color-border)',
           backgroundColor: checked ? 'var(--color-accent)' : 'transparent',
         }}
       >
-        {checked && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+        {checked && <div className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--color-text)' }} />}
       </div>
       {label}
     </label>
