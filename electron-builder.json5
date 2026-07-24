@@ -54,6 +54,8 @@
     "!node_modules/**",
     // 回加：external 依赖（Rolldown 无法打包的原生模块 + 其 JS 入口）
     "node_modules/better-sqlite3/**",
+    "node_modules/bindings/**",
+    "node_modules/file-uri-to-path/**",
     "node_modules/@lancedb/lancedb/**",
     "node_modules/@lancedb/lancedb-win32-*/**",
     "node_modules/@lancedb/lancedb-darwin-*/**",
