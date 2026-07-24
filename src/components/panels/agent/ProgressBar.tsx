@@ -14,10 +14,10 @@ interface ProgressBarProps {
 
 /** 阶段颜色映射 */
 const PHASE_COLORS: Record<string, string> = {
-  thinking: '#8b5cf6',     // 紫色
-  tool_execution: '#3b82f6', // 蓝色
-  generating: '#10b981',   // 绿色
-  done: '#6b7280',         // 灰色
+  thinking: 'var(--color-accent)',     // 紫色
+  tool_execution: 'var(--color-info)', // 蓝色
+  generating: 'var(--color-success)',   // 绿色
+  done: 'var(--color-text-muted)',         // 灰色
 }
 
 /** 阶段标签 */

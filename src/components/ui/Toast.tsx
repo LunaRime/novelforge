@@ -61,7 +61,7 @@ function ToastContainer() {
 
   return (
     <div
-      className="fixed bottom-10 right-5 z-[9999] flex flex-col gap-2 pointer-events-none"
+      className="fixed bottom-10 right-5 z-[var(--z-toast)] flex flex-col gap-2 pointer-events-none"
     >
       {toasts.map(t => (
         <ToastItemView key={t.id} item={t} onRemove={remove} />

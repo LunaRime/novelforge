@@ -119,7 +119,7 @@ export default function MonacoDiffViewer({
               className="flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium"
               style={{
                 backgroundColor: 'var(--color-accent)',
-                color: '#fff',
+                color: 'var(--color-text)',
               }}
             >
               <Check size={12} /> 接受修改

@@ -253,7 +253,7 @@ function ActiveRunView({
               border: '1px solid var(--color-border)'
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.color = '#fff'
+              e.currentTarget.style.color = 'var(--color-text)'
               e.currentTarget.style.backgroundColor = 'var(--color-error)'
               e.currentTarget.style.borderColor = 'var(--color-error)'
             }}

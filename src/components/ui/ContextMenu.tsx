@@ -72,8 +72,9 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
   return (
     <div
       ref={menuRef}
-      className="fixed z-[9999] py-1 select-none"
+      className="fixed py-1 select-none"
       style={{
+        zIndex: 'var(--z-dropdown)',
         left,
         top,
         minWidth: MENU_W,
@@ -110,7 +111,7 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
               onClose()
               item.onClick?.()
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
             style={{
               color: item.disabled
                 ? 'var(--color-text-muted)'

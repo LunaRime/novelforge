@@ -62,10 +62,10 @@ function parseRelationships(characters: RelationshipGraphProps['characters']): R
 }
 
 const ROLE_COLORS: Record<string, string> = {
-  protagonist: '#6ee7b7',
-  antagonist: '#fca5a5',
-  supporting: '#93c5fd',
-  minor: '#a78bfa',
+  protagonist: 'var(--color-success)',
+  antagonist: 'var(--color-error)',
+  supporting: 'var(--color-info)',
+  minor: 'var(--color-accent)',
 }
 
 /** 角色关系网 Canvas 可视化 */

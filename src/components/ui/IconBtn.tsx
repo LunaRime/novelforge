@@ -27,7 +27,7 @@ export function IconBtn({ children, title, onClick, disabled, active, badge, siz
       title={title}
       disabled={disabled}
       onClick={onClick}
-      className="group relative flex items-center justify-center rounded transition-colors"
+      className="group relative flex items-center justify-center rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-1 focus-visible:ring-offset-[var(--color-bg)]"
       style={{
         width: `${size}px`,
         height: `${size}px`,

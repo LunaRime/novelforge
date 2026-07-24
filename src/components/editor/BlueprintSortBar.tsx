@@ -34,9 +34,9 @@ export const BlueprintSortBar: React.FC = () => {
       <select
         value={config.key}
         onChange={(e) => setSortKey(e.target.value as BlueprintSortKey)}
-        className="bg-background border border-border rounded px-1.5 py-0.5 text-xs
-                   text-foreground cursor-pointer hover:border-accent
-                   focus:outline-none focus:ring-1 focus:ring-accent"
+        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded px-1.5 py-0.5 text-xs
+                   text-[var(--color-text)] cursor-pointer hover:border-[var(--color-accent)]
+                   focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
         title="选择排序方式"
       >
         {SORT_OPTIONS.map((key) => (

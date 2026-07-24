@@ -71,7 +71,7 @@ function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 9998,
+        zIndex: 'var(--z-toast)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

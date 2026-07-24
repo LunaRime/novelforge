@@ -61,7 +61,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
+      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center"
       style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
@@ -805,7 +805,7 @@ function FontSelect({
       {/* 下拉选项列表 */}
       {open && (
         <div
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-50 rounded-xl overflow-hidden"
+          className="absolute left-0 right-0 top-[calc(100%+4px)] z-[var(--z-modal)] rounded-xl overflow-hidden"
           style={{
             border: '1px solid var(--color-border)',
             backgroundColor: 'var(--color-panel)',
@@ -945,7 +945,7 @@ function AboutSection() {
         <p className="text-[11px] leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
           Every story deserves to be forged with care.
         </p>
-        <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-bg-muted)', color: 'var(--color-text-muted)' }}>
+        <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
           AI 智能写作 IDE · 开源 · 为创作者而生
         </p>
       </div>

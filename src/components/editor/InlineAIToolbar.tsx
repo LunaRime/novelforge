@@ -71,7 +71,7 @@ export default function InlineAIToolbar({
   if (!visible) {
     return (
       <div
-        className="fixed z-50 flex items-center gap-0.5 px-1.5 py-1 rounded-lg opacity-0 transition-opacity duration-200"
+        className="fixed z-[var(--z-overlay)] flex items-center gap-0.5 px-1.5 py-1 rounded-lg opacity-0 transition-opacity duration-200"
         style={{ left: x, top: y, pointerEvents: 'none' }}
       />
     )
@@ -79,7 +79,7 @@ export default function InlineAIToolbar({
 
   return (
     <div
-      className="fixed z-50 flex items-center gap-0.5 px-1.5 py-1 rounded-lg shadow-lg"
+      className="fixed z-[var(--z-overlay)] flex items-center gap-0.5 px-1.5 py-1 rounded-lg shadow-lg"
       style={{
         left: x,
         top: y,

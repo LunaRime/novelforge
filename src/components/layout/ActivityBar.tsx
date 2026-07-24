@@ -132,7 +132,7 @@ export default function ActivityBar() {
           {/* 项目管理 Popover */}
           {showProjectMenu && (
             <div
-              className="absolute z-50 flex flex-col py-1 rounded-xl shadow-2xl"
+              className="absolute z-[var(--z-overlay)] flex flex-col py-1 rounded-xl shadow-2xl"
               style={{
                 left: 44,
                 top: 0,

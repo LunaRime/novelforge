@@ -23,8 +23,8 @@ import { cn } from '../../lib/utils'
 function getSourceConfig(t: (key: TextKey) => string) {
   return {
     builtin: { label: t('prompt.builtin'), color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
-    global: { label: t('prompt.global'), color: '#3b82f6', bg: 'rgba(59, 130, 246, 0.1)' },
-    project: { label: t('prompt.project'), color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)' },
+    global: { label: t('prompt.global'), color: 'var(--color-info)', bg: 'rgba(59, 130, 246, 0.1)' },
+    project: { label: t('prompt.project'), color: 'var(--color-warning)', bg: 'rgba(245, 158, 11, 0.1)' },
   }
 }
 
