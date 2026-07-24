@@ -286,7 +286,6 @@ function ProxySettings() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadProxy()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleSave = async () => {
