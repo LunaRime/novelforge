@@ -106,7 +106,7 @@ export default function HomeSidebarPanel() {
                     className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
                     style={{ color: 'var(--color-text-muted)' }}
                     onClick={(e) => handleDelete(e, p.path)}
-                    title="删除项目"
+                    title={t('project.deleteTooltip')}
                     onMouseEnter={e => e.currentTarget.style.color = 'var(--color-error)'}
                     onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
                   >

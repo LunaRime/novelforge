@@ -252,7 +252,7 @@ export default function ActivityBar() {
                           <button
                             className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
                             style={{ color: 'var(--color-text-muted)' }}
-                            title="删除项目"
+                            title={t('project.deleteTooltip')}
                             onClick={(e) => handleDeleteRecent(e, p.path)}
                             onMouseEnter={e => e.currentTarget.style.color = 'var(--color-error)'}
                             onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
