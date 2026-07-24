@@ -81,6 +81,10 @@ interface ProjectState {
   closeProject: () => void
   /** 更新角色状态（内存 + 持久化） */
   updateCharacterStates: (states: string) => Promise<void>
+  /** 删除项目文件夹（从磁盘删除） */
+  deleteProjectFolder: (projectPath: string) => Promise<boolean>
+  /** 移除历史记录（仅从最近列表中移除） */
+  removeRecentProject: (projectPath: string) => Promise<void>
 }
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
@@ -206,10 +210,41 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     } catch (err) {
       console.error('[project-store.updateCharacterStates] 持久化失败:', err)
     }
-    // 【迁移优化】: project:save 已经持久化到 project_core 表的 characterStates 字段，
-    // 此处无需为了全局（-1）再进行一次 db:save-summary-snapshot 的冗余调用。
-    // try {
-    //   await ipc.invoke('db:save-summary-snapshot', -1, states)
-    // } catch { /* SQLite 可能未初始化 */ }
+  },
+
+  deleteProjectFolder: async (projectPath) => {
+    try {
+      // 如果当前打开的就是要删除的项目，先关闭
+      const current = get().currentProject
+      if (current && current.path === projectPath) {
+        get().closeProject()
+      }
+      const result = await ipc.invoke('project:delete-folder', projectPath)
+      if (result.success) {
+        // 从本地状态中移除
+        set((s) => ({
+          recentProjects: s.recentProjects.filter((p) => p.path !== projectPath),
+        }))
+        return true
+      }
+      console.error('[Project] 删除文件夹失败:', result.error)
+      alertError(result.error ?? '未知错误', { title: '删除项目失败' })
+      return false
+    } catch (e) {
+      console.error('[Project] deleteProjectFolder 异常:', e)
+      alertError(String(e), { title: '删除项目异常' })
+      return false
+    }
+  },
+
+  removeRecentProject: async (projectPath) => {
+    try {
+      await ipc.invoke('project:remove-recent', projectPath)
+      set((s) => ({
+        recentProjects: s.recentProjects.filter((p) => p.path !== projectPath),
+      }))
+    } catch (e) {
+      console.error('[Project] removeRecentProject 异常:', e)
+    }
   },
 }))

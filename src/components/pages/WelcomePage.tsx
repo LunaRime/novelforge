@@ -1,7 +1,8 @@
 import { useState } from 'react'
-import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X } from 'lucide-react'
+import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X, Trash2 } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
+import { confirmDeleteProject } from '../ui/Confirm'
 
 const FIRST_RUN_KEY = 'vela-first-run'
 
@@ -238,6 +239,28 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
                       {p.path}
                     </span>
                   </div>
+                  <button
+                    className="opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer transition-opacity"
+                    style={{ color: 'var(--color-text-muted)' }}
+                    title="删除项目"
+                    onClick={async (e) => {
+                      e.stopPropagation()
+                      const action = await confirmDeleteProject()
+                      if (action === 'delete') {
+                        await useProjectStore.getState().deleteProjectFolder(p.path)
+                      } else if (action === 'remove') {
+                        await useProjectStore.getState().removeRecentProject(p.path)
+                      }
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.color = 'var(--color-error)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.color = 'var(--color-text-muted)'
+                    }}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
             </div>

@@ -2,18 +2,28 @@
  * HomeSidebarPanel — 主页侧边栏：项目管理入口 + 最近项目列表
  */
 
-import { FolderOpen } from 'lucide-react'
+import { FolderOpen, Trash2 } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { ipc } from '../../../services/ipc-client'
 import { Button } from '../../ui/Button'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { confirmDeleteProject } from '../../ui/Confirm'
 
 export default function HomeSidebarPanel() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const recentProjects = useProjectStore(s => s.recentProjects)
   const openProject = useProjectStore(s => s.openProject)
+  const deleteProjectFolder = useProjectStore(s => s.deleteProjectFolder)
+  const removeRecentProject = useProjectStore(s => s.removeRecentProject)
+
+  const handleDelete = async (e: React.MouseEvent, projectPath: string) => {
+    e.stopPropagation()
+    const action = await confirmDeleteProject()
+    if (action === 'delete') await deleteProjectFolder(projectPath)
+    else if (action === 'remove') await removeRecentProject(projectPath)
+  }
 
   return (
     <div className="px-3 py-2 text-sm">
@@ -77,7 +87,7 @@ export default function HomeSidebarPanel() {
               .map((p, i) => (
                 <div
                   key={i}
-                  className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors"
+                  className="group flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer transition-colors"
                   style={{ backgroundColor: 'transparent' }}
                   onMouseEnter={e => e.currentTarget.style.backgroundColor = 'var(--color-hover)'}
                   onMouseLeave={e => e.currentTarget.style.backgroundColor = 'transparent'}
@@ -92,6 +102,16 @@ export default function HomeSidebarPanel() {
                       {p.path}
                     </p>
                   </div>
+                  <button
+                    className="flex-shrink-0 p-0.5 rounded opacity-0 group-hover:opacity-60 hover:!opacity-100 transition-opacity cursor-pointer"
+                    style={{ color: 'var(--color-text-muted)' }}
+                    onClick={(e) => handleDelete(e, p.path)}
+                    title="删除项目"
+                    onMouseEnter={e => e.currentTarget.style.color = 'var(--color-error)'}
+                    onMouseLeave={e => e.currentTarget.style.color = 'var(--color-text-muted)'}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
               ))}
             {recentProjects.filter(p => p.path !== currentProject?.path).length === 0 && (
