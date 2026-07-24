@@ -367,7 +367,7 @@ export default function ChapterCardEditor() {
                   {bp.userGuidance && (
                     <span
                       className="text-[0.7rem] px-1 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(var(--accent-rgb), 0.15)', color: 'var(--color-accent)' }}
+                      style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}
                       title="已有作者微操指导"
                     >
                       有指导
@@ -376,7 +376,7 @@ export default function ChapterCardEditor() {
                   {bp.notes && (
                     <span
                       className="text-[0.7rem] px-1 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(34,197,94,0.15)', color: 'rgb(34,197,94)' }}
+                      style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}
                       title="已生成章节要点"
                     >
                       有要点
@@ -505,7 +505,7 @@ export default function ChapterCardEditor() {
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-accent)',
-                    backgroundColor: 'rgba(var(--accent-rgb, 99 102 241), 0.06)',
+                    backgroundColor: 'rgba(var(--color-accent-rgb), 0.06)',
                   }}
                 >
                   <Label className="flex items-center gap-1.5">
@@ -522,7 +522,7 @@ export default function ChapterCardEditor() {
                     onChange={e => updateField('userGuidance', e.target.value)}
                     placeholder="我想在这章加入一个意外的背叛...&#10;让反派在这章露出破绽...&#10;（不填则完全按蓝图走）"
                     rows={3}
-                    style={{ marginTop: 6 }}
+                    className="mt-1.5"
                   />
                 </div>
                 {/* 章节要点（定稿后自动生成，也可手动编辑） */}
