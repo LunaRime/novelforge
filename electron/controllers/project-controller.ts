@@ -258,7 +258,7 @@ export function registerProjectController() {
       removeRecentProject(projectPath)
       logger.info('Project', `[remove-recent] 已移除历史记录: ${projectPath}`)
       return { success: true }
-    } catch (err) {
+    } catch {
       return { success: false }
     }
   })
