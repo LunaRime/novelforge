@@ -210,15 +210,30 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     } catch { return '' }
   }
 
+  /** 分级角色状态注入 — 核心角色完整档案，配角精简，龙套省略 */
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   private async readCharacterStates(_projectPath: string): Promise<string> {
     try {
-      const allChars = await ipc.invoke('db:character-get-all')
-      const states: string[] = []
+      const allChars = await ipc.invoke('db:character-get-all') as Array<{
+        name: string; role: string; tier?: number; currentState?: Record<string, unknown>
+      }>
+      const tier1: string[] = []
+      const tier2: string[] = []
+
       for (const card of allChars) {
-        if (card.name && card.currentState) {
-          const cs = card.currentState
-          states.push(
+        if (!card.name) continue
+        const tier = card.tier ?? (card.role === 'protagonist' || card.role === 'antagonist' ? 1 : 2)
+        const cs = card.currentState
+
+        if (!cs || !cs.updatedAtChapter) {
+          // 无状态数据 — 仅核心角色记录空档
+          if (tier === 1) tier1.push(`${card.name}（${card.role || '未知'}）| 状态未更新`)
+          continue
+        }
+
+        if (tier === 1) {
+          // 核心角色：完整档案
+          tier1.push(
             `${card.name}（${card.role || '未知'}）| ` +
             `境界：${cs.powerLevel || '未知'} | ` +
             `位置：${cs.location || '未知'} | ` +
@@ -227,9 +242,20 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
             `道具：${cs.keyItems || '无'} | ` +
             `最近：第${cs.updatedAtChapter || 0}章 ${cs.recentEvents || ''}`
           )
+        } else if (tier === 2) {
+          // 配角：精简摘要
+          tier2.push(
+            `${card.name}（配角）→ 第${cs.updatedAtChapter || 0}章 | ` +
+            `${cs.location || '未知位置'} | ${cs.recentEvents || ''}`
+          )
         }
+        // tier 3 龙套：不注入，除非蓝图 characters[] 引用
       }
-      return states.length > 0 ? `【角色状态档案】\n${states.join('\n')}` : '（暂无角色状态档案）'
+
+      const parts: string[] = []
+      if (tier1.length > 0) parts.push(`【核心角色 — 完整档案】\n${tier1.join('\n')}`)
+      if (tier2.length > 0) parts.push(`【重要配角 — 精简状态】\n${tier2.join('\n')}`)
+      return parts.length > 0 ? parts.join('\n\n') : '（暂无角色状态档案）'
     } catch { return '（角色状态档案读取失败）' }
   }
 

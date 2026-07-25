@@ -178,7 +178,7 @@ export function buildFinalizePostProcessSteps(
         const cardsResult = await callLLMForPostProcess(cardBuilder, callbacks)
 
         // 解析 Markdown 表格格式的角色状态更新（比 JSON 更稳定）
-        const { parseMarkdownTable } = await import('../workflow-utils')
+        const { parseMarkdownTable, robustParseJSON } = await import('../workflow-utils')
         const updSections = cardsResult.split(/###\s*(UPDATES|NEW)/i)
         let updateRows: Array<Record<string, string>> = []
         let newRows: Array<Record<string, string>> = []
@@ -195,6 +195,44 @@ export function buildFinalizePostProcessSteps(
         // 如果没有分段，尝试整体解析
         if (updateRows.length === 0 && newRows.length === 0) {
           updateRows = parseMarkdownTable(cardsResult) || []
+        }
+
+        // L2: JSON 回退
+        if (updateRows.length === 0 && newRows.length === 0) {
+          const jsonParsed = robustParseJSON(cardsResult, false)
+          if (jsonParsed && typeof jsonParsed === 'object') {
+            const obj = jsonParsed as Record<string, unknown>
+            const jUpdates = (Array.isArray(obj.updates) ? obj.updates : []) as Array<Record<string, unknown>>
+            const jNewChars = (Array.isArray(obj.newCharacters) ? obj.newCharacters : []) as Array<Record<string, unknown>>
+            const jChars = (Array.isArray(obj.characters) ? obj.characters : []) as Array<Record<string, unknown>>
+            const src = jUpdates.length > 0 ? jUpdates : jChars
+            if (src.length > 0) {
+              updateRows = src.map((c: Record<string, unknown>) => ({
+                name: String(c.name || ''),
+                location: String((c.currentState as Record<string, unknown> || {}).location || c.location || ''),
+                powerLevel: String((c.currentState as Record<string, unknown> || {}).powerLevel || c.powerLevel || ''),
+                physicalState: String((c.currentState as Record<string, unknown> || {}).physicalState || c.physicalState || ''),
+                mentalState: String((c.currentState as Record<string, unknown> || {}).mentalState || c.mentalState || ''),
+                keyItems: String((c.currentState as Record<string, unknown> || {}).keyItems || c.keyItems || ''),
+                recentEvents: String((c.currentState as Record<string, unknown> || {}).recentEvents || c.recentEvents || ''),
+              }))
+            }
+            if (jNewChars.length > 0) {
+              newRows = jNewChars.map((c: Record<string, unknown>) => ({
+                name: String(c.name || ''),
+                role: String(c.role || 'supporting'),
+                location: String((c.currentState as Record<string, unknown> || {}).location || c.location || ''),
+                powerLevel: String((c.currentState as Record<string, unknown> || {}).powerLevel || c.powerLevel || ''),
+                physicalState: String((c.currentState as Record<string, unknown> || {}).physicalState || c.physicalState || ''),
+                mentalState: String((c.currentState as Record<string, unknown> || {}).mentalState || c.mentalState || ''),
+                keyItems: String((c.currentState as Record<string, unknown> || {}).keyItems || c.keyItems || ''),
+                recentEvents: String((c.currentState as Record<string, unknown> || {}).recentEvents || c.recentEvents || ''),
+              }))
+            }
+            if (updateRows.length > 0 || newRows.length > 0) {
+              callbacks.log('✅ 角色状态解析成功 (JSON 回退)')
+            }
+          }
         }
 
         if (updateRows.length > 0) {
@@ -230,6 +268,7 @@ export function buildFinalizePostProcessSteps(
               role: row.role || 'supporting',
               gender: '', age: '', appearance: '', personality: '', background: '',
               abilities: '', motivation: '', relationships: '', arc: '', notes: '',
+              tier: 2, tags: '', appearChapters: '[]', relations: '[]',
               currentState: {
                 location: row.location || '',
                 powerLevel: row.powerLevel || '',
@@ -248,6 +287,77 @@ export function buildFinalizePostProcessSteps(
       },
     })
   }
+
+  // ─── 步骤 3.8: 关系自动检测 ────────────────────────────────────────
+  steps.push({
+    key: 'relation_detect',
+    label: '🔗 关系检测',
+    critical: false,
+    dependsOn: ['character_cards'],
+    executor: async (callbacks: StepCallbacks) => {
+      callbacks.log('正在检测角色间的关系变化...')
+      try {
+        const allChars = await ipc.invoke('db:character-get-all') as Array<{
+          name: string; relations: string; appearChapters: string
+        }>
+        let detected = 0
+
+        for (const char of allChars) {
+          if (!char.name) continue
+          let rels: Array<{ target: string; type: string; label: string; sinceChapter: number }> = []
+          try { rels = JSON.parse(char.relations || '[]') } catch { rels = [] }
+
+          // 更新出场章节
+          let chaps: number[] = []
+          try { chaps = JSON.parse(char.appearChapters || '[]') } catch { chaps = [] }
+          if (!chaps.includes(chapterNumber)) {
+            chaps.push(chapterNumber)
+            chaps.sort((a: number, b: number) => a - b)
+          }
+
+          // 检测新关系：在正文中查找 "角色名：关系描述" 或 "与XXX的关系"
+          for (const other of allChars) {
+            if (other.name === char.name) continue
+            const alreadyRelated = rels.some(r => r.target === other.name)
+            if (alreadyRelated) continue
+
+            // Simple heuristic: check if both names appear near each other in the text
+            const idxA = draftContent.indexOf(char.name)
+            const idxB = draftContent.indexOf(other.name)
+            if (idxA >= 0 && idxB >= 0 && Math.abs(idxA - idxB) < 500) {
+              // Both characters appear in the same vicinity → potential interaction
+              rels.push({
+                target: other.name,
+                type: 'other',
+                label: `第${chapterNumber}章互动`,
+                sinceChapter: chapterNumber,
+              })
+              detected++
+            }
+          }
+
+          if (detected > 0 || chaps.includes(chapterNumber)) {
+            const c = char as Record<string, unknown>
+            await ipc.invoke('db:character-upsert', {
+              name: c.name as string,
+              role: String(c.role || 'supporting'),
+              gender: '', age: '', appearance: '', personality: '', background: '',
+              abilities: '', motivation: '', relationships: String(c.relationships || ''),
+              arc: '', notes: '',
+              tier: Number(c.tier ?? 2),
+              tags: String(c.tags || ''),
+              appearChapters: JSON.stringify(chaps),
+              relations: JSON.stringify(rels),
+            })
+          }
+        }
+        if (detected > 0) callbacks.log(`✅ 自动检测到 ${detected} 条新角色关系`)
+        else callbacks.log('未检测到新的角色关系')
+      } catch (e) {
+        callbacks.log(`⚠️ 关系检测失败: ${String(e)}`)
+      }
+    },
+  })
 
   // ─── 步骤 4: 文风自动学习（每5章触发一次）─────────────────────────
   if (chapterNumber % 5 === 0) {

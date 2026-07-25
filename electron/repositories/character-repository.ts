@@ -30,7 +30,24 @@ export interface CharacterData {
     relationships: string
     arc: string
     notes: string
+    /** v7: 戏份等级 1=核心 2=配角 3=龙套 */
+    tier: number
+    /** v7: 标签 JSON 数组 */
+    tags: string
+    /** v7: 出场章节 JSON 数组 [1,5,10] */
+    appearChapters: string
+    /** v7: 结构化关系 JSON 数组 */
+    relations: string
     currentState?: CharacterStateData
+}
+
+/** 结构化关系条目 */
+export interface CharacterRelation {
+    target: string
+    type: 'ally' | 'enemy' | 'family' | 'master_student' | 'lover' | 'rival' | 'neutral' | 'other'
+    label: string
+    sinceChapter: number
+    endedChapter?: number
 }
 
 function rowToData(row: Record<string, unknown>): CharacterData {
@@ -47,6 +64,10 @@ function rowToData(row: Record<string, unknown>): CharacterData {
         relationships: (row.relationships as string) || '',
         arc: (row.arc as string) || '',
         notes: (row.notes as string) || '',
+        tier: (row.tier as number) ?? 2,
+        tags: (row.tags as string) || '',
+        appearChapters: (row.appear_chapters as string) || '[]',
+        relations: (row.relations as string) || '[]',
     }
 
     // 只有当 cs_updated_at_chapter > 0 时才构建 currentState
@@ -121,9 +142,10 @@ export class CharacterRepository {
       INSERT INTO characters (
         name, role, gender, age, appearance, personality, background,
         abilities, motivation, relationships, arc, notes,
+        tier, tags, appear_chapters, relations,
         cs_location, cs_power_level, cs_physical_state, cs_mental_state,
         cs_key_items, cs_recent_events, cs_updated_at_chapter
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(name) DO UPDATE SET
         role = excluded.role,
         gender = excluded.gender,
@@ -136,6 +158,10 @@ export class CharacterRepository {
         relationships = excluded.relationships,
         arc = excluded.arc,
         notes = excluded.notes,
+        tier = excluded.tier,
+        tags = excluded.tags,
+        appear_chapters = excluded.appear_chapters,
+        relations = excluded.relations,
         cs_location = excluded.cs_location,
         cs_power_level = excluded.cs_power_level,
         cs_physical_state = excluded.cs_physical_state,
@@ -157,6 +183,10 @@ export class CharacterRepository {
             data.relationships,
             data.arc,
             data.notes,
+            data.tier ?? 2,
+            data.tags || '',
+            data.appearChapters || '[]',
+            data.relations || '[]',
             cs?.location ?? '',
             cs?.powerLevel ?? '',
             cs?.physicalState ?? '',
