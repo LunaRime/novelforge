@@ -266,7 +266,11 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
           motivation: (card.motivation as string) || '',
           relationships: (card.relationships as string) || '',
           arc: (card.arc as string) || '',
-          notes: (card.notes as string) || ''
+          notes: (card.notes as string) || '',
+          tier: 2,
+          tags: '',
+          appearChapters: '[]',
+          relations: '[]',
         })
         createdCount++
       }

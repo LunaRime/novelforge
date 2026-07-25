@@ -4,14 +4,14 @@ export const charactersPrompts: PromptTemplate[] = [
   {
     key: 'update_character_cards',
     name: '更新角色卡动态状态',
-    description: '定稿后分析章节内容，以 JSON 格式返回有变化的角色的 currentState 字段，用于自动更新角色卡',
+    description: '定稿后分析章节内容，以 Markdown 表格返回角色状态变化，用于自动更新角色卡',
     systemRole: '你是一位严谨的小说角色档案管理员，擅长追踪角色多维状态变化。',
     variables: {
       chapter_content: '章节正文内容',
       chapter_number: '章节编号',
       existing_cards_json: '现有角色卡 JSON 数组（包含 name/role 等基础信息）',
     },
-    content: `请根据章节内容，以 JSON 格式返回在本章中发生状态变化的角色的最新状态。
+    content: `请根据章节内容，以 Markdown 表格格式返回在本章中发生状态变化的角色的最新状态。
 
 【本章内容（第{{chapter_number}}章）】
 {{chapter_content}}

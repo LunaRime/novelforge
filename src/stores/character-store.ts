@@ -9,6 +9,7 @@ export const EMPTY_CARD: CharacterCard = {
   name: '', role: 'supporting', gender: '', age: '',
   appearance: '', personality: '', background: '', abilities: '',
   motivation: '', relationships: '', arc: '', notes: '',
+  tier: 2, tags: '', appearChapters: '[]', relations: '[]',
 }
 
 export const EMPTY_STATE: CharacterCurrentState = {
@@ -21,6 +22,30 @@ export const ROLE_LABELS: Record<CharacterCard['role'], string> = {
   antagonist: '🔥 反派',
   supporting: '👥 配角',
   minor: '📌 龙套',
+}
+
+/** 戏份等级标签 */
+export const TIER_LABELS: Record<number, string> = {
+  1: '★★★ 核心',
+  2: '★★☆ 重要',
+  3: '★☆☆ 龙套',
+}
+
+/** 按 tier 分组角色 */
+export function groupByTier(chars: CharacterCard[]): Record<number, CharacterCard[]> {
+  const groups: Record<number, CharacterCard[]> = { 1: [], 2: [], 3: [] }
+  for (const c of chars) {
+    const t = c.tier || 2
+    if (!groups[t]) groups[t] = []
+    groups[t].push(c)
+  }
+  // 主角始终 tier=1，反派 tier=1
+  for (const c of [...groups[2], ...(groups[3] || [])]) {
+    if (c.role === 'protagonist' || c.role === 'antagonist') {
+      c.tier = 1
+    }
+  }
+  return groups
 }
 
 interface CharacterState {

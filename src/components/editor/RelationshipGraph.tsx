@@ -1,242 +1,210 @@
-import { useRef, useEffect } from 'react'
+/**
+ * RelationshipGraph — 交互式角色关系图谱 (v7 Obsidian 风格)
+ *
+ * 特性：SVG + React 渲染、拖拽/点击/缩放/筛选、Tier 分级布局、关系类型颜色编码
+ */
+import { useState, useRef, useMemo, useCallback } from 'react'
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
+import { ROLE_LABELS } from '../../stores/character-store'
+import type { CharacterCard } from '../../stores/character-store'
 
-interface CharacterNode {
+// ===== 类型 =====
+
+interface GraphNode {
   name: string
   role: string
+  tier: number
   x: number
   y: number
-  vx: number
-  vy: number
 }
 
-interface RelationshipEdge {
+interface GraphEdge {
   from: string
   to: string
+  type: string
   label: string
 }
 
-interface RelationshipGraphProps {
-  characters: Array<{
-    name: string
-    role: string
-    relationships: string
-  }>
+const RELATION_COLORS: Record<string, string> = {
+  ally: '#22c55e',
+  enemy: '#ef4444',
+  family: '#f59e0b',
+  master_student: '#3b82f6',
+  lover: '#ec4899',
+  rival: '#f97316',
+  neutral: '#94a3b8',
+  other: '#6b7280',
 }
 
-/** 从角色关系文本中解析出关系边 */
-function parseRelationships(characters: RelationshipGraphProps['characters']): RelationshipEdge[] {
-  const edges: RelationshipEdge[] = []
+const ROLE_SIZES: Record<string, number> = {
+  protagonist: 28,
+  antagonist: 26,
+  supporting: 20,
+  minor: 16,
+}
+
+// ===== 关系解析 =====
+
+function parseRelations(characters: CharacterCard[]): GraphEdge[] {
+  const edges: GraphEdge[] = []
+  const allNames = new Set(characters.map(c => c.name))
 
   for (const char of characters) {
+    // 优先解析结构化 relations
+    try {
+      const rels = JSON.parse(char.relations || '[]') as Array<{
+        target: string; type: string; label: string
+      }>
+      for (const r of rels) {
+        if (r.target && allNames.has(r.target)) {
+          // 去重：避免双向关系重复绘制
+          const key = [char.name, r.target].sort().join('::')
+          if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
+            edges.push({ from: char.name, to: r.target, type: r.type || 'other', label: r.label || '' })
+          }
+        }
+      }
+      if (rels.length > 0) continue
+    } catch { /* fallback */ }
+
+    // 回退：解析旧版文本 relationships
     if (!char.relationships) continue
-    // 尝试多种格式：JSON 数组 / "名字：关系" / "名字 - 关系"
     try {
       const parsed = JSON.parse(char.relationships)
       if (Array.isArray(parsed)) {
         for (const rel of parsed) {
-          const targetName = rel.name || rel.target
-          if (targetName && characters.some(c => c.name === targetName)) {
-            edges.push({ from: char.name, to: targetName, label: rel.relation || rel.label || '' })
+          const target = rel.name || rel.target
+          if (target && allNames.has(target)) {
+            const key = [char.name, target].sort().join('::')
+            if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
+              edges.push({ from: char.name, to: target, type: rel.type || 'other', label: rel.relation || rel.label || '' })
+            }
           }
         }
         continue
       }
-    } catch { /* 不是 JSON，继续用文本解析 */ }
+    } catch { /* text fallback */ }
 
-    // 文本格式解析
     const lines = char.relationships.split(/[,;，；\n]/).filter(Boolean)
     for (const line of lines) {
       const match = line.match(/(.+?)[：:—-]\s*(.+)/)
-      if (match) {
-        const targetName = match[1].trim()
-        const label = match[2].trim()
-        if (characters.some(c => c.name === targetName)) {
-          edges.push({ from: char.name, to: targetName, label })
+      if (match && allNames.has(match[1].trim())) {
+        const key = [char.name, match[1].trim()].sort().join('::')
+        if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
+          edges.push({ from: char.name, to: match[1].trim(), type: 'other', label: match[2].trim() })
         }
       }
     }
   }
-
   return edges
 }
 
-const ROLE_COLORS: Record<string, string> = {
-  protagonist: 'var(--color-success)',
-  antagonist: 'var(--color-error)',
-  supporting: 'var(--color-info)',
-  minor: 'var(--color-accent)',
-}
+// ===== 布局引擎 =====
 
-/** 角色关系网 Canvas 可视化 */
-export default function RelationshipGraph({ characters }: RelationshipGraphProps) {
-  const { t } = useTranslation()
-  const canvasRef = useRef<HTMLCanvasElement>(null)
-  const nodesRef = useRef<CharacterNode[]>([])
-  const animRef = useRef<number>(0)
+function computeLayout(characters: CharacterCard[], width: number, height: number): GraphNode[] {
+  const cx = width / 2
+  const cy = height / 2
 
-  const edges = parseRelationships(characters)
+  // Tier 1 居中，Tier 2 中层环，Tier 3 外层环
+  const tierConfig: Record<number, { radius: number }> = {
+    1: { radius: Math.min(width, height) * 0.12 },
+    2: { radius: Math.min(width, height) * 0.30 },
+    3: { radius: Math.min(width, height) * 0.44 },
+  }
 
-  // 初始化节点布局
-  useEffect(() => {
-    const canvas = canvasRef.current
-    if (!canvas) return
+  const grouped: Record<number, CharacterCard[]> = { 1: [], 2: [], 3: [] }
+  for (const c of characters) {
+    const t = c.tier || 2
+    grouped[t]?.push(c)
+  }
 
-    const w = canvas.offsetWidth
-    const h = canvas.offsetHeight
-    canvas.width = w * 2
-    canvas.height = h * 2
-
-    const centerX = w
-    const centerY = h
-    const radius = Math.min(w, h) * 0.6
-
-    // 环形初始布局
-    nodesRef.current = characters.map((c, i) => {
-      const angle = (i / characters.length) * Math.PI * 2 - Math.PI / 2
-      return {
+  const nodes: GraphNode[] = []
+  for (const tier of [1, 2, 3]) {
+    const chars = grouped[tier] || []
+    const r = tierConfig[tier].radius
+    chars.forEach((c, i) => {
+      const angle = (i / Math.max(chars.length, 1)) * Math.PI * 2 - Math.PI / 2
+      nodes.push({
         name: c.name,
         role: c.role,
-        x: centerX + radius * Math.cos(angle),
-        y: centerY + radius * Math.sin(angle),
-        vx: 0,
-        vy: 0,
-      }
+        tier: c.tier || 2,
+        x: cx + r * Math.cos(angle),
+        y: cy + r * Math.sin(angle),
+      })
     })
+  }
+  return nodes
+}
 
-    // 启动力导向模拟
-    let iteration = 0
-    const maxIterations = 120
+// ===== 组件 =====
 
-    const drawFrame = () => {
-      const canvas = canvasRef.current
-      if (!canvas) return
-      const ctx = canvas.getContext('2d')
-      if (!ctx) return
+interface Props {
+  characters: CharacterCard[]
+  onSelect?: (name: string) => void
+}
 
-      const nodes = nodesRef.current
+export default function RelationshipGraph({ characters, onSelect }: Props) {
+  const { t } = useTranslation()
+  const svgRef = useRef<SVGSVGElement>(null)
+  const [viewBox, setViewBox] = useState({ x: 0, y: 0, w: 800, h: 600 })
+  const [dragging, setDragging] = useState<{ name: string; sx: number; sy: number } | null>(null)
+  const [tierFilter, setTierFilter] = useState<number | null>(null)
+  const edges = useMemo(() => parseRelations(characters), [characters])
 
-      ctx.clearRect(0, 0, canvas.width, canvas.height)
+  // 基础布局（memo，避免 effect 中 setState）
+  const baseLayout = useMemo(
+    () => computeLayout(characters, viewBox.w, viewBox.h),
+    [characters, viewBox.w, viewBox.h]
+  )
+  // 可拖拽覆盖的节点位置
+  const [dragOffsets, setDragOffsets] = useState<Record<string, { dx: number; dy: number }>>({})
+  const visibleNodes = useMemo(() => {
+    const filtered = tierFilter ? baseLayout.filter(n => n.tier === tierFilter) : baseLayout
+    return filtered.map(n => {
+      const off = dragOffsets[n.name]
+      return off ? { ...n, x: n.x + off.dx, y: n.y + off.dy } : n
+    })
+  }, [baseLayout, tierFilter, dragOffsets])
 
-      // 绘制连线
-      ctx.lineWidth = 1.5
-      for (const edge of edges) {
-        const a = nodes.find((n) => n.name === edge.from)
-        const b = nodes.find((n) => n.name === edge.to)
-        if (!a || !b) continue
+  const visibleEdges = useMemo(() => tierFilter
+    ? edges.filter(e => visibleNodes.some(n => n.name === e.from) && visibleNodes.some(n => n.name === e.to))
+    : edges, [edges, tierFilter, visibleNodes])
 
-        ctx.beginPath()
-        ctx.moveTo(a.x, a.y)
-        ctx.lineTo(b.x, b.y)
-        ctx.strokeStyle = 'rgba(148,163,184,0.3)'
-        ctx.stroke()
+  // 缩放
+  const zoom = (factor: number) => {
+    setViewBox(vb => {
+      const newW = Math.max(300, Math.min(2000, vb.w * factor))
+      const newH = Math.max(200, Math.min(1500, vb.h * factor))
+      return { ...vb, w: newW, h: newH }
+    })
+  }
 
-        // 关系标签
-        if (edge.label) {
-          const mx = (a.x + b.x) / 2
-          const my = (a.y + b.y) / 2
-          ctx.font = '18px system-ui'
-          ctx.fillStyle = 'rgba(148,163,184,0.6)'
-          ctx.textAlign = 'center'
-          ctx.fillText(edge.label, mx, my - 4)
-        }
-      }
+  // 重置视图
+  const resetView = () => {
+    setViewBox({ x: 0, y: 0, w: 800, h: 600 })
+    setDragOffsets({})
+  }
 
-      // 绘制节点
-      for (const node of nodes) {
-        const color = ROLE_COLORS[node.role] || '#94a3b8'
+  // 拖拽节点
+  const handleMouseDown = useCallback((name: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setDragging({ name, sx: e.clientX, sy: e.clientY })
+  }, [])
 
-        // 光晕
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, 28, 0, Math.PI * 2)
-        ctx.fillStyle = color + '25'
-        ctx.fill()
-
-        // 节点
-        ctx.beginPath()
-        ctx.arc(node.x, node.y, 20, 0, Math.PI * 2)
-        ctx.fillStyle = color + '40'
-        ctx.fill()
-        ctx.strokeStyle = color
-        ctx.lineWidth = 2
-        ctx.stroke()
-
-        // 名字
-        ctx.font = 'bold 22px system-ui'
-        ctx.fillStyle = color
-        ctx.textAlign = 'center'
-        ctx.textBaseline = 'middle'
-        ctx.fillText(node.name, node.x, node.y + 36)
-      }
-    }
-
-    const simulate = () => {
-      const nodes = nodesRef.current
-      if (iteration >= maxIterations) {
-        drawFrame()
-        return
-      }
-
-      // 斥力（节点间）
-      for (let i = 0; i < nodes.length; i++) {
-        for (let j = i + 1; j < nodes.length; j++) {
-          const dx = nodes[j].x - nodes[i].x
-          const dy = nodes[j].y - nodes[i].y
-          const dist = Math.max(Math.sqrt(dx * dx + dy * dy), 1)
-          const force = 8000 / (dist * dist)
-          const fx = (dx / dist) * force
-          const fy = (dy / dist) * force
-          nodes[i].vx -= fx
-          nodes[i].vy -= fy
-          nodes[j].vx += fx
-          nodes[j].vy += fy
-        }
-      }
-
-      // 引力（连线间）
-      for (const edge of edges) {
-        const a = nodes.find((n) => n.name === edge.from)
-        const b = nodes.find((n) => n.name === edge.to)
-        if (!a || !b) continue
-        const dx = b.x - a.x
-        const dy = b.y - a.y
-        const dist = Math.sqrt(dx * dx + dy * dy)
-        const force = (dist - 150) * 0.01
-        const fx = (dx / dist) * force
-        const fy = (dy / dist) * force
-        a.vx += fx
-        a.vy += fy
-        b.vx -= fx
-        b.vy -= fy
-      }
-
-      // 向心力
-      for (const node of nodes) {
-        node.vx += (centerX - node.x) * 0.002
-        node.vy += (centerY - node.y) * 0.002
-      }
-
-      // 应用速度 + 阻尼
-      const damping = 0.85
-      for (const node of nodes) {
-        node.vx *= damping
-        node.vy *= damping
-        node.x += node.vx
-        node.y += node.vy
-        // 边界约束
-        node.x = Math.max(40, Math.min(w * 2 - 40, node.x))
-        node.y = Math.max(40, Math.min(h * 2 - 40, node.y))
-      }
-
-      iteration++
-      drawFrame()
-      animRef.current = requestAnimationFrame(simulate)
-    }
-
-    simulate()
-
-    return () => cancelAnimationFrame(animRef.current)
-  }, [characters, edges])
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!dragging) return
+    const dx = (e.clientX - dragging.sx) * (viewBox.w / 800)
+    const dy = (e.clientY - dragging.sy) * (viewBox.h / 600)
+    setDragOffsets(prev => ({
+      ...prev,
+      [dragging.name]: {
+        dx: (prev[dragging.name]?.dx || 0) + dx,
+        dy: (prev[dragging.name]?.dy || 0) + dy,
+      },
+    }))
+    setDragging({ ...dragging, sx: e.clientX, sy: e.clientY })
+  }, [dragging, viewBox])
 
   if (characters.length === 0) {
     return (
@@ -247,10 +215,125 @@ export default function RelationshipGraph({ characters }: RelationshipGraphProps
   }
 
   return (
-    <canvas
-      ref={canvasRef}
-      className="w-full h-full"
-      style={{ background: 'transparent' }}
-    />
+    <div className="relative w-full h-full overflow-hidden" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
+      {/* 工具栏 */}
+      <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+        {/* tier 筛选 */}
+        {([null, 1, 2, 3] as Array<number | null>).map(ti => (
+          <button
+            key={String(ti)}
+            className="text-[0.65rem] px-1.5 py-0.5 rounded transition-colors border cursor-pointer"
+            style={{
+              backgroundColor: tierFilter === ti ? 'rgba(var(--color-accent-rgb),0.15)' : 'var(--color-bg-elevated)',
+              borderColor: tierFilter === ti ? 'var(--color-accent)' : 'var(--color-border)',
+              color: tierFilter === ti ? 'var(--color-accent)' : 'var(--color-text-muted)',
+            }}
+            onClick={() => setTierFilter(ti)}
+            type="button"
+          >
+            {ti === null ? '全部' : ['','核心','重要','龙套'][ti]}
+          </button>
+        ))}
+        <div className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+        <button
+          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
+          onClick={() => zoom(0.8)} title="缩小" type="button"
+        >
+          <ZoomOut size={14} />
+        </button>
+        <button
+          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
+          onClick={() => zoom(1.25)} title="放大" type="button"
+        >
+          <ZoomIn size={14} />
+        </button>
+        <button
+          className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
+          onClick={resetView} title="重置" type="button"
+        >
+          <Maximize2 size={14} />
+        </button>
+      </div>
+
+      {/* 图例 */}
+      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2 text-[0.6rem]"
+        style={{ color: 'var(--color-text-muted)' }}>
+        {Object.entries(RELATION_COLORS).slice(0, 6).map(([k, v]) => (
+          <span key={k} className="flex items-center gap-0.5">
+            <span className="w-2 h-0.5 rounded" style={{ backgroundColor: v }} />
+            {k === 'ally' ? '盟友' : k === 'enemy' ? '敌对' : k === 'family' ? '家族' :
+             k === 'master_student' ? '师徒' : k === 'lover' ? '恋人' : k === 'rival' ? '劲敌' : '其他'}
+          </span>
+        ))}
+      </div>
+
+      {/* SVG 画布 */}
+      <svg
+        ref={svgRef}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+        className="w-full h-full cursor-grab active:cursor-grabbing"
+        onMouseMove={handleMouseMove}
+        onMouseUp={() => setDragging(null)}
+        onMouseLeave={() => setDragging(null)}
+      >
+        {/* 连线 */}
+        {visibleEdges.map((edge, i) => {
+          const a = visibleNodes.find(n => n.name === edge.from)
+          const b = visibleNodes.find(n => n.name === edge.to)
+          if (!a || !b) return null
+          const mx = (a.x + b.x) / 2
+          const my = (a.y + b.y) / 2
+          return (
+            <g key={i}>
+              <line
+                x1={a.x} y1={a.y} x2={b.x} y2={b.y}
+                stroke={RELATION_COLORS[edge.type] || '#94a3b8'}
+                strokeOpacity={0.4}
+                strokeWidth={1.5}
+              />
+              {edge.label && (
+                <text x={mx} y={my - 4} textAnchor="middle" fontSize={11}
+                  fill="var(--color-text-muted)" opacity={0.7}
+                >
+                  {edge.label}
+                </text>
+              )}
+            </g>
+          )
+        })}
+
+        {/* 节点 */}
+        {visibleNodes.map(node => {
+          const color = ROLE_LABELS[node.role]?.includes('主角') ? 'var(--color-success)'
+            : node.role === 'antagonist' ? 'var(--color-error)'
+            : 'var(--color-accent)'
+          const r = ROLE_SIZES[node.role] || 18
+
+          return (
+            <g key={node.name} style={{ cursor: 'pointer' }}>
+              {/* 光晕 */}
+              <circle cx={node.x} cy={node.y} r={r + 8} fill={color} opacity={0.08} />
+              {/* 节点圆 */}
+              <circle
+                cx={node.x} cy={node.y} r={r}
+                fill={color} fillOpacity={0.2}
+                stroke={color} strokeWidth={2}
+                onMouseDown={(e) => handleMouseDown(node.name, e)}
+                onClick={() => onSelect?.(node.name)}
+              />
+              {/* 名字 */}
+              <text
+                x={node.x} y={node.y + r + 14}
+                textAnchor="middle" fontSize={12}
+                fill={color} fontWeight="bold"
+                style={{ pointerEvents: 'none', userSelect: 'none' }}
+              >
+                {node.name}
+              </text>
+            </g>
+          )
+        })}
+      </svg>
+    </div>
   )
 }
