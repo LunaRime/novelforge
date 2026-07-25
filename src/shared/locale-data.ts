@@ -1182,5 +1182,6 @@ export const UI_TEXTS_DATA = {
   'models.calls': { 'zh-CN': '次调用', 'en-US': ' calls', 'ru-RU': ' вызовов' },
   'models.input': { 'zh-CN': '输入', 'en-US': 'Input', 'ru-RU': 'Ввод' },
   'models.output': { 'zh-CN': '输出', 'en-US': 'Output', 'ru-RU': 'Вывод' },
+  'models.total': { 'zh-CN': '合计', 'en-US': 'Total', 'ru-RU': 'Всего' },
   'dialog.close': { 'zh-CN': '关闭', 'en-US': 'Close', 'ru-RU': 'Закрыть' },
 } as const

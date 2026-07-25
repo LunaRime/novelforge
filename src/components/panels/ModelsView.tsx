@@ -60,10 +60,12 @@ export default memo(function ModelsView() {
                 className="text-[0.7rem] text-[var(--color-text-muted)]"
                 style={{ borderBottom: '1px solid var(--color-border)' }}
               >
-                <th className="text-left px-4 py-1 font-medium">{t('models.time')}</th>
+                <th className="text-left px-3 py-1 font-medium">{t('models.time')}</th>
                 <th className="text-left px-2 py-1 font-medium">{t('models.model')}</th>
                 <th className="text-left px-2 py-1 font-medium">{t('models.purpose')}</th>
-                <th className="text-right px-2 py-1 font-medium">Tokens</th>
+                <th className="text-right px-1.5 py-1 font-medium">{t('models.input')}</th>
+                <th className="text-right px-1.5 py-1 font-medium">{t('models.output')}</th>
+                <th className="text-right px-1.5 py-1 font-medium">{t('models.total')}</th>
                 <th className="text-right px-2 py-1 font-medium">{t('models.duration')}</th>
                 <th className="text-center px-2 py-1 font-medium">{t('models.status')}</th>
               </tr>
@@ -75,12 +77,14 @@ export default memo(function ModelsView() {
                   className="hover:bg-[var(--color-hover)] transition-colors"
                   style={{ borderBottom: '1px solid var(--color-border)' }}
                 >
-                  <td className="px-4 py-1 text-[var(--color-text-muted)]">
+                  <td className="px-3 py-1 text-[var(--color-text-muted)]">
                     {new Date(row.createdAt).toLocaleString(DEFAULT_LOCALE, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                   </td>
                   <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.modelName || '-'}</td>
                   <td className="px-2 py-1 text-[var(--color-text-secondary)]">{row.purpose || '-'}</td>
-                  <td className="px-2 py-1 text-right text-[var(--color-text)]">{row.totalTokens.toLocaleString()}</td>
+                  <td className="px-1.5 py-1 text-right text-[var(--color-text-muted)]">{row.promptTokens > 0 ? row.promptTokens.toLocaleString() : '-'}</td>
+                  <td className="px-1.5 py-1 text-right text-[var(--color-text-muted)]">{row.completionTokens > 0 ? row.completionTokens.toLocaleString() : '-'}</td>
+                  <td className="px-1.5 py-1 text-right text-[var(--color-text)] font-medium">{row.totalTokens > 0 ? row.totalTokens.toLocaleString() : '-'}</td>
                   <td className="px-2 py-1 text-right text-[var(--color-text-muted)]">{(row.durationMs / 1000).toFixed(1)}s</td>
                   <td className="px-2 py-1 text-center">{row.success ? <CheckCircle2 size={12} style={{ color: 'var(--color-success)', display: 'inline' }} /> : <XCircle size={12} style={{ color: 'var(--color-error)', display: 'inline' }} />}</td>
                 </tr>
