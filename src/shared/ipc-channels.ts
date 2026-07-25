@@ -496,8 +496,26 @@ export interface UpdateEvents {
   'update:download-progress': { progress: UpdateProgressInfo }
 }
 
+// ===== 导出频道 =====
+export interface ExportChannels {
+  'export:export-chapters': {
+    args: [params: {
+      chapterNumbers?: number[]
+      format: 'zip' | 'folder'
+      fileFormat: 'md' | 'txt'
+      outputPath: string
+      projectName: string
+    }]
+    return: { success: boolean; path?: string; chapterCount?: number; error?: string }
+  }
+  'export:select-output-dir': {
+    args: []
+    return: string | null
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */

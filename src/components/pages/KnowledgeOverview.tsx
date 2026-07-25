@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Database, BookOpen, FileText,
-  Search, RefreshCw, Layers, Zap, Server, Activity,
+  Search, RefreshCw, Layers, Zap, Server, Activity, Download,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -11,10 +11,12 @@ import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
+import { ipc } from '../../services/ipc-client'
 import {
   loadKBData, getVectorlessCount, searchKB, backfillVectors,
   type KBDocument, type SearchResult, type KBStatsData,
 } from '../../services/knowledge-service'
+import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
 /**
  * 知识库概览页面 — LanceDB 向量数据库的管理中心
@@ -29,10 +31,42 @@ export default function KnowledgeOverview() {
   const [topK, setTopK] = useState(10)
   const [vectorlessCount, setVectorlessCount] = useState(0)
   const [backfilling, setBackfilling] = useState(false)
+  // 导出状态
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportChapters, setExportChapters] = useState<number[]>([])
+  const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
 
   const currentProject = useProjectStore(s => s.currentProject)
 
   const { t } = useTranslation()
+
+  /** 提取文档章节号 */
+  const extractChNum = (doc: KBDocument): number => {
+    const rawName = doc.fileName.replace(/\.[^.]+$/, '')
+    const chMatch = rawName.match(/^(?:chapter_(\d+)|第(\d+)章)/)
+    return chMatch ? parseInt(chMatch[1] || chMatch[2], 10) : 0
+  }
+
+  /** 批量导出所有已入库章节 */
+  const openBatchExport = async () => {
+    const chapters: number[] = []
+    const titles: Record<number, string> = {}
+    for (const doc of documents) {
+      const cn = extractChNum(doc)
+      if (cn > 0) {
+        chapters.push(cn)
+        try {
+          const res = await ipc.invoke('db:blueprint-get', cn)
+          titles[cn] = res?.title || doc.fileName
+        } catch {
+          titles[cn] = doc.fileName
+        }
+      }
+    }
+    setExportChapters(chapters)
+    setExportTitleMap(titles)
+    setExportOpen(true)
+  }
 
   const loadData = useCallback(async () => {
     if (!currentProject) return
@@ -149,12 +183,23 @@ export default function KnowledgeOverview() {
           >
             <Database size={20} className="text-white" />
           </div>
-          <div>
+          <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold text-[var(--color-text)]">{t('nav.knowledgeBase')}</h2>
             <p className="text-xs text-[var(--color-text-muted)]">
               {t('knowledge.desc')}
             </p>
           </div>
+          {/* 批量导出按钮 */}
+          {documents.length > 0 && (
+            <Button
+              variant="outline"
+              className="flex-shrink-0"
+              onClick={openBatchExport}
+            >
+              <Download size={14} className="mr-1.5" />
+              {t('action.export')}
+            </Button>
+          )}
         </div>
 
         {/* ===== 统计卡片 ===== */}
@@ -224,7 +269,6 @@ export default function KnowledgeOverview() {
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
-            {/* 检索模式标签 */}
             <span className={cn(
               'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
               hasVectors
@@ -313,6 +357,14 @@ export default function KnowledgeOverview() {
         </div>
 
       </div>
+
+      {/* 章节导出对话框 */}
+      <ChapterExportDialog
+        chapterNumbers={exportChapters}
+        chapterTitles={exportTitleMap}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   )
 }
