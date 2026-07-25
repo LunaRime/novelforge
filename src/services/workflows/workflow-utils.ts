@@ -148,10 +148,21 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
 
   if (rows.length === 0) return null
 
-  // 6. 放宽验证：检查是否有任何章节号或标题
+  // 6. 放宽验证：按数据用途分类检查字段完整性
+  //    - 蓝图/目录表格: chapterNumber 或 title
+  //    - 审稿表格: category + (severity 或 description)
+  //    - 角色状态表格: name + (location 或 powerLevel 或 recentEvents)
   const hasValidData = rows.some(r => {
     const v = r.chapterNumber
-    return (v && !isNaN(Number(v)) && Number(v) > 0) || r.title?.trim()
+    const isBlueprint = (v && !isNaN(Number(v)) && Number(v) > 0) || r.title?.trim()
+    const hasCategory = r.category?.trim()
+    const hasSeverity = r.severity?.trim()
+    const hasDescription = r.description?.trim()
+    const isReview = hasCategory && (hasSeverity || hasDescription)
+    const hasName = r.name?.trim()
+    const hasCharField = r.location?.trim() || r.powerLevel?.trim() || r.recentEvents?.trim()
+    const isCharacter = hasName && hasCharField
+    return isBlueprint || isReview || isCharacter
   })
 
   if (!hasValidData) return null
