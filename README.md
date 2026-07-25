@@ -25,11 +25,11 @@
 
 | 主编辑界面（中文） | 主编辑界面（英文） |
 |-------------------|-------------------|
-| ![中文界面](screenshots/%E7%A8%8B%E5%BA%8F%E8%BF%9B%E5%85%A5%E7%95%8C%E9%9D%A2-%E4%B8%AD%E6%96%87.png) | ![英文界面](screenshots/%E7%A8%8B%E5%BA%8F%E8%BF%9B%E5%85%A5%E7%95%8C%E9%9D%A2-%E8%8B%B1%E6%96%87.png) |
+| ![中文界面](screenshots/main-editor-zh.png) | ![英文界面](screenshots/main-editor-en.png) |
 
 | 设置界面 | 提示库设置 |
 |----------|-----------|
-| ![设置](screenshots/%E8%AE%BE%E7%BD%AE%E7%95%8C%E9%9D%A2%E7%94%A8%E6%9D%A5%E8%AE%BE%E7%BD%AE%E8%AF%AD%E8%A8%80%E7%AD%89.png) | ![提示库](screenshots/%E6%8F%90%E7%A4%BA%E5%BA%93%E8%AE%BE%E7%BD%AE%E7%95%8C%E9%9D%A2.png) |
+| ![设置](screenshots/settings.png) | ![提示库](screenshots/prompt-library.png) |
 
 ---
 

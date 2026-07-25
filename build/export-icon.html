@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>NovelForge Icon Exporter</title>
+<style>
+  body { margin: 0; padding: 20px; background: #0f0f1a; color: #e2e8f0; font-family: system-ui; display: flex; flex-direction: column; align-items: center; }
+  h2 { margin-bottom: 4px; }
+  .sub { color: #94a3b8; font-size: 13px; margin-bottom: 20px; }
+  .preview { border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.5); margin-bottom: 24px; width: 256px; height: 256px; }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; justify-content: center; }
+  button { padding: 10px 24px; border: none; border-radius: 10px; font-size: 14px; font-weight: 600; cursor: pointer; transition: transform 0.15s, box-shadow 0.15s; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
+  .btn-png { background: #6366f1; color: #fff; }
+  .btn-ico { background: #f97316; color: #fff; }
+  .done { color: #4ade80; font-size: 13px; margin-top: 12px; opacity: 0; transition: opacity 0.3s; }
+  .done.show { opacity: 1; }
+</style>
+</head>
+<body>
+<h2>🔥 NovelForge Icon</h2>
+<div class="sub">点击按钮导出不同格式的图标</div>
+<img id="preview" class="preview" src="" onload="init()" />
+<canvas id="c" width="512" height="512" style="display:none"></canvas>
+<div class="btns">
+  <button class="btn-png" onclick="exportPNG()">⬇ icon.png (512×512)</button>
+  <button class="btn-png" onclick="exportPNG(256)">⬇ icon-256.png</button>
+  <button class="btn-ico" onclick="exportICO()">⬇ icon.ico (Windows)</button>
+</div>
+<div class="done" id="done">✅ 已开始下载！</div>
+
+<script>
+let loaded = false;
+function init() {
+  const img = document.getElementById('preview');
+  const c = document.getElementById('c');
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0, 512, 512);
+  loaded = true;
+}
+
+function render(size) {
+  const img = document.getElementById('preview');
+  const tmp = document.createElement('canvas');
+  tmp.width = size; tmp.height = size;
+  tmp.getContext('2d').drawImage(img, 0, 0, size, size);
+  return tmp;
+}
+
+function exportPNG(size = 512) {
+  if (!loaded) return alert('图标还在加载中，请稍候...');
+  render(size).toBlob(b => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(b);
+    a.download = size === 512 ? 'icon.png' : 'icon-256.png';
+    a.click();
+    flash();
+  });
+}
+
+function exportICO() {
+  if (!loaded) return alert('图标还在加载中，请稍候...');
+  const sizes = [32, 16];
+  const canvases = sizes.map(s => render(s));
+
+  const headerSize = 6;
+  const entrySize = 16;
+  const totalHeader = headerSize + entrySize * sizes.length;
+  const imageDatas = canvases.map(tc => {
+    const ctx = tc.getContext('2d');
+    const data = ctx.getImageData(0, 0, tc.width, tc.height).data;
+    const bmpSize = 40 + tc.width * tc.height * 4 + tc.height * Math.ceil(tc.width / 8);
+    const buf = new ArrayBuffer(bmpSize);
+    const v = new DataView(buf);
+    let off = 0;
+    v.setUint32(off, 40, true); off += 4;
+    v.setInt32(off, tc.width, true); off += 4;
+    v.setInt32(off, tc.height * 2, true); off += 4;
+    v.setUint16(off, 1, true); off += 2;
+    v.setUint16(off, 32, true); off += 2;
+    v.setUint32(off, 0, true); off += 4;
+    v.setUint32(off, tc.width * tc.height * 4, true); off += 4;
+    off += 16;
+    const px = new Uint8Array(buf, off);
+    for (let y = tc.height - 1; y >= 0; y--) {
+      for (let x = 0; x < tc.width; x++) {
+        const i = (y * tc.width + x) * 4;
+        const j = ((tc.height - 1 - y) * tc.width + x) * 4;
+        px[j] = data[i + 2]; px[j + 1] = data[i + 1]; px[j + 2] = data[i]; px[j + 3] = data[i + 3];
+      }
+    }
+    return { data: buf, size: tc.width };
+  });
+
+  const totalSize = totalHeader + imageDatas.reduce((s, d) => s + d.data.byteLength, 0);
+  const ico = new ArrayBuffer(totalSize);
+  const v = new DataView(ico);
+  let off = 0;
+  v.setUint16(off, 0, true); off += 2;
+  v.setUint16(off, 1, true); off += 2;
+  v.setUint16(off, sizes.length, true); off += 2;
+  let dataOff = totalHeader;
+  for (const d of imageDatas) {
+    v.setUint8(off, d.size); off++;
+    v.setUint8(off, d.size); off++;
+    v.setUint8(off, 0); off++;
+    v.setUint8(off, 0); off++;
+    v.setUint16(off, 1, true); off += 2;
+    v.setUint16(off, 32, true); off += 2;
+    v.setUint32(off, d.data.byteLength, true); off += 4;
+    v.setUint32(off, dataOff, true); off += 4;
+    new Uint8Array(ico, dataOff, d.data.byteLength).set(new Uint8Array(d.data));
+    dataOff += d.data.byteLength;
+  }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([ico]));
+  a.download = 'icon.ico';
+  a.click();
+  flash();
+}
+
+function flash() {
+  const d = document.getElementById('done');
+  d.classList.add('show');
+  setTimeout(() => d.classList.remove('show'), 2000);
+}
+</script>
+</body>
+</html>
