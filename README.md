@@ -23,19 +23,13 @@
 
 ## 📸 界面截图
 
-| 主编辑界面 | 角色系统 |
-|------------|----------|
-| ![主界面](screenshots/main-editor.png) | ![角色](screenshots/characters.png) |
+| 主编辑界面（中文） | 主编辑界面（英文） |
+|-------------------|-------------------|
+| ![中文界面](screenshots/%E7%A8%8B%E5%BA%8F%E8%BF%9B%E5%85%A5%E7%95%8C%E9%9D%A2-%E4%B8%AD%E6%96%87.png) | ![英文界面](screenshots/%E7%A8%8B%E5%BA%8F%E8%BF%9B%E5%85%A5%E7%95%8C%E9%9D%A2-%E8%8B%B1%E6%96%87.png) |
 
-| 知识库 | 模型调用统计 |
-|--------|-------------|
-| ![知识库](screenshots/knowledge-base.png) | ![模型调用](screenshots/model-calls.png) |
-
-| 关系图谱 | 导出功能 |
-|----------|----------|
-| ![图谱](screenshots/relationship-graph.png) | ![导出](screenshots/export-dialog.png) |
-
-> 💡 将截图放入 `screenshots/` 文件夹（PNG 格式，推荐 1200-1600px 宽度），然后更新上方引用路径。
+| 设置界面 | 提示库设置 |
+|----------|-----------|
+| ![设置](screenshots/%E8%AE%BE%E7%BD%AE%E7%95%8C%E9%9D%A2%E7%94%A8%E6%9D%A5%E8%AE%BE%E7%BD%AE%E8%AF%AD%E8%A8%80%E7%AD%89.png) | ![提示库](screenshots/%E6%8F%90%E7%A4%BA%E5%BA%93%E8%AE%BE%E7%BD%AE%E7%95%8C%E9%9D%A2.png) |
 
 ---
 
