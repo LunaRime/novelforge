@@ -42,3 +42,6 @@ tailwind.config.js.bak
 
 # 测试覆盖率
 coverage/
+.claude/
+.claude/
+CLAUDE.md

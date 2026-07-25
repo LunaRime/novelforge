@@ -22,6 +22,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   'import:',
   'uninstall:',
   'health:',
+  'export:',
 ] as const
 
 /** 合法的 invoke 通道前缀字面量类型（由白名单自动派生） */

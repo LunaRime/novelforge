@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { DEFAULT_LOCALE } from '../../shared/locale'
 import {
-  Database, RefreshCw, BookOpen,
+  Database, RefreshCw, BookOpen, Download, Archive,
 } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
@@ -10,6 +10,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
 import { loadKBData, type KBDocument } from '../../services/knowledge-service'
+import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
 
 
@@ -21,6 +22,41 @@ export default function KnowledgePanel() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
+  // 导出状态
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportChapters, setExportChapters] = useState<number[]>([])
+  const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
+
+  /** 从文档文件名提取章节号 */
+  const extractChapterNumber = (doc: KBDocument): number => {
+    const rawName = doc.fileName.replace(/\.[^.]+$/, '')
+    const chMatch = rawName.match(/^(?:chapter_(\d+)|第(\d+)章)/)
+    return chMatch ? parseInt(chMatch[1] || chMatch[2], 10) : 0
+  }
+
+  /** 单章导出 */
+  const openSingleExport = (doc: KBDocument) => {
+    const cn = extractChapterNumber(doc)
+    setExportChapters([cn])
+    setExportTitleMap({ [cn]: titleMap[doc.id] || doc.fileName })
+    setExportOpen(true)
+  }
+
+  /** 批量导出所有已入库章节 */
+  const openBatchExport = () => {
+    const chapters: number[] = []
+    const titles: Record<number, string> = {}
+    for (const doc of documents) {
+      const cn = extractChapterNumber(doc)
+      if (cn > 0) {
+        chapters.push(cn)
+        titles[cn] = titleMap[doc.id] || doc.fileName
+      }
+    }
+    setExportChapters(chapters)
+    setExportTitleMap(titles)
+    setExportOpen(true)
+  }
 
   /** 加载文档列表 + 统计（通过 Service 层） */
   const loadData = useCallback(async () => {
@@ -98,21 +134,34 @@ export default function KnowledgePanel() {
     <div className="h-full flex flex-col overflow-hidden text-sm">
       {/* 标题栏 */}
       <div className="flex items-center justify-between px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1.5">
+        <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1.5 min-w-0">
           <Database size={13} />
-          知识库
-          <span className="text-[0.7rem] text-[var(--color-text-muted)]">
+          <span className="truncate">{t('nav.knowledgeBase')}</span>
+          <span className="text-[0.7rem] text-[var(--color-text-muted)] flex-shrink-0">
             ({stats.documentCount} 文档 / {stats.totalChunks} 块)
           </span>
         </span>
-        <Button
-          variant="ghost" size="icon"
-          onClick={() => loadData()}
-          title="刷新"
-          className="h-6 w-6"
-        >
-          <RefreshCw size={11} />
-        </Button>
+        <div className="flex items-center gap-0.5 flex-shrink-0">
+          {/* 批量导出按钮 */}
+          {documents.length > 0 && (
+            <Button
+              variant="ghost" size="icon"
+              onClick={openBatchExport}
+              title={t('export.batchExportTip')}
+              className="h-6 w-6"
+            >
+              <Archive size={12} />
+            </Button>
+          )}
+          <Button
+            variant="ghost" size="icon"
+            onClick={() => loadData()}
+            title={t('action.refresh')}
+            className="h-6 w-6"
+          >
+            <RefreshCw size={11} />
+          </Button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -146,6 +195,16 @@ export default function KnowledgePanel() {
                       <span>{new Date(doc.importedAt).toLocaleDateString(DEFAULT_LOCALE)}</span>
                     </div>
                   </div>
+                  {/* 单章导出 — hover 显示 */}
+                  <button
+                    className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 hover:bg-[var(--color-hover)]"
+                    style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
+                    title={t('export.singleExportTip')}
+                    onClick={() => openSingleExport(doc)}
+                    type="button"
+                  >
+                    <Download size={12} />
+                  </button>
                 </div>
               ))}
             
@@ -177,6 +236,14 @@ export default function KnowledgePanel() {
           </div>
         )}
       </div>
+
+      {/* 章节导出对话框 */}
+      <ChapterExportDialog
+        chapterNumbers={exportChapters}
+        chapterTitles={exportTitleMap}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   )
 }

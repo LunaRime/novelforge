@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool, Download, Archive } from 'lucide-react'
 import type { FileNode } from '../../../shared/ipc-channels'
 import { ipc } from '../../../services/ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -12,6 +12,7 @@ import { t } from '../../../shared/locale'
 import { useTranslation } from '../../../hooks/useTranslation'
 
 import { showSidebarMenu, openChapterFile } from './SidebarShared'
+import ChapterExportDialog from '../../dialogs/ChapterExportDialog'
 
 // ===== 章节标题缓存 =====
 
@@ -76,8 +77,11 @@ async function readChapterTitle(filePath: string, fallback: string, chapterNumbe
 export default function ManuscriptGroup({ files }: { files: FileNode[]; projectPath: string }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(true)
-  // 文件路径 → 显示名称的映射（异步加载）
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
+  // 导出状态
+  const [exportOpen, setExportOpen] = useState(false)
+  const [exportChapters, setExportChapters] = useState<number[]>([])
+  const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
 
   // 每次 files 变化时异步读取各文件标题（命中缓存的路径直接跳过 IPC）
   const filesDep = files.map(f => f.path).join(',')
@@ -111,6 +115,42 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
     return chMatch ? t('chapter.label').replace('{n}', String(parseInt(chMatch[1], 10))) : rawName
   }
 
+  // 导出处理
+  const openSingleExport = (chapterNumber: number) => {
+    setExportChapters([chapterNumber])
+    setExportTitleMap(prev => ({ ...prev, [chapterNumber]: getTitleFromMap(chapterNumber) }))
+    setExportOpen(true)
+  }
+
+  const openBatchExport = () => {
+    const allChapters = chapterFiles.map(f => extractChapterNumber(f))
+    setExportChapters(allChapters)
+    const titles: Record<number, string> = {}
+    for (const cn of allChapters) {
+      titles[cn] = getTitleFromMap(cn)
+    }
+    setExportTitleMap(titles)
+    setExportOpen(true)
+  }
+
+  const getTitleFromMap = (chapterNumber: number): string => {
+    // 从 titleMap 中找到对应章节的标题
+    for (const [path, title] of Object.entries(titleMap)) {
+      const chMatch = path.match(/chapter_(\d+)/)
+      if (chMatch && parseInt(chMatch[1]) === chapterNumber) {
+        return title
+      }
+    }
+    return t('chapter.label').replace('{n}', String(chapterNumber))
+  }
+
+  /** 从文件名提取章节号 */
+  const extractChapterNumber = (f: FileNode): number => {
+    const rawName = f.name.replace(/\.[^.]+$/, '')
+    const chMatch = rawName.match(/^chapter_(\d+)$/)
+    return chMatch ? parseInt(chMatch[1], 10) : 0
+  }
+
   // 只显示正文章节（过滤掉旧的 _notes 文件）
   const chapterFiles = files.filter(f => !f.name.includes('_notes'))
 
@@ -128,9 +168,21 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
         <PenTool size={14} style={{ color: 'var(--color-text-muted)' }} />
         <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('manuscript.title')}</span>
         {chapterFiles.length > 0 && (
-          <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {t('draftbox.count').replace('{n}', String(chapterFiles.length))}
-          </span>
+          <>
+            {/* 批量导出按钮 */}
+            <button
+              className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded transition-colors hover:bg-[var(--color-hover)]"
+              style={{ color: 'var(--color-text-muted)' }}
+              title={t('export.batchExportTip')}
+              onClick={(e) => { e.stopPropagation(); openBatchExport() }}
+              type="button"
+            >
+              <Archive size={13} />
+            </button>
+            <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t('draftbox.count').replace('{n}', String(chapterFiles.length))}
+            </span>
+          </>
         )}
       </div>
       {open && (
@@ -142,10 +194,11 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
           ) : (
             chapterFiles.map(f => {
               const displayName = getDisplay(f)
+              const chapterNum = extractChapterNumber(f)
               return (
                 <div
                   key={f.path}
-                  className="tree-item gap-1.5 cursor-pointer"
+                  className="tree-item gap-1.5 cursor-pointer group"
                   style={{ paddingLeft: 30 }}
                   onClick={() => openChapterFile(f.path, displayName)}
                   onContextMenu={e => showSidebarMenu([
@@ -154,6 +207,12 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                       label: t('action.openChapter'),
                       icon: <FolderOpen size={13} />,
                       onClick: () => openChapterFile(f.path, displayName),
+                    },
+                    {
+                      key: 'export-single',
+                      label: t('action.export'),
+                      icon: <Download size={13} />,
+                      onClick: () => openSingleExport(chapterNum),
                     },
                     { key: 'div1', type: 'divider' as const },
                     {
@@ -166,15 +225,33 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                   title={t('manuscript.tooltip').replace('{name}', displayName)}
                 >
                   <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                  <span className="text-sm truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                  <span className="text-sm truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>
                     {displayName}
                   </span>
+                  {/* 单章导出按钮 — hover 时显示 */}
+                  <button
+                    className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 hover:bg-[var(--color-hover)]"
+                    style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
+                    title={t('export.singleExportTip')}
+                    onClick={(e) => { e.stopPropagation(); openSingleExport(chapterNum) }}
+                    type="button"
+                  >
+                    <Download size={12} />
+                  </button>
                 </div>
               )
             })
           )}
         </div>
       )}
+
+      {/* 章节导出对话框 */}
+      <ChapterExportDialog
+        chapterNumbers={exportChapters}
+        chapterTitles={exportTitleMap}
+        open={exportOpen}
+        onClose={() => setExportOpen(false)}
+      />
     </div>
   )
 }

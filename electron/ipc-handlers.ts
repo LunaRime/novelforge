@@ -10,6 +10,7 @@ import { registerKBController } from './controllers/kb-controller'
 import { registerImportController } from './controllers/import-controller'
 import { registerEmbeddingController } from './controllers/embedding-controller'
 import { registerUpdateController } from './controllers/update-controller'
+import { registerExportController } from './controllers/export-controller'
 import { registerHealthCheckIPC } from './health-check'
 
 /**
@@ -30,6 +31,7 @@ export function registerIPCHandlers() {
   registerImportController()
   registerEmbeddingController()
   registerUpdateController()
+  registerExportController()
   registerHealthCheckIPC()
 
   logger.info('IPC', `所有 Controller 已注册完成 | 全局工作区: ${VELA_HOME}`)
