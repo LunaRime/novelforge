@@ -66,8 +66,6 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       { }
     )
 
-    const reviewResultClean = this.stripThinkingTags(reviewResultRaw)
-
     const { parseDraftMeta } = await import('../chapter-workflow')
     const baseDraft = await parseDraftMeta(this.params.draftPath)
     if (!baseDraft) throw new Error('找不到基准草稿版本')
@@ -75,10 +73,15 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
 
     const revIndex = await ipc.invoke('db:review-next-index', baseDraft.id)
 
-    // 解析审稿结果（Markdown 表格格式，比 JSON 更稳定）
-    const { parseMarkdownTable } = await import('../workflow-utils')
-    const tableRows = parseMarkdownTable(reviewResultClean)
-    let parsedResult: { items?: Array<Record<string, string>>; summary?: string }
+    // 解析审稿结果 — 三层回退策略：
+    //   L1: Markdown 表格解析（优先，匹配 Prompt 要求）
+    //   L2: JSON 解析（LLM 实际经常输出 JSON，即使 Prompt 说不要）
+    //   L3: 原始文本兜底（保留完整输出供 ReviewReport 的旧版解析器处理）
+    const { parseMarkdownTable, robustParseJSON } = await import('../workflow-utils')
+    let parsedResult: { items?: Array<Record<string, string>>; summary?: string; rawResponse?: string } | undefined
+
+    // L1: Markdown 表格
+    const tableRows = parseMarkdownTable(reviewResultRaw)
     if (tableRows && tableRows.length > 0) {
       parsedResult = {
         items: tableRows.map(r => ({
@@ -89,21 +92,71 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
         })),
         summary: `审稿完成，共 ${tableRows.length} 项检查`,
       }
-      callbacks.log(`✅ Markdown 表格解析成功: ${tableRows.length} 条审稿记录`)
+      callbacks.log(`✅ 审稿结果解析成功 (Markdown 表格): ${tableRows.length} 条记录`)
     } else {
-      callbacks.log('⚠️ 审稿结果解析失败，返回原始文本')
-      parsedResult = { summary: '解析失败（非表格格式）', items: [] }
+      // L2: JSON 回退 — 很多 LLM 习惯性输出 JSON 而非 Markdown 表格
+      const jsonParsed = robustParseJSON(reviewResultRaw, false)
+      if (jsonParsed && typeof jsonParsed === 'object') {
+        const obj = jsonParsed as Record<string, unknown>
+        // 兼容多种 JSON 结构：{ items: [...] } / { findings: [...] } / 直接是数组
+        const items = Array.isArray(obj.items) ? obj.items
+          : Array.isArray(obj.findings) ? obj.findings
+          : Array.isArray(obj.issues) ? obj.issues
+          : Array.isArray(jsonParsed) ? jsonParsed
+          : null
+
+        if (items && items.length > 0) {
+          parsedResult = {
+            items: (items as Array<Record<string, unknown>>).map(item => ({
+              category: String(item.category || item.dimension || item.type || '综合检查'),
+              severity: String(item.severity || item.level || 'pass'),
+              quote: String(item.quote || item.excerpt || ''),
+              description: String(item.description || item.detail || item.issue || ''),
+            })),
+            summary: String(obj.summary || obj.conclusion || `JSON 解析成功，共 ${items.length} 项检查`),
+          }
+          callbacks.log(`✅ 审稿结果解析成功 (JSON 回退): ${items.length} 条记录`)
+        } else if (obj.summary || obj.conclusion) {
+          // 纯文本类型的 JSON 响应（包含 summary 但无结构化 items）
+          parsedResult = {
+            items: [{ category: '综合检查', severity: 'warning', description: String(obj.summary || obj.conclusion) }],
+            summary: String(obj.summary || obj.conclusion),
+          }
+          callbacks.log(`⚠️ JSON 解析为纯文本摘要，无结构化条目`)
+        }
+      }
+
+      // L3: 全部解析策略失败 — 直接传递原始文本给 ReviewReport 的旧版解析器
+      if (!parsedResult!) {
+        callbacks.log('⚠️ 审稿结果无法结构化解析，保留原始输出供旧版解析器处理')
+        // 不包装成 JSON — 直接存原始文本，ReviewReport.parseLegacyReport() 会处理
+        parsedResult = {
+          summary: '',
+          items: [],
+          rawResponse: reviewResultRaw,
+        }
+      }
     }
 
+    // DB 持久化: 始终保存完整结构化数据 + 原始响应（如有）
+    const dbContent: Record<string, unknown> = {
+      items: parsedResult.items,
+      summary: parsedResult.summary,
+    }
+    if (parsedResult.rawResponse) {
+      dbContent.rawResponse = parsedResult.rawResponse
+    }
     await ipc.invoke('db:review-create', {
       baseDraftId: baseDraft.id,
       reviewIndex: revIndex,
-      content: JSON.stringify(parsedResult, null, 2),
+      content: JSON.stringify(dbContent, null, 2),
     })
 
-    // 将审稿报告 JSON 序列化为字符串，作为 content 传给 Tab
-    // EditorArea 渲染 ReviewReport 的条件：activeTab.content 存在
-    const reportContent = JSON.stringify(parsedResult, null, 2)
+    // Tab 内容: L1/L2 传 JSON 字符串供 ReviewReport 结构化渲染
+    //           L3 传原始文本供 ReviewReport.parseLegacyReport() 旧版解析器处理
+    const reportContent = parsedResult.rawResponse
+      ? parsedResult.rawResponse
+      : JSON.stringify(parsedResult, null, 2)
 
     const { useEditorStore } = await import('../../../stores/editor-store')
     const pseudoReviewPath = `vela://draft/ch${this.params.chapterNumber}/v${baseVersion}/review${revIndex}`
@@ -119,20 +172,40 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     })
 
     callbacks.log(`✅ 审查完成，已生成审稿报告 r${revIndex}`)
-    return reviewResultClean
+    return reviewResultRaw
   }
 
+  /** 分级角色状态注入 — 核心角色完整档案，配角精简 */
   private async readCharacterStates(): Promise<string> {
     try {
-      const allChars = await ipc.invoke('db:character-get-all')
-      const states: string[] = []
+      const allChars = await ipc.invoke('db:character-get-all') as Array<{
+        name: string; role: string; tier?: number; currentState?: Record<string, unknown>
+      }>
+      const tier1: string[] = []
+      const tier2: string[] = []
+
       for (const card of allChars) {
-        if (card.name && card.currentState) {
-          const cs = card.currentState
-          states.push(`${card.name}（${card.role || '未知'}）: ${cs.powerLevel || ''}, ${cs.location || ''}, ${cs.physicalState || ''}, ${cs.mentalState || ''}, 最近：${cs.recentEvents || ''}`)
+        if (!card.name) continue
+        const tier = card.tier ?? (card.role === 'protagonist' || card.role === 'antagonist' ? 1 : 2)
+        const cs = card.currentState
+
+        if (!cs) continue
+
+        if (tier === 1) {
+          tier1.push(
+            `${card.name}（${card.role || '未知'}）: ` +
+            `${cs.powerLevel || ''}, ${cs.location || ''}, ${cs.physicalState || ''}, ${cs.mentalState || ''}, ` +
+            `最近：${cs.recentEvents || ''}`
+          )
+        } else if (tier === 2) {
+          tier2.push(`${card.name}（配角）: ${cs.location || ''}, ${cs.recentEvents || ''}`)
         }
       }
-      return states.length > 0 ? states.join('\n') : '（暂无）'
+
+      const parts: string[] = []
+      if (tier1.length > 0) parts.push(tier1.join('\n'))
+      if (tier2.length > 0) parts.push(tier2.join('\n'))
+      return parts.length > 0 ? parts.join('\n') : '（暂无）'
     } catch { return '（读取失败）' }
   }
 

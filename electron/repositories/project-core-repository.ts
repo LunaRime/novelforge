@@ -56,6 +56,23 @@ export interface ProjectCoreData {
 
 /** 数据库行 → 前端数据 */
 function rowToData(row: ProjectCoreRow): ProjectCoreData {
+    const db = getProjectDb()
+
+    /** 读取大文本字段：优先从 project_archives，回退到 project_core 列（兼容 v5 及以前） */
+    const readArchiveOrColumn = (archiveKey: string, columnValue: string | null): string => {
+        // 优先读 project_archives（v6+ 数据存储位置）
+        if (db) {
+            try {
+                const archiveRow = db.prepare(
+                    'SELECT body FROM project_archives WHERE project_id = ? AND field_key = ?'
+                ).get('main', archiveKey) as { body: string } | undefined
+                if (archiveRow?.body) return archiveRow.body
+            } catch { /* 表可能尚不存在 */ }
+        }
+        // 回退到 project_core 列（v5 及以前，列尚未被 DROP）
+        return columnValue ?? ''
+    }
+
     return {
         projectName: row.project_name,
         genre: row.genre,
@@ -69,10 +86,10 @@ function rowToData(row: ProjectCoreRow): ProjectCoreData {
         referenceWorks: row.reference_works,
         globalGuidance: row.global_guidance,
         goldenFinger: row.golden_finger,
-        premise: row.premise,
-        worldbuilding: row.worldbuilding,
-        charactersArch: row.characters_arch,
-        synopsis: row.synopsis,
+        premise: readArchiveOrColumn('premise', row.premise),
+        worldbuilding: readArchiveOrColumn('worldbuilding', row.worldbuilding),
+        charactersArch: readArchiveOrColumn('characters_arch', row.characters_arch),
+        synopsis: readArchiveOrColumn('synopsis', row.synopsis),
         characterStates: row.character_states,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -111,7 +128,29 @@ export class ProjectCoreRepository {
             throw new Error('项目数据库未连接，请关闭项目后重新打开')
         }
 
-        // 构建动态 SET 子句，只更新传入的字段
+        // ★ v6 修复：大文本字段写 project_archives，其余字段写 project_core
+        //    v6 迁移已将 premise/worldbuilding/characters_arch/synopsis 从 project_core DROP，
+        //    再次 UPDATE 会因列不存在而静默失败 → 导致配置保存无效、重启丢失。
+        const archiveFieldKeys: Array<{ camel: string; archiveKey: string }> = [
+            { camel: 'premise', archiveKey: 'premise' },
+            { camel: 'worldbuilding', archiveKey: 'worldbuilding' },
+            { camel: 'charactersArch', archiveKey: 'characters_arch' },
+            { camel: 'synopsis', archiveKey: 'synopsis' },
+        ]
+
+        // 分离：archive 字段 → setArchiveField，其余 → UPDATE project_core
+        const coreData: Partial<ProjectCoreData> = {}
+        for (const key of Object.keys(data) as Array<keyof ProjectCoreData>) {
+            const isArchive = archiveFieldKeys.some(a => a.camel === key)
+            if (isArchive && (data as Record<string, unknown>)[key] !== undefined) {
+                const archiveKey = archiveFieldKeys.find(a => a.camel === key)!.archiveKey
+                ProjectCoreRepository.setArchiveField(archiveKey, String((data as Record<string, unknown>)[key]))
+            } else {
+                (coreData as Record<string, unknown>)[key] = (data as Record<string, unknown>)[key]
+            }
+        }
+
+        // 写入 project_core（仅非归档字段）
         const fieldMap: Record<string, string> = {
             projectName: 'project_name',
             genre: 'genre',
@@ -125,10 +164,6 @@ export class ProjectCoreRepository {
             referenceWorks: 'reference_works',
             globalGuidance: 'global_guidance',
             goldenFinger: 'golden_finger',
-            premise: 'premise',
-            worldbuilding: 'worldbuilding',
-            charactersArch: 'characters_arch',
-            synopsis: 'synopsis',
             characterStates: 'character_states',
         }
 
@@ -136,21 +171,20 @@ export class ProjectCoreRepository {
         const values: unknown[] = []
 
         for (const [camel, col] of Object.entries(fieldMap)) {
-            if (camel in data) {
+            if (camel in coreData) {
                 setClauses.push(`${col} = ?`)
-                values.push((data as Record<string, unknown>)[camel])
+                values.push((coreData as Record<string, unknown>)[camel])
             }
         }
 
-        if (setClauses.length === 0) return
+        if (setClauses.length > 0) {
+            setClauses.push("updated_at = unixepoch() * 1000")
+            values.push('main')
 
-        // 追加 updated_at
-        setClauses.push("updated_at = unixepoch() * 1000")
-        values.push('main')
-
-        db.prepare(`
-      UPDATE project_core SET ${setClauses.join(', ')} WHERE id = ?
-    `).run(...values)
+            db.prepare(
+                `UPDATE project_core SET ${setClauses.join(', ')} WHERE id = ?`
+            ).run(...values)
+        }
     }
 
     // ===== project_archives 大文本字段读写（v4 schema） =====

@@ -105,7 +105,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 6
+const CURRENT_SCHEMA_VERSION = 7
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -207,9 +207,13 @@ function createTables(db: BetterSqlite3.Database) {
       background TEXT DEFAULT '',                 -- 背景
       abilities TEXT DEFAULT '',                  -- 能力
       motivation TEXT DEFAULT '',                 -- 动机
-      relationships TEXT DEFAULT '',              -- 关系链
+      relationships TEXT DEFAULT '',              -- 关系链（旧版纯文本，保留兼容）
       arc TEXT DEFAULT '',                        -- 弧光
       notes TEXT DEFAULT '',                      -- 备忘录
+      tier INTEGER DEFAULT 2,                     -- v7: 戏份等级 1=核心 2=配角 3=龙套
+      tags TEXT DEFAULT '',                       -- v7: JSON数组标签 ["宗门","正道"]
+      appear_chapters TEXT DEFAULT '[]',          -- v7: JSON数组出场章节 [1,5,10]
+      relations TEXT DEFAULT '[]',                -- v7: 结构化关系 [{target,type,label,sinceChapter}]
       cs_location TEXT DEFAULT '',                -- 当前位置
       cs_power_level TEXT DEFAULT '',             -- 修为境界
       cs_physical_state TEXT DEFAULT '',          -- 身体状态
@@ -507,9 +511,18 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       );
       CREATE UNIQUE INDEX IF NOT EXISTS idx_archive_field ON project_archives(project_id, field_key);
     `)
-    // 迁移现有的 4 个大文本字段到 project_archives（保留原列以保持兼容）
+    // 迁移现有的 4 个大文本字段到 project_archives
+    // ★ 幂等性保护：step 10 可能在上一轮迁移中已删除这些列，
+    //    此时数据已在 project_archives 中，无需再次迁移。
     const FIELDS = ['premise', 'worldbuilding', 'characters_arch', 'synopsis']
+    const coreCols = db.pragma('table_info(project_core)') as Array<{ name: string }>
+    const existingCols = new Set(coreCols.map(c => c.name))
+
     for (const field of FIELDS) {
+      if (!existingCols.has(field)) {
+        logger.info('DB', `迁移: project_core.${field} 已删除（上一轮迁移），跳过归档`)
+        continue
+      }
       const row = db.prepare(`SELECT ${field} FROM project_core WHERE id = 'main'`).get() as Record<string, string> | undefined
       if (row?.[field]) {
         db.prepare(`
@@ -541,20 +554,34 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     ]
 
     for (const { table, cols } of TIME_COL_TABLES) {
-      for (const col of cols) {
-        // 将旧的 TEXT 时间戳转换为 INTEGER 毫秒时间戳
-        const rows = db.prepare(
-          `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
-        ).all() as Array<{ rowid: number; [key: string]: unknown }>
+      // ★ 检查表是否存在（幂等性保护）
+      const tableCheck = db.prepare(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
+      ).get(table)
+      if (!tableCheck) {
+        logger.info('DB', `迁移: 表 ${table} 不存在，跳过时间字段转换`)
+        continue
+      }
 
-        for (const row of rows) {
-          const textVal = row[col] as string
-          if (textVal && typeof textVal === 'string') {
-            const parsed = Date.parse(textVal)
-            if (!isNaN(parsed)) {
-              db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
+      for (const col of cols) {
+        try {
+          // 将旧的 TEXT 时间戳转换为 INTEGER 毫秒时间戳
+          const rows = db.prepare(
+            `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
+          ).all() as Array<{ rowid: number; [key: string]: unknown }>
+
+          for (const row of rows) {
+            const textVal = row[col] as string
+            if (textVal && typeof textVal === 'string') {
+              const parsed = Date.parse(textVal)
+              if (!isNaN(parsed)) {
+                db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
+              }
             }
           }
+        } catch {
+          // 列可能不存在（已被上一轮迁移删除），跳过
+          logger.info('DB', `迁移: ${table}.${col} 时间转换跳过（列可能已删除）`)
         }
       }
     }
@@ -573,21 +600,24 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
 
     for (const { table, cols } of V6_TIME_TABLES) {
       for (const col of cols) {
-        const rows = db.prepare(
-          `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
-        ).all() as Array<{ rowid: number; [key: string]: unknown }>
+        try {
+          const rows = db.prepare(
+            `SELECT rowid, ${col} FROM ${table} WHERE typeof(${col}) = 'text'`
+          ).all() as Array<{ rowid: number; [key: string]: unknown }>
 
-        for (const row of rows) {
-          const textVal = row[col] as string
-          if (textVal && typeof textVal === 'string') {
-            const parsed = Date.parse(textVal)
-            if (!isNaN(parsed)) {
-              db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
-            } else {
-              // 无法解析的旧文本时间戳 → 重置为 0
-              db.prepare(`UPDATE ${table} SET ${col} = 0 WHERE rowid = ?`).run(row.rowid)
+          for (const row of rows) {
+            const textVal = row[col] as string
+            if (textVal && typeof textVal === 'string') {
+              const parsed = Date.parse(textVal)
+              if (!isNaN(parsed)) {
+                db.prepare(`UPDATE ${table} SET ${col} = ? WHERE rowid = ?`).run(parsed, row.rowid)
+              } else {
+                db.prepare(`UPDATE ${table} SET ${col} = 0 WHERE rowid = ?`).run(row.rowid)
+              }
             }
           }
+        } catch {
+          logger.info('DB', `v6 迁移: ${table}.${col} 时间转换跳过`)
         }
       }
     }
@@ -652,5 +682,17 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   } catch (e) {
     // 非关键迁移，旧版 SQLite 可能不支持 DROP COLUMN，降级为警告
     logger.warn('DB', `project_core 冗余列删除失败（可能 SQLite 版本过旧）: ${e}`)
+  }
+
+  // 11. v7: 角色戏份分级 + 标签 + 出场章节 + 结构化关系
+  //    非关键 — 即使列不存在，CharacterRepository.rowToData() 也会回退默认值
+  try {
+    safeAddColumn(db, 'characters', 'tier', 'INTEGER DEFAULT 2')
+    safeAddColumn(db, 'characters', 'tags', "TEXT DEFAULT ''")
+    safeAddColumn(db, 'characters', 'appear_chapters', "TEXT DEFAULT '[]'")
+    safeAddColumn(db, 'characters', 'relations', "TEXT DEFAULT '[]'")
+    logger.info('DB', 'v7 迁移: characters 表已添加 tier/tags/appear_chapters/relations 列')
+  } catch (e) {
+    logger.warn('DB', `v7 角色表迁移未完成（非关键），应用将使用默认值: ${e}`)
   }
 }
