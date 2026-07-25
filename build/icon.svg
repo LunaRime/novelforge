@@ -1,0 +1,107 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#1a1a2e"/>
+      <stop offset="100%" style="stop-color:#16213e"/>
+    </linearGradient>
+    <linearGradient id="forge" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#f97316"/>
+      <stop offset="50%" style="stop-color:#ef4444"/>
+      <stop offset="100%" style="stop-color:#ec4899"/>
+    </linearGradient>
+    <linearGradient id="spark" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#fbbf24"/>
+      <stop offset="50%" style="stop-color:#f97316"/>
+      <stop offset="100%" style="stop-color:#ffffff"/>
+    </linearGradient>
+    <linearGradient id="pen" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#38bdf8"/>
+      <stop offset="100%" style="stop-color:#8b5cf6"/>
+    </linearGradient>
+    <linearGradient id="book" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#818cf8"/>
+      <stop offset="100%" style="stop-color:#6366f1"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+    <filter id="shadow">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000" flood-opacity="0.4"/>
+    </filter>
+  </defs>
+
+  <!-- 背景圆角方形 -->
+  <rect x="32" y="32" width="448" height="448" rx="96" ry="96" fill="url(#bg)" filter="url(#shadow)"/>
+
+  <!-- 外圈光晕装饰 -->
+  <circle cx="256" cy="256" r="200" fill="none" stroke="url(#forge)" stroke-width="1.5" opacity="0.15"/>
+  <circle cx="256" cy="256" r="180" fill="none" stroke="url(#forge)" stroke-width="1" opacity="0.1"/>
+
+  <!-- 打开的书本 -->
+  <g transform="translate(256,300)" filter="url(#glow)">
+    <!-- 书页左 -->
+    <path d="M-2,-100 Q-70,-110 -80,-60 L-60,40 Q-40,30 -5,25 Z"
+          fill="url(#book)" opacity="0.9"/>
+    <!-- 书页右 -->
+    <path d="M2,-100 Q70,-110 80,-60 L60,40 Q40,30 5,25 Z"
+          fill="url(#book)" opacity="0.7"/>
+    <!-- 书脊 -->
+    <line x1="0" y1="-100" x2="0" y2="30" stroke="#c7d2fe" stroke-width="3" stroke-linecap="round"/>
+    <!-- 书签 -->
+    <path d="M0,10 L-3,-20 L0,-30 L3,-20 Z" fill="url(#forge)" opacity="0.8"/>
+  </g>
+
+  <!-- 锻造锤 + 火花 = 核心视觉 -->
+  <g transform="translate(256,240)" filter="url(#glow)">
+    <!-- 铁砧底座 -->
+    <rect x="-50" y="-10" width="100" height="14" rx="7" fill="url(#forge)" opacity="0.3"/>
+    <rect x="-35" y="-22" width="70" height="14" rx="5" fill="url(#forge)" opacity="0.4"/>
+
+    <!-- 锤子 -->
+    <g transform="rotate(-15)">
+      <rect x="-28" y="-18" width="56" height="28" rx="6" fill="url(#forge)"/>
+      <rect x="-4" y="-60" width="8" height="48" rx="4" fill="url(#forge)" opacity="0.8"/>
+      <!-- 锤柄末端 -->
+      <rect x="-6" y="-68" width="12" height="10" rx="3" fill="url(#forge)" opacity="0.5"/>
+    </g>
+
+    <!-- 击打火花 -->
+    <g>
+      <circle cx="20" cy="-40" r="4" fill="url(#spark)" opacity="0.9">
+        <animate attributeName="opacity" values="0.9;0.3;0.9" dur="1.5s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="35" cy="-55" r="3" fill="url(#spark)" opacity="0.7">
+        <animate attributeName="opacity" values="0.7;0.2;0.7" dur="2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="10" cy="-58" r="2.5" fill="url(#spark)" opacity="0.6">
+        <animate attributeName="opacity" values="0.6;0.1;0.6" dur="1.8s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="45" cy="-35" r="2" fill="url(#spark)" opacity="0.5">
+        <animate attributeName="opacity" values="0.5;0.15;0.5" dur="2.2s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="28" cy="-68" r="2" fill="url(#spark)" opacity="0.4">
+        <animate attributeName="opacity" values="0.4;0.1;0.4" dur="1.6s" repeatCount="indefinite"/>
+      </circle>
+      <circle cx="-8" cy="-50" r="1.5" fill="url(#spark)" opacity="0.5">
+        <animate attributeName="opacity" values="0.5;0.1;0.5" dur="2.5s" repeatCount="indefinite"/>
+      </circle>
+    </g>
+  </g>
+
+  <!-- AI 神经节点装饰 -->
+  <g filter="url(#glow)">
+    <circle cx="140" cy="180" r="3" fill="#38bdf8" opacity="0.6"/>
+    <circle cx="370" cy="180" r="3" fill="#818cf8" opacity="0.6"/>
+    <circle cx="140" cy="130" r="2" fill="#38bdf8" opacity="0.4"/>
+    <circle cx="370" cy="130" r="2" fill="#818cf8" opacity="0.4"/>
+    <!-- 连线 -->
+    <line x1="140" y1="180" x2="256" y2="220" stroke="#38bdf8" stroke-width="0.8" opacity="0.2"/>
+    <line x1="370" y1="180" x2="256" y2="220" stroke="#818cf8" stroke-width="0.8" opacity="0.2"/>
+    <line x1="140" y1="130" x2="140" y2="180" stroke="#38bdf8" stroke-width="0.8" opacity="0.15"/>
+    <line x1="370" y1="130" x2="370" y2="180" stroke="#818cf8" stroke-width="0.8" opacity="0.15"/>
+  </g>
+
+  <!-- 顶部品牌文字 -->
+  <text x="256" y="430" text-anchor="middle" font-family="system-ui,-apple-system,sans-serif" font-weight="900" font-size="52" letter-spacing="4" fill="url(#forge)" filter="url(#glow)">N</text>
+</svg>
