@@ -152,6 +152,8 @@ export class OpenAIProvider implements ILLMProvider {
       let isThinking = false
       let failedChunkCount = 0
       let buffer = '' // 跨 read 边界的行缓冲
+      // 流式输出的最后一帧通常携带 usage（OpenAI/DeepSeek 等兼容 API）
+      let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
 
       const hasMore = true
       while (hasMore) {
@@ -159,7 +161,6 @@ export class OpenAIProvider implements ILLMProvider {
         if (done) break
 
         buffer += decoder.decode(value, { stream: true })
-        // 按完整行分割，最后一段（可能不完整）留在 buffer 中
         const parts = buffer.split('\n')
         buffer = parts.pop() ?? ''
         const lines = parts.filter((l) => l.startsWith('data: '))
@@ -170,12 +171,21 @@ export class OpenAIProvider implements ILLMProvider {
           try {
             const parsed = JSON.parse(json) as {
               choices: Array<{ delta: { content?: string, reasoning_content?: string } }>
+              usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
             }
             const delta = parsed.choices?.[0]?.delta
 
+            // 提取 usage（通常在最后一个有效 chunk 中携带）
+            if (parsed.usage) {
+              lastUsage = {
+                promptTokens: parsed.usage.prompt_tokens,
+                completionTokens: parsed.usage.completion_tokens,
+                totalTokens: parsed.usage.total_tokens,
+              }
+            }
+
             let emitChunk = ''
 
-            // 如果存在思维链内容
             if (delta?.reasoning_content) {
               if (!isThinking) {
                 isThinking = true
@@ -184,7 +194,6 @@ export class OpenAIProvider implements ILLMProvider {
               emitChunk += delta.reasoning_content
             }
 
-            // 如果开始输出正文
             if (delta?.content !== undefined && delta?.content !== null) {
               if (isThinking) {
                 isThinking = false
@@ -203,7 +212,6 @@ export class OpenAIProvider implements ILLMProvider {
             failedChunkCount++
             const snippet = json.slice(0, 200)
             logger.warn('LLM:Stream', `第 ${failedChunkCount} 次 chunk 解析失败: ${String(parseError).slice(0, 100)} | chunk: ${snippet}`)
-            // 连续失败超过 10 次 → 中止流并报错
             if (failedChunkCount > 10) {
               const msg = `流式解析连续失败 ${failedChunkCount} 次，已中止`
               logger.error('LLM:Stream', msg)
@@ -223,7 +231,9 @@ export class OpenAIProvider implements ILLMProvider {
       if (failedChunkCount > 0) {
         logger.warn('LLM:Stream', `流式生成完成，但有 ${failedChunkCount} 个 chunk 解析失败`)
       }
-      opts.onDone(fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim())
+
+      const cleanText = fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+      opts.onDone(cleanText, lastUsage)
     }).catch((error) => {
       // withStreamRetry 重试耗尽后的最终错误处理
       if ((error as Error).name === 'AbortError') {
