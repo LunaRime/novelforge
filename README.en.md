@@ -21,6 +21,24 @@
 
 ---
 
+## 📸 Screenshots
+
+| Main Editor | Character System |
+|-------------|------------------|
+| ![Main](screenshots/main-editor.png) | ![Characters](screenshots/characters.png) |
+
+| Knowledge Base | Model Calls |
+|----------------|-------------|
+| ![KB](screenshots/knowledge-base.png) | ![Models](screenshots/model-calls.png) |
+
+| Relationship Graph | Export |
+|--------------------|--------|
+| ![Graph](screenshots/relationship-graph.png) | ![Export](screenshots/export-dialog.png) |
+
+> 💡 Place screenshots in the `screenshots/` folder (PNG format, 1200-1600px width recommended), then update the file references above.
+
+---
+
 ## Why NovelForge?
 
 Writing a web novel is not just about typing words — it's about managing a complex system of characters, plot threads, worldbuilding rules, and chapter-level pacing across hundreds of chapters. Traditional writing tools treat this like a text document. NovelForge treats it like a software project.

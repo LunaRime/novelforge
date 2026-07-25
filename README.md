@@ -21,6 +21,24 @@
 
 ---
 
+## 📸 界面截图
+
+| 主编辑界面 | 角色系统 |
+|------------|----------|
+| ![主界面](screenshots/main-editor.png) | ![角色](screenshots/characters.png) |
+
+| 知识库 | 模型调用统计 |
+|--------|-------------|
+| ![知识库](screenshots/knowledge-base.png) | ![模型调用](screenshots/model-calls.png) |
+
+| 关系图谱 | 导出功能 |
+|----------|----------|
+| ![图谱](screenshots/relationship-graph.png) | ![导出](screenshots/export-dialog.png) |
+
+> 💡 将截图放入 `screenshots/` 文件夹（PNG 格式，推荐 1200-1600px 宽度），然后更新上方引用路径。
+
+---
+
 ## ✨ 核心特性
 
 ### 🧬 AI 小说创作全流程
