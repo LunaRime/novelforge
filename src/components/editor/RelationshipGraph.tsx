@@ -6,7 +6,6 @@
 import { useState, useRef, useMemo, useCallback } from 'react'
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
-import { ROLE_LABELS } from '../../stores/character-store'
 import type { CharacterCard } from '../../stores/character-store'
 
 // ===== 类型 =====
@@ -231,25 +230,25 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
             onClick={() => setTierFilter(ti)}
             type="button"
           >
-            {ti === null ? '全部' : ['','核心','重要','龙套'][ti]}
+            {ti === null ? t('graph.filterAll') : ti === 1 ? t('graph.tierCore') : ti === 2 ? t('graph.tierImportant') : t('graph.tierMinor')}
           </button>
         ))}
         <div className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
         <button
           className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(0.8)} title="缩小" type="button"
+          onClick={() => zoom(0.8)} title={t('zoom.out')} type="button"
         >
           <ZoomOut size={14} />
         </button>
         <button
           className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(1.25)} title="放大" type="button"
+          onClick={() => zoom(1.25)} title={t('zoom.in')} type="button"
         >
           <ZoomIn size={14} />
         </button>
         <button
           className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={resetView} title="重置" type="button"
+          onClick={resetView} title={t('zoom.reset')} type="button"
         >
           <Maximize2 size={14} />
         </button>
@@ -261,8 +260,8 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
         {Object.entries(RELATION_COLORS).slice(0, 6).map(([k, v]) => (
           <span key={k} className="flex items-center gap-0.5">
             <span className="w-2 h-0.5 rounded" style={{ backgroundColor: v }} />
-            {k === 'ally' ? '盟友' : k === 'enemy' ? '敌对' : k === 'family' ? '家族' :
-             k === 'master_student' ? '师徒' : k === 'lover' ? '恋人' : k === 'rival' ? '劲敌' : '其他'}
+            {k === 'ally' ? t('character.relType.ally') : k === 'enemy' ? t('character.relType.enemy') : k === 'family' ? t('character.relType.family') :
+             k === 'master_student' ? t('character.relType.masterStudent') : k === 'lover' ? t('character.relType.lover') : k === 'rival' ? t('character.relType.rival') : t('character.relType.other')}
           </span>
         ))}
       </div>
@@ -304,7 +303,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
 
         {/* 节点 */}
         {visibleNodes.map(node => {
-          const color = ROLE_LABELS[node.role]?.includes('主角') ? 'var(--color-success)'
+          const color = node.role === 'protagonist' ? 'var(--color-success)'
             : node.role === 'antagonist' ? 'var(--color-error)'
             : 'var(--color-accent)'
           const r = ROLE_SIZES[node.role] || 18

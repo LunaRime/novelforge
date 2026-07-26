@@ -1,6 +1,6 @@
 import {
   FolderOpen, BookOpen, Users,
-  Home, Zap, ScrollText, Cpu,
+  Home, Zap, ScrollText, Cpu, Archive,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -11,6 +11,7 @@ const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label
   { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
   { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
   { id: 'characters', icon: Users, label: t('nav.characters') },
+  { id: 'history', icon: Archive, label: t('nav.history') },
 ]
 
 /** 底部面板 Tab 按钮配置 */

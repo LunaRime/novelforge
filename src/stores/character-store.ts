@@ -32,18 +32,17 @@ export const TIER_LABELS: Record<number, string> = {
 }
 
 /** 按 tier 分组角色 */
+/** 按 tier 分组角色，主角/反派强制归入 tier 1 */
 export function groupByTier(chars: CharacterCard[]): Record<number, CharacterCard[]> {
   const groups: Record<number, CharacterCard[]> = { 1: [], 2: [], 3: [] }
   for (const c of chars) {
-    const t = c.tier || 2
-    if (!groups[t]) groups[t] = []
-    groups[t].push(c)
-  }
-  // 主角始终 tier=1，反派 tier=1
-  for (const c of [...groups[2], ...(groups[3] || [])]) {
+    // 主角和反派始终 tier=1 —— 必须在分组前修正，否则会进错组
     if (c.role === 'protagonist' || c.role === 'antagonist') {
       c.tier = 1
     }
+    const t = c.tier || 2
+    if (!groups[t]) groups[t] = []
+    groups[t].push(c)
   }
   return groups
 }

@@ -14,6 +14,7 @@ import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
 import CharactersView from './sidebar/CharactersView'
+import HistoricalProjectsNav from './sidebar/HistoricalProjectsNav'
 import {
   registerMenuSetter, unregisterMenuSetter,
   type SidebarMenuState,
@@ -36,6 +37,7 @@ export default function Sidebar() {
     project:    t('nav.projectTree'),
     knowledge:  t('nav.knowledgeBase'),
     characters: t('nav.characters'),
+    history:    t('nav.history'),
   }
 
   return (
@@ -54,6 +56,7 @@ export default function Sidebar() {
         {sidebarView === 'project'    && <ProjectTree />}
         {sidebarView === 'knowledge'  && <KnowledgePanel />}
         {sidebarView === 'characters' && <CharactersView />}
+        {sidebarView === 'history'   && <HistoricalProjectsNav />}
       </div>
 
       {/* 动态右键菜单 */}

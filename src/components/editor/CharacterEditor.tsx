@@ -6,8 +6,6 @@ import { confirm } from '../ui/Confirm'
 import {
   useCharacterStore,
   EMPTY_STATE,
-  ROLE_LABELS,
-  TIER_LABELS,
   type CharacterCurrentState,
 } from '../../stores/character-store'
 import RelationshipGraph from './RelationshipGraph'
@@ -43,8 +41,8 @@ export default function CharacterEditor() {
   const handleDelete = async () => {
     if (!selectedCard || !currentProject) return
     const ok = await confirm(
-      `确定要删除角色「${selectedCard.name || '未命名'}」吗？此操作不可撤销。`,
-      { title: '删除角色', confirmText: '删除', danger: true }
+      t('character.deleteConfirm').replace('{name}', selectedCard.name || t('character.unnamed')),
+      { title: t('character.deleteTitle'), confirmText: t('action.delete'), danger: true }
     )
     if (!ok) return
     await deleteCharacter(selectedCard.name, currentProject.path)
@@ -70,50 +68,50 @@ export default function CharacterEditor() {
       >
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-            {viewMode === 'graph' 
-              ? '角色图谱' 
-              : selectedCard 
-                ? `${selectedCard.name || '新角色'} ${viewMode === 'state' ? '— 当前状态' : '— 编辑档案'}`
-                : '角色档案'}
+            {viewMode === 'graph'
+              ? t('character.viewGraph')
+              : selectedCard
+                ? `${selectedCard.name || t('character.newCharacter')} ${viewMode === 'state' ? `— ${t('character.viewState')}` : `— ${t('character.viewEdit')}`}`
+                : t('character.viewProfile')}
           </span>
         </div>
         
         <div className="flex items-center gap-1.5 flex-shrink-0">
           {viewMode === 'graph' ? (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title="返回编辑">
-              <Users size={12} /> 编辑模式
+            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToEdit')}>
+              <Users size={12} /> {t('character.editMode')}
             </Button>
           ) : viewMode === 'backlinks' ? (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title="返回编辑">
-              <Users size={12} /> 编辑模式
+            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToEdit')}>
+              <Users size={12} /> {t('character.editMode')}
             </Button>
           ) : selectedCard ? (
             <>
               {viewMode === 'state' ? (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title="返回基础设定">
-                  <Users size={12} /> 基础设定
+                <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToBasic')}>
+                  <Users size={12} /> {t('character.basicSettings')}
                 </Button>
               ) : (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('state')} title="查看当前进展/状态">
-                  📋 当前状态
+                <Button variant="outline" size="sm" onClick={() => setViewMode('state')} title={t('character.viewCurrentState')}>
+                  📋 {t('character.currentState')}
                 </Button>
               )}
-              <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title="查看全员关系网">
-                <Network size={12} /> 关系图谱
+              <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
+                <Network size={12} /> {t('character.relationGraph')}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setViewMode('backlinks')} title="查看反向链接">
-                <Link2 size={12} /> 反向链接
+              <Button variant="outline" size="sm" onClick={() => setViewMode('backlinks')} title={t('character.viewBacklinks')}>
+                <Link2 size={12} /> {t('character.backlinks')}
               </Button>
               <Button variant="destructive" size="sm" onClick={handleDelete}>
-                <Trash2 size={12} /> 删除
+                <Trash2 size={12} /> {t('action.delete')}
               </Button>
               <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
-                <Save size={12} /> {saving ? '保存中...' : '保存'}
+                <Save size={12} /> {saving ? t('status.saving') : t('action.save')}
               </Button>
             </>
           ) : (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title="查看全员关系网">
-              <Network size={12} /> 关系图谱
+            <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
+              <Network size={12} /> {t('character.relationGraph')}
             </Button>
           )}
         </div>
@@ -129,32 +127,32 @@ export default function CharacterEditor() {
         ) : viewMode === 'backlinks' && selectedCard ? (
           <CharacterBacklinks character={selectedCard} allCharacters={characters} />
         ) : !selectedCard ? (
-          <BaseEmptyState 
-            icon={<Users size={36} />} 
-            message={currentProject ? "在左侧选择或创建角色卡" : "请先打开项目"} 
+          <BaseEmptyState
+            icon={<Users size={36} />}
+            message={currentProject ? t('character.selectOrCreate') : t('blueprint.openProjectFirst')}
             opacity={currentProject ? 0.3 : 0.4}
           />
         ) : viewMode === 'state' ? (
           <div className="max-w-2xl mx-auto px-6 py-4">
             <div className="flex items-center justify-between mb-4">
               <h3 className="text-base font-bold text-[var(--color-text)]">
-                当前状态档案
+                {t('character.stateProfile')}
               </h3>
               <span className="text-xs text-[var(--color-text-secondary)]">
-                最后更新：第 {selectedCard.currentState?.updatedAtChapter ?? 0} 章
+                {t('character.lastUpdated').replace('{n}', String(selectedCard.currentState?.updatedAtChapter ?? 0))}
               </span>
             </div>
             <div className="space-y-3">
               {([
-                ['location', '当前位置/阵营'],
-                ['powerLevel', '修为境界/能力等级'],
-                ['physicalState', '身体状态（伤势/BUFF/外貌）'],
-                ['mentalState', '心理状态（愿望/恐惧/心态）'],
-                ['keyItems', '关键道具/资源'],
-                ['recentEvents', '最近重要事件'],
-              ] as const).map(([field, label]) => (
+                ['location', 'character.state.location'],
+                ['powerLevel', 'character.state.powerLevel'],
+                ['physicalState', 'character.state.physicalState'],
+                ['mentalState', 'character.state.mentalState'],
+                ['keyItems', 'character.state.keyItems'],
+                ['recentEvents', 'character.state.recentEvents'],
+              ] as const).map(([field, labelKey]) => (
                 <div key={field}>
-                  <Label>{label}</Label>
+                  <Label>{t(labelKey)}</Label>
                   <Textarea
                     value={selectedCard.currentState?.[field]?.toString() ?? ''}
                     onChange={(e) => {
@@ -165,14 +163,14 @@ export default function CharacterEditor() {
                       updateField(selectedCard.name, 'currentState', cs)
                     }}
                     rows={2}
-                    placeholder={`${label}...`}
+                    placeholder={`${t(labelKey)}...`}
                   />
                 </div>
               ))}
             </div>
             {!selectedCard.currentState && (
               <div className="mt-4 p-3 rounded-lg bg-[var(--color-hover)] text-xs text-[var(--color-text-secondary)]">
-                当前状态档案将在章节定稿后由 AI 自动更新，也可手动填写初始状态。
+                {t('character.stateHint')}
               </div>
             )}
           </div>
@@ -188,7 +186,7 @@ export default function CharacterEditor() {
                     value={selectedCard.tier ?? 2}
                     onChange={(e) => updateField(selectedCard.name, 'tier', parseInt(e.target.value))}
                   >
-                    {Object.entries(TIER_LABELS).map(([k, v]) => (
+                    {Object.entries(getTierMap(t)).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </NativeSelect>
@@ -196,7 +194,7 @@ export default function CharacterEditor() {
                 <div>
                   <Label>{t('character.position')}</Label>
                   <NativeSelect value={selectedCard.role} onChange={(e) => updateField(selectedCard.name, 'role', e.target.value as typeof selectedCard.role)}>
-                    {Object.entries(ROLE_LABELS).map(([k, v]) => (
+                    {Object.entries(getRoleMap(t)).map(([k, v]) => (
                       <option key={k} value={k}>{v}</option>
                     ))}
                   </NativeSelect>
@@ -254,7 +252,7 @@ export default function CharacterEditor() {
                     <summary className="text-[0.65rem] text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
                       {t('character.legacyRelations')}
                     </summary>
-                    <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder="旧版纯文本格式" /></div>
+                    <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
                   </details>
                   <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
                 </>
@@ -279,10 +277,29 @@ export default function CharacterEditor() {
 
 // ===== 结构化关系编辑器 =====
 
-const REL_TYPE_LABELS: Record<string, string> = {
-  ally: '盟友', enemy: '敌对', family: '家族',
-  master_student: '师徒', lover: '恋人', rival: '劲敌',
-  neutral: '中立', other: '其他',
+function getRelTypeMap(t: ReturnType<typeof useTranslation>['t']): Record<string, string> {
+  return {
+    ally: t('character.relType.ally'), enemy: t('character.relType.enemy'), family: t('character.relType.family'),
+    master_student: t('character.relType.masterStudent'), lover: t('character.relType.lover'), rival: t('character.relType.rival'),
+    neutral: t('character.relType.neutral'), other: t('character.relType.other'),
+  }
+}
+
+function getRoleMap(t: ReturnType<typeof useTranslation>['t']): Record<string, string> {
+  return {
+    protagonist: t('character.roleLabel.protagonist'),
+    antagonist: t('character.roleLabel.antagonist'),
+    supporting: t('character.roleLabel.supporting'),
+    minor: t('character.roleLabel.minor'),
+  }
+}
+
+function getTierMap(t: ReturnType<typeof useTranslation>['t']): Record<number, string> {
+  return {
+    1: t('character.tierLabel.core'),
+    2: t('character.tierLabel.important'),
+    3: t('character.tierLabel.minor'),
+  }
 }
 
 function StructuredRelations({
@@ -298,6 +315,8 @@ function StructuredRelations({
   const [newTarget, setNewTarget] = useState('')
   const [newType, setNewType] = useState('ally')
   const [newLabel, setNewLabel] = useState('')
+
+  const relTypes = getRelTypeMap(t)
 
   let rels: Array<{ target: string; type: string; label: string; sinceChapter: number }> = []
   try { rels = JSON.parse(relations || '[]') } catch { rels = [] }
@@ -340,7 +359,7 @@ function StructuredRelations({
               }}
             >
               <span className="font-medium text-[var(--color-text)]">{r.target}</span>
-              <span className="text-[0.65rem] opacity-60">{REL_TYPE_LABELS[r.type] || r.type}</span>
+              <span className="text-[0.65rem] opacity-60">{relTypes[r.type] || r.type}</span>
               {r.label && r.label !== r.type && <span className="text-[0.65rem] opacity-40">· {r.label}</span>}
               <button
                 className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all"
@@ -361,7 +380,7 @@ function StructuredRelations({
             {available.map(n => <option key={n} value={n}>{n}</option>)}
           </NativeSelect>
           <NativeSelect value={newType} onChange={(e) => setNewType(e.target.value)}>
-            {Object.entries(REL_TYPE_LABELS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            {Object.entries(relTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </NativeSelect>
           <Input
             value={newLabel}

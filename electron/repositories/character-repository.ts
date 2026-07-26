@@ -183,7 +183,7 @@ export class CharacterRepository {
             data.relationships,
             data.arc,
             data.notes,
-            data.tier ?? 2,
+            data.tier ?? (data.role === 'protagonist' || data.role === 'antagonist' ? 1 : 2),
             data.tags || '',
             data.appearChapters || '[]',
             data.relations || '[]',

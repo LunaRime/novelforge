@@ -2,10 +2,12 @@ import { ipcMain, dialog } from 'electron'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
+import Database from 'better-sqlite3'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { ProjectData } from '../../src/shared/ipc-channels'
+import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
 import { initProjectDatabase } from '../database'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
@@ -270,5 +272,71 @@ export function registerProjectController() {
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]
+  })
+
+  // ===== 历史项目摘要（只读，不打开项目）=====
+  ipcMain.handle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
+    const dbPath = path.join(projectPath, '.vela', 'vela.db')
+    if (!fs.existsSync(dbPath)) return null
+
+    let db: Database.Database | null = null
+    try {
+      db = new Database(dbPath, { readonly: true })
+      db.pragma('journal_mode = WAL')
+
+      // 项目名 = 目录名
+      const name = path.basename(projectPath)
+      const totalChapters = (db.prepare(
+        "SELECT total_chapters FROM project_core WHERE id = 'main'"
+      ).get() as { total_chapters: number } | undefined)?.total_chapters ?? 0
+
+      // 已定稿章节（drafts.status = 'finalized'，优先取蓝图标题）
+      const finalizedRows = db.prepare(`
+        SELECT d.chapter_number, COALESCE(bp.title, '') as title
+        FROM drafts d
+        LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
+        WHERE d.status = 'finalized'
+        GROUP BY d.chapter_number
+        ORDER BY d.chapter_number
+      `).all() as Array<{ chapter_number: number; title: string }>
+      const chapters = finalizedRows.map(r => ({ chapterNumber: r.chapter_number, title: r.title }))
+
+      // 有草稿的章节（按章汇总所有状态的草稿）
+      const draftRows = db.prepare(`
+        SELECT d.chapter_number, COUNT(*) as cnt,
+               MAX(CASE WHEN d.status = 'finalized' THEN 1 ELSE 0 END) as has_finalized,
+               COALESCE(MAX(bp.title), '') as chapter_title
+        FROM drafts d
+        LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
+        WHERE d.status != 'archived'
+        GROUP BY d.chapter_number
+        ORDER BY d.chapter_number
+      `).all() as Array<{ chapter_number: number; cnt: number; has_finalized: number; chapter_title: string }>
+      const draftChapters = draftRows.map(r => ({
+        chapterNumber: r.chapter_number,
+        draftCount: r.cnt,
+        hasFinalized: r.has_finalized === 1,
+        chapterTitle: r.chapter_title,
+      }))
+
+      // 蓝图数量
+      const blueprintCount = (db.prepare(
+        "SELECT COUNT(*) as cnt FROM blueprints"
+      ).get() as { cnt: number }).cnt
+
+      // 故事架构生成数（premise / worldbuilding / characters_arch / synopsis 共 4 项）
+      const archGenerated = (db.prepare(
+        "SELECT COUNT(*) as cnt FROM project_archives WHERE project_id = 'main' AND body != ''"
+      ).get() as { cnt: number }).cnt
+
+      return { name, path: projectPath, totalChapters, chapters, draftChapters, blueprintCount, archGenerated }
+    } catch (err) {
+      logger.error('Project', `[get-summary] 读取历史项目失败: ${projectPath} — ${safeErrorMessage(err)}`)
+      return null
+    } finally {
+      if (db) {
+        try { db.close() } catch { /* ignore */ }
+      }
+    }
   })
 }

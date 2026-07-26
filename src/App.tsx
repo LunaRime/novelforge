@@ -34,13 +34,13 @@ import UpdateNotification from './components/UpdateNotification'
  */
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
-  // 合并 14 个 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
+  // 合并 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
   const {
     sidebarOpen, aiPanelOpen, rightView, settingsOpen, closeSettings,
     newProjectOpen, closeNewProject, exportOpen, closeExport,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
-    focusMode,
+    focusMode, bottomPanelOpen,
   } = useLayoutStore(useShallow(s => ({
     sidebarOpen: s.sidebarOpen,
     aiPanelOpen: s.aiPanelOpen,
@@ -57,6 +57,7 @@ export default function App() {
     chapterCreationPrefill: s.chapterCreationPrefill,
     closeChapterCreation: s.closeChapterCreation,
     focusMode: s.focusMode,
+    bottomPanelOpen: s.bottomPanelOpen,
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -211,9 +212,9 @@ export default function App() {
             </PanelGroup>
           </Panel>
 
-          {/* 下层：底部面板 — 专注模式下隐藏 */}
-          {!focusMode && <PanelResizeHandle />}
-          {!focusMode && (
+          {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
+          {(bottomPanelOpen && !focusMode) && <PanelResizeHandle />}
+          {(bottomPanelOpen && !focusMode) && (
             <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>
               <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                 <BottomPanel />

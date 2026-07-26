@@ -66,7 +66,7 @@ export default function CharactersView() {
             onClick={() => setTierFilter(tier)}
             type="button"
           >
-            {tier === null ? '全部' : TIER_LABELS[tier]}
+            {tier === null ? t('charList.filterAll') : TIER_LABELS[tier]}
             <span className="ml-0.5 opacity-60">{tier === null ? characters.length : (grouped[tier] || []).length}</span>
           </button>
         ))}
