@@ -9,6 +9,7 @@ import {
   X,
   Home,
   Trash2,
+  Archive,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView } from '../../stores/layout-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -38,6 +39,7 @@ export default function ActivityBar() {
     { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
     { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
     { id: 'characters', icon: Users, label: t('nav.characters') },
+    { id: 'history', icon: Archive, label: t('nav.history') },
   ]
 
   /** 点击 Home 按钮：切换到主页视图 */

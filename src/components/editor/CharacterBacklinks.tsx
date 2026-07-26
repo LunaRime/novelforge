@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react'
 import { Hash, MessageCircle, Users } from 'lucide-react'
+import { useTranslation } from '../../hooks/useTranslation'
 import type { CharacterCard } from '../../stores/character-store'
 
 interface Props {
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export default function CharacterBacklinks({ character, allCharacters }: Props) {
+  const { t } = useTranslation()
   // 出场章节
   const appearChapters = useMemo(() => {
     try { return JSON.parse(character.appearChapters || '[]') as number[] }
@@ -55,7 +57,7 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
   return (
     <div className="space-y-4 px-4 py-3">
       {/* 出场章节 */}
-      <Section icon={<Hash size={12} />} title="出场章节">
+      <Section icon={<Hash size={12} />} title={t('character.backlinks.chapters')}>
         {appearChapters.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {appearChapters.map(ch => (
@@ -68,18 +70,18 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
                   border: '1px solid var(--color-border)',
                 }}
               >
-                第{ch}章
+                {t('chapter.label').replace('{n}', String(ch))}
               </span>
             ))}
           </div>
         ) : (
-          <span className="text-xs text-[var(--color-text-muted)]">暂无出场记录</span>
+          <span className="text-xs text-[var(--color-text-muted)]">{t('character.backlinks.noChapters')}</span>
         )}
       </Section>
 
       {/* 正向关系 */}
       {relations.length > 0 && (
-        <Section icon={<Users size={12} />} title="关联角色">
+        <Section icon={<Users size={12} />} title={t('character.backlinks.relatedChars')}>
           <div className="space-y-1">
             {relations.map((r, i) => (
               <div
@@ -90,7 +92,7 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
                 <span className="font-medium text-[var(--color-text)]">{r.target}</span>
                 <span className="opacity-50">{r.label || r.type}</span>
                 {r.sinceChapter > 0 && (
-                  <span className="opacity-30 ml-auto">第{r.sinceChapter}章</span>
+                  <span className="opacity-30 ml-auto">{t('chapter.label').replace('{n}', String(r.sinceChapter))}</span>
                 )}
               </div>
             ))}
@@ -100,7 +102,7 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
 
       {/* 反向链接（被谁提及） */}
       {backlinks.length > 0 && (
-        <Section icon={<MessageCircle size={12} />} title="被提及于">
+        <Section icon={<MessageCircle size={12} />} title={t('character.backlinks.mentionedBy')}>
           <div className="space-y-1">
             {backlinks.map((b, i) => (
               <div
@@ -118,16 +120,16 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
 
       {/* 状态摘要 */}
       {character.currentState && (
-        <Section icon={<Hash size={12} />} title="当前状态摘要">
+        <Section icon={<Hash size={12} />} title={t('character.backlinks.stateSummary')}>
           <div className="text-xs space-y-0.5" style={{ color: 'var(--color-text-secondary)' }}>
             {character.currentState.location && <div>📍 {character.currentState.location}</div>}
             {character.currentState.powerLevel && <div>⚡ {character.currentState.powerLevel}</div>}
             {character.currentState.recentEvents && (
-              <div className="opacity-70">最近：{character.currentState.recentEvents}</div>
+              <div className="opacity-70">{t('character.backlinks.recent')}{character.currentState.recentEvents}</div>
             )}
           </div>
           <div className="text-[0.65rem] mt-1 opacity-40">
-            最后更新：第{character.currentState.updatedAtChapter || 0}章
+            {t('character.lastUpdated').replace('{n}', String(character.currentState.updatedAtChapter || 0))}
           </div>
         </Section>
       )}
@@ -135,13 +137,13 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
       {/* 空状态 */}
       {relations.length === 0 && backlinks.length === 0 && appearChapters.length === 0 && (
         <div className="text-center py-6">
-          <div className="text-xs text-[var(--color-text-muted)] mb-1">暂无关系数据</div>
+          <div className="text-xs text-[var(--color-text-muted)] mb-1">{t('character.backlinks.noRelations')}</div>
           <div className="text-[0.65rem] opacity-50">
-            定稿后 AI 将自动分析角色关系
+            {t('character.backlinks.autoHint')}
           </div>
           {implicitLinks.length > 0 && (
             <div className="mt-2 text-[0.6rem] opacity-30">
-              潜在关联：{implicitLinks.map(c => c.name).join('、')}等
+              {t('character.backlinks.potentialLinks').replace('{names}', implicitLinks.map(c => c.name).join('、'))}
             </div>
           )}
         </div>

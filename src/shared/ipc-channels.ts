@@ -68,6 +68,24 @@ export interface ProjectChannels {
     args: []
     return: string | null
   }
+  'project:get-summary': {
+    args: [projectPath: string]
+    return: ProjectSummary | null
+  }
+}
+
+export interface ProjectSummary {
+  name: string
+  path: string
+  totalChapters: number
+  /** 已定稿章节列表 */
+  chapters: Array<{ chapterNumber: number; title: string }>
+  /** 有草稿的章节列表 */
+  draftChapters: Array<{ chapterNumber: number; draftCount: number; hasFinalized: boolean; chapterTitle?: string }>
+  /** 蓝图完成数 */
+  blueprintCount: number
+  /** 故事架构已生成数（premise/worldbuilding/characters_arch/synopsis 共 4 项） */
+  archGenerated: number
 }
 
 // ===== 文件系统 =====
