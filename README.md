@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-2.5.2-green.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.0-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -18,6 +18,18 @@
 ---
 
 > **NovelForge** 是一款开源、隐私优先的 AI 写作 IDE。将大语言模型驱动的全流程工作流与本地 RAG 知识库深度融合，为作者提供 IDE 级别的沉浸式创作体验。支持 **zh-CN / en-US / ru-RU** 三语界面。
+
+---
+
+### 🔔 关于版本号的重要说明
+
+> 从 v2.5.2 开始，NovelForge 正式进入 **0.y.z 早期开发阶段**。这并非"倒退"，而是我们向社区诚实地传达项目状态：
+>
+> - LLM 生成质量、UI 交互仍处于持续"调教"中
+> - 核心 API 和工作流尚未定型，未来可能引入破坏性变更
+> - 每一个 `0.x.x` 版本，都是我们向"让 AI 写出令人满意的小说"这个目标迈出的一小步
+>
+> 我们欢迎你以 **早期测试者** 的身份参与，反馈越多，项目成熟得越快。
 
 ---
 
