@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-2.5.2-green.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.0-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -18,6 +18,18 @@
 ---
 
 > **NovelForge** is an open-source, privacy-first AI writing IDE. It deeply integrates LLM-driven full workflows with a local RAG knowledge base, delivering an IDE-grade immersive writing experience. Supports **zh-CN / en-US / ru-RU** trilingual interface.
+
+---
+
+### 🔔 Important Note on Versioning
+
+> Starting from v2.5.2, NovelForge has officially entered the **0.y.z early development phase**. This is not a "regression" — it's an honest signal to the community about where the project stands:
+>
+> - LLM output quality and UI interactions are still being actively tuned
+> - Core APIs and workflows have not yet stabilized; breaking changes may occur
+> - Each `0.x.x` release is one small step toward the goal: "making AI write satisfying fiction"
+>
+> We welcome you to join as an **early tester** — the more feedback we get, the faster the project matures.
 
 ---
 

@@ -56,7 +56,7 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     ipc.invoke('update:get-version').then((result) => {
       set({ currentVersion: result.currentVersion, appName: result.appName })
     }).catch(() => {
-      set({ currentVersion: '2.2.0', appName: 'NovelForge' })
+      set({ currentVersion: '0.1.0', appName: 'NovelForge' })
     })
 
     // 监听状态变化
