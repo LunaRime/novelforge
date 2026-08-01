@@ -48,10 +48,10 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
     setSplitError('')
     setChapters([])
 
-    // 自动推断项目名称（取第一个文件名去掉后缀）
+    // 自动推断项目名称（取第一个文件名去掉后缀，兼容 Windows 反斜杠路径）
     if (!name.trim()) {
       const firstFile = files[0]
-      const baseName = firstFile.split('/').pop()?.replace(/\.(txt|md|text)$/i, '') || t('import.title')
+      const baseName = firstFile.split(/[\\/]/).pop()?.replace(/\.(txt|md|text)$/i, '') || t('import.title')
       setName(baseName)
     }
 
@@ -142,11 +142,11 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
                 <BookOpen size={14} style={{ flexShrink: 0 }} />
                 {selectedFiles.length > 0
                   ? `${selectedFiles.length} ${t('form.filesSelected')}`
-                  : '支持 .txt / .md 文件（单个或多个）'}
+                  : t('import.supportFormat')}
               </div>
               <Button variant="outline" onClick={handleSelectFiles} disabled={splitting}>
                 <FolderOpen size={14} />
-                选择
+                {t('action.select')}
               </Button>
             </div>
           </div>
@@ -226,7 +226,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
               />
               <Button variant="outline" onClick={handleSelectFolder}>
                 <FolderOpen size={14} />
-                选择
+                {t('action.select')}
               </Button>
             </div>
           </div>
