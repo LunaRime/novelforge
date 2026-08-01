@@ -4,7 +4,7 @@ import { create } from 'zustand'
 export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'history' | 'settings'
 
 /** 下方工具窗口 Tab */
-export type BottomTab = 'tasks' | 'log' | 'models'
+export type BottomTab = 'tasks' | 'log' | 'activity'
 
 /** 右侧面板视图类型 */
 export type RightView = 'agent' | 'ai-output'

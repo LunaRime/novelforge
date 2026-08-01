@@ -1,6 +1,6 @@
 import {
   FolderOpen, BookOpen, Users,
-  Home, Zap, ScrollText, Cpu, Archive,
+  Home, Zap, ScrollText, Activity, Archive,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -14,11 +14,11 @@ const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label
   { id: 'history', icon: Archive, label: t('nav.history') },
 ]
 
-/** 底部面板 Tab 按钮配置 */
+/** 底部面板 Tab 按钮配置（模型调用视图已替换为每日活动图） */
 const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
   { id: 'tasks', icon: Zap, label: t('panel.tasks') },
   { id: 'log', icon: ScrollText, label: t('panel.log') },
-  { id: 'models', icon: Cpu, label: t('panel.models') },
+  { id: 'activity', icon: Activity, label: t('panel.activityShort') },
 ]
 
 /**
