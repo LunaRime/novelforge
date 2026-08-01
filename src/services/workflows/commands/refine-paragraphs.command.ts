@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 /**
  * RefineParagraphsCommand — 段落级差异修改（非全文重写）
  *
@@ -47,7 +48,7 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
 
     // 提取选中段落及其上下文
     const selectedText = fullContent.slice(selectionStart, selectionEnd)
-    if (!selectedText.trim()) throw new Error('选中的段落为空')
+    if (!selectedText.trim()) throw new Error(t('error.emptySelection'))
 
     // 提取前后各 200 字作为上下文锚点
     const contextBefore = fullContent.slice(Math.max(0, selectionStart - 200), selectionStart)

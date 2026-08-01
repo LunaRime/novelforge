@@ -176,9 +176,9 @@ export default function ChapterCardEditor() {
   /** 删除选中章节 */
   const handleDeleteChapter = async () => {
     if (!selected) return
-    const ok = await confirm(`确认删除第 ${selected.chapterNumber} 章蓝图？\n此操作不可撤销。`, {
-      title: '删除章节蓝图',
-      confirmText: '删除',
+    const ok = await confirm(t('chapter.confirmDeleteMsg').replace('{n}', String(selected.chapterNumber)), {
+      title: t('chapter.confirmDeleteTitle'),
+      confirmText: t('chapter.confirmDelete'),
       danger: true,
     })
     if (!ok) return
@@ -211,14 +211,14 @@ export default function ChapterCardEditor() {
     if (!guard.ok) {
       // 校验失败：阻断并提示
       addLog('error', `Guard failed: ${guard.message}`)
-      toast.warning(`无法出发\n\n${guard.message}`)
+      toast.warning(t('blueprint.cannotGenerate').replace('{message}', guard.message || ''))
       return
     }
     if (guard.message) {
       // 有警告但允许继续：弹出确认
-      const yes = await confirm(`${guard.message}\n\n是否仍要继续生成？`, {
-        title: '前置条件警告',
-        confirmText: '继续生成',
+      const yes = await confirm(`${guard.message}\n\n${t('chapter.continueAnyway')}`, {
+        title: t('chapter.warningTitle'),
+        confirmText: t('chapter.continue'),
       })
       if (!yes) return
     }

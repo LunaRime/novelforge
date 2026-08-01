@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 /**
  * FillGapsCommand — AI 补全缺失的章节蓝图
  *
@@ -27,7 +28,7 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<ChapterBlueprint[]> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const architecture = (context.data.architecture as string) || ''
     const totalChapters = project.novelConfig.totalChapters
@@ -49,7 +50,7 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
       )
 
       const template = getPromptTemplate('chapter_blueprint_chunk')
-      if (!template) throw new Error('模板丢失')
+      if (!template) throw new Error(t('error.templateMissing'))
 
       const systemRole =
         getPromptTemplate('chapter_blueprint')?.systemRole ||

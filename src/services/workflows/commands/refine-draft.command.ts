@@ -24,15 +24,15 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const draft = this.params.draftContent
-    if (!draft) throw new Error('无草稿内容')
+    if (!draft) throw new Error(t('error.noDraft'))
 
     callbacks.log('正在进行大神级修稿...')
 
     const template = getPromptTemplate('refine_chapter')
-    if (!template) throw new Error('未找到修稿模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '修稿'))
 
     const mergedGuidance = this.params.mergedGuidance || project.novelConfig.globalGuidance || ''
     const userPromptBlock = this.params.userRefinePrompt?.trim()
@@ -53,7 +53,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
 
     const { parseDraftMeta } = await import('../chapter-workflow')
     const baseDraft = await parseDraftMeta(this.params.draftPath)
-    if (!baseDraft) throw new Error('找不到基准草稿版本')
+    if (!baseDraft) throw new Error(t('error.noBaseDraft'))
 
     const revIndex = await ipc.invoke('db:revision-next-index', baseDraft.id)
 

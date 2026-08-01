@@ -22,12 +22,12 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
 
   async execute({ callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     callbacks.log('正在根据审稿报告精准修复...')
 
     const template = getPromptTemplate('refine_from_review')
-    if (!template) throw new Error('未找到审稿修复模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '审稿修复'))
 
     const userPromptBlock = this.params.userRefinePrompt?.trim()
       ? `★【用户额外修稿指导（绝对优先级）】★：\n${this.params.userRefinePrompt}`
@@ -44,7 +44,7 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
 
     const { parseDraftMeta } = await import('../chapter-workflow')
     const baseDraft = await parseDraftMeta(this.params.draftPath)
-    if (!baseDraft) throw new Error('找不到基准草稿版本')
+    if (!baseDraft) throw new Error(t('error.noBaseDraft'))
 
     const revIndex = await ipc.invoke('db:revision-next-index', baseDraft.id)
 

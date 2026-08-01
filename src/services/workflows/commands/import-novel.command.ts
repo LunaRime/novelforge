@@ -8,6 +8,7 @@
  */
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
@@ -37,7 +38,7 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     callbacks.log(`📖 开始作为定稿导入 ${this.chapters.length} 章正文到数据库...`)
     callbacks.log(`🔑 导入会话 ID: ${this.importSessionId}`)
@@ -127,10 +128,10 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
 export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const chapters = context.data.chapters as ImportedChapter[]
-    if (!chapters || chapters.length === 0) throw new Error('无章节数据')
+    if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
 
     callbacks.log('🔍 通过向量知识库检索关键片段...')
     callbacks.setProgress(5)
@@ -167,7 +168,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     // 优先使用向量增强版 Prompt
     const template = getPromptTemplate('infer_novel_config_with_vectors')
       || getPromptTemplate('infer_novel_config')
-    if (!template) throw new Error('未找到推演 Prompt 模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '推演 Prompt'))
 
     const firstChapter = chapters[0]?.content?.slice(0, 3000) || '（第一章内容不可用）'
     const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 3000) || '（最新章节不可用）'
@@ -296,14 +297,14 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const chapters = context.data.chapters as ImportedChapter[]
     const configSummary = (context.data.novelConfigSummary as string) || '（配置概要不可用）'
-    if (!chapters || chapters.length === 0) throw new Error('无章节数据')
+    if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
 
     const template = getPromptTemplate('infer_single_chapter_blueprint')
-    if (!template) throw new Error('未找到单章蓝图推演 Prompt 模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '单章蓝图推演 Prompt'))
 
     callbacks.log(`📋 开始逐章推演蓝图（共 ${chapters.length} 章，并发限制 ${InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT}）...`)
     callbacks.setProgress(5)

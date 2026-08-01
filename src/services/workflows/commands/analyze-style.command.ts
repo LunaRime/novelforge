@@ -1,4 +1,5 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { BasePromptBuilder } from '../../prompts/prompt-builder'
@@ -13,7 +14,7 @@ import { ipc } from '../../ipc-client'
 export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
   async execute({ callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     callbacks.log('📖 正在采样已有章节正文...')
 
@@ -48,7 +49,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     }
 
     const template = getPromptTemplate('analyze_writing_style')
-    if (!template) throw new Error('未找到文风分析模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '文风分析'))
 
     const sampleText = sampleTexts.join('\n\n---\n\n')
     const prompt = new BasePromptBuilder(template)

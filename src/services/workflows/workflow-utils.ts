@@ -8,6 +8,7 @@
  * 2. PostProcessPipeline — 后处理流水线（注册 → 执行 → 持久化 → 修复）
  */
 
+import { t } from '../../shared/locale'
 import type { StepCallbacks } from '../../stores/workflow-store'
 import { ipc } from '../ipc-client'
 
@@ -737,7 +738,7 @@ export async function runPostProcessPipeline(
     run = await ipc.invoke('db:post-process-get-latest-run', sourceType, sourceId)
   }
 
-  if (!run) throw new Error('跑批获取异常')
+  if (!run) throw new Error(t('error.postProcessFetch'))
 
   const runId = run.id
   const runSteps = await ipc.invoke('db:post-process-get-steps', runId)
@@ -824,7 +825,7 @@ export async function runPostProcessPipeline(
   // 返回最终状态汇总供 UI 展示
   const status = await readPostProcessStatus(projectPath, scope)
   if (!status) {
-    throw new Error('汇总状态获取失败')
+    throw new Error(t('error.summaryFetch'))
   }
 
   // 最终汇总

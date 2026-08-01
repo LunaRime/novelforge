@@ -1,3 +1,4 @@
+import { t } from '../shared/locale'
 /**
  * NovelForge 风格 A/B 测试 — 同一场景多种风格并行生成，对比效果
  *
@@ -67,7 +68,7 @@ export async function runStyleABTest(
 ): Promise<ABTestResult> {
   const llmState = llmStore.getState()
   const modelId = llmState.getModelForPurpose('refine_chapter')
-  if (!modelId) throw new Error('无可用模型')
+  if (!modelId) throw new Error(t('error.noModel'))
 
   const styleConfigs = STYLE_PRESETS.filter(s => selectedStyles.includes(s.id))
   const variants: StyleVariant[] = []

@@ -286,7 +286,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
       executor: async (cb: { appendText: (t: string) => void; log: (m: string) => void }) => {
         const { ArchitecturePromptBuilder } = await import('../prompts/prompt-builder')
         const template = getPromptTemplate('extract_initial_characters')
-        if (!template) throw new Error('未找到 extract_initial_characters')
+        if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'extract_initial_characters'))
         const extractPrompt = new ArchitecturePromptBuilder(template).withCharacterDynamics(characterDynamicsContent).withGenre(genre).build()
         const systemRole = template.systemRole || '你是一位专业的小说数据结构化专家。'
 
@@ -317,7 +317,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         const parsedCards = extractCharactersFromText(rawText)
 
         if (parsedCards.length === 0) {
-          throw new Error('AI 返回的角色数据格式不正确，未提取到有效角色\n原始文本前200字: ' + rawText.slice(0, 200))
+          throw new Error(t('error.roleDataInvalid').replace('{text}', rawText.slice(0, 200)))
         }
 
         // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串
@@ -391,10 +391,10 @@ export function runArchCharacterExtract(projectPath: string, characterDynamicsCo
 
 export async function repairArchCharacterCards(projectPath: string): Promise<void> {
   const core = await ipc.invoke('db:project-core-get')
-  if (!core?.charactersArch || core.charactersArch.length < 50) throw new Error('无法提取角色卡')
+  if (!core?.charactersArch || core.charactersArch.length < 50) throw new Error(t('error.cannotExtractCards'))
 
   const project = useProjectStore.getState().currentProject
-  if (!project) throw new Error('未打开项目')
+  if (!project) throw new Error(t('error.noProject'))
 
   const steps = createCharacterExtractSteps(projectPath, core.charactersArch, project.novelConfig.genre)
   const { useWorkflowStore } = await import('../../stores/workflow-store')
