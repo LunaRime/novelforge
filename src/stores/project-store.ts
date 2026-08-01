@@ -122,6 +122,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const result = await ipc.invoke('project:open', projectPath)
       if (result.success && result.project) {
         set({ currentProject: result.project })
+        // 同步最近项目到全局配置（主进程活动聚合/历史导航可读）
+        const list = get().recentProjects
+        if (!list.some(p => p.path === projectPath)) {
+          list.unshift({ name: result.project.name, path: projectPath, updatedAt: Date.now() })
+          set({ recentProjects: list.slice(0, 20) })
+        }
+        ipc.invoke('config:set', { recentProjects: get().recentProjects.slice(0, 20) }).catch(() => {})
         // 加载文件树
         await get().refreshFileTree()
         // 自动展开侧边栏并切换到项目结构视图

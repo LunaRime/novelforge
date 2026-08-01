@@ -343,6 +343,7 @@ function createTables(db: BetterSqlite3.Database) {
       duration_ms INTEGER DEFAULT 0,
       success INTEGER DEFAULT 1,
       error_message TEXT DEFAULT '',
+      cost REAL DEFAULT 0,
       created_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
@@ -398,6 +399,9 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   // project_core — v4 后新增列
   safeAddColumn(db, 'project_core', 'writing_style', "TEXT DEFAULT ''")
   safeAddColumn(db, 'project_core', 'reference_works', "TEXT DEFAULT ''")
+
+  // llm_calls — v8 新增 cost（单次调用费用，美元）
+  safeAddColumn(db, 'llm_calls', 'cost', 'REAL DEFAULT 0')
 
   logger.info('DB', '迁移列补齐检查完成')
 }

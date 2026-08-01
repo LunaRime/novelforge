@@ -12,18 +12,21 @@ export class LLMHistoryRepository {
     duration_ms: number
     success: boolean
     error_message?: string
+    /** 单次调用费用（美元，由渲染进程按模型单价计算） */
+    cost?: number
   }): void {
     const db = getProjectDb()
     if (!db) return
 
     const modelId = call.model_id || 'unknown'
     db.prepare(`
-      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message, cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       modelId, call.model_name || '', call.purpose,
       call.prompt_tokens, call.completion_tokens, call.total_tokens,
-      call.duration_ms, call.success ? 1 : 0, call.error_message ?? ''
+      call.duration_ms, call.success ? 1 : 0, call.error_message ?? '',
+      call.cost ?? 0
     )
   }
 
@@ -33,18 +36,20 @@ export class LLMHistoryRepository {
     totalTokens: number
     totalPromptTokens: number
     totalCompletionTokens: number
+    totalCost: number
   } {
     const db = getProjectDb()
-    if (!db) return { totalCalls: 0, totalTokens: 0, totalPromptTokens: 0, totalCompletionTokens: 0 }
+    if (!db) return { totalCalls: 0, totalTokens: 0, totalPromptTokens: 0, totalCompletionTokens: 0, totalCost: 0 }
 
     const row = db.prepare(`
       SELECT
         COUNT(*) as totalCalls,
         COALESCE(SUM(total_tokens), 0) as totalTokens,
         COALESCE(SUM(prompt_tokens), 0) as totalPromptTokens,
-        COALESCE(SUM(completion_tokens), 0) as totalCompletionTokens
+        COALESCE(SUM(completion_tokens), 0) as totalCompletionTokens,
+        COALESCE(SUM(cost), 0) as totalCost
       FROM llm_calls WHERE success = 1
-    `).get() as { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number }
+    `).get() as { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number; totalCost: number }
 
     return row
   }
@@ -57,7 +62,7 @@ export class LLMHistoryRepository {
       SELECT id, model_name as modelName, purpose,
         prompt_tokens as promptTokens, completion_tokens as completionTokens,
         total_tokens as totalTokens, duration_ms as durationMs,
-        success, created_at as createdAt
+        success, cost, created_at as createdAt
       FROM llm_calls ORDER BY id DESC LIMIT ?
     `).all(limit)
   }

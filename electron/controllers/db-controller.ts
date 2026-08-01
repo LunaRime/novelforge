@@ -431,8 +431,8 @@ export function registerDatabaseController() {
     return LLMHistoryRepository.getHistory(limit ?? 50)
   })
 
-  ipcMain.handle('db:get-daily-activity', async (_event, days?: number) => {
-    return ActivityRepository.getDailyActivity(days ?? 90)
+  ipcMain.handle('db:get-daily-activity', async (_event, days?: number, projectPath?: string, currentProjectPath?: string) => {
+    return ActivityRepository.getDailyActivity(days ?? 90, projectPath, currentProjectPath)
   })
 
   ipcMain.handle('db:save-summary-snapshot', async (_event, chapterNumber: number, characterStates: string) => {

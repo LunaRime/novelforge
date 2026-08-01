@@ -18,7 +18,11 @@ const { ActivityRepository } = await import('./activity-repository')
 describe('ActivityRepository.getDailyActivity', () => {
   it('无项目 DB 时返回空结构', () => {
     const result = ActivityRepository.getDailyActivity(90)
-    expect(result).toEqual({ days: [], startDay: '', endDay: '', dayCount: 0 })
+    // endDay 恒为今天（本地时区 YYYY-MM-DD），无数据时 days/projects 为空
+    expect(result.days).toEqual([])
+    expect(result.projects).toEqual([])
+    expect(result.dayCount).toBe(0)
+    expect(result.endDay).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
   it('days 参数透传（默认 90）', () => {
@@ -30,10 +34,12 @@ describe('ActivityRepository.getDailyActivity', () => {
   it('返回结构字段完整（空态契约）', () => {
     const result = ActivityRepository.getDailyActivity()
     expect(result).toHaveProperty('days')
+    expect(result).toHaveProperty('projects')
     expect(result).toHaveProperty('startDay')
     expect(result).toHaveProperty('endDay')
     expect(result).toHaveProperty('dayCount')
     expect(Array.isArray(result.days)).toBe(true)
+    expect(Array.isArray(result.projects)).toBe(true)
   })
 })
 

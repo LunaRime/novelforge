@@ -49,7 +49,7 @@ export async function loadLLMData(limit = 30): Promise<{ stats: LLMStats; histor
 
 // ===== 每日活动（GitHub 风格活动图） =====
 
-/** 获取每日活动数据（写作字数 / 修改量 / 模型调用，按天聚合） */
-export async function getDailyActivity(days = 90): Promise<DailyActivityData> {
-  return ipc.invoke('db:get-daily-activity', days)
+/** 获取每日活动数据（写作字数 / 修改量 / 模型调用 / 费用，跨项目按天聚合） */
+export async function getDailyActivity(days = 90, projectPath?: string, currentProjectPath?: string): Promise<DailyActivityData> {
+  return ipc.invoke('db:get-daily-activity', days, projectPath, currentProjectPath)
 }

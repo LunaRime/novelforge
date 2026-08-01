@@ -64,18 +64,23 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         }
       }
 
-      const logLLMCall = (success: boolean, errorMessage?: string) => {
+      const logLLMCall = (success: boolean, errorMessage?: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => {
         const duration = Date.now() - startTime
+        // 费用：按模型单价计算（与成功分支一致）
+        const cost = success && usage && model
+          ? calculateCost(model, usage.promptTokens, usage.completionTokens, false).totalCost
+          : 0
         ipc.invoke('db:log-llm-call', {
           model_id: modelId,
           model_name: model?.name ?? model?.modelName ?? '',
           purpose: 'workflow',
-          prompt_tokens: 0,
-          completion_tokens: 0,
-          total_tokens: 0,
+          prompt_tokens: usage?.promptTokens ?? 0,
+          completion_tokens: usage?.completionTokens ?? 0,
+          total_tokens: usage?.totalTokens ?? 0,
           duration_ms: duration,
           success: success ? 1 : 0,
           error_message: errorMessage ?? '',
+          cost,
         }).catch(() => { /* 日志失败不影响主流程 */ })
       }
 
@@ -117,16 +122,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             }
             // 更新 token 用量（如果 provider 提供了 usage）
             if (usage) {
-              ipc.invoke('db:log-llm-call', {
-                model_id: modelId,
-                model_name: model?.name ?? model?.modelName ?? '',
-                purpose: 'workflow',
-                prompt_tokens: usage.promptTokens,
-                completion_tokens: usage.completionTokens,
-                total_tokens: usage.totalTokens,
-                duration_ms: Date.now() - startTime,
-                success: 1,
-              }).catch(() => { })
+              logLLMCall(true, undefined, usage)
             } else {
               logLLMCall(true)
             }
