@@ -1,10 +1,9 @@
 import type { PromptTemplate } from "../prompt-templates";
-import { t } from '../../shared/locale'
 
 export const charactersPrompts: PromptTemplate[] = [
   {
     key: 'update_character_cards',
-    name: t('prompt.name.updateCards'),
+    name: '更新角色卡动态状态',
     description: '定稿后分析章节内容，以 Markdown 表格返回角色状态变化，用于自动更新角色卡',
     systemRole: '你是一位严谨的小说角色档案管理员，擅长追踪角色多维状态变化。',
     variables: {
@@ -51,7 +50,7 @@ export const charactersPrompts: PromptTemplate[] = [
   },
   {
     key: 'extract_initial_characters',
-    name: t('prompt.name.extractCards'),
+    name: '提取初始角色卡',
     description: '从角色图谱纯文本中提取结构化角色卡数据，用于架构生成后自动创建角色卡 JSON 文件',
     systemRole: '你是一位专业的小说数据结构化专家。',
     variables: {

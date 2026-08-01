@@ -1,10 +1,9 @@
 import type { PromptTemplate } from "../prompt-templates";
-import { t } from '../../shared/locale'
 
 export const analysisPrompts: PromptTemplate[] = [
   {
     key: 'consistency_check',
-    name: t('prompt.name.consistency'),
+    name: '一致性审稿',
     description: '检查章节的一致性问题',
     systemRole: '你是一位极其严谨、铁面无私的小说质量监督编辑。你只检查客观事实问题，绝不评价主观文笔。',
     variables: {
@@ -62,7 +61,7 @@ severity 取值：error=严重矛盾建议修复, warning=轻微不一致可选�
   },
   {
     key: 'analyze_writing_style',
-    name: t('prompt.name.styleAnalysis'),
+    name: '文风分析',
     description: '从正文样本中提取作者的写作风格特征',
     systemRole: '你是一位资深的文学评论家和网文研究者，擅长精准捕捉作者的写作风格指纹。',
     variables: {
@@ -99,7 +98,7 @@ severity 取值：error=严重矛盾建议修复, warning=轻微不一致可选�
   },
   {
     key: 'generate_chapter_notes',
-    name: t('prompt.name.chapterNotes'),
+    name: '章节要点生成',
     description: '定稿后为本章生成结构化要点（剧情节点、角色动态、新增设定、伏笔与钩子）',
     systemRole: '你是一位专业的网文结构分析师。',
     variables: {

@@ -1,10 +1,9 @@
 import type { PromptTemplate } from "../prompt-templates";
-import { t } from '../../shared/locale'
 
 export const configPrompts: PromptTemplate[] = [
   {
     key: 'generate_global_config',
-    name: t('prompt.name.fullConfig'),
+    name: '全文配置生成',
     description: '根据用户一句话灵感，生成完整的小说配置 JSON',
     systemRole: '你是一位入行十年的顶尖网文主编与白金大神作家，擅长从一句话灵感中提炼完整的商业小说配置。',
     variables: {
@@ -48,7 +47,7 @@ export const configPrompts: PromptTemplate[] = [
   },
   {
     key: 'infer_novel_config',
-    name: t('prompt.name.reverseConfig'),
+    name: '逆向推演全局配置',
     description: '从已有小说内容（知识库采样片段）反推出小说配置、四段架构和主角色卡，用于旧作续写场景',
     systemRole: '你是一位顶级网文主编和资深阅读分析师，擅长从已有作品中逆向推演设定体系。',
     variables: {
@@ -114,7 +113,7 @@ export const configPrompts: PromptTemplate[] = [
   },
   {
     key: 'infer_novel_config_with_vectors',
-    name: t('prompt.name.vectorConfig'),
+    name: '向量采样增强推演',
     description: '利用向量检索采样的精确内容片段，增强全局配置推演的准确度',
     systemRole: '你是一位顶级网文主编和资深阅读分析师，擅长从已有作品中逆向推演设定体系。',
     variables: {

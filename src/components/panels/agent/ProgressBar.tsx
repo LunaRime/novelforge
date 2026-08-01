@@ -6,7 +6,7 @@
 
 import React from 'react'
 import type { AgentProgress } from '../../../services/agent/progress-tracker'
-import { t } from '../../../shared/locale'
+import { t, type TextKey } from '../../../shared/locale'
 
 interface ProgressBarProps {
   progress: AgentProgress
@@ -21,17 +21,17 @@ const PHASE_COLORS: Record<string, string> = {
   done: 'var(--color-text-muted)',         // 灰色
 }
 
-/** 阶段标签（模块级 t() 读取当前 locale） */
-const PHASE_LABELS: Record<string, string> = {
-  thinking: t('progressBar.thinking'),
-  tool_execution: t('progressBar.toolExecution'),
-  generating: t('progressBar.generating'),
-  done: t('status.completed'),
+/** 阶段标签 i18n key 映射（渲染时 t() 取当前语言，切换即时生效） */
+const PHASE_LABEL_KEYS: Record<string, TextKey> = {
+  thinking: 'progressBar.thinking',
+  tool_execution: 'progressBar.toolExecution',
+  generating: 'progressBar.generating',
+  done: 'status.completed',
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({ progress, className = '' }) => {
   const color = PHASE_COLORS[progress.phase] || '#6b7280'
-  const label = PHASE_LABELS[progress.phase] || progress.phase
+  const label = PHASE_LABEL_KEYS[progress.phase] ? t(PHASE_LABEL_KEYS[progress.phase]) : progress.phase
 
   return (
     <div className={`flex flex-col gap-1 ${className}`}>

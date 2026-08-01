@@ -1,10 +1,9 @@
 import type { PromptTemplate } from "../prompt-templates";
-import { t } from '../../shared/locale'
 
 export const architecturePrompts: PromptTemplate[] = [
   {
     key: 'premise',
-    name: t('arch.storyPremise'),
+    name: '故事前提',
     description: '故事架构第一步：提炼故事前提（Story Premise），浓缩全书的核心卖点与冲突链',
     systemRole: '你是一位顶尖的网络小说策划专家与故事架构师。',
     variables: {
@@ -61,7 +60,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'character_dynamics',
-    name: t('arch.characterMap'),
+    name: '角色图谱',
     description: '故事架构第二步：构建核心角色关系网与角色弧光',
     systemRole: '你是一位顶尖的网络小说策划专家与故事架构师。',
     variables: {
@@ -119,7 +118,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'world_building',
-    name: t('arch.worldBuilding'),
+    name: '世界观',
     description: '故事架构第三步：构建自带冲突引擎的世界观矩阵',
     systemRole: '你是一位顶尖的网络小说策划专家与故事架构师。',
     variables: {
@@ -168,7 +167,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'synopsis',
-    name: t('arch.plotOutline'),
+    name: '情节大纲',
     description: '故事架构第四步：整合所有碎片，按用户选择的故事结构模式生成情节大纲',
     systemRole: '你是一位顶尖的网络小说策划专家与故事架构师。',
     variables: {
@@ -218,7 +217,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'chapter_blueprint',
-    name: t('prompt.name.blueprintAll'),
+    name: '章节蓝图生成（全量）',
     description: '基于全书架构一次性生成所有章节的详细蓝图',
     systemRole: '你是一位经验丰富的网文架构师，擅长设计精密的章节蓝图。',
     variables: {
@@ -262,7 +261,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'chapter_blueprint_chunk',
-    name: t('prompt.name.blueprintChunk'),
+    name: '章节蓝图续写（分块）',
     description: '在已有目录基础上续写后续章节蓝图，支持分块生成',
     systemRole: '你是一位经验丰富的网文架构师，擅长设计精密的章节蓝图。',
     variables: {
@@ -314,7 +313,7 @@ export const architecturePrompts: PromptTemplate[] = [
   },
   {
     key: 'infer_single_chapter_blueprint',
-    name: t('prompt.name.blueprintSingle'),
+    name: '逆向推演单章蓝图',
     description: '从已有小说章节正文高精度反推出该章的结构化蓝图信息，用于导入旧作场景',
     systemRole: '你是一位专业的网文结构分析师，擅长从正文中提取结构化蓝图信息。',
     variables: {
