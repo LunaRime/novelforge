@@ -114,7 +114,7 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
     const perspectives = this.params.perspectives || DEFAULT_PERSPECTIVES
     const { draftContent, chapterNumber } = this.params
 
-    if (!draftContent) throw new Error('无草稿内容')
+    if (!draftContent) throw new Error(t('error.noDraft'))
 
     callbacks.log(
       `启动 ${perspectives.length} 个评审视角并行评审第 ${chapterNumber} 章...`,

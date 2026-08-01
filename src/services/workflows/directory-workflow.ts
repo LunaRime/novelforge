@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
@@ -301,11 +302,11 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
         description: `从 SQLite 加载项目架构信息`,
         executor: async (_step, context, callbacks) => {
           const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error('未打开项目')
+          if (!project) throw new Error(t('error.noProject'))
 
           callbacks.log('读取项目架构信息...')
           const core = await ipc.invoke('db:project-core-get')
-          if (!core) throw new Error('项目核心数据未初始化')
+          if (!core) throw new Error(t('error.coreNotInitialized'))
 
           const parts: string[] = []
           if (core.premise && core.premise.length > 50) parts.push(core.premise)
@@ -313,7 +314,7 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
           if (core.worldbuilding && core.worldbuilding.length > 50) parts.push(core.worldbuilding)
           if (core.synopsis && core.synopsis.length > 50) parts.push(core.synopsis)
 
-          if (parts.length === 0) throw new Error('项目主要架构均未生成')
+          if (parts.length === 0) throw new Error(t('error.noArchitecture'))
 
           context.data.architecture = parts.join('\n\n---\n\n')
           // 注入节奏指导到 context，供 Command 读取
@@ -341,7 +342,7 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
         description: `将章节蓝图批量写入 SQLite 数据库`,
         executor: async (_step, context, callbacks) => {
           const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error('未打开项目')
+          if (!project) throw new Error(t('error.noProject'))
 
           const newBlueprints = context.data.newBlueprints as ChapterBlueprint[]
           const existingBlueprints = context.data.existingBlueprints as ChapterBlueprint[]

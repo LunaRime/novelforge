@@ -1,4 +1,5 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { DirectoryPromptBuilder } from '../../prompts/prompt-builder'
@@ -25,7 +26,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<ChapterBlueprint[]> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const architecture = context.data.architecture as string
     const existingBlueprints = (context.data.existingBlueprints || []) as ChapterBlueprint[]
@@ -78,7 +79,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       let prompt: string
       if (cursor === 1 && this.params.mode === 'full') {
         const template = getPromptTemplate('chapter_blueprint')
-        if (!template) throw new Error('模板丢失')
+        if (!template) throw new Error(t('error.templateMissing'))
         prompt = new DirectoryPromptBuilder(template)
           .withNovelArchitecture(architecture)
           .withNumberOfChapters(endChapter)
@@ -88,7 +89,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
           .build()
       } else {
         const template = getPromptTemplate('chapter_blueprint_chunk')
-        if (!template) throw new Error('模板丢失')
+        if (!template) throw new Error(t('error.templateMissing'))
 
         // 构建上下文章节列表（清洗 + 截断，防止 prompt 膨胀）
         const prevAll = [...existingBlueprints, ...newBlueprints]

@@ -34,7 +34,7 @@ async function callLLMForPostProcess(
   options?: { responseFormat?: { type: string } },
 ): Promise<string> {
   const llmStore = useLLMStore.getState()
-  if (!llmStore.defaultModelId) throw new Error('未配置默认 AI 模型')
+  if (!llmStore.defaultModelId) throw new Error(t('error.noDefaultModel'))
 
   const modelId = llmStore.defaultModelId
   const model = llmStore.models.find(m => m.id === modelId)
@@ -459,17 +459,17 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
   async execute({ callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const refinedDraftText = this.params.draftContent
-    if (!refinedDraftText) throw new Error('没有定稿内容')
+    if (!refinedDraftText) throw new Error(t('error.noFinalizedContent'))
 
     callbacks.log('\n===== 开始定稿与后处理分析 =====')
 
     // 1. 获取对应草稿并将库内状态变更为 finalized（同时同步定稿期可能微调过的正文）
     const { parseDraftMeta } = await import('../chapter-workflow')
     const dbDraft = await parseDraftMeta(this.params.draftPath)
-    if (!dbDraft) throw new Error('内部状态流转异常：无法在数据库中定位该草稿源文件或解析路径版本')
+    if (!dbDraft) throw new Error(t('error.draftStateFlow'))
 
     await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, refinedDraftText.length)
     await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', refinedDraftText.length)

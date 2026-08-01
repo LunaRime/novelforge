@@ -1,4 +1,5 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
@@ -35,7 +36,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
 
   async execute({ callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const config = project.novelConfig
     const label = FIELD_LABELS[this.fieldKey]

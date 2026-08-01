@@ -21,10 +21,10 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
 
   async execute({ callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const draft = this.params.draftContent
-    if (!draft) throw new Error('无草稿内容')
+    if (!draft) throw new Error(t('error.noDraft'))
 
     callbacks.log('准备启动一致性审查引擎...')
     callbacks.log('  检索全书设定档案...')
@@ -49,7 +49,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     const worldBuilding = await this.readWorldBuilding()
 
     const template = getPromptTemplate('consistency_check')
-    if (!template) throw new Error('未找到审稿模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '审稿'))
 
     const promptBuilder = new ReviewPromptBuilder(template)
       .withChapterContent(draft)
@@ -69,7 +69,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
 
     const { parseDraftMeta } = await import('../chapter-workflow')
     const baseDraft = await parseDraftMeta(this.params.draftPath)
-    if (!baseDraft) throw new Error('找不到基准草稿版本')
+    if (!baseDraft) throw new Error(t('error.noBaseDraft'))
     const baseVersion = baseDraft.version
 
     const revIndex = await ipc.invoke('db:review-next-index', baseDraft.id)

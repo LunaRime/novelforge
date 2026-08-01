@@ -280,7 +280,7 @@ export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDef
           const { useProjectStore } = await import('../../stores/project-store')
           const { ipc } = await import('../ipc-client')
           const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error('未打开项目')
+          if (!project) throw new Error(t('error.noProject'))
 
           // 使用数据库定稿源
           const draftMeta = await ipc.invoke('db:draft-get-finalized', chapterNumber)

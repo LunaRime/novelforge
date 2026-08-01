@@ -4,6 +4,7 @@
  * 不调用 LLM，纯数据分析。
  */
 
+import { t } from '../../../shared/locale'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { loadDirectoryBlueprints } from '../directory-workflow'
@@ -12,7 +13,7 @@ import { generateVerificationReport, type VerificationReport } from '../../bluep
 export class VerifyBlueprintsCommand extends BaseWorkflowCommand<VerificationReport> {
   async execute({ callbacks }: CommandExecuteParams): Promise<VerificationReport> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error('未打开项目')
+    if (!project) throw new Error(t('error.noProject'))
 
     const totalChapters = project.novelConfig.totalChapters
 

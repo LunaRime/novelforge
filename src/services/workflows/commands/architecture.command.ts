@@ -1,4 +1,5 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ArchitecturePromptBuilder } from '../../prompts/prompt-builder'
@@ -28,7 +29,7 @@ async function savePartialData(projectPath: string, data: PartialArchData): Prom
 
 function getNovelConfig(): { project: NonNullable<ReturnType<typeof useProjectStore.getState>['currentProject']>; config: NovelConfig } {
   const project = useProjectStore.getState().currentProject
-  if (!project) throw new Error('未打开项目')
+  if (!project) throw new Error(t('error.noProject'))
   return { project, config: project.novelConfig }
 }
 
@@ -56,7 +57,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     callbacks.log('正在调度配置专家 AI，准备解析您的脑洞...')
 
     const template = getPromptTemplate('generate_global_config')
-    if (!template) throw new Error('未找到 generate_global_config 模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'generate_global_config'))
 
     const promptBuilder = new ArchitecturePromptBuilder(template)
       .withUserIdea(this.idea)
@@ -74,7 +75,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     try {
       parsed = this.parseJSON<Partial<NovelConfig>>(resultRaw)
     } catch (e) {
-      throw new Error('AI 返回的内容无法解析为 JSON，请重试或缩短输入。详细信息: ' + String(e))
+      throw new Error(t('error.jsonParse').replace('{error}', String(e)))
     }
 
     // 防御：LLM 常常将长文本字段错误地生成为对象或数组
@@ -120,7 +121,7 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
     callbacks.log('生成故事前提...')
 
     const template = getPromptTemplate('premise')
-    if (!template) throw new Error('未找到 premise 模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'premise'))
 
     const promptBuilder = new ArchitecturePromptBuilder(template)
       .withGenre(config.genre)
@@ -137,8 +138,8 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
       .withReferenceWorks(config.referenceWorks || '')
 
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
-    if (!result.trim()) throw new Error('故事前提生成失败，AI 返回空内容')
-    if (context.cancelled) throw new Error('工作流已取消')
+    if (!result.trim()) throw new Error(t('error.premiseEmpty'))
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
     const content = `# 故事前提\n\n${result}\n`
     await writeArchToDb('premise', content)
@@ -161,12 +162,12 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
     const premise_result = core?.premise || ''
 
     if (!premise_result || premise_result.includes('待生成') || premise_result.length < 50) {
-      throw new Error('故事前提尚未生成或内容不完整，请返回勾选生成')
+      throw new Error(t('error.premiseIncomplete'))
     }
 
     callbacks.log('生成角色图谱...')
     const template = getPromptTemplate('character_dynamics')
-    if (!template) throw new Error('未找到 character_dynamics 模板')
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'character_dynamics'))
 
     const promptBuilder = new ArchitecturePromptBuilder(template)
       .withCoreSeed(premise_result)
@@ -180,8 +181,8 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
       .withReferenceWorks(config.referenceWorks || '')
 
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
-    if (!result.trim()) throw new Error('角色图谱生成失败')
-    if (context.cancelled) throw new Error('工作流已取消')
+    if (!result.trim()) throw new Error(t('error.charactersFailed'))
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
     await writeArchToDb('charactersArch', `# 角色图谱\n\n${result}\n`)
 
@@ -207,12 +208,12 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     const premise_result = core?.premise || ''
 
     if (!premise_result || premise_result.includes('待生成') || premise_result.length < 50) {
-      throw new Error('故事前提尚未生成或内容不完整，请返回勾选生成')
+      throw new Error(t('error.premiseIncomplete'))
     }
 
     callbacks.log('生成世界观...')
     const template = getPromptTemplate('world_building')
-    if (!template) throw new Error('模板丢失')
+    if (!template) throw new Error(t('error.templateMissing'))
 
     const promptBuilder = new ArchitecturePromptBuilder(template)
       .withCoreSeed(premise_result)
@@ -224,7 +225,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
       .withStepGuidance(((context.data.stepGuidance as Record<string, string>) || {}).worldbuilding || '')
 
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
-    if (context.cancelled) throw new Error('工作流已取消')
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
     await writeArchToDb('worldbuilding', `# 世界观\n\n${result}\n`)
 
@@ -251,13 +252,13 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     const char_dyn = core?.charactersArch || ''
     const world_b = core?.worldbuilding || ''
 
-    if (!premise || premise.includes('待生成')) throw new Error('故事前提未生成')
-    if (!char_dyn || char_dyn.includes('待生成')) throw new Error('角色图谱未生成')
-    if (!world_b || world_b.includes('待生成')) throw new Error('世界观未生成')
+    if (!premise || premise.includes('待生成')) throw new Error(t('error.notGenerated').replace('{name}', t('arch.storyPremise')))
+    if (!char_dyn || char_dyn.includes('待生成')) throw new Error(t('error.notGenerated').replace('{name}', t('arch.characterMap')))
+    if (!world_b || world_b.includes('待生成')) throw new Error(t('error.notGenerated').replace('{name}', t('arch.worldBuilding')))
 
     callbacks.log('生成情节大纲...')
     const template = getPromptTemplate('synopsis')
-    if (!template) throw new Error('模板丢失')
+    if (!template) throw new Error(t('error.templateMissing'))
 
     const { getPlotStructureGuide, getNarrativePOVLabel } = await import('../architecture-workflow')
     const guide = getPlotStructureGuide(config.plotStructure || 'three_act', config.totalChapters)
@@ -276,7 +277,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       .withStepGuidance(((context.data.stepGuidance as Record<string, string>) || {}).synopsis || '')
 
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
-    if (context.cancelled) throw new Error('工作流已取消')
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
     await writeArchToDb('synopsis', `# 情节大纲\n\n${result}\n`)
 

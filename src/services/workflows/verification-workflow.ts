@@ -28,7 +28,7 @@ export function createVerificationWorkflow(
       description: '从数据库加载已有蓝图',
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const project = useProjectStore.getState().currentProject
-        if (!project) throw new Error('未打开项目')
+        if (!project) throw new Error(t('error.noProject'))
 
         // 加载架构（用于补全时提供上下文）
         try {
@@ -103,13 +103,13 @@ export function createVerificationWorkflow(
 
   return {
     type: 'post_process',
-    title: params.autoFill ? '🔍 蓝图校验与补全' : '🔍 蓝图完整性校验',
+    title: params.autoFill ? t('workflow.verifyTitle') : t('workflow.verifyTitleOnly'),
     steps,
     onComplete: {
       mode: 'silent',
       message: params.autoFill
-        ? '✅ 蓝图校验与补全完成'
-        : '✅ 蓝图完整性校验完成',
+        ? t('workflow.verifyDone')
+        : t('workflow.verifyDoneOnly'),
     },
   }
 }

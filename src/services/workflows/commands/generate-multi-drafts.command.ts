@@ -42,7 +42,7 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
   async execute({ callbacks }: CommandExecuteParams): Promise<DraftCandidate[]> {
     const count = Math.min(this.params.count || 2, 3)
     const template = getPromptTemplate('first_chapter_draft')
-    if (!template) throw new Error('模板丢失')
+    if (!template) throw new Error(t('error.templateMissing'))
 
     callbacks.log(`并行生成 ${count} 个草稿版本...`)
 

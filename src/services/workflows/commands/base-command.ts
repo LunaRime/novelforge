@@ -1,4 +1,5 @@
 import type { WorkflowContext, StepCallbacks, WorkflowStep } from '../../../stores/workflow-store'
+import { t } from '../../../shared/locale'
 import { useLLMStore } from '../../../stores/llm-store'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
@@ -31,7 +32,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
-    if (!llmStore.defaultModelId) throw new Error('未配置默认 AI 模型')
+    if (!llmStore.defaultModelId) throw new Error(t('error.noDefaultModel'))
 
     const modelId = llmStore.defaultModelId
     const model = llmStore.models.find(m => m.id === modelId)
@@ -51,7 +52,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             clearInterval(cancelCheckTimer!)
             cancelCheckTimer = null
             llmStore.cancelGeneration(streamRequestId).catch(() => { })
-            reject(new Error('工作流已取消'))
+            reject(new Error(t('error.workflowCancelled')))
           }
         }, 200)
       }
@@ -111,7 +112,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             // 取消后不 resolve，让 reject 生效
             if (context?.cancelled) {
               logLLMCall(false, '工作流已取消')
-              reject(new Error('工作流已取消'))
+              reject(new Error(t('error.workflowCancelled')))
               return
             }
             // 更新 token 用量（如果 provider 提供了 usage）
@@ -149,7 +150,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           llmStore.cancelGeneration(reqId).catch(() => { })
           cleanup()
           logLLMCall(false, '工作流已取消')
-          reject(new Error('工作流已取消'))
+          reject(new Error(t('error.workflowCancelled')))
         }
       }).catch(err => {
         cleanup()
