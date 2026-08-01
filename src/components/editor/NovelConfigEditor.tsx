@@ -9,7 +9,7 @@ import { Button } from '../ui/Button'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -138,20 +138,26 @@ export default function NovelConfigEditor() {
           <Section title={t('novelConfig.basicInfo')}>
             <div className="grid grid-cols-3 gap-4">
               <Field label={t('novelConfig.type')}>
-                <NativeSelect value={config.genre} onChange={(e) => update('genre', e.target.value)}>
-                  {genres.map((g) => <option key={g} value={g}>{t(GENRE_KEYS[g] ?? 'genre.fantasy')}</option>)}
-                </NativeSelect>
+                <Select value={config.genre} onValueChange={(v) => update('genre', v)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {genres.map((g) => <SelectItem key={g} value={g}>{t(GENRE_KEYS[g] ?? 'genre.fantasy')}</SelectItem>)}
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label={t('novelConfig.subType')}>
                 <Input value={config.subGenre} onChange={(e) => update('subGenre', e.target.value)} placeholder={t('novelConfig.subTypePlaceholder')} />
               </Field>
               <Field label={t('novelConfig.audience')}>
-                <NativeSelect value={config.targetAudience} onChange={(e) => update('targetAudience', e.target.value)}>
-                  <option value="男频">{t('novelConfig.audienceMale')}</option>
-                  <option value="女频">{t('novelConfig.audienceFemale')}</option>
-                  <option value="双性向">{t('novelConfig.audienceBoth')}</option>
-                  <option value="全龄">{t('novelConfig.audienceAll')}</option>
-                </NativeSelect>
+                <Select value={config.targetAudience} onValueChange={(v) => update('targetAudience', v)}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="男频">{t('novelConfig.audienceMale')}</SelectItem>
+                    <SelectItem value="女频">{t('novelConfig.audienceFemale')}</SelectItem>
+                    <SelectItem value="双性向">{t('novelConfig.audienceBoth')}</SelectItem>
+                    <SelectItem value="全龄">{t('novelConfig.audienceAll')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
             </div>
             <div className="grid grid-cols-4 gap-4 mt-4">
@@ -163,14 +169,17 @@ export default function NovelConfigEditor() {
                 t('novelConfig.structureTip5'),
                 t('novelConfig.structureTip6'),
               ]}>
-                <NativeSelect value={config.plotStructure || 'three_act'} onChange={(e) => update('plotStructure', e.target.value as NovelConfig['plotStructure'])}>
-                  <option value="three_act">{t('novelConfig.structureThreeAct')}</option>
-                  <option value="heros_journey">{t('novelConfig.structureHerosJourney')}</option>
-                  <option value="save_the_cat">{t('novelConfig.structureSaveTheCat')}</option>
-                  <option value="kishotenketsu">{t('novelConfig.structureKishotenketsu')}</option>
-                  <option value="multi_thread">{t('novelConfig.structureMultiThread')}</option>
-                  <option value="freeform">{t('novelConfig.structureFreeform')}</option>
-                </NativeSelect>
+                <Select value={config.plotStructure || 'three_act'} onValueChange={(v) => update('plotStructure', v as NovelConfig['plotStructure'])}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="three_act">{t('novelConfig.structureThreeAct')}</SelectItem>
+                    <SelectItem value="heros_journey">{t('novelConfig.structureHerosJourney')}</SelectItem>
+                    <SelectItem value="save_the_cat">{t('novelConfig.structureSaveTheCat')}</SelectItem>
+                    <SelectItem value="kishotenketsu">{t('novelConfig.structureKishotenketsu')}</SelectItem>
+                    <SelectItem value="multi_thread">{t('novelConfig.structureMultiThread')}</SelectItem>
+                    <SelectItem value="freeform">{t('novelConfig.structureFreeform')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label={t('novelConfig.pov')} tipItems={[
                 t('novelConfig.povTip1'),
@@ -178,12 +187,15 @@ export default function NovelConfigEditor() {
                 t('novelConfig.povTip3'),
                 t('novelConfig.povTip4'),
               ]}>
-                <NativeSelect value={config.narrativePOV || 'third_limited'} onChange={(e) => update('narrativePOV', e.target.value as NovelConfig['narrativePOV'])}>
-                  <option value="first_person">{t('novelConfig.povFirstPerson')}</option>
-                  <option value="third_limited">{t('novelConfig.povThirdLimited')}</option>
-                  <option value="third_omniscient">{t('novelConfig.povThirdOmniscient')}</option>
-                  <option value="multi_pov">{t('novelConfig.povMultiPov')}</option>
-                </NativeSelect>
+                <Select value={config.narrativePOV || 'third_limited'} onValueChange={(v) => update('narrativePOV', v as NovelConfig['narrativePOV'])}>
+                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="first_person">{t('novelConfig.povFirstPerson')}</SelectItem>
+                    <SelectItem value="third_limited">{t('novelConfig.povThirdLimited')}</SelectItem>
+                    <SelectItem value="third_omniscient">{t('novelConfig.povThirdOmniscient')}</SelectItem>
+                    <SelectItem value="multi_pov">{t('novelConfig.povMultiPov')}</SelectItem>
+                  </SelectContent>
+                </Select>
               </Field>
               <Field label={t('novelConfig.totalChapters')}>
                 <Input

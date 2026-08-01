@@ -17,7 +17,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 
 interface Props {
   isOpen: boolean
@@ -264,14 +264,17 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('chapter.role')}</Label>
-                  <NativeSelect value={role} onChange={(e) => setRole(e.target.value)}>
-                    {(() => {
-                      const labels = t('chapter.roles').split(', ')
-                      return ROLE_VALUES.map((val, i) => (
-                        <option key={val} value={val}>{labels[i] || val}</option>
-                      ))
-                    })()}
-                  </NativeSelect>
+                  <Select value={role} onValueChange={setRole}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {(() => {
+                        const labels = t('chapter.roles').split(', ')
+                        return ROLE_VALUES.map((val, i) => (
+                          <SelectItem key={val} value={val}>{labels[i] || val}</SelectItem>
+                        ))
+                      })()}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>{t('chapter.characters')}</Label>

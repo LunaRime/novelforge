@@ -63,15 +63,16 @@ export const useBlueprintSortStore = create<BlueprintSortState>()((set) => ({
 }))
 
 /** 排序键的显示标签 */
+/** 排序键 → i18n key（显示时 t() 取当前语言，切换即时生效） */
 export const SORT_KEY_LABELS: Record<BlueprintSortKey, string> = {
-  chapter_number: '按章节号',
-  priority: '按优先级',
-  role: '按章节定位',
-  custom: '自定义顺序',
+  chapter_number: 'sort.byChapter',
+  priority: 'sort.byPriority',
+  role: 'sort.byRole',
+  custom: 'sort.custom',
 }
 
-/** 排序方向的显示标签 */
+/** 排序方向 → i18n key（显示时 t() 取当前语言） */
 export const SORT_DIRECTION_LABELS: Record<SortDirection, string> = {
-  asc: '升序',
-  desc: '降序',
+  asc: 'sort.asc',
+  desc: 'sort.desc',
 }

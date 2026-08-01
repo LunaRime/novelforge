@@ -12,7 +12,8 @@ import {
   SORT_DIRECTION_LABELS,
 } from '../../stores/blueprint-sort-store'
 import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
-import { t } from '../../shared/locale'
+import { t, type TextKey } from '../../shared/locale'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 
 const SORT_OPTIONS: BlueprintSortKey[] = [
   'chapter_number',
@@ -32,24 +33,23 @@ export const BlueprintSortBar: React.FC = () => {
         <ArrowUpDown size={12} />
         {t('sort.label')}
       </span>
-      <select
+      <Select
         value={config.key}
-        onChange={(e) => setSortKey(e.target.value as BlueprintSortKey)}
-        className="bg-[var(--color-bg)] border border-[var(--color-border)] rounded-[var(--radius-sm)] px-1.5 py-0.5 text-xs
-                   text-[var(--color-text)] cursor-pointer hover:border-[var(--color-accent)]
-                   focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-        title={t('sort.chooseMethod')}
+        onValueChange={(v) => setSortKey(v as BlueprintSortKey)}
       >
-        {SORT_OPTIONS.map((key) => (
-          <option key={key} value={key}>
-            {SORT_KEY_LABELS[key]}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-xs" title={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {SORT_OPTIONS.map((key) => (
+            <SelectItem key={key} value={key}>
+              {t(SORT_KEY_LABELS[key] as TextKey)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
       <button
         onClick={toggleDirection}
         className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-        title={t('sort.current').replace('{label}', SORT_DIRECTION_LABELS[config.direction])}
+        title={t('sort.current').replace('{label}', t(SORT_DIRECTION_LABELS[config.direction] as TextKey))}
         aria-label={t('sort.toggleDirection')}
         style={{ color: 'var(--color-text-muted)' }}
       >

@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
-  Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
+  Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
   File, ExternalLink, RefreshCw, Loader2, Download, LogOut,
 } from 'lucide-react'
 import PromptSettings from './PromptSettings'
@@ -18,7 +18,7 @@ import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../sh
 import type { TextKey } from '../../shared/locale'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
 import { Switch } from '../ui/Switch'
@@ -480,27 +480,27 @@ function ModelForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label>{t('form.provider')}</Label>
-          <NativeSelect
-            value={model.provider}
-            onChange={(e) => handleProviderChange(e.target.value as ModelProfile['provider'])}
-          >
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="gemini">Google Gemini</option>
-            <option value="ollama">{t('settings.providerOllama')}</option>
-            <option value="bigmodel">{t('settings.providerBigModel')}</option>
-            <option value="custom">{t('settings.providerCustom')}</option>
-          </NativeSelect>
+          <Select value={model.provider} onValueChange={(v) => handleProviderChange(v as ModelProfile['provider'])}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="deepseek">DeepSeek</SelectItem>
+              <SelectItem value="gemini">Google Gemini</SelectItem>
+              <SelectItem value="ollama">{t('settings.providerOllama')}</SelectItem>
+              <SelectItem value="bigmodel">{t('settings.providerBigModel')}</SelectItem>
+              <SelectItem value="custom">{t('settings.providerCustom')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label>{t('form.protocol')}</Label>
-          <NativeSelect
-            value={model.protocol}
-            onChange={(e) => up('protocol', e.target.value as 'openai' | 'gemini')}
-          >
-            <option value="openai">OpenAI</option>
-            <option value="gemini">Gemini</option>
-          </NativeSelect>
+          <Select value={model.protocol} onValueChange={(v) => up('protocol', v as 'openai' | 'gemini')}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="gemini">Gemini</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -533,15 +533,15 @@ function ModelForm({
 
         {/* 有预设模型 且 未切到手动输入 → 显示下拉 */}
         {presetModels.length > 0 && !customModelName ? (
-          <NativeSelect
-            value={selectValue}
-            onChange={(e) => handleModelSelect(e.target.value)}
-          >
-            {presetModels.map((m) => (
-              <option key={m.name} value={m.name}>{m.name}</option>
-            ))}
-            <option value="__custom__">{t('form.manualOption')}</option>
-          </NativeSelect>
+          <Select value={selectValue} onValueChange={handleModelSelect}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {presetModels.map((m) => (
+                <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+              ))}
+              <SelectItem value="__custom__">{t('form.manualOption')}</SelectItem>
+            </SelectContent>
+          </Select>
         ) : (
           <div>
             <Input
@@ -708,13 +708,13 @@ function ProxySection() {
         >
           <div>
             <Label>{t('form.proxyType')}</Label>
-            <NativeSelect
-              value={proxy.type}
-              onChange={(e) => setProxy({ ...proxy, type: e.target.value as 'http' | 'socks5' })}
-            >
-              <option value="http">HTTP</option>
-              <option value="socks5">SOCKS5</option>
-            </NativeSelect>
+            <Select value={proxy.type} onValueChange={(v) => setProxy({ ...proxy, type: v as 'http' | 'socks5' })}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="http">HTTP</SelectItem>
+                <SelectItem value="socks5">SOCKS5</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="grid grid-cols-[1fr_120px] gap-3">
             <div>
@@ -751,7 +751,7 @@ function ProxySection() {
 
 // ==================== 编辑器设置 ====================
 
-/** 字体下拉菜单（界面字体 + 写作字体共用） */
+/** 字体下拉菜单（界面字体 + 写作字体共用，现代化 Radix Select） */
 function FontSelect({
   value,
   onChange,
@@ -760,105 +760,35 @@ function FontSelect({
   onChange: (id: FontId) => void
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const ref = useRef<HTMLDivElement>(null)
   const current = FONT_OPTIONS.find((o) => o.id === value) ?? FONT_OPTIONS[0]
   // 字体名优先走 i18n（labelKey 有则翻译，否则用内置中文 fallback）
   const currentLabel = current.labelKey ? t(current.labelKey as TextKey) : current.label
 
-  // 点击外部关闭
-  useEffect(() => {
-    if (!open) return
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
-        setOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [open])
-
   return (
-    <div ref={ref} className="relative">
-      {/* 触发按鈕 */}
-      <button
-        onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-2 w-full px-3 h-9 rounded-lg transition-colors text-left"
-        style={{
-          border: '1px solid var(--color-border)',
-          backgroundColor: open ? 'var(--color-hover)' : 'var(--color-panel)',
-          color: 'var(--color-text)',
-        }}
-      >
+    <Select value={value} onValueChange={(v) => onChange(v as FontId)}>
+      <SelectTrigger className="w-full">
         {/* 当前字体预览 */}
-        <span
-          className="flex-1 text-sm truncate"
-          style={{ fontFamily: current.family }}
-        >
+        <span className="flex-1 truncate text-left" style={{ fontFamily: current.family }}>
           {currentLabel}
         </span>
-        <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {current.preview}
-        </span>
-        <ChevronDown
-          size={13}
-          className="flex-shrink-0 transition-transform"
-          style={{
-            color: 'var(--color-text-muted)',
-            transform: open ? 'rotate(180deg)' : 'rotate(0deg)',
-          }}
-        />
-      </button>
-
-      {/* 下拉选项列表 */}
-      {open && (
-        <div
-          className="absolute left-0 right-0 top-[calc(100%+4px)] z-[var(--z-modal)] rounded-xl overflow-hidden"
-          style={{
-            border: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-panel)',
-            boxShadow: 'var(--shadow-lg)',
-          }}
-        >
-          {FONT_OPTIONS.map((opt) => (
-            <button
-              key={opt.id}
-              onClick={() => { onChange(opt.id); setOpen(false) }}
-              className="w-full text-left px-3 py-2.5 flex items-center gap-3 transition-colors hover:bg-[var(--color-hover)]"
-              style={{
-                backgroundColor: value === opt.id
-                  ? 'color-mix(in srgb, var(--color-accent) 8%, transparent)'
-                  : 'transparent',
-              }}
-            >
-              {/* 选中标记 */}
-              <span
-                className="w-3.5 h-3.5 rounded-full flex-shrink-0 flex items-center justify-center"
-                style={{
-                  backgroundColor: value === opt.id ? 'var(--color-accent)' : 'transparent',
-                  border: value === opt.id ? 'none' : '1.5px solid var(--color-border)',
-                }}
-              >
-                {value === opt.id && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-white" />
-                )}
-              </span>
-
+        <span className="text-xs flex-shrink-0 opacity-60">{current.preview}</span>
+      </SelectTrigger>
+      <SelectContent className="w-[var(--radix-select-trigger-width)]">
+        {FONT_OPTIONS.map((opt) => (
+          <SelectItem key={opt.id} value={opt.id} className="py-2">
+            <div className="flex items-center gap-3 w-full">
               {/* 字体名 + 描述 */}
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <span className="text-xs font-medium" style={{ color: 'var(--color-text)', fontFamily: opt.family }}>
+                  <span className="text-xs font-medium" style={{ fontFamily: opt.family }}>
                     {opt.labelKey ? t(opt.labelKey as TextKey) : opt.label}
                   </span>
-                  <span className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
-                    {opt.labelEn}
-                  </span>
+                  <span className="text-[0.65rem] opacity-60">{opt.labelEn}</span>
                 </div>
-                <p className="text-[0.65rem] truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                <p className="text-[0.65rem] truncate opacity-60">
                   {opt.descKey ? t(opt.descKey as TextKey) : opt.desc}
                 </p>
               </div>
-
               {/* 预览文字 */}
               <span
                 className="text-sm flex-shrink-0"
@@ -866,11 +796,11 @@ function FontSelect({
               >
                 {opt.preview}
               </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
+            </div>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   )
 }
 
@@ -890,16 +820,18 @@ function EditorSection() {
             </p>
           </div>
         </div>
-        <NativeSelect
-          value={locale}
-          onChange={(e) => switchLocale(e.target.value as SupportedLocale)}
-        >
-          {SUPPORTED_LOCALES.map((loc) => (
-            <option key={loc} value={loc}>
-              {loc === 'zh-CN' ? '🇨🇳' : loc === 'en-US' ? '🇺🇸' : '🇷🇺'} {LOCALE_LABELS[loc]} ({loc})
-            </option>
-          ))}
-        </NativeSelect>
+        <Select value={locale} onValueChange={(v) => switchLocale(v as SupportedLocale)}>
+          <SelectTrigger className="w-full">
+            <SelectValue placeholder={t('settings.language')} />
+          </SelectTrigger>
+          <SelectContent>
+            {SUPPORTED_LOCALES.map((loc) => (
+              <SelectItem key={loc} value={loc}>
+                {loc === 'zh-CN' ? '🇨🇳' : loc === 'en-US' ? '🇺🇸' : '🇷🇺'} {LOCALE_LABELS[loc]} ({loc})
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
 
       {/* 界面字体 */}
