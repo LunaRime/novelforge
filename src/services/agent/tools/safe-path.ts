@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 /**
  * 路径安全校验工具
  *
@@ -54,7 +55,7 @@ export function validatePath(
   relativePath: string,
 ): { valid: true; fullPath: string } | { valid: false; error: string } {
   if (!relativePath) {
-    return { valid: false, error: '缺少文件路径参数' }
+    return { valid: false, error: t('error.missingFilePath') }
   }
 
   const result = safePath(projectRoot, relativePath)

@@ -1,6 +1,7 @@
 /**
  * read_project_state — 读取项目全局状态
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { useProjectStore } from '../../../stores/project-store'
 import { ipc } from '../../ipc-client'
@@ -29,7 +30,7 @@ export const readProjectStateTool = buildAgentTool({
   execute: async (args) => {
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     const includeConfig = (args.include_config as boolean) !== false

@@ -7,6 +7,7 @@
 import React, { useState } from 'react'
 import { AlertTriangle, CheckCircle, XCircle, Sparkles, RefreshCw } from 'lucide-react'
 import type { VerificationReport, BlueprintGap } from '../../services/blueprint-verification-service'
+import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -20,11 +21,11 @@ interface VerificationPanelProps {
   onClose: () => void
 }
 
-/** 严重程度配置 */
-const SEVERITY_CONFIG: Record<string, { icon: React.ReactNode; color: string; label: string }> = {
-  ok: { icon: <CheckCircle size={14} />, color: 'text-green-500', label: '完整' },
-  warning: { icon: <AlertTriangle size={14} />, color: 'text-yellow-500', label: '有缺口' },
-  critical: { icon: <XCircle size={14} />, color: 'text-red-500', label: '严重缺失' },
+/** 严重程度配置（labelKey 由组件渲染时 t() 取当前语言） */
+const SEVERITY_CONFIG: Record<string, { icon: React.ReactNode; color: string; labelKey: TextKey }> = {
+  ok: { icon: <CheckCircle size={14} />, color: 'text-green-500', labelKey: 'verification.ok' },
+  warning: { icon: <AlertTriangle size={14} />, color: 'text-yellow-500', labelKey: 'verification.hasGaps' },
+  critical: { icon: <XCircle size={14} />, color: 'text-red-500', labelKey: 'verification.critical' },
 }
 
 export const VerificationPanel: React.FC<VerificationPanelProps> = ({
@@ -69,7 +70,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
           {severityConf && (
             <Badge variant="outline" className={`text-xs ${severityConf.color}`}>
               {severityConf.icon}
-              <span className="ml-1">{severityConf.label}</span>
+              <span className="ml-1">{t(severityConf.labelKey)}</span>
             </Badge>
           )}
         </div>
@@ -140,13 +141,13 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                         >
                           <Sparkles size={10} />
                           {fillingGaps.has(gap.missingChapterNumbers[0])
-                            ? '补全中...'
-                            : '补全'}
+                            ? t('verification.fillingGap')
+                            : t('verification.fillGap')}
                         </Button>
                       </div>
                       {gap.context && (
                         <div className="text-muted-foreground max-h-20 overflow-hidden text-ellipsis">
-                          上下文: {gap.context.slice(0, 150)}
+                          {t('verification.context').replace('{text}', gap.context.slice(0, 150))}
                           {gap.context.length > 150 && '...'}
                         </div>
                       )}
@@ -160,11 +161,11 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
             {report.inconsistentRoles.length > 0 && (
               <div className="mb-3">
                 <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                  角色定位不一致
+                  {t('verification.roleMismatch')}
                 </h4>
                 {report.inconsistentRoles.map((ir, idx) => (
                   <div key={idx} className="text-xs text-muted-foreground pl-2">
-                    • 第{ir.chapter}章: {ir.role} → 建议 {ir.expectedRole}
+                    {t('verification.roleLine').replace('{n}', String(ir.chapter)).replace('{role}', ir.role).replace('{expected}', ir.expectedRole)}
                   </div>
                 ))}
               </div>
@@ -172,7 +173,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
 
             {report.missingTitles.length > 0 && (
               <div className="mb-3 text-xs text-muted-foreground">
-                缺失标题: 第 {report.missingTitles.join(', ')} 章
+                {t('verification.missingTitles').replace('{n}', report.missingTitles.join(', '))}
               </div>
             )}
 
@@ -187,7 +188,9 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                   disabled={fillingAll}
                 >
                   <Sparkles size={12} />
-                  {fillingAll ? '正在全部补全...' : `全部补全（${report.gaps.reduce((s, g) => s + g.gapSize, 0)} 章）`}
+                  {fillingAll
+                    ? t('verification.fillingAll')
+                    : t('verification.fillAll').replace('{n}', String(report.gaps.reduce((s, g) => s + g.gapSize, 0)))}
                 </Button>
               </div>
             )}

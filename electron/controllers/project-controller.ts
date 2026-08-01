@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from 'electron'
+import { t } from '../../src/shared/locale'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -97,7 +98,7 @@ export function registerProjectController() {
   ipcMain.handle('project:open', async (_event, projectPath: string) => {
     try {
       if (!fs.existsSync(projectPath)) {
-        return { success: false, project: null, error: '目录不存在' }
+        return { success: false, project: null, error: t('error.dirNotFound') }
       }
 
       // TODO: 这里可以加入一个检测旧版项目的逻辑（如果有 旧的 01_novel_config.json 等），提示不支持旧格式。
@@ -115,7 +116,7 @@ export function registerProjectController() {
       // 组装返回给前端的数据结构
       const updatedCoreData = ProjectCoreRepository.get()
       if (!updatedCoreData) {
-        return { success: false, project: null, error: '无法读取项目配置，数据库可能未正确初始化' }
+        return { success: false, project: null, error: t('error.projectConfigReadFailed') }
       }
       const projectData: ProjectData = {
         id: 'main',
@@ -154,7 +155,7 @@ export function registerProjectController() {
   // 注意：novelConfig 字段与 DB project_core 列的映射关系（前后端字段名不同）
   ipcMain.handle('project:save', async (_event, _projectId: string, data: Partial<ProjectData>) => {
     try {
-      if (!data.path) return { success: false, error: '缺少项目路径' }
+      if (!data.path) return { success: false, error: t('error.missingProjectPath') }
 
       // 收集所有需要更新的字段，合并为单次 UPDATE
       const updateData: Partial<import('../repositories/project-core-repository').ProjectCoreData> = {}
@@ -237,11 +238,11 @@ export function registerProjectController() {
   ipcMain.handle('project:delete-folder', async (_event, projectPath: string) => {
     try {
       if (!fs.existsSync(projectPath)) {
-        return { success: false, error: '项目文件夹不存在' }
+        return { success: false, error: t('error.projectFolderNotFound') }
       }
       const stat = fs.statSync(projectPath)
       if (!stat.isDirectory()) {
-        return { success: false, error: '路径不是文件夹' }
+        return { success: false, error: t('error.notAFolder') }
       }
       fs.rmSync(projectPath, { recursive: true, force: true })
       // 同时从最近列表中移除

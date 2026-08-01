@@ -4,6 +4,7 @@
  * 让 AI 可以将生成的内容、提取的要点、角色设定等主动存入向量知识库，
  * 供后续的语义搜索和 RAG 管道使用。
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -48,14 +49,14 @@ export const indexContentTool = buildAgentTool({
       return {
         success: false,
         content: '',
-        error: 'content 和 file_name 参数不能为空',
+        error: t('error.contentFileNameEmpty'),
       }
     }
 
     try {
       const project = useProjectStore.getState().currentProject
       if (!project) {
-        return { success: false, content: '', error: '未打开项目' }
+        return { success: false, content: '', error: t('error.noProject') }
       }
 
       const result = await ipc.invoke(

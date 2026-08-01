@@ -1,6 +1,7 @@
 /**
  * update_config — 更新小说配置
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -33,12 +34,12 @@ export const updateConfigTool = buildAgentTool({
     const value = args.value as string
 
     if (!field || value === undefined) {
-      return { success: false, content: '', error: '缺少 field 或 value 参数' }
+      return { success: false, content: '', error: t('error.missingFieldValue') }
     }
 
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     // 构造更新数据

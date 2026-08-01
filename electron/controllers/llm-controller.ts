@@ -1,4 +1,5 @@
 import { ipcMain, BrowserWindow } from 'electron'
+import { t } from '../../src/shared/locale'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
 import { LLMFactory } from '../llm/llm-factory'
@@ -69,7 +70,7 @@ export function registerLLMController() {
       async () => {
         applyProxyConfig()
         const model = getModelConfig(request.modelId)
-        if (!model) return { success: false, content: '', error: '未找到模型配置' }
+        if (!model) return { success: false, content: '', error: t('error.modelConfigNotFound') }
 
         const provider = LLMFactory.getProvider(model)
         return await provider.generate(model, request.messages, {
