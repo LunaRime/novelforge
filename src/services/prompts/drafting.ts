@@ -1,9 +1,10 @@
 import type { PromptTemplate } from "../prompt-templates";
+import { t } from '../../shared/locale'
 
 export const draftingPrompts: PromptTemplate[] = [
   {
     key: 'first_chapter_draft',
-    name: '第一章草稿',
+    name: t('prompt.name.firstDraft'),
     description: '生成小说第一章的完整正文',
     systemRole: '你是一位笔力精湛的顶尖网文小说家，擅长撰写引人入胜、让读者欲罢不能的商业网文正文。',
     variables: {
@@ -54,7 +55,7 @@ export const draftingPrompts: PromptTemplate[] = [
   },
   {
     key: 'next_chapter_draft',
-    name: '后续章节草稿',
+    name: t('prompt.name.nextDraft'),
     description: '基于上下文和章节蓝图生成后续章节',
     systemRole: '你是一位笔力精湛的顶尖网文小说家，擅长撰写引人入胜、让读者欲罢不能的商业网文正文。',
     variables: {

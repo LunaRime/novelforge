@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 /**
  * SpawnReviewersCommand — 并行发起多个评审者 AI 实例
  *
@@ -36,7 +37,7 @@ export interface ReviewerOutput {
 export const DEFAULT_PERSPECTIVES: ReviewerPerspective[] = [
   {
     id: 'plot_logic',
-    name: '情节逻辑性',
+    name: t('workflow.reviewerPlotLogic'),
     systemPrompt: `你是一位严格的情节逻辑审查员。请从以下维度评审草稿：
 1. 因果链是否完整（每件事是否有前因后果）
 2. 时间线是否一致（是否有时序矛盾）
@@ -56,7 +57,7 @@ export const DEFAULT_PERSPECTIVES: ReviewerPerspective[] = [
   },
   {
     id: 'character_consistency',
-    name: '角色一致性',
+    name: t('workflow.reviewerCharConsistency'),
     systemPrompt: `你是一位关注角色塑造的审稿人。请从以下维度评审草稿：
 1. 角色行为是否符合其既定人设
 2. 角色弧光是否有推进
@@ -76,7 +77,7 @@ export const DEFAULT_PERSPECTIVES: ReviewerPerspective[] = [
   },
   {
     id: 'prose_quality',
-    name: '文笔流畅度',
+    name: t('workflow.reviewerStyle'),
     systemPrompt: `你是一位文笔编辑。请从以下维度评审草稿：
 1. 语言是否流畅易读
 2. 描写是否生动有画面感

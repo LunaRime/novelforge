@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
@@ -162,7 +163,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     const pseudoReviewPath = `vela://draft/ch${this.params.chapterNumber}/v${baseVersion}/review${revIndex}`
     useEditorStore.getState().openFile({
       id: `review-${this.params.draftPath}-${revIndex}`,
-      name: `审稿报告：第${this.params.chapterNumber}章`,
+      name: t('workflow.reviewReport').replace('{n}', String(this.params.chapterNumber)),
       type: 'review-report',
       content: reportContent,
       filePath: this.params.draftPath,

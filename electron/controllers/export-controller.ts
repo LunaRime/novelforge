@@ -7,6 +7,7 @@
  * - 跨平台（Windows/macOS/Linux）
  */
 import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { t } from '../../src/shared/locale'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getProjectDb } from '../database'
@@ -291,7 +292,7 @@ export function registerExportController(): void {
       if (!win) return null
 
       const result = await dialog.showOpenDialog(win, {
-        title: '选择导出目录',
+        title: t('dialog.selectExportDir'),
         properties: ['openDirectory', 'createDirectory'],
       })
 

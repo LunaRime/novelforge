@@ -1,4 +1,5 @@
 import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
+import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { closeProjectDatabase } from './database'
@@ -43,18 +44,18 @@ function buildAppMenu() {
     ...(isMac ? [{
       label: app.getName(),
       submenu: [
-        { role: 'about' as const, label: '关于 NovelForge' },
+        { role: 'about' as const, label: t('menu.aboutApp') },
         { type: 'separator' as const },
-        { role: 'quit' as const, label: '退出 NovelForge' },
+        { role: 'quit' as const, label: t('menu.quitApp') },
       ],
     }] : []),
 
     // 文件
     {
-      label: '文件',
+      label: t('menu.file'),
       submenu: [
         {
-          label: '检查更新...',
+          label: t('menu.checkUpdate'),
           accelerator: 'CmdOrCtrl+U',
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
@@ -62,49 +63,48 @@ function buildAppMenu() {
           },
         },
         { type: 'separator' },
-        isMac ? { role: 'close', label: '关闭窗口' } : { role: 'quit', label: '退出' },
+        isMac ? { role: 'close', label: t('menu.closeWindow') } : { role: 'quit', label: t('menu.quit') },
       ],
     },
 
     // 帮助
     {
-      label: '帮助',
+      label: t('menu.help'),
       submenu: [
         {
-          label: '检查更新',
+          label: t('menu.checkUpdate').replace('...', ''),
           click: () => {
             const focused = BrowserWindow.getFocusedWindow()
             focused?.webContents.send('menu:check-update')
           },
         },
         {
-          label: '查看发布页面',
+          label: t('menu.viewReleases'),
           click: () => {
             shell.openExternal('https://github.com/LunaRime/novelforge/releases')
           },
         },
         { type: 'separator' },
         {
-          label: `关于 NovelForge v${app.getVersion()}`,
+          label: `${t('menu.aboutApp')} v${app.getVersion()}`,
           click: () => {
             dialog.showMessageBox({
               type: 'info',
-              title: '关于 NovelForge',
+              title: t('dialog.aboutTitle'),
               message: `NovelForge v${app.getVersion()}`,
-              detail: 'AI 深度驱动的小说创作 IDE\n\n基于 Electron + React + TypeScript 构建\n开源协议: GPL-3.0\n\n© LunaRime',
+              detail: t('dialog.aboutMessage'),
             })
           },
         },
         { type: 'separator' },
         {
-          label: '卸载 NovelForge...',
+          label: t('menu.uninstall'),
           click: () => {
             dialog.showMessageBox({
               type: 'warning',
-              title: '确认卸载',
-              message: '确定要卸载 NovelForge 吗？',
-              detail: '卸载将从计算机中移除程序文件。\n你的项目文件不会被删除。\n\n如需同时清理用户配置数据（~/.vela），请在卸载后手动删除该目录。',
-              buttons: ['取消', '卸载'],
+              title: t('dialog.uninstallConfirmTitle'),
+              message: t('dialog.uninstallConfirmMsg'),
+              buttons: [t('dialog.buttons.cancel'), t('dialog.buttons.uninstall')],
               defaultId: 0,
               cancelId: 0,
             }).then(({ response }) => {
@@ -114,7 +114,10 @@ function buildAppMenu() {
                 exec(`"${uninstallerPath}"`, (err) => {
                   if (err) {
                     logger.error('Main', `启动卸载程序失败: ${err.message}`)
-                    dialog.showErrorBox('卸载失败', `无法启动卸载程序。\n请通过系统控制面板卸载。\n\n${err.message}`)
+                    dialog.showErrorBox(
+                      t('dialog.uninstallFailedTitle'),
+                      t('dialog.uninstallFailedMsg').replace('{error}', err.message)
+                    )
                   }
                 })
                 setTimeout(() => app.quit(), 500)
@@ -185,8 +188,8 @@ function createWindow() {
   win.webContents.on('render-process-gone', (_event, details) => {
     logger.error('Main', `渲染进程终止 (reason=${details.reason}, exitCode=${details.exitCode})`)
     dialog.showErrorBox(
-      '渲染进程意外终止',
-      '应用界面意外终止，点击确定后将尝试重新加载。\n如有未保存的工作可能会丢失。'
+      t('dialog.crashTitle'),
+      t('dialog.crashMsg')
     )
     if (win && !win.isDestroyed()) {
       win.webContents.reload()
@@ -206,10 +209,9 @@ function createWindow() {
         e.preventDefault()
         const { response } = await dialog.showMessageBox(win!, {
           type: 'warning',
-          title: '未保存的修改',
-          message: '你有未保存的修改内容。',
-          detail: '如果现在关闭，未保存的修改将会丢失。',
-          buttons: ['取消', '不保存并退出'],
+          title: t('dialog.unsavedTitle'),
+          message: t('dialog.unsavedMsg'),
+          buttons: [t('dialog.buttons.cancel'), t('dialog.buttons.discardExit')],
           defaultId: 0,
           cancelId: 0,
         })

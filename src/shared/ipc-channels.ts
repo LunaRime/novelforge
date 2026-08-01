@@ -369,6 +369,7 @@ export interface DatabaseChannels {
   'db:get-llm-stats': { args: []; return: { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
   'db:get-daily-activity': { args: [days?: number]; return: DailyActivityData }
+  'config:set-locale': { args: [locale: 'zh-CN' | 'en-US' | 'ru-RU']; return: { success: boolean } }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
   'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }
 }

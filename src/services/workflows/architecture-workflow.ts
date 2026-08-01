@@ -1,4 +1,5 @@
 import type { WorkflowDefinition, WorkflowContext, StepCallbacks, WorkflowStep } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
@@ -39,15 +40,15 @@ export interface ConfigGenerationWorkflowParams {
 
 export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = {}): WorkflowDefinition {
   const sel = params.selectedSteps ?? ['premise', 'characters', 'worldbuilding', 'synopsis']
-  const stepDesc = (key: string, defaultDesc: string) => sel.includes(key as never) ? defaultDesc : `（跳过，保留已有内容）`
+  const stepDesc = (key: string, defaultDesc: string) => sel.includes(key as never) ? defaultDesc : t('workflow.stepSkipped')
   // 闭包捕获逐步指导，executor 中注入到 context.data
   const guidance = params.stepGuidance || {}
 
   const allSteps = [
     {
-      name: '故事前提',
+      name: t('arch.storyPremise'),
       key: 'premise',
-      description: stepDesc('premise', '提炼故事前提与核心卖点'),
+      description: stepDesc('premise', t('workflow.archPremiseDesc')),
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateCoreSeedCommand } = await import('./commands/architecture.command')
@@ -55,9 +56,9 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       },
     },
     {
-      name: '角色图谱',
+      name: t('arch.characterMap'),
       key: 'characters',
-      description: stepDesc('characters', '构建核心角色关系网与角色弧光'),
+      description: stepDesc('characters', t('workflow.archCharactersDesc')),
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateCharactersCommand } = await import('./commands/architecture.command')
@@ -65,9 +66,9 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       },
     },
     {
-      name: '世界观',
+      name: t('arch.worldBuilding'),
       key: 'worldbuilding',
-      description: stepDesc('worldbuilding', '构建自带冲突引擎的世界观矩阵'),
+      description: stepDesc('worldbuilding', t('workflow.archWorldDesc')),
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GenerateWorldBuildingCommand } = await import('./commands/architecture.command')
@@ -75,9 +76,9 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       },
     },
     {
-      name: '情节大纲',
+      name: t('arch.plotOutline'),
       key: 'synopsis',
-      description: stepDesc('synopsis', '整合所有碎片，按选定结构模式生成情节大纲'),
+      description: stepDesc('synopsis', t('workflow.archSynopsisDesc')),
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GeneratePlotArchitectureCommand } = await import('./commands/architecture.command')
@@ -90,20 +91,20 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
 
   return {
     type: 'architecture_generation',
-    title: '🏗️ 生成故事架构',
+    title: t('workflow.generateArch'),
     steps: finalSteps,
-    onComplete: { mode: 'silent', message: '🏗️ 故事架构已生成完成！前往侧边栏「故事架构」查看' },
+    onComplete: { mode: 'silent', message: t('workflow.archDone') },
   }
 }
 
 export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowParams): WorkflowDefinition {
   return {
     type: 'config_generation',
-    title: '🧠 AI 生成小说配置',
+    title: t('workflow.generateConfig'),
     steps: [
       {
-        name: '智能分析并填充配置',
-        description: `根据创作脑洞生成小说配置（全书规划约 ${params.totalChapters} 章）`,
+        name: t('workflow.analyzeFill'),
+        description: t('workflow.configDesc').replace('{n}', String(params.totalChapters)),
         executor: async (step, context, callbacks) => {
           const { GenerateConfigCommand } = await import('./commands/architecture.command')
           const cmd = new GenerateConfigCommand(params.idea, params.totalChapters, params.wordsPerChapter, params.onGenerated)
@@ -111,7 +112,7 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
         },
       },
     ],
-    onComplete: { mode: 'silent', message: '✅ 小说配置已自动生成完毕，请查阅确认。' },
+    onComplete: { mode: 'silent', message: t('workflow.configDone') },
   }
 }
 
@@ -280,7 +281,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
   return [
     {
       key: 'extract_character_cards',
-      label: '📇 提取初始角色卡',
+      label: t('workflow.extractInitialCards'),
       critical: true,
       executor: async (cb: { appendText: (t: string) => void; log: (m: string) => void }) => {
         const { ArchitecturePromptBuilder } = await import('../prompts/prompt-builder')
@@ -357,10 +358,10 @@ export function runArchCharacterExtract(projectPath: string, characterDynamicsCo
   import('../../stores/workflow-store').then(async ({ useWorkflowStore }) => {
     await useWorkflowStore.getState().startWorkflow({
       type: 'post_process',
-      title: '📋 后处理：角色卡提取',
+      title: t('workflow.postProcessCards'),
       steps: [
         {
-          name: '提取角色卡片',
+          name: t('workflow.extractCards'),
           description: '从角色图谱中提取并生成角色卡片数据',
           executor: async (_step, _ctx, callbacks) => {
             const { globalEventBus } = await import('../../shared/event-bus')
@@ -399,10 +400,10 @@ export async function repairArchCharacterCards(projectPath: string): Promise<voi
   const { useWorkflowStore } = await import('../../stores/workflow-store')
   await useWorkflowStore.getState().startWorkflow({
     type: 'post_process',
-    title: '🔧 修复：角色卡提取',
+    title: t('workflow.fixCards'),
     steps: [
       {
-        name: '重试角色卡提取',
+        name: t('workflow.retryCards'),
         description: '重试失败的角色卡提取步骤',
         executor: async (_step, _ctx, callbacks) => {
           const { globalEventBus } = await import('../../shared/event-bus')

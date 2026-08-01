@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
@@ -65,7 +66,7 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
     const { useEditorStore } = await import('../../../stores/editor-store')
     useEditorStore.getState().openFile({
       id: `diff-${this.params.draftPath}-${createRes.id}`,
-      name: `审稿修复：第${this.params.chapterNumber}章`,
+      name: t('workflow.reviewFix').replace('{n}', String(this.params.chapterNumber)),
       type: 'diff',
       filePath: this.params.draftPath,
       originalContent: this.params.draftContent,

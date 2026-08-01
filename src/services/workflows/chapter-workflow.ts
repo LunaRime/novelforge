@@ -130,7 +130,7 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
         },
       },
     ],
-    onComplete: { mode: 'open', message: `✅ 第${chapterInfo.chapterNumber}章草稿已生成` },
+    onComplete: { mode: 'open', message: t('workflow.draftDone').replace('{n}', String(chapterInfo.chapterNumber)) },
   }
 }
 
@@ -205,7 +205,7 @@ export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefi
         },
       },
     ],
-    onComplete: { mode: 'open', message: `✅ 第${params.chapterNumber}章审稿完成` },
+    onComplete: { mode: 'open', message: t('workflow.reviewDone').replace('{n}', String(params.chapterNumber)) },
   }
 }
 
@@ -231,7 +231,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
       },
     ],
     onComplete: {
-      mode: 'open', message: `🎉 第${params.chapterNumber}章已定稿！`, openResult: async () => {
+      mode: 'open', message: t('workflow.finalized').replace('{n}', String(params.chapterNumber)), openResult: async () => {
         const { useEditorStore } = await import('../../stores/editor-store')
         const { useProjectStore } = await import('../../stores/project-store')
         const project = useProjectStore.getState().currentProject
@@ -251,7 +251,9 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
           const dbPath = `${VELA.MANUSCRIPT}${draftMeta.id}`
           useEditorStore.getState().openFile({
             id: dbPath,
-            name: `第${params.chapterNumber}章 ${displayTitle}`,
+            name: t('workflow.chapterTitle')
+              .replace('{n}', String(params.chapterNumber))
+              .replace('{title}', displayTitle),
             type: 'chapter',
             filePath: dbPath,
             content: fullContent?.content || '',
@@ -307,6 +309,6 @@ export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDef
         },
       },
     ],
-    onComplete: { mode: 'open', message: `✅ 第${chapterNumber}章后处理修复完成` },
+    onComplete: { mode: 'open', message: t('workflow.postProcessFix').replace('{n}', String(chapterNumber)) },
   }
 }

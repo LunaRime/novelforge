@@ -12,6 +12,7 @@
 
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { t } from '../shared/locale'
 import type { ModelProfile } from '../shared/ipc-channels'
 
 // ===== 类型定义 =====
@@ -226,14 +227,17 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
       if (ipc.isElectron) {
         const stats = await ipc.invoke('kb:stats')
         result.moduleOk = true
-        result.moduleDetail = `LanceDB 正常 | 文档: ${stats.documentCount} | 文本块: ${stats.totalChunks} | 向量维度: ${stats.vectorDimension}`
+        result.moduleDetail = t('vector.lancedbOk')
+          .replace('{docs}', String(stats.documentCount))
+          .replace('{chunks}', String(stats.totalChunks))
+          .replace('{dim}', String(stats.vectorDimension))
       } else {
         result.moduleOk = false
-        result.moduleDetail = '非 Electron 环境'
+        result.moduleDetail = t('vector.notElectron')
       }
     } catch (e) {
       result.moduleOk = false
-      result.moduleDetail = `LanceDB 异常: ${String(e)}`
+      result.moduleDetail = t('vector.lancedbError').replace('{error}', String(e))
     }
 
     // 2. 测试向量模型（Embedding API）
@@ -245,22 +249,24 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
           const testResult = await ipc.invoke('embedding:generate', '测试文本')
           if (testResult.success && testResult.vector && testResult.vector.length > 0) {
             result.modelOk = true
-            result.modelDetail = `Embedding API 正常 | 模型: ${embeddingModel.modelName} | 维度: ${testResult.vector.length}`
+            result.modelDetail = t('vector.embeddingOk')
+              .replace('{model}', embeddingModel.modelName)
+              .replace('{dim}', String(testResult.vector.length))
           } else {
             result.modelOk = false
-            result.modelDetail = `API 返回异常: ${testResult.error || '空向量'}`
+            result.modelDetail = t('vector.apiError').replace('{error}', testResult.error || t('vector.emptyVector'))
           }
         } else {
           result.modelOk = false
-          result.modelDetail = '未配置向量模型'
+          result.modelDetail = t('vector.notConfigured')
         }
       } else {
         result.modelOk = false
-        result.modelDetail = '非 Electron 环境'
+        result.modelDetail = t('vector.notElectron')
       }
     } catch (e) {
       result.modelOk = false
-      result.modelDetail = `API 连接失败: ${String(e)}`
+      result.modelDetail = t('vector.apiConnectFailed').replace('{error}', String(e))
     }
 
     // 3. 测试 LLM 向量化
@@ -269,17 +275,19 @@ export const useVectorConfigStore = create<VectorConfigState>()((set, get) => ({
         const testResult = await ipc.invoke('embedding:test-llm', '向量化测试')
         if (testResult.success && testResult.dimensions && testResult.dimensions > 0) {
           result.llmEmbeddingOk = true
-          result.llmEmbeddingDetail = `LLM 向量化正常 | 维度: ${testResult.dimensions} | 前10维预览: [${(testResult.vector || []).slice(0, 5).map((v: number) => v.toFixed(3)).join(', ')}...]`
+          result.llmEmbeddingDetail = t('vector.llmOk')
+            .replace('{dim}', String(testResult.dimensions))
+            .replace('{vector}', (testResult.vector || []).slice(0, 5).map((v: number) => v.toFixed(3)).join(', '))
         } else {
           result.llmEmbeddingOk = false
-          result.llmEmbeddingDetail = `LLM 向量化异常: ${testResult.error || '未知'}`
+          result.llmEmbeddingDetail = t('vector.llmError').replace('{error}', testResult.error || t('status.unknown'))
         }
       } catch (e) {
         result.llmEmbeddingOk = false
-        result.llmEmbeddingDetail = `LLM 向量化失败: ${String(e)}`
+        result.llmEmbeddingDetail = t('vector.llmFailed').replace('{error}', String(e))
       }
     } else {
-      result.llmEmbeddingDetail = 'LLM 向量化未启用或未配置模型'
+      result.llmEmbeddingDetail = t('vector.llmNotEnabled')
     }
 
     // 4. 测试 AI 是否能调用向量工具

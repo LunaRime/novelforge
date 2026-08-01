@@ -14,6 +14,9 @@ export interface FontOption {
   label: string
   labelEn: string
   desc: string
+  /** i18n key（有则显示时用 t() 取当前语言，label/desc 作为 fallback） */
+  labelKey?: string
+  descKey?: string
   /** 实际 CSS font-family 字符串 */
   family: string
   /** 预览文字（用该字体渲染，展示中英文效果） */
@@ -33,6 +36,8 @@ export const FONT_OPTIONS: FontOption[] = [
     label: 'Inter',
     labelEn: 'Inter',
     desc: '精心设计的现代 UI 字体，英文排版优秀，界面首选',
+    labelKey: undefined,
+    descKey: 'font.interDesc',
     family: "'Inter', system-ui, sans-serif",
     preview: 'Aa Bb 文字 123',
     // Inter 在 index.css 中静态声明（UI 全局字体），无需动态注入
@@ -42,6 +47,8 @@ export const FONT_OPTIONS: FontOption[] = [
     label: '思源黑体',
     labelEn: 'Noto Sans SC',
     desc: '黑体风格，中英文兼顾，简洁现代，科幻都市题材适用',
+    labelKey: 'font.notoSans',
+    descKey: 'font.notoSansDesc',
     family: "'Noto Sans SC', sans-serif",
     preview: '思源黑体 Sans',
     fontFaces: [{
@@ -54,6 +61,8 @@ export const FONT_OPTIONS: FontOption[] = [
     label: '霞鹜文楷',
     labelEn: 'LXGW WenKai',
     desc: '楷体风格，温润典雅，最适合中文小说写作',
+    labelKey: 'font.lxgw',
+    descKey: 'font.lxgwDesc',
     family: "'LXGW WenKai', serif",
     preview: '春花秋月何时了',
     fontFaces: [
@@ -66,6 +75,8 @@ export const FONT_OPTIONS: FontOption[] = [
     label: '思源宋体',
     labelEn: 'Noto Serif SC',
     desc: '宋体风格，字形端正，印刷质感强，正式文稿首选',
+    labelKey: 'font.notoSerif',
+    descKey: 'font.notoSerifDesc',
     family: "'Noto Serif SC', serif",
     preview: '往事如云烟，归零',
     fontFaces: [{
@@ -78,6 +89,8 @@ export const FONT_OPTIONS: FontOption[] = [
     label: '系统默认',
     labelEn: 'System UI',
     desc: 'macOS 使用苹方/SF Pro，原生手感，无需字体文件',
+    labelKey: 'font.system',
+    descKey: 'font.systemDesc',
     family: 'system-ui, -apple-system, sans-serif',
     preview: 'Aa Bb 苹方 123',
   },

@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -118,7 +119,7 @@ export function buildFinalizePostProcessSteps(
   // ─── 步骤 1: 导入知识库（无依赖，可独立执行）─────────────────────
   steps.push({
     key: 'kb_import',
-    label: '📚 导入知识库',
+    label: t('workflow.importKB'),
     critical: true,
     dependsOn: [],
     executor: async (callbacks) => {
@@ -139,7 +140,7 @@ export function buildFinalizePostProcessSteps(
   if (notesTemplate) {
     steps.push({
       key: 'chapter_notes',
-      label: '📋 章节剧情要点',
+      label: t('workflow.chapterKeyPoints'),
       critical: true,
       dependsOn: ['kb_import'],
       executor: async (callbacks) => {
@@ -162,7 +163,7 @@ export function buildFinalizePostProcessSteps(
   if (cardTemplate) {
     steps.push({
       key: 'character_cards',
-      label: '🎭 角色状态更新',
+      label: t('workflow.characterStateUpdate'),
       critical: false,
       dependsOn: ['kb_import'],  // 仅依赖 KB 导入完成，可与 chapter_notes 并行
       executor: async (callbacks) => {
@@ -291,7 +292,7 @@ export function buildFinalizePostProcessSteps(
   // ─── 步骤 3.8: 关系自动检测 ────────────────────────────────────────
   steps.push({
     key: 'relation_detect',
-    label: '🔗 关系检测',
+    label: t('workflow.relationDetect'),
     critical: false,
     dependsOn: ['character_cards'],
     executor: async (callbacks: StepCallbacks) => {
@@ -329,7 +330,7 @@ export function buildFinalizePostProcessSteps(
               rels.push({
                 target: other.name,
                 type: 'other',
-                label: `第${chapterNumber}章互动`,
+                label: t('workflow.chapterInteraction').replace('{n}', String(chapterNumber)),
                 sinceChapter: chapterNumber,
               })
               detected++
@@ -363,7 +364,7 @@ export function buildFinalizePostProcessSteps(
   if (chapterNumber % 5 === 0) {
     steps.push({
       key: 'style_analysis',
-      label: '🎨 文风自动学习',
+      label: t('workflow.styleLearning'),
       critical: false,
       dependsOn: ['kb_import'],
       executor: async (callbacks) => {
@@ -383,7 +384,7 @@ export function buildFinalizePostProcessSteps(
   const voiceIdx = steps.length - (chapterNumber % 5 === 0 ? 2 : 1)
   steps.splice(voiceIdx, 0, {
     key: 'foreshadowing_scan',
-    label: '🔮 伏笔扫描',
+    label: t('workflow.foreshadowScan'),
     critical: false,
     dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {
@@ -402,7 +403,7 @@ export function buildFinalizePostProcessSteps(
   // 步骤 3.5: 角色声音分析
   steps.splice(voiceIdx + 1, 0, {
     key: 'voice_analysis',
-    label: '🎤 角色声音分析',
+    label: t('workflow.voiceAnalysis'),
     critical: false,
     dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {

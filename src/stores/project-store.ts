@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
 import { alertError } from '../components/ui/AlertDialog'
+import { t } from '../shared/locale'
 
 /**
  * 从 currentProject 中提取纯净的 ProjectData 字段，
@@ -99,7 +100,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const result = await ipc.invoke('project:create', config)
       if (!result.success) {
         console.error('[Project] 创建失败:', result.error)
-        alertError(result.error ?? '未知错误', { title: '创建项目失败' })
+        alertError(result.error ?? t('status.unknown'), { title: t('dialog.createFailed') })
         return false
       }
       // 使用主进程返回的实际项目路径（跨平台安全，避免路径分隔符问题）
@@ -107,7 +108,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       return get().openProject(projectDir)
     } catch (e) {
       console.error('[Project] createProject 异常:', e)
-      alertError(String(e), { title: '创建项目异常' })
+      alertError(String(e), { title: t('dialog.createError') })
       return false
     } finally {
       set({ loading: false })
@@ -131,12 +132,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         return true
       }
       console.error('[Project] 打开失败:', result.error)
-      alertError(result.error ?? '未知错误', { title: '打开项目失败' })
+      alertError(result.error ?? t('status.unknown'), { title: t('dialog.openFailed') })
       return false
     } catch (e) {
       console.error('[Project] IPC 通信异常:', e)
       try { await ipc.invoke('fs:write-file', '/tmp/vela_error.log', String(e)) } catch { /* ignore error writing to log */ }
-      alertError(String(e), { title: '打开项目异常' })
+      alertError(String(e), { title: t('dialog.openError') })
       return false
     } finally {
       set({ loading: false })
@@ -228,11 +229,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         return true
       }
       console.error('[Project] 删除文件夹失败:', result.error)
-      alertError(result.error ?? '未知错误', { title: '删除项目失败' })
+      alertError(result.error ?? t('status.unknown'), { title: t('dialog.deleteFailed') })
       return false
     } catch (e) {
       console.error('[Project] deleteProjectFolder 异常:', e)
-      alertError(String(e), { title: '删除项目异常' })
+      alertError(String(e), { title: t('dialog.deleteError') })
       return false
     }
   },

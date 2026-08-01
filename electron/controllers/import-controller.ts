@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { DEFAULT_LOCALE } from '../../src/shared/locale'
+import { t, DEFAULT_LOCALE } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
@@ -272,7 +272,7 @@ export function registerImportController() {
   ipcMain.handle('dialog:select-novel-files', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options: Electron.OpenDialogOptions = {
-      title: '选择要导入的小说文件或文件夹',
+      title: t('dialog.selectNovelFiles'),
       filters: [
         { name: '小说文本', extensions: ['txt', 'md', 'text'] },
         { name: '所有文件', extensions: ['*'] },
