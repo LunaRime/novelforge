@@ -280,8 +280,12 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     })
     get().addLog('info', `[Start] ${definition.title}`)
 
-    // 自动联动：打开右侧面板的 AI 输出视图（非阻塞 import 避免循环依赖）
-    import('./layout-store').then(m => m.useLayoutStore.getState().openRightPanel('ai-output')).catch(() => {})
+    // 自动联动：打开底部任务面板（步进模式的"继续"确认按钮所在位置）+ 右侧 AI 输出视图
+    // 非阻塞 import 避免循环依赖；不打开底栏时，步进模式下工作流会在等待确认时"隐形卡住"
+    import('./layout-store').then(m => {
+      m.useLayoutStore.getState().openBottomTab('tasks')
+      m.useLayoutStore.getState().openRightPanel('ai-output')
+    }).catch(() => {})
 
     // 创建执行上下文
     const context: WorkflowContext = { data: {}, cancelled: false }
@@ -474,14 +478,24 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   restoreCheckpoint: () => {
     const cp = loadCheckpoint()
     if (cp && cp.activeRuns.length > 0) {
-      // 将 checkpoint 中的工作流恢复为 paused 状态
-      const restored = cp.activeRuns.map(r => ({
-        ...r,
-        status: 'paused' as const,
-      }))
+      // 区分「等待确认」与「运行中中断」：
+      // - 等待确认的工作流：executor 已随进程销毁，continueResolveRefs（内存态）
+      //   为空，「继续」按钮将点击无效 → 标记 failed 并提示重新运行
+      // - 运行中中断的工作流：恢复为 paused 展示，用户可取消后重新开始
+      const interruptedWaitingIds = new Set(Object.keys(cp.waitingRuns ?? {}))
+      const restored = cp.activeRuns.map(r => {
+        if (interruptedWaitingIds.has(r.id)) {
+          get().addLog('warn', `[Restore] ${r.title} 在等待确认时被中断（应用重启），无法继续，请重新运行该工作流`)
+          return { ...r, status: 'failed' as const }
+        }
+        return { ...r, status: 'paused' as const }
+      })
       set((s) => ({
         activeRuns: [...s.activeRuns, ...restored],
-        waitingRuns: { ...s.waitingRuns, ...cp.waitingRuns },
+        // 等待确认的 run 已标记失败，其 waiting 标记不再恢复（避免「继续」按钮无效假象）
+        waitingRuns: Object.fromEntries(
+          Object.entries(cp.waitingRuns ?? {}).filter(([id]) => !interruptedWaitingIds.has(id))
+        ),
       }))
     }
     return cp

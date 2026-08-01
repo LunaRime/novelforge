@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, ChevronDown, MessageSquare,
+  File, ExternalLink, RefreshCw, Loader2, Download, LogOut,
 } from 'lucide-react'
 import PromptSettings from './PromptSettings'
 import { useLLMStore } from '../../stores/llm-store'
@@ -21,10 +22,11 @@ import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
 import { Switch } from '../ui/Switch'
 import VectorConfigSection from './VectorConfigSection'
+import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'about'
+type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'file' | 'about'
 
 interface SectionItem {
   id: SettingsSection
@@ -40,6 +42,7 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'proxy', label: t('settings.proxy'), icon: <Globe size={16} />, description: t('settings.proxyDesc') },
     { id: 'editor', label: t('settings.editor'), icon: <Type size={16} />, description: t('settings.editorDesc') },
     { id: 'prompts', label: t('settings.promptTemplates'), icon: <MessageSquare size={16} />, description: t('settings.promptTemplatesDesc') },
+    { id: 'file', label: t('settings.file'), icon: <File size={16} />, description: t('settings.fileDesc') },
     { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
   ]
 }
@@ -136,6 +139,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
             {section === 'prompts' && <PromptSettings />}
+            {section === 'file' && <FileSection />}
             {section === 'about' && <AboutSection />}
           </div>
         </main>
@@ -930,9 +934,148 @@ function EditorSection() {
   )
 }
 
+// ==================== 文件区（原原生菜单「文件」） ====================
+
+/** 检查更新 + 退出应用 — 替代原生菜单栏的「文件」菜单 */
+function FileSection() {
+  const { t } = useTranslation()
+  const {
+    status, updateInfo, error,
+    checkForUpdates, downloadUpdate, installUpdate, openReleasesPage,
+  } = useUpdateStore()
+  const [checking, setChecking] = useState(false)
+  const [downloading, setDownloading] = useState(false)
+  const [confirmQuit, setConfirmQuit] = useState(false)
+
+  const isChecking = checking || status === 'checking'
+
+  const handleCheck = async () => {
+    setChecking(true)
+    await checkForUpdates()
+    setChecking(false)
+  }
+
+  const handleDownload = async () => {
+    setDownloading(true)
+    await downloadUpdate()
+    setDownloading(false)
+  }
+
+  const handleQuit = () => {
+    if (!confirmQuit) {
+      setConfirmQuit(true)
+      return
+    }
+    // 关闭窗口：主进程 close 事件会自动检查未保存内容
+    window.close()
+  }
+
+  return (
+    <div className="max-w-[480px] space-y-5">
+      {/* 检查更新卡片 */}
+      <div
+        className="rounded-xl p-4 space-y-3"
+        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+      >
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.checkUpdate')}</p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              {t('settings.currentVersion')}: v{__APP_VERSION__}
+            </p>
+          </div>
+          <Button size="sm" variant="outline" onClick={handleCheck} disabled={isChecking}>
+            {isChecking
+              ? <Loader2 size={13} className="animate-spin" />
+              : <RefreshCw size={13} />}
+            {isChecking ? t('status.checking') : t('settings.checkUpdate')}
+          </Button>
+        </div>
+
+        {/* 更新状态反馈 */}
+        {status === 'no-update' && (
+          <p className="text-xs flex items-center gap-1" style={{ color: 'var(--color-success)' }}>
+            <Check size={13} />
+            {t('settings.upToDate')}
+          </p>
+        )}
+        {status === 'available' && updateInfo && (
+          <div className="text-xs space-y-2">
+            <p style={{ color: 'var(--color-accent)' }}>
+              ✨ {t('update.newVersion')} v{updateInfo.version}
+            </p>
+            <div className="flex items-center gap-2">
+              <Button size="sm" onClick={handleDownload} disabled={downloading}>
+                {downloading
+                  ? <Loader2 size={13} className="animate-spin" />
+                  : <Download size={13} />}
+                {downloading ? t('status.downloading') : t('update.installing')}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={openReleasesPage}>
+                <ExternalLink size={13} />
+                {t('action.details')}
+              </Button>
+            </div>
+          </div>
+        )}
+        {status === 'downloaded' && (
+          <div className="text-xs space-y-2">
+            <p style={{ color: 'var(--color-success)' }}>
+              ✅ {t('update.downloaded')}
+            </p>
+            <Button size="sm" onClick={() => installUpdate()}>
+              <RefreshCw size={13} />
+              {t('action.restart')}
+            </Button>
+          </div>
+        )}
+        {status === 'error' && (
+          <p className="text-xs" style={{ color: 'var(--color-error)' }}>
+            {t('update.checkFailed')}{error || t('update.unknownError')}
+          </p>
+        )}
+      </div>
+
+      {/* 退出应用卡片 */}
+      <div
+        className="rounded-xl p-4 space-y-3"
+        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+      >
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.quitApp')}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.quitAppDesc')}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant={confirmQuit ? 'destructive' : 'outline'}
+          onClick={handleQuit}
+          onMouseLeave={() => setConfirmQuit(false)}
+        >
+          <LogOut size={13} />
+          {confirmQuit ? t('settings.quitConfirm') : t('settings.quitApp')}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 // ==================== 关于与支持区 ====================
 
 function AboutSection() {
+  const { t } = useTranslation()
+  const { openReleasesPage, triggerUninstall } = useUpdateStore()
+  const [confirmUninstall, setConfirmUninstall] = useState(false)
+
+  const handleUninstall = async () => {
+    if (!confirmUninstall) {
+      setConfirmUninstall(true)
+      return
+    }
+    await triggerUninstall()
+  }
+
   return (
     <div className="space-y-6 max-w-[600px] p-2">
       {/* 品牌标识 */}
@@ -958,6 +1101,44 @@ function AboutSection() {
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           项目基于 GPL-3.0 协议开源，欢迎参与贡献。无论是提交代码、反馈建议，还是分享你的创作故事，都是对项目最好的支持。
         </p>
+      </div>
+
+      {/* 帮助操作（原原生菜单「帮助」） */}
+      <div
+        className="rounded-lg p-4 space-y-4"
+        style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}
+      >
+        {/* 查看发布页面 */}
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.releasesPage')}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.releasesPageDesc')}
+          </p>
+          <Button size="sm" variant="outline" className="mt-2" onClick={openReleasesPage}>
+            <ExternalLink size={13} />
+            {t('settings.releasesPage')}
+          </Button>
+        </div>
+
+        <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+
+        {/* 卸载 */}
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.uninstall')}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.uninstallDesc')}
+          </p>
+          <Button
+            size="sm"
+            variant={confirmUninstall ? 'destructive' : 'outline'}
+            className="mt-2"
+            onClick={handleUninstall}
+            onMouseLeave={() => setConfirmUninstall(false)}
+          >
+            <Trash2 size={13} />
+            {confirmUninstall ? t('settings.uninstallConfirm') : t('settings.uninstall')}
+          </Button>
+        </div>
       </div>
 
     </div>

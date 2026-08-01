@@ -7,6 +7,7 @@ import { useLLMStore } from './stores/llm-store'
 import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
+import { useUpdateStore } from './stores/update-store'
 import { t } from './shared/locale'
 import { ipc } from './services/ipc-client'
 import TitleBar from './components/layout/TitleBar'
@@ -134,6 +135,10 @@ export default function App() {
         if (folder) {
           useProjectStore.getState().openProject(folder)
         }
+      } else if (e.key === 'u' || e.key === 'U') {
+        // 检查更新（原原生菜单 accelerator CmdOrCtrl+U，菜单已迁移至设置界面）
+        e.preventDefault()
+        useUpdateStore.getState().checkForUpdates()
       }
     }
     window.addEventListener('keydown', handleKeyDown)
