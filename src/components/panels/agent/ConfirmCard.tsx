@@ -8,6 +8,7 @@ import { ShieldAlert } from 'lucide-react'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useTranslation } from '../../../hooks/useTranslation'
+import type { TextKey } from '../../../shared/locale'
 
 interface Props {
   toolCall: ToolCallInfo
@@ -19,7 +20,7 @@ export default function ConfirmCard({ toolCall }: Props) {
   const { id, toolName, arguments: args } = toolCall
 
   // 生成操作描述
-  const description = generateDescription(toolName, args)
+  const description = generateDescription(toolName, args, t)
 
   return (
     <div className="confirm-card">
@@ -58,13 +59,13 @@ export default function ConfirmCard({ toolCall }: Props) {
           className="confirm-card-btn reject"
           onClick={() => resolveToolConfirmation(id, false)}
         >
-          拒绝
+          {t('action.reject')}
         </button>
         <button
           className="confirm-card-btn approve"
           onClick={() => resolveToolConfirmation(id, true)}
         >
-          批准执行
+          {t('action.approve')}
         </button>
       </div>
     </div>
@@ -72,17 +73,27 @@ export default function ConfirmCard({ toolCall }: Props) {
 }
 
 /** 根据 Tool 名称生成人类可读的操作描述 */
-function generateDescription(toolName: string, args: Record<string, unknown>): string {
+function generateDescription(
+  toolName: string,
+  args: Record<string, unknown>,
+  t: (key: TextKey) => string,
+): string {
   switch (toolName) {
     case 'write_file':
-      return `将写入文件：${args.file_path ?? '未知路径'}`
+      return t('agentConfirm.writeFile').replace('{path}', String(args.file_path ?? t('agentConfirm.unknownPath')))
     case 'open_editor':
-      return `将在编辑器中打开：${args.file_path ?? '未知文件'}`
-    case 'start_workflow':
-      return `将启动工作流：${args.workflow ?? '未知工作流'}${args.chapter_number ? `（第 ${args.chapter_number} 章）` : ''}`
+      return t('agentConfirm.openEditor').replace('{path}', String(args.file_path ?? t('agentConfirm.unknownFile')))
+    case 'start_workflow': {
+      const chapterSuffix = args.chapter_number
+        ? t('agentConfirm.chapterSuffix').replace('{n}', String(args.chapter_number))
+        : ''
+      return t('agentConfirm.startWorkflow')
+        .replace('{name}', String(args.workflow ?? t('agentConfirm.unknownWorkflow')))
+        .replace('{chapter}', chapterSuffix)
+    }
     case 'update_config':
-      return `将更新项目配置：${args.field ?? '未知字段'}`
+      return t('agentConfirm.updateConfig').replace('{field}', String(args.field ?? t('agentConfirm.unknownField')))
     default:
-      return `将执行操作：${toolName}`
+      return t('agentConfirm.defaultAction').replace('{name}', toolName)
   }
 }

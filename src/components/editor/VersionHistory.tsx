@@ -81,7 +81,7 @@ export default function VersionHistory() {
 
     useEditorStore.getState().openFile({
       id: `diff-version-${versionId}`,
-      name: `${versionLabel} vs 当前`,
+      name: t('version.vsCurrent').replace('{version}', versionLabel),
       type: 'diff',
       originalContent: oldContent,
       content: currentContent,
@@ -106,7 +106,7 @@ export default function VersionHistory() {
   }
 
   const TYPE_LABELS: Record<string, string> = {
-    draft: '草稿', refined: '修稿', reviewed: '审稿', final: '终稿',
+    draft: t('version.draft'), refined: t('version.refined'), reviewed: t('version.reviewed'), final: t('version.final'),
   }
 
   const TYPE_COLORS: Record<string, string> = {
@@ -119,7 +119,7 @@ export default function VersionHistory() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-[var(--color-text-muted)]">
-        <RefreshCw size={16} className="animate-spin" /> 加载中...
+        <RefreshCw size={16} className="animate-spin" /> {t('status.loading')}
       </div>
     )
   }
@@ -131,7 +131,7 @@ export default function VersionHistory() {
         <div className="flex items-center px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
           <span className="text-xs font-medium text-[var(--color-text)]">
             <History size={13} className="inline mr-1" />
-            章节列表
+            {t('version.chapterList')}
           </span>
         </div>
         <div className="flex-1 overflow-y-auto p-1">
@@ -154,7 +154,7 @@ export default function VersionHistory() {
                 <span className="font-mono text-[0.7rem] opacity-50 mr-1">
                   {ch.chapter_number}
                 </span>
-                {ch.title || '未命名'}
+                {ch.title || t('chapter.unnamed')}
               </div>
             ))
           )}
@@ -166,11 +166,11 @@ export default function VersionHistory() {
         {selectedChapter ? (
           <div className="max-w-xl mx-auto px-6 py-4">
             <h3 className="text-sm font-bold text-[var(--color-text)] mb-3">
-              版本历史
+              {t('version.history')}
             </h3>
             {versions.length === 0 ? (
               <div className="text-center text-xs text-[var(--color-text-muted)] py-8">
-                暂无版本记录
+                {t('version.noRecords')}
               </div>
             ) : (
               <div className="space-y-2">
@@ -200,16 +200,16 @@ export default function VersionHistory() {
                       <Button
                         variant="outline" size="sm"
                         onClick={() => handleDiff(ver.id, `v${ver.version} ${TYPE_LABELS[ver.type] || ''}`)}
-                        title="与当前版本对比"
+                        title={t('version.compareWithCurrent')}
                       >
-                        <ArrowLeftRight size={12} /> 对比
+                        <ArrowLeftRight size={12} /> {t('action.compare')}
                       </Button>
                       <Button
                         variant="outline" size="sm"
                         onClick={() => handleRevert(ver.id)}
-                        title="回退到此版本"
+                        title={t('version.rollbackTo')}
                       >
-                        <RotateCcw size={12} /> 回退
+                        <RotateCcw size={12} /> {t('action.rollback')}
                       </Button>
                     </div>
                   </div>

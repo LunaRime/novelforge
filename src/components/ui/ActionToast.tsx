@@ -21,14 +21,18 @@
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState, useCallback } from 'react'
 import { X, CheckCircle2, AlertTriangle, Info, Sparkles } from 'lucide-react'
+import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
 export type ActionToastType = 'success' | 'info' | 'warning' | 'ai'
 
 export interface ActionToastAction {
-  /** 按钮文案 */
+  /** 按钮文案（若提供 i18nKey 则渲染时用 t() 翻译，label 作为 fallback） */
   label: string
+  /** i18n key：优先于 label 渲染（ActionToast 是模块级 API，调用处无 t 上下文） */
+  i18nKey?: TextKey
   /** 点击回调（点击后 Toast 自动关闭） */
   onClick?: () => void | Promise<void>
   /** 按钮风格：主色('primary') 或灰色('ghost') */
@@ -123,6 +127,7 @@ const TYPE_STYLE: Record<ActionToastType, { border: string; icon: React.ReactNod
 }
 
 function ActionToastCard({ item, onRemove }: { item: ActionToastItem; onRemove: (id: number) => void }) {
+  const { t } = useTranslation()
   const [isExiting, setIsExiting] = useState(false)
   const duration = item.duration ?? 8000
 
@@ -249,7 +254,7 @@ function ActionToastCard({ item, onRemove }: { item: ActionToastItem; onRemove: 
                 }
               }}
             >
-              {action.label}
+              {action.i18nKey ? t(action.i18nKey) : action.label}
             </button>
           ))}
         </div>
@@ -275,8 +280,8 @@ export const actionToast = {
     ensureContainer()
     const actions: ActionToastAction[] = []
     if (openAction) {
-      actions.push({ label: '打开查看', onClick: openAction })
-      actions.push({ label: '忽略', variant: 'ghost' })
+      actions.push({ label: '打开查看', i18nKey: 'toast.openView', onClick: openAction })
+      actions.push({ label: '忽略', i18nKey: 'toast.dismiss', variant: 'ghost' })
     }
     const item: ActionToastItem = {
       id: ++_counter,

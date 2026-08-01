@@ -8,6 +8,7 @@ import { FileText, FolderOpen, Play, ExternalLink, BookOpen, Edit3, CheckCircle,
 import type { ToolArtifact } from '../../../services/agent/tool-registry'
 import { useEditorStore } from '../../../stores/editor-store'
 import { ipc } from '../../../services/ipc-client'
+import { t } from '../../../shared/locale'
 
 interface Props {
   artifact: ToolArtifact
@@ -32,21 +33,21 @@ function ArtifactIcon({ type }: { type: ToolArtifact['type'] }) {
   }
 }
 
-/** 产物类型中文标签 */
+/** 产物类型标签（模块级 t() 读取当前 locale） */
 function typeLabel(type: ToolArtifact['type']): string {
   switch (type) {
-    case 'file_created':         return '新建文件'
-    case 'file_modified':        return '已修改'
-    case 'workflow_started':     return '工作流'
-    case 'tab_opened':           return '已打开'
-    case 'blueprint_generated':  return '蓝图'
-    case 'draft_generated':      return '草稿'
-    case 'review_completed':     return '审稿'
-    case 'character_extracted':  return '角色'
-    case 'summary_updated':      return '摘要'
-    case 'verification_report':  return '校验'
-    case 'embedding_indexed':    return '向量'
-    case 'mutual_review_completed': return '互评'
+    case 'file_created':         return t('artifact.fileCreated')
+    case 'file_modified':        return t('artifact.fileModified')
+    case 'workflow_started':     return t('artifact.workflowStarted')
+    case 'tab_opened':           return t('artifact.tabOpened')
+    case 'blueprint_generated':  return t('artifact.blueprintGenerated')
+    case 'draft_generated':      return t('artifact.draftGenerated')
+    case 'review_completed':     return t('artifact.reviewCompleted')
+    case 'character_extracted':  return t('artifact.characterExtracted')
+    case 'summary_updated':      return t('artifact.summaryUpdated')
+    case 'verification_report':  return t('artifact.verificationReport')
+    case 'embedding_indexed':    return t('artifact.embeddingIndexed')
+    case 'mutual_review_completed': return t('artifact.mutualReview')
     default:                     return ''
   }
 }

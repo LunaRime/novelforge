@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { DEFAULT_LOCALE, t } from '../../shared/locale'
 /**
  * 后处理状态面板 — 通用可内嵌组件
  *
@@ -165,13 +165,13 @@ export function PostProcessStatusPanel({
                 ) : (
                   <>
                     <span className="text-[10px] max-w-[120px] truncate" title={step.error} style={{ color: 'var(--color-error)' }}>
-                      {step.error || '失败'}
+                      {step.error || t('status.failed')}
                     </span>
                     {onRetry && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onRetry(key) }}
                         className="p-0.5 rounded hover:bg-[var(--color-hover)] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-                        title="重试此步骤"
+                        title={t('postProcess.retryStep')}
                       >
                         <RefreshCw size={11} style={{ color: 'var(--color-accent)' }} />
                       </button>

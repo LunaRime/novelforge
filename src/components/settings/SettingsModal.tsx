@@ -12,6 +12,7 @@ import type { ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import { switchLocale, useTranslation } from '../../hooks/useTranslation'
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../shared/locale'
 import type { TextKey } from '../../shared/locale'
@@ -486,9 +487,9 @@ function ModelForm({
             <option value="openai">OpenAI</option>
             <option value="deepseek">DeepSeek</option>
             <option value="gemini">Google Gemini</option>
-            <option value="ollama">Ollama（本地）</option>
-            <option value="bigmodel">BigModel（智谱）</option>
-            <option value="custom">自定义</option>
+            <option value="ollama">{t('settings.providerOllama')}</option>
+            <option value="bigmodel">{t('settings.providerBigModel')}</option>
+            <option value="custom">{t('settings.providerCustom')}</option>
           </NativeSelect>
         </div>
         <div>
@@ -758,9 +759,12 @@ function FontSelect({
   value: FontId
   onChange: (id: FontId) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const current = FONT_OPTIONS.find((o) => o.id === value) ?? FONT_OPTIONS[0]
+  // 字体名优先走 i18n（labelKey 有则翻译，否则用内置中文 fallback）
+  const currentLabel = current.labelKey ? t(current.labelKey as TextKey) : current.label
 
   // 点击外部关闭
   useEffect(() => {
@@ -791,7 +795,7 @@ function FontSelect({
           className="flex-1 text-sm truncate"
           style={{ fontFamily: current.family }}
         >
-          {current.label}
+          {currentLabel}
         </span>
         <span className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
           {current.preview}
@@ -844,14 +848,14 @@ function FontSelect({
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-1.5">
                   <span className="text-xs font-medium" style={{ color: 'var(--color-text)', fontFamily: opt.family }}>
-                    {opt.label}
+                    {opt.labelKey ? t(opt.labelKey as TextKey) : opt.label}
                   </span>
                   <span className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
                     {opt.labelEn}
                   </span>
                 </div>
                 <p className="text-[0.65rem] truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                  {opt.desc}
+                  {opt.descKey ? t(opt.descKey as TextKey) : opt.desc}
                 </p>
               </div>
 
@@ -1083,23 +1087,23 @@ function AboutSection() {
         <h1 className="text-2xl font-bold brand-gradient tracking-wider">NovelForge</h1>
         <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
         <p className="text-xs mt-1 leading-relaxed text-center max-w-[320px]" style={{ color: 'var(--color-text-muted)' }}>
-          让每一个故事，都被认真锻造
+          {t('about.slogan')}
         </p>
         <p className="text-[11px] leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
-          Every story deserves to be forged with care.
+          {t('about.sloganEn')}
         </p>
         <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
-          AI 智能写作 IDE · 开源 · 为创作者而生
+          {t('about.tagline')}
         </p>
       </div>
 
       {/* 项目介绍 */}
       <div className="space-y-3 rounded-lg p-4" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text)' }}>
-          <strong>NovelForge</strong> 是一款面向小说创作者的 AI 辅助写作 IDE。它融合了大语言模型的智能生成能力与专业写作工作流，覆盖从大纲规划、人物塑造、章节撰写到审稿定稿的完整创作周期。
+          <MarkdownContent content={t('about.intro')} />
         </p>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          项目基于 GPL-3.0 协议开源，欢迎参与贡献。无论是提交代码、反馈建议，还是分享你的创作故事，都是对项目最好的支持。
+          {t('about.opensource')}
         </p>
       </div>
 

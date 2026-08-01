@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { DiffEditor, type DiffOnMount } from '@monaco-editor/react'
 import { Check, X, Columns2, AlignJustify } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
+import { t } from '../../shared/locale'
 
 interface MonacoDiffViewerProps {
   /** 原始文本 */
@@ -98,10 +99,10 @@ export default function MonacoDiffViewer({
               color: 'var(--color-text-secondary)',
               border: '1px solid var(--color-border)',
             }}
-            title={inline ? '切换并排视图' : '切换内联视图'}
+            title={inline ? t('diff.sideView') : t('diff.inlineView')}
           >
             {inline ? <Columns2 size={12} /> : <AlignJustify size={12} />}
-            {inline ? '并排' : '内联'}
+            {inline ? t('diff.sideView') : t('diff.inlineView')}
           </button>
           {/* 操作按钮 */}
           {onReject && (
@@ -110,7 +111,7 @@ export default function MonacoDiffViewer({
               className="flex items-center gap-1 px-2 py-0.5 rounded text-xs"
               style={{ color: 'var(--color-error)', border: '1px solid var(--color-border)' }}
             >
-              <X size={12} /> 拒绝
+              <X size={12} /> {t('action.reject')}
             </button>
           )}
           {onAccept && (
@@ -122,7 +123,7 @@ export default function MonacoDiffViewer({
                 color: 'var(--color-text)',
               }}
             >
-              <Check size={12} /> 接受修改
+              <Check size={12} /> {t('action.acceptChanges')}
             </button>
           )}
         </div>
