@@ -1,13 +1,13 @@
-import { Zap, ScrollText, Cpu } from 'lucide-react'
+import { Zap, ScrollText, Activity } from 'lucide-react'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 
-/** 底部工具窗口每个 Tab 对应的按钮配置 */
+/** 底部工具窗口每个 Tab 对应的按钮配置（模型调用视图已替换为每日活动图） */
 const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
-  { id: 'tasks',  icon: Zap,        label: t('panel.tasks')       },
-  { id: 'log',    icon: ScrollText, label: t('panel.log')         },
-  { id: 'models', icon: Cpu,        label: t('panel.modelsShort') },
+  { id: 'tasks',    icon: Zap,        label: t('panel.tasks')       },
+  { id: 'log',      icon: ScrollText, label: t('panel.log')         },
+  { id: 'activity', icon: Activity,   label: t('panel.activityShort') },
 ]
 
 /**

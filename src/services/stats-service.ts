@@ -1,10 +1,11 @@
 /**
  * stats-service — LLM 调用统计数据访问服务
  *
- * 封装 BottomPanel ModelsView 中的 IPC 调用。
+ * 封装 BottomPanel 活动视图（ActivityView）中的 IPC 调用。
  */
 
 import { ipc } from './ipc-client'
+import type { DailyActivityData } from '../shared/ipc-channels'
 
 /** LLM 调用统计 */
 export interface LLMStats {
@@ -44,4 +45,11 @@ export async function loadLLMData(limit = 30): Promise<{ stats: LLMStats; histor
     getLLMHistory(limit),
   ])
   return { stats, history }
+}
+
+// ===== 每日活动（GitHub 风格活动图） =====
+
+/** 获取每日活动数据（写作字数 / 修改量 / 模型调用，按天聚合） */
+export async function getDailyActivity(days = 90): Promise<DailyActivityData> {
+  return ipc.invoke('db:get-daily-activity', days)
 }

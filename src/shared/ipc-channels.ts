@@ -88,6 +88,25 @@ export interface ProjectSummary {
   archGenerated: number
 }
 
+/** 单日活动数据（本地时区按天聚合，GitHub 风格活动图数据源） */
+export interface DailyActivityRow {
+  day: string                  // 'YYYY-MM-DD'
+  writtenWords: number         // 当天人工/导入写作字数
+  writtenCount: number         // 当天创建草稿版本数
+  revisedWords: number         // 当天修改字数（AI 重写 + 修稿）
+  revisedCount: number         // 当天修改次数
+  llmCalls: number             // 当天成功模型调用次数
+  llmTokens: number            // 当天模型调用消耗 tokens
+}
+
+/** 每日活动查询结果 */
+export interface DailyActivityData {
+  days: DailyActivityRow[]
+  startDay: string
+  endDay: string
+  dayCount: number
+}
+
 // ===== 文件系统 =====
 export interface FileChannels {
   'fs:read-file': {
@@ -349,6 +368,7 @@ export interface DatabaseChannels {
   'db:log-llm-call': { args: [call: Record<string, unknown>]; return: { success: boolean } }
   'db:get-llm-stats': { args: []; return: { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
+  'db:get-daily-activity': { args: [days?: number]; return: DailyActivityData }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
   'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }
 }

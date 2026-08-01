@@ -8,14 +8,16 @@ import {
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
-import ModelsView from './ModelsView'
+import ActivityView from './activity/ActivityView'
 import { t } from '../../shared/locale'
 
 /** 底部面板 Tab 名称映射（通过 i18n 字典统一管理） */
 const TAB_LABELS: Record<string, string> = {
-  tasks:  t('panel.tasks'),
-  log:    t('panel.log'),
-  models: t('panel.models'),
+  tasks:    t('panel.tasks'),
+  log:      t('panel.log'),
+  activity: t('panel.activity'),
+  // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
+  models:   t('panel.activity'),
 }
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
@@ -25,7 +27,8 @@ export default function BottomPanel() {
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段
   const activeRuns = useWorkflowStore(s => s.activeRuns)
 
-  const activeTab = bottomTab || 'tasks'
+  // 声明为 string：兼容旧版本持久化的 bottomTab='models'（已映射到活动视图）
+  const activeTab: string = bottomTab || 'tasks'
   const label = TAB_LABELS[activeTab] ?? activeTab
   // 任何活跃任务运行中
   const hasRunning = activeRuns.some(r => r.status === 'running')
@@ -78,9 +81,9 @@ export default function BottomPanel() {
 
       {/* 内容区 */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'tasks'  && <TaskRunView />}
-        {activeTab === 'log'    && <LogsView />}
-        {activeTab === 'models' && <ModelsView />}
+        {activeTab === 'tasks' && <TaskRunView />}
+        {activeTab === 'log' && <LogsView />}
+        {(activeTab === 'activity' || activeTab === 'models') && <ActivityView />}
       </div>
     </div>
   )
@@ -467,5 +470,3 @@ function StepStatusIcon({ status }: { status: WorkflowStep['status'] }) {
   }
 }
 
-
-// ModelsView 已提取到 ./ModelsView.tsx

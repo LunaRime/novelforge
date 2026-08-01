@@ -13,6 +13,7 @@ import { PostProcessRepository } from '../repositories/post-process-repository'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
+import { ActivityRepository } from '../repositories/activity-repository'
 import { SummaryRepository } from '../repositories/summary-repository'
 
 export function registerDatabaseController() {
@@ -427,6 +428,10 @@ export function registerDatabaseController() {
 
   ipcMain.handle('db:get-llm-history', async (_event, limit?: number) => {
     return LLMHistoryRepository.getHistory(limit ?? 50)
+  })
+
+  ipcMain.handle('db:get-daily-activity', async (_event, days?: number) => {
+    return ActivityRepository.getDailyActivity(days ?? 90)
   })
 
   ipcMain.handle('db:save-summary-snapshot', async (_event, chapterNumber: number, characterStates: string) => {
