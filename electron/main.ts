@@ -25,10 +25,18 @@ let win: BrowserWindow | null
 
 /**
  * 构建应用菜单
- * 包含：文件、帮助（更新检查、卸载）
+ *
+ * Windows/Linux：原生菜单栏的「文件/帮助」功能已迁移至设置界面
+ * （检查更新 / 查看发布页 / 关于 / 卸载 / 退出），故直接隐藏菜单栏。
+ * macOS：保留原生菜单（屏幕顶部菜单栏是平台惯例，非窗口内按键）。
  */
 function buildAppMenu() {
   const isMac = process.platform === 'darwin'
+
+  if (!isMac) {
+    Menu.setApplicationMenu(null)
+    return
+  }
 
   const template: Electron.MenuItemConstructorOptions[] = [
     // macOS 应用菜单
