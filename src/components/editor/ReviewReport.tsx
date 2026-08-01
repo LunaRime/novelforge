@@ -242,7 +242,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
       // 从 index.json 读取章节标题
       const { readDraftIndex } = await import('../../services/draft-index')
       const index = await readDraftIndex()
-      const chapterTitle = index.chapterTitle || `第${chapterNum}章`
+      const chapterTitle = index.chapterTitle || t('chapter.nLabel').replace('{n}', String(chapterNum))
 
       useWorkflowStore.getState().startWorkflow(createRefineFromReviewWorkflow({
         chapterNumber: chapterNum,

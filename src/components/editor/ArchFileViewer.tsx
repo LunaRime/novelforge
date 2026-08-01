@@ -244,7 +244,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
           {/* 字数 */}
           {charCount > 0 && (
             <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-              {charCount.toLocaleString()} 字
+              {charCount.toLocaleString()} {t('unit.chars')}
             </span>
           )}
 
