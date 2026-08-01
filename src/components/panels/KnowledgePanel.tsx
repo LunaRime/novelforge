@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { getCurrentLocale } from '../../shared/locale'
 import {
   Database, RefreshCw, BookOpen, Download, Archive,
 } from 'lucide-react'
@@ -193,7 +193,7 @@ export default function KnowledgePanel() {
                     </div>
                     <div className="flex items-center gap-2 text-[0.7rem] text-[var(--color-text-muted)] mt-0.5">
                       <span>{t('knowledge.chunks').replace('{n}', String(doc.chunkCount))}</span>
-                      <span>{new Date(doc.importedAt).toLocaleDateString(DEFAULT_LOCALE)}</span>
+                      <span>{new Date(doc.importedAt).toLocaleDateString(getCurrentLocale())}</span>
                     </div>
                   </div>
                   {/* 单章导出 — hover 显示 */}

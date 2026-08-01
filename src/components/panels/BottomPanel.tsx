@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
   Loader2, CheckCircle2, XCircle, Clock,
@@ -160,7 +160,7 @@ function TaskRunView() {
                 </span>
                 {/* 时间 */}
                 <span className="text-[0.68rem] flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
-                  {new Date(run.createdAt).toLocaleTimeString(DEFAULT_LOCALE, { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(run.createdAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
             ))}
