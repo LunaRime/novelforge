@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { getCurrentLocale } from '../../shared/locale'
 import { History, RotateCcw, ArrowLeftRight, RefreshCw } from 'lucide-react'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -193,7 +193,7 @@ export default function VersionHistory() {
                         {ver.word_count} 字
                       </span>
                       <span className="text-[0.7rem] text-[var(--color-text-muted)]">
-                        {new Date(ver.created_at).toLocaleString(DEFAULT_LOCALE, { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        {new Date(ver.created_at).toLocaleString(getCurrentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>
                     <div className="flex items-center gap-1">
