@@ -6,6 +6,7 @@
  * - 分章 Markdown（每章一个 .md）
  * - 纯文本 TXT
  */
+import { t } from '../shared/locale'
 import { ipc } from './ipc-client'
 import { projectStore, workflowStore } from './store-facade'
 
@@ -22,7 +23,7 @@ interface ExportOptions {
 /** 导出全书 */
 export async function exportNovel(options: ExportOptions): Promise<{ success: boolean; path?: string; error?: string }> {
   const project = projectStore.currentProject
-  if (!project) return { success: false, error: '未打开项目' }
+  if (!project) return { success: false, error: t('error.noProject') }
 
   const addLog = workflowStore.addLog
   addLog('info', `[Export] ${formatLabel(options.format)}`)
@@ -47,7 +48,7 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
     }
 
     if (chapterContents.length === 0) {
-      return { success: false, error: '无可导出的章节（无定稿章节）' }
+      return { success: false, error: t('error.noExportableChapters') }
     }
 
     addLog('info', `找到 ${chapterContents.length} 个已定稿章节`)

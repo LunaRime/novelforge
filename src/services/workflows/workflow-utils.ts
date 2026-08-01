@@ -574,7 +574,7 @@ export async function withRetry(
       }
     }
   }
-  return { ok: false, error: '未知错误', attempts: maxRetries + 1 }
+  return { ok: false, error: t('status.unknown'), attempts: maxRetries + 1 }
 }
 
 // ===== 后处理流水线 =====

@@ -8,6 +8,7 @@
  * - 默认：BM25 全文检索（FTS），零配置即可用
  * - 增强：FTS + 向量近邻混合检索（需配置 Embedding 模型）
  */
+import { t } from '../src/shared/locale'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
@@ -55,7 +56,7 @@ async function importContent(
   await ensureMigration(projectPath)
 
   // 1. 分块
-  options?.onProgress?.(10, '正在分块...')
+  options?.onProgress?.(10, t('kb.chunking'))
   const chunks = chunkText(content, 500, 50)
   const docId = randomUUID()
 
@@ -94,11 +95,11 @@ async function importContent(
 
   // 全部失败 → FTS-only 模式（仍可全文搜索，但无语义搜索）
   if (!vectors || vectors.length === 0) {
-    options?.onProgress?.(30, '⚠️ 向量化不可用，使用纯文本索引（FTS）')
+    options?.onProgress?.(30, t('kb.ftsFallback'))
   }
 
   // 4. 删除同名旧文档，确保幂等性
-  options?.onProgress?.(70, '正在清理旧数据...')
+  options?.onProgress?.(70, t('kb.cleaning'))
   const existingDocs = await storeListDocuments(projectPath)
   const existingDoc = existingDocs.find(d => d.fileName === fileName)
   if (existingDoc) {
@@ -106,7 +107,7 @@ async function importContent(
   }
 
   // 5. 写入 LanceDB
-  options?.onProgress?.(80, '正在保存...')
+  options?.onProgress?.(80, t('kb.saving'))
   const result = await addChunks(projectPath, docId, fileName, chunks, vectors, options?.filePath, chapterMeta)
 
   if (!result.success) {
@@ -145,7 +146,7 @@ export async function importDocument(
       return { success: false, error: `文件过大 (${sizeMB} MB)，最大支持 50 MB。请拆分为多个小文件后分别导入。` }
     }
     if (stat.size === 0) {
-      return { success: false, error: '文件为空，无法导入' }
+      return { success: false, error: t('error.fileEmpty') }
     }
     const content = fs.readFileSync(filePath, 'utf-8')
 
@@ -299,7 +300,7 @@ export async function importText(
   model: { baseUrl: string; apiKey: string },
 ): Promise<{ success: boolean; docId?: string; chunkCount?: number; error?: string }> {
   try {
-    if (!text.trim()) return { success: false, error: '文本内容为空' }
+    if (!text.trim()) return { success: false, error: t('error.textEmpty') }
     return importContent(projectPath, fileName, text, protocol, model)
   } catch (error) {
     return { success: false, error: safeErrorMessage(error) }
@@ -333,7 +334,7 @@ export async function backfillVectors(
     const db = await getConnection(projectPath)
     const tableNames = await db.tableNames()
     if (!tableNames.includes('chunks')) {
-      return { success: false, processed: 0, failed: total, error: 'chunks 表不存在' }
+      return { success: false, processed: 0, failed: total, error: t('error.chunksTableMissing') }
     }
 
     const table = await db.openTable('chunks')
@@ -431,7 +432,7 @@ export async function backfillVectors(
     const tempTable = await db.openTable(TEMP_TABLE)
     const tempCount = await tempTable.countRows()
     if (tempCount === 0) {
-      return { success: false, processed: 0, failed: total, error: '临时表写入后为空' }
+      return { success: false, processed: 0, failed: total, error: t('error.tempTableEmpty') }
     }
 
     // 临时表写入成功 → 替换正式表
@@ -456,7 +457,7 @@ export async function backfillVectors(
       return (vec.length ?? 0) > 0
     }).length
     if (withVectors === 0) {
-      return { success: false, processed: 0, failed: total, error: '回填后记录向量为空，可能是 LanceDB schema 写入失败' }
+      return { success: false, processed: 0, failed: total, error: t('error.vectorBackfillEmpty') }
     }
 
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }

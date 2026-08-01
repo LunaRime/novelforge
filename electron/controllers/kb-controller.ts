@@ -41,7 +41,7 @@ export function registerKBController() {
   ipcMain.handle('kb:import-document', async (_event, filePath: string) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
-    if (!projectPath) return { success: false, error: '未打开项目' }
+    if (!projectPath) return { success: false, error: t('error.noProject') }
     const protocol = embConfig?.protocol ?? 'openai'
     const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
     return importDocument(filePath, projectPath, protocol, model)
@@ -50,7 +50,7 @@ export function registerKBController() {
   ipcMain.handle('kb:import-folder', async (_event, folderPath: string) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
-    if (!projectPath) return { success: false, error: '未打开项目' }
+    if (!projectPath) return { success: false, error: t('error.noProject') }
     const protocol = embConfig?.protocol ?? 'openai'
     const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
     return importFolder(folderPath, projectPath, protocol, model)
@@ -112,7 +112,7 @@ export function registerKBController() {
 
   ipcMain.handle('kb:backfill-vectors', async () => {
     const projectPath = getCurrentProjectPath()
-    if (!projectPath) return { success: false, processed: 0, failed: 0, error: '未打开项目' }
+    if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
 
     // 判断可用的向量化方式
     const embConfig = getEmbeddingConfig()

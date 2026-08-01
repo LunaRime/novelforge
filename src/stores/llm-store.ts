@@ -1,3 +1,4 @@
+import { t } from '../shared/locale'
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
@@ -154,7 +155,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   generate: async (messages, modelId, options) => {
     const mid = modelId ?? get().defaultModelId
-    if (!mid) return { success: false, content: '', error: '未配置默认模型' }
+    if (!mid) return { success: false, content: '', error: t('error.noDefaultModel') }
     return ipc.invoke('llm:generate', {
       modelId: mid,
       messages,

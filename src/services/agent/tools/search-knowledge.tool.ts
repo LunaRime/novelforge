@@ -4,6 +4,7 @@
  * 让 AI 可以主动调用向量模块检索相关上下文。
  * 支持章节范围过滤和相似度阈值控制。
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 
@@ -51,7 +52,7 @@ export const searchKnowledgeTool = buildAgentTool({
     const minScore = (args.min_score as number) ?? 0.5
 
     if (!query) {
-      return { success: false, content: '', error: '缺少 query 参数' }
+      return { success: false, content: '', error: t('error.missingQuery') }
     }
 
     let results: Array<{ text: string; score: number; fileName: string }>

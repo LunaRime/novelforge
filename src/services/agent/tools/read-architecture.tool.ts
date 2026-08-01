@@ -1,6 +1,7 @@
 /**
  * read_architecture — 读取故事架构文件
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -23,7 +24,7 @@ export const readArchitectureTool = buildAgentTool({
   execute: async (args) => {
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     const fileName = args.file_name as string | undefined
@@ -31,7 +32,7 @@ export const readArchitectureTool = buildAgentTool({
     try {
       const core = await ipc.invoke('db:project-core-get')
       if (!core) {
-        return { success: false, content: '', error: '项目架构未初始化' }
+        return { success: false, content: '', error: t('error.archNotInitialized') }
       }
 
       if (fileName) {

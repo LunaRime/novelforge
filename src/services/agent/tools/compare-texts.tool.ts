@@ -4,6 +4,7 @@
  * 让 AI 可以调用向量模块比较两段或多段文本的语义相似度。
  * 适用于一致性检查、去重检测、情节对比等场景。
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useVectorConfigStore } from '../../../stores/vector-config-store'
@@ -42,7 +43,7 @@ export const compareTextsTool = buildAgentTool({
       return {
         success: false,
         content: '',
-        error: 'query 和 candidates 参数不能为空',
+        error: t('error.queryCandidatesEmpty'),
       }
     }
 
@@ -52,7 +53,7 @@ export const compareTextsTool = buildAgentTool({
       return {
         success: false,
         content: '',
-        error: 'candidates 中至少需要一段文本（用 ||| 分隔）',
+        error: t('error.candidatesNeedText'),
       }
     }
 

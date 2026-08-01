@@ -1,6 +1,7 @@
 /**
  * read_characters — 读取角色卡档案
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -23,7 +24,7 @@ export const readCharactersTool = buildAgentTool({
   execute: async (args) => {
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     const charName = args.character_name as string | undefined

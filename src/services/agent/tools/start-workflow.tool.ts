@@ -49,7 +49,7 @@ export const startWorkflowTool = buildAgentTool({
     const chapterNumber = args.chapter_number as number | undefined
 
     if (!workflow) {
-      return { success: false, content: '', error: '缺少 workflow 参数' }
+      return { success: false, content: '', error: t('error.missingWorkflow') }
     }
 
     const chapterWorkflows = ['generate_draft', 'review', 'refine', 'finalize']
@@ -69,7 +69,7 @@ export const startWorkflowTool = buildAgentTool({
         case 'generate_draft': {
           const definition = await buildDraftWorkflow(chapterNumber!)
           if (!definition) {
-            return { success: false, content: '', error: '无法创建写稿工作流：请检查章节蓝图和前置条件' }
+            return { success: false, content: '', error: t('error.cannotCreateWriteWorkflow') }
           }
           const runId = await useWorkflowStore.getState().startWorkflow(definition)
           void runId // 保留 runId 供调试

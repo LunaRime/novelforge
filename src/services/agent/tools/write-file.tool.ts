@@ -1,6 +1,7 @@
 /**
  * write_file — 写入或修改项目文件
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -31,12 +32,12 @@ export const writeFileTool = buildAgentTool({
     const content = args.content as string
 
     if (!filePath || content === undefined) {
-      return { success: false, content: '', error: '缺少 file_path 或 content 参数' }
+      return { success: false, content: '', error: t('error.missingFilePathContent') }
     }
 
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     // 路径安全校验

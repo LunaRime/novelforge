@@ -4,7 +4,7 @@ import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
 import { logger, LogLevel } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
-import { setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
+import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
 import { GlobalConfig } from '../../src/shared/ipc-channels'
 
 const LOG_DIR = path.join(VELA_HOME, 'logs')
@@ -73,11 +73,11 @@ export function registerConfigController() {
       // 安全检查：防止路径遍历
       const safeName = path.basename(fileName)
       if (!safeName.startsWith('vela-') || !safeName.endsWith('.log')) {
-        return { success: false, error: '无效的日志文件名' }
+        return { success: false, error: t('error.invalidLogFileName') }
       }
       const filePath = path.join(LOG_DIR, safeName)
       if (!fs.existsSync(filePath)) {
-        return { success: false, error: '日志文件不存在' }
+        return { success: false, error: t('error.logFileNotFound') }
       }
       return { success: true, content: fs.readFileSync(filePath, 'utf-8') }
     } catch (error) {

@@ -1,6 +1,7 @@
 /**
  * read_file — 读取项目内的文件内容
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -25,7 +26,7 @@ export const readFileTool = buildAgentTool({
     const filePath = args.file_path as string
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     // 路径安全校验

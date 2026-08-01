@@ -225,7 +225,7 @@ export function registerExportController(): void {
 
       const chapters = await getFinalizedChapters(chapterNumbers)
       if (chapters.length === 0) {
-        return { success: false, error: '没有可导出的定稿章节' }
+        return { success: false, error: t('error.noExportableChapters') }
       }
 
       const safeProjectName = sanitizeFileName(projectName)

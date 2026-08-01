@@ -316,14 +316,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     return [
       {
         key: 'close-current',
-        label: '关闭',
+        label: t('action.close'),
         shortcut: '⌘W',
         disabled: !hasActive || activeTab?.pinned,
         onClick: () => { if (activeTabId) tryCloseTab(activeTabId) },
       },
       {
         key: 'close-others',
-        label: '关闭其他',
+        label: t('editor.closeOther'),
         disabled: !hasActive || !hasOthers,
         onClick: () => {
           const others = tabs
@@ -334,7 +334,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       },
       {
         key: 'close-right',
-        label: '关闭右侧所有',
+        label: t('editor.closeRight'),
         disabled: !hasActive || !hasRight,
         onClick: () => {
           const right = tabs
@@ -347,7 +347,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       { key: 'div-close', type: 'divider' as const },
       {
         key: 'close-all',
-        label: '关闭所有',
+        label: t('editor.closeAll'),
         danger: true,
         onClick: () => {
           const all = tabs.filter(t => !t.pinned).map(t => t.id)
@@ -367,7 +367,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         })),
       ] : []),
     ]
-  }, [tabs, activeTabId, tryCloseTab, tryBatchClose, setActiveTab])
+  }, [tabs, activeTabId, tryCloseTab, tryBatchClose, setActiveTab, t])
 
   // ===== 条件渲染 =====
 

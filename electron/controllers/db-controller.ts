@@ -1,4 +1,5 @@
 import { ipcMain } from 'electron'
+import { t } from '../../src/shared/locale'
 import { closeProjectDatabase, getProjectDb } from '../database'
 import { logger } from '../utils/logger'
 
@@ -334,7 +335,7 @@ export function registerDatabaseController() {
   }) => {
     try {
       const db = getProjectDb()
-      if (!db) return { success: false, error: '数据库未连接' }
+      if (!db) return { success: false, error: t('error.dbNotConnected') }
 
       const result = db.prepare(`
         INSERT INTO evaluation_scores (

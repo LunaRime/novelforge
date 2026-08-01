@@ -1,6 +1,7 @@
 /**
  * open_editor — 在编辑器中打开文件
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -34,12 +35,12 @@ export const openEditorTool = buildAgentTool({
     const tabType = (args.tab_type as string) ?? 'chapter'
 
     if (!filePath) {
-      return { success: false, content: '', error: '缺少 file_path 参数' }
+      return { success: false, content: '', error: t('error.missingFilePath') }
     }
 
     const project = useProjectStore.getState().currentProject
     if (!project) {
-      return { success: false, content: '', error: '没有打开的项目' }
+      return { success: false, content: '', error: t('error.noProject') }
     }
 
     const fullPath_check = validatePath(project.path, filePath)

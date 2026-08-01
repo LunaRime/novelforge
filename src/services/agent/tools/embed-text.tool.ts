@@ -4,6 +4,7 @@
  * 让 AI 可以主动调用向量模型，将文本转为向量。
  * 用于语义比较、相似度分析、文本聚类等场景。
  */
+import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useVectorConfigStore } from '../../../stores/vector-config-store'
@@ -33,7 +34,7 @@ export const embedTextTool = buildAgentTool({
     const text = args.text as string
 
     if (!text || text.trim().length === 0) {
-      return { success: false, content: '', error: 'text 参数不能为空' }
+      return { success: false, content: '', error: t('error.textParamEmpty') }
     }
 
     // 检查向量模型是否可用
