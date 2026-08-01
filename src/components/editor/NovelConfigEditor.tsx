@@ -12,6 +12,7 @@ import { Textarea } from '../ui/Textarea'
 import { NativeSelect } from '../ui/NativeSelect'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 
 /** 小说配置编辑器 — Tab 内的可视化配置面板 */
 export default function NovelConfigEditor() {
@@ -98,7 +99,15 @@ export default function NovelConfigEditor() {
     }
   }
 
+  // 题材 value 保持中文原文（数据兼容），显示文本走 i18n
   const genres = ['玄幻', '仙侠', '都市', '科幻', '历史', '军事', '游戏', '末世', '悬疑', '灵异', '言情', '古言', '现言', '奇幻', '武侠', '轻小说', '同人', '职场']
+  const GENRE_KEYS: Record<string, TextKey> = {
+    '玄幻': 'genre.xuanhuan', '仙侠': 'genre.xianxia', '都市': 'genre.urban', '科幻': 'genre.scifi',
+    '历史': 'genre.history', '军事': 'genre.military', '游戏': 'genre.game', '末世': 'genre.apocalypse',
+    '悬疑': 'genre.suspense', '灵异': 'genre.horror', '言情': 'genre.romance', '古言': 'genre.ancientRomance',
+    '现言': 'genre.modernRomance', '奇幻': 'genre.fantasy', '武侠': 'genre.wuxia', '轻小说': 'genre.lightNovel',
+    '同人': 'genre.fanfic', '职场': 'genre.workplace',
+  }
 
   return (
     <div className="h-full overflow-y-auto">
@@ -130,7 +139,7 @@ export default function NovelConfigEditor() {
             <div className="grid grid-cols-3 gap-4">
               <Field label={t('novelConfig.type')}>
                 <NativeSelect value={config.genre} onChange={(e) => update('genre', e.target.value)}>
-                  {genres.map((g) => <option key={g} value={g}>{g}</option>)}
+                  {genres.map((g) => <option key={g} value={g}>{t(GENRE_KEYS[g] ?? 'genre.fantasy')}</option>)}
                 </NativeSelect>
               </Field>
               <Field label={t('novelConfig.subType')}>

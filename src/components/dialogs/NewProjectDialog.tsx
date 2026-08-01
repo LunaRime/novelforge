@@ -71,7 +71,7 @@ export default function NewProjectDialog({ open, onClose }: NewProjectDialogProp
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="如：斗破苍穹"
+              placeholder={t('project.namePlaceholder')}
               autoFocus
               onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             />

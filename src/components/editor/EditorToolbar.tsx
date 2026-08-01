@@ -10,7 +10,8 @@ import { Button } from '../ui/Button'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
-import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
+import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
+import type { TextKey } from '../../shared/locale'
 
 export interface EditorToolbarProps {
   /** 草稿元数据（null 时显示占位） */
@@ -186,7 +187,7 @@ function RightActions({
           color: DRAFT_STATUS_COLOR[status] ?? 'var(--color-text-muted)',
         }}
       >
-        {DRAFT_STATUS_LABEL[status] ?? status}
+        {t(DRAFT_STATUS_LABEL_KEY[status] as TextKey) ?? status}
       </span>
 
       {/* 📋 待合并修稿 */}

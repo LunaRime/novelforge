@@ -211,7 +211,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="导入后的项目名称"
+              placeholder={t('import.projectNameAfter')}
             />
           </div>
 
@@ -221,7 +221,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
               <Input
                 value={savePath}
                 onChange={(e) => setSavePath(e.target.value)}
-                placeholder="选择项目保存目录"
+                placeholder={t('project.saveLocationPlaceholder')}
                 className="flex-1"
               />
               <Button variant="outline" onClick={handleSelectFolder}>

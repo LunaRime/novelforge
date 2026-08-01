@@ -299,20 +299,20 @@ export default function ChapterCardEditor() {
             variant="ai"
             size="sm"
             onClick={() => setShowBlueprintDialog(true)}
-            title="AI 生成章节蓝图（选择范围和模式）"
+            title={t('chapter.aiBlueprint')}
           >
             <Sparkles size={12} />
-            AI 生成蓝图
+            {t('blueprint.aiGenerate')}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => loadBlueprints()} title="重新加载" disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={() => loadBlueprints()} title={t('chapter.reload')} disabled={loading}>
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleAddChapter} title="新建章节">
+          <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')}>
             <Plus size={14} />
           </Button>
           {dirty && (
             <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving}>
-              <Save size={12} /> {saving ? '保存中...' : '保存全部'}
+              <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
             </Button>
           )}
         </div>
@@ -368,18 +368,18 @@ export default function ChapterCardEditor() {
                     <span
                       className="text-[0.7rem] px-1 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}
-                      title="已有作者微操指导"
+                      title={t('chapter.authorGuidance')}
                     >
-                      有指导
+                      {t('chapter.hasGuidance')}
                     </span>
                   )}
                   {bp.notes && (
                     <span
                       className="text-[0.7rem] px-1 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}
-                      title="已生成章节要点"
+                      title={t('chapter.blueprintNotes')}
                     >
-                      有要点
+                      {t('chapter.hasNotes')}
                     </span>
                   )}
                 </div>
@@ -396,7 +396,7 @@ export default function ChapterCardEditor() {
               {/* 编辑区头部 */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
-                  第 {selected.chapterNumber} 章：{selected.title || '未命名'}
+                  {t('import.chapterLabel').replace('{n}', String(selected.chapterNumber)).replace('{title}', selected.title || t('chapter.unnamed'))}
                 </h3>
                 <div className="flex items-center gap-1.5">
                   {/* 仅下一章允许写作 */}
@@ -405,16 +405,16 @@ export default function ChapterCardEditor() {
                       variant="ai"
                       size="sm"
                       onClick={() => handleWriteChapter(selected)}
-                      title="以当前蓝图信息生成草稿"
+                      title={t('chapter.generateDraft')}
                     >
-                      <PenLine size={12} /> 写作此章
+                      <PenLine size={12} /> {t('chapter.writeThisChapter')}
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={handleDeleteChapter} title="删除此章">
+                  <Button variant="ghost" size="icon" onClick={handleDeleteChapter} title={t('chapter.deleteChapter')}>
                     <Trash2 size={13} style={{ color: 'var(--color-text-muted)' }} />
                   </Button>
                   <Button variant="outline" size="sm" onClick={handleSaveOne} disabled={saving}>
-                    <Save size={12} /> {saving ? '保存中...' : '保存'}
+                    <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.save')}
                   </Button>
                 </div>
               </div>
@@ -448,7 +448,7 @@ export default function ChapterCardEditor() {
                     <Input
                       value={selected.title}
                       onChange={e => updateField('title', e.target.value)}
-                      placeholder="引人入胜的章节标题"
+                      placeholder={t('chapter.placeholderTitle')}
                     />
                   </div>
                 </div>
@@ -465,7 +465,7 @@ export default function ChapterCardEditor() {
                     <Input
                       value={selected.characters.join('、')}
                       onChange={e => updateField('characters', e.target.value.split(/[,，、\s]+/).filter(Boolean))}
-                      placeholder="如：主角、反派A"
+                      placeholder={t('chapter.placeholderCharacters')}
                     />
                   </div>
                 </div>
@@ -475,7 +475,7 @@ export default function ChapterCardEditor() {
                   <Textarea
                     value={selected.purpose}
                     onChange={e => updateField('purpose', e.target.value)}
-                    placeholder="本章主角最迫切要解决的一件事..."
+                    placeholder={t('chapter.placeholderConflict')}
                     rows={2}
                   />
                 </div>
@@ -485,7 +485,7 @@ export default function ChapterCardEditor() {
                   <Textarea
                     value={selected.keyEvents}
                     onChange={e => updateField('keyEvents', e.target.value)}
-                    placeholder="主角做了什么，遭遇了什么反转，金手指怎么用的..."
+                    placeholder={t('chapter.placeholderActions')}
                     rows={4}
                   />
                 </div>
@@ -495,7 +495,7 @@ export default function ChapterCardEditor() {
                   <Textarea
                     value={selected.suspenseHook}
                     onChange={e => updateField('suspenseHook', e.target.value)}
-                    placeholder="一句话说明结尾留了什么悬念..."
+                    placeholder={t('chapter.placeholderSuspense')}
                     rows={2}
                   />
                 </div>
@@ -514,13 +514,13 @@ export default function ChapterCardEditor() {
                       className="text-[0.7rem] font-normal"
                       style={{ color: 'var(--color-text-muted)' }}
                     >
-                      （写稿时会作为最高优先级注入 AI — 可覆盖蓝图）
+                      {t('chapter.guidanceHint')}
                     </span>
                   </Label>
                   <Textarea
                     value={selected.userGuidance}
                     onChange={e => updateField('userGuidance', e.target.value)}
-                    placeholder="我想在这章加入一个意外的背叛...&#10;让反派在这章露出破绽...&#10;（不填则完全按蓝图走）"
+                    placeholder={t('chapter.placeholderGuidance')}
                     rows={3}
                     className="mt-1.5"
                   />
@@ -540,15 +540,15 @@ export default function ChapterCardEditor() {
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {selected.notesUpdatedAt
-                        ? `（定稿后自动生成 — ${new Date(selected.notesUpdatedAt).toLocaleDateString(DEFAULT_LOCALE)}）`
-                        : '（定稿后自动生成，也可手动填写）'
+                        ? t('chapter.notesAuto').replace('{date}', new Date(selected.notesUpdatedAt).toLocaleDateString(DEFAULT_LOCALE))
+                        : t('chapter.notesAutoManual')
                       }
                     </span>
                   </Label>
                   <Textarea
                     value={selected.notes || ''}
                     onChange={e => updateField('notes', e.target.value)}
-                    placeholder="定稿后 AI 会自动填充本章要点（事件进展/角色变化/伏笔埋点）…＊也可以提前手动输入给 AI 作参考"
+                    placeholder={t('chapter.placeholderNotes')}
                     rows={4}
                   />
                 </div>

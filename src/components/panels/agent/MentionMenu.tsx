@@ -5,6 +5,7 @@
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { searchMentionTargets, type MentionTarget } from '../../../services/agent/intent-router'
+import { t } from '../../../shared/locale'
 
 interface Props {
   /** 搜索关键词（@ 后面的文字） */
@@ -71,7 +72,7 @@ export default function MentionMenu({ query, onSelect, onClose, position }: Prop
       }}
     >
       <div className="text-[0.68rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
-        引用上下文
+        {t('agentPanel.mentionContext')}
       </div>
       {results.map((target, i) => (
         <button

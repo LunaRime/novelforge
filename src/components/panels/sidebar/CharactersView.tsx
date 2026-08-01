@@ -128,7 +128,10 @@ function CharItem({ char: c, selected, onClick }: {
 
   const chapsDisplay = chaps.length <= 3
     ? chaps.join(',')
-    : `${chaps[0]}-${chaps[chaps.length - 1]} (${chaps.length}章)`
+    : t('character.chapterRange')
+        .replace('{start}', String(chaps[0]))
+        .replace('{end}', String(chaps[chaps.length - 1]))
+        .replace('{n}', String(chaps.length))
 
   const tier = c.tier ?? (c.role === 'protagonist' || c.role === 'antagonist' ? 1 : 2)
 
@@ -146,7 +149,7 @@ function CharItem({ char: c, selected, onClick }: {
         <span className="font-medium truncate">{c.name || t('character.unnamed')}</span>
         {c.currentState?.updatedAtChapter ? (
           <span className="text-[0.6rem] opacity-40 ml-auto flex-shrink-0">
-            第{c.currentState.updatedAtChapter}章
+            {t('chapter.nLabel').replace('{n}', String(c.currentState.updatedAtChapter))}
           </span>
         ) : null}
       </div>

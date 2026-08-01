@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
+import { t } from '../../shared/locale'
 
 interface MarkdownContentProps {
   content: string
@@ -291,7 +292,7 @@ function ThinkingBlock({ content, streaming }: { content: string; streaming?: bo
       >
         <Brain size={13} style={{ color: 'var(--color-accent)', opacity: 0.7 }} />
         <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {streaming ? '正在思考…' : '思考过程'}
+          {streaming ? t('markdown.thinking') : t('markdown.thoughtProcess')}
         </span>
         {streaming && (
           <span

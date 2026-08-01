@@ -305,7 +305,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               size="sm"
               onClick={handleOpenDialog}
               disabled={checkingArch}
-              title={`AI ${generated ? '重新生成' : '生成'}「${meta?.label}」`}
+              title={`AI ${generated ? t('archive.regenerate') : t('archive.generate')}「${meta?.label}」`}
             >
               {checkingArch ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {generated ? t('arch.aiRegenerate') : t('arch.aiGenerate')}

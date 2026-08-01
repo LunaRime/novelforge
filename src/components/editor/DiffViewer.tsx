@@ -1,5 +1,6 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, Check, X } from 'lucide-react'
+import { t } from '../../shared/locale'
 
 interface DiffViewerProps {
   /** 原始文本 */
@@ -76,7 +77,7 @@ export default function DiffViewer({
               border: '1px solid var(--color-border)',
             }}
           >
-            {mode === 'side' ? '并排视图' : '内联视图'}
+            {mode === 'side' ? t('diff.sideView') : t('diff.inlineView')}
           </button>
           {/* 操作按钮 */}
           {onReject && (
@@ -85,7 +86,7 @@ export default function DiffViewer({
               className="flex items-center gap-1 px-2 py-0.5 rounded text-xs"
               style={{ color: 'var(--color-error)', border: '1px solid var(--color-border)' }}
             >
-              <X size={12} /> 拒绝
+              <X size={12} /> {t('action.reject')}
             </button>
           )}
           {onAccept && (
@@ -97,7 +98,7 @@ export default function DiffViewer({
                 color: 'var(--color-text)',
               }}
             >
-              <Check size={12} /> 接受修改
+              <Check size={12} /> {t('action.acceptChanges')}
             </button>
           )}
         </div>

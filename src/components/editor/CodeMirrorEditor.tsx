@@ -432,7 +432,7 @@ export default function CodeMirrorEditor({
                 className="text-[10px] mb-1.5 font-medium flex items-center gap-1"
                 style={{ color: 'var(--color-text-muted)' }}
               >
-                <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction ? `${activeAIAction}预览` : 'AI 预览'}
+                <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction ? t('codeEditor.previewSuffix').replace('{action}', activeAIAction) : t('codeEditor.aiPreview')}
               </div>
               {/* 流式输入中显示动态内容 */}
               {aiResult === '' ? (
@@ -440,7 +440,7 @@ export default function CodeMirrorEditor({
                   className="text-xs leading-relaxed mb-3"
                   style={{ color: 'var(--color-text-muted)' }}
                 >
-                  正在生成 {loadingDots}
+                  {t('status.generating')} {loadingDots}
                 </div>
               ) : (
                 <div
@@ -475,7 +475,7 @@ export default function CodeMirrorEditor({
                 <>
                   <button
                     className="p-1 rounded"
-                    title="撤销 (Ctrl+Z)"
+                    title={t('action.undo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -488,7 +488,7 @@ export default function CodeMirrorEditor({
                   ><Undo2 size={14} /></button>
                   <button
                     className="p-1 rounded"
-                    title="重做 (Ctrl+Y / Ctrl+Shift+Z)"
+                    title={t('action.redo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}

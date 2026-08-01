@@ -79,11 +79,11 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
             size="icon"
             onClick={onVerify}
             disabled={loading}
-            title="重新校验"
+            title={t('verification.revalidate')}
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={onClose} title="关闭">
+          <Button variant="ghost" size="icon" onClick={onClose} title={t('action.close')}>
             <XCircle size={13} />
           </Button>
         </div>

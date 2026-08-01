@@ -1,6 +1,7 @@
 import * as React from 'react'
 import { ChevronUp, ChevronDown } from 'lucide-react'
 import { cn } from '../../lib/utils'
+import { t } from '../../shared/locale'
 
 /**
  * 通用 Input 组件
@@ -110,7 +111,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             )}
             onClick={increment}
             tabIndex={-1}
-            aria-label="增加"
+            aria-label={t('input.increase')}
           >
             <ChevronUp size={10} style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
           </button>
@@ -123,7 +124,7 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
             )}
             onClick={decrement}
             tabIndex={-1}
-            aria-label="减少"
+            aria-label={t('input.decrease')}
           >
             <ChevronDown size={10} style={{ color: 'var(--color-text-muted)' }} strokeWidth={2} />
           </button>

@@ -8,7 +8,8 @@ import type { DraftMeta } from '../../../stores/draft-store'
 import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { confirm } from '../../ui/Confirm'
-import { DRAFT_STATUS_LABEL, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
+import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
+import type { TextKey } from '../../../shared/locale'
 import { showSidebarMenu } from './SidebarShared'
 import { ipc } from '../../../services/ipc-client'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -252,7 +253,7 @@ function DraftItem({
       title={t('draftbox.tooltip')
         .replace('{title}', chapterTitleText)
         .replace('{version}', String(draft.version))
-        .replace('{status}', DRAFT_STATUS_LABEL[draft.status] || draft.status)}
+        .replace('{status}', t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status)}
     >
       <FileText size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
       <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
@@ -263,7 +264,7 @@ function DraftItem({
         className="text-[0.7rem] flex-shrink-0"
         style={{ color: DRAFT_STATUS_COLOR[draft.status] || 'var(--color-text-muted)' }}
       >
-        {DRAFT_STATUS_LABEL[draft.status] || draft.status}
+        {t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status}
       </span>
       {/* 已定稿图标 */}
       {isFinalized && (

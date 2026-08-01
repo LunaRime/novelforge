@@ -414,7 +414,7 @@ export default function ThreeWayMerge({
                 {/* 左栏 */}
                 <div className={`twm-cell twm-cell-left ${isApplied ? 'processed' : ''}`}>
                   <HunkLines lines={hunk.originalLines} padCount={leftPad} cls="twm-line-removed"
-                    emptyLabel={`（新增 ${hunk.modifiedLines.length} 行）`} />
+                    emptyLabel={t('merge.addedLines').replace('{n}', String(hunk.modifiedLines.length))} />
                 </div>
 
                 {/* 中栏 */}
@@ -428,12 +428,12 @@ export default function ThreeWayMerge({
                   <div className="twm-hunk-row">
                     <button className={`twm-adopt ${isApplied ? 'adopted' : ''}`}
                       onClick={() => toggleHunk(hunk.index)}
-                      title={isApplied ? '恢复原稿' : '采用修稿'}>
+                      title={isApplied ? t('merge.restoreOriginal') : t('merge.applyRevision')}>
                       {isApplied ? '✓' : '«'}
                     </button>
                     <div className="twm-hunk-text">
                       <HunkLines lines={hunk.modifiedLines} padCount={rightPad} cls="twm-line-added"
-                        emptyLabel={`（删除 ${hunk.originalLines.length} 行）`} />
+                        emptyLabel={t('merge.deletedLines').replace('{n}', String(hunk.originalLines.length))} />
                     </div>
                   </div>
                 </div>

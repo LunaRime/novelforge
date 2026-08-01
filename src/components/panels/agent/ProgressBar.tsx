@@ -6,6 +6,7 @@
 
 import React from 'react'
 import type { AgentProgress } from '../../../services/agent/progress-tracker'
+import { t } from '../../../shared/locale'
 
 interface ProgressBarProps {
   progress: AgentProgress
@@ -20,12 +21,12 @@ const PHASE_COLORS: Record<string, string> = {
   done: 'var(--color-text-muted)',         // 灰色
 }
 
-/** 阶段标签 */
+/** 阶段标签（模块级 t() 读取当前 locale） */
 const PHASE_LABELS: Record<string, string> = {
-  thinking: '思考中',
-  tool_execution: '执行工具',
-  generating: '生成回复',
-  done: '完成',
+  thinking: t('progressBar.thinking'),
+  tool_execution: t('progressBar.toolExecution'),
+  generating: t('progressBar.generating'),
+  done: t('status.completed'),
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({ progress, className = '' }) => {

@@ -96,7 +96,8 @@ export default function KnowledgePanel() {
           if (chMatch) {
             const num = chMatch[1] ? parseInt(chMatch[1], 10) : parseInt(chMatch[2], 10)
             const rest = (chMatch[3] || '').trim()
-            title = rest ? `第${num}章 ${rest}` : `第${num}章`
+            const chLabel = t('chapter.nLabel').replace('{n}', String(num))
+            title = rest ? `${chLabel} ${rest}` : chLabel
           }
 
           try {
@@ -123,7 +124,7 @@ export default function KnowledgePanel() {
     return (
       <EmptyState 
         icon={<BookOpen size={36} />} 
-        message="请先打开项目" 
+        message={t('knowledge.openProjectFirst')}
         className="pb-[15vh]" 
         opacity={0.4} 
       />
@@ -138,7 +139,7 @@ export default function KnowledgePanel() {
           <Database size={13} />
           <span className="truncate">{t('nav.knowledgeBase')}</span>
           <span className="text-[0.7rem] text-[var(--color-text-muted)] flex-shrink-0">
-            ({stats.documentCount} 文档 / {stats.totalChunks} 块)
+            {t('knowledge.docChunks').replace('{docs}', String(stats.documentCount)).replace('{chunks}', String(stats.totalChunks))}
           </span>
         </span>
         <div className="flex items-center gap-0.5 flex-shrink-0">
