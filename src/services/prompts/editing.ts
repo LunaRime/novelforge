@@ -1,10 +1,9 @@
 import type { PromptTemplate } from "../prompt-templates";
-import { t } from '../../shared/locale'
 
 export const editingPrompts: PromptTemplate[] = [
   {
     key: 'refine_chapter',
-    name: t('prompt.name.masterRefine'),
+    name: '大神级修稿',
     description: '将草稿提升到大神级质量',
     systemRole: '你是一位功力深厚的文学编辑，擅长将普通文稿精修为白金品质力作。',
     variables: {
@@ -51,7 +50,7 @@ export const editingPrompts: PromptTemplate[] = [
   },
   {
     key: 'refine_from_review',
-    name: t('prompt.name.reviewDriven'),
+    name: '审稿驱动修稿',
     description: '根据审稿报告中的问题精准修复草稿',
     systemRole: '你是一位严谨的小说编辑，擅长精准修复文本中的具体问题而不过度改写。',
     variables: {

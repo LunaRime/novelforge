@@ -3,6 +3,9 @@ import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle 
 import {
   BUILTIN_PROMPTS,
   EDITABLE_PROMPT_KEYS,
+  PROMPT_NAME_KEYS,
+  PROMPT_DESC_KEYS,
+  PROMPT_VAR_KEYS,
   getPromptTemplate,
   getPromptSource,
   saveCustomPrompt,
@@ -219,7 +222,9 @@ function TemplateItem({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              {builtinTemplate.name}
+              {PROMPT_NAME_KEYS[builtinTemplate.key]
+                ? t(PROMPT_NAME_KEYS[builtinTemplate.key])
+                : builtinTemplate.name}
             </span>
             <span
               className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
@@ -229,7 +234,9 @@ function TemplateItem({
             </span>
           </div>
           <p className="text-xs mt-0.5 truncate" style={{ color: 'var(--color-text-muted)' }}>
-            {builtinTemplate.description}
+            {PROMPT_DESC_KEYS[builtinTemplate.key]
+              ? t(PROMPT_DESC_KEYS[builtinTemplate.key])
+              : builtinTemplate.description}
           </p>
         </div>
       </button>
@@ -243,11 +250,13 @@ function TemplateItem({
               {t('prompt.variables')}
             </p>
             <div className="flex flex-wrap gap-1.5">
-              {Object.entries(builtinTemplate.variables).map(([varName, desc]) => (
+              {Object.entries(builtinTemplate.variables).map(([varName, desc]) => {
+                const descText = PROMPT_VAR_KEYS[desc] ? t(PROMPT_VAR_KEYS[desc]) : desc
+                return (
                 <button
                   key={varName}
                   onClick={() => insertVariable(varName)}
-                  title={desc}
+                  title={descText}
                   className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus:outline-none"
                   style={{
                     backgroundColor: 'var(--color-hover)',
@@ -256,9 +265,10 @@ function TemplateItem({
                   }}
                 >
                   <code className="font-mono">{`{{${varName}}}`}</code>
-                  <span className="opacity-60 max-w-[120px] truncate">{desc}</span>
+                  <span className="opacity-60 max-w-[120px] truncate">{descText}</span>
                 </button>
-              ))}
+                )
+              })}
             </div>
           </div>
 
