@@ -32,6 +32,8 @@ export interface GlobalConfig {
     host: string
     port: number
   }
+  /** 最近项目列表（打开项目时由渲染进程同步，活动聚合/历史导航读取） */
+  recentProjects?: Array<{ name: string; path: string; updatedAt?: number }>
 }
 
 // ===== 项目管理 =====
@@ -97,11 +99,15 @@ export interface DailyActivityRow {
   revisedCount: number         // 当天修改次数
   llmCalls: number             // 当天成功模型调用次数
   llmTokens: number            // 当天模型调用消耗 tokens
+  llmCost: number              // 当天模型调用费用（美元）
+  projectPath: string          // 来源项目路径
+  projectName: string          // 来源项目名
 }
 
-/** 每日活动查询结果 */
+/** 每日活动查询结果（跨项目聚合，days 带项目来源标记） */
 export interface DailyActivityData {
   days: DailyActivityRow[]
+  projects: Array<{ path: string; name: string }>
   startDay: string
   endDay: string
   dayCount: number
@@ -368,7 +374,7 @@ export interface DatabaseChannels {
   'db:log-llm-call': { args: [call: Record<string, unknown>]; return: { success: boolean } }
   'db:get-llm-stats': { args: []; return: { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
-  'db:get-daily-activity': { args: [days?: number]; return: DailyActivityData }
+  'db:get-daily-activity': { args: [days?: number, projectPath?: string, currentProjectPath?: string]; return: DailyActivityData }
   'config:set-locale': { args: [locale: 'zh-CN' | 'en-US' | 'ru-RU']; return: { success: boolean } }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
   'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }

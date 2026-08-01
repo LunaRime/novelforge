@@ -1,18 +1,22 @@
 /**
  * ActivityView — 每日活动热力图（GitHub Contribution Graph 风格）
  *
- * 三条数据链按天聚合（本地时区）：
+ * 跨项目聚合（最近项目列表来自全局配置）：
  * - 写作字数：drafts（source='write'）
  * - 修改量：AI 重写草稿 + 修稿（revisions）
- * - 模型调用：llm_calls（success=1）
+ * - 模型调用：llm_calls（success=1，含费用 cost）
  *
- * 数据来源：ipc 'db:get-daily-activity' → ActivityRepository（按天 SQL 聚合）
+ * 支持项目维度切换：全部项目（按天合并）/ 单个项目（过滤），
+ * 统计条恒定显示全局总计 + 当前范围。
  */
 import { useEffect, useState } from 'react'
-import { Activity, PenLine, RefreshCw, Loader2, Sparkles, BookOpen } from 'lucide-react'
-import { DEFAULT_LOCALE, t } from '../../../shared/locale'
+import { Activity, PenLine, RefreshCw, Loader2, Sparkles, BookOpen, Wallet } from 'lucide-react'
+import { getCurrentLocale, t } from '../../../shared/locale'
 import { getDailyActivity } from '../../../services/stats-service'
-import type { DailyActivityData } from '../../../shared/ipc-channels'
+import type { DailyActivityData, DailyActivityRow } from '../../../shared/ipc-channels'
+import { useProjectStore } from '../../../stores/project-store'
+import { useTranslation } from '../../../hooks/useTranslation'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../../ui/Select'
 
 /** 最近天数（13 周 ≈ 90 天） */
 const DAYS = 90
@@ -30,13 +34,23 @@ const LEVEL_COLORS = [
 ]
 
 export default function ActivityView() {
+  const { t } = useTranslation()
+  const currentProject = useProjectStore(s => s.currentProject)
   const [data, setData] = useState<DailyActivityData | null>(null)
   const [loading, setLoading] = useState(true)
+  /** '' = 全部项目；否则为项目路径 */
+  const [selectedPath, setSelectedPath] = useState('')
 
-  // 异步加载（与 ModelsView 相同模式：effect 内仅触发异步任务，无同步 setState）
+  // 打开项目时默认选中该项目（总数据仍在下拉可切回）
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 项目切换同步选择是同步副作用
+    if (currentProject?.path) setSelectedPath(currentProject.path)
+  }, [currentProject?.path])
+
   const loadActivity = async () => {
     try {
-      const result = await getDailyActivity(DAYS)
+      // currentProjectPath：当前项目始终纳入聚合（即使尚未写入最近项目列表）
+      const result = await getDailyActivity(DAYS, undefined, currentProject?.path)
       setData(result)
     } catch (e) {
       console.warn('[ActivityView] 加载每日活动数据失败:', e)
@@ -45,13 +59,11 @@ export default function ActivityView() {
     setLoading(false)
   }
 
-  // 数据加载模式：effect 仅触发异步任务，setState 全部发生在 promise 回调中
-  // （react-hooks v7 新规则对 async 数据加载误报，与 ModelsView 同模式，显式豁免）
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadActivity() }, [])
+  // 打开项目时同步刷新聚合数据（currentProject 纳入/移出聚合范围）
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- loadActivity 每次渲染重建，依赖 currentProject.path 即覆盖其变化
+  useEffect(() => { loadActivity() }, [currentProject?.path])
 
-  // 手动刷新：事件处理器内 setState 合法
-  // eslint-disable-next-line react-hooks/set-state-in-effect
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 事件处理器内 setState 合法
   const handleRefresh = () => { setLoading(true); loadActivity() }
 
   if (loading && !data) {
@@ -63,45 +75,86 @@ export default function ActivityView() {
     )
   }
 
+  // 按选择过滤/合并（一次请求全部数据，前端切换即时）
+  const allRows = data?.days ?? []
+  const scopeRows = selectedPath
+    ? allRows.filter(r => r.projectPath === selectedPath)
+    : mergeDaysByDay(allRows)
+
+  // 统计
+  const totalStats = calcStats(allRows)          // 全局总计（恒定显示）
+  const scopeStats = calcStats(scopeRows)        // 当前范围
+
   return (
     <div className="h-full flex flex-col overflow-y-auto">
-      {/* 顶部：标题 + 刷新 */}
+      {/* 顶部：标题 + 项目选择 + 刷新 */}
       <div
         className="flex items-center justify-between px-4 py-2 flex-shrink-0"
         style={{ borderBottom: '1px solid var(--color-border)' }}
       >
-        <div className="flex items-center gap-2">
-          <Activity size={13} style={{ color: 'var(--color-accent)' }} />
-          <span className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <Activity size={13} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+          <span className="text-xs font-semibold flex-shrink-0" style={{ color: 'var(--color-text)' }}>
             {t('panel.activity')}
           </span>
-          <span className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-[0.68rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             {t('activity.lastDays').replace('{n}', String(DAYS))}
           </span>
+          {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
+          <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
+            <SelectTrigger
+              className="h-6 w-auto max-w-[160px] rounded-[var(--radius-sm)] text-[0.68rem]"
+              title={t('activity.selectProject')}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__all__">{t('activity.allProjects')}</SelectItem>
+              {(data?.projects ?? []).map(p => (
+                <SelectItem key={p.path} value={p.path}>{p.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <button onClick={handleRefresh} className="icon-btn" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
+        <button onClick={handleRefresh} className="icon-btn flex-shrink-0" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
 
-      {!data || data.dayCount === 0 ? (
+      {allRows.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
           <BookOpen size={22} style={{ opacity: 0.4 }} />
           <span className="text-xs">{t('activity.noData')}</span>
         </div>
       ) : (
         <div className="px-4 py-3 space-y-4">
-          {/* 统计条 */}
-          <div className="flex items-center gap-5 flex-wrap">
-            <StatItem icon={<PenLine size={11} />} label={t('activity.totalWritten')} value={formatNumber(totalOf(data, 'writtenWords'))} />
-            <StatItem icon={<RefreshCw size={11} />} label={t('activity.totalRevised')} value={formatNumber(totalOf(data, 'revisedWords'))} />
-            <StatItem icon={<Sparkles size={11} />} label={t('activity.totalCalls')} value={formatNumber(totalOf(data, 'llmCalls'))} />
-            <StatItem icon={<Activity size={11} />} label={t('activity.totalTokens')} value={`${(totalOf(data, 'llmTokens') / 1000).toFixed(1)}K`} />
+          {/* 统计条：全局总计 + 当前范围 */}
+          <div className="space-y-2">
+            {/* 当前范围 */}
+            <div className="flex items-center gap-5 flex-wrap">
+              <StatItem icon={<PenLine size={11} />} label={t('activity.totalWritten')} value={formatNumber(scopeStats.writtenWords)} />
+              <StatItem icon={<RefreshCw size={11} />} label={t('activity.totalRevised')} value={formatNumber(scopeStats.revisedWords)} />
+              <StatItem icon={<Sparkles size={11} />} label={t('activity.totalCalls')} value={formatNumber(scopeStats.llmCalls)} />
+              <StatItem icon={<Activity size={11} />} label={t('activity.totalTokens')} value={`${(scopeStats.llmTokens / 1000).toFixed(1)}K`} />
+              <StatItem icon={<Wallet size={11} />} label={t('activity.totalCost')} value={`$${scopeStats.llmCost.toFixed(2)}`} accent />
+            </div>
+            {/* 全局总计（所有项目，恒定显示） */}
+            {selectedPath && (
+              <div className="flex items-center gap-4 text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="flex items-center gap-1">
+                  <GlobeIcon size={10} />
+                  {t('activity.globalTotal')}
+                </span>
+                <span>{t('activity.totalWritten')} {formatNumber(totalStats.writtenWords)}</span>
+                <span>{t('activity.totalCalls')} {formatNumber(totalStats.llmCalls)}</span>
+                <span>{t('activity.totalCost')} ${totalStats.llmCost.toFixed(2)}</span>
+              </div>
+            )}
           </div>
 
           {/* GitHub 风格热力图 */}
           <div className="select-none">
-            <ContributionGrid data={data} />
+            <ContributionGrid rows={scopeRows} />
           </div>
 
           {/* 图例 */}
@@ -128,19 +181,53 @@ export default function ActivityView() {
 }
 
 /** 统计项 */
-function StatItem({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function StatItem({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
   return (
     <div className="flex items-center gap-1.5 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-      <span style={{ color: 'var(--color-accent)' }}>{icon}</span>
+      <span style={{ color: accent ? 'var(--color-accent)' : 'var(--color-accent)' }}>{icon}</span>
       <span>{label}</span>
-      <span className="font-bold text-xs" style={{ color: 'var(--color-text)' }}>{value}</span>
+      <span className={`font-bold text-xs ${accent ? '' : ''}`} style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text)' }}>{value}</span>
     </div>
   )
 }
 
-/** 求和 */
-function totalOf(data: DailyActivityData, key: 'writtenWords' | 'revisedWords' | 'llmCalls' | 'llmTokens'): number {
-  return data.days.reduce((sum, d) => sum + d[key], 0)
+function GlobeIcon({ size }: { size: number }) {
+  return <span style={{ fontSize: size }}>🌐</span>
+}
+
+/** 按天合并跨项目行（求和） */
+function mergeDaysByDay(rows: DailyActivityRow[]): DailyActivityRow[] {
+  const map = new Map<string, DailyActivityRow>()
+  for (const r of rows) {
+    const cur = map.get(r.day) ?? {
+      day: r.day,
+      writtenWords: 0, writtenCount: 0, revisedWords: 0, revisedCount: 0,
+      llmCalls: 0, llmTokens: 0, llmCost: 0,
+      projectPath: '', projectName: '',
+    }
+    map.set(r.day, {
+      ...cur,
+      writtenWords: cur.writtenWords + r.writtenWords,
+      writtenCount: cur.writtenCount + r.writtenCount,
+      revisedWords: cur.revisedWords + r.revisedWords,
+      revisedCount: cur.revisedCount + r.revisedCount,
+      llmCalls: cur.llmCalls + r.llmCalls,
+      llmTokens: cur.llmTokens + r.llmTokens,
+      llmCost: cur.llmCost + r.llmCost,
+    })
+  }
+  return Array.from(map.values()).sort((a, b) => a.day.localeCompare(b.day))
+}
+
+/** 统计求和 */
+function calcStats(rows: DailyActivityRow[]) {
+  return rows.reduce((acc, r) => ({
+    writtenWords: acc.writtenWords + r.writtenWords,
+    revisedWords: acc.revisedWords + r.revisedWords,
+    llmCalls: acc.llmCalls + r.llmCalls,
+    llmTokens: acc.llmTokens + r.llmTokens,
+    llmCost: acc.llmCost + r.llmCost,
+  }), { writtenWords: 0, revisedWords: 0, llmCalls: 0, llmTokens: 0, llmCost: 0 })
 }
 
 /** 千分位格式化 */
@@ -150,25 +237,22 @@ function formatNumber(n: number): string {
 
 // ===== 热力图网格 =====
 
-function ContributionGrid({ data }: { data: DailyActivityData }) {
+function ContributionGrid({ rows }: { rows: DailyActivityRow[] }) {
   // 构建最近 90 天的日期序列（向前对齐到周日）
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const start = new Date(today)
-  start.setDate(start.getDate() - (DAYS - 1) - start.getDay()) // 对齐周日（getDay()=0）
+  start.setDate(start.getDate() - (DAYS - 1) - start.getDay())
 
   const totalDays = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1
   const columns = Math.ceil(totalDays / 7)
 
-  // day → row 映射
-  const byDay = new Map(data.days.map(d => [d.day, d]))
+  const byDay = new Map(rows.map(d => [d.day, d]))
 
-  // 各维度最大值（归一化基准，防除零）
-  const maxWritten = Math.max(1, ...data.days.map(d => d.writtenWords))
-  const maxRevised = Math.max(1, ...data.days.map(d => d.revisedWords))
-  const maxCalls = Math.max(1, ...data.days.map(d => d.llmCalls))
+  const maxWritten = Math.max(1, ...rows.map(d => d.writtenWords))
+  const maxRevised = Math.max(1, ...rows.map(d => d.revisedWords))
+  const maxCalls = Math.max(1, ...rows.map(d => d.llmCalls))
 
-  // 列集合：{ date, monthLabel }[]
   const colStarts: Array<{ date: Date; monthLabel: string | null }> = []
   for (let c = 0; c < columns; c++) {
     const colDate = new Date(start)
@@ -176,7 +260,7 @@ function ContributionGrid({ data }: { data: DailyActivityData }) {
     const prevDate = c > 0 ? new Date(start) : null
     if (prevDate) prevDate.setDate(start.getDate() + (c - 1) * 7)
     const monthLabel = colDate.getMonth() !== prevDate?.getMonth()
-      ? colDate.toLocaleString(DEFAULT_LOCALE, { month: 'short' })
+      ? colDate.toLocaleString(getCurrentLocale(), { month: 'short' })
       : null
     colStarts.push({ date: colDate, monthLabel })
   }
@@ -208,7 +292,6 @@ function ContributionGrid({ data }: { data: DailyActivityData }) {
             {Array.from({ length: 7 }, (_, row) => {
               const date = new Date(col.date)
               date.setDate(col.date.getDate() + row)
-              // 超过今天的天不渲染（占位保持对齐）
               if (date > today) return <span key={row} style={{ width: CELL_SIZE, height: CELL_SIZE }} />
               const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
               const d = byDay.get(key)
@@ -226,11 +309,10 @@ function Cell({
   dayKey, d, maxes, isToday,
 }: {
   dayKey: string
-  d?: { writtenWords: number; writtenCount: number; revisedWords: number; revisedCount: number; llmCalls: number; llmTokens: number }
+  d?: DailyActivityRow
   maxes: { maxWritten: number; maxRevised: number; maxCalls: number }
   isToday: boolean
 }) {
-  // 综合活跃度 = 各维度归一化后取最大（任一活动都有颜色）
   const strength = d
     ? Math.max(
         d.writtenWords / maxes.maxWritten,
@@ -238,12 +320,10 @@ function Cell({
         d.llmCalls / maxes.maxCalls,
       )
     : 0
-  // 5 级：0（无活动）~ 4（最高）
   const level = strength === 0 ? 0 : Math.min(4, 1 + Math.floor(strength * 4))
 
-  // tooltip 明细
   const tooltip = d
-    ? `${dayKey} · ${t('activity.writing')} ${formatNumber(d.writtenWords)} ${t('unit.chars')} · ${t('activity.revised')} ${d.revisedCount} ${t('activity.times')} · ${t('activity.calls')} ${d.llmCalls} ${t('activity.times')} / ${(d.llmTokens / 1000).toFixed(1)}K`
+    ? `${dayKey} · ${t('activity.writing')} ${formatNumber(d.writtenWords)} ${t('unit.chars')} · ${t('activity.revised')} ${d.revisedCount} ${t('activity.times')} · ${t('activity.calls')} ${d.llmCalls} ${t('activity.times')} / ${(d.llmTokens / 1000).toFixed(1)}K · $${d.llmCost.toFixed(2)}`
     : dayKey
 
   return (
@@ -255,7 +335,6 @@ function Cell({
         borderRadius: 2,
         backgroundColor: LEVEL_COLORS[level],
         border: '1px solid var(--color-border)',
-        // 今日高亮描边
         boxShadow: isToday ? 'inset 0 0 0 1px var(--color-accent)' : 'none',
         cursor: 'default',
       }}
