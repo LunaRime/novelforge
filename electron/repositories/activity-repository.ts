@@ -129,10 +129,14 @@ export class ActivityRepository {
         `).all(startMs, startMs) as Array<{ day: string; words: number; count: number }>
 
         // 3. 模型调用（含费用）
+        // 兼容旧库：cost 列由主进程打开项目时迁移补齐，但这里用只读连接打开
+        // 其他项目 DB（不执行迁移）——旧库可能没有 cost 列，查询时检测降级
+        const hasCost = (db.prepare(`PRAGMA table_info(llm_calls)`).all() as Array<{ name: string }>)
+          .some(c => c.name === 'cost')
         const llm = db.prepare(`
           SELECT ${dayFmt('created_at')} as day, COUNT(*) as calls,
                  COALESCE(SUM(total_tokens), 0) as tokens,
-                 COALESCE(SUM(cost), 0) as cost
+                 ${hasCost ? 'COALESCE(SUM(cost), 0) as cost' : '0 as cost'}
           FROM llm_calls WHERE success = 1 AND created_at >= ?
           GROUP BY day
         `).all(startMs) as Array<{ day: string; calls: number; tokens: number; cost: number }>
