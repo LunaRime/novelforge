@@ -1,12 +1,19 @@
 {
   "name": "novelforge",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "NovelForge - AI 深度驱动的小说创作 IDE",
   "author": "LunaRime",
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "type": "commonjs",
   "main": "dist-electron/main.js",
+  "dependencies": {
+    "@lancedb/lancedb": "^0.27.2",
+    "apache-arrow": "^18.1.0",
+    "better-sqlite3": "^12.8.0",
+    "electron-updater": "^6.8.9",
+    "flatbuffers": "^25.9.23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "node scripts/verify-build-contract.cjs && tsc && vite build && electron-builder && node scripts/verify-packed-app.cjs && node scripts/organize-release.cjs",
@@ -22,13 +29,6 @@
     "test:coverage": "vitest run --coverage",
     "gen:tokens": "node scripts/extract-tokens.cjs",
     "check:native": "node scripts/detect-native-deps.cjs"
-  },
-  "dependencies": {
-    "@lancedb/lancedb": "^0.27.2",
-    "apache-arrow": "^18.1.0",
-    "better-sqlite3": "^12.8.0",
-    "electron-updater": "^6.8.9",
-    "flatbuffers": "^25.9.23"
   },
   "devDependencies": {
     "@chromatic-com/storybook": "^5.1.2",
