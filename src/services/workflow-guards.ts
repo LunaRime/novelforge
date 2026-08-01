@@ -205,7 +205,7 @@ export async function guardRepairPostProcess(chapterNumber: number): Promise<Gua
   const maxFinalized = await ipc.invoke('db:draft-get-max-finalized-chapter')
 
   if (maxFinalized === 0) {
-    return { ok: false, message: '尚无已定稿章节，无法执行修复操作。' }
+    return { ok: false, message: t('guard.noFinalizedChapters') }
   }
 
   if (chapterNumber !== maxFinalized) {

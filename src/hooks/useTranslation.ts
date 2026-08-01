@@ -19,10 +19,14 @@ function subscribeToLocale(cb: () => void) {
 }
 function notifyLocaleChange() { localeListeners.forEach(l => l()) }
 
-/** 供语言选择 UI 调用的切换函数，会触发全界面重渲染 */
+/** 供语言选择 UI 调用的切换函数，会触发全界面重渲染，并同步主进程（对话框/菜单） */
 export function switchLocale(locale: SupportedLocale) {
   setCurrentLocale(locale)
   notifyLocaleChange()
+  // 主进程对话框/菜单的 t() 跟随 UI 语言（非 Electron 环境静默忽略）
+  import('../services/ipc-client').then(({ ipc }) => {
+    if (ipc.isElectron) ipc.invoke('config:set-locale', locale).catch(() => {})
+  }).catch(() => {})
 }
 
 export function useTranslation() {

@@ -9,6 +9,7 @@
  */
 
 import type { WorkflowDefinition } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 import type { ImportedChapter } from './commands/import-novel.command'
 
 export interface ImportWorkflowParams {
@@ -22,12 +23,12 @@ export interface ImportWorkflowParams {
 export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
   return {
     type: 'novel_import',
-    title: `📥 导入小说（${params.chapters.length} 章）`,
+    title: t('workflow.importTitle').replace('{n}', String(params.chapters.length)),
     steps: [
       // ===== 步骤 1: 写入正文 + 构建知识库 =====
       {
-        name: '写入正文与构建知识库',
-        description: `将 ${params.chapters.length} 章正文写入 manuscript/ 并灌入向量知识库`,
+        name: t('workflow.importWriteKB'),
+        description: t('workflow.importWriteKBDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
           const { ImportInitializeCommand } = await import('./commands/import-novel.command')
           const cmd = new ImportInitializeCommand(params.chapters)
@@ -37,8 +38,8 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
 
       // ===== 步骤 2: 向量采样 + AI 推演全局设定 =====
       {
-        name: 'AI 推演全局配置与架构',
-        description: '通过向量检索关键片段，AI 推演小说配置、故事架构、角色卡',
+        name: t('workflow.importInferGlobal'),
+        description: t('workflow.importInferGlobalDesc'),
         executor: async (step, context, callbacks) => {
           const { InferGlobalSettingsCommand } = await import('./commands/import-novel.command')
           const cmd = new InferGlobalSettingsCommand()
@@ -48,8 +49,8 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
 
       // ===== 步骤 3: AI 按章推演蓝图 + 蓝图入向量库 + 拼装摘要 =====
       {
-        name: 'AI 逐章推演蓝图',
-        description: `逐章推演蓝图 + 蓝图要点入向量库 + 拼装全局摘要（共 ${params.chapters.length} 章）`,
+        name: t('workflow.importInferBlueprints'),
+        description: t('workflow.importInferBlueprintsDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
           const { InferBlueprintsPerChapterCommand } = await import('./commands/import-novel.command')
           const cmd = new InferBlueprintsPerChapterCommand()
@@ -59,8 +60,8 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
 
       // ===== 步骤 4: 完成后处理 =====
       {
-        name: '完成后处理',
-        description: '刷新项目状态，加载角色卡与蓝图数据',
+        name: t('workflow.importPostProcess'),
+        description: t('workflow.importPostProcessDesc'),
         executor: async (_step, _context, callbacks) => {
           callbacks.log('🔄 正在刷新项目数据...')
           callbacks.setProgress(30)
@@ -91,7 +92,7 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
     ],
     onComplete: {
       mode: 'silent',
-      message: '🎉 小说导入完成！全部结构化数据已生成，可以开始续写了。',
+      message: t('workflow.importDone'),
     },
   }
 }

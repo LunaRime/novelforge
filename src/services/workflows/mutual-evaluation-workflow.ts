@@ -8,6 +8,7 @@
  */
 
 import type { WorkflowDefinition, WorkflowStep, WorkflowContext, StepCallbacks } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { SpawnReviewersCommand, type ReviewerOutput } from './commands/spawn-reviewers.command'
 import { SynthesizeScoresCommand } from './commands/synthesize-scores.command'
@@ -23,10 +24,10 @@ export function createMutualEvaluationWorkflow(
 ): WorkflowDefinition {
   return {
     type: 'post_process',
-    title: `🤝 AI 互评 — 第${params.chapterNumber}章`,
+    title: t('workflow.mutualTitle').replace('{n}', String(params.chapterNumber)),
     steps: [
       {
-        name: '多视角评审',
+        name: t('workflow.multiReview'),
         description: '从 3 个视角并行评审草稿（情节逻辑性、角色一致性、文笔流畅度）',
         executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
           callbacks.log(`启动 AI 互评引擎，评审第 ${params.chapterNumber} 章...`)
@@ -48,7 +49,7 @@ export function createMutualEvaluationWorkflow(
         },
       },
       {
-        name: '综合评分',
+        name: t('workflow.synthesizeScores'),
         description: '加权聚合多视角评分，分析共识和分歧',
         executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
           const outputs = context.data.reviewerOutputs as ReviewerOutput[]
@@ -92,7 +93,7 @@ export function createMutualEvaluationWorkflow(
     ],
     onComplete: {
       mode: 'open',
-      message: `✅ AI 互评完成 — 第${params.chapterNumber}章`,
+      message: t('workflow.mutualDone').replace('{n}', String(params.chapterNumber)),
       openResult: () => {
         import('../../stores/layout-store').then((m) =>
           m.useLayoutStore.getState().openRightPanel('ai-output'),

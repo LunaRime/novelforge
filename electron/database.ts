@@ -8,6 +8,7 @@ import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
 import { dialog } from 'electron'
+import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
 import type BetterSqlite3 from 'better-sqlite3'
 
@@ -51,8 +52,8 @@ export function initProjectDatabase(projectPath: string): void {
       // 通知用户
       dialog.showMessageBox({
         type: 'error',
-        title: '数据库损坏',
-        message: '项目数据库文件已损坏，已自动创建新数据库。',
+        title: t('dialog.dbCorruptTitle'),
+        message: t('dialog.dbCorruptMsg'),
         detail: '损坏的数据库文件已备份（文件名后缀 .corrupted）。\n\n' +
           '之前的数据可能已丢失。如果你有最近的备份，可以手动恢复。\n' +
           '备份路径：' + path.dirname(dbPath),
@@ -70,8 +71,8 @@ export function initProjectDatabase(projectPath: string): void {
       logger.error('DB', `数据库完整性检查失败: ${integrity}`)
       dialog.showMessageBox({
         type: 'warning',
-        title: '数据库完整性警告',
-        message: '数据库完整性检查未通过，可能存在数据损坏。',
+        title: t('dialog.dbIntegrityTitle'),
+        message: t('dialog.dbIntegrityMsg'),
         detail: `检查结果: ${integrity}\n\n建议备份项目数据后重新打开。`,
         buttons: ['确定'],
       }).catch(() => { /* ignore */ })

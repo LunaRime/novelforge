@@ -1,7 +1,7 @@
-import { DEFAULT_LOCALE, formatLocaleDate, formatLocaleDateTime } from '../shared/locale'
+import { DEFAULT_LOCALE, t, formatLocaleDate, formatLocaleDateTime } from '../shared/locale'
 
 /**
- * 格式化相对时间（如：刚刚 / 5分钟前 / 2小时前 / 3天前）
+ * 格式化相对时间（模块级 t() 读取当前 locale，随语言切换即时生效）
  */
 export function formatRelativeTime(timestamp: number): string {
   const now = Date.now()
@@ -10,10 +10,10 @@ export function formatRelativeTime(timestamp: number): string {
   const hours = Math.floor(diff / 3600000)
   const days = Math.floor(diff / 86400000)
 
-  if (minutes < 1) return '刚刚'
-  if (minutes < 60) return `${minutes}分钟前`
-  if (hours < 24) return `${hours}小时前`
-  if (days < 7) return `${days}天前`
+  if (minutes < 1) return t('time.justNow')
+  if (minutes < 60) return t('time.minutesAgo').replace('{n}', String(minutes))
+  if (hours < 24) return t('time.hoursAgo').replace('{n}', String(hours))
+  if (days < 7) return t('time.daysAgo').replace('{n}', String(days))
   return formatLocaleDate(timestamp, { month: 'short', day: 'numeric' })
 }
 

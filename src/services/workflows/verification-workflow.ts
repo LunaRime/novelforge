@@ -7,6 +7,7 @@
  */
 
 import type { WorkflowDefinition, WorkflowStep, WorkflowContext, StepCallbacks } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { loadDirectoryBlueprints, type ChapterBlueprint } from './directory-workflow'
 import { FillGapsCommand } from './commands/fill-gaps.command'
@@ -23,7 +24,7 @@ export function createVerificationWorkflow(
 ): WorkflowDefinition {
   const steps: WorkflowDefinition['steps'] = [
     {
-      name: '加载蓝图',
+      name: t('workflow.loadBlueprints'),
       description: '从数据库加载已有蓝图',
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const project = useProjectStore.getState().currentProject
@@ -53,7 +54,7 @@ export function createVerificationWorkflow(
       },
     },
     {
-      name: '扫描缺口',
+      name: t('workflow.scanGaps'),
       description: '检测缺失的章节蓝图',
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const blueprints = context.data.blueprints as ChapterBlueprint[]
@@ -76,7 +77,7 @@ export function createVerificationWorkflow(
   // 如果启用自动补全，添加补全步骤
   if (params.autoFill) {
     steps.push({
-      name: 'AI 补全',
+      name: t('workflow.aiFill'),
       description: '使用相邻章节上下文生成缺失蓝图',
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const gaps = context.data.gaps as BlueprintGap[]

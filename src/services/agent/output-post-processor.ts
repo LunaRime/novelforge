@@ -12,6 +12,7 @@
 
 import type { ToolArtifact } from './tool-registry'
 import type { LLMMessage } from './agent-engine'
+import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
@@ -110,8 +111,8 @@ const ArtifactExtractionStep: PostProcessStep = {
     ) {
       extracted.push({
         type: 'review_completed',
-        name: '审稿报告',
-        summary: '已完成一致性审查',
+        name: t('agent.reviewReportArtifact'),
+        summary: t('agent.reviewDoneSummary'),
         timestamp: Date.now(),
       })
     }

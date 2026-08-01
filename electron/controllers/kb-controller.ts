@@ -1,4 +1,5 @@
 import { ipcMain, dialog } from 'electron'
+import { t } from '../../src/shared/locale'
 import fs from 'node:fs'
 import {
   importDocument, importFolder, importText, searchKnowledge, searchKnowledgeFTS,
@@ -206,7 +207,7 @@ export function registerKBController() {
   ipcMain.handle('dialog:select-files', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
-      title: '选择要导入的文档',
+      title: t('dialog.selectDocs'),
       filters: [{ name: '文本文件', extensions: ['txt', 'md', 'markdown'] }],
     })
     if (result.canceled || result.filePaths.length === 0) return null
@@ -216,7 +217,7 @@ export function registerKBController() {
   ipcMain.handle('dialog:select-import-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
-      title: '选择要批量导入的文件夹',
+      title: t('dialog.selectDocsFolder'),
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths[0]

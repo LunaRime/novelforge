@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPrompt } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
@@ -173,7 +174,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const llmStore = useLLMStore.getState()
     const newConv: AgentConversation = {
       id: genId(),
-      title: '新对话',
+      title: t('agent.newConversation'),
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
@@ -572,7 +573,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           onError: (error) => {
             updateAssistantMsg(m => ({
               ...m,
-              content: `❌ 生成失败：${error}`,
+              content: t('agent.errorGenerated').replace('{error}', error),
               streaming: false,
             }))
             set({ generating: false, activeRequestId: null })
@@ -583,7 +584,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     } catch (error) {
       updateAssistantMsg(m => ({
         ...m,
-        content: `❌ 发生异常：${String(error)}`,
+        content: t('agent.errorException').replace('{error}', String(error)),
         streaming: false,
       }))
       set({ generating: false, activeRequestId: null })

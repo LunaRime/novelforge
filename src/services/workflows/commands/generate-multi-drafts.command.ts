@@ -1,3 +1,4 @@
+import { t } from '../../../shared/locale'
 /**
  * GenerateMultiDraftsCommand — 并行生成多个草稿版本 + AI 评分择优
  *
@@ -47,9 +48,9 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
 
     // 定义不同的生成风格
     const styles = [
-      { name: '标准版', temp: 0.7, focus: '平衡情节推进与角色刻画，保持稳定的叙事节奏。' },
-      { name: '创意版', temp: 0.95, focus: '大胆使用修辞手法和意象，追求独特的文风和惊喜感。' },
-      { name: '紧凑版', temp: 0.5, focus: '精简描写，快速推进情节，强化冲突和爽点密度。' },
+      { name: t('workflow.standardVersion'), temp: 0.7, focus: '平衡情节推进与角色刻画，保持稳定的叙事节奏。' },
+      { name: t('workflow.creativeVersion'), temp: 0.95, focus: '大胆使用修辞手法和意象，追求独特的文风和惊喜感。' },
+      { name: t('workflow.compactVersion'), temp: 0.5, focus: '精简描写，快速推进情节，强化冲突和爽点密度。' },
     ].slice(0, count)
 
     const candidates: DraftCandidate[] = []

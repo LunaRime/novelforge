@@ -11,6 +11,7 @@
  * 但简化为 NovelForge 的 Electron + React 架构。
  */
 
+import { t } from '../../shared/locale'
 import { toolRegistry, type ToolResult, type ToolArtifact } from './tool-registry'
 import { outputPostProcessor } from './output-post-processor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
@@ -123,7 +124,7 @@ export async function runAgentLoop(
     try {
       llmResponse = await generateFn(messages, modelId)
     } catch (error) {
-      callbacks.onError(`LLM 调用失败：${String(error)}`)
+      callbacks.onError(t('agent.llmCallFailed').replace('{error}', String(error)))
       return
     }
 
@@ -213,7 +214,7 @@ export async function runAgentLoop(
       const tool = toolRegistry.get(tc.name)
       if (!tool) {
         toolCallInfo.status = 'failed'
-        toolCallInfo.error = `未知工具：${tc.name}`
+        toolCallInfo.error = t('agent.unknownTool').replace('{name}', tc.name)
         callbacks.onToolCallComplete(toolCallInfo)
         observationParts.push(`<tool_result name="${tc.name}" error="true">\n未知工具：${tc.name}。可用工具：${toolRegistry.listAll().map(t => t.name).join(', ')}\n</tool_result>`)
         continue
@@ -230,7 +231,7 @@ export async function runAgentLoop(
         const confirmed = await callbacks.onToolCallConfirmRequired(toolCallInfo)
         if (!confirmed) {
           toolCallInfo.status = 'failed'
-          toolCallInfo.error = '用户拒绝执行'
+          toolCallInfo.error = t('agent.userRejected')
           callbacks.onToolCallComplete(toolCallInfo)
           observationParts.push(`<tool_result name="${tc.name}" error="true">\n用户拒绝了此操作\n</tool_result>`)
           continue
@@ -261,7 +262,7 @@ export async function runAgentLoop(
         }
       } catch (error) {
         toolCallInfo.status = 'failed'
-        toolCallInfo.error = `执行异常：${String(error)}`
+        toolCallInfo.error = t('agent.executionError').replace('{error}', String(error))
         callbacks.onToolCallComplete(toolCallInfo)
         observationParts.push(`<tool_result name="${tc.name}" error="true">\n执行异常：${String(error)}\n</tool_result>`)
       }
@@ -453,7 +454,7 @@ async function executeToolWithTimeout(
   return Promise.race([
     executeFn(args),
     new Promise<ToolResult>((_, reject) =>
-      setTimeout(() => reject(new Error(`工具执行超时（${timeoutMs / 1000}s）`)), timeoutMs)
+      setTimeout(() => reject(new Error(t('agent.toolTimeout').replace('{n}', String(timeoutMs / 1000)))), timeoutMs)
     ),
   ])
 }

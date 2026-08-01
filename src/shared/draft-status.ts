@@ -6,8 +6,16 @@
 /** 草稿状态类型 */
 export type DraftStatus = 'draft' | 'revised' | 'reviewed' | 'finalized' | 'archived'
 
+/** 草稿状态 → i18n key（组件渲染时用 t() 取当前 locale 文案） */
+export const DRAFT_STATUS_LABEL_KEY: Record<string, string> = {
+  draft:     'version.draft',
+  revised:   'draftStatus.revised',
+  reviewed:  'draftStatus.reviewed',
+  finalized: 'draftStatus.finalized',
+  archived:  'draftStatus.archived',
+}
 
-/** 草稿状态 → 中文标签 */
+/** 草稿状态 → 中文标签（兼容旧代码/fallback，新代码请用 DRAFT_STATUS_LABEL_KEY + t()） */
 export const DRAFT_STATUS_LABEL: Record<string, string> = {
   draft:     '草稿',
   revised:   '已修稿',

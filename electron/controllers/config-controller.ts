@@ -4,6 +4,7 @@ import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
 import { logger, LogLevel } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
 import { GlobalConfig } from '../../src/shared/ipc-channels'
 
 const LOG_DIR = path.join(VELA_HOME, 'logs')
@@ -29,6 +30,12 @@ export function registerConfigController() {
   /** 获取 ~/.vela 路径 */
   ipcMain.handle('config:get-vela-home', async () => {
     return VELA_HOME
+  })
+
+  /** 同步 UI 语言到主进程（主进程对话框/菜单用 t() 读取当前 locale） */
+  ipcMain.handle('config:set-locale', async (_event, locale: SupportedLocale) => {
+    setCurrentLocale(locale)
+    return { success: true }
   })
 
   // ===== 日志管理 =====
