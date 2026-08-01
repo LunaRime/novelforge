@@ -190,7 +190,7 @@ export default function VersionHistory() {
                         v{ver.version}
                       </span>
                       <span className="text-[0.7rem] text-[var(--color-text-muted)]">
-                        {ver.word_count} 字
+                        {ver.word_count} {t('unit.chars')}
                       </span>
                       <span className="text-[0.7rem] text-[var(--color-text-muted)]">
                         {new Date(ver.created_at).toLocaleString(getCurrentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}

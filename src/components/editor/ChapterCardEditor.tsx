@@ -282,10 +282,10 @@ export default function ChapterCardEditor() {
         <div className="flex items-center gap-1.5">
           <BookOpen size={13} style={{ color: 'var(--color-text-muted)' }} />
           <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-            章节蓝图
+            {t('chapter.blueprintTitle')}
             {blueprints.length > 0 && (
               <span style={{ color: 'var(--color-text-muted)' }} className="ml-1 font-normal">
-                ({blueprints.length} 章)
+                ({blueprints.length} {t('unit.chapters')})
               </span>
             )}
           </span>
@@ -300,7 +300,7 @@ export default function ChapterCardEditor() {
               onClick={() => handleWriteChapter(nextWriteBlueprint)}
             >
               <PenLine size={12} />
-              写作第{nextWriteChapter}章
+              {t('chapter.writeChapterN').replace('{n}', String(nextWriteChapter))}
             </Button>
           )}
           {/* 排序工具栏 */}

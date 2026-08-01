@@ -130,7 +130,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                           {gap.gapSize > 1 &&
                             `–${gap.missingChapterNumbers[gap.gapSize - 1]}`}
                           章
-                          {gap.gapSize > 1 && ` (${gap.gapSize} 章)`}
+                          {gap.gapSize > 1 && ` (${gap.gapSize} ${t('unit.chapters')})`}
                         </span>
                         <Button
                           variant="ai"

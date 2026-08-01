@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { ArrowLeftRight, Check, X } from 'lucide-react'
-import { t } from '../../shared/locale'
+import { useTranslation } from '../../hooks/useTranslation'
 
 interface DiffViewerProps {
   /** 原始文本 */
@@ -31,11 +31,12 @@ interface DiffLine {
 export default function DiffViewer({
   original,
   modified,
-  originalLabel = '原稿',
-  modifiedLabel = '修稿',
+  originalLabel,
+  modifiedLabel,
   onAccept,
   onReject,
 }: DiffViewerProps) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState<'side' | 'inline'>('side')
 
   // 计算差异
@@ -106,7 +107,7 @@ export default function DiffViewer({
 
       {/* Diff 内容 */}
       {mode === 'side' ? (
-        <SideBySideView diffLines={diffLines} originalLabel={originalLabel} modifiedLabel={modifiedLabel} />
+        <SideBySideView diffLines={diffLines} originalLabel={originalLabel ?? t('merge.original')} modifiedLabel={modifiedLabel ?? t('merge.revision')} />
       ) : (
         <InlineView diffLines={diffLines} />
       )}
