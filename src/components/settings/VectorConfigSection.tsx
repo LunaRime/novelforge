@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, type TextKey } from '../../shared/locale'
+import { getCurrentLocale, type TextKey } from '../../shared/locale'
 /**
  * VectorConfigSection — 向量配置管理面板
  *
@@ -22,6 +22,7 @@ import { Switch } from '../ui/Switch'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Label } from '../ui/Label'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import type { ModelProfile } from '../../shared/ipc-channels'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
@@ -332,24 +333,28 @@ export default function VectorConfigSection() {
             {/* LLM 模型选择 */}
             <div>
               <Label>{t('vector.selectLLM')}</Label>
-              <select
-                className="w-full mt-1 px-2 py-1.5 rounded border text-xs bg-[var(--color-bg)]"
-                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text)' }}
+              <Select
                 value={store.llmEmbeddingSettings.modelId || ''}
-                onChange={(e) => {
-                  store.setLLMEmbeddingSettings({ modelId: e.target.value || null })
+                onValueChange={(v) => {
+                  // Radix Select 无空值回调：__none__ 表示清除选择
+                  store.setLLMEmbeddingSettings({ modelId: v === '__none__' ? null : v })
                 }}
               >
-                <option value="">{t('vector.selectLLMPlaceholder')}</option>
-                {store.llmCandidates.length === 0 && (
-                  <option value="" disabled>{t('status.loading')}</option>
-                )}
-                {store.llmCandidates.map((m) => (
-                  <option key={m.id} value={m.id}>
-                    {m.name || m.modelName} ({m.provider})
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger className="w-full mt-1">
+                  <SelectValue placeholder={t('vector.selectLLMPlaceholder')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {store.llmCandidates.length === 0 && (
+                    <SelectItem value="__loading__" disabled>{t('status.loading')}</SelectItem>
+                  )}
+                  {store.llmCandidates.map((m) => (
+                    <SelectItem key={m.id} value={m.id}>
+                      {m.name || m.modelName} ({m.provider})
+                    </SelectItem>
+                  ))}
+                  <SelectItem value="__none__">{t('vector.clearSelection')}</SelectItem>
+                </SelectContent>
+              </Select>
               {store.llmCandidates.length === 0 && (
                 <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
                   {t('vector.noLLM')}
@@ -442,7 +447,7 @@ export default function VectorConfigSection() {
               }
             />
             <div className="text-[10px] text-[var(--color-text-muted)] text-right">
-              {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(DEFAULT_LOCALE)}
+              {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(getCurrentLocale())}
             </div>
           </div>
         )}

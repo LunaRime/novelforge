@@ -15,7 +15,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
 
 /**
@@ -182,22 +182,28 @@ export default function CharacterEditor() {
                 <div><Label>{t('character.name')}</Label><Input value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
                 <div>
                   <Label>{t('character.tier')}</Label>
-                  <NativeSelect
-                    value={selectedCard.tier ?? 2}
-                    onChange={(e) => updateField(selectedCard.name, 'tier', parseInt(e.target.value))}
+                  <Select
+                    value={String(selectedCard.tier ?? 2)}
+                    onValueChange={(v) => updateField(selectedCard.name, 'tier', parseInt(v))}
                   >
-                    {Object.entries(getTierMap(t)).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </NativeSelect>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(getTierMap(t)).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <Label>{t('character.position')}</Label>
-                  <NativeSelect value={selectedCard.role} onChange={(e) => updateField(selectedCard.name, 'role', e.target.value as typeof selectedCard.role)}>
-                    {Object.entries(getRoleMap(t)).map(([k, v]) => (
-                      <option key={k} value={k}>{v}</option>
-                    ))}
-                  </NativeSelect>
+                  <Select value={selectedCard.role} onValueChange={(v) => updateField(selectedCard.name, 'role', v as typeof selectedCard.role)}>
+                    <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      {Object.entries(getRoleMap(t)).map(([k, v]) => (
+                        <SelectItem key={k} value={k}>{v}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
@@ -375,13 +381,18 @@ function StructuredRelations({
 
       {adding ? (
         <div className="flex items-center gap-1.5 mt-1">
-          <NativeSelect value={newTarget} onChange={(e) => setNewTarget(e.target.value)}>
-            <option value="">{t('action.select')}...</option>
-            {available.map(n => <option key={n} value={n}>{n}</option>)}
-          </NativeSelect>
-          <NativeSelect value={newType} onChange={(e) => setNewType(e.target.value)}>
-            {Object.entries(relTypes).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-          </NativeSelect>
+          <Select value={newTarget} onValueChange={setNewTarget}>
+            <SelectTrigger className="w-full"><SelectValue placeholder={`${t('action.select')}...`} /></SelectTrigger>
+            <SelectContent>
+              {available.map(n => <SelectItem key={n} value={n}>{n}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Select value={newType} onValueChange={setNewType}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(relTypes).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+            </SelectContent>
+          </Select>
           <Input
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}

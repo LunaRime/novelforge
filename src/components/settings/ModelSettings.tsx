@@ -7,7 +7,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { toast } from '../ui/Toast'
 import { cn } from '../../lib/utils'
 
@@ -173,20 +173,26 @@ function ModelForm({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label>{t('form.provider')}</Label>
-          <NativeSelect value={model.provider} onChange={(e) => update('provider', e.target.value as ModelProfile['provider'])}>
-            <option value="openai">OpenAI</option>
-            <option value="deepseek">DeepSeek</option>
-            <option value="gemini">Gemini</option>
-            <option value="ollama">Ollama</option>
-            <option value="custom">{t('model.providerCustom')}</option>
-          </NativeSelect>
+          <Select value={model.provider} onValueChange={(v) => update('provider', v as ModelProfile['provider'])}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">OpenAI</SelectItem>
+              <SelectItem value="deepseek">DeepSeek</SelectItem>
+              <SelectItem value="gemini">Gemini</SelectItem>
+              <SelectItem value="ollama">Ollama</SelectItem>
+              <SelectItem value="custom">{t('model.providerCustom')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label>{t('form.protocol')}</Label>
-          <NativeSelect value={model.protocol} onChange={(e) => update('protocol', e.target.value as ModelProfile['protocol'])}>
-            <option value="openai">{t('model.protoOpenAI')}</option>
-            <option value="gemini">Gemini</option>
-          </NativeSelect>
+          <Select value={model.protocol} onValueChange={(v) => update('protocol', v as ModelProfile['protocol'])}>
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai">{t('model.protoOpenAI')}</SelectItem>
+              <SelectItem value="gemini">Gemini</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -319,14 +325,16 @@ function ProxySettings() {
         <div className="space-y-2">
           <div className="flex items-center gap-2">
             <Label className="text-[0.7rem] w-12 flex-shrink-0">{t('proxy.type')}</Label>
-            <NativeSelect
+            <Select
               value={proxy.type}
-              onChange={(e) => setProxy({ ...proxy, type: e.target.value as 'http' | 'socks5' })}
-              className="h-7 text-xs"
+              onValueChange={(v) => setProxy({ ...proxy, type: v as 'http' | 'socks5' })}
             >
-              <option value="http">HTTP</option>
-              <option value="socks5">SOCKS5</option>
-            </NativeSelect>
+              <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="http">HTTP</SelectItem>
+                <SelectItem value="socks5">SOCKS5</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <div className="flex items-center gap-2">
             <Label className="text-[0.7rem] w-12 flex-shrink-0">{t('proxy.host')}</Label>

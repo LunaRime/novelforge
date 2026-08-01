@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { DEFAULT_LOCALE } from '../../shared/locale'
+import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
   Sparkles, PenLine
@@ -25,13 +25,24 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
-import { NativeSelect } from '../ui/NativeSelect'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { globalEventBus } from '../../shared/event-bus'
 
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
+
+/** 章节角色 value（中文数据，存库兼容）→ i18n key（下拉显示时 t()） */
+const ROLE_LABEL_KEYS: Record<string, TextKey> = {
+  '建置': 'chapter.role.establishment',
+  '铺垫': 'chapter.role.setup',
+  '发展': 'chapter.role.development',
+  '冲突': 'chapter.role.conflict',
+  '高潮': 'chapter.role.climax',
+  '转折': 'chapter.role.twist',
+  '收尾': 'chapter.role.resolution',
+}
 
 const ROLE_COLORS: Record<string, string> = {
   高潮: 'bg-[rgba(var(--color-error-rgb),0.2)] text-[var(--color-error)]',
@@ -456,9 +467,12 @@ export default function ChapterCardEditor() {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <Label>{t('blueprint.chapterPosition')}</Label>
-                    <NativeSelect value={selected.role} onChange={e => updateField('role', e.target.value)}>
-                      {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
-                    </NativeSelect>
+                    <Select value={selected.role} onValueChange={(v) => updateField('role', v)}>
+                      <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {ROLES.map(r => <SelectItem key={r} value={r}>{t(ROLE_LABEL_KEYS[r] ?? 'chapter.role.development')}</SelectItem>)}
+                      </SelectContent>
+                    </Select>
                   </div>
                   <div>
                     <Label>{t('blueprint.keyCharacters')}</Label>
@@ -540,7 +554,7 @@ export default function ChapterCardEditor() {
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {selected.notesUpdatedAt
-                        ? t('chapter.notesAuto').replace('{date}', new Date(selected.notesUpdatedAt).toLocaleDateString(DEFAULT_LOCALE))
+                        ? t('chapter.notesAuto').replace('{date}', new Date(selected.notesUpdatedAt).toLocaleDateString(getCurrentLocale()))
                         : t('chapter.notesAutoManual')
                       }
                     </span>
