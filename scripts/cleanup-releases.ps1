@@ -1,9 +1,9 @@
 # Cleanup stale portable versions — run manually to remove locked directories
-$releaseDir = "E:\vela\11\vela-1\release\0.1.1"
+$releaseDir = "E:\vela\11\vela-1\release\0.1.2"
 $toRemove = @(
-  "NovelForge-0.1.1-Portable-final",
-  "NovelForge-0.1.1-Portable-v2",
-  "NovelForge-0.1.1-Portable-r8"
+  "NovelForge-0.1.2-Portable-final",
+  "NovelForge-0.1.2-Portable-v2",
+  "NovelForge-0.1.2-Portable-r8"
 )
 
 foreach ($name in $toRemove) {
