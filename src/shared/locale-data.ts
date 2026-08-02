@@ -147,6 +147,7 @@ export const UI_TEXTS_DATA = {
   'draftStatus.finalized': { 'zh-CN': '已定稿', 'en-US': 'Finalized', 'ru-RU': 'Финализирован' },
   'chapter.nLabel': { 'zh-CN': '第{n}章', 'en-US': 'Ch.{n}', 'ru-RU': 'Гл.{n}' },
   'chapter.blueprintTitle': { 'zh-CN': '章节蓝图', 'en-US': 'Chapter Blueprints', 'ru-RU': 'Блюпринты глав' },
+  'charList.workspace': { 'zh-CN': '进入工作台', 'en-US': 'Enter workspace', 'ru-RU': 'Войти в рабочую область' },
   'chapter.writeChapterN': { 'zh-CN': '写作第{n}章', 'en-US': 'Write Ch.{n}', 'ru-RU': 'Написать гл.{n}' },
   'chapter.role.establishment': { 'zh-CN': '建置', 'en-US': 'Establishment', 'ru-RU': 'Завязка' },
   'chapter.role.opening': { 'zh-CN': '开篇', 'en-US': 'Opening', 'ru-RU': 'Открытие' },
