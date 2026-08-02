@@ -1,14 +1,17 @@
 import {
-  FolderOpen, BookOpen, Users,
-  Home, Zap, ScrollText, Activity, Archive,
+  FolderOpen, BookOpen, Users, LayoutDashboard,
+  Home, Zap, ScrollText, Activity,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useTranslation } from '../../hooks/useTranslation'
+import ProjectSquareList from './ProjectSquareList'
 
 /**
  * 左侧工具窗口栏（LeftToolWindowBar）
- * JetBrains 风格：36px 宽，全高
+ * JetBrains 风格：44px 宽，全高，竖排
+ * 顶部：Home + 视图图标（角色管理为最后一个）；
+ * 中部：项目方块列表（紧挨角色管理，上下边界清晰）；底部：面板 Tab
  */
 export default function LeftToolWindowBar() {
   const { t } = useTranslation()
@@ -17,7 +20,7 @@ export default function LeftToolWindowBar() {
     { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
     { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
     { id: 'characters', icon: Users, label: t('nav.characters') },
-    { id: 'history', icon: Archive, label: t('nav.history') },
+    { id: 'workspace', icon: LayoutDashboard, label: t('nav.workspace') },
   ]
 
   /** 底部面板 Tab 按钮配置（模型调用视图已替换为每日活动图） */
@@ -41,22 +44,20 @@ export default function LeftToolWindowBar() {
     <div
       className="no-select flex flex-col h-full"
       style={{
-        width: 'var(--width-left-bar)',  /* 36px */
+        width: 'var(--width-left-bar)',
         backgroundColor: 'var(--color-activity-bar)',
         borderRight: '1px solid var(--color-border)',
         flexShrink: 0,
       }}
     >
-      {/* ===== 顶部：Home + 侧边栏视图切换 ===== */}
+      {/* ===== 顶部：Home + 侧边栏视图切换（竖排） ===== */}
       <div className="flex flex-col items-center w-full pt-0.5">
-
         {/* Home 按钮 — 点击切换到主页视图 */}
         <button
           onClick={() => setSidebarView('home')}
           title={t('panel.welcome')}
           className="tool-btn"
           style={{
-            height: 30,
             boxShadow: homeActive ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
             color: homeActive ? 'var(--color-activity-icon-active)' : undefined,
           }}
@@ -67,7 +68,7 @@ export default function LeftToolWindowBar() {
         {/* 分割线 */}
         <div className="w-4 my-0.5" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
 
-        {/* 侧边栏视图按钮 */}
+        {/* 侧边栏视图按钮（角色管理为最后一个） */}
         {sidebarActivities.map(({ id, icon: Icon, label }) => {
           const isActive = sidebarOpen && sidebarView === id
           return (
@@ -87,10 +88,23 @@ export default function LeftToolWindowBar() {
         })}
       </div>
 
+      {/* ===== 中部：项目方块列表 — 紧挨角色管理（视图图标之后），完整边框界限 ===== */}
+      <div
+        className="flex flex-col items-center w-full px-1 py-1.5"
+        style={{ backgroundColor: 'color-mix(in srgb, var(--color-hover) 30%, transparent)' }}
+      >
+        <div
+          className="w-full border rounded-lg overflow-hidden"
+          style={{ borderColor: 'var(--color-border)' }}
+        >
+          <ProjectSquareList />
+        </div>
+      </div>
+
       {/* 弹性间隔 */}
       <div className="flex-1" />
 
-      {/* ===== 底部：底部面板 Tab 控制 ===== */}
+      {/* ===== 底部：底部面板 Tab 控制（竖排） ===== */}
       <div className="flex flex-col items-center w-full pb-1">
         <div className="w-4 mb-0.5" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
 

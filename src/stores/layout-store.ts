@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
-/** 左侧活动栏的视图类型 */
-export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'history' | 'settings'
+/** 左侧活动栏的视图类型（历史项目已并入 home 视图，无独立视图） */
+export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'workspace' | 'settings'
 
 /** 下方工具窗口 Tab */
 export type BottomTab = 'tasks' | 'log' | 'activity'
@@ -76,9 +76,9 @@ interface LayoutState {
 }
 
 export const useLayoutStore = create<LayoutState>()((set) => ({
-  // 默认值
+  // 默认值（home：历史项目方块列表入口，替换原 Archive 图标）
   sidebarOpen: true,
-  sidebarView: 'project',
+  sidebarView: 'home',
   sidebarWidth: 260,
 
   aiPanelOpen: true,
