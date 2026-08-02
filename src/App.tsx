@@ -28,6 +28,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
 import { globalEventBus } from './shared/event-bus'
 import UpdateNotification from './components/UpdateNotification'
+import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 
 /**
  * NovelForge 主应用组件
@@ -152,6 +153,9 @@ export default function App() {
 
       {/* 更新通知栏 */}
       <UpdateNotification />
+
+      {/* 全局 title 悬停提示代理 — 原生 title 属性 → 现代化 Tooltip UI */}
+      <GlobalTitleTooltip />
 
       {/*
         主体：flex 行 = LeftBar | 纵向PanelGroup | RightBar
