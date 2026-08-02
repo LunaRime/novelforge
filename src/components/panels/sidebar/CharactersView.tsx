@@ -5,13 +5,27 @@ import { useState, useMemo } from 'react'
 import { Users, RefreshCw, Plus, ChevronDown, ChevronRight } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
-  useCharacterStore, ROLE_LABELS, TIER_LABELS, groupByTier,
+  useCharacterStore, groupByTier,
 } from '../../../stores/character-store'
 import type { CharacterCard } from '../../../stores/character-store'
+import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
+
+// 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
+const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
+  protagonist: 'character.roleLabel.protagonist',
+  antagonist: 'character.roleLabel.antagonist',
+  supporting: 'character.roleLabel.supporting',
+  minor: 'character.roleLabel.minor',
+}
+const TIER_LABEL_KEYS: Record<number, TextKey> = {
+  1: 'character.tierLabel.core',
+  2: 'character.tierLabel.important',
+  3: 'character.tierLabel.minor',
+}
 
 export default function CharactersView() {
   const { t } = useTranslation()
@@ -66,7 +80,7 @@ export default function CharactersView() {
             onClick={() => setTierFilter(tier)}
             type="button"
           >
-            {tier === null ? t('charList.filterAll') : TIER_LABELS[tier]}
+            {tier === null ? t('charList.filterAll') : t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
             <span className="ml-0.5 opacity-60">{tier === null ? characters.length : (grouped[tier] || []).length}</span>
           </button>
         ))}
@@ -93,7 +107,7 @@ export default function CharactersView() {
                     ? <ChevronRight size={10} />
                     : <ChevronDown size={10} />
                   }
-                  {TIER_LABELS[tier]}
+                  {t(TIER_LABEL_KEYS[tier] ?? 'character.tierLabel.core')}
                   <span className="opacity-50 ml-auto">{chars.length}</span>
                 </button>
                 {!collapsed && chars.map(c => (
@@ -154,7 +168,7 @@ function CharItem({ char: c, selected, onClick }: {
         ) : null}
       </div>
       <div className="text-[0.7rem] mt-0.5 opacity-60 flex items-center gap-1.5">
-        <span>{ROLE_LABELS[c.role]}</span>
+        <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
         {tier === 1 && chaps.length > 0 && (
           <span className="opacity-50">· {chapsDisplay}</span>
         )}

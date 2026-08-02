@@ -56,30 +56,42 @@ export function setCurrentLocale(locale: SupportedLocale): void {
 
 // ===== 格式化工具 =====
 
-/** 日期格式化（仅日期，无时间） */
+/**
+ * 安全解析时间戳：无效值（旧版字符串格式如 "1781397664000.0" / 越界）
+ * 返回 null，防止 Chromium 对 Invalid Date 调用 toLocale* 抛 RangeError
+ */
+function safeParseDate(timestamp: number | string | Date): Date | null {
+  const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
+  return Number.isNaN(date.getTime()) ? null : date
+}
+
+/** 日期格式化（仅日期，无时间）；无效时间戳返回空字符串 */
 export function formatLocaleDate(
   timestamp: number | string | Date,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
+  const date = safeParseDate(timestamp)
+  if (!date) return ''
   return date.toLocaleDateString(currentLocale, options)
 }
 
-/** 时间格式化（仅时间） */
+/** 时间格式化（仅时间）；无效时间戳返回空字符串 */
 export function formatLocaleTime(
   timestamp: number | string | Date,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
+  const date = safeParseDate(timestamp)
+  if (!date) return ''
   return date.toLocaleTimeString(currentLocale, options)
 }
 
-/** 日期+时间格式化 */
+/** 日期+时间格式化；无效时间戳返回空字符串 */
 export function formatLocaleDateTime(
   timestamp: number | string | Date,
   options?: Intl.DateTimeFormatOptions,
 ): string {
-  const date = timestamp instanceof Date ? timestamp : new Date(timestamp)
+  const date = safeParseDate(timestamp)
+  if (!date) return ''
   return date.toLocaleString(currentLocale, options)
 }
 

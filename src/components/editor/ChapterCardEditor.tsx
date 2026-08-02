@@ -134,7 +134,7 @@ export default function ChapterCardEditor() {
       setDirty(false)
       addLog('info', `Blueprint Ch.${selected.chapterNumber} saved`)
     } catch (e) {
-      addLog('error', `保存失败: ${String(e)}`)
+      addLog('error', t('chapterCard.saveFailed').replace('{error}', String(e)))
     }
     setSaving(false)
   }
@@ -149,7 +149,7 @@ export default function ChapterCardEditor() {
       setDirty(false)
       addLog('info', `Saved all ${blueprints.length} blueprints`)
     } catch (e) {
-      addLog('error', `全量保存失败: ${String(e)}`)
+      addLog('error', t('chapterCard.saveAllFailed').replace('{error}', String(e)))
     }
     setSaving(false)
   }
@@ -197,11 +197,15 @@ export default function ChapterCardEditor() {
       // ★ 立即从数据库删除，避免刷新后重新出现
       const result = await ipc.invoke('db:blueprint-delete', selected.chapterNumber)
       if (!result.success) {
-        addLog('error', `删除第 ${selected.chapterNumber} 章蓝图失败: ${result.error || '未知错误'}`)
+        addLog('error', t('chapterCard.deleteFailed')
+          .replace('{n}', String(selected.chapterNumber))
+          .replace('{error}', result.error || t('status.unknown')))
         return
       }
     } catch (e) {
-      addLog('error', `删除第 ${selected.chapterNumber} 章蓝图异常: ${String(e)}`)
+      addLog('error', t('chapterCard.deleteError')
+        .replace('{n}', String(selected.chapterNumber))
+        .replace('{error}', String(e)))
       return
     }
     const newList = blueprints.filter((_, i) => i !== selectedIdx)

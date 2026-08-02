@@ -222,7 +222,7 @@ export default function CharacterEditor() {
                   <Input
                     value={selectedCard.tags || ''}
                     onChange={(e) => updateField(selectedCard.name, 'tags', e.target.value)}
-                    placeholder='["宗门","正道"]'
+                    placeholder={t('character.tagsPlaceholder')}
                   />
                 </div>
               </div>
@@ -396,7 +396,7 @@ function StructuredRelations({
           <Input
             value={newLabel}
             onChange={(e) => setNewLabel(e.target.value)}
-            placeholder={t('character.relLabel') || '关系描述'}
+            placeholder={t('character.relLabel')}
             className="w-24 text-xs"
           />
           <button onClick={addRelation} className="p-1 rounded bg-[var(--color-accent)] text-white cursor-pointer" type="button">

@@ -17,20 +17,6 @@ export const EMPTY_STATE: CharacterCurrentState = {
   keyItems: '', recentEvents: '', updatedAtChapter: 0,
 }
 
-export const ROLE_LABELS: Record<CharacterCard['role'], string> = {
-  protagonist: '🌟 主角',
-  antagonist: '🔥 反派',
-  supporting: '👥 配角',
-  minor: '📌 龙套',
-}
-
-/** 戏份等级标签 */
-export const TIER_LABELS: Record<number, string> = {
-  1: '★★★ 核心',
-  2: '★★☆ 重要',
-  3: '★☆☆ 龙套',
-}
-
 /** 按 tier 分组角色 */
 /** 按 tier 分组角色，主角/反派强制归入 tier 1 */
 export function groupByTier(chars: CharacterCard[]): Record<number, CharacterCard[]> {
