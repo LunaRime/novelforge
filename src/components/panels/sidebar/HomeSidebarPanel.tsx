@@ -1,5 +1,7 @@
 /**
- * HomeSidebarPanel — 主页侧边栏：项目管理入口 + 最近项目列表
+ * HomeSidebarPanel — 主页侧边栏：项目管理入口 + 当前项目信息
+ *
+ * 历史项目方块列表已提升为 Sidebar 直接子级（常驻底部），不在此渲染。
  */
 
 import { useProjectStore } from '../../../stores/project-store'
@@ -7,23 +9,11 @@ import { useLayoutStore } from '../../../stores/layout-store'
 import { ipc } from '../../../services/ipc-client'
 import { Button } from '../../ui/Button'
 import { useTranslation } from '../../../hooks/useTranslation'
-import { confirmDeleteProject } from '../../ui/Confirm'
-import HistoricalProjectsNav from './HistoricalProjectsNav'
 
 export default function HomeSidebarPanel() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
-  const recentProjects = useProjectStore(s => s.recentProjects)
   const openProject = useProjectStore(s => s.openProject)
-  const deleteProjectFolder = useProjectStore(s => s.deleteProjectFolder)
-  const removeRecentProject = useProjectStore(s => s.removeRecentProject)
-
-  const handleDelete = async (e: React.MouseEvent, projectPath: string) => {
-    e.stopPropagation()
-    const action = await confirmDeleteProject()
-    if (action === 'delete') await deleteProjectFolder(projectPath)
-    else if (action === 'remove') await removeRecentProject(projectPath)
-  }
 
   return (
     <div className="px-3 py-2 text-sm">
@@ -69,20 +59,6 @@ export default function HomeSidebarPanel() {
         >
           {t('action.openProject')}</Button>
       </div>
-
-      {/* 最近项目 — 正方形卡片网格（直接显示在左侧栏层级） */}
-      {recentProjects.length > 0 && (
-        <div>
-          <div
-            className="flex items-center gap-1.5 mb-2 pt-2"
-            style={{ borderTop: '1px solid var(--color-border)' }}
-          >
-            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-              {t('project.recent')}</span>
-          </div>
-          <HistoricalProjectsNav onDelete={handleDelete} />
-        </div>
-      )}
     </div>
   )
 }
