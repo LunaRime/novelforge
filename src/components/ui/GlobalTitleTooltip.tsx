@@ -167,7 +167,7 @@ export default function GlobalTitleTooltip() {
     <div
       ref={tipElRef}
       role="tooltip"
-      className="pointer-events-none fixed z-[var(--z-tooltip)] max-w-[min(360px,calc(100vw-24px))] overflow-hidden rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs font-medium leading-relaxed shadow-[var(--shadow-tooltip)] animate-in fade-in-0 zoom-in-95 duration-150"
+      className="pointer-events-none fixed z-[var(--z-tooltip)] max-w-[min(360px,calc(100vw-24px))] overflow-hidden whitespace-pre-line rounded-xl border border-[var(--color-border)] px-3 py-2 text-xs font-medium leading-relaxed shadow-[var(--shadow-tooltip)] animate-in fade-in-0 zoom-in-95 duration-150"
       style={{
         left: pos?.left,
         top: pos?.top,

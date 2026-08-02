@@ -69,7 +69,7 @@ interface ProjectState {
     targetAudience: string
   }) => Promise<boolean>
   /** 打开项目 */
-  openProject: (projectPath: string) => Promise<boolean>
+  openProject: (projectPath: string, opts?: { keepView?: boolean }) => Promise<boolean>
   /** 保存项目 */
   saveProject: () => Promise<boolean>
   /** 更新小说配置 */
@@ -105,7 +105,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
       // 使用主进程返回的实际项目路径（跨平台安全，避免路径分隔符问题）
       const projectDir = result.projectPath ?? `${config.path}/${config.name}`
-      return get().openProject(projectDir)
+      // keepView：新建/导入后保持当前视图（home），让方块列表立即显示新项目
+      return get().openProject(projectDir, { keepView: true })
     } catch (e) {
       console.error('[Project] createProject 异常:', e)
       alertError(String(e), { title: t('dialog.createError') })
@@ -116,7 +117,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
 
-  openProject: async (projectPath) => {
+  openProject: async (projectPath, opts) => {
     set({ loading: true })
     try {
       const result = await ipc.invoke('project:open', projectPath)
@@ -131,9 +132,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         ipc.invoke('config:set', { recentProjects: get().recentProjects.slice(0, 20) }).catch(() => {})
         // 加载文件树
         await get().refreshFileTree()
-        // 自动展开侧边栏并切换到项目结构视图
-        const { useLayoutStore } = await import('./layout-store')
-        useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project' })
+        // 默认自动展开侧边栏并切换到项目结构视图；
+        // keepView（新建/导入）时保持当前视图，让方块列表显示新项目
+        if (!opts?.keepView) {
+          const { useLayoutStore } = await import('./layout-store')
+          useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project' })
+        }
         // 统一初始化 Layer 2 Store（角色卡、草稿等）
         await callProjectOpened()
         return true

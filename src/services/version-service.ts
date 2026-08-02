@@ -61,10 +61,23 @@ export async function getVersionContent(versionId: number): Promise<string | nul
 
 /** 获取章节最新内容（取代之前的文件读取） */
 export async function getChapterLatestContent(chapterNumber: number): Promise<string> {
+  const draft = await getChapterLatestDraft(chapterNumber)
+  return draft?.content ?? '（章节尚无内容）'
+}
+
+/**
+ * 获取章节最新草稿（id + 内容）
+ * 供工作台等场景用真实草稿 id 构造 vela://draft/{id} 路径打开
+ * （parseDraftMeta 依赖纯数字 id 解析，ch{n} 格式无法解析导致保存/定稿失效）
+ */
+export async function getChapterLatestDraft(
+  chapterNumber: number,
+): Promise<{ id: number; content: string } | null> {
   const draft = (await ipc.invoke('db:draft-get-latest', chapterNumber)) as { id?: number } | null
-  if (!draft || draft.id === undefined) return '（章节尚无内容）'
+  if (!draft || draft.id === undefined) return null
   const full = (await ipc.invoke('db:draft-get-full', draft.id)) as { content?: string } | null
-  return full?.content || '（内容被错误截断）'
+  if (!full) return null
+  return { id: draft.id, content: full.content ?? '' }
 }
 
 /** 回退到某个历史版本，创建新草稿 */
