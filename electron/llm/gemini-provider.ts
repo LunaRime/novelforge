@@ -44,6 +44,10 @@ export class GeminiProvider implements ILLMProvider {
         generationConfig: {
           temperature: opts.temperature ?? model.temperature,
           maxOutputTokens: opts.maxTokens ?? model.maxTokens,
+          // JSON 约束（与 OpenAI response_format 对应）：强制结构化输出，降低幻觉/解析失败
+          ...(opts.responseFormat?.type === 'json_object'
+            ? { responseMimeType: 'application/json' }
+            : {}),
         },
       }
       if (systemInstruction) {
@@ -78,6 +82,7 @@ export class GeminiProvider implements ILLMProvider {
         promptTokens: data.usageMetadata.promptTokenCount ?? 0,
         completionTokens: data.usageMetadata.candidatesTokenCount ?? 0,
         totalTokens: data.usageMetadata.totalTokenCount ?? 0,
+        cachedTokens: 0, // Gemini 无缓存命中计数字段（缓存机制不同）
       } : undefined
 
       return { success: true, content: text, usage }
@@ -109,6 +114,10 @@ export class GeminiProvider implements ILLMProvider {
         generationConfig: {
           temperature: opts.temperature ?? model.temperature,
           maxOutputTokens: opts.maxTokens ?? model.maxTokens,
+          // JSON 约束（与 OpenAI response_format 对应）：强制结构化输出，降低幻觉/解析失败
+          ...(opts.responseFormat?.type === 'json_object'
+            ? { responseMimeType: 'application/json' }
+            : {}),
         },
       }
       if (systemInstruction) {

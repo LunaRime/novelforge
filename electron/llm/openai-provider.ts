@@ -67,7 +67,12 @@ export class OpenAIProvider implements ILLMProvider {
 
       const data = await res.json() as {
         choices: Array<{ message: { content: string; reasoning_content?: string } }>
-        usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+        usage?: {
+          prompt_tokens: number; completion_tokens: number; total_tokens: number
+          // OpenAI: prompt_tokens_details.cached_tokens / DeepSeek: prompt_cache_hit_tokens
+          prompt_cache_hit_tokens?: number
+          prompt_tokens_details?: { cached_tokens?: number }
+        }
       }
 
       let finalContent = data.choices?.[0]?.message?.content ?? ''
@@ -80,6 +85,7 @@ export class OpenAIProvider implements ILLMProvider {
           promptTokens: data.usage.prompt_tokens,
           completionTokens: data.usage.completion_tokens,
           totalTokens: data.usage.total_tokens,
+          cachedTokens: data.usage.prompt_cache_hit_tokens ?? data.usage.prompt_tokens_details?.cached_tokens ?? 0,
         } : undefined,
       }
     }).catch((error) => {
@@ -153,7 +159,7 @@ export class OpenAIProvider implements ILLMProvider {
       let failedChunkCount = 0
       let buffer = '' // 跨 read 边界的行缓冲
       // 流式输出的最后一帧通常携带 usage（OpenAI/DeepSeek 等兼容 API）
-      let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number } | undefined
+      let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
 
       const hasMore = true
       while (hasMore) {
@@ -171,7 +177,11 @@ export class OpenAIProvider implements ILLMProvider {
           try {
             const parsed = JSON.parse(json) as {
               choices: Array<{ delta: { content?: string, reasoning_content?: string } }>
-              usage?: { prompt_tokens: number; completion_tokens: number; total_tokens: number }
+              usage?: {
+                prompt_tokens: number; completion_tokens: number; total_tokens: number
+                prompt_cache_hit_tokens?: number
+                prompt_tokens_details?: { cached_tokens?: number }
+              }
             }
             const delta = parsed.choices?.[0]?.delta
 
@@ -181,6 +191,7 @@ export class OpenAIProvider implements ILLMProvider {
                 promptTokens: parsed.usage.prompt_tokens,
                 completionTokens: parsed.usage.completion_tokens,
                 totalTokens: parsed.usage.total_tokens,
+                cachedTokens: parsed.usage.prompt_cache_hit_tokens ?? parsed.usage.prompt_tokens_details?.cached_tokens ?? 0,
               }
             }
 

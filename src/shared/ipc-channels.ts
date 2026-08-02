@@ -264,6 +264,8 @@ export interface TokenUsage {
   promptTokens: number
   completionTokens: number
   totalTokens: number
+  /** API 返回的真实缓存命中输入 token 数（OpenAI cached_tokens / DeepSeek prompt_cache_hit_tokens） */
+  cachedTokens?: number
 }
 
 export interface ModelProfile {
