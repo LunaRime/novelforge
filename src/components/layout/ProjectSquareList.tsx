@@ -8,15 +8,20 @@
  * - 点击方块 → 打开该项目 + 侧边栏切换到「项目工作台」
  *   （聚焦章节蓝图/草稿箱/正式稿，非专注模式）
  */
-import { useCallback } from 'react'
-import { Trash2 } from 'lucide-react'
+import { useCallback, useState } from 'react'
+import { Trash2, FolderOpen, AlertTriangle } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
+import { ipc } from '../../services/ipc-client'
 import { formatLocaleDateTime } from '../../shared/locale'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { confirmDeleteProject } from '../ui/Confirm'
+import { openBuiltinEditor } from '../panels/sidebar/SidebarShared'
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from '../ui/Dialog'
 
 // ===== 常量 =====
 
@@ -48,14 +53,17 @@ export default function ProjectSquareList() {
   const openProject = useProjectStore(s => s.openProject)
   const deleteProjectFolder = useProjectStore(s => s.deleteProjectFolder)
   const removeRecentProject = useProjectStore(s => s.removeRecentProject)
+  // 故事架构未完成提示弹窗（进入工作台前置检查）
+  const [archPrompt, setArchPrompt] = useState<{ path: string; name: string; done: number } | null>(null)
 
   // 过滤：排除当前项目 + 最多展示 5 个
   const targets = recentProjects
     .filter(p => p.path !== currentProject?.path)
     .slice(0, 5)
 
-  // 点击方块：打开该项目 + 进入项目工作台（非专注模式）
-  const handleSquareClick = useCallback(async (projectPath: string) => {
+  // 点击方块：打开该项目 + 进入项目工作台（非专注模式）；
+  // 进入后异步检查故事架构完整性（4 项），未完成弹窗提示可跳转填充
+  const handleSquareClick = useCallback(async (projectPath: string, projectName: string) => {
     const prevView = useLayoutStore.getState().sidebarView
     const ok = await openProject(projectPath, { keepView: true })
     if (!ok) return
@@ -65,7 +73,20 @@ export default function ProjectSquareList() {
     // 切换项目：清空旧项目残留的编辑器 Tab（避免内容错乱）
     useEditorStore.getState().clearTabs()
     useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'workspace' })
+    // 前置检查：故事架构未填充完成（<4/4）时弹窗提示（不阻塞工作台进入）
+    try {
+      const summary = await ipc.invoke('project:get-summary', projectPath)
+      if (summary && summary.archGenerated < 4) {
+        setArchPrompt({ path: projectPath, name: projectName, done: summary.archGenerated })
+      }
+    } catch { /* 摘要获取失败不打扰用户 */ }
   }, [openProject])
+
+  // 去填充故事架构：打开世界观/架构编辑器（WorldBuildingEditor）
+  const handleGoFill = useCallback(() => {
+    setArchPrompt(null)
+    openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')
+  }, [t])
 
   // 删除/移出最近项目（删除文件夹或仅移出列表）
   const handleDelete = useCallback(async (e: React.MouseEvent, projectPath: string) => {
@@ -96,7 +117,7 @@ export default function ProjectSquareList() {
             <button
               key={p.path}
               type="button"
-              onClick={() => handleSquareClick(p.path)}
+              onClick={() => handleSquareClick(p.path, p.name)}
               title={tipText}
               className={cn(
                 'group relative w-[30px] h-[30px] rounded-md flex items-center justify-center',
@@ -126,6 +147,45 @@ export default function ProjectSquareList() {
           )
         })}
       </div>
+
+      {/* 故事架构未完成提示弹窗（进入工作台前置检查） */}
+      <Dialog open={!!archPrompt} onOpenChange={(v) => { if (!v) setArchPrompt(null) }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle size={15} style={{ color: 'var(--color-warning)' }} />
+              {t('workspace.archIncomplete')}
+            </DialogTitle>
+            <DialogDescription>
+              <span className="flex items-center gap-1.5">
+                <FolderOpen size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+                <span className="truncate font-medium">{archPrompt?.name}</span>
+              </span>
+              <span className="block mt-1">
+                {t('workspace.archPrompt').replace('{done}', String(archPrompt?.done ?? 0))}
+              </span>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <button
+              type="button"
+              onClick={() => setArchPrompt(null)}
+              className="px-3 py-1.5 rounded-lg text-xs transition-colors cursor-pointer"
+              style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-hover)' }}
+            >
+              {t('action.close')}
+            </button>
+            <button
+              type="button"
+              onClick={handleGoFill}
+              className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors cursor-pointer"
+              style={{ color: '#fff', backgroundColor: 'var(--color-accent)' }}
+            >
+              {t('workspace.goFill')}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
