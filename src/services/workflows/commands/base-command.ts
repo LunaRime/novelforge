@@ -6,7 +6,7 @@ import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import { robustParseJSON } from '../workflow-utils'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-context-provider'
-import { structureForCache, hashStaticContext, generateCacheKey, calculateCost, type CacheScope } from '../../llm/prompt-cache'
+import { structureForCache, calculateCost, type CacheScope } from '../../llm/prompt-cache'
 
 export interface CommandExecuteParams {
   step: Partial<WorkflowStep> & { [extra: string]: unknown }
@@ -28,7 +28,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     prompt: string,
     systemPrompt: string,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; cacheScope?: CacheScope },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; cacheScope?: CacheScope; staticContext?: string },
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
@@ -64,11 +64,11 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         }
       }
 
-      const logLLMCall = (success: boolean, errorMessage?: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => {
+      const logLLMCall = (success: boolean, errorMessage?: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number }) => {
         const duration = Date.now() - startTime
-        // 费用：按模型单价计算（与成功分支一致）
+        // 费用：按模型单价计算（真实缓存命中按缓存价）
         const cost = success && usage && model
-          ? calculateCost(model, usage.promptTokens, usage.completionTokens, false).totalCost
+          ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
           : 0
         ipc.invoke('db:log-llm-call', {
           model_id: modelId,
@@ -84,12 +84,10 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         }).catch(() => { /* 日志失败不影响主流程 */ })
       }
 
-      // 缓存优化：将稳定内容前置以最大化 API 缓存命中
-      const cacheKey = options?.cacheScope
-        ? generateCacheKey(options.cacheScope, modelId, hashStaticContext(systemPrompt + prompt.slice(0, 200)))
-        : undefined
-
-      const cachedMessages = structureForCache(systemPrompt, '', prompt)
+      // 缓存优化：将稳定内容前置以最大化 API 缓存命中（命中与否由 API 返回的 cachedTokens 判定）
+      // staticContext（架构/世界观等）放入 system 前缀：同项目连续调用前缀稳定命中，
+      // 且静态上下文在 system 中模型遵从度更高（降低幻觉）
+      const cachedMessages = structureForCache(systemPrompt, options?.staticContext ?? '', prompt)
       llmStore.generateStream(
         cachedMessages,
         {
@@ -101,16 +99,17 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           },
           onDone: (text, usage) => {
             cleanup()
-            // 费用追踪
+            // 费用追踪（真实缓存命中 = API 返回 cachedTokens > 0，非"启用了缓存机制"）
             if (usage && model) {
-              const cost = calculateCost(model, usage.promptTokens, usage.completionTokens, !!cacheKey)
+              const cacheHit = (usage.cachedTokens ?? 0) > 0
+              const cost = calculateCost(model, usage.promptTokens, usage.completionTokens, cacheHit)
               callbacks.log(`💰 $${cost.totalCost.toFixed(4)} (${cost.cached ? '缓存命中' : '全价'})`)
               // 记录到全局用量 Store
               import('../../../stores/usage-store').then(m =>
                 m.useUsageStore.getState().recordCall({
                   model, promptTokens: usage.promptTokens,
                   completionTokens: usage.completionTokens,
-                  cacheHit: !!cacheKey,
+                  cacheHit,
                 })
               ).catch(() => {})
             }
@@ -163,7 +162,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   protected async callLLMWithBuilder(
     builder: BasePromptBuilder,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; staticContext?: string },
     context?: WorkflowContext
   ): Promise<string> {
     return this.callLLM(builder.build(), builder.getSystemRole(), callbacks, options, context)

@@ -9,19 +9,28 @@ export interface LLMGenerateOptions {
   cacheKey?: string
 }
 
+/** LLM 用量（含真实缓存命中 token：OpenAI prompt_tokens_details.cached_tokens / DeepSeek prompt_cache_hit_tokens） */
+export interface LLMUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+  /** API 返回的真实缓存命中输入 token 数（无缓存字段时为 0） */
+  cachedTokens?: number
+}
+
 export interface LLMStreamOptions extends LLMGenerateOptions {
   signal: AbortSignal
   onChunk: (chunk: string) => void
-  onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => void
+  onDone: (fullText: string, usage?: LLMUsage) => void
   onError: (error: string) => void
   /** 实时 Token 用量回调（流式传输中可用时触发） */
-  onTokenUsage?: (usage: { promptTokens: number; completionTokens: number; totalTokens: number }) => void
+  onTokenUsage?: (usage: LLMUsage) => void
 }
 
 export interface LLMResponse {
   success: boolean
   content: string
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  usage?: LLMUsage
   error?: string
 }
 
