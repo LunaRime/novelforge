@@ -9,7 +9,7 @@
 import { useState, useEffect } from 'react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ContextMenu } from '../ui/ContextMenu'
-import { t } from '../../shared/locale'
+import { useTranslation } from '../../hooks/useTranslation'
 import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
@@ -22,6 +22,7 @@ import {
 
 /** 左侧面板 */
 export default function Sidebar() {
+  const { t } = useTranslation()
   const sidebarView = useLayoutStore(s => s.sidebarView)
   // 全局右键菜单状态
   const [sidebarMenu, setSidebarMenu] = useState<SidebarMenuState | null>(null)
