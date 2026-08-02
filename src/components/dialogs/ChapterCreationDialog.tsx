@@ -181,7 +181,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
     const workflow = createChapterWorkflow({
       chapterNumber: Number(chapterNumber) || 1,
-      title: title || `第${chapterNumber || 1}章`,
+      title: title || t('chapter.label').replace('{n}', String(chapterNumber || 1)),
       role,
       purpose,
       characters: characters.split(/[、,，]/).map(s => s.trim()).filter(Boolean),

@@ -27,8 +27,8 @@ interface MonacoDiffViewerProps {
 export default function MonacoDiffViewer({
   original,
   modified,
-  originalLabel = '原稿',
-  modifiedLabel = '修稿',
+  originalLabel = t('diff.original'),
+  modifiedLabel = t('diff.modified'),
   onAccept,
   onReject,
 }: MonacoDiffViewerProps) {
