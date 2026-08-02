@@ -103,7 +103,7 @@ export default function App() {
       if (!latest) return
       const shortTitle = latest.title.replace(/^[^\s]+\s/, '')
       actionToast.workflowComplete(
-        `✅ 「${shortTitle}」已完成`,
+        `✅ 「${shortTitle}」${t('agent.taskComplete')}`,
         () => useLayoutStore.getState().openRightPanel('ai-output')
       )
     })

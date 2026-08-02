@@ -131,7 +131,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   const currentProject = useProjectStore((s) => s.currentProject)
   const tabs = useEditorStore(s => s.tabs)
   const activeTabId = useEditorStore(s => s.activeTabId)
-  const openFile = useEditorStore(s => s.openFile)
   const closeTab = useEditorStore(s => s.closeTab)
   const setActiveTab = useEditorStore(s => s.setActiveTab)
   const sidebarView = useLayoutStore((s) => s.sidebarView)
@@ -139,21 +138,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
 
   // ===== 所有 Hooks 必须在条件 return 之前 =====
-
-  // 打开项目后自动打开配置 Tab
-  // 依赖 currentProject?.id + tabs.length：
-  //   - id 变化（切换项目）时触发
-  //   - tabs 被清空（clearTabs）时触发
-  useEffect(() => {
-    if (currentProject && tabs.length === 0) {
-      // 从 store 直接取最新值，避免闭包陈旧
-      const latestTabs = useEditorStore.getState().tabs
-      if (latestTabs.length === 0) {
-        openFile({ id: 'config', name: t('editor.novelConfig'), type: 'config' })
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.id, tabs.length])
 
   // 防御性兜底：tabs 有内容但 activeTabId 无效时，激活第一个 tab
   const activeTab = tabs.find((t) => t.id === activeTabId)
@@ -163,6 +147,20 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tabs.length, activeTab])
+
+  // 侧栏切到「角色管理」时：自动打开角色编辑器 Tab（图谱/编辑可见，
+  // Tab 栏保持可管理 — 其他 Tab 可正常关闭/切换）；
+  // 切走角色管理时自动关闭角色 Tab（视图驱动 Tab 的生命周期与视图绑定，
+  // 避免残留：切到知识库/工作台后编辑器仍显示角色编辑区）
+  useEffect(() => {
+    const { tabs: ts, openFile, closeTab } = useEditorStore.getState()
+    if (sidebarView === 'characters') {
+      if (ts.some(tab => tab.type === 'character')) return
+      openFile({ id: 'character-editor', name: t('charList.title'), type: 'character' })
+    } else {
+      ts.filter(tab => tab.type === 'character').forEach(tab => closeTab(tab.id))
+    }
+  }, [sidebarView, t])
 
   // Tab 条自动滚动到当前活跃 Tab
   const tabBarRef = useRef<HTMLDivElement>(null)
@@ -371,8 +369,8 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
   // ===== 条件渲染 =====
 
-  // 侧栏为「主页」时，中间区域显示欢迎页
-  if (sidebarView === 'home') {
+  // 侧栏为「主页」时，中间区域显示欢迎页（有活跃 Tab 时优先显示 Tab 内容）
+  if (sidebarView === 'home' && !activeTab) {
     return (
       <WelcomePage
         onNewProject={() => {
@@ -394,25 +392,13 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     )
   }
 
-  // 侧栏为「角色管理」时，中间区域固定展示角色编辑器（跳过 Tab 系统）
-  if (sidebarView === 'characters') {
-    return (
-      <div
-        className="w-full h-full flex flex-col overflow-hidden"
-        style={{ backgroundColor: 'var(--color-editor-bg)' }}
-      >
-        <CharacterEditor />
-      </div>
-    )
-  }
-
-  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（跳过 Tab 系统）
-  if (sidebarView === 'knowledge') {
+  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（有活跃 Tab 时优先显示 Tab 内容）
+  if (sidebarView === 'knowledge' && !activeTab) {
     return <KnowledgeOverview />
   }
 
-  // 未打开项目时显示欢迎页
-  if (!currentProject) {
+  // 未打开项目时显示欢迎页（有活跃 Tab 时优先显示 Tab 内容，如项目详情 Tab）
+  if (!currentProject && !activeTab) {
     return (
       <WelcomePage
         onNewProject={onNewProject}

@@ -20,7 +20,12 @@ interface RecentProject {
 }
 
 function loadRecentProjects(): RecentProject[] {
-  return readJsonFile<RecentProject[]>(RECENT_PROJECTS_PATH, [])
+  // 规范化历史遗留数据：旧版本 updatedAt 可能为字符串（如 "1781397664000.0"），
+  // 渲染进程 new Date() 解析为 Invalid Date 会导致 UI 崩溃，统一转 number
+  return readJsonFile<RecentProject[]>(RECENT_PROJECTS_PATH, []).map(p => ({
+    ...p,
+    updatedAt: typeof p.updatedAt === 'string' ? Number(p.updatedAt) : p.updatedAt,
+  }))
 }
 
 function addRecentProject(project: RecentProject) {
@@ -291,16 +296,16 @@ export function registerProjectController() {
         "SELECT total_chapters FROM project_core WHERE id = 'main'"
       ).get() as { total_chapters: number } | undefined)?.total_chapters ?? 0
 
-      // 已定稿章节（drafts.status = 'finalized'，优先取蓝图标题）
+      // 已定稿章节（drafts.status = 'finalized'，优先取蓝图标题；draft_id 供工作台用 vela://manuscript/{id} 打开）
       const finalizedRows = db.prepare(`
-        SELECT d.chapter_number, COALESCE(bp.title, '') as title
+        SELECT d.chapter_number, COALESCE(bp.title, '') as title, MAX(d.id) as draft_id
         FROM drafts d
         LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
         WHERE d.status = 'finalized'
         GROUP BY d.chapter_number
         ORDER BY d.chapter_number
-      `).all() as Array<{ chapter_number: number; title: string }>
-      const chapters = finalizedRows.map(r => ({ chapterNumber: r.chapter_number, title: r.title }))
+      `).all() as Array<{ chapter_number: number; title: string; draft_id: number }>
+      const chapters = finalizedRows.map(r => ({ chapterNumber: r.chapter_number, title: r.title, draftId: r.draft_id }))
 
       // 有草稿的章节（按章汇总所有状态的草稿）
       const draftRows = db.prepare(`
