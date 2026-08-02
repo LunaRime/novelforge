@@ -167,7 +167,9 @@ export default function ProjectWorkspace() {
                       ? <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
                       : <Circle size={7} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />}
                     <span className="truncate">
-                      {dc.chapterTitle || t('chapter.label').replace('{n}', String(dc.chapterNumber))}
+                      {/* 章节号 + 标题（用户需知是第几章） */}
+                      {t('chapter.label').replace('{n}', String(dc.chapterNumber))}
+                      {dc.chapterTitle ? ` ${dc.chapterTitle}` : ''}
                     </span>
                     <span className="ml-auto text-[0.6rem] opacity-50 flex-shrink-0">
                       {dc.draftCount} {t('draftbox.label').replace('{version}', '')}

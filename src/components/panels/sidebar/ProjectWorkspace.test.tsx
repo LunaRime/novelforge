@@ -128,9 +128,9 @@ describe('ProjectWorkspace 项目工作台', () => {
     const { container } = render(<ProjectWorkspace />)
     await act(async () => { await Promise.resolve() })
     await act(async () => { await Promise.resolve() })
-    // 正式稿按钮文本为 "第1章 第一章"（草稿按钮是 "第一章"）
+    // 正式稿按钮文本为 "第1章 第一章"（草稿按钮含"草稿"计数，需排除）
     const btn = Array.from(container.querySelectorAll('button'))
-      .find(b => (b.textContent || '').includes('第1章 第一章'))
+      .find(b => (b.textContent || '').includes('第1章 第一章') && !(b.textContent || '').includes('草稿'))
     expect(btn).toBeTruthy()
     await act(async () => { btn!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     // 异步链路较长：openFinal → openChapterFile → readVelaContent(ipc) → openFile
