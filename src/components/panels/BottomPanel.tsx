@@ -9,19 +9,18 @@ import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import ActivityView from './activity/ActivityView'
-import { t } from '../../shared/locale'
-
-/** 底部面板 Tab 名称映射（通过 i18n 字典统一管理） */
-const TAB_LABELS: Record<string, string> = {
-  tasks:    t('panel.tasks'),
-  log:      t('panel.log'),
-  activity: t('panel.activity'),
-  // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
-  models:   t('panel.activity'),
-}
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
 export default function BottomPanel() {
+  const { t } = useTranslation()
+  /** 底部面板 Tab 名称映射（通过 i18n 字典统一管理）— 组件内求值，语言切换后标题跟随更新 */
+  const TAB_LABELS: Record<string, string> = {
+    tasks:    t('panel.tasks'),
+    log:      t('panel.log'),
+    activity: t('panel.activity'),
+    // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
+    models:   t('panel.activity'),
+  }
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段

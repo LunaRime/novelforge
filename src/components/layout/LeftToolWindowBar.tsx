@@ -4,28 +4,28 @@ import {
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { t } from '../../shared/locale'
-
-/** 左侧侧边栏视图按钮配置（不含 Home，它单独渲染） */
-const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label: string }> = [
-  { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
-  { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
-  { id: 'characters', icon: Users, label: t('nav.characters') },
-  { id: 'history', icon: Archive, label: t('nav.history') },
-]
-
-/** 底部面板 Tab 按钮配置（模型调用视图已替换为每日活动图） */
-const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
-  { id: 'tasks', icon: Zap, label: t('panel.tasks') },
-  { id: 'log', icon: ScrollText, label: t('panel.log') },
-  { id: 'activity', icon: Activity, label: t('panel.activityShort') },
-]
+import { useTranslation } from '../../hooks/useTranslation'
 
 /**
  * 左侧工具窗口栏（LeftToolWindowBar）
  * JetBrains 风格：36px 宽，全高
  */
 export default function LeftToolWindowBar() {
+  const { t } = useTranslation()
+  /** 左侧侧边栏视图按钮配置（不含 Home，它单独渲染）— 组件内求值，语言切换后悬停提示跟随更新 */
+  const sidebarActivities: Array<{ id: SidebarView; icon: typeof FolderOpen; label: string }> = [
+    { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
+    { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
+    { id: 'characters', icon: Users, label: t('nav.characters') },
+    { id: 'history', icon: Archive, label: t('nav.history') },
+  ]
+
+  /** 底部面板 Tab 按钮配置（模型调用视图已替换为每日活动图） */
+  const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
+    { id: 'tasks', icon: Zap, label: t('panel.tasks') },
+    { id: 'log', icon: ScrollText, label: t('panel.log') },
+    { id: 'activity', icon: Activity, label: t('panel.activityShort') },
+  ]
   const sidebarView = useLayoutStore(s => s.sidebarView)
   const sidebarOpen = useLayoutStore(s => s.sidebarOpen)
   const setSidebarView = useLayoutStore(s => s.setSidebarView)

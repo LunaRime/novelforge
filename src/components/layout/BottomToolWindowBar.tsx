@@ -1,14 +1,7 @@
 import { Zap, ScrollText, Activity } from 'lucide-react'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { t } from '../../shared/locale'
-
-/** 底部工具窗口每个 Tab 对应的按钮配置（模型调用视图已替换为每日活动图） */
-const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
-  { id: 'tasks',    icon: Zap,        label: t('panel.tasks')       },
-  { id: 'log',      icon: ScrollText, label: t('panel.log')         },
-  { id: 'activity', icon: Activity,   label: t('panel.activityShort') },
-]
+import { useTranslation } from '../../hooks/useTranslation'
 
 /**
  * 底部工具窗口左侧按钮栏（BottomToolWindowBar）
@@ -16,6 +9,13 @@ const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
  * 对应截图左下角红框区域
  */
 export default function BottomToolWindowBar() {
+  const { t } = useTranslation()
+  /** 底部工具窗口每个 Tab 对应的按钮配置（模型调用视图已替换为每日活动图）— 组件内求值，语言切换后 tooltip 跟随更新 */
+  const bottomTabs: Array<{ id: BottomTab; icon: typeof Zap; label: string }> = [
+    { id: 'tasks',    icon: Zap,        label: t('panel.tasks')       },
+    { id: 'log',      icon: ScrollText, label: t('panel.log')         },
+    { id: 'activity', icon: Activity,   label: t('panel.activityShort') },
+  ]
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const setBottomTab = useLayoutStore(s => s.setBottomTab)
   const activeRuns = useWorkflowStore(s => s.activeRuns)

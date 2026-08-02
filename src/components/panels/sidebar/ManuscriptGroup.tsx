@@ -75,7 +75,7 @@ async function readChapterTitle(filePath: string, fallback: string, chapterNumbe
 // ===== 正文章节组件 =====
 
 export default function ManuscriptGroup({ files }: { files: FileNode[]; projectPath: string }) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const [open, setOpen] = useState(true)
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
   // 导出状态
@@ -83,18 +83,18 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
 
-  // 每次 files 变化时异步读取各文件标题（命中缓存的路径直接跳过 IPC）
+  // 每次 files 或 locale 变化时读取各文件标题；语言切换时先清空缓存
+  // （缓存值含旧语言 t() 文本），再全量重建映射
   const filesDep = files.map(f => f.path).join(',')
   useEffect(() => {
     if (files.length === 0) return
     let cancelled = false
     const load = async () => {
-      // 只读取当前 state 中还没有的路径（增量更新，避免重复 IPC 调用）
-      const missing = files.filter(f => !f.name.includes('_notes') && !titleMap[f.path])
-      if (missing.length === 0) return
+      clearChapterTitleCache()
       const entries: Record<string, string> = {}
       await Promise.all(
-        missing.map(async (f) => {
+        files.map(async (f) => {
+          if (f.name.includes('_notes')) return
           const rawName = f.name.replace(/\.[^.]+$/, '')
           const chMatch = rawName.match(/^chapter_(\d+)$/)
           const fallback = chMatch ? t('chapter.label').replace('{n}', String(parseInt(chMatch[1], 10))) : rawName
@@ -102,11 +102,11 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
           entries[f.path] = await readChapterTitle(f.path, fallback, chNum)
         })
       )
-      if (!cancelled) setTitleMap(prev => ({ ...prev, ...entries }))
+      if (!cancelled) setTitleMap(entries)
     }
     load()
     return () => { cancelled = true }
-  }, [files, filesDep, titleMap, t])
+  }, [files, filesDep, t, locale])
 
   const getDisplay = (f: FileNode) => {
     if (titleMap[f.path]) return titleMap[f.path]
