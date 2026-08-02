@@ -84,7 +84,14 @@
     "oneClick": false,
     "perMachine": false,
     "allowToChangeInstallationDirectory": true,
-    "deleteAppDataOnUninstall": false
+    "deleteAppDataOnUninstall": false,
+    // 点击「完成」后不自动运行应用（避免 ExecShellAsUser 启动阻塞导致安装程序窗口无响应）
+    "runAfterFinish": false,
+    // 品牌化：安装程序图标 / 完成页头部图标（复用应用图标）
+    "installerIcon": "build/icon.ico",
+    "installerHeaderIcon": "build/icon.ico",
+    // 自定义 NSIS 脚本（字体/DPI 优化）
+    "include": "build/installer.nsh"
   },
   "linux": {
     "target": ["AppImage"],
