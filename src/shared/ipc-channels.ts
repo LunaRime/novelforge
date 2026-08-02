@@ -483,7 +483,31 @@ export interface MCPChannels {
   'mcp:list-resources': { args: []; return: unknown[] }
   'mcp:call-tool': { args: [serverId: string, toolName: string, args: Record<string, unknown>]; return: { success: boolean; content: string; error?: string } }
   'mcp:get-servers-status': { args: []; return: unknown[] }
-  'mcp:get-config-path': { args: []; return: string }
+  'mcp:get-config-path': { args: []; return: string },
+  'mcp:add-server': {
+    args: [{ id: string; command: string; args?: string[]; env?: Record<string, string> }]
+    return: { success: boolean; error?: string }
+  },
+  'mcp:remove-server': {
+    args: [serverId: string]
+    return: { success: boolean; error?: string }
+  },
+  'skill:list': {
+    args: []
+    return: Array<{ name: string; description: string }>
+  },
+  'skill:import': {
+    args: [{ name: string; content: string }]
+    return: { success: boolean; error?: string }
+  },
+  'skill:delete': {
+    args: [name: string]
+    return: { success: boolean; error?: string }
+  },
+  'dialog:select-skill-file': {
+    args: []
+    return: { name: string; content: string } | null
+  }
 }
 
 // ===== 应用更新 =====

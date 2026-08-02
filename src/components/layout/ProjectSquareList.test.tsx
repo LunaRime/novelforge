@@ -15,6 +15,21 @@ import ProjectSquareList from './ProjectSquareList'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
 
+// mock IPC（架构完整性检查：返回 archGenerated=2 → 触发未完成弹窗）
+vi.mock('../../services/ipc-client', () => ({
+  ipc: {
+    invoke: vi.fn(async (channel: string) => {
+      if (channel === 'project:get-summary') {
+        return {
+          name: '测试项目', path: 'E:\\test\\project', totalChapters: 3,
+          chapters: [], draftChapters: [], blueprintCount: 0, archGenerated: 2,
+        }
+      }
+      return null
+    }),
+  },
+}))
+
 function render(ui: React.ReactElement): { container: HTMLElement; root: Root } {
   const container = document.createElement('div')
   document.body.appendChild(container)
@@ -81,5 +96,30 @@ describe('ProjectSquareList LT 方块列表', () => {
     expect(openProjectMock).toHaveBeenCalledWith('E:\\vale\\小说\\斗罗大陆虚界之痕', { keepView: true })
     // 进入工作台视图
     expect(useLayoutStore.getState().sidebarView).toBe('workspace')
+  })
+
+  it('故事架构未完成（archGenerated < 4）→ 弹出填充提示', async () => {
+    const { container } = render(<ProjectSquareList />)
+    const buttons = Array.from(container.querySelectorAll('button'))
+    await act(async () => { buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    // 等待 summary 检查完成（异步 IPC；Dialog 用 Portal 渲染到 body）
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const bodyText = document.body.textContent || ''
+    expect(bodyText).toContain('故事架构未填充完成')
+    expect(bodyText).toContain('去填充')
+  })
+
+  it('关闭架构提示弹窗 → 弹窗消失', async () => {
+    const { container } = render(<ProjectSquareList />)
+    const buttons = Array.from(container.querySelectorAll('button'))
+    await act(async () => { buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    // 点击"关闭"（Portal 到 body）
+    const closeBtn = Array.from(document.body.querySelectorAll('button'))
+      .find(b => (b.textContent || '').trim() === '关闭')
+    expect(closeBtn).toBeTruthy()
+    await act(async () => { closeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    const bodyText = document.body.textContent || ''
+    expect(bodyText).not.toContain('故事架构未填充完成')
   })
 })

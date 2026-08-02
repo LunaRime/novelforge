@@ -3,8 +3,11 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
   File, ExternalLink, RefreshCw, Loader2, Download, LogOut,
+  BookMarked, Plug,
 } from 'lucide-react'
 import PromptSettings from './PromptSettings'
+import SkillsSettings from './SkillsSettings'
+import MCPSettings from './MCPSettings'
 import { useLLMStore } from '../../stores/llm-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
@@ -27,7 +30,7 @@ import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'file' | 'about'
+type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'about'
 
 interface SectionItem {
   id: SettingsSection
@@ -43,6 +46,8 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'proxy', label: t('settings.proxy'), icon: <Globe size={16} />, description: t('settings.proxyDesc') },
     { id: 'editor', label: t('settings.editor'), icon: <Type size={16} />, description: t('settings.editorDesc') },
     { id: 'prompts', label: t('settings.promptTemplates'), icon: <MessageSquare size={16} />, description: t('settings.promptTemplatesDesc') },
+    { id: 'skills', label: t('settings.skills'), icon: <BookMarked size={16} />, description: t('settings.skillsDesc') },
+    { id: 'mcp', label: t('settings.mcp'), icon: <Plug size={16} />, description: t('settings.mcpDesc') },
     { id: 'file', label: t('settings.file'), icon: <File size={16} />, description: t('settings.fileDesc') },
     { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
   ]
@@ -140,6 +145,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
             {section === 'prompts' && <PromptSettings />}
+            {section === 'skills' && <SkillsSettings />}
+            {section === 'mcp' && <MCPSettings />}
             {section === 'file' && <FileSection />}
             {section === 'about' && <AboutSection />}
           </div>
