@@ -65,7 +65,7 @@ export default function StatusBar() {
 
         {defaultModel ? (
           <StatusBarSegment
-            title={`${t('statusbar.currentModel')}: ${defaultModel.name}`}
+            title={`${t('statusbar.currentModel')}: ${defaultModel.modelName}${defaultModel.name !== defaultModel.modelName ? ` (${defaultModel.name})` : ''}`}
             onClick={openSettings}
           >
             <Wifi size={11} />
