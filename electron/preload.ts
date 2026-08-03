@@ -32,6 +32,7 @@ export type AllowedInvokePrefix = (typeof ALLOWED_INVOKE_CHANNELS)[number]
 const ALLOWED_EVENT_CHANNELS = [
   'llm:',
   'update:',
+  'menu:',
 ] as const
 
 /** 合法的 event 通道前缀字面量类型 */
