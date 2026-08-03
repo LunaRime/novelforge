@@ -3,6 +3,7 @@ import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
+import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
 
 
@@ -59,7 +60,7 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
       revisionIndex: revIndex,
       revisionType: 'review-fix',
       content: cleanRefined,
-      wordCount: cleanRefined.length,
+      wordCount: computeTextStats(cleanRefined).novelWordCount,
       userPrompt: this.params.userRefinePrompt,
     }) as { success: boolean; id: number }
 

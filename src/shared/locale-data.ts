@@ -209,6 +209,7 @@ export const UI_TEXTS_DATA = {
   'workflow.finalized': { 'zh-CN': '🎉 第{n}章已定稿！', 'en-US': '🎉 Ch.{n} finalized!', 'ru-RU': '🎉 Гл.{n} финализирована!' },
   'workflow.postProcessFix': { 'zh-CN': '✅ 第{n}章后处理修复完成', 'en-US': '✅ Post-process fix for Ch.{n} done', 'ru-RU': '✅ Пост-обработка гл.{n} исправлена' },
   'workflow.importKB': { 'zh-CN': '📚 导入知识库', 'en-US': '📚 Import to knowledge base', 'ru-RU': '📚 Импорт в базу знаний' },
+  'workflow.contentAudit': { 'zh-CN': '🛡️ 正文质量审计', 'en-US': '🛡️ Content quality audit', 'ru-RU': '🛡️ Аудит качества текста' },
   'workflow.chapterKeyPoints': { 'zh-CN': '📋 章节剧情要点', 'en-US': '📋 Chapter key points', 'ru-RU': '📋 Ключевые моменты главы' },
   'workflow.characterStateUpdate': { 'zh-CN': '🎭 角色状态更新', 'en-US': '🎭 Character state update', 'ru-RU': '🎭 Обновление состояний' },
   'workflow.relationDetect': { 'zh-CN': '🔗 关系检测', 'en-US': '🔗 Relationship detection', 'ru-RU': '🔗 Обнаружение связей' },

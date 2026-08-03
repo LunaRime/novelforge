@@ -3,6 +3,7 @@ import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
+import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
 import {
   DIR_PROMPTS
@@ -129,8 +130,46 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         .withUserGuidance(this.chapterInfo.userGuidance?.trim() || '（无微操指导）')
     }
 
+    // ===== 防缺陷注入（伏笔 / 角色声音 / 设定多样性）=====
+    let prompt = promptBuilder.build()
+    const antiDefectSections: string[] = []
+
+    // 1. 未回收伏笔（≤5 条，埋设于本章之前）——防止伏笔断裂/提前回收
+    try {
+      const { loadAllForeshadowing } = await import('../../foreshadowing-manager')
+      const all = await loadAllForeshadowing()
+      const pending = all
+        .filter(f => !f.resolved && (f.setChapter ?? 0) < this.chapterInfo.chapterNumber)
+        .sort((a, b) => (b.setChapter ?? 0) - (a.setChapter ?? 0))
+        .slice(0, 5)
+      if (pending.length > 0) {
+        antiDefectSections.push(
+          `【未回收伏笔（本章可自然回应 1-2 条，严禁提前全部回收）】\n` +
+          pending.map((f, i) => `${i + 1}. [第${f.setChapter}章] ${f.content} (${f.type})`).join('\n'),
+        )
+      }
+    } catch { /* 伏笔注入失败不阻断 */ }
+
+    // 2. 角色声音档案（tier1 台词风格，防 OOC）
+    try {
+      const { loadCharacterVoiceProfiles, formatVoiceForPrompt } = await import('../../character-voice-analyzer')
+      const profiles = await loadCharacterVoiceProfiles()
+      const voicePrompt = formatVoiceForPrompt(profiles)
+      if (voicePrompt) antiDefectSections.push(voicePrompt)
+    } catch { /* 声音注入失败不阻断 */ }
+
+    // 3. 冷门设定采样（创意多样性，可选非强制）
+    try {
+      const { sampleColdSettings } = await import('../../agent/tools/setting-sampler.tool')
+      const cold = await sampleColdSettings(2)
+      if (cold) antiDefectSections.push(`【创意多样性参考（可选，非强制）】\n${cold}`)
+    } catch { /* 采样失败不阻断 */ }
+
+    if (antiDefectSections.length > 0) {
+      prompt += '\n\n---\n\n' + antiDefectSections.join('\n\n---\n\n')
+    }
+
     // Token 预算管控：中文约 1.5 字符/token，预留 4K 给输出
-    const prompt = promptBuilder.build()
     const estimatedTokens = Math.ceil(prompt.length / 1.5)
     const TOKEN_BUDGET = 28000
     if (estimatedTokens > TOKEN_BUDGET) {
@@ -140,17 +179,19 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     callbacks.log('调用 AI 生成章节草稿...')
 
     // staticContext：架构入 system 前缀（同项目连续调用缓存命中 + 模型遵从度更高）
-    const draftText = await this.callLLMWithBuilder(promptBuilder, callbacks, { staticContext: architecture })
+    // 注意：必须传注入后的 prompt 字符串而非 builder —— callLLMWithBuilder 会重新 build() 丢失防缺陷注入
+    const draftText = await this.callLLM(prompt, promptBuilder.getSystemRole(), callbacks, { staticContext: architecture })
     const cleanDraftText = this.stripThinkingTags(draftText)
 
-    // 落于数据库
+    // 落于数据库（wordCount 用统一"有效字数"口径：汉字 + 英文单词，非 length）
+    const novelWordCount = computeTextStats(cleanDraftText).novelWordCount
     const nextVersion: number = await ipc.invoke('db:draft-next-version', this.chapterInfo.chapterNumber)
     const createResult = await ipc.invoke('db:draft-create', {
       chapterNumber: this.chapterInfo.chapterNumber,
       version: nextVersion,
       source: 'write',
       content: cleanDraftText,
-      wordCount: cleanDraftText.length,
+      wordCount: novelWordCount,
     })
 
     const pseudoPath = createResult.id ? `vela://draft/${createResult.id}` : `vela://draft/ch${this.chapterInfo.chapterNumber}/v${nextVersion}`
@@ -180,7 +221,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       })
     } catch { /* 忽略 */ }
 
-    callbacks.log(`✅ 草稿已自动入库保存为版本 v${nextVersion}（${draftText.length} 字）`)
+    callbacks.log(`✅ 草稿已自动入库保存为版本 v${nextVersion}（约 ${novelWordCount} 字）`)
     return draftText
   }
 

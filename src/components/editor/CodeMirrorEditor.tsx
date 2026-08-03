@@ -10,6 +10,7 @@ import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import InlineAIToolbar from './InlineAIToolbar'
 import { useTranslation } from '../../hooks/useTranslation'
+import { computeTextStats } from '../../services/text-stats'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -314,7 +315,7 @@ export default function CodeMirrorEditor({
             revisionType: 'refine',
             userPrompt: activeAIAction ? `气泡菜单 AI — ${activeAIAction}` : '气泡菜单 AI 改写',
             content: aiResult,
-            wordCount: aiResult.length,
+            wordCount: computeTextStats(aiResult).novelWordCount,
           })
         } catch { /* revision 创建失败不阻塞替换 */ }
       }

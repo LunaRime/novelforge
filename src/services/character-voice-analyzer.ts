@@ -135,6 +135,34 @@ export function formatVoiceForPrompt(profiles: CharacterVoiceProfile[]): string 
   return parts.join('\n')
 }
 
+/**
+ * 从角色卡 notes 中加载全部声音档案（[VOICE:角色名] JSON 标记）
+ * 供写稿 prompt 注入（防 OOC）与审计复用
+ */
+export async function loadCharacterVoiceProfiles(): Promise<CharacterVoiceProfile[]> {
+  try {
+    const { ipc } = await import('./ipc-client')
+    const allChars = await ipc.invoke('db:character-get-all') as Array<{ name: string; notes?: string }>
+    const profiles: CharacterVoiceProfile[] = []
+
+    for (const c of allChars) {
+      if (!c.name || !c.notes) continue
+      // 匹配 [VOICE:角色名]\n{JSON}\n（到下一个 [VOICE: 或结尾）
+      const match = c.notes.match(/\[VOICE:([^\]]+)\]\s*\n?([\s\S]*?)(?=\n\[VOICE:|$)/)
+      if (!match) continue
+      try {
+        const parsed = JSON.parse(match[2].trim()) as Partial<CharacterVoiceProfile>
+        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.topWords)) {
+          profiles.push({ ...parsed, name: match[1] } as CharacterVoiceProfile)
+        }
+      } catch { /* 单条解析失败跳过 */ }
+    }
+    return profiles
+  } catch {
+    return []
+  }
+}
+
 // ===== 内部工具函数 =====
 
 /** 提取指定角色的对话行 */

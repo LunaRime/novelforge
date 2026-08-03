@@ -6,6 +6,7 @@
  */
 
 import { ipc } from './ipc-client'
+import { computeTextStats } from './text-stats'
 
 /** 章节元数据（从数据库返回） */
 export interface ChapterRecord {
@@ -88,7 +89,7 @@ export async function revertToVersion(chapterNumber: number, content: string): P
     version: nextVer,
     source: 'rewrite',
     content,
-    wordCount: content.length,
+    wordCount: computeTextStats(content).novelWordCount,
   })
   return res.success
 }

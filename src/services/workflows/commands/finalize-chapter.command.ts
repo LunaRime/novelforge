@@ -1,4 +1,6 @@
 import { t } from '../../../shared/locale'
+import { computeTextStats } from '../../text-stats'
+import { runAllAudits } from '../../audit/audits'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -400,6 +402,59 @@ export function buildFinalizePostProcessSteps(
     },
   })
 
+  // ─── 步骤 5: 正文质量审计（重复词/衔接/术语/蓝图完成度/违禁词/时间线）──
+  // 全部非关键：审计发现问题不影响定稿，日志提示可触发修稿
+  steps.push({
+    key: 'content_audit',
+    label: t('workflow.contentAudit'),
+    critical: false,
+    dependsOn: ['kb_import'],
+    executor: async (callbacks: StepCallbacks) => {
+      // 上一章结尾（衔接审计用）
+      let prevEnding = ''
+      try {
+        const prevMeta = await ipc.invoke('db:draft-get-finalized', chapterNumber - 1) as { id?: number } | null
+        if (prevMeta && prevMeta.id !== undefined) {
+          const full = await ipc.invoke('db:draft-get-full', prevMeta.id) as { content?: string } | null
+          prevEnding = full?.content?.slice(-200) ?? ''
+        }
+      } catch { /* 忽略 */ }
+
+      // 本章蓝图关键事件
+      let keyEvents: string[] = []
+      try {
+        const bps = await ipc.invoke('db:blueprint-get-all') as Array<{ chapterNumber?: number; keyEvents?: string }>
+        const bp = bps.find(b => b.chapterNumber === chapterNumber)
+        if (bp?.keyEvents) {
+          keyEvents = String(bp.keyEvents).split(/[;；\n]/).map(s => s.trim()).filter(Boolean)
+        }
+      } catch { /* 忽略 */ }
+
+      // 角色名（术语表）
+      let terms: string[] = []
+      try {
+        const chars = await ipc.invoke('db:character-get-all') as Array<{ name?: string }>
+        terms = chars.map(c => String(c.name ?? '')).filter(Boolean)
+      } catch { /* 忽略 */ }
+
+      const result = runAllAudits({
+        chapterText: draftContent,
+        prevChapterEnding: prevEnding,
+        keyEvents,
+        terms,
+      })
+
+      if (result.passed) {
+        callbacks.log(`✅ ${result.summary}`)
+      } else {
+        for (const issue of result.issues) {
+          callbacks.log(`⚠️ [${issue.kind}] ${issue.message}`)
+        }
+        callbacks.log(`📋 ${result.summary}（不影响定稿，可据此触发修稿）`)
+      }
+    },
+  })
+
   // 步骤 3.5: 角色声音分析
   steps.splice(voiceIdx + 1, 0, {
     key: 'voice_analysis',
@@ -471,8 +526,10 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     const dbDraft = await parseDraftMeta(this.params.draftPath)
     if (!dbDraft) throw new Error(t('error.draftStateFlow'))
 
-    await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, refinedDraftText.length)
-    await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', refinedDraftText.length)
+    // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
+    const novelWordCount = computeTextStats(refinedDraftText).novelWordCount
+    await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, novelWordCount)
+    await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', novelWordCount)
 
     // 【重要】：除了写入 DB，对于已定稿的章节需要实体化为物理文件放在根目录，供外部系统读取或备份
     const safeTitle = this.params.chapterInfo.title ? ` ${this.params.chapterInfo.title.replace(/[/\\]/g, '_')}` : ''
