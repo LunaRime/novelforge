@@ -24,6 +24,7 @@ import { useLayoutStore } from '../../stores/layout-store'
 
 
 import { ipc } from '../../services/ipc-client'
+import { computeTextStats } from '../../services/text-stats'
 import { toast } from '../ui/Toast'
 import { useTranslation } from '../../hooks/useTranslation'
 
@@ -580,14 +581,24 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           />
         )}
         {activeTab?.type === 'chapter' && !activeTab.filePath?.startsWith(VELA.DRAFT) && (
-          // 【DB 迁移备注】：终稿目前作为物理文件保存在 manuscript/ 目录是合理的（用于外部阅读器或最终打包编译导出）
-          // 终稿文件（manuscript/）：用 ProseEditorWrapper（含字数信息栏）
+          // 终稿文件：vela://manuscript/{id}（DB 定稿行）或物理路径 → ProseEditorWrapper（含字数信息栏）
+          // 保存链见 onSave：manuscript 前缀写 DB（drafts 行），物理路径才走 fs:write-file
           <ProseEditorWrapper
             key={activeTab.id}
             tab={activeTab}
             onSave={async (text) => {
               if (!activeTab.filePath) return
-              await ipc.invoke('fs:write-file', activeTab.filePath, text)
+              if (activeTab.filePath.startsWith(VELA.MANUSCRIPT)) {
+                // vela://manuscript/{id}：定稿内容在 DB（drafts 行），伪协议无物理文件
+                // —— 不能走 fs:write-file（会被当作相对路径写到错误位置，内容丢失）
+                const idRaw = activeTab.filePath.replace(VELA.MANUSCRIPT, '')
+                if (/^\d+$/.test(idRaw)) {
+                  // wordCount 用统一"有效字数"口径
+                  await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+                }
+              } else {
+                await ipc.invoke('fs:write-file', activeTab.filePath, text)
+              }
               // 清除 dirty 标记 + 同步内容 + 刷新章节名缓存
               useEditorStore.getState().markTabSaved(activeTab.id)
               useEditorStore.getState().syncTabContent(activeTab.id, text)
