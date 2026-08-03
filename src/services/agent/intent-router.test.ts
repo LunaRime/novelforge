@@ -118,3 +118,31 @@ describe('parseMentions 文件提及', () => {
     expect(calls[0].args).toEqual({ file_path: '世界观.md' })
   })
 })
+
+describe('parseMentions 项目外文件（绝对路径）', () => {
+  it('Windows 盘符路径解析为 file 目标', () => {
+    const mentions = parseMentions('参考一下 @C:\\笔记\\设定.md 的内容')
+    expect(mentions.length).toBe(1)
+    expect(mentions[0].target.type).toBe('file')
+    expect(mentions[0].target.value).toBe('C:\\笔记\\设定.md')
+    expect(mentions[0].target.displayName).toBe('设定.md')
+  })
+
+  it('正斜杠绝对路径解析', () => {
+    const mentions = parseMentions('参考 @D:/文档/世界观.txt')
+    expect(mentions.length).toBe(1)
+    expect(mentions[0].target.value).toBe('D:/文档/世界观.txt')
+  })
+
+  it('绝对路径映射到 read_file（原样传递）', () => {
+    const mentions = parseMentions('@C:\\桌面\\灵感.md 里有一条好点子')
+    const calls = mentionsToToolCalls(mentions)
+    expect(calls[0].toolName).toBe('read_file')
+    expect(calls[0].args).toEqual({ file_path: 'C:\\桌面\\灵感.md' })
+  })
+
+  it('非绝对路径不误判（项目内相对路径保持项目内匹配）', () => {
+    const mentions = parseMentions('@02_架构/故事线.md')
+    expect(mentions[0].target.value).toBe('02_架构/故事线.md')
+  })
+})

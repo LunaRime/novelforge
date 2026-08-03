@@ -1140,6 +1140,7 @@ export const UI_TEXTS_DATA = {
   'agent.addFile': { 'zh-CN': '添加文件', 'en-US': 'Add file', 'ru-RU': 'Добавить файл' },
   'agent.searchFiles': { 'zh-CN': '搜索项目文件…', 'en-US': 'Search project files…', 'ru-RU': 'Поиск файлов проекта…' },
   'agent.noFilesFound': { 'zh-CN': '未找到可添加的文件', 'en-US': 'No files found', 'ru-RU': 'Файлы не найдены' },
+  'agent.openExternalFile': { 'zh-CN': '打开外部文件…', 'en-US': 'Open external file…', 'ru-RU': 'Открыть внешний файл…' },
   'agent.atMention': { 'zh-CN': '@提及', 'en-US': '@Mention', 'ru-RU': '@Упоминание' },
   'agent.workflowCmd': { 'zh-CN': '工作流命令', 'en-US': 'Workflow command', 'ru-RU': 'Команда рабочего процесса' },
   'agent.placeholder': { 'zh-CN': '输入消息，@ 提及，/ 使用工作流...', 'en-US': 'Type a message, @ mention, / workflow...', 'ru-RU': 'Сообщение, @упоминание, /команда...' },
