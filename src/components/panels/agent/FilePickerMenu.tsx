@@ -8,7 +8,7 @@
  *   发送时走与 @ 提及一致的预取链路（parseMentions → read_file）
  */
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { FileText, Search } from 'lucide-react'
+import { FileText, Search, FolderOpen } from 'lucide-react'
 import { searchProjectFiles } from '../../../services/agent/intent-router'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -38,6 +38,15 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
     setSelectedIndex(0)
     setPrevQuery(query)
   }
+
+  /** 打开系统对话框选择项目外文件（可多选，取第一个；重复点按可继续添加） */
+  const handleOpenExternal = useCallback(async () => {
+    try {
+      const { ipc } = await import('../../../services/ipc-client')
+      const paths = await ipc.invoke('dialog:select-files')
+      if (paths && paths.length > 0) onSelect(paths[0])
+    } catch { /* 对话框失败不处理 */ }
+  }, [onSelect])
 
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -115,6 +124,21 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
             </button>
           ))
         )}
+      </div>
+
+      {/* 项目外文件：系统对话框选择 */}
+      <div style={{ borderTop: '1px solid var(--color-border)' }}>
+        <button
+          type="button"
+          onClick={handleOpenExternal}
+          className="w-full flex items-center gap-2 px-3 py-2 text-xs text-left transition-colors"
+          style={{ color: 'var(--color-text-secondary)' }}
+          onMouseEnter={e => { e.currentTarget.style.backgroundColor = 'var(--color-hover)'; e.currentTarget.style.color = 'var(--color-text)' }}
+          onMouseLeave={e => { e.currentTarget.style.backgroundColor = 'transparent'; e.currentTarget.style.color = 'var(--color-text-secondary)' }}
+        >
+          <FolderOpen size={12} style={{ flexShrink: 0 }} />
+          <span className="flex-1 truncate">{t('agent.openExternalFile')}</span>
+        </button>
       </div>
     </div>
   )

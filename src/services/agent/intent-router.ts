@@ -178,7 +178,17 @@ export function searchMentionTargets(query: string): MentionTarget[] {
 // ===== 项目文件 @ 提及（2026-08-03 新增：可添加可读文件） =====
 
 /** 可读文件扩展名（文本类，排除二进制与内部目录） */
-const READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv'])
+export const READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv'])
+
+/** 绝对路径判定（Windows 盘符 / UNC；不含 / 开头——项目内相对路径也用 / 分隔） */
+function isAbsolutePath(p: string): boolean {
+  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')
+}
+
+/** 从路径提取文件名（兼容 \ 与 / 分隔符） */
+function basename(p: string): string {
+  return p.split(/[\\/]/).pop() ?? p
+}
 
 /** 递归收集可读文件（相对项目根路径）；跳过内部/依赖目录 */
 function flattenReadableFiles(
@@ -242,7 +252,10 @@ export function parseMentions(input: string): ParsedMention[] {
     // 精确匹配 value / displayName；若用户输入是 displayName 的前缀（输入法尚未完成）则跳过，
     // 仅在完整匹配时生效——避免"@故事"误匹配到不存在的目标
     const target = targets.find(t => t.value === value || t.displayName === value)
-      ?? searchProjectFiles(value, 1)[0]  // 文件提及：插入的是相对路径，按路径/文件名匹配回文件
+      ?? searchProjectFiles(value, 1)[0]  // 项目内文件：插入的是相对路径，按路径/文件名匹配回文件
+      ?? (isAbsolutePath(value)
+        ? { type: 'file' as const, displayName: basename(value), value, icon: '📄', insertText: value }
+        : undefined)                      // 项目外文件：@绝对路径 直接构造目标（read_file 直读）
     if (target) {
       mentions.push({
         target,

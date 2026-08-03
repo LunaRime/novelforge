@@ -206,7 +206,8 @@ export function registerKBController() {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       title: t('dialog.selectDocs'),
-      filters: [{ name: '文本文件', extensions: ['txt', 'md', 'markdown'] }],
+      // 可读文本扩展名（知识库导入 + Agent 添加外部文件共用）
+      filters: [{ name: '文本文件', extensions: ['txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'csv'] }],
     })
     if (result.canceled || result.filePaths.length === 0) return null
     return result.filePaths
