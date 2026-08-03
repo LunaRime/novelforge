@@ -11,6 +11,12 @@ import { safeErrorMessage } from '../utils/error-utils'
 /** 路径沙箱：允许访问的根目录列表 */
 const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
 
+/** 外部文件读取限制（Agent 添加项目外文件专用通道）：
+ * 用户通过系统对话框显式选择，信任用户意图，不套沙箱（可能在任何磁盘），
+ * 仅以可读扩展名 + 大小上限做防御 */
+const EXTERNAL_MAX_BYTES = 1_048_576 // 1MB
+const EXTERNAL_READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.markdown'])
+
 /** 禁止访问的敏感目录（即使在 SANDBOX_ROOTS 内） */
 const BLOCKED_PATHS = [
   path.join(os.homedir(), '.ssh'),
@@ -88,6 +94,28 @@ export function registerFSController() {
         const content = await fsPromises.readFile(safePath, 'utf-8')
         return { success: true, content }
       })
+    } catch (error) {
+      return { success: false, content: '', error: safeErrorMessage(error) }
+    }
+  })
+
+  // 项目外文件只读（Agent "添加外部文件"）：不走沙箱（用户显式选择，任意磁盘），
+  // 扩展名白名单 + 1MB 大小限制 + 只读（无写通道）
+  ipcMain.handle('fs:read-external-file', async (_event, filePath: string) => {
+    try {
+      const ext = path.extname(filePath).toLowerCase()
+      if (!EXTERNAL_READABLE_EXTS.has(ext)) {
+        return { success: false, content: '', error: `不支持的文件类型「${ext}」（仅支持文本文件）` }
+      }
+      const stat = await fsPromises.stat(filePath)
+      if (!stat.isFile()) {
+        return { success: false, content: '', error: '目标不是文件' }
+      }
+      if (stat.size > EXTERNAL_MAX_BYTES) {
+        return { success: false, content: '', error: `文件过大（超过 ${Math.round(EXTERNAL_MAX_BYTES / 1024)}KB），拒绝读取` }
+      }
+      const content = await fsPromises.readFile(filePath, 'utf-8')
+      return { success: true, content }
     } catch (error) {
       return { success: false, content: '', error: safeErrorMessage(error) }
     }

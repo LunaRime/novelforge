@@ -8,10 +8,6 @@ import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { validatePath } from './safe-path'
-import { READABLE_EXTS } from '../intent-router'
-
-/** 外部文件最大读取长度（字符，约 300KB）——预取会注入 prompt，超限截断防御 */
-const EXTERNAL_MAX_CHARS = 300_000
 
 /** 绝对路径判定（Windows 盘符 / UNC，与 intent-router 一致） */
 function isAbsolutePath(p: string): boolean {
@@ -41,24 +37,14 @@ export const readFileTool = buildAgentTool({
     }
 
     // 项目外文件：用户显式提供的绝对路径（"添加外部文件"对话框选择），
-    // 校验可读扩展名 + 长度防御后直读（不走 validatePath——那是项目内沙箱约束）
+    // 走专用只读通道 fs:read-external-file——fs:read-file 有沙箱（项目/主目录内），
+    // 任意磁盘的外部文件会被拒绝；专用通道无沙箱但有扩展名 + 1MB 限制
     if (isAbsolutePath(filePath)) {
-      const ext = filePath.slice(filePath.lastIndexOf('.')).toLowerCase()
-      if (!READABLE_EXTS.has(ext)) {
-        return { success: false, content: '', error: `不支持的文件类型「${ext}」（仅支持文本文件：md/txt/json/yaml/yml/csv）` }
-      }
-      const res = await ipc.invoke('fs:read-file', filePath)
+      const res = await ipc.invoke('fs:read-external-file', filePath)
       if (!res.success) {
-        return { success: false, content: '', error: res.error ?? '文件读取失败' }
+        return { success: false, content: '', error: res.error ?? '外部文件读取失败' }
       }
-      const content = String(res.content ?? '')
-      if (content.length > EXTERNAL_MAX_CHARS) {
-        return {
-          success: true,
-          content: `${content.slice(0, EXTERNAL_MAX_CHARS)}\n\n…（文件过大，已截断前 ${EXTERNAL_MAX_CHARS} 字符）`,
-        }
-      }
-      return { success: true, content }
+      return { success: true, content: String(res.content ?? '') }
     }
 
     // 项目内文件：路径安全校验
