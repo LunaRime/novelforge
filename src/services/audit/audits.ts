@@ -46,46 +46,259 @@ function cnBigramSet(text: string): Set<string> {
   return new Set(extractCnNgrams(text, 2))
 }
 
+/**
+ * 判断 2-gram 是否属于豁免专名（角色名/术语）的组成部分。
+ * 「苏晚晴」→ 其 2-gram 为「苏晚」「晚晴」——角色名在正文中高频出现是正常
+ * 叙事，不是重复水文；含专名的 2-gram 一律不参与词频/衔接统计。
+ */
+function isExcludedNgram(ngram: string, excludeWords: string[]): boolean {
+  return excludeWords.some(t => t.length >= 2 && t.includes(ngram))
+}
+
 // ===== 1. 重复词审计（对应"重复水文"） =====
 
+/** 水文检测白名单（用户可配置的豁免） */
+export interface AuditWhitelist {
+  /** 词/2-gram 豁免（如 "缓缓"——作者标志性文风） */
+  words?: string[]
+  /** 句首模式豁免（如 "只见"——本作叙事习惯） */
+  patterns?: string[]
+  /** 完整句子豁免（故意复用的句子，如口号/咒语） */
+  sentences?: string[]
+}
+
 export interface RepetitionAuditOptions {
-  /** 同词报警阈值（默认 3） */
+  /**
+   * 同词报警阈值。默认按章节长度动态计算：max(8, 字数/300)——
+   * 短文本下限 8 次；正文越长阈值越高（固定阈值 3 会把「世界」11 次这类
+   * 正常语境词误报为水文）
+   */
   maxRepeat?: number
   /** 报告上限（默认 8） */
   topN?: number
+  /** 豁免词（角色名/术语等专名——正文高频出现是正常叙事，不参与统计） */
+  excludeWords?: string[]
+  /**
+   * 本书历史章节基线词频（buildBaselineFreqs 输出）。
+   * 根源性判定：**不识别"什么是专名"，而是问"这个词在这本书里通常出现
+   * 多少次"**——专名/场景词/常用词在本书稳定高频（基线高 → 天然豁免），
+   * 真正的水文是"本章异常高频"（超基线 ×2）。报警条件：
+   * `本章频次 ≥ max(绝对下限 8, 基线 × 2)`；无基线（首章）回退动态阈值。
+   */
+  baselineFreqs?: Record<string, number>
+  /** 短句（4-30 字）完全重复 ≥N 次报警（默认 3）——AI 复读/复制粘贴典型信号 */
+  sentenceRepeatThreshold?: number
+  /** 句首 3 字模板重复 ≥N 次报警（默认 6）——句式单调/水文节奏 */
+  sentenceStartThreshold?: number
+  /** 白名单：words 并入词频豁免；patterns 豁免句首；sentences 豁免完整句 */
+  whitelist?: AuditWhitelist
+}
+
+/** 按句末标点切分句子（保留对话引导语） */
+function splitSentences(text: string): string[] {
+  return text
+    .split(/(?<=[。！？；])/)
+    .map(s => s.replace(/[。！？；]+$/, '').trim())
+    .filter(s => s.length > 0)
+}
+
+/** 句首 3 字模式（跳过前导引号/空白） */
+function sentenceStart3(sentence: string): string {
+  return sentence.replace(/^[\s“「"'‘]+/, '').slice(0, 3)
 }
 
 /**
- * 检测正文高频重复词（对话区豁免——角色口头禅不算水文）
+ * 对话引导语（人称 + 说/道/问/答等）——正常对话节奏，不算句式单调。
+ * 精确判断为"句首 3 字模板以任一引导词开头"（如"他说了"命中"他说"）。
  */
-export function repetitionAudit(text: string, options: RepetitionAuditOptions = {}): AuditResult {
-  const { maxRepeat = 3, topN = 8 } = options
-  const body = stripDialogue(text)
+const DIALOG_LEADS = ['他说', '她说', '他道', '她道', '我道', '你道', '问道', '答道', '应道', '笑道', '喊道', '叫道', '心想', '暗道', '低语', '忽然道', '冷冷道']
 
+/**
+ * 水文与重复结构检测（词频审计升级版）。
+ *
+ * 三维信号：
+ * 1. **词频堆砌**（原有）：2-gram 高频 + 跨章基线（超基线 ×2 才算异常）
+ * 2. **句子重复**：完全相同句子反复出现——AI 复读/复制粘贴的典型信号。
+ *    短句（4-30 字）≥3 次、长句（>30 字）≥2 次报警（长句复读更可疑）。
+ * 3. **句首模板**：同一句首 3 字模式反复——句式单调/水文节奏。
+ *    对话引导语（他说/她道…）与白名单 patterns 豁免。
+ *
+ * 白名单（AuditWhitelist）：words 并入词频豁免（作者标志性文风）、
+ * patterns 豁免句首模板（本作叙事习惯）、sentences 豁免完整句（口号/咒语等故意复用）。
+ */
+export function waterAudit(text: string, options: RepetitionAuditOptions = {}): AuditResult {
+  const {
+    maxRepeat = Math.max(8, Math.floor(text.length / 300)),
+    topN = 8,
+    excludeWords = [],
+    baselineFreqs,
+    sentenceRepeatThreshold = 3,
+    sentenceStartThreshold = 6,
+    whitelist,
+  } = options
+  const body = stripDialogue(text)
+  const issues: AuditIssue[] = []
+
+  // ===== 1. 词频堆砌 =====
+  // 白名单词（作者标志性文风）用替换式豁免：整词从正文剔除后再统计——
+  // 「缓缓」不仅自身不报，其相邻 2-gram（「他缓」「缓起」）也不产生信号
+  let freqSource = body
+  for (const w of whitelist?.words ?? []) {
+    if (w && w.length >= 2) freqSource = freqSource.split(w).join(' ')
+  }
   const freq = new Map<string, number>()
-  for (const word of extractCnNgrams(body, 2)) {
+  for (const word of extractCnNgrams(freqSource, 2)) {
+    if (isExcludedNgram(word, excludeWords)) continue
     freq.set(word, (freq.get(word) ?? 0) + 1)
   }
-  // 排除常见虚词组合
-  const stop = new Set(['一个', '什么', '自己', '没有', '就是', '这个', '那个', '时候', '已经', '知道', '可以', '现在', '起来', '这么', '那么', '他们', '我们', '你们', '怎么', '还是', '因为', '所以', '但是', '如果', '虽然', '然后', '最后'])
+  // 排除常见虚词组合与高频语境词（「世界」等场景词重复不构成水文）
+  const stop = new Set(['一个', '什么', '自己', '没有', '就是', '这个', '那个', '时候', '已经', '知道', '可以', '现在', '起来', '这么', '那么', '他们', '我们', '你们', '怎么', '还是', '因为', '所以', '但是', '如果', '虽然', '然后', '最后', '世界', '整个', '地方', '东西', '感觉', '看见', '看到', '想到', '心里', '脸上', '声音', '样子', '事情', '眼前', '周围'])
   const hits = [...freq.entries()]
-    .filter(([w, c]) => c >= maxRepeat && !stop.has(w))
+    .filter(([w, c]) => {
+      if (stop.has(w) || isExcludedNgram(w, excludeWords)) return false
+      const base = baselineFreqs?.[w] ?? 0
+      if (base > 0) return c >= Math.max(8, base * 2) // 有基线：超本书均值 2 倍且过绝对下限
+      return c >= maxRepeat // 无基线（首章/少章）：动态阈值
+    })
     .sort((a, b) => b[1] - a[1])
     .slice(0, topN)
+  for (const [w, c] of hits) {
+    issues.push({
+      kind: 'repetition',
+      severity: c >= maxRepeat + 3 ? 'error' : 'warn',
+      message: `「${w}」出现 ${c} 次，建议同义替换`,
+    })
+  }
 
-  const issues: AuditIssue[] = hits.map(([w, c]) => ({
-    kind: 'repetition',
-    severity: c >= maxRepeat + 3 ? 'error' : 'warn',
-    message: `「${w}」出现 ${c} 次，建议同义替换`,
-  }))
+  // ===== 2. 句子重复（AI 复读典型信号） =====
+  const sentences = splitSentences(body)
+  const sentFreq = new Map<string, number>()
+  for (const s of sentences) {
+    if (s.length < 4 || s.length > 80) continue // 太短/太长的句子无检测意义
+    if (whitelist?.sentences?.includes(s)) continue
+    sentFreq.set(s, (sentFreq.get(s) ?? 0) + 1)
+  }
+  const sentHits = [...sentFreq.entries()]
+    .filter(([s, c]) => c >= (s.length > 30 ? 2 : sentenceRepeatThreshold)) // 长句复读更可疑
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+  for (const [s, c] of sentHits) {
+    issues.push({
+      kind: 'repetition',
+      severity: 'error', // 整句复读是强水文信号
+      message: `完整句子重复 ${c} 次：「${s.length > 30 ? s.slice(0, 30) + '…' : s}」`,
+    })
+  }
+
+  // ===== 3. 句首模板（句式单调） =====
+  const startFreq = new Map<string, number>()
+  for (const s of sentences) {
+    if (s.length < 6) continue // 太短的句子不参与句式统计
+    const start3 = sentenceStart3(s)
+    if (start3.length < 2) continue
+    if (isExcludedNgram(start3, excludeWords)) continue // 角色名开头的句子（"苏晚向前"）正常
+    if (whitelist?.words?.some(w => w.length >= 2 && start3.includes(w))) continue // 白名单文风词开头的句子
+    if (DIALOG_LEADS.some(lead => start3.startsWith(lead))) continue // 对话引导语正常
+    if (whitelist?.patterns?.some(p => start3.startsWith(p))) continue
+    startFreq.set(start3, (startFreq.get(start3) ?? 0) + 1)
+  }
+  const startHits = [...startFreq.entries()]
+    .filter(([, c]) => c >= sentenceStartThreshold)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 3)
+  for (const [st, c] of startHits) {
+    issues.push({
+      kind: 'repetition',
+      severity: 'warn',
+      message: `句首「${st}」出现 ${c} 次，句式单调重复`,
+    })
+  }
+
+  // 汇总：错误级优先
+  issues.sort((a, b) => (a.severity === b.severity ? 0 : a.severity === 'error' ? -1 : 1))
 
   return {
     passed: issues.length === 0,
     issues,
     summary: issues.length === 0
-      ? '重复词检查通过'
-      : `发现 ${issues.length} 个高频重复词（阈值 ${maxRepeat} 次）`,
+      ? '水文与重复结构检查通过'
+      : `发现 ${issues.length} 处水文/重复信号（词频/句子重复/句式单调）`,
   }
+}
+
+/** 兼容旧名：词频审计 = 水文检测的子集（保留导出防破坏） */
+export const repetitionAudit = waterAudit
+
+// ===== 1.5 基线频率与设定专名（重复词审计的数据源） =====
+
+/**
+ * 从本书已定稿章节正文构建 2-gram 基线频率表。
+ * - 每章独立统计（章节长度波动天然归一化）
+ * - 只在 ≥2 章出现的词才入表（跨章稳定词——角色名/术语/场景词/常用词
+ *   每章都出现属"本书正常密度"；单章偶然词是本章特有，不构成基线）
+ * - 值 = 出现章的平均频次
+ * - 少于 2 章返回 {}（调用方回退动态阈值）
+ */
+export function buildBaselineFreqs(chapters: string[]): Record<string, number> {
+  const perChapter = chapters
+    .filter(ch => ch && ch.trim())
+    .map(ch => {
+      const m = new Map<string, number>()
+      for (const w of extractCnNgrams(stripDialogue(ch), 2)) {
+        m.set(w, (m.get(w) ?? 0) + 1)
+      }
+      return m
+    })
+  if (perChapter.length < 2) return {}
+
+  const appearChapters = new Map<string, number>()
+  const totalFreq = new Map<string, number>()
+  for (const m of perChapter) {
+    for (const [w, c] of m) {
+      appearChapters.set(w, (appearChapters.get(w) ?? 0) + 1)
+      totalFreq.set(w, (totalFreq.get(w) ?? 0) + c)
+    }
+  }
+  const baseline: Record<string, number> = {}
+  for (const [w, appear] of appearChapters) {
+    if (appear >= 2) baseline[w] = totalFreq.get(w)! / appear
+  }
+  return baseline
+}
+
+/** 世界观提取专用通用词表（设定文本高频的普通词，非专名，混入豁免会让水文检测失效） */
+const SETTING_COMMON_WORDS = new Set([
+  '世界', '大陆', '天地', '整个', '修炼', '境界', '强者', '实力', '灵力', '灵气', '气息',
+  '体内', '身体', '灵魂', '精神', '意识', '力量', '宗门', '家族', '帝国', '王朝', '城池',
+  '山脉', '森林', '天空', '地面', '身上', '心中', '眼前', '周围', '时候', '现在', '知道',
+  '可以', '没有', '就是', '什么', '自己', '一个', '已经', '他们', '我们', '怎么', '因为',
+  '所以', '但是', '如果', '然后', '最后', '突然', '缓缓', '淡淡', '冷冷', '微微', '轻轻',
+  '声音', '样子', '事情', '地方', '东西', '感觉', '看见', '想到', '心里', '脸上', '这个',
+  '那个', '起来', '这么', '那么', '还是', '虽然',
+])
+
+/**
+ * 从世界观/设定文本提取专名候选（首章无基线时的兜底豁免词）。
+ * 高置信来源：引号/书名号内词（设定作者标注专名的惯例，如「武魂」体系、《魂殿》秘辛）；
+ * 低置信来源：全文高频 2-3 字词（≥3 次，过滤通用词表）。
+ * 上限 60 防膨胀；普通词混入在"首章兜底"场景可接受——宁可少报不误报。
+ */
+export function extractSettingNouns(worldText: string): string[] {
+  if (!worldText.trim()) return []
+  const nouns = new Set<string>()
+  // 1. 引号/书名号内（2-8 字、不含标点）
+  for (const m of worldText.matchAll(/[「《]([^」》\s，。！？；：、（）—…·～【】]{2,8})[」》]/g)) {
+    nouns.add(m[1])
+  }
+  // 2. 全文高频 2-3 字词（≥3 次，过滤通用词）
+  const freq = new Map<string, number>()
+  for (const w of [...extractCnNgrams(worldText, 2), ...extractCnNgrams(worldText, 3)]) {
+    freq.set(w, (freq.get(w) ?? 0) + 1)
+  }
+  for (const [w, c] of freq) {
+    if (c >= 3 && !SETTING_COMMON_WORDS.has(w) && !nouns.has(w)) nouns.add(w)
+  }
+  return [...nouns].slice(0, 60)
 }
 
 // ===== 2. 章节衔接审计（对应"开头跳戏"） =====
@@ -97,23 +310,30 @@ export interface ContinuityAuditOptions {
   prevTailLen?: number
   /** 最少重叠词数（低于则提示） */
   minOverlap?: number
+  /** 豁免词（角色名/术语——两章都提主角不算衔接信号） */
+  excludeWords?: string[]
 }
 
 /**
- * 检测本章开头与上章结尾的衔接度（2 字词重叠计数）
+ * 检测本章开头与上章结尾的衔接度（2 字词重叠计数；专名重叠不计——两章都出现
+ * 主角名不代表衔接，真正衔接靠场景/动作词）
  */
 export function continuityAudit(
   chapterText: string,
   prevChapterEnding?: string,
   options: ContinuityAuditOptions = {},
 ): AuditResult {
-  const { chapterHeadLen = 100, prevTailLen = 200, minOverlap = 2 } = options
+  const { chapterHeadLen = 100, prevTailLen = 200, minOverlap = 2, excludeWords = [] } = options
   if (!prevChapterEnding || !prevChapterEnding.trim()) {
     return { passed: true, issues: [], summary: '无上章结尾可对照（首章或数据缺失）' }
   }
 
-  const head = cnBigramSet(chapterText.slice(0, chapterHeadLen))
-  const tail = cnBigramSet(prevChapterEnding.slice(-prevTailLen))
+  const head = new Set(
+    [...cnBigramSet(chapterText.slice(0, chapterHeadLen))].filter(w => !isExcludedNgram(w, excludeWords)),
+  )
+  const tail = new Set(
+    [...cnBigramSet(prevChapterEnding.slice(-prevTailLen))].filter(w => !isExcludedNgram(w, excludeWords)),
+  )
   let overlap = 0
   for (const w of tail) if (head.has(w)) overlap++
 
@@ -244,13 +464,21 @@ export function sensitiveAudit(
 
 // ===== 6. 时间线审计（对应"时序错乱"） =====
 
-/** 时间词正则：第X天 / 次日 / 翌日 / X天后 / X个月后 / X年后 / 当天 */
-const TIME_WORD_REGEX = /(第[一二三四五六七八九十百\d]+天|次日|翌日|第二天|当天|同一天|[\d一二三四五六七八九十百]+[天月年]后|[\d一二三四五六七八九十百]+个?[天月年]前)/g
+/**
+ * 时间词正则（仅保留可判定的绝对锚点）：
+ * - 「当天/同一天」**不参与检测**——指代性锚点（指前文某天），出现顺序
+ *   「已过 2 天」之后合法（"当天"指代那 2 天之后的当天），无法判断矛盾
+ * - 「X天前」**不参与检测**——闪回/倒叙是正常叙事手法，不构成时序矛盾
+ * - 「X天后」为相对增量（当前进度 + X），见 extractTimelineAnchors
+ */
+const TIME_WORD_REGEX = /(第[一二三四五六七八九十百\d]+天|次日|翌日|第二天|[\d一二三四五六七八九十百]+[天月年]后)/g
 
 export interface TimelineAnchor {
   /** 归一化时间值（相对第 1 天的偏移，约数） */
   dayOffset: number
   raw: string
+  /** true = 相对增量（X天后/月后/年后）：从当前时间进度推进，不参与倒序比较 */
+  delta?: boolean
 }
 
 /** 中文数字 → 数字 */
@@ -274,31 +502,28 @@ export function extractTimelineAnchors(text: string): TimelineAnchor[] {
   for (const m of matches) {
     const raw = m[0]
     let dayOffset: number
+    let delta = false
     if (raw.startsWith('第')) {
       const num = raw.replace(/^第|天$/g, '')
       dayOffset = cnNumToNum(num)
-    } else if (raw === '次日' || raw === '第二天') {
+    } else if (raw === '次日' || raw === '第二天' || raw === '翌日') {
       dayOffset = 2
-    } else if (raw === '翌日') {
-      dayOffset = 2
-    } else if (raw === '当天' || raw === '同一天') {
-      dayOffset = 1
     } else if (raw.includes('后')) {
+      // 相对增量：从当前时间进度推进（正文「3天后」= 上一锚点 + 3 天）
       const num = raw.replace(/[天月年后]/g, '')
       dayOffset = cnNumToNum(num) * (raw.includes('月') ? 30 : raw.includes('年') ? 365 : 1)
-    } else if (raw.includes('前')) {
-      const num = raw.replace(/[天月年前]/g, '')
-      dayOffset = -cnNumToNum(num) * (raw.includes('月') ? 30 : raw.includes('年') ? 365 : 1)
+      delta = true
     } else {
       continue
     }
-    anchors.push({ dayOffset, raw })
+    anchors.push({ dayOffset, raw, delta })
   }
   return anchors
 }
 
 /**
- * 单章内时间线检测：时间锚点出现倒序（后出现的时间早于前出现）判矛盾
+ * 单章内时间线检测：绝对锚点（第X天/次日）出现倒序判矛盾。
+ * 相对增量（X天后）从当前进度推进，不参与倒序比较。
  */
 export function timelineAudit(chapterText: string): AuditResult {
   const anchors = extractTimelineAnchors(chapterText)
@@ -306,6 +531,11 @@ export function timelineAudit(chapterText: string): AuditResult {
 
   let last = -Infinity
   for (const a of anchors) {
+    if (a.delta) {
+      // 相对增量：线性推进（首次出现时直接作为绝对进度）
+      last = last === -Infinity ? a.dayOffset : last + a.dayOffset
+      continue
+    }
     if (a.dayOffset < last) {
       issues.push({
         kind: 'timeline',
@@ -331,18 +561,29 @@ export interface FullAuditInput {
   chapterText: string
   prevChapterEnding?: string
   keyEvents?: string[]
+  /** 豁免词（角色名 + 世界观专名）：重复/衔接审计跳过 */
   terms?: string[]
   extraForbiddenWords?: string[]
+  /** 本书历史章节基线词频（buildBaselineFreqs 输出）——重复审计超基线才报警 */
+  baselineFreqs?: Record<string, number>
+  /** 水文检测白名单（用户配置：作者文风词/句首模式/故意复用的句子） */
+  whitelist?: AuditWhitelist
 }
 
 /**
  * 全量审计（后处理管道挂载入口）
+ * terms（角色名等专名）同时作为重复词/衔接审计的豁免词——专名高频出现
+ * 是正常叙事，不该被当成"重复水文"或"衔接信号"；
+ * baselineFreqs（本书历史章节基线）——稳定高频词（专名/场景词/常用词）
+ * 只有超出基线密度才算异常；
+ * whitelist（用户白名单）——作者标志性文风豁免。
  */
 export function runAllAudits(input: FullAuditInput): AuditResult {
+  const terms = input.terms ?? []
   const all: AuditResult[] = [
-    repetitionAudit(input.chapterText),
-    continuityAudit(input.chapterText, input.prevChapterEnding),
-    terminologyAudit(input.chapterText, input.terms ?? []),
+    waterAudit(input.chapterText, { excludeWords: terms, baselineFreqs: input.baselineFreqs, whitelist: input.whitelist }),
+    continuityAudit(input.chapterText, input.prevChapterEnding, { excludeWords: terms }),
+    terminologyAudit(input.chapterText, terms),
     blueprintAudit(input.chapterText, input.keyEvents ?? []),
     sensitiveAudit(input.chapterText, input.extraForbiddenWords),
     timelineAudit(input.chapterText),
