@@ -172,17 +172,20 @@ export function searchMentionTargets(query: string): MentionTarget[] {
 
 /**
  * 解析输入中的 @ 提及
+ * 注意：\S+ 会把紧跟提及的中文标点（如"@故事架构，"）也吞进匹配，
+ * 导致 find 失败、提及静默失效。排除常见中文标点后按尾部截断做前缀匹配。
  */
 export function parseMentions(input: string): ParsedMention[] {
   const mentions: ParsedMention[] = []
-  const regex = /@(\S+)/g
+  const regex = /@([^\s，。！？；：、（）《》【】·—…""'']+)/g
   let match: RegExpExecArray | null = null
 
   while ((match = regex.exec(input)) !== null) {
     const value = match[1]
-    const target = getAllMentionTargets().find(t =>
-      t.value === value || t.displayName === value
-    )
+    const targets = getAllMentionTargets()
+    // 精确匹配 value / displayName；若用户输入是 displayName 的前缀（输入法尚未完成）则跳过，
+    // 仅在完整匹配时生效——避免"@故事"误匹配到不存在的目标
+    const target = targets.find(t => t.value === value || t.displayName === value)
     if (target) {
       mentions.push({
         target,
