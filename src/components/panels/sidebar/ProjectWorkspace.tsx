@@ -13,11 +13,12 @@ import {
   LayoutList, CheckCircle2, Circle, BookOpen, FolderOpen,
 } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
-import { useEditorStore } from '../../../stores/editor-store'
 import { ipc } from '../../../services/ipc-client'
-import { getChapterLatestDraft } from '../../../services/version-service'
-import { openChapterFile, openBuiltinEditor } from './SidebarShared'
+import { openChapterFile, openBuiltinEditor, openDraftByChapter } from './SidebarShared'
 import type { ProjectSummary } from '../../../shared/ipc-channels'
+import VolumeGroup from './VolumeGroup'
+import { toast } from '../../ui/Toast'
+import { globalEventBus } from '../../../shared/event-bus'
 import { useTranslation } from '../../../hooks/useTranslation'
 
 export default function ProjectWorkspace() {
@@ -29,7 +30,7 @@ export default function ProjectWorkspace() {
   const requestIdRef = useRef(0)
 
   // 加载当前项目摘要（切换项目时保持 loading，新结果到达后替换）
-  useEffect(() => {
+  const loadSummary = useCallback(() => {
     const projectPath = currentProject?.path
     if (!projectPath) return
     const id = ++requestIdRef.current
@@ -45,38 +46,40 @@ export default function ProjectWorkspace() {
     })
   }, [currentProject?.path])
 
+  useEffect(() => {
+    loadSummary()
+  }, [loadSummary])
+
+  // 运行链闭环：定稿/资源变化后刷新工作台——组件已挂载时 effect 不重跑，
+  // 不监听事件则停留期间草稿箱/正式稿/分卷进度永远陈旧
+  // （分卷数据由 VolumeGroup 自行监听刷新）
+  useEffect(() => {
+    const unsub1 = globalEventBus.on('FINALIZE_COMPLETE', () => { loadSummary() })
+    const unsub2 = globalEventBus.on('REFRESH_RESOURCE', (payload: { resources: string[] }) => {
+      if (payload.resources.includes('all') || payload.resources.includes('drafts') || payload.resources.includes('characterCards')) {
+        loadSummary()
+      }
+    })
+    return () => { unsub1(); unsub2() }
+  }, [loadSummary])
+
   // 打开蓝图编辑器（全局章节蓝图，与 ProjectTree 入口统一 id 避免重复 Tab）
   const openBlueprint = useCallback(() => {
     openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')
   }, [t])
 
-  // 打开该章最新草稿（用真实草稿 id 构造 vela://draft/{id}，
-  // 保证 parseDraftMeta 能解析 → 保存/定稿/修稿全部可用）
-  const openDraft = useCallback(async (chapterNumber: number, chapterTitle?: string) => {
-    let draft: { id: number; content: string } | null = null
-    try {
-      draft = await getChapterLatestDraft(chapterNumber)
-    } catch (e) {
-      console.warn('[ProjectWorkspace] 读取草稿失败:', e)
-    }
-    if (!draft) return // 该章无草稿（工作台草稿项只在 draftCount>0 时显示，防御性跳过）
-    const filePath = `vela://draft/${draft.id}`
-    // Tab 名必须带章节号：标题存在时拼 "第N章 标题"（与正式稿/草稿箱命名一致），
-    // 标题已含"第N章"前缀则不重复拼接（对齐 DraftBoxGroup 防御逻辑）
-    const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
-    const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
-    useEditorStore.getState().openFile({
-      id: filePath,
-      name: `${chLabel}${titlePart} · 草稿`,
-      type: 'chapter',
-      filePath,
-      content: draft.content,
-    })
-  }, [t])
+  // 打开该章最新草稿（SidebarShared 公共实现：真实草稿 id → vela://draft/{id}，
+  // parseDraftMeta 可解析 → 保存/定稿/修稿全部可用；无草稿 toast 反馈）
+  const openDraft = useCallback((chapterNumber: number, chapterTitle?: string) => {
+    void openDraftByChapter(chapterNumber, chapterTitle)
+  }, [])
 
   // 打开正式稿（vela://manuscript/{draftId} → DB 定稿内容，不依赖物理路径命名）
   const openFinal = useCallback(async (chapterNumber: number, title?: string, draftId?: number) => {
-    if (!draftId) return
+    if (!draftId) {
+      toast.warning(t('workspace.noFinal').replace('{n}', String(chapterNumber)))
+      return // 防御：summary 聚合异常时给出反馈而非静默无反应
+    }
     const display = `${t('chapter.label').replace('{n}', String(chapterNumber))}${title ? ` ${title}` : ''}`
     await openChapterFile(`vela://manuscript/${draftId}`, display)
   }, [t])
@@ -137,6 +140,18 @@ export default function ProjectWorkspace() {
               <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
             </div>
           </button>
+
+          {/* 分卷 — 长篇小说按卷组织章节（新建/编辑/删除/自动划分/卷内章节） */}
+          <VolumeGroup
+            projectPath={currentProject.path}
+            totalChapters={summary.totalChapters}
+            chaptersForVolume={(v) => summary.draftChapters
+              .filter(dc => dc.chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || dc.chapterNumber <= v.chapterEnd))
+              .map(dc => ({ chapterNumber: dc.chapterNumber, chapterTitle: dc.chapterTitle, hasFinalized: dc.hasFinalized }))}
+            finalizedCountForVolume={(v) => summary.chapters
+              .filter(ch => ch.chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || ch.chapterNumber <= v.chapterEnd)).length}
+            onOpenDraft={openDraft}
+          />
 
           {/* 草稿箱 — 按章分组，点击打开该章最新草稿 */}
           <section

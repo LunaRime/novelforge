@@ -49,6 +49,9 @@ interface DraftState {
   ) => Promise<{ success: boolean; error?: string }>
 }
 
+// 草稿加载请求序号（loadAllDrafts 防跨项目切换竞态）
+let draftLoadSeq = 0
+
 export const useDraftStore = create<DraftState>()((set, get) => ({
   draftsByChapter: {},
   loading: false,
@@ -87,6 +90,8 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     const project = useProjectStore.getState().currentProject
     if (!project) return
 
+    // 请求序号：项目快速切换时旧项目的慢响应不得覆盖当前项目数据
+    const seq = ++draftLoadSeq
     set({ loading: true })
     try {
       // 获取所有有草稿的章节号（不仅限有蓝图的章节，导入流程先建草稿后推演蓝图）
@@ -109,9 +114,10 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         newDraftsByChapter[chNum] = metas
       }
 
+      if (seq !== draftLoadSeq) return // 已被更新的加载请求取代（项目已切换）
       set({ draftsByChapter: newDraftsByChapter })
     } finally {
-      set({ loading: false })
+      if (seq === draftLoadSeq) set({ loading: false })
     }
   },
 

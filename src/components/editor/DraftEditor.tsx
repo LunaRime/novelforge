@@ -103,6 +103,10 @@ export default function DraftEditor({ filePath, content }: Props) {
         if (/^\d+$/.test(idRaw)) {
           // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
           await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+          // 通知侧栏/工作台刷新草稿数据（编辑器保存后草稿箱计数/状态陈旧的运行链闭环；
+          // 自动保存默认 30s 间隔，全量 loadAllDrafts 成本可接受）
+          const { globalEventBus } = await import('../../shared/event-bus')
+          globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
         } else {
           await ipc.invoke('fs:write-file', filePath, text)
         }
