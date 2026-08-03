@@ -191,16 +191,76 @@ const activeContexts = new Map<string, WorkflowContext>()
 /** 步进模式：存储「等待用户确认」的 Promise resolve（runId → resolve） */
 const continueResolveRefs = new Map<string, () => void>()
 
-// ===== appendText 流式缓冲 =====
+// ===== appendText 流式缓冲（共享限频调度器） =====
 // LLM 流式 chunk 逐片 setState 会高频重渲染整个面板，阻塞主线程。
 // 后果：mouseover 事件排队 → 浏览器原生 title 提示（UI 线程驱动，不受 JS 阻塞）
-// 抢先弹出，用户看到"旧样式"悬浮弹窗。按 50ms / 200 字符合并刷新。
-const FLUSH_INTERVAL_MS = 50
-const FLUSH_SIZE_CHARS = 200
-const appendBuffers = new Map<string, {
-  buffer: string
-  timer: ReturnType<typeof setTimeout> | null
-}>()
+// 抢先弹出，用户看到"旧样式"悬浮弹窗。
+//
+// 根因教训（44244a1 修复无效的原因）：旧的"按 buffer 大小 >=200 立即 flush"会绕过
+// 定时器——chunk 大或快时 flush 频率仍 ≈ chunk 频率；且定稿后处理 6-7 个步骤并发
+// 流式，各自独立 buffer/timer，setState 频率再 ×并发数 → 主线程照样被占。
+//
+// 正确做法：**单一共享 timer 驱动，所有 run/step 的文本先进 pending 队列**。
+// 最小刷新间隔 = FLUSH_INTERVAL_MS 是硬约束（并发步骤共用一个 timer，每轮最多
+// 一次渲染）；同 tick 内的多次 updateStepById 被 React 自动批处理为一次渲染。
+const FLUSH_INTERVAL_MS = 100
+const pendingAppendFlushes = new Map<string, string>()
+let appendFlushScheduled = false
+
+/** 安排下一轮统一 flush（模块级单 timer，所有并发步骤共享） */
+function scheduleAppendFlush(): void {
+  if (appendFlushScheduled) return
+  appendFlushScheduled = true
+  setTimeout(() => {
+    appendFlushScheduled = false
+    flushAllPendingAppends()
+  }, FLUSH_INTERVAL_MS)
+}
+
+/**
+ * 把当前步骤的累积文本写入步骤 result。
+ * key 格式：`{runId}:{stepIndex}`
+ */
+function writeStepResultAppend(key: string, text: string): void {
+  const sepIdx = key.indexOf(':')
+  if (sepIdx < 0) return
+  const runId = key.slice(0, sepIdx)
+  const stepIndex = parseInt(key.slice(sepIdx + 1), 10)
+  if (isNaN(stepIndex)) return
+
+  const activeRun = useWorkflowStore.getState().activeRuns.find(r => r.id === runId)
+  if (!activeRun) return
+  const step = activeRun.steps[stepIndex]
+  if (!step) return
+  updateStepById(useWorkflowStore.setState, runId, stepIndex, { result: (step.result || '') + text })
+}
+
+/** 定时器到期：把 pending 队列中全部累积文本一次性写入（多 key 同 tick → 一次渲染） */
+function flushAllPendingAppends(): void {
+  if (pendingAppendFlushes.size === 0) return
+  for (const [key, text] of pendingAppendFlushes) {
+    pendingAppendFlushes.delete(key)
+    writeStepResultAppend(key, text)
+  }
+}
+
+/**
+ * 立即写入指定 key 的残留缓冲（不等 timer）。
+ * 用于步骤完成/工作流结束时——此后该 key 不会再有新 chunk。
+ */
+function flushAppendTextNow(key: string): void {
+  const text = pendingAppendFlushes.get(key)
+  if (text === undefined) return
+  pendingAppendFlushes.delete(key)
+  writeStepResultAppend(key, text)
+}
+
+/** 清理某工作流的所有待写缓冲（结束/取消时丢弃残留，不写入） */
+function clearAppendBuffers(runId: string): void {
+  for (const key of [...pendingAppendFlushes.keys()]) {
+    if (key.startsWith(`${runId}:`)) pendingAppendFlushes.delete(key)
+  }
+}
 
 /** 计算兼容字段的辅助函数 */
 function computeCompat(activeRuns: WorkflowRun[], waitingRuns: Record<string, { waitingForConfirm: boolean; waitingAfterStepIndex: number }>) {
@@ -328,27 +388,18 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           updateStepById(set, run.id, i, { progress })
         },
         appendText: (text) => {
-          // 缓冲合并：LLM 流式 chunk 高频调用，逐片 setState 会阻塞主线程
+          // 共享限频调度：只累积 + 安排统一 flush（timer 保证最小间隔），
+          // 不在此同步 setState——避免 LLM 流式高频 chunk 阻塞主线程
           const key = `${run.id}:${i}`
-          let entry = appendBuffers.get(key)
-          if (!entry) {
-            entry = { buffer: '', timer: null }
-            appendBuffers.set(key, entry)
-          }
-          entry.buffer += text
-
-          if (entry.buffer.length >= FLUSH_SIZE_CHARS) {
-            flushAppendBuffer(key)
-          } else if (!entry.timer) {
-            entry.timer = setTimeout(() => flushAppendBuffer(key), FLUSH_INTERVAL_MS)
-          }
+          pendingAppendFlushes.set(key, (pendingAppendFlushes.get(key) ?? '') + text)
+          scheduleAppendFlush()
         },
       }
 
       try {
         const result = await stepDef.executor(run.steps[i], context, callbacks)
-        // 刷新该步骤流式缓冲残留（避免 timer 晚于步骤完成写入）
-        flushAppendBuffer(`${run.id}:${i}`)
+        // 刷新该步骤流式缓冲残留（立即写入，避免 timer 晚于步骤完成）
+        flushAppendTextNow(`${run.id}:${i}`)
         updateStepById(set, run.id, i, {
           status: 'completed',
           completedAt: new Date().toISOString(),
@@ -567,43 +618,6 @@ function updateStepById(
     })
     return { activeRuns: newRuns, ...computeCompat(newRuns, s.waitingRuns) }
   })
-}
-
-/**
- * 刷新指定步骤的 appendText 缓冲（流式合并写入）
- * key 格式：`{runId}:{stepIndex}`
- */
-function flushAppendBuffer(key: string): void {
-  const e = appendBuffers.get(key)
-  if (!e) return
-  if (e.timer) { clearTimeout(e.timer); e.timer = null }
-  if (!e.buffer) return
-  const chunk = e.buffer
-  e.buffer = ''
-
-  const sepIdx = key.indexOf(':')
-  if (sepIdx < 0) return
-  const runId = key.slice(0, sepIdx)
-  const stepIndex = parseInt(key.slice(sepIdx + 1), 10)
-  if (isNaN(stepIndex)) return
-
-  const activeRun = useWorkflowStore.getState().activeRuns.find(r => r.id === runId)
-  if (activeRun) {
-    const step = activeRun.steps[stepIndex]
-    if (step) {
-      updateStepById(useWorkflowStore.setState, runId, stepIndex, { result: (step.result || '') + chunk })
-    }
-  }
-}
-
-/** 清理某工作流的所有流式缓冲（结束/取消时调用） */
-function clearAppendBuffers(runId: string): void {
-  for (const [key, entry] of appendBuffers) {
-    if (key.startsWith(`${runId}:`)) {
-      if (entry.timer) clearTimeout(entry.timer)
-      appendBuffers.delete(key)
-    }
-  }
 }
 
 /** 追加指定工作流的指定步骤日志 */

@@ -542,10 +542,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
       // 启动 ReAct 循环（使用预取增强后的用户消息）
       // 分块缓冲：减少 React re-render 次数
+      // 纯时间驱动（间隔硬约束）：流式 chunk 大小不受控（快模型单片可 >200 字符），
+      // 按大小立即 flush 会绕过时间间隔 → 高频 setState 阻塞主线程（同 workflow-store 教训）
       let chunkBuffer = ''
-      let lastFlushTime = Date.now()
+      let lastFlushTime = 0 // 0 = 首块立即 flush，首帧无延迟
       const FLUSH_INTERVAL_MS = 50
-      const FLUSH_SIZE_CHARS = 200
 
       const flushChunkBuffer = () => {
         if (!chunkBuffer) return
@@ -573,8 +574,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               .trim()
             if (!cleaned) return
             chunkBuffer += cleaned
-            const now = Date.now()
-            if (chunkBuffer.length >= FLUSH_SIZE_CHARS || now - lastFlushTime >= FLUSH_INTERVAL_MS) {
+            // 仅时间驱动：两次 flush 之间强制 ≥50ms，大小不再立即触发
+            if (Date.now() - lastFlushTime >= FLUSH_INTERVAL_MS) {
               flushChunkBuffer()
             }
           },
