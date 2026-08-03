@@ -218,8 +218,16 @@ export class CharacterRepository {
         db.prepare('DELETE FROM characters WHERE name = ?').run(name)
     }
 
-    /** 仅更新角色动态状态（后处理时使用） */
-    static updateState(name: string, state: CharacterStateData): void {
+    /**
+     * 仅更新角色动态状态（后处理时使用）。
+     * @param extra 可选的结构化字段更新——tags（JSON 数组字符串）/ motivation；
+     *              undefined 或 null 时不覆盖该列（COALESCE 保旧值）
+     */
+    static updateState(
+        name: string,
+        state: CharacterStateData,
+        extra?: { tags?: string | null; motivation?: string | null },
+    ): void {
         const db = getProjectDb()
         if (!db) throw new Error('[CharacterRepository] 数据库未连接，无法更新角色状态')
 
@@ -227,7 +235,10 @@ export class CharacterRepository {
       UPDATE characters SET
         cs_location = ?, cs_power_level = ?, cs_physical_state = ?,
         cs_mental_state = ?, cs_key_items = ?, cs_recent_events = ?,
-        cs_updated_at_chapter = ?, updated_at = unixepoch() * 1000
+        cs_updated_at_chapter = ?,
+        tags = COALESCE(?, tags),
+        motivation = COALESCE(?, motivation),
+        updated_at = unixepoch() * 1000
       WHERE name = ?
     `).run(
             state.location,
@@ -237,6 +248,8 @@ export class CharacterRepository {
             state.keyItems,
             state.recentEvents,
             state.updatedAtChapter,
+            extra?.tags ?? null,
+            extra?.motivation ?? null,
             name,
         )
     }

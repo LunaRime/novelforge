@@ -339,6 +339,13 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
           for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
             if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])
           }
+          // v7 标签：LLM 输出数组 → 存 JSON 数组字符串（角色列表 JSON.parse 消费）
+          if (card.tags !== undefined) {
+            const tags = Array.isArray(card.tags)
+              ? card.tags.map(String).filter(Boolean)
+              : String(card.tags).split(/[，,、]/).map(s => s.trim()).filter(Boolean)
+            if (tags.length > 0) cleaned.tags = JSON.stringify(tags.slice(0, 8))
+          }
           characterDataList.push(cleaned)
         }
 

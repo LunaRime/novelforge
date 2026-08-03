@@ -38,6 +38,28 @@ export default function CharacterEditor() {
 
   const selectedCard = characters.find((c) => c.name === selectedName) || null
 
+  // tags 存储为 JSON 数组字符串（角色列表按 JSON.parse 消费，v7 语义）；
+  // 编辑器显示逗号分隔文本，保存时转回 JSON 数组——两端格式统一
+  const tagsDisplay = (() => {
+    const raw = selectedCard?.tags || ''
+    if (!raw) return ''
+    try {
+      const arr = JSON.parse(raw)
+      return Array.isArray(arr) ? arr.join('、') : raw
+    } catch {
+      return raw // 旧数据纯文本，原样显示
+    }
+  })()
+
+  const onTagsChange = (value: string) => {
+    if (!selectedCard) return
+    const tags = value
+      .split(/[，,、；;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    updateField(selectedCard.name, 'tags', tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : '')
+  }
+
   const handleDelete = async () => {
     if (!selectedCard || !currentProject) return
     const ok = await confirm(
@@ -220,8 +242,8 @@ export default function CharacterEditor() {
                 <div>
                   <Label>{t('character.tags')}</Label>
                   <Input
-                    value={selectedCard.tags || ''}
-                    onChange={(e) => updateField(selectedCard.name, 'tags', e.target.value)}
+                    value={tagsDisplay}
+                    onChange={(e) => onTagsChange(e.target.value)}
                     placeholder={t('character.tagsPlaceholder')}
                   />
                 </div>

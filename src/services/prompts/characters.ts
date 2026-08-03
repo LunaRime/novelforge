@@ -32,21 +32,24 @@ export const charactersPrompts: PromptTemplate[] = [
    - keyItems: 当前持有的关键道具/资源（字符串）
    - recentEvents: 本章发生的最重要事件（字符串，50字以内）
    - updatedAtChapter: 固定填写 {{chapter_number}}（数字）
+4. \`tags\`：角色的标签（如"天才少年、复仇者、剑修"），多个标签用逗号分隔；没有新标签可写"无"。
+5. \`motivation\`：角色当前的核心动机/渴望（如果本章动机发生变化或本章揭示了动机，更新它；不变可写"无"）。
+6. NEW 表格额外填写 \`appearance\`（标志性外貌特征）与 \`personality\`（性格特点）——新角色登记时不得留空，外貌必须基于出场描写充实一段。
 
 【输出格式（Markdown 表格）】
 严格按以下表格输出（不要 JSON，不要代码块包裹）：
 
 ### UPDATES（状态变化的已有角色）
-| name | location | powerLevel | physicalState | mentalState | keyItems | recentEvents |
-|------|----------|------------|---------------|-------------|----------|-------------|
-| 角色名 | 位置 | 境界 | 身体状态 | 心理状态 | 道具 | 本章事件(50字内) |
+| name | location | powerLevel | physicalState | mentalState | keyItems | recentEvents | tags | motivation |
+|------|----------|------------|---------------|-------------|----------|-------------|------|------------|
+| 角色名 | 位置 | 境界 | 身体状态 | 心理状态 | 道具 | 本章事件(50字内) | 标签(逗号分隔) | 当前核心动机 |
 
 ### NEW（新出场角色）
-| name | role | location | powerLevel | physicalState | mentalState | keyItems | recentEvents |
-|------|------|----------|------------|---------------|-------------|----------|-------------|
-| 新角色名 | protagonist/antagonist/supporting/minor | 位置 | 境界 | 状态 | 心理 | 道具 | 介绍 |
+| name | role | location | powerLevel | physicalState | mentalState | keyItems | recentEvents | tags | motivation | appearance | personality |
+|------|------|----------|------------|---------------|-------------|----------|-------------|------|------------|------------|-------------|
+| 新角色名 | protagonist/antagonist/supporting/minor | 位置 | 境界 | 状态 | 心理 | 道具 | 介绍 | 标签 | 动机 | 外貌 | 性格 |
 
-注意：updatedAtChapter 固定为 {{chapter_number}}。老角色只输出状态变化了的。如果本章无任何角色状态变化且无新角色，输出"无变化"。`,
+注意：updatedAtChapter 固定为 {{chapter_number}}。老角色只输出状态变化了的；tags/motivation 无变化填"无"。如果本章无任何角色状态变化且无新角色，输出"无变化"。`,
   },
   {
     key: 'extract_initial_characters',
@@ -71,6 +74,7 @@ export const charactersPrompts: PromptTemplate[] = [
 3. 所有字段基于图谱内容提取。如果图谱中未明确描写外貌，请务必根据角色的身份背景与性格推测并补充一段丰满的标志性外貌描写（外貌特征绝对不要留空或写未知）。未能确定的其他次要字段可填写空字符串。
 4. role 字段仅限以下取值：protagonist（主角）、antagonist（反派）、supporting（配角）、minor（龙套）。
 5. currentState 是角色的初始状态（故事开始时），updatedAtChapter 固定为 0。
+6. \`tags\`：角色的短标签数组（如 ["天才少年", "复仇者"]，2-5 个，用于角色列表分级展示）。
 
 【输出格式（JSON 数组）】
 [
@@ -87,6 +91,7 @@ export const charactersPrompts: PromptTemplate[] = [
     "relationships": "与其他角色的关系",
     "arc": "预期的角色弧光/成长轨迹",
     "notes": "其他补充说明",
+    "tags": ["标签1", "标签2"],
     "currentState": {
       "location": "初始位置",
       "powerLevel": "初始境界/能力等级",
