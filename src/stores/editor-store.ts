@@ -76,9 +76,15 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
           activeTabId: tab.id,
         }))
       } else {
-        // 其他类型 Tab：已打开，更新名称并直接激活
+        // 其他类型 Tab：已打开，更新名称并直接激活。
+        // 非 dirty 时刷新内容——打开入口读到的通常是最新 DB/磁盘内容，
+        // 不刷新会显示陈旧版本（如定稿后再次打开正式稿 Tab）。
+        // dirty 时保留用户未保存编辑，仅激活。
+        const contentUpdate = tab.content !== undefined && !existing.dirty
+          ? { content: tab.content }
+          : {}
         set((s) => ({
-          tabs: s.tabs.map((t) => t.id === existing.id ? { ...t, name: tab.name } : t),
+          tabs: s.tabs.map((t) => t.id === existing.id ? { ...t, name: tab.name, ...contentUpdate } : t),
           activeTabId: existing.id,
         }))
       }
