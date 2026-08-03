@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { FileText } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useVolumeStore } from '../../stores/volume-store'
 import { toast } from '../ui/Toast'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -11,6 +12,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Textarea } from '../ui/Textarea'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import type { DirectoryWorkflowParams } from '../../services/workflows/directory-workflow'
 
 interface Props {
@@ -26,18 +28,30 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
 
-  // 范围选择
-  const [rangeMode, setRangeMode] = useState<'front' | 'range' | 'full'>('front')
+  // 范围选择（front/range/volume/full）
+  const [rangeMode, setRangeMode] = useState<'front' | 'range' | 'volume' | 'full'>('front')
   // 覆盖/追加模式选择 (仅当 existingCount > 0 时有效)
   const [overwriteMode, setOverwriteMode] = useState<'append' | 'full'>('append')
 
   const [frontN, setFrontN] = useState<number | ''>(50)
   const [rangeStart, setRangeStart] = useState<number | ''>(existingCount + 1)
   const [rangeEnd, setRangeEnd] = useState<number | ''>(existingCount + 50)
+  const [volumeNumber, setVolumeNumber] = useState<number | ''>('')
   // 节奏指导
   const [pacingGuidance, setPacingGuidance] = useState('')
 
   const isBatchRunning = useWorkflowStore(s => s.isTypeRunning('batch_generate'))
+  const volumes = useVolumeStore(s => s.volumes)
+  const loadVolumes = useVolumeStore(s => s.load)
+
+  // 打开时加载分卷（微任务惯例，供「按卷」模式选择）
+  useEffect(() => {
+    let mounted = true
+    if (isOpen) {
+      Promise.resolve().then(() => { if (mounted) loadVolumes() })
+    }
+    return () => { mounted = false }
+  }, [isOpen, loadVolumes])
 
   if (!currentProject) return null
   const total = currentProject.novelConfig.totalChapters
@@ -59,6 +73,18 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
       } else {
         params = { mode: 'full', count: Number(frontN) || 50 }
       }
+    } else if (rangeMode === 'volume') {
+      // 按卷生成：卷范围内全量生成（已有蓝图会被重生成）
+      const v = volumes.find(x => x.volumeNumber === Number(volumeNumber))
+      if (!v) {
+        toast.warning(t('volume.batchGenNeedVolume'))
+        return
+      }
+      const start = v.chapterStart
+      const count = v.chapterEnd > 0
+        ? v.chapterEnd - start + 1
+        : Math.max(1, total - start + 1) // 进行中卷 → 至全书末尾
+      params = { mode: 'append', startChapter: start, count }
     } else {
       const start = Number(rangeStart) || 1
       const end = Math.max(start, Number(rangeEnd) || start)
@@ -110,6 +136,43 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                       onClick={e => e.stopPropagation()}
                     />
                     {t('unit.chapters')}
+                  </span>
+                }
+              />
+              <RadioOption
+                checked={rangeMode === 'volume'}
+                onChange={() => setRangeMode('volume')}
+                label={
+                  <span className="flex items-center gap-2">
+                    {t('volume.batchGen')}
+                    <Select
+                      value={String(volumeNumber)}
+                      onValueChange={(v) => setVolumeNumber(parseInt(v))}
+                    >
+                      <SelectTrigger
+                        className="w-44 text-xs"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <SelectValue placeholder={t('volume.batchGenSelect')} />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {volumes.length === 0 ? (
+                          <SelectItem value="__none" disabled>
+                            {t('volume.empty')}
+                          </SelectItem>
+                        ) : volumes.map(v => (
+                          <SelectItem key={v.volumeNumber} value={String(v.volumeNumber)}>
+                            {v.title
+                              ? t('volume.ordinalTitle').replace('{n}', String(v.volumeNumber)).replace('{title}', v.title)
+                              : t('volume.ordinal').replace('{n}', String(v.volumeNumber))}
+                            {' '}
+                            {v.chapterEnd > 0
+                              ? t('volume.chapters').replace('{start}', String(v.chapterStart)).replace('{end}', String(v.chapterEnd))
+                              : `${t('volume.chapters').replace('{start}', String(v.chapterStart)).replace('{end}', '…')}`}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </span>
                 }
               />
