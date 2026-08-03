@@ -51,3 +51,6 @@ rule.lite.md
 public/logos/raw/
 public/buyme/
 scripts/font-char-set.txt
+
+# TypeScript 增量编译缓存
+*.tsbuildinfo
