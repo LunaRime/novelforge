@@ -153,7 +153,9 @@ export function getAllMentionTargets(): MentionTarget[] {
     { type: 'blueprint', displayName: t('mention.blueprint'), value: 'blueprints', icon: '📋' },
     { type: 'knowledge', displayName: t('mention.knowledge'), value: 'knowledge', icon: '📚' },
     { type: 'chapter', displayName: t('mention.currentChapter'), value: 'current_chapter', icon: '📝' },
-    { type: 'file', displayName: t('mention.projectFiles'), value: 'file', icon: '📄' },
+    // @文件 暂不可用：read_file 需要具体路径，而提及目标不含文件选择——
+    // 保留会导致预取 read_file('') 必然失败，误导用户（2026-08-03 检查确认）
+    // { type: 'file', displayName: t('mention.projectFiles'), value: 'file', icon: '📄' },
   ]
 }
 
@@ -213,8 +215,6 @@ export function mentionsToToolCalls(mentions: ParsedMention[]): Array<{
         return { toolName: 'search_knowledge', args: { query: '' } }
       case 'chapter':
         return { toolName: 'list_chapters', args: {} }
-      case 'file':
-        return { toolName: 'read_file', args: { file_path: '' } }
       default:
         return { toolName: 'read_project_state', args: {} }
     }

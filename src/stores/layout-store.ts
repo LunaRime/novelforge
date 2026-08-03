@@ -3,8 +3,8 @@ import { create } from 'zustand'
 /** 左侧活动栏的视图类型（历史项目已并入 home 视图，无独立视图） */
 export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'workspace' | 'settings'
 
-/** 下方工具窗口 Tab */
-export type BottomTab = 'tasks' | 'log' | 'activity'
+/** 下方工具窗口 Tab（AI Agent 对话与 AI 输出自 2026-08-03 起移入底部面板） */
+export type BottomTab = 'tasks' | 'log' | 'activity' | 'agent' | 'ai-output'
 
 /** 右侧面板视图类型 */
 export type RightView = 'agent' | 'ai-output'
@@ -19,9 +19,11 @@ interface LayoutState {
   sidebarWidth: number
 
   // ===== AI 对话面板 =====
+  // ⚠️ 2026-08-03 起 AI 面板移入底部（bottomTab 'agent'/'ai-output'），
+  // 以下字段已无 UI 消费，仅保留以兼容旧 localStorage 持久化（勿删）
   aiPanelOpen: boolean
   aiPanelWidth: number
-  /** 右侧面板当前视图：Agent 对话 / AI 输出 */
+  /** 右侧面板当前视图：Agent 对话 / AI 输出（已弃用） */
   rightView: RightView
 
   // ===== 底部面板 =====

@@ -52,7 +52,23 @@ export const searchKnowledgeTool = buildAgentTool({
     const minScore = (args.min_score as number) ?? 0.5
 
     if (!query) {
-      return { success: false, content: '', error: t('error.missingQuery') }
+      // 空查询（@知识库 预取场景）：降级为知识库概览，而不是失败——
+      // 否则用户 @ 知识库时预取链路拿不到任何内容
+      try {
+        const [docs, stats] = await Promise.all([
+          ipc.invoke('kb:list-documents'),
+          ipc.invoke('kb:stats'),
+        ]) as [Array<{ fileName: string; chunkCount: number; importedAt: string }> | null, { documentCount: number; totalChunks: number } | null]
+        const docList = docs && docs.length > 0
+          ? docs.map((d, i) => `${i + 1}. ${d.fileName}（${d.chunkCount} 块）`).join('\n')
+          : '（知识库为空，可先用导入功能添加设定文档）'
+        return {
+          success: true,
+          content: `📚 知识库概览（${stats?.documentCount ?? 0} 个文档，${stats?.totalChunks ?? 0} 个片段）\n\n${docList}`,
+        }
+      } catch {
+        return { success: false, content: '', error: t('error.missingQuery') }
+      }
     }
 
     let results: Array<{ text: string; score: number; fileName: string }>

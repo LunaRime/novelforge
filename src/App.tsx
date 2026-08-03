@@ -16,8 +16,6 @@ import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
 import RightToolWindowBar from './components/layout/RightToolWindowBar'
 import Sidebar from './components/panels/Sidebar'
 import EditorArea from './components/panels/EditorArea'
-import AIPanel from './components/panels/AIPanel'
-import AIOutputPanel from './components/panels/AIOutputPanel'
 import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
@@ -38,15 +36,13 @@ export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
   // 合并 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
   const {
-    sidebarOpen, aiPanelOpen, rightView, settingsOpen, closeSettings,
+    sidebarOpen, settingsOpen, closeSettings,
     newProjectOpen, closeNewProject, exportOpen, closeExport,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
     focusMode, bottomPanelOpen,
   } = useLayoutStore(useShallow(s => ({
     sidebarOpen: s.sidebarOpen,
-    aiPanelOpen: s.aiPanelOpen,
-    rightView: s.rightView,
     settingsOpen: s.settingsOpen,
     closeSettings: s.closeSettings,
     newProjectOpen: s.newProjectOpen,
@@ -104,7 +100,7 @@ export default function App() {
       const shortTitle = latest.title.replace(/^[^\s]+\s/, '')
       actionToast.workflowComplete(
         `✅ 「${shortTitle}」${t('agent.taskComplete')}`,
-        () => useLayoutStore.getState().openRightPanel('ai-output')
+        () => useLayoutStore.getState().openBottomTab('ai-output')
       )
     })
 
@@ -160,10 +156,11 @@ export default function App() {
       {/*
         主体：flex 行 = LeftBar | 纵向PanelGroup | RightBar
         ┌───┬──────────────────────────────┬───┐
-        │   │  Sidebar | Editor | AIPanel  │   │
+        │   │  Sidebar | Editor            │   │
         │ L │──────────────────────────────│ R │
-        │   │     BottomPanel (全宽)        │   │
+        │   │   BottomPanel (全宽，含 AI)   │   │
         └───┴──────────────────────────────┴───┘
+        AI Agent 对话与 AI 输出自 2026-08-03 起位于 BottomPanel（bottomTab agent/ai-output）
       */}
       {/* 键盘导航跳过链接（仅 focus 时可见），直达编辑区主内容 */}
       <a
@@ -181,7 +178,7 @@ export default function App() {
         {/* 纵向 PanelGroup：上层主区域 + 下层底部面板 */}
         <PanelGroup orientation="vertical" className="flex-1">
 
-          {/* 上层：侧边栏 | 编辑区 | AI 面板（水平分割） */}
+          {/* 上层：侧边栏 | 编辑区（AI 面板已移入底部 bottomTab） */}
           <Panel id="top" defaultSize={75} minSize={30}>
             <PanelGroup orientation="horizontal" className="flex-1 h-full">
 
@@ -207,21 +204,10 @@ export default function App() {
                 </div>
               </Panel>
 
-              {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
-              {(aiPanelOpen && !focusMode) && (
-                <>
-                  <PanelResizeHandle />
-                  <Panel id="ai-panel" defaultSize={20} minSize={10} aria-label={t('panel.ai')}>
-                    <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
-                    </ErrorBoundary>
-                  </Panel>
-                </>
-              )}
             </PanelGroup>
           </Panel>
 
-          {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
+          {/* 下层：底部面板（含 AI 对话/输出 Tab）— bottomPanelOpen 控制显隐 */}
           {(bottomPanelOpen && !focusMode) && <PanelResizeHandle />}
           {(bottomPanelOpen && !focusMode) && (
             <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>

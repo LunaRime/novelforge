@@ -58,7 +58,7 @@ export const startWorkflowTool = buildAgentTool({
     }
 
     // 打开右侧面板到 AI 输出视图
-    useLayoutStore.getState().openRightPanel('ai-output')
+    useLayoutStore.getState().openBottomTab('ai-output')
 
     try {
       const displayName = WORKFLOW_NAMES[workflow] ?? workflow
