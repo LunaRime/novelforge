@@ -8,9 +8,9 @@ import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
-import InlineAIToolbar from './InlineAIToolbar'
 import { useTranslation } from '../../hooks/useTranslation'
 import { computeTextStats } from '../../services/text-stats'
+import { extractPreferencePair, recordPreference } from '../../services/preferences'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -87,9 +87,41 @@ export default function CodeMirrorEditor({
   const [bubbleOpen, setBubbleOpen] = useState(false)
   const [bubblePos, setBubblePos] = useState({ top: 0, left: 0 })
   const [aiResult, setAiResult] = useState<string | null>(null)
+  // AI 流式缓冲：chunk 高频到达，逐片 setState 会高频重渲染编辑器阻塞主线程
+  // （同 workflow-store 教训）→ 50ms 时间间隔硬约束，纯时间驱动
+  const aiBufferRef = useRef('')
+  const aiLastFlushRef = useRef(0)
   const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
+  // 偏好记忆：AI 接受快照（检测用户后续手动修改 → 记录替换对）
+  const aiAcceptedRef = useRef<{ aiText: string } | null>(null)
+
+  // 检测用户是否手动修改了 AI 接受的内容，提取并记录替换对（偏好记忆）
+  const detectPreferenceChange = useCallback(() => {
+    const acc = aiAcceptedRef.current
+    if (!acc || !editorRef.current?.view) return
+    const doc = editorRef.current.view.state.doc.toString()
+    // AI 文本仍完整存在 → 用户改的是别处，保留快照继续等待
+    if (doc.includes(acc.aiText)) return
+    aiAcceptedRef.current = null // 每次 AI 接受只检测一次
+    // AI 文本被修改 → 定位（开头 15 字锚点；开头被改则用结尾锚点）→ 提取替换对
+    const head = acc.aiText.slice(0, 15)
+    const tail = acc.aiText.slice(-15)
+    let pos = doc.indexOf(head)
+    if (pos < 0 && head.length >= 15) {
+      const tailPos = doc.indexOf(tail)
+      if (tailPos < 0) return
+      pos = tailPos - (acc.aiText.length - tail.length)
+      if (pos < 0) return
+    }
+    if (pos < 0) return
+    // 取 AI 原文等长（放宽 24 字容纳扩写）的区段 → 前后缀匹配提取差异
+    const userSegment = doc.slice(pos, pos + acc.aiText.length + 24)
+    const pair = extractPreferencePair(acc.aiText, userSegment)
+    if (!pair) return
+    void recordPreference(pair.ai, pair.user)
+  }, [])
 
   useEffect(() => {
     if (aiResult === '') {
@@ -106,6 +138,9 @@ export default function CodeMirrorEditor({
 
       const cnt = countWords(newText)
       onCharCountChange?.(cnt)
+
+      // 偏好记忆：检测用户手动修改 AI 接受的内容
+      detectPreferenceChange()
     }
 
     if (v.selectionSet || v.docChanged || v.geometryChanged) {
@@ -121,7 +156,17 @@ export default function CodeMirrorEditor({
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult])
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange])
+
+  // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
+  useEffect(() => {
+    if (!bubbleOpen) return
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setBubbleOpen(false)
+    }
+    window.addEventListener('keydown', handleKey)
+    return () => window.removeEventListener('keydown', handleKey)
+  }, [bubbleOpen])
 
   // 监听滚动与缩放，实时更新 Bubble Menu 坐标
   useEffect(() => {
@@ -278,6 +323,8 @@ export default function CodeMirrorEditor({
       // 初始化流式内容
       setActiveAIAction(aiActions.find(a => a.key === _actionKey)?.label || 'AI')
       setAiResult('')
+      aiBufferRef.current = ''
+      aiLastFlushRef.current = 0 // 0 = 首块立即 flush
 
       await useLLMStore.getState().generateStream(
         [
@@ -286,13 +333,23 @@ export default function CodeMirrorEditor({
         ],
         {
           onChunk: (chunk) => {
-            setAiResult(prev => (prev ?? '') + chunk)
+            aiBufferRef.current += chunk
+            if (Date.now() - aiLastFlushRef.current >= 50) {
+              setAiResult(prev => (prev ?? '') + aiBufferRef.current)
+              aiBufferRef.current = ''
+              aiLastFlushRef.current = Date.now()
+            }
           },
           onError: () => {
             setAiResult('生成失败')
           },
         }
       )
+      // 流结束：flush 残留缓冲（最后一批可能不足 50ms 间隔）
+      if (aiBufferRef.current) {
+        setAiResult(prev => (prev ?? '') + aiBufferRef.current)
+        aiBufferRef.current = ''
+      }
     } catch (e) {
       console.error(e)
       setAiResult('生成失败')
@@ -326,6 +383,8 @@ export default function CodeMirrorEditor({
         selection: { anchor: selectionRange.from },
         scrollIntoView: true,
       })
+      // 偏好记忆快照：记录 AI 接受内容，供后续检测用户手动修改
+      aiAcceptedRef.current = { aiText: aiResult }
     }
     setAiResult(null)
     setBubbleOpen(false)
@@ -395,27 +454,8 @@ export default function CodeMirrorEditor({
         </div>
       </div>
 
-      {/* 行内 AI 快速工具条 — 选中文字后浮现，3 秒自动消失 */}
-      {bubbleOpen && bubblePos.top !== 0 && !aiResult && (
-        <InlineAIToolbar
-          x={bubblePos.left}
-          y={bubblePos.top}
-          selectedText={editorContent.slice(
-            selectionRange?.from ?? 0,
-            selectionRange?.to ?? 0,
-          )}
-          actions={aiActions.map(a => ({
-            key: a.key,
-            label: a.label,
-            icon: '✨',
-            prompt: a.prompt,
-          }))}
-          onAction={(a) => handleAIAction(a.prompt, a.key)}
-          onClose={() => {}}
-        />
-      )}
-
-      {/* Bubble Menu */}
+      {/* Bubble Menu（选中工具栏：撤销/重做/加粗/AI + 预览面板）。
+          旧 InlineAIToolbar 已废弃移除——曾与它同位置同时渲染造成双弹窗 */}
       {bubbleOpen && bubblePos.top !== 0 && (
         <div
           className="fixed z-[var(--z-overlay)] flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-xl transform -translate-x-1/2 -translate-y-full"

@@ -2,6 +2,7 @@ import type { WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
 import { VELA } from '../vela-protocol'
 import { t } from '../../shared/locale'
+import { ipc } from '../ipc-client'
 
 import type { DraftStatus } from '../../shared/draft-status'
 
@@ -127,6 +128,30 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
           const { GenerateDraftCommand } = await import('./commands/generate-draft.command')
           const cmd = new GenerateDraftCommand(chapterInfo)
           return cmd.execute({ step, context, callbacks })
+        },
+      },
+      {
+        // 迭代式自省：审计报告 → 终审 Agent 建议清单 → 主 AI 重写 → 再审计（≤2 轮）
+        // 容错：终审是增强环节，任何失败不得让整个写稿工作流 failed（初稿已生成）
+        name: t('workflow.selfReview'),
+        description: t('workflow.selfReviewDesc'),
+        executor: async (step, context, callbacks) => {
+          try {
+            const { SelfReviewCommand } = await import('./commands/self-review.command')
+            const latest = await ipc.invoke('db:draft-get-latest', chapterInfo.chapterNumber) as { id?: number } | null
+            if (!latest?.id) {
+              callbacks.log('⚠️ 终审自省：未找到写稿步骤产出的草稿，跳过')
+              return
+            }
+            const cmd = new SelfReviewCommand({
+              chapterNumber: chapterInfo.chapterNumber,
+              chapterTitle: chapterInfo.title,
+              draftId: latest.id,
+            })
+            await cmd.execute({ step, context, callbacks })
+          } catch (e) {
+            callbacks.log(`⚠️ 终审自省失败（不影响已生成的初稿）: ${e instanceof Error ? e.message : String(e)}`)
+          }
         },
       },
     ],
@@ -303,9 +328,12 @@ export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDef
 
           await runPostProcessPipeline(project.path, scope, `第${chapterNumber}章定稿`, steps, callbacks, { onlyFailed: true })
 
-          // 通知刷新
+          // 通知刷新：定稿改变了草稿状态/正式稿列表/角色卡/文件树——用 'all' 全刷
+          // （FINALIZE_COMPLETE 供 project-service 刷新草稿+角色+文件树，
+          //   REFRESH_RESOURCE 供工作台/知识库等组件重载各自数据）
           const { globalEventBus } = await import('../../shared/event-bus')
           globalEventBus.emit('FINALIZE_COMPLETE', { chapterNumber })
+          globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
         },
       },
     ],
