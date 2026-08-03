@@ -34,8 +34,8 @@ if (fs.existsSync(winUnpacked)) {
   console.log(`[organize] win-unpacked → ${productName}-${version}-Portable/`);
 }
 
-// 2. 清理构建调试文件
-const cleanupFiles = ['builder-debug.yml', 'builder-effective-config.yaml', 'latest.yml'];
+// 2. 清理构建调试文件（⚠️ 保留 latest.yml 与 .blockmap — electron-updater 自动更新的必需元数据，发布时必须一并上传）
+const cleanupFiles = ['builder-debug.yml', 'builder-effective-config.yaml'];
 for (const file of cleanupFiles) {
   const filePath = path.join(releaseDir, file);
   if (fs.existsSync(filePath)) {
@@ -44,16 +44,10 @@ for (const file of cleanupFiles) {
   }
 }
 
-// 3. 清理 installer 目录中的 .blockmap 文件
+// 3. 列出 installer 目录内容（blockmap 保留，供增量更新）
 const installerDir = path.join(releaseDir, `${productName}-${version}-Installer`);
 if (fs.existsSync(installerDir)) {
-  for (const file of fs.readdirSync(installerDir)) {
-    if (file.endsWith('.blockmap')) {
-      fs.unlinkSync(path.join(installerDir, file));
-      console.log(`[organize] 已清理 ${file}`);
-    }
-  }
-  const files = fs.readdirSync(installerDir).filter(f => !f.endsWith('.blockmap'));
+  const files = fs.readdirSync(installerDir);
   console.log(`[organize] ${productName}-${version}-Installer/: ${files.join(', ')}`);
 }
 

@@ -56,7 +56,8 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     ipc.invoke('update:get-version').then((result) => {
       set({ currentVersion: result.currentVersion, appName: result.appName })
     }).catch(() => {
-      set({ currentVersion: '0.1.2', appName: 'NovelForge' })
+      // IPC 失败时回退到构建时注入的版本号（禁止硬编码）
+      set({ currentVersion: __APP_VERSION__, appName: 'NovelForge' })
     })
 
     // 监听状态变化
@@ -85,12 +86,14 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
       const result = await ipc.invoke('update:check')
       set({ loading: false })
       if (result.hasUpdate && result.info) {
-        set({ updateInfo: result.info })
+        // 双保险：主进程事件推送 'available' 之外，invoke 结果直接落状态
+        set({ updateInfo: result.info, status: 'available' })
         return true
       }
+      set({ status: 'no-update' })
       return false
     } catch (err) {
-      set({ loading: false, error: String(err) })
+      set({ loading: false, error: String(err), status: 'error' })
       return false
     }
   },
@@ -100,9 +103,10 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       const result = await ipc.invoke('update:download')
       set({ loading: false })
+      if (result.success) set({ status: 'downloaded' })
       return result.success
     } catch (err) {
-      set({ loading: false, error: String(err) })
+      set({ loading: false, error: String(err), status: 'error' })
       return false
     }
   },
