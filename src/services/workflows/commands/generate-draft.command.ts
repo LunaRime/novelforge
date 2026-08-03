@@ -165,6 +165,19 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       if (cold) antiDefectSections.push(`【创意多样性参考（可选，非强制）】\n${cold}`)
     } catch { /* 采样失败不阻断 */ }
 
+    // 4. 偏好记忆注入（用户历史替换对——"偏好 X 而非 Y"，优先使用用户表达）
+    try {
+      const { getTopPreferences } = await import('../../preferences')
+      const prefs = await getTopPreferences(5)
+      if (prefs.length > 0) {
+        antiDefectSections.push(
+          `【用户偏好（来自历史修改记录，优先遵循）】\n` +
+          prefs.map(p => `- 用户偏好使用「${p.userText}」而非「${p.aiText}」（记录 ${p.count} 次）`).join('\n') +
+          `\n请在表达相同含义时优先使用用户偏好的措辞，避免使用用户不喜欢的「${prefs.map(p => p.aiText).join('」「')}」。`,
+        )
+      }
+    } catch { /* 偏好注入失败不阻断 */ }
+
     if (antiDefectSections.length > 0) {
       prompt += '\n\n---\n\n' + antiDefectSections.join('\n\n---\n\n')
     }
