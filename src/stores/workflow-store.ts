@@ -191,6 +191,17 @@ const activeContexts = new Map<string, WorkflowContext>()
 /** 步进模式：存储「等待用户确认」的 Promise resolve（runId → resolve） */
 const continueResolveRefs = new Map<string, () => void>()
 
+// ===== appendText 流式缓冲 =====
+// LLM 流式 chunk 逐片 setState 会高频重渲染整个面板，阻塞主线程。
+// 后果：mouseover 事件排队 → 浏览器原生 title 提示（UI 线程驱动，不受 JS 阻塞）
+// 抢先弹出，用户看到"旧样式"悬浮弹窗。按 50ms / 200 字符合并刷新。
+const FLUSH_INTERVAL_MS = 50
+const FLUSH_SIZE_CHARS = 200
+const appendBuffers = new Map<string, {
+  buffer: string
+  timer: ReturnType<typeof setTimeout> | null
+}>()
+
 /** 计算兼容字段的辅助函数 */
 function computeCompat(activeRuns: WorkflowRun[], waitingRuns: Record<string, { waitingForConfirm: boolean; waitingAfterStepIndex: number }>) {
   const currentRun = activeRuns.length > 0 ? activeRuns[0] : null
@@ -317,16 +328,27 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           updateStepById(set, run.id, i, { progress })
         },
         appendText: (text) => {
-          const activeRun = get().activeRuns.find(r => r.id === run.id)
-          if (activeRun) {
-            const step = activeRun.steps[i]
-            updateStepById(set, run.id, i, { result: (step.result || '') + text })
+          // 缓冲合并：LLM 流式 chunk 高频调用，逐片 setState 会阻塞主线程
+          const key = `${run.id}:${i}`
+          let entry = appendBuffers.get(key)
+          if (!entry) {
+            entry = { buffer: '', timer: null }
+            appendBuffers.set(key, entry)
+          }
+          entry.buffer += text
+
+          if (entry.buffer.length >= FLUSH_SIZE_CHARS) {
+            flushAppendBuffer(key)
+          } else if (!entry.timer) {
+            entry.timer = setTimeout(() => flushAppendBuffer(key), FLUSH_INTERVAL_MS)
           }
         },
       }
 
       try {
         const result = await stepDef.executor(run.steps[i], context, callbacks)
+        // 刷新该步骤流式缓冲残留（避免 timer 晚于步骤完成写入）
+        flushAppendBuffer(`${run.id}:${i}`)
         updateStepById(set, run.id, i, {
           status: 'completed',
           completedAt: new Date().toISOString(),
@@ -405,9 +427,10 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       }
     })
 
-    // 清理上下文
+    // 清理上下文与流式缓冲
     activeContexts.delete(run.id)
     continueResolveRefs.delete(run.id)
+    clearAppendBuffers(run.id)
 
     // 持久化 checkpoint
     saveCheckpoint(get())
@@ -439,6 +462,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
         }
       })
       get().addLog('warn', '[Cancel] Workflow cancelled')
+      clearAppendBuffers(runId)
       saveCheckpoint(get())
     } else {
       // 取消全部
@@ -543,6 +567,43 @@ function updateStepById(
     })
     return { activeRuns: newRuns, ...computeCompat(newRuns, s.waitingRuns) }
   })
+}
+
+/**
+ * 刷新指定步骤的 appendText 缓冲（流式合并写入）
+ * key 格式：`{runId}:{stepIndex}`
+ */
+function flushAppendBuffer(key: string): void {
+  const e = appendBuffers.get(key)
+  if (!e) return
+  if (e.timer) { clearTimeout(e.timer); e.timer = null }
+  if (!e.buffer) return
+  const chunk = e.buffer
+  e.buffer = ''
+
+  const sepIdx = key.indexOf(':')
+  if (sepIdx < 0) return
+  const runId = key.slice(0, sepIdx)
+  const stepIndex = parseInt(key.slice(sepIdx + 1), 10)
+  if (isNaN(stepIndex)) return
+
+  const activeRun = useWorkflowStore.getState().activeRuns.find(r => r.id === runId)
+  if (activeRun) {
+    const step = activeRun.steps[stepIndex]
+    if (step) {
+      updateStepById(useWorkflowStore.setState, runId, stepIndex, { result: (step.result || '') + chunk })
+    }
+  }
+}
+
+/** 清理某工作流的所有流式缓冲（结束/取消时调用） */
+function clearAppendBuffers(runId: string): void {
+  for (const [key, entry] of appendBuffers) {
+    if (key.startsWith(`${runId}:`)) {
+      if (entry.timer) clearTimeout(entry.timer)
+      appendBuffers.delete(key)
+    }
+  }
 }
 
 /** 追加指定工作流的指定步骤日志 */
