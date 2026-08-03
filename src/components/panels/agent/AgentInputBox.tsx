@@ -228,42 +228,6 @@ export default function AgentInputBox() {
         />
       )}
 
-      {/* 上下文菜单（+ 按钮弹出） */}
-      {showContextMenu && (
-        <div
-          className="absolute bottom-[calc(100%+8px)] left-0 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
-          style={{
-            width: 180,
-            backgroundColor: 'var(--color-sidebar)',
-            border: '1px solid var(--color-border)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-          }}
-        >
-          <div className="text-[0.7rem] px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
-            {t('tip.addContext')}
-          </div>
-          {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
-          <ContextMenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
-            setShowContextMenu(false)
-            setShowFilePicker(true)
-          }} />
-          <ContextMenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
-            setShowContextMenu(false)
-            // 插入 @ 字符并触发 MentionMenu
-            setInputText(prev => prev + '@')
-            handleInputChange(inputText + '@')
-            textareaRef.current?.focus()
-          }} />
-          <ContextMenuItem icon={<Workflow size={13} />} label={t('agent.workflowCmd')} onClick={() => {
-            setShowContextMenu(false)
-            // 插入 / 字符并触发 SlashCommandMenu
-            setInputText('/')
-            handleInputChange('/')
-            textareaRef.current?.focus()
-          }} />
-        </div>
-      )}
-
       {/* 可视化文件选择器（+ 菜单 → 添加文件） */}
       {showFilePicker && (
         <div ref={filePickerRef}>
@@ -301,8 +265,10 @@ export default function AgentInputBox() {
         {/* 左侧工具按钮组 */}
         <div className="flex items-center gap-0.5 min-w-0 flex-1">
 
-          {/* + 添加上下文 */}
-          <div ref={contextRef}>
+          {/* + 添加上下文（菜单必须包裹在 contextRef 内——否则点击菜单项时
+              mousedown 被 useOutsideClick 判定为外部点击并卸载菜单，
+              浏览器不再派发 click，菜单项 onClick 永不执行） */}
+          <div ref={contextRef} className="relative">
             <ToolbarIconBtn
               title={t('tip.addContext')}
               onClick={() => {
@@ -314,6 +280,45 @@ export default function AgentInputBox() {
             >
               <Plus size={14} />
             </ToolbarIconBtn>
+
+            {/* 上下文菜单（+ 按钮弹出） */}
+            {showContextMenu && (
+              <div
+                className="absolute bottom-[calc(100%+8px)] left-0 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+                style={{
+                  width: 180,
+                  backgroundColor: 'var(--color-sidebar)',
+                  border: '1px solid var(--color-border)',
+                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                }}
+              >
+                <div className="text-[0.7rem] px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('tip.addContext')}
+                </div>
+                {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
+                <ContextMenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
+                  setShowContextMenu(false)
+                  setShowFilePicker(true)
+                }} />
+                <ContextMenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
+                  setShowContextMenu(false)
+                  // 插入 @ 字符并触发 MentionMenu（handleInputChange 与 setInputText 用同源值，
+                  // 避免闭包旧值在连续点击时丢字符）
+                  const next = inputText + '@'
+                  setInputText(next)
+                  handleInputChange(next)
+                  textareaRef.current?.focus()
+                }} />
+                <ContextMenuItem icon={<Workflow size={13} />} label={t('agent.workflowCmd')} onClick={() => {
+                  setShowContextMenu(false)
+                  // 插入 / 字符并触发 SlashCommandMenu
+                  const next = '/'
+                  setInputText(next)
+                  handleInputChange(next)
+                  textareaRef.current?.focus()
+                }} />
+              </div>
+            )}
           </div>
 
           {/* 模式选择 */}
