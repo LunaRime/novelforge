@@ -96,7 +96,7 @@ export function createMutualEvaluationWorkflow(
       message: t('workflow.mutualDone').replace('{n}', String(params.chapterNumber)),
       openResult: () => {
         import('../../stores/layout-store').then((m) =>
-          m.useLayoutStore.getState().openRightPanel('ai-output'),
+          m.useLayoutStore.getState().openBottomTab('ai-output'),
         ).catch(() => {})
       },
     },

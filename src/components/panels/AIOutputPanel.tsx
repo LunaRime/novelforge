@@ -63,7 +63,7 @@ export default function AIOutputPanel() {
           {t('agent.aiOutput')}
         </span>
         <button
-          onClick={() => useLayoutStore.getState().setRightView('agent')}
+          onClick={() => useLayoutStore.getState().openBottomTab('agent')}
           title={t('agent.switchBack')}
           className="icon-btn"
           style={{ width: 20, height: 20 }}

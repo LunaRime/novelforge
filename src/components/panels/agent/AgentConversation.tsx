@@ -216,7 +216,7 @@ function ActiveConversation() {
  * 右侧：打开 AI 输出面板按钮
  */
 function AgentToolbar() {
-  const openRightPanel = useLayoutStore(s => s.openRightPanel)
+  const openBottomTab = useLayoutStore(s => s.openBottomTab)
   const { t } = useTranslation()
 
   return (
@@ -224,7 +224,7 @@ function AgentToolbar() {
 
       {/* 右侧：打开 AI 输出面板 */}
       <button
-        onClick={() => openRightPanel('ai-output')}
+        onClick={() => openBottomTab('ai-output')}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
         style={{
           color: 'var(--color-text-muted)',

@@ -9,6 +9,8 @@ import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import ActivityView from './activity/ActivityView'
+import AIPanel from './AIPanel'
+import AIOutputPanel from './AIOutputPanel'
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
 export default function BottomPanel() {
@@ -18,6 +20,8 @@ export default function BottomPanel() {
     tasks:    t('panel.tasks'),
     log:      t('panel.log'),
     activity: t('panel.activity'),
+    agent:    t('panel.agent'),
+    'ai-output': t('agent.aiOutput'),
     // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
     models:   t('panel.activity'),
   }
@@ -79,11 +83,20 @@ export default function BottomPanel() {
       </div>
 
       {/* 内容区 */}
-      <div className="flex-1 overflow-hidden">
-        {activeTab === 'tasks' && <TaskRunView />}
-        {activeTab === 'log' && <LogsView />}
-        {(activeTab === 'activity' || activeTab === 'models') && <ActivityView />}
-      </div>
+      {activeTab === 'agent' || activeTab === 'ai-output' ? (
+        // AI 面板视图：容器放行 overflow，保证输入框的弹出菜单（@提及/+/模型选择）
+        // 在底部面板有限高度下不被裁剪（absolute 定位不参与布局，不会撑开面板）
+        <div className="flex-1 overflow-visible">
+          {activeTab === 'agent' && <AIPanel />}
+          {activeTab === 'ai-output' && <AIOutputPanel />}
+        </div>
+      ) : (
+        <div className="flex-1 overflow-hidden">
+          {activeTab === 'tasks' && <TaskRunView />}
+          {activeTab === 'log' && <LogsView />}
+          {(activeTab === 'activity' || activeTab === 'models') && <ActivityView />}
+        </div>
+      )}
     </div>
   )
 }
