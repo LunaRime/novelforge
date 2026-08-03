@@ -72,12 +72,19 @@ export const ipc = {
       performance.mark(`ipc:${channel}:start`)
     }
 
-    const result = await Promise.race([
-      getAPI().invoke(channel, ...args) as Promise<AllInvokeChannels[C]['return']>,
-      new Promise<never>((_, reject) =>
-        setTimeout(() => reject(new IPCTimeoutError(channel, IPC_TIMEOUT_MS)), IPC_TIMEOUT_MS)
-      ),
-    ])
+    // 超时计时器在 settle 后清理，避免 dangling timer（超时本身不取消主进程请求——副作用型调用方需自行防重）
+    let timer: ReturnType<typeof setTimeout> | undefined
+    let result: AllInvokeChannels[C]['return']
+    try {
+      result = await Promise.race([
+        getAPI().invoke(channel, ...args) as Promise<AllInvokeChannels[C]['return']>,
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new IPCTimeoutError(channel, IPC_TIMEOUT_MS)), IPC_TIMEOUT_MS)
+        }),
+      ])
+    } finally {
+      if (timer) clearTimeout(timer)
+    }
 
     if (process.env.NODE_ENV === 'development') {
       performance.mark(`ipc:${channel}:end`)

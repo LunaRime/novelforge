@@ -7,6 +7,7 @@ import {
   getVectorlessCount, backfillVectors,
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { getProjectDb } from '../database'
 import { decryptApiKey } from '../utils/secure-config'
 import { logger } from '../utils/logger'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
@@ -31,6 +32,8 @@ function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl
 }
 
 function getCurrentProjectPath(): string | null {
+  // 必须存在已打开的项目数据库（否则 KB 操作会错误写入「最近项目」而非当前项目）
+  if (!getProjectDb()) return null
   try {
     const recent = JSON.parse(fs.readFileSync(RECENT_PROJECTS_PATH, 'utf-8')) as Array<{ path: string }>
     return recent[0]?.path ?? null
@@ -149,33 +152,28 @@ export function registerKBController() {
         const texts = vectorless.map((r: { text: string }) => r.text)
         const results = await embeddingService.embedBatchWithLLM(texts)
 
-        // 写入向量
+        // 写入向量（复用 vector-store 的安全逐行 update，避免 dropTable+createTable 中途失败丢数据）
         let processed = 0
         let failed = 0
         if (results.length > 0) {
           try {
-            const { getConnection: getConn } = await import('../vector-store')
-            const db2 = await getConn(projectPath)
-            const fullTable = await db2.openTable('chunks')
-            const allRows = await fullTable.query().toArray()
-
-            const idToVector = new Map<string, number[]>()
+            const { updateChunkVectors } = await import('../vector-store')
+            const updates: Array<{ id: string; vector: number[] }> = []
             vectorless.forEach((r: { id: string }, i: number) => {
               if (results[i] && results[i].vector.length > 0) {
-                idToVector.set(r.id, results[i].vector)
+                updates.push({ id: r.id, vector: results[i].vector })
                 processed++
               } else {
                 failed++
               }
             })
 
-            if (processed > 0) {
-              const updatedRows = allRows.map((r: { [key: string]: unknown }) => {
-                const v = idToVector.get(r.id as string)
-                return v ? { ...r, vector: v } : r
-              })
-              await db2.dropTable('chunks')
-              await db2.createTable('chunks', updatedRows)
+            if (updates.length > 0) {
+              const res = await updateChunkVectors(projectPath, updates)
+              if (!res.success) {
+                failed = updates.length
+                return { success: false, processed: 0, failed, error: 'LLM 向量写入失败' }
+              }
             }
           } catch (e) {
             failed = vectorless.length

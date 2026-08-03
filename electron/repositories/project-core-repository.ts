@@ -7,7 +7,10 @@
 import { getProjectDb } from '../database'
 import { logger } from '../utils/logger'
 
-/** project_core 表行类型 */
+/** project_core 表行类型
+ * 注意：premise/worldbuilding/characters_arch/synopsis 已在 v6 迁移中 DROP，
+ * 大文本存储于 project_archives，此处不再声明（兼容访问见 rowToData）。
+ */
 export interface ProjectCoreRow {
     id: string
     project_name: string
@@ -22,10 +25,6 @@ export interface ProjectCoreRow {
     reference_works: string
     global_guidance: string
     golden_finger: string
-    premise: string
-    worldbuilding: string
-    characters_arch: string
-    synopsis: string
     character_states: string
     created_at: number
     updated_at: number
@@ -73,6 +72,9 @@ function rowToData(row: ProjectCoreRow): ProjectCoreData {
         return columnValue ?? ''
     }
 
+    // 兼容访问：SELECT * 已不含被 DROP 的归档列，用 Record 类型访问避免类型断言污染
+    const legacyRow = row as unknown as Record<string, string | null | undefined>
+
     return {
         projectName: row.project_name,
         genre: row.genre,
@@ -86,10 +88,10 @@ function rowToData(row: ProjectCoreRow): ProjectCoreData {
         referenceWorks: row.reference_works,
         globalGuidance: row.global_guidance,
         goldenFinger: row.golden_finger,
-        premise: readArchiveOrColumn('premise', row.premise),
-        worldbuilding: readArchiveOrColumn('worldbuilding', row.worldbuilding),
-        charactersArch: readArchiveOrColumn('characters_arch', row.characters_arch),
-        synopsis: readArchiveOrColumn('synopsis', row.synopsis),
+        premise: readArchiveOrColumn('premise', legacyRow.premise ?? null),
+        worldbuilding: readArchiveOrColumn('worldbuilding', legacyRow.worldbuilding ?? null),
+        charactersArch: readArchiveOrColumn('characters_arch', legacyRow.characters_arch ?? null),
+        synopsis: readArchiveOrColumn('synopsis', legacyRow.synopsis ?? null),
         characterStates: row.character_states,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
