@@ -135,6 +135,41 @@ export function formatVoiceForPrompt(profiles: CharacterVoiceProfile[]): string 
   return parts.join('\n')
 }
 
+/** 正则转义（角色名可能含正则特殊字符） */
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+/**
+ * 将角色声音档案 upsert 到角色 notes（幂等）。
+ *
+ * 幂等规则：剥离该角色的旧 [VOICE:] 块 → mergeVoiceProfiles 合并新旧档案 → 写回单块。
+ * 防止逐章定稿时无条件追加导致：notes 无限膨胀 + 读端（非全局匹配）永远取到最早档案。
+ */
+export function upsertVoiceProfile(notes: string, profile: CharacterVoiceProfile): string {
+  const name = profile.name
+  const blockPattern = new RegExp(`\\n?\\[VOICE:${escapeRegExp(name)}\\][\\s\\S]*?(?=\\n\\[VOICE:|$)`)
+  const oldMatch = notes.match(blockPattern)
+
+  let merged = profile
+  if (oldMatch) {
+    try {
+      // 提取块内 JSON（档案顶层无嵌套对象，可安全取首个 {...}）
+      const inner = oldMatch[0].match(/\{[\s\S]*\}/)?.[0]
+      if (inner) {
+        const old = JSON.parse(inner) as CharacterVoiceProfile
+        if (old && Array.isArray(old.topWords)) merged = mergeVoiceProfiles(old, profile)
+      }
+    } catch { /* 旧档案解析失败时直接用新档案 */ }
+  }
+
+  // 剥离旧块并压缩多余空行，保留该角色其他笔记内容
+  const stripped = notes.replace(blockPattern, '').replace(/\n{3,}/g, '\n\n').trim()
+  // analyzedChapters 重置为本次分析结果，避免 "最新章 + 最新章 + ..." 无限拼接
+  merged.analyzedChapters = profile.analyzedChapters
+  return (stripped ? stripped + '\n' : '') + `[VOICE:${name}]\n${JSON.stringify(merged)}\n`
+}
+
 /**
  * 从角色卡 notes 中加载全部声音档案（[VOICE:角色名] JSON 标记）
  * 供写稿 prompt 注入（防 OOC）与审计复用
