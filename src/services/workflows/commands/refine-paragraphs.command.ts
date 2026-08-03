@@ -8,6 +8,7 @@ import { t } from '../../../shared/locale'
  */
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
 
 export interface RefineParagraphsParams {
@@ -54,7 +55,7 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
     const contextBefore = fullContent.slice(Math.max(0, selectionStart - 200), selectionStart)
     const contextAfter = fullContent.slice(selectionEnd, Math.min(fullContent.length, selectionEnd + 200))
 
-    callbacks.log(`段落改写 (${refineType}): 选中 ${selectedText.length} 字`)
+    callbacks.log(`段落改写 (${refineType}): 选中 ${computeTextStats(selectedText).novelWordCount} 字`)
 
     // 构建 prompt
     const guide = REFINE_TYPE_GUIDE[refineType] || REFINE_TYPE_GUIDE.polish
@@ -83,7 +84,8 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
     ].join('\n')
 
     const result = await this.callLLM(userPrompt, systemPrompt, callbacks, { cacheScope: 'chapter_refine' })
-    const wordDelta = result.length - selectedText.length
+    // 字数差用统一"有效字数"口径
+    const wordDelta = computeTextStats(result).novelWordCount - computeTextStats(selectedText).novelWordCount
 
     // 解析输出，提取修改后的段落
     let modifiedText = result
@@ -100,7 +102,7 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
 
     const summary =
       `${refineType === 'expand' ? '扩写' : refineType === 'shrink' ? '精简' : '改写'}完成: ` +
-      `${selectedText.length}字 → ${modifiedText.length}字 (${wordDelta >= 0 ? '+' : ''}${wordDelta})`
+      `${computeTextStats(selectedText).novelWordCount}字 → ${computeTextStats(modifiedText).novelWordCount}字 (${wordDelta >= 0 ? '+' : ''}${wordDelta})`
 
     // 创建修订记录
     try {
@@ -113,7 +115,7 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
           revisionType: 'refine' as const,
           userPrompt: `${refineType}: ${instruction}`,
           content: modifiedContent,
-          wordCount: modifiedContent.length,
+          wordCount: computeTextStats(modifiedContent).novelWordCount,
         })
         callbacks.log(summary)
       }

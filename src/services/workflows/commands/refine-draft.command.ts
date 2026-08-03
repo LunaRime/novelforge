@@ -3,6 +3,7 @@ import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
+import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
 
 import type { ChapterInfo } from '../chapter-workflow'
@@ -68,7 +69,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       revisionIndex: revIndex,
       revisionType: 'refine',
       content: cleanRefined,
-      wordCount: cleanRefined.length,
+      wordCount: computeTextStats(cleanRefined).novelWordCount,
     }) as { success: boolean; id: number }
 
     const { useEditorStore } = await import('../../../stores/editor-store')

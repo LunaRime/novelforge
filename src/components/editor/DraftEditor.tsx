@@ -23,6 +23,7 @@ import {
 } from '../../services/workflows/chapter-workflow'
 import { getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '../../services/draft-index'
 import { readDraftBody } from '../../stores/draft-store'
+import { computeTextStats } from '../../services/text-stats'
 import { ipc } from '../../services/ipc-client'
 
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
@@ -100,7 +101,8 @@ export default function DraftEditor({ filePath, content }: Props) {
         const idRaw = filePath.replace(prefix, '')
         // 非法 id（旧 ch{n} 格式 / 空）不写入 DB，避免 NaN 传入查询
         if (/^\d+$/.test(idRaw)) {
-          await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, text.length)
+          // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
+          await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
         } else {
           await ipc.invoke('fs:write-file', filePath, text)
         }

@@ -6,6 +6,7 @@
  */
 import { create } from 'zustand'
 import { VELA } from '../services/vela-protocol'
+import { computeTextStats } from '../services/text-stats'
 import { ipc } from '../services/ipc-client'
 import {
   updateDraftStatus as updateDraftStatusInIndex,
@@ -153,12 +154,15 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
       const versionMatch = filePath.match(/v(\d+)/)
       const version = versionMatch ? parseInt(versionMatch[1]) : 1
 
+      // 统一"有效字数"口径（汉字 + 英文单词）
+      const mergedWordCount = computeTextStats(mergedText).novelWordCount
+
       let targetDraftId: number | undefined
       // 统一通过 DB 更新草稿内容
       if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
         const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
         targetDraftId = parseInt(filePath.replace(prefix, ''))
-        await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedText.length)
+        await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount)
       } else {
         // 从 filePath 解析 chapterNumber 和 version，查出 draftId 再更新
         const chMatch = filePath.match(/ch(\d+)/)
@@ -168,14 +172,14 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
           const target = (drafts as unknown as Array<Record<string, unknown>>).find((d) => d.version === version)
           if (target) {
             targetDraftId = target.id as number
-            await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedText.length)
+            await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount)
           }
         }
       }
 
       // 更新草稿状态为 revised（直接调用 DB，不走 legacy index）
       if (targetDraftId && version) {
-        await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedText.length)
+        await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedWordCount)
       }
 
       // 标记修稿为已合并

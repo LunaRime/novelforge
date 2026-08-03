@@ -21,6 +21,10 @@ import { updateConfigTool } from './update-config.tool'
 import { embedTextTool } from './embed-text.tool'
 import { compareTextsTool } from './compare-texts.tool'
 import { indexContentTool } from './index-content.tool'
+import { countCharactersTool } from './count-characters.tool'
+import { calculatorTool } from './calculator.tool'
+import { queryForeshadowingTool } from './query-foreshadowing.tool'
+import { settingSamplerTool } from './setting-sampler.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
@@ -33,6 +37,12 @@ export const builtinTools = [
   readProjectStateTool,
   readDraftsTool,
   listChaptersTool,
+  // 字数统计（只读，自动执行）— 字数限制场景免 LLM 逐字计数
+  countCharactersTool,
+  // 防缺陷工具（只读，自动执行）— 计算/伏笔/设定多样性
+  calculatorTool,
+  queryForeshadowingTool,
+  settingSamplerTool,
   // 向量模块 Tool（只读，自动执行）
   embedTextTool,
   compareTextsTool,
