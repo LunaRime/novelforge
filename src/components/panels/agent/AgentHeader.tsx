@@ -15,8 +15,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
  */
 export default function AgentHeader() {
   const { createConversation, toggleHistory, showHistory, getActiveConversation } = useAgentStore()
-  // 面板位于底部（bottomTab='agent'），关闭 = 折叠底部面板
-  const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
+  const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
@@ -37,9 +36,9 @@ export default function AgentHeader() {
     createConversation()
   }
 
-  /** 关闭 AI 面板（折叠底部面板） */
+  /** 关闭 AI 面板 */
   const handleClose = () => {
-    toggleBottomPanel()
+    toggleAIPanel()
   }
 
   // 当前会话为空（无消息）时禁止新建

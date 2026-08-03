@@ -295,7 +295,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     // 非阻塞 import 避免循环依赖；不打开底栏时，步进模式下工作流会在等待确认时"隐形卡住"
     import('./layout-store').then(m => {
       m.useLayoutStore.getState().openBottomTab('tasks')
-      m.useLayoutStore.getState().openBottomTab('ai-output')
+      m.useLayoutStore.getState().openRightPanel('ai-output')
     }).catch(() => {})
 
     // 创建执行上下文

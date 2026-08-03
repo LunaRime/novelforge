@@ -43,10 +43,12 @@ function EmptyState() {
 
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full flex flex-col overflow-hidden">
+      {/* 内容区（滚动）——输入框已移至面板下部固定，此处仅保留引导内容 */}
+      <div className="flex-1 overflow-y-auto">
       <div
         className="px-4"
-        style={{ paddingTop: 'max(22vh, 48px)', paddingBottom: 24 }}
+        style={{ paddingTop: 'max(8vh, 32px)', paddingBottom: 16 }}
       >
         {/* 标题 */}
         <div className="mb-1 pl-1 text-base font-semibold" style={{ color: 'var(--color-text)' }}>
@@ -69,11 +71,6 @@ function EmptyState() {
             return <>{parts}</>
           })()}
         </div>
-
-        {/* 输入框 */}
-        <AgentInputBox />
-
-
 
         {/* 最近会话（如有） */}
         {recentConvs.length > 0 && (
@@ -107,6 +104,15 @@ function EmptyState() {
         <div className="pt-8 text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
           {t('agent.disclaimer')}
         </div>
+      </div>
+      </div>
+
+      {/* 输入框固定于面板下部（与对话视图一致的贴底样式） */}
+      <div
+        className="flex-shrink-0 px-3 pb-3 pt-2"
+        style={{ borderTop: '1px solid var(--color-border)' }}
+      >
+        <AgentInputBox />
       </div>
     </div>
   )
@@ -216,7 +222,7 @@ function ActiveConversation() {
  * 右侧：打开 AI 输出面板按钮
  */
 function AgentToolbar() {
-  const openBottomTab = useLayoutStore(s => s.openBottomTab)
+  const openRightPanel = useLayoutStore(s => s.openRightPanel)
   const { t } = useTranslation()
 
   return (
@@ -224,7 +230,7 @@ function AgentToolbar() {
 
       {/* 右侧：打开 AI 输出面板 */}
       <button
-        onClick={() => openBottomTab('ai-output')}
+        onClick={() => openRightPanel('ai-output')}
         className="flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-all select-none"
         style={{
           color: 'var(--color-text-muted)',

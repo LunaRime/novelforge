@@ -516,7 +516,6 @@ export const UI_TEXTS_DATA = {
   'panel.sidebar': { 'zh-CN': '导航侧边栏', 'en-US': 'Navigation Sidebar', 'ru-RU': 'Боковая панель' },
   'panel.editor': { 'zh-CN': '主编辑区', 'en-US': 'Editor', 'ru-RU': 'Редактор' },
   'panel.ai': { 'zh-CN': 'AI 对话面板', 'en-US': 'AI Panel', 'ru-RU': 'Панель ИИ' },
-  'panel.agent': { 'zh-CN': 'AI 对话', 'en-US': 'AI Chat', 'ru-RU': 'ИИ-чат' },
   'panel.bottom': { 'zh-CN': '底部任务面板', 'en-US': 'Bottom Panel', 'ru-RU': 'Нижняя панель' },
   'panel.taskHistory': { 'zh-CN': '历史任务', 'en-US': 'Task history', 'ru-RU': 'История задач' },
   'panel.nextStep': { 'zh-CN': '下一步：{name}', 'en-US': 'Next: {name}', 'ru-RU': 'Далее: {name}' },
