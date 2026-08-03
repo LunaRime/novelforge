@@ -4,7 +4,7 @@ import {
   ChevronDown,
   ArrowRight,
   Square,
-  Image,
+  FileText,
   AtSign,
   Workflow,
 } from 'lucide-react'
@@ -15,6 +15,7 @@ import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useTranslation } from '../../../hooks/useTranslation'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
+import FilePickerMenu from './FilePickerMenu'
 import type { SlashCommand, MentionTarget } from '../../../services/agent/intent-router'
 
 /** 输入框最大高度（px），超出后框内滚动 */
@@ -46,6 +47,8 @@ export default function AgentInputBox() {
   const [showContextMenu, setShowContextMenu] = useState(false)
   const [showModeMenu, setShowModeMenu] = useState(false)
   const [showModelMenu, setShowModelMenu] = useState(false)
+  // 可视化添加文件选择器（+ 菜单 → 添加文件）
+  const [showFilePicker, setShowFilePicker] = useState(false)
 
   // / 命令和 @ 提及菜单状态
   const [showSlashMenu, setShowSlashMenu] = useState(false)
@@ -114,6 +117,7 @@ export default function AgentInputBox() {
   const contextRef = useRef<HTMLDivElement>(null)
   const modeRef = useRef<HTMLDivElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
+  const filePickerRef = useRef<HTMLDivElement>(null)
 
   // 调整文本框高度的通用函数
   const adjustHeight = useCallback(() => {
@@ -154,6 +158,14 @@ export default function AgentInputBox() {
   useOutsideClick(contextRef, () => setShowContextMenu(false), showContextMenu)
   useOutsideClick(modeRef, () => setShowModeMenu(false), showModeMenu)
   useOutsideClick(modelRef, () => setShowModelMenu(false), showModelMenu)
+  useOutsideClick(filePickerRef, () => setShowFilePicker(false), showFilePicker)
+
+  /** 可视化选择文件后追加 "@路径 " 到输入框（与 @ 提及同解析/预取链路） */
+  const handleFileSelect = useCallback((path: string) => {
+    setShowFilePicker(false)
+    setInputText(prev => `${prev.trimEnd()}${prev.trimEnd() ? ' ' : ''}@${path} `)
+    textareaRef.current?.focus()
+  }, [])
 
   /** 发送或停止 */
   const handleSendOrStop = useCallback(async () => {
@@ -229,7 +241,11 @@ export default function AgentInputBox() {
           <div className="text-[0.7rem] px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
             {t('tip.addContext')}
           </div>
-          <ContextMenuItem icon={<Image size={13} />} label={t('agent.mediaFile')} onClick={() => setShowContextMenu(false)} disabled />
+          {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
+          <ContextMenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
+            setShowContextMenu(false)
+            setShowFilePicker(true)
+          }} />
           <ContextMenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
             setShowContextMenu(false)
             // 插入 @ 字符并触发 MentionMenu
@@ -244,6 +260,16 @@ export default function AgentInputBox() {
             handleInputChange('/')
             textareaRef.current?.focus()
           }} />
+        </div>
+      )}
+
+      {/* 可视化文件选择器（+ 菜单 → 添加文件） */}
+      {showFilePicker && (
+        <div ref={filePickerRef}>
+          <FilePickerMenu
+            onSelect={handleFileSelect}
+            onClose={() => setShowFilePicker(false)}
+          />
         </div>
       )}
 
@@ -281,6 +307,7 @@ export default function AgentInputBox() {
               onClick={() => {
                 setShowModeMenu(false)
                 setShowModelMenu(false)
+                setShowFilePicker(false)
                 setShowContextMenu(v => !v)
               }}
             >
@@ -294,6 +321,7 @@ export default function AgentInputBox() {
               onClick={() => {
                 setShowContextMenu(false)
                 setShowModelMenu(false)
+                setShowFilePicker(false)
                 setShowModeMenu(v => !v)
               }}
               className="flex items-center gap-0.5 py-1 pl-1 pr-1.5 rounded-md text-xs transition-colors"
@@ -352,6 +380,7 @@ export default function AgentInputBox() {
               onClick={() => {
                 setShowContextMenu(false)
                 setShowModeMenu(false)
+                setShowFilePicker(false)
                 setShowModelMenu(v => !v)
               }}
               className="flex items-center gap-0.5 py-1 pl-0.5 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
