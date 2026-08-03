@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useVolumeStore } from '../../stores/volume-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ipc } from '../../services/ipc-client'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -59,6 +60,9 @@ export default function ChapterCardEditor() {
   // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
   const startWorkflow = useWorkflowStore.getState().startWorkflow
   const addLog = useWorkflowStore.getState().addLog
+  // 分卷归属（蓝图列表每章显示所属卷）
+  const volumes = useVolumeStore(s => s.volumes)
+  const loadVolumes = useVolumeStore(s => s.load)
   const [blueprints, setBlueprints] = useState<ChapterBlueprint[]>([])
   const [selectedIdx, setSelectedIdx] = useState<number>(0)
   const [saving, setSaving] = useState(false)
@@ -69,6 +73,13 @@ export default function ChapterCardEditor() {
 
   // 蓝图生成弹窗（替代原 inline 批量面板）
   const [showBlueprintDialog, setShowBlueprintDialog] = useState(false)
+
+  // 加载分卷（蓝图列表显示所属卷徽标）
+  useEffect(() => {
+    let mounted = true
+    Promise.resolve().then(() => { if (mounted) loadVolumes() })
+    return () => { mounted = false }
+  }, [loadVolumes])
 
   const loadBlueprints = useCallback(async () => {
     if (!currentProject) return
@@ -373,6 +384,20 @@ export default function ChapterCardEditor() {
                   <span className="font-medium truncate flex-1">{bp.title || t('character.unnamed')}</span>
                 </div>
                 <div className="flex items-center gap-1 mt-0.5">
+                  {(() => {
+                    const vol = volumes.find(v =>
+                      v.chapterStart <= bp.chapterNumber &&
+                      (v.chapterEnd === 0 || bp.chapterNumber <= v.chapterEnd))
+                    return vol ? (
+                      <span
+                        className="text-[0.7rem] px-1 py-0.5 rounded"
+                        style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
+                        title={vol.title || undefined}
+                      >
+                        {t('volume.ordinal').replace('{n}', String(vol.volumeNumber))}
+                      </span>
+                    ) : null
+                  })()}
                   <span className={cn(
                     'text-[0.7rem] px-1 py-0.5 rounded',
                     ROLE_COLORS[bp.role] || 'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
