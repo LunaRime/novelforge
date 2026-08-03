@@ -267,10 +267,10 @@ function cnNumToNum(cn: string): number {
   return 0
 }
 
-/** 提取章节内时间锚点序列（归一化为天偏移） */
+/** 提取章节内时间锚点序列（归一化为天偏移；对话区豁免——台词里的"第三天"不算叙事时间） */
 export function extractTimelineAnchors(text: string): TimelineAnchor[] {
   const anchors: TimelineAnchor[] = []
-  const matches = text.matchAll(TIME_WORD_REGEX)
+  const matches = stripDialogue(text).matchAll(TIME_WORD_REGEX)
   for (const m of matches) {
     const raw = m[0]
     let dayOffset: number

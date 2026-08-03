@@ -85,6 +85,12 @@ describe('timelineAudit', () => {
     const r = timelineAudit('第一天出发。次日到达。三天后决战。')
     expect(r.passed).toBe(true)
   })
+
+  it('对话区时间词不误报', () => {
+    // 台词里的"第三天"不是叙事时间
+    const r = timelineAudit('他说道："第三天我们在城门口见。"随后离开。')
+    expect(r.issues.length).toBe(0)
+  })
 })
 
 describe('runAllAudits', () => {

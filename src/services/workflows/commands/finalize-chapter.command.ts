@@ -464,7 +464,7 @@ export function buildFinalizePostProcessSteps(
     executor: async (callbacks: StepCallbacks) => {
       callbacks.log('正在分析角色对话风格...')
       try {
-        const { analyzeCharacterVoice } = await import('../../character-voice-analyzer')
+        const { analyzeCharacterVoice, upsertVoiceProfile } = await import('../../character-voice-analyzer')
         const characters = await ipc.invoke('db:character-get-all') as Array<{ name: string; notes?: string }>
         let analyzed = 0
         for (const char of characters) {
@@ -475,8 +475,8 @@ export function buildFinalizePostProcessSteps(
             const existing = char as Record<string, string | number | undefined>
             const profile = analyzeCharacterVoice(draftContent, char.name)
             if (profile.topWords.length > 0) {
-              const voiceData = JSON.stringify(profile)
-              const updatedNotes = ((existing.notes as string) || '') + `\n[VOICE:${char.name}]\n${voiceData}\n`
+              // upsert：剥离旧 VOICE 块 → 合并新旧档案 → 单块写回（防止 notes 膨胀 + 读端取到旧档案）
+              const updatedNotes = upsertVoiceProfile((existing.notes as string) || '', profile)
               await ipc.invoke('db:character-upsert', {
                 name: existing.name as string,
                 role: (existing.role as string) || 'supporting',
