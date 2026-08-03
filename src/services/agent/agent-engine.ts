@@ -28,6 +28,13 @@ const TOOL_TIMEOUT_MS = 30_000
 /** Tool 返回内容最大 Token 数 */
 const TOOL_RESULT_MAX_TOKENS = 800
 
+/**
+ * 发送给 LLM 的消息整体 token 预算。
+ * systemPrompt（≤3500）+ 历史窗口（≤4000）+ 多轮 observation 可能超出模型上下文，
+ * 每轮调用前按此预算压缩（保留 system + 最近轮次 + 末尾消息）。
+ */
+const MESSAGE_BUDGET_TOKENS = 16_000
+
 // ===== 类型 =====
 
 /** Tool 调用信息 */
@@ -66,10 +73,14 @@ export interface LLMMessage {
   content: string
 }
 
-/** LLM 生成函数签名（由 agent-store 提供实际实现） */
+/** LLM 生成函数签名（由 agent-store 提供实际实现）
+ * 第三个参数 onChunk：可选流式回调。若提供且被调用，引擎将不再重复推送文本
+ * （流式已实时显示），但 fullAssistantText 仍从返回的完整文本拼接。
+ */
 export type LLMGenerateFn = (
   messages: LLMMessage[],
   modelId: string,
+  onChunk?: (chunk: string) => void,
 ) => Promise<string>
 
 // ===== 核心引擎 =====
@@ -119,11 +130,22 @@ export async function runAgentLoop(
 
     rounds++
 
-    // 调用 LLM
+    // 调用 LLM（支持流式：onChunk 实时推送文本，引擎收到流式文本后不再重复输出）
+    // 发送前按整体预算压缩消息副本（完整 messages 仍保留给后处理使用）
+    const budgetedMessages = compressMessagesToBudget(messages, MESSAGE_BUDGET_TOKENS)
     let llmResponse: string
+    let streamed = false
     try {
-      llmResponse = await generateFn(messages, modelId)
+      llmResponse = await generateFn(budgetedMessages, modelId, (chunk) => {
+        streamed = true
+        callbacks.onTextChunk(chunk)
+      })
     } catch (error) {
+      // 取消导致的生成中断走"已停止"而不是错误提示
+      if (abortSignal?.aborted) {
+        callbacks.onDone(fullAssistantText + '\n\n_（已停止生成）_', allToolCalls, allArtifacts)
+        return
+      }
       callbacks.onError(t('agent.llmCallFailed').replace('{error}', String(error)))
       return
     }
@@ -147,7 +169,8 @@ export async function runAgentLoop(
       .replace(/\n{3,}/g, '\n\n')
       .trim()
     if (textContent) {
-      callbacks.onTextChunk(textContent)
+      // 流式模式下文本已通过 onChunk 实时推送，避免重复输出
+      if (!streamed) callbacks.onTextChunk(textContent)
       fullAssistantText += textContent
     }
 
@@ -256,9 +279,9 @@ export async function runAgentLoop(
         callbacks.onToolCallComplete(toolCallInfo)
 
         if (result.success) {
-          observationParts.push(`<tool_result name="${tc.name}">\n${truncatedContent}\n</tool_result>`)
+          observationParts.push(`<tool_result name="${tc.name}">\n${sanitizeObservation(truncatedContent)}\n</tool_result>`)
         } else {
-          observationParts.push(`<tool_result name="${tc.name}" error="true">\n${result.error ?? truncatedContent}\n</tool_result>`)
+          observationParts.push(`<tool_result name="${tc.name}" error="true">\n${sanitizeObservation(result.error ?? truncatedContent)}\n</tool_result>`)
         }
       } catch (error) {
         toolCallInfo.status = 'failed'
@@ -445,18 +468,82 @@ ${parts.join('\n\n')}
 
 /**
  * 带超时的 Tool 执行
+ *
+ * 注意：Promise.race 超时后工具本身无法中止（副作用可能已发生），
+ * 这里仅确保等待不无限期挂起，并在 settle 后清理计时器。
  */
 async function executeToolWithTimeout(
   executeFn: (args: Record<string, unknown>) => Promise<ToolResult>,
   args: Record<string, unknown>,
   timeoutMs: number,
 ): Promise<ToolResult> {
-  return Promise.race([
-    executeFn(args),
-    new Promise<ToolResult>((_, reject) =>
-      setTimeout(() => reject(new Error(t('agent.toolTimeout').replace('{n}', String(timeoutMs / 1000)))), timeoutMs)
-    ),
-  ])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      executeFn(args),
+      new Promise<ToolResult>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(t('agent.toolTimeout').replace('{n}', String(timeoutMs / 1000)))), timeoutMs)
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
+/**
+ * 清洗注入 observation 的工具结果，防止结果内容包含
+ * <tool_result> 闭合标签时破坏 XML 结构（注入污染）。
+ */
+function sanitizeObservation(content: string): string {
+  return content
+    .replace(/<\/tool_result>/gi, '')
+    .replace(/<tool_result/gi, '')
+}
+
+/**
+ * 将消息列表压缩到 token 预算内（ReAct 多轮 observation 的上下文整体防线）。
+ *
+ * 压缩策略（保证 role 交替与最近上下文）：
+ * 1. system 提示恒保留
+ * 2. 从尾部向前保留最近的 (user, assistant) 轮次对，直到预算耗尽
+ * 3. 末尾独立的 user（当前问题 / observation）单独保留
+ *
+ * 注意：仅作用于发送给 LLM 的副本，不修改引擎的完整消息记录。
+ */
+function compressMessagesToBudget(messages: LLMMessage[], budget: number): LLMMessage[] {
+  const total = messages.reduce((sum, m) => sum + estimateTokens(m.content), 0)
+  if (total <= budget) return messages
+
+  const out: LLMMessage[] = []
+  let used = 0
+
+  // 1. system 提示恒保留（即使超预算也不能丢）
+  if (messages[0]?.role === 'system') {
+    out.push(messages[0])
+    used += estimateTokens(messages[0].content)
+  }
+
+  // 2. 从尾部向前保留最近的轮次（user, assistant 对 / 独立 user）
+  const tail: LLMMessage[] = []
+  for (let i = messages.length - 1; i >= 1; i--) {
+    const m = messages[i]
+    if (m.role === 'assistant' && messages[i - 1]?.role === 'user') {
+      const pairTokens = estimateTokens(messages[i - 1].content) + estimateTokens(m.content)
+      if (used + pairTokens > budget) break
+      tail.unshift(messages[i - 1], m)
+      used += pairTokens
+      i--
+    } else if (m.role === 'user') {
+      // 末尾独立的 user（observation / 当前问题）：单独保留后继续向前配对
+      const msgTokens = estimateTokens(m.content)
+      if (used + msgTokens > budget) break
+      tail.unshift(m)
+      used += msgTokens
+    }
+  }
+  out.push(...tail)
+
+  return out
 }
 
 /**

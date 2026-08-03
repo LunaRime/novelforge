@@ -118,7 +118,8 @@ export function registerLLMController() {
                 win?.webContents.send('llm:stream-chunk', { requestId, chunk })
               }
             },
-            onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number }) => {
+            onDone: (fullText: string, usage?: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number }) => {
+              // usage 含真实缓存命中 token（provider 已解析），透传给渲染进程供费用统计
               win?.webContents.send('llm:stream-done', { requestId, fullText, usage })
               activeStreams.delete(requestId)
               resolve()
