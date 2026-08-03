@@ -145,4 +145,27 @@ describe('parseMentions 项目外文件（绝对路径）', () => {
     const mentions = parseMentions('@02_架构/故事线.md')
     expect(mentions[0].target.value).toBe('02_架构/故事线.md')
   })
+
+  it('含空格路径完整解析（My Documents 场景）', () => {
+    const mentions = parseMentions('参考 @C:\\My Documents\\灵感.md 的内容')
+    expect(mentions.length).toBe(1)
+    expect(mentions[0].target.value).toBe('C:\\My Documents\\灵感.md')
+  })
+
+  it('路径后尾随文字被截断（扩展名锚点）', () => {
+    const mentions = parseMentions('@D:/笔记/设定.md 帮我看看这个')
+    expect(mentions[0].target.value).toBe('D:/笔记/设定.md')
+  })
+
+  it('路径不吞同一行的后续 @提及', () => {
+    const mentions = parseMentions('@C:\\a.md 然后 @故事架构')
+    expect(mentions.length).toBe(2)
+    expect(mentions[0].target.value).toBe('C:\\a.md')
+    expect(mentions[1].target.type).toBe('architecture')
+  })
+
+  it('中文括号路径可解析', () => {
+    const mentions = parseMentions('@C:\\笔记(上).md 的内容')
+    expect(mentions[0].target.value).toBe('C:\\笔记(上).md')
+  })
 })

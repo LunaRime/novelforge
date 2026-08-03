@@ -180,14 +180,21 @@ export function searchMentionTargets(query: string): MentionTarget[] {
 /** 可读文件扩展名（文本类，排除二进制与内部目录） */
 export const READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv'])
 
-/** 绝对路径判定（Windows 盘符 / UNC；不含 / 开头——项目内相对路径也用 / 分隔） */
-function isAbsolutePath(p: string): boolean {
-  return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')
-}
-
 /** 从路径提取文件名（兼容 \ 与 / 分隔符） */
 function basename(p: string): string {
   return p.split(/[\\/]/).pop() ?? p
+}
+
+/**
+ * 截断绝对路径后的尾随文字。
+ * 绝对路径正则允许空格（"C:\My Documents\笔记.md"），但路径后的
+ * " 帮我看看"（空格+描述）也会被吞——用扩展名锚点截断：
+ * 匹配"扩展名 + 空白 + 其余"→ 只保留扩展名前的路径。
+ */
+function trimPathTail(value: string): string {
+  const exts = [...READABLE_EXTS, '.markdown'].map(e => e.slice(1)).join('|')
+  const m = value.match(new RegExp(`^(.+?\\.(?:${exts}))\\s.*$`, 'i'))
+  return m ? m[1] : value
 }
 
 /** 递归收集可读文件（相对项目根路径）；跳过内部/依赖目录 */
@@ -238,24 +245,45 @@ export function searchProjectFiles(query: string, limit = 8): MentionTarget[] {
 
 /**
  * 解析输入中的 @ 提及
- * 注意：\S+ 会把紧跟提及的中文标点（如"@故事架构，"）也吞进匹配，
- * 导致 find 失败、提及静默失效。排除常见中文标点后按尾部截断做前缀匹配。
+ * 两阶段匹配：
+ * 1. 绝对路径提及（项目外文件）——路径可含空格/括号/中文，以中文句读或行尾结束
+ *    （不能用 \S+：`C:\My Documents\笔记.md` 会在空格处被截断）
+ * 2. 通用提及——排除空格与常见中文标点（"@故事架构，" 不被吞标点导致失效）
  */
 export function parseMentions(input: string): ParsedMention[] {
   const mentions: ParsedMention[] = []
-  const regex = /@([^\s，。！？；：、（）《》【】·—…""'']+)/g
-  let match: RegExpExecArray | null = null
+  // 已占用的区间（绝对路径命中后，通用正则跳过，避免截断残留误匹配）
+  const absSpans: Array<[number, number]> = []
 
+  // ===== 阶段 1：项目外文件（绝对路径）=====
+  // 排除 @：避免吞掉同一行后续的 @提及（"@C:\a.md 然后 @架构"）
+  const absRegex = /@((?:[a-zA-Z]:[\\/]|\\\\)[^，。！？；：\r\n@]*)/g
+  let match: RegExpExecArray | null = null
+  while ((match = absRegex.exec(input)) !== null) {
+    const value = trimPathTail(match[1])
+    if (!value) continue
+    const target: MentionTarget = {
+      type: 'file',
+      displayName: basename(value),
+      value,
+      icon: '📄',
+      insertText: value,
+    }
+    mentions.push({ target, start: match.index, end: match.index + match[0].length })
+    absSpans.push([match.index, match.index + match[0].length])
+  }
+
+  // ===== 阶段 2：通用提及（固定目标 / 项目内文件）=====
+  const regex = /@([^\s，。！？；：、（）《》【】·—…""'']+)/g
   while ((match = regex.exec(input)) !== null) {
+    // 命中在绝对路径区间内（@C:\My 之类被截断的残留）→ 跳过
+    if (absSpans.some(([s, e]) => match!.index >= s && match!.index < e)) continue
     const value = match[1]
     const targets = getAllMentionTargets()
     // 精确匹配 value / displayName；若用户输入是 displayName 的前缀（输入法尚未完成）则跳过，
     // 仅在完整匹配时生效——避免"@故事"误匹配到不存在的目标
     const target = targets.find(t => t.value === value || t.displayName === value)
       ?? searchProjectFiles(value, 1)[0]  // 项目内文件：插入的是相对路径，按路径/文件名匹配回文件
-      ?? (isAbsolutePath(value)
-        ? { type: 'file' as const, displayName: basename(value), value, icon: '📄', insertText: value }
-        : undefined)                      // 项目外文件：@绝对路径 直接构造目标（read_file 直读）
     if (target) {
       mentions.push({
         target,
