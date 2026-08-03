@@ -35,7 +35,7 @@ export default function ModelSettings() {
       name: '',
       provider: 'openai',
       protocol: 'openai',
-      modelName: 'gpt-4o',
+      modelName: 'deepseek-v4-flash',
       apiKey: '',
       baseUrl: 'https://api.openai.com',
       temperature: 0.7,
@@ -198,7 +198,7 @@ function ModelForm({
 
       <div>
         <Label>{t('model.modelName')}</Label>
-        <Input value={model.modelName} onChange={(e) => update('modelName', e.target.value)} placeholder="gpt-4o / deepseek-chat" />
+        <Input value={model.modelName} onChange={(e) => update('modelName', e.target.value)} placeholder="gpt-5.6-luna / deepseek-v4-flash" />
       </div>
       <div>
         <Label>{t('form.apiAddress')}</Label>

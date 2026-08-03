@@ -87,8 +87,25 @@ export function hashStaticContext(context: string): string {
 
 // ===== 费用追踪 =====
 
-/** 模型价格表（USD per 1M tokens, 2024 年价格，仅供参考） */
+/**
+ * 模型价格表（USD per 1M tokens，2026-08 参考价，仅供参考）
+ * 注意：遍历顺序即匹配优先级——具体型号（如 gpt-5.4-mini）必须排在通用型号（如 gpt-5.4）之前
+ */
 export const MODEL_PRICES: Record<string, { input: number; output: number; cachedInput: number }> = {
+  // ---- 2026 最新模型 ----
+  'gpt-5.6-sol': { input: 5, output: 30, cachedInput: 0.5 },
+  'gpt-5.6-terra': { input: 2.5, output: 15, cachedInput: 0.25 },
+  'gpt-5.6-luna': { input: 1, output: 6, cachedInput: 0.1 },
+  'gpt-5.4-mini': { input: 0.75, output: 4.5, cachedInput: 0.075 },
+  'gpt-5.4-nano': { input: 0.2, output: 1.25, cachedInput: 0.02 },
+  // DeepSeek V4（2026-07-24 起 deepseek-chat/reasoner 已停用）
+  'deepseek-v4-flash': { input: 0.14, output: 0.28, cachedInput: 0.0028 },
+  'deepseek-v4-pro': { input: 0.435, output: 0.87, cachedInput: 0.003625 },
+  'gemini-3.1-pro-preview': { input: 2, output: 12, cachedInput: 0.5 },
+  'gemini-3.6-flash': { input: 1.5, output: 7.5, cachedInput: 0.375 },
+  'gemini-3.5-flash': { input: 1.5, output: 9, cachedInput: 0.375 },
+  'gemini-3-flash-preview': { input: 0.5, output: 3, cachedInput: 0.125 },
+  // ---- 旧模型兼容（存量配置仍可能引用） ----
   'gpt-4o': { input: 2.5, output: 10, cachedInput: 1.25 },
   'gpt-4o-mini': { input: 0.15, output: 0.6, cachedInput: 0.075 },
   'gpt-4-turbo': { input: 10, output: 30, cachedInput: 5 },
@@ -96,8 +113,6 @@ export const MODEL_PRICES: Record<string, { input: number; output: number; cache
   'claude-3-opus': { input: 15, output: 75, cachedInput: 7.5 },
   'claude-3.5-sonnet': { input: 3, output: 15, cachedInput: 1.5 },
   'claude-3-haiku': { input: 0.25, output: 1.25, cachedInput: 0.125 },
-  'deepseek-chat': { input: 0.14, output: 0.28, cachedInput: 0.07 },
-  'deepseek-reasoner': { input: 0.55, output: 2.19, cachedInput: 0.275 },
   'gemini-1.5-flash': { input: 0.075, output: 0.3, cachedInput: 0.0375 },
   'gemini-1.5-pro': { input: 1.25, output: 5, cachedInput: 0.625 },
 }

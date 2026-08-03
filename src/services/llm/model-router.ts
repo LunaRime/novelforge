@@ -2,9 +2,9 @@
  * NovelForge 模型路由器 — 按任务自动选择最优模型
  *
  * 三层模型策略：
- * - Elite: 创意写作、架构规划 → GPT-4o, Claude Opus, DeepSeek-V3
- * - Standard: 审稿、分析、风格检查 → GPT-4o-mini, DeepSeek-V3, Gemini Flash
- * - Budget: JSON 提取、摘要、分类 → GPT-3.5, 本地模型
+ * - Elite: 创意写作、架构规划 → GPT-5.6, Claude Opus, DeepSeek-V4-Pro
+ * - Standard: 审稿、分析、风格检查 → GPT-5.6-Luna, DeepSeek-V4-Flash, Gemini Flash
+ * - Budget: JSON 提取、摘要、分类 → GPT-5.4-Nano, 本地模型
  *
  * 预期节省 API 费用 50-70%。
  */
@@ -163,8 +163,20 @@ export class ModelRouter {
     const modelId = this.route(purpose) || 'unknown'
     const model = this.models.find(m => m.id === modelId)
 
-    // 粗略价格估算（USD per 1K tokens）
+    // 粗略价格估算（USD per 1K tokens，2026-08 参考价；具体型号在前，避免 includes 误匹配）
     const prices: Record<string, { input: number; output: number }> = {
+      'gpt-5.6-sol': { input: 0.005, output: 0.03 },
+      'gpt-5.6-terra': { input: 0.0025, output: 0.015 },
+      'gpt-5.6-luna': { input: 0.001, output: 0.006 },
+      'gpt-5.4-mini': { input: 0.00075, output: 0.0045 },
+      'gpt-5.4-nano': { input: 0.0002, output: 0.00125 },
+      'deepseek-v4-flash': { input: 0.00014, output: 0.00028 },
+      'deepseek-v4-pro': { input: 0.000435, output: 0.00087 },
+      'gemini-3.1-pro-preview': { input: 0.002, output: 0.012 },
+      'gemini-3.6-flash': { input: 0.0015, output: 0.0075 },
+      'gemini-3.5-flash': { input: 0.0015, output: 0.009 },
+      'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
+      // 旧模型兼容（存量配置仍可能引用）
       'gpt-4o': { input: 0.0025, output: 0.01 },
       'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
       'gpt-4-turbo': { input: 0.01, output: 0.03 },
@@ -172,8 +184,6 @@ export class ModelRouter {
       'claude-3-opus': { input: 0.015, output: 0.075 },
       'claude-3.5-sonnet': { input: 0.003, output: 0.015 },
       'claude-3-haiku': { input: 0.00025, output: 0.00125 },
-      'deepseek-chat': { input: 0.00014, output: 0.00028 },
-      'deepseek-reasoner': { input: 0.00055, output: 0.00219 },
       'gemini-1.5-flash': { input: 0.000075, output: 0.0003 },
       'gemini-1.5-pro': { input: 0.00125, output: 0.005 },
     }
@@ -222,6 +232,9 @@ export class ModelRouter {
       const name = (model.modelName + model.name).toLowerCase()
 
       if (
+        name.includes('gpt-5.6-sol') ||
+        name.includes('gpt-5.6-terra') ||
+        name.includes('deepseek-v4-pro') ||
         name.includes('gpt-4o') && !name.includes('mini') ||
         name.includes('claude-3-opus') ||
         name.includes('claude-3.5') ||
