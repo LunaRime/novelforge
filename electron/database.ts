@@ -13,10 +13,18 @@ import { logger } from './utils/logger'
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
+/** 当前已打开的项目路径（get-summary 等可判断"当前项目"直接走主连接，免只读连接） */
+let currentProjectPath: string | null = null
+
+/** 获取当前已打开项目的路径（未打开返回 null） */
+export function getCurrentProjectPath(): string | null {
+  return currentProjectPath
+}
 
 /** 初始化项目数据库（打开项目时调用） */
 export function initProjectDatabase(projectPath: string): void {
   closeProjectDatabase()
+  currentProjectPath = projectPath
 
   const dbPath = path.join(projectPath, '.vela', 'vela.db')
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -97,6 +105,7 @@ export function closeProjectDatabase(): void {
     projectDb.close()
     projectDb = null
   }
+  currentProjectPath = null
 }
 
 /** 获取当前数据库实例 */
@@ -106,7 +115,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 8
+const CURRENT_SCHEMA_VERSION = 10
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -373,10 +382,36 @@ function createTables(db: BetterSqlite3.Database) {
       created_at INTEGER DEFAULT (unixepoch() * 1000)
     );
 
+    -- 分卷（长篇小说按卷组织章节：卷号唯一、起止章节为含边界）
+    CREATE TABLE IF NOT EXISTS volumes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      volume_number INTEGER NOT NULL UNIQUE,
+      title TEXT DEFAULT '',
+      description TEXT DEFAULT '',
+      chapter_start INTEGER NOT NULL DEFAULT 0,
+      chapter_end INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
+    );
+
+    -- 偏好记忆（用户把 AI 文本的 X 改成 Y 的替换对，供写稿注入）
+    CREATE TABLE IF NOT EXISTS preferences (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ai_text TEXT NOT NULL,
+      user_text TEXT NOT NULL,
+      count INTEGER NOT NULL DEFAULT 1,
+      last_chapter INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000),
+      UNIQUE (ai_text, user_text)
+    );
+
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_llm_calls_time ON llm_calls(created_at);
     CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number);
     CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at);
+    CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
+    CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
   `)
 
   // ===== 旧表迁移 =====
@@ -715,5 +750,47 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', 'v7 迁移: characters 表已添加 tier/tags/appear_chapters/relations 列')
   } catch (e) {
     logger.warn('DB', `v7 角色表迁移未完成（非关键），应用将使用默认值: ${e}`)
+  }
+
+  // 12. v9: 分卷表（长篇小说按卷组织章节）
+  //    非关键 — 表不存在时 VolumeRepository 返回空列表，分卷功能自动降级
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS volumes (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        volume_number INTEGER NOT NULL UNIQUE,
+        title TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        chapter_start INTEGER NOT NULL DEFAULT 0,
+        chapter_end INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000)
+      );
+      CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
+    `)
+    logger.info('DB', 'v9 迁移: volumes 分卷表已创建')
+  } catch (e) {
+    logger.warn('DB', `v9 分卷表迁移未完成（非关键），分卷功能将不可用: ${e}`)
+  }
+
+  // 13. v10: 偏好记忆表（用户把 AI 文本的 X 改成 Y 的替换对）
+  //    非关键 — 表不存在时偏好记录/注入自动降级为空
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS preferences (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        ai_text TEXT NOT NULL,
+        user_text TEXT NOT NULL,
+        count INTEGER NOT NULL DEFAULT 1,
+        last_chapter INTEGER DEFAULT 0,
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000),
+        UNIQUE (ai_text, user_text)
+      );
+      CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
+    `)
+    logger.info('DB', 'v10 迁移: preferences 偏好记忆表已创建')
+  } catch (e) {
+    logger.warn('DB', `v10 偏好记忆表迁移未完成（非关键），偏好功能将不可用: ${e}`)
   }
 }

@@ -294,6 +294,8 @@ import type { DraftMeta, DraftFull } from '../../electron/repositories/draft-rep
 import type { RevisionMeta, RevisionFull } from '../../electron/repositories/revision-repository'
 import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-repository'
 import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
+import type { VolumeData } from '../../electron/repositories/volume-repository'
+import type { PreferenceData } from '../../electron/repositories/preference-repository'
 
 // ===== 数据库操作 =====
 export interface DatabaseChannels {
@@ -321,7 +323,7 @@ export interface DatabaseChannels {
   'db:character-upsert': { args: [data: CharacterData]; return: { success: boolean; error?: string } }
   'db:character-save-all': { args: [items: CharacterData[]]; return: { success: boolean; error?: string } }
   'db:character-delete': { args: [name: string]; return: { success: boolean; error?: string } }
-  'db:character-update-state': { args: [name: string, state: CharacterStateData]; return: { success: boolean; error?: string } }
+  'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }]; return: { success: boolean; error?: string } }
 
   // 4. drafts
   'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
@@ -385,6 +387,16 @@ export interface DatabaseChannels {
   'config:set-locale': { args: [locale: 'zh-CN' | 'en-US' | 'ru-RU']; return: { success: boolean } }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }
   'db:get-latest-summary': { args: []; return: { characterStates: string; chapterNumber: number } | null }
+
+  // 13. volumes — 分卷
+  'db:volume-get-all': { args: []; return: VolumeData[] }
+  'db:volume-get-by-chapter': { args: [chapterNumber: number]; return: VolumeData | null }
+  'db:volume-upsert': { args: [data: VolumeData]; return: { success: boolean; error?: string } }
+  'db:volume-delete': { args: [volumeNumber: number]; return: { success: boolean; error?: string } }
+
+  // 14. preferences — 偏好记忆
+  'db:preference-record': { args: [aiText: string, userText: string, chapterNumber?: number]; return: { success: boolean; error?: string } }
+  'db:preference-get-top': { args: [limit: number, recentChapters?: number]; return: PreferenceData[] }
 }
 
 // ===== 知识库频道 =====

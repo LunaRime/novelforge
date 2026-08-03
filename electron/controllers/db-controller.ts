@@ -14,6 +14,8 @@ import { PostProcessRepository } from '../repositories/post-process-repository'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
+import { VolumeRepository, VolumeData } from '../repositories/volume-repository'
+import { PreferenceRepository } from '../repositories/preference-repository'
 import { ActivityRepository } from '../repositories/activity-repository'
 import { SummaryRepository } from '../repositories/summary-repository'
 
@@ -156,9 +158,9 @@ export function registerDatabaseController() {
     }
   })
 
-  ipcMain.handle('db:character-update-state', async (_event, name: string, state: CharacterStateData) => {
+  ipcMain.handle('db:character-update-state', async (_event, name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }) => {
     try {
-      CharacterRepository.updateState(name, state)
+      CharacterRepository.updateState(name, state, extra)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
@@ -442,5 +444,50 @@ export function registerDatabaseController() {
 
   ipcMain.handle('db:get-latest-summary', async () => {
     return SummaryRepository.getLatestSnapshot()
+  })
+
+  // ============================================================
+  // 13. volumes — 分卷（长篇小说按卷组织章节）
+  // ============================================================
+  ipcMain.handle('db:volume-get-all', async () => {
+    return VolumeRepository.getAll()
+  })
+
+  ipcMain.handle('db:volume-get-by-chapter', async (_event, chapterNumber: number) => {
+    return VolumeRepository.getByChapter(chapterNumber)
+  })
+
+  ipcMain.handle('db:volume-upsert', async (_event, data: VolumeData) => {
+    try {
+      VolumeRepository.upsert(data)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:volume-delete', async (_event, volumeNumber: number) => {
+    try {
+      VolumeRepository.delete(volumeNumber)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // ============================================================
+  // 14. preferences — 偏好记忆（AI 文本 → 用户替换对）
+  // ============================================================
+  ipcMain.handle('db:preference-record', async (_event, aiText: string, userText: string, chapterNumber?: number) => {
+    try {
+      PreferenceRepository.record(aiText, userText, chapterNumber)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  ipcMain.handle('db:preference-get-top', async (_event, limit: number, recentChapters?: number) => {
+    return PreferenceRepository.getTop(limit ?? 5, recentChapters)
   })
 }
