@@ -46,4 +46,8 @@ coverage/
 CLAUDE.md
 rule.md
 rule.lite.md
-CHANGELOG.md
+
+# 中间产物 / 隐私文件（不提交）
+public/logos/raw/
+public/buyme/
+scripts/font-char-set.txt
