@@ -1,6 +1,5 @@
 import { t } from '../../../shared/locale'
 import { computeTextStats } from '../../text-stats'
-import { runAllAudits } from '../../audit/audits'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -200,7 +199,7 @@ export function buildFinalizePostProcessSteps(
           updateRows = parseMarkdownTable(cardsResult) || []
         }
 
-        // L2: JSON 回退
+        // L2: JSON 回退（字段映射与 Markdown 表格一致：currentState + tags/motivation + NEW 详情）
         if (updateRows.length === 0 && newRows.length === 0) {
           const jsonParsed = robustParseJSON(cardsResult, false)
           if (jsonParsed && typeof jsonParsed === 'object') {
@@ -209,33 +208,51 @@ export function buildFinalizePostProcessSteps(
             const jNewChars = (Array.isArray(obj.newCharacters) ? obj.newCharacters : []) as Array<Record<string, unknown>>
             const jChars = (Array.isArray(obj.characters) ? obj.characters : []) as Array<Record<string, unknown>>
             const src = jUpdates.length > 0 ? jUpdates : jChars
-            if (src.length > 0) {
-              updateRows = src.map((c: Record<string, unknown>) => ({
+            const mapState = (c: Record<string, unknown>) => {
+              const st = (c.currentState as Record<string, unknown> | undefined) ?? {}
+              return {
                 name: String(c.name || ''),
-                location: String((c.currentState as Record<string, unknown> || {}).location || c.location || ''),
-                powerLevel: String((c.currentState as Record<string, unknown> || {}).powerLevel || c.powerLevel || ''),
-                physicalState: String((c.currentState as Record<string, unknown> || {}).physicalState || c.physicalState || ''),
-                mentalState: String((c.currentState as Record<string, unknown> || {}).mentalState || c.mentalState || ''),
-                keyItems: String((c.currentState as Record<string, unknown> || {}).keyItems || c.keyItems || ''),
-                recentEvents: String((c.currentState as Record<string, unknown> || {}).recentEvents || c.recentEvents || ''),
-              }))
+                location: String(st.location || c.location || ''),
+                powerLevel: String(st.powerLevel || c.powerLevel || ''),
+                physicalState: String(st.physicalState || c.physicalState || ''),
+                mentalState: String(st.mentalState || c.mentalState || ''),
+                keyItems: String(st.keyItems || c.keyItems || ''),
+                recentEvents: String(st.recentEvents || c.recentEvents || ''),
+                tags: typeof c.tags === 'string' ? c.tags : (Array.isArray(c.tags) ? (c.tags as unknown[]).join('、') : ''),
+                motivation: String(c.motivation || ''),
+                appearance: String(c.appearance || ''),
+                personality: String(c.personality || ''),
+              }
+            }
+            if (src.length > 0) {
+              updateRows = src.map(mapState)
             }
             if (jNewChars.length > 0) {
-              newRows = jNewChars.map((c: Record<string, unknown>) => ({
-                name: String(c.name || ''),
-                role: String(c.role || 'supporting'),
-                location: String((c.currentState as Record<string, unknown> || {}).location || c.location || ''),
-                powerLevel: String((c.currentState as Record<string, unknown> || {}).powerLevel || c.powerLevel || ''),
-                physicalState: String((c.currentState as Record<string, unknown> || {}).physicalState || c.physicalState || ''),
-                mentalState: String((c.currentState as Record<string, unknown> || {}).mentalState || c.mentalState || ''),
-                keyItems: String((c.currentState as Record<string, unknown> || {}).keyItems || c.keyItems || ''),
-                recentEvents: String((c.currentState as Record<string, unknown> || {}).recentEvents || c.recentEvents || ''),
-              }))
+              newRows = jNewChars.map(mapState)
             }
             if (updateRows.length > 0 || newRows.length > 0) {
               callbacks.log('✅ 角色状态解析成功 (JSON 回退)')
             }
           }
+        }
+
+        // LLM 输出归一化：tags → JSON 数组字符串（角色列表按 JSON.parse 消费）
+        const normalizeTags = (value: string): string => {
+          const tags = String(value ?? '')
+            .split(/[，,、；;]+/)
+            .map(s => s.trim())
+            .filter(Boolean)
+          return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
+        }
+        // LLM 占位"无/无变化" → null（不覆盖已有值）
+        const cleanOptional = (value: string): string | null => {
+          const s = String(value ?? '').trim()
+          if (!s || s === '无' || s === '无变化' || s === 'N/A' || s === 'NA') return null
+          return s
+        }
+        const cleanText = (value: string): string => {
+          const s = String(value ?? '').trim()
+          return (!s || s === '无' || s === '无变化') ? '' : s
         }
 
         if (updateRows.length > 0) {
@@ -254,7 +271,11 @@ export function buildFinalizePostProcessSteps(
                 recentEvents: row.recentEvents || '',
                 updatedAtChapter: chapterNumber,
               }
-              await ipc.invoke('db:character-update-state', name, newState)
+              // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"保留旧值
+              await ipc.invoke('db:character-update-state', name, newState, {
+                tags: normalizeTags(row.tags ?? '') || null,
+                motivation: cleanOptional(row.motivation ?? ''),
+              })
               callbacks.log(`更新角色状态: ${name}`)
             }
           }
@@ -269,9 +290,16 @@ export function buildFinalizePostProcessSteps(
             await ipc.invoke('db:character-upsert', {
               name: name,
               role: row.role || 'supporting',
-              gender: '', age: '', appearance: '', personality: '', background: '',
-              abilities: '', motivation: '', relationships: '', arc: '', notes: '',
-              tier: 2, tags: '', appearChapters: '[]', relations: '[]',
+              gender: '', age: '',
+              appearance: cleanText(row.appearance ?? ''),
+              personality: cleanText(row.personality ?? ''),
+              background: '', abilities: '',
+              motivation: cleanOptional(row.motivation ?? '') ?? '',
+              relationships: '', arc: '', notes: '',
+              tier: 2,
+              tags: normalizeTags(row.tags ?? ''),
+              appearChapters: JSON.stringify([chapterNumber]), // 登记出场章节
+              relations: '[]',
               currentState: {
                 location: row.location || '',
                 powerLevel: row.powerLevel || '',
@@ -410,39 +438,10 @@ export function buildFinalizePostProcessSteps(
     critical: false,
     dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {
-      // 上一章结尾（衔接审计用）
-      let prevEnding = ''
-      try {
-        const prevMeta = await ipc.invoke('db:draft-get-finalized', chapterNumber - 1) as { id?: number } | null
-        if (prevMeta && prevMeta.id !== undefined) {
-          const full = await ipc.invoke('db:draft-get-full', prevMeta.id) as { content?: string } | null
-          prevEnding = full?.content?.slice(-200) ?? ''
-        }
-      } catch { /* 忽略 */ }
-
-      // 本章蓝图关键事件
-      let keyEvents: string[] = []
-      try {
-        const bps = await ipc.invoke('db:blueprint-get-all') as Array<{ chapterNumber?: number; keyEvents?: string }>
-        const bp = bps.find(b => b.chapterNumber === chapterNumber)
-        if (bp?.keyEvents) {
-          keyEvents = String(bp.keyEvents).split(/[;；\n]/).map(s => s.trim()).filter(Boolean)
-        }
-      } catch { /* 忽略 */ }
-
-      // 角色名（术语表）
-      let terms: string[] = []
-      try {
-        const chars = await ipc.invoke('db:character-get-all') as Array<{ name?: string }>
-        terms = chars.map(c => String(c.name ?? '')).filter(Boolean)
-      } catch { /* 忽略 */ }
-
-      const result = runAllAudits({
-        chapterText: draftContent,
-        prevChapterEnding: prevEnding,
-        keyEvents,
-        terms,
-      })
+      // ===== 审计上下文（跨章基线/细纲锚点/豁免词/白名单）——与终审自省共用收集 =====
+      const { collectAuditContext, auditText } = await import('../../audit/audit-context')
+      const ctx = await collectAuditContext(chapterNumber)
+      const result = auditText(ctx, draftContent)
 
       if (result.passed) {
         callbacks.log(`✅ ${result.summary}`)
