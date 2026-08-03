@@ -79,6 +79,36 @@ export function openBuiltinEditor(id: string, name: string, type: 'chapter-card'
   useEditorStore.getState().openFile({ id, name, type })
 }
 
+/** 打开指定章最新草稿（工作台/项目结构共用；无草稿时 toast 反馈） */
+export async function openDraftByChapter(chapterNumber: number, chapterTitle?: string): Promise<boolean> {
+  const { getChapterLatestDraft } = await import('../../../services/version-service')
+  let draft: { id: number; content: string } | null = null
+  try {
+    draft = await getChapterLatestDraft(chapterNumber)
+  } catch (e) {
+    console.warn('[SidebarShared] 读取草稿失败:', e)
+  }
+  if (!draft) {
+    const { toast } = await import('../../ui/Toast')
+    const { t } = await import('../../../shared/locale')
+    toast.warning(t('workspace.noDraft').replace('{n}', String(chapterNumber)))
+    return false
+  }
+  const filePath = `vela://draft/${draft.id}`
+  const { t } = await import('../../../shared/locale')
+  // Tab 名必须带章节号（与正式稿/草稿箱命名一致；标题已含"第N章"前缀则不重复拼接）
+  const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
+  const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
+  useEditorStore.getState().openFile({
+    id: filePath,
+    name: `${chLabel}${titlePart} · 草稿`,
+    type: 'chapter',
+    filePath,
+    content: draft.content,
+  })
+  return true
+}
+
 /** 打开章节文件 */
 export async function openChapterFile(filePath: string, name: string) {
   let content = ''

@@ -16,30 +16,26 @@ import ProjectWorkspace from './ProjectWorkspace'
 import { useProjectStore } from '../../../stores/project-store'
 import { useEditorStore } from '../../../stores/editor-store'
 
-// mock IPC（get-summary）
+// mock IPC（get-summary / volume-get-all）
 vi.mock('../../../services/ipc-client', () => ({
-  ipc: {
-    invoke: vi.fn(async (channel: string) => {
-      if (channel === 'project:get-summary') {
-        return {
-          name: '测试项目',
-          path: 'E:\\test\\project',
-          totalChapters: 3,
-          chapters: [
-            { chapterNumber: 1, title: '第一章', draftId: 101 },
-            { chapterNumber: 2, title: '第二章', draftId: 102 },
-          ],
-          draftChapters: [
-            { chapterNumber: 1, draftCount: 2, hasFinalized: false, chapterTitle: '第一章' },
-          ],
-          blueprintCount: 1,
-          archGenerated: 1,
-        }
-      }
-      return null
-    }),
-  },
+  ipc: { invoke: vi.fn() },
 }))
+import { ipc } from '../../../services/ipc-client'
+
+const summary = {
+  name: '测试项目',
+  path: 'E:\\test\\project',
+  totalChapters: 3,
+  chapters: [
+    { chapterNumber: 1, title: '第一章', draftId: 101 },
+    { chapterNumber: 2, title: '第二章', draftId: 102 },
+  ],
+  draftChapters: [
+    { chapterNumber: 1, draftCount: 2, hasFinalized: false, chapterTitle: '第一章' },
+  ],
+  blueprintCount: 1,
+  archGenerated: 1,
+}
 
 // mock 草稿内容服务（工作台用 getChapterLatestDraft 拿真实草稿 id）
 vi.mock('../../../services/version-service', () => ({
@@ -72,12 +68,47 @@ describe('ProjectWorkspace 项目工作台', () => {
     document.body.innerHTML = ''
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useProjectStore.setState({ currentProject: mockProject })
+    vi.mocked(ipc.invoke).mockImplementation((async (...args: unknown[]) => {
+      const channel = args[0] as string
+      if (channel === 'project:get-summary') return summary
+      if (channel === 'db:volume-get-all') return []
+      return null
+    }) as typeof ipc.invoke)
   })
 
   it('未打开项目时显示提示', () => {
     useProjectStore.setState({ currentProject: null })
     const { container } = render(<ProjectWorkspace />)
     expect(container.textContent).toContain('请先打开项目')
+  })
+
+  it('渲染分卷块（空态提示）', async () => {
+    const { container } = render(<ProjectWorkspace />)
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+    const text = container.textContent || ''
+    expect(text).toContain('分卷')
+    expect(text).toContain('暂无分卷')
+  })
+
+  it('渲染分卷列表与进度徽标', async () => {
+    vi.mocked(ipc.invoke).mockImplementation((async (...args: unknown[]) => {
+      const channel = args[0] as string
+      if (channel === 'project:get-summary') return summary
+      if (channel === 'db:volume-get-all') {
+        return [{ volumeNumber: 1, title: '风起青萍', description: '', chapterStart: 1, chapterEnd: 3 }]
+      }
+      return null
+    }) as typeof ipc.invoke)
+    const { container } = render(<ProjectWorkspace />)
+    await act(async () => { await Promise.resolve() })
+    await act(async () => { await Promise.resolve() })
+    const text = container.textContent || ''
+    expect(text).toContain('第1卷「风起青萍」')
+    // 卷 1-3 章，定稿 2 章（第1/2章）→ 进度 2/3
+    expect(text).toContain('2/3')
+    // 卷内章节列表（有草稿的第 1 章）
+    expect(text).toContain('第1章 第一章')
   })
 
   it('渲染三大块（蓝图/草稿箱/正式稿）', async () => {

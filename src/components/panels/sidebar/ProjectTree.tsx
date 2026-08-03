@@ -18,18 +18,22 @@ import { useTranslation } from '../../../hooks/useTranslation'
 
 import {
   getArchFiles, LeafItem, renderIcon, showSidebarMenu,
-  openArchFile, openBuiltinEditor,
+  openArchFile, openBuiltinEditor, openDraftByChapter,
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
+import VolumeGroup from './VolumeGroup'
 
 export default function ProjectTree() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
 
   // refreshFileTree / loadAllDrafts 在 refreshAll 内通过 getState() 调用
-  // ✅ 只订阅 activeRuns
-  const activeRuns = useWorkflowStore(s => s.activeRuns)
+  // ✅ 只订阅「工作流状态派生 key」（步骤 status 组合）——工作流运行期间
+  //    appendText 每 100ms flush 的 activeRuns 引用变化不触发全树重渲染，
+  //    只有步骤状态真正变化才刷新（防抖 effect 依赖）
+  const workflowKey = useWorkflowStore(s =>
+    s.activeRuns.map(r => `${r.id}:${r.status}|${r.steps.map(st => st.status).join(',')}`).join(';'))
   // ✅ 精确订阅，避免 loadAllDrafts 执行后引用变化触发 useCallback/useEffect 循环
   const draftsByChapter = useDraftStore(s => s.draftsByChapter)
 
@@ -62,7 +66,6 @@ export default function ProjectTree() {
 
   // 工作流步骤状态或整体状态变化时刷新侧边栏（适配多任务）
   // 合并为单一 effect + 防抖，避免一次步骤完成同时触发多次刷新
-  const workflowKey = activeRuns.map(r => `${r.id}:${r.status}|${r.steps.map(s => s.status).join(',')}`).join(';')
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
     if (!currentProject) return
@@ -208,6 +211,34 @@ export default function ProjectTree() {
             onClick: () => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card'),
           },
         ], e)}
+      />
+
+      {/* 3.5 分卷 — 按卷组织章节（可新建/编辑/删除/自动划分；卷内章节直接打开草稿） */}
+      <VolumeGroup
+        projectPath={p}
+        totalChapters={nc.totalChapters}
+        chaptersForVolume={(v) => Object.entries(draftsByChapter)
+          .map(([num, drafts]) => {
+            const n = parseInt(num, 10)
+            return { n, drafts }
+          })
+          .filter(({ n }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd))
+          .map(({ n, drafts }) => {
+            // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
+            const latest = drafts[0]
+            return {
+              chapterNumber: n,
+              chapterTitle: latest?.chapterTitle || '',
+              hasFinalized: drafts.some(d => d.status === 'finalized'),
+            }
+          })
+          .sort((a, b) => a.chapterNumber - b.chapterNumber)}
+        finalizedCountForVolume={(v) => Object.entries(draftsByChapter)
+          .filter(([num, drafts]) => {
+            const n = parseInt(num, 10)
+            return n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd) && drafts.some(d => d.status === 'finalized')
+          }).length}
+        onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
       />
 
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}

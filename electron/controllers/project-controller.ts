@@ -7,6 +7,7 @@ import Database from 'better-sqlite3'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
+import { getProjectDb, getCurrentProjectPath } from '../database'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
@@ -280,62 +281,23 @@ export function registerProjectController() {
     return result.filePaths[0]
   })
 
-  // ===== 历史项目摘要（只读，不打开项目）=====
+  // ===== 项目摘要（当前项目走主连接；历史项目只读打开，不打开项目）=====
   ipcMain.handle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
     const dbPath = path.join(projectPath, '.vela', 'vela.db')
     if (!fs.existsSync(dbPath)) return null
 
+    // 当前已打开的项目：直接用主连接（WAL 多连接只读有 -shm 依赖，
+    // 且避免每次进工作台新建/关闭连接）
+    if (getCurrentProjectPath() === projectPath) {
+      const current = getProjectDb()
+      if (current) return buildProjectSummary(current, projectPath)
+    }
+
     let db: Database.Database | null = null
     try {
       db = new Database(dbPath, { readonly: true })
-      db.pragma('journal_mode = WAL')
-
-      // 项目名 = 目录名
-      const name = path.basename(projectPath)
-      const totalChapters = (db.prepare(
-        "SELECT total_chapters FROM project_core WHERE id = 'main'"
-      ).get() as { total_chapters: number } | undefined)?.total_chapters ?? 0
-
-      // 已定稿章节（drafts.status = 'finalized'，优先取蓝图标题；draft_id 供工作台用 vela://manuscript/{id} 打开）
-      const finalizedRows = db.prepare(`
-        SELECT d.chapter_number, COALESCE(bp.title, '') as title, MAX(d.id) as draft_id
-        FROM drafts d
-        LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
-        WHERE d.status = 'finalized'
-        GROUP BY d.chapter_number
-        ORDER BY d.chapter_number
-      `).all() as Array<{ chapter_number: number; title: string; draft_id: number }>
-      const chapters = finalizedRows.map(r => ({ chapterNumber: r.chapter_number, title: r.title, draftId: r.draft_id }))
-
-      // 有草稿的章节（按章汇总所有状态的草稿）
-      const draftRows = db.prepare(`
-        SELECT d.chapter_number, COUNT(*) as cnt,
-               MAX(CASE WHEN d.status = 'finalized' THEN 1 ELSE 0 END) as has_finalized,
-               COALESCE(MAX(bp.title), '') as chapter_title
-        FROM drafts d
-        LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
-        WHERE d.status != 'archived'
-        GROUP BY d.chapter_number
-        ORDER BY d.chapter_number
-      `).all() as Array<{ chapter_number: number; cnt: number; has_finalized: number; chapter_title: string }>
-      const draftChapters = draftRows.map(r => ({
-        chapterNumber: r.chapter_number,
-        draftCount: r.cnt,
-        hasFinalized: r.has_finalized === 1,
-        chapterTitle: r.chapter_title,
-      }))
-
-      // 蓝图数量
-      const blueprintCount = (db.prepare(
-        "SELECT COUNT(*) as cnt FROM blueprints"
-      ).get() as { cnt: number }).cnt
-
-      // 故事架构生成数（premise / worldbuilding / characters_arch / synopsis 共 4 项）
-      const archGenerated = (db.prepare(
-        "SELECT COUNT(*) as cnt FROM project_archives WHERE project_id = 'main' AND body != ''"
-      ).get() as { cnt: number }).cnt
-
-      return { name, path: projectPath, totalChapters, chapters, draftChapters, blueprintCount, archGenerated }
+      try { db.pragma('journal_mode = WAL') } catch { /* 只读连接无法设置 journal_mode（已持久化为 WAL 时无副作用） */ }
+      return buildProjectSummary(db, projectPath)
     } catch (err) {
       logger.error('Project', `[get-summary] 读取历史项目失败: ${projectPath} — ${safeErrorMessage(err)}`)
       return null
@@ -345,4 +307,57 @@ export function registerProjectController() {
       }
     }
   })
+}
+
+/** 从给定数据库连接构建项目摘要（供当前项目主连接 / 历史项目只读连接复用） */
+function buildProjectSummary(
+  db: Database.Database,
+  projectPath: string,
+): ProjectSummary {
+  // 项目名 = 目录名
+  const name = path.basename(projectPath)
+  const totalChapters = (db.prepare(
+    "SELECT total_chapters FROM project_core WHERE id = 'main'"
+  ).get() as { total_chapters: number } | undefined)?.total_chapters ?? 0
+
+  // 已定稿章节（drafts.status = 'finalized'，优先取蓝图标题；draft_id 供工作台用 vela://manuscript/{id} 打开）
+  const finalizedRows = db.prepare(`
+    SELECT d.chapter_number, COALESCE(bp.title, '') as title, MAX(d.id) as draft_id
+    FROM drafts d
+    LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
+    WHERE d.status = 'finalized'
+    GROUP BY d.chapter_number
+    ORDER BY d.chapter_number
+  `).all() as Array<{ chapter_number: number; title: string; draft_id: number }>
+  const chapters = finalizedRows.map(r => ({ chapterNumber: r.chapter_number, title: r.title, draftId: r.draft_id }))
+
+  // 有草稿的章节（按章汇总所有状态的草稿）
+  const draftRows = db.prepare(`
+    SELECT d.chapter_number, COUNT(*) as cnt,
+           MAX(CASE WHEN d.status = 'finalized' THEN 1 ELSE 0 END) as has_finalized,
+           COALESCE(MAX(bp.title), '') as chapter_title
+    FROM drafts d
+    LEFT JOIN blueprints bp ON bp.chapter_number = d.chapter_number
+    WHERE d.status != 'archived'
+    GROUP BY d.chapter_number
+    ORDER BY d.chapter_number
+  `).all() as Array<{ chapter_number: number; cnt: number; has_finalized: number; chapter_title: string }>
+  const draftChapters = draftRows.map(r => ({
+    chapterNumber: r.chapter_number,
+    draftCount: r.cnt,
+    hasFinalized: r.has_finalized === 1,
+    chapterTitle: r.chapter_title,
+  }))
+
+  // 蓝图数量
+  const blueprintCount = (db.prepare(
+    "SELECT COUNT(*) as cnt FROM blueprints"
+  ).get() as { cnt: number }).cnt
+
+  // 故事架构生成数（premise / worldbuilding / characters_arch / synopsis 共 4 项）
+  const archGenerated = (db.prepare(
+    "SELECT COUNT(*) as cnt FROM project_archives WHERE project_id = 'main' AND body != ''"
+  ).get() as { cnt: number }).cnt
+
+  return { name, path: projectPath, totalChapters, chapters, draftChapters, blueprintCount, archGenerated }
 }
