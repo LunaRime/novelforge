@@ -74,8 +74,9 @@ export default function AgentInputBox() {
     const lastAt = value.lastIndexOf('@')
     if (lastAt >= 0) {
       const afterAt = value.slice(lastAt + 1)
-      // 如果 @ 后面没有空格，视为正在输入提及
-      if (!afterAt.includes(' ')) {
+      // @ 后跟空格或中文标点（如"@世界观.md，帮我看看"）视为提及已结束——
+      // 只按空格判断会误触发空结果菜单并吞掉回车导致无法发送
+      if (!/[\s，。！？；：、（）]/.test(afterAt)) {
         setMentionQuery(afterAt)
         setShowMentionMenu(true)
         setShowSlashMenu(false)

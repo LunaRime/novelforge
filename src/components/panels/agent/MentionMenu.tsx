@@ -32,6 +32,14 @@ export default function MentionMenu({ query, onSelect, onClose, position }: Prop
   }
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Escape 始终拦截（关闭菜单），即使列表为空
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+      return
+    }
+    // 空结果不拦截方向键/Enter——否则监听器会吞掉回车导致消息无法发送
+    if (results.length === 0) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedIndex(i => Math.min(i + 1, results.length - 1))
@@ -43,9 +51,6 @@ export default function MentionMenu({ query, onSelect, onClose, position }: Prop
       if (results[selectedIndex]) {
         onSelect(results[selectedIndex])
       }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onClose()
     }
   }, [results, selectedIndex, onSelect, onClose])
 
