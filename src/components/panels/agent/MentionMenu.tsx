@@ -87,6 +87,12 @@ export default function MentionMenu({ query, onSelect, onClose, position }: Prop
         >
           <span className="text-sm">{target.icon}</span>
           <span className="font-medium">{target.displayName}</span>
+          {/* 文件目标：右侧小字显示相对路径（插入后为 @路径 文本） */}
+          {target.type === 'file' && (
+            <span className="ml-auto text-[0.62rem] opacity-50 truncate max-w-[90px]" style={{ color: 'var(--color-text-muted)' }}>
+              {target.value}
+            </span>
+          )}
         </button>
       ))}
     </div>

@@ -1,5 +1,6 @@
-import { describe, it, expect } from 'vitest'
-import { parseMentions, mentionsToToolCalls, getAllMentionTargets } from './intent-router'
+import { describe, it, expect, beforeEach } from 'vitest'
+import { parseMentions, mentionsToToolCalls, getAllMentionTargets, searchProjectFiles, searchMentionTargets } from './intent-router'
+import { useProjectStore } from '../../stores/project-store'
 
 describe('parseMentions', () => {
   it('解析纯 @ 提及', () => {
@@ -49,5 +50,71 @@ describe('mentionsToToolCalls', () => {
   it('不包含已移除的 file 目标', () => {
     const targets = getAllMentionTargets()
     expect(targets.some(t => t.type === 'file')).toBe(false)
+  })
+})
+
+// ===== 项目文件 @ 提及（2026-08-03 新增） =====
+
+const TEST_TREE = [
+  { name: '世界观.md', path: '世界观.md', isDir: false },
+  { name: '02_架构', path: '02_架构', isDir: true, children: [
+    { name: '故事线.md', path: '02_架构/故事线.md', isDir: false },
+    { name: '设定.json', path: '02_架构/设定.json', isDir: false },
+    { name: '封面.png', path: '02_架构/封面.png', isDir: false }, // 非可读扩展名
+  ] },
+  { name: '.vela', path: '.vela', isDir: true, children: [
+    { name: 'vela.db', path: '.vela/vela.db', isDir: false }, // 内部目录应排除
+  ] },
+]
+
+beforeEach(() => {
+  useProjectStore.setState({ fileTree: TEST_TREE as never })
+})
+
+describe('searchProjectFiles', () => {
+  it('仅返回可读文本文件', () => {
+    const files = searchProjectFiles('', 20)
+    const paths = files.map(f => f.value)
+    expect(paths).toContain('世界观.md')
+    expect(paths).toContain('02_架构/故事线.md')
+    expect(paths).not.toContain('02_架构/封面.png') // 非文本
+    expect(paths).not.toContain('.vela/vela.db')     // 内部目录
+  })
+
+  it('按文件名模糊匹配', () => {
+    const files = searchProjectFiles('故事线')
+    expect(files.length).toBe(1)
+    expect(files[0].value).toBe('02_架构/故事线.md')
+  })
+
+  it('文件目标插入文本为相对路径', () => {
+    const files = searchProjectFiles('世界观')
+    expect(files[0].insertText).toBe('世界观.md')
+    expect(files[0].type).toBe('file')
+  })
+
+  it('固定目标排在文件之前', () => {
+    const results = searchMentionTargets('')
+    const firstFileIdx = results.findIndex(r => r.type === 'file')
+    const lastFixedIdx = results.findIndex(r => r.type !== 'file' && firstFileIdx >= 0)
+    expect(firstFileIdx).toBeGreaterThanOrEqual(0)
+    expect(lastFixedIdx).toBeLessThan(firstFileIdx)
+  })
+})
+
+describe('parseMentions 文件提及', () => {
+  it('@路径 解析回文件目标', () => {
+    const mentions = parseMentions('请参考 @02_架构/故事线.md 来写')
+    expect(mentions.length).toBe(1)
+    expect(mentions[0].target.type).toBe('file')
+    expect(mentions[0].target.value).toBe('02_架构/故事线.md')
+  })
+
+  it('文件提及映射到 read_file', () => {
+    const mentions = parseMentions('@世界观.md 的内容是什么')
+    const calls = mentionsToToolCalls(mentions)
+    expect(calls.length).toBe(1)
+    expect(calls[0].toolName).toBe('read_file')
+    expect(calls[0].args).toEqual({ file_path: '世界观.md' })
   })
 })

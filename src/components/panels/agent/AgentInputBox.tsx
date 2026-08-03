@@ -101,11 +101,12 @@ export default function AgentInputBox() {
   // 选择 @ 提及
   const handleMentionSelect = useCallback((target: MentionTarget) => {
     setShowMentionMenu(false)
-    // 替换最后一个 @ 及其后面的文字为 @displayName
+    // 替换最后一个 @ 及其后面的文字为 @提及文本
+    // （固定目标用 displayName；文件目标用相对路径，发送时可解析回文件）
     const lastAt = inputText.lastIndexOf('@')
     if (lastAt >= 0) {
       const before = inputText.slice(0, lastAt)
-      setInputText(`${before}@${target.displayName} `)
+      setInputText(`${before}@${target.insertText ?? target.displayName} `)
     }
     textareaRef.current?.focus()
   }, [inputText])
