@@ -404,7 +404,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       let enrichedUserMessage = content.trim()
       const mentions = parseMentions(enrichedUserMessage)
       if (mentions.length > 0) {
+        // 同一目标被多次 @ 时只预取一次（如"对比 @架构 和 @架构"），避免重复注入 + 浪费预算
         const prefetchCalls = mentionsToToolCalls(mentions)
+          .filter((call, i, arr) => arr.findIndex(c => c.toolName === call.toolName) === i)
         const prefetchResults: string[] = []
         let prefetchTokens = 0
         for (const call of prefetchCalls) {
