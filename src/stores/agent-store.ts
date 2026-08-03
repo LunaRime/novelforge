@@ -404,9 +404,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       let enrichedUserMessage = content.trim()
       const mentions = parseMentions(enrichedUserMessage)
       if (mentions.length > 0) {
-        // 同一目标被多次 @ 时只预取一次（如"对比 @架构 和 @架构"），避免重复注入 + 浪费预算
+        // 同一目标被多次 @ 时只预取一次（如"对比 @架构 和 @架构"），避免重复注入 + 浪费预算；
+        // 文件目标同用 read_file 工具，需按参数（路径）区分，不能只按 toolName 去重
         const prefetchCalls = mentionsToToolCalls(mentions)
-          .filter((call, i, arr) => arr.findIndex(c => c.toolName === call.toolName) === i)
+          .filter((call, i, arr) => arr.findIndex(c =>
+            c.toolName === call.toolName && JSON.stringify(c.args) === JSON.stringify(call.args)
+          ) === i)
         const prefetchResults: string[] = []
         let prefetchTokens = 0
         for (const call of prefetchCalls) {

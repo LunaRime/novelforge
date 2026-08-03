@@ -9,6 +9,7 @@
 
 import { skillRegistry, type LoadedSkill } from './skill-registry'
 import { t } from '../../shared/locale'
+import { useProjectStore } from '../../stores/project-store'
 
 // ===== 类型定义 =====
 
@@ -32,10 +33,12 @@ export interface MentionTarget {
   type: 'chapter' | 'character' | 'architecture' | 'blueprint' | 'knowledge' | 'file'
   /** 显示名称 */
   displayName: string
-  /** 提及值（传递给 Tool） */
+  /** 提及值（传递给 Tool；文件目标 = 相对项目根的路径） */
   value: string
   /** 图标 emoji */
   icon: string
+  /** 插入输入框的文本（默认 displayName；文件目标用路径以便发送时解析回文件） */
+  insertText?: string
 }
 
 /** 提及解析结果 */
@@ -161,13 +164,66 @@ export function getAllMentionTargets(): MentionTarget[] {
 
 /**
  * 模糊搜索 @ 提及目标
+ * 固定目标（架构/角色/蓝图/知识库/章节）在前，项目文件搜索结果在后
  */
 export function searchMentionTargets(query: string): MentionTarget[] {
   const q = query.toLowerCase()
-  return getAllMentionTargets().filter(t =>
+  const fixed = getAllMentionTargets().filter(t =>
     t.displayName.toLowerCase().includes(q) ||
     t.value.toLowerCase().includes(q)
   )
+  return [...fixed, ...searchProjectFiles(q)]
+}
+
+// ===== 项目文件 @ 提及（2026-08-03 新增：可添加可读文件） =====
+
+/** 可读文件扩展名（文本类，排除二进制与内部目录） */
+const READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv'])
+
+/** 递归收集可读文件（相对项目根路径）；跳过内部/依赖目录 */
+function flattenReadableFiles(
+  nodes: Array<{ name: string; isDir: boolean; children?: unknown[] }>,
+  prefix = '',
+): Array<{ name: string; path: string }> {
+  const out: Array<{ name: string; path: string }> = []
+  for (const n of nodes) {
+    if (n.isDir) {
+      if (n.name === '.vela' || n.name === 'node_modules' || n.name === '.git') continue
+      out.push(...flattenReadableFiles((n.children as Array<{ name: string; isDir: boolean; children?: unknown[] }>) ?? [], prefix + n.name + '/'))
+    } else {
+      const lower = n.name.toLowerCase()
+      if (READABLE_EXTS.has(lower.slice(lower.lastIndexOf('.')))) {
+        out.push({ name: n.name, path: prefix + n.name })
+      }
+    }
+  }
+  return out
+}
+
+/**
+ * 从项目文件树搜索可读文件（按文件名优先、路径其次模糊匹配）
+ * 供 @ 提及选择文件 → 插入路径 → 发送时 read_file 预取内容
+ */
+export function searchProjectFiles(query: string, limit = 8): MentionTarget[] {
+  const tree = useProjectStore.getState().fileTree
+  if (!tree || tree.length === 0) return []
+  const q = query.trim().toLowerCase()
+  const files = flattenReadableFiles(tree)
+  const matched = files.filter(f =>
+    f.name.toLowerCase().includes(q) || f.path.toLowerCase().includes(q)
+  )
+  // 文件名命中优先于路径命中；同组内按名称排序；空查询时返回名称排序前 limit
+  const sorted = [...matched].sort((a, b) => {
+    const rank = (f: { name: string; path: string }) => (q ? (f.name.toLowerCase().includes(q) ? 0 : 1) : 0)
+    return rank(a) - rank(b) || a.name.localeCompare(b.name)
+  })
+  return sorted.slice(0, limit).map(f => ({
+    type: 'file' as const,
+    displayName: f.name,
+    value: f.path,
+    icon: '📄',
+    insertText: f.path,
+  }))
 }
 
 /**
@@ -186,6 +242,7 @@ export function parseMentions(input: string): ParsedMention[] {
     // 精确匹配 value / displayName；若用户输入是 displayName 的前缀（输入法尚未完成）则跳过，
     // 仅在完整匹配时生效——避免"@故事"误匹配到不存在的目标
     const target = targets.find(t => t.value === value || t.displayName === value)
+      ?? searchProjectFiles(value, 1)[0]  // 文件提及：插入的是相对路径，按路径/文件名匹配回文件
     if (target) {
       mentions.push({
         target,
@@ -218,6 +275,8 @@ export function mentionsToToolCalls(mentions: ParsedMention[]): Array<{
         return { toolName: 'search_knowledge', args: { query: '' } }
       case 'chapter':
         return { toolName: 'list_chapters', args: {} }
+      case 'file':
+        return { toolName: 'read_file', args: { file_path: m.target.value } }
       default:
         return { toolName: 'read_project_state', args: {} }
     }
