@@ -424,7 +424,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   ? truncateToTokenBudget(result.content, availableBudget)
                   : result.content
                 const contentTokens = estimateTokens(content)
-                prefetchResults.push(`[预加载上下文 @${call.toolName}]\n${content}`)
+                // 文件预取用路径做标记（多文件时可区分来源），其余用工具名
+                const label = call.toolName === 'read_file'
+                  ? String((call.args as Record<string, unknown>).file_path ?? call.toolName)
+                  : call.toolName
+                prefetchResults.push(`[预加载上下文 @${label}]\n${content}`)
                 prefetchTokens += contentTokens
               }
             } catch {

@@ -42,7 +42,8 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
   const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault()
-      setSelectedIndex(i => Math.min(i + 1, files.length - 1))
+      // 空列表时保持 0，避免 Math.min(i+1, -1) 产生 -1 索引
+      setSelectedIndex(i => files.length === 0 ? 0 : Math.min(i + 1, files.length - 1))
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       setSelectedIndex(i => Math.max(i - 1, 0))
