@@ -97,8 +97,13 @@ export default function DraftEditor({ filePath, content }: Props) {
     try {
       if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
         const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
-        const draftId = parseInt(filePath.replace(prefix, ''))
-        await ipc.invoke('db:draft-update-content', draftId, text, text.length)
+        const idRaw = filePath.replace(prefix, '')
+        // 非法 id（旧 ch{n} 格式 / 空）不写入 DB，避免 NaN 传入查询
+        if (/^\d+$/.test(idRaw)) {
+          await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, text.length)
+        } else {
+          await ipc.invoke('fs:write-file', filePath, text)
+        }
       } else {
         await ipc.invoke('fs:write-file', filePath, text)
       }

@@ -116,7 +116,17 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
 
 
   markDraftStatus: async (draftPath, chapterNumber, status) => {
-    // 从路径提取版本号
+    // 新路径：vela://draft/{id} → 直接解析真实 id（归档/状态更新走 DB）
+    if (draftPath.startsWith(VELA.DRAFT)) {
+      const idRaw = draftPath.replace(VELA.DRAFT, '')
+      if (/^\d+$/.test(idRaw)) {
+        await ipc.invoke('db:draft-update-status', parseInt(idRaw, 10), status)
+        await get().loadChapterDrafts(chapterNumber)
+        return
+      }
+    }
+
+    // 旧路径兼容：draft_v{N}.md → 经 draft-index（已 DB 桥接）更新
     const versionMatch = draftPath.match(/draft_v(\d+)\.md$/)
     if (!versionMatch) return
     const version = parseInt(versionMatch[1])

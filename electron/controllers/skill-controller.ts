@@ -92,7 +92,8 @@ export function registerSkillController(): void {
   // 选择技能文件（.md 过滤器）
   ipcMain.handle('dialog:select-skill-file', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
-    const result = await dialog.showOpenDialog(win!, {
+    if (!win) return null
+    const result = await dialog.showOpenDialog(win, {
       title: '选择技能文件',
       filters: [{ name: 'Skill 文件', extensions: ['md'] }],
       properties: ['openFile'],

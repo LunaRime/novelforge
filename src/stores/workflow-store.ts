@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { DEFAULT_LOCALE } from '../shared/locale'
+import { getCurrentLocale } from '../shared/locale'
 import { randomUUID } from '../utils/id'
 
 // ===== 工作流 Checkpoint 持久化 =====
@@ -355,7 +355,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
           error: errorMsg,
           completedAt: new Date().toISOString(),
         })
-        updateRunById(set, run.id, { status: 'failed' })
+        updateRunById(set, run.id, { status: 'failed', completedAt: new Date().toISOString() })
         get().addLog('error', `[${definition.title}] ${stepDef.name} — FAIL: ${errorMsg}`)
         break
       }
@@ -466,7 +466,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   },
 
   addLog: (level, message) => {
-    const entry = { time: new Date().toLocaleTimeString(DEFAULT_LOCALE), level, message }
+    const entry = { time: new Date().toLocaleTimeString(getCurrentLocale()), level, message }
     set((s) => ({
       globalLogs: [...s.globalLogs, entry].slice(-500), // 保留最近 500 条
     }))
@@ -558,7 +558,7 @@ function appendStepLogById(
       const steps = [...r.steps]
       steps[stepIndex] = {
         ...steps[stepIndex],
-        logs: [...steps[stepIndex].logs, `[${new Date().toLocaleTimeString(DEFAULT_LOCALE)}] ${message}`],
+        logs: [...steps[stepIndex].logs, `[${new Date().toLocaleTimeString(getCurrentLocale())}] ${message}`],
       }
       return { ...r, steps }
     })

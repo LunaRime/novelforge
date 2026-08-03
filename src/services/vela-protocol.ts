@@ -38,15 +38,11 @@ export function parseCoreField(velaPath: string): string | null {
 /** 从 DB 读取 vela://core/ 路径对应的内容 */
 export async function readCoreContent(velaPath: string): Promise<string> {
     const key = velaPath.replace(VELA.CORE, '')
+    const dbField = CORE_FIELD_MAP[key]
+    if (!dbField) return ''
     const core = await ipc.invoke('db:project-core-get')
     if (!core) return ''
-    const fieldMap: Record<string, string> = {
-        premise: core.premise || '',
-        worldbuilding: core.worldbuilding || '',
-        characters: core.charactersArch || '',
-        synopsis: core.synopsis || '',
-    }
-    return fieldMap[key] || ''
+    return ((core as unknown as Record<string, unknown>)[dbField] as string) || ''
 }
 
 /** 将内容写入 vela://core/ 对应的 DB 字段 */
@@ -59,24 +55,46 @@ export async function writeCoreContent(velaPath: string, content: string): Promi
 
 // ===== vela://draft/ | vela://revision/ | vela://review/ 内容读取 =====
 
+/**
+ * 从 vela:// 路径解析纯数字 id，非法（含旧 ch{n} 格式 / 空 / 非数字）返回 null
+ * 防止 NaN 传入 IPC → better-sqlite3 查询异常
+ */
+function parseVelaId(velaPath: string, prefix: string): number | null {
+    const raw = velaPath.replace(prefix, '')
+    if (!/^\d+$/.test(raw)) return null
+    return parseInt(raw, 10)
+}
+
 /** 读取 vela:// 伪协议路径的内容（统一入口） */
 export async function readVelaContent(filePath: string): Promise<string> {
     if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
         const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
-        const draftId = parseInt(filePath.replace(prefix, ''))
+        const draftId = parseVelaId(filePath, prefix)
+        if (draftId === null) {
+            console.warn('[readVelaContent] 草稿路径 id 非法:', filePath)
+            return ''
+        }
         const full = await ipc.invoke('db:draft-get-full', draftId)
         return full?.content ?? ''
     }
 
     if (filePath.startsWith(VELA.REVISION)) {
-        const revId = parseInt(filePath.replace(VELA.REVISION, ''))
+        const revId = parseVelaId(filePath, VELA.REVISION)
+        if (revId === null) {
+            console.warn('[readVelaContent] 修稿路径 id 非法:', filePath)
+            return ''
+        }
         const full = await ipc.invoke('db:revision-get-full', revId)
         return full?.content ?? ''
     }
 
     if (filePath.startsWith(VELA.REVIEW)) {
-        const revId = parseInt(filePath.replace(VELA.REVIEW, ''))
-        const full = await ipc.invoke('db:review-get-full', revId)
+        const reviewId = parseVelaId(filePath, VELA.REVIEW)
+        if (reviewId === null) {
+            console.warn('[readVelaContent] 审稿路径 id 非法:', filePath)
+            return ''
+        }
+        const full = await ipc.invoke('db:review-get-full', reviewId)
         return full?.content ?? ''
     }
 

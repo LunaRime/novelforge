@@ -389,6 +389,8 @@ export const UI_TEXTS_DATA = {
   'dialog.dbCorruptMsg': { 'zh-CN': '项目数据库文件已损坏，已自动创建新数据库。', 'en-US': 'The project database was corrupted; a new one was created automatically.', 'ru-RU': 'База данных повреждена; создана новая автоматически.' },
   'dialog.dbIntegrityTitle': { 'zh-CN': '数据库完整性警告', 'en-US': 'Database integrity warning', 'ru-RU': 'Предупреждение целостности БД' },
   'dialog.dbIntegrityMsg': { 'zh-CN': '数据库完整性检查未通过，可能存在数据损坏。', 'en-US': 'Database integrity check failed — data may be corrupted.', 'ru-RU': 'Проверка целостности не пройдена — возможна порча данных.' },
+  'dialog.dbDowngradeTitle': { 'zh-CN': '数据库版本过高', 'en-US': 'Database version too new', 'ru-RU': 'Версия БД новее приложения' },
+  'dialog.dbDowngradeMsg': { 'zh-CN': '项目数据库由更高版本创建，当前应用版本过低，已跳过数据库迁移以免数据损坏。', 'en-US': 'The project database was created by a newer version. Migration was skipped to avoid data corruption.', 'ru-RU': 'База данных создана более новой версией. Миграция пропущена во избежание повреждения данных.' },
   'dialog.selectExportDir': { 'zh-CN': '选择导出目录', 'en-US': 'Select export directory', 'ru-RU': 'Выберите папку экспорта' },
   'dialog.selectNovelFiles': { 'zh-CN': '选择要导入的小说文件或文件夹', 'en-US': 'Select novel files or folders', 'ru-RU': 'Выберите файлы или папки романа' },
   'dialog.selectDocs': { 'zh-CN': '选择要导入的文档', 'en-US': 'Select documents to import', 'ru-RU': 'Выберите документы для импорта' },

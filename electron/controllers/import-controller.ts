@@ -1,5 +1,5 @@
 import { ipcMain, dialog, BrowserWindow } from 'electron'
-import { t, DEFAULT_LOCALE } from '../../src/shared/locale'
+import { t, getCurrentLocale } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
@@ -353,7 +353,7 @@ export function registerImportController() {
         const sorted = [...filePaths].sort((a, b) => {
           const nameA = path.basename(a)
           const nameB = path.basename(b)
-          return nameA.localeCompare(nameB, DEFAULT_LOCALE, { numeric: true })
+          return nameA.localeCompare(nameB, getCurrentLocale(), { numeric: true })
         })
 
         for (let i = 0; i < sorted.length; i++) {

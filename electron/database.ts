@@ -106,11 +106,27 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 7
+const CURRENT_SCHEMA_VERSION = 8
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
   const currentVersion = db.pragma('user_version', { simple: true }) as number
+
+  // 降级哨兵：数据库版本高于当前应用（用户回退了安装包）。
+  // 不执行任何迁移（降级迁移风险极高），提示用户使用匹配版本。
+  if (currentVersion > CURRENT_SCHEMA_VERSION) {
+    logger.error('DB', `数据库 Schema 版本 (v${currentVersion}) 高于应用支持 (v${CURRENT_SCHEMA_VERSION})，疑似应用降级`)
+    dialog.showMessageBox({
+      type: 'warning',
+      title: t('dialog.dbDowngradeTitle'),
+      message: t('dialog.dbDowngradeMsg'),
+      detail: `数据库版本: v${currentVersion}，应用支持: v${CURRENT_SCHEMA_VERSION}\n\n` +
+        '为避免数据损坏，已跳过数据库迁移。建议安装与数据库版本匹配的更新版本。',
+      buttons: ['确定'],
+    }).catch(() => { /* dialog may fail in headless */ })
+    return
+  }
+
   if (currentVersion >= CURRENT_SCHEMA_VERSION) return
 
   logger.info('DB', `Schema 迁移: v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`)
