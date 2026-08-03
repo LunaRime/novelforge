@@ -61,9 +61,13 @@ export default function ProjectWorkspace() {
     }
     if (!draft) return // 该章无草稿（工作台草稿项只在 draftCount>0 时显示，防御性跳过）
     const filePath = `vela://draft/${draft.id}`
+    // Tab 名必须带章节号：标题存在时拼 "第N章 标题"（与正式稿/草稿箱命名一致），
+    // 标题已含"第N章"前缀则不重复拼接（对齐 DraftBoxGroup 防御逻辑）
+    const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
+    const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
     useEditorStore.getState().openFile({
       id: filePath,
-      name: `${chapterTitle || t('chapter.label').replace('{n}', String(chapterNumber))} · 草稿`,
+      name: `${chLabel}${titlePart} · 草稿`,
       type: 'chapter',
       filePath,
       content: draft.content,
