@@ -10,6 +10,7 @@ import { toolRegistry } from '../services/agent/tool-registry'
 import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
+import { calculateCost } from '../services/llm/prompt-cache'
 
 // ===== 类型定义 =====
 
@@ -140,6 +141,12 @@ const pendingConfirmations = new Map<string, {
 
 /** 当前活跃的 AbortController（用于取消 ReAct 循环） */
 let activeAbortController: AbortController | null = null
+
+/** 当前活跃的流式 LLM 请求 ID（llm:cancel 真正取消底层生成，替代无效的 assistantMsg.id） */
+let activeStreamRequestId: string | null = null
+
+/** 生成序号 — 取消后立即发新消息时，旧请求的 onDone/onError 晚到不覆盖新状态 */
+let generationSeq = 0
 
 // ===== Zustand Store =====
 
@@ -361,6 +368,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
 
     try {
+      // 竞态防护：记录本次生成序号，旧请求（取消后）的 onDone/onError 晚到时不覆盖新请求状态
+      const mySeq = ++generationSeq
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
       const modelId = currentConv.modelId ?? llmStore.defaultModelId ?? undefined
@@ -438,39 +447,83 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         historyTokens += msgTokens
       }
 
-      // LLM 生成函数（封装为非流式调用，Agent 专用参数）
-      const generateFn = async (messages: LLMMessage[], mid: string): Promise<string> => {
+      // LLM 生成函数（流式调用：实时推送文本 + 底层可取消 + 真实 usage）
+      // 返回 Promise<string> 完整文本供 ReAct 循环解析 tool_call
+      const generateFn = async (
+        messages: LLMMessage[],
+        mid: string,
+        onChunk?: (chunk: string) => void,
+      ): Promise<string> => {
         const startTime = Date.now()
-        const request = {
-          modelId: mid,
-          messages: messages.map(m => ({ role: m.role, content: m.content })),
-          maxTokens: 4096,     // Agent 需要足够 Token 空间来输出推理 + tool_call
-          temperature: 0.7,    // 创作场景适度随机
-        }
-        const response = await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('llm:generate', request)
-        const res = response as { success: boolean; content: string; error?: string; usage?: { promptTokens: number; completionTokens: number; totalTokens: number } }
+        let streamRequestId: string | null = null
+        let usage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
 
-        // 记录 LLM 调用日志
-        const model = llmStore.models.find(m => m.id === mid)
-        const duration = Date.now() - startTime
         try {
-          await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('db:log-llm-call', {
-            model_id: mid,
-            model_name: model?.name ?? model?.modelName ?? '',
-            purpose: 'agent',
-            prompt_tokens: res.usage?.promptTokens ?? 0,
-            completion_tokens: res.usage?.completionTokens ?? 0,
-            total_tokens: res.usage?.totalTokens ?? 0,
-            duration_ms: duration,
-            success: res.success ? 1 : 0,
-            error_message: res.error ?? '',
+          const text = await new Promise<string>((resolve, reject) => {
+            useLLMStore.getState().generateStream(
+              messages.map(m => ({ role: m.role, content: m.content })),
+              {
+                onChunk: (chunk) => {
+                  onChunk?.(chunk)
+                },
+                onDone: (fullText, u) => {
+                  usage = u
+                  resolve(fullText)
+                },
+                onError: (error) => reject(new Error(error)),
+              },
+              mid,
+              { priority: 12 }, // Agent 任务优先于批量任务
+            ).then((requestId) => {
+              streamRequestId = requestId
+              activeStreamRequestId = requestId
+            }).catch((error) => reject(error))
           })
-        } catch { /* 日志失败不影响主流程 */ }
 
-        if (!res.success) {
-          throw new Error(res.error ?? 'LLM 生成失败')
+          // 记录 LLM 调用日志（流式 usage 真实统计 + 缓存命中费用真实化）
+          const model = llmStore.models.find(m => m.id === mid)
+          const duration = Date.now() - startTime
+          try {
+            const cost = usage && model
+              ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
+              : 0
+            await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('db:log-llm-call', {
+              model_id: mid,
+              model_name: model?.name ?? model?.modelName ?? '',
+              purpose: 'agent',
+              prompt_tokens: usage?.promptTokens ?? 0,
+              completion_tokens: usage?.completionTokens ?? 0,
+              total_tokens: usage?.totalTokens ?? 0,
+              duration_ms: duration,
+              success: 1,
+              error_message: '',
+              cost,
+            })
+          } catch { /* 日志失败不影响主流程 */ }
+
+          return text
+        } catch (error) {
+          // 记录失败日志
+          const model = llmStore.models.find(m => m.id === mid)
+          try {
+            await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('db:log-llm-call', {
+              model_id: mid,
+              model_name: model?.name ?? model?.modelName ?? '',
+              purpose: 'agent',
+              prompt_tokens: 0,
+              completion_tokens: 0,
+              total_tokens: 0,
+              duration_ms: Date.now() - startTime,
+              success: 0,
+              error_message: String(error),
+            })
+          } catch { /* 日志失败不影响主流程 */ }
+          throw error
+        } finally {
+          if (activeStreamRequestId === streamRequestId) {
+            activeStreamRequestId = null
+          }
         }
-        return res.content
       }
 
       // AbortController 用于取消（P1-7: 提升到模块级变量以便 cancelGeneration 访问）
@@ -517,10 +570,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             }
           },
           onToolCallStart: (toolCall) => {
-            updateAssistantMsg(m => ({
-              ...m,
-              toolCalls: [...(m.toolCalls ?? []), toolCall],
-            }))
+            // 需确认的工具会收到两次 start（waiting_confirm + running），已存在则更新而非重复追加
+            updateAssistantMsg(m => {
+              const existing = m.toolCalls ?? []
+              const idx = existing.findIndex(tc => tc.id === toolCall.id)
+              return {
+                ...m,
+                toolCalls: idx >= 0
+                  ? existing.map(tc => tc.id === toolCall.id ? toolCall : tc)
+                  : [...existing, toolCall],
+              }
+            })
           },
           onToolCallComplete: (toolCall) => {
             updateAssistantMsg(m => ({
@@ -545,6 +605,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             })
           },
           onDone: (fullText, toolCalls, artifacts) => {
+            // 旧请求晚到（取消后已发新消息）：忽略，避免覆盖新请求的 generating 状态
+            if (mySeq !== generationSeq) return
             // 刷新任何残留的缓冲区
             flushChunkBuffer()
             // 最终文本全量清洗，去除所有形式的 tool_call / tool_result 标签
@@ -571,6 +633,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             }))
           },
           onError: (error) => {
+            if (mySeq !== generationSeq) return
             updateAssistantMsg(m => ({
               ...m,
               content: t('agent.errorGenerated').replace('{error}', error),
@@ -592,19 +655,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   cancelGeneration: async () => {
-    const { activeRequestId } = get()
-
-    // P1-7: 触发 AbortSignal，使 ReAct 循环真正中止
+    // 触发 AbortSignal，使 ReAct 循环中止（下一轮检查）
     if (activeAbortController) {
       activeAbortController.abort()
       activeAbortController = null
     }
 
-    if (activeRequestId) {
-      await useLLMStore.getState().cancelGeneration(activeRequestId)
+    // 真实取消底层流式请求（旧实现传 assistantMsg.id 给 llm:cancel 无效，底层 API 会跑完）
+    if (activeStreamRequestId) {
+      await useLLMStore.getState().cancelGeneration(activeStreamRequestId)
+      activeStreamRequestId = null
     }
 
-    // P1-8: 清理所有等待确认的 Promise，防止内存泄漏
+    // 清理所有等待确认的 Promise，防止内存泄漏
     for (const [, pending] of pendingConfirmations) {
       pending.resolve(false) // 取消时默认拒绝
     }

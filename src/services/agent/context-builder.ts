@@ -41,7 +41,11 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
   const toolPrompt = toolRegistry.generateToolPrompt()
   if (toolPrompt) {
     const truncated = truncateToTokenBudget(toolPrompt, 1200)
-    sections.push(truncated)
+    // 截断发生在头部预算内时，补一份完整工具名清单，避免列表靠后的工具（含写入类）对 Agent 不可见
+    const isTruncated = truncated.length < toolPrompt.length
+    sections.push(isTruncated
+      ? `${truncated}\n\n（工具描述已按预算截断，全部可用工具：${toolRegistry.listAll().map(t => t.name).join(', ')}）`
+      : truncated)
   }
 
   const fullPrompt = sections.join('\n\n---\n\n')
@@ -108,7 +112,8 @@ function buildL0ProjectContext(): string | null {
   const project = useProjectStore.getState().currentProject
   if (!project) return null
 
-  const cfg = project.novelConfig
+  // 旧项目数据库可能缺 novelConfig（类型上非可选），运行时兜底避免崩溃
+  const cfg = project.novelConfig ?? {}
   const parts: string[] = [
     `## 当前项目上下文`,
     `项目名称：《${project.name}》`,

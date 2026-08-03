@@ -83,16 +83,25 @@ const ArtifactExtractionStep: PostProcessStep = {
     const extracted: ToolArtifact[] = []
 
     // 检测可能含有的蓝图/章节标记
-    const chapterMatch = input.match(/第(\d+)章\s*[:：]?\s*(.+)/g)
-    if (chapterMatch && chapterMatch.length > 0) {
+    // 收紧规则：必须位于行首，且为"第N章 + 冒号/空格 + 短标题"格式，
+    // 避免把对话中的"第 2 章的开头节奏较慢"误判为产物（此前无行首锚定 + 无长度限制，高频误报）
+    const chapterMatch: string[] = [
+      ...(input.match(/^第(\d+)章\s*[:：]\s*(.+)$/gm) ?? []),
+      ...(input.match(/^第(\d+)章\s+[^\n。，！？]{2,40}$/gm) ?? []),
+    ]
+    if (chapterMatch.length > 0) {
+      const seen = new Set<number>()
       for (const cm of chapterMatch) {
         const numMatch = cm.match(/第(\d+)章/)
         if (numMatch) {
+          const num = parseInt(numMatch[1], 10)
+          if (seen.has(num)) continue // 同一章节只提取一次
+          seen.add(num)
           extracted.push({
             type: 'blueprint_generated',
             name: cm.trim(),
             summary: `章节蓝图: ${cm.trim()}`,
-            metadata: { chapterNumber: parseInt(numMatch[1], 10) },
+            metadata: { chapterNumber: num },
             timestamp: Date.now(),
           })
         }
