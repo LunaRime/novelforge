@@ -4,22 +4,29 @@
  * 将原生 `<title>` 悬停提示（浏览器默认样式）统一替换为现代化 Tooltip UI：
  * 毛玻璃背景、圆角、缩放渐显动画、视口边缘自动翻转。
  *
- * 工作原理（事件委托，零侵入）：
- * 1. document 捕获阶段监听 mouseover/mouseout，读取元素 title 属性
- * 2. **进入元素即移除 title 屏蔽原生提示**（原值存入 ref），彻底消灭
- *    原生 tooltip 与自定义 tooltip 并存/竞争的双 UI 窗口期
- * 3. MutationObserver 监控 title 属性——React 重挂载/重渲染恢复 title
- *    时立即再次屏蔽，保证悬停期间原生提示永不出现
- * 4. 400ms 延迟后显示自定义 tooltip；移出/滚动/窗口变化时恢复 title 并隐藏
+ * 工作原理（根源性设计——title 在 DOM 中**永不存活**）：
+ * 1. 挂载时全量扫描 document，提取所有 [title] 文本存入 WeakMap 并移除属性
+ * 2. 全局 MutationObserver（document 级）持续拦截：任何新插入/属性变化的
+ *    title 在 microtask 内被提取并移除——比 mouseover 事件排队更早执行，
+ *    即使主线程被阻塞（流式 LLM 高频渲染），title 存活窗口也只是微任务延迟
+ * 3. 原生 tooltip 需要元素 title 存在 + 悬停计时（秒级）——title 在 DOM 中
+ *    不存在，原生提示**从根上无弹出机会**，不存在与 UI 线程竞争的竞态
+ * 4. mouseover 捕获阶段从 WeakMap 取文本，400ms 延迟显示自定义 tooltip
  * 5. 位置跟随元素（居中于元素下方），接近视口边缘时自动翻转
  *
  * 挂载一次（App.tsx 顶层）即可覆盖全部 title 用法，内容仍由各组件
  * t() 国际化文本提供。
+ *
+ * ⚠️ 注意：不要依赖元素上的 title 属性定位/取文本（已被移除）——
+ * 一律走 titleStore WeakMap。
  */
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 
 /** 显示延迟（与原生 tooltip 接近的体验） */
 const SHOW_DELAY = 400
+
+/** 元素 → 原始 title 文本（DOM 属性移除后唯一事实来源） */
+const titleStore = new WeakMap<Element, string>()
 
 interface TipAnchor {
   text: string
@@ -40,53 +47,66 @@ export default function GlobalTitleTooltip() {
   const tipElRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
   const titleElRef = useRef<HTMLElement | null>(null)
-  const originalTitleRef = useRef<string | null>(null)
-  const observerRef = useRef<MutationObserver | null>(null)
+
+  // ===== 全局 title 提取与拦截（DOM 层根除原生 tooltip） =====
+  // 观察器回调在 microtask 执行：主线程再忙，当前任务一结束就处理，
+  // 远早于 mouseover 事件排队（task 级）——竞态窗口收敛到微任务延迟
+  useLayoutEffect(() => {
+    // 挂载时全量扫描（useLayoutEffect：paint 前完成，首帧即无 title）
+    const existing = document.querySelectorAll<HTMLElement>('[title]')
+    for (const el of existing) {
+      const text = el.getAttribute('title')
+      if (text) {
+        titleStore.set(el, text)
+        el.removeAttribute('title')
+      }
+    }
+
+    // 全局观察器：拦截后续所有 title 出现（React 重挂载插入 / 代码 setAttribute）。
+    // 快速路径：仅处理 addedNodes 自身——React 挂载是逐节点插入，带 title 的
+    // 节点必作为 addedNodes 出现；不做子树递归（CodeMirror 等高频 DOM 变更下
+    // 递归 O(N) 扫描会卡顿）。innerHTML 批量插入的 title 由 mouseover 兜底移除。
+    const globalObserver = new MutationObserver((records) => {
+      for (const r of records) {
+        if (r.type === 'attributes') {
+          // title 属性被（重）设置——提取并移除
+          const el = r.target as Element
+          const text = el.getAttribute('title')
+          if (text !== null) {
+            titleStore.set(el, text)
+            el.removeAttribute('title')
+          }
+        } else {
+          for (const node of r.addedNodes) {
+            if (node.nodeType !== 1) continue
+            const el = node as Element
+            const text = el.getAttribute('title')
+            if (text !== null) {
+              titleStore.set(el, text)
+              el.removeAttribute('title')
+            }
+          }
+        }
+      }
+    })
+    globalObserver.observe(document.documentElement, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['title'],
+    })
+
+    return () => {
+      globalObserver.disconnect()
+    }
+  }, [])
 
   useEffect(() => {
     const cancelTimer = () => { window.clearTimeout(timerRef.current) }
 
-    /** 停止监控 title 属性恢复 */
-    const stopObserving = () => {
-      observerRef.current?.disconnect()
-      observerRef.current = null
-    }
-
-    /**
-     * 监控当前元素 title 属性：React 重挂载/重渲染会恢复 title，
-     * 此时原生 tooltip 开始计时，必须立即重新屏蔽（并同步备份值）
-     */
-    const startObserving = (el: HTMLElement) => {
-      stopObserving()
-      const observer = new MutationObserver((mutations) => {
-        for (const m of mutations) {
-          if (m.type !== 'attributes' || m.attributeName !== 'title') continue
-          const target = m.target as HTMLElement
-          const current = target.getAttribute('title')
-          if (current !== null) {
-            originalTitleRef.current = current
-            target.removeAttribute('title')
-          }
-        }
-      })
-      observer.observe(el, { attributes: true, attributeFilter: ['title'] })
-      observerRef.current = observer
-    }
-
-    /** 恢复元素 title 属性（屏蔽期被临时移除） */
-    const restoreTitle = () => {
-      const el = titleElRef.current
-      if (el && originalTitleRef.current !== null) {
-        el.setAttribute('title', originalTitleRef.current)
-      }
-      originalTitleRef.current = null
-      titleElRef.current = null
-    }
-
     const hide = () => {
       cancelTimer()
-      stopObserving()
-      restoreTitle()
+      titleElRef.current = null
       setAnchor(null)
       setPos(null)
     }
@@ -94,23 +114,31 @@ export default function GlobalTitleTooltip() {
     const handleMouseOver = (e: MouseEvent) => {
       const target = e.target as Element | null
       if (!target) return
-      const el = target.closest<HTMLElement>('[title]')
+      // 双源查找：WeakMap 记录（观察器已提取）或 DOM 上仍存的 title 属性
+      // （观察器漏网兜底——mouseover 捕获是事件最早时机，同步移除可杜绝
+      //   原生提示的任何计时窗口）
+      let el: Element | null = target
+      while (el && !titleStore.has(el) && !el.hasAttribute('title')) {
+        el = el.parentElement
+      }
       const current = titleElRef.current
       if (current) {
         // 关键：鼠标仍在当前处理元素内部移动（按钮内图标↔padding 穿越时
-        // title 已被屏蔽，closest 找不到，但位置仍在元素内）→ 保持现状，
-        // 绝不 hide —— 否则会恢复 title 让原生提示重新计时，来回切换
+        // 仍会触发 mouseover）→ 保持现状，绝不 hide —— 否则 tooltip 反复
+        // 隐藏/重现，体验闪烁
         if (el === current || current.contains(target)) return
       }
       if (!el) { hide(); return }
       hide()
-      const text = el.getAttribute('title')
+      // 兜底：DOM 上仍有 title（观察器漏网）→ 立即提取并移除
+      const domTitle = el.getAttribute('title')
+      if (domTitle !== null) {
+        titleStore.set(el, domTitle)
+        el.removeAttribute('title')
+      }
+      const text = titleStore.get(el)
       if (!text) return // 空 title 不显示（与原生行为一致）
-      titleElRef.current = el
-      originalTitleRef.current = text
-      // 进入元素即屏蔽原生 title —— 原生提示从这一刻起绝无弹出机会
-      el.removeAttribute('title')
-      startObserving(el)
+      titleElRef.current = el as HTMLElement
       timerRef.current = window.setTimeout(() => {
         const rect = el.getBoundingClientRect()
         setAnchor({ text, x: rect.left + rect.width / 2, y: rect.bottom })
@@ -139,8 +167,7 @@ export default function GlobalTitleTooltip() {
       window.removeEventListener('scroll', hideOnViewportChange, true)
       window.removeEventListener('resize', hideOnViewportChange)
       cancelTimer()
-      stopObserving()
-      restoreTitle()
+      titleElRef.current = null
     }
   }, [])
 
