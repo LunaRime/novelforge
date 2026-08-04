@@ -17,6 +17,7 @@ import { ipc } from '../../../services/ipc-client'
 import { openChapterFile, openBuiltinEditor, openDraftByChapter } from './SidebarShared'
 import type { ProjectSummary } from '../../../shared/ipc-channels'
 import VolumeGroup from './VolumeGroup'
+import SidebarGroup from './SidebarGroup'
 import { toast } from '../../ui/Toast'
 import { globalEventBus } from '../../../shared/event-bus'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -153,20 +154,12 @@ export default function ProjectWorkspace() {
             onOpenDraft={openDraft}
           />
 
-          {/* 草稿箱 — 按章分组，点击打开该章最新草稿 */}
-          <section
-            className="rounded-xl border p-2.5"
-            style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+          {/* 草稿箱 — 按章分组，点击打开该章最新草稿（可折叠） */}
+          <SidebarGroup
+            icon={<FileText size={12} />}
+            title={t('draftbox.title')}
+            count={draftTotal}
           >
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <FileText size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-              <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-                {t('draftbox.title')}
-              </span>
-              <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-                {draftTotal}
-              </span>
-            </div>
             {summary.draftChapters.length === 0 ? (
               <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
                 {t('charList.emptyProject')}
@@ -197,22 +190,14 @@ export default function ProjectWorkspace() {
                 ))}
               </div>
             )}
-          </section>
+          </SidebarGroup>
 
-          {/* 正式稿 — 已定稿章节，点击打开正文 */}
-          <section
-            className="rounded-xl border p-2.5"
-            style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+          {/* 正式稿 — 已定稿章节，点击打开正文（可折叠） */}
+          <SidebarGroup
+            icon={<PenTool size={12} />}
+            title={t('workspace.finalized')}
+            count={summary.chapters.length}
           >
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <PenTool size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-              <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-                {t('workspace.finalized')}
-              </span>
-              <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-                {summary.chapters.length}
-              </span>
-            </div>
             {summary.chapters.length === 0 ? (
               <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
                 {t('charList.emptyProject')}
@@ -237,7 +222,7 @@ export default function ProjectWorkspace() {
                 ))}
               </div>
             )}
-          </section>
+          </SidebarGroup>
 
           {/* 更多 — 故事架构（折叠） */}
           <MoreSection badge={`${summary.archGenerated}/4`} badgeDone={summary.archGenerated >= 4}>

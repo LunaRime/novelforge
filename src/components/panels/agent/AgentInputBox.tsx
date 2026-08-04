@@ -7,6 +7,9 @@ import {
   FileText,
   AtSign,
   Workflow,
+  BrainCircuit,
+  Zap,
+  Check,
 } from 'lucide-react'
 import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -321,7 +324,7 @@ export default function AgentInputBox() {
             )}
           </div>
 
-          {/* 模式选择 */}
+          {/* 模式选择（Claude Code 图标式：模式图标 + 名称 + 下拉） */}
           <div ref={modeRef} className="relative">
             <button
               onClick={() => {
@@ -330,7 +333,7 @@ export default function AgentInputBox() {
                 setShowFilePicker(false)
                 setShowModeMenu(v => !v)
               }}
-              className="flex items-center gap-0.5 py-1 pl-1 pr-1.5 rounded-md text-xs transition-colors"
+              className="flex items-center gap-1 py-1 pl-1 pr-1.5 rounded-md text-xs transition-colors"
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.75,
@@ -344,16 +347,19 @@ export default function AgentInputBox() {
                 e.currentTarget.style.opacity = '0.75'
               }}
             >
-              <ChevronDown size={13} strokeWidth={1.5} />
-              <span className="select-none">{currentMode === 'planning' ? t('agent.deepShort') : t('agent.quickShort')}</span>
+              {currentMode === 'planning'
+                ? <BrainCircuit size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
+                : <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning, #eab308)' }} />}
+              <span className="select-none font-medium">{currentMode === 'planning' ? t('agent.deepShort') : t('agent.quickShort')}</span>
+              <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
             </button>
 
-            {/* 模式选择下拉 */}
+            {/* 模式选择下拉（图标 + 名称 + 描述 + 选中态） */}
             {showModeMenu && (
               <div
                 className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
                 style={{
-                  width: 240,
+                  width: 260,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
@@ -365,6 +371,7 @@ export default function AgentInputBox() {
                 <ModeMenuItem
                   mode="planning"
                   currentMode={currentMode}
+                  icon={<BrainCircuit size={14} style={{ color: 'var(--color-accent)' }} />}
                   label={t('agent.deepMode')}
                   desc={t('agent.deepModeDesc')}
                   onClick={() => { setMode('planning'); setShowModeMenu(false) }}
@@ -372,6 +379,7 @@ export default function AgentInputBox() {
                 <ModeMenuItem
                   mode="fast"
                   currentMode={currentMode}
+                  icon={<Zap size={14} style={{ color: 'var(--color-warning, #eab308)' }} />}
                   label={t('agent.quickMode')}
                   desc={t('agent.quickModeDesc')}
                   onClick={() => { setMode('fast'); setShowModeMenu(false) }}
@@ -547,16 +555,18 @@ function ContextMenuItem({
   )
 }
 
-/** 模式菜单项 */
+/** 模式菜单项（Claude Code 风格：图标 + 名称 + 描述 + 选中 ✓） */
 function ModeMenuItem({
   mode,
   currentMode,
+  icon,
   label,
   desc,
   onClick,
 }: {
   mode: AgentMode
   currentMode: AgentMode
+  icon: React.ReactNode
   label: string
   desc: string
   onClick: () => void
@@ -566,7 +576,7 @@ function ModeMenuItem({
   return (
     <button
       onClick={onClick}
-      className="w-full flex flex-col items-start gap-0.5 px-3 py-2 text-left text-xs transition-colors rounded-md mx-1"
+      className="w-full flex items-start gap-2 px-3 py-2 text-left text-xs transition-colors rounded-md mx-1"
       style={{
         width: 'calc(100% - 8px)',
         backgroundColor: isActive ? 'var(--color-hover)' : 'transparent',
@@ -578,8 +588,16 @@ function ModeMenuItem({
         if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
       }}
     >
-      <div className="font-medium" style={{ color: 'var(--color-text)' }}>{label}</div>
-      <div className="text-left leading-relaxed" style={{ color: 'var(--color-text-muted)', fontSize: "0.75rem" }}>{desc}</div>
+      {/* 模式图标 */}
+      <span className="flex-shrink-0 mt-0.5" style={{ opacity: isActive ? 1 : 0.75 }}>{icon}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block font-medium" style={{ color: 'var(--color-text)' }}>{label}</span>
+        <span className="block leading-relaxed" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{desc}</span>
+      </span>
+      {/* 选中标记 */}
+      {isActive && (
+        <Check size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-accent)' }} />
+      )}
     </button>
   )
 }
