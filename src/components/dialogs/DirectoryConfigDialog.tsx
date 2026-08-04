@@ -37,6 +37,9 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
   const [rangeStart, setRangeStart] = useState<number | ''>(existingCount + 1)
   const [rangeEnd, setRangeEnd] = useState<number | ''>(existingCount + 50)
   const [volumeNumber, setVolumeNumber] = useState<number | ''>('')
+  // 生成方式：single = 一次对话生成全部（默认）；batch = 分批生成（质量优先）
+  const [generationMode, setGenerationMode] = useState<'single' | 'batch'>('single')
+  const [batchChapterCount, setBatchChapterCount] = useState<number | ''>(10)
   // 节奏指导
   const [pacingGuidance, setPacingGuidance] = useState('')
 
@@ -91,7 +94,12 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
       params = { mode: 'append', startChapter: start, count: Math.max(1, end - start + 1) }
     }
 
-    onConfirm({ ...params, pacingGuidance: pacingGuidance.trim() || undefined })
+    onConfirm({
+      ...params,
+      pacingGuidance: pacingGuidance.trim() || undefined,
+      generationMode,
+      batchChapterCount: generationMode === 'batch' ? (Number(batchChapterCount) || 10) : undefined,
+    })
     onClose()
     toast.info(t('blueprintGen.submitted'))
   }
@@ -241,6 +249,51 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
               </div>
             </div>
           )}
+
+          {/* 生成方式：单次 vs 分批（长范围质量/费用权衡，由用户选择） */}
+          <div
+            className="rounded-lg p-3 space-y-2"
+            style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}
+          >
+            <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+              {t('blueprintGen.generationMode')}
+            </p>
+            <div className="space-y-3 mt-2">
+              <RadioOption
+                checked={generationMode === 'single'}
+                onChange={() => setGenerationMode('single')}
+                label={t('blueprintGen.singlePass')}
+              />
+              <p className="text-[11px] pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                {t('blueprintGen.singlePassHint')}
+              </p>
+              <RadioOption
+                checked={generationMode === 'batch'}
+                onChange={() => setGenerationMode('batch')}
+                label={
+                  <span className="flex items-center gap-2">
+                    {t('blueprintGen.batched')}
+                    <Input
+                      type="number"
+                      value={batchChapterCount}
+                      onChange={e => setBatchChapterCount(e.target.value === '' ? '' : parseInt(e.target.value))}
+                      onBlur={() => {
+                        const v = Number(batchChapterCount)
+                        if (!v || v < 1) setBatchChapterCount(10)
+                        else setBatchChapterCount(Math.min(50, v))
+                      }}
+                      className="w-16"
+                      onClick={e => e.stopPropagation()}
+                    />
+                    {t('unit.chapters')}{t('blueprintGen.perBatch')}
+                  </span>
+                }
+              />
+              <p className="text-[11px] pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                {t('blueprintGen.batchedHint')}
+              </p>
+            </div>
+          </div>
 
           {/* 节奏/风格指导（可选） */}
           <div>

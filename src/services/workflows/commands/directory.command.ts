@@ -55,7 +55,15 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
     const modelMaxTokens = defaultModel?.maxTokens || 4096
     const outputBudget = Math.floor(modelMaxTokens * 0.6)  // 预留 40% 给 prompt + 思考
     const tokensPerChapter = 200
-    const batchSize = Math.min(50, Math.max(5, Math.floor(outputBudget / tokensPerChapter)))
+    const autoBatchSize = Math.min(50, Math.max(5, Math.floor(outputBudget / tokensPerChapter)))
+    // 用户选择分批时每批章数（不得超过模型输出预算自动值，防截断/防上下文溢出）；
+    // single 模式 = 自动值（大模型通常 50 = 一次对话生成全部）
+    const batchSize = this.params.generationMode === 'batch' && this.params.batchChapterCount
+      ? Math.min(this.params.batchChapterCount, autoBatchSize)
+      : autoBatchSize
+    if (this.params.generationMode === 'batch') {
+      callbacks.log(`  分批生成模式：${batchSize} 章/批`)
+    }
 
     const newBlueprints: ChapterBlueprint[] = []
     // 使用游标追踪生成进度，支持 AI 超额返回时智能跳过后续批次
@@ -124,8 +132,10 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       const resultText = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture })
 
       // 接受 AI 返回的从 cursor 到 endChapter 范围内的所有有效章节
-      // AI 可能一次性返回超出本批次（batchEnd）的章节，全部保留
-      const parsed = parseTextBlueprints(resultText, cursor, endChapter)
+      // AI 可能一次性返回超出本批次（batchEnd）的章节，全部保留（single 模式：省调用）
+      // batch 模式：严格按批 —— 程序接受范围与模板输出纪律（≤ {{m}}）双保险，杜绝越界输出
+      const parsed = parseTextBlueprints(resultText, cursor,
+        this.params.generationMode === 'batch' ? batchEnd : endChapter)
       newBlueprints.push(...parsed)
 
       // 批次入库
