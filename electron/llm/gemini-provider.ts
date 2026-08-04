@@ -14,30 +14,44 @@ class HttpError extends Error {
   }
 }
 
-export class GeminiProvider implements ILLMProvider {
-  private toGeminiContents(messages: Array<{ role: string; content: string }>) {
-    let systemInstruction: string | undefined
-    const contents: Array<{ role: string; parts: Array<{ text: string }> }> = []
+/**
+ * 将 NovelForge messages 转换为 Gemini 的 contents + systemInstruction。
+ * 导出为纯函数便于单元测试（Gemini 只接受单一 systemInstruction）。
+ */
+export function toGeminiContents(messages: Array<{ role: string; content: string }>): {
+  contents: Array<{ role: string; parts: Array<{ text: string }> }>
+  systemInstruction?: string
+} {
+  const systemParts: string[] = []
+  const contents: Array<{ role: string; parts: Array<{ text: string }> }> = []
 
-    for (const msg of messages) {
-      if (msg.role === 'system') {
-        systemInstruction = msg.content
-        continue
-      }
-      contents.push({
-        role: msg.role === 'assistant' ? 'model' : 'user',
-        parts: [{ text: msg.content }],
-      })
+  for (const msg of messages) {
+    if (msg.role === 'system') {
+      // structureForCache 会产生多条 system（systemRole + staticContext 前缀缓存结构）
+      // Gemini API 只接受单一 systemInstruction —— 必须全部合并，
+      // 否则后写覆盖先写会导致 systemRole 丢失（模型无角色约束 → 输出质量下降）
+      systemParts.push(msg.content)
+      continue
     }
-    return { contents, systemInstruction }
+    contents.push({
+      role: msg.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: msg.content }],
+    })
   }
+  return {
+    contents,
+    systemInstruction: systemParts.length > 0 ? systemParts.join('\n\n') : undefined,
+  }
+}
+
+export class GeminiProvider implements ILLMProvider {
 
   async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     return withRetry(async () => {
       const baseUrl = model.baseUrl.replace(/\/$/, '')
       const url = `${baseUrl}/v1beta/models/${model.modelName}:generateContent`
 
-      const { contents, systemInstruction } = this.toGeminiContents(messages)
+      const { contents, systemInstruction } = toGeminiContents(messages)
 
       const body: Record<string, unknown> = {
         contents,
@@ -107,7 +121,7 @@ export class GeminiProvider implements ILLMProvider {
       const baseUrl = model.baseUrl.replace(/\/$/, '')
       const url = `${baseUrl}/v1beta/models/${model.modelName}:streamGenerateContent?alt=sse`
 
-      const { contents, systemInstruction } = this.toGeminiContents(messages)
+      const { contents, systemInstruction } = toGeminiContents(messages)
 
       const body: Record<string, unknown> = {
         contents,

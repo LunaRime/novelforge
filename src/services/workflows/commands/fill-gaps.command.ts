@@ -72,7 +72,8 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
       callbacks.setProgress(progressBase)
 
       try {
-        const resultText = await this.callLLM(prompt, systemRole, callbacks)
+        // staticContext：架构入 system 前缀（同 directory/generate-draft）——批次间前缀稳定命中 + system 遵从度更高
+        const resultText = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture })
         const parsed = parseTextBlueprints(resultText, chapters[0], chapters[chapters.length - 1])
 
         if (parsed.length > 0) {
