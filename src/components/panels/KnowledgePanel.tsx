@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import {
-  Database, RefreshCw, BookOpen, Download, Archive,
+  Database, RefreshCw, BookOpen, Download, Archive, SortAsc,
 } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -22,6 +23,8 @@ export default function KnowledgePanel() {
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
+  // 排序方式：time = 导入时间（默认，降序）/ chapter = 章节号（升序）/ name = 名称（升序）
+  const [sortMode, setSortMode] = useState<'time' | 'chapter' | 'name'>('time')
   // 导出状态
   const [exportOpen, setExportOpen] = useState(false)
   const [exportChapters, setExportChapters] = useState<number[]>([])
@@ -167,9 +170,30 @@ export default function KnowledgePanel() {
 
       <div className="flex-1 overflow-y-auto">
 
-        {/* 已入库章节列表 */}
-        <div className="px-3 py-1.5 text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
-          {t('knowledge.indexedChapters')}
+        {/* 已入库章节列表（可排序） */}
+        <div className="flex items-center justify-between px-3 py-1.5">
+          <span className="text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+            {t('knowledge.indexedChapters')}
+          </span>
+          {/* 排序选择：导入时间 / 章节号 / 名称 */}
+          <Select value={sortMode} onValueChange={(v) => {
+            setSortMode(v as 'time' | 'chapter' | 'name')
+            setCurrentPage(1) // 排序变化回到第一页，避免当前页超出新排序总页数
+          }}>
+            <SelectTrigger
+              className="h-6 gap-1 text-[0.7rem] px-1.5"
+              title={t('knowledge.sortBy')}
+              style={{ minWidth: 0, borderColor: 'var(--color-border)' }}
+            >
+              <SortAsc size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="time">{t('knowledge.sortTime')}</SelectItem>
+              <SelectItem value="chapter">{t('knowledge.sortChapter')}</SelectItem>
+              <SelectItem value="name">{t('knowledge.sortName')}</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         {documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
@@ -179,10 +203,19 @@ export default function KnowledgePanel() {
           </div>
         ) : (
           <div className="pb-4">
-            {documents
-              .sort((a, b) => new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime())
-              .slice((currentPage - 1) * pageSize, currentPage * pageSize)
-              .map((doc) => (
+            {(() => {
+              // 排序：章节号（升序，非章节文档按名称兜底）/ 名称（升序）/ 默认导入时间（降序）
+              const sorted = [...documents].sort((a, b) => {
+                if (sortMode === 'chapter') {
+                  const diff = extractChapterNumber(a) - extractChapterNumber(b)
+                  return diff !== 0 ? diff : a.fileName.localeCompare(b.fileName, getCurrentLocale())
+                }
+                if (sortMode === 'name') return a.fileName.localeCompare(b.fileName, getCurrentLocale())
+                return new Date(b.importedAt).getTime() - new Date(a.importedAt).getTime()
+              })
+              return sorted
+                .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                .map((doc) => (
                 <div
                   key={doc.id}
                   className="flex items-center justify-between px-3 py-2 hover:bg-[var(--color-hover)] transition-colors group"
@@ -207,8 +240,9 @@ export default function KnowledgePanel() {
                     <Download size={12} />
                   </button>
                 </div>
-              ))}
-            
+              ))
+            })()}
+
             {Math.ceil(documents.length / pageSize) > 1 && (
               <div className="flex items-center justify-between px-3 pt-3">
                 <span className="text-[0.65rem] text-[var(--color-text-muted)]">
