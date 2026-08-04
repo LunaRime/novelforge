@@ -172,6 +172,33 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     }
   }, [activeTabId])
 
+  // ===== 知识库视图优先 =====
+  // 从项目结构/工作台切到知识库时，残留的其他部件 Tab 不再抢占中间区域——
+  // 固定显示 KnowledgeOverview（检索界面），无需手动关闭编辑区；
+  // Tab 保留在 Tab 栏（dirty 数据安全），用户主动点击 Tab 可切回内容。
+  // 视图切换 / 关闭全部 Tab 后回到「视图优先」。
+  const [knowledgeTabActive, setKnowledgeTabActive] = useState(false)
+
+  /** 用户主动激活 Tab（Tab 栏/箭头/菜单 goto）：知识库视图下切到 Tab 内容 */
+  const activateTab = useCallback((id: string) => {
+    if (sidebarView === 'knowledge') setKnowledgeTabActive(true)
+    setActiveTab(id)
+  }, [sidebarView, setActiveTab])
+
+  // 进入知识库视图 → 重置为视图优先（微任务 setState，规避 effect 同步 setState 的级联渲染）
+  useEffect(() => {
+    if (sidebarView === 'knowledge') {
+      Promise.resolve().then(() => setKnowledgeTabActive(false))
+    }
+  }, [sidebarView])
+
+  // 知识库视图下关闭全部 Tab → 回到视图优先（检索界面）
+  useEffect(() => {
+    if (sidebarView === 'knowledge' && !activeTabId) {
+      Promise.resolve().then(() => setKnowledgeTabActive(false))
+    }
+  }, [sidebarView, activeTabId])
+
   /** 点击左右箭头时切换到上/下一个 Tab */
   const switchTab = useCallback((direction: 'left' | 'right') => {
     if (tabs.length === 0) return
@@ -182,8 +209,8 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     } else {
       nextIndex = currentIndex >= tabs.length - 1 ? 0 : currentIndex + 1
     }
-    setActiveTab(tabs[nextIndex].id)
-  }, [tabs, activeTabId, setActiveTab])
+    activateTab(tabs[nextIndex].id)
+  }, [tabs, activeTabId, activateTab])
 
   // ===== 三个点菜单状态 =====
   const [moreMenuOpen, setMoreMenuOpen] = useState(false)
@@ -362,11 +389,11 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           icon: t.id === activeTabId
             ? <span style={{ color: 'var(--color-accent)', fontWeight: 'bold' }}>●</span>
             : undefined,
-          onClick: () => setActiveTab(t.id),
+          onClick: () => activateTab(t.id),
         })),
       ] : []),
     ]
-  }, [tabs, activeTabId, tryCloseTab, tryBatchClose, setActiveTab, t])
+  }, [tabs, activeTabId, tryCloseTab, tryBatchClose, activateTab, t])
 
   // ===== 条件渲染 =====
 
@@ -393,8 +420,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     )
   }
 
-  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面（有活跃 Tab 时优先显示 Tab 内容）
-  if (sidebarView === 'knowledge' && !activeTab) {
+  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面——
+  // 残留的其他部件 Tab 不抢占（knowledgeTabActive 仅在用户主动点击 Tab 后置真）
+  if (sidebarView === 'knowledge' && !knowledgeTabActive) {
     return <KnowledgeOverview />
   }
 
@@ -486,10 +514,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                   ? 'var(--color-text)'
                   : 'var(--color-text-secondary)',
               }}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => activateTab(tab.id)}
               onContextMenu={e => {
                 e.preventDefault()
-                setActiveTab(tab.id)
+                activateTab(tab.id)
                 setTabMenu({ tabId: tab.id, position: { x: e.clientX, y: e.clientY } })
               }}
               onMouseEnter={e => {
