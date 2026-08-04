@@ -15,7 +15,8 @@ import { calculateCost } from '../services/llm/prompt-cache'
 // ===== 类型定义 =====
 
 /** 对话模式：Planning（深度推理）/ Fast（快速执行） */
-export type AgentMode = 'planning' | 'fast'
+/** 思考等级（6 级）：quick → swift → balanced → reflective → deep → max */
+export type AgentMode = 'quick' | 'swift' | 'balanced' | 'reflective' | 'deep' | 'max'
 
 /** 单条消息 */
 export interface AgentMessage {
@@ -154,7 +155,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   conversations: [],
   activeConversationId: null,
   showHistory: false,
-  defaultMode: 'planning',
+  defaultMode: 'deep',
   generating: false,
   activeRequestId: null,
   toolsInitialized: false,
