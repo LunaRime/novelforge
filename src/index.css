@@ -1004,6 +1004,39 @@
   100% { opacity: 1; transform: translateY(0); }
 }
 
+/* ===== 思考等级温度滑块（Agent 深度选择） ===== */
+
+/* 交互层：透明 range input（opacity 0 不影响拖动/点击捕获），
+   视觉大圆 = 组件层自定义 div（位置 JS 精确计算，端点外缘与条边完全贴合，
+   拖动时 onChange 直接写 DOM 与原生交互同帧同步——不依赖浏览器 UA thumb 行为） */
+.depth-slider {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  outline: none;
+  margin: 0;
+}
+
+/* MAX 专属特效：大圆变警告色 + 琥珀光晕呼吸（克制柔和） */
+.depth-thumb--max {
+  animation: depth-max-pulse 1.8s ease-in-out infinite;
+}
+
+/* MAX 光晕呼吸 */
+@keyframes depth-max-pulse {
+  0%, 100% {
+    box-shadow: 0 0 0 1px var(--color-border),
+                0 0 10px rgba(var(--color-warning-rgb), 0.45),
+                0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+  50% {
+    box-shadow: 0 0 0 1px var(--color-border),
+                0 0 18px rgba(var(--color-warning-rgb), 0.85),
+                0 2px 6px rgba(0, 0, 0, 0.25);
+  }
+}
+
 /* =====================================================================
  * 无层样式 — CodeMirror 搜索面板覆盖（需要最高优先级）
  * 这些样式故意不放入任何 @layer，使其优先级高于所有层级样式

@@ -80,9 +80,17 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
 
 /** Agent 身份提示词 */
 function buildIdentityPrompt(mode: AgentMode): string {
-  const modeDesc = mode === 'planning'
-    ? '当前处于 Planning 模式：你可以先规划再执行，适合复杂的多步骤任务。请先分析需求，制定方案，再逐步执行。'
-    : '当前处于 Fast 模式：你直接高效地完成任务，适合简单快速的操作。'
+  const modeDesc = mode === 'max'
+    ? '当前处于 MAX 模式（思考等级 6/6）：全力执行——深度规划 + 完整工具链，逐步严谨验证每一步，追求最佳结果。'
+    : mode === 'deep'
+      ? '当前处于 Deep 模式（思考等级 5/6）：深度规划后再执行，适合复杂的多步骤任务。请先分析需求，制定方案，再逐步执行。'
+      : mode === 'reflective'
+        ? '当前处于 Reflective 模式（思考等级 4/6）：先分析需求再行动，注重完成质量，可适当多轮推演。'
+        : mode === 'balanced'
+          ? '当前处于 Balanced 模式（思考等级 3/6）：先快速评估任务复杂度，简单任务直接执行，复杂任务先规划再执行。'
+          : mode === 'swift'
+            ? '当前处于 Swift 模式（思考等级 2/6）：快速执行任务，在保证基础质量的前提下尽量简洁。'
+            : '当前处于 Quick 模式（思考等级 1/6）：直接高效地完成任务，适合简单快速的操作。'
 
   return `# NovelForge AI 创作助手
 

@@ -9,8 +9,10 @@ import {
   Workflow,
   BrainCircuit,
   Zap,
-  Check,
+  Gauge,
+  Flame,
 } from 'lucide-react'
+import type { TextKey } from '../../../shared/locale'
 import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { ModelProfile } from '../../../shared/ipc-channels'
@@ -25,6 +27,39 @@ import type { SlashCommand, MentionTarget } from '../../../services/agent/intent
 const MAX_HEIGHT = 200
 
 /**
+ * 思考等级（Claude Code effort 风格：六个独立等级胶囊，选中高亮）
+ * 每个等级是独立 AgentMode（quick/swift/balanced/reflective/deep/max）——
+ * 引擎提示词六分支，等级之间行为有真实差异
+ */
+const DEPTH_LEVELS: Array<{
+  level: number
+  mode: AgentMode
+  labelKey: TextKey
+  descKey: TextKey
+}> = [
+  { level: 1, mode: 'quick', labelKey: 'agent.depthL1', descKey: 'agent.depthL1Desc' },
+  { level: 2, mode: 'swift', labelKey: 'agent.depthL2', descKey: 'agent.depthL2Desc' },
+  { level: 3, mode: 'balanced', labelKey: 'agent.depthL3', descKey: 'agent.depthL3Desc' },
+  { level: 4, mode: 'reflective', labelKey: 'agent.depthL4', descKey: 'agent.depthL4Desc' },
+  { level: 5, mode: 'deep', labelKey: 'agent.depthL5', descKey: 'agent.depthL5Desc' },
+  { level: 6, mode: 'max', labelKey: 'agent.depthL6', descKey: 'agent.depthL6Desc' },
+]
+
+/** 等级图标（输入框工具栏按钮；低档闪电 → 高档火焰） */
+function depthIcon(mode: AgentMode): React.ReactNode {
+  if (mode === 'max') {
+    return <Flame size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
+  }
+  if (mode === 'deep' || mode === 'reflective') {
+    return <BrainCircuit size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
+  }
+  if (mode === 'balanced' || mode === 'swift') {
+    return <Gauge size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
+  }
+  return <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning, #eab308)' }} />
+}
+
+/**
  * Agent 输入框组件（参考 agent1.html 第 69-155 行）
  * 卡片式圆角容器，底部工具栏含模式/模型/发送
  */
@@ -33,6 +68,7 @@ export default function AgentInputBox() {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
   const { generating, sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  const defaultMode = useAgentStore(s => s.defaultMode)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
 
@@ -40,7 +76,9 @@ export default function AgentInputBox() {
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
   const activeConv = getActiveConversation()
-  const currentMode = activeConv?.mode ?? 'planning'
+  // 无会话时回退 defaultMode（setMode 无会话只更新 defaultMode）——
+  // 否则无会话时拉条拖动后 value 不变（拉不动）
+  const currentMode = activeConv?.mode ?? defaultMode
   const currentModelId = activeConv?.modelId ?? defaultModelId
 
   // 找到当前模型信息
@@ -169,7 +207,7 @@ export default function AgentInputBox() {
     setShowFilePicker(false)
     setInputText(prev => `${prev.trimEnd()}${prev.trimEnd() ? ' ' : ''}@${path} `)
     textareaRef.current?.focus()
-  }, [])
+  }, [setShowFilePicker])
 
   /** 发送或停止 */
   const handleSendOrStop = useCallback(async () => {
@@ -324,7 +362,7 @@ export default function AgentInputBox() {
             )}
           </div>
 
-          {/* 模式选择（Claude Code 图标式：模式图标 + 名称 + 下拉） */}
+          {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板） */}
           <div ref={modeRef} className="relative">
             <button
               onClick={() => {
@@ -347,45 +385,152 @@ export default function AgentInputBox() {
                 e.currentTarget.style.opacity = '0.75'
               }}
             >
-              {currentMode === 'planning'
-                ? <BrainCircuit size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
-                : <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning, #eab308)' }} />}
-              <span className="select-none font-medium">{currentMode === 'planning' ? t('agent.deepShort') : t('agent.quickShort')}</span>
+              {depthIcon(currentMode)}
+              <span className="select-none font-medium">
+                {t((DEPTH_LEVELS.find(l => l.mode === currentMode) ?? DEPTH_LEVELS[0]).labelKey)}
+              </span>
               <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
             </button>
 
-            {/* 模式选择下拉（图标 + 名称 + 描述 + 选中态） */}
-            {showModeMenu && (
-              <div
-                className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
-                style={{
-                  width: 260,
-                  backgroundColor: 'var(--color-sidebar)',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                }}
-              >
-                <div className="text-[0.7rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
-                  {t('agent.chatMode')}
+            {/* 思考等级面板（温度滑块式：等比例紧凑 + 首末节点被条包裹 + 适度特效） */}
+            {showModeMenu && (() => {
+              const currentLv = DEPTH_LEVELS.find(l => l.mode === currentMode) ?? DEPTH_LEVELS[0]
+              // 滑块条高 = 大圆直径（thumb 上下限与条贴齐内嵌）
+              const TRACK_H = 18
+              // 大圆半径：大圆端点与条边完全贴合（内切）；首末节点小点仍被条包裹（4px 点在 9px 处，左缘 7px）
+              const INSET = TRACK_H / 2
+              const isMax = currentLv.level === 6
+              // 含内缩的档位位置（大圆圆心）：calc(9px + (100% - 18px) * frac)
+              const posCalc = (level: number, minusHalf?: boolean) =>
+                `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((level - 1) / 5).toFixed(3)})${minusHalf ? ' - 2px' : ''})`
+              // 温度计填充宽度 = 大圆圆心位置（填充延伸进大圆左半，大圆作为填充的球头——
+              // 填充层 z 高于大圆 → 半透明渐变罩住大圆左半 → "深度绑定"一体视觉）
+              const fillWidth = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((currentLv.level - 1) / 5).toFixed(3)}))`
+
+              return (
+                <div
+                  className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] p-2.5 rounded-lg shadow-lg"
+                  style={{
+                    width: 210,
+                    backgroundColor: 'var(--color-sidebar)',
+                    border: '1px solid var(--color-border)',
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                  }}
+                >
+                  {/* 标题行：思考等级 + 当前档位名 */}
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[0.7rem] font-medium" style={{ color: 'var(--color-text)' }}>
+                      {t('agent.depthTitle')}
+                    </span>
+                    <span className="text-[0.7rem] font-semibold" style={{ color: isMax ? 'var(--color-warning)' : 'var(--color-accent)' }}>
+                      {t(currentLv.labelKey)} · {currentLv.level}/6
+                    </span>
+                  </div>
+
+                  {/* 温度滑块：轨道条 + 温度计填充（延伸进大圆）+ 六节点小点 + 自定义大圆（球头） */}
+                  <div className="relative" style={{ height: TRACK_H }}>
+                    {/* 轨道条（纯背景） */}
+                    <div
+                      className="absolute inset-0 rounded-full"
+                      style={{ backgroundColor: 'var(--color-border)' }}
+                    />
+
+                    {/* 已滑过区域（温度计填充：右端 = 大圆圆心，盖住大圆左半 → 与大圆一体；
+                        拖动时由 onChange 直接写 DOM 同帧） */}
+                    <div
+                      className="depth-fill absolute left-0 top-0 bottom-0"
+                      style={{
+                        width: fillWidth,
+                        borderRadius: '999px 0 0 999px',
+                        zIndex: 1,
+                        background: isMax
+                          ? 'linear-gradient(to right, rgba(var(--color-warning-rgb), 0.15), rgba(var(--color-warning-rgb), 0.55))'
+                          : 'linear-gradient(to right, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.5))',
+                      }}
+                    />
+
+                    {/* 六节点（未滑到 = 缩小点；已滑过 = accent 淡点；当前档被大圆覆盖 → 隐藏；首末点被条包裹） */}
+                    {DEPTH_LEVELS.map(lv => {
+                      const lit = lv.level <= currentLv.level
+                      const hidden = lv.level === currentLv.level
+                      return (
+                        <span
+                          key={lv.level}
+                          className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
+                          style={{
+                            left: posCalc(lv.level, true),
+                            width: 4,
+                            height: 4,
+                            zIndex: 2,
+                            backgroundColor: lit ? 'var(--color-accent)' : 'var(--color-text-muted)',
+                            opacity: hidden ? 0 : (lit ? 0.85 : 0.4),
+                            boxShadow: lit ? '0 0 3px rgba(var(--color-accent-rgb), 0.6)' : undefined,
+                          }}
+                        />
+                      )
+                    })}
+
+                    {/* 自定义大圆（球头：位置 JS 精确计算——圆心 = INSET + (100%-2*INSET)×frac，
+                        端点圆心 = INSET = 半径 → 外缘与条边完全贴合；z 低于填充 →
+                        左半被填充半透明渐变罩住（深度绑定一体视觉）；拖动时 onChange 同帧直写） */}
+                    <div
+                      className={`depth-thumb absolute rounded-full pointer-events-none ${isMax ? 'depth-thumb--max' : ''}`}
+                      style={{
+                        width: TRACK_H,
+                        height: TRACK_H,
+                        left: `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((currentLv.level - 1) / 5).toFixed(3)}) - ${TRACK_H / 2}px)`,
+                        top: 0,
+                        zIndex: 0,
+                        backgroundColor: isMax ? 'var(--color-warning)' : 'var(--color-accent)',
+                        // 边框与中心同色（不再用 sidebar 白/浅色外圈），仅保留 1px 外描边定界
+                        border: `2px solid ${isMax ? 'var(--color-warning)' : 'var(--color-accent)'}`,
+                        boxShadow: '0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,0.25)',
+                      }}
+                    />
+
+                    {/* 交互层：透明 range（仅捕获拖动/点击；opacity 0 不影响交互） */}
+                    <input
+                      type="range"
+                      min={1}
+                      max={6}
+                      step={1}
+                      value={currentLv.level}
+                      onChange={e => {
+                        const lv = DEPTH_LEVELS[parseInt(e.target.value, 10) - 1]
+                        setMode(lv.mode)
+                        // 同帧 DOM 直写：大圆 + 填充跟随（不经 React 渲染，无帧延迟）
+                        const wrap = e.currentTarget.parentElement
+                        const thumb = wrap?.querySelector<HTMLElement>('.depth-thumb')
+                        const fill = wrap?.querySelector<HTMLElement>('.depth-fill')
+                        const frac = ((lv.level - 1) / 5).toFixed(3)
+                        if (thumb) {
+                          thumb.style.left = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${frac}) - ${TRACK_H / 2}px)`
+                        }
+                        if (fill) {
+                          fill.style.width = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${frac}))`
+                        }
+                      }}
+                      className="depth-slider absolute top-0 bottom-0"
+                      style={{ left: `${INSET}px`, right: `${INSET}px`, opacity: 0, zIndex: 3 }}
+                    />
+                  </div>
+
+                  {/* 当前等级说明（固定 2 行高度 + 截断 → 面板高度恒定，滑块不上下跳动） */}
+                  <div
+                    className="mt-2 text-[0.6rem] leading-relaxed overflow-hidden"
+                    style={{
+                      color: 'var(--color-text-muted)',
+                      minHeight: 31,
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      WebkitLineClamp: 2,
+                    }}
+                  >
+                    {t(currentLv.descKey)}
+                  </div>
                 </div>
-                <ModeMenuItem
-                  mode="planning"
-                  currentMode={currentMode}
-                  icon={<BrainCircuit size={14} style={{ color: 'var(--color-accent)' }} />}
-                  label={t('agent.deepMode')}
-                  desc={t('agent.deepModeDesc')}
-                  onClick={() => { setMode('planning'); setShowModeMenu(false) }}
-                />
-                <ModeMenuItem
-                  mode="fast"
-                  currentMode={currentMode}
-                  icon={<Zap size={14} style={{ color: 'var(--color-warning, #eab308)' }} />}
-                  label={t('agent.quickMode')}
-                  desc={t('agent.quickModeDesc')}
-                  onClick={() => { setMode('fast'); setShowModeMenu(false) }}
-                />
-              </div>
-            )}
+              )
+            })()}
           </div>
 
           {/* 模型选择 */}
@@ -551,53 +696,6 @@ function ContextMenuItem({
       <span style={{ color: 'var(--color-text-secondary)' }}>{icon}</span>
       {label}
       {disabled && <span className="ml-auto text-[0.7rem] opacity-40">{t('agent.comingSoon')}</span>}
-    </button>
-  )
-}
-
-/** 模式菜单项（Claude Code 风格：图标 + 名称 + 描述 + 选中 ✓） */
-function ModeMenuItem({
-  mode,
-  currentMode,
-  icon,
-  label,
-  desc,
-  onClick,
-}: {
-  mode: AgentMode
-  currentMode: AgentMode
-  icon: React.ReactNode
-  label: string
-  desc: string
-  onClick: () => void
-}) {
-  const isActive = mode === currentMode
-
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-start gap-2 px-3 py-2 text-left text-xs transition-colors rounded-md mx-1"
-      style={{
-        width: 'calc(100% - 8px)',
-        backgroundColor: isActive ? 'var(--color-hover)' : 'transparent',
-      }}
-      onMouseEnter={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-      }}
-      onMouseLeave={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      {/* 模式图标 */}
-      <span className="flex-shrink-0 mt-0.5" style={{ opacity: isActive ? 1 : 0.75 }}>{icon}</span>
-      <span className="flex-1 min-w-0">
-        <span className="block font-medium" style={{ color: 'var(--color-text)' }}>{label}</span>
-        <span className="block leading-relaxed" style={{ color: 'var(--color-text-muted)', fontSize: '0.75rem' }}>{desc}</span>
-      </span>
-      {/* 选中标记 */}
-      {isActive && (
-        <Check size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-accent)' }} />
-      )}
     </button>
   )
 }
