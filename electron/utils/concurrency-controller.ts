@@ -44,6 +44,8 @@ interface QueuedRequest<T = unknown> {
   signal?: AbortSignal
   /** 入队时间 */
   enqueuedAt: number
+  /** 调用方指定的超时（毫秒，0=不超时）——排队执行时沿用，不得回落默认值 */
+  timeoutMs: number
 }
 
 /** 活跃槽位 */
@@ -139,6 +141,7 @@ export class ConcurrencyController {
         },
         signal,
         enqueuedAt: Date.now(),
+        timeoutMs,
       }
 
       this.enqueue(queued)
@@ -397,7 +400,7 @@ export class ConcurrencyController {
     try {
       const result = await this.executeWithTimeout(
         request.execute,
-        this.config.defaultTimeoutMs,
+        request.timeoutMs,
         request.signal,
       )
       request.resolve(result)

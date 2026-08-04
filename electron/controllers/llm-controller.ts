@@ -101,6 +101,8 @@ export function registerLLMController() {
 
     // 使用并发控制器执行流式请求
     // 注意：流式请求的 execute 返回后流仍在进行，所以我们在内部获取槽位
+    // timeoutMs: 0（无硬超时）——长输出（批量蓝图/长文生成）可超过 120s；
+    // 流式请求的生命周期由 llm:cancel → AbortController 管理（取消仍生效）
     llmConcurrencyController.execute(
       async () => {
         // 检查请求是否已被取消
@@ -132,7 +134,7 @@ export function registerLLMController() {
           }).catch(reject)
         }).catch(() => { /* 流式错误已通过 onError 回调处理 */ })
       },
-      { priority: request.priority ?? 10 },
+      { priority: request.priority ?? 10, timeoutMs: 0 },
     ).catch((error) => {
       if (error.message !== '请求已取消') {
         win?.webContents.send('llm:stream-error', { requestId, error: safeErrorMessage(error) })
