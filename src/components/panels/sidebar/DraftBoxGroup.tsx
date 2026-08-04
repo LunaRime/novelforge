@@ -3,7 +3,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen } from 'lucide-react'
+import { CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, ChevronRight, ChevronDown } from 'lucide-react'
 import type { DraftMeta } from '../../../stores/draft-store'
 import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
@@ -13,8 +13,9 @@ import type { TextKey } from '../../../shared/locale'
 import { showSidebarMenu } from './SidebarShared'
 import { ipc } from '../../../services/ipc-client'
 import { useTranslation } from '../../../hooks/useTranslation'
+import SidebarGroup from './SidebarGroup'
 
-// ===== 草稿箱折叠组 =====
+// ===== 草稿箱卡片组 =====
 
 export default function DraftBoxGroup({
   draftsByChapter,
@@ -22,7 +23,6 @@ export default function DraftBoxGroup({
   draftsByChapter: Record<number, DraftMeta[]>
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(true)
 
   // 所有章节号排序
   const chapterNums = Object.keys(draftsByChapter)
@@ -35,48 +35,28 @@ export default function DraftBoxGroup({
   ).length
 
   return (
-    <div>
-      {/* 草稿箱标题行 */}
-      <div
-        className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
-        onClick={() => setOpen(v => !v)}
-        title={t('tip.draftBox')}
-      >
-        {open
-          ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        }
-        <FilePen size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('draftbox.title')}</span>
-        {activeChapterCount > 0 && (
-          <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {t('draftbox.count').replace('{n}', String(activeChapterCount))}
-          </span>
-        )}
-      </div>
-
-      {open && (
-        <div>
-          {chapterNums.length === 0 ? (
-            <div
-              className="text-xs py-1"
-              style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}
-            >
-              {t('draftbox.empty')}
-            </div>
-          ) : (
-            chapterNums.map(chNum => (
-              <DraftChapterGroup
-                key={chNum}
-                chapterNumber={chNum}
-                drafts={draftsByChapter[chNum] || []}
-              />
-            ))
-          )}
+    <SidebarGroup
+      icon={<FilePen size={12} />}
+      title={t('draftbox.title')}
+      titleHint={t('tip.draftBox')}
+      count={activeChapterCount > 0
+        ? t('draftbox.count').replace('{n}', String(activeChapterCount))
+        : undefined}
+    >
+      {chapterNums.length === 0 ? (
+        <div className="text-xs py-1" style={{ paddingLeft: 24, color: 'var(--color-text-muted)' }}>
+          {t('draftbox.empty')}
         </div>
+      ) : (
+        chapterNums.map(chNum => (
+          <DraftChapterGroup
+            key={chNum}
+            chapterNumber={chNum}
+            drafts={draftsByChapter[chNum] || []}
+          />
+        ))
       )}
-    </div>
+    </SidebarGroup>
   )
 }
 

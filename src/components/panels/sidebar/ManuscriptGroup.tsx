@@ -4,7 +4,7 @@
  */
 
 import { useState, useEffect } from 'react'
-import { ChevronRight, ChevronDown, FileText, FolderOpen, Copy, PenTool, Download, Archive } from 'lucide-react'
+import { FileText, FolderOpen, Copy, PenTool, Download, Archive } from 'lucide-react'
 import type { FileNode } from '../../../shared/ipc-channels'
 import { ipc } from '../../../services/ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
@@ -13,6 +13,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 
 import { showSidebarMenu, openChapterFile } from './SidebarShared'
 import ChapterExportDialog from '../../dialogs/ChapterExportDialog'
+import SidebarGroup from './SidebarGroup'
 
 // ===== 章节标题缓存 =====
 
@@ -76,7 +77,6 @@ async function readChapterTitle(filePath: string, fallback: string, chapterNumbe
 
 export default function ManuscriptGroup({ files }: { files: FileNode[]; projectPath: string }) {
   const { t, locale } = useTranslation()
-  const [open, setOpen] = useState(true)
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
   // 导出状态
   const [exportOpen, setExportOpen] = useState(false)
@@ -155,44 +155,30 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
   const chapterFiles = files.filter(f => !f.name.includes('_notes'))
 
   return (
-    <div>
-      <div
-        className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
-        onClick={() => setOpen(v => !v)}
-      >
-        {open
-          ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        }
-        <PenTool size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('manuscript.title')}</span>
-        {chapterFiles.length > 0 && (
-          <>
-            {/* 批量导出按钮 */}
-            <button
-              className="ml-auto flex items-center gap-0.5 px-1.5 py-0.5 rounded transition-colors hover:bg-[var(--color-hover)]"
-              style={{ color: 'var(--color-text-muted)' }}
-              title={t('export.batchExportTip')}
-              onClick={(e) => { e.stopPropagation(); openBatchExport() }}
-              type="button"
-            >
-              <Archive size={13} />
-            </button>
-            <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-              {t('draftbox.count').replace('{n}', String(chapterFiles.length))}
-            </span>
-          </>
-        )}
-      </div>
-      {open && (
-        <div>
-          {chapterFiles.length === 0 ? (
-            <div className="text-xs py-1" style={{ paddingLeft: 34, color: 'var(--color-text-muted)' }}>
-              {t('manuscript.empty')}
-            </div>
-          ) : (
-            chapterFiles.map(f => {
+    <SidebarGroup
+      icon={<PenTool size={12} />}
+      title={t('manuscript.title')}
+      count={chapterFiles.length > 0
+        ? t('draftbox.count').replace('{n}', String(chapterFiles.length))
+        : undefined}
+      actions={chapterFiles.length > 0 && (
+        <button
+          type="button"
+          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={t('export.batchExportTip')}
+          onClick={(e) => { e.stopPropagation(); openBatchExport() }}
+        >
+          <Archive size={12} />
+        </button>
+      )}
+    >
+      {chapterFiles.length === 0 ? (
+        <div className="text-xs py-1" style={{ paddingLeft: 24, color: 'var(--color-text-muted)' }}>
+          {t('manuscript.empty')}
+        </div>
+      ) : (
+        chapterFiles.map(f => {
               const displayName = getDisplay(f)
               const chapterNum = extractChapterNumber(f)
               return (
@@ -242,8 +228,6 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
               )
             })
           )}
-        </div>
-      )}
 
       {/* 章节导出对话框 */}
       <ChapterExportDialog
@@ -252,6 +236,6 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
         open={exportOpen}
         onClose={() => setExportOpen(false)}
       />
-    </div>
+    </SidebarGroup>
   )
 }

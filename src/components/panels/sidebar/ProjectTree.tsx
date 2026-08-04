@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { ChevronRight, ChevronDown, RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree } from 'lucide-react'
+import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
@@ -17,12 +17,13 @@ import { EmptyState } from '../../ui/EmptyState'
 import { useTranslation } from '../../../hooks/useTranslation'
 
 import {
-  getArchFiles, LeafItem, renderIcon, showSidebarMenu,
+  getArchFiles, renderIcon, showSidebarMenu,
   openArchFile, openBuiltinEditor, openDraftByChapter,
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
 import VolumeGroup from './VolumeGroup'
+import SidebarGroup from './SidebarGroup'
 
 export default function ProjectTree() {
   const { t } = useTranslation()
@@ -143,7 +144,7 @@ export default function ProjectTree() {
   const archDone = archFiles.filter(f => archStatus[f.key]).length
 
   return (
-    <div className="text-sm">
+    <div className="text-sm space-y-2">
       {/* 项目名 + 刷新 */}
       <div className="flex items-center justify-between px-3 py-1.5 mb-0.5">
         <span className="font-semibold text-xs truncate" style={{ color: 'var(--color-text)' }}>
@@ -154,14 +155,17 @@ export default function ProjectTree() {
         </Button>
       </div>
 
-      {/* 1. 小说配置 */}
-      <LeafItem
-        iconName="book-open"
-        label={t('editor.novelConfig')}
-        desc={t('sidebar.novelConfigDesc')}
-        badge={configDone ? t('status.configured') : t('status.pendingConfig')}
-        badgeDone={configDone}
-        onClick={() => {
+      {/* 1. 小说配置（单行入口块：标题行点击打开配置编辑器） */}
+      <SidebarGroup
+        icon={<BookOpen size={12} />}
+        title={t('editor.novelConfig')}
+        collapsible={false}
+        count={
+          <span style={{ color: configDone ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
+            {configDone ? t('status.configured') : t('status.pendingConfig')}
+          </span>
+        }
+        onTitleClick={() => {
           const state = useEditorStore.getState()
           const configTab = state.tabs.find(t => t.type === 'config')
           if (configTab) {
@@ -188,21 +192,24 @@ export default function ProjectTree() {
       {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
       <WorldBuildingGroup archStatus={archStatus} archDone={archDone} archFiles={archFiles} />
 
-      {/* 3. 章节蓝图 — 点击打开编辑器页 */}
-      <LeafItem
-        iconName="layout-list"
-        label={t('mention.blueprint')}
-        desc={t('sidebar.blueprintDesc')}
-        badge={blueprintCount > 0 ? `${blueprintCount}/${nc.totalChapters} ${t('unit.chapters')}` : t('status.pendingGen')}
-        badgeColor={
-          blueprintCount >= nc.totalChapters
-            ? 'var(--color-success)'
-            : blueprintCount > 0
-              ? 'var(--color-warning, #eab308)'
-              : undefined
+      {/* 3. 章节蓝图（单行入口块：标题行点击打开编辑器页） */}
+      <SidebarGroup
+        icon={<LayoutList size={12} />}
+        title={t('mention.blueprint')}
+        collapsible={false}
+        count={
+          <span style={{
+            color: blueprintCount >= nc.totalChapters
+              ? 'var(--color-success)'
+              : blueprintCount > 0
+                ? 'var(--color-warning, #eab308)'
+                : 'var(--color-text-muted)',
+          }}
+          >
+            {blueprintCount > 0 ? `${blueprintCount}/${nc.totalChapters} ${t('unit.chapters')}` : t('status.pendingGen')}
+          </span>
         }
-        badgeDone={blueprintCount >= nc.totalChapters}
-        onClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
+        onTitleClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
         onContextMenu={e => showSidebarMenu([
           {
             key: 'open',
@@ -263,63 +270,44 @@ function WorldBuildingGroup({
   archFiles: Array<{ key: string; fileName: string; label: string; iconName: string; desc: string }>
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(true)
 
   const allDone = archDone === archFiles.length
 
   return (
-    <div>
-      {/* 组标题行 — 点击打开故事架构编辑器，双击展开/折叠子文件 */}
-      <div
-        className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 10 }}
-        onClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
-        title={t('tip.openArchEditor')}
-      >
-        <span
-          style={{ width: 12, flexShrink: 0, display: 'flex', alignItems: 'center', cursor: 'pointer' }}
-          onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
-        >
-          {open
-            ? <ChevronDown size={12} style={{ color: 'var(--color-text-muted)' }} />
-            : <ChevronRight size={12} style={{ color: 'var(--color-text-muted)' }} />
-          }
-        </span>
-        <FolderTree size={14} style={{ color: 'var(--color-text-muted)' }} />
-        <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{t('editor.storyArch')}</span>
-        {/* 进度徽章 */}
-        <span
-          className="text-[0.7rem] flex-shrink-0 ml-1"
-          style={{
-            color: allDone
-              ? 'var(--color-success)'
-              : archDone > 0
-                ? 'var(--color-warning, #eab308)'
-                : 'var(--color-text-muted)'
-          }}
+    <SidebarGroup
+      icon={<FolderTree size={12} />}
+      title={t('editor.storyArch')}
+      count={
+        <span style={{
+          color: allDone
+            ? 'var(--color-success)'
+            : archDone > 0
+              ? 'var(--color-warning, #eab308)'
+              : 'var(--color-text-muted)',
+        }}
         >
           {archDone}/{archFiles.length}
         </span>
-      </div>
-
+      }
+      onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
+      titleHint={t('tip.openArchEditor')}
+    >
       {/* 子文件列表（点击直接在 Markdown 编辑器打开） */}
-      {open && (
-        <div>
-          {archFiles.map(f => {
-            const isGenerated = archStatus[f.key]
-            const filePath = `vela://core/${f.key}`
-            return (
-              <ArchFileRow
-                key={f.key}
-                f={f}
-                filePath={filePath}
-                isGenerated={isGenerated}
-              />
-            )
-          })}
-        </div>
-      )}
-    </div>
+      <div className="mt-1">
+        {archFiles.map(f => {
+          const isGenerated = archStatus[f.key]
+          const filePath = `vela://core/${f.key}`
+          return (
+            <ArchFileRow
+              key={f.key}
+              f={f}
+              filePath={filePath}
+              isGenerated={isGenerated}
+            />
+          )
+        })}
+      </div>
+    </SidebarGroup>
   )
 }
 
