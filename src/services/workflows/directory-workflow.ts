@@ -32,6 +32,14 @@ export interface DirectoryWorkflowParams {
   count?: number
   /** 节奏/风格指导（可选） */
   pacingGuidance?: string
+  /**
+   * 生成方式：
+   * - single（默认）：一次对话生成所选范围（费用最低；大范围时中后段质量可能下降）
+   * - batch：分批生成，每批 batchChapterCount 章（每批重新注入架构上下文，质量更稳，费用略高）
+   */
+  generationMode?: 'single' | 'batch'
+  /** batch 模式的每批章数 */
+  batchChapterCount?: number
 }
 
 // ==========================================
