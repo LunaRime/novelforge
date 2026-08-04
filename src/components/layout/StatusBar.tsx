@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen, Thermometer } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { t } from '../../shared/locale'
+import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useUsageStore } from '../../stores/usage-store'
+import { useOutsideClick } from '../../hooks/useOutsideClick'
+import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
 export default function StatusBar() {
@@ -57,11 +60,14 @@ export default function StatusBar() {
 
       </div>
 
-      {/* 右侧：费用 + AI 胶囊 + 模型名 */}
+      {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 */}
       <div className="flex items-center h-full">
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
+
+        {/* 水温控制（当前默认模型 temperature，拖动实时预览 + 防抖保存） */}
+        <TemperatureControl defaultModel={defaultModel} />
 
         {defaultModel ? (
           <StatusBarSegment
@@ -84,6 +90,129 @@ export default function StatusBar() {
   )
 }
 
+
+// ===== 水温控制（temperature 快速调节）=====
+
+/**
+ * 右下角图标式温度控制：
+ * - 状态栏段：温度计图标 + 当前温度值，点击弹出滑块面板
+ * - 拖动实时预览（本地 state），300ms 防抖后保存到默认模型（llm:save-model）
+ * - 预设快捷：0.3 严谨 / 0.7 平衡 / 1.2 创意
+ */
+function TemperatureControl({
+  defaultModel,
+}: {
+  defaultModel: ModelProfile | undefined
+}) {
+  const { t } = useTranslation()
+  const [open, setOpen] = useState(false)
+  const [tempDraft, setTempDraft] = useState<number>(defaultModel?.temperature ?? 0.7)
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  useOutsideClick(panelRef, () => setOpen(false), open)
+
+  // 打开面板时同步当前模型温度（保存成功后 loadModels 刷新引用）
+  const handleToggle = () => {
+    if (!open && defaultModel) setTempDraft(defaultModel.temperature ?? 0.7)
+    setOpen(v => !v)
+  }
+
+  const handleTempChange = (v: number) => {
+    const rounded = Math.round(v * 100) / 100
+    setTempDraft(rounded)
+    if (!defaultModel) return
+    // 防抖：拖动时只更新本地预览，停顿 300ms 后写盘
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+    saveTimer.current = setTimeout(() => {
+      void useLLMStore.getState().saveModel({ ...defaultModel, temperature: rounded })
+    }, 300)
+  }
+
+  useEffect(() => () => {
+    if (saveTimer.current) clearTimeout(saveTimer.current)
+  }, [])
+
+  if (!defaultModel) return null
+
+  const presets = [
+    { label: t('statusbar.temperatureLow'), value: 0.3 },
+    { label: t('statusbar.temperatureMid'), value: 0.7 },
+    { label: t('statusbar.temperatureHigh'), value: 1.2 },
+  ]
+
+  return (
+    <div ref={panelRef} className="relative">
+      <StatusBarSegment
+        title={`${t('statusbar.temperature')}: ${(defaultModel.temperature ?? 0.7).toFixed(2)}`}
+        onClick={handleToggle}
+      >
+        <Thermometer size={11} />
+        <span className="opacity-80 tabular-nums">{(defaultModel.temperature ?? 0.7).toFixed(2)}</span>
+      </StatusBarSegment>
+
+      {open && (
+        <div
+          className="absolute bottom-[calc(100%+6px)] right-0 z-[var(--z-dropdown)] py-2 px-3 rounded-lg shadow-lg"
+          style={{
+            width: 200,
+            backgroundColor: 'var(--color-sidebar)',
+            border: '1px solid var(--color-border)',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+          }}
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[0.7rem] font-medium" style={{ color: 'var(--color-text)' }}>
+              {t('statusbar.temperature')}
+            </span>
+            <span className="text-[0.7rem] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+              {tempDraft.toFixed(2)}
+            </span>
+          </div>
+
+          {/* 温度滑块 */}
+          <input
+            type="range"
+            min={0}
+            max={2}
+            step={0.05}
+            value={tempDraft}
+            onChange={e => handleTempChange(parseFloat(e.target.value))}
+            style={{
+              width: '100%',
+              accentColor: 'var(--color-accent)',
+              cursor: 'pointer',
+            }}
+          />
+
+          {/* 预设快捷 */}
+          <div className="flex items-center gap-1 mt-2">
+            {presets.map(p => (
+              <button
+                key={p.value}
+                type="button"
+                onClick={() => handleTempChange(p.value)}
+                className="flex-1 py-0.5 rounded text-[0.65rem] transition-colors cursor-pointer"
+                style={{
+                  color: tempDraft === p.value ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                  backgroundColor: tempDraft === p.value ? 'rgba(var(--color-accent-rgb), 0.1)' : 'transparent',
+                }}
+                onMouseEnter={e => {
+                  if (tempDraft !== p.value) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
+                }}
+                onMouseLeave={e => {
+                  if (tempDraft !== p.value) e.currentTarget.style.backgroundColor = 'transparent'
+                }}
+              >
+                {p.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ===== AI 任务胶囊指示器（Layer 1）=====
 
