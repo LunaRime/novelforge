@@ -44,6 +44,12 @@ export interface GlobalConfig {
     /** 请求超时（ms，默认 15000） */
     timeoutMs: number
   }
+  /** 浏览器接入（内置 CDP 桥接）：Chrome/Edge 开 --remote-debugging-port 后开箱即用 */
+  devBrowser?: {
+    enabled: boolean
+    /** CDP 调试端口（默认 9222，仅回环 127.0.0.1） */
+    cdpPort: number
+  }
 }
 
 // ===== 项目管理 =====
@@ -645,6 +651,29 @@ export interface DevChannels {
   }
 }
 
+// ===== 浏览器接入频道（内置 CDP 桥接） =====
+
+/** 浏览器标签页信息（CDP /json 返回精简） */
+export interface BrowserTabInfo {
+  id: string
+  title: string
+  url: string
+  type: string
+}
+
+export interface BrowserChannels {
+  /** 查询浏览器标签页列表（GET http://127.0.0.1:{port}/json，按 title/url 排序） */
+  'browser:list-tabs': {
+    args: []
+    return: { success: boolean; tabs?: BrowserTabInfo[]; error?: string }
+  }
+  /** 测试 CDP 连接（GET /json/version） */
+  'browser:test': {
+    args: []
+    return: { success: boolean; version?: string; error?: string }
+  }
+}
+
 // ===== 日志频道 =====
 
 /** 日志环境（对应主进程双环境日志流：dev=开发/内测，release=公测/正式） */
@@ -691,7 +720,7 @@ export interface LogChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */
