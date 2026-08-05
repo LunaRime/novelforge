@@ -210,7 +210,7 @@ function DevGuideDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
               className="p-2 rounded-lg font-mono text-[0.7rem] overflow-x-auto"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}
             >
-              {`API 基础地址: ${exampleBase}\n请求头: {}`}
+              {`${t('dev.apiBaseUrl')}: ${exampleBase}\n${t('dev.headers')}: {}`}
             </pre>
           </div>
 
