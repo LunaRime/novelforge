@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import type { PromptTemplate } from './prompt-templates'
 import { ipc } from './ipc-client'
 
 // mock ipc-client（prompt-templates 内部动态 import）
@@ -142,13 +143,57 @@ describe('localizeTemplate（Issue #18 多语言模板）', () => {
     const tpl = mod.getPromptTemplate('premise')!
     expect(tpl.content).toBe('用户保存的内容 {{genre}}')
   })
+})
 
-  it('未翻译的模板（无 contentLocales）原样返回', async () => {
+describe('systemSuffix/systemRole 语言化（英文用户生成质量）', () => {
+  it('localizeTemplate 解析 systemRole 语言变体', async () => {
+    const mod = await loadModule()
+    const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
+    const localized = mod.localizeTemplate(premise, 'en-US')
+    expect(localized.systemRole).toContain('story architect')
+    expect(localized.content).toContain('Story Premise')
+  })
+
+  it('localizeTemplate 解析 systemSuffix 语言变体（保留占位符）', async () => {
+    const mod = await loadModule()
+    const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
+    const localized = mod.localizeTemplate(premise, 'en-US')
+    expect(localized.systemSuffix).toContain('highest priority')
+    expect(localized.systemSuffix).toContain('{{step_guidance}}')
+  })
+
+  it('全部 19 个模板的 systemRole 都有 en-US 变体', async () => {
+    const mod = await loadModule()
+    const missing = mod.BUILTIN_PROMPTS.filter(p => !p.systemRoleLocales?.['en-US']).map(p => p.key)
+    expect(missing).toEqual([])
+  })
+
+  it('systemSuffix 英文变体占位符与中文版一致（防渲染残留）', async () => {
+    const mod = await loadModule()
+    for (const p of mod.BUILTIN_PROMPTS) {
+      const en = p.systemSuffixLocales?.['en-US']
+      if (!en) continue
+      const zhVars = [...(p.systemSuffix ?? '').matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]).sort()
+      const enVars = [...en.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]).sort()
+      expect(enVars, `${p.key} systemSuffix 占位符不一致`).toEqual(zhVars)
+    }
+  })
+})
+
+describe('localizeTemplate 回退与完整性（续）', () => {
+  it('无 content 变体的模板：content 保持中文，其他变体按语言解析', async () => {
     const mod = await loadModule()
     const blueprint = mod.BUILTIN_PROMPTS.find(p => p.key === 'chapter_blueprint')!
     const localized = mod.localizeTemplate(blueprint, 'en-US')
-    expect(localized).toBe(blueprint) // 无语言变体 → 同一引用
+    // content 无英文变体 → 中文原文；systemRole 有英文变体 → 解析
     expect(localized.content).toContain('保姆级执行目录细纲')
+    expect(localized.systemRole).toContain('chapter blueprints')
+  })
+
+  it('无任何语言变体的模板原样返回（同一引用）', async () => {
+    const mod = await loadModule()
+    const plain: PromptTemplate = { key: 'x', name: 'x', description: 'x', content: '中文', variables: {} }
+    expect(mod.localizeTemplate(plain, 'en-US')).toBe(plain)
   })
 
   it('全部 11 个 EDITABLE 模板都有 en-US 变体', async () => {

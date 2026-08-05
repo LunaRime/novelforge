@@ -1,5 +1,5 @@
 import type { PromptTemplate } from '../prompt-templates'
-import { BUILTIN_PROMPTS, appendOutputLanguage } from '../prompt-templates'
+import { BUILTIN_PROMPTS, localizeTemplate, appendOutputLanguage } from '../prompt-templates'
 
 /**
  * 基础抽象 Prompt 建造者
@@ -30,9 +30,9 @@ export class BasePromptBuilder {
       result = result.replaceAll(`{{${key}}}`, safeValue)
     }
 
-    // 自动追加 systemSuffix（始终从内置模板获取，与 renderPrompt 行为对齐）
-    const builtinTemplate = BUILTIN_PROMPTS.find(p => p.key === this.template.key)
-    const suffix = builtinTemplate?.systemSuffix
+    // 自动追加 systemSuffix（始终从内置模板获取，与 renderPrompt 行为对齐；按当前语言解析变体）
+    const builtin = BUILTIN_PROMPTS.find(p => p.key === this.template.key)
+    const suffix = builtin ? localizeTemplate(builtin).systemSuffix : undefined
     if (suffix) {
       let renderedSuffix = suffix
       for (const [key, value] of Object.entries(this.variables)) {
