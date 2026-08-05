@@ -48,13 +48,43 @@ if (!fs.existsSync(releaseDir)) {
   process.exit(0);
 }
 
+// 目录移动：rename 带重试（Windows Defender 实时扫描锁可致间歇性 EPERM（UV_EPERM/-4048），
+// 构建产物刚生成时扫描队列高负载必现——electron-builder 原生创建的目录同样受影响），
+// 仍失败则回退复制+删除（复制/删除不受扫描锁影响，实测可靠）
+function sleepSync(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+function moveWithRetry(src, dest, label) {
+  if (!fs.existsSync(src)) return false;
+  if (fs.existsSync(dest)) fs.rmSync(dest, { recursive: true, force: true });
+
+  let moved = false;
+  for (let attempt = 1; attempt <= 5 && !moved; attempt++) {
+    try {
+      fs.renameSync(src, dest);
+      moved = true;
+    } catch (e) {
+      if (attempt < 5) {
+        console.warn(`[organize] ${label} rename 尝试 ${attempt}/5 失败（${e.code || e.message}），1s 后重试`);
+        sleepSync(1000);
+      }
+    }
+  }
+  if (moved) {
+    console.log(`[organize] ${label} → ${path.basename(dest)}/`);
+    return true;
+  }
+  console.warn(`[organize] ${label} rename 连续失败（扫描锁持续），回退复制+删除`);
+  fs.cpSync(src, dest, { recursive: true });
+  fs.rmSync(src, { recursive: true, force: true });
+  console.log(`[organize] ${label}（复制模式）→ ${path.basename(dest)}/`);
+  return true;
+}
+
 // 1. 将 win-unpacked 重命名为 {productName}-{version}-Portable
 if (fs.existsSync(winUnpacked)) {
-  if (fs.existsSync(portableDir)) {
-    fs.rmSync(portableDir, { recursive: true, force: true });
-  }
-  fs.renameSync(winUnpacked, portableDir);
-  console.log(`[organize] win-unpacked → ${productName}-${version}-Portable/`);
+  moveWithRetry(winUnpacked, portableDir, 'win-unpacked');
 }
 
 // 2. 清理构建调试文件（⚠️ 保留 latest.yml 与 .blockmap — electron-updater 自动更新的必需元数据，发布时必须一并上传）
@@ -107,43 +137,14 @@ const categoryRoot = path.join(__dirname, '..', 'release', categoryDirMap[versio
 const targetDir = path.join(categoryRoot, version);
 
 fs.mkdirSync(categoryRoot, { recursive: true });
-if (fs.existsSync(targetDir)) {
-  // 同版本重复构建：先删除旧产物，防 rename 目标已存在失败
-  fs.rmSync(targetDir, { recursive: true, force: true });
-}
 
-// rename 带重试（Windows Defender 实时扫描锁可致间歇性 EPERM（UV_EPERM/-4048），
-// 实测扫描队列高负载期稳定复现、负载回落自行恢复——重试间隔拉长到 1s×5），
-// 仍失败则回退复制+删除（复制/删除不受扫描锁影响，实测可靠）
-function sleepSync(ms) {
-  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
-}
-
-let renamed = false;
-for (let attempt = 1; attempt <= 5 && !renamed; attempt++) {
-  try {
-    fs.renameSync(releaseDir, targetDir);
-    renamed = true;
-  } catch (e) {
-    if (attempt < 5) {
-      console.warn(`[organize] rename 尝试 ${attempt}/5 失败（${e.code || e.message}），1s 后重试`);
-      sleepSync(1000);
-    }
-  }
-}
-
-if (renamed) {
+if (moveWithRetry(releaseDir, targetDir, '产物归位')) {
   console.log(`[organize] 产物归位 → release/${categoryDirMap[versionType]}/${version}`);
   // 归位后计数（源目录已移走，避免触碰源目录触发扫描锁）
   const movedPortable = path.join(targetDir, `${productName}-${version}-Portable`);
   if (fs.existsSync(movedPortable)) {
     console.log(`[organize] ${productName}-${version}-Portable/: ${fs.readdirSync(movedPortable).length} 个文件/目录`);
   }
-} else {
-  console.warn(`[organize] rename 连续失败（扫描锁持续），回退复制+删除`);
-  fs.cpSync(releaseDir, targetDir, { recursive: true });
-  fs.rmSync(releaseDir, { recursive: true, force: true });
-  console.log(`[organize] 产物归位（复制模式）→ release/${categoryDirMap[versionType]}/${version}`);
 }
 
 console.log(`[organize] release/${version} 整理完成（已归位 ${categoryDirMap[versionType]}/${version}）`);
