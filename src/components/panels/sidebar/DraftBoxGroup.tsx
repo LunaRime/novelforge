@@ -39,6 +39,7 @@ export default function DraftBoxGroup({
       icon={<FilePen size={12} />}
       title={t('draftbox.title')}
       titleHint={t('tip.draftBox')}
+      defaultOpen={false}
       count={activeChapterCount > 0
         ? t('draftbox.count').replace('{n}', String(activeChapterCount))
         : undefined}
@@ -70,7 +71,7 @@ function DraftChapterGroup({
   drafts: DraftMeta[]
 }) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
 
   // 将 archived 草稿折叠，只显示活跃草稿（非 archived）
   const activeDrafts = drafts.filter(d => d.status !== 'archived')
