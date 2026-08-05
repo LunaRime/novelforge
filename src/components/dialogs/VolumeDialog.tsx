@@ -8,6 +8,7 @@ import { useEffect, useState } from 'react'
 import { BookMarked } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 import { useVolumeStore } from '../../stores/volume-store'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -95,9 +96,12 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
     })
     setSaving(false)
     if (ok) {
+      // 保存行为日志流（视觉反馈已有 toast.success）
+      renderLog('info', 'Save:Volume', `分卷保存成功 第${num}卷「${title.trim()}」（${editing ? '编辑' : '新建'}）`)
       onClose()
       toast.success(editing ? t('volume.editVolume') : t('volume.newVolume'))
     } else {
+      renderLog('error', 'Save:Volume', `分卷保存失败 第${num}卷: DB 写入失败`)
       toast.error(t('volume.saveFailed').replace('{error}', 'DB'))
     }
   }

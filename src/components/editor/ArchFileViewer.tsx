@@ -6,7 +6,9 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useEditorStore } from '../../stores/editor-store'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 import { Button } from '../ui/Button'
+import { toast } from '../ui/Toast'
 import { ipc } from '../../services/ipc-client'
+import { renderLog } from '../../services/render-logger'
 import { readCoreContent, writeCoreContent, VELA } from '../../services/vela-protocol'
 import CodeMirrorEditor from './CodeMirrorEditor'
 import { useProjectStore } from '../../stores/project-store'
@@ -106,6 +108,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
 
   /** 保存（统一走 vela://core/ DB 路径） */
   const handleSave = useCallback(async (md: string) => {
+    const t0 = Date.now()
     setSaving(true)
     try {
       let success = true
@@ -121,11 +124,21 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
         savedContentRef.current = md
         setIsDirty(false)
         useEditorStore.getState().markTabSaved(filePath)
+        // 保存行为日志流：成功 info + toast 视觉反馈
+        renderLog('info', 'Save:Arch', `架构文件保存成功 ${filePath}（${Date.now() - t0}ms）`)
+        toast.success(t('save.success'))
+      } else {
+        // 保存被拒绝（writeCoreContent 返回 false）——不再静默
+        renderLog('error', 'Save:Arch', `架构文件保存被拒绝 ${filePath}`)
+        toast.error(t('save.failed').replace('{error}', 'DB'))
       }
+    } catch (e) {
+      renderLog('error', 'Save:Arch', `架构文件保存失败 ${filePath}: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)
     }
-  }, [filePath])
+  }, [filePath, t])
 
   /** 从 DB 重新加载（AI 生成后刷新用） */
   const handleReload = useCallback(async () => {

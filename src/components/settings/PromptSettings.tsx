@@ -20,6 +20,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { cn } from '../../lib/utils'
+import { renderLog } from '../../services/render-logger'
 
 // ==================== 来源标签配置 ====================
 
@@ -167,7 +168,13 @@ function TemplateItem({
     const ok = await saveCustomPrompt(template)
     setSaving(false)
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedGlobal') } : { type: 'error', msg: t('prompt.saveFailed') })
-    if (ok) onSaved()
+    // 保存行为日志流（视觉反馈已有 saveResult 局部文本）
+    if (ok) {
+      renderLog('info', 'Save:Prompt', `模板保存成功（全局）${builtinTemplate.key}`)
+      onSaved()
+    } else {
+      renderLog('error', 'Save:Prompt', `模板保存失败（全局）${builtinTemplate.key}`)
+    }
     setTimeout(() => setSaveResult(null), 3000)
   }
 
@@ -185,7 +192,13 @@ function TemplateItem({
     const ok = await saveProjectCustomPrompt(projectPath, template)
     setSaving(false)
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedProject') } : { type: 'error', msg: t('prompt.saveFailed') })
-    if (ok) onSaved()
+    // 保存行为日志流（视觉反馈已有 saveResult 局部文本）
+    if (ok) {
+      renderLog('info', 'Save:Prompt', `模板保存成功（项目）${builtinTemplate.key}`)
+      onSaved()
+    } else {
+      renderLog('error', 'Save:Prompt', `模板保存失败（项目）${builtinTemplate.key}`)
+    }
     setTimeout(() => setSaveResult(null), 3000)
   }
 

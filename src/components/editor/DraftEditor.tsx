@@ -25,6 +25,7 @@ import { getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '.
 import { readDraftBody } from '../../stores/draft-store'
 import { computeTextStats } from '../../services/text-stats'
 import { ipc } from '../../services/ipc-client'
+import { renderLog } from '../../services/render-logger'
 
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
 import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils'
@@ -92,8 +93,14 @@ export default function DraftEditor({ filePath, content }: Props) {
 
   const currentProject = useProjectStore(s => s.currentProject)
 
-  /** 保存 */
-  const doSave = async (text: string) => {
+  /**
+   * 保存（手动/自动共用）
+   * - 手动：toast 视觉反馈（成功/失败）+ info 日志
+   * - 自动（useAutoSave 30s）：仅 debug 日志（不 toast，避免高频打扰）
+   */
+  const doSave = async (text: string, opts?: { manual?: boolean }) => {
+    const manual = opts?.manual ?? false
+    const t0 = Date.now()
     setSaving(true)
     try {
       if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
@@ -119,6 +126,13 @@ export default function DraftEditor({ filePath, content }: Props) {
         useEditorStore.getState().markTabSaved(targetTab.id)
         useEditorStore.getState().syncTabContent(targetTab.id, text)
       }
+      // 保存行为日志流：手动 info（公测可见）/ 自动 debug（dev 可见）
+      renderLog(manual ? 'info' : 'debug', 'Save:Draft', `${manual ? '手动' : '自动'}保存成功 ${filePath}（${Date.now() - t0}ms）`)
+      if (manual) toast.success(t('save.success'))
+    } catch (e) {
+      // 保存失败不再静默：toast 视觉反馈 + error 日志（含原因）
+      renderLog('error', 'Save:Draft', `保存失败 ${filePath}: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)
     }
@@ -275,7 +289,7 @@ export default function DraftEditor({ filePath, content }: Props) {
         pendingRevisions={pendingRevisions}
         reviewCount={reviewCount}
         hasProcessFailure={hasProcessFailure}
-        onSave={() => doSave(currentBodyRef.current)}
+        onSave={() => doSave(currentBodyRef.current, { manual: true })}
         onRefine={() => { setUserRefinePrompt(''); setConfirmAction('refine') }}
         onReview={() => setConfirmAction('review')}
         onFinalize={doFinalize}
@@ -308,7 +322,7 @@ export default function DraftEditor({ filePath, content }: Props) {
             currentBodyRef.current = text
             useEditorStore.getState().updateTabContent(filePath, text)
           }}
-          onSave={(text) => doSave(text)}
+          onSave={(text) => doSave(text, { manual: true })}
         />
       </div>
 
