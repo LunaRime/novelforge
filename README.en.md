@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.4-20260804-orange.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.4-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -94,6 +94,23 @@ Writing a web novel is not just about typing words — it's about managing a com
 | 📊 Multi-Draft Comparison | Parallel generation of multiple versions per chapter, AI auto-scoring |
 | 🔮 Foreshadowing Manager | Auto-scans for new foreshadowing + detects resolution of existing threads |
 | 🔁 Post-Process Pipeline | Ingest → plot extraction → character update → foreshadowing scan → voice analysis → style learning (DAG parallel) |
+| 🌐 Multilingual Prompt Templates | Built-in templates in EN/RU (19 templates + system constraints + system roles), AI output language follows the UI language |
+
+### 📊 Writing Activity Dashboard
+
+| Feature | Description |
+|---------|-------------|
+| 🔥 Daily Activity Heatmap | GitHub Contribution-style full-year view, hover for per-day writing/revision/calls/cost |
+| 📅 Monthly Trend Chart | 12-month writing trend with year switching for history |
+| 💰 Global Statistics | Cross-project aggregation of written words / revisions / model calls / tokens / cost |
+
+### 🔍 Observability
+
+| Feature | Description |
+|---------|-------------|
+| 📝 Dual-Environment Logs | Dev (DEBUG full) vs release (INFO+) separate directories; renderer logs persisted + global error capture |
+| 🧩 LLM Extraction Logs | Call/JSON-parse/self-check retry fully visible, full diagnostics on parse failure |
+| 💾 Save Feedback | Toast feedback for every save operation + modular logs (Save:{Module}) |
 
 ### 🧠 Million-Word Local Knowledge Base + Vector Engine
 
@@ -174,9 +191,10 @@ pnpm run build
 > - `CSC_IDENTITY_AUTO_DISCOVERY=false` — Skips code signing (not needed for local builds)
 > - `ELECTRON_BUILDER_BINARIES_MIRROR` — Mirror for faster downloads (essential in China; optional elsewhere)
 >
-> Build output at `release/{version}/`:
-> - `NovelForge-{version}-Portable/` — Portable edition
+> Build output is organized by release type at `release/{type}/{version}/` (`alpha` internal / `beta` public / `stable` release):
+> - `NovelForge-{version}-Portable/` — Portable edition (`.7z` archive auto-generated for beta/stable)
 > - `NovelForge-{version}-Installer/NovelForge-{version}-Installer.exe` — NSIS installer
+> - `latest.yml` / `.blockmap` — electron-updater metadata
 
 #### Windows Build Issues
 

@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.4-20260804-orange.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.4-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -63,6 +63,23 @@
 | 🔮 伏笔管理器 | 自动扫描新伏笔 + 检测回收旧伏笔，防止遗忘 |
 | 🔁 后期管线 | 正文入库 → 剧情提取 → 角色更新 → 伏笔扫描 → 声音分析 → 文风学习（DAG 并行） |
 | ↩️ 撤销/重做 | Ctrl+Z/Y 快捷键 + 工具栏按钮，CodeMirror 6 原生支持 |
+| 🌐 多语言 Prompt 模板 | 内置模板英/俄双语（19 模板 + 系统约束 + 角色定位），输出语言自动跟随界面语言 |
+
+### 📊 写作数据看板
+
+| 能力 | 说明 |
+|---|---|
+| 🔥 每日活动热力图 | GitHub Contribution 风格全年视图，悬停查看单日写作/修改/调用/费用 |
+| 📅 月度趋势柱状图 | 全年 12 个月写作趋势，年份切换查看往期 |
+| 💰 全局统计 | 跨项目聚合写作字数 / 修改量 / 模型调用 / Tokens / 费用 |
+
+### 🔍 可观测性
+
+| 能力 | 说明 |
+|---|---|
+| 📝 双环境日志流 | 开发（DEBUG 全量）与发布（INFO 起）分目录；渲染进程日志落盘 + 全局错误捕获 |
+| 🧩 LLM 提取日志 | 调用/JSON 解析/自检重试全过程可见，解析失败完整诊断落盘 |
+| 💾 保存行为反馈 | 所有保存操作 toast 视觉反馈 + 模块化日志（Save:{Module}） |
 
 ### 🧠 百万字级本地知识库 + 向量引擎
 
@@ -143,9 +160,10 @@ pnpm run build
 > - `CSC_IDENTITY_AUTO_DISCOVERY=false` — 跳过代码签名（本地构建无需证书）
 > - `ELECTRON_BUILDER_BINARIES_MIRROR` — npmmirror 镜像加速（国内网络必需，避免 GitHub 下载超时）
 >
-> 构建产物位于 `release/{version}/`：
-> - `NovelForge-{version}-Portable/` — 绿色便携版
+> 构建产物按版本类型归位到 `release/{type}/{version}/`（`alpha` 内测 / `beta` 公测 / `stable` 正式版）：
+> - `NovelForge-{version}-Portable/` — 绿色便携版（beta/stable 自动附带 `.7z` 压缩包）
 > - `NovelForge-{version}-Installer/NovelForge-{version}-Installer.exe` — NSIS 安装程序
+> - `latest.yml` / `.blockmap` — electron-updater 自动更新元数据
 
 #### 构建卡点（Windows）
 
