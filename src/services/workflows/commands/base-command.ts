@@ -7,6 +7,7 @@ import { ipc } from '../../ipc-client'
 import { robustParseJSON } from '../workflow-utils'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-context-provider'
 import { structureForCache, calculateCost, type CacheScope } from '../../llm/prompt-cache'
+import { renderLog } from '../../render-logger'
 
 export interface CommandExecuteParams {
   step: Partial<WorkflowStep> & { [extra: string]: unknown }
@@ -37,6 +38,9 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     const modelId = llmStore.defaultModelId
     const model = llmStore.models.find(m => m.id === modelId)
     const startTime = Date.now()
+
+    // LLM 提取日志流：发起调用（debug 级，开发环境全量可见）
+    renderLog('debug', 'LLM', `发起调用 ${model?.name ?? modelId} | prompt ${prompt.length} 字符 | system ${systemPrompt.length} 字符 | 缓存前缀 ${options?.staticContext ? '含' : '无'}`)
 
     callbacks.setProgress(10)
 
@@ -82,6 +86,16 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           error_message: errorMessage ?? '',
           cost,
         }).catch(() => { /* 日志失败不影响主流程 */ })
+
+        // LLM 提取日志流：结果与失败原因落盘（info/error 级在公测/正式版也保留）
+        if (success && usage) {
+          const cacheHit = (usage.cachedTokens ?? 0) > 0
+          renderLog('info', 'LLM', `完成 ${duration}ms | ${usage.totalTokens} tokens（输入 ${usage.promptTokens} / 输出 ${usage.completionTokens}）| $${cost.toFixed(4)}${cacheHit ? '（缓存命中）' : ''}`)
+        } else if (success) {
+          renderLog('info', 'LLM', `完成 ${duration}ms（无 usage 统计）`)
+        } else {
+          renderLog('error', 'LLM', `失败: ${errorMessage ?? '未知错误'}（${duration}ms）`)
+        }
       }
 
       // 缓存优化：将稳定内容前置以最大化 API 缓存命中（命中与否由 API 返回的 cachedTokens 判定）
@@ -182,17 +196,25 @@ export abstract class BaseWorkflowCommand<TResult = string> {
    * ★ AI 自检增强：解析失败时提供详细诊断信息，可反馈给 LLM 自我修正
    */
   protected parseJSON<T>(text: string): T {
+    // LLM 提取日志流：解析过程可见（debug 级，开发环境全量）
+    renderLog('debug', 'Parse', `JSON 解析开始: ${text.length} 字符，对象优先`)
+
     // 先尝试对象解析（AI 通常返回 JSON 对象），再尝试数组
     let result = robustParseJSON(text, false)
     if (!result) {
+      // 对象失败 → 数组回退（常见于角色卡/多蓝图场景）
+      renderLog('warn', 'Parse', '对象解析失败，回退数组尝试')
       result = robustParseJSON(text, true)
     }
 
     if (result === null) {
       const diagnostic = this.buildJSONParseDiagnostic(text)
+      // 完整诊断落盘——"为什么提取失败"的核心（error 级，公测/正式版也保留）
+      renderLog('error', 'Parse', `JSON 解析失败:\n${diagnostic}`)
       throw new Error(diagnostic)
     }
 
+    renderLog('debug', 'Parse', `JSON 解析成功（${Array.isArray(result) ? `数组 ${result.length} 项` : '对象'}）`)
     return result as T
   }
 
@@ -273,6 +295,9 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         lastError = err instanceof Error ? err.message : String(err)
         if (attempt >= maxRetries) break
 
+        // LLM 提取日志流：自检重试过程可见
+        renderLog('info', 'Parse', `JSON 自检重试 ${attempt + 1}/${maxRetries}：解析失败反馈 LLM 修正（${err instanceof Error ? err.message.slice(0, 100) : String(err)}）`)
+
         // 构建反馈消息，让 LLM 自我修正
         const feedback = `你上一次输出的 JSON 格式有误，请修正后重新输出。\n\n【解析错误诊断】\n${lastError}\n\n请只输出修正后的纯 JSON（不要包裹在 Markdown 代码块中，不要添加任何说明文字）。`
         try {
@@ -283,6 +308,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       }
     }
 
+    renderLog('error', 'Parse', `JSON 自检重试 ${maxRetries} 次后仍失败: ${lastError.slice(0, 300)}`)
     throw new Error(`JSON 解析失败（已重试 ${maxRetries} 次）: ${lastError}`)
   }
 

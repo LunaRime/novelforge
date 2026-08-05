@@ -6,6 +6,7 @@
  */
 
 import { llmStore } from './store-facade'
+import { renderLog } from './render-logger'
 
 export interface ChapterSplitSuggestion {
   /** 建议总章数 */
@@ -70,7 +71,12 @@ export async function analyzeOutlineForChapters(
     // 解析 Markdown 表格
     const { parseMarkdownTable } = await import('./workflows/workflow-utils')
     const rows = parseMarkdownTable(response.content)
-    if (!rows || rows.length === 0) return null
+    if (!rows || rows.length === 0) {
+      // LLM 提取日志流：拆章提取失败原因落盘（error 级，公测/正式版也保留）
+      renderLog('error', 'Extract', `拆章解析失败: 未找到 Markdown 表格\n输出头部 300 字: ${response.content.slice(0, 300)}`)
+      return null
+    }
+    renderLog('info', 'Extract', `拆章解析成功: ${rows.length} 行表格`)
 
     const row = rows[0]
     const totalChapters = parseInt(row.totalChapters) || 64
