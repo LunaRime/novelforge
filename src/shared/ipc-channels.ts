@@ -34,6 +34,16 @@ export interface GlobalConfig {
   }
   /** 最近项目列表（打开项目时由渲染进程同步，活动聚合/历史导航读取） */
   recentProjects?: Array<{ name: string; path: string; updatedAt?: number }>
+  /** 开发者模式：接入外部程序 API（如本地浏览器服务），AI 工具 call_external_api 可调用 */
+  devMode?: {
+    enabled: boolean
+    /** 外部 API 基础地址（http/https，如 http://localhost:9223） */
+    apiBaseUrl: string
+    /** 请求头（JSON 对象，如 {"Authorization": "Bearer xxx"}） */
+    headers: Record<string, string>
+    /** 请求超时（ms，默认 15000） */
+    timeoutMs: number
+  }
 }
 
 // ===== 项目管理 =====
@@ -602,6 +612,39 @@ export interface ExportChannels {
   }
 }
 
+// ===== 开发者模式频道（外部 API 接入） =====
+
+export interface DevApiRequest {
+  /** 相对路径（base URL 由主进程从配置读取——LLM 只能调配置的端点，防任意 URL） */
+  path: string
+  /** HTTP 方法（默认 GET） */
+  method?: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
+  /** 请求体（JSON 字符串，POST/PUT/PATCH 时） */
+  body?: string
+}
+
+export interface DevApiResponse {
+  success: boolean
+  /** 响应文本（截断至 1MB） */
+  content?: string
+  /** HTTP 状态码 */
+  status?: number
+  error?: string
+}
+
+export interface DevChannels {
+  /** 调用开发者模式配置的外部 API（主进程代理 fetch，绕过渲染 CSP） */
+  'dev:invoke': {
+    args: [req: DevApiRequest]
+    return: DevApiResponse
+  }
+  /** 测试连接（设置页"测试连接"按钮：GET baseUrl 根路径） */
+  'dev:test': {
+    args: []
+    return: { success: boolean; status?: number; error?: string }
+  }
+}
+
 // ===== 日志频道 =====
 
 /** 日志环境（对应主进程双环境日志流：dev=开发/内测，release=公测/正式） */
@@ -648,7 +691,7 @@ export interface LogChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */

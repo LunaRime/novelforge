@@ -25,6 +25,7 @@ import { countCharactersTool } from './count-characters.tool'
 import { calculatorTool } from './calculator.tool'
 import { queryForeshadowingTool } from './query-foreshadowing.tool'
 import { settingSamplerTool } from './setting-sampler.tool'
+import { callExternalApiTool } from './call-external-api.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
@@ -52,6 +53,7 @@ export const builtinTools = [
   startWorkflowTool,
   updateConfigTool,
   indexContentTool, // 写入知识库，需确认
+  callExternalApiTool, // 开发者模式外部 API（需确认）
 ]
 
 /**
