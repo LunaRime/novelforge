@@ -65,6 +65,8 @@ const SelectContent = React.forwardRef<
       <SelectPrimitive.Viewport
         className={cn(
           'p-1',
+          // 长列表滚动：max-h 限制（视口 60% 或 256px），超出内部滚动——防弹窗超出程序窗口
+          'max-h-[min(60vh,16rem)] overflow-y-auto',
           position === 'popper' &&
             'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]'
         )}
