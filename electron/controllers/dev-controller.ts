@@ -67,13 +67,17 @@ async function invokeDevApi(req: DevApiRequest): Promise<DevApiResponse> {
       headers: dev.headers ?? {},
       body: (method === 'GET' || method === 'DELETE') ? undefined : (req.body ?? undefined),
       signal: controller.signal,
+      // manual：不跟随重定向——3xx 返回原文并附 Location，防重定向链绕过单一端点限制（SSRF 扩展面）
+      redirect: 'manual',
     })
     const buf = Buffer.from(await res.arrayBuffer())
     const { content } = truncateResponse(buf, MAX_RESPONSE_BYTES)
+    // 3xx 时附 Location（manual 模式不自动跟随，LLM 可看到重定向目标）
+    const location = res.headers.get('location')
     return {
       success: true,
       status: res.status,
-      content,
+      content: location ? `${content}\n\n[重定向 ${res.status} → ${location}]` : content,
     }
   } catch (e) {
     const msg = safeErrorMessage(e)
