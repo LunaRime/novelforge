@@ -6,11 +6,13 @@
  * 安全：base URL 由主进程读取（LLM 只能传相对 path）；仅 http/https；响应 1MB 截断。
  */
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Plug, ShieldAlert } from 'lucide-react'
+import { Save, Loader2, Plug, ShieldAlert, HelpCircle } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
 import type { GlobalConfig } from '../../shared/ipc-channels'
@@ -27,6 +29,7 @@ export default function DeveloperModeSection() {
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null)
+  const [guideOpen, setGuideOpen] = useState(false)
 
   useEffect(() => {
     ipc.invoke('config:get').then((cfg) => {
@@ -152,7 +155,14 @@ export default function DeveloperModeSection() {
           <Save size={12} />
           {t('action.save')}
         </Button>
+        <Button variant="ghost" size="sm" onClick={() => setGuideOpen(true)} title={t('dev.guide')}>
+          <HelpCircle size={12} />
+          {t('dev.guide')}
+        </Button>
       </div>
+
+      {/* 使用说明弹窗 */}
+      <DevGuideDialog open={guideOpen} onOpenChange={setGuideOpen} />
 
       {/* 测试结果 */}
       {testResult && (
@@ -168,5 +178,70 @@ export default function DeveloperModeSection() {
         </div>
       )}
     </div>
+  )
+}
+
+/** 使用说明弹窗（三步 + 示例 + 要点） */
+function DevGuideDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const { t } = useTranslation()
+  const exampleBase = 'http://localhost:9223'
+  const example1 = t('dev.guideEx1')
+  const example2 = t('dev.guideEx2')
+  const example3 = t('dev.guideEx3')
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-xl">
+        <DialogHeader className="pr-10">
+          <DialogTitle>{t('dev.guideTitle')}</DialogTitle>
+        </DialogHeader>
+        <div className="px-6 pb-5 space-y-4 text-xs leading-relaxed max-h-[60vh] overflow-y-auto" style={{ color: 'var(--color-text-secondary)' }}>
+          {/* 步骤 1 */}
+          <div>
+            <div className="font-semibold mb-1" style={{ color: 'var(--color-text)' }}>{t('dev.guideStep1Title')}</div>
+            <div>{t('dev.guideStep1')}</div>
+          </div>
+
+          {/* 步骤 2：示例代码块 */}
+          <div>
+            <div className="font-semibold mb-1" style={{ color: 'var(--color-text)' }}>{t('dev.guideStep2Title')}</div>
+            <div className="mb-1">{t('dev.guideStep2')}</div>
+            <pre
+              className="p-2 rounded-lg font-mono text-[0.7rem] overflow-x-auto"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}
+            >
+              {`API 基础地址: ${exampleBase}\n请求头: {}`}
+            </pre>
+          </div>
+
+          {/* 步骤 3：AI 对话示例 */}
+          <div>
+            <div className="font-semibold mb-1" style={{ color: 'var(--color-text)' }}>{t('dev.guideStep3Title')}</div>
+            <div className="mb-1">{t('dev.guideStep3')}</div>
+            <div className="space-y-1">
+              {[example1, example2, example3].map((ex, i) => (
+                <pre
+                  key={i}
+                  className="p-2 rounded-lg font-mono text-[0.7rem] overflow-x-auto whitespace-pre-wrap break-all"
+                  style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)' }}
+                >
+                  {ex}
+                </pre>
+              ))}
+            </div>
+          </div>
+
+          {/* 要点 */}
+          <div>
+            <div className="font-semibold mb-1" style={{ color: 'var(--color-text)' }}>{t('dev.guideTipsTitle')}</div>
+            <ul className="space-y-1 list-disc pl-4">
+              {[1, 2, 3, 4, 5].map(n => (
+                <li key={n}>{t(`dev.guideTip${n}` as TextKey)}</li>
+              ))}
+            </ul>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
