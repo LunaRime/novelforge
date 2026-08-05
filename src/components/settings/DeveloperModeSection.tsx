@@ -89,22 +89,22 @@ export default function DeveloperModeSection() {
     setSaving(false)
   }
 
-  /** 测试连接 */
+  /** 测试连接（传 UI 当前地址——未保存也能正确测试） */
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
-    const res = await ipc.invoke('dev:test')
+    const res = await ipc.invoke('dev:test', { apiBaseUrl: apiBaseUrl.trim() })
     setTesting(false)
     setTestResult(res.success
       ? { success: true }
       : { success: false, error: res.error })
   }
 
-  /** 测试浏览器 CDP 连接 */
+  /** 测试浏览器 CDP 连接（传 UI 当前端口——未保存也能正确测试） */
   const handleBrowserTest = async () => {
     setBrowserTesting(true)
     setBrowserTestResult(null)
-    const res = await ipc.invoke('browser:test')
+    const res = await ipc.invoke('browser:test', { cdpPort: browserPort || 9222 })
     setBrowserTesting(false)
     setBrowserTestResult(res)
   }
@@ -190,7 +190,8 @@ export default function DeveloperModeSection() {
               <label className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('dev.browserPort')}</label>
               <Input
                 type="number"
-                value={browserPort}
+                value={browserPort || ''}
+                placeholder="9222"
                 onChange={(e) => setBrowserPort(Number(e.target.value))}
                 className="h-7 text-xs w-28"
               />

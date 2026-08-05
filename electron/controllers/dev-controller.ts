@@ -35,13 +35,17 @@ function getDevConfig(): GlobalConfig['devMode'] | null {
   }
 }
 
-/** 执行一次外部 API 请求（核心：配置校验 → fetch → 大小截断 → sanitize 错误） */
-async function invokeDevApi(req: DevApiRequest): Promise<DevApiResponse> {
+/**
+ * 执行一次外部 API 请求（核心：配置校验 → fetch → 大小截断 → sanitize 错误）
+ * @param baseUrlOverride 测试用覆盖地址（设置页未保存时测 UI 当前值；null 用配置）
+ */
+async function invokeDevApi(req: DevApiRequest, baseUrlOverride?: string): Promise<DevApiResponse> {
   const dev = getDevConfig()
-  if (!dev) {
+  if (!dev && !baseUrlOverride) {
     return { success: false, error: '开发者模式未启用（设置 → 开发者模式）' }
   }
-  if (!dev.apiBaseUrl || !isValidHttpUrl(dev.apiBaseUrl)) {
+  const baseUrl = baseUrlOverride?.trim() || dev?.apiBaseUrl || ''
+  if (!baseUrl || !isValidHttpUrl(baseUrl)) {
     return { success: false, error: '开发者模式 API 地址无效（需 http/https）' }
   }
 
@@ -52,19 +56,19 @@ async function invokeDevApi(req: DevApiRequest): Promise<DevApiResponse> {
     return { success: false, error: 'path 仅支持相对路径（base URL 由开发者模式配置决定）' }
   }
 
-  const url = buildDevApiUrl(dev.apiBaseUrl, path)
+  const url = buildDevApiUrl(baseUrl, path)
   if (!url) {
     return { success: false, error: '拼接后的 URL 无效（需 http/https）' }
   }
 
-  const timeoutMs = Number.isFinite(dev.timeoutMs) && dev.timeoutMs > 0 ? dev.timeoutMs : DEFAULT_TIMEOUT_MS
+  const timeoutMs = dev && Number.isFinite(dev.timeoutMs) && dev.timeoutMs > 0 ? dev.timeoutMs : DEFAULT_TIMEOUT_MS
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
     const res = await fetch(url, {
       method,
-      headers: dev.headers ?? {},
+      headers: dev?.headers ?? {},
       body: (method === 'GET' || method === 'DELETE') ? undefined : (req.body ?? undefined),
       signal: controller.signal,
       // manual：不跟随重定向——3xx 返回原文并附 Location，防重定向链绕过单一端点限制（SSRF 扩展面）
@@ -98,9 +102,9 @@ export function registerDevController() {
     }
   })
 
-  /** 测试连接（GET baseUrl 根路径） */
-  ipcMain.handle('dev:test', async (): Promise<{ success: boolean; status?: number; error?: string }> => {
-    const res = await invokeDevApi({ path: '', method: 'GET' })
+  /** 测试连接（GET baseUrl 根路径；apiBaseUrl 可选覆盖——设置页未保存也能测 UI 当前值） */
+  ipcMain.handle('dev:test', async (_event, override?: { apiBaseUrl?: string }): Promise<{ success: boolean; status?: number; error?: string }> => {
+    const res = await invokeDevApi({ path: '', method: 'GET' }, override?.apiBaseUrl)
     if (res.success) return { success: true, status: res.status }
     return { success: false, error: res.error }
   })
