@@ -92,11 +92,12 @@ export default function ActivityView() {
   // 范围 = 所选年份全年（每日热力图 / 每月柱状图共用 viewYear）
   const scopeRows = projectRows.filter(r => r.day.startsWith(String(viewYear)))
 
-  // 年份切换边界：数据最早年份（左禁用）→ 今年（右禁用）
+  // 年份选择区间：数据最早年份 → 今年（连续，中间无数据年份也保留——连续性）
   const currentYear = new Date().getFullYear()
   const minYear = allRows.length > 0
     ? Math.min(...allRows.map(r => parseInt(r.day.slice(0, 4), 10)))
     : currentYear
+  const yearOptions = Array.from({ length: currentYear - minYear + 1 }, (_, i) => currentYear - i)
 
   // 统计
   const totalStats = calcStats(allRows)          // 全局总计（恒定显示）
@@ -141,30 +142,20 @@ export default function ActivityView() {
             </button>
           </div>
 
-          {/* 年份切换（每日/每月共用） */}
-          <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setViewYear(y => y - 1)}
-              disabled={viewYear <= minYear}
-              title={t('activity.previousYear')}
-              className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+          {/* 年份选择（每日/每月共用；连续区间含无数据年份——从数据最早年至今） */}
+          <Select value={String(viewYear)} onValueChange={(v) => setViewYear(parseInt(v, 10))}>
+            <SelectTrigger
+              className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-[0.68rem]"
+              title={t('activity.selectYear')}
             >
-              ◀
-            </button>
-            <span className="px-1.5 py-0.5 text-[0.65rem] font-semibold select-none" style={{ color: 'var(--color-text)' }}>
-              {viewYear}
-            </span>
-            <button
-              type="button"
-              onClick={() => setViewYear(y => y + 1)}
-              disabled={viewYear >= currentYear}
-              title={t('activity.nextYear')}
-              className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-            >
-              ▶
-            </button>
-          </div>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {yearOptions.map(y => (
+                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
 
           {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
           <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
@@ -339,14 +330,13 @@ function aggregateByMonth(rows: DailyActivityRow[]): Map<string, ReturnType<type
 }
 
 function ContributionGrid({ rows, year }: { rows: DailyActivityRow[]; year: number }) {
-  // 全年日期序列：1 月 1 日（向前对齐到周日）→ 年末（今年 = 今日止，往年 = 12 月 31 日止）
+  // 全年日期序列：1 月 1 日（向前对齐到周日）→ 12 月 31 日——未来天数也显示（空格子）
   const now = new Date()
   const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const isCurrentYear = year === now.getFullYear()
 
   const start = new Date(year, 0, 1)
   start.setDate(start.getDate() - start.getDay())
-  const end = isCurrentYear ? today : new Date(year, 11, 31)
+  const end = new Date(year, 11, 31)
 
   const totalDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
   const columns = Math.ceil(totalDays / 7)
