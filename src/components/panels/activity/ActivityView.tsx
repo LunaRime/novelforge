@@ -18,16 +18,14 @@ import { useProjectStore } from '../../../stores/project-store'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../../ui/Select'
 
-/** 数据拉取天数（全年，前端按所选范围过滤——月度视图需要跨月数据） */
-const FETCH_DAYS = 365
+/** 数据拉取天数（10 年等效全量——月度视图按年切换需要多年历史；聚合 SQL 按天分组数据量极小） */
+const FETCH_DAYS = 3650
 /** 热力图格子尺寸（固定，比原 10px 适度放大） */
 const CELL_SIZE = 12
 /** 热力图格子间距 */
 const CELL_GAP = 2
 /** 每日粒度可选范围（天） */
 const DAILY_RANGES = [15, 30, 90]
-/** 每月粒度可选范围（月数） */
-const MONTHLY_RANGES = [6, 12]
 
 /** 5 级活跃度颜色（accent 透明度渐变，禁止硬编码色值） */
 const LEVEL_COLORS = [
@@ -49,8 +47,8 @@ export default function ActivityView() {
   const [granularity, setGranularity] = useState<'daily' | 'monthly'>('daily')
   /** 每日粒度范围（天） */
   const [dailyRange, setDailyRange] = useState(30)
-  /** 每月粒度范围（月数） */
-  const [monthlyRange, setMonthlyRange] = useState(12)
+  /** 每月粒度查看年份（默认今年，◀▶ 切换往期） */
+  const [monthYear, setMonthYear] = useState(() => new Date().getFullYear())
 
   // 打开项目时默认选中该项目（总数据仍在下拉可切回）
   useEffect(() => {
@@ -93,11 +91,17 @@ export default function ActivityView() {
     ? allRows.filter(r => r.projectPath === selectedPath)
     : mergeDaysByDay(allRows)
 
-  // 按粒度 + 范围过滤（每日：近 N 天；每月：近 N 个月，前端按月聚合）
+  // 按粒度 + 范围过滤（每日：近 N 天；每月：所选年份全年 12 个月）
   const todayKey = todayDayKey()
   const scopeRows = granularity === 'daily'
     ? filterDaysByRange(projectRows, dailyRange, todayKey)
-    : filterDaysByMonths(projectRows, monthlyRange, todayKey)
+    : projectRows.filter(r => r.day.startsWith(String(monthYear)))
+
+  // 年份切换边界：数据最早年份（左禁用）→ 今年（右禁用）
+  const currentYear = new Date().getFullYear()
+  const minYear = allRows.length > 0
+    ? Math.min(...allRows.map(r => parseInt(r.day.slice(0, 4), 10)))
+    : currentYear
 
   // 统计
   const totalStats = calcStats(allRows)          // 全局总计（恒定显示）
@@ -142,10 +146,10 @@ export default function ActivityView() {
             </button>
           </div>
 
-          {/* 范围切换（跟随粒度） */}
-          <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
-            {granularity === 'daily'
-              ? DAILY_RANGES.map(n => (
+          {/* 范围切换（每日：近 N 天；每月：年份 ◀▶） */}
+          {granularity === 'daily' ? (
+            <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
+              {DAILY_RANGES.map(n => (
                 <button
                   key={n}
                   type="button"
@@ -158,22 +162,33 @@ export default function ActivityView() {
                 >
                   {t('activity.daysShort').replace('{n}', String(n))}
                 </button>
-              ))
-              : MONTHLY_RANGES.map(n => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setMonthlyRange(n)}
-                  className={`px-1.5 py-0.5 text-[0.65rem] transition-colors ${
-                    monthlyRange === n
-                      ? 'bg-[var(--color-accent)] text-white'
-                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                  }`}
-                >
-                  {t('activity.monthsShort').replace('{n}', String(n))}
-                </button>
               ))}
-          </div>
+            </div>
+          ) : (
+            <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
+              <button
+                type="button"
+                onClick={() => setMonthYear(y => y - 1)}
+                disabled={monthYear <= minYear}
+                title={t('activity.previousYear')}
+                className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+              >
+                ◀
+              </button>
+              <span className="px-1.5 py-0.5 text-[0.65rem] font-semibold select-none" style={{ color: 'var(--color-text)' }}>
+                {monthYear}
+              </span>
+              <button
+                type="button"
+                onClick={() => setMonthYear(y => y + 1)}
+                disabled={monthYear >= currentYear}
+                title={t('activity.nextYear')}
+                className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+              >
+                ▶
+              </button>
+            </div>
+          )}
 
           {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
           <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
@@ -235,7 +250,7 @@ export default function ActivityView() {
             {granularity === 'daily' ? (
               <ContributionGrid rows={scopeRows} days={dailyRange} />
             ) : (
-              <MonthlyChart rows={scopeRows} months={monthlyRange} />
+              <MonthlyChart rows={scopeRows} year={monthYear} />
             )}
           </div>
 
@@ -344,17 +359,8 @@ function filterDaysByRange(rows: DailyActivityRow[], range: number, todayKey: st
   return rows.filter(r => r.day >= cutoffKey)
 }
 
-/** 按月范围过滤（保留最近 months 个月） */
-function filterDaysByMonths(rows: DailyActivityRow[], months: number, todayKey: string): DailyActivityRow[] {
-  const cutoff = new Date(todayKey)
-  cutoff.setMonth(cutoff.getMonth() - (months - 1))
-  cutoff.setDate(1)
-  const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`
-  return rows.filter(r => r.day.startsWith(cutoffKey) || r.day > cutoffKey)
-}
-
 /** 按月聚合（月 key 'YYYY-MM' → 统计求和） */
-function aggregateByMonth(rows: DailyActivityRow[]): Array<{ month: string; stats: ReturnType<typeof calcStats> }> {
+function aggregateByMonth(rows: DailyActivityRow[]): Map<string, ReturnType<typeof calcStats>> {
   const map = new Map<string, ReturnType<typeof calcStats>>()
   for (const r of rows) {
     const month = r.day.slice(0, 7)
@@ -367,9 +373,7 @@ function aggregateByMonth(rows: DailyActivityRow[]): Array<{ month: string; stat
       llmCost: cur.llmCost + r.llmCost,
     })
   }
-  return Array.from(map.entries())
-    .map(([month, stats]) => ({ month, stats }))
-    .sort((a, b) => a.month.localeCompare(b.month))
+  return map
 }
 
 function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: number }) {
@@ -493,29 +497,38 @@ function Cell({
   )
 }
 
-/** 月度柱状图：每月写作字数（accent 渐变柱），悬停查看当月完整统计 */
-function MonthlyChart({ rows, months }: { rows: DailyActivityRow[]; months: number }) {
-  const monthsData = aggregateByMonth(rows).slice(-months)
-  const maxWritten = Math.max(1, ...monthsData.map(m => m.stats.writtenWords))
+/** 月度柱状图：全年 12 个月写作字数（accent 渐变柱），无数据月份空柱，悬停查看当月完整统计 */
+function MonthlyChart({ rows, year }: { rows: DailyActivityRow[]; year: number }) {
+  const byMonth = aggregateByMonth(rows)
+  const maxWritten = Math.max(1, ...Array.from(byMonth.values()).map(s => s.writtenWords))
 
   return (
     <div className="w-full" style={{ maxWidth: 360 }}>
-      {/* 柱体区 */}
-      <div className="flex items-end gap-2" style={{ height: 96 }}>
-        {monthsData.map(m => {
-          const heightPct = Math.max(4, (m.stats.writtenWords / maxWritten) * 100)
-          const monthLabel = new Date(`${m.month}-01T00:00:00`).toLocaleString(getCurrentLocale(), { month: 'short' })
-          const tooltip = `${m.month} · ${t('activity.writing')} ${formatNumber(m.stats.writtenWords)} ${t('unit.chars')} · ${t('activity.totalRevised')} ${formatNumber(m.stats.revisedWords)} · ${t('activity.totalCalls')} ${formatNumber(m.stats.llmCalls)} · ${(m.stats.llmTokens / 1000).toFixed(1)}K · $${m.stats.llmCost.toFixed(2)}`
+      {/* 柱体区：固定 1-12 月全年序列 */}
+      <div className="flex items-end gap-1" style={{ height: 96 }}>
+        {Array.from({ length: 12 }, (_, i) => {
+          const month = i + 1
+          const monthKey = `${year}-${String(month).padStart(2, '0')}`
+          const stats = byMonth.get(monthKey)
+          const heightPct = stats && stats.writtenWords > 0
+            ? Math.max(4, (stats.writtenWords / maxWritten) * 100)
+            : 0
+          const monthLabel = new Date(`${monthKey}-01T00:00:00`).toLocaleString(getCurrentLocale(), { month: 'short' })
+          const tooltip = stats
+            ? `${monthKey} · ${t('activity.writing')} ${formatNumber(stats.writtenWords)} ${t('unit.chars')} · ${t('activity.totalRevised')} ${formatNumber(stats.revisedWords)} · ${t('activity.totalCalls')} ${formatNumber(stats.llmCalls)} · ${(stats.llmTokens / 1000).toFixed(1)}K · $${stats.llmCost.toFixed(2)}`
+            : `${monthKey} · —`
           return (
-            <div key={m.month} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={tooltip}>
+            <div key={monthKey} className="flex-1 flex flex-col items-center gap-1 min-w-0" title={tooltip}>
               <div className="w-full flex items-end justify-center" style={{ height: 84 }}>
-                <div
-                  className="w-full max-w-[18px] rounded-t-sm"
-                  style={{
-                    height: `${heightPct}%`,
-                    backgroundColor: 'color-mix(in srgb, var(--color-accent) 70%, transparent)',
-                  }}
-                />
+                {heightPct > 0 && (
+                  <div
+                    className="w-full max-w-[18px] rounded-t-sm"
+                    style={{
+                      height: `${heightPct}%`,
+                      backgroundColor: 'color-mix(in srgb, var(--color-accent) 70%, transparent)',
+                    }}
+                  />
+                )}
               </div>
               <span className="text-[0.6rem] leading-none truncate" style={{ color: 'var(--color-text-muted)' }}>
                 {monthLabel}

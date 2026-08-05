@@ -70,6 +70,8 @@ export const UI_TEXTS_DATA = {
   'activity.daysShort': { 'zh-CN': '{n} 天', 'en-US': '{n}d', 'ru-RU': '{n} дн' },
   'activity.monthsShort': { 'zh-CN': '{n} 月', 'en-US': '{n}mo', 'ru-RU': '{n} мес' },
   'activity.monthlyHint': { 'zh-CN': '每月写作字数趋势（悬停查看当月完整统计）', 'en-US': 'Monthly writing trend (hover for details)', 'ru-RU': 'Тенденция написания по месяцам (наведите для деталей)' },
+  'activity.previousYear': { 'zh-CN': '上一年', 'en-US': 'Previous year', 'ru-RU': 'Предыдущий год' },
+  'activity.nextYear': { 'zh-CN': '下一年', 'en-US': 'Next year', 'ru-RU': 'Следующий год' },
   'vector.clearSelection': { 'zh-CN': '清除选择', 'en-US': 'Clear selection', 'ru-RU': 'Сбросить выбор' },
   'action.approve': { 'zh-CN': '批准执行', 'en-US': 'Approve', 'ru-RU': 'Одобрить' },
   'action.reject': { 'zh-CN': '拒绝', 'en-US': 'Reject', 'ru-RU': 'Отклонить' },
