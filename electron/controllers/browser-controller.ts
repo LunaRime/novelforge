@@ -88,15 +88,17 @@ export function registerBrowserController() {
     return { success: true, tabs }
   })
 
-  /** 测试 CDP 连接 */
-  ipcMain.handle('browser:test', async (): Promise<{ success: boolean; version?: string; error?: string }> => {
+  /** 测试 CDP 连接（cdpPort 可选覆盖——设置页未保存也能测 UI 当前值） */
+  ipcMain.handle('browser:test', async (_event, override?: { cdpPort?: number }): Promise<{ success: boolean; version?: string; error?: string }> => {
     const b = getBrowserConfig()
-    if (!b) return { success: false, error: '浏览器接入未启用' }
-    if (!isValidPort(b.cdpPort)) return { success: false, error: `CDP 端口无效: ${b.cdpPort}` }
+    // 覆盖端口优先（UI 测试用）；否则要求已启用
+    const port = override?.cdpPort ?? b?.cdpPort
+    if (!b && override?.cdpPort === undefined) return { success: false, error: '浏览器接入未启用' }
+    if (!isValidPort(port ?? 0)) return { success: false, error: `CDP 端口无效: ${port}` }
 
-    const data = await cdpFetchJson(b.cdpPort, '/json/version') as Record<string, unknown> | null
+    const data = await cdpFetchJson(port as number, '/json/version') as Record<string, unknown> | null
     if (!data || typeof data !== 'object') {
-      return { success: false, error: `无法连接 CDP（端口 ${b.cdpPort}）。请确认浏览器已用 --remote-debugging-port=${b.cdpPort} 启动` }
+      return { success: false, error: `无法连接 CDP（端口 ${port}）。请确认浏览器已用 --remote-debugging-port=${port} 启动` }
     }
     return { success: true, version: String(data['Browser'] ?? data['Protocol-Version'] ?? 'unknown') }
   })

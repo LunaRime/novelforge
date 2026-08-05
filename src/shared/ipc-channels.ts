@@ -644,9 +644,9 @@ export interface DevChannels {
     args: [req: DevApiRequest]
     return: DevApiResponse
   }
-  /** 测试连接（设置页"测试连接"按钮：GET baseUrl 根路径） */
+  /** 测试连接（设置页"测试连接"按钮：GET baseUrl 根路径；apiBaseUrl 可选覆盖——未保存也能测 UI 当前值） */
   'dev:test': {
-    args: []
+    args: [override?: { apiBaseUrl?: string }]
     return: { success: boolean; status?: number; error?: string }
   }
 }
@@ -667,9 +667,9 @@ export interface BrowserChannels {
     args: []
     return: { success: boolean; tabs?: BrowserTabInfo[]; error?: string }
   }
-  /** 测试 CDP 连接（GET /json/version） */
+  /** 测试 CDP 连接（GET /json/version；cdpPort 可选覆盖——未保存也能测 UI 当前值） */
   'browser:test': {
-    args: []
+    args: [override?: { cdpPort?: number }]
     return: { success: boolean; version?: string; error?: string }
   }
 }
