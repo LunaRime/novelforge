@@ -127,6 +127,43 @@ export function scanNewForeshadowing(
 }
 
 /**
+ * 将存储中的伏笔项归一化为合法 ForeshadowingItem
+ * 兼容旧格式（字符串 content 数组——saveForeshadowing 曾只存 content）与新格式（对象数组），
+ * 非法项（null / 无 content）返回 null 由调用方过滤。
+ */
+function normalizeItem(raw: unknown, index: number): ForeshadowingItem | null {
+  if (typeof raw === 'string') {
+    // 旧格式：只有 content，无 setChapter/type 等信息
+    return {
+      id: `fs_legacy_${index}`,
+      content: raw,
+      setChapter: 0,
+      resolvedChapter: 0,
+      type: 'mystery',
+      resolved: false,
+      createdAt: '',
+    }
+  }
+  if (raw && typeof raw === 'object') {
+    const o = raw as Partial<ForeshadowingItem>
+    if (typeof o.content === 'string') {
+      return {
+        id: typeof o.id === 'string' && o.id ? o.id : `fs_legacy_${index}`,
+        content: o.content,
+        setChapter: typeof o.setChapter === 'number' ? o.setChapter : 0,
+        resolvedChapter: typeof o.resolvedChapter === 'number' ? o.resolvedChapter : 0,
+        type: (['item', 'character', 'mystery', 'prophecy', 'conflict'] as const).includes(o.type as never)
+          ? o.type as ForeshadowingItem['type']
+          : 'mystery',
+        resolved: o.resolved === true,
+        createdAt: typeof o.createdAt === 'string' ? o.createdAt : '',
+      }
+    }
+  }
+  return null
+}
+
+/**
  * 检测本章是否回收了旧伏笔
  */
 export function detectResolvedForeshadowing(
@@ -137,6 +174,8 @@ export function detectResolvedForeshadowing(
   const resolved: ForeshadowingItem[] = []
 
   for (const item of pendingItems) {
+    // 防御：非法项（旧格式字符串混入 / null）跳过——曾致 undefined.replace 崩溃
+    if (!item || typeof item.content !== 'string') continue
     const keywords = item.content.replace(/第\d+章[:：]\s*/, '').slice(0, 20)
     const keywordParts = keywords.split(/[，。；！？\s]+/).filter(k => k.length >= 2)
 
@@ -155,6 +194,7 @@ export function detectResolvedForeshadowing(
 
 /**
  * 保存伏笔列表到项目配置
+ * ⚠️ 存完整对象数组（曾只存 content 字符串——导致加载端类型矛盾：字符串被当对象用 → undefined.replace 崩溃）
  */
 export async function saveForeshadowing(items: ForeshadowingItem[]): Promise<void> {
   try {
@@ -162,7 +202,17 @@ export async function saveForeshadowing(items: ForeshadowingItem[]): Promise<voi
     if (core) {
       let states: Record<string, unknown> = {}
       try { states = JSON.parse(core.characterStates || '{}') } catch { /* ignore */ }
-      states.pendingForeshadowing = items.filter(i => !i.resolved).map(i => i.content)
+      states.pendingForeshadowing = items
+        .filter(i => !i.resolved && i && typeof i.content === 'string')
+        .map(i => ({
+          id: i.id,
+          content: i.content,
+          setChapter: i.setChapter,
+          resolvedChapter: i.resolvedChapter,
+          type: i.type,
+          resolved: i.resolved,
+          createdAt: i.createdAt,
+        }))
       await ipc.invoke('db:project-core-update', { characterStates: JSON.stringify(states) })
     }
   } catch (e) { console.warn('[foreshadowing] 保存伏笔失败:', e) }
@@ -170,13 +220,18 @@ export async function saveForeshadowing(items: ForeshadowingItem[]): Promise<voi
 
 /**
  * 加载全部伏笔（从 pendingForeshadowing 读取，与 saveForeshadowing 键名一致）
+ * ⚠️ 归一化：兼容旧格式（字符串 content 数组）与新格式（对象数组），非法项丢弃
  */
 export async function loadAllForeshadowing(): Promise<ForeshadowingItem[]> {
   try {
     const core = await ipc.invoke('db:project-core-get')
     if (core?.characterStates) {
       const states = JSON.parse(core.characterStates)
-      if (states.pendingForeshadowing) return states.pendingForeshadowing
+      if (Array.isArray(states.pendingForeshadowing)) {
+        return states.pendingForeshadowing
+          .map((raw: unknown, i: number) => normalizeItem(raw, i))
+          .filter((x: ForeshadowingItem | null): x is ForeshadowingItem => x !== null)
+      }
     }
   } catch { /* ignore */ }
   return []
@@ -186,7 +241,8 @@ export async function loadAllForeshadowing(): Promise<ForeshadowingItem[]> {
  * 格式化待回收伏笔列表（用于 prompt 注入）
  */
 export function formatPendingForPrompt(items: ForeshadowingItem[]): string {
-  const pending = items.filter(i => !i.resolved)
+  // 防御：跳过非法项（曾因旧格式字符串混入显示 [第undefined章]）
+  const pending = items.filter(i => i && !i.resolved && typeof i.content === 'string')
   if (pending.length === 0) return ''
   return pending.map((f, i) => `${i + 1}. [第${f.setChapter}章] ${f.content} (${f.type})`).join('\n')
 }
