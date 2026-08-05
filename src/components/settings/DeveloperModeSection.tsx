@@ -6,7 +6,7 @@
  * 安全：base URL 由主进程读取（LLM 只能传相对 path）；仅 http/https；响应 1MB 截断。
  */
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Plug, ShieldAlert, HelpCircle } from 'lucide-react'
+import { Save, Loader2, Plug, ShieldAlert, HelpCircle, Globe } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
@@ -30,15 +30,26 @@ export default function DeveloperModeSection() {
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ success: boolean; error?: string } | null>(null)
   const [guideOpen, setGuideOpen] = useState(false)
+  // 浏览器接入（内置 CDP）
+  const [browserEnabled, setBrowserEnabled] = useState(false)
+  const [browserPort, setBrowserPort] = useState(9222)
+  const [browserTesting, setBrowserTesting] = useState(false)
+  const [browserTestResult, setBrowserTestResult] = useState<{ success: boolean; version?: string; error?: string } | null>(null)
 
   useEffect(() => {
     ipc.invoke('config:get').then((cfg) => {
-      const dev = (cfg as GlobalConfig | null)?.devMode
+      const cfg2 = cfg as GlobalConfig | null
+      const dev = cfg2?.devMode
       if (dev) {
         setEnabled(dev.enabled ?? false)
         setApiBaseUrl(dev.apiBaseUrl ?? '')
         setHeadersText(dev.headers ? JSON.stringify(dev.headers, null, 2) : '{}')
         setTimeoutMs(dev.timeoutMs ?? DEFAULT_TIMEOUT)
+      }
+      const browser = cfg2?.devBrowser
+      if (browser) {
+        setBrowserEnabled(browser.enabled ?? false)
+        setBrowserPort(browser.cdpPort ?? 9222)
       }
     }).catch(() => { })
   }, [])
@@ -67,6 +78,7 @@ export default function DeveloperModeSection() {
     try {
       await ipc.invoke('config:set', {
         devMode: { enabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
+        devBrowser: { enabled: browserEnabled, cdpPort: browserPort || 9222 },
       })
       renderLog('info', 'Save:Settings', `开发者模式配置保存成功（${Date.now() - t0}ms）`)
       toast.success(t('save.success'))
@@ -86,6 +98,15 @@ export default function DeveloperModeSection() {
     setTestResult(res.success
       ? { success: true }
       : { success: false, error: res.error })
+  }
+
+  /** 测试浏览器 CDP 连接 */
+  const handleBrowserTest = async () => {
+    setBrowserTesting(true)
+    setBrowserTestResult(null)
+    const res = await ipc.invoke('browser:test')
+    setBrowserTesting(false)
+    setBrowserTestResult(res)
   }
 
   return (
@@ -143,6 +164,63 @@ export default function DeveloperModeSection() {
             className="h-8 text-xs w-40"
           />
         </div>
+      </div>
+
+      {/* 浏览器接入（内置 CDP，开箱即用） */}
+      <div className="p-3 rounded-xl space-y-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <Globe size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+            <div className="min-w-0">
+              <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.browserTitle')}</div>
+              <div className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.browserDesc')}</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={browserEnabled}
+            onChange={(e) => setBrowserEnabled(e.target.checked)}
+            className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer flex-shrink-0"
+          />
+        </div>
+
+        {browserEnabled && (
+          <>
+            <div className="flex items-center gap-3">
+              <label className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('dev.browserPort')}</label>
+              <Input
+                type="number"
+                value={browserPort}
+                onChange={(e) => setBrowserPort(Number(e.target.value))}
+                className="h-7 text-xs w-28"
+              />
+              <Button variant="outline" size="sm" onClick={handleBrowserTest} disabled={browserTesting}>
+                {browserTesting ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                {t('dev.browserTest')}
+              </Button>
+            </div>
+            <div className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t('dev.browserLaunchHint').replace('{port}', String(browserPort || 9222))}
+            </div>
+            <div className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+              {t('dev.browserToolHint')}
+            </div>
+            {browserTestResult && (
+              <div
+                className={`text-xs p-2 rounded break-all ${
+                  browserTestResult.success
+                    ? 'border border-[var(--color-success)]/20 text-[var(--color-success)]'
+                    : 'border border-[var(--color-error)]/20 text-[var(--color-error)]'
+                }`}
+                style={{ backgroundColor: browserTestResult.success ? 'color-mix(in srgb, var(--color-success) 8%, transparent)' : 'color-mix(in srgb, var(--color-error) 8%, transparent)' }}
+              >
+                {browserTestResult.success
+                  ? `✅ ${t('dev.browserTestSuccess').replace('{version}', browserTestResult.version ?? '')}`
+                  : `❌ ${t('dev.browserTestFailed').replace('{error}', browserTestResult.error ?? '')}`}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* 操作按钮 */}
