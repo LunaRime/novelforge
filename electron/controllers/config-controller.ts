@@ -1,13 +1,43 @@
-import { ipcMain } from 'electron'
+import { ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
-import { logger, LogLevel } from '../utils/logger'
+import { logger, LogLevel, LogEnvironment, LOG_DIRS, getLogPathFor } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
-import { GlobalConfig } from '../../src/shared/ipc-channels'
+import { GlobalConfig, type LogEnvMode, type LogFileInfo } from '../../src/shared/ipc-channels'
 
-const LOG_DIR = path.join(VELA_HOME, 'logs')
+/** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
+const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {
+  debug: LogLevel.DEBUG,
+  info: LogLevel.INFO,
+  warn: LogLevel.WARN,
+  error: LogLevel.ERROR,
+}
+
+/** IPC 环境参数 → 主进程日志环境（缺省用当前环境） */
+function envFromMode(mode: LogEnvMode | undefined): LogEnvironment {
+  return mode === 'dev' ? LogEnvironment.Dev : LogEnvironment.Release
+}
+
+/** 读取日志目录下的 vela-*.log 文件列表（新→旧） */
+function listLogFilesIn(dir: string, env: LogEnvMode): LogFileInfo[] {
+  try {
+    return fs.readdirSync(dir)
+      .filter(f => f.startsWith('vela-') && f.endsWith('.log'))
+      .map(name => {
+        try {
+          const stat = fs.statSync(path.join(dir, name))
+          return { env, name, size: stat.size, mtime: stat.mtimeMs }
+        } catch {
+          return { env, name, size: 0, mtime: 0 }
+        }
+      })
+      .sort((a, b) => b.mtime - a.mtime)
+  } catch {
+    return []
+  }
+}
 
 export function registerConfigController() {
   /** 读取全局配置 */
@@ -38,13 +68,14 @@ export function registerConfigController() {
     return { success: true }
   })
 
-  // ===== 日志管理 =====
+  // ===== 日志管理（双环境：dev=开发/内测，release=公测/正式） =====
 
-  /** 获取今天的日志文件内容 */
-  ipcMain.handle('log:get-today', async (_event, maxLines?: number) => {
+  /** 获取指定环境今天的日志文件内容（默认当前环境） */
+  ipcMain.handle('log:get-today', async (_event, env?: LogEnvMode, maxLines?: number) => {
     try {
-      const logPath = logger.getLogPath()
+      const logPath = getLogPathFor(envFromMode(env))
       if (!fs.existsSync(logPath)) return ''
+      // 文件一律 UTF-8 编码（logger 写入端保证），读取端统一 utf-8
       const content = fs.readFileSync(logPath, 'utf-8')
       if (!maxLines) return content
       const lines = content.split('\n')
@@ -54,40 +85,51 @@ export function registerConfigController() {
     }
   })
 
-  /** 获取日志文件列表 */
+  /** 获取两个环境的日志文件列表（新→旧，带环境标记/大小/时间） */
   ipcMain.handle('log:list-files', async () => {
-    try {
-      if (!fs.existsSync(LOG_DIR)) return []
-      return fs.readdirSync(LOG_DIR)
-        .filter(f => f.startsWith('vela-') && f.endsWith('.log'))
-        .sort()
-        .reverse()
-    } catch {
-      return []
-    }
+    return [
+      { env: 'release' as const, files: listLogFilesIn(LOG_DIRS[LogEnvironment.Release], 'release') },
+      { env: 'dev' as const, files: listLogFilesIn(LOG_DIRS[LogEnvironment.Dev], 'dev') },
+    ]
   })
 
-  /** 读取指定日志文件 */
-  ipcMain.handle('log:read-file', async (_event, fileName: string) => {
+  /** 读取指定环境的日志文件（maxLines 截断为尾部 N 行，防大文件卡 UI） */
+  ipcMain.handle('log:read-file', async (_event, env: LogEnvMode, fileName: string, maxLines?: number) => {
     try {
-      // 安全检查：防止路径遍历
+      // 安全检查：文件名必须合法（basename 防路径遍历）+ 前缀/后缀校验
       const safeName = path.basename(fileName)
       if (!safeName.startsWith('vela-') || !safeName.endsWith('.log')) {
         return { success: false, error: t('error.invalidLogFileName') }
       }
-      const filePath = path.join(LOG_DIR, safeName)
+      const filePath = path.join(LOG_DIRS[envFromMode(env)], safeName)
       if (!fs.existsSync(filePath)) {
         return { success: false, error: t('error.logFileNotFound') }
       }
-      return { success: true, content: fs.readFileSync(filePath, 'utf-8') }
+      const lines = fs.readFileSync(filePath, 'utf-8').split('\n')
+      const shown = maxLines && lines.length > maxLines ? lines.slice(-maxLines) : lines
+      return { success: true, content: shown.join('\n'), totalLines: lines.length }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
     }
   })
 
-  /** 记录前端日志（渲染进程通过 IPC 写入） */
-  ipcMain.handle('log:write', async (_event, level: LogLevel, source: string, message: string) => {
-    switch (level) {
+  /** 在系统文件管理器中打开日志目录（用户反馈问题时可快速定位日志文件） */
+  ipcMain.handle('log:open-dir', async () => {
+    try {
+      const dir = logger.getLogDir()
+      if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+      const err = await shell.openPath(dir)
+      if (err) return { success: false, error: err }
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
+  /** 记录前端日志（渲染进程通过 IPC 写入；level 为字符串，主进程映射到 LogLevel） */
+  ipcMain.handle('log:write', async (_event, level: 'debug' | 'info' | 'warn' | 'error', source: string, message: string) => {
+    const logLevel = RENDER_LOG_LEVELS[level] ?? LogLevel.INFO
+    switch (logLevel) {
       case LogLevel.DEBUG: logger.debug(source, message); break
       case LogLevel.INFO: logger.info(source, message); break
       case LogLevel.WARN: logger.warn(source, message); break

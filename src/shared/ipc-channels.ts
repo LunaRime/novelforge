@@ -602,8 +602,53 @@ export interface ExportChannels {
   }
 }
 
+// ===== 日志频道 =====
+
+/** 日志环境（对应主进程双环境日志流：dev=开发/内测，release=公测/正式） */
+export type LogEnvMode = 'dev' | 'release'
+
+/** 日志文件信息 */
+export interface LogFileInfo {
+  /** 日志环境 */
+  env: LogEnvMode
+  /** 文件名（如 vela-2026-08-05.log / vela-dev-2026-08-05.log） */
+  name: string
+  /** 文件大小（字节） */
+  size: number
+  /** 最后修改时间戳（ms） */
+  mtime: number
+}
+
+export interface LogChannels {
+  /** 渲染进程写入主进程日志文件（fire-and-forget，调用方自行控制频率） */
+  'log:write': {
+    args: [level: 'debug' | 'info' | 'warn' | 'error', source: string, message: string]
+    return: { success: boolean }
+  }
+  /** 获取指定环境今天的日志文件内容（默认当前环境） */
+  'log:get-today': {
+    args: [env?: LogEnvMode, maxLines?: number]
+    return: string
+  }
+  /** 列出两个环境的日志文件（新→旧） */
+  'log:list-files': {
+    args: []
+    return: Array<{ env: LogEnvMode; files: LogFileInfo[] }>
+  }
+  /** 读取指定环境的日志文件内容（maxLines 截断，只返回尾部 N 行；totalLines 为文件总行数） */
+  'log:read-file': {
+    args: [env: LogEnvMode, fileName: string, maxLines?: number]
+    return: { success: boolean; content?: string; totalLines?: number; error?: string }
+  }
+  /** 在系统文件管理器中打开日志目录 */
+  'log:open-dir': {
+    args: []
+    return: { success: boolean; error?: string }
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */

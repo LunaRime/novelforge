@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { getCurrentLocale } from '../shared/locale'
 import { randomUUID } from '../utils/id'
+import { renderLog } from '../services/render-logger'
 
 // ===== 工作流 Checkpoint 持久化 =====
 
@@ -545,6 +546,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     set((s) => ({
       globalLogs: [...s.globalLogs, entry].slice(-500), // 保留最近 500 条
     }))
+    // 双写：内存（LogsView 展示）+ 主进程文件日志（持久化，用户反馈可查）
+    renderLog(level, 'Workflow', message)
   },
 
   clearLogs: () => set({ globalLogs: [] }),
