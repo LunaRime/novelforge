@@ -28,6 +28,7 @@ import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
 import { globalEventBus } from './shared/event-bus'
 import UpdateNotification from './components/UpdateNotification'
+import { loadCustomPrompts } from './services/prompt-templates'
 import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 
 /**
@@ -75,6 +76,8 @@ export default function App() {
     const t2 = performance.now()
     loadRecentProjects()
     console.log(`[Startup] loadRecentProjects 触发: ${(performance.now() - t2).toFixed(0)}ms`)
+    // 加载全局自定义 Prompt 覆盖（Issue #19：此前从未调用导致自定义保存后回退内置模板）
+    loadCustomPrompts()
     // 初始化 MCP Store
     useMCPStore.getState().init().catch(e => console.warn('[MCP] 初始化失败:', e))
     // 恢复未完成的工作流 checkpoint

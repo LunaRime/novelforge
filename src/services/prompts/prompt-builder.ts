@@ -1,5 +1,5 @@
 import type { PromptTemplate } from '../prompt-templates'
-import { BUILTIN_PROMPTS } from '../prompt-templates'
+import { BUILTIN_PROMPTS, appendOutputLanguage } from '../prompt-templates'
 
 /**
  * 基础抽象 Prompt 建造者
@@ -52,7 +52,9 @@ export class BasePromptBuilder {
     if (missing) {
       console.warn(`[PromptBuilder] 警告：模板 "${this.template.name}" 中有未赋值的变量残留:`, missing)
     }
-    return result
+
+    // 输出语言约束（始终在最后，优先级最高；与 renderPrompt 行为对齐）
+    return appendOutputLanguage(result)
   }
 }
 
