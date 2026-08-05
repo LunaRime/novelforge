@@ -20,14 +20,14 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '.
 
 /** 数据拉取天数（全年，前端按所选范围过滤——月度视图需要跨月数据） */
 const FETCH_DAYS = 365
+/** 热力图格子尺寸（固定，比原 10px 适度放大） */
+const CELL_SIZE = 12
 /** 热力图格子间距 */
 const CELL_GAP = 2
 /** 每日粒度可选范围（天） */
 const DAILY_RANGES = [15, 30, 90]
 /** 每月粒度可选范围（月数） */
 const MONTHLY_RANGES = [6, 12]
-/** 热力图最大宽度（自适应放大，超过后居中不再膨胀） */
-const GRID_MAX_WIDTH = 480
 
 /** 5 级活跃度颜色（accent 透明度渐变，禁止硬编码色值） */
 const LEVEL_COLORS = [
@@ -373,7 +373,7 @@ function aggregateByMonth(rows: DailyActivityRow[]): Array<{ month: string; stat
 }
 
 function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: number }) {
-  // 构建日期序列（向前对齐到周日），格子尺寸随容器自适应（max-w 上限内放大）
+  // 构建日期序列（向前对齐到周日），固定格子尺寸（CELL_SIZE）
   const today = new Date()
   today.setHours(0, 0, 0, 0)
   const start = new Date(today)
@@ -404,14 +404,15 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
   const weekLabels = ['', t('activity.mon'), '', t('activity.wed'), '', t('activity.fri'), '']
 
   return (
-    <div className="w-full" style={{ maxWidth: GRID_MAX_WIDTH }}>
-      {/* 月份标签行（与列对齐，星期列宽内缩；列 flex-1 等宽） */}
+    <div>
+      {/* 月份标签行（与列对齐，星期列宽内缩） */}
       <div className="flex" style={{ gap: CELL_GAP, paddingLeft: WEEK_LABEL_WIDTH + CELL_GAP, marginBottom: 2 }}>
         {colStarts.map((col, c) => (
           <span
             key={c}
-            className="flex-1 text-[0.6rem] leading-none"
+            className="text-[0.6rem] leading-none"
             style={{
+              width: CELL_SIZE,
               color: 'var(--color-text-muted)',
               overflow: 'visible',
               whiteSpace: 'nowrap',
@@ -422,7 +423,7 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
         ))}
       </div>
 
-      {/* 网格：星期标签列 + 周列（7 天），列 flex-1 撑开 → 格子随容器放大 */}
+      {/* 网格：星期标签列 + 周列（7 天） */}
       <div className="flex" style={{ gap: CELL_GAP }}>
         {/* 星期标签列 */}
         <div className="flex flex-col" style={{ gap: CELL_GAP, width: WEEK_LABEL_WIDTH, flexShrink: 0 }}>
@@ -430,7 +431,7 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
             <span
               key={row}
               className="text-[0.6rem] leading-none flex items-center"
-              style={{ color: 'var(--color-text-muted)' }}
+              style={{ height: CELL_SIZE, color: 'var(--color-text-muted)' }}
             >
               {label}
             </span>
@@ -438,11 +439,11 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
         </div>
 
         {colStarts.map((col, c) => (
-          <div key={c} className="flex-1 flex flex-col" style={{ gap: CELL_GAP }}>
+          <div key={c} className="flex flex-col" style={{ gap: CELL_GAP }}>
             {Array.from({ length: 7 }, (_, row) => {
               const date = new Date(col.date)
               date.setDate(col.date.getDate() + row)
-              if (date > today) return <div key={row} className="w-full aspect-square" />
+              if (date > today) return <span key={row} style={{ width: CELL_SIZE, height: CELL_SIZE }} />
               const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
               const d = byDay.get(key)
               return <Cell key={row} dayKey={key} d={d} maxes={{ maxWritten, maxRevised, maxCalls }} isToday={date.getTime() === today.getTime()} />
@@ -454,7 +455,7 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
   )
 }
 
-/** 单个格子（宽高随列自适应，aspect-square 保持方形） */
+/** 单个格子（固定 CELL_SIZE 方形） */
 function Cell({
   dayKey, d, maxes, isToday,
 }: {
@@ -477,10 +478,11 @@ function Cell({
     : dayKey
 
   return (
-    <div
+    <span
       title={tooltip}
-      className="w-full aspect-square"
       style={{
+        width: CELL_SIZE,
+        height: CELL_SIZE,
         borderRadius: 2,
         backgroundColor: LEVEL_COLORS[level],
         border: '1px solid var(--color-border)',
@@ -497,7 +499,7 @@ function MonthlyChart({ rows, months }: { rows: DailyActivityRow[]; months: numb
   const maxWritten = Math.max(1, ...monthsData.map(m => m.stats.writtenWords))
 
   return (
-    <div className="w-full" style={{ maxWidth: GRID_MAX_WIDTH }}>
+    <div className="w-full" style={{ maxWidth: 360 }}>
       {/* 柱体区 */}
       <div className="flex items-end gap-2" style={{ height: 96 }}>
         {monthsData.map(m => {
