@@ -128,19 +128,22 @@ export default function ActivityView() {
         </div>
       ) : (
         <div className="px-4 py-3 space-y-4">
-          {/* 统计条：全局总计 + 当前范围 */}
-          <div className="space-y-2">
-            {/* 当前范围 */}
-            <div className="flex items-center gap-5 flex-wrap">
-              <StatItem icon={<PenLine size={11} />} label={t('activity.totalWritten')} value={formatNumber(scopeStats.writtenWords)} />
-              <StatItem icon={<RefreshCw size={11} />} label={t('activity.totalRevised')} value={formatNumber(scopeStats.revisedWords)} />
-              <StatItem icon={<Sparkles size={11} />} label={t('activity.totalCalls')} value={formatNumber(scopeStats.llmCalls)} />
-              <StatItem icon={<Activity size={11} />} label={t('activity.totalTokens')} value={`${(scopeStats.llmTokens / 1000).toFixed(1)}K`} />
-              <StatItem icon={<Wallet size={11} />} label={t('activity.totalCost')} value={`$${scopeStats.llmCost.toFixed(2)}`} accent />
+          {/* 统计区：当前范围卡片 + 全局总计 */}
+          <div className="space-y-2.5">
+            {/* 当前范围（卡片式统计） */}
+            <div className="flex items-stretch gap-2 flex-wrap">
+              <StatCard icon={<PenLine size={12} />} label={t('activity.totalWritten')} value={formatNumber(scopeStats.writtenWords)} accent />
+              <StatCard icon={<RefreshCw size={12} />} label={t('activity.totalRevised')} value={formatNumber(scopeStats.revisedWords)} />
+              <StatCard icon={<Sparkles size={12} />} label={t('activity.totalCalls')} value={formatNumber(scopeStats.llmCalls)} />
+              <StatCard icon={<Activity size={12} />} label={t('activity.totalTokens')} value={`${(scopeStats.llmTokens / 1000).toFixed(1)}K`} />
+              <StatCard icon={<Wallet size={12} />} label={t('activity.totalCost')} value={`$${scopeStats.llmCost.toFixed(2)}`} accent />
             </div>
-            {/* 全局总计（所有项目，恒定显示） */}
+            {/* 全局总计（所有项目，恒定显示；选中单项目时展示） */}
             {selectedPath && (
-              <div className="flex items-center gap-4 text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+              <div
+                className="flex items-center gap-4 pt-2 border-t text-[0.68rem]"
+                style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
+              >
                 <span className="flex items-center gap-1">
                   <GlobeIcon size={10} />
                   {t('activity.globalTotal')}
@@ -152,13 +155,13 @@ export default function ActivityView() {
             )}
           </div>
 
-          {/* GitHub 风格热力图 */}
-          <div className="select-none">
+          {/* GitHub 风格热力图（居中，含星期标签列） */}
+          <div className="flex justify-center select-none">
             <ContributionGrid rows={scopeRows} />
           </div>
 
           {/* 图例 */}
-          <div className="flex items-center justify-end gap-1.5 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="flex items-center justify-center gap-1.5 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
             <span>{t('activity.less')}</span>
             {LEVEL_COLORS.map((c, i) => (
               <span
@@ -180,13 +183,15 @@ export default function ActivityView() {
   )
 }
 
-/** 统计项 */
-function StatItem({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
+/** 统计卡片：label 小字 + value 大字（hover 色块背景，突出数字层级） */
+function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
   return (
-    <div className="flex items-center gap-1.5 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-      <span style={{ color: accent ? 'var(--color-accent)' : 'var(--color-accent)' }}>{icon}</span>
-      <span>{label}</span>
-      <span className={`font-bold text-xs ${accent ? '' : ''}`} style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text)' }}>{value}</span>
+    <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 min-w-[5.5rem]" style={{ backgroundColor: 'var(--color-hover)' }}>
+      <span className="flex-shrink-0" style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>{icon}</span>
+      <div className="flex flex-col leading-tight min-w-0">
+        <span className="text-[0.62rem] truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+        <span className="text-xs font-bold truncate" style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text)' }}>{value}</span>
+      </div>
     </div>
   )
 }
@@ -237,6 +242,9 @@ function formatNumber(n: number): string {
 
 // ===== 热力图网格 =====
 
+/** 星期标签列宽（容纳 zh 单字 / en 三字母 / ru 双字母） */
+const WEEK_LABEL_WIDTH = 14
+
 function ContributionGrid({ rows }: { rows: DailyActivityRow[] }) {
   // 构建最近 90 天的日期序列（向前对齐到周日）
   const today = new Date()
@@ -265,10 +273,13 @@ function ContributionGrid({ rows }: { rows: DailyActivityRow[] }) {
     colStarts.push({ date: colDate, monthLabel })
   }
 
+  // GitHub 风格星期标签（行 0=周日…6=周六，只标 周一/周三/周五）
+  const weekLabels = ['', t('activity.mon'), '', t('activity.wed'), '', t('activity.fri'), '']
+
   return (
     <div>
-      {/* 月份标签行（与列对齐） */}
-      <div className="flex" style={{ gap: CELL_GAP, paddingLeft: 0, marginBottom: 2 }}>
+      {/* 月份标签行（与列对齐，星期列宽内缩） */}
+      <div className="flex" style={{ gap: CELL_GAP, paddingLeft: WEEK_LABEL_WIDTH + CELL_GAP, marginBottom: 2 }}>
         {colStarts.map((col, c) => (
           <span
             key={c}
@@ -285,8 +296,21 @@ function ContributionGrid({ rows }: { rows: DailyActivityRow[] }) {
         ))}
       </div>
 
-      {/* 网格：列 = 周（7 天），行 = 星期 */}
+      {/* 网格：星期标签列 + 周列（7 天） */}
       <div className="flex" style={{ gap: CELL_GAP }}>
+        {/* 星期标签列 */}
+        <div className="flex flex-col" style={{ gap: CELL_GAP, width: WEEK_LABEL_WIDTH, flexShrink: 0 }}>
+          {weekLabels.map((label, row) => (
+            <span
+              key={row}
+              className="text-[0.6rem] leading-none flex items-center"
+              style={{ height: CELL_SIZE, color: 'var(--color-text-muted)' }}
+            >
+              {label}
+            </span>
+          ))}
+        </div>
+
         {colStarts.map((col, c) => (
           <div key={c} className="flex flex-col" style={{ gap: CELL_GAP }}>
             {Array.from({ length: 7 }, (_, row) => {
