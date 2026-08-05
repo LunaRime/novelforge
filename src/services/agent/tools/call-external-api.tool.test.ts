@@ -30,6 +30,14 @@ describe('call_external_api 工具', () => {
     expect(mockInvoke).toHaveBeenCalledWith('dev:invoke', { path: '/api/v1', method: 'POST', body: '{"q":"x"}' })
   })
 
+  it('缺 path → 报错且不调用 IPC（不静默调根路径）', async () => {
+    const { callExternalApiTool } = await import('./call-external-api.tool')
+    const result = await callExternalApiTool.execute({})
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('path')
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+
   it('失败（开发者模式未启用等）→ error 透传给 LLM observation', async () => {
     mockInvoke.mockResolvedValue({ success: false, error: '开发者模式未启用（设置 → 开发者模式）' })
     const { callExternalApiTool } = await import('./call-external-api.tool')

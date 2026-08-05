@@ -25,7 +25,11 @@ export const callExternalApiTool = buildAgentTool({
     required: ['path'],
   },
   execute: async (args) => {
-    const path = typeof args.path === 'string' ? args.path : ''
+    // 缺 path 报错（与其他工具缺参约定一致；空 path 静默调根路径语义不明确）
+    if (typeof args.path !== 'string' || !args.path.trim()) {
+      return { success: false, content: '', error: 'call_external_api 需要提供 path 参数（相对路径，如 /search?q=xxx）' }
+    }
+    const path = args.path.trim()
     const method = (['GET', 'POST', 'PUT', 'DELETE', 'PATCH'] as const).includes(args.method as never)
       ? args.method as 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH'
       : 'GET'

@@ -46,7 +46,12 @@ export default function DeveloperModeSection() {
     try {
       const parsed = JSON.parse(headersText || '{}')
       if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        headers = parsed as Record<string, string>
+        // 值类型校验：fetch 要求字符串值（数字/布尔会导致 undici 报错，难定位）
+        if (Object.values(parsed).every(v => typeof v === 'string')) {
+          headers = parsed as Record<string, string>
+        } else {
+          throw new Error('headers 值必须是字符串')
+        }
       } else {
         throw new Error('headers 需为 JSON 对象')
       }
