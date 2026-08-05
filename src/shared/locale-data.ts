@@ -592,6 +592,8 @@ export const UI_TEXTS_DATA = {
   'status.readOnly': { 'zh-CN': '已定稿（只读）', 'en-US': 'Finalized (read-only)', 'ru-RU': 'Финал (только чтение)' },
   'status.archived': { 'zh-CN': '已归档（只读）', 'en-US': 'Archived (read-only)', 'ru-RU': 'Архив (только чтение)' },
   'status.unnamed': { 'zh-CN': '未命名', 'en-US': 'Unnamed', 'ru-RU': 'Без имени' },
+  'save.success': { 'zh-CN': '保存成功', 'en-US': 'Saved successfully', 'ru-RU': 'Сохранено' },
+  'save.failed': { 'zh-CN': '保存失败：{error}', 'en-US': 'Save failed: {error}', 'ru-RU': 'Ошибка сохранения: {error}' },
   'status.notConfigured': { 'zh-CN': '未填写', 'en-US': 'Not filled', 'ru-RU': 'Не заполнено' },
   'tip.autoScrollOn': { 'zh-CN': '自动滚动: 开', 'en-US': 'Auto-scroll: ON', 'ru-RU': 'Авто-прокрутка: Вкл' },
   'tip.autoScrollOff': { 'zh-CN': '自动滚动: 关', 'en-US': 'Auto-scroll: OFF', 'ru-RU': 'Авто-прокрутка: Выкл' },

@@ -9,6 +9,7 @@ import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 import { cn } from '../../lib/utils'
 
 /** 模型设置面板 — 在侧边栏 settings 视图中展示 */
@@ -47,8 +48,17 @@ export default function ModelSettings() {
   /** 保存模型 */
   const handleSave = async () => {
     if (!editingModel) return
+    const t0 = Date.now()
     setSaving(true)
-    await saveModel(editingModel)
+    try {
+      await saveModel(editingModel)
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Model', `模型保存成功 ${editingModel.id}（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
+    } catch (e) {
+      renderLog('error', 'Save:Model', `模型保存失败 ${editingModel.id}: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
+    }
     setEditingModel(null)
     setSaving(false)
   }
@@ -295,11 +305,19 @@ function ProxySettings() {
   }, [])
 
   const handleSave = async () => {
+    const t0 = Date.now()
     setSaving(true)
     try {
       const { ipc } = await import('../../services/ipc-client')
       await ipc.invoke('config:set', { proxy })
-    } catch { /* 忽略 */ }
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Model', `代理配置保存成功（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
+    } catch (e) {
+      // 失败不再静默（原 catch 忽略）
+      renderLog('error', 'Save:Model', `代理配置保存失败: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
+    }
     setSaving(false)
   }
 

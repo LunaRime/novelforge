@@ -30,6 +30,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '.
 import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
+import { renderLog } from '../../services/render-logger'
 import { globalEventBus } from '../../shared/event-bus'
 
 const ROLES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
@@ -138,14 +139,18 @@ export default function ChapterCardEditor() {
   /** 保存当前章节蓝图 */
   const handleSaveOne = async () => {
     if (!currentProject || !selected) return
+    const t0 = Date.now()
     setSaving(true)
     try {
       await saveChapterBlueprint(selected)
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
-      addLog('info', `Blueprint Ch.${selected.chapterNumber} saved`)
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Blueprint', `章节蓝图保存成功 第${selected.chapterNumber}章（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
     } catch (e) {
-      addLog('error', t('chapterCard.saveFailed').replace('{error}', String(e)))
+      renderLog('error', 'Save:Blueprint', `章节蓝图保存失败 第${selected.chapterNumber}章: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)
   }
@@ -153,14 +158,18 @@ export default function ChapterCardEditor() {
   /** 全量保存 */
   const handleSaveAll = async () => {
     if (!currentProject) return
+    const t0 = Date.now()
     setSaving(true)
     try {
       await saveAllBlueprints(blueprints)
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
-      addLog('info', `Saved all ${blueprints.length} blueprints`)
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Blueprint', `章节蓝图全量保存成功 ${blueprints.length} 章（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
     } catch (e) {
-      addLog('error', t('chapterCard.saveAllFailed').replace('{error}', String(e)))
+      renderLog('error', 'Save:Blueprint', `章节蓝图全量保存失败: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)
   }

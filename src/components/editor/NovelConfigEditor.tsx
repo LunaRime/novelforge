@@ -13,6 +13,8 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '.
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
+import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 
 /** 小说配置编辑器 — Tab 内的可视化配置面板 */
 export default function NovelConfigEditor() {
@@ -50,13 +52,18 @@ export default function NovelConfigEditor() {
   /** 保存配置 — Store 已是最新数据，仅需持久化到磁盘 */
   const handleSave = async () => {
     if (!config || saving) return
+    const t0 = Date.now()
     setSaving(true)
     try {
       await saveProject()
-      addLog('info', t('novelConfig.saved'))
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Config', `小说配置保存成功（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
     } catch (error) {
+      // 失败：toast + error 日志（含原因）
       console.error('[NovelConfigEditor] 保存失败:', error)
-      addLog('error', t('error.saveFailed').replace('{error}', String(error)))
+      renderLog('error', 'Save:Config', `小说配置保存失败: ${String(error)}`)
+      toast.error(t('save.failed').replace('{error}', String(error)))
     } finally {
       setSaving(false)
     }

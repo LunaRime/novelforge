@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { Save, Trash2, Users, Network, Link2, Plus, X } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
-import { useWorkflowStore } from '../../stores/workflow-store'
 import { confirm } from '../ui/Confirm'
+import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 import {
   useCharacterStore,
   EMPTY_STATE,
@@ -25,7 +26,6 @@ import { useTranslation } from '../../hooks/useTranslation'
 export default function CharacterEditor() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
-  const addLog = useWorkflowStore(s => s.addLog)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
   const saving = useCharacterStore(s => s.saving)
@@ -72,8 +72,17 @@ export default function CharacterEditor() {
 
   const handleSave = async () => {
     if (!currentProject) return
-    await saveAll(currentProject.path)
-    addLog('info', `Saved ${characters.length} character cards`)
+    const t0 = Date.now()
+    try {
+      await saveAll(currentProject.path)
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Character', `角色卡保存成功 ${characters.length} 张（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
+    } catch (e) {
+      // 失败：toast + error 日志（含原因）
+      renderLog('error', 'Save:Character', `角色卡保存失败: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
+    }
   }
 
   // ===== 渲染 =====

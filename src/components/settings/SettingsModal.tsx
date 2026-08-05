@@ -24,6 +24,8 @@ import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
+import { renderLog } from '../../services/render-logger'
+import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
 import VectorConfigSection from './VectorConfigSection'
 import { useUpdateStore } from '../../stores/update-store'
@@ -214,16 +216,25 @@ function LLMSection({
   /** 保存模型；若是该分类第一个则自动设为默认 */
   const handleSave = async () => {
     if (!editingModel) return
+    const t0 = Date.now()
     setSaving(true)
-    await saveModel(editingModel)
-    // 新增模型后，如果该分类还没有默认则自动设为默认
-    const countBefore = filtered.length
-    if (countBefore === 0) {
-      if (isEmbeddingSection) {
-        setDefaultEmbeddingModel(editingModel.id)
-      } else {
-        setDefaultModel(editingModel.id)
+    try {
+      await saveModel(editingModel)
+      // 新增模型后，如果该分类还没有默认则自动设为默认
+      const countBefore = filtered.length
+      if (countBefore === 0) {
+        if (isEmbeddingSection) {
+          setDefaultEmbeddingModel(editingModel.id)
+        } else {
+          setDefaultModel(editingModel.id)
+        }
       }
+      // 保存行为日志流：成功 info + toast 视觉反馈
+      renderLog('info', 'Save:Settings', `模型保存成功 ${editingModel.id}（${Date.now() - t0}ms）`)
+      toast.success(t('save.success'))
+    } catch (e) {
+      renderLog('error', 'Save:Settings', `模型保存失败 ${editingModel.id}: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setEditingModel(null)
     setSaving(false)
@@ -680,8 +691,16 @@ function ProxySection() {
   }, [])
 
   const handleSave = async () => {
+    const t0 = Date.now()
     setSaving(true)
-    await ipc.invoke('config:set', { proxy }).catch(() => { })
+    try {
+      await ipc.invoke('config:set', { proxy })
+      // 保存行为日志流：成功 info（视觉反馈已有 setSaved 局部文本）
+      renderLog('info', 'Save:Settings', `代理配置保存成功（${Date.now() - t0}ms）`)
+    } catch (e) {
+      renderLog('error', 'Save:Settings', `代理配置保存失败: ${String(e)}`)
+      toast.error(t('save.failed').replace('{error}', String(e)))
+    }
     setSaving(false)
     setSaved(true)
     setTimeout(() => setSaved(false), 2000)
