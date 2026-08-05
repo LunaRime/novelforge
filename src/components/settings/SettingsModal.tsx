@@ -28,11 +28,12 @@ import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
 import VectorConfigSection from './VectorConfigSection'
+import DeveloperModeSection from './DeveloperModeSection'
 import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'about'
+type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'dev' | 'about'
 
 interface SectionItem {
   id: SettingsSection
@@ -51,6 +52,7 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'skills', label: t('settings.skills'), icon: <BookMarked size={16} />, description: t('settings.skillsDesc') },
     { id: 'mcp', label: t('settings.mcp'), icon: <Plug size={16} />, description: t('settings.mcpDesc') },
     { id: 'file', label: t('settings.file'), icon: <File size={16} />, description: t('settings.fileDesc') },
+    { id: 'dev', label: t('settings.developer'), icon: <Plug size={16} />, description: t('settings.developerDesc') },
     { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
   ]
 }
@@ -150,6 +152,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'skills' && <SkillsSettings />}
             {section === 'mcp' && <MCPSettings />}
             {section === 'file' && <FileSection />}
+            {section === 'dev' && <DeveloperModeSection />}
             {section === 'about' && <AboutSection />}
           </div>
         </main>
