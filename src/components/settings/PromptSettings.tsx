@@ -160,9 +160,10 @@ function TemplateItem({
     const template: PromptTemplate = {
       ...builtinTemplate,
       content: editContent,
-      // 不保存 systemSuffix，渲染时自动从内置取
+      // 不保存 systemSuffix（渲染时自动从内置取）与 contentLocales（自定义模板单语言，content 是唯一事实）
     }
     delete (template as Partial<PromptTemplate>).systemSuffix
+    delete (template as Partial<PromptTemplate>).contentLocales
     const ok = await saveCustomPrompt(template)
     setSaving(false)
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedGlobal') } : { type: 'error', msg: t('prompt.saveFailed') })
@@ -180,6 +181,7 @@ function TemplateItem({
       content: editContent,
     }
     delete (template as Partial<PromptTemplate>).systemSuffix
+    delete (template as Partial<PromptTemplate>).contentLocales
     const ok = await saveProjectCustomPrompt(projectPath, template)
     setSaving(false)
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedProject') } : { type: 'error', msg: t('prompt.saveFailed') })
@@ -194,7 +196,8 @@ function TemplateItem({
     // 依次删除项目级和全局级覆盖
     if (projectPath) await deleteProjectCustomPrompt(projectPath, builtinTemplate.key)
     await deleteCustomPrompt(builtinTemplate.key)
-    setEditContent(builtinTemplate.content)
+    // 重置为当前语言的默认模板（删除自定义后 getPromptTemplate 返回内置语言版）
+    setEditContent(getPromptTemplate(builtinTemplate.key)?.content ?? builtinTemplate.content)
     setSaving(false)
     setSaveResult({ type: 'success', msg: t('prompt.restoredDefault') })
     onSaved()

@@ -7,6 +7,7 @@
  * 架构生成 Prompt 来源于 AI_NovelGenerator 项目（经专业优化）
  */
 import type { TextKey } from '../shared/locale'
+import { getCurrentLocale, type SupportedLocale } from '../shared/locale'
 
 export interface PromptTemplate {
   /** 模板唯一标识 */
@@ -15,8 +16,10 @@ export interface PromptTemplate {
   name: string
   /** 用途说明 */
   description: string
-  /** 模板内容（支持 {{变量}} 插值） */
+  /** 模板内容（支持 {{变量}} 插值）— 中文原文（默认语言） */
   content: string
+  /** 语言变体内容（占位符与 content 一致，仅指令文本翻译）；回退链：当前语言 → en-US → content（中文） */
+  contentLocales?: Partial<Record<SupportedLocale, string>>
   /** 不可编辑的系统约束（输出格式、JSON schema 等），渲染时自动追加到 content 末尾 */
   systemSuffix?: string
   /** LLM system message 角色定位（由模板统一定义，command 不再硬编码） */
@@ -47,8 +50,10 @@ import { draftingPrompts } from './prompts/drafting'
 import { editingPrompts } from './prompts/editing'
 import { analysisPrompts } from './prompts/analysis'
 import { charactersPrompts } from './prompts/characters'
+import { EN_US_CONTENT } from './prompts/locales/en-US'
 
-export const BUILTIN_PROMPTS: PromptTemplate[] = [
+/** 合并多语言变体：集中式英文模板表按 key 挂载 contentLocales（不侵入分类文件） */
+const BASE_PROMPTS: PromptTemplate[] = [
   ...configPrompts,
   ...architecturePrompts,
   ...draftingPrompts,
@@ -56,6 +61,21 @@ export const BUILTIN_PROMPTS: PromptTemplate[] = [
   ...analysisPrompts,
   ...charactersPrompts,
 ]
+
+export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p =>
+  EN_US_CONTENT[p.key] ? { ...p, contentLocales: { 'en-US': EN_US_CONTENT[p.key] } } : p,
+)
+
+/**
+ * 按当前语言解析模板内容（返回副本，不污染 BUILTIN_PROMPTS 内存对象）
+ * 回退链：contentLocales[locale] → contentLocales['en-US'] → content（中文原文）
+ */
+export function localizeTemplate(template: PromptTemplate, locale?: SupportedLocale): PromptTemplate {
+  const lang = locale ?? getCurrentLocale()
+  const localized = template.contentLocales?.[lang] ?? template.contentLocales?.['en-US']
+  if (!localized || localized === template.content) return template
+  return { ...template, content: localized }
+}
 
 // ===== 模板显示文本 i18n 映射 =====
 // 模板的 name/description/variables 是数据（模块级常量，保存/加载用中文原文），
@@ -191,6 +211,8 @@ const projectCustomPrompts: Map<string, PromptTemplate> = new Map()
 
 /** 加载全局自定义 Prompt 覆盖（从 ~/.vela/prompts/ 目录） */
 export async function loadCustomPrompts(): Promise<void> {
+  // 幂等：已加载/已尝试过则跳过（App 启动 + PromptSettings 挂载双调用点防重复加载）
+  if (customPromptsLoaded) return
   try {
     const { ipc } = await import('./ipc-client')
     if (!ipc.isElectron) return
@@ -234,7 +256,9 @@ async function _loadPromptsFromDir(dirPath: string, target: Map<string, PromptTe
     if (result.success && result.content.trim()) {
       try {
         const custom = JSON.parse(result.content) as PromptTemplate
-        if (custom.key) {
+        // 不覆盖内存已有条目——加载是异步的，期间用户可能已保存（内存 Map 是会话内权威，
+        // 文件是跨会话持久化；竞态下以 save 优先，避免加载完成把新保存的值覆盖回旧值）
+        if (custom.key && !target.has(custom.key)) {
           target.set(custom.key, custom)
         }
       } catch { /* 忽略无效 JSON */ }
@@ -242,20 +266,21 @@ async function _loadPromptsFromDir(dirPath: string, target: Map<string, PromptTe
   }
 }
 
-/** 根据 key 获取 Prompt 模板（三级优先级：项目级 > 全局级 > 内置） */
+/** 根据 key 获取 Prompt 模板（三级优先级：项目级 > 全局级 > 内置；按当前语言解析内容） */
 export function getPromptTemplate(key: string): PromptTemplate | undefined {
   // 优先级 1：项目级自定义覆盖
   const projectCustom = projectCustomPrompts.get(key)
-  if (projectCustom) return projectCustom
+  if (projectCustom) return localizeTemplate(projectCustom)
 
   // 优先级 2：全局自定义覆盖
   if (customPromptsLoaded) {
     const globalCustom = customPrompts.get(key)
-    if (globalCustom) return globalCustom
+    if (globalCustom) return localizeTemplate(globalCustom)
   }
 
-  // 优先级 3：内置默认
-  return BUILTIN_PROMPTS.find((p) => p.key === key)
+  // 优先级 3：内置默认（语言化）
+  const builtin = BUILTIN_PROMPTS.find((p) => p.key === key)
+  return builtin ? localizeTemplate(builtin) : undefined
 }
 
 /** 获取指定模板当前生效的来源 */
@@ -265,7 +290,7 @@ export function getPromptSource(key: string): 'builtin' | 'global' | 'project' {
   return 'builtin'
 }
 
-/** 获取所有模板（合并自定义，保留三级覆盖优先级） */
+/** 获取所有模板（合并自定义，保留三级覆盖优先级；按当前语言解析内容） */
 export function getAllPromptTemplates(): PromptTemplate[] {
   const all = [...BUILTIN_PROMPTS]
   // 用全局自定义覆盖同名内置模板
@@ -286,7 +311,7 @@ export function getAllPromptTemplates(): PromptTemplate[] {
       all.push(custom)
     }
   }
-  return all
+  return all.map(t => localizeTemplate(t))
 }
 
 /** 保存全局自定义 Prompt 到 ~/.vela/prompts/ */
@@ -302,6 +327,9 @@ export async function saveCustomPrompt(template: PromptTemplate): Promise<boolea
 
     await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
     customPrompts.set(template.key, template)
+    // 保存成功即视为已加载——否则 getPromptTemplate 的 customPromptsLoaded 检查
+    // 会跳过内存 Map，导致"保存后 UI 仍显示内置模板"（Issue #19 根因）
+    customPromptsLoaded = true
     return true
   } catch {
     return false
@@ -358,8 +386,24 @@ export async function deleteProjectCustomPrompt(projectPath: string, key: string
   }
 }
 
-/** 渲染 Prompt 模板（填充变量 + 自动追加内置 systemSuffix + 空段落裁剪） */
-export function renderPrompt(template: PromptTemplate, variables: Record<string, string>): string {
+/** 输出语言指令：追加到模板末尾，约束 LLM 输出语言与界面语言一致（Issue #19 P.S.） */
+const OUTPUT_LANGUAGE_NAMES: Record<SupportedLocale, string> = {
+  'zh-CN': '中文',
+  'en-US': 'English',
+  'ru-RU': 'Русский',
+}
+
+/**
+ * 追加系统级输出语言约束（置于模板最末，优先级最高；不可被用户自定义覆盖）
+ * 解决：非中文语言设置下 LLM 按中文模板工作导致输出偏中文
+ */
+export function appendOutputLanguage(content: string, locale?: SupportedLocale): string {
+  const lang = OUTPUT_LANGUAGE_NAMES[locale ?? getCurrentLocale()]
+  return `${content}\n\n[System] 请始终使用 ${lang} 输出所有内容。Do not respond in any other language.`
+}
+
+/** 渲染 Prompt 模板（填充变量 + 自动追加内置 systemSuffix + 空段落裁剪 + 输出语言约束） */
+export function renderPrompt(template: PromptTemplate, variables: Record<string, string>, locale?: SupportedLocale): string {
   let content = template.content
   for (const [key, value] of Object.entries(variables)) {
     content = content.replaceAll(`{{${key}}}`, value)
@@ -382,5 +426,6 @@ export function renderPrompt(template: PromptTemplate, variables: Record<string,
     .replace(/\n【[^】]*（如有[^）]*）[^】]*】\s*\n?\s*$/gm, '') // 清除空的 【...如有...】 标签行
     .replace(/\n{3,}/g, '\n\n') // 合并多余空行
 
-  return content
+  // 输出语言约束（始终在最后，优先级最高）
+  return appendOutputLanguage(content, locale)
 }
