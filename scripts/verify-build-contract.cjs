@@ -8,6 +8,12 @@
  */
 const fs = require('node:fs');
 const path = require('node:path');
+const {
+  parseVersionType,
+  VERSION_TYPE_LABELS,
+  isSemverVersion,
+  isValidPrereleaseSuffix,
+} = require('./version-utils.cjs');
 
 const ROOT = path.join(__dirname, '..');
 let errors = 0;
@@ -124,6 +130,23 @@ if (asarUnpackSection && filesSection) {
     }
   }
   if (errors === 0) ok('检查 D: asarUnpack 与 files 白名单无冲突');
+}
+
+// ===== 检查 E：版本号三分类格式 =====
+// 三版本发版制：alpha（内测 -alpha.N / 日期式）/ beta（公测 -beta.N）/ release（正式 x.y.z）
+// 禁止自定义 prerelease 后缀（会 fallback 到 release 被当正式版发布）
+const versionToCheck = pkgJson.version ?? '';
+const versionFormatOk = isSemverVersion(versionToCheck);
+const prereleaseOk = isValidPrereleaseSuffix(versionToCheck);
+
+if (versionFormatOk && prereleaseOk) {
+  const vtype = parseVersionType(versionToCheck);
+  ok(`检查 E: 版本号 "${versionToCheck}" 合法（${VERSION_TYPE_LABELS[vtype]}）`);
+} else {
+  const reasons = [];
+  if (!versionFormatOk) reasons.push('不符合 SemVer 格式（x.y.z[-prerelease]）');
+  if (!prereleaseOk) reasons.push('prerelease 后缀不在白名单（alpha.N / beta.N / YYYYMMDD），会被误判为正式版');
+  fail(`检查 E: 版本号 "${versionToCheck}" 非法 — ${reasons.join('；')}`);
 }
 
 // ===== 总结 =====
