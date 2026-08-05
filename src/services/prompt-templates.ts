@@ -20,6 +20,10 @@ export interface PromptTemplate {
   content: string
   /** 语言变体内容（占位符与 content 一致，仅指令文本翻译）；回退链：当前语言 → en-US → content（中文） */
   contentLocales?: Partial<Record<SupportedLocale, string>>
+  /** 语言变体系统约束（回退链同上）；渲染时自动追加到 content 末尾 */
+  systemSuffixLocales?: Partial<Record<SupportedLocale, string>>
+  /** 语言变体角色定位（回退链同上） */
+  systemRoleLocales?: Partial<Record<SupportedLocale, string>>
   /** 不可编辑的系统约束（输出格式、JSON schema 等），渲染时自动追加到 content 末尾 */
   systemSuffix?: string
   /** LLM system message 角色定位（由模板统一定义，command 不再硬编码） */
@@ -50,9 +54,9 @@ import { draftingPrompts } from './prompts/drafting'
 import { editingPrompts } from './prompts/editing'
 import { analysisPrompts } from './prompts/analysis'
 import { charactersPrompts } from './prompts/characters'
-import { EN_US_CONTENT } from './prompts/locales/en-US'
+import { EN_US_CONTENT, EN_US_ROLE, EN_US_SUFFIX } from './prompts/locales/en-US'
 
-/** 合并多语言变体：集中式英文模板表按 key 挂载 contentLocales（不侵入分类文件） */
+/** 合并多语言变体：集中式英文模板表按 key 挂载 content/systemSuffix/systemRole 变体（不侵入分类文件） */
 const BASE_PROMPTS: PromptTemplate[] = [
   ...configPrompts,
   ...architecturePrompts,
@@ -62,19 +66,29 @@ const BASE_PROMPTS: PromptTemplate[] = [
   ...charactersPrompts,
 ]
 
-export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p =>
-  EN_US_CONTENT[p.key] ? { ...p, contentLocales: { 'en-US': EN_US_CONTENT[p.key] } } : p,
-)
+export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p => ({
+  ...p,
+  ...(EN_US_CONTENT[p.key] ? { contentLocales: { 'en-US': EN_US_CONTENT[p.key] } } : {}),
+  ...(EN_US_SUFFIX[p.key] ? { systemSuffixLocales: { 'en-US': EN_US_SUFFIX[p.key] } } : {}),
+  ...(EN_US_ROLE[p.key] ? { systemRoleLocales: { 'en-US': EN_US_ROLE[p.key] } } : {}),
+}))
 
 /**
- * 按当前语言解析模板内容（返回副本，不污染 BUILTIN_PROMPTS 内存对象）
- * 回退链：contentLocales[locale] → contentLocales['en-US'] → content（中文原文）
+ * 按当前语言解析模板（返回副本，不污染 BUILTIN_PROMPTS 内存对象）
+ * 回退链：{lang} → en-US → 中文原文（content / systemSuffix / systemRole 各自独立回退）
  */
 export function localizeTemplate(template: PromptTemplate, locale?: SupportedLocale): PromptTemplate {
   const lang = locale ?? getCurrentLocale()
-  const localized = template.contentLocales?.[lang] ?? template.contentLocales?.['en-US']
-  if (!localized || localized === template.content) return template
-  return { ...template, content: localized }
+  const content = template.contentLocales?.[lang] ?? template.contentLocales?.['en-US']
+  const suffix = template.systemSuffixLocales?.[lang] ?? template.systemSuffixLocales?.['en-US']
+  const role = template.systemRoleLocales?.[lang] ?? template.systemRoleLocales?.['en-US']
+  if (!content && !suffix && !role) return template
+  return {
+    ...template,
+    ...(content ? { content } : {}),
+    ...(suffix ? { systemSuffix: suffix } : {}),
+    ...(role ? { systemRole: role } : {}),
+  }
 }
 
 // ===== 模板显示文本 i18n 映射 =====
@@ -409,9 +423,9 @@ export function renderPrompt(template: PromptTemplate, variables: Record<string,
     content = content.replaceAll(`{{${key}}}`, value)
   }
 
-  // 自动追加系统约束（始终从内置模板获取，不受用户自定义影响）
-  const builtinTemplate = BUILTIN_PROMPTS.find(p => p.key === template.key)
-  const suffix = builtinTemplate?.systemSuffix
+  // 自动追加系统约束（始终从内置模板获取，不受用户自定义影响；按 locale 解析语言变体）
+  const builtin = BUILTIN_PROMPTS.find(p => p.key === template.key)
+  const suffix = builtin ? localizeTemplate(builtin, locale).systemSuffix : undefined
   if (suffix) {
     let renderedSuffix = suffix
     for (const [key, value] of Object.entries(variables)) {
