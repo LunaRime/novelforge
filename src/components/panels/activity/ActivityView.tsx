@@ -24,8 +24,8 @@ const FETCH_DAYS = 3650
 const CELL_SIZE = 12
 /** 热力图格子间距 */
 const CELL_GAP = 2
-/** 每日粒度可选范围（天） */
-const DAILY_RANGES = [15, 30, 90]
+/** 热力图横向滚动兜底最小宽度（全年 53 周列 × 12px + 星期列） */
+const GRID_MIN_WIDTH = 742
 
 /** 5 级活跃度颜色（accent 透明度渐变，禁止硬编码色值） */
 const LEVEL_COLORS = [
@@ -45,10 +45,8 @@ export default function ActivityView() {
   const [selectedPath, setSelectedPath] = useState('')
   /** 视图粒度：每日（热力图）/ 每月（柱状图） */
   const [granularity, setGranularity] = useState<'daily' | 'monthly'>('daily')
-  /** 每日粒度范围（天） */
-  const [dailyRange, setDailyRange] = useState(30)
-  /** 每月粒度查看年份（默认今年，◀▶ 切换往期） */
-  const [monthYear, setMonthYear] = useState(() => new Date().getFullYear())
+  /** 查看年份（每日/每月共用，默认今年，◀▶ 切换往期） */
+  const [viewYear, setViewYear] = useState(() => new Date().getFullYear())
 
   // 打开项目时默认选中该项目（总数据仍在下拉可切回）
   useEffect(() => {
@@ -91,11 +89,8 @@ export default function ActivityView() {
     ? allRows.filter(r => r.projectPath === selectedPath)
     : mergeDaysByDay(allRows)
 
-  // 按粒度 + 范围过滤（每日：近 N 天；每月：所选年份全年 12 个月）
-  const todayKey = todayDayKey()
-  const scopeRows = granularity === 'daily'
-    ? filterDaysByRange(projectRows, dailyRange, todayKey)
-    : projectRows.filter(r => r.day.startsWith(String(monthYear)))
+  // 范围 = 所选年份全年（每日热力图 / 每月柱状图共用 viewYear）
+  const scopeRows = projectRows.filter(r => r.day.startsWith(String(viewYear)))
 
   // 年份切换边界：数据最早年份（左禁用）→ 今年（右禁用）
   const currentYear = new Date().getFullYear()
@@ -146,49 +141,30 @@ export default function ActivityView() {
             </button>
           </div>
 
-          {/* 范围切换（每日：近 N 天；每月：年份 ◀▶） */}
-          {granularity === 'daily' ? (
-            <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
-              {DAILY_RANGES.map(n => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setDailyRange(n)}
-                  className={`px-1.5 py-0.5 text-[0.65rem] transition-colors ${
-                    dailyRange === n
-                      ? 'bg-[var(--color-accent)] text-white'
-                      : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                  }`}
-                >
-                  {t('activity.daysShort').replace('{n}', String(n))}
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
-              <button
-                type="button"
-                onClick={() => setMonthYear(y => y - 1)}
-                disabled={monthYear <= minYear}
-                title={t('activity.previousYear')}
-                className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-              >
-                ◀
-              </button>
-              <span className="px-1.5 py-0.5 text-[0.65rem] font-semibold select-none" style={{ color: 'var(--color-text)' }}>
-                {monthYear}
-              </span>
-              <button
-                type="button"
-                onClick={() => setMonthYear(y => y + 1)}
-                disabled={monthYear >= currentYear}
-                title={t('activity.nextYear')}
-                className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
-              >
-                ▶
-              </button>
-            </div>
-          )}
+          {/* 年份切换（每日/每月共用） */}
+          <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewYear(y => y - 1)}
+              disabled={viewYear <= minYear}
+              title={t('activity.previousYear')}
+              className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+            >
+              ◀
+            </button>
+            <span className="px-1.5 py-0.5 text-[0.65rem] font-semibold select-none" style={{ color: 'var(--color-text)' }}>
+              {viewYear}
+            </span>
+            <button
+              type="button"
+              onClick={() => setViewYear(y => y + 1)}
+              disabled={viewYear >= currentYear}
+              title={t('activity.nextYear')}
+              className="px-1.5 py-0.5 text-[0.65rem] transition-colors disabled:opacity-30 disabled:cursor-not-allowed text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]"
+            >
+              ▶
+            </button>
+          </div>
 
           {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
           <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
@@ -248,9 +224,9 @@ export default function ActivityView() {
           {/* 视图主体：每日热力图 / 每月柱状图（自适应放大，居中） */}
           <div className="flex justify-center select-none">
             {granularity === 'daily' ? (
-              <ContributionGrid rows={scopeRows} days={dailyRange} />
+              <ContributionGrid rows={scopeRows} year={viewYear} />
             ) : (
-              <MonthlyChart rows={scopeRows} year={monthYear} />
+              <MonthlyChart rows={scopeRows} year={viewYear} />
             )}
           </div>
 
@@ -345,20 +321,6 @@ function formatNumber(n: number): string {
 /** 星期标签列宽（容纳 zh 单字 / en 三字母 / ru 双字母） */
 const WEEK_LABEL_WIDTH = 14
 
-/** 今天的 'YYYY-MM-DD' key（与 DB 聚合格式一致） */
-function todayDayKey(): string {
-  const now = new Date()
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
-}
-
-/** 按天范围过滤（保留最近 range 天） */
-function filterDaysByRange(rows: DailyActivityRow[], range: number, todayKey: string): DailyActivityRow[] {
-  const cutoff = new Date(todayKey)
-  cutoff.setDate(cutoff.getDate() - (range - 1))
-  const cutoffKey = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}-${String(cutoff.getDate()).padStart(2, '0')}`
-  return rows.filter(r => r.day >= cutoffKey)
-}
-
 /** 按月聚合（月 key 'YYYY-MM' → 统计求和） */
 function aggregateByMonth(rows: DailyActivityRow[]): Map<string, ReturnType<typeof calcStats>> {
   const map = new Map<string, ReturnType<typeof calcStats>>()
@@ -376,14 +338,17 @@ function aggregateByMonth(rows: DailyActivityRow[]): Map<string, ReturnType<type
   return map
 }
 
-function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: number }) {
-  // 构建日期序列（向前对齐到周日），固定格子尺寸（CELL_SIZE）
-  const today = new Date()
-  today.setHours(0, 0, 0, 0)
-  const start = new Date(today)
-  start.setDate(start.getDate() - (days - 1) - start.getDay())
+function ContributionGrid({ rows, year }: { rows: DailyActivityRow[]; year: number }) {
+  // 全年日期序列：1 月 1 日（向前对齐到周日）→ 年末（今年 = 今日止，往年 = 12 月 31 日止）
+  const now = new Date()
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  const isCurrentYear = year === now.getFullYear()
 
-  const totalDays = Math.floor((today.getTime() - start.getTime()) / 86400000) + 1
+  const start = new Date(year, 0, 1)
+  start.setDate(start.getDate() - start.getDay())
+  const end = isCurrentYear ? today : new Date(year, 11, 31)
+
+  const totalDays = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1
   const columns = Math.ceil(totalDays / 7)
 
   const byDay = new Map(rows.map(d => [d.day, d]))
@@ -408,52 +373,54 @@ function ContributionGrid({ rows, days }: { rows: DailyActivityRow[]; days: numb
   const weekLabels = ['', t('activity.mon'), '', t('activity.wed'), '', t('activity.fri'), '']
 
   return (
-    <div>
-      {/* 月份标签行（与列对齐，星期列宽内缩） */}
-      <div className="flex" style={{ gap: CELL_GAP, paddingLeft: WEEK_LABEL_WIDTH + CELL_GAP, marginBottom: 2 }}>
-        {colStarts.map((col, c) => (
-          <span
-            key={c}
-            className="text-[0.6rem] leading-none"
-            style={{
-              width: CELL_SIZE,
-              color: 'var(--color-text-muted)',
-              overflow: 'visible',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {col.monthLabel ?? ''}
-          </span>
-        ))}
-      </div>
-
-      {/* 网格：星期标签列 + 周列（7 天） */}
-      <div className="flex" style={{ gap: CELL_GAP }}>
-        {/* 星期标签列 */}
-        <div className="flex flex-col" style={{ gap: CELL_GAP, width: WEEK_LABEL_WIDTH, flexShrink: 0 }}>
-          {weekLabels.map((label, row) => (
+    <div style={{ overflowX: 'auto', maxWidth: '100%' }}>
+      <div style={{ minWidth: GRID_MIN_WIDTH }}>
+        {/* 月份标签行（与列对齐，星期列宽内缩） */}
+        <div className="flex" style={{ gap: CELL_GAP, paddingLeft: WEEK_LABEL_WIDTH + CELL_GAP, marginBottom: 2 }}>
+          {colStarts.map((col, c) => (
             <span
-              key={row}
-              className="text-[0.6rem] leading-none flex items-center"
-              style={{ height: CELL_SIZE, color: 'var(--color-text-muted)' }}
+              key={c}
+              className="text-[0.6rem] leading-none"
+              style={{
+                width: CELL_SIZE,
+                color: 'var(--color-text-muted)',
+                overflow: 'visible',
+                whiteSpace: 'nowrap',
+              }}
             >
-              {label}
+              {col.monthLabel ?? ''}
             </span>
           ))}
         </div>
 
-        {colStarts.map((col, c) => (
-          <div key={c} className="flex flex-col" style={{ gap: CELL_GAP }}>
-            {Array.from({ length: 7 }, (_, row) => {
-              const date = new Date(col.date)
-              date.setDate(col.date.getDate() + row)
-              if (date > today) return <span key={row} style={{ width: CELL_SIZE, height: CELL_SIZE }} />
-              const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
-              const d = byDay.get(key)
-              return <Cell key={row} dayKey={key} d={d} maxes={{ maxWritten, maxRevised, maxCalls }} isToday={date.getTime() === today.getTime()} />
-            })}
+        {/* 网格：星期标签列 + 周列（7 天） */}
+        <div className="flex" style={{ gap: CELL_GAP }}>
+          {/* 星期标签列 */}
+          <div className="flex flex-col" style={{ gap: CELL_GAP, width: WEEK_LABEL_WIDTH, flexShrink: 0 }}>
+            {weekLabels.map((label, row) => (
+              <span
+                key={row}
+                className="text-[0.6rem] leading-none flex items-center"
+                style={{ height: CELL_SIZE, color: 'var(--color-text-muted)' }}
+              >
+                {label}
+              </span>
+            ))}
           </div>
-        ))}
+
+          {colStarts.map((col, c) => (
+            <div key={c} className="flex flex-col" style={{ gap: CELL_GAP }}>
+              {Array.from({ length: 7 }, (_, row) => {
+                const date = new Date(col.date)
+                date.setDate(col.date.getDate() + row)
+                if (date > end) return <span key={row} style={{ width: CELL_SIZE, height: CELL_SIZE }} />
+                const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+                const d = byDay.get(key)
+                return <Cell key={row} dayKey={key} d={d} maxes={{ maxWritten, maxRevised, maxCalls }} isToday={date.getTime() === today.getTime()} />
+              })}
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   )
