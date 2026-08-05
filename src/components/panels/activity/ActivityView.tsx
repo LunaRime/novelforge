@@ -93,10 +93,12 @@ export default function ActivityView() {
   const scopeRows = projectRows.filter(r => r.day.startsWith(String(viewYear)))
 
   // 年份选择区间：数据最早年份 → 今年（连续，中间无数据年份也保留——连续性）
+  // ⚠️ 双保险：过滤异常年份（<2000 的脏数据时间戳——旧库字符串时间戳可逃过主进程数字过滤）
   const currentYear = new Date().getFullYear()
-  const minYear = allRows.length > 0
-    ? Math.min(...allRows.map(r => parseInt(r.day.slice(0, 4), 10)))
-    : currentYear
+  const validYears = allRows
+    .map(r => parseInt(r.day.slice(0, 4), 10))
+    .filter(y => Number.isFinite(y) && y >= 2000 && y <= currentYear)
+  const minYear = validYears.length > 0 ? Math.min(...validYears) : currentYear
   const yearOptions = Array.from({ length: currentYear - minYear + 1 }, (_, i) => currentYear - i)
 
   // 统计
