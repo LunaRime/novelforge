@@ -277,6 +277,7 @@ function WorldBuildingGroup({
     <SidebarGroup
       icon={<FolderTree size={12} />}
       title={t('editor.storyArch')}
+      defaultOpen={false}
       count={
         <span style={{
           color: allDone

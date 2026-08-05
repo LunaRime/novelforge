@@ -158,6 +158,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
     <SidebarGroup
       icon={<PenTool size={12} />}
       title={t('manuscript.title')}
+      defaultOpen={false}
       count={chapterFiles.length > 0
         ? t('draftbox.count').replace('{n}', String(chapterFiles.length))
         : undefined}
