@@ -3,7 +3,7 @@ import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { closeProjectDatabase } from './database'
-import { installGlobalErrorHandlers, logger } from './utils/logger'
+import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
 
 import path from 'node:path'
 import { exec } from 'node:child_process'
@@ -259,9 +259,12 @@ app.on('before-quit', () => {
 })
 
 app.whenReady().then(() => {
-  installGlobalErrorHandlers()
+  // 双环境日志：dev 模式 / 内测版（-alpha.N 或历史日期式）→ 开发日志（DEBUG 全量）；
+  // 公测版（-beta.N）/ 正式版 → 发布日志（INFO 起）
+  const logEnv = detectLogEnvironment(Boolean(VITE_DEV_SERVER_URL), app.getVersion())
+  installGlobalErrorHandlers(logEnv, app.getVersion())
   registerIPCHandlers()
   registerMCPHandlers()
   createWindow()
-  logger.info('Main', 'NovelForge 启动完成')
+  logger.info('Main', `NovelForge 启动完成 | 日志环境: ${logEnv === LogEnvironment.Dev ? '开发（dev/内测）' : '发布（公测/正式）'}`)
 })

@@ -3,12 +3,18 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { useEditorStore } from './stores/editor-store'
+import { installRendererErrorCapture, renderLog } from './services/render-logger'
+
+// 渲染进程全局错误捕获 → ERROR 落盘（必须先注册，确保早期错误也被记录）
+installRendererErrorCapture()
 
 // ===== 启动计时：诊断初始化瓶颈 =====
 const T0 = performance.now()
 const T_HTML = window.__VELA_HTML_READY as number | undefined
 if (T_HTML) {
-  console.log(`[Startup] HTML→JS 模块加载耗时: ${(T0 - T_HTML).toFixed(0)}ms`)
+  const elapsed = (T0 - T_HTML).toFixed(0)
+  console.log(`[Startup] HTML→JS 模块加载耗时: ${elapsed}ms`)
+  renderLog('debug', 'Startup', `HTML→JS 模块加载耗时: ${elapsed}ms`)
 }
 
 declare global {

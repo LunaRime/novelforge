@@ -15,7 +15,7 @@
     "flatbuffers": "^25.9.23"
   },
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev-utf8.cjs && vite",
     "build": "node scripts/verify-build-contract.cjs && tsc && vite build && electron-builder && node scripts/verify-packed-app.cjs && node scripts/organize-release.cjs",
     "typecheck": "tsc --noEmit",
     "build:vite": "vite build",
