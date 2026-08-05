@@ -111,9 +111,12 @@ export class ActivityRepository {
         projectMeta.push({ path: proj.path, name: proj.name || path.basename(proj.path) })
 
         // 1. 写作
+        // ⚠️ 时间戳过滤必须带 typeof(created_at)='integer'——旧库脏数据是字符串时间戳
+        // （SQLite 类型序：文本 > 数字，字符串会逃过 created_at >= ? 数字过滤 → 1970-01-01 脏行进入聚合，
+        // 导致年份选择区间爆炸为 1970 起 57 项）
         const written = db.prepare(`
           SELECT ${dayFmt('created_at')} as day, SUM(word_count) as words, COUNT(*) as count
-          FROM drafts WHERE source = 'write' AND created_at >= ?
+          FROM drafts WHERE source = 'write' AND created_at >= ? AND typeof(created_at) = 'integer'
           GROUP BY day
         `).all(startMs) as Array<{ day: string; words: number; count: number }>
 
@@ -121,9 +124,9 @@ export class ActivityRepository {
         const revised = db.prepare(`
           SELECT ${dayFmt('created_at')} as day, SUM(word_count) as words, COUNT(*) as count
           FROM (
-            SELECT created_at, word_count FROM drafts WHERE source = 'rewrite' AND created_at >= ?
+            SELECT created_at, word_count FROM drafts WHERE source = 'rewrite' AND created_at >= ? AND typeof(created_at) = 'integer'
             UNION ALL
-            SELECT created_at, word_count FROM revisions WHERE created_at >= ?
+            SELECT created_at, word_count FROM revisions WHERE created_at >= ? AND typeof(created_at) = 'integer'
           )
           GROUP BY day
         `).all(startMs, startMs) as Array<{ day: string; words: number; count: number }>
@@ -137,7 +140,7 @@ export class ActivityRepository {
           SELECT ${dayFmt('created_at')} as day, COUNT(*) as calls,
                  COALESCE(SUM(total_tokens), 0) as tokens,
                  ${hasCost ? 'COALESCE(SUM(cost), 0) as cost' : '0 as cost'}
-          FROM llm_calls WHERE success = 1 AND created_at >= ?
+          FROM llm_calls WHERE success = 1 AND created_at >= ? AND typeof(created_at) = 'integer'
           GROUP BY day
         `).all(startMs) as Array<{ day: string; calls: number; tokens: number; cost: number }>
 
