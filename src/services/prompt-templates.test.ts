@@ -180,6 +180,48 @@ describe('systemSuffix/systemRole 语言化（英文用户生成质量）', () =
   })
 })
 
+describe('ru-RU 模板（俄语）', () => {
+  it('ru-RU content 语言化生效', async () => {
+    const mod = await loadModule()
+    const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
+    const localized = mod.localizeTemplate(premise, 'ru-RU')
+    expect(localized.content).toContain('Сформулируйте предпосылку')
+    expect(localized.systemRole).toContain('эксперт по планированию')
+  })
+
+  it('11 个 EDITABLE 模板都有 ru-RU content 变体', async () => {
+    const mod = await loadModule()
+    const editable = mod.BUILTIN_PROMPTS.filter(p => mod.EDITABLE_PROMPT_KEYS.includes(p.key))
+    const missing = editable.filter(p => !p.contentLocales?.['ru-RU']).map(p => p.key)
+    expect(missing).toEqual([])
+  })
+
+  it('全部 19 个模板 systemRole 都有 ru-RU 变体', async () => {
+    const mod = await loadModule()
+    const missing = mod.BUILTIN_PROMPTS.filter(p => !p.systemRoleLocales?.['ru-RU']).map(p => p.key)
+    expect(missing).toEqual([])
+  })
+
+  it('ru-RU content 占位符与中文版一致（防渲染残留）', async () => {
+    const mod = await loadModule()
+    for (const p of mod.BUILTIN_PROMPTS) {
+      const ru = p.contentLocales?.['ru-RU']
+      if (!ru) continue
+      const zhVars = [...p.content.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]).sort()
+      const ruVars = [...ru.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]).sort()
+      expect(ruVars, `${p.key} ru content 占位符不一致`).toEqual(zhVars)
+    }
+  })
+
+  it('systemSuffix 无 ru 变体 → 回退 en-US（渲染链安全）', async () => {
+    const mod = await loadModule()
+    const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
+    const localized = mod.localizeTemplate(premise, 'ru-RU')
+    // suffix 无俄语 → 回退英文
+    expect(localized.systemSuffix).toContain('highest priority')
+  })
+})
+
 describe('localizeTemplate 回退与完整性（续）', () => {
   it('无 content 变体的模板：content 保持中文，其他变体按语言解析', async () => {
     const mod = await loadModule()

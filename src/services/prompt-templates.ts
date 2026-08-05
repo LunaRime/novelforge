@@ -55,8 +55,9 @@ import { editingPrompts } from './prompts/editing'
 import { analysisPrompts } from './prompts/analysis'
 import { charactersPrompts } from './prompts/characters'
 import { EN_US_CONTENT, EN_US_ROLE, EN_US_SUFFIX } from './prompts/locales/en-US'
+import { RU_CONTENT, RU_ROLE } from './prompts/locales/ru-RU'
 
-/** 合并多语言变体：集中式英文模板表按 key 挂载 content/systemSuffix/systemRole 变体（不侵入分类文件） */
+/** 合并多语言变体：集中式语言表按 key 挂载 content/systemSuffix/systemRole 变体（不侵入分类文件） */
 const BASE_PROMPTS: PromptTemplate[] = [
   ...configPrompts,
   ...architecturePrompts,
@@ -66,12 +67,22 @@ const BASE_PROMPTS: PromptTemplate[] = [
   ...charactersPrompts,
 ]
 
-export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p => ({
-  ...p,
-  ...(EN_US_CONTENT[p.key] ? { contentLocales: { 'en-US': EN_US_CONTENT[p.key] } } : {}),
-  ...(EN_US_SUFFIX[p.key] ? { systemSuffixLocales: { 'en-US': EN_US_SUFFIX[p.key] } } : {}),
-  ...(EN_US_ROLE[p.key] ? { systemRoleLocales: { 'en-US': EN_US_ROLE[p.key] } } : {}),
-}))
+export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p => {
+  const contentLocales: Partial<Record<SupportedLocale, string>> = {}
+  const systemSuffixLocales: Partial<Record<SupportedLocale, string>> = {}
+  const systemRoleLocales: Partial<Record<SupportedLocale, string>> = {}
+  if (EN_US_CONTENT[p.key]) contentLocales['en-US'] = EN_US_CONTENT[p.key]
+  if (RU_CONTENT[p.key]) contentLocales['ru-RU'] = RU_CONTENT[p.key]
+  if (EN_US_SUFFIX[p.key]) systemSuffixLocales['en-US'] = EN_US_SUFFIX[p.key]
+  if (EN_US_ROLE[p.key]) systemRoleLocales['en-US'] = EN_US_ROLE[p.key]
+  if (RU_ROLE[p.key]) systemRoleLocales['ru-RU'] = RU_ROLE[p.key]
+  return {
+    ...p,
+    ...(Object.keys(contentLocales).length ? { contentLocales } : {}),
+    ...(Object.keys(systemSuffixLocales).length ? { systemSuffixLocales } : {}),
+    ...(Object.keys(systemRoleLocales).length ? { systemRoleLocales } : {}),
+  }
+})
 
 /**
  * 按当前语言解析模板（返回副本，不污染 BUILTIN_PROMPTS 内存对象）
