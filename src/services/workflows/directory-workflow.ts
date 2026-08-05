@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { stripThinkingTags, extractAndRepairJSON, parseMarkdownTable } from './workflow-utils'
+import { renderLog } from '../render-logger'
 
 // ==========================================
 // 1. 结构与类型导出 (保留对外的向后兼容)
@@ -209,13 +210,14 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
     if (tableRows && tableRows.length > 0) {
       const result = parseTextBlueprintsFromTable(tableRows, startNum, endNum)
       if (result.length > 0) {
-        console.log(`[parseTextBlueprints] Markdown 表格解析成功: ${result.length} 章蓝图`)
+        // LLM 提取日志流：蓝图提取路径可见（info 级，公测/正式版也保留）
+        renderLog('info', 'Extract', `蓝图解析: Markdown 表格成功 ${result.length} 章（${startNum}-${endNum}）`)
         return result
       }
     }
 
     // ==== PATH 2: JSON（fallback 路径）====
-    console.log('[parseTextBlueprints] Markdown 表格未产生结果，回落 JSON 解析...')
+    renderLog('warn', 'Extract', '蓝图解析: Markdown 表格未产生结果，回落 JSON 解析')
 
     // 预处理：移除 AI 常见的前导/后随说明文本
     let jsonContent = cleanContent
@@ -238,12 +240,15 @@ export function parseTextBlueprints(content: string, startNum: number, endNum: n
     }
 
     if (!parsed) {
-      console.error('[parseTextBlueprints] JSON 解析完全失败\n原始内容前500字:', cleanContent.slice(0, 500))
+      // LLM 提取日志流：失败原因落盘（error 级，含原始内容头部供排查）
+      renderLog('error', 'Extract', `蓝图解析: JSON 完全失败\n原始内容前 500 字: ${cleanContent.slice(0, 500)}`)
       return []
     }
 
     if (repaired) {
-      console.log('[parseTextBlueprints] JSON 经过修复后成功解析，解析到顶层类型:', Array.isArray(parsed) ? `数组(${parsed.length}项)` : `对象(${Object.keys(parsed as object).length}键)`)
+      renderLog('info', 'Extract', `蓝图解析: JSON 修复后成功，顶层 ${Array.isArray(parsed) ? `数组 ${parsed.length} 项` : `对象 ${Object.keys(parsed as object).length} 键`}`)
+    } else {
+      renderLog('debug', 'Extract', '蓝图解析: JSON 直接解析成功')
     }
 
     const result = parseTextBlueprintsFromParsed(parsed, startNum, endNum)
