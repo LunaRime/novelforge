@@ -27,9 +27,10 @@ const CELL_GAP = 2
 /** 热力图横向滚动兜底最小宽度（全年 53 周列 × 12px + 星期列） */
 const GRID_MIN_WIDTH = 742
 
-/** 5 级活跃度颜色（accent 透明度渐变，禁止硬编码色值） */
+/** 5 级活跃度颜色（accent 透明度渐变，禁止硬编码色值）
+ * 0 级 = 无数据日：5% 文字色浅底——与面板背景区分（弱于最低数据级 12% accent，层次正确） */
 const LEVEL_COLORS = [
-  'transparent',
+  'color-mix(in srgb, var(--color-text) 5%, transparent)',
   'color-mix(in srgb, var(--color-accent) 12%, transparent)',
   'color-mix(in srgb, var(--color-accent) 30%, transparent)',
   'color-mix(in srgb, var(--color-accent) 55%, transparent)',
