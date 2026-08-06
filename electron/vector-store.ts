@@ -62,6 +62,18 @@ export interface SearchResult {
   text: string
   score: number
   fileName: string
+  /** 命中通道：vector=向量检索 / fts=全文匹配（精确关键词召回） */
+  source?: 'vector' | 'fts'
+}
+
+/**
+ * L2 归一化（P0 修复：检索度量统一——OpenAI 原始 embedding 未归一化、LLM 兜底向量已归一化，
+ * 混库后 1/(1+d) 分数域断裂；归一化后 L2 距离 ∈[0,2]，相似度 = 1 - d/2 可解释）
+ */
+export function normalizeVector(v: number[]): number[] {
+  const norm = Math.sqrt(v.reduce((s, x) => s + x * x, 0))
+  if (norm === 0 || !Number.isFinite(norm)) return v
+  return v.map(x => x / norm)
 }
 
 /** 知识库统计 */
@@ -187,9 +199,9 @@ export async function addChunks(
         chapterNumber: metadata?.chapterNumber,
         chapterTitle: metadata?.chapterTitle,
       }
-      // 如果有向量，附加到记录上
+      // 如果有向量，附加到记录上（⚠️ P0：统一 L2 归一化——混库后度量空间一致）
       if (vectors && vectors[i] && vectors[i].length > 0) {
-        record.vector = vectors[i]
+        record.vector = normalizeVector(vectors[i])
       }
       return record
     })
@@ -388,55 +400,64 @@ export async function searchWithScope(
 
     const table = await db.openTable(TABLE_NAME)
 
-    // 构建范围过滤条件
+    // 构建范围过滤条件（⚠️ P0 修复：无章节元数据的文档（设定集/角色卡/大纲）纳入范围检索——
+    //   NULL 不满足 BETWEEN 恒 false，此前被结构性排除在章节写作 RAG 之外）
     let scopeFilter: string | undefined
     if (chapterScope) {
       const [from, to] = chapterScope
-      scopeFilter = `chapterNumber >= ${from} AND chapterNumber <= ${to}`
+      scopeFilter = `(chapterNumber >= ${from} AND chapterNumber <= ${to}) OR chapterNumber IS NULL`
     }
 
-    // 如果有查询向量，先尝试混合检索
-    if (queryVector && queryVector.length > 0) {
-      try {
-        let query = table.search(queryVector).limit(topK)
-        if (scopeFilter) {
-          query = query.where(scopeFilter)
-        }
-        const results = await query.toArray()
-
-        if (results.length > 0) {
-          return results.map((r: { text: string; _distance?: number; fileName: string }) => ({
-            text: r.text,
-            score: r._distance != null ? 1 / (1 + r._distance) : 0.5,
-            fileName: r.fileName,
-          }))
-        }
-      } catch {
-        // 向量检索失败，降级到 FTS
+    // ⚠️ P0 修复：真混合检索——向量 + FTS 双通道并行取并集，分数取通道 max，
+    //    此前向量检索有结果即 return，FTS 的精确关键词召回（人名/专有名词/原句）永不参与融合
+    const candidates = new Map<string, SearchResult>()
+    const pushCandidate = (text: string, fileName: string, score: number, source: 'vector' | 'fts') => {
+      const cur = candidates.get(text)
+      if (!cur || score > cur.score) {
+        candidates.set(text, { text, fileName, score, source })
       }
     }
 
-    // FTS 检索 (Tantivy 不支持中文分词，改为 DataFusion LIKE 模糊匹配)
+    // 通道 1：向量检索（查询端归一化；相似度 = 1 - d/2，归一化后 L2 距离 ∈[0,2]）
+    if (queryVector && queryVector.length > 0) {
+      try {
+        const normQuery = normalizeVector(queryVector)
+        const query = table.search(normQuery).limit(topK * 3)
+        const results = await (scopeFilter ? query.where(scopeFilter) : query).toArray()
+        for (const r of results as Array<{ text: string; _distance?: number; fileName: string }>) {
+          const dist = r._distance ?? 0
+          const similarity = Math.max(0, Math.min(1, 1 - dist / 2))
+          pushCandidate(r.text, r.fileName, similarity, 'vector')
+        }
+      } catch {
+        // 向量检索失败，降级到 FTS 通道
+      }
+    }
+
+    // 通道 2：FTS（DataFusion LIKE 模糊匹配，Tantivy 不支持中文分词）
     try {
       const escapedQuery = queryText.replace(/'/g, "''")
       // 将 "搜索" 转换为 "%搜%索%" 进行容错匹配
       const likePattern = `%${escapedQuery.split('').join('%')}%`
 
-      let q = table.query().filter(`text LIKE '${likePattern}'`).limit(topK)
+      let q = table.query().filter(`text LIKE '${likePattern}'`).limit(topK * 3)
       if (scopeFilter) {
         q = q.where(scopeFilter)
       }
       const results = await q.toArray()
 
-      return results.map((r: { text: string; fileName: string }) => ({
-        text: r.text,
-        score: 0.5, // 普通匹配无打分
-        fileName: r.fileName,
-      }))
+      for (const r of results as Array<{ text: string; fileName: string }>) {
+        // FTS 无真实打分（0.5）——调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
+        pushCandidate(r.text, r.fileName, 0.5, 'fts')
+      }
     } catch (e) {
       logger.warn('VectorStore', t('log.vectorStore.ftsSearchFailed').replace('{err}', String(e)))
-      return []
     }
+
+    // 融合排序（双通道取高后按分数降序）
+    return [...candidates.values()]
+      .sort((a, b) => b.score - a.score)
+      .slice(0, topK)
   } catch (error) {
     logger.error('VectorStore', t('log.vectorStore.searchFailed').replace('{err}', String(error)))
     return []
