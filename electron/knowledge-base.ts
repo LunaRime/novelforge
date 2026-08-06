@@ -398,11 +398,19 @@ export async function backfillVectors(
     })
 
     // 全量读出 + 合并更新
+    // ⚠️ P1 修复：非回填行的 vector 是 Arrow FixedSizeList 对象，与回填行的纯 number[]
+    //    混写同一列会干扰 schema 校验（addChunks 注释明确要求纯数组）——统一转换
     const fullTable = await db.openTable('chunks')
     const allRows = await fullTable.query().toArray()
+    const toPlainArray = (v: unknown): unknown => {
+      if (v && typeof v === 'object' && typeof (v as { toArray?: unknown }).toArray === 'function') {
+        try { return (v as { toArray: () => number[] }).toArray() } catch { /* fallthrough */ }
+      }
+      return v
+    }
     const updatedRows = allRows.map((r: { [key: string]: unknown }) => {
       const v = idToVector.get(r.id as string)
-      return v ? { ...r, vector: v } : r
+      return v ? { ...r, vector: v } : { ...r, vector: toPlainArray(r.vector) }
     })
 
     // 使用显式 Arrow Schema 确保 vector 列正确持久化
@@ -439,10 +447,21 @@ export async function backfillVectors(
       return { success: false, processed: 0, failed: total, error: t('error.tempTableEmpty') }
     }
 
-    // 临时表写入成功 → 替换正式表
+    // 临时表写入成功 → 替换正式表（⚠️ P1 修复：替换失败时从临时表恢复——
+    //    此前 drop chunks 后 createTable 失败则 chunks 表彻底消失，直到下次导入）
     await db.dropTable('chunks')
-    await db.dropTable(TEMP_TABLE)
-    await db.createTable('chunks', updatedRows, { schema: arrowSchema })
+    try {
+      await db.createTable('chunks', updatedRows, { schema: arrowSchema })
+    } catch (e) {
+      try {
+        const tempRows = await (await db.openTable(TEMP_TABLE)).query().toArray()
+        await db.createTable('chunks', tempRows, { schema: arrowSchema })
+        logger.warn('KB', t('log.kb.backfillRecovered'))
+      } catch { /* 尽力恢复失败 */ }
+      throw e
+    } finally {
+      await db.dropTable(TEMP_TABLE).catch(() => {})
+    }
 
     // 重建 FTS 索引
     const newTable = await db.openTable('chunks')
