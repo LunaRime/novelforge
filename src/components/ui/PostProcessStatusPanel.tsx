@@ -100,7 +100,7 @@ export function PostProcessStatusPanel({
         className,
       )} style={{ color: 'var(--color-success)', backgroundColor: 'rgba(var(--color-success-rgb), 0.08)' }}>
         <CheckCircle2 size={12} />
-        <span>{status.sourceLabel} 完成（{successCount}/{totalCount}）</span>
+        <span>{t('postprocess.complete').replace('{label}', status.sourceLabel).replace('{success}', String(successCount)).replace('{total}', String(totalCount))}</span>
       </div>
     )
   }
@@ -122,7 +122,7 @@ export function PostProcessStatusPanel({
         <div className="flex items-center gap-1.5">
           <AlertTriangle size={13} style={{ color: hasCriticalFailure ? errorColor : warnColor }} />
           <span className="text-[11px] font-medium" style={{ color: 'var(--color-text)' }}>
-            {status.sourceLabel} — {failedSteps.length} 个步骤失败
+            {t('postprocess.failed').replace('{label}', status.sourceLabel).replace('{n}', String(failedSteps.length))}
           </span>
           <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
             ({successCount}/{totalCount})
@@ -152,7 +152,7 @@ export function PostProcessStatusPanel({
                 </span>
                 {step.critical && !step.ok && (
                   <span className="shrink-0 px-1 py-0.5 rounded text-[9px]" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-error)' }}>
-                    关键
+                    {t('postprocess.critical')}
                   </span>
                 )}
               </div>
@@ -187,7 +187,7 @@ export function PostProcessStatusPanel({
             <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
               <Clock size={10} />
               <span>
-                上次尝试 {new Date(status.updatedAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
+                {t('postprocess.lastAttempt').replace('{time}', new Date(status.updatedAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' }))}
               </span>
             </div>
             {onRetry && (
@@ -198,7 +198,7 @@ export function PostProcessStatusPanel({
                 className="gap-1"
               >
                 <RefreshCw size={10} />
-                重试失败步骤
+                {t('tip.retryFailed')}
               </Button>
             )}
           </div>

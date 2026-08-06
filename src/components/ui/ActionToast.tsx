@@ -280,8 +280,8 @@ export const actionToast = {
     ensureContainer()
     const actions: ActionToastAction[] = []
     if (openAction) {
-      actions.push({ label: '打开查看', i18nKey: 'toast.openView', onClick: openAction })
-      actions.push({ label: '忽略', i18nKey: 'toast.dismiss', variant: 'ghost' })
+      actions.push({ label: 'Open', i18nKey: 'toast.openView', onClick: openAction })
+      actions.push({ label: 'Dismiss', i18nKey: 'toast.dismiss', variant: 'ghost' })
     }
     const item: ActionToastItem = {
       id: ++_counter,

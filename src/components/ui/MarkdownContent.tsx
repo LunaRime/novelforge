@@ -234,7 +234,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-border)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
         >
-          复制
+          {t('action.copy')}
         </button>
       </div>
       {/* 代码内容 */}

@@ -156,7 +156,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
               <div className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
-              正在分析并拆分章节...
+              {t('project.analyzingChapters')}
             </div>
           )}
 
@@ -189,7 +189,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
                 {chapters.slice(0, 8).map((ch) => (
                   <div key={ch.number} className="flex items-center justify-between text-xs">
                     <span style={{ color: 'var(--color-text-secondary)' }}>
-                      第{ch.number}章 {ch.title}
+                      {t('import.chapterLabel').replace('{n}', String(ch.number)).replace('{title}', ch.title)}
                     </span>
                     <span style={{ color: 'var(--color-text-muted)' }}>
                       {ch.wordCount.toLocaleString()} {t('unit.chars')}

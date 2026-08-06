@@ -303,7 +303,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>{t('chapter.authorGuidance')} <span className="text-[0.7rem] opacity-50">（{t('chapter.optional')}写稿时最高优先级）</span></Label>
+                <Label>{t('chapter.authorGuidance')} <span className="text-[0.7rem] opacity-50">{t('chapter.authorGuidanceHint').replace('{optional}', t('chapter.optional'))}</span></Label>
                 <Textarea
                   value={userGuidance}
                   onChange={(e) => setUserGuidance(e.target.value)}
@@ -313,7 +313,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>{t('chapter.kbKeywords')} <span className="text-[0.7rem] opacity-50">（{t('chapter.optional')}追加到向量搜索 query）</span></Label>
+                <Label>{t('chapter.kbKeywords')} <span className="text-[0.7rem] opacity-50">{t('chapter.kbKeywordsHint').replace('{optional}', t('chapter.optional'))}</span></Label>
                 <Input
                   value={knowledgeHint}
                   onChange={(e) => setKnowledgeHint(e.target.value)}

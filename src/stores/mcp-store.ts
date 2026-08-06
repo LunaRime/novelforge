@@ -7,6 +7,7 @@
 
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { t } from '../shared/locale'
 import { toolRegistry } from '../services/agent/tool-registry'
 import type {
   MCPServerConfig,
@@ -117,7 +118,7 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
   connectServer: async (config) => {
     const result = await ipc.invoke('mcp:connect', config as unknown as Record<string, unknown>)
     if (!result.success) {
-      set({ error: result.error ?? '连接失败' })
+      set({ error: result.error ?? t('mcp.connectFailed') })
       return
     }
     await get().refreshStatus()

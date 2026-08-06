@@ -162,7 +162,7 @@ export default function MCPSettings() {
             <input
               value={newCommand}
               onChange={e => setNewCommand(e.target.value)}
-              placeholder={`${t('mcp.command')}（如 npx）`}
+              placeholder={t('mcp.commandPlaceholder')}
               className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
             />

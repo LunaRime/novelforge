@@ -9,6 +9,7 @@
  */
 
 import { ipc } from './ipc-client'
+import { t, type TextKey } from '../shared/locale'
 import type { ChapterBlueprint } from './workflows/directory-workflow'
 
 // ===== 类型定义 =====
@@ -107,11 +108,22 @@ function detectInconsistentRoles(blueprints: ChapterBlueprint[]): InconsistentRo
     else expectedRole = '结局'
 
     if (bp.role !== expectedRole && bp.role !== '发展') {
+      // 展示用角色名跟随界面语言（比较逻辑保持中文，与 DB 蓝图数据一致）
+      const roleKey: Record<string, TextKey> = {
+        '开端': 'blueprintVerify.roleOpening',
+        '发展': 'blueprintVerify.roleDevelopment',
+        '转折': 'blueprintVerify.roleTwist',
+        '高潮': 'blueprintVerify.roleClimax',
+        '结局': 'blueprintVerify.roleEnding',
+      }
       inconsistent.push({
         chapter: bp.chapterNumber,
         role: bp.role,
         expectedRole,
-        reason: `第${bp.chapterNumber}章位于故事的${Math.round(position * 100)}%处，通常为「${expectedRole}」阶段`,
+        reason: t('blueprintVerify.positionReason')
+          .replace('{n}', String(bp.chapterNumber))
+          .replace('{x}', String(Math.round(position * 100)))
+          .replace('{role}', t(roleKey[expectedRole] ?? 'blueprintVerify.roleDevelopment')),
       })
     }
   }
@@ -189,19 +201,19 @@ export async function generateVerificationReport(
 
   // 生成摘要
   const summaryParts: string[] = []
-  summaryParts.push(`共 ${totalChapters} 章，已有 ${blueprints.length} 章蓝图`)
+  summaryParts.push(t('blueprintVerify.summary').replace('{total}', String(totalChapters)).replace('{existing}', String(blueprints.length)))
   if (gaps.length > 0) {
     const totalMissing = gaps.reduce((sum, g) => sum + g.gapSize, 0)
-    summaryParts.push(`发现 ${gaps.length} 处缺口，共缺失 ${totalMissing} 章`)
+    summaryParts.push(t('blueprintVerify.gapsFound').replace('{n}', String(gaps.length)).replace('{missing}', String(totalMissing)))
   }
   if (missingTitles.length > 0) {
-    summaryParts.push(`${missingTitles.length} 章缺少标题`)
+    summaryParts.push(t('blueprintVerify.missingTitles').replace('{n}', String(missingTitles.length)))
   }
   if (inconsistentRoles.length > 0) {
-    summaryParts.push(`${inconsistentRoles.length} 章角色定位与位置不匹配`)
+    summaryParts.push(t('blueprintVerify.roleMismatch').replace('{n}', String(inconsistentRoles.length)))
   }
   if (gaps.length === 0 && missingTitles.length === 0 && inconsistentRoles.length === 0) {
-    summaryParts.push('✅ 蓝图完整无缺口')
+    summaryParts.push(t('blueprintVerify.complete'))
   }
 
   return {

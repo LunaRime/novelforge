@@ -168,7 +168,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   generateStream: async (messages, callbacks, modelId, options) => {
     const mid = modelId ?? get().defaultModelId
     if (!mid) {
-      callbacks.onError?.('未配置默认模型')
+      callbacks.onError?.(t('error.noDefaultModel'))
       return ''
     }
 
