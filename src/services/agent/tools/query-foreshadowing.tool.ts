@@ -42,10 +42,15 @@ export const queryForeshadowingTool = buildAgentTool({
       const pending = all.filter(f => !f.resolved)
 
       // 按当前章节过滤：仅埋设于本章之前（至少相隔 1 章）
-      const chapterNum = args.chapter_number as number | undefined
+      // 数值归一化：LLM 传 "10" 字符串时 "9" < "10" 字典序比较恒 false，过滤结果错误（P2 修复）
+      const chapterNumRaw = args.chapter_number
+      const chapterNum = chapterNumRaw === undefined ? undefined : Number(chapterNumRaw)
+      if (chapterNum !== undefined && !Number.isFinite(chapterNum)) {
+        return { success: false, content: '', error: t('tool.invalidChapterNumber').replace('{value}', String(chapterNumRaw)) }
+      }
       let eligible = pending
       if (chapterNum !== undefined) {
-        eligible = pending.filter(f => (f.setChapter ?? 0) < chapterNum)
+        eligible = pending.filter(f => (f.setChapter ?? 0) < (chapterNum as number))
       }
       // 取最近埋设的
       eligible = [...eligible].sort((a, b) => (b.setChapter ?? 0) - (a.setChapter ?? 0))
