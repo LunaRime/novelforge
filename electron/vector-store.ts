@@ -76,6 +76,23 @@ export function normalizeVector(v: number[]): number[] {
   return v.map(x => x / norm)
 }
 
+/** 从 LanceDB 行值提取向量维度（兼容 Arrow FixedSizeList / number[] / toArray） */
+function extractVectorDim(v: unknown): number | null {
+  if (!v) return null
+  if (Array.isArray(v)) return v.length
+  if (typeof v === 'object') {
+    const obj = v as { toArray?: () => number[]; dataType?: unknown }
+    if (typeof obj.toArray === 'function') {
+      try { return obj.toArray().length } catch { /* fallthrough */ }
+    }
+    // Arrow FixedSizeList 的 dataType 可能嵌套 listSize 信息
+    const json = JSON.stringify(obj.dataType ?? '')
+    const m = json.match(/listSize[^0-9]*(\d+)/)
+    if (m) return parseInt(m[1], 10)
+  }
+  return null
+}
+
 /** 知识库统计 */
 export interface KBStats {
   documentCount: number
@@ -220,6 +237,25 @@ export async function addChunks(
       const hasAllFields = requiredFields.every(f => existingFieldNames.includes(f))
 
       if (hasAllFields) {
+        // ⚠️ P1 修复：维度守卫——模型切换后向量维度不一致时 table.add 硬失败且外层 catch 吞掉
+        //    （用户看到"导入失败"却无原因）；采样现有行探测维度，不一致给明确错误
+        if (vectors && vectors.length > 0 && vectors[0].length > 0) {
+          try {
+            const sample = await table.query().limit(1).toArray()
+            if (sample.length > 0) {
+              const existingDim = extractVectorDim((sample[0] as { vector?: unknown }).vector)
+              if (existingDim && existingDim !== vectors[0].length) {
+                return {
+                  success: false,
+                  chunkCount: 0,
+                  error: t('error.vectorDimMismatch')
+                    .replace('{expected}', String(existingDim))
+                    .replace('{actual}', String(vectors[0].length)),
+                }
+              }
+            }
+          } catch { /* 探测失败跳过（由 add 失败兜底） */ }
+        }
         await table.add(records)
       } else {
         // schema 不匹配（旧表缺少字段），需要重建表

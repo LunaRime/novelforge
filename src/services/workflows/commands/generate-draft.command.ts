@@ -97,7 +97,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       let filteredContext = ''
       try {
         callbacks.log(t('log.generateDraft.searchingKB'))
-        let searchQuery = `${this.chapterInfo.title} ${this.chapterInfo.keyEvents} ${this.chapterInfo.characters.join(' ')}`
+        // ⚠️ P1 修复：查询不再拼接角色名列表——多主题拼接（title+keyEvents+角色名+提示词）
+        //    的 200+ 字符 query 会被 embedding 稀释到与任何单主题都不相似（query 漂移）；
+        //    角色信息已通过角色状态注入，检索 query 聚焦本章剧情主题
+        let searchQuery = `${this.chapterInfo.title} ${this.chapterInfo.keyEvents}`
         if (this.chapterInfo.knowledgeQueryHint?.trim()) {
           searchQuery += ` ${this.chapterInfo.knowledgeQueryHint.trim()}`
           callbacks.log(t('log.generateDraft.kbHint').replace('{keyword}', this.chapterInfo.knowledgeQueryHint.trim()))
