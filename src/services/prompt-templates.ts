@@ -267,6 +267,11 @@ export async function loadProjectCustomPrompts(projectPath: string): Promise<voi
   }
 }
 
+/** 清空项目级 Prompt 覆盖（关闭项目时调用，防旧项目覆盖残留被误用） */
+export function clearProjectCustomPrompts(): void {
+  projectCustomPrompts.clear()
+}
+
 /** 内部工具：从目录加载 JSON 覆盖到指定 Map */
 async function _loadPromptsFromDir(dirPath: string, target: Map<string, PromptTemplate>): Promise<void> {
   const { ipc } = await import('./ipc-client')

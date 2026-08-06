@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { loadProjectCustomPrompts, clearProjectCustomPrompts } from '../services/prompt-templates'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
 import { alertError } from '../components/ui/Confirm'
 import { t } from '../shared/locale'
@@ -123,6 +124,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const result = await ipc.invoke('project:open', projectPath)
       if (result.success && result.project) {
         set({ currentProject: result.project })
+        // 加载项目级 Prompt 覆盖（此前仅在设置页挂载时加载——未打开设置页时覆盖静默失效；
+        // 挂到项目打开统一入口，新建/导入/切换均生效）
+        loadProjectCustomPrompts(projectPath).catch(() => {})
         // 同步最近项目到全局配置（主进程活动聚合/历史导航可读）
         const list = get().recentProjects
         if (!list.some(p => p.path === projectPath)) {
@@ -205,6 +209,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   closeProject: () => {
     // 统一清空 Layer 2 Store + 编辑器 Tab
     callProjectClosed()
+    clearProjectCustomPrompts()
     set({ currentProject: null, fileTree: [] })
   },
 
