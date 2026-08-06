@@ -1,11 +1,12 @@
-import { useEffect } from 'react'
-import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, PenLine } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Sun, Moon, ScrollText, Settings, ZoomIn, ZoomOut, Sparkles, PenLine, Check } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import { useProjectStore } from '../../stores/project-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useOutsideClick } from '../../hooks/useOutsideClick'
 
 /** 检测是否为 macOS */
 const isMac = navigator.userAgent.includes('Mac')
@@ -28,9 +29,13 @@ export default function TitleBar() {
   const hasDirty = useEditorStore((s) => s.tabs.some((t) => t.dirty))
 
   const ThemeIcon = themeIcons[theme] || Sun
-  const cycleTheme = (e: React.MouseEvent) => {
-    const nextTheme = themeOrder[(themeOrder.indexOf(theme) + 1) % themeOrder.length]
+  // 主题菜单展开状态
+  const [themeMenuOpen, setThemeMenuOpen] = useState(false)
+  const themeMenuRef = useRef<HTMLDivElement>(null)
+  useOutsideClick(themeMenuRef, () => setThemeMenuOpen(false), themeMenuOpen)
 
+  /** 设置主题（保留鼠标点击位置扩散的视图过渡动画，不再循环切换） */
+  const applyThemeWithTransition = (nextTheme: Theme, e: React.MouseEvent) => {
     if (
       !('startViewTransition' in document) ||
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -68,6 +73,9 @@ export default function TitleBar() {
       )
     })
   }
+
+  /** 主题的本地化名称 */
+  const themeLabel = (id: Theme) => id === 'galaxy' ? t('theme.starry') : id === 'paper' ? t('theme.paper') : id === 'dark' ? t('theme.dark') : t('theme.light')
   const openSettings = useLayoutStore(s => s.openSettings)
   const { focusMode, toggleFocusMode } = useLayoutStore(useShallow(s => ({ focusMode: s.focusMode, toggleFocusMode: s.toggleFocusMode })))
 
@@ -99,9 +107,6 @@ export default function TitleBar() {
 
   /** 百分比文字，如 "100%" */
   const zoomLabel = `${Math.round(zoom * 100)}%`
-
-  /** 当前主题的本地化名称 */
-  const themeName = theme === 'galaxy' ? t('theme.starry') : theme === 'paper' ? t('theme.paper') : theme === 'dark' ? t('theme.dark') : t('theme.light')
 
   return (
     <div
@@ -218,15 +223,42 @@ export default function TitleBar() {
           <PenLine size={13} strokeWidth={1.5} />
         </button>
 
-        {/* 主题切换 */}
-        <button
-          onClick={cycleTheme}
-          title={t('theme.label').replace('{theme}', themeName)}
-          className="icon-btn"
-          style={{ width: 24, height: 22 }}
-        >
-          <ThemeIcon size={13} strokeWidth={1.5} />
-        </button>
+        {/* 主题切换 — 点击弹出四主题菜单直选（避免循环切换） */}
+        <div className="relative" style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>
+          <button
+            onClick={() => setThemeMenuOpen(v => !v)}
+            title={t('theme.label').replace('{theme}', themeLabel(theme))}
+            className="icon-btn"
+            style={{ width: 24, height: 22 }}
+          >
+            <ThemeIcon size={13} strokeWidth={1.5} />
+          </button>
+          {themeMenuOpen && (
+            <div
+              ref={themeMenuRef}
+              className="absolute right-0 top-full mt-1 z-50 rounded-lg border shadow-lg overflow-hidden py-1"
+              style={{ backgroundColor: 'var(--color-panel)', borderColor: 'var(--color-border)', minWidth: 128 }}
+            >
+              {themeOrder.map(id => {
+                const Icon = themeIcons[id]
+                const active = theme === id
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={(e) => { applyThemeWithTransition(id, e); setThemeMenuOpen(false) }}
+                    className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-[var(--color-hover)] cursor-pointer"
+                    style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
+                  >
+                    <Icon size={12} />
+                    <span className="flex-1">{themeLabel(id)}</span>
+                    {active && <Check size={10} />}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+        </div>
 
         {/* 设置 */}
         <button

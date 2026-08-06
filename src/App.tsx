@@ -260,9 +260,10 @@ export default function App() {
           onClose={closeChapterCreation}
         />
       </ErrorBoundary>
-      {/* 全屏设置弹窗 */}
+      {/* 全屏设置弹窗 — key 随开关变化重新挂载，保证每次打开回到默认分区 */}
       <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
         <SettingsModal
+          key={String(settingsOpen)}
           open={settingsOpen}
           onClose={closeSettings}
         />
