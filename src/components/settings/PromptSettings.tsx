@@ -19,7 +19,6 @@ import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
-import { cn } from '../../lib/utils'
 import { renderLog } from '../../services/render-logger'
 
 // ==================== 来源标签配置 ====================
@@ -218,6 +217,8 @@ function TemplateItem({
     setEditContent(getPromptTemplate(builtinTemplate.key)?.content ?? builtinTemplate.content)
     setSaving(false)
     setSaveResult({ type: 'success', msg: t('prompt.restoredDefault') })
+    // 保存行为日志流（视觉反馈已有 saveResult 局部文本）
+    renderLog('info', 'Save:Prompt', t('log.render.promptResetDefault').replace('{key}', () => builtinTemplate.key))
     onSaved()
     setTimeout(() => setSaveResult(null), 3000)
   }
@@ -322,7 +323,7 @@ function TemplateItem({
             return (
             <div
               className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs"
-              style={{ backgroundColor: 'rgba(245, 158, 11, 0.08)', color: '#f59e0b' }}
+              style={{ backgroundColor: 'color-mix(in srgb, var(--color-warning) 10%, transparent)', color: 'var(--color-warning)' }}
             >
               <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
               <span>
@@ -343,7 +344,7 @@ function TemplateItem({
             return (
             <div
               className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs"
-              style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)' }}
+              style={{ backgroundColor: 'color-mix(in srgb, var(--color-info) 10%, transparent)', color: 'var(--color-info)' }}
             >
               <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
               <span>
@@ -395,12 +396,16 @@ function TemplateItem({
           {/* 保存结果反馈 */}
           {saveResult && (
             <div
-              className={cn(
-                'text-xs px-3 py-1.5 rounded-lg',
-                saveResult.type === 'success'
-                  ? 'bg-green-500/10 text-green-500 border border-green-500/20'
-                  : 'bg-red-500/10 text-red-500 border border-red-500/20'
-              )}
+              className="text-xs px-3 py-1.5 rounded-lg border"
+              style={{
+                backgroundColor: saveResult.type === 'success'
+                  ? 'color-mix(in srgb, var(--color-success) 10%, transparent)'
+                  : 'color-mix(in srgb, var(--color-error) 10%, transparent)',
+                color: saveResult.type === 'success' ? 'var(--color-success)' : 'var(--color-error)',
+                borderColor: saveResult.type === 'success'
+                  ? 'color-mix(in srgb, var(--color-success) 20%, transparent)'
+                  : 'color-mix(in srgb, var(--color-error) 20%, transparent)',
+              }}
             >
               {saveResult.type === 'success' ? '✅ ' : '❌ '}
               {saveResult.msg}

@@ -2562,6 +2562,7 @@ export const UI_TEXTS_DATA = {
   'log.render.promptSaveFailedGlobal': { 'zh-CN': '模板保存失败（全局）{key}', 'en-US': 'Failed to save template (global): {key}', 'ru-RU': 'Не удалось сохранить шаблон (глобально): {key}' },
   'log.render.promptSaveSuccessProject': { 'zh-CN': '模板保存成功（项目）{key}', 'en-US': 'Template saved (project): {key}', 'ru-RU': 'Шаблон сохранён (проект): {key}' },
   'log.render.promptSaveFailedProject': { 'zh-CN': '模板保存失败（项目）{key}', 'en-US': 'Failed to save template (project): {key}', 'ru-RU': 'Не удалось сохранить шаблон (проект): {key}' },
+  'log.render.promptResetDefault': { 'zh-CN': '模板已恢复默认 {key}', 'en-US': 'Template reset to default: {key}', 'ru-RU': 'Шаблон сброшен к стандартному: {key}' },
 
   // —— 启动（main.tsx）——
   'log.render.startupHtmlLoad': { 'zh-CN': 'HTML→JS 模块加载耗时: {ms}ms', 'en-US': 'HTML→JS module load took: {ms}ms', 'ru-RU': 'Загрузка модулей HTML→JS: {ms}ms' },

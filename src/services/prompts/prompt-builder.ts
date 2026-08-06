@@ -45,10 +45,10 @@ export class BasePromptBuilder {
       result = result + '\n\n' + renderedSuffix
     }
 
-    // 空变量段落裁剪：清除可选变量为空时残留的空标签段落
+    // 空变量段落裁剪：清除可选变量为空时残留的空标签段落（(^|\n) 同时覆盖模板首行）
     result = result
-      .replace(/\n★【[^】]*】★[：:]\s*\n?\s*$/gm, '')
-      .replace(/\n【[^】]*（如有[^）]*）[^】]*】\s*\n?\s*$/gm, '')
+      .replace(/(^|\n)★【[^】]*】★[：:]\s*\n?\s*$/gm, '')
+      .replace(/(^|\n)【[^】]*（如有[^）]*）[^】]*】\s*\n?\s*$/gm, '')
       .replace(/\n{3,}/g, '\n\n')
 
     // 防御性校验：检查是否有未处理的模板占位符
