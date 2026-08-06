@@ -86,7 +86,7 @@ describe('ProjectSquareList LT 方块列表', () => {
     expect(buttons[0].textContent).toContain('穿')
   })
 
-  it('点击方块 → 调用 openProject 并切换到工作台视图', async () => {
+  it('点击方块 → 调用 openProject 并切换到项目结构视图', async () => {
     const { container } = render(<ProjectSquareList />)
     const openProjectMock = useProjectStore.getState().openProject as ReturnType<typeof vi.fn>
     const buttons = Array.from(container.querySelectorAll('button'))
@@ -94,8 +94,8 @@ describe('ProjectSquareList LT 方块列表', () => {
     await act(async () => { await Promise.resolve() })
     // openProject 被调用（keepView 模式）
     expect(openProjectMock).toHaveBeenCalledWith('E:\\vale\\小说\\斗罗大陆虚界之痕', { keepView: true })
-    // 进入工作台视图
-    expect(useLayoutStore.getState().sidebarView).toBe('workspace')
+    // 进入项目结构视图（工作台已并入项目结构）
+    expect(useLayoutStore.getState().sidebarView).toBe('project')
   })
 
   it('故事架构未完成（archGenerated < 4）→ 弹出填充提示', async () => {

@@ -1,5 +1,5 @@
 import {
-  FolderOpen, BookOpen, Users, LayoutDashboard,
+  FolderOpen, BookOpen, Users,
   Home, Zap, ScrollText, Activity,
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
@@ -20,7 +20,6 @@ export default function LeftToolWindowBar() {
     { id: 'project', icon: FolderOpen, label: t('nav.projectTree') },
     { id: 'knowledge', icon: BookOpen, label: t('nav.knowledgeBase') },
     { id: 'characters', icon: Users, label: t('nav.characters') },
-    { id: 'workspace', icon: LayoutDashboard, label: t('nav.workspace') },
   ]
 
   /** 底部面板 Tab 按钮配置（模型调用视图已替换为每日活动图） */

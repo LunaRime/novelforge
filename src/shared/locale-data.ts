@@ -790,7 +790,6 @@ export const UI_TEXTS_DATA = {
   'nav.characters': { 'zh-CN': '角色管理', 'en-US': 'Characters', 'ru-RU': 'Персонажи' },
   'nav.history': { 'zh-CN': '历史项目', 'en-US': 'History', 'ru-RU': 'История' },
   'nav.welcome': { 'zh-CN': '欢迎页', 'en-US': 'Welcome', 'ru-RU': 'Приветствие' },
-  'nav.workspace': { 'zh-CN': '工作台', 'en-US': 'Workspace', 'ru-RU': 'Рабочее место' },
   'workspace.finalized': { 'zh-CN': '正式稿', 'en-US': 'Final Draft', 'ru-RU': 'Финальный черновик' },
   'workspace.archIncomplete': { 'zh-CN': '故事架构未填充完成', 'en-US': 'Story architecture incomplete', 'ru-RU': 'Архитектура истории не завершена' },
   'workspace.archPrompt': { 'zh-CN': '该项目的故事架构已完成 {done}/4，建议先填充完整再开始创作。', 'en-US': 'This project\'s story architecture is {done}/4 complete. Consider filling it in first.', 'ru-RU': 'Архитектура истории проекта заполнена на {done}/4. Рекомендуется заполнить её.' },

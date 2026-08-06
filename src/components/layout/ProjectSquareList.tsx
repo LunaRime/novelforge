@@ -72,7 +72,7 @@ export default function ProjectSquareList() {
     if (useLayoutStore.getState().sidebarView !== prevView) return
     // 切换项目：清空旧项目残留的编辑器 Tab（避免内容错乱）
     useEditorStore.getState().clearTabs()
-    useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'workspace' })
+    useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project' })
     // 前置检查：故事架构未填充完成（<4/4）时弹窗提示（不阻塞工作台进入）
     try {
       const summary = await ipc.invoke('project:get-summary', projectPath)
