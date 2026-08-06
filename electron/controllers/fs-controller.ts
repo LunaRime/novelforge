@@ -164,6 +164,18 @@ export function registerFSController() {
     }
   })
 
+  ipcMain.handle('fs:delete-file', async (_event, filePath: string) => {
+    try {
+      const safePath = validateSandbox(filePath)
+      await fsPromises.unlink(safePath)
+      return { success: true }
+    } catch (error) {
+      // 文件不存在视为成功（幂等删除）
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true }
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
   ipcMain.handle('fs:read-json', async (_event, filePath: string) => {
     try {
       const safePath = validateSandbox(filePath)

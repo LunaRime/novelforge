@@ -160,6 +160,10 @@ export interface FileChannels {
     args: [filePath: string]
     return: boolean
   }
+  'fs:delete-file': {
+    args: [filePath: string]
+    return: { success: boolean; error?: string }
+  }
   'fs:read-json': {
     args: [filePath: string]
     return: { success: boolean; data: unknown; error?: string }
