@@ -11,6 +11,7 @@ import { readJsonFile, MODELS_CONFIG_PATH } from '../utils/config-utils'
 import { decryptApiKey } from '../utils/secure-config'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 
 /** 从全局配置加载嵌入模型配置（自动解密 apiKey） */
@@ -212,5 +213,5 @@ export function registerEmbeddingController() {
     return models.filter(m => !m.purposes?.includes('embedding'))
   })
 
-  logger.info('Embedding', '已注册 IPC 处理器')
+  logger.info('Embedding', t('log.ipc.handlersRegistered'))
 }

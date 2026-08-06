@@ -35,7 +35,7 @@ export function initProjectDatabase(projectPath: string): void {
     const errMsg = error instanceof Error ? error.message : String(error)
     const isCorrupt = errMsg.includes('SQLITE_CORRUPT') || errMsg.includes('SQLITE_NOTADB')
 
-    logger.error('DB', `打开数据库失败: ${errMsg}`)
+    logger.error('DB', t('log.db.openFailed').replace('{err}', errMsg))
 
     if (isCorrupt) {
       // 备份损坏的数据库文件
@@ -43,17 +43,17 @@ export function initProjectDatabase(projectPath: string): void {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-')
         const backupPath = dbPath + `.corrupted.${timestamp}`
         fs.renameSync(dbPath, backupPath)
-        logger.warn('DB', `损坏数据库已备份: ${backupPath}`)
+        logger.warn('DB', t('log.db.corruptBackedUp').replace('{path}', backupPath))
       } catch (backupErr) {
-        logger.error('DB', `备份损坏数据库失败: ${backupErr}`)
+        logger.error('DB', t('log.db.corruptBackupFailed').replace('{err}', String(backupErr)))
       }
 
       // 创建新数据库
       try {
         projectDb = new Database(dbPath)
-        logger.info('DB', '已创建新数据库替代损坏文件')
+        logger.info('DB', t('log.db.createdNewReplacement'))
       } catch (createErr) {
-        logger.error('DB', `创建新数据库失败: ${createErr}`)
+        logger.error('DB', t('log.db.createFailed').replace('{err}', String(createErr)))
         throw createErr
       }
 
@@ -74,7 +74,7 @@ export function initProjectDatabase(projectPath: string): void {
   try {
     const integrity = projectDb.pragma('integrity_check', { simple: true }) as string
     if (integrity !== 'ok') {
-      logger.error('DB', `数据库完整性检查失败: ${integrity}`)
+      logger.error('DB', t('log.db.integrityFailed').replace('{result}', integrity))
       dialog.showMessageBox({
         type: 'warning',
         title: t('dialog.dbIntegrityTitle'),
@@ -84,7 +84,7 @@ export function initProjectDatabase(projectPath: string): void {
       }).catch(() => { /* ignore */ })
     }
   } catch (checkErr) {
-    logger.error('DB', `数据库完整性检查执行失败: ${checkErr}`)
+    logger.error('DB', t('log.db.integrityCheckFailed').replace('{err}', String(checkErr)))
   }
 
   projectDb.pragma('journal_mode = WAL')
@@ -92,7 +92,7 @@ export function initProjectDatabase(projectPath: string): void {
 
   // 创建表结构
   createTables(projectDb)
-  logger.info('DB', `项目数据库已打开: ${dbPath}`)
+  logger.info('DB', t('log.db.opened').replace('{path}', dbPath))
 }
 
 /** 关闭项目数据库 */
@@ -122,7 +122,9 @@ function ensureSchemaVersion(db: BetterSqlite3.Database): void {
   // 降级哨兵：数据库版本高于当前应用（用户回退了安装包）。
   // 不执行任何迁移（降级迁移风险极高），提示用户使用匹配版本。
   if (currentVersion > CURRENT_SCHEMA_VERSION) {
-    logger.error('DB', `数据库 Schema 版本 (v${currentVersion}) 高于应用支持 (v${CURRENT_SCHEMA_VERSION})，疑似应用降级`)
+    logger.error('DB', t('log.db.schemaDowngradeDetected')
+      .replace('{current}', String(currentVersion))
+      .replace('{supported}', String(CURRENT_SCHEMA_VERSION)))
     dialog.showMessageBox({
       type: 'warning',
       title: t('dialog.dbDowngradeTitle'),
@@ -137,14 +139,18 @@ function ensureSchemaVersion(db: BetterSqlite3.Database): void {
 
   if (currentVersion >= CURRENT_SCHEMA_VERSION) return
 
-  logger.info('DB', `Schema 迁移: v${currentVersion} → v${CURRENT_SCHEMA_VERSION}`)
+  logger.info('DB', t('log.db.schemaMigration')
+    .replace('{from}', String(currentVersion))
+    .replace('{to}', String(CURRENT_SCHEMA_VERSION)))
   try {
     migrateExistingTables(db)
     // 仅在全部迁移步骤成功后才递增版本号
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
-    logger.info('DB', `Schema 迁移完成: v${CURRENT_SCHEMA_VERSION}`)
+    logger.info('DB', t('log.db.schemaMigrationDone').replace('{version}', String(CURRENT_SCHEMA_VERSION)))
   } catch (error) {
-    logger.error('DB', `Schema 迁移失败，数据库保持 v${currentVersion} 不变: ${error}`)
+    logger.error('DB', t('log.db.schemaMigrationFailed')
+      .replace('{version}', String(currentVersion))
+      .replace('{err}', String(error)))
     // 不递增版本号，下次启动时重新尝试迁移
     throw new Error(
       t('dialog.migrationFailed')
@@ -420,7 +426,7 @@ function createTables(db: BetterSqlite3.Database) {
   const currentVersion = db.pragma('user_version', { simple: true }) as number
   if (currentVersion === 0) {
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
-    logger.info('DB', `全新数据库，Schema 版本已标记为 v${CURRENT_SCHEMA_VERSION}`)
+    logger.info('DB', t('log.db.freshSchemaMarked').replace('{version}', String(CURRENT_SCHEMA_VERSION)))
   } else {
     ensureSchemaVersion(db)
   }
@@ -454,7 +460,7 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   // llm_calls — v8 新增 cost（单次调用费用，美元）
   safeAddColumn(db, 'llm_calls', 'cost', 'REAL DEFAULT 0')
 
-  logger.info('DB', '迁移列补齐检查完成')
+  logger.info('DB', t('log.db.columnBackfillDone'))
 }
 
 /** 安全地给表添加列（列已存在则跳过） */
@@ -463,11 +469,14 @@ function safeAddColumn(db: BetterSqlite3.Database, table: string, column: string
     const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>
     if (!cols.some(c => c.name === column)) {
       db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${columnDef}`)
-      logger.info('DB', `迁移: ${table}.${column} 列已补加`)
+      logger.info('DB', t('log.db.columnAdded').replace('{table}', table).replace('{column}', column))
     }
   } catch (e) {
     // 表不存在时静默跳过（后续 createTables 会处理）
-    logger.warn('DB', `补加列 ${table}.${column} 失败（表可能尚不存在）: ${e}`)
+    logger.warn('DB', t('log.db.columnAddFailed')
+      .replace('{table}', table)
+      .replace('{column}', column)
+      .replace('{err}', String(e)))
   }
 }
 
@@ -477,7 +486,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   try {
     ensureMigrationColumns(db)
   } catch (e) {
-    logger.error('DB', `补加迁移列失败: ${e}`)
+    logger.error('DB', t('log.db.migrationColumnsFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (ensure columns): ${e}`)
   }
 
@@ -486,10 +495,10 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     const cols = db.pragma('table_info(contents)') as Array<{ name: string }>
     if (!cols.some(c => c.name === 'updated_at')) {
       db.exec("ALTER TABLE contents ADD COLUMN updated_at INTEGER DEFAULT (unixepoch() * 1000)")
-      logger.info('DB', '迁移: contents 表已添加 updated_at 列')
+      logger.info('DB', t('log.db.migContentsUpdatedAt'))
     }
   } catch (e) {
-    logger.error('DB', `迁移 contents.updated_at 失败: ${e}`)
+    logger.error('DB', t('log.db.migContentsUpdatedAtFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (contents.updated_at): ${e}`)
   }
 
@@ -498,10 +507,10 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     const indexes = db.pragma('index_list(post_process_steps)') as Array<{ name: string }>
     if (!indexes.some(i => i.name === 'uq_post_steps_run_key')) {
       db.exec('CREATE UNIQUE INDEX IF NOT EXISTS uq_post_steps_run_key ON post_process_steps(run_id, step_key)')
-      logger.info('DB', '迁移: post_process_steps 已添加唯一约束')
+      logger.info('DB', t('log.db.migStepsUniqueConstraint'))
     }
   } catch (e) {
-    logger.error('DB', `迁移 post_process_steps 唯一约束失败: ${e}`)
+    logger.error('DB', t('log.db.migStepsUniqueFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (post_process_steps): ${e}`)
   }
 
@@ -510,7 +519,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number)')
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at)')
   } catch (e) {
-    logger.error('DB', `迁移 summary_snapshots 索引失败: ${e}`)
+    logger.error('DB', t('log.db.migSnapshotsIndexFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (summary_snapshots indexes): ${e}`)
   }
 
@@ -519,14 +528,14 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     const bpCols = db.pragma('table_info(blueprints)') as Array<{ name: string }>
     if (!bpCols.some(c => c.name === 'sort_order')) {
       db.exec('ALTER TABLE blueprints ADD COLUMN sort_order INTEGER DEFAULT 0')
-      logger.info('DB', '迁移: blueprints 表已添加 sort_order 列')
+      logger.info('DB', t('log.db.migBlueprintsSortOrder'))
     }
     if (!bpCols.some(c => c.name === 'priority')) {
       db.exec('ALTER TABLE blueprints ADD COLUMN priority INTEGER DEFAULT 0')
-      logger.info('DB', '迁移: blueprints 表已添加 priority 列')
+      logger.info('DB', t('log.db.migBlueprintsPriority'))
     }
   } catch (e) {
-    logger.error('DB', `迁移 blueprints 列失败: ${e}`)
+    logger.error('DB', t('log.db.migBlueprintsColumnsFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (blueprints): ${e}`)
   }
 
@@ -549,9 +558,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       );
       CREATE INDEX IF NOT EXISTS idx_evaluation_draft ON evaluation_scores(draft_id);
     `)
-    logger.info('DB', '迁移: evaluation_scores 表 + draft_id 索引已创建')
+    logger.info('DB', t('log.db.migEvaluationScores'))
   } catch (e) {
-    logger.error('DB', `迁移 evaluation_scores 失败: ${e}`)
+    logger.error('DB', t('log.db.migEvaluationScoresFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (evaluation_scores): ${e}`)
   }
 
@@ -576,7 +585,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
 
     for (const field of FIELDS) {
       if (!existingCols.has(field)) {
-        logger.info('DB', `迁移: project_core.${field} 已删除（上一轮迁移），跳过归档`)
+        logger.info('DB', t('log.db.migFieldAlreadyDropped').replace('{field}', field))
         continue
       }
       const row = db.prepare(`SELECT ${field} FROM project_core WHERE id = 'main'`).get() as Record<string, string> | undefined
@@ -587,9 +596,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         `).run(`main_${field}`, field, row[field])
       }
     }
-    logger.info('DB', '迁移: project_archives 表已创建，大文本字段已归档')
+    logger.info('DB', t('log.db.migArchivesCreated'))
   } catch (e) {
-    logger.error('DB', `迁移 project_archives 失败: ${e}`)
+    logger.error('DB', t('log.db.migArchivesFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (project_archives): ${e}`)
   }
 
@@ -615,7 +624,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         "SELECT name FROM sqlite_master WHERE type='table' AND name=?"
       ).get(table)
       if (!tableCheck) {
-        logger.info('DB', `迁移: 表 ${table} 不存在，跳过时间字段转换`)
+        logger.info('DB', t('log.db.timeMigTableMissing').replace('{table}', table))
         continue
       }
 
@@ -637,13 +646,13 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
           }
         } catch {
           // 列可能不存在（已被上一轮迁移删除），跳过
-          logger.info('DB', `迁移: ${table}.${col} 时间转换跳过（列可能已删除）`)
+          logger.info('DB', t('log.db.timeMigSkipped').replace('{table}', table).replace('{col}', col))
         }
       }
     }
-    logger.info('DB', '迁移: 时间字段 TEXT→INTEGER 转换完成')
+    logger.info('DB', t('log.db.timeMigDone'))
   } catch (e) {
-    logger.error('DB', `时间字段迁移失败: ${e}`)
+    logger.error('DB', t('log.db.timeMigFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (time migration v5): ${e}`)
   }
 
@@ -673,13 +682,13 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
             }
           }
         } catch {
-          logger.info('DB', `v6 迁移: ${table}.${col} 时间转换跳过`)
+          logger.info('DB', t('log.db.v6TimeMigSkipped').replace('{table}', table).replace('{col}', col))
         }
       }
     }
-    logger.info('DB', 'v6 迁移: post_process_steps/blueprints 遗留 TEXT→INTEGER 完成')
+    logger.info('DB', t('log.db.v6TimeMigDone'))
   } catch (e) {
-    logger.error('DB', `v6 时间字段迁移失败: ${e}`)
+    logger.error('DB', t('log.db.v6TimeMigFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (time migration v6): ${e}`)
   }
 
@@ -719,9 +728,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         SELECT RAISE(ABORT, 'Invalid blueprint priority: ' || NEW.priority);
       END;
     `)
-    logger.info('DB', 'v6 迁移: CHECK 约束触发器已创建 (drafts.status + blueprints.priority)')
+    logger.info('DB', t('log.db.v6CheckTriggersCreated'))
   } catch (e) {
-    logger.error('DB', `CHECK 约束触发器创建失败: ${e}`)
+    logger.error('DB', t('log.db.v6CheckTriggersFailed').replace('{err}', String(e)))
     throw new Error(`关键迁移步骤失败 (CHECK triggers v6): ${e}`)
   }
 
@@ -732,12 +741,12 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     for (const field of archivedFields) {
       if (coreCols.some(c => c.name === field)) {
         db.exec(`ALTER TABLE project_core DROP COLUMN ${field}`)
-        logger.info('DB', `v6 迁移: project_core.${field} 已删除（已归档到 project_archives）`)
+        logger.info('DB', t('log.db.v6ColumnArchived').replace('{field}', field))
       }
     }
   } catch (e) {
     // 非关键迁移，旧版 SQLite 可能不支持 DROP COLUMN，降级为警告
-    logger.warn('DB', `project_core 冗余列删除失败（可能 SQLite 版本过旧）: ${e}`)
+    logger.warn('DB', t('log.db.v6RedundantColDropFailed').replace('{err}', String(e)))
   }
 
   // 11. v7: 角色戏份分级 + 标签 + 出场章节 + 结构化关系
@@ -747,9 +756,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     safeAddColumn(db, 'characters', 'tags', "TEXT DEFAULT ''")
     safeAddColumn(db, 'characters', 'appear_chapters', "TEXT DEFAULT '[]'")
     safeAddColumn(db, 'characters', 'relations', "TEXT DEFAULT '[]'")
-    logger.info('DB', 'v7 迁移: characters 表已添加 tier/tags/appear_chapters/relations 列')
+    logger.info('DB', t('log.db.v7CharsColumnsAdded'))
   } catch (e) {
-    logger.warn('DB', `v7 角色表迁移未完成（非关键），应用将使用默认值: ${e}`)
+    logger.warn('DB', t('log.db.v7CharsMigIncomplete').replace('{err}', String(e)))
   }
 
   // 12. v9: 分卷表（长篇小说按卷组织章节）
@@ -768,9 +777,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       );
       CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
     `)
-    logger.info('DB', 'v9 迁移: volumes 分卷表已创建')
+    logger.info('DB', t('log.db.v9VolumesCreated'))
   } catch (e) {
-    logger.warn('DB', `v9 分卷表迁移未完成（非关键），分卷功能将不可用: ${e}`)
+    logger.warn('DB', t('log.db.v9VolumesMigIncomplete').replace('{err}', String(e)))
   }
 
   // 13. v10: 偏好记忆表（用户把 AI 文本的 X 改成 Y 的替换对）
@@ -789,8 +798,8 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       );
       CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
     `)
-    logger.info('DB', 'v10 迁移: preferences 偏好记忆表已创建')
+    logger.info('DB', t('log.db.v10PreferencesCreated'))
   } catch (e) {
-    logger.warn('DB', `v10 偏好记忆表迁移未完成（非关键），偏好功能将不可用: ${e}`)
+    logger.warn('DB', t('log.db.v10PrefsMigIncomplete').replace('{err}', String(e)))
   }
 }

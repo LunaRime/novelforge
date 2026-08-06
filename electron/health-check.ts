@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import { getProjectDb } from './database'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
+import { t } from '../src/shared/locale'
 
 // ===== 类型 =====
 
@@ -119,7 +120,7 @@ export function registerHealthCheckIPC(): void {
       checks,
     }
 
-    logger.info('HealthCheck', `健康检查完成: ${allOk ? 'OK' : 'WARN'}`)
+    logger.info('HealthCheck', t('log.healthCheck.done').replace('{status}', allOk ? 'OK' : 'WARN'))
     return result
   })
 
@@ -128,5 +129,5 @@ export function registerHealthCheckIPC(): void {
     return { ok: llmCheck.ok, message: llmCheck.message, detail: llmCheck.detail }
   })
 
-  logger.info('HealthCheck', 'IPC 处理器已注册')
+  logger.info('HealthCheck', t('log.ipc.handlersRegistered'))
 }

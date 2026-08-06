@@ -19,14 +19,14 @@ function loadModelConfigs(): ModelProfile[] {
     if (isPlaintextKey(model.apiKey)) {
       model.apiKey = encryptApiKey(model.apiKey)
       migrated = true
-      logger.info('LLM', `自动迁移 API 密钥到加密格式: ${model.name} (${model.id})`)
+      logger.info('LLM', t('log.llm.migrateKeyAuto').replace('{name}', model.name).replace('{id}', model.id))
     }
   }
 
   // 如果有迁移，立即写回加密后的配置
   if (migrated) {
     writeJsonFile(MODELS_CONFIG_PATH, models)
-    logger.info('LLM', 'API 密钥加密迁移完成')
+    logger.info('LLM', t('log.llm.migrateKeyDone'))
   }
 
   // 返回时解密 key 供运行时使用

@@ -11,6 +11,7 @@ import path from 'node:path'
 import { app } from 'electron'
 import { mcpManager } from './mcp-manager'
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 import { safeErrorMessage } from '../utils/error-utils'
 
 /** MCP 配置文件路径（与 mcpManager.getDefaultConfigPath 一致） */
@@ -137,5 +138,5 @@ export function registerMCPHandlers(): void {
     return mcpManager.getDefaultConfigPath()
   })
 
-  logger.info('MCP', 'IPC 处理器已注册')
+  logger.info('MCP', t('log.ipc.handlersRegistered'))
 }

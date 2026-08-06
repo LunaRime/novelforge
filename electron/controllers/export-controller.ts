@@ -263,7 +263,10 @@ export function registerExportController(): void {
           await fsPromises.writeFile(path.join(folderPath, fileName), getChapterText(ch), 'utf-8')
         }
 
-        logger.info('Export', `文件夹导出完成: ${folderPath} (${chapters.length} 章, ${fileFormat})`)
+        logger.info('Export', t('log.export.folderDone')
+          .replace('{path}', folderPath)
+          .replace('{count}', String(chapters.length))
+          .replace('{format}', fileFormat))
         return { success: true, path: folderPath, chapterCount: chapters.length }
       } else {
         // ZIP 格式
@@ -276,11 +279,14 @@ export function registerExportController(): void {
         }
 
         await zip.writeToFile(zipPath)
-        logger.info('Export', `ZIP 导出完成: ${zipPath} (${chapters.length} 章, ${fileFormat})`)
+        logger.info('Export', t('log.export.zipDone')
+          .replace('{path}', zipPath)
+          .replace('{count}', String(chapters.length))
+          .replace('{format}', fileFormat))
         return { success: true, path: zipPath, chapterCount: chapters.length }
       }
     } catch (error) {
-      logger.error('Export', `导出失败: ${error}`)
+      logger.error('Export', t('log.export.failed').replace('{err}', String(error)))
       return { success: false, error: safeErrorMessage(error) }
     }
   })
@@ -303,5 +309,5 @@ export function registerExportController(): void {
     }
   })
 
-  logger.info('IPC', 'Export Controller 已注册')
+  logger.info('IPC', t('log.ipc.exportRegistered'))
 }

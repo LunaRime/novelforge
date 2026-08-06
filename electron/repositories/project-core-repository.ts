@@ -6,6 +6,7 @@
  */
 import { getProjectDb } from '../database'
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 
 /** project_core 表行类型
  * 注意：premise/worldbuilding/characters_arch/synopsis 已在 v6 迁移中 DROP，
@@ -126,7 +127,7 @@ export class ProjectCoreRepository {
     static update(data: Partial<ProjectCoreData>): void {
         const db = getProjectDb()
         if (!db) {
-            logger.error('ProjectCore', '数据库未连接，无法保存配置')
+            logger.error('ProjectCore', t('log.projectCore.dbNotConnected'))
             throw new Error('项目数据库未连接，请关闭项目后重新打开')
         }
 
@@ -219,7 +220,7 @@ export class ProjectCoreRepository {
         ON CONFLICT(id) DO UPDATE SET body = excluded.body, updated_at = unixepoch() * 1000
       `).run(id, key, body)
         } catch (error) {
-            logger.error('ProjectCore', `setArchiveField(${key}) 失败: ${error}`)
+            logger.error('ProjectCore', t('log.projectCore.archiveSetFailed').replace('{key}', key).replace('{err}', String(error)))
             throw error
         }
     }

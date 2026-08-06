@@ -124,17 +124,17 @@ export function registerKBController() {
 
     // 方式 1：专用 Embedding API（内部已含 LLM 降级，失败会自动切换）
     if (canUseEmbeddingAPI) {
-      logger.info('KB', '使用 Embedding API 重建向量索引（如失败将自动降级到 LLM 向量化）')
+      logger.info('KB', t('log.kb.rebuildWithEmbeddingApi'))
       const result = await backfillVectors(projectPath, embConfig!.protocol, embConfig!.model)
       // 如果 processed > 0 说明至少部分成功了
       if (result.success || result.processed > 0) return result
       // 完全失败 → 降级到 LLM 向量化
-      logger.warn('KB', `Embedding API 完全失败，尝试 LLM 向量化: ${result.error}`)
+      logger.warn('KB', t('log.kb.embeddingFailedTryLlm').replace('{err}', String(result.error)))
     }
 
     // 方式 2：LLM 向量化
     if (canUseLLM) {
-      logger.info('KB', '使用 LLM 向量化重建向量索引')
+      logger.info('KB', t('log.kb.rebuildWithLlm'))
       try {
         const { count } = await getVectorlessCount(projectPath)
         if (count === 0) return { success: true, processed: 0, failed: 0 }
@@ -183,12 +183,12 @@ export function registerKBController() {
 
         return { success: true, processed, failed }
       } catch (error) {
-        logger.warn('KB', `LLM 向量化回填失败: ${error}`)
+        logger.warn('KB', t('log.kb.llmBackfillFailed').replace('{err}', String(error)))
       }
     }
 
     // 方式 3：全部不可用 — 标记为 FTS 模式
-    logger.info('KB', '无可用的向量化方式，文本块将保持 FTS 纯文本模式')
+    logger.info('KB', t('log.kb.noVectorMethodFtsOnly'))
     const { count } = await getVectorlessCount(projectPath)
     return {
       success: false,

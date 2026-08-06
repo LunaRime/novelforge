@@ -15,6 +15,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
+import { t } from '../src/shared/locale'
 
 // 懒加载：避免 Electron 启动时同步 require 原生模块导致数秒无日志
 let _lancedb: typeof LanceDB | null = null
@@ -94,7 +95,7 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
 function validateUUID(value: string, context: string): void {
   if (!UUID_RE.test(value)) {
-    logger.warn('VectorStore', `${context} 不是有效的 UUID 格式: ${value.slice(0, 50)}`)
+    logger.warn('VectorStore', t('log.vectorStore.invalidUuid').replace('{context}', context).replace('{value}', value.slice(0, 50)))
   }
 }
 
@@ -269,7 +270,7 @@ export async function addChunks(
 
     return { success: true, chunkCount: chunks.length }
   } catch (error) {
-    logger.error('VectorStore', `写入失败: ${error}`)
+    logger.error('VectorStore', t('log.vectorStore.writeFailed').replace('{err}', String(error)))
     return { success: false, chunkCount: 0, error: safeErrorMessage(error) }
   }
 }
@@ -300,7 +301,7 @@ export async function removeDocument(
 
     return true
   } catch (error) {
-    logger.error('VectorStore', `删除失败: ${error}`)
+    logger.error('VectorStore', t('log.vectorStore.deleteFailed').replace('{err}', String(error)))
     return false
   }
 }
@@ -340,10 +341,12 @@ async function ensureVectorIndex(projectPath: string): Promise<void> {
       }),
       replace: true,
     })
-    logger.info('VectorStore', `IVF_PQ 向量索引已创建 (chunks: ${chunkCount}, partitions: ${numPartitions})`)
+    logger.info('VectorStore', t('log.vectorStore.indexCreated')
+      .replace('{chunks}', String(chunkCount))
+      .replace('{partitions}', String(numPartitions)))
   } catch (e) {
     // 索引创建失败不应阻断正常流程（可能 LanceDB 版本不支持 IVF_PQ）
-    logger.warn('VectorStore', `向量索引创建失败: ${String(e).slice(0, 200)}`)
+    logger.warn('VectorStore', t('log.vectorStore.indexCreateFailed').replace('{err}', String(e).slice(0, 200)))
   }
 }
 
@@ -431,11 +434,11 @@ export async function searchWithScope(
         fileName: r.fileName,
       }))
     } catch (e) {
-      logger.warn('VectorStore', `纯文本检索失败: ${e}`)
+      logger.warn('VectorStore', t('log.vectorStore.ftsSearchFailed').replace('{err}', String(e)))
       return []
     }
   } catch (error) {
-    logger.error('VectorStore', `检索失败: ${error}`)
+    logger.error('VectorStore', t('log.vectorStore.searchFailed').replace('{err}', String(error)))
     return []
   }
 }
@@ -613,7 +616,7 @@ export async function updateChunkVectors(
             values: { vector: update.vector },
           })
         } catch (e) {
-          logger.warn('VectorStore', `更新块 ${update.id} 向量失败: ${e}`)
+          logger.warn('VectorStore', t('log.vectorStore.updateVectorFailed').replace('{id}', update.id).replace('{err}', String(e)))
         }
       }
       // 回填后尝试创建向量索引
@@ -652,7 +655,7 @@ export async function updateChunkVectors(
         const newTable = await db.openTable(TABLE_NAME)
         await newTable.createIndex('text', { config: getLanceDB().Index.fts() })
       } catch (e) {
-        logger.warn('VectorStore', `回填覆写后 FTS 重建失败: ${e}`)
+        logger.warn('VectorStore', t('log.vectorStore.ftsRebuildFailed').replace('{err}', String(e)))
       }
 
       // 回填后尝试创建向量索引
@@ -661,7 +664,7 @@ export async function updateChunkVectors(
       return { success: true, count: updates.length }
     }
   } catch (error) {
-    logger.error('VectorStore', `批量更新向量失败: ${error}`)
+    logger.error('VectorStore', t('log.vectorStore.batchUpdateFailed').replace('{err}', String(error)))
     return { success: false, count: 0 }
   }
 }
@@ -679,7 +682,7 @@ export async function migrateFromJSON(
   }
 
   try {
-    logger.info('VectorStore', '检测到旧 vectors.json，开始迁移...')
+    logger.info('VectorStore', t('log.vectorStore.migrationDetected'))
     const raw = fs.readFileSync(jsonPath, 'utf-8')
     const store = JSON.parse(raw) as {
       documents: Array<{ id: string; fileName: string; importedAt: string; chunkCount: number; filePath: string }>
@@ -721,11 +724,11 @@ export async function migrateFromJSON(
 
     // 迁移完成，重命名旧文件
     fs.renameSync(jsonPath, jsonPath + '.migrated')
-    logger.info('VectorStore', `迁移完成：${migrated} 个块已写入 LanceDB`)
+    logger.info('VectorStore', t('log.vectorStore.migrationDone').replace('{count}', String(migrated)))
 
     return { success: true, migrated }
   } catch (error) {
-    logger.error('VectorStore', `迁移失败: ${error}`)
+    logger.error('VectorStore', t('log.vectorStore.migrationFailed').replace('{err}', String(error)))
     return { success: false, migrated: 0, error: safeErrorMessage(error) }
   }
 }

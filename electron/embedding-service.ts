@@ -12,6 +12,7 @@ import type { ModelProfile } from '../src/shared/ipc-channels'
 import { LLMFactory } from './llm/llm-factory'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
+import { t } from '../src/shared/locale'
 import {
   optimizeForEmbedding,
   contentHash,
@@ -126,7 +127,10 @@ export class EmbeddingService {
   /** 配置嵌入服务（专用 Embedding API） */
   configure(config: EmbeddingConfig): void {
     this.config = config
-    logger.info('Embedding', `Embedding API 已配置: ${config.modelName} (${config.protocol}, ${config.dimensions}d)`)
+    logger.info('Embedding', t('log.embedding.apiConfigured')
+      .replace('{model}', config.modelName)
+      .replace('{protocol}', config.protocol)
+      .replace('{dimensions}', String(config.dimensions)))
   }
 
   /** 获取当前 Embedding API 配置 */
@@ -152,9 +156,11 @@ export class EmbeddingService {
   configureLLMEmbedding(config: Partial<LLMEmbeddingConfig>): void {
     this.llmConfig = { ...this.llmConfig, ...config }
     const status = this.llmConfig.enabled && this.llmConfig.model
-      ? `已启用 (模型: ${this.llmConfig.model.modelName}, ${this.llmConfig.dimensions}d)`
-      : '已禁用'
-    logger.info('Embedding', `LLM 向量化 ${status}`)
+      ? t('log.embedding.llmEnabled')
+          .replace('{model}', this.llmConfig.model.modelName)
+          .replace('{dimensions}', String(this.llmConfig.dimensions))
+      : t('log.embedding.llmDisabled')
+    logger.info('Embedding', status)
   }
 
   /** 获取 LLM 向量化配置 */
@@ -489,7 +495,7 @@ export class EmbeddingService {
         const tokens = Math.ceil(text.length * 0.75)
         return { vector, text, tokens, source: 'embedding_api' }
       } catch (error) {
-        logger.warn('Embedding', `Embedding API 失败，尝试 LLM 向量化: ${safeErrorMessage(error)}`)
+        logger.warn('Embedding', t('log.embedding.apiFailedTryLlm').replace('{err}', safeErrorMessage(error)))
         // 降级到 LLM 向量化
       }
     }

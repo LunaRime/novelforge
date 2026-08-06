@@ -15,6 +15,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import { VELA_HOME } from './config-utils'
+import { t } from '../../src/shared/locale'
 
 // ===== 常量 =====
 
@@ -218,9 +219,15 @@ export function initLogger(env: LogEnvironment, version: string): void {
     environment = env
     minLevel = DEFAULT_MIN_LEVEL[env]
 
-    const envLabel = env === LogEnvironment.Dev ? '开发（dev/内测）' : '发布（公测/正式）'
-    logger.info('Logger', `日志环境: ${envLabel} | 版本: ${version} | 日志目录: ${LOG_DIRS[env]}`)
-    logger.info('Logger', `平台: ${os.platform()} ${os.release()} | Node: ${process.version} | 架构: ${os.arch()}`)
+    const envLabel = env === LogEnvironment.Dev ? t('log.envDev') : t('log.envRelease')
+    logger.info('Logger', t('log.logger.envInfo')
+      .replace('{env}', envLabel)
+      .replace('{version}', version)
+      .replace('{dir}', LOG_DIRS[env]))
+    logger.info('Logger', t('log.logger.platformInfo')
+      .replace('{os}', `${os.platform()} ${os.release()}`)
+      .replace('{node}', process.version)
+      .replace('{arch}', os.arch()))
     if (env === LogEnvironment.Dev) {
         logger.debug('Logger', '开发环境：DEBUG 全量日志已开启')
     }
@@ -282,14 +289,14 @@ export const logger = {
 
 /** 记录未捕获异常 */
 function captureUncaughtException(error: Error): void {
-    logger.error('Process', `未捕获异常: ${error.message}`)
+    logger.error('Process', t('log.process.uncaughtException').replace('{err}', error.message))
     logger.error('Process', error)
 }
 
 /** 记录未处理的 Promise 拒绝 */
 function captureUnhandledRejection(reason: unknown): void {
     const msg = reason instanceof Error ? `${reason.message}\n${reason.stack}` : String(reason)
-    logger.error('Process', `未处理 Promise 拒绝: ${msg}`)
+    logger.error('Process', t('log.process.unhandledRejection').replace('{err}', msg))
 }
 
 /**
@@ -305,7 +312,7 @@ export function installGlobalErrorHandlers(env?: LogEnvironment, version?: strin
     process.on('uncaughtException', captureUncaughtException)
     process.on('unhandledRejection', captureUnhandledRejection)
 
-    logger.info('Logger', `日志系统已初始化，日志目录: ${LOG_DIRS[environment]}`)
+    logger.info('Logger', t('log.logger.initialized').replace('{dir}', LOG_DIRS[environment]))
 }
 
 /** 卸载全局异常处理器（应用退出时调用） */
