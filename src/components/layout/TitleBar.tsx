@@ -262,7 +262,7 @@ export default function TitleBar() {
 
         {/* 设置 */}
         <button
-          onClick={openSettings}
+          onClick={() => openSettings()}
           title={t('dialog.settings')}
           className="icon-btn"
           style={{ width: 24, height: 22 }}
