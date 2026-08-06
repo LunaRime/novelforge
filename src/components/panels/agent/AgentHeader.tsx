@@ -5,7 +5,7 @@ import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
 import { useRef, useState, useMemo } from 'react'
 import { confirm } from '../../ui/Confirm'
-import { IconBtn } from '../../ui/IconBtn'
+import { Button } from '../../ui/Button'
 import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -65,21 +65,23 @@ export default function AgentHeader() {
       <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0">
 
         {/* 新建对话按钮 */}
-        <IconBtn
+        <Button
+          variant="ghost"
           title={isCurrentEmpty ? t('tip.emptyAgent') : t('tip.newConversation')}
           disabled={isCurrentEmpty}
           onClick={handleNew}
-          size={18}
+          style={{ width: 18, height: 18, padding: 0 }}
         >
           <Plus size={13} strokeWidth={1.5} />
-        </IconBtn>
+        </Button>
 
         {/* 历史记录按钮 */}
-        <IconBtn
+        <Button
+          variant="ghost"
           title={t('tip.historyConversations')}
           onClick={toggleHistory}
           active={showHistory}
-          size={18}
+          style={{ width: 18, height: 18, padding: 0 }}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -96,18 +98,19 @@ export default function AgentHeader() {
             <path d="M3 3v5h5" />
             <path d="M12 7v5l4 2" />
           </svg>
-        </IconBtn>
+        </Button>
 
         {/* 更多菜单 */}
         <div className="relative" ref={moreRef}>
-          <IconBtn
+          <Button
+            variant="ghost"
             title={t('tip.moreOptions')}
             onClick={() => { setShowMore(v => !v); setSubView('main') }}
             active={showMore}
-            size={18}
+            style={{ width: 18, height: 18, padding: 0 }}
           >
             <MoreHorizontal size={15} strokeWidth={1.5} />
-          </IconBtn>
+          </Button>
 
           {/* 更多菜单下拉 */}
           {showMore && (
@@ -174,9 +177,14 @@ export default function AgentHeader() {
         </div>
 
         {/* 关闭面板按钮 */}
-        <IconBtn title={t('agent.closeAgent')} onClick={handleClose} size={18}>
+        <Button
+          variant="ghost"
+          title={t('agent.closeAgent')}
+          onClick={handleClose}
+          style={{ width: 18, height: 18, padding: 0 }}
+        >
           <X size={15} strokeWidth={1.5} />
-        </IconBtn>
+        </Button>
       </div>
     </div>
   )

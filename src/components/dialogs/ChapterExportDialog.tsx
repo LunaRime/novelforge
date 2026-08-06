@@ -10,7 +10,7 @@ import { Download, FolderArchive, FolderOpen, FileText, Check, Loader2 } from 'l
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { useProjectStore } from '../../stores/project-store'
-import { actionToast } from '../ui/ActionToast'
+import { toast } from '../ui/Toast'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -57,19 +57,19 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
       })
 
       if (result.success) {
-        actionToast.show({
+        toast.show({
           type: 'success',
           message: t('export.chapterSuccess').replace('{count}', String(result.chapterCount || 0)),
         })
         onClose()
       } else {
-        actionToast.show({
+        toast.show({
           type: 'warning',
           message: result.error || t('status.unknown'),
         })
       }
     } catch (e) {
-      actionToast.show({
+      toast.show({
         type: 'warning',
         message: String(e),
       })

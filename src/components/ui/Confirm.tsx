@@ -13,6 +13,7 @@
 
 import { createRoot } from 'react-dom/client'
 import { useState, useEffect, useRef, useCallback } from 'react'
+import { AlertCircle } from 'lucide-react'
 import { t } from '../../shared/locale'
 import { Button } from './Button'
 
@@ -24,6 +25,8 @@ interface ConfirmOptions {
   confirmText?: string
   cancelText?: string
   danger?: boolean
+  /** 单按钮错误提示模式（无取消按钮，遮罩/ESC 等同确认）— alertError 使用 */
+  alert?: boolean
 }
 
 interface ConfirmDialogProps extends ConfirmOptions {
@@ -36,15 +39,16 @@ function ConfirmDialog({
   confirmText = t('dialog.confirm'),
   cancelText = t('action.cancel'),
   danger = false,
+  alert = false,
   onResolve,
 }: ConfirmDialogProps) {
   const [isExiting, setIsExiting] = useState(false)
   const confirmBtnRef = useRef<HTMLButtonElement>(null)
 
-  const handleConfirm = () => {
+  const handleConfirm = useCallback(() => {
     setIsExiting(true)
     setTimeout(() => onResolve(true), 200)
-  }
+  }, [onResolve])
 
   const handleCancel = useCallback(() => {
     setIsExiting(true)
@@ -56,14 +60,17 @@ function ConfirmDialog({
     confirmBtnRef.current?.focus()
   }, [])
 
-  // ESC 关闭（等同取消）
+  // ESC 关闭（alert 模式等同确认，否则等同取消）
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') handleCancel()
+      if (e.key === 'Escape') {
+        if (alert) handleConfirm()
+        else handleCancel()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [handleCancel])
+  }, [alert, handleCancel, handleConfirm])
 
   return (
     /* 遮罩层 — 统一 CSS 变量和动画 */
@@ -71,7 +78,7 @@ function ConfirmDialog({
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 'var(--z-toast)',
+        zIndex: 'var(--z-modal)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -83,11 +90,11 @@ function ConfirmDialog({
           ? 'backdrop-exit 0.15s ease-out both'
           : 'backdrop-enter 0.25s ease-out both',
       }}
-      onClick={handleCancel}
+      onClick={alert ? handleConfirm : handleCancel}
     >
       {/* 弹窗主体 */}
       <div
-        role="dialog"
+        role={alert ? 'alertdialog' : 'dialog'}
         aria-modal="true"
         style={{
           backgroundColor: 'var(--color-sidebar)',
@@ -104,9 +111,14 @@ function ConfirmDialog({
         }}
         onClick={e => e.stopPropagation()}
       >
-        {/* 标题 */}
-        <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
-          {title}
+        {/* 标题（alert 模式带错误图标） */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+          {alert && (
+            <AlertCircle size={15} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+          )}
+          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
+            {title}
+          </div>
         </div>
 
         {/* 消息体 */}
@@ -124,9 +136,11 @@ function ConfirmDialog({
 
         {/* 按钮区 */}
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
-          <Button variant="ghost" size="sm" onClick={handleCancel}>
-            {cancelText}
-          </Button>
+          {!alert && (
+            <Button variant="ghost" size="sm" onClick={handleCancel}>
+              {cancelText}
+            </Button>
+          )}
           <Button
             ref={confirmBtnRef}
             variant={danger ? 'destructive' : 'default'}
@@ -171,10 +185,29 @@ export function confirm(
         confirmText={options?.confirmText}
         cancelText={options?.cancelText}
         danger={options?.danger}
+        alert={options?.alert}
         onResolve={cleanup}
       />
     )
   })
+}
+
+/**
+ * 显示单按钮错误弹窗（原 AlertDialog.alertError），返回 Promise（确认后 resolve）。
+ * 也可以不 await，fire-and-forget。
+ *
+ * @example
+ * await alertError('不是有效的 NovelForge 项目目录', { title: '打开项目失败' })
+ */
+export function alertError(
+  message: string,
+  options?: { title?: string; confirmText?: string },
+): Promise<void> {
+  return confirm(message, {
+    title: options?.title,
+    confirmText: options?.confirmText,
+    alert: true,
+  }).then(() => undefined)
 }
 
 // ===== 删除项目确认对话框 =====
@@ -213,7 +246,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        zIndex: 'var(--z-toast)',
+        zIndex: 'var(--z-modal)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
