@@ -106,13 +106,7 @@ describe('appendOutputLanguage（Issue #18/#19 输出语言约束）', () => {
     expect(mod.appendOutputLanguage('内容', 'ru-RU')).toContain('Русский')
   })
 
-  it('renderPrompt 末尾带输出语言约束（zh 默认），占位符已替换', async () => {
-    const mod = await loadModule()
-    const builtin = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
-    const out = mod.renderPrompt(builtin, { genre: '玄幻' })
-    expect(out.endsWith('[System] 请始终使用 中文 输出所有内容。Do not respond in any other language.')).toBe(true)
-    expect(out).not.toContain('{{genre}}')
-  })
+  // 渲染统一走 prompt-builder 的 BasePromptBuilder（renderPrompt 已删除，见 prompt-templates.ts 注释）
 })
 
 describe('localizeTemplate（Issue #18 多语言模板）', () => {

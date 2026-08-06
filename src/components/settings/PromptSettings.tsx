@@ -136,6 +136,11 @@ function TemplateItem({
     (v) => builtinTemplate.content.includes(`{{${v}}}`) && !editContent.includes(`{{${v}}}`)
   )
 
+  // 检查是否新增了模板未定义的变量（拼写错误/臆造变量渲染时不会被替换，会原样发给 LLM）
+  const unknownVars = [...editContent.matchAll(/\{\{([^{}]+)\}\}/g)]
+    .map(m => m[1])
+    .filter(v => !builtinTemplate.variables[v])
+
   const sourceConf = getSourceConfig(t)[source]
 
   // 插入变量到光标位置
@@ -323,6 +328,27 @@ function TemplateItem({
               <span>
                 {before}
                 {missingVars.map((v) => (
+                  <code key={v} className="mx-1 font-mono">{`{{${v}}}`}</code>
+                ))}
+                {after}
+              </span>
+            </div>
+            )
+          })()}
+
+          {/* 未知变量警告（新增的 {{变量}} 不在模板变量列表中，渲染时不会被替换） */}
+          {unknownVars.length > 0 && (() => {
+            const unknownText = t('prompt.unknownVars')
+            const [before, after] = unknownText.split('{vars}')
+            return (
+            <div
+              className="flex items-start gap-2 px-3 py-2 rounded-lg text-xs"
+              style={{ backgroundColor: 'rgba(59, 130, 246, 0.08)', color: 'var(--color-info)' }}
+            >
+              <AlertTriangle size={13} className="flex-shrink-0 mt-0.5" />
+              <span>
+                {before}
+                {unknownVars.map((v) => (
                   <code key={v} className="mx-1 font-mono">{`{{${v}}}`}</code>
                 ))}
                 {after}

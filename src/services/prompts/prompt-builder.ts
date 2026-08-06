@@ -30,7 +30,11 @@ export class BasePromptBuilder {
       result = result.replaceAll(`{{${key}}}`, safeValue)
     }
 
-    // 自动追加 systemSuffix（始终从内置模板获取，与 renderPrompt 行为对齐；按当前语言解析变体）
+    // 自动追加 systemSuffix（始终从内置模板获取；按当前语言解析变体）
+    // ⚠️ 防御约束：suffix 是受控结构（JSON schema / ★标签行），变量替换刻意**不加**
+    // USER_INPUT_START/END 边界——包边界会污染 JSON 结构。suffix 中的变量因此必须是
+    // 受限值（数字 / 下拉选项文本，当前仅 number_of_chapters / review_focus 等）；
+    // 严禁在 suffix 中加入自由文本变量（含引号/换行的值会破坏 JSON 或表格结构）。
     const builtin = BUILTIN_PROMPTS.find(p => p.key === this.template.key)
     const suffix = builtin ? localizeTemplate(builtin).systemSuffix : undefined
     if (suffix) {
