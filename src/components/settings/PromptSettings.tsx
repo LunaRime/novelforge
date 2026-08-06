@@ -19,6 +19,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 
 // ==================== 来源标签配置 ====================
@@ -206,8 +207,15 @@ function TemplateItem({
     setTimeout(() => setSaveResult(null), 3000)
   }
 
-  // 恢复默认
+  // 恢复默认 — 破坏性操作（删除全局+项目级自定义内容），先确认（用户困惑点：曾不知
+  // 「恢复默认」会删除自定义、以及自定义模板为何不随语言切换——确认文案明确行为）
   const handleReset = async () => {
+    const ok = await confirm(t('prompt.restoreDefaultConfirm'), {
+      title: t('prompt.restoreDefaultTitle'),
+      confirmText: t('prompt.restoreDefaultBtn'),
+      danger: true,
+    })
+    if (!ok) return
     setSaving(true)
     setSaveResult(null)
     // 依次删除项目级和全局级覆盖
@@ -251,6 +259,7 @@ function TemplateItem({
             <span
               className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
               style={{ color: sourceConf.color, backgroundColor: sourceConf.bg }}
+              title={source !== 'builtin' ? t('prompt.customLangTip') : undefined}
             >
               {sourceConf.label}
             </span>
