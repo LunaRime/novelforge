@@ -52,7 +52,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     const prompt = this.buildPrompt(config, context)
     const systemPrompt = t('role.configDesigner')
 
-    const result = await this.callLLM(prompt, systemPrompt, callbacks)
+    const result = await this.callLLM(prompt, systemPrompt, callbacks, { purpose: 'architecture_gen' })
     const cleanResult = this.stripThinkingTags(result).trim()
 
     if (!cleanResult) {

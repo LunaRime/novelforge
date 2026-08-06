@@ -208,7 +208,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       prompt,
       template.systemRole || t('role.editorAnalyst'),
       callbacks,
-      { responseFormat: { type: 'json_object' } }
+      { responseFormat: { type: 'json_object' }, purpose: 'extract_json' }
     )
 
     callbacks.setProgress(70)

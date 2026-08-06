@@ -1,6 +1,7 @@
 import type { WorkflowContext, StepCallbacks, WorkflowStep } from '../../../stores/workflow-store'
 import { t } from '../../../shared/locale'
 import { useLLMStore } from '../../../stores/llm-store'
+import type { CallPurpose } from '../../llm/model-router'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
@@ -24,18 +25,25 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   /** 抽象执行入口 */
   abstract execute(params: CommandExecuteParams): Promise<TResult>
 
-  /** 获取 LLM 大模型连接代理（支持取消 + Prompt 缓存） */
+  /** 获取 LLM 大模型连接代理（支持取消 + Prompt 缓存）
+   *
+   * 选模（产品决策「路由优先，默认模型兜底」）：
+   * - 传 purpose → getModelForPurpose(purpose)：用户配置了对应层路由则用路由模型
+   * - 不传 purpose → 走 standard 层（default 用途）；路由未配置 → 用户默认模型
+   */
   protected async callLLM(
     prompt: string,
     systemPrompt: string,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; cacheScope?: CacheScope; staticContext?: string },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; cacheScope?: CacheScope; staticContext?: string; purpose?: CallPurpose },
     context?: WorkflowContext
   ): Promise<string> {
     const llmStore = useLLMStore.getState()
     if (!llmStore.defaultModelId) throw new Error(t('error.noDefaultModel'))
 
-    const modelId = llmStore.defaultModelId
+    // 路由优先，默认模型兜底（三层路由此前只对 generate-multi-drafts 生效）
+    const modelId = llmStore.getModelForPurpose(options?.purpose ?? 'default')
+    if (!modelId) throw new Error(t('error.noDefaultModel'))
     const model = llmStore.models.find(m => m.id === modelId)
     const startTime = Date.now()
 
@@ -190,7 +198,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   protected async callLLMWithBuilder(
     builder: BasePromptBuilder,
     callbacks: StepCallbacks,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; staticContext?: string },
+    options?: { responseFormat?: { type: string }; thinking?: boolean; staticContext?: string; purpose?: CallPurpose },
     context?: WorkflowContext
   ): Promise<string> {
     return this.callLLM(builder.build(), builder.getSystemRole(), callbacks, options, context)
