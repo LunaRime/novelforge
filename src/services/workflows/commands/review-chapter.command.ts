@@ -30,20 +30,21 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     callbacks.log(t('log.review.loadingSettings'))
 
     // 使用向量检索获取与待审章节相关的历史上下文（替代全局摘要）
+    // ⚠️ M 级修复：统一走 retrieveContextForQuery——此前用草稿前 200 字做裸 kb:search
+    //   （无范围/阈值）：对话/场景铺垫常命中无关片段 → 审稿者把无关内容当「前文」误报矛盾；
+    //   检索 query 改用标题+关键事件+角色组合（buildChapterRAGQuery）
     let contextSummary = t('inject.review.noContextReference')
     try {
-      // 从待审内容中提取前 200 字作为检索 query
-      const queryText = draft.slice(0, 200)
-      const results = await ipc.invoke('kb:search', queryText, 5)
-      if (results.length > 0) {
-        contextSummary = results
-          .map((r: { fileName: string; score: number; text: string }, i: number) =>
-            t('inject.kbSnippetLine')
-              .replace('{index}', String(i + 1))
-              .replace('{file}', () => r.fileName)
-              .replace('{score}', String((r.score * 100).toFixed(0)))
-              .replace('{text}', () => r.text))
-          .join('\n\n')
+      const { retrieveContextForQuery, buildChapterRAGQuery } = await import('../../agent/rag-context-provider')
+      const queryText = buildChapterRAGQuery({
+        chapterNumber: this.params.chapterNumber,
+        title: '',
+        keyEvents: draft.slice(0, 300),
+        characters: [],
+      })
+      const rag = await retrieveContextForQuery(queryText, undefined, this.params.chapterNumber)
+      if (rag && rag.formattedContext) {
+        contextSummary = rag.formattedContext
       }
     } catch {
       contextSummary = t('inject.kbSearchUnavailable')

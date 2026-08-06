@@ -102,9 +102,13 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
           searchQuery += ` ${this.chapterInfo.knowledgeQueryHint.trim()}`
           callbacks.log(t('log.generateDraft.kbHint').replace('{keyword}', this.chapterInfo.knowledgeQueryHint.trim()))
         }
-        const results = await ipc.invoke('kb:search', searchQuery, 5)
-        filteredContext = results.length > 0
-          ? results.map((r: { fileName: string; score: number; text: string }, i: number) => `[${i + 1}] (${r.fileName}, ${t('engine.ragRelevance')} ${(r.score * 100).toFixed(0)}%)\n${r.text}`).join('\n\n')
+        // ⚠️ M 级修复：统一走 retrieveContextForQuery——章节范围过滤（±10 章防未来剧情泄露
+        //    ——此前裸 kb:search 会命中已定稿的未来章节，与 future_blueprints 指令直接冲突）、
+        //    0.6 相似度阈值（低相关片段不再诱导硬关联）、800 token 预算
+        const { retrieveContextForQuery } = await import('../../agent/rag-context-provider')
+        const rag = await retrieveContextForQuery(searchQuery, undefined, this.chapterInfo.chapterNumber)
+        filteredContext = rag && rag.formattedContext
+          ? rag.formattedContext
           : t('inject.kbNoContent')
       } catch {
         filteredContext = t('inject.kbUnavailable')
@@ -197,17 +201,27 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       }
     } catch { /* 偏好注入失败不阻断 */ }
 
-    if (antiDefectSections.length > 0) {
-      prompt += '\n\n---\n\n' + antiDefectSections.join('\n\n---\n\n')
-    }
+    // ⚠️ M 级修复：超限降级——provider 静默截断会恰好截掉 prompt 尾部的角色状态/伏笔清单
+    //    （幻觉高发段）。按优先级从尾部裁剪低关键段（设定采样/偏好在后，伏笔/声音档案在前），
+    //    始终保留至少一段防缺陷注入
+    const assemblePrompt = () => promptBuilder.build()
+      + (antiDefectSections.length > 0 ? '\n\n---\n\n' + antiDefectSections.join('\n\n---\n\n') : '')
+    prompt = assemblePrompt()
 
     // Token 预算管控：中文约 1.5 字符/token，预留 4K 给输出
-    const estimatedTokens = Math.ceil(prompt.length / 1.5)
     const TOKEN_BUDGET = 28000
-    if (estimatedTokens > TOKEN_BUDGET) {
+    const estimate = (p: string) => Math.ceil(p.length / 1.5)
+    let removedSections = 0
+    while (estimate(prompt) > TOKEN_BUDGET && antiDefectSections.length > 1) {
+      antiDefectSections.pop()
+      removedSections++
+      prompt = assemblePrompt()
+    }
+    if (removedSections > 0 || estimate(prompt) > TOKEN_BUDGET) {
       callbacks.log(t('log.generateDraft.tokenOverBudget')
-        .replace('{estimated}', String(estimatedTokens))
-        .replace('{budget}', String(TOKEN_BUDGET)))
+        .replace('{estimated}', String(estimate(prompt)))
+        .replace('{budget}', String(TOKEN_BUDGET))
+        .replace('{removed}', String(removedSections)))
     }
 
     callbacks.log(t('log.generateDraft.calling'))

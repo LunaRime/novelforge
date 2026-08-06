@@ -7,6 +7,7 @@ import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
 
 import type { ChapterInfo } from '../chapter-workflow'
+import type { TextKey } from '../../../shared/locale'
 
 export interface RefineDraftParams {
   draftPath: string
@@ -40,16 +41,31 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       ? `★【用户额外修稿指导（绝对优先级）】★：\n${this.params.userRefinePrompt}`
       : ''
 
+    // ⚠️ M 级修复：注入角色声音档案 + 角色状态——修稿模板引用「上方注入的角色声音档案」
+    //    但此前从未注入（OOC 校验无基准，修稿者可能把符合人设的台词改歪）；
+    //    withGlobalSummary/withShortSummary 此前恒空（无前文基准，修稿可能改写掉与前文咬合的细节）
+    let voiceProfileText = ''
+    try {
+      const { loadCharacterVoiceProfiles, formatVoiceForPrompt } = await import('../../character-voice-analyzer')
+      const profiles = await loadCharacterVoiceProfiles()
+      voiceProfileText = formatVoiceForPrompt(profiles)
+    } catch { /* 声音档案加载失败不阻断 */ }
+    const characterStates = await this.readCharacterStates()
+    const shortSummary = this.params.shortSummary?.trim() || t('inject.review.noContextReference')
+
     const promptBuilder = new ChapterPromptBuilder(template)
       .withDraftContent(draft)
       .withChapterInfo(this.params.chapterInfo)
       .withGlobalGuidance(mergedGuidance)
-      .withGlobalSummary(this.params.shortSummary || '')
-      .withShortSummary(this.params.shortSummary || '')
+      .withGlobalSummary(shortSummary)
+      .withShortSummary(shortSummary)
+      .withCharacterStates(characterStates)
+      .withVoiceProfile(voiceProfileText)
       .withWordNumber(project.novelConfig.wordsPerChapter)
       .withUserRefinePrompt(userPromptBlock)
 
     const refined = await this.callLLMWithBuilder(promptBuilder, callbacks, { purpose: 'refine_chapter' })
+
     const cleanRefined = this.stripThinkingTags(refined)
 
     const { parseDraftMeta } = await import('../chapter-workflow')
@@ -91,5 +107,61 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       .replace('{chars}', String(cleanRefined.length))
       .replace('{revision}', String(revIndex)))
     return refined
+  }
+
+  /** 角色状态（修稿设定咬合基准）— 与 review-chapter 同实现 */
+  private async readCharacterStates(): Promise<string> {
+    try {
+      const allChars = await ipc.invoke('db:character-get-all') as Array<{
+        name: string; role: string; tier?: number; currentState?: Record<string, unknown>
+      }>
+      const tier1: string[] = []
+      const tier2: string[] = []
+
+      for (const card of allChars) {
+        if (!card.name) continue
+        const tier = card.tier ?? (card.role === 'protagonist' || card.role === 'antagonist' ? 1 : 2)
+        const cs = card.currentState
+
+        if (!cs) continue
+
+        if (tier === 1) {
+          tier1.push(
+            t('inject.review.charStateTier1')
+              .replace('{name}', () => card.name)
+              .replace('{role}', () => this.roleLabel(card.role))
+              .replace('{power}', () => String(cs.powerLevel || ''))
+              .replace('{location}', () => String(cs.location || ''))
+              .replace('{physical}', () => String(cs.physicalState || ''))
+              .replace('{mental}', () => String(cs.mentalState || ''))
+              .replace('{recent}', () => String(cs.recentEvents || ''))
+          )
+        } else if (tier === 2) {
+          tier2.push(
+            t('inject.review.charStateTier2')
+              .replace('{name}', () => card.name)
+              .replace('{role}', () => t('characterRole.supporting'))
+              .replace('{location}', () => String(cs.location || ''))
+              .replace('{recent}', () => String(cs.recentEvents || ''))
+          )
+        }
+      }
+
+      const parts: string[] = []
+      if (tier1.length > 0) parts.push(tier1.join('\n'))
+      if (tier2.length > 0) parts.push(tier2.join('\n'))
+      return parts.length > 0 ? parts.join('\n') : t('common.noneYetPlaceholder')
+    } catch { return t('common.readFailedPlaceholder') }
+  }
+
+  private roleLabel(role?: string): string {
+    if (!role) return t('common.unknownWord')
+    const known: Record<string, TextKey> = {
+      protagonist: 'characterRole.protagonist',
+      antagonist: 'characterRole.antagonist',
+      supporting: 'characterRole.supporting',
+      extra: 'characterRole.extra',
+    }
+    return known[role] ? t(known[role]) : role
   }
 }

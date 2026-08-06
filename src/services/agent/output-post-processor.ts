@@ -85,9 +85,11 @@ const ArtifactExtractionStep: PostProcessStep = {
     // 检测可能含有的蓝图/章节标记
     // 收紧规则：必须位于行首，且为"第N章 + 冒号/空格 + 短标题"格式，
     // 避免把对话中的"第 2 章的开头节奏较慢"误判为产物（此前无行首锚定 + 无长度限制，高频误报）
+    // ⚠️ M 级修复：第二模式排除「的/了/是/在」等语气词开头——"第2章 的开头节奏较慢"
+    //    曾被误判为章节产物（元数据幻觉）
     const chapterMatch: string[] = [
       ...(input.match(/^第(\d+)章\s*[:：]\s*(.+)$/gm) ?? []),
-      ...(input.match(/^第(\d+)章\s+[^\n。，！？]{2,40}$/gm) ?? []),
+      ...(input.match(/^第(\d+)章\s+[^\n。，！？的的了是在]{2,40}$/gm) ?? []),
     ]
     if (chapterMatch.length > 0) {
       const seen = new Set<number>()
@@ -162,17 +164,25 @@ const SummaryGenerationStep: PostProcessStep = {
 const CodeBlockCleanupStep: PostProcessStep = {
   name: 'code-block-cleanup',
   process: async (input, _) => {
-    // 修复不完整的代码块标记
+    // ⚠️ M 级修复：此前奇数个 ``` 时在文末追加一个——小说对白含字面 ```（如
+    //   "他说：```是结束标记吗？"）会给可见正文注入一行不属于内容的字符（内容污染）。
+    //   改为只删除「孤立不成对」的整行 ```（行首/行尾独立成行的），绝不追加
     let cleaned = input
-    // 统计 ``` 数量，如果奇数则补一个
-    const backtickCount = (cleaned.match(/```/g) || []).length
-    if (backtickCount % 2 !== 0) {
-      cleaned += '\n```'
+    const lines = cleaned.split('\n')
+    const backtickLines = lines
+      .map((l, i) => ({ l, i }))
+      .filter(({ l }) => /^\s*```\s*$/.test(l))
+    const isOdd = backtickLines.length % 2 !== 0
+    if (isOdd && backtickLines.length > 0) {
+      // 奇数个整行 ```：删除最后一个孤立行
+      const last = backtickLines[backtickLines.length - 1]
+      lines.splice(last.i, 1)
+      cleaned = lines.join('\n')
     }
 
     return {
       output: cleaned,
-      metadata: { fixedIncompleteBlocks: backtickCount % 2 !== 0 },
+      metadata: { fixedIncompleteBlocks: isOdd },
     }
   },
 }

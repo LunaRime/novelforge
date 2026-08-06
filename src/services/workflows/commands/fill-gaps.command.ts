@@ -80,6 +80,18 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
         const parsed = parseTextBlueprints(resultText, chapters[0], chapters[chapters.length - 1])
 
         if (parsed.length > 0) {
+          // ⚠️ M 级修复（轻量确定性闸门）：确认覆盖请求区间——LLM 补写可能漏章，
+          //   缺口残留会让后续写作在该章仍无蓝图锚点（写稿/自审都读蓝图，错误逐级放大）
+          const requested = new Set<number>()
+          for (let n = chapters[0]; n <= chapters[chapters.length - 1]; n++) requested.add(n)
+          const covered = new Set(parsed.map(p => p.chapterNumber))
+          const missingNums = [...requested].filter(n => !covered.has(n))
+          if (missingNums.length > 0) {
+            callbacks.log(t('log.fillGaps.partialCoverage')
+              .replace('{start}', String(chapters[0]))
+              .replace('{end}', String(chapters[chapters.length - 1]))
+              .replace('{missing}', missingNums.join(',')))
+          }
           await saveAllBlueprints(parsed)
           allFilled.push(...parsed)
           callbacks.log(

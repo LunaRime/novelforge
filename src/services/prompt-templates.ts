@@ -202,6 +202,7 @@ export const PROMPT_VAR_KEYS: Record<string, TextKey> = {
   '上下文检索结果': 'prompt.var.rag_context',
   '全局配置（类型/受众/叙事视角/总章数）': 'prompt.var.novel_config',
   '待回收伏笔清单': 'prompt.var.foreshadowing',
+  '角色声音档案（语气/常用词/句长/语体）': 'prompt.var.voice_profile',
   '审稿维度侧重点（可选）': 'prompt.var.review_focus',
   '正文采样文本（3-5章拼接）': 'prompt.var.sample_text',
   '章节标题': 'prompt.var.chapter_name',

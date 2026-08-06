@@ -129,7 +129,14 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
         if (response.success) {
           try {
             const parsed = JSON.parse(response.content)
-            c.score = parsed.overallScore || 0
+            const score = Number(parsed.overallScore)
+            if (!Number.isFinite(score) || score <= 0) {
+              // ⚠️ M 级修复：解析失败/无效分剔除该候选（此前固定给 5 分参与排序——以随机值做决定）
+              c.score = -1
+              callbacks.log(`  ${c.style}: 评分无效，已剔除`)
+              continue
+            }
+            c.score = score
             c.strengths = parsed.strengths || []
             c.weaknesses = parsed.weaknesses || []
             useUsageStore.getState().recordCall({
@@ -138,10 +145,21 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
               completionTokens: response.usage?.completionTokens || 0,
               tier: 'standard',
             })
-          } catch { c.score = 5 }
+          } catch {
+            c.score = -1
+            callbacks.log(`  ${c.style}: 评分解析失败，已剔除`)
+            continue
+          }
+        } else {
+          c.score = -1
+          callbacks.log(`  ${c.style}: 评分请求失败，已剔除`)
+          continue
         }
         callbacks.log(`  ${c.style}: ${c.score}/10`)
-      } catch { c.score = 5 }
+      } catch {
+        c.score = -1
+        callbacks.log(`  ${c.style}: 评分异常，已剔除`)
+      }
     }
   }
 }
