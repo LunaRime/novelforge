@@ -45,14 +45,14 @@ interface LLMState {
   generate: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number; temperature?: number }
   ) => Promise<LLMResponse>
   /** 流式生成 */
   generateStream: (
     messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>,
     callbacks: StreamCallbacks,
     modelId?: string,
-    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number }
+    options?: { responseFormat?: { type: string }; thinking?: boolean; priority?: number; temperature?: number }
   ) => Promise<string>
   /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
@@ -188,6 +188,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return ipc.invoke('llm:generate', {
       modelId: mid,
       messages,
+      temperature: options?.temperature,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,
@@ -243,6 +244,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       modelId: mid,
       messages,
       stream: true,
+      temperature: options?.temperature,
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,

@@ -52,6 +52,25 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     const characterState = await this.readCharacterStates()
     const worldBuilding = await this.readWorldBuilding()
 
+    // ⚠️ H 级修复：注入待回收伏笔清单——模板要求检查「伏笔完整性」但此前无基准数据，
+    //    LLM 只能编造「前文埋了 XX 伏笔未回收」制造伪问题，或漏报真实断裂
+    let foreshadowingList = ''
+    try {
+      const { loadAllForeshadowing } = await import('../../foreshadowing-manager')
+      const pending = (await loadAllForeshadowing())
+        .filter(f => !f.resolved && (f.setChapter ?? 0) <= this.params.chapterNumber)
+        .sort((a, b) => (b.setChapter ?? 0) - (a.setChapter ?? 0))
+        .slice(0, 8)
+      if (pending.length > 0) {
+        foreshadowingList = pending.map((f, i) =>
+          t('inject.foreshadowItem')
+            .replace(/\{index\}/g, () => String(i + 1))
+            .replace(/\{chapter\}/g, () => String(f.setChapter))
+            .replace(/\{content\}/g, () => String(f.content))
+            .replace(/\{type\}/g, () => String(f.type))).join('\n')
+      }
+    } catch { /* 伏笔清单加载失败不阻断 */ }
+
     const template = getPromptTemplate('consistency_check')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.review.templateName')))
 
@@ -60,6 +79,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       .withCharacterStates(characterState)
       .withGlobalSummary(contextSummary)
       .withWorldBuilding(worldBuilding)
+      .withForeshadowing(foreshadowingList)
       .withReviewFocus(this.params.reviewFocus || '')
 
     callbacks.log(t('log.review.calling'))

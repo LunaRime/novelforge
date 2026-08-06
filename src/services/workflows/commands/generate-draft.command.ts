@@ -129,10 +129,16 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
       promptBuilder
         .withFutureBlueprints(futureBlueprintsStr)
-        .withUserGuidance((this.chapterInfo.userGuidance || '') + '\n\n' + transitionContext)
+        // ⚠️ H 级修复：此前 withUserGuidance 连续调用两次，后者覆盖前者——transitionContext
+        //（前章场景卡：地点/时间/情绪/在场角色/未解决冲突/关键物品）被静默丢弃，
+        // 衔接型幻觉（角色瞬移/冲突蒸发）的源头。合并为一次调用
+        .withUserGuidance(
+          [this.chapterInfo.userGuidance?.trim(), transitionContext.trim()]
+            .filter(Boolean)
+            .join('\n\n') || t('inject.noUserGuidance'),
+        )
         .withFilteredContext(filteredContext)
         .withShortSummary('')
-        .withUserGuidance(this.chapterInfo.userGuidance?.trim() || t('inject.noUserGuidance'))
     }
 
     // ===== 防缺陷注入（伏笔 / 角色声音 / 设定多样性）=====

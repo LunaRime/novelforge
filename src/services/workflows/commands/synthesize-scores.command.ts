@@ -61,6 +61,24 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
       return null
     }
 
+    // ⚠️ H 级修复：评分键别名兜底——评审 prompt 曾用短键（"因果链"/"时间线"）而聚合用
+    //    evaluationCriteria 全名（"因果链完整"…），维度聚合与分歧检测静默空转
+    //    （prompt 示例键已改全名；此映射兼容旧 prompt 输出的短键）
+    const SCORE_ALIAS_TO_CRITERION: Record<string, string> = {
+      '因果链': '因果链完整',
+      '时间线': '时间线无矛盾',
+      '伏笔': '伏笔设置合理',
+      '冲突升级': '冲突升级自然',
+      '行为符合人设': '角色行为符合人设',
+    }
+    const resolveScore = (scores: Record<string, unknown>, criterion: string): unknown => {
+      if (criterion in scores) return scores[criterion]
+      for (const [alias, full] of Object.entries(SCORE_ALIAS_TO_CRITERION)) {
+        if (full === criterion && alias in scores) return scores[alias]
+      }
+      return undefined
+    }
+
     // 1. 加权平均各维度评分
     const allCriteria = perspectives.flatMap((p) => p.evaluationCriteria)
     const uniqueCriteria = [...new Set(allCriteria)]
@@ -72,7 +90,7 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
       for (const output of reviewerOutputs) {
         // 字符串分数（"8分"/"8"）归一化为数字——此前 typeof === 'number' 过滤会把
         // 该评审者的此维度静默丢弃
-        const score = toScore(output.scores[criterion])
+        const score = toScore(resolveScore(output.scores as Record<string, unknown>, criterion))
         if (score !== null) scores.push(score)
       }
 

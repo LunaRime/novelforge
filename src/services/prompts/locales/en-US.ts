@@ -281,6 +281,9 @@ Rigorously extrapolate the book-wide plot outline. Write "structural turning poi
 【Chapter Information】
 {{chapter_info}}
 
+【Global Config】(genre, target audience, narrative POV, chapter plan — must be strictly followed; do NOT change POV or genre on your own)
+{{novel_config}}
+
 【Future Chapter Outlines Preview】(for understanding where the plot is heading — absolutely DO NOT write future content in this chapter!)
 {{future_blueprints}}
 

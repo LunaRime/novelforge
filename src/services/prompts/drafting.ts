@@ -8,6 +8,7 @@ export const draftingPrompts: PromptTemplate[] = [
     systemRole: '你是一位笔力精湛的顶尖网文小说家，擅长撰写引人入胜、让读者欲罢不能的商业网文正文。',
     variables: {
       architecture: '故事架构（故事前提+角色图谱+世界观+情节大纲）',
+      novel_config: '全局配置（类型/受众/叙事视角/总章数）',
       chapter_info: '本章信息（JSON）',
       future_blueprints: '后续章节蓝图（防止剧情提前）',
       global_guidance: '全局写作要求',
@@ -16,6 +17,9 @@ export const draftingPrompts: PromptTemplate[] = [
       user_guidance: '作者本章微操指导（可选）',
     },
     content: `请开始创作这本小说的第一章（破冰章）。
+
+【全局配置】（类型、目标受众、叙事视角与篇幅规划——必须严格遵循，禁止自行改变视角/题材）
+{{novel_config}}
 
 【全书设定池】
 {{architecture}}
@@ -59,6 +63,7 @@ export const draftingPrompts: PromptTemplate[] = [
     systemRole: '你是一位笔力精湛的顶尖网文小说家，擅长撰写引人入胜、让读者欲罢不能的商业网文正文。',
     variables: {
       global_summary: '章节要点时间线（从蓝图按序拼装）',
+      novel_config: '全局配置（类型/受众/叙事视角/总章数）',
       character_states: '角色状态',
       short_summary: '近期三章简要',
       previous_ending: '上章结尾800字',
@@ -71,6 +76,9 @@ export const draftingPrompts: PromptTemplate[] = [
       writing_style: '文风描述（可选）',
     },
     content: `你正在连载写作最新章节。
+
+【全局配置】（类型、目标受众、叙事视角与篇幅规划——必须严格遵循，禁止自行改变视角/题材）
+{{novel_config}}
 
 【剧情记忆库与前置断点上下文】
 - [全局剧情进展]：{{global_summary}}

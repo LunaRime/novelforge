@@ -451,22 +451,25 @@ export function extractAndRepairJSON(
   }
 
   // ====== Layer 4: 兜底 — 逐对象提取 ======
-  // 当整个 JSON 结构损坏时，尝试提取每个独立的 { ... } 对象
-  // 只保留包含 chapterNumber 字段的对象（蓝图标配字段）
+  // 当整个 JSON 结构损坏时，尝试提取每个独立的 { ... } 对象。
+  // ⚠️ H 级修复：要求「章节号 + 核心字段（title 或 keyEvents 非空）」才接受——
+  // 此前只要含 chapterNumber 即通过，LLM 输出中的"示例/讲解性 JSON 对象"（如
+  // {"chapterNumber": 5, "title": "示例"...}）若落在章节范围内会被实体化为真实蓝图入库；
+  // 无蓝图特征时不再返回全部对象（示例对象同样可能被误用）
   const objects = extractIndividualObjects(content)
   if (objects.length > 0) {
-    // 检查是否有蓝图特征字段
-    const blueprintObjects = objects.filter(obj =>
-      obj && typeof obj === 'object' && (
-        'chapterNumber' in (obj as Record<string, unknown>) ||
-        'chapter_number' in (obj as Record<string, unknown>)
-      )
-    )
+    const blueprintObjects = objects.filter(obj => {
+      if (!obj || typeof obj !== 'object') return false
+      const o = obj as Record<string, unknown>
+      const hasNum = 'chapterNumber' in o || 'chapter_number' in o
+      if (!hasNum) return false
+      const title = String(o.title ?? o.chapterTitle ?? '').trim()
+      const keyEvents = String(o.keyEvents ?? '').trim()
+      return title.length > 0 || keyEvents.length > 0
+    })
     if (blueprintObjects.length > 0) {
       return { parsed: blueprintObjects, repaired: true }
     }
-    // 没有蓝图特征，但至少有对象，返回所有对象
-    return { parsed: objects, repaired: true }
   }
 
   return { parsed: null, repaired: false }
