@@ -376,7 +376,13 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           role: (blueprint.role as string) || '发展',
           purpose: (blueprint.purpose as string) || '',
           keyEvents: (blueprint.keyEvents as string) || '',
-          characters: Array.isArray(blueprint.characters) ? blueprint.characters as string[] : [],
+          // 角色列表：数组直用；字符串按分隔符拆（与 directory 路径消费一致——此前字符串
+          // 角色列表被静默置空丢失，同一 LLM 输出两种消费行为，P3 修复）
+          characters: Array.isArray(blueprint.characters)
+            ? blueprint.characters as string[]
+            : (typeof blueprint.characters === 'string' && blueprint.characters.trim()
+                ? blueprint.characters.split(/[,，、;；]+/).map(s => s.trim()).filter(Boolean)
+                : []),
           suspenseHook: (blueprint.suspenseHook as string) || '',
           userGuidance: '',
           notes: '',

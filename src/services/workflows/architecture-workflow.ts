@@ -7,7 +7,7 @@ import { ipc } from '../ipc-client'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import type { CharacterData } from '../../../electron/repositories/character-repository'
 
-import { runPostProcessPipeline, stripThinkingTags } from './workflow-utils'
+import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 
 // ==========================================
 // 1. 类型定义
@@ -191,15 +191,33 @@ export const ARCH_CHARACTER_SCOPE = 'arch_characters'
  * - 半结构化文本：每个角色从 "name" 字段开始
  */
 function extractCharactersFromText(text: string): Array<Record<string, unknown>> {
-  // 1. 找出所有 { ... } 对象块
+  // 1. 先走统一结构化出口（workflow-utils 的提取/修复引擎，与其余工作流一致）
+  const repaired = extractAndRepairJSON(text, false)
+  const raw = repaired.parsed ?? robustParseJSON(text, false)
+  if (raw) {
+    const arr = Array.isArray(raw)
+      ? raw
+      : (raw as Record<string, unknown>).characters
+    if (Array.isArray(arr) && arr.length > 0) {
+      const cards = arr.filter((c): c is Record<string, unknown> =>
+        !!c && typeof c === 'object' && !!(c as Record<string, unknown>).name)
+      if (cards.length > 0) return cards
+    }
+  }
+
+  // 2. 降级：字符串感知的括号扫描（角色描述含 } 不会提前闭合对象区间，历史事故）
   const objects: string[] = []
   let depth = 0
   let start = -1
+  let inStr = false
   for (let i = 0; i < text.length; i++) {
-    if (text[i] === '{') {
+    const ch = text[i]
+    if (ch === '"' && text[i - 1] !== '\\') inStr = !inStr
+    if (inStr) continue
+    if (ch === '{') {
       if (depth === 0) start = i
       depth++
-    } else if (text[i] === '}') {
+    } else if (ch === '}') {
       depth--
       if (depth === 0 && start !== -1) {
         objects.push(text.substring(start, i + 1))
@@ -240,6 +258,13 @@ function extractFieldsFromJsonLike(objStr: string): Record<string, unknown> | nu
   let match: RegExpExecArray | null
   while ((match = kvPattern.exec(objStr)) !== null) {
     card[match[1]] = match[2].replace(/\\"/g, '"').replace(/\\n/g, '\n')
+  }
+
+  // 非字符串字段（数字/布尔）——此前只匹配字符串值，age/tier/powerLevel 等数字字段全丢（P2 修复）
+  const nonStringPattern = /"(\w+)":\s*(\d+(?:\.\d+)?|true|false|null)/g
+  while ((match = nonStringPattern.exec(objStr)) !== null) {
+    const v = match[2]
+    card[match[1]] = v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : Number(v)
   }
 
   // 也匹配 "name" 后面缺冒号时用空格分隔的模式
@@ -320,14 +345,8 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
           throw new Error(t('error.roleDataInvalid').replace('{text}', rawText.slice(0, 200)))
         }
 
-        // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串
-        const stringifyField = (val: unknown): string => {
-          if (!val) return ''
-          if (typeof val === 'string') return val
-          if (Array.isArray(val)) return val.map(v => String(v)).join('、')
-          if (typeof val === 'object') return JSON.stringify(val, null, 2)
-          return String(val)
-        }
+        // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串（workflow-utils 单一出口）
+        const stringifyField = (val: unknown): string => stringifyFieldUtils(val)
 
         // 构建角色卡数据列表
         const validRoles = ['protagonist', 'antagonist', 'supporting', 'minor']
