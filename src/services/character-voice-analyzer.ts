@@ -105,7 +105,8 @@ export function mergeVoiceProfiles(
       ? newAnalysis.sampleLines
       : existing.sampleLines,
     formalityLevel: existing.formalityLevel * 0.6 + newAnalysis.formalityLevel * 0.4,
-    interjections: [...new Set([...existing.interjections, ...newAnalysis.interjections])],
+    // 感叹词有限集合，上限 10 防长期运行膨胀（P3 修复：tone/topWords 已有 slice 上限）
+    interjections: [...new Set([...existing.interjections, ...newAnalysis.interjections])].slice(0, 10),
     analyzedChapters: `${existing.analyzedChapters} + ${newAnalysis.analyzedChapters}`,
     updatedAt: new Date().toISOString(),
   }
