@@ -116,20 +116,46 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
   })
 
   // 5. 收集数据行（分隔行之后，以 | 开头的行）
-  //    非表格行优先合并到上一行最后一个单元格（LLM 在 description/keyEvents 单元格内换行是
-  //    高频行为——直接 break 会丢弃后续所有行且无告警，历史事故）；连续 2 行非表格行才终止
-  const dataRowRegex = /^\s*\|.+\|\s*$/
+  //    LLM 在单元格内换行是高频行为（description/keyEvents），直接 break 会丢弃后续所有行
+  //    且无告警（历史事故）。三种形态统一处理：
+  //    a) 完整数据行（以 | 开头和结尾）→ 直接收集
+  //    b) 不完整数据行（以 | 开头但结尾 | 在换行后的行上）→ 缓冲合并到补全为止
+  //    c) 完整数据行后的非表格行 → 并入上一行最后一个单元格（插入到行尾 | 之前）
+  //    连续 2 行非表格行才终止（后续是说明文字）
   const rawDataLines: string[] = []
+  let pendingLine = '' // 不完整数据行缓冲
   let skippedNonTable = 0
 
   for (let i = separatorIdx + 1; i < lines.length; i++) {
     const line = lines[i]
     if (!line.trim()) continue
-    if (dataRowRegex.test(line)) {
+    const startsPipe = /^\s*\|/.test(line)
+    const endsPipe = /\|\s*$/.test(line)
+
+    if (startsPipe && endsPipe) {
+      // a) 完整数据行
+      if (pendingLine) {
+        // 缓冲在完整行前未闭合（理论不发生：不完整行必由补全行结束）——直接并掉
+        rawDataLines.push(pendingLine + '\n' + line)
+        pendingLine = ''
+      } else {
+        skippedNonTable = 0
+        rawDataLines.push(line)
+      }
+    } else if (startsPipe) {
+      // b) 不完整数据行（结尾 | 在后续行）→ 开始/继续缓冲
+      pendingLine = (pendingLine ? pendingLine + '\n' : '') + line
       skippedNonTable = 0
-      rawDataLines.push(line)
+    } else if (pendingLine) {
+      // 缓冲中的数据行遇到非表格行：并入缓冲（多行单元格内容）；若该行带结尾 | 则补全完成
+      pendingLine += '\n' + line.trim()
+      if (endsPipe) {
+        rawDataLines.push(pendingLine)
+        pendingLine = ''
+        skippedNonTable = 0
+      }
     } else if (rawDataLines.length > 0 && skippedNonTable < 1) {
-      // 多行单元格：换行内容并入上一行最后一个单元格（插入到行尾 | 之前）
+      // c) 完整行后的多行单元格内容（插入到上一行行尾 | 之前）
       const last = rawDataLines[rawDataLines.length - 1]
       const lastPipe = last.lastIndexOf('|')
       if (lastPipe > 0) {
@@ -141,6 +167,7 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
       break // 连续 2 行非表格行 = 表格结束（后续是说明文字）
     }
   }
+  if (pendingLine) rawDataLines.push(pendingLine)
 
   const rows: Array<Record<string, string>> = []
 
