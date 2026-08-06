@@ -43,10 +43,17 @@ export const searchKnowledgeTool = buildAgentTool({
   requiresConfirmation: false,
   execute: async (args) => {
     const query = args.query as string
-    const topK = Math.min((args.top_k as number) ?? 5, 10)
-    const chapterFrom = args.chapter_from as number | undefined
-    const chapterTo = args.chapter_to as number | undefined
-    const minScore = (args.min_score as number) ?? 0.5
+    // 参数钳制（P1 修复）：top_k 保底 1（-5 此前透传主进程）、min_score 钳制 [0,1]
+    // （-1 让过滤失效、99 让所有结果被丢弃且误导 LLM）、倒序章节范围自动交换
+    const topK = Math.max(1, Math.min((args.top_k as number) ?? 5, 10))
+    let chapterFrom = args.chapter_from as number | undefined
+    let chapterTo = args.chapter_to as number | undefined
+    if (chapterFrom !== undefined && chapterTo !== undefined && chapterFrom > chapterTo) {
+      const tmp = chapterFrom
+      chapterFrom = chapterTo
+      chapterTo = tmp
+    }
+    const minScore = Math.max(0, Math.min((args.min_score as number) ?? 0.5, 1))
 
     if (!query) {
       // 空查询（@知识库 预取场景）：降级为知识库概览，而不是失败——
