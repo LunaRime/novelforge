@@ -115,17 +115,35 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
   })
 
   // 5. 收集数据行（分隔行之后，以 | 开头的行）
+  //    非表格行优先合并到上一行最后一个单元格（LLM 在 description/keyEvents 单元格内换行是
+  //    高频行为——直接 break 会丢弃后续所有行且无告警，历史事故）；连续 2 行非表格行才终止
   const dataRowRegex = /^\s*\|.+\|\s*$/
-  const rows: Array<Record<string, string>> = []
+  const rawDataLines: string[] = []
+  let skippedNonTable = 0
 
   for (let i = separatorIdx + 1; i < lines.length; i++) {
     const line = lines[i]
     if (!line.trim()) continue
-    if (!dataRowRegex.test(line)) {
-      if (rows.length > 0) break
-      continue
+    if (dataRowRegex.test(line)) {
+      skippedNonTable = 0
+      rawDataLines.push(line)
+    } else if (rawDataLines.length > 0 && skippedNonTable < 1) {
+      // 多行单元格：换行内容并入上一行最后一个单元格（插入到行尾 | 之前）
+      const last = rawDataLines[rawDataLines.length - 1]
+      const lastPipe = last.lastIndexOf('|')
+      if (lastPipe > 0) {
+        rawDataLines[rawDataLines.length - 1] =
+          last.slice(0, lastPipe) + '\n' + line.trim() + last.slice(lastPipe)
+      }
+      skippedNonTable++
+    } else if (rawDataLines.length > 0) {
+      break // 连续 2 行非表格行 = 表格结束（后续是说明文字）
     }
+  }
 
+  const rows: Array<Record<string, string>> = []
+
+  for (const line of rawDataLines) {
     const cells = splitTableRow(line)
     const row: Record<string, string> = {}
     let hasContent = false
@@ -263,9 +281,21 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
       // ★ 缺失键名的前引号: { key": value → { "key": value
       //   注意：必须在单引号→双引号替换之前执行，否则 key 中的单引号（如 character's_name）会先被破坏
       .replace(/([[{,]\s*)([a-zA-Z_]\w*)\s*:/g, '$1"$2":')
-      // 单引号键/值 → 双引号（某些模型会混用）
-      //   在键名补引号之后执行，避免破坏包含单引号的键名
-      .replace(/'/g, '"')
+      // 单引号键/值 → 双引号（某些模型会混用）——字符串感知分段替换：
+      //   仅替换双引号字符串**之外**的 '（结构引号），字符串值内的撇号
+      //   （"It's a trap" / "don't stop"）绝不被触碰。
+      //   历史事故：全量 .replace(/'/g, '"') 会把值内撇号也替换，轻则解析失败、
+      //   重则引号恰好平衡时**解析成功但数据被静默篡改**。
+      // 字符串感知扫描：state = 是否在双引号字符串内
+      .replace(/'/g, (match, offset, source) => {
+        // 判断该 ' 是否位于双引号字符串内部（扫描到 offset 为止的未闭合双引号数）
+        let inStr = false
+        for (let i = 0; i < offset; i++) {
+          const ch = source[i]
+          if (ch === '"' && source[i - 1] !== '\\') inStr = !inStr
+        }
+        return inStr ? match : '"'
+      })
       // ★ 数字/布尔值后的意外逗号: 123, } → 123 }
       .replace(/(\d)\s*,\s*}/g, '$1 }')
       .replace(/(true|false|null)\s*,\s*}/g, '$1 }')

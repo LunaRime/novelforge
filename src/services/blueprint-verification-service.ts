@@ -89,15 +89,18 @@ async function getAdjacentBlueprints(
 
 /**
  * 检测角色定位不一致
+ *
+ * @param totalChapters 全书总章数（显式传入——用 blueprints.length 做分母在部分生成时
+ *                      （如 100 章只生成了前 20 章蓝图）会系统性误报：第 12 章 position=12/20=0.6
+ *                      被判"转折"，实际应为 12/100=0.12 判"开端"）
  */
-function detectInconsistentRoles(blueprints: ChapterBlueprint[]): InconsistentRole[] {
+function detectInconsistentRoles(blueprints: ChapterBlueprint[], totalChapters: number): InconsistentRole[] {
   const inconsistent: InconsistentRole[] = []
 
   for (const bp of blueprints) {
     if (!bp.role || bp.role === '发展') continue
 
-    // 检查章节号与角色定位是否匹配
-    const totalChapters = blueprints.length
+    // 检查章节号与角色定位是否匹配（分母 = 全书总章数，而非已生成蓝图数）
     const position = bp.chapterNumber / totalChapters
 
     let expectedRole = '发展'
@@ -182,8 +185,8 @@ export async function generateVerificationReport(
     }
   }
 
-  // 检测不一致的角色定位
-  const inconsistentRoles = detectInconsistentRoles(blueprints)
+  // 检测不一致的角色定位（分母 = 全书总章数，防部分生成时系统性误报）
+  const inconsistentRoles = detectInconsistentRoles(blueprints, totalChapters)
 
   // 检测缺失标题
   const missingTitles = blueprints
