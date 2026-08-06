@@ -117,6 +117,9 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
 
     return t('prompt.field.header') + '\n' + context + '\n\n' +
       fieldPrompts[this.fieldKey] + '\n\n' +
+      // ⚠️ 低风险修复：一致性约束——生成内容必须与已有字段设定保持一致，
+      //    禁止引入与既有信息冲突的设定（此前无此约束，生成字段可能与已有设定矛盾）
+      t('prompt.field.consistencyRequirement') + '\n\n' +
       t('prompt.field.outputRequirements')
   }
 }
