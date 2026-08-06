@@ -106,8 +106,10 @@ export const MODEL_PRICES: Record<string, { input: number; output: number; cache
   'gemini-3.5-flash': { input: 1.5, output: 9, cachedInput: 0.375 },
   'gemini-3-flash-preview': { input: 0.5, output: 3, cachedInput: 0.125 },
   // ---- 旧模型兼容（存量配置仍可能引用） ----
-  'gpt-4o': { input: 2.5, output: 10, cachedInput: 1.25 },
+  // ⚠️ 顺序即匹配优先级：gpt-4o-mini 必须在 gpt-4o 之前（name.includes('gpt-4o') 会先命中
+  //    通用型号 → mini 按 16 倍高价计费，历史事故）
   'gpt-4o-mini': { input: 0.15, output: 0.6, cachedInput: 0.075 },
+  'gpt-4o': { input: 2.5, output: 10, cachedInput: 1.25 },
   'gpt-4-turbo': { input: 10, output: 30, cachedInput: 5 },
   'gpt-3.5-turbo': { input: 0.5, output: 1.5, cachedInput: 0.25 },
   'claude-3-opus': { input: 15, output: 75, cachedInput: 7.5 },

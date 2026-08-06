@@ -57,7 +57,11 @@ export class GeminiProvider implements ILLMProvider {
       const body: Record<string, unknown> = {
         contents,
         generationConfig: {
-          temperature: opts.temperature ?? model.temperature,
+          // 思考模式：Gemini 对应 thinkingConfig（此前未映射，思考开关对 Gemini 静默无效）；
+          // 思考时省略 temperature（Gemini 思考模式下 temperature 不生效，与 OpenAI 行为对齐）
+          ...(opts.thinking
+            ? { thinkingConfig: { includeThoughts: true } }
+            : { temperature: opts.temperature ?? model.temperature }),
           maxOutputTokens: opts.maxTokens ?? model.maxTokens,
           // JSON 约束（与 OpenAI response_format 对应）：强制结构化输出，降低幻觉/解析失败
           ...(opts.responseFormat?.type === 'json_object'
@@ -127,7 +131,10 @@ export class GeminiProvider implements ILLMProvider {
       const body: Record<string, unknown> = {
         contents,
         generationConfig: {
-          temperature: opts.temperature ?? model.temperature,
+          // 思考模式 → thinkingConfig（与 generate 对齐）
+          ...(opts.thinking
+            ? { thinkingConfig: { includeThoughts: true } }
+            : { temperature: opts.temperature ?? model.temperature }),
           maxOutputTokens: opts.maxTokens ?? model.maxTokens,
           // JSON 约束（与 OpenAI response_format 对应）：强制结构化输出，降低幻觉/解析失败
           ...(opts.responseFormat?.type === 'json_object'
