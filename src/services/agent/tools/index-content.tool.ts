@@ -61,29 +61,31 @@ export const indexContentTool = buildAgentTool({
         return {
           success: false,
           content: '',
-          error: `索引失败: ${result.error || '未知错误'}`,
+          error: t('tool.indexFailed').replace('{error}', result.error || t('status.unknown')),
         }
       }
 
       const chunkCount = result.chunkCount || 0
       const chapterInfo = args.chapter_number
-        ? `\n- 关联章节: 第${args.chapter_number}章`
+        ? t('tool.indexChapterInfo').replace('{chapter}', String(args.chapter_number))
         : ''
 
       return {
         success: true,
         content:
-          `✅ 内容已索引到向量知识库\n` +
-          `- 文档名: ${fileName}\n` +
-          `- 文本块数: ${chunkCount}\n` +
-          `- 内容长度: ${content.length} 字符${chapterInfo}\n` +
-          `- 后续可通过 search_knowledge 工具检索此内容`,
+          t('tool.indexSuccessHeader') +
+          t('tool.indexDocName').replace('{name}', fileName) +
+          t('tool.indexChunks').replace('{count}', String(chunkCount)) +
+          t('tool.indexLength')
+            .replace('{length}', String(content.length))
+            .replace('{chapter}', chapterInfo) +
+          t('tool.indexRetrievable'),
       }
     } catch (error) {
       return {
         success: false,
         content: '',
-        error: `索引异常: ${String(error)}`,
+        error: t('tool.indexException').replace('{error}', String(error)),
       }
     }
   },

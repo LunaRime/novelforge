@@ -33,7 +33,7 @@ export const readCharactersTool = buildAgentTool({
       const charsResult = await ipc.invoke('db:character-get-all')
       const chars = (Array.isArray(charsResult) ? charsResult : []) as unknown as Array<Record<string, unknown>>
       if (!chars || chars.length === 0) {
-        return { success: true, content: '⚠️ 角色池为空，暂无角色卡。建议先创建角色卡。' }
+        return { success: true, content: t('tool.readCharsEmpty') }
       }
 
       if (charName) {
@@ -43,21 +43,21 @@ export const readCharactersTool = buildAgentTool({
         )
         if (!target) {
           const available = chars.map((c) => String(c.name)).join('、')
-          return { success: false, content: '', error: `未找到角色 "${charName}"。可用角色：${available}` }
+          return { success: false, content: '', error: t('tool.readCharsNotFound').replace('{name}', charName).replace('{available}', available) }
         }
 
         const formatted = Object.entries(target)
           .filter(([k, v]) => v && k !== 'id')
           .map(([k, v]) => `**${k}**: ${typeof v === 'object' ? JSON.stringify(v, null, 2) : String(v)}`)
           .join('\n')
-        return { success: true, content: `👤 角色卡：${target.name}\n\n${formatted}` }
+        return { success: true, content: t('tool.readCharsCard').replace('{name}', String(target.name)).replace('{formatted}', formatted) }
       }
 
       // 列出所有角色
       const list = chars.map((c) => `  - ${c.name} (${c.role})`).join('\n')
-      return { success: true, content: `👤 角色列表（${chars.length} 个）\n${list}\n\n使用 character_name 参数可以读取具体角色的详细信息。` }
+      return { success: true, content: t('tool.readCharsList').replace('{count}', String(chars.length)).replace('{list}', list) }
     } catch (error) {
-      return { success: false, content: '', error: `读取角色列表失败：${String(error)}` }
+      return { success: false, content: '', error: t('tool.readCharsFailed').replace('{error}', String(error)) }
     }
   },
 })

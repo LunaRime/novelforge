@@ -38,7 +38,7 @@ export const countCharactersTool = buildAgentTool({
     if (textArg !== undefined && textArg.trim() !== '') {
       return {
         success: true,
-        content: formatTextStats(computeTextStats(textArg), '文本'),
+        content: formatTextStats(computeTextStats(textArg), t('tool.countTextLabel')),
       }
     }
 
@@ -51,25 +51,30 @@ export const countCharactersTool = buildAgentTool({
       try {
         const latest = await ipc.invoke('db:draft-get-latest', chapterNum) as { id?: number; version?: number } | null
         if (!latest || latest.id === undefined) {
-          return { success: true, content: `第 ${chapterNum} 章暂无草稿，无法统计。` }
+          return { success: true, content: t('tool.countNoDraft').replace('{chapter}', String(chapterNum)) }
         }
         const full = await ipc.invoke('db:draft-get-full', latest.id) as { content?: string } | null
         if (!full) {
-          return { success: false, content: '', error: `读取第 ${chapterNum} 章草稿失败` }
+          return { success: false, content: '', error: t('tool.countDraftReadFailed').replace('{chapter}', String(chapterNum)) }
         }
         return {
           success: true,
-          content: formatTextStats(computeTextStats(full.content ?? ''), `第 ${chapterNum} 章草稿（v${latest.version ?? '?'}）`),
+          content: formatTextStats(
+            computeTextStats(full.content ?? ''),
+            t('tool.countChapterDraftLabel')
+              .replace('{chapter}', String(chapterNum))
+              .replace('{version}', String(latest.version ?? '?')),
+          ),
         }
       } catch (error) {
-        return { success: false, content: '', error: `统计失败：${String(error)}` }
+        return { success: false, content: '', error: t('tool.countFailed').replace('{error}', String(error)) }
       }
     }
 
     return {
       success: false,
       content: '',
-      error: 'count_characters 需要提供 text 或 chapter_number 参数（二选一）',
+      error: t('tool.countMissingParam'),
     }
   },
 })

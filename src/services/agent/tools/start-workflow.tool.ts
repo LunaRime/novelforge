@@ -12,13 +12,16 @@ import { useWorkflowStore } from '../../../stores/workflow-store'
 import { ipc } from '../../ipc-client'
 
 // ---- 工作流类型到显示名的映射 ----
-const WORKFLOW_NAMES: Record<string, string> = {
-  generate_draft: '写稿',
-  review: '审稿',
-  refine: '修稿',
-  finalize: '定稿',
-  generate_blueprint: '生成蓝图',
-  generate_architecture: '生成架构',
+function getWorkflowDisplayName(workflow: string): string {
+  switch (workflow) {
+    case 'generate_draft': return t('tool.wfDraft')
+    case 'review': return t('tool.wfReview')
+    case 'refine': return t('tool.wfRefine')
+    case 'finalize': return t('tool.wfFinalize')
+    case 'generate_blueprint': return t('tool.wfBlueprint')
+    case 'generate_architecture': return t('tool.wfArchitecture')
+    default: return workflow
+  }
 }
 
 export const startWorkflowTool = buildAgentTool({
@@ -52,15 +55,17 @@ export const startWorkflowTool = buildAgentTool({
 
     const chapterWorkflows = ['generate_draft', 'review', 'refine', 'finalize']
     if (chapterWorkflows.includes(workflow) && chapterNumber === undefined) {
-      return { success: false, content: '', error: `${workflow} 工作流需要指定 chapter_number 参数` }
+      return { success: false, content: '', error: t('tool.wfNeedChapter').replace('{workflow}', workflow) }
     }
 
     // 打开右侧面板到 AI 输出视图
     useLayoutStore.getState().openRightPanel('ai-output')
 
     try {
-      const displayName = WORKFLOW_NAMES[workflow] ?? workflow
-      const chapterTag = chapterNumber !== undefined ? `第${chapterNumber}章` : ''
+      const displayName = getWorkflowDisplayName(workflow)
+      const chapterTag = chapterNumber !== undefined
+        ? t('tool.chapterTag').replace('{n}', String(chapterNumber))
+        : ''
 
       // ===== 分发到具体工作流创建逻辑 =====
       switch (workflow) {
@@ -71,54 +76,54 @@ export const startWorkflowTool = buildAgentTool({
           }
           const runId = await useWorkflowStore.getState().startWorkflow(definition)
           void runId // 保留 runId 供调试
-          return { success: true, content: `✅ 已启动「${displayName}」工作流（${chapterTag}），请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
+          return { success: true, content: t('tool.workflowStarted').replace('{name}', displayName).replace('{chapter}', chapterTag), artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
         }
         case 'review': {
           const definition = await buildReviewWorkflow(chapterNumber!)
-          if (!definition) return { success: false, content: '', error: `第${chapterNumber}章没有可审稿的草稿` }
+          if (!definition) return { success: false, content: '', error: t('tool.wfNoReviewDraft').replace('{chapter}', String(chapterNumber)) }
           await useWorkflowStore.getState().startWorkflow(definition)
-          return { success: true, content: `✅ 已启动「${displayName}」工作流（${chapterTag}），请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
+          return { success: true, content: t('tool.workflowStarted').replace('{name}', displayName).replace('{chapter}', chapterTag), artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
         }
         case 'refine': {
           const definition = await buildRefineWorkflow(chapterNumber!)
-          if (!definition) return { success: false, content: '', error: `第${chapterNumber}章没有可修稿的草稿` }
+          if (!definition) return { success: false, content: '', error: t('tool.wfNoRefineDraft').replace('{chapter}', String(chapterNumber)) }
           await useWorkflowStore.getState().startWorkflow(definition)
-          return { success: true, content: `✅ 已启动「${displayName}」工作流（${chapterTag}），请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
+          return { success: true, content: t('tool.workflowStarted').replace('{name}', displayName).replace('{chapter}', chapterTag), artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
         }
         case 'finalize': {
           const definition = await buildFinalizeWorkflow(chapterNumber!)
-          if (!definition) return { success: false, content: '', error: `第${chapterNumber}章没有可定稿的草稿` }
+          if (!definition) return { success: false, content: '', error: t('tool.wfNoFinalizeDraft').replace('{chapter}', String(chapterNumber)) }
           await useWorkflowStore.getState().startWorkflow(definition)
-          return { success: true, content: `✅ 已启动「${displayName}」工作流（${chapterTag}），请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
+          return { success: true, content: t('tool.workflowStarted').replace('{name}', displayName).replace('{chapter}', chapterTag), artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}` }] }
         }
         case 'generate_blueprint': {
           const { createDirectoryWorkflow } = await import('../../workflows/directory-workflow')
           const { guardDirectoryGeneration } = await import('../../workflow-guards')
           const guard = await guardDirectoryGeneration()
           if (!guard.ok) {
-            return { success: false, content: '', error: guard.message || '前置条件不满足' }
+            return { success: false, content: '', error: guard.message || t('error.prereqNotMet') }
           }
           const definition = createDirectoryWorkflow({ mode: 'full' })
           await useWorkflowStore.getState().startWorkflow(definition)
-          return { success: true, content: `✅ 已启动「${displayName}」工作流，请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: displayName }] }
+          return { success: true, content: t('tool.workflowStartedNoChapter').replace('{name}', displayName), artifacts: [{ type: 'workflow_started', name: displayName }] }
         }
         case 'generate_architecture': {
           const { createArchitectureWorkflow } = await import('../../workflows/architecture-workflow')
           const { guardArchitectureGeneration } = await import('../../workflow-guards')
           const guard = guardArchitectureGeneration()
           if (!guard.ok) {
-            return { success: false, content: '', error: guard.message || '前置条件不满足' }
+            return { success: false, content: '', error: guard.message || t('error.prereqNotMet') }
           }
           const definition = createArchitectureWorkflow()
           await useWorkflowStore.getState().startWorkflow(definition)
-          return { success: true, content: `✅ 已启动「${displayName}」工作流，请在 AI 输出面板查看进度。`, artifacts: [{ type: 'workflow_started', name: displayName }] }
+          return { success: true, content: t('tool.workflowStartedNoChapter').replace('{name}', displayName), artifacts: [{ type: 'workflow_started', name: displayName }] }
         }
         default:
-          return { success: false, content: '', error: `不支持的工作流类型: ${workflow}` }
+          return { success: false, content: '', error: t('tool.wfUnsupported').replace('{workflow}', workflow) }
       }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      return { success: false, content: '', error: `启动工作流失败: ${msg}` }
+      return { success: false, content: '', error: t('tool.wfStartFailed').replace('{error}', msg) }
     }
   },
 })
@@ -133,7 +138,7 @@ async function getChapterInfoFromBlueprint(chapterNumber: number) {
     if (!bp) return null
     return {
       chapterNumber,
-      title: (bp.title as string) || `第${chapterNumber}章`,
+      title: (bp.title as string) || t('tool.chapterTag').replace('{n}', String(chapterNumber)),
       role: (bp.role as string) || '',
       purpose: (bp.purpose as string) || '',
       characters: Array.isArray(bp.characters)
@@ -166,7 +171,7 @@ async function getLatestDraft(chapterNumber: number): Promise<{
     return {
       filePath: `vela://draft/${latest.id}`,
       content: full.content,
-      title: (latest.title as string) || `第${chapterNumber}章`,
+      title: (latest.title as string) || t('tool.chapterTag').replace('{n}', String(chapterNumber)),
       meta: latest,
     }
   } catch {
@@ -206,7 +211,7 @@ async function buildDraftWorkflow(chapterNumber: number) {
 
   const chapterInfo = await getChapterInfoFromBlueprint(chapterNumber)
   if (!chapterInfo) {
-    throw new Error(`未找到第${chapterNumber}章的蓝图数据，请先生成章节蓝图`)
+    throw new Error(t('tool.wfBlueprintDataMissing').replace('{chapter}', String(chapterNumber)))
   }
 
   const { createChapterWorkflow } = await import('../../workflows/chapter-workflow')

@@ -36,14 +36,14 @@ export const readProjectStateTool = buildAgentTool({
     const includeConfig = (args.include_config as boolean) !== false
     const includeSummary = (args.include_summary as boolean) !== false
 
-    const parts: string[] = [`# 📊 项目状态：《${project.name}》\n`]
+    const parts: string[] = [t('tool.readStateHeader').replace('{name}', project.name)]
 
     if (includeConfig) {
       // 读取小说配置
       try {
         const core = await ipc.invoke('db:project-core-get')
         if (core) {
-          parts.push(`## 小说配置\n\`\`\`json\n${JSON.stringify({
+          parts.push(t('tool.readStateConfigSection').replace('{json}', JSON.stringify({
             projectName: core.projectName,
             genre: core.genre,
             subGenre: core.subGenre,
@@ -53,11 +53,11 @@ export const readProjectStateTool = buildAgentTool({
             plotStructure: core.plotStructure,
             narrativePov: core.narrativePov,
             writingStyle: core.writingStyle
-          }, null, 2)}\n\`\`\``)
+          }, null, 2)))
         }
       } catch {
         // Fallback
-        parts.push(`## 小说配置\n⚠️ 获取配置失败`)
+        parts.push(t('tool.readStateConfigFailed'))
       }
     }
 
@@ -71,7 +71,10 @@ export const readProjectStateTool = buildAgentTool({
           const sorted = bps.sort((a, b) => b.chapterNumber - a.chapterNumber)
           for (const bp of sorted) {
             if (bp.notes && bp.notes.trim()) {
-              notesParts.unshift(`### 第${bp.chapterNumber}章 ${bp.title || ''}\n${bp.notes}`)
+              notesParts.unshift(t('tool.readStateNoteItem')
+                .replace('{chapter}', String(bp.chapterNumber))
+                .replace('{title}', bp.title || '')
+                .replace('{notes}', bp.notes))
               if (notesParts.length >= 5) break
             }
           }
@@ -79,9 +82,9 @@ export const readProjectStateTool = buildAgentTool({
       } catch { /* 忽略 */ }
 
       if (notesParts.length > 0) {
-        parts.push(`## 近章要点\n${notesParts.join('\n\n')}`)
+        parts.push(t('tool.readStateNotesSection').replace('{notes}', notesParts.join('\n\n')))
       } else {
-        parts.push(`## 近章要点\n暂无章节要点。章节要点会在定稿后自动生成并写入蓝图。`)
+        parts.push(t('tool.readStateNoNotes'))
       }
     }
 

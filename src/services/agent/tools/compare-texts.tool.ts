@@ -73,9 +73,11 @@ export const compareTextsTool = buildAgentTool({
         return {
           success: true,
           content:
-            `⚠️ 向量模型已关闭，使用本地文本相似度（基于关键词重叠和长度分析）\n\n` +
-            `### 本地比较结果（${localResults.length} 段）\n${formatted}\n\n` +
-            `_注意：本地比较精度有限，建议在设置中开启向量模型以获得准确的语义相似度。_`,
+            t('tool.compareFallbackLocal') +
+            t('tool.compareLocalResults')
+              .replace('{count}', String(localResults.length))
+              .replace('{formatted}', formatted) +
+            t('tool.compareLocalNote'),
         }
       }
 
@@ -85,13 +87,13 @@ export const compareTextsTool = buildAgentTool({
         return {
           success: false,
           content: '',
-          error: `语义比较失败: ${result.error || '未知错误'}`,
+          error: t('tool.compareFailed').replace('{error}', result.error || t('status.unknown')),
         }
       }
 
       const similarities = result.similarities || []
       if (similarities.length === 0) {
-        return { success: true, content: '⚠️ 未能计算出有效的相似度分数' }
+        return { success: true, content: t('tool.compareNoScore') }
       }
 
       // 分析结果
@@ -103,10 +105,10 @@ export const compareTextsTool = buildAgentTool({
 
       let analysis = ''
       if (highSimilarity.length > 0) {
-        analysis += `\n⚠️  ${highSimilarity.length} 段文本与查询高度相似（≥85%），可能存在重复内容。\n`
+        analysis += t('tool.compareHighSimilar').replace('{count}', String(highSimilarity.length))
       }
       if (mediumSimilarity.length > 0) {
-        analysis += `\n📊 ${mediumSimilarity.length} 段文本与查询中度相似（70-85%）。\n`
+        analysis += t('tool.compareMediumSimilar').replace('{count}', String(mediumSimilarity.length))
       }
 
       const formatted = similarities
@@ -122,16 +124,16 @@ export const compareTextsTool = buildAgentTool({
       return {
         success: true,
         content:
-          `🔬 语义相似度分析完成（共 ${similarities.length} 段）\n` +
-          `最高相似度: ${(best.score * 100).toFixed(1)}%\n` +
+          t('tool.compareDone').replace('{count}', String(similarities.length)) +
+          t('tool.compareBestScore').replace('{score}', (best.score * 100).toFixed(1)) +
           `${analysis}\n` +
-          `### 详细结果\n${formatted}`,
+          t('tool.compareDetailHeader') + formatted,
       }
     } catch (error) {
       return {
         success: false,
         content: '',
-        error: `比较异常: ${String(error)}`,
+        error: t('tool.compareException').replace('{error}', String(error)),
       }
     }
   },

@@ -42,7 +42,7 @@ export const readFileTool = buildAgentTool({
     if (isAbsolutePath(filePath)) {
       const res = await ipc.invoke('fs:read-external-file', filePath)
       if (!res.success) {
-        return { success: false, content: '', error: res.error ?? '外部文件读取失败' }
+        return { success: false, content: '', error: res.error ?? t('tool.readFileExternalFailed') }
       }
       return { success: true, content: String(res.content ?? '') }
     }
@@ -55,7 +55,7 @@ export const readFileTool = buildAgentTool({
 
     const result = await ipc.invoke('fs:read-file', pathCheck.fullPath)
     if (!result.success) {
-      return { success: false, content: '', error: result.error ?? '文件读取失败' }
+      return { success: false, content: '', error: result.error ?? t('tool.readFileFailed') }
     }
 
     return { success: true, content: result.content }

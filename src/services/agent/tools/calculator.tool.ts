@@ -13,17 +13,17 @@ const SAFE_EXPR_REGEX = /^[0-9+\-*/().%\s]+$/
 /** 安全求值：白名单预检 + Function 构造（无 eval、无作用域注入） */
 function safeEvaluate(expression: string): { ok: true; value: number } | { ok: false; error: string } {
   if (!SAFE_EXPR_REGEX.test(expression)) {
-    return { ok: false, error: '表达式包含非法字符（仅支持数字与 + - * / ( ) . %）' }
+    return { ok: false, error: t('tool.calcIllegalChars') }
   }
   try {
     // 白名单已过滤，Function 仅用于把表达式解析为数值；不传入任何作用域变量
     const result = new Function(`"use strict"; return (${expression})`)() as unknown
     if (typeof result !== 'number' || !isFinite(result)) {
-      return { ok: false, error: '表达式结果无效（可能除零或溢出）' }
+      return { ok: false, error: t('tool.calcInvalidResult') }
     }
     return { ok: true, value: result }
   } catch (e) {
-    return { ok: false, error: `表达式求值失败：${e instanceof Error ? e.message : String(e)}` }
+    return { ok: false, error: t('tool.calcEvalFailed').replace('{error}', e instanceof Error ? e.message : String(e)) }
   }
 }
 
@@ -46,7 +46,7 @@ export const calculatorTool = buildAgentTool({
     const expression = String(args.expression ?? '').trim()
     if (!expression) {
       // 工具内部错误注入给 LLM 的 observation，不走 UI i18n
-      return { success: false, content: '', error: 'calculator 需要提供 expression 参数' }
+      return { success: false, content: '', error: t('tool.calcMissingExpression') }
     }
     const result = safeEvaluate(expression)
     if (!result.ok) {

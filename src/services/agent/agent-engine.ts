@@ -181,7 +181,7 @@ export async function runAgentLoop(
       messages.push({ role: 'assistant', content: llmResponse })
       messages.push({
         role: 'user',
-        content: `[系统诊断 — tool_call 解析失败]\n\n${errorFeedback}\n\n请根据上述诊断修正后重新输出 tool_call。`,
+        content: t('engine.parseDiagnosis').replace('{feedback}', errorFeedback),
       })
       console.warn('[AgentEngine] 注入解析错误反馈给 LLM，触发自我修正')
       continue
@@ -239,7 +239,7 @@ export async function runAgentLoop(
         toolCallInfo.status = 'failed'
         toolCallInfo.error = t('agent.unknownTool').replace('{name}', tc.name)
         callbacks.onToolCallComplete(toolCallInfo)
-        observationParts.push(`<tool_result name="${tc.name}" error="true">\n未知工具：${tc.name}。可用工具：${toolRegistry.listAll().map(t => t.name).join(', ')}\n</tool_result>`)
+        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}\n</tool_result>`)
         continue
       }
 
@@ -256,7 +256,7 @@ export async function runAgentLoop(
           toolCallInfo.status = 'failed'
           toolCallInfo.error = t('agent.userRejected')
           callbacks.onToolCallComplete(toolCallInfo)
-          observationParts.push(`<tool_result name="${tc.name}" error="true">\n用户拒绝了此操作\n</tool_result>`)
+          observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('engine.userRejectedAction')}\n</tool_result>`)
           continue
         }
       }
@@ -287,13 +287,13 @@ export async function runAgentLoop(
         toolCallInfo.status = 'failed'
         toolCallInfo.error = t('agent.executionError').replace('{error}', String(error))
         callbacks.onToolCallComplete(toolCallInfo)
-        observationParts.push(`<tool_result name="${tc.name}" error="true">\n执行异常：${String(error)}\n</tool_result>`)
+        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('agent.executionError').replace('{error}', String(error))}\n</tool_result>`)
       }
     }
 
     // 将所有 tool 结果作为 user role 的 observation 注入
     // 加上明确提示，防止 LLM 误以为这是用户新发言
-    const observation = `[以下是工具执行结果，请根据结果继续回答用户的问题]\n\n${observationParts.join('\n\n')}\n\n[请根据上面的工具结果，继续回答用户的原始问题。如果需要更多信息可以继续调用工具。]`
+    const observation = `${t('engine.observationHeader')}\n\n${observationParts.join('\n\n')}\n\n${t('engine.observationFooter')}`
     messages.push({ role: 'user', content: observation })
   }
 
@@ -381,8 +381,8 @@ export function parseToolCalls(text: string): {
       } else {
         parseErrors.push({
           rawContent: rawContent.slice(0, 300),
-          reason: 'JSON 解析成功但缺少必需的 "name" 字段',
-          suggestion: '请确保 tool_call 内包含 {"name": "工具名", "arguments": {...}} 格式的 JSON，name 字段为必填',
+          reason: t('engine.parseReasonMissingName'),
+          suggestion: t('engine.parseSuggestionMissingName'),
         })
       }
     } catch (e1) {
@@ -398,23 +398,23 @@ export function parseToolCalls(text: string): {
           } else {
             parseErrors.push({
               rawContent: rawContent.slice(0, 300),
-              reason: `提取到 JSON 对象但缺少 "name" 字段: ${jsonMatch[0].slice(0, 100)}`,
-              suggestion: '请确保 JSON 对象包含 "name"（工具名）和 "arguments"（参数对象）两个字段',
+              reason: t('engine.parseReasonExtractedMissingName').replace('{detail}', jsonMatch[0].slice(0, 100)),
+              suggestion: t('engine.parseSuggestionObjectFields'),
             })
           }
         } catch (e2) {
           const errMsg2 = e2 instanceof SyntaxError ? e2.message : String(e2)
           parseErrors.push({
             rawContent: rawContent.slice(0, 300),
-            reason: `JSON 解析失败 — 直接解析: ${errMsg1.slice(0, 80)}；提取后解析: ${errMsg2.slice(0, 80)}`,
-            suggestion: `请检查：1) 所有字符串必须用双引号 2) 不能有尾随逗号 3) 键名必须加双引号。正确格式示例：{"name": "read_file", "arguments": {"path": "/path/to/file"}}`,
+            reason: t('engine.parseReasonJsonFailed').replace('{e1}', errMsg1.slice(0, 80)).replace('{e2}', errMsg2.slice(0, 80)),
+            suggestion: t('engine.parseSuggestionJsonRules'),
           })
         }
       } else {
         parseErrors.push({
           rawContent: rawContent.slice(0, 300),
-          reason: `内容中未找到有效 JSON 对象（无 {} 结构）: ${errMsg1.slice(0, 80)}`,
-          suggestion: 'tool_call 标签内必须包含一个 JSON 对象，格式为 {"name": "工具名", "arguments": {...}}',
+          reason: t('engine.parseReasonNoJson').replace('{detail}', errMsg1.slice(0, 80)),
+          suggestion: t('engine.parseSuggestionNeedJson'),
         })
       }
     }
@@ -449,21 +449,22 @@ export function formatParseErrorsForLLM(parseErrors: ToolParseError[]): string {
   if (parseErrors.length === 0) return ''
 
   const parts = parseErrors.map((err, i) =>
-    `[错误 ${i + 1}]
-原始内容: ${err.rawContent}
-失败原因: ${err.reason}
-修复建议: ${err.suggestion}`
+    t('engine.parseErrorBlock')
+      .replace('{n}', String(i + 1))
+      .replace('{raw}', err.rawContent)
+      .replace('{reason}', err.reason)
+      .replace('{suggestion}', err.suggestion)
   )
 
-  return `⚠️ 以下 tool_call 解析失败，请修正后重新调用：
+  return `${t('engine.parseFeedbackHeader')}
 
 ${parts.join('\n\n')}
 
-请根据上述诊断信息修正 JSON 格式后重新输出 tool_call。常见问题：
-- 键名和字符串值必须用双引号（"），不能使用单引号（'）
-- JSON 对象/数组末尾不能有尾随逗号
-- tool_call 内必须包含 {"name": "...", "arguments": {...}} 结构
-- 请勿在 JSON 前后添加额外说明文字`
+${t('engine.parseFeedbackCommon')}
+${t('engine.parseBulletQuotes')}
+${t('engine.parseBulletTrailingComma')}
+${t('engine.parseBulletStructure')}
+${t('engine.parseBulletNoExtraText')}`
 }
 
 /**
@@ -552,5 +553,5 @@ function compressMessagesToBudget(messages: LLMMessage[], budget: number): LLMMe
 function truncateResult(content: string, maxTokens: number): string {
   if (estimateTokens(content) <= maxTokens) return content
   return truncateToTokenBudget(content, maxTokens) +
-    `\n\n…（内容已截断，完整内容约 ${estimateTokens(content)} tokens。可使用 read_file 工具获取完整文件内容）`
+    '\n\n' + t('engine.resultTruncatedNotice').replace('{tokens}', String(estimateTokens(content)))
 }

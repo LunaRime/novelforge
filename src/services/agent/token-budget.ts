@@ -11,6 +11,8 @@
 
 // ===== 导入 =====
 
+import { t } from '../../shared/locale'
+
 let gptEncoder: {
   encode: (text: string) => number[]
   decode: (tokens: number[]) => string
@@ -220,7 +222,9 @@ export class TokenBudget {
 
   /** 获取使用摘要 */
   getSummary(): string {
-    const lines: string[] = [`Token 预算: ${this.maxTokens} (已用 ${this.maxTokens - this.remaining})`]
+    const lines: string[] = [t('engine.tokenBudgetSummary')
+      .replace('{max}', String(this.maxTokens))
+      .replace('{used}', String(this.maxTokens - this.remaining))]
     for (const [, alloc] of this.allocations) {
       const usagePercent = alloc.maxTokens > 0 ? Math.round((alloc.used / alloc.maxTokens) * 100) : 0
       lines.push(`  ${alloc.section}: ${alloc.used}/${alloc.maxTokens} (${usagePercent}%)`)

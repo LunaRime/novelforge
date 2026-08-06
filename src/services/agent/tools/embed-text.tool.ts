@@ -37,12 +37,13 @@ export const embedTextTool = buildAgentTool({
       return {
         success: true,
         content:
-          `⚠️ 向量模型（Embedding API）已关闭，无法生成精确向量嵌入。\n\n` +
-          `当前状态: 向量模型=${vectorConfig.vectorModelEnabled ? 'ON' : 'OFF'}, ` +
-          `本地模块=${vectorConfig.vectorModuleEnabled ? 'ON' : 'OFF'}\n\n` +
-          `建议:\n` +
-          `- 在「设置 → 向量模型」中开启向量模型\n` +
-          `- 如果不需要精确语义搜索，可使用 search_knowledge 进行全文搜索`,
+          t('tool.embedDisabled') +
+          t('tool.embedStatus')
+            .replace('{model}', vectorConfig.vectorModelEnabled ? 'ON' : 'OFF')
+            .replace('{module}', vectorConfig.vectorModuleEnabled ? 'ON' : 'OFF') +
+          t('tool.embedSuggestHeader') +
+          t('tool.embedSuggestEnable') +
+          t('tool.embedSuggestSearch'),
       }
     }
 
@@ -53,7 +54,7 @@ export const embedTextTool = buildAgentTool({
         return {
           success: false,
           content: '',
-          error: `向量嵌入失败: ${result.error || '未知错误'}`,
+          error: t('tool.embedFailed').replace('{error}', result.error || t('status.unknown')),
         }
       }
 
@@ -63,17 +64,17 @@ export const embedTextTool = buildAgentTool({
       return {
         success: true,
         content:
-          `✅ 文本已向量化\n` +
-          `- 文本: "${truncated}"\n` +
-          `- 向量维度: ${dims}\n` +
-          `- Token 消耗: ${result.tokens || '未知'}\n` +
-          `- 嵌入模型已缓存此向量，可高效复用`,
+          t('tool.embedSuccessHeader') +
+          t('tool.embedTextLine').replace('{text}', truncated) +
+          t('tool.embedDimsLine').replace('{dims}', String(dims)) +
+          t('tool.embedTokensLine').replace('{tokens}', String(result.tokens || t('common.unknownWord'))) +
+          t('tool.embedCached'),
       }
     } catch (error) {
       return {
         success: false,
         content: '',
-        error: `嵌入生成异常: ${String(error)}`,
+        error: t('tool.embedException').replace('{error}', String(error)),
       }
     }
   },

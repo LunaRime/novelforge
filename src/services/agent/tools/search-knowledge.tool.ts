@@ -57,11 +57,17 @@ export const searchKnowledgeTool = buildAgentTool({
           ipc.invoke('kb:stats'),
         ]) as [Array<{ fileName: string; chunkCount: number; importedAt: string }> | null, { documentCount: number; totalChunks: number } | null]
         const docList = docs && docs.length > 0
-          ? docs.map((d, i) => `${i + 1}. ${d.fileName}（${d.chunkCount} 块）`).join('\n')
-          : '（知识库为空，可先用导入功能添加设定文档）'
+          ? docs.map((d, i) => t('tool.searchKbDocItem')
+            .replace('{index}', String(i + 1))
+            .replace('{name}', d.fileName)
+            .replace('{chunks}', String(d.chunkCount))).join('\n')
+          : t('tool.searchKbEmptyHint')
         return {
           success: true,
-          content: `📚 知识库概览（${stats?.documentCount ?? 0} 个文档，${stats?.totalChunks ?? 0} 个片段）\n\n${docList}`,
+          content: t('tool.searchKbOverview')
+            .replace('{docs}', String(stats?.documentCount ?? 0))
+            .replace('{chunks}', String(stats?.totalChunks ?? 0))
+            .replace('{list}', docList),
         }
       } catch {
         return { success: false, content: '', error: t('error.missingQuery') }
@@ -86,13 +92,7 @@ export const searchKnowledgeTool = buildAgentTool({
     if (!results || results.length === 0) {
       return {
         success: true,
-        content:
-          '🔍 未找到相关结果。\n\n' +
-          '建议：\n' +
-          '- 尝试使用更短的关键词\n' +
-          '- 使用 read_architecture 直接读取故事架构\n' +
-          '- 使用 read_characters 查看角色卡\n' +
-          '- 如果知识库为空，可以先将相关文档导入知识库',
+        content: t('tool.searchKbNoResults'),
       }
     }
 
@@ -102,25 +102,31 @@ export const searchKnowledgeTool = buildAgentTool({
     if (filtered.length === 0) {
       return {
         success: true,
-        content:
-          `⚠️ 找到 ${results.length} 条结果，但相似度均低于阈值 ${minScore}。\n` +
-          `最高相似度: ${(results[0].score * 100).toFixed(0)}%。\n` +
-          `建议降低 min_score 参数重试。`,
+        content: t('tool.searchKbBelowThreshold')
+          .replace('{count}', String(results.length))
+          .replace('{minScore}', String(minScore))
+          .replace('{maxScore}', (results[0].score * 100).toFixed(0)),
       }
     }
 
     const formatted = filtered
       .map(
         (r, i) =>
-          `### 📖 结果 ${i + 1} (相关度: ${(r.score * 100).toFixed(0)}%)\n` +
-          `**来源**: ${r.fileName}\n\n${r.text}`,
+          t('tool.searchKbResultItem')
+            .replace('{index}', String(i + 1))
+            .replace('{score}', (r.score * 100).toFixed(0))
+            .replace('{fileName}', r.fileName)
+            .replace('{text}', r.text),
       )
       .join('\n\n---\n\n')
 
     return {
       success: true,
-      content:
-        `🔍 语义搜索完成：找到 ${filtered.length} 条相关结果（共 ${results.length} 条，过滤 ${results.length - filtered.length} 条低相关度）\n\n${formatted}`,
+      content: t('tool.searchKbDone')
+        .replace('{filtered}', String(filtered.length))
+        .replace('{total}', String(results.length))
+        .replace('{dropped}', String(results.length - filtered.length))
+        .replace('{formatted}', formatted),
     }
   },
 })
