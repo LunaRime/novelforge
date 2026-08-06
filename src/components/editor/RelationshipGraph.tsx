@@ -48,6 +48,15 @@ const ROLE_SIZES: Record<string, number> = {
 function parseRelations(characters: CharacterCard[]): GraphEdge[] {
   const edges: GraphEdge[] = []
   const allNames = new Set(characters.map(c => c.name))
+  // 边去重索引（P3 修复：此前 edges.some 线性扫描 O(E²)，大关系网卡顿）
+  const seenEdges = new Set<string>()
+
+  const pushEdge = (from: string, to: string, type: string, label: string) => {
+    const key = [from, to].sort().join('::')
+    if (seenEdges.has(key)) return
+    seenEdges.add(key)
+    edges.push({ from, to, type, label })
+  }
 
   for (const char of characters) {
     // 优先解析结构化 relations
@@ -58,10 +67,7 @@ function parseRelations(characters: CharacterCard[]): GraphEdge[] {
       for (const r of rels) {
         if (r.target && allNames.has(r.target)) {
           // 去重：避免双向关系重复绘制
-          const key = [char.name, r.target].sort().join('::')
-          if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
-            edges.push({ from: char.name, to: r.target, type: r.type || 'other', label: r.label || '' })
-          }
+          pushEdge(char.name, r.target, r.type || 'other', r.label || '')
         }
       }
       if (rels.length > 0) continue
@@ -75,10 +81,7 @@ function parseRelations(characters: CharacterCard[]): GraphEdge[] {
         for (const rel of parsed) {
           const target = rel.name || rel.target
           if (target && allNames.has(target)) {
-            const key = [char.name, target].sort().join('::')
-            if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
-              edges.push({ from: char.name, to: target, type: rel.type || 'other', label: rel.relation || rel.label || '' })
-            }
+            pushEdge(char.name, target, rel.type || 'other', rel.relation || rel.label || '')
           }
         }
         continue
@@ -89,10 +92,7 @@ function parseRelations(characters: CharacterCard[]): GraphEdge[] {
     for (const line of lines) {
       const match = line.match(/(.+?)[：:—-]\s*(.+)/)
       if (match && allNames.has(match[1].trim())) {
-        const key = [char.name, match[1].trim()].sort().join('::')
-        if (!edges.some(e => [e.from, e.to].sort().join('::') === key)) {
-          edges.push({ from: char.name, to: match[1].trim(), type: 'other', label: match[2].trim() })
-        }
+        pushEdge(char.name, match[1].trim(), 'other', match[2].trim())
       }
     }
   }

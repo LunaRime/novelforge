@@ -11,6 +11,7 @@ import type { CharacterCard } from '../../../stores/character-store'
 import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
+import { confirm } from '../../ui/Confirm'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -35,6 +36,20 @@ export default function CharactersView() {
   const load = useCharacterStore(s => s.load)
   const setSelectedName = useCharacterStore(s => s.setSelectedName)
   const addCharacter = useCharacterStore(s => s.addCharacter)
+  const dirty = useCharacterStore(s => s.dirty)
+
+  /** 刷新：有未保存编辑时先确认（P3 修复——此前一键 load 直接丢弃全部未保存修改） */
+  const handleRefresh = async () => {
+    if (dirty) {
+      const ok = await confirm(t('character.refreshConfirm'), {
+        title: t('charList.refresh'),
+        confirmText: t('charList.refresh'),
+        danger: true,
+      })
+      if (!ok) return
+    }
+    load()
+  }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
 
@@ -57,7 +72,7 @@ export default function CharactersView() {
           {t('charList.title')} ({characters.length})
         </span>
         <div className="flex items-center gap-0.5">
-          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => load()} title={t('charList.refresh')}>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
             <RefreshCw size={14} strokeWidth={2} />
           </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>

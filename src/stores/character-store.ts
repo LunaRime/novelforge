@@ -43,6 +43,8 @@ interface CharacterState {
   selectedName: string | null
   saving: boolean
   loaded: boolean
+  /** 是否有未保存的编辑（刷新/切项目前用于确认，P3 修复） */
+  dirty: boolean
 
   load: () => Promise<void>
   reset: () => void
@@ -61,6 +63,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   selectedName: null,
   saving: false,
   loaded: false,
+  dirty: false,
 
   load: async () => {
     try {
@@ -70,12 +73,15 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       set({
         characters: cards,
         loaded: true,
+        dirty: false,
         selectedName: cards.find(c => c.name === selectedName)
           ? selectedName
           : (cards.length > 0 ? cards[0].name : null),
       })
-    } catch {
-      set({ characters: [], selectedName: null, loaded: true })
+    } catch (e) {
+      // 加载失败打日志（此前静默清空列表，无从排查）
+      renderLog('error', 'Load:Character', t('log.render.characterLoadFailed').replace('{error}', () => String(e)))
+      set({ characters: [], selectedName: null, loaded: true, dirty: false })
     }
   },
 
@@ -84,7 +90,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   },
 
   reset: () => {
-    set({ characters: [], selectedName: null, saving: false, loaded: false })
+    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false })
   },
 
   setSelectedName: (name) => set({ selectedName: name }),
@@ -97,6 +103,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     set((s) => ({
       characters: [...s.characters, newCard],
       selectedName: newCard.name,
+      dirty: true,
     }))
   },
 
@@ -130,6 +137,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     set({
       characters: remaining,
       selectedName: remaining.length > 0 ? remaining[0].name : null,
+      dirty: true,
     })
   },
 
@@ -144,7 +152,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
         newSelected = value as string
       }
 
-      return { characters: newChars, selectedName: newSelected }
+      return { characters: newChars, selectedName: newSelected, dirty: true }
     })
   },
 
@@ -166,6 +174,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
       // 提交到 DB 批量保存
       await ipc.invoke('db:character-save-all', characters)
+      set({ dirty: false })
     } catch (e) {
       // 失败向上抛——CharacterEditor handleSave 的 catch 负责 renderLog + toast（此前无 catch，未捕获 rejection）
       renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))
