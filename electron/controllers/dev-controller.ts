@@ -50,7 +50,12 @@ async function invokeDevApi(req: DevApiRequest, baseUrlOverride?: string): Promi
     return { success: false, error: '开发者模式 API 地址无效（需 http/https）' }
   }
 
-  const method = req.method ?? 'GET'
+  // method 白名单（P3 修复）：渲染层工具有白名单，主进程此前接受任意字符串（TRACE/OPTIONS 等可透传）
+  const method = (req.method ?? 'GET').toUpperCase()
+  const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE'])
+  if (!ALLOWED_METHODS.has(method)) {
+    return { success: false, error: 'method 仅支持 GET/POST/PUT/PATCH/DELETE' }
+  }
   const path = (req.path ?? '').trim()
   // path 白名单：不允许绝对 URL / 协议注入（只接受相对路径，base URL 由配置决定）
   if (!isValidRelativePath(path)) {

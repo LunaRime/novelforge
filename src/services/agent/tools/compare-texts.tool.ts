@@ -40,6 +40,12 @@ export const compareTextsTool = buildAgentTool({
       }
     }
 
+    // 长度上限（P3）：超大文本直送 embedding API，token 成本不可控
+    const MAX_COMPARE_LENGTH = 50_000
+    if (query.length + candidatesStr.length > MAX_COMPARE_LENGTH) {
+      return { success: false, content: '', error: t('tool.embedTextTooLong').replace('{limit}', String(MAX_COMPARE_LENGTH)) }
+    }
+
     const candidates = candidatesStr.split('|||').map((s) => s.trim()).filter(Boolean)
 
     if (candidates.length === 0) {
