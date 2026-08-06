@@ -12,8 +12,6 @@ import { ContextMenu } from '../ui/ContextMenu'
 import { useTranslation } from '../../hooks/useTranslation'
 import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
-import HistoricalProjectsNav from './sidebar/HistoricalProjectsNav'
-import ProjectWorkspace from './sidebar/ProjectWorkspace'
 import ProjectTree from './sidebar/ProjectTree'
 import CharactersView from './sidebar/CharactersView'
 import {
@@ -39,7 +37,6 @@ export default function Sidebar() {
     project:    t('nav.projectTree'),
     knowledge:  t('nav.knowledgeBase'),
     characters: t('nav.characters'),
-    workspace:  t('nav.workspace'),
   }
 
   return (
@@ -58,10 +55,6 @@ export default function Sidebar() {
         {sidebarView === 'project'    && <ProjectTree />}
         {sidebarView === 'knowledge'  && <KnowledgePanel />}
         {sidebarView === 'characters' && <CharactersView />}
-        {sidebarView === 'workspace'  && <ProjectWorkspace />}
-
-        {/* 历史项目方块列表 — 内容区末尾（视图内容之后，跟随内容区滚动） */}
-        <HistoricalProjectsNav />
       </div>
 
       {/* 动态右键菜单 */}

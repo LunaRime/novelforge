@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 
-/** 左侧活动栏的视图类型（历史项目已并入 home 视图，无独立视图） */
-export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'workspace' | 'settings'
+/** 左侧活动栏的视图类型（工作台已并入项目结构视图：ProjectTree 为完整超集） */
+export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'settings'
 
 /** 下方工具窗口 Tab */
 export type BottomTab = 'tasks' | 'log' | 'activity'

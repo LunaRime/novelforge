@@ -3,9 +3,9 @@ import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
   Loader2, CheckCircle2, XCircle, Clock,
-  Play, X, ChevronDown, ChevronRight, Zap,
+  Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Activity,
 } from 'lucide-react'
-import { useLayoutStore } from '../../stores/layout-store'
+import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import ActivityView from './activity/ActivityView'
@@ -17,21 +17,34 @@ export default function BottomPanel() {
   const TAB_LABELS: Record<string, string> = {
     tasks:    t('panel.tasks'),
     log:      t('panel.log'),
-    activity: t('panel.activity'),
+    activity: t('panel.activityShort'),
     // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
-    models:   t('panel.activity'),
+    models:   t('panel.activityShort'),
   }
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
+  const openBottomTab = useLayoutStore(s => s.openBottomTab)
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段
   const activeRuns = useWorkflowStore(s => s.activeRuns)
 
   // 声明为 string：兼容旧版本持久化的 bottomTab='models'（已映射到活动视图）
   const activeTab: string = bottomTab || 'tasks'
-  const label = TAB_LABELS[activeTab] ?? activeTab
+  const effectiveTab = activeTab === 'models' ? 'activity' : activeTab
   // 任何活跃任务运行中
   const hasRunning = activeRuns.some(r => r.status === 'running')
   const hasWaiting = activeRuns.some(r => r.status === 'waiting')
+
+  /** 面板内 Tab 点击：切到其他 Tab 打开面板，点当前 Tab 收起（与左栏语义一致） */
+  const handleTabClick = (id: BottomTab) => {
+    if (bottomTab === id) toggleBottomPanel()
+    else openBottomTab(id)
+  }
+
+  const TAB_ICONS: Record<string, typeof Zap> = {
+    tasks: Zap,
+    log: ScrollText,
+    activity: Activity,
+  }
 
   return (
     <div
@@ -41,35 +54,47 @@ export default function BottomPanel() {
         borderTop: '1px solid var(--color-border)',
       }}
     >
-      {/* 面板标题头 */}
+      {/* 面板标题头 — 内置 Tab 切换（就近原则，无需移回左栏） */}
       <div
-        className="no-select flex items-center justify-between flex-shrink-0 px-3"
+        className="no-select flex items-center justify-between flex-shrink-0 px-2"
         style={{ height: 'var(--height-panel-header)', borderBottom: '1px solid var(--color-border)' }}
       >
-        {/* 左侧：面板名称 + 可选状态点 */}
-        <div className="flex items-center gap-2">
-          <span
-            className="text-xs font-semibold uppercase tracking-widest"
-            style={{ color: 'var(--color-text-muted)' }}
-          >
-            {label}
-          </span>
-          {/* 运行中指示 */}
-          {activeTab === 'tasks' && hasRunning && (
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-accent)' }} />
-          )}
-          {activeTab === 'tasks' && hasWaiting && !hasRunning && (
-            <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-warning)' }} />
-          )}
-          {/* 活跃任务数徽章 */}
-          {activeTab === 'tasks' && activeRuns.length > 0 && (
-            <span
-              className="text-[0.68rem] font-mono px-1 rounded"
-              style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
-            >
-              {activeRuns.length}
-            </span>
-          )}
+        {/* 左侧：Tab 组 */}
+        <div className="flex items-center gap-1">
+          {(['tasks', 'log', 'activity'] as const).map(id => {
+            const Icon = TAB_ICONS[id]
+            const active = effectiveTab === id
+            return (
+              <button
+                key={id}
+                type="button"
+                onClick={() => handleTabClick(id)}
+                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer"
+                style={{
+                  color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
+                  backgroundColor: active ? 'var(--color-hover)' : 'transparent',
+                }}
+              >
+                <Icon size={12} strokeWidth={active ? 2 : 1.5} />
+                {TAB_LABELS[id]}
+                {/* 任务 Tab 状态点 + 活跃数徽章 */}
+                {id === 'tasks' && activeRuns.length > 0 && (
+                  <span
+                    className="text-[0.68rem] font-mono px-1 rounded"
+                    style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
+                  >
+                    {activeRuns.length}
+                  </span>
+                )}
+                {id === 'tasks' && activeRuns.length > 0 && hasRunning && (
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-accent)' }} />
+                )}
+                {id === 'tasks' && activeRuns.length > 0 && hasWaiting && !hasRunning && (
+                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-warning)' }} />
+                )}
+              </button>
+            )
+          })}
         </div>
 
         {/* 右侧：关闭按钮 */}
