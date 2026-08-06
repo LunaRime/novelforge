@@ -54,7 +54,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
   }
 
   async execute({ callbacks }: CommandExecuteParams): Promise<string> {
-    callbacks.log('正在调度配置专家 AI，准备解析您的脑洞...')
+    callbacks.log(t('log.arch.dispatchConfigAI'))
 
     const template = getPromptTemplate('generate_global_config')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'generate_global_config'))
@@ -70,7 +70,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       { responseFormat: { type: 'json_object' }, thinking: true }
     )
 
-    callbacks.log('解析完成，正在应用到项目配置...')
+    callbacks.log(t('log.arch.parseDone'))
     let parsed: Partial<NovelConfig>
     try {
       parsed = this.parseJSON<Partial<NovelConfig>>(resultRaw)
@@ -100,15 +100,15 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
 
     // 先更新前端 Store
     this.onGenerated(parsed)
-    callbacks.log('配置已应用至界面，正在持久化到数据库...')
+    callbacks.log(t('log.arch.applying'))
 
     // 再持久化到数据库
     const saved = await useProjectStore.getState().saveProject()
 
     if (saved) {
-      callbacks.log('✅ AI 配置生成并保存成功，请检查各字段后点击「生成架构」')
+      callbacks.log(t('log.arch.configSaved'))
     } else {
-      callbacks.log('⚠️ AI 配置已在界面显示，但数据库保存失败。请点击工具栏「保存」按钮手动保存，或检查项目是否正常打开。')
+      callbacks.log(t('log.arch.configSaveFailed'))
     }
     callbacks.setProgress(100)
     return '生成的配置已成功应用！'
@@ -118,7 +118,7 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
 export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
     const { project, config } = getNovelConfig()
-    callbacks.log('生成故事前提...')
+    callbacks.log(t('log.arch.generatingPremise'))
 
     const template = getPromptTemplate('premise')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'premise'))
@@ -149,7 +149,7 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
     await savePartialData(project.path, partial)
     context.data.partial = partial
 
-    callbacks.log(`✅ 故事前提已生成并写入数据库`)
+    callbacks.log(t('log.arch.premiseDone'))
     return result
   }
 }
@@ -165,7 +165,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
       throw new Error(t('error.premiseIncomplete'))
     }
 
-    callbacks.log('生成角色图谱...')
+    callbacks.log(t('log.arch.generatingCharacters'))
     const template = getPromptTemplate('character_dynamics')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'character_dynamics'))
 
@@ -186,7 +186,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
 
     await writeArchToDb('charactersArch', `# 角色图谱\n\n${result}\n`)
 
-    callbacks.log('📇 正在启动角色卡自动提取流水线...')
+    callbacks.log(t('log.arch.extractingCards'))
     const { runArchCharacterExtract } = await import('../architecture-workflow')
     runArchCharacterExtract(project.path, result, config.genre)
 
@@ -195,7 +195,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
     await savePartialData(project.path, partial)
     context.data.partial = partial
 
-    callbacks.log(`✅ 角色图谱已生成并写入数据库`)
+    callbacks.log(t('log.arch.charactersDone'))
     return result
   }
 }
@@ -211,7 +211,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
       throw new Error(t('error.premiseIncomplete'))
     }
 
-    callbacks.log('生成世界观...')
+    callbacks.log(t('log.arch.generatingWorld'))
     const template = getPromptTemplate('world_building')
     if (!template) throw new Error(t('error.templateMissing'))
 
@@ -234,7 +234,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     await savePartialData(project.path, partial)
     context.data.partial = partial
 
-    callbacks.log(`✅ 世界观已生成并写入数据库`)
+    callbacks.log(t('log.arch.worldDone'))
     return result
   }
 }
@@ -256,7 +256,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     if (!char_dyn || char_dyn.includes('待生成')) throw new Error(t('error.notGenerated').replace('{name}', t('arch.characterMap')))
     if (!world_b || world_b.includes('待生成')) throw new Error(t('error.notGenerated').replace('{name}', t('arch.worldBuilding')))
 
-    callbacks.log('生成情节大纲...')
+    callbacks.log(t('log.arch.generatingSynopsis'))
     const template = getPromptTemplate('synopsis')
     if (!template) throw new Error(t('error.templateMissing'))
 
@@ -290,7 +290,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
       await ipc.invoke('fs:write-file', `${project.path}/.vela/partial_arch.json`, '{}')
     }
 
-    callbacks.log(`✅ 情节大纲已生成并写入数据库`)
+    callbacks.log(t('log.arch.synopsisDone'))
     return result
   }
 }

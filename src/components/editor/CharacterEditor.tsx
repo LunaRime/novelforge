@@ -76,11 +76,13 @@ export default function CharacterEditor() {
     try {
       await saveAll(currentProject.path)
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Character', `角色卡保存成功 ${characters.length} 张（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Character', t('log.render.characterSaveSuccess')
+        .replace('{count}', String(characters.length))
+        .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
       // 失败：toast + error 日志（含原因）
-      renderLog('error', 'Save:Character', `角色卡保存失败: ${String(e)}`)
+      renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
   }

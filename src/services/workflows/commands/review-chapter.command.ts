@@ -26,8 +26,8 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     const draft = this.params.draftContent
     if (!draft) throw new Error(t('error.noDraft'))
 
-    callbacks.log('准备启动一致性审查引擎...')
-    callbacks.log('  检索全书设定档案...')
+    callbacks.log(t('log.review.starting'))
+    callbacks.log(t('log.review.loadingSettings'))
 
     // 使用向量检索获取与待审章节相关的历史上下文（替代全局摘要）
     let contextSummary = '（无上下文参考）'
@@ -58,7 +58,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       .withWorldBuilding(worldBuilding)
       .withReviewFocus(this.params.reviewFocus || '')
 
-    callbacks.log('调用 AI 审查员对本章进行多维度扫描...')
+    callbacks.log(t('log.review.calling'))
 
     // 期望 JSON 格式返回
     const reviewResultRaw = await this.callLLMWithBuilder(
@@ -93,7 +93,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
         })),
         summary: `审稿完成，共 ${tableRows.length} 项检查`,
       }
-      callbacks.log(`✅ 审稿结果解析成功 (Markdown 表格): ${tableRows.length} 条记录`)
+      callbacks.log(t('log.review.mdParsed').replace('{count}', String(tableRows.length)))
     } else {
       // L2: JSON 回退 — 很多 LLM 习惯性输出 JSON 而非 Markdown 表格
       const jsonParsed = robustParseJSON(reviewResultRaw, false)
@@ -116,20 +116,20 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
             })),
             summary: String(obj.summary || obj.conclusion || `JSON 解析成功，共 ${items.length} 项检查`),
           }
-          callbacks.log(`✅ 审稿结果解析成功 (JSON 回退): ${items.length} 条记录`)
+          callbacks.log(t('log.review.jsonParsed').replace('{count}', String(items.length)))
         } else if (obj.summary || obj.conclusion) {
           // 纯文本类型的 JSON 响应（包含 summary 但无结构化 items）
           parsedResult = {
             items: [{ category: '综合检查', severity: 'warning', description: String(obj.summary || obj.conclusion) }],
             summary: String(obj.summary || obj.conclusion),
           }
-          callbacks.log(`⚠️ JSON 解析为纯文本摘要，无结构化条目`)
+          callbacks.log(t('log.review.jsonPlainText'))
         }
       }
 
       // L3: 全部解析策略失败 — 直接传递原始文本给 ReviewReport 的旧版解析器
       if (!parsedResult!) {
-        callbacks.log('⚠️ 审稿结果无法结构化解析，保留原始输出供旧版解析器处理')
+        callbacks.log(t('log.review.unparsable'))
         // 不包装成 JSON — 直接存原始文本，ReviewReport.parseLegacyReport() 会处理
         parsedResult = {
           summary: '',
@@ -172,7 +172,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       chapterNumber: this.params.chapterNumber,
     })
 
-    callbacks.log(`✅ 审查完成，已生成审稿报告 r${revIndex}`)
+    callbacks.log(t('log.review.done').replace('{revision}', String(revIndex)))
     return reviewResultRaw
   }
 

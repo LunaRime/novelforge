@@ -9,6 +9,7 @@
  * 可追溯、可与初稿对比；重写稿过短（< 初稿 50%）判定异常放弃本轮。
  */
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
 import { computeTextStats } from '../../text-stats'
 
@@ -35,7 +36,7 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
     // 读初稿（写稿步骤最新版本）
     const full = await ipc.invoke('db:draft-get-full', this.params.draftId) as { content?: string } | null
     if (!full?.content || !full.content.trim()) {
-      callbacks.log('⚠️ 终审自省：初稿内容不可读，跳过')
+      callbacks.log(t('log.selfReview.unreadable'))
       return
     }
 
@@ -47,10 +48,13 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
       rounds = round
       const audit = auditText(ctx, current)
       if (audit.passed) {
-        callbacks.log(`✅ 终审自省第 ${round} 轮：审计通过，无需修改`)
+        callbacks.log(t('log.selfReview.passed').replace('{round}', String(round)))
         break
       }
-      callbacks.log(`🔍 终审自省第 ${round} 轮：发现 ${audit.issues.length} 处问题（${audit.summary}）`)
+      callbacks.log(t('log.selfReview.issuesFound')
+        .replace('{round}', String(round))
+        .replace('{count}', String(audit.issues.length))
+        .replace('{summary}', audit.summary))
 
       // ===== 1. 终审 Agent：审计报告 → 修改建议清单 =====
       const issueText = audit.issues
@@ -64,10 +68,11 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
 只针对审计报告中的问题，不要泛泛而谈，不要重写正文。`
       const suggestions = await this.callLLM(reviewerPrompt, REVIEWER_SYSTEM, callbacks)
       if (!suggestions.trim()) {
-        callbacks.log('⚠️ 终审 Agent 未给出建议，本轮跳过')
+        callbacks.log(t('log.selfReview.noSuggestions'))
         break
       }
-      callbacks.log(`📋 终审 Agent 建议：\n${suggestions.slice(0, 500)}${suggestions.length > 500 ? '…' : ''}`)
+      callbacks.log(t('log.selfReview.suggestions')
+        .replace('{suggestions}', suggestions.slice(0, 500) + (suggestions.length > 500 ? '…' : '')))
 
       // ===== 2. 主 AI 根据清单重写 =====
       const rewritePrompt =
@@ -78,7 +83,7 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
 
       // 防御：重写稿异常（过短 = 截断/拒答）→ 放弃本轮，保留当前稿
       if (rewritten.trim().length < current.trim().length * 0.5) {
-        callbacks.log('⚠️ 重写稿异常（长度不足初稿 50%），放弃本轮重写')
+        callbacks.log(t('log.selfReview.rewriteTooShort'))
         break
       }
       current = rewritten
@@ -96,11 +101,11 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
         wordCount: computeTextStats(current).novelWordCount,
         source: 'rewrite',
       })
-      callbacks.log(`📝 终审自省完成：重写稿已保存为新版本 v${nextVersion}（初稿保留，可对比）`)
+      callbacks.log(t('log.selfReview.rewriteSaved').replace('{version}', String(nextVersion)))
       const { globalEventBus } = await import('../../../shared/event-bus')
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
     } else {
-      callbacks.log(`✅ 终审自省完成（${rounds} 轮）：未生成重写稿——审计通过或重写被拒，初稿保持`)
+      callbacks.log(t('log.selfReview.done').replace('{rounds}', String(rounds)))
     }
   }
 }

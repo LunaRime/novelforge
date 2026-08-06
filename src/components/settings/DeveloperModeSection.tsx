@@ -80,10 +80,10 @@ export default function DeveloperModeSection() {
         devMode: { enabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
         devBrowser: { enabled: browserEnabled, cdpPort: browserPort || 9222 },
       })
-      renderLog('info', 'Save:Settings', `开发者模式配置保存成功（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Settings', t('log.render.devModeSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
-      renderLog('error', 'Save:Settings', `开发者模式配置保存失败: ${String(e)}`)
+      renderLog('error', 'Save:Settings', t('log.render.devModeSaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)

@@ -25,7 +25,7 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
 
-    callbacks.log('正在根据审稿报告精准修复...')
+    callbacks.log(t('log.refineFromReview.starting'))
 
     const template = getPromptTemplate('refine_from_review')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '审稿修复'))
@@ -77,7 +77,9 @@ export class RefineFromReviewCommand extends BaseWorkflowCommand<string> {
       chapterDir: `vela://draft/ch${this.params.chapterNumber}`,
     })
 
-    callbacks.log(`✅ 审稿修复完成（${cleanRefined.length} 字），已生成修订稿版本 r${revIndex}`)
+    callbacks.log(t('log.refineFromReview.done')
+      .replace('{chars}', String(cleanRefined.length))
+      .replace('{revision}', String(revIndex)))
     return refined
   }
 }

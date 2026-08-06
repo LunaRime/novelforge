@@ -16,14 +16,14 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
 
-    callbacks.log('📖 正在采样已有章节正文...')
+    callbacks.log(t('log.analyzeStyle.sampling'))
 
     // 采样策略：取最近 5 章的正文（从数据库查询）
     const sampleTexts: string[] = []
     try {
       const maxChap = await ipc.invoke('db:draft-get-max-finalized-chapter')
       if (maxChap <= 0) {
-        callbacks.log('⚠️ 无已写章节，无法分析文风')
+        callbacks.log(t('log.analyzeStyle.noChapters'))
         return ''
       }
 
@@ -37,14 +37,14 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
           }
         }
       }
-      callbacks.log(`  已采样 ${sampleTexts.length} 章正文`)
+      callbacks.log(t('log.analyzeStyle.sampled').replace('{count}', String(sampleTexts.length)))
     } catch {
-      callbacks.log('⚠️ 提取定稿内容失败')
+      callbacks.log(t('log.analyzeStyle.fetchFailed'))
       return ''
     }
 
     if (sampleTexts.length === 0) {
-      callbacks.log('⚠️ 采样文本为空，跳过文风分析')
+      callbacks.log(t('log.analyzeStyle.sampleEmpty'))
       return ''
     }
 
@@ -57,7 +57,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
       ; (prompt as unknown as { variables: { sample_text: string } }).variables = { sample_text: sampleText }
     const finalPrompt = prompt.build()
 
-    callbacks.log('🎨 调用 AI 分析文风特征...')
+    callbacks.log(t('log.analyzeStyle.calling'))
     const result = await this.callLLM(
       finalPrompt,
       template.systemRole || t('role.literaryCritic'),
@@ -66,7 +66,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
 
     const cleanResult = this.stripThinkingTags(result).trim()
     if (!cleanResult) {
-      callbacks.log('⚠️ 文风分析返回空结果')
+      callbacks.log(t('log.analyzeStyle.emptyResult'))
       return ''
     }
 
@@ -74,7 +74,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     const { updateNovelConfig, saveProject } = useProjectStore.getState()
     updateNovelConfig({ writingStyle: cleanResult })
     await saveProject()
-    callbacks.log('✅ 文风特征已保存到小说配置')
+    callbacks.log(t('log.analyzeStyle.saved'))
 
     return cleanResult
   }

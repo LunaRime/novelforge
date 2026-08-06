@@ -44,7 +44,7 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
     const template = getPromptTemplate('first_chapter_draft')
     if (!template) throw new Error(t('error.templateMissing'))
 
-    callbacks.log(`并行生成 ${count} 个草稿版本...`)
+    callbacks.log(t('log.multiDrafts.starting').replace('{count}', String(count)))
 
     // 定义不同的生成风格
     const styles = [
@@ -57,7 +57,9 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
 
     // 并行生成
     const promises = styles.map(async (style, i) => {
-      callbacks.log(`  📝 ${style.name} (t=${style.temp}) 生成中...`)
+      callbacks.log(t('log.multiDrafts.generating')
+        .replace('{name}', style.name)
+        .replace('{temp}', String(style.temp)))
 
       const builder = new ChapterPromptBuilder(template)
         .withArchitecture(this.params.blueprintContext)
@@ -81,9 +83,13 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
           tokensUsed: Math.ceil(content.length * 0.75),
         })
 
-        callbacks.log(`  ✅ ${style.name} 完成 (${content.length} 字)`)
+        callbacks.log(t('log.multiDrafts.done')
+          .replace('{name}', style.name)
+          .replace('{chars}', String(content.length)))
       } catch (e) {
-        callbacks.log(`  ❌ ${style.name} 失败: ${String(e)}`)
+        callbacks.log(t('log.multiDrafts.failed')
+          .replace('{name}', style.name)
+          .replace('{error}', () => String(e)))
       }
     })
 
@@ -91,7 +97,7 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
 
     // AI 评分择优
     if (candidates.length >= 2) {
-      callbacks.log('正在 AI 评分择优...')
+      callbacks.log(t('log.multiDrafts.scoring'))
       await this.scoreCandidates(candidates, callbacks)
     }
 

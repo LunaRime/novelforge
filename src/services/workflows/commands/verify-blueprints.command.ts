@@ -17,13 +17,15 @@ export class VerifyBlueprintsCommand extends BaseWorkflowCommand<VerificationRep
 
     const totalChapters = project.novelConfig.totalChapters
 
-    callbacks.log('正在扫描蓝图缺口...')
+    callbacks.log(t('log.verifyBlueprints.scanning'))
     const blueprints = await loadDirectoryBlueprints()
-    callbacks.log(`已加载 ${blueprints.length} 章蓝图（共 ${totalChapters} 章）`)
+    callbacks.log(t('log.verifyBlueprints.loaded')
+      .replace('{loaded}', String(blueprints.length))
+      .replace('{total}', String(totalChapters)))
 
     const report = await generateVerificationReport(totalChapters, blueprints)
 
-    callbacks.log(`校检完成: ${report.summary}`)
+    callbacks.log(t('log.verifyBlueprints.done').replace('{summary}', report.summary))
     callbacks.setProgress(100)
 
     return report

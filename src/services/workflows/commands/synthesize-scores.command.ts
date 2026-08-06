@@ -6,6 +6,7 @@
  */
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { t } from '../../../shared/locale'
 import {
   type ReviewerOutput,
   DEFAULT_PERSPECTIVES,
@@ -48,7 +49,7 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
     const { reviewerOutputs, draftId, chapterNumber } = this.params
     const perspectives = DEFAULT_PERSPECTIVES
 
-    callbacks.log('正在合成多视角评审结果...')
+    callbacks.log(t('log.synthesizeScores.starting'))
 
     // 1. 加权平均各维度评分
     const allCriteria = perspectives.flatMap((p) => p.evaluationCriteria)
@@ -136,7 +137,11 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
 
     callbacks.setProgress(100)
     callbacks.log(
-      `综合评分: ${finalScore}/10 | 共识优点: ${consensusStrengths.length} | 共识问题: ${consensusWeaknesses.length} | 分歧: ${divergenceNotes.length}`,
+      t('log.synthesizeScores.done')
+        .replace('{score}', String(finalScore))
+        .replace('{strengths}', String(consensusStrengths.length))
+        .replace('{weaknesses}', String(consensusWeaknesses.length))
+        .replace('{divergence}', String(divergenceNotes.length)),
     )
 
     return {

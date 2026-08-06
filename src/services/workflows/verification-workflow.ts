@@ -25,7 +25,7 @@ export function createVerificationWorkflow(
   const steps: WorkflowDefinition['steps'] = [
     {
       name: t('workflow.loadBlueprints'),
-      description: '从数据库加载已有蓝图',
+      description: t('workflow.verifyLoadBlueprintsDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const project = useProjectStore.getState().currentProject
         if (!project) throw new Error(t('error.noProject'))
@@ -45,22 +45,22 @@ export function createVerificationWorkflow(
           }
         } catch { /* 架构加载失败不阻塞 */ }
 
-        callbacks.log('加载已有蓝图...')
+        callbacks.log(t('log.loadingBlueprints'))
         const blueprints = await loadDirectoryBlueprints()
         context.data.blueprints = blueprints
         context.data.totalChapters = project.novelConfig.totalChapters
-        callbacks.log(`已加载 ${blueprints.length} 章蓝图`)
-        return `已加载 ${blueprints.length} 章`
+        callbacks.log(t('log.blueprintsLoaded').replace('{n}', String(blueprints.length)))
+        return t('workflow.verifyLoadedCount').replace('{n}', String(blueprints.length))
       },
     },
     {
       name: t('workflow.scanGaps'),
-      description: '检测缺失的章节蓝图',
+      description: t('workflow.verifyScanGapsDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const blueprints = context.data.blueprints as ChapterBlueprint[]
         const totalChapters = context.data.totalChapters as number
 
-        callbacks.log('正在分析蓝图完整性...')
+        callbacks.log(t('log.analyzingCompleteness'))
         const report = await generateVerificationReport(totalChapters, blueprints)
 
         context.data.verificationReport = report
@@ -78,14 +78,14 @@ export function createVerificationWorkflow(
   if (params.autoFill) {
     steps.push({
       name: t('workflow.aiFill'),
-      description: '使用相邻章节上下文生成缺失蓝图',
+      description: t('workflow.verifyAiFillDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const gaps = context.data.gaps as BlueprintGap[]
 
         if (!gaps || gaps.length === 0) {
-          callbacks.log('✅ 无缺口，无需补全')
+          callbacks.log(t('log.noGaps'))
           callbacks.setProgress(100)
-          return '无缺口'
+          return t('workflow.noGaps')
         }
 
         const cmd = new FillGapsCommand({ gaps })
@@ -96,7 +96,7 @@ export function createVerificationWorkflow(
         })
 
         context.data.filledBlueprints = filled
-        return `已补全 ${filled.length} 章`
+        return t('workflow.filledCount').replace('{n}', String(filled.length))
       },
     })
   }

@@ -8,6 +8,7 @@
  * - 调用方自行控制频率：LLM 流式 chunk 等高频路径不走这里（写文件会爆炸）
  */
 import { ipc } from './ipc-client'
+import { t } from '../shared/locale'
 import type { LogEnvMode } from '../shared/ipc-channels'
 
 export type RenderLogLevel = 'debug' | 'info' | 'warn' | 'error'
@@ -41,7 +42,7 @@ export function installRendererErrorCapture(): void {
     const detail = err instanceof Error
       ? `${err.message}${err.stack ? `\n${err.stack}` : ''}`
       : `${event.message}${event.filename ? ` @ ${event.filename}:${event.lineno}:${event.colno}` : ''}`
-    renderLog('error', 'Renderer', `全局错误: ${detail}`)
+    renderLog('error', 'Renderer', t('log.render.rendererGlobalError').replace('{detail}', () => detail))
   })
 
   window.addEventListener('unhandledrejection', (event) => {
@@ -49,6 +50,6 @@ export function installRendererErrorCapture(): void {
     const detail = reason instanceof Error
       ? `${reason.message}${reason.stack ? `\n${reason.stack}` : ''}`
       : String(reason)
-    renderLog('error', 'Renderer', `未处理 Promise 拒绝: ${detail}`)
+    renderLog('error', 'Renderer', t('log.render.rendererUnhandledRejection').replace('{detail}', () => detail))
   })
 }

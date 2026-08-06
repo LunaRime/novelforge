@@ -84,8 +84,8 @@ async function callLLMForPostProcess(
           resolve(stripThinkingTags(raw))
         },
         onError: (err) => {
-          logLLMCall(false, err || '流式生成失败')
-          reject(new Error(err || '流式生成失败'))
+          logLLMCall(false, err || t('log.render.llmStreamFailed'))
+          reject(new Error(err || t('log.render.llmStreamFailed')))
         },
       },
       undefined,
@@ -129,7 +129,7 @@ export function buildFinalizePostProcessSteps(
         : `chapter_${chapterNumber}.txt`
       const result = await ipc.invoke('kb:import-text', draftContent, contentFileName, _project.path) as { success: boolean; error?: string; chunkCount?: number }
       if (result.success) {
-        callbacks.log(`✅ 正文章节已导入知识库（${result.chunkCount} 块）`)
+        callbacks.log(t('log.finalize.kbImported').replace('{count}', String(result.chunkCount)))
       } else {
         throw new Error(`导入知识库失败: ${result.error}`)
       }
@@ -154,7 +154,7 @@ export function buildFinalizePostProcessSteps(
 
         // 写入蓝图 JSON 的 notes 字段
         await ipc.invoke('db:blueprint-update-notes', chapterNumber, cleanNotes)
-        callbacks.log('✅ 本章剧情要点提取完成（已写入蓝图）')
+        callbacks.log(t('log.finalize.notesDone'))
       },
     })
   }
@@ -231,7 +231,7 @@ export function buildFinalizePostProcessSteps(
               newRows = jNewChars.map(mapState)
             }
             if (updateRows.length > 0 || newRows.length > 0) {
-              callbacks.log('✅ 角色状态解析成功 (JSON 回退)')
+              callbacks.log(t('log.finalize.charStateJsonFallback'))
             }
           }
         }
@@ -276,7 +276,7 @@ export function buildFinalizePostProcessSteps(
                 tags: normalizeTags(row.tags ?? '') || null,
                 motivation: cleanOptional(row.motivation ?? ''),
               })
-              callbacks.log(`更新角色状态: ${name}`)
+              callbacks.log(t('log.finalize.charStateUpdated').replace('{name}', name))
             }
           }
         }
@@ -312,7 +312,7 @@ export function buildFinalizePostProcessSteps(
             })
           }
           if (newCharCount > 0) {
-            callbacks.log(`✅ 自动提取并登记 ${newCharCount} 名新出场角色`)
+            callbacks.log(t('log.finalize.newChars').replace('{count}', String(newCharCount)))
           }
         }
       },
@@ -326,7 +326,7 @@ export function buildFinalizePostProcessSteps(
     critical: false,
     dependsOn: ['character_cards'],
     executor: async (callbacks: StepCallbacks) => {
-      callbacks.log('正在检测角色间的关系变化...')
+      callbacks.log(t('log.finalize.detectingRelations'))
       try {
         const allChars = await ipc.invoke('db:character-get-all') as Array<{
           name: string; relations: string; appearChapters: string
@@ -382,10 +382,10 @@ export function buildFinalizePostProcessSteps(
             })
           }
         }
-        if (detected > 0) callbacks.log(`✅ 自动检测到 ${detected} 条新角色关系`)
-        else callbacks.log('未检测到新的角色关系')
+        if (detected > 0) callbacks.log(t('log.finalize.relationsDetected').replace('{count}', String(detected)))
+        else callbacks.log(t('log.finalize.noRelations'))
       } catch (e) {
-        callbacks.log(`⚠️ 关系检测失败: ${String(e)}`)
+        callbacks.log(t('log.finalize.relationDetectFailed').replace('{error}', () => String(e)))
       }
     },
   })
@@ -398,14 +398,14 @@ export function buildFinalizePostProcessSteps(
       critical: false,
       dependsOn: ['kb_import'],
       executor: async (callbacks) => {
-        callbacks.log('🎨 触发文风自动学习（每5章一次）...')
+        callbacks.log(t('log.finalize.styleLearning'))
         const { AnalyzeWritingStyleCommand } = await import('./analyze-style.command')
         await new AnalyzeWritingStyleCommand().execute({
           step: { id: '', name: '', description: '', status: 'pending' as const, logs: [] },
           context: { data: {}, cancelled: false },
           callbacks,
         })
-        callbacks.log('✅ 文风分析完成，已更新配置')
+        callbacks.log(t('log.finalize.styleDone'))
       },
     })
   }
@@ -425,8 +425,8 @@ export function buildFinalizePostProcessSteps(
         const done = detectResolvedForeshadowing(draftContent, all, chapterNumber)
         const merged = [...all.filter(i => !done.some(d => d.id === i.id)), ...news]
         await saveForeshadowing(merged)
-        if (news.length) callbacks.log(`新增${news.length}伏笔/回收${done.length}旧伏笔`)
-      } catch (e) { callbacks.log(`⚠️ 伏笔扫描失败: ${String(e)}`) }
+        if (news.length) callbacks.log(t('log.finalize.foreshadow').replace('{added}', String(news.length)).replace('{resolved}', String(done.length)))
+      } catch (e) { callbacks.log(t('log.finalize.foreshadowFailed').replace('{error}', () => String(e))) }
     },
   })
 
@@ -449,7 +449,7 @@ export function buildFinalizePostProcessSteps(
         for (const issue of result.issues) {
           callbacks.log(`⚠️ [${issue.kind}] ${issue.message}`)
         }
-        callbacks.log(`📋 ${result.summary}（不影响定稿，可据此触发修稿）`)
+        callbacks.log(t('log.finalize.auditSummary').replace('{summary}', result.summary))
       }
     },
   })
@@ -461,7 +461,7 @@ export function buildFinalizePostProcessSteps(
     critical: false,
     dependsOn: ['kb_import'],
     executor: async (callbacks: StepCallbacks) => {
-      callbacks.log('正在分析角色对话风格...')
+      callbacks.log(t('log.finalize.analyzingVoice'))
       try {
         const { analyzeCharacterVoice, upsertVoiceProfile } = await import('../../character-voice-analyzer')
         const characters = await ipc.invoke('db:character-get-all') as Array<{ name: string; notes?: string }>
@@ -494,9 +494,9 @@ export function buildFinalizePostProcessSteps(
             }
           } catch { /* skip */ }
         }
-        callbacks.log(`角色声音分析完成 (${analyzed}/${characters.length})`)
+        callbacks.log(t('log.finalize.voiceDone').replace('{done}', String(analyzed)).replace('{total}', String(characters.length)))
       } catch (e) {
-        callbacks.log(`⚠️ 角色声音分析失败: ${String(e)}`)
+        callbacks.log(t('log.finalize.voiceFailed').replace('{error}', () => String(e)))
       }
     },
   })
@@ -518,7 +518,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     const refinedDraftText = this.params.draftContent
     if (!refinedDraftText) throw new Error(t('error.noFinalizedContent'))
 
-    callbacks.log('\n===== 开始定稿与后处理分析 =====')
+    callbacks.log(t('log.finalize.start'))
 
     // 1. 获取对应草稿并将库内状态变更为 finalized（同时同步定稿期可能微调过的正文）
     const { parseDraftMeta } = await import('../chapter-workflow')
@@ -538,13 +538,15 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
       const contentToWrite = titleLine + refinedDraftText.replace(/^#+ .*\n*/, '')
       await ipc.invoke('fs:write-file', physicalPath, contentToWrite)
     } catch (e) {
-      callbacks.log(`⚠️ 写入根目录物理文件失败: ${String(e)}`)
+      callbacks.log(t('log.finalize.fileWriteFailed').replace('{error}', () => String(e)))
     }
 
-    callbacks.log(`✅ 定稿内容已正式写入 SQLite 数据库并同步为根目录文件 (第${this.params.chapterNumber}章${safeTitle}.txt)`)
+    callbacks.log(t('log.finalize.written')
+      .replace('{chapter}', String(this.params.chapterNumber))
+      .replace('{title}', safeTitle))
 
     // 3. 通过 PostProcessPipeline 执行后处理（状态持久化 + 支持重试）
-    callbacks.log('🚀 正在启动后台大模型推演系统更新全书状态...')
+    callbacks.log(t('log.finalize.startingPostProcess'))
 
     const scope = getChapterFinalizeScope(this.params.chapterNumber)
     const sourceLabel = `第${this.params.chapterNumber}章定稿`
@@ -557,7 +559,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     await runPostProcessPipeline(project.path, scope, sourceLabel, steps, callbacks)
 
-    callbacks.log('\n🎉 第' + this.params.chapterNumber + '章创作全流程彻底完成！')
+    callbacks.log(t('log.finalize.allDone').replace('{chapter}', String(this.params.chapterNumber)))
     useProjectStore.getState().refreshFileTree()
 
     // 通过 EventBus 通知 ProjectService 执行定稿后的统一刷新

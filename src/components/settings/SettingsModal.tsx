@@ -233,10 +233,14 @@ function LLMSection({
         }
       }
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Settings', `模型保存成功 ${editingModel.id}（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Settings', t('log.render.modelSaveSuccess')
+        .replace('{id}', () => editingModel.id)
+        .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
-      renderLog('error', 'Save:Settings', `模型保存失败 ${editingModel.id}: ${String(e)}`)
+      renderLog('error', 'Save:Settings', t('log.render.modelSaveFailed')
+        .replace('{id}', () => editingModel.id)
+        .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setEditingModel(null)
@@ -699,9 +703,9 @@ function ProxySection() {
     try {
       await ipc.invoke('config:set', { proxy })
       // 保存行为日志流：成功 info（视觉反馈已有 setSaved 局部文本）
-      renderLog('info', 'Save:Settings', `代理配置保存成功（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Settings', t('log.render.proxySaveSuccess').replace('{ms}', String(Date.now() - t0)))
     } catch (e) {
-      renderLog('error', 'Save:Settings', `代理配置保存失败: ${String(e)}`)
+      renderLog('error', 'Save:Settings', t('log.render.proxySaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)

@@ -140,7 +140,7 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
             const { SelfReviewCommand } = await import('./commands/self-review.command')
             const latest = await ipc.invoke('db:draft-get-latest', chapterInfo.chapterNumber) as { id?: number } | null
             if (!latest?.id) {
-              callbacks.log('⚠️ 终审自省：未找到写稿步骤产出的草稿，跳过')
+              callbacks.log(t('log.selfReviewSkipped'))
               return
             }
             const cmd = new SelfReviewCommand({
@@ -150,7 +150,7 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
             })
             await cmd.execute({ step, context, callbacks })
           } catch (e) {
-            callbacks.log(`⚠️ 终审自省失败（不影响已生成的初稿）: ${e instanceof Error ? e.message : String(e)}`)
+            callbacks.log(t('log.selfReviewFailed').replace('{error}', e instanceof Error ? e.message : String(e)))
           }
         },
       },
@@ -242,7 +242,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
     steps: [
       {
         name: t('workflow.finalize'),
-        description: '写入 manuscript/，开启后处理 Command 更新三路大纲',
+        description: t('workflow.finalizeDesc'),
         executor: async (step, context, callbacks) => {
           const { FinalizeChapterCommand } = await import('./commands/finalize-chapter.command')
           const cmd = new FinalizeChapterCommand({
@@ -309,9 +309,9 @@ export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDef
 
           // 使用数据库定稿源
           const draftMeta = await ipc.invoke('db:draft-get-finalized', chapterNumber)
-          if (!draftMeta) throw new Error(`第 ${chapterNumber} 章的定稿记录未获取到`)
+          if (!draftMeta) throw new Error(t('error.chapterFinalizeMissing').replace('{n}', String(chapterNumber)))
           const full = await ipc.invoke('db:draft-get-full', draftMeta.id)
-          if (!full) throw new Error(`正文提取失败: ID=${draftMeta.id}`)
+          if (!full) throw new Error(t('error.chapterContentFetch').replace('{id}', String(draftMeta.id)))
 
           // 从数据库蓝图读取正式标题
           let chapterTitle = `第${chapterNumber}章`
@@ -326,7 +326,7 @@ export function createRepairFinalizeWorkflow(chapterNumber: number): WorkflowDef
           const scope = getChapterFinalizeScope(chapterNumber)
           const steps = buildFinalizePostProcessSteps(project, chapterNumber, chapterTitle, full.content)
 
-          await runPostProcessPipeline(project.path, scope, `第${chapterNumber}章定稿`, steps, callbacks, { onlyFailed: true })
+          await runPostProcessPipeline(project.path, scope, t('workflow.chapterFinalizeSource').replace('{n}', String(chapterNumber)), steps, callbacks, { onlyFailed: true })
 
           // 通知刷新：定稿改变了草稿状态/正式稿列表/角色卡/文件树——用 'all' 全刷
           // （FINALIZE_COMPLETE 供 project-service 刷新草稿+角色+文件树，

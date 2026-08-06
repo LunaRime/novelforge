@@ -97,11 +97,14 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
     setSaving(false)
     if (ok) {
       // 保存行为日志流（视觉反馈已有 toast.success）
-      renderLog('info', 'Save:Volume', `分卷保存成功 第${num}卷「${title.trim()}」（${editing ? '编辑' : '新建'}）`)
+      renderLog('info', 'Save:Volume', t('log.render.volumeSaveSuccess')
+        .replace('{num}', String(num))
+        .replace('{title}', () => title.trim())
+        .replace('{mode}', () => editing ? t('log.render.modeEdit') : t('log.render.modeNew')))
       onClose()
       toast.success(editing ? t('volume.editVolume') : t('volume.newVolume'))
     } else {
-      renderLog('error', 'Save:Volume', `分卷保存失败 第${num}卷: DB 写入失败`)
+      renderLog('error', 'Save:Volume', t('log.render.volumeSaveFailed').replace('{num}', String(num)))
       toast.error(t('volume.saveFailed').replace('{error}', 'DB'))
     }
   }

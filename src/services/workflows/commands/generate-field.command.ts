@@ -41,7 +41,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     const config = project.novelConfig
     const label = FIELD_LABELS[this.fieldKey]
 
-    callbacks.log(`🧠 正在为「${label}」生成内容...`)
+    callbacks.log(t('log.generateField.generating').replace('{label}', label))
 
     // 构建上下文摘要（已填写的字段作为参考）
     const context = this.buildContext(config)
@@ -53,7 +53,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     const cleanResult = this.stripThinkingTags(result).trim()
 
     if (!cleanResult) {
-      callbacks.log(`⚠️ 「${label}」生成返回空结果`)
+      callbacks.log(t('log.generateField.emptyResult').replace('{label}', label))
       return ''
     }
 
@@ -61,7 +61,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     const { updateNovelConfig, saveProject } = useProjectStore.getState()
     updateNovelConfig({ [this.fieldKey]: cleanResult })
     await saveProject()
-    callbacks.log(`✅ 「${label}」已生成并保存`)
+    callbacks.log(t('log.generateField.saved').replace('{label}', label))
 
     return cleanResult
   }

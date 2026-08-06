@@ -146,10 +146,14 @@ export default function ChapterCardEditor() {
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Blueprint', `章节蓝图保存成功 第${selected.chapterNumber}章（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Blueprint', t('log.render.blueprintSaveSuccess')
+        .replace('{num}', String(selected.chapterNumber))
+        .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
-      renderLog('error', 'Save:Blueprint', `章节蓝图保存失败 第${selected.chapterNumber}章: ${String(e)}`)
+      renderLog('error', 'Save:Blueprint', t('log.render.blueprintSaveFailed')
+        .replace('{num}', String(selected.chapterNumber))
+        .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)
@@ -165,10 +169,12 @@ export default function ChapterCardEditor() {
       useProjectStore.getState().refreshFileTree()
       setDirty(false)
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Blueprint', `章节蓝图全量保存成功 ${blueprints.length} 章（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Blueprint', t('log.render.blueprintSaveAllSuccess')
+        .replace('{count}', String(blueprints.length))
+        .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
-      renderLog('error', 'Save:Blueprint', `章节蓝图全量保存失败: ${String(e)}`)
+      renderLog('error', 'Save:Blueprint', t('log.render.blueprintSaveAllFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)

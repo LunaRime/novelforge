@@ -30,7 +30,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     const draft = this.params.draftContent
     if (!draft) throw new Error(t('error.noDraft'))
 
-    callbacks.log('正在进行大神级修稿...')
+    callbacks.log(t('log.refineDraft.starting'))
 
     const template = getPromptTemplate('refine_chapter')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '修稿'))
@@ -87,7 +87,9 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
 
     context.data.refined = cleanRefined
     context.data.refinedPath = this.params.draftPath
-    callbacks.log(`✅ 修稿完成（${cleanRefined.length} 字），已生成修订稿版本 r${revIndex}`)
+    callbacks.log(t('log.refineDraft.done')
+      .replace('{chars}', String(cleanRefined.length))
+      .replace('{revision}', String(revIndex)))
     return refined
   }
 }

@@ -53,10 +53,14 @@ export default function ModelSettings() {
     try {
       await saveModel(editingModel)
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Model', `模型保存成功 ${editingModel.id}（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Model', t('log.render.modelSaveSuccess')
+        .replace('{id}', () => editingModel.id)
+        .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
-      renderLog('error', 'Save:Model', `模型保存失败 ${editingModel.id}: ${String(e)}`)
+      renderLog('error', 'Save:Model', t('log.render.modelSaveFailed')
+        .replace('{id}', () => editingModel.id)
+        .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setEditingModel(null)
@@ -311,11 +315,11 @@ function ProxySettings() {
       const { ipc } = await import('../../services/ipc-client')
       await ipc.invoke('config:set', { proxy })
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Model', `代理配置保存成功（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Model', t('log.render.proxySaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
       // 失败不再静默（原 catch 忽略）
-      renderLog('error', 'Save:Model', `代理配置保存失败: ${String(e)}`)
+      renderLog('error', 'Save:Model', t('log.render.proxySaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
     setSaving(false)

@@ -291,7 +291,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         const systemRole = template.systemRole || t('role.dataStructurer')
 
         const llmStore = useLLMStore.getState()
-        cb.appendText('🔍 正在调用 AI 提取角色卡片...\n')
+        cb.appendText(t('log.extractCardsStart'))
 
         let fullContent = ''
         await new Promise<void>((resolve, reject) => {
@@ -352,9 +352,9 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 批量写入数据库
         const saveResult = await ipc.invoke('db:character-save-all', characterDataList as unknown as CharacterData[])
         if (!saveResult.success) {
-          throw new Error(`角色卡保存失败: ${saveResult.error || '未知错误'}`)
+          throw new Error(t('error.characterCardsSave').replace('{error}', saveResult.error || t('status.unknown')))
         }
-        cb.log(`✅ 角色卡提取完毕（共 ${characterDataList.length} 个角色）`)
+        cb.log(t('log.extractCardsDone').replace('{n}', String(characterDataList.length)))
       },
     },
   ]
@@ -369,10 +369,10 @@ export function runArchCharacterExtract(projectPath: string, characterDynamicsCo
       steps: [
         {
           name: t('workflow.extractCards'),
-          description: '从角色图谱中提取并生成角色卡片数据',
+          description: t('workflow.extractCardsDesc'),
           executor: async (_step, _ctx, callbacks) => {
             const { globalEventBus } = await import('../../shared/event-bus')
-            const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, '架构-角色图谱', steps, callbacks)
+            const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks)
             if (archStatus.allCriticalPassed) {
               // 角色卡提取成功 → 通过 EventBus 通知 ProjectService 刷新
               globalEventBus.emit('ARCH_POSTPROCESS_UPDATED', {})
@@ -383,8 +383,8 @@ export function runArchCharacterExtract(projectPath: string, characterDynamicsCo
                 return stepResult && !stepResult.ok
               })
               const errMsg = failedStep
-                ? `${failedStep.label}: ${archStatus.steps[failedStep.key]?.error || '未知错误'}`
-                : '角色卡提取失败（原因未知）'
+                ? `${failedStep.label}: ${archStatus.steps[failedStep.key]?.error || t('status.unknown')}`
+                : t('log.extractFailedUnknown')
               callbacks.log(`❌ ${errMsg}`)
               globalEventBus.emit('CHARACTER_EXTRACT_FAILED', { error: errMsg })
               globalEventBus.emit('ARCH_POSTPROCESS_UPDATED', {})
@@ -411,10 +411,10 @@ export async function repairArchCharacterCards(projectPath: string): Promise<voi
     steps: [
       {
         name: t('workflow.retryCards'),
-        description: '重试失败的角色卡提取步骤',
+        description: t('workflow.retryCardsDesc'),
         executor: async (_step, _ctx, callbacks) => {
           const { globalEventBus } = await import('../../shared/event-bus')
-          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, '架构-角色图谱', steps, callbacks, { onlyFailed: true })
+          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks, { onlyFailed: true })
           if (archStatus.allCriticalPassed) {
             globalEventBus.emit('ARCH_POSTPROCESS_UPDATED', {})
           } else {
