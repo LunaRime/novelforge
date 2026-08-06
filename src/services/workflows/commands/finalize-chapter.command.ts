@@ -14,6 +14,7 @@ import {
   type PostProcessStep,
 } from '../workflow-utils'
 import type { ChapterInfo } from '../chapter-workflow'
+import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
 
 // LLM 输出占位「无/无变化/None/No changes」等 → 视为无更新（中文模板输出中文，英文模板输出英文）
@@ -342,9 +343,7 @@ export function buildFinalizePostProcessSteps(
     executor: async (callbacks: StepCallbacks) => {
       callbacks.log(t('log.finalize.detectingRelations'))
       try {
-        const allChars = await ipc.invoke('db:character-get-all') as Array<{
-          name: string; relations: string; appearChapters: string
-        }>
+        const allChars = await ipc.invoke('db:character-get-all') as CharacterData[]
         let detected = 0
 
         for (const char of allChars) {
@@ -355,12 +354,16 @@ export function buildFinalizePostProcessSteps(
           // 更新出场章节
           let chaps: number[] = []
           try { chaps = JSON.parse(char.appearChapters || '[]') } catch { chaps = [] }
-          if (!chaps.includes(chapterNumber)) {
+          // ⚠️ P0 修复：chapsChanged 必须先记录再 push——此前 `chaps.includes()` 在 push 后恒 true，
+          //    导致每个角色每次定稿都触发 upsert（连同 detected 循环外累计，一个角色有变化全量角色被写）
+          const chapsChanged = !chaps.includes(chapterNumber)
+          if (chapsChanged) {
             chaps.push(chapterNumber)
             chaps.sort((a: number, b: number) => a - b)
           }
 
           // 检测新关系：在正文中查找 "角色名：关系描述" 或 "与XXX的关系"
+          let detectedForChar = 0
           for (const other of allChars) {
             if (other.name === char.name) continue
             const alreadyRelated = rels.some(r => r.target === other.name)
@@ -377,20 +380,20 @@ export function buildFinalizePostProcessSteps(
                 label: t('workflow.chapterInteraction').replace('{n}', String(chapterNumber)),
                 sinceChapter: chapterNumber,
               })
-              detected++
+              detectedForChar++
             }
           }
+          detected += detectedForChar
 
-          if (detected > 0 || chaps.includes(chapterNumber)) {
-            const c = char as Record<string, unknown>
+          // 仅在确有变更时 upsert；**全量回填所有字段**——此前 payload 只带 7 个字段，
+          // 仓库 upsert 是全列覆盖 → gender/age/appearance/.../notes（含 [VOICE:] 块）/currentState 全被清空
+          if (chapsChanged || detectedForChar > 0) {
             await ipc.invoke('db:character-upsert', {
-              name: c.name as string,
-              role: String(c.role || 'supporting'),
-              gender: '', age: '', appearance: '', personality: '', background: '',
-              abilities: '', motivation: '', relationships: String(c.relationships || ''),
-              arc: '', notes: '',
-              tier: Number(c.tier ?? 2),
-              tags: String(c.tags || ''),
+              ...char,
+              name: char.name,
+              role: String(char.role || 'supporting'),
+              tier: Number(char.tier ?? 2),
+              tags: String(char.tags || ''),
               appearChapters: JSON.stringify(chaps),
               relations: JSON.stringify(rels),
             })
@@ -478,30 +481,23 @@ export function buildFinalizePostProcessSteps(
       callbacks.log(t('log.finalize.analyzingVoice'))
       try {
         const { analyzeCharacterVoice, upsertVoiceProfile } = await import('../../character-voice-analyzer')
-        const characters = await ipc.invoke('db:character-get-all') as Array<{ name: string; notes?: string }>
+        const characters = await ipc.invoke('db:character-get-all') as CharacterData[]
         let analyzed = 0
         for (const char of characters) {
           if (!char.name) continue
           try {
-            // 获取角色的完整数据，防止覆写
-            // 从已有字符数据构造完整字段，仅更新 notes，防止覆写其他字段
-            const existing = char as Record<string, string | number | undefined>
+            // ⚠️ P0 修复：get-all 返回全列（含 currentState/tier/tags/appearChapters/relations），
+            //    upsert 用 ...existing 全量回填——此前只带 12 个字段，仓库 upsert 全列覆盖
+            //    把 v7 元数据与动态状态（cs_*）全部清空（注释声称"防止覆写"实际正是覆写）
+            const existing = char
             const profile = analyzeCharacterVoice(draftContent, char.name)
             if (profile.topWords.length > 0) {
               // upsert：剥离旧 VOICE 块 → 合并新旧档案 → 单块写回（防止 notes 膨胀 + 读端取到旧档案）
-              const updatedNotes = upsertVoiceProfile((existing.notes as string) || '', profile)
+              const updatedNotes = upsertVoiceProfile(existing.notes || '', profile)
               await ipc.invoke('db:character-upsert', {
-                name: existing.name as string,
-                role: (existing.role as string) || 'supporting',
-                gender: (existing.gender as string) || '',
-                age: (existing.age as string) || '',
-                appearance: (existing.appearance as string) || '',
-                personality: (existing.personality as string) || '',
-                background: (existing.background as string) || '',
-                abilities: (existing.abilities as string) || '',
-                motivation: (existing.motivation as string) || '',
-                relationships: (existing.relationships as string) || '',
-                arc: (existing.arc as string) || '',
+                ...existing,
+                name: existing.name,
+                role: existing.role || 'supporting',
                 notes: updatedNotes,
               } as never)
               analyzed++
