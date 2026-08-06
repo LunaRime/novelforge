@@ -3,6 +3,7 @@ import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ArchitecturePromptBuilder } from '../../prompts/prompt-builder'
+import { stripThinkingTags, stringifyField as stringifyFieldUtils } from '../workflow-utils'
 import { ipc } from '../../ipc-client'
 
 import type { NovelConfig } from '../../../shared/ipc-channels'
@@ -15,9 +16,7 @@ function getNovelConfig(): { project: NonNullable<ReturnType<typeof useProjectSt
   return { project, config: project.novelConfig }
 }
 
-function stripThinkingTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
-}
+// stripThinkingTags 统一走 workflow-utils 单一出口
 
 async function writeArchToDb(key: 'premise' | 'charactersArch' | 'worldbuilding' | 'synopsis', content: string): Promise<void> {
   const cleanContent = stripThinkingTags(content)
@@ -60,14 +59,8 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       throw new Error(t('error.jsonParse').replace('{error}', String(e)))
     }
 
-    // 防御：LLM 常常将长文本字段错误地生成为对象或数组
-    const stringifyField = (val: unknown) => {
-      if (!val) return ''
-      if (typeof val === 'string') return val
-      if (Array.isArray(val)) return val.join('\n')
-      if (typeof val === 'object') return JSON.stringify(val, null, 2)
-      return String(val)
-    }
+    // 防御：LLM 常常将长文本字段错误地生成为对象或数组（workflow-utils 单一出口，长文本数组用换行合并）
+    const stringifyField = (val: unknown): string => stringifyFieldUtils(val, '\n')
 
     if (parsed.coreOutline !== undefined) parsed.coreOutline = stringifyField(parsed.coreOutline)
     if (parsed.worldSetting !== undefined) parsed.worldSetting = stringifyField(parsed.worldSetting)
@@ -77,8 +70,25 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     if (parsed.referenceWorks !== undefined) parsed.referenceWorks = stringifyField(parsed.referenceWorks)
     if (parsed.writingStyle !== undefined) parsed.writingStyle = stringifyField(parsed.writingStyle)
 
-    if (parsed.totalChapters !== undefined) parsed.totalChapters = parseInt(String(parsed.totalChapters)) || 100
-    if (parsed.wordsPerChapter !== undefined) parsed.wordsPerChapter = parseInt(String(parsed.wordsPerChapter)) || 3000
+    // 数字字段解析：非法值（如 "50章"）静默默认——打日志便于诊断（P3 修复）
+    if (parsed.totalChapters !== undefined) {
+      const n = parseInt(String(parsed.totalChapters))
+      if (isNaN(n) || n <= 0) {
+        callbacks.log(t('log.arch.numberParseFallback').replace('{field}', 'totalChapters').replace('{raw}', String(parsed.totalChapters)).replace('{fallback}', '100'))
+        parsed.totalChapters = 100
+      } else {
+        parsed.totalChapters = n
+      }
+    }
+    if (parsed.wordsPerChapter !== undefined) {
+      const n = parseInt(String(parsed.wordsPerChapter))
+      if (isNaN(n) || n <= 0) {
+        callbacks.log(t('log.arch.numberParseFallback').replace('{field}', 'wordsPerChapter').replace('{raw}', String(parsed.wordsPerChapter)).replace('{fallback}', '3000'))
+        parsed.wordsPerChapter = 3000
+      } else {
+        parsed.wordsPerChapter = n
+      }
+    }
 
     // 先更新前端 Store
     this.onGenerated(parsed)

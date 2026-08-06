@@ -24,6 +24,19 @@ export function stripThinkingTags(text: string): string {
   return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
 }
 
+/**
+ * 防御性字段序列化：AI 可能把文本字段生成为对象/数组，统一转字符串。
+ * 单一出口（原 architecture-workflow 与 architecture.command 各有一份，数组分隔符不一致）。
+ * @param joinBy 数组合并分隔符——角色卡字段用 '、'（顿号），长文本架构字段用 '\n'（换行）
+ */
+export function stringifyField(val: unknown, joinBy: string = '、'): string {
+  if (!val) return ''
+  if (typeof val === 'string') return val
+  if (Array.isArray(val)) return val.map(v => String(v)).join(joinBy)
+  if (typeof val === 'object') return JSON.stringify(val, null, 2)
+  return String(val)
+}
+
 // ===== Markdown 表格解析 =====
 
 /** 表头别名映射：AI 可能使用中文/英文/缩写表头，统一映射到标准字段名 */

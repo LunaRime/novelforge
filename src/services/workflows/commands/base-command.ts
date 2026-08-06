@@ -5,7 +5,7 @@ import type { CallPurpose } from '../../llm/model-router'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
 import type { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
-import { robustParseJSON } from '../workflow-utils'
+import { robustParseJSON, stripThinkingTags } from '../workflow-utils'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG } from '../../agent/rag-context-provider'
 import { structureForCache, calculateCost, type CacheScope } from '../../llm/prompt-cache'
 import { renderLog } from '../../render-logger'
@@ -206,9 +206,10 @@ export abstract class BaseWorkflowCommand<TResult = string> {
 
   /**
    * 去除 DeepSeek 等模型的 <think> 标签，保证落盘纯净
+   * （统一委托 workflow-utils 单一出口，与 architecture.command 等一致）
    */
   protected stripThinkingTags(text: string): string {
-    return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+    return stripThinkingTags(text)
   }
 
   /**
