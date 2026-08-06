@@ -136,9 +136,12 @@ function CharItem({ char: c, selected, onClick }: {
   let tags: string[] = []
   try { tags = JSON.parse(c.tags || '[]') } catch { tags = [] }
 
-  // 解析出场章节
+  // 解析出场章节（Array.isArray 守卫：裸 JSON 文本框可存 "1,5" 字符串——此前 join 抛 TypeError 崩溃）
   let chaps: number[] = []
-  try { chaps = JSON.parse(c.appearChapters || '[]') } catch { chaps = [] }
+  try {
+    const parsed = JSON.parse(c.appearChapters || '[]')
+    if (Array.isArray(parsed)) chaps = parsed as number[]
+  } catch { chaps = [] }
 
   const chapsDisplay = chaps.length <= 3
     ? chaps.join(',')

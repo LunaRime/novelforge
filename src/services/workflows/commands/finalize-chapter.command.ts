@@ -251,11 +251,15 @@ export function buildFinalizePostProcessSteps(
         }
 
         // LLM 输出归一化：tags → JSON 数组字符串（角色列表按 JSON.parse 消费）
+        // ⚠️ P1 修复：'无/无变化/None/No changes' 占位值过滤（prompt 指示"tags 无变化填无"，
+        //    此前 normalizeTags('无') 返回 '["无"]' 非 null → COALESCE 不生效 → 每次定稿
+        //    UPDATES 表中的角色真实标签被替换为 ["无"]）
         const normalizeTags = (value: string): string => {
           const tags = String(value ?? '')
             .split(/[，,、；;]+/)
             .map(s => s.trim())
             .filter(Boolean)
+            .filter(s => !NO_CHANGE_VALUES.includes(s.toLowerCase()))
           return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
         }
         // LLM 占位"无/无变化/None/No changes" → null（不覆盖已有值）

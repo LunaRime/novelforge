@@ -37,9 +37,12 @@ export const readCharactersTool = buildAgentTool({
       }
 
       if (charName) {
-        // 查找指定角色
-        const target = chars.find((c) =>
-          String(c.name).toLowerCase().includes(charName.toLowerCase())
+        // 查找指定角色——精确匹配优先（P1 修复：此前子串 includes 取第一个命中，
+        // 查询「林」可能命中「林峰」而非主角「林晓」，返回卡片与意图不符且无提示）
+        const query = charName.trim()
+        const exact = chars.find((c) => String(c.name) === query)
+        const target = exact ?? chars.find((c) =>
+          String(c.name).toLowerCase().includes(query.toLowerCase())
         )
         if (!target) {
           const available = chars.map((c) => String(c.name)).join('、')
