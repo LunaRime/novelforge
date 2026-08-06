@@ -152,20 +152,20 @@ function buildL0ProjectContext(): string | null {
   if (cfg.coreOutline) {
     // Token 感知截断（~80 tokens 预算）
     const { text, truncated } = applyTokenTruncation(cfg.coreOutline, 80)
-    parts.push(`${t('engine.contextCoreOutline').replace('{text}', text)}${truncated ? '…' : ''}`)
+    parts.push(`${t('engine.contextCoreOutline').replace('{text}', text)}${truncated ? t('engine.truncatedHint') : ''}`)
   }
   if (cfg.writingStyle) {
     // Token 感知截断（~40 tokens 预算）
     const { text, truncated } = applyTokenTruncation(cfg.writingStyle, 40)
-    parts.push(`${t('engine.contextWritingStyle').replace('{text}', text)}${truncated ? '…' : ''}`)
+    parts.push(`${t('engine.contextWritingStyle').replace('{text}', text)}${truncated ? t('engine.truncatedHint') : ''}`)
   }
 
   // 检查 L0 总预算
   const full = parts.join('\n')
   if (estimateTokens(full) > 800) {
-    // 裁剪大纲和风格部分
+    // 裁剪大纲和风格部分（⚠️ 低风险修复：追加截断提示——模型曾把截断后的配置当完整内容回答）
     const trimmed = truncateToTokenBudget(full, 800)
-    return trimmed
+    return trimmed + t('engine.truncatedHint')
   }
 
   return full

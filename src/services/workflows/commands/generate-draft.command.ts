@@ -332,6 +332,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
         if (tier === 1) {
           // 核心角色：完整档案
+          // ⚠️ 低风险修复：陈旧状态标记——状态停留在早期章节（距当前 >10 章）时提示可能过期，
+          //    模型曾把第 3 章的状态当作当前事实使用
+          const stale = Number(cs.updatedAtChapter ?? 0) > 0
+            && (this.chapterInfo.chapterNumber - Number(cs.updatedAtChapter)) > 10
           tier1.push(
             t('inject.charStateCore')
               .replace(/\{name\}/g, () => card.name)
@@ -341,7 +345,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
               .replace(/\{physical\}/g, () => String(cs.physicalState || t('inject.stateNormal')))
               .replace(/\{mental\}/g, () => String(cs.mentalState || t('inject.stateNormal')))
               .replace(/\{items\}/g, () => String(cs.keyItems || t('inject.stateNone')))
-              .replace(/\{chapter\}/g, () => String(cs.updatedAtChapter || 0))
+              .replace(/\{chapter\}/g, () => String(cs.updatedAtChapter || 0) + (stale ? t('inject.charStateStale') : ''))
               .replace(/\{events\}/g, () => String(cs.recentEvents || ''))
           )
         } else if (tier === 2) {
