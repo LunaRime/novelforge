@@ -16,16 +16,12 @@ import {
   Brain,
 } from 'lucide-react'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
-import { useLLMStore } from '../../stores/llm-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { Switch } from '../ui/Switch'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
-import type { ModelProfile } from '../../shared/ipc-channels'
-import { BUILTIN_PRESETS } from '../../shared/provider-presets'
-import { randomUUID } from '../../utils/id'
 
 // ===== 工作模式配置 =====
 
@@ -67,7 +63,6 @@ function getModeInfo(t: (key: TextKey) => string): Record<VectorWorkMode, {
 
 export default function VectorConfigSection() {
   const store = useVectorConfigStore()
-  const llmStore = useLLMStore()
   const { t } = useTranslation()
   const [testResult, setTestResult] = useState<VectorTestResult | null>(
     store.lastTestResult,
@@ -78,12 +73,6 @@ export default function VectorConfigSection() {
     store.load()
     store.loadLLMCandidates()
   }, [store])
-
-  // 模型列表（仅嵌入用途）
-  const embeddingModels = llmStore.models.filter((m) =>
-    m.purposes?.includes('embedding'),
-  )
-  const defaultEmbeddingModelId = llmStore.defaultEmbeddingModelId
 
   // ===== 工作分配说明 =====
 
@@ -121,31 +110,6 @@ export default function VectorConfigSection() {
   const handleTest = async () => {
     const result = await store.testConnection()
     setTestResult(result)
-  }
-
-  // ===== 设置默认嵌入模型 =====
-
-  const handleSetDefaultEmbedding = async (modelId: string) => {
-    await llmStore.setDefaultEmbeddingModel(modelId)
-  }
-
-  // ===== 添加嵌入模型 =====
-
-  const handleAddEmbeddingModel = () => {
-    const openaiPreset = BUILTIN_PRESETS.find((p) => p.provider === 'openai') ?? BUILTIN_PRESETS[0]
-    const newModel: ModelProfile = {
-      id: randomUUID(),
-      name: '',
-      provider: 'openai',
-      protocol: (openaiPreset?.protocol ?? 'openai') as 'openai' | 'gemini',
-      modelName: openaiPreset?.embeddingModels?.[0] ?? 'text-embedding-3-small',
-      apiKey: '',
-      baseUrl: openaiPreset?.baseUrl ?? 'https://api.openai.com',
-      temperature: 0,
-      maxTokens: 0,
-      purposes: ['embedding'],
-    }
-    llmStore.saveModel(newModel)
   }
 
   const modeInfo = getModeInfo(t)[store.workMode]
@@ -210,7 +174,7 @@ export default function VectorConfigSection() {
             <div className="flex items-center gap-2">
               <Cpu size={16} style={{ color: 'var(--color-text)' }} />
               <span className="font-medium" style={{ color: 'var(--color-text)' }}>
-                {t('settings.vectorModel')}
+                {t('vector.embeddingModelCard')}
               </span>
             </div>
             <Switch
@@ -246,68 +210,6 @@ export default function VectorConfigSection() {
           {distributionLogic(t)}
         </div>
       </div>
-
-      {/* ===== 向量模型管理（仅在开启时显示） ===== */}
-      {store.vectorModelEnabled && (
-        <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
-          <div className="flex items-center justify-between mb-3">
-            <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('vector.configuredModels')}
-            </h4>
-            <Button variant="outline" size="sm" onClick={handleAddEmbeddingModel}>
-              {t('vector.add')}
-            </Button>
-          </div>
-
-          {embeddingModels.length === 0 ? (
-            <div className="text-xs text-[var(--color-text-muted)] text-center py-3">
-              {t('vector.noModel')}
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {embeddingModels.map((model) => (
-                <div
-                  key={model.id}
-                  className="flex items-center justify-between p-2 rounded border text-xs"
-                  style={{
-                    borderColor:
-                      model.id === defaultEmbeddingModelId
-                        ? 'var(--color-accent)'
-                        : 'var(--color-border)',
-                    backgroundColor:
-                      model.id === defaultEmbeddingModelId
-                        ? 'var(--color-accent-bg)'
-                        : 'transparent',
-                  }}
-                >
-                  <div className="flex-1 min-w-0">
-                    <div className="font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                      {model.name || model.modelName}
-                    </div>
-                    <div className="text-[var(--color-text-muted)] truncate">
-                      {model.provider} · {model.modelName}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-1 ml-2 flex-shrink-0">
-                    {model.id === defaultEmbeddingModelId ? (
-                      <Badge variant="success" className="text-[10px]">{t('model.default')}</Badge>
-                    ) : (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-[10px] h-5"
-                        onClick={() => handleSetDefaultEmbedding(model.id)}
-                      >
-                        {t('model.setDefault')}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
 
       {/* ===== LLM 向量化 ===== */}
       <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>

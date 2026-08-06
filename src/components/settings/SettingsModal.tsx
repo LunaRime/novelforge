@@ -2,15 +2,19 @@ import { useState, useEffect } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
-  File, ExternalLink, RefreshCw, Loader2, Download, LogOut,
+  ExternalLink, RefreshCw, Loader2, Download, LogOut,
   BookMarked, Plug,
 } from 'lucide-react'
+import { confirm } from '../ui/Confirm'
 import PromptSettings from './PromptSettings'
 import SkillsSettings from './SkillsSettings'
 import MCPSettings from './MCPSettings'
 import { useLLMStore } from '../../stores/llm-store'
+import { useLayoutStore } from '../../stores/layout-store'
+import { useConcurrencyStore } from '../../stores/concurrency-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
+import type { ModelTier, ModelRouteConfig } from '../../services/llm/model-router'
 import type { ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
@@ -51,7 +55,6 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'prompts', label: t('settings.promptTemplates'), icon: <MessageSquare size={16} />, description: t('settings.promptTemplatesDesc') },
     { id: 'skills', label: t('settings.skills'), icon: <BookMarked size={16} />, description: t('settings.skillsDesc') },
     { id: 'mcp', label: t('settings.mcp'), icon: <Plug size={16} />, description: t('settings.mcpDesc') },
-    { id: 'file', label: t('settings.file'), icon: <File size={16} />, description: t('settings.fileDesc') },
     { id: 'dev', label: t('settings.developer'), icon: <Plug size={16} />, description: t('settings.developerDesc') },
     { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
   ]
@@ -67,8 +70,14 @@ interface SettingsModalProps {
 /** 全屏设置弹窗 */
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { t } = useTranslation()
-  const [section, setSection] = useState<SettingsSection>('llm')
+  // 初始分区：支持 openSettings('llm') 深链；无指定或分区无效时回默认 llm
+  const settingsSection = useLayoutStore(s => s.settingsSection)
   const sections = getSections(t)
+  const [section, setSection] = useState<SettingsSection>(
+    () => (settingsSection && sections.some(s => s.id === settingsSection)
+      ? settingsSection as SettingsSection
+      : 'llm')
+  )
 
   if (!open) return null
 
@@ -144,14 +153,33 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
           {/* 区域内容 */}
           <div className="flex-1 overflow-y-auto px-6 py-5">
-            {section === 'llm' && <LLMSection purposes={['generation', 'refinement', 'summary']} purposeLabel={t('model.purposeGen')} />}
-            {section === 'embedding' && <VectorConfigSection />}
+            {section === 'llm' && (
+              <>
+                <LLMSection purposes={['generation', 'refinement', 'summary']} purposeLabel={t('model.purposeGen')} />
+                {/* 模型路由 — 三层调度（此前功能存在但无 UI 入口，静默失效） */}
+                <div className="mt-6">
+                  <ModelRoutingSection />
+                </div>
+                {/* 并发控制（此前功能存在但无 UI 入口） */}
+                <div className="mt-6">
+                  <ConcurrencySection />
+                </div>
+              </>
+            )}
+            {section === 'embedding' && (
+              <>
+                <VectorConfigSection />
+                {/* 嵌入模型管理 — 与生成模型同套增删改/默认标记（原散落在向量配置内且无编辑/删除） */}
+                <div className="mt-6">
+                  <LLMSection purposes={['embedding']} purposeLabel={t('model.purposeEmbedding')} />
+                </div>
+              </>
+            )}
             {section === 'proxy' && <ProxySection />}
             {section === 'editor' && <EditorSection />}
             {section === 'prompts' && <PromptSettings />}
             {section === 'skills' && <SkillsSettings />}
             {section === 'mcp' && <MCPSettings />}
-            {section === 'file' && <FileSection />}
             {section === 'dev' && <DeveloperModeSection />}
             {section === 'about' && <AboutSection />}
           </div>
@@ -310,6 +338,161 @@ function LLMSection({
           )}
         </>
       )}
+    </div>
+  )
+}
+
+// ==================== 模型路由区 ====================
+
+/** 三层路由配置（elite/standard/budget）— 每层单选主用模型，自动降级链由 ModelRouter 处理 */
+function ModelRoutingSection() {
+  const { t } = useTranslation()
+  const models = useLLMStore(s => s.models)
+  const modelRoutes = useLLMStore(s => s.modelRoutes)
+  const updateModelRoutes = useLLMStore(s => s.updateModelRoutes)
+
+  const candidates = models.filter((m) => !m.purposes?.includes('embedding'))
+
+  const tiers: Array<{ id: ModelTier; label: string; desc: string }> = [
+    { id: 'elite', label: t('settings.routeElite'), desc: t('settings.routeEliteDesc') },
+    { id: 'standard', label: t('settings.routeStandard'), desc: t('settings.routeStandardDesc') },
+    { id: 'budget', label: t('settings.routeBudget'), desc: t('settings.routeBudgetDesc') },
+  ]
+
+  const handleChange = (tier: ModelTier, modelId: string) => {
+    const patch: Partial<ModelRouteConfig> = {}
+    patch[tier] = [modelId]
+    updateModelRoutes(patch)
+  }
+
+  return (
+    <div
+      className="rounded-xl p-4 space-y-4"
+      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+    >
+      <div>
+        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</p>
+        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+          {t('settings.routeDesc')}
+        </p>
+      </div>
+
+      {tiers.map(tier => {
+        const current = modelRoutes[tier.id]?.[0] || ''
+        return (
+          <div key={tier.id} className="space-y-1">
+            <div className="flex items-baseline justify-between gap-2">
+              <Label>{tier.label}</Label>
+              <span className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{tier.desc}</span>
+            </div>
+            <Select
+              value={current}
+              onValueChange={(v) => {
+                if (v !== '__none__') handleChange(tier.id, v)
+                else {
+                  const patch: Partial<ModelRouteConfig> = {}
+                  patch[tier.id] = []
+                  updateModelRoutes(patch)
+                }
+              }}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={t('settings.routeSelect')} />
+              </SelectTrigger>
+              <SelectContent>
+                {candidates.length === 0 && (
+                  <SelectItem value="__loading__" disabled>{t('model.noLabelConfig').replace('{label}', '')}</SelectItem>
+                )}
+                {candidates.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>
+                    {m.name || m.modelName} ({m.provider})
+                  </SelectItem>
+                ))}
+                <SelectItem value="__none__">{t('settings.routeClear')}</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ==================== 并发控制区 ====================
+
+/** 并发控制 — 最大并发请求数与排队上限（此前功能存在但无 UI 入口） */
+function ConcurrencySection() {
+  const { t } = useTranslation()
+  const status = useConcurrencyStore(s => s.status)
+  const updateConfig = useConcurrencyStore(s => s.updateConfig)
+  const [maxConcurrent, setMaxConcurrent] = useState(status.maxConcurrent)
+  const [maxQueueSize, setMaxQueueSize] = useState(status.maxQueueSize)
+  const [saving, setSaving] = useState(false)
+
+  // 挂载时拉取主进程当前并发状态
+  useEffect(() => {
+    useConcurrencyStore.getState().refreshStatus().then(() => {
+      const s = useConcurrencyStore.getState().status
+      setMaxConcurrent(s.maxConcurrent)
+      setMaxQueueSize(s.maxQueueSize)
+    }).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const handleSave = async () => {
+    setSaving(true)
+    const ok = await updateConfig({ maxConcurrent, maxQueueSize })
+    if (ok) {
+      toast.success(t('save.success'))
+    } else {
+      toast.error(t('save.failed').replace('{error}', t('status.unknown')))
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div
+      className="rounded-xl p-4 space-y-4"
+      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+    >
+      <div>
+        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.concurrencyTitle')}</p>
+        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+          {t('settings.concurrencyDesc')}
+        </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="space-y-1">
+          <Label>{t('settings.concurrencyMax')}</Label>
+          <Input
+            type="number"
+            min={1}
+            max={20}
+            value={String(maxConcurrent)}
+            onChange={(e) => setMaxConcurrent(Math.max(1, parseInt(e.target.value) || 1))}
+          />
+          <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyMaxDesc')}</p>
+        </div>
+        <div className="space-y-1">
+          <Label>{t('settings.concurrencyQueue')}</Label>
+          <Input
+            type="number"
+            min={1}
+            max={500}
+            value={String(maxQueueSize)}
+            onChange={(e) => setMaxQueueSize(Math.max(1, parseInt(e.target.value) || 1))}
+          />
+          <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyQueueDesc')}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button size="sm" onClick={handleSave} disabled={saving}>
+          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          {t('action.save')}
+        </Button>
+      </div>
     </div>
   )
 }
@@ -903,18 +1086,17 @@ function EditorSection() {
   )
 }
 
-// ==================== 文件区（原原生菜单「文件」） ====================
+// ==================== 关于与支持区 ====================
 
-/** 检查更新 + 退出应用 — 替代原生菜单栏的「文件」菜单 */
-function FileSection() {
+function AboutSection() {
   const { t } = useTranslation()
   const {
     status, updateInfo, error,
-    checkForUpdates, downloadUpdate, installUpdate, openReleasesPage,
+    checkForUpdates, downloadUpdate, installUpdate,
+    openReleasesPage, triggerUninstall,
   } = useUpdateStore()
   const [checking, setChecking] = useState(false)
   const [downloading, setDownloading] = useState(false)
-  const [confirmQuit, setConfirmQuit] = useState(false)
 
   const isChecking = checking || status === 'checking'
 
@@ -930,21 +1112,60 @@ function FileSection() {
     setDownloading(false)
   }
 
-  const handleQuit = () => {
-    if (!confirmQuit) {
-      setConfirmQuit(true)
-      return
+  /** 退出应用 — confirm 二次确认（替代原 onMouseLeave 复位，键盘/触屏可操作） */
+  const handleQuit = async () => {
+    const ok = await confirm(t('settings.quitConfirmMsg'), {
+      title: t('settings.quitApp'),
+      confirmText: t('settings.quitConfirm'),
+      danger: true,
+    })
+    if (ok) {
+      // 关闭窗口：主进程 close 事件会自动检查未保存内容
+      window.close()
     }
-    // 关闭窗口：主进程 close 事件会自动检查未保存内容
-    window.close()
+  }
+
+  /** 卸载 — confirm 二次确认 */
+  const handleUninstall = async () => {
+    const ok = await confirm(t('settings.uninstallConfirmMsg'), {
+      title: t('settings.uninstall'),
+      confirmText: t('settings.uninstallConfirm'),
+      danger: true,
+    })
+    if (ok) await triggerUninstall()
   }
 
   return (
-    <div className="max-w-[480px] space-y-5">
-      {/* 检查更新卡片 */}
+    <div className="space-y-6 max-w-[600px] p-2">
+      {/* 品牌标识 */}
+      <div className="flex flex-col items-center justify-center py-10 rounded-xl space-y-3" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
+        <h1 className="text-2xl font-bold brand-gradient tracking-wider">NovelForge</h1>
+        <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
+        <p className="text-xs mt-1 leading-relaxed text-center max-w-[320px]" style={{ color: 'var(--color-text-muted)' }}>
+          {t('about.slogan')}
+        </p>
+        <p className="text-[11px] leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
+          {t('about.sloganEn')}
+        </p>
+        <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
+          {t('about.tagline')}
+        </p>
+      </div>
+
+      {/* 项目介绍 */}
+      <div className="space-y-3 rounded-lg p-4" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text)' }}>
+          <MarkdownContent content={t('about.intro')} />
+        </p>
+        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+          {t('about.opensource')}
+        </p>
+      </div>
+
+      {/* 检查更新（原「文件」区） */}
       <div
-        className="rounded-xl p-4 space-y-3"
-        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+        className="rounded-lg p-4 space-y-3"
+        style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}
       >
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -1005,73 +1226,6 @@ function FileSection() {
         )}
       </div>
 
-      {/* 退出应用卡片 */}
-      <div
-        className="rounded-xl p-4 space-y-3"
-        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-      >
-        <div>
-          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.quitApp')}</p>
-          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-            {t('settings.quitAppDesc')}
-          </p>
-        </div>
-        <Button
-          size="sm"
-          variant={confirmQuit ? 'destructive' : 'outline'}
-          onClick={handleQuit}
-          onMouseLeave={() => setConfirmQuit(false)}
-        >
-          <LogOut size={13} />
-          {confirmQuit ? t('settings.quitConfirm') : t('settings.quitApp')}
-        </Button>
-      </div>
-    </div>
-  )
-}
-
-// ==================== 关于与支持区 ====================
-
-function AboutSection() {
-  const { t } = useTranslation()
-  const { openReleasesPage, triggerUninstall } = useUpdateStore()
-  const [confirmUninstall, setConfirmUninstall] = useState(false)
-
-  const handleUninstall = async () => {
-    if (!confirmUninstall) {
-      setConfirmUninstall(true)
-      return
-    }
-    await triggerUninstall()
-  }
-
-  return (
-    <div className="space-y-6 max-w-[600px] p-2">
-      {/* 品牌标识 */}
-      <div className="flex flex-col items-center justify-center py-10 rounded-xl space-y-3" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
-        <h1 className="text-2xl font-bold brand-gradient tracking-wider">NovelForge</h1>
-        <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
-        <p className="text-xs mt-1 leading-relaxed text-center max-w-[320px]" style={{ color: 'var(--color-text-muted)' }}>
-          {t('about.slogan')}
-        </p>
-        <p className="text-[11px] leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
-          {t('about.sloganEn')}
-        </p>
-        <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
-          {t('about.tagline')}
-        </p>
-      </div>
-
-      {/* 项目介绍 */}
-      <div className="space-y-3 rounded-lg p-4" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text)' }}>
-          <MarkdownContent content={t('about.intro')} />
-        </p>
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('about.opensource')}
-        </p>
-      </div>
-
       {/* 帮助操作（原原生菜单「帮助」） */}
       <div
         className="rounded-lg p-4 space-y-4"
@@ -1091,21 +1245,29 @@ function AboutSection() {
 
         <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
 
+        {/* 退出应用（原「文件」区） */}
+        <div>
+          <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.quitApp')}</p>
+          <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.quitAppDesc')}
+          </p>
+          <Button size="sm" variant="outline" className="mt-2" onClick={handleQuit}>
+            <LogOut size={13} />
+            {t('settings.quitApp')}
+          </Button>
+        </div>
+
+        <div style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+
         {/* 卸载 */}
         <div>
           <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.uninstall')}</p>
           <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             {t('settings.uninstallDesc')}
           </p>
-          <Button
-            size="sm"
-            variant={confirmUninstall ? 'destructive' : 'outline'}
-            className="mt-2"
-            onClick={handleUninstall}
-            onMouseLeave={() => setConfirmUninstall(false)}
-          >
+          <Button size="sm" variant="outline" className="mt-2" onClick={handleUninstall}>
             <Trash2 size={13} />
-            {confirmUninstall ? t('settings.uninstallConfirm') : t('settings.uninstall')}
+            {t('settings.uninstall')}
           </Button>
         </div>
       </div>
