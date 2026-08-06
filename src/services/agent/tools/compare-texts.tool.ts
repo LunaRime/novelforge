@@ -11,25 +11,18 @@ import { useVectorConfigStore } from '../../../stores/vector-config-store'
 
 export const compareTextsTool = buildAgentTool({
   name: 'compare_texts',
-  description:
-    '使用向量嵌入模型比较文本的语义相似度。\n' +
-    '适用场景：\n' +
-    '- 检查新写的章节是否与已有内容高度重复\n' +
-    '- 验证角色描写前后是否一致\n' +
-    '- 分析情节发展是否符合预期方向\n' +
-    '- 比较不同版本草稿的语义差异',
+  description: t('tool.compareDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: '查询文本（基准文本）',
+        description: t('tool.compareQuery'),
       },
       candidates: {
         type: 'string',
-        description:
-          '候选文本列表，用 "|||" 分隔。例如："文本A|||文本B|||文本C"。每段文本会被分别与查询文本比较',
+        description: t('tool.compareCandidates'),
       },
     },
     required: ['query', 'candidates'],

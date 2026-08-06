@@ -8,6 +8,8 @@
  * 4. 实时状态快照
  */
 
+import { t } from '../../shared/locale'
+
 // ===== 类型定义 =====
 
 /** Agent 执行阶段 */
@@ -58,7 +60,7 @@ export class ProgressTracker {
     this.totalTools = 0
     this.tokensUsed = 0
     this.phase = 'thinking'
-    this.description = '正在思考...'
+    this.description = t('agent.phaseThinking')
   }
 
   /** 设置阶段 */
@@ -66,16 +68,16 @@ export class ProgressTracker {
     this.phase = phase
     switch (phase) {
       case 'thinking':
-        this.description = '正在思考...'
+        this.description = t('agent.phaseThinking')
         break
       case 'tool_execution':
-        this.description = `正在执行工具: ${this.currentTool}`
+        this.description = t('agent.phaseTool').replace('{tool}', this.currentTool)
         break
       case 'generating':
-        this.description = '正在生成回复...'
+        this.description = t('agent.phaseGenerating')
         break
       case 'done':
-        this.description = '完成'
+        this.description = t('agent.phaseDone')
         break
     }
   }
@@ -86,7 +88,7 @@ export class ProgressTracker {
     this.totalTools = totalTools
     this.toolIndex++
     this.phase = 'tool_execution'
-    this.description = `正在执行工具: ${toolName} (${this.toolIndex}/${totalTools})`
+    this.description = t('agent.phaseTool').replace('{tool}', `${toolName} (${this.toolIndex}/${totalTools})`)
   }
 
   /** 步骤完成 */
@@ -108,7 +110,7 @@ export class ProgressTracker {
   complete(): void {
     this.phase = 'done'
     this.completedSteps = this.totalSteps
-    this.description = '完成'
+    this.description = t('agent.phaseDone')
   }
 
   /** 获取当前进度快照 */

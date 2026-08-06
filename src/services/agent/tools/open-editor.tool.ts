@@ -10,18 +10,18 @@ import { validatePath } from './safe-path'
 
 export const openEditorTool = buildAgentTool({
   name: 'open_editor',
-  description: '在 NovelForge 编辑器中打开指定文件的 Tab 页。用户可以直接在编辑器中查看和编辑内容。',
+  description: t('tool.openEditorDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       file_path: {
         type: 'string',
-        description: '相对于项目根目录的文件路径',
+        description: t('tool.openEditorPath'),
       },
       tab_type: {
         type: 'string',
-        description: 'Tab 类型',
+        description: t('tool.openEditorTabType'),
         enum: ['chapter', 'outline', 'character', 'config', 'arch-file'],
         default: 'chapter',
       },

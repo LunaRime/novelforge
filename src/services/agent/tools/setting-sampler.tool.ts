@@ -6,9 +6,9 @@
  * 判定标准：用随机低频词检索，取相关度最低的尾部结果。
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
-import { t } from '../../../shared/locale'
 
 /** 低频检索词池（与常见网文套路词拉开距离） */
 const COLD_QUERY_POOL = [
@@ -45,14 +45,14 @@ export async function sampleColdSettings(count = 2): Promise<string> {
 
 export const settingSamplerTool = buildAgentTool({
   name: 'setting_sampler',
-  description: '从知识库采样冷门设定片段（低相关度内容）。需要创意多样性、避免套路化描写时调用，返回 1-2 条冷门设定作为可选参考。',
+  description: t('tool.samplerDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       count: {
         type: 'number',
-        description: '采样条数（默认 2，最大 3）',
+        description: t('tool.samplerCount'),
         default: 2,
       },
     },

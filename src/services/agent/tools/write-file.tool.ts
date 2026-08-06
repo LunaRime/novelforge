@@ -9,18 +9,18 @@ import { validatePath } from './safe-path'
 
 export const writeFileTool = buildAgentTool({
   name: 'write_file',
-  description: '写入或修改项目内的文件。可用于创建新文件或覆盖已有文件内容。这是一个写入操作，需要用户确认。',
+  description: t('tool.writeFileDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       file_path: {
         type: 'string',
-        description: '相对于项目根目录的文件路径',
+        description: t('tool.writeFilePath'),
       },
       content: {
         type: 'string',
-        description: '要写入的文件内容',
+        description: t('tool.writeFileContent'),
       },
     },
     required: ['file_path', 'content'],

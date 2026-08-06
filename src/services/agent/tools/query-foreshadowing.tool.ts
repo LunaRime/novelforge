@@ -5,27 +5,27 @@
  * LLM 据此自然回应旧伏笔、避免断裂或提前回收。
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 import { loadAllForeshadowing, formatPendingForPrompt } from '../../foreshadowing-manager'
 import { useProjectStore } from '../../../stores/project-store'
-import { t } from '../../../shared/locale'
 
 /** 单次注入上限（避免 prompt 膨胀，超出取最近埋设的） */
 const MAX_ITEMS = 5
 
 export const queryForeshadowingTool = buildAgentTool({
   name: 'query_foreshadowing',
-  description: '查询尚未回收的伏笔（埋设章节 + 内容 + 类型）。写稿或规划剧情前调用，最多返回 5 条最近埋设的伏笔，据此在后续章节中自然回应或回收。',
+  description: t('tool.foreshadowDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       chapter_number: {
         type: 'number',
-        description: '当前章节号（用于筛选：只返回埋设于本章之前的伏笔）',
+        description: t('tool.foreshadowChapter'),
       },
       max_items: {
         type: 'number',
-        description: '返回条数上限（默认 5，最大 10）',
+        description: t('tool.foreshadowLimit'),
         default: 5,
       },
     },

@@ -16,14 +16,14 @@ function isAbsolutePath(p: string): boolean {
 
 export const readFileTool = buildAgentTool({
   name: 'read_file',
-  description: '读取项目内指定文件的内容。支持读取架构文件、蓝图、角色卡、草稿、配置等任意文本文件。',
+  description: t('tool.readFileDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       file_path: {
         type: 'string',
-        description: '相对于项目根目录的文件路径，例如 "02_architecture/世界观.md"',
+        description: t('tool.readFilePath'),
       },
     },
     required: ['file_path'],

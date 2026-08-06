@@ -8,19 +8,20 @@
  * - requiresConfirmation：外部 API 有副作用，调用前需用户确认
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
 
 export const callExternalApiTool = buildAgentTool({
   name: 'call_external_api',
-  description: '调用开发者模式配置的外部程序 API（在设置 → 开发者模式中配置基础地址与请求头）。传入相对路径 path（如 /search?q=xxx）、方法（默认 GET）与 JSON 字符串 body。用于接入浏览器等其他程序的能力。',
+  description: t('tool.externalApiDesc'),
   source: 'builtin',
   requiresConfirmation: true,
   inputSchema: {
     type: 'object',
     properties: {
-      path: { type: 'string', description: '相对路径（不含基础地址），如 /search?q=关键词 或 /api/v1/query' },
-      method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], description: 'HTTP 方法（默认 GET）' },
-      body: { type: 'string', description: '请求体 JSON 字符串（POST/PUT/PATCH 时使用）' },
+      path: { type: 'string', description: t('tool.externalApiPath') },
+      method: { type: 'string', enum: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'], description: t('tool.externalApiMethod') },
+      body: { type: 'string', description: t('tool.externalApiBody') },
     },
     required: ['path'],
   },

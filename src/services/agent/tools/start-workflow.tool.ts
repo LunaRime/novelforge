@@ -6,10 +6,10 @@
  * 工作流启动后会自动在底部任务面板和右侧 AI 输出面板中展示进度。
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { ipc } from '../../ipc-client'
-import { t } from '../../../shared/locale'
 
 // ---- 工作流类型到显示名的映射 ----
 const WORKFLOW_NAMES: Record<string, string> = {
@@ -23,21 +23,19 @@ const WORKFLOW_NAMES: Record<string, string> = {
 
 export const startWorkflowTool = buildAgentTool({
   name: 'start_workflow',
-  description:
-    '触发 NovelForge 创作工作流。支持写稿、修稿、审稿、定稿、生成蓝图、生成架构等工作流。' +
-    '调用此工具后，工作流将在 AI 输出面板中自动执行，并在底部任务面板显示进度。',
+  description: t('tool.startWorkflowDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       workflow: {
         type: 'string',
-        description: '工作流类型',
+        description: t('tool.startWorkflowType'),
         enum: ['generate_draft', 'review', 'refine', 'finalize', 'generate_blueprint', 'generate_architecture'],
       },
       chapter_number: {
         type: 'number',
-        description: '章节号（写稿/修稿/审稿/定稿必填）',
+        description: t('tool.startWorkflowChapter'),
       },
     },
     required: ['workflow'],

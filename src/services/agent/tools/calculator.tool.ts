@@ -5,6 +5,7 @@
  * 安全：仅允许数字与四则运算符的白名单表达式，禁用 eval/函数调用。
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 
 /** 表达式白名单：数字、四则、括号、小数点、百分号、空格 */
 const SAFE_EXPR_REGEX = /^[0-9+\-*/().%\s]+$/
@@ -28,14 +29,14 @@ function safeEvaluate(expression: string): { ok: true; value: number } | { ok: f
 
 export const calculatorTool = buildAgentTool({
   name: 'calculator',
-  description: '精确数学计算。当需要计算数字（字数×章节数、百分比、加减乘除）时调用，返回精确结果。不要心算。',
+  description: t('tool.calcDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       expression: {
         type: 'string',
-        description: '数学表达式，如 "3000 * 30" 或 "(12000 + 800) / 2"。仅支持数字与 + - * / ( ) . %',
+        description: t('tool.calcParam'),
       },
     },
     required: ['expression'],

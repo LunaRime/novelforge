@@ -6,11 +6,12 @@
  * 只读工具（自动执行，无需确认）；未启用时返回引导性错误。
  */
 import { buildAgentTool } from '../tool-registry'
+import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
 
 export const browserListTabsTool = buildAgentTool({
   name: 'browser_list_tabs',
-  description: '查询浏览器当前打开的标签页列表（标题 + URL）。需在设置 → 开发者模式 → 浏览器接入中启用（Chrome/Edge 以 --remote-debugging-port 启动）。',
+  description: t('tool.browserTabsDesc'),
   source: 'builtin',
   requiresConfirmation: false,
   inputSchema: {
