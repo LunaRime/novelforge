@@ -34,6 +34,12 @@ export const openEditorTool = buildAgentTool({
     const filePath = args.file_path as string
     const tabType = (args.tab_type as string) ?? 'chapter'
 
+    // tab_type enum 校验（LLM 传非法值会以非法 tab 类型打开编辑器，P3 修复）
+    const ALLOWED_TAB_TYPES = new Set(['chapter', 'outline', 'character', 'config', 'arch-file'])
+    if (!ALLOWED_TAB_TYPES.has(tabType)) {
+      return { success: false, content: '', error: t('tool.openEditorInvalidTabType').replace('{value}', tabType) }
+    }
+
     if (!filePath) {
       return { success: false, content: '', error: t('error.missingFilePath') }
     }

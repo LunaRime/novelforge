@@ -35,16 +35,17 @@ export const readBlueprintTool = buildAgentTool({
       if (!bp) {
         return { success: false, content: '', error: t('tool.readBlueprintNotFound').replace('{chapter}', String(chapterNum)) }
       }
+      // 字段 ?? ''：bp.title 等可能 undefined，.replace 会把 undefined 输出为字面 "undefined" 污染观察
       return { success: true, content: t('tool.readBlueprintDetail')
         .replace('{chapter}', String(chapterNum))
-        .replace('{title}', bp.title)
-        .replace('{role}', bp.role)
-        .replace('{purpose}', bp.purpose)
-        .replace('{keyEvents}', bp.keyEvents)
-        .replace('{characters}', bp.characters.join(', '))
-        .replace('{suspense}', bp.suspenseHook)
-        .replace('{notes}', bp.notes)
-        .replace('{guidance}', bp.userGuidance) }
+        .replace('{title}', bp.title ?? '')
+        .replace('{role}', bp.role ?? '')
+        .replace('{purpose}', bp.purpose ?? '')
+        .replace('{keyEvents}', bp.keyEvents ?? '')
+        .replace('{characters}', Array.isArray(bp.characters) ? bp.characters.join(', ') : String(bp.characters ?? ''))
+        .replace('{suspense}', bp.suspenseHook ?? '')
+        .replace('{notes}', bp.notes ?? '')
+        .replace('{guidance}', bp.userGuidance ?? '') }
     }
 
     // 列出所有蓝图文件

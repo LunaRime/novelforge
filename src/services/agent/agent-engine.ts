@@ -285,9 +285,9 @@ export async function runAgentLoop(
         }
       } catch (error) {
         toolCallInfo.status = 'failed'
-        toolCallInfo.error = t('agent.executionError').replace('{error}', String(error))
+        toolCallInfo.error = t('agent.executionError').replace('{error}', sanitizeErrorText(error))
         callbacks.onToolCallComplete(toolCallInfo)
-        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('agent.executionError').replace('{error}', String(error))}\n</tool_result>`)
+        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('agent.executionError').replace('{error}', sanitizeErrorText(error))}\n</tool_result>`)
       }
     }
 
@@ -489,6 +489,18 @@ async function executeToolWithTimeout(
   } finally {
     if (timer) clearTimeout(timer)
   }
+}
+
+/**
+ * 错误文本脱敏（P3 修复）：截断 + 去除绝对路径——原始异常常含绝对路径/DB 栈，
+ * 直接注入 LLM 上下文会泄漏本机路径信息。
+ */
+function sanitizeErrorText(err: unknown): string {
+  const s = err instanceof Error ? err.message : String(err)
+  const masked = s
+    .replace(/[a-zA-Z]:[\\/][^"'\s,;]+/g, '[path]')          // Windows 绝对路径
+    .replace(/\/(?:Users|home|root|tmp|Users)\/[^"'\s,;]+/g, '[path]') // Unix/家目录路径
+  return masked.length > 300 ? masked.slice(0, 300) + '…' : masked
 }
 
 /**

@@ -18,6 +18,7 @@ const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
  * 登记，见 fs:grant-external-file）或项目目录内文件；BLOCKED_PATHS 同样适用。
  * 此前 LLM 可传任意绝对路径（含 ~/.ssh/AppData 的 .json）无确认读取，注入 LLM 上下文。 */
 const EXTERNAL_MAX_BYTES = 1_048_576 // 1MB
+const INTERNAL_MAX_BYTES = 5 * 1_048_576 // 5MB（项目内读取上限）
 const EXTERNAL_READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.markdown'])
 
 /** 用户显式授权过的外部文件路径（dialog:select-files 选择成功后由渲染层登记，会话级） */
@@ -97,6 +98,12 @@ export function registerFSController() {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
+        // 项目内读取也加大小上限（P3 修复）：50MB 文本全量跨 IPC 再被截断到 800 token，
+        // 内存与 IPC 成本浪费且可能撞工具超时竞态
+        const stat = await fsPromises.stat(safePath)
+        if (stat.size > INTERNAL_MAX_BYTES) {
+          return { success: false, content: '', error: t('error.fileTooLarge').replace('{limit}', String(Math.round(INTERNAL_MAX_BYTES / 1024 / 1024))) }
+        }
         const content = await fsPromises.readFile(safePath, 'utf-8')
         return { success: true, content }
       })

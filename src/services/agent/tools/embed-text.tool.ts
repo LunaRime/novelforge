@@ -31,6 +31,12 @@ export const embedTextTool = buildAgentTool({
       return { success: false, content: '', error: t('error.textParamEmpty') }
     }
 
+    // 长度上限（P3 修复）：超大文本直送 embedding API，token 成本与内存不可控
+    const MAX_EMBED_TEXT_LENGTH = 50_000
+    if (text.length > MAX_EMBED_TEXT_LENGTH) {
+      return { success: false, content: '', error: t('tool.embedTextTooLong').replace('{limit}', String(MAX_EMBED_TEXT_LENGTH)) }
+    }
+
     // 检查向量模型是否可用
     const vectorConfig = useVectorConfigStore.getState()
     if (!vectorConfig.canUseEmbeddingAPI()) {

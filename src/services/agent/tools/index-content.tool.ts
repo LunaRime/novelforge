@@ -44,6 +44,12 @@ export const indexContentTool = buildAgentTool({
       }
     }
 
+    // 长度上限（P3）：超大文本直送 embedding API，token 成本不可控
+    const MAX_INDEX_LENGTH = 50_000
+    if (content.length > MAX_INDEX_LENGTH) {
+      return { success: false, content: '', error: t('tool.embedTextTooLong').replace('{limit}', String(MAX_INDEX_LENGTH)) }
+    }
+
     try {
       const project = useProjectStore.getState().currentProject
       if (!project) {
