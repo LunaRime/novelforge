@@ -432,30 +432,6 @@ export function appendOutputLanguage(content: string, locale?: SupportedLocale):
   return `${content}\n\n[System] 请始终使用 ${lang} 输出所有内容。Do not respond in any other language.`
 }
 
-/** 渲染 Prompt 模板（填充变量 + 自动追加内置 systemSuffix + 空段落裁剪 + 输出语言约束） */
-export function renderPrompt(template: PromptTemplate, variables: Record<string, string>, locale?: SupportedLocale): string {
-  let content = template.content
-  for (const [key, value] of Object.entries(variables)) {
-    content = content.replaceAll(`{{${key}}}`, value)
-  }
-
-  // 自动追加系统约束（始终从内置模板获取，不受用户自定义影响；按 locale 解析语言变体）
-  const builtin = BUILTIN_PROMPTS.find(p => p.key === template.key)
-  const suffix = builtin ? localizeTemplate(builtin, locale).systemSuffix : undefined
-  if (suffix) {
-    let renderedSuffix = suffix
-    for (const [key, value] of Object.entries(variables)) {
-      renderedSuffix = renderedSuffix.replaceAll(`{{${key}}}`, value)
-    }
-    content = content + '\n\n' + renderedSuffix
-  }
-
-  // 空变量段落裁剪：当可选变量为空时，清除残留的空标签段落，避免分散 LLM 注意力
-  content = content
-    .replace(/\n★【[^】]*】★[：:]\s*\n?\s*$/gm, '')   // 清除空的 ★【...】★ 标签行
-    .replace(/\n【[^】]*（如有[^）]*）[^】]*】\s*\n?\s*$/gm, '') // 清除空的 【...如有...】 标签行
-    .replace(/\n{3,}/g, '\n\n') // 合并多余空行
-
-  // 输出语言约束（始终在最后，优先级最高）
-  return appendOutputLanguage(content, locale)
-}
+// ⚠️ 渲染统一走 services/prompts/prompt-builder.ts 的 BasePromptBuilder（含 USER_INPUT 注入防护
+// 与占位符残留警告）。旧 renderPrompt 曾在此处双轨并存（生产零调用、无注入防护），已删除——
+// 禁止在此新增渲染函数，一律使用 Builder。
