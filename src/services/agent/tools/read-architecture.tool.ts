@@ -48,9 +48,9 @@ export const readArchitectureTool = buildAgentTool({
         else if (isSynopsis) property = core.synopsis
 
         if (!property) {
-          return { success: false, content: '', error: `架构文件内容为空：${fileName}` }
+          return { success: false, content: '', error: t('tool.readArchFileEmpty').replace('{name}', fileName) }
         }
-        return { success: true, content: `📐 架构文件：${fileName}\n\n${property}` }
+        return { success: true, content: t('tool.readArchFileContent').replace('{name}', fileName).replace('{content}', property) }
       }
 
       const contents: string[] = []
@@ -60,12 +60,12 @@ export const readArchitectureTool = buildAgentTool({
       if (core.synopsis) contents.push(`## 📄 synopsis.md\n\n${core.synopsis}`)
 
       if (contents.length === 0) {
-        return { success: true, content: '⚠️ 架构为空，暂无架构文件。建议通过工作流生成故事架构。' }
+        return { success: true, content: t('tool.readArchEmpty') }
       }
 
-      return { success: true, content: `📐 故事架构（${contents.length} 个文件）\n\n${contents.join('\n\n---\n\n')}` }
+      return { success: true, content: t('tool.readArchList').replace('{count}', String(contents.length)).replace('{contents}', contents.join('\n\n---\n\n')) }
     } catch (error) {
-      return { success: false, content: '', error: `读取架构失败：${String(error)}` }
+      return { success: false, content: '', error: t('tool.readArchFailed').replace('{error}', String(error)) }
     }
   },
 })

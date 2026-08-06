@@ -42,7 +42,7 @@ export const readDraftsTool = buildAgentTool({
       const draftsResult = await ipc.invoke('db:draft-list', chapterNum)
       const drafts = (Array.isArray(draftsResult) ? draftsResult : []) as unknown as Array<Record<string, unknown>>
       if (!drafts || drafts.length === 0) {
-        return { success: true, content: `第 ${chapterNum} 章暂无草稿。` }
+        return { success: true, content: t('tool.readDraftsNone').replace('{chapter}', String(chapterNum)) }
       }
 
       let targetId: number | null = null
@@ -62,7 +62,7 @@ export const readDraftsTool = buildAgentTool({
 
         if (!target) {
           const available = drafts.map(d => `v${d.version as number}`).join('、')
-          return { success: false, content: '', error: `未找到 "${draftType}" 类型的草稿。可用版本：${available}` }
+          return { success: false, content: '', error: t('tool.readDraftsTypeNotFound').replace('{type}', draftType).replace('{available}', available) }
         }
         targetId = target.id as number
         targetName = `v${target.version as number}`
@@ -70,11 +70,14 @@ export const readDraftsTool = buildAgentTool({
 
       const fullDraft = await ipc.invoke('db:draft-get-full', targetId as number) as { content?: string } | null
       if (!fullDraft) {
-        return { success: false, content: '', error: `读取草稿内容失败：id ${targetId}` }
+        return { success: false, content: '', error: t('tool.readDraftsContentFailed').replace('{id}', String(targetId)) }
       }
-      return { success: true, content: `📝 第 ${chapterNum} 章草稿（${targetName}）\n\n${fullDraft.content}` }
+      return { success: true, content: t('tool.readDraftsContent')
+        .replace('{chapter}', String(chapterNum))
+        .replace('{name}', targetName)
+        .replace('{content}', fullDraft.content ?? '') }
     } catch (error) {
-      return { success: false, content: '', error: `读取草稿失败：${String(error)}` }
+      return { success: false, content: '', error: t('tool.readDraftsFailed').replace('{error}', String(error)) }
     }
   },
 })

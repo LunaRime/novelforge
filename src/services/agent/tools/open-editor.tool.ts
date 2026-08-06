@@ -52,7 +52,7 @@ export const openEditorTool = buildAgentTool({
     // 读取文件内容
     const result = await ipc.invoke('fs:read-file', fullPath)
     if (!result.success) {
-      return { success: false, content: '', error: `文件读取失败：${result.error}` }
+      return { success: false, content: '', error: t('tool.openEditorReadFailed').replace('{error}', result.error ?? '') }
     }
 
     // 在编辑器中打开
@@ -67,7 +67,7 @@ export const openEditorTool = buildAgentTool({
 
     return {
       success: true,
-      content: `✅ 已在编辑器中打开：${fileName}`,
+      content: t('tool.openEditorSuccess').replace('{name}', fileName),
       artifacts: [{ type: 'tab_opened', path: fullPath, name: fileName }],
     }
   },

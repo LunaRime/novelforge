@@ -55,17 +55,20 @@ export const queryForeshadowingTool = buildAgentTool({
 
       if (top.length === 0) {
         return { success: true, content: pending.length === 0
-          ? '当前没有未回收的伏笔。'
-          : `共有 ${pending.length} 条未回收伏笔，但均埋设于本章或之后，暂不适用。` }
+          ? t('tool.foreshadowNone')
+          : t('tool.foreshadowNotEligible').replace('{count}', String(pending.length)) }
       }
 
       const list = formatPendingForPrompt(top)
       return {
         success: true,
-        content: `📌 未回收伏笔（共 ${pending.length} 条，展示最近 ${top.length} 条）\n${list}\n\n（仅作上下文参考：本章可自然回应 1-2 条，不必全部回收）`,
+        content: t('tool.foreshadowList')
+          .replace('{total}', String(pending.length))
+          .replace('{shown}', String(top.length))
+          .replace('{list}', list),
       }
     } catch (e) {
-      return { success: false, content: '', error: `伏笔查询失败：${String(e)}` }
+      return { success: false, content: '', error: t('tool.foreshadowQueryFailed').replace('{error}', String(e)) }
     }
   },
 })

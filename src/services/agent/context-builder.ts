@@ -13,6 +13,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { AgentMode } from '../../stores/agent-store'
+import { t } from '../../shared/locale'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
@@ -44,7 +45,7 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
     // 截断发生在头部预算内时，补一份完整工具名清单，避免列表靠后的工具（含写入类）对 Agent 不可见
     const isTruncated = truncated.length < toolPrompt.length
     sections.push(isTruncated
-      ? `${truncated}\n\n（工具描述已按预算截断，全部可用工具：${toolRegistry.listAll().map(t => t.name).join(', ')}）`
+      ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}`
       : truncated)
   }
 
@@ -57,17 +58,17 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
       `[ContextBuilder] 系统提示词过大 (${totalTokens} tokens)，按优先级裁剪`,
     )
     // 裁剪 L1 和 Tool 部分
-    const l1Index = sections.findIndex(s => s.startsWith('## 编辑器状态'))
+    const l1Index = sections.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
     if (l1Index >= 0) {
-      sections[l1Index] = '## 编辑器状态\n（内容过长已省略，可使用 read_file 工具获取）'
+      sections[l1Index] = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOmitted')}`
     }
     const trimmed = sections.join('\n\n---\n\n')
     const trimmedTokens = estimateTokens(trimmed)
     if (trimmedTokens > 3500) {
       // 进一步裁剪 Tool 部分
-      const toolIndex = sections.findIndex(s => s.startsWith('## 工具系统'))
+      const toolIndex = sections.findIndex(s => s.startsWith(t('engine.toolSystemTitle')))
       if (toolIndex >= 0 && sections[toolIndex].length > 500) {
-        sections[toolIndex] = sections[toolIndex].slice(0, 500) + '\n\n…（工具列表已截断）'
+        sections[toolIndex] = sections[toolIndex].slice(0, 500) + '\n\n…' + t('engine.toolListTruncated')
       }
     }
     return sections.join('\n\n---\n\n')
@@ -81,35 +82,35 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
 /** Agent 身份提示词 */
 function buildIdentityPrompt(mode: AgentMode): string {
   const modeDesc = mode === 'max'
-    ? '当前处于 MAX 模式（思考等级 6/6）：全力执行——深度规划 + 完整工具链，逐步严谨验证每一步，追求最佳结果。'
+    ? t('engine.modeMax')
     : mode === 'deep'
-      ? '当前处于 Deep 模式（思考等级 5/6）：深度规划后再执行，适合复杂的多步骤任务。请先分析需求，制定方案，再逐步执行。'
+      ? t('engine.modeDeep')
       : mode === 'reflective'
-        ? '当前处于 Reflective 模式（思考等级 4/6）：先分析需求再行动，注重完成质量，可适当多轮推演。'
+        ? t('engine.modeReflective')
         : mode === 'balanced'
-          ? '当前处于 Balanced 模式（思考等级 3/6）：先快速评估任务复杂度，简单任务直接执行，复杂任务先规划再执行。'
+          ? t('engine.modeBalanced')
           : mode === 'swift'
-            ? '当前处于 Swift 模式（思考等级 2/6）：快速执行任务，在保证基础质量的前提下尽量简洁。'
-            : '当前处于 Quick 模式（思考等级 1/6）：直接高效地完成任务，适合简单快速的操作。'
+            ? t('engine.modeSwift')
+            : t('engine.modeQuick')
 
-  return `# NovelForge AI 创作助手
+  return `${t('engine.identityTitle')}
 
-你是 NovelForge 智能创作助手，专注于帮助作家进行长篇小说创作。
+${t('engine.identityIntro')}
 
 ${modeDesc}
 
-## 核心能力
-- 📖 深入理解小说项目的架构、人物、情节，提供专业的创作建议
-- 🔍 通过工具调用主动获取项目数据（架构文件、角色卡、蓝图、草稿等）
-- ✏️ 通过工具触发创作工作流（写稿、修稿、审计、定稿）
-- 🧠 结合知识库做检索增强生成（RAG）
+${t('engine.identityCapabilitiesHeader')}
+${t('engine.identityCapabilityArchitecture')}
+${t('engine.identityCapabilityTools')}
+${t('engine.identityCapabilityWorkflows')}
+${t('engine.identityCapabilityRag')}
 
-## 行为规范
-- 使用中文回复
-- 回答应当专业、具体、富有创意
-- 主动使用工具获取所需信息，而非要求用户提供
-- 对于写入型操作（修改文件、触发工作流），先说明你要做什么，再调用工具
-- 如果需要多步操作，可以逐步调用多个工具`
+${t('engine.identityRulesHeader')}
+${t('engine.identityRuleLanguage')}
+${t('engine.identityRuleProfessional')}
+${t('engine.identityRuleUseTools')}
+${t('engine.identityRuleExplainWriteOps')}
+${t('engine.identityRuleMultiStep')}`
 }
 
 /**
@@ -123,40 +124,40 @@ function buildL0ProjectContext(): string | null {
   // 旧项目数据库可能缺 novelConfig（类型上非可选），运行时兜底避免崩溃
   const cfg = project.novelConfig ?? {}
   const parts: string[] = [
-    `## 当前项目上下文`,
-    `项目名称：《${project.name}》`,
+    t('engine.contextProjectHeader'),
+    t('engine.contextProjectName').replace('{name}', project.name),
   ]
 
   if (cfg.genre) {
-    parts.push(`类型：${cfg.genre}${cfg.subGenre ? ' · ' + cfg.subGenre : ''}`)
+    parts.push(`${t('engine.contextGenre').replace('{genre}', cfg.genre)}${cfg.subGenre ? ' · ' + cfg.subGenre : ''}`)
   }
   if (cfg.targetAudience) {
-    parts.push(`目标读者：${cfg.targetAudience}`)
+    parts.push(t('engine.contextTargetAudience').replace('{audience}', cfg.targetAudience))
   }
   if (cfg.totalChapters) {
-    parts.push(`计划章节数：${cfg.totalChapters} 章`)
+    parts.push(t('engine.contextTotalChapters').replace('{n}', String(cfg.totalChapters)))
   }
   if (cfg.wordsPerChapter) {
-    parts.push(`每章字数：约 ${cfg.wordsPerChapter} 字`)
+    parts.push(t('engine.contextWordsPerChapter').replace('{n}', String(cfg.wordsPerChapter)))
   }
   if (cfg.narrativePOV) {
     const povMap: Record<string, string> = {
-      'third_limited': '第三人称有限',
-      'first_person': '第一人称',
-      'third_omniscient': '第三人称全知',
-      'multi_pov': '多视角',
+      'third_limited': t('engine.povThirdLimited'),
+      'first_person': t('engine.povFirstPerson'),
+      'third_omniscient': t('engine.povThirdOmniscient'),
+      'multi_pov': t('engine.povMulti'),
     }
-    parts.push(`叙事视角：${povMap[cfg.narrativePOV] ?? cfg.narrativePOV}`)
+    parts.push(t('engine.contextPov').replace('{pov}', povMap[cfg.narrativePOV] ?? cfg.narrativePOV))
   }
   if (cfg.coreOutline) {
     // Token 感知截断（~80 tokens 预算）
     const { text, truncated } = applyTokenTruncation(cfg.coreOutline, 80)
-    parts.push(`核心大纲：${text}${truncated ? '…' : ''}`)
+    parts.push(`${t('engine.contextCoreOutline').replace('{text}', text)}${truncated ? '…' : ''}`)
   }
   if (cfg.writingStyle) {
     // Token 感知截断（~40 tokens 预算）
     const { text, truncated } = applyTokenTruncation(cfg.writingStyle, 40)
-    parts.push(`写作风格：${text}${truncated ? '…' : ''}`)
+    parts.push(`${t('engine.contextWritingStyle').replace('{text}', text)}${truncated ? '…' : ''}`)
   }
 
   // 检查 L0 总预算
@@ -180,16 +181,16 @@ function buildL1EditorContext(): string | null {
   // 当前打开的编辑器 Tab
   const editorState = useEditorStore.getState()
   if (editorState.tabs.length > 0) {
-    const activeTab = editorState.tabs.find(t => t.id === editorState.activeTabId)
-    const tabSummaries = editorState.tabs.slice(0, 5).map(t => {
-      const active = t.id === editorState.activeTabId ? ' [当前活跃]' : ''
-      const dirty = t.dirty ? ' [未保存]' : ''
-      return `  - ${t.name} (${t.type})${active}${dirty}`
+    const activeTab = editorState.tabs.find(tab => tab.id === editorState.activeTabId)
+    const tabSummaries = editorState.tabs.slice(0, 5).map(tab => {
+      const active = tab.id === editorState.activeTabId ? t('engine.contextTabActive') : ''
+      const dirty = tab.dirty ? t('engine.contextTabDirty') : ''
+      return `  - ${tab.name} (${tab.type})${active}${dirty}`
     }).join('\n')
 
-    let tabSection = `## 编辑器状态\n打开的文件：\n${tabSummaries}`
+    let tabSection = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOpenFiles')}\n${tabSummaries}`
     if (editorState.tabs.length > 5) {
-      tabSection += `\n  …（共 ${editorState.tabs.length} 个文件，仅展示前 5 个）`
+      tabSection += `\n  …${t('engine.contextTabsMore').replace('{n}', String(editorState.tabs.length))}`
     }
     parts.push(tabSection)
 
@@ -197,10 +198,11 @@ function buildL1EditorContext(): string | null {
     if (activeTab?.content && activeTab.content.length > 0) {
       // Token 感知截断（~120 tokens 预算）
       const { text, truncated } = applyTokenTruncation(activeTab.content, 120)
+      const fileHeader = `${t('engine.contextActiveFileHeader')}\n${t('engine.contextActiveFileName').replace('{name}', activeTab.name)}`
       if (truncated) {
-        parts.push(`### 当前活跃文件内容\n文件名：${activeTab.name}\n\`\`\`\n${text}\n…（已截断，可通过 read_file 获取完整内容）\n\`\`\``)
+        parts.push(`${fileHeader}\n\`\`\`\n${text}\n${t('engine.contextActiveFileTruncated')}\n\`\`\``)
       } else {
-        parts.push(`### 当前活跃文件内容\n文件名：${activeTab.name}\n\`\`\`\n${text}\n\`\`\``)
+        parts.push(`${fileHeader}\n\`\`\`\n${text}\n\`\`\``)
       }
     }
   }
@@ -210,7 +212,7 @@ function buildL1EditorContext(): string | null {
   if (workflowState.hasActiveRun()) {
     const run = workflowState.currentRun
     if (run) {
-      parts.push(`## 工作流状态\n当前有工作流正在运行：${run.title}（进度：${run.currentStepIndex + 1}/${run.steps.length}）`)
+      parts.push(`${t('engine.contextWorkflowHeader')}\n${t('engine.contextWorkflowRunning').replace('{title}', run.title).replace('{progress}', `${run.currentStepIndex + 1}/${run.steps.length}`)}`)
     }
   }
 

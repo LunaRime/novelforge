@@ -12,6 +12,7 @@
 import { ipc } from '../ipc-client'
 import { estimateTokens } from './token-budget'
 import { useVectorConfigStore } from '../../stores/vector-config-store'
+import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
@@ -145,7 +146,7 @@ export async function retrieveContextForQuery(
       }
 
       contextParts.push(
-        `[${i + 1}] (${chunk.fileName}, 相关度 ${(chunk.score * 100).toFixed(0)}%)\n${displayText}`,
+        `[${i + 1}] (${chunk.fileName}, ${t('engine.ragRelevance')} ${(chunk.score * 100).toFixed(0)}%)\n${displayText}`,
       )
       totalTokens += estimateTokens(displayText)
     }
@@ -180,13 +181,13 @@ export function buildChapterRAGQuery(params: {
   if (params.title) parts.push(params.title)
   if (params.keyEvents) parts.push(params.keyEvents.slice(0, 200))
   if (params.characters.length > 0) {
-    parts.push(`角色: ${params.characters.slice(0, 3).join(', ')}`)
+    parts.push(`${t('engine.ragQueryCharacters')}${params.characters.slice(0, 3).join(', ')}`)
   }
   if (params.userGuidance) {
     parts.push(params.userGuidance.slice(0, 150))
   }
 
-  return parts.join(' ') || `第${params.chapterNumber}章`
+  return parts.join(' ') || t('engine.ragQueryFallback').replace('{n}', String(params.chapterNumber))
 }
 
 /**
@@ -194,7 +195,10 @@ export function buildChapterRAGQuery(params: {
  */
 export function getRAGSummary(result: RAGInjectionResult | null): string {
   if (!result || result.chunks.length === 0) {
-    return 'RAG: 无相关上下文'
+    return t('engine.ragNoContext')
   }
-  return `RAG: ${result.chunks.length} 个片段, ${result.tokenCount} tokens, 最高相关度 ${(result.chunks[0].score * 100).toFixed(0)}%`
+  return t('engine.ragSummary')
+    .replace('{n}', String(result.chunks.length))
+    .replace('{tokens}', String(result.tokenCount))
+    .replace('{score}', (result.chunks[0].score * 100).toFixed(0))
 }

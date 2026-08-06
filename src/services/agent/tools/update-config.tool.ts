@@ -49,12 +49,14 @@ export const updateConfigTool = buildAgentTool({
 
     const result = await ipc.invoke('project:update-config', project.id, updateData)
     if (!result.success) {
-      return { success: false, content: '', error: result.error ?? '配置更新失败' }
+      return { success: false, content: '', error: result.error ?? t('tool.updateConfigFailed') }
     }
 
     return {
       success: true,
-      content: `✅ 配置已更新：${field} = "${typeof value === 'string' && value.length > 50 ? value.slice(0, 50) + '…' : value}"`,
+      content: t('tool.configUpdated')
+        .replace('{field}', field)
+        .replace('{value}', typeof value === 'string' && value.length > 50 ? value.slice(0, 50) + '…' : String(value)),
     }
   },
 })

@@ -37,7 +37,11 @@ export async function sampleColdSettings(count = 2): Promise<string> {
     const cold = [...results].sort((a, b) => a.score - b.score).slice(0, Math.min(count, results.length))
     if (cold.length === 0) return ''
 
-    return cold.map((r, i) => `[${i + 1}] (${r.fileName}, 相关度 ${(r.score * 100).toFixed(0)}%)\n${r.text.slice(0, 300)}`).join('\n\n')
+    return cold.map((r, i) => t('tool.samplerItem')
+      .replace('{index}', String(i + 1))
+      .replace('{name}', r.fileName)
+      .replace('{score}', (r.score * 100).toFixed(0))
+      .replace('{text}', r.text.slice(0, 300))).join('\n\n')
   } catch {
     return ''
   }
@@ -66,11 +70,11 @@ export const settingSamplerTool = buildAgentTool({
     const count = Math.min(Math.max(Number(args.count ?? 2), 1), 3)
     const sampled = await sampleColdSettings(count)
     if (!sampled) {
-      return { success: true, content: '知识库为空或无可采样内容，跳过创意多样性参考。' }
+      return { success: true, content: t('tool.samplerEmpty') }
     }
     return {
       success: true,
-      content: `🎲 冷门设定采样（可选参考，非强制）：\n${sampled}`,
+      content: t('tool.samplerResult').replace('{sampled}', sampled),
     }
   },
 })

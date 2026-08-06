@@ -48,12 +48,12 @@ export const writeFileTool = buildAgentTool({
 
     const result = await ipc.invoke('fs:write-file', pathCheck.fullPath, content)
     if (!result.success) {
-      return { success: false, content: '', error: result.error ?? '写入失败' }
+      return { success: false, content: '', error: result.error ?? t('tool.writeFileFailed') }
     }
 
     return {
       success: true,
-      content: `✅ 文件已写入：${filePath}（${content.length} 字符）`,
+      content: t('tool.fileWritten').replace('{path}', filePath).replace('{length}', String(content.length)),
       artifacts: [{ type: 'file_modified', path: pathCheck.fullPath, name: filePath }],
     }
   },

@@ -24,17 +24,17 @@ export const browserListTabsTool = buildAgentTool({
       return {
         success: false,
         content: '',
-        error: res.error ?? '浏览器标签页查询失败',
+        error: res.error ?? t('tool.browserTabsQueryFailed'),
       }
     }
     const tabs = res.tabs ?? []
     if (tabs.length === 0) {
-      return { success: true, content: '浏览器当前没有打开的页面标签' }
+      return { success: true, content: t('tool.browserTabsEmpty') }
     }
-    const list = tabs.map((t, i) => `${i + 1}. ${t.title}\n   ${t.url}`).join('\n')
+    const list = tabs.map((tab, i) => `${i + 1}. ${tab.title}\n   ${tab.url}`).join('\n')
     return {
       success: true,
-      content: `浏览器标签页（共 ${tabs.length} 个）：\n${list}`,
+      content: t('tool.browserTabsList').replace('{count}', String(tabs.length)).replace('{list}', list),
     }
   },
 })

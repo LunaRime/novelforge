@@ -10,6 +10,8 @@
  * 3. source 字段标识来源 — 方便 UI 渲染不同的视觉标记
  */
 
+import { t } from '../../shared/locale'
+
 // ===== JSON Schema 简化类型 =====
 
 /** 简化的 JSON Schema 描述（用于 Tool 参数定义） */
@@ -178,44 +180,11 @@ class ToolRegistryImpl {
     const tools = this.listAll()
     if (tools.length === 0) return ''
 
-    let prompt = `## 工具系统
-
-你可以通过调用工具来获取项目数据或执行操作。
-
-### 调用格式
-
-使用以下 XML 格式调用工具：
-
-<tool_call>
-{"name": "工具名称", "arguments": {"参数名": "参数值"}}
-</tool_call>
-
-### 重要规则
-
-1. **每次回复最多放一个** <tool_call> 标签。
-2. 调用工具后，系统会自动执行并返回 <tool_result> 结果。
-3. **收到 <tool_result> 后你必须继续推理**，根据工具返回的数据回答用户问题。不要就此停止。
-4. 如果一个工具的结果不够，你可以在下一轮继续调用另一个工具。
-5. 不要在正文中引用或复述 <tool_call> 标签的内容。
-6. 只读工具自动执行。写入型工具（标记 ⚠️）需要用户确认。
-
-### 示例交互
-
-用户：帮我分析第一章
-助手：好的，我先获取第一章的内容。
-<tool_call>
-{"name": "read_drafts", "arguments": {"chapter_number": 1}}
-</tool_call>
-
-（系统返回 tool_result 后，助手根据结果继续分析）
-
-### 可用工具列表
-
-`
+    let prompt = `${t('engine.toolSystemTitle')}\n\n${t('engine.toolSystemBody')}\n\n`
     for (const tool of tools) {
       const displayName = tool.userFacingName ?? tool.name
       const sourceTag = tool.source === 'mcp' ? ' [MCP]' : tool.source === 'skill' ? ' [Skill]' : ''
-      const confirmTag = tool.requiresConfirmation ? ' ⚠️需确认' : ''
+      const confirmTag = tool.requiresConfirmation ? t('engine.toolConfirmTag') : ''
 
       prompt += `#### ${displayName}${sourceTag}${confirmTag}\n`
       prompt += `${tool.description}\n`
@@ -223,16 +192,16 @@ class ToolRegistryImpl {
       // 生成参数说明
       const { properties, required = [] } = tool.inputSchema
       if (Object.keys(properties).length > 0) {
-        prompt += '参数：\n'
+        prompt += `${t('engine.toolParamHeader')}\n`
         for (const [key, schema] of Object.entries(properties)) {
           const isRequired = required.includes(key)
-          const reqTag = isRequired ? '必填' : '可选'
+          const reqTag = isRequired ? t('engine.toolRequired') : t('engine.toolOptional')
           let paramDesc = `- ${key} (${schema.type}, ${reqTag}): ${schema.description}`
           if (schema.enum) {
-            paramDesc += ` [可选值: ${schema.enum.join(', ')}]`
+            paramDesc += t('engine.toolEnumValues').replace('{values}', schema.enum.join(', '))
           }
           if (schema.default !== undefined) {
-            paramDesc += ` (默认: ${JSON.stringify(schema.default)})`
+            paramDesc += t('engine.toolDefault').replace('{value}', JSON.stringify(schema.default))
           }
           prompt += paramDesc + '\n'
         }
