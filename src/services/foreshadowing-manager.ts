@@ -9,6 +9,7 @@
  */
 
 import { ipc } from './ipc-client'
+import { appendOutputLanguage } from './prompt-templates'
 
 // ===== 类型定义 =====
 
@@ -274,7 +275,7 @@ export async function confirmForeshadowingWithLLM(
       .map((c, i) => `${i + 1}. [${c.type}] "${c.content}"`)
       .join('\n')
 
-    const prompt = `你是一位专业的小说分析编辑。请判断以下从章节中提取的候选伏笔是否**真正设置了伏笔**。
+    const prompt = appendOutputLanguage(`你是一位专业的小说分析编辑。请判断以下从章节中提取的候选伏笔是否**真正设置了伏笔**。
 
 伏笔的定义：作者刻意设置的、将在后续章节中发挥作用的信息、物品、谜团或冲突线索。
 非伏笔的例子：普通描写（"她戴上戒指出门"）、日常行为（"他捡起掉落的笔"）。
@@ -289,7 +290,7 @@ ${candidateList}
 
 注意：
 - 排除"普通描写"和"日常行为"（如穿戴、丢失、借用物品等非情节驱动的动作）
-- 确认"刻意设置"的线索（暗示能力、埋下矛盾、引入关键物品等）`
+- 确认"刻意设置"的线索（暗示能力、埋下矛盾、引入关键物品等）`)
 
     const response = await llm.generateStream?.([{
       role: 'system',

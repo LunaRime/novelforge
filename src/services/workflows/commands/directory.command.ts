@@ -124,7 +124,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       callbacks.setProgress(Math.round(((cursor - startChapter) / (endChapter - startChapter + 1)) * 90))
 
       // systemRole 由模板定义
-      const systemRole = getPromptTemplate('chapter_blueprint')?.systemRole || '你是一位经验丰富的网文架构师。'
+      const systemRole = getPromptTemplate('chapter_blueprint')?.systemRole || t('role.blueprintArchitect')
       // staticContext：架构入 system 前缀（与 generate-draft 一致）——
       // ① 批次间 system 前缀完全稳定 → API 前缀缓存命中（长链路输入费用减半）
       // ② system 消息遵从度更高 → 50 章级长输出中后段不偏离架构（降幻觉）

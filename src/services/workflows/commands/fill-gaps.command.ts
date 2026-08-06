@@ -54,7 +54,7 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
 
       const systemRole =
         getPromptTemplate('chapter_blueprint')?.systemRole ||
-        '你是一位经验丰富的网文架构师，擅长根据前后章节的剧情上下文，填补中间缺失的蓝图。'
+        t('role.blueprintGapFiller')
 
       const prompt = new DirectoryPromptBuilder(template)
         .withNovelArchitecture(architecture)

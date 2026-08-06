@@ -60,7 +60,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     callbacks.log('🎨 调用 AI 分析文风特征...')
     const result = await this.callLLM(
       finalPrompt,
-      template.systemRole || '你是一位资深的文学评论家和网文研究者。',
+      template.systemRole || t('role.literaryCritic'),
       callbacks,
     )
 

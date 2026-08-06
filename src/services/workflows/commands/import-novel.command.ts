@@ -190,7 +190,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
 
     const rawResult = await this.callLLM(
       prompt,
-      template.systemRole || '你是一位顶级网文主编和资深阅读分析师。',
+      template.systemRole || t('role.editorAnalyst'),
       callbacks,
       { responseFormat: { type: 'json_object' } }
     )
@@ -233,7 +233,14 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       callbacks.log('✅ 小说配置已更新')
 
       // 生成配置摘要供后续步骤使用
-      context.data.novelConfigSummary = `类型: ${novelConfig.genre || '未知'} | 子类型: ${novelConfig.subGenre || '未知'} | 受众: ${novelConfig.targetAudience || '未知'}\n大纲: ${novelConfig.coreOutline || '（无）'}\n世界观: ${novelConfig.worldSetting || '（无）'}\n金手指: ${novelConfig.goldenFinger || '（无）'}\n主角: ${novelConfig.protagonistProfile || '（无）'}`
+      context.data.novelConfigSummary = t('import.summaryLine')
+        .replace('{genre}', novelConfig.genre || t('common.unknownWord'))
+        .replace('{subGenre}', novelConfig.subGenre || t('common.unknownWord'))
+        .replace('{audience}', novelConfig.targetAudience || t('common.unknownWord'))
+        .replace('{outline}', novelConfig.coreOutline || t('common.nonePlaceholder'))
+        .replace('{world}', novelConfig.worldSetting || t('common.nonePlaceholder'))
+        .replace('{goldenFinger}', novelConfig.goldenFinger || t('common.nonePlaceholder'))
+        .replace('{protagonist}', novelConfig.protagonistProfile || t('common.nonePlaceholder'))
     }
 
     // ===== 写入架构信息 =====
@@ -336,7 +343,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
 
         const rawResult = await this.callLLM(
           prompt,
-          template.systemRole || '你是一位专业的网文结构分析师。',
+          template.systemRole || t('role.novelAnalyst'),
           callbacks,
           { responseFormat: { type: 'json_object' } }
         )

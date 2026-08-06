@@ -206,12 +206,12 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       const parts: string[] = []
       if (tier1.length > 0) parts.push(tier1.join('\n'))
       if (tier2.length > 0) parts.push(tier2.join('\n'))
-      return parts.length > 0 ? parts.join('\n') : '（暂无）'
-    } catch { return '（读取失败）' }
+      return parts.length > 0 ? parts.join('\n') : t('common.noneYetPlaceholder')
+    } catch { return t('common.readFailedPlaceholder') }
   }
 
   private async readWorldBuilding(): Promise<string> {
     const core = await ipc.invoke('db:project-core-get')
-    return core?.worldbuilding || '（暂无）'
+    return core?.worldbuilding || t('common.noneYetPlaceholder')
   }
 }

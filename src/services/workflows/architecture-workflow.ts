@@ -288,7 +288,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         const template = getPromptTemplate('extract_initial_characters')
         if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'extract_initial_characters'))
         const extractPrompt = new ArchitecturePromptBuilder(template).withCharacterDynamics(characterDynamicsContent).withGenre(genre).build()
-        const systemRole = template.systemRole || '你是一位专业的小说数据结构化专家。'
+        const systemRole = template.systemRole || t('role.dataStructurer')
 
         const llmStore = useLLMStore.getState()
         cb.appendText('🔍 正在调用 AI 提取角色卡片...\n')
