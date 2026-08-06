@@ -6,6 +6,8 @@
  * 供后处理步骤（finalize 审计）与 Agent 工具复用。
  */
 
+import { t } from '../../shared/locale'
+
 // ===== 通用类型 =====
 
 export interface AuditIssue {
@@ -166,7 +168,7 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
     issues.push({
       kind: 'repetition',
       severity: c >= maxRepeat + 3 ? 'error' : 'warn',
-      message: `「${w}」出现 ${c} 次，建议同义替换`,
+      message: t('audit.wordRepeat').replace('{word}', w).replace('{n}', String(c)),
     })
   }
 
@@ -186,7 +188,7 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
     issues.push({
       kind: 'repetition',
       severity: 'error', // 整句复读是强水文信号
-      message: `完整句子重复 ${c} 次：「${s.length > 30 ? s.slice(0, 30) + '…' : s}」`,
+      message: t('audit.sentenceRepeat').replace('{n}', String(c)).replace('{sentence}', s.length > 30 ? s.slice(0, 30) + '…' : s),
     })
   }
 
@@ -210,7 +212,7 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
     issues.push({
       kind: 'repetition',
       severity: 'warn',
-      message: `句首「${st}」出现 ${c} 次，句式单调重复`,
+      message: t('audit.sentenceStart').replace('{pattern}', st).replace('{n}', String(c)),
     })
   }
 
@@ -221,8 +223,8 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
     passed: issues.length === 0,
     issues,
     summary: issues.length === 0
-      ? '水文与重复结构检查通过'
-      : `发现 ${issues.length} 处水文/重复信号（词频/句子重复/句式单调）`,
+      ? t('audit.waterPassed')
+      : t('audit.waterFound').replace('{n}', String(issues.length)),
   }
 }
 
@@ -325,7 +327,7 @@ export function continuityAudit(
 ): AuditResult {
   const { chapterHeadLen = 100, prevTailLen = 200, minOverlap = 2, excludeWords = [] } = options
   if (!prevChapterEnding || !prevChapterEnding.trim()) {
-    return { passed: true, issues: [], summary: '无上章结尾可对照（首章或数据缺失）' }
+    return { passed: true, issues: [], summary: t('audit.noPrevEnding') }
   }
 
   const head = new Set(
@@ -342,14 +344,18 @@ export function continuityAudit(
     issues.push({
       kind: 'continuity',
       severity: 'warn',
-      message: `本章开头与上章结尾衔接词仅 ${overlap} 个（阈值 ${minOverlap}），可能场景跳转生硬`,
+      message: t('audit.continuityWeak')
+        .replace('{n}', String(overlap))
+        .replace('{threshold}', String(minOverlap)),
     })
   }
 
   return {
     passed: issues.length === 0,
     issues,
-    summary: issues.length === 0 ? `章节衔接正常（重叠词 ${overlap} 个）` : `衔接偏弱（重叠词 ${overlap} 个）`,
+    summary: issues.length === 0
+      ? t('audit.continuityOk').replace('{n}', String(overlap))
+      : t('audit.continuityPoor').replace('{n}', String(overlap)),
   }
 }
 
@@ -377,7 +383,11 @@ export function terminologyAudit(text: string, terms: string[]): AuditResult {
         issues.push({
           kind: 'terminology',
           severity: 'warn',
-          message: `「${term}」疑似被少字改写（前缀「${prefix3}」出现 ${prefixCount} 次，完整 ${fullCount} 次）`,
+          message: t('audit.termVariant')
+            .replace('{term}', term)
+            .replace('{prefix}', prefix3)
+            .replace('{prefixCount}', String(prefixCount))
+            .replace('{fullCount}', String(fullCount)),
         })
       }
     }
@@ -386,7 +396,7 @@ export function terminologyAudit(text: string, terms: string[]): AuditResult {
   return {
     passed: issues.length === 0,
     issues,
-    summary: issues.length === 0 ? '术语一致性检查通过' : `发现 ${issues.length} 个术语疑似变体`,
+    summary: issues.length === 0 ? t('audit.termPassed') : t('audit.termFound').replace('{n}', String(issues.length)),
   }
 }
 
@@ -411,7 +421,7 @@ export function blueprintAudit(chapterText: string, keyEvents: string[]): AuditR
       issues.push({
         kind: 'blueprint',
         severity: 'warn',
-        message: `蓝图关键事件「${ev.slice(0, 40)}」在正文中未体现`,
+        message: t('audit.blueprintMissing').replace('{event}', ev.slice(0, 40)),
       })
     }
   }
@@ -419,7 +429,7 @@ export function blueprintAudit(chapterText: string, keyEvents: string[]): AuditR
   return {
     passed: issues.length === 0,
     issues,
-    summary: issues.length === 0 ? '蓝图关键事件全部体现' : `${issues.length} 个关键事件未体现`,
+    summary: issues.length === 0 ? t('audit.blueprintOk') : t('audit.blueprintFound').replace('{n}', String(issues.length)),
   }
 }
 
@@ -450,7 +460,7 @@ export function sensitiveAudit(
       issues.push({
         kind: 'sensitive',
         severity: 'error',
-        message: `命中违禁词「${w}」${count} 次`,
+        message: t('audit.sensitiveHit').replace('{word}', w).replace('{n}', String(count)),
       })
     }
   }
@@ -458,7 +468,7 @@ export function sensitiveAudit(
   return {
     passed: issues.length === 0,
     issues,
-    summary: issues.length === 0 ? '违禁词检查通过' : `命中 ${issues.length} 个违禁词`,
+    summary: issues.length === 0 ? t('audit.sensitivePassed') : t('audit.sensitiveFound').replace('{n}', String(issues.length)),
   }
 }
 
@@ -540,7 +550,7 @@ export function timelineAudit(chapterText: string): AuditResult {
       issues.push({
         kind: 'timeline',
         severity: 'warn',
-        message: `时间线矛盾：「${a.raw}」出现在更早的「已过 ${last} 天」之后`,
+        message: t('audit.timelineConflict').replace('{time}', a.raw).replace('{n}', String(last)),
       })
     }
     last = Math.max(last, a.dayOffset)
@@ -550,8 +560,8 @@ export function timelineAudit(chapterText: string): AuditResult {
     passed: issues.length === 0,
     issues,
     summary: issues.length === 0
-      ? `时间线检查通过（${anchors.length} 个时间锚点）`
-      : `发现 ${issues.length} 处时间线矛盾`,
+      ? t('audit.timelineOk').replace('{n}', String(anchors.length))
+      : t('audit.timelineFound').replace('{n}', String(issues.length)),
   }
 }
 
@@ -593,6 +603,10 @@ export function runAllAudits(input: FullAuditInput): AuditResult {
   return {
     passed,
     issues,
-    summary: passed ? '全部审计通过' : `${issues.length} 个问题（${all.filter(r => !r.passed).length} 类）`,
+    summary: passed
+      ? t('audit.allPassed')
+      : t('audit.allFound')
+          .replace('{n}', String(issues.length))
+          .replace('{m}', String(all.filter(r => !r.passed).length)),
   }
 }
