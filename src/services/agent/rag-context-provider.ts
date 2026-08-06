@@ -34,6 +34,8 @@ export interface RAGChunk {
   score: number
   fileName: string
   docId?: string
+  /** 命中通道：vector / fts（FTS 精确匹配豁免相似度阈值） */
+  source?: 'vector' | 'fts'
 }
 
 export interface RAGInjectionResult {
@@ -119,9 +121,10 @@ export async function retrieveContextForQuery(
       return null
     }
 
-    // 过滤低相关度结果
+    // 过滤低相关度结果（⚠️ P0 修复：FTS 来源豁免阈值——LIKE 精确匹配的 0.5 恒低于 0.6 阈值，
+    //    此前默认配置（无 Embedding）下 RAG 静默完全失效；FTS 命中本身保证相关性）
     const filtered = results.filter(
-      (r) => r.score >= config.similarityThreshold,
+      (r) => r.source === 'fts' || r.score >= config.similarityThreshold,
     )
 
     if (filtered.length === 0) return null
