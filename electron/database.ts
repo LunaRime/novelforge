@@ -412,6 +412,52 @@ function createTables(db: BetterSqlite3.Database) {
       UNIQUE (ai_text, user_text)
     );
 
+    -- ⚠️ P0 修复：evaluation_scores 与 CHECK 触发器此前只在迁移路径创建，
+    --    全新数据库（user_version=0）走 fresh 分支跳过迁移 → 表/约束永不存在
+    --    （互评结果静默丢失、新旧库约束不一致）。移入主清单，迁移段保留兼容旧库
+    CREATE TABLE IF NOT EXISTS evaluation_scores (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      draft_id INTEGER NOT NULL,
+      reviewer_perspective TEXT NOT NULL,
+      scores TEXT NOT NULL DEFAULT '{}',
+      overall_score REAL DEFAULT 0,
+      strengths TEXT DEFAULT '[]',
+      weaknesses TEXT DEFAULT '[]',
+      suggestions TEXT DEFAULT '[]',
+      raw_response TEXT DEFAULT '',
+      tokens_used INTEGER DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE
+    );
+    CREATE INDEX IF NOT EXISTS idx_evaluation_draft ON evaluation_scores(draft_id);
+
+    -- drafts.status 四值约束（CHECK 触发器，SQLite 不支持 ALTER TABLE ADD CHECK）
+    CREATE TRIGGER IF NOT EXISTS check_draft_status_insert
+    BEFORE INSERT ON drafts
+    WHEN NEW.status NOT IN ('draft', 'revised', 'finalized', 'archived')
+    BEGIN
+      SELECT RAISE(ABORT, 'Invalid draft status: ' || NEW.status);
+    END;
+    CREATE TRIGGER IF NOT EXISTS check_draft_status_update
+    BEFORE UPDATE ON drafts
+    WHEN NEW.status NOT IN ('draft', 'revised', 'finalized', 'archived')
+    BEGIN
+      SELECT RAISE(ABORT, 'Invalid draft status: ' || NEW.status);
+    END;
+    -- blueprints.priority 0/1/2 约束
+    CREATE TRIGGER IF NOT EXISTS check_blueprint_priority_insert
+    BEFORE INSERT ON blueprints
+    WHEN NEW.priority NOT IN (0, 1, 2)
+    BEGIN
+      SELECT RAISE(ABORT, 'Invalid blueprint priority: ' || NEW.priority);
+    END;
+    CREATE TRIGGER IF NOT EXISTS check_blueprint_priority_update
+    BEFORE UPDATE ON blueprints
+    WHEN NEW.priority NOT IN (0, 1, 2)
+    BEGIN
+      SELECT RAISE(ABORT, 'Invalid blueprint priority: ' || NEW.priority);
+    END;
+
     -- 索引
     CREATE INDEX IF NOT EXISTS idx_llm_calls_time ON llm_calls(created_at);
     CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number);
