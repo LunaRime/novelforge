@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle } from 'lucide-react'
+import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle, Play } from 'lucide-react'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
@@ -63,8 +63,8 @@ export default function AIOutputPanel() {
           {t('agent.aiOutput')}
         </span>
         <button
-          onClick={() => useLayoutStore.getState().setRightView('agent')}
-          title={t('agent.switchBack')}
+          onClick={() => useLayoutStore.getState().setAIPanelOpen(false)}
+          title={t('action.close')}
           className="icon-btn"
           style={{ width: 20, height: 20 }}
         >
@@ -125,6 +125,11 @@ function ActiveRunView({
   const [autoScroll, setAutoScroll] = useState(true)
   const isActive = run.status === 'running' || run.status === 'waiting'
   const cancelWorkflow = useWorkflowStore.getState().cancelWorkflow
+  // 等待确认状态（与 BottomPanel 同源）：任务挂起等待用户确认下一步时提供「继续执行」
+  const waitingRuns = useWorkflowStore(s => s.waitingRuns)
+  const confirmContinue = useWorkflowStore(s => s.confirmContinue)
+  const runWaiting = waitingRuns[run.id]
+  const waitingForConfirm = runWaiting?.waitingForConfirm ?? false
   const prevLenRef = useRef(0)
   const { t } = useTranslation()
 
@@ -242,9 +247,23 @@ function ActiveRunView({
         {isActive && <div className="h-10 w-full flex-shrink-0" />}
       </div>
 
-      {/* 固定在底部的操作悬浮区 */}
+      {/* 固定在底部的操作悬浮区 — 等待确认时提供「继续执行」（与底部任务面板一致） */}
       {isActive && (
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10">
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2">
+          {waitingForConfirm && (
+            <button
+              onClick={() => confirmContinue(run.id)}
+              className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-md backdrop-blur-md"
+              style={{
+                color: 'var(--color-text)',
+                backgroundColor: 'var(--color-accent)',
+                border: '1px solid var(--color-accent)'
+              }}
+            >
+              <Play size={13} />
+              <span className="font-medium tracking-wide">{t('nextStep.continue')}</span>
+            </button>
+          )}
           <button
             onClick={() => cancelWorkflow(run.id)}
             className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-md backdrop-blur-md"
