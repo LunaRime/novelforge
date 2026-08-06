@@ -28,10 +28,10 @@ export function createMutualEvaluationWorkflow(
     steps: [
       {
         name: t('workflow.multiReview'),
-        description: '从 3 个视角并行评审草稿（情节逻辑性、角色一致性、文笔流畅度）',
+        description: t('workflow.mutualReviewDesc'),
         executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
-          callbacks.log(`启动 AI 互评引擎，评审第 ${params.chapterNumber} 章...`)
-          callbacks.log('评审视角: 情节逻辑性(35%) + 角色一致性(35%) + 文笔流畅度(30%)')
+          callbacks.log(t('log.mutualStart').replace('{n}', String(params.chapterNumber)))
+          callbacks.log(t('log.mutualPerspectives'))
 
           const cmd = new SpawnReviewersCommand({
             draftContent: params.draftContent,
@@ -45,12 +45,12 @@ export function createMutualEvaluationWorkflow(
           })
 
           context.data.reviewerOutputs = outputs
-          return `完成 ${outputs.length} 个视角的评审`
+          return t('workflow.mutualReviewCount').replace('{n}', String(outputs.length))
         },
       },
       {
         name: t('workflow.synthesizeScores'),
-        description: '加权聚合多视角评分，分析共识和分歧',
+        description: t('workflow.synthesizeDesc'),
         executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
           const outputs = context.data.reviewerOutputs as ReviewerOutput[]
           const cmd = new SynthesizeScoresCommand({
@@ -82,12 +82,15 @@ export function createMutualEvaluationWorkflow(
                 tokensUsed: output.tokensUsed,
               })
             }
-            callbacks.log('评审结果已保存到数据库')
+            callbacks.log(t('log.evalSaved'))
           } catch (e) {
-            callbacks.log(`⚠️ 评审结果持久化失败: ${String(e)}`)
+            callbacks.log(t('log.evalSaveFailed').replace('{error}', String(e)))
           }
 
-          return `综合评分: ${report.finalScore}/10 | 共识优点: ${report.consensusStrengths.length} | 问题: ${report.consensusWeaknesses.length}`
+          return t('workflow.synthesizeResult')
+            .replace('{score}', String(report.finalScore))
+            .replace('{strengths}', String(report.consensusStrengths.length))
+            .replace('{weaknesses}', String(report.consensusWeaknesses.length))
         },
       },
     ],

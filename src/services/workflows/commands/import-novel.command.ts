@@ -40,8 +40,8 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
 
-    callbacks.log(`📖 开始作为定稿导入 ${this.chapters.length} 章正文到数据库...`)
-    callbacks.log(`🔑 导入会话 ID: ${this.importSessionId}`)
+    callbacks.log(t('log.import.starting').replace('{count}', String(this.chapters.length)))
+    callbacks.log(t('log.import.sessionId').replace('{id}', this.importSessionId))
     callbacks.setProgress(5)
 
     // 获取已存在的章节号（幂等检测）
@@ -59,7 +59,7 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
         if (latestDraft?.source === 'write') {
           skippedCount++
           if (skippedCount <= 3) {
-            callbacks.log(`  ⏭️ 第 ${ch.number} 章已存在（source=write），跳过导入`)
+            callbacks.log(t('log.import.skipped').replace('{chapter}', String(ch.number)))
           }
           continue
         }
@@ -76,16 +76,19 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
 
       if (i % 10 === 0) {
         callbacks.setProgress(5 + Math.round((i / this.chapters.length) * 40))
-        callbacks.log(`  ✍️ 已导入第 ${ch.number} 章（${ch.wordCount} 字）`)
+        callbacks.log(t('log.import.imported')
+          .replace('{chapter}', String(ch.number))
+          .replace('{words}', String(ch.wordCount)))
       }
     }
 
     const importedCount = this.chapters.length - skippedCount
-    callbacks.log(`✅ 全部完成：导入 ${importedCount} 章` + (skippedCount > 0 ? `，跳过 ${skippedCount} 章（已存在）` : ''))
+    callbacks.log(t('log.import.allDone').replace('{count}', String(importedCount))
+      + (skippedCount > 0 ? t('log.import.skippedSuffix').replace('{count}', String(skippedCount)) : ''))
     callbacks.setProgress(45)
 
     // 2. 逐章导入知识库（向量化）
-    callbacks.log('🔍 开始构建向量知识库...')
+    callbacks.log(t('log.import.buildingKB'))
     let successCount = 0
     let failCount = 0
     for (let i = 0; i < this.chapters.length; i++) {
@@ -98,7 +101,9 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
         if (result.success) {
           successCount++
         } else {
-          callbacks.log(`⚠️ 导入 ${fileName} 失败: ${result.error}`)
+          callbacks.log(t('log.import.kbImportFailed')
+            .replace('{file}', fileName)
+            .replace('{error}', () => result.error ?? ''))
           failCount++
         }
       } catch {
@@ -108,7 +113,9 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
         callbacks.setProgress(45 + Math.round((i / this.chapters.length) * 45))
       }
     }
-    callbacks.log(`✅ 知识库构建完成（成功 ${successCount} 章，失败 ${failCount} 章）`)
+    callbacks.log(t('log.import.kbDone')
+      .replace('{ok}', String(successCount))
+      .replace('{fail}', String(failCount)))
     callbacks.setProgress(90)
 
     // 将章节数据 + 导入会话 ID 存入 context 供后续步骤使用
@@ -133,7 +140,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     const chapters = context.data.chapters as ImportedChapter[]
     if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
 
-    callbacks.log('🔍 通过向量知识库检索关键片段...')
+    callbacks.log(t('log.import.searching'))
     callbacks.setProgress(5)
 
     // ===== 向量检索采样 =====
@@ -156,10 +163,12 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         } else {
           sampledContent[topic.key] = '（未检索到相关内容）'
         }
-        callbacks.log(`  ✅ 已检索「${topic.label}」— ${results.length} 条结果`)
+        callbacks.log(t('log.import.topicFound')
+          .replace('{topic}', topic.label)
+          .replace('{count}', String(results.length)))
       } catch {
         sampledContent[topic.key] = '（向量检索不可用）'
-        callbacks.log(`  ⚠️ 「${topic.label}」检索失败，将使用降级策略`)
+        callbacks.log(t('log.import.topicFailed').replace('{topic}', topic.label))
       }
     }
     callbacks.setProgress(20)
@@ -185,7 +194,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       .withSampleContent(`【第1章片段】\n${firstChapter}\n\n【最新章节片段】\n${latestChapter}`)
       .build()
 
-    callbacks.log('🧠 正在调用 AI 推演全局小说配置...')
+    callbacks.log(t('log.import.inferringConfig'))
     callbacks.setProgress(25)
 
     const rawResult = await this.callLLM(
@@ -196,7 +205,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     )
 
     callbacks.setProgress(70)
-    callbacks.log('📝 正在解析 AI 返回结果并写入项目...')
+    callbacks.log(t('log.import.parsing'))
 
     // ===== 解析 JSON 结果 =====
     const inferResult = this.parseJSON<{
@@ -230,7 +239,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         }
         await ipc.invoke('project:save', plainData.id, plainData)
       }
-      callbacks.log('✅ 小说配置已更新')
+      callbacks.log(t('log.import.configUpdated'))
 
       // 生成配置摘要供后续步骤使用
       context.data.novelConfigSummary = t('import.summaryLine')
@@ -251,7 +260,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         worldbuilding: inferResult.architectureFiles.world,
         synopsis: inferResult.architectureFiles.synopsis,
       })
-      callbacks.log('✅ 四段式故事架构已持久化到数据库')
+      callbacks.log(t('log.import.archSaved'))
     }
 
     // ===== 写入角色卡 =====
@@ -285,7 +294,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       if (cardsToSave.length > 0) {
         await ipc.invoke('db:character-save-all', cardsToSave)
       }
-      callbacks.log(`✅ 已生成 ${createdCount} 张角色卡`)
+      callbacks.log(t('log.import.cardsCreated').replace('{count}', String(createdCount)))
     }
 
     callbacks.setProgress(90)
@@ -313,7 +322,9 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     const template = getPromptTemplate('infer_single_chapter_blueprint')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '单章蓝图推演 Prompt'))
 
-    callbacks.log(`📋 开始逐章推演蓝图（共 ${chapters.length} 章，并发限制 ${InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT}）...`)
+    callbacks.log(t('log.import.inferringBlueprints')
+      .replace('{count}', String(chapters.length))
+      .replace('{limit}', String(InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT)))
     callbacks.setProgress(5)
 
     let completedCount = 0
@@ -369,10 +380,12 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
         await ipc.invoke('db:blueprint-upsert', finalBlueprint)
 
         completedCount++
-        callbacks.log(`  ✅ 第 ${ch.number} 章蓝图已生成`)
+        callbacks.log(t('log.import.blueprintDone').replace('{chapter}', String(ch.number)))
       } catch (err) {
         failedCount++
-        callbacks.log(`  ⚠️ 第 ${ch.number} 章蓝图生成失败: ${err instanceof Error ? err.message : String(err)}`)
+        callbacks.log(t('log.import.blueprintFailed')
+          .replace('{chapter}', String(ch.number))
+          .replace('{error}', () => err instanceof Error ? err.message : String(err)))
       }
 
       // 更新进度
@@ -383,8 +396,10 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
 
     await runWithConcurrency(tasks, InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT)
 
-    callbacks.log(`\n━━━━━━━━━━ 蓝图推演完成 ━━━━━━━━━━`)
-    callbacks.log(`✅ 成功: ${completedCount} 章 | ⚠️ 失败: ${failedCount} 章`)
+    callbacks.log(t('log.import.blueprintDoneTitle'))
+    callbacks.log(t('log.import.blueprintResult')
+      .replace('{ok}', String(completedCount))
+      .replace('{fail}', String(failedCount)))
     callbacks.setProgress(85)
 
     callbacks.setProgress(100)

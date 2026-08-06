@@ -40,7 +40,11 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     const startTime = Date.now()
 
     // LLM 提取日志流：发起调用（debug 级，开发环境全量可见）
-    renderLog('debug', 'LLM', `发起调用 ${model?.name ?? modelId} | prompt ${prompt.length} 字符 | system ${systemPrompt.length} 字符 | 缓存前缀 ${options?.staticContext ? '含' : '无'}`)
+    renderLog('debug', 'LLM', t('log.render.llmCallStart')
+      .replace('{model}', () => model?.name ?? modelId)
+      .replace('{promptChars}', String(prompt.length))
+      .replace('{systemChars}', String(systemPrompt.length))
+      .replace('{cachePrefix}', () => options?.staticContext ? t('log.render.cacheIncluded') : t('log.render.cacheExcluded')))
 
     callbacks.setProgress(10)
 
@@ -90,11 +94,19 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         // LLM 提取日志流：结果与失败原因落盘（info/error 级在公测/正式版也保留）
         if (success && usage) {
           const cacheHit = (usage.cachedTokens ?? 0) > 0
-          renderLog('info', 'LLM', `完成 ${duration}ms | ${usage.totalTokens} tokens（输入 ${usage.promptTokens} / 输出 ${usage.completionTokens}）| $${cost.toFixed(4)}${cacheHit ? '（缓存命中）' : ''}`)
+          renderLog('info', 'LLM', t('log.render.llmCallDone')
+            .replace('{ms}', String(duration))
+            .replace('{total}', String(usage.totalTokens))
+            .replace('{prompt}', String(usage.promptTokens))
+            .replace('{completion}', String(usage.completionTokens))
+            .replace('{cost}', () => '$' + cost.toFixed(4))
+            .replace('{cacheHit}', () => cacheHit ? t('log.render.cacheHit') : ''))
         } else if (success) {
-          renderLog('info', 'LLM', `完成 ${duration}ms（无 usage 统计）`)
+          renderLog('info', 'LLM', t('log.render.llmCallDoneNoUsage').replace('{ms}', String(duration)))
         } else {
-          renderLog('error', 'LLM', `失败: ${errorMessage ?? '未知错误'}（${duration}ms）`)
+          renderLog('error', 'LLM', t('log.render.llmCallFailed')
+            .replace('{ms}', String(duration))
+            .replace('{error}', () => errorMessage ?? t('log.render.unknownError')))
         }
       }
 
@@ -117,7 +129,9 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             if (usage && model) {
               const cacheHit = (usage.cachedTokens ?? 0) > 0
               const cost = calculateCost(model, usage.promptTokens, usage.completionTokens, cacheHit)
-              callbacks.log(`💰 $${cost.totalCost.toFixed(4)} (${cost.cached ? '缓存命中' : '全价'})`)
+              callbacks.log(t('log.llm.cost')
+                .replace('{cost}', cost.totalCost.toFixed(4))
+                .replace('{cacheStatus}', cost.cached ? t('log.llm.cacheHit') : t('log.llm.fullPrice')))
               // 记录到全局用量 Store
               import('../../../stores/usage-store').then(m =>
                 m.useUsageStore.getState().recordCall({
@@ -129,7 +143,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             }
             // 取消后不 resolve，让 reject 生效
             if (context?.cancelled) {
-              logLLMCall(false, '工作流已取消')
+              logLLMCall(false, t('error.workflowCancelled'))
               reject(new Error(t('error.workflowCancelled')))
               return
             }
@@ -146,8 +160,8 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           },
           onError: (err) => {
             cleanup()
-            logLLMCall(false, err || '流式生成失败')
-            reject(new Error(err || '流式生成失败'))
+            logLLMCall(false, err || t('log.render.llmStreamFailed'))
+            reject(new Error(err || t('log.render.llmStreamFailed')))
           }
         },
         undefined,
@@ -158,7 +172,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         if (context?.cancelled) {
           llmStore.cancelGeneration(reqId).catch(() => { })
           cleanup()
-          logLLMCall(false, '工作流已取消')
+          logLLMCall(false, t('error.workflowCancelled'))
           reject(new Error(t('error.workflowCancelled')))
         }
       }).catch(err => {
@@ -197,24 +211,26 @@ export abstract class BaseWorkflowCommand<TResult = string> {
    */
   protected parseJSON<T>(text: string): T {
     // LLM 提取日志流：解析过程可见（debug 级，开发环境全量）
-    renderLog('debug', 'Parse', `JSON 解析开始: ${text.length} 字符，对象优先`)
+    renderLog('debug', 'Parse', t('log.render.jsonParseStart').replace('{chars}', String(text.length)))
 
     // 先尝试对象解析（AI 通常返回 JSON 对象），再尝试数组
     let result = robustParseJSON(text, false)
     if (!result) {
       // 对象失败 → 数组回退（常见于角色卡/多蓝图场景）
-      renderLog('warn', 'Parse', '对象解析失败，回退数组尝试')
+      renderLog('warn', 'Parse', t('log.render.jsonParseObjectFallback'))
       result = robustParseJSON(text, true)
     }
 
     if (result === null) {
       const diagnostic = this.buildJSONParseDiagnostic(text)
       // 完整诊断落盘——"为什么提取失败"的核心（error 级，公测/正式版也保留）
-      renderLog('error', 'Parse', `JSON 解析失败:\n${diagnostic}`)
+      renderLog('error', 'Parse', t('log.render.jsonParseFailed').replace('{diagnostic}', () => diagnostic))
       throw new Error(diagnostic)
     }
 
-    renderLog('debug', 'Parse', `JSON 解析成功（${Array.isArray(result) ? `数组 ${result.length} 项` : '对象'}）`)
+    renderLog('debug', 'Parse', Array.isArray(result)
+      ? t('log.render.jsonParseSuccessArray').replace('{count}', String(result.length))
+      : t('log.render.jsonParseSuccessObject'))
     return result as T
   }
 
@@ -230,42 +246,46 @@ export abstract class BaseWorkflowCommand<TResult = string> {
 
     // 检测常见问题
     if (trimmed.includes("'''") || trimmed.includes('"""')) {
-      issues.push('• 使用了 Python 风格的三引号，应改用标准 JSON 双引号 (")')
+      issues.push(t('log.render.diagTripleQuotes'))
     }
     if (trimmed.includes("'") && !trimmed.includes('"')) {
-      issues.push('• 使用了单引号，JSON 标准要求双引号 (")')
+      issues.push(t('log.render.diagSingleQuotes'))
     }
     if (/,\s*[}\]]/.test(trimmed)) {
-      issues.push('• 存在尾随逗号（对象或数组末尾多余的逗号）')
+      issues.push(t('log.render.diagTrailingComma'))
     }
     if (/[{,]\s*['"]?\w+['"]?\s*:/g.test(trimmed) === false && trimmed.includes(':')) {
-      issues.push('• 可能缺少 JSON 根对象的花括号 {} 包裹')
+      issues.push(t('log.render.diagMissingBraces'))
     }
     if (trimmed.startsWith('```')) {
-      issues.push('• 内容被 Markdown 代码块包裹，应只输出纯 JSON')
+      issues.push(t('log.render.diagMarkdownBlock'))
     }
     const openBraces = (trimmed.match(/\{/g) || []).length
     const closeBraces = (trimmed.match(/\}/g) || []).length
     if (openBraces !== closeBraces) {
-      issues.push(`• 花括号不匹配（{${openBraces} 开 / ${closeBraces} 闭}），JSON 结构不完整`)
+      issues.push(t('log.render.diagBraceMismatch')
+        .replace('{open}', String(openBraces))
+        .replace('{close}', String(closeBraces)))
     }
     const openBrackets = (trimmed.match(/\[/g) || []).length
     const closeBrackets = (trimmed.match(/\]/g) || []).length
     if (openBrackets !== closeBrackets) {
-      issues.push(`• 方括号不匹配（[${openBrackets} 开 / ${closeBrackets} 闭]）`)
+      issues.push(t('log.render.diagBracketMismatch')
+        .replace('{open}', String(openBrackets))
+        .replace('{close}', String(closeBrackets)))
     }
 
     // 截取末端供人工排查
     const tail = trimmed.length > 200 ? '…' + trimmed.slice(-200) : trimmed
     const head = trimmed.length > 150 ? trimmed.slice(0, 150) + '…' : trimmed
 
-    let diagnostic = `AI 返回的数据格式无法解析为有效 JSON。\n\n`
-    diagnostic += `【内容头部】${head}\n`
-    diagnostic += `【内容尾部】${tail}\n`
+    let diagnostic = t('log.render.diagHeader') + '\n\n'
+    diagnostic += t('log.render.diagContentHead').replace('{content}', () => head) + '\n'
+    diagnostic += t('log.render.diagContentTail').replace('{content}', () => tail) + '\n'
     if (issues.length > 0) {
-      diagnostic += `\n【检测到的问题】\n${issues.join('\n')}\n`
+      diagnostic += '\n' + t('log.render.diagIssuesHeader') + '\n' + issues.join('\n') + '\n'
     }
-    diagnostic += `\n【修复建议】请确保输出为标准 JSON 格式：使用双引号、无尾随逗号、正确闭合所有括号。`
+    diagnostic += '\n' + t('log.render.diagFixSuggestion')
     return diagnostic
   }
 
@@ -296,10 +316,13 @@ export abstract class BaseWorkflowCommand<TResult = string> {
         if (attempt >= maxRetries) break
 
         // LLM 提取日志流：自检重试过程可见
-        renderLog('info', 'Parse', `JSON 自检重试 ${attempt + 1}/${maxRetries}：解析失败反馈 LLM 修正（${err instanceof Error ? err.message.slice(0, 100) : String(err)}）`)
+        renderLog('info', 'Parse', t('log.render.jsonSelfCheckRetry')
+          .replace('{attempt}', String(attempt + 1))
+          .replace('{max}', String(maxRetries))
+          .replace('{error}', () => err instanceof Error ? err.message.slice(0, 100) : String(err)))
 
         // 构建反馈消息，让 LLM 自我修正
-        const feedback = `你上一次输出的 JSON 格式有误，请修正后重新输出。\n\n【解析错误诊断】\n${lastError}\n\n请只输出修正后的纯 JSON（不要包裹在 Markdown 代码块中，不要添加任何说明文字）。`
+        const feedback = t('log.render.selfCheckFeedback').replace('{diagnostic}', () => lastError)
         try {
           currentText = await retryLLM(feedback)
         } catch {
@@ -308,8 +331,12 @@ export abstract class BaseWorkflowCommand<TResult = string> {
       }
     }
 
-    renderLog('error', 'Parse', `JSON 自检重试 ${maxRetries} 次后仍失败: ${lastError.slice(0, 300)}`)
-    throw new Error(`JSON 解析失败（已重试 ${maxRetries} 次）: ${lastError}`)
+    renderLog('error', 'Parse', t('log.render.jsonSelfCheckExhausted')
+      .replace('{count}', String(maxRetries))
+      .replace('{error}', () => lastError.slice(0, 300)))
+    throw new Error(t('log.render.jsonParseFailedAfterRetries')
+      .replace('{count}', String(maxRetries))
+      .replace('{error}', () => lastError))
   }
 
   /**

@@ -63,7 +63,7 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importPostProcess'),
         description: t('workflow.importPostProcessDesc'),
         executor: async (_step, _context, callbacks) => {
-          callbacks.log('🔄 正在刷新项目数据...')
+          callbacks.log(t('log.refreshProject'))
           callbacks.setProgress(30)
 
           // 刷新文件树
@@ -85,7 +85,7 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
             await useDraftStore.getState().loadAllDrafts()
           } catch { /* 忽略 */ }
 
-          callbacks.log('🎉 小说导入全流程完成！所有数据已就位。')
+          callbacks.log(t('log.importAllDone'))
           callbacks.setProgress(100)
         },
       },

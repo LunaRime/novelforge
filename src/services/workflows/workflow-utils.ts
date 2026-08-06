@@ -568,7 +568,7 @@ export async function withRetry(
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       if (attempt < maxRetries) {
-        callbacks.log(`  ⚠️ ${label} 第${attempt + 1}次失败，正在重试...（${errMsg}）`)
+        callbacks.log(t('log.retryFailed').replace('{label}', label).replace('{n}', String(attempt + 1)).replace('{err}', errMsg))
       } else {
         return { ok: false, error: errMsg, attempts: attempt + 1 }
       }
@@ -725,7 +725,7 @@ export async function runPostProcessPipeline(
 
   if (!onlyFailed || !run) {
     // 新建跑批
-    callbacks.log(`  初始化后处理跑批...`)
+    callbacks.log(t('log.postProcessInit'))
     const createRes = await ipc.invoke('db:post-process-create-run', {
       triggerSourceType: sourceType,
       triggerSourceId: sourceId,
@@ -733,7 +733,7 @@ export async function runPostProcessPipeline(
       steps: steps.map(s => ({ key: s.key, label: s.label, critical: s.critical }))
     })
     if (!createRes.success || !createRes.id) {
-      throw new Error(`创建跑批失败: ${createRes.error}`)
+      throw new Error(t('error.postProcessCreateRun').replace('{error}', String(createRes.error ?? '')))
     }
     run = await ipc.invoke('db:post-process-get-latest-run', sourceType, sourceId)
   }
@@ -772,7 +772,7 @@ export async function runPostProcessPipeline(
       }
     }
     if (level.length === 0) {
-      callbacks.log('⚠️ 依赖图存在循环引用，降级为顺序执行')
+      callbacks.log(t('log.dagCycle'))
       level.push(...pendingSteps.values())
     }
     for (const step of level) {
@@ -796,20 +796,21 @@ export async function runPostProcessPipeline(
       const existingStep = stepMap.get(step.key)
 
       if (onlyFailed && existingStep?.ok) {
-        callbacks.log(`  ⏭️ ${step.label} — 已成功，跳过`)
+        callbacks.log(t('log.stepSkipped').replace('{label}', step.label))
         return
       }
 
-      callbacks.log(`  ▶ ${step.label}${(step.dependsOn ?? []).length > 0 ? ` (依赖: ${(step.dependsOn ?? []).join(', ')})` : ''}`)
+      const stepDeps = (step.dependsOn ?? []).join(', ')
+      callbacks.log(t('log.stepRunning').replace('{label}', step.label) + (stepDeps ? t('log.stepDepsSuffix').replace('{deps}', stepDeps) : ''))
       const result = await withRetry(() => step.executor(callbacks), retryCount, step.label, callbacks)
 
       if (result.ok) {
         await ipc.invoke('db:post-process-mark-step-ok', runId, step.key)
       } else {
-        await ipc.invoke('db:post-process-mark-step-failed', runId, step.key, result.error || '未知错误')
+        await ipc.invoke('db:post-process-mark-step-failed', runId, step.key, result.error || t('status.unknown'))
         if (step.critical) {
           hasCriticalFailure = true
-          callbacks.log(`  🔴 关键步骤 ${step.label} 失败，管线中止（阻断下游 ${(reverseDeps.get(step.key) ?? []).length} 个步骤）`)
+          callbacks.log(t('log.criticalFailed').replace('{label}', step.label).replace('{n}', String((reverseDeps.get(step.key) ?? []).length)))
         }
       }
     })
@@ -819,7 +820,7 @@ export async function runPostProcessPipeline(
 
   // 事务边界：标记 run 最终状态（供 UI 判断是否需要回滚/重试）
   if (hasCriticalFailure) {
-    callbacks.log('⚠️ 后处理管线因关键步骤失败而中止。已执行的步骤已记录，可重试修复。')
+    callbacks.log(t('log.pipelineAborted'))
   }
 
   // 返回最终状态汇总供 UI 展示
@@ -833,17 +834,17 @@ export async function runPostProcessPipeline(
   const successSteps = Object.values(status.steps).filter(s => s.ok)
 
   callbacks.log('')
-  callbacks.log(`━━━━━━━━━━ ${sourceLabel} 后处理汇总 ━━━━━━━━━━`)
+  callbacks.log(t('log.summaryTitle').replace('{label}', sourceLabel))
   for (const [, r] of Object.entries(status.steps)) {
     callbacks.log(`  ${r.ok ? '✅' : '❌'} ${r.label}${r.ok ? '' : ` — ${r.error}`}`)
   }
-  callbacks.log(`━━━━━━━━━━ ${successSteps.length}/${Object.keys(status.steps).length} 成功 ━━━━━━━━━━`)
+  callbacks.log(t('log.summaryCount').replace('{success}', String(successSteps.length)).replace('{total}', String(Object.keys(status.steps).length)))
 
   if (failedSteps.length > 0) {
     const failedLabels = failedSteps.map(r => r.label).join('、')
-    callbacks.log(`⚠️ 以下后处理步骤失败：${failedLabels}`)
+    callbacks.log(t('log.failedStepsList').replace('{labels}', failedLabels))
     if (failedSteps.some(s => s.critical)) {
-      callbacks.log('💡 存在关键步骤失败，后续流程可能被阻断。请在对应页面使用「重试」功能修复')
+      callbacks.log(t('log.criticalHint'))
     }
   }
 

@@ -20,7 +20,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
 
-    callbacks.log('拼装章节上下文 (强类型注入中)...')
+    callbacks.log(t('log.generateDraft.assembling'))
 
     const architecture = await this.readArchitecture(project.path)
     const projectPrompts = await this.readProjectPrompts(project.path)
@@ -66,7 +66,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     if (genreOverride) {
       const genreGuide = (await import('../../genre-overrides')).formatGenreOverrideForPrompt(genreOverride)
       promptBuilder.withWritingStyle((project.novelConfig.writingStyle || '') + '\n\n' + genreGuide)
-      callbacks.log(`  已注入流派特化指导: ${project.novelConfig.genre}`)
+      callbacks.log(t('log.generateDraft.genreInjected').replace('{genre}', project.novelConfig.genre))
     }
 
     if (!isFirstChapter) {
@@ -77,7 +77,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         { title: this.chapterInfo.title, keyEvents: this.chapterInfo.keyEvents, characters: this.chapterInfo.characters },
       )
       const chapterTimeline = pruned.text
-      callbacks.log(`  智能剪枝: ${pruned.tokensUsed}tokens (节省${pruned.tokensSaved})`)
+      callbacks.log(t('log.generateDraft.pruned')
+        .replace('{tokens}', String(pruned.tokensUsed))
+        .replace('{saved}', String(pruned.tokensSaved)))
 
       let previousEnding = ''
       try {
@@ -91,11 +93,11 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
       let filteredContext = ''
       try {
-        callbacks.log('  🔍 检索知识库相关片段...')
+        callbacks.log(t('log.generateDraft.searchingKB'))
         let searchQuery = `${this.chapterInfo.title} ${this.chapterInfo.keyEvents} ${this.chapterInfo.characters.join(' ')}`
         if (this.chapterInfo.knowledgeQueryHint?.trim()) {
           searchQuery += ` ${this.chapterInfo.knowledgeQueryHint.trim()}`
-          callbacks.log(`  📌 追加用户检索关键词：${this.chapterInfo.knowledgeQueryHint.trim()}`)
+          callbacks.log(t('log.generateDraft.kbHint').replace('{keyword}', this.chapterInfo.knowledgeQueryHint.trim()))
         }
         const results = await ipc.invoke('kb:search', searchQuery, 5)
         filteredContext = results.length > 0
@@ -119,7 +121,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         const { buildTransitionContext, formatTransitionForPrompt } = await import('../../chapter-transition-engine')
         const ctx = await buildTransitionContext(this.chapterInfo.chapterNumber)
         transitionContext = formatTransitionForPrompt(ctx)
-        if (transitionContext) callbacks.log('  已构建章节过渡上下文')
+        if (transitionContext) callbacks.log(t('log.generateDraft.transitionBuilt'))
       } catch { /* 不影响主流程 */ }
 
       promptBuilder
@@ -186,10 +188,12 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     const estimatedTokens = Math.ceil(prompt.length / 1.5)
     const TOKEN_BUDGET = 28000
     if (estimatedTokens > TOKEN_BUDGET) {
-      callbacks.log(`⚠️ Prompt 预估 ${estimatedTokens} tokens，超出预算 ${TOKEN_BUDGET}，请考虑精简上下文`)
+      callbacks.log(t('log.generateDraft.tokenOverBudget')
+        .replace('{estimated}', String(estimatedTokens))
+        .replace('{budget}', String(TOKEN_BUDGET)))
     }
 
-    callbacks.log('调用 AI 生成章节草稿...')
+    callbacks.log(t('log.generateDraft.calling'))
 
     // staticContext：架构入 system 前缀（同项目连续调用缓存命中 + 模型遵从度更高）
     // 注意：必须传注入后的 prompt 字符串而非 builder —— callLLMWithBuilder 会重新 build() 丢失防缺陷注入
@@ -234,7 +238,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       })
     } catch { /* 忽略 */ }
 
-    callbacks.log(`✅ 草稿已自动入库保存为版本 v${nextVersion}（约 ${novelWordCount} 字）`)
+    callbacks.log(t('log.generateDraft.saved')
+      .replace('{version}', String(nextVersion))
+      .replace('{words}', String(novelWordCount)))
     return draftText
   }
 

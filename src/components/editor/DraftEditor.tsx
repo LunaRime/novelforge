@@ -127,11 +127,16 @@ export default function DraftEditor({ filePath, content }: Props) {
         useEditorStore.getState().syncTabContent(targetTab.id, text)
       }
       // 保存行为日志流：手动 info（公测可见）/ 自动 debug（dev 可见）
-      renderLog(manual ? 'info' : 'debug', 'Save:Draft', `${manual ? '手动' : '自动'}保存成功 ${filePath}（${Date.now() - t0}ms）`)
+      renderLog(manual ? 'info' : 'debug', 'Save:Draft', t('log.render.draftSaveSuccess')
+        .replace('{mode}', () => manual ? t('log.render.modeManual') : t('log.render.modeAuto'))
+        .replace('{path}', () => filePath)
+        .replace('{ms}', String(Date.now() - t0)))
       if (manual) toast.success(t('save.success'))
     } catch (e) {
       // 保存失败不再静默：toast 视觉反馈 + error 日志（含原因）
-      renderLog('error', 'Save:Draft', `保存失败 ${filePath}: ${String(e)}`)
+      renderLog('error', 'Save:Draft', t('log.render.draftSaveFailed')
+        .replace('{path}', () => filePath)
+        .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)

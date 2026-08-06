@@ -117,7 +117,9 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
     if (!draftContent) throw new Error(t('error.noDraft'))
 
     callbacks.log(
-      `启动 ${perspectives.length} 个评审视角并行评审第 ${chapterNumber} 章...`,
+      t('log.spawnReviewers.starting')
+        .replace('{count}', String(perspectives.length))
+        .replace('{chapter}', String(chapterNumber)),
     )
 
     const outputs: ReviewerOutput[] = []
@@ -125,7 +127,10 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
 
     // 并行启动所有评审者（由并发控制器管理实际并发数）
     const reviewPromises = perspectives.map(async (perspective, index) => {
-      callbacks.log(`  🤖 ${perspective.name} 评审中... (${index + 1}/${perspectives.length})`)
+      callbacks.log(t('log.spawnReviewers.reviewing')
+        .replace('{name}', perspective.name)
+        .replace('{index}', String(index + 1))
+        .replace('{total}', String(perspectives.length)))
 
       try {
         const response = await llmStore.generate(
@@ -141,7 +146,9 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
         )
 
         if (!response.success) {
-          callbacks.log(`  ❌ ${perspective.name} 评审失败: ${response.error}`)
+          callbacks.log(t('log.spawnReviewers.failed')
+            .replace('{name}', perspective.name)
+            .replace('{error}', () => response.error ?? ''))
           return null
         }
 
@@ -150,12 +157,16 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
         parsed.tokensUsed = response.usage?.totalTokens || 0
 
         callbacks.log(
-          `  ✅ ${perspective.name} 完成，综合评分: ${parsed.overallScore}/10`,
+          t('log.spawnReviewers.done')
+            .replace('{name}', perspective.name)
+            .replace('{score}', String(parsed.overallScore)),
         )
 
         return parsed
       } catch (error) {
-        callbacks.log(`  ❌ ${perspective.name} 评审异常: ${String(error)}`)
+        callbacks.log(t('log.spawnReviewers.exception')
+          .replace('{name}', perspective.name)
+          .replace('{error}', () => String(error)))
         return null
       }
     })
@@ -168,7 +179,9 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
       }
     }
 
-    callbacks.log(`✅ 互评完成：${outputs.length}/${perspectives.length} 个视角成功`)
+    callbacks.log(t('log.spawnReviewers.allDone')
+      .replace('{ok}', String(outputs.length))
+      .replace('{total}', String(perspectives.length)))
 
     return outputs
   }

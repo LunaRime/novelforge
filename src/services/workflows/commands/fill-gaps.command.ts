@@ -40,13 +40,16 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
 
     for (const gap of this.params.gaps) {
       if (context.cancelled) {
-        callbacks.log('已取消补全')
+        callbacks.log(t('log.fillGaps.cancelled'))
         break
       }
 
       const { missingChapterNumbers: chapters, context: gapContext } = gap
       callbacks.log(
-        `正在补全第 ${chapters[0]}–${chapters[chapters.length - 1]} 章（${chapters.length} 章）...`,
+        t('log.fillGaps.filling')
+          .replace('{start}', String(chapters[0]))
+          .replace('{end}', String(chapters[chapters.length - 1]))
+          .replace('{count}', String(chapters.length)),
       )
 
       const template = getPromptTemplate('chapter_blueprint_chunk')
@@ -80,16 +83,24 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
           await saveAllBlueprints(parsed)
           allFilled.push(...parsed)
           callbacks.log(
-            `  ✅ 已补全第 ${chapters[0]}–${chapters[chapters.length - 1]} 章（${parsed.length} 章）`,
+            t('log.fillGaps.done')
+              .replace('{start}', String(chapters[0]))
+              .replace('{end}', String(chapters[chapters.length - 1]))
+              .replace('{count}', String(parsed.length)),
           )
         } else {
           callbacks.log(
-            `  ⚠️ 第 ${chapters[0]}–${chapters[chapters.length - 1]} 章补全结果为空，需要重试`,
+            t('log.fillGaps.empty')
+              .replace('{start}', String(chapters[0]))
+              .replace('{end}', String(chapters[chapters.length - 1])),
           )
         }
       } catch (error) {
         callbacks.log(
-          `  ❌ 第 ${chapters[0]}–${chapters[chapters.length - 1]} 章补全失败: ${String(error)}`,
+          t('log.fillGaps.failed')
+            .replace('{start}', String(chapters[0]))
+            .replace('{end}', String(chapters[chapters.length - 1]))
+            .replace('{error}', () => String(error)),
         )
       }
 
@@ -97,7 +108,7 @@ export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
     }
 
     callbacks.setProgress(100)
-    callbacks.log(`✅ 共补全 ${allFilled.length} 章蓝图`)
+    callbacks.log(t('log.fillGaps.total').replace('{count}', String(allFilled.length)))
 
     return allFilled
   }

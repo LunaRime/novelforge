@@ -47,7 +47,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       endChapter = Math.min(this.params.count, totalChapters)
     }
 
-    callbacks.log(`生成第 ${startChapter}–${endChapter} 章蓝图...`)
+    callbacks.log(t('log.directory.generating').replace('{start}', String(startChapter)).replace('{end}', String(endChapter)))
 
     // 从当前默认模型获取 maxTokens，动态计算每批次章节数
     const llmStore = (await import('../../../stores/llm-store')).useLLMStore.getState()
@@ -62,7 +62,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       ? Math.min(this.params.batchChapterCount, autoBatchSize)
       : autoBatchSize
     if (this.params.generationMode === 'batch') {
-      callbacks.log(`  分批生成模式：${batchSize} 章/批`)
+      callbacks.log(t('log.directory.batchMode').replace('{size}', String(batchSize)))
     }
 
     const newBlueprints: ChapterBlueprint[] = []
@@ -75,13 +75,18 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
     let effectiveBatchSize = batchSize
 
     while (cursor <= endChapter) {
-      if (context.cancelled) { callbacks.log('已取消'); break }
+      if (context.cancelled) { callbacks.log(t('log.directory.cancelled')); break }
 
       const batchEnd = Math.min(cursor + effectiveBatchSize - 1, endChapter)
       if (effectiveBatchSize < batchSize) {
-        callbacks.log(`  正在生成第 ${cursor}–${batchEnd} 章...（缩小批次重试，${effectiveBatchSize} 章/批）`)
+        callbacks.log(t('log.directory.generatingRetry')
+          .replace('{start}', String(cursor))
+          .replace('{end}', String(batchEnd))
+          .replace('{size}', String(effectiveBatchSize)))
       } else {
-        callbacks.log(`  正在生成第 ${cursor}–${batchEnd} 章...`)
+        callbacks.log(t('log.directory.generatingRange')
+          .replace('{start}', String(cursor))
+          .replace('{end}', String(batchEnd)))
       }
 
       let prompt: string
@@ -153,23 +158,33 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
 
         // 缺口检测：如果游标章节在结果中缺失，下一轮重试会填补
         if (actualMinChapter > cursor) {
-          callbacks.log(`  ⚠️ 第 ${cursor} 章在结果中缺失（检测到第 ${actualMinChapter}–${actualMaxChapter} 章），将在下一轮填补缺口`)
+          callbacks.log(t('log.directory.gapDetected')
+            .replace('{chapter}', String(cursor))
+            .replace('{min}', String(actualMinChapter))
+            .replace('{max}', String(actualMaxChapter)))
         } else {
-          callbacks.log(`  ✅ 第 ${cursor}–${actualMaxChapter} 章完成（${parsed.length} 章）并已保存入库`)
+          callbacks.log(t('log.directory.batchDone')
+            .replace('{start}', String(cursor))
+            .replace('{end}', String(actualMaxChapter))
+            .replace('{count}', String(parsed.length)))
           cursor = actualMaxChapter + 1
         }
       } else {
         consecutiveParseFailures++
-        callbacks.log(`  ⚠️ 第 ${cursor}–${batchEnd} 章解析失败（连续 ${consecutiveParseFailures}/${MAX_CONSECUTIVE_FAILURES}）`)
+        callbacks.log(t('log.directory.parseFailed')
+          .replace('{start}', String(cursor))
+          .replace('{end}', String(batchEnd))
+          .replace('{failures}', String(consecutiveParseFailures))
+          .replace('{maxFailures}', String(MAX_CONSECUTIVE_FAILURES)))
 
         // 三级降级策略：本地修复（不消耗 Token）→ 缩小批次 → 单章兜底
         // parseTextBlueprints 内部会自动尝试 Markdown 表格 → JSON fallback 两条路径
         if (consecutiveParseFailures === 1) {
           // 第 1 次失败：尝试更深层的本地 JSON 修复
-          callbacks.log(`  🔧 尝试本地修复 JSON（不消耗额外 Token）...`)
+          callbacks.log(t('log.directory.localRepair'))
           const repairResult = extractAndRepairJSON(stripThinkingTags(resultText), false)
           if (repairResult.parsed) {
-            callbacks.log(`  ✅ 本地修复成功，提取到有效数据`)
+            callbacks.log(t('log.directory.repairOk'))
             const repairedBlueprints = parseTextBlueprintsFromParsed(repairResult.parsed, cursor, endChapter)
             if (repairedBlueprints.length > 0) {
               newBlueprints.push(...repairedBlueprints)
@@ -178,27 +193,34 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
               consecutiveParseFailures = 0
               effectiveBatchSize = batchSize
               const actualMaxChapter = Math.max(...repairedBlueprints.map(p => p.chapterNumber))
-              callbacks.log(`  ✅ 第 ${cursor}–${actualMaxChapter} 章完成（修复后 ${repairedBlueprints.length} 章）并已保存入库`)
+              callbacks.log(t('log.directory.batchDoneRepaired')
+                .replace('{start}', String(cursor))
+                .replace('{end}', String(actualMaxChapter))
+                .replace('{count}', String(repairedBlueprints.length)))
               cursor = actualMaxChapter + 1
               continue
             }
           }
-          callbacks.log(`  ❌ 本地修复未能提取到有效蓝图数据`)
+          callbacks.log(t('log.directory.repairFailed'))
           // 降级到 5 章小批次重试
           effectiveBatchSize = Math.min(5, effectiveBatchSize)
-          callbacks.log(`  🔄 缩小为 ${effectiveBatchSize} 章/批，从第 ${cursor} 章重新生成...`)
+          callbacks.log(t('log.directory.shrinkBatch')
+            .replace('{size}', String(effectiveBatchSize))
+            .replace('{chapter}', String(cursor)))
         } else if (consecutiveParseFailures === 2 || consecutiveParseFailures === 3) {
           // 第 2-3 次失败：进一步缩小批次
           effectiveBatchSize = Math.max(1, Math.floor(effectiveBatchSize / 2))
-          callbacks.log(`  🔄 继续缩小为 ${effectiveBatchSize} 章/批，从第 ${cursor} 章重试...`)
+          callbacks.log(t('log.directory.shrinkMore')
+            .replace('{size}', String(effectiveBatchSize))
+            .replace('{chapter}', String(cursor)))
         } else {
           // 第 4-5 次失败：单章模式
           effectiveBatchSize = 1
-          callbacks.log(`  🔄 单章模式重试第 ${cursor} 章...`)
+          callbacks.log(t('log.directory.singleRetry').replace('{chapter}', String(cursor)))
         }
 
         if (consecutiveParseFailures >= MAX_CONSECUTIVE_FAILURES) {
-          callbacks.log(`  ❌ 连续 ${MAX_CONSECUTIVE_FAILURES} 次解析失败，中止蓝图生成`)
+          callbacks.log(t('log.directory.abort').replace('{count}', String(MAX_CONSECUTIVE_FAILURES)))
           throw new Error(`蓝图解析连续失败 ${MAX_CONSECUTIVE_FAILURES} 次，请检查 AI 模型输出格式`)
         }
         // cursor 保持不变，确保不跳过任何章节
@@ -208,7 +230,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
     context.data.newBlueprints = newBlueprints
     context.data.existingBlueprints = existingBlueprints
 
-    callbacks.log(`✅ 共生成 ${newBlueprints.length} 章蓝图`)
+    callbacks.log(t('log.directory.done').replace('{count}', String(newBlueprints.length)))
     return newBlueprints
   }
 }

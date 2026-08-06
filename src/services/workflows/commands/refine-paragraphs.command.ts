@@ -55,7 +55,9 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
     const contextBefore = fullContent.slice(Math.max(0, selectionStart - 200), selectionStart)
     const contextAfter = fullContent.slice(selectionEnd, Math.min(fullContent.length, selectionEnd + 200))
 
-    callbacks.log(`段落改写 (${refineType}): 选中 ${computeTextStats(selectedText).novelWordCount} 字`)
+    callbacks.log(t('log.refineParagraphs.selected')
+      .replace('{type}', refineType)
+      .replace('{words}', String(computeTextStats(selectedText).novelWordCount)))
 
     // 构建 prompt
     const guide = REFINE_TYPE_GUIDE[refineType] || REFINE_TYPE_GUIDE.polish
@@ -100,9 +102,15 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
       modifiedText +
       fullContent.slice(selectionEnd)
 
+    const action = refineType === 'expand' ? t('log.refineParagraphs.actionExpand')
+      : refineType === 'shrink' ? t('log.refineParagraphs.actionShrink')
+      : t('log.refineParagraphs.actionRewrite')
     const summary =
-      `${refineType === 'expand' ? '扩写' : refineType === 'shrink' ? '精简' : '改写'}完成: ` +
-      `${computeTextStats(selectedText).novelWordCount}字 → ${computeTextStats(modifiedText).novelWordCount}字 (${wordDelta >= 0 ? '+' : ''}${wordDelta})`
+      t('log.refineParagraphs.done')
+        .replace('{action}', action)
+        .replace('{before}', String(computeTextStats(selectedText).novelWordCount))
+        .replace('{after}', String(computeTextStats(modifiedText).novelWordCount))
+        .replace('{delta}', `${wordDelta >= 0 ? '+' : ''}${wordDelta}`)
 
     // 创建修订记录
     try {

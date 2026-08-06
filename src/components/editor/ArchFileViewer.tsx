@@ -125,15 +125,19 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
         setIsDirty(false)
         useEditorStore.getState().markTabSaved(filePath)
         // 保存行为日志流：成功 info + toast 视觉反馈
-        renderLog('info', 'Save:Arch', `架构文件保存成功 ${filePath}（${Date.now() - t0}ms）`)
+        renderLog('info', 'Save:Arch', t('log.render.archSaveSuccess')
+          .replace('{path}', () => filePath)
+          .replace('{ms}', String(Date.now() - t0)))
         toast.success(t('save.success'))
       } else {
         // 保存被拒绝（writeCoreContent 返回 false）——不再静默
-        renderLog('error', 'Save:Arch', `架构文件保存被拒绝 ${filePath}`)
+        renderLog('error', 'Save:Arch', t('log.render.archSaveRejected').replace('{path}', () => filePath))
         toast.error(t('save.failed').replace('{error}', 'DB'))
       }
     } catch (e) {
-      renderLog('error', 'Save:Arch', `架构文件保存失败 ${filePath}: ${String(e)}`)
+      renderLog('error', 'Save:Arch', t('log.render.archSaveFailed')
+        .replace('{path}', () => filePath)
+        .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)

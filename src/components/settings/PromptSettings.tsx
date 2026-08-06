@@ -170,10 +170,10 @@ function TemplateItem({
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedGlobal') } : { type: 'error', msg: t('prompt.saveFailed') })
     // 保存行为日志流（视觉反馈已有 saveResult 局部文本）
     if (ok) {
-      renderLog('info', 'Save:Prompt', `模板保存成功（全局）${builtinTemplate.key}`)
+      renderLog('info', 'Save:Prompt', t('log.render.promptSaveSuccessGlobal').replace('{key}', () => builtinTemplate.key))
       onSaved()
     } else {
-      renderLog('error', 'Save:Prompt', `模板保存失败（全局）${builtinTemplate.key}`)
+      renderLog('error', 'Save:Prompt', t('log.render.promptSaveFailedGlobal').replace('{key}', () => builtinTemplate.key))
     }
     setTimeout(() => setSaveResult(null), 3000)
   }
@@ -194,10 +194,10 @@ function TemplateItem({
     setSaveResult(ok ? { type: 'success', msg: t('prompt.savedProject') } : { type: 'error', msg: t('prompt.saveFailed') })
     // 保存行为日志流（视觉反馈已有 saveResult 局部文本）
     if (ok) {
-      renderLog('info', 'Save:Prompt', `模板保存成功（项目）${builtinTemplate.key}`)
+      renderLog('info', 'Save:Prompt', t('log.render.promptSaveSuccessProject').replace('{key}', () => builtinTemplate.key))
       onSaved()
     } else {
-      renderLog('error', 'Save:Prompt', `模板保存失败（项目）${builtinTemplate.key}`)
+      renderLog('error', 'Save:Prompt', t('log.render.promptSaveFailedProject').replace('{key}', () => builtinTemplate.key))
     }
     setTimeout(() => setSaveResult(null), 3000)
   }

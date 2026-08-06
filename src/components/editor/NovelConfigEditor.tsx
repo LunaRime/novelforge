@@ -57,12 +57,12 @@ export default function NovelConfigEditor() {
     try {
       await saveProject()
       // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Config', `小说配置保存成功（${Date.now() - t0}ms）`)
+      renderLog('info', 'Save:Config', t('log.render.configSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (error) {
       // 失败：toast + error 日志（含原因）
       console.error('[NovelConfigEditor] 保存失败:', error)
-      renderLog('error', 'Save:Config', `小说配置保存失败: ${String(error)}`)
+      renderLog('error', 'Save:Config', t('log.render.configSaveFailed').replace('{error}', () => String(error)))
       toast.error(t('save.failed').replace('{error}', String(error)))
     } finally {
       setSaving(false)
