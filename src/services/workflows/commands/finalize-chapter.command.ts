@@ -176,8 +176,21 @@ export function buildFinalizePostProcessSteps(
         const allChars = (await ipc.invoke('db:character-get-all')) as unknown as Array<Record<string, unknown>>
         const simpleCards = allChars.map((c) => ({ name: c.name, role: c.role }))
 
+        // ⚠️ M 级修复：分段注入（首 5000 + 尾 3000 + 中间抽样）——此前只喂前 5000 字，
+        //    后半章的角色变化模型完全看不到，却按 prompt 指示"tags 无变化填无"——
+        //    系统用确定性"无"占位把真实变化过滤掉了
+        const chapterContent = (() => {
+          const first = draftContent.slice(0, 5000)
+          if (draftContent.length <= 5000) return first
+          const last = draftContent.slice(-3000)
+          const middle = draftContent.length > 12000
+            ? draftContent.slice(6000, 8000)
+            : ''
+          return first + (middle ? `\n\n[中段抽样]\n${middle}` : '') + `\n\n[结尾]\n${last}`
+        })()
+
         const cardBuilder = new PostProcessPromptBuilder(cardTemplate)
-          .withChapterContent(draftContent.slice(0, 5000))
+          .withChapterContent(chapterContent)
           .withChapterNumber(chapterNumber)
           .withExistingCardsJson(simpleCards)
 

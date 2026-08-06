@@ -388,7 +388,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           DEFAULT_RAG_CONFIG,
         )
         if (ragResult && ragResult.chunks.length > 0) {
-          systemPrompt += `\n\n---\n## 知识库相关上下文（自动检索）\n\n${ragResult.formattedContext}`
+          // ⚠️ M 级修复：标注检索片段的「非事实」语义——模型曾把检索结果当既定事实直接采信
+          systemPrompt += `\n\n---\n## 知识库相关上下文（自动检索——以下片段为相关度排序的检索结果，可能与定稿有出入；涉及事实请以最新工具查询为准）\n\n${ragResult.formattedContext}`
           console.debug(`[Agent] ${getRAGSummary(ragResult)}`)
         }
       } catch {
@@ -433,7 +434,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           }
         }
         if (prefetchResults.length > 0) {
-          enrichedUserMessage = `${enrichedUserMessage}\n\n---\n以下是用户 @ 引用的上下文数据（已自动获取，约 ${prefetchTokens} tokens）：\n\n${prefetchResults.join('\n\n---\n\n')}`
+          // ⚠️ M 级修复：标注预取数据的时效性——预取后数据可能被修改（角色卡/架构编辑），
+          //    模型曾基于过期数据作答
+          enrichedUserMessage = `${enrichedUserMessage}\n\n---\n以下是系统预取的项目数据（约 ${prefetchTokens} tokens，可能已过期——涉及当前事实请以最新工具查询为准）：\n\n${prefetchResults.join('\n\n---\n\n')}`
         }
       }
 

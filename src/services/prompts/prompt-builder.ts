@@ -153,6 +153,12 @@ export class ChapterPromptBuilder extends BasePromptBuilder {
     return this;
   }
 
+  /** 角色声音档案（修稿 OOC 校验基准，M 级降幻觉） */
+  withVoiceProfile(text: string) {
+    this.variables.voice_profile = text;
+    return this;
+  }
+
   /** 用户指定的知识库检索关键词（追加到向量搜索 query） */
   withKnowledgeQueryHint(hint: string) {
     this.variables.knowledge_query_hint = hint;

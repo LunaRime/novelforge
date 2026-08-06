@@ -60,11 +60,17 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
       const issueText = audit.issues
         .map((iss, i) => `${i + 1}. [${iss.kind}] ${iss.message}`)
         .join('\n')
+      // ⚠️ M 级修复：审稿输入全文分段采样（此前只见前 3000 字——后半章问题不可见却给全稿建议，
+      //    "基于不完整输入的自信判断"）
+      const draftPreview = current.length <= 4500
+        ? current
+        : current.slice(0, 1500) + '\n\n[中段略]...\n\n' + current.slice(-3000)
       const reviewerPrompt =
         t('prompt.selfReview.reviewerTitle') + '\n' + issueText + '\n\n' +
-        t('prompt.selfReview.draftPreviewTitle') + '\n' + current.slice(0, 3000) + '\n\n' +
+        t('prompt.selfReview.draftPreviewTitle') + '\n' + draftPreview + '\n\n' +
         t('prompt.selfReview.reviewerTask')
-      const suggestions = await this.callLLM(reviewerPrompt, getReviewerSystem(), callbacks)
+      // ⚠️ M 级修复：审稿人路由到独立审稿模型（purpose 分派——同模型自审对判断类纠错效果有限）
+      const suggestions = await this.callLLM(reviewerPrompt, getReviewerSystem(), callbacks, { purpose: 'review_chapter' })
       if (!suggestions.trim()) {
         callbacks.log(t('log.selfReview.noSuggestions'))
         break
@@ -84,6 +90,24 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
         callbacks.log(t('log.selfReview.rewriteTooShort'))
         break
       }
+      // ⚠️ M 级修复：关键情节保留检查——重写稿可悄悄删掉/篡改关键事件而不被拦截；
+      //   取本章蓝图 keyEvents 关键词，重写稿命中不足半数则放弃本轮（确定性闸门）
+      try {
+        const bp = await ipc.invoke('db:blueprint-get', this.params.chapterNumber) as { keyEvents?: string } | null
+        if (bp?.keyEvents) {
+          const keywords = String(bp.keyEvents)
+            .split(/[，,。；;、\s]+/)
+            .filter(s => s.length >= 2)
+            .slice(0, 5)
+          if (keywords.length > 0) {
+            const hit = keywords.filter(k => rewritten.includes(k)).length
+            if (hit < Math.max(1, Math.ceil(keywords.length / 2))) {
+              callbacks.log(t('log.selfReview.keyEventsLost').replace('{hit}', String(hit)).replace('{total}', String(keywords.length)))
+              break
+            }
+          }
+        }
+      } catch { /* 蓝图读取失败不阻断 */ }
       current = rewritten
       rewrote = true
     }
