@@ -395,16 +395,15 @@ export async function saveProjectCustomPrompt(projectPath: string, template: Pro
   }
 }
 
-/** 删除全局自定义 Prompt（恢复为内置版本） */
+/** 删除全局自定义 Prompt（恢复为内置版本）— fs:delete-file 真删除（此前写空文件模拟，残留 0 字节） */
 export async function deleteCustomPrompt(key: string): Promise<boolean> {
   try {
     const { ipc } = await import('./ipc-client')
     const velaHome = await ipc.invoke('config:get-vela-home')
     const filePath = `${velaHome}/prompts/${key}.json`
-    const exists = await ipc.invoke('fs:check-exists', filePath)
-    if (exists) await ipc.invoke('fs:write-file', filePath, '')
+    const result = await ipc.invoke('fs:delete-file', filePath)
     customPrompts.delete(key)
-    return true
+    return result.success
   } catch {
     return false
   }
@@ -415,10 +414,9 @@ export async function deleteProjectCustomPrompt(projectPath: string, key: string
   try {
     const { ipc } = await import('./ipc-client')
     const filePath = `${projectPath}/.vela/prompts/${key}.json`
-    const exists = await ipc.invoke('fs:check-exists', filePath)
-    if (exists) await ipc.invoke('fs:write-file', filePath, '')
+    const result = await ipc.invoke('fs:delete-file', filePath)
     projectCustomPrompts.delete(key)
-    return true
+    return result.success
   } catch {
     return false
   }
