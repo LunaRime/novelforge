@@ -75,6 +75,8 @@ export async function collectAuditContext(chapterNumber: number): Promise<AuditC
     const { useProjectStore } = await import('../../stores/project-store')
     const project = useProjectStore.getState().currentProject
     if (project) {
+      // 登记授权（fs:read-external-file 现仅放行显式授权路径——项目内白名单文件在此登记）
+      await ipc.invoke('fs:grant-external-file', `${project.path}/.vela/audit-whitelist.json`).catch(() => {})
       const wlRes = await ipc.invoke('fs:read-external-file', `${project.path}/.vela/audit-whitelist.json`) as { success?: boolean; content?: string } | null
       if (wlRes?.success && wlRes.content) {
         const parsed = JSON.parse(wlRes.content) as Record<string, unknown>

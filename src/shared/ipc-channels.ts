@@ -140,6 +140,10 @@ export interface FileChannels {
     return: { success: boolean; content: string; error?: string }
   }
   /** 项目外文件只读（Agent 添加外部文件专用；无沙箱，扩展名 + 1MB 限制） */
+  'fs:grant-external-file': {
+    args: [filePath: string]
+    return: { success: boolean }
+  }
   'fs:read-external-file': {
     args: [filePath: string]
     return: { success: boolean; content: string; error?: string }
