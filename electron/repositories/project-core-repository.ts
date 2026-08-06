@@ -128,7 +128,7 @@ export class ProjectCoreRepository {
         const db = getProjectDb()
         if (!db) {
             logger.error('ProjectCore', t('log.projectCore.dbNotConnected'))
-            throw new Error('项目数据库未连接，请关闭项目后重新打开')
+            throw new Error(t('error.projectDbDisconnected'))
         }
 
         // ★ v6 修复：大文本字段写 project_archives，其余字段写 project_core

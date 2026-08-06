@@ -487,7 +487,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     ensureMigrationColumns(db)
   } catch (e) {
     logger.error('DB', t('log.db.migrationColumnsFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (ensure columns): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'ensure columns').replace('{err}', String(e)))
   }
 
   // 1. contents 表：补加 updated_at 列
@@ -499,7 +499,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     }
   } catch (e) {
     logger.error('DB', t('log.db.migContentsUpdatedAtFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (contents.updated_at): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'contents.updated_at').replace('{err}', String(e)))
   }
 
   // 2. post_process_steps 表：补加唯一约束
@@ -511,7 +511,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     }
   } catch (e) {
     logger.error('DB', t('log.db.migStepsUniqueFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (post_process_steps): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'post_process_steps').replace('{err}', String(e)))
   }
 
   // 3. summary_snapshots 表：补加索引
@@ -520,7 +520,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     db.exec('CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at)')
   } catch (e) {
     logger.error('DB', t('log.db.migSnapshotsIndexFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (summary_snapshots indexes): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'summary_snapshots indexes').replace('{err}', String(e)))
   }
 
   // 4. v2: blueprints 表：添加 sort_order, priority 列
@@ -536,7 +536,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     }
   } catch (e) {
     logger.error('DB', t('log.db.migBlueprintsColumnsFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (blueprints): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'blueprints').replace('{err}', String(e)))
   }
 
   // 5. v2: evaluation_scores 表
@@ -561,7 +561,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.migEvaluationScores'))
   } catch (e) {
     logger.error('DB', t('log.db.migEvaluationScoresFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (evaluation_scores): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'evaluation_scores').replace('{err}', String(e)))
   }
 
   // 6. v4: project_archives 表 + 大文本字段迁移
@@ -599,7 +599,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.migArchivesCreated'))
   } catch (e) {
     logger.error('DB', t('log.db.migArchivesFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (project_archives): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'project_archives').replace('{err}', String(e)))
   }
 
   // 7. v5: 时间字段 TEXT → INTEGER 迁移（毫秒级 unix 时间戳）
@@ -653,7 +653,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.timeMigDone'))
   } catch (e) {
     logger.error('DB', t('log.db.timeMigFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (time migration v5): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'time migration v5').replace('{err}', String(e)))
   }
 
   // 8. v6: 补充遗漏的 TEXT 时间列 → INTEGER（post_process_steps + blueprints）
@@ -689,7 +689,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.v6TimeMigDone'))
   } catch (e) {
     logger.error('DB', t('log.db.v6TimeMigFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (time migration v6): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'time migration v6').replace('{err}', String(e)))
   }
 
   // 9. v6: CHECK 约束触发器（SQLite 不支持 ALTER TABLE ADD CHECK，用触发器替代）
@@ -731,7 +731,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.v6CheckTriggersCreated'))
   } catch (e) {
     logger.error('DB', t('log.db.v6CheckTriggersFailed').replace('{err}', String(e)))
-    throw new Error(`关键迁移步骤失败 (CHECK triggers v6): ${e}`)
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'CHECK triggers v6').replace('{err}', String(e)))
   }
 
   // 10. v6: 删除 project_core 中已归档到 project_archives 的冗余大文本列

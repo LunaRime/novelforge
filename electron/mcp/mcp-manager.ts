@@ -224,7 +224,7 @@ class MCPManagerImpl {
   private async connectStdio(runtime: MCPServerRuntime): Promise<void> {
     const { command, args = [], env } = runtime.config
     if (!command) {
-      throw new Error('stdio 模式需要 command 参数')
+      throw new Error(t('error.mcpStdioNeedsCommand'))
     }
 
     const proc = spawn(command, args, {
@@ -306,7 +306,7 @@ class MCPManagerImpl {
       const timerId = setTimeout(() => {
         if (runtime.pendingRequests.has(id)) {
           runtime.pendingRequests.delete(id)
-          reject(new Error(`MCP 请求超时: ${method}`))
+          reject(new Error(t('error.mcpRequestTimeout').replace('{method}', method)))
         }
       }, 10000)
 
@@ -404,7 +404,7 @@ class MCPManagerImpl {
     if (!runtime) return
 
     runtime.process?.kill()
-    runtime.pendingRequests.forEach(p => p.reject(new Error('连接已断开')))
+    runtime.pendingRequests.forEach(p => p.reject(new Error(t('error.connectionClosed'))))
     runtime.pendingRequests.clear()
     this.servers.delete(serverId)
     this.notifyStatusChange(serverId, 'disconnected')

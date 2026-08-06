@@ -5,6 +5,7 @@
  * （第一卷 第 1-20 章 → start=1, end=20；end=0 表示未定/进行中）。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 
 /** 分卷数据（前端驼峰接口） */
 export interface VolumeData {
@@ -62,7 +63,7 @@ export class VolumeRepository {
     /** 插入或更新分卷（卷号唯一；冲突时按卷号更新） */
     static upsert(data: VolumeData): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[VolumeRepository] 数据库未连接，无法保存分卷')
+        if (!db) throw new Error(t('error.repoVolumeCannotSave').replace('{repo}', '[VolumeRepository]'))
 
         db.prepare(`
             INSERT INTO volumes (volume_number, title, description, chapter_start, chapter_end, updated_at)
@@ -85,7 +86,7 @@ export class VolumeRepository {
     /** 删除分卷 */
     static delete(volumeNumber: number): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[VolumeRepository] 数据库未连接，无法删除分卷')
+        if (!db) throw new Error(t('error.repoVolumeCannotDelete').replace('{repo}', '[VolumeRepository]'))
 
         db.prepare('DELETE FROM volumes WHERE volume_number = ?').run(volumeNumber)
     }

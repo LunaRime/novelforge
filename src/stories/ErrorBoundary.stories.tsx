@@ -1,10 +1,11 @@
 // eslint-disable-next-line storybook/no-renderer-packages
 import type { Meta, StoryObj } from '@storybook/react'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import { t } from '../shared/locale'
 
 /** 用于触发错误的测试组件 */
 function BrokenComponent({ throws }: { throws?: boolean }) {
-  if (throws) throw new Error('模拟组件崩溃错误')
+  if (throws) throw new Error(t('error.simulatedCrash'))
   return <div style={{ padding: 20 }}>正常内容</div>
 }
 

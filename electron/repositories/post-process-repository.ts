@@ -5,6 +5,7 @@
  * 通过 trigger_source_type + trigger_source_id 溯源到业务实体。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 import { randomUUID } from 'node:crypto'
 
 /** 跑批实例 */
@@ -44,7 +45,7 @@ export class PostProcessRepository {
         steps: Array<{ key: string; label: string; critical: boolean }>
     }): string {
         const db = getProjectDb()
-        if (!db) throw new Error('[PostProcessRepository] 数据库未连接')
+        if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[PostProcessRepository]'))
 
         const runId = randomUUID()
 

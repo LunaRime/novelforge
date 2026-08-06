@@ -8,6 +8,8 @@
  * 本模块仅保留 Embedding API 调用和文本分块功能
  */
 
+import { t } from '../src/shared/locale'
+
 // ===== Embedding API 调用 =====
 
 /** OpenAI Embedding API */
@@ -31,7 +33,7 @@ export async function embedOpenAI(
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`OpenAI Embedding 调用失败 (${res.status}): ${text}`)
+    throw new Error(t('error.embeddingApiFailed').replace('{provider}', 'OpenAI').replace('{status}', String(res.status)).replace('{err}', text))
   }
 
   const data = await res.json() as {
@@ -71,7 +73,7 @@ export async function embedGemini(
 
   if (!res.ok) {
     const text = await res.text()
-    throw new Error(`Gemini Embedding 调用失败 (${res.status}): ${text}`)
+    throw new Error(t('error.embeddingApiFailed').replace('{provider}', 'Gemini').replace('{status}', String(res.status)).replace('{err}', text))
   }
 
   const data = await res.json() as {

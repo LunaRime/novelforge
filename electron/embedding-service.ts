@@ -189,7 +189,7 @@ export class EmbeddingService {
     onProgress?: ProgressCallback,
   ): Promise<EmbeddingResult> {
     if (!this.canUseLLMEmbedding()) {
-      throw new Error('LLM 向量化未启用或未配置模型')
+      throw new Error(t('error.llmVectorizeNotConfigured'))
     }
 
     // ===== 层3：语义去重缓存 =====
@@ -236,11 +236,11 @@ export class EmbeddingService {
       // 双重试机制：先尝试 JSON 模式 → 失败则纯文本模式（兼容非 OpenAI API）
       const response = await this.tryGenerateEmbedding(provider, model, prompt, dims)
 
-      if (!response.success) throw new Error(`LLM 调用失败: ${response.error || '未知错误'}`)
-      if (!response.content?.trim()) throw new Error('LLM 返回空响应')
+      if (!response.success) throw new Error(t('error.llmCallFailed').replace('{err}', response.error || t('error.unknownError')))
+      if (!response.content?.trim()) throw new Error(t('error.llmEmptyResponse'))
 
       const vector = this.parseLLMVector(response.content, dims)
-      if (vector.every(v => v === 0)) throw new Error(`向量无效（全零）。响应: ${response.content.slice(0, 200)}`)
+      if (vector.every(v => v === 0)) throw new Error(t('error.vectorAllZero').replace('{preview}', response.content.slice(0, 200)))
 
       // 存入去重缓存
       this.dedupCache.set(textHash, { vector, hits: 1 })
@@ -252,7 +252,7 @@ export class EmbeddingService {
       const tokens = response.usage?.totalTokens || Math.ceil(promptText.length * 0.75)
       return { vector, text, tokens, source: 'llm' }
     } catch (error) {
-      throw new Error(`LLM 向量化异常: ${error instanceof Error ? error.message : safeErrorMessage(error)}`)
+      throw new Error(t('error.llmVectorizeFailed').replace('{err}', error instanceof Error ? error.message : safeErrorMessage(error)))
     }
   }
 
@@ -431,9 +431,11 @@ export class EmbeddingService {
 
     // 策略3：失败，抛出明确错误
     const preview = rawContent.slice(0, 300).replace(/\n/g, ' ')
+    const previewText = `${preview}${rawContent.length > 300 ? '...' : ''}`
     throw new Error(
-      `无法从 LLM 响应中提取有效向量。期望 ${expectedDims} 维，` +
-      `响应预览: "${preview}${rawContent.length > 300 ? '...' : ''}"`
+      t('error.vectorExtractFailed')
+        .replace('{dims}', String(expectedDims))
+        .replace('{preview}', previewText)
     )
   }
 
@@ -507,7 +509,7 @@ export class EmbeddingService {
       return result
     }
 
-    throw new Error('EmbeddingService: 无可用的嵌入方式（专用 API 和 LLM 向量化均未配置）')
+    throw new Error(t('error.embeddingNoMethod'))
   }
 
   /**
@@ -521,7 +523,7 @@ export class EmbeddingService {
     },
   ): Promise<EmbeddingResult[]> {
     if (texts.length === 0) return []
-    if (!this.config) throw new Error('EmbeddingService 未配置模型')
+    if (!this.config) throw new Error(t('error.embeddingNoModel'))
 
     const results: EmbeddingResult[] = []
     const uncached: Array<{ text: string; index: number }> = []

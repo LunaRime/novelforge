@@ -10,6 +10,8 @@
  * 不含任何 LLM 特定逻辑 — 通用并发控制，可用于文件 I/O、数据库操作等场景。
  */
 
+import { t } from '../../src/shared/locale'
+
 // ===== 类型定义 =====
 
 export interface ConcurrencyConfig {
@@ -90,12 +92,12 @@ export class ConcurrencyController {
 
     // 如果信号已经中止，直接拒绝
     if (signal?.aborted) {
-      throw new DOMException('请求已取消', 'AbortError')
+      throw new DOMException(t('error.requestCancelled'), 'AbortError')
     }
 
     // 检查队列容量
     if (this.queue.length >= this.config.maxQueueSize) {
-      throw new Error(`并发队列已满（最多 ${this.config.maxQueueSize} 个排队请求），请稍后重试`)
+      throw new Error(t('error.queueFull').replace('{max}', String(this.config.maxQueueSize)))
     }
 
     // 如果活跃数未达上限，直接获取槽位并执行
@@ -116,12 +118,12 @@ export class ConcurrencyController {
       // 监听 AbortSignal
       const onAbort = () => {
         this.removeFromQueue(id)
-        reject(new DOMException('请求已取消', 'AbortError'))
+        reject(new DOMException(t('error.requestCancelled'), 'AbortError'))
       }
 
       if (signal) {
         if (signal.aborted) {
-          reject(new DOMException('请求已取消', 'AbortError'))
+          reject(new DOMException(t('error.requestCancelled'), 'AbortError'))
           return
         }
         signal.addEventListener('abort', onAbort, { once: true })
@@ -280,7 +282,7 @@ export class ConcurrencyController {
   cancelAllQueued(): number {
     const cancelled = this.queue.length
     for (const req of this.queue) {
-      req.reject(new DOMException('所有排队请求已取消', 'AbortError'))
+      req.reject(new DOMException(t('error.allRequestsCancelled'), 'AbortError'))
     }
     this.queue = []
     return cancelled
@@ -340,7 +342,7 @@ export class ConcurrencyController {
     for (const req of this.queue) {
       if (req.signal === signal) {
         toRemove.push(req.id)
-        req.reject(new DOMException('请求已取消', 'AbortError'))
+        req.reject(new DOMException(t('error.requestCancelled'), 'AbortError'))
       }
     }
     this.queue = this.queue.filter((r) => !toRemove.includes(r.id))
@@ -392,7 +394,7 @@ export class ConcurrencyController {
   private async executeQueued<T>(request: QueuedRequest<T>): Promise<void> {
     // 检查是否已被取消
     if (request.signal?.aborted) {
-      request.reject(new DOMException('请求已取消', 'AbortError'))
+      request.reject(new DOMException(t('error.requestCancelled'), 'AbortError'))
       return
     }
 
@@ -427,14 +429,14 @@ export class ConcurrencyController {
 
     const timeoutPromise = new Promise<never>((_, reject) => {
       timeoutId = setTimeout(() => {
-        reject(new Error(`请求超时（${timeoutMs / 1000}s）`))
+        reject(new Error(t('error.requestTimeout').replace('{timeout}', String(timeoutMs / 1000))))
       }, timeoutMs)
     })
 
     const abortPromise = signal
       ? new Promise<never>((_, reject) => {
           const onAbort = () => {
-            reject(new DOMException('请求已取消', 'AbortError'))
+            reject(new DOMException(t('error.requestCancelled'), 'AbortError'))
           }
           if (signal.aborted) {
             onAbort()

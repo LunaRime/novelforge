@@ -221,7 +221,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
 
         if (consecutiveParseFailures >= MAX_CONSECUTIVE_FAILURES) {
           callbacks.log(t('log.directory.abort').replace('{count}', String(MAX_CONSECUTIVE_FAILURES)))
-          throw new Error(`蓝图解析连续失败 ${MAX_CONSECUTIVE_FAILURES} 次，请检查 AI 模型输出格式`)
+          throw new Error(t('error.blueprintParseRepeatedFailure').replace('{count}', String(MAX_CONSECUTIVE_FAILURES)))
         }
         // cursor 保持不变，确保不跳过任何章节
       }

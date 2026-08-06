@@ -13,6 +13,7 @@
 
 import { globalEventBus, type GlobalEventType } from './event-bus'
 import type { HubMiddleware } from './middleware.interface'
+import { t } from './locale'
 
 // ===== 类型定义 =====
 
@@ -369,7 +370,7 @@ export class TransferHub {
     // 清理所有待处理请求
     for (const [, pending] of this.pendingRequests) {
       clearTimeout(pending.timeout)
-      pending.reject(new Error('TransferHub 已销毁'))
+      pending.reject(new Error(t('error.transferHubDestroyed')))
     }
     this.pendingRequests.clear()
     this.deliveredResponses.clear()

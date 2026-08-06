@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge, webFrame } from 'electron'
+import { t } from '../src/shared/locale'
 
 /**
  * NovelForge Preload Script — 安全地暴露 IPC 通信能力到渲染进程
@@ -43,7 +44,7 @@ export type AllowedEventPrefix = (typeof ALLOWED_EVENT_CHANNELS)[number]
 /** 运行时白名单校验 + 编译时类型约束 */
 function checkChannel(channel: string, allowed: readonly string[]): void {
   if (!allowed.some(p => channel.startsWith(p))) {
-    throw new Error(`[preload] 不允许的 IPC 通道: ${channel}`)
+    throw new Error(t('error.ipcChannelNotAllowed').replace('{channel}', channel))
   }
 }
 

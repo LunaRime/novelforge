@@ -4,6 +4,7 @@
  * 取代旧的 chapter-repository.ts，管理章节的规划元数据。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 
 /** 蓝图行类型（DB 蛇形命名） */
 export interface BlueprintRow {
@@ -144,7 +145,7 @@ export class BlueprintRepository {
     /** 批量更新排序序号 */
     static updateSortOrder(orders: Array<{ chapterNumber: number; sortOrder: number }>): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法更新排序')
+        if (!db) throw new Error(t('error.repoBlueprintCannotUpdateSort').replace('{repo}', '[BlueprintRepository]'))
 
         const stmt = db.prepare(
             'UPDATE blueprints SET sort_order = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
@@ -161,7 +162,7 @@ export class BlueprintRepository {
     /** 批量更新优先级 */
     static updatePriority(chapterNumber: number, priority: number): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法更新优先级')
+        if (!db) throw new Error(t('error.repoBlueprintCannotUpdatePriority').replace('{repo}', '[BlueprintRepository]'))
 
         db.prepare(
             'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
@@ -171,7 +172,7 @@ export class BlueprintRepository {
     /** 批量更新多个蓝图优先级 */
     static updatePriorityBatch(items: Array<{ chapterNumber: number; priority: number }>): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法批量更新优先级')
+        if (!db) throw new Error(t('error.repoBlueprintCannotUpdatePriorityBatch').replace('{repo}', '[BlueprintRepository]'))
 
         const stmt = db.prepare(
             'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
@@ -212,7 +213,7 @@ export class BlueprintRepository {
     /** 插入或更新蓝图 */
     static upsert(data: BlueprintData): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法保存蓝图')
+        if (!db) throw new Error(t('error.repoBlueprintCannotSave').replace('{repo}', '[BlueprintRepository]'))
 
         db.prepare(`
       INSERT INTO blueprints (
@@ -252,7 +253,7 @@ export class BlueprintRepository {
     /** 批量插入/更新蓝图（事务） */
     static upsertMany(items: BlueprintData[]): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法批量保存蓝图')
+        if (!db) throw new Error(t('error.repoBlueprintCannotSaveBatch').replace('{repo}', '[BlueprintRepository]'))
 
         const tx = db.transaction(() => {
             for (const item of items) {
@@ -265,7 +266,7 @@ export class BlueprintRepository {
     /** 删除蓝图 */
     static delete(chapterNumber: number): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法删除蓝图')
+        if (!db) throw new Error(t('error.repoBlueprintCannotDelete').replace('{repo}', '[BlueprintRepository]'))
 
         db.prepare('DELETE FROM blueprints WHERE chapter_number = ?').run(chapterNumber)
     }
@@ -273,7 +274,7 @@ export class BlueprintRepository {
     /** 仅更新 notes 字段 */
     static updateNotes(chapterNumber: number, notes: string): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[BlueprintRepository] 数据库未连接，无法更新蓝图笔记')
+        if (!db) throw new Error(t('error.repoBlueprintCannotUpdateNotes').replace('{repo}', '[BlueprintRepository]'))
 
         db.prepare(`
       UPDATE blueprints

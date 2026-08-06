@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron'
-import { DEFAULT_LOCALE } from '../../src/shared/locale'
+import { DEFAULT_LOCALE, t } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
@@ -42,7 +42,7 @@ function validateSandbox(filePath: string): string {
     return resolved.startsWith(normalized + path.sep) || resolved === normalized
   })
   if (!isAllowed) {
-    throw new Error(`[fs-sandbox] 拒绝访问: 路径 "${filePath}" 不在允许的目录范围内`)
+    throw new Error(t('error.fsAccessDenied').replace('{path}', filePath))
   }
   // 检查是否在禁止列表中
   const isBlocked = BLOCKED_PATHS.some(blocked => {
@@ -50,7 +50,7 @@ function validateSandbox(filePath: string): string {
     return resolved.startsWith(normalized + path.sep) || resolved === normalized
   })
   if (isBlocked) {
-    throw new Error(`[fs-sandbox] 拒绝访问: 路径 "${filePath}" 指向受保护的目录`)
+    throw new Error(t('error.fsAccessProtected').replace('{path}', filePath))
   }
   return resolved
 }

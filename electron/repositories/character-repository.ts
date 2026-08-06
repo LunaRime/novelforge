@@ -4,6 +4,7 @@
  * currentState 子结构已拍平为 cs_* 前缀列，杜绝 JSON 大字段。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 
 /** 角色卡动态状态 */
 export interface CharacterStateData {
@@ -135,7 +136,7 @@ export class CharacterRepository {
     /** 插入或更新角色 */
     static upsert(data: CharacterData): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[CharacterRepository] 数据库未连接，无法保存角色')
+        if (!db) throw new Error(t('error.repoCharacterCannotSave').replace('{repo}', '[CharacterRepository]'))
 
         const cs = data.currentState
         db.prepare(`
@@ -200,7 +201,7 @@ export class CharacterRepository {
     /** 批量保存角色（事务） */
     static saveAll(characters: CharacterData[]): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[CharacterRepository] 数据库未连接，无法保存角色卡')
+        if (!db) throw new Error(t('error.repoCharacterCannotSaveCard').replace('{repo}', '[CharacterRepository]'))
 
         const tx = db.transaction(() => {
             for (const char of characters) {
@@ -213,7 +214,7 @@ export class CharacterRepository {
     /** 删除角色 */
     static delete(name: string): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[CharacterRepository] 数据库未连接，无法删除角色')
+        if (!db) throw new Error(t('error.repoCharacterCannotDelete').replace('{repo}', '[CharacterRepository]'))
 
         db.prepare('DELETE FROM characters WHERE name = ?').run(name)
     }
@@ -229,7 +230,7 @@ export class CharacterRepository {
         extra?: { tags?: string | null; motivation?: string | null },
     ): void {
         const db = getProjectDb()
-        if (!db) throw new Error('[CharacterRepository] 数据库未连接，无法更新角色状态')
+        if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
 
         db.prepare(`
       UPDATE characters SET
