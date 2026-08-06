@@ -315,7 +315,8 @@ export function buildFinalizePostProcessSteps(
               background: '', abilities: '',
               motivation: cleanOptional(row.motivation ?? '') ?? '',
               relationships: '', arc: '', notes: '',
-              tier: 2,
+              // tier 按 role 推导（P2 修复：此前恒 2——新主角/反派 DB tier=2 与「protagonist/antagonist → tier 1」规则矛盾）
+              tier: row.role === 'protagonist' || row.role === 'antagonist' ? 1 : (row.role === 'minor' ? 3 : 2),
               tags: normalizeTags(row.tags ?? ''),
               appearChapters: JSON.stringify([chapterNumber]), // 登记出场章节
               relations: '[]',

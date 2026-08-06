@@ -148,7 +148,10 @@ function escapeRegExp(s: string): string {
  */
 export function upsertVoiceProfile(notes: string, profile: CharacterVoiceProfile): string {
   const name = profile.name
-  const blockPattern = new RegExp(`\\n?\\[VOICE:${escapeRegExp(name)}\\][\\s\\S]*?(?=\\n\\[VOICE:|$)`)
+  // ⚠️ P2 修复：块结束边界为「下一个 [VOICE:」或「换行后行首不是 {」（JSON 行以 { 开头）——
+  //   此前 (?=$) 惰性匹配到字符串末尾：VOICE 块后用户追加的普通文本被当作块内容一并删除；
+  //   修正版曾用 \n(?!\[VOICE:)——JSON 行也不以 [VOICE: 开头，头行后即满足，JSON 行残留
+  const blockPattern = new RegExp(`\\n?\\[VOICE:${escapeRegExp(name)}\\][\\s\\S]*?(?=\\n\\[VOICE:|\\n(?!\\{))`)
   const oldMatch = notes.match(blockPattern)
 
   let merged = profile
@@ -182,15 +185,18 @@ export async function loadCharacterVoiceProfiles(): Promise<CharacterVoiceProfil
 
     for (const c of allChars) {
       if (!c.name || !c.notes) continue
-      // 匹配 [VOICE:角色名]\n{JSON}\n（到下一个 [VOICE: 或结尾）
-      const match = c.notes.match(/\[VOICE:([^\]]+)\]\s*\n?([\s\S]*?)(?=\n\[VOICE:|$)/)
-      if (!match) continue
-      try {
-        const parsed = JSON.parse(match[2].trim()) as Partial<CharacterVoiceProfile>
-        if (parsed && typeof parsed === 'object' && Array.isArray(parsed.topWords)) {
-          profiles.push({ ...parsed, name: match[1] } as CharacterVoiceProfile)
-        }
-      } catch { /* 单条解析失败跳过 */ }
+      // 匹配全部 [VOICE:角色名]\n{JSON}\n 块（P2 修复：此前非全局正则只读首个块——
+      // notes 被其他角色名块污染时读到错误档案；且校验块内 name 与角色名一致）
+      const matches = c.notes.matchAll(/\[VOICE:([^\]]+)\]\s*\n?([\s\S]*?)(?=\n\[VOICE:|$)/g)
+      for (const match of matches) {
+        if (match[1].trim() !== c.name) continue // 块内 name 与角色名不一致 → 跳过（污染块）
+        try {
+          const parsed = JSON.parse(match[2].trim()) as Partial<CharacterVoiceProfile>
+          if (parsed && typeof parsed === 'object' && Array.isArray(parsed.topWords)) {
+            profiles.push({ ...parsed, name: match[1] } as CharacterVoiceProfile)
+          }
+        } catch { /* 单条解析失败跳过 */ }
+      }
     }
     return profiles
   } catch {

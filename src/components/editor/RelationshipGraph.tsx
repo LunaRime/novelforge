@@ -114,7 +114,11 @@ function computeLayout(characters: CharacterCard[], width: number, height: numbe
 
   const grouped: Record<number, CharacterCard[]> = { 1: [], 2: [], 3: [] }
   for (const c of characters) {
-    const t = c.tier || 2
+    // 非法 tier 值归一化到 1-3（此前 tier>=4 静默丢弃，图例/边仍引用，节点消失无日志）
+    const t = (c.tier >= 1 && c.tier <= 3) ? (c.tier || 2) : 2
+    if (c.tier !== undefined && (c.tier < 1 || c.tier > 3)) {
+      console.warn(`[RelationshipGraph] 角色「${c.name}」tier=${c.tier} 非法，已按 2 展示（数据未修正，保存时生效）`)
+    }
     grouped[t]?.push(c)
   }
 
