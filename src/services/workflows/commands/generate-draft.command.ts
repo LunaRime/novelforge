@@ -208,7 +208,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
     // staticContext：架构入 system 前缀（同项目连续调用缓存命中 + 模型遵从度更高）
     // 注意：必须传注入后的 prompt 字符串而非 builder —— callLLMWithBuilder 会重新 build() 丢失防缺陷注入
-    const draftText = await this.callLLM(prompt, promptBuilder.getSystemRole(), callbacks, { staticContext: architecture })
+    const draftText = await this.callLLM(prompt, promptBuilder.getSystemRole(), callbacks, { staticContext: architecture, purpose: 'draft_chapter' })
     const cleanDraftText = this.stripThinkingTags(draftText)
 
     // 落于数据库（wordCount 用统一"有效字数"口径：汉字 + 英文单词，非 length）

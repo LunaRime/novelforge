@@ -137,7 +137,7 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
       // ① 批次间 system 前缀完全稳定 → API 前缀缓存命中（长链路输入费用减半）
       // ② system 消息遵从度更高 → 50 章级长输出中后段不偏离架构（降幻觉）
       // 注意：必须传注入后的 prompt 字符串而非 builder（callLLMWithBuilder 内部重 build 会丢注入）
-      const resultText = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture })
+      const resultText = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture, purpose: 'blueprint_gen' })
 
       // 接受 AI 返回的从 cursor 到 endChapter 范围内的所有有效章节
       // AI 可能一次性返回超出本批次（batchEnd）的章节，全部保留（single 模式：省调用）

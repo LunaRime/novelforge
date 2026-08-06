@@ -68,7 +68,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     const reviewResultRaw = await this.callLLMWithBuilder(
       promptBuilder,
       callbacks,
-      { }
+      { purpose: 'review_chapter' }
     )
 
     const { parseDraftMeta } = await import('../chapter-workflow')

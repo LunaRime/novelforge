@@ -62,6 +62,7 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
       finalPrompt,
       template.systemRole || t('role.literaryCritic'),
       callbacks,
+      { purpose: 'style_analysis' },
     )
 
     const cleanResult = this.stripThinkingTags(result).trim()

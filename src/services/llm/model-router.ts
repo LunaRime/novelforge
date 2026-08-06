@@ -89,7 +89,9 @@ export class ModelRouter {
   constructor(config: ModelRouteConfig, models: ModelProfile[]) {
     this.config = config
     this.models = models
-    this.autoDetectTiers()
+    // ⚠️ 不再自动填充 tier（2026-08-06 产品决策「路由优先，默认模型兜底」）：
+    //    autoDetectTiers 曾按名称启发式填满所有层，导致用户显式默认模型被路由覆盖。
+    //    路由配置只来自用户持久化配置；未配置的层由调用方回退到 defaultModelId。
   }
 
   /** 模型是否可用于聊天/生成（排除 embedding 专用模型，防路由把聊天请求发给向量模型） */
@@ -127,9 +129,9 @@ export class ModelRouter {
       }
     }
 
-    // 最终降级：任意可用的聊天模型（跳过 embedding 专用模型）
-    const defaultModel = this.models.find(m => this.isChatModel(m))
-    return defaultModel?.id || null
+    // 所有层均无有效模型 → 返回 null，由调用方（llm-store.getModelForPurpose）
+    // 回退到用户显式默认模型（产品决策：路由优先，默认模型兜底）
+    return null
   }
 
   /** 获取模型的 tier */
@@ -221,56 +223,7 @@ export class ModelRouter {
   /** 更新模型列表 */
   updateModels(models: ModelProfile[]): void {
     this.models = models
-    this.autoDetectTiers()
-  }
-
-  /** 自动检测模型 tier（基于模型名称） */
-  private autoDetectTiers(): void {
-    // 只自动分配尚未配置的模型
-    const assigned = new Set([
-      ...(this.config.elite || []),
-      ...(this.config.standard || []),
-      ...(this.config.budget || []),
-    ])
-
-    for (const model of this.models) {
-      if (assigned.has(model.id)) continue
-      // 跳过 embedding 专用模型（不得进入聊天 tier，防 route() 把聊天请求发给向量模型）
-      if (model.purposes?.includes('embedding')) continue
-
-      const name = (model.modelName + model.name).toLowerCase()
-
-      if (
-        name.includes('gpt-5.6-sol') ||
-        name.includes('gpt-5.6-terra') ||
-        name.includes('deepseek-v4-pro') ||
-        name.includes('gpt-4o') && !name.includes('mini') ||
-        name.includes('claude-3-opus') ||
-        name.includes('claude-3.5') ||
-        name.includes('claude-opus')
-      ) {
-        this.config.elite.push(model.id)
-      } else if (
-        name.includes('deepseek') && !name.includes('lite') ||
-        name.includes('gpt-4o-mini') ||
-        name.includes('gemini-flash') ||
-        name.includes('claude-3-haiku') ||
-        name.includes('claude-haiku')
-      ) {
-        this.config.standard.push(model.id)
-      } else if (
-        name.includes('gpt-3.5') ||
-        name.includes('llama') ||
-        name.includes('mistral') ||
-        name.includes('deepseek-lite')
-      ) {
-        this.config.budget.push(model.id)
-      } else {
-        // 默认放入 standard
-        this.config.standard.push(model.id)
-      }
-      assigned.add(model.id)
-    }
+    // 不再自动填充 tier（见构造注释——路由配置只来自用户持久化配置）
   }
 
   /** 获取配置 */
