@@ -166,11 +166,26 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
             .replace('{min}', String(actualMinChapter))
             .replace('{max}', String(actualMaxChapter)))
         } else {
-          callbacks.log(t('log.directory.batchDone')
-            .replace('{start}', String(cursor))
-            .replace('{end}', String(actualMaxChapter))
-            .replace('{count}', String(parsed.length)))
-          cursor = actualMaxChapter + 1
+          // 中间缺口检测：批次返回 1、3、4（缺 2）时，头部不缺但中间缺——
+          // 历史事故：cursor 直接推到 max+1，缺失章节永久跳过。推进前检查连续性，
+          // 有缺口则游标回退到第一个缺失章号
+          const missingInRange: number[] = []
+          for (let n = cursor; n < actualMaxChapter; n++) {
+            if (!parsed.some(p => p.chapterNumber === n)) missingInRange.push(n)
+          }
+          if (missingInRange.length > 0) {
+            cursor = missingInRange[0]
+            callbacks.log(t('log.directory.middleGap')
+              .replace('{chapter}', String(missingInRange[0]))
+              .replace('{max}', String(actualMaxChapter))
+              .replace('{count}', String(missingInRange.length)))
+          } else {
+            callbacks.log(t('log.directory.batchDone')
+              .replace('{start}', String(cursor))
+              .replace('{end}', String(actualMaxChapter))
+              .replace('{count}', String(parsed.length)))
+            cursor = actualMaxChapter + 1
+          }
         }
       } else {
         consecutiveParseFailures++
@@ -188,7 +203,10 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
           const repairResult = extractAndRepairJSON(stripThinkingTags(resultText), false)
           if (repairResult.parsed) {
             callbacks.log(t('log.directory.repairOk'))
-            const repairedBlueprints = parseTextBlueprintsFromParsed(repairResult.parsed, cursor, endChapter)
+            // batch 模式 repair 同样限批（此前误用 endChapter——AI 超额返回的越界章节
+            // 在 repair 后被接受入库，破坏「严格按批」双保险）
+            const repairedBlueprints = parseTextBlueprintsFromParsed(repairResult.parsed, cursor,
+              this.params.generationMode === 'batch' ? batchEnd : endChapter)
             if (repairedBlueprints.length > 0) {
               newBlueprints.push(...repairedBlueprints)
               await saveAllBlueprints(repairedBlueprints)

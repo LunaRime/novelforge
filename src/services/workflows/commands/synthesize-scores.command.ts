@@ -51,6 +51,16 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
 
     callbacks.log(t('log.synthesizeScores.starting'))
 
+    /** 分数归一化：LLM 可能返回字符串（"8分"/"8.5"）或缺失——统一转数字；非法值返回 null */
+    const toScore = (v: unknown): number | null => {
+      if (typeof v === 'number') return Number.isFinite(v) ? v : null
+      if (typeof v === 'string') {
+        const n = parseFloat(v)
+        return Number.isFinite(n) ? n : null
+      }
+      return null
+    }
+
     // 1. 加权平均各维度评分
     const allCriteria = perspectives.flatMap((p) => p.evaluationCriteria)
     const uniqueCriteria = [...new Set(allCriteria)]
@@ -60,10 +70,10 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
     for (const criterion of uniqueCriteria) {
       const scores: number[] = []
       for (const output of reviewerOutputs) {
-        const score = output.scores[criterion]
-        if (typeof score === 'number') {
-          scores.push(score)
-        }
+        // 字符串分数（"8分"/"8"）归一化为数字——此前 typeof === 'number' 过滤会把
+        // 该评审者的此维度静默丢弃
+        const score = toScore(output.scores[criterion])
+        if (score !== null) scores.push(score)
       }
 
       if (scores.length > 0) {
@@ -77,14 +87,23 @@ export class SynthesizeScoresCommand extends BaseWorkflowCommand<MutualReviewRep
       }
     }
 
-    // 2. 加权最终分
+    // 2. 加权最终分（跳过无效 overallScore——缺失/字符串/NaN 会导致 weightedSum=NaN → finalScore=NaN）
     let weightedSum = 0
     let totalWeight = 0
+    let skippedOverall = 0
     for (const output of reviewerOutputs) {
       const perspective = perspectives.find((p) => p.name === output.perspective)
       const weight = perspective?.weight || 1 / perspectives.length
-      weightedSum += output.overallScore * weight
+      const s = toScore(output.overallScore)
+      if (s === null) {
+        skippedOverall++
+        continue
+      }
+      weightedSum += s * weight
       totalWeight += weight
+    }
+    if (skippedOverall > 0) {
+      callbacks.log(t('log.synthesizeScores.invalidOverall').replace('{n}', String(skippedOverall)))
     }
     const finalScore = totalWeight > 0
       ? Math.round((weightedSum / totalWeight) * 10) / 10

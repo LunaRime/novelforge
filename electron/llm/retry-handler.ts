@@ -142,18 +142,20 @@ function sleep(ms: number): Promise<void> {
  * - 网络错误时重新发起完整的流式请求
  * - 仅重试网络层错误和可重试 HTTP 状态码（429/503/5xx）
  * - 4xx（除 429）不重试，直接向上抛出
+ * - canRetry 返回 false 时不再重试（流已输出部分内容——重试会让用户看到重复前缀）
  *
  * @param streamFn - 流式生成函数，应在可重试错误时 throw（而非调用 onError）
  * @param options - 重试选项（默认最多重试 2 次）
  */
 export async function withStreamRetry(
   streamFn: () => Promise<void>,
-  options: RetryOptions = {},
+  options: RetryOptions & { canRetry?: () => boolean } = {},
 ): Promise<void> {
   const {
     maxRetries = 2,
     baseDelayMs = 1000,
     maxDelayMs = 30000,
+    canRetry,
   } = options
 
   let lastError: unknown
@@ -175,6 +177,12 @@ export async function withStreamRetry(
 
       // AbortError（用户取消）→ 不重试
       if (error instanceof Error && error.name === 'AbortError') {
+        throw error
+      }
+
+      // 流已输出部分内容 → 不再重试（重试会重复推送已输出前缀，用户实时文本错乱）
+      if (canRetry && !canRetry()) {
+        logger.warn('LLM:StreamRetry', '流已输出部分内容，断流不再重试（避免重复前缀），直接报错')
         throw error
       }
 
