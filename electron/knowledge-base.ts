@@ -72,7 +72,7 @@ async function importContent(
       options?.onProgress?.(20, `正在通过 ${embedMethod} 向量化 ${chunks.length} 个块...`)
       vectors = await generateEmbeddings(chunks, protocol, model)
     } catch (e) {
-      logger.warn('KB', `Embedding API 失败，尝试 LLM 向量化: ${String(e)}`)
+      logger.warn('KB', t('log.embedding.apiFailedTryLlm').replace('{err}', String(e)))
     }
   }
 
@@ -85,11 +85,13 @@ async function importContent(
         const results = await embeddingService.embedBatchWithLLM(chunks)
         vectors = results.map(r => r.vector).filter(v => v.length > 0)
         if (vectors.length > 0) {
-          logger.info('KB', `LLM 向量化成功: ${vectors.length}/${chunks.length} 个块`)
+          logger.info('KB', t('log.kb.llmVectorizeSuccess')
+            .replace('{ok}', String(vectors.length))
+            .replace('{total}', String(chunks.length)))
         }
       }
     } catch (e) {
-      logger.warn('KB', `LLM 向量化也失败，降级为 FTS-only（纯文本搜索）: ${String(e)}`)
+      logger.warn('KB', t('log.kb.llmAlsoFailedFtsOnly').replace('{err}', String(e)))
     }
   }
 
@@ -364,7 +366,7 @@ export async function backfillVectors(
     try {
       vectors = await generateEmbeddings(texts, protocol, model)
     } catch (e) {
-      logger.warn('KB', `Embedding API 回填失败 (状态码可能为 404，API 不支持 /embeddings): ${String(e)}`)
+      logger.warn('KB', t('log.kb.backfillApiFailed').replace('{err}', String(e)))
     }
 
     // 尝试 2：LLM 向量化（Embedding API 失败或无有效结果时自动降级）
@@ -372,16 +374,18 @@ export async function backfillVectors(
       try {
         const { embeddingService } = await import('./embedding-service')
         if (embeddingService.canUseLLMEmbedding()) {
-          logger.info('KB', `Embedding API 不可用，降级到 LLM 向量化 (${texts.length} 个块)`)
+          logger.info('KB', t('log.kb.apiUnavailableDegradeLlm').replace('{count}', String(texts.length)))
           const llmResults = await embeddingService.embedBatchWithLLM(texts)
           vectors = llmResults.map(r => r.vector)
           const validCount = vectors.filter(v => v.length > 0).length
-          logger.info('KB', `LLM 向量化完成: ${validCount}/${texts.length}`)
+          logger.info('KB', t('log.kb.llmVectorizeDone')
+            .replace('{ok}', String(validCount))
+            .replace('{total}', String(texts.length)))
         } else {
-          logger.info('KB', 'LLM 向量化未启用，跳过向量生成（FTS 纯文本模式）')
+          logger.info('KB', t('log.kb.llmNotEnabledSkipVectors'))
         }
       } catch (e2) {
-        logger.warn('KB', `LLM 向量化也失败，使用 FTS 纯文本模式: ${String(e2)}`)
+        logger.warn('KB', t('log.kb.llmAlsoFailedFtsMode').replace('{err}', String(e2)))
       }
     }
 
@@ -462,7 +466,7 @@ export async function backfillVectors(
 
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }
   } catch (error) {
-    logger.error('KB', `向量回填异常: ${error}`)
+    logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
     return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
   }
 }

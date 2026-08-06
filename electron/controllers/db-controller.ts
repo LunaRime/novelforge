@@ -37,7 +37,7 @@ export function registerDatabaseController() {
       ProjectCoreRepository.update(data)
       return { success: true }
     } catch (err) {
-      logger.error('DB:Controller', `project-core-update 失败: ${err}`)
+      logger.error('DB:Controller', t('log.dbController.projectCoreUpdateFailed').replace('{err}', String(err)))
       return { success: false, error: String(err) }
     }
   })
@@ -420,7 +420,7 @@ export function registerDatabaseController() {
       LLMHistoryRepository.logCall(call)
       return { success: true }
     } catch (error) {
-      logger.error('DB:Controller', `log-llm-call 失败: ${error}`)
+      logger.error('DB:Controller', t('log.dbController.logLlmCallFailed').replace('{err}', String(error)))
       return { success: false }
     }
   })

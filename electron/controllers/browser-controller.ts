@@ -14,6 +14,7 @@
 import { ipcMain } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 import type { BrowserTabInfo, GlobalConfig } from '../../src/shared/ipc-channels'
 
 /** CDP 查询超时（ms） */
@@ -103,5 +104,5 @@ export function registerBrowserController() {
     return { success: true, version: String(data['Browser'] ?? data['Protocol-Version'] ?? 'unknown') }
   })
 
-  logger.info('Browser', '浏览器接入 Controller 已注册')
+  logger.info('Browser', t('log.browser.controllerRegistered'))
 }

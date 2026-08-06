@@ -113,7 +113,7 @@ function buildAppMenu() {
                 const uninstallerPath = path.join(appDir, 'Uninstall NovelForge.exe')
                 exec(`"${uninstallerPath}"`, (err) => {
                   if (err) {
-                    logger.error('Main', `启动卸载程序失败: ${err.message}`)
+                    logger.error('Main', t('log.uninstall.launchFailed').replace('{err}', err.message))
                     dialog.showErrorBox(
                       t('dialog.uninstallFailedTitle'),
                       t('dialog.uninstallFailedMsg').replace('{error}', err.message)
@@ -186,7 +186,9 @@ function createWindow() {
 
   // 渲染进程崩溃检测 — 自动提示重载
   win.webContents.on('render-process-gone', (_event, details) => {
-    logger.error('Main', `渲染进程终止 (reason=${details.reason}, exitCode=${details.exitCode})`)
+    logger.error('Main', t('log.main.rendererGone')
+      .replace('{reason}', details.reason)
+      .replace('{exitCode}', String(details.exitCode)))
     dialog.showErrorBox(
       t('dialog.crashTitle'),
       t('dialog.crashMsg')
@@ -227,17 +229,17 @@ function createWindow() {
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL)
-    logger.info('Main', `开发模式: ${VITE_DEV_SERVER_URL}`)
+    logger.info('Main', t('log.main.devMode').replace('{url}', VITE_DEV_SERVER_URL))
   } else {
     win.loadFile(path.join(RENDERER_DIST, 'index.html'))
-    logger.info('Main', '生产模式启动')
+    logger.info('Main', t('log.main.productionStart'))
   }
 }
 
 // macOS: 关闭所有窗口不退出
 app.on('window-all-closed', () => {
   closeProjectDatabase()
-  logger.info('Main', '所有窗口已关闭')
+  logger.info('Main', t('log.main.allWindowsClosed'))
   if (process.platform !== 'darwin') {
     app.quit()
     win = null
@@ -254,7 +256,7 @@ app.on('activate', () => {
 // 应用即将退出时清理
 app.on('before-quit', () => {
   closeProjectDatabase()
-  logger.info('Main', '应用即将退出')
+  logger.info('Main', t('log.main.appQuitting'))
   logger.close()
 })
 
@@ -266,5 +268,5 @@ app.whenReady().then(() => {
   registerIPCHandlers()
   registerMCPHandlers()
   createWindow()
-  logger.info('Main', `NovelForge 启动完成 | 日志环境: ${logEnv === LogEnvironment.Dev ? '开发（dev/内测）' : '发布（公测/正式）'}`)
+  logger.info('Main', t('log.main.startupDone').replace('{env}', t(logEnv === LogEnvironment.Dev ? 'log.envDev' : 'log.envRelease')))
 })

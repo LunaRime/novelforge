@@ -3,6 +3,7 @@ import { ModelProfile } from '../../src/shared/ipc-channels'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { t } from '../../src/shared/locale'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -204,9 +205,11 @@ export class GeminiProvider implements ILLMProvider {
             }
           } catch (parseError) {
             failedChunkCount++
-            logger.warn('LLM:Stream', `第 ${failedChunkCount} 次 chunk 解析失败: ${String(parseError).slice(0, 100)}`)
+            logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailed')
+              .replace('{n}', String(failedChunkCount))
+              .replace('{err}', String(parseError).slice(0, 100)))
             if (failedChunkCount > 10) {
-              const msg = `流式解析连续失败 ${failedChunkCount} 次，已中止`
+              const msg = t('log.llmStream.aborted').replace('{n}', String(failedChunkCount))
               logger.error('LLM:Stream', msg)
               opts.onError(msg)
               return
@@ -216,7 +219,7 @@ export class GeminiProvider implements ILLMProvider {
       }
 
       if (failedChunkCount > 0) {
-        logger.warn('LLM:Stream', `流式生成完成，但有 ${failedChunkCount} 个 chunk 解析失败`)
+        logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailures').replace('{n}', String(failedChunkCount)))
       }
       opts.onDone(fullText, usage)
     }).catch((error) => {

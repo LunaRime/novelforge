@@ -195,7 +195,7 @@ export function registerProjectController() {
 
       // 单次批量更新
       ProjectCoreRepository.update(updateData)
-      logger.info('Project', `配置已持久化，字段数: ${Object.keys(updateData).length}`)
+      logger.info('Project', t('log.project.configPersisted').replace('{count}', String(Object.keys(updateData).length)))
 
       addRecentProject({
         name: data.name ?? 'Unknown',
@@ -253,11 +253,11 @@ export function registerProjectController() {
       fs.rmSync(projectPath, { recursive: true, force: true })
       // 同时从最近列表中移除
       removeRecentProject(projectPath)
-      logger.info('Project', `[delete-folder] 已删除项目文件夹: ${projectPath}`)
+      logger.info('Project', t('log.project.folderDeleted').replace('{path}', projectPath))
       return { success: true }
     } catch (err) {
       const msg = safeErrorMessage(err)
-      logger.error('Project', `[delete-folder] 删除失败: ${msg}`)
+      logger.error('Project', t('log.project.folderDeleteFailed').replace('{err}', msg))
       return { success: false, error: msg }
     }
   })
@@ -265,7 +265,7 @@ export function registerProjectController() {
   ipcMain.handle('project:remove-recent', async (_event, projectPath: string) => {
     try {
       removeRecentProject(projectPath)
-      logger.info('Project', `[remove-recent] 已移除历史记录: ${projectPath}`)
+      logger.info('Project', t('log.project.recentRemoved').replace('{path}', projectPath))
       return { success: true }
     } catch {
       return { success: false }
@@ -299,7 +299,9 @@ export function registerProjectController() {
       try { db.pragma('journal_mode = WAL') } catch { /* 只读连接无法设置 journal_mode（已持久化为 WAL 时无副作用） */ }
       return buildProjectSummary(db, projectPath)
     } catch (err) {
-      logger.error('Project', `[get-summary] 读取历史项目失败: ${projectPath} — ${safeErrorMessage(err)}`)
+      logger.error('Project', t('log.project.summaryReadFailed')
+        .replace('{path}', projectPath)
+        .replace('{err}', safeErrorMessage(err)))
       return null
     } finally {
       if (db) {

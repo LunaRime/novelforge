@@ -16,6 +16,7 @@ import { join } from 'path'
 import { app } from 'electron'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { t } from '../../src/shared/locale'
 
 // ===== 类型定义 =====
 
@@ -246,7 +247,7 @@ class MCPManagerImpl {
 
     // 监听进程退出
     proc.on('exit', (code) => {
-      logger.info('MCP', `[${runtime.config.id}] 进程退出，code=${code}`)
+      logger.info('MCP', t('log.mcp.processExited').replace('{id}', runtime.config.id).replace('{code}', String(code)))
       runtime.status = 'disconnected'
       this.notifyStatusChange(runtime.config.id, 'disconnected')
     })

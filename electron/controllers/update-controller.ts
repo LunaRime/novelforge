@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 
 // ===== 状态管理 =====
 
@@ -56,16 +57,16 @@ function setupAutoUpdater() {
 
   // 检查更新
   autoUpdater.on('checking-for-update', () => {
-    logger.info('Update', '正在检查更新...')
+    logger.info('Update', t('log.update.checking'))
   })
 
   autoUpdater.on('update-available', (info) => {
-    logger.info('Update', `发现新版本: ${info.version}`)
+    logger.info('Update', t('log.update.available').replace('{version}', info.version))
     sendStatusToRenderer('available', info)
   })
 
   autoUpdater.on('update-not-available', () => {
-    logger.info('Update', '当前已是最新版本')
+    logger.info('Update', t('log.update.upToDate'))
     sendStatusToRenderer('no-update')
   })
 
@@ -78,13 +79,13 @@ function setupAutoUpdater() {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    logger.info('Update', `更新包下载完成: ${info.version}`)
+    logger.info('Update', t('log.update.downloaded').replace('{version}', info.version))
     sendStatusToRenderer('downloaded', info)
   })
 
   // 错误处理
   autoUpdater.on('error', (error) => {
-    logger.error('Update', `更新错误: ${error.message}`)
+    logger.error('Update', t('log.update.error').replace('{err}', error.message))
     sendStatusToRenderer('error', null, error.message)
   })
 }
@@ -111,7 +112,7 @@ function triggerUninstall(): { success: boolean; error?: string } {
     // 启动卸载程序
     exec(`"${uninstallerPath}"`, (err) => {
       if (err) {
-        logger.error('Uninstall', `启动卸载程序失败: ${err.message}`)
+        logger.error('Uninstall', t('log.uninstall.launchFailed').replace('{err}', err.message))
       }
     })
 
@@ -135,7 +136,7 @@ function cleanUserData(): { success: boolean; error?: string } {
 
     if (fs.existsSync(velaHome)) {
       fs.rmSync(velaHome, { recursive: true, force: true })
-      logger.info('Uninstall', `已清理用户数据: ${velaHome}`)
+      logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', velaHome))
       return { success: true }
     }
     return { success: true } // 目录不存在也算成功
@@ -244,5 +245,5 @@ export function registerUpdateController(): void {
     return { success: true }
   })
 
-  logger.info('Update', '更新 & 卸载 Controller 已注册')
+  logger.info('Update', t('log.ipc.updateRegistered'))
 }

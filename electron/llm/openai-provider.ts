@@ -3,6 +3,7 @@ import { ModelProfile } from '../../src/shared/ipc-channels'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { t } from '../../src/shared/locale'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -222,9 +223,12 @@ export class OpenAIProvider implements ILLMProvider {
           } catch (parseError) {
             failedChunkCount++
             const snippet = json.slice(0, 200)
-            logger.warn('LLM:Stream', `第 ${failedChunkCount} 次 chunk 解析失败: ${String(parseError).slice(0, 100)} | chunk: ${snippet}`)
+            logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailedWithSnippet')
+              .replace('{n}', String(failedChunkCount))
+              .replace('{err}', String(parseError).slice(0, 100))
+              .replace('{snippet}', snippet))
             if (failedChunkCount > 10) {
-              const msg = `流式解析连续失败 ${failedChunkCount} 次，已中止`
+              const msg = t('log.llmStream.aborted').replace('{n}', String(failedChunkCount))
               logger.error('LLM:Stream', msg)
               opts.onError(msg)
               return
@@ -240,7 +244,7 @@ export class OpenAIProvider implements ILLMProvider {
       }
 
       if (failedChunkCount > 0) {
-        logger.warn('LLM:Stream', `流式生成完成，但有 ${failedChunkCount} 个 chunk 解析失败`)
+        logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailures').replace('{n}', String(failedChunkCount)))
       }
 
       const cleanText = fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()

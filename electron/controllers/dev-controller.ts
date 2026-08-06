@@ -15,6 +15,7 @@ import { ipcMain } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { t } from '../../src/shared/locale'
 import { isValidHttpUrl, isValidRelativePath, buildDevApiUrl, truncateResponse } from '../utils/dev-api-utils'
 import type { DevApiRequest, DevApiResponse, GlobalConfig } from '../../src/shared/ipc-channels'
 
@@ -97,7 +98,7 @@ export function registerDevController() {
     try {
       return await invokeDevApi(req)
     } catch (e) {
-      logger.error('Dev', `dev:invoke 异常: ${safeErrorMessage(e)}`)
+      logger.error('Dev', t('log.dev.invokeError').replace('{err}', safeErrorMessage(e)))
       return { success: false, error: safeErrorMessage(e) }
     }
   })

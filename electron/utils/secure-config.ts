@@ -10,6 +10,7 @@
  */
 import { safeStorage } from 'electron'
 import { logger } from './logger'
+import { t } from '../../src/shared/locale'
 
 const ENC_PREFIX = 'ENC:'
 
@@ -28,10 +29,10 @@ export function encryptApiKey(plainKey: string): string {
       return ENC_PREFIX + encrypted.toString('base64')
     }
     // 回退：base64 编码（非安全，标记为 ENC:B64: 区分真正的加密）
-    logger.warn('SecureConfig', 'safeStorage 不可用，API 密钥将使用 base64 编码存储（非加密）')
+    logger.warn('SecureConfig', t('log.secureConfig.safeStorageUnavailable'))
     return ENC_PREFIX + 'B64:' + Buffer.from(plainKey, 'utf-8').toString('base64')
   } catch (error) {
-    logger.error('SecureConfig', `加密 API 密钥失败: ${error}`)
+    logger.error('SecureConfig', t('log.secureConfig.encryptFailed').replace('{err}', String(error)))
     // 加密失败时回退到 base64
     return ENC_PREFIX + 'B64:' + Buffer.from(plainKey, 'utf-8').toString('base64')
   }
@@ -53,7 +54,7 @@ export function decryptApiKey(encrypted: string): string {
     try {
       return Buffer.from(payload.slice(4), 'base64').toString('utf-8')
     } catch {
-      logger.error('SecureConfig', '解码 base64 API 密钥失败')
+      logger.error('SecureConfig', t('log.secureConfig.decodeBase64Failed'))
       return encrypted
     }
   }
@@ -63,7 +64,7 @@ export function decryptApiKey(encrypted: string): string {
     const buffer = Buffer.from(payload, 'base64')
     return safeStorage.decryptString(buffer)
   } catch (error) {
-    logger.error('SecureConfig', `解密 API 密钥失败: ${error}`)
+    logger.error('SecureConfig', t('log.secureConfig.decryptFailed').replace('{err}', String(error)))
     // 解密失败时返回原始值（可能是旧格式导致）
     return encrypted
   }
