@@ -15,9 +15,12 @@ interface Props {
 
 export default function CharacterBacklinks({ character, allCharacters }: Props) {
   const { t } = useTranslation()
-  // 出场章节
+  // 出场章节（Array.isArray 守卫：裸 JSON 文本框可存 "1,5" 字符串/数字——此前 map 抛 TypeError 崩溃）
   const appearChapters = useMemo(() => {
-    try { return JSON.parse(character.appearChapters || '[]') as number[] }
+    try {
+      const parsed = JSON.parse(character.appearChapters || '[]')
+      return Array.isArray(parsed) ? parsed as number[] : []
+    }
     catch { return [] }
   }, [character.appearChapters])
 

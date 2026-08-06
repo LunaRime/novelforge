@@ -71,9 +71,15 @@ function rowToData(row: Record<string, unknown>): CharacterData {
         relations: (row.relations as string) || '[]',
     }
 
-    // 只有当 cs_updated_at_chapter > 0 时才构建 currentState
-    const updatedChapter = row.cs_updated_at_chapter as number
-    if (updatedChapter > 0) {
+    // 构建 currentState：任一 cs_ 字段非空即构建（P1 修复——此前仅 cs_updated_at_chapter > 0，
+    //    而 UI 状态编辑器不提供 updatedAtChapter 输入：从未定稿过的角色（=0）编辑
+    //    location/recentEvents 保存后整个状态被读端丢弃，编辑内容凭空消失）
+    const updatedChapter = (row.cs_updated_at_chapter as number) || 0
+    const stateFields = [
+        row.cs_location, row.cs_power_level, row.cs_physical_state,
+        row.cs_mental_state, row.cs_key_items, row.cs_recent_events,
+    ]
+    if (stateFields.some(v => typeof v === 'string' && (v as string).trim() !== '')) {
         data.currentState = {
             location: (row.cs_location as string) || '',
             powerLevel: (row.cs_power_level as string) || '',

@@ -71,7 +71,18 @@ export default function CharacterEditor() {
   }
 
   const handleSave = async () => {
-    if (!currentProject) return
+    if (!currentProject || !selectedCard) return
+    // 出场章节 JSON 校验（裸文本框可输入 5 / "1,5" —— 非法值曾导致角色列表/反向链接渲染崩溃）
+    try {
+      const parsed = JSON.parse(selectedCard.appearChapters || '[]')
+      if (!Array.isArray(parsed) || parsed.some(n => typeof n !== 'number' || !Number.isFinite(n))) {
+        toast.error(t('character.invalidAppearChapters'))
+        return
+      }
+    } catch {
+      toast.error(t('character.invalidAppearChapters'))
+      return
+    }
     const t0 = Date.now()
     try {
       await saveAll(currentProject.path)
