@@ -282,7 +282,7 @@ export default function ChapterCardEditor() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
-        <RefreshCw size={16} className="animate-spin" /> 加载章节蓝图...
+        <RefreshCw size={16} className="animate-spin" /> {t('chapterCard.loadingBlueprints')}
       </div>
     )
   }

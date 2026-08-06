@@ -62,10 +62,8 @@ export function initProjectDatabase(projectPath: string): void {
         type: 'error',
         title: t('dialog.dbCorruptTitle'),
         message: t('dialog.dbCorruptMsg'),
-        detail: '损坏的数据库文件已备份（文件名后缀 .corrupted）。\n\n' +
-          '之前的数据可能已丢失。如果你有最近的备份，可以手动恢复。\n' +
-          '备份路径：' + path.dirname(dbPath),
-        buttons: ['确定'],
+        detail: t('dialog.dbCorruptDetail').replace('{path}', path.dirname(dbPath)),
+        buttons: [t('dialog.buttons.ok')],
       }).catch(() => { /* dialog may fail in headless */ })
     } else {
       throw error // 非损坏错误，继续抛出
@@ -81,8 +79,8 @@ export function initProjectDatabase(projectPath: string): void {
         type: 'warning',
         title: t('dialog.dbIntegrityTitle'),
         message: t('dialog.dbIntegrityMsg'),
-        detail: `检查结果: ${integrity}\n\n建议备份项目数据后重新打开。`,
-        buttons: ['确定'],
+        detail: t('dialog.dbIntegrityDetail').replace('{result}', integrity),
+        buttons: [t('dialog.buttons.ok')],
       }).catch(() => { /* ignore */ })
     }
   } catch (checkErr) {
@@ -129,9 +127,10 @@ function ensureSchemaVersion(db: BetterSqlite3.Database): void {
       type: 'warning',
       title: t('dialog.dbDowngradeTitle'),
       message: t('dialog.dbDowngradeMsg'),
-      detail: `数据库版本: v${currentVersion}，应用支持: v${CURRENT_SCHEMA_VERSION}\n\n` +
-        '为避免数据损坏，已跳过数据库迁移。建议安装与数据库版本匹配的更新版本。',
-      buttons: ['确定'],
+      detail: t('dialog.dbDowngradeDetail')
+        .replace('{current}', String(currentVersion))
+        .replace('{supported}', String(CURRENT_SCHEMA_VERSION)),
+      buttons: [t('dialog.buttons.ok')],
     }).catch(() => { /* dialog may fail in headless */ })
     return
   }
@@ -148,8 +147,9 @@ function ensureSchemaVersion(db: BetterSqlite3.Database): void {
     logger.error('DB', `Schema 迁移失败，数据库保持 v${currentVersion} 不变: ${error}`)
     // 不递增版本号，下次启动时重新尝试迁移
     throw new Error(
-      `数据库迁移 v${currentVersion}→v${CURRENT_SCHEMA_VERSION} 失败。` +
-      '请检查数据库文件完整性或手动删除 .vela/vela.db 后重新打开项目。'
+      t('dialog.migrationFailed')
+        .replace('{from}', String(currentVersion))
+        .replace('{to}', String(CURRENT_SCHEMA_VERSION))
     )
   }
 }

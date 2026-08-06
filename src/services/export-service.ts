@@ -6,7 +6,7 @@
  * - 分章 Markdown（每章一个 .md）
  * - 纯文本 TXT
  */
-import { t } from '../shared/locale'
+import { t, type TextKey } from '../shared/locale'
 import { ipc } from './ipc-client'
 import { projectStore, workflowStore } from './store-facade'
 
@@ -127,10 +127,10 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
 }
 
 function formatLabel(format: ExportFormat): string {
-  const labels: Record<ExportFormat, string> = {
-    'merged-md': '合并 Markdown',
-    'split-md': '分章 Markdown',
-    'txt': '纯文本 TXT',
+  const keys: Record<ExportFormat, TextKey> = {
+    'merged-md': 'export.mergedMD',
+    'split-md': 'export.perChapterMD',
+    'txt': 'export.plainText',
   }
-  return labels[format]
+  return t(keys[format])
 }

@@ -223,13 +223,18 @@ describe('ru-RU 模板（俄语）', () => {
 })
 
 describe('localizeTemplate 回退与完整性（续）', () => {
-  it('无 content 变体的模板：content 保持中文，其他变体按语言解析', async () => {
+  it('有 content 变体的模板：en-US 解析为英文 content', async () => {
     const mod = await loadModule()
     const blueprint = mod.BUILTIN_PROMPTS.find(p => p.key === 'chapter_blueprint')!
     const localized = mod.localizeTemplate(blueprint, 'en-US')
-    // content 无英文变体 → 中文原文；systemRole 有英文变体 → 解析
-    expect(localized.content).toContain('保姆级执行目录细纲')
+    expect(localized.content).toContain('nanny-level execution outline')
     expect(localized.systemRole).toContain('chapter blueprints')
+  })
+
+  it('全部 19 个内置模板都有 en-US content 变体', async () => {
+    const mod = await loadModule()
+    const missing = mod.BUILTIN_PROMPTS.filter(p => !p.contentLocales?.['en-US']).map(p => p.key)
+    expect(missing).toEqual([])
   })
 
   it('无任何语言变体的模板原样返回（同一引用）', async () => {

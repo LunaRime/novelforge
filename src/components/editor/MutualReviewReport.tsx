@@ -85,7 +85,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
       {report.consensusStrengths.length > 0 && (
         <div className="border rounded p-3">
           <h4 className="text-xs font-medium text-green-600 mb-2 flex items-center gap-1">
-            <ThumbsUp size={12} /> 共识优点
+            <ThumbsUp size={12} /> {t('mutual.consensusStrengths')}
           </h4>
           <ul className="space-y-1">
             {report.consensusStrengths.map((s, i) => (
@@ -101,7 +101,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
       {report.consensusWeaknesses.length > 0 && (
         <div className="border rounded p-3">
           <h4 className="text-xs font-medium text-yellow-600 mb-2 flex items-center gap-1">
-            <AlertCircle size={12} /> 共识问题
+            <AlertCircle size={12} /> {t('mutual.consensusWeaknesses')}
           </h4>
           <ul className="space-y-1">
             {report.consensusWeaknesses.map((w, i) => (
@@ -160,7 +160,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
       {report.divergenceNotes.length > 0 && (
         <div className="border rounded p-3 border-yellow-300">
           <h4 className="text-xs font-medium text-yellow-700 mb-2 flex items-center gap-1">
-            <AlertCircle size={12} /> 评审分歧（需要作者判断）
+            <AlertCircle size={12} /> {t('mutual.disagreements')}
           </h4>
           {report.divergenceNotes.map((note, i) => (
             <div

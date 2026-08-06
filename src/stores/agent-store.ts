@@ -111,26 +111,21 @@ const generateHelpText = (): string => {
   const toolCount = toolRegistry.listAll().length
   const skillCount = skillRegistry.listAll().length
   const lines: string[] = [
-    '## NovelForge AI 助手 — 帮助',
+    t('agent.helpTitle'),
     '',
-    '### 可用命令',
-    '- `/clear` — 清空当前对话',
-    '- `/new` — 开始新对话',
-    '- `/help` — 显示此帮助信息',
-    '- `/status` — 查看项目状态',
+    t('agent.helpCommands'),
     '',
-    '### @ 提及',
-    '输入 `@` 可引用项目上下文：故事架构、角色卡、蓝图、知识库等。',
+    t('agent.helpMention'),
     '',
-    '### 可用工具',
-    '当前已加载 **' + toolCount + '** 个工具、**' + skillCount + '** 个 Skill。',
+    t('agent.helpTools'),
+    t('agent.helpToolCount').replace('{n}', String(toolCount)).replace('{m}', String(skillCount)),
     '',
-    '### Skill 命令',
+    t('agent.helpSkills'),
   ]
   for (const s of skillRegistry.listAll()) {
     lines.push('- `/' + s.metadata.name + '` — ' + s.metadata.description)
   }
-  lines.push('', '有任何创作问题，直接问我即可！')
+  lines.push('', t('agent.helpFooter'))
   return lines.join('\n')
 }
 
@@ -300,7 +295,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 skillContent = skillContent.replace(/\$\{args\}/g, args).replace(/\$1/g, args)
               }
               // 改写 content：用户意图 + Skill 指令拼接
-              content = `[用户使用了 Skill: ${command.skill.metadata.displayName ?? command.name}]\n\n用户输入: ${args || '(无额外参数)'}\n\n---\n\n${skillContent}`
+              content = `${t('agent.skillUsed').replace('{name}', command.skill.metadata.displayName ?? command.name).replace('{args}', args || t('agent.noExtraArgs'))}\n\n${skillContent}`
             }
             break
         }
@@ -377,7 +372,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
       if (!modelId) {
         updateAssistantMsg(m => ({
-          ...m, content: '⚠️ 请先在设置中配置 AI 模型。', streaming: false,
+          ...m, content: `⚠️ ${t('agent.noModel')}`, streaming: false,
         }))
         set({ generating: false })
         return
@@ -691,7 +686,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       conversations: state.conversations.map(c => ({
         ...c,
         messages: c.messages.map(m =>
-          m.streaming ? { ...m, streaming: false, content: m.content + '\n\n_（已停止生成）_' } : m
+          m.streaming ? { ...m, streaming: false, content: m.content + '\n\n_' + t('agent.stoppedGenerating') + '_' } : m
         ),
       })),
     }))

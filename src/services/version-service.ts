@@ -6,6 +6,7 @@
  */
 
 import { ipc } from './ipc-client'
+import { t } from '../shared/locale'
 import { computeTextStats } from './text-stats'
 
 /** 章节元数据（从数据库返回） */
@@ -33,7 +34,7 @@ export async function getChapters(): Promise<ChapterRecord[]> {
   return blueprints.map(bp => ({
     chapter_id: String(bp.chapterNumber),
     file_path: '',
-    file_name: String(bp.title || `第 ${bp.chapterNumber} 章`),
+    file_name: String(bp.title || t('chapter.nLabel').replace('{n}', String(bp.chapterNumber))),
     updated_at: '',
     chapter_number: bp.chapterNumber as number,
     status: 'draft',
@@ -63,7 +64,7 @@ export async function getVersionContent(versionId: number): Promise<string | nul
 /** 获取章节最新内容（取代之前的文件读取） */
 export async function getChapterLatestContent(chapterNumber: number): Promise<string> {
   const draft = await getChapterLatestDraft(chapterNumber)
-  return draft?.content ?? '（章节尚无内容）'
+  return draft?.content ?? t('version.noContent')
 }
 
 /**
