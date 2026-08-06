@@ -177,10 +177,14 @@ export async function getConnection(projectPath: string): Promise<LanceDB.Connec
   return db
 }
 
-/** 关闭指定项目的连接 */
-export function closeConnection(projectPath: string): void {
+/** 关闭指定项目的连接（⚠️ P3 修复：真正关闭底层连接——此前仅从 Map 删除，原生内存不释放） */
+export async function closeConnection(projectPath: string): Promise<void> {
   const dbPath = path.join(projectPath, '.vela', 'lancedb')
-  connectionPool.delete(dbPath)
+  const conn = connectionPool.get(dbPath)
+  if (conn) {
+    try { await conn.close() } catch { /* 忽略关闭失败 */ }
+    connectionPool.delete(dbPath)
+  }
 }
 
 
@@ -472,7 +476,12 @@ export async function searchWithScope(
 
     // 通道 2：FTS（DataFusion LIKE 模糊匹配，Tantivy 不支持中文分词）
     try {
-      const escapedQuery = queryText.replace(/'/g, "''")
+      // ⚠️ P3 修复：查询中的 %/_ 转全角（LIKE 通配符注入——'100%' 此前匹配 "100任意串"；
+      //    逐字拆分产生的 % 已用于容错匹配，查询自身的通配符需消除语义）
+      const escapedQuery = queryText
+        .replace(/'/g, "''")
+        .replace(/%/g, '％')
+        .replace(/_/g, '＿')
       // 将 "搜索" 转换为 "%搜%索%" 进行容错匹配
       const likePattern = `%${escapedQuery.split('').join('%')}%`
 

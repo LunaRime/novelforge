@@ -120,15 +120,19 @@ export class PostProcessRepository {
         const db = getProjectDb()
         if (!db) return
 
-        db.prepare(`
-      UPDATE post_process_steps
-      SET ok = 1, completed_at = unixepoch() * 1000, last_attempt_at = unixepoch() * 1000,
-          attempt_count = attempt_count + 1
-      WHERE run_id = ? AND step_key = ?
-    `).run(runId, stepKey)
+        // ⚠️ P3 修复：UPDATE + 状态刷新包事务——只读连接（活动面板）可能读到瞬时不一致
+        const tx = db.transaction(() => {
+            db.prepare(`
+          UPDATE post_process_steps
+          SET ok = 1, completed_at = unixepoch() * 1000, last_attempt_at = unixepoch() * 1000,
+              attempt_count = attempt_count + 1
+          WHERE run_id = ? AND step_key = ?
+        `).run(runId, stepKey)
 
-        // 检查是否所有关键步骤都已通过
-        PostProcessRepository._refreshCriticalStatus(runId)
+            // 检查是否所有关键步骤都已通过
+            PostProcessRepository._refreshCriticalStatus(runId)
+        })
+        tx()
     }
 
     /** 标记步骤为失败 */
