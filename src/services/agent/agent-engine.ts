@@ -124,7 +124,7 @@ export async function runAgentLoop(
   while (rounds < MAX_TOOL_ROUNDS) {
     // 检查中止信号
     if (abortSignal?.aborted) {
-      callbacks.onDone(fullAssistantText + '\n\n_（已停止生成）_', allToolCalls, allArtifacts)
+      callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
       return
     }
 
@@ -143,7 +143,7 @@ export async function runAgentLoop(
     } catch (error) {
       // 取消导致的生成中断走"已停止"而不是错误提示
       if (abortSignal?.aborted) {
-        callbacks.onDone(fullAssistantText + '\n\n_（已停止生成）_', allToolCalls, allArtifacts)
+        callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
         return
       }
       callbacks.onError(t('agent.llmCallFailed').replace('{error}', String(error)))
@@ -152,7 +152,7 @@ export async function runAgentLoop(
 
     // 检查中止
     if (abortSignal?.aborted) {
-      callbacks.onDone(fullAssistantText + '\n\n_（已停止生成）_', allToolCalls, allArtifacts)
+      callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
       return
     }
 
@@ -203,7 +203,7 @@ export async function runAgentLoop(
         callbacks.onProgress?.(progress.getProgress())
         // 在最终文本前附加思考内容（可选）
         const finalText = processed.thinkingContent
-          ? `_思考过程：_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
+          ? `_${t('agent.thinkingPrefix')}_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
           : processed.cleanedOutput
         callbacks.onDone(finalText, allToolCalls, processed.extractedArtifacts)
       } catch {
@@ -299,7 +299,7 @@ export async function runAgentLoop(
 
   // 达到最大循环次数
   if (rounds >= MAX_TOOL_ROUNDS) {
-    fullAssistantText += '\n\n⚠️ 已达到最大工具调用次数限制，自动停止。'
+    fullAssistantText += '\n\n⚠️ ' + t('agent.maxToolRoundsReached')
   }
 
   // 运行后处理管道
@@ -312,7 +312,7 @@ export async function runAgentLoop(
     progress.complete()
     callbacks.onProgress?.(progress.getProgress())
     const finalText = processed.thinkingContent
-      ? `_思考过程：_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
+      ? `_${t('agent.thinkingPrefix')}_\n> ${processed.thinkingContent.replace(/\n/g, '\n> ')}\n\n${processed.cleanedOutput}`
       : processed.cleanedOutput
     callbacks.onDone(finalText, allToolCalls, processed.extractedArtifacts)
   } catch {

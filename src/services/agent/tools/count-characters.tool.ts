@@ -14,18 +14,18 @@ import { computeTextStats, formatTextStats } from '../../text-stats'
 
 export const countCharactersTool = buildAgentTool({
   name: 'count_characters',
-  description: '统计文本或章节的字数。当需要核对字数是否达标、判断篇幅体量时调用（例如"每章约3000字"的要求），返回有效字数/汉字数/总字符数等精确统计。不要自己逐字计数。',
+  description: t('tool.countDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       text: {
         type: 'string',
-        description: '要统计的文本内容（与 chapter_number 二选一）',
+        description: t('tool.countText'),
       },
       chapter_number: {
         type: 'number',
-        description: '要统计的章节号（读取该章最新草稿，与 text 二选一）',
+        description: t('tool.countChapter'),
       },
     },
   },

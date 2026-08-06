@@ -11,31 +11,22 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const indexContentTool = buildAgentTool({
   name: 'index_content',
-  description:
-    '将文本内容索引到向量知识库中，供后续的语义搜索使用。\n' +
-    '适用场景：\n' +
-    '- 将新生成的章节要点存入知识库\n' +
-    '- 将提取的角色设定索引入库\n' +
-    '- 将世界观设定片段存入知识库\n' +
-    '- 将审稿发现的问题模式存入知识库\n' +
-    '索引后的内容可通过 search_knowledge 工具检索。',
+  description: t('tool.indexDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       content: {
         type: 'string',
-        description: '需要索引的文本内容',
+        description: t('tool.indexText'),
       },
       file_name: {
         type: 'string',
-        description:
-          '文件名标识（用于后续检索时显示来源），例如 "第5章-要点.md"、"角色-张三-设定.md"',
+        description: t('tool.indexFileName'),
       },
       chapter_number: {
         type: 'number',
-        description:
-          '关联的章节号（可选）。如果提供，检索时可以按章节范围过滤。',
+        description: t('tool.indexChapter'),
       },
     },
     required: ['content', 'file_name'],

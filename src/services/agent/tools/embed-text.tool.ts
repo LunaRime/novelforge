@@ -11,20 +11,14 @@ import { useVectorConfigStore } from '../../../stores/vector-config-store'
 
 export const embedTextTool = buildAgentTool({
   name: 'embed_text',
-  description:
-    '调用向量嵌入模型，将文本转换为向量表示。' +
-    '适用于：\n' +
-    '- 需要精确比较两段文本的语义相似度时\n' +
-    '- 分析角色描述的相似性\n' +
-    '- 检查情节是否与已有内容重复\n' +
-    '- 对生成的内容进行质量评估（与参考文本对比）',
+  description: t('tool.embedDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       text: {
         type: 'string',
-        description: '需要嵌入的文本内容',
+        description: t('tool.embedText'),
       },
     },
     required: ['text'],

@@ -9,14 +9,14 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const readArchitectureTool = buildAgentTool({
   name: 'read_architecture',
-  description: '读取小说的故事架构文件（四段式架构：故事前提、世界观、角色图谱、剧情大纲等）。是理解小说全局结构的核心工具。',
+  description: t('tool.readArchDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       file_name: {
         type: 'string',
-        description: '架构文件名（可选）。不填则列出所有架构文件。例如 "故事前提.md"、"世界观.md"',
+        description: t('tool.readArchFile'),
       },
     },
   },

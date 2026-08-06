@@ -13,6 +13,7 @@
 import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
 import { toolRegistry, type AgentTool } from './tool-registry'
+import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
@@ -177,7 +178,7 @@ class SkillRegistryImpl {
           properties: {
             args: {
               type: 'string',
-              description: skill.metadata.argumentHint ?? '可选的参数',
+              description: skill.metadata.argumentHint ?? t('skill.optionalArgs'),
             },
           },
         },
@@ -288,9 +289,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'review-chapter',
-        displayName: '章节审阅',
-        description: '对指定章节进行全面的质量审阅，包括剧情逻辑、角色一致性、节奏感、伏笔呼应等多个维度。',
-        whenToUse: '用户要求审阅、检查、评估某个章节时',
+        displayName: t('skill.chapterReview'),
+        description: t('skill.chapterReviewDesc'),
+        whenToUse: t('skill.chapterReviewUse'),
       },
       content: `# 章节审阅
 
@@ -322,9 +323,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'brainstorm',
-        displayName: '脑暴创意',
-        description: '针对指定话题进行创意脑暴，生成多个创意方向和灵感。',
-        whenToUse: '用户要求头脑风暴、找灵感、想创意时',
+        displayName: t('skill.brainstorm'),
+        description: t('skill.brainstormDesc'),
+        whenToUse: t('skill.brainstormUse'),
       },
       content: `# 创意脑暴
 
@@ -343,9 +344,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'character-analysis',
-        displayName: '角色分析',
-        description: '深入分析指定角色的性格、动机、角色弧、人物关系等。',
-        whenToUse: '用户想深入了解或调整角色设定时',
+        displayName: t('skill.characterAnalysis'),
+        description: t('skill.characterAnalysisDesc'),
+        whenToUse: t('skill.characterAnalysisUse'),
       },
       content: `# 角色深度分析
 
@@ -364,9 +365,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'continuity-check',
-        displayName: '连续性检查',
-        description: '检查小说中的设定一致性和连续性问题，发现矛盾和遗漏。',
-        whenToUse: '用户想检查设定有没有矛盾、是否有不一致的地方时',
+        displayName: t('skill.continuityCheck'),
+        description: t('skill.continuityCheckDesc'),
+        whenToUse: t('skill.continuityCheckUse'),
       },
       content: `# 连续性与一致性检查
 
@@ -385,9 +386,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'writing-coach',
-        displayName: '写作教练',
-        description: '提供专业的写作技巧指导和文笔改善建议。',
-        whenToUse: '用户想提高写作水平、求教写作技巧时',
+        displayName: t('skill.writingCoach'),
+        description: t('skill.writingCoachDesc'),
+        whenToUse: t('skill.writingCoachUse'),
       },
       content: `# 写作教练
 
@@ -411,9 +412,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'novel-outline',
-        displayName: '大纲架构师',
-        description: '基于故事前提和角色设定，生成结构严谨、节奏合理的小说大纲。自动适配三幕/英雄之旅/起承转合等多种结构模式。',
-        whenToUse: '需要生成、优化或重构小说大纲时；用户提到"大纲""结构""分卷"时',
+        displayName: t('skill.outlineArchitect'),
+        description: t('skill.outlineArchitectDesc'),
+        whenToUse: t('skill.outlineArchitectUse'),
       },
       content: `# 大纲架构师
 
@@ -438,9 +439,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'chapter-architect',
-        displayName: '章节架构师',
-        description: '针对单章进行精细化架构设计：开场钩子、场景分段、对话/描写/叙述比例、结尾悬念。',
-        whenToUse: '需要设计具体章节的结构和节奏时；写稿前规划章节布局时',
+        displayName: t('skill.chapterArchitect'),
+        description: t('skill.chapterArchitectDesc'),
+        whenToUse: t('skill.chapterArchitectUse'),
       },
       content: `# 章节架构师
 
@@ -471,9 +472,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'dialogue-craft',
-        displayName: '对话工艺师',
-        description: '专门优化小说中的对话写作：角色语音个性化、潜台词设计、对话节奏、信息密度控制。',
-        whenToUse: '需要优化对话、设计角色对白、检查对话质量时',
+        displayName: t('skill.dialogueCraft'),
+        description: t('skill.dialogueCraftDesc'),
+        whenToUse: t('skill.dialogueCraftUse'),
       },
       content: `# 对话工艺师
 
@@ -507,9 +508,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'description-master',
-        displayName: '描写大师',
-        description: '五感描写技法指导：环境渲染、人物外貌/动作刻画、氛围营造、抽象概念具象化。',
-        whenToUse: '需要增强描写质量、丰富场景画面感、改善文笔时',
+        displayName: t('skill.descriptionMaster'),
+        description: t('skill.descriptionMasterDesc'),
+        whenToUse: t('skill.descriptionMasterUse'),
       },
       content: `# 描写大师
 
@@ -545,9 +546,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'plot-weaver',
-        displayName: '情节编织者',
-        description: '多线叙事情节管理：主线/支线协调、伏笔埋设与回收、反转设计、冲突升级阶梯。',
-        whenToUse: '需要处理复杂情节、设计反转、管理多线叙事时',
+        displayName: t('skill.plotWeaver'),
+        description: t('skill.plotWeaverDesc'),
+        whenToUse: t('skill.plotWeaverUse'),
       },
       content: `# 情节编织者
 
@@ -583,9 +584,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'pacing-conductor',
-        displayName: '节奏指挥家',
-        description: '精细化的小说节奏控制：章节级/段落级/句子级节奏分析、高潮间隔校验、留白与加速技巧。',
-        whenToUse: '检查小说节奏问题、调整张弛度时',
+        displayName: t('skill.paceDirector'),
+        description: t('skill.paceDirectorDesc'),
+        whenToUse: t('skill.paceDirectorUse'),
       },
       content: `# 节奏指挥家
 
@@ -618,9 +619,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'world-forge',
-        displayName: '世界观锻造师',
-        description: '硬核世界观构建：规则体系自洽性验证、势力博弈推演、历史文化层积、设定利用率最大化。',
-        whenToUse: '需要构建或优化世界观、检查设定矛盾时',
+        displayName: t('skill.worldForge'),
+        description: t('skill.worldForgeDesc'),
+        whenToUse: t('skill.worldForgeUse'),
       },
       content: `# 世界观锻造师
 
@@ -651,9 +652,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'character-arc-designer',
-        displayName: '角色弧设计师',
-        description: '专业角色弧光设计：成长弧/堕落弧/平稳弧的类型选择、关键转折点设计、角色关系网的弧线协调。',
-        whenToUse: '需要设计或优化角色成长轨迹、检查角色弧完整性时',
+        displayName: t('skill.characterArc'),
+        description: t('skill.characterArcDesc'),
+        whenToUse: t('skill.characterArcUse'),
       },
       content: `# 角色弧设计师
 
@@ -693,9 +694,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'json-output-guard',
-        displayName: 'JSON 输出守门',
-        description: '★ AI 自检 Skill：强制 LLM 输出规范 JSON 格式，输出后自动校验，发现错误时自我修正。适用于所有需要结构化输出的场景。',
-        whenToUse: '任何需要 AI 输出 JSON 格式的场景；Agent 判断输出可能被解析时自动调用',
+        displayName: t('skill.jsonGuard'),
+        description: t('skill.jsonGuardDesc'),
+        whenToUse: t('skill.jsonGuardUse'),
         allowedTools: [],
       },
       content: `# JSON 输出守门员
@@ -731,9 +732,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'self-review',
-        displayName: 'AI 自审员',
-        description: '★ AI 自检 Skill：在输出章节内容后自动进行多维度自审——检查逻辑矛盾、角色OOC、连贯性问题、水文检测。',
-        whenToUse: '章节写作完成后自动触发；Agent 判断输出质量需要自检时',
+        displayName: t('skill.selfAudit'),
+        description: t('skill.selfAuditDesc'),
+        whenToUse: t('skill.selfAuditUse'),
       },
       content: `# AI 自审员
 
@@ -775,9 +776,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'genre-compliance',
-        displayName: '流派合规官',
-        description: '确保小说创作严格符合目标流派的读者期待和写作规范，避免跨流派失误。支持玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实等。',
-        whenToUse: '需要验证创作是否符合流派规范、检查是否有跨流派毒点时',
+        displayName: t('skill.genreCompliance'),
+        description: t('skill.genreComplianceDesc'),
+        whenToUse: t('skill.genreComplianceUse'),
       },
       content: `# 流派合规官
 
@@ -810,9 +811,9 @@ function registerBuiltinSkills(registry: SkillRegistryImpl): void {
     {
       metadata: {
         name: 'chapter-hook-designer',
-        displayName: '钩子设计师',
-        description: '专业设计章节级别的各种钩子（Hook）：开场钩子抓住读者、中场钩子维持注意力、结尾钩子驱动翻页。',
-        whenToUse: '需要设计章节钩子、提升读者留存率、优化章节首尾吸引力时',
+        displayName: t('skill.hookDesigner'),
+        description: t('skill.hookDesignerDesc'),
+        whenToUse: t('skill.hookDesignerUse'),
       },
       content: `# 钩子设计师
 

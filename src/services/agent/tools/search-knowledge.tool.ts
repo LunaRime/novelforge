@@ -10,34 +10,31 @@ import { ipc } from '../../ipc-client'
 
 export const searchKnowledgeTool = buildAgentTool({
   name: 'search_knowledge',
-  description:
-    '在知识库中进行语义搜索（基于向量嵌入的混合搜索），查找与查询相关的参考资料、设定文档、角色档案等。' +
-    '支持按章节范围过滤结果，适用于查找特定区间的上下文。' +
-    '返回结果包含相似度分数，分数越高越相关。',
+  description: t('tool.searchKbDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       query: {
         type: 'string',
-        description: '搜索查询语句，例如 "主角的金手指设定"、"第3章的战斗场景"',
+        description: t('tool.searchKbQuery'),
       },
       top_k: {
         type: 'number',
-        description: '返回结果数量（默认 5，最大 10）',
+        description: t('tool.searchKbLimit'),
         default: 5,
       },
       chapter_from: {
         type: 'number',
-        description: '章节范围起始（可选）。例如搜索第 1-10 章的内容，填 1',
+        description: t('tool.searchKbStart'),
       },
       chapter_to: {
         type: 'number',
-        description: '章节范围结束（可选）。例如搜索第 1-10 章的内容，填 10',
+        description: t('tool.searchKbEnd'),
       },
       min_score: {
         type: 'number',
-        description: '最低相似度阈值（0-1，默认 0.5）。低于此值的结果会被过滤。',
+        description: t('tool.searchKbThreshold'),
         default: 0.5,
       },
     },

@@ -8,21 +8,21 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const updateConfigTool = buildAgentTool({
   name: 'update_config',
-  description: '更新小说项目的配置信息，如类型、目标读者、大纲、写作风格等。这会修改项目核心设定，需要用户确认。',
+  description: t('tool.updateConfigDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       field: {
         type: 'string',
-        description: '要更新的字段名',
+        description: t('tool.updateConfigField'),
         enum: ['genre', 'subGenre', 'targetAudience', 'totalChapters', 'wordsPerChapter',
                'coreOutline', 'worldSetting', 'goldenFinger', 'protagonistProfile',
                'globalGuidance', 'writingStyle', 'referenceWorks'],
       },
       value: {
         type: 'string',
-        description: '新值',
+        description: t('tool.updateConfigValue'),
       },
     },
     required: ['field', 'value'],

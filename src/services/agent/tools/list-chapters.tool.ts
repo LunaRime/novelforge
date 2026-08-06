@@ -9,7 +9,7 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const listChaptersTool = buildAgentTool({
   name: 'list_chapters',
-  description: '列出项目中所有章节的状态概览，包括哪些章节有蓝图、有草稿、已定稿等信息。用于了解项目整体进度。',
+  description: t('tool.listChaptersDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',

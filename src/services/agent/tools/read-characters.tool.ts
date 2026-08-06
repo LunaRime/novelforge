@@ -9,14 +9,14 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const readCharactersTool = buildAgentTool({
   name: 'read_characters',
-  description: '读取小说的角色卡档案。可以获取所有角色列表或指定角色的详细信息（背景、性格、外貌、角色弧等）。',
+  description: t('tool.readCharsDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       character_name: {
         type: 'string',
-        description: '角色名称（可选）。不填则列出所有角色。',
+        description: t('tool.readCharsName'),
       },
     },
   },

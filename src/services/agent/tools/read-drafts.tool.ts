@@ -9,18 +9,18 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const readDraftsTool = buildAgentTool({
   name: 'read_drafts',
-  description: '读取指定章节的草稿内容。可以获取初稿、修订稿等不同版本。',
+  description: t('tool.readDraftsDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       chapter_number: {
         type: 'number',
-        description: '章节号（必填）',
+        description: t('tool.readDraftsChapter'),
       },
       draft_type: {
         type: 'string',
-        description: '草稿类型',
+        description: t('tool.readDraftsType'),
         enum: ['draft_v1', 'revised', 'latest'],
         default: 'latest',
       },

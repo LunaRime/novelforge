@@ -9,19 +9,19 @@ import { ipc } from '../../ipc-client'
 
 export const readProjectStateTool = buildAgentTool({
   name: 'read_project_state',
-  description: '读取项目的全局状态信息，包括小说配置、近章要点等。用于了解项目的整体概况。',
+  description: t('tool.readStateDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       include_config: {
         type: 'boolean',
-        description: '是否包含完整的小说配置',
+        description: t('tool.readStateFullConfig'),
         default: true,
       },
       include_summary: {
         type: 'boolean',
-        description: '是否包含近章要点',
+        description: t('tool.readStateNotes'),
         default: true,
       },
     },

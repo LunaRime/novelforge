@@ -9,14 +9,14 @@ import { useProjectStore } from '../../../stores/project-store'
 
 export const readBlueprintTool = buildAgentTool({
   name: 'read_blueprint',
-  description: '读取指定章节的蓝图（剧情大纲、场景分配、角色出场计划等）。蓝图是写稿前的详细规划。',
+  description: t('tool.readBlueprintDesc'),
   source: 'builtin',
   inputSchema: {
     type: 'object',
     properties: {
       chapter_number: {
         type: 'number',
-        description: '章节号（可选）。不填则列出所有蓝图文件。',
+        description: t('tool.readBlueprintChapter'),
       },
     },
   },
