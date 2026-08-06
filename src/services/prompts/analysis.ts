@@ -11,6 +11,7 @@ export const analysisPrompts: PromptTemplate[] = [
       character_states: '角色状态',
       global_summary: '上下文检索结果',
       world_building: '世界观设定',
+      foreshadowing: '待回收伏笔清单',
       review_focus: '审稿维度侧重点（可选）',
     },
     content: `请对以下章节进行审查。
@@ -26,6 +27,9 @@ export const analysisPrompts: PromptTemplate[] = [
 
 【世界观设定】
 {{world_building}}
+
+【待回收伏笔清单】（伏笔完整性判断的唯一依据——仅报告与清单相关的断裂，禁止臆测清单之外的伏笔）
+{{foreshadowing}}
 
 【审查原则】
 

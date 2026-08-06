@@ -72,7 +72,7 @@ export class GenerateMultiDraftsCommand extends BaseWorkflowCommand<DraftCandida
           builder.build(),
           builder.getSystemRole(),
           callbacks,
-          { cacheScope: 'chapter_draft', staticContext: this.params.blueprintContext, purpose: 'draft_chapter' },
+          { cacheScope: 'chapter_draft', staticContext: this.params.blueprintContext, purpose: 'draft_chapter', temperature: style.temp },
         )
 
         candidates.push({

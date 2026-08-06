@@ -189,6 +189,12 @@ export class ReviewPromptBuilder extends BasePromptBuilder {
     this.variables.review_focus = focus;
     return this;
   }
+
+  /** 待回收伏笔清单（伏笔完整性判断的基准数据，H 级降幻觉） */
+  withForeshadowing(list: string) {
+    this.variables.foreshadowing = list;
+    return this;
+  }
 }
 
 /**

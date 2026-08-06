@@ -540,15 +540,38 @@ function compressMessagesToBudget(messages: LLMMessage[], budget: number): LLMMe
     used += estimateTokens(messages[0].content)
   }
 
-  // 2. 从尾部向前保留最近的轮次（user, assistant 对 / 独立 user）
   const tail: LLMMessage[] = []
+  const kept = new Set<number>()
+
+  // 2a. 最后一条 user 消息无条件保留（当前问题/observation——丢弃会致 LLM
+  //     无题可答、凭空编造；超预算时截断它本身而非跳过，H 级降幻觉）
+  const last = messages.length - 1
+  if (last >= 1 && messages[last].role === 'user') {
+    let content = messages[last].content
+    let tokens = estimateTokens(content)
+    if (used + tokens > budget && budget - used > 64) {
+      const maxChars = Math.max(64, Math.floor((budget - used) * 4))
+      content = content.slice(0, maxChars) + '\n[内容已截断]'
+      tokens = estimateTokens(content)
+    }
+    tail.unshift({ ...messages[last], content })
+    used += tokens
+    kept.add(last)
+  }
+
+  // 2b. 从尾部向前保留最近的轮次（user, assistant 对 / 独立 user）
+  //     kept 防重复：工具轮 [assistant(tool_call), user(observation)] 中
+  //     observation 已在 2a 保留——配对分支此前会再次 unshift 同一条（重复注入）
   for (let i = messages.length - 1; i >= 1; i--) {
+    if (kept.has(i)) continue
     const m = messages[i]
-    if (m.role === 'assistant' && messages[i - 1]?.role === 'user') {
+    if (m.role === 'assistant' && messages[i - 1]?.role === 'user' && !kept.has(i - 1)) {
       const pairTokens = estimateTokens(messages[i - 1].content) + estimateTokens(m.content)
       if (used + pairTokens > budget) break
       tail.unshift(messages[i - 1], m)
       used += pairTokens
+      kept.add(i - 1)
+      kept.add(i)
       i--
     } else if (m.role === 'user') {
       // 末尾独立的 user（observation / 当前问题）：单独保留后继续向前配对
@@ -556,6 +579,7 @@ function compressMessagesToBudget(messages: LLMMessage[], budget: number): LLMMe
       if (used + msgTokens > budget) break
       tail.unshift(m)
       used += msgTokens
+      kept.add(i)
     }
   }
   out.push(...tail)
