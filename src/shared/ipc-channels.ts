@@ -34,6 +34,10 @@ export interface GlobalConfig {
   }
   /** 最近项目列表（打开项目时由渲染进程同步，活动聚合/历史导航读取） */
   recentProjects?: Array<{ name: string; path: string; updatedAt?: number }>
+  /** LLM 并发配置（主进程启动时恢复，重启不丢） */
+  concurrency?: { maxConcurrent: number; maxQueueSize: number }
+  /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */
+  modelRoutes?: { elite: string[]; standard: string[]; budget: string[] }
   /** 开发者模式：接入外部程序 API（如本地浏览器服务），AI 工具 call_external_api 可调用 */
   devMode?: {
     enabled: boolean
@@ -187,6 +191,14 @@ export interface LLMChannels {
   'llm:concurrency-config': {
     args: [config: { maxConcurrent?: number; maxQueueSize?: number }]
     return: { success: boolean }
+  }
+  'llm:set-routes': {
+    args: [routes: { elite: string[]; standard: string[]; budget: string[] }]
+    return: { success: boolean }
+  }
+  'llm:get-routes': {
+    args: []
+    return: { elite: string[]; standard: string[]; budget: string[] }
   }
   'llm:list-models': {
     args: []

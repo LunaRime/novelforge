@@ -1,6 +1,7 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
 import { ModelProfile } from '../../src/shared/ipc-channels'
 import { withRetry, withStreamRetry } from './retry-handler'
+import { buildOpenAIUrl } from './url-utils'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
@@ -16,19 +17,9 @@ class HttpError extends Error {
 }
 
 export class OpenAIProvider implements ILLMProvider {
-  private buildUrl(baseUrl: string): string {
-    const base = baseUrl.replace(/\/$/, '')
-    // 如果 baseUrl 已经带了完整 /v1/chat 路径，直接用
-    if (base.endsWith('/v1/chat')) {
-      return `${base}/completions`
-    }
-    // 否则补全完整路径
-    return `${base}/v1/chat/completions`
-  }
-
   async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     return withRetry(async () => {
-      const url = this.buildUrl(model.baseUrl)
+      const url = buildOpenAIUrl(model.baseUrl, 'chat')
 
       const body: Record<string, unknown> = {
         model: model.modelName,
@@ -108,7 +99,7 @@ export class OpenAIProvider implements ILLMProvider {
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
     await withStreamRetry(async () => {
-      const url = this.buildUrl(model.baseUrl)
+      const url = buildOpenAIUrl(model.baseUrl, 'chat')
 
       const body: Record<string, unknown> = {
         model: model.modelName,

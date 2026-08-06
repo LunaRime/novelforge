@@ -92,15 +92,20 @@ export class ModelRouter {
     this.autoDetectTiers()
   }
 
+  /** 模型是否可用于聊天/生成（排除 embedding 专用模型，防路由把聊天请求发给向量模型） */
+  private isChatModel(model: ModelProfile): boolean {
+    return !model.purposes?.includes('embedding')
+  }
+
   /** 根据 purpose 选择最佳可用模型 */
   route(purpose: CallPurpose): string | null {
     const tier = PURPOSE_TIER_MAP[purpose] || 'standard'
 
-    // 尝试 tier 内的模型
+    // 尝试 tier 内的模型（仅聊天模型；embedding 模型可能因 autoDetectTiers 误入各层）
     const tierModelIds = this.config[tier] || []
     for (const id of tierModelIds) {
       const model = this.models.find(m => m.id === id)
-      if (model) return id
+      if (model && this.isChatModel(model)) return id
     }
 
     // 降级到下一层
@@ -117,12 +122,13 @@ export class ModelRouter {
     for (const tier of fallbackOrder) {
       const ids = this.config[tier] || []
       for (const id of ids) {
-        if (this.models.find(m => m.id === id)) return id
+        const model = this.models.find(m => m.id === id)
+        if (model && this.isChatModel(model)) return id
       }
     }
 
-    // 最终降级：任何可用的模型
-    const defaultModel = this.models.find(m => m.id)
+    // 最终降级：任意可用的聊天模型（跳过 embedding 专用模型）
+    const defaultModel = this.models.find(m => this.isChatModel(m))
     return defaultModel?.id || null
   }
 
@@ -228,6 +234,8 @@ export class ModelRouter {
 
     for (const model of this.models) {
       if (assigned.has(model.id)) continue
+      // 跳过 embedding 专用模型（不得进入聊天 tier，防 route() 把聊天请求发给向量模型）
+      if (model.purposes?.includes('embedding')) continue
 
       const name = (model.modelName + model.name).toLowerCase()
 

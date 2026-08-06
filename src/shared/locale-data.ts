@@ -2333,6 +2333,7 @@ export const UI_TEXTS_DATA = {
   'log.kb.noVectorMethodFtsOnly': { 'zh-CN': '无可用的向量化方式，文本块将保持 FTS 纯文本模式', 'en-US': 'No vectorization method available; chunks will stay in FTS plain-text mode', 'ru-RU': 'Нет доступного способа векторизации; фрагменты останутся в режиме FTS (чистый текст)' },
   'log.llm.migrateKeyAuto': { 'zh-CN': '自动迁移 API 密钥到加密格式: {name} ({id})', 'en-US': 'Auto-migrating API key to encrypted format: {name} ({id})', 'ru-RU': 'Автоматический перенос API-ключа в зашифрованный формат: {name} ({id})' },
   'log.llm.migrateKeyDone': { 'zh-CN': 'API 密钥加密迁移完成', 'en-US': 'API key encryption migration complete', 'ru-RU': 'Перенос API-ключей в шифрование завершён' },
+  'log.llm.concurrencyRestored': { 'zh-CN': '已恢复并发配置：最大并发 {max}、排队上限 {queue}', 'en-US': 'Concurrency config restored: max {max}, queue {queue}', 'ru-RU': 'Восстановлена конфигурация параллельности: макс. {max}, очередь {queue}' },
   'log.project.configPersisted': { 'zh-CN': '配置已持久化，字段数: {count}', 'en-US': 'Config persisted, {count} fields', 'ru-RU': 'Конфигурация сохранена, полей: {count}' },
   'log.project.folderDeleted': { 'zh-CN': '[delete-folder] 已删除项目文件夹: {path}', 'en-US': '[delete-folder] Project folder deleted: {path}', 'ru-RU': '[delete-folder] Папка проекта удалена: {path}' },
   'log.project.folderDeleteFailed': { 'zh-CN': '[delete-folder] 删除失败: {err}', 'en-US': '[delete-folder] Delete failed: {err}', 'ru-RU': '[delete-folder] Не удалось удалить: {err}' },
