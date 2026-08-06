@@ -183,8 +183,9 @@ export class ModelRouter {
       'gemini-3.5-flash': { input: 0.0015, output: 0.009 },
       'gemini-3-flash-preview': { input: 0.0005, output: 0.003 },
       // 旧模型兼容（存量配置仍可能引用）
-      'gpt-4o': { input: 0.0025, output: 0.01 },
+      // ⚠️ 顺序即匹配优先级：gpt-4o-mini 必须在 gpt-4o 之前（includes 先命中通用型号会 16 倍误计）
       'gpt-4o-mini': { input: 0.00015, output: 0.0006 },
+      'gpt-4o': { input: 0.0025, output: 0.01 },
       'gpt-4-turbo': { input: 0.01, output: 0.03 },
       'gpt-3.5-turbo': { input: 0.0005, output: 0.0015 },
       'claude-3-opus': { input: 0.015, output: 0.075 },

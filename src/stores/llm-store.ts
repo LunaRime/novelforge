@@ -1,6 +1,7 @@
 import { t } from '../shared/locale'
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { renderLog } from '../services/render-logger'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -148,31 +149,44 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       // 删除默认生成模型：从剩余生成模型自动选替补（否则所有工作流立即报 noDefaultModel）
       if (get().defaultModelId === modelId) {
         const fallback = get().models.find(m => !m.purposes?.includes('embedding'))
-        if (fallback) {
-          set({ defaultModelId: fallback.id })
-          ipc.invoke('llm:set-default-model', fallback.id)
-        } else {
-          set({ defaultModelId: null })
-          ipc.invoke('llm:set-default-model', null)
+        const nextId = fallback ? fallback.id : null
+        set({ defaultModelId: nextId })
+        // await + 校验：fire-and-forget 写盘失败会静默（重启后 config.json 指向已删 id）
+        try {
+          const r = await ipc.invoke('llm:set-default-model', nextId)
+          if (!r.success) renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed'))
+        } catch (e) {
+          renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed').replace('{err}', () => String(e)))
         }
       }
       // 如果删除的是默认向量模型，清空默认
       if (get().defaultEmbeddingModelId === modelId) {
         set({ defaultEmbeddingModelId: null })
-        ipc.invoke('llm:set-default-embedding-model', null)
+        ipc.invoke('llm:set-default-embedding-model', null).catch(() => {})
       }
     }
     return result.success
   },
 
-  setDefaultModel: (modelId) => {
+  setDefaultModel: async (modelId) => {
     set({ defaultModelId: modelId })
-    ipc.invoke('llm:set-default-model', modelId)
+    // await + 校验：写盘失败时主进程 config.json 仍指向旧 id，重启后模型配置失效（P2 修复）
+    try {
+      const result = await ipc.invoke('llm:set-default-model', modelId)
+      if (!result.success) renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed'))
+    } catch (e) {
+      renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed').replace('{err}', () => String(e)))
+    }
   },
 
-  setDefaultEmbeddingModel: (modelId) => {
+  setDefaultEmbeddingModel: async (modelId) => {
     set({ defaultEmbeddingModelId: modelId })
-    ipc.invoke('llm:set-default-embedding-model', modelId)
+    try {
+      const result = await ipc.invoke('llm:set-default-embedding-model', modelId)
+      if (!result.success) renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed'))
+    } catch (e) {
+      renderLog('error', 'Save:Model', t('log.render.defaultModelSaveFailed').replace('{err}', () => String(e)))
+    }
   },
 
   generate: async (messages, modelId, options) => {

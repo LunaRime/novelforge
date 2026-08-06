@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
@@ -429,12 +429,15 @@ function ConcurrencySection() {
   const [maxQueueSize, setMaxQueueSize] = useState(status.maxQueueSize)
   const [saving, setSaving] = useState(false)
 
-  // 挂载时拉取主进程当前并发状态
+  // 挂载时拉取主进程当前并发状态——用户已修改时不覆盖（刷新返回晚于用户输入的竞态，P2 修复）
+  const userEditedRef = useRef(false)
   useEffect(() => {
     useConcurrencyStore.getState().refreshStatus().then(() => {
       const s = useConcurrencyStore.getState().status
-      setMaxConcurrent(s.maxConcurrent)
-      setMaxQueueSize(s.maxQueueSize)
+      if (!userEditedRef.current) {
+        setMaxConcurrent(s.maxConcurrent)
+        setMaxQueueSize(s.maxQueueSize)
+      }
     }).catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -470,7 +473,7 @@ function ConcurrencySection() {
             min={1}
             max={20}
             value={String(maxConcurrent)}
-            onChange={(e) => setMaxConcurrent(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) => { userEditedRef.current = true; setMaxConcurrent(Math.max(1, parseInt(e.target.value) || 1)) }}
           />
           <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyMaxDesc')}</p>
         </div>
@@ -481,7 +484,7 @@ function ConcurrencySection() {
             min={1}
             max={500}
             value={String(maxQueueSize)}
-            onChange={(e) => setMaxQueueSize(Math.max(1, parseInt(e.target.value) || 1))}
+            onChange={(e) => { userEditedRef.current = true; setMaxQueueSize(Math.max(1, parseInt(e.target.value) || 1)) }}
           />
           <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyQueueDesc')}</p>
         </div>
@@ -808,8 +811,11 @@ function ModelForm({
               value={model.temperature}
               onChange={(e) => up('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)}
               onBlur={() => {
+                // 钳制到 [0, 2]——此前可保存 -5 等非法值，运行时 API 400（P2 修复）
                 const v = Number(model.temperature);
                 if (isNaN(v)) up('temperature', 0.7)
+                else if (v < 0) up('temperature', 0)
+                else if (v > 2) up('temperature', 2)
               }}
             />
           </div>
@@ -820,8 +826,10 @@ function ModelForm({
               value={model.maxTokens}
               onChange={(e) => up('maxTokens', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
               onBlur={() => {
+                // 钳制到 [1, 131072]（全局模型输出上限）——此前可保存 9999999（P2 修复）
                 const v = Number(model.maxTokens);
-                if (!v || v < 1) up('maxTokens', 4096)
+                if (isNaN(v) || v < 1) up('maxTokens', 4096)
+                else if (v > 131072) up('maxTokens', 131072)
               }}
             />
           </div>
