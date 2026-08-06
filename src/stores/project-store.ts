@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
-import { alertError } from '../components/ui/AlertDialog'
+import { alertError } from '../components/ui/Confirm'
 import { t } from '../shared/locale'
 
 /**

@@ -43,17 +43,33 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {
   asChild?: boolean
+  /** 高亮激活态（背景 + 颜色加深）— 原 IconBtn.active */
+  active?: boolean
+  /** 数字徽标（>0 时显示 accent 小圆点）— 原 IconBtn.badge */
+  badge?: number
 }
 
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
+  ({ className, variant, size, asChild = false, active = false, badge, children, ...props }, ref) => {
     const Comp = asChild ? Slot : 'button'
     return (
       <Comp
-        className={cn(buttonVariants({ variant, size, className }))}
+        className={cn(
+          buttonVariants({ variant, size, className }),
+          active && 'bg-[var(--color-hover)] text-[var(--color-text)]',
+          badge !== undefined && badge > 0 && 'relative',
+        )}
         ref={ref}
         {...props}
-      />
+      >
+        {children}
+        {badge !== undefined && badge > 0 && (
+          <span
+            className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full"
+            style={{ backgroundColor: 'var(--color-accent)' }}
+          />
+        )}
+      </Comp>
     )
   }
 )

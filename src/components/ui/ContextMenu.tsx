@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { MenuItem } from './MenuItem'
 
 /** 单条菜单项定义 */
 export interface ContextMenuItem {
@@ -100,70 +101,22 @@ export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
           )
         }
 
-        /* 菜单项 */
+        /* 菜单项 — 复用 MenuItem 统一渲染 */
         const item = entry as ContextMenuItem
         return (
-          <button
+          <MenuItem
             key={item.key}
+            label={item.label}
+            icon={item.icon}
+            shortcut={item.shortcut}
             disabled={item.disabled}
+            danger={item.danger}
             onClick={() => {
               if (item.disabled) return
               onClose()
               item.onClick?.()
             }}
-            className="w-full flex items-center gap-2 px-3 py-1.5 text-left transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-            style={{
-              color: item.disabled
-                ? 'var(--color-text-muted)'
-                : item.danger
-                  ? 'var(--color-error)'
-                  : 'var(--color-text)',
-              opacity: item.disabled ? 0.45 : 1,
-              cursor: item.disabled ? 'not-allowed' : 'pointer',
-              backgroundColor: 'transparent',
-              fontSize: 12,
-            }}
-            onMouseEnter={e => {
-              if (!item.disabled) {
-                e.currentTarget.style.backgroundColor = item.danger
-                  ? 'color-mix(in srgb, var(--color-error) 12%, transparent)'
-                  : 'var(--color-hover)'
-              }
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.backgroundColor = 'transparent'
-            }}
-          >
-            {/* 图标 */}
-            {item.icon && (
-              <span
-                style={{
-                  color: item.disabled
-                    ? 'var(--color-text-muted)'
-                    : item.danger
-                      ? 'var(--color-error)'
-                      : 'var(--color-text-secondary)',
-                  width: 14,
-                  flexShrink: 0,
-                  display: 'flex',
-                  alignItems: 'center',
-                }}
-              >
-                {item.icon}
-              </span>
-            )}
-            {/* 标签 */}
-            <span className="flex-1">{item.label}</span>
-            {/* 快捷键 */}
-            {item.shortcut && (
-              <span
-                className="font-mono text-[10px] opacity-40 ml-2 flex-shrink-0"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                {item.shortcut}
-              </span>
-            )}
-          </button>
+          />
         )
       })}
     </div>

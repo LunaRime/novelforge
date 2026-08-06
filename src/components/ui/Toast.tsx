@@ -2,8 +2,8 @@
 /**
  * NovelForge 全局 Toast 通知系统
  *
- * 用于轻量、非阻塞的操作反馈（成功、警告，普通信息）。
- * 关键错误请使用 alertError() — 见 AlertDialog.tsx。
+ * 轻量、非阻塞的操作反馈（成功/错误/警告/信息/AI），支持带操作按钮的增强通知。
+ * 关键错误请使用 alertError() — 见 Confirm.tsx。
  *
  * 使用 CSS 动画类替代 inline-style，统一与 index.css 中的 keyframes 对齐。
  *
@@ -11,22 +11,39 @@
  *   import { toast } from '@/components/ui/Toast'
  *   toast.success('保存成功')
  *   toast.warning('字数超出限制')
- *   toast.info('提示信息')
+ *   toast.show({ type: 'ai', message: '✅ 草稿已生成', actions: [{ label: '打开查看', onClick: openDraft }] })
+ *   toast.workflowComplete('「第3章」已完成', () => openRightPanel('ai-output'))
  */
 
 import { createRoot } from 'react-dom/client'
 import { useEffect, useState } from 'react'
-import { X, CheckCircle2, AlertTriangle, Info } from 'lucide-react'
+import { X, CheckCircle2, AlertTriangle, Info, Sparkles } from 'lucide-react'
+import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
-export type ToastType = 'success' | 'error' | 'info' | 'warning'
+export type ToastType = 'success' | 'error' | 'info' | 'warning' | 'ai'
+
+/** 操作按钮（点击后 Toast 自动关闭） */
+export interface ToastAction {
+  /** 按钮文案（若提供 i18nKey 则渲染时用 t() 翻译，label 作为 fallback） */
+  label: string
+  /** i18n key：优先于 label 渲染（Toast 是模块级 API，调用处无 t 上下文） */
+  i18nKey?: TextKey
+  /** 点击回调 */
+  onClick?: () => void | Promise<void>
+  /** 按钮风格：主色('primary') 或灰色('ghost') */
+  variant?: 'primary' | 'ghost'
+}
 
 interface ToastItem {
   id: number
   type: ToastType
   message: string
   duration: number
+  /** 操作按钮列表（最多 2 个） */
+  actions?: ToastAction[]
 }
 
 // ===== 全局状态 =====
@@ -94,12 +111,19 @@ const TOAST_STYLE: Record<ToastType, { border: string; bg: string; icon: React.R
     bg: 'linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.04))',
     icon: <Info size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
   },
+  ai: {
+    border: 'var(--color-accent)',
+    bg: 'linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.04))',
+    icon: <Sparkles size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+  },
 }
 
 function ToastItemView({ item, onRemove }: { item: ToastItem; onRemove: (id: number) => void }) {
+  const { t } = useTranslation()
   const [isExiting, setIsExiting] = useState(false)
 
   useEffect(() => {
+    if (item.duration <= 0) return
     // 退场动画 - 提前 300ms 开始
     const t2 = setTimeout(() => setIsExiting(true), item.duration - 300)
     // 移除 DOM
@@ -107,12 +131,24 @@ function ToastItemView({ item, onRemove }: { item: ToastItem; onRemove: (id: num
     return () => { clearTimeout(t2); clearTimeout(t3) }
   }, [item.id, item.duration, onRemove])
 
+  const dismiss = () => {
+    setIsExiting(true)
+    setTimeout(() => onRemove(item.id), 250)
+  }
+
+  const handleAction = async (action: ToastAction) => {
+    if (action.onClick) {
+      await action.onClick()
+    }
+    dismiss()
+  }
+
   const { border, bg, icon } = TOAST_STYLE[item.type]
 
   return (
     <div
       className={`
-        pointer-events-auto flex items-start gap-3 px-4 py-3
+        pointer-events-auto flex flex-col gap-2 px-4 py-3
         rounded-xl border backdrop-blur-xl
         ${isExiting ? 'animate-toast-exit' : 'animate-toast-enter'}
       `}
@@ -127,39 +163,83 @@ function ToastItemView({ item, onRemove }: { item: ToastItem; onRemove: (id: num
         minWidth: 260,
       }}
     >
-      <div className="flex-shrink-0 mt-0.5">{icon}</div>
-      <span
-        className="flex-1 text-xs leading-relaxed"
-        style={{
-          color: 'var(--color-text)',
-          whiteSpace: 'pre-wrap',
-          wordBreak: 'break-word',
-        }}
-      >
-        {item.message}
-      </span>
-      <button
-        onClick={() => onRemove(item.id)}
-        className="flex-shrink-0 p-0.5 rounded transition-all duration-150 hover:bg-[var(--color-hover)]"
-        style={{
-          background: 'none',
-          border: 'none',
-          cursor: 'pointer',
-          color: 'var(--color-text-muted)',
-          lineHeight: 1,
-        }}
-      >
-        <X size={13} />
-      </button>
+      {/* 第一行：图标 + 消息 + 关闭 */}
+      <div className="flex items-start gap-3">
+        <div className="flex-shrink-0 mt-0.5">{icon}</div>
+        <span
+          className="flex-1 text-xs leading-relaxed"
+          style={{
+            color: 'var(--color-text)',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+          }}
+        >
+          {item.message}
+        </span>
+        <button
+          onClick={dismiss}
+          className="flex-shrink-0 p-0.5 rounded transition-all duration-150 hover:bg-[var(--color-hover)]"
+          style={{
+            background: 'none',
+            border: 'none',
+            cursor: 'pointer',
+            color: 'var(--color-text-muted)',
+            lineHeight: 1,
+          }}
+        >
+          <X size={13} />
+        </button>
+      </div>
+
+      {/* 第二行：操作按钮 */}
+      {item.actions && item.actions.length > 0 && (
+        <div className="flex justify-end gap-1.5">
+          {item.actions.map((action, i) => (
+            <button
+              key={i}
+              type="button"
+              onClick={() => handleAction(action)}
+              className="px-3 py-1 text-[0.7rem] font-medium cursor-pointer transition-all rounded-md"
+              style={{
+                border: action.variant === 'ghost'
+                  ? '1px solid var(--color-border)'
+                  : '1px solid transparent',
+                backgroundColor: action.variant === 'ghost'
+                  ? 'transparent'
+                  : 'var(--color-accent)',
+                color: action.variant === 'ghost'
+                  ? 'var(--color-text-secondary)'
+                  : 'var(--color-text)',
+              }}
+              onMouseEnter={e => {
+                if (action.variant === 'ghost') {
+                  e.currentTarget.style.backgroundColor = 'var(--color-hover)'
+                } else {
+                  e.currentTarget.style.filter = 'brightness(1.1)'
+                }
+              }}
+              onMouseLeave={e => {
+                if (action.variant === 'ghost') {
+                  e.currentTarget.style.backgroundColor = 'transparent'
+                } else {
+                  e.currentTarget.style.filter = 'none'
+                }
+              }}
+            >
+              {action.i18nKey ? t(action.i18nKey) : action.label}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
 
 // ===== 公共 API =====
 
-function show(message: string, type: ToastType = 'info', duration = 4000) {
+function show(message: string, type: ToastType = 'info', duration = 4000, actions?: ToastAction[]) {
   ensureContainer()
-  const item: ToastItem = { id: ++_toastCounter, type, message, duration }
+  const item: ToastItem = { id: ++_toastCounter, type, message, duration, actions }
   // 等待下一帧确保容器已挂载
   requestAnimationFrame(() => _addToast?.(item))
 }
@@ -169,4 +249,18 @@ export const toast = {
   error:   (msg: string, duration = 5000) => show(msg, 'error', duration),
   warning: (msg: string, duration = 4500) => show(msg, 'warning', duration),
   info:    (msg: string, duration = 4000) => show(msg, 'info', duration),
+
+  /** 带操作按钮的增强通知（兼容原 ActionToast.show） */
+  show: (options: { type?: ToastType; message: string; actions?: ToastAction[]; duration?: number }) =>
+    show(options.message, options.type ?? 'info', options.duration ?? 8000, options.actions),
+
+  /** 工作流完成快捷方法（原 actionToast.workflowComplete） */
+  workflowComplete: (message: string, openAction?: () => void | Promise<void>) => {
+    const actions: ToastAction[] = []
+    if (openAction) {
+      actions.push({ label: 'Open', i18nKey: 'toast.openView', onClick: openAction })
+      actions.push({ label: 'Dismiss', i18nKey: 'toast.dismiss', variant: 'ghost' })
+    }
+    show(message, 'ai', openAction ? 10000 : 6000, actions)
+  },
 }

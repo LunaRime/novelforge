@@ -1,12 +1,10 @@
-import { useTranslation } from '../../hooks/useTranslation'
-
 /**
  * 通用菜单项按钮
- * 统一替换 AgentHeader.MoreMenuItem 和 ActivityBar.MenuAction
+ * 供下拉/右键菜单的条目渲染复用（ContextMenu 内部调用）
  */
 export interface MenuItemProps {
   label: string
-  onClick: () => void
+  onClick?: () => void
   icon?: React.ReactNode
   shortcut?: string
   disabled?: boolean
@@ -14,7 +12,6 @@ export interface MenuItemProps {
 }
 
 export function MenuItem({ label, onClick, icon, shortcut, disabled, danger }: MenuItemProps) {
-  const { t } = useTranslation()
   return (
     <button
       onClick={!disabled ? onClick : undefined}
@@ -26,7 +23,9 @@ export function MenuItem({ label, onClick, icon, shortcut, disabled, danger }: M
           : disabled
           ? 'var(--color-text-muted)'
           : 'var(--color-text)',
+        opacity: disabled ? 0.45 : 1,
         cursor: disabled ? 'not-allowed' : 'pointer',
+        backgroundColor: 'transparent',
       }}
       onMouseEnter={e => {
         if (!disabled) {
@@ -40,16 +39,21 @@ export function MenuItem({ label, onClick, icon, shortcut, disabled, danger }: M
       }}
     >
       {icon && (
-        <span style={{ color: danger ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>
+        <span
+          style={{
+            color: danger ? 'var(--color-error)' : 'var(--color-text-secondary)',
+            width: 14,
+            flexShrink: 0,
+            display: 'flex',
+            alignItems: 'center',
+          }}
+        >
           {icon}
         </span>
       )}
       <span className="flex-1">{label}</span>
       {shortcut && (
         <span className="text-[0.7rem] opacity-40 font-mono ml-2 flex-shrink-0">{shortcut}</span>
-      )}
-      {disabled && (
-        <span className="ml-auto text-[0.7rem] opacity-40">{t('menu.comingSoon')}</span>
       )}
     </button>
   )

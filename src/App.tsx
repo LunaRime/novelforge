@@ -24,7 +24,7 @@ import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
 import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
-import { actionToast } from './components/ui/ActionToast'
+import { toast } from './components/ui/Toast'
 import { globalEventBus } from './shared/event-bus'
 import UpdateNotification from './components/UpdateNotification'
 import { loadCustomPrompts } from './services/prompt-templates'
@@ -102,7 +102,7 @@ export default function App() {
       const latest = history.find(r => r.status === 'completed')
       if (!latest) return
       const shortTitle = latest.title.replace(/^[^\s]+\s/, '')
-      actionToast.workflowComplete(
+      toast.workflowComplete(
         `✅ 「${shortTitle}」${t('agent.taskComplete')}`,
         () => useLayoutStore.getState().openRightPanel('ai-output')
       )
