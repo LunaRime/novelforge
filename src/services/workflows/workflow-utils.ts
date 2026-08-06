@@ -92,9 +92,10 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
   }
 
   // 备用：如果标准分隔符没找到，尝试找第一个同时包含 | 和 --- 的行
+  // （约束为"仅含分隔符字符"——数据行描述里含 "---" 不会被误判成分隔行，历史事故）
   if (separatorIdx < 0) {
     for (let i = 1; i < lines.length; i++) {
-      if (lines[i].includes('|') && lines[i].includes('---')) {
+      if (/^\s*\|?[\s\-:|]+\|?\s*$/.test(lines[i]) && lines[i].includes('---')) {
         separatorIdx = i
         break
       }
@@ -189,15 +190,18 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
   return rows
 }
 
-/** 分割表格行为 cell 数组 */
+/** 分割表格行为 cell 数组（按非转义 | 分割；\| 转义竖线留在单元格内再还原） */
 function splitTableRow(line: string): string[] {
   // 去掉首尾的 pipe 和空白
   let trimmed = line.trim()
   if (trimmed.startsWith('|')) trimmed = trimmed.slice(1)
   if (trimmed.endsWith('|')) trimmed = trimmed.slice(0, -1)
 
-  // 按 | 分割（简单场景，不处理转义 |）
-  return trimmed.split('|').map(s => s.trim())
+  // 非转义 | 分割（LLM 常用 \| 转义单元格内竖线——裸分割会列错位静默错配）
+  return trimmed
+    .split(/(?<!\\)\|/)
+    .map(s => s.trim())
+    .map(s => s.replace(/\\\|/g, '|'))
 }
 
 // ===== 健壮 JSON 解析 =====
@@ -222,8 +226,8 @@ export function robustParseJSON(text: string, preferArray: boolean = false): unk
 
   let content = text
 
-  // 1. 移除 markdown 代码块
-  content = content.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+  // 1. 移除 markdown 代码块（大小写不敏感 + 容忍 ``` json 带空格；i 标志覆盖 ```JSON/```Json）
+  content = content.replace(/```[ \t]*(?:json)?[ \t]*/gi, '').trim()
 
   // 2. 找出 JSON 边界
   const firstBrace = content.indexOf('{')
@@ -344,8 +348,8 @@ export function extractAndRepairJSON(
   let repaired = false
 
   // ====== Layer 1: 提取 markdown 代码块 ======
-  // 支持 ```json ... ``` 和 ``` ... ``` 两种形式
-  const codeBlockMatch = content.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
+  // 支持 ```json/```JSON/``` json/``` 等形式（i 标志 + [ \t]* 容忍大小写与空格变体）
+  const codeBlockMatch = content.match(/```[ \t]*(?:json)?[ \t]*\n?([\s\S]*?)```/i)
   if (codeBlockMatch) {
     content = codeBlockMatch[1].trim()
     repaired = true

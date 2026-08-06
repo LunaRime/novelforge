@@ -98,6 +98,8 @@ export class OpenAIProvider implements ILLMProvider {
   }
 
   async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
+    // 已输出内容标记：中途断流（网络错误）不得重试——重试会重复推送已输出前缀
+    let emittedAny = false
     await withStreamRetry(async () => {
       const url = buildOpenAIUrl(model.baseUrl, 'chat')
 
@@ -209,6 +211,7 @@ export class OpenAIProvider implements ILLMProvider {
 
             if (emitChunk) {
               fullText += emitChunk
+              emittedAny = true
               opts.onChunk(emitChunk)
             }
           } catch (parseError) {
@@ -240,7 +243,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       const cleanText = fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
       opts.onDone(cleanText, lastUsage)
-    }).catch((error) => {
+    }, { canRetry: () => !emittedAny }).catch((error) => {
       // withStreamRetry 重试耗尽后的最终错误处理
       if ((error as Error).name === 'AbortError') {
         opts.onError('已取消生成')

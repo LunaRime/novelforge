@@ -132,7 +132,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       }
 
       // L3: 全部解析策略失败 — 直接传递原始文本给 ReviewReport 的旧版解析器
-      if (!parsedResult!) {
+      if (!parsedResult) {
         callbacks.log(t('log.review.unparsable'))
         // 不包装成 JSON — 直接存原始文本，ReviewReport.parseLegacyReport() 会处理
         parsedResult = {

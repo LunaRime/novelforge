@@ -96,7 +96,10 @@ export function registerLLMController() {
           thinking: request.thinking,
         })
       },
-      { priority: request.priority ?? 10 },
+      // timeoutMs: 0 —— 与流式一致：长输出（预设 maxTokens 高达 131072）可超 120s；
+      // Promise.race 超时不取消底层 fn，超时后请求仍会真实调用 API 继续扣费（历史事故：
+      // 超时报错 + 底层继续执行 + 槽位提前释放 → 并发上限失效 + 双倍计费）
+      { priority: request.priority ?? 10, timeoutMs: 0 },
     ).catch((error) => ({
       success: false,
       content: '',
@@ -121,8 +124,13 @@ export function registerLLMController() {
     // 流式请求的生命周期由 llm:cancel → AbortController 管理（取消仍生效）
     llmConcurrencyController.execute(
       async () => {
-        // 检查请求是否已被取消
-        if (abortController.signal.aborted) return { skipped: true }
+        // 检查请求是否已被取消（排队期间被取消：必须补发错误事件——
+        // 渲染层监听器与 activeRequests 只在 onDone/onError 中清理，静默跳过会永久泄漏）
+        if (abortController.signal.aborted) {
+          win?.webContents.send('llm:stream-error', { requestId, error: t('error.requestCancelled') })
+          activeStreams.delete(requestId)
+          return { skipped: true }
+        }
 
         return new Promise<void>((resolve, reject) => {
           provider.generateStream(model, request.messages, {
@@ -152,7 +160,9 @@ export function registerLLMController() {
       },
       { priority: request.priority ?? 10, timeoutMs: 0 },
     ).catch((error) => {
-      if (error.message !== '请求已取消') {
+      // 用 error.name 判断取消（此前依赖 locale 文案 '请求已取消' 字符串比较，
+      // en-US/ru-RU 语言下失效且是死分支——取消路径实际已被 skipped 分支/onError 处理）
+      if (!(error instanceof Error && error.name === 'AbortError')) {
         win?.webContents.send('llm:stream-error', { requestId, error: safeErrorMessage(error) })
         activeStreams.delete(requestId)
       }
