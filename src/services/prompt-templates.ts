@@ -87,12 +87,20 @@ export const BUILTIN_PROMPTS: PromptTemplate[] = BASE_PROMPTS.map(p => {
 /**
  * 按当前语言解析模板（返回副本，不污染 BUILTIN_PROMPTS 内存对象）
  * 回退链：{lang} → en-US → 中文原文（content / systemSuffix / systemRole 各自独立回退）
+ *
+ * ⚠️ zh-CN 特例：**跳过 en-US 回退**，直接回退中文原文——中文是模板原文语言
+ * （content 恒为中文），回退到 en-US 会让中文用户看到英文模板。
+ * 历史 bug：19 个模板全有 en-US 变体 → zh-CN 无变体时恒取 en-US → 设置页
+ * 「提示词模板」显示混合语言（自定义过的模板中文、内置模板英文）。
  */
 export function localizeTemplate(template: PromptTemplate, locale?: SupportedLocale): PromptTemplate {
   const lang = locale ?? getCurrentLocale()
-  const content = template.contentLocales?.[lang] ?? template.contentLocales?.['en-US']
-  const suffix = template.systemSuffixLocales?.[lang] ?? template.systemSuffixLocales?.['en-US']
-  const role = template.systemRoleLocales?.[lang] ?? template.systemRoleLocales?.['en-US']
+  const enFallback = lang === 'zh-CN' ? undefined : template.contentLocales?.['en-US']
+  const content = template.contentLocales?.[lang] ?? enFallback
+  const suffix = template.systemSuffixLocales?.[lang]
+    ?? (lang === 'zh-CN' ? undefined : template.systemSuffixLocales?.['en-US'])
+  const role = template.systemRoleLocales?.[lang]
+    ?? (lang === 'zh-CN' ? undefined : template.systemRoleLocales?.['en-US'])
   if (!content && !suffix && !role) return template
   return {
     ...template,
