@@ -34,8 +34,6 @@ interface LayoutState {
   settingsOpen: boolean
   /** 新建项目对话框是否打开 */
   newProjectOpen: boolean
-  /** 导出对话框是否打开 */
-  exportOpen: boolean
   /** 导入小说对话框是否打开 */
   importNovelOpen: boolean
   /** 章节创建对话框是否打开 */
@@ -67,8 +65,6 @@ interface LayoutState {
   closeSettings: () => void
   openNewProject: () => void
   closeNewProject: () => void
-  openExport: () => void
-  closeExport: () => void
   openImportNovel: () => void
   closeImportNovel: () => void
   openChapterCreation: (prefill?: ChapterCreationPrefill) => void
@@ -95,7 +91,6 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   // 全局弹窗默认关闭
   settingsOpen: false,
   newProjectOpen: false,
-  exportOpen: false,
   importNovelOpen: false,
   chapterCreationOpen: false,
   chapterCreationPrefill: null,
@@ -129,8 +124,6 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   openNewProject: () => set({ newProjectOpen: true }),
   closeNewProject: () => set({ newProjectOpen: false }),
-  openExport: () => set({ exportOpen: true }),
-  closeExport: () => set({ exportOpen: false }),
   openImportNovel: () => set({ importNovelOpen: true }),
   closeImportNovel: () => set({ importNovelOpen: false }),
   openChapterCreation: (prefill = null) => set({ chapterCreationOpen: true, chapterCreationPrefill: prefill }),
