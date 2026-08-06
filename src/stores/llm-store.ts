@@ -5,14 +5,6 @@ import { renderLog } from '../services/render-logger'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
-/** 并发状态快照 */
-export interface ConcurrencyStatus {
-  activeCount: number
-  queueLength: number
-  maxConcurrent: number
-  maxQueueSize: number
-}
-
 /** 流式生成的回调 */
 interface StreamCallbacks {
   onChunk?: (chunk: string) => void
@@ -31,8 +23,6 @@ interface LLMState {
   activeRequests: Map<string, { status: 'running' | 'done' | 'error'; text: string }>
   /** 是否已加载模型配置 */
   loaded: boolean
-  /** 并发状态 */
-  concurrencyStatus: ConcurrencyStatus
   /** 模型路由器 */
   modelRouter: ModelRouter | null
   /** 模型路由配置 */
@@ -68,8 +58,6 @@ interface LLMState {
   cancelGeneration: (requestId: string) => Promise<void>
   /** 测试模型连接 */
   testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
-  /** 刷新并发状态 */
-  refreshConcurrencyStatus: () => Promise<void>
   /** 根据 purpose 获取最优模型 ID */
   getModelForPurpose: (purpose: CallPurpose) => string | null
   /** 更新模型路由配置 */
@@ -82,7 +70,6 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   defaultEmbeddingModelId: null,
   activeRequests: new Map(),
   loaded: false,
-  concurrencyStatus: { activeCount: 0, queueLength: 0, maxConcurrent: 3, maxQueueSize: 50 },
   modelRouter: null,
   modelRoutes: { ...DEFAULT_ROUTE_CONFIG },
 
@@ -119,10 +106,16 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   loadModels: async () => {
     if (!ipc.isElectron) return
-    const models = await ipc.invoke('llm:list-models')
-    const routeConfig = get().modelRoutes
-    const router = new ModelRouter(routeConfig, models)
-    set({ models, modelRouter: router, modelRoutes: router.getConfig(), loaded: true })
+    try {
+      const models = await ipc.invoke('llm:list-models')
+      const routeConfig = get().modelRoutes
+      const router = new ModelRouter(routeConfig, models)
+      set({ models, modelRouter: router, modelRoutes: router.getConfig(), loaded: true })
+    } catch (e) {
+      // 加载失败：置 loaded 终止调用方 useEffect 无限重试（此前失败后每次渲染重试 + 未捕获 rejection）
+      renderLog('error', 'LLM', t('log.render.modelListLoadFailed').replace('{err}', () => String(e)))
+      set({ loaded: true })
+    }
   },
 
   saveModel: async (model) => {
@@ -264,16 +257,6 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   testConnection: async (model) => {
     return ipc.invoke('llm:test-connection', model)
-  },
-
-  refreshConcurrencyStatus: async () => {
-    if (!ipc.isElectron) return
-    try {
-      const status = await ipc.invoke('llm:concurrency-status')
-      set({ concurrencyStatus: status })
-    } catch {
-      // IPC 不可用时静默失败
-    }
   },
 
   getModelForPurpose: (purpose) => {

@@ -2555,6 +2555,9 @@ export const UI_TEXTS_DATA = {
   // —— 模型（ModelSettings / SettingsModal）——
   'log.render.modelSaveSuccess': { 'zh-CN': '模型保存成功 {id}（{ms}ms）', 'en-US': 'Model saved: {id} ({ms}ms)', 'ru-RU': 'Модель сохранена: {id} ({ms}ms)' },
   'log.render.modelSaveFailed': { 'zh-CN': '模型保存失败 {id}: {error}', 'en-US': 'Failed to save model {id}: {error}', 'ru-RU': 'Не удалось сохранить модель {id}: {error}' },
+  'log.render.modelListLoadFailed': { 'zh-CN': '模型列表加载失败 {err}', 'en-US': 'Failed to load model list {err}', 'ru-RU': 'Не удалось загрузить список моделей {err}' },
+  'error.modelNameEmpty': { 'zh-CN': '模型名称不能为空', 'en-US': 'Model name is required', 'ru-RU': 'Имя модели не может быть пустым' },
+  'error.modelPurposesEmpty': { 'zh-CN': '模型至少需要一个用途（生成/嵌入）', 'en-US': 'Model needs at least one purpose (generation/embedding)', 'ru-RU': 'Модели нужна хотя бы одна роль (генерация/эмбеддинг)' },
   'log.render.defaultModelSaveFailed': { 'zh-CN': '默认模型写盘失败，重启后可能失效 {err}', 'en-US': 'Failed to persist default model; may not survive restart {err}', 'ru-RU': 'Не удалось сохранить модель по умолчанию; может не пережить перезапуск {err}' },
   'log.render.proxySaveSuccess': { 'zh-CN': '代理配置保存成功（{ms}ms）', 'en-US': 'Proxy config saved ({ms}ms)', 'ru-RU': 'Конфигурация прокси сохранена ({ms}ms)' },
   'log.render.proxySaveFailed': { 'zh-CN': '代理配置保存失败: {error}', 'en-US': 'Failed to save proxy config: {error}', 'ru-RU': 'Не удалось сохранить конфигурацию прокси: {error}' },
