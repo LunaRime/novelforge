@@ -2664,6 +2664,7 @@ export const UI_TEXTS_DATA = {
   'log.finalize.kbImported': { 'zh-CN': '✅ 正文章节已导入知识库（{count} 块）', 'en-US': '✅ Chapter imported to the knowledge base ({count} chunks)', 'ru-RU': '✅ Глава импортирована в базу знаний ({count} фрагментов)' },
   'log.finalize.notesDone': { 'zh-CN': '✅ 本章剧情要点提取完成（已写入蓝图）', 'en-US': '✅ Chapter key points extracted (saved to the blueprint)', 'ru-RU': '✅ Ключевые моменты главы извлечены (сохранены в блюпринт)' },
   'log.finalize.charStateJsonFallback': { 'zh-CN': '✅ 角色状态解析成功 (JSON 回退)', 'en-US': '✅ Character state parsed (JSON fallback)', 'ru-RU': '✅ Состояния персонажей разобраны (запасной JSON)' },
+  'log.finalize.charStateParseFailed': { 'zh-CN': '⚠️ 角色状态解析失败（Markdown 表格与 JSON 均未识别），本次无角色更新', 'en-US': '⚠️ Character state parse failed (neither Markdown table nor JSON recognized), no updates this run', 'ru-RU': '⚠️ Не удалось разобрать состояния персонажей (ни таблица, ни JSON не распознаны), обновлений нет' },
   'log.finalize.charStateUpdated': { 'zh-CN': '更新角色状态: {name}', 'en-US': 'Updating character state: {name}', 'ru-RU': 'Обновление состояния персонажа: {name}' },
   'log.finalize.newChars': { 'zh-CN': '✅ 自动提取并登记 {count} 名新出场角色', 'en-US': '✅ {count} new characters extracted and registered', 'ru-RU': '✅ Извлечено и зарегистрировано персонажей: {count}' },
   'log.finalize.detectingRelations': { 'zh-CN': '正在检测角色间的关系变化...', 'en-US': 'Detecting relationship changes...', 'ru-RU': 'Обнаружение изменений связей...' },

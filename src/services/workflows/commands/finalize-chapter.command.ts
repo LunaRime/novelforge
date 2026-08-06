@@ -197,9 +197,14 @@ export function buildFinalizePostProcessSteps(
             newRows = parseMarkdownTable(content) || []
           }
         }
-        // 如果没有分段，尝试整体解析
+        // 如果没有分段，尝试整体解析——按角色名是否已存在分类：
+        //   历史事故：唯一一张 NEW 表被整体当 UPDATES → allChars.find 找不到 → continue
+        //   静默跳过，新角色全部丢失。回退时按存在性分流，不存在的名字进 newRows。
         if (updateRows.length === 0 && newRows.length === 0) {
-          updateRows = parseMarkdownTable(cardsResult) || []
+          const fallbackRows = parseMarkdownTable(cardsResult) || []
+          const existingNames = new Set(allChars.map(c => c.name))
+          updateRows = fallbackRows.filter(r => existingNames.has(r.name || ''))
+          newRows = fallbackRows.filter(r => !existingNames.has(r.name || '') && (r.name || ''))
         }
 
         // L2: JSON 回退（字段映射与 Markdown 表格一致：currentState + tags/motivation + NEW 详情）
@@ -239,6 +244,11 @@ export function buildFinalizePostProcessSteps(
           }
         }
 
+        // L1 + L2 均失败：记录可诊断日志（步骤以成功完成，但 0 更新——用户/开发者有线索）
+        if (updateRows.length === 0 && newRows.length === 0) {
+          callbacks.log(t('log.finalize.charStateParseFailed'))
+        }
+
         // LLM 输出归一化：tags → JSON 数组字符串（角色列表按 JSON.parse 消费）
         const normalizeTags = (value: string): string => {
           const tags = String(value ?? '')
@@ -271,7 +281,8 @@ export function buildFinalizePostProcessSteps(
                 physicalState: row.physicalState || (dbCharState.physicalState as string) || '',
                 mentalState: row.mentalState || (dbCharState.mentalState as string) || '',
                 keyItems: row.keyItems || (dbCharState.keyItems as string) || '',
-                recentEvents: row.recentEvents || '',
+                // COALESCE 与其余字段一致：LLM 该行为空时保留旧值（此前会清空已有 recentEvents）
+                recentEvents: row.recentEvents || (dbCharState.recentEvents as string) || '',
                 updatedAtChapter: chapterNumber,
               }
               // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"保留旧值
