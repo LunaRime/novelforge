@@ -9,6 +9,7 @@
  */
 
 import { t } from '../src/shared/locale'
+import { buildOpenAIUrl } from './llm/url-utils'
 
 // ===== Embedding API 调用 =====
 
@@ -18,7 +19,7 @@ export async function embedOpenAI(
   model: { baseUrl: string; apiKey: string; modelName?: string },
 ): Promise<number[][]> {
   const embeddingModel = model.modelName || 'text-embedding-3-small'
-  const url = model.baseUrl.replace(/\/$/, '') + '/embeddings'
+  const url = buildOpenAIUrl(model.baseUrl, 'embedding')
   const res = await fetch(url, {
     method: 'POST',
     headers: {

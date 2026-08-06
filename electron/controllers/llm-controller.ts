@@ -64,7 +64,23 @@ function applyProxyConfig() {
   } catch { /* 忽略 */ }
 }
 
+/** 启动时恢复持久化的并发配置（重启不丢；损坏值忽略回到默认） */
+function restoreConcurrencyConfig() {
+  try {
+    const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+    if (config.concurrency?.maxConcurrent && config.concurrency.maxQueueSize) {
+      llmConcurrencyController.updateConfig({
+        maxConcurrent: Math.max(1, Math.min(20, config.concurrency.maxConcurrent)),
+        maxQueueSize: Math.max(1, Math.min(500, config.concurrency.maxQueueSize)),
+      })
+      logger.info('LLM', t('log.llm.concurrencyRestored').replace('{max}', String(config.concurrency.maxConcurrent)).replace('{queue}', String(config.concurrency.maxQueueSize)))
+    }
+  } catch { /* 忽略 */ }
+}
+
 export function registerLLMController() {
+  restoreConcurrencyConfig()
+
   ipcMain.handle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
     return llmConcurrencyController.execute(
       async () => {
@@ -245,10 +261,44 @@ export function registerLLMController() {
 
   ipcMain.handle('llm:concurrency-config', async (_event, config: { maxConcurrent?: number; maxQueueSize?: number }) => {
     try {
-      llmConcurrencyController.updateConfig(config)
+      // IPC 层钳制（UI 已有 min 1，主进程独立校验防死锁排队：maxConcurrent<=0 时所有请求卡队列）
+      const next = {
+        maxConcurrent: config.maxConcurrent !== undefined ? Math.max(1, Math.min(20, config.maxConcurrent)) : undefined,
+        maxQueueSize: config.maxQueueSize !== undefined ? Math.max(1, Math.min(500, config.maxQueueSize)) : undefined,
+      }
+      llmConcurrencyController.updateConfig(next)
+      // 持久化到全局配置（重启恢复）
+      const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+      g.concurrency = {
+        maxConcurrent: llmConcurrencyController.getStatus().maxConcurrent,
+        maxQueueSize: llmConcurrencyController.getStatus().maxQueueSize,
+      }
+      writeJsonFile(GLOBAL_CONFIG_PATH, g)
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
     }
+  })
+
+  // ===== 模型路由配置（三层 elite/standard/budget，持久化到全局配置） =====
+
+  ipcMain.handle('llm:set-routes', async (_event, routes: { elite: string[]; standard: string[]; budget: string[] }) => {
+    try {
+      const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+      g.modelRoutes = {
+        elite: Array.isArray(routes.elite) ? routes.elite : [],
+        standard: Array.isArray(routes.standard) ? routes.standard : [],
+        budget: Array.isArray(routes.budget) ? routes.budget : [],
+      }
+      writeJsonFile(GLOBAL_CONFIG_PATH, g)
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
+  ipcMain.handle('llm:get-routes', async () => {
+    const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+    return g.modelRoutes ?? { elite: [], standard: [], budget: [] }
   })
 }

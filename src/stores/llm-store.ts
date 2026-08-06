@@ -87,6 +87,13 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   init: async () => {
     if (get().loaded) return
+    if (ipc.isElectron) {
+      // 先恢复持久化的三层路由配置——router 构造时用持久化配置，autoDetectTiers 只补新模型
+      try {
+        const saved = await ipc.invoke('llm:get-routes')
+        if (saved) set({ modelRoutes: saved })
+      } catch { /* 静默：无持久化配置时走自动分配 */ }
+    }
     // 从 ~/.vela/ 加载模型列表和默认模型 ID
     await get().loadModels()
     if (ipc.isElectron) {
@@ -128,11 +135,26 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   deleteModel: async (modelId) => {
     const result = await ipc.invoke('llm:delete-model', modelId)
     if (result.success) {
+      // 从三层路由中清理该模型引用（防 ModelRoutingSection 读到已删除 id 显示空白）
+      const routes = get().modelRoutes
+      const cleaned: ModelRouteConfig = {
+        elite: routes.elite.filter(id => id !== modelId),
+        standard: routes.standard.filter(id => id !== modelId),
+        budget: routes.budget.filter(id => id !== modelId),
+      }
+      set({ modelRoutes: cleaned })
+      ipc.invoke('llm:set-routes', cleaned).catch(() => {})
       await get().loadModels()
-      // 如果删除的是默认生成模型，清空默认
+      // 删除默认生成模型：从剩余生成模型自动选替补（否则所有工作流立即报 noDefaultModel）
       if (get().defaultModelId === modelId) {
-        set({ defaultModelId: null })
-        ipc.invoke('llm:set-default-model', null)
+        const fallback = get().models.find(m => !m.purposes?.includes('embedding'))
+        if (fallback) {
+          set({ defaultModelId: fallback.id })
+          ipc.invoke('llm:set-default-model', fallback.id)
+        } else {
+          set({ defaultModelId: null })
+          ipc.invoke('llm:set-default-model', null)
+        }
       }
       // 如果删除的是默认向量模型，清空默认
       if (get().defaultEmbeddingModelId === modelId) {
@@ -250,7 +272,10 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     const { modelRouter } = get()
     if (modelRouter) {
       modelRouter.updateConfig(config)
-      set({ modelRoutes: modelRouter.getConfig() })
+      const routes = modelRouter.getConfig()
+      set({ modelRoutes: routes })
+      // 持久化到全局配置（重启恢复，此前仅内存导致手动路由重启丢失）
+      ipc.invoke('llm:set-routes', routes).catch(() => {})
     }
   },
 }))
