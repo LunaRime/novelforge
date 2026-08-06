@@ -4,7 +4,7 @@
  * 替代原生 select 弹层（无法定制样式）：
  * - 弹出面板：圆角 12px / 面板底色 / 边框 / 大阴影 / zoom+fade 入场动画
  * - 选项：hover 高亮、选中 accent 背景 + 对勾指示器
- * - 触发器：与 NativeSelect 视觉一致（h-8 / rounded-lg / 自定义箭头）
+ * - 触发器：自定义下拉（h-8 / rounded-lg / 自定义箭头）
  */
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'

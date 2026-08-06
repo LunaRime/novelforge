@@ -22,7 +22,6 @@ import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
-import ExportDialog from './components/dialogs/ExportDialog'
 import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { actionToast } from './components/ui/ActionToast'
@@ -40,7 +39,7 @@ export default function App() {
   // 合并 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
   const {
     sidebarOpen, aiPanelOpen, rightView, settingsOpen, closeSettings,
-    newProjectOpen, closeNewProject, exportOpen, closeExport,
+    newProjectOpen, closeNewProject,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
     focusMode, bottomPanelOpen,
@@ -52,8 +51,6 @@ export default function App() {
     closeSettings: s.closeSettings,
     newProjectOpen: s.newProjectOpen,
     closeNewProject: s.closeNewProject,
-    exportOpen: s.exportOpen,
-    closeExport: s.closeExport,
     importNovelOpen: s.importNovelOpen,
     closeImportNovel: s.closeImportNovel,
     chapterCreationOpen: s.chapterCreationOpen,
@@ -178,8 +175,8 @@ export default function App() {
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* 左侧工具窗口栏（全高，包括底部面板区域） */}
-        <LeftToolWindowBar />
+        {/* 左侧工具窗口栏（全高，包括底部面板区域）— 专注模式下隐藏（与其余面板一致） */}
+        {!focusMode && <LeftToolWindowBar />}
 
         {/* 纵向 PanelGroup：上层主区域 + 下层底部面板 */}
         <PanelGroup orientation="vertical" className="flex-1">
@@ -261,12 +258,6 @@ export default function App() {
           isOpen={chapterCreationOpen}
           prefill={chapterCreationPrefill}
           onClose={closeChapterCreation}
-        />
-      </ErrorBoundary>
-      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
-        <ExportDialog
-          isOpen={exportOpen}
-          onClose={closeExport}
         />
       </ErrorBoundary>
       {/* 全屏设置弹窗 */}

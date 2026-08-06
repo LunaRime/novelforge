@@ -8,6 +8,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useUsageStore } from '../../stores/usage-store'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { confirm } from '../ui/Confirm'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
@@ -52,10 +53,10 @@ export default function StatusBar() {
 
         <StatusBarDivider />
         <StatusBarSegment
-          title={t('statusbar.sponsor')}
+          title={t('settings.title')}
           onClick={openSettings}
         >
-          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('statusbar.sponsor')}</span>
+          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.title')}</span>
         </StatusBarSegment>
 
       </div>
@@ -223,7 +224,7 @@ function TemperatureControl({
  * - 多任务时显示 "N个任务运行中"
  * - 完成后短暂显示 ✅ 然后淡出
  */
-/** 会话费用显示 */
+/** 会话费用显示（点击重置需二次确认，避免误触清零统计） */
 function SessionCost() {
   const cost = useUsageStore(s => s.getFormattedCost())
   const cacheHits = useUsageStore(s => s.cacheHits)
@@ -231,12 +232,21 @@ function SessionCost() {
 
   if (sessionCost < 0.001) return null
 
+  const handleReset = async () => {
+    const ok = await confirm(t('statusbar.resetCostConfirm'), {
+      title: t('statusbar.resetCostTitle'),
+      confirmText: t('action.reset'),
+      danger: true,
+    })
+    if (ok) useUsageStore.getState().resetSession()
+  }
+
   return (
     <div
-      className="flex items-center gap-1 px-2 h-full text-xs cursor-default"
+      className="flex items-center gap-1 px-2 h-full text-xs cursor-pointer"
       style={{ color: 'var(--color-statusbar-text)' }}
       title={`${t('statusbar.cacheHit')}: ${cacheHits} ${t('statusbar.calls')} | ${t('statusbar.clickReset')}`}
-      onClick={() => useUsageStore.getState().resetSession()}
+      onClick={handleReset}
     >
       <DollarSign size={10} className="opacity-60" />
       <span className="opacity-80 tabular-nums">{cost}</span>

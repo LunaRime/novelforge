@@ -159,7 +159,8 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       if (ts.some(tab => tab.type === 'character')) return
       openFile({ id: 'character-editor', name: t('charList.title'), type: 'character' })
     } else {
-      ts.filter(tab => tab.type === 'character').forEach(tab => closeTab(tab.id))
+      // dirty 的角色 Tab 保留（有未保存修改，避免静默丢内容），仅关闭干净 Tab
+      ts.filter(tab => tab.type === 'character' && !tab.dirty).forEach(tab => closeTab(tab.id))
     }
   }, [sidebarView, t])
 
