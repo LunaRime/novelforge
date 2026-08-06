@@ -44,7 +44,11 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
     try {
       const { ipc } = await import('../../../services/ipc-client')
       const paths = await ipc.invoke('dialog:select-files')
-      if (paths && paths.length > 0) onSelect(paths[0])
+      if (paths && paths.length > 0) {
+        // 登记授权：fs:read-external-file 仅放行用户显式选择过的路径（安全边界）
+        await ipc.invoke('fs:grant-external-file', paths[0]).catch(() => {})
+        onSelect(paths[0])
+      }
     } catch { /* 对话框失败不处理 */ }
   }, [onSelect])
 
