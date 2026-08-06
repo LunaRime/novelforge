@@ -11,6 +11,21 @@
 import { t } from '../src/shared/locale'
 import { buildOpenAIUrl } from './llm/url-utils'
 
+/** ⚠️ P2 修复：查询向量 LRU 缓存——RAG 是每次章节写作/对话的必经路径，同一查询重复向量化
+ *  （此前每次检索都发一次 Embedding API 请求，无缓存） */
+const queryCache = new Map<string, { vector: number[]; ts: number }>()
+const QUERY_CACHE_MAX = 500
+const QUERY_CACHE_TTL = 30 * 60 * 1000 // 30 分钟
+
+/** Embedding API fetch 超时（此前无 AbortController——API 挂起时章节写作被无限阻塞） */
+const EMBEDDING_TIMEOUT_MS = 10_000
+
+function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), EMBEDDING_TIMEOUT_MS)
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+}
+
 // ===== Embedding API 调用 =====
 
 /** OpenAI Embedding API */
@@ -20,7 +35,7 @@ export async function embedOpenAI(
 ): Promise<number[][]> {
   const embeddingModel = model.modelName || 'text-embedding-3-small'
   const url = buildOpenAIUrl(model.baseUrl, 'embedding')
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -63,7 +78,7 @@ export async function embedGemini(
     taskType: 'RETRIEVAL_DOCUMENT',
   }))
 
-  const res = await fetch(url, {
+  const res = await fetchWithTimeout(url, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -84,7 +99,7 @@ export async function embedGemini(
   return data.embeddings.map((e) => e.values)
 }
 
-/** 统一的 Embedding 调用接口 */
+/** 统一的 Embedding 调用接口（单文本查询走 LRU 缓存——RAG 热路径） */
 export async function generateEmbeddings(
   texts: string[],
   protocol: 'openai' | 'gemini',
@@ -93,16 +108,53 @@ export async function generateEmbeddings(
   // 空文本处理
   if (texts.length === 0) return []
 
+  // ⚠️ P2 修复：单文本（查询向量）走缓存——同一查询重复向量化此前每次都发 API 请求
+  if (texts.length === 1) {
+    const key = texts[0]
+    const hit = queryCache.get(key)
+    if (hit && Date.now() - hit.ts < QUERY_CACHE_TTL) {
+      return [hit.vector]
+    }
+    const result = await doGenerate(texts, protocol, model)
+    if (result[0] && result[0].length > 0) {
+      queryCache.set(key, { vector: result[0], ts: Date.now() })
+      if (queryCache.size > QUERY_CACHE_MAX) {
+        const oldest = queryCache.keys().next().value
+        if (oldest !== undefined) queryCache.delete(oldest)
+      }
+    }
+    return result
+  }
+
+  return doGenerate(texts, protocol, model)
+}
+
+/** 实际批量生成（批量限制 + 分批循环 + 指数退避重试） */
+async function doGenerate(
+  texts: string[],
+  protocol: 'openai' | 'gemini',
+  model: { baseUrl: string; apiKey: string; modelName?: string },
+): Promise<number[][]> {
   // 批量限制：每次最多 50 条
   const batchSize = protocol === 'gemini' ? 100 : 50
   const results: number[][] = []
 
   for (let i = 0; i < texts.length; i += batchSize) {
     const batch = texts.slice(i, i + batchSize)
-    const embeddings = protocol === 'gemini'
-      ? await embedGemini(batch, model)
-      : await embedOpenAI(batch, model)
-    results.push(...embeddings)
+    // ⚠️ P2 修复：批次级指数退避重试（此前一批失败整体抛出——10 万 chunk 第 30 批失败
+    //    → 前 29 批作废，整次导入降级到 LLM 向量化，成本 ×100）
+    let embeddings: number[][] | null = null
+    for (let attempt = 0; attempt < 3 && !embeddings; attempt++) {
+      try {
+        embeddings = protocol === 'gemini'
+          ? await embedGemini(batch, model)
+          : await embedOpenAI(batch, model)
+      } catch (e) {
+        if (attempt >= 2) throw e
+        await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)))
+      }
+    }
+    results.push(...(embeddings ?? []))
   }
 
   return results

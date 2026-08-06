@@ -464,6 +464,10 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at);
     CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
     CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
+    -- ⚠️ P1 修复：活动聚合/统计热点索引（此前全表扫描）
+    CREATE INDEX IF NOT EXISTS idx_drafts_source_created ON drafts(source, created_at);
+    CREATE INDEX IF NOT EXISTS idx_revisions_created ON revisions(created_at);
+    CREATE INDEX IF NOT EXISTS idx_llm_calls_success ON llm_calls(success, created_at);
   `)
 
   // ===== 旧表迁移 =====
@@ -847,5 +851,18 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.v10PreferencesCreated'))
   } catch (e) {
     logger.warn('DB', t('log.db.v10PrefsMigIncomplete').replace('{err}', String(e)))
+  }
+
+  // 14. v11: 活动聚合/统计热点索引（旧库升级；此前全表扫描）
+  //    非关键 — 索引缺失仅性能问题
+  try {
+    db.exec(`
+      CREATE INDEX IF NOT EXISTS idx_drafts_source_created ON drafts(source, created_at);
+      CREATE INDEX IF NOT EXISTS idx_revisions_created ON revisions(created_at);
+      CREATE INDEX IF NOT EXISTS idx_llm_calls_success ON llm_calls(success, created_at);
+    `)
+    logger.info('DB', t('log.db.v11HotIndexes'))
+  } catch (e) {
+    logger.warn('DB', t('log.db.v11HotIndexesFailed').replace('{err}', String(e)))
   }
 }

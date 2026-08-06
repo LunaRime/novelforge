@@ -665,12 +665,12 @@ export async function updateChunkVectors(
     const hasVectorCol = schema.fields.some(f => f.name === 'vector')
 
     if (hasVectorCol) {
-      // 如果已有 vector 列，直接 update
+      // 如果已有 vector 列，直接 update（⚠️ 统一 L2 归一化——与 addChunks 度量一致）
       for (const update of updates) {
         try {
           await table.update({
             where: `id = '${update.id}'`,
-            values: { vector: update.vector },
+            values: { vector: normalizeVector(update.vector) },
           })
         } catch (e) {
           logger.warn('VectorStore', t('log.vectorStore.updateVectorFailed').replace('{id}', update.id).replace('{err}', String(e)))
@@ -684,12 +684,14 @@ export async function updateChunkVectors(
       const allRecords = await table.query().toArray()
       const newData = allRecords.map((r: { [key: string]: unknown; id: string }) => {
         const up = updates.find(u => u.id === r.id)
-        if (up) return { ...r, vector: up.vector }
+        if (up) return { ...r, vector: normalizeVector(up.vector) }
         return r
       })
 
       // 使用显式 Schema 确保 vector 列正确持久化
-      const VECTOR_DIM = 2048
+      // ⚠️ P1 修复：维度从实际向量探测——此前硬编码 2048，而 LLM 向量化默认 256 维
+      //    → 纯 FTS 库的 LLM 回填写入 FixedSizeList(2048) 必败，回填整体失效
+      const VECTOR_DIM = updates[0]?.vector?.length ?? 2048
       const vectorField = new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true)
       const schema = new ArrowSchema([
         new Field('id', new Utf8()),
