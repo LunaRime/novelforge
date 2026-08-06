@@ -292,10 +292,28 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
           relationships: (card.relationships as string) || '',
           arc: (card.arc as string) || '',
           notes: (card.notes as string) || '',
-          tier: 2,
-          tags: '',
-          appearChapters: '[]',
+          // tier 按 role 推导（P2 修复：此前恒 2）；tags/appearChapters/currentState 从 LLM 输出回填
+          // （此前恒 ''/'[]'/缺失 → 对已有项目重跑导入会抹掉 v7 元数据与动态状态）
+          tier: role === 'protagonist' || role === 'antagonist' ? 1 : (role === 'minor' ? 3 : 2),
+          tags: (card.tags as string) || '',
+          appearChapters: (card.appearChapters as string) || '[]',
           relations: '[]',
+          ...(card.currentState && typeof card.currentState === 'object'
+            ? (() => {
+                const st = card.currentState as Record<string, unknown>
+                return {
+                  currentState: {
+                    location: String(st.location ?? ''),
+                    powerLevel: String(st.powerLevel ?? ''),
+                    physicalState: String(st.physicalState ?? ''),
+                    mentalState: String(st.mentalState ?? ''),
+                    keyItems: String(st.keyItems ?? ''),
+                    recentEvents: String(st.recentEvents ?? ''),
+                    updatedAtChapter: Number(st.updatedAtChapter ?? 0) || 0,
+                  },
+                }
+              })()
+            : {}),
         })
         createdCount++
       }
