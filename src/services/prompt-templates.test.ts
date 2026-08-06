@@ -121,6 +121,17 @@ describe('localizeTemplate（Issue #18 多语言模板）', () => {
     expect(premise.content).not.toBe(localized.content)
   })
 
+  it('zh-CN → 回退中文原文（跳过 en-US，中文是模板原文语言）', async () => {
+    const mod = await loadModule()
+    const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
+    const localized = mod.localizeTemplate(premise, 'zh-CN')
+    // 返回中文原文而非英文变体（历史 bug：19 个模板全有 en-US → zh-CN 用户看到英文模板，
+    // 设置页混合语言）。注意中文原文可能自带术语（如「故事前提（Story Premise）」），
+    // 断言用英文变体的特征句区分
+    expect(localized.content).toContain('请提炼本书的故事前提')
+    expect(localized.content).not.toContain('You are a top-tier web novel planning expert')
+  })
+
   it('ru-RU（无俄语变体）→ 回退 en-US', async () => {
     const mod = await loadModule()
     const premise = mod.BUILTIN_PROMPTS.find(p => p.key === 'premise')!
