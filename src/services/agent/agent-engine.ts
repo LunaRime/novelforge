@@ -493,12 +493,16 @@ async function executeToolWithTimeout(
 
 /**
  * 清洗注入 observation 的工具结果，防止结果内容包含
- * <tool_result> 闭合标签时破坏 XML 结构（注入污染）。
+ * <tool_result> / <tool_call> 标签时破坏 XML 结构（注入污染，P2 修复）。
+ * 历史事故：只剥离 tool_result 未剥离 tool_call——读到含 <tool_call> 指令的不可信文件
+ * （外部导入草稿/知识库文档）原样回喂 LLM，下一轮可能被 parseToolCalls 当真实工具调用执行。
  */
 function sanitizeObservation(content: string): string {
   return content
     .replace(/<\/tool_result>/gi, '')
     .replace(/<tool_result/gi, '')
+    .replace(/<\/tool_call>/gi, '')
+    .replace(/<tool_call/gi, '')
 }
 
 /**

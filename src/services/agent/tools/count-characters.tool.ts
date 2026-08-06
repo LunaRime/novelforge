@@ -32,7 +32,12 @@ export const countCharactersTool = buildAgentTool({
   requiresConfirmation: false,
   execute: async (args) => {
     const textArg = args.text as string | undefined
-    const chapterNum = args.chapter_number as number | undefined
+    // 数值归一化（LLM 可能传字符串 "10"——此前透传 IPC/SQLite，亲和性偶发可用）
+    const chapterNumRaw = args.chapter_number
+    const chapterNum = chapterNumRaw === undefined ? undefined : Number(chapterNumRaw)
+    if (chapterNum !== undefined && !Number.isFinite(chapterNum)) {
+      return { success: false, content: '', error: t('tool.invalidChapterNumber').replace('{value}', String(chapterNumRaw)) }
+    }
 
     // 直接统计传入文本
     if (textArg !== undefined && textArg.trim() !== '') {

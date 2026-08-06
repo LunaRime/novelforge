@@ -34,7 +34,12 @@ export const readDraftsTool = buildAgentTool({
       return { success: false, content: '', error: t('error.noProject') }
     }
 
-    const chapterNum = args.chapter_number as number
+    // 数值归一化（LLM 可能传字符串 "10"——此前透传 SQLite）
+    const chapterNumRaw = args.chapter_number
+    const chapterNum = Number(chapterNumRaw)
+    if (!Number.isFinite(chapterNum)) {
+      return { success: false, content: '', error: t('tool.invalidChapterNumber').replace('{value}', String(chapterNumRaw)) }
+    }
     const draftType = (args.draft_type as string) ?? 'latest'
 
     try {

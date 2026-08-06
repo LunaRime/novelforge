@@ -169,9 +169,16 @@ class SkillRegistryImpl {
     toolRegistry.unregisterBySource('skill')
 
     for (const skill of this.listAll()) {
+      // allowedTools 白名单提示：SKILL.md frontmatter 声明的工具约束注入描述
+      // （此前解析后从未执行——LLM 加载技能后仍可调全部工具；至少以提示约束收窄）
+      const allowedHint = skill.metadata.allowedTools?.length
+        ? ` — ${t('skill.allowedToolsHint')}: ${skill.metadata.allowedTools.join(', ')}`
+        : ''
       const agentTool: AgentTool = {
         name: `skill__${skill.metadata.name}`,
-        description: skill.metadata.description + (skill.metadata.whenToUse ? ` — ${skill.metadata.whenToUse}` : ''),
+        description: skill.metadata.description
+          + (skill.metadata.whenToUse ? ` — ${skill.metadata.whenToUse}` : '')
+          + allowedHint,
         source: 'skill',
         inputSchema: {
           type: 'object',

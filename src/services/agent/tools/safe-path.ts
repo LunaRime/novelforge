@@ -60,7 +60,8 @@ export function validatePath(
 
   const result = safePath(projectRoot, relativePath)
   if (result === null) {
-    return { valid: false, error: `路径越界：「${relativePath}」超出了项目目录范围。只能访问项目内的文件。` }
+    // i18n（此前硬编码中文，切 en/ru 后 LLM 收到中文错误而工具描述是英文，诊断一致性受损）
+    return { valid: false, error: t('error.pathEscape').replace('{path}', relativePath) }
   }
 
   return { valid: true, fullPath: result }

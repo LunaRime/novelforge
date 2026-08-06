@@ -33,8 +33,15 @@ export const readProjectStateTool = buildAgentTool({
       return { success: false, content: '', error: t('error.noProject') }
     }
 
-    const includeConfig = (args.include_config as boolean) !== false
-    const includeSummary = (args.include_summary as boolean) !== false
+    // 布尔归一化：LLM 传字符串 "false" 时 !== false 判 true（P2 修复）
+    const toBool = (v: unknown, def: boolean): boolean => {
+      if (v === undefined) return def
+      if (typeof v === 'boolean') return v
+      if (typeof v === 'string') return v.toLowerCase() !== 'false' && v !== '0'
+      return Boolean(v)
+    }
+    const includeConfig = toBool(args.include_config, true)
+    const includeSummary = toBool(args.include_summary, true)
 
     const parts: string[] = [t('tool.readStateHeader').replace('{name}', project.name)]
 
