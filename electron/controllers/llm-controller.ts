@@ -185,6 +185,15 @@ export function registerLLMController() {
 
   ipcMain.handle('llm:save-model', async (_event, model: ModelProfile) => {
     try {
+      // 业务校验（P3 修复）：
+      // - modelName 空 → 运行时 API 必报错（ollama 空名等）
+      // - purposes 空 → 模型在 UI 所有分类中不可见的孤儿，无法编辑/删除
+      if (!model.modelName?.trim()) {
+        return { success: false, error: t('error.modelNameEmpty') }
+      }
+      if (!model.purposes || model.purposes.length === 0) {
+        return { success: false, error: t('error.modelPurposesEmpty') }
+      }
       const models = loadModelConfigs()
       const idx = models.findIndex((m) => m.id === model.id)
       if (idx >= 0) models[idx] = model

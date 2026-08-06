@@ -62,29 +62,6 @@ export function structureForCache(
   return messages
 }
 
-/**
- * 生成缓存键哈希（用于追踪和调试）
- */
-export function generateCacheKey(
-  scope: CacheScope,
-  modelId: string,
-  staticContextHash: string,
-): string {
-  return `${scope}:${modelId}:${staticContextHash}`
-}
-
-/**
- * 计算静态上下文的简短哈希（用于缓存键）
- */
-export function hashStaticContext(context: string): string {
-  let hash = 0
-  for (let i = 0; i < context.length; i++) {
-    hash = ((hash << 5) - hash) + context.charCodeAt(i)
-    hash |= 0
-  }
-  return hash.toString(36)
-}
-
 // ===== 费用追踪 =====
 
 /**

@@ -217,10 +217,14 @@ function LLMSection({
   // 预设直接使用内置常量，无需 IPC 加载
   const presets = BUILTIN_PRESETS
 
-  // 按用途过滤
-  const filtered = models.filter((m) =>
-    m.purposes?.some((p) => purposes.includes(p as ModelProfile['purposes'][number]))
-  )
+  // 按用途过滤——遗留模型（无 purposes 字段的旧配置）按生成模型兜底显示，
+  // 否则成孤儿无法编辑/删除/设默认（P3 修复）
+  const filtered = models.filter((m) => {
+    if (!m.purposes || m.purposes.length === 0) {
+      return !purposes.includes('embedding')
+    }
+    return m.purposes.some((p) => purposes.includes(p as ModelProfile['purposes'][number]))
+  })
 
   /** 创建新模型，使用预设中 openai 的默认属性 */
   const handleAdd = () => {
@@ -619,6 +623,7 @@ function ModelForm({
    * 并将模型名重置为该服务商的第一个预设模型
    */
   const handleProviderChange = (provider: ModelProfile['provider']) => {
+    const oldPreset = presetMap.get(model.provider)
     const p = presetMap.get(provider)
     const firstModel = isEmbedding ? null : (p?.models[0] ?? null)
     const defaultModelName = isEmbedding
@@ -629,9 +634,16 @@ function ModelForm({
       ...model,
       provider,
       protocol: (p?.protocol ?? 'openai') as 'openai' | 'gemini',
-      baseUrl: p?.baseUrl ?? '',
-      modelName: defaultModelName,
-      maxTokens: firstModel?.maxTokens ?? 4096,
+      // 保护已填配置（误触 provider 不再清空，P3 修复）：
+      // - baseUrl 是用户自定义值（≠ 旧 provider 默认）时保留
+      // - modelName 处于自定义输入模式时保留
+      baseUrl: (model.baseUrl && oldPreset && model.baseUrl !== oldPreset.baseUrl)
+        ? model.baseUrl
+        : (p?.baseUrl ?? ''),
+      modelName: (customModelName && model.modelName)
+        ? model.modelName
+        : defaultModelName,
+      maxTokens: firstModel?.maxTokens ?? model.maxTokens,
     })
   }
 
