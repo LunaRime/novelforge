@@ -148,7 +148,7 @@ export class BlueprintRepository {
         if (!db) throw new Error(t('error.repoBlueprintCannotUpdateSort').replace('{repo}', '[BlueprintRepository]'))
 
         const stmt = db.prepare(
-            'UPDATE blueprints SET sort_order = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+            'UPDATE blueprints SET sort_order = ?, updated_at = unixepoch() * 1000 WHERE chapter_number = ?'
         )
 
         const tx = db.transaction(() => {
@@ -165,7 +165,7 @@ export class BlueprintRepository {
         if (!db) throw new Error(t('error.repoBlueprintCannotUpdatePriority').replace('{repo}', '[BlueprintRepository]'))
 
         db.prepare(
-            'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+            'UPDATE blueprints SET priority = ?, updated_at = unixepoch() * 1000 WHERE chapter_number = ?'
         ).run(priority, chapterNumber)
     }
 
@@ -175,7 +175,7 @@ export class BlueprintRepository {
         if (!db) throw new Error(t('error.repoBlueprintCannotUpdatePriorityBatch').replace('{repo}', '[BlueprintRepository]'))
 
         const stmt = db.prepare(
-            'UPDATE blueprints SET priority = ?, updated_at = datetime(\'now\') WHERE chapter_number = ?'
+            'UPDATE blueprints SET priority = ?, updated_at = unixepoch() * 1000 WHERE chapter_number = ?'
         )
 
         const tx = db.transaction(() => {
