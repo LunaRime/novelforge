@@ -64,10 +64,10 @@ export default function DeveloperModeSection() {
         if (Object.values(parsed).every(v => typeof v === 'string')) {
           headers = parsed as Record<string, string>
         } else {
-          throw new Error('headers 值必须是字符串')
+          throw new Error(t('error.headersValueString'))
         }
       } else {
-        throw new Error('headers 需为 JSON 对象')
+        throw new Error(t('error.headersNotJsonObject'))
       }
     } catch {
       toast.error(t('dev.headersInvalid'))

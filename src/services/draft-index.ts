@@ -5,6 +5,7 @@
  * 保留原有函数名和数据接口结构，以便减少对 UI 层 (DraftEditor) 的破坏性修改。
  */
 import { ipc } from './ipc-client'
+import { t } from '../shared/locale'
 import { VELA } from './vela-protocol'
 import type { DraftStatus } from '../shared/draft-status'
 
@@ -295,5 +296,5 @@ export async function readDraftIndex() {
  * 该函数将在下一主版本中移除。
  */
 export function toDraftMeta(): never {
-  throw new Error('[toDraftMeta] 已废弃 — 请使用 ipc.invoke(\'db:draft-get-meta\', ...) 替代')
+  throw new Error(t('error.draftMetaDeprecated'))
 }

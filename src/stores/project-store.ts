@@ -24,7 +24,7 @@ function toPlainProjectData(p: ProjectData): ProjectData {
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return new Promise<T>((resolve, reject) => {
     const timer = setTimeout(() => {
-      reject(new Error(`[${label}] 超时 (${ms}ms)`))
+      reject(new Error(t('error.timeoutMs').replace('{label}', label).replace('{ms}', String(ms))))
     }, ms)
     promise.then(
       (v) => { clearTimeout(timer); resolve(v) },

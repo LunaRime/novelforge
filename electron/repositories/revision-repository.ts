@@ -5,6 +5,7 @@
  * 状态流转：pending → merged / discarded
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 import { ContentRepository } from './content-repository'
 
 /** 修稿元数据（不含正文） */
@@ -57,7 +58,7 @@ export class RevisionRepository {
         wordCount: number
     }): number {
         const db = getProjectDb()
-        if (!db) throw new Error('[RevisionRepository] 数据库未连接')
+        if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[RevisionRepository]'))
 
         const tx = db.transaction(() => {
             const contentId = ContentRepository.create(params.content)

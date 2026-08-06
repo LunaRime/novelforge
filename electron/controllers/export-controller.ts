@@ -144,7 +144,7 @@ interface ChapterExportMeta {
 
 async function getFinalizedChapters(chapterNumbers?: number[]): Promise<ChapterExportMeta[]> {
   const db = getProjectDb()
-  if (!db) throw new Error('未打开项目数据库')
+  if (!db) throw new Error(t('error.projectDbNotOpen'))
 
   const chapters: ChapterExportMeta[] = []
 

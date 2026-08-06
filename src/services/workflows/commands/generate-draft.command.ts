@@ -44,7 +44,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     const isFirstChapter = this.chapterInfo.chapterNumber === 1
     const templateKey = isFirstChapter ? 'first_chapter_draft' : 'next_chapter_draft'
     const template = getPromptTemplate(templateKey)
-    if (!template) throw new Error(`未找到模板: ${templateKey}`)
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', templateKey))
 
     // ==========================================
     // Prompt 构建——按「稳定前缀 → 可变后缀」排列

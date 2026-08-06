@@ -8,6 +8,8 @@
  * 4. 向量归一化
  */
 
+import { t } from '../../src/shared/locale'
+
 // ===== 相似度/距离计算 =====
 
 /**
@@ -16,7 +18,7 @@
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(`向量维度不匹配: ${a.length} vs ${b.length}`)
+    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
   }
 
   let dotProduct = 0
@@ -40,7 +42,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  */
 export function euclideanDistance(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(`向量维度不匹配: ${a.length} vs ${b.length}`)
+    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
   }
 
   let sum = 0
@@ -57,7 +59,7 @@ export function euclideanDistance(a: number[], b: number[]): number {
  */
 export function dotProduct(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(`向量维度不匹配: ${a.length} vs ${b.length}`)
+    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
   }
 
   let sum = 0

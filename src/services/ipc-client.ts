@@ -11,6 +11,7 @@ import type {
   InvokeChannel,
   EventChannel,
 } from '../shared/ipc-channels'
+import { t } from '../shared/locale'
 
 /** 从 preload 暴露的 velaAPI */
 interface VelaAPI {
@@ -30,7 +31,7 @@ function getAPI(): VelaAPI {
     // 浏览器模式下的降级处理（开发时直接浏览器打开的情况）
     console.warn('[NovelForge IPC] velaAPI 未注入，可能不在 Electron 环境中运行')
     return {
-      invoke: async () => { throw new Error('不在 Electron 环境中') },
+      invoke: async () => { throw new Error(t('error.notElectron')) },
       on: () => () => {},
       once: () => {},
       send: () => {},
@@ -48,7 +49,7 @@ const IPC_TIMEOUT_MS = 30000
 /** 超时错误 */
 class IPCTimeoutError extends Error {
   constructor(channel: string, timeoutMs: number) {
-    super(`IPC 调用超时 (${timeoutMs / 1000}s): ${channel}`)
+    super(t('error.ipcTimeout').replace('{s}', String(timeoutMs / 1000)).replace('{channel}', channel))
     this.name = 'IPCTimeoutError'
   }
 }

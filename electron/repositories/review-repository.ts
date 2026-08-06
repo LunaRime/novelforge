@@ -4,6 +4,7 @@
  * 审稿是对某版草稿的评审反馈报告。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 import { ContentRepository } from './content-repository'
 
 /** 审稿元数据 */
@@ -38,7 +39,7 @@ export class ReviewRepository {
         content: string
     }): number {
         const db = getProjectDb()
-        if (!db) throw new Error('[ReviewRepository] 数据库未连接')
+        if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[ReviewRepository]'))
 
         const tx = db.transaction(() => {
             const contentId = ContentRepository.create(params.content)

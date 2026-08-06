@@ -83,7 +83,7 @@ const DOCS_TABLE_NAME = 'documents'
  */
 function sanitizeFilterValue(value: string, context: string): string {
   if (!value || typeof value !== 'string') {
-    throw new Error(`VectorStore: ${context} 过滤值无效`)
+    throw new Error(t('error.vectorFilterInvalid').replace('{context}', context))
   }
   // 移除可能导致注入的字符（反斜杠、NULL字节等），然后转义单引号
   const cleaned = value.replace(/\\/g, '').replace(/\0/g, '')

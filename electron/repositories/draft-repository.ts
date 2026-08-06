@@ -5,6 +5,7 @@
  * 正文统一存储在 contents 表中，drafts 只持有 content_id 外键。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 import { ContentRepository } from './content-repository'
 
 /** 草稿元数据（不含正文，适合列表查询） */
@@ -53,7 +54,7 @@ export class DraftRepository {
         wordCount: number
     }): number {
         const db = getProjectDb()
-        if (!db) throw new Error('[DraftRepository] 数据库未连接')
+        if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[DraftRepository]'))
 
         // 事务：先入内容池，再建元数据
         const tx = db.transaction(() => {

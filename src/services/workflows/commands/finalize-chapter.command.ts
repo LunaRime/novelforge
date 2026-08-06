@@ -131,7 +131,7 @@ export function buildFinalizePostProcessSteps(
       if (result.success) {
         callbacks.log(t('log.finalize.kbImported').replace('{count}', String(result.chunkCount)))
       } else {
-        throw new Error(`导入知识库失败: ${result.error}`)
+        throw new Error(t('error.kbImportFailed').replace('{error}', String(result.error)))
       }
     },
   })

@@ -5,12 +5,13 @@
  * 元数据表（drafts/revisions/reviews）仅通过 content_id 外键引用。
  */
 import { getProjectDb } from '../database'
+import { t } from '../../src/shared/locale'
 
 export class ContentRepository {
     /** 创建一条内容记录，返回自增 ID */
     static create(body: string): number {
         const db = getProjectDb()
-        if (!db) throw new Error('[ContentRepository] 数据库未连接')
+        if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[ContentRepository]'))
 
         const result = db.prepare(`
       INSERT INTO contents (body) VALUES (?)
