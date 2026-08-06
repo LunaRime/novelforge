@@ -33,12 +33,16 @@ export interface RefineParagraphsResult {
   wordDelta: number
 }
 
-const REFINE_TYPE_GUIDE: Record<string, string> = {
-  expand: '扩写选中段落，增加细节描写和感官体验，目标增加 30-50% 字数。保持原有情节不变。',
-  shrink: '精简选中段落，删除冗余修饰，压缩到原文 60-70% 字数。保留核心情节和关键对话。',
-  style: '按照指定文风改写选中段落。保持情节不变，改变表达方式。',
-  conflict: '增强选中段落的冲突感和张力。加入更多内心挣扎、外部压力或反转元素。',
-  polish: '润色选中段落，修正语病、优化措辞、提升流畅度。不改变情节和字数。',
+/** 改写类型 → 指令段落（i18n） */
+function getRefineGuide(refineType: string): string {
+  const guides: Record<string, string> = {
+    expand: t('prompt.refine.guideExpand'),
+    shrink: t('prompt.refine.guideShrink'),
+    style: t('prompt.refine.guideStyle'),
+    conflict: t('prompt.refine.guideConflict'),
+    polish: t('prompt.refine.guidePolish'),
+  }
+  return guides[refineType] || guides.polish
 }
 
 export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraphsResult> {
@@ -60,23 +64,23 @@ export class RefineParagraphsCommand extends BaseWorkflowCommand<RefineParagraph
       .replace('{words}', String(computeTextStats(selectedText).novelWordCount)))
 
     // 构建 prompt
-    const guide = REFINE_TYPE_GUIDE[refineType] || REFINE_TYPE_GUIDE.polish
+    const guide = getRefineGuide(refineType)
     const systemPrompt = [
-      '你是一个精准的文本编辑。你的任务是只修改指定的段落，保持其余内容完全不变。',
+      t('prompt.refine.systemIntro'),
       '',
-      `改写类型: ${refineType}`,
-      `指导: ${guide}`,
-      instruction ? `用户要求: ${instruction}` : '',
+      t('prompt.refine.typeLabel').replace(/\{type\}/g, () => refineType),
+      t('prompt.refine.guideLabel').replace(/\{guide\}/g, () => guide),
+      instruction ? t('prompt.refine.requestLabel').replace(/\{instruction\}/g, () => instruction) : '',
       '',
-      '【重要规则】',
-      '1. 只修改 <<<SELECTED>>> 和 >>>END<<< 之间的内容',
-      '2. 上下文锚点（CONTEXT_BEFORE/CONTEXT_AFTER）不能修改，只用于理解语境',
-      '3. 输出格式: [CONTEXT_BEFORE]原文前锚点[START]修改后的段落[END][CONTEXT_AFTER]原文后锚点',
-      '4. 保持人物性格、世界观设定一致',
+      t('prompt.refine.importantRules'),
+      t('prompt.refine.rule1'),
+      t('prompt.refine.rule2'),
+      t('prompt.refine.rule3'),
+      t('prompt.refine.rule4'),
     ].filter(Boolean).join('\n')
 
     const userPrompt = [
-      '请改写以下选中段落：',
+      t('prompt.refine.userIntro'),
       '',
       `[CONTEXT_BEFORE]${contextBefore}`,
       `<<<SELECTED>>>`,

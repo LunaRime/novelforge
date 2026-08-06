@@ -108,15 +108,18 @@ export class GenerateDirectoryCommand extends BaseWorkflowCommand<ChapterBluepri
         const prevAll = [...existingBlueprints, ...newBlueprints]
         // 最多取最近 20 章，防止超出上下文窗口
         const chapterList = prevAll.slice(-20).map(c =>
-          `第${c.chapterNumber}章 ${sanitizeForPrompt(c.title, 30)}：${sanitizeForPrompt(c.keyEvents, 80)}`
+          t('inject.directory.chapterLine')
+            .replace('{chapter}', String(c.chapterNumber))
+            .replace('{title}', () => sanitizeForPrompt(c.title, 30))
+            .replace('{events}', () => sanitizeForPrompt(c.keyEvents, 80))
         ).join('\n')
         const chapterListNote = prevAll.length > 20
-          ? `（仅展示最近 20 章，共 ${prevAll.length} 章前置蓝图，更多历史不再赘述）`
-          : `（共 ${prevAll.length} 章前置蓝图）`
+          ? t('inject.directory.truncatedNote').replace('{count}', String(prevAll.length))
+          : t('inject.directory.countNote').replace('{count}', String(prevAll.length))
 
         prompt = new DirectoryPromptBuilder(template)
           .withNovelArchitecture(architecture)
-          .withChapterList((chapterList || '（首批生成）') + '\n' + chapterListNote)
+          .withChapterList((chapterList || t('inject.directory.firstBatch')) + '\n' + chapterListNote)
           .withNumberOfChapters(totalChapters)
           .withN(cursor)
           .withM(batchEnd)

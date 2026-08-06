@@ -9,24 +9,6 @@ import type { NovelConfig } from '../../../shared/ipc-channels'
 
 // --- 基础工具库 ---
 
-interface PartialArchData {
-  premise_result?: string
-  character_dynamics_result?: string
-  character_state_result?: string
-  world_building_result?: string
-  synopsis_result?: string
-}
-
-async function loadPartialData(projectPath: string): Promise<PartialArchData> {
-  const result = await ipc.invoke('fs:read-json', `${projectPath}/.vela/partial_arch.json`)
-  if (result.success && result.data) return result.data as PartialArchData
-  return {}
-}
-
-async function savePartialData(projectPath: string, data: PartialArchData): Promise<void> {
-  await ipc.invoke('fs:write-json', `${projectPath}/.vela/partial_arch.json`, data)
-}
-
 function getNovelConfig(): { project: NonNullable<ReturnType<typeof useProjectStore.getState>['currentProject']>; config: NovelConfig } {
   const project = useProjectStore.getState().currentProject
   if (!project) throw new Error(t('error.noProject'))
@@ -111,13 +93,13 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       callbacks.log(t('log.arch.configSaveFailed'))
     }
     callbacks.setProgress(100)
-    return '生成的配置已成功应用！'
+    return t('arch.configApplied')
   }
 }
 
 export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
-    const { project, config } = getNovelConfig()
+    const { config } = getNovelConfig()
     callbacks.log(t('log.arch.generatingPremise'))
 
     const template = getPromptTemplate('premise')
@@ -141,13 +123,8 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
     if (!result.trim()) throw new Error(t('error.premiseEmpty'))
     if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    const content = `# 故事前提\n\n${result}\n`
+    const content = `# ${t('arch.storyPremise')}\n\n${result}\n`
     await writeArchToDb('premise', content)
-
-    const partial = (context.data.partial as PartialArchData) || await loadPartialData(project.path)
-    partial.premise_result = result
-    await savePartialData(project.path, partial)
-    context.data.partial = partial
 
     callbacks.log(t('log.arch.premiseDone'))
     return result
@@ -184,16 +161,11 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
     if (!result.trim()) throw new Error(t('error.charactersFailed'))
     if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    await writeArchToDb('charactersArch', `# 角色图谱\n\n${result}\n`)
+    await writeArchToDb('charactersArch', `# ${t('arch.characterMap')}\n\n${result}\n`)
 
     callbacks.log(t('log.arch.extractingCards'))
     const { runArchCharacterExtract } = await import('../architecture-workflow')
     runArchCharacterExtract(project.path, result, config.genre)
-
-    const partial = (context.data.partial as PartialArchData) || await loadPartialData(project.path)
-    partial.character_dynamics_result = result
-    await savePartialData(project.path, partial)
-    context.data.partial = partial
 
     callbacks.log(t('log.arch.charactersDone'))
     return result
@@ -202,7 +174,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
 
 export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
-    const { project, config } = getNovelConfig()
+    const { config } = getNovelConfig()
 
     const core = await ipc.invoke('db:project-core-get')
     const premise_result = core?.premise || ''
@@ -227,12 +199,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
     if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    await writeArchToDb('worldbuilding', `# 世界观\n\n${result}\n`)
-
-    const partial = (context.data.partial as PartialArchData) || await loadPartialData(project.path)
-    partial.world_building_result = result
-    await savePartialData(project.path, partial)
-    context.data.partial = partial
+    await writeArchToDb('worldbuilding', `# ${t('arch.worldBuilding')}\n\n${result}\n`)
 
     callbacks.log(t('log.arch.worldDone'))
     return result
@@ -240,12 +207,8 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
 }
 
 export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string> {
-  constructor(private selectedSteps: string[]) {
-    super()
-  }
-
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
-    const { project, config } = getNovelConfig()
+    const { config } = getNovelConfig()
 
     const core = await ipc.invoke('db:project-core-get')
     const premise = core?.premise || ''
@@ -279,16 +242,7 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     const result = await this.callLLMWithBuilder(promptBuilder, callbacks, undefined, context)
     if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    await writeArchToDb('synopsis', `# 情节大纲\n\n${result}\n`)
-
-    const partial = (context.data.partial as PartialArchData) || await loadPartialData(project.path)
-    partial.synopsis_result = result
-    context.data.partial = partial
-
-    if (this.selectedSteps.includes('premise') && this.selectedSteps.includes('characters') &&
-      this.selectedSteps.includes('worldbuilding') && this.selectedSteps.includes('synopsis')) {
-      await ipc.invoke('fs:write-file', `${project.path}/.vela/partial_arch.json`, '{}')
-    }
+    await writeArchToDb('synopsis', `# ${t('arch.plotOutline')}\n\n${result}\n`)
 
     callbacks.log(t('log.arch.synopsisDone'))
     return result

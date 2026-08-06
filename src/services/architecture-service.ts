@@ -9,18 +9,6 @@ import { ipc } from './ipc-client'
 
 export type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
-export const ARCH_FILES: Array<{
-  key: ArchStepKey
-  label: string
-  emoji: string
-  desc: string
-}> = [
-    { key: 'premise', label: '故事前提', emoji: '🎯', desc: 'Logline · 核心冲突链 · 金手指定位 · 悬念骨架' },
-    { key: 'characters', label: '角色图谱', emoji: '👥', desc: '角色弧光 · 关系网络 · 矛盾交织' },
-    { key: 'worldbuilding', label: '世界观', emoji: '🌍', desc: '核心规则 · 阶层断层 · 深层危机' },
-    { key: 'synopsis', label: '情节大纲', emoji: '🗺️', desc: '三幕结构 · 拐点节奏 · 伏笔闭环' },
-  ]
-
 /**
  * 检查所有架构块的生成状态
  * @returns key → boolean 映射，true 表示该块已有有效内容
@@ -36,11 +24,12 @@ export async function checkArchStatus(): Promise<Record<string, boolean>> {
   const core = await ipc.invoke('db:project-core-get')
   if (!core) return status
 
-  // 长度 > 50 才算真正已生成，前端可以直接用长度判断
-  status.premise = (core.premise?.length ?? 0) > 50
-  status.characters = (core.charactersArch?.length ?? 0) > 50
-  status.worldbuilding = (core.worldbuilding?.length ?? 0) > 50
-  status.synopsis = (core.synopsis?.length ?? 0) > 50
+  // 长度 > 50 且不含「待生成」哨兵才算真正已生成（哨兵检查与 ArchFileViewer/workflow-guards 统一）
+  const hasContent = (v: string | null | undefined) => (v?.length ?? 0) > 50 && !v?.includes('待生成')
+  status.premise = hasContent(core.premise)
+  status.characters = hasContent(core.charactersArch)
+  status.worldbuilding = hasContent(core.worldbuilding)
+  status.synopsis = hasContent(core.synopsis)
 
   return status
 }
@@ -60,7 +49,7 @@ export async function checkArchStatusWithWordCount(): Promise<{
 
   const check = (key: ArchStepKey, content: string | undefined | null) => {
     const len = content?.length ?? 0
-    const hasContent = len > 50
+    const hasContent = len > 50 && !content?.includes('待生成')
     status[key] = hasContent
     wordCounts[key] = hasContent ? len : 0
   }

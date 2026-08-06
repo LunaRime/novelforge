@@ -38,60 +38,21 @@ export const DEFAULT_PERSPECTIVES: ReviewerPerspective[] = [
   {
     id: 'plot_logic',
     name: t('workflow.reviewerPlotLogic'),
-    systemPrompt: `你是一位严格的情节逻辑审查员。请从以下维度评审草稿：
-1. 因果链是否完整（每件事是否有前因后果）
-2. 时间线是否一致（是否有时序矛盾）
-3. 伏笔设置是否合理（是否有明显的坑未填）
-4. 冲突升级是否自然（张力是否逐级递增）
-
-请以 JSON 格式输出评审结果：
-{
-  "scores": { "因果链": 8, "时间线": 8, "伏笔": 7, "冲突升级": 7 },
-  "overallScore": 7.5,
-  "strengths": ["优点1", "优点2"],
-  "weaknesses": ["问题1", "问题2"],
-  "suggestions": ["建议1", "建议2"]
-}`,
+    systemPrompt: t('prompt.spawnReviewers.plotLogicSystem'),
     evaluationCriteria: ['因果链完整', '时间线无矛盾', '伏笔设置合理', '冲突升级自然'],
     weight: 0.35,
   },
   {
     id: 'character_consistency',
     name: t('workflow.reviewerCharConsistency'),
-    systemPrompt: `你是一位关注角色塑造的审稿人。请从以下维度评审草稿：
-1. 角色行为是否符合其既定人设
-2. 角色弧光是否有推进
-3. 对话是否符合角色性格
-4. 角色关系变化是否合理
-
-请以 JSON 格式输出评审结果：
-{
-  "scores": { "行为符合人设": 8, "角色弧光推进": 7, "对话符合性格": 8, "关系变化合理": 7 },
-  "overallScore": 7.5,
-  "strengths": ["优点1", "优点2"],
-  "weaknesses": ["问题1", "问题2"],
-  "suggestions": ["建议1", "建议2"]
-}`,
+    systemPrompt: t('prompt.spawnReviewers.characterSystem'),
     evaluationCriteria: ['角色行为符合人设', '角色弧光推进', '对话符合性格', '关系变化合理'],
     weight: 0.35,
   },
   {
     id: 'prose_quality',
     name: t('workflow.reviewerStyle'),
-    systemPrompt: `你是一位文笔编辑。请从以下维度评审草稿：
-1. 语言是否流畅易读
-2. 描写是否生动有画面感
-3. 对话是否自然不做作
-4. 节奏把控是否得当
-
-请以 JSON 格式输出评审结果：
-{
-  "scores": { "语言流畅": 8, "描写生动": 7, "对话自然": 8, "节奏把控": 7 },
-  "overallScore": 7.5,
-  "strengths": ["优点1", "优点2"],
-  "weaknesses": ["问题1", "问题2"],
-  "suggestions": ["建议1", "建议2"]
-}`,
+    systemPrompt: t('prompt.spawnReviewers.proseSystem'),
     evaluationCriteria: ['语言流畅', '描写生动', '对话自然', '节奏把控'],
     weight: 0.30,
   },
@@ -136,7 +97,9 @@ export class SpawnReviewersCommand extends BaseWorkflowCommand<ReviewerOutput[]>
         const response = await llmStore.generate(
           [
             { role: 'system', content: perspective.systemPrompt },
-            { role: 'user', content: `请评审以下第${chapterNumber}章草稿：\n\n${draftContent.slice(0, 6000)}` },
+            { role: 'user', content: t('prompt.spawnReviewers.userRequest')
+              .replace('{chapter}', String(chapterNumber))
+              .replace('{draft}', () => draftContent.slice(0, 6000)) },
           ],
           undefined,
           {

@@ -14,10 +14,10 @@ import { ipc } from '../../ipc-client'
 import { computeTextStats } from '../../text-stats'
 
 /** 终审 Agent systemRole：只审不改，输出可执行的修改建议 */
-const REVIEWER_SYSTEM = '你是一位资深网文编辑，擅长根据审计报告给出精准、可执行的修改建议。你只负责指出问题和给出方案，不负责改写正文。'
+const getReviewerSystem = (): string => t('prompt.selfReview.reviewerSystem')
 
 /** 重写 Agent systemRole：落实建议的写手 */
-const REWRITER_SYSTEM = '你是一位顶尖网文写手，擅长根据编辑的修改建议重写正文，保持原文风格、节奏与剧情不变。'
+const getRewriterSystem = (): string => t('prompt.selfReview.rewriterSystem')
 
 export class SelfReviewCommand extends BaseWorkflowCommand<void> {
   constructor(private params: {
@@ -61,12 +61,10 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
         .map((iss, i) => `${i + 1}. [${iss.kind}] ${iss.message}`)
         .join('\n')
       const reviewerPrompt =
-        `【初稿审计报告】\n${issueText}\n\n` +
-        `【初稿（前 3000 字）】\n${current.slice(0, 3000)}\n\n` +
-        `【任务】针对审计报告中的每个问题，给出修改建议清单（编号 1.2.3.）：
-每条格式：问题简述 → 具体修改方案 → 一句示例。
-只针对审计报告中的问题，不要泛泛而谈，不要重写正文。`
-      const suggestions = await this.callLLM(reviewerPrompt, REVIEWER_SYSTEM, callbacks)
+        t('prompt.selfReview.reviewerTitle') + '\n' + issueText + '\n\n' +
+        t('prompt.selfReview.draftPreviewTitle') + '\n' + current.slice(0, 3000) + '\n\n' +
+        t('prompt.selfReview.reviewerTask')
+      const suggestions = await this.callLLM(reviewerPrompt, getReviewerSystem(), callbacks)
       if (!suggestions.trim()) {
         callbacks.log(t('log.selfReview.noSuggestions'))
         break
@@ -76,10 +74,10 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
 
       // ===== 2. 主 AI 根据清单重写 =====
       const rewritePrompt =
-        `【修改建议清单】\n${suggestions}\n\n` +
-        `【初稿全文】\n${current}\n\n` +
-        `【任务】根据修改建议清单重写正文：落实每一条建议；保持原文风格、叙事节奏、剧情走向不变；不要新增与建议无关的大幅改动。`
-      const rewritten = await this.callLLM(rewritePrompt, REWRITER_SYSTEM, callbacks)
+        t('prompt.selfReview.suggestionTitle') + '\n' + suggestions + '\n\n' +
+        t('prompt.selfReview.fullDraftTitle') + '\n' + current + '\n\n' +
+        t('prompt.selfReview.rewriteTask')
+      const rewritten = await this.callLLM(rewritePrompt, getRewriterSystem(), callbacks)
 
       // 防御：重写稿异常（过短 = 截断/拒答）→ 放弃本轮，保留当前稿
       if (rewritten.trim().length < current.trim().length * 0.5) {

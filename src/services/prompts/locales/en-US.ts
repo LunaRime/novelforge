@@ -428,7 +428,7 @@ Return the analysis strictly in the following JSON format:
     "globalGuidance": "Global writing style and pacing requirements inferred from the existing content"
   },
   "architectureFiles": {
-    "premise": "Core story premise text (highly condensed, within 200 characters)",
+    "premise": "Core story premise text (highly condensed, 50-200 characters, must include a one-line logline and the core conflict)",
     "characters": "Full character map (must be sectioned by character: one paragraph per known major character with 【Character Name】 as the first line, covering identity/background/personality/core motivation/relationship with the protagonist/hidden secrets; end with a 【Conflict Web】 section summarizing inter-character conflicts; no less than 400 characters)",
     "worldbuilding": "World matrix (power system, class structure, key scenes)",
     "synopsis": "Known plot direction analysis (covering completed parts and inferred continuation)"
@@ -505,7 +505,7 @@ Return the analysis strictly in the following JSON format:
     "globalGuidance": "Global writing style and pacing requirements inferred from the existing content"
   },
   "architectureFiles": {
-    "premise": "Core story premise text (highly condensed, within 200 characters)",
+    "premise": "Core story premise text (highly condensed, 50-200 characters, must include a one-line logline and the core conflict)",
     "characters": "Full character map (must be sectioned by character: one paragraph per known major character with 【Character Name】 as the first line, covering identity/background/personality/core motivation/relationship with the protagonist/hidden secrets; end with a 【Conflict Web】 section summarizing inter-character conflicts; no less than 400 characters)",
     "worldbuilding": "World matrix (power system, class structure, key scenes)",
     "synopsis": "Known plot direction analysis (covering completed parts and inferred continuation)"

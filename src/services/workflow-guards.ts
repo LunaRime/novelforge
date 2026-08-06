@@ -70,7 +70,7 @@ export async function guardDirectoryGeneration(): Promise<GuardResult> {
   const core = await ipc.invoke('db:project-core-get')
   const missing: string[] = []
 
-  const checkHasContent = (text: string | null | undefined) => text && text.length > 50 && !text.includes('> 待生成')
+  const checkHasContent = (text: string | null | undefined) => text && text.length > 50 && !text.includes('待生成')
 
   const archNames = {
     premise: t('arch.storyPremise'),

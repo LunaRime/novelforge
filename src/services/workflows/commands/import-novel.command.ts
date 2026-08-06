@@ -144,11 +144,12 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     callbacks.setProgress(5)
 
     // ===== 向量检索采样 =====
+    // 注：query 为检索词，需与小说正文语言一致（知识库内容不随界面语言变化），仅 label 本地化
     const searchTopics = [
-      { key: 'worldview', query: '世界观 力量体系 修炼等级 境界', label: '世界观与力量体系' },
-      { key: 'protagonist', query: '主角 金手指 核心能力 天赋 系统', label: '主角设定与金手指' },
-      { key: 'conflict', query: '敌人 反派 阴谋 危机 矛盾 对手', label: '核心矛盾与敌对势力' },
-      { key: 'style', query: '视角 叙述 描写 风格 节奏', label: '写作风格与叙事视角' },
+      { key: 'worldview', query: '世界观 力量体系 修炼等级 境界', label: t('inject.import.topicWorldview') },
+      { key: 'protagonist', query: '主角 金手指 核心能力 天赋 系统', label: t('inject.import.topicProtagonist') },
+      { key: 'conflict', query: '敌人 反派 阴谋 危机 矛盾 对手', label: t('inject.import.topicConflict') },
+      { key: 'style', query: '视角 叙述 描写 风格 节奏', label: t('inject.import.topicStyle') },
     ]
 
     const sampledContent: Record<string, string> = {}
@@ -158,16 +159,20 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         if (results.length > 0) {
           sampledContent[topic.key] = results
             .map((r: { text: string; score: number; fileName: string }, i: number) =>
-              `[${i + 1}] (${r.fileName}, 相关度 ${(r.score * 100).toFixed(0)}%)\n${r.text}`
+              t('inject.kbSnippetLine')
+                .replace('{index}', String(i + 1))
+                .replace('{file}', () => r.fileName)
+                .replace('{score}', String((r.score * 100).toFixed(0)))
+                .replace('{text}', () => r.text)
             ).join('\n\n')
         } else {
-          sampledContent[topic.key] = '（未检索到相关内容）'
+          sampledContent[topic.key] = t('inject.import.noSearchResults')
         }
         callbacks.log(t('log.import.topicFound')
           .replace('{topic}', topic.label)
           .replace('{count}', String(results.length)))
       } catch {
-        sampledContent[topic.key] = '（向量检索不可用）'
+        sampledContent[topic.key] = t('inject.vectorSearchUnavailable')
         callbacks.log(t('log.import.topicFailed').replace('{topic}', topic.label))
       }
     }
@@ -177,10 +182,10 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     // 优先使用向量增强版 Prompt
     const template = getPromptTemplate('infer_novel_config_with_vectors')
       || getPromptTemplate('infer_novel_config')
-    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '推演 Prompt'))
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.import.templateNameInferConfig')))
 
-    const firstChapter = chapters[0]?.content?.slice(0, 3000) || '（第一章内容不可用）'
-    const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 3000) || '（最新章节不可用）'
+    const firstChapter = chapters[0]?.content?.slice(0, 3000) || t('inject.import.noFirstChapter')
+    const latestChapter = chapters[chapters.length - 1]?.content?.slice(0, 3000) || t('inject.import.noLatestChapter')
 
     const prompt = new ImportPromptBuilder(template)
       .withSampledWorldview(sampledContent.worldview || '')
@@ -191,7 +196,9 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       .withLatestChapter(latestChapter)
       .withTotalChapters(chapters.length)
       // 兼容旧版 Prompt 的 sample_content 变量
-      .withSampleContent(`【第1章片段】\n${firstChapter}\n\n【最新章节片段】\n${latestChapter}`)
+      .withSampleContent(t('inject.import.sampleContent')
+        .replace('{first}', () => firstChapter)
+        .replace('{latest}', () => latestChapter))
       .build()
 
     callbacks.log(t('log.import.inferringConfig'))
@@ -252,13 +259,14 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         .replace('{protagonist}', novelConfig.protagonistProfile || t('common.nonePlaceholder'))
     }
 
-    // ===== 写入架构信息 =====
+    // ===== 写入架构信息（标题前缀与生成路径格式统一，消费方按 key 读取不受影响） =====
     if (inferResult.architectureFiles) {
+      const title = (name: string, content: string) => content.startsWith(`# ${name}`) ? content : `# ${name}\n\n${content}\n`
       await ipc.invoke('db:project-core-update', {
-        premise: inferResult.architectureFiles.premise,
-        charactersArch: inferResult.architectureFiles.characters,
-        worldbuilding: inferResult.architectureFiles.world,
-        synopsis: inferResult.architectureFiles.synopsis,
+        premise: title(t('arch.storyPremise'), inferResult.architectureFiles.premise),
+        charactersArch: title(t('arch.characterMap'), inferResult.architectureFiles.characters),
+        worldbuilding: title(t('arch.worldBuilding'), inferResult.architectureFiles.world),
+        synopsis: title(t('arch.plotOutline'), inferResult.architectureFiles.synopsis),
       })
       callbacks.log(t('log.import.archSaved'))
     }
@@ -316,11 +324,11 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     if (!project) throw new Error(t('error.noProject'))
 
     const chapters = context.data.chapters as ImportedChapter[]
-    const configSummary = (context.data.novelConfigSummary as string) || '（配置概要不可用）'
+    const configSummary = (context.data.novelConfigSummary as string) || t('inject.import.configSummaryUnavailable')
     if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
 
     const template = getPromptTemplate('infer_single_chapter_blueprint')
-    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '单章蓝图推演 Prompt'))
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.import.templateNameInferBlueprint')))
 
     callbacks.log(t('log.import.inferringBlueprints')
       .replace('{count}', String(chapters.length))

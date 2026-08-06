@@ -1,4 +1,4 @@
-import { t } from '../../../shared/locale'
+import { t, type TextKey } from '../../../shared/locale'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
@@ -30,7 +30,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     callbacks.log(t('log.review.loadingSettings'))
 
     // 使用向量检索获取与待审章节相关的历史上下文（替代全局摘要）
-    let contextSummary = '（无上下文参考）'
+    let contextSummary = t('inject.review.noContextReference')
     try {
       // 从待审内容中提取前 200 字作为检索 query
       const queryText = draft.slice(0, 200)
@@ -38,18 +38,22 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       if (results.length > 0) {
         contextSummary = results
           .map((r: { fileName: string; score: number; text: string }, i: number) =>
-            `[${i + 1}] (${r.fileName}, 相关度 ${(r.score * 100).toFixed(0)}%)\n${r.text}`)
+            t('inject.kbSnippetLine')
+              .replace('{index}', String(i + 1))
+              .replace('{file}', () => r.fileName)
+              .replace('{score}', String((r.score * 100).toFixed(0)))
+              .replace('{text}', () => r.text))
           .join('\n\n')
       }
     } catch {
-      contextSummary = '（知识库检索不可用）'
+      contextSummary = t('inject.kbSearchUnavailable')
     }
 
     const characterState = await this.readCharacterStates()
     const worldBuilding = await this.readWorldBuilding()
 
     const template = getPromptTemplate('consistency_check')
-    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', '审稿'))
+    if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.review.templateName')))
 
     const promptBuilder = new ReviewPromptBuilder(template)
       .withChapterContent(draft)
@@ -91,7 +95,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
           quote: r.quote || '',
           description: r.description || '',
         })),
-        summary: `审稿完成，共 ${tableRows.length} 项检查`,
+        summary: t('inject.review.summaryDone').replace('{count}', String(tableRows.length)),
       }
       callbacks.log(t('log.review.mdParsed').replace('{count}', String(tableRows.length)))
     } else {
@@ -109,18 +113,18 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
         if (items && items.length > 0) {
           parsedResult = {
             items: (items as Array<Record<string, unknown>>).map(item => ({
-              category: String(item.category || item.dimension || item.type || '综合检查'),
+              category: String(item.category || item.dimension || item.type || t('review.comprehensiveCheck')),
               severity: String(item.severity || item.level || 'pass'),
               quote: String(item.quote || item.excerpt || ''),
               description: String(item.description || item.detail || item.issue || ''),
             })),
-            summary: String(obj.summary || obj.conclusion || `JSON 解析成功，共 ${items.length} 项检查`),
+            summary: String(obj.summary || obj.conclusion || t('inject.review.summaryJsonParsed').replace('{count}', String(items.length))),
           }
           callbacks.log(t('log.review.jsonParsed').replace('{count}', String(items.length)))
         } else if (obj.summary || obj.conclusion) {
           // 纯文本类型的 JSON 响应（包含 summary 但无结构化 items）
           parsedResult = {
-            items: [{ category: '综合检查', severity: 'warning', description: String(obj.summary || obj.conclusion) }],
+            items: [{ category: t('review.comprehensiveCheck'), severity: 'warning', description: String(obj.summary || obj.conclusion) }],
             summary: String(obj.summary || obj.conclusion),
           }
           callbacks.log(t('log.review.jsonPlainText'))
@@ -176,6 +180,18 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     return reviewResultRaw
   }
 
+  /** 角色枚举 → 本地化角色标签（未知枚举原样保留，避免改动既有数据语义） */
+  private roleLabel(role?: string): string {
+    if (!role) return t('common.unknownWord')
+    const known: Record<string, TextKey> = {
+      protagonist: 'characterRole.protagonist',
+      antagonist: 'characterRole.antagonist',
+      supporting: 'characterRole.supporting',
+      extra: 'characterRole.extra',
+    }
+    return known[role] ? t(known[role]) : role
+  }
+
   /** 分级角色状态注入 — 核心角色完整档案，配角精简 */
   private async readCharacterStates(): Promise<string> {
     try {
@@ -194,12 +210,23 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
 
         if (tier === 1) {
           tier1.push(
-            `${card.name}（${card.role || '未知'}）: ` +
-            `${cs.powerLevel || ''}, ${cs.location || ''}, ${cs.physicalState || ''}, ${cs.mentalState || ''}, ` +
-            `最近：${cs.recentEvents || ''}`
+            t('inject.review.charStateTier1')
+              .replace('{name}', () => card.name)
+              .replace('{role}', () => this.roleLabel(card.role))
+              .replace('{power}', () => String(cs.powerLevel || ''))
+              .replace('{location}', () => String(cs.location || ''))
+              .replace('{physical}', () => String(cs.physicalState || ''))
+              .replace('{mental}', () => String(cs.mentalState || ''))
+              .replace('{recent}', () => String(cs.recentEvents || ''))
           )
         } else if (tier === 2) {
-          tier2.push(`${card.name}（配角）: ${cs.location || ''}, ${cs.recentEvents || ''}`)
+          tier2.push(
+            t('inject.review.charStateTier2')
+              .replace('{name}', () => card.name)
+              .replace('{role}', () => t('characterRole.supporting'))
+              .replace('{location}', () => String(cs.location || ''))
+              .replace('{recent}', () => String(cs.recentEvents || ''))
+          )
         }
       }
 
