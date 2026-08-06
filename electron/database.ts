@@ -117,8 +117,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号 */
-const CURRENT_SCHEMA_VERSION = 10
+/** 当前数据库 schema 版本号（v11：活动聚合/统计热点索引 + 冗余索引清理） */
+const CURRENT_SCHEMA_VERSION = 11
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
