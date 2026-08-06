@@ -16,6 +16,9 @@ import {
 import type { ChapterInfo } from '../chapter-workflow'
 import type { StepCallbacks } from '../../../stores/workflow-store'
 
+// LLM 输出占位「无/无变化/None/No changes」等 → 视为无更新（中文模板输出中文，英文模板输出英文）
+const NO_CHANGE_VALUES = ['无', '无变化', 'none', 'no change', 'no changes', 'n/a', 'na']
+
 export interface FinalizeChapterParams {
   draftPath: string
   draftContent: string
@@ -244,15 +247,15 @@ export function buildFinalizePostProcessSteps(
             .filter(Boolean)
           return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
         }
-        // LLM 占位"无/无变化" → null（不覆盖已有值）
+        // LLM 占位"无/无变化/None/No changes" → null（不覆盖已有值）
         const cleanOptional = (value: string): string | null => {
           const s = String(value ?? '').trim()
-          if (!s || s === '无' || s === '无变化' || s === 'N/A' || s === 'NA') return null
+          if (!s || NO_CHANGE_VALUES.includes(s.toLowerCase())) return null
           return s
         }
         const cleanText = (value: string): string => {
           const s = String(value ?? '').trim()
-          return (!s || s === '无' || s === '无变化') ? '' : s
+          return (!s || NO_CHANGE_VALUES.includes(s.toLowerCase())) ? '' : s
         }
 
         if (updateRows.length > 0) {
@@ -532,9 +535,15 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     // 【重要】：除了写入 DB，对于已定稿的章节需要实体化为物理文件放在根目录，供外部系统读取或备份
     const safeTitle = this.params.chapterInfo.title ? ` ${this.params.chapterInfo.title.replace(/[/\\]/g, '_')}` : ''
-    const physicalPath = `${project.path}/第${this.params.chapterNumber}章${safeTitle}.txt`
+    const physicalPath = `${project.path}/${t('inject.chapterFileName')
+      .replace('{chapter}', String(this.params.chapterNumber))
+      .replace('{title}', () => safeTitle)}`
     try {
-      const titleLine = this.params.chapterInfo.title ? `第${this.params.chapterNumber}章 ${this.params.chapterInfo.title}\n\n` : `第${this.params.chapterNumber}章\n\n`
+      const titleLine = this.params.chapterInfo.title
+        ? t('inject.chapterTitleLineWithTitle')
+          .replace('{chapter}', String(this.params.chapterNumber))
+          .replace('{title}', () => this.params.chapterInfo.title)
+        : t('inject.chapterTitleLineNoTitle').replace('{chapter}', String(this.params.chapterNumber))
       const contentToWrite = titleLine + refinedDraftText.replace(/^#+ .*\n*/, '')
       await ipc.invoke('fs:write-file', physicalPath, contentToWrite)
     } catch (e) {
@@ -549,7 +558,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     callbacks.log(t('log.finalize.startingPostProcess'))
 
     const scope = getChapterFinalizeScope(this.params.chapterNumber)
-    const sourceLabel = `第${this.params.chapterNumber}章定稿`
+    const sourceLabel = t('inject.finalize.sourceLabel').replace('{chapter}', String(this.params.chapterNumber))
     const steps = buildFinalizePostProcessSteps(
       project,
       this.params.chapterNumber,

@@ -27,7 +27,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     const mergedGuidance = [project.novelConfig.globalGuidance || '', projectPrompts].filter(Boolean).join('\n\n')
 
     const characterState = await this.readCharacterStates(project.path)
-    let futureBlueprintsStr = '（无后续蓝图）'
+    let futureBlueprintsStr = t('inject.noFutureBlueprints')
     try {
       const { loadDirectoryBlueprints } = await import('../directory-workflow')
       const allBlueprints = await loadDirectoryBlueprints()
@@ -35,7 +35,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         b => b.chapterNumber > this.chapterInfo.chapterNumber && b.chapterNumber <= this.chapterInfo.chapterNumber + 5
       )
       if (futureBlueprintsArr.length > 0) {
-        futureBlueprintsStr = futureBlueprintsArr.map(b => `第${b.chapterNumber}章 ${b.title}：${b.keyEvents}`).join('\n')
+        futureBlueprintsStr = futureBlueprintsArr.map(b => t('inject.futureBlueprintItem')
+          .replace(/\{chapter\}/g, () => String(b.chapterNumber))
+          .replace(/\{title\}/g, () => b.title)
+          .replace(/\{events\}/g, () => b.keyEvents)).join('\n')
       }
     } catch (e) {
       console.warn('[generate-draft] 加载后续蓝图失败，将仅使用当前章节信息生成:', e)
@@ -101,10 +104,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         }
         const results = await ipc.invoke('kb:search', searchQuery, 5)
         filteredContext = results.length > 0
-          ? results.map((r: { fileName: string; score: number; text: string }, i: number) => `[${i + 1}] (${r.fileName}, 相关度 ${(r.score * 100).toFixed(0)}%)\n${r.text}`).join('\n\n')
-          : '（知识库中无相关内容）'
+          ? results.map((r: { fileName: string; score: number; text: string }, i: number) => `[${i + 1}] (${r.fileName}, ${t('engine.ragRelevance')} ${(r.score * 100).toFixed(0)}%)\n${r.text}`).join('\n\n')
+          : t('inject.kbNoContent')
       } catch {
-        filteredContext = '（知识库检索不可用）'
+        filteredContext = t('inject.kbUnavailable')
       }
 
       promptBuilder
@@ -112,7 +115,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         .withGlobalSummary(chapterTimeline)
         .withCharacterStates(characterState)
         // ---- 缓存失效区（逐章变化）----
-        .withPreviousEnding(previousEnding || '（无前文）')
+        .withPreviousEnding(previousEnding || t('inject.noPreviousEnding'))
         .withChapterInfo(this.chapterInfo)
 
       // 过渡引擎：构建前章场景卡片
@@ -129,7 +132,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         .withUserGuidance((this.chapterInfo.userGuidance || '') + '\n\n' + transitionContext)
         .withFilteredContext(filteredContext)
         .withShortSummary('')
-        .withUserGuidance(this.chapterInfo.userGuidance?.trim() || '（无微操指导）')
+        .withUserGuidance(this.chapterInfo.userGuidance?.trim() || t('inject.noUserGuidance'))
     }
 
     // ===== 防缺陷注入（伏笔 / 角色声音 / 设定多样性）=====
@@ -146,8 +149,12 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
         .slice(0, 5)
       if (pending.length > 0) {
         antiDefectSections.push(
-          `【未回收伏笔（本章可自然回应 1-2 条，严禁提前全部回收）】\n` +
-          pending.map((f, i) => `${i + 1}. [第${f.setChapter}章] ${f.content} (${f.type})`).join('\n'),
+          t('inject.unresolvedForeshadowing') + '\n' +
+          pending.map((f, i) => t('inject.foreshadowItem')
+            .replace(/\{index\}/g, () => String(i + 1))
+            .replace(/\{chapter\}/g, () => String(f.setChapter))
+            .replace(/\{content\}/g, () => String(f.content))
+            .replace(/\{type\}/g, () => String(f.type))).join('\n'),
         )
       }
     } catch { /* 伏笔注入失败不阻断 */ }
@@ -164,7 +171,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     try {
       const { sampleColdSettings } = await import('../../agent/tools/setting-sampler.tool')
       const cold = await sampleColdSettings(2)
-      if (cold) antiDefectSections.push(`【创意多样性参考（可选，非强制）】\n${cold}`)
+      if (cold) antiDefectSections.push(t('inject.creativityDiversity') + '\n' + cold)
     } catch { /* 采样失败不阻断 */ }
 
     // 4. 偏好记忆注入（用户历史替换对——"偏好 X 而非 Y"，优先使用用户表达）
@@ -173,9 +180,13 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       const prefs = await getTopPreferences(5)
       if (prefs.length > 0) {
         antiDefectSections.push(
-          `【用户偏好（来自历史修改记录，优先遵循）】\n` +
-          prefs.map(p => `- 用户偏好使用「${p.userText}」而非「${p.aiText}」（记录 ${p.count} 次）`).join('\n') +
-          `\n请在表达相同含义时优先使用用户偏好的措辞，避免使用用户不喜欢的「${prefs.map(p => p.aiText).join('」「')}」。`,
+          t('inject.userPreferencesTitle') + '\n' +
+          prefs.map(p => t('inject.userPreferenceItem')
+            .replace(/\{userText\}/g, () => String(p.userText))
+            .replace(/\{aiText\}/g, () => String(p.aiText))
+            .replace(/\{count\}/g, () => String(p.count))).join('\n') +
+          t('inject.userPreferenceFooter')
+            .replace(/\{aiTexts\}/g, () => prefs.map(p => String(p.aiText)).join('」「')),
         )
       }
     } catch { /* 偏好注入失败不阻断 */ }
@@ -231,7 +242,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       const { useEditorStore } = await import('../../../stores/editor-store')
       useEditorStore.getState().openFile({
         id: pseudoPath,
-        name: `第${this.chapterInfo.chapterNumber}章 ${this.chapterInfo.title} v${nextVersion}`,
+        name: t('draft.versionName')
+          .replace(/\{chapter\}/g, () => String(this.chapterInfo.chapterNumber))
+          .replace(/\{title\}/g, () => this.chapterInfo.title)
+          .replace(/\{version\}/g, () => String(nextVersion)),
         type: 'chapter',
         filePath: pseudoPath,
         content: cleanDraftText,
@@ -265,7 +279,8 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       for (const f of mdFiles) {
         const result = await ipc.invoke('fs:read-file', f.path)
         if (result.success && result.content.trim()) {
-          parts.push(`## 项目专属指导（${f.name.replace(/\.md$/, '')}）\n${result.content.trim()}`)
+          parts.push(t('inject.projectGuidanceTitle')
+            .replace(/\{name\}/g, () => f.name.replace(/\.md$/, '')) + '\n' + result.content.trim())
         }
       }
       return parts.join('\n\n')
@@ -289,36 +304,44 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
         if (!cs || !cs.updatedAtChapter) {
           // 无状态数据 — 仅核心角色记录空档
-          if (tier === 1) tier1.push(`${card.name}（${card.role || '未知'}）| 状态未更新`)
+          if (tier === 1) tier1.push(t('inject.charStateEmpty')
+            .replace(/\{name\}/g, () => card.name)
+            .replace(/\{role\}/g, () => card.role || t('common.unknownWord')))
           continue
         }
 
         if (tier === 1) {
           // 核心角色：完整档案
           tier1.push(
-            `${card.name}（${card.role || '未知'}）| ` +
-            `境界：${cs.powerLevel || '未知'} | ` +
-            `位置：${cs.location || '未知'} | ` +
-            `身体：${cs.physicalState || '正常'} | ` +
-            `心理：${cs.mentalState || '正常'} | ` +
-            `道具：${cs.keyItems || '无'} | ` +
-            `最近：第${cs.updatedAtChapter || 0}章 ${cs.recentEvents || ''}`
+            t('inject.charStateCore')
+              .replace(/\{name\}/g, () => card.name)
+              .replace(/\{role\}/g, () => card.role || t('common.unknownWord'))
+              .replace(/\{power\}/g, () => String(cs.powerLevel || t('common.unknownWord')))
+              .replace(/\{location\}/g, () => String(cs.location || t('common.unknownWord')))
+              .replace(/\{physical\}/g, () => String(cs.physicalState || t('inject.stateNormal')))
+              .replace(/\{mental\}/g, () => String(cs.mentalState || t('inject.stateNormal')))
+              .replace(/\{items\}/g, () => String(cs.keyItems || t('inject.stateNone')))
+              .replace(/\{chapter\}/g, () => String(cs.updatedAtChapter || 0))
+              .replace(/\{events\}/g, () => String(cs.recentEvents || ''))
           )
         } else if (tier === 2) {
           // 配角：精简摘要
           tier2.push(
-            `${card.name}（配角）→ 第${cs.updatedAtChapter || 0}章 | ` +
-            `${cs.location || '未知位置'} | ${cs.recentEvents || ''}`
+            t('inject.charStateSupporting')
+              .replace(/\{name\}/g, () => card.name)
+              .replace(/\{chapter\}/g, () => String(cs.updatedAtChapter || 0))
+              .replace(/\{location\}/g, () => String(cs.location || t('inject.stateUnknownLocation')))
+              .replace(/\{events\}/g, () => String(cs.recentEvents || ''))
           )
         }
         // tier 3 龙套：不注入，除非蓝图 characters[] 引用
       }
 
       const parts: string[] = []
-      if (tier1.length > 0) parts.push(`【核心角色 — 完整档案】\n${tier1.join('\n')}`)
-      if (tier2.length > 0) parts.push(`【重要配角 — 精简状态】\n${tier2.join('\n')}`)
-      return parts.length > 0 ? parts.join('\n\n') : '（暂无角色状态档案）'
-    } catch { return '（角色状态档案读取失败）' }
+      if (tier1.length > 0) parts.push(t('inject.characterStateTitleCore') + '\n' + tier1.join('\n'))
+      if (tier2.length > 0) parts.push(t('inject.characterStateTitleSupporting') + '\n' + tier2.join('\n'))
+      return parts.length > 0 ? parts.join('\n\n') : t('inject.characterStateNone')
+    } catch { return t('inject.characterStateReadFailed') }
   }
 
 }

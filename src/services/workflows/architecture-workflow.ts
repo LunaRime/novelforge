@@ -82,7 +82,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         context.data.stepGuidance = guidance
         const { GeneratePlotArchitectureCommand } = await import('./commands/architecture.command')
-        return new GeneratePlotArchitectureCommand(sel).execute({ step, context, callbacks })
+        return new GeneratePlotArchitectureCommand().execute({ step, context, callbacks })
       },
     },
   ]

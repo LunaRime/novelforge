@@ -15,14 +15,17 @@ export type GeneratableField =
   | 'globalGuidance'
   | 'writingStyle'
 
-/** 字段中文标签映射 */
-const FIELD_LABELS: Record<GeneratableField, string> = {
-  coreOutline: '核心大纲',
-  worldSetting: '世界观设定',
-  goldenFinger: '金手指/核心卖点',
-  protagonistProfile: '主角人设',
-  globalGuidance: '全局写作要求',
-  writingStyle: '文风配置',
+/** 字段标签映射（i18n） */
+function getFieldLabel(fieldKey: GeneratableField): string {
+  const labels: Record<GeneratableField, string> = {
+    coreOutline: t('field.label.coreOutline'),
+    worldSetting: t('field.label.worldSetting'),
+    goldenFinger: t('field.label.goldenFinger'),
+    protagonistProfile: t('field.label.protagonistProfile'),
+    globalGuidance: t('field.label.globalGuidance'),
+    writingStyle: t('field.label.writingStyle'),
+  }
+  return labels[fieldKey]
 }
 
 /**
@@ -39,7 +42,7 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     if (!project) throw new Error(t('error.noProject'))
 
     const config = project.novelConfig
-    const label = FIELD_LABELS[this.fieldKey]
+    const label = getFieldLabel(this.fieldKey)
 
     callbacks.log(t('log.generateField.generating').replace('{label}', label))
 
@@ -69,75 +72,51 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
   /** 构建已有配置的上下文摘要 */
   private buildContext(config: NovelConfig): string {
     const parts: string[] = []
-    if (config.genre) parts.push(`- 类型：${config.genre}`)
-    if (config.subGenre) parts.push(`- 细分类型：${config.subGenre}`)
-    if (config.targetAudience) parts.push(`- 目标受众：${config.targetAudience}`)
-    if (config.totalChapters) parts.push(`- 总章数：${config.totalChapters} 章`)
-    if (config.wordsPerChapter) parts.push(`- 每章字数：${config.wordsPerChapter} 字`)
+    if (config.genre) parts.push(t('inject.ctxGenre').replace(/\{value\}/g, () => config.genre))
+    if (config.subGenre) parts.push(t('inject.ctxSubGenre').replace(/\{value\}/g, () => config.subGenre))
+    if (config.targetAudience) parts.push(t('inject.ctxAudience').replace(/\{value\}/g, () => config.targetAudience))
+    if (config.totalChapters) parts.push(t('inject.ctxTotalChapters').replace(/\{value\}/g, () => String(config.totalChapters)))
+    if (config.wordsPerChapter) parts.push(t('inject.ctxWordsPerChapter').replace(/\{value\}/g, () => String(config.wordsPerChapter)))
     if (config.coreOutline?.trim() && this.fieldKey !== 'coreOutline')
-      parts.push(`- 核心大纲：${config.coreOutline.slice(0, 500)}`)
+      parts.push(t('inject.ctxCoreOutline').replace(/\{value\}/g, () => config.coreOutline.slice(0, 500)))
     if (config.worldSetting?.trim() && this.fieldKey !== 'worldSetting')
-      parts.push(`- 世界观设定：${config.worldSetting.slice(0, 500)}`)
+      parts.push(t('inject.ctxWorldSetting').replace(/\{value\}/g, () => config.worldSetting.slice(0, 500)))
     if (config.goldenFinger?.trim() && this.fieldKey !== 'goldenFinger')
-      parts.push(`- 金手指体系：${config.goldenFinger.slice(0, 500)}`)
+      parts.push(t('inject.ctxGoldenFinger').replace(/\{value\}/g, () => config.goldenFinger.slice(0, 500)))
     if (config.protagonistProfile?.trim() && this.fieldKey !== 'protagonistProfile')
-      parts.push(`- 主角人设：${config.protagonistProfile.slice(0, 500)}`)
+      parts.push(t('inject.ctxProtagonist').replace(/\{value\}/g, () => config.protagonistProfile.slice(0, 500)))
     if (config.globalGuidance?.trim() && this.fieldKey !== 'globalGuidance')
-      parts.push(`- 全局写作要求：${config.globalGuidance.slice(0, 500)}`)
-    if (config.referenceWorks?.trim())
-      parts.push(`- 参考作品：${config.referenceWorks}`)
-    if (config.writingStyle?.trim() && this.fieldKey !== 'writingStyle')
-      parts.push(`- 文风描述：${config.writingStyle.slice(0, 300)}`)
-    return parts.length > 0 ? parts.join('\n') : '（尚未填写任何配置）'
+      parts.push(t('inject.ctxGlobalGuidance').replace(/\{value\}/g, () => config.globalGuidance.slice(0, 500)))
+    const referenceWorks = config.referenceWorks
+    if (referenceWorks?.trim())
+      parts.push(t('inject.ctxReferenceWorks').replace(/\{value\}/g, () => referenceWorks))
+    const writingStyle = config.writingStyle
+    if (writingStyle?.trim() && this.fieldKey !== 'writingStyle')
+      parts.push(t('inject.ctxWritingStyle').replace(/\{value\}/g, () => writingStyle.slice(0, 300)))
+    return parts.length > 0 ? parts.join('\n') : t('inject.ctxNoConfig')
   }
 
   /** 根据 fieldKey 构建针对性 prompt */
   private buildPrompt(config: NovelConfig, context: string): string {
     const fieldPrompts: Record<GeneratableField, string> = {
-      coreOutline: `请为这部小说生成一份【核心大纲】。
-要求：不少于150字，包含主角的致命危机/开局困境、必须完成的核心目标、终极大危机、主要爽点起伏。
-大纲应具有强烈的戏剧张力和商业吸引力，让编辑一看就知道这本书的核心卖点。`,
+      coreOutline: t('prompt.field.coreOutline'),
 
-      worldSetting: `请为这部小说生成一份【世界观/初始设定】。
-要求：描述故事发生的背景、时代、力量体系、社会结构。
-包含：物理维度特征、权力结构与断层、核心资源争夺机制。
-所有设定必须自带冲突点，能直接驱动情节发展。`,
+      worldSetting: t('prompt.field.worldSetting'),
 
-      goldenFinger: `请为这部小说生成一份【金手指/核心卖点体系】。
-要求：详细描述主角的差异化优势。
-包含：获取方式、具体功能与核心机制、进阶成长路径、副作用/限制/代价。
-金手指必须与世界观规则产生有趣的交互，而非万能型。`,
+      goldenFinger: t('prompt.field.goldenFinger'),
 
-      protagonistProfile: `请为这部小说生成一份【主角人设档案】。
-要求：包含表面伪装标签与真实性格、极具反差的性格弱点。
-核心驱动力需要区分物质目标（显性）和深层灵魂渴望（隐性）。
-主角必须有清晰的成长弧光起点和终点。`,
+      protagonistProfile: t('prompt.field.protagonistProfile'),
 
-      globalGuidance: `请为这部小说生成一份【全局写作要求】。
-要求：严格基于${config.totalChapters || 100}章的实际规模推算。
-包含：前/中/后期各占多少章、小/中/大高潮的具体章节频率。
-明确写作风格要求、核心禁忌/毒点、节奏控制策略。`,
+      globalGuidance: t('prompt.field.globalGuidance')
+        .replace(/\{totalChapters\}/g, () => String(config.totalChapters || 100)),
 
-      writingStyle: `请为这部小说设计一份【文风配置指南】。
-要求：不少于100字，这份指南将指导 AI 写稿和修稿时的文风遵循。
-请从以下维度给出具体、可操作的风格要求：
-1. 叙述节奏：整体快慢偏好、场景切换频率、段落长短
-2. 描写密度：环境/动作/心理描写的比重偏好
-3. 对话风格：对话比例、口语化程度、是否使用方言
-4. 用词偏好：古风/现代/专业术语的倾向
-5. 情感基调：热血/冷峻/诙谐/沉重/轻松
-6. 标志性手法：推荐的修辞手法、过渡技巧
-请根据本书的类型（${config.genre || '未指定'}）和受众（${config.targetAudience || '未指定'}）推荐最匹配的写作风格。`,
+      writingStyle: t('prompt.field.writingStyle')
+        .replace(/\{genre\}/g, () => config.genre || t('inject.unspecified'))
+        .replace(/\{audience\}/g, () => config.targetAudience || t('inject.unspecified')),
     }
 
-    return `以下是这部小说的已有配置信息：
-${context}
-
-${fieldPrompts[this.fieldKey]}
-
-【输出要求】
-- 直接输出纯文本内容，不要使用 JSON 格式
-- 不要添加任何前导语、解释或客套话
-- 不要使用 Markdown 标题（#），可以使用换行分段`
+    return t('prompt.field.header') + '\n' + context + '\n\n' +
+      fieldPrompts[this.fieldKey] + '\n\n' +
+      t('prompt.field.outputRequirements')
   }
 }
