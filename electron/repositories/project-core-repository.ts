@@ -141,53 +141,58 @@ export class ProjectCoreRepository {
             { camel: 'synopsis', archiveKey: 'synopsis' },
         ]
 
-        // 分离：archive 字段 → setArchiveField，其余 → UPDATE project_core
-        const coreData: Partial<ProjectCoreData> = {}
-        for (const key of Object.keys(data) as Array<keyof ProjectCoreData>) {
-            const isArchive = archiveFieldKeys.some(a => a.camel === key)
-            if (isArchive && (data as Record<string, unknown>)[key] !== undefined) {
-                const archiveKey = archiveFieldKeys.find(a => a.camel === key)!.archiveKey
-                ProjectCoreRepository.setArchiveField(archiveKey, String((data as Record<string, unknown>)[key]))
-            } else {
-                (coreData as Record<string, unknown>)[key] = (data as Record<string, unknown>)[key]
+        // ⚠️ P3 修复：archive 字段与 core 字段写入包事务——此前 archive 写一半时 core UPDATE
+        //    失败会部分保存
+        const tx = db.transaction(() => {
+            // 分离：archive 字段 → setArchiveField，其余 → UPDATE project_core
+            const coreData: Partial<ProjectCoreData> = {}
+            for (const key of Object.keys(data) as Array<keyof ProjectCoreData>) {
+                const isArchive = archiveFieldKeys.some(a => a.camel === key)
+                if (isArchive && (data as Record<string, unknown>)[key] !== undefined) {
+                    const archiveKey = archiveFieldKeys.find(a => a.camel === key)!.archiveKey
+                    ProjectCoreRepository.setArchiveField(archiveKey, String((data as Record<string, unknown>)[key]))
+                } else {
+                    (coreData as Record<string, unknown>)[key] = (data as Record<string, unknown>)[key]
+                }
             }
-        }
 
-        // 写入 project_core（仅非归档字段）
-        const fieldMap: Record<string, string> = {
-            projectName: 'project_name',
-            genre: 'genre',
-            subGenre: 'sub_genre',
-            targetAudience: 'target_audience',
-            totalChapters: 'total_chapters',
-            wordsPerChapter: 'words_per_chapter',
-            plotStructure: 'plot_structure',
-            narrativePov: 'narrative_pov',
-            writingStyle: 'writing_style',
-            referenceWorks: 'reference_works',
-            globalGuidance: 'global_guidance',
-            goldenFinger: 'golden_finger',
-            characterStates: 'character_states',
-        }
-
-        const setClauses: string[] = []
-        const values: unknown[] = []
-
-        for (const [camel, col] of Object.entries(fieldMap)) {
-            if (camel in coreData) {
-                setClauses.push(`${col} = ?`)
-                values.push((coreData as Record<string, unknown>)[camel])
+            // 写入 project_core（仅非归档字段）
+            const fieldMap: Record<string, string> = {
+                projectName: 'project_name',
+                genre: 'genre',
+                subGenre: 'sub_genre',
+                targetAudience: 'target_audience',
+                totalChapters: 'total_chapters',
+                wordsPerChapter: 'words_per_chapter',
+                plotStructure: 'plot_structure',
+                narrativePov: 'narrative_pov',
+                writingStyle: 'writing_style',
+                referenceWorks: 'reference_works',
+                globalGuidance: 'global_guidance',
+                goldenFinger: 'golden_finger',
+                characterStates: 'character_states',
             }
-        }
 
-        if (setClauses.length > 0) {
-            setClauses.push("updated_at = unixepoch() * 1000")
-            values.push('main')
+            const setClauses: string[] = []
+            const values: unknown[] = []
 
-            db.prepare(
-                `UPDATE project_core SET ${setClauses.join(', ')} WHERE id = ?`
-            ).run(...values)
-        }
+            for (const [camel, col] of Object.entries(fieldMap)) {
+                if (camel in coreData) {
+                    setClauses.push(`${col} = ?`)
+                    values.push((coreData as Record<string, unknown>)[camel])
+                }
+            }
+
+            if (setClauses.length > 0) {
+                setClauses.push("updated_at = unixepoch() * 1000")
+                values.push('main')
+
+                db.prepare(
+                    `UPDATE project_core SET ${setClauses.join(', ')} WHERE id = ?`
+                ).run(...values)
+            }
+        })
+        tx()
     }
 
     // ===== project_archives 大文本字段读写（v4 schema） =====

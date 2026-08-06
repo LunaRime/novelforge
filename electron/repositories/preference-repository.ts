@@ -47,12 +47,12 @@ export class PreferenceRepository {
             ? db.prepare(`
                 SELECT * FROM preferences
                 WHERE last_chapter >= ?
-                ORDER BY count DESC, updated_at DESC
+                ORDER BY count DESC, updated_at DESC, id DESC
                 LIMIT ?
             `).all(recentChapters, limit) as Record<string, unknown>[]
             : db.prepare(`
                 SELECT * FROM preferences
-                ORDER BY count DESC, updated_at DESC
+                ORDER BY count DESC, updated_at DESC, id DESC
                 LIMIT ?
             `).all(limit) as Record<string, unknown>[]
 

@@ -103,6 +103,11 @@ export function closeProjectDatabase(): void {
     projectDb.close()
     projectDb = null
   }
+  // ⚠️ P3 修复：切换项目时关闭旧项目的 LanceDB 连接（此前 connectionPool 无界累积，
+  //    每个连接持有原生内存）
+  if (currentProjectPath) {
+    import('./vector-store').then(m => m.closeConnection(currentProjectPath!)).catch(() => {})
+  }
   currentProjectPath = null
 }
 
@@ -358,7 +363,6 @@ function createTables(db: BetterSqlite3.Database) {
       FOREIGN KEY (run_id) REFERENCES post_process_runs(id) ON DELETE CASCADE,
       UNIQUE(run_id, step_key)
     );
-    CREATE INDEX IF NOT EXISTS idx_post_steps_run ON post_process_steps(run_id);
 
     -- ============================================================
     -- 沿用表：LLM 调用记录
@@ -462,8 +466,7 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE INDEX IF NOT EXISTS idx_llm_calls_time ON llm_calls(created_at);
     CREATE INDEX IF NOT EXISTS idx_summary_chapter ON summary_snapshots(chapter_number);
     CREATE INDEX IF NOT EXISTS idx_summary_created ON summary_snapshots(created_at);
-    CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
-    CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
+    CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC, updated_at DESC);
     -- ⚠️ P1 修复：活动聚合/统计热点索引（此前全表扫描）
     CREATE INDEX IF NOT EXISTS idx_drafts_source_created ON drafts(source, created_at);
     CREATE INDEX IF NOT EXISTS idx_revisions_created ON revisions(created_at);
@@ -825,7 +828,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         created_at INTEGER DEFAULT (unixepoch() * 1000),
         updated_at INTEGER DEFAULT (unixepoch() * 1000)
       );
-      CREATE INDEX IF NOT EXISTS idx_volumes_number ON volumes(volume_number);
+      -- 冗余索引已移除（volume_number UNIQUE 自建索引覆盖）
     `)
     logger.info('DB', t('log.db.v9VolumesCreated'))
   } catch (e) {
@@ -846,7 +849,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         updated_at INTEGER DEFAULT (unixepoch() * 1000),
         UNIQUE (ai_text, user_text)
       );
-      CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC);
+      CREATE INDEX IF NOT EXISTS idx_preferences_count ON preferences(count DESC, updated_at DESC);
     `)
     logger.info('DB', t('log.db.v10PreferencesCreated'))
   } catch (e) {
@@ -860,6 +863,9 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
       CREATE INDEX IF NOT EXISTS idx_drafts_source_created ON drafts(source, created_at);
       CREATE INDEX IF NOT EXISTS idx_revisions_created ON revisions(created_at);
       CREATE INDEX IF NOT EXISTS idx_llm_calls_success ON llm_calls(success, created_at);
+      -- 冗余索引清理（与新库一致：UNIQUE 约束自建索引已覆盖）
+      DROP INDEX IF EXISTS idx_post_steps_run;
+      DROP INDEX IF EXISTS idx_volumes_number;
     `)
     logger.info('DB', t('log.db.v11HotIndexes'))
   } catch (e) {

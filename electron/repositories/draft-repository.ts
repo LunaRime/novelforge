@@ -218,16 +218,21 @@ export class DraftRepository {
         const db = getProjectDb()
         if (!db) return
 
-        // 先获取 contentId 以便清理
-        const meta = DraftRepository.getMeta(id)
-        db.prepare('DELETE FROM drafts WHERE id = ?').run(id)
+        // ⚠️ P3 修复：两条语句包事务——进程在 DELETE drafts 与 DELETE contents 之间
+        //    崩溃会残留孤儿 contents 行
+        const tx = db.transaction(() => {
+            // 先获取 contentId 以便清理
+            const meta = DraftRepository.getMeta(id)
+            db.prepare('DELETE FROM drafts WHERE id = ?').run(id)
 
-        // 清理孤立的 content 记录
-        if (meta) {
-            // 【DB 迁移备注】：如果 contents。id 仍被 revision 或 review 引用，
-            // SQLite外键约束会阻止删除（抛出异常）。捕获并吞掉异常是预期的，
-            // 这会导致少量不再被草稿引用的内容记录残留，但长期风险极低。
-            try { ContentRepository.delete(meta.contentId) } catch { /* 被外键保护 */ }
-        }
+            // 清理孤立的 content 记录
+            if (meta) {
+                // 【DB 迁移备注】：如果 contents.id 仍被 revision 或 review 引用，
+                // SQLite外键约束会阻止删除（抛出异常）。捕获并吞掉异常是预期的，
+                // 这会导致少量不再被草稿引用的内容记录残留，但长期风险极低。
+                try { ContentRepository.delete(meta.contentId) } catch { /* 被外键保护 */ }
+            }
+        })
+        tx()
     }
 }

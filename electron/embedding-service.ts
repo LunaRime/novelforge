@@ -610,15 +610,21 @@ export class EmbeddingService {
     this.cacheMisses = 0
   }
 
-  /** 简单文本哈希 */
+  /**
+   * 文本哈希（⚠️ P3 修复：32 位 djb2 + 长度后缀——两个不同文本同 hash 且同长度时
+   * LRU/去重缓存会返回错误向量（静默的错误检索）。升级为 64 位双 djb2 混合 + 长度）
+   */
   private hashText(text: string): string {
-    let hash = 0
+    let h1 = 0x811c9dc5
+    let h2 = 0x9e3779b1
     for (let i = 0; i < text.length; i++) {
       const char = text.charCodeAt(i)
-      hash = ((hash << 5) - hash) + char
-      hash |= 0 // 转换为 32 位整数
+      h1 = Math.imul(h1 ^ char, 16777619)
+      h2 = Math.imul(h2 + char, 2654435761)
     }
-    return `${hash}_${text.length}`
+    h1 >>>= 0
+    h2 >>>= 0
+    return `${h1.toString(16)}${h2.toString(16)}_${text.length}`
   }
 }
 
