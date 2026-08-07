@@ -5,6 +5,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ArchitecturePromptBuilder } from '../../prompts/prompt-builder'
 import { stripThinkingTags, stringifyField as stringifyFieldUtils } from '../workflow-utils'
 import { ipc } from '../../ipc-client'
+import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
 
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
@@ -58,6 +59,9 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     } catch (e) {
       throw new Error(t('error.jsonParse').replace('{error}', String(e)))
     }
+
+    // 枚举归一化：英文模板输出的 genre/targetAudience/结构/视角 → UI 中文规范值（未知值保留原样）
+    parsed = normalizeNovelConfigEnums(parsed)
 
     // 防御：LLM 常常将长文本字段错误地生成为对象或数组（workflow-utils 单一出口，长文本数组用换行合并）
     const stringifyField = (val: unknown): string => stringifyFieldUtils(val, '\n')

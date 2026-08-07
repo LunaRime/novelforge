@@ -67,11 +67,14 @@ export const configPrompts: PromptTemplate[] = [
     "genre": "主类型（玄幻/仙侠/都市/科幻/历史/悬疑/游戏/军事/奇幻/武侠/现实/其他）",
     "targetAudience": "受众（男频/女频/通用）",
     "subGenre": "细分类型及标签",
+    "plotStructure": "故事结构（three_act/heros_journey/save_the_cat/kishotenketsu/multi_thread/freeform）",
+    "narrativePOV": "叙事视角（third_limited/first_person/third_omniscient/multi_pov）",
     "coreOutline": "核心大纲（150字以上，含主线目标、核心冲突、故事走向）",
     "worldSetting": "世界观背景与力量体系",
     "goldenFinger": "主角金手指/核心能力体系",
     "protagonistProfile": "主角人设（性格、背景、核心驱动力）",
-    "globalGuidance": "根据已有内容归纳的全局写作风格与节奏要求"
+    "globalGuidance": "根据已有内容归纳的全局写作风格与节奏要求",
+    "writingStyle": "写作风格（100字以上，含语言风格、节奏特点）"
   },
   "architectureFiles": {
     "premise": "核心故事前提文本（50-200字的高度浓缩核心，须含一句话前提与核心冲突）",
@@ -162,7 +165,8 @@ export const configPrompts: PromptTemplate[] = [
     "worldSetting": "世界观背景与力量体系",
     "goldenFinger": "主角金手指/核心能力体系",
     "protagonistProfile": "主角人设（性格、背景、核心驱动力）",
-    "globalGuidance": "根据已有内容归纳的全局写作风格与节奏要求"
+    "globalGuidance": "根据已有内容归纳的全局写作风格与节奏要求",
+    "writingStyle": "写作风格（100字以上，含语言风格、节奏特点）"
   },
   "architectureFiles": {
     "premise": "核心故事前提文本（50-200字的高度浓缩核心，须含一句话前提与核心冲突）",
