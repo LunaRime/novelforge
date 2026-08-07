@@ -115,7 +115,9 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
     }
   }
 
-  if (separatorIdx < 1) return null
+  // 标准 Markdown 表格不存在时，尝试空格/制表符分隔兜底
+  // （LLM 高频变形：丢失全部竖线只留多空格对齐——用户实测「苏晚晴（苏夜）」定稿状态表全丢的根因路径）
+  if (separatorIdx < 1) return parseSpaceSeparatedTable(text)
 
   // 4. 解析表头（分隔行上一行）
   const headerLine = lines[separatorIdx - 1]
@@ -228,6 +230,60 @@ export function parseMarkdownTable(text: string): Array<Record<string, string>> 
   if (!hasValidData) return null
 
   return rows
+}
+
+/**
+ * 空格/制表符分隔表格兜底解析（LLM 丢失竖线时的对齐表格）。
+ * 结构判定：某行按 2+ 空格或 tab 切分后字段数 ≥2 且首字段为 name 类 → header；
+ * 后续同结构行为数据行（缺列补空）。首字段非 name 类 → 判非表格返回 null（防正文误判）。
+ */
+function parseSpaceSeparatedTable(text: string): Array<Record<string, string>> | null {
+  const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean)
+  const nameFields = new Set(['name', '角色名', '名字', '姓名', '角色名称', '角色'])
+
+  let headerIdx = -1
+  let headers: string[] = []
+  for (let i = 0; i < lines.length; i++) {
+    const parts = lines[i].split(/\s{2,}|\t+/).filter(Boolean)
+    if (parts.length >= 2 && nameFields.has(parts[0].trim().toLowerCase())) {
+      headerIdx = i
+      headers = parts
+      break
+    }
+  }
+  if (headerIdx < 0 || headers.length < 2) return null
+
+  const rows: Array<Record<string, string>> = []
+  for (let i = headerIdx + 1; i < lines.length; i++) {
+    const parts = lines[i].split(/\s{2,}|\t+/).filter(Boolean)
+    if (parts.length < 2) continue
+    const row: Record<string, string> = {}
+    headers.forEach((h, idx) => {
+      const normalized = h.trim()
+      row[HEADER_ALIASES[normalized] || HEADER_ALIASES[normalized.toLowerCase()] || normalized] = parts[idx] ?? ''
+    })
+    rows.push(row)
+  }
+
+  return rows.length > 0 ? rows : null
+}
+
+/**
+ * 分割定稿角色状态更新的 UPDATES/NEW 分段。
+ * 容忍 LLM 变体：无 ### 前缀、带方括号 `[UPDATES（状态变化...）`、中文注释紧跟。
+ */
+export function splitCharacterUpdateSections(
+  text: string,
+): Array<{ label: 'UPDATES' | 'NEW'; content: string }> {
+  const parts = text.split(/(?:#{1,3}\s*)?\[?\s*(UPDATES|NEW)(?=[（(:：]|\s|$)/i)
+  const sections: Array<{ label: 'UPDATES' | 'NEW'; content: string }> = []
+  for (let i = 0; i < parts.length; i++) {
+    const label = parts[i]?.trim().toUpperCase()
+    if (label === 'UPDATES' || label === 'NEW') {
+      sections.push({ label, content: parts[i + 1] || '' })
+    }
+  }
+  return sections
 }
 
 /** 分割表格行为 cell 数组（按非转义 | 分割；\| 转义竖线留在单元格内再还原） */

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue } from './character-normalize'
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName } from './character-normalize'
 
 /**
  * 角色卡 LLM 输出归一化 — 背景：定稿后处理 update_character_cards 依赖中文哨兵
@@ -104,5 +104,30 @@ describe('normalizeTagsValue', () => {
   it('空值 → 空', () => {
     expect(normalizeTagsValue('')).toBe('')
     expect(normalizeTagsValue(undefined as unknown as string)).toBe('')
+  })
+})
+
+describe('matchCharacterName', () => {
+  const chars = [{ name: '苏晚晴' }, { name: '李雷' }]
+
+  it('精确匹配优先', () => {
+    expect(matchCharacterName(chars, '苏晚晴')?.name).toBe('苏晚晴')
+  })
+
+  it('别名格式「名（别名）」→ 匹配括号外名称', () => {
+    expect(matchCharacterName(chars, '苏晚晴（苏夜）')?.name).toBe('苏晚晴')
+  })
+
+  it('别名格式半角括号 → 匹配括号内名称（DB 存别名）', () => {
+    const aliasOnly = [{ name: '苏夜' }]
+    expect(matchCharacterName(aliasOnly, '苏晚晴(苏夜)')?.name).toBe('苏夜')
+  })
+
+  it('不存在的名称 → undefined', () => {
+    expect(matchCharacterName(chars, '王五')).toBeUndefined()
+  })
+
+  it('带别名的未知角色 → undefined', () => {
+    expect(matchCharacterName(chars, '王五（阿五）')).toBeUndefined()
   })
 })

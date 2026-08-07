@@ -5,7 +5,7 @@
  * 缺 isCharacter 分支）——改实现不改进测试会误报/漏报。现直接 import 生产模块。
  */
 import { describe, it, expect } from 'vitest'
-import { parseMarkdownTable, robustParseJSON, extractAndRepairJSON } from './workflow-utils'
+import { parseMarkdownTable, robustParseJSON, extractAndRepairJSON, splitCharacterUpdateSections } from './workflow-utils'
 
 describe('parseMarkdownTable', () => {
   describe('审稿表格解析 (Bug Fix)', () => {
@@ -59,6 +59,55 @@ describe('parseMarkdownTable', () => {
 
     it('无表格文本返回 null', () => {
       expect(parseMarkdownTable('这是一段纯文本，没有表格')).toBeNull()
+    })
+  })
+
+  describe('空格分隔表格（LLM 丢失竖线变体）', () => {
+    it('应解析空格分隔的角色状态表格', () => {
+      const input = `（状态变化的已有角色）
+name    location    powerLevel    tags    motivation
+苏晚晴    低处驿道（猎户小屋以南）    虚脉淬体完成    虚能操控者    集齐碎片`
+
+      const result = parseMarkdownTable(input)
+      expect(result).not.toBeNull()
+      expect(result).toHaveLength(1)
+      expect(result![0].name).toBe('苏晚晴')
+      expect(result![0].location).toBe('低处驿道（猎户小屋以南）')
+      expect(result![0].powerLevel).toBe('虚脉淬体完成')
+    })
+
+    it('应解析多行空格分隔表格（尾部缺值补空）', () => {
+      const input = `name    location    recentEvents
+苏晚晴    低处驿道    猎户小屋中炼化碎片
+李雷    低处驿道`
+
+      const result = parseMarkdownTable(input)
+      expect(result).not.toBeNull()
+      expect(result).toHaveLength(2)
+      expect(result![1].name).toBe('李雷')
+      expect(result![1].recentEvents).toBe('')
+    })
+
+    it('纯文本正文（首字段非 name 类）不误判为表格', () => {
+      expect(parseMarkdownTable('这是一段普通的正文描述 没有表格 结构')).toBeNull()
+    })
+  })
+
+  describe('splitCharacterUpdateSections', () => {
+    it('标准 ### UPDATES/NEW 分段', () => {
+      const sections = splitCharacterUpdateSections('### UPDATES\na|b\n### NEW\nc|d')
+      expect(sections.map(s => s.label)).toEqual(['UPDATES', 'NEW'])
+      expect(sections[0].content).toContain('a|b')
+    })
+
+    it('容忍 LLM 变体 [UPDATES（...）— 无 ### 前缀带方括号与中文注释', () => {
+      const sections = splitCharacterUpdateSections('[UPDATES（状态变化的已有角色）\nname    location\n苏晚晴    低处驿道\nNEW（新出场角色）\n无    -')
+      expect(sections.map(s => s.label)).toEqual(['UPDATES', 'NEW'])
+      expect(sections[0].content).toContain('苏晚晴')
+    })
+
+    it('正文不含分段标记 → 空数组', () => {
+      expect(splitCharacterUpdateSections('这是一段普通文本')).toEqual([])
     })
   })
 
