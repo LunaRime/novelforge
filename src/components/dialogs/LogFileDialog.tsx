@@ -7,8 +7,8 @@
  * - 内容区：等宽只读，尾部 maxLines 截断（防大文件卡 UI），显示总行数
  * - 工具栏：刷新 / 复制 / 在文件管理器中打开日志目录
  */
-import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, Copy, Check, FolderOpen, FileText } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { RefreshCw, Copy, Check, FolderOpen, FileText, ArrowUp, ArrowDown } from 'lucide-react'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '../ui/Dialog'
@@ -34,6 +34,14 @@ function formatDate(mtime: number): string {
   })
 }
 
+/** 解析日志行首 ISO 时间戳（logger 文件格式 `[2026-08-07T14:30:01.123Z] [INFO ] [source] msg`）；解析失败返回 -Infinity */
+function parseLogLineTs(line: string): number {
+  const m = line.match(/^\[([^\]]+)\]/)
+  if (!m) return -Infinity
+  const ts = Date.parse(m[1])
+  return Number.isNaN(ts) ? -Infinity : ts
+}
+
 interface LogFileDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -48,9 +56,40 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState('')
   const [copied, setCopied] = useState(false)
+  /** 文件列表排序方向：false = 按 mtime 降序（新→旧，默认），true = 升序 */
+  const [listSortAsc, setListSortAsc] = useState(false)
+  /** 内容行排序方向：true = 按行首时间戳升序（文件原序，默认），false = 倒序（最新在上） */
+  const [contentSortAsc, setContentSortAsc] = useState(true)
   const contentRef = useRef<HTMLPreElement>(null)
 
-  const currentFiles = envFiles.find(e => e.env === env)?.files ?? []
+  const currentFiles = useMemo(
+    () => envFiles.find(e => e.env === env)?.files ?? [],
+    [envFiles, env],
+  )
+
+  /** 文件列表显式按 mtime 排序（不依赖主进程返回顺序；mtime 缺失排最后） */
+  const sortedFiles = useMemo(() => {
+    return [...currentFiles].sort((a, b) => {
+      const ka = a.mtime || 0
+      const kb = b.mtime || 0
+      return listSortAsc ? ka - kb : kb - ka
+    })
+  }, [currentFiles, listSortAsc])
+
+  /** 内容行按行首时间戳排序（升序=文件原序；无时间戳行稳定排最后） */
+  const displayedLines = useMemo(() => {
+    if (!content) return content
+    const lines = content.split('\n')
+    if (contentSortAsc) return content
+    const withTs = lines.map(line => ({ line, ts: parseLogLineTs(line) }))
+    withTs.sort((a, b) => {
+      // 无时间戳行(空行/堆栈续行)key=Infinity——升降序都排最后
+      const ka = a.ts === -Infinity ? Infinity : a.ts
+      const kb = b.ts === -Infinity ? Infinity : b.ts
+      return kb - ka
+    })
+    return withTs.map(x => x.line).join('\n')
+  }, [content, contentSortAsc])
 
   /** 加载两环境文件列表 */
   const loadFiles = useCallback(async () => {
@@ -76,14 +115,14 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
     Promise.resolve().then(() => {
       if (files.length > 0) {
         if (!selected || !files.some(f => f.name === selected.name)) {
-          setSelected(files[0])
+          setSelected(sortedFiles[0] ?? files[0])
         }
       } else {
         setSelected(null)
         setContent('')
       }
     })
-  }, [env, envFiles, selected])
+  }, [env, envFiles, selected, sortedFiles])
 
   // 选中文件 → 加载内容（尾部截断）
   useEffect(() => {
@@ -110,16 +149,16 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
     return () => { cancelled = true }
   }, [selected])
 
-  // 内容加载完成后回到底部（最新日志在最下）
+  // 内容加载完成后滚动：正序回到底部（最新在下），倒序回到顶部（最新在上）
   useEffect(() => {
     if (contentRef.current && !loading) {
-      contentRef.current.scrollTop = contentRef.current.scrollHeight
+      contentRef.current.scrollTop = contentSortAsc ? contentRef.current.scrollHeight : 0
     }
-  }, [content, loading])
+  }, [content, loading, contentSortAsc])
 
   const copyContent = async () => {
     try {
-      await navigator.clipboard.writeText(content)
+      await navigator.clipboard.writeText(displayedLines)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
     } catch { /* 剪贴板不可用 */ }
@@ -173,10 +212,21 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
 
         <div className="flex flex-1 min-h-0">
           {/* 文件列表 */}
-          <div className="w-56 flex-shrink-0 border-r border-[var(--color-border)] overflow-y-auto py-1">
-            {currentFiles.length === 0 ? (
+          <div className="w-56 flex-shrink-0 border-r border-[var(--color-border)] flex flex-col">
+            <div className="flex items-center justify-end px-1.5 py-1 border-b border-[var(--color-border)] flex-shrink-0">
+              <Button
+                variant="ghost" size="icon"
+                onClick={() => setListSortAsc(!listSortAsc)}
+                title={listSortAsc ? t('log.sortAsc') : t('log.sortDesc')}
+                className={listSortAsc ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
+              >
+                {listSortAsc ? <ArrowUp size={12} /> : <ArrowDown size={12} />}
+              </Button>
+            </div>
+            <div className="flex-1 overflow-y-auto py-1">
+            {sortedFiles.length === 0 ? (
               <div className="text-center py-8 text-xs opacity-50">{t('log.noFiles')}</div>
-            ) : currentFiles.map((file) => (
+            ) : sortedFiles.map((file) => (
               <button
                 key={`${file.env}-${file.name}`}
                 type="button"
@@ -196,6 +246,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
                 </span>
               </button>
             ))}
+            </div>
           </div>
 
           {/* 内容区 */}
@@ -208,14 +259,25 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
                       : `${totalLines} lines`)
                   : ''}
               </span>
-              <Button
-                variant="ghost" size="icon"
-                onClick={copyContent}
-                disabled={!content}
-                title={t('log.copy')}
-              >
-                {copied ? <Check size={13} className="text-[var(--color-accent)]" /> : <Copy size={13} />}
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setContentSortAsc(!contentSortAsc)}
+                  disabled={!content}
+                  title={contentSortAsc ? t('log.sortAsc') : t('log.sortDesc')}
+                  className={contentSortAsc ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-accent)]'}
+                >
+                  {contentSortAsc ? <ArrowDown size={12} /> : <ArrowUp size={12} />}
+                </Button>
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={copyContent}
+                  disabled={!content}
+                  title={t('log.copy')}
+                >
+                  {copied ? <Check size={13} className="text-[var(--color-accent)]" /> : <Copy size={13} />}
+                </Button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-auto">
@@ -236,7 +298,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
                   ref={contentRef}
                   className="p-3 font-mono text-[11px] leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]"
                 >
-                  {content}
+                  {displayedLines}
                 </pre>
               )}
             </div>
