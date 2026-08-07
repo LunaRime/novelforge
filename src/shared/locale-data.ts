@@ -2049,6 +2049,9 @@ export const UI_TEXTS_DATA = {
   'shareCard.generate': { 'zh-CN': '生成分享卡', 'en-US': 'Create Share Card', 'ru-RU': 'Создать карточку' },
   'shareCard.saveSuccess': { 'zh-CN': '分享卡已保存: {path}', 'en-US': 'Share card saved: {path}', 'ru-RU': 'Карточка сохранена: {path}' },
   'shareCard.saveFailed': { 'zh-CN': '分享卡生成失败: {error}', 'en-US': 'Failed to create share card: {error}', 'ru-RU': 'Не удалось создать карточку: {error}' },
+  // --- 角色试演（Agent 扮演角色） ---
+  'roleplay.enter': { 'zh-CN': '角色试演', 'en-US': 'Roleplay', 'ru-RU': 'Ролевая игра' },
+  'roleplay.newConversation': { 'zh-CN': '试演：{name}', 'en-US': 'Roleplay: {name}', 'ru-RU': 'Ролевая игра: {name}' },
   // --- Window title & splash（启动页 React 挂载前显示） ---
   'window.title': { 'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE', 'en-US': 'NovelForge — AI-Powered Novel Writing IDE', 'ru-RU': 'NovelForge — IDE для написания романов с ИИ' },
   'splash.initializing': { 'zh-CN': 'NovelForge 初始化中', 'en-US': 'NovelForge Initializing', 'ru-RU': 'NovelForge: инициализация' },

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X } from 'lucide-react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -68,6 +68,20 @@ export default function CharacterEditor() {
     )
     if (!ok) return
     await deleteCharacter(selectedCard.name, currentProject.path)
+  }
+
+  /** 角色试演：新建绑定角色的 Agent 会话（角色 prompt 在 sendMessage 时注入）并打开 AI 面板 */
+  const handleRoleplay = () => {
+    if (!selectedCard) return
+    void (async () => {
+      const { useAgentStore } = await import('../../stores/agent-store')
+      const { useLayoutStore } = await import('../../stores/layout-store')
+      useAgentStore.getState().createConversation({
+        roleplayCharacter: selectedCard.name,
+        title: t('roleplay.newConversation').replace('{name}', selectedCard.name),
+      })
+      useLayoutStore.getState().setAIPanelOpen(true)
+    })()
   }
 
   const handleSave = async () => {
@@ -145,6 +159,10 @@ export default function CharacterEditor() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => setViewMode('backlinks')} title={t('character.viewBacklinks')}>
                 <Link2 size={12} /> {t('character.backlinks')}
+              </Button>
+              {/* 角色试演：新建绑定角色的 Agent 会话并打开 AI 面板（OOC 约束在 roleplay prompt 内） */}
+              <Button variant="outline" size="sm" onClick={handleRoleplay} title={t('roleplay.enter')}>
+                <MessagesSquare size={12} /> {t('roleplay.enter')}
               </Button>
               <Button variant="destructive" size="sm" onClick={handleDelete}>
                 <Trash2 size={12} /> {t('action.delete')}
