@@ -685,6 +685,29 @@ export interface BrowserTabInfo {
   type: string
 }
 
+export interface TemplateChannels {
+  /** 模板元信息列表（不含 data） */
+  'templates:list': {
+    args: []
+    return: Array<{ name: string; description: string }>
+  }
+  /** 获取完整模板 data（应用模板时填充） */
+  'templates:get': {
+    args: [name: string]
+    return: Record<string, unknown> | null
+  }
+  /** 保存模板（校验 schema + 名称清洗防穿越） */
+  'templates:save': {
+    args: [input: { name: string; description?: string; data: Record<string, unknown> }]
+    return: { success: boolean; error?: string }
+  }
+  /** 删除模板 */
+  'templates:delete': {
+    args: [name: string]
+    return: { success: boolean }
+  }
+}
+
 export interface ReportChannels {
   /** 渲染 HTML 并离屏截图（年度报告/分享卡生成链路） */
   'report:render-html': {
@@ -752,7 +775,7 @@ export interface LogChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */
