@@ -192,7 +192,7 @@
     /* 编辑器 */
     --color-editor-bg: #F7F9FC;
     --color-editor-line-highlight: rgba(91, 158, 214, 0.04);
-    --color-editor-selection: rgba(91, 158, 214, 0.14);
+    --color-editor-selection: rgba(91, 158, 214, 0.30);
 
     /* 分割条 Sash */
     --color-sash: transparent;
@@ -308,7 +308,7 @@
 
     --color-editor-bg: #091525;
     --color-editor-line-highlight: rgba(126, 200, 227, 0.04);
-    --color-editor-selection: rgba(126, 200, 227, 0.18);
+    --color-editor-selection: rgba(126, 200, 227, 0.30);
 
     --color-sash: transparent;
     --color-sash-hover: rgba(126, 200, 227, 0.15);
@@ -386,7 +386,7 @@
 
     --color-editor-bg: #F8F3EB;
     --color-editor-line-highlight: rgba(155, 142, 200, 0.04);
-    --color-editor-selection: rgba(155, 142, 200, 0.12);
+    --color-editor-selection: rgba(155, 142, 200, 0.30);
 
     --color-sash: transparent;
     --color-sash-hover: rgba(155, 142, 200, 0.12);
