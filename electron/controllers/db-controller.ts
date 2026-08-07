@@ -169,6 +169,15 @@ export function registerDatabaseController() {
     }
   })
 
+  ipcMain.handle('db:character-merge-fields', async (_event, name: string, fields: Record<string, string>) => {
+    try {
+      CharacterRepository.mergeFields(name, fields)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
   // ============================================================
   // 4. drafts — 草稿
   // ============================================================
