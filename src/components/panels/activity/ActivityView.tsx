@@ -17,6 +17,9 @@ import type { DailyActivityData, DailyActivityRow } from '../../../shared/ipc-ch
 import { useProjectStore } from '../../../stores/project-store'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../../ui/Select'
+import { ipc } from '../../../services/ipc-client'
+import { toast } from '../../ui/Toast'
+import { buildYearlySummary, buildYearlyReportHTML } from '../../../services/yearly-report'
 
 /** 数据拉取天数（10 年等效全量——月度视图按年切换需要多年历史；聚合 SQL 按天分组数据量极小） */
 const FETCH_DAYS = 3650
@@ -74,6 +77,25 @@ export default function ActivityView() {
 
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 事件处理器内 setState 合法
   const handleRefresh = () => { setLoading(true); loadActivity() }
+
+  /** 生成年度报告分享卡（当前查看年份）→ 主进程离屏截图 → 选择目录保存 PNG */
+  const handleGenerateReport = async () => {
+    if (!data) return
+    try {
+      const summary = buildYearlySummary(data.days, viewYear)
+      const html = buildYearlyReportHTML(summary, getCurrentLocale())
+      const res = await ipc.invoke('report:render-html', html)
+      if (!res.success || !res.png) throw new Error(res.error || 'render failed')
+      const dir = await ipc.invoke('dialog:select-folder')
+      if (!dir) return
+      const filePath = `${dir}/NovelForge-Yearly-Report-${viewYear}.png`
+      const saved = await ipc.invoke('fs:write-buffer', filePath, res.png)
+      if (!saved.success) throw new Error(saved.error || 'write failed')
+      toast.success(t('report.saveSuccess').replace('{path}', filePath))
+    } catch (e) {
+      toast.error(t('report.saveFailed').replace('{error}', String(e)))
+    }
+  }
 
   if (loading && !data) {
     return (
@@ -176,6 +198,15 @@ export default function ActivityView() {
             </SelectContent>
           </Select>
         </div>
+        <button
+          onClick={handleGenerateReport}
+          className="icon-btn flex-shrink-0"
+          style={{ width: 20, height: 20 }}
+          title={t('report.generate')}
+          disabled={!data}
+        >
+          <Sparkles size={12} />
+        </button>
         <button onClick={handleRefresh} className="icon-btn flex-shrink-0" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>

@@ -152,6 +152,10 @@ export interface FileChannels {
     args: [filePath: string, content: string]
     return: { success: boolean; error?: string }
   }
+  'fs:write-buffer': {
+    args: [filePath: string, content: Uint8Array]
+    return: { success: boolean; error?: string }
+  }
   'fs:list-dir': {
     args: [dirPath: string]
     return: FileNode[]
@@ -681,6 +685,14 @@ export interface BrowserTabInfo {
   type: string
 }
 
+export interface ReportChannels {
+  /** 渲染 HTML 并离屏截图（年度报告/分享卡生成链路） */
+  'report:render-html': {
+    args: [html: string]
+    return: { success: boolean; png?: Uint8Array; error?: string }
+  }
+}
+
 export interface BrowserChannels {
   /** 查询浏览器标签页列表（GET http://127.0.0.1:{port}/json，按 title/url 排序） */
   'browser:list-tabs': {
@@ -740,7 +752,7 @@ export interface LogChannels {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */

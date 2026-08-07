@@ -15,6 +15,7 @@ import { registerExportController } from './controllers/export-controller'
 import { registerSkillController } from './controllers/skill-controller'
 import { registerDevController } from './controllers/dev-controller'
 import { registerBrowserController } from './controllers/browser-controller'
+import { registerReportController } from './controllers/report-controller'
 import { registerHealthCheckIPC } from './health-check'
 
 /**
@@ -39,6 +40,7 @@ export function registerIPCHandlers() {
   registerSkillController()
   registerDevController()
   registerBrowserController()
+  registerReportController()
   registerHealthCheckIPC()
 
   logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', VELA_HOME))
