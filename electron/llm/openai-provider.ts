@@ -48,7 +48,8 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (!res.ok) {
         const text = await res.text().catch(() => '')
-        const errorMsg = `API 调用失败 (${res.status}): ${text}`
+        // text 为服务端原始响应（可能含 $）→ 箭头函数 replacer 防 $& 语义
+        const errorMsg = t('error.apiCallFailed').replace('{status}', String(res.status)).replace('{err}', () => text)
         // 抛出 HttpError 供 withRetry 判断是否可重试
         if (res.status === 429 || res.status === 503 || res.status >= 500) {
           throw new HttpError(res.status, errorMsg)
@@ -85,11 +86,11 @@ export class OpenAIProvider implements ILLMProvider {
       if (error instanceof HttpError) {
         let errorMsg = error.message
         if (error.status === 429) {
-          errorMsg = `请求过于频繁 (429)，已重试多次仍失败。请稍后重试或降低并发数。`
+          errorMsg = t('error.rateLimitExhausted')
         } else if (error.status === 503) {
-          errorMsg = `服务暂时不可用 (503)，已重试多次仍失败。请稍后重试。`
+          errorMsg = t('error.serviceUnavailableExhausted')
         } else if (error.status >= 500) {
-          errorMsg = `服务器错误 (${error.status})，已重试多次仍失败。`
+          errorMsg = t('error.serverErrorExhausted').replace('{status}', String(error.status))
         }
         return { success: false, content: '', error: errorMsg }
       }
@@ -131,7 +132,8 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (!res.ok) {
         const text = await res.text()
-        const errorMsg = `API 调用失败 (${res.status}): ${text}`
+        // text 为服务端原始响应（可能含 $）→ 箭头函数 replacer 防 $& 语义
+        const errorMsg = t('error.apiCallFailed').replace('{status}', String(res.status)).replace('{err}', () => text)
         // 可重试的 HTTP 状态码 → 抛出以便 withStreamRetry 处理
         if (res.status === 429 || res.status === 503 || res.status >= 500) {
           throw new HttpError(res.status, errorMsg)
@@ -143,7 +145,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       const reader = res.body?.getReader()
       if (!reader) {
-        opts.onError('无法读取响应流')
+        opts.onError(t('error.streamReadFailed'))
         return
       }
 
@@ -246,15 +248,15 @@ export class OpenAIProvider implements ILLMProvider {
     }, { canRetry: () => !emittedAny }).catch((error) => {
       // withStreamRetry 重试耗尽后的最终错误处理
       if ((error as Error).name === 'AbortError') {
-        opts.onError('已取消生成')
+        opts.onError(t('error.generationCancelled'))
       } else if (error instanceof HttpError) {
         let errorMsg = error.message
         if (error.status === 429) {
-          errorMsg = `请求过于频繁 (429)，已重试多次仍失败。请稍后重试或降低并发数。`
+          errorMsg = t('error.rateLimitExhausted')
         } else if (error.status === 503) {
-          errorMsg = `服务暂时不可用 (503)，已重试多次仍失败。请稍后重试。`
+          errorMsg = t('error.serviceUnavailableExhausted')
         } else if (error.status >= 500) {
-          errorMsg = `服务器错误 (${error.status})，已重试多次仍失败。`
+          errorMsg = t('error.serverErrorExhausted').replace('{status}', String(error.status))
         }
         opts.onError(errorMsg)
       } else {

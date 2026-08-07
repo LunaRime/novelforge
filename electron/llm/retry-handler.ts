@@ -121,7 +121,13 @@ export async function withRetry<T>(
 
       logger.warn(
         'LLM:Retry',
-        `第 ${attempt + 1}/${maxRetries} 次重试，等待 ${delay}ms${statusInfo}: ${String(error).slice(0, 200)}`,
+        // error 动态内容可能含 $ → 箭头函数 replacer 防 $& 语义
+        t('log.llm.retryAttempt')
+          .replace('{attempt}', String(attempt + 1))
+          .replace('{max}', String(maxRetries))
+          .replace('{delay}', String(delay))
+          .replace('{statusInfo}', () => statusInfo)
+          .replace('{err}', () => String(error).slice(0, 200)),
       )
 
       await sleep(delay)
@@ -197,7 +203,12 @@ export async function withStreamRetry(
 
       logger.warn(
         'LLM:StreamRetry',
-        `流式第 ${attempt + 1}/${maxRetries} 次重试，等待 ${delay}ms${statusInfo}: ${String(error).slice(0, 200)}`,
+        t('log.llm.retryAttempt')
+          .replace('{attempt}', String(attempt + 1))
+          .replace('{max}', String(maxRetries))
+          .replace('{delay}', String(delay))
+          .replace('{statusInfo}', () => statusInfo)
+          .replace('{err}', () => String(error).slice(0, 200)),
       )
 
       await sleep(delay)
