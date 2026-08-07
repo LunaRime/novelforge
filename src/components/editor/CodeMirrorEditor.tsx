@@ -354,12 +354,16 @@ export default function CodeMirrorEditor({
     }
   }
 
-  /** 生成章节分享卡：选中文本 → LLM 摘要（JSON）→ 品牌卡片 → 离屏截图 → 保存 PNG */
+  /** 生成章节分享卡：先弹保存对话框（用户手势立即响应）→ LLM 摘要 → 卡片 → 截图 → 写入 */
   const handleShareCard = async () => {
     try {
       if (!selectionRange || !editorRef.current?.view) return
       const selectedText = editorRef.current.view.state.sliceDoc(selectionRange.from, selectionRange.to)
       if (!selectedText.trim()) return
+
+      const { ipc } = await import('../../services/ipc-client')
+      const outPath = await ipc.invoke('dialog:save-file', { defaultName: 'NovelForge-Share-Card.png' })
+      if (!outPath) return
 
       const { useLLMStore } = await import('../../stores/llm-store')
       const res = await useLLMStore.getState().generate(
@@ -380,7 +384,6 @@ export default function CodeMirrorEditor({
       }
       if (!parsed.summary) throw new Error('no summary in response')
 
-      const { ipc } = await import('../../services/ipc-client')
       const { buildShareCardHTML } = await import('../../services/share-card')
       const { toast } = await import('../ui/Toast')
       // 卡片标题：物理文件取文件名（去扩展名）；vela:// 伪协议用品牌名
@@ -396,9 +399,6 @@ export default function CodeMirrorEditor({
 
       const shot = await ipc.invoke('report:render-html', html)
       if (!shot.success || !shot.png) throw new Error(shot.error || 'render failed')
-      const dir = await ipc.invoke('dialog:select-folder')
-      if (!dir) return
-      const outPath = `${dir}/NovelForge-Share-Card.png`
       const saved = await ipc.invoke('fs:write-buffer', outPath, shot.png)
       if (!saved.success) throw new Error(saved.error || 'write failed')
       toast.success(t('shareCard.saveSuccess').replace('{path}', outPath))

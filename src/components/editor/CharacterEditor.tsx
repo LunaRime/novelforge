@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus } from 'lucide-react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -130,11 +130,13 @@ export default function CharacterEditor() {
     void (async () => {
       const { useAgentStore } = await import('../../stores/agent-store')
       const { useLayoutStore } = await import('../../stores/layout-store')
-      useAgentStore.getState().createConversation({
+      const conv = useAgentStore.getState().createConversation({
         roleplayCharacter: selectedCard.name,
         title: t('roleplay.newConversation').replace('{name}', selectedCard.name),
       })
       useLayoutStore.getState().setAIPanelOpen(true)
+      // 视觉反馈：会话已创建并打开 AI 面板（此前点击后无感知）
+      toast.success(t('roleplay.created').replace('{name}', selectedCard.name).replace('{title}', conv.title))
     })()
   }
 
@@ -223,8 +225,8 @@ export default function CharacterEditor() {
                 <BookmarkPlus size={12} />
               </Button>
               <Select value="" onValueChange={(v) => void handleApplyTemplate(v)} onOpenChange={(open) => { if (open) void loadTemplates() }}>
-                <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-[0.68rem]" title={t('template.apply')}>
-                  <SelectValue placeholder={t('template.apply')} />
+                <SelectTrigger className="h-6 w-6 rounded-[var(--radius-sm)] justify-center" title={t('template.apply')}>
+                  <FileInput size={12} />
                 </SelectTrigger>
                 <SelectContent>
                   {templates.length === 0 ? (

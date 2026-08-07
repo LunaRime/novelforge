@@ -78,20 +78,19 @@ export default function ActivityView() {
   // eslint-disable-next-line react-hooks/set-state-in-effect -- 事件处理器内 setState 合法
   const handleRefresh = () => { setLoading(true); loadActivity() }
 
-  /** 生成年度报告分享卡（当前查看年份）→ 主进程离屏截图 → 选择目录保存 PNG */
+  /** 生成年度报告分享卡（当前查看年份）：先弹保存对话框（用户手势立即响应）→ 截图 → 写入 */
   const handleGenerateReport = async () => {
     if (!data) return
     try {
+      const outPath = await ipc.invoke('dialog:save-file', { defaultName: `NovelForge-Yearly-Report-${viewYear}.png` })
+      if (!outPath) return
       const summary = buildYearlySummary(data.days, viewYear)
       const html = buildYearlyReportHTML(summary, getCurrentLocale())
       const res = await ipc.invoke('report:render-html', html)
       if (!res.success || !res.png) throw new Error(res.error || 'render failed')
-      const dir = await ipc.invoke('dialog:select-folder')
-      if (!dir) return
-      const filePath = `${dir}/NovelForge-Yearly-Report-${viewYear}.png`
-      const saved = await ipc.invoke('fs:write-buffer', filePath, res.png)
+      const saved = await ipc.invoke('fs:write-buffer', outPath, res.png)
       if (!saved.success) throw new Error(saved.error || 'write failed')
-      toast.success(t('report.saveSuccess').replace('{path}', filePath))
+      toast.success(t('report.saveSuccess').replace('{path}', outPath))
     } catch (e) {
       toast.error(t('report.saveFailed').replace('{error}', String(e)))
     }
@@ -198,18 +197,22 @@ export default function ActivityView() {
             </SelectContent>
           </Select>
         </div>
-        <button
-          onClick={handleGenerateReport}
-          className="icon-btn flex-shrink-0"
-          style={{ width: 20, height: 20 }}
-          title={t('report.generate')}
-          disabled={!data}
-        >
-          <Sparkles size={12} />
-        </button>
-        <button onClick={handleRefresh} className="icon-btn flex-shrink-0" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
+        {/* 报告 + 刷新：紧邻的右侧操作组（报告按钮带文字标签，明确功能入口） */}
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={handleGenerateReport}
+            className="flex items-center gap-1 px-1.5 h-5 rounded text-[0.65rem] transition-colors cursor-pointer hover:opacity-80"
+            style={{ color: 'var(--color-accent)' }}
+            title={t('report.generate')}
+            disabled={!data}
+          >
+            <Sparkles size={11} />
+            {t('report.generateShort')}
+          </button>
+          <button onClick={handleRefresh} className="icon-btn flex-shrink-0" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
 
       {allRows.length === 0 ? (

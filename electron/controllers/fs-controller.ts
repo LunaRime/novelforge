@@ -38,11 +38,32 @@ const BLOCKED_PATHS = [
 ]
 
 /**
+ * 用户通过系统对话框显式选择的目录（会话级授权）。
+ * 导出/分享卡保存到任意用户目录：dialog:select-folder / dialog:save-file /
+ * export:select-output-dir 返回路径时登记，fs 写通道对已登记目录放行。
+ */
+const grantedDirs = new Set<string>()
+
+/** 登记用户通过系统对话框确认的目录（外部授权链路——与 fs:grant-external-file 同模式） */
+export function grantDirectory(dirPath: string): void {
+  if (!dirPath) return
+  grantedDirs.add(path.resolve(dirPath))
+}
+
+/** 路径是否位于已登记的授权目录内 */
+function isGranted(filePath: string): boolean {
+  const abs = path.resolve(filePath)
+  return [...grantedDirs].some(dir => abs === dir || abs.startsWith(dir + path.sep))
+}
+
+/**
  * 验证文件路径是否在允许的沙箱范围内
  * @throws 如果路径逃逸沙箱则抛出错误
  */
 function validateSandbox(filePath: string): string {
   const resolved = path.resolve(filePath)
+  // 用户显式授权的目录优先放行（会话级，进程重启后失效）
+  if (isGranted(filePath)) return resolved
   // 检查是否在允许的根目录内
   const isAllowed = SANDBOX_ROOTS.some(root => {
     const normalized = path.resolve(root)

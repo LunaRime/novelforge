@@ -7,7 +7,7 @@
 import { memo } from 'react'
 import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
+import { Select, SelectTrigger, SelectContent, SelectItem } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
@@ -186,10 +186,11 @@ function RightActions({
         </Button>
       )}
 
-      {/* 翻译为（生成新草稿） */}
+      {/* 翻译为（生成新草稿）——带文字触发器，入口明确 */}
       <Select value="" onValueChange={(v) => onTranslate(v as 'zh' | 'en' | 'ru')}>
-        <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-[0.68rem]" title={t('translate.title')}>
-          <Languages size={11} /> <SelectValue placeholder={t('translate.title')} />
+        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-[0.68rem]" title={t('translate.title')}>
+          <Languages size={11} />
+          <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
         </SelectTrigger>
         <SelectContent>
           <SelectItem value="zh">{t('translate.lang.zh')}</SelectItem>
