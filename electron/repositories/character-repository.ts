@@ -227,6 +227,9 @@ export class CharacterRepository {
 
     /**
      * 仅更新角色动态状态（后处理时使用）。
+     * ⚠️ 哨兵合并语义（写时刻以 DB 当前值为基准）：cs_* 六字段空值/哨兵
+     * （'' 或 null）不覆盖已有值（CASE WHEN 保旧列）——调用端不再需要读快照合并，
+     * 消除并发定稿/LLM 调用期间慢工作流用旧快照覆盖新状态、以及手动编辑被覆盖的竞态。
      * @param extra 可选的结构化字段更新——tags（JSON 数组字符串）/ motivation；
      *              undefined 或 null 时不覆盖该列（COALESCE 保旧值）
      */
@@ -240,20 +243,24 @@ export class CharacterRepository {
 
         db.prepare(`
       UPDATE characters SET
-        cs_location = ?, cs_power_level = ?, cs_physical_state = ?,
-        cs_mental_state = ?, cs_key_items = ?, cs_recent_events = ?,
+        cs_location = CASE WHEN ? != '' THEN ? ELSE cs_location END,
+        cs_power_level = CASE WHEN ? != '' THEN ? ELSE cs_power_level END,
+        cs_physical_state = CASE WHEN ? != '' THEN ? ELSE cs_physical_state END,
+        cs_mental_state = CASE WHEN ? != '' THEN ? ELSE cs_mental_state END,
+        cs_key_items = CASE WHEN ? != '' THEN ? ELSE cs_key_items END,
+        cs_recent_events = CASE WHEN ? != '' THEN ? ELSE cs_recent_events END,
         cs_updated_at_chapter = ?,
         tags = COALESCE(?, tags),
         motivation = COALESCE(?, motivation),
         updated_at = unixepoch() * 1000
       WHERE name = ?
     `).run(
-            state.location,
-            state.powerLevel,
-            state.physicalState,
-            state.mentalState,
-            state.keyItems,
-            state.recentEvents,
+            state.location, state.location,
+            state.powerLevel, state.powerLevel,
+            state.physicalState, state.physicalState,
+            state.mentalState, state.mentalState,
+            state.keyItems, state.keyItems,
+            state.recentEvents, state.recentEvents,
             state.updatedAtChapter,
             extra?.tags ?? null,
             extra?.motivation ?? null,
