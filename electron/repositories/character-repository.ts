@@ -95,7 +95,7 @@ function rowToData(row: Record<string, unknown>): CharacterData {
 }
 
 export class CharacterRepository {
-    /** 获取所有角色（按角色定位排序：主角→配角→反派→龙套） */
+    /** 获取所有角色（按戏份核心度排序：主角→反派→配角→龙套，与 tier 分级一致） */
     static getAll(): CharacterData[] {
         const db = getProjectDb()
         if (!db) return []
@@ -105,8 +105,8 @@ export class CharacterRepository {
       ORDER BY
         CASE role
           WHEN 'protagonist' THEN 0
-          WHEN 'supporting' THEN 1
-          WHEN 'antagonist' THEN 2
+          WHEN 'antagonist' THEN 1
+          WHEN 'supporting' THEN 2
           WHEN 'minor' THEN 3
           ELSE 9
         END ASC
