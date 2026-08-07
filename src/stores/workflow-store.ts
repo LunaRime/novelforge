@@ -146,7 +146,7 @@ interface WorkflowState {
   /** 历史工作流记录 */
   history: WorkflowRun[]
   /** 全局日志（下方面板用） */
-  globalLogs: Array<{ time: string; level: 'info' | 'warn' | 'error'; message: string }>
+  globalLogs: Array<{ ts: number; time: string; level: 'info' | 'warn' | 'error'; message: string }>
 
   /** 兼容属性：第一个活跃工作流（供旧代码平稳过渡） */
   currentRun: WorkflowRun | null
@@ -542,7 +542,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   },
 
   addLog: (level, message) => {
-    const entry = { time: new Date().toLocaleTimeString(getCurrentLocale()), level, message }
+    const now = Date.now()
+    const entry = { ts: now, time: new Date(now).toLocaleTimeString(getCurrentLocale()), level, message }
     set((s) => ({
       globalLogs: [...s.globalLogs, entry].slice(-500), // 保留最近 500 条
     }))
