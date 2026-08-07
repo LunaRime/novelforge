@@ -11,6 +11,7 @@ import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
+import { normalizeBlueprintRole } from '../../blueprint-role'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
@@ -391,7 +392,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
         const finalBlueprint = {
           chapterNumber: ch.number,
           title: (blueprint.title as string) || ch.title,
-          role: (blueprint.role as string) || '发展',
+          role: normalizeBlueprintRole(blueprint.role as string),
           purpose: (blueprint.purpose as string) || '',
           keyEvents: (blueprint.keyEvents as string) || '',
           // 角色列表：数组直用；字符串按分隔符拆（与 directory 路径消费一致——此前字符串
