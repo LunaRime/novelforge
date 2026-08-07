@@ -283,16 +283,16 @@ export function buildFinalizePostProcessSteps(
             if (!name) continue
             const dbChar = allChars.find((c) => c.name === name)
             if (dbChar) {
-              const dbCharState = (dbChar.currentState as Record<string, unknown>) || {}
-              // ⚠️ P1 加固：cs_* 六字段走哨兵判定——英文 LLM 输出 'none'/'N/A' 等
-              //    字面量不再覆盖真实动态状态（此前仅空值保旧值，真值 'none' 直接覆盖）
+              // cs_* 六字段哨兵值（无/无变化/none 变体）→ null → SQL CASE WHEN 保旧值。
+              // ⚠️ 合并已下沉 repository 层（写时刻以 DB 当前值为基准，SQL 层 CASE 保旧列）——
+              //    不再读快照合并，消除并发定稿/LLM 调用期间旧快照覆盖新状态的竞态
               const newState = {
-                location: cleanOptional(row.location) ?? ((dbCharState.location as string) || ''),
-                powerLevel: cleanOptional(row.powerLevel) ?? ((dbCharState.powerLevel as string) || ''),
-                physicalState: cleanOptional(row.physicalState) ?? ((dbCharState.physicalState as string) || ''),
-                mentalState: cleanOptional(row.mentalState) ?? ((dbCharState.mentalState as string) || ''),
-                keyItems: cleanOptional(row.keyItems) ?? ((dbCharState.keyItems as string) || ''),
-                recentEvents: cleanOptional(row.recentEvents) ?? ((dbCharState.recentEvents as string) || ''),
+                location: cleanOptional(row.location) ?? '',
+                powerLevel: cleanOptional(row.powerLevel) ?? '',
+                physicalState: cleanOptional(row.physicalState) ?? '',
+                mentalState: cleanOptional(row.mentalState) ?? '',
+                keyItems: cleanOptional(row.keyItems) ?? '',
+                recentEvents: cleanOptional(row.recentEvents) ?? '',
                 updatedAtChapter: chapterNumber,
               }
               // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"变体保留旧值
