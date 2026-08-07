@@ -137,6 +137,23 @@ describe('CharacterRepository.mergeFields 仅填充空白(写时刻保旧)', () 
     expect(CharacterRepository.getByName('张三')?.tags).toBe('["旧标签"]')
   })
 
+  it('DB 哨兵值(无/none)视为空白 → 填充', () => {
+    CharacterRepository.upsert(makeChar('张三', { gender: '无', age: 'none' }))
+    CharacterRepository.mergeFields('张三', { gender: '女', age: '18', personality: '冷静' })
+    const char = CharacterRepository.getByName('张三')
+    expect(char?.gender).toBe('女')          // DB 哨兵 '无' → 视为空白 → 填充
+    expect(char?.age).toBe('18')             // DB 哨兵 'none' → 视为空白 → 填充
+    expect(char?.personality).toBe('冷静')   // DB 空 → 填充
+  })
+
+  it('tags 哨兵视为空白 → 填充;新值也是哨兵 → 不写', () => {
+    CharacterRepository.upsert(makeChar('张三', { tags: '无' }))
+    CharacterRepository.mergeFields('张三', { tags: '["新标签"]', appearance: '无变化' })
+    const char = CharacterRepository.getByName('张三')
+    expect(char?.tags).toBe('["新标签"]')  // DB tags 哨兵 → 填充
+    expect(char?.appearance).toBe('')       // 新值是哨兵 → 不写
+  })
+
   it('不触碰动态状态与角色定位', () => {
     CharacterRepository.upsert(makeChar('张三', { role: 'protagonist', tier: 1 }))
     CharacterRepository.mergeFields('张三', { appearance: '黑发' })

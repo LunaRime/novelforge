@@ -42,10 +42,21 @@ export function normalizeCharacterRole(value: string): string {
 
 /**
  * 归一化 LLM 输出的 tags 为 JSON 数组字符串（角色列表按 JSON.parse 消费）。
+ * 入参可为字符串（逗号/顿号分隔）或数组（元素逐个归一化，含分隔符的元素
+ * 不被拆分——与 architecture-workflow createCharacterExtractSteps 的
+ * Array.isArray 分支语义对齐）。
  * 整串为哨兵（'无'/'No new tags'）或空 → ''（不覆盖旧标签）；
  * 混合列表剔除哨兵项；上限 8 个。
  */
-export function normalizeTagsValue(value: string): string {
+export function normalizeTagsValue(value: unknown): string {
+  if (Array.isArray(value)) {
+    const tags = value
+      .map(String)
+      .map(s => s.trim())
+      .filter(Boolean)
+      .filter(s => !isNoChangeValue(s))
+    return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
+  }
   const raw = String(value ?? '')
   if (isNoChangeValue(raw)) return ''
   const tags = raw

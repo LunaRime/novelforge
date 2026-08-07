@@ -5,6 +5,7 @@
  */
 import { getProjectDb } from '../database'
 import { t } from '../../src/shared/locale'
+import { isNoChangeValue } from '../../src/services/character-normalize'
 
 /** 角色卡动态状态 */
 export interface CharacterStateData {
@@ -270,22 +271,41 @@ export class CharacterRepository {
 
     /**
      * 仅填充空白(写时刻保旧):DB 中已有非空值的档案字段一律保留,只填充空白字段
-     * （CASE WHEN 以 DB 当前值为基准——LLM 提取结果只补全、不覆盖用户手写内容,
+     * （以 DB 当前值为基准——LLM 提取结果只补全、不覆盖用户手写内容,
      * 与 updateState 的新值优先语义相反,勿混用）；tags 同规则保旧;
      * 不触碰 role/tier/currentState。
+     * 哨兵语义:DB 值空或哨兵('无'/'none'/'无变化' 等变体,见 isNoChangeValue)
+     * 一律视为空白才填充——存量哨兵值(beta.2 前历史写入或用户手输)不再堵住
+     * LLM 提取结果写入(纯 CASE WHEN != '' 只能挡空串,挡不住哨兵)。
      */
     static mergeFields(name: string, fields: Record<string, string>): void {
         const db = getProjectDb()
         if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
+        // 预读该行 DB 值,哨兵视为空白(需要填充的字段才写;列名来自硬编码白名单,无注入面)
+        const row = db.prepare(
+            'SELECT gender, age, appearance, personality, background, abilities, motivation, relationships, arc, notes, tags FROM characters WHERE name = ?'
+        ).get(name) as Record<string, unknown> | undefined
+        if (!row) return
         const cols = ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']
-        const clauses = cols.map(c => `${c} = CASE WHEN ${c} != '' THEN ${c} ELSE ? END`).join(', ')
-        const params: unknown[] = cols.map(c => fields[c] ?? '')
-        db.prepare(`
-      UPDATE characters SET
-        ${clauses},
-        tags = CASE WHEN tags != '' THEN tags ELSE ? END,
-        updated_at = unixepoch() * 1000
-      WHERE name = ?
-    `).run(...params, fields.tags ?? '', name)
+        const updates: Record<string, string> = {}
+        for (const c of cols) {
+            const dbVal = String(row[c] ?? '').trim()
+            const newVal = String(fields[c] ?? '').trim()
+            if ((dbVal === '' || isNoChangeValue(dbVal)) && newVal !== '' && !isNoChangeValue(newVal)) {
+                updates[c] = newVal
+            }
+        }
+        const dbTags = String(row.tags ?? '').trim()
+        const newTags = String(fields.tags ?? '').trim()
+        if ((dbTags === '' || isNoChangeValue(dbTags)) && newTags && !isNoChangeValue(newTags)) updates.tags = newTags
+        if (Object.keys(updates).length === 0) return
+        const setClauses: string[] = []
+        const params: unknown[] = []
+        for (const [k, v] of Object.entries(updates)) {
+            setClauses.push(`${k} = ?`)
+            params.push(v)
+        }
+        setClauses.push('updated_at = unixepoch() * 1000')
+        db.prepare(`UPDATE characters SET ${setClauses.join(', ')} WHERE name = ?`).run(...params, name)
     }
 }

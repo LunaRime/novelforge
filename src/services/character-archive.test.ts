@@ -51,6 +51,12 @@ describe('parseArchiveJson', () => {
     expect(out?.appearance).toBe('黑发')
     expect(out?.tags).toBe('["天才","剑修"]')
   })
+  it('tags 数组输入 → 输出 JSON 数组字符串,元素含逗号不拆分', () => {
+    // Array.isArray 分支:元素 '天才,剑修' 含逗号——String() 展开后会被 split 拆碎,
+    // join('、') 保证元素完整性(与 architecture-workflow createCharacterExtractSteps 对齐)
+    const out = parseArchiveJson('{"tags":["天才,剑修","冷静"]}', '苏晚')
+    expect(out?.tags).toBe('["天才,剑修","冷静"]')
+  })
   it('字段白名单:非档案字段丢弃', () => {
     const out = parseArchiveJson('{"appearance":"黑发","role":"protagonist","cs_location":"x"}', '苏晚')
     expect(out?.role).toBeUndefined()
