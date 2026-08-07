@@ -5,7 +5,7 @@
  * （字符频率 Dice）+ 审计告警（术语/水文）。相似度徽标分色提示平台删改风险。
  */
 import { useState, useEffect } from 'react'
-import { Satellite, Plus, Trash2 } from 'lucide-react'
+import { Satellite, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { ipc } from '../../../services/ipc-client'
 import { toast } from '../../ui/Toast'
@@ -17,7 +17,6 @@ import { Textarea } from '../../ui/Textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../../ui/Dialog'
-import SidebarGroup from './SidebarGroup'
 import type { PublicationEntry } from '../../../../electron/repositories/publication-repository'
 
 interface Props {
@@ -28,6 +27,7 @@ interface Props {
 export default function PublicationGroup({ projectPath }: Props) {
   const { t } = useTranslation()
   const [entries, setEntries] = useState<PublicationEntry[]>([])
+  const [open, setOpen] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const load = async () => {
@@ -58,74 +58,88 @@ export default function PublicationGroup({ projectPath }: Props) {
   }
 
   return (
-    <div className="mt-1.5">
-      <SidebarGroup
-        icon={<Satellite size={12} />}
-        title={t('pub.title')}
-        count={entries.length > 0 ? String(entries.length) : undefined}
-        defaultOpen={false}
-        actions={
-          <button
-            type="button"
-            className="p-0.5 rounded transition-colors hover:opacity-80 cursor-pointer flex-shrink-0"
-            title={t('pub.import')}
-            onClick={() => setDialogOpen(true)}
-            style={{ color: 'var(--color-accent)' }}
-          >
-            <Plus size={12} />
-          </button>
-        }
-      >
-        {/* 紧凑列表：章节号/标题 + 相似度/告警徽标 + 删除（与 VolumeGroup 列表行风格一致） */}
-        {entries.length === 0 ? (
-          <div className="px-1.5 py-1 text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
-            {t('pub.empty')}
-          </div>
-        ) : (
-          <div className="mt-1.5 space-y-0.5">
-            {entries.map((e) => (
-              <div key={e.chapterNumber} className="flex items-center gap-1.5 px-1.5 py-1 rounded group" style={{ backgroundColor: 'var(--color-hover)' }}>
-                <span className="text-[0.7rem] flex-1 truncate" style={{ color: 'var(--color-text)' }}>
-                  {t('pub.chapterLabel').replace('{n}', String(e.chapterNumber))}
-                  {e.externalTitle ? ` · ${e.externalTitle}` : ''}
-                </span>
+    <section
+      className="rounded-xl border p-2.5"
+      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+    >
+      {/* 头部：与 VolumeGroup 完全同构（icon + title + ml-auto 数量 + muted 操作按钮 + 折叠按钮最后） */}
+      <div className="flex items-center gap-1.5 mb-1.5">
+        <Satellite size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+        <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
+          {t('pub.title')}
+        </span>
+        <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+          {entries.length}
+        </span>
+        <button
+          type="button"
+          onClick={() => setDialogOpen(true)}
+          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={t('pub.import')}
+        >
+          <Plus size={12} />
+        </button>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={open ? t('action.close') : t('action.open')}
+        >
+          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      </div>
+
+      {!open ? null : entries.length === 0 ? (
+        <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+          {t('pub.empty')}
+        </div>
+      ) : (
+        <div className="space-y-1">
+          {entries.map((e) => (
+            <div key={e.chapterNumber} className="flex items-center gap-1.5 px-1.5 py-1 rounded group hover:bg-[var(--color-hover)]">
+              <span className="text-[0.7rem] flex-1 truncate" style={{ color: 'var(--color-text)' }}>
+                {t('pub.chapterLabel').replace('{n}', String(e.chapterNumber))}
+                {e.externalTitle ? ` · ${e.externalTitle}` : ''}
+              </span>
+              <span
+                className="text-[0.62rem] px-1 py-0.5 rounded flex-shrink-0"
+                style={{ backgroundColor: 'var(--color-hover)', color: simColor(e.similarity) }}
+                title={t('pub.similarity').replace('{p}', String(Math.round(e.similarity * 100)))}
+              >
+                {Math.round(e.similarity * 100)}%
+              </span>
+              {e.auditIssues > 0 && (
                 <span
                   className="text-[0.62rem] px-1 py-0.5 rounded flex-shrink-0"
-                  style={{ backgroundColor: 'var(--color-panel)', color: simColor(e.similarity) }}
-                  title={t('pub.similarity').replace('{p}', String(Math.round(e.similarity * 100)))}
+                  style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-warning)' }}
+                  title={t('pub.auditIssues').replace('{n}', String(e.auditIssues))}
                 >
-                  {Math.round(e.similarity * 100)}%
+                  {e.auditIssues}
                 </span>
-                {e.auditIssues > 0 && (
-                  <span
-                    className="text-[0.62rem] px-1 py-0.5 rounded flex-shrink-0"
-                    style={{ backgroundColor: 'var(--color-panel)', color: 'var(--color-warning)' }}
-                    title={t('pub.auditIssues').replace('{n}', String(e.auditIssues))}
-                  >
-                    {e.auditIssues}
-                  </span>
-                )}
-                <button
-                  type="button"
-                  className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
-                  title={t('action.delete')}
-                  onClick={() => void handleDelete(e)}
-                  style={{ color: 'var(--color-text-muted)' }}
-                >
-                  <Trash2 size={11} />
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
-      </SidebarGroup>
+              )}
+              <button
+                type="button"
+                className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                title={t('action.delete')}
+                onClick={() => void handleDelete(e)}
+                style={{ color: 'var(--color-text-muted)' }}
+              >
+                <Trash2 size={11} />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
 
+      {/* 导入弹框 */}
       <PublishImportDialog
         isOpen={dialogOpen}
         onClose={() => { setDialogOpen(false); void load() }}
         existingNumbers={entries.map(e => e.chapterNumber)}
       />
-    </div>
+    </section>
   )
 }
 
