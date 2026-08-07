@@ -22,6 +22,7 @@ import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
 import { switchLocale, useTranslation } from '../../hooks/useTranslation'
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../shared/locale'
+import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import type { TextKey } from '../../shared/locale'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
@@ -838,10 +839,10 @@ function ModelForm({
               value={model.maxTokens}
               onChange={(e) => up('maxTokens', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
               onBlur={() => {
-                // 钳制到 [1, 131072]（全局模型输出上限）——此前可保存 9999999（P2 修复）
+                // 钳制到 [1, MAX_TOKENS_CAP]（全局模型输出上限，与主进程运行时钳制共享常量）——此前可保存 9999999（P2 修复）
                 const v = Number(model.maxTokens);
                 if (isNaN(v) || v < 1) up('maxTokens', 4096)
-                else if (v > 131072) up('maxTokens', 131072)
+                else if (v > MAX_TOKENS_CAP) up('maxTokens', MAX_TOKENS_CAP)
               }}
             />
           </div>
