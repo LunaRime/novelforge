@@ -9,6 +9,7 @@ import type { TextKey } from '../../shared/locale'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 
 import { Button } from '../ui/Button'
+import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
 import { VELA } from '../../services/vela-protocol'
 import { ipc } from '../../services/ipc-client'
@@ -112,6 +113,14 @@ export default function WorldBuildingEditor() {
   /** 从角色图谱提取角色卡（首次提取 / 重新提取） */
   const handleExtractCharacters = useCallback(async () => {
     if (!currentProject || extracting) return
+    // 已有角色卡时确认覆盖（提取=重建，会覆盖手动编辑内容）
+    try {
+      const existing = (await ipc.invoke('db:character-get-all')) as unknown[]
+      if (existing.length > 0) {
+        const ok = await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })
+        if (!ok) return
+      }
+    } catch { /* 确认检查失败不阻断提取 */ }
     setExtracting(true)
     try {
       const core = await ipc.invoke('db:project-core-get')
@@ -126,7 +135,7 @@ export default function WorldBuildingEditor() {
       console.error('角色卡提取失败', e)
       setExtracting(false)
     }
-  }, [currentProject, extracting])
+  }, [currentProject, extracting, t])
 
   /** 打开单个架构文件（arch-file 类型；若 tab 已存在则刷新磁盘内容） */
   const openArchFile = async (f: ArchFileItem) => {

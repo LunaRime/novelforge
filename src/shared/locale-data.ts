@@ -1910,6 +1910,8 @@ export const UI_TEXTS_DATA = {
   // --- CharacterEditor: 删除/保存 ---
   'character.deleteConfirm': { 'zh-CN': '确定要删除角色「{name}」吗？此操作不可撤销。', 'en-US': 'Are you sure you want to delete "{name}"? This action cannot be undone.', 'ru-RU': 'Вы уверены, что хотите удалить "{name}"? Это действие необратимо.' },
   'character.deleteTitle': { 'zh-CN': '删除角色', 'en-US': 'Delete Character', 'ru-RU': 'Удалить персонажа' },
+  'character.extractConfirmTitle': { 'zh-CN': '重新提取角色卡', 'en-US': 'Re-extract Character Cards', 'ru-RU': 'Повторное извлечение карточек персонажей' },
+  'character.extractConfirm': { 'zh-CN': '重新提取将覆盖已有角色卡数据（包括手动编辑的内容）。确定继续？', 'en-US': 'Re-extracting will overwrite existing character cards, including manual edits. Continue?', 'ru-RU': 'Повторное извлечение перезапишет существующие карточки персонажей, включая ручные правки. Продолжить?' },
   'character.defaultName': { 'zh-CN': '新角色', 'en-US': 'New Character', 'ru-RU': 'Новый персонаж' },
   // --- CharacterEditor: 空状态 ---
   'character.selectOrCreate': { 'zh-CN': '在左侧选择或创建角色卡', 'en-US': 'Select or create a character card on the left', 'ru-RU': 'Выберите или создайте карточку персонажа слева' },

@@ -7,6 +7,7 @@ import { useEditorStore } from '../../stores/editor-store'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 import { Button } from '../ui/Button'
 import { toast } from '../ui/Toast'
+import { confirm } from '../ui/Confirm'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { readCoreContent, writeCoreContent, VELA } from '../../services/vela-protocol'
@@ -204,6 +205,14 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
   const handleExtractCharacters = useCallback(async () => {
     const project = useProjectStore.getState().currentProject
     if (!project || extracting) return
+    // 已有角色卡时确认覆盖（提取=重建，会覆盖手动编辑内容）
+    try {
+      const existing = (await ipc.invoke('db:character-get-all')) as unknown[]
+      if (existing.length > 0) {
+        const ok = await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })
+        if (!ok) return
+      }
+    } catch { /* 确认检查失败不阻断提取 */ }
     setExtracting(true)
     try {
       const core = await ipc.invoke('db:project-core-get')
@@ -230,7 +239,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
       console.error('角色卡提取失败', e)
       setExtracting(false)
     }
-  }, [extracting])
+  }, [extracting, t])
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
