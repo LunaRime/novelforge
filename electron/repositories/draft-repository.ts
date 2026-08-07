@@ -49,7 +49,7 @@ export class DraftRepository {
     static create(params: {
         chapterNumber: number
         version: number
-        source: 'write' | 'rewrite'
+        source: 'write' | 'rewrite' | 'translation'
         content: string
         wordCount: number
     }): number {

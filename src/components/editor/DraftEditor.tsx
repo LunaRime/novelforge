@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 
 import { useTranslation } from '../../hooks/useTranslation'
+import type { TextKey } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -281,6 +282,51 @@ export default function DraftEditor({ filePath, content }: Props) {
     })
   }
 
+  /** 正文翻译：目标语言 → LLM 翻译 → 新建 source='translation' 草稿 → 打开新 Tab（原文保留） */
+  const doTranslate = async (lang: 'zh' | 'en' | 'ru') => {
+    const text = currentBodyRef.current
+    if (!text?.trim()) return
+    try {
+      const langLabel = t(`translate.lang.${lang}` as TextKey)
+      const { useLLMStore } = await import('../../stores/llm-store')
+      const res = await useLLMStore.getState().generate(
+        [
+          { role: 'system', content: t('ai.systemPrompt') },
+          { role: 'user', content: t('translate.prompt').replace('{lang}', langLabel).replace('{content}', text.slice(0, 12000)) },
+        ],
+        undefined,
+        { temperature: 0.3 },
+      )
+      if (!res.success || !res.content) throw new Error(res.error || 'empty response')
+      const translated = res.content.trim()
+      if (!meta) throw new Error('no draft meta')
+
+      const created = await ipc.invoke('db:draft-create', {
+        chapterNumber: meta.chapterNumber,
+        version: (meta.version ?? 1) + 1,
+        source: 'translation',
+        content: translated,
+        wordCount: computeTextStats(translated).novelWordCount,
+      })
+      if (!created.success || !created.id) throw new Error(created.error || 'create failed')
+
+      // 打开新 Tab（翻译稿独立于原文，可对比/续用）
+      useEditorStore.getState().openFile({
+        id: `draft-${created.id}-translation`,
+        name: `${t('translate.title')} · ${langLabel}`,
+        type: 'chapter',
+        filePath: `vela://draft/${created.id}`,
+        content: translated,
+      })
+      toast.success(t('translate.success'))
+      // 通知侧栏刷新（草稿箱出现翻译稿）
+      const { globalEventBus } = await import('../../shared/event-bus')
+      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
+    } catch (e) {
+      toast.error(t('translate.failed').replace('{error}', String(e)))
+    }
+  }
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 工具栏 — 提取到 EditorToolbar */}
@@ -297,6 +343,7 @@ export default function DraftEditor({ filePath, content }: Props) {
         onSave={() => doSave(currentBodyRef.current, { manual: true })}
         onRefine={() => { setUserRefinePrompt(''); setConfirmAction('refine') }}
         onReview={() => setConfirmAction('review')}
+        onTranslate={doTranslate}
         onFinalize={doFinalize}
         onRepairFinalize={doRepairFinalize}
         onOpenRevision={openPendingRevision}

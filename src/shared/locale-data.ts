@@ -2060,6 +2060,14 @@ export const UI_TEXTS_DATA = {
   'template.saveFailed': { 'zh-CN': '模板保存失败: {error}', 'en-US': 'Failed to save template: {error}', 'ru-RU': 'Не удалось сохранить шаблон: {error}' },
   'template.applySuccess': { 'zh-CN': '已应用模板: {name}', 'en-US': 'Template applied: {name}', 'ru-RU': 'Шаблон применён: {name}' },
   'template.applyFailed': { 'zh-CN': '模板应用失败: {error}', 'en-US': 'Failed to apply template: {error}', 'ru-RU': 'Не удалось применить шаблон: {error}' },
+  // --- 正文翻译草稿 ---
+  'translate.prompt': { 'zh-CN': '将以下小说正文翻译为{lang}。规则：1. 人名、地名、设定专名保持原名不翻译；2. 对话语气保留原作风格；3. 输出流畅自然的译文，不要任何解释。\n\n正文：\n{content}', 'en-US': 'Translate the following novel text into {lang}. Rules: 1. Keep proper nouns (names, places, setting terms) untranslated; 2. Preserve the original tone of dialogue; 3. Output fluent natural translation with no explanations.\n\nText:\n{content}', 'ru-RU': 'Переведите следующий текст романа на {lang}. Правила: 1. Имена, места и термины сеттинга не переводите; 2. Сохраняйте тон диалогов; 3. Выдайте только плавный перевод без пояснений.\n\nТекст:\n{content}' },
+  'translate.lang.zh': { 'zh-CN': '简体中文', 'en-US': 'Simplified Chinese', 'ru-RU': 'Упрощённый китайский' },
+  'translate.lang.en': { 'zh-CN': '英语', 'en-US': 'English', 'ru-RU': 'Английский' },
+  'translate.lang.ru': { 'zh-CN': '俄语', 'en-US': 'Russian', 'ru-RU': 'Русский' },
+  'translate.title': { 'zh-CN': '翻译为', 'en-US': 'Translate to', 'ru-RU': 'Перевести на' },
+  'translate.success': { 'zh-CN': '翻译完成，已打开新草稿', 'en-US': 'Translation done; new draft opened', 'ru-RU': 'Перевод готов; открыт новый черновик' },
+  'translate.failed': { 'zh-CN': '翻译失败: {error}', 'en-US': 'Translation failed: {error}', 'ru-RU': 'Ошибка перевода: {error}' },
   // --- Window title & splash（启动页 React 挂载前显示） ---
   'window.title': { 'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE', 'en-US': 'NovelForge — AI-Powered Novel Writing IDE', 'ru-RU': 'NovelForge — IDE для написания романов с ИИ' },
   'splash.initializing': { 'zh-CN': 'NovelForge 初始化中', 'en-US': 'NovelForge Initializing', 'ru-RU': 'NovelForge: инициализация' },

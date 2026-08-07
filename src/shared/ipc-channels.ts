@@ -366,7 +366,7 @@ export interface DatabaseChannels {
   'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }]; return: { success: boolean; error?: string } }
 
   // 4. drafts
-  'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
+  'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite' | 'translation'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
   'db:draft-list': { args: [chapterNumber: number]; return: DraftMeta[] }
   'db:draft-get-meta': { args: [id: number]; return: DraftMeta | null }
   'db:draft-get-full': { args: [id: number]; return: DraftFull | null }
