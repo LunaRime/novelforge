@@ -17,6 +17,8 @@ import { LLMHistoryRepository } from '../repositories/llm-repository'
 import { VolumeRepository, VolumeData } from '../repositories/volume-repository'
 import { PreferenceRepository } from '../repositories/preference-repository'
 import { ActivityRepository } from '../repositories/activity-repository'
+import { PublicationRepository, type PublicationEntry } from '../repositories/publication-repository'
+import { analyzeExternalChapter } from '../../src/services/publication-analysis'
 import { SummaryRepository } from '../repositories/summary-repository'
 
 export function registerDatabaseController() {
@@ -187,6 +189,45 @@ export function registerDatabaseController() {
 
   ipcMain.handle('db:draft-list', async (_event, chapterNumber: number) => {
     return DraftRepository.listByChapter(chapterNumber)
+  })
+
+  // ===== 连载监控（手动导入平台章节，本地优先——不自动抓取） =====
+
+  ipcMain.handle('db:publication-list', async (): Promise<PublicationEntry[]> => {
+    return PublicationRepository.getAll()
+  })
+
+  ipcMain.handle('db:publication-save', async (_event, input: { chapterNumber: number; title: string; content: string; terms?: string[] }) => {
+    try {
+      // 本地定稿对比：同章最新定稿全文（无定稿则仅审计）
+      let localContent: string | null = null
+      const finalized = DraftRepository.getFinalizedByChapter(input.chapterNumber)
+      if (finalized) {
+        const full = DraftRepository.getFull(finalized.id)
+        if (full) localContent = full.content
+      }
+      const report = analyzeExternalChapter(input.content, localContent, input.terms ?? [])
+      PublicationRepository.upsert({
+        chapterNumber: input.chapterNumber,
+        externalTitle: input.title,
+        externalContent: input.content,
+        importedAt: Date.now(),
+        similarity: report.similarity,
+        auditIssues: report.auditIssues.length,
+      })
+      return { success: true }
+    } catch (error) {
+      return { success: false, error: String(error) }
+    }
+  })
+
+  ipcMain.handle('db:publication-delete', async (_event, chapterNumber: number): Promise<{ success: boolean }> => {
+    try {
+      PublicationRepository.delete(chapterNumber)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
   })
 
   ipcMain.handle('db:draft-get-meta', async (_event, id: number) => {

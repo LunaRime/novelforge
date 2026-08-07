@@ -23,6 +23,7 @@ import {
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
 import VolumeGroup from './VolumeGroup'
+import PublicationGroup from './PublicationGroup'
 import SidebarGroup from './SidebarGroup'
 
 export default function ProjectTree() {
@@ -247,6 +248,9 @@ export default function ProjectTree() {
           }).length}
         onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
       />
+
+      {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}
+      <PublicationGroup projectPath={p} />
 
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
       <DraftBoxGroup draftsByChapter={draftsByChapter} />
