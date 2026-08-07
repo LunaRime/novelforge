@@ -267,4 +267,25 @@ export class CharacterRepository {
             name,
         )
     }
+
+    /**
+     * 仅填充空白(写时刻保旧):DB 中已有非空值的档案字段一律保留,只填充空白字段
+     * （CASE WHEN 以 DB 当前值为基准——LLM 提取结果只补全、不覆盖用户手写内容,
+     * 与 updateState 的新值优先语义相反,勿混用）；tags 同规则保旧;
+     * 不触碰 role/tier/currentState。
+     */
+    static mergeFields(name: string, fields: Record<string, string>): void {
+        const db = getProjectDb()
+        if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
+        const cols = ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']
+        const clauses = cols.map(c => `${c} = CASE WHEN ${c} != '' THEN ${c} ELSE ? END`).join(', ')
+        const params: unknown[] = cols.map(c => fields[c] ?? '')
+        db.prepare(`
+      UPDATE characters SET
+        ${clauses},
+        tags = CASE WHEN tags != '' THEN tags ELSE ? END,
+        updated_at = unixepoch() * 1000
+      WHERE name = ?
+    `).run(...params, fields.tags ?? '', name)
+    }
 }

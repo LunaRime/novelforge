@@ -113,3 +113,36 @@ describe('CharacterRepository.updateState 哨兵合并（写时刻以 DB 当前�
     expect(char?.motivation).toBe('守护')
   })
 })
+
+describe('CharacterRepository.mergeFields 仅填充空白(写时刻保旧)', () => {
+  it('非空字段填充,空字段保旧', () => {
+    CharacterRepository.upsert(makeChar('张三', { appearance: '已有外貌' }))
+    CharacterRepository.mergeFields('张三', { appearance: '新外貌', personality: '冷静' })
+    const char = CharacterRepository.getByName('张三')
+    expect(char?.appearance).toBe('已有外貌') // 非空保旧
+    expect(char?.personality).toBe('冷静')     // 空白填充
+  })
+
+  it('字段级独立:空值不覆盖、哨兵(无)不覆盖', () => {
+    CharacterRepository.upsert(makeChar('张三', { motivation: '复仇' }))
+    CharacterRepository.mergeFields('张三', { motivation: '', background: '无名门派' })
+    const char = CharacterRepository.getByName('张三')
+    expect(char?.motivation).toBe('复仇')
+    expect(char?.background).toBe('无名门派')
+  })
+
+  it('tags COALESCE:null 不覆盖', () => {
+    CharacterRepository.upsert(makeChar('张三', { tags: '["旧标签"]' }))
+    CharacterRepository.mergeFields('张三', { tags: null as unknown as string })
+    expect(CharacterRepository.getByName('张三')?.tags).toBe('["旧标签"]')
+  })
+
+  it('不触碰动态状态与角色定位', () => {
+    CharacterRepository.upsert(makeChar('张三', { role: 'protagonist', tier: 1 }))
+    CharacterRepository.mergeFields('张三', { appearance: '黑发' })
+    const char = CharacterRepository.getByName('张三')
+    expect(char?.role).toBe('protagonist')
+    expect(char?.tier).toBe(1)
+    expect(char?.currentState).toBeUndefined()
+  })
+})
