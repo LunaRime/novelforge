@@ -301,6 +301,9 @@ export function buildFinalizePostProcessSteps(
                 motivation: cleanOptional(row.motivation ?? ''),
               })
               callbacks.log(t('log.finalize.charStateUpdated').replace('{name}', name))
+            } else {
+              // 角色已被删除但 LLM 仍输出 → 记录可诊断日志（此前静默丢弃，排查无线索）
+              callbacks.log(t('log.finalize.charUpdateSkipped').replace('{name}', name))
             }
           }
         }
