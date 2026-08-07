@@ -45,22 +45,24 @@ hasBlankArchiveFields(char): boolean
 
 ```sql
 UPDATE characters SET
-  gender        = CASE WHEN ? != '' THEN ? ELSE gender END,
-  age           = CASE WHEN ? != '' THEN ? ELSE age END,
-  appearance    = CASE WHEN ? != '' THEN ? ELSE appearance END,
-  personality   = CASE WHEN ? != '' THEN ? ELSE personality END,
-  background    = CASE WHEN ? != '' THEN ? ELSE background END,
-  abilities     = CASE WHEN ? != '' THEN ? ELSE abilities END,
-  motivation    = CASE WHEN ? != '' THEN ? ELSE motivation END,
-  relationships = CASE WHEN ? != '' THEN ? ELSE relationships END,
-  arc           = CASE WHEN ? != '' THEN ? ELSE arc END,
-  notes         = CASE WHEN ? != '' THEN ? ELSE notes END,
-  tags          = COALESCE(?, tags),
+  gender        = CASE WHEN gender != '' THEN gender ELSE ? END,
+  age           = CASE WHEN age != '' THEN age ELSE ? END,
+  appearance    = CASE WHEN appearance != '' THEN appearance ELSE ? END,
+  personality   = CASE WHEN personality != '' THEN personality ELSE ? END,
+  background    = CASE WHEN background != '' THEN background ELSE ? END,
+  abilities     = CASE WHEN abilities != '' THEN abilities ELSE ? END,
+  motivation    = CASE WHEN motivation != '' THEN motivation ELSE ? END,
+  relationships = CASE WHEN relationships != '' THEN relationships ELSE ? END,
+  arc           = CASE WHEN arc != '' THEN arc ELSE ? END,
+  notes         = CASE WHEN notes != '' THEN notes ELSE ? END,
+  tags          = CASE WHEN tags != '' THEN tags ELSE ? END,
   updated_at    = unixepoch() * 1000
 WHERE name = ?
 ```
 
-- 与 `updateState`(块 4)同构:写时刻以 DB 当前值为基准,空值/哨兵保旧列
+> ⚠️ 语义修正(实施时实测确认):上方 SQL 为「**DB 值非空保旧、仅填充空白**」——`CASE WHEN col != '' THEN col ELSE ? END`。与 `updateState`(新值非空覆盖)方向相反,勿混用;tags 与字段同规则。
+
+- **⚠️ 与 `updateState`(块 4)方向相反**:updateState 是「新值非空覆盖、空值保旧」;mergeFields 是「DB 值非空保旧、仅填充空白」——语义以实施确认版为准(测试锁定)
 - 不触碰:cs_*(动态状态)、role/tier、relations、appearChapters、currentState
 - IPC:新增 `db:character-merge-fields` 通道(db-controller + ipc-channels 签名;preload 白名单 `db:` 前缀已覆盖)
 

@@ -246,19 +246,20 @@ static mergeFields(name: string, fields: Record<string, string>): void {
   const db = getProjectDb()
   if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
   const cols = ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']
-  const clauses = cols.map(c => `${c} = CASE WHEN ? != '' THEN ? ELSE ${c} END`).join(', ')
+  // ⚠️ 语义(已实施修正):「DB 值非空保旧、仅填充空白」——CASE 判断的是 DB 列而非新值,
+  //    与 updateState 的新值覆盖方向相反;tags 同规则(非 COALESCE 新值覆盖)
+  const clauses = cols.map(c => `${c} = CASE WHEN ${c} != '' THEN ${c} ELSE ? END`).join(', ')
   const params: unknown[] = []
   for (const c of cols) {
-    const v = fields[c] ?? ''
-    params.push(v, v)
+    params.push(fields[c] ?? '')
   }
   db.prepare(`
     UPDATE characters SET
       ${clauses},
-      tags = COALESCE(?, tags),
+      tags = CASE WHEN tags != '' THEN tags ELSE ? END,
       updated_at = unixepoch() * 1000
     WHERE name = ?
-  `).run(...params, fields.tags ?? null, name)
+  `).run(...params, fields.tags ?? '', name)
 }
 ```
 
