@@ -25,6 +25,14 @@ interface ServerStatus {
   error?: string
 }
 
+/** 推荐 MCP server（零代码生态——官方生态常用 server，点击一键填充添加表单；产品名为技术标识不翻译） */
+const RECOMMENDED_MCPS: Array<{ id: string; name: string; command: string; args: string }> = [
+  { id: 'filesystem', name: 'Filesystem', command: 'npx', args: '-y @modelcontextprotocol/server-filesystem ~' },
+  { id: 'memory', name: 'Memory', command: 'npx', args: '-y @modelcontextprotocol/server-memory' },
+  { id: 'sequential-thinking', name: 'Sequential Thinking', command: 'npx', args: '-y @modelcontextprotocol/server-sequential-thinking' },
+  { id: 'github', name: 'GitHub', command: 'npx', args: '-y @modelcontextprotocol/server-github' },
+]
+
 export default function MCPSettings() {
   const { t } = useTranslation()
   const [servers, setServers] = useState<MCPServerConfig[]>([])
@@ -146,6 +154,38 @@ export default function MCPSettings() {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {/* 推荐 MCP（零代码生态：点击一键填充添加表单——插件市场 a/c 型） */}
+        <div
+          className="p-3 rounded-xl border"
+          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+        >
+          <div className="text-[0.68rem] font-semibold mb-2" style={{ color: 'var(--color-text-muted)' }}>
+            {t('mcp.recommended')}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {RECOMMENDED_MCPS.map((rec) => (
+              <button
+                key={rec.id}
+                type="button"
+                className="px-2 py-1 rounded-lg text-[0.65rem] transition-colors cursor-pointer hover:opacity-80"
+                style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)' }}
+                title={rec.id}
+                onClick={() => {
+                  setNewId(rec.id)
+                  setNewCommand(rec.command)
+                  setNewArgs(rec.args)
+                  setShowAdd(true)
+                }}
+              >
+                {rec.name}
+              </button>
+            ))}
+          </div>
+          <div className="text-[0.6rem] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            {t('mcp.recommendedHint')}
+          </div>
+        </div>
+
         {/* 添加表单 */}
         {showAdd && (
           <div
