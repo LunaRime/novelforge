@@ -13,6 +13,7 @@ import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { normalizeBlueprintRole } from '../../blueprint-role'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
+import { normalizeCharacterRole } from '../../character-normalize'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
@@ -280,8 +281,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
       const cardsToSave: CharacterData[] = []
       for (const card of inferResult.characterCards) {
         if (!card.name) continue
-        const validRoles = ['protagonist', 'antagonist', 'supporting', 'minor']
-        const role = validRoles.includes(card.role as string) ? card.role : 'supporting'
+        // role 枚举归一化（'Protagonist' 大写等变体 → 小写规范枚举，非法兜底 supporting）
+        const role = normalizeCharacterRole(card.role as string)
         cardsToSave.push({
           name: card.name as string,
           role: role as 'protagonist' | 'antagonist' | 'supporting' | 'minor',

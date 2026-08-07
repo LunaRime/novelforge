@@ -4,6 +4,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
 import { ipc } from '../ipc-client'
+import { normalizeCharacterRole } from '../character-normalize'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import type { CharacterData } from '../../../electron/repositories/character-repository'
 
@@ -348,12 +349,11 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串（workflow-utils 单一出口）
         const stringifyField = (val: unknown): string => stringifyFieldUtils(val)
 
-        // 构建角色卡数据列表
-        const validRoles = ['protagonist', 'antagonist', 'supporting', 'minor']
+        // 构建角色卡数据列表（role 枚举归一化：'Protagonist' 大写等变体 → 小写规范枚举）
         const characterDataList: Array<Record<string, unknown>> = []
         for (const card of parsedCards) {
           if (!card.name) continue
-          const role = validRoles.includes(card.role as string) ? card.role : 'supporting'
+          const role = normalizeCharacterRole(card.role as string)
           const cleaned: Record<string, unknown> = { name: card.name, role }
           for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
             if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])

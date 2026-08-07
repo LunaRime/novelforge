@@ -16,9 +16,7 @@ import {
 import type { ChapterInfo } from '../chapter-workflow'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
-
-// LLM 输出占位「无/无变化/None/No changes」等 → 视为无更新（中文模板输出中文，英文模板输出英文）
-const NO_CHANGE_VALUES = ['无', '无变化', 'none', 'no change', 'no changes', 'n/a', 'na']
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue } from '../../character-normalize'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -264,26 +262,18 @@ export function buildFinalizePostProcessSteps(
         }
 
         // LLM 输出归一化：tags → JSON 数组字符串（角色列表按 JSON.parse 消费）
-        // ⚠️ P1 修复：'无/无变化/None/No changes' 占位值过滤（prompt 指示"tags 无变化填无"，
-        //    此前 normalizeTags('无') 返回 '["无"]' 非 null → COALESCE 不生效 → 每次定稿
-        //    UPDATES 表中的角色真实标签被替换为 ["无"]）
-        const normalizeTags = (value: string): string => {
-          const tags = String(value ?? '')
-            .split(/[，,、；;]+/)
-            .map(s => s.trim())
-            .filter(Boolean)
-            .filter(s => !NO_CHANGE_VALUES.includes(s.toLowerCase()))
-          return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
-        }
-        // LLM 占位"无/无变化/None/No changes" → null（不覆盖已有值）
+        // ⚠️ P1 加固：哨兵判定升级为变体感知（character-normalize）——'none.'/'No new tags'/
+        //    'not applicable'/'unchanged'/'-' 等英文常见变体此前绕过精确匹配，
+        //    导致 tags/motivation 被垃圾串替换、cs_* 状态被 'none' 字面量覆盖
+        // 哨兵判定/枚举归一化统一走 character-normalize（变体感知，可单测）
+        // LLM 占位"无/无变化/none/no changes"变体 → null（不覆盖已有值）
         const cleanOptional = (value: string): string | null => {
           const s = String(value ?? '').trim()
-          if (!s || NO_CHANGE_VALUES.includes(s.toLowerCase())) return null
-          return s
+          return isNoChangeValue(s) ? null : s
         }
         const cleanText = (value: string): string => {
           const s = String(value ?? '').trim()
-          return (!s || NO_CHANGE_VALUES.includes(s.toLowerCase())) ? '' : s
+          return isNoChangeValue(s) ? '' : s
         }
 
         if (updateRows.length > 0) {
@@ -293,19 +283,20 @@ export function buildFinalizePostProcessSteps(
             const dbChar = allChars.find((c) => c.name === name)
             if (dbChar) {
               const dbCharState = (dbChar.currentState as Record<string, unknown>) || {}
+              // ⚠️ P1 加固：cs_* 六字段走哨兵判定——英文 LLM 输出 'none'/'N/A' 等
+              //    字面量不再覆盖真实动态状态（此前仅空值保旧值，真值 'none' 直接覆盖）
               const newState = {
-                location: row.location || (dbCharState.location as string) || '',
-                powerLevel: row.powerLevel || (dbCharState.powerLevel as string) || '',
-                physicalState: row.physicalState || (dbCharState.physicalState as string) || '',
-                mentalState: row.mentalState || (dbCharState.mentalState as string) || '',
-                keyItems: row.keyItems || (dbCharState.keyItems as string) || '',
-                // COALESCE 与其余字段一致：LLM 该行为空时保留旧值（此前会清空已有 recentEvents）
-                recentEvents: row.recentEvents || (dbCharState.recentEvents as string) || '',
+                location: cleanOptional(row.location) ?? ((dbCharState.location as string) || ''),
+                powerLevel: cleanOptional(row.powerLevel) ?? ((dbCharState.powerLevel as string) || ''),
+                physicalState: cleanOptional(row.physicalState) ?? ((dbCharState.physicalState as string) || ''),
+                mentalState: cleanOptional(row.mentalState) ?? ((dbCharState.mentalState as string) || ''),
+                keyItems: cleanOptional(row.keyItems) ?? ((dbCharState.keyItems as string) || ''),
+                recentEvents: cleanOptional(row.recentEvents) ?? ((dbCharState.recentEvents as string) || ''),
                 updatedAtChapter: chapterNumber,
               }
-              // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"保留旧值
+              // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"变体保留旧值
               await ipc.invoke('db:character-update-state', name, newState, {
-                tags: normalizeTags(row.tags ?? '') || null,
+                tags: normalizeTagsValue(row.tags ?? '') || null,
                 motivation: cleanOptional(row.motivation ?? ''),
               })
               callbacks.log(t('log.finalize.charStateUpdated').replace('{name}', name))
@@ -319,9 +310,11 @@ export function buildFinalizePostProcessSteps(
             const name = row.name || ''
             if (!name || allChars.some((c) => c.name === name)) continue
             newCharCount++
+            // ⚠️ P1 加固：role 枚举归一化（'Protagonist' 大写入库此前绕过 tier 推导/排序/UI 分级）
+            const role = normalizeCharacterRole(row.role)
             await ipc.invoke('db:character-upsert', {
               name: name,
-              role: row.role || 'supporting',
+              role,
               gender: '', age: '',
               appearance: cleanText(row.appearance ?? ''),
               personality: cleanText(row.personality ?? ''),
@@ -329,8 +322,8 @@ export function buildFinalizePostProcessSteps(
               motivation: cleanOptional(row.motivation ?? '') ?? '',
               relationships: '', arc: '', notes: '',
               // tier 按 role 推导（P2 修复：此前恒 2——新主角/反派 DB tier=2 与「protagonist/antagonist → tier 1」规则矛盾）
-              tier: row.role === 'protagonist' || row.role === 'antagonist' ? 1 : (row.role === 'minor' ? 3 : 2),
-              tags: normalizeTags(row.tags ?? ''),
+              tier: role === 'protagonist' || role === 'antagonist' ? 1 : (role === 'minor' ? 3 : 2),
+              tags: normalizeTagsValue(row.tags ?? ''),
               appearChapters: JSON.stringify([chapterNumber]), // 登记出场章节
               relations: '[]',
               currentState: {
