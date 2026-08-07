@@ -5,8 +5,9 @@
  * 从 DraftEditor 提取，减少父组件复杂度。
  */
 import { memo } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages } from 'lucide-react'
 import { Button } from '../ui/Button'
+import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
@@ -38,6 +39,8 @@ export interface EditorToolbarProps {
   onRefine: () => void
   /** 触发 AI 审稿 */
   onReview: () => void
+  /** 触发正文翻译（目标语言，生成新草稿） */
+  onTranslate: (lang: 'zh' | 'en' | 'ru') => void
   /** 触发定稿 */
   onFinalize: () => void
   /** 触发修复定稿后处理 */
@@ -61,6 +64,7 @@ function EditorToolbar({
   onSave,
   onRefine,
   onReview,
+  onTranslate,
   onFinalize,
   onRepairFinalize,
   onOpenRevision,
@@ -102,6 +106,7 @@ function EditorToolbar({
           onSave={onSave}
           onRefine={onRefine}
           onReview={onReview}
+          onTranslate={onTranslate}
           onFinalize={onFinalize}
           onOpenRevision={onOpenRevision}
           onOpenReview={onOpenReview}
@@ -134,6 +139,7 @@ function RightActions({
   onSave,
   onRefine,
   onReview,
+  onTranslate,
   onFinalize,
   onOpenRevision,
   onOpenReview,
@@ -148,6 +154,7 @@ function RightActions({
   onSave: () => void
   onRefine: () => void
   onReview: () => void
+  onTranslate: (lang: 'zh' | 'en' | 'ru') => void
   onFinalize: () => void
   onOpenRevision: (rev: RevisionEntry) => void
   onOpenReview: () => void
@@ -178,6 +185,18 @@ function RightActions({
           {saving ? t('status.saving') : t('editor.save')}
         </Button>
       )}
+
+      {/* 翻译为（生成新草稿） */}
+      <Select value="" onValueChange={(v) => onTranslate(v as 'zh' | 'en' | 'ru')}>
+        <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-[0.68rem]" title={t('translate.title')}>
+          <Languages size={11} /> <SelectValue placeholder={t('translate.title')} />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="zh">{t('translate.lang.zh')}</SelectItem>
+          <SelectItem value="en">{t('translate.lang.en')}</SelectItem>
+          <SelectItem value="ru">{t('translate.lang.ru')}</SelectItem>
+        </SelectContent>
+      </Select>
 
       {/* 状态标签 */}
       <span
