@@ -6,7 +6,7 @@ import { languages } from '@codemirror/language-data'
 import { EditorState } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { Sparkles, Bold, Undo2, Redo2 } from 'lucide-react'
+import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { computeTextStats } from '../../services/text-stats'
@@ -354,6 +354,60 @@ export default function CodeMirrorEditor({
     }
   }
 
+  /** 生成章节分享卡：选中文本 → LLM 摘要（JSON）→ 品牌卡片 → 离屏截图 → 保存 PNG */
+  const handleShareCard = async () => {
+    try {
+      if (!selectionRange || !editorRef.current?.view) return
+      const selectedText = editorRef.current.view.state.sliceDoc(selectionRange.from, selectionRange.to)
+      if (!selectedText.trim()) return
+
+      const { useLLMStore } = await import('../../stores/llm-store')
+      const res = await useLLMStore.getState().generate(
+        [
+          { role: 'system', content: t('ai.systemPrompt') },
+          { role: 'user', content: `${t('ai.prompt.shareSummary')}\n\n片段：\n${selectedText.slice(0, 4000)}` },
+        ],
+        undefined,
+        { temperature: 0.2, responseFormat: { type: 'json_object' } },
+      )
+      if (!res.success || !res.content) throw new Error(res.error || 'empty response')
+
+      let parsed: { summary?: string; quote?: string }
+      try {
+        parsed = JSON.parse(res.content) as { summary?: string; quote?: string }
+      } catch {
+        throw new Error('summary parse failed')
+      }
+      if (!parsed.summary) throw new Error('no summary in response')
+
+      const { ipc } = await import('../../services/ipc-client')
+      const { buildShareCardHTML } = await import('../../services/share-card')
+      const { toast } = await import('../ui/Toast')
+      // 卡片标题：物理文件取文件名（去扩展名）；vela:// 伪协议用品牌名
+      const fileName = filePath && !filePath.startsWith('vela:')
+        ? filePath.split(/[\\/]/).pop()?.replace(/\.[^.]+$/, '')
+        : ''
+      const html = buildShareCardHTML({
+        title: fileName || 'NovelForge',
+        meta: '',
+        summary: parsed.summary,
+        quote: parsed.quote ?? '',
+      })
+
+      const shot = await ipc.invoke('report:render-html', html)
+      if (!shot.success || !shot.png) throw new Error(shot.error || 'render failed')
+      const dir = await ipc.invoke('dialog:select-folder')
+      if (!dir) return
+      const outPath = `${dir}/NovelForge-Share-Card.png`
+      const saved = await ipc.invoke('fs:write-buffer', outPath, shot.png)
+      if (!saved.success) throw new Error(saved.error || 'write failed')
+      toast.success(t('shareCard.saveSuccess').replace('{path}', outPath))
+    } catch (e) {
+      const { toast } = await import('../ui/Toast')
+      toast.error(t('shareCard.saveFailed').replace('{error}', String(e)))
+    }
+  }
+
   const handleAcceptAI = async () => {
     if (selectionRange && aiResult && editorRef.current?.view) {
       const view = editorRef.current.view
@@ -577,6 +631,15 @@ export default function CodeMirrorEditor({
                   <span className="text-[10px] tracking-widest">{action.label}</span>
                 </button>
               ))}
+              <button
+                className="p-1.5 rounded transition-colors"
+                title={t('shareCard.generate')}
+                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                onClick={handleShareCard}
+              >
+                <Share2 size={13} style={{ color: 'var(--color-text-muted)' }} />
+              </button>
             </>
           )}
         </div>
