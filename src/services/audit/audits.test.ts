@@ -261,3 +261,37 @@ describe('runAllAudits', () => {
     expect(r.summary).toContain('问题')
   })
 })
+
+describe('重复词检测误报优化（用户实测回归）', () => {
+  // 用户实测误报词：碎片35/虚脉21（术语）、了一18/枚碎18/的虚17（跨词边界碎片）、
+  // 第二11（序数）、小屋8（场景词）——跨词边界碎片应永不报警，场景词靠阈值放宽
+
+  it('跨词边界 2-gram 碎片不报警（了一/枚碎/的虚/第二）', () => {
+    const text = ('他走了一程又一程。四枚碎片散落在地。这的虚脉渐渐凝实。第二天清晨出发。').repeat(10)
+    const r = waterAudit(text)
+    const words = r.issues.map(i => i.message)
+    expect(words.some(m => m.includes('「了一」'))).toBe(false)
+    expect(words.some(m => m.includes('「枚碎」'))).toBe(false)
+    expect(words.some(m => m.includes('「的虚」'))).toBe(false)
+    expect(words.some(m => m.includes('「第二」'))).toBe(false)
+  })
+
+  it('实词组合不受虚字过滤影响（碎片仍参与检测）', () => {
+    const text = '碎片'.repeat(30)
+    const r = waterAudit(text, { maxRepeat: 8 })
+    expect(r.issues.some(i => i.message.includes('「碎片」'))).toBe(true)
+  })
+
+  it('无基线默认阈值下限 10：8-9 次场景词不报警（旧阈值 8 误报「小屋」）', () => {
+    const text = ('小屋'.repeat(8) + '。')
+    const r = waterAudit(text)
+    expect(r.issues.some(i => i.message.includes('「小屋」'))).toBe(false)
+  })
+
+  it('新术语集中章（碎片 9 次）默认阈值下不报警，超阈值仍报', () => {
+    const low = waterAudit('碎片。'.repeat(9))
+    expect(low.issues.some(i => i.message.includes('「碎片」'))).toBe(false)
+    const high = waterAudit('碎片。'.repeat(12))
+    expect(high.issues.some(i => i.message.includes('「碎片」'))).toBe(true)
+  })
+})
