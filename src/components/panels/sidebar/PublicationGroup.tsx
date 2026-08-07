@@ -182,15 +182,23 @@ function PublishImportDialog({ isOpen, onClose, existingNumbers }: {
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => { if (!open) onClose() }}>
-      <DialogContent>
+      <DialogContent className="max-w-[420px]">
         <DialogHeader>
-          <DialogTitle>{t('pub.import')}</DialogTitle>
-          <DialogDescription>{t('pub.importHint')}</DialogDescription>
+          <DialogTitle className="flex items-center gap-2">
+            <Satellite size={16} className="text-[var(--color-accent)]" />
+            {t('pub.import')}
+          </DialogTitle>
+          <DialogDescription>
+            {t('pub.importHint')}
+          </DialogDescription>
         </DialogHeader>
-        <div className="space-y-3">
+
+        <div className="px-5 py-4 space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label>{t('pub.chapterNumber')}</Label>
+              <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
+                {t('pub.chapterNumber')}
+              </Label>
               <Input
                 type="number"
                 min={1}
@@ -199,23 +207,30 @@ function PublishImportDialog({ isOpen, onClose, existingNumbers }: {
               />
             </div>
             <div>
-              <Label>{t('pub.externalTitle')}</Label>
+              <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
+                {t('pub.externalTitle')}
+              </Label>
               <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t('pub.externalTitlePlaceholder')} />
             </div>
           </div>
+
           <div>
-            <Label>{t('pub.externalContent')}</Label>
+            <Label className="text-xs font-semibold mb-1.5 block" style={{ color: 'var(--color-text)' }}>
+              {t('pub.externalContent')}
+            </Label>
             <Textarea
-              className="min-h-[160px]"
               value={content}
               onChange={(e) => setContent(e.target.value)}
+              rows={5}
+              className="text-xs"
               placeholder={t('pub.externalContentPlaceholder')}
             />
           </div>
         </div>
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>{t('action.cancel')}</Button>
-          <Button variant="ai" onClick={() => void handleSave()} disabled={saving || !content.trim()}>
+          <Button variant="outline" onClick={onClose} disabled={saving}>{t('action.cancel')}</Button>
+          <Button variant="default" onClick={() => void handleSave()} disabled={saving || !content.trim()}>
             {saving ? t('status.saving') : t('action.save')}
           </Button>
         </DialogFooter>
