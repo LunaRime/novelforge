@@ -21,6 +21,17 @@ interface VerificationPanelProps {
   onClose: () => void
 }
 
+/** 角色定位显示映射（与模板枚举/下拉值域一致，跟随界面语言） */
+const ROLE_DISPLAY: Record<string, TextKey> = {
+  '建置': 'chapter.role.establishment',
+  '铺垫': 'chapter.role.setup',
+  '发展': 'chapter.role.development',
+  '冲突': 'chapter.role.conflict',
+  '高潮': 'chapter.role.climax',
+  '转折': 'chapter.role.twist',
+  '收尾': 'chapter.role.resolution',
+}
+
 /** 严重程度配置（labelKey 由组件渲染时 t() 取当前语言） */
 const SEVERITY_CONFIG: Record<string, { icon: React.ReactNode; color: string; labelKey: TextKey }> = {
   ok: { icon: <CheckCircle size={14} />, color: 'text-green-500', labelKey: 'verification.ok' },
@@ -165,7 +176,10 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                 </h4>
                 {report.inconsistentRoles.map((ir, idx) => (
                   <div key={idx} className="text-xs text-muted-foreground pl-2">
-                    {t('verification.roleLine').replace('{n}', String(ir.chapter)).replace('{role}', ir.role).replace('{expected}', ir.expectedRole)}
+                    {t('verification.roleLine')
+                      .replace('{n}', String(ir.chapter))
+                      .replace('{role}', t(ROLE_DISPLAY[ir.role] ?? 'chapter.role.development'))
+                      .replace('{expected}', t(ROLE_DISPLAY[ir.expectedRole] ?? 'chapter.role.development'))}
                   </div>
                 ))}
               </div>

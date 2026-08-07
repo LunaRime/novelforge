@@ -7,6 +7,7 @@ import { t } from '../../shared/locale'
 
 import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
 import { guardChapterWriting } from '../../services/workflow-guards'
+import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
@@ -26,8 +27,8 @@ interface Props {
   prefill?: Record<string, unknown> | null
 }
 
-/** 章节角色规范值 — 保持数据一致性，不受 locale 切换影响 */
-const ROLE_VALUES = ['开篇', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
+/** 章节角色规范值 — 与模板枚举/目录编辑器值域统一（建置系，P2 修复 '开篇' 历史变体） */
+const ROLE_VALUES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
 
 /** 章节创作参数持久化路径（相对于项目路径） */
 const CREATION_LOG_REL = '.vela/chapter_creation_log.json'
@@ -85,7 +86,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           // 章节号自动 +1
           setChapterNumber((last.chapterNumber || 0) + 1)
           setTitle('') // 标题不继承，让用户自填
-          setRole(last.role || '发展')
+          setRole(normalizeBlueprintRole(last.role))
           setPurpose(last.purpose || '')
           setKeyEvents(last.keyEvents || '')
           setCharacters(last.characters || '')
@@ -112,7 +113,8 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
         // 使用章节蓝图预填数据
         setChapterNumber(Number(prefill.chapterNumber) || 1)
         setTitle(String(prefill.title || ''))
-        setRole(String(prefill.role || '发展'))
+        // 归一化：蓝图历史值可能为英文/旧变体（'开篇'），统一到下拉规范值防空白
+        setRole(normalizeBlueprintRole(String(prefill.role || '')))
         setPurpose(String(prefill.purpose || ''))
         setKeyEvents(String(prefill.keyEvents || ''))
         setCharacters(String(prefill.characters || ''))
