@@ -5,6 +5,7 @@ import { ipc } from '../ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { stripThinkingTags, extractAndRepairJSON, parseMarkdownTable } from './workflow-utils'
 import { renderLog } from '../render-logger'
+import { normalizeBlueprintRole } from '../blueprint-role'
 
 // ==========================================
 // 1. 结构与类型导出 (保留对外的向后兼容)
@@ -131,7 +132,8 @@ export function parseTextBlueprintsFromParsed(
       ...EMPTY_BLUEPRINT,
       chapterNumber: chNum,
       title: String(p.title ?? p.chapterTitle ?? p.chapter_title ?? `第${chNum}章`),
-      role: String(p.role ?? '发展'),
+      // 归一化：英文模板输出的 role 枚举（Setup/Development...）→ 中文规范值
+      role: normalizeBlueprintRole(String(p.role ?? '')),
       purpose: String(p.purpose ?? p.goal ?? ''),
       keyEvents: String(p.keyEvents ?? p.key_events ?? p.events ?? ''),
       characters: characterArray,
@@ -175,7 +177,7 @@ export function parseTextBlueprintsFromTable(
       ...EMPTY_BLUEPRINT,
       chapterNumber: chNum,
       title: row.title || `第${chNum}章`,
-      role: row.role || '发展',
+      role: normalizeBlueprintRole(row.role),
       purpose: row.purpose || '',
       keyEvents: row.keyEvents || '',
       characters: characterArray,
