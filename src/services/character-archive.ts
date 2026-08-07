@@ -50,8 +50,11 @@ export function parseArchiveJson(raw: string, charName: string): Record<string, 
     const s = String(v).trim()
     if (s && !isNoChangeValue(s)) out[f] = s
   }
-  if (obj.tags !== undefined) {
-    const tags = normalizeTagsValue(String(obj.tags))
+  if (obj.tags !== undefined && obj.tags !== null) {
+    // 直接传原始值:normalizeTagsValue 的 Array.isArray 分支对数组元素逐个归一化
+    // (不走分隔符 split——含逗号的元素不会被拆碎,与 architecture-workflow
+    // createCharacterExtractSteps 的 Array.isArray 分支对齐)
+    const tags = normalizeTagsValue(obj.tags)
     if (tags) out.tags = tags
   }
   return Object.keys(out).length > 0 ? out : null

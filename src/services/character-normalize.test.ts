@@ -105,6 +105,12 @@ describe('normalizeTagsValue', () => {
     expect(normalizeTagsValue('')).toBe('')
     expect(normalizeTagsValue(undefined as unknown as string)).toBe('')
   })
+
+  it('数组输入 → 元素逐个归一化(含逗号元素不拆分,剔除哨兵项)', () => {
+    expect(normalizeTagsValue(['天才,剑修', '冷静'])).toBe('["天才,剑修","冷静"]')
+    expect(normalizeTagsValue(['无', '铁血'])).toBe('["铁血"]')
+    expect(normalizeTagsValue(['无'])).toBe('')
+  })
 })
 
 describe('matchCharacterName', () => {
