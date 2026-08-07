@@ -52,7 +52,7 @@ export default function VolumeGroup({
   const loadVolumes = useVolumeStore(s => s.load)
   const removeVolume = useVolumeStore(s => s.remove)
   const upsertVolume = useVolumeStore(s => s.upsert)
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const [volumeDialog, setVolumeDialog] = useState<{ open: boolean; editing: VolumeData | null }>({ open: false, editing: null })
   const [autoSplitOpen, setAutoSplitOpen] = useState(false)
 
