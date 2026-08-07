@@ -92,15 +92,17 @@ export class BlueprintRepository {
                 orderClause = `priority ${config.direction === 'desc' ? 'DESC' : 'ASC'}, chapter_number ASC`
                 break
             case 'role':
-                // 按章节定位排序：开端 → 发展 → 转折 → 高潮 → 结局
+                // 按章节定位排序（模板枚举 7 值）：建置 → 铺垫 → 发展 → 冲突 → 高潮 → 转折 → 收尾
                 orderClause = `
                     CASE role
-                        WHEN '开端' THEN 1
-                        WHEN '发展' THEN 2
-                        WHEN '转折' THEN 3
-                        WHEN '高潮' THEN 4
-                        WHEN '结局' THEN 5
-                        ELSE 6
+                        WHEN '建置' THEN 1
+                        WHEN '铺垫' THEN 2
+                        WHEN '发展' THEN 3
+                        WHEN '冲突' THEN 4
+                        WHEN '高潮' THEN 5
+                        WHEN '转折' THEN 6
+                        WHEN '收尾' THEN 7
+                        ELSE 8
                     END ${config.direction === 'desc' ? 'DESC' : 'ASC'},
                     chapter_number ASC
                 `

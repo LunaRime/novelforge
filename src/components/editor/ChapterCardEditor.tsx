@@ -19,6 +19,7 @@ import {
   type DirectoryWorkflowParams,
 } from '../../services/workflows/directory-workflow'
 import { guardDirectoryGeneration } from '../../services/workflow-guards'
+import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
@@ -94,7 +95,8 @@ export default function ChapterCardEditor() {
       } else {
         data = await ipc.invoke('db:blueprint-get-all-sorted', sortConfig) as ChapterBlueprint[]
       }
-      setBlueprints(data)
+      // 读取侧清洗：旧库英文/历史变体 role 值归一化为规范值（保存时随蓝图写回 DB）
+      setBlueprints(data.map(b => ({ ...b, role: normalizeBlueprintRole(b.role) })))
       if (data.length > 0) setSelectedIdx(0)
       // 获取下一个待写章节号
       const maxFinalized = await ipc.invoke('db:draft-get-max-finalized-chapter')
