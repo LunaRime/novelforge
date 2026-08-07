@@ -169,6 +169,22 @@ export function registerFSController() {
     }
   })
 
+  // 二进制写入（PNG 截图导出——年度报告/分享卡；与 write-file 同安全模式）
+  ipcMain.handle('fs:write-buffer', async (_event, filePath: string, content: Uint8Array) => {
+    try {
+      const safePath = validateSandbox(filePath)
+      return await withFileMutex(filePath, async () => {
+        await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
+        const tempPath = `${safePath}.${Date.now()}.tmp`
+        await fsPromises.writeFile(tempPath, Buffer.from(content))
+        await fsPromises.rename(tempPath, safePath)
+        return { success: true }
+      })
+    } catch (error) {
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
   // 跨平台绝对安全异步写入（防踩空）
   ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
     try {
