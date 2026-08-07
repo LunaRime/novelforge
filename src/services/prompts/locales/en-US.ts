@@ -424,11 +424,14 @@ Return the analysis strictly in the following JSON format:
     "genre": "Main genre (xuanhuan/fairy-cultivation/urban/sci-fi/history/mystery/game/military/fantasy/wuxia/realistic/other)",
     "targetAudience": "Audience (male-channel/female-channel/general)",
     "subGenre": "Sub-genre and tags",
+    "plotStructure": "Story structure (three_act/heros_journey/save_the_cat/kishotenketsu/multi_thread/freeform)",
+    "narrativePOV": "Narrative POV (third_limited/first_person/third_omniscient/multi_pov)",
     "coreOutline": "Core outline (150+ characters, including main-line goal, core conflict, story direction)",
     "worldSetting": "World background and power system",
     "goldenFinger": "Protagonist's golden finger / core ability system",
     "protagonistProfile": "Protagonist profile (personality, background, core drives)",
-    "globalGuidance": "Global writing style and pacing requirements inferred from the existing content"
+    "globalGuidance": "Global writing style and pacing requirements inferred from the existing content",
+    "writingStyle": "Writing style (100+ characters, including language style and pacing)"
   },
   "architectureFiles": {
     "premise": "Core story premise text (highly condensed, 50-200 characters, must include a one-line logline and the core conflict)",
@@ -505,7 +508,8 @@ Return the analysis strictly in the following JSON format:
     "worldSetting": "World background and power system",
     "goldenFinger": "Protagonist's golden finger / core ability system",
     "protagonistProfile": "Protagonist profile (personality, background, core drives)",
-    "globalGuidance": "Global writing style and pacing requirements inferred from the existing content"
+    "globalGuidance": "Global writing style and pacing requirements inferred from the existing content",
+    "writingStyle": "Writing style (100+ characters, including language style and pacing)"
   },
   "architectureFiles": {
     "premise": "Core story premise text (highly condensed, 50-200 characters, must include a one-line logline and the core conflict)",

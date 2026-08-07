@@ -12,6 +12,7 @@ import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { normalizeBlueprintRole } from '../../blueprint-role'
+import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
@@ -226,7 +227,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (inferResult.novelConfig) {
       const novelConfig = {
         ...project.novelConfig,
-        ...inferResult.novelConfig,
+        // 枚举归一化：英文模板输出的 genre/audience/结构/视角 → UI 中文规范值
+        ...normalizeNovelConfigEnums(inferResult.novelConfig as Partial<import('../../../shared/ipc-channels').NovelConfig>),
         totalChapters: chapters.length,
         wordsPerChapter: Math.round(chapters.reduce((s, c) => s + c.wordCount, 0) / chapters.length),
       }
