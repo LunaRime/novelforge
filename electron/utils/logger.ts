@@ -14,13 +14,45 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { VELA_HOME } from './config-utils'
+import { VELA_HOME, readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from './config-utils'
+import type { GlobalConfig } from '../../src/shared/ipc-channels'
 import { t } from '../../src/shared/locale'
 
 // ===== 常量 =====
 
-/** 最多保留 N 天日志 */
+/** 每环境默认最多保留日志文件数（数量约束；可在设置 → 开发者 → 日志保留中调整） */
+const MAX_LOG_FILES = 5
+/** 默认最多保留天数（时间窗约束；可在设置 → 开发者 → 日志保留中调整） */
 const MAX_LOG_DAYS = 7
+
+/** 读取日志保留配置（缺省回退默认值；容错旧 config.json 无该字段） */
+function getRetentionConfig(): { files: number; days: number } {
+  const cfg = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+  const r = cfg?.logRetention
+  return {
+    files: typeof r?.files === 'number' && r.files > 0 ? Math.min(r.files, 30) : MAX_LOG_FILES,
+    days: typeof r?.days === 'number' && r.days > 0 ? Math.min(r.days, 365) : MAX_LOG_DAYS,
+  }
+}
+
+/**
+ * 计算应删除的日志文件（双约束：超时间窗 或 数量超限的最旧文件）。
+ * 纯函数可单测；返回删除顺序（按 mtime 旧→新）。
+ */
+export function computeLogFilesToDelete(
+  files: Array<{ name: string; mtime: number }>,
+  keepFiles: number,
+  keepDays: number,
+): string[] {
+  // 只参与合法日志文件（vela- 前缀 + .log 后缀）
+  const valid = files.filter(f => f.name.startsWith('vela-') && f.name.endsWith('.log'))
+  const cutoff = Date.now() - keepDays * 24 * 60 * 60 * 1000
+  const expireDays = valid.filter(f => f.mtime < cutoff)
+  const keepByCount = [...valid].sort((a, b) => b.mtime - a.mtime).slice(keepFiles)
+  const toDelete = new Map<string, number>() // name → mtime(双约束去重)
+  for (const f of [...expireDays, ...keepByCount]) toDelete.set(f.name, f.mtime)
+  return [...toDelete.entries()].sort((a, b) => a[1] - b[1]).map(([name]) => name)
+}
 
 // ===== 日志环境 =====
 
@@ -134,8 +166,8 @@ function ensureLogStream(): fs.WriteStream {
             fs.mkdirSync(LOG_DIRS[environment], { recursive: true })
         }
 
-        // 清理过期日志
-        cleanupOldLogs()
+        // 清理过期日志（双约束：数量 + 时间窗，配置来自设置页）
+        cleanupOldLogs(getRetentionConfig().files, getRetentionConfig().days)
 
         logStream = fs.createWriteStream(todayPath, { flags: 'a' })
     }
@@ -143,21 +175,18 @@ function ensureLogStream(): fs.WriteStream {
     return logStream!
 }
 
-/** 删除超过 MAX_LOG_DAYS 的日志文件（两环境目录都清理） */
-function cleanupOldLogs(): void {
-    const cutoff = Date.now() - MAX_LOG_DAYS * 24 * 60 * 60 * 1000
+/** 删除超时间窗或数量超限的日志文件（双约束，两环境目录都清理） */
+function cleanupOldLogs(keepFiles: number, keepDays: number): void {
     for (const dir of Object.values(LOG_DIRS)) {
         try {
             const files = fs.readdirSync(dir)
-            for (const file of files) {
-                if (!file.startsWith('vela-') || !file.endsWith('.log')) continue
-                const filePath = path.join(dir, file)
-                try {
-                    const stat = fs.statSync(filePath)
-                    if (stat.mtimeMs < cutoff) {
-                        fs.unlinkSync(filePath)
-                    }
-                } catch { /* 忽略单个文件的错误 */ }
+                .map((name): { name: string; mtime: number } | null => {
+                    try { return { name, mtime: fs.statSync(path.join(dir, name)).mtimeMs } }
+                    catch { return null }
+                })
+                .filter((f): f is { name: string; mtime: number } => f !== null)
+            for (const name of computeLogFilesToDelete(files, keepFiles, keepDays)) {
+                try { fs.unlinkSync(path.join(dir, name)) } catch { /* 忽略单个文件的错误 */ }
             }
         } catch { /* 目录可能不存在 */ }
     }

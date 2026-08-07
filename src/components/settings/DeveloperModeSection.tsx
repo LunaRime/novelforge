@@ -6,7 +6,7 @@
  * 安全：base URL 由主进程读取（LLM 只能传相对 path）；仅 http/https；响应 1MB 截断。
  */
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Plug, ShieldAlert, HelpCircle, Globe } from 'lucide-react'
+import { Save, Loader2, Plug, ShieldAlert, HelpCircle, Globe, FileText } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
@@ -35,6 +35,9 @@ export default function DeveloperModeSection() {
   const [browserPort, setBrowserPort] = useState(9222)
   const [browserTesting, setBrowserTesting] = useState(false)
   const [browserTestResult, setBrowserTestResult] = useState<{ success: boolean; version?: string; error?: string } | null>(null)
+  // 日志保留（双约束：数量 + 时间窗）
+  const [retentionFiles, setRetentionFiles] = useState(5)
+  const [retentionDays, setRetentionDays] = useState(7)
 
   useEffect(() => {
     ipc.invoke('config:get').then((cfg) => {
@@ -50,6 +53,11 @@ export default function DeveloperModeSection() {
       if (browser) {
         setBrowserEnabled(browser.enabled ?? false)
         setBrowserPort(browser.cdpPort ?? 9222)
+      }
+      const retention = cfg2?.logRetention
+      if (retention) {
+        setRetentionFiles(retention.files ?? 5)
+        setRetentionDays(retention.days ?? 7)
       }
     }).catch(() => { })
   }, [])
@@ -79,6 +87,11 @@ export default function DeveloperModeSection() {
       await ipc.invoke('config:set', {
         devMode: { enabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
         devBrowser: { enabled: browserEnabled, cdpPort: browserPort || 9222 },
+        // 日志保留（钳制：1-30 个文件 / 1-365 天）
+        logRetention: {
+          files: Math.min(Math.max(retentionFiles || 5, 1), 30),
+          days: Math.min(Math.max(retentionDays || 7, 1), 365),
+        },
       })
       renderLog('info', 'Save:Settings', t('log.render.devModeSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
@@ -222,6 +235,36 @@ export default function DeveloperModeSection() {
             )}
           </>
         )}
+      </div>
+
+      {/* 日志保留（双约束清理） */}
+      <div className="p-3 rounded-xl space-y-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+        <div className="flex items-center gap-2 min-w-0">
+          <FileText size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+          <div className="min-w-0">
+            <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.logRetentionTitle')}</div>
+            <div className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.logRetentionDesc')}</div>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <label className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('dev.logRetentionFiles')}</label>
+          <Input
+            type="number"
+            min={1} max={30}
+            value={retentionFiles || ''}
+            onChange={(e) => setRetentionFiles(Number(e.target.value))}
+            className="h-7 text-xs w-20"
+          />
+          <label className="text-xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('dev.logRetentionDays')}</label>
+          <Input
+            type="number"
+            min={1} max={365}
+            value={retentionDays || ''}
+            onChange={(e) => setRetentionDays(Number(e.target.value))}
+            className="h-7 text-xs w-20"
+          />
+        </div>
       </div>
 
       {/* 操作按钮 */}
