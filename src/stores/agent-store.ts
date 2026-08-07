@@ -4,6 +4,8 @@ import { useLLMStore } from './llm-store'
 import { buildAgentSystemPrompt } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
 import { registerBuiltinTools } from '../services/agent/tools'
+import { buildRoleplaySystemPrompt } from '../services/roleplay-prompt'
+import { useCharacterStore } from './character-store'
 import { skillRegistry } from '../services/agent/skill-registry'
 import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
@@ -44,6 +46,8 @@ export interface AgentConversation {
   mode: AgentMode
   /** 当前会话使用的模型 ID（null 表示使用默认） */
   modelId: string | null
+  /** 角色试演：绑定的角色名（Agent 以该角色身份回复；无此字段为普通会话） */
+  roleplayCharacter?: string
 }
 
 // ===== Store 状态接口 =====
@@ -72,7 +76,7 @@ interface AgentState {
   /** 初始化 Tool 系统 */
   initializeTools: () => void
   /** 新建会话并激活 */
-  createConversation: () => AgentConversation
+  createConversation: (opts?: { roleplayCharacter?: string; title?: string }) => AgentConversation
   /** 激活指定会话 */
   selectConversation: (id: string) => void
   /** 删除指定会话 */
@@ -170,19 +174,20 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ toolsInitialized: true })
   },
 
-  createConversation: () => {
+  createConversation: (opts?: { roleplayCharacter?: string; title?: string }) => {
     // 确保 Tool 已初始化
     get().initializeTools()
 
     const llmStore = useLLMStore.getState()
     const newConv: AgentConversation = {
       id: genId(),
-      title: t('agent.newConversation'),
+      title: opts?.title ?? t('agent.newConversation'),
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
       mode: get().defaultMode,
       modelId: llmStore.defaultModelId,
+      roleplayCharacter: opts?.roleplayCharacter,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
@@ -380,6 +385,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
       // 构建系统提示词（包含项目上下文 + Tool 列表）
       let systemPrompt = buildAgentSystemPrompt(currentConv.mode)
+
+      // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
+      if (currentConv.roleplayCharacter) {
+        const roleChar = useCharacterStore.getState().characters.find(c => c.name === currentConv.roleplayCharacter)
+        if (roleChar) {
+          systemPrompt += `\n\n${buildRoleplaySystemPrompt(roleChar)}`
+        }
+      }
 
       // ===== RAG 自动注入：向量搜索增强上下文 =====
       try {
