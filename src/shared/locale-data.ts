@@ -2784,6 +2784,7 @@ export const UI_TEXTS_DATA = {
   'log.finalize.charStateJsonFallback': { 'zh-CN': '✅ 角色状态解析成功 (JSON 回退)', 'en-US': '✅ Character state parsed (JSON fallback)', 'ru-RU': '✅ Состояния персонажей разобраны (запасной JSON)' },
   'log.finalize.charStateParseFailed': { 'zh-CN': '⚠️ 角色状态解析失败（Markdown 表格与 JSON 均未识别），本次无角色更新', 'en-US': '⚠️ Character state parse failed (neither Markdown table nor JSON recognized), no updates this run', 'ru-RU': '⚠️ Не удалось разобрать состояния персонажей (ни таблица, ни JSON не распознаны), обновлений нет' },
   'log.finalize.charStateUpdated': { 'zh-CN': '更新角色状态: {name}', 'en-US': 'Updating character state: {name}', 'ru-RU': 'Обновление состояния персонажа: {name}' },
+  'log.finalize.charUpdateSkipped': { 'zh-CN': '⚠️ 跳过「{name}」状态更新（角色已不在表中）', 'en-US': '⚠️ Skipped state update for "{name}" (character no longer exists)', 'ru-RU': '⚠️ Пропуск обновления «{name}» (персонаж не существует)' },
   'log.finalize.newChars': { 'zh-CN': '✅ 自动提取并登记 {count} 名新出场角色', 'en-US': '✅ {count} new characters extracted and registered', 'ru-RU': '✅ Извлечено и зарегистрировано персонажей: {count}' },
   'log.finalize.detectingRelations': { 'zh-CN': '正在检测角色间的关系变化...', 'en-US': 'Detecting relationship changes...', 'ru-RU': 'Обнаружение изменений связей...' },
   'log.finalize.relationsDetected': { 'zh-CN': '✅ 自动检测到 {count} 条新角色关系', 'en-US': '✅ {count} new character relationships detected', 'ru-RU': '✅ Обнаружено новых связей: {count}' },
