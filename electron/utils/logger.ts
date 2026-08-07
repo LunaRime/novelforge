@@ -229,7 +229,7 @@ export function initLogger(env: LogEnvironment, version: string): void {
       .replace('{node}', process.version)
       .replace('{arch}', os.arch()))
     if (env === LogEnvironment.Dev) {
-        logger.debug('Logger', '开发环境：DEBUG 全量日志已开启')
+        logger.debug('Logger', t('log.logger.devDebugEnabled'))
     }
 }
 

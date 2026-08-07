@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { getCurrentLocale } from '../shared/locale'
+import { getCurrentLocale, t } from '../shared/locale'
 import { randomUUID } from '../utils/id'
 import { renderLog } from '../services/render-logger'
 
@@ -563,7 +563,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       const interruptedWaitingIds = new Set(Object.keys(cp.waitingRuns ?? {}))
       const restored = cp.activeRuns.map(r => {
         if (interruptedWaitingIds.has(r.id)) {
-          get().addLog('warn', `[Restore] ${r.title} 在等待确认时被中断（应用重启），无法继续，请重新运行该工作流`)
+          // 工作流标题是用户数据，可能含 $ 等特殊字符 → 箭头函数 replacer 防 $& 语义
+          get().addLog('warn', t('log.workflow.restoreInterrupted').replace('{title}', () => r.title))
           return { ...r, status: 'failed' as const }
         }
         return { ...r, status: 'paused' as const }

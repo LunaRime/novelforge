@@ -23,7 +23,7 @@ function getLanceDB(): typeof LanceDB {
   if (!_lancedb) {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     _lancedb = require('@lancedb/lancedb')
-    logger.debug('VectorStore', 'LanceDB 原生模块已加载')
+    logger.debug('VectorStore', t('log.vectorStore.moduleLoaded'))
   }
   return _lancedb as typeof LanceDB
 }

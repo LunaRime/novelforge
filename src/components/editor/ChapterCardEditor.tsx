@@ -100,11 +100,11 @@ export default function ChapterCardEditor() {
       const maxFinalized = await ipc.invoke('db:draft-get-max-finalized-chapter')
       setNextWriteChapter(maxFinalized !== null ? maxFinalized + 1 : 1)
     } catch {
-      addLog('error', '读取章节蓝图失败')
+      addLog('error', t('log.render.blueprintLoadFailed'))
     }
     setLoading(false)
     setDirty(false)
-  }, [currentProject, addLog])
+  }, [currentProject, addLog, t])
 
   useEffect(() => {
     let mounted = true
@@ -205,7 +205,7 @@ export default function ChapterCardEditor() {
       await saveChapterBlueprint(newBlueprint)
       useProjectStore.getState().refreshFileTree()
     } catch {
-      addLog('error', '自动保存新章节蓝图失败')
+      addLog('error', t('log.render.blueprintAutoSaveFailed'))
     }
     setDirty(true)
   }

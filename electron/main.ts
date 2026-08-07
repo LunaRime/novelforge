@@ -139,7 +139,7 @@ function createWindow() {
     height: 900,
     minWidth: 1024,
     minHeight: 640,
-    title: 'NovelForge — AI 深度驱动的小说创作 IDE',
+    title: t('window.title'),
     icon: path.join(process.env.APP_ROOT!, 'build', 'icon.png'),
     // macOS 使用自定义标题栏
     titleBarStyle: 'hiddenInset',

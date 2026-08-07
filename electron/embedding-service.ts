@@ -329,7 +329,8 @@ export class EmbeddingService {
       }
 
       // JSON 模式失败，记录原因
-      logger.debug('Embedding', `JSON 模式失败: ${res1.error || '空响应'} → 尝试纯文本模式`)
+      // res1.error 动态内容可能含 $ → 箭头函数 replacer 防 $& 语义
+      logger.debug('Embedding', t('log.embedding.jsonModeFailedTryPlain').replace('{err}', () => res1.error || t('log.embedding.emptyResponse')))
     } catch {
       // provider.generate 抛出异常（如 API 不可达），继续尝试 2
     }

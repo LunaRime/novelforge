@@ -19,9 +19,11 @@ function subscribeToLocale(cb: () => void) {
 }
 function notifyLocaleChange() { localeListeners.forEach(l => l()) }
 
-/** 供语言选择 UI 调用的切换函数，会触发全界面重渲染，并同步主进程（对话框/菜单） */
+/** 供语言选择 UI 调用的切换函数，会触发全界面重渲染，并同步主进程（对话框/菜单/窗口标题） */
 export function switchLocale(locale: SupportedLocale) {
   setCurrentLocale(locale)
+  // 文档标题（窗口标题栏显示）跟随界面语言
+  document.title = translate('window.title')
   notifyLocaleChange()
   // 主进程对话框/菜单的 t() 跟随 UI 语言（非 Electron 环境静默忽略）
   import('../services/ipc-client').then(({ ipc }) => {
