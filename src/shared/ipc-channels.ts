@@ -34,6 +34,8 @@ export interface GlobalConfig {
   }
   /** 最近项目列表（打开项目时由渲染进程同步，活动聚合/历史导航读取） */
   recentProjects?: Array<{ name: string; path: string; updatedAt?: number }>
+  /** 日志保留策略（双约束：数量 + 时间窗；设置 → 开发者 → 日志保留） */
+  logRetention?: { files: number; days: number }
   /** LLM 并发配置（主进程启动时恢复，重启不丢） */
   concurrency?: { maxConcurrent: number; maxQueueSize: number }
   /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */

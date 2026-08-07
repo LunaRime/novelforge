@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { detectLogEnvironment, formatMessage, shouldUseColors, LogEnvironment, LogLevel } from './logger'
+import { detectLogEnvironment, formatMessage, shouldUseColors, computeLogFilesToDelete, LogEnvironment, LogLevel } from './logger'
 
 describe('detectLogEnvironment', () => {
   it('dev mode (VITE_DEV_SERVER_URL) → Dev 环境', () => {
@@ -57,5 +57,40 @@ describe('shouldUseColors', () => {
   it('测试环境（非 TTY）→ 禁用颜色（纯文本输出）', () => {
     // vitest 的 stdout/stderr 非 TTY
     expect(shouldUseColors()).toBe(false)
+  })
+})
+
+describe('computeLogFilesToDelete 双约束（数量 + 时间窗）', () => {
+  const now = Date.now()
+  const DAY = 24 * 60 * 60 * 1000
+  const mk = (name: string, ageDays: number) => ({ name, mtime: now - ageDays * DAY })
+
+  it('超过时间窗(keepDays)的文件删除', () => {
+    const files = [mk('vela-2026-07-01.log', 8), mk('vela-2026-08-05.log', 2)]
+    expect(computeLogFilesToDelete(files, 5, 7)).toEqual(['vela-2026-07-01.log'])
+  })
+
+  it('数量超限(keepFiles)时删除最旧文件(未超天数)', () => {
+    const files = [mk('vela-a.log', 1), mk('vela-b.log', 2), mk('vela-c.log', 3), mk('vela-d.log', 4), mk('vela-e.log', 5), mk('vela-f.log', 6)]
+    expect(computeLogFilesToDelete(files, 5, 7)).toEqual(['vela-f.log'])
+  })
+
+  it('双约束命中去重(同一文件只删一次)', () => {
+    const files = [mk('vela-a.log', 1), mk('vela-b.log', 2), mk('vela-c.log', 3), mk('vela-d.log', 4), mk('vela-e.log', 5), mk('vela-f.log', 6), mk('vela-g.log', 8)]
+    expect(computeLogFilesToDelete(files, 5, 7)).toEqual(['vela-g.log', 'vela-f.log'])
+  })
+
+  it('数量内且天数内 → 不删除', () => {
+    expect(computeLogFilesToDelete([mk('vela-a.log', 1)], 5, 7)).toEqual([])
+  })
+
+  it('keepFiles=0 → 全部删除', () => {
+    const files = [mk('vela-a.log', 1), mk('vela-b.log', 2)]
+    expect(computeLogFilesToDelete(files, 0, 7)).toEqual(['vela-b.log', 'vela-a.log'])
+  })
+
+  it('非法文件名(非 vela- 前缀)不参与计算', () => {
+    const files = [mk('other.log', 30), mk('vela-2026-07-01.log', 8)]
+    expect(computeLogFilesToDelete(files, 5, 7)).toEqual(['vela-2026-07-01.log'])
   })
 })
