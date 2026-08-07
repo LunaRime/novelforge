@@ -5,7 +5,7 @@
  * 2026-08-05 升级：级别筛选 / 复制 / 日志文件查看器 / 打开日志目录。
  */
 import { useState, useRef, useEffect, memo, useMemo } from 'react'
-import { Trash2, ChevronsDown, Copy, Check, FileText, FolderOpen } from 'lucide-react'
+import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
 import { t, type TextKey } from '../../shared/locale'
@@ -29,11 +29,15 @@ export default memo(function LogsView() {
   const [filter, setFilter] = useState<LogFilter>('all')
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
+  /** 时间排序方向：true = 正序（新日志在底部，与 autoScroll 一致），false = 倒序 */
+  const [sortAsc, setSortAsc] = useState(true)
 
-  const visibleLogs = useMemo(
-    () => filter === 'all' ? globalLogs : globalLogs.filter(l => l.level === filter),
-    [globalLogs, filter],
-  )
+  const visibleLogs = useMemo(() => {
+    const filtered = filter === 'all' ? globalLogs : globalLogs.filter(l => l.level === filter)
+    // 按完整时间戳显式排序（追加顺序在多工作流并发/跨天场景下不可靠；
+    // 12 小时制 locale 下 time 字符串比较也会错乱——用数字 ts 排序）
+    return [...filtered].sort((a, b) => (sortAsc ? a.ts - b.ts : b.ts - a.ts))
+  }, [globalLogs, filter, sortAsc])
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
@@ -101,6 +105,14 @@ export default memo(function LogsView() {
           </Button>
           <Button variant="ghost" size="icon" onClick={openLogDir} title={t('log.openDir')}>
             <FolderOpen size={13} />
+          </Button>
+          <Button
+            variant="ghost" size="icon"
+            onClick={() => setSortAsc(!sortAsc)}
+            title={sortAsc ? t('log.sortAsc') : t('log.sortDesc')}
+            className={sortAsc ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-accent)]'}
+          >
+            {sortAsc ? <ArrowDown size={13} /> : <ArrowUp size={13} />}
           </Button>
           <Button
             variant="ghost" size="icon"
