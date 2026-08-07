@@ -2080,7 +2080,7 @@ export const UI_TEXTS_DATA = {
   // --- 连载监控（手动导入平台章节） ---
   'pub.title': { 'zh-CN': '连载监控', 'en-US': 'Publication', 'ru-RU': 'Публикация' },
   'pub.import': { 'zh-CN': '导入平台章节', 'en-US': 'Import Published Chapter', 'ru-RU': 'Импорт опубликованной главы' },
-  'pub.importHint': { 'zh-CN': '粘贴平台已发布的章节正文（不自动抓取——本地优先）。将对比本地定稿相似度并审计术语/水文。', 'en-US': 'Paste the published chapter text (no auto-fetching — local-first). Compared against your local finalized draft for similarity and audited for terminology/water.', 'ru-RU': 'Вставьте текст опубликованной главы (без автозагрузки — локальный приоритет). Будет сравнено с локальным финалом и проверено на терминологию/воду.' },
+  'pub.importHint': { 'zh-CN': '粘贴平台已发布正文，自动对比本地定稿', 'en-US': 'Paste published text; compared with local draft', 'ru-RU': 'Вставьте опубликованный текст; сравнивается с локальным' },
   'pub.empty': { 'zh-CN': '尚未导入任何平台章节', 'en-US': 'No published chapters imported yet', 'ru-RU': 'Импортированных глав пока нет' },
   'pub.chapterLabel': { 'zh-CN': '第 {n} 章', 'en-US': 'Ch.{n}', 'ru-RU': 'Гл.{n}' },
   'pub.chapterNumber': { 'zh-CN': '章节号', 'en-US': 'Chapter #', 'ru-RU': '№ главы' },
