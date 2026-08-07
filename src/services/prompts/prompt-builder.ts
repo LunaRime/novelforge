@@ -228,6 +228,18 @@ export class PostProcessPromptBuilder extends BasePromptBuilder {
       : JSON.stringify(json, null, 2);
     return this;
   }
+
+  /** 角色名（定稿正文档案提取基准） */
+  withCharacterName(name: string) {
+    this.variables.character_name = name;
+    return this;
+  }
+
+  /** 该角色出现的章节相关段落（带章节号） */
+  withChaptersSegments(segments: string) {
+    this.variables.chapters_segments = segments;
+    return this;
+  }
 }
 
 /**
