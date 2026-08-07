@@ -191,7 +191,7 @@ export const ARCH_CHARACTER_SCOPE = 'arch_characters'
  * - 包裹格式：{ "characters": [...] }
  * - 半结构化文本：每个角色从 "name" 字段开始
  */
-function extractCharactersFromText(text: string): Array<Record<string, unknown>> {
+export function extractCharactersFromText(text: string): Array<Record<string, unknown>> {
   // 1. 先走统一结构化出口（workflow-utils 的提取/修复引擎，与其余工作流一致）
   const repaired = extractAndRepairJSON(text, false)
   const raw = repaired.parsed ?? robustParseJSON(text, false)
@@ -249,9 +249,11 @@ function extractCharactersFromText(text: string): Array<Record<string, unknown>>
 
 /**
  * 从类 JSON 对象字符串中提取字段（容错模式）
- * 使用正则逐个匹配 "field": value 对，容忍格式错误
+ * 使用正则逐个匹配 "field": value 对，容忍格式错误。
+ * 主路径（extractFieldsFromJsonLike）与降级路径（extractByNamePattern）共用的单一出口，
+ * 防止内联正则副本漂移（降级路径曾漏掉数字/布尔字段）。
  */
-function extractFieldsFromJsonLike(objStr: string): Record<string, unknown> | null {
+export function extractKvFields(objStr: string): Record<string, unknown> {
   const card: Record<string, unknown> = {}
 
   // 匹配 "name": "value" 的键值对（支持值中带转义引号）
@@ -274,6 +276,11 @@ function extractFieldsFromJsonLike(objStr: string): Record<string, unknown> | nu
     if (nameMatch) card.name = nameMatch[1]
   }
 
+  return card
+}
+
+function extractFieldsFromJsonLike(objStr: string): Record<string, unknown> | null {
+  const card = extractKvFields(objStr)
   return card.name ? card : null
 }
 
@@ -291,14 +298,11 @@ function extractByNamePattern(text: string): Array<Record<string, unknown>> {
     if (nameEnd === -1) continue
     const name = part.substring(0, nameEnd)
 
-    const card: Record<string, unknown> = { name }
-    const kvPattern = /"(\w+)":\s*"((?:[^"\\]|\\.)*)"/g
-    let m: RegExpExecArray | null
-    while ((m = kvPattern.exec(part)) !== null) {
-      if (m[1] !== 'name') card[m[1]] = m[2].replace(/\\"/g, '"').replace(/\\n/g, '\n')
-    }
-
-    if (card.name) results.push(card)
+    // 与主路径共用 extractKvFields（含数字/布尔字段），防正则副本漂移
+    const fields = extractKvFields(part)
+    // split 后 part 不含 "name" 键（首个双引号前已是名字值），防御性清理避免覆盖显式 name
+    delete fields.name
+    if (name) results.push({ name, ...fields })
   }
 
   return results
