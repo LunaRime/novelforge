@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput } from 'lucide-react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -18,6 +18,7 @@ import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
+import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
 
 /**
  * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
@@ -68,6 +69,21 @@ export default function CharacterEditor() {
     )
     if (!ok) return
     await deleteCharacter(selectedCard.name, currentProject.path)
+  }
+
+  // 「从定稿生成档案」（单角色）：确认后仅针对当前选中角色执行
+  const [archiving, setArchiving] = useState(false)
+  const handleArchive = async () => {
+    if (!selectedCard || !currentProject) return
+    const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
+    if (!ok) return
+    const { globalEventBus } = await import('../../shared/event-bus')
+    const stop = () => setArchiving(false)
+    const unsub = globalEventBus.on('WORKFLOW_COMPLETE', stop)
+    setArchiving(true)
+    runCharacterArchive(currentProject.path, selectedCard.name)
+    // 兜底：60s 后释放监听（工作流事件已触发过则不重复执行）
+    setTimeout(() => { unsub(); setArchiving(false) }, 60000)
   }
 
   // ===== 角色卡模板（~/.vela/templates/）：存为模板 / 应用模板 =====
@@ -215,6 +231,10 @@ export default function CharacterEditor() {
               </Button>
               <Button variant="outline" size="sm" onClick={() => setViewMode('backlinks')} title={t('character.viewBacklinks')}>
                 <Link2 size={12} /> {t('character.backlinks')}
+              </Button>
+              {/* 从定稿生成档案：仅当前选中角色，确认后由工作流驱动（执行中禁用防重入） */}
+              <Button variant="outline" size="sm" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
+                <Sparkles size={12} /> {archiving ? t('character.archiveRunning') : t('character.archiveBtn')}
               </Button>
               {/* 角色试演：新建绑定角色的 Agent 会话并打开 AI 面板（OOC 约束在 roleplay prompt 内） */}
               <Button variant="outline" size="sm" onClick={handleRoleplay} title={t('roleplay.enter')}>

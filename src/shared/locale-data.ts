@@ -1920,6 +1920,11 @@ export const UI_TEXTS_DATA = {
   'character.deleteTitle': { 'zh-CN': '删除角色', 'en-US': 'Delete Character', 'ru-RU': 'Удалить персонажа' },
   'character.extractConfirmTitle': { 'zh-CN': '重新提取角色卡', 'en-US': 'Re-extract Character Cards', 'ru-RU': 'Повторное извлечение карточек персонажей' },
   'character.extractConfirm': { 'zh-CN': '重新提取将覆盖已有角色卡数据（包括手动编辑的内容）。确定继续？', 'en-US': 'Re-extracting will overwrite existing character cards, including manual edits. Continue?', 'ru-RU': 'Повторное извлечение перезапишет существующие карточки персонажей, включая ручные правки. Продолжить?' },
+  // --- CharactersView/CharacterEditor: 从定稿生成档案 ---
+  'character.archiveBtn': { 'zh-CN': '从定稿生成', 'en-US': 'Generate from Finalized', 'ru-RU': 'Из финальных глав' },
+  'character.archiveBtnTitle': { 'zh-CN': '基于已定稿章节正文生成/补全角色档案', 'en-US': 'Generate/complete profiles from finalized chapters', 'ru-RU': 'Создать профили из завершённых глав' },
+  'character.archiveConfirm': { 'zh-CN': '将基于已定稿正文为角色生成档案（仅填充空白，不覆盖已有内容，包括手动编辑）。确定继续？', 'en-US': 'Profiles will be generated from finalized text (fill blanks only — existing content, including manual edits, is kept). Continue?', 'ru-RU': 'Профили будут созданы из завершённого текста (только пустые поля — существующее содержимое, включая ручные правки, сохраняется). Продолжить?' },
+  'character.archiveRunning': { 'zh-CN': '正在从定稿文本生成角色档案…', 'en-US': 'Generating character profiles from finalized text…', 'ru-RU': 'Создание профилей из завершённого текста…' },
   'character.defaultName': { 'zh-CN': '新角色', 'en-US': 'New Character', 'ru-RU': 'Новый персонаж' },
   // --- CharacterEditor: 空状态 ---
   'character.selectOrCreate': { 'zh-CN': '在左侧选择或创建角色卡', 'en-US': 'Select or create a character card on the left', 'ru-RU': 'Выберите или создайте карточку персонажа слева' },

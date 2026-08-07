@@ -2,7 +2,7 @@
  * CharactersView — 角色管理列表视图 (v7 戏份分级)
  */
 import { useState, useMemo } from 'react'
-import { Users, RefreshCw, Plus, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
   useCharacterStore, groupByTier,
@@ -15,6 +15,7 @@ import { confirm } from '../../ui/Confirm'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { openBuiltinEditor } from './SidebarShared'
+import { runCharacterArchive } from '../../../services/workflows/character-archive-workflow'
 
 // 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
 const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
@@ -51,6 +52,21 @@ export default function CharactersView() {
     }
     load()
   }
+  // 「从定稿生成档案」执行中状态：由 WORKFLOW_COMPLETE 事件驱动结束（60s 兜底释放监听）
+  const [archiving, setArchiving] = useState(false)
+  const handleArchive = async () => {
+    const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
+    if (!ok) return
+    const project = currentProject
+    if (!project) return
+    const { globalEventBus } = await import('../../../shared/event-bus')
+    const stop = () => setArchiving(false)
+    const unsub = globalEventBus.on('WORKFLOW_COMPLETE', stop)
+    setArchiving(true)
+    runCharacterArchive(project.path)
+    // 兜底：60s 后释放监听（工作流事件已触发过则不重复执行）
+    setTimeout(() => { unsub(); setArchiving(false) }, 60000)
+  }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
 
@@ -75,6 +91,9 @@ export default function CharactersView() {
         <div className="flex items-center gap-0.5">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
             <RefreshCw size={14} strokeWidth={2} />
+          </Button>
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
+            <Sparkles size={14} strokeWidth={2} />
           </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>
             <Plus size={14} strokeWidth={2} />
