@@ -117,8 +117,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号（v11：活动聚合/统计热点索引 + 冗余索引清理） */
-const CURRENT_SCHEMA_VERSION = 11
+/** 当前数据库 schema 版本号（v12：连载监控 publication_tracker 表） */
+const CURRENT_SCHEMA_VERSION = 12
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -471,6 +471,16 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE INDEX IF NOT EXISTS idx_drafts_source_created ON drafts(source, created_at);
     CREATE INDEX IF NOT EXISTS idx_revisions_created ON revisions(created_at);
     CREATE INDEX IF NOT EXISTS idx_llm_calls_success ON llm_calls(success, created_at);
+
+    -- v12: 连载监控（手动导入平台章节，本地优先——不自动抓取）
+    CREATE TABLE IF NOT EXISTS publication_tracker (
+      chapter_number INTEGER PRIMARY KEY,
+      external_title TEXT DEFAULT '',
+      external_content TEXT DEFAULT '',
+      imported_at INTEGER DEFAULT 0,
+      similarity REAL DEFAULT 0,
+      audit_issues INTEGER DEFAULT 0
+    );
   `)
 
   // ===== 旧表迁移 =====
@@ -870,5 +880,23 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.v11HotIndexes'))
   } catch (e) {
     logger.warn('DB', t('log.db.v11HotIndexesFailed').replace('{err}', String(e)))
+  }
+
+  // 15. v12: 连载监控表（手动导入平台章节，本地优先）
+  //    非关键 — 表缺失仅连载监控不可用
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS publication_tracker (
+        chapter_number INTEGER PRIMARY KEY,
+        external_title TEXT DEFAULT '',
+        external_content TEXT DEFAULT '',
+        imported_at INTEGER DEFAULT 0,
+        similarity REAL DEFAULT 0,
+        audit_issues INTEGER DEFAULT 0
+      );
+    `)
+    logger.info('DB', t('log.db.v12PublicationTable'))
+  } catch (e) {
+    logger.warn('DB', t('log.db.v12PublicationTableFailed').replace('{err}', String(e)))
   }
 }

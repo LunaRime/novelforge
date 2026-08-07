@@ -336,6 +336,7 @@ import type { ReviewMeta, ReviewFull } from '../../electron/repositories/review-
 import type { PostProcessRunData, PostProcessStepData } from '../../electron/repositories/post-process-repository'
 import type { VolumeData } from '../../electron/repositories/volume-repository'
 import type { PreferenceData } from '../../electron/repositories/preference-repository'
+import type { PublicationEntry } from '../../electron/repositories/publication-repository'
 
 // ===== 数据库操作 =====
 export interface DatabaseChannels {
@@ -367,6 +368,9 @@ export interface DatabaseChannels {
 
   // 4. drafts
   'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite' | 'translation'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
+  'db:publication-list': { args: []; return: PublicationEntry[] }
+  'db:publication-save': { args: [input: { chapterNumber: number; title: string; content: string; terms?: string[] }]; return: { success: boolean; error?: string } }
+  'db:publication-delete': { args: [chapterNumber: number]; return: { success: boolean } }
   'db:draft-list': { args: [chapterNumber: number]; return: DraftMeta[] }
   'db:draft-get-meta': { args: [id: number]; return: DraftMeta | null }
   'db:draft-get-full': { args: [id: number]; return: DraftFull | null }
