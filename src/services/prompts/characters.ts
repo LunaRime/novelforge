@@ -106,4 +106,41 @@ export const charactersPrompts: PromptTemplate[] = [
 
 如果图谱中没有任何可提取的角色，返回空数组 []。`,
   },
+  {
+    key: 'extract_from_finalized',
+    name: '从定稿正文提取角色档案',
+    description: '基于已定稿章节中该角色出现的相关段落,提取/补全角色静态档案(仅填充空白,不覆盖已有)',
+    systemRole: '你是一位严谨的小说角色档案专家,擅长从正文细节还原角色设定。',
+    variables: {
+      character_name: '角色名',
+      chapters_segments: '该角色出现的章节相关段落(带章节号)',
+    },
+    content: `请从以下已定稿章节的正文片段中,提取角色 {{character_name}} 的静态档案信息。
+
+【角色名】{{character_name}}
+【相关正文片段(按章节排列)】
+{{chapters_segments}}
+
+【任务要求】
+1. 所有档案字段必须基于片段中的明确描写;可以合理推断,但不得编造与原文矛盾的信息。
+2. 外貌(appearance):基于出场描写充实一段标志性外貌描写(绝对不要留空)。
+3. 片段中未出现的字段输出空字符串(不要写"无"或"未知"——空值不会覆盖已有档案)。
+4. tags:角色的短标签数组(2-5 个)。
+5. relationships:与片段中其他角色的关系简述。
+
+【输出格式(JSON 对象)】
+{
+  "gender": "性别",
+  "age": "年龄/年龄段",
+  "appearance": "标志性外貌描写",
+  "personality": "性格特点",
+  "background": "背景来历",
+  "abilities": "能力/修为",
+  "motivation": "核心动机",
+  "relationships": "与其他角色的关系",
+  "arc": "成长弧线/当前阶段",
+  "notes": "补充备注",
+  "tags": ["标签1", "标签2"]
+}`,
+  },
 ]

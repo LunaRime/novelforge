@@ -28,6 +28,7 @@ export const EN_US_ROLE: Partial<Record<string, string>> = {
   'generate_chapter_notes': 'You are a professional web novel structure analyst.',
   'update_character_cards': 'You are a rigorous novel character archive manager, skilled at tracking multi-dimensional character state changes.',
   'extract_initial_characters': 'You are a professional novel data structuring expert.',
+  'extract_from_finalized': 'You are a rigorous novel character archive expert, skilled at reconstructing character settings from textual details.',
 }
 
 /** 模板 key → en-US 系统约束（systemSuffix） */
@@ -779,6 +780,34 @@ Note: updatedAtChapter is always {{chapter_number}}. Output only existing charac
 ]
 
 If there are no extractable characters in the map, return an empty array [].`,
+
+  'extract_from_finalized': `Extract the static archive information of the character {{character_name}} from the following finalized chapter excerpts.
+
+【Character Name】{{character_name}}
+【Related Text Excerpts (by chapter)】
+{{chapters_segments}}
+
+【Task Requirements】
+1. All archive fields must be based on explicit descriptions in the excerpts; reasonable inference is allowed, but do not fabricate information that contradicts the source text.
+2. Appearance: flesh out a signature appearance description based on the appearance scenes (absolutely never leave it blank).
+3. Fields not appearing in the excerpts must be output as empty strings (do not write "none" or "unknown" — empty values will not overwrite existing archive fields).
+4. tags: a short tag array for the character (2-5 tags).
+5. relationships: brief descriptions of relationships with other characters in the excerpts.
+
+【Output Format (JSON object)】
+{
+  "gender": "Gender",
+  "age": "Age or age range",
+  "appearance": "Signature appearance description",
+  "personality": "Personality traits",
+  "background": "Background and origin",
+  "abilities": "Abilities/cultivation",
+  "motivation": "Core motivation",
+  "relationships": "Relationships with other characters",
+  "arc": "Growth arc/current stage",
+  "notes": "Supplementary notes",
+  "tags": ["tag1", "tag2"]
+}`,
 
   'refine_from_review': `Precisely repair the draft according to the issues listed in the 【Review Report】.
 
