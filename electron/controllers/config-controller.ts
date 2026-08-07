@@ -1,4 +1,4 @@
-import { ipcMain, shell } from 'electron'
+import { BrowserWindow, ipcMain, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
@@ -62,9 +62,11 @@ export function registerConfigController() {
     return VELA_HOME
   })
 
-  /** 同步 UI 语言到主进程（主进程对话框/菜单用 t() 读取当前 locale） */
+  /** 同步 UI 语言到主进程（主进程对话框/菜单/窗口标题用 t() 读取当前 locale） */
   ipcMain.handle('config:set-locale', async (_event, locale: SupportedLocale) => {
     setCurrentLocale(locale)
+    // 同步更新窗口标题（渲染层 document.title 是主覆盖源，此处兜底原生标题栏/焦点窗口场景）
+    for (const w of BrowserWindow.getAllWindows()) w.setTitle(t('window.title'))
     return { success: true }
   })
 

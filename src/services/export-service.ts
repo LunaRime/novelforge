@@ -51,7 +51,7 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
       return { success: false, error: t('error.noExportableChapters') }
     }
 
-    addLog('info', `找到 ${chapterContents.length} 个已定稿章节`)
+    addLog('info', t('log.export.foundChapters').replace('{count}', String(chapterContents.length)))
 
     // 确保输出目录存在
     await ipc.invoke('fs:mkdir', options.outputDir)

@@ -32,6 +32,32 @@
         /* 将背景色注入 CSS 变量供 .vela-initial-loader 引用 */
         document.documentElement.style.setProperty('--loader-bg', bg);
       })();
+
+      // 启动加载页国际化（React 挂载前无法使用 t()，按持久化语言偏好做最小三语映射；
+      // React 挂载后由 main.tsx / switchLocale 接管 document.title 与界面文案）
+      (function() {
+        var locale = 'zh-CN';
+        try { locale = localStorage.getItem('novelforge-locale') || 'zh-CN'; } catch(e) {}
+        var TITLES = {
+          'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE',
+          'en-US': 'NovelForge — AI-Powered Novel Writing IDE',
+          'ru-RU': 'NovelForge — IDE для написания романов с ИИ'
+        };
+        var INIT = {
+          'zh-CN': 'NovelForge 初始化中',
+          'en-US': 'NovelForge Initializing',
+          'ru-RU': 'NovelForge: инициализация'
+        };
+        var ELAPSED = {
+          'zh-CN': '已耗时 ',
+          'en-US': 'Elapsed ',
+          'ru-RU': 'Прошло '
+        };
+        document.title = TITLES[locale] || TITLES['zh-CN'];
+        window.__VELA_SPLASH_ELAPSED_PREFIX = ELAPSED[locale] || ELAPSED['zh-CN'];
+        var splashText = document.getElementById('vela-splash-text');
+        if (splashText) splashText.textContent = INIT[locale] || INIT['zh-CN'];
+      })();
     </script>
     <div id="root">
       <style>
@@ -126,7 +152,7 @@
           <div class="vela-ring-inner"></div>
           <div class="vela-core"></div>
         </div>
-        <div class="vela-text">NovelForge 初始化中</div>
+        <div id="vela-splash-text" class="vela-text">NovelForge 初始化中</div>
         <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.35);font-family:monospace;letter-spacing:1px;"></div>
       </div>
     </div>
@@ -137,7 +163,7 @@
       if (timerEl) {
         setInterval(function() {
           var elapsed = ((performance.now() - window.__VELA_HTML_READY) / 1000).toFixed(1)
-          timerEl.textContent = '已耗时 ' + elapsed + 's'
+          timerEl.textContent = (window.__VELA_SPLASH_ELAPSED_PREFIX || '已耗时 ') + elapsed + 's'
         }, 200)
       }
     </script>

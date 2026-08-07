@@ -37,11 +37,7 @@ function getAIActions(t: (key: string) => string) {
     polish: 'ai.polish', expand: 'ai.expand', shrink: 'ai.shrink', style: 'ai.style', conflict: 'ai.conflict',
   }
   const prompts: Record<string, string> = {
-    polish: '润色选中段落，修正语病、优化措辞、提升流畅度。不改变情节和字数。',
-    expand: '扩写选中段落，增加细节描写和感官体验。保持原有情节不变。',
-    shrink: '精简选中段落，删除冗余修饰。保留核心情节和关键对话。',
-    style: '改变选中段落的表达风格。保持情节不变，改变叙述方式。',
-    conflict: '增强选中段落的冲突感和张力。加入内心挣扎、外部压力或反转。',
+    polish: t('ai.prompt.polish'), expand: t('ai.prompt.expand'), shrink: t('ai.prompt.shrink'), style: t('ai.prompt.style'), conflict: t('ai.prompt.conflict'),
   }
   const colors: Record<string, string> = {
     polish: 'text-blue-400', expand: 'text-amber-400', shrink: 'text-purple-400', style: 'text-emerald-400', conflict: 'text-rose-400',
@@ -58,8 +54,10 @@ export default function CodeMirrorEditor({
   onCharCountChange,
   mode = 'document',
 }: CodeMirrorEditorProps) {
-  const { t } = useTranslation()
-  const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t])
+  const { t, locale } = useTranslation()
+  // t 是稳定引用（useCallback []），语言切换时 locale 变化必须重算操作标签/指令（eslint 仅看数据流，误判 locale 不必要）
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t, locale])
   const editorRef = useRef<ReactCodeMirrorRef>(null)
 
   // 避免状态回路
@@ -341,7 +339,7 @@ export default function CodeMirrorEditor({
             }
           },
           onError: () => {
-            setAiResult('生成失败')
+            setAiResult(t('error.genFailed'))
           },
         }
       )
@@ -352,7 +350,7 @@ export default function CodeMirrorEditor({
       }
     } catch (e) {
       console.error(e)
-      setAiResult('生成失败')
+      setAiResult(t('error.genFailed'))
     }
   }
 

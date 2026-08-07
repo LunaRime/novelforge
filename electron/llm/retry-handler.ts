@@ -11,6 +11,7 @@
  * - 4xx (除 429) — 客户端错误（API key 无效、参数错误等）
  */
 import { logger } from '../utils/logger'
+import { t } from '../../src/shared/locale'
 
 export interface RetryOptions {
   /** 最大重试次数（默认 3） */
@@ -106,7 +107,7 @@ export async function withRetry<T>(
 
       // 检查是否可重试
       if (!isRetryableError(error)) {
-        logger.debug('LLM:Retry', `不可重试的错误，直接返回: ${String(error).slice(0, 200)}`)
+        logger.debug('LLM:Retry', t('log.llm.nonRetryableError').replace('{err}', () => String(error).slice(0, 200)))
         throw error
       }
 
@@ -171,7 +172,7 @@ export async function withStreamRetry(
 
       // 检查是否可重试
       if (!isRetryableError(error)) {
-        logger.debug('LLM:StreamRetry', `不可重试的流错误，直接返回: ${String(error).slice(0, 200)}`)
+        logger.debug('LLM:StreamRetry', t('log.llm.nonRetryableStreamError').replace('{err}', () => String(error).slice(0, 200)))
         throw error
       }
 
@@ -182,7 +183,7 @@ export async function withStreamRetry(
 
       // 流已输出部分内容 → 不再重试（重试会重复推送已输出前缀，用户实时文本错乱）
       if (canRetry && !canRetry()) {
-        logger.warn('LLM:StreamRetry', '流已输出部分内容，断流不再重试（避免重复前缀），直接报错')
+        logger.warn('LLM:StreamRetry', t('log.llm.streamPartialLost'))
         throw error
       }
 

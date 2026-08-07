@@ -9,6 +9,9 @@ import { t } from './shared/locale'
 // 渲染进程全局错误捕获 → ERROR 落盘（必须先注册，确保早期错误也被记录）
 installRendererErrorCapture()
 
+// 窗口标题跟随界面语言（index.html 静态 title 是 React 挂载前的启动兜底）
+document.title = t('window.title')
+
 // ===== 启动计时：诊断初始化瓶颈 =====
 const T0 = performance.now()
 const T_HTML = window.__VELA_HTML_READY as number | undefined
