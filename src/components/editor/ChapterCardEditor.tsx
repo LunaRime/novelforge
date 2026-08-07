@@ -419,7 +419,7 @@ export default function ChapterCardEditor() {
                     'text-[0.7rem] px-1 py-0.5 rounded',
                     ROLE_COLORS[bp.role] || 'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                   )}>
-                    {bp.role}
+                    {t(ROLE_LABEL_KEYS[bp.role] ?? 'chapter.role.development')}
                   </span>
                   {bp.userGuidance && (
                     <span
