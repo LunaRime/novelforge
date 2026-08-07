@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { extractRoleContextSegments, hasBlankArchiveFields, parseArchiveJson } from './character-archive'
+import { getPromptTemplate } from './prompt-templates'
 
 const mkChapter = (n: number, content: string) => ({ chapterNumber: n, content })
 
@@ -56,5 +57,14 @@ describe('parseArchiveJson', () => {
   })
   it('非法 JSON → null', () => {
     expect(parseArchiveJson('不是 JSON', '苏晚')).toBeNull()
+  })
+})
+
+describe('extract_from_finalized 模板', () => {
+  it('模板已注册且变量完整', () => {
+    const tpl = getPromptTemplate('extract_from_finalized')
+    expect(tpl).not.toBeNull()
+    expect(tpl?.variables?.character_name).toBeTruthy()
+    expect(tpl?.content).toContain('{{chapters_segments}}')
   })
 })
