@@ -55,3 +55,22 @@ export function normalizeTagsValue(value: string): string {
     .filter(s => !isNoChangeValue(s))
   return tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : ''
 }
+
+/**
+ * 角色名匹配：先精确匹配；LLM 常输出别名格式「苏晚晴（苏夜）」（笔名/曾用名），
+ * 与 DB 角色名精确匹配必然失败 → 定稿状态更新被跳过（用户实测"UPDATES 未写入"根因之一）。
+ * 剥离括号后先匹配括号外名称，失败再尝试括号内名称。
+ */
+export function matchCharacterName<T extends { name: unknown }>(
+  characters: T[],
+  rawName: string,
+): T | undefined {
+  const name = String(rawName ?? '').trim()
+  const exact = characters.find(c => String(c.name) === name)
+  if (exact) return exact
+  const m = name.match(/^(.*?)[（(]([^（）()]*)[）)]\s*$/)
+  if (m) {
+    return characters.find(c => String(c.name) === m[1]) ?? characters.find(c => String(c.name) === m[2])
+  }
+  return undefined
+}

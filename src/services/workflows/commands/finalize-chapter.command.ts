@@ -16,7 +16,7 @@ import {
 import type { ChapterInfo } from '../chapter-workflow'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
-import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue } from '../../character-normalize'
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName } from '../../character-normalize'
 import { buildNamePositions, hasProximity } from '../relation-utils'
 
 export interface FinalizeChapterParams {
@@ -172,7 +172,7 @@ export function buildFinalizePostProcessSteps(
       dependsOn: ['kb_import'],  // 仅依赖 KB 导入完成，可与 chapter_notes 并行
       executor: async (callbacks) => {
         // 读取现有角色卡
-        const allChars = (await ipc.invoke('db:character-get-all')) as unknown as Array<Record<string, unknown>>
+        const allChars = (await ipc.invoke('db:character-get-all')) as unknown as CharacterData[]
         const simpleCards = allChars.map((c) => ({ name: c.name, role: c.role }))
 
         // ⚠️ M 级修复：分段注入（首 5000 + 尾 3000 + 中间抽样）——此前只喂前 5000 字，
@@ -196,18 +196,17 @@ export function buildFinalizePostProcessSteps(
         const cardsResult = await callLLMForPostProcess(cardBuilder, callbacks)
 
         // 解析 Markdown 表格格式的角色状态更新（比 JSON 更稳定）
-        const { parseMarkdownTable, robustParseJSON } = await import('../workflow-utils')
-        const updSections = cardsResult.split(/###\s*(UPDATES|NEW)/i)
+        const { parseMarkdownTable, robustParseJSON, splitCharacterUpdateSections } = await import('../workflow-utils')
+        // 分段容忍 LLM 变体：无 ### 前缀/带方括号 `[UPDATES（...）`/中文注释（用户实测输出形态）
+        const updSections = splitCharacterUpdateSections(cardsResult)
         let updateRows: Array<Record<string, string>> = []
         let newRows: Array<Record<string, string>> = []
 
-        for (let si = 0; si < updSections.length; si++) {
-          const label = updSections[si]?.trim().toUpperCase()
-          const content = updSections[si + 1] || ''
-          if (label === 'UPDATES') {
-            updateRows = parseMarkdownTable(content) || []
-          } else if (label === 'NEW') {
-            newRows = parseMarkdownTable(content) || []
+        for (const sec of updSections) {
+          if (sec.label === 'UPDATES') {
+            updateRows = parseMarkdownTable(sec.content) || []
+          } else if (sec.label === 'NEW') {
+            newRows = parseMarkdownTable(sec.content) || []
           }
         }
         // 如果没有分段，尝试整体解析——按角色名是否已存在分类：
@@ -281,7 +280,8 @@ export function buildFinalizePostProcessSteps(
           for (const row of updateRows) {
             const name = row.name || ''
             if (!name) continue
-            const dbChar = allChars.find((c) => c.name === name)
+            // 别名格式「苏晚晴（苏夜）」→ 剥离括号匹配 DB 角色（精确匹配失败会静默跳过更新）
+            const dbChar = matchCharacterName(allChars, name)
             if (dbChar) {
               // cs_* 六字段哨兵值（无/无变化/none 变体）→ null → SQL CASE WHEN 保旧值。
               // ⚠️ 合并已下沉 repository 层（写时刻以 DB 当前值为基准，SQL 层 CASE 保旧列）——
@@ -312,7 +312,8 @@ export function buildFinalizePostProcessSteps(
           let newCharCount = 0
           for (const row of newRows) {
             const name = row.name || ''
-            if (!name || allChars.some((c) => c.name === name)) continue
+            // NEW 表哨兵：LLM 用「无」/「-」表示无新出场角色——此前会真的创建名为「无」的角色
+            if (!name || isNoChangeValue(name) || allChars.some((c) => c.name === name)) continue
             newCharCount++
             // ⚠️ P1 加固：role 枚举归一化（'Protagonist' 大写入库此前绕过 tier 推导/排序/UI 分级）
             const role = normalizeCharacterRole(row.role)
