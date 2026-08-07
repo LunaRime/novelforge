@@ -14,6 +14,7 @@ import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { openBuiltinEditor } from './SidebarShared'
 
 // 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
 const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
@@ -130,7 +131,12 @@ export default function CharactersView() {
                     key={c.name}
                     char={c}
                     selected={selectedName === c.name}
-                    onClick={() => setSelectedName(c.name)}
+                    onClick={() => {
+                      // 角色 Tab 可能被手动关闭——点击角色时确保重新打开并激活
+                      // （openFile 已存在则仅激活；不存在则新开 'character-editor' Tab）
+                      openBuiltinEditor('character-editor', t('charList.title'), 'character')
+                      setSelectedName(c.name)
+                    }}
                   />
                 ))}
               </div>
