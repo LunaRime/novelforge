@@ -2084,6 +2084,9 @@ export const UI_TEXTS_DATA = {
   'pub.deleteConfirm': { 'zh-CN': '删除第 {n} 章的连载监控记录？', 'en-US': 'Delete publication record for Ch.{n}?', 'ru-RU': 'Удалить запись о гл.{n}?' },
   'pub.saveSuccess': { 'zh-CN': '第 {n} 章已导入并分析', 'en-US': 'Ch.{n} imported and analyzed', 'ru-RU': 'Гл.{n} импортирована и проанализирована' },
   'pub.saveFailed': { 'zh-CN': '导入失败: {error}', 'en-US': 'Import failed: {error}', 'ru-RU': 'Ошибка импорта: {error}' },
+  // --- 插件市场（MCP 推荐清单，零代码配置） ---
+  'mcp.recommended': { 'zh-CN': '推荐 MCP（一键填充）', 'en-US': 'Recommended MCPs (one-click)', 'ru-RU': 'Рекомендуемые MCP (в один клик)' },
+  'mcp.recommendedHint': { 'zh-CN': '点击填充添加表单；需要 npx 环境（Node.js）。脚本型插件因安全沙箱要求暂不开放。', 'en-US': 'Click to fill the add form; requires npx (Node.js). Script-based plugins are not yet supported (sandbox review pending).', 'ru-RU': 'Нажмите, чтобы заполнить форму; требуется npx (Node.js). Скриптовые плагины пока не поддерживаются (ожидает проверки песочницы).' },
   // --- Window title & splash（启动页 React 挂载前显示） ---
   'window.title': { 'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE', 'en-US': 'NovelForge — AI-Powered Novel Writing IDE', 'ru-RU': 'NovelForge — IDE для написания романов с ИИ' },
   'splash.initializing': { 'zh-CN': 'NovelForge 初始化中', 'en-US': 'NovelForge Initializing', 'ru-RU': 'NovelForge: инициализация' },
