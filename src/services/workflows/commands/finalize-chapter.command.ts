@@ -17,6 +17,7 @@ import type { ChapterInfo } from '../chapter-workflow'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
 import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue } from '../../character-normalize'
+import { buildNamePositions, hasProximity } from '../relation-utils'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -357,6 +358,14 @@ export function buildFinalizePostProcessSteps(
         const allChars = await ipc.invoke('db:character-get-all') as CharacterData[]
         let detected = 0
 
+        // ⚠️ 性能优化：预扫描正文一次建立角色名位置索引（O(N + C×M)），
+        //    角色对检查走双指针最小间距（O(C²)）——原实现每对做两次全文 indexOf 为 O(C² × N)，
+        //    且仅比较首出现位置（正文多处同现时可能漏判）
+        const namePositions = buildNamePositions(
+          draftContent,
+          allChars.map(c => c.name).filter((n): n is string => Boolean(n)),
+        )
+
         for (const char of allChars) {
           if (!char.name) continue
           let rels: Array<{ target: string; type: string; label: string; sinceChapter: number }> = []
@@ -381,9 +390,7 @@ export function buildFinalizePostProcessSteps(
             if (alreadyRelated) continue
 
             // Simple heuristic: check if both names appear near each other in the text
-            const idxA = draftContent.indexOf(char.name)
-            const idxB = draftContent.indexOf(other.name)
-            if (idxA >= 0 && idxB >= 0 && Math.abs(idxA - idxB) < 500) {
+            if (hasProximity(namePositions.get(char.name)!, namePositions.get(other.name)!, 500)) {
               // Both characters appear in the same vicinity → potential interaction
               rels.push({
                 target: other.name,
