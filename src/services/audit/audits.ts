@@ -24,14 +24,39 @@ export interface AuditResult {
   summary: string
 }
 
-/** 提取 2-3 字中文词（滑窗，跳过标点与空白） */
+/**
+ * 跨词边界虚字（助词/量词/数词/介词/连词/副词/方位/语气）——
+ * 2-gram 含此类字即视为跨词边界碎片（「了一」「枚碎」「的虚」「第二」），
+ * 语言上无实义，不构成水文/衔接/专名信号（用户实测 4 个误报全部由此产生）。
+ * 只做**边界模式**判定（首字/尾字位），不逐字过滤——「碎片」「虚脉」等
+ * 实词组合不受影响。
+ */
+const GRAM_BOUNDARY_PREFIX = new Set([
+  // '了' 同时在前后位（「走了一程」的「了一」是上一词尾字边界；误伤「了解」可接受——实词报警价值低）
+  '了', '的', '枚', '第', '个', '只', '条', '位', '名', '双', '棵', '座', '块', '件', '种', '类', '支', '张', '根', '面',
+  '一', '二', '三', '四', '五', '六', '七', '八', '九', '十', '百', '千', '万', '两',
+  '与', '和', '及', '或', '而', '且', '但', '也', '都', '还', '就', '才', '又', '再', '曾', '已', '将', '会', '能', '要', '可', '很', '最', '更', '太', '没', '别',
+  '这', '那', '之', '其', '们', '上', '下', '中', '里', '前', '后', '左', '右', '内', '外', '旁',
+  '吗', '呢', '啊', '吧', '呀',
+])
+const GRAM_BOUNDARY_SUFFIX = new Set([
+  '的', '了', '着', '过', '地', '得', '吗', '呢', '啊', '吧', '呀', '么', '们',
+])
+
+function isBoundaryNgram(ngram: string): boolean {
+  return ngram.length === 2 && (GRAM_BOUNDARY_PREFIX.has(ngram[0]) || GRAM_BOUNDARY_SUFFIX.has(ngram[1]))
+}
+
+/** 提取 2-3 字中文词（滑窗，跳过标点与空白；2-gram 过滤跨词边界虚字碎片） */
 function extractCnNgrams(text: string, n: 2 | 3): string[] {
   const chars = text.replace(/\s/g, '').split('')
   const out: string[] = []
   for (let i = 0; i <= chars.length - n; i++) {
     // 跳过含标点的窗口
     if (/[，。！？；：""''《》、（）—…·～【】]/.test(chars.slice(i, i + n).join(''))) continue
-    out.push(chars.slice(i, i + n).join(''))
+    const gram = chars.slice(i, i + n).join('')
+    if (n === 2 && isBoundaryNgram(gram)) continue
+    out.push(gram)
   }
   return out
 }
@@ -71,9 +96,9 @@ export interface AuditWhitelist {
 
 export interface RepetitionAuditOptions {
   /**
-   * 同词报警阈值。默认按章节长度动态计算：max(8, 字数/300)——
-   * 短文本下限 8 次；正文越长阈值越高（固定阈值 3 会把「世界」11 次这类
-   * 正常语境词误报为水文）
+   * 同词报警阈值。默认按章节长度动态计算：max(10, 字数/300)——
+   * 短文本下限 10 次（下限 8 曾误报「小屋」8 次等场景词）；正文越长阈值越高
+   * （固定阈值 3 会把「世界」11 次这类正常语境词误报为水文）
    */
   maxRepeat?: number
   /** 报告上限（默认 8） */
@@ -130,7 +155,7 @@ const DIALOG_LEADS = ['他说', '她说', '他道', '她道', '我道', '你道'
  */
 export function waterAudit(text: string, options: RepetitionAuditOptions = {}): AuditResult {
   const {
-    maxRepeat = Math.max(8, Math.floor(text.length / 300)),
+    maxRepeat = Math.max(10, Math.floor(text.length / 300)),
     topN = 8,
     excludeWords = [],
     baselineFreqs,
