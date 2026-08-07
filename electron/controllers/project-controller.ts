@@ -1,4 +1,4 @@
-import { ipcMain, dialog } from 'electron'
+import { ipcMain, dialog, BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -8,6 +8,7 @@ import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/conf
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { getProjectDb, getCurrentProjectPath } from '../database'
+import { grantDirectory } from './fs-controller'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
@@ -275,10 +276,26 @@ export function registerProjectController() {
   ipcMain.handle('dialog:select-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
-      title: '选择项目保存位置',
+      title: t('dialog.selectFolder'),
     })
     if (result.canceled || result.filePaths.length === 0) return null
+    // 登记授权目录：导出/分享卡随后写入该目录不被沙箱拦截
+    grantDirectory(result.filePaths[0])
     return result.filePaths[0]
+  })
+
+  /** 保存文件对话框（分享卡/报告导出：选目录+文件名一次完成；登记父目录授权） */
+  ipcMain.handle('dialog:save-file', async (_event, opts?: { defaultName?: string; title?: string }) => {
+    const win = BrowserWindow.getFocusedWindow()
+    const options = {
+      title: opts?.title ?? t('dialog.saveFile'),
+      defaultPath: opts?.defaultName,
+      filters: [{ name: 'PNG Image', extensions: ['png'] }],
+    }
+    const result = win ? await dialog.showSaveDialog(win, options) : await dialog.showSaveDialog(options)
+    if (result.canceled || !result.filePath) return null
+    grantDirectory(path.dirname(result.filePath))
+    return result.filePath
   })
 
   // ===== 项目摘要（当前项目走主连接；历史项目只读打开，不打开项目）=====

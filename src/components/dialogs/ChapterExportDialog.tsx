@@ -5,8 +5,8 @@
  *   顶层：ZIP 压缩包 / 文件夹
  *   子级：.md (Markdown) / .txt (纯文本)
  */
-import { useState, useMemo } from 'react'
-import { Download, FolderArchive, FolderOpen, FileText, Check, Loader2 } from 'lucide-react'
+import { useState, useMemo, useEffect } from 'react'
+import { Download, FolderArchive, FolderOpen, FileText, Check, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { useProjectStore } from '../../stores/project-store'
@@ -32,6 +32,21 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
   const [format, setFormat] = useState<ExportFormat>('zip')
   const [fileFormat, setFileFormat] = useState<FileFormat>('md')
   const [exporting, setExporting] = useState(false)
+  /** 排序：按章节号 / 标题 × 升/降序 */
+  const [sortKey, setSortKey] = useState<'number' | 'title'>('number')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
+  /** 选中章节集合（默认全选；打开时重置） */
+  const [selected, setSelected] = useState<Set<number>>(() => new Set(chapterNumbers))
+
+  // 打开时重置选中为全选（批量场景；微任务绕行 effect 同步 setState 惯例）
+  useEffect(() => {
+    let mounted = true
+    if (open) {
+      Promise.resolve().then(() => { if (mounted) setSelected(new Set(chapterNumbers)) })
+    }
+    return () => { mounted = false }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 打开时按传入章节初始化
+  }, [open])
 
   const isBatch = chapterNumbers.length !== 1
   const displayChapters = useMemo(() => {
@@ -41,6 +56,30 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
     }))
   }, [chapterNumbers, chapterTitles, t])
 
+  /** 排序后的章节列表 */
+  const sortedChapters = useMemo(() => {
+    const arr = [...displayChapters]
+    arr.sort((a, b) => {
+      const diff = sortKey === 'number' ? a.number - b.number : a.title.localeCompare(b.title)
+      return sortDir === 'asc' ? diff : -diff
+    })
+    return arr
+  }, [displayChapters, sortKey, sortDir])
+
+  const toggleSelect = (number: number) => {
+    setSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(number)) next.delete(number)
+      else next.add(number)
+      return next
+    })
+  }
+
+  const toggleSort = (key: 'number' | 'title') => {
+    if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+
   const doExport = async () => {
     if (!project) return
     setExporting(true)
@@ -49,7 +88,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
       if (!outputDir) { setExporting(false); return }
 
       const result = await ipc.invoke('export:export-chapters', {
-        chapterNumbers: chapterNumbers.length > 0 ? chapterNumbers : undefined,
+        chapterNumbers: selected.size > 0 ? [...selected].sort((a, b) => a - b) : undefined,
         format,
         fileFormat,
         outputPath: outputDir,
@@ -93,32 +132,88 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
           </DialogDescription>
         </DialogHeader>
 
-        {/* 章节预览 */}
+        {/* 章节预览：排序 + 多选（点击行切换选中） */}
         <div className="px-5 py-3">
-          <div className="text-xs font-medium mb-2" style={{ color: 'var(--color-text)' }}>
-            {t('export.chapterPreview')}
-            <span className="ml-1 font-normal" style={{ color: 'var(--color-text-muted)' }}>
-              ({displayChapters.length})
-            </span>
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
+                {t('export.chapterPreview')}
+              </span>
+              <span className="text-xs font-normal" style={{ color: 'var(--color-text-muted)' }}>
+                ({t('export.selectedCount').replace('{n}', String(selected.size)).replace('{total}', String(displayChapters.length))})
+              </span>
+            </div>
+            <div className="flex items-center gap-1">
+              {/* 排序：章节号 / 标题 + 方向 */}
+              <button
+                type="button"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.65rem] transition-colors"
+                style={{ color: sortKey === 'number' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+                onClick={() => toggleSort('number')}
+              >
+                {t('export.sortNumber')}
+                {sortKey === 'number' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+              </button>
+              <button
+                type="button"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.65rem] transition-colors"
+                style={{ color: sortKey === 'title' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+                onClick={() => toggleSort('title')}
+              >
+                {t('export.sortTitle')}
+                {sortKey === 'title' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+              </button>
+              {/* 全选 / 清空 */}
+              <button
+                type="button"
+                className="px-1.5 py-0.5 rounded text-[0.65rem] transition-colors hover:opacity-80"
+                style={{ color: 'var(--color-text-muted)' }}
+                onClick={() => setSelected(new Set(displayChapters.map(c => c.number)))}
+              >
+                {t('export.selectAll')}
+              </button>
+              <button
+                type="button"
+                className="px-1.5 py-0.5 rounded text-[0.65rem] transition-colors hover:opacity-80"
+                style={{ color: 'var(--color-text-muted)' }}
+                onClick={() => setSelected(new Set())}
+              >
+                {t('export.selectNone')}
+              </button>
+            </div>
           </div>
           <div
-            className="max-h-32 overflow-y-auto rounded-lg border p-2 space-y-0.5"
+            className="max-h-40 overflow-y-auto rounded-lg border p-1.5 space-y-0.5"
             style={{
               backgroundColor: 'var(--color-bg-elevated)',
               borderColor: 'var(--color-border)',
             }}
           >
-            {displayChapters.slice(0, 10).map(ch => (
-              <div key={ch.number} className="flex items-center gap-2 text-xs py-0.5">
-                <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                <span style={{ color: 'var(--color-text-secondary)' }}>
-                  {t('chapter.label').replace('{n}', String(ch.number))} {ch.title}
-                </span>
-              </div>
-            ))}
-            {displayChapters.length > 10 && (
-              <div className="text-xs pt-1" style={{ color: 'var(--color-text-muted)' }}>
-                ...{t('export.andMore').replace('{n}', String(displayChapters.length - 10))}
+            {sortedChapters.map(ch => {
+              const checked = selected.has(ch.number)
+              return (
+                <div
+                  key={ch.number}
+                  className="flex items-center gap-2 text-xs py-1 px-1 rounded cursor-pointer transition-colors"
+                  style={{ backgroundColor: checked ? 'rgba(var(--color-accent-rgb), 0.08)' : 'transparent' }}
+                  onClick={() => toggleSelect(ch.number)}
+                >
+                  <span
+                    className="flex items-center justify-center w-3.5 h-3.5 rounded border flex-shrink-0"
+                    style={{ borderColor: checked ? 'var(--color-accent)' : 'var(--color-border)', backgroundColor: checked ? 'var(--color-accent)' : 'transparent' }}
+                  >
+                    {checked && <Check size={10} style={{ color: '#fff' }} />}
+                  </span>
+                  <FileText size={11} style={{ color: checked ? 'var(--color-accent)' : 'var(--color-text-muted)', flexShrink: 0 }} />
+                  <span style={{ color: checked ? 'var(--color-text)' : 'var(--color-text-secondary)' }} className="truncate">
+                    {t('chapter.label').replace('{n}', String(ch.number))} {ch.title}
+                  </span>
+                </div>
+              )
+            })}
+            {sortedChapters.length === 0 && (
+              <div className="text-xs py-1" style={{ color: 'var(--color-text-muted)' }}>
+                {t('export.noChapters')}
               </div>
             )}
           </div>

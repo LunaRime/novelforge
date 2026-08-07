@@ -11,6 +11,7 @@ import { t } from '../../src/shared/locale'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getProjectDb } from '../database'
+import { grantDirectory } from './fs-controller'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 
@@ -303,6 +304,8 @@ export function registerExportController(): void {
       })
 
       if (result.canceled || result.filePaths.length === 0) return null
+      // 登记授权目录：导出写入该目录不被沙箱拦截
+      grantDirectory(result.filePaths[0])
       return result.filePaths[0]
     } catch {
       return null

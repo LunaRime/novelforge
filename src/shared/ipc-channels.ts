@@ -90,6 +90,10 @@ export interface ProjectChannels {
     args: []
     return: string | null
   }
+  'dialog:save-file': {
+    args: [opts?: { defaultName?: string; title?: string }]
+    return: string | null
+  }
   'project:get-summary': {
     args: [projectPath: string]
     return: ProjectSummary | null
