@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
+import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
 import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
@@ -42,6 +43,24 @@ function saveModelConfigs(models: ModelProfile[]) {
 function getModelConfig(modelId: string): ModelProfile | null {
   const models = loadModelConfigs()
   return models.find((m) => m.id === modelId) ?? null
+}
+
+/**
+ * 解析并钳制 maxTokens 请求参数（运行时钳制，所有请求通道唯一收口）。
+ * 设置页 ModelForm 已钳制保存路径 [1, 131072]，但旧配置/直改 models.json
+ * 仍可超限 → 请求 max_tokens 超模型上限 → API 400（"This endpoint's max tokens..."）。
+ */
+function resolveMaxTokens(requested: number | undefined, model: ModelProfile): number {
+  const raw = requested ?? model.maxTokens
+  const clamped = clampMaxTokens(requested, model.maxTokens)
+  if (clamped !== raw) {
+    logger.warn('LLM', t('log.llm.maxTokensClamped')
+      .replace('{model}', model.name)
+      .replace('{requested}', String(raw))
+      .replace('{clamped}', String(clamped))
+      .replace('{cap}', String(MAX_TOKENS_CAP)))
+  }
+  return clamped
 }
 
 function applyProxyConfig() {
@@ -91,7 +110,7 @@ export function registerLLMController() {
         const provider = LLMFactory.getProvider(model)
         return await provider.generate(model, request.messages, {
           temperature: request.temperature ?? model.temperature,
-          maxTokens: request.maxTokens ?? model.maxTokens,
+          maxTokens: resolveMaxTokens(request.maxTokens, model),
           responseFormat: request.responseFormat,
           thinking: request.thinking,
         })
@@ -135,7 +154,7 @@ export function registerLLMController() {
         return new Promise<void>((resolve, reject) => {
           provider.generateStream(model, request.messages, {
             temperature: request.temperature ?? model.temperature,
-            maxTokens: request.maxTokens ?? model.maxTokens,
+            maxTokens: resolveMaxTokens(request.maxTokens, model),
             responseFormat: request.responseFormat,
             thinking: request.thinking,
             signal: abortController.signal,
