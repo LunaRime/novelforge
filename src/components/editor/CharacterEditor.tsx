@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare } from 'lucide-react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -68,6 +68,60 @@ export default function CharacterEditor() {
     )
     if (!ok) return
     await deleteCharacter(selectedCard.name, currentProject.path)
+  }
+
+  // ===== 角色卡模板（~/.vela/templates/）：存为模板 / 应用模板 =====
+
+  /** 模板列表（应用模板下拉用；空 = 未加载/无模板） */
+  const [templates, setTemplates] = useState<Array<{ name: string; description: string }>>([])
+  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+
+  /** 加载模板元信息（下拉展开前拉取一次） */
+  const loadTemplates = async () => {
+    if (templatesLoaded) return
+    try {
+      const { ipc } = await import('../../services/ipc-client')
+      setTemplates(await ipc.invoke('templates:list'))
+      setTemplatesLoaded(true)
+    } catch { /* 加载失败静默（下拉显示空） */ }
+  }
+
+  /** 存为模板：当前角色卡 → ~/.vela/templates/{角色名}.json（schema 校验在模板定义层） */
+  const handleSaveTemplate = async () => {
+    if (!selectedCard) return
+    try {
+      const { ipc } = await import('../../services/ipc-client')
+      const res = await ipc.invoke('templates:save', {
+        name: selectedCard.name,
+        data: { ...selectedCard } as Record<string, unknown>,
+      })
+      if (!res.success) throw new Error(res.error || 'save failed')
+      setTemplatesLoaded(false) // 下次下拉重新加载（含新模板）
+      toast.success(t('template.saveSuccess').replace('{name}', selectedCard.name))
+      renderLog('info', 'Save:Template', t('template.saveSuccess').replace('{name}', selectedCard.name))
+    } catch (e) {
+      toast.error(t('template.saveFailed').replace('{error}', String(e)))
+    }
+  }
+
+  /** 应用模板：填充角色卡字段（跳过 name 主键，其余字段覆盖） */
+  const handleApplyTemplate = async (tplName: string) => {
+    if (!selectedCard || !tplName) return
+    try {
+      const { ipc } = await import('../../services/ipc-client')
+      const data = await ipc.invoke('templates:get', tplName)
+      if (!data) throw new Error('template data not found')
+      for (const [key, value] of Object.entries(data)) {
+        if (key === 'name' || key === 'relations' || key === 'appearChapters') continue // 主键/章节归属不覆盖
+        if (typeof value === 'string') {
+          // 动态 key 绕过泛型（运行时安全：模板字段均为角色卡文本字段）
+          (updateField as (name: string, key: string, value: unknown) => void)(selectedCard.name, key, value)
+        }
+      }
+      toast.success(t('template.applySuccess').replace('{name}', tplName))
+    } catch (e) {
+      toast.error(t('template.applyFailed').replace('{error}', String(e)))
+    }
   }
 
   /** 角色试演：新建绑定角色的 Agent 会话（角色 prompt 在 sendMessage 时注入）并打开 AI 面板 */
@@ -164,6 +218,22 @@ export default function CharacterEditor() {
               <Button variant="outline" size="sm" onClick={handleRoleplay} title={t('roleplay.enter')}>
                 <MessagesSquare size={12} /> {t('roleplay.enter')}
               </Button>
+              {/* 角色卡模板：存为模板（当前卡 → ~/.vela/templates/）/ 应用模板（下拉选择填充） */}
+              <Button variant="outline" size="sm" onClick={handleSaveTemplate} title={t('template.saveAs')}>
+                <BookmarkPlus size={12} />
+              </Button>
+              <Select value="" onValueChange={(v) => void handleApplyTemplate(v)} onOpenChange={(open) => { if (open) void loadTemplates() }}>
+                <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-[0.68rem]" title={t('template.apply')}>
+                  <SelectValue placeholder={t('template.apply')} />
+                </SelectTrigger>
+                <SelectContent>
+                  {templates.length === 0 ? (
+                    <div className="px-2 py-1 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>{t('template.empty')}</div>
+                  ) : templates.map(tp => (
+                    <SelectItem key={tp.name} value={tp.name}>{tp.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               <Button variant="destructive" size="sm" onClick={handleDelete}>
                 <Trash2 size={12} /> {t('action.delete')}
               </Button>

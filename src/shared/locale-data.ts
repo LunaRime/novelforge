@@ -2052,6 +2052,14 @@ export const UI_TEXTS_DATA = {
   // --- 角色试演（Agent 扮演角色） ---
   'roleplay.enter': { 'zh-CN': '角色试演', 'en-US': 'Roleplay', 'ru-RU': 'Ролевая игра' },
   'roleplay.newConversation': { 'zh-CN': '试演：{name}', 'en-US': 'Roleplay: {name}', 'ru-RU': 'Ролевая игра: {name}' },
+  // --- 角色卡模板（~/.vela/templates/） ---
+  'template.saveAs': { 'zh-CN': '存为模板', 'en-US': 'Save as Template', 'ru-RU': 'Сохранить как шаблон' },
+  'template.apply': { 'zh-CN': '应用模板', 'en-US': 'Apply Template', 'ru-RU': 'Применить шаблон' },
+  'template.empty': { 'zh-CN': '暂无模板', 'en-US': 'No templates', 'ru-RU': 'Нет шаблонов' },
+  'template.saveSuccess': { 'zh-CN': '模板已保存: {name}', 'en-US': 'Template saved: {name}', 'ru-RU': 'Шаблон сохранён: {name}' },
+  'template.saveFailed': { 'zh-CN': '模板保存失败: {error}', 'en-US': 'Failed to save template: {error}', 'ru-RU': 'Не удалось сохранить шаблон: {error}' },
+  'template.applySuccess': { 'zh-CN': '已应用模板: {name}', 'en-US': 'Template applied: {name}', 'ru-RU': 'Шаблон применён: {name}' },
+  'template.applyFailed': { 'zh-CN': '模板应用失败: {error}', 'en-US': 'Failed to apply template: {error}', 'ru-RU': 'Не удалось применить шаблон: {error}' },
   // --- Window title & splash（启动页 React 挂载前显示） ---
   'window.title': { 'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE', 'en-US': 'NovelForge — AI-Powered Novel Writing IDE', 'ru-RU': 'NovelForge — IDE для написания романов с ИИ' },
   'splash.initializing': { 'zh-CN': 'NovelForge 初始化中', 'en-US': 'NovelForge Initializing', 'ru-RU': 'NovelForge: инициализация' },
