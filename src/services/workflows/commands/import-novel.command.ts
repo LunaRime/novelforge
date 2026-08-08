@@ -13,10 +13,8 @@ import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { normalizeBlueprintRole } from '../../blueprint-role'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
-import { normalizeCharacterRole } from '../../character-normalize'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
-import type { CharacterData } from '../../../../electron/repositories/character-repository'
 
 /** 拆分后的章节数据（从 context.data 中传递） */
 export interface ImportedChapter {
@@ -278,51 +276,42 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     // ===== 写入角色卡 =====
     if (inferResult.characterCards && Array.isArray(inferResult.characterCards)) {
       let createdCount = 0
-      const cardsToSave: CharacterData[] = []
+      // #34 块 A：构造 LLM 原始字段（role 不预 normalize、缺失字段不填空值），
+      // 由 mergeCharacterCards 仅填空合并——重跑导入不再清空存量 relations/tags/动态状态
+      const cardsToSave: Array<Record<string, unknown>> = []
       for (const card of inferResult.characterCards) {
         if (!card.name) continue
-        // role 枚举归一化（'Protagonist' 大写等变体 → 小写规范枚举，非法兜底 supporting）
-        const role = normalizeCharacterRole(card.role as string)
-        cardsToSave.push({
-          name: card.name as string,
-          role: role as 'protagonist' | 'antagonist' | 'supporting' | 'minor',
-          gender: (card.gender as string) || '',
-          age: (card.age as string) || '',
-          appearance: (card.appearance as string) || '',
-          personality: (card.personality as string) || '',
-          background: (card.background as string) || '',
-          abilities: (card.abilities as string) || '',
-          motivation: (card.motivation as string) || '',
-          relationships: (card.relationships as string) || '',
-          arc: (card.arc as string) || '',
-          notes: (card.notes as string) || '',
-          // tier 按 role 推导（P2 修复：此前恒 2）；tags/appearChapters/currentState 从 LLM 输出回填
-          // （此前恒 ''/'[]'/缺失 → 对已有项目重跑导入会抹掉 v7 元数据与动态状态）
-          tier: role === 'protagonist' || role === 'antagonist' ? 1 : (role === 'minor' ? 3 : 2),
-          tags: (card.tags as string) || '',
-          appearChapters: (card.appearChapters as string) || '[]',
-          relations: '[]',
-          ...(card.currentState && typeof card.currentState === 'object'
-            ? (() => {
-                const st = card.currentState as Record<string, unknown>
-                return {
-                  currentState: {
-                    location: String(st.location ?? ''),
-                    powerLevel: String(st.powerLevel ?? ''),
-                    physicalState: String(st.physicalState ?? ''),
-                    mentalState: String(st.mentalState ?? ''),
-                    keyItems: String(st.keyItems ?? ''),
-                    recentEvents: String(st.recentEvents ?? ''),
-                    updatedAtChapter: Number(st.updatedAtChapter ?? 0) || 0,
-                  },
-                }
-              })()
-            : {}),
-        })
+        const row: Record<string, unknown> = { name: String(card.name) }
+        if (card.role !== undefined && String(card.role).trim() !== '') row.role = String(card.role)
+        for (const f of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
+          const v = card[f as keyof typeof card]
+          if (v !== undefined && String(v).trim() !== '') row[f] = String(v)
+        }
+        if (card.tags !== undefined) {
+          const t = Array.isArray(card.tags)
+            ? JSON.stringify(card.tags.map(String).filter(Boolean))
+            : String(card.tags)
+          if (t.trim() !== '' && t.trim() !== '[]') row.tags = t
+        }
+        if (card.currentState && typeof card.currentState === 'object') {
+          const st = card.currentState as Record<string, unknown>
+          row.currentState = {
+            location: String(st.location ?? ''),
+            powerLevel: String(st.powerLevel ?? ''),
+            physicalState: String(st.physicalState ?? ''),
+            mentalState: String(st.mentalState ?? ''),
+            keyItems: String(st.keyItems ?? ''),
+            recentEvents: String(st.recentEvents ?? ''),
+            updatedAtChapter: Number(st.updatedAtChapter ?? 0) || 0,
+          }
+        }
+        cardsToSave.push(row)
         createdCount++
       }
       if (cardsToSave.length > 0) {
-        await ipc.invoke('db:character-save-all', cardsToSave)
+        const { mergeCharacterCards } = await import('../../character-card-merge')
+        const stats = await mergeCharacterCards(cardsToSave)
+        createdCount = stats.saved
       }
       callbacks.log(t('log.import.cardsCreated').replace('{count}', String(createdCount)))
     }
