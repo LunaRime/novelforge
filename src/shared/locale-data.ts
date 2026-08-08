@@ -2642,6 +2642,7 @@ export const UI_TEXTS_DATA = {
   'error.chapterFinalizeMissing': { 'zh-CN': '第 {n} 章的定稿记录未获取到', 'en-US': 'No finalization record found for Ch.{n}', 'ru-RU': 'Запись финализации гл.{n} не найдена' },
   'error.chapterContentFetch': { 'zh-CN': '正文提取失败: ID={id}', 'en-US': 'Failed to fetch content: ID={id}', 'ru-RU': 'Не удалось получить текст: ID={id}' },
   'error.characterCardsSave': { 'zh-CN': '角色卡保存失败: {error}', 'en-US': 'Failed to save character cards: {error}', 'ru-RU': 'Ошибка сохранения карточек персонажей: {error}' },
+  'error.characterDuplicateName': { 'zh-CN': '角色名重复：{name}（角色名是唯一标识，请先修改或删除重名角色）', 'en-US': 'Duplicate character name: {name} (character names must be unique — rename or delete the conflicting character first)', 'ru-RU': 'Дубликат имени персонажа: {name} (имена персонажей должны быть уникальны — переименуйте или удалите конфликтующего персонажа)' },
   // ===== renderLog 日志面板（log.render.*）=====
 
   // —— 通用片段 ——
