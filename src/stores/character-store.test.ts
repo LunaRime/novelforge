@@ -13,6 +13,10 @@ const mock = vi.hoisted(() => ({
   dbSnapshot: [] as unknown[],
 }))
 
+vi.mock('../components/ui/Toast', () => ({
+  toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn(), info: vi.fn() },
+}))
+
 vi.mock('../services/ipc-client', () => ({
   ipc: {
     invoke: vi.fn(async (channel: string, ...args: unknown[]) => {

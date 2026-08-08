@@ -25,7 +25,7 @@ import { runCharacterArchive } from '../../services/workflows/character-archive-
  * 从 character-store 读取选中角色，仅渲染编辑表单。
  */
 export default function CharacterEditor() {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
@@ -40,13 +40,15 @@ export default function CharacterEditor() {
   const selectedCard = characters.find((c) => c.name === selectedName) || null
 
   // tags 存储为 JSON 数组字符串（角色列表按 JSON.parse 消费，v7 语义）；
-  // 编辑器显示逗号分隔文本，保存时转回 JSON 数组——两端格式统一
+  // 编辑器显示分隔文本，保存时转回 JSON 数组——两端格式统一
+  // #34 块 D：分隔符跟随 locale（zh 顿号 / 其他逗号——此前恒顿号，英文界面输入被回写顿号）
+  const tagSeparator = locale === 'zh-CN' ? '、' : ', '
   const tagsDisplay = (() => {
     const raw = selectedCard?.tags || ''
     if (!raw) return ''
     try {
       const arr = JSON.parse(raw)
-      return Array.isArray(arr) ? arr.join('、') : raw
+      return Array.isArray(arr) ? arr.join(tagSeparator) : raw
     } catch {
       return raw // 旧数据纯文本，原样显示
     }
@@ -58,6 +60,8 @@ export default function CharacterEditor() {
       .split(/[，,、；;\n]+/)
       .map((s) => s.trim())
       .filter(Boolean)
+    // #34 块 D：超过 8 个给出提示（此前静默截断，第 9 个标签无声消失）
+    if (tags.length > 8) toast.warning(t('character.tagsLimit'))
     updateField(selectedCard.name, 'tags', tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : '')
   }
 
@@ -129,9 +133,17 @@ export default function CharacterEditor() {
     }
   }
 
-  /** 应用模板：填充角色卡字段（跳过 name 主键，其余字段覆盖） */
+  /** 应用模板：填充角色卡字段（跳过 name 主键，其余字段覆盖）——#34 块 D：覆盖前确认（评估 P2：误触静默覆盖手写档案） */
   const handleApplyTemplate = async (tplName: string) => {
     if (!selectedCard || !tplName) return
+    const hasContent = Object.values(selectedCard).some(v => typeof v === 'string' && v.trim() !== '')
+    if (hasContent) {
+      const ok = await confirm(
+        t('template.applyConfirm').replace('{name}', tplName),
+        { title: t('template.applyTitle'), confirmText: t('template.applyBtn'), danger: true },
+      )
+      if (!ok) return
+    }
     try {
       const { ipc } = await import('../../services/ipc-client')
       const data = await ipc.invoke('templates:get', tplName)
