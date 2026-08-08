@@ -4,9 +4,8 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
 import { ipc } from '../ipc-client'
-import { normalizeCharacterRole, stripNameAlias } from '../character-normalize'
+import { stripNameAlias } from '../character-normalize'
 import type { NovelConfig } from '../../shared/ipc-channels'
-import type { CharacterData } from '../../../electron/repositories/character-repository'
 
 import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 
@@ -353,13 +352,13 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串（workflow-utils 单一出口）
         const stringifyField = (val: unknown): string => stringifyFieldUtils(val)
 
-        // 构建角色卡数据列表（role 枚举归一化：'Protagonist' 大写等变体 → 小写规范枚举）
+        // 构建角色卡数据列表（#34 块 A：role 不在此处 normalize——mergeCharacterCards
+        // 内部处理且仅当 LLM 原始值非空才覆盖；写入端剥离括号别名保证主键稳定）
         const characterDataList: Array<Record<string, unknown>> = []
         for (const card of parsedCards) {
           if (!card.name) continue
-          const role = normalizeCharacterRole(card.role as string)
-          // #34：写入端剥离括号别名（主键稳定，防与后续无括号输出分裂）
-          const cleaned: Record<string, unknown> = { name: stripNameAlias(String(card.name)), role }
+          const cleaned: Record<string, unknown> = { name: stripNameAlias(String(card.name)) }
+          if (card.role !== undefined && String(card.role).trim() !== '') cleaned.role = String(card.role)
           for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
             if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])
           }
@@ -373,12 +372,11 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
           characterDataList.push(cleaned)
         }
 
-        // 批量写入数据库
-        const saveResult = await ipc.invoke('db:character-save-all', characterDataList as unknown as CharacterData[])
-        if (!saveResult.success) {
-          throw new Error(t('error.characterCardsSave').replace('{error}', saveResult.error || t('status.unknown')))
-        }
-        cb.log(t('log.extractCardsDone').replace('{n}', String(characterDataList.length)))
+        // 批量写入（#34 块 A：仅填空合并——已存在角色 LLM 非空字段覆盖、空白保留 DB 现值，
+        // 防重跑提取全列覆盖清空手写档案/tags/动态状态）
+        const { mergeCharacterCards } = await import('../character-card-merge')
+        const stats = await mergeCharacterCards(characterDataList)
+        cb.log(t('log.extractCardsDone').replace('{n}', String(stats.saved)))
       },
     },
   ]
