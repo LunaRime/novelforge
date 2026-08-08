@@ -189,9 +189,13 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
     setDragOffsets({})
   }
 
-  // 拖拽节点
+  // 拖拽节点（#34 块 D：dragMovedRef 记录是否发生实际位移——拖拽后浏览器仍派发
+  // click，位移超过阈值则抑制随后的选中，防止"摆节点被踢回编辑页"）
+  const dragMovedRef = useRef(false)
+
   const handleMouseDown = useCallback((name: string, e: React.MouseEvent) => {
     e.stopPropagation()
+    dragMovedRef.current = false
     setDragging({ name, sx: e.clientX, sy: e.clientY })
   }, [])
 
@@ -199,6 +203,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
     if (!dragging) return
     const dx = (e.clientX - dragging.sx) * (viewBox.w / 800)
     const dy = (e.clientY - dragging.sy) * (viewBox.h / 600)
+    if (dx !== 0 || dy !== 0) dragMovedRef.current = true
     setDragOffsets(prev => ({
       ...prev,
       [dragging.name]: {
@@ -325,7 +330,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
                 fill={color} fillOpacity={0.2}
                 stroke={color} strokeWidth={2}
                 onMouseDown={(e) => handleMouseDown(node.name, e)}
-                onClick={() => onSelect?.(node.name)}
+                onClick={() => { if (dragMovedRef.current) return; onSelect?.(node.name) }}
               />
               {/* 名字 */}
               <text

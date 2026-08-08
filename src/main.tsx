@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import App from './App'
 import './index.css'
 import { useEditorStore } from './stores/editor-store'
+import { useCharacterStore } from './stores/character-store'
 import { installRendererErrorCapture, renderLog } from './services/render-logger'
 import { t, getCurrentLocale } from './shared/locale'
 import { ipc } from './services/ipc-client'
@@ -35,9 +36,13 @@ declare global {
 }
 
 // 暴露给主进程的关闭前检查（主进程 window.on('close') 通过 executeJavaScript 调用）
+// #34 块 D：纳入角色卡未保存编辑（此前只查编辑器 Tab——角色 dirty 从不传播，
+// 关闭应用/切项目时未保存的角色设定静默丢失）
 window.__vela_hasDirtyTabs = () => {
   try {
-    return useEditorStore.getState().tabs.some(t => t.dirty)
+    const hasDirtyTab = useEditorStore.getState().tabs.some(t => t.dirty)
+    const hasDirtyCharacters = useCharacterStore.getState().dirty
+    return hasDirtyTab || hasDirtyCharacters
   } catch {
     return false
   }

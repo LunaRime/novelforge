@@ -48,7 +48,8 @@ interface CharacterState {
   /** 改名映射 oldName → newName（#34 块 B：编辑时捕获，保存时级联重写 relations） */
   renameMap: Record<string, string>
 
-  load: () => Promise<void>
+  /** force=true 时忽略 dirty 强制刷新（手动刷新确认后） */
+  load: (force?: boolean) => Promise<void>
   reset: () => void
   setSelectedName: (name: string | null) => void
   addCharacter: () => void
@@ -73,7 +74,13 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   dirty: false,
   renameMap: {},
 
-  load: async () => {
+  load: async (force = false) => {
+    // #34 块 D：自动刷新（定稿完成/档案生成/提取失败）尊重未保存编辑——
+    // dirty 时跳过（手动刷新经 confirm 后传 force=true）
+    if (get().dirty && !force) {
+      renderLog('warn', 'Load:Character', t('log.render.characterLoadSkippedDirty'))
+      return
+    }
     const seq = ++loadSeq
     try {
       // #34：存量角色名括号别名一次性修复（幂等——无括号名时零操作），
@@ -143,7 +150,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     const result = await ipc.invoke('db:character-delete', name).catch(() => null)
     if (!result?.success) {
       renderLog('error', 'Delete:Character', t('log.render.characterDeleteFailed').replace('{error}', () => String(result?.error ?? t('status.unknown'))))
-      toast.error(t('save.failed').replace('{error}', String(result?.error ?? t('status.unknown'))))
+      toast.error(t('character.deleteFailed').replace('{error}', String(result?.error ?? t('status.unknown'))))
       return
     }
 
@@ -177,6 +184,10 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       dirty: true,
       renameMap,
     })
+
+    // #34 块 D：删除成功反馈（此前静默，违反 save-feedback-standard 双通道）
+    renderLog('info', 'Delete:Character', t('log.render.characterDeleted').replace('{name}', name))
+    toast.success(t('character.deleted').replace('{name}', name))
   },
 
   updateField: (name, key, value) => {

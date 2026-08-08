@@ -50,7 +50,7 @@ export default function CharactersView() {
       })
       if (!ok) return
     }
-    load()
+    load(true) // 手动刷新（已确认）→ force 跳过 dirty 检查
   }
   // 「从定稿生成档案」执行中状态：由 WORKFLOW_COMPLETE 事件驱动结束（60s 兜底释放监听）
   // 竞态防护：stop 统一 unsub + 清 timer，任何触发路径（完成/兜底）都彻底释放——
