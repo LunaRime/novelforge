@@ -96,9 +96,19 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   setSelectedName: (name) => set({ selectedName: name }),
 
   addCharacter: () => {
+    // 角色名是唯一主键：默认名用 i18n 文案 + 数字序号去重（#29——此前硬编码中文
+    // 「新角色_随机4位」产生垃圾名且英文界面显示中文）
+    const base = t('character.defaultName')
+    const existing = new Set(get().characters.map(c => c.name))
+    let name = base
+    let seq = 2
+    while (existing.has(name)) {
+      name = `${base} ${seq}`
+      seq++
+    }
     const newCard: CharacterCard = {
       ...EMPTY_CARD,
-      name: `新角色_${Math.random().toString(36).slice(2, 6)}`,
+      name,
     }
     set((s) => ({
       characters: [...s.characters, newCard],
