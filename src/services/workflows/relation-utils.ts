@@ -6,19 +6,30 @@
  * 将复杂度降到 O(N + C²)，且语义升级为「任意位置间距」而非「首位置间距」。
  */
 
+import { stripNameAlias } from '../character-normalize'
+
 /** 收集每个名字在文本中的所有出现位置（升序）。名字未出现 → 空数组 */
 export function buildNamePositions(text: string, names: string[]): Map<string, number[]> {
   const positions = new Map<string, number[]>()
   for (const name of names) {
     const list: number[] = []
     if (name) {
-      let idx = text.indexOf(name)
-      while (idx !== -1) {
-        list.push(idx)
-        idx = text.indexOf(name, idx + name.length)
+      // #34：双形态扫描——历史数据可能含「无名老乞丐（前魂师）」整名，正文只写
+      // 「无名老乞丐」；同时扫完整名与剥离形态，位置去重后排序
+      const forms = new Set([name, stripNameAlias(name)])
+      for (const form of forms) {
+        if (!form) continue
+        let idx = text.indexOf(form)
+        while (idx !== -1) {
+          list.push(idx)
+          idx = text.indexOf(form, idx + form.length)
+        }
       }
+      // 双形态可能命中同一位置（完整名包含剥离形态子串），去重后升序
+      positions.set(name, [...new Set(list)].sort((a, b) => a - b))
+    } else {
+      positions.set(name, list)
     }
-    positions.set(name, list)
   }
   return positions
 }

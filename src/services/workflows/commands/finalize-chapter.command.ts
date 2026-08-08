@@ -16,7 +16,7 @@ import {
 import type { ChapterInfo } from '../chapter-workflow'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
-import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName } from '../../character-normalize'
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias } from '../../character-normalize'
 import { buildNamePositions, hasProximity } from '../relation-utils'
 
 export interface FinalizeChapterParams {
@@ -214,9 +214,10 @@ export function buildFinalizePostProcessSteps(
         //   静默跳过，新角色全部丢失。回退时按存在性分流，不存在的名字进 newRows。
         if (updateRows.length === 0 && newRows.length === 0) {
           const fallbackRows = parseMarkdownTable(cardsResult) || []
-          const existingNames = new Set(allChars.map(c => c.name))
-          updateRows = fallbackRows.filter(r => existingNames.has(r.name || ''))
-          newRows = fallbackRows.filter(r => !existingNames.has(r.name || '') && (r.name || ''))
+          // #34：存在性判定用 matchCharacterName（精确 + 括号别名双形态），
+          // 此前精确匹配——DB 名带括号时「无名老乞丐（前魂师）」vs「无名老乞丐」判定为不存在
+          updateRows = fallbackRows.filter(r => matchCharacterName(allChars, r.name || ''))
+          newRows = fallbackRows.filter(r => !matchCharacterName(allChars, r.name || '') && (r.name || ''))
         }
 
         // L2: JSON 回退（字段映射与 Markdown 表格一致：currentState + tags/motivation + NEW 详情）
@@ -283,6 +284,9 @@ export function buildFinalizePostProcessSteps(
             // 别名格式「苏晚晴（苏夜）」→ 剥离括号匹配 DB 角色（精确匹配失败会静默跳过更新）
             const dbChar = matchCharacterName(allChars, name)
             if (dbChar) {
+              // ⚠️ 更新目标必须用 DB 规范名（dbChar.name）：此前传 LLM 原始名 name——
+              //     LLM 名带括号而 DB 名不带时，WHERE name = '苏晚晴（苏夜）' 匹配不到行，
+              //     匹配成功但更新静默落空（#34 评估发现）
               // cs_* 六字段哨兵值（无/无变化/none 变体）→ null → SQL CASE WHEN 保旧值。
               // ⚠️ 合并已下沉 repository 层（写时刻以 DB 当前值为基准，SQL 层 CASE 保旧列）——
               //    不再读快照合并，消除并发定稿/LLM 调用期间旧快照覆盖新状态的竞态
@@ -296,7 +300,7 @@ export function buildFinalizePostProcessSteps(
                 updatedAtChapter: chapterNumber,
               }
               // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"变体保留旧值
-              await ipc.invoke('db:character-update-state', name, newState, {
+              await ipc.invoke('db:character-update-state', dbChar.name, newState, {
                 tags: normalizeTagsValue(row.tags ?? '') || null,
                 motivation: cleanOptional(row.motivation ?? ''),
               })
@@ -311,9 +315,12 @@ export function buildFinalizePostProcessSteps(
         if (newRows.length > 0) {
           let newCharCount = 0
           for (const row of newRows) {
-            const name = row.name || ''
-            // NEW 表哨兵：LLM 用「无」/「-」表示无新出场角色——此前会真的创建名为「无」的角色
-            if (!name || isNoChangeValue(name) || allChars.some((c) => c.name === name)) continue
+            // #34：写入端剥离括号别名（「无名老乞丐（前魂师）」→「无名老乞丐」），
+            // 保证主键稳定——带括号名落库后与后续无括号输出分裂成两条记录
+            const name = stripNameAlias(row.name || '')
+            // NEW 表哨兵：LLM 用「无」/「-」表示无新出场角色——此前会真的创建名为「无」的角色；
+            // 去重用 matchCharacterName（精确 + 别名双形态）：已有角色被 LLM 误写进 NEW 时跳过创建
+            if (!name || isNoChangeValue(name) || matchCharacterName(allChars, row.name || '')) continue
             newCharCount++
             // ⚠️ P1 加固：role 枚举归一化（'Protagonist' 大写入库此前绕过 tier 推导/排序/UI 分级）
             const role = normalizeCharacterRole(row.role)
