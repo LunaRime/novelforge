@@ -26,6 +26,9 @@ export interface ProjectCoreRow {
     reference_works: string
     global_guidance: string
     golden_finger: string
+    core_outline: string
+    world_setting: string
+    protagonist_profile: string
     character_states: string
     created_at: number
     updated_at: number
@@ -49,6 +52,9 @@ export interface ProjectCoreData {
     worldbuilding: string
     charactersArch: string
     synopsis: string
+    coreOutline: string
+    worldSetting: string
+    protagonistProfile: string
     characterStates: string
     createdAt: number
     updatedAt: number
@@ -93,6 +99,10 @@ function rowToData(row: ProjectCoreRow): ProjectCoreData {
         worldbuilding: readArchiveOrColumn('worldbuilding', legacyRow.worldbuilding ?? null),
         charactersArch: readArchiveOrColumn('characters_arch', legacyRow.characters_arch ?? null),
         synopsis: readArchiveOrColumn('synopsis', legacyRow.synopsis ?? null),
+        // v13 解耦（#27）：小说配置读独立列（v13 迁移时已快照旧共享列数据到新列，此处无需回退）
+        coreOutline: String(legacyRow.core_outline ?? ''),
+        worldSetting: String(legacyRow.world_setting ?? ''),
+        protagonistProfile: String(legacyRow.protagonist_profile ?? ''),
         characterStates: row.character_states,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -170,6 +180,9 @@ export class ProjectCoreRepository {
                 referenceWorks: 'reference_works',
                 globalGuidance: 'global_guidance',
                 goldenFinger: 'golden_finger',
+                coreOutline: 'core_outline',
+                worldSetting: 'world_setting',
+                protagonistProfile: 'protagonist_profile',
                 characterStates: 'character_states',
             }
 

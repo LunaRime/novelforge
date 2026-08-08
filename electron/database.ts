@@ -117,8 +117,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号（v12：连载监控 publication_tracker 表） */
-const CURRENT_SCHEMA_VERSION = 12
+/** 当前数据库 schema 版本号（v13：project_core 新增小说配置独立列，与架构解耦） */
+const CURRENT_SCHEMA_VERSION = 13
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -205,6 +205,10 @@ function createTables(db: BetterSqlite3.Database) {
       worldbuilding TEXT DEFAULT '',              -- 世界观
       characters_arch TEXT DEFAULT '',            -- 人物群像网络
       synopsis TEXT DEFAULT '',                   -- 情节总大纲
+      -- [小说配置独立字段（v13：与架构解耦，此前复用 synopsis/worldbuilding/characters_arch）]
+      core_outline TEXT DEFAULT '',               -- 核心大纲（配置）
+      world_setting TEXT DEFAULT '',              -- 世界观设定（配置）
+      protagonist_profile TEXT DEFAULT '',        -- 主角人设档案（配置）
       -- [系统缓存]
       character_states TEXT DEFAULT '',           -- 全书角色动态快照
       created_at INTEGER DEFAULT (unixepoch() * 1000),
@@ -519,6 +523,11 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   // project_core — v4 后新增列
   safeAddColumn(db, 'project_core', 'writing_style', "TEXT DEFAULT ''")
   safeAddColumn(db, 'project_core', 'reference_works', "TEXT DEFAULT ''")
+
+  // project_core — v13 新增小说配置独立列（与架构 synopsis/worldbuilding/characters_arch 解耦，见 #27）
+  safeAddColumn(db, 'project_core', 'core_outline', "TEXT DEFAULT ''")
+  safeAddColumn(db, 'project_core', 'world_setting', "TEXT DEFAULT ''")
+  safeAddColumn(db, 'project_core', 'protagonist_profile', "TEXT DEFAULT ''")
 
   // llm_calls — v8 新增 cost（单次调用费用，美元）
   safeAddColumn(db, 'llm_calls', 'cost', 'REAL DEFAULT 0')
@@ -898,5 +907,26 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', t('log.db.v12PublicationTable'))
   } catch (e) {
     logger.warn('DB', t('log.db.v12PublicationTableFailed').replace('{err}', String(e)))
+  }
+
+  // 16. v13: 小说配置独立列快照（#27）——列由 ensureMigrationColumns 补齐，
+  //    此处将 v13 前共享列数据（project_archives 的 synopsis/worldbuilding/characters_arch）
+  //    一次性快照到独立列（仅独立列为空时）。此后配置与架构读写彻底解耦。
+  //    非关键 — 快照失败仅旧库配置字段回退显示架构内容，数据不丢
+  try {
+    db.exec(`
+      UPDATE project_core SET core_outline = COALESCE(
+        (SELECT body FROM project_archives WHERE project_id = 'main' AND field_key = 'synopsis'), '')
+        WHERE core_outline IS NULL OR core_outline = '';
+      UPDATE project_core SET world_setting = COALESCE(
+        (SELECT body FROM project_archives WHERE project_id = 'main' AND field_key = 'worldbuilding'), '')
+        WHERE world_setting IS NULL OR world_setting = '';
+      UPDATE project_core SET protagonist_profile = COALESCE(
+        (SELECT body FROM project_archives WHERE project_id = 'main' AND field_key = 'characters_arch'), '')
+        WHERE protagonist_profile IS NULL OR protagonist_profile = '';
+    `)
+    logger.info('DB', t('log.db.v13ConfigColumnsSnapshot'))
+  } catch (e) {
+    logger.warn('DB', t('log.db.v13ConfigColumnsSnapshotFailed').replace('{err}', String(e)))
   }
 }
