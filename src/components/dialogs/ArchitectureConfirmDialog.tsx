@@ -11,6 +11,7 @@ import { Button } from '../ui/Button'
 import { Textarea } from '../ui/Textarea'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
+import { getGenreTextKey, getAudienceTextKey } from '../../services/novel-config-normalize'
 
 type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
 
@@ -46,6 +47,10 @@ export default function ArchitectureConfirmDialog({
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const archFiles = getArchFiles(t)
+
+  // #33：genre/targetAudience 为中文规范值，显示走 i18n 翻译；未知值原样显示
+  const localizeGenre = (v: string) => { const k = getGenreTextKey(v); return k ? t(k) : v }
+  const localizeAudience = (v: string) => { const k = getAudienceTextKey(v); return k ? t(k) : v }
 
   // 默认：未生成的全部勾选；或使用 initialSelectedSteps 覆盖
   const [checked, setChecked] = useState<Record<ArchStepKey, boolean>>(() => {
@@ -169,8 +174,16 @@ export default function ArchitectureConfirmDialog({
               {t('archConfirm.preview')}
             </p>
             <div className="grid grid-cols-2 gap-1">
-              <ConfigRow label={t('archConfirm.type')} value={[config.genre, config.subGenre].filter(Boolean).join(' · ')} placeholder={t('status.notConfigured')} />
-              <ConfigRow label={t('archConfirm.audience')} value={config.targetAudience} placeholder={t('status.notConfigured')} />
+              <ConfigRow
+                label={t('archConfirm.type')}
+                value={[config.genre ? localizeGenre(config.genre) : '', config.subGenre].filter(Boolean).join(' · ')}
+                placeholder={t('status.notConfigured')}
+              />
+              <ConfigRow
+                label={t('archConfirm.audience')}
+                value={config.targetAudience ? localizeAudience(config.targetAudience) : ''}
+                placeholder={t('status.notConfigured')}
+              />
               <ConfigRow label={t('novelConfig.totalChapters')} value={`${config.totalChapters} ${t('unit.chaptersCount')}`} placeholder={t('status.notConfigured')} />
               <ConfigRow label={t('novelConfig.wordsPerChapter')} value={`${config.wordsPerChapter} ${t('unit.chars')}`} placeholder={t('status.notConfigured')} />
             </div>

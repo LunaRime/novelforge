@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { normalizeGenre, normalizeTargetAudience, normalizePlotStructure, normalizeNarrativePOV, normalizeNovelConfigEnums } from './novel-config-normalize'
+import { normalizeGenre, normalizeTargetAudience, normalizePlotStructure, normalizeNarrativePOV, normalizeNovelConfigEnums, getGenreTextKey, getAudienceTextKey } from './novel-config-normalize'
 import type { NovelConfig } from '../shared/ipc-channels'
 
 /**
@@ -116,5 +116,32 @@ describe('normalizeNovelConfigEnums', () => {
   it('undefined 字段不被添加', () => {
     const result = normalizeNovelConfigEnums({ genre: 'xuanhuan' })
     expect('plotStructure' in result).toBe(false)
+  })
+})
+
+describe('getGenreTextKey（#33 显示翻译）', () => {
+  it('中文规范值映射到 i18n key', () => {
+    expect(getGenreTextKey('言情')).toBe('genre.romance')
+    expect(getGenreTextKey('玄幻')).toBe('genre.xuanhuan')
+    expect(getGenreTextKey('职场')).toBe('genre.workplace')
+  })
+
+  it('未知值返回 null（调用方原样显示）', () => {
+    expect(getGenreTextKey('realistic')).toBeNull()
+    expect(getGenreTextKey('')).toBeNull()
+  })
+})
+
+describe('getAudienceTextKey（#33 显示翻译）', () => {
+  it('中文规范值映射到 i18n key', () => {
+    expect(getAudienceTextKey('男频')).toBe('novelConfig.audienceMale')
+    expect(getAudienceTextKey('女频')).toBe('novelConfig.audienceFemale')
+    expect(getAudienceTextKey('双性向')).toBe('novelConfig.audienceBoth')
+    expect(getAudienceTextKey('全龄')).toBe('novelConfig.audienceAll')
+  })
+
+  it('未知值返回 null', () => {
+    expect(getAudienceTextKey('general')).toBeNull()
+    expect(getAudienceTextKey('')).toBeNull()
   })
 })
