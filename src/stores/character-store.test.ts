@@ -1,11 +1,33 @@
 /**
- * character-store — addCharacter 默认名测试（#29）
- * 角色名唯一主键：默认名用 i18n 文案 + 数字序号去重，不再产生「新角色_随机4位」垃圾名。
+ * character-store 测试
+ * - addCharacter 默认名（#29）：i18n 文案 + 数字序号去重
+ * - renameMap 改名捕获/级联/重名校验（#34 块 B）
  */
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useCharacterStore } from './character-store'
 
+// vi.hoisted：mock 工厂（hoisted）引用共享状态
+const mock = vi.hoisted(() => ({
+  savedCalls: [] as unknown[][],
+  deletedCalls: [] as string[],
+  dbSnapshot: [] as unknown[],
+}))
+
+vi.mock('../services/ipc-client', () => ({
+  ipc: {
+    invoke: vi.fn(async (channel: string, ...args: unknown[]) => {
+      if (channel === 'db:character-get-all') return mock.dbSnapshot
+      if (channel === 'db:character-save-all') { mock.savedCalls.push(args); return { success: true } }
+      if (channel === 'db:character-delete') { mock.deletedCalls.push(String(args[0])); return { success: true } }
+      return { success: true }
+    }),
+  },
+}))
+
 beforeEach(() => {
+  mock.savedCalls.length = 0
+  mock.deletedCalls.length = 0
+  mock.dbSnapshot = []
   useCharacterStore.getState().reset()
 })
 
@@ -38,3 +60,54 @@ describe('addCharacter 默认名', () => {
     expect(names).not.toContain('新角色 2 ') // 不允许重名
   })
 })
+
+describe('renameMap 改名捕获与级联（#34 块 B）', () => {
+  const card = (name: string, relations = '[]') => ({
+    ...useCharacterStore.getState().characters[0], name, relations,
+  })
+
+  it('改名记录映射（旧名 → 新名）', () => {
+    useCharacterStore.setState({ characters: [card('旧名')] })
+    useCharacterStore.getState().updateField('旧名', 'name', '新名')
+    expect(useCharacterStore.getState().renameMap).toEqual({ 旧名: '新名' })
+  })
+
+  it('链式改名压缩（A→B 再 B→C → A→C）', () => {
+    useCharacterStore.setState({ characters: [card('旧名')] })
+    useCharacterStore.getState().updateField('旧名', 'name', '中间名')
+    useCharacterStore.getState().updateField('中间名', 'name', '最终名')
+    expect(useCharacterStore.getState().renameMap).toEqual({ 旧名: '最终名' })
+  })
+
+  it('saveAll 级联重写其他角色 relations 引用并清空映射', async () => {
+    mock.dbSnapshot = [{ name: '旧名', relations: '[]' }, { name: '旁观者', relations: '[]' }]
+    useCharacterStore.setState({ characters: [
+      card('旧名', '[{"target":"旧名"}]'),
+      card('旁观者', '[{"target":"旧名","label":"兄弟"}]'),
+    ] })
+    useCharacterStore.getState().updateField('旧名', 'name', '新名')
+    await useCharacterStore.getState().saveAll()
+
+    const saved = mock.savedCalls[0]?.[0] as Array<Record<string, unknown>>
+    const observer = saved.find(c => c.name === '旁观者')
+    expect(JSON.parse(String(observer?.relations))).toEqual([{ target: '新名', label: '兄弟' }])
+    expect(useCharacterStore.getState().renameMap).toEqual({})
+    expect(useCharacterStore.getState().dirty).toBe(false)
+  })
+
+  it('重名保存被拒绝（throw 且 dirty 保持）', async () => {
+    useCharacterStore.setState({ characters: [card('甲'), card('甲')], dirty: true })
+    await expect(useCharacterStore.getState().saveAll()).rejects.toThrow('角色名重复')
+    expect(useCharacterStore.getState().dirty).toBe(true)
+    expect(mock.savedCalls.length).toBe(0)
+  })
+
+  it('删除被改名角色后清理映射', async () => {
+    useCharacterStore.setState({ characters: [card('旧名'), card('旁观者')] })
+    useCharacterStore.getState().updateField('旧名', 'name', '新名')
+    // 删除新名角色 → 映射作废
+    await useCharacterStore.getState().deleteCharacter('新名')
+    expect(useCharacterStore.getState().renameMap).toEqual({})
+  })
+})
+

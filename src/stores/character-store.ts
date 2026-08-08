@@ -45,6 +45,8 @@ interface CharacterState {
   loaded: boolean
   /** 是否有未保存的编辑（刷新/切项目前用于确认，P3 修复） */
   dirty: boolean
+  /** 改名映射 oldName → newName（#34 块 B：编辑时捕获，保存时级联重写 relations） */
+  renameMap: Record<string, string>
 
   load: () => Promise<void>
   reset: () => void
@@ -64,6 +66,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   saving: false,
   loaded: false,
   dirty: false,
+  renameMap: {},
 
   load: async () => {
     try {
@@ -94,7 +97,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   },
 
   reset: () => {
-    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false })
+    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {} })
   },
 
   setSelectedName: (name) => set({ selectedName: name }),
@@ -148,10 +151,17 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       }
     }
 
+    // 清理改名映射中指向被删角色的条目（改名 A→B 后删除 B，A→B 映射作废）
+    const renameMap = { ...get().renameMap }
+    for (const [old, n] of Object.entries(renameMap)) {
+      if (n === name) delete renameMap[old]
+    }
+
     set({
       characters: remaining,
       selectedName: remaining.length > 0 ? remaining[0].name : null,
       dirty: true,
+      renameMap,
     })
   },
 
@@ -162,23 +172,65 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       )
 
       let newSelected = s.selectedName
-      if (key === 'name' && s.selectedName === name) {
-        newSelected = value as string
+      let renameMap = s.renameMap
+      if (key === 'name') {
+        const newName = value as string
+        if (newSelected === name) newSelected = newName
+        if (name !== newName) {
+          // 捕获改名映射（#34 块 B：保存时级联重写其他角色 relations 的 target；
+          // 链式压缩：A→B 再改 B→C 时把指向 B 的键更新为 C——反向查找）
+          renameMap = { ...s.renameMap }
+          let found = false
+          for (const [old, n] of Object.entries(renameMap)) {
+            if (n === name) { renameMap[old] = newName; found = true }
+          }
+          if (!found) renameMap[name] = newName
+        }
       }
 
-      return { characters: newChars, selectedName: newSelected, dirty: true }
+      return { characters: newChars, selectedName: newSelected, renameMap, dirty: true }
     })
   },
 
   saveAll: async () => {
     set({ saving: true })
-    const { characters } = get()
+    const { characters, renameMap } = get()
 
     try {
+      // #34 块 B：重名校验——改名撞名时后者会静默覆盖前者整卡（ON CONFLICT 全列覆盖）
+      const names = characters.map(c => c.name)
+      const dup = names.find((n, i) => n && names.indexOf(n) !== i)
+      if (dup) throw new Error(t('error.characterDuplicateName').replace('{name}', dup))
+
+      // 级联重写 relations（#34 块 B）：改名映射应用到其他角色的 relations target。
+      // ⚠️ 无稳定 id，改名映射只能在编辑时捕获（renameMap），保存时无法从 diff 推断
+      let toSave = characters
+      if (Object.keys(renameMap).length > 0) {
+        const resolve = (n: string): string => {
+          let cur = n
+          const seen = new Set<string>()
+          while (renameMap[cur] && !seen.has(cur)) { seen.add(cur); cur = renameMap[cur] }
+          return cur
+        }
+        toSave = characters.map(c => {
+          if (!c.relations) return c
+          let rels: Array<Record<string, unknown>> = []
+          try { rels = JSON.parse(c.relations) } catch { return c }
+          let changed = false
+          const next = rels.map(r => {
+            const t = String(r.target ?? '')
+            const mapped = resolve(t)
+            if (mapped !== t) { changed = true; return { ...r, target: mapped } }
+            return r
+          })
+          return changed ? { ...c, relations: JSON.stringify(next) } : c
+        })
+      }
+
       // 改名 diff（P1 修复）：name 是唯一主键——「DB 有而 store 无」的名字 = 被改名/删除的
       // 旧记录，先删再 upsert。此前改名后旧名行残留（幽灵角色）、撞名时后者覆盖前者静默丢失
       const dbChars = await ipc.invoke('db:character-get-all').catch(() => [])
-      const storeNames = new Set(characters.map(c => c.name))
+      const storeNames = new Set(toSave.map(c => c.name))
       for (const dbChar of (Array.isArray(dbChars) ? dbChars : [])) {
         const dbName = (dbChar as { name?: string }).name
         if (dbName && !storeNames.has(dbName)) {
@@ -187,8 +239,8 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       }
 
       // 提交到 DB 批量保存
-      await ipc.invoke('db:character-save-all', characters)
-      set({ dirty: false })
+      await ipc.invoke('db:character-save-all', toSave)
+      set({ dirty: false, renameMap: {} })
     } catch (e) {
       // 失败向上抛——CharacterEditor handleSave 的 catch 负责 renderLog + toast（此前无 catch，未捕获 rejection）
       renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))
