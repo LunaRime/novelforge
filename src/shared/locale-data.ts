@@ -1840,6 +1840,7 @@ export const UI_TEXTS_DATA = {
   'novelConfig.povTip4': { 'zh-CN': '多视角轮换：多名角色交替叙事，适合复杂群像故事', 'en-US': 'Multi-POV：Multiple characters alternate narration, suits complex ensemble stories', 'ru-RU': 'Множественная точка зрения：Чередование рассказчиков' },
   // --- Misc ---
   'tip.configModelFirst': { 'zh-CN': '请先在设置中配置 AI 模型', 'en-US': 'Please configure AI model in Settings first', 'ru-RU': 'Сначала настройте модель ИИ в Настройках' },
+  'tip.characterSaving': { 'zh-CN': '角色正在保存，请稍候再切换项目', 'en-US': 'Characters are still saving — please wait before switching projects', 'ru-RU': 'Персонажи сохраняются — подождите перед переключением проекта' },
   // --- Knowledge: search-related ---
   'knowledge.semanticSearch': { 'zh-CN': '语义检索', 'en-US': 'Semantic Search', 'ru-RU': 'Семантический поиск' },
   'knowledge.searchPlaceholder': { 'zh-CN': '输入查询内容，如：主角的能力体系、世界观核心设定...', 'en-US': 'Enter query, e.g.: protagonist abilities, world setting...', 'ru-RU': 'Введите запрос, напр.: способности героя, настройка мира...' },

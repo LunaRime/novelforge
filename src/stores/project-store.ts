@@ -3,6 +3,7 @@ import { ipc } from '../services/ipc-client'
 import { loadProjectCustomPrompts, clearProjectCustomPrompts } from '../services/prompt-templates'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
 import { alertError } from '../components/ui/Confirm'
+import { toast } from '../components/ui/Toast'
 import { t } from '../shared/locale'
 
 /**
@@ -119,6 +120,13 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
 
   openProject: async (projectPath, opts) => {
+    // #34 块 C：保存/删除进行中禁止切项目——IPC await 期间 DB 已切换，
+    // 旧项目数据会被写进新项目库（saveAll 全量 upsert + 改名 diff 曾误删新项目角色）
+    const { useCharacterStore } = await import('./character-store')
+    if (useCharacterStore.getState().saving) {
+      toast.warning(t('tip.characterSaving'))
+      return false
+    }
     set({ loading: true })
     try {
       const result = await ipc.invoke('project:open', projectPath)
