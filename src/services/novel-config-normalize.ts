@@ -12,6 +12,7 @@
  */
 
 import type { NovelConfig } from '../shared/ipc-channels'
+import type { TextKey } from '../shared/locale'
 
 /** 压缩键：小写 + 去除空格/连字符/下划线/撇号（'three-act' → 'threeact'） */
 function normKey(value: string): string {
@@ -37,6 +38,35 @@ const GENRE_ALIASES: Record<string, string> = {
 export function normalizeGenre(value: string): string {
   if (!value) return value
   return GENRE_ALIASES[normKey(value)] ?? value.trim()
+}
+
+// ===== 显示翻译：中文规范值 → i18n key（#33：非 zh 界面直接显示存储值「言情/男频」） =====
+
+/** genre 规范值（含未知值的 normKey 变体）→ i18n key；未知返回 null（调用方原样显示） */
+const GENRE_KEYS: Record<string, TextKey> = {
+  '玄幻': 'genre.xuanhuan', '仙侠': 'genre.xianxia', '都市': 'genre.urban', '科幻': 'genre.scifi',
+  '历史': 'genre.history', '军事': 'genre.military', '游戏': 'genre.game', '末世': 'genre.apocalypse',
+  '悬疑': 'genre.suspense', '灵异': 'genre.horror', '言情': 'genre.romance', '古言': 'genre.ancientRomance',
+  '现言': 'genre.modernRomance', '奇幻': 'genre.fantasy', '武侠': 'genre.wuxia', '轻小说': 'genre.lightNovel',
+  '同人': 'genre.fanfic', '职场': 'genre.workplace',
+}
+
+export function getGenreTextKey(genre: string): TextKey | null {
+  if (!genre) return null
+  return GENRE_KEYS[genre] ?? null
+}
+
+/** targetAudience 规范值 → i18n key；未知返回 null（调用方原样显示） */
+const AUDIENCE_KEYS: Record<string, TextKey> = {
+  '男频': 'novelConfig.audienceMale',
+  '女频': 'novelConfig.audienceFemale',
+  '双性向': 'novelConfig.audienceBoth',
+  '全龄': 'novelConfig.audienceAll',
+}
+
+export function getAudienceTextKey(audience: string): TextKey | null {
+  if (!audience) return null
+  return AUDIENCE_KEYS[audience] ?? null
 }
 
 // ===== targetAudience：英文模板枚举 → UI 中文规范值 =====
