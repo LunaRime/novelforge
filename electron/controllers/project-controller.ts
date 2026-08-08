@@ -137,10 +137,11 @@ export function registerProjectController() {
           wordsPerChapter: updatedCoreData.wordsPerChapter,
           plotStructure: updatedCoreData.plotStructure as 'three_act' | 'heros_journey' | 'save_the_cat' | 'kishotenketsu' | 'multi_thread' | 'freeform',
           narrativePOV: updatedCoreData.narrativePov as 'third_limited' | 'first_person' | 'third_omniscient' | 'multi_pov',
-          coreOutline: updatedCoreData.synopsis,      // 旧字段映射
-          worldSetting: updatedCoreData.worldbuilding, // 旧字段映射
+          // v13 解耦（#27）：读取独立列；为空时 repository 层已回退架构列（旧库兼容）
+          coreOutline: updatedCoreData.coreOutline,
+          worldSetting: updatedCoreData.worldSetting,
           goldenFinger: updatedCoreData.goldenFinger,
-          protagonistProfile: updatedCoreData.charactersArch, // 旧字段映射
+          protagonistProfile: updatedCoreData.protagonistProfile,
           globalGuidance: updatedCoreData.globalGuidance,
           writingStyle: updatedCoreData.writingStyle,
           referenceWorks: updatedCoreData.referenceWorks,
@@ -184,10 +185,10 @@ export function registerProjectController() {
         if (nc.globalGuidance !== undefined) updateData.globalGuidance = nc.globalGuidance
         if (nc.writingStyle !== undefined) updateData.writingStyle = nc.writingStyle
         if (nc.referenceWorks !== undefined) updateData.referenceWorks = nc.referenceWorks
-        // 关键修复：反向映射旧字段名 → DB 列名
-        if (nc.coreOutline !== undefined) updateData.synopsis = nc.coreOutline
-        if (nc.worldSetting !== undefined) updateData.worldbuilding = nc.worldSetting
-        if (nc.protagonistProfile !== undefined) updateData.charactersArch = nc.protagonistProfile
+        // v13 解耦（#27）：小说配置写入独立列，不再反向映射到架构列（避免覆盖故事架构内容）
+        if (nc.coreOutline !== undefined) updateData.coreOutline = nc.coreOutline
+        if (nc.worldSetting !== undefined) updateData.worldSetting = nc.worldSetting
+        if (nc.protagonistProfile !== undefined) updateData.protagonistProfile = nc.protagonistProfile
       }
 
       if (data.characterStates !== undefined) {
@@ -227,9 +228,10 @@ export function registerProjectController() {
         if (nc.globalGuidance !== undefined) updateData.globalGuidance = nc.globalGuidance
         if (nc.writingStyle !== undefined) updateData.writingStyle = nc.writingStyle
         if (nc.referenceWorks !== undefined) updateData.referenceWorks = nc.referenceWorks
-        if (nc.coreOutline !== undefined) updateData.synopsis = nc.coreOutline
-        if (nc.worldSetting !== undefined) updateData.worldbuilding = nc.worldSetting
-        if (nc.protagonistProfile !== undefined) updateData.charactersArch = nc.protagonistProfile
+        // v13 解耦（#27）：同 project:save，写入独立列
+        if (nc.coreOutline !== undefined) updateData.coreOutline = nc.coreOutline
+        if (nc.worldSetting !== undefined) updateData.worldSetting = nc.worldSetting
+        if (nc.protagonistProfile !== undefined) updateData.protagonistProfile = nc.protagonistProfile
         ProjectCoreRepository.update(updateData)
       }
       return { success: true }
