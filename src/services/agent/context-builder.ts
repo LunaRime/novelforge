@@ -13,7 +13,8 @@ import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { AgentMode } from '../../stores/agent-store'
-import { t } from '../../shared/locale'
+import { t, getCurrentLocale } from '../../shared/locale'
+import { appendOutputLanguage } from '../prompt-templates'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
@@ -71,10 +72,12 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
         sections[toolIndex] = sections[toolIndex].slice(0, 500) + '\n\n…' + t('engine.toolListTruncated')
       }
     }
-    return sections.join('\n\n---\n\n')
+    return appendOutputLanguage(sections.join('\n\n---\n\n'), getCurrentLocale())
   }
 
-  return fullPrompt
+  // #30：末尾追加明确输出语言约束（此前仅 identityRuleLanguage 弱约束
+  // "Reply in the user's language" 不指明具体语言，英文界面下 Agent 仍回中文）
+  return appendOutputLanguage(fullPrompt, getCurrentLocale())
 }
 
 // ===== 内部构建方法 =====
