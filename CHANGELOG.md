@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.1.5-beta.4] — 2026-08-08（公测版）
+
+### 🐛 修复（beta.3 用户实测问题 #26-#32）
+- 主进程 locale 启动不同步：重启应用后主进程错误弹窗/对话框文案恒中文（英文界面下打开不存在项目显示「目录不存在」）
+- AI 填充小说配置会一并填充故事架构：v13 schema 新增配置独立列（core_outline/world_setting/protagonist_profile），配置与架构读写彻底解耦（含旧数据快照迁移）
+- Agent 回复语言不跟随界面：system prompt 末尾追加明确输出语言约束
+- Agent 工具 read_file 路径示例误导：示例为 v6 前物理架构路径（02_architecture/…）→ LLM 猜路径 ENOENT；示例改真实路径并引导使用 read_architecture/read_characters
+- 新建角色默认名：硬编码中文随机后缀（新角色_1emm）→ i18n 文案 + 数字序号去重
+- 关系图谱缩放按钮方向颠倒（ZoomIn/ZoomOut 互换）
+
 ## [0.1.5-beta.3] — 2026-08-07（公测版）
 
 ### ✨ 新功能（推广功能矩阵）
