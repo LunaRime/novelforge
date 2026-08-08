@@ -238,15 +238,18 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
           </button>
         ))}
         <div className="w-px h-4 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+        {/* SVG viewBox 语义：viewBox 宽高增大 → 内容缩小；减小 → 内容放大。
+            因此「缩小」按钮增大 viewBox（factor>1），「放大」按钮减小 viewBox（factor<1）。
+            曾方向写反（0.8/1.25 对调），用户实测报告 #28 */}
         <button
           className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(0.8)} title={t('zoom.out')} type="button"
+          onClick={() => zoom(1.25)} title={t('zoom.out')} type="button"
         >
           <ZoomOut size={14} />
         </button>
         <button
           className="p-1 rounded hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] cursor-pointer"
-          onClick={() => zoom(1.25)} title={t('zoom.in')} type="button"
+          onClick={() => zoom(0.8)} title={t('zoom.in')} type="button"
         >
           <ZoomIn size={14} />
         </button>
