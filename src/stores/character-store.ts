@@ -67,6 +67,10 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
   load: async () => {
     try {
+      // #34：存量角色名括号别名一次性修复（幂等——无括号名时零操作），
+      // 修复后再读取，保证 store 与 DB 一致
+      const { applyCharacterNameRepair } = await import('../services/character-name-repair')
+      await applyCharacterNameRepair()
       const cards = await ipc.invoke('db:character-get-all')
 
       const { selectedName } = get()

@@ -1,6 +1,6 @@
 // src/services/character-archive.ts
 import { robustParseJSON } from './workflows/workflow-utils'
-import { isNoChangeValue, normalizeTagsValue } from './character-normalize'
+import { isNoChangeValue, normalizeTagsValue, stripNameAlias } from './character-normalize'
 
 export interface ChapterContent { chapterNumber: number; content: string }
 export interface RoleContextSegment { chapterNumber: number; text: string }
@@ -13,14 +13,19 @@ export function extractRoleContextSegments(
   maxSegments = 8,
 ): RoleContextSegment[] {
   const segments: RoleContextSegment[] = []
+  // #34：双形态扫描——历史数据可能含「无名老乞丐（前魂师）」整名，正文只写
+  // 「无名老乞丐」；完整名与剥离形态都扫，否则该角色档案生成零上下文
+  const forms = [...new Set([name, stripNameAlias(name)])].filter(Boolean)
   for (const ch of chapters) {
-    let idx = ch.content.indexOf(name)
-    while (idx !== -1) {
-      const start = Math.max(0, idx - windowChars)
-      const end = Math.min(ch.content.length, idx + name.length + windowChars)
-      segments.push({ chapterNumber: ch.chapterNumber, text: ch.content.slice(start, end) })
-      if (segments.length >= maxSegments) return segments
-      idx = ch.content.indexOf(name, idx + name.length)
+    for (const form of forms) {
+      let idx = ch.content.indexOf(form)
+      while (idx !== -1) {
+        const start = Math.max(0, idx - windowChars)
+        const end = Math.min(ch.content.length, idx + form.length + windowChars)
+        segments.push({ chapterNumber: ch.chapterNumber, text: ch.content.slice(start, end) })
+        if (segments.length >= maxSegments) return segments
+        idx = ch.content.indexOf(form, idx + form.length)
+      }
     }
   }
   return segments

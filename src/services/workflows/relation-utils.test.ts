@@ -24,6 +24,19 @@ describe('buildNamePositions', () => {
     expect(positions.get('苏晚')?.length).toBe(2)
     expect(positions.get('苏晚晴')?.length).toBe(1)
   })
+
+  it('#34 双形态：带括号名同时命中正文无括号形态，位置去重', () => {
+    const text = '无名老乞丐（前魂师）出手，无名老乞丐退到一旁。无名老乞丐再次上前。'
+    const positions = buildNamePositions(text, ['无名老乞丐（前魂师）'])
+    // 完整名 1 处（位置0，含剥离形态子串）+ 正文独立无括号形态 2 处 → 去重后 3 处
+    expect(positions.get('无名老乞丐（前魂师）')?.length).toBe(3)
+  })
+
+  it('#34 双形态：正文含完整名时位置不重复', () => {
+    const text = '无名老乞丐（前魂师）缓缓起身。'
+    const positions = buildNamePositions(text, ['无名老乞丐（前魂师）'])
+    expect(positions.get('无名老乞丐（前魂师）')).toEqual([0])
+  })
 })
 
 describe('hasProximity', () => {

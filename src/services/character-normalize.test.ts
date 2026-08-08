@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName } from './character-normalize'
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias } from './character-normalize'
 
 /**
  * 角色卡 LLM 输出归一化 — 背景：定稿后处理 update_character_cards 依赖中文哨兵
@@ -135,5 +135,33 @@ describe('matchCharacterName', () => {
 
   it('带别名的未知角色 → undefined', () => {
     expect(matchCharacterName(chars, '王五（阿五）')).toBeUndefined()
+  })
+})
+
+describe('stripNameAlias（#34 写入端归一化）', () => {
+  it('剥离尾部中文括号别名', () => {
+    expect(stripNameAlias('无名老乞丐（前魂师）')).toBe('无名老乞丐')
+    expect(stripNameAlias('苏晚晴（苏夜）')).toBe('苏晚晴')
+  })
+
+  it('剥离尾部半角括号别名', () => {
+    expect(stripNameAlias('无名老乞丐(前魂师)')).toBe('无名老乞丐')
+  })
+
+  it('无括号原样返回（幂等）', () => {
+    expect(stripNameAlias('无名老乞丐')).toBe('无名老乞丐')
+    expect(stripNameAlias('')).toBe('')
+  })
+
+  it('剥离前后空格', () => {
+    expect(stripNameAlias(' 无名老乞丐（前魂师） ')).toBe('无名老乞丐')
+  })
+
+  it('全括号名 → 空串（调用方空名保护兜底）', () => {
+    expect(stripNameAlias('（前魂师）')).toBe('')
+  })
+
+  it('名字中段的括号不剥离（仅尾部形态）', () => {
+    expect(stripNameAlias('老乞丐（前魂师）归来')).toBe('老乞丐（前魂师）归来')
   })
 })

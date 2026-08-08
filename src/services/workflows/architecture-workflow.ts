@@ -4,7 +4,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
 import { ipc } from '../ipc-client'
-import { normalizeCharacterRole } from '../character-normalize'
+import { normalizeCharacterRole, stripNameAlias } from '../character-normalize'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import type { CharacterData } from '../../../electron/repositories/character-repository'
 
@@ -358,7 +358,8 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         for (const card of parsedCards) {
           if (!card.name) continue
           const role = normalizeCharacterRole(card.role as string)
-          const cleaned: Record<string, unknown> = { name: card.name, role }
+          // #34：写入端剥离括号别名（主键稳定，防与后续无括号输出分裂）
+          const cleaned: Record<string, unknown> = { name: stripNameAlias(String(card.name)), role }
           for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
             if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])
           }

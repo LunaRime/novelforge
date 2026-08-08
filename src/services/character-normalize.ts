@@ -85,3 +85,17 @@ export function matchCharacterName<T extends { name: unknown }>(
   }
   return undefined
 }
+
+/**
+ * 剥离角色名尾部的括号别名/身份注释（#34 评估修复）：LLM 常输出
+ * 「无名老乞丐（前魂师）」形态——若带括号名直接落库（角色名是唯一主键），
+ * 后续 LLM 输出「无名老乞丐」时：NEW 去重精确匹配失败 → 重复创建；
+ * UPDATES 匹配失败 → 更新静默跳过；正文精确扫描（互动检测/档案上下文）
+ * 也永不命中。写入端统一剥离，保证主键稳定。
+ * 无括号 → 原样返回（幂等）；全括号名 → 返回空串（调用方空名保护兜底）。
+ */
+export function stripNameAlias(rawName: string): string {
+  const name = String(rawName ?? '').trim()
+  const m = name.match(/^(.*?)[（(][^（）()]*[）)]\s*$/)
+  return m ? m[1].trim() : name
+}
