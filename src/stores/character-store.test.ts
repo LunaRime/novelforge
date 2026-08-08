@@ -111,3 +111,41 @@ describe('renameMap 改名捕获与级联（#34 块 B）', () => {
   })
 })
 
+
+describe('saveAll 语义（#34 块 C）', () => {
+  const card = (name: string, relations = '[]') => ({
+    ...useCharacterStore.getState().characters[0], name, relations,
+  })
+
+  it('主进程保存失败 → reject 且 dirty 保持（不误报成功）', async () => {
+    // 整体替换实现：save-all 返回失败（get-all 等多通道调用不能用 mockImplementationOnce）
+    const origImpl = vi.mocked(ipcInvoke).getMockImplementation()
+    vi.mocked(ipcInvoke).mockImplementation(async (channel: unknown) => {
+      if (channel === 'db:character-get-all') return mock.dbSnapshot
+      if (channel === 'db:character-save-all') return { success: false, error: 'db error' }
+      return { success: true }
+    })
+    try {
+      useCharacterStore.setState({ characters: [card('甲')], dirty: true })
+      await expect(useCharacterStore.getState().saveAll()).rejects.toThrow('db error')
+      expect(useCharacterStore.getState().dirty).toBe(true)
+    } finally {
+      vi.mocked(ipcInvoke).mockImplementation(origImpl!)
+    }
+  })
+
+  it('diff 收敛：DB 有而 store 无的非改名行不被删除（工作流并发新角色保留）', async () => {
+    mock.dbSnapshot = [
+      { name: '新角色', relations: '[]' },      // 并发新角色（store 未 load 到）→ 保留
+      { name: '旧名', relations: '[]' },         // 改名旧名 → 删除
+    ]
+    useCharacterStore.setState({ characters: [card('旧名')] })
+    useCharacterStore.getState().updateField('旧名', 'name', '新名')
+    await useCharacterStore.getState().saveAll()
+    expect(mock.deletedCalls).toEqual(['旧名']) // 只删改名旧名
+  })
+})
+
+// 供 mockImplementationOnce 引用
+import { ipc } from '../services/ipc-client'
+const ipcInvoke = ipc.invoke as unknown as (...args: unknown[]) => Promise<unknown>

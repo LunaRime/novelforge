@@ -60,6 +60,11 @@ interface CharacterState {
   loadCharacters: (projectPath: string) => Promise<void>
 }
 
+// 加载请求序号（#34 块 C）：快速切换项目时，旧项目的慢响应不得覆盖当前项目数据
+//（对齐 volume-store / draft-store 的 loadSeq 模式——此前 character-store 缺失，
+//  旧项目角色覆盖新项目 + repair 跨项目写库）
+let loadSeq = 0
+
 export const useCharacterStore = create<CharacterState>()((set, get) => ({
   characters: [],
   selectedName: null,
@@ -69,12 +74,15 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   renameMap: {},
 
   load: async () => {
+    const seq = ++loadSeq
     try {
       // #34：存量角色名括号别名一次性修复（幂等——无括号名时零操作），
-      // 修复后再读取，保证 store 与 DB 一致
+      // 修复后再读取，保证 store 与 DB 一致；repair 内部带项目切换校验
       const { applyCharacterNameRepair } = await import('../services/character-name-repair')
       await applyCharacterNameRepair()
+      if (seq !== loadSeq) return // 项目已切换，丢弃旧响应
       const cards = await ipc.invoke('db:character-get-all')
+      if (seq !== loadSeq) return
 
       const { selectedName } = get()
       set({
@@ -86,6 +94,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
           : (cards.length > 0 ? cards[0].name : null),
       })
     } catch (e) {
+      if (seq !== loadSeq) return
       // 加载失败打日志（此前静默清空列表，无从排查）
       renderLog('error', 'Load:Character', t('log.render.characterLoadFailed').replace('{error}', () => String(e)))
       set({ characters: [], selectedName: null, loaded: true, dirty: false })
@@ -138,16 +147,21 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
       return
     }
 
-    // 级联清理其他角色 relations 中对被删角色的引用（防悬空边/图谱断边）
-    const remaining = characters.filter(c => c.name !== name)
+    // 级联清理其他角色 relations 中对被删角色的引用（防悬空边/图谱断边）——
+    // #34 块 C：store 同步更新（此前只写 DB，store 残留悬空引用 → 下次 saveAll
+    // 用旧数据写回，级联清理被完全抵消）；级联 upsert 用清理后的数据
+    const remaining = characters
+      .filter(c => c.name !== name)
+      .map(c => {
+        let rels: Array<{ target: string }> = []
+        try { rels = JSON.parse(c.relations || '[]') } catch { return c }
+        if (!rels.some(r => r.target === name)) return c
+        return { ...c, relations: JSON.stringify(rels.filter(r => r.target !== name)) }
+      })
     for (const c of remaining) {
-      let rels: Array<{ target: string }> = []
-      try { rels = JSON.parse(c.relations || '[]') } catch { rels = [] }
-      if (rels.some(r => r.target === name)) {
-        await ipc.invoke('db:character-upsert', {
-          ...c,
-          relations: JSON.stringify(rels.filter(r => r.target !== name)),
-        } as never).catch(() => {})
+      const old = characters.find(x => x.name === c.name)
+      if (old && c.relations !== old.relations) {
+        await ipc.invoke('db:character-upsert', c as never).catch(() => {})
       }
     }
 
@@ -195,6 +209,8 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   saveAll: async () => {
     set({ saving: true })
     const { characters, renameMap } = get()
+    // #34 块 C：记录保存起点——保存期间的新编辑不得被无条件清 dirty
+    const snapshot = characters
 
     try {
       // #34 块 B：重名校验——改名撞名时后者会静默覆盖前者整卡（ON CONFLICT 全列覆盖）
@@ -227,20 +243,29 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
         })
       }
 
-      // 改名 diff（P1 修复）：name 是唯一主键——「DB 有而 store 无」的名字 = 被改名/删除的
-      // 旧记录，先删再 upsert。此前改名后旧名行残留（幽灵角色）、撞名时后者覆盖前者静默丢失
+      // 旧名清理（#34 块 C 收敛）：只删「改名映射的旧名」且 DB 存在 store 无 的行——
+      // 此前 diff 删除所有「DB 有 store 无」的行，会把工作流并发写入、store 尚未
+      // load 到的新角色静默误删（AI 生成数据丢失）
       const dbChars = await ipc.invoke('db:character-get-all').catch(() => [])
       const storeNames = new Set(toSave.map(c => c.name))
+      const staleOldNames = new Set(Object.keys(renameMap))
       for (const dbChar of (Array.isArray(dbChars) ? dbChars : [])) {
         const dbName = (dbChar as { name?: string }).name
-        if (dbName && !storeNames.has(dbName)) {
+        if (dbName && !storeNames.has(dbName) && staleOldNames.has(dbName)) {
           await ipc.invoke('db:character-delete', dbName).catch(() => {})
         }
       }
 
-      // 提交到 DB 批量保存
-      await ipc.invoke('db:character-save-all', toSave)
-      set({ dirty: false, renameMap: {} })
+      // 提交到 DB 批量保存——#34 块 C：校验主进程返回值（此前忽略 {success:false}，
+      // DB 事务失败被当成成功、dirty 被清为已保存）
+      const result = await ipc.invoke('db:character-save-all', toSave)
+      if (!result.success) {
+        throw new Error(result.error || t('error.characterCardsSave').replace('{error}', t('status.unknown')))
+      }
+
+      // #34 块 C：保存期间若有新编辑（引用变化），dirty 与 renameMap 保留
+      const stillDirty = get().characters !== snapshot
+      set({ dirty: stillDirty, renameMap: stillDirty ? get().renameMap : {} })
     } catch (e) {
       // 失败向上抛——CharacterEditor handleSave 的 catch 负责 renderLog + toast（此前无 catch，未捕获 rejection）
       renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))

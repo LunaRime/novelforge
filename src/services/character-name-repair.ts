@@ -116,13 +116,20 @@ export function computeNameRepairPlan(chars: CharacterCardLike[]): NameRepairPla
 /** 应用修复（读全角色 → 计算 → 写回；非关键，失败仅日志） */
 export async function applyCharacterNameRepair(): Promise<void> {
   try {
+    // #34 块 C：防跨项目写库——读取前记录项目路径，读取后/写入前校验未切换
+    //（load 慢响应期间用户切项目，DB 已切换，旧项目的角色会被写进新项目库）
+    const { useProjectStore } = await import('../stores/project-store')
+    const projectPath = useProjectStore.getState().currentProject?.path
     const chars = (await ipc.invoke('db:character-get-all')) as unknown as CharacterCardLike[]
+    if (useProjectStore.getState().currentProject?.path !== projectPath) return
     const plan = computeNameRepairPlan(chars)
     if (plan.upserts.length === 0 && plan.deletes.length === 0) return
     for (const row of plan.upserts) {
+      if (useProjectStore.getState().currentProject?.path !== projectPath) return
       await ipc.invoke('db:character-upsert', row)
     }
     for (const name of plan.deletes) {
+      if (useProjectStore.getState().currentProject?.path !== projectPath) return
       await ipc.invoke('db:character-delete', name)
     }
     renderLog('info', 'Repair:CharacterName', t('log.render.characterNameRepaired')
