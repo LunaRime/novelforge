@@ -44,6 +44,8 @@ tailwind.config.js.bak
 coverage/
 .claude/
 CLAUDE.md
+.codex/
+AGENTS.md
 rule.md
 rule.lite.md
 
