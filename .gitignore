@@ -56,3 +56,6 @@ scripts/font-char-set.txt
 
 # TypeScript 增量编译缓存
 *.tsbuildinfo
+
+# pnpm 本地缓存（不走 store 时的临时落盘目录）
+.pnpm-store/
