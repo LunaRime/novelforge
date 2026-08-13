@@ -269,6 +269,19 @@ export function extractKvFields(objStr: string): Record<string, unknown> {
     card[match[1]] = v === 'true' ? true : v === 'false' ? false : v === 'null' ? null : Number(v)
   }
 
+  // 嵌套对象重建：currentState 等嵌套键被上方正则拍平成顶层键（location/powerLevel/...），
+  // 检测到 "currentState" 键时回收到 currentState 子对象（P0-1：初始提取 currentState 丢失修复）
+  if (!card.currentState && /"currentState"\s*:/.test(objStr)) {
+    const st: Record<string, unknown> = {}
+    for (const k of ['location', 'powerLevel', 'physicalState', 'mentalState', 'keyItems', 'recentEvents', 'updatedAtChapter']) {
+      if (card[k] !== undefined) {
+        st[k] = card[k]
+        delete card[k]
+      }
+    }
+    if (Object.keys(st).length > 0) card.currentState = st
+  }
+
   // 也匹配 "name" 后面缺冒号时用空格分隔的模式
   if (!card.name) {
     const nameMatch = objStr.match(/"name"\s*[:=]\s*"([^"]+)"/)
@@ -354,23 +367,7 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
 
         // 构建角色卡数据列表（#34 块 A：role 不在此处 normalize——mergeCharacterCards
         // 内部处理且仅当 LLM 原始值非空才覆盖；写入端剥离括号别名保证主键稳定）
-        const characterDataList: Array<Record<string, unknown>> = []
-        for (const card of parsedCards) {
-          if (!card.name) continue
-          const cleaned: Record<string, unknown> = { name: stripNameAlias(String(card.name)) }
-          if (card.role !== undefined && String(card.role).trim() !== '') cleaned.role = String(card.role)
-          for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
-            if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])
-          }
-          // v7 标签：LLM 输出数组 → 存 JSON 数组字符串（角色列表 JSON.parse 消费）
-          if (card.tags !== undefined) {
-            const tags = Array.isArray(card.tags)
-              ? card.tags.map(String).filter(Boolean)
-              : String(card.tags).split(/[，,、]/).map(s => s.trim()).filter(Boolean)
-            if (tags.length > 0) cleaned.tags = JSON.stringify(tags.slice(0, 8))
-          }
-          characterDataList.push(cleaned)
-        }
+        const characterDataList = assembleCharacterCards(parsedCards, stringifyField)
 
         // 批量写入（#34 块 A：仅填空合并——已存在角色 LLM 非空字段覆盖、空白保留 DB 现值，
         // 防重跑提取全列覆盖清空手写档案/tags/动态状态）
@@ -380,6 +377,41 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
       },
     },
   ]
+}
+
+/**
+ * 组装角色卡数据列表（纯函数，可单测）
+ *
+ * P0-1 修复：currentState（初始位置/境界/道具/心理）此前不在拷贝清单 → 初始状态整体丢失；
+ * 现按 LLM 原始对象透传（mergeCardRows/仓库 upsert 负责拍平到 cs_* 列），
+ * 并校验为对象形态（LLM 可能输出字符串/数组，防御性丢弃非法形态）。
+ */
+export function assembleCharacterCards(
+  parsedCards: Array<Record<string, unknown>>,
+  stringifyField: (val: unknown) => string,
+): Array<Record<string, unknown>> {
+  const characterDataList: Array<Record<string, unknown>> = []
+  for (const card of parsedCards) {
+    if (!card.name) continue
+    const cleaned: Record<string, unknown> = { name: stripNameAlias(String(card.name)) }
+    if (card.role !== undefined && String(card.role).trim() !== '') cleaned.role = String(card.role)
+    for (const key of ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']) {
+      if (card[key] !== undefined) cleaned[key] = stringifyField(card[key])
+    }
+    // v7 标签：LLM 输出数组 → 存 JSON 数组字符串（角色列表 JSON.parse 消费）
+    if (card.tags !== undefined) {
+      const tags = Array.isArray(card.tags)
+        ? card.tags.map(String).filter(Boolean)
+        : String(card.tags).split(/[，,、]/).map(s => s.trim()).filter(Boolean)
+      if (tags.length > 0) cleaned.tags = JSON.stringify(tags.slice(0, 8))
+    }
+    // P0-1：初始 currentState 透传（对象形态校验；updatedAtChapter 由 LLM 按模板填 0）
+    if (card.currentState !== undefined && card.currentState !== null && typeof card.currentState === 'object' && !Array.isArray(card.currentState)) {
+      cleaned.currentState = card.currentState
+    }
+    characterDataList.push(cleaned)
+  }
+  return characterDataList
 }
 
 export function runArchCharacterExtract(projectPath: string, characterDynamicsContent: string, genre: string): void {

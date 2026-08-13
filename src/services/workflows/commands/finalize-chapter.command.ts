@@ -17,7 +17,7 @@ import type { ChapterInfo } from '../chapter-workflow'
 import type { CharacterData } from '../../../../electron/repositories/character-repository'
 import type { StepCallbacks } from '../../../stores/workflow-store'
 import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias } from '../../character-normalize'
-import { buildNamePositions, hasProximity } from '../relation-utils'
+import { buildNamePositions, hasProximity, closestNamePair, hasDialogueMarker } from '../relation-utils'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -369,15 +369,19 @@ export function buildFinalizePostProcessSteps(
         const allChars = await ipc.invoke('db:character-get-all') as CharacterData[]
         let detected = 0
 
+        // P1-6：只对 active 角色做关系检测与出场统计——dead/departed 退出候选，
+        // 角色库"只增不减"时关系检测 O(C²) 不再随死亡角色膨胀
+        const activeChars = allChars.filter(c => (c.status ?? 'active') === 'active')
+
         // ⚠️ 性能优化：预扫描正文一次建立角色名位置索引（O(N + C×M)），
         //    角色对检查走双指针最小间距（O(C²)）——原实现每对做两次全文 indexOf 为 O(C² × N)，
         //    且仅比较首出现位置（正文多处同现时可能漏判）
         const namePositions = buildNamePositions(
           draftContent,
-          allChars.map(c => c.name).filter((n): n is string => Boolean(n)),
+          activeChars.map(c => c.name).filter((n): n is string => Boolean(n)),
         )
 
-        for (const char of allChars) {
+        for (const char of activeChars) {
           if (!char.name) continue
           let rels: Array<{ target: string; type: string; label: string; sinceChapter: number }> = []
           try { rels = JSON.parse(char.relations || '[]') } catch { rels = [] }
@@ -393,16 +397,33 @@ export function buildFinalizePostProcessSteps(
             chaps.sort((a: number, b: number) => a - b)
           }
 
+          // P1-6：出场统计（仅正文中出现时更新；首章未记录时登记 firstChapter）
+          const appearsHere = (namePositions.get(char.name) ?? []).length > 0
+          const appearCount = (char.appearCount ?? 0) + (appearsHere ? 1 : 0)
+          const firstChapter = appearsHere && !(char.firstChapter ?? 0) ? chapterNumber : (char.firstChapter ?? 0)
+          const lastChapter = appearsHere ? chapterNumber : (char.lastChapter ?? 0)
+
           // 检测新关系：在正文中查找 "角色名：关系描述" 或 "与XXX的关系"
+          // P1-5：纯共现（500 字内同场出现）不再直接建关系——群像戏会生成大量
+          // 无意义 'other' 关系；要求 100 字内直接接触 或 区间内有对话标记（引号/说/道）
           let detectedForChar = 0
-          for (const other of allChars) {
+          for (const other of activeChars) {
             if (other.name === char.name) continue
             const alreadyRelated = rels.some(r => r.target === other.name)
             if (alreadyRelated) continue
 
-            // Simple heuristic: check if both names appear near each other in the text
-            if (hasProximity(namePositions.get(char.name)!, namePositions.get(other.name)!, 500)) {
-              // Both characters appear in the same vicinity → potential interaction
+            const posA = namePositions.get(char.name) ?? []
+            const posB = namePositions.get(other.name) ?? []
+            // 外层窗口仍为 500 字（同场），互动判定收紧：
+            // 最小间距 < 100（直接接触）或 最小间距区间内有对话标记
+            if (hasProximity(posA, posB, 500)) {
+              const pair = closestNamePair(posA, posB)
+              if (!pair) continue
+              const minPos = Math.min(pair[0], pair[1])
+              const maxPos = Math.max(pair[0], pair[1])
+              const gap = maxPos - minPos
+              const interactive = gap < 100 || hasDialogueMarker(draftContent, minPos, maxPos)
+              if (!interactive) continue
               rels.push({
                 target: other.name,
                 type: 'other',
@@ -425,6 +446,9 @@ export function buildFinalizePostProcessSteps(
               tags: String(char.tags || ''),
               appearChapters: JSON.stringify(chaps),
               relations: JSON.stringify(rels),
+              appearCount,
+              firstChapter,
+              lastChapter,
             })
           }
         }

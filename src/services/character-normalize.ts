@@ -18,6 +18,9 @@ const NO_CHANGE_VARIANTS = new Set([
   'none', 'nothing', 'nil', 'n/a', 'na',
   'no change', 'no changes', 'no update', 'no updates',
   'not applicable', 'unchanged', 'same',
+  // 俄语（P2-2：三语支持漏网——ru-RU 模型输出哨兵此前会污染 tags/cs_* 字段）
+  'нет', 'нет данных', 'без изменений', 'нет изменений',
+  'не изменился', 'не изменилась', 'не изменилось', 'ничего нового',
   // 占位符号
   '-', '—',
 ])
@@ -28,7 +31,10 @@ export function isNoChangeValue(value: string): boolean {
   if (!s) return true
   if (NO_CHANGE_VARIANTS.has(s)) return true
   // 短语变体：'No new tags'、'no changes at all'
-  return s.startsWith('no new') || s.startsWith('no change') || s.startsWith('no changes')
+  if (s.startsWith('no new') || s.startsWith('no change') || s.startsWith('no changes')) return true
+  // 俄语短语变体：'нет изменений по тегам' 等（含空格前缀，避免误伤 'небо' 等普通词）
+  if (s.startsWith('нет ') || s.startsWith('без изменений')) return true
+  return false
 }
 
 /** 角色 role 枚举（模板输出 protagonist/antagonist/supporting/minor） */
@@ -68,22 +74,54 @@ export function normalizeTagsValue(value: unknown): string {
 }
 
 /**
- * 角色名匹配：先精确匹配；LLM 常输出别名格式「苏晚晴（苏夜）」（笔名/曾用名），
- * 与 DB 角色名精确匹配必然失败 → 定稿状态更新被跳过（用户实测"UPDATES 未写入"根因之一）。
- * 剥离括号后先匹配括号外名称，失败再尝试括号内名称。
+ * 解析角色别名注册表（JSON 数组字符串 → string[]）。
+ * 容错：数组元素逐个 trim 去空；字符串按逗号/顿号/分号拆分；非法 JSON → 空数组。
+ * 供 matchCharacterName 与档案上下文抽取共用。
+ */
+export function parseAliases(raw: unknown): string[] {
+  if (raw === undefined || raw === null) return []
+  if (Array.isArray(raw)) {
+    return raw.map(String).map(s => s.trim()).filter(Boolean)
+  }
+  const s = String(raw).trim()
+  if (!s || s === '[]') return []
+  // 类 JSON 形态（{ 或 [ 开头）：必须可解析为数组，否则视为非法（不回退分隔符拆分）
+  if (s.startsWith('{') || s.startsWith('[')) {
+    try {
+      const parsed = JSON.parse(s)
+      if (Array.isArray(parsed)) return parsed.map(String).map(x => x.trim()).filter(Boolean)
+    } catch {
+      /* 非法 JSON → 空数组 */
+    }
+    return []
+  }
+  return s.split(/[，,、;；]/).map(x => x.trim()).filter(Boolean)
+}
+
+/**
+ * 角色名匹配（P0-2 升级：别名注册表 + 存量双形态）：
+ * 1. 精确匹配；
+ * 2. DB 角色 aliases 注册表包含 rawName（昵称/称号/曾用名变体）；
+ * 3. 别名格式「苏晚晴（苏夜）」→ 括号外优先、括号内兜底；
+ * 4. 存量旧数据：DB 名带括号（历史写入）← LLM 无括号名，剥离后比对。
  */
 export function matchCharacterName<T extends { name: unknown }>(
   characters: T[],
   rawName: string,
 ): T | undefined {
   const name = String(rawName ?? '').trim()
-  const exact = characters.find(c => String(c.name) === name)
+  const findByName = (n: string): T | undefined => characters.find(c => String(c.name) === n)
+  const exact = findByName(name)
   if (exact) return exact
+  // 别名注册表：LLM 输出昵称/称号 → DB 角色 aliases 包含该形态
+  const aliasHit = characters.find(c => parseAliases((c as { aliases?: unknown }).aliases).includes(name))
+  if (aliasHit) return aliasHit
   const m = name.match(/^(.*?)[（(]([^（）()]*)[）)]\s*$/)
   if (m) {
-    return characters.find(c => String(c.name) === m[1]) ?? characters.find(c => String(c.name) === m[2])
+    return findByName(m[1]) ?? findByName(m[2])
   }
-  return undefined
+  // 存量旧数据：DB 名带括号（如「无名老乞丐（前魂师）」），LLM 输出无括号形态
+  return characters.find(c => stripNameAlias(String(c.name)) === name)
 }
 
 /**
@@ -92,10 +130,34 @@ export function matchCharacterName<T extends { name: unknown }>(
  * 后续 LLM 输出「无名老乞丐」时：NEW 去重精确匹配失败 → 重复创建；
  * UPDATES 匹配失败 → 更新静默跳过；正文精确扫描（互动检测/档案上下文）
  * 也永不命中。写入端统一剥离，保证主键稳定。
+ * P0-2 升级：迭代剥离嵌套括号（「苏晚（苏夜（少主））」→「苏晚」），
+ * 每次只剥"末尾且组内无未闭合括号"的最内层组；
  * 无括号 → 原样返回（幂等）；全括号名 → 返回空串（调用方空名保护兜底）。
  */
 export function stripNameAlias(rawName: string): string {
-  const name = String(rawName ?? '').trim()
-  const m = name.match(/^(.*?)[（(][^（）()]*[）)]\s*$/)
-  return m ? m[1].trim() : name
+  let name = String(rawName ?? '').trim()
+  for (let i = 0; i < 4; i++) {
+    const closeIdx = Math.max(name.lastIndexOf('）'), name.lastIndexOf(')'))
+    // 末尾必须是闭括号（括号组在名字最尾），且其前存在开括号
+    if (closeIdx === -1 || closeIdx !== name.length - 1) break
+    const openIdx = Math.max(name.lastIndexOf('（'), name.lastIndexOf('('))
+    if (openIdx === -1 || openIdx >= closeIdx) break
+    // 找到该开括号对应的首个闭括号（即最内层组的闭合），剥离该组；
+    // 嵌套时外层的闭括号保留（「苏晚（苏夜（少主））」→ 先剥「（少主）」→「苏晚（苏夜）」→「苏晚」）
+    let innerClose = -1
+    for (let j = openIdx + 1; j < name.length; j++) {
+      if (name[j] === '）' || name[j] === ')') {
+        innerClose = j
+        break
+      }
+    }
+    if (innerClose === -1) break
+    const base = (name.slice(0, openIdx) + name.slice(innerClose + 1)).trim()
+    if (!base) {
+      name = '' // 全括号名 → 空串（调用方空名保护兜底）
+      break
+    }
+    name = base
+  }
+  return name
 }

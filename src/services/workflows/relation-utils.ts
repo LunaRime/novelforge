@@ -8,8 +8,19 @@
 
 import { stripNameAlias } from '../character-normalize'
 
-/** 收集每个名字在文本中的所有出现位置（升序）。名字未出现 → 空数组 */
+/** 收集每个名字在文本中的所有出现位置（升序）。名字未出现 → 空数组。
+ *  P0-3：前缀碰撞过滤——短名命中更长注册名开头（「苏晚」命中「苏晚晴」）时跳过，
+ *  出场登记/互动检测不再被长名角色的段落污染。 */
 export function buildNamePositions(text: string, names: string[]): Map<string, number[]> {
+  // 前缀碰撞注册表：全部注册名 + 其剥离形态
+  const registry: string[] = []
+  for (const n of names) {
+    if (!n) continue
+    registry.push(n)
+    const s = stripNameAlias(n)
+    if (s && s !== n) registry.push(s)
+  }
+
   const positions = new Map<string, number[]>()
   for (const name of names) {
     const list: number[] = []
@@ -21,7 +32,9 @@ export function buildNamePositions(text: string, names: string[]): Map<string, n
         if (!form) continue
         let idx = text.indexOf(form)
         while (idx !== -1) {
-          list.push(idx)
+          // 命中位置被更长注册名覆盖（prefix collision）→ 跳过
+          const covered = registry.some(r => r.length > form.length && text.startsWith(r, idx))
+          if (!covered) list.push(idx)
           idx = text.indexOf(form, idx + form.length)
         }
       }
@@ -48,6 +61,34 @@ export function minGap(a: number[], b: number[]): number {
     else j++
   }
   return min
+}
+
+/** 双指针求两个升序位置数组的最小间距位置对 [idxA, idxB]（任一方为空 → null） */
+export function closestNamePair(a: number[], b: number[]): [number, number] | null {
+  if (a.length === 0 || b.length === 0) return null
+  let i = 0
+  let j = 0
+  let best: [number, number] = [a[0], b[0]]
+  let min = Math.abs(a[0] - b[0])
+  while (i < a.length && j < b.length) {
+    const gap = Math.abs(a[i] - b[j])
+    if (gap < min) {
+      min = gap
+      best = [a[i], b[j]]
+    }
+    if (min === 0) return best
+    if (a[i] < b[j]) i++
+    else j++
+  }
+  return best
+}
+
+/** 区间内是否存在对话标记（引号/说/道/喊/叫/问/答）——互动过滤用（P1-5） */
+const DIALOGUE_MARKER = /[「『"“」』”]|说|道|喊|叫|问|答/g
+export function hasDialogueMarker(text: string, from: number, to: number): boolean {
+  if (to <= from) return false
+  DIALOGUE_MARKER.lastIndex = 0
+  return DIALOGUE_MARKER.test(text.slice(from, to))
 }
 
 /** 两个角色是否在正文中存在间距小于 window 的位置对 */

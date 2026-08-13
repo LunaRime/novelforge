@@ -29,6 +29,7 @@ export const EN_US_ROLE: Partial<Record<string, string>> = {
   'update_character_cards': 'You are a rigorous novel character archive manager, skilled at tracking multi-dimensional character state changes.',
   'extract_initial_characters': 'You are a professional novel data structuring expert.',
   'extract_from_finalized': 'You are a rigorous novel character archive expert, skilled at reconstructing character settings from textual details.',
+  'extract_from_finalized_batch': 'You are a rigorous novel character archive expert, skilled at reconstructing character settings from textual details.',
 }
 
 /** 模板 key → en-US 系统约束（systemSuffix） */
@@ -807,6 +808,37 @@ If there are no extractable characters in the map, return an empty array [].`,
   "arc": "Growth arc/current stage",
   "notes": "Supplementary notes",
   "tags": ["tag1", "tag2"]
+}`,
+
+  'extract_from_finalized_batch': `Extract the static archive information for MULTIPLE characters from the following finalized chapter excerpts.
+
+【Characters and Related Excerpts (one section per character, excerpts ordered by chapter)】
+{{characters_segments}}
+
+【Task Requirements】
+1. For each character, all archive fields must be based on explicit descriptions in that character's own excerpts; reasonable inference is allowed, but do not fabricate information that contradicts the source text.
+2. Appearance: flesh out a signature appearance description based on the appearance scenes (absolutely never leave it blank).
+3. Fields not appearing in the excerpts must be output as empty strings (do not write "none" or "unknown" — empty values will not overwrite existing archive fields).
+4. tags: a short tag array for the character (2-5 tags).
+5. Output every character, do not omit any; if a character has no scenes at all in the excerpts, its archive object may be omitted.
+6. Output a JSON object keyed by character name, with each value being that character's archive object.
+
+【Output Format (JSON object)】
+{
+  "CharacterName1": {
+    "gender": "Gender",
+    "age": "Age or age range",
+    "appearance": "Signature appearance description",
+    "personality": "Personality traits",
+    "background": "Background and origin",
+    "abilities": "Abilities/cultivation",
+    "motivation": "Core motivation",
+    "relationships": "Relationships with other characters",
+    "arc": "Growth arc/current stage",
+    "notes": "Supplementary notes",
+    "tags": ["tag1", "tag2"]
+  },
+  "CharacterName2": { "..." : "..." }
 }`,
 
   'refine_from_review': `Precisely repair the draft according to the issues listed in the 【Review Report】.

@@ -1,5 +1,5 @@
-import { useState, useRef } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles } from 'lucide-react'
+import { useState, useRef, useMemo } from 'react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -9,6 +9,7 @@ import {
   EMPTY_STATE,
   type CharacterCurrentState,
 } from '../../stores/character-store'
+import { findPairsForCharacter, type DuplicatePair, type DuplicateReason } from '../../services/character-duplicates'
 import RelationshipGraph from './RelationshipGraph'
 import CharacterBacklinks from './CharacterBacklinks'
 import { EmptyState as BaseEmptyState } from '../ui/EmptyState'
@@ -19,6 +20,7 @@ import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
 import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
+import type { TextKey } from '../../shared/locale'
 
 /**
  * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
@@ -442,6 +444,14 @@ export default function CharacterEditor() {
               {/* 所有 tier 通用：备注 */}
               <div><Label>{t('character.notes')}</Label><Textarea value={selectedCard.notes} onChange={(e) => updateField(selectedCard.name, 'notes', e.target.value)} rows={2} /></div>
 
+              {/* === 生命周期 + 角色合并（P1-6） === */}
+              <LifecycleMergeSection
+                char={selectedCard}
+                characters={characters}
+                t={t}
+                onChanged={async () => { await useCharacterStore.getState().load(true) }}
+              />
+
               {/* tier 3 提示 */}
               {(selectedCard.tier ?? 2) >= 3 && (
                 <div className="p-2 rounded text-[0.65rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}>
@@ -451,6 +461,149 @@ export default function CharacterEditor() {
             </div>
           </div>
         )}
+      </div>
+    </div>
+  )
+}
+
+// ===== 生命周期 + 角色合并（P1-6） =====
+
+const DUP_REASON_KEYS: Record<DuplicateReason, TextKey> = {
+  'alias-equals-name': 'character.dupReasonAlias',
+  'shared-alias': 'character.dupReasonShared',
+  'name-similar': 'character.dupReasonSimilar',
+}
+
+/** 生命周期状态展示文案 */
+const STATUS_KEYS: Record<string, TextKey> = {
+  active: 'character.statusActive',
+  departed: 'character.statusDeparted',
+  dead: 'character.statusDead',
+}
+
+function LifecycleMergeSection({ char, characters, t, onChanged }: {
+  char: { name: string; status?: string; appearCount?: number; firstChapter?: number; lastChapter?: number }
+  characters: Array<{ name: string; aliases?: unknown }>
+  t: ReturnType<typeof useTranslation>['t']
+  onChanged: () => Promise<void>
+}) {
+  const [merging, setMerging] = useState(false)
+  const [mergeTarget, setMergeTarget] = useState('')
+
+  // 疑似重复对（与当前角色相关；置信度降序）
+  const duplicates = useMemo(
+    () => findPairsForCharacter(characters, char.name),
+    [characters, char.name],
+  )
+
+  /** 执行合并：把 source 并入 target，成功后刷新角色数据 */
+  const doMerge = async (target: string, source: string) => {
+    if (!target || !source || target === source) {
+      toast.error(t('character.mergeSelf'))
+      return
+    }
+    const ok = await confirm(
+      t('character.mergeConfirm').replace('{source}', source).replace('{target}', target),
+      { title: t('character.mergeTitle'), confirmText: t('action.confirm'), danger: true },
+    )
+    if (!ok) return
+    setMerging(true)
+    try {
+      const { ipc } = await import('../../services/ipc-client')
+      const res = await ipc.invoke('db:character-merge', target, source)
+      if (!res.success) throw new Error(res.error || 'merge failed')
+      toast.success(t('character.mergeSuccess').replace('{source}', source).replace('{target}', target))
+      // 当前角色被合并掉（source 是当前卡）→ 选中目标角色
+      if (char.name === source) useCharacterStore.getState().setSelectedName(target)
+      await onChanged()
+    } catch (e) {
+      toast.error(t('character.mergeFailed').replace('{error}', () => String(e)))
+    } finally {
+      setMerging(false)
+      setMergeTarget('')
+    }
+  }
+
+  const otherName = (pair: DuplicatePair): string => pair.a === char.name ? pair.b : pair.a
+
+  return (
+    <div className="pt-3 mt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
+      {/* 生命周期统计 + 状态 */}
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <Label>{t('character.status')}</Label>
+          <Select
+            value={char.status || 'active'}
+            onValueChange={(v) => useCharacterStore.getState().updateField(char.name, 'status', v)}
+          >
+            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {Object.entries(STATUS_KEYS).map(([k, key]) => (
+                <SelectItem key={k} value={k}>{t(key)}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <div className="text-[0.6rem] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+            {t('character.statusHint')}
+          </div>
+        </div>
+        <div className="text-xs space-y-1 pt-1" style={{ color: 'var(--color-text-secondary)' }}>
+          <div>{t('character.appearCount')}: <span className="font-medium">{char.appearCount ?? 0}</span></div>
+          <div>
+            {t('character.firstChapter')}: <span className="font-medium">{char.firstChapter ?? 0}</span>
+            {' · '}
+            {t('character.lastChapter')}: <span className="font-medium">{char.lastChapter ?? 0}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 疑似重复 */}
+      <div className="mt-3 space-y-1.5">
+        <div className="text-[0.65rem] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+          {t('character.duplicateTitle')}
+        </div>
+        {duplicates.length === 0 ? (
+          <div className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+            {t('character.noDuplicates')}
+          </div>
+        ) : (
+          duplicates.map(pair => {
+            const other = otherName(pair)
+            return (
+              <div key={pair.a + pair.b} className="flex items-center gap-2 text-[0.7rem]">
+                <span className="px-1.5 py-0.5 rounded truncate max-w-[9rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
+                  {other}
+                </span>
+                <span className="opacity-60 flex-shrink-0">{t(DUP_REASON_KEYS[pair.reason])}</span>
+                <div className="ml-auto flex gap-1 flex-shrink-0">
+                  <Button variant="outline" size="sm" disabled={merging} onClick={() => void doMerge(char.name, other)} title={t('character.mergeIntoCurrent').replace('{name}', other)}>
+                    <GitMerge size={11} /> {t('character.mergeIntoCurrent').replace('{name}', other)}
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={merging} onClick={() => void doMerge(other, char.name)} title={t('character.mergeIntoOther').replace('{name}', other)}>
+                    → {other}
+                  </Button>
+                </div>
+              </div>
+            )
+          })
+        )}
+
+        {/* 手动合并到任意角色 */}
+        <div className="flex items-center gap-2 pt-1">
+          <Select value={mergeTarget} onValueChange={setMergeTarget}>
+            <SelectTrigger className="h-7 text-[0.7rem] w-40">
+              <SelectValue placeholder={t('character.mergeToPlaceholder')} />
+            </SelectTrigger>
+            <SelectContent>
+              {characters
+                .filter(c => c.name !== char.name)
+                .map(c => <SelectItem key={c.name} value={c.name}>{c.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" disabled={merging || !mergeTarget} onClick={() => void doMerge(mergeTarget, char.name)}>
+            <GitMerge size={11} /> {t('character.mergeBtn')}
+          </Button>
+        </div>
       </div>
     </div>
   )

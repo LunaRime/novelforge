@@ -160,6 +160,15 @@ export function registerDatabaseController() {
     }
   })
 
+  ipcMain.handle('db:character-merge', async (_event, target: string, source: string) => {
+    try {
+      CharacterRepository.mergeCharacters(target, source)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
   ipcMain.handle('db:character-update-state', async (_event, name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }) => {
     try {
       CharacterRepository.updateState(name, state, extra)

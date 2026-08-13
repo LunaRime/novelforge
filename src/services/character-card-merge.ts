@@ -13,7 +13,7 @@
  *
  * mergeCardRows 为纯函数（可单测）；mergeCharacterCards 走 IPC 写库。
  */
-import { stripNameAlias, matchCharacterName, normalizeCharacterRole } from './character-normalize'
+import { stripNameAlias, matchCharacterName, normalizeCharacterRole, parseAliases } from './character-normalize'
 import { ipc } from './ipc-client'
 import type { CharacterData } from '../../electron/repositories/character-repository'
 
@@ -85,6 +85,9 @@ export function mergeCardRows(
       if (newRow.tags === undefined) newRow.tags = ''
       if (newRow.appearChapters === undefined) newRow.appearChapters = '[]'
       if (newRow.relations === undefined) newRow.relations = '[]'
+      // aliases：LLM 原始值（数组/字符串）统一归一化为 JSON 数组字符串（仓库 upsert 绑定值必须为 TEXT）
+      const aliases = parseAliases(card.aliases)
+      newRow.aliases = aliases.length > 0 ? JSON.stringify(aliases) : '[]'
       rows.push(newRow)
       stats.created++
     }

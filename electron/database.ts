@@ -117,8 +117,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号（v13：project_core 新增小说配置独立列，与架构解耦） */
-const CURRENT_SCHEMA_VERSION = 13
+/** 当前数据库 schema 版本号（v15：characters 新增生命周期列 appear_count/first_chapter/last_chapter/status） */
+const CURRENT_SCHEMA_VERSION = 15
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -255,6 +255,11 @@ function createTables(db: BetterSqlite3.Database) {
       tags TEXT DEFAULT '',                       -- v7: JSON数组标签 ["宗门","正道"]
       appear_chapters TEXT DEFAULT '[]',          -- v7: JSON数组出场章节 [1,5,10]
       relations TEXT DEFAULT '[]',                -- v7: 结构化关系 [{target,type,label,sinceChapter}]
+      aliases TEXT DEFAULT '[]',                  -- v14: 别名/称呼注册表 JSON数组 ["阿晚","苏仙子"]
+      appear_count INTEGER DEFAULT 0,             -- v15: 出场章数统计（定稿时维护）
+      first_chapter INTEGER DEFAULT 0,            -- v15: 首次出场章号（0=未记录）
+      last_chapter INTEGER DEFAULT 0,             -- v15: 最近出场章号（0=未记录）
+      status TEXT DEFAULT 'active',               -- v15: 生命周期 active/departed/dead（dead 退出关系检测）
       cs_location TEXT DEFAULT '',                -- 当前位置
       cs_power_level TEXT DEFAULT '',             -- 修为境界
       cs_physical_state TEXT DEFAULT '',          -- 身体状态
@@ -531,6 +536,15 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
 
   // llm_calls — v8 新增 cost（单次调用费用，美元）
   safeAddColumn(db, 'llm_calls', 'cost', 'REAL DEFAULT 0')
+
+  // characters — v14 新增 aliases（别名/称呼注册表，角色名匹配的变体形态）
+  safeAddColumn(db, 'characters', 'aliases', "TEXT DEFAULT '[]'")
+
+  // characters — v15 新增生命周期列（出场统计 + 状态）
+  safeAddColumn(db, 'characters', 'appear_count', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'characters', 'first_chapter', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'characters', 'last_chapter', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'characters', 'status', "TEXT DEFAULT 'active'")
 
   logger.info('DB', t('log.db.columnBackfillDone'))
 }

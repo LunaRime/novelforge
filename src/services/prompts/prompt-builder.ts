@@ -240,6 +240,12 @@ export class PostProcessPromptBuilder extends BasePromptBuilder {
     this.variables.chapters_segments = segments;
     return this;
   }
+
+  /** 批量档案提取：多角色及其相关章节段落（带章节号，每角色一节） */
+  withCharactersSegments(segments: string) {
+    this.variables.characters_segments = segments;
+    return this;
+  }
 }
 
 /**

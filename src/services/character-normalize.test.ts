@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias } from './character-normalize'
+import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias, parseAliases } from './character-normalize'
 
 /**
  * 角色卡 LLM 输出归一化 — 背景：定稿后处理 update_character_cards 依赖中文哨兵
@@ -41,6 +41,23 @@ describe('isNoChangeValue', () => {
   it('短语变体识别（No new tags 场景）', () => {
     expect(isNoChangeValue('No new tags')).toBe(true)
     expect(isNoChangeValue('no new')).toBe(true)
+  })
+
+  it('俄语哨兵识别（P2-2：ru-RU 三语支持漏网修复）', () => {
+    expect(isNoChangeValue('нет')).toBe(true)
+    expect(isNoChangeValue('нет изменений')).toBe(true)
+    expect(isNoChangeValue('без изменений')).toBe(true)
+    expect(isNoChangeValue('нет данных')).toBe(true)
+    expect(isNoChangeValue('не изменился')).toBe(true)
+    expect(isNoChangeValue('ничего нового')).toBe(true)
+    // 俄语短语变体（含空格前缀）
+    expect(isNoChangeValue('нет изменений по тегам')).toBe(true)
+    expect(isNoChangeValue('Нет.')).toBe(true)
+  })
+
+  it('俄语普通词不被误判（нет 前缀需带空格或为整词）', () => {
+    expect(isNoChangeValue('небо')).toBe(false)
+    expect(isNoChangeValue('нетерпимый')).toBe(false)
   })
 
   it('正常内容不被误判', () => {
@@ -136,6 +153,53 @@ describe('matchCharacterName', () => {
   it('带别名的未知角色 → undefined', () => {
     expect(matchCharacterName(chars, '王五（阿五）')).toBeUndefined()
   })
+
+  it('P0-2: 别名注册表匹配——LLM 输出昵称/称号 → 命中 aliases 含该形态的角色', () => {
+    const withAliases = [
+      { name: '苏晚晴', aliases: JSON.stringify(['阿晚', '苏仙子']) },
+      { name: '李雷' },
+    ]
+    expect(matchCharacterName(withAliases, '阿晚')?.name).toBe('苏晚晴')
+    expect(matchCharacterName(withAliases, '苏仙子')?.name).toBe('苏晚晴')
+    expect(matchCharacterName(withAliases, '晚晴')).toBeUndefined()
+  })
+
+  it('P0-2: 存量旧数据——DB 名带括号 ← LLM 输出无括号形态', () => {
+    const legacy = [{ name: '无名老乞丐（前魂师）' }, { name: '李雷' }]
+    expect(matchCharacterName(legacy, '无名老乞丐')?.name).toBe('无名老乞丐（前魂师）')
+  })
+
+  it('P0-2: 别名优先于括号形态——昵称命中不依赖括号解析', () => {
+    const withAliases = [
+      { name: '苏晚晴', aliases: JSON.stringify(['苏夜']) },
+      { name: '苏夜' },
+    ]
+    // 「苏夜」同时是 苏晚晴 的别名与独立角色名 → 精确匹配优先
+    expect(matchCharacterName(withAliases, '苏夜')?.name).toBe('苏夜')
+  })
+})
+
+describe('parseAliases（别名注册表解析）', () => {
+  it('JSON 数组字符串 → string[]', () => {
+    expect(parseAliases('["阿晚","苏仙子"]')).toEqual(['阿晚', '苏仙子'])
+  })
+
+  it('数组输入 → 元素 trim 去空', () => {
+    expect(parseAliases([' 阿晚 ', '', '苏仙子'])).toEqual(['阿晚', '苏仙子'])
+  })
+
+  it('分隔符字符串（非 JSON）→ 按逗号/顿号拆分', () => {
+    expect(parseAliases('阿晚、苏仙子')).toEqual(['阿晚', '苏仙子'])
+    expect(parseAliases('阿晚,苏仙子')).toEqual(['阿晚', '苏仙子'])
+  })
+
+  it('空/占位/非法输入 → 空数组', () => {
+    expect(parseAliases(undefined)).toEqual([])
+    expect(parseAliases(null)).toEqual([])
+    expect(parseAliases('')).toEqual([])
+    expect(parseAliases('[]')).toEqual([])
+    expect(parseAliases('{broken json')).toEqual([])
+  })
 })
 
 describe('stripNameAlias（#34 写入端归一化）', () => {
@@ -163,5 +227,9 @@ describe('stripNameAlias（#34 写入端归一化）', () => {
 
   it('名字中段的括号不剥离（仅尾部形态）', () => {
     expect(stripNameAlias('老乞丐（前魂师）归来')).toBe('老乞丐（前魂师）归来')
+  })
+
+  it('P0-2: 嵌套括号迭代剥离（「苏晚（苏夜（少主）」→「苏晚」）', () => {
+    expect(stripNameAlias('苏晚（苏夜（少主））')).toBe('苏晚')
   })
 })

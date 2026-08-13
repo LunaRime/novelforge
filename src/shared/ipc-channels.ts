@@ -370,6 +370,7 @@ export interface DatabaseChannels {
   'db:character-upsert': { args: [data: CharacterData]; return: { success: boolean; error?: string } }
   'db:character-save-all': { args: [items: CharacterData[]]; return: { success: boolean; error?: string } }
   'db:character-delete': { args: [name: string]; return: { success: boolean; error?: string } }
+  'db:character-merge': { args: [target: string, source: string]; return: { success: boolean; error?: string } }
   'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }]; return: { success: boolean; error?: string } }
   'db:character-merge-fields': { args: [name: string, fields: Record<string, string>]; return: { success: boolean; error?: string } }
 

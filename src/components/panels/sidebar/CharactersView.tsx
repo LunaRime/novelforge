@@ -213,6 +213,18 @@ function CharItem({ char: c, selected, onClick }: {
     >
       <div className="flex items-center gap-1">
         <span className="font-medium truncate">{c.name || t('character.unnamed')}</span>
+        {/* P1-6：生命周期状态徽标（退场/死亡角色列表可见，编辑器中可切换） */}
+        {c.status && c.status !== 'active' && (
+          <span
+            className="text-[0.55rem] px-1 rounded flex-shrink-0"
+            style={{
+              backgroundColor: c.status === 'dead' ? 'rgba(239,68,68,0.15)' : 'var(--color-hover)',
+              color: c.status === 'dead' ? 'var(--color-error)' : 'var(--color-text-muted)',
+            }}
+          >
+            {c.status === 'dead' ? t('character.statusDead') : t('character.statusDeparted')}
+          </span>
+        )}
         {c.currentState?.updatedAtChapter ? (
           <span className="text-[0.6rem] opacity-40 ml-auto flex-shrink-0">
             {t('chapter.nLabel').replace('{n}', String(c.currentState.updatedAtChapter))}

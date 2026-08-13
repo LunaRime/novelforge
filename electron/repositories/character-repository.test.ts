@@ -17,6 +17,9 @@ let db: DatabaseSync
 
 beforeEach(() => {
   db = new DatabaseSync(':memory:')
+  // node:sqlite 无 better-sqlite3 的 transaction() API——patch 为"返回原函数"：
+  // 语义等价 better-sqlite3 的 `const tx = db.transaction(fn); tx()`（单连接同步无并发）
+  ;(db as unknown as { transaction: (fn: () => void) => () => void }).transaction = (fn: () => void) => fn
   db.exec(`
     CREATE TABLE characters (
       name TEXT PRIMARY KEY,
@@ -35,6 +38,11 @@ beforeEach(() => {
       tags TEXT DEFAULT '',
       appear_chapters TEXT DEFAULT '[]',
       relations TEXT DEFAULT '[]',
+      aliases TEXT DEFAULT '[]',
+      appear_count INTEGER DEFAULT 0,
+      first_chapter INTEGER DEFAULT 0,
+      last_chapter INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'active',
       cs_location TEXT DEFAULT '',
       cs_power_level TEXT DEFAULT '',
       cs_physical_state TEXT DEFAULT '',
@@ -161,5 +169,87 @@ describe('CharacterRepository.mergeFields 仅填充空白(写时刻保旧)', () 
     expect(char?.role).toBe('protagonist')
     expect(char?.tier).toBe(1)
     expect(char?.currentState).toBeUndefined()
+  })
+})
+
+describe('CharacterRepository.mergeCharacters（P1-6 用户合并角色）', () => {
+  it('合并：空白字段填充 + tags 并集 + 出场数据合并 + 删除源角色', () => {
+    CharacterRepository.upsert(makeChar('苏晚', {
+      appearance: '黑发', tags: '["天才"]', appearChapters: '[1,3]',
+      appearCount: 2, firstChapter: 1, lastChapter: 3,
+    }))
+    CharacterRepository.upsert(makeChar('苏晚晴', {
+      appearance: '', personality: '冷静', tags: '["天才","剑修"]',
+      appearChapters: '[2]', appearCount: 1, firstChapter: 2, lastChapter: 2,
+    }))
+    CharacterRepository.mergeCharacters('苏晚', '苏晚晴')
+
+    const merged = CharacterRepository.getByName('苏晚')
+    expect(merged).not.toBeNull()
+    expect(CharacterRepository.getByName('苏晚晴')).toBeNull() // 源已删除
+    expect(merged?.appearance).toBe('黑发')    // target 非空保旧
+    expect(merged?.personality).toBe('冷静')   // target 空白 → source 填充
+    expect(merged?.tags).toBe('["天才","剑修"]') // 并集去重
+    expect(JSON.parse(merged?.appearChapters || '[]')).toEqual([1, 2, 3]) // 并集升序
+    expect(merged?.appearCount).toBe(3)
+    expect(merged?.firstChapter).toBe(1)
+    expect(merged?.lastChapter).toBe(3)
+  })
+
+  it('合并：role/tier 取更核心，relations 并入与全库重定向', () => {
+    CharacterRepository.upsert(makeChar('苏晚', { role: 'supporting', tier: 2, relations: '[]' }))
+    CharacterRepository.upsert(makeChar('苏夜', {
+      role: 'protagonist', tier: 1,
+      relations: JSON.stringify([{ target: '李雷', type: 'ally', label: '搭档', sinceChapter: 5 }, { target: '苏晚', type: 'other', label: '自身', sinceChapter: 1 }]),
+    }))
+    CharacterRepository.upsert(makeChar('李雷', {
+      relations: JSON.stringify([{ target: '苏夜', type: 'enemy', label: '宿敌', sinceChapter: 6 }]),
+    }))
+    CharacterRepository.mergeCharacters('苏晚', '苏夜')
+
+    const merged = CharacterRepository.getByName('苏晚')
+    expect(merged?.role).toBe('protagonist') // 取更核心
+    expect(merged?.tier).toBe(1)
+    // source 指向 target 的条目丢弃；指向其他角色的条目并入
+    const rels = JSON.parse(merged?.relations || '[]') as Array<{ target: string }>
+    expect(rels.some(r => r.target === '苏晚')).toBe(false)
+    expect(rels.some(r => r.target === '李雷')).toBe(true)
+    // 全库重定向：李雷指向 苏夜 → 苏晚
+    const liRel = JSON.parse(CharacterRepository.getByName('李雷')?.relations || '[]') as Array<{ target: string }>
+    expect(liRel.some(r => r.target === '苏晚')).toBe(true)
+    expect(liRel.some(r => r.target === '苏夜')).toBe(false)
+  })
+
+  it('合并：currentState 空白填充 + updatedAtChapter 取更晚', () => {
+    CharacterRepository.upsert(makeChar('苏晚', {
+      currentState: { location: '森林', powerLevel: '', physicalState: '', mentalState: '', keyItems: '', recentEvents: '', updatedAtChapter: 3 },
+    }))
+    CharacterRepository.upsert(makeChar('苏夜', {
+      currentState: { location: '', powerLevel: '金丹期', physicalState: '轻伤', mentalState: '', keyItems: '', recentEvents: '', updatedAtChapter: 8 },
+    }))
+    CharacterRepository.mergeCharacters('苏晚', '苏夜')
+
+    const cs = CharacterRepository.getByName('苏晚')?.currentState
+    expect(cs?.location).toBe('森林')   // target 非空保旧
+    expect(cs?.powerLevel).toBe('金丹期') // target 空白 → source
+    expect(cs?.physicalState).toBe('轻伤')
+    expect(cs?.updatedAtChapter).toBe(8) // 取更晚
+  })
+
+  it('合并：目标或源不存在 / 自身 → 抛错且不删数据', () => {
+    CharacterRepository.upsert(makeChar('苏晚'))
+    expect(() => CharacterRepository.mergeCharacters('苏晚', '不存在')).toThrow()
+    expect(() => CharacterRepository.mergeCharacters('不存在', '苏晚')).toThrow()
+    expect(() => CharacterRepository.mergeCharacters('苏晚', '苏晚')).toThrow()
+    expect(CharacterRepository.getByName('苏晚')).not.toBeNull()
+  })
+
+  it('合并：status/aliases 保留 target', () => {
+    CharacterRepository.upsert(makeChar('苏晚', { status: 'departed', aliases: '["阿晚"]' }))
+    CharacterRepository.upsert(makeChar('苏夜', { status: 'dead', aliases: '["夜儿"]' }))
+    CharacterRepository.mergeCharacters('苏晚', '苏夜')
+    const merged = CharacterRepository.getByName('苏晚')
+    expect(merged?.status).toBe('departed')
+    expect(merged?.aliases).toBe('["阿晚"]')
   })
 })
