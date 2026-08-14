@@ -2,7 +2,7 @@
  * CharactersView — 角色管理列表视图 (v7 戏份分级)
  */
 import { useState, useMemo, useRef } from 'react'
-import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight } from 'lucide-react'
+import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight, Radar } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
   useCharacterStore, groupByTier,
@@ -12,10 +12,13 @@ import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
+import { toast } from '../../ui/Toast'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { openBuiltinEditor } from './SidebarShared'
 import { runCharacterArchive } from '../../../services/workflows/character-archive-workflow'
+import { parseAliases } from '../../../services/character-normalize'
+import { renderLog } from '../../../services/render-logger'
 
 // 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
 const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
@@ -78,12 +81,63 @@ export default function CharactersView() {
   }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
+  // P1-1：名字/别名即时过滤（大小写不敏感；空查询 = 全部）
+  const [query, setQuery] = useState('')
+  const q = query.trim().toLowerCase()
+
+  // P2-1：出场统计扫描（存量项目生命周期字段回填 + 疑似退场提示）
+  const [scanning, setScanning] = useState(false)
+  const handleScan = async () => {
+    if (dirty) {
+      const ok = await confirm(t('character.refreshConfirm'), {
+        title: t('charList.refresh'),
+        confirmText: t('charList.refresh'),
+        danger: true,
+      })
+      if (!ok) return
+    }
+    const ok2 = await confirm(t('charList.scanConfirm'), { title: t('charList.scanAppearances'), confirmText: t('action.confirm') })
+    if (!ok2) return
+    setScanning(true)
+    try {
+      const { loadFinalizedChapters, scanCharacterAppearances, saveAppearanceStats, DEPARTED_GAP } =
+        await import('../../../services/character-appearance-scan')
+      const chars = useCharacterStore.getState().characters
+      const chapters = await loadFinalizedChapters()
+      if (chapters.length === 0) {
+        toast.warning(t('charList.scanNoFinalized'))
+        return
+      }
+      const result = scanCharacterAppearances(chapters, chars)
+      const { updated, failed } = await saveAppearanceStats(result.stats)
+      renderLog('info', 'Scan:Appearances', t('charList.scanDone').replace('{n}', String(updated)) + (failed > 0 ? ` (failed: ${failed})` : ''))
+      toast.success(t('charList.scanDone').replace('{n}', String(updated)))
+      if (result.departed.length > 0) {
+        toast.warning(t('charList.scanDeparted')
+          .replace('{gap}', String(DEPARTED_GAP))
+          .replace('{names}', result.departed.join('、')))
+      }
+      await load(true) // 扫描已完成且用户已确认丢弃未保存编辑 → force 刷新统计展示
+    } catch (e) {
+      renderLog('error', 'Scan:Appearances', t('charList.scanFailed').replace('{error}', () => String(e)))
+      toast.error(t('charList.scanFailed').replace('{error}', () => String(e)))
+    } finally {
+      setScanning(false)
+    }
+  }
 
   const grouped = useMemo(() => groupByTier(characters), [characters])
   const display = useMemo(() => {
-    if (tierFilter === null) return grouped
-    return { [tierFilter]: grouped[tierFilter] || [] }
-  }, [grouped, tierFilter])
+    const filtered = q
+      ? characters.filter(c => {
+          const hay = [c.name, ...parseAliases(c.aliases)].join(' ').toLowerCase()
+          return hay.includes(q)
+        })
+      : characters
+    const byTier = groupByTier(filtered)
+    if (tierFilter === null) return byTier
+    return { [tierFilter]: byTier[tierFilter] || [] }
+  }, [characters, tierFilter, q])
 
   if (!currentProject) {
     return <EmptyState icon={<Users size={36} />} message={t('blueprint.openProjectFirst')} className="pb-[15vh]" opacity={0.4} />
@@ -100,6 +154,10 @@ export default function CharactersView() {
         <div className="flex items-center gap-0.5">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
             <RefreshCw size={14} strokeWidth={2} />
+          </Button>
+          {/* P2-1：出场统计扫描（存量项目生命周期字段回填） */}
+          <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => void handleScan()} disabled={scanning} title={t('charList.scanAppearances')}>
+            <Radar size={14} strokeWidth={2} />
           </Button>
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
             <Sparkles size={14} strokeWidth={2} />
@@ -128,6 +186,17 @@ export default function CharactersView() {
             <span className="ml-0.5 opacity-60">{tier === null ? characters.length : (grouped[tier] || []).length}</span>
           </button>
         ))}
+      </div>
+
+      {/* P1-1：名字/别名搜索框 */}
+      <div className="px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder={t('charList.searchPlaceholder')}
+          className="w-full h-6 px-2 text-[0.7rem] rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+        />
       </div>
 
       {/* 角色列表 — 按 tier 分组 */}

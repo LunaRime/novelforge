@@ -63,4 +63,34 @@ describe('buildRoleplaySystemPrompt', () => {
     expect(p).not.toContain('【背景】')
     expect(p).toContain('苏晚')
   })
+
+  it('P1-2: notes 含 [VOICE:] 声音档案时注入语气/常用词/典型对话', () => {
+    const p = buildRoleplaySystemPrompt(char({
+      notes: '角色笔记。\n[VOICE:苏晚]\n{"name":"苏晚","tone":["冷酷"],"topWords":["退下","剑来"],"avgSentenceLength":8,"sampleLines":["退下。"],"formalityLevel":0.8,"interjections":["哼"],"analyzedChapters":"1-3","updatedAt":"2026-01-01"}\n',
+    }))
+    expect(p).toContain('【声音档案】')
+    expect(p).toContain('冷酷')
+    expect(p).toContain('剑来')
+    expect(p).toContain('退下。')
+  })
+
+  it('P1-2: 无声音档案或块内 name 不匹配 → 不注入声音段', () => {
+    const noVoice = buildRoleplaySystemPrompt(char({ notes: '普通笔记' }))
+    expect(noVoice).not.toContain('【声音档案】')
+    // 污染块（块内 name 是其他角色）不注入
+    const polluted = buildRoleplaySystemPrompt(char({
+      notes: '[VOICE:李雷]\n{"name":"李雷","topWords":["哈"]}\n',
+    }))
+    expect(polluted).not.toContain('【声音档案】')
+  })
+
+  it('P1-3: locale 参数控制指令文本语言（en-US/ru-RU）', () => {
+    const en = buildRoleplaySystemPrompt(char(), 'en-US')
+    expect(en).toContain('You are now playing the novel character')
+    expect(en).toContain('Never admit you are an AI')
+    const ru = buildRoleplaySystemPrompt(char(), 'ru-RU')
+    expect(ru).toContain('Теперь ты играешь персонажа')
+    // 字段值（数据）保持原文
+    expect(ru).toContain('外冷内热')
+  })
 })

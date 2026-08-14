@@ -156,7 +156,8 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
     // 级联清理其他角色 relations 中对被删角色的引用（防悬空边/图谱断边）——
     // #34 块 C：store 同步更新（此前只写 DB，store 残留悬空引用 → 下次 saveAll
-    // 用旧数据写回，级联清理被完全抵消）；级联 upsert 用清理后的数据
+    // 用旧数据写回，级联清理被完全抵消）；级联写库用清理后的数据。
+    // P0-3：批量一次 save-all（此前逐角色 upsert = N 次 IPC + N 次 SQL）
     const remaining = characters
       .filter(c => c.name !== name)
       .map(c => {
@@ -165,11 +166,9 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
         if (!rels.some(r => r.target === name)) return c
         return { ...c, relations: JSON.stringify(rels.filter(r => r.target !== name)) }
       })
-    for (const c of remaining) {
-      const old = characters.find(x => x.name === c.name)
-      if (old && c.relations !== old.relations) {
-        await ipc.invoke('db:character-upsert', c as never).catch(() => {})
-      }
+    const changed = remaining.filter((c, i) => c.relations !== characters[i]?.relations)
+    if (changed.length > 0) {
+      await ipc.invoke('db:character-save-all', changed as never[]).catch(() => {})
     }
 
     // 清理改名映射中指向被删角色的条目（改名 A→B 后删除 B，A→B 映射作废）

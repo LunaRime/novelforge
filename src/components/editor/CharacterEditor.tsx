@@ -1,4 +1,4 @@
-import { useState, useRef, useMemo } from 'react'
+import { useState, useRef, useMemo, useEffect } from 'react'
 import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
@@ -10,6 +10,7 @@ import {
   type CharacterCurrentState,
 } from '../../stores/character-store'
 import { findPairsForCharacter, type DuplicatePair, type DuplicateReason } from '../../services/character-duplicates'
+import { parseAliases } from '../../services/character-normalize'
 import RelationshipGraph from './RelationshipGraph'
 import CharacterBacklinks from './CharacterBacklinks'
 import { EmptyState as BaseEmptyState } from '../ui/EmptyState'
@@ -41,6 +42,16 @@ export default function CharacterEditor() {
 
   const selectedCard = characters.find((c) => c.name === selectedName) || null
 
+  // P2-4：新角色（默认名）自动聚焦名字输入框，引导立即改名
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  useEffect(() => {
+    if (selectedCard && selectedCard.name === t('character.defaultName')) {
+      nameInputRef.current?.focus()
+      nameInputRef.current?.select()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 仅角色切换/新建时触发
+  }, [selectedCard?.name])
+
   // tags 存储为 JSON 数组字符串（角色列表按 JSON.parse 消费，v7 语义）；
   // 编辑器显示分隔文本，保存时转回 JSON 数组——两端格式统一
   // #34 块 D：分隔符跟随 locale（zh 顿号 / 其他逗号——此前恒顿号，英文界面输入被回写顿号）
@@ -65,6 +76,18 @@ export default function CharacterEditor() {
     // #34 块 D：超过 8 个给出提示（此前静默截断，第 9 个标签无声消失）
     if (tags.length > 8) toast.warning(t('character.tagsLimit'))
     updateField(selectedCard.name, 'tags', tags.length > 0 ? JSON.stringify(tags.slice(0, 8)) : '')
+  }
+
+  // P0-1：别名注册表手动编辑（昵称/称号——写稿/定稿/档案提取的匹配形态；
+  // 存 JSON 数组字符串，显示用分隔符文本，与 tags 同模式）
+  const aliasesDisplay = parseAliases(selectedCard?.aliases).join(tagSeparator)
+  const onAliasesChange = (value: string) => {
+    if (!selectedCard) return
+    const aliases = value
+      .split(/[，,、；;\n]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    updateField(selectedCard.name, 'aliases', aliases.length > 0 ? JSON.stringify(aliases) : '[]')
   }
 
   const handleDelete = async () => {
@@ -356,7 +379,7 @@ export default function CharacterEditor() {
             <div className="space-y-3">
               {/* 戏份等级 + 角色定位 */}
               <div className="grid grid-cols-3 gap-3">
-                <div><Label>{t('character.name')}</Label><Input value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
+                <div><Label>{t('character.name')}</Label><Input ref={nameInputRef} value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
                 <div>
                   <Label>{t('character.tier')}</Label>
                   <Select
@@ -402,6 +425,16 @@ export default function CharacterEditor() {
                     placeholder={t('character.tagsPlaceholder')}
                   />
                 </div>
+              </div>
+
+              {/* 别名（昵称/称号）— P0-1：匹配层的手动登记入口 */}
+              <div>
+                <Label>{t('character.aliases')}</Label>
+                <Input
+                  value={aliasesDisplay}
+                  onChange={(e) => onAliasesChange(e.target.value)}
+                  placeholder={t('character.aliasesHint')}
+                />
               </div>
 
               {/* === Tier 1-2: 核心字段 === */}
@@ -649,6 +682,8 @@ function StructuredRelations({
   const [newTarget, setNewTarget] = useState('')
   const [newType, setNewType] = useState('ally')
   const [newLabel, setNewLabel] = useState('')
+  // P2-3：关系起始章节（0 = 未知；图谱/反链展示 sinceChapter）
+  const [newSinceChapter, setNewSinceChapter] = useState('0')
 
   const relTypes = getRelTypeMap(t)
 
@@ -663,13 +698,14 @@ function StructuredRelations({
 
   const addRelation = () => {
     if (!newTarget) return
+    const since = parseInt(newSinceChapter, 10)
     onChange(JSON.stringify([...rels, {
       target: newTarget,
       type: newType,
       label: newLabel || newType,
-      sinceChapter: 0,
+      sinceChapter: Number.isFinite(since) && since > 0 ? since : 0,
     }]))
-    setNewTarget(''); setNewLabel(''); setAdding(false)
+    setNewTarget(''); setNewLabel(''); setNewSinceChapter('0'); setAdding(false)
   }
 
   return (
@@ -726,6 +762,15 @@ function StructuredRelations({
             onChange={(e) => setNewLabel(e.target.value)}
             placeholder={t('character.relLabel')}
             className="w-24 text-xs"
+          />
+          {/* P2-3：关系起始章节（0 = 未知） */}
+          <Input
+            type="number"
+            min={0}
+            value={newSinceChapter}
+            onChange={(e) => setNewSinceChapter(e.target.value)}
+            placeholder={t('character.relSince')}
+            className="w-16 text-xs"
           />
           <button onClick={addRelation} className="p-1 rounded bg-[var(--color-accent)] text-white cursor-pointer" type="button">
             <Plus size={10} />

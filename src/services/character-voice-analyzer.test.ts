@@ -3,6 +3,8 @@ import {
   mergeVoiceProfiles,
   upsertVoiceProfile,
   loadCharacterVoiceProfiles,
+  analyzeCharacterVoice,
+  extractVoiceProfileFromNotes,
   type CharacterVoiceProfile,
 } from './character-voice-analyzer'
 
@@ -98,5 +100,76 @@ describe('loadCharacterVoiceProfiles', () => {
     const blocks = [...notes.matchAll(re)]
     expect(blocks.length).toBe(2)
     expect(blocks[1][1]).toBe('角色乙')
+  })
+})
+
+describe('analyzeCharacterVoice 对话提取（P2-2 增强）', () => {
+  it('模式1：角色名+说+冒号+引号', () => {
+    const p = analyzeCharacterVoice('苏晚说：“退下，全部退下。”', '苏晚')
+    expect(p.sampleLines.some(l => l.includes('退下，全部退下'))).toBe(true)
+  })
+
+  it('模式2：引号在前、说话人在后（无中间标点）', () => {
+    const p = analyzeCharacterVoice('“我们走吧，师兄。”苏晚道', '苏晚')
+    expect(p.sampleLines.some(l => l.includes('我们走吧，师兄'))).toBe(true)
+  })
+
+  it('P2-2 模式3：引号段与说话人之间有标点/空格（“走吧。” 苏晚说着）', () => {
+    const p = analyzeCharacterVoice('“我们走吧。” 苏晚说着，推开门。', '苏晚')
+    expect(p.sampleLines.some(l => l.includes('我们走吧'))).toBe(true)
+  })
+
+  it('P2-2 模式3：半角引号 + 逗号分隔', () => {
+    const p = analyzeCharacterVoice('"别怕，有我在。"，苏晚道。', '苏晚')
+    expect(p.sampleLines.some(l => l.includes('别怕，有我在'))).toBe(true)
+  })
+
+  it('其他角色说的话不提取（空档案 tone=未分析）', () => {
+    const p = analyzeCharacterVoice('李雷说：“我是李雷。”', '苏晚')
+    expect(p.sampleLines.length).toBe(0)
+    expect(p.tone).toEqual(['未分析'])
+  })
+
+  it('P2-2: 英文对话语气检测（冷酷/悲伤），中文标签输出', () => {
+    const p = analyzeCharacterVoice('"You are cold and cruel." 苏晚 said. "I am crying with grief." 苏晚 said.', '苏晚')
+    expect(p.tone).toContain('冷酷')
+    expect(p.tone).toContain('悲伤')
+  })
+
+  it('P2-2: 重复对话行去重（模式1/3 可能同时命中）', () => {
+    const p = analyzeCharacterVoice('苏晚说：“退下，都退下。”\n“退下，都退下。” 苏晚道。', '苏晚')
+    const dup = p.sampleLines.filter(l => l.includes('退下，都退下'))
+    // 去重后同一句只出现一次
+    expect(new Set(dup).size).toBe(dup.length)
+  })
+})
+
+describe('extractVoiceProfileFromNotes（P1-2 单角色同步解析）', () => {
+  const validBlock = '[VOICE:苏晚]\n{"name":"苏晚","tone":["冷酷"],"topWords":["退下"],"avgSentenceLength":8,"sampleLines":["退下。"],"formalityLevel":0.8,"interjections":["哼"],"analyzedChapters":"1-3","updatedAt":"2026-01-01"}\n'
+
+  it('解析角色自己的声音档案', () => {
+    const p = extractVoiceProfileFromNotes(`角色笔记。\n${validBlock}`, '苏晚')
+    expect(p).not.toBeNull()
+    expect(p?.tone).toEqual(['冷酷'])
+    expect(p?.topWords).toContain('退下')
+  })
+
+  it('无块/空 notes → null', () => {
+    expect(extractVoiceProfileFromNotes('普通笔记', '苏晚')).toBeNull()
+    expect(extractVoiceProfileFromNotes('', '苏晚')).toBeNull()
+  })
+
+  it('污染块（块内 name 是其他角色）→ null', () => {
+    expect(extractVoiceProfileFromNotes(validBlock, '李雷')).toBeNull()
+  })
+
+  it('多块时只取自己角色的块', () => {
+    const other = '[VOICE:李雷]\n{"name":"李雷","topWords":["哈"]}\n'
+    const p = extractVoiceProfileFromNotes(other + validBlock, '苏晚')
+    expect(p?.name).toBe('苏晚')
+  })
+
+  it('非法 JSON → null', () => {
+    expect(extractVoiceProfileFromNotes('[VOICE:苏晚]\n{broken\n', '苏晚')).toBeNull()
   })
 })

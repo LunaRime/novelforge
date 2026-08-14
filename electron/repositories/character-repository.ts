@@ -336,6 +336,19 @@ export class CharacterRepository {
     }
 
     /**
+     * 出场统计更新（P2-1：存量项目扫描工具专用）。
+     * 只更新 appear_count/first_chapter/last_chapter 三列，不触碰其他字段——
+     * 避免扫描工具走全列 upsert 覆盖用户手写档案。
+     */
+    static updateAppearanceStats(name: string, stats: { appearCount: number; firstChapter: number; lastChapter: number }): void {
+        const db = getProjectDb()
+        if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
+        db.prepare(
+            'UPDATE characters SET appear_count = ?, first_chapter = ?, last_chapter = ?, updated_at = unixepoch() * 1000 WHERE name = ?'
+        ).run(stats.appearCount, stats.firstChapter, stats.lastChapter, name)
+    }
+
+    /**
      * 用户合并角色（P1-6）：把 source 合并进 target，事务执行后删除 source。
      *
      * 合并语义（全部以 DB 当前值为基准）：

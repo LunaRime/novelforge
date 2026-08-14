@@ -186,18 +186,8 @@ export async function loadCharacterVoiceProfiles(): Promise<CharacterVoiceProfil
 
     for (const c of allChars) {
       if (!c.name || !c.notes) continue
-      // 匹配全部 [VOICE:角色名]\n{JSON}\n 块（P2 修复：此前非全局正则只读首个块——
-      // notes 被其他角色名块污染时读到错误档案；且校验块内 name 与角色名一致）
-      const matches = c.notes.matchAll(/\[VOICE:([^\]]+)\]\s*\n?([\s\S]*?)(?=\n\[VOICE:|$)/g)
-      for (const match of matches) {
-        if (match[1].trim() !== c.name) continue // 块内 name 与角色名不一致 → 跳过（污染块）
-        try {
-          const parsed = JSON.parse(match[2].trim()) as Partial<CharacterVoiceProfile>
-          if (parsed && typeof parsed === 'object' && Array.isArray(parsed.topWords)) {
-            profiles.push({ ...parsed, name: match[1] } as CharacterVoiceProfile)
-          }
-        } catch { /* 单条解析失败跳过 */ }
-      }
+      const p = extractVoiceProfileFromNotes(c.notes, c.name)
+      if (p) profiles.push(p)
     }
     return profiles
   } catch {
@@ -205,29 +195,68 @@ export async function loadCharacterVoiceProfiles(): Promise<CharacterVoiceProfil
   }
 }
 
+/**
+ * 从单角色 notes 解析其 [VOICE:name] 声音档案（同步；供试演 prompt 注入）。
+ * 匹配全部 [VOICE:角色名]\n{JSON}\n 块（P2 修复：此前非全局正则只读首个块——
+ * notes 被其他角色名块污染时读到错误档案；且校验块内 name 与角色名一致）
+ */
+export function extractVoiceProfileFromNotes(notes: string, name: string): CharacterVoiceProfile | null {
+  if (!notes || !name) return null
+  const matches = notes.matchAll(/\[VOICE:([^\]]+)\]\s*\n?([\s\S]*?)(?=\n\[VOICE:|$)/g)
+  for (const match of matches) {
+    if (match[1].trim() !== name) continue // 块内 name 与角色名不一致 → 跳过（污染块）
+    try {
+      const parsed = JSON.parse(match[2].trim()) as Partial<CharacterVoiceProfile>
+      if (parsed && typeof parsed === 'object' && Array.isArray(parsed.topWords)) {
+        return { ...parsed, name: match[1] } as CharacterVoiceProfile
+      }
+    } catch { /* 单条解析失败跳过 */ }
+  }
+  return null
+}
+
 // ===== 内部工具函数 =====
+
+/** 引号字符类（半角 + 中文左右引号——原实现漏左引号“，中文对话全漏提） */
+const QUOTES = '["“”]'
+
+/** 说话动词组（中英文；英文需 i 标志匹配 said/says 等） */
+const SPEECH_VERBS = '(?:[说问道喊叫嚷叹怒笑哭]|said|says|asked|replied|whispered|shouted|murmured)'
 
 /** 提取指定角色的对话行 */
 function extractDialogue(content: string, name: string): string[] {
   const lines: string[] = []
+  const escaped = escapeRegExp(name)
+  // 名字与说话动词之间允许空格（英文 "苏晚 said:" / 中文 "苏晚 说："）
+  const nameVerb = `${escaped}\\s*${SPEECH_VERBS}`
 
-  // 匹配 "角色名说：..." 或 "角色名道：..." 模式
+  // 模式1：匹配 "角色名说：..." 或 "角色名道：..." 模式（中英文动词）
   const regex = new RegExp(
-    `${name}[说问道喊叫嚷叹怒笑哭]\\s*[：:]\\s*[""](.+?)[""]`,
-    'g',
+    `${nameVerb}\\s*[：:]\\s*${QUOTES}(.+?)${QUOTES}`,
+    'gi',
   )
   let match: RegExpExecArray | null
   while ((match = regex.exec(content)) !== null) {
     lines.push(match[1].trim())
   }
 
-  // 也匹配直接引号格式
-  const altRegex = new RegExp(`[""](.+?)[""]\\s*${name}[说问道]`, 'g')
+  // 模式2：直接引号在前、说话人在后（中间无标点）
+  const altRegex = new RegExp(`${QUOTES}(.+?)${QUOTES}\\s*${nameVerb}`, 'gi')
   while ((match = altRegex.exec(content)) !== null) {
     lines.push(match[1].trim())
   }
 
-  return lines.filter(l => l.length > 2)
+  // 模式3（P2-2）：引号段与说话人之间允许标点/空格/助词——
+  // 原模式2 中间出现「。」「，」「着」等即漏提（"走吧。" 苏晚说着）
+  const spacedRegex = new RegExp(
+    `${QUOTES}(.+?)${QUOTES}[，。！？!?…\\s、，]*${nameVerb}`,
+    'gi',
+  )
+  while ((match = spacedRegex.exec(content)) !== null) {
+    lines.push(match[1].trim())
+  }
+
+  return [...new Set(lines)].filter(l => l.length > 2)
 }
 
 /** 分析语气 */
@@ -236,14 +265,15 @@ function analyzeTone(lines: string[]): string[] {
   const allText = lines.join(' ')
 
   const tonePatterns: Record<string, RegExp> = {
-    '冷酷': /冷[冷漠淡]|无情|杀[意气]|寒[气意]|冰[冷寒]/,
-    '温柔': /温柔|轻声|柔和|温暖|体贴|关怀/,
-    '热血': /冲[啊呀]|来吧|战斗|绝不|拼了|燃/,
-    '冷静': /冷静|沉着|淡定|思索|分析/,
-    '傲娇': /哼[！!]|笨蛋|谁[要会]|才不|别[误会想]/,
-    '幽默': /哈哈|笑[死了]|搞笑|吐槽|幽默/,
-    '严肃': /严肃|认真|重要|必须|责任/,
-    '悲伤': /哭[了泣]|伤心|难过|痛苦|泪水/,
+    // P2-2：检测词补英/俄（大小写不敏感）；tone 标签保持中文（prompt 数据）
+    '冷酷': /冷[冷漠淡]|无情|杀[意气]|寒[气意]|冰[冷寒]|cold|cruel|ruthless|холод|жесток/i,
+    '温柔': /温柔|轻声|柔和|温暖|体贴|关怀|gentle|soft|tender|kind|нежн|мягк|добр/i,
+    '热血': /冲[啊呀]|来吧|战斗|绝不|拼了|燃|fight|never give up|fire|пыл|бой|борьб/i,
+    '冷静': /冷静|沉着|淡定|思索|分析|calm|rational|serene|composed|спокойн|рассуд|анализ/i,
+    '傲娇': /哼[！!]|笨蛋|谁[要会]|才不|别[误会想]|tsundere/i,
+    '幽默': /哈哈|笑[死了]|搞笑|吐槽|幽默|funny|joke|humor|hilarious|шутк|смешн/i,
+    '严肃': /严肃|认真|重要|必须|责任|serious|important|strict|duty|серьёз|важн|долг/i,
+    '悲伤': /哭[了泣]|伤心|难过|痛苦|泪水|sad|cry|tears|grief|груст|печал|слёз|гор/i,
   }
 
   for (const [tone, pattern] of Object.entries(tonePatterns)) {
@@ -259,6 +289,12 @@ function extractTopWords(lines: string[], count: number): string[] {
   const stopWords = new Set([
     '的', '了', '是', '我', '你', '他', '她', '不', '就', '也', '都', '要',
     '说', '在', '有', '人', '这', '那', '什么', '怎么', '吗', '呢', '啊',
+    // P2-2：英文高频停用词（英文对话分词片段）
+    'the', 'and', 'you', 'your', 'that', 'this', 'with', 'have', 'are', 'was',
+    'were', 'for', 'but', 'not', 'they', 'she', 'his', 'her', 'them', 'what',
+    'will', 'would', 'can', 'could', 'should', 'just', 'like', 'know', 'said',
+    'yeah', 'well', 'look', 'really', 'right', 'want', 'need', 'think', 'go',
+    'come', 'see', 'let', 'gonna', 'okay', 'ok',
   ])
 
   for (const line of lines) {

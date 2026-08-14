@@ -25,15 +25,16 @@ interface GraphEdge {
   label: string
 }
 
+// 关系类型颜色 — 全部走主题 CSS 变量（AGENTS.md 约束：禁止硬编码颜色，四主题自适应）
 const RELATION_COLORS: Record<string, string> = {
-  ally: '#22c55e',
-  enemy: '#ef4444',
-  family: '#f59e0b',
-  master_student: '#3b82f6',
-  lover: '#ec4899',
-  rival: '#f97316',
-  neutral: '#94a3b8',
-  other: '#6b7280',
+  ally: 'var(--color-success)',
+  enemy: 'var(--color-error)',
+  family: 'var(--color-warning)',
+  master_student: 'var(--color-info)',
+  lover: 'var(--color-accent)',
+  rival: 'var(--color-gold)',
+  neutral: 'var(--color-text-muted)',
+  other: 'var(--color-text-secondary)',
 }
 
 const ROLE_SIZES: Record<string, number> = {
@@ -298,7 +299,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
             <g key={i}>
               <line
                 x1={a.x} y1={a.y} x2={b.x} y2={b.y}
-                stroke={RELATION_COLORS[edge.type] || '#94a3b8'}
+                stroke={RELATION_COLORS[edge.type] || 'var(--color-text-muted)'}
                 strokeOpacity={0.4}
                 strokeWidth={1.5}
               />

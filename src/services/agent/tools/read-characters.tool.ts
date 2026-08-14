@@ -56,8 +56,26 @@ export const readCharactersTool = buildAgentTool({
         return { success: true, content: t('tool.readCharsCard').replace('{name}', String(target.name)).replace('{formatted}', formatted) }
       }
 
-      // 列出所有角色
-      const list = chars.map((c) => `  - ${c.name} (${c.role})`).join('\n')
+      // P1-4：列表压缩——主要角色（主角/反派）全量，配角/龙套只给前 10 个 + 总数；
+      // status 标注（退场/死亡）
+      const statusTag = (c: { status?: string }): string =>
+        c.status === 'dead' ? t('tool.readCharsDead')
+          : c.status === 'departed' ? t('tool.readCharsDeparted')
+          : ''
+      const core = chars.filter(c => String(c.role) === 'protagonist' || String(c.role) === 'antagonist')
+      const others = chars.filter(c => String(c.role) !== 'protagonist' && String(c.role) !== 'antagonist')
+      const fmt = (c: Record<string, unknown>): string => `  - ${statusTag(c)}${String(c.name)} (${String(c.role)})`
+      const coreList = core.map(fmt).join('\n')
+      const OTHERS_CAP = 10
+      const shownOthers = others.slice(0, OTHERS_CAP).map(fmt).join('\n')
+      const hiddenOthers = others.length - shownOthers.split('\n').filter(Boolean).length
+      const sections: string[] = []
+      if (coreList) sections.push(t('tool.readCharsCore').replace('{list}', coreList))
+      if (shownOthers) {
+        const suffix = hiddenOthers > 0 ? t('tool.readCharsMore').replace('{n}', String(hiddenOthers)) : ''
+        sections.push(t('tool.readCharsOthers').replace('{n}', String(others.length)).replace('{list}', shownOthers + suffix))
+      }
+      const list = sections.join('\n')
       return { success: true, content: t('tool.readCharsList').replace('{count}', String(chars.length)).replace('{list}', list) }
     } catch (error) {
       return { success: false, content: '', error: t('tool.readCharsFailed').replace('{error}', String(error)) }
