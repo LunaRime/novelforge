@@ -15,82 +15,90 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
 // https://vitejs.dev/config/
-export default defineConfig({
-  plugins: [tailwindcss(), react(), electron({
-    main: {
-      // Shortcut of `build.lib.entry`.
-      // 格式由 vite-plugin-electron 根据 package.json 的 type 字段自动选择。
-      // 移除 type:module 后自动输出 CJS，不再需要显式 format。
-      entry: 'electron/main.ts',
-      vite: {
-        build: {
-          rollupOptions: {
-            // 原生模块必须 externalize，Rolldown 无法打包 .node 二进制文件
-            external: ['better-sqlite3', '@lancedb/lancedb'],
-            output: {
-              banner: `console.log('[NovelForge] 正在启动...');`,
-              footer: `console.log('[NovelForge] 模块加载完成');`,
-            },
+export default defineConfig(({ mode }) => {
+  // index.html %VITE_CSP_SCRIPT% 占位替换（HTML 环境变量机制）：
+  // dev（Vite 服务器）需要 'unsafe-inline'——@vitejs/plugin-react 的 react-refresh
+  // preamble 是内联脚本；生产构建替换为 'self'（严格模式，内联脚本已外移至 public/）。
+  // 注意：必须在返回配置前设置 process.env（HTML 替换读 process.env）。
+  process.env.VITE_CSP_SCRIPT = mode === 'development' ? "'unsafe-inline'" : "'self'"
+
+  return {
+    plugins: [tailwindcss(), react(), electron({
+      main: {
+        // Shortcut of `build.lib.entry`.
+        // 格式由 vite-plugin-electron 根据 package.json 的 type 字段自动选择。
+        // 移除 type:module 后自动输出 CJS，不再需要显式 format。
+        entry: 'electron/main.ts',
+        vite: {
+          build: {
+            rollupOptions: {
+              // 原生模块必须 externalize，Rolldown 无法打包 .node 二进制文件
+              external: ['better-sqlite3', '@lancedb/lancedb'],
+              output: {
+                banner: `console.log('[NovelForge] 正在启动...');`,
+                footer: `console.log('[NovelForge] 模块加载完成');`,
+              },
+            }
           }
         }
-      }
-    },
-    preload: {
-      // Shortcut of `build.rollupOptions.input`.
-      // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
-      input: path.join(__dirname, 'electron/preload.ts'),
-      vite: {
-        build: {
-          rollupOptions: {
-            output: {
-              // 显式输出 CommonJS（Electron preload 沙箱环境天然支持 CJS require）
-              format: 'cjs',
-              // .cjs 扩展名与 CJS 格式匹配，避免 .mjs + require 的矛盾
-              entryFileNames: 'preload.cjs',
+      },
+      preload: {
+        // Shortcut of `build.rollupOptions.input`.
+        // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
+        input: path.join(__dirname, 'electron/preload.ts'),
+        vite: {
+          build: {
+            rollupOptions: {
+              output: {
+                // 显式输出 CommonJS（Electron preload 沙箱环境天然支持 CJS require）
+                format: 'cjs',
+                // .cjs 扩展名与 CJS 格式匹配，避免 .mjs + require 的矛盾
+                entryFileNames: 'preload.cjs',
+              }
             }
           }
         }
       }
-    }
-  }), process.env.NODE_ENV !== 'test' && electronRenderer()],
-  publicDir: 'public',
-  server: {
-    watch: {
-      ignored: ['**/docs/**']
-    }
-  },
-  define: {
-    // 构建时将 package.json 版本注入为全局常量，避免 StatusBar 硬编码版本号
-    __APP_VERSION__: JSON.stringify(pkg.version)
-  },
-  optimizeDeps: {
-    entries: ['index.html', 'src/**/*.{ts,tsx}']
-  },
-  build: {
-    rollupOptions: {
-      output: {
-        // vendor chunk 分割 — 减少首屏加载体积，提高浏览器缓存命中率
-        // Vite 8 + Rolldown：manualChunks 必须为函数（不支持对象格式）
-        manualChunks(id: string) {
-          if (!id.includes('node_modules')) return;
-          if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
-            return 'vendor-react';
-          }
-          if (id.includes('@codemirror') || id.includes('@uiw/react-codemirror')) {
-            return 'vendor-editor';
-          }
-          if (id.includes('@radix-ui') || id.includes('lucide-react')) {
-            return 'vendor-ui';
-          }
-          // 其余第三方依赖归入 vendor 通用 chunk
-          return 'vendor';
+    }), process.env.NODE_ENV !== 'test' && electronRenderer()],
+    publicDir: 'public',
+    server: {
+      watch: {
+        ignored: ['**/docs/**']
+      }
+    },
+    define: {
+      // 构建时将 package.json 版本注入为全局常量，避免 StatusBar 硬编码版本号
+      __APP_VERSION__: JSON.stringify(pkg.version)
+    },
+    optimizeDeps: {
+      entries: ['index.html', 'src/**/*.{ts,tsx}']
+    },
+    build: {
+      rollupOptions: {
+        output: {
+          // vendor chunk 分割 — 减少首屏加载体积，提高浏览器缓存命中率
+          // Vite 8 + Rolldown：manualChunks 必须为函数（不支持对象格式）
+          manualChunks(id: string) {
+            if (!id.includes('node_modules')) return;
+            if (id.includes('react') || id.includes('react-dom') || id.includes('scheduler')) {
+              return 'vendor-react';
+            }
+            if (id.includes('@codemirror') || id.includes('@uiw/react-codemirror')) {
+              return 'vendor-editor';
+            }
+            if (id.includes('@radix-ui') || id.includes('lucide-react')) {
+              return 'vendor-ui';
+            }
+            // 其余第三方依赖归入 vendor 通用 chunk
+            return 'vendor';
+          },
         },
-      },
-      onwarn(warning, defaultHandler) {
-        // 过滤掉已知的无害警告
-        if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return;
-        if (warning.message?.includes('Invalid key')) return;
-        defaultHandler(warning);
+        onwarn(warning, defaultHandler) {
+          // 过滤掉已知的无害警告
+          if (warning.code === 'INEFFECTIVE_DYNAMIC_IMPORT') return;
+          if (warning.message?.includes('Invalid key')) return;
+          defaultHandler(warning);
+        }
       }
     }
   }

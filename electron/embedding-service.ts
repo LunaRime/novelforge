@@ -205,7 +205,7 @@ export class EmbeddingService {
 
     // ===== 层1+2：文本优化管道（预处理 + 压缩） =====
     onProgress?.({
-      step: '预处理中',
+      step: t('embedding.stepPreprocess'),
       inputChars: text.length,
       outputChars: 0,
       compressionRate: 0,
@@ -217,7 +217,7 @@ export class EmbeddingService {
       : text.slice(0, this.llmConfig.optimizer.maxInputChars)
 
     onProgress?.({
-      step: '优化完成',
+      step: t('embedding.stepOptimized'),
       inputChars: optimized.stats.originalChars,
       outputChars: optimized.stats.finalChars,
       compressionRate: optimized.stats.overallCompression,
@@ -231,7 +231,7 @@ export class EmbeddingService {
     try {
       const provider = LLMFactory.getProvider(model)
 
-      onProgress?.({ step: 'LLM 生成中', inputChars: promptText.length, outputChars: 0, compressionRate: optimized.stats.overallCompression })
+      onProgress?.({ step: t('embedding.stepGenerating'), inputChars: promptText.length, outputChars: 0, compressionRate: optimized.stats.overallCompression })
 
       // 双重试机制：先尝试 JSON 模式 → 失败则纯文本模式（兼容非 OpenAI API）
       const response = await this.tryGenerateEmbedding(provider, model, prompt, dims)
@@ -358,7 +358,9 @@ export class EmbeddingService {
     })
 
     if (!res2.success || !res2.content?.trim()) {
-      return { success: false, content: '', error: `两次尝试均失败: ①JSON模式=${res2.error || 'N/A'} ②纯文本=${res2.error || '空响应'}` }
+      return { success: false, content: '', error: t('embedding.doubleAttemptFailed')
+        .replace('{a}', res2.error || t('error.unknownError'))
+        .replace('{b}', res2.error || t('log.embedding.emptyResponse')) }
     }
 
     return { success: true, content: res2.content, usage: res2.usage }

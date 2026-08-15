@@ -155,8 +155,10 @@ function createWindow() {
   })
 
   // 通过 session API 设置 Content-Security-Policy（Electron 推荐方式，防御 XSS）
-  // 开发模式下需要 'unsafe-inline' 支持 Vite HMR 注入脚本 + index.html 内联脚本（主题检测/启动计时器）
-  // 生产模式下使用 loadFile (file://)，CSP 不经过 webRequest，此处仅影响 dev 模式
+  // 开发模式下需要 'unsafe-inline' 支持 Vite HMR 注入脚本 + react-refresh preamble。
+  // ⚠️ P0-1：生产环境（loadFile file://）不经过 webRequest——CSP 已由 index.html 的
+  // meta 标签承担（script-src 'self' 严格模式，内联脚本已外移至 public/theme-init.js、
+  // startup-timer.js）；此处仅 dev 模式生效（与 meta 的 dev 值一致，双保险）。
   const cspPolicy = [
     "default-src 'self'",
     VITE_DEV_SERVER_URL

@@ -40,17 +40,17 @@ function checkDatabase(): HealthCheckResult {
   try {
     const db = getProjectDb()
     if (!db) {
-      return { ok: false, message: '数据库未连接' }
+      return { ok: false, message: t('health.dbNotConnected') }
     }
     const result = db.pragma('integrity_check') as Array<{ integrity_check: string }>
     const isOk = result.length === 1 && result[0].integrity_check === 'ok'
     return {
       ok: isOk,
-      message: isOk ? '数据库完整' : '数据库完整性校验失败',
+      message: isOk ? t('health.dbOk') : t('health.dbCorrupt'),
       detail: isOk ? undefined : result.map(r => r.integrity_check).join('; '),
     }
   } catch (error) {
-    return { ok: false, message: '数据库检查异常', detail: safeErrorMessage(error) }
+    return { ok: false, message: t('health.dbCheckFailed'), detail: safeErrorMessage(error) }
   }
 }
 
@@ -61,7 +61,7 @@ function checkDiskSpace(projectPath?: string): HealthCheckResult {
     const targetPath = projectPath || process.env.VELA_HOME || ''
     if (!targetPath || !fs.existsSync(targetPath)) {
       // 无法确定路径时返回 neutral
-      return { ok: true, message: '磁盘检查已跳过（无项目路径）' }
+      return { ok: true, message: t('health.diskSkippedNoPath') }
     }
 
     // Node.js 没有直接的磁盘空间 API，用 fs.statfs（Node 19+）或保守处理
@@ -71,14 +71,16 @@ function checkDiskSpace(projectPath?: string): HealthCheckResult {
       const isLow = freeMB < 100 // 低于 100MB 警告
       return {
         ok: !isLow,
-        message: isLow ? `磁盘空间不足 (${freeMB}MB)` : `磁盘正常 (${freeMB}MB 可用)`,
+        message: isLow
+          ? t('health.diskLow').replace('{mb}', String(freeMB))
+          : t('health.diskOk').replace('{mb}', String(freeMB)),
         detail: `${freeMB}MB`,
       }
     } catch {
-      return { ok: true, message: '磁盘检查已跳过（statfs 不可用）' }
+      return { ok: true, message: t('health.diskSkippedNoStatfs') }
     }
   } catch (error) {
-    return { ok: false, message: '磁盘检查异常', detail: safeErrorMessage(error) }
+    return { ok: false, message: t('health.diskCheckFailed'), detail: safeErrorMessage(error) }
   }
 }
 
@@ -95,11 +97,11 @@ async function checkLLMConnectivity(baseUrl: string, apiKey: string): Promise<He
     clearTimeout(timeout)
 
     if (res.ok) {
-      return { ok: true, message: 'LLM 服务可达' }
+      return { ok: true, message: t('health.llmOk') }
     }
-    return { ok: false, message: `LLM 返回 ${res.status}`, detail: await res.text().catch(() => '') }
+    return { ok: false, message: t('health.llmStatus').replace('{status}', String(res.status)), detail: await res.text().catch(() => '') }
   } catch (error) {
-    return { ok: false, message: 'LLM 连接失败', detail: safeErrorMessage(error) }
+    return { ok: false, message: t('health.llmFailed'), detail: safeErrorMessage(error) }
   }
 }
 

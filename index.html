@@ -4,61 +4,16 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NovelForge — AI 小说创作 IDE</title>
+    <!-- P0-1：生产环境 CSP（file:// 不经过 webRequest，必须走 meta）。
+         %VITE_CSP_SCRIPT% 由 vite.config 按模式替换：dev='unsafe-inline'（react-refresh preamble），
+         生产='self'（内联脚本已外移至 public/theme-init.js / startup-timer.js） -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' %VITE_CSP_SCRIPT%; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https://*.openai.com https://*.anthropic.com https://*.googleapis.com https://*.deepseek.com https://*.bigmodel.cn http://localhost:* http://127.0.0.1:* ws://localhost:* ws://127.0.0.1:*; media-src 'self'" />
     <!-- 预加载 UI 核心字体 Inter（其他字体按需加载） -->
     <link rel="preload" href="/fonts/Inter-VariableFont_opsz,wght.ttf" as="font" type="font/ttf" crossorigin>
+    <!-- 渲染前同步初始化（主题 + 启动页 i18n）——原内联脚本外移，满足生产 CSP script-src 'self' -->
+    <script src="/theme-init.js"></script>
   </head>
   <body style="margin: 0;">
-    <!-- 同步读取主题，避免加载页与主界面背景色闪跳 -->
-    <script>
-      (function() {
-        var bgMap = { light: '#F7F9FC', galaxy: '#0A1628', paper: '#F5F0E8', dark: '#1E1E1E' };
-        var theme = 'dark';
-        try {
-          var raw = localStorage.getItem('vela-theme');
-          if (raw) {
-            var state = JSON.parse(raw).state;
-            theme = state.resolvedTheme || state.theme || 'dark';
-            if (theme === 'night') theme = 'dark'; // 兼容旧版
-          }
-        } catch(e) {}
-        
-        var bg = bgMap[theme] || bgMap.galaxy;
-        
-        // 提前给 html 注入主题 class，确保所有全局 CSS 变量立即生效
-        document.documentElement.classList.remove('light', 'dark', 'galaxy', 'paper');
-        document.documentElement.classList.add(theme);
-        
-        document.body.style.backgroundColor = bg;
-        /* 将背景色注入 CSS 变量供 .vela-initial-loader 引用 */
-        document.documentElement.style.setProperty('--loader-bg', bg);
-      })();
-
-      // 启动加载页国际化（React 挂载前无法使用 t()，按持久化语言偏好做最小三语映射；
-      // React 挂载后由 main.tsx / switchLocale 接管 document.title 与界面文案）
-      (function() {
-        var locale = 'zh-CN';
-        try { locale = localStorage.getItem('novelforge-locale') || 'zh-CN'; } catch(e) {}
-        var TITLES = {
-          'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE',
-          'en-US': 'NovelForge — AI-Powered Novel Writing IDE',
-          'ru-RU': 'NovelForge — IDE для написания романов с ИИ'
-        };
-        var INIT = {
-          'zh-CN': 'NovelForge 初始化中',
-          'en-US': 'NovelForge Initializing',
-          'ru-RU': 'NovelForge: инициализация'
-        };
-        var ELAPSED = {
-          'zh-CN': '已耗时 ',
-          'en-US': 'Elapsed ',
-          'ru-RU': 'Прошло '
-        };
-        document.title = TITLES[locale] || TITLES['zh-CN'];
-        window.__VELA_SPLASH_ELAPSED_PREFIX = ELAPSED[locale] || ELAPSED['zh-CN'];
-        var splashText = document.getElementById('vela-splash-text');
-        if (splashText) splashText.textContent = INIT[locale] || INIT['zh-CN'];
-      })();
-    </script>
     <div id="root">
       <style>
         .vela-initial-loader {
@@ -156,17 +111,8 @@
         <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.35);font-family:monospace;letter-spacing:1px;"></div>
       </div>
     </div>
-    <!-- 启动计时：记录 HTML 解析完成时间，并在加载页实时显示耗时 -->
-    <script>
-      window.__VELA_HTML_READY = performance.now()
-      var timerEl = document.getElementById('vela-startup-timer')
-      if (timerEl) {
-        setInterval(function() {
-          var elapsed = ((performance.now() - window.__VELA_HTML_READY) / 1000).toFixed(1)
-          timerEl.textContent = (window.__VELA_SPLASH_ELAPSED_PREFIX || '已耗时 ') + elapsed + 's'
-        }, 200)
-      }
-    </script>
+    <!-- 启动计时：记录 HTML 解析完成时间，并在加载页实时显示耗时（原内联脚本外移，满足 CSP） -->
+    <script src="/startup-timer.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

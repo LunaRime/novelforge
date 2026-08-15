@@ -1191,6 +1191,7 @@ export const UI_TEXTS_DATA = {
   'mcp.added': { 'zh-CN': '服务器已添加', 'en-US': 'Server added', 'ru-RU': 'Сервер добавлен' },
   'mcp.connectFailed': { 'zh-CN': '连接失败', 'en-US': 'Connection failed', 'ru-RU': 'Ошибка подключения' },
   'mcp.deleteConfirm': { 'zh-CN': '确定删除服务器「{name}」？', 'en-US': 'Delete server "{name}"?', 'ru-RU': 'Удалить сервер «{name}»?' },
+  'mcp.sseNotImplemented': { 'zh-CN': 'SSE 传输暂未实现', 'en-US': 'SSE transport not implemented yet', 'ru-RU': 'SSE-транспорт пока не реализован' },
   'settings.currentVersion': { 'zh-CN': '当前版本', 'en-US': 'Current version', 'ru-RU': 'Текущая версия' },
   'settings.checkUpdate': { 'zh-CN': '检查更新', 'en-US': 'Check for updates', 'ru-RU': 'Проверить обновления' },
   'settings.upToDate': { 'zh-CN': '已是最新版本', 'en-US': 'You are up to date', 'ru-RU': 'Установлена актуальная версия' },
@@ -2154,6 +2155,32 @@ export const UI_TEXTS_DATA = {
   // --- 插件市场（MCP 推荐清单，零代码配置） ---
   'mcp.recommended': { 'zh-CN': '推荐 MCP（一键填充）', 'en-US': 'Recommended MCPs (one-click)', 'ru-RU': 'Рекомендуемые MCP (в один клик)' },
   'mcp.recommendedHint': { 'zh-CN': '点击填充添加表单；需要 npx 环境（Node.js）。脚本型插件因安全沙箱要求暂不开放。', 'en-US': 'Click to fill the add form; requires npx (Node.js). Script-based plugins are not yet supported (sandbox review pending).', 'ru-RU': 'Нажмите, чтобы заполнить форму; требуется npx (Node.js). Скриптовые плагины пока не поддерживаются (ожидает проверки песочницы).' },
+
+  // ===== 健康检查（health-check 主进程错误文案，P1-1 修复） =====
+  'health.dbNotConnected': { 'zh-CN': '数据库未连接', 'en-US': 'Database not connected', 'ru-RU': 'База данных не подключена' },
+  'health.dbOk': { 'zh-CN': '数据库完整', 'en-US': 'Database OK', 'ru-RU': 'База данных в порядке' },
+  'health.dbCorrupt': { 'zh-CN': '数据库完整性校验失败', 'en-US': 'Database integrity check failed', 'ru-RU': 'Проверка целостности БД не пройдена' },
+  'health.dbCheckFailed': { 'zh-CN': '数据库检查异常', 'en-US': 'Database check error', 'ru-RU': 'Ошибка проверки БД' },
+  'health.diskSkippedNoPath': { 'zh-CN': '磁盘检查已跳过（无项目路径）', 'en-US': 'Disk check skipped (no project path)', 'ru-RU': 'Проверка диска пропущена (нет пути проекта)' },
+  'health.diskSkippedNoStatfs': { 'zh-CN': '磁盘检查已跳过（statfs 不可用）', 'en-US': 'Disk check skipped (statfs unavailable)', 'ru-RU': 'Проверка диска пропущена (statfs недоступен)' },
+  'health.diskCheckFailed': { 'zh-CN': '磁盘检查异常', 'en-US': 'Disk check error', 'ru-RU': 'Ошибка проверки диска' },
+  'health.diskLow': { 'zh-CN': '磁盘空间不足 ({mb}MB)', 'en-US': 'Low disk space ({mb}MB)', 'ru-RU': 'Недостаточно места на диске ({mb}МБ)' },
+  'health.diskOk': { 'zh-CN': '磁盘正常 ({mb}MB 可用)', 'en-US': 'Disk OK ({mb}MB free)', 'ru-RU': 'Диск в порядке ({mb}МБ свободно)' },
+  'health.llmOk': { 'zh-CN': 'LLM 服务可达', 'en-US': 'LLM service reachable', 'ru-RU': 'Сервис LLM доступен' },
+  'health.llmFailed': { 'zh-CN': 'LLM 连接失败', 'en-US': 'LLM connection failed', 'ru-RU': 'Ошибка подключения LLM' },
+  'health.llmStatus': { 'zh-CN': 'LLM 返回 {status}', 'en-US': 'LLM returned {status}', 'ru-RU': 'LLM вернул {status}' },
+
+  // ===== 浏览器接入错误（browser-controller，P1-2 修复） =====
+  'browser.notEnabled': { 'zh-CN': '浏览器接入未启用（设置 → 开发者模式 → 浏览器接入）', 'en-US': 'Browser integration not enabled (Settings → Developer mode → Browser integration)', 'ru-RU': 'Интеграция с браузером не включена (Настройки → Режим разработчика → Интеграция с браузером)' },
+  'browser.notEnabledShort': { 'zh-CN': '浏览器接入未启用', 'en-US': 'Browser integration not enabled', 'ru-RU': 'Интеграция с браузером не включена' },
+  'browser.invalidCdpPort': { 'zh-CN': 'CDP 端口无效: {port}', 'en-US': 'Invalid CDP port: {port}', 'ru-RU': 'Недопустимый порт CDP: {port}' },
+  'browser.cdpConnectFailed': { 'zh-CN': '无法连接 CDP（{url}）。请确认浏览器已用 --remote-debugging-port={port} 启动', 'en-US': 'Cannot connect to CDP ({url}). Make sure the browser was started with --remote-debugging-port={port}', 'ru-RU': 'Не удаётся подключиться к CDP ({url}). Убедитесь, что браузер запущен с --remote-debugging-port={port}' },
+
+  // ===== 嵌入服务进度/错误（embedding-service，P1-2 修复） =====
+  'embedding.stepPreprocess': { 'zh-CN': '预处理中', 'en-US': 'Preprocessing', 'ru-RU': 'Предобработка' },
+  'embedding.stepOptimized': { 'zh-CN': '优化完成', 'en-US': 'Optimization done', 'ru-RU': 'Оптимизация завершена' },
+  'embedding.stepGenerating': { 'zh-CN': 'LLM 生成中', 'en-US': 'LLM generating', 'ru-RU': 'Генерация LLM' },
+  'embedding.doubleAttemptFailed': { 'zh-CN': '两次尝试均失败: ①JSON模式={a} ②纯文本={b}', 'en-US': 'Both attempts failed: ①JSON mode={a} ②plain={b}', 'ru-RU': 'Обе попытки не удались: ①JSON={a} ②обычный={b}' },
   // --- Window title & splash（启动页 React 挂载前显示） ---
   'window.title': { 'zh-CN': 'NovelForge — AI 深度驱动的小说创作 IDE', 'en-US': 'NovelForge — AI-Powered Novel Writing IDE', 'ru-RU': 'NovelForge — IDE для написания романов с ИИ' },
   'splash.initializing': { 'zh-CN': 'NovelForge 初始化中', 'en-US': 'NovelForge Initializing', 'ru-RU': 'NovelForge: инициализация' },

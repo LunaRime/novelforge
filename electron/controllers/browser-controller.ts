@@ -65,12 +65,14 @@ export function registerBrowserController() {
   /** 查询标签页列表 */
   ipcMain.handle('browser:list-tabs', async (): Promise<{ success: boolean; tabs?: BrowserTabInfo[]; error?: string }> => {
     const b = getBrowserConfig()
-    if (!b) return { success: false, error: '浏览器接入未启用（设置 → 开发者模式 → 浏览器接入）' }
-    if (!isValidPort(b.cdpPort)) return { success: false, error: `CDP 端口无效: ${b.cdpPort}` }
+    if (!b) return { success: false, error: t('browser.notEnabled') }
+    if (!isValidPort(b.cdpPort)) return { success: false, error: t('browser.invalidCdpPort').replace('{port}', String(b.cdpPort)) }
 
     const data = await cdpFetchJson(b.cdpPort, '/json')
     if (!Array.isArray(data)) {
-      return { success: false, error: `无法连接 CDP（${cdpBaseUrl(b.cdpPort)}/json）。请确认浏览器已用 --remote-debugging-port=${b.cdpPort} 启动` }
+      return { success: false, error: t('browser.cdpConnectFailed')
+        .replace('{url}', `${cdpBaseUrl(b.cdpPort)}/json`)
+        .replace('{port}', String(b.cdpPort)) }
     }
 
     const tabs: BrowserTabInfo[] = data
@@ -94,12 +96,14 @@ export function registerBrowserController() {
     const b = getBrowserConfig()
     // 覆盖端口优先（UI 测试用）；否则要求已启用
     const port = override?.cdpPort ?? b?.cdpPort
-    if (!b && override?.cdpPort === undefined) return { success: false, error: '浏览器接入未启用' }
-    if (!isValidPort(port ?? 0)) return { success: false, error: `CDP 端口无效: ${port}` }
+    if (!b && override?.cdpPort === undefined) return { success: false, error: t('browser.notEnabledShort') }
+    if (!isValidPort(port ?? 0)) return { success: false, error: t('browser.invalidCdpPort').replace('{port}', String(port)) }
 
     const data = await cdpFetchJson(port as number, '/json/version') as Record<string, unknown> | null
     if (!data || typeof data !== 'object') {
-      return { success: false, error: `无法连接 CDP（端口 ${port}）。请确认浏览器已用 --remote-debugging-port=${port} 启动` }
+      return { success: false, error: t('browser.cdpConnectFailed')
+        .replace('{url}', `端口 ${port}`)
+        .replace('{port}', String(port)) }
     }
     return { success: true, version: String(data['Browser'] ?? data['Protocol-Version'] ?? 'unknown') }
   })

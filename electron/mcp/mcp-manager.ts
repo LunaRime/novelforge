@@ -196,7 +196,7 @@ class MCPManagerImpl {
       } else {
         // SSE 暂时跳过，标记为错误
         runtime.status = 'error'
-        runtime.error = 'SSE 传输暂未实现'
+        runtime.error = t('mcp.sseNotImplemented')
         this.notifyStatusChange(config.id, 'error', runtime.error)
         return
       }
