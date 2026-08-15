@@ -75,6 +75,7 @@
     "eslint-plugin-react-refresh": "^0.4.19",
     "eslint-plugin-storybook": "^10.3.5",
     "gpt-tokenizer": "^3.4.0",
+    "jsdom": "^30.0.1",
     "lucide-react": "^1.8.0",
     "monaco-editor": "^0.55.1",
     "playwright": "^1.59.1",

@@ -36,6 +36,8 @@ jobs:
 
     - name: Lint (ESLint)
       run: pnpm run lint
+    - name: Test (Vitest)
+      run: pnpm run test
 
     - name: Type check (TypeScript)
       run: pnpm tsc --noEmit
