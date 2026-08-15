@@ -30,7 +30,7 @@ import { renderLog } from '../../services/render-logger'
 
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
 import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils'
-import { guardRepairPostProcess } from '../../services/workflow-guards'
+import { guardRepairPostProcess } from '../../services/workflows/workflow-guards'
 
 interface Props {
   filePath: string

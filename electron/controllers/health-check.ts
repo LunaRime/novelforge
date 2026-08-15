@@ -10,10 +10,10 @@
  */
 import { ipcMain } from 'electron'
 import fs from 'node:fs'
-import { getProjectDb } from './database'
-import { logger } from './utils/logger'
-import { safeErrorMessage } from './utils/error-utils'
-import { t } from '../src/shared/locale'
+import { getProjectDb } from '../database'
+import { logger } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
+import { t } from '../../src/shared/locale'
 
 // ===== 类型 =====
 

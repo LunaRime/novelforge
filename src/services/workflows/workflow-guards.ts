@@ -8,11 +8,11 @@
  * 由调用方选择展示方式（弹窗提示 / 日志输出）。
  */
 
-import { projectStore } from './store-facade'
-import { ipc } from './ipc-client'
-import { t } from '../shared/locale'
+import { projectStore } from '../store-facade'
+import { ipc } from '../ipc-client'
+import { t } from '../../shared/locale'
 
-import { readPostProcessStatus, getChapterFinalizeScope, getFailedStepLabels } from './workflows/workflow-utils'
+import { readPostProcessStatus, getChapterFinalizeScope, getFailedStepLabels } from './workflow-utils'
 
 export interface GuardResult {
   ok: boolean

@@ -17,7 +17,7 @@ import { registerDevController } from './controllers/dev-controller'
 import { registerBrowserController } from './controllers/browser-controller'
 import { registerReportController } from './controllers/report-controller'
 import { registerTemplatesController } from './controllers/templates-controller'
-import { registerHealthCheckIPC } from './health-check'
+import { registerHealthCheckIPC } from './controllers/health-check'
 
 /**
  * 注册所有 IPC 通道 — 在主进程启动时调用

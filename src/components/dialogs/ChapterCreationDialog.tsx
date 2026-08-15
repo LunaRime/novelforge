@@ -6,7 +6,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 
 import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
-import { guardChapterWriting } from '../../services/workflow-guards'
+import { guardChapterWriting } from '../../services/workflows/workflow-guards'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { ipc } from '../../services/ipc-client'

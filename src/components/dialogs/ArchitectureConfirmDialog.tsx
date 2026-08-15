@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Wand2, AlertCircle, ChevronDown, ChevronRight } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { guardArchitectureGeneration, guardCharacterRegeneration } from '../../services/workflow-guards'
+import { guardArchitectureGeneration, guardCharacterRegeneration } from '../../services/workflows/workflow-guards'
 import { toast } from '../ui/Toast'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,

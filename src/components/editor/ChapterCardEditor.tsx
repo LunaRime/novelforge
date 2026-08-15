@@ -18,7 +18,7 @@ import {
   type ChapterBlueprint,
   type DirectoryWorkflowParams,
 } from '../../services/workflows/directory-workflow'
-import { guardDirectoryGeneration } from '../../services/workflow-guards'
+import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'

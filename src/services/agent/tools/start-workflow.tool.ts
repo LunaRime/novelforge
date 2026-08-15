@@ -98,7 +98,7 @@ export const startWorkflowTool = buildAgentTool({
         }
         case 'generate_blueprint': {
           const { createDirectoryWorkflow } = await import('../../workflows/directory-workflow')
-          const { guardDirectoryGeneration } = await import('../../workflow-guards')
+          const { guardDirectoryGeneration } = await import('../../workflows/workflow-guards')
           const guard = await guardDirectoryGeneration()
           if (!guard.ok) {
             return { success: false, content: '', error: guard.message || t('error.prereqNotMet') }
@@ -109,7 +109,7 @@ export const startWorkflowTool = buildAgentTool({
         }
         case 'generate_architecture': {
           const { createArchitectureWorkflow } = await import('../../workflows/architecture-workflow')
-          const { guardArchitectureGeneration } = await import('../../workflow-guards')
+          const { guardArchitectureGeneration } = await import('../../workflows/workflow-guards')
           const guard = guardArchitectureGeneration()
           if (!guard.ok) {
             return { success: false, content: '', error: guard.message || t('error.prereqNotMet') }
@@ -202,7 +202,7 @@ async function getLatestReview(chapterNumber: number): Promise<string | null> {
 
 /** 构建写稿工作流 */
 async function buildDraftWorkflow(chapterNumber: number) {
-  const { guardChapterWriting } = await import('../../workflow-guards')
+  const { guardChapterWriting } = await import('../../workflows/workflow-guards')
   const guard = await guardChapterWriting(chapterNumber)
   if (!guard.ok) {
     // guard 失败时返回 null，由调用方处理
