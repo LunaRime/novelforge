@@ -69,7 +69,9 @@ async function importContent(
 
   if (model.apiKey) {
     try {
-      options?.onProgress?.(20, `正在通过 ${embedMethod} 向量化 ${chunks.length} 个块...`)
+      options?.onProgress?.(20, t('kb.vectorizingWith')
+        .replace('{method}', embedMethod)
+        .replace('{count}', String(chunks.length)))
       vectors = await generateEmbeddings(chunks, protocol, model)
     } catch (e) {
       logger.warn('KB', t('log.embedding.apiFailedTryLlm').replace('{err}', String(e)))
@@ -81,7 +83,9 @@ async function importContent(
     try {
       const { embeddingService } = await import('./embedding-service')
       if (embeddingService.canUseLLMEmbedding()) {
-        options?.onProgress?.(25, `正在通过 LLM 向量化 ${chunks.length} 个块...`)
+        options?.onProgress?.(25, t('kb.vectorizingWith')
+          .replace('{method}', 'LLM')
+          .replace('{count}', String(chunks.length)))
         const results = await embeddingService.embedBatchWithLLM(chunks)
         vectors = results.map(r => r.vector).filter(v => v.length > 0)
         if (vectors.length > 0) {
@@ -116,7 +120,9 @@ async function importContent(
     return { success: false, error: result.error }
   }
 
-  options?.onProgress?.(100, `✅ 已导入 ${fileName}（${chunks.length} 个块）`)
+  options?.onProgress?.(100, t('kb.imported')
+    .replace('{name}', fileName)
+    .replace('{count}', String(chunks.length)))
   return { success: true, docId, chunkCount: chunks.length }
 }
 
@@ -136,16 +142,16 @@ export async function importDocument(
     const fileName = path.basename(filePath)
     const ext = path.extname(filePath).toLowerCase()
     if (!['.txt', '.md', '.markdown'].includes(ext)) {
-      return { success: false, error: `不支持的文件类型: ${ext}，仅支持 .txt / .md` }
+      return { success: false, error: t('kb.unsupportedType').replace('{ext}', ext) }
     }
 
-    onProgress?.(5, `正在读取 ${fileName}...`)
+    onProgress?.(5, t('kb.reading').replace('{name}', fileName))
     // 文件大小检查：超过 50MB 的文件拒绝导入，防止 OOM
     const MAX_FILE_SIZE = 50 * 1024 * 1024 // 50 MB
     const stat = fs.statSync(filePath)
     if (stat.size > MAX_FILE_SIZE) {
       const sizeMB = (stat.size / (1024 * 1024)).toFixed(1)
-      return { success: false, error: `文件过大 (${sizeMB} MB)，最大支持 50 MB。请拆分为多个小文件后分别导入。` }
+      return { success: false, error: t('kb.fileTooLarge').replace('{size}', sizeMB) }
     }
     if (stat.size === 0) {
       return { success: false, error: t('error.fileEmpty') }

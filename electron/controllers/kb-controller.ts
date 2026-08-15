@@ -172,12 +172,12 @@ export function registerKBController() {
               const res = await updateChunkVectors(projectPath, updates)
               if (!res.success) {
                 failed = updates.length
-                return { success: false, processed: 0, failed, error: 'LLM 向量写入失败' }
+                return { success: false, processed: 0, failed, error: t('kb.llmWriteFailed') }
               }
             }
           } catch (e) {
             failed = vectorless.length
-            return { success: false, processed: 0, failed, error: `LLM 向量写入失败: ${String(e)}` }
+            return { success: false, processed: 0, failed, error: t('kb.llmWriteFailedDetail').replace('{error}', String(e)) }
           }
         }
 
@@ -194,11 +194,7 @@ export function registerKBController() {
       success: false,
       processed: 0,
       failed: count,
-      error:
-        '无可用的向量化方式。请至少配置以下其一：\n' +
-        '1. 在「设置 → 向量模型」中添加 Embedding 模型（如 text-embedding-3-small）\n' +
-        '2. 在「设置 → 向量模型」中开启 LLM 向量化并选择模型\n' +
-        '向量模块（本地 FTS 全文搜索）仍可用于搜索，但无法生成语义向量。',
+      error: t('kb.noVectorMethod'),
     }
   })
 

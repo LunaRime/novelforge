@@ -144,8 +144,16 @@ export async function retrieveContextForQuery(
       if (chunkTokens > budget) {
         // 简单截断（这里用字符近似，因为我们需要快速）
         const ratio = budget / chunkTokens
-        const cutPoint = Math.floor(chunk.text.length * ratio)
-        displayText = chunk.text.slice(0, cutPoint) + '…'
+        let cutPoint = Math.floor(chunk.text.length * ratio)
+        // P2-2：截断点前移到最近的句子边界（。！？!?/换行），避免 LLM 拿到半句；
+        //   边界太靠前（<30%）时不移动——防止截得过短
+        const head = chunk.text.slice(0, cutPoint)
+        const lastBoundary = Math.max(
+          head.lastIndexOf('。'), head.lastIndexOf('！'), head.lastIndexOf('？'),
+          head.lastIndexOf('!'), head.lastIndexOf('?'), head.lastIndexOf('\n'),
+        )
+        if (lastBoundary > head.length * 0.3) cutPoint = lastBoundary + 1
+        displayText = chunk.text.slice(0, cutPoint).trimEnd() + '…'
       }
 
       contextParts.push(

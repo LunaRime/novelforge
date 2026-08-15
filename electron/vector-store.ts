@@ -403,6 +403,57 @@ async function ensureVectorIndex(projectPath: string): Promise<void> {
 }
 
 /**
+ * FTS 相关性启发式打分（P1-1）：纯 FTS 模式（无 Embedding 配置）的排序依据。
+ *
+ * 背景：DataFusion LIKE 逐字匹配没有真实打分（恒 0.5）——无向量时全部候选同分，
+ * 融合排序退化为表扫描顺序，"最相关"不保证排前。此处给 FTS 命中加启发式分数。
+ *
+ * 范围 [0.5, 1.0]：FTS 命中本身保证相关性（调用方对 fts 来源豁免相似度阈值），
+ * 分数只用于**排序**。加分项（各带权重）：
+ * - 逐字命中率：query 去重字符中出现在 text 里的比例（0.5 权重）
+ * - 最长连续命中片段：query 中最长连续 n-gram（2-4 字）能在 text 中找到的长度占比（0.3 权重）
+ * - 首个命中位置靠前（0.2 权重）
+ */
+export function computeFTSRelevance(text: string, query: string): number {
+  if (!text || !query) return 0.5
+  const lowerText = text.toLowerCase()
+  const q = query.toLowerCase()
+
+  // 1. 逐字命中率（query 去重字符）
+  const uniqueChars = new Set(q)
+  let hitCount = 0
+  for (const ch of uniqueChars) {
+    if (lowerText.includes(ch)) hitCount++
+  }
+  const charHitRatio = uniqueChars.size > 0 ? hitCount / uniqueChars.size : 0
+
+  // 2. 最长连续命中 n-gram（2-4 字窗口，取最长能在 text 中找到的）
+  let longestRun = 0
+  const maxN = Math.min(4, q.length)
+  for (let n = maxN; n >= 2; n--) {
+    let found = false
+    for (let i = 0; i + n <= q.length; i++) {
+      if (lowerText.includes(q.slice(i, i + n))) {
+        found = true
+        break
+      }
+    }
+    if (found) {
+      longestRun = n
+      break
+    }
+  }
+  const runRatio = q.length > 0 ? longestRun / q.length : 0
+
+  // 3. 首个命中位置靠前
+  const firstHit = lowerText.indexOf(q[0])
+  const positionScore = firstHit === -1 ? 0 : 1 - firstHit / text.length
+
+  const score = 0.5 + charHitRatio * 0.25 + runRatio * 0.15 + positionScore * 0.1
+  return Math.min(1, Math.max(0.5, score))
+}
+
+/**
  * 统一检索入口 — 自动选择 FTS / 混合模式
  *
  * @param queryText 搜索关键词/语句
@@ -492,8 +543,9 @@ export async function searchWithScope(
       const results = await q.toArray()
 
       for (const r of results as Array<{ text: string; fileName: string }>) {
-        // FTS 无真实打分（0.5）——调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
-        pushCandidate(r.text, r.fileName, 0.5, 'fts')
+        // P1-1：FTS 命中给启发式相关性分数（不再恒 0.5）——纯 FTS 模式排序有据；
+        //   调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
+        pushCandidate(r.text, r.fileName, computeFTSRelevance(r.text, queryText), 'fts')
       }
     } catch (e) {
       logger.warn('VectorStore', t('log.vectorStore.ftsSearchFailed').replace('{err}', String(e)))
