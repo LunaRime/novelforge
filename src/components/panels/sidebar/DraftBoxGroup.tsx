@@ -34,6 +34,24 @@ export default function DraftBoxGroup({
     (draftsByChapter[n] || []).some(d => d.status !== 'archived')
   ).length
 
+  // 一次拉取全部蓝图标题建 map（此前每章分组挂载各发一次 db:blueprint-get IPC，
+  // 展开 50 章 = 50 次请求）；章节集合变化时重拉
+  const [bpTitleMap, setBpTitleMap] = useState<Record<number, string>>({})
+  const chaptersDep = chapterNums.join(',')
+  useEffect(() => {
+    if (chapterNums.length === 0) return
+    let cancelled = false
+    ipc.invoke('db:blueprint-get-all').then(bps => {
+      if (cancelled) return
+      const map: Record<number, string> = {}
+      for (const bp of bps || []) {
+        if (bp?.title) map[bp.chapterNumber] = bp.title
+      }
+      setBpTitleMap(map)
+    }).catch(() => { /* 蓝图读取失败仅缺标题，不阻断 */ })
+    return () => { cancelled = true }
+  }, [chaptersDep]) // eslint-disable-line react-hooks/exhaustive-deps -- chapterNums 每次渲染新建，用派生字符串做依赖
+
   return (
     <SidebarGroup
       icon={<FilePen size={12} />}
@@ -54,6 +72,7 @@ export default function DraftBoxGroup({
             key={chNum}
             chapterNumber={chNum}
             drafts={draftsByChapter[chNum] || []}
+            bpTitle={bpTitleMap[chNum]}
           />
         ))
       )}
@@ -66,9 +85,12 @@ export default function DraftBoxGroup({
 function DraftChapterGroup({
   chapterNumber,
   drafts,
+  bpTitle,
 }: {
   chapterNumber: number
   drafts: DraftMeta[]
+  /** 蓝图标题（父组件一次 db:blueprint-get-all 提供，子组件零 IPC） */
+  bpTitle?: string
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -77,24 +99,13 @@ function DraftChapterGroup({
   const activeDrafts = drafts.filter(d => d.status !== 'archived')
   const archivedDrafts = drafts.filter(d => d.status === 'archived')
   const [showArchived, setShowArchived] = useState(false)
-  const [bpTitle, setBpTitle] = useState<string>('')
-
-  useEffect(() => {
-    let cancelled = false
-    ipc.invoke('db:blueprint-get', chapterNumber).then(bp => {
-      if (!cancelled && bp?.title) {
-        setBpTitle(bp.title)
-      }
-    }).catch(() => { })
-    return () => { cancelled = true }
-  }, [chapterNumber])
 
   // 已定稿的草稿存在时，章节显示绿色标记
   const hasFinalized = drafts.some(d => d.status === 'finalized')
   const baseTitle = bpTitle || drafts[0]?.chapterTitle || ''
-  const chLabelCN = `第${chapterNumber}章`
+  // 前缀判断与显示用同一语言文案（此前硬编码中文「第{n}章」，英文/俄文界面下匹配不到前缀导致重复）
   const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
-  const displayTitle = baseTitle.startsWith(chLabelCN) ? baseTitle : (baseTitle ? `${chLabel} ${baseTitle}` : chLabel)
+  const displayTitle = baseTitle.startsWith(chLabel) ? baseTitle : (baseTitle ? `${chLabel} ${baseTitle}` : chLabel)
 
   return (
     <div>

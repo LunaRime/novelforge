@@ -4,7 +4,7 @@
  * 包含：小说配置、故事架构、章节蓝图、草稿箱、正文章节、全局摘要
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
@@ -25,6 +25,7 @@ import ManuscriptGroup from './ManuscriptGroup'
 import VolumeGroup from './VolumeGroup'
 import PublicationGroup from './PublicationGroup'
 import SidebarGroup from './SidebarGroup'
+import type { VolumeData } from '../../../../electron/repositories/volume-repository'
 
 export default function ProjectTree() {
   const { t } = useTranslation()
@@ -43,6 +44,32 @@ export default function ProjectTree() {
   const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
   // 章节蓝图数量
   const [blueprintCount, setBlueprintCount] = useState<number>(-1)
+
+  // 卷 → 章节映射缓存（依赖 draftsByChapter 引用）：此前每次渲染都
+  // Object.entries 全量遍历 + parseInt + sort（N 章 × M 卷重复计算），
+  // 章节多的项目侧栏重渲染有明显开销
+  const volumeChapterIndex = useMemo(() => {
+    // 按章节号预分组排序一次
+    const byNumber = Object.entries(draftsByChapter)
+      .map(([num, drafts]) => {
+        const n = parseInt(num, 10)
+        // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
+        const latest = drafts[0]
+        return {
+          n,
+          chapterTitle: latest?.chapterTitle || '',
+          hasFinalized: drafts.some(d => d.status === 'finalized'),
+        }
+      })
+      .sort((a, b) => a.n - b.n)
+    const chaptersForVolume = (v: VolumeData) => byNumber
+      .filter(({ n }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd))
+      .map(({ n, chapterTitle, hasFinalized }) => ({ chapterNumber: n, chapterTitle, hasFinalized }))
+    const finalizedCountForVolume = (v: VolumeData) => byNumber
+      .filter(({ n, hasFinalized }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd) && hasFinalized)
+      .length
+    return { chaptersForVolume, finalizedCountForVolume }
+  }, [draftsByChapter])
 
   /** 统一刷新：文件树 + 架构状态 + 草稿列表 + 蓝图数量 */
   // ✅ 用 getState() 获取最新的 action，不作为依赖项，避免重建导致 useEffect 循环
@@ -225,27 +252,8 @@ export default function ProjectTree() {
       <VolumeGroup
         projectPath={p}
         totalChapters={nc.totalChapters}
-        chaptersForVolume={(v) => Object.entries(draftsByChapter)
-          .map(([num, drafts]) => {
-            const n = parseInt(num, 10)
-            return { n, drafts }
-          })
-          .filter(({ n }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd))
-          .map(({ n, drafts }) => {
-            // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
-            const latest = drafts[0]
-            return {
-              chapterNumber: n,
-              chapterTitle: latest?.chapterTitle || '',
-              hasFinalized: drafts.some(d => d.status === 'finalized'),
-            }
-          })
-          .sort((a, b) => a.chapterNumber - b.chapterNumber)}
-        finalizedCountForVolume={(v) => Object.entries(draftsByChapter)
-          .filter(([num, drafts]) => {
-            const n = parseInt(num, 10)
-            return n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd) && drafts.some(d => d.status === 'finalized')
-          }).length}
+        chaptersForVolume={volumeChapterIndex.chaptersForVolume}
+        finalizedCountForVolume={volumeChapterIndex.finalizedCountForVolume}
         onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
       />
 

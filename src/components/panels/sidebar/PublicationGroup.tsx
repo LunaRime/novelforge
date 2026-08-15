@@ -47,7 +47,7 @@ export default function PublicationGroup({ projectPath }: Props) {
   const simColor = (s: number) => {
     if (s >= 0.9) return 'var(--color-success)'
     if (s >= 0.5) return 'var(--color-warning)'
-    return 'var(--color-danger)'
+    return 'var(--color-error)'
   }
 
   const handleDelete = async (e: PublicationEntry) => {

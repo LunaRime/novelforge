@@ -3,7 +3,7 @@
  * ManuscriptGroup — 正文章节折叠组（已定稿章节列表）
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { FileText, FolderOpen, Copy, PenTool, Download, Archive } from 'lucide-react'
 import type { FileNode } from '../../../shared/ipc-channels'
 import { ipc } from '../../../services/ipc-client'
@@ -83,14 +83,18 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
 
-  // 每次 files 或 locale 变化时读取各文件标题；语言切换时先清空缓存
-  // （缓存值含旧语言 t() 文本），再全量重建映射
+  // files 变化时增量补齐标题（readChapterTitle 内部有缓存命中，已读过的 path 不再发 IPC）；
+  // 仅语言切换时清空缓存全量重建（缓存值含旧语言 t() 文本）
+  const prevLocaleRef = useRef(locale)
   const filesDep = files.map(f => f.path).join(',')
   useEffect(() => {
     if (files.length === 0) return
     let cancelled = false
     const load = async () => {
-      clearChapterTitleCache()
+      if (prevLocaleRef.current !== locale) {
+        prevLocaleRef.current = locale
+        clearChapterTitleCache()
+      }
       const entries: Record<string, string> = {}
       await Promise.all(
         files.map(async (f) => {
