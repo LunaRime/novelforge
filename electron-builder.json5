@@ -71,7 +71,11 @@
     "category": "public.app-category.productivity"
   },
   "win": {
-    "signAndEditExecutable": false,
+    // 应用图标（exe 资源 + 桌面快捷方式/任务栏图标的来源）：
+    // 必须由 electron-builder 通过 rcedit 注入——此前缺省 icon 且 signAndEditExecutable: false
+    // 跳过了图标注入，安装后 exe/快捷方式保留 Electron 默认图标（安装向导图标正常，
+    // 因为 installerIcon 单独配置了——两者不是同一个图标源）
+    "icon": "build/icon.ico",
     "target": [
       {
         "target": "nsis",
