@@ -11,6 +11,7 @@ import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
+import { useMemoryStore } from '../../../stores/memory-store'
 import { ipc } from '../../../services/ipc-client'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
@@ -24,6 +25,7 @@ import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
 import VolumeGroup from './VolumeGroup'
 import PublicationGroup from './PublicationGroup'
+import MemoryGroup from './MemoryGroup'
 import SidebarGroup from './SidebarGroup'
 import type { VolumeData } from '../../../../electron/repositories/volume-repository'
 
@@ -77,6 +79,7 @@ export default function ProjectTree() {
 
     useProjectStore.getState().refreshFileTree()
     useDraftStore.getState().loadAllDrafts()
+    useMemoryStore.getState().load() // 记忆文件（定稿/失效标记后刷新列表与 stale 徽标）
     // 通过 Service 层获取架构状态和蓝图数量（避免直接 IPC）
     const { checkArchStatus, getBlueprintCount } = await import('../../../services/architecture-service')
     const [status, count] = await Promise.all([
@@ -259,6 +262,9 @@ export default function ProjectTree() {
 
       {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}
       <PublicationGroup projectPath={p} />
+
+      {/* 3.7 AI 记忆 — 三级摘要文件（章节/分卷/全书）只读查看 + stale 徽标 + 手动重建 */}
+      <MemoryGroup projectPath={p} />
 
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
       <DraftBoxGroup draftsByChapter={draftsByChapter} />

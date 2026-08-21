@@ -3211,5 +3211,14 @@ export const UI_TEXTS_DATA = {
   'memory.summaryPrompt': { 'zh-CN': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。', 'en-US': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。', 'ru-RU': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。' },
   'memory.draftLabel': { 'zh-CN': '本章正文：', 'en-US': 'Chapter text:', 'ru-RU': 'Текст главы:' },
   'memory.injectedHeader': { 'zh-CN': '## 作品记忆（自动生成，非用户输入）', 'en-US': '## Story Memory (auto-generated, not user input)', 'ru-RU': '## Память произведения (создано автоматически, не ввод пользователя)' },
+  // --- 作品记忆侧栏组（Task 5 记忆查看器，见 MemoryGroup.tsx）---
+  'memory.groupTitle': { 'zh-CN': 'AI 记忆', 'en-US': 'AI Memory', 'ru-RU': 'Память ИИ' },
+  'memory.kindChapters': { 'zh-CN': '章节', 'en-US': 'Chapters', 'ru-RU': 'Главы' },
+  'memory.kindVolume': { 'zh-CN': '分卷', 'en-US': 'Volume', 'ru-RU': 'Том' },
+  'memory.kindBook': { 'zh-CN': '全书', 'en-US': 'Book', 'ru-RU': 'Книга' },
+  'memory.stale': { 'zh-CN': '待重建', 'en-US': 'Needs rebuild', 'ru-RU': 'Требует пересборки' },
+  'memory.rebuild': { 'zh-CN': '重建', 'en-US': 'Rebuild', 'ru-RU': 'Пересобрать' },
+  'memory.rebuildHint': { 'zh-CN': '已标记待重建——下次定稿/检查点自动生成', 'en-US': 'Marked for rebuild — regenerated on next finalize/checkpoint', 'ru-RU': 'Отмечено — будет пересобрано при следующей финализации' },
+  'memory.empty': { 'zh-CN': '暂无记忆——定稿章节后自动生成', 'en-US': 'No memory yet — generated after finalizing chapters', 'ru-RU': 'Память пока пуста — создаётся после финализации глав' },
 } as const
 
