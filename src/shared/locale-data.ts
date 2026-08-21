@@ -3183,5 +3183,11 @@ export const UI_TEXTS_DATA = {
   'inject.chapterTitleLineNoTitle': { 'zh-CN': '第{chapter}章\n\n', 'en-US': 'Ch.{chapter}\n\n', 'ru-RU': 'Гл.{chapter}\n\n' },
   'inject.chapterFileName': { 'zh-CN': '第{chapter}章{title}.txt', 'en-US': 'Ch.{chapter}{title}.txt', 'ru-RU': 'Гл.{chapter}{title}.txt' },
   'arch.configApplied': { 'zh-CN': '生成的配置已成功应用！', 'en-US': 'Generated config applied successfully!', 'ru-RU': 'Сгенерированная конфигурация успешно применена!' },
+  // --- CCR 上下文压缩（对话摘要生成，见 ccr-summary.ts）---
+  'ccr.summaryPrompt': { 'zh-CN': '请将以下对话历史压缩为简洁的中文摘要，保留：关键事实、用户指令、未完成任务、已确认的决策。不要编造对话中未出现的信息。输出纯摘要文本。', 'en-US': 'Compress the following conversation history into a concise summary. Keep: key facts, user instructions, unfinished tasks, and confirmed decisions. Do not invent information absent from the conversation. Output only the summary text.', 'ru-RU': 'Сожмите следующую историю диалога в краткую сводку. Сохраните: ключевые факты, указания пользователя, незавершённые задачи и принятые решения. Не выдумывайте информацию, отсутствующую в диалоге. Выведите только текст сводки.' },
+  'ccr.oldSummaryLabel': { 'zh-CN': '已有摘要：', 'en-US': 'Existing summary:', 'ru-RU': 'Существующая сводка:' },
+  'ccr.batchLabel': { 'zh-CN': '本次新增对话历史：', 'en-US': 'New conversation history:', 'ru-RU': 'Новые сообщения:' },
+  'ccr.roleUser': { 'zh-CN': '用户', 'en-US': 'User', 'ru-RU': 'Пользователь' },
+  'ccr.roleAssistant': { 'zh-CN': '助手', 'en-US': 'Assistant', 'ru-RU': 'Ассистент' },
 } as const
 
