@@ -9,7 +9,8 @@ import AgentInputBox from './AgentInputBox'
 import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
 import { computeContextUsage } from '../../../services/agent/context-usage'
-import { buildAgentSystemSegments } from '../../../services/agent/context-builder'
+import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
+import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -126,6 +127,31 @@ function EmptyState() {
 
 // ===== 活跃对话视图 =====
 
+/**
+ * 预算条记忆段数据源（F3）：与真实注入共用 buildAgentSystemSegmentsAsync——
+ * 注入实际含 M1+M2（~1.1k tokens），此前预算条走同步 M1-only（~300）显示与实况不符。
+ * 竞态/卸载安全：cancelled 标志丢弃过期响应；loaded 携带 key（会话/模式/项目），
+ * 过期响应即使已 setState 也在渲染时按 key 丢弃——避免 effect 内同步 setState 级联渲染。
+ */
+function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode } | null): { base: string; memoryM1: string; memoryM2: string } | null {
+  const [loaded, setLoaded] = useState<{ key: string; segments: { base: string; memoryM1: string; memoryM2: string } } | null>(null)
+  const projectPath = useProjectStore.getState().currentProject?.path ?? null
+  const convId = activeConv?.id ?? ''
+  const mode = activeConv?.mode ?? 'quick'
+  const key = `${convId}|${mode}|${projectPath}`
+
+  useEffect(() => {
+    if (!convId) return
+    let cancelled = false
+    buildAgentSystemSegmentsAsync(mode)
+      .then(segments => { if (!cancelled) setLoaded({ key, segments }) })
+      .catch(() => { /* M2 读盘失败降级：保持同步兜底 */ })
+    return () => { cancelled = true }
+  }, [convId, mode, projectPath, key])
+
+  return loaded && loaded.key === key ? loaded.segments : null
+}
+
 function ActiveConversation() {
   const { getActiveConversation, generating } = useAgentStore()
   const { t } = useTranslation()
@@ -134,6 +160,7 @@ function ActiveConversation() {
   const rootRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
   const [currentInput, setCurrentInput] = useState('')
+  const asyncSegments = useAsyncSegments(activeConv)
 
   // 输入框内容追踪（AgentInputBox 内部状态，通过冒泡 input 事件捕获——预算条 current 段用，P0 近似）
   useEffect(() => {
@@ -176,13 +203,15 @@ function ActiveConversation() {
   if (!activeConv) return null
 
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
-  const systemSegments = buildAgentSystemSegments(activeConv.mode)
+  // F3：与注入共用 async 数据源（M1+M2 真实值）；async 未就绪时同步 M1-only 兜底，避免闪烁
+  const syncSegments = buildAgentSystemSegments(activeConv.mode)
+  const usageSegments = asyncSegments ?? { base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '' }
   const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
   const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
   const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.maxTokens ?? 131072
   const contextUsage = computeContextUsage({
-    base: systemSegments.base,
-    memory: systemSegments.memory,
+    base: usageSegments.base,
+    memory: [usageSegments.memoryM2, usageSegments.memoryM1].filter(Boolean).join('\n\n---\n\n'),
     historyMessages: activeConv.messages
       .filter(m => m.role !== 'system')
       .map(m => ({ role: m.role, content: m.content })),

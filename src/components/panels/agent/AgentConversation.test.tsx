@@ -1,0 +1,95 @@
+// @vitest-environment jsdom
+/**
+ * AgentConversation — 预算条记忆段数据源测试（F3）
+ *
+ * 验证预算条与真实注入共用 buildAgentSystemSegmentsAsync：
+ * 此前预算条走同步 buildAgentSystemSegments（仅 M1 ~300 tokens），
+ * 实际注入含 M1+M2（~1.1k）——显示与实况不符。修复后 async 拉取
+ * M2 真实值并用于 contextUsage 计算。
+ */
+import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
+import { createRoot, type Root } from 'react-dom/client'
+import { act } from 'react'
+import AgentConversation from './AgentConversation'
+import { useAgentStore } from '../../../stores/agent-store'
+import { useLLMStore } from '../../../stores/llm-store'
+import { useProjectStore } from '../../../stores/project-store'
+
+// jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
+beforeAll(() => {
+  Element.prototype.scrollTo = vi.fn() as never
+  ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  }
+})
+
+function render(ui: React.ReactElement): { container: HTMLElement; root: Root } {
+  const container = document.createElement('div')
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  act(() => { root.render(ui) })
+  return { container, root }
+}
+
+describe('AgentConversation 预算条记忆段（F3）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    // M2 有内容：book 文件多段落 ~1600 tokens → 节选到 800 预算
+    // （注意 truncateToTokenBudget 按段落保留：单段落超预算会被整段丢弃，故用多段落）
+    const bookBody = Array.from({ length: 40 }, (_, i) => `第${i + 1}节 ${'详'.repeat(30)}`).join('\n\n')
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async (ch: string) => {
+          if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', stale: false, mtime: 1 }]
+          if (ch === 'memory:read') return `---\n---\n\n# 全书精要\n\n${bookBody}`
+          return null
+        }),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+  })
+
+  const readMemoryToken = (container: HTMLElement): number => {
+    const m = container.textContent?.match(/记忆 (\d+)/)
+    return m ? Number(m[1]) : -1
+  }
+
+  it('async 加载后记忆段反映 M2 真实值（与注入共用数据源）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: Date.now() }],
+      } : c),
+    }))
+    const { container, root } = render(<AgentConversation />)
+    // 初始（async 未就绪）：同步 M1-only 兜底——无滚动摘要 → 记忆段 0
+    expect(readMemoryToken(container)).toBe(0)
+    // 等待 async 段加载（microtask + effect 刷新）
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+    // 记忆段 = M2 节选（≤800）+ M1（无）→ 应显著大于 0
+    const memoryTokens = readMemoryToken(container)
+    expect(memoryTokens).toBeGreaterThan(100)
+    expect(memoryTokens).toBeLessThanOrEqual(800)
+    act(() => { root.unmount() })
+  })
+
+  it('M2 读盘失败降级：记忆段回落同步 M1-only（不阻塞渲染）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: Date.now() }],
+      } : c),
+    }))
+    ;(window.velaAPI.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('no project'))
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+    expect(readMemoryToken(container)).toBe(0) // 无 M1（无摘要）且 M2 失败 → 0
+    act(() => { root.unmount() })
+  })
+})
