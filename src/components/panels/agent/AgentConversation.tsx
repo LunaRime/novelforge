@@ -2,8 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
+import { useLLMStore } from '../../../stores/llm-store'
+import { useProjectStore } from '../../../stores/project-store'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
+import CompressedBatchCard from './CompressedBatchCard'
+import ContextBudgetBar from './ContextBudgetBar'
+import { computeContextUsage } from '../../../services/agent/context-usage'
+import { buildAgentSystemSegments } from '../../../services/agent/context-builder'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -125,7 +131,21 @@ function ActiveConversation() {
   const { t } = useTranslation()
   const activeConv = getActiveConversation()
   const scrollRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
+  const [currentInput, setCurrentInput] = useState('')
+
+  // 输入框内容追踪（AgentInputBox 内部状态，通过冒泡 input 事件捕获——预算条 current 段用，P0 近似）
+  useEffect(() => {
+    const onInput = (e: Event) => {
+      const el = e.target as HTMLElement | null
+      if (el && el.tagName === 'TEXTAREA' && rootRef.current?.contains(el)) {
+        setCurrentInput((el as HTMLTextAreaElement).value)
+      }
+    }
+    document.addEventListener('input', onInput)
+    return () => document.removeEventListener('input', onInput)
+  }, [])
 
   // 消息变化时自动滚动到底部
   useEffect(() => {
@@ -155,8 +175,23 @@ function ActiveConversation() {
 
   if (!activeConv) return null
 
+  // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
+  const systemSegments = buildAgentSystemSegments(activeConv.mode)
+  const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
+  const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
+  const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.maxTokens ?? 131072
+  const contextUsage = computeContextUsage({
+    base: systemSegments.base,
+    memory: systemSegments.memory,
+    historyMessages: activeConv.messages
+      .filter(m => m.role !== 'system')
+      .map(m => ({ role: m.role, content: m.content })),
+    currentContent: currentInput,
+    modelMax,
+  })
+
   return (
-    <div className="flex flex-col h-full relative">
+    <div ref={rootRef} className="flex flex-col h-full relative">
       {/* 消息列表滚动区 */}
       <div
         ref={scrollRef}
@@ -164,6 +199,20 @@ function ActiveConversation() {
         className="flex-1 overflow-y-auto px-4 py-4"
       >
         <div className="flex flex-col">
+          {/* 恢复提示：会话基于快照项目，与当前打开项目不一致（P0 仅提示，不静默切换） */}
+          {activeConv.projectName && currentProjectName && activeConv.projectName !== currentProjectName && (
+            <div className="mx-2 my-2 rounded-lg px-3 py-1.5 text-xs" style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+              {t('ccr.restoreProjectHint').replace('{name}', activeConv.projectName).replace('{current}', currentProjectName)}
+            </div>
+          )}
+          {/* CCR 压缩事件卡片：已折叠批次（按 batch 序，早的在前） */}
+          {(activeConv.compressed ?? [])
+            .slice()
+            .sort((a, b) => a.batch - b.batch)
+            .filter(b => b.summary)
+            .map(b => (
+              <CompressedBatchCard key={b.batch} batch={b} />
+            ))}
           {activeConv.messages
             .filter(m => m.role !== 'system')
             .map(msg => (
@@ -201,6 +250,9 @@ function ActiveConversation() {
           </svg>
         </button>
       )}
+
+      {/* 上下文占用预算条（基础/记忆/历史/当前 vs 模型上限） */}
+      <ContextBudgetBar usage={contextUsage} />
 
       {/* 底部工具栏 + 输入区 */}
       <div
