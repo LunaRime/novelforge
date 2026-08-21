@@ -544,7 +544,8 @@ export function buildFinalizePostProcessSteps(
           const vol = volumes.find(v => entry.chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || entry.chapterNumber <= v.chapterEnd))
           if (vol) await ensureVolumeSummary(vol)
         } else {
-          callbacks.log(t('log.finalize.memoryFailed'))
+          // F8：模板含 {error} 占位，未 replace 会显示字面量——upsert 失败无错误对象，清空占位
+          callbacks.log(t('log.finalize.memoryFailed').replace('{error}', () => ''))
         }
       } catch (e) {
         callbacks.log(t('log.finalize.memoryFailed').replace('{error}', () => String(e)))

@@ -10,7 +10,8 @@ export interface ChapterSummaryEntry {
 
 export interface MemoryFileMeta {
   file: string
-  kind: 'chapters' | 'volume' | 'book'
+  /** F9：白名单分类——unknown = 非 book-state/chapters-/volume- 前缀的任意 .md，不参与 M2 注入 */
+  kind: 'chapters' | 'volume' | 'book' | 'unknown'
   range?: string
   stale: boolean
   mtime: number

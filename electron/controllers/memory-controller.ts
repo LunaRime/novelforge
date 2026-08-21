@@ -12,9 +12,31 @@ const memoryDir = (): string => {
   return path.join(p, '.vela', 'memory')
 }
 
+/**
+ * 记忆文件名白名单校验（F7）：拒绝空名/'.'/'..'/非 .md 后缀——
+ * 防路径穿越外的越权名（目录名、脚本文件）与空名误写。返回 basename。
+ */
+export function assertSafeMemoryFileName(file: string): string {
+  const base = path.basename(file)
+  if (!base || base === '.' || base === '..' || !base.endsWith('.md')) {
+    throw new Error(`unsafe memory file name: ${file}`)
+  }
+  return base
+}
+
+/**
+ * kind 白名单分类（F9）：仅 book-state.md 归 book；chapters-/volume- 前缀归对应类；
+ * 其余无法识别前缀的 .md（用户手放 notes.md 等）kind=unknown——不参与 M2 节选注入。
+ */
+export function classifyMemoryFileKind(name: string): MemoryFileMeta['kind'] {
+  if (name === 'book-state.md') return 'book'
+  if (name.startsWith('chapters-')) return 'chapters'
+  if (name.startsWith('volume-')) return 'volume'
+  return 'unknown'
+}
+
 const safeFile = (file: string): string => {
-  const safe = path.basename(file) // 防路径穿越
-  return path.join(memoryDir(), safe)
+  return path.join(memoryDir(), assertSafeMemoryFileName(file))
 }
 
 export function registerMemoryController() {
@@ -28,7 +50,7 @@ export function registerMemoryController() {
         if (!e.isFile() || !e.name.endsWith('.md')) continue
         const raw = await fsPromises.readFile(path.join(dir, e.name), 'utf-8').catch(() => '')
         const parsed = parseMemoryFile(raw)
-        const kind = e.name.startsWith('chapters-') ? 'chapters' as const : e.name.startsWith('volume-') ? 'volume' as const : 'book'
+        const kind = classifyMemoryFileKind(e.name) // F9：白名单分类，未知前缀 → unknown
         const range = kind === 'chapters' ? e.name.replace(/^chapters-(\d+)-(\d+)\.md$/, '$1-$2') : undefined
         const stat = await fsPromises.stat(path.join(dir, e.name))
         out.push({ file: e.name, kind, range, stale: parsed ? parsed.frontmatter.status === 'stale' : false, mtime: stat.mtimeMs })
@@ -42,28 +64,40 @@ export function registerMemoryController() {
   })
 
   ipcMain.handle('memory:write', async (_e, file: string, content: string): Promise<{ success: boolean }> => {
+    let temp: string | null = null
     try {
       const dir = memoryDir()
       await fsPromises.mkdir(dir, { recursive: true })
       const target = safeFile(file)
-      const temp = `${target}.${Date.now()}.tmp`
+      temp = `${target}.${Date.now()}.tmp`
       await fsPromises.writeFile(temp, content, 'utf-8')
       await fsPromises.rename(temp, target)
+      temp = null // 已重命名，无残留
       return { success: true }
-    } catch { return { success: false } }
+    } catch {
+      // F7：写失败时清理残留临时文件（防 .tmp 堆积）
+      if (temp) await fsPromises.unlink(temp).catch(() => {})
+      return { success: false }
+    }
   })
 
   ipcMain.handle('memory:mark-stale', async (_e, file: string): Promise<{ success: boolean }> => {
+    let temp: string | null = null
     try {
       const target = safeFile(file)
       const raw = await fsPromises.readFile(target, 'utf-8')
       const marked = markStaleFrontmatter(raw)
       if (marked === raw) return { success: true }
-      const temp = `${target}.${Date.now()}.tmp`
+      temp = `${target}.${Date.now()}.tmp`
       await fsPromises.writeFile(temp, marked, 'utf-8')
       await fsPromises.rename(temp, target)
+      temp = null // 已重命名，无残留
       return { success: true }
-    } catch { return { success: false } }
+    } catch {
+      // F7：写失败时清理残留临时文件（防 .tmp 堆积）
+      if (temp) await fsPromises.unlink(temp).catch(() => {})
+      return { success: false }
+    }
   })
 
   ipcMain.handle('memory:delete', async (_e, file: string): Promise<{ success: boolean }> => {
