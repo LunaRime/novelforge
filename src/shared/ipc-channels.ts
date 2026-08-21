@@ -803,8 +803,32 @@ export interface LogChannels {
   }
 }
 
+// ===== 作品记忆频道（三级摘要文件：章节/分卷/全书，.vela/memory/*.md） =====
+export interface MemoryChannels {
+  'memory:list': {
+    args: []
+    return: Array<{ file: string; kind: 'chapters' | 'volume' | 'book'; range?: string; stale: boolean; mtime: number }>
+  }
+  'memory:read': {
+    args: [file: string]
+    return: string | null
+  }
+  'memory:write': {
+    args: [file: string, content: string]
+    return: { success: boolean }
+  }
+  'memory:mark-stale': {
+    args: [file: string]
+    return: { success: boolean }
+  }
+  'memory:delete': {
+    args: [file: string]
+    return: { success: boolean }
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */

@@ -29,6 +29,7 @@ const ALLOWED_INVOKE_CHANNELS = [
   'browser:',
   'report:',
   'templates:',
+  'memory:',
 ] as const
 
 /** 合法的 invoke 通道前缀字面量类型（由白名单自动派生） */

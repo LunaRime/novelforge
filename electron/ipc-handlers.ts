@@ -18,6 +18,7 @@ import { registerBrowserController } from './controllers/browser-controller'
 import { registerReportController } from './controllers/report-controller'
 import { registerTemplatesController } from './controllers/templates-controller'
 import { registerHealthCheckIPC } from './controllers/health-check'
+import { registerMemoryController } from './controllers/memory-controller'
 
 /**
  * 注册所有 IPC 通道 — 在主进程启动时调用
@@ -44,6 +45,7 @@ export function registerIPCHandlers() {
   registerReportController()
   registerTemplatesController()
   registerHealthCheckIPC()
+  registerMemoryController()
 
   logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', VELA_HOME))
 }
