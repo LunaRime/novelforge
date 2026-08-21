@@ -34,6 +34,27 @@ describe('selectCompressionBatch', () => {
     const { batch } = selectCompressionBatch(withSys, 800)
     expect(batch.some(m => m.role === 'system')).toBe(false)
   })
+
+  it('system 消息位于 batch 中间时不进 batch 且 rest 保序', () => {
+    // [m0, system, m1, m2, m3] 超预算：system 落在 batch 中段
+    // （预算 50 < 单条 ~210，从最新端累积时 m2 触发 break，batch = [m0, system, m1, m2]；
+    //   system 移回 rest 头部，非 system 消息顺序不变——契约见 selectCompressionBatch 注释）
+    const withSysMid = [msgs(4)[0], makeMsg('sys', 'system', '系统指令'), msgs(4)[1], msgs(4)[2], msgs(4)[3]]
+    const { batch, rest } = selectCompressionBatch(withSysMid, 50)
+    expect(batch.some(m => m.role === 'system')).toBe(false)
+    expect(rest.some(m => m.role === 'system')).toBe(true)
+    // rest 是原消息的子序列（相对顺序保持）
+    const restIds = rest.map(m => m.id)
+    const origIds = withSysMid.map(m => m.id)
+    let j = 0
+    for (const id of origIds) {
+      if (restIds[j] === id) j++
+    }
+    expect(j).toBe(restIds.length)
+    // 非 system 消息顺序不变（batch + rest 拼接）
+    expect([...batch, ...rest].filter(m => m.role !== 'system').map(m => m.id))
+      .toEqual(withSysMid.filter(m => m.role !== 'system').map(m => m.id))
+  })
 })
 
 describe('archive 序列化', () => {
@@ -59,5 +80,30 @@ describe('archive 序列化', () => {
     expect(parsed!.messages).toEqual([])
     expect(parsed!.compressed).toEqual([])
     expect(parsed!.rollingSummary).toBeUndefined()
+  })
+
+  it('手改/损坏形状防御：content 非字符串的消息被过滤，original 非数组置空', () => {
+    const raw = JSON.stringify({
+      id: 'c2', title: 'T', createdAt: 0, updatedAt: 0, mode: 'balanced', modelId: null,
+      messages: [
+        { id: 'ok', role: 'user', content: '正常', createdAt: 0 },
+        { id: 'bad', role: 'assistant', content: 12345, createdAt: 0 },
+        { id: 'nullish', role: 'user', content: null, createdAt: 0 },
+        '不是对象',
+      ],
+      compressed: [
+        { batch: 1, summary: '摘要', original: [{ id: 'a', role: 'user', content: '原文', createdAt: 0 }], compressedAt: 1, originalTokens: 100 },
+        { batch: 2, summary: '损坏批', original: '不是数组', compressedAt: 2, originalTokens: 50 },
+        { batch: 3, original: [{ id: 'x', role: 'user', content: '无摘要', createdAt: 0 }], compressedAt: 3, originalTokens: 10 },
+        '不是对象',
+      ],
+    })
+    const parsed = parseArchive(raw)
+    expect(parsed).not.toBeNull()
+    expect(parsed!.messages).toEqual([{ id: 'ok', role: 'user', content: '正常', createdAt: 0 }])
+    expect(parsed!.compressed).toHaveLength(2)
+    expect(parsed!.compressed![0].original).toEqual([{ id: 'a', role: 'user', content: '原文', createdAt: 0 }])
+    // original 非数组 → 置空（不崩溃）
+    expect(parsed!.compressed![1].original).toEqual([])
   })
 })
