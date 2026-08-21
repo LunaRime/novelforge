@@ -31,6 +31,9 @@ export function affectedFiles(
 /**
  * diff 式失效区间（reviewer F1）：对 [start, end] 内每章，收集其在变更前后卷列表下的
  * 记忆文件并去重。纯函数无 IPC，几十章计算开销可忽略。
+ * F4：受影响区间重叠的卷的 volume-NNN.md 一并失效——卷边界编辑后旧聚合文件保持非 stale
+ * 会被 M2 注入（卷成员已变、聚合内容过期）。进行中卷（chapterEnd=0）按 start..start+30
+ * 保守上限判定重叠（与 volume-store 钩子同口径）。
  */
 export function collectAffectedFiles(
   oldVolumes: { volumeNumber: number; chapterStart: number; chapterEnd: number }[],
@@ -42,6 +45,13 @@ export function collectAffectedFiles(
   for (let n = start; n <= end; n++) {
     files.add(computeMemoryFileRange(n, oldVolumes).file)
     files.add(computeMemoryFileRange(n, newVolumes).file)
+  }
+  for (const v of [...oldVolumes, ...newVolumes]) {
+    const vStart = v.chapterStart
+    const vEnd = v.chapterEnd === 0 ? v.chapterStart + 30 : v.chapterEnd
+    if (vEnd >= start && vStart <= end) {
+      files.add(`volume-${String(v.volumeNumber).padStart(3, '0')}.md`)
+    }
   }
   return [...files]
 }

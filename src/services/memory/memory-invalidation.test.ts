@@ -52,6 +52,23 @@ describe('collectAffectedFiles（diff 式失效区间——reviewer F1 修正）
     expect(new Set(files).size).toBe(files.length)
     expect(files[0]).toBe('chapters-001-015.md')
   })
+
+  it('F4：变更卷的 volume-NNN.md（零填充）一并失效——卷边界编辑后旧聚合不被 M2 注入', () => {
+    const oldVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 15 }]
+    const newVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 12 }, { volumeNumber: 2, chapterStart: 13, chapterEnd: 0 }]
+    const files = collectAffectedFiles(oldVolumes, newVolumes, 1, 15)
+    // 卷 1（新旧均重叠 1..15）必标；卷 2 进行中（13..43 与区间重叠）也标
+    expect(files).toContain('volume-001.md')
+    expect(files).toContain('volume-002.md')
+  })
+
+  it('F4：区间外的卷不被误标', () => {
+    const oldVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 10 }]
+    const newVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 12 }, { volumeNumber: 2, chapterStart: 20, chapterEnd: 30 }]
+    const files = collectAffectedFiles(oldVolumes, newVolumes, 1, 12)
+    expect(files).toContain('volume-001.md')
+    expect(files).not.toContain('volume-002.md') // 卷 2（20-30）与区间 1-12 无交集
+  })
 })
 
 describe('invalidateMemoryFiles（批量失效标记）', () => {
