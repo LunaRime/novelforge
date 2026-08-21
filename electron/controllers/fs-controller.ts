@@ -331,7 +331,7 @@ export function registerFSController() {
       const dir = path.join(VELA_HOME, 'agent-archive')
       await fsPromises.mkdir(dir, { recursive: true })
       const target = archivePath(id)
-      const temp = `${target}.tmp`
+      const temp = `${target}.${Date.now()}.tmp`
       await fsPromises.writeFile(temp, content, 'utf-8')
       await fsPromises.rename(temp, target)
       return { success: true }
@@ -344,8 +344,10 @@ export function registerFSController() {
     try {
       await fsPromises.unlink(archivePath(id))
       return { success: true }
-    } catch {
-      return { success: false } // 文件不存在视为成功语义（幂等删除）
+    } catch (error) {
+      // 文件不存在视为成功（幂等删除），与 fs:delete-file 惯例对齐
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true }
+      return { success: false }
     }
   })
 }
