@@ -96,11 +96,12 @@ describe('agent-store 持久化', () => {
 
 describe('CCR 压缩集成', () => {
   it('历史超预算时最旧批移入 compressed 且 rollingSummary 迭代更新', async () => {
-    // 构造超预算会话（12 条 × 每条约 60+ tokens）
+    // 构造超预算会话（12 条 × 每条 cl100k 800 / 启发式 1750 tokens——repeat(30) 在 cl100k 下仅 240/条，
+    // 12 条 2880 < 4000 不触发压缩，故用 repeat(100)，两种 tokenizer 路径均稳定超 4000 预算）
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     const longMsgs = Array.from({ length: 12 }, (_, i) => ({
       id: `m${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: '这里是历史消息内容占位。'.repeat(30), createdAt: i,
+      content: '这里是历史消息内容占位。'.repeat(100), createdAt: i,
     }))
     useAgentStore.setState(state => ({
       conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
@@ -123,7 +124,7 @@ describe('CCR 压缩集成', () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     const longMsgs = Array.from({ length: 12 }, (_, i) => ({
       id: `m${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
-      content: '这里是历史消息内容占位。'.repeat(30), createdAt: i,
+      content: '这里是历史消息内容占位。'.repeat(100), createdAt: i,
     }))
     useAgentStore.setState(state => ({
       conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
