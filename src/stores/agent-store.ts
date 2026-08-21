@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
-import { buildAgentSystemPrompt } from '../services/agent/context-builder'
+import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { buildRoleplaySystemPrompt } from '../services/roleplay-prompt'
@@ -425,8 +425,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         return
       }
 
-      // 构建系统提示词（包含项目上下文 + Tool 列表）
-      let systemPrompt = buildAgentSystemPrompt(currentConv.mode)
+      // 构建系统提示词（包含项目上下文 + Tool 列表；M2 作品记忆异步读盘注入，失败降级仅 M1）
+      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode)
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
       if (currentConv.roleplayCharacter) {

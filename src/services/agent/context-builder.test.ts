@@ -1,10 +1,11 @@
+// @vitest-environment jsdom
 /**
  * context-builder — Agent system prompt 输出语言约束测试（#30）
  * 此前仅 identityRuleLanguage 弱约束（"Reply in the user's language" 不指明具体语言），
  * 英文界面下 Agent 仍回中文。修复后末尾追加 appendOutputLanguage 明确语言指令。
  */
-import { describe, it, expect } from 'vitest'
-import { buildAgentSystemPrompt, buildAgentSystemSegments } from './context-builder'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { buildAgentSystemPrompt, buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from './context-builder'
 import { useAgentStore } from '../../stores/agent-store'
 
 describe('buildAgentSystemPrompt 输出语言约束', () => {
@@ -46,5 +47,30 @@ describe('buildAgentSystemSegments M1 会话摘要', () => {
   it('语言指令保持在最终 prompt 最末尾（#30 语义不变）', () => {
     const prompt = buildAgentSystemPrompt('quick')
     expect(prompt.trim().endsWith('Do not respond in any other language.')).toBe(true)
+  })
+})
+
+describe('M2 作品记忆节（P1）', () => {
+  const mockInvoke = vi.fn(async (ch: string) => {
+    if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', stale: false, mtime: 1 }]
+    if (ch === 'memory:read') return '---\nrange: 001-015\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒'
+    return null
+  })
+
+  beforeEach(() => {
+    Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+    useAgentStore.setState({ conversations: [], activeConversationId: null })
+  })
+
+  it('有记忆文件时 memory 段含 M2 节', async () => {
+    const { memory } = await buildAgentSystemSegmentsAsync('quick')
+    expect(memory).toContain('作品记忆')
+    expect(memory).toContain('主角觉醒')
+  })
+
+  it('读取失败降级：memory 段仅含 M1（不阻塞）', async () => {
+    mockInvoke.mockResolvedValue(null)
+    const { memory } = await buildAgentSystemSegmentsAsync('quick')
+    expect(memory).not.toContain('作品记忆')
   })
 })

@@ -15,8 +15,13 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { useAgentStore, type AgentMode } from '../../stores/agent-store'
 import { t, getCurrentLocale } from '../../shared/locale'
 import { appendOutputLanguage } from '../prompt-templates'
+import { ipc } from '../ipc-client'
+import { parseMemoryFile } from '../memory/memory-codec'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
+
+/** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间，累计不超过此值） */
+const M2_BUDGET_TOKENS = 800
 
 // ===== 上下文构建 =====
 
@@ -67,11 +72,15 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
   return { base, memory: memoryParts.join('\n\n---\n\n') }
 }
 
-/** 兼容入口：base + memory + 语言指令（语言指令保持最末尾，优先于一切） */
+/** 兼容入口（M1 only，同步）：base + memory + 语言指令（语言指令保持最末尾，优先于一切） */
 export function buildAgentSystemPrompt(mode: AgentMode): string {
-  const { base, memory } = buildAgentSystemSegments(mode)
-  const parts = [base]
-  if (memory) parts.push(memory)
+  return assembleFinalPrompt(buildAgentSystemSegments(mode))
+}
+
+/** 最终拼装（同步/异步共用）：base + memory + 语言指令；超限按 M1 → L1 → Tool 顺序降级 */
+function assembleFinalPrompt(segments: { base: string; memory: string }): string {
+  const parts = [segments.base]
+  if (segments.memory) parts.push(segments.memory)
   const full = parts.join('\n\n---\n\n')
 
   // 总上限 3500 → 3800（M1 记忆层 300；超限按 M1 → L1 → Tool 顺序降级）
@@ -99,6 +108,48 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
     )
   }
   return appendOutputLanguage(full, getCurrentLocale())
+}
+
+/** 异步版：M2 作品记忆节（memory:* 读盘，预算 800，失败降级仅 M1） */
+export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ base: string; memory: string }> {
+  const { base, memory: m1 } = buildAgentSystemSegments(mode)
+  const memoryParts: string[] = []
+  if (m1) memoryParts.push(m1)
+  try {
+    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book'; stale: boolean }[]
+    const fresh = list.filter(f => !f.stale)
+    const book = fresh.find(f => f.kind === 'book')
+    // ⚠️ 审阅修正：volume-010.md 字典序在 volume-002.md 前——按文件名中的卷号数值排序（最新卷优先）
+    const volumes = fresh.filter(f => f.kind === 'volume').sort((a, b) => {
+      const n = (f: string) => Number(f.match(/volume-(\d+)\.md/)?.[1] ?? 0)
+      return n(b.file) - n(a.file)
+    })
+    const chapters = fresh.filter(f => f.kind === 'chapters').sort((a, b) => b.file.localeCompare(a.file)) // 最近区间优先（零填充格式字典序=数值序）
+    const picks = [book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string }[]
+    const sections: string[] = []
+    let used = 0
+    for (const p of picks) {
+      if (used >= M2_BUDGET_TOKENS) break
+      const raw = await ipc.invoke('memory:read', p.file) as string | null
+      if (!raw) continue
+      const { body } = parseMemoryFile(raw) ?? { body: raw }
+      const remaining = M2_BUDGET_TOKENS - used
+      const excerpt = truncateToTokenBudget(body, remaining)
+      sections.push(excerpt)
+      used += estimateTokens(excerpt)
+    }
+    if (sections.length > 0) {
+      memoryParts.push(`${t('memory.injectedHeader')}\n${sections.join('\n\n')}`)
+    }
+  } catch {
+    // M2 读盘失败降级：仅 M1
+  }
+  return { base, memory: memoryParts.join('\n\n---\n\n') }
+}
+
+/** 异步版最终拼装：base + memory（M1 + M2）+ 语言指令（语言指令保持最末尾） */
+export async function buildAgentSystemPromptAsync(mode: AgentMode): Promise<string> {
+  return assembleFinalPrompt(await buildAgentSystemSegmentsAsync(mode))
 }
 
 // ===== 内部构建方法 =====
