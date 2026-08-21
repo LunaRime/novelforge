@@ -8,16 +8,18 @@ import {
   upsertChapterMemory,
   ensureVolumeSummary,
 } from './chapter-memory'
+import { parseMemoryFile } from './memory-codec'
 import { useLLMStore } from '../../stores/llm-store'
 
 // mock IPC（memory:read/write / db:log-llm-call 通道，P0 agent-store.test.ts 先例）
 const memoryFiles = new Map<string, string>()
-// memory:list 从内存文件表派生（ensureVolumeSummary 全量扫描依赖，F6）
+// memory:list 从内存文件表派生（ensureVolumeSummary 全量扫描依赖，F6）；
+// stale 状态按 frontmatter 解析（与真实 controller 同口径——失效规则测试依赖）
 const listFiles = (): { file: string; kind: 'chapters' | 'volume' | 'book' | 'unknown'; stale: boolean }[] =>
   [...memoryFiles.keys()].map(file => ({
     file,
     kind: file.startsWith('chapters-') ? 'chapters' as const : file.startsWith('volume-') ? 'volume' as const : 'book' as const,
-    stale: false,
+    stale: parseMemoryFile(memoryFiles.get(file) ?? '')?.frontmatter.status === 'stale',
   }))
 const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
   switch (ch) {
@@ -278,6 +280,38 @@ describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () =>
     const content = memoryFiles.get('volume-001.md')!
     expect(content).toContain('## 第 1 章 · 开局')
     expect(content).toContain('## 第 2 章 · 转折') // 跨文件收集
+  })
+
+  it('fix round 2：stale 文件条目不参与聚合（陈旧窗口不得胜出）', async () => {
+    // 卷对齐窗口 chapters-001-002.md 新鲜；旧滚动窗口 chapters-001-015.md 已标 stale——
+    // 后者字典序靠后（升序扫描最后处理），不过滤时会覆盖胜出 → 卷摘要用旧条目生成
+    memoryFiles.set('chapters-001-002.md', [
+      '',
+      '## 第 1 章 · 开局',
+      '- 关键事件：A',
+      '',
+      '## 第 2 章 · 转折',
+      '- 关键事件：B',
+    ].join('\n'))
+    memoryFiles.set('chapters-001-015.md', [
+      '---',
+      'range: 001-015',
+      'status: stale',
+      '---',
+      '',
+      '## 第 1 章 · 旧开局',
+      '- 关键事件：旧A',
+      '',
+      '## 第 2 章 · 旧转折',
+      '- 关键事件：旧B',
+    ].join('\n'))
+    const res = await ensureVolumeSummary(volume)
+    expect(res.success).toBe(true)
+    const content = memoryFiles.get('volume-001.md')!
+    expect(content).toContain('## 第 1 章 · 开局')
+    expect(content).toContain('- 关键事件：A') // 新鲜窗口条目
+    expect(content).not.toContain('旧A') // stale 文件条目被排除
+    expect(content).not.toContain('旧开局')
   })
 
   it('F6：同章跨文件重复时较新窗口条目胜出（升序扫描去重）', async () => {

@@ -148,16 +148,19 @@ export function buildVolumeSummaryFile(
  * 卷创建晚于章节定稿/卷边界编辑后，条目散落在旧窗口文件（孤儿化），只读单窗口文件会漏收
  * → 完整性门槛永不过。文件数少（每 15 章一个），成本可忽略。同章条目跨文件重复时按窗口
  * 文件升序取最后出现者（较新窗口胜出）。
+ * fix round 2：扫描过滤 **stale 文件**（与 M2 注入侧 fresh 过滤同口径）——失效规则标记的
+ * 陈旧窗口（如卷对齐窗口 chapters-001-002.md 字典序在旧滚动 chapters-001-015.md 之前，
+ * 后者升序靠后处理会覆盖胜出）不得参与聚合，否则卷摘要用旧条目生成后仍被 M2 注入。
  */
 export async function ensureVolumeSummary(
   volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number },
 ): Promise<{ file: string | null; success: boolean }> {
   if (volume.chapterEnd === 0) return { file: null, success: false } // 进行中卷：不支持
   try {
-    const list = (await ipc.invoke('memory:list')) as { file: string; kind: string }[] | null
+    const list = (await ipc.invoke('memory:list')) as { file: string; kind: string; stale: boolean }[] | null
     if (!list) return { file: null, success: false }
     const chapterFiles = list
-      .filter(f => f.kind === 'chapters' || f.file.startsWith('chapters-'))
+      .filter(f => !f.stale && (f.kind === 'chapters' || f.file.startsWith('chapters-')))
       .map(f => f.file)
       .sort() // 零填充窗口名升序 = 数值序，后出现的文件为较新窗口
     const byChapter = new Map<number, ChapterSummaryEntry>()
