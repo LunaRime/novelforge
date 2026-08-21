@@ -292,9 +292,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           case 'clear': {
             const activeConv = get().getActiveConversation()
             if (activeConv) {
+              // ⚠️ P0 修复：/clear 必须同时重置滚动摘要与压缩批次——否则旧主题摘要
+              //    继续注入新对话的 system 尾部（污染新主题），压缩卡片也残留旧对话
               set(state => ({
                 conversations: state.conversations.map(c =>
-                  c.id === activeConv.id ? { ...c, messages: [] } : c
+                  c.id === activeConv.id
+                    ? { ...c, messages: [], rollingSummary: undefined, compressed: undefined }
+                    : c
                 ),
               }))
               // 清空同步落盘：否则重启后已清空的消息会从 archive 复活

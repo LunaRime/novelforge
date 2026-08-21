@@ -25,21 +25,27 @@ export async function generateConversationSummary(opts: {
     .join('\n\n')
   const prompt = buildCcrSummaryPrompt(opts.oldSummary, batchText)
 
+  // ⚠️ P0 修复：压缩摘要必须走 budget 路由（summarize→budget，设计 §7/计划 Global
+  //    Constraints）——此前直接传 opts.modelId（Agent 的 elite/standard 模型），
+  //    摘要成本高且与路由策略冲突。getModelForPurpose 无配置时返回 null，
+  //    回退 opts.modelId（调用方语义不变）。
+  const mid = useLLMStore.getState().getModelForPurpose('summarize') ?? opts.modelId
+
   const startTime = Date.now()
   const response = await useLLMStore.getState().generate(
     [{ role: 'user', content: prompt }],
-    opts.modelId,
+    mid,
     { temperature: 0.2, priority: 12 },
   )
   const duration = Date.now() - startTime
-  const model = useLLMStore.getState().models.find(m => m.id === opts.modelId)
+  const model = useLLMStore.getState().models.find(m => m.id === mid)
   const usage = response.usage
 
   if (!response.success) {
     // 失败落库 success:0（对照 agent-store.ts 失败分支惯例）
     try {
       await ipc.invoke('db:log-llm-call', {
-        model_id: opts.modelId,
+        model_id: mid,
         model_name: model?.name ?? model?.modelName ?? '',
         purpose: 'ccr_summary',
         prompt_tokens: 0, completion_tokens: 0, total_tokens: 0,
@@ -56,7 +62,7 @@ export async function generateConversationSummary(opts: {
       ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
       : 0
     await ipc.invoke('db:log-llm-call', {
-      model_id: opts.modelId,
+      model_id: mid,
       model_name: model?.name ?? model?.modelName ?? '',
       purpose: 'ccr_summary',
       prompt_tokens: usage?.promptTokens ?? 0,
