@@ -542,7 +542,7 @@ export function buildFinalizePostProcessSteps(
           callbacks.log(t('log.finalize.memoryDone').replace('{file}', file))
           // 卷级聚合：upsert 成功后检查所在卷（已闭合卷且卷内章节条目完整 → 生成 volume-NNN.md；否则静默跳过）
           const vol = volumes.find(v => entry.chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || entry.chapterNumber <= v.chapterEnd))
-          if (vol) await ensureVolumeSummary(vol, file)
+          if (vol) await ensureVolumeSummary(vol)
         } else {
           callbacks.log(t('log.finalize.memoryFailed'))
         }

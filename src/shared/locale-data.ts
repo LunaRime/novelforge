@@ -3219,6 +3219,8 @@ export const UI_TEXTS_DATA = {
   'memory.stale': { 'zh-CN': '待重建', 'en-US': 'Needs rebuild', 'ru-RU': 'Требует пересборки' },
   'memory.rebuild': { 'zh-CN': '重建', 'en-US': 'Rebuild', 'ru-RU': 'Пересобрать' },
   'memory.rebuildHint': { 'zh-CN': '已标记待重建——下次定稿/检查点自动生成', 'en-US': 'Marked for rebuild — regenerated on next finalize/checkpoint', 'ru-RU': 'Отмечено — будет пересобрано при следующей финализации' },
+  'memory.rebuildIncomplete': { 'zh-CN': '卷内章节记忆不完整，需先定稿缺失章节', 'en-US': 'Volume memory incomplete — finalize missing chapters first', 'ru-RU': 'Память тома неполна — сначала завершите недостающие главы' },
+  'memory.kindUnknown': { 'zh-CN': '其他', 'en-US': 'Other', 'ru-RU': 'Другое' },
   'memory.empty': { 'zh-CN': '暂无记忆——定稿章节后自动生成', 'en-US': 'No memory yet — generated after finalizing chapters', 'ru-RU': 'Память пока пуста — создаётся после финализации глав' },
 } as const
 

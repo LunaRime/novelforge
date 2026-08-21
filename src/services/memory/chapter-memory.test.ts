@@ -12,6 +12,13 @@ import { useLLMStore } from '../../stores/llm-store'
 
 // mock IPC（memory:read/write / db:log-llm-call 通道，P0 agent-store.test.ts 先例）
 const memoryFiles = new Map<string, string>()
+// memory:list 从内存文件表派生（ensureVolumeSummary 全量扫描依赖，F6）
+const listFiles = (): { file: string; kind: 'chapters' | 'volume' | 'book' | 'unknown'; stale: boolean }[] =>
+  [...memoryFiles.keys()].map(file => ({
+    file,
+    kind: file.startsWith('chapters-') ? 'chapters' as const : file.startsWith('volume-') ? 'volume' as const : 'book' as const,
+    stale: false,
+  }))
 const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
   switch (ch) {
     case 'memory:read':
@@ -20,6 +27,8 @@ const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
       memoryFiles.set(String(args[0]), String(args[1]))
       return { success: true }
     }
+    case 'memory:list':
+      return listFiles()
     case 'db:log-llm-call':
       return { success: true }
     default:
@@ -38,6 +47,8 @@ beforeEach(() => {
         memoryFiles.set(String(args[0]), String(args[1]))
         return { success: true }
       }
+      case 'memory:list':
+        return listFiles()
       case 'db:log-llm-call':
         return { success: true }
       default:
@@ -215,14 +226,14 @@ describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () =>
   })
 
   it('进行中卷（chapterEnd=0）直接跳过', async () => {
-    const res = await ensureVolumeSummary({ ...volume, chapterEnd: 0 }, 'chapters-001-015.md')
+    const res = await ensureVolumeSummary({ ...volume, chapterEnd: 0 })
     expect(res).toEqual({ file: null, success: false })
     expect(memoryFiles.size).toBe(0)
   })
 
   it('卷内条目不完整（未覆盖卷范围）→ 跳过', async () => {
     memoryFiles.set('chapters-001-015.md', '\n## 第 1 章 · 开局\n- 关键事件：A\n')
-    const res = await ensureVolumeSummary(volume, 'chapters-001-015.md')
+    const res = await ensureVolumeSummary(volume)
     expect(res).toEqual({ file: null, success: false })
     expect(memoryFiles.has('volume-001.md')).toBe(false)
   })
@@ -240,7 +251,7 @@ describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () =>
       '## 第 2 章 · 转折',
       '- 关键事件：B',
     ].join('\n'))
-    const res = await ensureVolumeSummary(volume, 'chapters-001-015.md')
+    const res = await ensureVolumeSummary(volume)
     expect(res).toEqual({ file: 'volume-001.md', success: true })
     const content = memoryFiles.get('volume-001.md')!
     expect(content).toContain('volume: 1')
@@ -248,5 +259,45 @@ describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () =>
     expect(content).toContain('# 第 1 卷 · 风起青萍')
     expect(content).toContain('## 第 1 章 · 开局')
     expect(content).toContain('## 第 2 章 · 转折')
+  })
+
+  it('F6：条目散落多窗口文件（卷创建晚于章节定稿的孤儿场景）→ 跨文件收集后聚合成功', async () => {
+    // 卷 1-2 创建前：第 1 章落在 chapters-001-015.md，第 2 章落在 chapters-016-030.md（滚动窗口）
+    memoryFiles.set('chapters-001-015.md', [
+      '',
+      '## 第 1 章 · 开局',
+      '- 关键事件：A',
+    ].join('\n'))
+    memoryFiles.set('chapters-016-030.md', [
+      '',
+      '## 第 2 章 · 转折',
+      '- 关键事件：B',
+    ].join('\n'))
+    const res = await ensureVolumeSummary(volume)
+    expect(res).toEqual({ file: 'volume-001.md', success: true })
+    const content = memoryFiles.get('volume-001.md')!
+    expect(content).toContain('## 第 1 章 · 开局')
+    expect(content).toContain('## 第 2 章 · 转折') // 跨文件收集
+  })
+
+  it('F6：同章跨文件重复时较新窗口条目胜出（升序扫描去重）', async () => {
+    memoryFiles.set('chapters-001-015.md', [
+      '',
+      '## 第 1 章 · 开局',
+      '- 关键事件：A',
+      '',
+      '## 第 2 章 · 旧窗口',
+      '- 关键事件：旧事件',
+    ].join('\n'))
+    memoryFiles.set('chapters-013-027.md', [
+      '',
+      '## 第 2 章 · 新窗口',
+      '- 关键事件：新事件',
+    ].join('\n'))
+    const res = await ensureVolumeSummary(volume)
+    expect(res.success).toBe(true)
+    const content = memoryFiles.get('volume-001.md')!
+    expect(content).toContain('## 第 2 章 · 新窗口')
+    expect(content).not.toContain('旧窗口')
   })
 })

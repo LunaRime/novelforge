@@ -144,29 +144,43 @@ export function buildVolumeSummaryFile(
 
 /**
  * 章节文件写入后调用：**仅已闭合卷（chapterEnd != 0）**——卷内章节条目完整（覆盖卷范围）→ 聚合生成 volume-N.md；进行中卷跳过（归 P2/手动重建，审阅修正）
+ * F6 修正：**扫描全部 chapters-*.md** 收集卷范围 [chapterStart..chapterEnd] 内的条目——
+ * 卷创建晚于章节定稿/卷边界编辑后，条目散落在旧窗口文件（孤儿化），只读单窗口文件会漏收
+ * → 完整性门槛永不过。文件数少（每 15 章一个），成本可忽略。同章条目跨文件重复时按窗口
+ * 文件升序取最后出现者（较新窗口胜出）。
  */
 export async function ensureVolumeSummary(
   volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number },
-  chapterFile: string,
 ): Promise<{ file: string | null; success: boolean }> {
   if (volume.chapterEnd === 0) return { file: null, success: false } // 进行中卷：不支持
   try {
-    const raw = await ipc.invoke('memory:read', chapterFile) as string | null
-    if (!raw) return { file: null, success: false }
-    const { body } = parseMemoryFile(raw) ?? { body: raw }
-    // 从章节文件正文解析条目（按「## 第 N 章 ·」块；标题从块头分离——审阅修正）
-    const entries: ChapterSummaryEntry[] = []
-    const blocks = body.split('\n## 第 ')
-    for (const b of blocks.slice(1)) {
-      const numMatch = b.match(/^(\d+) 章 · (.+)/)
-      if (!numMatch) continue
-      const field = (label: string) => { const m = b.match(new RegExp(`${label}：([^\\n]+)`)); return m ? m[1].trim() : '' }
-      entries.push({ chapterNumber: Number(numMatch[1]), title: numMatch[2].trim(), keyEvents: field('关键事件'), characters: field('出场角色'), foreshadowing: field('伏笔'), newElements: field('新设定'), currentState: field('当前状态') })
+    const list = (await ipc.invoke('memory:list')) as { file: string; kind: string }[] | null
+    if (!list) return { file: null, success: false }
+    const chapterFiles = list
+      .filter(f => f.kind === 'chapters' || f.file.startsWith('chapters-'))
+      .map(f => f.file)
+      .sort() // 零填充窗口名升序 = 数值序，后出现的文件为较新窗口
+    const byChapter = new Map<number, ChapterSummaryEntry>()
+    for (const file of chapterFiles) {
+      const raw = await ipc.invoke('memory:read', file) as string | null
+      if (!raw) continue
+      const { body } = parseMemoryFile(raw) ?? { body: raw }
+      // 从章节文件正文解析条目（按「## 第 N 章 ·」块；标题从块头分离——审阅修正）
+      const blocks = body.split('\n## 第 ')
+      for (const b of blocks.slice(1)) {
+        const numMatch = b.match(/^(\d+) 章 · (.+)/)
+        if (!numMatch) continue
+        const num = Number(numMatch[1])
+        if (num < volume.chapterStart || num > volume.chapterEnd) continue // 只收卷内章节
+        const field = (label: string) => { const m = b.match(new RegExp(`${label}：([^\\n]+)`)); return m ? m[1].trim() : '' }
+        byChapter.set(num, { chapterNumber: num, title: numMatch[2].trim(), keyEvents: field('关键事件'), characters: field('出场角色'), foreshadowing: field('伏笔'), newElements: field('新设定'), currentState: field('当前状态') })
+      }
     }
     // 完整性检查：卷内章节号连续覆盖（chapterStart..chapterEnd）
     const expected = Array.from({ length: volume.chapterEnd - volume.chapterStart + 1 }, (_, i) => volume.chapterStart + i)
-    const has = expected.every(n => entries.some(e => e.chapterNumber === n))
+    const has = expected.every(n => byChapter.has(n))
     if (!has) return { file: null, success: false } // 未完整，跳过
+    const entries = [...byChapter.values()].sort((a, b) => a.chapterNumber - b.chapterNumber)
     const file = `volume-${String(volume.volumeNumber).padStart(3, '0')}.md` // 零填充防字典序错排（审阅修正）
     await ipc.invoke('memory:write', file, buildVolumeSummaryFile(volume, entries))
     return { file, success: true }

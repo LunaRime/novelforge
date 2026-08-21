@@ -15,7 +15,7 @@ import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw } from 'lucide-re
 import { useMemoryStore } from '../../../stores/memory-store'
 import { useVolumeStore } from '../../../stores/volume-store'
 import { ipc } from '../../../services/ipc-client'
-import { computeMemoryFileRange, ensureVolumeSummary } from '../../../services/memory/chapter-memory'
+import { ensureVolumeSummary } from '../../../services/memory/chapter-memory'
 import { toast } from '../../ui/Toast'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { globalEventBus } from '../../../shared/event-bus'
@@ -46,7 +46,7 @@ export default function MemoryGroup({ projectPath }: Props) {
 
   /** 手动重建入口 */
   const handleRebuild = async (f: MemoryFileMeta) => {
-    // 卷级：从对应章节文件（computeMemoryFileRange 定位卷起始窗口）解析条目 →
+    // 卷级：ensureVolumeSummary 扫描全部 chapters-*.md 收集卷内条目 →
     // buildVolumeSummaryFile 组装 → memory:write 覆盖（纯函数聚合，零 LLM，即时完成）
     if (f.kind === 'volume') {
       const m = f.file.match(/^volume-(\d+)\.md$/)
@@ -60,10 +60,10 @@ export default function MemoryGroup({ projectPath }: Props) {
         toast.success(t('memory.rebuildHint'))
         return
       }
-      const { file } = computeMemoryFileRange(vol.chapterStart, volumes)
-      const res = await ensureVolumeSummary(vol, file)
+      const res = await ensureVolumeSummary(vol)
       if (res.success) await refresh() // 覆盖写（无 status:stale）→ stale 徽标消失
-      else toast.error(t('error.unknown'))
+      // F6：重建失败 = 卷内章节条目不完整（未定稿）——明确指引而非笼统未知错误
+      else toast.error(t('memory.rebuildIncomplete'))
       return
     }
     // 章节/全书：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；全书 P2 无生成链路）
@@ -151,7 +151,9 @@ function MemoryRow({ meta, onRebuild }: {
     ? t('memory.kindChapters')
     : meta.kind === 'volume'
       ? t('memory.kindVolume')
-      : t('memory.kindBook')
+      : meta.kind === 'book'
+        ? t('memory.kindBook')
+        : t('memory.kindUnknown') // F9：未知前缀文件（用户手放 notes.md 等）
 
   /** 行点击切换查看（memory:read 只读；首次展开才读取） */
   const toggleView = () => {
