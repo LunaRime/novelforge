@@ -6,6 +6,8 @@
  */
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
+import { renderLog } from '../services/render-logger'
+import { affectedFiles, invalidateMemoryFiles } from '../services/memory/memory-invalidation'
 import type { VolumeData } from '../../electron/repositories/volume-repository'
 
 interface VolumeState {
@@ -24,6 +26,18 @@ interface VolumeState {
 
 // 加载请求序号：快速切换项目时，旧项目的慢响应不得覆盖当前项目数据
 let loadSeq = 0
+
+/**
+ * 卷成员变更后：标记受影响区间记忆文件 stale（CCR P1 Task 3）。
+ * 非关键路径：失败仅日志，不阻断卷编辑。boundary = 变更卷的 chapterStart（或 1）。
+ */
+async function invalidateVolumeMemory(volumes: VolumeData[], boundary: number): Promise<void> {
+  try {
+    await invalidateMemoryFiles(affectedFiles(Math.max(1, boundary), volumes).map(f => f.file))
+  } catch (e) {
+    renderLog('warn', 'Memory', `[volume-store] 记忆文件失效标记失败: ${String(e)}`)
+  }
+}
 
 export const useVolumeStore = create<VolumeState>()((set, get) => ({
   volumes: [],
@@ -47,13 +61,22 @@ export const useVolumeStore = create<VolumeState>()((set, get) => ({
 
   upsert: async (data) => {
     const res = await ipc.invoke('db:volume-upsert', data)
-    if (res.success) await get().load()
+    if (res.success) {
+      await get().load()
+      // 卷变更后失效标记：边界 = 变更卷的 chapterStart（volumes 为变更后的最新列表）
+      await invalidateVolumeMemory(get().volumes, data.chapterStart)
+    }
     return res.success === true
   },
 
   remove: async (volumeNumber) => {
+    const target = get().volumes.find(v => v.volumeNumber === volumeNumber)
     const res = await ipc.invoke('db:volume-delete', volumeNumber)
-    if (res.success) await get().load()
+    if (res.success) {
+      await get().load()
+      // 卷删除后失效标记：边界 = 被删卷的 chapterStart（或 1）
+      await invalidateVolumeMemory(get().volumes, target?.chapterStart ?? 1)
+    }
     return res.success === true
   },
 
