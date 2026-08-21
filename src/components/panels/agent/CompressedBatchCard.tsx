@@ -1,11 +1,13 @@
 import { useState } from 'react'
 import type { CompressedBatch } from '../../../services/agent/archive-codec'
+import { estimateTokens } from '../../../services/agent/token-budget'
 import { t } from '../../../shared/locale'
 
 /** CCR 压缩事件卡片：摘要 + 展开恢复原文（设计 §4.4） */
 export default function CompressedBatchCard({ batch }: { batch: CompressedBatch }) {
   const [expanded, setExpanded] = useState(false)
-  const savedTokens = batch.originalTokens
+  // 净节省 = 原始 token − 摘要 token（设计 §4.4）；≤0 时不显示节省标注
+  const savedTokens = batch.originalTokens - estimateTokens(batch.summary)
 
   return (
     <div

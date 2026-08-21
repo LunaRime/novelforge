@@ -234,14 +234,18 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       return { conversations: filtered, activeConversationId: nextId }
     })
     // 同步删除归档文件（主进程幂等删除；fire-and-forget）
-    ipc.invoke('fs:agent-archive-delete', id).catch(() => {})
+    ipc.invoke('fs:agent-archive-delete', id).catch(() => {
+      console.warn('[Agent] 归档删除失败:', id)
+    })
   },
 
   clearAll: () => {
     const ids = get().conversations.map(c => c.id)
     set({ conversations: [], activeConversationId: null })
     for (const id of ids) {
-      ipc.invoke('fs:agent-archive-delete', id).catch(() => {})
+      ipc.invoke('fs:agent-archive-delete', id).catch(() => {
+        console.warn('[Agent] 归档删除失败:', id)
+      })
     }
   },
 

@@ -46,16 +46,32 @@ export function serializeArchive(conv: AgentConversation): string {
   return JSON.stringify(conv, null, 2)
 }
 
-/** 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认 */
+/** 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认；手改/损坏形状逐条防御 */
 export function parseArchive(raw: string): AgentConversation | null {
   try {
     const data = JSON.parse(raw) as Partial<AgentConversation>
     if (!data || typeof data.id !== 'string' || typeof data.title !== 'string') return null
-    return {
-      ...data,
-      messages: Array.isArray(data.messages) ? data.messages : [],
-      compressed: Array.isArray(data.compressed) ? data.compressed : [],
-    } as AgentConversation
+    // ⚠️ P0 修复：手改/损坏归档的形状防御——messages 逐条校验 content 字符串
+    //    （非法条过滤，防止渲染层 m.content 崩溃）；compressed 条目 original
+    //    非数组时置空（CompressedBatchCard 展开依赖 original.length/map）
+    const messages: AgentMessage[] = Array.isArray(data.messages)
+      ? data.messages.filter(
+          m => !!m && typeof m === 'object' && typeof (m as { content?: unknown }).content === 'string'
+        )
+      : []
+    const compressed: CompressedBatch[] = Array.isArray(data.compressed)
+      ? (data.compressed as unknown as CompressedBatch[])
+          .filter(b => !!b && typeof b === 'object' && typeof b.summary === 'string')
+          .map(b => ({
+            ...b,
+            original: Array.isArray(b.original)
+              ? b.original.filter(
+                  m => !!m && typeof m === 'object' && typeof (m as { content?: unknown }).content === 'string'
+                )
+              : [],
+          }))
+      : []
+    return { ...data, messages, compressed } as AgentConversation
   } catch {
     return null
   }
