@@ -77,18 +77,26 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
   // 总上限 3500 → 3800（M1 记忆层 300；超限按 M1 → L1 → Tool 顺序降级）
   if (estimateTokens(full) > 3800) {
     console.warn(`[ContextBuilder] 系统提示词过大 (${estimateTokens(full)} tokens)，按优先级裁剪`)
-    const l1Index = parts.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
+    // 1. 先丢 M1 记忆节
+    parts[1] = ''
+    // 2. base 拆回节数组（拼接分隔符 '\n\n---\n\n'），按标题定位裁剪 L1
+    const baseSections = parts[0].split('\n\n---\n\n')
+    const l1Index = baseSections.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
     if (l1Index >= 0) {
-      parts[l1Index] = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOmitted')}`
+      baseSections[l1Index] = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOmitted')}`
     }
-    const trimmed = parts.join('\n\n---\n\n')
-    if (estimateTokens(trimmed) > 3800) {
-      const toolIndex = parts.findIndex(s => s.startsWith(t('engine.toolSystemTitle')))
-      if (toolIndex >= 0 && parts[toolIndex].length > 500) {
-        parts[toolIndex] = parts[toolIndex].slice(0, 500) + '\n\n…' + t('engine.toolListTruncated')
+    const trimmedBase = baseSections.join('\n\n---\n\n')
+    // 3. 仍超限则裁剪 Tool
+    if (estimateTokens(`${trimmedBase}\n\n---\n\n${parts[1]}`) > 3800) {
+      const toolIndex = baseSections.findIndex(s => s.startsWith(t('engine.toolSystemTitle')))
+      if (toolIndex >= 0 && baseSections[toolIndex].length > 500) {
+        baseSections[toolIndex] = baseSections[toolIndex].slice(0, 500) + '\n\n…' + t('engine.toolListTruncated')
       }
     }
-    return appendOutputLanguage(parts.join('\n\n---\n\n'), getCurrentLocale())
+    return appendOutputLanguage(
+      `${baseSections.join('\n\n---\n\n')}${parts[1] ? '\n\n---\n\n' + parts[1] : ''}`,
+      getCurrentLocale(),
+    )
   }
   return appendOutputLanguage(full, getCurrentLocale())
 }
