@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { affectedFiles, invalidateMemoryFiles } from './memory-invalidation'
+import { affectedFiles, collectAffectedFiles, invalidateMemoryFiles } from './memory-invalidation'
 
 describe('affectedFiles（失效区间）', () => {
   it('卷成员变更 → 变更卷起始窗口 + 相邻滚动窗口双失效', () => {
@@ -21,6 +21,36 @@ describe('affectedFiles（失效区间）', () => {
     const files = affectedFiles(12, [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 12 }, { volumeNumber: 2, chapterStart: 13, chapterEnd: 0 }])
     const names = files.map(f => f.file)
     expect(names).toContain('chapters-001-012.md')
+  })
+})
+
+describe('collectAffectedFiles（diff 式失效区间——reviewer F1 修正）', () => {
+  it('单侧边界编辑：成员变更章节所在文件被失效（欠失效回归）', () => {
+    const oldVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 15 }]
+    const newVolumes = [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 12 }, { volumeNumber: 2, chapterStart: 13, chapterEnd: 0 }]
+    // 受影响区间 = 变更卷旧范围 ∪ 新范围（1..15 ∪ 1..12）
+    const files = collectAffectedFiles(oldVolumes, newVolumes, 1, 15)
+    expect(files).toContain('chapters-001-015.md') // 13-15 章滚动窗口（旧归属）——欠失效场景必标
+    expect(files).toContain('chapters-001-012.md') // 新卷窗口
+  })
+
+  it('删除进行中卷（31+ 章）→ 其滚动窗口文件被失效（欠失效回归）', () => {
+    const oldVolumes = [{ volumeNumber: 1, chapterStart: 31, chapterEnd: 0 }]
+    // 进行中卷（end=0）保守上限 start..start+30
+    const files = collectAffectedFiles(oldVolumes, [], 31, 61)
+    expect(files).toContain('chapters-031-045.md')
+    expect(files).toContain('chapters-046-060.md')
+    expect(files).toContain('chapters-061-075.md')
+  })
+
+  it('去重且顺序稳定（同章在变更前后映射同一文件不重复）', () => {
+    const files = collectAffectedFiles(
+      [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 15 }],
+      [{ volumeNumber: 1, chapterStart: 1, chapterEnd: 12 }, { volumeNumber: 2, chapterStart: 13, chapterEnd: 0 }],
+      1, 15,
+    )
+    expect(new Set(files).size).toBe(files.length)
+    expect(files[0]).toBe('chapters-001-015.md')
   })
 })
 
