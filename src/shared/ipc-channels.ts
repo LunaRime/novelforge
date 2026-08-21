@@ -186,6 +186,22 @@ export interface FileChannels {
     args: [filePath: string, data: unknown]
     return: { success: boolean; error?: string }
   }
+  'fs:agent-archive-list': {
+    args: [];
+    return: { id: string; title: string; updatedAt: number }[];
+  },
+  'fs:agent-archive-read': {
+    args: [id: string];
+    return: string | null;
+  },
+  'fs:agent-archive-write': {
+    args: [id: string, content: string];
+    return: { success: boolean };
+  },
+  'fs:agent-archive-delete': {
+    args: [id: string];
+    return: { success: boolean };
+  },
 }
 
 // ===== LLM 调用 =====

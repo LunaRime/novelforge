@@ -287,6 +287,67 @@ export function registerFSController() {
       return { success: false, error: safeErrorMessage(error) }
     }
   })
+
+  // ===== Agent 会话归档（~/.vela/agent-archive/<id>.json，CCR 持久化层） =====
+  // 渲染进程不持有 VELA_HOME 路径，归档目录由主进程统一定位（同模板/技能/日志惯例）
+  const archivePath = (id: string): string => {
+    const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '') // uuid 防御性清洗，防路径穿越
+    return path.join(VELA_HOME, 'agent-archive', `${safe}.json`)
+  }
+
+  ipcMain.handle('fs:agent-archive-list', async (): Promise<{ id: string; title: string; updatedAt: number }[]> => {
+    const dir = path.join(VELA_HOME, 'agent-archive')
+    try {
+      await fsPromises.mkdir(dir, { recursive: true })
+      const entries = await fsPromises.readdir(dir, { withFileTypes: true })
+      const out: { id: string; title: string; updatedAt: number }[] = []
+      for (const entry of entries) {
+        if (!entry.isFile() || !entry.name.endsWith('.json')) continue
+        const id = entry.name.slice(0, -5)
+        try {
+          const raw = await fsPromises.readFile(path.join(dir, entry.name), 'utf-8')
+          const data = JSON.parse(raw) as { title?: string; updatedAt?: number }
+          out.push({ id, title: data.title ?? id, updatedAt: data.updatedAt ?? 0 })
+        } catch {
+          // 损坏归档跳过（列表仍可用，读取时再降级）
+        }
+      }
+      return out.sort((a, b) => b.updatedAt - a.updatedAt)
+    } catch {
+      return []
+    }
+  })
+
+  ipcMain.handle('fs:agent-archive-read', async (_e, id: string): Promise<string | null> => {
+    try {
+      return await fsPromises.readFile(archivePath(id), 'utf-8')
+    } catch {
+      return null
+    }
+  })
+
+  ipcMain.handle('fs:agent-archive-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
+    try {
+      const dir = path.join(VELA_HOME, 'agent-archive')
+      await fsPromises.mkdir(dir, { recursive: true })
+      const target = archivePath(id)
+      const temp = `${target}.tmp`
+      await fsPromises.writeFile(temp, content, 'utf-8')
+      await fsPromises.rename(temp, target)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
+  })
+
+  ipcMain.handle('fs:agent-archive-delete', async (_e, id: string): Promise<{ success: boolean }> => {
+    try {
+      await fsPromises.unlink(archivePath(id))
+      return { success: true }
+    } catch {
+      return { success: false } // 文件不存在视为成功语义（幂等删除）
+    }
+  })
 }
 
 function readDirRecursive(dirPath: string): FileNode[] {
