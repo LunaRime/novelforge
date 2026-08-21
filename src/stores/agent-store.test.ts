@@ -78,7 +78,8 @@ describe('agent-store 持久化', () => {
 
   it('restoreArchives 从 archive 恢复会话列表', async () => {
     const conv = useAgentStore.getState().createConversation({ title: '旧会话' })
-    useAgentStore.getState().clearAll()
+    // 仅清内存（不经 clearAll——clearAll 会同步删归档，测试意图是验证 restoreArchives 从 archive 重建列表）
+    useAgentStore.setState({ conversations: [], activeConversationId: null })
     await useAgentStore.getState().restoreArchives()
     const restored = useAgentStore.getState().conversations.find(c => c.id === conv.id)
     expect(restored).toBeDefined()

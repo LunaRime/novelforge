@@ -237,7 +237,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   clearAll: () => {
+    const ids = get().conversations.map(c => c.id)
     set({ conversations: [], activeConversationId: null })
+    for (const id of ids) {
+      ipc.invoke('fs:agent-archive-delete', id).catch(() => {})
+    }
   },
 
   toggleHistory: () => {
@@ -752,9 +756,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         if (conv) restored.push(conv)
       }
       if (mySeq !== archiveLoadSeq) return // 旧请求晚到不覆盖
-      set(state => ({
-        conversations: [...restored, ...state.conversations],
-      }))
+      set(state => {
+        // 顺序二次调用（HMR 重执行/未来刷新入口）按 id 去重，避免整体重复
+        const existingIds = new Set(state.conversations.map(c => c.id))
+        const merged = [...restored.filter(c => !existingIds.has(c.id)), ...state.conversations]
+        return { conversations: merged }
+      })
     } catch {
       // 恢复失败静默（首次启动无归档目录属正常）
     }
