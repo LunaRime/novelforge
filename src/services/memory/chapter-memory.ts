@@ -1,6 +1,7 @@
 import { t } from '../../shared/locale'
 import { useLLMStore } from '../../stores/llm-store'
 import { ipc } from '../ipc-client'
+import { calculateCost } from '../llm/prompt-cache'
 import { parseMemoryFile, buildChapterEntryBlock, type ChapterSummaryEntry } from './memory-codec'
 
 /** 15 章滚动窗口（无分卷/未命中/进行中卷时） */
@@ -33,7 +34,8 @@ export function computeMemoryFileRange(
 /** 章节摘要 prompt（budget 路由 + 温度 0.2；输出为六字段清单） */
 export function buildChapterSummaryPrompt(chapterNumber: number, chapterTitle: string, draftContent: string): string {
   return [
-    t('memory.summaryPrompt').replace('{n}', String(chapterNumber)).replace('{title}', chapterTitle),
+    // {title} 用函数形式 replace：标题含 $&/$'/$`/$n 时 String.replace 会做 $ 模式插值污染 prompt
+    t('memory.summaryPrompt').replace('{n}', String(chapterNumber)).replace('{title}', () => chapterTitle),
     '',
     t('memory.draftLabel'),
     draftContent,
@@ -52,14 +54,22 @@ export async function generateChapterSummary(opts: {
   const startTime = Date.now()
   const response = await useLLMStore.getState().generate([{ role: 'user', content: prompt }], mid, { temperature: 0.2, priority: 12 })
   const duration = Date.now() - startTime
+  const model = useLLMStore.getState().models.find(m => m.id === mid)
+  const usage = response.usage
   if (!response.success) throw new Error(response.error ?? 'memory summary failed')
   try {
+    // 真实 usage/cost 落库（对照 ccr-summary.ts 先例——此前 token/cost 恒 0，统计失真）
+    const cost = usage && model
+      ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
+      : 0
     await ipc.invoke('db:log-llm-call', {
       model_id: mid,
-      model_name: useLLMStore.getState().models.find(m => m.id === mid)?.name ?? '',
+      model_name: model?.name ?? model?.modelName ?? '',
       purpose: 'memory_summary',
-      prompt_tokens: 0, completion_tokens: 0, total_tokens: 0,
-      duration_ms: duration, success: 1, error_message: '', cost: 0,
+      prompt_tokens: usage?.promptTokens ?? 0,
+      completion_tokens: usage?.completionTokens ?? 0,
+      total_tokens: usage?.totalTokens ?? 0,
+      duration_ms: duration, success: 1, error_message: '', cost,
     })
   } catch { /* 日志失败不影响主流程 */ }
   // 六字段解析：LLM 输出以「关键事件：」等六行格式（prompt 已约束）；解析失败字段降级 '无'

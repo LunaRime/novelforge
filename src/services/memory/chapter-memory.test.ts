@@ -104,6 +104,36 @@ describe('generateChapterSummary（LLM 六字段解析）', () => {
     expect(entry.newElements).toBe('魔族大陆')
     expect(entry.currentState).toBe('主角重伤')
   })
+
+  it('LLM 调用失败 → throw（DAG 步骤容错依赖）', async () => {
+    useLLMStore.setState({
+      generate: vi.fn(async () => ({ success: false, error: 'boom', content: '' })),
+    })
+    await expect(
+      generateChapterSummary({ chapterNumber: 7, chapterTitle: '决战', draftContent: '正文', modelId: 'test-model' }),
+    ).rejects.toThrow('boom')
+  })
+
+  it('成功路径以 purpose memory_summary 落库且带真实 usage token 统计', async () => {
+    useLLMStore.setState({
+      generate: vi.fn(async () => ({
+        success: true,
+        content: '关键事件：A',
+        usage: { promptTokens: 100, completionTokens: 50, totalTokens: 150 },
+      })),
+    })
+    await generateChapterSummary({ chapterNumber: 7, chapterTitle: '决战', draftContent: '正文', modelId: 'test-model' })
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'db:log-llm-call',
+      expect.objectContaining({
+        purpose: 'memory_summary',
+        success: 1,
+        prompt_tokens: 100,
+        completion_tokens: 50,
+        total_tokens: 150,
+      }),
+    )
+  })
 })
 
 describe('upsertChapterMemory（按章节号替换/追加 + stale 闭环）', () => {

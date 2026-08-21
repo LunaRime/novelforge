@@ -2917,7 +2917,7 @@ export const UI_TEXTS_DATA = {
   'log.finalize.voiceDone': { 'zh-CN': '角色声音分析完成 ({done}/{total})', 'en-US': 'Voice analysis done ({done}/{total})', 'ru-RU': 'Анализ голосов завершён ({done}/{total})' },
   'log.finalize.voiceFailed': { 'zh-CN': '⚠️ 角色声音分析失败: {error}', 'en-US': '⚠️ Voice analysis failed: {error}', 'ru-RU': '⚠️ Ошибка анализа голосов: {error}' },
   'log.finalize.memoryDone': { 'zh-CN': '📝 章节记忆已更新（{file}）', 'en-US': '📝 Chapter memory updated ({file})', 'ru-RU': '📝 Память главы обновлена ({file})' },
-  'log.finalize.memoryFailed': { 'zh-CN': '⚠️ 章节记忆生成失败', 'en-US': '⚠️ Chapter memory generation failed', 'ru-RU': '⚠️ Ошибка генерации памяти главы' },
+  'log.finalize.memoryFailed': { 'zh-CN': '⚠️ 章节记忆生成失败（{error}）', 'en-US': '⚠️ Chapter memory generation failed ({error})', 'ru-RU': '⚠️ Ошибка генерации памяти главы ({error})' },
   'log.finalize.start': { 'zh-CN': '\n===== 开始定稿与后处理分析 =====', 'en-US': '\n===== Starting finalization & post-processing =====', 'ru-RU': '\n===== Финализация и пост-обработка =====' },
   'log.finalize.fileWriteFailed': { 'zh-CN': '⚠️ 写入根目录物理文件失败: {error}', 'en-US': '⚠️ Failed to write the physical file: {error}', 'ru-RU': '⚠️ Ошибка записи файла: {error}' },
   'log.finalize.written': { 'zh-CN': '✅ 定稿内容已正式写入 SQLite 数据库并同步为根目录文件 (第{chapter}章{title}.txt)', 'en-US': '✅ Finalized content written to SQLite and synced as the root file (Ch.{chapter}{title}.txt)', 'ru-RU': '✅ Текст финализирован: сохранён в SQLite и в корневой файл (гл.{chapter}{title}.txt)' },
