@@ -110,8 +110,8 @@ interface AgentState {
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
   /** 启动恢复：扫描 ~/.vela/agent-archive 重建会话列表（loadSeq 防竞态） */
   restoreArchives: () => Promise<void>
-  /** 持久化当前会话（防抖 500ms，fire-and-forget） */
-  persistCurrent: () => Promise<void>
+  /** 持久化会话（防抖 500ms，fire-and-forget）；convId 缺省取当前活跃会话 */
+  persistCurrent: (convId?: string) => Promise<void>
 }
 
 // ===== 工具函数 =====
@@ -216,7 +216,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeConversationId: newConv.id,
       showHistory: false,
     }))
-    get().persistCurrent()
+    get().persistCurrent(newConv.id)
     return newConv
   },
 
@@ -298,7 +298,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 ),
               }))
               // 清空同步落盘：否则重启后已清空的消息会从 archive 复活
-              get().persistCurrent()
+              get().persistCurrent(activeConv.id)
             }
             return
           }
@@ -384,7 +384,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
     // 消息写入即时落盘（leading 写 + 尾写防抖）：否则 archive 只有创建时的空壳快照，
     // 长会话刷新后无法完整恢复
-    get().persistCurrent()
+    get().persistCurrent(convId)
 
     // 辅助函数：更新助手消息
     const updateAssistantMsg = (updater: (msg: AgentMessage) => AgentMessage) => {
@@ -523,7 +523,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   : c
               ),
             }))
-            get().persistCurrent()
+            get().persistCurrent(convId)
           }
         } catch {
           // 摘要失败降级：不压缩，走下方硬截断（历史行为，不阻断对话）
@@ -732,7 +732,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               ),
             }))
             // 流式完成最终状态落盘（含完整助手回复/tool 产物）：刷新后可完整恢复
-            get().persistCurrent()
+            get().persistCurrent(convId)
           },
           onError: (error) => {
             if (mySeq !== generationSeq) return
@@ -819,11 +819,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
   },
 
-  persistCurrent: async () => {
+  persistCurrent: async (convId?: string) => {
     // 首写立即落盘（快照即时可见，恢复流程依赖首写落盘）；
     // 500ms 窗口内重复调用走尾写防抖，收尾写合并（fire-and-forget）
-    const doWrite = () => {
-      const conv = get().getActiveConversation()
+    // ⚠️ 必须按「变更会话 convId」而非「当前活跃会话」序列化：会话 A 生成中
+    //    （ReAct 30-120s）用户切到 B，A 的 onDone 落盘若取活跃会话会把 A 的流式状态
+    //    写到 B 名下，A 的 archive 停在 leading 写的空助手占位符（streaming:true），
+    //    重启后 A 回复空白。所有调用点均已传 convId。
+    const targetId = convId ?? get().activeConversationId
+    if (!targetId) return
+    const doWrite = (cid: string) => {
+      const conv = get().conversations.find(c => c.id === cid)
       if (!conv) return
       ipc.invoke('fs:agent-archive-write', conv.id, serializeArchive(conv)).catch(() => {
         console.warn('[Agent] 会话归档写盘失败:', conv.id)
@@ -832,10 +838,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (persistTimer) {
       clearTimeout(persistTimer)
     }
-    doWrite()
+    doWrite(targetId)
     persistTimer = setTimeout(() => {
       persistTimer = null
-      doWrite()
+      doWrite(targetId)
     }, 500)
   },
 }))

@@ -41,6 +41,7 @@ tailwind.config.js.bak
 .codewhale/
 
 # 测试覆盖率
+.agents/
 coverage/
 .claude/
 CLAUDE.md
