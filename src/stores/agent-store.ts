@@ -13,6 +13,9 @@ import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
+import { serializeArchive, parseArchive, type CompressedBatch } from '../services/agent/archive-codec'
+import { ipc } from '../services/ipc-client'
+import { useProjectStore } from './project-store'
 
 // ===== 类型定义 =====
 
@@ -48,6 +51,13 @@ export interface AgentConversation {
   modelId: string | null
   /** 角色试演：绑定的角色名（Agent 以该角色身份回复；无此字段为普通会话） */
   roleplayCharacter?: string
+  /** CCR：已压缩批次（保留 2-3 代原文，供压缩卡片展开恢复） */
+  compressed?: CompressedBatch[]
+  /** CCR：滚动摘要（M1，注入 system 尾部标注节） */
+  rollingSummary?: string
+  /** 创建时项目快照（仅展示与恢复提示，P0 不做按快照注入） */
+  projectPath?: string
+  projectName?: string
 }
 
 // ===== Store 状态接口 =====
@@ -97,6 +107,10 @@ interface AgentState {
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
+  /** 启动恢复：扫描 ~/.vela/agent-archive 重建会话列表（loadSeq 防竞态） */
+  restoreArchives: () => Promise<void>
+  /** 持久化当前会话（防抖 500ms，fire-and-forget） */
+  persistCurrent: () => Promise<void>
 }
 
 // ===== 工具函数 =====
@@ -148,6 +162,10 @@ let activeStreamRequestId: string | null = null
 /** 生成序号 — 取消后立即发新消息时，旧请求的 onDone/onError 晚到不覆盖新状态 */
 let generationSeq = 0
 
+/** archive 恢复请求序号 — 快速启动/重复调用时旧请求晚到不覆盖新状态 */
+let archiveLoadSeq = 0
+let persistTimer: ReturnType<typeof setTimeout> | null = null
+
 // ===== Zustand Store =====
 
 export const useAgentStore = create<AgentState>()((set, get) => ({
@@ -179,6 +197,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     get().initializeTools()
 
     const llmStore = useLLMStore.getState()
+    const project = useProjectStore.getState().currentProject
     const newConv: AgentConversation = {
       id: genId(),
       title: opts?.title ?? t('agent.newConversation'),
@@ -188,12 +207,15 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       mode: get().defaultMode,
       modelId: llmStore.defaultModelId,
       roleplayCharacter: opts?.roleplayCharacter,
+      projectPath: project?.path,
+      projectName: project?.name,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
       activeConversationId: newConv.id,
       showHistory: false,
     }))
+    get().persistCurrent()
     return newConv
   },
 
@@ -210,6 +232,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         : state.activeConversationId
       return { conversations: filtered, activeConversationId: nextId }
     })
+    // 同步删除归档文件（主进程幂等删除；fire-and-forget）
+    ipc.invoke('fs:agent-archive-delete', id).catch(() => {})
   },
 
   clearAll: () => {
@@ -714,5 +738,45 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       pending.resolve(confirmed)
       pendingConfirmations.delete(toolCallId)
     }
+  },
+
+  restoreArchives: async () => {
+    const mySeq = ++archiveLoadSeq
+    try {
+      const list = (await ipc.invoke('fs:agent-archive-list')) as { id: string; title: string; updatedAt: number }[]
+      const restored: AgentConversation[] = []
+      for (const meta of list) {
+        const raw = await ipc.invoke('fs:agent-archive-read', meta.id) as string | null
+        if (!raw) continue
+        const conv = parseArchive(raw)
+        if (conv) restored.push(conv)
+      }
+      if (mySeq !== archiveLoadSeq) return // 旧请求晚到不覆盖
+      set(state => ({
+        conversations: [...restored, ...state.conversations],
+      }))
+    } catch {
+      // 恢复失败静默（首次启动无归档目录属正常）
+    }
+  },
+
+  persistCurrent: async () => {
+    // 首写立即落盘（快照即时可见，恢复流程依赖首写落盘）；
+    // 500ms 窗口内重复调用走尾写防抖，收尾写合并（fire-and-forget）
+    const doWrite = () => {
+      const conv = get().getActiveConversation()
+      if (!conv) return
+      ipc.invoke('fs:agent-archive-write', conv.id, serializeArchive(conv)).catch(() => {
+        console.warn('[Agent] 会话归档写盘失败:', conv.id)
+      })
+    }
+    if (persistTimer) {
+      clearTimeout(persistTimer)
+    }
+    doWrite()
+    persistTimer = setTimeout(() => {
+      persistTimer = null
+      doWrite()
+    }, 500)
   },
 }))
