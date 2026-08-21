@@ -6,7 +6,7 @@
  * - L1 编辑器感知（~600 token 预算）：当前打开的 Tab 信息
  * - L2 按需获取：通过 Tool 调用获取详细数据
  *
- * 系统提示词总上限 ~3000 tokens。
+ * 系统提示词总上限 ~4700 tokens（设计 §4.3：P1 加 M2 记忆层 800 + M1 300）。
  */
 
 import { useProjectStore } from '../../stores/project-store'
@@ -22,6 +22,9 @@ import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 /** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间，累计不超过此值） */
 const M2_BUDGET_TOKENS = 800
+
+/** 系统提示词总上限（设计 §4.3：身份/L0/L1/Tool ~3000 + M2 800 + M1 300 ≈ 4700） */
+const TOTAL_BUDGET_TOKENS = 4700
 
 // ===== 上下文构建 =====
 
@@ -74,50 +77,77 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
 
 /** 兼容入口（M1 only，同步）：base + memory + 语言指令（语言指令保持最末尾，优先于一切） */
 export function buildAgentSystemPrompt(mode: AgentMode): string {
-  return assembleFinalPrompt(buildAgentSystemSegments(mode))
+  const segments = buildAgentSystemSegments(mode)
+  return assembleFinalPrompt({ base: segments.base, memoryM1: segments.memory, memoryM2: '' })
 }
 
-/** 最终拼装（同步/异步共用）：base + memory + 语言指令；超限按 M1 → L1 → Tool 顺序降级 */
-function assembleFinalPrompt(segments: { base: string; memory: string }): string {
-  const parts = [segments.base]
-  if (segments.memory) parts.push(segments.memory)
-  const full = parts.join('\n\n---\n\n')
+/**
+ * 最终拼装（同步/异步共用）：base + M2 + M1 + 语言指令（语言指令保持最末尾）。
+ * 段序：base → M2 作品记忆 → M1 会话摘要（M2 比 M1 稳定，前缀缓存友好，设计 §3）；
+ * 超限降级顺序 M1 → M2 → L1 → Tool（设计 §4.3，reviewer F1：此前 3800 上限把 M1+M2 整段一起丢）。
+ * 导出供单测直接验证降级顺序（合成超限输入）。
+ */
+export function assembleFinalPrompt(segments: { base: string; memoryM1: string; memoryM2: string }): string {
+  const join = (xs: Array<string | undefined>) => xs.filter((x): x is string => Boolean(x)).join('\n\n---\n\n')
+  // 索引：0=base，1=M2，2=M1
+  const parts: Array<string | undefined> = [segments.base, segments.memoryM2, segments.memoryM1]
+  const full = join(parts)
 
-  // 总上限 3500 → 3800（M1 记忆层 300；超限按 M1 → L1 → Tool 顺序降级）
-  if (estimateTokens(full) > 3800) {
-    console.warn(`[ContextBuilder] 系统提示词过大 (${estimateTokens(full)} tokens)，按优先级裁剪`)
-    // 1. 先丢 M1 记忆节
-    parts[1] = ''
-    // 2. base 拆回节数组（拼接分隔符 '\n\n---\n\n'），按标题定位裁剪 L1
-    const baseSections = parts[0].split('\n\n---\n\n')
-    const l1Index = baseSections.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
-    if (l1Index >= 0) {
-      baseSections[l1Index] = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOmitted')}`
-    }
-    const trimmedBase = baseSections.join('\n\n---\n\n')
-    // 3. 仍超限则裁剪 Tool
-    if (estimateTokens(`${trimmedBase}\n\n---\n\n${parts[1]}`) > 3800) {
-      const toolIndex = baseSections.findIndex(s => s.startsWith(t('engine.toolSystemTitle')))
-      if (toolIndex >= 0 && baseSections[toolIndex].length > 500) {
-        baseSections[toolIndex] = baseSections[toolIndex].slice(0, 500) + '\n\n…' + t('engine.toolListTruncated')
-      }
-    }
-    return appendOutputLanguage(
-      `${baseSections.join('\n\n---\n\n')}${parts[1] ? '\n\n---\n\n' + parts[1] : ''}`,
-      getCurrentLocale(),
-    )
+  if (estimateTokens(full) <= TOTAL_BUDGET_TOKENS) {
+    return appendOutputLanguage(full, getCurrentLocale())
   }
-  return appendOutputLanguage(full, getCurrentLocale())
+
+  console.warn(`[ContextBuilder] 系统提示词过大 (${estimateTokens(full)} tokens)，按 M1 → M2 → L1 → Tool 顺序降级`)
+  // 语言指令后缀（#30：必须保持最末尾；各步预算预留其 token 数）
+  const langSuffix = appendOutputLanguage('', getCurrentLocale())
+  const langTokens = estimateTokens(langSuffix)
+  // 1. 先丢 M1 会话摘要段（压缩滚动摘要，非创作必需）
+  parts[2] = undefined
+  // 2. 仍超限丢 M2 作品记忆段
+  if (estimateTokens(join(parts)) > TOTAL_BUDGET_TOKENS) parts[1] = undefined
+  // 3. base 拆回节数组（拼接分隔符 '\n\n---\n\n'），按标题定位裁剪 L1
+  const baseSections = (parts[0] ?? '').split('\n\n---\n\n')
+  const l1Index = baseSections.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
+  if (l1Index >= 0) {
+    baseSections[l1Index] = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOmitted')}`
+  }
+  // 4. 仍超限则裁剪 Tool 至剩余预算（剩余 = 上限 − 语言指令 − 其他节 − 截断提示），保证最终 ≤ 上限
+  const marker = `\n\n…${t('engine.toolListTruncated')}`
+  const markerTokens = estimateTokens(marker)
+  const toolIndex = baseSections.findIndex(s => s.startsWith(t('engine.toolSystemTitle')))
+  let toolMarked = false
+  if (toolIndex >= 0) {
+    const othersTokens = estimateTokens(baseSections.filter((_, i) => i !== toolIndex).join('\n\n---\n\n'))
+    const memoryTokens = estimateTokens(join(parts.slice(1)))
+    const toolBudget = TOTAL_BUDGET_TOKENS - langTokens - othersTokens - memoryTokens - markerTokens
+    if (toolBudget > 0 && estimateTokens(baseSections[toolIndex]) > toolBudget) {
+      baseSections[toolIndex] = truncateToTokenBudget(baseSections[toolIndex], toolBudget) + marker
+      toolMarked = true
+    }
+  }
+  // 5. 兜底硬截断（各节独立预算下理论不可达）：主体按预算截断，语言指令保持最末尾（#30）。
+  //    预算预留截断提示 token——tokenizer 分段拼接非可加，硬截断可能切掉尾部提示，补回保持语义不变量
+  const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2]])
+  const mainBudget = TOTAL_BUDGET_TOKENS - langTokens - (toolMarked ? markerTokens : 0)
+  if (estimateTokens(main) > mainBudget) {
+    const cut = truncateToTokenBudget(main, mainBudget)
+    const suffix = (toolMarked && !cut.includes(marker) ? marker : '') + langSuffix
+    return cut + suffix
+  }
+  return appendOutputLanguage(main, getCurrentLocale())
 }
 
-/** 异步版：M2 作品记忆节（memory:* 读盘，预算 800，失败降级仅 M1） */
-export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ base: string; memory: string }> {
+/**
+ * 异步版：M2 作品记忆节（memory:* 读盘，预算 800，失败降级仅 M1）。
+ * 返回 M1/M2 分两段（F1：超限可按段降级）；最终顺序 M2 → M1 由 assembleFinalPrompt 保证（F2）。
+ */
+export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ base: string; memoryM1: string; memoryM2: string }> {
   const { base, memory: m1 } = buildAgentSystemSegments(mode)
-  const memoryParts: string[] = []
-  if (m1) memoryParts.push(m1)
+  let m2 = ''
   try {
-    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book'; stale: boolean }[]
+    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book' | 'unknown'; stale: boolean }[]
     const fresh = list.filter(f => !f.stale)
+    // M2 节选只取 book/volume/chapters（F9：未知前缀文件 kind=unknown，不参与注入）
     const book = fresh.find(f => f.kind === 'book')
     // ⚠️ 审阅修正：volume-010.md 字典序在 volume-002.md 前——按文件名中的卷号数值排序（最新卷优先）
     const volumes = fresh.filter(f => f.kind === 'volume').sort((a, b) => {
@@ -125,7 +155,7 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
       return n(b.file) - n(a.file)
     })
     const chapters = fresh.filter(f => f.kind === 'chapters').sort((a, b) => b.file.localeCompare(a.file)) // 最近区间优先（零填充格式字典序=数值序）
-    const picks = [book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string }[]
+    const picks = [book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string; kind: string }[]
     const sections: string[] = []
     let used = 0
     for (const p of picks) {
@@ -134,17 +164,39 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
       if (!raw) continue
       const { body } = parseMemoryFile(raw) ?? { body: raw }
       const remaining = M2_BUDGET_TOKENS - used
-      const excerpt = truncateToTokenBudget(body, remaining)
+      // chapters 文件从尾部节选（F5：最新章节优先——truncateToTokenBudget 从头保留会把最新章节丢光）；book/volume 保持头部节选
+      const excerpt = p.kind === 'chapters' ? excerptLatestChapters(body, remaining) : truncateToTokenBudget(body, remaining)
       sections.push(excerpt)
       used += estimateTokens(excerpt)
     }
     if (sections.length > 0) {
-      memoryParts.push(`${t('memory.injectedHeader')}\n${sections.join('\n\n')}`)
+      m2 = `${t('memory.injectedHeader')}\n${sections.join('\n\n')}`
     }
   } catch {
     // M2 读盘失败降级：仅 M1
   }
-  return { base, memory: memoryParts.join('\n\n---\n\n') }
+  return { base, memoryM1: m1, memoryM2: m2 }
+}
+
+/**
+ * 章节记忆尾部节选（F5）：将 body 按「## 第」块切分，从尾部（最新章节）向前累积到预算——
+ * 满窗口时注入最近章节而非最早章节；单块超预算时至少保留最新一块，由 truncateToTokenBudget 兜底。
+ * 文件头（如 `# 章节记忆 001-015`）始终保留作为区间标注；book/volume 文件不适用本函数。
+ */
+function excerptLatestChapters(body: string, maxTokens: number): string {
+  if (estimateTokens(body) <= maxTokens) return body
+  const parts = body.split('\n## 第')
+  const header = parts[0]
+  const blocks = parts.slice(1).map(b => `## 第${b}`)
+  const picked: string[] = []
+  let used = 0
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    const blockTokens = estimateTokens(blocks[i])
+    if (picked.length > 0 && used + blockTokens > maxTokens) break
+    picked.unshift(blocks[i])
+    used += blockTokens
+  }
+  return truncateToTokenBudget([header, ...picked].join('\n'), maxTokens)
 }
 
 /** 异步版最终拼装：base + memory（M1 + M2）+ 语言指令（语言指令保持最末尾） */
