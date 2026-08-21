@@ -108,6 +108,22 @@ describe('M2 作品记忆节（P1）', () => {
     expect(m1Idx).toBeGreaterThan(m2Idx)
   })
 
+  it('kind=unknown 文件（用户手放 notes.md）不参与 M2 节选（F9）', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return [
+        { file: 'notes.md', kind: 'unknown', stale: false, mtime: 1 },
+        { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
+      ]
+      if (ch === 'memory:read') return file === 'notes.md'
+        ? '# notes 私人笔记\n不该注入的内容'
+        : '---\n---\n\n# 全书精要\n主角是苏晚晴'
+      return null
+    })
+    const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
+    expect(memoryM2).toContain('苏晚晴') // book 正常注入
+    expect(memoryM2).not.toContain('不该注入的内容') // unknown 文件内容被排除
+  })
+
   it('章节文件尾部节选：满窗口时注入最新章节而非最早章节（F5）', async () => {
     const blocks: string[] = []
     for (let n = 1; n <= 15; n++) {
