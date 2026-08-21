@@ -1,0 +1,166 @@
+import { t } from '../../shared/locale'
+import { useLLMStore } from '../../stores/llm-store'
+import { ipc } from '../ipc-client'
+import { parseMemoryFile, buildChapterEntryBlock, type ChapterSummaryEntry } from './memory-codec'
+
+/** 15 章滚动窗口（无分卷/未命中/进行中卷时） */
+const CHAPTERS_PER_FILE = 15
+
+/**
+ * 章节 → 记忆文件：优先按分卷边界对齐。
+ * 已闭合卷（chapterEnd != 0）→ 卷起始窗口（start = 卷起始，end = 卷结束）；
+ * 未命中卷或进行中卷（chapterEnd === 0）→ 15 章滚动窗口（start 从章节号反推，保证章节号恒在 [start, end] 内——审阅修正：进行中卷超 15 章后不再映射到卷起始固定窗口外）。
+ */
+export function computeMemoryFileRange(
+  chapterNumber: number,
+  volumes: { volumeNumber: number; chapterStart: number; chapterEnd: number }[],
+): { file: string; range: string } {
+  const vol = volumes.find(v => chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || chapterNumber <= v.chapterEnd))
+  let start: number
+  let end: number
+  if (vol && vol.chapterEnd !== 0) {
+    start = vol.chapterStart
+    end = vol.chapterEnd
+  } else {
+    // 滚动窗口：start 反推使 chapterNumber ∈ [start, start+14]
+    start = Math.max(1, Math.floor((chapterNumber - 1) / CHAPTERS_PER_FILE) * CHAPTERS_PER_FILE + 1)
+    end = start + CHAPTERS_PER_FILE - 1
+  }
+  const pad = (n: number) => String(n).padStart(3, '0')
+  return { file: `chapters-${pad(start)}-${pad(end)}.md`, range: `${pad(start)}-${pad(end)}` }
+}
+
+/** 章节摘要 prompt（budget 路由 + 温度 0.2；输出为六字段清单） */
+export function buildChapterSummaryPrompt(chapterNumber: number, chapterTitle: string, draftContent: string): string {
+  return [
+    t('memory.summaryPrompt').replace('{n}', String(chapterNumber)).replace('{title}', chapterTitle),
+    '',
+    t('memory.draftLabel'),
+    draftContent,
+  ].join('\n')
+}
+
+/** 调用 LLM 生成章节摘要（budget 路由；失败 throw 由 DAG 步骤容错） */
+export async function generateChapterSummary(opts: {
+  chapterNumber: number
+  chapterTitle: string
+  draftContent: string
+  modelId: string
+}): Promise<ChapterSummaryEntry> {
+  const prompt = buildChapterSummaryPrompt(opts.chapterNumber, opts.chapterTitle, opts.draftContent)
+  const mid = useLLMStore.getState().getModelForPurpose('summarize') ?? opts.modelId
+  const startTime = Date.now()
+  const response = await useLLMStore.getState().generate([{ role: 'user', content: prompt }], mid, { temperature: 0.2, priority: 12 })
+  const duration = Date.now() - startTime
+  if (!response.success) throw new Error(response.error ?? 'memory summary failed')
+  try {
+    await ipc.invoke('db:log-llm-call', {
+      model_id: mid,
+      model_name: useLLMStore.getState().models.find(m => m.id === mid)?.name ?? '',
+      purpose: 'memory_summary',
+      prompt_tokens: 0, completion_tokens: 0, total_tokens: 0,
+      duration_ms: duration, success: 1, error_message: '', cost: 0,
+    })
+  } catch { /* 日志失败不影响主流程 */ }
+  // 六字段解析：LLM 输出以「关键事件：」等六行格式（prompt 已约束）；解析失败字段降级 '无'
+  const text = response.content
+  const field = (label: string) => {
+    const m = text.match(new RegExp(`${label}[：:]([^\\n]+)`))
+    return m ? m[1].trim() : ''
+  }
+  return {
+    chapterNumber: opts.chapterNumber,
+    title: opts.chapterTitle,
+    keyEvents: field('关键事件'),
+    characters: field('出场角色'),
+    foreshadowing: field('伏笔'),
+    newElements: field('新设定'),
+    currentState: field('当前状态'),
+  }
+}
+
+/**
+ * 读现有文件 → 按章节号替换/追加 → 写回。
+ * 审阅修正（Bug 1/2/5）：
+ * - 块边界 = [idx, nextIdx)：按下一个「## 第」标题定位，只替换该区间——不再用 filter 误删后续章节字段行
+ * - 写回时清除 frontmatter status（stale 生命周期闭环：新摘要生成即恢复非 stale，防重定稿后 M2 永久过滤）
+ * - 单章块用 buildChapterEntryBlock（无 frontmatter/标题残留）
+ * - 重定稿判定（文件已有本章条目 = 重定稿）由调用方在 DAG 步骤内完成（覆盖生成即清除 stale）
+ */
+export async function upsertChapterMemory(entry: ChapterSummaryEntry, file: string): Promise<{ file: string; success: boolean }> {
+  try {
+    const raw = await ipc.invoke('memory:read', file) as string | null
+    const existing = parseMemoryFile(raw ?? '')
+    const header = `## 第 ${entry.chapterNumber} 章`
+    const lines = existing ? existing.body.split('\n') : []
+    const idx = lines.findIndex(l => l.startsWith(header))
+    const newBlock = buildChapterEntryBlock(entry)
+    let body: string[]
+    if (idx >= 0) {
+      // 块边界：下一个「## 第」标题
+      let nextIdx = lines.length
+      for (let i = idx + 1; i < lines.length; i++) {
+        if (lines[i].startsWith('## 第')) { nextIdx = i; break }
+      }
+      body = [...lines.slice(0, idx), newBlock, ...lines.slice(nextIdx)]
+    } else {
+      body = [...lines, '', newBlock]
+    }
+    // frontmatter：保留 range 等字段，**清除 status**（stale 闭环）
+    const fmEntries = Object.entries(existing?.frontmatter ?? {}).filter(([k]) => k !== 'status')
+    const fm = fmEntries.length > 0 ? `---\n${fmEntries.map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n\n` : ''
+    await ipc.invoke('memory:write', file, `${fm}${body.join('\n')}`)
+    return { file, success: true }
+  } catch {
+    return { file, success: false }
+  }
+}
+
+/** 卷级摘要文件：纯函数组装（卷头 + 卷内章节条目），不额外 LLM */
+export function buildVolumeSummaryFile(
+  volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number },
+  chapterEntries: ChapterSummaryEntry[],
+): string {
+  const end = volume.chapterEnd === 0 ? chapterEntries[chapterEntries.length - 1]?.chapterNumber ?? volume.chapterStart : volume.chapterEnd
+  const lines = [
+    '---', `volume: ${volume.volumeNumber}`, `range: ${volume.chapterStart}-${end}`, '---', '',
+    `# 第 ${volume.volumeNumber} 卷 · ${volume.title || '（无题）'}`,
+  ]
+  for (const e of chapterEntries) {
+    lines.push('', `## 第 ${e.chapterNumber} 章 · ${e.title || '（无题）'}`, `- 关键事件：${e.keyEvents || '无'}`, `- 出场角色：${e.characters || '无'}`, `- 伏笔：${e.foreshadowing || '无'}`, `- 新设定：${e.newElements || '无'}`, `- 当前状态：${e.currentState || '无'}`)
+  }
+  return lines.join('\n')
+}
+
+/**
+ * 章节文件写入后调用：**仅已闭合卷（chapterEnd != 0）**——卷内章节条目完整（覆盖卷范围）→ 聚合生成 volume-N.md；进行中卷跳过（归 P2/手动重建，审阅修正）
+ */
+export async function ensureVolumeSummary(
+  volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number },
+  chapterFile: string,
+): Promise<{ file: string | null; success: boolean }> {
+  if (volume.chapterEnd === 0) return { file: null, success: false } // 进行中卷：不支持
+  try {
+    const raw = await ipc.invoke('memory:read', chapterFile) as string | null
+    if (!raw) return { file: null, success: false }
+    const { body } = parseMemoryFile(raw) ?? { body: raw }
+    // 从章节文件正文解析条目（按「## 第 N 章 ·」块；标题从块头分离——审阅修正）
+    const entries: ChapterSummaryEntry[] = []
+    const blocks = body.split('\n## 第 ')
+    for (const b of blocks.slice(1)) {
+      const numMatch = b.match(/^(\d+) 章 · (.+)/)
+      if (!numMatch) continue
+      const field = (label: string) => { const m = b.match(new RegExp(`${label}：([^\\n]+)`)); return m ? m[1].trim() : '' }
+      entries.push({ chapterNumber: Number(numMatch[1]), title: numMatch[2].trim(), keyEvents: field('关键事件'), characters: field('出场角色'), foreshadowing: field('伏笔'), newElements: field('新设定'), currentState: field('当前状态') })
+    }
+    // 完整性检查：卷内章节号连续覆盖（chapterStart..chapterEnd）
+    const expected = Array.from({ length: volume.chapterEnd - volume.chapterStart + 1 }, (_, i) => volume.chapterStart + i)
+    const has = expected.every(n => entries.some(e => e.chapterNumber === n))
+    if (!has) return { file: null, success: false } // 未完整，跳过
+    const file = `volume-${String(volume.volumeNumber).padStart(3, '0')}.md` // 零填充防字典序错排（审阅修正）
+    await ipc.invoke('memory:write', file, buildVolumeSummaryFile(volume, entries))
+    return { file, success: true }
+  } catch {
+    return { file: null, success: false }
+  }
+}

@@ -312,6 +312,7 @@ export const UI_TEXTS_DATA = {
   'workflow.postProcessFix': { 'zh-CN': '✅ 第{n}章后处理修复完成', 'en-US': '✅ Post-process fix for Ch.{n} done', 'ru-RU': '✅ Пост-обработка гл.{n} исправлена' },
   'workflow.importKB': { 'zh-CN': '📚 导入知识库', 'en-US': '📚 Import to knowledge base', 'ru-RU': '📚 Импорт в базу знаний' },
   'workflow.contentAudit': { 'zh-CN': '🛡️ 正文质量审计', 'en-US': '🛡️ Content quality audit', 'ru-RU': '🛡️ Аудит качества текста' },
+  'workflow.chapterMemory': { 'zh-CN': '章节记忆', 'en-US': 'Chapter Memory', 'ru-RU': 'Память главы' },
   'workflow.chapterKeyPoints': { 'zh-CN': '📋 章节剧情要点', 'en-US': '📋 Chapter key points', 'ru-RU': '📋 Ключевые моменты главы' },
   'workflow.characterStateUpdate': { 'zh-CN': '🎭 角色状态更新', 'en-US': '🎭 Character state update', 'ru-RU': '🎭 Обновление состояний' },
   'workflow.relationDetect': { 'zh-CN': '🔗 关系检测', 'en-US': '🔗 Relationship detection', 'ru-RU': '🔗 Обнаружение связей' },
@@ -2915,6 +2916,8 @@ export const UI_TEXTS_DATA = {
   'log.finalize.analyzingVoice': { 'zh-CN': '正在分析角色对话风格...', 'en-US': 'Analyzing character dialogue styles...', 'ru-RU': 'Анализ стилей диалогов персонажей...' },
   'log.finalize.voiceDone': { 'zh-CN': '角色声音分析完成 ({done}/{total})', 'en-US': 'Voice analysis done ({done}/{total})', 'ru-RU': 'Анализ голосов завершён ({done}/{total})' },
   'log.finalize.voiceFailed': { 'zh-CN': '⚠️ 角色声音分析失败: {error}', 'en-US': '⚠️ Voice analysis failed: {error}', 'ru-RU': '⚠️ Ошибка анализа голосов: {error}' },
+  'log.finalize.memoryDone': { 'zh-CN': '📝 章节记忆已更新（{file}）', 'en-US': '📝 Chapter memory updated ({file})', 'ru-RU': '📝 Память главы обновлена ({file})' },
+  'log.finalize.memoryFailed': { 'zh-CN': '⚠️ 章节记忆生成失败', 'en-US': '⚠️ Chapter memory generation failed', 'ru-RU': '⚠️ Ошибка генерации памяти главы' },
   'log.finalize.start': { 'zh-CN': '\n===== 开始定稿与后处理分析 =====', 'en-US': '\n===== Starting finalization & post-processing =====', 'ru-RU': '\n===== Финализация и пост-обработка =====' },
   'log.finalize.fileWriteFailed': { 'zh-CN': '⚠️ 写入根目录物理文件失败: {error}', 'en-US': '⚠️ Failed to write the physical file: {error}', 'ru-RU': '⚠️ Ошибка записи файла: {error}' },
   'log.finalize.written': { 'zh-CN': '✅ 定稿内容已正式写入 SQLite 数据库并同步为根目录文件 (第{chapter}章{title}.txt)', 'en-US': '✅ Finalized content written to SQLite and synced as the root file (Ch.{chapter}{title}.txt)', 'ru-RU': '✅ Текст финализирован: сохранён в SQLite и в корневой файл (гл.{chapter}{title}.txt)' },
@@ -3203,5 +3206,9 @@ export const UI_TEXTS_DATA = {
   'ccr.budgetLabel': { 'zh-CN': '基础 {base} · 记忆 {memory} · 历史 {history} · 当前 {current}', 'en-US': 'Base {base} · Memory {memory} · History {history} · Current {current}', 'ru-RU': 'База {base} · Память {memory} · История {history} · Текущее {current}' },
   'ccr.budgetTotal': { 'zh-CN': '{total} / {max} ({pct}%)', 'en-US': '{total} / {max} ({pct}%)', 'ru-RU': '{total} / {max} ({pct}%)' },
   'ccr.restoreProjectHint': { 'zh-CN': '此会话基于项目「{name}」，当前打开项目「{current}」', 'en-US': 'This conversation was created in project "{name}", currently open: "{current}"', 'ru-RU': 'Диалог создан в проекте «{name}», сейчас открыт: «{current}»' },
+  // --- 作品记忆（章节摘要生成，见 chapter-memory.ts）---
+  // 解析锚点固定中文（审阅定案）：en/ru 分支与 zh 共用同一模板，六字段解析正则锚定中文标签
+  'memory.summaryPrompt': { 'zh-CN': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。', 'en-US': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。', 'ru-RU': '请为第 {n} 章「{title}」生成章节记忆摘要。逐行输出以下六个字段（每个字段一行，格式「标签：内容」）：\n关键事件：本章核心事件（≤80 字）\n出场角色：本章出场的角色名（逗号分隔）\n伏笔：本章埋设或回收的伏笔（无则写「无」）\n新设定：本章新出现的世界观/物品/技能（无则写「无」）\n当前状态：本章结束时主角/局势状态（≤60 字）\n只输出字段行，不要多余文字。' },
+  'memory.draftLabel': { 'zh-CN': '本章正文：', 'en-US': 'Chapter text:', 'ru-RU': 'Текст главы:' },
 } as const
 

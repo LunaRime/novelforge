@@ -524,6 +524,34 @@ export function buildFinalizePostProcessSteps(
     },
   })
 
+  // ─── 步骤: 章节记忆摘要（P1 作品记忆——非关键：失败不影响定稿） ──────
+  steps.push({
+    key: 'chapter_memory',
+    label: t('workflow.chapterMemory'),
+    critical: false,
+    dependsOn: ['kb_import'],
+    executor: async (callbacks: StepCallbacks) => {
+      try {
+        const { generateChapterSummary, computeMemoryFileRange, upsertChapterMemory, ensureVolumeSummary } = await import('../../memory/chapter-memory')
+        const volumes = (await ipc.invoke('db:volume-get-all')) as { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number }[]
+        const { file } = computeMemoryFileRange(chapterNumber, volumes)
+        const modelId = useLLMStore.getState().defaultModelId ?? ''
+        const entry = await generateChapterSummary({ chapterNumber, chapterTitle, draftContent, modelId })
+        const result = await upsertChapterMemory(entry, file)
+        if (result.success) {
+          callbacks.log(t('log.finalize.memoryDone').replace('{file}', file))
+          // 卷级聚合：upsert 成功后检查所在卷（已闭合卷且卷内章节条目完整 → 生成 volume-NNN.md；否则静默跳过）
+          const vol = volumes.find(v => entry.chapterNumber >= v.chapterStart && (v.chapterEnd === 0 || entry.chapterNumber <= v.chapterEnd))
+          if (vol) await ensureVolumeSummary(vol, file)
+        } else {
+          callbacks.log(t('log.finalize.memoryFailed'))
+        }
+      } catch (e) {
+        callbacks.log(t('log.finalize.memoryFailed').replace('{error}', () => String(e)))
+      }
+    },
+  })
+
   // 步骤 3.5: 角色声音分析
   steps.splice(voiceIdx + 1, 0, {
     key: 'voice_analysis',
