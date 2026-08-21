@@ -2,6 +2,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
+import { useLLMStore } from './llm-store'
 
 // mock IPC（fs:agent-archive-* 通道）
 const archiveFiles = new Map<string, string>()
@@ -90,5 +91,88 @@ describe('agent-store 持久化', () => {
     archiveFiles.set('bad', '{bad json')
     await useAgentStore.getState().restoreArchives()
     expect(useAgentStore.getState().conversations).toHaveLength(0)
+  })
+})
+
+describe('CCR 压缩集成', () => {
+  it('历史超预算时最旧批移入 compressed 且 rollingSummary 迭代更新', async () => {
+    // 构造超预算会话（12 条 × 每条约 60+ tokens）
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const longMsgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `m${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '这里是历史消息内容占位。'.repeat(30), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
+    }))
+    // 必要补充：默认模型（否则 sendMessage 因无模型早退，压缩路径不可达）
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    // mock 摘要生成（success: true 必要补充——generateConversationSummary 检查 response.success，缺省即抛错走降级）
+    const generateMock = vi.fn(async () => ({ success: true, content: '迭代摘要 v1', usage: undefined }))
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.rollingSummary).toBe('迭代摘要 v1')
+    expect(after.compressed).toHaveLength(1)
+    expect(after.messages.length).toBeLessThan(longMsgs.length)
+  })
+
+  it('摘要生成失败时降级硬截断（不阻断对话，rollingSummary 不变）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const longMsgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `m${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '这里是历史消息内容占位。'.repeat(30), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
+    }))
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useLLMStore.setState({ generate: vi.fn(async () => { throw new Error('LLM 失败') }) as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.rollingSummary).toBeUndefined() // 压缩失败未污染摘要
+    // 注：压缩失败路径不触碰 compressed（字段保持未设/旧值），?? [] 兼容未初始化的可选字段
+    expect(after.compressed ?? []).toHaveLength(0)
+    // 对话仍完成（assistant 回复生成中/完成，generating 已复位）
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('sendMessage 后消息即时落盘（刷新后完整恢复）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useLLMStore.setState({ generate: vi.fn(async () => { throw new Error('LLM 失败') }) as never })
+
+    await useAgentStore.getState().sendMessage('你好')
+
+    // 直接断言（不用 waitFor）：createConversation 的防抖尾写在 +500ms 也会写入最终态，
+    // 只有「消息追加后的即时落盘（leading 写）」才能区分接线是否生效
+    const raw = archiveFiles.get(conv.id)
+    expect(raw).toBeDefined()
+    const restored = JSON.parse(raw!) as { messages: Array<{ role: string; content: string }> }
+    expect(restored.messages.some(m => m.role === 'user' && m.content === '你好')).toBe(true)
+  })
+
+  it('/clear 清空后同步落盘（重启后已清空消息不复活）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: [{
+        id: 'old', role: 'user' as const, content: '旧消息', createdAt: 0,
+      }] } : c),
+    }))
+    // 先手动落盘「旧消息」状态——模拟 /clear 前 archive 里已有历史
+    useAgentStore.getState().persistCurrent()
+
+    await useAgentStore.getState().sendMessage('/clear')
+
+    // 直接断言：/clear 的即时落盘必须覆盖旧消息状态（防抖尾写 +500ms 同样会写最终态，
+    // 只有即时断言能区分清空接线是否生效）
+    const raw = archiveFiles.get(conv.id)
+    expect(raw).toBeDefined()
+    const restored = JSON.parse(raw!) as { messages: unknown[] }
+    expect(restored.messages).toHaveLength(0)
   })
 })

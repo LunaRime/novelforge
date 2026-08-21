@@ -13,7 +13,8 @@ import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
-import { serializeArchive, parseArchive, type CompressedBatch } from '../services/agent/archive-codec'
+import { serializeArchive, parseArchive, selectCompressionBatch, type CompressedBatch } from '../services/agent/archive-codec'
+import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
 import { useProjectStore } from './project-store'
 
@@ -296,6 +297,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                   c.id === activeConv.id ? { ...c, messages: [] } : c
                 ),
               }))
+              // 清空同步落盘：否则重启后已清空的消息会从 archive 复活
+              get().persistCurrent()
             }
             return
           }
@@ -379,6 +382,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           : c
       ),
     }))
+    // 消息写入即时落盘（leading 写 + 尾写防抖）：否则 archive 只有创建时的空壳快照，
+    // 长会话刷新后无法完整恢复
+    get().persistCurrent()
 
     // 辅助函数：更新助手消息
     const updateAssistantMsg = (updater: (msg: AgentMessage) => AgentMessage) => {
@@ -481,9 +487,53 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }
       }
 
-      // 构造历史消息（Token 感知窗口：最多 4000 tokens）
-      const HISTORY_MAX_TOKENS = 4000
-      const candidateMessages = currentConv.messages
+      // ===== CCR 压缩检查（替换原 4000-token 硬丢弃）：超预算时先压缩最旧批 =====
+      // 压缩后 messages 剩 rest（最新轮次），压缩批移入 compressed 保留原文（2-3 代）
+      const HISTORY_MAX_TOKENS = 4000 // 常量随块上移（原 456-457 行块内 const）
+      const preCompressMessages = currentConv.messages.filter(m => !m.streaming && m.role !== 'system')
+      const totalHistoryTokens = preCompressMessages.reduce(
+        (sum, m) => sum + estimateTokens(m.content), 0,
+      )
+      if (totalHistoryTokens > HISTORY_MAX_TOKENS) {
+        try {
+          const { batch, rest } = selectCompressionBatch(currentConv.messages, HISTORY_MAX_TOKENS)
+          if (batch.length > 0) {
+            const summary = await generateConversationSummary({
+              oldSummary: currentConv.rollingSummary ?? '',
+              batch,
+              modelId,
+            })
+            const batchNum = (currentConv.compressed?.length ?? 0) + 1
+            const newBatch: CompressedBatch = {
+              batch: batchNum,
+              original: batch,
+              summary,
+              compressedAt: Date.now(),
+              originalTokens: batch.reduce((sum, m) => sum + estimateTokens(m.content), 0),
+            }
+            // 保留 2-3 代原文防摘要漂移：超过 3 代时丢弃最旧一代的 original（仅留摘要）
+            const compressed = [...(currentConv.compressed ?? []), newBatch]
+            if (compressed.length > 3) {
+              compressed[0] = { ...compressed[0], original: [] }
+            }
+            set(state => ({
+              conversations: state.conversations.map(c =>
+                c.id === convId
+                  ? { ...c, messages: rest, compressed, rollingSummary: summary, updatedAt: Date.now() }
+                  : c
+              ),
+            }))
+            get().persistCurrent()
+          }
+        } catch {
+          // 摘要失败降级：不压缩，走下方硬截断（历史行为，不阻断对话）
+          console.warn('[Agent] CCR 摘要生成失败，降级硬截断')
+        }
+      }
+
+      // 构造历史消息（Token 感知窗口：最多 4000 tokens；CCR 压缩后剩余消息通常已达标）
+      const afterCompress = get().conversations.find(c => c.id === convId)!
+      const candidateMessages = afterCompress.messages
         .filter(m => !m.streaming && m.role !== 'system')
         .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
         .reverse() // 从最新到最旧
@@ -681,6 +731,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 c.id === convId ? { ...c, updatedAt: Date.now() } : c
               ),
             }))
+            // 流式完成最终状态落盘（含完整助手回复/tool 产物）：刷新后可完整恢复
+            get().persistCurrent()
           },
           onError: (error) => {
             if (mySeq !== generationSeq) return
