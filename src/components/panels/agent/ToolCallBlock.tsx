@@ -53,6 +53,29 @@ function statusLabel(status: ToolCallInfo['status'], t: (key: TextKey) => string
   }
 }
 
+/**
+ * 从工具参数提取文件/对象摘要（read_file/read_drafts 等）
+ * - file_path / path → 📄 文件名（末尾段）
+ * - chapter_number → 📖 章节（走 i18n chapter.label，禁止硬编码中文）
+ * - 角色类工具 name 参数 → 👤 角色名
+ */
+function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: TextKey) => string): string | null {
+  const path = typeof args.file_path === 'string' ? args.file_path
+    : typeof args.path === 'string' ? args.path
+    : null
+  if (path) {
+    const base = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path
+    return `📄 ${base}`
+  }
+  if (typeof args.chapter_number === 'number') {
+    return `📖 ${t('chapter.label').replace('{n}', String(args.chapter_number))}`
+  }
+  if (typeof args.name === 'string' && ['read_characters', 'update_character_cards'].includes(toolName)) {
+    return `👤 ${args.name}`
+  }
+  return null
+}
+
 export default function ToolCallBlock({ toolCall }: Props) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -67,6 +90,17 @@ export default function ToolCallBlock({ toolCall }: Props) {
         </div>
 
         <span className="tool-call-name">{toolName}</span>
+
+        {/* 文件/章节摘要（📄/📖/👤） */}
+        {(() => {
+          const summary = fileSummary(toolName, args, t)
+          return summary ? (
+            <span className="tool-call-file-summary text-[0.65rem] opacity-60 ml-1 truncate max-w-[160px]"
+              style={{ color: 'var(--color-text-muted)' }}>
+              {summary}
+            </span>
+          ) : null
+        })()}
 
         {/* 来源徽章 */}
         {source && (

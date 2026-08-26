@@ -9,12 +9,23 @@
 import type { AgentMessage as AgentMessageType } from '../../../stores/agent-store'
 import MarkdownContent, { StreamingCursor } from '../../ui/MarkdownContent'
 import ToolCallBlock from './ToolCallBlock'
+import ThinkingCollapse from './ThinkingCollapse'
 import ConfirmCard from './ConfirmCard'
 import ArtifactCard from './ArtifactCard'
 import '../../../styles/agent-tools.css'
 
 interface Props {
   message: AgentMessageType
+}
+
+/**
+ * 拆分思考块：匹配 `_思考过程_\n> ...` 前缀（agent-engine 拼装格式），
+ * 容错：不匹配则按普通 markdown 处理（thinking=null, rest=content）
+ */
+function splitThinking(content: string): { thinking: string | null; rest: string } {
+  const m = content.match(/^_[^_\n]+_\n>[\s\S]*?(?=\n\n)/)
+  if (!m) return { thinking: null, rest: content }
+  return { thinking: m[0], rest: content.slice(m[0].length + 2) }
 }
 
 export default function AgentMessage({ message }: Props) {
@@ -44,10 +55,16 @@ export default function AgentMessage({ message }: Props) {
         className="max-w-full text-xs leading-relaxed break-words w-full"
         style={{ color: 'var(--color-text)' }}
       >
-        {/* 文本内容 */}
-        {content ? (
-          <MarkdownContent content={content} streaming={streaming} />
-        ) : streaming ? (
+        {/* 文本内容（思考块拆分：默认折叠头部 + 正文 markdown） */}
+        {content ? (() => {
+          const { thinking, rest } = splitThinking(content)
+          return (
+            <>
+              {thinking && <ThinkingCollapse thinking={thinking} />}
+              {rest && <MarkdownContent content={rest} streaming={streaming} />}
+            </>
+          )
+        })() : streaming ? (
           <span className="inline-flex items-center h-4">
             <StreamingCursor />
           </span>
