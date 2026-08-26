@@ -1,4 +1,4 @@
-import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight } from 'lucide-react'
+import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, Brain } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMCPStore } from '../../../stores/mcp-store'
@@ -14,7 +14,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
  * Agent 面板顶部工具栏
  */
 export default function AgentHeader() {
-  const { createConversation, toggleHistory, showHistory, getActiveConversation } = useAgentStore()
+  const { createConversation, toggleHistory, showHistory, getActiveConversation, memoryView, toggleMemoryView } = useAgentStore()
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
@@ -98,6 +98,17 @@ export default function AgentHeader() {
             <path d="M3 3v5h5" />
             <path d="M12 7v5l4 2" />
           </svg>
+        </Button>
+
+        {/* 记忆查看器按钮（P3 Task 3：切换 AI 面板内嵌记忆视图） */}
+        <Button
+          variant="ghost"
+          title={t('memory.menuTitle')}
+          onClick={() => { setShowMore(false); toggleMemoryView() }}
+          active={memoryView}
+          style={{ width: 18, height: 18, padding: 0 }}
+        >
+          <Brain size={15} strokeWidth={1.5} />
         </Button>
 
         {/* 更多菜单 */}

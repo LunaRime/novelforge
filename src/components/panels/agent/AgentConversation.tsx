@@ -6,6 +6,7 @@ import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
+import AgentMemoryView from './AgentMemoryView'
 import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
 import { computeContextUsage } from '../../../services/agent/context-usage'
@@ -20,12 +21,17 @@ import { useTranslation } from '../../../hooks/useTranslation'
  * - 有会话：消息列表 + 底部固定输入框
  */
 export default function AgentConversation() {
-  const { getActiveConversation, showHistory } = useAgentStore()
+  const { getActiveConversation, showHistory, memoryView } = useAgentStore()
   const activeConv = getActiveConversation()
 
   // 历史面板模式
   if (showHistory) {
     return <AgentHistoryPanel />
+  }
+
+  // 记忆查看器模式（AgentHeader「记忆」按钮 → AgentMemoryView）
+  if (memoryView) {
+    return <AgentMemoryView />
   }
 
   // 空状态（无活跃会话）

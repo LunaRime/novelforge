@@ -14,14 +14,12 @@
 import { useEffect, useState } from 'react'
 import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Pencil } from 'lucide-react'
 import { useMemoryStore } from '../../../stores/memory-store'
-import { useVolumeStore } from '../../../stores/volume-store'
 import { ipc } from '../../../services/ipc-client'
 import { renderLog } from '../../../services/render-logger'
-import { ensureVolumeSummary } from '../../../services/memory/chapter-memory'
-import { rebuildBookState } from '../../../services/memory/book-memory'
 import { isValidMemoryContent, stripStatusFrontmatter } from '../../../services/memory/memory-codec'
 import { toast } from '../../ui/Toast'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
 import type { MemoryFileMeta } from '../../../services/memory/memory-codec'
 
@@ -33,6 +31,7 @@ interface Props {
 export default function MemoryGroup({ projectPath }: Props) {
   const { t } = useTranslation()
   const { files, loading, load, refresh } = useMemoryStore()
+  const { handleRebuild } = useMemoryRebuild()
   const [open, setOpen] = useState(true)
 
   // 挂载 + 项目切换时加载记忆文件列表
@@ -47,50 +46,6 @@ export default function MemoryGroup({ projectPath }: Props) {
     })
     return () => { unsub() }
   }, [load])
-
-  /** 手动重建入口 */
-  const handleRebuild = async (f: MemoryFileMeta) => {
-    // 卷级：ensureVolumeSummary 扫描全部 chapters-*.md 收集卷内条目 →
-    // buildVolumeSummaryFile 组装 → memory:write 覆盖（纯函数聚合，零 LLM，即时完成）
-    if (f.kind === 'volume') {
-      const m = f.file.match(/^volume-(\d+)\.md$/)
-      if (!m) { toast.error(t('error.unknown')); return }
-      const applied = await useVolumeStore.getState().load() // 重建前保证卷数据最新（loadSeq 竞态守卫）
-      const volumes = applied ? useVolumeStore.getState().volumes : []
-      const vol = volumes.find(v => v.volumeNumber === Number(m[1]))
-      if (!vol) { toast.error(t('error.unknown')); return }
-      if (vol.chapterEnd === 0) {
-        // 进行中卷：卷聚合无入口（ensureVolumeSummary 跳过）——提示走定稿/检查点生成
-        toast.success(t('memory.rebuildHint'))
-        return
-      }
-      const res = await ensureVolumeSummary(vol)
-      if (res.success) await refresh() // 覆盖写（无 status:stale）→ stale 徽标消失
-      // F6：重建失败 = 卷内章节条目不完整（未定稿）——明确指引而非笼统未知错误
-      else toast.error(t('memory.rebuildIncomplete'))
-      return
-    }
-    // 全书：P2 真实重建——rebuildBookState 聚合非 stale 卷（无分卷则聚合最新章节文件）→ 覆盖写
-    if (f.kind === 'book') {
-      const res = await rebuildBookState()
-      if (res.success) {
-        toast.success(t('memory.rebuildBookDone'))
-        await refresh() // 覆盖写（无 status:stale）→ stale 徽标消失
-      } else {
-        // M6：失败带出 rebuildBookState 的 reason（如 'all volume files stale'）而非吞掉——reason 为内部诊断串，直接拼接展示
-        toast.error(res.reason ? `${t('error.unknown')}：${res.reason}` : t('error.unknown'))
-      }
-      return
-    }
-    // 章节/共享：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；共享事实下次压缩自动重提取；全书走上面的真实重建）
-    const res = await ipc.invoke('memory:mark-stale', f.file)
-    if (res.success) {
-      toast.success(t('memory.rebuildHint'))
-      await refresh() // stale 徽标出现
-    } else {
-      toast.error(t('error.unknown'))
-    }
-  }
 
   return (
     <section
@@ -138,17 +93,19 @@ export default function MemoryGroup({ projectPath }: Props) {
   )
 }
 
-// ===== 记忆文件列表 =====
+// ===== 记忆文件列表（侧栏与 AI 面板共享，P3 Task 3） =====
 
-function MemoryList({ files, onRebuild, onSaved }: {
+export function MemoryList({ files, onRebuild, onSaved, editable = true }: {
   files: MemoryFileMeta[]
   onRebuild: (f: MemoryFileMeta) => void
   onSaved: () => Promise<void>
+  /** 行内手动编辑开关——AI 面板视图只读（编辑模式为侧栏入口，P2 Task 5） */
+  editable?: boolean
 }) {
   return (
     <div className="space-y-1">
       {files.map(f => (
-        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved} />
+        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved} editable={editable} />
       ))}
     </div>
   )
@@ -156,10 +113,12 @@ function MemoryList({ files, onRebuild, onSaved }: {
 
 // ===== 记忆文件行 =====
 
-function MemoryRow({ meta, onRebuild, onSaved }: {
+function MemoryRow({ meta, onRebuild, onSaved, editable = true }: {
   meta: MemoryFileMeta
   onRebuild: () => void
   onSaved: () => Promise<void>
+  /** 手动编辑开关（false = 只读展开查看，见 MemoryList） */
+  editable?: boolean
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -307,17 +266,19 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
               >
                 {content ?? ''}
               </pre>
-              <div className="flex justify-end mt-1">
-                <button
-                  type="button"
-                  className="flex items-center gap-1 text-[0.6rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
-                  style={{ color: 'var(--color-text-muted)' }}
-                  onClick={startEdit}
-                >
-                  <Pencil size={10} />
-                  {t('action.edit')}
-                </button>
-              </div>
+              {editable && (
+                <div className="flex justify-end mt-1">
+                  <button
+                    type="button"
+                    className="flex items-center gap-1 text-[0.6rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
+                    style={{ color: 'var(--color-text-muted)' }}
+                    onClick={startEdit}
+                  >
+                    <Pencil size={10} />
+                    {t('action.edit')}
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>

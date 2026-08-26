@@ -70,6 +70,8 @@ interface AgentState {
   activeConversationId: string | null
   /** 是否显示历史面板 */
   showHistory: boolean
+  /** 是否显示记忆查看器（AgentHeader 记忆按钮 → AgentMemoryView，P3 Task 3） */
+  memoryView: boolean
   /** 全局默认模式 */
   defaultMode: AgentMode
   /** 当前是否正在生成（用于 UI 状态） */
@@ -98,6 +100,10 @@ interface AgentState {
   toggleHistory: () => void
   /** 设置历史面板可见性 */
   setShowHistory: (show: boolean) => void
+  /** 切换记忆查看器（与历史面板互斥） */
+  toggleMemoryView: () => void
+  /** 设置记忆查看器可见性 */
+  setMemoryView: (show: boolean) => void
   /** 设置当前会话模式 */
   setMode: (mode: AgentMode) => void
   /** 设置当前会话使用的模型 */
@@ -173,6 +179,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   conversations: [],
   activeConversationId: null,
   showHistory: false,
+  memoryView: false,
   defaultMode: 'deep',
   generating: false,
   activeRequestId: null,
@@ -215,13 +222,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       conversations: [newConv, ...state.conversations],
       activeConversationId: newConv.id,
       showHistory: false,
+      memoryView: false,
     }))
     get().persistCurrent(newConv.id)
     return newConv
   },
 
   selectConversation: (id) => {
-    set({ activeConversationId: id, showHistory: false })
+    set({ activeConversationId: id, showHistory: false, memoryView: false })
   },
 
   deleteConversation: (id) => {
@@ -250,11 +258,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   toggleHistory: () => {
-    set(state => ({ showHistory: !state.showHistory }))
+    set(state => ({ showHistory: !state.showHistory, memoryView: false }))
   },
 
   setShowHistory: (show) => {
-    set({ showHistory: show })
+    set({ showHistory: show, memoryView: false })
+  },
+
+  toggleMemoryView: () => {
+    set(state => ({ memoryView: !state.memoryView, showHistory: false }))
+  },
+
+  setMemoryView: (show) => {
+    set({ memoryView: show, showHistory: false })
   },
 
   setMode: (mode) => {

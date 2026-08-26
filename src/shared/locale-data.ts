@@ -3258,5 +3258,9 @@ export const UI_TEXTS_DATA = {
   'memory.empty': { 'zh-CN': '暂无记忆——定稿章节后自动生成', 'en-US': 'No memory yet — generated after finalizing chapters', 'ru-RU': 'Память пока пуста — создаётся после финализации глав' },
   // 手动编辑（Task 5：编辑/保存/取消按钮复用 action.*，见 MemoryGroup.tsx）
   'memory.invalidFormat': { 'zh-CN': '记忆文件格式无效（缺少章节块）', 'en-US': 'Invalid memory file format (missing chapter blocks)', 'ru-RU': 'Недопустимый формат файла памяти (нет блоков глав)' },
+  // AI 面板入口（P3 Task 3：AgentHeader 工具栏按钮 + AgentMemoryView，返回按钮 title 复用 memory.back）
+  'memory.menuTitle': { 'zh-CN': '记忆', 'en-US': 'Memory', 'ru-RU': 'Память' },
+  'memory.back': { 'zh-CN': '返回对话', 'en-US': 'Back to chat', 'ru-RU': 'Назад к диалогу' },
+  'memory.openProjectHint': { 'zh-CN': '打开项目后可查看记忆', 'en-US': 'Open a project to view memory', 'ru-RU': 'Откройте проект, чтобы просмотреть память' },
 } as const
 
