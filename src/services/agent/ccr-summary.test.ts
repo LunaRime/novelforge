@@ -105,6 +105,7 @@ describe('SharedContext：压缩摘要附带提取可复用事实（P3）', () =
   it('prompt 含提取指令且 [可复用事实] 机器锚点在批文本之后（三语字面量不翻译）', () => {
     const p = buildCcrSummaryPrompt('', '新批内容')
     expect(p).toContain('[可复用事实]')
+    expect(p).toContain('3-5 条') // 审查裁决 Important-1：数量约束（防一次性琐碎事实挤占 50 条上限）
     expect(p.indexOf('[可复用事实]')).toBeGreaterThan(p.indexOf('新批内容'))
   })
 
