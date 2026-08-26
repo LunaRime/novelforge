@@ -14,17 +14,20 @@ export class LLMHistoryRepository {
     error_message?: string
     /** 单次调用费用（美元，由渲染进程按模型单价计算） */
     cost?: number
+    /** 缓存命中 token 数（v16：CacheAligner 效果事后统计；旧写入端不传时默认 0）。注意：IPC 参数走 Record<string, unknown>，键名与 model_id 等同为 snake_case */
+    cached_tokens?: number
   }): void {
     const db = getProjectDb()
     if (!db) return
 
     const modelId = call.model_id || 'unknown'
     db.prepare(`
-      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message, cost)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, cached_tokens, duration_ms, success, error_message, cost)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       modelId, call.model_name || '', call.purpose,
       call.prompt_tokens, call.completion_tokens, call.total_tokens,
+      call.cached_tokens ?? 0,
       call.duration_ms, call.success ? 1 : 0, call.error_message ?? '',
       call.cost ?? 0
     )

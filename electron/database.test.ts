@@ -4,8 +4,12 @@
  * 因 better-sqlite3 编译目标为 Electron (NODE_MODULE_VERSION 145)，
  * vitest 运行环境为 Node.js (NODE_MODULE_VERSION 131)，无法直接加载原生模块。
  * 此处验证 SQL 语句和迁移逻辑的正确性，运行时验证由 Electron 集成测试覆盖。
+ *
+ * v16 cached_tokens 迁移用 node:sqlite 内存 DB 直接执行 SQL（Node 23 内置，
+ * 与 vitest Node ABI 兼容——better-sqlite3 走 Electron ABI 无法在测试加载）。
  */
 import { describe, it, expect } from 'vitest'
+import { DatabaseSync } from 'node:sqlite'
 
 // ===== safeAddColumn 逻辑验证（不依赖 DB 实例） =====
 
@@ -112,5 +116,67 @@ describe('v7 Migration SQL Logic', () => {
     const newCols = ['tier', 'tags', 'appear_chapters']
     const skipped = newCols.filter(c => !existingCols.includes(c))
     expect(skipped).toEqual(['appear_chapters']) // 只添加不存在的列
+  })
+})
+
+// ===== v16 cached_tokens 迁移（node:sqlite 内存 DB） =====
+
+describe('v16 cached_tokens 迁移', () => {
+  /** 与 database.ts safeAddColumn 语义一致的迁移模拟（pragma 检查列存在再 ALTER，幂等） */
+  function migrateV16(db: DatabaseSync): void {
+    const cols = db.prepare(`PRAGMA table_info(llm_calls)`).all() as { name: string }[]
+    if (!cols.some(c => c.name === 'cached_tokens')) {
+      db.exec(`ALTER TABLE llm_calls ADD COLUMN cached_tokens INTEGER NOT NULL DEFAULT 0`)
+    }
+  }
+
+  /** 旧版 llm_calls 表（无 cached_tokens 列——v16 前 schema） */
+  const CREATE_LLM_CALLS_V15 = `
+    CREATE TABLE llm_calls (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      model_id TEXT NOT NULL,
+      model_name TEXT DEFAULT '',
+      purpose TEXT DEFAULT '',
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      total_tokens INTEGER DEFAULT 0,
+      duration_ms INTEGER DEFAULT 0,
+      success INTEGER DEFAULT 1,
+      error_message TEXT DEFAULT '',
+      cost REAL DEFAULT 0,
+      created_at INTEGER DEFAULT (unixepoch() * 1000)
+    )
+  `
+
+  it('加列幂等（重复执行不报错且只产生一列）', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(CREATE_LLM_CALLS_V15)
+
+    // 首次执行迁移
+    migrateV16(db)
+    const cols1 = db.prepare(`PRAGMA table_info(llm_calls)`).all() as { name: string }[]
+    expect(cols1.some(c => c.name === 'cached_tokens')).toBe(true)
+
+    // 二次执行（幂等：safeAddColumn 检查后跳过）
+    migrateV16(db)
+    const cols2 = db.prepare(`PRAGMA table_info(llm_calls)`).all() as { name: string }[]
+    expect(cols2.filter(c => c.name === 'cached_tokens')).toHaveLength(1)
+    db.close()
+  })
+
+  it('cached_tokens 默认 0 且固定列 INSERT 可落库（repository logCall 契约）', () => {
+    const db = new DatabaseSync(':memory:')
+    db.exec(CREATE_LLM_CALLS_V15)
+    migrateV16(db)
+    // 不动 cached_tokens 的 INSERT（旧写入端形态）→ 默认 0
+    db.exec(`INSERT INTO llm_calls (model_id, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message, cost) VALUES ('m1', 10, 5, 15, 100, 1, '', 0.0)`)
+    // 固定列 INSERT（LLMHistoryRepository.logCall 形态）补 cached_tokens
+    db.exec(`INSERT INTO llm_calls (model_id, prompt_tokens, completion_tokens, total_tokens, duration_ms, success, error_message, cost, cached_tokens) VALUES ('m2', 10, 5, 15, 100, 1, '', 0.0, 7)`)
+    const rows = db.prepare(`SELECT model_id, cached_tokens FROM llm_calls ORDER BY id`).all() as Array<{ model_id: string; cached_tokens: number }>
+    expect(rows).toEqual([
+      { model_id: 'm1', cached_tokens: 0 },
+      { model_id: 'm2', cached_tokens: 7 },
+    ])
+    db.close()
   })
 })

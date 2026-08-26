@@ -117,8 +117,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号（v15：characters 新增生命周期列 appear_count/first_chapter/last_chapter/status） */
-const CURRENT_SCHEMA_VERSION = 15
+/** 当前数据库 schema 版本号（v16：llm_calls 新增 cached_tokens 列——CacheAligner 缓存命中事后统计） */
+const CURRENT_SCHEMA_VERSION = 16
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -384,6 +384,7 @@ function createTables(db: BetterSqlite3.Database) {
       prompt_tokens INTEGER DEFAULT 0,
       completion_tokens INTEGER DEFAULT 0,
       total_tokens INTEGER DEFAULT 0,
+      cached_tokens INTEGER NOT NULL DEFAULT 0,  -- v16: 缓存命中 token 数（CacheAligner 效果事后统计）
       duration_ms INTEGER DEFAULT 0,
       success INTEGER DEFAULT 1,
       error_message TEXT DEFAULT '',
@@ -536,6 +537,9 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
 
   // llm_calls — v8 新增 cost（单次调用费用，美元）
   safeAddColumn(db, 'llm_calls', 'cost', 'REAL DEFAULT 0')
+
+  // llm_calls — v16 新增 cached_tokens（缓存命中 token 数，CacheAligner 效果事后统计）
+  safeAddColumn(db, 'llm_calls', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0')
 
   // characters — v14 新增 aliases（别名/称呼注册表，角色名匹配的变体形态）
   safeAddColumn(db, 'characters', 'aliases', "TEXT DEFAULT '[]'")

@@ -68,6 +68,7 @@ export async function generateConversationSummary(opts: {
       prompt_tokens: usage?.promptTokens ?? 0,
       completion_tokens: usage?.completionTokens ?? 0,
       total_tokens: usage?.totalTokens ?? 0,
+      cached_tokens: usage?.cachedTokens ?? 0,
       duration_ms: duration,
       success: 1,
       error_message: '',
