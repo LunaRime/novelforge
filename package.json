@@ -6,6 +6,11 @@
   "private": true,
   "packageManager": "pnpm@9.15.4",
   "type": "commonjs",
+  "pnpm": {
+    "overrides": {
+      "@codemirror/state": "6.7.1"
+    }
+  },
   "main": "dist-electron/main.js",
   "dependencies": {
     "@lancedb/lancedb": "^0.27.2",
@@ -36,7 +41,7 @@
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/language": "^6.12.3",
     "@codemirror/language-data": "^6.5.2",
-    "@codemirror/state": "^6.6.0",
+    "@codemirror/state": "^6.7.1",
     "@codemirror/view": "^6.41.0",
     "@electron/rebuild": "^4.0.3",
     "@lezer/highlight": "^1.2.3",

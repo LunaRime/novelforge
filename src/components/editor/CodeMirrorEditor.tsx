@@ -84,9 +84,10 @@ export default function CodeMirrorEditor({
         // 整文替换事务会进入 undo 栈。
         // 不带 selection：CodeMirror 自动 clamp 越界光标，保留原有受控同步的光标语义，
         // 避免强制 anchor:0 导致切文件后光标跳文件头（用户可感知回归）。
-        // 注：state@6.6.0 的 TransactionSpec 类型没有 addToHistory 快捷字段
-        // （与 @codemirror/commands@6.10.4 要求 state@6.7+ 的同源类型不匹配，
-        // 见下方 undo 按钮处的既有注释），改用 annotation 形式语义等价。
+        // 注：使用 annotation 形式而非 TransactionSpec 的 addToHistory 快捷字段——
+        // 该快捷字段由 state 6.8+ 的 update() 转换（6.7.1 运行时静默忽略，
+        // 行为级测试实测），annotation 形式在两版语义等价且由 @codemirror/commands
+        // 的 historyField.update 直接识别。
         view.dispatch({
           changes: { from: 0, to: view.state.doc.length, insert: content },
           annotations: [Transaction.addToHistory.of(false)],
@@ -593,9 +594,7 @@ export default function CodeMirrorEditor({
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => {
                       const view = editorRef.current?.view
-                      // @codemirror/commands v6.10.4 依赖 @codemirror/state v6.7+ — 项目用 v6.6，类型不兼容但运行时兼容
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      if (view) undo(view as any)
+                      if (view) undo(view)
                     }}
                   ><Undo2 size={14} /></button>
                   <button
@@ -606,8 +605,7 @@ export default function CodeMirrorEditor({
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                     onClick={() => {
                       const view = editorRef.current?.view
-                      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                      if (view) redo(view as any)
+                      if (view) redo(view)
                     }}
                   ><Redo2 size={14} /></button>
                   <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />

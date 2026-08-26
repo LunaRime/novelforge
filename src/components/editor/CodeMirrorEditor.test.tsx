@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 /**
- * CodeMirrorEditor — 外部 content 同步测试（C3 根因验证与修复的回归覆盖）
+ * CodeMirrorEditor — 外部 content 同步与撤销历史测试（C3 根因验证与修复回归）
  *
  * 背景链路：DraftEditor/ArchFileViewer onChange → updateTabContent → store →
  * content prop → CodeMirrorEditor useEffect。
  *
- * 根因（已在代码级确认）：ReactCodeMirror 的受控 value 同步
+ * 根因（已代码级确认）：ReactCodeMirror 的受控 value 同步
  * （node_modules/@uiw/react-codemirror/esm/useCodeMirror.js 的 value effect）
  * dispatch 整文替换时只带 ExternalChange 注解（防 onChange 回显），
  * 未带 addToHistory:false——该事务默认进入 undo 历史栈（@codemirror/commands
@@ -16,24 +16,21 @@
  * 整文替换不进 undo 栈，且 editorContent state 不变 → ReactCodeMirror 的
  * value prop 不变 → 不会再触发其带历史的同步 dispatch。
  *
- * 本测试覆盖 jsdom 可确定性验证的同步契约：
- * 1) 外部 content 变化应用到编辑器（view 存在走手动 dispatch 路径）
- * 2) 外部回写相同内容不重复 dispatch（lastEmittedContentRef 回路防护）
- * 3) 多次外部同步内容正确叠加
+ * 前提：@codemirror/state 已通过 pnpm.overrides 统一到 6.7.1（此前根依赖
+ * 6.6.0 与 @codemirror/commands@6.10.4 嵌套 6.7.1 双实例并存，history
+ * StateField 被 6.6.0 的 flatten 静默丢弃 → undo 完全失效），本用例依赖
+ * 单实例环境下历史管线恢复可用。
  *
- * 说明：jsdom 中未能验证 Ctrl+Z 撤销行为本身——本项目存在
- * @codemirror/state 双实例（根 6.6.0 vs @codemirror/commands@6.10.4
- * 嵌套 6.7.1）：6.6.0 的 flatten 以 instanceof 识别扩展，6.7.1 的
- * history StateField 被静默丢弃 → undo/undoDepth 完全失效（任何事务都
- * 不进历史），且 cm6 的 keydown 在 jsdom 中不触发 keymap，故撤销断言
- * 无法在此环境可靠执行。撤销行为按 brief 的手动验证清单确认
- * （见 task-1-report.md 结论）。
+ * 注：jsdom 中 cm6 keymap 的 keydown 不会触发（keyboard 事件经由
+ * KeyboardEvent 构造派发不进入 cm6 的按键处理），故 Ctrl+Z 用
+ * historyKeymap 绑定的同一个 undo 命令直接调用（同一模块实例、语义等价）。
  */
 import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { EditorView } from '@codemirror/view'
 import { Transaction } from '@codemirror/state'
+import { undo } from '@codemirror/commands'
 import CodeMirrorEditor from './CodeMirrorEditor'
 
 // jsdom 未实现 scrollTo / ResizeObserver（与 AgentConversation.test 相同防护）
@@ -81,53 +78,53 @@ function getView(container: HTMLElement): EditorView {
   return view as unknown as EditorView
 }
 
+/** 模拟用户一次输入（与键入等价的事务；time 参数强制拉开间隔，防 history 新组 500ms 分组干扰） */
+function userInput(view: EditorView, text: string, time: number): void {
+  act(() => {
+    view.dispatch({
+      changes: { from: view.state.doc.length, insert: text },
+      annotations: [Transaction.time.of(time)],
+    })
+  })
+}
+
 afterEach(() => {
   roots.forEach(r => act(() => r.unmount()))
   roots.length = 0
   document.body.innerHTML = ''
 })
 
-describe('CodeMirrorEditor 外部 content 同步', () => {
-  it('外部 content 同步（切文件/AI 刷新）应用到编辑器内容', () => {
+describe('CodeMirrorEditor 撤销行为（外部同步不进 undo 栈）', () => {
+  it('外部 content 同步（切文件/AI 刷新）不应让撤销回到旧内容', () => {
     const onChange = vi.fn()
     const { container, rerender } = renderEditor('旧内容', onChange)
     const view = getView(container)
     expect(view.state.doc.toString()).toBe('旧内容')
 
-    // 用户输入（与键入等价的事务）
-    act(() => {
-      view.dispatch({
-        changes: { from: view.state.doc.length, insert: '编辑一' },
-        annotations: [Transaction.time.of(1000)],
-      })
-    })
+    // 用户输入 "编辑一"
+    userInput(view, '编辑一', 1000)
     expect(view.state.doc.toString()).toBe('旧内容编辑一')
     expect(onChange).toHaveBeenLastCalledWith('旧内容编辑一')
 
-    // 外部内容同步（updateTabContent 链路 / 切换文件）：content prop 变为不同文本
-    // 修复后走 view.dispatch（addToHistory:false），内容必须正确应用
+    // 外部内容同步（updateTabContent 链路 / 切换文件）：content prop 变为不同文本，
+    // 修复后走 view.dispatch(addToHistory:false)——整文替换不进 undo 栈
     act(() => { rerender('外部同步内容N') })
+    expect(view.state.doc.toString()).toBe('外部同步内容N')
+
+    // Ctrl+Z：撤销的应是用户自身编辑前的状态；若 undo 无效果（外部同步未进栈），
+    // 文档保持外部内容——不应跳回 "旧内容编辑一"（修复前会跳回旧内容）
+    act(() => { undo(view) })
     expect(view.state.doc.toString()).toBe('外部同步内容N')
   })
 
-  it('外部回写相同内容不重复 dispatch（lastEmittedContentRef 回路防护）', () => {
+  it('编辑 → 外部回写相同内容 → 编辑 → undo 只撤销最后一次编辑', () => {
     const onChange = vi.fn()
     const { container, rerender } = renderEditor('旧内容', onChange)
     const view = getView(container)
 
     // 用户输入 "编辑一" → "编辑二"
-    act(() => {
-      view.dispatch({
-        changes: { from: view.state.doc.length, insert: '编辑一' },
-        annotations: [Transaction.time.of(1000)],
-      })
-    })
-    act(() => {
-      view.dispatch({
-        changes: { from: view.state.doc.length, insert: '编辑二' },
-        annotations: [Transaction.time.of(2000)],
-      })
-    })
+    userInput(view, '编辑一', 1000)
+    userInput(view, '编辑二', 2000)
     expect(view.state.doc.toString()).toBe('旧内容编辑一编辑二')
     expect(onChange).toHaveBeenCalledTimes(2)
 
@@ -136,15 +133,31 @@ describe('CodeMirrorEditor 外部 content 同步', () => {
     act(() => { rerender('旧内容编辑一编辑二') })
     expect(view.state.doc.toString()).toBe('旧内容编辑一编辑二')
     expect(onChange).toHaveBeenCalledTimes(2)
+
+    // Ctrl+Z：只撤销 "编辑二"，外部回写不产生可撤销事件
+    act(() => { undo(view) })
+    expect(view.state.doc.toString()).toBe('旧内容编辑一')
+
+    // 再按一次：撤销 "编辑一"
+    act(() => { undo(view) })
+    expect(view.state.doc.toString()).toBe('旧内容')
   })
 
-  it('多次外部同步内容正确叠加（每次同步都反映最新外部内容）', () => {
+  it('多次外部同步不累积 undo 事件（后续同步仍只撤销用户编辑）', () => {
     const { container, rerender } = renderEditor('旧内容')
     const view = getView(container)
+
+    userInput(view, '编辑一', 1000)
 
     act(() => { rerender('外部A') })
     expect(view.state.doc.toString()).toBe('外部A')
     act(() => { rerender('外部B') })
+    expect(view.state.doc.toString()).toBe('外部B')
+
+    // 两次外部同步后，Ctrl+Z 不应跳回旧内容（无整文替换可撤销）
+    act(() => { undo(view) })
+    expect(view.state.doc.toString()).toBe('外部B')
+    act(() => { undo(view) })
     expect(view.state.doc.toString()).toBe('外部B')
   })
 })
