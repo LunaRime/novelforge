@@ -83,4 +83,18 @@ describe('ToolCallBlock 文件摘要', () => {
     expect(container.textContent).toMatch(/第3章|Ch\.3|Гл\.3/)
     act(() => { root.unmount() })
   })
+
+  it('read_characters 调用显示 👤 角色摘要（character_name 参数）', () => {
+    const tc = { id: '4', toolName: 'read_characters', arguments: { character_name: '林晚' }, status: 'completed' as const }
+    const { container, root } = render(<ToolCallBlock toolCall={tc} />)
+    expect(container.textContent).toContain('👤 林晚')
+    act(() => { root.unmount() })
+  })
+
+  it('角色工具使用 name 参数（非真实 schema）时不触发 👤 摘要', () => {
+    const tc = { id: '5', toolName: 'read_characters', arguments: { name: '林晚' }, status: 'completed' as const }
+    const { container, root } = render(<ToolCallBlock toolCall={tc} />)
+    expect(container.textContent).not.toContain('👤')
+    act(() => { root.unmount() })
+  })
 })

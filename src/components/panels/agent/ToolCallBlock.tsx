@@ -57,7 +57,7 @@ function statusLabel(status: ToolCallInfo['status'], t: (key: TextKey) => string
  * 从工具参数提取文件/对象摘要（read_file/read_drafts 等）
  * - file_path / path → 📄 文件名（末尾段）
  * - chapter_number → 📖 章节（走 i18n chapter.label，禁止硬编码中文）
- * - 角色类工具 name 参数 → 👤 角色名
+ * - read_characters 的 character_name 参数（read-characters.tool.ts:17）→ 👤 角色名
  */
 function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: TextKey) => string): string | null {
   const path = typeof args.file_path === 'string' ? args.file_path
@@ -70,8 +70,8 @@ function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: T
   if (typeof args.chapter_number === 'number') {
     return `📖 ${t('chapter.label').replace('{n}', String(args.chapter_number))}`
   }
-  if (typeof args.name === 'string' && ['read_characters', 'update_character_cards'].includes(toolName)) {
-    return `👤 ${args.name}`
+  if (toolName === 'read_characters' && typeof args.character_name === 'string') {
+    return `👤 ${args.character_name}`
   }
   return null
 }
