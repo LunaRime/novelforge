@@ -3,6 +3,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { ipc } from '../ipc-client'
 import { calculateCost } from '../llm/prompt-cache'
 import { parseMemoryFile, buildChapterEntryBlock, type ChapterSummaryEntry } from './memory-codec'
+import { maybeTriggerBookState } from './book-memory'
 
 /** 15 章滚动窗口（无分卷/未命中/进行中卷时） */
 const CHAPTERS_PER_FILE = 15
@@ -187,6 +188,8 @@ export async function ensureVolumeSummary(
     const entries = [...byChapter.values()].sort((a, b) => a.chapterNumber - b.chapterNumber)
     const file = `volume-${String(volume.volumeNumber).padStart(3, '0')}.md` // 零填充防字典序错排（审阅修正）
     await ipc.invoke('memory:write', file, buildVolumeSummaryFile(volume, entries))
+    // P2 Task 3：卷聚合成功后检查点触发全书重建（每满 3 个非 stale 卷；低频，失败静默不阻断定稿）
+    await maybeTriggerBookState()
     return { file, success: true }
   } catch {
     return { file: null, success: false }

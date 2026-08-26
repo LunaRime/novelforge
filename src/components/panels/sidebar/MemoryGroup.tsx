@@ -7,7 +7,8 @@
  * 重建（审阅修正——卷级真实重建，非仅标 stale）：
  *   卷级 = 复用 Task 2 卷聚合（章节文件解析 → buildVolumeSummaryFile → memory:write 覆盖，
  *         纯函数零 LLM 即时完成；进行中卷 chapterEnd=0 无聚合入口 → 仅提示不可重建）
- *   章节 = 标记 stale（走下次定稿 DAG 重建）；全书 = 仅标记（P1 无自动生成链路，P2 跟进）
+ *   章节 = 标记 stale（走下次定稿 DAG 重建）
+ *   全书 = P2 真实重建（rebuildBookState 聚合非 stale 卷 / 无分卷聚合最新章节文件）
  * 数据：useMemoryStore（memory:list / memory:read / memory:mark-stale）
  */
 import { useEffect, useState } from 'react'
@@ -16,6 +17,7 @@ import { useMemoryStore } from '../../../stores/memory-store'
 import { useVolumeStore } from '../../../stores/volume-store'
 import { ipc } from '../../../services/ipc-client'
 import { ensureVolumeSummary } from '../../../services/memory/chapter-memory'
+import { rebuildBookState } from '../../../services/memory/book-memory'
 import { toast } from '../../ui/Toast'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { globalEventBus } from '../../../shared/event-bus'
@@ -66,7 +68,18 @@ export default function MemoryGroup({ projectPath }: Props) {
       else toast.error(t('memory.rebuildIncomplete'))
       return
     }
-    // 章节/全书：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；全书 P2 无生成链路）
+    // 全书：P2 真实重建——rebuildBookState 聚合非 stale 卷（无分卷则聚合最新章节文件）→ 覆盖写
+    if (f.kind === 'book') {
+      const res = await rebuildBookState()
+      if (res.success) {
+        toast.success(t('memory.rebuildBookDone'))
+        await refresh() // 覆盖写（无 status:stale）→ stale 徽标消失
+      } else {
+        toast.error(t('error.unknown'))
+      }
+      return
+    }
+    // 章节：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；全书走上面的真实重建）
     const res = await ipc.invoke('memory:mark-stale', f.file)
     if (res.success) {
       toast.success(t('memory.rebuildHint'))
