@@ -59,7 +59,7 @@ export default function AgentMemoryView() {
           <span>{t('memory.menuTitle')}</span>
         </button>
         <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
-          {files.length}
+          {projectPath ? files.length : '—'}
         </span>
         <button
           type="button"

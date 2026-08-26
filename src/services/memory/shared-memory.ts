@@ -68,6 +68,9 @@ export function parseSharedFile(raw: string): string[] {
  */
 export async function upsertSharedFacts(facts: string[]): Promise<boolean> {
   try {
+    // 无新事实 → 直接短路：不触发 memory:read/write（避免无关写回使 shared.md mtime 更新、
+    // 重建 frontmatter 丢弃 status、规范化重写丢弃非 `- ` 行内容）
+    if (facts.length === 0) return true
     const raw = await ipc.invoke('memory:read', SHARED_MEMORY_FILE) as string | null
     const merged = mergeSharedFacts(parseSharedFile(raw ?? ''), facts)
     if (merged.length === 0) return true // 无可写事实：不写入（幂等）

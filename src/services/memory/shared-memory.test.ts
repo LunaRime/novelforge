@@ -103,4 +103,14 @@ describe('upsertSharedFacts', () => {
     expect(await upsertSharedFacts([])).toBe(true)
     expect(invoke).not.toHaveBeenCalledWith('memory:write', expect.anything(), expect.anything())
   })
+
+  it('文件已存在 + 无新事实 → 不写入（避免无关写回/重建 frontmatter）', async () => {
+    memoryFiles.set(SHARED_MEMORY_FILE, buildSharedFile(['事实A']))
+    expect(await upsertSharedFacts([])).toBe(true)
+    // 不写（不会触发 memory:write，也不会无谓读文件）
+    expect(invoke).not.toHaveBeenCalledWith('memory:write', expect.anything(), expect.anything())
+    expect(invoke).not.toHaveBeenCalledWith('memory:read', expect.anything())
+    // 原文件内容未被修改
+    expect(memoryFiles.get(SHARED_MEMORY_FILE)).toBe(buildSharedFile(['事实A']))
+  })
 })
