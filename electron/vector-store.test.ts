@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeFTSRelevance } from './vector-store'
+import { computeFTSRelevance, parseChapterNumberForBackfill } from './vector-store'
 
 describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
   it('空输入返回基础分 0.5', () => {
@@ -38,5 +38,18 @@ describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
   it('中文标点/英文混合 query 不崩溃', () => {
     expect(() => computeFTSRelevance('这是 hero 的剑', 'hero')).not.toThrow()
     expect(computeFTSRelevance('这是 hero 的剑', 'hero')).toBeGreaterThan(0.5)
+  })
+})
+
+describe('存量回填章节号解析（真实定稿导入格式）', () => {
+  it('第N章 标题.txt（真实格式：定稿导入文件名）→ 章节号', () => {
+    expect(parseChapterNumberForBackfill('第9章 破坛换晶.txt')).toBe(9)
+    expect(parseChapterNumberForBackfill('第 9 章 破坛换晶.txt')).toBe(9)
+  })
+
+  it('无匹配 → null（回填 NULL，scopeFilter 容忍）', () => {
+    expect(parseChapterNumberForBackfill('设定集.md')).toBeNull()
+    expect(parseChapterNumberForBackfill('chapter_9.txt')).toBeNull()
+    expect(parseChapterNumberForBackfill('第9章 正文.md')).toBeNull() // 旧格式（正文/要点/蓝图.md）非定稿导入
   })
 })

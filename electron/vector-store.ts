@@ -188,6 +188,50 @@ export async function closeConnection(projectPath: string): Promise<void> {
 }
 
 
+// ===== 存量 schema 自检迁移（P2） =====
+
+/**
+ * 存量表回填章节号解析（匹配真实定稿导入文件名 `第N章 标题.txt`；无匹配 null）
+ * 宽松形式 `第\s*(\d+)\s*章`：定稿文件名 `第9章 标题.txt` 与带空格形式均匹配；
+ * `.md` 后缀（旧格式 正文/要点/蓝图）不匹配，返回 null
+ */
+export function parseChapterNumberForBackfill(fileName: string): number | null {
+  const m = fileName.match(/^第\s*(\d+)\s*章\s*(.+?)\.txt$/)
+  return m ? parseInt(m[1], 10) : null
+}
+
+/**
+ * chunks 表 schema 自检 + 迁移（P2：存量表缺 chapterNumber 列——导入路径已有重建自愈
+ * （requiredFields 检查），检索/启动路径此前无修复，纯文本检索因 scopeFilter 查询
+ * 不存在列而失败降级。add_columns 优先：不 drop 重建，避免向量数据重嵌入）。
+ * 幂等：列已存在时零动作；调用方可安全地在检索入口前置调用。
+ */
+export async function ensureChunksSchema(db: LanceDB.Connection): Promise<{ migrated: boolean; error?: string }> {
+  try {
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return { migrated: false }
+    const table = await db.openTable(TABLE_NAME)
+    const fields = (await table.schema()).fields.map(f => f.name)
+    if (fields.includes('chapterNumber')) return { migrated: false }
+
+    // add_columns 优先：不 drop 重建，存量向量数据原样保留
+    await table.addColumns([new Field('chapterNumber', new Int32(), true)])
+    // 从 fileName 解析回填（仅解析成功的行；无匹配保持默认 NULL——scopeFilter 已容忍 NULL）
+    const rows = await table.query().select(['id', 'fileName']).toArray()
+    for (const r of rows as Array<{ id: string; fileName?: string }>) {
+      const chapterNumber = r.fileName ? parseChapterNumberForBackfill(r.fileName) : null
+      if (chapterNumber === null) continue
+      await table.update({
+        where: `id = '${r.id}'`,
+        values: { chapterNumber },
+      }).catch(() => { /* 单行失败跳过 */ })
+    }
+    return { migrated: true }
+  } catch (e) {
+    return { migrated: false, error: String(e) }
+  }
+}
+
 // ===== 核心操作 =====
 
 /**
@@ -486,6 +530,9 @@ export async function searchWithScope(
 ): Promise<SearchResult[]> {
   try {
     const db = await getConnection(projectPath)
+    // P2 修复：检索前自检 chunks 表 schema —— 存量表缺 chapterNumber 列时
+    //   （导入路径自愈外的旧数据）清理 add_columns + 回填；幂等，迁移过一次后零开销
+    await ensureChunksSchema(db)
     const tableNames = await db.tableNames()
     if (!tableNames.includes(TABLE_NAME)) return []
 
