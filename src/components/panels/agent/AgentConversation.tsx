@@ -429,25 +429,25 @@ function RecentConversationItem({
         </div>
       </div>
 
-      {/* 右侧：时间 or 删除（纯 CSS group-hover 控制） */}
-      <div className="flex-shrink-0 ml-2">
+      {/* 右侧：固定宽度容器，时间与删除按钮绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
+      <div className="flex-shrink-0 ml-2 relative" style={{ width: 72, height: 16 }}>
+        <span
+          className="absolute right-0 top-0 text-[0.7rem] whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0"
+          style={{ color: 'var(--color-text-muted)' }}
+        >
+          {formatRelativeTime(updatedAt)}
+        </span>
         <button
           onClick={e => {
             e.stopPropagation()
             onDelete()
           }}
-          className="hidden group-hover:flex items-center justify-center w-4 h-4 rounded opacity-50 hover:opacity-100 transition-opacity"
+          className="absolute right-0 top-0 flex items-center justify-center w-4 h-4 rounded opacity-0 group-hover:opacity-100 transition-opacity duration-150"
           style={{ color: 'var(--color-text-secondary)' }}
           title={t('agent.deleteConversation')}
         >
           <Trash2 size={12} />
         </button>
-        <span
-          className="group-hover:hidden text-[0.7rem] whitespace-nowrap"
-          style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}
-        >
-          {formatRelativeTime(updatedAt)}
-        </span>
       </div>
     </button>
   )

@@ -93,3 +93,54 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     act(() => { root.unmount() })
   })
 })
+
+describe('RecentConversationItem hover 行为', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async () => null),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+    useAgentStore.setState({ conversations: [], activeConversationId: null, showHistory: false, memoryView: false })
+  })
+
+  it('右侧区域为固定宽度容器且时间/删除按钮无 hidden 切换类', () => {
+    // 构造：一条有消息的会话但当前激活会话为空 → EmptyState 渲染 RecentConversationItem
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: Date.now() }],
+      } : c),
+      activeConversationId: null,
+    }))
+    const { container, root } = render(<AgentConversation />)
+
+    const row = Array.from(container.querySelectorAll('button')).find(b => b.className.includes('group'))
+    expect(row).toBeTruthy()
+    const deleteBtn = row!.querySelector<HTMLButtonElement>('button[title]')
+    const timeSpan = row!.querySelector<HTMLSpanElement>('span')
+    expect(deleteBtn).toBeTruthy()
+    expect(timeSpan).toBeTruthy()
+
+    // 断言 1：删除按钮不含 'hidden' 类（当前实现含 'hidden group-hover:flex' 做 display 切换）
+    expect(deleteBtn!.className).not.toContain('hidden')
+    // 断言 2：时间元素不含 'group-hover:hidden' 类（当前实现含——display 切换导致布局跳动根因）
+    expect(timeSpan!.className).not.toContain('group-hover:hidden')
+    // 断言 3：删除按钮的祖先容器有固定宽度 style（当前实现无固定宽度——修复前此断言失败，防假绿）
+    const rightBox = deleteBtn!.parentElement!
+    expect(rightBox.style.width).not.toBe('')
+    // 正向锁定：固定宽度容器 + 两端 opacity 过渡替代 display 切换
+    expect(rightBox.className).toContain('relative')
+    expect(deleteBtn!.className).toContain('group-hover:opacity-100')
+    expect(timeSpan!.className).toContain('group-hover:opacity-0')
+    // 时间元素基础透明度须走类而非内联 style（内联 opacity 会压过 group-hover:opacity-0，hover 永不淡出）
+    expect(timeSpan!.style.opacity).toBe('')
+
+    act(() => { root.unmount() })
+  })
+})
