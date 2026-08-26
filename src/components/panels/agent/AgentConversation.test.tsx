@@ -17,6 +17,7 @@ import { useProjectStore } from '../../../stores/project-store'
 
 // jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
 beforeAll(() => {
+  (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   Element.prototype.scrollTo = vi.fn() as never
   ;(globalThis as { ResizeObserver?: unknown }).ResizeObserver = class {
     observe() {}
@@ -141,6 +142,74 @@ describe('RecentConversationItem hover 行为', () => {
     // 时间元素基础透明度须走类而非内联 style（内联 opacity 会压过 group-hover:opacity-0，hover 永不淡出）
     expect(timeSpan!.style.opacity).toBe('')
 
+    act(() => { root.unmount() })
+  })
+})
+
+describe('EmptyState 历史条数配置', () => {
+  // 通道路由 mock：EmptyState 读取 config:get 控制最近会话条数；
+  // makeConvs 的 createConversation 会触发 initializeTools → skillRegistry.loadAll（异步先消费 ipc 调用），
+  // 故 mock 必须按通道分流，保证 config:get 精确命中测试值
+  let configValue: unknown = null
+  let configError: Error | null = null
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    configValue = null
+    configError = null
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async (ch: string) => {
+          if (ch === 'config:get') {
+            if (configError) throw configError
+            return configValue
+          }
+          return null
+        }),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+    useAgentStore.setState({ conversations: [], activeConversationId: null, showHistory: false, memoryView: false })
+  })
+
+  /** 构造 n 条带消息的会话（最新在前），并置空活跃会话 → 渲染 EmptyState */
+  const makeConvs = (n: number) => {
+    for (let i = 0; i < n; i++) {
+      const conv = useAgentStore.getState().createConversation({ title: `会话${i}` })
+      useAgentStore.setState(state => ({
+        conversations: state.conversations.map(c => c.id === conv.id ? {
+          ...c,
+          messages: [{ id: `m${i}`, role: 'user', content: '你好', createdAt: Date.now() }],
+        } : c),
+      }))
+    }
+    useAgentStore.setState({ activeConversationId: null })
+  }
+
+  /** 统计最近会话行数（RecentConversationItem 外层按钮 token 恰为 group；内层删除按钮为 group-hover:* 不算） */
+  const recentRowCount = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('button'))
+      .filter(b => b.className.split(' ').includes('group')).length
+
+  it('按 config recentConversationCount 显示条数（mock 5 → 显示 5 条）', async () => {
+    configValue = { recentConversationCount: 5 }
+    makeConvs(6)
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+    expect(recentRowCount(container)).toBe(5) // slice(0, recentCount)：mock 5 → 显示 5 条
+    expect(container.textContent).toContain('查看全部对话') // 6 > 5 → 「加载更多」出现
+    act(() => { root.unmount() })
+  })
+
+  it('config 读取失败/无配置时默认 3 条', async () => {
+    configError = new Error('no config')
+    makeConvs(4)
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+    expect(recentRowCount(container)).toBe(3) // 读取失败 → 默认 3 条
+    expect(container.textContent).toContain('查看全部对话') // 4 > 3 → 「加载更多」仍出现
     act(() => { root.unmount() })
   })
 })

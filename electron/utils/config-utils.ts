@@ -54,6 +54,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   editorFontSize: 16,
   editorFontFamily: 'Noto Serif SC',
   autoSaveInterval: 30,
+  recentConversationCount: 3,
   logRetention: {
     files: 5,
     days: 7,

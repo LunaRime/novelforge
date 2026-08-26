@@ -26,6 +26,8 @@ export interface GlobalConfig {
   editorFontSize: number
   editorFontFamily: string
   autoSaveInterval: number
+  /** Agent 空状态显示的最近会话条数（默认 3） */
+  recentConversationCount?: number
   proxy?: {
     enabled: boolean
     type: 'http' | 'socks5'

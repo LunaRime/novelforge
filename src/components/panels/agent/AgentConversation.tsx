@@ -11,6 +11,7 @@ import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
 import { computeContextUsage } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
+import { ipc } from '../../../services/ipc-client'
 import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -48,10 +49,23 @@ export default function AgentConversation() {
 function EmptyState() {
   const { conversations, selectConversation } = useAgentStore()
   const { t } = useTranslation()
-  // 取最近 3 条历史会话（不包含当前空会话）
+  // 最近会话条数默认 3，可通过全局配置 recentConversationCount 覆盖（读取失败/非法值静默降级为 3）
+  const [recentCount, setRecentCount] = useState(3)
+  useEffect(() => {
+    let cancelled = false
+    ipc.invoke('config:get')
+      .then(cfg => {
+        if (!cancelled && typeof cfg?.recentConversationCount === 'number' && cfg.recentConversationCount > 0) {
+          setRecentCount(cfg.recentConversationCount)
+        }
+      })
+      .catch(() => { /* config:get 读取失败保持默认 3 */ })
+    return () => { cancelled = true }
+  }, [])
+  // 取最近 recentCount 条历史会话（不包含当前空会话）
   const recentConvs = conversations
     .filter(c => c && c.messages.length > 0)
-    .slice(0, 3)
+    .slice(0, recentCount)
 
 
 
@@ -99,7 +113,7 @@ function EmptyState() {
                 />
               ))}
             </div>
-            {conversations.filter(c => c.messages.length > 0).length > 3 && (
+            {conversations.filter(c => c.messages.length > 0).length > recentCount && (
               <button
                 onClick={() => useAgentStore.getState().setShowHistory(true)}
                 className="mt-4 text-left text-xs transition-all hover:underline"
