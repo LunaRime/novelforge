@@ -145,7 +145,11 @@ export function buildVolumeSummaryFile(
 }
 
 /**
- * 章节文件写入后调用：**仅已闭合卷（chapterEnd != 0）**——卷内章节条目完整（覆盖卷范围）→ 聚合生成 volume-N.md；进行中卷跳过（归 P2/手动重建，审阅修正）
+ * 章节文件写入后调用：卷内章节条目完整（覆盖聚合区间）→ 聚合生成 volume-N.md。
+ * - 已闭合卷（chapterEnd != 0）：聚合区间 = 卷范围 [chapterStart..chapterEnd]
+ * - 进行中卷（chapterEnd === 0，P2 解除 P1 限制）：聚合区间 = [chapterStart..已有条目的最大章节号]
+ *   ——上界 = 跨文件解析条目后的最大 chapterNumber，**不是文件 range 的 end**（range 是 15 章
+ *   滚动窗口上界如 16-30，未定稿区间按 range 判完整性永远失败）
  * F6 修正：**扫描全部 chapters-*.md** 收集卷范围 [chapterStart..chapterEnd] 内的条目——
  * 卷创建晚于章节定稿/卷边界编辑后，条目散落在旧窗口文件（孤儿化），只读单窗口文件会漏收
  * → 完整性门槛永不过。文件数少（每 15 章一个），成本可忽略。同章条目跨文件重复时按窗口
@@ -157,7 +161,6 @@ export function buildVolumeSummaryFile(
 export async function ensureVolumeSummary(
   volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number },
 ): Promise<{ file: string | null; success: boolean }> {
-  if (volume.chapterEnd === 0) return { file: null, success: false } // 进行中卷：不支持
   try {
     const list = (await ipc.invoke('memory:list')) as { file: string; kind: string; stale: boolean }[] | null
     if (!list) return { file: null, success: false }
@@ -166,6 +169,8 @@ export async function ensureVolumeSummary(
       .map(f => f.file)
       .sort() // 零填充窗口名升序 = 数值序，后出现的文件为较新窗口
     const byChapter = new Map<number, ChapterSummaryEntry>()
+    // 收集上界：已闭合卷 = chapterEnd；进行中卷 = 无上界（收集后按条目最大章节号确定——见下）
+    const cap = volume.chapterEnd === 0 ? Number.MAX_SAFE_INTEGER : volume.chapterEnd
     for (const file of chapterFiles) {
       const raw = await ipc.invoke('memory:read', file) as string | null
       if (!raw) continue
@@ -176,13 +181,16 @@ export async function ensureVolumeSummary(
         const numMatch = b.match(/^(\d+) 章 · (.+)/)
         if (!numMatch) continue
         const num = Number(numMatch[1])
-        if (num < volume.chapterStart || num > volume.chapterEnd) continue // 只收卷内章节
+        if (num < volume.chapterStart || num > cap) continue // 只收卷内章节
         const field = (label: string) => { const m = b.match(new RegExp(`${label}：([^\\n]+)`)); return m ? m[1].trim() : '' }
         byChapter.set(num, { chapterNumber: num, title: numMatch[2].trim(), keyEvents: field('关键事件'), characters: field('出场角色'), foreshadowing: field('伏笔'), newElements: field('新设定'), currentState: field('当前状态') })
       }
     }
-    // 完整性检查：卷内章节号连续覆盖（chapterStart..chapterEnd）
-    const expected = Array.from({ length: volume.chapterEnd - volume.chapterStart + 1 }, (_, i) => volume.chapterStart + i)
+    if (byChapter.size === 0) return { file: null, success: false } // 无条目：进行中卷无可推断上界
+    // 上界语义：进行中卷 = 已收集条目的最大 chapterNumber（⚠️ 不是文件 range 的 end，range 是窗口上界非实际定稿最大章）
+    const end = volume.chapterEnd === 0 ? Math.max(...Array.from(byChapter.keys())) : volume.chapterEnd
+    // 完整性检查：聚合区间内章节号连续覆盖（已闭合卷 chapterStart..chapterEnd；进行中卷 chapterStart..end）
+    const expected = Array.from({ length: end - volume.chapterStart + 1 }, (_, i) => volume.chapterStart + i)
     const has = expected.every(n => byChapter.has(n))
     if (!has) return { file: null, success: false } // 未完整，跳过
     const entries = [...byChapter.values()].sort((a, b) => a.chapterNumber - b.chapterNumber)

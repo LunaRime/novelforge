@@ -212,6 +212,11 @@ describe('upsertChapterMemory（按章节号替换/追加 + stale 闭环）', ()
 
 describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () => {
   const volume = { volumeNumber: 1, title: '风起青萍', chapterStart: 1, chapterEnd: 2 }
+  // 生成 [from..to] 连续章节条目块（仅关键事件字段，其余字段解析降级「无」）
+  const mk = (from: number, to: number) =>
+    Array.from({ length: to - from + 1 }, (_, i) => from + i)
+      .map(n => [`## 第 ${n} 章 · 章${n}`, `- 关键事件：E${n}`].join('\n'))
+      .join('\n\n')
 
   it('buildVolumeSummaryFile 组装卷头 + 条目（空字段降级「无」）', () => {
     const out = buildVolumeSummaryFile(volume, [
@@ -227,10 +232,32 @@ describe('buildVolumeSummaryFile / ensureVolumeSummary（卷级聚合）', () =>
     expect(out).toContain('## 第 2 章 · 转折')
   })
 
-  it('进行中卷（chapterEnd=0）直接跳过', async () => {
+  it('进行中卷无条目 → 跳过（无可推断上界）', async () => {
     const res = await ensureVolumeSummary({ ...volume, chapterEnd: 0 })
     expect(res).toEqual({ file: null, success: false })
     expect(memoryFiles.size).toBe(0)
+  })
+
+  it('进行中卷（chapterEnd=0）：聚合区间 = 卷起始..条目最大章节号（上界不是窗口 range end）', async () => {
+    // 卷 2 第 16 章起、已定稿至 25（26-30 未定稿）→ 条目落在滚动窗口 chapters-016-030.md
+    // （文件 range 上界 30 是窗口上界非实际定稿最大章；若按 range 上界 30 判完整性必失败——RED 暴露点）
+    memoryFiles.set('chapters-016-030.md', `\n${mk(16, 25)}`)
+    const res = await ensureVolumeSummary({ volumeNumber: 2, title: '卷二', chapterStart: 16, chapterEnd: 0 })
+    expect(res).toEqual({ file: 'volume-002.md', success: true })
+    const content = memoryFiles.get('volume-002.md')!
+    expect(content).toContain('volume: 2')
+    expect(content).toContain('range: 16-25') // 上界 = 条目最大章节号 25
+    expect(content).toContain('## 第 16 章 · 章16')
+    expect(content).toContain('## 第 25 章 · 章25')
+    expect(content).not.toContain('## 第 26 章') // 26-30 未定稿，不属于聚合区间
+  })
+
+  it('进行中卷：区间内有缺章（16-25 缺 20）→ 完整性检查失败 → 跳过', async () => {
+    const entries = Array.from({ length: 10 }, (_, i) => i + 16).filter(n => n !== 20)
+    memoryFiles.set('chapters-016-030.md', `\n${entries.map(n => [`## 第 ${n} 章 · 章${n}`, `- 关键事件：E${n}`].join('\n')).join('\n\n')}`)
+    const res = await ensureVolumeSummary({ volumeNumber: 2, title: '卷二', chapterStart: 16, chapterEnd: 0 })
+    expect(res).toEqual({ file: null, success: false })
+    expect(memoryFiles.has('volume-002.md')).toBe(false)
   })
 
   it('卷内条目不完整（未覆盖卷范围）→ 跳过', async () => {
