@@ -275,7 +275,9 @@ export default function CodeMirrorEditor({
     ".cm-activeLine": { backgroundColor: "transparent" },
     ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
     ".cm-line": { padding: "0" },
-    // markdown 高亮标记样式：`**文字**` 渲染为粗体、`*文字*` 渲染为斜体
+    // 防御性兜底（非渲染来源）：当前依赖下 `**文字**`/`*文字*` 的粗体/斜体渲染由
+    // defaultHighlightStyle（basicSetup 的 syntaxHighlighting）提供的散列类名实现，
+    // .cm-strong/.cm-em 并不匹配任何实际 DOM 类；保留以防未来替换高亮主题后丢失
     ".cm-strong": { fontWeight: "bold" },
     ".cm-em": { fontStyle: "italic" },
   }), [mode])
