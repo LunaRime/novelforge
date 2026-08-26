@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron'
 import { t } from '../../src/shared/locale'
-import { closeProjectDatabase, getProjectDb } from '../database'
+import { closeProjectDatabase, getCurrentProjectPath, getProjectDb } from '../database'
 import { logger } from '../utils/logger'
 
 // 导入所有 Repository
@@ -17,6 +17,7 @@ import { LLMHistoryRepository } from '../repositories/llm-repository'
 import { VolumeRepository, VolumeData } from '../repositories/volume-repository'
 import { PreferenceRepository } from '../repositories/preference-repository'
 import { ActivityRepository } from '../repositories/activity-repository'
+import { getGlobalUsageStats } from '../repositories/usage-repository'
 import { PublicationRepository, type PublicationEntry } from '../repositories/publication-repository'
 import { analyzeExternalChapter } from '../../src/services/publication-analysis'
 import { SummaryRepository } from '../repositories/summary-repository'
@@ -500,6 +501,11 @@ export function registerDatabaseController() {
   // 用量统计（当前项目维度：purpose/模型两维度 + 合计；区间过滤毫秒时间戳；无项目返回空聚合）
   ipcMain.handle('db:usage-stats', async (_event, range: { from: number; to: number }) => {
     return LLMHistoryRepository.getUsageStats(range.from, range.to)
+  })
+
+  // 全局用量统计（跨项目聚合：最近项目 + 当前项目逐项目只读；主进程 60s 缓存）
+  ipcMain.handle('db:usage-stats-global', async () => {
+    return getGlobalUsageStats(getCurrentProjectPath() ?? undefined)
   })
 
   ipcMain.handle('db:get-llm-history', async (_event, limit?: number) => {
