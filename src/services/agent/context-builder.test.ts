@@ -15,6 +15,7 @@ import {
 } from './context-builder'
 import { estimateTokens } from './token-budget'
 import { useAgentStore } from '../../stores/agent-store'
+import { buildSharedFile } from '../memory/shared-memory'
 
 describe('buildAgentSystemPrompt 输出语言约束', () => {
   it('末尾包含明确输出语言指令', () => {
@@ -146,6 +147,40 @@ describe('M2 作品记忆节（P1）', () => {
     expect(memoryM2).toContain('## 第 14 章 · 标题14')
     expect(memoryM2).not.toContain('## 第 1 章 · 标题1') // 最早章节被丢弃
     expect(memoryM2).not.toContain('## 第 2 章 · 标题2')
+  })
+
+  it('P3：kind=shared 文件参与 M2 节选（unknown 仍不注入）', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return [
+        { file: 'shared.md', kind: 'shared', stale: false, mtime: 3 },
+        { file: 'notes.md', kind: 'unknown', stale: false, mtime: 2 },
+      ]
+      if (ch === 'memory:read') return file === 'shared.md'
+        ? buildSharedFile(['用户偏好爽文节奏', '主角名苏晚晴'])
+        : '# notes 私人笔记\n不该注入的内容'
+      return null
+    })
+    const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
+    expect(memoryM2).toContain('用户偏好爽文节奏') // shared 注入
+    expect(memoryM2).toContain('主角名苏晚晴')
+    expect(memoryM2).not.toContain('不该注入的内容') // unknown 文件仍被排除
+  })
+
+  it('P3：shared 段保底——book 占满预算时 shared 保底配额仍注入', async () => {
+    const bigBook = `# 全书精要\n${'详'.repeat(1200)}` // 启发式 >800 tokens，单段必触发截断
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return [
+        { file: 'shared.md', kind: 'shared', stale: false, mtime: 1 },
+        { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
+      ]
+      if (ch === 'memory:read') return file === 'shared.md'
+        ? buildSharedFile(['用户偏好爽文节奏'])
+        : bigBook
+      return null
+    })
+    const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
+    expect(memoryM2).toContain('用户偏好爽文节奏') // shared 没被 book 挤出
+    expect(memoryM2).toContain('全书精要') // book 仍有节选
   })
 })
 

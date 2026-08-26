@@ -51,4 +51,12 @@ describe('classifyMemoryFileKind（F9 白名单分类）', () => {
     expect(classifyMemoryFileKind('book.md')).toBe('unknown') // 仅 book-state.md 归 book
     expect(classifyMemoryFileKind('my-notes.md')).toBe('unknown')
   })
+
+  it('shared.md → shared（P3：cross-session 可复用事实参与 M2 注入）', () => {
+    expect(classifyMemoryFileKind('shared.md')).toBe('shared')
+    // frontmatter type: shared 兜底识别（手编文件名非 shared.md 也可参与）
+    expect(classifyMemoryFileKind('facts.md', '---\ntype: shared\n---\n\n- 事实A')).toBe('shared')
+    // 无 type: shared 不误判
+    expect(classifyMemoryFileKind('facts.md', '# 普通笔记')).toBe('unknown')
+  })
 })

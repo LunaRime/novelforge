@@ -10,8 +10,8 @@ export interface ChapterSummaryEntry {
 
 export interface MemoryFileMeta {
   file: string
-  /** F9：白名单分类——unknown = 非 book-state/chapters-/volume- 前缀的任意 .md，不参与 M2 注入 */
-  kind: 'chapters' | 'volume' | 'book' | 'unknown'
+  /** F9：白名单分类——unknown = 非 book-state/chapters-/volume-/shared 的任意 .md，不参与 M2 注入 */
+  kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'
   range?: string
   stale: boolean
   mtime: number
@@ -75,10 +75,14 @@ export function buildChapterSummaryFile(range: string, entries: ChapterSummaryEn
  */
 export function isValidMemoryContent(raw: string): boolean {
   if (!raw.trim()) return false
-  const body = parseMemoryFile(raw)?.body ?? raw
+  const parsed = parseMemoryFile(raw)
+  const body = parsed?.body ?? raw
   for (const b of body.split('\n## 第 ').slice(1)) {
     if (/^(\d+) 章 · /.test(b)) return true
   }
+  // P3 shared 分支：type: shared 显式声明 → 放行（shared 无章节块，章节校验不适用；
+  // 下游 parseSharedFile 宽容提取「- 」行，坏格式仅丢事实行、不导致块解析崩溃）
+  if (parsed?.frontmatter.type === 'shared') return true
   // FM 分支约束（T5-2 审阅修正）：正文为空或仅以块前缀开头，否则 body 非空且无块时
   // 下游 split 连首块都解析不出 → 静默丢首章，与无 frontmatter 的「首行即块」判无效同口径
   return FM_RE.test(raw) && (body.trim() === '' || body.startsWith('\n## 第 '))

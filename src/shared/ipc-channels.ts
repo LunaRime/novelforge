@@ -829,11 +829,11 @@ export interface LogChannels {
   }
 }
 
-// ===== 作品记忆频道（三级摘要文件：章节/分卷/全书，.vela/memory/*.md） =====
+// ===== 作品记忆频道（三级摘要文件：章节/分卷/全书 + 跨会话共享事实，.vela/memory/*.md） =====
 export interface MemoryChannels {
   'memory:list': {
     args: []
-    return: Array<{ file: string; kind: 'chapters' | 'volume' | 'book'; range?: string; stale: boolean; mtime: number }>
+    return: Array<{ file: string; kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'; range?: string; stale: boolean; mtime: number }>
   }
   'memory:read': {
     args: [file: string]

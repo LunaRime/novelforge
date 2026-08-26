@@ -92,6 +92,10 @@ describe('isValidMemoryContent（手动编辑保存前结构校验）', () => {
   it('frontmatter 损坏但章节块存在 → 有效（块分支生效）', () => {
     expect(isValidMemoryContent('---\nrange: 001-003\n## 第 1 章 · 开局')).toBe(true)
   })
+
+  it('P3：type: shared frontmatter（事实列表文件）有效——编辑保存不被章节校验误拒', () => {
+    expect(isValidMemoryContent('---\ntype: shared\n---\n\n# 跨会话可复用事实\n- 事实A\n- 事实B')).toBe(true)
+  })
 })
 
 describe('stripStatusFrontmatter（编辑保存清除 stale）', () => {

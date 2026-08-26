@@ -49,7 +49,6 @@ describe('generateConversationSummary', () => {
       success: false, error: 'x', content: '', usage: undefined,
     })
   })
-
   it('生成失败时 throw 且落库 success:0（mock ipc 捕获 db:log-llm-call 参数）', async () => {
     await expect(generateConversationSummary({
       oldSummary: '',
@@ -92,5 +91,47 @@ describe('generateConversationSummary', () => {
     const logCall = mockIpcInvoke.mock.calls.find(c => c[0] === 'db:log-llm-call')
     expect(logCall).toBeDefined()
     expect(logCall![1]).toMatchObject({ model_id: 'budget-model', success: 1 })
+  })
+})
+
+describe('SharedContext：压缩摘要附带提取可复用事实（P3）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    mockLlmState.getModelForPurpose.mockReturnValue(null)
+    // memory:read shared.md 默认不存在（返回 null）
+    mockIpcInvoke.mockResolvedValue(null)
+  })
+
+  it('prompt 含提取指令且 [可复用事实] 机器锚点在批文本之后（三语字面量不翻译）', () => {
+    const p = buildCcrSummaryPrompt('', '新批内容')
+    expect(p).toContain('[可复用事实]')
+    expect(p.indexOf('[可复用事实]')).toBeGreaterThan(p.indexOf('新批内容'))
+  })
+
+  it('生成成功 → 解析 [可复用事实] → 合并写 shared.md（写失败降级不阻断）', async () => {
+    mockLlmState.generate.mockResolvedValue({
+      success: true,
+      content: '汇总摘要 v1\n\n[可复用事实]\n- 用户偏好爽文节奏\n- 主角名苏晚晴',
+      usage: { promptTokens: 10, completionTokens: 5, totalTokens: 15, cachedTokens: 0 },
+    })
+    const summary = await generateConversationSummary({ oldSummary: '', batch: batchMsg, modelId: 'agent-model' })
+    expect(summary).toBe('汇总摘要 v1\n\n[可复用事实]\n- 用户偏好爽文节奏\n- 主角名苏晚晴') // 摘要内容不变
+    const read = mockIpcInvoke.mock.calls.find(c => c[0] === 'memory:read')
+    expect(read).toBeDefined()
+    expect(read![1]).toBe('shared.md')
+    const write = mockIpcInvoke.mock.calls.find(c => c[0] === 'memory:write')
+    expect(write).toBeDefined()
+    expect(write![1]).toBe('shared.md')
+    expect(write![2]).toContain('- 用户偏好爽文节奏')
+    expect(write![2]).toContain('- 主角名苏晚晴')
+  })
+
+  it('摘要无 [可复用事实] 段 → 不写 shared.md（幂等）', async () => {
+    mockLlmState.generate.mockResolvedValue({
+      success: true, content: '纯摘要', usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2, cachedTokens: 0 },
+    })
+    await generateConversationSummary({ oldSummary: '', batch: batchMsg, modelId: 'agent-model' })
+    const writes = mockIpcInvoke.mock.calls.filter(c => c[0] === 'memory:write')
+    expect(writes).toHaveLength(0)
   })
 })

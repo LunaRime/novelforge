@@ -20,8 +20,11 @@ import { parseMemoryFile } from '../memory/memory-codec'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
-/** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间，累计不超过此值） */
+/** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间 + shared 段，累计不超过此值） */
 const M2_BUDGET_TOKENS = 800
+
+/** P3：shared 段保底配额——节选预算内先预留 shared 再按序累计其余段（评审定案） */
+const SHARED_FLOOR_TOKENS = 150
 
 /** 系统提示词总上限（设计 §4.3：身份/L0/L1/Tool ~3000 + M2 800 + M1 300 ≈ 4700） */
 const TOTAL_BUDGET_TOKENS = 4700
@@ -145,9 +148,9 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
   const { base, memory: m1 } = buildAgentSystemSegments(mode)
   let m2 = ''
   try {
-    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book' | 'unknown'; stale: boolean }[]
+    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'; stale: boolean }[]
     const fresh = list.filter(f => !f.stale)
-    // M2 节选只取 book/volume/chapters（F9：未知前缀文件 kind=unknown，不参与注入）
+    // M2 节选只取 book/volume/chapters/shared（F9：未知前缀文件 kind=unknown，不参与注入）
     const book = fresh.find(f => f.kind === 'book')
     // ⚠️ 审阅修正：volume-010.md 字典序在 volume-002.md 前——按文件名中的卷号数值排序（最新卷优先）
     const volumes = fresh.filter(f => f.kind === 'volume').sort((a, b) => {
@@ -155,7 +158,9 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
       return n(b.file) - n(a.file)
     })
     const chapters = fresh.filter(f => f.kind === 'chapters').sort((a, b) => b.file.localeCompare(a.file)) // 最近区间优先（零填充格式字典序=数值序）
-    const picks = [book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string; kind: string }[]
+    const shared = fresh.find(f => f.kind === 'shared') // P3：跨会话可复用事实段
+    // picks 顺序：shared 最先（先按保底配额截断，used 从实际用量起算 → 其余段共用剩余——见下）
+    const picks = [shared, book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string; kind: string }[]
     const sections: string[] = []
     let used = 0
     for (const p of picks) {
@@ -163,9 +168,11 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
       const raw = await ipc.invoke('memory:read', p.file) as string | null
       if (!raw) continue
       const { body } = parseMemoryFile(raw) ?? { body: raw }
-      const remaining = M2_BUDGET_TOKENS - used
-      // chapters 文件从尾部节选（F5：最新章节优先——truncateToTokenBudget 从头保留会把最新章节丢光）；book/volume 保持头部节选
-      const excerpt = p.kind === 'chapters' ? excerptLatestChapters(body, remaining) : truncateToTokenBudget(body, remaining)
+      // P3 保底配额：shared 段独立限额 SHARED_FLOOR_TOKENS（先预留再按序累计其余段——
+      // 长书 book/volume 占满预算时 shared 不被完全挤出）；其他段共用 800 − shared 实际用量
+      const budget = p.kind === 'shared' ? SHARED_FLOOR_TOKENS : M2_BUDGET_TOKENS - used
+      // chapters 文件从尾部节选（F5：最新章节优先——truncateToTokenBudget 从头保留会把最新章节丢光）；book/volume/shared 保持头部节选
+      const excerpt = p.kind === 'chapters' ? excerptLatestChapters(body, budget) : truncateToTokenBudget(body, budget)
       sections.push(excerpt)
       used += estimateTokens(excerpt)
     }

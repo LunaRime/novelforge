@@ -3,6 +3,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { calculateCost } from '../llm/prompt-cache'
+import { parseSharedFacts, upsertSharedFacts } from '../memory/shared-memory'
 
 /** 组装 CCR 摘要 prompt：第 N 次压缩输入 = 旧 rollingSummary + 新压缩批原文（迭代规则见设计 §4.2） */
 export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): string {
@@ -11,6 +12,8 @@ export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): st
     parts.push(`${t('ccr.oldSummaryLabel')}\n${oldSummary}`)
   }
   parts.push(`${t('ccr.batchLabel')}\n${batchText}`)
+  // P3 SharedContext：提取指令追在批文本之后（机器锚点 [可复用事实] 三语字面量一致）
+  parts.push(t('ccr.sharedFactsInstruction'))
   return parts.join('\n\n')
 }
 
@@ -77,6 +80,10 @@ export async function generateConversationSummary(opts: {
   } catch {
     // 日志失败不影响压缩主流程
   }
+
+  // P3 SharedContext：摘要成功 → 提取「[可复用事实]」段 → 合并写项目级 shared.md（跨会话复用）。
+  // 无锚点/无事实/读写失败均不阻断压缩主流程（upsertSharedFacts 内部 catch 返回 false）。
+  await upsertSharedFacts(parseSharedFacts(response.content))
 
   return response.content
 }

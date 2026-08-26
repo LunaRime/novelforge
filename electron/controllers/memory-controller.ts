@@ -26,12 +26,14 @@ export function assertSafeMemoryFileName(file: string): string {
 
 /**
  * kind 白名单分类（F9）：仅 book-state.md 归 book；chapters-/volume- 前缀归对应类；
+ * shared（P3）：文件名 shared.md 或 frontmatter type: shared → 跨会话可复用事实，参与 M2 节选注入；
  * 其余无法识别前缀的 .md（用户手放 notes.md 等）kind=unknown——不参与 M2 节选注入。
  */
-export function classifyMemoryFileKind(name: string): MemoryFileMeta['kind'] {
+export function classifyMemoryFileKind(name: string, content?: string | null): MemoryFileMeta['kind'] {
   if (name === 'book-state.md') return 'book'
   if (name.startsWith('chapters-')) return 'chapters'
   if (name.startsWith('volume-')) return 'volume'
+  if (name === 'shared.md' || parseMemoryFile(content ?? '')?.frontmatter.type === 'shared') return 'shared'
   return 'unknown'
 }
 
@@ -50,7 +52,7 @@ export function registerMemoryController() {
         if (!e.isFile() || !e.name.endsWith('.md')) continue
         const raw = await fsPromises.readFile(path.join(dir, e.name), 'utf-8').catch(() => '')
         const parsed = parseMemoryFile(raw)
-        const kind = classifyMemoryFileKind(e.name) // F9：白名单分类，未知前缀 → unknown
+        const kind = classifyMemoryFileKind(e.name, raw) // F9：白名单分类（P3：frontmatter type: shared 识别），未知前缀 → unknown
         const range = kind === 'chapters' ? e.name.replace(/^chapters-(\d+)-(\d+)\.md$/, '$1-$2') : undefined
         const stat = await fsPromises.stat(path.join(dir, e.name))
         out.push({ file: e.name, kind, range, stale: parsed ? parsed.frontmatter.status === 'stale' : false, mtime: stat.mtimeMs })

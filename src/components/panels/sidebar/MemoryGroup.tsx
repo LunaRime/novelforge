@@ -2,7 +2,7 @@
  * MemoryGroup — 作品记忆组（侧栏 AI 记忆查看器，CCR P1 Task 5）
  *
  * 标题行：AI 记忆 + 数量 + 刷新 + 折叠（默认展开）
- * 列表行：kind 徽标（章节/分卷/全书）+ 文件名 + stale「待重建」徽标 + 点击查看 + 重建按钮
+ * 列表行：kind 徽标（章节/分卷/全书/共享）+ 文件名 + stale「待重建」徽标 + 点击查看 + 重建按钮
  * 查看区：memory:read 内容 pre-wrap 只读（max-h 滚动）
  * 重建（审阅修正——卷级真实重建，非仅标 stale）：
  *   卷级 = 复用 Task 2 卷聚合（章节文件解析 → buildVolumeSummaryFile → memory:write 覆盖，
@@ -82,7 +82,7 @@ export default function MemoryGroup({ projectPath }: Props) {
       }
       return
     }
-    // 章节：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；全书走上面的真实重建）
+    // 章节/共享：标记 stale（章节条目来自定稿 LLM 提取，走下次定稿 DAG；共享事实下次压缩自动重提取；全书走上面的真实重建）
     const res = await ipc.invoke('memory:mark-stale', f.file)
     if (res.success) {
       toast.success(t('memory.rebuildHint'))
@@ -175,7 +175,9 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
       ? t('memory.kindVolume')
       : meta.kind === 'book'
         ? t('memory.kindBook')
-        : t('memory.kindUnknown') // F9：未知前缀文件（用户手放 notes.md 等）
+        : meta.kind === 'shared' // P3：跨会话可复用事实（shared.md）
+          ? t('memory.kindShared')
+          : t('memory.kindUnknown') // F9：未知前缀文件（用户手放 notes.md 等）
 
   /** 行点击切换查看（memory:read 只读；首次展开才读取） */
   const toggleView = () => {
