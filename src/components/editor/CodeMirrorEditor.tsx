@@ -275,6 +275,9 @@ export default function CodeMirrorEditor({
     ".cm-activeLine": { backgroundColor: "transparent" },
     ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
     ".cm-line": { padding: "0" },
+    // markdown 高亮标记样式：`**文字**` 渲染为粗体、`*文字*` 渲染为斜体
+    ".cm-strong": { fontWeight: "bold" },
+    ".cm-em": { fontStyle: "italic" },
   }), [mode])
 
   // 构建扩展
@@ -323,7 +326,7 @@ export default function CodeMirrorEditor({
         "close": "Close"
       })
     ]
-    if (mode === 'document') {
+    if (mode === 'document' || mode === 'prose') {
       exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
     }
     return exts
@@ -611,7 +614,7 @@ export default function CodeMirrorEditor({
                   <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}
-              {mode === 'document' && (
+              {(mode === 'document' || mode === 'prose') && (
                 <>
                   <button
                     className="p-1 rounded"

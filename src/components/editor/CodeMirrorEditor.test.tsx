@@ -25,11 +25,12 @@
  * KeyboardEvent 构造派发不进入 cm6 的按键处理），故 Ctrl+Z 用
  * historyKeymap 绑定的同一个 undo 命令直接调用（同一模块实例、语义等价）。
  */
-import { describe, it, expect, vi, beforeAll, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { EditorView } from '@codemirror/view'
 import { Transaction } from '@codemirror/state'
+import { ensureSyntaxTree } from '@codemirror/language'
 import { undo } from '@codemirror/commands'
 import CodeMirrorEditor from './CodeMirrorEditor'
 
@@ -159,5 +160,105 @@ describe('CodeMirrorEditor 撤销行为（外部同步不进 undo 栈）', () =>
     expect(view.state.doc.toString()).toBe('外部B')
     act(() => { undo(view) })
     expect(view.state.doc.toString()).toBe('外部B')
+  })
+})
+
+// ===== Task 3: 加粗（prose 模式 markdown 渲染）=====
+
+/**
+ * 加粗按钮位于 Bubble Menu 中，而 Bubble Menu 的坐标计算依赖
+ * coordsAtPos / DOM Range 几何——jsdom 无布局引擎，文本坐标测量失败
+ * （coordsAtPos 返回 null 会导致程序主动关闭气泡）。因此对 coordsAtPos
+ * 打桩返回固定坐标，使 Bubble Menu 在 jsdom 中也能完成定位并渲染。
+ * 选区经由 view.dispatch 直接设置（编辑器未聚焦时 CM 不写 DOM 选区，
+ * 窗口选区为空 → 气泡定位走 coordsAtPos 分支，打桩生效）。
+ */
+function renderWithMode(
+  mode: 'document' | 'prose',
+  content: string,
+  onChange?: (c: string) => void,
+): HTMLElement {
+  const container = document.createElement('div')
+  container.style.width = '800px'
+  document.body.appendChild(container)
+  const root = createRoot(container)
+  roots.push(root)
+  act(() => {
+    root.render(<CodeMirrorEditor mode={mode} content={content} onChange={onChange} />)
+  })
+  return container
+}
+
+/** 加粗按钮无 title/aria-label（与其他工具栏按钮一致），以 lucide Bold 图标类定位 */
+function findBoldButton(container: HTMLElement): HTMLButtonElement | null {
+  const btn = Array.from(container.querySelectorAll('button'))
+    .find(b => b.querySelector('svg.lucide-bold'))
+  return (btn as HTMLButtonElement | undefined) ?? null
+}
+
+/** Bubble Menu 定位在 requestAnimationFrame 中执行；等待一帧让 setBubblePos 生效 */
+async function flushBubbleFrame(): Promise<void> {
+  await act(async () => {
+    await new Promise<void>(resolve => { requestAnimationFrame(() => resolve()) })
+  })
+}
+
+describe('CodeMirrorEditor 加粗（prose 模式）', () => {
+  let coordsSpy: ReturnType<typeof vi.spyOn>
+
+  beforeEach(() => {
+    coordsSpy = vi.spyOn(EditorView.prototype, 'coordsAtPos')
+      .mockReturnValue({ left: 10, top: 10, right: 30, bottom: 24 })
+  })
+
+  afterEach(() => {
+    coordsSpy.mockRestore()
+  })
+
+  it('prose 模式：选中文本后点击加粗按钮，文本被 ** 包裹', async () => {
+    const onChange = vi.fn()
+    const container = renderWithMode('prose', '力王虎父子冲', onChange)
+    const view = getView(container)
+
+    // 选中全文 → handleUpdate.selectionSet → Bubble Menu 打开并渲染加粗按钮
+    act(() => { view.dispatch({ selection: { anchor: 0, head: view.state.doc.length } }) })
+    await flushBubbleFrame()
+
+    const boldBtn = findBoldButton(container)
+    expect(boldBtn).toBeTruthy()
+
+    act(() => { boldBtn?.click() })
+    expect(view.state.doc.toString()).toBe('**力王虎父子冲**')
+    expect(onChange).toHaveBeenCalledWith('**力王虎父子冲**')
+  })
+
+  it('prose 模式启用 markdown 高亮：**文本** 解析为粗体语法节点（StrongEmphasis）', async () => {
+    const onChange = vi.fn()
+    const container = renderWithMode('prose', '**力王虎**父子冲', onChange)
+    const view = getView(container)
+    // lang-markdown 语法解析为异步分片执行；小文档等待片刻后同步强制补全
+    await act(async () => { await new Promise<void>(r => setTimeout(() => r(), 100)) })
+    const tree = ensureSyntaxTree(view.state, view.state.doc.length, 1000)
+    expect(tree).toBeTruthy()
+    // StrongEmphasis 位于 Document > Paragraph 内，覆盖 **力王虎**（内容为中间文本）
+    const strong = tree?.topNode.getChild('Paragraph')?.getChild('StrongEmphasis')
+    expect(strong).toBeTruthy()
+    expect(view.state.sliceDoc(strong?.from ?? 0, strong?.to ?? 0)).toBe('**力王虎**')
+  })
+
+  it('prose 与 document 模式均渲染加粗按钮（document 行为不回归）', async () => {
+    const onChange = vi.fn()
+
+    const prose = renderWithMode('prose', '内容甲', onChange)
+    const proseView = getView(prose)
+    act(() => { proseView.dispatch({ selection: { anchor: 0, head: proseView.state.doc.length } }) })
+    await flushBubbleFrame()
+    expect(findBoldButton(prose)).toBeTruthy()
+
+    const doc = renderWithMode('document', '内容乙', onChange)
+    const docView = getView(doc)
+    act(() => { docView.dispatch({ selection: { anchor: 0, head: docView.state.doc.length } }) })
+    await flushBubbleFrame()
+    expect(findBoldButton(doc)).toBeTruthy()
   })
 })
