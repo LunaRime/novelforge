@@ -12,12 +12,14 @@
  * 数据：useMemoryStore（memory:list / memory:read / memory:mark-stale）
  */
 import { useEffect, useState } from 'react'
-import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw } from 'lucide-react'
+import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Pencil } from 'lucide-react'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { useVolumeStore } from '../../../stores/volume-store'
 import { ipc } from '../../../services/ipc-client'
+import { renderLog } from '../../../services/render-logger'
 import { ensureVolumeSummary } from '../../../services/memory/chapter-memory'
 import { rebuildBookState } from '../../../services/memory/book-memory'
+import { isValidMemoryContent, stripStatusFrontmatter } from '../../../services/memory/memory-codec'
 import { toast } from '../../ui/Toast'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { globalEventBus } from '../../../shared/event-bus'
@@ -129,7 +131,7 @@ export default function MemoryGroup({ projectPath }: Props) {
         </div>
       ) : (
         // key=projectPath：项目切换时重挂载，行级查看/内容缓存不跨项目串味
-        <MemoryList key={projectPath ?? 'none'} files={files} onRebuild={handleRebuild} />
+        <MemoryList key={projectPath ?? 'none'} files={files} onRebuild={handleRebuild} onSaved={refresh} />
       )}
     </section>
   )
@@ -137,14 +139,15 @@ export default function MemoryGroup({ projectPath }: Props) {
 
 // ===== 记忆文件列表 =====
 
-function MemoryList({ files, onRebuild }: {
+function MemoryList({ files, onRebuild, onSaved }: {
   files: MemoryFileMeta[]
   onRebuild: (f: MemoryFileMeta) => void
+  onSaved: () => Promise<void>
 }) {
   return (
     <div className="space-y-1">
       {files.map(f => (
-        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} />
+        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved} />
       ))}
     </div>
   )
@@ -152,13 +155,18 @@ function MemoryList({ files, onRebuild }: {
 
 // ===== 记忆文件行 =====
 
-function MemoryRow({ meta, onRebuild }: {
+function MemoryRow({ meta, onRebuild, onSaved }: {
   meta: MemoryFileMeta
   onRebuild: () => void
+  onSaved: () => Promise<void>
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [content, setContent] = useState<string | null>(null)
+  // 手动编辑三态（Task 5）：查看（只读）→ 编辑（textarea draft）→ 保存/取消
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState('')
+  const [saving, setSaving] = useState(false)
 
   const kindLabel = meta.kind === 'chapters'
     ? t('memory.kindChapters')
@@ -176,6 +184,44 @@ function MemoryRow({ meta, onRebuild }: {
       ipc.invoke('memory:read', meta.file)
         .then(raw => setContent(raw ?? ''))
         .catch(() => setContent(''))
+    }
+  }
+
+  /** 进入编辑：draft 从查看内容初始化 */
+  const startEdit = () => {
+    setDraft(content ?? '')
+    setEditing(true)
+  }
+
+  /**
+   * 保存：结构校验（无章节块且 frontmatter 不完整 → toast 阻止）→ 清除 frontmatter status
+   * （同 upsert 语义，编辑后不再视为 stale）→ memory:write → 成功回查看态 + 刷新 stale 徽标。
+   */
+  const handleSave = async () => {
+    if (!isValidMemoryContent(draft)) {
+      toast.error(t('memory.invalidFormat'))
+      return
+    }
+    const t0 = Date.now()
+    setSaving(true)
+    try {
+      const saved = stripStatusFrontmatter(draft)
+      const res = await ipc.invoke('memory:write', meta.file, saved)
+      if (!res.success) throw new Error(t('status.unknown'))
+      renderLog('info', 'Save:Memory', t('log.render.memorySaveSuccess')
+        .replace('{file}', () => meta.file)
+        .replace('{ms}', String(Date.now() - t0)))
+      setContent(saved)
+      setEditing(false)
+      toast.success(t('save.success'))
+      await onSaved()
+    } catch (e) {
+      renderLog('error', 'Save:Memory', t('log.render.memorySaveFailed')
+        .replace('{file}', () => meta.file)
+        .replace('{error}', () => String(e)))
+      toast.error(t('save.failed').replace('{error}', () => String(e)))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -216,15 +262,60 @@ function MemoryRow({ meta, onRebuild }: {
         </button>
       </div>
 
-      {/* 内容查看区（memory:read 只读展示） */}
+      {/* 查看/编辑区：默认只读（pre-wrap），「编辑」→ textarea 三态（Task 5） */}
       {open && (
         <div className="px-2 pb-2">
-          <pre
-            className="whitespace-pre-wrap max-h-40 overflow-y-auto rounded p-2 text-[0.65rem] leading-relaxed"
-            style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-hover)' }}
-          >
-            {content ?? ''}
-          </pre>
+          {editing ? (
+            <>
+              <textarea
+                className="w-full whitespace-pre-wrap max-h-40 overflow-y-auto rounded p-2 text-[0.65rem] leading-relaxed resize-y focus:outline-none"
+                style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-hover)' }}
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                spellCheck={false}
+                autoFocus
+              />
+              <div className="flex justify-end gap-1.5 mt-1">
+                <button
+                  type="button"
+                  className="text-[0.6rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
+                  style={{ color: 'var(--color-text-muted)' }}
+                  onClick={() => setEditing(false)}
+                >
+                  {t('action.cancel')}
+                </button>
+                <button
+                  type="button"
+                  className="text-[0.6rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer disabled:opacity-60"
+                  style={{ color: 'var(--color-accent)' }}
+                  disabled={saving}
+                  onClick={() => void handleSave()}
+                >
+                  {t('action.save')}
+                </button>
+              </div>
+            </>
+          ) : (
+            <>
+              <pre
+                className="whitespace-pre-wrap max-h-40 overflow-y-auto rounded p-2 text-[0.65rem] leading-relaxed"
+                style={{ color: 'var(--color-text-secondary)', backgroundColor: 'var(--color-hover)' }}
+              >
+                {content ?? ''}
+              </pre>
+              <div className="flex justify-end mt-1">
+                <button
+                  type="button"
+                  className="flex items-center gap-1 text-[0.6rem] px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
+                  style={{ color: 'var(--color-text-muted)' }}
+                  onClick={startEdit}
+                >
+                  <Pencil size={10} />
+                  {t('action.edit')}
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
     </div>

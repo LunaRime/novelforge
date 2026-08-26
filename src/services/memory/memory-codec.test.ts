@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMemoryFile, isStale, markStaleFrontmatter, buildChapterSummaryFile } from './memory-codec'
+import { parseMemoryFile, isStale, markStaleFrontmatter, buildChapterSummaryFile, isValidMemoryContent, stripStatusFrontmatter } from './memory-codec'
 
 describe('parseMemoryFile', () => {
   it('解析 frontmatter 与正文', () => {
@@ -43,5 +43,62 @@ describe('buildChapterSummaryFile', () => {
     expect(content).toContain('range: 001-015')
     expect(content).toContain('第 1 章 · 开局')
     expect(content).toContain('主角觉醒')
+  })
+})
+
+describe('isValidMemoryContent（手动编辑保存前结构校验）', () => {
+  it('章节文件（frontmatter + 章节块）有效', () => {
+    const raw = '---\nrange: 001-003\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒\n'
+    expect(isValidMemoryContent(raw)).toBe(true)
+  })
+
+  it('纯章节块无 frontmatter 有效（前置标题行，下游 split 同口径）', () => {
+    expect(isValidMemoryContent('# 我的记忆\n\n## 第 3 章 · 转折\n- 关键事件：对决')).toBe(true)
+  })
+
+  it('正文首行即章节块（无前置标题）无效——下游 split 也解析不出首块', () => {
+    expect(isValidMemoryContent('## 第 3 章 · 转折\n- 关键事件：对决')).toBe(false)
+  })
+
+  it('仅 frontmatter 完整有效', () => {
+    expect(isValidMemoryContent('---\nvolume: 1\nrange: 1-10\n---\n# 第 1 卷')).toBe(true)
+  })
+
+  it('空内容无效', () => {
+    expect(isValidMemoryContent('')).toBe(false)
+    expect(isValidMemoryContent('   ')).toBe(false)
+  })
+
+  it('无结构文本无效', () => {
+    expect(isValidMemoryContent('随便写的文字')).toBe(false)
+  })
+
+  it('块头缺「 · 」无效（与下游块解析同口径）', () => {
+    expect(isValidMemoryContent('## 第 1 章\n- 关键事件：无')).toBe(false)
+  })
+
+  it('frontmatter 损坏但章节块存在 → 有效（块分支生效）', () => {
+    expect(isValidMemoryContent('---\nrange: 001-003\n## 第 1 章 · 开局')).toBe(true)
+  })
+})
+
+describe('stripStatusFrontmatter（编辑保存清除 stale）', () => {
+  it('清除 status 保留其余字段', () => {
+    const stripped = stripStatusFrontmatter('---\nstatus: stale\nrange: 001-003\n---\n## 第 1 章 · 开局')
+    expect(stripped).toBe('---\nrange: 001-003\n---\n\n## 第 1 章 · 开局')
+  })
+
+  it('status 为唯一字段时移除整个 frontmatter', () => {
+    expect(stripStatusFrontmatter('---\nstatus: stale\n---\n正文')).toBe('正文')
+  })
+
+  it('无 status 幂等原样返回', () => {
+    const raw = '---\nrange: 001-003\n---\n正文'
+    expect(stripStatusFrontmatter(raw)).toBe(raw)
+  })
+
+  it('无 frontmatter 原样返回', () => {
+    const raw = '纯正文'
+    expect(stripStatusFrontmatter(raw)).toBe(raw)
   })
 })

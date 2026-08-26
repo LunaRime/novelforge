@@ -66,3 +66,32 @@ export function buildChapterSummaryFile(range: string, entries: ChapterSummaryEn
   }
   return lines.join('\n')
 }
+
+/**
+ * 手动编辑保存前结构校验（Task 5 审阅修正）：内容必须能解析出章节块（「## 第 N 章」至少
+ * 1 块——与 ensureVolumeSummary/rebuildBookState 的块解析同口径）或 frontmatter 完整
+ * （--- 闭合块）。否则坏格式文件会让下游块解析静默失败产生空洞记忆。
+ */
+export function isValidMemoryContent(raw: string): boolean {
+  if (!raw.trim()) return false
+  const body = parseMemoryFile(raw)?.body ?? raw
+  for (const b of body.split('\n## 第 ').slice(1)) {
+    if (/^(\d+) 章 · /.test(b)) return true
+  }
+  return FM_RE.test(raw)
+}
+
+/**
+ * 清除 frontmatter status（手动编辑保存同 upsert 语义：编辑后的文件不再被视为 stale）。
+ * 无 status（或无 frontmatter）时幂等原样返回；status 为唯一字段时移除整个 frontmatter 块。
+ */
+export function stripStatusFrontmatter(raw: string): string {
+  const parsed = parseMemoryFile(raw)
+  if (!parsed) return raw
+  const entries = Object.entries(parsed.frontmatter).filter(([k]) => k !== 'status')
+  if (entries.length === Object.keys(parsed.frontmatter).length) return raw
+  const fm = entries.length > 0
+    ? `---\n${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n\n`
+    : ''
+  return `${fm}${parsed.body}`
+}

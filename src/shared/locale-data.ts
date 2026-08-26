@@ -2752,6 +2752,8 @@ export const UI_TEXTS_DATA = {
   // —— 分卷（VolumeDialog）——
   'log.render.volumeSaveSuccess': { 'zh-CN': '分卷保存成功 第{num}卷「{title}」（{mode}）', 'en-US': 'Vol.{num} "{title}" saved successfully ({mode})', 'ru-RU': 'Том {num} «{title}» успешно сохранён ({mode})' },
   'log.render.volumeSaveFailed': { 'zh-CN': '分卷保存失败 第{num}卷: DB 写入失败', 'en-US': 'Failed to save Vol.{num}: DB write failed', 'ru-RU': 'Не удалось сохранить том {num}: ошибка записи в БД' },
+  'log.render.memorySaveSuccess': { 'zh-CN': '记忆文件保存成功 {file}（{ms}ms）', 'en-US': 'Memory file saved successfully: {file} ({ms}ms)', 'ru-RU': 'Файл памяти сохранён: {file} ({ms}ms)' },
+  'log.render.memorySaveFailed': { 'zh-CN': '记忆文件保存失败 {file}: {error}', 'en-US': 'Failed to save memory file {file}: {error}', 'ru-RU': 'Не удалось сохранить файл памяти {file}: {error}' },
 
   // —— 架构文件（ArchFileViewer）——
   'log.render.archSaveSuccess': { 'zh-CN': '架构文件保存成功 {path}（{ms}ms）', 'en-US': 'Architecture file saved: {path} ({ms}ms)', 'ru-RU': 'Файл архитектуры сохранён: {path} ({ms}ms)' },
@@ -3223,5 +3225,7 @@ export const UI_TEXTS_DATA = {
   'memory.rebuildBookDone': { 'zh-CN': '全书摘要已重建', 'en-US': 'Book state rebuilt', 'ru-RU': 'Состояние книги пересобрано' },
   'memory.kindUnknown': { 'zh-CN': '其他', 'en-US': 'Other', 'ru-RU': 'Другое' },
   'memory.empty': { 'zh-CN': '暂无记忆——定稿章节后自动生成', 'en-US': 'No memory yet — generated after finalizing chapters', 'ru-RU': 'Память пока пуста — создаётся после финализации глав' },
+  // 手动编辑（Task 5：编辑/保存/取消按钮复用 action.*，见 MemoryGroup.tsx）
+  'memory.invalidFormat': { 'zh-CN': '记忆文件格式无效（缺少章节块）', 'en-US': 'Invalid memory file format (missing chapter blocks)', 'ru-RU': 'Недопустимый формат файла памяти (нет блоков глав)' },
 } as const
 
