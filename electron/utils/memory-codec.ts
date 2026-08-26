@@ -70,7 +70,8 @@ export function buildChapterSummaryFile(range: string, entries: ChapterSummaryEn
 /**
  * 手动编辑保存前结构校验（Task 5 审阅修正）：内容必须能解析出章节块（「## 第 N 章」至少
  * 1 块——与 ensureVolumeSummary/rebuildBookState 的块解析同口径）或 frontmatter 完整
- * （--- 闭合块）。否则坏格式文件会让下游块解析静默失败产生空洞记忆。
+ * （--- 闭合块 + 正文空 / 以块前缀开头——首块无前导 \n 时下游 split 解析不出，不得放行）。
+ * 否则坏格式文件会让下游块解析静默失败产生空洞记忆。
  */
 export function isValidMemoryContent(raw: string): boolean {
   if (!raw.trim()) return false
@@ -78,7 +79,9 @@ export function isValidMemoryContent(raw: string): boolean {
   for (const b of body.split('\n## 第 ').slice(1)) {
     if (/^(\d+) 章 · /.test(b)) return true
   }
-  return FM_RE.test(raw)
+  // FM 分支约束（T5-2 审阅修正）：正文为空或仅以块前缀开头，否则 body 非空且无块时
+  // 下游 split 连首块都解析不出 → 静默丢首章，与无 frontmatter 的「首行即块」判无效同口径
+  return FM_RE.test(raw) && (body.trim() === '' || body.startsWith('\n## 第 '))
 }
 
 /**

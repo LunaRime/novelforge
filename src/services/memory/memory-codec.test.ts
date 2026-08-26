@@ -60,8 +60,20 @@ describe('isValidMemoryContent（手动编辑保存前结构校验）', () => {
     expect(isValidMemoryContent('## 第 3 章 · 转折\n- 关键事件：对决')).toBe(false)
   })
 
-  it('仅 frontmatter 完整有效', () => {
-    expect(isValidMemoryContent('---\nvolume: 1\nrange: 1-10\n---\n# 第 1 卷')).toBe(true)
+  it('仅 frontmatter 完整（正文空）有效', () => {
+    expect(isValidMemoryContent('---\nvolume: 1\nrange: 1-10\n---\n')).toBe(true)
+  })
+
+  it('frontmatter 完整 + body 以块前缀开头有效', () => {
+    expect(isValidMemoryContent('---\nrange: 001-003\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒')).toBe(true)
+  })
+
+  it('frontmatter 完整但正文首行即章节块（无前导 \\n）无效——下游 split 解析不出首块', () => {
+    expect(isValidMemoryContent('---\nrange: 001-003\n---\n## 第 1 章 · 开局\n- 关键事件：主角觉醒')).toBe(false)
+  })
+
+  it('frontmatter 完整但正文非空且非块前缀（单标题行）无效', () => {
+    expect(isValidMemoryContent('---\nvolume: 1\nrange: 1-10\n---\n# 第 1 卷')).toBe(false)
   })
 
   it('空内容无效', () => {
