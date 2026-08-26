@@ -98,10 +98,11 @@ useEffect(() => {
     if (view) {
       // 外部内容同步（切文件/AI 刷新）：手动 dispatch 且不进 undo 历史栈，
       // 否则用户 Ctrl+Z 会先撤销"整文替换"而非自身编辑
+      // 不带 selection：CodeMirror 自动 clamp 越界光标，保留原有受控同步的光标语义，
+      // 避免强制 anchor:0 导致切文件后光标跳文件头（用户可感知回归）
       view.dispatch({
         changes: { from: 0, to: view.state.doc.length, insert: content },
         addToHistory: false,
-        selection: { anchor: 0 },
         scrollIntoView: true,
       })
     } else {
@@ -151,18 +152,22 @@ EOF
 ```tsx
 // AgentConversation.test.tsx 追加
 describe('RecentConversationItem hover 行为', () => {
-  it('删除按钮与时间文本共存于固定宽度容器（无 display 切换）', () => {
+  it('右侧区域为固定宽度容器且时间/删除按钮无 hidden 切换类', () => {
     // 渲染空状态视图（含 RecentConversationItem）
-    // 断言：删除按钮元素存在（不再需要 hover 才出现在 DOM）
-    // 断言：容器宽度固定（style.width 或固定类）
+    // 断言 1：删除按钮元素不含 'hidden' 类（当前实现含 'hidden group-hover:flex'）
+    // 断言 2：时间元素不含 'group-hover:hidden' 类（当前实现含）
+    // 断言 3：删除按钮的祖先容器有固定宽度 style（style.width 为数值/字符串，
+    //         当前实现无固定宽度——修复前此断言失败，防假绿）
   })
 })
 ```
 
+  ⚠️ 注意：jsdom 不做 CSS 布局计算，`hidden` 类本身不隐藏元素——**必须断言类名/结构而非可见性**，否则测试假绿（当前实现也能通过"按钮存在"断言）。
+
 - [ ] **Step 2: 运行测试确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentConversation.test.tsx`
-Expected: 断言失败（当前删除按钮 hidden，不在 DOM 语义中可见）。
+Expected: 断言 3 失败（当前实现无固定宽度容器）——证明测试能区分新旧实现。
 
 - [ ] **Step 3: 实现修复——右侧固定宽度容器 + 绝对定位 + opacity 过渡**
 
@@ -301,7 +306,7 @@ EOF
 - Test: `src/components/panels/agent/AgentMessage.test.tsx`（新建）
 
 **Interfaces:**
-- Produces: `ThinkingCollapse({ thinking, hasContent })` 组件（默认折叠，头部「思考过程」+ 展开按钮）；AgentMessage 对思考块的解析函数 `splitThinking(content)`
+- Produces: `ThinkingCollapse({ thinking })` 组件（默认折叠，头部「思考过程」+ 展开按钮）；AgentMessage 对思考块的解析函数 `splitThinking(content)`
 - Consumes: 无
 
 **背景**：agent-engine.ts:205-206 拼 `_${t('agent.thinkingPrefix')}_\n> ${thinking}\n\n${cleanedOutput}`；thinkingContent 为空时不拼思考块。
@@ -346,6 +351,13 @@ describe('ToolCallBlock 文件摘要', () => {
     render(<ToolCallBlock toolCall={tc as never} />)
     expect(screen.queryByText(/📄/)).toBeNull()
   })
+
+  it('read_drafts 调用显示 📖 章节摘要（chapter_number 参数）', () => {
+    const tc = { id: '3', toolName: 'read_drafts', arguments: { chapter_number: 3 }, status: 'completed' as const }
+    render(<ToolCallBlock toolCall={tc as never} />)
+    // chapter.label 三语：zh「第3章」/ en「Ch.3」/ ru「Гл.3」
+    expect(screen.getByText(/第3章|Ch\.3|Гл\.3/)).toBeTruthy()
+  })
 })
 ```
 
@@ -364,10 +376,9 @@ import { useTranslation } from '../../../hooks/useTranslation'
 
 interface Props {
   thinking: string  // 思考块原文（含 `_思考过程_\n> ...` 前缀）
-  hasContent: boolean
 }
 
-export default function ThinkingCollapse({ thinking, hasContent }: Props) {
+export default function ThinkingCollapse({ thinking }: Props) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)  // 默认折叠（与 AIOutputPanel ThinkingBlock 语义一致）
   return (
@@ -411,7 +422,7 @@ function splitThinking(content: string): { thinking: string | null; rest: string
   const { thinking, rest } = splitThinking(content)
   return (
     <>
-      {thinking && <ThinkingCollapse thinking={thinking} hasContent={!!rest} />}
+      {thinking && <ThinkingCollapse thinking={thinking} />}
       {rest && <MarkdownContent content={rest} streaming={streaming} />}
     </>
   )
@@ -423,9 +434,9 @@ function splitThinking(content: string): { thinking: string | null; rest: string
 - [ ] **Step 5: ToolCallBlock 头部 📄 文件摘要**
 
 ```tsx
-// ToolCallBlock.tsx 内新增辅助
+// ToolCallBlock.tsx 内新增辅助（t 取自组件内 useTranslation()，i18n 铁律：用户可见文本不走硬编码）
 /** 从工具参数提取文件/对象摘要（read_file/read-drafts 等） */
-function fileSummary(toolName: string, args: Record<string, unknown>): string | null {
+function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: TextKey) => string): string | null {
   const path = typeof args.file_path === 'string' ? args.file_path
     : typeof args.path === 'string' ? args.path
     : null
@@ -433,8 +444,10 @@ function fileSummary(toolName: string, args: Record<string, unknown>): string | 
     const base = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path
     return `📄 ${base}`
   }
-  if (typeof args.chapterNumber === 'number' || typeof args.chapter === 'number') {
-    return `📖 第${(args.chapterNumber ?? args.chapter) as number}章`
+  // ⚠️ 验证点：read_drafts 实际参数名是 chapter_number（read-drafts.tool.ts:17），
+  // 实现时确认无其他章节参数形态（如章节对象）后按实际补充分支
+  if (typeof args.chapter_number === 'number') {
+    return `📖 ${t('chapter.label').replace('{n}', String(args.chapter_number))}`
   }
   if (typeof args.name === 'string' && ['read_characters', 'update_character_cards'].includes(toolName)) {
     return `👤 ${args.name}`
@@ -446,12 +459,15 @@ function fileSummary(toolName: string, args: Record<string, unknown>): string | 
 头部 `tool-call-name` 后追加（:69-75 之间）：
 
 ```tsx
-{fileSummary(toolName, args) && (
-  <span className="tool-call-file-summary text-[0.65rem] opacity-60 ml-1 truncate max-w-[160px]"
-    style={{ color: 'var(--color-text-muted)' }}>
-    {fileSummary(toolName, args)}
-  </span>
-)}
+{(() => {
+  const summary = fileSummary(toolName, args, t)
+  return summary ? (
+    <span className="tool-call-file-summary text-[0.65rem] opacity-60 ml-1 truncate max-w-[160px]"
+      style={{ color: 'var(--color-text-muted)' }}>
+      {summary}
+    </span>
+  ) : null
+})()}
 ```
 
 - [ ] **Step 6: 运行测试确认通过 + typecheck + lint**
