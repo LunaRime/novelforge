@@ -6,7 +6,7 @@
  * 跨项目聚合归 P3
  */
 import { useCallback, useEffect, useState } from 'react'
-import { BarChart3, Loader2, RefreshCw } from 'lucide-react'
+import { AlertTriangle, BarChart3, Loader2, RefreshCw } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import type { UsageStatsByPurposeRow, UsageStatsByModelRow, UsageStatsData } from '../../shared/ipc-channels'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -30,30 +30,40 @@ function formatCost(cost: number): string {
   return cost.toFixed(2)
 }
 
+let loadSeq = 0 // loadSeq 防竞态（stores 惯例；视图单实例）
+
 export default function UsageStatsView() {
   const { t } = useTranslation()
   const [rangeDays, setRangeDays] = useState(30)
   const [data, setData] = useState<UsageStatsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
   const load = useCallback(async (days: number) => {
+    const seq = ++loadSeq // loadSeq 防竞态（项目惯例）：区间快速切换时丢弃旧响应
     setLoading(true)
+    setError(null)
     try {
       const to = Date.now()
       const from = days === 0 ? 0 : to - days * 86_400_000
-      setData(await ipc.invoke('db:usage-stats', { from, to }))
+      const res = await ipc.invoke('db:usage-stats', { from, to })
+      if (seq !== loadSeq) return // 已被更新请求取代——旧响应不覆盖新区间数据
+      setData(res)
     } catch (e) {
+      if (seq !== loadSeq) return
       console.warn('[UsageStatsView] 加载用量统计失败:', e)
       setData(null)
+      setError(String(e))
+    } finally {
+      if (seq === loadSeq) setLoading(false)
     }
-    setLoading(false)
   }, [])
 
-  // 区间切换即重新聚合（SQL 按区间过滤，数据量小无需缓存）
-  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- load 每次渲染重建，依赖 rangeDays 即覆盖
-  useEffect(() => { load(rangeDays) }, [rangeDays])
+  // 区间切换即重新聚合（SQL 按区间过滤，数据量小无需缓存）；load 为 useCallback([]) 稳定引用，仅 rangeDays 变化触发
+  // eslint-disable-next-line react-hooks/set-state-in-effect, react-hooks/exhaustive-deps -- load 稳定引用（[]），依赖 rangeDays 覆盖切换
+  useEffect(() => { void load(rangeDays) }, [rangeDays])
 
-  const handleRefresh = () => { setLoading(true); load(rangeDays) }
+  const handleRefresh = () => { void load(rangeDays) }
 
   return (
     <div className="space-y-4">
@@ -84,10 +94,29 @@ export default function UsageStatsView() {
         </button>
       </div>
 
-      {loading && !data ? (
+      {loading && !data && !error ? (
         <div className="flex items-center justify-center py-12 gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
           <Loader2 size={14} className="animate-spin" />
           {t('status.loading')}
+        </div>
+      ) : error ? (
+        <div
+          className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl"
+          style={{ border: '1px dashed var(--color-border)' }}
+        >
+          <AlertTriangle size={22} style={{ color: 'var(--color-warning)', opacity: 0.7 }} />
+          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
+            {t('usage.loadFailed')}
+          </span>
+          <button
+            type="button"
+            onClick={handleRefresh}
+            className="icon-btn"
+            style={{ width: 28, height: 28 }}
+            title={t('action.retry')}
+          >
+            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          </button>
         </div>
       ) : data && (data.byPurpose.length === 0 && data.byModel.length === 0) ? (
         <div
@@ -122,9 +151,9 @@ export default function UsageStatsView() {
                 t('usage.cost'),
               ]}
               rows={data.byPurpose.map((r: UsageStatsByPurposeRow) => ({
-                key: r.purpose,
+                key: r.purpose || '—',
                 cells: [
-                  r.purpose,
+                  r.purpose || '—', // M3：purpose DEFAULT '' 历史行显示占位（与 byModel 行同形态）
                   formatNumber(r.calls),
                   formatNumber(r.promptTokens),
                   formatNumber(r.completionTokens),

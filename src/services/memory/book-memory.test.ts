@@ -148,6 +148,35 @@ describe('rebuildBookState（全书重建）', () => {
     expect(res.file).toBeNull()
     expect(res.reason).toBeTruthy()
   })
+
+  it('卷文件存在但全部 stale → 不降级回退（success:false + reason，不覆盖原多卷摘要）', async () => {
+    // 已有双卷全书摘要（模拟重建前状态）
+    memoryFiles.set('book-state.md', '---\nupdatedAt: 2026-08-20T00:00:00.000Z\nvolumes: 2\n---\n\n# 全书状态\n')
+    // 全部卷文件 stale（卷边界编辑 collectAffectedFiles 批量标记场景）
+    memoryFiles.set('volume-001.md', '---\nvolume: 1\nrange: 1-15\nstatus: stale\n---\n\n# 第 1 卷 · 旧\n\n## 第 1 章 · 旧稿\n- 关键事件：旧事件\n')
+    memoryFiles.set('volume-002.md', '---\nvolume: 2\nrange: 16-30\nstatus: stale\n---\n\n# 第 2 卷 · 旧\n')
+    // 存在 fresh 章节文件——若落入「无分卷」分支会聚合出单窗口降级版
+    memoryFiles.set('chapters-001-015.md', '\n## 第 1 章 · 开局\n- 关键事件：主角觉醒\n')
+    const res = await rebuildBookState()
+    expect(res).toEqual({ success: false, file: null, reason: 'all volume files stale' })
+    expect(memoryFiles.get('book-state.md')).toContain('volumes: 2')
+    expect(memoryFiles.get('book-state.md')).not.toContain('主角觉醒')
+  })
+
+  it('完全无卷文件（仅章节文件）→ 无分卷降级路径不回归', async () => {
+    memoryFiles.set('chapters-001-015.md', [
+      '# 章节记忆 001-015', '',
+      '## 第 1 章 · 开局',
+      '- 关键事件：主角觉醒',
+      '- 出场角色：苏晚晴',
+      '- 伏笔：虚晶',
+      '- 新设定：武魂',
+      '- 当前状态：筑基',
+    ].join('\n'))
+    const res = await rebuildBookState()
+    expect(res).toEqual({ success: true, file: 'book-state.md' })
+    expect(memoryFiles.get('book-state.md')).toContain('volumes: 0')
+  })
 })
 
 describe('maybeTriggerBookState（每满 3 卷检查点触发）', () => {

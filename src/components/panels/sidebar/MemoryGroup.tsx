@@ -77,7 +77,8 @@ export default function MemoryGroup({ projectPath }: Props) {
         toast.success(t('memory.rebuildBookDone'))
         await refresh() // 覆盖写（无 status:stale）→ stale 徽标消失
       } else {
-        toast.error(t('error.unknown'))
+        // M6：失败带出 rebuildBookState 的 reason（如 'all volume files stale'）而非吞掉——reason 为内部诊断串，直接拼接展示
+        toast.error(res.reason ? `${t('error.unknown')}：${res.reason}` : t('error.unknown'))
       }
       return
     }
@@ -253,9 +254,10 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
         )}
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
           style={{ color: 'var(--color-text-muted)' }}
           title={t('memory.rebuild')}
+          disabled={editing}
           onClick={(e) => { e.stopPropagation(); onRebuild() }}
         >
           <RotateCw size={10} />

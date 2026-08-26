@@ -75,6 +75,11 @@ export async function rebuildBookState(): Promise<{ success: boolean; file: stri
     const volumeFiles = list
       .filter(f => f.kind === 'volume' && !f.stale) // 与 M2 注入 fresh 口径一致（stale 卷不聚合）
       .sort((a, b) => a.file.localeCompare(b.file)) // volume-NNN 零填充字典序 = 卷号序
+    // 卷文件存在但全部 stale：无分卷分支会取最新章节窗口覆盖原多卷摘要（静默退化）——返回失败，
+    // 由触发方容错（检查点返回 false）/手动按钮 toast 指引；「无分卷降级」仅对完全无卷文件成立
+    if (list.some(f => f.kind === 'volume') && volumeFiles.length === 0) {
+      return { success: false, file: null, reason: 'all volume files stale' }
+    }
     const volumes: { volumeNumber: number; range: string }[] = []
     let entries: { volumeNumber: number; chapters: ChapterSummaryEntry[] }[] = []
     if (volumeFiles.length > 0) {

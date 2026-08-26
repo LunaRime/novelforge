@@ -1204,6 +1204,7 @@ export const UI_TEXTS_DATA = {
   'usage.completionTokens': { 'zh-CN': '输出 Tokens', 'en-US': 'Output tokens', 'ru-RU': 'Выходные токены' },
   'usage.cachedTokens': { 'zh-CN': '缓存命中', 'en-US': 'Cache hit', 'ru-RU': 'Кэш-попадание' },
   'usage.cost': { 'zh-CN': '费用（$）', 'en-US': 'Cost ($)', 'ru-RU': 'Стоимость ($)' },
+  'usage.loadFailed': { 'zh-CN': '用量统计加载失败', 'en-US': 'Failed to load usage stats', 'ru-RU': 'Не удалось загрузить статистику расхода' },
   'skill.import': { 'zh-CN': '导入技能', 'en-US': 'Import skill', 'ru-RU': 'Импортировать навык' },
   'skill.empty': { 'zh-CN': '暂无技能，点击右上角导入 .md 技能文件', 'en-US': 'No skills yet. Import a .md skill file.', 'ru-RU': 'Навыков пока нет. Импортируйте файл .md.' },
   'skill.imported': { 'zh-CN': '技能已导入', 'en-US': 'Skill imported', 'ru-RU': 'Навык импортирован' },
