@@ -69,4 +69,47 @@ export class LLMHistoryRepository {
       FROM llm_calls ORDER BY id DESC LIMIT ?
     `).all(limit)
   }
+
+  /**
+   * 用量统计（按用途/模型两维度聚合 + 合计）
+   * @param from 区间起始（毫秒时间戳，含）
+   * @param to 区间结束（毫秒时间戳，含）
+   */
+  static getUsageStats(from: number, to: number): {
+    byPurpose: Array<{ purpose: string; calls: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number }>
+    byModel: Array<{ model: string; calls: number; cost: number }>
+    total: { calls: number; cost: number }
+  } {
+    const empty = { byPurpose: [], byModel: [], total: { calls: 0, cost: 0 } }
+    const db = getProjectDb()
+    if (!db) return empty
+
+    // 口径与 getStats 一致：仅成功调用（失败调用无 tokens/cost，计入会稀释统计）
+    // 时间区间为毫秒时间戳（created_at 为 unixepoch()*1000，v7 迁移已把字符串脏数据转 INTEGER）
+    const byPurpose = db.prepare(`
+      SELECT purpose,
+        COUNT(*) as calls,
+        COALESCE(SUM(prompt_tokens), 0) as promptTokens,
+        COALESCE(SUM(completion_tokens), 0) as completionTokens,
+        COALESCE(SUM(cached_tokens), 0) as cachedTokens,
+        COALESCE(SUM(cost), 0) as cost
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+      GROUP BY purpose ORDER BY calls DESC
+    `).all(from, to) as Array<{ purpose: string; calls: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number }>
+
+    const byModel = db.prepare(`
+      SELECT model_name as model,
+        COUNT(*) as calls,
+        COALESCE(SUM(cost), 0) as cost
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+      GROUP BY model_name ORDER BY calls DESC
+    `).all(from, to) as Array<{ model: string; calls: number; cost: number }>
+
+    const total = db.prepare(`
+      SELECT COUNT(*) as calls, COALESCE(SUM(cost), 0) as cost
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+    `).get(from, to) as { calls: number; cost: number }
+
+    return { byPurpose, byModel, total }
+  }
 }

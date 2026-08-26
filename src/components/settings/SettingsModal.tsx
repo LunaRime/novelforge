@@ -3,7 +3,7 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
   ExternalLink, RefreshCw, Loader2, Download, LogOut,
-  BookMarked, Plug,
+  BookMarked, Plug, BarChart3,
 } from 'lucide-react'
 import { confirm } from '../ui/Confirm'
 import PromptSettings from './PromptSettings'
@@ -34,11 +34,12 @@ import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
+import UsageStatsView from './UsageStatsView'
 import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'llm' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'dev' | 'about'
+type SettingsSection = 'llm' | 'usage' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'dev' | 'about'
 
 interface SectionItem {
   id: SettingsSection
@@ -50,6 +51,7 @@ interface SectionItem {
 function getSections(t: (key: TextKey) => string): SectionItem[] {
   return [
     { id: 'llm', label: t('settings.aiModel'), icon: <Cpu size={16} />, description: t('settings.aiModelDesc') },
+    { id: 'usage', label: t('settings.usage'), icon: <BarChart3 size={16} />, description: t('settings.usageDesc') },
     { id: 'embedding', label: t('settings.vectorModel'), icon: <Database size={16} />, description: t('settings.vectorModelDesc') },
     { id: 'proxy', label: t('settings.proxy'), icon: <Globe size={16} />, description: t('settings.proxyDesc') },
     { id: 'editor', label: t('settings.editor'), icon: <Type size={16} />, description: t('settings.editorDesc') },
@@ -167,6 +169,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 </div>
               </>
             )}
+            {section === 'usage' && <UsageStatsView />}
             {section === 'embedding' && (
               <>
                 <VectorConfigSection />

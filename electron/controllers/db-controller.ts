@@ -497,6 +497,11 @@ export function registerDatabaseController() {
     return LLMHistoryRepository.getStats()
   })
 
+  // 用量统计（当前项目维度：purpose/模型两维度 + 合计；区间过滤毫秒时间戳；无项目返回空聚合）
+  ipcMain.handle('db:usage-stats', async (_event, range: { from: number; to: number }) => {
+    return LLMHistoryRepository.getUsageStats(range.from, range.to)
+  })
+
   ipcMain.handle('db:get-llm-history', async (_event, limit?: number) => {
     return LLMHistoryRepository.getHistory(limit ?? 50)
   })

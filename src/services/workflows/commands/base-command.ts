@@ -116,6 +116,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
           prompt_tokens: usage?.promptTokens ?? 0,
           completion_tokens: usage?.completionTokens ?? 0,
           total_tokens: usage?.totalTokens ?? 0,
+          cached_tokens: usage?.cachedTokens ?? 0,
           duration_ms: duration,
           success: success ? 1 : 0,
           error_message: errorMessage ?? '',

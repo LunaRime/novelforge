@@ -139,6 +139,30 @@ export interface DailyActivityData {
   dayCount: number
 }
 
+/** 用量统计 — 用途维度行 */
+export interface UsageStatsByPurposeRow {
+  purpose: string
+  calls: number
+  promptTokens: number
+  completionTokens: number
+  cachedTokens: number
+  cost: number
+}
+
+/** 用量统计 — 模型维度行 */
+export interface UsageStatsByModelRow {
+  model: string
+  calls: number
+  cost: number
+}
+
+/** 用量统计查询结果（当前项目维度，success=1 口径，与 getStats 一致） */
+export interface UsageStatsData {
+  byPurpose: UsageStatsByPurposeRow[]
+  byModel: UsageStatsByModelRow[]
+  total: { calls: number; cost: number }
+}
+
 // ===== 文件系统 =====
 export interface FileChannels {
   'fs:read-file': {
@@ -452,6 +476,8 @@ export interface DatabaseChannels {
   'db:log-llm-call': { args: [call: Record<string, unknown>]; return: { success: boolean } }
   'db:get-llm-stats': { args: []; return: { totalCalls: number; totalTokens: number; totalPromptTokens: number; totalCompletionTokens: number } }
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
+  // 用量统计（当前项目维度：purpose/模型两维度 + 合计；区间过滤毫秒时间戳）
+  'db:usage-stats': { args: [range: { from: number; to: number }]; return: UsageStatsData }
   'db:get-daily-activity': { args: [days?: number, projectPath?: string, currentProjectPath?: string]; return: DailyActivityData }
   'config:set-locale': { args: [locale: 'zh-CN' | 'en-US' | 'ru-RU']; return: { success: boolean } }
   'db:save-summary-snapshot': { args: [chapterNumber: number, characterStates: string]; return: { success: boolean } }

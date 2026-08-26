@@ -53,6 +53,7 @@ async function callLLMForPostProcess(
       prompt_tokens: 0,
       completion_tokens: 0,
       total_tokens: 0,
+      cached_tokens: 0,
       duration_ms: duration,
       success: success ? 1 : 0,
       error_message: errorMessage ?? '',
@@ -77,6 +78,7 @@ async function callLLMForPostProcess(
               prompt_tokens: usage.promptTokens,
               completion_tokens: usage.completionTokens,
               total_tokens: usage.totalTokens,
+              cached_tokens: usage.cachedTokens ?? 0,
               duration_ms: Date.now() - startTime,
               success: 1,
             }).catch(() => { })
