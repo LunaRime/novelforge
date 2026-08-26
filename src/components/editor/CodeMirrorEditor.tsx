@@ -3,7 +3,7 @@ import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate } from '@uiw/rea
 import { keymap } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
-import { EditorState } from '@codemirror/state'
+import { EditorState, Transaction } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
@@ -75,7 +75,26 @@ export default function CodeMirrorEditor({
 
     if (content !== lastEmittedContentRef.current) {
       lastEmittedContentRef.current = content
-      setEditorContent(content)
+      const view = editorRef.current?.view
+      if (view) {
+        // 外部内容同步（切文件/AI 刷新）：手动 dispatch 且不进 undo 历史栈，
+        // 否则用户 Ctrl+Z 会先撤销"整文替换"而非自身编辑。
+        // ReactCodeMirror 的受控 value 同步（esm/useCodeMirror.js value effect）
+        // 只标记 ExternalChange 防止 onChange 回显，未带 addToHistory:false，
+        // 整文替换事务会进入 undo 栈。
+        // 不带 selection：CodeMirror 自动 clamp 越界光标，保留原有受控同步的光标语义，
+        // 避免强制 anchor:0 导致切文件后光标跳文件头（用户可感知回归）。
+        // 注：state@6.6.0 的 TransactionSpec 类型没有 addToHistory 快捷字段
+        // （与 @codemirror/commands@6.10.4 要求 state@6.7+ 的同源类型不匹配，
+        // 见下方 undo 按钮处的既有注释），改用 annotation 形式语义等价。
+        view.dispatch({
+          changes: { from: 0, to: view.state.doc.length, insert: content },
+          annotations: [Transaction.addToHistory.of(false)],
+          scrollIntoView: true,
+        })
+      } else {
+        setEditorContent(content)
+      }
       // 内容经由外部变动（例如打开新文件）
       onCharCountChange?.(countWords(content))
     }
