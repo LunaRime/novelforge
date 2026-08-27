@@ -467,4 +467,4 @@ EOF
 
 **🟢 rewind × CCR 交互（ledger 记录项，v1 接受）**：rewind 截断后 `compressed.original` 仍含被截断消息（压缩卡片可展开显示原文）；restoreRewound 后压缩卡片与归档消息双份拷贝存在。v1 可接受（展示层冗余，无数据丢失），**记入 ledger 长期项**——后续考虑 rewind 时同步裁剪 compressed.original 或加标注。
 
-**🟢 ForkRight 图标**：lucide-react ^1.8.0 依赖存在（核验确认），B2 直接可用。
+**🟢 ForkRight 图标（核验修正）**：**lucide-react 1.8.0 实测无 ForkRight 导出**（node -e 核验：ForkRight false / GitFork true / Undo2 true——初始导入即 React 渲染崩溃）——B2/B3 改用 GitFork（规范 fork 图标，语义等同），inline 注释记录。⚠️ 评审记录原声称「ForkRight 可用」不实，后续任务勿再引用 ForkRight。
