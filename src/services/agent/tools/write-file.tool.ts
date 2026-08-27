@@ -6,6 +6,7 @@ import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { validatePath } from './safe-path'
+import { clearReadState } from './read-file.tool'
 
 export const writeFileTool = buildAgentTool({
   name: 'write_file',
@@ -58,6 +59,10 @@ export const writeFileTool = buildAgentTool({
     if (!result.success) {
       return { success: false, content: '', error: result.error ?? t('tool.writeFileFailed') }
     }
+
+    // ⚠️ 写盘成功后失效读去重缓存（P0-2）：LLM「写盘 → 重读验证」是 ReAct 常见模式，
+    //    不清除则重读仍命中桩，LLM 无法确认写入结果
+    clearReadState(pathCheck.fullPath)  // key 与 read_file 项目内分支的 pathKey（validatePath.fullPath）一致
 
     return {
       success: true,

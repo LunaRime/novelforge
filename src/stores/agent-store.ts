@@ -3,6 +3,7 @@ import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
+import { clearReadState } from '../services/agent/tools/read-file.tool'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { buildRoleplaySystemPrompt } from '../services/roleplay-prompt'
 import { useCharacterStore } from './character-store'
@@ -224,12 +225,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       showHistory: false,
       memoryView: false,
     }))
+    // 新建会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
+    clearReadState()
     get().persistCurrent(newConv.id)
     return newConv
   },
 
   selectConversation: (id) => {
     set({ activeConversationId: id, showHistory: false, memoryView: false })
+    // 切换会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
+    clearReadState()
   },
 
   deleteConversation: (id) => {
@@ -250,6 +255,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   clearAll: () => {
     const ids = get().conversations.map(c => c.id)
     set({ conversations: [], activeConversationId: null })
+    // 清空所有会话后同步清空读去重状态（防会话间模块级状态残留）
+    clearReadState()
     for (const id of ids) {
       ipc.invoke('fs:agent-archive-delete', id).catch(() => {
         console.warn('[Agent] 归档删除失败:', id)

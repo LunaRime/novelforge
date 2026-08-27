@@ -3,8 +3,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
+import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 
-// mock IPC（fs:agent-archive-* 通道）
+// mock IPC（fs:agent-archive-* + fs:read-file 通道）
 const archiveFiles = new Map<string, string>()
 let deleteCalls: string[] = []
 const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
@@ -22,6 +23,8 @@ const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
       archiveFiles.delete(String(args[0]))
       return { success: true }
     }
+    case 'fs:read-file':
+      return { success: true, content: '长文本内容' }
     default:
       return null
   }
@@ -175,5 +178,22 @@ describe('CCR 压缩集成', () => {
     expect(raw).toBeDefined()
     const restored = JSON.parse(raw!) as { messages: unknown[] }
     expect(restored.messages).toHaveLength(0)
+  })
+})
+
+describe('read_file 读去重与会话生命周期', () => {
+  it('切换会话后 read_file 重复读返回全文（clearReadState 生效）', async () => {
+    // 防测试顺序依赖：先全清模块级读去重状态
+    clearReadState()
+    useAgentStore.getState().createConversation({ title: 'S1' })
+    const r1 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r1.content).toContain('长文本内容')
+    const r2 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r2.content).toContain('file_unchanged') // 读去重桩命中
+    // 切换会话 → clearReadState 全体清空 → 重复读恢复全文（不同上下文应重新全量注入）
+    useAgentStore.getState().selectConversation('another-conv-id')
+    const r3 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r3.content).toContain('长文本内容')
+    expect(r3.content).not.toContain('file_unchanged')
   })
 })

@@ -2395,6 +2395,7 @@ export const UI_TEXTS_DATA = {
   // read_file
   'tool.readFileExternalFailed': { 'zh-CN': '外部文件读取失败', 'en-US': 'Failed to read external file', 'ru-RU': 'Ошибка чтения внешнего файла' },
   'tool.readFileFailed': { 'zh-CN': '文件读取失败', 'en-US': 'File read failed', 'ru-RU': 'Ошибка чтения файла' },
+  'tool.fileUnchangedStub': { 'zh-CN': '<persisted-output>\n[file_unchanged] {path} 内容与上次读取一致（{len} 字符），未重新注入全文。若文件已被修改，请先使用 write_file 写入后再读取以获取最新内容。\n</persisted-output>', 'en-US': '<persisted-output>\n[file_unchanged] {path} content is unchanged since the last read ({len} chars) — the full text was not re-injected. If the file was modified, write it with write_file first, then read again to get the latest content.\n</persisted-output>', 'ru-RU': '<persisted-output>\n[file_unchanged] Содержимое {path} не изменилось с прошлого чтения ({len} зн.) — полный текст не введён повторно. Если файл был изменён, сначала выполните write_file, затем прочитайте снова для получения актуального содержимого.\n</persisted-output>' },
   // read_project_state
   'tool.readStateHeader': { 'zh-CN': '# 📊 项目状态：《{name}》\n', 'en-US': '# 📊 Project Status: "{name}"\n', 'ru-RU': '# 📊 Статус проекта: «{name}»\n' },
   'tool.readStateConfigSection': { 'zh-CN': '## 小说配置\n```json\n{json}\n```', 'en-US': '## Novel Config\n```json\n{json}\n```', 'ru-RU': '## Конфигурация романа\n```json\n{json}\n```' },
