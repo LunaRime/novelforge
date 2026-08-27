@@ -39,8 +39,10 @@ export function detectWritingIntent(input: string): WritingIntent {
   if (charCreate) return { kind: 'character', name: charCreate[1].trim(), action: 'create' }
   if (/(?:创建|新建|添加|新增).{0,4}角色/.test(input)) return { kind: 'ambiguous', hint: 'character' }
   // brief 修订：补 character/update 分支（spec §4.2「新建 vs 修改分支」；brief 遗漏，plan 文档含此行）
-  // 评审二次修订：捕获组前置负向前瞻 (?!角色|人设|设定)——无名字输入（「修改角色设定」）不得以垃圾名触发角色更新
-  const charUpdate = input.match(/(?:修改|更新|改一下|调整)(?:下)?\s*(?!角色|人设|设定)([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
+  // 评审二次修订：动词组 `(?:下|一下)?` 消费助词 + 捕获组负向前瞻——名与「角色/人设/设定」后缀间有前缀助词或空名时绝不命中。
+  //   前置守护前瞻 (?!下|一下…后缀) 闭合并回溯孔（助词组回溯为空的二次尝试仍会以「一下」开头捕获），
+  //   且保留「的」排除（否则贪心捕获吞入后缀导致 name=「苏晚晴的角色」）。
+  const charUpdate = input.match(/(?:修改|更新|调整|改)(?!(?:下|一下)\s*(?:的)?\s*(?:角色|人设|设定))(?:下|一下)?\s*(?!角色|人设|设定)([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
   if (charUpdate) return { kind: 'character', name: charUpdate[1].trim(), action: 'update' }
 
   // ==== 大纲/架构 ====

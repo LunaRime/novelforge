@@ -58,4 +58,16 @@ describe('detectWritingIntent 命中表', () => {
   it('「修改角色设定」无名字 → 回落 refine(null)（不触发垃圾名角色更新，A1 评审实测修正）', () => {
     expect(detectWritingIntent('修改角色设定')).toEqual({ kind: 'refine', chapter: null })
   })
+  it('「修改一下角色设定」→ 回落 refine(null)（「一下」是助词非名字，A1 评审二轮实测修正）', () => {
+    expect(detectWritingIntent('修改一下角色设定')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「调整一下角色设定」→ 回落 none（调整非 refine 动词；无章节语义归 ReAct 兜底，同上）', () => {
+    expect(detectWritingIntent('调整一下角色设定')).toEqual({ kind: 'none' })
+  })
+  it('「更新一下角色设定」→ 回落 none（更新非 refine 动词，同上）', () => {
+    expect(detectWritingIntent('更新一下角色设定')).toEqual({ kind: 'none' })
+  })
+  it('「修改一下苏晚晴的角色设定」→ character(苏晚晴, update)（「一下」助词消费，名字正常，A1 评审二轮需求）', () => {
+    expect(detectWritingIntent('修改一下苏晚晴的角色设定')).toEqual({ kind: 'character', name: '苏晚晴', action: 'update' })
+  })
 })
