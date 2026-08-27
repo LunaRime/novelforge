@@ -15,6 +15,8 @@ import { ipc } from '../../../services/ipc-client'
 import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { confirm } from '../../ui/Confirm'
+import type { TextKey } from '../../../shared/locale'
 
 /**
  * 对话区域主组件
@@ -220,6 +222,23 @@ function ActiveConversation() {
     })
   }
 
+  /** 分支：从指定消息 fork 新会话（B1 数据层：复制起点含历史，自动激活） */
+  const handleFork = (messageId: string) => {
+    useAgentStore.getState().forkFromMessage(messageId)
+    // 自动滚动到新会话底部
+    requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }))
+  }
+
+  /** 回退：确认后截断到指定消息（可恢复） */
+  const handleRewind = async (messageId: string) => {
+    const ok = await confirm(t('agent.confirmRewind' as TextKey), {
+      title: t('agent.confirmRewindTitle' as TextKey),
+      confirmText: t('dialog.confirmRewind' as TextKey),
+      danger: true,
+    })
+    if (ok) useAgentStore.getState().rewindToMessage(messageId)
+  }
+
   if (!activeConv) return null
 
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
@@ -265,7 +284,7 @@ function ActiveConversation() {
           {activeConv.messages
             .filter(m => m.role !== 'system')
             .map(msg => (
-              <AgentMessage key={msg.id} message={msg} />
+              <AgentMessage key={msg.id} message={msg} onFork={handleFork} onRewind={handleRewind} />
             ))}
         </div>
         {/* 底部空间 */}

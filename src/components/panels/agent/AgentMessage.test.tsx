@@ -6,7 +6,7 @@
  * 折叠为「思考过程」头部（点击展开后正文可见），正文不受影响；无思考块
  * 的普通内容原样渲染。另含 ToolCallBlock 头部 📄/📖/👤 摘要。
  */
-import { describe, it, expect, afterEach } from 'vitest'
+import { describe, it, expect, afterEach, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import AgentMessage from './AgentMessage'
@@ -56,6 +56,47 @@ describe('AgentMessage 思考折叠', () => {
     expect(container.textContent).toContain('普通正文内容没有思考块')
     // 无折叠按钮（思考块头部）
     expect(container.querySelector('button')).toBeNull()
+    act(() => { root.unmount() })
+  })
+})
+
+describe('AgentMessage 分支操作', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('hover 操作区默认不可见（opacity-0 + 无 display 切换），提供 onFork/onRewind 回调时渲染按钮', () => {
+    const onFork = vi.fn()
+    const onRewind = vi.fn()
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onFork={onFork} onRewind={onRewind} />)
+    // 操作区容器存在：opacity 过渡模式（C1：固定容器，禁止 display 切换导致布局跳动）
+    const actions = container.querySelector<HTMLElement>('[class*="group-hover:opacity-100"]')
+    expect(actions).toBeTruthy()
+    expect(actions!.classList.contains('opacity-0')).toBe(true)
+    expect(actions!.classList.contains('transition-opacity')).toBe(true)
+    expect(actions!.classList.contains('hidden')).toBe(false)
+    // 两个按钮 title 存在（i18n 键 B4 才加——缺失键返回键名字面量，按键名断言）
+    expect(container.querySelector('[title="agent.forkConversation"]')).toBeTruthy()
+    expect(container.querySelector('[title="agent.rewindToHere"]')).toBeTruthy()
+    act(() => { root.unmount() })
+  })
+
+  it('点击 fork 按钮回调携带 messageId', () => {
+    const onFork = vi.fn()
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onFork={onFork} />)
+    const fork = container.querySelector<HTMLButtonElement>('[title="agent.forkConversation"]')
+    expect(fork).toBeTruthy()
+    act(() => { fork!.click() })
+    expect(onFork).toHaveBeenCalledWith('m1')
+    act(() => { root.unmount() })
+  })
+
+  it('无 onFork/onRewind props 时不渲染操作区（只读历史/归档视图兼容）', () => {
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(container.querySelector('[title="agent.forkConversation"]')).toBeNull()
+    expect(container.querySelector('[title="agent.rewindToHere"]')).toBeNull()
+    expect(container.querySelector('[class*="group-hover:opacity-100"]')).toBeNull()
     act(() => { root.unmount() })
   })
 })
