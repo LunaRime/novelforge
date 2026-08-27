@@ -81,39 +81,52 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
     expect(fs.existsSync(VELA_HOME)).toBe(false)   // 新目录未创建
   })
 
-  it('rename 失败后 ensureVelaHome 空建 newHome（无 config.json 哨兵）→ 下次启动条件仍真，重试迁移成功', async () => {
+  it('迁移重试：ensureVelaHome 空建 newHome（含空 prompts/logs）→ auto 树被清理，真实 rename 成功', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
     fs.writeFileSync(path.join(legacyHome, 'old-marker.txt'), 'old')
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    // 第一次调用（本启动）：rename 瞬时失败（EPERM/EBUSY）
-    vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('EBUSY') })
+    // 第一次调用（本启动）：rename 瞬时失败（EBUSY）
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('EBUSY') })
     await migrateLegacyDirs()
+    expect(renameSpy).toHaveBeenCalledTimes(1)
     expect(errorSpy).toHaveBeenCalled()
     expect(fs.existsSync(legacyHome)).toBe(true)
 
-    // 模拟同次启动后续 ensureVelaHome（ipc-handlers.ts）空建 newHome（无 config.json——哨兵不满足）
+    // 模拟同次启动后续 ensureVelaHome（ipc-handlers.ts）空建 newHome（含空 prompts/logs，无 config.json 哨兵）
     fs.mkdirSync(VELA_HOME, { recursive: true })
     fs.mkdirSync(path.join(VELA_HOME, 'prompts'), { recursive: true })
     fs.mkdirSync(path.join(VELA_HOME, 'logs'), { recursive: true })
     expect(fs.existsSync(GLOBAL_CONFIG_PATH)).toBe(false)
 
-    // 第二次调用（下次启动）：条件仍真（哨兵缺失）→ 重试。Win32 目录 rename 到已存在空目录会
-    // EPERM（实测），此处以完成真实文件移动的 fake 验证——测试点是条件判定与控制流，非 rename 原生语义
-    const renameSpy = vi.mocked(fs.renameSync)
-    renameSpy.mockImplementation((src, dest) => {
-      fs.mkdirSync(String(dest), { recursive: true })
-      fs.writeFileSync(path.join(String(dest), 'config.json'), fs.readFileSync(path.join(String(src), 'config.json')))
-      fs.writeFileSync(path.join(String(dest), 'old-marker.txt'), fs.readFileSync(path.join(String(src), 'old-marker.txt')))
-      fs.rmSync(String(src), { recursive: true, force: true })
-    })
+    // 第二次调用（下次启动）：auto 空树（仅空 prompts/logs，无 config.json）被识别并清理 →
+    // 真实 rename 成功（Win32 rename 到已存在空目录会 EPERM，清理后目标不存在）
     await migrateLegacyDirs()
 
-    expect(renameSpy).toHaveBeenCalledTimes(2)          // 重试确实发起（未因空目录存在而跳过）
+    expect(renameSpy).toHaveBeenCalledTimes(2)
     expect(fs.existsSync(legacyHome)).toBe(false)
     expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
     expect(fs.readFileSync(path.join(VELA_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
+  })
+
+  it('安全边界：newHome 含用户数据（非 auto 形态）→ 绝不删除，rename 失败静默回退（双读兜底）', async () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(path.join(VELA_HOME, 'user-notes.txt'), 'mine') // 用户手工放入的数据
+    fs.mkdirSync(path.join(VELA_HOME, 'prompts'), { recursive: true })
+    fs.writeFileSync(path.join(VELA_HOME, 'prompts', 'premise.json'), '{}')
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await migrateLegacyDirs()
+
+    // 安全边界：含用户数据的新目录未被删除；rename 失败（Win32 目标已存在 EPERM 实测）→
+    // 静默回退——旧目录保留（双路径兜底，数据不丢）
+    expect(fs.readFileSync(path.join(VELA_HOME, 'user-notes.txt'), 'utf-8')).toBe('mine')
+    expect(fs.readFileSync(path.join(VELA_HOME, 'prompts', 'premise.json'), 'utf-8')).toBe('{}')
+    expect(fs.existsSync(legacyHome)).toBe(true)
+    expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
   })
 })
 

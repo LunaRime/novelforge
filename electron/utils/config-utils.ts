@@ -8,13 +8,48 @@ export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 /** 项目内运行时数据目录名（与 VELA_HOME 同步改名：.vela → .novelforge） */
 export const PROJECT_VELA_DIR = '.novelforge'
 
+/** 判定目录是否为 ensureVelaHome 空建产物：目录不存在 / 空目录 / 仅含空的 prompts+logs 子目录
+ *  （ensureVelaHome 的产物形态：{path, prompts, logs}）→ true；
+ *  含其他任何条目（用户数据）→ false。**false 时绝不删除**（安全边界，用户数据目录保留） */
+function isAutoCreatedEmptyHome(dir: string): boolean {
+  if (!fs.existsSync(dir)) return true
+  let entries: string[]
+  try {
+    entries = fs.readdirSync(dir)
+  } catch {
+    return false
+  }
+  if (entries.length === 0) return true
+  for (const name of entries) {
+    if (name !== 'prompts' && name !== 'logs') return false
+    try {
+      if (fs.readdirSync(path.join(dir, name)).length > 0) return false
+    } catch {
+      return false // prompts/logs 存在但不可读/非目录 → 视为含数据，不删除
+    }
+  }
+  return true
+}
+
 /** 全局目录迁移：~/.vela → ~/.novelforge（启动早期调用；失败静默，旧路径兜底）。
  *  判定哨兵为 newHome/config.json（而非目录存在）——防「首次 rename 失败后 ensureVelaHome
- *  空建 newHome」令条件永久为假、数据永久搁浅；失败下次启动自动重试 */
+ *  空建 newHome」令条件永久为假、数据永久搁浅；失败下次启动自动重试。
+ *  重试前清理 auto-created 空新目录树（Win32 目录 rename 到已存在空目录会 EPERM——
+ *  不清则每次启动都重试但都不成功，用户配置仍搁浅） */
 export async function migrateLegacyDirs(): Promise<void> {
   const oldHome = path.join(os.homedir(), '.vela')
   const newHome = VELA_HOME
   if (fs.existsSync(oldHome) && !fs.existsSync(GLOBAL_CONFIG_PATH)) {
+    // Win32：目录 rename 到已存在（空）目录会 EPERM——重试前识别并清理
+    // ensureVelaHome 空建的新目录树；仅限 auto 形态（空/仅空 prompts+logs），
+    // 含用户数据的目录绝不删除（清理失败同样走 rename 失败路径静默回退）
+    try {
+      if (isAutoCreatedEmptyHome(newHome)) {
+        fs.rmSync(newHome, { recursive: true, force: true })
+      }
+    } catch (e) {
+      console.error('[NovelForge] 清理 auto-created ~/.novelforge 失败，尝试直接迁移：', e)
+    }
     try {
       fs.renameSync(oldHome, newHome)
     } catch (e) {
