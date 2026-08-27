@@ -27,6 +27,30 @@ export function clearReadState(pathKey?: string): void {
 const FILE_UNCHANGED_STUB = (path: string, len: number): string =>
   t('tool.fileUnchangedStub').replace('{path}', path).replace('{len}', String(len))
 
+/**
+ * 单次注入上限（字符量口径，初值 1200 ≈ 1200-1800 token）：
+ * - 中文 1 字符 ≈ 0.6-1.5 token（estimateTokensHeuristic CJK ×1.5）
+ * - 引擎侧 truncateResult(result.content, TOOL_RESULT_MAX_TOKENS=800) 二次兜底（agent-engine.ts），
+ *   截断提示置于 content 开头（truncateResult 从头保留）→ 提示不会被二次截断吞掉
+ */
+export const READ_MAX_CHARS = 1200
+
+/**
+ * 应用读取窗口：只返回 [offset, offset+limit) 区间的字符（超出部分截断），
+ * 截断/越界提示作为前缀置于 content 开头——引擎 truncateResult 从头保留，防提示被二次截断吞掉。
+ * 未超 limit 且 offset 在文件内时原样返回（行为兼容：正常小文件路径不变）
+ */
+function applyReadWindow(fullText: string, offset: number, limit: number): string {
+  const full = String(fullText ?? '')
+  const truncated = full.length > limit ? full.slice(offset, offset + limit) : full.slice(offset)
+  const notice = full.length > offset + limit
+    ? `${t('tool.readFileTruncated').replace('{total}', String(full.length)).replace('{offset}', String(offset + limit))}\n\n`
+    : offset > full.length
+      ? `${t('tool.readFileOffsetBeyond')}\n\n`
+      : ''
+  return notice + truncated
+}
+
 export const readFileTool = buildAgentTool({
   name: 'read_file',
   description: t('tool.readFileDesc'),
@@ -38,12 +62,23 @@ export const readFileTool = buildAgentTool({
         type: 'string',
         description: t('tool.readFilePath'),
       },
+      offset: {
+        type: 'number',
+        description: t('tool.readFileOffset'),
+      },
+      limit: {
+        type: 'number',
+        description: t('tool.readFileLimit'),
+      },
     },
     required: ['file_path'],
   },
   requiresConfirmation: false,
   execute: async (args) => {
     const filePath = args.file_path as string
+    // offset/limit 解析必须先于去重短路判断（P0-1 契约：短路豁免条件 = !args.offset && !args.limit）
+    const offset = typeof args.offset === 'number' && args.offset > 0 ? Math.floor(args.offset) : 0
+    const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : READ_MAX_CHARS
     const project = useProjectStore.getState().currentProject
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -66,9 +101,12 @@ export const readFileTool = buildAgentTool({
       if (!res.success) {
         return { success: false, content: '', error: res.error ?? t('tool.readFileExternalFailed') }
       }
-      // 读去重：记录状态；重复读同一路径返回桩（不重发全文）
-      readState.set(filePath, { content: String(res.content ?? '') })
-      return { success: true, content: String(res.content ?? '') }
+      // 读去重：仅「无 offset/limit 的全量读」记录状态（P0-1 修订：分页读不覆盖「全量已读」语义）——
+      // 否则分页读把 Map 覆盖为部分内容，后续全量读命中桩时桩长度=分页长度，LLM 拿不到全文
+      if (!args.offset && !args.limit) {
+        readState.set(filePath, { content: String(res.content ?? '') })
+      }
+      return { success: true, content: applyReadWindow(String(res.content ?? ''), offset, limit) }
     }
 
     // 项目内文件：路径安全校验
@@ -89,8 +127,11 @@ export const readFileTool = buildAgentTool({
       return { success: false, content: '', error: result.error ?? t('tool.readFileFailed') }
     }
 
-    // 读去重：记录状态；重复读同一路径返回桩（不重发全文）
-    readState.set(pathCheck.fullPath, { content: String(result.content ?? '') })
-    return { success: true, content: result.content }
+    // 读去重：仅「无 offset/limit 的全量读」记录状态（P0-1 修订：分页读不覆盖「全量已读」语义）——
+    // 否则分页读把 Map 覆盖为部分内容，后续全量读命中桩时桩长度=分页长度，LLM 拿不到全文
+    if (!args.offset && !args.limit) {
+      readState.set(pathCheck.fullPath, { content: String(result.content ?? '') })
+    }
+    return { success: true, content: applyReadWindow(String(result.content ?? ''), offset, limit) }
   },
 })
