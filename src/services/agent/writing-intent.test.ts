@@ -46,4 +46,16 @@ describe('detectWritingIntent 命中表', () => {
   it('「创建角色」无名字 → ambiguous（澄清而非静默 none，评审覆盖缺口修订）', () => {
     expect(detectWritingIntent('创建角色')).toMatchObject({ kind: 'ambiguous' })
   })
+  it('「润色一下」→ refine(null)（「一下」不当作章号，A1 评审实测修正）', () => {
+    expect(detectWritingIntent('润色一下')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「修改一下」→ refine(null)（同上）', () => {
+    expect(detectWritingIntent('修改一下')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「优化一下」→ refine(null)（同上）', () => {
+    expect(detectWritingIntent('优化一下')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「修改角色设定」无名字 → 回落 refine(null)（不触发垃圾名角色更新，A1 评审实测修正）', () => {
+    expect(detectWritingIntent('修改角色设定')).toEqual({ kind: 'refine', chapter: null })
+  })
 })

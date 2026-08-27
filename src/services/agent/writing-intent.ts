@@ -39,7 +39,8 @@ export function detectWritingIntent(input: string): WritingIntent {
   if (charCreate) return { kind: 'character', name: charCreate[1].trim(), action: 'create' }
   if (/(?:创建|新建|添加|新增).{0,4}角色/.test(input)) return { kind: 'ambiguous', hint: 'character' }
   // brief 修订：补 character/update 分支（spec §4.2「新建 vs 修改分支」；brief 遗漏，plan 文档含此行）
-  const charUpdate = input.match(/(?:修改|更新|改一下|调整)(?:下)?\s*([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
+  // 评审二次修订：捕获组前置负向前瞻 (?!角色|人设|设定)——无名字输入（「修改角色设定」）不得以垃圾名触发角色更新
+  const charUpdate = input.match(/(?:修改|更新|改一下|调整)(?:下)?\s*(?!角色|人设|设定)([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
   if (charUpdate) return { kind: 'character', name: charUpdate[1].trim(), action: 'update' }
 
   // ==== 大纲/架构 ====
@@ -49,8 +50,9 @@ export function detectWritingIntent(input: string): WritingIntent {
   // ==== 修稿 ====
   // 第 与 数字 之间允许空格（评审覆盖缺口修订：「润色第 2 章」此前退化成 refine(null)）
   // brief 修订：章号可位于动词之前（「把第2章润色一下」），原正则只跟动词后会把「一下」的「一」误当章号
+  // 评审二次修订：数字分支 `章?` → `章`——「润色一下/修改一下/优化一下」不得把「一下」的「一」当章号（refine(1) 误触发）
   const refinePreM = input.match(/第?\s*(\d+|[一二三四五六七八九十]+)\s*章\s*(?:的)?\s*(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)/)
-  const refineM = input.match(/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)(?:第?\s*(\d+|[一二三四五六七八九十]+)\s*章?|这段|这段文字|这一段)?/)
+  const refineM = input.match(/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)(?:第?\s*(\d+|[一二三四五六七八九十]+)\s*章|这段|这段文字|这一段)?/)
   if (/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)/.test(input)) {
     const chapRaw = refinePreM?.[1] ?? refineM?.[1]
     const chap = chapRaw ? parseChapterNum(chapRaw) : null
