@@ -8,9 +8,8 @@ describe('detectWritingIntent 命中表', () => {
   it('创作 5-8 章 → chapter_creation(range)', () => {
     expect(detectWritingIntent('创作 5-8 章')).toEqual({ kind: 'chapter_creation', chapter: { from: 5, to: 8 } })
   })
-  it('写 → ambiguous（缺章号，hint 提示）', () => {
-    const r = detectWritingIntent('帮我写')
-    expect(r.kind).toBe('ambiguous')
+  it('写 → ambiguous（缺章号，hint=chapter；I3 回归：祈使句不被查询护栏误伤）', () => {
+    expect(detectWritingIntent('帮我写')).toEqual({ kind: 'ambiguous', hint: 'chapter' })
   })
   it('润色第2章 → refine(2)', () => {
     expect(detectWritingIntent('把第2章润色一下')).toEqual({ kind: 'refine', chapter: 2 })
@@ -69,5 +68,20 @@ describe('detectWritingIntent 命中表', () => {
   })
   it('「修改一下苏晚晴的角色设定」→ character(苏晚晴, update)（「一下」助词消费，名字正常，A1 评审二轮需求）', () => {
     expect(detectWritingIntent('修改一下苏晚晴的角色设定')).toEqual({ kind: 'character', name: '苏晚晴', action: 'update' })
+  })
+  it('「写作风格是什么」→ none（查询护栏：宽写动词不拦截查询类，I3）', () => {
+    expect(detectWritingIntent('写作风格是什么')).toEqual({ kind: 'none' })
+  })
+  it('「怎么写出更精彩的对话」→ none（疑问句护栏：查询类留给 ReAct，I3）', () => {
+    expect(detectWritingIntent('怎么写出更精彩的对话')).toEqual({ kind: 'none' })
+  })
+  it('「写作手法怎么练」→ none（怎么写/写作形态护栏变体，I3）', () => {
+    expect(detectWritingIntent('写作手法怎么练')).toEqual({ kind: 'none' })
+  })
+  it('「写第3章」→ chapter_creation(3)（带章号先于护栏返回，不受查询护栏影响，I3）', () => {
+    expect(detectWritingIntent('写第3章')).toEqual({ kind: 'chapter_creation', chapter: 3 })
+  })
+  it('「修改 一下角色设定」→ 不 character（空格变体：守卫前瞻容忍前导空格，M1）', () => {
+    expect(detectWritingIntent('修改 一下角色设定')).toEqual({ kind: 'refine', chapter: null })
   })
 })

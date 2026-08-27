@@ -77,10 +77,15 @@ export async function startChapterWorkflow(
   }
   // 仅 review/refine/finalize 可达（generate_draft 从不返回 null——蓝图缺失已在 buildDraftWorkflow 内 throw ERR_NO_BLUEPRINT）
   if (!definition) {
-    throw new WorkflowStartError(
-      'ERR_NO_DRAFT',
-      t('tool.wfNoReviewDraft').replace('{chapter}', String(chapterNumber)),
-    )
+    // 评审修复（I1）：按 workflow 参数化 ERR_NO_DRAFT 文案——意图层（agent-store handleWritingIntent）
+    // 对 ERR_NO_DRAFT 透传 e.message（「润色第3章」无草稿曾收到「第{n}章没有可审稿的草稿」）；
+    // 工具层按 workflow 重映射仍保留（无害，文案一致）
+    const noDraftMsg = workflow === 'refine'
+      ? t('tool.wfNoRefineDraft')
+      : workflow === 'finalize'
+        ? t('tool.wfNoFinalizeDraft')
+        : t('tool.wfNoReviewDraft')
+    throw new WorkflowStartError('ERR_NO_DRAFT', noDraftMsg.replace('{chapter}', String(chapterNumber)))
   }
   const runId = await useWorkflowStore.getState().startWorkflow(definition)
   return { runId, displayName, chapterTag }

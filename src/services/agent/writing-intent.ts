@@ -42,7 +42,9 @@ export function detectWritingIntent(input: string): WritingIntent {
   // 评审二次修订：动词组 `(?:下|一下)?` 消费助词 + 捕获组负向前瞻——名与「角色/人设/设定」后缀间有前缀助词或空名时绝不命中。
   //   前置守护前瞻 (?!下|一下…后缀) 闭合并回溯孔（助词组回溯为空的二次尝试仍会以「一下」开头捕获），
   //   且保留「的」排除（否则贪心捕获吞入后缀导致 name=「苏晚晴的角色」）。
-  const charUpdate = input.match(/(?:修改|更新|调整|改)(?!(?:下|一下)\s*(?:的)?\s*(?:角色|人设|设定))(?:下|一下)?\s*(?!角色|人设|设定)([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
+  // 评审修复（M1）：守卫前瞻内先行 `\s?` 容忍「修改 一下角色设定」空格变体——空格使原前瞻与助词组
+  //   错位，捕获组会以「一下」开头误命 name（实测 name=「一下角色」）。
+  const charUpdate = input.match(/(?:修改|更新|调整|改)(?!\s?(?:下|一下)\s*(?:的)?\s*(?:角色|人设|设定))(?:下|一下)?\s*(?!角色|人设|设定)([^\s，。！？；：、（）《》【】·—""''的]{1,10})\s*(?:的)?(?:角色|人设|设定)/)
   if (charUpdate) return { kind: 'character', name: charUpdate[1].trim(), action: 'update' }
 
   // ==== 大纲/架构 ====
@@ -74,6 +76,13 @@ export function detectWritingIntent(input: string): WritingIntent {
     if (single) {
       const n = parseChapterNum(single[1])
       if (n !== null) return { kind: 'chapter_creation', chapter: n }
+    }
+    // 评审修复（I3）查询护栏：宽「写」动词命中后、ambiguous 返回前——查询/聊天类不预路由
+    //（「写作风格是什么」「怎么写出更精彩的对话」此前被永久拦截为 ambiguous，无 ReAct 兜底）。
+    //   写作/写法/写得/写好/写作风格 形态 或 含疑问词（什么/怎么/如何/？/?）→ 查询类留给 ReAct；
+    //   祈使句「帮我写」不含这些形态 → 仍 ambiguous；带章号「写第3章」已先于护栏返回。
+    if (/(写作|写法|写得|写好|写作风格|怎么写)/.test(input) || /(什么|怎么|如何|？|\?)/.test(input)) {
+      return { kind: 'none' }
     }
     return { kind: 'ambiguous', hint: 'chapter' }
   }

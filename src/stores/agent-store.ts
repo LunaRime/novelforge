@@ -390,13 +390,32 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 全量保持改动前落 ReAct 的行为不变——预路由只对非 slash 输入有增量价值（查询→写工作流零切换）
     const intent = !trimmedContent.startsWith('/') ? detectWritingIntent(trimmedContent) : { kind: 'none' as const }
     let enhancedContent: string | undefined
-    if (intent.kind !== 'none') {
-      const res = await get().handleWritingIntent(intent, trimmedContent)
-      if (res.status === 'handled') return
-      enhancedContent = res.enhancedContent
-      // P0-4：增强后文本同步替换 content——后续 userMsg/标题/RAG/@ 预取/enrichedUserMessage
-      // 全部基于增强后文本执行（与 skill 注入改写 content 的既有手法一致）
-      if (enhancedContent !== undefined) content = enhancedContent
+    try {
+      if (intent.kind !== 'none') {
+        const res = await get().handleWritingIntent(intent, trimmedContent)
+        if (res.status === 'handled') return
+        enhancedContent = res.enhancedContent
+        // P0-4：增强后文本同步替换 content——后续 userMsg/标题/RAG/@ 预取/enrichedUserMessage
+        // 全部基于增强后文本执行（与 skill 注入改写 content 的既有手法一致）
+        if (enhancedContent !== undefined) content = enhancedContent
+      }
+    } catch (error) {
+      // 评审修复（I2）：预路由无兜底——handleWritingIntent 对非 WorkflowStartError 一律 rethrow（真实可达源：
+      // workflow-starter.ts 的 startWorkflow 在 starter try 之外直抛），此前 sendMessage 直接 reject：
+      // 无错误消息、无用户消息、generating 未置位。兜底：注入 `发生异常` 文案（与下方 ReAct try/catch
+      // 的既有形态一致）并 return——不让 sendMessage reject，会话保持可继续对话
+      const errorMsg: AgentMessage = {
+        id: genId(), role: 'assistant',
+        content: t('agent.errorException').replace('{error}', String(error)),
+        createdAt: Date.now(),
+      }
+      set(state => ({
+        conversations: state.conversations.map(c =>
+          c.id === conv.id ? { ...c, messages: [...c.messages, errorMsg], updatedAt: Date.now() } : c
+        ),
+      }))
+      get().persistCurrent(convId)
+      return
     }
     // 未命中继续走原有 ReAct 链路——userMsg 构建处 content 取 enhancedContent ?? content.trim()
 
@@ -816,7 +835,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   handleWritingIntent: async (intent, rawContent) => {
     const conv = get().getActiveConversation()
     if (!conv) return { status: 'none' }
-    const { t } = await import('../shared/locale')
+    // 评审修复（M5）：t 已在模块顶部静态导入——动态 import 冗余（handleWritingIntent 不受影响）
     const { startChapterWorkflow, startBlueprintWorkflow, startArchitectureWorkflow, WorkflowStartError } = await import('../services/workflows/workflow-starter')
 
     // ⚠️ P0-4 修订：**不在此 append 用户消息**——用户消息由 sendMessage 主流程统一构建/append（唯一入口）；
@@ -886,7 +905,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           return { status: 'none', enhancedContent: `${op}：${intent.name}\n\n${rawContent}` }
         }
         case 'ambiguous':
-          appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyGeneric'), createdAt: Date.now() })
+          // 评审修复（M2）：按 hint 映射澄清文案——hint='chapter'（「帮我写」等缺章号写稿祈使）用
+          // intentClarifyChapter（此前该键不可达，用户收到通用模糊句）；character 与其他 hint 用通用澄清
+          appendMsg({
+            id: genId(), role: 'assistant',
+            content: intent.hint === 'character'
+              ? t('agent.intentClarifyGeneric')
+              : intent.hint === 'chapter'
+                ? t('agent.intentClarifyChapter')
+                : t('agent.intentClarifyGeneric'),
+            createdAt: Date.now(),
+          })
           return { status: 'handled' }
         case 'none':
           return { status: 'none' }

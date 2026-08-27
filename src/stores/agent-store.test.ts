@@ -280,18 +280,33 @@ describe('sendMessage 意图预路由', () => {
     expect(useAgentStore.getState().generating).toBe(false)
   })
 
-  it('弱命中：注入澄清消息（不触发工作流）', async () => {
+  it('弱命中 hint=chapter：注入 intentClarifyChapter 文案（M2：clarifyChapter 键可达——「帮我写」不再收通用模糊句）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
     mockDetect.mockReturnValue({ kind: 'ambiguous', hint: 'chapter' })
 
-    await useAgentStore.getState().sendMessage('写一下')
+    await useAgentStore.getState().sendMessage('帮我写')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toBe(t('agent.intentClarifyChapter'))
+    expect(mockStartChapter).not.toHaveBeenCalled()
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('弱命中 hint=character：仍为通用澄清文案（M2 映射：character 不回退 clarifyChapter）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'ambiguous', hint: 'character' })
+
+    await useAgentStore.getState().sendMessage('创建角色')
 
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.content).toBe(t('agent.intentClarifyGeneric'))
-    expect(mockStartChapter).not.toHaveBeenCalled()
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
   })
@@ -372,6 +387,41 @@ describe('sendMessage 意图预路由', () => {
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.content).toBe(blueprintMissingMsg)
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('refine 意图 ERR_NO_DRAFT：助理消息为 wfNoRefineDraft 修稿语义（I1：e.message 透传不再报「审稿」）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'refine', chapter: 3 })
+    const refineNoDraftMsg = t('tool.wfNoRefineDraft').replace('{chapter}', '3')
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_NO_DRAFT', refineNoDraftMsg))
+
+    await useAgentStore.getState().sendMessage('润色第3章')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toBe(refineNoDraftMsg)
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('预路由异常兜底：非 WorkflowStartError（startWorkflow 直抛）→ 注入异常消息不 reject、无用户消息（I2）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    mockStartChapter.mockRejectedValue(new Error('startWorkflow 直抛：工作流实例内部异常'))
+
+    // 此前 sendMessage 直接 reject（无错误消息、无用户消息、generating 未置位）——兜底后正常 resolve
+    await expect(useAgentStore.getState().sendMessage('写第3章')).resolves.toBeUndefined()
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toBe(t('agent.errorException').replace('{error}', 'Error: startWorkflow 直抛：工作流实例内部异常'))
+    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(0)
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
   })

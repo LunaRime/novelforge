@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { WorkflowStartError, startChapterWorkflow } from './workflow-starter'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { t } from '../../shared/locale'
 
 // ---- ipc 通道路由（window.velaAPI.invoke——参照 agent-store.test.ts:10-28/:59 模式）----
 // 默认全部为空/缺失；各用例按需覆盖。未路由通道（如 db:post-process-get-latest-run）返回 null——
@@ -83,6 +84,23 @@ describe('workflow-starter', () => {
     const err = await startChapterWorkflow('review', 1).catch(e => e)
     expect(err).toBeInstanceOf(WorkflowStartError)
     expect(err).toMatchObject({ code: 'ERR_NO_DRAFT' })
+    expect(err.message).toBe(t('tool.wfNoReviewDraft').replace('{chapter}', '1'))
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+  })
+
+  it('refine 无草稿 → ERR_NO_DRAFT message 为 wfNoRefineDraft 文案（I1：按 workflow 参数化——意图层透传 e.message 不再报「审稿」）', async () => {
+    const err = await startChapterWorkflow('refine', 1).catch(e => e)
+    expect(err).toBeInstanceOf(WorkflowStartError)
+    expect(err).toMatchObject({ code: 'ERR_NO_DRAFT' })
+    expect(err.message).toBe(t('tool.wfNoRefineDraft').replace('{chapter}', '1'))
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+  })
+
+  it('finalize 无草稿 → ERR_NO_DRAFT message 为 wfNoFinalizeDraft 文案（I1 三分支同构回归）', async () => {
+    const err = await startChapterWorkflow('finalize', 1).catch(e => e)
+    expect(err).toBeInstanceOf(WorkflowStartError)
+    expect(err).toMatchObject({ code: 'ERR_NO_DRAFT' })
+    expect(err.message).toBe(t('tool.wfNoFinalizeDraft').replace('{chapter}', '1'))
     expect(startWorkflowMock).not.toHaveBeenCalled()
   })
 
