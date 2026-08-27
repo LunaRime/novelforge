@@ -24,11 +24,11 @@ beforeEach(() => {
   mockInvoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
     switch (channel) {
       case 'config:get-vela-home':
-        return 'C:/Users/test/.vela'
+        return 'C:/Users/test/.novelforge'
       case 'fs:check-exists':
         return String(args[0]).includes('prompts')
       case 'fs:list-dir':
-        return [{ name: 'premise.json', path: 'C:/Users/test/.vela/prompts/premise.json', isDir: false }]
+        return [{ name: 'premise.json', path: 'C:/Users/test/.novelforge/prompts/premise.json', isDir: false }]
       case 'fs:read-file':
         return { success: true, content: OLD_CUSTOM }
       case 'fs:write-file':
@@ -47,7 +47,7 @@ async function loadModule() {
 }
 
 describe('loadCustomPrompts（Issue #19 加载链路）', () => {
-  it('从 ~/.vela/prompts 加载 JSON 覆盖，getPromptTemplate 返回自定义内容', async () => {
+  it('从 ~/.novelforge/prompts 加载 JSON 覆盖，getPromptTemplate 返回自定义内容', async () => {
     const mod = await loadModule()
     await mod.loadCustomPrompts()
     const template = mod.getPromptTemplate('premise')

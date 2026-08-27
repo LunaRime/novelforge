@@ -71,7 +71,7 @@ export async function collectAuditContext(chapterNumber: number): Promise<AuditC
     }
   } catch { /* 忽略 */ }
 
-  // 4. 项目级水文白名单（{project}/.vela/audit-whitelist.json）
+  // 4. 项目级水文白名单（{project}/.novelforge/audit-whitelist.json）
   try {
     const { useProjectStore } = await import('../../stores/project-store')
     const project = useProjectStore.getState().currentProject

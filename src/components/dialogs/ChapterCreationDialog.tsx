@@ -69,7 +69,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
     return unsub
   }, [isOpen, onClose])
 
-  /** 从项目本地 .vela/chapter_creation_log.json 读取上次参数 */
+  /** 从项目本地 .novelforge/chapter_creation_log.json 读取上次参数 */
   const loadLastParams = useCallback(async () => {
     if (!currentProject) return
     try {

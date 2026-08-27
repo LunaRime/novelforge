@@ -246,14 +246,14 @@ export const PROMPT_VAR_KEYS: Record<string, TextKey> = {
 }
 
 
-/** 全局自定义覆盖 Prompt 缓存（~/.vela/prompts/） */
+/** 全局自定义覆盖 Prompt 缓存（~/.novelforge/prompts/） */
 const customPrompts: Map<string, PromptTemplate> = new Map()
 let customPromptsLoaded = false
 
-/** 项目级自定义覆盖 Prompt 缓存（{project}/.vela/prompts/） */
+/** 项目级自定义覆盖 Prompt 缓存（{project}/.novelforge/prompts/） */
 const projectCustomPrompts: Map<string, PromptTemplate> = new Map()
 
-/** 加载全局自定义 Prompt 覆盖（从 ~/.vela/prompts/ 目录） */
+/** 加载全局自定义 Prompt 覆盖（从 ~/.novelforge/prompts/ 目录） */
 export async function loadCustomPrompts(): Promise<void> {
   // 幂等：已加载/已尝试过则跳过（App 启动 + PromptSettings 挂载双调用点防重复加载）
   if (customPromptsLoaded) return
@@ -273,7 +273,7 @@ export async function loadCustomPrompts(): Promise<void> {
   }
 }
 
-/** 加载项目级自定义 Prompt 覆盖（从 {projectPath}/.vela/prompts/ 目录） */
+/** 加载项目级自定义 Prompt 覆盖（从 {projectPath}/.novelforge/prompts/ 目录） */
 export async function loadProjectCustomPrompts(projectPath: string): Promise<void> {
   try {
     projectCustomPrompts.clear()
@@ -363,7 +363,7 @@ export function getAllPromptTemplates(): PromptTemplate[] {
   return all.map(t => localizeTemplate(t))
 }
 
-/** 保存全局自定义 Prompt 到 ~/.vela/prompts/ */
+/** 保存全局自定义 Prompt 到 ~/.novelforge/prompts/ */
 export async function saveCustomPrompt(template: PromptTemplate): Promise<boolean> {
   try {
     const { ipc } = await import('./ipc-client')
@@ -385,7 +385,7 @@ export async function saveCustomPrompt(template: PromptTemplate): Promise<boolea
   }
 }
 
-/** 保存项目级自定义 Prompt 到 {projectPath}/.vela/prompts/ */
+/** 保存项目级自定义 Prompt 到 {projectPath}/.novelforge/prompts/ */
 export async function saveProjectCustomPrompt(projectPath: string, template: PromptTemplate): Promise<boolean> {
   try {
     const { ipc } = await import('./ipc-client')
