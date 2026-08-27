@@ -386,7 +386,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const convId = conv.id
 
     // ===== 意图预路由（阶段 A）：/命令与@未命中后，本地意图识别 → 确定性触发 or 澄清 or 兜底 =====
-    const intent = detectWritingIntent(trimmedContent)
+    // 守卫：/ 前缀输入（/status 穿透分支、未知/自定义 skill 命令改写分支——皆未 return 到达此处）
+    // 全量保持改动前落 ReAct 的行为不变——预路由只对非 slash 输入有增量价值（查询→写工作流零切换）
+    const intent = !trimmedContent.startsWith('/') ? detectWritingIntent(trimmedContent) : { kind: 'none' as const }
     let enhancedContent: string | undefined
     if (intent.kind !== 'none') {
       const res = await get().handleWritingIntent(intent, trimmedContent)

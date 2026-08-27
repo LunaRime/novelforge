@@ -326,6 +326,24 @@ describe('sendMessage 意图预路由', () => {
     expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('看看最近有哪些改动')
   })
 
+  it('`/status 写第三章` 不被预路由抢占：走原 ReAct 链路（无 workflow_started 产物）', async () => {
+    // 评审确认缺陷：/status 分支故意 break 穿透（不拦截，作为普通消息让 Agent 处理）——
+    // 若预路由对 / 前缀输入生效，读-查询语义会被写工作流吞掉（LLM 费用 + DB 写入 + workflow 状态）
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    // 即便 detectWritingIntent 对「写第三章」返回强命中，/ 前缀守卫也必须短路
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    mockStartChapter.mockResolvedValue({ runId: 'run-1', displayName: '写稿', chapterTag: '第3章' })
+
+    await useAgentStore.getState().sendMessage('/status 写第三章')
+
+    expect(mockDetect).not.toHaveBeenCalled()
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
+    expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('/status 写第三章')
+  })
+
   it('character 命中：userMsg.content 为增强内容（原文不重复出现），走 ReAct（P0-4 回归）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
