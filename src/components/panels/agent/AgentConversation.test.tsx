@@ -11,9 +11,10 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import AgentConversation from './AgentConversation'
-import { useAgentStore } from '../../../stores/agent-store'
+import { useAgentStore, type AgentConversation as AgentConv } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
+import { t, type TextKey } from '../../../shared/locale'
 
 // jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
 beforeAll(() => {
@@ -210,6 +211,82 @@ describe('EmptyState 历史条数配置', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 30)) })
     expect(recentRowCount(container)).toBe(3) // 读取失败 → 默认 3 条
     expect(container.textContent).toContain('查看全部对话') // 4 > 3 → 「加载更多」仍出现
+    act(() => { root.unmount() })
+  })
+})
+
+describe('AgentHistoryPanel fork 层级', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async () => null),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+    useAgentStore.setState({ conversations: [], activeConversationId: null, showHistory: false, memoryView: false })
+  })
+
+  /** 构造根会话 R + fork 子会话 C（parentId=R, forkMessageId='m1'），并打开历史面板 */
+  const makeForkState = () => {
+    const now = Date.now()
+    const rootConv: AgentConv = {
+      id: 'conv-root',
+      title: '父会话A',
+      messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: now }],
+      createdAt: now,
+      updatedAt: now,
+      mode: 'balanced',
+      modelId: null,
+    }
+    const childConv: AgentConv = {
+      ...rootConv,
+      id: 'conv-fork',
+      title: '子会话B',
+      createdAt: now + 1,
+      updatedAt: now + 1, // fork 后创建 → 排序更靠前
+      parentId: rootConv.id,
+      forkMessageId: 'm1',
+    }
+    useAgentStore.setState({ conversations: [childConv, rootConv], activeConversationId: null, showHistory: true })
+    return { rootConv, childConv }
+  }
+
+  /** RecentConversationItem 外层行（外层按钮 token 恰为 group；内层删除按钮为 group-hover:* 不算） */
+  const historyRows = (container: HTMLElement) =>
+    Array.from(container.querySelectorAll('button'))
+      .filter(b => b.className.split(' ').includes('group'))
+
+  it('fork 子会话缩进显示 + GitFork 图标 + 父会话标注', () => {
+    const { rootConv, childConv } = makeForkState()
+    const { container, root } = render(<AgentConversation />)
+    const rows = historyRows(container)
+    expect(rows).toHaveLength(2)
+    const rowC = rows.find(r => r.textContent?.includes(childConv.title))!
+    expect(rowC).toBeTruthy()
+    // 缩进：固定 pl-5（C1 教训——固定缩进无布局跳动）
+    expect(rowC.className).toContain('pl-5')
+    // 分支图标：lucide-react 1.8.0 无 ForkRight（B2 实测核验）→ GitFork
+    expect(rowC.querySelector('svg.lucide-git-fork')).toBeTruthy()
+    // 父会话标注：t('agent.forkedFrom') 键 B4 才加——缺失键回退键名字面量（B1/B2 先例）。
+    // 与组件同源计算期望值 → B4 键落地后断言自动同步为「来自『父会话A』」。
+    const expectedLabel = t('agent.forkedFrom' as TextKey).replace('{title}', rootConv.title)
+    expect(rowC.textContent).toContain(expectedLabel)
+    act(() => { root.unmount() })
+  })
+
+  it('根会话无标注', () => {
+    const { rootConv } = makeForkState()
+    const { container, root } = render(<AgentConversation />)
+    const rowR = historyRows(container).find(r => r.textContent?.includes(rootConv.title))!
+    expect(rowR).toBeTruthy()
+    // 根会话：无缩进、无分支图标、无标注文本
+    expect(rowR.className).not.toContain('pl-5')
+    expect(rowR.querySelector('svg.lucide-git-fork')).toBeNull()
+    expect(rowR.textContent).not.toContain('agent.forkedFrom')
+    expect(rowR.textContent).not.toContain('来自')
     act(() => { root.unmount() })
   })
 })

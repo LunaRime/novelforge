@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
-import { Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { GitFork, Trash2 } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -384,6 +384,13 @@ function AgentHistoryPanel() {
   // 按更新时间倒序排列
   const sorted = [...conversations].sort((a, b) => b.updatedAt - a.updatedAt)
 
+  // title 查找表：fork 子会话标注父会话标题（父会话已被删除时 get 返回 undefined → 不标注，静默降级）
+  const titleById = useMemo(() => {
+    const m = new Map<string, string>()
+    for (const c of sorted) m.set(c.id, c.title)
+    return m
+  }, [sorted])
+
   return (
     <div className="flex flex-col h-full">
       {/* 面板标题 */}
@@ -417,6 +424,7 @@ function AgentHistoryPanel() {
               key={conv.id}
               title={conv.title}
               updatedAt={conv.updatedAt}
+              parentTitle={conv.parentId ? titleById.get(conv.parentId) : undefined}
               isActive={conv.id === activeConversationId}
               onClick={() => selectConversation(conv.id)}
               onDelete={() => deleteConversation(conv.id)}
@@ -434,12 +442,15 @@ function RecentConversationItem({
   title,
   updatedAt,
   isActive,
+  parentTitle,
   onClick,
   onDelete,
 }: {
   title: string
   updatedAt: number
   isActive?: boolean
+  /** 父会话标题（有值 = fork 子会话——缩进 + 分支图标 + 标注） */
+  parentTitle?: string
   onClick: () => void
   onDelete: () => void
 }) {
@@ -447,7 +458,7 @@ function RecentConversationItem({
   return (
     <button
       onClick={onClick}
-      className="group w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors"
+      className={`group w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors${parentTitle ? ' pl-5' : ''}`}
       style={{ backgroundColor: isActive ? 'var(--color-hover)' : 'transparent' }}
       onMouseEnter={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)' }}
       onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
@@ -460,6 +471,15 @@ function RecentConversationItem({
         >
           {title}
         </div>
+        {/* fork 子会话标注：分支图标 + 「来自『父标题』」（固定 pl-5 缩进，无布局跳动） */}
+        {parentTitle && (
+          <div className="flex items-center gap-1 min-w-0">
+            <GitFork size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+            <span className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
+              {t('agent.forkedFrom' as TextKey).replace('{title}', parentTitle)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 右侧：固定宽度容器，时间与删除按钮绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
