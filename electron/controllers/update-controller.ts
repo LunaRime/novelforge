@@ -135,15 +135,16 @@ function cleanUserData(): { success: boolean; error?: string } {
   try {
     const legacyHome = path.join(os.homedir(), '.vela')
     const targets = [VELA_HOME, legacyHome]
-    let cleaned = false
+    const cleanedDirs: string[] = []
     for (const dir of targets) {
       if (fs.existsSync(dir)) {
         fs.rmSync(dir, { recursive: true, force: true })
-        cleaned = true
+        cleanedDirs.push(dir)
       }
     }
-    if (cleaned) {
-      logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', VELA_HOME))
+    if (cleanedDirs.length > 0) {
+      // 记录实际清理的路径（迁移失败残留时可能只清理了旧 ~/.vela，固定 {path}=VELA_HOME 会失真）
+      logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', cleanedDirs.join(', ')))
     }
     return { success: true } // 目录不存在也算成功
   } catch (err) {

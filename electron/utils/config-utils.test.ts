@@ -13,9 +13,9 @@ vi.mock('node:os', () => ({
   default: { homedir: () => fakeHome },
 }))
 
-// config-utils 模块级计算 VELA_HOME = path.join(os.homedir(), '.novelforge)——
+// config-utils 模块级计算 VELA_HOME = path.join(os.homedir(), '.novelforge')——
 // 静态 import 在 vi.mock 生效后求值，拿到的是 mock home
-import { VELA_HOME, GLOBAL_CONFIG_PATH, migrateLegacyDirs, getProjectVelaDir } from './config-utils'
+import { VELA_HOME, GLOBAL_CONFIG_PATH, migrateLegacyDirs, getProjectVelaDir, readJsonFile } from './config-utils'
 
 const legacyHome = path.join(fakeHome, '.vela')
 
@@ -136,6 +136,52 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
     expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
   })
 
+  it('迁移重试：空建 skills/templates/agent-archive（应用面板列表或归档自动创建）→ auto → 清理后真实 rename 成功', async () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
+    fs.writeFileSync(path.join(legacyHome, 'old-marker.txt'), 'old')
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    // 第一次调用（本启动）：rename 瞬时失败（EBUSY）
+    const renameSpy = vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('EBUSY') })
+    await migrateLegacyDirs()
+    expect(renameSpy).toHaveBeenCalledTimes(1)
+    expect(errorSpy).toHaveBeenCalled()
+    expect(fs.existsSync(legacyHome)).toBe(true)
+
+    // 模拟失败会话中的运行时副产物：skills:list 空建 skills/、templates:list 空建 templates/、
+    // agent-archive-list 空建 agent-archive/（仍无 config.json 哨兵）
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(path.join(VELA_HOME, 'skills'), { recursive: true })
+    fs.mkdirSync(path.join(VELA_HOME, 'templates'), { recursive: true })
+    fs.mkdirSync(path.join(VELA_HOME, 'agent-archive'), { recursive: true })
+    expect(fs.existsSync(GLOBAL_CONFIG_PATH)).toBe(false)
+
+    // 第二次调用（下次启动）：空建目录均在 auto 形态白名单（应用自有空目录）→ 清理 → 真实 rename 成功
+    await migrateLegacyDirs()
+
+    expect(renameSpy).toHaveBeenCalledTimes(2)
+    expect(fs.existsSync(legacyHome)).toBe(false)
+    expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
+    expect(fs.readFileSync(path.join(VELA_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
+  })
+
+  it('安全边界：skills/ 含用户导入技能（非空）→ 判定非 auto → 绝不删除，双读兜底', async () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(path.join(VELA_HOME, 'skills'), { recursive: true })
+    fs.writeFileSync(path.join(VELA_HOME, 'skills', 'my-skill.md'), 'imported skill') // 用户导入的技能
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await migrateLegacyDirs()
+
+    // 非空 skills → 非 auto（应用副产物判定失败）→ 绝不删除 → rename 失败静默回退
+    expect(fs.readFileSync(path.join(VELA_HOME, 'skills', 'my-skill.md'), 'utf-8')).toBe('imported skill')
+    expect(fs.existsSync(legacyHome)).toBe(true)
+    expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
+  })
+
   it('安全边界：logs 含用户文件（非 .log，如 memo.txt）→ 判定非 auto → 不删，双读兜底', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
@@ -149,6 +195,38 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
     expect(fs.readFileSync(path.join(VELA_HOME, 'logs', 'memo.txt'), 'utf-8')).toBe('user memo')
     expect(fs.existsSync(legacyHome)).toBe(true)
     expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
+  })
+})
+
+describe('readJsonFile 全局配置旧路径回读（迁移失败残留兜底）', () => {
+  it('新路径文件缺失 + ~/.vela 旧文件存在（迁移失败）→ 回读旧文件', () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
+
+    expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ theme: 'dark' })
+  })
+
+  it('新路径存在 → 读新的（不回读旧）', () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(path.join(VELA_HOME, 'config.json'), '{"theme":"light"}')
+
+    expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ theme: 'light' })
+  })
+
+  it('全新安装（~/.vela 无配置文件）→ 无回读，返回 fallback', () => {
+    expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ fallback: true })
+  })
+
+  it('新路径存在但 JSON 损坏 → 不回退旧路径（仅对「文件不存在」回退，保持现状）', () => {
+    fs.mkdirSync(legacyHome, { recursive: true })
+    fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(path.join(VELA_HOME, 'config.json'), '{broken')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ fallback: true })
   })
 })
 

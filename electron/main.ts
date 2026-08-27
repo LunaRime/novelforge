@@ -264,7 +264,9 @@ app.on('before-quit', () => {
 })
 
 app.whenReady().then(async () => {
-  // 全局目录迁移：~/.vela → ~/.novelforge（必须在 logger 首写 VELA_HOME 之前，防新目录先建导致跳过迁移）
+  // 全局目录迁移：~/.vela → ~/.novelforge（config.json 哨兵判定 + auto 形态新目录清理重试——
+  // 失败静默、旧路径兜底读取；在 logger/ensureVelaHome 首次写入新目录之前执行，
+  // 避免新目录固化出非 auto 形态后迁移永久搁浅）
   await migrateLegacyDirs()
   // 双环境日志：dev 模式 / 内测版（-alpha.N 或历史日期式）→ 开发日志（DEBUG 全量）；
   // 公测版（-beta.N）/ 正式版 → 发布日志（INFO 起）
