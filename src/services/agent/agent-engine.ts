@@ -158,6 +158,9 @@ export async function runAgentLoop(
 
     // 解析 LLM 回复：分离文本和 tool_call
     const { textParts, toolCalls, parseErrors } = parseToolCalls(llmResponse)
+    // 部分失败场景的诊断反馈（每轮重置；仅部分成功 + 部分解析失败时被赋值，
+    // 延迟到 observation 组装时注入，避免与全失败路径重复 push）
+    let parseFeedbackForObservation: string | undefined
 
     // 输出文本部分（清理可能残留的 tool_call/tool_result 标记）
     let textContent = textParts.join('')
@@ -174,17 +177,23 @@ export async function runAgentLoop(
       fullAssistantText += textContent
     }
 
-    // ★ AI 自检：如果有解析失败但没有任何成功的 tool_call，
-    //    将详细错误注入为 observation，让 LLM 自我修正
-    if (parseErrors.length > 0 && toolCalls.length === 0) {
+    // ★ 工具调用解析失败诊断（逐条反馈，不静默）：
+    //    部分成功 + 部分解析失败时，失败项也注入 observation，让 LLM 知道哪些调用没被理解
+    if (parseErrors.length > 0) {
       const errorFeedback = formatParseErrorsForLLM(parseErrors)
-      messages.push({ role: 'assistant', content: llmResponse })
-      messages.push({
-        role: 'user',
-        content: t('engine.parseDiagnosis').replace('{feedback}', errorFeedback),
-      })
-      console.warn('[AgentEngine] 注入解析错误反馈给 LLM，触发自我修正')
-      continue
+      if (toolCalls.length === 0) {
+        // 全失败：独立 user 消息触发自我修正（既有行为）
+        messages.push({ role: 'assistant', content: llmResponse })
+        messages.push({
+          role: 'user',
+          content: t('engine.parseDiagnosis').replace('{feedback}', errorFeedback),
+        })
+        console.warn('[AgentEngine] 注入解析错误反馈给 LLM，触发自我修正')
+        continue
+      }
+      // 部分失败：解析诊断追加到本轮 observation 头部（toolCalls 继续正常执行）
+      // 诊断段延迟到 observation 组装时注入——此处仅保存，避免重复 push
+      parseFeedbackForObservation = errorFeedback
     }
 
     // 如果没有 tool_call，循环结束
@@ -293,7 +302,10 @@ export async function runAgentLoop(
 
     // 将所有 tool 结果作为 user role 的 observation 注入
     // 加上明确提示，防止 LLM 误以为这是用户新发言
-    const observation = `${t('engine.observationHeader')}\n\n${observationParts.join('\n\n')}\n\n${t('engine.observationFooter')}`
+    const observationPartsWithDiagnosis = parseFeedbackForObservation
+      ? [`${t('engine.parsePartialDiagnosis')}\n${parseFeedbackForObservation}`, ...observationParts]
+      : observationParts
+    const observation = `${t('engine.observationHeader')}\n\n${observationPartsWithDiagnosis.join('\n\n')}\n\n${t('engine.observationFooter')}`
     messages.push({ role: 'user', content: observation })
   }
 
