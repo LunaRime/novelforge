@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { t, type TextKey } from '../shared/locale'
+import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
@@ -832,7 +832,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     const makeStartedMsg = (displayName: string, chapterTag: string): AgentMessage => ({
       id: genId(), role: 'assistant',
-      content: t('agent.intentStarted' as TextKey).replace('{name}', displayName).replace('{chapter}', chapterTag),
+      content: t('agent.intentStarted').replace('{name}', displayName).replace('{chapter}', chapterTag),
       createdAt: Date.now(),
       artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}`.trim() }],
     })
@@ -842,7 +842,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         case 'chapter_creation': {
           const chapter = intent.chapter
           if (chapter === null) {  // 「写」无章号
-            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyChapter' as TextKey), createdAt: Date.now() })
+            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyChapter'), createdAt: Date.now() })
             return { status: 'handled' }
           }
           if (typeof chapter === 'object') {
@@ -860,7 +860,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         case 'refine': {
           const chap = intent.chapter
           if (chap === null) {  // 无定位 → 澄清
-            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyRefine' as TextKey), createdAt: Date.now() })
+            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyRefine'), createdAt: Date.now() })
             return { status: 'handled' }
           }
           const r = await startChapterWorkflow('refine', chap)
@@ -873,7 +873,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             : await startArchitectureWorkflow()
           appendMsg({
             id: genId(), role: 'assistant',
-            content: t('agent.intentStartedNoChapter' as TextKey).replace('{name}', r.displayName),
+            content: t('agent.intentStartedNoChapter').replace('{name}', r.displayName),
             createdAt: Date.now(),
             artifacts: [{ type: 'workflow_started', name: r.displayName }],
           })
@@ -882,11 +882,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         case 'character': {
           // v1：角色无现成工作流 → 参数提取 + 增强内容返回主流程（P0-4：不 append 任何消息，
           // 主流程在 userMsg 构建时替换 content——用户历史中为增强后的完整请求，原文仅出现 1 次）
-          const op = intent.action === 'create' ? t('agent.intentCharCreate' as TextKey) : t('agent.intentCharUpdate' as TextKey)
+          const op = intent.action === 'create' ? t('agent.intentCharCreate') : t('agent.intentCharUpdate')
           return { status: 'none', enhancedContent: `${op}：${intent.name}\n\n${rawContent}` }
         }
         case 'ambiguous':
-          appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyGeneric' as TextKey), createdAt: Date.now() })
+          appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyGeneric'), createdAt: Date.now() })
           return { status: 'handled' }
         case 'none':
           return { status: 'none' }
@@ -895,7 +895,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       if (e instanceof WorkflowStartError) {
         // P0-3：ERR_NO_BLUEPRINT 用 e.message（buildDraftWorkflow 内已带 wfBlueprintDataMissing 文案，归因精准）；
         // ERR_GUARD 用意图层文案
-        const msg = e.code === 'ERR_GUARD' ? t('agent.intentGuardFail' as TextKey) : e.message
+        const msg = e.code === 'ERR_GUARD' ? t('agent.intentGuardFail') : e.message
         appendMsg({ id: genId(), role: 'assistant', content: msg, createdAt: Date.now() })
         return { status: 'handled' }
       }

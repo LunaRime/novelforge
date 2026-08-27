@@ -5,10 +5,12 @@ import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
-import { startChapterWorkflow } from '../services/workflows/workflow-starter'
+import { startChapterWorkflow, WorkflowStartError } from '../services/workflows/workflow-starter'
 import { runAgentLoop } from '../services/agent/agent-engine'
+import { t } from '../shared/locale'
 
-// ===== 意图预路由 mock（A3）：writing-intent / workflow-starter / agent-engine / locale =====
+// ===== 意图预路由 mock（A3）：writing-intent / workflow-starter / agent-engine =====
+// locale 不 mock（A4 起真实键已齐备）——意图层断言直接用真实 t() 文案
 
 vi.mock('../services/agent/writing-intent', () => ({
   // 默认未命中（与真实 detectWritingIntent 对不含写稿动词的输入行为一致）——既有用例不受影响
@@ -32,26 +34,6 @@ vi.mock('../services/agent/agent-engine', async (importOriginal) => {
     // ReAct 桩：被调用即抛错——sendMessage 的 catch 会复位 generating（与既有用例的终止语义一致），
     // 测试通过「是否被调用」区分预路由命中/未命中
     runAgentLoop: vi.fn(async () => { throw new Error('agent-engine stub: ReAct not implemented') }),
-  }
-})
-
-vi.mock('../shared/locale', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../shared/locale')>()
-  // A4 将补齐 agent.intent* 键（本任务不新增键）——此处用 stub 文案驱动意图层断言；
-  // 其余键回退真实翻译，避免影响既有用例
-  const overrides: Record<string, string> = {
-    'agent.intentStarted': '已开始：{name} {chapter}',
-    'agent.intentStartedNoChapter': '已开始：{name}',
-    'agent.intentClarifyChapter': '请明确要写的章节',
-    'agent.intentClarifyRefine': '请明确要润色的章节',
-    'agent.intentClarifyGeneric': '请明确目标任务',
-    'agent.intentGuardFail': '工作流启动失败：前置条件不满足',
-    'agent.intentCharCreate': '创建角色',
-    'agent.intentCharUpdate': '更新角色',
-  }
-  return {
-    ...actual,
-    t: (key: string) => overrides[key] ?? actual.t(key as never),
   }
 })
 
@@ -308,7 +290,7 @@ describe('sendMessage 意图预路由', () => {
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
-    expect(last.content).toContain('请明确')
+    expect(last.content).toBe(t('agent.intentClarifyGeneric'))
     expect(mockStartChapter).not.toHaveBeenCalled()
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
@@ -358,6 +340,39 @@ describe('sendMessage 意图预路由', () => {
     expect(userMsgs[0].content).toBe('创建角色：苏晚晴\n\n创建角色苏晚晴')
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
     expect(mockRunAgentLoop.mock.calls[0][2]).toBe('创建角色：苏晚晴\n\n创建角色苏晚晴')
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('工作流启动失败 ERR_GUARD：注入 intentGuardFail 文案（不做 ReAct 兜底）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', '前置条件失败（guard 明细）'))
+
+    await useAgentStore.getState().sendMessage('写第3章')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toBe(t('agent.intentGuardFail'))
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('工作流启动失败 ERR_NO_BLUEPRINT：透传 e.message（蓝图缺失文案归因）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    const blueprintMissingMsg = '未找到第3章的蓝图数据，请先生成章节蓝图（e.message 透传）'
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_NO_BLUEPRINT', blueprintMissingMsg))
+
+    await useAgentStore.getState().sendMessage('写第3章')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toBe(blueprintMissingMsg)
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
   })
 })
