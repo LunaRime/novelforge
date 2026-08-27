@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { t } from '../shared/locale'
+import { t, type TextKey } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
@@ -40,6 +40,13 @@ export interface AgentMessage {
   artifacts?: ToolArtifact[]
 }
 
+/** fork/rewind 分支：rewind 归档（可恢复） */
+export interface RewoundBranch {
+  messageId: string
+  messages: AgentMessage[]
+  rewoundAt: number
+}
+
 /** 单个会话 */
 export interface AgentConversation {
   id: string
@@ -61,6 +68,12 @@ export interface AgentConversation {
   /** 创建时项目快照（仅展示与恢复提示，P0 不做按快照注入） */
   projectPath?: string
   projectName?: string
+  /** fork 自哪个会话（无此字段为根会话） */
+  parentId?: string
+  /** fork 起点消息 id（该消息及之前的历史已复制进新会话） */
+  forkMessageId?: string
+  /** rewind 归档：被截断消息，可 restoreRewound 恢复 */
+  rewound?: RewoundBranch[]
 }
 
 // ===== Store 状态接口 =====
@@ -122,6 +135,15 @@ interface AgentState {
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
   /** 启动恢复：扫描 ~/.vela/agent-archive 重建会话列表（loadSeq 防竞态） */
   restoreArchives: () => Promise<void>
+  /** 从指定消息 fork 新会话：复制到起点（含）的历史（过滤 system），新会话立即可用（自动激活）；
+   *  返回新会话 id；无活跃会话或 messageId 无效返回 null */
+  forkFromMessage: (messageId: string) => string | null
+  /** 回退到指定消息（截断到起点含，被截断消息入 rewound 归档可恢复）；
+   *  返回是否成功；无活跃会话或 messageId 无效返回 false */
+  rewindToMessage: (messageId: string) => boolean
+  /** 恢复第 entryIndex 个 rewind 归档：归档消息 append 回 messages（rewind 可逆）；
+   *  返回是否成功；无归档或索引无效返回 false */
+  restoreRewound: (entryIndex: number) => boolean
   /** 持久化会话（防抖 500ms，fire-and-forget）；convId 缺省取当前活跃会话 */
   persistCurrent: (convId?: string) => Promise<void>
 }
@@ -993,6 +1015,71 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     } catch {
       // 恢复失败静默（首次启动无归档目录属正常）
     }
+  },
+
+  forkFromMessage: (messageId) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return null
+    const idx = conv.messages.findIndex(m => m.id === messageId)
+    if (idx < 0) return null
+    // 复制到起点（含）——system 消息显式过滤（评审注意点已核验：生成链路独立构建 system——
+    //   buildAgentSystemPromptAsync agent-store:445 每次生成重建 + historyMessages 过滤 role!=='system'（:561），
+    //   过滤不影响 fork 后新会话生成；此处过滤只为保持会话数据干净）
+    const forkMsgs = conv.messages
+      .slice(0, idx + 1)
+      .filter(m => m.role !== 'system')
+      .map(m => ({ ...m }))
+    const newConv: AgentConversation = {
+      ...conv,
+      id: genId(),
+      title: `${conv.title}${t('agent.forkSuffix' as TextKey)}`,
+      messages: forkMsgs,
+      parentId: conv.id,
+      forkMessageId: messageId,
+      // rewound 不复制（新会话无归档）
+      rewound: undefined,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    set(s => ({
+      conversations: [...s.conversations, newConv],
+      activeConversationId: newConv.id,
+    }))
+    get().persistCurrent(newConv.id)
+    return newConv.id
+  },
+
+  rewindToMessage: (messageId) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return false
+    const idx = conv.messages.findIndex(m => m.id === messageId)
+    if (idx < 0) return false
+    const truncated = conv.messages.slice(idx + 1)
+    const entry: RewoundBranch = { messageId, messages: truncated, rewoundAt: Date.now() }
+    set(s => ({
+      conversations: s.conversations.map(c =>
+        c.id === conv.id
+          ? { ...c, messages: c.messages.slice(0, idx + 1), rewound: [...(c.rewound ?? []), entry] }
+          : c
+      ),
+    }))
+    get().persistCurrent(conv.id)
+    return true
+  },
+
+  restoreRewound: (entryIndex) => {
+    const conv = get().getActiveConversation()
+    if (!conv || !conv.rewound || entryIndex < 0 || entryIndex >= conv.rewound.length) return false
+    const entry = conv.rewound[entryIndex]
+    set(s => ({
+      conversations: s.conversations.map(c =>
+        c.id === conv.id
+          ? { ...c, messages: [...c.messages, ...entry.messages], rewound: c.rewound?.filter((_, i) => i !== entryIndex) }
+          : c
+      ),
+    }))
+    get().persistCurrent(conv.id)
+    return true
   },
 
   persistCurrent: async (convId?: string) => {

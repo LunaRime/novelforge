@@ -7,7 +7,9 @@ import { readFileTool, clearReadState } from '../services/agent/tools/read-file.
 import { detectWritingIntent } from '../services/agent/writing-intent'
 import { startChapterWorkflow, WorkflowStartError } from '../services/workflows/workflow-starter'
 import { runAgentLoop } from '../services/agent/agent-engine'
+import { serializeArchive, parseArchive } from '../services/agent/archive-codec'
 import { t } from '../shared/locale'
+import type { AgentConversation } from './agent-store'
 
 // ===== 意图预路由 mock（A3）：writing-intent / workflow-starter / agent-engine =====
 // locale 不 mock（A4 起真实键已齐备）——意图层断言直接用真实 t() 文案
@@ -424,5 +426,126 @@ describe('sendMessage 意图预路由', () => {
     expect(after.messages.filter(m => m.role === 'user')).toHaveLength(0)
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
+  })
+})
+
+describe('对话分支 fork/rewind', () => {
+  const convId = 'conv-b1'
+
+  // 会话 A：messages [u1, a1, u2, a2]（无 system——按实现过滤，细则用例覆盖）
+  const baseConv = (): AgentConversation => ({
+    id: convId,
+    title: '会话 A',
+    messages: [
+      { id: 'u1', role: 'user', content: '你好', createdAt: 1 },
+      { id: 'a1', role: 'assistant', content: '你好呀', createdAt: 2 },
+      { id: 'u2', role: 'user', content: '帮我写第3章', createdAt: 3 },
+      { id: 'a2', role: 'assistant', content: '好的', createdAt: 4 },
+    ],
+    createdAt: 1,
+    updatedAt: 4,
+    mode: 'deep',
+    modelId: null,
+  })
+
+  beforeEach(() => {
+    useAgentStore.setState({ conversations: [baseConv()], activeConversationId: convId })
+  })
+
+  it('forkFromMessage：复制到起点（含）的历史，新会话独立 id + parentId/forkMessageId 标记', () => {
+    const newId = useAgentStore.getState().forkFromMessage('u2')
+    const forked = useAgentStore.getState().conversations.find(c => c.id === newId)!
+    expect(forked.parentId).toBe(convId)
+    expect(forked.forkMessageId).toBe('u2')
+    // 不含 u2 之后的消息
+    expect(forked.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2'])
+    expect(forked.id).not.toBe(convId)
+    expect(useAgentStore.getState().activeConversationId).toBe(newId)
+  })
+
+  it('fork 复制 compressed/rollingSummary/mode/roleplay，rewound 不复制', () => {
+    useAgentStore.setState({
+      conversations: [{
+        ...baseConv(),
+        mode: 'balanced',
+        roleplayCharacter: '苏晚晴',
+        rollingSummary: '旧摘要',
+        compressed: [{
+          batch: 1,
+          original: [{ id: 'm0', role: 'user', content: '旧消息', createdAt: 0 }],
+          summary: '摘要 v1',
+          compressedAt: 0,
+          originalTokens: 1,
+        }],
+        rewound: [{ messageId: 'u2', messages: [{ id: 'a2', role: 'assistant', content: '已回退', createdAt: 4 }], rewoundAt: 5 }],
+      }],
+    })
+    const newId = useAgentStore.getState().forkFromMessage('u2')!
+    const forked = useAgentStore.getState().conversations.find(c => c.id === newId)!
+    expect(forked.mode).toBe('balanced')
+    expect(forked.roleplayCharacter).toBe('苏晚晴')
+    expect(forked.rollingSummary).toBe('旧摘要')
+    expect(forked.compressed).toHaveLength(1)
+    expect(forked.rewound).toBeUndefined()
+  })
+
+  it('fork 过滤 system 消息（数据干净——生成链路独立构建 system，无影响）', () => {
+    useAgentStore.setState({
+      conversations: [{
+        ...baseConv(),
+        messages: [
+          { id: 'u1', role: 'user', content: '你好', createdAt: 1 },
+          { id: 'sys1', role: 'system', content: '系统提示', createdAt: 2 },
+          { id: 'a1', role: 'assistant', content: '你好呀', createdAt: 3 },
+          { id: 'sys2', role: 'system', content: '系统提示2', createdAt: 4 },
+        ],
+      }],
+    })
+    const newId = useAgentStore.getState().forkFromMessage('a1')!
+    const forked = useAgentStore.getState().conversations.find(c => c.id === newId)!
+    expect(forked.messages.map(m => m.id)).toEqual(['u1', 'a1'])
+    expect(forked.messages.every(m => m.role !== 'system')).toBe(true)
+  })
+
+  it('rewindToMessage：截断到起点（含），被截断消息入 rewound 归档', () => {
+    const ok = useAgentStore.getState().rewindToMessage('a1')
+    expect(ok).toBe(true)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1'])
+    expect(conv.rewound?.length).toBe(1)
+    expect(conv.rewound![0].messages.map(m => m.id)).toEqual(['u2', 'a2'])
+  })
+
+  it('restoreRewound：归档 append 回 messages（rewind 可逆）', () => {
+    useAgentStore.getState().rewindToMessage('a1')
+    const ok = useAgentStore.getState().restoreRewound(0)
+    expect(ok).toBe(true)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2', 'a2'])
+    expect(conv.rewound?.length).toBe(0) // 恢复后归档清空
+  })
+
+  it('无效 messageId：fork/rewind 返回 null/false 不改变状态', () => {
+    expect(useAgentStore.getState().forkFromMessage('not-exist')).toBeNull()
+    expect(useAgentStore.getState().rewindToMessage('not-exist')).toBe(false)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2', 'a2'])
+  })
+
+  it('archive 透传：serialize→parse 后 parentId/rewound 保留', () => {
+    const newId = useAgentStore.getState().forkFromMessage('u2')!
+    const forked = useAgentStore.getState().conversations.find(c => c.id === newId)!
+    const raw = serializeArchive(forked)
+    const parsed = parseArchive(raw)!
+    expect(parsed.parentId).toBe(convId)
+    expect(parsed.forkMessageId).toBe('u2')
+    // rewind 归档往返：rewind 后 serialize→parse 保留 rewound 结构（fork 已切换活跃会话——切回原会话再回退）
+    useAgentStore.getState().selectConversation(convId)
+    useAgentStore.getState().rewindToMessage('a1')
+    const rewoundConv = useAgentStore.getState().getActiveConversation()!
+    const parsedRewound = parseArchive(serializeArchive(rewoundConv))!
+    expect(parsedRewound.rewound).toHaveLength(1)
+    expect(parsedRewound.rewound![0].messageId).toBe('a1')
+    expect(parsedRewound.rewound![0].messages.map(m => m.id)).toEqual(['u2', 'a2'])
   })
 })
