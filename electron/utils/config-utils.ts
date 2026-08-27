@@ -8,11 +8,13 @@ export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 /** 项目内运行时数据目录名（与 VELA_HOME 同步改名：.vela → .novelforge） */
 export const PROJECT_VELA_DIR = '.novelforge'
 
-/** 全局目录迁移：~/.vela → ~/.novelforge（启动早期调用；失败静默，旧路径兜底） */
+/** 全局目录迁移：~/.vela → ~/.novelforge（启动早期调用；失败静默，旧路径兜底）。
+ *  判定哨兵为 newHome/config.json（而非目录存在）——防「首次 rename 失败后 ensureVelaHome
+ *  空建 newHome」令条件永久为假、数据永久搁浅；失败下次启动自动重试 */
 export async function migrateLegacyDirs(): Promise<void> {
   const oldHome = path.join(os.homedir(), '.vela')
   const newHome = VELA_HOME
-  if (fs.existsSync(oldHome) && !fs.existsSync(newHome)) {
+  if (fs.existsSync(oldHome) && !fs.existsSync(GLOBAL_CONFIG_PATH)) {
     try {
       fs.renameSync(oldHome, newHome)
     } catch (e) {
