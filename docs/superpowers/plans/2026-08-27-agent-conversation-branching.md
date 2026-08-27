@@ -127,8 +127,13 @@ forkFromMessage: (messageId) => {
   if (!conv) return null
   const idx = conv.messages.findIndex(m => m.id === messageId)
   if (idx < 0) return null
-  // 复制到起点（含）——system 消息按主流程规则过滤（messages 中 role!=='system' 的保留）
-  const forkMsgs = conv.messages.slice(0, idx + 1).map(m => ({ ...m }))
+  // 复制到起点（含）——system 消息显式过滤（评审注意点已核验：生成链路独立构建 system——
+  //   buildAgentSystemPromptAsync agent-store:445 每次生成重建 + historyMessages 过滤 role!=='system'（:561），
+  //   过滤不影响 fork 后新会话生成；此处过滤只为保持会话数据干净）
+  const forkMsgs = conv.messages
+    .slice(0, idx + 1)
+    .filter(m => m.role !== 'system')
+    .map(m => ({ ...m }))
   const newConv: AgentConversation = {
     ...conv,
     id: genId(),
@@ -453,3 +458,13 @@ EOF
 **类型一致性**：`RewoundBranch` 在 B1 定义、B2/B3 不直接引用（仅 store action）；`AgentMessage` props 新增 onFork/onRewind 在 B2 定义、B2 使用一致；`forkFromMessage` 返回 `string | null` 在 B1/B2 一致。
 
 **与 C 群衔接**：AgentMessage.tsx 与 AgentConversation.tsx 已被 C1/C4 修改（hover 固定容器模式、思考折叠）——B2 的 hover 操作区沿用 C1 的 opacity 过渡模式（不破坏），splitThinking 渲染路径不受影响（操作区在消息外层）。
+
+## 评审修订记录（2026-08-27 外部评审 — 结论：无硬伤，可直接执行）
+
+评审代码事实核验全部通过（CCR 压缩后消息移出 messages :543-549 / AgentConversation 无 parentId 等字段 / archive-codec 全量 stringify :45-47 自动透传 / Confirm 组件 + AgentHeader 用法 / RecentConversationItem C1 opacity 模式 :446-465 且有测试断言）。以下注意点经**补充核验**后结论：
+
+**🟢 system 过滤对生成链路无影响（已核验）**：systemPrompt 由 `buildAgentSystemPromptAsync(currentConv.mode)` 每次生成时独立构建（agent-store :445，含模式/角色试演/RAG 注入），historyMessages 组装时显式 `.filter(m => m.role !== 'system')`（:561）——生成链路完全不依赖 messages 中的 system 消息，fork 过滤 system 不会导致新会话生成异常。已落地：B1 forkMsgs 显式 `.filter(m => m.role !== 'system')`（保持会话数据干净）。
+
+**🟢 rewind × CCR 交互（ledger 记录项，v1 接受）**：rewind 截断后 `compressed.original` 仍含被截断消息（压缩卡片可展开显示原文）；restoreRewound 后压缩卡片与归档消息双份拷贝存在。v1 可接受（展示层冗余，无数据丢失），**记入 ledger 长期项**——后续考虑 rewind 时同步裁剪 compressed.original 或加标注。
+
+**🟢 ForkRight 图标**：lucide-react ^1.8.0 依赖存在（核验确认），B2 直接可用。

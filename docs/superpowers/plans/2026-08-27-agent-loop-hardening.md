@@ -117,7 +117,7 @@ EOF
 - Test: `src/services/agent/tools/read-file.tool.test.ts`（新建）
 
 **Interfaces:**
-- Produces: `readState` 模块级 Map + `clearReadState(): void`（导出，供 agent-store 调用）；桩消息常量 `FILE_UNCHANGED_STUB`
+- Produces: `readState` 模块级 Map + `clearReadState(pathKey?: string): void`（导出：无参全清——agent-store 会话切换；带参单键清除——write_file 成功后失效，P0-2）；桩消息常量 `FILE_UNCHANGED_STUB`
 - Consumes: 现有 `ipc.invoke('fs:read-file' | 'fs:read-external-file')`
 
 **背景（对照 CC FileReadTool 读去重）**：CC 实测约 18% Read 是同一文件重复读，重复全量注入每轮烧 cache_creation token。NF 的 read_file 无状态，多轮 ReAct 中 LLM 重复读同一文件时全文重复注入（引擎层 truncateResult 800 兜底但仍白读全文件）。
@@ -172,13 +172,15 @@ Expected: FAIL（无去重）。
 /** 读去重状态（模块级，会话无关）；agent-store 会话切换/新建/清空时调用 clearReadState 清理 */
 const readState = new Map<string, { content: string }>()
 
-export function clearReadState(): void {
-  readState.clear()
+/** 清空读去重状态：无参全清（会话切换/清空）；带 pathKey 单键清除（write_file 成功后失效，P0-2） */
+export function clearReadState(pathKey?: string): void {
+  if (pathKey) readState.delete(pathKey)
+  else readState.clear()
 }
 
 /** 桩消息：文件未变化，不重发全文（省重复注入的 token） */
 const FILE_UNCHANGED_STUB = (path: string, len: number): string =>
-  `<persisted-output>\n[file_unchanged] ${path} 内容与上次读取一致（${len} 字符），未重新注入全文。如需要最新内容请先保存后重试。\n</persisted-output>`
+  `<persisted-output>\n[file_unchanged] ${path} 内容与上次读取一致（${len} 字符），未重新注入全文。若文件已被修改，请先使用 write_file 写入后再读取以获取最新内容。\n</persisted-output>`
 ```
 
   execute 中两个读取分支（项目内 :56 / 外部 :43）成功后各加：
@@ -192,9 +194,13 @@ return { success: true, content: String(result.content ?? '') }
   execute 开头（路径解析后）加去重短路：
 
 ```ts
-// 读去重：同路径已读过且内容未变化 → 桩（省重复注入）
+// 读去重：同路径已全量读过且内容未变化 → 桩（省重复注入）。
+// ⚠️ 仅「无 offset/limit 的全量读」短路（P0-1 修订）：分页/区间读必须真实读文件——
+//    桩不含文件内容，若分页读也被短路，LLM 带 offset 重读永远拿不到数据；
+//    而 read_file 是只读工具、LLM 无任何途径"先保存后重试"→ 死循环。
+//    豁免条件 = !args.offset && !args.limit（H3 的 offset/limit 解析必须先于此处执行）
 const state = readState.get(pathKey)
-if (state) {
+if (state && !args.offset && !args.limit) {
   return { success: true, content: FILE_UNCHANGED_STUB(pathKey, state.content.length) }
 }
 ```
@@ -212,17 +218,37 @@ if (state) {
 
   测试：`src/stores/agent-store.test.ts` 追加——切换会话后 read_file 重复读返回全文（clearReadState 生效）。
 
-- [ ] **Step 5: 运行确认通过 + 全量回归**
+- [ ] **Step 5: write_file 成功路径失效缓存（P0-2 修订）**
+
+  write-file.tool.ts 成功返回前加单键清除（write_file 与 read-file.tool 同目录，import 无障碍）：
+
+```ts
+// write-file.tool.ts
+import { clearReadState } from './read-file.tool'
+// ...
+const result = await ipc.invoke('fs:write-file', pathCheck.fullPath, content)
+if (!result.success) {
+  return { success: false, content: '', error: result.error ?? t('tool.writeFileFailed') }
+}
+// ⚠️ 写盘成功后失效读去重缓存（P0-2）：LLM「写盘 → 重读验证」是 ReAct 常见模式，
+//    不清除则重读仍命中桩，LLM 无法确认写入结果
+clearReadState(pathCheck.fullPath)  // key 与 read_file 项目内分支的 pathKey（validatePath.fullPath）一致
+return { success: true, ... }
+```
+
+  测试：`read-file.tool.test.ts` 追加——write 后重复读返回全文（缓存已失效）；write_file 只接受相对路径（validatePath），无外部绝对路径 key，外部分支无需处理。
+
+- [ ] **Step 6: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add src/services/agent/tools/read-file.tool.ts src/services/agent/tools/read-file.tool.test.ts src/stores/agent-store.ts src/shared/locale-data.ts
+git add src/services/agent/tools/read-file.tool.ts src/services/agent/tools/read-file.tool.test.ts src/services/agent/tools/write-file.tool.ts src/stores/agent-store.ts src/shared/locale-data.ts
 git commit -F - <<'EOF'
-feat: read_file 读去重（同路径重复读返回 file_unchanged 桩，省重复注入 token；会话切换清理）
+feat: read_file 读去重（同路径重复读返回 file_unchanged 桩；offset/limit 分页豁免短路；write_file 成功后失效缓存）
 EOF
 ```
 
@@ -237,7 +263,7 @@ EOF
 
 **Interfaces:**
 - Consumes: `estimateTokens`（token-budget.ts，已有）
-- Produces: read_file 新参数 `offset?: number`、`limit?: number`；常量 `READ_MAX_CHARS`（注入上限，约 8000 字符 ≈ 2000-4000 token，取项目实际值）
+- Produces: read_file 新参数 `offset?: number`、`limit?: number`；常量 `READ_MAX_CHARS`（注入上限——⚠️ 数值口径修正（评审）：中文 1 字符 ≈ 0.6-1 token，8000 字符实际 ≈ 5000-8000 token，**非计划初稿声称的 2000-4000**；且引擎侧 `truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)` 800 token 兜底（agent-engine.ts:272）**先于** 8000 字符截断生效——工具层上限必须 ≤ 800 token 量级，截断提示（含 total/分页建议）才能到达 LLM。**取 `READ_MAX_CHARS = 1200` 字符初值**（≈1200 token，截断提示置 content 开头防被引擎截断吞掉），实现时用 `estimateTokens` 实测校准）
 
 **背景（对照 CC 两段式估算 + readFileInRange）**：NF 现状 read_file 全量返回 → 引擎层 truncateResult 800 token 截断——**I/O 与 IPC 传全文后丢弃**。CC 读前估算 + 超限抛错教模型用 offset/limit。NF v1：读全量但**注入限制**（省的是上下文注入与截断损耗）+ offset/limit 分页（大文件分段读）。
 
@@ -277,10 +303,12 @@ Expected: FAIL（无约束/无分页）。
 offset: { type: 'number', description: t('tool.readFileOffset') },
 limit: { type: 'number', description: t('tool.readFileLimit') },
 
-// 常量：单次注入上限（约 2000 token 的字符量，防止大文件全量进上下文）
-const READ_MAX_CHARS = 8000
+// 常量：单次注入上限（字符量口径：中文 1 字符 ≈ 0.6-1 token；初值 1200 ≈ 1200 token，
+// 必须 ≤ 引擎 800 token 截断线附近——否则截断提示被引擎二次截断吞掉（agent-engine.ts:272）；
+// 实现时用 estimateTokens 实测校准）
+const READ_MAX_CHARS = 1200
 
-// execute 内（去重短路之后、读取之前）：
+// execute 内（offset/limit 解析在去重短路判断之前——P0-1：短路豁免依赖这两个值）：
 const offset = typeof args.offset === 'number' && args.offset > 0 ? Math.floor(args.offset) : 0
 const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : READ_MAX_CHARS
 
@@ -288,14 +316,20 @@ const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args
 const full = String(result.content ?? '')
 const truncated = full.length > limit ? full.slice(offset, offset + limit) : full.slice(offset)
 const truncatedNotice = full.length > offset + limit
-  ? `\n\n${t('tool.readFileTruncated').replace('{total}', String(full.length)).replace('{offset}', String(offset + limit))}`
+  ? `${t('tool.readFileTruncated').replace('{total}', String(full.length)).replace('{offset}', String(offset + limit))}\n\n`
   : offset > full.length
-    ? `\n\n${t('tool.readFileOffsetBeyond')}`
+    ? `${t('tool.readFileOffsetBeyond')}\n\n`
     : ''
-const content = truncated + truncatedNotice
+// ⚠️ 截断提示置于 content 开头（前缀）——truncateToTokenBudget 从头保留，
+//    防止引擎 800 token 截断把尾部的分页建议吞掉
+const content = truncatedNotice + truncated
 ```
 
-  ⚠️ 注意与 H2 读去重的交互：offset/limit 读取**不覆盖** readState（分页读取不改变「全量已读」语义）；全量读（无 offset/limit）才写 readState。若 H2 已先实现，此处保持该契约；实现顺序 H2 → H3 时注意。
+  ⚠️ 注意与 H2 读去重的交互（**P0-1 闭环**——评审发现原计划只约定了写侧「分页读取不覆盖 readState」，漏了读侧短路豁免，导致分页重读被桩挡住形成死循环。实现顺序 H2 → H3 时必须同时落地）：
+  ① offset/limit 读取**不被去重短路命中**——H2 的短路条件必须是 `state && !args.offset && !args.limit`（仅无参全量读短路），offset/limit 解析先于短路判断；
+  ② offset/limit 读取**不覆盖** readState（分页读取不改变「全量已读」语义）；
+  ③ 全量读（无 offset/limit）才写 readState；
+  ④ 若 H2 未实现、H3 单独落地：短路豁免无对象，无影响——但两条契约都属于「去重」行为，建议按 H2 → H3 顺序实现，H2 commit 内含豁免条件（见 H2 Step 3 修订）。
 
 - [ ] **Step 4: 运行确认通过 + 全量回归**
 
@@ -317,8 +351,21 @@ EOF
 
 **Spec 覆盖**：compare 报告 §三.1 → H1（诚实标注：NF 已有未知工具/异常/拒绝的错误隔离骨架，H1 补的是**部分解析失败静默**这一真实缺口）；§三.2 readFileState 三合一 → H2（v1 范围收缩：只做读去重；先读后写/Windows mtime 回退记 deferred，理由：execute 无 context 签名、write 有新建文件场景）；§三.9 两段式估算 → H3（NF 的 estimateTokens 已本地近似，价值点在注入上限 + 分页而非精确计数）。
 
-**占位符扫描**：无 TBD；`READ_MAX_CHARS = 8000` 为初值，实现时可调（注释说明依据）。
+**占位符扫描**：无 TBD；`READ_MAX_CHARS = 1200` 为初值（评审口径修正后，实现时用 estimateTokens 实测校准）。
 
 **类型一致性**：`clearReadState` 在 H2 定义、agent-store 消费一致；`FILE_UNCHANGED_STUB`/`READ_MAX_CHARS` 单任务内使用；offset/limit 在 H3 schema 与 execute 内一致。
 
 **deferred 记录**（随 ledger）：先读后写硬拒（write 新建场景破坏风险）、Windows mtime 内容回退（需 execute context 签名改造）、readState 会话 id 化（当前模块级 Map + 会话清理钩子，单活跃会话场景足够）。
+
+## 评审修订记录（2026-08-27 外部评审，代码事实核验 16/16 属实）
+
+**🔴 P0-1｜H2+H3 组合缺陷（桩永久化，LLM 无法绕过）**：H3 的 offset/limit 读取同样命中去重短路（原计划只约定写侧「分页读取不覆盖 readState」，漏了读侧豁免）→ LLM 被桩挡住后无论怎么带 offset 重读都返回桩，而 read_file 是只读工具、LLM 没有任何途径触发"保存"→ 死循环。
+**修订（已落地）**：短路条件加 `!args.offset && !args.limit`（仅无参全量读短路）；offset/limit 解析先于短路判断；桩消息文案改为「请先使用 write_file 写入后再读取」（配合 P0-2 闭环）。
+
+**🔴 P0-2｜H2 与 write_file 零交互**：write_file 写入成功后 readState 不清除 → LLM 写盘后重读验证（ReAct 常见模式）仍命中桩，无法确认写入结果。
+**修订（已落地）**：`clearReadState(pathKey?)` 支持带参单键清除；write-file.tool.ts 成功路径（IPC 成功后、返回前）调用 `clearReadState(pathCheck.fullPath)`（key 与 read_file 项目内分支一致；write_file 仅相对路径，无外部分支 key）。
+
+**🟡 轻微｜READ_MAX_CHARS 数值口径**：8000 字符对中文实际 ≈ 5000-8000 token（非声称的 2000-4000），且引擎 800 token 截断（agent-engine.ts:272）先于工具层 8000 字符截断生效——截断提示（total/分页建议）永远到不了 LLM。
+**修订（已落地）**：READ_MAX_CHARS 初值 8000 → **1200**（≈1200 token，≤ 引擎截断线附近）；截断提示改**前缀**（content 开头）防被引擎二次截断吞掉；实现时用 estimateTokens 实测校准。
+
+**核验补充事实**（实施时参照）：read-file.tool.ts 无状态、schema 仅 file_path、execute 签名 `(args) => ...`（tool-registry.ts:91 接口固定，无 context——模块级 Map 是唯一可行态）；agent-store 三挂钩点 createConversation(:203)/selectConversation(:231)/clearAll(:250) 存在；agent-engine.test.ts 不存在（新建）；tools/ 已有两个 `.tool.test.ts` 先例可照抄基建。
