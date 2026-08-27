@@ -74,9 +74,9 @@ describe('AgentMessage 分支操作', () => {
     expect(actions!.classList.contains('opacity-0')).toBe(true)
     expect(actions!.classList.contains('transition-opacity')).toBe(true)
     expect(actions!.classList.contains('hidden')).toBe(false)
-    // 两个按钮 title 存在（i18n 键 B4 才加——缺失键返回键名字面量，按键名断言）
-    expect(container.querySelector('[title="agent.forkConversation"]')).toBeTruthy()
-    expect(container.querySelector('[title="agent.rewindToHere"]')).toBeTruthy()
+    // 两个按钮 title 存在（B4 键落地后为真实 zh-CN 文案，按键值断言——键名断言已随 cast 移除失效）
+    expect(container.querySelector('[title="从此处分支"]')).toBeTruthy()
+    expect(container.querySelector('[title="回退到此处"]')).toBeTruthy()
     act(() => { root.unmount() })
   })
 
@@ -84,7 +84,7 @@ describe('AgentMessage 分支操作', () => {
     const onFork = vi.fn()
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onFork={onFork} />)
-    const fork = container.querySelector<HTMLButtonElement>('[title="agent.forkConversation"]')
+    const fork = container.querySelector<HTMLButtonElement>('[title="从此处分支"]')
     expect(fork).toBeTruthy()
     act(() => { fork!.click() })
     expect(onFork).toHaveBeenCalledWith('m1')
@@ -94,8 +94,8 @@ describe('AgentMessage 分支操作', () => {
   it('无 onFork/onRewind props 时不渲染操作区（只读历史/归档视图兼容）', () => {
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} />)
-    expect(container.querySelector('[title="agent.forkConversation"]')).toBeNull()
-    expect(container.querySelector('[title="agent.rewindToHere"]')).toBeNull()
+    expect(container.querySelector('[title="从此处分支"]')).toBeNull()
+    expect(container.querySelector('[title="回退到此处"]')).toBeNull()
     expect(container.querySelector('[class*="group-hover:opacity-100"]')).toBeNull()
     act(() => { root.unmount() })
   })

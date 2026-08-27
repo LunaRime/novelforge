@@ -16,7 +16,6 @@ import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
-import type { TextKey } from '../../../shared/locale'
 
 /**
  * 对话区域主组件
@@ -231,9 +230,9 @@ function ActiveConversation() {
 
   /** 回退：确认后截断到指定消息（可恢复） */
   const handleRewind = async (messageId: string) => {
-    const ok = await confirm(t('agent.confirmRewind' as TextKey), {
-      title: t('agent.confirmRewindTitle' as TextKey),
-      confirmText: t('dialog.confirmRewind' as TextKey),
+    const ok = await confirm(t('agent.confirmRewind'), {
+      title: t('agent.confirmRewindTitle'),
+      confirmText: t('dialog.confirmRewind'),
       danger: true,
     })
     if (ok) useAgentStore.getState().rewindToMessage(messageId)
@@ -476,7 +475,7 @@ function RecentConversationItem({
           <div className="flex items-center gap-1 min-w-0">
             <GitFork size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
             <span className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
-              {t('agent.forkedFrom' as TextKey).replace('{title}', parentTitle)}
+              {t('agent.forkedFrom').replace('{title}', parentTitle)}
             </span>
           </div>
         )}

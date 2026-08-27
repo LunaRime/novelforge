@@ -15,7 +15,6 @@ import ArtifactCard from './ArtifactCard'
 // 注：brief 声明使用 ForkRight，实测 lucide-react 1.8.0 无此导出；改用 lucide 规范 fork 图标 GitFork（语义等同「从此分支」）
 import { GitFork, Undo2 } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
-import type { TextKey } from '../../../shared/locale'
 import '../../../styles/agent-tools.css'
 
 interface Props {
@@ -48,7 +47,7 @@ export default function AgentMessage({ message, onFork, onRewind }: Props) {
           onClick={() => onFork(message.id)}
           className="p-1 rounded hover:opacity-80"
           style={{ color: 'var(--color-text-muted)' }}
-          title={t('agent.forkConversation' as TextKey)}
+          title={t('agent.forkConversation')}
         >
           <GitFork size={12} />
         </button>
@@ -58,7 +57,7 @@ export default function AgentMessage({ message, onFork, onRewind }: Props) {
           onClick={() => onRewind(message.id)}
           className="p-1 rounded hover:opacity-80"
           style={{ color: 'var(--color-text-muted)' }}
-          title={t('agent.rewindToHere' as TextKey)}
+          title={t('agent.rewindToHere')}
         >
           <Undo2 size={12} />
         </button>

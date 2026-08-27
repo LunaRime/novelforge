@@ -14,7 +14,7 @@ import AgentConversation from './AgentConversation'
 import { useAgentStore, type AgentConversation as AgentConv } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
-import { t, type TextKey } from '../../../shared/locale'
+import { t } from '../../../shared/locale'
 
 // jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
 beforeAll(() => {
@@ -270,17 +270,24 @@ describe('AgentHistoryPanel fork 层级', () => {
     expect(rowC.className).toContain('pl-5')
     // 分支图标：lucide-react 1.8.0 无 ForkRight（B2 实测核验）→ GitFork
     expect(rowC.querySelector('svg.lucide-git-fork')).toBeTruthy()
-    // 父会话标注：t('agent.forkedFrom') 键 B4 才加——缺失键回退键名字面量（B1/B2 先例）。
-    // 与组件同源计算期望值 → B4 键落地后断言自动同步为「来自『父会话A』」。
-    const expectedLabel = t('agent.forkedFrom' as TextKey).replace('{title}', rootConv.title)
+    // 父会话标注：与组件同源 t() 计算期望值（B3 评审 Minor③ 防同源遮蔽——下方另补字面量断言）
+    const expectedLabel = t('agent.forkedFrom').replace('{title}', rootConv.title)
     expect(rowC.textContent).toContain(expectedLabel)
+    // 真实渲染断言（B4 收尾，B3 评审 Minor③）：zh-CN 模板「来自「{title}」」的实际求值
+    // 「来自「父会话A」」——字面量断言验证模板占位符 {title} 已被正确替换；
+    // 若替换失败（如组件 .replace('{xx}') 不匹配），同源 t() 期望值仍通过而此断言失败（假绿反制）
+    expect(rowC.textContent).toContain('来自「父会话A」')
     act(() => { root.unmount() })
   })
 
   it('根会话无标注', () => {
-    const { rootConv } = makeForkState()
+    const { rootConv, childConv } = makeForkState()
     const { container, root } = render(<AgentConversation />)
-    const rowR = historyRows(container).find(r => r.textContent?.includes(rootConv.title))!
+    // B4 收尾修正：fork 子会话标注包含父标题文本——单按 rootConv.title 匹配会误中
+    // 子会话行（其「来自『父会话A』」标注含该文本），须排除子会话标题作双重区分
+    const rowR = historyRows(container).find(r =>
+      r.textContent?.includes(rootConv.title) && !r.textContent?.includes(childConv.title)
+    )!
     expect(rowR).toBeTruthy()
     // 根会话：无缩进、无分支图标、无标注文本
     expect(rowR.className).not.toContain('pl-5')

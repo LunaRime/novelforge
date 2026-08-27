@@ -460,6 +460,9 @@ describe('对话分支 fork/rewind', () => {
     // 不含 u2 之后的消息
     expect(forked.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2'])
     expect(forked.id).not.toBe(convId)
+    // B4：fork 标题追加三语后缀（zh-CN「（分支）」）——真实键值断言（此前中间态「会话 Aagent.forkSuffix」为键回落），
+    // 锁死 B4 键落地行为，防再次回到键名字面量
+    expect(forked.title).toBe('会话 A（分支）')
     expect(useAgentStore.getState().activeConversationId).toBe(newId)
   })
 

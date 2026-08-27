@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import { t, type TextKey } from '../shared/locale'
+import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
@@ -1032,7 +1032,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const newConv: AgentConversation = {
       ...conv,
       id: genId(),
-      title: `${conv.title}${t('agent.forkSuffix' as TextKey)}`,
+      title: `${conv.title}${t('agent.forkSuffix')}`,
       messages: forkMsgs,
       parentId: conv.id,
       forkMessageId: messageId,
