@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import { t } from '../shared/locale'
+import { t, type TextKey } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
 import { clearReadState } from '../services/agent/tools/read-file.tool'
 import { registerBuiltinTools } from '../services/agent/tools'
+import { detectWritingIntent, type WritingIntent } from '../services/agent/writing-intent'
 import { buildRoleplaySystemPrompt } from '../services/roleplay-prompt'
 import { useCharacterStore } from './character-store'
 import { skillRegistry } from '../services/agent/skill-registry'
@@ -111,6 +112,10 @@ interface AgentState {
   setModelId: (modelId: string | null) => void
   /** 发送消息（触发 Agent ReAct 循环） */
   sendMessage: (content: string) => Promise<void>
+  /** 意图预路由处理（内部）：强命中直接触发工作流并注入汇报消息；弱命中注入澄清；
+   *  character 分支返回 { status: 'none', enhancedContent }（不 append 消息，由主流程在 userMsg
+   *  构建时替换 content——P0-4）；未命中返回 { status: 'none' } */
+  handleWritingIntent: (intent: WritingIntent, rawContent: string) => Promise<{ status: 'handled' | 'none'; enhancedContent?: string }>
   /** 取消当前生成 */
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
@@ -380,11 +385,24 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     const convId = conv.id
 
-    // 构建用户消息
+    // ===== 意图预路由（阶段 A）：/命令与@未命中后，本地意图识别 → 确定性触发 or 澄清 or 兜底 =====
+    const intent = detectWritingIntent(trimmedContent)
+    let enhancedContent: string | undefined
+    if (intent.kind !== 'none') {
+      const res = await get().handleWritingIntent(intent, trimmedContent)
+      if (res.status === 'handled') return
+      enhancedContent = res.enhancedContent
+      // P0-4：增强后文本同步替换 content——后续 userMsg/标题/RAG/@ 预取/enrichedUserMessage
+      // 全部基于增强后文本执行（与 skill 注入改写 content 的既有手法一致）
+      if (enhancedContent !== undefined) content = enhancedContent
+    }
+    // 未命中继续走原有 ReAct 链路——userMsg 构建处 content 取 enhancedContent ?? content.trim()
+
+    // 构建用户消息（意图预路由 character 命中时 content 为增强后的完整请求——P0-4）
     const userMsg: AgentMessage = {
       id: genId(),
       role: 'user',
-      content: content.trim(),
+      content: enhancedContent ?? content.trim(),
       createdAt: Date.now(),
     }
 
@@ -790,6 +808,96 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         streaming: false,
       }))
       set({ generating: false, activeRequestId: null })
+    }
+  },
+
+  handleWritingIntent: async (intent, rawContent) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return { status: 'none' }
+    const { t } = await import('../shared/locale')
+    const { startChapterWorkflow, startBlueprintWorkflow, startArchitectureWorkflow, WorkflowStartError } = await import('../services/workflows/workflow-starter')
+
+    // ⚠️ P0-4 修订：**不在此 append 用户消息**——用户消息由 sendMessage 主流程统一构建/append（唯一入口）；
+    //    原实现「这里 append 原文 + character 分支 append 增强 + 主流程再 append 原文」= 用户原文 2 次 + 增强 1 次，三重复
+    const appendMsg = (msg: AgentMessage) => {
+      set(state => ({
+        conversations: state.conversations.map(c =>
+          c.id === conv.id ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() } : c
+        ),
+      }))
+      get().persistCurrent(conv.id)
+    }
+
+    const makeStartedMsg = (displayName: string, chapterTag: string): AgentMessage => ({
+      id: genId(), role: 'assistant',
+      content: t('agent.intentStarted' as TextKey).replace('{name}', displayName).replace('{chapter}', chapterTag),
+      createdAt: Date.now(),
+      artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}`.trim() }],
+    })
+
+    try {
+      switch (intent.kind) {
+        case 'chapter_creation': {
+          const chapter = intent.chapter
+          if (chapter === null) {  // 「写」无章号
+            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyChapter' as TextKey), createdAt: Date.now() })
+            return { status: 'handled' }
+          }
+          if (typeof chapter === 'object') {
+            // 批量：逐章触发（v1 串行）
+            for (let n = chapter.from; n <= chapter.to; n++) {
+              const r = await startChapterWorkflow('generate_draft', n)
+              appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
+            }
+          } else {
+            const r = await startChapterWorkflow('generate_draft', chapter)
+            appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
+          }
+          return { status: 'handled' }
+        }
+        case 'refine': {
+          const chap = intent.chapter
+          if (chap === null) {  // 无定位 → 澄清
+            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyRefine' as TextKey), createdAt: Date.now() })
+            return { status: 'handled' }
+          }
+          const r = await startChapterWorkflow('refine', chap)
+          appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
+          return { status: 'handled' }
+        }
+        case 'architecture': {
+          const r = intent.target === 'blueprint'
+            ? await startBlueprintWorkflow()
+            : await startArchitectureWorkflow()
+          appendMsg({
+            id: genId(), role: 'assistant',
+            content: t('agent.intentStartedNoChapter' as TextKey).replace('{name}', r.displayName),
+            createdAt: Date.now(),
+            artifacts: [{ type: 'workflow_started', name: r.displayName }],
+          })
+          return { status: 'handled' }
+        }
+        case 'character': {
+          // v1：角色无现成工作流 → 参数提取 + 增强内容返回主流程（P0-4：不 append 任何消息，
+          // 主流程在 userMsg 构建时替换 content——用户历史中为增强后的完整请求，原文仅出现 1 次）
+          const op = intent.action === 'create' ? t('agent.intentCharCreate' as TextKey) : t('agent.intentCharUpdate' as TextKey)
+          return { status: 'none', enhancedContent: `${op}：${intent.name}\n\n${rawContent}` }
+        }
+        case 'ambiguous':
+          appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyGeneric' as TextKey), createdAt: Date.now() })
+          return { status: 'handled' }
+        case 'none':
+          return { status: 'none' }
+      }
+    } catch (e) {
+      if (e instanceof WorkflowStartError) {
+        // P0-3：ERR_NO_BLUEPRINT 用 e.message（buildDraftWorkflow 内已带 wfBlueprintDataMissing 文案，归因精准）；
+        // ERR_GUARD 用意图层文案
+        const msg = e.code === 'ERR_GUARD' ? t('agent.intentGuardFail' as TextKey) : e.message
+        appendMsg({ id: genId(), role: 'assistant', content: msg, createdAt: Date.now() })
+        return { status: 'handled' }
+      }
+      throw e
     }
   },
 

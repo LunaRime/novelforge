@@ -4,6 +4,56 @@ import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
+import { detectWritingIntent } from '../services/agent/writing-intent'
+import { startChapterWorkflow } from '../services/workflows/workflow-starter'
+import { runAgentLoop } from '../services/agent/agent-engine'
+
+// ===== 意图预路由 mock（A3）：writing-intent / workflow-starter / agent-engine / locale =====
+
+vi.mock('../services/agent/writing-intent', () => ({
+  // 默认未命中（与真实 detectWritingIntent 对不含写稿动词的输入行为一致）——既有用例不受影响
+  detectWritingIntent: vi.fn(() => ({ kind: 'none' } as const)),
+}))
+
+vi.mock('../services/workflows/workflow-starter', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/workflows/workflow-starter')>()
+  return {
+    ...actual,
+    startChapterWorkflow: vi.fn(),
+    startBlueprintWorkflow: vi.fn(),
+    startArchitectureWorkflow: vi.fn(),
+  }
+})
+
+vi.mock('../services/agent/agent-engine', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/agent/agent-engine')>()
+  return {
+    ...actual,
+    // ReAct 桩：被调用即抛错——sendMessage 的 catch 会复位 generating（与既有用例的终止语义一致），
+    // 测试通过「是否被调用」区分预路由命中/未命中
+    runAgentLoop: vi.fn(async () => { throw new Error('agent-engine stub: ReAct not implemented') }),
+  }
+})
+
+vi.mock('../shared/locale', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../shared/locale')>()
+  // A4 将补齐 agent.intent* 键（本任务不新增键）——此处用 stub 文案驱动意图层断言；
+  // 其余键回退真实翻译，避免影响既有用例
+  const overrides: Record<string, string> = {
+    'agent.intentStarted': '已开始：{name} {chapter}',
+    'agent.intentStartedNoChapter': '已开始：{name}',
+    'agent.intentClarifyChapter': '请明确要写的章节',
+    'agent.intentClarifyRefine': '请明确要润色的章节',
+    'agent.intentClarifyGeneric': '请明确目标任务',
+    'agent.intentGuardFail': '工作流启动失败：前置条件不满足',
+    'agent.intentCharCreate': '创建角色',
+    'agent.intentCharUpdate': '更新角色',
+  }
+  return {
+    ...actual,
+    t: (key: string) => overrides[key] ?? actual.t(key as never),
+  }
+})
 
 // mock IPC（fs:agent-archive-* + fs:read-file 通道）
 const archiveFiles = new Map<string, string>()
@@ -214,5 +264,82 @@ describe('read_file 读去重与会话生命周期', () => {
     const r3 = await readFileTool.execute({ file_path: 'chap1.md' })
     expect(r3.content).toContain('长文本内容')
     expect(r3.content).not.toContain('file_unchanged')
+  })
+})
+
+describe('sendMessage 意图预路由', () => {
+  const mockDetect = vi.mocked(detectWritingIntent)
+  const mockStartChapter = vi.mocked(startChapterWorkflow)
+  const mockRunAgentLoop = vi.mocked(runAgentLoop)
+
+  beforeEach(() => {
+    // 清理跨用例残留（此前真实/stub 的 runAgentLoop 调用不得泄漏到本 describe）
+    vi.clearAllMocks()
+  })
+
+  it('强命中写稿意图：不调 runAgentLoop，注入开始消息 + workflow_started 产物', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    mockStartChapter.mockResolvedValue({ runId: 'run-1', displayName: '写稿', chapterTag: '第3章' })
+
+    await useAgentStore.getState().sendMessage('写第3章')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    // P0-4：预路由命中时不 append 用户消息——会话中仅有一条助手汇报消息
+    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(0)
+    const started = after.messages[after.messages.length - 1]
+    expect(started.role).toBe('assistant')
+    expect(started.content).toContain('已开始')
+    expect(started.content).toContain('写稿')
+    expect(started.content).toContain('第3章')
+    expect(started.artifacts?.[0]).toMatchObject({ type: 'workflow_started', name: '写稿 第3章' })
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('弱命中：注入澄清消息（不触发工作流）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'ambiguous', hint: 'chapter' })
+
+    await useAgentStore.getState().sendMessage('写一下')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.content).toContain('请明确')
+    expect(mockStartChapter).not.toHaveBeenCalled()
+    expect(mockRunAgentLoop).not.toHaveBeenCalled()
+    expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('未命中：原样走 ReAct（行为不变）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'none' })
+
+    await useAgentStore.getState().sendMessage('看看最近有哪些改动')
+
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('看看最近有哪些改动')
+  })
+
+  it('character 命中：userMsg.content 为增强内容（原文不重复出现），走 ReAct（P0-4 回归）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'character', name: '苏晚晴', action: 'create' })
+
+    await useAgentStore.getState().sendMessage('创建角色苏晚晴')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const userMsgs = after.messages.filter(m => m.role === 'user')
+    expect(userMsgs).toHaveLength(1)
+    // P0-4：增强后的完整请求（原文仅出现一次，无重复 append）
+    expect(userMsgs[0].content).toBe('创建角色：苏晚晴\n\n创建角色苏晚晴')
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+    expect(mockRunAgentLoop.mock.calls[0][2]).toBe('创建角色：苏晚晴\n\n创建角色苏晚晴')
+    expect(useAgentStore.getState().generating).toBe(false)
   })
 })
