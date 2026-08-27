@@ -3,7 +3,15 @@ import path from 'node:path'
 import os from 'node:os'
 import { GlobalConfig } from '../../src/shared/ipc-channels'
 
-export const VELA_HOME = path.join(os.homedir(), '.vela')
+export const VELA_HOME = path.join(os.homedir(), '.vela') // V1 保持原值；V2 改 ~/.novelforge
+
+/** 项目内运行时数据目录名（V1 占位值 .vela；V2 改 .novelforge——与 VELA_HOME 同步一次改） */
+export const PROJECT_VELA_DIR = '.vela'
+
+/** 项目库目录（V1 单路径版；V2 升级双路径+惰性迁移）——所有直开点统一走此函数 */
+export function getProjectVelaDir(projectPath: string): string {
+  return path.join(projectPath, PROJECT_VELA_DIR)
+}
 
 export function ensureVelaHome() {
   const dirs = [

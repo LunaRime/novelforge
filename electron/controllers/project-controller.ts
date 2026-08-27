@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectVelaDir } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { getProjectDb, getCurrentProjectPath } from '../database'
@@ -302,7 +302,7 @@ export function registerProjectController() {
 
   // ===== 项目摘要（当前项目走主连接；历史项目只读打开，不打开项目）=====
   ipcMain.handle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
-    const dbPath = path.join(projectPath, '.vela', 'vela.db')
+    const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
     if (!fs.existsSync(dbPath)) return null
 
     // 当前已打开的项目：直接用主连接（WAL 多连接只读有 -shm 依赖，

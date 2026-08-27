@@ -14,6 +14,7 @@ import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
 import { toolRegistry, type AgentTool } from './tool-registry'
 import { t } from '../../shared/locale'
+import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
 // ===== 类型定义 =====
 
@@ -148,7 +149,7 @@ class SkillRegistryImpl {
     // 加载项目 Skill（项目/.vela/skills/）
     const project = useProjectStore.getState().currentProject
     if (project) {
-      const projectSkillsDir = `${project.path}/.vela/skills`
+      const projectSkillsDir = `${project.path}/${DIR_VELA_INTERNAL}/skills`
       const projectCount = await this.loadFromDirectory(projectSkillsDir, 'project')
       if (projectCount > 0) {
         console.log(`[Skills] 加载了 ${projectCount} 个项目 Skill`)

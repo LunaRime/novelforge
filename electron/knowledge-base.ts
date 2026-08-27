@@ -14,6 +14,7 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
+import { getProjectVelaDir } from './utils/config-utils'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
 import {
@@ -36,7 +37,7 @@ async function ensureMigration(projectPath: string): Promise<void> {
   if (migratedProjects.has(projectPath)) return
   migratedProjects.add(projectPath)
 
-  const jsonPath = path.join(projectPath, '.vela', 'vectors.json')
+  const jsonPath = path.join(getProjectVelaDir(projectPath), 'vectors.json')
   if (fs.existsSync(jsonPath)) {
     await migrateFromJSON(projectPath)
   }

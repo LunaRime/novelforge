@@ -6,6 +6,7 @@
  */
 import { ipc } from '../ipc-client'
 import { buildBaselineFreqs, extractSettingNouns, runAllAudits, type AuditWhitelist } from './audits'
+import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
 export interface AuditContext {
   /** 上一章结尾（衔接审计用，200 字） */
@@ -76,8 +77,8 @@ export async function collectAuditContext(chapterNumber: number): Promise<AuditC
     const project = useProjectStore.getState().currentProject
     if (project) {
       // 登记授权（fs:read-external-file 现仅放行显式授权路径——项目内白名单文件在此登记）
-      await ipc.invoke('fs:grant-external-file', `${project.path}/.vela/audit-whitelist.json`).catch(() => {})
-      const wlRes = await ipc.invoke('fs:read-external-file', `${project.path}/.vela/audit-whitelist.json`) as { success?: boolean; content?: string } | null
+      await ipc.invoke('fs:grant-external-file', `${project.path}/${DIR_VELA_INTERNAL}/audit-whitelist.json`).catch(() => {})
+      const wlRes = await ipc.invoke('fs:read-external-file', `${project.path}/${DIR_VELA_INTERNAL}/audit-whitelist.json`) as { success?: boolean; content?: string } | null
       if (wlRes?.success && wlRes.content) {
         const parsed = JSON.parse(wlRes.content) as Record<string, unknown>
         ctx.whitelist = {

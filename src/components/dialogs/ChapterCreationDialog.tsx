@@ -4,6 +4,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
+import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
 import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
 import { guardChapterWriting } from '../../services/workflows/workflow-guards'
@@ -31,7 +32,7 @@ interface Props {
 const ROLE_VALUES = ['建置', '铺垫', '发展', '冲突', '高潮', '转折', '收尾']
 
 /** 章节创作参数持久化路径（相对于项目路径） */
-const CREATION_LOG_REL = '.vela/chapter_creation_log.json'
+const CREATION_LOG_REL = `${DIR_VELA_INTERNAL}/chapter_creation_log.json`
 
 /** 章节创作对话框 — 配置并启动章节创作工作流（步进式，每步等待用户确认） */
 export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Props) {

@@ -13,6 +13,7 @@ import fs from 'node:fs'
 import Database from 'better-sqlite3'
 
 import { ActivityRepository } from './activity-repository'
+import { getProjectVelaDir } from '../utils/config-utils'
 
 /** 全局用量统计 — 项目维度行 */
 export interface GlobalProjectUsage {
@@ -61,7 +62,7 @@ export function filterAvailableProjects(projects: Array<{ path: string; name: st
 
 /** 打开一个项目库只读（同 ActivityRepository.openProjectDb：失败返回 null 由调用方跳过） */
 function openProjectDb(projectPath: string): Database.Database | null {
-  const dbPath = path.join(projectPath, '.vela', 'vela.db')
+  const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
   if (!fs.existsSync(dbPath)) return null
   try {
     return new Database(dbPath, { readonly: true })
@@ -88,7 +89,7 @@ export function getGlobalUsageStats(currentProjectPath?: string): GlobalUsageSta
   // 项目列表：全局配置最近项目（仅真实存在路径）+ 当前项目始终纳入（同 getDailyActivity 语义）
   const projects = filterAvailableProjects(ActivityRepository.getRecentProjects())
   if (currentProjectPath && !projects.some(p => p.path === currentProjectPath)) {
-    if (fs.existsSync(path.join(currentProjectPath, '.vela', 'vela.db'))) {
+    if (fs.existsSync(path.join(getProjectVelaDir(currentProjectPath), 'vela.db'))) {
       projects.push({ path: currentProjectPath, name: path.basename(currentProjectPath) })
     }
   }

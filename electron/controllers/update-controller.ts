@@ -10,10 +10,10 @@ import { ipcMain, app, BrowserWindow, shell } from 'electron'
 import { autoUpdater, UpdateInfo as EUUpdateInfo } from 'electron-updater'
 import path from 'node:path'
 import fs from 'node:fs'
-import os from 'node:os'
 import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
+import { VELA_HOME } from '../utils/config-utils'
 
 // ===== 状态管理 =====
 
@@ -132,11 +132,9 @@ function triggerUninstall(): { success: boolean; error?: string } {
  */
 function cleanUserData(): { success: boolean; error?: string } {
   try {
-    const velaHome = path.join(os.homedir(), '.vela')
-
-    if (fs.existsSync(velaHome)) {
-      fs.rmSync(velaHome, { recursive: true, force: true })
-      logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', velaHome))
+    if (fs.existsSync(VELA_HOME)) {
+      fs.rmSync(VELA_HOME, { recursive: true, force: true })
+      logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', VELA_HOME))
       return { success: true }
     }
     return { success: true } // 目录不存在也算成功

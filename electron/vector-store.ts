@@ -16,6 +16,7 @@ import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
 import { t } from '../src/shared/locale'
+import { getProjectVelaDir } from './utils/config-utils'
 
 // 懒加载：避免 Electron 启动时同步 require 原生模块导致数秒无日志
 let _lancedb: typeof LanceDB | null = null
@@ -164,7 +165,7 @@ const connectionPool = new Map<string, LanceDB.Connection>()
 
 /** 获取 LanceDB 连接（惰性创建） */
 export async function getConnection(projectPath: string): Promise<LanceDB.Connection> {
-  const dbPath = path.join(projectPath, '.vela', 'lancedb')
+  const dbPath = path.join(getProjectVelaDir(projectPath), 'lancedb')
 
   const cached = connectionPool.get(dbPath)
   if (cached) return cached
@@ -179,7 +180,7 @@ export async function getConnection(projectPath: string): Promise<LanceDB.Connec
 
 /** 关闭指定项目的连接（⚠️ P3 修复：真正关闭底层连接——此前仅从 Map 删除，原生内存不释放） */
 export async function closeConnection(projectPath: string): Promise<void> {
-  const dbPath = path.join(projectPath, '.vela', 'lancedb')
+  const dbPath = path.join(getProjectVelaDir(projectPath), 'lancedb')
   const conn = connectionPool.get(dbPath)
   if (conn) {
     try { await conn.close() } catch { /* 忽略关闭失败 */ }
@@ -842,7 +843,7 @@ export async function updateChunkVectors(
 export async function migrateFromJSON(
   projectPath: string,
 ): Promise<{ success: boolean; migrated: number; error?: string }> {
-  const jsonPath = path.join(projectPath, '.vela', 'vectors.json')
+  const jsonPath = path.join(getProjectVelaDir(projectPath), 'vectors.json')
 
   if (!fs.existsSync(jsonPath)) {
     return { success: true, migrated: 0 }

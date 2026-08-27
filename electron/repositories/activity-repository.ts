@@ -2,7 +2,7 @@ import path from 'node:path'
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
 
-import { readJsonFile, GLOBAL_CONFIG_PATH } from '../utils/config-utils'
+import { readJsonFile, GLOBAL_CONFIG_PATH, getProjectVelaDir } from '../utils/config-utils'
 
 /** 单日活动数据（本地时区按天聚合） */
 export interface DailyActivityRow {
@@ -52,7 +52,7 @@ export class ActivityRepository {
 
   /** 打开一个项目 DB 只读查询（当前项目用共享连接，其余临时只读打开） */
   private static openProjectDb(projectPath: string): Database.Database | null {
-    const dbPath = path.join(projectPath, '.vela', 'vela.db')
+    const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
     if (!fs.existsSync(dbPath)) return null
     try {
       return new Database(dbPath, { readonly: true })
@@ -91,7 +91,7 @@ export class ActivityRepository {
     }
     if (currentProjectPath) {
       const exists = projects.some(p => p.path === currentProjectPath)
-      if (!exists && fs.existsSync(path.join(currentProjectPath, '.vela', 'vela.db'))) {
+      if (!exists && fs.existsSync(path.join(getProjectVelaDir(currentProjectPath), 'vela.db'))) {
         projects.push({ name: path.basename(currentProjectPath), path: currentProjectPath })
       }
     }

@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import { dialog } from 'electron'
 import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
+import { getProjectVelaDir } from './utils/config-utils'
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
@@ -26,7 +27,7 @@ export function initProjectDatabase(projectPath: string): void {
   closeProjectDatabase()
   currentProjectPath = projectPath
 
-  const dbPath = path.join(projectPath, '.vela', 'vela.db')
+  const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
   fs.mkdirSync(path.dirname(dbPath), { recursive: true })
 
   try {

@@ -8,6 +8,7 @@
  */
 import type { TextKey } from '../shared/locale'
 import { getCurrentLocale, type SupportedLocale } from '../shared/locale'
+import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../shared/project-paths'
 
 export interface PromptTemplate {
   /** 模板唯一标识 */
@@ -276,7 +277,7 @@ export async function loadCustomPrompts(): Promise<void> {
 export async function loadProjectCustomPrompts(projectPath: string): Promise<void> {
   try {
     projectCustomPrompts.clear()
-    const promptsDir = `${projectPath}/.vela/prompts`
+    const promptsDir = `${projectPath}/${DIR_PROMPTS}`
 
     await _loadPromptsFromDir(promptsDir, projectCustomPrompts)
     console.log(`[NovelForge Prompts] 已加载 ${projectCustomPrompts.size} 个项目级自定义覆盖`)
@@ -388,11 +389,11 @@ export async function saveCustomPrompt(template: PromptTemplate): Promise<boolea
 export async function saveProjectCustomPrompt(projectPath: string, template: PromptTemplate): Promise<boolean> {
   try {
     const { ipc } = await import('./ipc-client')
-    const dirPath = `${projectPath}/.vela/prompts`
+    const dirPath = `${projectPath}/${DIR_PROMPTS}`
     // 确保目录存在
     const exists = await ipc.invoke('fs:check-exists', dirPath)
     if (!exists) {
-      await ipc.invoke('fs:mkdir', `${projectPath}/.vela`)
+      await ipc.invoke('fs:mkdir', `${projectPath}/${DIR_VELA_INTERNAL}`)
       await ipc.invoke('fs:mkdir', dirPath)
     }
     const filePath = `${dirPath}/${template.key}.json`
@@ -423,7 +424,7 @@ export async function deleteCustomPrompt(key: string): Promise<boolean> {
 export async function deleteProjectCustomPrompt(projectPath: string, key: string): Promise<boolean> {
   try {
     const { ipc } = await import('./ipc-client')
-    const filePath = `${projectPath}/.vela/prompts/${key}.json`
+    const filePath = `${projectPath}/${DIR_PROMPTS}/${key}.json`
     const result = await ipc.invoke('fs:delete-file', filePath)
     projectCustomPrompts.delete(key)
     return result.success

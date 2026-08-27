@@ -13,10 +13,10 @@
 import { spawn, type ChildProcess } from 'child_process'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
-import { app } from 'electron'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
+import { VELA_HOME } from '../utils/config-utils'
 
 // ===== 类型定义 =====
 
@@ -113,7 +113,7 @@ class MCPManagerImpl {
 
   /** 获取 MCP 配置文件默认路径 */
   getDefaultConfigPath(): string {
-    return join(app.getPath('home'), '.vela', 'mcp_config.json')
+    return join(VELA_HOME, 'mcp_config.json')
   }
 
   /**
