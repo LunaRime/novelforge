@@ -25,8 +25,8 @@ const MAX_TOOL_ROUNDS = 8
 /** Tool 执行超时（毫秒） */
 const TOOL_TIMEOUT_MS = 30_000
 
-/** Tool 返回内容最大 Token 数 */
-const TOOL_RESULT_MAX_TOKENS = 800
+/** Tool 返回内容最大 Token 数（read-file.tool 的 READ_MAX_CHARS 按此校准，见其锁定用例） */
+export const TOOL_RESULT_MAX_TOKENS = 800
 
 /**
  * 发送给 LLM 的消息整体 token 预算。

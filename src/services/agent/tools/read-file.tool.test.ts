@@ -5,6 +5,8 @@ import { useProjectStore } from '../../../stores/project-store'
 import { t } from '../../../shared/locale'
 import { clearReadState, READ_MAX_CHARS, readFileTool } from './read-file.tool'
 import { writeFileTool } from './write-file.tool'
+import { estimateTokens } from '../token-budget'
+import { TOOL_RESULT_MAX_TOKENS } from '../agent-engine'
 
 vi.mock('../../ipc-client', () => ({
   ipc: { invoke: vi.fn() },
@@ -88,6 +90,8 @@ describe('read_file 读去重', () => {
     const r2 = await readFileTool.execute({ file_path: 'C:/Users/test/notes.md' })
     expect(r2.content).toContain('file_unchanged')
     expect(r2.content).not.toContain('外部全文')
+    // 与项目内分支对称：第二次命中桩不重发 IPC（fs:read-external-file 仅 1 次）
+    expect(mockInvoke).toHaveBeenCalledTimes(1)
     expect(mockInvoke).toHaveBeenCalledWith('fs:read-external-file', 'C:/Users/test/notes.md')
   })
 
@@ -128,10 +132,10 @@ describe('read_file token 约束与分页', () => {
     mockInvoke.mockResolvedValue({ success: true, content: longContent })
     const r = await readFileTool.execute({ file_path: 'chap1.md' })
     expect(r.success).toBe(true)
-    // 截断提示作为前缀，含总长度 + 已有页的结束位置（offset+limit）+ 分页建议
+    // 截断提示作为前缀，含总长度 + 本次窗口结束位置（offset+limit）+ 分页建议
     const notice = t('tool.readFileTruncated')
       .replace('{total}', String(longContent.length))
-      .replace('{offset}', String(READ_MAX_CHARS)) + '\n\n'
+      .replace('{end}', String(READ_MAX_CHARS)) + '\n\n'
     expect(r.content).toBe(notice + longContent.slice(0, READ_MAX_CHARS))
   })
 
@@ -141,11 +145,11 @@ describe('read_file token 约束与分页', () => {
     mockInvoke.mockResolvedValue({ success: true, content })
     const r = await readFileTool.execute({ file_path: 'chap1.md', offset: 1000, limit: 500 })
     expect(r.success).toBe(true)
-    // 精确返回 [1000, 1500) 区间，区间外内容未混入
-    expect(r.content).toContain('B'.repeat(500))
-    expect(r.content).not.toContain('E')
-    // 截断提示仍在前缀（告知剩余内容与分页建议）
-    expect(r.content).toContain('截断')
+    // 精确返回 [1000, 1500) 区间 + 截断提示前缀（{end}=1500 = offset+limit，注入引擎的全文不含区间外内容）
+    const notice = t('tool.readFileTruncated')
+      .replace('{total}', String(content.length))
+      .replace('{end}', String(1000 + 500)) + '\n\n'
+    expect(r.content).toBe(notice + 'B'.repeat(500))
   })
 
   it('offset 超出文件长度：返回空 + 提示', async () => {
@@ -156,7 +160,8 @@ describe('read_file token 约束与分页', () => {
   })
 
   it('正常小文件不受影响（无截断无提示）', async () => {
-    const content = '正常内容'.repeat(100)
+    // fixture 200 字符：READ_MAX_CHARS=440（按引擎 800 token 截断线校准）——500 字符会误触发截断
+    const content = '正常内容'.repeat(40)
     mockInvoke.mockResolvedValue({ success: true, content })
     const r = await readFileTool.execute({ file_path: 'chap1.md' })
     expect(r.success).toBe(true)
@@ -181,5 +186,40 @@ describe('read_file token 约束与分页', () => {
     expect(r3.content).toContain('file_unchanged')
     expect(r3.content).toContain('3000')
     expect(r3.content).not.toContain('5000')
+  })
+
+  it('offset 恰等于文件长度：返回越界提示而非静默空串（M5 边界）', async () => {
+    const content = '边界内容'.repeat(5) // 20 字符
+    mockInvoke.mockResolvedValue({ success: true, content })
+    const r = await readFileTool.execute({ file_path: 'chap1.md', offset: content.length })
+    expect(r.success).toBe(true)
+    expect(r.content).toBe(t('tool.readFileOffsetBeyond') + '\n\n')
+  })
+
+  it('病态数值参数：limit<1 走默认上限、负 offset 按 0 处理（M2）', async () => {
+    const content = '参数内容'.repeat(10) // 40 字符（≤ READ_MAX_CHARS 不触发截断）
+    mockInvoke.mockResolvedValue({ success: true, content })
+    // limit=0.5：旧实现 Math.floor(0.5)=0 → 空串+误报截断提示；新实现视为未指定 → 全量返回
+    const r1 = await readFileTool.execute({ file_path: 'chap1.md', limit: 0.5 })
+    expect(r1.success).toBe(true)
+    expect(r1.content).toBe(content)
+    expect(r1.content).not.toContain('截断')
+    // 负 limit 同样走默认上限（全量窗口，无截断提示）
+    const r2 = await readFileTool.execute({ file_path: 'chap1.md', limit: -5 })
+    expect(r2.content).toBe(content)
+    // 负 offset 按 0 处理（全量窗口，非越界提示）
+    const r3 = await readFileTool.execute({ file_path: 'chap1.md', offset: -1 })
+    expect(r3.content).toBe(content)
+  })
+
+  it('中文峰值输出 ≤ 引擎截断线：READ_MAX_CHARS 全中文 + 截断提示 ≤ TOOL_RESULT_MAX_TOKENS（F3 锁定）', async () => {
+    // 产品主语言为中文：CJK 启发式 ×1.5 是保守上界——锁定「工具层输出 + 提示 ≤ 引擎截断线」，
+    // 保证截断先于引擎 truncateResult(800) 在工具层生效（1200 时中文 ≈1800 token，引擎先截断，注入上限失效）
+    const longContent = '中'.repeat(READ_MAX_CHARS * 5)
+    mockInvoke.mockResolvedValue({ success: true, content: longContent })
+    const r = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r.success).toBe(true)
+    expect(r.content).toContain('截断')
+    expect(estimateTokens(r.content)).toBeLessThanOrEqual(TOOL_RESULT_MAX_TOKENS)
   })
 })

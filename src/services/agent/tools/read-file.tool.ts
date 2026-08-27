@@ -14,8 +14,11 @@ function isAbsolutePath(p: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')
 }
 
-/** 读去重状态（模块级，会话无关）；agent-store 会话切换/新建/清空时调用 clearReadState 清理 */
-const readState = new Map<string, { content: string }>()
+/**
+ * 读去重状态（模块级，会话无关）；agent-store 会话切换/新建/清空时调用 clearReadState 清理。
+ * 只存 length：桩判定（file_unchanged）不比较内容，length 即全部所需——省一份文件内容引用
+ */
+const readState = new Map<string, { length: number }>()
 
 /** 清空读去重状态：无参全清（会话切换/清空）；带 pathKey 单键清除（write_file 成功后失效，P0-2） */
 export function clearReadState(pathKey?: string): void {
@@ -28,12 +31,13 @@ const FILE_UNCHANGED_STUB = (path: string, len: number): string =>
   t('tool.fileUnchangedStub').replace('{path}', path).replace('{len}', String(len))
 
 /**
- * 单次注入上限（字符量口径，初值 1200 ≈ 1200-1800 token）：
- * - 中文 1 字符 ≈ 0.6-1.5 token（estimateTokensHeuristic CJK ×1.5）
+ * 单次注入上限（字符量口径，按引擎截断线校准，见 read-file.tool.test.ts「中文峰值 ≤ TOOL_RESULT_MAX_TOKENS」锁定用例）：
+ * - 中文 1 字符 ≈ 1.5 token（estimateTokensHeuristic CJK ×1.5，保守上界）→ 440 全中文 ≈ 660 tokens
  * - 引擎侧 truncateResult(result.content, TOOL_RESULT_MAX_TOKENS=800) 二次兜底（agent-engine.ts），
  *   截断提示置于 content 开头（truncateResult 从头保留）→ 提示不会被二次截断吞掉
+ * - 440 字符 + 截断提示 ≈ 725 tokens < 800——保证对中文（产品主语言）工具层输出先于引擎截断生效
  */
-export const READ_MAX_CHARS = 1200
+export const READ_MAX_CHARS = 440
 
 /**
  * 应用读取窗口：只返回 [offset, offset+limit) 区间的字符（超出部分截断），
@@ -43,9 +47,10 @@ export const READ_MAX_CHARS = 1200
 function applyReadWindow(fullText: string, offset: number, limit: number): string {
   const full = String(fullText ?? '')
   const truncated = full.length > limit ? full.slice(offset, offset + limit) : full.slice(offset)
+  // {end} = offset+limit（本次窗口真正读到的结束位置；旧文案 {offset} 实收 offset+limit，语义失真）
   const notice = full.length > offset + limit
-    ? `${t('tool.readFileTruncated').replace('{total}', String(full.length)).replace('{offset}', String(offset + limit))}\n\n`
-    : offset > full.length
+    ? `${t('tool.readFileTruncated').replace('{total}', String(full.length)).replace('{end}', String(offset + limit))}\n\n`
+    : offset >= full.length
       ? `${t('tool.readFileOffsetBeyond')}\n\n`
       : ''
   return notice + truncated
@@ -77,8 +82,10 @@ export const readFileTool = buildAgentTool({
   execute: async (args) => {
     const filePath = args.file_path as string
     // offset/limit 解析必须先于去重短路判断（P0-1 契约：短路豁免条件 = !args.offset && !args.limit）
-    const offset = typeof args.offset === 'number' && args.offset > 0 ? Math.floor(args.offset) : 0
-    const limit = typeof args.limit === 'number' && args.limit > 0 ? Math.floor(args.limit) : READ_MAX_CHARS
+    // 病态参数防御：limit<1（0/0.5/负数）视为未指定 → 默认上限（旧 Math.floor(0.5)=0 → 空串+误报截断提示）；
+    // offset<0 视为 0（旧实现负值过 args truthy 检查却解析为 0，静默跳过读去重）
+    const offset = typeof args.offset === 'number' && args.offset >= 0 ? Math.floor(args.offset) : 0
+    const limit = typeof args.limit === 'number' && args.limit >= 1 ? Math.floor(args.limit) : READ_MAX_CHARS
     const project = useProjectStore.getState().currentProject
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -95,7 +102,7 @@ export const readFileTool = buildAgentTool({
       //    豁免条件 = !args.offset && !args.limit（H3 的 offset/limit 解析必须先于此处执行）
       const state = readState.get(filePath)
       if (state && !args.offset && !args.limit) {
-        return { success: true, content: FILE_UNCHANGED_STUB(filePath, state.content.length) }
+        return { success: true, content: FILE_UNCHANGED_STUB(filePath, state.length) }
       }
       const res = await ipc.invoke('fs:read-external-file', filePath)
       if (!res.success) {
@@ -104,7 +111,7 @@ export const readFileTool = buildAgentTool({
       // 读去重：仅「无 offset/limit 的全量读」记录状态（P0-1 修订：分页读不覆盖「全量已读」语义）——
       // 否则分页读把 Map 覆盖为部分内容，后续全量读命中桩时桩长度=分页长度，LLM 拿不到全文
       if (!args.offset && !args.limit) {
-        readState.set(filePath, { content: String(res.content ?? '') })
+        readState.set(filePath, { length: String(res.content ?? '').length })
       }
       return { success: true, content: applyReadWindow(String(res.content ?? ''), offset, limit) }
     }
@@ -119,7 +126,7 @@ export const readFileTool = buildAgentTool({
     // ⚠️ 仅「无 offset/limit 的全量读」短路（P0-1 修订）——豁免条件同外部分支
     const state = readState.get(pathCheck.fullPath)
     if (state && !args.offset && !args.limit) {
-      return { success: true, content: FILE_UNCHANGED_STUB(pathCheck.fullPath, state.content.length) }
+      return { success: true, content: FILE_UNCHANGED_STUB(pathCheck.fullPath, state.length) }
     }
 
     const result = await ipc.invoke('fs:read-file', pathCheck.fullPath)
@@ -130,7 +137,7 @@ export const readFileTool = buildAgentTool({
     // 读去重：仅「无 offset/limit 的全量读」记录状态（P0-1 修订：分页读不覆盖「全量已读」语义）——
     // 否则分页读把 Map 覆盖为部分内容，后续全量读命中桩时桩长度=分页长度，LLM 拿不到全文
     if (!args.offset && !args.limit) {
-      readState.set(pathCheck.fullPath, { content: String(result.content ?? '') })
+      readState.set(pathCheck.fullPath, { length: String(result.content ?? '').length })
     }
     return { success: true, content: applyReadWindow(String(result.content ?? ''), offset, limit) }
   },

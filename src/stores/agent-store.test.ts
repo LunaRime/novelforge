@@ -196,4 +196,23 @@ describe('read_file 读去重与会话生命周期', () => {
     expect(r3.content).toContain('长文本内容')
     expect(r3.content).not.toContain('file_unchanged')
   })
+
+  it('删除活跃会话后 read_file 重复读返回全文（clearReadState 生效）', async () => {
+    // 防测试顺序依赖：先全清模块级读去重状态
+    clearReadState()
+    // 存在第二个会话：删除活跃会话后 activeConversationId 切换到它（镜像 selectConversation 清理用例）
+    useAgentStore.getState().createConversation({ title: 'S1' })
+    useAgentStore.getState().createConversation({ title: 'S2' })
+    const activeId = useAgentStore.getState().activeConversationId!
+    const r1 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r1.content).toContain('长文本内容')
+    const r2 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r2.content).toContain('file_unchanged') // 读去重桩命中
+    // 删除活跃会话（S2）→ 激活 S1 → 读去重状态清空 → 重复读恢复全文
+    //（此前 deleteConversation 缺 clearReadState，新活跃会话会收到从未读过的文件的桩）
+    useAgentStore.getState().deleteConversation(activeId)
+    const r3 = await readFileTool.execute({ file_path: 'chap1.md' })
+    expect(r3.content).toContain('长文本内容')
+    expect(r3.content).not.toContain('file_unchanged')
+  })
 })

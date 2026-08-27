@@ -41,7 +41,9 @@ async function runLoopWithResponses(
 ): Promise<{ generateFn: ReturnType<typeof vi.fn>; messagesLog: LLMMessage[][]; callbacks: ReturnType<typeof createCallbacks> }> {
   const messagesLog: LLMMessage[][] = []
   const generateFn = vi.fn((messages: LLMMessage[]): Promise<string> => {
-    messagesLog.push(messages)
+    // 浅拷贝快照：compressMessagesToBudget 在预算内返回原数组引用（token-budget.ts:544），
+    // 引擎随后仍会继续向其 push 新消息——直接存引用会让 messagesLog 全部别名到循环结束后的最终态
+    messagesLog.push([...messages])
     return Promise.resolve(responses.shift() ?? '')
   })
   const callbacks = createCallbacks()

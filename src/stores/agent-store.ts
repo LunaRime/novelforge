@@ -246,6 +246,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         : state.activeConversationId
       return { conversations: filtered, activeConversationId: nextId }
     })
+    // 清空读去重状态：删除活跃会话时 activeConversationId 会切换到既有会话——
+    // 新活跃会话从未读过该文件，却会命中上一会话的 file_unchanged 桩（零内容）。
+    // 与 createConversation/selectConversation 挂钩一致（后者即使选择同一会话也清空）
+    clearReadState()
     // 同步删除归档文件（主进程幂等删除；fire-and-forget）
     ipc.invoke('fs:agent-archive-delete', id).catch(() => {
       console.warn('[Agent] 归档删除失败:', id)
