@@ -3,14 +3,41 @@ import path from 'node:path'
 import os from 'node:os'
 import { GlobalConfig } from '../../src/shared/ipc-channels'
 
-export const VELA_HOME = path.join(os.homedir(), '.vela') // V1 保持原值；V2 改 ~/.novelforge
+export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 
-/** 项目内运行时数据目录名（V1 占位值 .vela；V2 改 .novelforge——与 VELA_HOME 同步一次改） */
-export const PROJECT_VELA_DIR = '.vela'
+/** 项目内运行时数据目录名（与 VELA_HOME 同步改名：.vela → .novelforge） */
+export const PROJECT_VELA_DIR = '.novelforge'
 
-/** 项目库目录（V1 单路径版；V2 升级双路径+惰性迁移）——所有直开点统一走此函数 */
+/** 全局目录迁移：~/.vela → ~/.novelforge（启动早期调用；失败静默，旧路径兜底） */
+export async function migrateLegacyDirs(): Promise<void> {
+  const oldHome = path.join(os.homedir(), '.vela')
+  const newHome = VELA_HOME
+  if (fs.existsSync(oldHome) && !fs.existsSync(newHome)) {
+    try {
+      fs.renameSync(oldHome, newHome)
+    } catch (e) {
+      console.error('[NovelForge] 迁移 ~/.vela 失败，保留旧目录读取：', e)
+    }
+  }
+}
+
+/** 项目库目录：优先 .novelforge；旧 .vela 存在且新目录不存在时惰性迁移（P0-6：覆盖未打开项目的
+ *  跨项目聚合直开点——activity/usage 只读扫 B/C 项目时同样触发迁移，不再静默漏读）；
+ *  迁移失败回退旧路径（双路径兜底，数据不丢） */
 export function getProjectVelaDir(projectPath: string): string {
-  return path.join(projectPath, PROJECT_VELA_DIR)
+  const newDir = path.join(projectPath, PROJECT_VELA_DIR)
+  if (fs.existsSync(newDir)) return newDir
+  const oldDir = path.join(projectPath, '.vela')
+  if (fs.existsSync(oldDir)) {
+    try {
+      fs.renameSync(oldDir, newDir)  // 惰性迁移：rename 成功后返回新路径
+      return newDir
+    } catch (e) {
+      console.error(`[NovelForge] 迁移 ${projectPath}/.vela 失败，保留旧目录读取：`, e)
+      return oldDir  // 迁移失败：回退旧路径（双路径兜底，数据不丢）
+    }
+  }
+  return newDir  // 新项目：无任何目录 → 用 .novelforge 创建
 }
 
 export function ensureVelaHome() {

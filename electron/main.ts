@@ -4,6 +4,7 @@ import { registerIPCHandlers } from './ipc-handlers'
 import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
+import { migrateLegacyDirs } from './utils/config-utils'
 
 import path from 'node:path'
 import { exec } from 'node:child_process'
@@ -262,7 +263,9 @@ app.on('before-quit', () => {
   logger.close()
 })
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  // 全局目录迁移：~/.vela → ~/.novelforge（必须在 logger 首写 VELA_HOME 之前，防新目录先建导致跳过迁移）
+  await migrateLegacyDirs()
   // 双环境日志：dev 模式 / 内测版（-alpha.N 或历史日期式）→ 开发日志（DEBUG 全量）；
   // 公测版（-beta.N）/ 正式版 → 发布日志（INFO 起）
   const logEnv = detectLogEnvironment(Boolean(VITE_DEV_SERVER_URL), app.getVersion())

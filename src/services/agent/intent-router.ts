@@ -205,7 +205,7 @@ function flattenReadableFiles(
   const out: Array<{ name: string; path: string }> = []
   for (const n of nodes) {
     if (n.isDir) {
-      if (n.name === '.vela' || n.name === 'node_modules' || n.name === '.git') continue
+      if (n.name === '.novelforge' || n.name === '.vela' || n.name === 'node_modules' || n.name === '.git') continue
       out.push(...flattenReadableFiles((n.children as Array<{ name: string; isDir: boolean; children?: unknown[] }>) ?? [], prefix + n.name + '/'))
     } else {
       const lower = n.name.toLowerCase()

@@ -9,6 +9,7 @@
 import { ipcMain, app, BrowserWindow, shell } from 'electron'
 import { autoUpdater, UpdateInfo as EUUpdateInfo } from 'electron-updater'
 import path from 'node:path'
+import os from 'node:os'
 import fs from 'node:fs'
 import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
@@ -128,14 +129,21 @@ function triggerUninstall(): { success: boolean; error?: string } {
 }
 
 /**
- * 清理用户数据目录 (~/.vela)
+ * 清理用户数据目录（~/.novelforge + 旧 ~/.vela 双删——迁移失败残留场景）
  */
 function cleanUserData(): { success: boolean; error?: string } {
   try {
-    if (fs.existsSync(VELA_HOME)) {
-      fs.rmSync(VELA_HOME, { recursive: true, force: true })
+    const legacyHome = path.join(os.homedir(), '.vela')
+    const targets = [VELA_HOME, legacyHome]
+    let cleaned = false
+    for (const dir of targets) {
+      if (fs.existsSync(dir)) {
+        fs.rmSync(dir, { recursive: true, force: true })
+        cleaned = true
+      }
+    }
+    if (cleaned) {
       logger.info('Uninstall', t('log.uninstall.cleanedUserData').replace('{path}', VELA_HOME))
-      return { success: true }
     }
     return { success: true } // 目录不存在也算成功
   } catch (err) {

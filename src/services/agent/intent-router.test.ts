@@ -62,8 +62,11 @@ const TEST_TREE = [
     { name: '设定.json', path: '02_架构/设定.json', isDir: false },
     { name: '封面.png', path: '02_架构/封面.png', isDir: false }, // 非可读扩展名
   ] },
+  { name: '.novelforge', path: '.novelforge', isDir: true, children: [
+    { name: 'vela.db', path: '.novelforge/vela.db', isDir: false }, // 内部目录应排除
+  ] },
   { name: '.vela', path: '.vela', isDir: true, children: [
-    { name: 'vela.db', path: '.vela/vela.db', isDir: false }, // 内部目录应排除
+    { name: 'vela.db', path: '.vela/vela.db', isDir: false }, // 旧内部目录（迁移窗口期回退）也应排除
   ] },
 ]
 
@@ -78,7 +81,8 @@ describe('searchProjectFiles', () => {
     expect(paths).toContain('世界观.md')
     expect(paths).toContain('02_架构/故事线.md')
     expect(paths).not.toContain('02_架构/封面.png') // 非文本
-    expect(paths).not.toContain('.vela/vela.db')     // 内部目录
+    expect(paths).not.toContain('.novelforge/vela.db') // 新内部目录
+    expect(paths).not.toContain('.vela/vela.db')       // 旧内部目录（迁移窗口期回退）
   })
 
   it('按文件名模糊匹配', () => {
