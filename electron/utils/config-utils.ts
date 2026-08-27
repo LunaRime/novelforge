@@ -8,24 +8,53 @@ export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 /** 项目内运行时数据目录名（与 VELA_HOME 同步改名：.vela → .novelforge） */
 export const PROJECT_VELA_DIR = '.novelforge'
 
-/** 判定目录是否为 ensureVelaHome 空建产物：目录不存在 / 空目录 / 仅含空的 prompts+logs 子目录
- *  （ensureVelaHome 的产物形态：{path, prompts, logs}）→ true；
- *  含其他任何条目（用户数据）→ false。**false 时绝不删除**（安全边界，用户数据目录保留） */
-function isAutoCreatedEmptyHome(dir: string): boolean {
-  if (!fs.existsSync(dir)) return true
+/** 目录内容是否仅含 .log 文件（含空目录）——日志是应用自身副产物
+ *  （logger.ts createWriteStream 写 {prefix}{date}.log；Dev 模式在 logs/dev/），
+ *  非用户数据，删除可接受。读取异常 → false（安全侧向） */
+function isLogsOnlyDir(dir: string): boolean {
+  try {
+    return fs.readdirSync(dir).every((name: string) => name.endsWith('.log'))
+  } catch {
+    return false
+  }
+}
+
+/** 判定目录是否为「auto 形态」——ensureVelaHome 产物 + 应用日志副产物：
+ *  目录不存在 / 空目录 → true；prompts 不存在或为空；logs 不存在或仅含 .log 文件
+ *  （或含仅 .log 文件的 dev/ 子目录——logger Dev 模式 {prefix}{date}.log）；
+ *  其余任何条目（用户数据：非 .log 文件、非空 prompts、非空 dev、其他目录/文件）→ false。
+ *  **false 时绝不删除**（安全边界，用户数据目录保留） */
+function isAutoCreatedHome(dir: string): boolean {
   let entries: string[]
   try {
+    if (!fs.existsSync(dir)) return true
     entries = fs.readdirSync(dir)
   } catch {
     return false
   }
   if (entries.length === 0) return true
   for (const name of entries) {
-    if (name !== 'prompts' && name !== 'logs') return false
-    try {
-      if (fs.readdirSync(path.join(dir, name)).length > 0) return false
-    } catch {
-      return false // prompts/logs 存在但不可读/非目录 → 视为含数据，不删除
+    if (name === 'prompts') {
+      try {
+        if (fs.readdirSync(path.join(dir, name)).length > 0) return false
+      } catch {
+        return false // prompts 存在但不可读/非目录 → 视为含数据，不删除
+      }
+    } else if (name === 'logs') {
+      const logsPath = path.join(dir, name)
+      let logsEntries: string[]
+      try {
+        logsEntries = fs.readdirSync(logsPath)
+      } catch {
+        return false // logs 存在但不可读/非目录 → 视为含数据，不删除
+      }
+      for (const sub of logsEntries) {
+        if (sub.endsWith('.log')) continue
+        if (sub === 'dev' && isLogsOnlyDir(path.join(logsPath, sub))) continue
+        return false
+      }
+    } else {
+      return false
     }
   }
   return true
@@ -34,17 +63,17 @@ function isAutoCreatedEmptyHome(dir: string): boolean {
 /** 全局目录迁移：~/.vela → ~/.novelforge（启动早期调用；失败静默，旧路径兜底）。
  *  判定哨兵为 newHome/config.json（而非目录存在）——防「首次 rename 失败后 ensureVelaHome
  *  空建 newHome」令条件永久为假、数据永久搁浅；失败下次启动自动重试。
- *  重试前清理 auto-created 空新目录树（Win32 目录 rename 到已存在空目录会 EPERM——
- *  不清则每次启动都重试但都不成功，用户配置仍搁浅） */
+ *  重试前清理 auto 形态新目录树（ensureVelaHome 产物 {path,prompts,logs} + 应用日志副产物）——
+ *  Win32 目录 rename 到已存在目录会 EPERM；非 auto 形态（含用户数据）绝不删除 */
 export async function migrateLegacyDirs(): Promise<void> {
   const oldHome = path.join(os.homedir(), '.vela')
   const newHome = VELA_HOME
   if (fs.existsSync(oldHome) && !fs.existsSync(GLOBAL_CONFIG_PATH)) {
-    // Win32：目录 rename 到已存在（空）目录会 EPERM——重试前识别并清理
-    // ensureVelaHome 空建的新目录树；仅限 auto 形态（空/仅空 prompts+logs），
+    // Win32：目录 rename 到已存在目录会 EPERM——重试前识别并清理新目录树
+    // （auto 形态：ensureVelaHome 空建产物 + 失败会话必然落盘的日志副产物）；
     // 含用户数据的目录绝不删除（清理失败同样走 rename 失败路径静默回退）
     try {
-      if (isAutoCreatedEmptyHome(newHome)) {
+      if (isAutoCreatedHome(newHome)) {
         fs.rmSync(newHome, { recursive: true, force: true })
       }
     } catch (e) {
