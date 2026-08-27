@@ -65,6 +65,8 @@ describe('archive 序列化', () => {
       projectPath: 'E:/p', projectName: 'P',
       compressed: [{ batch: 1, original: [msgs(3)[0]], summary: '摘要', compressedAt: 1, originalTokens: 100 }],
       rollingSummary: '滚动摘要',
+      // F5：parse 同 messages/compressed 一样恒常附加缺省字段——rewound 缺失即 []（完整形状契约）
+      rewound: [],
     }
     const parsed = parseArchive(serializeArchive(conv))
     expect(parsed).toEqual(conv)
@@ -79,6 +81,7 @@ describe('archive 序列化', () => {
     expect(parsed).not.toBeNull()
     expect(parsed!.messages).toEqual([])
     expect(parsed!.compressed).toEqual([])
+    expect(parsed!.rewound).toEqual([])
     expect(parsed!.rollingSummary).toBeUndefined()
   })
 

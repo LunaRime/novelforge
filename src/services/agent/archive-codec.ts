@@ -1,4 +1,4 @@
-import type { AgentMessage, AgentConversation } from '../../stores/agent-store'
+import type { AgentMessage, AgentConversation, RewoundBranch } from '../../stores/agent-store'
 import { estimateTokens } from './token-budget'
 
 export interface CompressedBatch {
@@ -46,7 +46,7 @@ export function serializeArchive(conv: AgentConversation): string {
   return JSON.stringify(conv, null, 2)
 }
 
-/** 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认；手改/损坏形状逐条防御 */
+/** 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认；手改/损坏形状逐条防御（messages/compressed/rewound） */
 export function parseArchive(raw: string): AgentConversation | null {
   try {
     const data = JSON.parse(raw) as Partial<AgentConversation>
@@ -71,7 +71,22 @@ export function parseArchive(raw: string): AgentConversation | null {
               : [],
           }))
       : []
-    return { ...data, messages, compressed } as AgentConversation
+    // ⚠️ F5 防御（同 messages/compressed 模式）：rewound 逐条形状校验——messageId 字符串 + messages
+    //    数组，否则整条过滤（损坏 arch 的 restoreRewound 对 spread undefined 会 throw）；
+    //    条目内 messages 再逐条过滤 content 字符串
+    const rewound: RewoundBranch[] = Array.isArray(data.rewound)
+      ? (data.rewound as unknown as RewoundBranch[])
+          .filter(e => !!e && typeof e === 'object'
+            && typeof (e as { messageId?: unknown }).messageId === 'string'
+            && Array.isArray((e as { messages?: unknown }).messages))
+          .map(e => ({
+            ...e,
+            messages: (e.messages as unknown as AgentMessage[]).filter(
+              m => !!m && typeof m === 'object' && typeof (m as { content?: unknown }).content === 'string'
+            ),
+          }))
+      : []
+    return { ...data, messages, compressed, rewound } as AgentConversation
   } catch {
     return null
   }

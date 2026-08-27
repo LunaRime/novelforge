@@ -551,4 +551,64 @@ describe('对话分支 fork/rewind', () => {
     expect(parsedRewound.rewound![0].messageId).toBe('a1')
     expect(parsedRewound.rewound![0].messages.map(m => m.id)).toEqual(['u2', 'a2'])
   })
+
+  it('fork 过滤 in-flight streaming 占位符（F2：streaming:true 行不复制）', () => {
+    useAgentStore.setState({
+      conversations: [{
+        ...baseConv(),
+        messages: [
+          { id: 'u1', role: 'user', content: '你好', createdAt: 1 },
+          { id: 'u2', role: 'user', content: '继续', createdAt: 2 },
+          { id: 'a1', role: 'assistant', content: '生成中', createdAt: 3, streaming: true, toolCalls: [] },
+        ],
+      }],
+    })
+    const newId = useAgentStore.getState().forkFromMessage('a1')!
+    const forked = useAgentStore.getState().conversations.find(c => c.id === newId)!
+    expect(forked.messages.some(m => m.streaming)).toBe(false)
+    expect(forked.messages.map(m => m.id)).toEqual(['u1', 'u2'])
+  })
+
+  it('rewindToMessage 生成期间守卫（F3：generating 时不截断状态不变）', () => {
+    useAgentStore.setState({ generating: true })
+    const ok = useAgentStore.getState().rewindToMessage('a1')
+    expect(ok).toBe(false)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2', 'a2'])
+    expect(conv.rewound).toBeUndefined()
+    useAgentStore.setState({ generating: false })
+  })
+
+  it('rewind 到最后一条消息（F6）：无截断内容不产生空 entry', () => {
+    const ok = useAgentStore.getState().rewindToMessage('a2')
+    expect(ok).toBe(false)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2', 'a2'])
+    expect(conv.rewound).toBeUndefined()
+  })
+
+  it('parseArchive 损坏 rewound 不 throw（F5：整条过滤/条目内消息净化）', () => {
+    const parsed = parseArchive(JSON.stringify({
+      id: 'conv-bad-rewound',
+      title: '会话',
+      messages: [{ id: 'u1', role: 'user', content: '你好', createdAt: 1 }],
+      rewound: 'x',
+    }))!
+    expect(parsed.rewound).toEqual([])
+    // 条目缺 messageId / messages 非数组 → 整条过滤；合法条目内坏消息逐条净化
+    const parsed2 = parseArchive(JSON.stringify({
+      id: 'conv-bad-entry',
+      title: '会话2',
+      messages: [{ id: 'u1', role: 'user', content: '你好', createdAt: 1 }],
+      rewound: [
+        { messages: [{ id: 'a1', role: 'assistant', content: 'x', createdAt: 2 }] },
+        { messageId: 'u2', messages: 'bad', rewoundAt: 1 },
+        { messageId: 'u2', messages: [{ id: 'a2', role: 'assistant', content: 'y', createdAt: 2 }, { id: 'a3', content: 123 }], rewoundAt: 1 },
+        null,
+      ],
+    }))!
+    expect(parsed2.rewound).toHaveLength(1)
+    expect(parsed2.rewound![0].messageId).toBe('u2')
+    expect(parsed2.rewound![0].messages.map(m => m.id)).toEqual(['a2'])
+  })
 })

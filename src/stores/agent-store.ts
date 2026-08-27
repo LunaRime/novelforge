@@ -1022,12 +1022,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (!conv) return null
     const idx = conv.messages.findIndex(m => m.id === messageId)
     if (idx < 0) return null
-    // 复制到起点（含）——system 消息显式过滤（评审注意点已核验：生成链路独立构建 system——
-    //   buildAgentSystemPromptAsync agent-store:445 每次生成重建 + historyMessages 过滤 role!=='system'（:561），
-    //   过滤不影响 fork 后新会话生成；此处过滤只为保持会话数据干净）
+    // 复制到起点（含）——system 消息 + in-flight streaming 占位符显式过滤（评审注意点已核验：
+    //   生成链路独立构建 system——buildAgentSystemPromptAsync agent-store:517 每次生成重建 +
+    //   historyMessages 过滤 role!=='system'（:633），过滤不影响 fork 后新会话生成；
+    //   此处过滤只为保持会话数据干净；streaming 占位符不复制——fork 后其流式更新仍指向原会话 id）
     const forkMsgs = conv.messages
       .slice(0, idx + 1)
-      .filter(m => m.role !== 'system')
+      .filter(m => m.role !== 'system' && !m.streaming)
       .map(m => ({ ...m }))
     const newConv: AgentConversation = {
       ...conv,
@@ -1042,7 +1043,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       updatedAt: Date.now(),
     }
     set(s => ({
-      conversations: [...s.conversations, newConv],
+      // 与 createConversation 一致的 prepend（列表合同「最新的排在前面」）；history 面板按
+      // updatedAt 排序故视觉不受影响，但 deleteConversation 的 filtered[0] 回退激活依赖该序
+      conversations: [newConv, ...s.conversations],
       activeConversationId: newConv.id,
     }))
     get().persistCurrent(newConv.id)
@@ -1050,11 +1053,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   rewindToMessage: (messageId) => {
+    // 生成期间不可回退：截断占位符进归档而 LLM 仍继续烧 token（onDone 写回旧 conv——回复丢失无信号）。
+    // 守卫放 store 层最稳（发送方唯一入口），UI 禁用留后续
+    if (get().generating) return false
     const conv = get().getActiveConversation()
     if (!conv) return false
     const idx = conv.messages.findIndex(m => m.id === messageId)
     if (idx < 0) return false
     const truncated = conv.messages.slice(idx + 1)
+    // 回退到最后一条消息：无截断内容，空 entry 无意义（不 append）
+    if (truncated.length === 0) return false
     const entry: RewoundBranch = { messageId, messages: truncated, rewoundAt: Date.now() }
     set(s => ({
       conversations: s.conversations.map(c =>
