@@ -155,7 +155,10 @@ const genId = () => crypto.randomUUID()
 
 /** 从消息内容生成会话标题 */
 const generateTitle = (content: string): string => {
-  const cleaned = content.replace(/\s+/g, ' ').trim()
+  // M8：P0-4 增强/注入消息形如「更新角色：苏晚晴\n\n原文」——取首段（增强句首）作标题；
+  // 原先直接对全文截断会把用户原文粘进标题（首条 character 消息标题成「更新角色：苏晚晴 修改苏晚晴的…」）
+  const firstParagraph = content.split(/\n\n/, 1)[0] ?? content
+  const cleaned = firstParagraph.replace(/\s+/g, ' ').trim()
   return cleaned.length > 24 ? cleaned.slice(0, 24) + '…' : cleaned
 }
 

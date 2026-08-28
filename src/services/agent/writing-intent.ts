@@ -51,12 +51,22 @@ export function detectWritingIntent(input: string): WritingIntent {
   if (/(?:生成|重新|创建|帮我)?\s*(?:大纲|蓝图)/.test(input)) return { kind: 'architecture', target: 'blueprint' }
   if (/(?:重新)?\s*(?:规划|设计|搭建|写)\s*(?:剧情|架构|世界观|剧情架构)/.test(input)) return { kind: 'architecture', target: 'architecture' }
 
+  // ==== 无名字角色操作（M3，评审裁定） ====
+  // 「修改/更新/调整/改 + 角色/人设/设定」无名字 → ambiguous('character')——与「创建角色」落点一致；
+  // 此前回落 refine(null) 会误触发润色工作流。放在架构判定之后（「帮我修改大纲」→ blueprint 先返回，
+  // M3 不与其竞争）、修稿判定之前（角色操作不喂给 refine）。只匹配 角色/人设/设定 目标词，与大纲
+  // 「蓝图/大纲」目标词正交——无角色目标词的输入不受影响。
+  // 排除「改写」：改(?!写)——改写是文本改写动词（「改写这段…」落 refine），非角色操作。
+  if (/(?:修改|更新|调整|改(?!写)).{0,4}(?:角色|人设|设定)/.test(input)) return { kind: 'ambiguous', hint: 'character' }
+
   // ==== 修稿 ====
   // 第 与 数字 之间允许空格（评审覆盖缺口修订：「润色第 2 章」此前退化成 refine(null)）
   // brief 修订：章号可位于动词之前（「把第2章润色一下」），原正则只跟动词后会把「一下」的「一」误当章号
   // 评审二次修订：数字分支 `章?` → `章`——「润色一下/修改一下/优化一下」不得把「一下」的「一」当章号（refine(1) 误触发）
+  // M6（评审覆盖缺口修订）：动词后容忍空格——「润色 第2章」（空格在动词与章号间）此前退化成 refine(null)；
+  //   `\s*` 只影响空格，不吞「一下」：空格后单数字后无 章 时（「润色 一下」）数字分支仍失败 → null
   const refinePreM = input.match(/第?\s*(\d+|[一二三四五六七八九十]+)\s*章\s*(?:的)?\s*(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)/)
-  const refineM = input.match(/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)(?:第?\s*(\d+|[一二三四五六七八九十]+)\s*章|这段|这段文字|这一段)?/)
+  const refineM = input.match(/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)\s*(?:第?\s*(\d+|[一二三四五六七八九十]+)\s*章|这段|这段文字|这一段)?/)
   if (/(?:润色|修改|改写|打磨|优化|修(?:一下|改)?)/.test(input)) {
     const chapRaw = refinePreM?.[1] ?? refineM?.[1]
     const chap = chapRaw ? parseChapterNum(chapRaw) : null
@@ -66,10 +76,12 @@ export function detectWritingIntent(input: string): WritingIntent {
   // ==== 写稿（最后判定——「写」是最宽动词） ====
   const writeVerb = /(?:写|创作|生成|起草|接着写|继续写|产出)/
   if (writeVerb.test(input)) {
-    const range = input.match(/(\d+)\s*[-–至到]\s*(\d+)\s*章/)
+    // M7（评审覆盖缺口修订）：中文数字 range——「五到八章」「第五到八章」此前不命中（仅阿拉伯数字 `-`/`至`）；
+    //   两段均经 parseChapterNum 解析（与单章一致），阿拉伯数字行为不变
+    const range = input.match(/(\d+|[一二三四五六七八九十]+)\s*[-–至到]\s*(\d+|[一二三四五六七八九十]+)\s*章/)
     if (range) {
-      const from = parseInt(range[1], 10), to = parseInt(range[2], 10)
-      if (from > 0 && to >= from) return { kind: 'chapter_creation', chapter: { from, to } }
+      const from = parseChapterNum(range[1]), to = parseChapterNum(range[2])
+      if (from !== null && to !== null && from > 0 && to >= from) return { kind: 'chapter_creation', chapter: { from, to } }
     }
     // \s* 支持「第 3 章」带空格（评审覆盖缺口修订：`第?(\d+)` 后无空格容忍时「第 3 章」匹配失败）
     const single = input.match(/第?\s*(\d+|[一二三四五六七八九十]+)\s*章/)
@@ -81,7 +93,11 @@ export function detectWritingIntent(input: string): WritingIntent {
     //（「写作风格是什么」「怎么写出更精彩的对话」此前被永久拦截为 ambiguous，无 ReAct 兜底）。
     //   写作/写法/写得/写好/写作风格 形态 或 含疑问词（什么/怎么/如何/？/?）→ 查询类留给 ReAct；
     //   祈使句「帮我写」不含这些形态 → 仍 ambiguous；带章号「写第3章」已先于护栏返回。
-    if (/(写作|写法|写得|写好|写作风格|怎么写)/.test(input) || /(什么|怎么|如何|？|\?)/.test(input)) {
+    // I3 扩展（deferred 评审裁决）：负向白名单——邮件/报告/文案/代码/方案/简历等明确非小说写作目标 → none；
+    //   误伤面：目标词判定在章号判定（range/单章）之后——「帮我写第三章」先命中章号不受影响。
+    if (/(写作|写法|写得|写好|写作风格|怎么写)/.test(input)
+      || /(什么|怎么|如何|？|\?)/.test(input)
+      || /(邮件|报告|文案|代码|方案|简历)/.test(input)) {
       return { kind: 'none' }
     }
     return { kind: 'ambiguous', hint: 'chapter' }

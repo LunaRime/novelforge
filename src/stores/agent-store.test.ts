@@ -360,6 +360,29 @@ describe('sendMessage 意图预路由', () => {
     expect(useAgentStore.getState().generating).toBe(false)
   })
 
+  it('M8：character 增强全文作首条消息 → 标题截取增强句首（「更新角色：苏晚晴」而非吞全文）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'character', name: '苏晚晴', action: 'update' })
+
+    await useAgentStore.getState().sendMessage('修改苏晚晴的角色设定')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    // 增强全文为「更新角色：苏晚晴\n\n修改苏晚晴的角色设定」——M8 首段取「更新角色：苏晚晴」
+    expect(after.title).toBe('更新角色：苏晚晴')
+  })
+
+  it('M8 负：普通首条消息（无增强注入）标题行为不变', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'none' })
+
+    await useAgentStore.getState().sendMessage('你好')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.title).toBe('你好')
+  })
+
   it('工作流启动失败 ERR_GUARD：注入 intentGuardFail 文案（不做 ReAct 兜底）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })

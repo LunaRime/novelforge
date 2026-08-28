@@ -54,17 +54,29 @@ describe('detectWritingIntent 命中表', () => {
   it('「优化一下」→ refine(null)（同上）', () => {
     expect(detectWritingIntent('优化一下')).toEqual({ kind: 'refine', chapter: null })
   })
-  it('「修改角色设定」无名字 → 回落 refine(null)（不触发垃圾名角色更新，A1 评审实测修正）', () => {
-    expect(detectWritingIntent('修改角色设定')).toEqual({ kind: 'refine', chapter: null })
+  it('「修改角色设定」无名字 → ambiguous(character)（M3：不再回落 refine(null) 误触润色工作流；不产生垃圾名角色更新）', () => {
+    expect(detectWritingIntent('修改角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
   })
-  it('「修改一下角色设定」→ 回落 refine(null)（「一下」是助词非名字，A1 评审二轮实测修正）', () => {
-    expect(detectWritingIntent('修改一下角色设定')).toEqual({ kind: 'refine', chapter: null })
+  it('「修改一下角色设定」→ ambiguous(character)（M3：「一下」是助词非名字，落点与「创建角色」一致）', () => {
+    expect(detectWritingIntent('修改一下角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
   })
-  it('「调整一下角色设定」→ 回落 none（调整非 refine 动词；无章节语义归 ReAct 兜底，同上）', () => {
-    expect(detectWritingIntent('调整一下角色设定')).toEqual({ kind: 'none' })
+  it('「调整一下角色设定」→ ambiguous(character)（M3：调整无名字角色操作不再静默 none）', () => {
+    expect(detectWritingIntent('调整一下角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
   })
-  it('「更新一下角色设定」→ 回落 none（更新非 refine 动词，同上）', () => {
-    expect(detectWritingIntent('更新一下角色设定')).toEqual({ kind: 'none' })
+  it('「更新一下角色设定」→ ambiguous(character)（M3：更新无名字角色操作不再静默 none）', () => {
+    expect(detectWritingIntent('更新一下角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
+  })
+  it('「改角色设定」→ ambiguous(character)（M3：最短动词形态「改」+ 词距离内目标命中）', () => {
+    expect(detectWritingIntent('改角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
+  })
+  it('「修改人设」→ ambiguous(character)（M3：人设/设定目标词同覆盖）', () => {
+    expect(detectWritingIntent('修改人设')).toEqual({ kind: 'ambiguous', hint: 'character' })
+  })
+  it('「修改一下这段文字」→ refine(null)（M3 负：无角色/人设/设定目标词不误伤 refine）', () => {
+    expect(detectWritingIntent('修改一下这段文字')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「修改蓝图」→ architecture(blueprint)（M3 负：蓝图/大纲目标词与角色目标词正交，架构命中不受影响）', () => {
+    expect(detectWritingIntent('修改蓝图')).toEqual({ kind: 'architecture', target: 'blueprint' })
   })
   it('「修改一下苏晚晴的角色设定」→ character(苏晚晴, update)（「一下」助词消费，名字正常，A1 评审二轮需求）', () => {
     expect(detectWritingIntent('修改一下苏晚晴的角色设定')).toEqual({ kind: 'character', name: '苏晚晴', action: 'update' })
@@ -81,7 +93,43 @@ describe('detectWritingIntent 命中表', () => {
   it('「写第3章」→ chapter_creation(3)（带章号先于护栏返回，不受查询护栏影响，I3）', () => {
     expect(detectWritingIntent('写第3章')).toEqual({ kind: 'chapter_creation', chapter: 3 })
   })
-  it('「修改 一下角色设定」→ 不 character（空格变体：守卫前瞻容忍前导空格，M1）', () => {
-    expect(detectWritingIntent('修改 一下角色设定')).toEqual({ kind: 'refine', chapter: null })
+  it('「修改 一下角色设定」→ ambiguous(character)（空格变体不产生垃圾名 character——M1 守卫 + M3 落点澄清）', () => {
+    expect(detectWritingIntent('修改 一下角色设定')).toEqual({ kind: 'ambiguous', hint: 'character' })
+  })
+  it('「润色 第2章」→ refine(2)（动词后空格容忍，M6）', () => {
+    expect(detectWritingIntent('润色 第2章')).toEqual({ kind: 'refine', chapter: 2 })
+  })
+  it('「修改 第2章」→ refine(2)（动词后空格容忍变体，M6）', () => {
+    expect(detectWritingIntent('修改 第2章')).toEqual({ kind: 'refine', chapter: 2 })
+  })
+  it('「润色 一下」→ refine(null)（空格变体不把「一」当章号，M6 负）', () => {
+    expect(detectWritingIntent('润色 一下')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「修改 一下」→ refine(null)（同上，M6 负）', () => {
+    expect(detectWritingIntent('修改 一下')).toEqual({ kind: 'refine', chapter: null })
+  })
+  it('「写五到八章」→ chapter_creation(range {5,8})（中文数字 range，M7）', () => {
+    expect(detectWritingIntent('写五到八章')).toEqual({ kind: 'chapter_creation', chapter: { from: 5, to: 8 } })
+  })
+  it('「写第五到八章」→ chapter_creation(range {5,8})（序数前缀「第」不阻断 range，M7）', () => {
+    expect(detectWritingIntent('写第五到八章')).toEqual({ kind: 'chapter_creation', chapter: { from: 5, to: 8 } })
+  })
+  it('「写五至八章」→ chapter_creation(range {5,8})（「至」分隔符中文数字，M7）', () => {
+    expect(detectWritingIntent('写五至八章')).toEqual({ kind: 'chapter_creation', chapter: { from: 5, to: 8 } })
+  })
+  it('「五到八章」无写动词 → none（range 仅在写稿意图内触发，M7 负）', () => {
+    expect(detectWritingIntent('五到八章')).toEqual({ kind: 'none' })
+  })
+  it('「帮我写个邮件」→ none（负向白名单目标词，I3 扩展）', () => {
+    expect(detectWritingIntent('帮我写个邮件')).toEqual({ kind: 'none' })
+  })
+  it('「写个报告」→ none（负向白名单目标词，I3 扩展）', () => {
+    expect(detectWritingIntent('写个报告')).toEqual({ kind: 'none' })
+  })
+  it('「帮我写个文案」→ none（负向白名单目标词，I3 扩展）', () => {
+    expect(detectWritingIntent('帮我写个文案')).toEqual({ kind: 'none' })
+  })
+  it('「帮我写一下」→ ambiguous（祈使句+助词不落负向白名单，I3 负）', () => {
+    expect(detectWritingIntent('帮我写一下')).toEqual({ kind: 'ambiguous', hint: 'chapter' })
   })
 })
