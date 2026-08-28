@@ -12,7 +12,7 @@ import { ipc } from './services/ipc-client'
 // 渲染进程全局错误捕获 → ERROR 落盘（必须先注册，确保早期错误也被记录）
 installRendererErrorCapture()
 
-// 恢复 Agent 会话归档（~/.vela/agent-archive）——CCR 持久化层
+// 恢复 Agent 会话归档（~/.novelforge/agent-archive）——CCR 持久化层
 useAgentStore.getState().restoreArchives().catch(() => {})
 
 // 窗口标题跟随界面语言（index.html 静态 title 是 React 挂载前的启动兜底）

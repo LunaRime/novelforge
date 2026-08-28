@@ -1,7 +1,7 @@
 /**
  * UsageStatsView — 用量统计面板（设置 → 用量）
  *
- * 双视图：当前项目（llm_calls 在项目库 {project}/.vela/vela.db）purpose/模型维度 + 合计 + 时间区间过滤，
+ * 双视图：当前项目（llm_calls 在项目库 {project}/.novelforge/vela.db）purpose/模型维度 + 合计 + 时间区间过滤，
  * 以及全部项目（跨项目聚合：最近项目 + 当前项目逐项目只读，主进程 60s 缓存；旧库缺列降级标记）。
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react'

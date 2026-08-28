@@ -1,7 +1,7 @@
 /**
  * TemplatesController — 角色卡模板管理（保存/列表/获取/删除）
  *
- * 模板存储于 ~/.vela/templates/*.json（与技能库同目录模式）：
+ * 模板存储于 ~/.novelforge/templates/*.json（与技能库同目录模式）：
  * 格式 { "schema": "character", "name": "模板名", "description": "...", "data": { 角色卡字段 } }
  * 文件名校验走 validateCharacterTemplate + 名称清洗（防路径穿越）。
  */

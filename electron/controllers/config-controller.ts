@@ -57,7 +57,7 @@ export function registerConfigController() {
     }
   })
 
-  /** 获取 ~/.vela 路径 */
+  /** 获取 ~/.novelforge 路径 */
   ipcMain.handle('config:get-vela-home', async () => {
     return VELA_HOME
   })

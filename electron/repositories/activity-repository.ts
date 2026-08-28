@@ -37,7 +37,7 @@ interface ConfigRecentProject {
 /**
  * 活动统计 Repository — GitHub 风格每日活动图的数据源
  *
- * 跨项目聚合（最近项目列表来自全局配置 ~/.vela/config.json，
+ * 跨项目聚合（最近项目列表来自全局配置 ~/.novelforge/config.json，
  * 由渲染进程打开项目时同步）：
  * 1. 写作字数：drafts（source='write'）
  * 2. 修改量：drafts（source='rewrite'）+ revisions

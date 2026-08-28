@@ -1,7 +1,7 @@
 /**
  * MCPSettings — MCP 服务器设置（列表/连接/添加/删除）
  *
- * 配置文件：~/.vela/mcp_config.json（Claude Desktop 兼容格式）
+ * 配置文件：~/.novelforge/mcp_config.json（Claude Desktop 兼容格式）
  */
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Plug, Unplug, Server } from 'lucide-react'

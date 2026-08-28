@@ -1,7 +1,7 @@
 /**
  * SkillsSettings — 技能库设置（导入/列表/删除 .md 技能文件）
  *
- * 技能存储于 ~/.vela/skills/*.md（与 Claude Code skills 目录同模式），
+ * 技能存储于 ~/.novelforge/skills/*.md（与 Claude Code skills 目录同模式），
  * 供 AI Agent 对话时按需加载。
  */
 import { useState, useEffect, useCallback } from 'react'

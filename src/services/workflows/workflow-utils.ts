@@ -737,7 +737,7 @@ export interface PostProcessStepResult {
   attemptCount: number
 }
 
-/** 后处理状态（持久化到 .vela/post_process/{scope}.json） */
+/** 后处理状态（持久化到 DB post_process_runs/steps 表——不再使用 JSON 状态文件） */
 export interface PostProcessStatus {
   /** 唯一标识，如 'chapter_1_finalize' */
   scope: string

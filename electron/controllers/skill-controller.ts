@@ -1,7 +1,7 @@
 /**
  * SkillController — 技能文件管理（导入/列表/删除）
  *
- * 技能文件存储于 ~/.vela/skills/*.md（与 Claude Code skills 目录同模式）：
+ * 技能文件存储于 ~/.novelforge/skills/*.md（与 Claude Code skills 目录同模式）：
  * - 导入：写入 .md 文件（名称清洗防路径穿越）
  * - 列表：扫描目录，解析 frontmatter description 作为描述
  * - 删除：移除文件

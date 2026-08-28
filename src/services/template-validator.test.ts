@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { validateCharacterTemplate } from './template-validator'
 
 /**
- * 角色卡模板校验 — ~/.vela/templates/ 模板文件格式：
+ * 角色卡模板校验 — ~/.novelforge/templates/ 模板文件格式：
  * { "schema": "character", "name": "模板名", "description": "...", "data": { 角色卡字段 } }
  */
 describe('validateCharacterTemplate', () => {

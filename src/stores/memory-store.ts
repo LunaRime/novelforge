@@ -1,7 +1,7 @@
 /**
  * memory-store — 作品记忆列表状态（侧栏 AI 记忆组）
  *
- * 数据源：memory:list（.vela/memory/*.md 三级摘要文件：章节/分卷/全书）。
+ * 数据源：memory:list（.novelforge/memory/*.md 三级摘要文件：章节/分卷/全书）。
  * MemoryGroup 消费：文件列表 + 加载态；手动重建后 refresh() 刷新 stale 徽标。
  */
 import { create } from 'zustand'

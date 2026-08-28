@@ -1,6 +1,6 @@
 /**
  * 服务商预设配置 — 共享类型定义
- * 渲染进程与主进程共同使用，持久化在 ~/.vela/provider-presets.json
+ * 渲染进程与主进程共同使用，持久化在 ~/.novelforge/provider-presets.json
  */
 
 /** 单个模型的预设 — name + 该模型的输出 token 上限 */

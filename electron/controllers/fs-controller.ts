@@ -288,7 +288,7 @@ export function registerFSController() {
     }
   })
 
-  // ===== Agent 会话归档（~/.vela/agent-archive/<id>.json，CCR 持久化层） =====
+  // ===== Agent 会话归档（~/.novelforge/agent-archive/<id>.json，CCR 持久化层） =====
   // 渲染进程不持有 VELA_HOME 路径，归档目录由主进程统一定位（同模板/技能/日志惯例）
   const archivePath = (id: string): string => {
     const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '') // uuid 防御性清洗，防路径穿越

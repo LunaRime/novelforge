@@ -1,7 +1,7 @@
 /**
  * 模板文件校验 — 纯函数，可单测
  *
- * 模板存储于 ~/.vela/templates/*.json，格式：
+ * 模板存储于 ~/.novelforge/templates/*.json，格式：
  * { "schema": "character", "name": "模板名", "description": "...", "data": { ... } }
  * schema 决定 data 结构：character = 角色卡字段（CharacterData 子集）。
  */

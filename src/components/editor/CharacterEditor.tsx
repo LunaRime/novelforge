@@ -124,7 +124,7 @@ export default function CharacterEditor() {
     runCharacterArchive(currentProject.path, selectedCard.name)
   }
 
-  // ===== 角色卡模板（~/.vela/templates/）：存为模板 / 应用模板 =====
+  // ===== 角色卡模板（~/.novelforge/templates/）：存为模板 / 应用模板 =====
 
   /** 模板列表（应用模板下拉用；空 = 未加载/无模板） */
   const [templates, setTemplates] = useState<Array<{ name: string; description: string }>>([])
@@ -140,7 +140,7 @@ export default function CharacterEditor() {
     } catch { /* 加载失败静默（下拉显示空） */ }
   }
 
-  /** 存为模板：当前角色卡 → ~/.vela/templates/{角色名}.json（schema 校验在模板定义层） */
+  /** 存为模板：当前角色卡 → ~/.novelforge/templates/{角色名}.json（schema 校验在模板定义层） */
   const handleSaveTemplate = async () => {
     if (!selectedCard) return
     try {
@@ -286,7 +286,7 @@ export default function CharacterEditor() {
               <Button variant="outline" size="sm" onClick={handleRoleplay} title={t('roleplay.enter')}>
                 <MessagesSquare size={12} /> {t('roleplay.enter')}
               </Button>
-              {/* 角色卡模板：存为模板（当前卡 → ~/.vela/templates/）/ 应用模板（下拉选择填充） */}
+              {/* 角色卡模板：存为模板（当前卡 → ~/.novelforge/templates/）/ 应用模板（下拉选择填充） */}
               <Button variant="outline" size="sm" onClick={handleSaveTemplate} title={t('template.saveAs')}>
                 <BookmarkPlus size={12} />
               </Button>

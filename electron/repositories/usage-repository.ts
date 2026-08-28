@@ -1,9 +1,9 @@
 /**
  * UsageRepository — 跨项目 token 聚合（设置 → 用量 → 全部项目）
  *
- * 项目列表来源：全局配置最近项目（~/.vela/config.json 的 recentProjects，渲染进程打开项目时同步）
+ * 项目列表来源：全局配置最近项目（~/.novelforge/config.json 的 recentProjects，渲染进程打开项目时同步）
  * + 当前打开项目（getCurrentProjectPath——新打开尚未写入全局配置的项目也始终纳入）。
- * 逐项目以只读连接打开项目库（{project}/.vela/vela.db，连接失败跳过，同 ActivityRepository.openProjectDb），
+ * 逐项目以只读连接打开项目库（{project}/.novelforge/vela.db，连接失败跳过，同 ActivityRepository.openProjectDb），
  * 聚合 llm_calls（success=1 口径，与当前项目面板 LLMHistoryRepository.getUsageStats 一致）。
  * 旧库（user_version < 16）缺 cached_tokens 列时按 0 聚合并在该项目标记 degraded（不抛错不静默缺失）。
  * 60 秒结果缓存（同 ActivityRepository.getDailyActivity）。

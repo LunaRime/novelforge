@@ -37,9 +37,9 @@ interface LLMState {
   saveModel: (model: ModelProfile) => Promise<boolean>
   /** 删除模型 */
   deleteModel: (modelId: string) => Promise<boolean>
-  /** 设置默认生成模型（持久化到 ~/.vela/config.json） */
+  /** 设置默认生成模型（持久化到 ~/.novelforge/config.json） */
   setDefaultModel: (modelId: string) => void
-  /** 设置默认向量模型（持久化到 ~/.vela/config.json） */
+  /** 设置默认向量模型（持久化到 ~/.novelforge/config.json） */
   setDefaultEmbeddingModel: (modelId: string) => void
   /** 非流式生成 */
   generate: (
@@ -82,7 +82,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
         if (saved) set({ modelRoutes: saved })
       } catch { /* 静默：无持久化配置时走自动分配 */ }
     }
-    // 从 ~/.vela/ 加载模型列表和默认模型 ID
+    // 从 ~/.novelforge/ 加载模型列表和默认模型 ID
     await get().loadModels()
     if (ipc.isElectron) {
       const [defaultId, defaultEmbeddingId] = await Promise.all([

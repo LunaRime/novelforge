@@ -57,7 +57,7 @@ function checkDatabase(): HealthCheckResult {
 /** 磁盘空间检查（项目目录所在盘） */
 function checkDiskSpace(projectPath?: string): HealthCheckResult {
   try {
-    // 默认检查 ~/.vela 配置目录
+    // 默认检查 ~/.novelforge 配置目录
     const targetPath = projectPath || process.env.VELA_HOME || ''
     if (!targetPath || !fs.existsSync(targetPath)) {
       // 无法确定路径时返回 neutral

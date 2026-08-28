@@ -852,7 +852,7 @@ export interface LogChannels {
   }
 }
 
-// ===== 作品记忆频道（三级摘要文件：章节/分卷/全书 + 跨会话共享事实，.vela/memory/*.md） =====
+// ===== 作品记忆频道（三级摘要文件：章节/分卷/全书 + 跨会话共享事实，.novelforge/memory/*.md） =====
 export interface MemoryChannels {
   'memory:list': {
     args: []

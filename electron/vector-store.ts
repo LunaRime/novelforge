@@ -6,7 +6,7 @@
  * - FTS-only（BM25 全文检索，零配置默认可用）
  * - 混合检索（FTS + 向量近邻，需要 Embedding 模型）
  *
- * 存储位置：{projectPath}/.vela/lancedb/
+ * 存储位置：{projectPath}/.novelforge/lancedb/
  */
 import type * as LanceDB from '@lancedb/lancedb'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'

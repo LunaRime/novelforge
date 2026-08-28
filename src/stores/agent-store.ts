@@ -133,7 +133,7 @@ interface AgentState {
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
-  /** 启动恢复：扫描 ~/.vela/agent-archive 重建会话列表（loadSeq 防竞态） */
+  /** 启动恢复：扫描 ~/.novelforge/agent-archive 重建会话列表（loadSeq 防竞态） */
   restoreArchives: () => Promise<void>
   /** 从指定消息 fork 新会话：复制到起点（含）的历史（过滤 system），新会话立即可用（自动激活）；
    *  返回新会话 id；无活跃会话或 messageId 无效返回 null */
