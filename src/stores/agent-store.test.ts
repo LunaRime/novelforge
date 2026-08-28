@@ -7,6 +7,7 @@ import { readFileTool, clearReadState } from '../services/agent/tools/read-file.
 import { detectWritingIntent } from '../services/agent/writing-intent'
 import { startChapterWorkflow, WorkflowStartError } from '../services/workflows/workflow-starter'
 import { runAgentLoop } from '../services/agent/agent-engine'
+import { skillRegistry } from '../services/agent/skill-registry'
 import { serializeArchive, parseArchive } from '../services/agent/archive-codec'
 import { t } from '../shared/locale'
 import type { AgentConversation } from './agent-store'
@@ -372,15 +373,40 @@ describe('sendMessage 意图预路由', () => {
     expect(after.title).toBe('更新角色：苏晚晴')
   })
 
-  it('M8 负：普通首条消息（无增强注入）标题行为不变', async () => {
+  it('M8 负：普通多段用户消息标题不截断（换行折叠为全文，而非仅首段）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
     mockDetect.mockReturnValue({ kind: 'none' })
 
-    await useAgentStore.getState().sendMessage('你好')
+    await useAgentStore.getState().sendMessage('第一段\n\n第二段')
 
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    expect(after.title).toBe('你好')
+    // 非增强形态不触发首段截断——若无条件截首段，标题会变成「第一段」
+    expect(after.title).toBe('第一段 第二段')
+  })
+
+  it('M8 负：/skill 注入消息标题行为不变（全文截断，不因换行截首段）', async () => {
+    skillRegistry.register({
+      metadata: { name: 'tw', displayName: 'TW', description: 'test skill' },
+      content: 'SKILL_BODY',
+      source: 'builtin',
+      baseDir: '/tmp/skills/tw',
+      filePath: '/tmp/skills/tw/SKILL.md',
+    })
+    try {
+      const conv = useAgentStore.getState().createConversation({ title: 'T' })
+      useLLMStore.setState({ defaultModelId: 'test-model' })
+
+      await useAgentStore.getState().sendMessage('/tw 嗨')
+
+      const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+      // 注入全文（skillUsed 头 + 换行 + 正文）为标题素材——标题须越过首段（「用户输入」段可见）；
+      // 无条件首段截断时标题会被截成「[用户使用了 Skill: TW]」（不含 用户输入）
+      expect(after.title).toContain('TW')
+      expect(after.title).toContain('用户输入')
+    } finally {
+      skillRegistry.clear()
+    }
   })
 
   it('工作流启动失败 ERR_GUARD：注入 intentGuardFail 文案（不做 ReAct 兜底）', async () => {

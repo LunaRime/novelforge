@@ -154,11 +154,13 @@ interface AgentState {
 const genId = () => crypto.randomUUID()
 
 /** 从消息内容生成会话标题 */
-const generateTitle = (content: string): string => {
-  // M8：P0-4 增强/注入消息形如「更新角色：苏晚晴\n\n原文」——取首段（增强句首）作标题；
-  // 原先直接对全文截断会把用户原文粘进标题（首条 character 消息标题成「更新角色：苏晚晴 修改苏晚晴的…」）
-  const firstParagraph = content.split(/\n\n/, 1)[0] ?? content
-  const cleaned = firstParagraph.replace(/\s+/g, ' ').trim()
+const generateTitle = (content: string, enhanced?: boolean): string => {
+  // M8：P0-4 增强消息形如「更新角色：苏晚晴\n\n原文」——仅在调用方标明增强形态（enhanced 标志，
+  // 仅 character 预路由设置 enhancedContent 时传 true）时取首段（增强句首）作标题；
+  // 原先直接对全文截断会把用户原文粘进标题（首条 character 消息标题成「更新角色：苏晚晴 修改苏晚晴的…」）。
+  // 普通多段用户消息 / /skill 注入消息非增强形态 → 保持对全文的既有截断行为（评审修复：首段截断不得无条件作用于所有含 \n\n 消息）。
+  const source = enhanced ? (content.split(/\n\n/, 1)[0] ?? content) : content
+  const cleaned = source.replace(/\s+/g, ' ').trim()
   return cleaned.length > 24 ? cleaned.slice(0, 24) + '…' : cleaned
 }
 
@@ -464,8 +466,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
 
     // 更新会话标题（取第一条用户消息）
+    // M8（评审修复）：仅 P0-4 增强形态（enhancedContent 注入——character 预路由独有）传 enhanced 标志；
+    //   普通多段用户消息与 /skill 注入消息无注入标志 → 保持对全文的既有截断行为
     const isFirstMsg = conv.messages.length === 0
-    const newTitle = isFirstMsg ? generateTitle(content) : conv.title
+    const newTitle = isFirstMsg ? generateTitle(content, enhancedContent !== undefined) : conv.title
 
     // 把用户消息 + 空助手消息写入会话
     set(state => ({
