@@ -1388,6 +1388,7 @@ export const UI_TEXTS_DATA = {
   'agent.confirmClearMsg': { 'zh-CN': '确定要清空所有对话记录？此操作不可撤销。', 'en-US': 'Clear all conversation history? This cannot be undone.', 'ru-RU': 'Очистить всю историю? Необратимо.' },
   'agent.forkConversation': { 'zh-CN': '从此处分支', 'en-US': 'Fork from here', 'ru-RU': 'Ветвить отсюда' },
   'agent.rewindToHere': { 'zh-CN': '回退到此处', 'en-US': 'Rewind to here', 'ru-RU': 'Откатить до сюда' },
+  'agent.rewindLastMessage': { 'zh-CN': '最后一条消息，无需回退', 'en-US': 'Last message — nothing to rewind', 'ru-RU': 'Последнее сообщение — откат не требуется' },
   'agent.forkSuffix': { 'zh-CN': '（分支）', 'en-US': '(fork)', 'ru-RU': '(ветка)' },
   'agent.forkedFrom': { 'zh-CN': '来自「{title}」', 'en-US': 'from "{title}"', 'ru-RU': 'из "{title}"' },
   'agent.confirmRewind': { 'zh-CN': '将截断此消息之后的全部对话（可恢复），确定？', 'en-US': 'This will truncate the conversation after this message (recoverable). Continue?', 'ru-RU': 'Диалог после этого сообщения будет обрезан (восстановимо). Продолжить?' },

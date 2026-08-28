@@ -23,6 +23,8 @@ interface Props {
   onFork?: (messageId: string) => void
   /** 回退到该消息（截断后续，可恢复） */
   onRewind?: (messageId: string) => void
+  /** 末条消息禁用回退（F6/D1：无内容可截断——store 静默 no-op，禁用 + 解释性 tooltip 消除无声失败） */
+  rewindDisabled?: boolean
 }
 
 /**
@@ -35,7 +37,7 @@ function splitThinking(content: string): { thinking: string | null; rest: string
   return { thinking: m[0], rest: content.slice(m[0].length + 2) }
 }
 
-export default function AgentMessage({ message, onFork, onRewind }: Props) {
+export default function AgentMessage({ message, onFork, onRewind, rewindDisabled }: Props) {
   const { t } = useTranslation()
   const { role, content, streaming, toolCalls, artifacts } = message
 
@@ -55,9 +57,11 @@ export default function AgentMessage({ message, onFork, onRewind }: Props) {
       {onRewind && (
         <button
           onClick={() => onRewind(message.id)}
+          disabled={rewindDisabled}
           className="p-1 rounded hover:opacity-80"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={t('agent.rewindToHere')}
+          // 禁用态用内联 opacity/cursor（inline 压过 hover:opacity-80 类，hover 时禁用态不失效）
+          style={{ color: 'var(--color-text-muted)', opacity: rewindDisabled ? 0.4 : undefined, cursor: rewindDisabled ? 'not-allowed' : undefined }}
+          title={rewindDisabled ? t('agent.rewindLastMessage') : t('agent.rewindToHere')}
         >
           <Undo2 size={12} />
         </button>

@@ -1076,6 +1076,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   restoreRewound: (entryIndex) => {
+    // 生成期间不可恢复：归档 append 进流式会话会与 onDone 写回竞争（与 rewindToMessage 的 F3 守卫对称）
+    if (get().generating) return false
     const conv = get().getActiveConversation()
     if (!conv || !conv.rewound || entryIndex < 0 || entryIndex >= conv.rewound.length) return false
     const entry = conv.rewound[entryIndex]

@@ -240,6 +240,11 @@ function ActiveConversation() {
 
   if (!activeConv) return null
 
+  // 可见消息列表（过滤 system——显示层与 store 层独立：store 按物理序截断，展示按可见序）
+  const visibleMessages = activeConv.messages.filter(m => m.role !== 'system')
+  /** 末条可见消息 id（F6/D1）：rewind 到末条无内容可截断（store 静默 no-op）——按钮禁用 + 解释性 tooltip */
+  const lastVisibleId = visibleMessages.length > 0 ? visibleMessages[visibleMessages.length - 1].id : null
+
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
   // F3：与注入共用 async 数据源（M1+M2 真实值）；async 未就绪时同步 M1-only 兜底，避免闪烁
   const syncSegments = buildAgentSystemSegments(activeConv.mode)
@@ -280,11 +285,16 @@ function ActiveConversation() {
             .map(b => (
               <CompressedBatchCard key={b.batch} batch={b} />
             ))}
-          {activeConv.messages
-            .filter(m => m.role !== 'system')
-            .map(msg => (
-              <AgentMessage key={msg.id} message={msg} onFork={handleFork} onRewind={handleRewind} />
-            ))}
+          {visibleMessages.map(msg => (
+            <AgentMessage
+              key={msg.id}
+              message={msg}
+              onFork={handleFork}
+              onRewind={handleRewind}
+              // 末条：不可回退（F6 store 已 no-op）——禁用 + 解释性 tooltip 消除无声失败
+              rewindDisabled={msg.id === lastVisibleId}
+            />
+          ))}
         </div>
         {/* 底部空间 */}
         <div className="h-4" />

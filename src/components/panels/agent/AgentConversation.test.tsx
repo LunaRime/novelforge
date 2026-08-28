@@ -297,3 +297,56 @@ describe('AgentHistoryPanel fork 层级', () => {
     act(() => { root.unmount() })
   })
 })
+
+describe('AgentConversation 末条消息 rewind 禁用（D1/F6）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async () => null),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+    useAgentStore.setState({ conversations: [], activeConversationId: null, showHistory: false, memoryView: false })
+  })
+
+  /** 构造带 4 条可见消息的活跃会话（user/assistant 交替，无 system——显示即物理序） */
+  const makeActiveConv = () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        mode: 'balanced',
+        messages: [
+          { id: 'm1', role: 'user', content: '你好', createdAt: Date.now() },
+          { id: 'm2', role: 'assistant', content: '你好呀', createdAt: Date.now() + 1 },
+          { id: 'm3', role: 'user', content: '继续', createdAt: Date.now() + 2 },
+          { id: 'm4', role: 'assistant', content: '好的', createdAt: Date.now() + 3 },
+        ],
+      } : c),
+    }))
+    return conv
+  }
+
+  it('末条消息 rewind 按钮 disabled（解释性 tooltip），其余消息保持可点（F6 静默 no-op 消除）', () => {
+    makeActiveConv()
+    const { container, root } = render(<AgentConversation />)
+
+    // rewind 按钮：正常态 title=agent.rewindToHere；禁用态 title=agent.rewindLastMessage（二选一匹配）
+    const rewindBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
+      .filter(b => b.title === t('agent.rewindToHere') || b.title === t('agent.rewindLastMessage'))
+    expect(rewindBtns).toHaveLength(4)
+    // 末条（DOM 序最后一个）禁用 + 解释性 tooltip
+    const last = rewindBtns[rewindBtns.length - 1]!
+    expect(last.disabled).toBe(true)
+    expect(last.title).toBe(t('agent.rewindLastMessage'))
+    // 其余 3 条可点且 tooltip 不变
+    expect(rewindBtns.slice(0, -1).every(b => !b.disabled && b.title === t('agent.rewindToHere'))).toBe(true)
+    // 禁用不影响末条 fork 入口（4 条消息仍全部可见 GitFork 按钮）
+    expect(container.querySelectorAll('svg.lucide-git-fork')).toHaveLength(4)
+
+    act(() => { root.unmount() })
+  })
+})

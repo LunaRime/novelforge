@@ -579,6 +579,18 @@ describe('对话分支 fork/rewind', () => {
     useAgentStore.setState({ generating: false })
   })
 
+  it('restoreRewound 生成期间守卫（D1：generating 时不恢复，归档不消费——与 F3 对称）', () => {
+    // 先正常 rewind 制造归档（generating=false 路径不受影响）
+    expect(useAgentStore.getState().rewindToMessage('a1')).toBe(true)
+    useAgentStore.setState({ generating: true })
+    const ok = useAgentStore.getState().restoreRewound(0)
+    expect(ok).toBe(false)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1']) // 无 append 回流式会话
+    expect(conv.rewound?.length).toBe(1) // 归档保留（不消费）
+    useAgentStore.setState({ generating: false })
+  })
+
   it('rewind 到最后一条消息（F6）：无截断内容不产生空 entry', () => {
     const ok = useAgentStore.getState().rewindToMessage('a2')
     expect(ok).toBe(false)
