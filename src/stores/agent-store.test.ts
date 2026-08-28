@@ -271,8 +271,13 @@ describe('sendMessage 意图预路由', () => {
     await useAgentStore.getState().sendMessage('写第3章')
 
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    // P0-4：预路由命中时不 append 用户消息——会话中仅有一条助手汇报消息
-    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(0)
+    // D5：强命中路径保留用户原文转录 1 次（P0-4 后零出现的缺陷修复）——转录在「已开始」消息之前
+    const userMsgs = after.messages.filter(m => m.role === 'user')
+    expect(userMsgs).toHaveLength(1)
+    expect(userMsgs[0].content).toBe('写第3章')
+    expect(after.messages[0].role).toBe('user')
+    // 首条用户消息标题合同：强命中会话不再停「新对话」
+    expect(after.title).toBe('写第3章')
     const started = after.messages[after.messages.length - 1]
     expect(started.role).toBe('assistant')
     expect(started.content).toContain('已开始')
@@ -294,6 +299,9 @@ describe('sendMessage 意图预路由', () => {
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.content).toBe(t('agent.intentClarifyChapter'))
+    // D5：澄清前保留用户转录 + 首条标题合同（不再停「新对话」）
+    expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('帮我写')
+    expect(after.title).toBe('帮我写')
     expect(mockStartChapter).not.toHaveBeenCalled()
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
@@ -310,6 +318,8 @@ describe('sendMessage 意图预路由', () => {
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.content).toBe(t('agent.intentClarifyGeneric'))
+    // D5：澄清前保留用户转录
+    expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('创建角色')
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
   })
@@ -459,7 +469,7 @@ describe('sendMessage 意图预路由', () => {
     expect(useAgentStore.getState().generating).toBe(false)
   })
 
-  it('预路由异常兜底：非 WorkflowStartError（startWorkflow 直抛）→ 注入异常消息不 reject、无用户消息（I2）', async () => {
+  it('预路由异常兜底：非 WorkflowStartError（startWorkflow 直抛）→ 注入异常消息不 reject、用户转录保留（I2）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
     mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
@@ -472,7 +482,9 @@ describe('sendMessage 意图预路由', () => {
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.content).toBe(t('agent.errorException').replace('{error}', 'Error: startWorkflow 直抛：工作流实例内部异常'))
-    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(0)
+    // D5：错误兜底前转录已 append（用户原文仍保留在历史，顺序为转录在前、异常消息在后）
+    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(1)
+    expect(after.messages[0].role).toBe('user')
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
   })

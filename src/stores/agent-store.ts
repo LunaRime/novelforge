@@ -867,12 +867,36 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 评审修复（M5）：t 已在模块顶部静态导入——动态 import 冗余（handleWritingIntent 不受影响）
     const { startChapterWorkflow, startBlueprintWorkflow, startArchitectureWorkflow, WorkflowStartError } = await import('../services/workflows/workflow-starter')
 
-    // ⚠️ P0-4 修订：**不在此 append 用户消息**——用户消息由 sendMessage 主流程统一构建/append（唯一入口）；
-    //    原实现「这里 append 原文 + character 分支 append 增强 + 主流程再 append 原文」= 用户原文 2 次 + 增强 1 次，三重复
+    // ⚠️ P0-4 修订：**用户消息不得在此重复 append**——原实现「这里 append 原文 + character 分支 append
+    //    增强 + 主流程再 append 原文」= 用户原文 2 次 + 增强 1 次，三重复；
+    //    D5 例外补充：强命中/澄清路径在本函数内先 append 用户原文转录（下方守卫块）再 return handled——
+    //    主流程 :423 直接 return 不再 append，每轮用户输入仍恰好 1 次（「恰 1 次」合同未变）
     const appendMsg = (msg: AgentMessage) => {
       set(state => ({
         conversations: state.conversations.map(c =>
           c.id === conv.id ? { ...c, messages: [...c.messages, msg], updatedAt: Date.now() } : c
+        ),
+      }))
+      get().persistCurrent(conv.id)
+    }
+
+    // ⚠️ D5 修订（转录形态）：强命中/澄清路径 append 用户原文 1 次——P0-4 修复后主流程在 handled 时
+    //    直接 return，用户原文曾零出现（对话断链、标题停「新对话」、CCR batch 无原文、fork 无源节点）。
+    //    防三重复接线：仅非 character/none 分支在此 append——character 仍由主流程 append 增强形态（恰 1 次）；
+    //    handled 分支主流程 return 不再 append；none 分支主流程走 ReAct append 原文——用户输入在本轮历史恰好 1 次
+    if (intent.kind !== 'character' && intent.kind !== 'none') {
+      const userMsg: AgentMessage = { id: genId(), role: 'user', content: rawContent, createdAt: Date.now() }
+      set(state => ({
+        conversations: state.conversations.map(c =>
+          c.id === conv.id
+            ? {
+                ...c,
+                // 首条用户消息标题合同（与主流程 :471 的 generateTitle 一致）：补齐强命中会话「新对话」不可区分缺陷
+                title: c.messages.length === 0 ? generateTitle(rawContent) : c.title,
+                messages: [...c.messages, userMsg],
+                updatedAt: Date.now(),
+              }
+            : c
         ),
       }))
       get().persistCurrent(conv.id)
