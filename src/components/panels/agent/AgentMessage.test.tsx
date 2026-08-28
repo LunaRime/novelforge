@@ -91,6 +91,41 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
+  it('点击 rewind 按钮回调携带 messageId（B2 补强）', () => {
+    const onRewind = vi.fn()
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onRewind={onRewind} />)
+    const rewind = container.querySelector<HTMLButtonElement>('[title="回退到此处"]')
+    expect(rewind).toBeTruthy()
+    act(() => { rewind!.click() })
+    expect(onRewind).toHaveBeenCalledWith('m1')
+    act(() => { root.unmount() })
+  })
+
+  it('用户消息（role=user）气泡变体：右对齐 + 内容原样 + 分支操作区可用（B2 补强）', () => {
+    const onFork = vi.fn()
+    const onRewind = vi.fn()
+    const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onFork={onFork} onRewind={onRewind} />)
+    const wrap = container.firstElementChild as HTMLElement
+    // 用户消息右对齐（助手消息为 justify-start——两类消息的视觉区分点）
+    expect(wrap.className).toContain('justify-end')
+    expect(wrap.className).not.toContain('justify-start')
+    // 气泡样式：accent 半透明背景（内联 style，用户消息专用视觉）
+    const bubble = wrap.firstElementChild as HTMLElement
+    expect(bubble.style.backgroundColor).toBe('rgba(var(--color-accent-rgb), 0.12)')
+    // 内容原样渲染（不走 Markdown/思考块拆分）
+    expect(container.textContent).toContain('用户输入的原样文本')
+    // 分支操作区在气泡内且可用（fork/rewind 回调均触发）
+    act(() => {
+      container.querySelector<HTMLButtonElement>('[title="从此处分支"]')!.click()
+      container.querySelector<HTMLButtonElement>('[title="回退到此处"]')!.click()
+    })
+    expect(onFork).toHaveBeenCalledWith('u1')
+    expect(onRewind).toHaveBeenCalledWith('u1')
+    act(() => { root.unmount() })
+  })
+
   it('无 onFork/onRewind props 时不渲染操作区（只读历史/归档视图兼容）', () => {
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} />)

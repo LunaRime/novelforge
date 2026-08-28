@@ -60,6 +60,11 @@ function lastUserMessage(messagesLog: LLMMessage[][], callIndex: number): string
 }
 
 describe('agent-engine 工具解析错误反馈', () => {
+  // ⚠️ zh-CN 字面量断言说明（H1 补强）：本组用例直接断言诊断文案的中文字面量
+  // （如「以下工具调用未能解析，已忽略」「请根据上述诊断修正」）——这些文案来自
+  // t('engine.parsePartialDiagnosis')/t('engine.parseDiagnosis') 等 locale 键，测试未 mock
+  // locale，输出按当前导出 locale（zh-CN）求值。若 locale 初始化/默认值变化，此类
+  // 字面量断言必须同步改为按键值用 t() 计算，防止「i18n 输出受 locale 影响」静默漂移。
   beforeEach(() => {
     registerEchoTool()
   })

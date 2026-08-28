@@ -577,6 +577,22 @@ describe('对话分支 fork/rewind', () => {
     expect(conv.rewound?.length).toBe(0) // 恢复后归档清空
   })
 
+  it('restoreRewound 无效索引/无归档：返回 false 不改变状态', () => {
+    // 无归档会话：restore 无对象 → false，状态不变
+    expect(useAgentStore.getState().restoreRewound(0)).toBe(false)
+    const conv = useAgentStore.getState().getActiveConversation()!
+    expect(conv.messages.map(m => m.id)).toEqual(['u1', 'a1', 'u2', 'a2'])
+    expect(conv.rewound).toBeUndefined()
+    // 正常 rewind 制造 1 条归档后：越界/负索引 → false，消息与归档均不变（归档不被消费）
+    expect(useAgentStore.getState().rewindToMessage('a1')).toBe(true)
+    expect(useAgentStore.getState().restoreRewound(5)).toBe(false)
+    expect(useAgentStore.getState().restoreRewound(-1)).toBe(false)
+    const after = useAgentStore.getState().getActiveConversation()!
+    expect(after.messages.map(m => m.id)).toEqual(['u1', 'a1'])
+    expect(after.rewound?.length).toBe(1)
+    expect(after.rewound![0].messages.map(m => m.id)).toEqual(['u2', 'a2'])
+  })
+
   it('无效 messageId：fork/rewind 返回 null/false 不改变状态', () => {
     expect(useAgentStore.getState().forkFromMessage('not-exist')).toBeNull()
     expect(useAgentStore.getState().rewindToMessage('not-exist')).toBe(false)
