@@ -1030,8 +1030,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const idx = conv.messages.findIndex(m => m.id === messageId)
     if (idx < 0) return null
     // 复制到起点（含）——system 消息 + in-flight streaming 占位符显式过滤（评审注意点已核验：
-    //   生成链路独立构建 system——buildAgentSystemPromptAsync agent-store:517 每次生成重建 +
-    //   historyMessages 过滤 role!=='system'（:633），过滤不影响 fork 后新会话生成；
+    //   生成链路独立构建 system——sendMessage 每轮经 buildAgentSystemPromptAsync 重建（调用点 :524）+
+    //   historyMessages 候选消息的 role!=='system' 过滤（:596 preCompressMessages / :640 candidateMessages），
+    //   过滤不影响 fork 后新会话生成；
     //   此处过滤只为保持会话数据干净；streaming 占位符不复制——fork 后其流式更新仍指向原会话 id）
     const forkMsgs = conv.messages
       .slice(0, idx + 1)
