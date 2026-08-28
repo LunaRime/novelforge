@@ -28,7 +28,14 @@ const AUTO_CREATED_DIRS = ['prompts', 'skills', 'templates', 'agent-archive']
  *  目录不存在 / 空目录 → true；已知应用自有目录名（prompts/skills/templates/agent-archive）为空 → true；
  *  logs 不存在或仅含 .log 文件（或含仅 .log 文件的 dev/ 子目录——logger Dev 模式 {prefix}{date}.log）；
  *  其余任何条目（用户数据：非 .log 文件、非空已知目录、其他目录/文件/名字）→ false。
- *  **false 时绝不删除**（安全边界——skills/ 用户导入、agent-archive/ 归档数据、未知目录一律保留） */
+ *  **false 时绝不删除**（安全边界——skills/ 用户导入、agent-archive/ 归档数据、未知目录一律保留）
+ *  **mcp_config.json 特例**：~/.novelforge 根级 mcp_config.json 是用户数据（MCP 设置保存后写入，
+ *  见 mcp-ipc-bridge），不在 AUTO_CREATED_DIRS/logs 中 → isAutoCreatedHome 恒为 false →
+ *  migrateLegacyDirs **跳过清理** → rename 到已存在的 ~/.novelforge 目录 EPERM（Win32）→
+ *  迁移失败静默 → readJsonFile 旧路径兜底继续读 ~/.vela（数据不丢，仅迁移搁浅）。
+ *  搁浅窗口狭窄：旧 ~/.vela 仍在 + 用户已在 ~/.novelforge 保存过 MCP 配置（且 config.json 尚未
+ *  落盘新目录才会触发迁移尝试）。**有意不扩展白名单**：mcp_config.json 是用户数据，任何自动删除
+ *  路径都不可接受；搁浅场景由双路径兜底覆盖，符合「false 时绝不删除」的安全边界 */
 function isAutoCreatedHome(dir: string): boolean {
   let entries: string[]
   try {
