@@ -150,3 +150,58 @@ describe('agent-engine 工具解析错误反馈', () => {
     expect(callbacks.onDone).toHaveBeenCalled()
   })
 })
+
+describe('空结果占位注入（D6-1）', () => {
+  // 成功但 content 为空的工具：runLoopWithResponses 不负责注册工具，
+  // 此处自建 empty_tool / blank_tool 并经全局 toolRegistry 注册（参照 registerEchoTool 模式）
+  const EMPTY_TOOL_NAME = 'empty_tool'
+  const BLANK_TOOL_NAME = 'blank_tool'
+
+  beforeEach(() => {
+    toolRegistry.register(
+      buildAgentTool({
+        name: EMPTY_TOOL_NAME,
+        description: 'empty result tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: '' }),
+      }),
+    )
+    toolRegistry.register(
+      buildAgentTool({
+        name: BLANK_TOOL_NAME,
+        description: 'blank result tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: ' \n\t  \n ' }),
+      }),
+    )
+  })
+
+  afterEach(() => {
+    toolRegistry.unregister(EMPTY_TOOL_NAME)
+    toolRegistry.unregister(BLANK_TOOL_NAME)
+  })
+
+  it('成功但内容为空的工具 → observation 注入占位文本而非空壳', async () => {
+    const { messagesLog, callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${EMPTY_TOOL_NAME}","arguments":{}}</tool_call>`,
+      '最终回复',
+    ])
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain(`${EMPTY_TOOL_NAME} 已完成，无输出`)
+    expect(lastUser?.content).not.toContain(`<tool_result name="${EMPTY_TOOL_NAME}">\n\n</tool_result>`)
+    expect(callbacks.onDone).toHaveBeenCalled()
+  })
+
+  it('纯空白内容（含换行/空格）同样注入占位', async () => {
+    const { messagesLog } = await runLoopWithResponses([
+      `<tool_call>{"name":"${BLANK_TOOL_NAME}","arguments":{}}</tool_call>`,
+      '最终回复',
+    ])
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain('已完成，无输出')
+  })
+})

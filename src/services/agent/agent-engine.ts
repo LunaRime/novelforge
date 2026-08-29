@@ -288,7 +288,12 @@ export async function runAgentLoop(
         callbacks.onToolCallComplete(toolCallInfo)
 
         if (result.success) {
-          observationParts.push(`<tool_result name="${tc.name}">\n${sanitizeObservation(truncatedContent)}\n</tool_result>`)
+          // 空结果占位（D6-1）：成功但无内容（或纯空白）→ 注入占位文本，防模型把空 <tool_result>
+          // 当回合边界停止生成（CC 事故：capybara 对空结果误判 \n\nHuman: 停止序列）
+          const content = truncatedContent.trim() === ''
+            ? t('engine.emptyToolResult').replace('{toolName}', tc.name)
+            : sanitizeObservation(truncatedContent)
+          observationParts.push(`<tool_result name="${tc.name}">\n${content}\n</tool_result>`)
         } else {
           observationParts.push(`<tool_result name="${tc.name}" error="true">\n${sanitizeObservation(result.error ?? truncatedContent)}\n</tool_result>`)
         }
