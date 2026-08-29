@@ -28,12 +28,18 @@ const TOOL_TIMEOUT_MS = 30_000
 /** Tool 返回内容最大 Token 数（read-file.tool 的 READ_MAX_CHARS 按此校准，见其锁定用例） */
 export const TOOL_RESULT_MAX_TOKENS = 800
 
-/**
- * 发送给 LLM 的消息整体 token 预算。
- * systemPrompt（≤3500）+ 历史窗口（≤4000）+ 多轮 observation 可能超出模型上下文，
- * 每轮调用前按此预算压缩（保留 system + 最近轮次 + 末尾消息）。
- */
-const MESSAGE_BUDGET_TOKENS = 16_000
+/** 默认消息压缩预算（无模型窗口信息 / 小窗口模型）——与既有行为一致 */
+const DEFAULT_MESSAGE_BUDGET_TOKENS = 16_000
+/** 动态预算工程上限（128k 窗口模型也不无限放大——成本/延迟裁决） */
+const MAX_MESSAGE_BUDGET_TOKENS = 32_000
+/** 动态预算输出空间预留（对话单次输出通常 <2k，4k 保守） */
+const OUTPUT_RESERVE_TOKENS = 4_000
+/** 启用动态预算的最小模型窗口（小窗口模型压缩语义不变——压缩是成本控制非防超窗） */
+const MIN_DYNAMIC_WINDOW_TOKENS = 16_000
+/** 恢复阶梯降档预算下限（对话质量底线） */
+const MIN_RECOVERY_BUDGET_TOKENS = 8_000
+/** 连续可恢复失败熔断阈值（CC 遥测 MAX_CONSECUTIVE_AUTOCOMPACT_FAILURES=3 简化） */
+const MAX_CONSECUTIVE_RECOVERY_FAILURES = 3
 
 /** 写盘引用摘要上限（tokens）——路径+摘要合计 ≤ ~250 tokens，远小于 800 截断注入 */
 const RESULT_SUMMARY_MAX_TOKENS = 200
@@ -120,7 +126,7 @@ export async function runAgentLoop(
   generateFn: LLMGenerateFn,
   callbacks: AgentEngineCallbacks,
   abortSignal?: AbortSignal,
-  _options?: AgentEngineOptions, // 本次未消费（仅有签名占位）：Task D7-1 接入后再改为命名参数
+  options?: AgentEngineOptions, // 动态压缩预算：modelContextWindow（Task D7-1）
   deps?: AgentEngineDeps,
 ): Promise<void> {
   const allToolCalls: ToolCallInfo[] = []
@@ -140,6 +146,13 @@ export async function runAgentLoop(
   let rounds = 0
   let fullAssistantText = ''
 
+  // 恢复阶梯状态（withhold-then-recover，P0-2）：可恢复错误先恢复后放行；
+  // 单次调用生命周期（跨调用持久化 deferred）；重试消耗 rounds 计数（最多 3 round，MAX=8 仍剩 5 轮工具循环）
+  type RecoveryStage = 'none' | 'compacting' | 'meta-injected'
+  let recoveryStage: RecoveryStage = 'none'
+  let consecutiveRecoveryFailures = 0
+  let currentBudget = computeMessageBudget(options?.modelContextWindow)
+
   while (rounds < MAX_TOOL_ROUNDS) {
     // 检查中止信号
     if (abortSignal?.aborted) {
@@ -150,8 +163,8 @@ export async function runAgentLoop(
     rounds++
 
     // 调用 LLM（支持流式：onChunk 实时推送文本，引擎收到流式文本后不再重复输出）
-    // 发送前按整体预算压缩消息副本（完整 messages 仍保留给后处理使用）
-    const budgetedMessages = compressMessagesToBudget(messages, MESSAGE_BUDGET_TOKENS)
+    // 发送前按当前预算压缩消息副本（完整 messages 仍保留给后处理使用）
+    let budgetedMessages = compressMessagesToBudget(messages, currentBudget)
     let llmResponse: string
     let streamed = false
     try {
@@ -159,13 +172,37 @@ export async function runAgentLoop(
         streamed = true
         callbacks.onTextChunk(chunk)
       })
+      // 调用成功：恢复计数清零、预算复原（下次调用生效）
+      consecutiveRecoveryFailures = 0
+      recoveryStage = 'none'
+      currentBudget = computeMessageBudget(options?.modelContextWindow)
     } catch (error) {
       // 取消导致的生成中断走"已停止"而不是错误提示
       if (abortSignal?.aborted) {
         callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
         return
       }
-      callbacks.onError(t('agent.llmCallFailed').replace('{error}', String(error)))
+      // 可恢复错误（上下文超限类）→ withhold-then-recover：降档压缩 → meta 注入 → 熔断放行。
+      // 非可恢复错误直接放行（无额外调用 = 无额外费用）。
+      const errText = String(error)
+      // 连续失败计数先增后判：第 MAX(3) 次连续失败即熔断（本阶梯仅 2 个可恢复动作：
+      // compacting / meta-injected，第 3 次失败 = 熔断，不再发起调用——与测试契约一致）
+      consecutiveRecoveryFailures++
+      if (isRecoverableError(errText) && consecutiveRecoveryFailures < MAX_CONSECUTIVE_RECOVERY_FAILURES) {
+        if (recoveryStage === 'none') {
+          recoveryStage = 'compacting'
+          console.warn(`[AgentEngine] 恢复重试 compacting（失败 ${consecutiveRecoveryFailures}/${MAX_CONSECUTIVE_RECOVERY_FAILURES}）：${errText}`)
+        } else if (recoveryStage === 'compacting') {
+          recoveryStage = 'meta-injected'
+          messages.push({ role: 'user', content: t('engine.resumeDirectly') })
+          console.warn(`[AgentEngine] 恢复重试 meta-injected（失败 ${consecutiveRecoveryFailures}/${MAX_CONSECUTIVE_RECOVERY_FAILURES}）：${errText}`)
+        }
+        // 降档压缩重试（决策冻结：压缩只从尾部加深截断，前缀稳定）
+        currentBudget = Math.max(MIN_RECOVERY_BUDGET_TOKENS, Math.floor(currentBudget / 2))
+        budgetedMessages = compressMessagesToBudget(messages, currentBudget)
+        continue
+      }
+      callbacks.onError(t('agent.llmCallFailed').replace('{error}', errText))
       return
     }
 
@@ -566,6 +603,34 @@ function sanitizeObservation(content: string): string {
     .replace(/<tool_result/gi, '')
     .replace(/<\/tool_call>/gi, '')
     .replace(/<tool_call/gi, '')
+}
+
+/**
+ * 按模型窗口计算消息压缩预算（P0-2 动态化）：
+ * 无窗口 / 窗口 < 16k → 默认 16_000（现状不变）；否则 min(窗口 - 4k 预留, 32k 工程上限)。
+ */
+export function computeMessageBudget(modelContextWindow?: number): number {
+  if (!modelContextWindow || modelContextWindow < MIN_DYNAMIC_WINDOW_TOKENS) return DEFAULT_MESSAGE_BUDGET_TOKENS
+  return Math.min(modelContextWindow - OUTPUT_RESERVE_TOKENS, MAX_MESSAGE_BUDGET_TOKENS)
+}
+
+/** 可恢复错误识别（上下文超限类——压缩后重试真实有效；白名单收紧防误判烧钱）。 */
+const RECOVERABLE_ERROR_PATTERNS: RegExp[] = [
+  /context length/i,
+  /maximum context/i,
+  /context window/i,
+  /too many tokens/i,
+  /token limit/i,
+  /context_length_exceeded/i,
+  /\b413\b/,
+  /request entity too large/i,
+  /上下文长度/,
+  /超(出|过).{0,4}(上限|限制|长度)/,
+  /长度.{0,4}(超|超过)/,
+]
+
+export function isRecoverableError(message: string): boolean {
+  return RECOVERABLE_ERROR_PATTERNS.some(p => p.test(message))
 }
 
 /**

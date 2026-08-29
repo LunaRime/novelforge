@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { runAgentLoop, type LLMMessage, type AgentEngineDeps } from './agent-engine'
+import { runAgentLoop, computeMessageBudget, isRecoverableError, type LLMMessage, type AgentEngineDeps } from './agent-engine'
+import { estimateTokens } from './token-budget'
 import { toolRegistry, buildAgentTool } from './tool-registry'
 
 /** 测试专用纯内存工具名（不触碰 IPC） */
@@ -300,5 +301,91 @@ describe('长结果写盘引用（D6-2）', () => {
     expect(spy).toHaveBeenCalledTimes(2)
     const [first, second] = spy.mock.calls.map(c => c[0])
     expect(first).toBe(second)
+  })
+})
+
+/** 消息 token 总和（恢复阶梯降档压缩断言），基于 estimateTokens */
+function sumTokens(msgs: LLMMessage[]): number {
+  return msgs.reduce((sum, m) => sum + estimateTokens(m.content), 0)
+}
+
+describe('动态预算与恢复阶梯（D7-1）', () => {
+  it('computeMessageBudget：窗口 32000 → 28000', () => {
+    expect(computeMessageBudget(32_000)).toBe(28_000)
+  })
+  it('computeMessageBudget：窗口 131072 → 32000（工程上限）', () => {
+    expect(computeMessageBudget(131_072)).toBe(32_000)
+  })
+  it('computeMessageBudget：窗口 8000（小窗口）→ 默认 16000', () => {
+    expect(computeMessageBudget(8_000)).toBe(16_000)
+  })
+  it('computeMessageBudget：undefined → 默认 16000', () => {
+    expect(computeMessageBudget(undefined)).toBe(16_000)
+  })
+  it('isRecoverableError：英文上下文类 → true', () => {
+    expect(isRecoverableError('This model\'s maximum context length is 32768 tokens')).toBe(true)
+    expect(isRecoverableError('Request failed with status code 413')).toBe(true)
+  })
+  it('isRecoverableError：中文上下文类 → true', () => {
+    expect(isRecoverableError('上下文长度超出限制')).toBe(true)
+    expect(isRecoverableError('输入超过模型长度上限')).toBe(true)
+  })
+  it('isRecoverableError：非上下文错误 → false', () => {
+    expect(isRecoverableError('Invalid API key provided')).toBe(false)
+    expect(isRecoverableError('Connection refused')).toBe(false)
+    expect(isRecoverableError('429 Too Many Requests')).toBe(false)
+  })
+
+  it('失败 1 次（上下文错误）→ 降档压缩重试成功，共调用 2 次', async () => {
+    let calls = 0
+    const generateFn = vi.fn(async (messages: LLMMessage[]): Promise<string> => {
+      void messages
+      calls++
+      if (calls === 1) throw new Error('maximum context length exceeded')
+      return '最终回复'
+    })
+    const callbacks = createCallbacks() // 复用既有辅助
+    await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+    expect(generateFn).toHaveBeenCalledTimes(2)
+    expect(callbacks.onError).not.toHaveBeenCalled()
+    // 第二次调用的消息预算 ≤ 降档预算（min(28000/2=14000, 8000 下限)=14000）——断言第二次调用消息 token 总和 < 第一次
+    const t1 = sumTokens(generateFn.mock.calls[0][0])
+    const t2 = sumTokens(generateFn.mock.calls[1][0])
+    expect(t2).toBeLessThanOrEqual(t1)
+  })
+
+  it('失败 2 次 → meta 消息注入后成功（调用 3 次，第 3 次含 resumeDirectly 文案）', async () => {
+    let calls = 0
+    const generateFn = vi.fn(async (messages: LLMMessage[]): Promise<string> => {
+      void messages // 带参数类型仅供 mock.calls[2][0] 断言消息内容，此处不消费
+      calls++
+      if (calls <= 2) throw new Error('too many tokens')
+      return '最终回复'
+    })
+    const callbacks = createCallbacks()
+    await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+    expect(generateFn).toHaveBeenCalledTimes(3)
+    const third = generateFn.mock.calls[2][0]
+    expect(third.some(m => m.role === 'user' && m.content.includes('请直接从上次中断处继续'))).toBe(true)
+  })
+
+  it('失败 3 次 → 熔断放行 onError（调用 3 次不再重试）', async () => {
+    const generateFn = vi.fn(async (): Promise<string> => {
+      throw new Error('context window exceeded')
+    })
+    const callbacks = createCallbacks()
+    await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+    expect(generateFn).toHaveBeenCalledTimes(3) // 初始 1 + 重试 2，第 3 次失败后熔断
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+  })
+
+  it('非可恢复错误 → 直接放行，不重试', async () => {
+    const generateFn = vi.fn(async (): Promise<string> => {
+      throw new Error('Invalid API key')
+    })
+    const callbacks = createCallbacks()
+    await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+    expect(generateFn).toHaveBeenCalledTimes(1)
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
   })
 })
