@@ -213,6 +213,11 @@ describe('长结果写盘引用（D6-2）', () => {
   const LONG_TOOL_NAME = 'long_tool'
   const SHORT_TOOL_NAME = 'short_tool'
   const longContent = '中'.repeat(1200) // 中文 1.5 token/字 ≈ 1800 tokens > 800
+  // 长度 > 512KB 且估计 tokens > 800 的内容：空格分词（非连续词）保证启发式不把整串
+  // 低估为 1 个词（estimateTokensHeuristic 的 wordRegex 按 [a-zA-Z0-9]+ 计词），
+  // 从而应触发的 shouldSpill 判定落在「length 超限」而非「est 不足」条件上
+  const overSpill = 'x '.repeat(262_145) // 524,290 字符 > MAX_SPILL_CHARS 524,288；est ≈ 314,574
+  const OVER_TOOL_NAME = 'over_limit_tool'
 
   beforeEach(() => {
     toolRegistry.register(
@@ -235,11 +240,22 @@ describe('长结果写盘引用（D6-2）', () => {
         execute: async () => ({ success: true, content: 'short: ok' }),
       }),
     )
+    toolRegistry.register(
+      buildAgentTool({
+        name: OVER_TOOL_NAME,
+        description: 'over 512KB result tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: overSpill }),
+      }),
+    )
   })
 
   afterEach(() => {
     toolRegistry.unregister(LONG_TOOL_NAME)
     toolRegistry.unregister(SHORT_TOOL_NAME)
+    toolRegistry.unregister(OVER_TOOL_NAME)
   })
 
   it('>800 token 结果 → 写盘 + 注入路径/摘要/总数', async () => {
@@ -284,6 +300,21 @@ describe('长结果写盘引用（D6-2）', () => {
     ])
     const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
     expect(lastUser?.content).toContain('<tool_result')
+  })
+
+  it('>512KB 结果 → 长度超限不写盘，回退截断注入（MAX_SPILL_CHARS 上限守卫）', async () => {
+    // shouldSpill = est > 800 && length <= MAX_SPILL_CHARS：此处 est 超限但 length 超限 →
+    // 必须回退「截断注入」路径，不得调用 writeResult（512KB 上限之外不做写盘引用）
+    const spy = vi.fn(async (content: string) => { void content; return { success: true, path: 'C:\\Users\\test\\.novelforge\\agent-results\\abc123.txt' } })
+    const { messagesLog } = await runLoopWithResponses(
+      [`<tool_call>{"name":"${OVER_TOOL_NAME}","arguments":{}}</tool_call>`, '最终回复'],
+      { writeResult: spy },
+    )
+    expect(spy).not.toHaveBeenCalled()
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain('<tool_result')
+    expect(lastUser?.content).toContain('内容已截断') // truncateResult 注入截断通知（est > 800）
+    expect(lastUser?.content).not.toContain('全文已写入') // 未走 spill 文案
   })
 
   it('同内容两次 → 写盘调用 content 相同（决策冻结确定性）', async () => {
@@ -387,5 +418,45 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
     await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
     expect(generateFn).toHaveBeenCalledTimes(1)
     expect(callbacks.onError).toHaveBeenCalledTimes(1)
+  })
+
+  it('压缩确定性：降档后保留序列与降档前尾部一致（不同预算前部一致）', async () => {
+    // 超预算历史：4 对轮次，每条约 9600 tokens（启发式，空格分词），每对 ≈ 19200 → 总量 ≈ 76800
+    // 两次压缩同一消息源（首次失败后 messages 未变化），预算 28000 vs 降档 14000：
+    // 压缩按「从尾部向前保留最近轮次」决策，预算越低越早 break——保留集合是尾部连续子序列，
+    // 即「前部（最近轮次 + 当前问题）保留一致」，不随预算变化而漂移（决策冻结）
+    const bigUser = 'u '.repeat(8_000)
+    const bigAsst = 'a '.repeat(8_000)
+    const history: LLMMessage[] = [
+      { role: 'user', content: bigUser },
+      { role: 'assistant', content: bigAsst },
+      { role: 'user', content: bigUser },
+      { role: 'assistant', content: bigAsst },
+      { role: 'user', content: bigUser },
+      { role: 'assistant', content: bigAsst },
+      { role: 'user', content: bigUser },
+      { role: 'assistant', content: bigAsst },
+    ]
+    let calls = 0
+    const messagesLog: LLMMessage[][] = []
+    const generateFn = vi.fn(async (messages: LLMMessage[]): Promise<string> => {
+      messagesLog.push([...messages]) // 浅拷贝（同 runLoopWithResponses 的 snapshot 约定）
+      calls++
+      if (calls === 1) throw new Error('context window exceeded')
+      return '最终回复'
+    })
+    const callbacks = createCallbacks()
+    await runAgentLoop('system', history, '当前问题：请继续', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+
+    expect(generateFn).toHaveBeenCalledTimes(2)
+    expect(callbacks.onError).not.toHaveBeenCalled()
+    const full = messagesLog[0] // 预算 28000 的压缩结果
+    const degraded = messagesLog[1] // 降档 14000 的压缩结果
+    // 低预算保留序列是降档前的尾部连续子序列（0 位 system 恒保留，比对时排除）
+    expect(full.slice(1).slice(full.length - degraded.length)).toEqual(degraded.slice(1))
+    // 降档确实丢弃了更早轮次（保留的消息更少）
+    expect(degraded.length).toBeLessThan(full.length)
+    // 当前问题（2a 无条件保留）两预算下逐字一致（预算内完整保留，未被预算差异截断）
+    expect(degraded.at(-1)).toEqual(full.at(-1))
   })
 })
