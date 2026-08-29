@@ -22,8 +22,23 @@ const EMBEDDING_TIMEOUT_MS = 10_000
 
 function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), EMBEDDING_TIMEOUT_MS)
-  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  // ⚠️ abort 兜底（2026-08-29 冒烟实测根因）：API 请求挂起（限流/网络）时，
+  // undici 对挂起连接的 abort reject 可能延迟 ~20s（实测），IPC 30s 窗口内降级链来不及完成
+  // → kb:import-text 三次超时 → 后处理管线中止。Promise.race 保证超时即 abort + 立即 reject，
+  // 不依赖 fetch 对 abort 信号的响应及时性。
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort()
+      reject(new DOMException('This operation was aborted', 'AbortError'))
+    }, EMBEDDING_TIMEOUT_MS)
+  })
+  return Promise.race([
+    fetch(url, { ...init, signal: controller.signal }),
+    timeoutPromise,
+  ]).finally(() => {
+    if (timer) clearTimeout(timer)
+  })
 }
 
 // ===== Embedding API 调用 =====
