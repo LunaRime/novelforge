@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: 参照 `.claude/skills/novelforge-release.md`（三版本制 + 发版 checklist）；执行方式按 Superpowers SDD 或 Inline（改动面小，可 Inline）。
 
-**Goal:** 将 2026-08-26~28 的 Agent 对话升级全链（Agent 循环加固 / .novelforge 目录改名 / 意图预路由 + fork-rewind 分支）发布为 **v0.2.0 正式版**（0.1.5 → 0.2.0：minor bump——3 大功能群，无 breaking，符合 SemVer）。
+**Goal:** 将 2026-08-26~29 的 Agent 对话升级全链（Agent 循环加固 / .novelforge 目录改名 / 意图预路由 + fork-rewind 分支 / D6-D7 压缩优化）发布为 **v0.1.6 正式版**（0.1.5 → 0.1.6：patch bump——用户裁决 2026-08-29；功能群照实记录但版本语义为补丁级，符合 SemVer）。
 
 **Architecture:** ① CHANGELOG 三大功能群条目 ② README 功能表/架构更新 ③ 版本 5 文件 ④ 完整构建 ⑤ dev 冒烟清单（本次功能实操验证）⑥ 发布（tag + Release 双语 Notes）。
 
@@ -20,43 +20,47 @@
 
 ---
 
-### Task R1: CHANGELOG 三大功能群条目
+### Task R1: CHANGELOG 功能群条目
 
 **Files:**
-- Modify: `CHANGELOG.md`（新增 v0.2.0 正式版条目）
+- Modify: `CHANGELOG.md`（新增 v0.1.6 正式版条目）
 
-**内容结构**（三功能群 + 质量）：
+**内容结构**（功能群 + 质量；版本语义为 patch 但功能照实记录）：
 
 ```
-## [0.2.0] - 2026-08-28
+## [0.1.6] - 2026-08-29
 
 ### Agent 对话升级（对话即生成 + 分支能力）
 - 意图预路由：本地零 LLM 成本识别「写第三章」「润色第2章」「生成大纲」等意图，强命中直接触发创作工作流、弱命中澄清追问（writing-intent 模式库 + workflow-starter 统一错误语义）
 - 对话分支：任意消息 hover fork 派生新会话 / rewind 回退可恢复（历史面板分支层级标注）
 - Agent 循环加固：工具解析失败逐条反馈（不再静默）、read_file 读去重（file_unchanged 桩省 token）、注入上限 + offset/limit 分页（大文件不全量进上下文）
 
+### 上下文压缩优化（P0-1/P0-2）
+- 长工具结果写盘引用：>800 tokens 结果全文落盘 ~/.novelforge/agent-results/，上下文只进路径+摘要，LLM 按需 read_file 再读（sha1 确定性命名 + wx 防重 + 空结果占位防回合边界误判）
+- 自适应压缩：预算按模型窗口动态化（min(window-4000, 32k)）、可恢复错误 withhold-then-recover 恢复阶梯（降档压缩 → meta 消息 → 连续 3 次熔断放行）
+
 ### .novelforge 目录改名
 - 项目数据目录 `.vela/` → `.novelforge/`（全局 ~/.vela 与项目目录自动迁移，双路径兜底；vela.db/vela:///velaAPI 保留）
 - 迁移安全：config.json 哨兵重试 + auto 形态清理 + 旧路径回读兜底
 
 ### 质量与修复
-- 799 测试全绿；意图路由正则修复（章号 1-99/空格容忍/查询护栏）等
+- 847 测试全绿；意图路由正则修复（章号 1-99/空格容忍/查询护栏）；写盘授权闭环 + IPC 超时保护
 ```
 
 ### Task R2: README 更新
 
 **Files:**
-- Modify: `README.md` / `README.en.md`（功能特性表补三大功能群；版本徽章 0.1.5 → 0.2.0；若提及 `.vela` 目录同步 `.novelforge`——V3 已确认 README 零提及 .vela，只需功能表与徽章）
+- Modify: `README.md` / `README.en.md`（功能特性表补功能群（Agent 对话升级 + 上下文压缩优化）；版本徽章 0.1.5 → 0.1.6；若提及 `.vela` 目录同步 `.novelforge`——V3 已确认 README 零提及 .vela，只需功能表与徽章）
 
 ### Task R3: 版本号 5 文件
 
-- `package.json` / `build/app-package.json` / `CHANGELOG.md`（版本行）/ `README.md` / `README.en.md`：`0.1.5` → `0.2.0`
+- `package.json` / `build/app-package.json` / `CHANGELOG.md`（版本行）/ `README.md` / `README.en.md`：`0.1.5` → `0.1.6`
 
 ### Task R4: 完整构建 + 产物归位
 
 - 三环境变量 + `pnpm run build`（verify-contract → tsc → vite → electron-builder → verify-asar → organize-release）
-- 构建后：git status 查 package.json 覆盖（第 12 次坑——`git checkout -- package.json` 或合并恢复）；latest.yml url/path sed 修正（`NovelForge-0.2.0-Installer.exe`）
-- 产物落位 `release/stable/0.2.0/`（正式版 + 7z 自动压缩）
+- 构建后：git status 查 package.json 覆盖（第 12 次坑——`git checkout -- package.json` 或合并恢复）；latest.yml url/path sed 修正（`NovelForge-0.1.6-Installer.exe`）
+- 产物落位 `release/stable/0.1.6/`（正式版 + 7z 自动压缩）
 
 ### Task R5: dev 冒烟清单（发版前必跑）
 
@@ -70,17 +74,21 @@
 | 6 | 分页读取 | 大文件 offset/limit（LLM 驱动或工具直调） |
 | 7 | 改名迁移后项目 | 打开 `E:\vale\小说\*`（已迁移 .novelforge）→ 数据完整 |
 | 8 | 全局配置 | 模型列表/最近项目从 ~/.novelforge 读取正常 |
+| 9 | 长结果写盘引用（D6） | 大文件 read_file 或检索输出 >800 tokens → `~/.novelforge/agent-results/` 出现 {sha1}.txt + 对话含路径摘要（Cannot-verify 补项） |
+| 10 | 恢复阶梯（D7） | 制造上下文超限错误（小窗口模型/超长对话）→ 日志出现「恢复重试 compacting/meta-injected」+ 对话继续（Cannot-verify 补项） |
+| 11 | read_file 再读 spill 文件 | 对话中让 agent 读 `~/.novelforge/agent-results/*.txt` → 成功返回全文（授权登记链路） |
+| 12 | 空结果占位 | 触发空输出工具 → 对话显示「已完成，无输出」占位（Cannot-verify 补项） |
 
 ### Task R6: 发布
 
-- 全量门禁确认 + `git push` + tag `v0.2.0` + `gh release create`（正式版非 prerelease，中英双语 Notes 含三功能群）+ 4 资产上传（Installer.exe / blockmap / latest.yml / Portable.7z）
+- 全量门禁确认 + `git push` + tag `v0.1.6` + `gh release create`（正式版非 prerelease，中英双语 Notes 含功能群）+ 4 资产上传（Installer.exe / blockmap / latest.yml / Portable.7z）
 - 发布后：README 徽章核对、CHANGELOG 顶部核对
 
 ---
 
 ## Self-Review 记录
 
-**范围**：v0.2.0 正式版全流程（文档 → 版本 → 构建 → 冒烟 → 发布）。
+**范围**：v0.1.6 正式版全流程（文档 → 版本 → 构建 → 冒烟 → 发布）。
 **风险**：package.json 第 12 次覆盖坑（构建后必查）、latest.yml 默认名坑（sed 修正）、产物归位 EPERM（复制回退兜底）——见 build-process 记忆。
-**依赖**：本次 5 计划（C/H/V/A/B）全部已完成且推送；冒烟清单为人工验证项（用户执行或指导执行）。
-**版本裁决**：0.1.5 → 0.2.0（minor——3 大功能群新增；无 breaking change；不跳 1.x——项目早期阶段按 0.y.z 递增惯例）。
+**依赖**：全部计划（C/H/V/A/B + 档 1 D1-D5 + 档 2 D6/D7）已完成且推送；冒烟清单为人工验证项（用户执行或指导执行）+ D6/D7 Cannot-verify 补项 4 条。
+**版本裁决**：0.1.5 → **0.1.6（patch——用户裁决 2026-08-29**，否决原定 v0.2.0 minor 方案；功能群照实记录，SemVer 语义为补丁级）。
