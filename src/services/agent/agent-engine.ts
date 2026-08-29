@@ -185,6 +185,12 @@ export async function runAgentLoop(
       // 可恢复错误（上下文超限类）→ withhold-then-recover：降档压缩 → meta 注入 → 熔断放行。
       // 非可恢复错误直接放行（无额外调用 = 无额外费用）。
       const errText = String(error)
+      // 已到最后一轮（rounds >= MAX_TOOL_ROUNDS）：continue 会退出循环 → 走 maxToolRoundsReached
+      // 误报并吞掉真实错误——重试无意义时错误透传（final review 回归：工具循环后段超限错误最高发）
+      if (rounds >= MAX_TOOL_ROUNDS) {
+        callbacks.onError(t('agent.llmCallFailed').replace('{error}', errText))
+        return
+      }
       // 连续失败计数先增后判：第 MAX(3) 次连续失败即熔断（本阶梯仅 2 个可恢复动作：
       // compacting / meta-injected，第 3 次失败 = 熔断，不再发起调用——与测试契约一致）
       consecutiveRecoveryFailures++

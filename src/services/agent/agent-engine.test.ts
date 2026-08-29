@@ -460,3 +460,39 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
     expect(degraded.at(-1)).toEqual(full.at(-1))
   })
 })
+
+describe('恢复阶梯边界（第 8 轮，final review 回归）', () => {
+  // 短结果工具（不触发写盘引用）：前 7 轮返回 tool_call 消耗轮次，第 8 轮触发可恢复错误
+  const NOOP_TOOL_NAME = 'noop_recovery_tool'
+
+  beforeEach(() => {
+    toolRegistry.register(
+      buildAgentTool({
+        name: NOOP_TOOL_NAME,
+        description: 'noop recovery tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: 'ok' }),
+      }),
+    )
+  })
+
+  afterEach(() => {
+    toolRegistry.unregister(NOOP_TOOL_NAME)
+  })
+
+  it('第 8 轮可恢复失败 → 错误透传 onError，不误报 maxToolRoundsReached 且不吞错', async () => {
+    let calls = 0
+    const generateFn = vi.fn(async (): Promise<string> => {
+      calls++
+      if (calls === 8) throw new Error('maximum context length exceeded')
+      return `<tool_call>{"name":"${NOOP_TOOL_NAME}","arguments":{}}</tool_call>`
+    })
+    const callbacks = createCallbacks()
+    await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
+    expect(generateFn).toHaveBeenCalledTimes(8) // 前 7 轮工具循环 + 第 8 轮失败调用（不得第 9 次）
+    expect(callbacks.onError).toHaveBeenCalledTimes(1)
+    expect(callbacks.onDone).not.toHaveBeenCalled() // 错误不得被 maxToolRoundsReached 路径吞掉
+  })
+})
