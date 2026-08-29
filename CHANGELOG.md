@@ -1,5 +1,25 @@
 # Changelog
 
+## [0.1.6] — 2026-08-29（正式版）
+
+### ✨ 新功能
+- Agent 意图预路由：本地零 LLM 成本识别「写第三章」「润色第2章」「生成大纲」等意图，强命中直接触发创作工作流、弱命中澄清追问（writing-intent 模式库 + 统一错误语义 + 用户原文转录保留）
+- 对话分支：任意消息 hover fork 派生新会话 / rewind 回退可恢复（历史面板分支层级标注 + 生成期间守卫）
+- Agent 循环加固：工具解析失败逐条反馈（不再静默）、read_file 读去重（file_unchanged 桩省 token）、注入上限 + offset/limit 分页（大文件不全量进上下文）
+- 长工具结果写盘引用（P0-1）：>800 tokens 工具结果全文落盘 `~/.novelforge/agent-results/`，上下文只进路径 + 摘要，LLM 按需 read_file 再读（sha1 确定性命名 + wx 写盘防重 + 空结果占位防回合边界误判）
+- 自适应压缩（P0-2）：压缩预算按模型窗口动态化（min(窗口−4000, 32k)）、可恢复错误 withhold-then-recover 恢复阶梯（降档压缩 → meta 消息 → 连续 3 次熔断放行）
+- 项目数据目录 `.vela/` → `.novelforge/`（全局 ~/.vela 与项目目录自动迁移，双路径兜底；vela.db / vela:// / velaAPI 保留）
+
+### 🐛 修复
+- restoreRewound 生成期间守卫 + 末条消息 rewind 按钮禁用（三语 tooltip）
+- 意图预路由模式库覆盖扩展（无名字角色落点一致 / refine 空格容忍 / 中文数字范围 / 标题截断限定）
+- 工具空结果注入占位（防模型把空 tool_result 当回合边界停止生成）
+- spill 写盘授权登记（LLM read_file 再读闭环）+ writeResult 走 ipc.invoke 超时保护（30s）
+- 第 8 轮可恢复失败错误透传（恢复阶梯吞错回归修复）
+
+### ✅ 质量
+- 847 测试全量通过（0.1.5 的 449 → +398）；Schema v16；三语 key 持续扩展；CI 全绿
+
 ## [0.1.5] — 2026-08-10（正式版）
 
 ### 📦 正式发布

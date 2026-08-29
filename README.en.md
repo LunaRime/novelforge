@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.5-orange.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.6-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -129,6 +129,15 @@ Writing a web novel is not just about typing words — it's about managing a com
 | ⚡ Prompt Caching | Automatic cache hits, cuts input costs by 50% |
 | 📊 Real-Time Cost Tracking | Live session cost display in the status bar |
 | 📐 Token Budget Engine | Intelligent truncation with system prompt size control |
+
+### 🤖 AI Agent Assistant
+
+| Feature | Description |
+|---------|-------------|
+| 🎯 Intent Pre-Routing | Zero-LLM local intent detection ("write chapter 3", "polish chapter 2") — strong hits trigger creative workflows directly, weak hits ask for clarification |
+| 🌿 Conversation Branching | Fork a new session from any message / rewind with recovery, branch hierarchy in history panel |
+| 📄 Tool Result Spill-to-Disk | Long tool results stored on disk with path + summary in context; LLM re-reads on demand (deterministic naming + dedupe) |
+| 📐 Adaptive Context Compression | Budget scales with model window; recoverable errors auto-degrade and retry (withhold-then-recover) |
 
 ### 🛡️ Privacy & Security
 

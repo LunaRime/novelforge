@@ -7,7 +7,7 @@
 [![React](https://img.shields.io/badge/React-19-blue.svg)](https://reactjs.org/)
 [![Electron](https://img.shields.io/badge/Electron-41-black.svg)](https://www.electronjs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6.svg)](https://www.typescriptlang.org/)
-[![Version](https://img.shields.io/badge/Version-0.1.5-orange.svg)]()
+[![Version](https://img.shields.io/badge/Version-0.1.6-orange.svg)]()
 [![CI](https://github.com/LunaRime/novelforge/actions/workflows/build.yml/badge.svg)](https://github.com/LunaRime/novelforge/actions/workflows/build.yml)
 [![License: GPL-3.0](https://img.shields.io/badge/License-GPLv3-yellow.svg)](https://opensource.org/licenses/GPL-3.0)
 
@@ -90,6 +90,15 @@
 | ⚡ Prompt 缓存 | API 自动缓存命中，输入费用降低 50% |
 | 📊 实时费用追踪 | StatusBar 实时显示会话费用 |
 | 📐 Token 预算引擎 | 智能截断，系统提示词上限控制 |
+
+### 🤖 AI Agent 助手
+
+| 能力 | 说明 |
+|---|---|
+| 🎯 意图预路由 | 本地零 LLM 成本识别「写第三章」「润色第2章」等意图，强命中直接触发创作工作流、弱命中澄清追问 |
+| 🌿 对话分支 | 任意消息 fork 派生新会话 / rewind 回退可恢复，历史面板分支层级标注 |
+| 📄 工具结果写盘引用 | 长工具结果全文落盘按需再读，上下文只进路径 + 摘要（确定性命名 + 写盘防重） |
+| 📐 自适应上下文压缩 | 压缩预算按模型窗口动态化，可恢复错误自动降档重试（withhold-then-recover） |
 
 ### 🛡️ 安全加固（v2.3.0）
 
