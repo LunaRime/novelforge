@@ -735,12 +735,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeAbortController = abortController
       set({ activeRequestId: assistantMsg.id })
 
-      // 引擎依赖注入（P0-1 写盘引用）：真实 IPC 实现；失败回退由引擎降级（截断注入）
+      // 引擎依赖注入（P0-1 写盘引用）：真实 IPC 实现；失败回退由引擎降级（截断注入）。
+      // 走 ipc.invoke（带 30s 超时，同 fs:agent-archive-* 调用惯例）——裸 window.velaAPI.invoke
+      // 无超时保护，写盘挂起会让 ReAct 循环该轮永卡；超时 reject → catch → {success:false} → 引擎降级
       const agentDeps: AgentEngineDeps = {
         writeResult: async (content) => {
           try {
-            const res = await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<{ success: boolean; path?: string; error?: string }> } }).velaAPI.invoke('fs:agent-result-write', content)
-            return res
+            return await ipc.invoke('fs:agent-result-write', content)
           } catch {
             return { success: false, error: 'fs:agent-result-write unavailable' }
           }

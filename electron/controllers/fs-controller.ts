@@ -367,6 +367,10 @@ export function registerFSController() {
         // EEXIST = 同内容已落盘（同哈希）→ 幂等成功；其他错误上抛
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       }
+      // P0-1 再读授权：read_file 绝对路径分支走 fs:read-external-file（:147 检查 grantedExternalFiles），
+      // 落盘文件必须登记，否则 LLM 按注入文案「用 read_file 读取」必被拒——登记后 .txt 在扩展名
+      // 白名单内、不在 BLOCKED_PATHS，其余防线仍生效（grantedExternalFiles 会话级，进程重启失效）
+      grantedExternalFiles.add(path.resolve(target))
       return { success: true, path: target }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
