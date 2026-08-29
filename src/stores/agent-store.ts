@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
-import { runAgentLoop, type ToolCallInfo, type LLMMessage } from '../services/agent/agent-engine'
+import { runAgentLoop, type ToolCallInfo, type LLMMessage, type AgentEngineDeps } from '../services/agent/agent-engine'
 import { clearReadState } from '../services/agent/tools/read-file.tool'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { detectWritingIntent, type WritingIntent } from '../services/agent/writing-intent'
@@ -735,6 +735,18 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeAbortController = abortController
       set({ activeRequestId: assistantMsg.id })
 
+      // 引擎依赖注入（P0-1 写盘引用）：真实 IPC 实现；失败回退由引擎降级（截断注入）
+      const agentDeps: AgentEngineDeps = {
+        writeResult: async (content) => {
+          try {
+            const res = await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<{ success: boolean; path?: string; error?: string }> } }).velaAPI.invoke('fs:agent-result-write', content)
+            return res
+          } catch {
+            return { success: false, error: 'fs:agent-result-write unavailable' }
+          }
+        },
+      }
+
       // 启动 ReAct 循环（使用预取增强后的用户消息）
       // 分块缓冲：减少 React re-render 次数
       // 纯时间驱动（间隔硬约束）：流式 chunk 大小不受控（快模型单片可 >200 字符），
@@ -850,6 +862,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           },
         },
         abortController.signal,
+        undefined, // options：Task D7-1 接入 modelContextWindow
+        agentDeps,
       )
     } catch (error) {
       updateAssistantMsg(m => ({

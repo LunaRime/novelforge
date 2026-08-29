@@ -35,6 +35,11 @@ export const TOOL_RESULT_MAX_TOKENS = 800
  */
 const MESSAGE_BUDGET_TOKENS = 16_000
 
+/** 写盘引用摘要上限（tokens）——路径+摘要合计 ≤ ~250 tokens，远小于 800 截断注入 */
+const RESULT_SUMMARY_MAX_TOKENS = 200
+/** 写盘内容上限（字符）——超出回退截断注入（read_file 再读受 fs:read-external-file 1MB 限制） */
+const MAX_SPILL_CHARS = 512 * 1024
+
 // ===== 类型 =====
 
 /** Tool 调用信息 */
@@ -65,6 +70,18 @@ export interface AgentEngineCallbacks {
   onDone: (fullText: string, toolCalls: ToolCallInfo[], artifacts: ToolArtifact[]) => void
   /** 错误 */
   onError: (error: string) => void
+}
+
+/** 引擎依赖注入（保持 agent-engine 无 electron 依赖可单测；agent-store 注入真实 IPC 实现） */
+export interface AgentEngineDeps {
+  /** 长工具结果写盘（>800 tokens 落盘引用；失败返回 success:false 时引擎回退截断注入） */
+  writeResult?: (content: string) => Promise<{ success: boolean; path?: string; error?: string }>
+}
+
+/** Agent 引擎选项（D6/D7：动态压缩预算等） */
+export interface AgentEngineOptions {
+  /** 模型上下文窗口（tokens，来自 ModelProfile.maxTokens）；用于动态压缩预算（Task D7-1 消费） */
+  modelContextWindow?: number
 }
 
 /** LLM 消息格式 */
@@ -103,6 +120,8 @@ export async function runAgentLoop(
   generateFn: LLMGenerateFn,
   callbacks: AgentEngineCallbacks,
   abortSignal?: AbortSignal,
+  _options?: AgentEngineOptions, // 本次未消费（仅有签名占位）：Task D7-1 接入后再改为命名参数
+  deps?: AgentEngineDeps,
 ): Promise<void> {
   const allToolCalls: ToolCallInfo[] = []
   const allArtifacts: ToolArtifact[] = []
@@ -288,12 +307,27 @@ export async function runAgentLoop(
         callbacks.onToolCallComplete(toolCallInfo)
 
         if (result.success) {
-          // 空结果占位（D6-1）：成功但无内容（或纯空白）→ 注入占位文本，防模型把空 <tool_result>
-          // 当回合边界停止生成（CC 事故：capybara 对空结果误判 \n\nHuman: 停止序列）
-          const content = truncatedContent.trim() === ''
-            ? t('engine.emptyToolResult').replace('{toolName}', tc.name)
-            : sanitizeObservation(truncatedContent)
-          observationParts.push(`<tool_result name="${tc.name}">\n${content}\n</tool_result>`)
+          // 长结果写盘引用（P0-1）：原始内容 > 注入上限且 ≤ 512KB → 全文落盘，
+          // 上下文只进「路径 + 摘要」，LLM 按需用 read_file 再读（绝对路径分支）。
+          // read_file 工具天然豁免：自身按引擎截断线校准（READ_MAX_CHARS=440），结果永不超限。
+          const rawContent = result.content ?? ''
+          const shouldSpill = estimateTokens(rawContent) > TOOL_RESULT_MAX_TOKENS && rawContent.length <= MAX_SPILL_CHARS
+          if (shouldSpill && deps?.writeResult) {
+            const writeRes = await deps.writeResult(rawContent)
+            if (writeRes.success && writeRes.path) {
+              const summary = truncateToTokenBudget(rawContent, RESULT_SUMMARY_MAX_TOKENS)
+              observationParts.push(`<tool_result name="${tc.name}">\n${t('engine.resultSpilledToDisk').replace('{total}', String(estimateTokens(rawContent))).replace('{path}', writeRes.path)}\n\n${sanitizeObservation(summary)}\n</tool_result>`)
+            } else {
+              observationParts.push(`<tool_result name="${tc.name}">\n${sanitizeObservation(truncatedContent)}\n</tool_result>`)
+            }
+          } else {
+            // 空结果占位（D6-1）：成功但无内容（或纯空白）→ 注入占位文本，防模型把空 <tool_result>
+            // 当回合边界停止生成（CC 事故：capybara 对空结果误判 \n\nHuman: 停止序列）
+            const content = truncatedContent.trim() === ''
+              ? t('engine.emptyToolResult').replace('{toolName}', tc.name)
+              : sanitizeObservation(truncatedContent)
+            observationParts.push(`<tool_result name="${tc.name}">\n${content}\n</tool_result>`)
+          }
         } else {
           observationParts.push(`<tool_result name="${tc.name}" error="true">\n${sanitizeObservation(result.error ?? truncatedContent)}\n</tool_result>`)
         }

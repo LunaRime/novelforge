@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { runAgentLoop, type LLMMessage } from './agent-engine'
+import { runAgentLoop, type LLMMessage, type AgentEngineDeps } from './agent-engine'
 import { toolRegistry, buildAgentTool } from './tool-registry'
 
 /** 测试专用纯内存工具名（不触碰 IPC） */
@@ -35,9 +35,11 @@ function createCallbacks() {
 /**
  * 运行 agent 循环：
  * responses 按序作为每次 LLM 生成的返回值；messagesLog 收集每次 generateFn 收到的消息副本
+ * deps 可选（D6-2 写盘引用）：传入 runAgentLoop 第 9 参（8 参 options 由本任务起预留，D7-1 消费）
  */
 async function runLoopWithResponses(
   responses: string[],
+  deps?: AgentEngineDeps,
 ): Promise<{ generateFn: ReturnType<typeof vi.fn>; messagesLog: LLMMessage[][]; callbacks: ReturnType<typeof createCallbacks> }> {
   const messagesLog: LLMMessage[][] = []
   const generateFn = vi.fn((messages: LLMMessage[]): Promise<string> => {
@@ -47,7 +49,7 @@ async function runLoopWithResponses(
     return Promise.resolve(responses.shift() ?? '')
   })
   const callbacks = createCallbacks()
-  await runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks)
+  await runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks, undefined, undefined, deps)
   return { generateFn, messagesLog, callbacks }
 }
 
@@ -203,5 +205,100 @@ describe('空结果占位注入（D6-1）', () => {
     ])
     const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
     expect(lastUser?.content).toContain('已完成，无输出')
+  })
+})
+
+describe('长结果写盘引用（D6-2）', () => {
+  const LONG_TOOL_NAME = 'long_tool'
+  const SHORT_TOOL_NAME = 'short_tool'
+  const longContent = '中'.repeat(1200) // 中文 1.5 token/字 ≈ 1800 tokens > 800
+
+  beforeEach(() => {
+    toolRegistry.register(
+      buildAgentTool({
+        name: LONG_TOOL_NAME,
+        description: 'long result tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: longContent }),
+      }),
+    )
+    toolRegistry.register(
+      buildAgentTool({
+        name: SHORT_TOOL_NAME,
+        description: 'short result tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: 'short: ok' }),
+      }),
+    )
+  })
+
+  afterEach(() => {
+    toolRegistry.unregister(LONG_TOOL_NAME)
+    toolRegistry.unregister(SHORT_TOOL_NAME)
+  })
+
+  it('>800 token 结果 → 写盘 + 注入路径/摘要/总数', async () => {
+    const writeResultMock = vi.fn(async () => ({ success: true, path: 'C:\\Users\\test\\.novelforge\\agent-results\\abc123.txt' }))
+    const { messagesLog } = await runLoopWithResponses(
+      [`<tool_call>{"name":"${LONG_TOOL_NAME}","arguments":{}}</tool_call>`, '最终回复'],
+      { writeResult: writeResultMock },
+    )
+    expect(writeResultMock).toHaveBeenCalledWith(longContent)
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain('已写入') // engine.resultSpilledToDisk 中文文案
+    expect(lastUser?.content).toContain('abc123.txt')
+    expect(lastUser?.content).not.toContain(longContent.slice(0, 500)) // 全文不进上下文
+  })
+
+  it('≤800 token 结果 → 不写盘，原样注入', async () => {
+    const spy = vi.fn(async () => ({ success: false, error: 'unexpected write' }))
+    const { messagesLog } = await runLoopWithResponses(
+      [`<tool_call>{"name":"${SHORT_TOOL_NAME}","arguments":{}}</tool_call>`, '最终回复'],
+      { writeResult: spy },
+    )
+    expect(spy).not.toHaveBeenCalled()
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain(SHORT_TOOL_NAME)
+    expect(lastUser?.content).toContain('short: ok')
+  })
+
+  it('写盘失败 → 回退截断注入（降级路径）', async () => {
+    const failMock = vi.fn(async () => ({ success: false, error: 'disk full' }))
+    const { messagesLog } = await runLoopWithResponses(
+      [`<tool_call>{"name":"${LONG_TOOL_NAME}","arguments":{}}</tool_call>`, '最终回复'],
+      { writeResult: failMock },
+    )
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain('<tool_result') // 截断注入形态
+  })
+
+  it('未注入 deps → 行为兼容（截断注入）', async () => {
+    const { messagesLog } = await runLoopWithResponses([
+      `<tool_call>{"name":"${LONG_TOOL_NAME}","arguments":{}}</tool_call>`,
+      '最终回复',
+    ])
+    const lastUser = messagesLog[messagesLog.length - 1].filter(m => m.role === 'user').at(-1)
+    expect(lastUser?.content).toContain('<tool_result')
+  })
+
+  it('同内容两次 → 写盘调用 content 相同（决策冻结确定性）', async () => {
+    // 独立 spy：避免共享 writeResultMock 的调用计数被同 describe 其他用例污染
+    // 带参 mock（供 mock.calls[0] 断言）：无参/下划线前缀会被 tsc 或 eslint 判为未使用，用 void 显式引用
+    const spy = vi.fn(async (content: string) => { void content; return { success: true, path: 'C:\\Users\\test\\.novelforge\\agent-results\\abc123.txt' } })
+    await runLoopWithResponses(
+      [
+        `<tool_call>{"name":"${LONG_TOOL_NAME}","arguments":{}}</tool_call>`,
+        `<tool_call>{"name":"${LONG_TOOL_NAME}","arguments":{}}</tool_call>`,
+        '最终回复',
+      ],
+      { writeResult: spy },
+    )
+    expect(spy).toHaveBeenCalledTimes(2)
+    const [first, second] = spy.mock.calls.map(c => c[0])
+    expect(first).toBe(second)
   })
 })

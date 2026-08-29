@@ -4,6 +4,7 @@ import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
+import { createHash } from 'node:crypto'
 import { FileNode } from '../../src/shared/ipc-channels'
 import { VELA_HOME } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
@@ -348,6 +349,27 @@ export function registerFSController() {
       // 文件不存在视为成功（幂等删除），与 fs:delete-file 惯例对齐
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true }
       return { success: false }
+    }
+  })
+
+  // ===== Agent 长工具结果落盘（~/.novelforge/agent-results/<sha1-12>.txt，P0-1 写盘引用） =====
+  // 同内容同哈希同文件（确定性命名 + wx 防重 = 决策冻结）；文件保留（rewind/fork/存档重放需引用仍在）
+  ipcMain.handle('fs:agent-result-write', async (_e, content: unknown): Promise<{ success: boolean; path?: string; error?: string }> => {
+    try {
+      const text = typeof content === 'string' ? content : String(content ?? '')
+      const dir = path.join(VELA_HOME, 'agent-results')
+      await fsPromises.mkdir(dir, { recursive: true })
+      const hash = createHash('sha1').update(text).digest('hex').slice(0, 12)
+      const target = path.join(dir, `${hash}.txt`)
+      try {
+        await fsPromises.writeFile(target, text, { encoding: 'utf-8', flag: 'wx' })
+      } catch (error) {
+        // EEXIST = 同内容已落盘（同哈希）→ 幂等成功；其他错误上抛
+        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      }
+      return { success: true, path: target }
+    } catch (error) {
+      return { success: false, error: safeErrorMessage(error) }
     }
   })
 }
