@@ -61,15 +61,16 @@
 - 应用于：归档读取路径（parseArchive）+ checkpoint 恢复路径（workflow-store）
 - 测试：崩溃残片四类输入 → 净化后结构合法；正常归档零改动（行为兼容）
 **裁决点**：tool_use 配对判定（assistant tool_call ↔ 后续 user observation 的邻接规则）；thinking 形态（`[THINKING]` 块 vs 折叠标记）。
+**联动（L2）**：本任务净化逻辑沉淀为独立纯函数；L2（checkpoint 迁 DB）迁移时直接复用，勿双写实现——执行顺序 C4 在前。
 
 ## 档 2：中等改造（每项独立设计小窗 + SDD）
 
 ### Task M1: 工具分批并发（§三.5）
 
-**现状**：`agent-engine.ts:236-301` for 循环串行执行全部 tool_call。
+**现状**：`agent-engine.ts` 的 `runAgentLoop`（工具执行段，`executeToolWithTimeout` 调用点）用 for 循环串行执行全部 tool_call——无并行、无分批。
 **范围**（对齐 CC toolOrchestration.ts）：
 - 一次 LLM 调用 N 个工具：**连续只读归批并行（上限 10）**、写工具逐个串行、requiresConfirmation 工具保持确认交互
-- 工具分类：`tool.source === 'builtin'` 只读清单（read_file/search_knowledge/read_architecture/read_characters/count_characters/query_foreshadowing/setting_sampler 等）vs 写工具（write_file/update_config）
+- 工具分类：**以 `tool.isReadOnly` 字段为准**（write_file 已标记 `isReadOnly: false`）——只读清单（read_file/search_knowledge/read_architecture/read_characters/count_characters/query_foreshadowing/setting_sampler 等）vs 写工具（write_file/update_config）；⚠️ index-content/embed-text/compare-texts 虽属 builtin 且无需确认，但会写 LanceDB，**必须归入写工具**（执行前全量核对 `isReadOnly`，勿按 `source` 分组）
 - 观察注入顺序与并行执行结果一致（按 tool_call 出现顺序拼接 observation）
 - 测试：只读批并行（并发数断言）、写串行、混合批、并行中单工具失败不影响其他
 **裁决点**：只读白名单清单；并行上限 10 vs 模型窗口预算（与 D6 写盘引用协同——并行大结果汇总溢出处理）。
@@ -135,5 +136,5 @@
 ## Self-Review 记录
 
 - 覆盖检查：§三.3→C2 ✓、§三.4→M2 ✓、§三.5→M1 ✓、§三.7→C3 ✓、§三.8→C4 ✓、§三.9 剩余→C1 ✓、五.1→L1 ✓、五.2→L2 ✓、五.3→L3 ✓、五.4→L4 ✓；已落地项（P0-1/P0-2/三.1/三.2/三.6/三.9 分页部分）明确标注基线不重复 ✓
-- 冲突检查：C1 与 D7-1 的 gptEncoder 低估问题联动（C1 修两段式时顺带缓解）；M1 与 D6 写盘引用共享 observation 组装（裁决点已列）；L2 迁移号 v17（当前 v16——执行时以 CURRENT_SCHEMA_VERSION 为准复核）；C2 与既有 update_config 无冲突（不同工具）
+- 冲突检查：C1 与 D7-1 的 gptEncoder 低估问题联动（C1 修两段式时顺带缓解）；M1 与 D6 写盘引用共享 observation 组装（裁决点已列）；L2 迁移号 v17（当前 v16——执行时以 CURRENT_SCHEMA_VERSION 为准复核）；C2 与既有 update_config 无冲突（不同工具）；**C4 与 L2 共享 workflow-store 恢复路径（C4 先沉淀净化纯函数，L2 迁移时复用——见 C4 联动标注）**
 - 占位符扫描：各任务均给出范围/文件/裁决点；档 3 明确「先设计」——设计文档产出后再细化任务（与 D6/D7 同流程，非占位符）
