@@ -15,7 +15,7 @@
 |---|---|
 | `electron/embedding.ts:23-45` | `fetchWithTimeout`（10s abort 兜底，2026-08-29 修复）——Ollama 调用复用 |
 | `electron/knowledge-base.ts:71-101` | `importContent` 三级降级：Embedding API → LLM 向量化 → FTS-only（:104） |
-| `electron/knowledge-base.ts:374-397` | `backfillVectors` 同三级降级 |
+| `electron/knowledge-base.ts:332`（`backfillVectors`） | 同三级降级 |
 | `electron/kb-controller.ts:16-32` | `getEmbeddingConfig()` 读 config.json + models.json |
 | `~/.novelforge/config.json` | GlobalConfig（模型列表/默认模型/路由）——本地模型配置并入 |
 | 模型列表 | 已有 ollama 协议先例（llama3.3 等本地模型走 ollama baseUrl） |
@@ -50,9 +50,10 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 ```
 
 - **新配置** `GlobalConfig.localEmbedding: { enabled: boolean; baseUrl: string; model: string; preferLocal: boolean }`（默认：enabled=false, baseUrl='http://localhost:11434', model='bge-m3', preferLocal=true）
-- **集成点**：`knowledge-base.ts` 的 `importContent`（:71-101）与 `backfillVectors`（:374-397）——新增纯函数 `resolveEmbeddingOrder(cfg): ('local'|'api'|'llm'|'fts')[]` 决定尝试顺序（可单测）；每档失败（throw/空向量）按序降级
+- **集成点**：`knowledge-base.ts` 的 `importContent`（降级段 :67-106）与 `backfillVectors`（:332）——新增纯函数 `resolveEmbeddingOrder(cfg): ('local'|'api'|'llm'|'fts')[]` 决定尝试顺序（可单测）；每档失败（throw/空向量）按序降级
 - **推理失败语义**：本地失败（未连接/模型缺失/embed 报错）→ 降级下一档（不阻断导入；与现有 `AbortError` 修复后的降级路径一致）
 - **backfillVectors 同步接入**（存量库重建索引也走本地——用户痛点场景）
+- **维度硬校验（v1 必做，T3 实现）**：bge-m3（1024 维）与 API 模型（1536 维）不得混入同一 LanceDB 表——`importContent`/`backfillVectors` 写入前检测现有表向量维度，不一致则**拒绝写入并返回明确错误（提示重建索引）**，不做静默降级；切换模型形态（本地↔API）时 UI 同步提示重建（含 i18n 错误文案）
 
 ### 3.3 双通道获取
 
@@ -115,7 +116,7 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 
 - **T1**：`fetchWithTimeout` 导出 + 超时参数化（embedding.ts，小）+ 既有测试适配
 - **T2**：`ollama-embedding.ts` 新模块（detect/list/pull/embed + 测试）
-- **T3**：降级链集成（resolveEmbeddingOrder + importContent/backfillVectors 接入 + 测试）
+- **T3**：降级链集成（resolveEmbeddingOrder + importContent/backfillVectors 接入 + **维度硬校验** + 测试）
 - **T4**：config 扩展（GlobalConfig.localEmbedding + config-controller 读写 + 默认值）+ IPC 通道（`embedding:local-*`：detect/list/pull 发起 + pull-progress 事件，preload 白名单 'embedding:' 已有）
 - **T5**：设置页 UI 卡片（开关/地址/模型下拉/下载进度/测试/优先级单选 + i18n 三语）+ 组件测试
 - **顺序**：T1 → T2 → T3 → T4 → T5（每任务独立 commit，SDD 或 Inline）
@@ -136,4 +137,4 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 
 - Ollama 进程自管理（内置安装/启动守护）——v2
 - /api/embeddings 旧接口兼容——v2
-- 本地模型与 RAG 检索链路（searchKnowledge 向量维度一致性校验——bge-m3 1024 维 vs API 1536 维混库问题）——**v1 裁决：切换模型形态（本地/API）时提示用户重建索引**（维度不一致混库会破坏检索，需显式处理；归入 T3 的部署文档/UI 提示）
+- 本地模型与 RAG 检索链路检索侧优化（searchKnowledge 混合检索对本地模型维度/阈值的适配）——v2（**维度一致性硬校验已升为 v1 必做，见 §3.2 / T3**）
