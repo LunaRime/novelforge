@@ -10,6 +10,7 @@ import {
   DESANITIZE_MAP,
   desanitizeText,
   detectFileQuoteStyle,
+  detectRegionAwareQuoteStyle,
   EDIT_CONTEXT_MAX_CHARS,
   findEditMatch,
   normalizeQuoteKey,
@@ -217,6 +218,41 @@ describe('adaptTextToQuoteStyle（preserveQuoteStyle 回填）', () => {
   })
 })
 
+// ===== 区域感知风格（评审 Finding 2） =====
+
+describe('detectRegionAwareQuoteStyle（命中区优先，全文件多数决仅兜底）', () => {
+  it('弯引号主文件的直引号区（JSON/代码块）→ 区域直 → 保持直（不被全文件转弯）', () => {
+    const file = '“弯一”“弯二”\n{"a": "b"}\n“弯三”'
+    const region = '{"a": "b"}' // 命中区真实文本
+    const styles = detectRegionAwareQuoteStyle(region, file)
+    expect(styles.double).toBe('straight')
+    // 回填验证：直引号 new_string 逐字保持
+    expect(adaptTextToQuoteStyle('{"k": "v"}', styles)).toBe('{"k": "v"}')
+  })
+
+  it('命中区该族无证据 → 回退全文件多数决（new_string 引入命中区没有的引号族）', () => {
+    const file = '“弯文”' // 全文件弯双引号
+    const region = '无引号区'
+    const styles = detectRegionAwareQuoteStyle(region, file)
+    expect(styles.double).toBe('curly')
+    expect(adaptTextToQuoteStyle('"引入"', styles)).toBe('“引入”')
+  })
+
+  it('族独立：命中区单引号族弯、双引号族无证据 → 单引号按区域、双引号按全文件', () => {
+    const file = '"直双引号"文件。don’t'
+    const region = 'it’s ok' // 单引号弯、双引号无
+    const styles = detectRegionAwareQuoteStyle(region, file)
+    expect(styles.single).toBe('curly')
+    expect(styles.double).toBe('straight') // 全文件直双引号兜底
+  })
+
+  it('区域与全文件都无证据/持平 → none 不动', () => {
+    const styles = detectRegionAwareQuoteStyle('无引号', '同样无引号')
+    expect(styles).toEqual({ double: 'none', single: 'none' })
+    expect(adaptTextToQuoteStyle('"原样"', styles)).toBe('"原样"')
+  })
+})
+
 // ===== 尾换行语义 =====
 
 describe('尾换行语义（附带，对齐 CC）', () => {
@@ -246,17 +282,42 @@ describe('尾换行语义（附带，对齐 CC）', () => {
     expect(r.content).toBe('a\nx\nc\n')
   })
 
+  it('文件首行整行删除（start===0）同样消费尾换行', () => {
+    const r = applySpanEdit('ab\ncd', 0, 2, 'ab', '')
+    expect(r.content).toBe('cd')
+    expect(r.removedChars).toBe(3) // 'ab\n'
+  })
+
+  it('行尾片段（段末标点）删除 → 不消费尾换行（评审 Finding 1：不并段落行）', () => {
+    const r = applySpanEdit('第一段结尾。\n第二段开始。\n', 5, 6, '。', '')
+    expect(r.content).toBe('第一段结尾\n第二段开始。\n') // '。' 被删但 \n 保留，两段不合并
+    expect(r.removedChars).toBe(1)
+  })
+
+  it('md 段落边界（\\n\\n）保留：行尾片段删除不得塌缩段落分隔（评审 Finding 1）', () => {
+    const r = applySpanEdit('第一段结尾。\n\n第二段开始。\n', 5, 6, '。', '')
+    expect(r.content).toBe('第一段结尾\n\n第二段开始。\n') // \n\n 原样保留
+  })
+
   it('行中片段（后无换行）删除 → 不消费任何字符', () => {
     const r = applySpanEdit('alpha beta gamma', 6, 10, 'beta', '')
     expect(r.content).toBe('alpha  gamma') // 双侧空格保留
     expect(r.removedChars).toBe(4)
   })
 
-  it('consumeTrailingNewline 单测：边界条件', () => {
-    expect(consumeTrailingNewline('a\nb\nc', 3, 'b', '')).toBe(4) // 后跟 \n + 删除 → 消费
-    expect(consumeTrailingNewline('a\nb\nc', 3, 'b', 'x')).toBe(3) // 后跟 \n + 无换行替换 → 不消费
-    expect(consumeTrailingNewline('a\nb', 3, 'b', '')).toBe(3) // 文件尾无 \n → 不消费
-    expect(consumeTrailingNewline('a\nb\nc', 3, 'b\n', '')).toBe(3) // old 自带 \n → 不消费
+  it('consumeTrailingNewline 单测：边界条件（整行门控 + 行尾判定）', () => {
+    // 整行（前字符为 \n）删除 → 消费
+    expect(consumeTrailingNewline('a\nb\nc', 2, 3, 'b', '')).toBe(4)
+    // 文件首行（start===0）删除 → 消费
+    expect(consumeTrailingNewline('ab\ncd', 0, 2, 'ab', '')).toBe(3)
+    // 整行 + 无换行替换 → 不消费
+    expect(consumeTrailingNewline('a\nb\nc', 2, 3, 'b', 'x')).toBe(3)
+    // 非整行（行尾片段）删除 → 不消费（评审 Finding 1）
+    expect(consumeTrailingNewline('x。\ny', 1, 2, '。', '')).toBe(2)
+    // 文件尾无 \n → 不消费
+    expect(consumeTrailingNewline('a\nb', 2, 3, 'b', '')).toBe(3)
+    // old 自带 \n → 不消费（命中区已含行分隔）
+    expect(consumeTrailingNewline('a\nb\nc', 2, 4, 'b\n', '')).toBe(4)
   })
 })
 

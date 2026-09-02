@@ -19,7 +19,7 @@ import {
   adaptTextToQuoteStyle,
   applySpanEdit,
   desanitizeText,
-  detectFileQuoteStyle,
+  detectRegionAwareQuoteStyle,
   findEditMatch,
 } from './edit-file-utils'
 
@@ -104,9 +104,11 @@ export const editFileTool = buildAgentTool({
       return { success: false, content: '', error: t('tool.editNotFound') }
     }
 
-    // preserveQuoteStyle：new_string 反脱敏（当前空表=恒等，扩展点）后按文件引号风格回填
+    // preserveQuoteStyle（区域感知，评审 Finding 2）：new_string 先反脱敏（空表=恒等，扩展点），
+    // 再按**命中区真实文本**的引号风格回填（命中区无该族证据才回退全文件多数决）——直引号
+    // JSON/代码块等少数风格区不被弯引号主文件强制转弯（old==new 逐字请求保持 no-op）
     const rawNew = desanitizeText(newString)
-    const styles = detectFileQuoteStyle(currentText)
+    const styles = detectRegionAwareQuoteStyle(match.matchedText, currentText)
     const adaptedNew = adaptTextToQuoteStyle(rawNew, styles)
 
     // 应用替换（尾换行语义由纯函数承载）；命中区外其余内容一字不动

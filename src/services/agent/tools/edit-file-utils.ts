@@ -340,19 +340,49 @@ export function adaptTextToQuoteStyle(text: string, styles: FileQuoteStyle): str
   return out
 }
 
+/**
+ * preserveQuoteStyle 区域感知判定（评审 Finding 2 修复）：
+ * 回填基准 = **命中区真实文本**（fileText 的 [start,end)）逐族的引号风格，而非全文件多数决——
+ * 弯引号主文件内嵌的直引号区（md JSON/代码块/外文串）本身是合法的少数风格区：
+ * L1 精确命中该区（old/new 逐字复制自 read_file）时若按全文件转弯，会改写 old==new 的无意义请求
+ * （破坏 no-op 承诺、mtime 抖动）甚至损坏直引号 JSON。
+ * 规则：某族在命中区有证据 → 按命中区风格回填（弯→转弯、直→转直）；命中区该族无证据
+ * （new_string 引入了命中区没有的引号族）→ 才回退全文件多数决（detectFileQuoteStyle）；仍无证据 → none 不动。
+ */
+export function detectRegionAwareQuoteStyle(regionText: string, fileText: string): FileQuoteStyle {
+  const region = detectFileQuoteStyle(regionText)
+  const file = detectFileQuoteStyle(fileText)
+  return {
+    double: region.double !== 'none' ? region.double : file.double,
+    single: region.single !== 'none' ? region.single : file.single,
+  }
+}
+
 // ===== 尾换行语义（附带，对齐 CC） =====
 
 /**
- * 连带删除尾换行：old_string 不以 \n 结尾、命中区后紧跟 \n，且替换文本为空或以 \n 结尾
- * （即模型把 old 视为"整行含换行"：删除或自带换行结尾的替换）→ 命中区连带吞掉该 \n。
+ * 连带删除尾换行：命中区**覆盖整行**（spanStart===0 或前字符为 \n）、old_string 不以 \n 结尾、
+ * 命中区后紧跟 \n，且替换文本为空或以 \n 结尾 → 命中区连带吞掉该 \n。
  * 避免残留空行（old 'b' new '' 于 'a\nb\nc\n' → 'a\nc\n' 而非 'a\n\nc\n'）。
+ *
+ * ⚠️ 整行校验（评审 Finding 1 修复）：行尾**片段**（如句末标点 '。'）删除不得吞行分隔——
+ *   old '。' new '' 于 '第一段结尾。\n第二段' 若吞 \n 会把两段并成一行；md 的 \n\n 段落边界
+ *   也会塌缩。消费尾换行只发生在「模型显然在删一整行」时（i18n 语义：删除独占一行的片段时
+ *   连带删除行尾换行）。
  *
  * 替换文本不以 \n 结尾（且非空）时不消费——文件行分隔符保留（old 'b' new 'x' → 'a\nx\nc\n'，
  * 行替换语义下 new 与下行用文件原有 \n 分隔，不粘连）。
  */
-export function consumeTrailingNewline(fileText: string, spanEnd: number, oldString: string, newString: string): number {
+export function consumeTrailingNewline(
+  fileText: string,
+  spanStart: number,
+  spanEnd: number,
+  oldString: string,
+  newString: string,
+): number {
   if (oldString.endsWith('\n')) return spanEnd
-  if (newString === '' || newString.endsWith('\n')) {
+  const coversWholeLine = spanStart === 0 || fileText[spanStart - 1] === '\n'
+  if (coversWholeLine && (newString === '' || newString.endsWith('\n'))) {
     if (fileText[spanEnd] === '\n') return spanEnd + 1
   }
   return spanEnd
@@ -385,7 +415,7 @@ export function applySpanEdit(
   newString: string,
 ): SpanEditResult {
   const replacement = finalizeReplacementText(oldString, newString)
-  const end2 = consumeTrailingNewline(fileText, end, oldString, replacement)
+  const end2 = consumeTrailingNewline(fileText, start, end, oldString, replacement)
   return {
     content: fileText.slice(0, start) + replacement + fileText.slice(end2),
     removedChars: end2 - start,

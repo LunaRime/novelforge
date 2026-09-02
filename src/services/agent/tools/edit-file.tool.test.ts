@@ -213,3 +213,26 @@ describe('edit_file 与读去重状态（P0-2 语义对齐）', () => {
     expect(after.content).toContain('新内容')
   })
 })
+
+describe('区域感知引号回填（评审 Finding 2 修复）', () => {
+  it('弯引号主文件内直引号 JSON 区替换：保持直引号不被转弯（防 JSON 损坏）', async () => {
+    // 全文件弯双引号 6 > JSON 区直引号 4 → 旧行为按全文件多数决会把 new 转弯
+    disk = '“弯一”和“弯二”都在。\n```json\n{"a": "b"}\n```\n“弯三”收尾。\n'
+    const r = await editFileTool.execute({ file_path: 'note.md', old_string: '{"a": "b"}', new_string: '{"a": "c"}' })
+    expect(r.success).toBe(true)
+    // 区域真实文本是直引号 → new_string 直引号逐字保持（不转弯）
+    expect(disk).toBe('“弯一”和“弯二”都在。\n```json\n{"a": "c"}\n```\n“弯三”收尾。\n')
+    expect(disk).toContain('{"a": "c"}')
+    expect(r.content).toBe(fileEditedMsg('note.md', '3', '10', '10')) // 精确层、单命中 → 无附加提示
+  })
+
+  it('old==new（含引号、区域少数直引号风格）→ editNoChange 不写盘（no-op 承诺 + mtime 不抖）', async () => {
+    disk = '“弯一”和“弯二”都在。\n```json\n{"a": "b"}\n```\n“弯三”收尾。\n'
+    const before = disk
+    const r = await editFileTool.execute({ file_path: 'note.md', old_string: '{"a": "b"}', new_string: '{"a": "b"}' })
+    expect(r.success).toBe(true)
+    expect(r.content).toBe(t('tool.editNoChange').replace('{path}', 'note.md'))
+    expect(disk).toBe(before) // 文件未变
+    expect(mockInvoke.mock.calls.map(c => c[0])).toEqual(['fs:read-file']) // 只有读，无写
+  })
+})
