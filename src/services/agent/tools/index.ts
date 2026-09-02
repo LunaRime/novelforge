@@ -15,6 +15,7 @@ import { readProjectStateTool } from './read-project-state.tool'
 import { readDraftsTool } from './read-drafts.tool'
 import { listChaptersTool } from './list-chapters.tool'
 import { writeFileTool } from './write-file.tool'
+import { editFileTool } from './edit-file.tool'
 import { openEditorTool } from './open-editor.tool'
 import { startWorkflowTool } from './start-workflow.tool'
 import { updateConfigTool } from './update-config.tool'
@@ -52,6 +53,8 @@ export const builtinTools = [
   browserListTabsTool,
   // 行动 Tool（需确认）
   writeFileTool,
+  // 局部编辑（需确认）— CC FileEditTool 对齐：old_string→new_string + 三层降级链（C2）
+  editFileTool,
   openEditorTool,
   startWorkflowTool,
   updateConfigTool,
