@@ -5,6 +5,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
+import { getActiveStyle, appendWritingStyle } from '../../agent/style-registry'
 
 import type { ChapterInfo } from '../chapter-workflow'
 import type { TextKey } from '../../../shared/locale'
@@ -53,10 +54,20 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     const characterStates = await this.readCharacterStates()
     const shortSummary = this.params.shortSummary?.trim() || t('inject.review.noContextReference')
 
+    // ==========================================
+    // 输出风格注入（C3，与 generate-draft 同款语义）：default.md 存在即追加到既有 config.writingStyle
+    // 之后，无 default.md / 读盘失败 → 零变化（修稿首次把 writingStyle 引入 prompt——用户裁决接受新行为）
+    // ==========================================
+    const activeStyleBody = project.path
+      ? ((await getActiveStyle(project.path))?.promptBody ?? '')
+      : ''
+    const writingStyleValue = appendWritingStyle(project.novelConfig.writingStyle || '', activeStyleBody)
+
     const promptBuilder = new ChapterPromptBuilder(template)
       .withDraftContent(draft)
       .withChapterInfo(this.params.chapterInfo)
       .withGlobalGuidance(mergedGuidance)
+      .withWritingStyle(writingStyleValue)
       .withGlobalSummary(shortSummary)
       .withShortSummary(shortSummary)
       .withCharacterStates(characterStates)
