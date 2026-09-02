@@ -7,7 +7,8 @@ import { renderLog } from '../services/render-logger'
 
 const CHECKPOINT_KEY = 'vela-workflow-checkpoint'
 
-interface CheckpointData {
+/** Checkpoint 数据结构（导出：conversation-recovery 净化纯函数复用类型，L2 迁 DB 亦复用） */
+export interface CheckpointData {
   activeRuns: WorkflowRun[]
   waitingRuns: Record<string, { waitingForConfirm: boolean; waitingAfterStepIndex: number }>
   savedAt: string
