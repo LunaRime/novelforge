@@ -8,6 +8,7 @@ import { createHash } from 'node:crypto'
 import { FileNode } from '../../src/shared/ipc-channels'
 import { VELA_HOME } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
+import { scanTextWindow } from '../utils/read-text-window'
 
 /** 路径沙箱：允许访问的根目录列表 */
 const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
@@ -21,6 +22,61 @@ const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
 const EXTERNAL_MAX_BYTES = 1_048_576 // 1MB
 const INTERNAL_MAX_BYTES = 5 * 1_048_576 // 5MB（项目内读取上限）
 const EXTERNAL_READABLE_EXTS = new Set(['.md', '.txt', '.json', '.yaml', '.yml', '.csv', '.markdown'])
+
+// ===== C1 窗口读（read_file offset/limit 流式化）： =====
+// - 无 offset/limit → 既有全量读路径（大小上限 = 安全网，行为兼容）；
+// - 带 offset/limit → 主进程按 [offset, offset+limit) 读窗口：≤ 上限文件整读切片（精确 totalChars），
+//   > 上限文件流式扫描（scanTextWindow：只累计窗口内内容，窗口外仅计数，读 100GB 文件首窗口不爆 RSS）
+const WINDOW_LIMIT_MAX = 1_000_000 // 窗口内容长度上限（字符）——防 LLM 请求荒谬 limit 引发超长扫描
+
+interface ReadWindowSpec {
+  windowed: boolean
+  offset: number
+  limit: number
+}
+
+/** 清洗渲染层可选窗口参数（与 read_file 工具 parse 语义对齐：offset<0→0；limit<1→非窗口） */
+function parseReadWindow(options: unknown): ReadWindowSpec {
+  if (!options || typeof options !== 'object') return { windowed: false, offset: 0, limit: 0 }
+  const o = options as { offset?: unknown; limit?: unknown }
+  const offset =
+    typeof o.offset === 'number' && Number.isFinite(o.offset) && o.offset >= 0 ? Math.floor(o.offset) : 0
+  const rawLimit = typeof o.limit === 'number' && Number.isFinite(o.limit) ? Math.floor(o.limit) : 0
+  if (rawLimit < 1) return { windowed: false, offset: 0, limit: 0 }
+  return { windowed: true, offset, limit: Math.min(rawLimit, WINDOW_LIMIT_MAX) }
+}
+
+/** 窗口读快路径（文件 ≤ 全量上限）：整读 + 内存切片，totalChars 精确 */
+function windowFromFullText(
+  fullText: string,
+  spec: ReadWindowSpec,
+): { content: string; totalChars: number; beyond: boolean } {
+  const total = fullText.length
+  if (spec.offset >= total) return { content: '', totalChars: total, beyond: true }
+  return {
+    content: fullText.slice(spec.offset, spec.offset + spec.limit),
+    totalChars: total,
+    beyond: false,
+  }
+}
+
+/** 超大文件窗口读（size > 全量上限）：流式扫描 + 元数据回填 */
+async function windowFromHugeFile(
+  filePath: string,
+  spec: ReadWindowSpec,
+  statSize: number,
+): Promise<{ content: string; totalChars?: number; beyond?: boolean }> {
+  // 字符数 ≤ 字节数（UTF-8 每字符 ≥ 1 字节）：offset 字符 ≥ 字节数 ⇒ 必越界，免扫描
+  if (spec.offset >= statSize) return { content: '', beyond: true }
+  const scanned = await scanTextWindow(filePath, spec.offset, spec.limit)
+  const res: { content: string; totalChars?: number; beyond?: boolean } = { content: scanned.content }
+  const total = scanned.eof ? scanned.totalChars : undefined
+  if (total !== undefined) {
+    res.totalChars = total
+    if (spec.offset >= total) res.beyond = true
+  }
+  return res
+}
 
 /** 用户显式授权过的外部文件路径（dialog:select-files 选择成功后由渲染层登记，会话级） */
 const grantedExternalFiles = new Set<string>()
@@ -116,18 +172,30 @@ async function withFileMutex<T>(filePath: string, task: () => Promise<T>): Promi
 
 export function registerFSController() {
   // 安全的异步读取
-  ipcMain.handle('fs:read-file', async (_event, filePath: string) => {
+  ipcMain.handle('fs:read-file', async (_event, filePath: string, options?: unknown) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
+        const spec = parseReadWindow(options)
         // 项目内读取也加大小上限（P3 修复）：50MB 文本全量跨 IPC 再被截断到 800 token，
-        // 内存与 IPC 成本浪费且可能撞工具超时竞态
+        // 内存与 IPC 成本浪费且可能撞工具超时竞态。上限仅约束「无 offset/limit 的全量读」；
+        // 窗口读（C1）不受上限约束但只返回窗口内内容（超大文件流式扫描）
         const stat = await fsPromises.stat(safePath)
-        if (stat.size > INTERNAL_MAX_BYTES) {
-          return { success: false, content: '', error: t('error.fileTooLarge').replace('{limit}', String(Math.round(INTERNAL_MAX_BYTES / 1024 / 1024))) }
+        if (!spec.windowed) {
+          if (stat.size > INTERNAL_MAX_BYTES) {
+            return { success: false, content: '', error: t('error.fileTooLarge').replace('{limit}', String(Math.round(INTERNAL_MAX_BYTES / 1024 / 1024))) }
+          }
+          const content = await fsPromises.readFile(safePath, 'utf-8')
+          return { success: true, content }
         }
-        const content = await fsPromises.readFile(safePath, 'utf-8')
-        return { success: true, content }
+        // 窗口读：≤ 上限快路径（精确 totalChars，行为与旧渲染层切片一致）；> 上限流式扫描
+        if (stat.size <= INTERNAL_MAX_BYTES) {
+          const full = await fsPromises.readFile(safePath, 'utf-8')
+          const w = windowFromFullText(full, spec)
+          return { success: true, content: w.content, totalChars: w.totalChars, beyond: w.beyond }
+        }
+        const w = await windowFromHugeFile(safePath, spec, stat.size)
+        return { success: true, content: w.content, ...(w.totalChars !== undefined ? { totalChars: w.totalChars } : {}), ...(w.beyond ? { beyond: true } : {}) }
       })
     } catch (error) {
       return { success: false, content: '', error: safeErrorMessage(error) }
@@ -138,7 +206,7 @@ export function registerFSController() {
   // 扩展名白名单 + 1MB 大小限制 + 只读（无写通道）
   // ⚠️ 安全边界：仅放行「用户对话框显式选择过」的路径（fs:grant-external-file 登记）或项目目录内文件；
   //    BLOCKED_PATHS（.ssh/.aws/AppData/Windows 等）同样适用——此前 LLM 可传任意绝对路径无确认读取
-  ipcMain.handle('fs:read-external-file', async (_event, filePath: string) => {
+  ipcMain.handle('fs:read-external-file', async (_event, filePath: string, options?: unknown) => {
     try {
       const resolved = path.resolve(filePath)
 
@@ -169,11 +237,22 @@ export function registerFSController() {
       if (!stat.isFile()) {
         return { success: false, content: '', error: '目标不是文件' }
       }
-      if (stat.size > EXTERNAL_MAX_BYTES) {
-        return { success: false, content: '', error: `文件过大（超过 ${Math.round(EXTERNAL_MAX_BYTES / 1024)}KB），拒绝读取` }
+      const spec = parseReadWindow(options)
+      if (!spec.windowed) {
+        if (stat.size > EXTERNAL_MAX_BYTES) {
+          return { success: false, content: '', error: `文件过大（超过 ${Math.round(EXTERNAL_MAX_BYTES / 1024)}KB），拒绝读取` }
+        }
+        const content = await fsPromises.readFile(filePath, 'utf-8')
+        return { success: true, content }
       }
-      const content = await fsPromises.readFile(filePath, 'utf-8')
-      return { success: true, content }
+      // C1 窗口读：授权/扩展名/类型检查不变；1MB 上限仅约束全量读，窗口读流式切片
+      if (stat.size <= EXTERNAL_MAX_BYTES) {
+        const full = await fsPromises.readFile(filePath, 'utf-8')
+        const w = windowFromFullText(full, spec)
+        return { success: true, content: w.content, totalChars: w.totalChars, beyond: w.beyond }
+      }
+      const w = await windowFromHugeFile(filePath, spec, stat.size)
+      return { success: true, content: w.content, ...(w.totalChars !== undefined ? { totalChars: w.totalChars } : {}), ...(w.beyond ? { beyond: true } : {}) }
     } catch (error) {
       return { success: false, content: '', error: safeErrorMessage(error) }
     }

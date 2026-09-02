@@ -98,12 +98,17 @@ describe('read_file 读去重', () => {
   it('带 offset 的分页读不短路（P0-1：桩不含文件内容，分页读必须真实读盘）', async () => {
     // ⚠️ H3 语义：offset 超出文件长度会走「已超出文件长度」提示分支——
     //    故 fixture 长度必须 > 10，分页读才能真实返回内容（断言依赖）
-    mockInvoke.mockResolvedValue({ success: true, content: '全文内容'.repeat(10) })
+    // C1：窗口读由主进程切片返回（totalChars 元数据），此处模拟主进程行为
+    const fullContent = '全文内容'.repeat(10) // 40 字符
+    mockInvoke
+      .mockResolvedValueOnce({ success: true, content: fullContent })
+      .mockResolvedValueOnce({ success: true, content: fullContent.slice(10), totalChars: 40, beyond: false })
     await readFileTool.execute({ file_path: 'chap1.md' })
-    // offset 指定 → 绕过短路，走真实读文件（H3 将解析 offset/limit；此处直传 args）
+    // offset 指定 → 绕过短路，走真实读文件，且窗口参数随 IPC 下发主进程
     const page = await readFileTool.execute({ file_path: 'chap1.md', offset: 10 })
     expect(page.content).toContain('全文内容')
     expect(mockInvoke).toHaveBeenCalledTimes(2)
+    expect(mockInvoke).toHaveBeenLastCalledWith('fs:read-file', `${projectPath}/chap1.md`, { offset: 10, limit: READ_MAX_CHARS })
   })
 
   it('write_file 成功后失效缓存：写后重复读返回全文（P0-2）', async () => {
@@ -139,10 +144,10 @@ describe('read_file token 约束与分页', () => {
     expect(r.content).toBe(notice + longContent.slice(0, READ_MAX_CHARS))
   })
 
-  it('offset/limit 生效：offset=1000&limit=500 只返回该区间', async () => {
-    // 3 段可区分内容：[0,1000)='0'、[1000,1500)='B'、[1500,3000)='E'
+  it('offset/limit 生效：offset=1000&limit=500 只返回该区间（C1 主进程窗口切片 + totalChars 元数据）', async () => {
+    // 3 段可区分内容：[0,1000)='0'、[1000,1500)='B'、[1500,3000)='E'；主进程按窗口切片返回
     const content = '0'.repeat(1000) + 'B'.repeat(500) + 'E'.repeat(1500)
-    mockInvoke.mockResolvedValue({ success: true, content })
+    mockInvoke.mockResolvedValue({ success: true, content: 'B'.repeat(500), totalChars: content.length, beyond: false })
     const r = await readFileTool.execute({ file_path: 'chap1.md', offset: 1000, limit: 500 })
     expect(r.success).toBe(true)
     // 精确返回 [1000, 1500) 区间 + 截断提示前缀（{end}=1500 = offset+limit，注入引擎的全文不含区间外内容）
@@ -150,10 +155,12 @@ describe('read_file token 约束与分页', () => {
       .replace('{total}', String(content.length))
       .replace('{end}', String(1000 + 500)) + '\n\n'
     expect(r.content).toBe(notice + 'B'.repeat(500))
+    // 窗口参数随 IPC 下发主进程（超大文件不再全量回传渲染层）
+    expect(mockInvoke).toHaveBeenCalledWith('fs:read-file', `${projectPath}/chap1.md`, { offset: 1000, limit: 500 })
   })
 
-  it('offset 超出文件长度：返回空 + 提示', async () => {
-    mockInvoke.mockResolvedValue({ success: true, content: '短内容'.repeat(10) })
+  it('offset 超出文件长度：主进程返回 beyond → 空 + 越界提示', async () => {
+    mockInvoke.mockResolvedValue({ success: true, content: '', totalChars: 40, beyond: true })
     const r = await readFileTool.execute({ file_path: 'chap1.md', offset: 1000 })
     expect(r.success).toBe(true)
     expect(r.content).toBe(t('tool.readFileOffsetBeyond') + '\n\n')
@@ -171,11 +178,11 @@ describe('read_file token 约束与分页', () => {
   it('带 offset/limit 的读取不被读去重短路命中（P0-1 回归）', async () => {
     mockInvoke
       .mockResolvedValueOnce({ success: true, content: 'x'.repeat(3000) })
-      .mockResolvedValueOnce({ success: true, content: 'y'.repeat(5000) })
+      .mockResolvedValueOnce({ success: true, content: 'y'.repeat(500), totalChars: 5000, beyond: false })
     // 全量读（无 offset/limit）→ 写入 readState（3000 字符）
     const r1 = await readFileTool.execute({ file_path: 'chap1.md' })
     expect(r1.content).toContain('截断')
-    // 分页读（offset/limit）→ 不命中 file_unchanged 桩，走真实读盘
+    // 分页读（offset/limit）→ 不命中 file_unchanged 桩，走真实读盘（主进程窗口切片）
     const r2 = await readFileTool.execute({ file_path: 'chap1.md', offset: 1000, limit: 500 })
     expect(r2.content).not.toContain('file_unchanged')
     expect(r2.content).toContain('y'.repeat(500))
@@ -188,9 +195,9 @@ describe('read_file token 约束与分页', () => {
     expect(r3.content).not.toContain('5000')
   })
 
-  it('offset 恰等于文件长度：返回越界提示而非静默空串（M5 边界）', async () => {
+  it('offset 恰等于文件长度：主进程返回 beyond → 越界提示而非静默空串（M5 边界）', async () => {
     const content = '边界内容'.repeat(5) // 20 字符
-    mockInvoke.mockResolvedValue({ success: true, content })
+    mockInvoke.mockResolvedValue({ success: true, content: '', totalChars: content.length, beyond: true })
     const r = await readFileTool.execute({ file_path: 'chap1.md', offset: content.length })
     expect(r.success).toBe(true)
     expect(r.content).toBe(t('tool.readFileOffsetBeyond') + '\n\n')
@@ -198,8 +205,9 @@ describe('read_file token 约束与分页', () => {
 
   it('病态数值参数：limit<1 走默认上限、负 offset 按 0 处理（M2）', async () => {
     const content = '参数内容'.repeat(10) // 40 字符（≤ READ_MAX_CHARS 不触发截断）
-    mockInvoke.mockResolvedValue({ success: true, content })
-    // limit=0.5：旧实现 Math.floor(0.5)=0 → 空串+误报截断提示；新实现视为未指定 → 全量返回
+    // C1 窗口读：主进程返回窗口切片 + totalChars；40 ≤ offset+limit → 原样返回
+    mockInvoke.mockResolvedValue({ success: true, content, totalChars: content.length, beyond: false })
+    // limit=0.5：旧实现 Math.floor(0.5)=0 → 空串+误报截断提示；新实现视为未指定 → 全量窗口
     const r1 = await readFileTool.execute({ file_path: 'chap1.md', limit: 0.5 })
     expect(r1.success).toBe(true)
     expect(r1.content).toBe(content)
@@ -210,6 +218,29 @@ describe('read_file token 约束与分页', () => {
     // 负 offset 按 0 处理（全量窗口，非越界提示）
     const r3 = await readFileTool.execute({ file_path: 'chap1.md', offset: -1 })
     expect(r3.content).toBe(content)
+  })
+
+  it('超大文件窗口读（totalChars 未知 = 主进程流式早停）：超大文件提示 + 窗口内容', async () => {
+    // > 5MB 上限文件：主进程扫到窗口尾即停，未达 EOF → totalChars 缺省
+    mockInvoke.mockResolvedValue({ success: true, content: 'Z'.repeat(440), beyond: false })
+    const r = await readFileTool.execute({ file_path: 'chap1.md', offset: 2000, limit: 440 })
+    expect(r.success).toBe(true)
+    const expected = t('tool.readFileHugeWindow')
+      .replace('{start}', '2000')
+      .replaceAll('{end}', '2440') + '\n\n' + 'Z'.repeat(440)
+    expect(r.content).toBe(expected)
+    expect(mockInvoke).toHaveBeenCalledWith('fs:read-file', `${projectPath}/chap1.md`, { offset: 2000, limit: 440 })
+  })
+
+  it('外部文件窗口读：offset/limit 下发 fs:read-external-file + 组合提示', async () => {
+    mockInvoke.mockResolvedValue({ success: true, content: 'B'.repeat(500), totalChars: 3000, beyond: false })
+    const r = await readFileTool.execute({ file_path: 'C:/Users/test/big.md', offset: 1000, limit: 500 })
+    expect(r.success).toBe(true)
+    const notice = t('tool.readFileTruncated')
+      .replace('{total}', '3000')
+      .replace('{end}', '1500') + '\n\n'
+    expect(r.content).toBe(notice + 'B'.repeat(500))
+    expect(mockInvoke).toHaveBeenCalledWith('fs:read-external-file', 'C:/Users/test/big.md', { offset: 1000, limit: 500 })
   })
 
   it('中文峰值输出 ≤ 引擎截断线：READ_MAX_CHARS 全中文 + 截断提示 ≤ TOOL_RESULT_MAX_TOKENS（F3 锁定）', async () => {

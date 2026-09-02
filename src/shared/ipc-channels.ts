@@ -185,10 +185,29 @@ export interface GlobalUsageStatsData {
 }
 
 // ===== 文件系统 =====
+
+/**
+ * fs:read-file / fs:read-external-file 可选窗口读参数（C1，CC §三.9 剩余）：
+ * 提供有效 offset/limit 时主进程走 [offset, offset+limit) 窗口读——超大文件流式扫描
+ * （只累计窗口内内容，窗口外仅计数，RSS 有界），不受单次全量读取上限约束。
+ * 窗口口径 = JS string.length（UTF-16 code unit），与渲染层 read_file offset/limit 契约一致。
+ */
+export interface ReadFileRangeOptions {
+  /** 起始字符偏移（0 = 文件头）；<0 视为 0 */
+  offset?: number
+  /** 窗口长度（字符）；<1 视为未指定（回退全量读路径） */
+  limit?: number
+}
+
 export interface FileChannels {
   'fs:read-file': {
-    args: [filePath: string]
-    return: { success: boolean; content: string; error?: string }
+    args: [filePath: string, options?: ReadFileRangeOptions]
+    /**
+     * 无 options：全文（≤ 全量上限安全网）；带 options：窗口切片。
+     * totalChars：窗口扫描扫到文件尾时 = 文件总字符数（精确）；超大文件窗口早停截断时缺省。
+     * beyond：主进程已证明 offset ≥ 文件总长（无内容返回）。
+     */
+    return: { success: boolean; content: string; totalChars?: number; beyond?: boolean; error?: string }
   }
   /** 项目外文件只读（Agent 添加外部文件专用；无沙箱，扩展名 + 1MB 限制） */
   'fs:grant-external-file': {
@@ -196,8 +215,8 @@ export interface FileChannels {
     return: { success: boolean }
   }
   'fs:read-external-file': {
-    args: [filePath: string]
-    return: { success: boolean; content: string; error?: string }
+    args: [filePath: string, options?: ReadFileRangeOptions]
+    return: { success: boolean; content: string; totalChars?: number; beyond?: boolean; error?: string }
   }
   'fs:write-file': {
     args: [filePath: string, content: string]
