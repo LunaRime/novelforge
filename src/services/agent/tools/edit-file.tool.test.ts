@@ -195,6 +195,33 @@ describe('edit_file 边界与失败路径', () => {
   })
 })
 
+describe('edit_file 数据目录保护归一化（I-1 修复回归矩阵）', () => {
+  const cases: Array<[string, string]> = [
+    ['直形 .novelforge/vela.db', '.novelforge/vela.db'],
+    ['直形 .git/config', '.git/config'],
+    ['./ 前缀混淆', './.novelforge/vela.db'],
+    ['.. 中段混淆（文本形态提示词覆盖目标）', 'x/../.novelforge/prompts/main.json'],
+    ['反斜杠 + .. 混淆', 'x\\..\\.novelforge\\prompts\\main.json'],
+    ['目录名本身', '.novelforge'],
+  ]
+  for (const [label, filePath] of cases) {
+    it(`${label} → 拒绝（writeProtectedPath），零 IPC`, async () => {
+      const r = await editFileTool.execute({ file_path: filePath, old_string: 'x', new_string: 'y' })
+      expect(r.success).toBe(false)
+      expect(r.error).toBe(t('tool.writeProtectedPath'))
+      expect(mockInvoke).not.toHaveBeenCalled()
+    })
+  }
+
+  it('正常子目录文件不受影响（不误报）：编辑成功且写回正确路径', async () => {
+    disk = '正文内容'
+    const r = await editFileTool.execute({ file_path: '稿子/第一章.md', old_string: '正文', new_string: '新文' })
+    expect(r.success).toBe(true)
+    expect(disk).toBe('新文内容')
+    expect(mockInvoke).toHaveBeenLastCalledWith('fs:write-file', `${projectPath}/稿子/第一章.md`, disk)
+  })
+})
+
 describe('edit_file 与读去重状态（P0-2 语义对齐）', () => {
   it('编辑成功后失效读缓存：LLM「编辑 → 重读验证」拿到新内容而非 file_unchanged 桩', async () => {
     disk = '原文内容'

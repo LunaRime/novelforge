@@ -13,7 +13,7 @@ import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
-import { validatePath } from './safe-path'
+import { isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 import {
   adaptTextToQuoteStyle,
@@ -22,16 +22,6 @@ import {
   detectRegionAwareQuoteStyle,
   findEditMatch,
 } from './edit-file-utils'
-
-/**
- * 数据目录保护（与 write-file.tool.ts:52-56 同源策略——改动需两处同步）：
- * .novelforge/.vela 含 SQLite 库/向量库/白名单，一次误写即可用文本覆盖二进制 DB 损坏整个项目（P0 修复）
- */
-function isProtectedProjectPath(filePath: string): boolean {
-  const normalized = filePath.replace(/\\/g, '/')
-  const forbiddenPrefixes = ['.novelforge/', '.vela/', '.git/', 'node_modules/']
-  return forbiddenPrefixes.some(p => normalized === p.slice(0, -1) || normalized.startsWith(p))
-}
 
 export const editFileTool = buildAgentTool({
   name: 'edit_file',
@@ -81,12 +71,13 @@ export const editFileTool = buildAgentTool({
       return { success: false, content: '', error: t('error.noProject') }
     }
 
-    // 路径安全校验（与 write_file 同链：validatePath + 数据目录前缀）
+    // 路径安全校验（与 write_file 同源：validatePath 返回规范化相对路径 → 数据目录保护首段判定，
+    // './.novelforge/x'、'x/../.novelforge/x' 等混淆形态经归一化后必命中——I-1 修复）
     const pathCheck = validatePath(project.path, filePath)
     if (!pathCheck.valid) {
       return { success: false, content: '', error: pathCheck.error }
     }
-    if (isProtectedProjectPath(filePath)) {
+    if (isProtectedRelativePath(pathCheck.relativePath)) {
       return { success: false, content: '', error: t('tool.writeProtectedPath') }
     }
 

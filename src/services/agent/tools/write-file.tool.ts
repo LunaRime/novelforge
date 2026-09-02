@@ -5,7 +5,7 @@ import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
-import { validatePath } from './safe-path'
+import { isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 
 export const writeFileTool = buildAgentTool({
@@ -48,10 +48,10 @@ export const writeFileTool = buildAgentTool({
     }
 
     // ⚠️ 数据文件保护：拒绝写入项目内部数据目录（.novelforge/.vela 含 SQLite 库/向量库/白名单、
-    // .git/、node_modules）——一次误写即可用文本覆盖二进制 DB，损坏整个项目（P0 修复）
-    const normalized = filePath.replace(/\\/g, '/')
-    const forbiddenPrefixes = ['.novelforge/', '.vela/', '.git/', 'node_modules/']
-    if (forbiddenPrefixes.some(p => normalized === p.slice(0, -1) || normalized.startsWith(p))) {
+    // .git/、node_modules）——一次误写即可用文本覆盖二进制 DB，损坏整个项目（P0 修复）。
+    // 判定对象 = validatePath 产出的**规范化相对路径**（首段 ∈ 数据目录）——原始 LLM 串的
+    // './.novelforge/x'、'x/../.novelforge/x' 等混淆形态经 resolveSafeRelativePath 归一化后必命中（I-1）
+    if (isProtectedRelativePath(pathCheck.relativePath)) {
       return { success: false, content: '', error: t('tool.writeProtectedPath') }
     }
 
