@@ -900,6 +900,22 @@ export interface MemoryChannels {
   }
 }
 
+// ===== 输出风格（写作风格 .md 零代码注册；styles/*.md，项目级覆盖用户级） =====
+
+/** 风格元信息（列表返回，不含 promptBody） */
+export interface StyleInfo {
+  /** 风格名（= 文件名去 .md） */
+  name: string
+  /** 描述（frontmatter description，可为空） */
+  description: string
+}
+
+/** 完整风格（get 返回，含正文 prompt——写稿注入用） */
+export interface StyleMeta extends StyleInfo {
+  /** 正文（写作风格指令，LLM 注入 writing_style 变量用） */
+  promptBody: string
+}
+
 // ===== 合并所有频道 =====
 export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
