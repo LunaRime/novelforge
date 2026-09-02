@@ -7,13 +7,15 @@
  * NovelForge 形态裁决（2026-08-29，C4 report 记录）：
  * - tool_call 配对判定：NF 的 tool_call 是 agent-engine ReAct 协议的 <tool_call> 纯文本块，
  *   归档写入链（agent-store onTextChunk/onDone 全量清洗）保证正常归档不含任何 tool 标签——
- *   恢复时出现的完整/断裂 tool_call/tool_result 文本 = 崩溃或旧版残留，一律文本级清理。
+ *   **assistant** 消息恢复时出现的完整/断裂 tool_call/tool_result 文本 = 崩溃或旧版残留，文本级清理。
  *   CC 的「无配对 tool_use 整轮过滤」对应到 NF = assistant 消息清理后为纯空白 → 整条过滤
  *   （NF store 层无独立 user observation 消息类型，不存在跨消息配对判定的基质；
  *   assistant 含正文 + tool 块 → 只清块留正文，不整条删）。
+ *   **user/system 消息写入链零清洗，正文必须逐字保留**（可含字面 <tool_call>/<think>，
+ *   含未闭合形态——评审 F1 修复：清理只作用 assistant，user/system 仅校验/空白过滤/streaming 归一）。
  * - thinking：输出链落盘前已剥 <think>（output-post-processor / workflow-utils
  *   stripThinkingTags）；可见思考以 `_思考过程：_` 引用形态存 assistant 正文（用户可见，不滤）。
- *   恢复内容里出现原始 <think> 块（含未闭合）= 流式中断残留 → 清理。
+ *   **assistant** 消息里出现原始 <think> 块（含未闭合）= 流式中断残留 → 清理。
  *   「仅思考无正文」的引用形态（quote-only assistant）可被正常路径产出（引擎空正文 + 有思考），
  *   非崩溃残片 → 本层不动，留 UI/后续裁决（C4 report 记录）。
  * - streaming:true 持久化 = 崩溃/错误后未收尾（正常 onDone 清 flag 后才落盘）→ 恢复时清 flag；
@@ -62,11 +64,17 @@ const VALID_ROLES: ReadonlySet<string> = new Set(['user', 'assistant', 'system']
  * 净化单条消息：role 非法 / content 非字符串 → null（过滤）；
  * content 清理后为纯空白 → null（过滤——CC「滤纯空白消息」+ 无配对 tool_use 整轮过滤的 NF 落地）；
  * 残留 streaming:true → 清为 false（恢复后无生成链路，flag 恒陈旧）。
+ *
+ * 按 role 分流（评审 F1 修复，2026-09）：cleanupMessageText 只作用 **assistant** 消息——
+ * assistant 写链在落盘前全量清洗（agent-store onTextChunk/onDone），恢复时出现的 tool/think
+ * 标签 = 崩溃残留，可安全清理；**user/system 消息写入链零清洗**（agent-store 用户原文直存），
+ * 正常正文可能含字面 <tool_call>/<think>（用户粘贴/讨论代码标签/引用文件内容，含未闭合形态——
+ * 未闭合 <think> 正则会吞其后整段到文末），必须逐字保留：只做校验 + 空白过滤 + streaming flag 归一。
  * 无变化的合法消息返回原引用（调用方可据此判断是否发生过净化）。
  */
 export function sanitizeAgentMessage(msg: AgentMessage): AgentMessage | null {
   if (!msg || typeof msg.content !== 'string' || !VALID_ROLES.has(msg.role)) return null
-  const cleaned = cleanupMessageText(msg.content)
+  const cleaned = msg.role === 'assistant' ? cleanupMessageText(msg.content) : msg.content
   if (cleaned.trim() === '') return null
   if (cleaned === msg.content && msg.streaming !== true) return msg
   if (cleaned === msg.content) {

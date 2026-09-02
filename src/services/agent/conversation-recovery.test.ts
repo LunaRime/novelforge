@@ -133,6 +133,36 @@ describe('sanitizeMessageList', () => {
     const out = sanitizeMessageList(list)
     expect(out).toEqual(list)
   })
+
+  // 评审 F1/F2 修复（2026-09）：cleanup 只作用 assistant——user/system 正文逐字保留（写链零清洗，
+  // 正常 user 正文可含字面标签，含未闭合 <think>——不得被吞段/清空/改写）
+  it('F1/F2：user 消息含原始 <tool_call>/<think>（含未闭合）→ 逐字保留', () => {
+    const literalTool = makeMsg('u1', 'user', '请问 <tool_call> 和 <tool_result> 标签的用途？')
+    const pastedBlock = makeMsg('u2', 'user', `我贴一段：\n${toolCallBlock}\n<think>用户粘贴的思考标记</think>后面还有正文`)
+    const unclosedThink = makeMsg('u3', 'user', '文件里有 <think> 未闭合\n\n其后整段都是正文，绝不能吞')
+    const list = [literalTool, pastedBlock, unclosedThink]
+    const out = sanitizeMessageList(list)
+    expect(out).toEqual(list)
+    expect(out[2]!.content).toBe(unclosedThink.content) // 未闭合 <think> 不吞其后正文
+  })
+
+  it('F1/F2：system 消息含原始标签 → 逐字保留', () => {
+    const sys = makeMsg('s1', 'system', '规则：禁止使用 <tool_call> 伪造调用；参考 <think> 结构')
+    expect(sanitizeMessageList([sys])).toEqual([sys])
+  })
+
+  it('F1/F2 对偶：assistant 含同样标签内容 → 清理（残片清理语义不变）', () => {
+    const assistantMsgs = [
+      makeMsg('a1', 'assistant', '请问 <tool_call> 和 <tool_result> 标签的用途？'),
+      makeMsg('a2', 'assistant', `${toolCallBlock}\n正文`),
+      makeMsg('a3', 'assistant', '半截<think>未闭合'),
+    ]
+    const out = sanitizeMessageList(assistantMsgs)
+    expect(out.map(m => m.id)).toEqual(['a1', 'a2', 'a3'])
+    expect(out[0]!.content).toBe('请问  和  标签的用途？')
+    expect(out[1]!.content).toBe('\n正文')
+    expect(out[2]!.content).toBe('半截')
+  })
 })
 
 // ===== 单条消息级净化 =====
@@ -145,6 +175,11 @@ describe('sanitizeAgentMessage', () => {
     const out = sanitizeAgentMessage(stale)!
     expect(out.streaming).toBe(false)
     expect(out.content).toBe('半截')
+  })
+
+  it('F1/F2：user 含标签消息原引用返回（正文零触碰，不建新对象）', () => {
+    const u = makeMsg('u1', 'user', '<think>未闭合\n\n其后整段正文不能吞')
+    expect(sanitizeAgentMessage(u)).toBe(u)
   })
 })
 

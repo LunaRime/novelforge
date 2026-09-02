@@ -171,4 +171,25 @@ describe('archive 序列化', () => {
     }
     expect(parseArchive(serializeArchive(conv))).toEqual(conv)
   })
+
+  it('F1/F2 锁：user/system 正文含原始标签经 parseArchive 逐字保留；assistant 同内容清理', () => {
+    const conv: AgentConversation = {
+      id: 'c5', title: '会话', messages: [
+        // user 用户原文（可含字面 tool/think 标签——写入链零清洗，绝不可被净化改写）
+        { id: 'u1', role: 'user', content: '<tool_call> 和 <tool_result> 怎么用？', createdAt: 0 },
+        { id: 'u2', role: 'user', content: '文件里是 <think> 未闭合\n\n其后整段正文，不能被吞', createdAt: 1 },
+        { id: 's1', role: 'system', content: '系统注入：参考 <think> 折叠语法', createdAt: 2 },
+        // assistant 同内容 → 崩溃残片语义，清理
+        { id: 'a1', role: 'assistant', content: '<tool_call>\n{"name":"x","arguments":{}}\n</tool_call>\n正文回复', createdAt: 3 },
+      ],
+      createdAt: 0, updatedAt: 4, mode: 'deep', modelId: null,
+    }
+    const raw = serializeArchive(conv)
+    const parsed = parseArchive(raw)!
+    expect(parsed.messages.map(m => m.id)).toEqual(['u1', 'u2', 's1', 'a1'])
+    expect(parsed.messages[0]!.content).toBe('<tool_call> 和 <tool_result> 怎么用？')
+    expect(parsed.messages[1]!.content).toBe('文件里是 <think> 未闭合\n\n其后整段正文，不能被吞')
+    expect(parsed.messages[2]!.content).toBe('系统注入：参考 <think> 折叠语法')
+    expect(parsed.messages[3]!.content).toBe('\n正文回复')
+  })
 })
