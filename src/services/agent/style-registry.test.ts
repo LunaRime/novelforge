@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import {
   parseStylePromptFile,
   styleNameFromFile,
@@ -6,8 +6,19 @@ import {
   toStyleInfo,
   DEFAULT_STYLE_NAME,
   appendWritingStyle,
+  listStyles,
+  getStyle,
+  getActiveStyle,
 } from './style-registry'
+import { ipc } from '../ipc-client'
 import type { StyleMeta } from '../../shared/ipc-channels'
+
+vi.mock('../ipc-client', () => ({
+  ipc: { invoke: vi.fn() },
+}))
+
+const mockInvoke = vi.mocked(ipc.invoke)
+const projectPath = 'C:/projects/demo'
 
 function meta(name: string, description: string, promptBody: string): StyleMeta {
   return { name, description, promptBody }
@@ -117,5 +128,38 @@ describe('appendWritingStyle — 风格正文追加到既有 writingStyle', () =
 
   it('二者非空 → 既有 + 空行 + 风格正文', () => {
     expect(appendWritingStyle('基调：冷峻', '多用短句。')).toBe('基调：冷峻\n\n多用短句。')
+  })
+})
+
+describe('style-registry IPC API（styles:list / styles:get 通道契约）', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+  })
+
+  it('listStyles → styles:list(projectPath) 透传；损坏/异常 → []', async () => {
+    mockInvoke.mockResolvedValueOnce([{ name: 'a', description: 'A' }])
+    await expect(listStyles(projectPath)).resolves.toEqual([{ name: 'a', description: 'A' }])
+    expect(mockInvoke).toHaveBeenCalledWith('styles:list', projectPath)
+
+    mockInvoke.mockRejectedValueOnce(new Error('ipc down'))
+    await expect(listStyles(projectPath)).resolves.toEqual([])
+  })
+
+  it('getStyle → styles:get(projectPath, name) 透传；不存在/异常 → null', async () => {
+    mockInvoke.mockResolvedValueOnce({ name: 'default', description: 'd', promptBody: '正文' })
+    await expect(getStyle('default', projectPath)).resolves.toEqual({ name: 'default', description: 'd', promptBody: '正文' })
+    expect(mockInvoke).toHaveBeenCalledWith('styles:get', projectPath, 'default')
+
+    mockInvoke.mockResolvedValueOnce(null)
+    await expect(getStyle('nope', projectPath)).resolves.toBeNull()
+    mockInvoke.mockRejectedValueOnce(new Error('down'))
+    await expect(getStyle('nope', projectPath)).resolves.toBeNull()
+  })
+
+  it('getActiveStyle → 固定请求 DEFAULT_STYLE_NAME', async () => {
+    mockInvoke.mockResolvedValue({ name: 'default', description: '激活', promptBody: '激活正文' })
+    const active = await getActiveStyle(projectPath)
+    expect(active?.promptBody).toBe('激活正文')
+    expect(mockInvoke).toHaveBeenCalledWith('styles:get', projectPath, DEFAULT_STYLE_NAME)
   })
 })

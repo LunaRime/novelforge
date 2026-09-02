@@ -19,6 +19,7 @@ import { registerReportController } from './controllers/report-controller'
 import { registerTemplatesController } from './controllers/templates-controller'
 import { registerHealthCheckIPC } from './controllers/health-check'
 import { registerMemoryController } from './controllers/memory-controller'
+import { registerStylesController } from './controllers/styles-controller'
 
 /**
  * 注册所有 IPC 通道 — 在主进程启动时调用
@@ -46,6 +47,7 @@ export function registerIPCHandlers() {
   registerTemplatesController()
   registerHealthCheckIPC()
   registerMemoryController()
+  registerStylesController()
 
   logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', VELA_HOME))
 }

@@ -916,8 +916,21 @@ export interface StyleMeta extends StyleInfo {
   promptBody: string
 }
 
+export interface StyleChannels {
+  /** 合并列表（项目覆盖用户；按 name 排序；不含 promptBody） */
+  'styles:list': {
+    args: [projectPath: string]
+    return: StyleInfo[]
+  }
+  /** 单风格（含 promptBody；非法名/不存在 → null） */
+  'styles:get': {
+    args: [projectPath: string, name: string]
+    return: StyleMeta | null
+  }
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents
 
 /** 提取 invoke 频道名 */
