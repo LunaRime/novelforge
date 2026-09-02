@@ -1,5 +1,6 @@
 import type { AgentMessage, AgentConversation, RewoundBranch } from '../../stores/agent-store'
 import { estimateTokens } from './token-budget'
+import { sanitizeMessageList } from './conversation-recovery'
 
 export interface CompressedBatch {
   batch: number
@@ -46,7 +47,11 @@ export function serializeArchive(conv: AgentConversation): string {
   return JSON.stringify(conv, null, 2)
 }
 
-/** 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认；手改/损坏形状逐条防御（messages/compressed/rewound） */
+/**
+ * 解析 archive 文件；损坏 JSON 返回 null；缺字段降级默认；手改/损坏形状逐条防御（messages/compressed/rewound）。
+ * 解析后追加会话恢复净化（conversation-recovery）：崩溃残片（tool/think 标签、空白占位、陈旧 streaming）
+ * 在恢复时清理；正常归档零改动（净化只命中残片形态——正常写入链已在落盘前全量清洗）。
+ */
 export function parseArchive(raw: string): AgentConversation | null {
   try {
     const data = JSON.parse(raw) as Partial<AgentConversation>
@@ -86,7 +91,13 @@ export function parseArchive(raw: string): AgentConversation | null {
             ),
           }))
       : []
-    return { ...data, messages, compressed, rewound } as AgentConversation
+    // C4 会话恢复净化：形状防御之后再净化（三处消息数组同口径——CC §三.8 对齐）
+    return {
+      ...data,
+      messages: sanitizeMessageList(messages),
+      compressed: compressed.map(b => ({ ...b, original: sanitizeMessageList(b.original) })),
+      rewound: rewound.map(e => ({ ...e, messages: sanitizeMessageList(e.messages) })),
+    } as AgentConversation
   } catch {
     return null
   }

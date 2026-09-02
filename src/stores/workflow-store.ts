@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { getCurrentLocale, t } from '../shared/locale'
 import { randomUUID } from '../utils/id'
 import { renderLog } from '../services/render-logger'
+import { sanitizeCheckpointData } from '../services/agent/conversation-recovery'
 
 // ===== 工作流 Checkpoint 持久化 =====
 
@@ -556,7 +557,11 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
   // ===== Checkpoint 持久化 =====
   restoreCheckpoint: () => {
-    const cp = loadCheckpoint()
+    // C4 净化（conversation-recovery）：恢复前先净化 checkpoint——steps[].result/error/logs 的
+    // LLM 崩溃残片（半截 think/tool 标签）清理；形状防御（activeRuns/run/steps/waitingRuns 逐级
+    // 校验，损坏 checkpoint 曾致启动崩溃：activeRuns 非数组时对字符串 .map）→ 损坏返回 null
+    // 按「无 checkpoint」处理。正常 checkpoint 零改动（净化只命中残片）。
+    const cp = sanitizeCheckpointData(loadCheckpoint())
     if (cp && cp.activeRuns.length > 0) {
       // 区分「等待确认」与「运行中中断」：
       // - 等待确认的工作流：executor 已随进程销毁，continueResolveRefs（内存态）

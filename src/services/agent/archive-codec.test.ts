@@ -109,4 +109,66 @@ describe('archive 序列化', () => {
     // original 非数组 → 置空（不崩溃）
     expect(parsed!.compressed![1].original).toEqual([])
   })
+
+  it('C4 恢复净化：崩溃残片四类（tool_call/thinking/空白/陈旧 streaming）解析后被净化', () => {
+    const raw = JSON.stringify({
+      id: 'c3', title: 'T', createdAt: 0, updatedAt: 0, mode: 'balanced', modelId: null,
+      messages: [
+        { id: 'u1', role: 'user', content: '帮我查第 3 章', createdAt: 0 },
+        // 1) 无配对 tool_call（无正文）assistant → 整条过滤
+        { id: 'a1', role: 'assistant', content: '<tool_call>\n{"name":"read_drafts","arguments":{}}\n</tool_call>', createdAt: 1 },
+        // 2) thinking 残片 + tool 块混入正文 → 清残片留正文
+        { id: 'a2', role: 'assistant', content: '好的。<think>思考</think>\n<tool_result name="read_drafts">第3章\n</tool_result>\n继续', createdAt: 2 },
+        // 3) 纯空白消息（user + streaming 占位符 assistant）→ 整条过滤
+        { id: 'u2', role: 'user', content: '   ', createdAt: 3 },
+        { id: 'a3', role: 'assistant', content: '', createdAt: 4, streaming: true, toolCalls: [] },
+        // 4) 陈旧 streaming 但有正文 → 保留并清 flag
+        { id: 'a4', role: 'assistant', content: '半截正文', createdAt: 5, streaming: true },
+        // 角色非法（手改归档）→ 过滤
+        { id: 'bad-role', role: 'tool', content: 'x', createdAt: 6 },
+        // 正常结尾
+        { id: 'u3', role: 'user', content: '继续', createdAt: 7 },
+      ],
+      compressed: [{
+        batch: 1, summary: '摘要', compressedAt: 1, originalTokens: 10,
+        original: [
+          { id: 'c1', role: 'assistant', content: '<tool_call>{"name":"x","arguments":{}}</tool_call>', createdAt: 0 },
+          { id: 'c2', role: 'user', content: '正常原文', createdAt: 0 },
+        ],
+      }],
+      rewound: [{
+        messageId: 'u1', rewoundAt: 1,
+        messages: [
+          { id: 'r1', role: 'assistant', content: '<think>未闭合', createdAt: 0 },
+          { id: 'r2', role: 'user', content: '归档正文', createdAt: 0 },
+        ],
+      }],
+    })
+    const parsed = parseArchive(raw)!
+    expect(parsed.messages.map(m => m.id)).toEqual(['u1', 'a2', 'a4', 'u3'])
+    expect(parsed.messages[1]!.content).toBe('好的。\n\n继续')
+    expect(parsed.messages[2]!.content).toBe('半截正文')
+    expect(parsed.messages[2]!.streaming).toBe(false)
+    // compressed/rewound 与 messages 同口径净化
+    expect(parsed.compressed![0].original.map(m => m.id)).toEqual(['c2'])
+    expect(parsed.rewound![0].messages.map(m => m.id)).toEqual(['r2'])
+  })
+
+  it('C4 行为兼容锁定：正常归档解析零改动（含思考引用形态与压缩/rewind 往返）', () => {
+    const conv: AgentConversation = {
+      id: 'c4', title: '会话', messages: [
+        { id: 'u1', role: 'user', content: '帮我写一章', createdAt: 0 },
+        // 正常可见思考形态（引用前缀 + 正文）——净化不得触碰
+        { id: 'a1', role: 'assistant', content: '_思考过程：_\n> 先梳理伏笔\n\n夜色渐深。', createdAt: 1 },
+        { id: 'u2', role: 'user', content: '继续', createdAt: 2 },
+        { id: 'a2', role: 'assistant', content: '他推开门，风涌了进来。', createdAt: 3 },
+      ],
+      createdAt: 0, updatedAt: 4, mode: 'deep', modelId: null,
+      compressed: [{ batch: 1, summary: '摘要', compressedAt: 1, originalTokens: 1,
+        original: [{ id: 'u0', role: 'user', content: '旧的原文问题', createdAt: -1 }] }],
+      rewound: [{ messageId: 'u1', rewoundAt: 2,
+        messages: [{ id: 'a0', role: 'assistant', content: '被回退的回复', createdAt: -1 }] }],
+    }
+    expect(parseArchive(serializeArchive(conv))).toEqual(conv)
+  })
 })
