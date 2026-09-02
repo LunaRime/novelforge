@@ -64,6 +64,95 @@ export function estimateTokensHeuristic(text: string): number {
   return Math.max(1, tokens)
 }
 
+// ===== 两段式估算（C1，§三.9 剩余）：粗估（内容类型系数表）→ 预算闸门 → 精确编码 =====
+
+/** 文本主导类型——粗估系数表按键。裁决点（2026-08-29 C1）：纯函数拿不到文件名/扩展名，
+ * 系数表按「内容类型」（CJK 占比 / 拉丁词密度）分键；扩展名维度若需要留给有文件名的调用方。 */
+export type RoughTextKind = 'cjk' | 'latin' | 'mixed'
+
+export interface RoughTokenEstimate {
+  kind: RoughTextKind
+  /** 粗估 token 数（保守偏大——宁大勿小：粗估 ≤ maxTokens/4 短路时，精确数必然也 ≤ 预算） */
+  tokens: number
+}
+
+// 粗估系数表（保守上界取向，与 estimateTokensHeuristic 的 CJK×1.5 中文口径一致）：
+// - cjk：中文字符 ×1.5 + 词 ×1.3 + 其余字符（含空格/标点）×1
+// - latin：词 ×1.4（cl100k 英文 ~1.2-1.4/词，取上界）+ 其余字符（含空格/标点）×1
+// - mixed：全字符 ×1.25
+const ROUGH_CJK_PER_CHAR = 1.5
+const ROUGH_WORD_IN_CJK = 1.3
+const ROUGH_WORD_LATIN = 1.4
+const ROUGH_MIXED_PER_CHAR = 1.25
+/** kind=cjk 判定阈值：CJK 字符占比（优先判定——中文是产品主语言） */
+const ROUGH_CJK_MIN_RATIO = 0.35
+/** kind=latin 判定阈值：拉丁词字符占比 */
+const ROUGH_LATIN_MIN_RATIO = 0.5
+
+/**
+ * 阶段 1：粗估（单趟扫描、不建 match 数组、不拼接中间串——超大文本不爆内存/GC）。
+ * 与启发式的差异：启发式对非词剩余字符剔空格（空格 0 token），粗估把空格按 1 token 计——
+ * 粗估是保守（偏大）估计；tokens 值差异仅在粗估 > maxTokens/4 会触发阶段 2 精确计数时才有意义。
+ */
+export function roughEstimateTokens(text: string): RoughTokenEstimate {
+  if (!text) return { kind: 'mixed', tokens: 0 }
+
+  const len = text.length
+  // 局部正则实例（共享 /g 实例有 lastIndex 状态，跨调用复用易踩坑；此处新建开销可忽略）
+  const cjkRe = /[一-鿿㐀-䶿豈-﫿]/g
+  const wordRe = /[a-zA-Z0-9]+/g
+  let cjk = 0
+  let words = 0
+  let wordChars = 0
+  let m: RegExpExecArray | null
+  while ((m = cjkRe.exec(text))) cjk++
+  while ((m = wordRe.exec(text))) {
+    words++
+    wordChars += m[0].length
+  }
+
+  const cjkRatio = cjk / len
+  const wordRatio = wordChars / len
+
+  let kind: RoughTextKind
+  let tokens: number
+  if (cjkRatio >= ROUGH_CJK_MIN_RATIO) {
+    kind = 'cjk'
+    tokens = Math.ceil(cjk * ROUGH_CJK_PER_CHAR) + Math.ceil(words * ROUGH_WORD_IN_CJK) + (len - cjk - wordChars)
+  } else if (wordRatio >= ROUGH_LATIN_MIN_RATIO) {
+    kind = 'latin'
+    tokens = Math.ceil(words * ROUGH_WORD_LATIN) + (len - wordChars)
+  } else {
+    kind = 'mixed'
+    tokens = Math.ceil(len * ROUGH_MIXED_PER_CHAR)
+  }
+  return { kind, tokens: Math.max(1, tokens) }
+}
+
+/**
+ * 阶段 2 门控的两段式估算（预算口径）：
+ * 1. 粗估 ≤ maxTokens/4 → 直接返回粗估值——粗估保守偏大 ⇒ 精确数必然 ≤ 预算，
+ *    跳过精确编码 / 全量启发式（预算截断的二分查找热路径收益最大）；
+ * 2. 粗估 > maxTokens/4 → 精确编码（encoder 已加载时），否则回退既有启发式（行为兼容）。
+ */
+export function estimateTokensWithBudget(text: string, maxTokens: number): number {
+  if (!text) return 0
+  const gate = Math.floor(maxTokens / 4)
+  if (gate >= 1) {
+    const rough = roughEstimateTokens(text)
+    if (rough.tokens <= gate) return rough.tokens
+  }
+  // 精确编码器优先（与 estimateTokens 同路径）
+  if (gptEncoder) {
+    try {
+      return gptEncoder.encode(text).length
+    } catch {
+      // 编码失败，回退启发式
+    }
+  }
+  return estimateTokensHeuristic(text)
+}
+
 /**
  * 精确 Token 计数（优先使用 tiktoken，否则启发式）
  */
@@ -94,22 +183,26 @@ export function estimateTokens(text: string, _?: string): number {
  * 3. 短语边界（逗号、分号）
  * 4. 硬截断（单词边界）
  *
+ * 内部比较走 estimateTokensWithBudget（C1 两段式：粗估 ≤ maxTokens/4 短路，避免
+ * 二分/逐段循环对每段做精确编码）——截断结果与纯 estimateTokens 比较语义等价
+ * （粗估保守偏大：短路成立时精确数必然 ≤ maxTokens/4 ≤ maxTokens，接受/拒绝方向不变）。
  * 返回的文本保证 ≤ maxTokens。
  */
 export function truncateToTokenBudget(
   text: string,
   maxTokens: number,
-  modelId?: string,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  _modelId?: string,
 ): string {
   if (!text) return ''
-  if (estimateTokens(text, modelId) <= maxTokens) return text
+  if (estimateTokensWithBudget(text, maxTokens) <= maxTokens) return text
 
   // 策略 1：段落边界截断
   const paragraphs = text.split(/\n\s*\n/)
   let result = ''
   for (const para of paragraphs) {
     const testResult = result ? result + '\n\n' + para : para
-    if (estimateTokens(testResult, modelId) > maxTokens) {
+    if (estimateTokensWithBudget(testResult, maxTokens) > maxTokens) {
       // 尝试保留到上一个句号
       if (result) {
         const lastPeriod = Math.max(
@@ -128,24 +221,24 @@ export function truncateToTokenBudget(
   }
 
   // 如果段落截断后仍然过多（比如单段落很长），按句子截断
-  if (estimateTokens(result || text.slice(0, 200), modelId) > maxTokens) {
+  if (estimateTokensWithBudget(result || text.slice(0, 200), maxTokens) > maxTokens) {
     const sentences = text.split(/(?<=[。！？.!?])/g)
     result = ''
     for (const sent of sentences) {
       const testResult = result + sent
-      if (estimateTokens(testResult, modelId) > maxTokens) break
+      if (estimateTokensWithBudget(testResult, maxTokens) > maxTokens) break
       result = testResult
     }
   }
 
   // 最后的兜底：硬截断
-  if (!result || estimateTokens(result, modelId) > maxTokens) {
+  if (!result || estimateTokensWithBudget(result, maxTokens) > maxTokens) {
     // 二分查找精确截断点
     let lo = 0
     let hi = text.length
     while (lo < hi) {
       const mid = Math.floor((lo + hi + 1) / 2)
-      if (estimateTokens(text.slice(0, mid), modelId) <= maxTokens) {
+      if (estimateTokensWithBudget(text.slice(0, mid), maxTokens) <= maxTokens) {
         lo = mid
       } else {
         hi = mid - 1
