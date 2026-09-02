@@ -11,6 +11,7 @@ import {
   getActiveStyle,
 } from './style-registry'
 import { ipc } from '../ipc-client'
+import { ChapterPromptBuilder } from '../prompts/prompt-builder'
 import type { StyleMeta } from '../../shared/ipc-channels'
 
 vi.mock('../ipc-client', () => ({
@@ -161,5 +162,55 @@ describe('style-registry IPC API（styles:list / styles:get 通道契约）', ()
     const active = await getActiveStyle(projectPath)
     expect(active?.promptBody).toBe('激活正文')
     expect(mockInvoke).toHaveBeenCalledWith('styles:get', projectPath, DEFAULT_STYLE_NAME)
+  })
+})
+
+describe('注入接线（generate-draft 同款 seam：getActiveStyle + appendWritingStyle → withWritingStyle）', () => {
+  beforeEach(() => {
+    mockInvoke.mockReset()
+  })
+
+  function makeChapterTemplate(content: string) {
+    return {
+      key: 'test_chapter',
+      name: '章节',
+      description: 'd',
+      content,
+      variables: { writing_style: '文风' },
+    }
+  }
+
+  it('无 default.md（styles:get → null）→ writing_style 与现状逐字一致（含空既有值）', async () => {
+    mockInvoke.mockResolvedValueOnce(null)
+    const activeBody = (await getActiveStyle(projectPath))?.promptBody ?? ''
+    const existing = '既有文风（含边界空格）  '
+    const value = appendWritingStyle(existing, activeBody)
+    // 与旧代码 .withWritingStyle(project.novelConfig.writingStyle || '') 一致
+    expect(value).toBe(existing)
+
+    const builder = new ChapterPromptBuilder(makeChapterTemplate('【文风】{{writing_style}}'))
+    builder.withWritingStyle(appendWritingStyle('', activeBody))
+    const variables = (builder as unknown as { variables: Record<string, string> }).variables
+    expect(variables.writing_style).toBe('') // 空值 → 模板空段裁剪同现状
+  })
+
+  it('有 default.md → 风格正文追加进 withWritingStyle 的 writing_style 变量（含空既有值只取正文）', async () => {
+    mockInvoke.mockResolvedValueOnce({ name: 'default', description: '激活', promptBody: '冷峻克制，多用短句。' })
+    const active = await getActiveStyle(projectPath)
+    const activeBody = active?.promptBody ?? ''
+    expect(activeBody).toBe('冷峻克制，多用短句。')
+
+    const withExisting = appendWritingStyle('基调：沉重', activeBody)
+    expect(withExisting).toBe('基调：沉重\n\n冷峻克制，多用短句。')
+    const onlyBody = appendWritingStyle('', activeBody)
+    expect(onlyBody).toBe('冷峻克制，多用短句。')
+
+    const builder = new ChapterPromptBuilder(makeChapterTemplate('【文风】{{writing_style}}'))
+    builder.withWritingStyle(withExisting)
+    const variables = (builder as unknown as { variables: Record<string, string> }).variables
+    expect(variables.writing_style).toBe('基调：沉重\n\n冷峻克制，多用短句。')
+    // 注入经 build 落进最终 prompt（USER_INPUT 包裹后仍含正文）
+    const built = builder.build()
+    expect(built).toContain('冷峻克制，多用短句。')
   })
 })

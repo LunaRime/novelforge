@@ -5,6 +5,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
+import { getActiveStyle, appendWritingStyle } from '../../agent/style-registry'
 import {
   DIR_PROMPTS
 } from '../../../shared/project-paths'
@@ -50,6 +51,15 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', templateKey))
 
     // ==========================================
+    // 输出风格注入（C3，v1 零代码注册）：default.md 存在即追加到既有 writing_style 值，
+    // 无 default.md / 读盘失败 → 零变化（与现状逐字一致）。project.path 空则跳过。
+    // ==========================================
+    const activeStyleBody = project.path
+      ? ((await getActiveStyle(project.path))?.promptBody ?? '')
+      : ''
+    const writingStyleValue = appendWritingStyle(project.novelConfig.writingStyle || '', activeStyleBody)
+
+    // ==========================================
     // Prompt 构建——按「稳定前缀 → 可变后缀」排列
     // 以最大化 LLM 上下文缓存命中率
     // ==========================================
@@ -57,18 +67,18 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       // ---- 缓存命中区（跨章稳定，前缀对齐）----
       .withArchitecture(architecture)
       .withGlobalGuidance(mergedGuidance)
-      .withWritingStyle(project.novelConfig.writingStyle || '')
+      .withWritingStyle(writingStyleValue)
       .withNovelConfig(project.novelConfig)
       .withWordNumber(project.novelConfig.wordsPerChapter)
 
-    // 流派特化注入
+    // 流派特化注入（追加在 writing_style 既有值+输出风格之后——与旧语义「文风 + 流派」一致）
     const genreOverride = (await import('../../genre-overrides')).getGenreOverride(
       project.novelConfig.genre,
       project.novelConfig.subGenre,
     )
     if (genreOverride) {
       const genreGuide = (await import('../../genre-overrides')).formatGenreOverrideForPrompt(genreOverride)
-      promptBuilder.withWritingStyle((project.novelConfig.writingStyle || '') + '\n\n' + genreGuide)
+      promptBuilder.withWritingStyle(writingStyleValue + '\n\n' + genreGuide)
       callbacks.log(t('log.generateDraft.genreInjected').replace('{genre}', project.novelConfig.genre))
     }
 
