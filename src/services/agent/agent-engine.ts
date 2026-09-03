@@ -12,7 +12,7 @@
  */
 
 import { t } from '../../shared/locale'
-import { toolRegistry, type ToolResult, type ToolArtifact } from './tool-registry'
+import { toolRegistry, type AgentTool, type ToolResult, type ToolArtifact } from './tool-registry'
 import { outputPostProcessor } from './output-post-processor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
@@ -45,6 +45,9 @@ const MAX_CONSECUTIVE_RECOVERY_FAILURES = 3
 const RESULT_SUMMARY_MAX_TOKENS = 200
 /** 写盘内容上限（字符）——超出回退截断注入（read_file 再读受 fs:read-external-file 1MB 限制） */
 const MAX_SPILL_CHARS = 512 * 1024
+
+/** M1 只读并行批内并发上限（对齐 CC toolOrchestration.ts 工具编排；连续只读归批并行，批间串行） */
+const MAX_PARALLEL_READ_TOOLS = 10
 
 // ===== 类型 =====
 
@@ -288,97 +291,74 @@ export async function runAgentLoop(
     // 将 LLM 的完整回复加入历史（包含 tool_call 标签）
     messages.push({ role: 'assistant', content: llmResponse })
 
-    // 依次执行每个 tool_call
     const observationParts: string[] = []
 
     progress.setPhase('tool_execution')
     progress.setCurrentTool(toolCalls[0].name, toolCalls.length)
     callbacks.onProgress?.(progress.getProgress())
 
-    for (const tc of toolCalls) {
-      const toolCallInfo: ToolCallInfo = {
+    // === M1 工具分批并发（对齐 CC toolOrchestration.ts）===
+    // 预扫描：全部 tool_call 建 job（保持原始顺序注册 toolCallInfo——UI 列表与产物顺序 = 调用顺序）
+    const jobs: ToolCallJob[] = toolCalls.map(tc => {
+      const info: ToolCallInfo = {
         id: crypto.randomUUID(),
         toolName: tc.name,
         arguments: tc.arguments,
         status: 'pending',
       }
-      allToolCalls.push(toolCallInfo)
-
-      // 查找 Tool
+      allToolCalls.push(info)
       const tool = toolRegistry.get(tc.name)
-      if (!tool) {
-        toolCallInfo.status = 'failed'
-        toolCallInfo.error = t('agent.unknownTool').replace('{name}', tc.name)
-        callbacks.onToolCallComplete(toolCallInfo)
-        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}\n</tool_result>`)
+      if (tool) info.source = tool.source
+      return { tc, tool, info }
+    })
+
+    // 分批规则（分类依据 = tool.isReadOnly，勿按 source——read_file 等 builtin 只读，
+    // index-content/embed-text/compare-texts 同属 builtin 但语义经 isReadOnly 已正确区分：
+    // embed/compare 纯计算只读；index_content 写库 conf=true → isReadOnly=false 归写）：
+    // 1. 连续只读工具归入当前只读批，满 MAX_PARALLEL_READ_TOOLS 封批（批内并发上限）
+    // 2. 写工具 / 需确认工具 / 未知工具：先封只读批，再各自单元素批——逐个串行、不与
+    //    任何工具并行；确认流程（onToolCallConfirmRequired）先于并行决策完成——批内绝不
+    //    混入需确认工具（防御：requiresConfirmation 工具即使误标 isReadOnly 也单独成批）
+    // 3. 批序 = tool_call 首次出现顺序：写工具前的只读批先并行、之后的只读批不会越过写
+    //    工具提前执行（语义与串行一致，仅批内并行加速）
+    const batches: ToolCallJob[][] = []
+    let openReadBatch: ToolCallJob[] = []
+    const flushReadBatch = (): void => {
+      if (openReadBatch.length > 0) {
+        batches.push(openReadBatch)
+        openReadBatch = []
+      }
+    }
+    for (const job of jobs) {
+      const tool = job.tool
+      const parallelEligible = tool !== undefined && tool.isReadOnly && !tool.requiresConfirmation
+      if (parallelEligible) {
+        openReadBatch.push(job)
+        if (openReadBatch.length >= MAX_PARALLEL_READ_TOOLS) flushReadBatch()
+      } else {
+        flushReadBatch()
+        batches.push([job])
+      }
+    }
+    flushReadBatch()
+
+    // 批执行：观察注入顺序 = 各批内 job 原始顺序（并行完成先后不影响拼接顺序——严格保持
+    // tool_call 出现顺序，与现状 <tool_result name=...> 顺序一致）
+    for (const batch of batches) {
+      if (batch.length === 1) {
+        // 单工具批（写/需确认/未知工具 + 单个只读——现状串行路径逐字节等价）
+        const outcome = await executeToolJob(batch[0], callbacks, deps)
+        observationParts.push(outcome.observation)
+        if (outcome.artifacts.length > 0) allArtifacts.push(...outcome.artifacts)
         continue
       }
-
-      // 记录来源
-      toolCallInfo.source = tool.source
-
-      // 需要用户确认的 Tool
-      if (tool.requiresConfirmation) {
-        toolCallInfo.status = 'waiting_confirm'
-        callbacks.onToolCallStart(toolCallInfo)
-
-        const confirmed = await callbacks.onToolCallConfirmRequired(toolCallInfo)
-        if (!confirmed) {
-          toolCallInfo.status = 'failed'
-          toolCallInfo.error = t('agent.userRejected')
-          callbacks.onToolCallComplete(toolCallInfo)
-          observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('engine.userRejectedAction')}\n</tool_result>`)
-          continue
-        }
-      }
-
-      // 执行 Tool
-      toolCallInfo.status = 'running'
-      callbacks.onToolCallStart(toolCallInfo)
-
-      try {
-        const result = await executeToolWithTimeout(tool.execute, tc.arguments, TOOL_TIMEOUT_MS)
-
-        // 截断过长的结果
-        const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)
-
-        toolCallInfo.status = result.success ? 'completed' : 'failed'
-        toolCallInfo.result = truncatedContent
-        if (result.error) toolCallInfo.error = result.error
-        if (result.artifacts) allArtifacts.push(...result.artifacts)
-
-        callbacks.onToolCallComplete(toolCallInfo)
-
-        if (result.success) {
-          // 长结果写盘引用（P0-1）：原始内容 > 注入上限且 ≤ 512KB → 全文落盘，
-          // 上下文只进「路径 + 摘要」，LLM 按需用 read_file 再读（绝对路径分支）。
-          // read_file 工具天然豁免：自身按引擎截断线校准（READ_MAX_CHARS=440），结果永不超限。
-          const rawContent = result.content ?? ''
-          const shouldSpill = estimateTokens(rawContent) > TOOL_RESULT_MAX_TOKENS && rawContent.length <= MAX_SPILL_CHARS
-          if (shouldSpill && deps?.writeResult) {
-            const writeRes = await deps.writeResult(rawContent)
-            if (writeRes.success && writeRes.path) {
-              const summary = truncateToTokenBudget(rawContent, RESULT_SUMMARY_MAX_TOKENS)
-              observationParts.push(`<tool_result name="${tc.name}">\n${t('engine.resultSpilledToDisk').replace('{total}', String(estimateTokens(rawContent))).replace('{path}', writeRes.path)}\n\n${sanitizeObservation(summary)}\n</tool_result>`)
-            } else {
-              observationParts.push(`<tool_result name="${tc.name}">\n${sanitizeObservation(truncatedContent)}\n</tool_result>`)
-            }
-          } else {
-            // 空结果占位（D6-1）：成功但无内容（或纯空白）→ 注入占位文本，防模型把空 <tool_result>
-            // 当回合边界停止生成（CC 事故：capybara 对空结果误判 \n\nHuman: 停止序列）
-            const content = truncatedContent.trim() === ''
-              ? t('engine.emptyToolResult').replace('{toolName}', tc.name)
-              : sanitizeObservation(truncatedContent)
-            observationParts.push(`<tool_result name="${tc.name}">\n${content}\n</tool_result>`)
-          }
-        } else {
-          observationParts.push(`<tool_result name="${tc.name}" error="true">\n${sanitizeObservation(result.error ?? truncatedContent)}\n</tool_result>`)
-        }
-      } catch (error) {
-        toolCallInfo.status = 'failed'
-        toolCallInfo.error = t('agent.executionError').replace('{error}', sanitizeErrorText(error))
-        callbacks.onToolCallComplete(toolCallInfo)
-        observationParts.push(`<tool_result name="${tc.name}" error="true">\n${t('agent.executionError').replace('{error}', sanitizeErrorText(error))}\n</tool_result>`)
+      // 只读并行批：Promise.all 并发执行（引擎无 electron 依赖，无新并行基础设施）；
+      // 单工具失败由 executeToolJob 内部 try/catch 隔离——失败项照旧注入 error observation，
+      // 不影响同批其他工具；每个工具仍走 executeToolWithTimeout 超时包装
+      const outcomes = await Promise.all(batch.map(job => executeToolJob(job, callbacks, deps)))
+      for (const outcome of outcomes) {
+        observationParts.push(outcome.observation)
+        if (outcome.artifacts.length > 0) allArtifacts.push(...outcome.artifacts)
       }
     }
 
@@ -421,6 +401,129 @@ export async function runAgentLoop(
 interface ParsedToolCall {
   name: string
   arguments: Record<string, unknown>
+}
+
+/** 单条 tool_call 的执行 job（M1 预扫描阶段创建，保持原始顺序） */
+interface ToolCallJob {
+  tc: ParsedToolCall
+  tool: AgentTool | undefined
+  info: ToolCallInfo
+}
+
+/** 单工具执行产出（供分批器按 tool_call 原始顺序拼接 observation / 产物） */
+interface ToolJobOutcome {
+  observation: string
+  artifacts: ToolArtifact[]
+}
+
+/**
+ * 执行单个 tool_call 的完整管线（M1 从原串行 for 循环体抽取）：
+ * 未知工具 → 需确认工具确认（确认流程先于并行决策——requiresConfirmation 工具已由分批器
+ * 单独成批，此处仅单飞批走到）→ 执行（executeToolWithTimeout 超时包装）→ 成功结果截断 /
+ * 长结果写盘引用 / 空占位 / 失败与异常注入。
+ *
+ * 并行批内每个 job 独立调用：状态与观察互不共享、各自 try/catch（失败隔离），
+ * observation 与 artifacts 由返回值带回，调用方按 tool_call 出现顺序拼接——
+ * 观察注入顺序恒 = tool_call 顺序（与现状 <tool_result name=...> 顺序一致）。
+ */
+async function executeToolJob(
+  job: ToolCallJob,
+  callbacks: AgentEngineCallbacks,
+  deps: AgentEngineDeps | undefined,
+): Promise<ToolJobOutcome> {
+  const { tc, tool, info } = job
+  const artifacts: ToolArtifact[] = []
+
+  // 查找 Tool（预扫描已定位；此处 tool 不存在走未知工具错误注入）
+  if (!tool) {
+    info.status = 'failed'
+    info.error = t('agent.unknownTool').replace('{name}', tc.name)
+    callbacks.onToolCallComplete(info)
+    return {
+      observation: `<tool_result name="${tc.name}" error="true">\n${t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}\n</tool_result>`,
+      artifacts,
+    }
+  }
+
+  // 需要用户确认的 Tool
+  if (tool.requiresConfirmation) {
+    info.status = 'waiting_confirm'
+    callbacks.onToolCallStart(info)
+
+    const confirmed = await callbacks.onToolCallConfirmRequired(info)
+    if (!confirmed) {
+      info.status = 'failed'
+      info.error = t('agent.userRejected')
+      callbacks.onToolCallComplete(info)
+      return {
+        observation: `<tool_result name="${tc.name}" error="true">\n${t('engine.userRejectedAction')}\n</tool_result>`,
+        artifacts,
+      }
+    }
+  }
+
+  // 执行 Tool
+  info.status = 'running'
+  callbacks.onToolCallStart(info)
+
+  try {
+    const result = await executeToolWithTimeout(tool.execute, tc.arguments, TOOL_TIMEOUT_MS)
+
+    // 截断过长的结果
+    const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)
+
+    info.status = result.success ? 'completed' : 'failed'
+    info.result = truncatedContent
+    if (result.error) info.error = result.error
+    if (result.artifacts) artifacts.push(...result.artifacts)
+
+    callbacks.onToolCallComplete(info)
+
+    if (result.success) {
+      // 长结果写盘引用（P0-1）：原始内容 > 注入上限且 ≤ 512KB → 全文落盘，
+      // 上下文只进「路径 + 摘要」，LLM 按需用 read_file 再读（绝对路径分支）。
+      // read_file 工具天然豁免：自身按引擎截断线校准（READ_MAX_CHARS=440），结果永不超限。
+      // M1 并行批多个大结果可并发 spill——fs:agent-result-write 内容寻址（sha1-12 定名 +
+      // wx 防重：同内容 EEXIST 幂等成功，异内容异文件），并发写盘无竞态（见 D6 注）。
+      const rawContent = result.content ?? ''
+      const shouldSpill = estimateTokens(rawContent) > TOOL_RESULT_MAX_TOKENS && rawContent.length <= MAX_SPILL_CHARS
+      if (shouldSpill && deps?.writeResult) {
+        const writeRes = await deps.writeResult(rawContent)
+        if (writeRes.success && writeRes.path) {
+          const summary = truncateToTokenBudget(rawContent, RESULT_SUMMARY_MAX_TOKENS)
+          return {
+            observation: `<tool_result name="${tc.name}">\n${t('engine.resultSpilledToDisk').replace('{total}', String(estimateTokens(rawContent))).replace('{path}', writeRes.path)}\n\n${sanitizeObservation(summary)}\n</tool_result>`,
+            artifacts,
+          }
+        }
+        return {
+          observation: `<tool_result name="${tc.name}">\n${sanitizeObservation(truncatedContent)}\n</tool_result>`,
+          artifacts,
+        }
+      }
+      // 空结果占位（D6-1）：成功但无内容（或纯空白）→ 注入占位文本，防模型把空 <tool_result>
+      // 当回合边界停止生成（CC 事故：capybara 对空结果误判 \n\nHuman: 停止序列）
+      const content = truncatedContent.trim() === ''
+        ? t('engine.emptyToolResult').replace('{toolName}', tc.name)
+        : sanitizeObservation(truncatedContent)
+      return {
+        observation: `<tool_result name="${tc.name}">\n${content}\n</tool_result>`,
+        artifacts,
+      }
+    }
+    return {
+      observation: `<tool_result name="${tc.name}" error="true">\n${sanitizeObservation(result.error ?? truncatedContent)}\n</tool_result>`,
+      artifacts,
+    }
+  } catch (error) {
+    info.status = 'failed'
+    info.error = t('agent.executionError').replace('{error}', sanitizeErrorText(error))
+    callbacks.onToolCallComplete(info)
+    return {
+      observation: `<tool_result name="${tc.name}" error="true">\n${t('agent.executionError').replace('{error}', sanitizeErrorText(error))}\n</tool_result>`,
+      artifacts,
+    }
+  }
 }
 
 /** Tool 调用解析错误详情（供 AI 自检反馈） */

@@ -496,3 +496,287 @@ describe('恢复阶梯边界（第 8 轮，final review 回归）', () => {
     expect(callbacks.onDone).not.toHaveBeenCalled() // 错误不得被 maxToolRoundsReached 路径吞掉
   })
 })
+
+describe('工具分批并发（M1，对齐 CC toolOrchestration.ts）', () => {
+  /** 工具执行事件流（start/end 同步记录——并发断言不依赖墙钟完成时刻） */
+  interface M1Event { kind: 'start' | 'end'; name: string }
+  let events: M1Event[]
+  const createdTools: string[] = []
+
+  const sleep = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+
+  /** 延迟型工具 execute 工厂：start/end 入事件流，可选延时后抛错（模拟并行批内失败隔离） */
+  function trackedExecute(name: string, delayMs: number, failAfterMs?: number): () => Promise<{ success: boolean; content: string }> {
+    return async () => {
+      events.push({ kind: 'start', name })
+      if (failAfterMs !== undefined) {
+        await sleep(failAfterMs)
+        events.push({ kind: 'end', name })
+        throw new Error('boom: simulated tool failure')
+      }
+      await sleep(delayMs)
+      events.push({ kind: 'end', name })
+      return { success: true, content: `result:${name}` }
+    }
+  }
+
+  /** 注册只读测试工具（conf=false → isReadOnly=true，同真实只读工具标注语义） */
+  function registerReadTool(name: string, delayMs: number, failAfterMs?: number): void {
+    toolRegistry.register(
+      buildAgentTool({
+        name,
+        description: 'm1 read tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: trackedExecute(name, delayMs, failAfterMs),
+      }),
+    )
+    createdTools.push(name)
+  }
+
+  /** 注册写测试工具（isReadOnly=false 显式；confirm=true 模拟真实写工具确认交互） */
+  function registerWriteTool(name: string, delayMs: number, opts?: { confirm?: boolean }): void {
+    toolRegistry.register(
+      buildAgentTool({
+        name,
+        description: 'm1 write tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: opts?.confirm ?? false,
+        isReadOnly: false,
+        execute: trackedExecute(name, delayMs),
+      }),
+    )
+    createdTools.push(name)
+  }
+
+  beforeEach(() => {
+    events = []
+  })
+
+  afterEach(() => {
+    for (const name of createdTools.splice(0)) toolRegistry.unregister(name)
+  })
+
+  /** 事件流并发峰：start +1 / end -1 的最大活跃数（可按工具名过滤） */
+  function peakConcurrency(names?: string[]): number {
+    let active = 0
+    let peak = 0
+    for (const ev of events) {
+      if (names && !names.includes(ev.name)) continue
+      if (ev.kind === 'start') active++
+      else active--
+      if (active > peak) peak = active
+    }
+    return peak
+  }
+
+  /** 事件流中指定工具的 start/end 下标（occurrence 次命中） */
+  function eventIndex(name: string, kind: 'start' | 'end', occurrence = 0): number {
+    let seen = 0
+    for (let i = 0; i < events.length; i++) {
+      const ev = events[i]
+      if (ev.name === name && ev.kind === kind) {
+        if (seen === occurrence) return i
+        seen++
+      }
+    }
+    return -1
+  }
+
+  /** 组装一条含多个 tool_call 的 LLM 首轮回复 */
+  function callsLine(names: string[]): string {
+    return names.map(n => `<tool_call>{"name":"${n}","arguments":{}}</tool_call>`).join('\n')
+  }
+
+  /** 同 runLoopWithResponses 语义的本地 runner，允许覆写确认回调（createCallbacks 默认拒绝） */
+  function runWithOverrides(
+    responses: string[],
+    overrides?: Partial<ReturnType<typeof createCallbacks>>,
+  ): Promise<{ messagesLog: LLMMessage[][]; callbacks: ReturnType<typeof createCallbacks> }> {
+    const messagesLog: LLMMessage[][] = []
+    const generateFn = vi.fn((messages: LLMMessage[]): Promise<string> => {
+      messagesLog.push([...messages])
+      return Promise.resolve(responses.shift() ?? '')
+    })
+    const callbacks = { ...createCallbacks(), ...overrides }
+    return runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks).then(() => ({
+      messagesLog,
+      callbacks,
+    }))
+  }
+
+  it('连续只读工具并行执行（并发峰 = 批内工具数，非串行 1）', async () => {
+    registerReadTool('m1_ro_a', 25)
+    registerReadTool('m1_ro_b', 25)
+    registerReadTool('m1_ro_c', 25)
+    const { messagesLog, callbacks } = await runLoopWithResponses([callsLine(['m1_ro_a', 'm1_ro_b', 'm1_ro_c']), '最终回复'])
+    expect(peakConcurrency()).toBe(3) // 串行实现该值为 1
+    // 末工具 start 先于首工具 end → 确为并发执行（事件序断言）
+    expect(eventIndex('m1_ro_c', 'start')).toBeLessThan(eventIndex('m1_ro_a', 'end'))
+    expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(3)
+    const observation = lastUserMessage(messagesLog, 1)
+    for (const name of ['m1_ro_a', 'm1_ro_b', 'm1_ro_c']) {
+      expect(observation).toContain(`<tool_result name="${name}">`)
+      expect(observation).toContain(`result:${name}`)
+    }
+    expect(callbacks.onError).not.toHaveBeenCalled()
+  })
+
+  it('只读批并发上限 10：12 个只读分两批，第二批须等首批全部完成', async () => {
+    for (let i = 1; i <= 12; i++) registerReadTool(`m1_cap_${i}`, 20)
+    const names = Array.from({ length: 12 }, (_, i) => `m1_cap_${i + 1}`)
+    const { messagesLog } = await runLoopWithResponses([callsLine(names), '最终回复'])
+    expect(peakConcurrency()).toBe(10) // 并发峰恰为上限，从不超 10
+    // 结构性断言（不依赖计时精度）：第 11/12 个工具的 start 必晚于首批 10 个全部 end
+    for (const late of ['m1_cap_11', 'm1_cap_12']) {
+      const lateStart = eventIndex(late, 'start')
+      for (let i = 1; i <= 10; i++) {
+        expect(eventIndex(`m1_cap_${i}`, 'end')).toBeLessThan(lateStart)
+      }
+    }
+    const observation = lastUserMessage(messagesLog, 1)
+    expect(observation).toContain('<tool_result name="m1_cap_12">') // 全部工具均已注入
+  })
+
+  it('写工具逐个串行：互不并行且依次执行', async () => {
+    registerWriteTool('m1_wr_1', 20)
+    registerWriteTool('m1_wr_2', 20)
+    const { callbacks } = await runLoopWithResponses([callsLine(['m1_wr_1', 'm1_wr_2']), '最终回复'])
+    expect(peakConcurrency()).toBe(1) // 写工具绝不并行
+    expect(eventIndex('m1_wr_1', 'end')).toBeLessThan(eventIndex('m1_wr_2', 'start'))
+    expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(2)
+  })
+
+  it('混合批：只读批并行、写工具串行且只读批不越过写工具', async () => {
+    registerReadTool('m1_mix_r1', 15)
+    registerReadTool('m1_mix_r2', 15)
+    registerWriteTool('m1_mix_w', 25)
+    registerReadTool('m1_mix_r3', 15)
+    registerReadTool('m1_mix_r4', 15)
+    const { messagesLog } = await runLoopWithResponses([
+      callsLine(['m1_mix_r1', 'm1_mix_r2', 'm1_mix_w', 'm1_mix_r3', 'm1_mix_r4']),
+      '最终回复',
+    ])
+    // 写工具自身执行期间活跃 = 1（不与任何只读并行）
+    expect(peakConcurrency(['m1_mix_w'])).toBe(1)
+    // 写前只读段（r1/r2）与写后只读段（r3/r4）各自并行
+    expect(peakConcurrency(['m1_mix_r1', 'm1_mix_r2'])).toBe(2)
+    expect(peakConcurrency(['m1_mix_r3', 'm1_mix_r4'])).toBe(2)
+    // 分界：写前只读批完成 → 写 → 写后只读批才开始
+    expect(eventIndex('m1_mix_r1', 'end')).toBeLessThan(eventIndex('m1_mix_w', 'start'))
+    expect(eventIndex('m1_mix_r2', 'end')).toBeLessThan(eventIndex('m1_mix_w', 'start'))
+    expect(eventIndex('m1_mix_w', 'end')).toBeLessThan(eventIndex('m1_mix_r3', 'start'))
+    expect(eventIndex('m1_mix_w', 'end')).toBeLessThan(eventIndex('m1_mix_r4', 'start'))
+    // 观察顺序 = tool_call 顺序（r1 < r2 < w < r3 < r4）
+    const observation = lastUserMessage(messagesLog, 1)
+    const pos = (n: string) => observation.indexOf(`<tool_result name="${n}">`)
+    for (const n of ['m1_mix_r1', 'm1_mix_r2', 'm1_mix_w', 'm1_mix_r3', 'm1_mix_r4']) {
+      expect(pos(n)).toBeGreaterThan(-1)
+    }
+    expect(pos('m1_mix_r1')).toBeLessThan(pos('m1_mix_r2'))
+    expect(pos('m1_mix_r2')).toBeLessThan(pos('m1_mix_w'))
+    expect(pos('m1_mix_w')).toBeLessThan(pos('m1_mix_r3'))
+    expect(pos('m1_mix_r3')).toBeLessThan(pos('m1_mix_r4'))
+  })
+
+  it('并行批单工具失败不影响同批其他工具（失败隔离 + 错误 observation 注入）', async () => {
+    registerReadTool('m1_fail_ok1', 20)
+    registerReadTool('m1_fail_boom', 0, 5) // 5ms 后抛错
+    registerReadTool('m1_fail_ok2', 20)
+    const { messagesLog, callbacks } = await runLoopWithResponses([
+      callsLine(['m1_fail_ok1', 'm1_fail_boom', 'm1_fail_ok2']),
+      '最终回复',
+    ])
+    // 三个工具都实际执行（boom 执行到半途抛错），循环正常进入下一轮
+    expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(3)
+    const observation = lastUserMessage(messagesLog, 1)
+    expect(observation).toContain('result:m1_fail_ok1')
+    expect(observation).toContain('result:m1_fail_ok2')
+    // 失败项注入 error observation（sanitize 后错误文本）
+    expect(observation).toContain('<tool_result name="m1_fail_boom" error="true">')
+    expect(observation).toContain('boom: simulated tool failure')
+    // 观察顺序仍 = tool_call 顺序（ok1 < boom < ok2）
+    const pos = (s: string) => observation.indexOf(s)
+    expect(pos('<tool_result name="m1_fail_ok1">')).toBeLessThan(pos('<tool_result name="m1_fail_boom"'))
+    expect(pos('<tool_result name="m1_fail_boom"')).toBeLessThan(pos('<tool_result name="m1_fail_ok2">'))
+    // 引擎整体不 onError：工具级失败属正常 observation 注入路径
+    expect(callbacks.onError).not.toHaveBeenCalled()
+    expect(callbacks.onDone).toHaveBeenCalled()
+  })
+
+  it('并行完成顺序与注入顺序无关：观察按 tool_call 出现顺序拼接', async () => {
+    registerReadTool('m1_seq_1', 15)
+    registerReadTool('m1_seq_2', 60) // 最慢者居中——若按完成顺序拼接必乱序
+    registerReadTool('m1_seq_3', 15)
+    const { messagesLog } = await runLoopWithResponses([callsLine(['m1_seq_1', 'm1_seq_2', 'm1_seq_3']), '最终回复'])
+    const observation = lastUserMessage(messagesLog, 1)
+    const pos = (s: string) => observation.indexOf(s)
+    expect(pos('result:m1_seq_1')).toBeGreaterThan(-1)
+    expect(pos('result:m1_seq_1')).toBeLessThan(pos('result:m1_seq_2'))
+    expect(pos('result:m1_seq_2')).toBeLessThan(pos('result:m1_seq_3'))
+  })
+
+  it('需确认写工具：确认交互先于执行、不与只读并行，确认后照常执行', async () => {
+    registerReadTool('m1_cf_r1', 15)
+    registerWriteTool('m1_cf_w', 15, { confirm: true })
+    registerReadTool('m1_cf_r2', 15)
+    // 引擎回调传递同一可变对象引用（后续 mutate），须在回调触发时快照状态
+    const confirmStatuses: string[] = []
+    const confirmSpy = vi.fn(async (tc: { status: string }) => {
+      confirmStatuses.push(tc.status)
+      return true
+    })
+    const { messagesLog, callbacks } = await runWithOverrides(
+      [callsLine(['m1_cf_r1', 'm1_cf_w', 'm1_cf_r2']), '最终回复'],
+      { onToolCallConfirmRequired: confirmSpy },
+    )
+    // 确认只对写工具发起一次（只读工具不触发确认），发起时状态为 waiting_confirm
+    expect(confirmSpy).toHaveBeenCalledTimes(1)
+    expect(confirmStatuses).toEqual(['waiting_confirm'])
+    // 确认后写工具照常执行（trackedExecute 记录到事件）
+    expect(eventIndex('m1_cf_w', 'start')).toBeGreaterThan(-1)
+    // 串行边界：r1 完成 → w 确认+执行 → r2
+    expect(eventIndex('m1_cf_r1', 'end')).toBeLessThan(eventIndex('m1_cf_w', 'start'))
+    expect(eventIndex('m1_cf_w', 'end')).toBeLessThan(eventIndex('m1_cf_r2', 'start'))
+    expect(peakConcurrency(['m1_cf_w'])).toBe(1)
+    // 写工具 completed 且观察含结果
+    const observation = lastUserMessage(messagesLog, 1)
+    expect(observation).toContain('result:m1_cf_w')
+    const completes = callbacks.onToolCallComplete.mock.calls.map(c => c[0] as { toolName: string; status: string })
+    expect(completes).toContainEqual(expect.objectContaining({ toolName: 'm1_cf_w', status: 'completed' }))
+  })
+
+  it('需确认工具被拒绝：不执行、注入拒绝 observation，后续工具不受影响（观察顺序保持）', async () => {
+    registerWriteTool('m1_rej_w', 15, { confirm: true })
+    registerReadTool('m1_rej_r', 15)
+    // createCallbacks 默认 confirm=false → 拒绝
+    const { messagesLog, callbacks } = await runLoopWithResponses([callsLine(['m1_rej_w', 'm1_rej_r']), '最终回复'])
+    // 写工具从未执行（无 start/end 事件）
+    expect(eventIndex('m1_rej_w', 'start')).toBe(-1)
+    expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(2) // 拒绝也 complete（failed）
+    const observation = lastUserMessage(messagesLog, 1)
+    const pos = (s: string) => observation.indexOf(s)
+    // 拒绝项 error observation 位于其原始槽位（在只读之前）
+    expect(observation).toContain('<tool_result name="m1_rej_w" error="true">')
+    expect(pos('<tool_result name="m1_rej_w" error="true">')).toBeLessThan(pos('<tool_result name="m1_rej_r">'))
+    expect(observation).toContain('result:m1_rej_r') // 后续只读照常执行
+  })
+
+  it('单工具路径行为兼容（现状回归）：回调形态与 observation 注入不变', async () => {
+    registerReadTool('m1_solo', 5)
+    const { messagesLog, callbacks } = await runLoopWithResponses([callsLine(['m1_solo']), '最终回复'])
+    // 无确认；start/complete 各一次（回调传同一可变引用——只断言触发次数与工具名）
+    expect(callbacks.onToolCallConfirmRequired).not.toHaveBeenCalled()
+    expect(callbacks.onToolCallStart).toHaveBeenCalledTimes(1)
+    expect((callbacks.onToolCallStart.mock.calls[0][0] as { toolName: string }).toolName).toBe('m1_solo')
+    const completes = callbacks.onToolCallComplete.mock.calls.map(c => c[0] as { toolName: string; status: string })
+    expect(completes).toEqual([expect.objectContaining({ toolName: 'm1_solo', status: 'completed' })])
+    // 观察注入形态与串行现状逐字一致
+    const observation = lastUserMessage(messagesLog, 1)
+    expect(observation).toContain(`<tool_result name="m1_solo">\nresult:m1_solo\n</tool_result>`)
+    expect(callbacks.onError).not.toHaveBeenCalled()
+    expect(callbacks.onDone).toHaveBeenCalled()
+  })
+})
