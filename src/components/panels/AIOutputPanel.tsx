@@ -6,6 +6,7 @@ import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useOutputFileTail } from '../../hooks/useOutputFileTail'
+import { cleanupMessageText } from '../../services/agent/conversation-recovery'
 
 /**
  * 右侧面板「AI 输出」视图
@@ -32,12 +33,13 @@ export default function AIOutputPanel() {
       setViewRunId(prev => prev === activeRun.id ? prev : activeRun.id)
       return
     }
-    // M2 崩溃恢复续读：无活跃流时优先展示恢复回来的 paused/failed run（其步骤输出
-    // 可能只存在于磁盘 workflow-output 文件，需在面板内可见才能触发文件轮询查看）
+    // M2 崩溃恢复续读：无活跃流时仅当用户尚未选择任何视图（viewRunId===null）才自动选中
+    // 恢复回来的 paused/failed run（其步骤输出可能只存在于磁盘 workflow-output 文件，需在面板内
+    // 可见才能触发文件轮询查看）——M-5：一旦用户浏览了历史/其他 run，不再把视图抢回
     const recovered = activeRuns.find(r => r.status === 'paused' || r.status === 'failed')
     if (recovered) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setViewRunId(prev => prev === recovered.id ? prev : recovered.id)
+      setViewRunId(prev => prev === null ? recovered.id : prev)
     }
   }, [activeRun?.id, activeRun, activeRuns])
 
@@ -350,7 +352,9 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
     stepIndex: index,
     enabled: Boolean(recoverRunId && !rawText && expanded),
   })
-  const recoveredContent = expanded && !rawText && fileTail.exists ? fileTail.content : ''
+  // M-2：恢复区渲染前过 cleanupMessageText 净化（与 hydrate 补填 step.result 同语义——
+  // 文件是流式原文镜像，可能带半截 <think>/<tool_call> 残片，直接渲染会闪现脏文本）
+  const recoveredContent = expanded && !rawText && fileTail.exists ? cleanupMessageText(fileTail.content) : ''
 
   // 监听如果步骤被激活，则自动展开
   useEffect(() => {

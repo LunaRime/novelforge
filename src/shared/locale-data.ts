@@ -2610,6 +2610,8 @@ export const UI_TEXTS_DATA = {
   'log.export.folderDone': { 'zh-CN': '文件夹导出完成: {path} ({count} 章, {format})', 'en-US': 'Folder export finished: {path} ({count} chapters, {format})', 'ru-RU': 'Экспорт в папку завершён: {path} ({count} глав, {format})' },
   'log.export.zipDone': { 'zh-CN': 'ZIP 导出完成: {path} ({count} 章, {format})', 'en-US': 'ZIP export finished: {path} ({count} chapters, {format})', 'ru-RU': 'Экспорт ZIP завершён: {path} ({count} глав, {format})' },
   'log.export.failed': { 'zh-CN': '导出失败: {err}', 'en-US': 'Export failed: {err}', 'ru-RU': 'Ошибка экспорта: {err}' },
+  'log.fs.workflowOutputDeleteFailed': { 'zh-CN': '工作流输出清理失败: {err}', 'en-US': 'Workflow output cleanup failed: {err}', 'ru-RU': 'Ошибка очистки вывода рабочего процесса: {err}' },
+  'log.fs.unknownError': { 'zh-CN': '未知错误', 'en-US': 'Unknown error', 'ru-RU': 'Неизвестная ошибка' },
   'log.export.foundChapters': { 'zh-CN': '找到 {count} 个已定稿章节', 'en-US': 'Found {count} finalized chapters', 'ru-RU': 'Найдено {count} завершённых глав' },
   'log.kb.rebuildWithEmbeddingApi': { 'zh-CN': '使用 Embedding API 重建向量索引（如失败将自动降级到 LLM 向量化）', 'en-US': 'Rebuilding vector index with Embedding API (auto-falls back to LLM vectorization on failure)', 'ru-RU': 'Пересоздание векторного индекса через Embedding API (при сбое — автоматический переход на LLM-векторизацию)' },
   'log.kb.embeddingFailedTryLlm': { 'zh-CN': 'Embedding API 完全失败，尝试 LLM 向量化: {err}', 'en-US': 'Embedding API completely failed, trying LLM vectorization: {err}', 'ru-RU': 'Embedding API полностью не сработал, пробуем LLM-векторизацию: {err}' },

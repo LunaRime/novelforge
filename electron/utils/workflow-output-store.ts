@@ -44,14 +44,16 @@ interface OpenStepWriter {
  */
 export function alignUtf8WindowStart(prev: Buffer, prevStart: number, cut: number): number {
   // 从 cut 前一个字节向前找 lead（连续续字节最多 3 个——UTF-8 最长 4 字节）
+  // ⚠️ prev 是 [prevStart, prevStart+len) 的小窗 Buffer——索引必须相对 prevStart（W-1 实测：绝对索引越界
+  // 读到 undefined，对齐失效 → 半截多字节字符解码出 U+FFFD 替换符）
   let i = cut - 1
   let back = 0
-  while (i >= prevStart && back < 3 && (prev[i]! & 0xC0) === 0x80) {
+  while (i >= prevStart && back < 3 && (prev[i - prevStart]! & 0xC0) === 0x80) {
     i -= 1
     back += 1
   }
   if (i >= prevStart) {
-    const b = prev[i]!
+    const b = prev[i - prevStart]!
     let need = 1
     if ((b & 0xE0) === 0xC0) need = 2
     else if ((b & 0xF0) === 0xE0) need = 3
@@ -214,13 +216,13 @@ export class WorkflowOutputFileStore {
     }
 
     let truncated = false
-    // 窗口起点 > 0（被字节窗口截断）且首行不完整 → 丢到下一个换行（只显示完整行）
+    // 字节窗口起点 > 0（被截断）→ 恒置 truncated（tail 视图 = 非完整全文）：
+    // 首行不完整时丢到下一个换行（只显示完整行）；单行超长窗口内无换行可丢（nl===-1）
+    // 时保留半截行内容但 truncated 仍为 true——与「tail 只显示完整尾部」的注释语义一致
     if (!full && start > 0) {
+      truncated = true
       const nl = content.indexOf('\n')
-      if (nl !== -1) {
-        content = content.slice(nl + 1)
-        truncated = true
-      }
+      if (nl !== -1) content = content.slice(nl + 1)
     }
     // 行窗口：保留最近 maxLines 行
     if (Number.isFinite(maxLines) && content.length > 0) {

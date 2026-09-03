@@ -131,6 +131,18 @@ describe('readTail（UI 1s 轮询 tail 4KB + 最近 1000 行）', () => {
     expect(tail.content).toBe(full)
     expect(tail.truncated).toBe(false)
   })
+
+  it('W-1：超长单行（>4KB 无换行）→ truncated=true（内容从半截行中部开始，非完整尾部）', async () => {
+    const full = 'x'.repeat(500) + '中'.repeat(1400) + 'z'.repeat(500) // 500+4200+500 > 4KB 且全文件仅一行
+    await store.append(runId, 0, full)
+    const tail = await store.readTail(runId, 0)
+    expect(tail.truncated).toBe(true)
+    expect(tail.content.length).toBeGreaterThan(0)
+    expect(tail.content.length).toBeLessThanOrEqual(4096 + 3)
+    // 字符边界对齐：无 U+FFFD 替换符（不因半截多字节字符产生脏字节）
+    expect(tail.content.includes('\uFFFD')).toBe(false)
+    expect(tail.content.endsWith('z'.repeat(500))).toBe(true)
+  })
 })
 
 describe('alignUtf8WindowStart（UTF-8 字符边界对齐纯函数）', () => {
@@ -146,6 +158,15 @@ describe('alignUtf8WindowStart（UTF-8 字符边界对齐纯函数）', () => {
     expect(alignUtf8WindowStart(buf, 0, 0)).toBe(0)
     expect(alignUtf8WindowStart(buf, 0, 2)).toBe(2)
     expect(alignUtf8WindowStart(buf, 0, buf.length)).toBe(buf.length)
+  })
+
+  it('prevStart>0 小窗：相对索引对齐（回归——绝对索引读到 undefined 致对齐失效产生 U+FFFD）', () => {
+    // 章 @9..11（E4 B8 AD），cut=10 落在其第 2 字节；prev 仅含 [6..10) 的 4 字节小窗
+    const full = Buffer.from('xxxxxxxxx章cd', 'utf8')
+    const cut = 10
+    const prevStart = cut - 4
+    const prev = full.subarray(prevStart, cut)
+    expect(alignUtf8WindowStart(prev, prevStart, cut)).toBe(9) // 回退到 章 的起始字节
   })
 })
 

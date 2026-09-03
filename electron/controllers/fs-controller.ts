@@ -5,10 +5,11 @@ import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import os from 'node:os'
 import { createHash } from 'node:crypto'
-import { FileNode } from '../../src/shared/ipc-channels'
+import { FileNode, WorkflowOutputTailOptions } from '../../src/shared/ipc-channels'
 import { VELA_HOME } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { scanTextWindow } from '../utils/read-text-window'
+import { logger } from '../utils/logger'
 import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
 
 /** 路径沙箱：允许访问的根目录列表 */
@@ -474,17 +475,18 @@ export function registerFSController() {
     return workflowOutputStore.append(runId, stepIndex, text)
   })
 
-  ipcMain.handle('fs:workflow-output-tail', async (_e, runId: string, stepIndex: number, options?: unknown) => {
-    const opts = options && typeof options === 'object' ? options as { maxBytes?: unknown; maxLines?: unknown; full?: unknown } : {}
-    return workflowOutputStore.readTail(runId, stepIndex, {
-      maxBytes: typeof opts.maxBytes === 'number' ? opts.maxBytes : undefined,
-      maxLines: typeof opts.maxLines === 'number' ? opts.maxLines : undefined,
-      full: opts.full === true,
-    })
+  ipcMain.handle('fs:workflow-output-tail', async (_e, runId: string, stepIndex: number, options?: WorkflowOutputTailOptions) => {
+    // M-7：直接引用共享类型（ipc-channels 两端同源）；readTail 内部已对数值入参做防御清洗
+    return workflowOutputStore.readTail(runId, stepIndex, options)
   })
 
   ipcMain.handle('fs:workflow-output-delete-run', async (_e, runId: string) => {
-    return workflowOutputStore.deleteRun(runId)
+    const res = await workflowOutputStore.deleteRun(runId)
+    // W-3：清理失败不能静默——任务级清理不变量破坏（残留目录将由 7 天 sweep 兜底），主进程日志留痕
+    if (!res.success) {
+      logger.warn('FS', t('log.fs.workflowOutputDeleteFailed').replace('{err}', () => res.error ?? t('log.fs.unknownError')))
+    }
+    return res
   })
 
   // 崩溃残留兜底清理：超龄（7 天）run 目录删除；保留窗口内文件供「任务中途崩溃下次可续读」
