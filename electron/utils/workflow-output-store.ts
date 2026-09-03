@@ -236,11 +236,28 @@ export class WorkflowOutputFileStore {
   /**
    * 任务级清理：删除整 run 输出目录（完成/取消后由渲染层调用）；
    * 先释放该 run 所有打开的写句柄（防 Windows fd 占用删除失败），再递归删除。
+   *
+   * I-1（评审修复）：步骤完成/取消时最后一发镜像 append 与 delete-run IPC 可同 tick 到达——
+   * 两个 async handler 并发。必须先收齐该 run 名下 writeQueues 的**全部排队任务**
+   * （await 其落盘完成或失败）再关句柄 + rm：否则 rm 后仍排队的 append 会
+   * mkdir + open('w') 重建目录（输出文件复活），或 Windows 下句柄未释放 rm 失败，
+   * 「任务级清理」不变量不成立。IPC 管道保序 + append 入队同步于 handler 入口 →
+   * 快照覆盖 delete 之前已发送的全部 append。
    */
   async deleteRun(runId: string): Promise<{ success: boolean; error?: string }> {
     const runDir = this.runDir(runId)
     if (!runDir) return { success: false, error: 'invalid run id' }
-    // 关闭该 run 名下所有写句柄
+    // ① 收齐排队任务（等待落盘完成或失败——writeQueues 存的是吞错链，永不自拒）
+    const queued: Promise<unknown>[] = []
+    for (const [key, task] of this.writeQueues) {
+      if (key.startsWith(`${runId}:`)) queued.push(task)
+    }
+    if (queued.length > 0) await Promise.allSettled(queued)
+    // ② 排队任务已结束：清理该 run 的队列条目（防 Map 泄漏——条目指向已 settle 的链）
+    for (const key of [...this.writeQueues.keys()]) {
+      if (key.startsWith(`${runId}:`)) this.writeQueues.delete(key)
+    }
+    // ③ 关闭该 run 名下所有写句柄（防 Windows fd 占用删除失败）
     for (const [key, writer] of [...this.openWriters]) {
       if (key.startsWith(`${runId}:`)) {
         this.openWriters.delete(key)

@@ -179,6 +179,25 @@ describe('deleteRun / sweep（任务级生命周期）', () => {
     expect(fs.existsSync(path.join(rootDir, staleRun))).toBe(false)
     expect(fs.existsSync(path.join(rootDir, freshRun))).toBe(true)
   })
+
+  it('I-1：deleteRun 收齐排队 append 后再删——目录不复活（文件不复生）、队列条目清空', async () => {
+    // 模拟步骤完成同 tick：两发镜像 append 与 delete-run IPC 并发到达（不 await append 即删）
+    const p1 = store.append(runId, 0, 'part-1')
+    const p2 = store.append(runId, 0, 'part-2')
+    const del = store.deleteRun(runId)
+    await expect(del).resolves.toEqual({ success: true })
+    await Promise.all([p1, p2])
+
+    // 清理不变量：rm 后排队 append 已先落盘完成，不会 mkdir+open('w') 重建目录（文件复活）
+    expect(fs.existsSync(path.join(rootDir, runId))).toBe(false)
+    // writeQueues 中该 run 的队列条目已随 deleteRun 清理（防 Map 泄漏）
+    const writeQueues = (store as unknown as { writeQueues: Map<string, unknown> }).writeQueues
+    expect([...writeQueues.keys()].some(k => k.startsWith(`${runId}:`))).toBe(false)
+    // 清理后正常路径仍可用（后续新 run append 不受影响）
+    await store.append(runId, 0, 'fresh')
+    expect(fs.existsSync(path.join(rootDir, runId, '0.txt'))).toBe(true)
+    await store.deleteRun(runId)
+  })
 })
 
 describe('崩溃恢复（文件还在，下次可续读）', () => {
