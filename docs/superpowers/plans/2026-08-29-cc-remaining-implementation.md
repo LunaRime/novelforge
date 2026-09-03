@@ -70,7 +70,7 @@
 **现状**：`agent-engine.ts` 的 `runAgentLoop`（工具执行段，`executeToolWithTimeout` 调用点）用 for 循环串行执行全部 tool_call——无并行、无分批。
 **范围**（对齐 CC toolOrchestration.ts）：
 - 一次 LLM 调用 N 个工具：**连续只读归批并行（上限 10）**、写工具逐个串行、requiresConfirmation 工具保持确认交互
-- 工具分类：**以 `tool.isReadOnly` 字段为准**（write_file 已标记 `isReadOnly: false`）——只读清单（read_file/search_knowledge/read_architecture/read_characters/count_characters/query_foreshadowing/setting_sampler 等）vs 写工具（write_file/update_config）；⚠️ index-content/embed-text/compare-texts 虽属 builtin 且无需确认，但会写 LanceDB，**必须归入写工具**（执行前全量核对 `isReadOnly`，勿按 `source` 分组）
+- 工具分类：**以 `tool.isReadOnly` 字段为准**（write_file 已标记 `isReadOnly: false`）——只读清单（read_file/search_knowledge/read_architecture/read_characters/count_characters/query_foreshadowing/setting_sampler 等）vs 写工具（write_file/update_config）；⚠️ 不按 `source` 分组——M1 review 实证（2026-09-02）：embed_text/compare_texts 只调 `embedding:generate` 纯计算**不写库**（isReadOnly=true 正确），index_content 调 `kb:import-text` 写库（conf=true → isReadOnly=false 归写）；执行以 `isReadOnly` 字段为准
 - 观察注入顺序与并行执行结果一致（按 tool_call 出现顺序拼接 observation）
 - 测试：只读批并行（并发数断言）、写串行、混合批、并行中单工具失败不影响其他
 **裁决点**：只读白名单清单；并行上限 10 vs 模型窗口预算（与 D6 写盘引用协同——并行大结果汇总溢出处理）。
