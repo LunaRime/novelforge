@@ -1553,6 +1553,8 @@ export const UI_TEXTS_DATA = {
   'agent.aiOutput': { 'zh-CN': '工作流输出', 'en-US': 'Workflow Output', 'ru-RU': 'Вывод рабочего процесса' },
   'agent.aiPanel': { 'zh-CN': 'Agent 对话', 'en-US': 'Agent Chat', 'ru-RU': 'Чат агента' },
   'agent.noOutput': { 'zh-CN': '暂无输出', 'en-US': 'No output', 'ru-RU': 'Нет вывода' },
+  'agent.outputRecovered': { 'zh-CN': '已从本地文件恢复中断输出', 'en-US': 'Interrupted output recovered from disk', 'ru-RU': 'Прерванный вывод восстановлен с диска' },
+  'agent.outputTailOnly': { 'zh-CN': '仅显示尾部', 'en-US': 'tail only', 'ru-RU': 'только хвост вывода' },
   'agent.workflowComplete': { 'zh-CN': '整个工作流已全部完成', 'en-US': 'Workflow complete', 'ru-RU': 'Рабочий процесс завершён' },
   'agent.waitingResponse': { 'zh-CN': '等待指令响应...', 'en-US': 'Waiting for response...', 'ru-RU': 'Ожидание ответа...' },
   'agent.thinkingToggle': { 'zh-CN': '思考过程', 'en-US': 'Thinking process', 'ru-RU': 'Процесс размышления' },

@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import { getCurrentLocale, t } from '../shared/locale'
 import { randomUUID } from '../utils/id'
 import { renderLog } from '../services/render-logger'
-import { sanitizeCheckpointData } from '../services/agent/conversation-recovery'
+import { sanitizeCheckpointData, cleanupMessageText } from '../services/agent/conversation-recovery'
+import { mirrorStepAppend, deleteRunOutput, readStepOutputTail } from '../services/workflow-output'
 
 // ===== 工作流 Checkpoint 持久化 =====
 
@@ -187,6 +188,13 @@ interface WorkflowState {
   restoreCheckpoint: () => CheckpointData | null
   /** 清除持久化的 checkpoint */
   clearCheckpoint: () => void
+  /**
+   * 崩溃恢复续读（M2，CC §三.4）：restoreCheckpoint 后调用——把中断步骤落盘到
+   * workflow-output/<runId>/<stepIndex>.txt 的输出（主进程文件）补回空的 step.result。
+   * 只补「result 为空且文件存在」的步骤（checkpoint 已有内容/正常步骤零改动），
+   * 补填内容走 cleanupMessageText 净化（与 checkpoint 恢复同语义，防半截 think 残片）。
+   */
+  hydrateInterruptedOutputs: () => Promise<void>
 }
 
 /** 工作流上下文实例 Map（runId → context） */
@@ -223,6 +231,10 @@ function scheduleAppendFlush(): void {
 /**
  * 把当前步骤的累积文本写入步骤 result。
  * key 格式：`{runId}:{stepIndex}`
+ *
+ * M2 双轨：此处是「内存流式 + 文件镜像」的单一汇聚点——文本以既有 100ms 共享 flush 节奏
+ * 同时进 step.result（UI 流式渲染）与主进程输出文件（崩溃恢复/续读，见 workflow-output）。
+ * 镜像与内存写同频、fire-and-forget，失败静默（补充通道，绝不打断渲染主路径）。
  */
 function writeStepResultAppend(key: string, text: string): void {
   const sepIdx = key.indexOf(':')
@@ -236,6 +248,7 @@ function writeStepResultAppend(key: string, text: string): void {
   const step = activeRun.steps[stepIndex]
   if (!step) return
   updateStepById(useWorkflowStore.setState, runId, stepIndex, { result: (step.result || '') + text })
+  mirrorStepAppend(runId, stepIndex, text)
 }
 
 /** 定时器到期：把 pending 队列中全部累积文本一次性写入（多 key 同 tick → 一次渲染） */
@@ -485,6 +498,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     activeContexts.delete(run.id)
     continueResolveRefs.delete(run.id)
     clearAppendBuffers(run.id)
+    // M2 任务级清理：run 已移入历史（完成/失败），删除其输出目录（崩溃恢复窗口已过）
+    deleteRunOutput(run.id)
 
     // 持久化 checkpoint
     saveCheckpoint(get())
@@ -517,9 +532,12 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       })
       get().addLog('warn', '[Cancel] Workflow cancelled')
       clearAppendBuffers(runId)
+      // M2：取消 = 任务级清理（用户不再需要该任务输出；崩溃恢复窗口关闭）
+      deleteRunOutput(runId)
       saveCheckpoint(get())
     } else {
       // 取消全部
+      const allRunIds = get().activeRuns.map(r => r.id)
       for (const [id, ctx] of activeContexts) {
         ctx.cancelled = true
         const resolve = continueResolveRefs.get(id)
@@ -540,6 +558,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       })
       get().addLog('warn', '[Cancel] All workflows cancelled')
       clearCheckpoint()
+      // M2：取消全部 = 逐个任务级清理（被取消 run 的输出文件不再保留）
+      for (const id of allRunIds) deleteRunOutput(id)
     }
   },
 
@@ -588,6 +608,27 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   },
 
   clearCheckpoint: () => clearCheckpoint(),
+
+  hydrateInterruptedOutputs: async () => {
+    // 只处理崩溃恢复回来的暂停/失败 run（正常 run 不落此状态，文件在其结束时已被任务级清理）
+    const runs = get().activeRuns.filter(r => r.status === 'paused' || r.status === 'failed')
+    for (const run of runs) {
+      // 候选 = result 为空/缺失的步骤（文件存在才补——pending/未流式步骤无文件，天然跳过）
+      const candidates = run.steps
+        .map((step, index) => ({ index, step }))
+        .filter(({ step }) => typeof step.result !== 'string' || step.result === '')
+      for (const { index } of candidates) {
+        try {
+          const tail = await readStepOutputTail(run.id, index, { full: true })
+          if (!tail.success || !tail.exists || tail.content === '') continue
+          // cleanupMessageText：与 restoreCheckpoint 同语义净化（半截 think/tool 残片）
+          updateStepById(set, run.id, index, { result: cleanupMessageText(tail.content) })
+        } catch {
+          // 单步补填失败不影响其余步骤/run
+        }
+      }
+    }
+  },
 }))
 
 // Auto-save checkpoint on beforeunload

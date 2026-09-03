@@ -82,6 +82,8 @@ export default function App() {
     if (cp && cp.activeRuns.length > 0) {
       console.log(`[Workflow] 检测到 ${cp.activeRuns.length} 个未完成工作流，已恢复为暂停状态（保存时间: ${cp.savedAt}）`)
     }
+    // M2 崩溃恢复续读：把中断步骤落盘输出（workflow-output 文件）补回空的 step.result（异步，失败无害）
+    useWorkflowStore.getState().hydrateInterruptedOutputs().catch(e => console.warn('[Workflow] 输出文件续读失败:', e))
     if (ipc.isElectron) {
       const savedZoom = localStorage.getItem('vela-zoom-level')
       if (savedZoom) ipc.setZoomLevel(parseFloat(savedZoom))

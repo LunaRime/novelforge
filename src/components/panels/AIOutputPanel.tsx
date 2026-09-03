@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle, Play } from 'lucide-react'
+import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useOutputFileTail } from '../../hooks/useOutputFileTail'
 
 /**
  * 右侧面板「AI 输出」视图
@@ -29,8 +30,16 @@ export default function AIOutputPanel() {
     if (activeRun) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewRunId(prev => prev === activeRun.id ? prev : activeRun.id)
+      return
     }
-  }, [activeRun?.id, activeRun])
+    // M2 崩溃恢复续读：无活跃流时优先展示恢复回来的 paused/failed run（其步骤输出
+    // 可能只存在于磁盘 workflow-output 文件，需在面板内可见才能触发文件轮询查看）
+    const recovered = activeRuns.find(r => r.status === 'paused' || r.status === 'failed')
+    if (recovered) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setViewRunId(prev => prev === recovered.id ? prev : recovered.id)
+    }
+  }, [activeRun?.id, activeRun, activeRuns])
 
   const viewRun: WorkflowRun | undefined =
     activeRuns.find(r => r.id === viewRunId) ||
@@ -124,6 +133,9 @@ function ActiveRunView({
   const scrollRef = useRef<HTMLDivElement>(null)
   const [autoScroll, setAutoScroll] = useState(true)
   const isActive = run.status === 'running' || run.status === 'waiting'
+  // M2：崩溃恢复回来的 paused/failed run（仅 activeRuns 内）——其空 result 步骤可从磁盘
+  // workflow-output 文件续读（组件挂载/展开才 1s 轮询 tail，不可见即停）
+  const isRecoveredRun = activeRuns.some(r => r.id === run.id) && (run.status === 'paused' || run.status === 'failed')
   const cancelWorkflow = useWorkflowStore.getState().cancelWorkflow
   // 等待确认状态（与 BottomPanel 同源）：任务挂起等待用户确认下一步时提供「继续执行」
   const waitingRuns = useWorkflowStore(s => s.waitingRuns)
@@ -228,6 +240,7 @@ function ActiveRunView({
               total={run.steps.length}
               isActiveRun={isActive}
               isCurrentStep={i === run.currentStepIndex}
+              recoverRunId={isRecoveredRun ? run.id : null}
             />
           ))}
 
@@ -294,7 +307,16 @@ function ActiveRunView({
 
 
 // ===== 新版渲染单步结果（支持查看所有历史步骤数据） =====
-function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { step: WorkflowStep; index: number; total: number; isActiveRun: boolean; isCurrentStep: boolean }) {
+function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recoverRunId }: {
+  step: WorkflowStep
+  index: number
+  total: number
+  isActiveRun: boolean
+  isCurrentStep: boolean
+  /** M2：崩溃恢复 run（paused/failed，在 activeRuns 内）→ 该 runId 下 result 为空的步骤
+   *  可从磁盘输出文件续读（useOutputFileTail：组件展开才轮询 tail，折叠/卸载即停） */
+  recoverRunId?: string | null
+}) {
   const { t } = useTranslation()
   const isRunning = step.status === 'running'
   const isCompleted = step.status === 'completed'
@@ -321,6 +343,15 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
   // 当前激活的步骤默认展开，过去/未来的默认折叠（只有产生了内容的步骤才允许展开）
   const [expanded, setExpanded] = useState(isCurrentStep)
 
+  // M2 文件续读轮询：仅当「恢复 run + 本步无内存内容 + 本步展开可见」才启用（挂载门控，
+  // 折叠/切换 run/卸载 → enabled=false → 停轮询）；正在流式的步骤走内存渲染，不参与
+  const fileTail = useOutputFileTail({
+    runId: recoverRunId ?? '',
+    stepIndex: index,
+    enabled: Boolean(recoverRunId && !rawText && expanded),
+  })
+  const recoveredContent = expanded && !rawText && fileTail.exists ? fileTail.content : ''
+
   // 监听如果步骤被激活，则自动展开
   useEffect(() => {
     let mounted = true
@@ -332,21 +363,24 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
     return () => { mounted = false }
   }, [isCurrentStep])
 
+  // 头部是否可点击展开/收起：有内存内容 或 崩溃恢复步骤（磁盘可能仍有中断输出）
+  const revealable = Boolean(rawText) || Boolean(recoverRunId && !rawText)
+
   return (
     <div className="mb-1.5">
       {/* 头部摘要项，点击折叠/展开 */}
       <div
-        onClick={() => { if (rawText) setExpanded(!expanded) }}
+        onClick={() => { if (revealable) setExpanded(!expanded) }}
         className="flex items-center gap-2 px-2 py-1.5 rounded-md text-xs transition-colors"
         style={{
-          cursor: rawText ? 'pointer' : 'default',
+          cursor: revealable ? 'pointer' : 'default',
           backgroundColor: isRunning ? 'var(--color-hover)' : 'transparent',
           color: isRunning ? 'var(--color-text)' :
                  isCompleted ? 'var(--color-text-secondary)' :
                  isFailed ? 'var(--color-error)' :
                  'var(--color-text-muted)',
         }}
-        title={rawText ? t('agent.stepHistoryTip') : undefined}
+        title={revealable ? t('agent.stepHistoryTip') : undefined}
       >
         {/* 状态图标 */}
         <span className="flex-shrink-0 w-4 flex justify-center">
@@ -374,7 +408,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
         )}
 
         {/* 展开角标或序号 */}
-        {(rawText && !isRunning) ? (
+        {((rawText || recoverRunId) && !isRunning) ? (
           <ChevronRight
             size={11}
             style={{
@@ -401,13 +435,29 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep }: { s
               hasContent={!!content}
             />
           )}
-          
+
           {/* 实际正文区域 */}
           {content && (
             <div className="mt-1">
               <MarkdownContent content={content} streaming={isRunning && isActiveRun} />
             </div>
           )}
+        </div>
+      )}
+
+      {/* M2：崩溃恢复续读区——步骤中断时内存 result 为空，但磁盘输出文件仍在：
+          组件展开可见才轮询（1s tail），读到内容以「已从磁盘恢复」标注渲染 */}
+      {recoveredContent && (
+        <div className="pl-[4px] pr-1 pt-1 pb-3 text-xs w-full max-w-full break-words">
+          <div
+            className="flex items-center gap-1.5 mb-1.5 text-[0.65rem]"
+            style={{ color: 'var(--color-text-muted)', opacity: 0.85 }}
+          >
+            <HardDrive size={10} />
+            <span>{t('agent.outputRecovered')}</span>
+            {fileTail.truncated && <span className="opacity-70">({t('agent.outputTailOnly')})</span>}
+          </div>
+          <MarkdownContent content={recoveredContent} streaming={false} />
         </div>
       )}
 

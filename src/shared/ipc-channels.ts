@@ -271,6 +271,49 @@ export interface FileChannels {
     args: [content: string];
     return: { success: boolean; path?: string; error?: string };
   },
+  /**
+   * 工作流任务输出落盘（M2，CC 对比 §三.4）——渲染层在既有 100ms 共享 flush 点把步骤流式
+   * 文本镜像到 `{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`（补充通道，双轨）。
+   * 主进程 open 'w'（截断）+ 显式字节偏移追加；同 key 串行队列保证字节序。
+   */
+  'fs:workflow-output-append': {
+    args: [runId: string, stepIndex: number, text: string];
+    return: { success: boolean; error?: string };
+  },
+  /** 读步骤输出文件尾部窗口（UI 1s 轮询 / 崩溃恢复续读） */
+  'fs:workflow-output-tail': {
+    args: [runId: string, stepIndex: number, options?: WorkflowOutputTailOptions];
+    return: WorkflowOutputTailData;
+  },
+  /** 任务级清理：删除整 run 输出目录（完成/取消后调用；崩溃恢复前保留） */
+  'fs:workflow-output-delete-run': {
+    args: [runId: string];
+    return: { success: boolean };
+  },
+}
+
+/** 步骤输出文件 tail 读参数（M2；与 CC TaskOutput tail 4KB + 最近 1000 行对齐） */
+export interface WorkflowOutputTailOptions {
+  /** 尾部字节窗口（默认 4096；full=true 时忽略） */
+  maxBytes?: number
+  /** 窗口内行数上限（默认 1000；full=true 时忽略） */
+  maxLines?: number
+  /** true = 整文件读（崩溃恢复续读填充 step.result；忽略 maxBytes/maxLines） */
+  full?: boolean
+}
+
+/** 步骤输出文件 tail 读结果 */
+export interface WorkflowOutputTailData {
+  success: boolean
+  /** 文件是否存在（false 时 content 为空串——未落盘步骤/已清理任务） */
+  exists: boolean
+  /** 窗口内容（默认尾部 4KB / 最近 1000 行；full=true 时为全文） */
+  content: string
+  /** 文件当前总字节数（轮询增量判等 / 环形缓冲去重用） */
+  totalBytes: number
+  /** 是否因字节/行窗口发生截断（UI 可据此提示「仅显示尾部」） */
+  truncated: boolean
+  error?: string
 }
 
 // ===== LLM 调用 =====

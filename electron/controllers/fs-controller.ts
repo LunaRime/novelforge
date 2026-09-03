@@ -9,6 +9,7 @@ import { FileNode } from '../../src/shared/ipc-channels'
 import { VELA_HOME } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { scanTextWindow } from '../utils/read-text-window'
+import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
 
 /** 路径沙箱：允许访问的根目录列表 */
 const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
@@ -80,6 +81,15 @@ async function windowFromHugeFile(
 
 /** 用户显式授权过的外部文件路径（dialog:select-files 选择成功后由渲染层登记，会话级） */
 const grantedExternalFiles = new Set<string>()
+
+/**
+ * 工作流任务输出文件仓库（M2，CC §三.4 双轨补充通道）：
+ * `{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`——纯 fs 单测见 utils 测试。
+ * 崩溃残留兜底清理窗口：7 天（超龄 run 目录启动时 sweep；保留窗口内文件供恢复续读）
+ */
+const WORKFLOW_OUTPUT_DIR = path.join(VELA_HOME, 'workflow-output')
+const WORKFLOW_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
+const workflowOutputStore = new WorkflowOutputFileStore(WORKFLOW_OUTPUT_DIR)
 
 /** 禁止访问的敏感目录（即使在 SANDBOX_ROOTS 内） */
 const BLOCKED_PATHS = [
@@ -455,6 +465,30 @@ export function registerFSController() {
       return { success: false, error: safeErrorMessage(error) }
     }
   })
+
+  // ===== 工作流任务输出落盘（~/.novelforge/workflow-output/<runId>/<stepIndex>.txt，M2 CC §三.4） =====
+  // 双轨补充通道：渲染层在既有 appendText 100ms 共享 flush 点把流式文本镜像到文件（fd 'w' 直写、
+  // 显式字节偏移），内存 step.result 流式渲染不变；文件供崩溃恢复续读 + 尾部轮询。
+  // 渲染进程不持有 VELA_HOME 路径，目录由主进程统一定位（同 agent-archive/agent-results 惯例）。
+  ipcMain.handle('fs:workflow-output-append', async (_e, runId: string, stepIndex: number, text: string) => {
+    return workflowOutputStore.append(runId, stepIndex, text)
+  })
+
+  ipcMain.handle('fs:workflow-output-tail', async (_e, runId: string, stepIndex: number, options?: unknown) => {
+    const opts = options && typeof options === 'object' ? options as { maxBytes?: unknown; maxLines?: unknown; full?: unknown } : {}
+    return workflowOutputStore.readTail(runId, stepIndex, {
+      maxBytes: typeof opts.maxBytes === 'number' ? opts.maxBytes : undefined,
+      maxLines: typeof opts.maxLines === 'number' ? opts.maxLines : undefined,
+      full: opts.full === true,
+    })
+  })
+
+  ipcMain.handle('fs:workflow-output-delete-run', async (_e, runId: string) => {
+    return workflowOutputStore.deleteRun(runId)
+  })
+
+  // 崩溃残留兜底清理：超龄（7 天）run 目录删除；保留窗口内文件供「任务中途崩溃下次可续读」
+  void workflowOutputStore.sweep(WORKFLOW_OUTPUT_RETENTION_MS).catch(() => {})
 }
 
 function readDirRecursive(dirPath: string): FileNode[] {
