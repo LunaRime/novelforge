@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { runAgentLoop, computeMessageBudget, isRecoverableError, type LLMMessage, type AgentEngineDeps } from './agent-engine'
+import { runAgentLoop, computeMessageBudget, isRecoverableError, type LLMMessage, type AgentEngineDeps, type ToolCallInfo } from './agent-engine'
 import { estimateTokens } from './token-budget'
 import { toolRegistry, buildAgentTool } from './tool-registry'
 
@@ -26,7 +26,10 @@ function createCallbacks() {
     onTextChunk: vi.fn(),
     onToolCallStart: vi.fn(),
     onToolCallComplete: vi.fn(),
-    onToolCallConfirmRequired: vi.fn(async () => false),
+    // 默认 mock 需带引擎实参类型（ToolCallInfo）：零参推导会让 ReturnType 变成 Mock<() => …>，
+    // M1 测试里带参 spy 覆写（onToolCallConfirmRequired(tc)）将无法赋值（tsc 733 类型错误）
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars -- 参数仅用于对齐类型签名
+    onToolCallConfirmRequired: vi.fn(async (_toolCall: ToolCallInfo) => false),
     onProgress: vi.fn(),
     onDone: vi.fn(),
     onError: vi.fn(),
