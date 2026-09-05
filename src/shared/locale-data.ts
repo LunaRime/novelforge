@@ -2119,6 +2119,20 @@ export const UI_TEXTS_DATA = {
   // --- CodeMirrorEditor ---
   'editor.cancel': { 'zh-CN': '取消', 'en-US': 'Cancel', 'ru-RU': 'Отмена' },
   'editor.replace': { 'zh-CN': '✓ 替换', 'en-US': '✓ Replace', 'ru-RU': '✓ Заменить' },
+  // --- L1 inline 接受（气泡 AI 改写 → 会话浮层/浮条） ---
+  'inlineAccept.progress': { 'zh-CN': '已处理 {n}/{m} 处修改', 'en-US': '{n}/{m} changes processed', 'ru-RU': 'Обработано {n}/{m} изменений' },
+  'inlineAccept.bubbleProgress': { 'zh-CN': '第 {n}/{m} 处改动', 'en-US': 'Change {n} of {m}', 'ru-RU': 'Правка {n} из {m}' },
+  'inlineAccept.original': { 'zh-CN': '改前', 'en-US': 'Before', 'ru-RU': 'До' },
+  'inlineAccept.revised': { 'zh-CN': '改后', 'en-US': 'After', 'ru-RU': 'После' },
+  'inlineAccept.acceptSelected': { 'zh-CN': '接受选中', 'en-US': 'Accept selected', 'ru-RU': 'Принять выбранное' },
+  'inlineAccept.acceptWhole': { 'zh-CN': '整体接受', 'en-US': 'Accept entire change', 'ru-RU': 'Принять всё изменение' },
+  'inlineAccept.reject': { 'zh-CN': '拒绝', 'en-US': 'Reject', 'ru-RU': 'Отклонить' },
+  'inlineAccept.acceptAll': { 'zh-CN': '全部接受', 'en-US': 'Accept all', 'ru-RU': 'Принять всё' },
+  'inlineAccept.rejectAll': { 'zh-CN': '全部拒绝', 'en-US': 'Reject all', 'ru-RU': 'Отклонить всё' },
+  'inlineAccept.finish': { 'zh-CN': '完成', 'en-US': 'Finish', 'ru-RU': 'Готово' },
+  'inlineAccept.close': { 'zh-CN': '关闭', 'en-US': 'Close', 'ru-RU': 'Закрыть' },
+  'inlineAccept.manualEditExit': { 'zh-CN': '改动已被手动修改，修改建议已清除', 'en-US': 'Text was edited manually; suggestions cleared', 'ru-RU': 'Текст изменён вручную; предложения очищены' },
+  'inlineAccept.closeConfirm': { 'zh-CN': '仍有 {n} 处修改未处理。关闭将放弃这些建议，已接受的修改会保留。', 'en-US': 'You still have {n} unhandled changes. Closing discards them; accepted changes are kept.', 'ru-RU': 'Осталось {n} необработанных изменений. Закрытие отменит их; принятые изменения сохранятся.' },
   'editor.saving': { 'zh-CN': '保存中...', 'en-US': 'Saving...', 'ru-RU': 'Сохранение...' },
   // --- MutualReviewReport ---
   'review.overallScore': { 'zh-CN': '综合评分/10', 'en-US': 'Overall Score/10', 'ru-RU': 'Общая оценка/10' },
