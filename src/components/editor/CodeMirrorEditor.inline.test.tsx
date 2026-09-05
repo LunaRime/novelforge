@@ -646,4 +646,107 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     expect(invoke).not.toHaveBeenCalled()
     expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
   })
+
+  // ===== 评审 I-1 修复（round 1）：收尾重入防护（per-session in-flight + 会话身份 end） =====
+
+  it('重入防护：并发/重复 finish 调用只跑一条收尾链——get-pending/mark-discarded/create 各一套（I-1 双击不变量）', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    invoke.mockImplementation(async (...args: unknown[]) => {
+      const ch = String(args[0])
+      if (ch === 'db:revision-get-pending') return [{ id: 1 }, { id: 2 }]
+      if (ch === 'db:revision-next-index') return 3
+      if (ch === 'db:revision-mark-discarded') return { success: true }
+      if (ch === 'db:revision-create') return { success: true, id: 9 }
+      return {}
+    })
+    const filePath = 'vela://draft/31'
+    const doc = '雨下了一整夜。\n天亮了。\n她推开窗。'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession())
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    // 同一会话的两次 finish 并发（双击「完成」的等价形态：两链都在旧链 finally 前启动）
+    await act(async () => {
+      await Promise.all([
+        finishSelectionSession(filePath, doc),
+        finishSelectionSession(filePath, doc),
+      ])
+    })
+    const calls = invoke.mock.calls.map(c => String(c[0]))
+    expect(calls.filter(c => c === 'db:revision-get-pending')).toHaveLength(1) // 第二条链被 in-flight 挡掉
+    expect(calls.filter(c => c === 'db:revision-mark-discarded')).toHaveLength(2)
+    expect(calls.filter(c => c === 'db:revision-create')).toHaveLength(1) // R9：双击也只产生一条 pending refine
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+  })
+
+  it('浮条双击「完成」→ 仅一条收尾链（I-1 UI 路径：按钮重复点击不产生第二链）', async () => {
+    const filePath = 'vela://draft/33'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    // 双击：同一 act tick 内连点两次——第二条点击在旧链 finally 清会话前到达（bar 仍挂载），
+    // 必须被 in-flight 挡掉（若分两次 act，第一次点击的 flush 已把链跑完并卸 bar，非双击形态）
+    act(() => {
+      const btn = findButton(container, 'finish')
+      expect(btn).toBeTruthy()
+      btn?.click()
+      btn?.click()
+    })
+    await flushSessionSync()
+    const calls = vi.mocked(ipc.invoke).mock.calls.map(c => String(c[0]))
+    expect(calls.filter(c => c === 'db:revision-get-pending')).toHaveLength(1)
+    expect(calls.filter(c => c === 'db:revision-create')).toHaveLength(1)
+    expect(storeSession(filePath)).toBeUndefined()
+    expect(container.querySelector('.nf-ia-bar')).toBeFalsy()
+    expect(fieldOf(view).ranges).toHaveLength(0)
+  })
+
+  it('收尾 in-flight 中新会话接管 → 旧链 finally 不清新会话（I-1 会话身份 end）', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    let releasePending!: (value: unknown[]) => void
+    invoke.mockImplementation(async (...args: unknown[]) => {
+      const ch = String(args[0])
+      if (ch === 'db:revision-get-pending') {
+        // 挂起旧链，模拟 IPC round-trip 窗口
+        return new Promise<unknown[]>(res => { releasePending = res })
+      }
+      if (ch === 'db:revision-next-index') return 0
+      if (ch === 'db:revision-create') return { success: true, id: 1 }
+      return {}
+    })
+    const filePath = 'vela://draft/32'
+    const doc = '雨下了一整夜。\n天亮了。'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession()) // sessionId 's1'
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    let chain!: Promise<void>
+    await act(async () => { chain = finishSelectionSession(filePath, doc) }) // 挂起在 get-pending
+    // 窗口期内用户开启新会话（另一轮「应用为修改建议」beginInlineSession 覆盖）
+    const takeover = { ...mkSession(), sessionId: 's2' }
+    await act(async () => { useEditorStore.getState().beginInlineSession(filePath, takeover) })
+    await act(async () => {
+      releasePending([]) // 旧链收尾完成（旧链 finally 执行 endSessionIfSame）
+      await chain
+    })
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession?.sessionId).toBe('s2')
+  })
+
+  it('legacy vela://draft/ch{n}（非数字 id）→ 不建 revision、仅关会话（M-1 防 NaN 入参）', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    const filePath = 'vela://draft/ch5'
+    const doc = 'AAA BBB CCC'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession())
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    await act(async () => { await finishSelectionSession(filePath, doc) })
+    expect(invoke).not.toHaveBeenCalled() // NaN 不进入 db:revision-* 查询
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+  })
 })

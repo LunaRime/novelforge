@@ -72,7 +72,15 @@ function getAIActions(t: (key: string) => string) {
  *      已接受内容以 doc 为准（doc 是唯一真相，undo 后的 doc 即最终采纳文本，决策表不参与正文合成）；
  *   3. 正文落库不在此处（Ctrl+S/自动保存走 DraftEditor.doSave 现状链路 :102-145）。
  * 无 accepted / 非 vela://draft 宿主 → 仅关会话（不落 revision）。任何 ipc 失败不阻塞会话结束。
+ *
+ * 重入防护（Task 5 评审 I-1）：双击「完成」/重复调用不得产生第二条并行收尾链——
+ * ① per-session in-flight flag（selectionFinishInFlight）：async 链入口（首个 await 前）
+ *    登记 sessionId，重复调用直接 return——R9「同一草稿只留一条 pending refine」在双击下也成立；
+ * ② endSession 带会话身份检查（endSessionIfSame）：收尾期间若 tab 已被新会话接管
+ *    （sessionId 变化），旧链迟到的 finally 不再清场（不破坏中途新建会话）。
  */
+const selectionFinishInFlight = new Set<string>()
+
 export async function finishSelectionSession(
   filePath: string | undefined,
   docText: string,
@@ -81,22 +89,38 @@ export async function finishSelectionSession(
   const store = useEditorStore.getState()
   const tab = filePath ? store.tabs.find(t => t.id === filePath || t.filePath === filePath) : undefined
   const session = tab?.inlineSession
-  const endSession = () => {
-    if (tab) useEditorStore.getState().endInlineSession(tab.id)
+  const sessionId = session?.sessionId
+  // ② 会话身份检查：仅当 tab 仍持同一 inlineSession（sessionId 未变）才 end——旧链
+  // finally 迟到时若已开新会话（另一轮「应用为修改建议」）不清场
+  const endSessionIfSame = () => {
+    if (!tab || !sessionId) return
+    const current = useEditorStore.getState().tabs.find(t => t.id === tab.id)?.inlineSession
+    if (current && current.sessionId !== sessionId) return
+    useEditorStore.getState().endInlineSession(tab.id)
   }
-  if (!filePath || !tab || !session) return
+  if (!filePath || !tab || !session || !sessionId) return
   // 非 vela://draft 宿主：完成 = 关会话（Task 4 语义保留；revision 侧链仅 A 入口草稿走）
   if (!filePath.startsWith('vela://draft/')) {
-    endSession()
+    endSessionIfSame()
     return
   }
   const hasAccepted = session.hunks.some(h => h.sub.some(s => session.decisions[s.id] === 'accepted'))
   if (!hasAccepted) {
-    endSession() // 全部拒绝/未决：不落 revision
+    endSessionIfSame() // 全部拒绝/未决：不落 revision
     return
   }
+  const draftIdRaw = filePath.slice('vela://draft/'.length)
+  if (!/^\d+$/.test(draftIdRaw)) {
+    // legacy vela://draft/ch{n}（对齐 DraftEditor.doSave:111 防 NaN 入参）→ 无法定位 DB 草稿：
+    // 仅关会话不落 revision（正文仍在 doc，Ctrl+S 保存链兜底）
+    endSessionIfSame()
+    return
+  }
+  // ① 重入防护：async 链入口登记（同步完成于首个 await 前），重复调用直接 return
+  if (selectionFinishInFlight.has(sessionId)) return
+  selectionFinishInFlight.add(sessionId)
   try {
-    const draftId = parseInt(filePath.slice('vela://draft/'.length), 10)
+    const draftId = parseInt(draftIdRaw, 10)
     const { ipc } = await import('../../services/ipc-client')
     const pending = await ipc.invoke('db:revision-get-pending', draftId) as Array<{ id: number }>
     for (const rev of pending) {
@@ -115,7 +139,8 @@ export async function finishSelectionSession(
     // 不阻塞会话结束（错误经 console 留痕；Toast 反馈接入留给后续）
     console.error('[inline-accept] revision create failed', e)
   } finally {
-    endSession()
+    selectionFinishInFlight.delete(sessionId)
+    endSessionIfSame()
   }
 }
 
