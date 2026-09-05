@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { aggregateDecision } from '../services/diff/hunk-model'
+import type { DiffSession } from '../services/diff/hunk-model'
 
 /** 编辑器 Tab 数据 */
 export interface EditorTab {
@@ -22,6 +24,8 @@ export interface EditorTab {
   chapterDir?: string
   /** 审稿报告存放路径 */
   reportPath?: string
+  /** L1 inline 接受会话（决策态随 tab 持久；正文文本仍走 content） */
+  inlineSession?: DiffSession
 }
 
 interface EditorState {
@@ -52,6 +56,14 @@ interface EditorState {
    * 在保存成功后调用，使警示灯、Tab 圆点消失。
    */
   markTabSaved: (tabId: string) => void
+  /** 开始 inline 会话（A 入口 AI 输出进入会话；同 tab 已有会话则覆盖） */
+  beginInlineSession: (tabId: string, session: DiffSession) => void
+  /** 更新单子 hunk 决策（决策表 + 组聚合单写路径；未知 subHunkId no-op） */
+  updateHunkDecision: (tabId: string, subHunkId: string, decision: 'accepted' | 'rejected') => void
+  /** 重置单子 hunk 决策为 pending（误拒/误选恢复；accepted 后须先 doc 层 undo） */
+  resetHunkDecision: (tabId: string, subHunkId: string) => void
+  /** 结束会话（discard 语义：清 inlineSession；不清 dirty/content——已接受文本保留） */
+  endInlineSession: (tabId: string) => void
   /** 清空所有 Tab */
   clearTabs: () => void
 }
@@ -132,6 +144,67 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   markTabSaved: (tabId) => {
     set((s) => ({
       tabs: s.tabs.map((t) => t.id === tabId ? { ...t, dirty: false } : t),
+    }))
+  },
+
+  // ===== L1 inline 会话（决策态随 tab 持久；doc 文本不进决策表，正文走 content）=====
+
+  beginInlineSession: (tabId, session) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => t.id === tabId ? { ...t, inlineSession: session } : t),
+    }))
+  },
+
+  // 决策表 + 组级 decision 聚合的单写路径（hunk-model aggregateDecision 唯一调用方）
+  updateHunkDecision: (tabId, subHunkId, decision) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId || !t.inlineSession) return t
+        const session = t.inlineSession
+        if (!session.hunks.some(h => h.sub.some(x => x.id === subHunkId))) return t // 未知 subHunkId → no-op
+        const decisions = { ...session.decisions, [subHunkId]: decision }
+        return {
+          ...t,
+          inlineSession: {
+            ...session,
+            decisions,
+            hunks: session.hunks.map(h => h.sub.some(x => x.id === subHunkId)
+              ? { ...h, decision: aggregateDecision(h.sub, decisions) }
+              : h),
+          },
+        }
+      }),
+    }))
+  },
+
+  resetHunkDecision: (tabId, subHunkId) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => {
+        if (t.id !== tabId || !t.inlineSession) return t
+        const session = t.inlineSession
+        // 决策表摘除该 subHunkId（strict noUnusedLocals 下避免 rest-omit 解构未用变量，用显式拷贝）
+        const rest: typeof session.decisions = {}
+        for (const k of Object.keys(session.decisions)) {
+          if (k !== subHunkId) rest[k] = session.decisions[k]
+        }
+        return {
+          ...t,
+          inlineSession: {
+            ...session,
+            decisions: rest,
+            hunks: session.hunks.map(h => h.sub.some(x => x.id === subHunkId)
+              ? { ...h, decision: aggregateDecision(h.sub, rest) }
+              : h),
+          },
+        }
+      }),
+    }))
+  },
+
+  // discard 语义：清 inlineSession（未决建议丢弃）；不清 dirty/content——已接受文本保留走既有保存链路
+  endInlineSession: (tabId) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => t.id === tabId ? { ...t, inlineSession: undefined } : t),
     }))
   },
 

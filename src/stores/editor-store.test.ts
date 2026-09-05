@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useEditorStore } from './editor-store'
+import type { DiffSession } from '../services/diff/hunk-model'
 
 beforeEach(() => {
   // 重置 store 状态
@@ -78,5 +79,87 @@ describe('editor-store closeTab', () => {
     s.openFile({ id: 'p', name: 'P', type: 'config', pinned: true })
     s.closeTab('p')
     expect(useEditorStore.getState().tabs.length).toBe(1)
+  })
+})
+
+describe('editor-store inlineSession（L1 会话层）', () => {
+  const mkSession = (): DiffSession => ({
+    sessionId: 'sess-1',
+    sourceKind: 'selection',
+    baseDocSnapshot: '他走了。她没答话。',
+    hunks: [{
+      id: 'h0', kind: 'MATCH', modText: '他离开了。她没答话。',
+      sub: [
+        { id: 'h0.s0', parentId: 'h0', origRange: { from: 0, to: 4 }, origText: '他走了。', modText: '他离开了。' },
+      ],
+      decision: 'pending',
+    }],
+    decisions: {},
+  })
+
+  it('beginInlineSession：tab 挂会话，content/dirty 不变', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 'vela://draft/1', name: 'd', type: 'chapter', filePath: 'vela://draft/1', content: '他走了。她没答话。' })
+    s.beginInlineSession('vela://draft/1', mkSession())
+    const tab = useEditorStore.getState().tabs.find(t => t.id === 'vela://draft/1')!
+    expect(tab.inlineSession?.sessionId).toBe('sess-1')
+    expect(tab.content).toBe('他走了。她没答话。')
+    expect(tab.dirty).toBeFalsy()
+  })
+
+  it('updateHunkDecision：决策表 + 组聚合同步；全部 accepted → h0.decision=accepted', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 't', name: 'd', type: 'chapter', filePath: 't' })
+    s.beginInlineSession('t', mkSession())
+    s.updateHunkDecision('t', 'h0.s0', 'accepted')
+    let tab = useEditorStore.getState().tabs.find(t => t.id === 't')!
+    expect(tab.inlineSession!.decisions['h0.s0']).toBe('accepted')
+    expect(tab.inlineSession!.hunks[0].decision).toBe('accepted')
+    s.updateHunkDecision('t', 'h0.s0', 'rejected')
+    tab = useEditorStore.getState().tabs.find(t => t.id === 't')!
+    expect(tab.inlineSession!.hunks[0].decision).toBe('rejected')
+  })
+
+  it('updateHunkDecision 未知 subHunkId → no-op（不抛、不改状态）', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 't2', name: 'd', type: 'chapter', filePath: 't2' })
+    s.beginInlineSession('t2', mkSession())
+    expect(() => s.updateHunkDecision('t2', 'ghost', 'accepted')).not.toThrow()
+  })
+
+  it('resetHunkDecision：rejected → pending（误拒恢复）', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 't3', name: 'd', type: 'chapter', filePath: 't3' })
+    s.beginInlineSession('t3', mkSession())
+    s.updateHunkDecision('t3', 'h0.s0', 'rejected')
+    s.resetHunkDecision('t3', 'h0.s0')
+    const tab = useEditorStore.getState().tabs.find(t => t.id === 't3')!
+    expect(tab.inlineSession!.decisions['h0.s0']).toBeUndefined()
+    expect(tab.inlineSession!.hunks[0].decision).toBe('pending')
+  })
+
+  it('endInlineSession（discard 语义）：清会话、保留 content 与 dirty', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 't4', name: 'd', type: 'chapter', filePath: 't4' })
+    s.beginInlineSession('t4', mkSession())
+    s.updateHunkDecision('t4', 'h0.s0', 'rejected')
+    // 模拟接受后 doc 已变（dirty 置位由 updateTabContent 链路负责——此处仅验证 end 不清 dirty）
+    useEditorStore.setState(st => ({ tabs: st.tabs.map(t => t.id === 't4' ? { ...t, content: '新内容', dirty: true } : t) }))
+    s.endInlineSession('t4')
+    const tab = useEditorStore.getState().tabs.find(t => t.id === 't4')!
+    expect(tab.inlineSession).toBeUndefined()
+    expect(tab.content).toBe('新内容')
+    expect(tab.dirty).toBe(true) // 已接受文本须随 dirty 走既有保存链路
+  })
+
+  it('决策态持久：模拟重挂载（begin → 决策 → 重新读回 tab）不丢 decisions', () => {
+    const s = useEditorStore.getState()
+    s.openFile({ id: 't5', name: 'd', type: 'chapter', filePath: 't5' })
+    const session = mkSession()
+    s.beginInlineSession('t5', session)
+    s.updateHunkDecision('t5', 'h0.s0', 'rejected')
+    // 「重挂载」= 从同一 tab 对象重读（EditorArea 单实例切 tab 后 store 即唯一来源）
+    const tab = useEditorStore.getState().tabs.find(t => t.id === 't5')!
+    expect(tab.inlineSession!.decisions['h0.s0']).toBe('rejected')
   })
 })
