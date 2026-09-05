@@ -73,14 +73,37 @@ describe('computeParagraphHunks（抽取回归锁 + offsets 组装，设计 §7�
       }
     }
   })
-  it('1:1 完全重写（相似度 < SIM_THRESH 的 DELETE+INSERT 路径）归一为整段替换，无粘连', () => {
+  it('1:1 完全重写（共享标点 → 相似度 ≥ 阈值走 MATCH 直通）→ 单整段替换形态', () => {
+    // 输入说明：'春天来了。' 与 '狂风卷着沙尘。' 共享「。」→ sim = 2·1/(5+7) ≈ 0.167 ≥
+    // SIM_THRESH(0.15)，DP 直接落 1:1 MATCH，未走 DEL+INS 归一化分支（归一化由下一条零重叠用例直接驱动）。
     const doc = '春天来了。\n\n第二段原样。'
-    const mod = '狂风卷着沙尘。\n\n第二段原样。' // 与原文几乎无字符重叠 → DP DELETE+INSERT
+    const mod = '狂风卷着沙尘。\n\n第二段原样。'
     const hunks = computeParagraphHunks(doc, mod)
     expect(hunks).toHaveLength(1)
     expect(hunks[0].kind).toBe('MATCH')
     expect(hunks[0].modText).toBe('狂风卷着沙尘。')
     expect(doc.slice(hunks[0].origRange.from, hunks[0].origRange.to)).toBe('春天来了。')
+  })
+  it('零字符重叠替换（甲→X，sim=0 → DP 走 INSERT+DELETE 相邻对）→ 归一为单整段替换 MATCH hunk', () => {
+    // 归一化驱动用例（Task 1 评审 Minor 1/2 补测）：DP 回溯对同位置替换恒产出
+    // 「纯 INSERT 对在前、纯 DELETE 对在后」的相邻序列（非 DELETE→INSERT，见模块头
+    // computeParagraphHunks 归一化注释与 exhaustive probe 证据）；实现按整段纯对
+    // 连续 run 合并为单个 MATCH hunk（origRange = 删除段区间，modText = 插入文本，
+    // 防「先删后插」在段界产生粘连文本——设计 R6）。
+    const hunks = computeParagraphHunks('甲\n\n乙', 'X\n\n乙')
+    expect(hunks).toHaveLength(1)
+    expect(hunks[0].kind).toBe('MATCH')
+    expect(hunks[0].origText).toBe('甲')
+    expect(hunks[0].modText).toBe('X')
+    expect('甲\n\n乙'.slice(hunks[0].origRange.from, hunks[0].origRange.to)).toBe('甲')
+  })
+  it('多段零重叠替换（甲、乙 → X、Y）→ 整段纯对 run 归一为单 MATCH hunk（非 4 个零散增删 hunk）', () => {
+    const hunks = computeParagraphHunks('甲\n\n乙\n\n丙', 'X\n\nY\n\n丙')
+    expect(hunks).toHaveLength(1)
+    expect(hunks[0].kind).toBe('MATCH')
+    expect(hunks[0].origText).toBe('甲\n\n乙')
+    expect(hunks[0].modText).toBe('X\n\nY')
+    expect('甲\n\n乙\n\n丙'.slice(hunks[0].origRange.from, hunks[0].origRange.to)).toBe('甲\n\n乙')
   })
   it('buildMergeSegments 与旧 computeSegments 语义一致（same 段无 hunk、hunk 索引连续、段间空行锚保留）', () => {
     const segments = buildMergeSegments('甲\n\n乙', '甲改\n\n乙')

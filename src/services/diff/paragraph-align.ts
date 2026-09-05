@@ -6,7 +6,8 @@
  * - 弹窗路径 buildMergeSegments 与旧 computeSegments/buildSegments 语义逐字节等价
  *   （ThreeWayMerge.test.tsx 弹窗回归 4 条 + 本模块测试共同锁定）；
  * - inline 消费路径 computeParagraphHunks 额外返回带 char offsets 的 AlignedHunk，
- *   并把相邻 DELETE+INSERT 段对归一为整段替换（避免「先删后插」在段界粘连，设计 R6）。
+ *   并把相邻 DELETE+INSERT 段对（同一替换 gap 的纯对 run）归一为整段替换
+ *   （避免「先删后插」在段界粘连，设计 R6）。
  *
  * 迁移纪律：DP 主体（频率预计算 / dp / op 表 / 回溯）逐字保留，仅
  * 1) const enum AlignOp（数值）→ AlignOp string union（inline 会话需 JSON 序列化）；
@@ -301,11 +302,13 @@ export function buildMergeSegments(original: string, modified: string): MergeSeg
  * 计算段级 hunk（offset 已折算回「传入 original 的坐标」）。
  * 与 ThreeWayMerge.computeSegments 同语义（splitFrontmatter 逻辑保留）；
  * 差异 1：返回带 char 偏移的 AlignedHunk（hunk = 段文本有差异的对，kind 取该对的对齐操作）；
- * 差异 2（新增归一化，inline 消费用）：相邻且连续的「DELETE 段对 + INSERT 段对」
- *   （1:1 相似度 < SIM_THRESH 时 DP 会走 DELETE+INSERT 而非 MATCH，见 DP 打分）
- *   合并为单个整段替换 hunk（origRange = [删除段首, 删除段末]、kind='MATCH'），
- *   避免 inline 逐 hunk 接受时「先删后插」在段界产生粘连文本（设计 R6 同源防护）。
- *   弹窗路径不受影响——弹窗用 buildMergeSegments，保持旧的两段两 hunk 形态。
+ * 差异 2（新增归一化，inline 消费用）：同一替换 gap 的相邻纯 INSERT/DELETE 段对
+ *   （1:1 相似度 < SIM_THRESH 时 DP 走 INSERT+DELETE 而非 MATCH，见 DP 打分与
+ *   :347-380 run 判定注释——回溯实际产出 INSERT 在前、DELETE 在后的相邻序）组成
+ *   连续 run 时合并为单个整段替换 hunk（origRange = [删除段首, 删除段末]、
+ *   kind='MATCH'），避免 inline 逐 hunk 接受时「先删后插」在段界产生粘连文本
+ *   （设计 R6 同源防护）。弹窗路径不受影响——弹窗用 buildMergeSegments，保持旧的
+ *   两段两 hunk 形态。
  */
 export function computeParagraphHunks(original: string, modified: string): AlignedHunk[] {
   const { body: oBody, offset: oOff } = splitFrontmatter(original)
@@ -350,7 +353,47 @@ export function computeParagraphHunks(original: string, modified: string): Align
       pair.origIdx.length === pair.modIdx.length &&
       pair.origIdx.every((oi, k) => oParas[oi].text === mParas[pair.modIdx[k]].text)
     if (same) continue // 完全相同的段对 → 无 hunk
-    // 归一化：DELETE 后紧跟 INSERT → 合成整段替换（kind MATCH），跳过下一对
+    const isInsert = pair.origIdx.length === 0 && pair.modIdx.length > 0
+    const isDelete = pair.origIdx.length > 0 && pair.modIdx.length === 0
+    if (isInsert || isDelete) {
+      // 归一化：同一替换 gap 的相邻纯 INSERT/DELETE 对构成连续 run；run 含增、删两侧时
+      // 合并为单个整段替换 MATCH hunk（origRange = 被删段区间、origText/modText = 两侧文本），
+      // 避免 inline 逐 hunk 接受时「先删后插」在段界产生粘连文本（设计 R6 同源防护）。
+      // 方向说明（实证）：DP 回溯（:218-239）对同位置替换产出的是「纯 INSERT 对在前、
+      // 纯 DELETE 对在后」的相邻序列——1:1 相似度 < SIM_THRESH 时 DP 走 INSERT+DELETE
+      // 而非 MATCH（见 DP 打分），且对角格平局按 DELETE 落子使回溯先补 INSERT 再删；
+      // 对 ≤4 段全空间 exhaustive 枚举（28 万余 doc 对）未出现 DELETE→INSERT 相邻序，
+      // 故按 run 整体判定、不假设方向（两种顺序都能正确合并）。
+      let q = p
+      let hasIns = false
+      let hasDel = false
+      while (q < pairs.length) {
+        const pp = pairs[q]
+        if (pp.origIdx.length === 0 && pp.modIdx.length > 0) { hasIns = true; q++ }
+        else if (pp.origIdx.length > 0 && pp.modIdx.length === 0) { hasDel = true; q++ }
+        else break
+      }
+      if (hasIns && hasDel) {
+        const insIdx: number[] = []
+        const delIdx: number[] = []
+        for (let k = p; k < q; k++) {
+          const pp = pairs[k]
+          if (pp.origIdx.length === 0) insIdx.push(...pp.modIdx)
+          else delIdx.push(...pp.origIdx)
+        }
+        const from = oParas[delIdx[0]].start + oOff
+        const to = oParas[delIdx[delIdx.length - 1]].end + oOff
+        out.push({
+          id: `h${seq++}`,
+          kind: 'MATCH',
+          origRange: { from, to },
+          origText: paraTexts(oParas, delIdx),
+          modText: paraTexts(mParas, insIdx),
+        })
+        p = q - 1 // 跳过整个 run（纯增/纯删 run 无两侧 → 落 pushHunk，行为不变）
+        continue
+      }
+    }
     const opKind = ((): AlignOp => {
       if (pair.origIdx.length === 0) return 'INSERT'
       if (pair.modIdx.length === 0) return 'DELETE'
@@ -360,21 +403,6 @@ export function computeParagraphHunks(original: string, modified: string): Align
       if (pair.modIdx.length === 3) return 'SPLIT_1_3'
       return 'MATCH'
     })()
-    const next = pairs[p + 1]
-    if (opKind === 'DELETE' && next && next.origIdx.length === 0) {
-      const insertPair: AlignedPair = next
-      const from = oParas[pair.origIdx[0]].start + oOff
-      const to = oParas[pair.origIdx[pair.origIdx.length - 1]].end + oOff
-      out.push({
-        id: `h${seq++}`,
-        kind: 'MATCH',
-        origRange: { from, to },
-        origText: paraTexts(oParas, pair.origIdx),
-        modText: paraTexts(mParas, insertPair.modIdx),
-      })
-      p++ // 跳过 INSERT 对
-      continue
-    }
     pushHunk(pair, opKind)
   }
   return out
