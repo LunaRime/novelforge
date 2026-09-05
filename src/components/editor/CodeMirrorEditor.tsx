@@ -10,6 +10,7 @@ import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { computeTextStats } from '../../services/text-stats'
+import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
 import { useEditorStore } from '../../stores/editor-store'
 import {
@@ -61,6 +62,63 @@ function getAIActions(t: (key: string) => string) {
   return AI_ACTION_KEYS.map(k => ({ key: k, label: t(labelKeys[k]), color: colors[k], prompt: prompts[k] }))
 }
 
+/* eslint-disable react-refresh/only-export-components */
+/**
+ * A 收尾落库（Task 5，设计 §4.5 A 来源；白盒导出供 CodeMirrorEditor.inline.test 断言调用序列）。
+ * 语义：会话「完成」（浮条 onFinish）→ 仅 vela://draft 且会话有 accepted 时创建 refine revision：
+ *   1. R9 修复（现状气泡无 pending 清理 → 反复累积缺陷）：先按 refine-draft.command.ts:88-92
+ *      语义清理该草稿既有 pending refine revision，保证同一草稿只留最新一条；
+ *   2. db:revision-create（content = 会话最终 doc 实况、userPrompt 带动作标签）——
+ *      已接受内容以 doc 为准（doc 是唯一真相，undo 后的 doc 即最终采纳文本，决策表不参与正文合成）；
+ *   3. 正文落库不在此处（Ctrl+S/自动保存走 DraftEditor.doSave 现状链路 :102-145）。
+ * 无 accepted / 非 vela://draft 宿主 → 仅关会话（不落 revision）。任何 ipc 失败不阻塞会话结束。
+ */
+export async function finishSelectionSession(
+  filePath: string | undefined,
+  docText: string,
+  actionLabel?: string,
+): Promise<void> {
+  const store = useEditorStore.getState()
+  const tab = filePath ? store.tabs.find(t => t.id === filePath || t.filePath === filePath) : undefined
+  const session = tab?.inlineSession
+  const endSession = () => {
+    if (tab) useEditorStore.getState().endInlineSession(tab.id)
+  }
+  if (!filePath || !tab || !session) return
+  // 非 vela://draft 宿主：完成 = 关会话（Task 4 语义保留；revision 侧链仅 A 入口草稿走）
+  if (!filePath.startsWith('vela://draft/')) {
+    endSession()
+    return
+  }
+  const hasAccepted = session.hunks.some(h => h.sub.some(s => session.decisions[s.id] === 'accepted'))
+  if (!hasAccepted) {
+    endSession() // 全部拒绝/未决：不落 revision
+    return
+  }
+  try {
+    const draftId = parseInt(filePath.slice('vela://draft/'.length), 10)
+    const { ipc } = await import('../../services/ipc-client')
+    const pending = await ipc.invoke('db:revision-get-pending', draftId) as Array<{ id: number }>
+    for (const rev of pending) {
+      await ipc.invoke('db:revision-mark-discarded', rev.id)
+    }
+    const nextIdx = await ipc.invoke('db:revision-next-index', draftId) as number
+    await ipc.invoke('db:revision-create', {
+      baseDraftId: draftId,
+      revisionIndex: nextIdx,
+      revisionType: 'refine',
+      userPrompt: actionLabel ? `气泡菜单 AI — ${actionLabel}` : '气泡菜单 AI 改写',
+      content: docText,
+      wordCount: computeTextStats(docText).novelWordCount,
+    })
+  } catch (e) {
+    // 不阻塞会话结束（错误经 console 留痕；Toast 反馈接入留给后续）
+    console.error('[inline-accept] revision create failed', e)
+  } finally {
+    endSession()
+  }
+}
+
 export default function CodeMirrorEditor({
   content,
   filePath,
@@ -99,6 +157,9 @@ export default function CodeMirrorEditor({
   const activeSubId = activeRange && inlineSession
     ? (inlineSession.hunks[activeRange.hunkIdx]?.sub[activeRange.subIdx]?.id ?? null)
     : null
+  // 气泡 AI 流式动作标签（A 入口会话收尾 revision.userPrompt 标注「气泡菜单 AI — {动作}」用；
+  // 声明须先于 finishSession——其 useCallback 依赖数组在 render 期即时求值）
+  const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
 
   // @uiw/react-codemirror 在自身 useLayoutEffect + setState 后才创建 EditorView 并经 ref 暴露；
   // 首帧 effect 里 editorRef.current?.view 尚不存在 → 用 onCreateEditor 锁存实例触发重渲染，
@@ -162,16 +223,23 @@ export default function CodeMirrorEditor({
     }
   }, [])
 
-  /** 完成：默认 endInlineSession（Task 5 在 DraftEditor 层接管 revision 落库） */
+  /** 完成：会话收尾——vela://draft 且有 accepted → finishSelectionSession 落 refine revision
+   *  （Task 5，验收 4）；非草稿宿主仅关会话。doc 实况经 cmViewRef 取（渲染期不访问 ref）。
+   *  动作标签直接读 activeAIAction state（A 入口会话由某次 AI 动作进入，标签至完成保持不变；
+   *  v1 后动作标签定格进会话元数据留给 v1.1）。 */
   const finishSession = useCallback(() => {
     const tabId = filePathRef.current
-    if (!tabId) return
-    useEditorStore.getState().endInlineSession(tabId)
+    const view = cmViewRef.current
+    const session = inlineSessionRef.current
     setActiveRange(null)
     setPopoverPos(null)
-  }, [])
+    if (!tabId) return
+    const docText = view ? view.state.doc.toString() : (session?.baseDocSnapshot ?? '')
+    void finishSelectionSession(tabId, docText, activeAIAction ?? undefined)
+  }, [activeAIAction])
 
-  /** 关闭：仍有未决修改 → 二次确认（复用 ui/Confirm 模式，R5） */
+  /** 关闭：仍有未决修改 → 二次确认；确认后丢弃未决建议并关会话——不落 revision
+   *  （discard 语义，设计 §4.5；已接受文本保留在 doc，走 Ctrl+S 保存链） */
   const closeSession = useCallback(async () => {
     const tabId = filePathRef.current
     const session = inlineSessionRef.current
@@ -187,8 +255,10 @@ export default function CodeMirrorEditor({
       const ok = await confirm(t('inlineAccept.closeConfirm').replace('{n}', String(unhandled)))
       if (!ok) return
     }
-    finishSession()
-  }, [t, finishSession])
+    useEditorStore.getState().endInlineSession(tabId)
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [t])
 
   /** 点击 pending 区段 → 打开接受浮层（复用坐标基建思路：selection head + coordsAtPos） */
   const handleDocClick = useCallback(() => {
@@ -292,7 +362,6 @@ export default function CodeMirrorEditor({
   // （同 workflow-store 教训）→ 50ms 时间间隔硬约束，纯时间驱动
   const aiBufferRef = useRef('')
   const aiLastFlushRef = useRef(0)
-  const [activeAIAction, setActiveAIAction] = useState<string | null>(null)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
   // 偏好记忆：AI 接受快照（检测用户后续手动修改 → 记录替换对）
@@ -645,38 +714,38 @@ export default function CodeMirrorEditor({
     }
   }
 
+  /** A 入口（Task 5）：AI 流式结果「应用为修改建议」→ 进入 inline 会话，不再整段替换。
+   *  - buildSelectionSession 选区级对齐：AI 输出与选区等价 → toast 提示并清态（无改动不进会话）；
+   *  - 进会话后 doc 保持原样（验收 1/2——原文不变、pending 区装饰由 Task 4 浮层接管）；
+   *  - revision 落库移至会话收尾 finishSelectionSession（验收 4：恰一条 + R9 旧 pending 清理）；
+   *  - 偏好记忆快照（aiAcceptedRef 旧整段替换链路）在新路径不适用：detectPreferenceChange 保留
+   *    但不再写快照（接受在会话内逐句发生），偏好记忆链留 v1.1 评估。 */
   const handleAcceptAI = async () => {
     if (selectionRange && aiResult && editorRef.current?.view) {
       const view = editorRef.current.view
-
-      // revision 跟踪：如果 filePath 指向数据库草稿，创建 revision 记录
-      if (filePath?.startsWith('vela://draft/')) {
-        try {
-          const draftId = parseInt(filePath.replace('vela://draft/', ''))
-          const { ipc } = await import('../../services/ipc-client')
-          const nextIdx = await ipc.invoke('db:revision-next-index', draftId) as number
-          await ipc.invoke('db:revision-create', {
-            baseDraftId: draftId,
-            revisionIndex: nextIdx,
-            revisionType: 'refine',
-            userPrompt: activeAIAction ? `气泡菜单 AI — ${activeAIAction}` : '气泡菜单 AI 改写',
-            content: aiResult,
-            wordCount: computeTextStats(aiResult).novelWordCount,
-          })
-        } catch { /* revision 创建失败不阻塞替换 */ }
+      // v1 仅 DraftEditor（必带 filePath）接入；无 filePath 的宿主无法挂会话 → toast 拒绝
+      // （不回退旧整段替换——L1 已把入口语义改为「建议先行」，设计 §4.7 范围）
+      if (!filePath) {
+        const { toast } = await import('../ui/Toast')
+        toast.error(t('error.unknownError'))
+        handleRejectAI()
+        return
       }
-
-      // 替换文本 + 光标定位 + 滚动到替换位置
-      view.dispatch({
-        changes: { from: selectionRange.from, to: selectionRange.to, insert: aiResult },
-        selection: { anchor: selectionRange.from },
-        scrollIntoView: true,
-      })
-      // 偏好记忆快照：记录 AI 接受内容，供后续检测用户手动修改
-      aiAcceptedRef.current = { aiText: aiResult }
+      const session = buildSelectionSession(
+        view.state.doc.toString(), selectionRange.from, selectionRange.to, aiResult,
+      )
+      if (!session) {
+        // AI 输出与选区等价（无改动可进会话——Task 1 reviewer 归一化零重叠语义）
+        const { toast } = await import('../ui/Toast')
+        toast.info(t('inlineAccept.noChanges'))
+        handleRejectAI()
+        return
+      }
+      // 进会话：doc 保持原样（验收 1/2）——会话 action 标签由 finishSession 读 activeAIAction
+      useEditorStore.getState().beginInlineSession(filePath, session)
+      setAiResult(null)
+      setBubbleOpen(false)
     }
-    setAiResult(null)
-    setBubbleOpen(false)
   }
 
   const handleRejectAI = () => {
@@ -804,7 +873,7 @@ export default function CodeMirrorEditor({
                   onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
                   disabled={aiResult === ''}
                   onClick={handleAcceptAI}
-                >{t('editor.replace')}</button>
+                >{t('inlineAccept.applyAsSuggestion')}</button>
               </div>
             </div>
           ) : (

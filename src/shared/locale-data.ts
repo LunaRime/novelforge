@@ -2133,6 +2133,8 @@ export const UI_TEXTS_DATA = {
   'inlineAccept.close': { 'zh-CN': '关闭', 'en-US': 'Close', 'ru-RU': 'Закрыть' },
   'inlineAccept.manualEditExit': { 'zh-CN': '改动已被手动修改，修改建议已清除', 'en-US': 'Text was edited manually; suggestions cleared', 'ru-RU': 'Текст изменён вручную; предложения очищены' },
   'inlineAccept.closeConfirm': { 'zh-CN': '仍有 {n} 处修改未处理。关闭将放弃这些建议，已接受的修改会保留。', 'en-US': 'You still have {n} unhandled changes. Closing discards them; accepted changes are kept.', 'ru-RU': 'Осталось {n} необработанных изменений. Закрытие отменит их; принятые изменения сохранятся.' },
+  'inlineAccept.applyAsSuggestion': { 'zh-CN': '应用为修改建议', 'en-US': 'Apply as suggestion', 'ru-RU': 'Применить как предложение' },
+  'inlineAccept.noChanges': { 'zh-CN': 'AI 未改动选中文本', 'en-US': 'AI made no changes to the selection', 'ru-RU': 'ИИ не изменил выделенный текст' },
   'editor.saving': { 'zh-CN': '保存中...', 'en-US': 'Saving...', 'ru-RU': 'Сохранение...' },
   // --- MutualReviewReport ---
   'review.overallScore': { 'zh-CN': '综合评分/10', 'en-US': 'Overall Score/10', 'ru-RU': 'Общая оценка/10' },

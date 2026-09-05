@@ -23,6 +23,7 @@ import { undo } from '@codemirror/commands'
 import CodeMirrorEditor from './CodeMirrorEditor'
 import { useEditorStore } from '../../stores/editor-store'
 import type { DiffSession, SubHunk } from '../../services/diff/hunk-model'
+import { ipc } from '../../services/ipc-client'
 import {
   INLINE_ACCEPT_EVENT,
   dispatchAcceptChange,
@@ -32,6 +33,26 @@ import {
   inlineAcceptField,
   setHunkRanges,
 } from './codemirror-inline-accept'
+
+// Task 5 A 收尾链白盒断言：finishSelectionSession 经 ipc-client 落 revision。
+// 顶层 mock（同 CodeMirrorEditor.test 无 IPC 需求）：既有用例点击「完成」会触发
+// finish 链，默认返回 []/{}/0 使清理循环空转、revision-create 静默成功。
+vi.mock('../../services/ipc-client', () => {
+  const fallback = async (ch: string) => {
+    if (ch === 'db:revision-get-pending') return []
+    if (ch === 'db:revision-next-index') return 0
+    return {}
+  }
+  return {
+    ipc: {
+      invoke: vi.fn(fallback),
+      on: vi.fn(() => () => {}),
+      once: vi.fn(),
+      send: vi.fn(),
+      isElectron: true,
+    },
+  }
+})
 
 // jsdom 未实现 scrollTo / ResizeObserver / Range 几何（与 CodeMirrorEditor.test 相同防护）
 beforeAll(() => {
@@ -535,11 +556,94 @@ describe('inline 接受浮层与浮条交互', () => {
     act(() => { undo(view) })
     expect(view.state.doc.toString()).toBe(ORIG)
 
-    // 完成 → endInlineSession：浮条/装饰消失、field 清空（已接受文本保留在 doc）
+    // 完成 → finishSelectionSession（Task 5：async 收尾链）+ endInlineSession：
+    // 浮条/装饰消失、field 清空（已接受文本保留在 doc）。ipc 顶层 mock 使链同步落定。
     clickButton(container, 'finish')
+    await flushSessionSync()
     expect(storeSession(filePath)).toBeUndefined()
     expect(container.querySelector('.nf-ia-bar')).toBeFalsy()
     expect(fieldOf(view).ranges).toHaveLength(0)
     expect(view.state.doc.toString()).toBe(ORIG)
+  })
+})
+
+// ===== A 入口收尾落库链（Task 5）：finishSelectionSession 白盒（mock ipc-client） =====
+// A 入口可测契约拆两层（brief Step 2）：① buildSelectionSession 纯函数全测在
+// selection-session.test.ts；② 收尾落库链在此白盒断言调用序列。「点击流式按钮进入
+// 会话」依赖真实 LLM/状态机，jsdom 不可达——由 Task 6 人工 QA（验收 1/2）覆盖。
+
+describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
+  const resetInvoke = () => {
+    const invoke = vi.mocked(ipc.invoke)
+    invoke.mockClear()
+    invoke.mockImplementation(async (...args: unknown[]) => {
+      const ch = String(args[0])
+      if (ch === 'db:revision-get-pending') return []
+      if (ch === 'db:revision-next-index') return 0
+      return {}
+    })
+  }
+
+  beforeEach(resetInvoke)
+
+  it('A 收尾：完成会话 → 旧 pending 清理 + revision-create 恰一次；正文不在此落库（验收 4）', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    invoke.mockImplementation(async (...args: unknown[]) => {
+      const ch = String(args[0])
+      if (ch === 'db:revision-get-pending') return [{ id: 1 }, { id: 2 }] // 两条旧 pending（R9 要清理）
+      if (ch === 'db:revision-next-index') return 3
+      if (ch === 'db:revision-mark-discarded') return { success: true }
+      if (ch === 'db:revision-create') return { success: true, id: 9 }
+      return {}
+    })
+    const filePath = 'vela://draft/12'
+    const doc = '雨下了一整夜。\n天亮了。\n她推开窗。'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession())
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    // finishSelectionSession 以导出纯异步函数白盒调用（组件浮条 onFinish 接线同一函数）
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    await act(async () => {
+      await finishSelectionSession(filePath, useEditorStore.getState().tabs.find(t => t.id === filePath)!.content!)
+    })
+    const calls = invoke.mock.calls.map(c => String(c[0]))
+    expect(calls.filter(c => c === 'db:revision-mark-discarded')).toHaveLength(2)
+    expect(calls.filter(c => c === 'db:revision-create')).toHaveLength(1)
+    expect(calls.indexOf('db:revision-mark-discarded')).toBeLessThan(calls.indexOf('db:revision-create'))
+    const createArg = invoke.mock.calls.find(c => String(c[0]) === 'db:revision-create')![1] as { content: string; revisionType: string }
+    expect(createArg.content).toBe(doc) // content = 会话最终 doc 实况
+    expect(createArg.revisionType).toBe('refine')
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+  })
+
+  it('无接受（全部 pending/拒绝）→ 不落 revision、会话结束（拒绝无 revision）', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    const filePath = 'vela://draft/13'
+    const doc = '雨下了一整夜。\n天亮了。'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession())
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'rejected')
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'rejected')
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s2', 'rejected')
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    await act(async () => { await finishSelectionSession(filePath, doc) })
+    const calls = invoke.mock.calls.map(c => String(c[0]))
+    expect(calls.some(c => c.startsWith('db:revision-'))).toBe(false)
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+  })
+
+  it('非 vela://draft 宿主完成 → 仅关会话，零 db:revision 侧链', async () => {
+    const invoke = vi.mocked(ipc.invoke)
+    const filePath = '/mnt/notes/raw.md'
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    useEditorStore.getState().openFile({ id: filePath, name: 'raw', type: 'chapter', filePath, content: ORIG })
+    useEditorStore.getState().beginInlineSession(filePath, mkSession())
+    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    const { finishSelectionSession } = await import('./CodeMirrorEditor')
+    await act(async () => { await finishSelectionSession(filePath, 'AAA1 BBB CCC') })
+    expect(invoke).not.toHaveBeenCalled()
+    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
   })
 })
