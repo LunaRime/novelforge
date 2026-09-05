@@ -377,6 +377,44 @@ describe('inline 会话接线（store 注入）', () => {
     expect(fieldOf(view).ranges).toHaveLength(0)
   })
 
+  it('程序化改动触碰 pending 区（无 userEvent：Bold/缩进/气泡替换类）→ 退出会话并清空（评审 I1）', async () => {
+    const filePath = 'vela://draft/12b'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+    expect(storeSession(filePath)).toBeTruthy()
+    expect(fieldOf(view).ranges.length).toBe(3)
+
+    // 模拟 Bold：无 userEvent 的程序化 dispatch 包裹整个 pending 段 'AAA'（0..3）
+    // （与 CodeMirrorEditor 加粗按钮同一形态——changeFilter 只拦输入类 userEvent，此改动会真的落 doc）
+    act(() => {
+      view.dispatch({ changes: { from: 0, to: 3, insert: '**AAA**' } })
+    })
+    expect(view.state.doc.toString()).toBe('**AAA** BBB CCC') // Bold 确实生效
+    expect(storeSession(filePath)).toBeUndefined()            // 触碰 pending 区 → 会话退出（防装饰漂移）
+    await flushSessionSync()
+    expect(container.querySelector('.nf-ia-bar')).toBeFalsy()
+    expect(fieldOf(view).ranges).toHaveLength(0)              // 装饰/冻结清空
+  })
+
+  it('程序化改动在 pending 区之外（无 userEvent）→ 不退出（区间触碰判定只关心 pending 内容）', async () => {
+    const filePath = 'vela://draft/12c'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+    expect(storeSession(filePath)).toBeTruthy()
+
+    // 模拟在空白/锚句间隙（pos 3，'AAA' 与 'BBB' 之间）无 userEvent 插入：不触碰任何 pending 区间
+    act(() => {
+      view.dispatch({ changes: { from: 3, to: 3, insert: '-' } })
+    })
+    expect(view.state.doc.toString()).toBe('AAA- BBB CCC')
+    expect(storeSession(filePath)).toBeTruthy() // 会话保留（field 随 doc 平移；浮层仍可裁决）
+    expect(container.querySelector('.nf-ia-bar')).toBeTruthy()
+  })
+
   it('撤销自身接受不退出会话（undo/redo 无输入 userEvent，不触发手动编辑退出）', async () => {
     const filePath = 'vela://draft/13'
     seedSession(filePath)

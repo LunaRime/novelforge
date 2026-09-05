@@ -65,24 +65,37 @@ export function isManualUserEdit(userEvent: string | undefined): boolean {
   return !!userEvent && MANUAL_INPUT_EVENT.test(userEvent)
 }
 
-/** 只拦「输入类 userEvent」落在 pending/rejected 区间内的改动；其余放行（语义见模块头） */
+/**
+ * 事务改动区间是否与给定 ranges 相交（pending/rejected 区内容被触碰）。
+ * changeFilter（无 view）与组件 handleUpdate（I1：无 userEvent 的程序化改动——Bold/Tab/
+ * 气泡替换——落在区间内也要退出会话）共用同一判定；iterChanges 需回调形式，返回 false 提前中止。
+ */
+export function changesIntersectRanges(tr: Transaction, ranges: InlineHunkRange[]): boolean {
+  if (ranges.length === 0) return false
+  let hit = false
+  tr.changes.iterChanges((fromA, toA) => {
+    if (ranges.some(r => fromA < r.to && toA > r.from)) {
+      hit = true
+      return false
+    }
+    return undefined
+  })
+  return hit
+}
+
+/**
+ * 只拦「输入类 userEvent」落在 pending/rejected 区间内的改动；其余放行。
+ * 语义（I1 复审后保持）：changeFilter 负责把真实输入的区间内改动拦在 doc 外；
+ * 无 userEvent 的程序化改动（Bold/Tab/气泡替换等）不由 filter 拦（doc 层面它们会
+ * 真的改写区间）——漂移防护由组件 handleUpdate 的「改动触碰区间 → 退出会话」兜底。
+ */
 const freezeChange: (tr: Transaction) => boolean = (tr) => {
   const userEvent = tr.annotation(Transaction.userEvent)
   if (userEvent === INLINE_ACCEPT_EVENT) return true // 自身接受事务（替换 pending 区间）不拦
   if (!isManualUserEdit(userEvent)) return true // undo/redo/外部同步/程序化事务不拦
   // changeFilter 只收 Transaction（无 view）：区间状态取 startState（field 与 facet 同配置常驻）
   const { ranges } = tr.startState.field(inlineAcceptField)
-  if (ranges.length === 0) return true
-  // 相交即拦（pending/rejected 区冻结）；iterChanges 需回调形式，返回 false 提前中止
-  let blocked = false
-  tr.changes.iterChanges((fromA, toA) => {
-    if (ranges.some(r => fromA < r.to && toA > r.from)) {
-      blocked = true
-      return false
-    }
-    return undefined
-  })
-  return !blocked
+  return !changesIntersectRanges(tr, ranges)
 }
 
 export const inlineAcceptField = StateField.define<{ ranges: InlineHunkRange[]; deco: DecorationSet }>({

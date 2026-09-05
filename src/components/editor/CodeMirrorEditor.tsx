@@ -14,6 +14,7 @@ import { extractPreferencePair, recordPreference } from '../../services/preferen
 import { useEditorStore } from '../../stores/editor-store'
 import {
   INLINE_ACCEPT_EVENT,
+  changesIntersectRanges,
   deriveRangesFromDoc,
   dispatchAcceptChange,
   findPendingRangeAt,
@@ -127,7 +128,9 @@ export default function CodeMirrorEditor({
 
   /** 单子 hunk 接受 = 唯一 doc 改写路径：带递增 time + INLINE_ACCEPT_EVENT 的独立事务。
    *  只接受 pending 子句：accepted 已入 doc（区间不在 field）、rejected 属已裁决（v1 恢复走
-   *  resetHunkDecision，不在此路径复活）。view 在事件处理器内经 cmViewRef 取（渲染期不访问） */
+   *  resetHunkDecision，不在此路径复活）。view 在事件处理器内经 cmViewRef 取（渲染期不访问）。
+   *  接受后同步重推 ranges：关闭「dispatch → React effect」间隙——立即 Ctrl+Z 的还原区间
+   *  已不在 field（I1：防 undo 被触碰区间判定误判成漂移退出） */
   const applyAcceptSub = useCallback((sub: SubHunk) => {
     const view = cmViewRef.current
     const tabId = filePathRef.current
@@ -137,6 +140,10 @@ export default function CodeMirrorEditor({
     if (!r || r.decision !== 'pending') return
     dispatchAcceptChange(view, r, sub.modText, nextAcceptTime())
     useEditorStore.getState().updateHunkDecision(tabId, sub.id, 'accepted')
+    const session = useEditorStore.getState().tabs.find(tab => tab.id === tabId)?.inlineSession
+    if (session) {
+      view.dispatch({ effects: setHunkRanges.of(deriveRangesFromDoc(session, view.state.doc.toString())) })
+    }
   }, [nextAcceptTime])
 
   /** 按序逐个接受（每子句独立事务 → 多步 undo 逐句还原，裁决 4） */
@@ -326,21 +333,29 @@ export default function CodeMirrorEditor({
 
   const handleUpdate = useCallback((v: ViewUpdate) => {
     if (v.docChanged) {
-      // L1 inline 会话（R6 简化）：真实 CM 输入（input.*/delete.*/move.*/indent.* userEvent）
-      // 到达 doc = 手动编辑。pending/rejected 区内输入已被 changeFilter 拦截，
-      // 能到达这里的必然在区间外 → 偏移基准失效 → 自动退出会话 + 提示。
-      // 自身接受事务（INLINE_ACCEPT_EVENT）、外部同步（addToHistory:false）、
-      // undo/redo（history 事务无输入类 userEvent）均不触发退出。
+      // L1 inline 会话（R6 + 评审 I1）：任何「非会话知情」的 doc 改动都视为漂移并退出会话——
+      // (a) 真实 CM 输入（input.*/delete.*/move.*/indent.* userEvent；区间内输入已被
+      //     changeFilter 拦截，能到 doc 的必在区间外，偏移基准同样失效）；
+      // (b) 无 userEvent 的程序化改动（Bold/Tab/气泡替换等）若 changes 触碰当前
+      //     pending/rejected 区间——读该事务 startState 的 field（改动后映射可能已使区间
+      //     塌缩，无法用 v.state 判定）。
+      // 豁免：自身接受（INLINE_ACCEPT_EVENT）、外部同步（addToHistory:false）、undo/redo
+      // （history 事务无输入类 userEvent，且其还原的已接受区间在接受后已被同步重推清除，
+      //  不触碰剩余 pending/rejected → 不误判退出——「撤销自身接受不退出」用例锁定）。
       const session = inlineSessionRef.current
       if (session && filePathRef.current) {
         const tr = v.transactions[v.transactions.length - 1]
         const userEvent = tr?.annotation(Transaction.userEvent)
         const isExternal = tr?.annotation(Transaction.addToHistory) === false
-        if (userEvent !== INLINE_ACCEPT_EVENT && !isExternal && isManualUserEdit(userEvent)) {
-          useEditorStore.getState().endInlineSession(filePathRef.current)
-          void import('../ui/Toast').then(({ toast }) => {
-            toast.info(t('inlineAccept.manualEditExit'))
-          })
+        if (tr && userEvent !== INLINE_ACCEPT_EVENT && !isExternal) {
+          const preRanges = tr.startState.field(inlineAcceptField).ranges
+          const drift = isManualUserEdit(userEvent) || changesIntersectRanges(tr, preRanges)
+          if (drift) {
+            useEditorStore.getState().endInlineSession(filePathRef.current)
+            void import('../ui/Toast').then(({ toast }) => {
+              toast.info(t('inlineAccept.manualEditExit'))
+            })
+          }
         }
       }
 
