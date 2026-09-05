@@ -170,3 +170,15 @@ export function findPendingRangeAt(view: EditorView, pos: number): InlineHunkRan
   const r = ranges.find(x => pos >= x.from && pos < x.to)
   return r && r.decision === 'pending' ? r : null
 }
+
+/**
+ * 浮层命中（final review I-1 误拒恢复入口）：pos 落在「未接受」区间内
+ * （pending 或 rejected，半开 [from, to)）。accepted 已替换入 doc、不在 field；
+ * rejected 划除段原文仍在 doc——点开浮层可经「恢复为待定」撤销误拒。
+ * findPendingRangeAt 保持 pending-only 语义（既有调用方/测试不变）。
+ */
+export function findRestorableRangeAt(view: EditorView, pos: number): InlineHunkRange | null {
+  const { ranges } = view.state.field(inlineAcceptField)
+  const r = ranges.find(x => pos >= x.from && pos < x.to)
+  return r && (r.decision === 'pending' || r.decision === 'rejected') ? r : null
+}

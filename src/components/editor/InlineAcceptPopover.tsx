@@ -1,9 +1,11 @@
 /**
  * InlineAcceptPopover — L1 inline 接受浮层（Task 4）
  *
- * 点击 pending 区段打开：展示「第 n/m 处改动」+ 句级子 hunk 勾选列表
+ * 点击未接受区段（pending 或 rejected）打开：展示「第 n/m 处改动」+ 句级子 hunk 勾选列表
  * （每行 改前[划除] / 改后[高亮] 预览，checkbox 勾选 = 待接受），
  * 底部动作：接受选中 / 整体接受 / 拒绝 / 关闭。
+ * final review I-1（误拒恢复）：rejected 子句行勾选禁用（已裁决不再复裁），但行内提供
+ * 「恢复为待定」动作——onRestoreSub → resetHunkDecision，误拒会话内可逆。
  * 纯展示 + 回调：doc 事务与 store 决策由 CodeMirrorEditor 统一执行。
  */
 import { useState } from 'react'
@@ -21,6 +23,8 @@ export interface InlineAcceptPopoverProps {
   onAcceptWhole: () => void
   onReject: () => void
   onClose: () => void
+  /** 恢复误拒子句为待定（rejected 行行动作，final review I-1） */
+  onRestoreSub: (subId: string) => void
 }
 
 /** 浮层小按钮（内联样式，仅 CSS 变量色） */
@@ -58,7 +62,7 @@ function PopoverButton({
 }
 
 export function InlineAcceptPopover({
-  session, hunkIdx, activeSubId, position, onAcceptSelected, onAcceptWhole, onReject, onClose,
+  session, hunkIdx, activeSubId, position, onAcceptSelected, onAcceptWhole, onReject, onClose, onRestoreSub,
 }: InlineAcceptPopoverProps) {
   const { t } = useTranslation()
   const hunk = session.hunks[hunkIdx]
@@ -129,6 +133,16 @@ export function InlineAcceptPopover({
                   </span>
                 </div>
               </div>
+              {rejected && (
+                <button
+                  data-act={`pv-restore-${s.id}`}
+                  className="shrink-0 self-center px-1.5 py-0.5 rounded text-[10px] transition-colors"
+                  style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                  onClick={() => onRestoreSub(s.id)}
+                >{t('inlineAccept.restore')}</button>
+              )}
             </li>
           )
         })}

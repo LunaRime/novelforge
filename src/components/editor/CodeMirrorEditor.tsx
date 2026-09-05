@@ -18,7 +18,7 @@ import {
   changesIntersectRanges,
   deriveRangesFromDoc,
   dispatchAcceptChange,
-  findPendingRangeAt,
+  findRestorableRangeAt,
   inlineAcceptExtensions,
   inlineAcceptField,
   isManualUserEdit,
@@ -285,14 +285,16 @@ export default function CodeMirrorEditor({
     setPopoverPos(null)
   }, [t])
 
-  /** 点击 pending 区段 → 打开接受浮层（复用坐标基建思路：selection head + coordsAtPos） */
+  /** 点击未接受区段 → 打开浮层（复用坐标基建思路：selection head + coordsAtPos）。
+   *  final review I-1：rejected 划除段同样可点开——浮层内「恢复为待定」撤销误拒
+   *  （findRestorableRangeAt 覆盖 pending|rejected；findPendingRangeAt 语义保持不变） */
   const handleDocClick = useCallback(() => {
     const view = editorRef.current?.view
     const session = inlineSessionRef.current
     if (!view || !session) return
     const sel = view.state.selection.main
     if (!sel.empty) return // 拖选（AI 气泡流）不打开 inline 浮层
-    const range = findPendingRangeAt(view, sel.head)
+    const range = findRestorableRangeAt(view, sel.head)
     if (range) {
       const hunkIdx = session.hunks.findIndex(h => h.sub.some(s => s.id === range.id))
       if (hunkIdx < 0) {
@@ -338,6 +340,12 @@ export default function CodeMirrorEditor({
     setActiveRange(null)
     setPopoverPos(null)
   }, [popoverHunk, rejectSubs])
+  /** 恢复误拒子句为待定（final review I-1）：resetHunkDecision → 装饰回 pending，可再接受 */
+  const handlePopoverRestoreSub = useCallback((subId: string) => {
+    const tabId = filePathRef.current
+    if (!tabId) return
+    useEditorStore.getState().resetHunkDecision(tabId, subId)
+  }, [])
   const handlePopoverClose = useCallback(() => {
     setActiveRange(null)
     setPopoverPos(null)
@@ -445,6 +453,10 @@ export default function CodeMirrorEditor({
           const preRanges = tr.startState.field(inlineAcceptField).ranges
           const drift = isManualUserEdit(userEvent) || changesIntersectRanges(tr, preRanges)
           if (drift) {
+            // final review M-1：清浮层状态——否则旧 activeRange/popoverPos 会在
+            // 下一会话 begin 时（无点击）复活错位的旧浮层
+            setActiveRange(null)
+            setPopoverPos(null)
             useEditorStore.getState().endInlineSession(filePathRef.current)
             void import('../ui/Toast').then(({ toast }) => {
               toast.info(t('inlineAccept.manualEditExit'))
@@ -986,8 +998,16 @@ export default function CodeMirrorEditor({
       {inlineSession && (
         <InlineAcceptBar
           session={inlineSession}
-          onAcceptAll={() => acceptSubsInOrder(inlineSession.hunks.flatMap(h => h.sub))}
-          onRejectAll={() => rejectSubs(inlineSession.hunks.flatMap(h => h.sub))}
+          onAcceptAll={() => {
+            setActiveRange(null)
+            setPopoverPos(null)
+            acceptSubsInOrder(inlineSession.hunks.flatMap(h => h.sub))
+          }}
+          onRejectAll={() => {
+            setActiveRange(null)
+            setPopoverPos(null)
+            rejectSubs(inlineSession.hunks.flatMap(h => h.sub))
+          }}
           onFinish={finishSession}
           onClose={() => void closeSession()}
         />
@@ -1003,6 +1023,7 @@ export default function CodeMirrorEditor({
           onAcceptWhole={handlePopoverAcceptWhole}
           onReject={handlePopoverReject}
           onClose={handlePopoverClose}
+          onRestoreSub={handlePopoverRestoreSub}
         />
       )}
     </div>

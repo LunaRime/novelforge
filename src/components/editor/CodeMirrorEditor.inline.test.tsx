@@ -29,6 +29,7 @@ import {
   dispatchAcceptChange,
   deriveRangesFromDoc,
   findPendingRangeAt,
+  findRestorableRangeAt,
   inlineAcceptExtensions,
   inlineAcceptField,
   setHunkRanges,
@@ -301,6 +302,32 @@ describe('codemirror-inline-accept 模块（Task 4）', () => {
       view.destroy()
     }
   })
+
+  it('findRestorableRangeAt：pending/rejected 均命中（误拒恢复入口）；findPendingRangeAt 保持 pending-only', () => {
+    const state = EditorState.create({ doc: ORIG, extensions: inlineAcceptExtensions() })
+    // pending-only 会话：两个命中函数一致
+    const seeded = state.update({ effects: setHunkRanges.of(deriveRangesFromDoc(mkSession(), ORIG)) }).state
+    const view = new EditorView({ state: seeded, parent: document.body })
+    try {
+      expect(findRestorableRangeAt(view, 1)?.id).toBe('h0.s0')
+      expect(findRestorableRangeAt(view, 3)).toBeNull()
+      expect(findRestorableRangeAt(view, 99)).toBeNull()
+    } finally {
+      view.destroy()
+    }
+    // rejected 会话：rejected 区间仅 findRestorableRangeAt 命中（rejected 划除段可点开恢复）
+    const rejected = mkSession()
+    rejected.decisions = { 'h0.s1': 'rejected' }
+    const seeded2 = state.update({ effects: setHunkRanges.of(deriveRangesFromDoc(rejected, ORIG)) }).state
+    const view2 = new EditorView({ state: seeded2, parent: document.body })
+    try {
+      expect(findPendingRangeAt(view2, 5)).toBeNull() // pending-only 语义保持（既有调用方/测试不变）
+      expect(findRestorableRangeAt(view2, 5)?.id).toBe('h0.s1')
+      expect(findRestorableRangeAt(view2, 1)?.id).toBe('h0.s0') // pending 照常命中
+    } finally {
+      view2.destroy()
+    }
+  })
 })
 
 // ===== 会话接线：装饰 / 浮条 / 决策驱动 / 冻结 / 手动编辑退出 =====
@@ -564,6 +591,109 @@ describe('inline 接受浮层与浮条交互', () => {
     expect(container.querySelector('.nf-ia-bar')).toBeFalsy()
     expect(fieldOf(view).ranges).toHaveLength(0)
     expect(view.state.doc.toString()).toBe(ORIG)
+  })
+
+  // ===== final fix wave：误拒恢复（I-1）/ 漂移清浮层（M-1）/ 批量动作清浮层（M-2） =====
+
+  it('误拒可逆（final I-1）：拒绝后 rejected 区可点开浮层 → 恢复为待定 → 区间回 pending 可再接受', async () => {
+    const filePath = 'vela://draft/40'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+
+    // 1) 点开 'AAA' → 拒绝整 hunk（误拒路径：doc 不变、全部决策 rejected）
+    act(() => { view.dispatch({ selection: { anchor: 1 } }) })
+    clickContent(container)
+    expect(container.querySelector('.nf-ia-popover')).toBeTruthy()
+    clickButton(container, 'pv-reject')
+    const decisions = storeSession(filePath)?.decisions
+    expect(decisions).toMatchObject({ 'h0.s0': 'rejected', 'h0.s1': 'rejected', 'h0.s2': 'rejected' })
+    expect(view.state.doc.toString()).toBe(ORIG)
+    await flushSessionSync()
+    expect(fieldOf(view).ranges.length).toBe(3)
+    expect(fieldOf(view).ranges.every(r => r.decision === 'rejected')).toBe(true)
+    expect(container.querySelector('.nf-ia-popover')).toBeFalsy() // 拒绝后浮层关闭
+
+    // 2) rejected 划除段可再次点开浮层（findRestorableRangeAt 扩展——旧 findPendingRangeAt 不命中）
+    act(() => { view.dispatch({ selection: { anchor: 1 } }) })
+    clickContent(container)
+    expect(container.querySelector('.nf-ia-popover')).toBeTruthy()
+    const restoreBtn = container.querySelector<HTMLButtonElement>('[data-act="pv-restore-h0.s0"]')
+    expect(restoreBtn).toBeTruthy()
+
+    // 3) 恢复 h0.s0 → pending（其余 rejected 保持）；区间决策回 pending（装饰随之回 pending）
+    act(() => { restoreBtn?.click() })
+    await flushSessionSync()
+    const afterRestore = storeSession(filePath)?.decisions
+    expect(afterRestore?.['h0.s0']).toBeUndefined()
+    expect(afterRestore?.['h0.s1']).toBe('rejected')
+    expect(fieldOf(view).ranges.find(r => r.id === 'h0.s0')?.decision).toBe('pending')
+
+    // 4) 恢复行默认勾选（activeSubId）→ 接受选中 → doc 更新 + decision accepted
+    clickButton(container, 'pv-accept-selected')
+    expect(view.state.doc.toString()).toBe('AAA1 BBB CCC')
+    expect(storeSession(filePath)?.decisions['h0.s0']).toBe('accepted')
+    expect(container.querySelector('.nf-ia-popover')).toBeFalsy()
+  })
+
+  it('漂移退出清浮层（final M-1）：旧浮层不会在新会话 begin 时无点击复活', async () => {
+    const filePath = 'vela://draft/41'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+
+    // 打开 'AAA' 浮层 → 手动编辑区间外 → 漂移退出会话（旧 activeRange/popoverPos 若不清会残留）
+    act(() => { view.dispatch({ selection: { anchor: 1 } }) })
+    clickContent(container)
+    expect(container.querySelector('.nf-ia-popover')).toBeTruthy()
+    act(() => {
+      view.dispatch({
+        changes: { from: 11, to: 11, insert: 'X' },
+        annotations: [Transaction.time.of(6000), Transaction.userEvent.of('input.type')],
+      })
+    })
+    expect(storeSession(filePath)).toBeUndefined()
+    expect(container.querySelector('.nf-ia-popover')).toBeFalsy()
+
+    // 新会话 begin（另一轮「应用为修改建议」）→ 不复活旧浮层（M-1 修复断言）
+    await act(async () => { useEditorStore.getState().beginInlineSession(filePath, mkSession()) })
+    await flushSessionSync()
+    expect(storeSession(filePath)).toBeTruthy()
+    expect(container.querySelector('.nf-ia-bar')).toBeTruthy()
+    expect(container.querySelector('.nf-ia-popover')).toBeFalsy() // 无点击不得弹出旧浮层
+  })
+
+  it('浮条 accept-all / reject-all 先清浮层（final M-2）：批量动作后无残留空浮层', async () => {
+    const filePath = 'vela://draft/42'
+    seedSession(filePath)
+    const { container } = renderEditor(ORIG, undefined, filePath)
+    const view = getView(container)
+    await flushSessionSync()
+
+    // accept-all 时浮层开着 → 动作后浮层关闭 + doc 全接受
+    act(() => { view.dispatch({ selection: { anchor: 1 } }) })
+    clickContent(container)
+    expect(container.querySelector('.nf-ia-popover')).toBeTruthy()
+    clickButton(container, 'accept-all')
+    expect(container.querySelector('.nf-ia-popover')).toBeFalsy()
+    expect(view.state.doc.toString()).toBe('AAA1 BBB2 CCC3')
+
+    // 再来一轮：reject-all 时浮层开着 → 动作后浮层关闭 + doc 不变（纯决策）
+    const filePath2 = 'vela://draft/42b'
+    seedSession(filePath2)
+    const { container: c2 } = renderEditor(ORIG, undefined, filePath2)
+    const view2 = getView(c2)
+    await flushSessionSync()
+    act(() => { view2.dispatch({ selection: { anchor: 1 } }) })
+    clickContent(c2)
+    expect(c2.querySelector('.nf-ia-popover')).toBeTruthy()
+    clickButton(c2, 'reject-all')
+    expect(c2.querySelector('.nf-ia-popover')).toBeFalsy()
+    expect(view2.state.doc.toString()).toBe(ORIG)
+    const decisions2 = storeSession(filePath2)?.decisions
+    expect(decisions2).toMatchObject({ 'h0.s0': 'rejected', 'h0.s1': 'rejected', 'h0.s2': 'rejected' })
   })
 })
 
