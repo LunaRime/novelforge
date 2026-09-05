@@ -11,6 +11,21 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { computeTextStats } from '../../services/text-stats'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
+import { useEditorStore } from '../../stores/editor-store'
+import {
+  INLINE_ACCEPT_EVENT,
+  deriveRangesFromDoc,
+  dispatchAcceptChange,
+  findPendingRangeAt,
+  inlineAcceptExtensions,
+  inlineAcceptField,
+  isManualUserEdit,
+  setHunkRanges,
+} from './codemirror-inline-accept'
+import type { SubHunk } from '../../services/diff/hunk-model'
+import { InlineAcceptBar } from './InlineAcceptBar'
+import { InlineAcceptPopover } from './InlineAcceptPopover'
+import './inline-accept.css'
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -64,6 +79,167 @@ export default function CodeMirrorEditor({
   const lastEmittedContentRef = useRef(content)
   const [editorContent, setEditorContent] = useState(content)
   const hasEmittedInitialCount = useRef(false)
+
+  // ===== L1 inline 接受会话（Task 4）=====
+  // 会话决策态存 editor-store（R5：切 tab/重挂载不丢）；本文档仅订阅 + 派发事务。
+  // vela 草稿 tab 的 id === filePath（DraftEditor:373-376 语义）；filePath 缺失/未命中 → 无会话零影响。
+  const inlineSession = useEditorStore((s) =>
+    filePath ? (s.tabs.find(tab => tab.id === filePath || tab.filePath === filePath)?.inlineSession ?? null) : null,
+  )
+  // handleUpdate 以 ref 读会话（避免每次决策更新重建回调）；filePath 对 tab 固定
+  const inlineSessionRef = useRef(inlineSession)
+  const filePathRef = useRef(filePath)
+  useEffect(() => { inlineSessionRef.current = inlineSession }, [inlineSession])
+  useEffect(() => { filePathRef.current = filePath }, [filePath])
+
+  // 浮层命中状态（点击 pending 区段打开）
+  const [activeRange, setActiveRange] = useState<{ hunkIdx: number; subIdx: number } | null>(null)
+  const [popoverPos, setPopoverPos] = useState<{ top: number; left: number } | null>(null)
+  const activeSubId = activeRange && inlineSession
+    ? (inlineSession.hunks[activeRange.hunkIdx]?.sub[activeRange.subIdx]?.id ?? null)
+    : null
+
+  // @uiw/react-codemirror 在自身 useLayoutEffect + setState 后才创建 EditorView 并经 ref 暴露；
+  // 首帧 effect 里 editorRef.current?.view 尚不存在 → 用 onCreateEditor 锁存实例触发重渲染，
+  // 使会话区间同步 effect 在 view 就绪后必然执行（含「带会话重挂载」路径，R5）
+  const [cmView, setCmView] = useState<EditorView | null>(null)
+  // 事件处理器经 ref 取 view（渲染期不访问 ref；cmView state 只作 effect 触发器）
+  const cmViewRef = useRef<EditorView | null>(null)
+  useEffect(() => { cmViewRef.current = cmView }, [cmView])
+
+  // 会话期间把决策态同步进 CM ranges（begin / 决策变更 / 会话结束 / 重挂载）。
+  // accepted 子句已替换入 doc（derive 跳过）；rejected/pending 重 derive 定位；结束 → 清空
+  useEffect(() => {
+    const view = cmView
+    if (!view) return
+    const ranges = inlineSession ? deriveRangesFromDoc(inlineSession, view.state.doc.toString()) : []
+    view.dispatch({ effects: setHunkRanges.of(ranges) })
+  }, [inlineSession, cmView])
+
+  // 程序化连续接受的事务时间：显式递增（R4，防 CM history 500ms 事件合并；
+  // 实测 userEvent 非 input.type/delete 亦不合并，时间戳为双保险）
+  const acceptTimeRef = useRef(0)
+  const nextAcceptTime = useCallback(() => {
+    const now = Date.now()
+    acceptTimeRef.current = Math.max(now, acceptTimeRef.current + 1)
+    return acceptTimeRef.current
+  }, [])
+
+  /** 单子 hunk 接受 = 唯一 doc 改写路径：带递增 time + INLINE_ACCEPT_EVENT 的独立事务。
+   *  只接受 pending 子句：accepted 已入 doc（区间不在 field）、rejected 属已裁决（v1 恢复走
+   *  resetHunkDecision，不在此路径复活）。view 在事件处理器内经 cmViewRef 取（渲染期不访问） */
+  const applyAcceptSub = useCallback((sub: SubHunk) => {
+    const view = cmViewRef.current
+    const tabId = filePathRef.current
+    if (!view || !tabId) return
+    const ranges = view.state.field(inlineAcceptField).ranges
+    const r = ranges.find(x => x.id === sub.id)
+    if (!r || r.decision !== 'pending') return
+    dispatchAcceptChange(view, r, sub.modText, nextAcceptTime())
+    useEditorStore.getState().updateHunkDecision(tabId, sub.id, 'accepted')
+  }, [nextAcceptTime])
+
+  /** 按序逐个接受（每子句独立事务 → 多步 undo 逐句还原，裁决 4） */
+  const acceptSubsInOrder = useCallback((subs: SubHunk[]) => {
+    for (const sub of subs) applyAcceptSub(sub)
+  }, [applyAcceptSub])
+
+  /** 拒绝 = 纯决策态（无 doc 事务、无 undo 事件）；只翻动当前 pending 的子句 */
+  const rejectSubs = useCallback((subs: SubHunk[]) => {
+    const tabId = filePathRef.current
+    const session = inlineSessionRef.current
+    if (!tabId || !session) return
+    for (const sub of subs) {
+      if (session.decisions[sub.id]) continue // 已有裁决不再翻动
+      useEditorStore.getState().updateHunkDecision(tabId, sub.id, 'rejected')
+    }
+  }, [])
+
+  /** 完成：默认 endInlineSession（Task 5 在 DraftEditor 层接管 revision 落库） */
+  const finishSession = useCallback(() => {
+    const tabId = filePathRef.current
+    if (!tabId) return
+    useEditorStore.getState().endInlineSession(tabId)
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [])
+
+  /** 关闭：仍有未决修改 → 二次确认（复用 ui/Confirm 模式，R5） */
+  const closeSession = useCallback(async () => {
+    const tabId = filePathRef.current
+    const session = inlineSessionRef.current
+    if (!tabId || !session) return
+    let unhandled = 0
+    for (const h of session.hunks) {
+      for (const s of h.sub) {
+        if (!session.decisions[s.id]) unhandled++
+      }
+    }
+    if (unhandled > 0) {
+      const { confirm } = await import('../ui/Confirm')
+      const ok = await confirm(t('inlineAccept.closeConfirm').replace('{n}', String(unhandled)))
+      if (!ok) return
+    }
+    finishSession()
+  }, [t, finishSession])
+
+  /** 点击 pending 区段 → 打开接受浮层（复用坐标基建思路：selection head + coordsAtPos） */
+  const handleDocClick = useCallback(() => {
+    const view = editorRef.current?.view
+    const session = inlineSessionRef.current
+    if (!view || !session) return
+    const sel = view.state.selection.main
+    if (!sel.empty) return // 拖选（AI 气泡流）不打开 inline 浮层
+    const range = findPendingRangeAt(view, sel.head)
+    if (range) {
+      const hunkIdx = session.hunks.findIndex(h => h.sub.some(s => s.id === range.id))
+      if (hunkIdx < 0) {
+        setActiveRange(null)
+        setPopoverPos(null)
+        return
+      }
+      const subIdx = session.hunks[hunkIdx].sub.findIndex(s => s.id === range.id)
+      const coords = view.coordsAtPos(range.from)
+      if (coords) {
+        setActiveRange({ hunkIdx, subIdx })
+        setPopoverPos({ top: coords.top + 4, left: coords.left })
+        return
+      }
+    }
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [])
+
+  // 浮层动作：以命名 handler 挂接（避免渲染期 IIFE 闭包触发 react-hooks/refs 保守告警）
+  const popoverHunk = inlineSession && activeRange
+    ? (inlineSession.hunks[activeRange.hunkIdx] ?? null)
+    : null
+  const handlePopoverAcceptSelected = useCallback((ids: string[]) => {
+    if (!popoverHunk) return
+    const subs = ids
+      .map(id => popoverHunk.sub.find(s => s.id === id))
+      .filter((s): s is SubHunk => !!s)
+    if (subs.length === 0) return
+    acceptSubsInOrder(subs)
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [popoverHunk, acceptSubsInOrder])
+  const handlePopoverAcceptWhole = useCallback(() => {
+    if (!popoverHunk) return
+    acceptSubsInOrder(popoverHunk.sub)
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [popoverHunk, acceptSubsInOrder])
+  const handlePopoverReject = useCallback(() => {
+    if (!popoverHunk) return
+    rejectSubs(popoverHunk.sub)
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [popoverHunk, rejectSubs])
+  const handlePopoverClose = useCallback(() => {
+    setActiveRange(null)
+    setPopoverPos(null)
+  }, [])
 
   // 更新内容
   useEffect(() => {
@@ -150,6 +326,24 @@ export default function CodeMirrorEditor({
 
   const handleUpdate = useCallback((v: ViewUpdate) => {
     if (v.docChanged) {
+      // L1 inline 会话（R6 简化）：真实 CM 输入（input.*/delete.*/move.*/indent.* userEvent）
+      // 到达 doc = 手动编辑。pending/rejected 区内输入已被 changeFilter 拦截，
+      // 能到达这里的必然在区间外 → 偏移基准失效 → 自动退出会话 + 提示。
+      // 自身接受事务（INLINE_ACCEPT_EVENT）、外部同步（addToHistory:false）、
+      // undo/redo（history 事务无输入类 userEvent）均不触发退出。
+      const session = inlineSessionRef.current
+      if (session && filePathRef.current) {
+        const tr = v.transactions[v.transactions.length - 1]
+        const userEvent = tr?.annotation(Transaction.userEvent)
+        const isExternal = tr?.annotation(Transaction.addToHistory) === false
+        if (userEvent !== INLINE_ACCEPT_EVENT && !isExternal && isManualUserEdit(userEvent)) {
+          useEditorStore.getState().endInlineSession(filePathRef.current)
+          void import('../ui/Toast').then(({ toast }) => {
+            toast.info(t('inlineAccept.manualEditExit'))
+          })
+        }
+      }
+
       const newText = v.state.doc.toString()
       lastEmittedContentRef.current = newText
       onChange?.(newText)
@@ -174,7 +368,7 @@ export default function CodeMirrorEditor({
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange])
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t])
 
   // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
   useEffect(() => {
@@ -328,6 +522,9 @@ export default function CodeMirrorEditor({
         "close": "Close"
       })
     ]
+    // L1 inline 接受（Task 4）：StateField 常驻但无会话时空值零可见影响（R3）；
+    // 会话期由 setHunkRanges effect 动态驱动，无需 reconfigure
+    exts.push(...inlineAcceptExtensions())
     if (mode === 'document' || mode === 'prose') {
       exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
     }
@@ -509,6 +706,14 @@ export default function CodeMirrorEditor({
           e.preventDefault()
           onSave?.(lastEmittedContentRef.current)
         }
+      }}
+      onClick={(e) => {
+        // L1 inline（Task 4）：仅 CM 正文点击驱动 pending 段点击 → 打开/切换接受浮层
+        // （浮条/浮层/气泡按钮的点击不落在 .cm-content 内，不触发）
+        const target = e.target as HTMLElement
+        if (target && typeof target.closest === 'function' && target.closest('.cm-content')) {
+          handleDocClick()
+        }
       }}>
       <div className="flex-1 relative min-h-0 overflow-hidden"
         onMouseDown={() => {
@@ -527,6 +732,7 @@ export default function CodeMirrorEditor({
             readOnly={!editable}
             basicSetup={cmBasicSetup}
             onUpdate={handleUpdate}
+            onCreateEditor={(view) => setCmView(view)}
           />
         </div>
       </div>
@@ -665,6 +871,30 @@ export default function CodeMirrorEditor({
             </>
           )}
         </div>
+      )}
+
+      {/* L1 inline 接受（Task 4）：进度浮条 + 接受浮层——仅存在 inlineSession 时渲染 */}
+      {inlineSession && (
+        <InlineAcceptBar
+          session={inlineSession}
+          onAcceptAll={() => acceptSubsInOrder(inlineSession.hunks.flatMap(h => h.sub))}
+          onRejectAll={() => rejectSubs(inlineSession.hunks.flatMap(h => h.sub))}
+          onFinish={finishSession}
+          onClose={() => void closeSession()}
+        />
+      )}
+      {inlineSession && activeRange && popoverPos && activeSubId && popoverHunk && (
+        <InlineAcceptPopover
+          key={`${activeRange.hunkIdx}:${activeRange.subIdx}`}
+          session={inlineSession}
+          hunkIdx={activeRange.hunkIdx}
+          activeSubId={activeSubId}
+          position={popoverPos}
+          onAcceptSelected={handlePopoverAcceptSelected}
+          onAcceptWhole={handlePopoverAcceptWhole}
+          onReject={handlePopoverReject}
+          onClose={handlePopoverClose}
+        />
       )}
     </div>
   )

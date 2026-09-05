@@ -1,0 +1,48 @@
+/**
+ * inline-accept — L1 inline 接受 UI（Task 4）装饰/浮条/浮层样式
+ * 颜色纪律：仅 CSS 变量（var(--color-*)），透明度合成用 color-mix(变量, transparent)；
+ * z-index 纪律：语义变量（--z-sticky 浮条 / --z-overlay 浮层）。
+ */
+
+/* 进度浮条：悬浮编辑器顶部（覆盖 .cm-content 顶部留白，不推挤正文） */
+.nf-ia-bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-sticky);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 12px;
+  font-size: 12px;
+  background-color: var(--color-sidebar);
+  border-bottom: 1px solid var(--color-border);
+}
+
+/* pending 子 hunk：段首竖条 + 段底纹（accent 淡显） */
+.nf-ia-pending {
+  background-color: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  box-shadow: inset 2px 0 0 var(--color-accent);
+  border-radius: 2px;
+}
+
+/* rejected 子 hunk：划除 + 弱化 */
+.nf-ia-rejected {
+  text-decoration: line-through;
+  color: color-mix(in srgb, var(--color-text-muted) 70%, transparent);
+}
+
+/* 接受浮层（fixed 定位由组件 style 注入 top/left） */
+.nf-ia-popover {
+  position: fixed;
+  z-index: var(--z-overlay);
+  width: 380px;
+  max-height: 320px;
+  overflow-y: auto;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1px solid var(--color-border);
+  background-color: var(--color-sidebar);
+  box-shadow: var(--shadow-lg);
+}
