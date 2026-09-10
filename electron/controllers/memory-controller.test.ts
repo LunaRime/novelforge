@@ -11,6 +11,13 @@ import { describe, it, expect, vi } from 'vitest'
 // 避免加载原生模块/Electron 绑定（测试仅覆盖纯函数）
 vi.mock('better-sqlite3', () => ({ default: vi.fn() }))
 
+// CI 装依赖时设 ELECTRON_SKIP_BINARY_DOWNLOAD=1，node_modules/electron 无 path.txt →
+// 真实 electron 模块 import 即抛「Electron failed to install correctly」。
+// 本文件只测纯函数，故按需打桩 ipcMain（模块顶层有 ipcMain.handle 注册）。
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
+}))
+
 import { assertSafeMemoryFileName, classifyMemoryFileKind } from './memory-controller'
 
 describe('assertSafeMemoryFileName（F7 安全守卫）', () => {

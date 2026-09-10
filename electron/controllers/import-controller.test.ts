@@ -5,7 +5,17 @@
  * 1. 前言/序章：首行丢失 + 前言被当作"第 1 章"（标题错误）
  * 2. 多文件章号覆盖：跨文件相同章号互相覆盖丢章节
  */
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
+
+// CI 装依赖时设 ELECTRON_SKIP_BINARY_DOWNLOAD=1，node_modules/electron 无 path.txt →
+// 真实 electron 模块 import 即抛「Electron failed to install correctly」。
+// 本文件只测拆章纯函数，故打桩 electron（模块顶层有 ipcMain.handle 注册）。
+vi.mock('electron', () => ({
+  ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
+  dialog: { showOpenDialog: vi.fn() },
+  BrowserWindow: { fromWebContents: vi.fn() },
+}))
+
 import {
   splitSingleFileContent,
   hasChapterHeadings,
