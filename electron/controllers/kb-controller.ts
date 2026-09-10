@@ -206,7 +206,8 @@ export function registerKBController() {
     try {
       return await backfillTokens(projectPath)
     } catch (error) {
-      logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
+      // T2 M4：分词回填失败用**分词**文案（复用 log.kb.backfillError「向量回填异常」会误导 LogsView）
+      logger.error('KB', t('log.kb.backfillTokensError').replace('{err}', String(error)))
       return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
     }
   })

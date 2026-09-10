@@ -288,6 +288,19 @@ describe('FTS 过滤表达式构造（L3 T3，纯函数）', () => {
     expect(buildChunkFTSFilter("it's", [])).toBe(`text LIKE '%i%t%''%s%'`)
   })
 
+  // ===== L3 final review / IMP-1：scope 必须并入表达式，不得用二次 where 覆盖词级条件 =====
+  it('scope 条件并入表达式（AND 约束），词级/逐字分支都受 scope 约束', () => {
+    const scope = `(chapterNumber >= 1 AND chapterNumber <= 3) OR chapterNumber IS NULL`
+    const expr = buildChunkFTSFilter('搜索知识', ['搜索', '知识'], scope)
+    expect(expr).toContain(`tokens LIKE '%搜索%' AND tokens LIKE '%知识%'`)
+    expect(expr).toContain(`AND (${scope})`)
+    // 逐字兜底分支同样受 scope 约束
+    expect(buildChunkFTSFilter('搜索', [], scope)).toBe(`(text LIKE '%搜%索%') AND (${scope})`)
+    // 无 scope 时形态与既有断言完全一致（不改既有行为）
+    expect(buildChunkFTSFilter('搜索', [])).toBe(`text LIKE '%搜%索%'`)
+    expect(buildChunkFTSFilter('搜索知识', ['搜索', '知识'])).not.toContain('AND (chapterNumber')
+  })
+
   it('词级片段同样转义通配符与引号（LIKE 注入 / SQL 闭合防护）', () => {
     const expr = buildChunkFTSFilter("100% it's", ['100%', "it's"])
     expect(expr).toContain(`tokens LIKE '%100％%'`)
@@ -548,6 +561,44 @@ describe('LanceDB 端到端：FTS 词级检索（L3 T3）', () => {
       const scoped = await searchWithScope(projectPath, '主角', undefined, 5, [1, 3])
       expect(scoped.map(r => r.text)).toContain('主角在第一章')
       expect(scoped.map(r => r.text)).not.toContain('主角在第九章')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  /**
+   * L3 final review / IMP-1 回归：带 chapterScope 时词级过滤被二次 where 覆盖。
+   *
+   * 修复前 `runFilter` 是 `table.query().filter(词级表达式).limit(N)` 之后再 `q.where(scope)`——
+   * lancedb 的 `filter()` 是 `where()` 别名、`where()` 为**赋值**语义，第二次调用覆盖第一次，
+   * 词级条件整段消失 → FTS 通道退化为「章节窗内任意 ≤N 行」，窗内无关块被
+   * `computeFTSRelevance` 打出 ≥0.5 并标 `source='fts'`，而 rag-context-provider 对 fts 来源
+   * 豁免 0.6 阈值 → 无关块注入 RAG（chapterNumber 存在时默认 scope=[ch-10,ch+10]，即章节写作主路径）。
+   *
+   * 既有「范围检索在词级通道下仍生效」用例两行都含查询词 → 无法区分 filter 是否生效（假阳性）；
+   * 本用例构造**窗内不含任何查询词的块** + **窗外真命中**，直接锁定词级条件是否仍在。
+   */
+  it('IMP-1：scope 窗内不含任何查询词的块不得进入 FTS 候选/结果，窗外真命中仍被排除', async () => {
+    const projectPath = makeTempProject()
+    try {
+      const IRRELEVANT = '完全无关的段落，讲的是天气与风景'
+      expect((await addChunks(
+        projectPath, randomUUID(), '第1章 甲.txt', ['主角在第一章'], undefined, undefined, { chapterNumber: 1 },
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第2章 无关.txt', [IRRELEVANT], undefined, undefined, { chapterNumber: 2 },
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第9章 乙.txt', ['主角在第九章'], undefined, undefined, { chapterNumber: 9 },
+      )).success).toBe(true)
+
+      // 证据：窗内无关块在词级通道下确实不满足词级条件（整块不含 query 的任何词）
+      expect(await filterTexts(projectPath, `tokens LIKE '%主角%'`)).not.toContain(IRRELEVANT)
+
+      const scoped = await searchWithScope(projectPath, '主角', undefined, 5, [1, 3])
+      expect(scoped.map(r => r.text)).toContain('主角在第一章') // 窗内真命中保留
+      expect(scoped.map(r => r.text)).not.toContain(IRRELEVANT) // 窗内无关块不得进入 FTS 候选/结果
+      expect(scoped.map(r => r.text)).not.toContain('主角在第九章') // 窗外真命中仍被 scope 排除
     } finally {
       await cleanupProject(projectPath)
     }

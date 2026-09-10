@@ -680,19 +680,26 @@ export function selectQueryTerms(words: string[]): string[] {
  * 逐字兜底：`tokens` 缺失（NULL / 空串——存量未回填库、回填失败行、旧表无该列）的行走
  *   改造前的逐字容错 `text LIKE '%搜%索%'`，保证存量库不因改造而检不到。
  * 分词/词表不可用（words 为空）→ 全量退回逐字 LIKE，行为与改造前完全一致。
+ *
+ * @param scopeFilter 章节范围条件（可选）。⚠️ L3 final review / IMP-1：**必须并入本表达式**
+ *   （`(<词级或逐字>) AND (<scope>)`），**不得**改由调用方二次 `where()` 施加——
+ *   LanceDB 的 `filter()` 是 `where()` 的别名，而 `where()` 是**赋值**语义（第二次调用覆盖第一次），
+ *   二次 where 会把词级条件整段抹掉，FTS 通道退化成「章节窗内任意 ≤limit 行」：窗内无关块
+ *   被 `computeFTSRelevance` 打出 ≥0.5 且标 `source='fts'`，而 `rag-context-provider` 对 fts 来源
+ *   豁免 0.6 阈值 → 无关块直接注入 RAG（`chapterNumber` 存在时默认 scope=[ch-10,ch+10]，即章节写作主路径）。
  */
-export function buildChunkFTSFilter(queryText: string, words: string[]): string {
+export function buildChunkFTSFilter(queryText: string, words: string[], scopeFilter?: string): string {
   // ⚠️ P3 修复保留：查询中的 %/_ 转全角（LIKE 通配符注入——'100%' 此前匹配 "100任意串"；
   //    逐字拆分产生的 % 已用于容错匹配，查询自身的通配符需消除语义）
   // ⚠️ 转义必须在**逐字符拆分之后**：先转义整串再 split('') 会把 `''` 拆成 `'%'`，
   //    单引号转义随之失效 → 含 ' 的 query 生成非法 SQL（FTS 通道整体抛错降级）
   const charPattern = `%${queryText.split('').map(escapeLikeLiteral).join('%')}%`
   const fallbackClause = `text LIKE '${charPattern}'`
-  if (words.length === 0) return fallbackClause
-
-  const wordClauses = words.map(w => `tokens LIKE '%${escapeLikeLiteral(w)}%'`)
   const missingTokens = `(tokens IS NULL OR tokens = '')`
-  return `((${wordClauses.join(' AND ')}) OR (${missingTokens} AND ${fallbackClause}))`
+  const wordClause = words.length === 0
+    ? fallbackClause
+    : `((${words.map(w => `tokens LIKE '%${escapeLikeLiteral(w)}%'`).join(' AND ')}) OR (${missingTokens} AND ${fallbackClause}))`
+  return scopeFilter ? `(${wordClause}) AND (${scopeFilter})` : wordClause
 }
 
 /**
@@ -846,14 +853,17 @@ export async function searchWithScope(
       const words = selectQueryTerms(tokenizeQueryWords(queryText))
       // Fix round 1 / ③ 候选先取足量再打分：打分在下方（computeFTSRelevance），
       //   原 limit(topK*3) 会在打分前按表扫描顺序截断 —— 多词命中面较大时真命中被挤出候选池
+      // ⚠️ L3 final review / IMP-1：scope **并入过滤表达式**（见 buildChunkFTSFilter 的 @param scopeFilter）。
+      //   原实现 `q.where(scopeFilter)` 是二次 where —— LanceDB 的 filter() 是 where() 别名且 where() 为
+      //   赋值语义，第二次调用会**覆盖**词级条件，带 chapterScope 时 FTS 通道退化成「章节窗内任意行」，
+      //   窗内无关块被标 source='fts' 后由 rag 层豁免 0.6 阈值注入上下文。此处只保留一次 filter()。
       const runFilter = async (filterExpr: string) => {
-        const q = table.query().filter(filterExpr).limit(candidateLimit)
-        return await (scopeFilter ? q.where(scopeFilter) : q).toArray() as Array<{ text: string; fileName: string }>
+        return await table.query().filter(filterExpr).limit(candidateLimit).toArray() as Array<{ text: string; fileName: string }>
       }
 
       let rows: Array<{ text: string; fileName: string }>
       try {
-        rows = await runFilter(buildChunkFTSFilter(queryText, words))
+        rows = await runFilter(buildChunkFTSFilter(queryText, words, scopeFilter))
       } catch (inner) {
         if (words.length === 0) throw inner
         // Fix round 1 / Important-2：词级表达式不可用（tokens 列缺失或类型不符 → 补列失败）时，
@@ -863,7 +873,7 @@ export async function searchWithScope(
           ftsCharFallbackLogged = true
           logger.warn('VectorStore', `word-level FTS filter failed, fallback to char LIKE: ${safeErrorMessage(inner)}`)
         }
-        rows = await runFilter(buildChunkFTSFilter(queryText, []))
+        rows = await runFilter(buildChunkFTSFilter(queryText, [], scopeFilter))
       }
 
       // P1-1：FTS 命中给启发式相关性分数（不再恒 0.5）——纯 FTS 模式排序有据；

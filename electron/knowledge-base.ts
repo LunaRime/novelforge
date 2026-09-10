@@ -652,7 +652,8 @@ export async function backfillTokens(
   try {
     return await storeBackfillTokens(projectPath)
   } catch (error) {
-    logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
+    // T2 M4：分词回填失败必须用**分词**文案（此前复用 log.kb.backfillError「向量回填异常」→ LogsView 误导）
+    logger.error('KB', t('log.kb.backfillTokensError').replace('{err}', String(error)))
     return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
   }
 }

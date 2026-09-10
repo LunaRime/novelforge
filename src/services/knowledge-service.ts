@@ -64,3 +64,12 @@ export async function searchKB(query: string, topK: number): Promise<SearchResul
 export async function backfillVectors(): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
   return ipc.invoke('kb:backfill-vectors') as Promise<{ success: boolean; processed: number; failed: number; error?: string }>
 }
+
+/**
+ * 执行中文分词回填（L3 T2 / IMP-2：为存量 chunks 补齐 tokens，纯本地分词、无需 Embedding 配置）
+ *
+ * 幂等：只处理 tokens 为 NULL/空串的行，重复执行零动作（见 vector-store.backfillTokens）。
+ */
+export async function backfillTokens(): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
+  return ipc.invoke('kb:backfill-tokens') as Promise<{ success: boolean; processed: number; failed: number; error?: string }>
+}

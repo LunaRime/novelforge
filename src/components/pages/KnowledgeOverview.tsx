@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Database, BookOpen, FileText,
-  Search, RefreshCw, Layers, Zap, Server, Activity, Download,
+  Search, RefreshCw, Layers, Zap, Server, Activity, Download, Languages,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -13,7 +13,7 @@ import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import {
-  loadKBData, getVectorlessCount, searchKB, backfillVectors,
+  loadKBData, getVectorlessCount, searchKB, backfillVectors, backfillTokens,
   type KBDocument, type SearchResult, type KBStatsData,
 } from '../../services/knowledge-service'
 import ChapterExportDialog from '../dialogs/ChapterExportDialog'
@@ -31,6 +31,7 @@ export default function KnowledgeOverview() {
   const [topK, setTopK] = useState(10)
   const [vectorlessCount, setVectorlessCount] = useState(0)
   const [backfilling, setBackfilling] = useState(false)
+  const [tokenBackfilling, setTokenBackfilling] = useState(false)
   // 导出状态
   const [exportOpen, setExportOpen] = useState(false)
   const [exportChapters, setExportChapters] = useState<number[]>([])
@@ -171,6 +172,32 @@ export default function KnowledgeOverview() {
     }
   }
 
+  /**
+   * 分词回填（L3 T2 / IMP-2 接线）
+   *
+   * 为存量 chunks 补齐中文分词 `tokens`（纯本地 jieba、无需 Embedding 配置、幂等）。
+   * 不触发 REFRESH_RESOURCE：tokens 只服务于 FTS 词级通道，不改变文档/统计的展示。
+   */
+  const handleTokenBackfill = async () => {
+    setTokenBackfilling(true)
+    try {
+      const result = await backfillTokens()
+      if (result.success) {
+        if (result.failed > 0) {
+          toast.success(t('knowledge.tokenBackfillPartial').replace('{processed}', String(result.processed)).replace('{failed}', String(result.failed)))
+        } else {
+          toast.success(t('knowledge.tokenBackfillSuccess').replace('{processed}', String(result.processed)))
+        }
+      } else {
+        toast.error(result.error || t('knowledge.tokenBackfillFailed'))
+      }
+    } catch (e) {
+      toast.error(t('error.tokenBackfillFailed').replace('{error}', String(e)))
+    } finally {
+      setTokenBackfilling(false)
+    }
+  }
+
   return (
     <div className="h-full overflow-y-auto" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
       <div className="max-w-4xl mx-auto px-8 py-6">
@@ -189,6 +216,26 @@ export default function KnowledgeOverview() {
               {t('knowledge.desc')}
             </p>
           </div>
+          {/* 分词回填入口（L3 T2 / IMP-2）：为存量块补齐中文分词 tokens。
+              ⚠️ 刻意挂在页面头部动作区（与「批量导出」同排、同样式 outline），**不放进**下方
+              「向量索引待升级」卡片——那张卡片仅在 vectorlessCount > 0 时渲染，而本入口要服务的
+              正是「向量齐全但 tokens 缺失」的老库，放进去等于没有入口。
+              条件 stats.totalChunks > 0 = 有块可回填（空库无可回填对象）。 */}
+          {stats.totalChunks > 0 && (
+            <Button
+              variant="outline"
+              className="flex-shrink-0"
+              title={t('knowledge.tokenBackfillDesc')}
+              onClick={handleTokenBackfill}
+              disabled={tokenBackfilling}
+            >
+              {tokenBackfilling ? (
+                <><RefreshCw size={14} className="animate-spin mr-1.5" />{t('knowledge.tokenBackfilling')}</>
+              ) : (
+                <><Languages size={14} className="mr-1.5" />{t('knowledge.tokenBackfill')}</>
+              )}
+            </Button>
+          )}
           {/* 批量导出按钮 */}
           {documents.length > 0 && (
             <Button
