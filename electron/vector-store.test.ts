@@ -26,6 +26,7 @@ import {
   buildChunkFTSFilter,
   tokenizeQueryWords,
   selectQueryTerms,
+  rrfFuse,
 } from './vector-store'
 
 describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
@@ -322,6 +323,69 @@ describe('查询词过滤（L3 T3 Fix round 1，纯函数）', () => {
   })
 })
 
+// ===== L3 T4：RRF 融合（替换双通道 max 取并）=====
+
+describe('RRF 融合（L3 T4，纯函数）', () => {
+  it('brief 对称构造：B 排 A 前（品秩多重集相同 → RRF 分打平，靠最佳原始分破平）', () => {
+    // 向量通道 A(0.9) > B(0.85)；FTS 通道 B(1.0) > A(0.5)
+    const fused = rrfFuse([
+      [{ key: 'A', score: 0.9 }, { key: 'B', score: 0.85 }],
+      [{ key: 'B', score: 1.0 }, { key: 'A', score: 0.5 }],
+    ])
+
+    expect(fused.map(f => f.key)).toEqual(['B', 'A'])
+    // 两个 key 都是「一通道 rank1 + 另一通道 rank2」→ RRF 分**完全相等**；
+    // 破平用各 key 的最佳原始分（B 1.0 > A 0.9）→ 结果确定，无 Map 插入序依赖
+    expect(fused[0].score).toBeCloseTo(fused[1].score, 12)
+    expect(fused[0].score).toBeCloseTo(1 / 61 + 1 / 62, 12)
+  })
+
+  it('两通道共识优先：两通道都排第 2 的 key 超过只在一个通道排第 1 的 key（与 max 取并语义不同）', () => {
+    // 向量通道 A(0.95) > C(0.80)；FTS 通道 B(1.0) > C(0.90)
+    const fused = rrfFuse([
+      [{ key: 'A', score: 0.95 }, { key: 'C', score: 0.8 }],
+      [{ key: 'B', score: 1.0 }, { key: 'C', score: 0.9 }],
+    ])
+
+    // C：1/62 + 1/62 = 1/31 ≈ 0.0323；A/B：各自 1/61 ≈ 0.0164
+    // ⚠️ max 取并语义（旧实现）下 A(0.95)、B(1.0) 都在 C(max 0.90) 之前 → C 垫底；
+    //    RRF 只用品秩 → 两通道共识的 C 提到首位
+    expect(fused.map(f => f.key)).toEqual(['C', 'B', 'A'])
+    expect(fused[0].score).toBeCloseTo(1 / 31, 12)
+    // 名义原始分最高的 B(1.0) 也不是第一 → 排序确实没看原始分
+    expect(fused[0].key).not.toBe('B')
+  })
+
+  it('单通道退化安全：排序与通道自身分数序一致', () => {
+    const fused = rrfFuse([
+      [{ key: 'X', score: 0.9 }, { key: 'Y', score: 0.7 }, { key: 'Z', score: 0.5 }],
+      [],
+    ])
+    expect(fused.map(f => f.key)).toEqual(['X', 'Y', 'Z'])
+    expect(fused.map(f => f.score)).toEqual([1 / 61, 1 / 62, 1 / 63])
+  })
+
+  it('无命中通道 / 全空 → 空数组', () => {
+    expect(rrfFuse([[], []])).toEqual([])
+    expect(rrfFuse([])).toEqual([])
+    expect(rrfFuse([[{ key: 'X', score: 1 }], []])).toHaveLength(1)
+  })
+
+  it('同一 key 两通道均 rank1 → 分叠加（2/61）', () => {
+    const fused = rrfFuse([
+      [{ key: 'X', score: 0.9 }],
+      [{ key: 'X', score: 0.6 }],
+    ])
+    expect(fused).toHaveLength(1)
+    expect(fused[0].score).toBeCloseTo(2 / 61, 12)
+  })
+
+  it('k 可配（默认 60）：k=1 时 rank1 权重 = 1/2', () => {
+    expect(rrfFuse([[{ key: 'X', score: 1 }]], 1)[0].score).toBeCloseTo(0.5, 12)
+    expect(rrfFuse([[{ key: 'X', score: 1 }]], 0)[0].score).toBeCloseTo(1, 12)
+  })
+})
+
 describe('LanceDB 端到端：FTS 词级检索（L3 T3）', () => {
   /** 隔离的临时项目目录（LanceDB 落到 {projectPath}/.novelforge/lancedb） */
   function makeTempProject(): string {
@@ -556,6 +620,124 @@ describe('LanceDB 端到端：多词查询不再因候选池截断丢召回（L3
       const results = await searchWithScope(projectPath, '主角')
       expect(results.map(r => r.text)).toContain('主角的剑在月光下') // 改造前靠逐字 LIKE 可召回
       expect(results.find(r => r.text === '主角的剑在月光下')?.source).toBe('fts')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+})
+
+// ===== L3 T4：RRF 融合（替换双通道 max 取并，排序在截断之前）=====
+
+describe('LanceDB 端到端：RRF 融合排序在截断之前（L3 T4）', () => {
+  function makeTempProject(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-rrf-'))
+  }
+
+  async function cleanupProject(projectPath: string): Promise<void> {
+    await closeConnection(projectPath)
+    fs.rmSync(projectPath, { recursive: true, force: true })
+  }
+
+  const QUERY = '主角的剑' // 词级 AND 词表 = ['主角', '剑']（'的' 为功能词被丢弃）
+  const QUERY_VECTOR = [1, 0, 0, 0]
+
+  /**
+   * 与 query 向量夹角 rad 的 4 维单位向量：L2 距离 d = 2·sin(rad/2)，
+   * 相似度 = 1 - d/2 = 1 - sin(rad/2)（rad 越大越不相似）。
+   */
+  function vecAt(rad: number): number[] {
+    return [Math.cos(rad), Math.sin(rad), 0, 0]
+  }
+
+  it('两通道共识行排首位；topK 截断发生在融合排序之后（单通道榜首跌出 top2）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      // A：仅向量命中（相似度最高 ≈0.90）
+      // B：仅 FTS 命中（启发式 0.807；向量相似度最低 ≈0.36）
+      // C：两通道都命中（FTS 1.0 rank1；向量 ≈0.70 rank2）——共识行
+      // D：仅向量命中（相似度最低 ≈0.52，无 FTS）
+      const A = '没有任何关键词的段落'
+      const B = '剑在鞘中，主角静立'
+      const C = '主角的剑在月光下'
+      const D = '无关内容第二段'
+      expect((await addChunks(
+        projectPath, randomUUID(), '第1章 混合.txt', [A, B, C, D],
+        [vecAt(0.2), vecAt(1.4), vecAt(0.6), vecAt(1.0)], undefined,
+      )).success).toBe(true)
+
+      // 前置证据：FTS 通道排序 = C(1.0) > B(0.807)（A/D 无词级命中）
+      expect(computeFTSRelevance(C, QUERY)).toBeGreaterThan(computeFTSRelevance(B, QUERY))
+      expect(computeFTSRelevance(A, QUERY)).toBeLessThan(computeFTSRelevance(B, QUERY))
+
+      const full = await searchWithScope(projectPath, QUERY, QUERY_VECTOR, 4)
+      // RRF：C(1/62+1/61≈0.0325) > B(1/64+1/62≈0.0318) > A(1/61≈0.0164) > D(1/63≈0.0159)
+      expect(full.map(r => r.text)).toEqual([C, B, A, D])
+
+      const top2 = await searchWithScope(projectPath, QUERY, QUERY_VECTOR, 2)
+      expect(top2.map(r => r.text)).toEqual([C, B])
+
+      // ⚠️ 回归证据（T3 handoff）：A 是向量通道榜首、原始分最高，但在融合排序里是第 3 名
+      //   → ① 排序只用品秩（分数更高却排在 B 之后）；② 截断在融合排序之后
+      //   （max 取并语义按原始分排：C 1.0 > A 0.90 > B 0.807 > D 0.52 → top2 会是 [C, A]）
+      const foundA = full.find(r => r.text === A)!
+      const foundB = full.find(r => r.text === B)!
+      expect(foundA.score).toBeGreaterThan(foundB.score)
+      expect(full.indexOf(foundA)).toBeGreaterThan(full.indexOf(foundB))
+      expect(top2.map(r => r.text)).not.toContain(A)
+      expect(top2.map(r => r.text)).not.toContain(D)
+
+      // score/source 语义保持通道原始分（rag-context-provider 靠 source='fts' 豁免 0.6 阈值）：
+      //   C 两通道都命中 → 取较高者（FTS 1.0）→ source='fts'
+      expect(full.find(r => r.text === C)?.source).toBe('fts')
+      expect(foundB.source).toBe('fts')
+      expect(foundA.source).toBe('vector')
+      expect(full.every(r => Object.keys(r).sort().join(',') === 'fileName,score,source,text')).toBe(true)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('单通道（仅向量命中）退化为向量相似度序，RRF 不改单通道排序', async () => {
+    const projectPath = makeTempProject()
+    try {
+      const A = '没有任何关键词的段落'
+      const B = '剑在鞘中，主角静立'
+      const C = '主角的剑在月光下'
+      const D = '无关内容第二段'
+      expect((await addChunks(
+        projectPath, randomUUID(), '第1章 混合.txt', [A, B, C, D],
+        [vecAt(0.2), vecAt(1.4), vecAt(0.6), vecAt(1.0)], undefined,
+      )).success).toBe(true)
+
+      // 该 query 词级 AND 无命中 → FTS 通道为空（仅向量通道有结果）
+      const results = await searchWithScope(projectPath, '没有这个词的段落xyz', QUERY_VECTOR, 4)
+      expect(results.map(r => r.text)).toEqual([A, C, D, B]) // 与向量相似度降序一致
+      expect(results.every(r => r.source === 'vector')).toBe(true)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('同一 text 多行（重复导入）只返回一次，且不因通道内重复而虚增融合分', async () => {
+    const projectPath = makeTempProject()
+    try {
+      const DUP = '剑在鞘中，主角静立'
+      const E = '主角的剑' // 两通道各 rank1（FTS 1.0 / 向量 ≈0.90）
+      const F = '没有任何关键词的段落' // 仅向量 rank2（≈0.70）
+      expect((await addChunks(
+        projectPath, randomUUID(), '第1章 重复.txt', [DUP, DUP, DUP],
+        [vecAt(1.4), vecAt(1.4), vecAt(1.4)], undefined,
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第2章 共识.txt', [E, F],
+        [vecAt(0.2), vecAt(0.6)], undefined,
+      )).success).toBe(true)
+
+      const results = await searchWithScope(projectPath, QUERY, QUERY_VECTOR, 5)
+      // 通道内按 text 去重后再品秩：E(1/61+1/61≈0.0328) > DUP(1/63+1/62≈0.0320) > F(1/62≈0.0161)；
+      //   若不去重，DUP 占据 FTS 的 rank1/2/3 与向量的 rank3/4/5 → 融合分≈0.079 反超 E（排序错误）
+      expect(results.map(r => r.text)).toEqual([E, DUP, F])
+      expect(results.filter(r => r.text === DUP)).toHaveLength(1)
     } finally {
       await cleanupProject(projectPath)
     }

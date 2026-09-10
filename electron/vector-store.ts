@@ -681,6 +681,47 @@ export function buildChunkFTSFilter(queryText: string, words: string[]): string 
 }
 
 /**
+ * RRF 融合（Reciprocal Rank Fusion，L3 T4）：`score = Σ 1/(k + rank_i)`。
+ *
+ * - 各通道候选**必须已按自身分数降序**；rank 从 1 开始，空通道（无命中）自然贡献 0。
+ * - **只用品秩、不用原始分**：向量相似度 ∈[0,1] 与 FTS 启发式 ∈[0.5,1] 量纲不同，
+ *   直接比原始分会让某个通道系统性主导；品秩融合消除量纲差异。
+ * - 破平（RRF 分完全相等时：两 key 品秩多重集相同，或不同通道各自的 rank1 相撞）：
+ *   按各 key 的**最佳原始分**降序，再按 key 升序 → 结果确定（不依赖 Map 插入序）；
+ *   该退化序与改造前的 max 取并分数序一致，即 RRF 打平时不劣于旧行为。
+ * - 同一通道内的重复 key 由调用方先按通道去重（否则同一 rank 会被重复累加虚增融合分）。
+ */
+export function rrfFuse(
+  channels: Array<Array<{ key: string; score: number }>>,
+  k = 60,
+): Array<{ key: string; score: number }> {
+  const fused = new Map<string, number>()
+  const bestRaw = new Map<string, number>()
+  for (const list of channels) {
+    list.forEach((c, i) => {
+      fused.set(c.key, (fused.get(c.key) ?? 0) + 1 / (k + (i + 1)))
+      const prev = bestRaw.get(c.key)
+      if (prev === undefined || c.score > prev) bestRaw.set(c.key, c.score)
+    })
+  }
+  return [...fused.entries()]
+    .map(([key, score]) => ({ key, score, raw: bestRaw.get(key) ?? 0 }))
+    .sort((a, b) =>
+      b.score - a.score
+      || b.raw - a.raw
+      || (a.key < b.key ? -1 : a.key > b.key ? 1 : 0))
+    .map(({ key, score }) => ({ key, score }))
+}
+
+/** 单通道候选（融合用）：key = chunk 文本（与旧 Map 去重口径一致，同 text 视为同一命中） */
+interface ChannelHit {
+  key: string
+  score: number
+  fileName: string
+  source: 'vector' | 'fts'
+}
+
+/**
  * 统一检索入口 — 自动选择 FTS / 混合模式
  *
  * @param queryText 搜索关键词/语句
@@ -734,38 +775,62 @@ export async function searchWithScope(
       scopeFilter = `(chapterNumber >= ${from} AND chapterNumber <= ${to}) OR chapterNumber IS NULL`
     }
 
-    // ⚠️ P0 修复：真混合检索——向量 + FTS 双通道并行取并集，分数取通道 max，
-    //    此前向量检索有结果即 return，FTS 的精确关键词召回（人名/专有名词/原句）永不参与融合
-    const candidates = new Map<string, SearchResult>()
-    const pushCandidate = (text: string, fileName: string, score: number, source: 'vector' | 'fts') => {
-      const cur = candidates.get(text)
-      if (!cur || score > cur.score) {
-        candidates.set(text, { text, fileName, score, source })
+    // ⚠️ P0 修复 + L3 T4：真混合检索——向量 + FTS 双通道取并集。
+    //    L3 T4 把融合从「双通道取 max 分」改为 **RRF（k=60）品秩融合**：
+    //    旧实现按候选**原始分**排序，而两通道量纲不同（向量 ∈[0,1] / FTS 启发式 ∈[0.5,1]）；
+    //    且两通道候选都在排序前被 limit 截断（T3 handoff：真命中可能被挤出候选池）。
+    //    新形态：各通道拉足候选（topK*10）→ 各自按本通道分数得 rank → RRF 融合 → 融合排序
+    //    → **最后**取 topK（截断在融合排序之后）。
+    const candidateLimit = Math.max(topK * 10, 50)
+
+    /** 命中记录（score/source 仍取「通道 max」——与旧 pushCandidate 语义一致，rag 阈值判定不受影响） */
+    const bestByKey = new Map<string, SearchResult>()
+    const reportHit = (c: ChannelHit) => {
+      const cur = bestByKey.get(c.key)
+      if (!cur || c.score > cur.score) {
+        bestByKey.set(c.key, { text: c.key, fileName: c.fileName, score: c.score, source: c.source })
       }
     }
 
+    /** 通道内按 key 去重（重复导入/同 text 多行）：列表已按分数降序 → 保留首个即最高分，避免重复占 rank */
+    const dedupeChannel = (list: ChannelHit[]): ChannelHit[] => {
+      const seen = new Set<string>()
+      const out: ChannelHit[] = []
+      for (const c of list) {
+        if (seen.has(c.key)) continue
+        seen.add(c.key)
+        out.push(c)
+      }
+      return out
+    }
+
     // 通道 1：向量检索（查询端归一化；相似度 = 1 - d/2，归一化后 L2 距离 ∈[0,2]）
+    let vectorChannel: ChannelHit[] = []
     if (queryVector && queryVector.length > 0) {
       try {
         const normQuery = normalizeVector(queryVector)
-        const query = table.search(normQuery).limit(topK * 3)
+        const query = table.search(normQuery).limit(candidateLimit)
         const results = await (scopeFilter ? query.where(scopeFilter) : query).toArray()
-        for (const r of results as Array<{ text: string; _distance?: number; fileName: string }>) {
-          const dist = r._distance ?? 0
-          const similarity = Math.max(0, Math.min(1, 1 - dist / 2))
-          pushCandidate(r.text, r.fileName, similarity, 'vector')
-        }
+        vectorChannel = dedupeChannel(
+          (results as Array<{ text: string; _distance?: number; fileName: string }>)
+            .map(r => {
+              const dist = r._distance ?? 0
+              const similarity = Math.max(0, Math.min(1, 1 - dist / 2))
+              return { key: r.text, score: similarity, fileName: r.fileName, source: 'vector' as const }
+            })
+            .sort((a, b) => b.score - a.score),
+        )
       } catch {
         // 向量检索失败，降级到 FTS 通道
       }
     }
 
     // 通道 2：FTS（L3 T3：query 分词 → 过滤噪声词 → tokens 词级 AND 匹配；tokens 缺失行退回逐字 LIKE 兜底）
+    let ftsChannel: ChannelHit[] = []
     try {
       const words = selectQueryTerms(tokenizeQueryWords(queryText))
       // Fix round 1 / ③ 候选先取足量再打分：打分在下方（computeFTSRelevance），
       //   原 limit(topK*3) 会在打分前按表扫描顺序截断 —— 多词命中面较大时真命中被挤出候选池
-      const candidateLimit = Math.max(topK * 10, 50)
       const runFilter = async (filterExpr: string) => {
         const q = table.query().filter(filterExpr).limit(candidateLimit)
         return await (scopeFilter ? q.where(scopeFilter) : q).toArray() as Array<{ text: string; fileName: string }>
@@ -786,19 +851,31 @@ export async function searchWithScope(
         rows = await runFilter(buildChunkFTSFilter(queryText, []))
       }
 
-      for (const r of rows) {
-        // P1-1：FTS 命中给启发式相关性分数（不再恒 0.5）——纯 FTS 模式排序有据；
-        //   调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
-        pushCandidate(r.text, r.fileName, computeFTSRelevance(r.text, queryText), 'fts')
-      }
+      // P1-1：FTS 命中给启发式相关性分数（不再恒 0.5）——纯 FTS 模式排序有据；
+      //   调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
+      ftsChannel = dedupeChannel(
+        rows
+          .map(r => ({
+            key: r.text,
+            score: computeFTSRelevance(r.text, queryText),
+            fileName: r.fileName,
+            source: 'fts' as const,
+          }))
+          .sort((a, b) => b.score - a.score),
+      )
     } catch (e) {
       logger.warn('VectorStore', t('log.vectorStore.ftsSearchFailed').replace('{err}', String(e)))
     }
 
-    // 融合排序（双通道取高后按分数降序）
-    return [...candidates.values()]
-      .sort((a, b) => b.score - a.score)
-      .slice(0, topK)
+    for (const c of [...vectorChannel, ...ftsChannel]) reportHit(c)
+
+    // RRF 融合（品秩）→ 融合排序 → 取 topK → 映射回 4 键 SearchResult
+    const fused: SearchResult[] = []
+    for (const f of rrfFuse([vectorChannel, ftsChannel]).slice(0, topK)) {
+      const hit = bestByKey.get(f.key)
+      if (hit) fused.push(hit)
+    }
+    return fused
   } catch (error) {
     logger.error('VectorStore', t('log.vectorStore.searchFailed').replace('{err}', String(error)))
     return []
