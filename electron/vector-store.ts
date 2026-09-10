@@ -17,6 +17,7 @@ import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
 import { t } from '../src/shared/locale'
 import { getProjectVelaDir } from './utils/config-utils'
+import { tokenizeToSpaceSeparated } from './chinese-tokenizer'
 
 // 懒加载：避免 Electron 启动时同步 require 原生模块导致数秒无日志
 let _lancedb: typeof LanceDB | null = null
@@ -42,6 +43,8 @@ export interface ChunkRecord {
   /** 章节标题（可选，用于展示） */
   chapterTitle?: string
   text: string
+  /** jieba 分词结果（空格分隔，L3 中文词级 FTS 检索用；缺失时检索侧退回逐字 LIKE） */
+  tokens?: string
   vector?: number[]
   chunkIndex: number
   totalChunks: number
@@ -137,6 +140,32 @@ function detectVectorDim(records: ChunkRecord[]): number {
   return 0
 }
 
+/** 从既有表 schema 的 vector 列解析维度（FixedSizeList listSize）；无该列返回 0 */
+function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
+  const vectorField = fields.find(f => f.name === 'vector')
+  if (!vectorField) return 0
+  const listSize = (vectorField.type as { listSize?: number }).listSize
+  return typeof listSize === 'number' ? listSize : 0
+}
+
+/**
+ * 补列（L3 T2 实证修复）：必须用 addColumns 的 **SQL 表达式** 形式，不能用 `[new Field(...)]`。
+ *
+ * `Table.addColumns` 内部以 `instanceof Field/Schema` 判定入参类型，而打包产物中主进程那份
+ * apache-arrow 是 **Rolldown 内联的 ESM 副本**（`//#region node_modules/.../apache-arrow/*.mjs`），
+ * 与 external 的 `@lancedb/lancedb` 自己 `require('apache-arrow')` 的 CJS 副本**不是同一实例**——
+ * instanceof 恒 false，入参被当作 SQL 表达式数组处理而报 "Missing field `valueSql`"，
+ * 迁移静默失效（vitest 下同样复现；`createTable({schema})` 无此问题——lancedb 内部有
+ * `sanitizeSchema` 专门处理多副本，addColumns 没有）。SQL 形式走 napi 侧、不做 instanceof。
+ */
+async function addNullableColumn(
+  table: LanceDB.Table,
+  name: string,
+  sqlType: 'string' | 'int',
+): Promise<void> {
+  await table.addColumns([{ name, valueSql: `cast(NULL as ${sqlType})` }])
+}
+
 /** 构建包含可选向量列的 Arrow Schema */
 function buildChunksSchema(vectorDim: number): ArrowSchema {
   const fields: Field[] = [
@@ -146,6 +175,8 @@ function buildChunksSchema(vectorDim: number): ArrowSchema {
     new Field('chapterNumber', new Int32(), true),
     new Field('chapterTitle', new Utf8(), true),
     new Field('text', new Utf8()),
+    // L3 T2：中文分词结果列（Utf8，空格分隔词串；可空——存量行回填前为 NULL，检索侧退回 LIKE）
+    new Field('tokens', new Utf8(), true),
   ]
   // 仅在确实有向量数据时添加 FixedSizeList 列
   if (vectorDim > 0) {
@@ -205,7 +236,10 @@ export function parseChapterNumberForBackfill(fileName: string): number | null {
  * chunks 表 schema 自检 + 迁移（P2：存量表缺 chapterNumber 列——导入路径已有重建自愈
  * （requiredFields 检查），检索/启动路径此前无修复，纯文本检索因 scopeFilter 查询
  * 不存在列而失败降级。add_columns 优先：不 drop 重建，避免向量数据重嵌入）。
- * 幂等：列已存在时零动作；调用方可安全地在检索入口前置调用。
+ * L3 T2 追加：tokens 列同法自检补列（旧库升级后既可被检索侧 LIKE 兜底，
+ * 也可被 kb:backfill-tokens 回填；列必须在任何 add/select 之前存在，
+ * 否则 LanceDB 对含 tokens 键的记录直接报 "Found field not in schema"）。
+ * 幂等：两列均已存在时零动作；调用方可安全地在检索/导入入口前置调用。
  */
 export async function ensureChunksSchema(db: LanceDB.Connection): Promise<{ migrated: boolean; error?: string }> {
   try {
@@ -213,24 +247,74 @@ export async function ensureChunksSchema(db: LanceDB.Connection): Promise<{ migr
     if (!tableNames.includes(TABLE_NAME)) return { migrated: false }
     const table = await db.openTable(TABLE_NAME)
     const fields = (await table.schema()).fields.map(f => f.name)
-    if (fields.includes('chapterNumber')) return { migrated: false }
+    let migrated = false
 
-    // add_columns 优先：不 drop 重建，存量向量数据原样保留
-    await table.addColumns([new Field('chapterNumber', new Int32(), true)])
-    // 从 fileName 解析回填（仅解析成功的行；无匹配保持默认 NULL——scopeFilter 已容忍 NULL）
-    const rows = await table.query().select(['id', 'fileName']).toArray()
-    for (const r of rows as Array<{ id: string; fileName?: string }>) {
-      const chapterNumber = r.fileName ? parseChapterNumberForBackfill(r.fileName) : null
-      if (chapterNumber === null) continue
-      await table.update({
-        where: `id = '${r.id}'`,
-        values: { chapterNumber },
-      }).catch(() => { /* 单行失败跳过 */ })
+    if (!fields.includes('chapterNumber')) {
+      // add_columns 优先：不 drop 重建，存量向量数据原样保留
+      await addNullableColumn(table, 'chapterNumber', 'int')
+      // 从 fileName 解析回填（仅解析成功的行；无匹配保持默认 NULL——scopeFilter 已容忍 NULL）
+      const rows = await table.query().select(['id', 'fileName']).toArray()
+      for (const r of rows as Array<{ id: string; fileName?: string }>) {
+        const chapterNumber = r.fileName ? parseChapterNumberForBackfill(r.fileName) : null
+        if (chapterNumber === null) continue
+        await table.update({
+          where: `id = '${r.id}'`,
+          values: { chapterNumber },
+        }).catch(() => { /* 单行失败跳过 */ })
+      }
+      migrated = true
     }
-    return { migrated: true }
+
+    if (!fields.includes('tokens')) {
+      // L3 T2：仅补列不在此处分词——存量行保持 NULL 由 backfillTokens 显式回填
+      //（检索入口前置调用本函数，全表分词会阻塞首次检索；设计 §3.1 明确 NULL → LIKE 兜底）
+      await addNullableColumn(table, 'tokens', 'string')
+      migrated = true
+    }
+
+    return { migrated }
   } catch (e) {
     return { migrated: false, error: String(e) }
   }
+}
+
+// ===== 中文分词辅助（L3 T2） =====
+
+/** 分词失败只告警一次，避免大库逐块刷屏 */
+let tokenizerFailureLogged = false
+
+/**
+ * 对 chunk 文本分词，产出写入 chunks.tokens 的空格分隔词串。
+ *
+ * 惰性降级（设计 §3.1）：分词器不可用（wasm 加载失败等）或文本无有效词 → 返回 undefined，
+ * 该行 tokens 写空 → 检索侧退回既有 LIKE 逐字匹配，导入流程不因分词失败而整体失败。
+ */
+export function buildChunkTokens(text: string): string | undefined {
+  try {
+    const tokens = tokenizeToSpaceSeparated(text)
+    return tokens.trim() !== '' ? tokens : undefined
+  } catch (e) {
+    if (!tokenizerFailureLogged) {
+      tokenizerFailureLogged = true
+      // 非用户可见文本（仅落日志文件，与下方 getChunksWithoutVectors 的 raw 日志同例），
+      // 故不引入新的 i18n 键（本任务文件范围不含 locale-data.ts）
+      logger.warn('VectorStore', `tokenize failed, tokens written empty (LIKE fallback): ${safeErrorMessage(e)}`)
+    }
+    return undefined
+  }
+}
+
+/** tokens 缺失判定：null / undefined / 空串 / 纯空白（旧表无该列时读出 undefined） */
+function isMissingTokens(value: unknown): boolean {
+  return typeof value !== 'string' || value.trim() === ''
+}
+
+/**
+ * 筛出缺 tokens 的行（纯函数，供 getChunksWithoutTokens / backfillTokens 共用）。
+ * 抽出为纯函数以便在无 LanceDB 环境下用 mock 数据断言回填选择与幂等语义。
+ */
+export function selectRowsMissingTokens<T extends { tokens?: unknown }>(rows: T[]): T[] {
+  return rows.filter(r => isMissingTokens(r.tokens))
 }
 
 // ===== 核心操作 =====
@@ -252,6 +336,14 @@ export async function addChunks(
     const db = await getConnection(projectPath)
     const now = new Date().toISOString()
 
+    // L3 T2：写入前先自检补列（tokens）——add_columns 幂等且不重建表（存量向量保留）。
+    // 否则存量表缺 tokens 列时，下方 table.add(records) 会因记录含 tokens 键而
+    // 报 "Found field not in schema: tokens" 导致整个导入失败
+    const schemaCheck = await ensureChunksSchema(db)
+    if (schemaCheck.error) {
+      logger.warn('VectorStore', `ensureChunksSchema before add failed: ${schemaCheck.error.slice(0, 200)}`)
+    }
+
     // 构建记录
     const records: ChunkRecord[] = chunks.map((text, i) => {
       const record: ChunkRecord = {
@@ -259,6 +351,8 @@ export async function addChunks(
         docId,
         fileName,
         text,
+        // L3 T2：中文分词（空格分隔词串）；分词不可用时为 undefined → 检索侧退回 LIKE
+        tokens: buildChunkTokens(text),
         chunkIndex: i,
         totalChunks: chunks.length,
         importedAt: now,
@@ -282,7 +376,7 @@ export async function addChunks(
       const existingSchema = await table.schema()
       const existingFieldNames = existingSchema.fields.map(f => f.name)
       // 检查旧表 schema 是否包含所有必要字段
-      const requiredFields = ['id', 'docId', 'fileName', 'text', 'chunkIndex', 'totalChunks', 'importedAt', 'chapterNumber', 'chapterTitle', 'vector']
+      const requiredFields = ['id', 'docId', 'fileName', 'text', 'chunkIndex', 'totalChunks', 'importedAt', 'chapterNumber', 'chapterTitle', 'tokens', 'vector']
       const hasAllFields = requiredFields.every(f => existingFieldNames.includes(f))
 
       if (hasAllFields) {
@@ -324,7 +418,13 @@ export async function addChunks(
           return cleaned
         })
         await db.dropTable(TABLE_NAME)
-        await db.createTable(TABLE_NAME, [...cleanRows, ...records], { schema: targetSchema })
+        // L3 T2 加固：本次导入无向量而旧表已有 vector 列时，重建 schema 必须保留该列
+        //（沿用旧列维度）——否则存量行的 vector 字段会让 makeArrowTable 报
+        //"Found field not in schema: vector" 使整个导入失败、且向量列被整体丢弃
+        const rebuildSchema = VECTOR_DIM > 0
+          ? targetSchema
+          : buildChunksSchema(detectVectorDimFromSchema(existingSchema.fields))
+        await db.createTable(TABLE_NAME, [...cleanRows, ...records], { schema: rebuildSchema })
       }
     } else {
       // 首次创建时使用显式 Schema，确保 vector 列正确识别为 FixedSizeList
@@ -716,6 +816,93 @@ export async function getChunksWithoutVectors(
 }
 
 /**
+ * 获取缺少 tokens 的文本块（L3 T2：回填检测与驱动）
+ *
+ * tokens 缺失 = NULL / 空串 / 纯空白 / 旧表尚无该列；返回 text + fileName。
+ */
+export async function getChunksWithoutTokens(
+  projectPath: string,
+): Promise<Array<{ text: string; fileName: string }>> {
+  try {
+    const db = await getConnection(projectPath)
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return []
+
+    const table = await db.openTable(TABLE_NAME)
+    const hasTokensCol = (await table.schema()).fields.some(f => f.name === 'tokens')
+    // 无 tokens 列的存量表：全部行都缺 tokens（不在此处写库——补列由 ensureChunksSchema / backfillTokens 负责）
+    const rows = hasTokensCol
+      ? await table.query().select(['text', 'fileName', 'tokens']).toArray()
+      : await table.query().select(['text', 'fileName']).toArray()
+
+    return selectRowsMissingTokens(rows as Array<{ text: string; fileName: string; tokens?: unknown }>)
+      .map(r => ({ text: r.text, fileName: r.fileName }))
+  } catch (e) {
+    logger.error('VectorStore', `getChunksWithoutTokens error: ${e}`)
+    return []
+  }
+}
+
+/**
+ * 为缺少 tokens 的块批量回填中文分词（L3 T2）
+ *
+ * 幂等：只处理 tokens 为 NULL/空串/纯空白的行，已有 tokens 一律不改写，重复调用零动作。
+ * 逐行 update（非 drop+create 全表重写），中断不会丢数据；单行失败计入 failed 不中断整体。
+ * 回填后 LanceDB 侧的 tokens 词级 FTS 索引重建由检索侧任务负责（本函数只保证数据就位）。
+ */
+export async function backfillTokens(
+  projectPath: string,
+  onProgress?: (pct: number, msg: string) => void,
+): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
+  try {
+    const db = await getConnection(projectPath)
+    const tableNames = await db.tableNames()
+    if (!tableNames.includes(TABLE_NAME)) return { success: true, processed: 0, failed: 0 }
+
+    const table = await db.openTable(TABLE_NAME)
+    // 存量表可能尚无 tokens 列（升级后未走过导入/检索入口）→ 先补列（幂等）
+    if (!(await table.schema()).fields.some(f => f.name === 'tokens')) {
+      await addNullableColumn(table, 'tokens', 'string')
+    }
+
+    const rows = await table.query().select(['id', 'text', 'tokens']).toArray()
+    const missing = selectRowsMissingTokens(rows as Array<{ id: string; text: string; tokens?: unknown }>)
+    if (missing.length === 0) return { success: true, processed: 0, failed: 0 }
+
+    let processed = 0
+    let failed = 0
+    for (let i = 0; i < missing.length; i++) {
+      const row = missing[i]
+      try {
+        const tokens = buildChunkTokens(String(row.text ?? ''))
+        if (!tokens) {
+          failed++
+        } else {
+          await table.update({
+            where: `id = '${sanitizeFilterValue(row.id, 'id')}'`,
+            values: { tokens },
+          })
+          processed++
+        }
+      } catch (e) {
+        failed++
+        logger.warn('VectorStore', `backfillTokens row failed (id=${row.id}): ${safeErrorMessage(e)}`)
+      }
+      // 进度消息复用既有 i18n 键（本任务文件范围不含 locale-data.ts，不新增键）
+      onProgress?.(
+        Math.round(((i + 1) / missing.length) * 100),
+        t('knowledge.chunks').replace('{n}', String(processed)),
+      )
+    }
+
+    return { success: true, processed, failed }
+  } catch (error) {
+    logger.error('VectorStore', `backfillTokens error: ${safeErrorMessage(error)}`)
+    return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
+  }
+}
+
+/**
  * 为缺少向量的块批量回填向量
  * 返回无向量的块列表（id + text），供调用方批量生成向量后更新
  */
@@ -809,6 +996,8 @@ export async function updateChunkVectors(
         new Field('chapterNumber', new Int32(), true),
         new Field('chapterTitle', new Utf8(), true),
         new Field('text', new Utf8()),
+        // L3 T2：显式 schema 重建时必须带上 tokens 列，否则分词结果被整体丢弃
+        new Field('tokens', new Utf8(), true),
         vectorField,
         new Field('chunkIndex', new Int32()),
         new Field('totalChunks', new Int32()),

@@ -25,6 +25,7 @@ import {
   getStats as storeGetStats,
   migrateFromJSON,
   getChunksWithoutVectors as storeGetChunksWithoutVectors,
+  backfillTokens as storeBackfillTokens,
 } from './vector-store'
 
 // ===== 迁移状态跟踪 =====
@@ -431,6 +432,8 @@ export async function backfillVectors(
       new Field('chapterNumber', new Int32(), true),
       new Field('chapterTitle', new Utf8(), true),
       new Field('text', new Utf8()),
+      // L3 T2：显式 schema 重建时必须带上 tokens 列，否则回填向量时中文分词结果被整体丢弃
+      new Field('tokens', new Utf8(), true),
     ]
     if (VECTOR_DIM > 0) {
       arrowFields.push(new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true))
@@ -491,6 +494,23 @@ export async function backfillVectors(
     }
 
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }
+  } catch (error) {
+    logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
+    return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
+  }
+}
+
+/**
+ * 批量回填中文分词（L3 T2：为缺 tokens 的块补 jieba 分词结果）
+ *
+ * 与 backfillVectors 不同：不依赖 Embedding 配置（纯本地分词，零成本、零网络），
+ * 故无三级降级逻辑——直接委托 vector-store（幂等：只处理 tokens 为空的行）。
+ */
+export async function backfillTokens(
+  projectPath: string,
+): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
+  try {
+    return await storeBackfillTokens(projectPath)
   } catch (error) {
     logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
     return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }

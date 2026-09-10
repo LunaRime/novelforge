@@ -4,12 +4,13 @@ import fs from 'node:fs'
 import {
   importDocument, importFolder, importText, searchKnowledge, searchKnowledgeFTS,
   listDocuments, removeDocument, getKnowledgeStats,
-  getVectorlessCount, backfillVectors,
+  getVectorlessCount, backfillVectors, backfillTokens,
 } from '../knowledge-base'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
 import { getProjectDb } from '../database'
 import { decryptApiKey } from '../utils/secure-config'
 import { logger } from '../utils/logger'
+import { safeErrorMessage } from '../utils/error-utils'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { embeddingService } from '../embedding-service'
 
@@ -195,6 +196,18 @@ export function registerKBController() {
       processed: 0,
       failed: count,
       error: t('kb.noVectorMethod'),
+    }
+  })
+
+  // L3 T2：中文分词回填（纯本地 jieba 分词，无需 Embedding 配置）
+  ipcMain.handle('kb:backfill-tokens', async () => {
+    const projectPath = getCurrentProjectPath()
+    if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
+    try {
+      return await backfillTokens(projectPath)
+    } catch (error) {
+      logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
+      return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
     }
   })
 

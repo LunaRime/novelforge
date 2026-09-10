@@ -32,8 +32,10 @@ export default defineConfig(({ mode }) => {
         vite: {
           build: {
             rollupOptions: {
-              // 原生模块必须 externalize，Rolldown 无法打包 .node 二进制文件
-              external: ['better-sqlite3', '@lancedb/lancedb'],
+              // 原生/wasm 模块必须 externalize：Rolldown 无法打包 .node 二进制，
+              // 且 jieba-wasm 的 nodejs target 在模块加载期同步 fs.readFileSync 读 .wasm，
+              // 内联打包会因 __dirname 位移 + .wasm 未拷贝而启动即 ENOENT（T1 review 实证）
+              external: ['better-sqlite3', '@lancedb/lancedb', 'jieba-wasm'],
               output: {
                 banner: `console.log('[NovelForge] 正在启动...');`,
                 footer: `console.log('[NovelForge] 模块加载完成');`,

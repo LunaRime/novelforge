@@ -603,6 +603,7 @@ export interface KnowledgeBaseChannels {
   'dialog:select-import-folder': { args: []; return: string | null }
   'kb:get-vectorless-count': { args: []; return: { count: number } }
   'kb:backfill-vectors': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
+  'kb:backfill-tokens': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
 }
 
 // ===== 向量嵌入 =====

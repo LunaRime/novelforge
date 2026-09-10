@@ -9,7 +9,9 @@
     "node_modules/apache-arrow/**/*",
     "node_modules/@lancedb/lancedb-darwin-*/**/*",
     "node_modules/@lancedb/lancedb-linux-*/**/*",
-    "node_modules/@lancedb/lancedb-win32-*/**/*"
+    "node_modules/@lancedb/lancedb-win32-*/**/*",
+    // jieba-wasm：nodejs target 在模块加载期同步读 pkg/nodejs/*.wasm，asar 内路径不可 fs 读
+    "node_modules/jieba-wasm/**/*"
   ],
   // 覆盖根 package.json 的 "type":"module"，确保主进程以 CommonJS 运行
   // Electron 主进程使用 CJS require，ESM 模式会导致 Rolldown CJS shim 崩溃
@@ -63,7 +65,9 @@
     "node_modules/apache-arrow/**",
     "node_modules/flatbuffers/**",
     "node_modules/tslib/**",
-    "node_modules/reflect-metadata/**"
+    "node_modules/reflect-metadata/**",
+    // jieba-wasm：external 依赖（中文分词 .wasm + JS 入口）
+    "node_modules/jieba-wasm/**"
   ],
   "mac": {
     "target": ["dmg"],
