@@ -13,6 +13,9 @@ jobs:
     runs-on: ${{ matrix.os }}
 
     strategy:
+      # 一个平台失败不取消其余平台。默认 fail-fast 会让先挂的平台 cancel 掉另外两个，
+      # 制造「只有某平台失败」的假象并掩盖全貌（2026-09-10 前的 CI 事故即如此）。
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node-version: [22.x]
@@ -73,6 +76,9 @@ jobs:
         echo "✅ CI smoke check 通过"
 
   # ===== Release 构建（仅 tag push 触发，Ubuntu 环境） =====
+  # 本 job 只产出 GitHub Actions artifact（NovelForge-linux-<tag>），**不写入 GitHub Release 资产**——
+  # 正式发布走本地 Windows 构建 + gh release create（见 novelforge-release）。
+  # 因 needs: check，check 恒红期间（2026-08-15~09-10）它从未真正运行过。
   release:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: check
