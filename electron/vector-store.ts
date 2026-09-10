@@ -615,19 +615,56 @@ export function tokenizeQueryWords(queryText: string): string[] {
   }
 }
 
+/** 词级表达式不可用（tokens 列缺失/类型不符）退回逐字 LIKE 只告警一次，避免每次检索刷屏 */
+let ftsCharFallbackLogged = false
+
 /** LIKE 字面量转义：' → ''（字符串闭合）、%/_ → 全角（消除通配符语义注入） */
 function escapeLikeLiteral(s: string): string {
   return s.replace(/'/g, "''").replace(/%/g, '％').replace(/_/g, '＿')
 }
 
 /**
+ * 单字功能词表（L3 T3 Fix round 1）——检索前丢弃，避免高频虚词（的/是/在…）主导匹配。
+ * ⚠️ 只收**虚词**，不收实义单字（剑/盾/光…）：丢弃实义单字会把 query 退化成更宽的词
+ *    （如「主角的剑」→「主角」），反而重演候选池泛滥（有 e2e 用例锁定）。
+ *    纯虚词/标点 query（如「的」「，。」）过滤后为空 → 调用方退回逐字 LIKE，单词查询能力不丢。
+ */
+const QUERY_STOP_WORDS = new Set([
+  // 中文虚词
+  '的', '了', '是', '在', '和', '与', '及', '或', '也', '就', '都', '而', '被', '把', '对', '为',
+  '着', '过', '之', '其', '这', '那', '我', '你', '他', '她', '它', '们', '个', '有', '不', '没',
+  '很', '更', '最', '会', '能', '要', '从', '向', '于', '等', '并', '则', '因', '由', '以', '所',
+  '但', '若', '如', '将', '已', '又', '再', '还', '只', '才', '使', '让', '给', '上', '下', '中',
+  '里', '时', '后', '前', '吗', '呢', '啊', '吧', '嘛', '呀', '哦',
+  // 英文虚词（中英混排 query）
+  'a', 'an', 'the', 'of', 'and', 'or', 'to', 'in', 'on', 'at', 'by', 'for', 'is', 'are', 'was',
+  'were', 'be', 'it', 'this', 'that', 'with', 'as',
+])
+
+/** 纯标点/符号/空白 token 判定（jieba 保留标点，T1 遗留；此处统一丢弃） */
+const PUNCTUATION_ONLY = /^[\p{P}\p{S}\s]+$/u
+
+/**
+ * 查询词过滤（L3 T3 Fix round 1，纯函数）：标点/符号/空白 + 单字虚词丢弃；
+ * 实义单字（剑/盾）保留——保留选择性，避免多词查询被高频虚词淹没。
+ */
+export function selectQueryTerms(words: string[]): string[] {
+  return words.filter(w => {
+    if (!w || w.trim() === '') return false
+    if (PUNCTUATION_ONLY.test(w)) return false
+    return !QUERY_STOP_WORDS.has(w.toLowerCase())
+  })
+}
+
+/**
  * 构造 chunks 检索过滤表达式（L3 T3，纯函数便于断言）。
  *
- * 词级为主：query 分词后**每词**一个 `tokens LIKE '%词%'` 片段，OR 取并集
- * （jieba 保留标点，标点词同样按词匹配，无需特判）。
+ * 词级为主：query 分词**并过滤噪声词**后，每词一个 `tokens LIKE '%词%'` 片段，
+ *   **多词用 AND**（chunk 须含全部词）——选择性回到改造前水平，避免高频词 OR 命中近乎全表
+ *   后在 `limit` 处被截断（改造引入的静默丢召回，见 Fix round 1 / Critical-1）。
  * 逐字兜底：`tokens` 缺失（NULL / 空串——存量未回填库、回填失败行、旧表无该列）的行走
- * 改造前的逐字容错 `text LIKE '%搜%索%'`，保证存量库不因改造而检不到。
- * 分词不可用（words 为空）→ 全量退回逐字 LIKE，行为与改造前完全一致。
+ *   改造前的逐字容错 `text LIKE '%搜%索%'`，保证存量库不因改造而检不到。
+ * 分词/词表不可用（words 为空）→ 全量退回逐字 LIKE，行为与改造前完全一致。
  */
 export function buildChunkFTSFilter(queryText: string, words: string[]): string {
   // ⚠️ P3 修复保留：查询中的 %/_ 转全角（LIKE 通配符注入——'100%' 此前匹配 "100任意串"；
@@ -640,7 +677,7 @@ export function buildChunkFTSFilter(queryText: string, words: string[]): string 
 
   const wordClauses = words.map(w => `tokens LIKE '%${escapeLikeLiteral(w)}%'`)
   const missingTokens = `(tokens IS NULL OR tokens = '')`
-  return `((${wordClauses.join(' OR ')}) OR (${missingTokens} AND ${fallbackClause}))`
+  return `((${wordClauses.join(' AND ')}) OR (${missingTokens} AND ${fallbackClause}))`
 }
 
 /**
@@ -678,7 +715,12 @@ export async function searchWithScope(
     const db = await getConnection(projectPath)
     // P2 修复：检索前自检 chunks 表 schema —— 存量表缺 chapterNumber 列时
     //   （导入路径自愈外的旧数据）清理 add_columns + 回填；幂等，迁移过一次后零开销
-    await ensureChunksSchema(db)
+    const schemaCheck = await ensureChunksSchema(db)
+    if (schemaCheck.error) {
+      // Fix round 1 / Important-2：补列失败（此前 error 被丢弃）时 tokens 列可能不存在，
+      //   下方词级表达式会抛错并由通道 2 内部退回逐字 LIKE；此处留痕便于排查根因
+      logger.warn('VectorStore', `ensureChunksSchema before search failed: ${schemaCheck.error.slice(0, 200)}`)
+    }
     const tableNames = await db.tableNames()
     if (!tableNames.includes(TABLE_NAME)) return []
 
@@ -718,18 +760,33 @@ export async function searchWithScope(
       }
     }
 
-    // 通道 2：FTS（L3 T3：query 分词 → tokens 词级匹配；tokens 缺失行退回逐字 LIKE 兜底）
+    // 通道 2：FTS（L3 T3：query 分词 → 过滤噪声词 → tokens 词级 AND 匹配；tokens 缺失行退回逐字 LIKE 兜底）
     try {
-      const words = tokenizeQueryWords(queryText)
-      const filterExpr = buildChunkFTSFilter(queryText, words)
-
-      let q = table.query().filter(filterExpr).limit(topK * 3)
-      if (scopeFilter) {
-        q = q.where(scopeFilter)
+      const words = selectQueryTerms(tokenizeQueryWords(queryText))
+      // Fix round 1 / ③ 候选先取足量再打分：打分在下方（computeFTSRelevance），
+      //   原 limit(topK*3) 会在打分前按表扫描顺序截断 —— 多词命中面较大时真命中被挤出候选池
+      const candidateLimit = Math.max(topK * 10, 50)
+      const runFilter = async (filterExpr: string) => {
+        const q = table.query().filter(filterExpr).limit(candidateLimit)
+        return await (scopeFilter ? q.where(scopeFilter) : q).toArray() as Array<{ text: string; fileName: string }>
       }
-      const results = await q.toArray()
 
-      for (const r of results as Array<{ text: string; fileName: string }>) {
+      let rows: Array<{ text: string; fileName: string }>
+      try {
+        rows = await runFilter(buildChunkFTSFilter(queryText, words))
+      } catch (inner) {
+        if (words.length === 0) throw inner
+        // Fix round 1 / Important-2：词级表达式不可用（tokens 列缺失或类型不符 → 补列失败）时，
+        //   原实现被外层 catch 吞掉 → FTS 通道静默归零（改造前靠 text LIKE 仍能召回）；
+        //   此处退回纯逐字 LIKE 重试一次，保持改造前的召回能力。
+        if (!ftsCharFallbackLogged) {
+          ftsCharFallbackLogged = true
+          logger.warn('VectorStore', `word-level FTS filter failed, fallback to char LIKE: ${safeErrorMessage(inner)}`)
+        }
+        rows = await runFilter(buildChunkFTSFilter(queryText, []))
+      }
+
+      for (const r of rows) {
         // P1-1：FTS 命中给启发式相关性分数（不再恒 0.5）——纯 FTS 模式排序有据；
         //   调用方对 fts 来源豁免相似度阈值（精确匹配本身保证相关性）
         pushCandidate(r.text, r.fileName, computeFTSRelevance(r.text, queryText), 'fts')

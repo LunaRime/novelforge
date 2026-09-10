@@ -25,6 +25,7 @@ import {
   searchWithScope,
   buildChunkFTSFilter,
   tokenizeQueryWords,
+  selectQueryTerms,
 } from './vector-store'
 
 describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
@@ -268,11 +269,9 @@ describe('LanceDB 端到端：tokens 写入 + 回填（L3 T2）', () => {
 // ===== L3 T3：FTS 通道中文词级检索（替换逐字 LIKE）+ tokens 缺失兜底 =====
 
 describe('FTS 过滤表达式构造（L3 T3，纯函数）', () => {
-  it('query 分词 → 每词一个 tokens LIKE 片段 OR 连并，且带 tokens 缺失逐字兜底', () => {
+  it('query 分词 → 每词一个 tokens LIKE 片段 AND 连并（chunk 须含全部词），且带 tokens 缺失逐字兜底', () => {
     const expr = buildChunkFTSFilter('搜索知识', ['搜索', '知识'])
-    expect(expr).toContain(`tokens LIKE '%搜索%'`)
-    expect(expr).toContain(`tokens LIKE '%知识%'`)
-    expect(expr).toContain(' OR ')
+    expect(expr).toContain(`tokens LIKE '%搜索%' AND tokens LIKE '%知识%'`)
     expect(expr).toContain(`(tokens IS NULL OR tokens = '')`)
     expect(expr).toContain(`text LIKE '%搜%索%知%识%'`)
   })
@@ -298,6 +297,28 @@ describe('FTS 过滤表达式构造（L3 T3，纯函数）', () => {
     expect(tokenizeQueryWords('主角的剑')).toEqual(['主角', '的', '剑'])
     expect(tokenizeQueryWords('主力，配角。')).toContain('，')
     expect(tokenizeQueryWords('')).toEqual([])
+  })
+})
+
+// ===== L3 T3 Fix round 1：查询词过滤（Critical-1）+ AND 选择性 + tokens 列不可用兜底（Important-2）=====
+
+describe('查询词过滤（L3 T3 Fix round 1，纯函数）', () => {
+  it('丢弃标点/符号与单字功能词（的/是/在…）', () => {
+    expect(selectQueryTerms(['主角', '的', '剑', '，', '在', '是'])).toEqual(['主角', '剑'])
+  })
+
+  it('保留实义单字词（剑/盾）——丢弃会把 query 退化成更宽的词，重演候选池泛滥', () => {
+    expect(selectQueryTerms(['剑'])).toEqual(['剑'])
+    expect(selectQueryTerms(['主角', '的', '剑'])).toEqual(['主角', '剑'])
+  })
+
+  it('纯噪声词表（功能词/标点）→ 空词表 → 调用方退回逐字 LIKE（单字/纯功能词 query 能力保持）', () => {
+    expect(selectQueryTerms(['的', '是', '，', '。', ' '])).toEqual([])
+    expect(buildChunkFTSFilter('的是，。', [])).toBe(`text LIKE '%的%是%，%。%'`)
+  })
+
+  it('过滤保持词序与重复词（不重排、不去重，语义不变）', () => {
+    expect(selectQueryTerms(['主角', '剑', '主角'])).toEqual(['主角', '剑', '主角'])
   })
 })
 
@@ -445,6 +466,96 @@ describe('LanceDB 端到端：FTS 词级检索（L3 T3）', () => {
       const scoped = await searchWithScope(projectPath, '主角', undefined, 5, [1, 3])
       expect(scoped.map(r => r.text)).toContain('主角在第一章')
       expect(scoped.map(r => r.text)).not.toContain('主角在第九章')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+})
+
+// ===== L3 T3 Fix round 1：候选池截断丢召回回归（Critical-1）+ tokens 列不可用兜底（Important-2）=====
+
+describe('LanceDB 端到端：多词查询不再因候选池截断丢召回（L3 T3 Fix round 1）', () => {
+  function makeTempProject(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fts-fix-'))
+  }
+
+  async function cleanupProject(projectPath: string): Promise<void> {
+    await closeConnection(projectPath)
+    fs.rmSync(projectPath, { recursive: true, force: true })
+  }
+
+  it('多词含高频词（的）：无关行不撑满候选池，真命中仍返回（reviewer 复现场景）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      // 200 行含高频词「的」的无关内容；目标行**最后**写入 →
+      // 多词 OR + limit(topK*3) 会先按表扫描顺序截断，把目标挤出候选池（改造引入的静默丢召回）
+      const noise = Array.from({ length: 200 }, (_, i) => `无关内容第${i}段，他的心情很复杂`)
+      expect((await addChunks(projectPath, randomUUID(), '第1章 噪声.txt', noise, undefined)).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第2章 目标.txt', ['主角的剑在月光下'], undefined,
+      )).success).toBe(true)
+
+      const results = await searchWithScope(projectPath, '主角的剑')
+      expect(results.map(r => r.text)).toContain('主角的剑在月光下') // 真命中不丢
+      expect(results.every(r => r.text.includes('主角'))).toBe(true) // 无关行不灌入（FTS 豁免阈值）
+      expect(results.find(r => r.text === '主角的剑在月光下')?.source).toBe('fts')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('实义单字词不被丢弃：200 条含「主角」的行不会挤出同时含「剑」的真命中', async () => {
+    const projectPath = makeTempProject()
+    try {
+      // 若按「丢弃全部单字词」实现，词表退化为 ['主角'] → 201 行命中 → 上限截断 → 目标丢失
+      const noise = Array.from({ length: 200 }, (_, i) => `主角的心情第${i}段`)
+      expect((await addChunks(projectPath, randomUUID(), '第3章 噪声.txt', noise, undefined)).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第4章 目标.txt', ['主角的剑在月光下'], undefined,
+      )).success).toBe(true)
+
+      const results = await searchWithScope(projectPath, '主角的剑')
+      expect(results.map(r => r.text)).toContain('主角的剑在月光下')
+      expect(results.every(r => r.text.includes('剑'))).toBe(true)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('单字 query（剑）仍可检索到目标（单词查询能力保持）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第5章 目标.txt', ['主角的剑在月光下'], undefined,
+      )).success).toBe(true)
+
+      const results = await searchWithScope(projectPath, '剑')
+      expect(results.map(r => r.text)).toContain('主角的剑在月光下')
+      expect(results.find(r => r.text === '主角的剑在月光下')?.source).toBe('fts')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('tokens 列不可用（类型不符 / 补列失败）→ 词级表达式抛错时退回逐字 LIKE，FTS 不静默归零（Important-2）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      const db = await getConnection(projectPath)
+      // 模拟 tokens 列未被正确补出（非字符串列）→ 词级表达式整体抛错
+      await db.createTable('chunks', [{
+        id: randomUUID(), docId: randomUUID(), fileName: '第1章 旧.txt',
+        chapterNumber: 1, chapterTitle: '旧', text: '主角的剑在月光下',
+        tokens: 0, chunkIndex: 0, totalChunks: 1, importedAt: '2026-01-01T00:00:00.000Z',
+      }])
+
+      // 证据：词级表达式在该表上确实抛错（否则本用例不成立）
+      await expect(
+        (await db.openTable('chunks')).query().filter("tokens LIKE '%主角%'").toArray(),
+      ).rejects.toThrow()
+
+      const results = await searchWithScope(projectPath, '主角')
+      expect(results.map(r => r.text)).toContain('主角的剑在月光下') // 改造前靠逐字 LIKE 可召回
+      expect(results.find(r => r.text === '主角的剑在月光下')?.source).toBe('fts')
     } finally {
       await cleanupProject(projectPath)
     }
