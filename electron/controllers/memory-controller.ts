@@ -18,7 +18,9 @@ const memoryDir = (): string => {
  * 防路径穿越外的越权名（目录名、脚本文件）与空名误写。返回 basename。
  */
 export function assertSafeMemoryFileName(file: string): string {
-  const base = path.basename(file)
+  // 先归一化 Windows 反斜杠再取 basename：POSIX（CI ubuntu/macos）的 path.basename
+  // 不把 '\' 当分隔符，否则 '..\..\evil.md' 会原样通过守卫（跨平台行为不一致）。
+  const base = path.basename(file.replace(/\\/g, '/'))
   if (!base || base === '.' || base === '..' || !base.endsWith('.md')) {
     throw new Error(`unsafe memory file name: ${file}`)
   }
