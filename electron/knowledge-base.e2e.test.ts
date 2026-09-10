@@ -70,6 +70,13 @@ beforeEach(() => {
 })
 
 describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L3 T5）', () => {
+  /**
+   * 显式 timeout（L3 T6 fix）：本文件是**真实 LanceDB** 端到端（建表 + 写入 + 迁移自检 + 双通道检索），
+   * 默认 5s 在 CI/官方环境与并发负载下会抖（T6 门禁实测：并发跑时首例 > 5s 触发
+   * "Test timed out in 5000ms"）。断言逐字未改，只放宽时限。
+   */
+  const E2E_TIMEOUT_MS = 30_000
+
   it('扩展生效：query 用别名「阿晚」→ 召回只含正名「苏晚」的 chunk；无 characters 时与改造前一致', async () => {
     const projectPath = makeTempProject()
     try {
@@ -102,7 +109,7 @@ describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L
     } finally {
       await cleanupProject(projectPath)
     }
-  })
+  }, E2E_TIMEOUT_MS)
 
   it('回归守卫：有/无 characters 时 FTS-only 检索结果逐字相同（扩展不进 T3 的 AND 通道）', async () => {
     const projectPath = makeTempProject()
@@ -126,5 +133,5 @@ describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L
     } finally {
       await cleanupProject(projectPath)
     }
-  })
+  }, E2E_TIMEOUT_MS)
 })

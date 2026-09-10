@@ -287,6 +287,12 @@ function readCharacterAliasMap(projectPath: string): Map<string, string[]> {
  * 检索知识库
  * 有 Embedding 配置时 → 混合检索（FTS + 向量）
  * 无 Embedding 配置时 → 纯 FTS 检索
+ *
+ * L3 T5：本入口**做**查询改写（角色别名扩展）——query 命中 characters 的角色名/别名时，
+ * 并入该角色的正名 + 别名后再向量化；扩展只喂语义通道，词法通道沿用原 query，
+ * 失败路径（无 characters / 别名缺失 / 解析失败 / 项目不匹配）一律退回原 query；
+ * 分词器不可用时退化为子串命中判定（仍可扩展，只是不再按词匹配）。
+ * 收益边界（只保证词法通道与候选池不减；结果集排序/top-K 成员仍可能被替换）见函数内注释。
  */
 export async function searchKnowledge(
   query: string,
@@ -307,8 +313,17 @@ export async function searchKnowledge(
     // ⚠️ 扩展**只喂语义通道**：`storeSearchWithScope` 的 queryText 仅被 FTS 通道消费，而 T3 的
     //   词级检索是 **AND**——把变体并进 query 等于追加 AND 约束，候选集只会收紧
     //   （query「阿晚」→ 并入 苏晚/晚儿 后要求 chunk 同时含三种形态），反向丢失既有召回。
-    //   故词法通道沿用原 query：扩展在任何情况下都是**纯增益**（只增召回、不减召回），
-    //   任何失败（无 characters / 别名缺失 / 解析失败 / 项目不匹配）都退回原 query。
+    //   故词法通道沿用原 query；任何失败（无 characters / 别名缺失 / 解析失败 / 项目不匹配）
+    //   都退回原 query。
+    //
+    // ⚠️ 收益边界（T5 review Important-1 收窄，勿再表述为「纯增益」）：上述保证只到
+    //   **「词法通道不变、候选池不减」**。扩展后的 query 向量会改变语义通道的候选与品秩，
+    //   而 T4 的 RRF 融合是在**融合排序之后**才 `slice(topK)`——因此 **结果集排序与 top-K
+    //   成员可能被替换**（同一 query、topK=1 时 top1 就可能换块），并非「只增不减」。
+    //   带硬阈值的消费者（rag-context-provider 的 vector ≥0.6、search-knowledge.tool 的
+    //   min_score 0.5）因此可能丢弃改造前会注入的 chunk。该风险只能在**有 API Key 的真实
+    //   embedding 环境**复测确认（发布前置项：真实 embedding 下别名 query 的 top-K 与
+    //   阈值命中率不得低于改造前）。
     const effectiveQuery = rewriteQuery(query, readCharacterAliasMap(projectPath))
     try {
       const [vec] = await generateEmbeddings([effectiveQuery], protocol, model)
@@ -648,8 +663,8 @@ export async function backfillTokens(
  *
  * L3 T5：本入口**不做**角色别名扩展——它只有词法通道，而 T3 的词级检索是 AND，并入别名变体
  * 只会追加 AND 约束、收紧候选集（别名查询可能被清零）。扩展只在 `searchKnowledge` 的语义通道
- * 生效；要让词法通道也吃到别名增益，需要 T3 支持「同角色变体 OR 成组」的放宽——brief 明确禁止
- * 在本任务内做（避免重演 Critical-1），见 `.superpowers/sdd/2026-09-08-chinese-search-plan/task-5-report.md`。
+ * 生效；要让词法通道也吃到别名增益，需要 T3 支持「同角色变体 OR 成组」的放宽——该放宽会重演
+ * Critical-1 的候选池泛滥，本任务明确不做。
  */
 export async function searchKnowledgeFTS(
   query: string,

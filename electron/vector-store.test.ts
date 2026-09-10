@@ -384,6 +384,24 @@ describe('RRF 融合（L3 T4，纯函数）', () => {
     expect(rrfFuse([[{ key: 'X', score: 1 }]], 1)[0].score).toBeCloseTo(0.5, 12)
     expect(rrfFuse([[{ key: 'X', score: 1 }]], 0)[0].score).toBeCloseTo(1, 12)
   })
+
+  it('完全打平（RRF 分与最佳原始分都相等）→ 按 key 升序，结果确定（T4 Minor-1）', () => {
+    // 两 key 各占一通道 rank1：RRF 分同为 1/61，最佳原始分同为 0.9 → 前两级破平失效，
+    // 只能靠 key 升序兜底；否则输出顺序取决于 Map 插入序（= 通道遍历序），不可确定
+    const fused = rrfFuse([
+      [{ key: 'B', score: 0.9 }],
+      [{ key: 'A', score: 0.9 }],
+    ])
+    expect(fused.map(f => f.key)).toEqual(['A', 'B'])
+    expect(fused[0].score).toBeCloseTo(fused[1].score, 12)
+
+    // 反向通道序 → 同一输出（与通道遍历序无关）
+    const reversed = rrfFuse([
+      [{ key: 'A', score: 0.9 }],
+      [{ key: 'B', score: 0.9 }],
+    ])
+    expect(reversed.map(f => f.key)).toEqual(['A', 'B'])
+  })
 })
 
 describe('LanceDB 端到端：FTS 词级检索（L3 T3）', () => {
@@ -548,12 +566,24 @@ describe('LanceDB 端到端：多词查询不再因候选池截断丢召回（L3
     fs.rmSync(projectPath, { recursive: true, force: true })
   }
 
+  /**
+   * 噪声语料规模（T6 fix）：
+   * - 语义不变的前提是「噪声单独即可撑满候选池」——`searchWithScope` 的
+   *   `candidateLimit = max(topK*10, 50) = 50`（默认 topK=5），故噪声行数必须 **> 50**；
+   *   取 100（2× 上限）既保留该语义，也把单例耗时压到默认 5s 超时之内。
+   * - 配套给两个用例显式 timeout（30s）：真实 LanceDB 建表 + 写入 + 双通道检索的开销
+   *   与机器负载相关，默认 5s 在 CI/官方环境会抖（T6 门禁实测超时）。
+   * - 断言（真命中不丢 / 无关行不灌入 / source=fts）逐字未改。
+   */
+  const NOISE_ROWS = 100
+  const E2E_TIMEOUT_MS = 30_000
+
   it('多词含高频词（的）：无关行不撑满候选池，真命中仍返回（reviewer 复现场景）', async () => {
     const projectPath = makeTempProject()
     try {
-      // 200 行含高频词「的」的无关内容；目标行**最后**写入 →
-      // 多词 OR + limit(topK*3) 会先按表扫描顺序截断，把目标挤出候选池（改造引入的静默丢召回）
-      const noise = Array.from({ length: 200 }, (_, i) => `无关内容第${i}段，他的心情很复杂`)
+      // 噪声行含高频词「的」；目标行**最后**写入 →
+      // 多词 OR + 打分前截断会先按表扫描顺序截断，把目标挤出候选池（改造引入的静默丢召回）
+      const noise = Array.from({ length: NOISE_ROWS }, (_, i) => `无关内容第${i}段，他的心情很复杂`)
       expect((await addChunks(projectPath, randomUUID(), '第1章 噪声.txt', noise, undefined)).success).toBe(true)
       expect((await addChunks(
         projectPath, randomUUID(), '第2章 目标.txt', ['主角的剑在月光下'], undefined,
@@ -566,13 +596,13 @@ describe('LanceDB 端到端：多词查询不再因候选池截断丢召回（L3
     } finally {
       await cleanupProject(projectPath)
     }
-  })
+  }, E2E_TIMEOUT_MS)
 
-  it('实义单字词不被丢弃：200 条含「主角」的行不会挤出同时含「剑」的真命中', async () => {
+  it('实义单字词不被丢弃：100 条含「主角」的行不会挤出同时含「剑」的真命中', async () => {
     const projectPath = makeTempProject()
     try {
-      // 若按「丢弃全部单字词」实现，词表退化为 ['主角'] → 201 行命中 → 上限截断 → 目标丢失
-      const noise = Array.from({ length: 200 }, (_, i) => `主角的心情第${i}段`)
+      // 若按「丢弃全部单字词」实现，词表退化为 ['主角'] → 101 行命中 → 上限截断 → 目标丢失
+      const noise = Array.from({ length: NOISE_ROWS }, (_, i) => `主角的心情第${i}段`)
       expect((await addChunks(projectPath, randomUUID(), '第3章 噪声.txt', noise, undefined)).success).toBe(true)
       expect((await addChunks(
         projectPath, randomUUID(), '第4章 目标.txt', ['主角的剑在月光下'], undefined,
@@ -584,7 +614,7 @@ describe('LanceDB 端到端：多词查询不再因候选池截断丢召回（L3
     } finally {
       await cleanupProject(projectPath)
     }
-  })
+  }, E2E_TIMEOUT_MS)
 
   it('单字 query（剑）仍可检索到目标（单词查询能力保持）', async () => {
     const projectPath = makeTempProject()

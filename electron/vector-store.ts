@@ -240,6 +240,7 @@ export function parseChapterNumberForBackfill(fileName: string): number | null {
  * 也可被 kb:backfill-tokens 回填；列必须在任何 add/select 之前存在，
  * 否则 LanceDB 对含 tokens 键的记录直接报 "Found field not in schema"）。
  * 幂等：两列均已存在时零动作；调用方可安全地在检索/导入入口前置调用。
+ * 容错（T6 fix）：两列各自独立尝试，一列失败不影响另一列；失败信息经返回值 error 上交。
  */
 export async function ensureChunksSchema(db: LanceDB.Connection): Promise<{ migrated: boolean; error?: string }> {
   try {
@@ -249,30 +250,44 @@ export async function ensureChunksSchema(db: LanceDB.Connection): Promise<{ migr
     const fields = (await table.schema()).fields.map(f => f.name)
     let migrated = false
 
+    // ⚠️ T2 review Minor-1（T6 fix）：两列各自独立 try/catch。
+    //   原实现共用一个 try —— 任一步失败（含回填循环中的查询异常）会直接跳到外层 catch，
+    //   使**另一列也不再补**：chapterNumber 补列失败连带上 tokens 缺失 → 检索侧词级表达式
+    //   抛错 → `searchWithScope` 退回逐字 LIKE（召回/排序退化）。失败信息一并上交，不再静默。
+    const failures: string[] = []
+
     if (!fields.includes('chapterNumber')) {
-      // add_columns 优先：不 drop 重建，存量向量数据原样保留
-      await addNullableColumn(table, 'chapterNumber', 'int')
-      // 从 fileName 解析回填（仅解析成功的行；无匹配保持默认 NULL——scopeFilter 已容忍 NULL）
-      const rows = await table.query().select(['id', 'fileName']).toArray()
-      for (const r of rows as Array<{ id: string; fileName?: string }>) {
-        const chapterNumber = r.fileName ? parseChapterNumberForBackfill(r.fileName) : null
-        if (chapterNumber === null) continue
-        await table.update({
-          where: `id = '${r.id}'`,
-          values: { chapterNumber },
-        }).catch(() => { /* 单行失败跳过 */ })
+      try {
+        // add_columns 优先：不 drop 重建，存量向量数据原样保留
+        await addNullableColumn(table, 'chapterNumber', 'int')
+        // 从 fileName 解析回填（仅解析成功的行；无匹配保持默认 NULL——scopeFilter 已容忍 NULL）
+        const rows = await table.query().select(['id', 'fileName']).toArray()
+        for (const r of rows as Array<{ id: string; fileName?: string }>) {
+          const chapterNumber = r.fileName ? parseChapterNumberForBackfill(r.fileName) : null
+          if (chapterNumber === null) continue
+          await table.update({
+            where: `id = '${r.id}'`,
+            values: { chapterNumber },
+          }).catch(() => { /* 单行失败跳过 */ })
+        }
+        migrated = true
+      } catch (e) {
+        failures.push(`chapterNumber: ${String(e)}`)
       }
-      migrated = true
     }
 
     if (!fields.includes('tokens')) {
-      // L3 T2：仅补列不在此处分词——存量行保持 NULL 由 backfillTokens 显式回填
-      //（检索入口前置调用本函数，全表分词会阻塞首次检索；设计 §3.1 明确 NULL → LIKE 兜底）
-      await addNullableColumn(table, 'tokens', 'string')
-      migrated = true
+      try {
+        // L3 T2：仅补列不在此处分词——存量行保持 NULL 由 backfillTokens 显式回填
+        //（检索入口前置调用本函数，全表分词会阻塞首次检索；设计 §3.1 明确 NULL → LIKE 兜底）
+        await addNullableColumn(table, 'tokens', 'string')
+        migrated = true
+      } catch (e) {
+        failures.push(`tokens: ${String(e)}`)
+      }
     }
 
-    return { migrated }
+    return failures.length > 0 ? { migrated, error: failures.join(' | ') } : { migrated }
   } catch (e) {
     return { migrated: false, error: String(e) }
   }

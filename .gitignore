@@ -61,5 +61,9 @@ scripts/font-char-set.txt
 # pnpm 本地缓存（不走 store 时的临时落盘目录）
 .pnpm-store/
 
+# 测试临时产物（受限沙箱下 vitest 的临时 config / 临时目录，不提交）
+.tmp-vitest/
+.vitest-min.config.mjs
+
 # git worktrees（隔离工作区）.worktrees/
 
