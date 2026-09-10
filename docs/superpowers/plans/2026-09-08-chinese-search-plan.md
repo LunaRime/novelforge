@@ -219,7 +219,7 @@ git commit -m "feat: FTS 通道改中文词级检索（query 分词 → tokens�
 - Consumes: Task 3 双通道结果
 - Produces: RRF 融合（`score(d) = Σ_channel 1/(60 + rank_channel(d))`），替换「分数取 max」
 
-- [ ] **Step 1: 写失败测试**（RRF 排序：构造向量通道 [A(0.9), B(0.85)] + FTS 通道 [B(1.0), A(0.5)]；max 取并会 A=0.9 排前，RRF 会 B 排前（两通道都靠前）——断言 RRF 排序 B 在 A 前。以纯函数 `rrfFuse(vectorRanks, ftsRanks)` 导出测，或经 searchWithScope mock）
+- [ ] **Step 1: 写失败测试**（RRF 排序：⚠️ 原拟数据 `[A(0.9), B(0.85)] + FTS [B(1.0), A(0.5)]` **经 T4 review 实证不可用**——A/B 在该数据下 RRF 分**完全相等**（各 `1/61+1/62`），且 max 语义下同样是 B 排 A 前（B 取 FTS 1.0 > A 的 0.9）→ 既不能满足「B 排 A 前」，也无法证明「与 max 不同」。改用**共识用例**：C 原始分最低但两通道共识排前 → RRF `[C,B,A]` vs max `[B,A,C]`（这才是「RRF ≠ max」的正证据）；另补单通道退化 / 全空 / **完全打平**（key 升序兜底）用例。`rrfFuse` 纯函数导出测。T4 破平契约见 SDD ledger：融合分降序 → 完全打平时最佳原始分降序 → 再打平 key 升序）
 
 - [ ] **Step 2: 跑失败**
 
