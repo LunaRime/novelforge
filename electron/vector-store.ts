@@ -17,7 +17,7 @@ import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
 import { t } from '../src/shared/locale'
 import { getProjectVelaDir } from './utils/config-utils'
-import { tokenizeToSpaceSeparated } from './chinese-tokenizer'
+import { tokenize, tokenizeToSpaceSeparated } from './chinese-tokenizer'
 
 // 懒加载：避免 Electron 启动时同步 require 原生模块导致数秒无日志
 let _lancedb: typeof LanceDB | null = null
@@ -599,6 +599,51 @@ export function computeFTSRelevance(text: string, query: string): number {
 }
 
 /**
+ * FTS 查询侧分词（L3 T3）——必须与写入 `chunks.tokens` 时使用**同一**分词器（T1 jieba），
+ * 否则词边界不一致会导致查不到。分词器不可用（wasm 加载失败等）→ 返回空数组，
+ * 调用方据此退回逐字 LIKE（行为与改造前一致，检索不因分词失败而失效）。
+ */
+export function tokenizeQueryWords(queryText: string): string[] {
+  try {
+    return tokenize(queryText)
+  } catch (e) {
+    if (!tokenizerFailureLogged) {
+      tokenizerFailureLogged = true
+      logger.warn('VectorStore', `query tokenize failed, fallback to char LIKE: ${safeErrorMessage(e)}`)
+    }
+    return []
+  }
+}
+
+/** LIKE 字面量转义：' → ''（字符串闭合）、%/_ → 全角（消除通配符语义注入） */
+function escapeLikeLiteral(s: string): string {
+  return s.replace(/'/g, "''").replace(/%/g, '％').replace(/_/g, '＿')
+}
+
+/**
+ * 构造 chunks 检索过滤表达式（L3 T3，纯函数便于断言）。
+ *
+ * 词级为主：query 分词后**每词**一个 `tokens LIKE '%词%'` 片段，OR 取并集
+ * （jieba 保留标点，标点词同样按词匹配，无需特判）。
+ * 逐字兜底：`tokens` 缺失（NULL / 空串——存量未回填库、回填失败行、旧表无该列）的行走
+ * 改造前的逐字容错 `text LIKE '%搜%索%'`，保证存量库不因改造而检不到。
+ * 分词不可用（words 为空）→ 全量退回逐字 LIKE，行为与改造前完全一致。
+ */
+export function buildChunkFTSFilter(queryText: string, words: string[]): string {
+  // ⚠️ P3 修复保留：查询中的 %/_ 转全角（LIKE 通配符注入——'100%' 此前匹配 "100任意串"；
+  //    逐字拆分产生的 % 已用于容错匹配，查询自身的通配符需消除语义）
+  // ⚠️ 转义必须在**逐字符拆分之后**：先转义整串再 split('') 会把 `''` 拆成 `'%'`，
+  //    单引号转义随之失效 → 含 ' 的 query 生成非法 SQL（FTS 通道整体抛错降级）
+  const charPattern = `%${queryText.split('').map(escapeLikeLiteral).join('%')}%`
+  const fallbackClause = `text LIKE '${charPattern}'`
+  if (words.length === 0) return fallbackClause
+
+  const wordClauses = words.map(w => `tokens LIKE '%${escapeLikeLiteral(w)}%'`)
+  const missingTokens = `(tokens IS NULL OR tokens = '')`
+  return `((${wordClauses.join(' OR ')}) OR (${missingTokens} AND ${fallbackClause}))`
+}
+
+/**
  * 统一检索入口 — 自动选择 FTS / 混合模式
  *
  * @param queryText 搜索关键词/语句
@@ -673,18 +718,12 @@ export async function searchWithScope(
       }
     }
 
-    // 通道 2：FTS（DataFusion LIKE 模糊匹配，Tantivy 不支持中文分词）
+    // 通道 2：FTS（L3 T3：query 分词 → tokens 词级匹配；tokens 缺失行退回逐字 LIKE 兜底）
     try {
-      // ⚠️ P3 修复：查询中的 %/_ 转全角（LIKE 通配符注入——'100%' 此前匹配 "100任意串"；
-      //    逐字拆分产生的 % 已用于容错匹配，查询自身的通配符需消除语义）
-      const escapedQuery = queryText
-        .replace(/'/g, "''")
-        .replace(/%/g, '％')
-        .replace(/_/g, '＿')
-      // 将 "搜索" 转换为 "%搜%索%" 进行容错匹配
-      const likePattern = `%${escapedQuery.split('').join('%')}%`
+      const words = tokenizeQueryWords(queryText)
+      const filterExpr = buildChunkFTSFilter(queryText, words)
 
-      let q = table.query().filter(`text LIKE '${likePattern}'`).limit(topK * 3)
+      let q = table.query().filter(filterExpr).limit(topK * 3)
       if (scopeFilter) {
         q = q.where(scopeFilter)
       }

@@ -22,6 +22,9 @@ import {
   addChunks,
   getChunksWithoutTokens,
   backfillTokens,
+  searchWithScope,
+  buildChunkFTSFilter,
+  tokenizeQueryWords,
 } from './vector-store'
 
 describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
@@ -256,6 +259,192 @@ describe('LanceDB 端到端：tokens 写入 + 回填（L3 T2）', () => {
       const res = await backfillTokens(projectPath)
       expect(res).toMatchObject({ success: true, processed: 1, failed: 0 }) // 仅旧行缺失
       expect(rows).toHaveLength(2)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+})
+
+// ===== L3 T3：FTS 通道中文词级检索（替换逐字 LIKE）+ tokens 缺失兜底 =====
+
+describe('FTS 过滤表达式构造（L3 T3，纯函数）', () => {
+  it('query 分词 → 每词一个 tokens LIKE 片段 OR 连并，且带 tokens 缺失逐字兜底', () => {
+    const expr = buildChunkFTSFilter('搜索知识', ['搜索', '知识'])
+    expect(expr).toContain(`tokens LIKE '%搜索%'`)
+    expect(expr).toContain(`tokens LIKE '%知识%'`)
+    expect(expr).toContain(' OR ')
+    expect(expr).toContain(`(tokens IS NULL OR tokens = '')`)
+    expect(expr).toContain(`text LIKE '%搜%索%知%识%'`)
+  })
+
+  it('分词不可用（无词）→ 全量退回逐字 LIKE，行为与改造前一致', () => {
+    expect(buildChunkFTSFilter('搜索', [])).toBe(`text LIKE '%搜%索%'`)
+    expect(buildChunkFTSFilter('搜索', [])).not.toContain('tokens LIKE')
+  })
+
+  it('逐字兜底：query 字符间插 %；%/ _ 转全角、单引号 SQL 闭合转义', () => {
+    expect(buildChunkFTSFilter('100%', [])).toBe(`text LIKE '%1%0%0%％%'`)
+    expect(buildChunkFTSFilter('a_b', [])).toBe(`text LIKE '%a%＿%b%'`)
+    expect(buildChunkFTSFilter("it's", [])).toBe(`text LIKE '%i%t%''%s%'`)
+  })
+
+  it('词级片段同样转义通配符与引号（LIKE 注入 / SQL 闭合防护）', () => {
+    const expr = buildChunkFTSFilter("100% it's", ['100%', "it's"])
+    expect(expr).toContain(`tokens LIKE '%100％%'`)
+    expect(expr).toContain(`tokens LIKE '%it''s%'`)
+  })
+
+  it('查询侧分词与写入侧同源（T1 jieba），标点词保留不特判', () => {
+    expect(tokenizeQueryWords('主角的剑')).toEqual(['主角', '的', '剑'])
+    expect(tokenizeQueryWords('主力，配角。')).toContain('，')
+    expect(tokenizeQueryWords('')).toEqual([])
+  })
+})
+
+describe('LanceDB 端到端：FTS 词级检索（L3 T3）', () => {
+  /** 隔离的临时项目目录（LanceDB 落到 {projectPath}/.novelforge/lancedb） */
+  function makeTempProject(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-fts-'))
+  }
+
+  async function cleanupProject(projectPath: string): Promise<void> {
+    await closeConnection(projectPath)
+    fs.rmSync(projectPath, { recursive: true, force: true })
+  }
+
+  /** 直接改写某行 tokens（模拟存量未回填 NULL / 回填失败空串） */
+  async function setTokens(projectPath: string, text: string, tokens: string | null): Promise<void> {
+    const db = await getConnection(projectPath)
+    await (await db.openTable('chunks')).update({ where: `text = '${text}'`, values: { tokens } })
+  }
+
+  /** 直接跑过滤表达式（用于证明「词级子句 / 逐字子句」单独的命中情况） */
+  async function filterTexts(projectPath: string, filterExpr: string): Promise<string[]> {
+    const db = await getConnection(projectPath)
+    const rows = await (await db.openTable('chunks')).query().filter(filterExpr).toArray()
+    return (rows as Array<{ text: string }>).map(r => r.text)
+  }
+
+  it('词级检索命中：query 分词后匹配 tokens，source=fts 且返回结构不变', async () => {
+    const projectPath = makeTempProject()
+    try {
+      const added = await addChunks(
+        projectPath, randomUUID(), '第1章 主角.txt', ['主角的剑在月光下'], undefined,
+      )
+      expect(added.success, JSON.stringify(added)).toBe(true)
+
+      const results = await searchWithScope(projectPath, '主角')
+      const hit = results.find(r => r.text === '主角的剑在月光下')
+      expect(results.map(r => r.text)).toContain('主角的剑在月光下')
+      expect(hit?.source).toBe('fts') // rag-context-provider 靠 source='fts' 豁免 0.6 阈值
+      expect(hit?.fileName).toBe('第1章 主角.txt')
+      expect(hit?.score).toBeGreaterThanOrEqual(0.5)
+      expect(hit?.score).toBeLessThanOrEqual(1)
+      expect(Object.keys(hit!).sort()).toEqual(['fileName', 'score', 'source', 'text']) // 返回结构不变
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('逐字 LIKE 不命中而词级命中（query「搜索知识」→ chunk「知识搜索的方法」）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第2章 检索.txt', ['知识搜索的方法'], undefined,
+      )).success).toBe(true)
+
+      // 证据：旧通道的逐字容错 pattern 对该 chunk 不命中（本任务的直接收益）
+      expect(await filterTexts(projectPath, `text LIKE '%搜%索%知%识%'`)).toHaveLength(0)
+      // 词级：query 分词 ['搜索','知识'] → 命中其中一个词即召回
+      expect(await filterTexts(projectPath, `tokens LIKE '%搜索%' OR tokens LIKE '%知识%'`))
+        .toContain('知识搜索的方法')
+
+      const results = await searchWithScope(projectPath, '搜索知识')
+      expect(results.find(r => r.text === '知识搜索的方法')?.source).toBe('fts')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('词级语义：跨词边界的字符碎片不再命中（tokens 行由逐字容错改为整词匹配）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第7章 词级.txt', ['主角的剑在月光下'], undefined,
+      )).success).toBe(true)
+
+      // 证据：逐字容错通道会命中跨词碎片「光下」（tokens 为「月光 下」，中间无该词）
+      expect(await filterTexts(projectPath, `text LIKE '%光%下%'`)).toContain('主角的剑在月光下')
+      // 词级通道：jieba 把「光下」切为整词，而该 chunk 的 tokens 只含「月光」「下」→ 不再命中
+      const fragment = await searchWithScope(projectPath, '光下')
+      expect(fragment.map(r => r.text)).not.toContain('主角的剑在月光下')
+      // 同一条 chunk 的整词查询仍命中
+      expect((await searchWithScope(projectPath, '月光')).map(r => r.text)).toContain('主角的剑在月光下')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('tokens 缺失（NULL / 空串）行退回逐字 LIKE 兜底，不因改造而漏检', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第3章 主角.txt', ['主角的剑在月光下'], undefined,
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第4章 配角.txt', ['配角登场说话'], undefined,
+      )).success).toBe(true)
+
+      // 模拟存量库：一行 tokens 从未回填（NULL），一行回填失败留空串
+      await setTokens(projectPath, '主角的剑在月光下', null)
+      await setTokens(projectPath, '配角登场说话', '')
+
+      // 词级子句对缺失行无效（无 tokens 可比）→ 命中只可能来自逐字兜底
+      expect(await filterTexts(projectPath, `tokens LIKE '%主角%' OR tokens LIKE '%配角%'`)).toHaveLength(0)
+
+      const protagonist = await searchWithScope(projectPath, '主角')
+      expect(protagonist.find(r => r.text === '主角的剑在月光下')?.source).toBe('fts')
+
+      const supporting = await searchWithScope(projectPath, '配角')
+      expect(supporting.find(r => r.text === '配角登场说话')?.source).toBe('fts')
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('混合库：新行（有 tokens）词级命中 + 存量行（NULL tokens）逐字兜底，同一条 query 都召回', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第5章 新.txt', ['主角的新剑'], undefined,
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第6章 旧.txt', ['主角的旧剑'], undefined,
+      )).success).toBe(true)
+      await setTokens(projectPath, '主角的旧剑', null) // 存量行
+
+      const results = await searchWithScope(projectPath, '主角')
+      expect(results.map(r => r.text)).toContain('主角的新剑') // 词级
+      expect(results.map(r => r.text)).toContain('主角的旧剑') // 兜底
+      expect(results.every(r => r.source === 'fts')).toBe(true)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  })
+
+  it('范围检索（chapterScope）在词级通道下仍生效，且 NULL 章节行不被排除', async () => {
+    const projectPath = makeTempProject()
+    try {
+      expect((await addChunks(
+        projectPath, randomUUID(), '第1章 甲.txt', ['主角在第一章'], undefined, undefined, { chapterNumber: 1 },
+      )).success).toBe(true)
+      expect((await addChunks(
+        projectPath, randomUUID(), '第9章 乙.txt', ['主角在第九章'], undefined, undefined, { chapterNumber: 9 },
+      )).success).toBe(true)
+
+      const scoped = await searchWithScope(projectPath, '主角', undefined, 5, [1, 3])
+      expect(scoped.map(r => r.text)).toContain('主角在第一章')
+      expect(scoped.map(r => r.text)).not.toContain('主角在第九章')
     } finally {
       await cleanupProject(projectPath)
     }
