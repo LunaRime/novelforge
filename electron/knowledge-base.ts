@@ -17,6 +17,8 @@ import { safeErrorMessage } from './utils/error-utils'
 import { getProjectVelaDir } from './utils/config-utils'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
+import { tokenize } from './chinese-tokenizer'
+import { getCurrentProjectPath, getProjectDb } from './database'
 import {
   addChunks,
   removeDocument as removeDocFromStore,
@@ -167,6 +169,120 @@ export async function importDocument(
   }
 }
 
+// ===== L3 T5：查询改写（角色别名扩展） =====
+
+/**
+ * 别名 JSON 解析（`characters.aliases` 列，v14 起为 TEXT 承载的 JSON 数组）。
+ *
+ * 返回 `null` 表示**解析失败**（非字符串 / 空串 / 非法 JSON / 非数组）——调用方据此跳过该角色；
+ * 返回 `[]` 是合法结果（该角色暂无别名，扩展时天然零动作）。
+ */
+function parseCharacterAliases(raw: unknown): string[] | null {
+  if (typeof raw !== 'string' || raw.trim() === '') return null
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return null
+    return parsed
+      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+      .map(v => v.trim())
+  } catch {
+    return null
+  }
+}
+
+/**
+ * characters 行 → 别名映射（纯函数）：键 = 角色正名，值 = 该角色别名列表。
+ *
+ * 容错：`name` 为空或别名解析失败的行**跳过该角色**（不抛）——查询改写只是检索链路上的增强，
+ * 单行脏数据不应让检索失败，更不应让整库降级。
+ */
+export function buildCharacterAliasMap(
+  rows: Array<{ name?: unknown; aliases?: unknown }>,
+): Map<string, string[]> {
+  const map = new Map<string, string[]>()
+  for (const row of rows) {
+    const name = typeof row?.name === 'string' ? row.name.trim() : ''
+    if (!name) continue
+    const aliases = parseCharacterAliases(row?.aliases)
+    if (aliases === null) continue
+    map.set(name, aliases)
+  }
+  return map
+}
+
+/** 子串匹配最短长度：单字变体只在**分词 token 精确相等**时命中（避免「云」误命中「云海」） */
+const MIN_SUBSTRING_MATCH_LENGTH = 2
+
+/**
+ * 查询改写：query 命中角色名/别名 → 并入该角色的**正名 + 别名**（空格拼接）。
+ *
+ * 命中判定（两者取并集）：
+ * - **分词 token 精确相等**（T1 jieba，大小写不敏感）——query 里该形态独立成词时命中；
+ * - **原文子串包含**（长度 ≥ 2，大小写不敏感）——jieba 把 OOV 名字切碎时 token 判定会漏，
+ *   子串判定补上（与 T3 跨 token 边界漏成同类问题的查询侧镜像）。
+ *
+ * 语义保证（brief 契约）：
+ * - 无命中 / 无可并入形态 → **逐字原样返回**（零改动）；
+ * - 已在 query 中出现的形态不重复并入（扩展幂等：`rewriteQuery(rewriteQuery(q)) === rewriteQuery(q)`）；
+ * - `tokenize` 不可用（wasm 加载失败）→ 退回纯子串匹配，不抛；
+ * - aliasMap 脏值（值非数组）→ 该角色等价于无别名，不抛。
+ */
+export function rewriteQuery(query: string, aliasMap: Map<string, string[]>): string {
+  if (!query || !query.trim() || aliasMap.size === 0) return query
+
+  let tokens: string[] = []
+  try {
+    tokens = tokenize(query)
+  } catch {
+    // 分词器不可用：token 命中不可用，子串命中仍然生效（检索侧同样有 LIKE 兜底）
+  }
+  const tokenSet = new Set(tokens.map(w => w.toLowerCase()))
+  const lowerQuery = query.toLowerCase()
+  // 已出现形态（token 或原文子串）→ 不再并入，保证扩展幂等
+  const alreadyPresent = new Set(tokenSet)
+  const appended: string[] = []
+
+  const isHit = (variant: string): boolean =>
+    tokenSet.has(variant.toLowerCase())
+    || (variant.length >= MIN_SUBSTRING_MATCH_LENGTH && lowerQuery.includes(variant.toLowerCase()))
+
+  for (const [name, aliases] of aliasMap) {
+    const variants = [name, ...(Array.isArray(aliases) ? aliases : [])]
+      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+      .map(v => v.trim())
+    if (!variants.some(isHit)) continue
+    for (const variant of variants) {
+      const key = variant.toLowerCase()
+      if (alreadyPresent.has(key) || lowerQuery.includes(key)) continue
+      alreadyPresent.add(key)
+      appended.push(variant)
+    }
+  }
+
+  return appended.length > 0 ? `${query} ${appended.join(' ')}` : query
+}
+
+/**
+ * 读取当前项目 characters 的角色名 + 别名 → 别名映射。
+ *
+ * 失败降级（零损失）：未打开项目库 / 无 characters 表 / 读取异常 / 项目不匹配 → 空 map，
+ * 调用方据此得到原样 query（检索行为与改造前完全一致），且不阻塞检索。
+ */
+function readCharacterAliasMap(projectPath: string): Map<string, string[]> {
+  try {
+    // 项目边界：别名只属于**检索目标项目**。getProjectDb() 无项目身份，
+    // 用当前打开项目路径校验，避免检索 B 项目时并入 A 项目的角色别名（跨项目污染）
+    if (getCurrentProjectPath() !== projectPath) return new Map()
+    const db = getProjectDb()
+    if (!db) return new Map()
+    const rows = db.prepare('SELECT name, aliases FROM characters').all() as Array<{ name: string; aliases: string }>
+    return buildCharacterAliasMap(rows)
+  } catch (e) {
+    logger.warn('KB', `character alias read failed, query kept as-is: ${safeErrorMessage(e)}`)
+    return new Map()
+  }
+}
+
 /**
  * 检索知识库
  * 有 Embedding 配置时 → 混合检索（FTS + 向量）
@@ -185,8 +301,17 @@ export async function searchKnowledge(
   // 可选：生成查询向量
   let queryVector: number[] | undefined
   if (model.apiKey && query.trim()) {
+    // L3 T5：角色别名扩展——query 命中角色名/别名时，并入该角色的正名 + 别名后再向量化，
+    //   使「角色在不同章节以别名出现」的 chunk 也能被召回到（正名与别名都参与检索）。
+    //
+    // ⚠️ 扩展**只喂语义通道**：`storeSearchWithScope` 的 queryText 仅被 FTS 通道消费，而 T3 的
+    //   词级检索是 **AND**——把变体并进 query 等于追加 AND 约束，候选集只会收紧
+    //   （query「阿晚」→ 并入 苏晚/晚儿 后要求 chunk 同时含三种形态），反向丢失既有召回。
+    //   故词法通道沿用原 query：扩展在任何情况下都是**纯增益**（只增召回、不减召回），
+    //   任何失败（无 characters / 别名缺失 / 解析失败 / 项目不匹配）都退回原 query。
+    const effectiveQuery = rewriteQuery(query, readCharacterAliasMap(projectPath))
     try {
-      const [vec] = await generateEmbeddings([query], protocol, model)
+      const [vec] = await generateEmbeddings([effectiveQuery], protocol, model)
       if (vec && vec.length > 0) {
         queryVector = vec
       }
@@ -520,6 +645,11 @@ export async function backfillTokens(
 /**
  * FTS-only 检索（不需要 Embedding 配置）
  * 用于 IPC 层在无 Embedding 模型时直接调用
+ *
+ * L3 T5：本入口**不做**角色别名扩展——它只有词法通道，而 T3 的词级检索是 AND，并入别名变体
+ * 只会追加 AND 约束、收紧候选集（别名查询可能被清零）。扩展只在 `searchKnowledge` 的语义通道
+ * 生效；要让词法通道也吃到别名增益，需要 T3 支持「同角色变体 OR 成组」的放宽——brief 明确禁止
+ * 在本任务内做（避免重演 Critical-1），见 `.superpowers/sdd/2026-09-08-chinese-search-plan/task-5-report.md`。
  */
 export async function searchKnowledgeFTS(
   query: string,
