@@ -1,7 +1,7 @@
 # 从定稿正文生成角色档案 — 设计文档
 
 日期:2026-08-07
-状态:待审阅
+状态:已实施（2026-09-14 核对：`src/services/character-archive.ts` + `src/services/workflows/character-archive-workflow.ts` + `src/services/character-archive.test.ts` 全部在库）
 方案:按角色检索上下文 + 逐角色 LLM(方案 A)
 
 ## 1. 背景与目标

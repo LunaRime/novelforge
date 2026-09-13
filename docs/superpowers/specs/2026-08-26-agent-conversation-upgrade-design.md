@@ -1,6 +1,6 @@
 # Agent 对话升级：意图预路由 + fork/rewind 分支 + 编辑器修复群（2026-08-26）
 
-> 状态：设计定稿，待实施
+> 状态：设计定稿；**实施状态：✅ 已落地（2026-09-14 核对）** —— C 群修复（`2026-08-26-agent-c-fixes.md`）、A 意图预路由（`src/services/agent/intent-router.ts` + `writing-intent.ts` + 测试）、B fork/rewind（`src/stores/agent-store.ts` 的 `forkFromMessage`/`rewindToMessage`/`restoreRewound`，测试 `agent-store.test.ts`「对话分支 fork/rewind」）全部在库
 > 阶段顺序：**C 群（修复群，先行）→ A（对话即生成）→ B（分支）**
 > 关联评审：外部评审 + 内部深度评审（用户逐节裁决），三个裁决点见 §8
 
