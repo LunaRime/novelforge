@@ -12,12 +12,13 @@
  * 数据：useMemoryStore（memory:list / memory:read / memory:mark-stale）
  */
 import { useEffect, useState } from 'react'
-import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Pencil } from 'lucide-react'
+import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Pencil, Trash2 } from 'lucide-react'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { ipc } from '../../../services/ipc-client'
 import { renderLog } from '../../../services/render-logger'
 import { isValidMemoryContent, stripStatusFrontmatter } from '../../../services/memory/memory-codec'
 import { toast } from '../../ui/Toast'
+import { confirm } from '../../ui/Confirm'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
@@ -187,6 +188,24 @@ function MemoryRow({ meta, onRebuild, onSaved, editable = true }: {
     }
   }
 
+  /**
+   * 删除（memory:delete）：破坏性操作 → confirm 二次确认 + toast + renderLog。
+   * 路径安全由主进程 safeFile（白名单正则）兜底，前端传的是列表回读的 meta.file。
+   */
+  const handleDelete = async () => {
+    const ok = await confirm(t('memory.deleteConfirm'), { danger: true })
+    if (!ok) return
+    try {
+      const res = await ipc.invoke('memory:delete', meta.file)
+      if (!res.success) throw new Error(t('status.unknown'))
+      renderLog('info', 'Save:Memory', t('log.render.memoryDeleteSuccess').replace('{file}', () => meta.file))
+      toast.success(t('memory.deleted'))
+      await onSaved()
+    } catch (e) {
+      toast.error(t('memory.deleteFailed').replace('{error}', () => String(e)))
+    }
+  }
+
   return (
     <div className="rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
       <div
@@ -222,6 +241,16 @@ function MemoryRow({ meta, onRebuild, onSaved, editable = true }: {
           onClick={(e) => { e.stopPropagation(); onRebuild() }}
         >
           <RotateCw size={10} />
+        </button>
+        <button
+          type="button"
+          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
+          style={{ color: 'var(--color-text-muted)' }}
+          title={t('action.delete')}
+          disabled={editing || saving}
+          onClick={(e) => { e.stopPropagation(); void handleDelete() }}
+        >
+          <Trash2 size={10} />
         </button>
       </div>
 

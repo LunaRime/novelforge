@@ -2145,6 +2145,9 @@ export const UI_TEXTS_DATA = {
   'inlineAccept.applyAsSuggestion': { 'zh-CN': '应用为修改建议', 'en-US': 'Apply as suggestion', 'ru-RU': 'Применить как предложение' },
   'inlineAccept.noChanges': { 'zh-CN': 'AI 未改动选中文本', 'en-US': 'AI made no changes to the selection', 'ru-RU': 'ИИ не изменил выделенный текст' },
   'inlineAccept.restore': { 'zh-CN': '恢复为待定', 'en-US': 'Restore to pending', 'ru-RU': 'Вернуть в ожидание' },
+  // 会话收尾落库的 revision.userPrompt 溯源文案（无动作标签 / 带动作标签两态）
+  'inlineAccept.revisionPrompt': { 'zh-CN': '气泡菜单 AI 改写', 'en-US': 'Bubble-menu AI rewrite', 'ru-RU': 'Перезапись ИИ из меню' },
+  'inlineAccept.revisionPromptAction': { 'zh-CN': '气泡菜单 AI — {action}', 'en-US': 'Bubble-menu AI — {action}', 'ru-RU': 'ИИ из меню — {action}' },
   'editor.saving': { 'zh-CN': '保存中...', 'en-US': 'Saving...', 'ru-RU': 'Сохранение...' },
   // --- MutualReviewReport ---
   'review.overallScore': { 'zh-CN': '综合评分/10', 'en-US': 'Overall Score/10', 'ru-RU': 'Общая оценка/10' },
@@ -2855,6 +2858,7 @@ export const UI_TEXTS_DATA = {
   'log.render.volumeSaveFailed': { 'zh-CN': '分卷保存失败 第{num}卷: DB 写入失败', 'en-US': 'Failed to save Vol.{num}: DB write failed', 'ru-RU': 'Не удалось сохранить том {num}: ошибка записи в БД' },
   'log.render.memorySaveSuccess': { 'zh-CN': '记忆文件保存成功 {file}（{ms}ms）', 'en-US': 'Memory file saved successfully: {file} ({ms}ms)', 'ru-RU': 'Файл памяти сохранён: {file} ({ms}ms)' },
   'log.render.memorySaveFailed': { 'zh-CN': '记忆文件保存失败 {file}: {error}', 'en-US': 'Failed to save memory file {file}: {error}', 'ru-RU': 'Не удалось сохранить файл памяти {file}: {error}' },
+  'log.render.memoryDeleteSuccess': { 'zh-CN': '记忆文件删除成功 {file}', 'en-US': 'Memory file deleted: {file}', 'ru-RU': 'Файл памяти удалён: {file}' },
 
   // —— 架构文件（ArchFileViewer）——
   'log.render.archSaveSuccess': { 'zh-CN': '架构文件保存成功 {path}（{ms}ms）', 'en-US': 'Architecture file saved: {path} ({ms}ms)', 'ru-RU': 'Файл архитектуры сохранён: {path} ({ms}ms)' },
@@ -3331,6 +3335,9 @@ export const UI_TEXTS_DATA = {
   'memory.empty': { 'zh-CN': '暂无记忆——定稿章节后自动生成', 'en-US': 'No memory yet — generated after finalizing chapters', 'ru-RU': 'Память пока пуста — создаётся после финализации глав' },
   // 手动编辑（Task 5：编辑/保存/取消按钮复用 action.*，见 MemoryGroup.tsx）
   'memory.invalidFormat': { 'zh-CN': '记忆文件格式无效（缺少章节块）', 'en-US': 'Invalid memory file format (missing chapter blocks)', 'ru-RU': 'Недопустимый формат файла памяти (нет блоков глав)' },
+  'memory.deleteConfirm': { 'zh-CN': '删除这条记忆文件？此操作不可撤销。', 'en-US': 'Delete this memory file? This cannot be undone.', 'ru-RU': 'Удалить этот файл памяти? Действие необратимо.' },
+  'memory.deleted': { 'zh-CN': '记忆文件已删除', 'en-US': 'Memory file deleted', 'ru-RU': 'Файл памяти удалён' },
+  'memory.deleteFailed': { 'zh-CN': '删除失败：{error}', 'en-US': 'Delete failed: {error}', 'ru-RU': 'Ошибка удаления: {error}' },
   // AI 面板入口（P3 Task 3：AgentHeader 工具栏按钮 + AgentMemoryView，返回按钮 title 复用 memory.back）
   'memory.menuTitle': { 'zh-CN': '记忆', 'en-US': 'Memory', 'ru-RU': 'Память' },
   'memory.back': { 'zh-CN': '返回对话', 'en-US': 'Back to chat', 'ru-RU': 'Назад к диалогу' },

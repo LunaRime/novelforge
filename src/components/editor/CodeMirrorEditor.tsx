@@ -9,6 +9,7 @@ import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
+import { t as tStatic } from '../../shared/locale'
 import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
@@ -156,7 +157,10 @@ export async function finishSelectionSession(
       baseDraftId: draftId,
       revisionIndex: nextIdx,
       revisionType: 'refine',
-      userPrompt: actionLabel ? `气泡菜单 AI — ${actionLabel}` : '气泡菜单 AI 改写',
+      // i18n（模块级函数无 hook 的 t → 用 locale 的静态 t；箭头 replacer 防 actionLabel 含 $& 语义）
+      userPrompt: actionLabel
+        ? tStatic('inlineAccept.revisionPromptAction').replace('{action}', () => actionLabel)
+        : tStatic('inlineAccept.revisionPrompt'),
       content: docText,
       wordCount: computeTextStats(docText).novelWordCount,
     })
