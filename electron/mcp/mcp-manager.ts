@@ -171,6 +171,29 @@ class MCPManagerImpl {
   }
 
   /**
+   * 按 **id** 连接已登记（落盘）的服务器 —— L4 S10 安全加固。
+   *
+   * 为什么必须由主进程解析配置：`mcp:connect` 原先接受渲染层传来的**完整 config**，直通
+   * `spawn(command, args, { env: { ...process.env, ...env } })`（见 `connectStdio`）——
+   * 渲染层（或一次主帧 XSS）可以传 `{ command: 'cmd.exe', args: ['/c', '…'] }` 取得
+   * **任意代码执行**，从而绕过整个 fs 白名单。现在只接受 id：
+   * command / args / env 一律取主进程自己从配置文件读到的值。
+   *
+   * @throws id 为空，或该 id 不在配置文件中（含被过滤掉的 SSE 类型）
+   */
+  async connectById(serverId: string): Promise<void> {
+    if (typeof serverId !== 'string' || !serverId.trim()) {
+      throw new Error('MCP server id 不能为空')
+    }
+    const servers = await this.loadConfig()
+    const config = servers.find(s => s.id === serverId)
+    if (!config) {
+      throw new Error(`未登记的 MCP 服务器: ${serverId}`)
+    }
+    return this.connect(config)
+  }
+
+  /**
    * 连接到 MCP 服务器
    */
   async connect(config: MCPServerConfig): Promise<void> {

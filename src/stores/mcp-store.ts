@@ -87,7 +87,8 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
       // 自动连接所有配置的服务器
       for (const config of result.configs as Array<Record<string, unknown>>) {
         try {
-          await ipc.invoke('mcp:connect', config)
+          // L4 S10：只传 id（配置由主进程解析），不再把整份 config 交给主进程执行
+          await ipc.invoke('mcp:connect', String(config.id ?? ''))
         } catch (e) {
           console.warn(`[MCP] 连接 ${config.id} 失败:`, e)
         }
@@ -116,7 +117,8 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
   },
 
   connectServer: async (config) => {
-    const result = await ipc.invoke('mcp:connect', config as unknown as Record<string, unknown>)
+    // L4 S10：只传 id
+    const result = await ipc.invoke('mcp:connect', config.id)
     if (!result.success) {
       set({ error: result.error ?? t('mcp.connectFailed') })
       return

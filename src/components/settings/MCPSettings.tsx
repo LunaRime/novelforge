@@ -75,10 +75,9 @@ export default function MCPSettings() {
 
   /** 连接服务器 */
   const handleConnect = useCallback(async (server: MCPServerConfig) => {
-    const result = await ipc.invoke('mcp:connect', {
-      id: server.id, name: server.name, command: server.command,
-      args: server.args ?? [], env: server.env ?? {},
-    })
+    // L4 S10：只传 id —— command/args/env 由主进程从配置文件解析（原先传整份配置，
+    // 等于让渲染层决定要 spawn 什么命令）
+    const result = await ipc.invoke('mcp:connect', server.id)
     if (!result.success) toast.error(result.error ?? t('status.unknown'))
     load()
   }, [t, load])

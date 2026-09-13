@@ -353,7 +353,19 @@ v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确�
 | **S8b ✅ 已完成** | 接线：`fs-controller` 的 9 处 `validateSandbox` 全部按通道补**意图**（读/写/删）；`fs:grant-external-file` **通道已删除**（含类型声明、策略表、2 个调用点）；4 处对话框处理器改为**主进程内签发**授权；保留 `agent-result` 自登记；`kb-controller` 的重复 `getCurrentProjectPath` 说明保留（语义略有差异，未强删）。**两个 blocker 一并修掉**：`project:delete-folder`（要求「确实是 NovelForge 项目」+ 路径断言）、`export:export-chapters`（`assertPathAllowedForIpc(outputPath,'write')`） | ⚠️ 行为变更 | 全量 110 files / **1305 tests** 绿；tsc/eslint 全仓 0；对账快照更新为 199 invoke + 7 event |
 | **S8b-回归（待真机）** | 回归清单需真机确认：对话框授权 / 外部文件读取（Agent 添加文件）/ 导出到任意目录 / 分享卡 PNG 落盘 / 工作流输出读写 / **主目录之外的项目**打开与保存 / 记忆文件读写删 | — | 真机执行 §6 回归清单 |
 | **S9 ✅ 已完成** | **移除主目录根**（单点开关：`currentPathPolicy().legacyHomeDir` 由 `os.homedir()` 改为 `null`）。文件边界自此真正等于 **VELA_HOME ∪ 当前项目根 ∪ 主进程签发的授权**，其余默认拒绝。回滚方式 = 把该行改回 `os.homedir()` | ⚠️ 行为变更（需真机回归） | 全量 110 files / **1305 tests** 绿；tsc/eslint 0。**副作用（正向）**：项目根与盘符无关，因此「主目录之外的项目」（如 `D:\…`）此前连文件树都读不出来（旧沙箱只认主目录），**现在修好了** |
-| **S10** | `destructive`/`spawn` 要求授权上下文（含 `project:delete-folder`、`mcp:connect`）——**不要与其它收紧同批**（不可逆） | ⚠️ | destructive 无上下文被拒测试绿 |
+| **S10 ✅ 已完成（spawn 部分）** | **`mcp:connect` 契约由「完整配置」改为「serverId」**：command/args/env 一律由主进程从落盘的 `mcp_config.json` 解析 —— 渲染层再也无法指定要 spawn 什么命令。`MCPManagerImpl.connectById()` 对空 id / 未登记 id 直接拒绝（未登记 → 绝不调用 `connect`）。3 处调用点同步改为传 id | ⚠️ 契约变更 | 全量 111 files / **1308 tests** 绿；新增 `mcp-manager.test.ts` 3 例（全部 mock，**不真的 spawn**），关键断言：传给 `connect` 的配置**完全等于文件里的值** |
+
+### S10 的两处**有意偏离**（记录理由，非遗漏）
+
+**① `destructive` 未引入「交互式逐次授权」。** 设计原文写「`destructive`/`spawn` 要求显式授权上下文」，其中 `spawn` 已按上面完成。`destructive` 我**没有**做成「每次删除弹一次授权」，理由：
+
+- 删除操作在 UI 里是**高频正常操作**（删角色 / 删分卷 / 删章节 / 删草稿），逐次弹授权会直接破坏可用性；
+- 真正的保护已经由**路径意图**承担：`fs:delete-file` 现在要求 `delete` 意图，而路径必须落在 `VELA_HOME` / 当前项目根 / 主进程签发的授权内（S9 之后主目录根已移除）；
+- 两个已知的破坏性 blocker 已单独修复（`project:delete-folder` 要求「确实是 NovelForge 项目」；`export:export-chapters` 走写意图断言）。
+
+**仍未收口的破坏性通道**（如实登记）：`uninstall:clean-user-data`（抹掉 `~/.novelforge`）与 `uninstall:trigger` 目前只依赖**渲染层的**确认弹窗 —— 主帧 XSS 可直接调用。若要收口，正确做法是**主进程自己弹一次原生确认**再执行，属独立小改动（未做，留待裁决）。
+
+**② `dev-only` 按构建类型门控 —— 已否决**（理由见 §4.6：`dev:` 指「开发者选项」这一**已发布用户功能**，按构建门控等于删功能；且 `dev:test` 的覆盖参数不构成提权，因为渲染层本就能用 `config:set` 改同一个 base URL）。该类权限更名为 `dev-bridge`，语义为「用户启用的桥接能力」。
 
 > **回滚成本提示**：`project:delete-folder` 与 `uninstall:clean-user-data` 不可逆，不与其它收紧同批；会话授权不落盘（`fs-controller.ts:84,113`），无持久化数据需迁移，故回滚成本总体低。
 > **必须保留**：`fs-controller.ts:463` 的 `agent-result-write` **主进程自发授权**——删了它，LLM 读回自己写的 spill 文件会被拒。

@@ -52,10 +52,12 @@ export function registerMCPHandlers(): void {
     }
   })
 
-  // 连接服务器
-  guardedHandle('mcp:connect', async (_event, config) => {
+  // 连接服务器（L4 S10：只接受 id —— command/args/env 由主进程从落盘配置解析，
+  // 渲染层无法再传入任意命令；改造前它直通 spawn(command, args, {env: {...process.env}})
+  // = 任意代码执行）
+  guardedHandle('mcp:connect', async (_event, serverId: string) => {
     try {
-      await mcpManager.connect(config)
+      await mcpManager.connectById(serverId)
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }

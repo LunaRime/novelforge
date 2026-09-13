@@ -696,7 +696,12 @@ export interface ImportChannels {
 // ===== MCP =====
 export interface MCPChannels {
   'mcp:load-config': { args: [configPath?: string]; return: { success: boolean; configs: unknown[]; error?: string } }
-  'mcp:connect': { args: [config: Record<string, unknown>]; return: { success: boolean; error?: string } }
+  /**
+   * 连接 MCP 服务器。
+   * L4 S10：参数由**完整配置**改为 **serverId** —— command/args/env 必须来自主进程落盘的
+   * 配置文件（改造前渲染层可传任意 command，直通 spawn = 任意代码执行）。
+   */
+  'mcp:connect': { args: [serverId: string]; return: { success: boolean; error?: string } }
   'mcp:disconnect': { args: [serverId: string]; return: { success: boolean; error?: string } }
   'mcp:disconnect-all': { args: []; return: { success: boolean; error?: string } }
   'mcp:list-tools': { args: []; return: unknown[] }
