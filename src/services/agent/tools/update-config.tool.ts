@@ -66,9 +66,17 @@ export const updateConfigTool = buildAgentTool({
       return { success: false, content: '', error: t('error.noProject') }
     }
 
-    // 构造更新数据
+    // 构造更新数据 —— ⚠️ **只发被改的那一个字段**。
+    //
+    // 真机 bug 修复（2026-09-13）：原实现是 `{ ...project.novelConfig, [field]: finalValue }`，
+    // 即把**渲染层缓存里的整份配置**一起写回。而主进程 `project:update-config` 是逐字段
+    // 判 `!== undefined` 合并 —— 收到整份就等于「所有列都写」。缓存不会因为上一次工具调用
+    // 而刷新，于是**连续改多个字段时，后一次会把前一次改过的字段写回旧值**。
+    // 实测症状：连续改 genre → subGenre → writingStyle 后回读，writingStyle 是新的，
+    // 而 genre/subGenre 退回旧值，Agent 只得反复重提，最终撞上工具调用次数上限。
+    // 只发单字段后，主进程的逐字段合并语义才真正成立（也是该 handler 的原始设计意图）。
     const updateData = {
-      novelConfig: { ...project.novelConfig, [field]: finalValue },
+      novelConfig: { [field]: finalValue },
     }
 
     const result = await ipc.invoke('project:update-config', project.id, updateData)

@@ -75,7 +75,11 @@ export interface ProjectChannels {
     return: { success: boolean; error?: string }
   }
   'project:update-config': {
-    args: [projectId: string, data: Partial<ProjectData>]
+    // ⚠️ novelConfig 是**部分字段**语义：主进程 `project:update-config` 逐字段判 `!== undefined`
+    //   再做列更新（project-controller.ts）。契约必须写成 Partial，否则调用方会被类型逼着
+    //   传整份配置 —— 而整份配置一旦来自**过期缓存**，就会把别的字段写回旧值（丢更新，真机实测：
+    //   连续改 genre/subGenre/writingStyle 后前两个退回旧值）。
+    args: [projectId: string, data: Partial<Omit<ProjectData, 'novelConfig'>> & { novelConfig?: Partial<NovelConfig> }]
     return: { success: boolean; error?: string }
   }
   'project:recent-list': {
