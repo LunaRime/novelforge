@@ -8,7 +8,7 @@ import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectVelaDir } 
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { getProjectDb, getCurrentProjectPath } from '../database'
-import { grantDirectory } from './fs-controller'
+import { grantDirectory, assertPathAllowedForIpc } from './fs-controller'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
@@ -254,6 +254,14 @@ export function registerProjectController() {
       if (!stat.isDirectory()) {
         return { success: false, error: t('error.notAFolder') }
       }
+      // ⚠️ L4 S8 安全修复（评审 blocker B1）：入参来自渲染层，而紧接着就是
+      //   `fs.rmSync(recursive, force)`。改造前只查 existsSync + isDirectory ——
+      //   等于「渲染层给什么路径就递归删什么」，可 `rm -rf` 用户主目录下任意目录。
+      //   现在要求：① 确实是一个 NovelForge 项目目录（存在项目库）；② 通过路径策略断言。
+      if (!fs.existsSync(path.join(getProjectVelaDir(projectPath), 'vela.db'))) {
+        return { success: false, error: t('error.notAProjectFolder') }
+      }
+      assertPathAllowedForIpc(projectPath, 'delete')
       fs.rmSync(projectPath, { recursive: true, force: true })
       // 同时从最近列表中移除
       removeRecentProject(projectPath)

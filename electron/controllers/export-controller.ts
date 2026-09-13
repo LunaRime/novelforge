@@ -11,7 +11,7 @@ import { t } from '../../src/shared/locale'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getProjectDb } from '../database'
-import { grantDirectory } from './fs-controller'
+import { grantDirectory, assertPathAllowedForIpc } from './fs-controller'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { guardedHandle } from '../security/ipc-guard'
@@ -224,6 +224,11 @@ export function registerExportController(): void {
   }) => {
     try {
       const { chapterNumbers, format, fileFormat, outputPath, projectName } = params
+
+      // ⚠️ L4 S8 安全修复（评审 blocker B2）：outputPath 来自渲染层，下面直接 mkdir + writeFile
+      //   （改造前全程没有任何沙箱校验，可往任意路径写文件）。
+      //   目标目录应由 `export:select-output-dir` 的对话框签发授权。
+      assertPathAllowedForIpc(outputPath, 'write')
 
       const chapters = await getFinalizedChapters(chapterNumbers)
       if (chapters.length === 0) {

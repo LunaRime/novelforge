@@ -6,6 +6,8 @@ import path from 'node:path'
 import readline from 'node:readline'
 import { safeErrorMessage } from '../utils/error-utils'
 import { guardedHandle } from '../security/ipc-guard'
+// L4 S8：对话框结果由主进程签发授权
+import { grantExternalFile } from './fs-controller'
 
 /**
  * 导入小说控制器 — 处理文件选择与章节拆分
@@ -285,6 +287,9 @@ export function registerImportController() {
       ? await dialog.showOpenDialog(win, options)
       : await dialog.showOpenDialog(options)
     if (result.canceled || result.filePaths.length === 0) return null
+
+    // L4 S8：主进程在对话框结果处签发读授权（渲染层不再自报路径）
+    for (const p of result.filePaths) grantExternalFile(p)
 
     // 展开目录为递归文件列表（仅收集小说格式），文件直接使用
     const files: string[] = []

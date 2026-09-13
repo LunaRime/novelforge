@@ -67,7 +67,9 @@ describe('collectAuditContext 正常路径', () => {
       if (channel === 'db:project-core-get') {
         return { worldbuilding: '「武魂」是核心力量体系。「魂殿」掌控武魂秘辛。' }
       }
-      if (channel === 'fs:read-external-file') {
+      // L4 S8：项目内白名单文件改走 fs:read-file（原先靠渲染层自报 fs:grant-external-file
+      // + fs:read-external-file 绕行；自报授权通道已删除）
+      if (channel === 'fs:read-file') {
         return { success: true, content: JSON.stringify({ words: ['缓缓'], patterns: ['只见'] }) }
       }
       return null

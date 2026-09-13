@@ -178,7 +178,6 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'fs:agent-result-write': { authority: 'write-project' },
   'fs:check-exists': { authority: 'read-project' },
   'fs:delete-file': { authority: 'destructive' },
-  'fs:grant-external-file': { authority: 'write-project' },
   'fs:list-dir': { authority: 'read-project' },
   'fs:mkdir': { authority: 'write-project' },
   'fs:read-external-file': { authority: 'read-project' },

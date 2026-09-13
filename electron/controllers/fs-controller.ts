@@ -6,14 +6,32 @@ import os from 'node:os'
 import { createHash } from 'node:crypto'
 import { FileNode, WorkflowOutputTailOptions } from '../../src/shared/ipc-channels'
 import { VELA_HOME } from '../utils/config-utils'
+import { getCurrentProjectPath } from '../database'
+import {
+  assertPathAllowed,
+  currentGrants,
+  grantPath,
+  hasGrantFor,
+  revokeGrant,
+  type PathIntent,
+  type PathPolicy,
+} from '../security/grants'
 import { safeErrorMessage } from '../utils/error-utils'
 import { scanTextWindow } from '../utils/read-text-window'
 import { logger } from '../utils/logger'
 import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
 import { guardedHandle } from '../security/ipc-guard'
 
-/** 路径沙箱：允许访问的根目录列表 */
-const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
+/**
+ * 路径权限（L4 S8）——判定逻辑在 `electron/security/grants.ts`（纯模块，可离线单测）。
+ *
+ * 改造前这里是 `SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` + 黑名单，实质等于
+ * **整个用户主目录可读写**，且授权可由渲染层自行登记（`fs:grant-external-file`）。现在：
+ *   白名单 = VELA_HOME ∪ 当前项目根 ∪ 会话内**由主进程签发**的授权
+ *   + 意图分级（读/写/删分别判定）
+ *   + 拒绝名单（纵深防御）
+ * ⚠️ `legacyHomeDir` 在 S8 过渡期仍等于主目录（与改造前等价）；**S9 置空即完成收紧**。
+ */
 
 /** 外部文件读取限制（Agent 添加项目外文件专用通道）：
  * 用户通过系统对话框显式选择，信任用户意图，不套沙箱（可能在任何磁盘），
@@ -80,9 +98,6 @@ async function windowFromHugeFile(
   return res
 }
 
-/** 用户显式授权过的外部文件路径（dialog:select-files 选择成功后由渲染层登记，会话级） */
-const grantedExternalFiles = new Set<string>()
-
 /**
  * 工作流任务输出文件仓库（M2，CC §三.4 双轨补充通道）：
  * `{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`——纯 fs 单测见 utils 测试。
@@ -92,63 +107,73 @@ const WORKFLOW_OUTPUT_DIR = path.join(VELA_HOME, 'workflow-output')
 const WORKFLOW_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 const workflowOutputStore = new WorkflowOutputFileStore(WORKFLOW_OUTPUT_DIR)
 
-/** 禁止访问的敏感目录（即使在 SANDBOX_ROOTS 内） */
+/** 禁止访问的敏感目录（纵深防御第二道；边界由白名单承担）——S8 补齐了评审点名缺失的项 */
 const BLOCKED_PATHS = [
   path.join(os.homedir(), '.ssh'),
   path.join(os.homedir(), '.gnupg'),
   path.join(os.homedir(), '.aws'),
   path.join(os.homedir(), '.docker'),
+  path.join(os.homedir(), '.kube'),
+  path.join(os.homedir(), '.npmrc'),
+  path.join(os.homedir(), '.git-credentials'),
+  path.join(os.homedir(), '.config'),
+  path.join(os.homedir(), '.local'),
+  path.join(os.homedir(), '.vscode'),
   path.join(os.homedir(), 'AppData', 'Roaming'),
   path.join(os.homedir(), 'AppData', 'Local'),
+  path.join(os.homedir(), 'AppData', 'LocalLow'),
   process.env.WINDIR || 'C:\\Windows',
   process.env.SYSTEMROOT || 'C:\\Windows',
   '/etc', '/sys', '/proc', '/dev',
 ]
 
 /**
- * 用户通过系统对话框显式选择的目录（会话级授权）。
- * 导出/分享卡保存到任意用户目录：dialog:select-folder / dialog:save-file /
- * export:select-output-dir 返回路径时登记，fs 写通道对已登记目录放行。
+ * 组装当前策略。**每次调用现取**：项目根会随打开/关闭项目变化，授权集是会话级可变的。
  */
-const grantedDirs = new Set<string>()
-
-/** 登记用户通过系统对话框确认的目录（外部授权链路——与 fs:grant-external-file 同模式） */
-export function grantDirectory(dirPath: string): void {
-  if (!dirPath) return
-  grantedDirs.add(path.resolve(dirPath))
-}
-
-/** 路径是否位于已登记的授权目录内 */
-function isGranted(filePath: string): boolean {
-  const abs = path.resolve(filePath)
-  return [...grantedDirs].some(dir => abs === dir || abs.startsWith(dir + path.sep))
+function currentPathPolicy(): PathPolicy {
+  return {
+    velaHome: VELA_HOME,
+    projectRoot: getCurrentProjectPath(),
+    granted: currentGrants(),
+    blockedPaths: BLOCKED_PATHS,
+    // ⚠️ S9：把这一行改成 `null` 即完成「移除主目录根」（单点收紧、可单点回滚）
+    legacyHomeDir: os.homedir(),
+  }
 }
 
 /**
- * 验证文件路径是否在允许的沙箱范围内
- * @throws 如果路径逃逸沙箱则抛出错误
+ * 登记用户通过系统对话框确认的目录（会话级授权）。
+ * **只应由主进程的对话框处理器调用**——渲染层没有登记入口（这正是改造前缺口 A）。
  */
-function validateSandbox(filePath: string): string {
-  const resolved = path.resolve(filePath)
-  // 用户显式授权的目录优先放行（会话级，进程重启后失效）
-  if (isGranted(filePath)) return resolved
-  // 检查是否在允许的根目录内
-  const isAllowed = SANDBOX_ROOTS.some(root => {
-    const normalized = path.resolve(root)
-    return resolved.startsWith(normalized + path.sep) || resolved === normalized
-  })
-  if (!isAllowed) {
-    throw new Error(t('error.fsAccessDenied').replace('{path}', filePath))
-  }
-  // 检查是否在禁止列表中
-  const isBlocked = BLOCKED_PATHS.some(blocked => {
-    const normalized = path.resolve(blocked)
-    return resolved.startsWith(normalized + path.sep) || resolved === normalized
-  })
-  if (isBlocked) {
-    throw new Error(t('error.fsAccessProtected').replace('{path}', filePath))
-  }
-  return resolved
+export function grantDirectory(dirPath: string): void {
+  grantPath(dirPath, ['read', 'write', 'delete'])
+}
+
+/** 登记单个文件（对话框选中的外部文件） */
+export function grantExternalFile(absPath: string): void {
+  grantPath(absPath, ['read'])
+}
+
+/** 注销授权（测试/撤销用） */
+export function revokeGrantedPath(absPath: string): void {
+  revokeGrant(absPath)
+}
+
+/**
+ * 校验路径在指定意图下是否允许，返回解析后的绝对路径。
+ * @throws 越界 → error.fsAccessDenied；命中拒绝名单/凭据文件 → error.fsAccessProtected
+ */
+function validateSandbox(filePath: string, intent: PathIntent = 'read'): string {
+  return assertPathAllowed(filePath, intent, currentPathPolicy())
+}
+
+/**
+ * 供**其它 controller** 复用的路径断言（同一套策略，避免各写一份白名单）。
+ * 用于那些自己直接碰盘、不走 `fs:` 通道的通道 —— 评审点名的两个 blocker 属此类：
+ * `project:delete-folder`（可递归删任意目录）与 `export:export-chapters`（可写任意路径）。
+ */
+export function assertPathAllowedForIpc(filePath: string, intent: PathIntent): string {
+  return validateSandbox(filePath, intent)
 }
 
 // 全局文件操作锁（按文件绝对路径分配 Mutex 队列）
@@ -185,7 +210,7 @@ export function registerFSController() {
   // 安全的异步读取
   guardedHandle('fs:read-file', async (_event, filePath: string, options?: unknown) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'read')
       return await withFileMutex(filePath, async () => {
         const spec = parseReadWindow(options)
         // 项目内读取也加大小上限（P3 修复）：50MB 文本全量跨 IPC 再被截断到 800 token，
@@ -221,9 +246,11 @@ export function registerFSController() {
     try {
       const resolved = path.resolve(filePath)
 
-      // 1. 授权检查：仅放行用户显式选择过的路径（fs:grant-external-file 登记，
-      //    渲染层在 dialog:select-files 成功与内部白名单读取前调用）
-      if (!grantedExternalFiles.has(resolved)) {
+      // 1. 授权检查（L4 S8）：只放行**精确登记**过读授权的路径 —— 授权只能由主进程的
+      //    对话框处理器签发（grantExternalFile）。改造前这里是渲染层可自行上报的
+      //    `fs:grant-external-file`，等于自己给自己发通行证（该通道已删除）。
+      //    刻意不用「在白名单内即可」：过渡期主目录根仍在白名单里，那样会形同虚设。
+      if (!hasGrantFor(resolved, 'read')) {
         return {
           success: false,
           content: '',
@@ -269,22 +296,10 @@ export function registerFSController() {
     }
   })
 
-  // 用户显式选择外部文件后登记授权（dialog:select-files 成功路径由渲染层调用）
-  guardedHandle('fs:grant-external-file', async (_event, filePath: string) => {
-    try {
-      if (typeof filePath === 'string' && filePath.trim()) {
-        grantedExternalFiles.add(path.resolve(filePath))
-      }
-      return { success: true }
-    } catch {
-      return { success: false }
-    }
-  })
-
   // 二进制写入（PNG 截图导出——年度报告/分享卡；与 write-file 同安全模式）
   guardedHandle('fs:write-buffer', async (_event, filePath: string, content: Uint8Array) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         const tempPath = `${safePath}.${Date.now()}.tmp`
@@ -300,7 +315,7 @@ export function registerFSController() {
   // 跨平台绝对安全异步写入（防踩空）
   guardedHandle('fs:write-file', async (_event, filePath: string, content: string) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         // 先写到临时文件再原位替换，绝对防止 0KB 碎屑踩空现象
@@ -316,7 +331,7 @@ export function registerFSController() {
 
   guardedHandle('fs:list-dir', async (_event, dirPath: string): Promise<FileNode[]> => {
     try {
-      return readDirRecursive(validateSandbox(dirPath))
+      return readDirRecursive(validateSandbox(dirPath, 'read'))
     } catch {
       return []
     }
@@ -324,7 +339,7 @@ export function registerFSController() {
 
   guardedHandle('fs:mkdir', async (_event, dirPath: string) => {
     try {
-      const safePath = validateSandbox(dirPath)
+      const safePath = validateSandbox(dirPath, 'write')
       fs.mkdirSync(safePath, { recursive: true })
       return { success: true }
     } catch (error) {
@@ -334,7 +349,7 @@ export function registerFSController() {
 
   guardedHandle('fs:check-exists', async (_event, filePath: string) => {
     try {
-      return fs.existsSync(validateSandbox(filePath))
+      return fs.existsSync(validateSandbox(filePath, 'read'))
     } catch {
       return false
     }
@@ -342,7 +357,7 @@ export function registerFSController() {
 
   guardedHandle('fs:delete-file', async (_event, filePath: string) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'delete')
       await fsPromises.unlink(safePath)
       return { success: true }
     } catch (error) {
@@ -354,7 +369,7 @@ export function registerFSController() {
 
   guardedHandle('fs:read-json', async (_event, filePath: string) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'read')
       return await withFileMutex(filePath, async () => {
         const content = await fsPromises.readFile(safePath, 'utf-8')
         return { success: true, data: JSON.parse(content) }
@@ -366,7 +381,7 @@ export function registerFSController() {
 
   guardedHandle('fs:write-json', async (_event, filePath: string, data: unknown) => {
     try {
-      const safePath = validateSandbox(filePath)
+      const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         const tempPath = `${safePath}.${Date.now()}.tmp`
@@ -457,10 +472,11 @@ export function registerFSController() {
         // EEXIST = 同内容已落盘（同哈希）→ 幂等成功；其他错误上抛
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
       }
-      // P0-1 再读授权：read_file 绝对路径分支走 fs:read-external-file（:147 检查 grantedExternalFiles），
-      // 落盘文件必须登记，否则 LLM 按注入文案「用 read_file 读取」必被拒——登记后 .txt 在扩展名
-      // 白名单内、不在 BLOCKED_PATHS，其余防线仍生效（grantedExternalFiles 会话级，进程重启失效）
-      grantedExternalFiles.add(path.resolve(target))
+      // P0-1 再读授权（L4 S8 保留）：read_file 的绝对路径分支走 fs:read-external-file，
+      //   而该通道只放行**精确登记过**的路径（见 hasGrantFor）。这里由**主进程自己**登记刚写的
+      //   spill 文件（不是渲染层上报），否则 LLM 按注入文案「用 read_file 读取」必被拒。
+      //   ⚠️ 删除这行会让 spill 链路整体失效——评审专门点名的「必须保留」项。
+      grantExternalFile(path.resolve(target))
       return { success: true, path: target }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }

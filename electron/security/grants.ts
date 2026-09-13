@@ -32,6 +32,12 @@ export interface PathPolicy {
    * S9 将其置空即完成收紧——**只改这一处**，便于单点回滚。
    */
   legacyHomeDir?: string | null
+  /**
+   * 纵深防御：即使在白名单内也**禁止**访问的路径（改造前的 `BLOCKED_PATHS`）。
+   * S8 过渡期必须保留——因为 `legacyHomeDir` 仍等于主目录，没有这层的话
+   * `~/.ssh`、`~/.aws`、`AppData/Roaming` 会重新变得可读写。
+   */
+  blockedPaths?: readonly string[]
 }
 
 /**
@@ -76,6 +82,8 @@ function isForbiddenCredentialFile(candidate: string, velaHome: string): boolean
 export function isPathAllowed(candidate: string, intent: PathIntent, policy: PathPolicy): boolean {
   if (!candidate || typeof candidate !== 'string' || !candidate.trim()) return false
   if (isForbiddenCredentialFile(candidate, policy.velaHome)) return false
+  // 纵深防御：拒绝名单优先于一切放行（S8 过渡期靠它挡住主目录下的敏感目录）
+  if (policy.blockedPaths?.some(b => isInside(candidate, b))) return false
 
   if (isInside(candidate, policy.velaHome)) return true
   if (policy.projectRoot && isInside(candidate, policy.projectRoot)) return true
@@ -123,6 +131,15 @@ export function revokeGrant(absPath: string): void {
 /** 当前授权集（供构造 `PathPolicy`；返回只读视图的副本） */
 export function currentGrants(): ReadonlyMap<string, ReadonlySet<PathIntent>> {
   return new Map(grantedPaths)
+}
+
+/**
+ * 该绝对路径是否被**精确**授予了某意图（不做包含判定）。
+ * 用于 `fs:read-external-file` 这类「必须由用户显式选中过这个文件」的通道——
+ * 若改成「在白名单内即可」，主目录根（过渡期）会让它形同虚设。
+ */
+export function hasGrantFor(absPath: string, intent: PathIntent): boolean {
+  return Boolean(grantedPaths.get(norm(absPath))?.has(intent))
 }
 
 /** 仅供测试：清空授权集（进程重启即失效的真实语义） */

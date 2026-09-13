@@ -76,9 +76,10 @@ export async function collectAuditContext(chapterNumber: number): Promise<AuditC
     const { useProjectStore } = await import('../../stores/project-store')
     const project = useProjectStore.getState().currentProject
     if (project) {
-      // 登记授权（fs:read-external-file 现仅放行显式授权路径——项目内白名单文件在此登记）
-      await ipc.invoke('fs:grant-external-file', `${project.path}/${DIR_VELA_INTERNAL}/audit-whitelist.json`).catch(() => {})
-      const wlRes = await ipc.invoke('fs:read-external-file', `${project.path}/${DIR_VELA_INTERNAL}/audit-whitelist.json`) as { success?: boolean; content?: string } | null
+      // L4 S8：该文件**在项目内**，本来就在白名单里（项目根），无需任何外部授权 ——
+      // 改用普通 fs:read-file。原先靠渲染层自行登记 fs:grant-external-file 绕一圈，
+      // 那条通道已删除（它是「渲染层可自报任意路径」的缺口所在）。
+      const wlRes = await ipc.invoke('fs:read-file', `${project.path}/${DIR_VELA_INTERNAL}/audit-whitelist.json`) as { success?: boolean; content?: string } | null
       if (wlRes?.success && wlRes.content) {
         const parsed = JSON.parse(wlRes.content) as Record<string, unknown>
         ctx.whitelist = {

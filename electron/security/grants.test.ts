@@ -103,6 +103,13 @@ describe('越界与凭据保护', () => {
     expect(isPathAllowed(path.join(PROJ, 'config.json'), 'read', policy())).toBe(true)
   })
 
+  it('拒绝名单优先于白名单（S8 过渡期：主目录根仍开，靠它挡住 ~/.ssh 类）', () => {
+    const sshDir = path.join(LEGACY_HOME, '.ssh')
+    const p = policy({ legacyHomeDir: LEGACY_HOME, blockedPaths: [sshDir] })
+    expect(isPathAllowed(path.join(sshDir, 'id_rsa'), 'read', p)).toBe(false)
+    expect(isPathAllowed(path.join(LEGACY_HOME, 'doc.md'), 'read', p)).toBe(true)
+  })
+
   it.skipIf(process.platform !== 'win32')('Windows 大小写不敏感：CONFIG.JSON 同样被拒', () => {
     expect(isPathAllowed(path.join(VELA, 'CONFIG.JSON'), 'read', policy())).toBe(false)
     expect(isPathAllowed(path.join(VELA.toUpperCase(), 'vela.db'), 'read', policy())).toBe(true)

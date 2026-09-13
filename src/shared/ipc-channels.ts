@@ -209,11 +209,12 @@ export interface FileChannels {
      */
     return: { success: boolean; content: string; totalChars?: number; beyond?: boolean; error?: string }
   }
-  /** 项目外文件只读（Agent 添加外部文件专用；无沙箱，扩展名 + 1MB 限制） */
-  'fs:grant-external-file': {
-    args: [filePath: string]
-    return: { success: boolean }
-  }
+  /**
+   * 项目外文件只读（Agent 添加外部文件专用；扩展名 + 1MB 限制）。
+   * L4 S8：**授权改由主进程签发** —— 原先渲染层可调 `fs:grant-external-file` 自报任意路径
+   * （等于自己给自己发通行证），该通道已删除；现在由 `dialog:select-files` 等处理器
+   * 在对话框结果处登记（见 electron/security/grants.ts）。
+   */
   'fs:read-external-file': {
     args: [filePath: string, options?: ReadFileRangeOptions]
     return: { success: boolean; content: string; totalChars?: number; beyond?: boolean; error?: string }

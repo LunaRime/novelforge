@@ -550,6 +550,7 @@ export const UI_TEXTS_DATA = {
   'error.missingProjectPath': { 'zh-CN': '缺少项目路径', 'en-US': 'Missing project path', 'ru-RU': 'Отсутствует путь проекта' },
   'error.projectFolderNotFound': { 'zh-CN': '项目文件夹不存在', 'en-US': 'Project folder does not exist', 'ru-RU': 'Папка проекта не существует' },
   'error.notAFolder': { 'zh-CN': '路径不是文件夹', 'en-US': 'Path is not a folder', 'ru-RU': 'Путь не является папкой' },
+  'error.notAProjectFolder': { 'zh-CN': '该文件夹不是 NovelForge 项目，已拒绝删除', 'en-US': 'That folder is not a NovelForge project; deletion refused', 'ru-RU': 'Эта папка не является проектом NovelForge; удаление отклонено' },
   'error.fileEmpty': { 'zh-CN': '文件为空，无法导入', 'en-US': 'File is empty — cannot import', 'ru-RU': 'Файл пуст — импорт невозможен' },
   'error.textEmpty': { 'zh-CN': '文本内容为空', 'en-US': 'Text content is empty', 'ru-RU': 'Текст пуст' },
   'error.chunksTableMissing': { 'zh-CN': 'chunks 表不存在', 'en-US': 'chunks table does not exist', 'ru-RU': 'Таблица chunks не существует' },

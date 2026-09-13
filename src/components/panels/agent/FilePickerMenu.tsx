@@ -45,8 +45,8 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
       const { ipc } = await import('../../../services/ipc-client')
       const paths = await ipc.invoke('dialog:select-files')
       if (paths && paths.length > 0) {
-        // 登记授权：fs:read-external-file 仅放行用户显式选择过的路径（安全边界）
-        await ipc.invoke('fs:grant-external-file', paths[0]).catch(() => {})
+        // L4 S8：授权已由主进程在 dialog:select-files 处理器内部签发 ——
+        // 渲染层不再（也不能）上报路径（原 fs:grant-external-file 通道已删除）。
         onSelect(paths[0])
       }
     } catch { /* 对话框失败不处理 */ }

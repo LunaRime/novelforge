@@ -14,6 +14,8 @@ import { safeErrorMessage } from '../utils/error-utils'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { embeddingService } from '../embedding-service'
 import { guardedHandle } from '../security/ipc-guard'
+// L4 S8：对话框结果由主进程直接签发授权（取代渲染层自行调用的 fs:grant-external-file）
+import { grantDirectory, grantExternalFile } from './fs-controller'
 
 function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
@@ -221,6 +223,9 @@ export function registerKBController() {
       filters: [{ name: '文本文件', extensions: ['txt', 'md', 'markdown', 'json', 'yaml', 'yml', 'csv'] }],
     })
     if (result.canceled || result.filePaths.length === 0) return null
+    // L4 S8：授权由**主进程**在对话框结果处签发（改造前是渲染层回调 fs:grant-external-file
+    // 自行上报路径 —— 那可是任意路径，等于自己给自己发通行证；该通道已删除）。
+    for (const p of result.filePaths) grantExternalFile(p)
     return result.filePaths
   })
 
@@ -230,6 +235,7 @@ export function registerKBController() {
       title: t('dialog.selectDocsFolder'),
     })
     if (result.canceled || result.filePaths.length === 0) return null
+    grantDirectory(result.filePaths[0])
     return result.filePaths[0]
   })
 }
