@@ -11,11 +11,14 @@
  *   ① 已注册的每个通道都有类型声明；
  *   ② 声明的每个通道，要么被注册（invoke），要么在 EVENT_CHANNELS 显式列名（主→渲染事件）；
  *   ③ 事件通道不得被注册成 handler（防止方向搞反）；
- *   ④ 通道总数快照（防无声增删）。
+ *   ④ 通道总数快照（防无声增删）；
+ *   ⑤ 策略表（`IPC_CHANNEL_POLICY`）与已注册集合双向一致 —— 与 `Record<InvokeChannel, ChannelPolicy>`
+ *      的编译期约束互为双重保障（编译期防漏登记，运行期防「类型被放宽成 Record<string,…>」）。
  */
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
+import { IPC_CHANNEL_POLICY } from './ipc-policy'
 
 /**
  * 主→渲染事件通道（由 `webContents.send` 发出，不走 `ipcMain.handle`，不进策略表）。
@@ -46,16 +49,26 @@ function collectTsFiles(dir: string, out: string[] = []): string[] {
   return out
 }
 
+/** 去掉注释：文档示例里出现的 `ipcMain.handle('x:y')` 不是真实注册，不能计入 */
+function stripComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    // 负向前置避免吃掉 `http://` 这类 URL
+    .replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
+
 /**
  * 扫描主进程实际注册的 invoke 通道。
- * 正则用 `\s*` 跨行匹配，覆盖 `ipcMain.handle(\n  'embedding:compare',` 这类多行写法
- * （行级扫描会漏掉它们——本测试存在的直接原因之一）。
+ * - 正则用 `\s*` 跨行匹配，覆盖 `ipcMain.handle(\n  'embedding:compare',` 这类多行写法
+ *   （行级扫描会漏掉它们——本测试存在的直接原因之一）。
+ * - **迁移期必须同时扫两种注册形式**：S4 之前多数通道是裸 `ipcMain.handle`，
+ *   收口后逐个变成 `guardedHandle`。只扫一种会让「已迁移的通道」被误判成幽灵声明。
  */
 function scanRegisteredChannels(): Map<string, string> {
   const registered = new Map<string, string>()
-  const re = /ipcMain\.handle\(\s*'([^']+)'/g
+  const re = /(?:ipcMain\.handle|guardedHandle)\(\s*'([^']+)'/g
   for (const file of collectTsFiles(path.join(ROOT, 'electron'))) {
-    const src = fs.readFileSync(file, 'utf-8')
+    const src = stripComments(fs.readFileSync(file, 'utf-8'))
     for (const m of src.matchAll(re)) {
       registered.set(m[1], path.relative(ROOT, file).replace(/\\/g, '/'))
     }
@@ -95,5 +108,12 @@ describe('IPC 通道对账（L4 §6 第 1 类）', () => {
   it('④ 通道数量快照（防无声增删；新增通道时同步更新）', () => {
     expect(registered.size).toBe(200)
     expect(declared.size).toBe(207) // 200 invoke + 7 event
+  })
+
+  it('⑤ 策略表与已注册集合双向一致', () => {
+    const policyKeys = new Set(Object.keys(IPC_CHANNEL_POLICY))
+    expect([...registered.keys()].filter(c => !policyKeys.has(c)), '已注册但策略表未登记').toEqual([])
+    expect([...policyKeys].filter(c => !registered.has(c)), '策略表登记了未注册的通道').toEqual([])
+    expect(policyKeys.size).toBe(200)
   })
 })

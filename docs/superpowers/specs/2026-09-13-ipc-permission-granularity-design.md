@@ -330,7 +330,7 @@ v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确�
 |---|---|---|---|
 | **S0** | 只读盘点：200 invoke + 8 event 通道 + 不一致表（本文档 §5 即其产物） | 0 改动 | 人工核对 |
 | **S1 ✅ 已完成**（`41994c5`） | 消差：补 4 条 invoke 声明（health ×2 / embedding ×2）+ 2 条事件声明（`import:progress`、`menu:check-update`）+ **修 `import:` 事件前缀缺失（静默死通道）** + 新增通道对账测试 | ✅ | `src/shared/ipc-channel-parity.test.ts` 4 断言绿；全量 108 files / 1258 tests 绿；tsc/eslint 0 |
-| **S2** | 金丝雀收口：建 `src/shared/ipc-policy.ts`（纯数据、零运行时 import）+ `electron/security/ipc-guard.ts`，**只迁 `styles-controller.ts`**（2 通道、无事件、无路径） | ✅ | 全量测试仍绿（2 个 mock electron 的测试不许红） |
+| **S2 ✅ 已完成** | 金丝雀收口：`src/shared/ipc-policy.ts`（**200 条策略，纯数据、零运行时 import**）+ `electron/security/ipc-guard.ts`（`guardedHandle` 保持 `ipcMain.handle` 同签名），**只迁 `styles-controller.ts`**（2 通道、无事件、无路径） | ✅ | 全量 108 files / 1259 tests 绿；tsc/eslint 0；`Record<InvokeChannel, ChannelPolicy>` 使策略表完整性成为**编译期**保证 |
 | **S3** | `GuardedCtx` 契约：迁含活 `event` 的 3 个文件（`import-controller` / `llm-controller` / `skill-controller`），确认 `event.sender.send('import:progress')` 4 处行为不变 | ✅ | 全量测试 + `vite build` 绿 |
 | **S4** | 分批替换其余 197 处（每批一次提交）：批1 templates/report/browser/dev/config/health-check/memory/export → 批2 kb/project/embedding/update → 批3 llm → 批4 fs → 批5 db(73) → **批6 mcp-ipc-bridge(11)，同时把 `registerMCPHandlers()` 并入 `registerIPCHandlers()`** | ✅ 每批 | 每批 `ipcMain.handle(` 计数递减且有对账测试兜底 |
 | **S5** | **失败可见性修复**（前置！）：`fs:write-file` 等写通道的返回值必须被检查，失败 → toast + 不 `markTabSaved()` | ✅ | 新增断言「写失败时 `markTabSaved()` 不被调用」 |

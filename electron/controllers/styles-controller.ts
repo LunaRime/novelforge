@@ -9,7 +9,7 @@
  * 解析与双层合并逻辑在 electron/utils/style-codec.ts（纯函数，与渲染层注册表共享）。
  * v1 只读零代码注册（用户手动丢 .md 即生效），无写通道；风格文件正文是用户作品数据，不做翻译。
  */
-import { ipcMain } from 'electron'
+import { guardedHandle } from '../security/ipc-guard'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { VELA_HOME, getProjectVelaDir } from '../utils/config-utils'
@@ -58,7 +58,7 @@ async function loadMergedStyles(projectPath: string): Promise<StyleMeta[]> {
 
 export function registerStylesController(): void {
   // 合并列表（项目覆盖用户；按 name 排序；不含 promptBody——列表只给元信息）
-  ipcMain.handle('styles:list', async (_e, projectPath: string): Promise<StyleInfo[]> => {
+  guardedHandle('styles:list', async (_e, projectPath: string): Promise<StyleInfo[]> => {
     try {
       const merged = await loadMergedStyles(projectPath)
       return merged.map(toStyleInfo)
@@ -68,7 +68,7 @@ export function registerStylesController(): void {
   })
 
   // 单风格（含 promptBody——写稿注入/未来 UI 详情用）
-  ipcMain.handle('styles:get', async (_e, projectPath: string, name: string): Promise<StyleMeta | null> => {
+  guardedHandle('styles:get', async (_e, projectPath: string, name: string): Promise<StyleMeta | null> => {
     try {
       if (!name || typeof name !== 'string') return null
       const merged = await loadMergedStyles(projectPath)
