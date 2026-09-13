@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
@@ -14,6 +14,7 @@ import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
 import { initProjectDatabase } from '../database'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
+import { guardedHandle } from '../security/ipc-guard'
 
 interface RecentProject {
   name: string
@@ -46,7 +47,7 @@ function removeRecentProject(projectPath: string) {
 
 export function registerProjectController() {
   // 创建新项目
-  ipcMain.handle('project:create', async (_event, config: {
+  guardedHandle('project:create', async (_event, config: {
     name: string; path: string; genre: string; targetAudience: string
   }) => {
     try {
@@ -102,7 +103,7 @@ export function registerProjectController() {
   })
 
   // 打开现有项目
-  ipcMain.handle('project:open', async (_event, projectPath: string) => {
+  guardedHandle('project:open', async (_event, projectPath: string) => {
     try {
       if (!fs.existsSync(projectPath)) {
         return { success: false, project: null, error: t('error.dirNotFound') }
@@ -161,7 +162,7 @@ export function registerProjectController() {
 
   // 保存/更新项目配置
   // 注意：novelConfig 字段与 DB project_core 列的映射关系（前后端字段名不同）
-  ipcMain.handle('project:save', async (_event, _projectId: string, data: Partial<ProjectData>) => {
+  guardedHandle('project:save', async (_event, _projectId: string, data: Partial<ProjectData>) => {
     try {
       if (!data.path) return { success: false, error: t('error.missingProjectPath') }
 
@@ -212,7 +213,7 @@ export function registerProjectController() {
   })
 
   // project:update-config 同理
-  ipcMain.handle('project:update-config', async (_event, _projectId: string, data: Partial<ProjectData>) => {
+  guardedHandle('project:update-config', async (_event, _projectId: string, data: Partial<ProjectData>) => {
     try {
       if (data.novelConfig) {
         const nc = data.novelConfig
@@ -240,11 +241,11 @@ export function registerProjectController() {
     }
   })
 
-  ipcMain.handle('project:recent-list', async () => {
+  guardedHandle('project:recent-list', async () => {
     return loadRecentProjects()
   })
 
-  ipcMain.handle('project:delete-folder', async (_event, projectPath: string) => {
+  guardedHandle('project:delete-folder', async (_event, projectPath: string) => {
     try {
       if (!fs.existsSync(projectPath)) {
         return { success: false, error: t('error.projectFolderNotFound') }
@@ -265,7 +266,7 @@ export function registerProjectController() {
     }
   })
 
-  ipcMain.handle('project:remove-recent', async (_event, projectPath: string) => {
+  guardedHandle('project:remove-recent', async (_event, projectPath: string) => {
     try {
       removeRecentProject(projectPath)
       logger.info('Project', t('log.project.recentRemoved').replace('{path}', projectPath))
@@ -275,7 +276,7 @@ export function registerProjectController() {
     }
   })
 
-  ipcMain.handle('dialog:select-folder', async () => {
+  guardedHandle('dialog:select-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory', 'createDirectory'],
       title: t('dialog.selectFolder'),
@@ -287,7 +288,7 @@ export function registerProjectController() {
   })
 
   /** 保存文件对话框（分享卡/报告导出：选目录+文件名一次完成；登记父目录授权） */
-  ipcMain.handle('dialog:save-file', async (_event, opts?: { defaultName?: string; title?: string }) => {
+  guardedHandle('dialog:save-file', async (_event, opts?: { defaultName?: string; title?: string }) => {
     const win = BrowserWindow.getFocusedWindow()
     const options = {
       title: opts?.title ?? t('dialog.saveFile'),
@@ -301,7 +302,7 @@ export function registerProjectController() {
   })
 
   // ===== 项目摘要（当前项目走主连接；历史项目只读打开，不打开项目）=====
-  ipcMain.handle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
+  guardedHandle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
     const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
     if (!fs.existsSync(dbPath)) return null
 

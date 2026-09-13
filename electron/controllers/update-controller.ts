@@ -6,7 +6,7 @@
  * 2. 卸载 — 触发 NSIS 卸载程序 + 清理用户数据
  */
 
-import { ipcMain, app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, shell } from 'electron'
 import { autoUpdater, UpdateInfo as EUUpdateInfo } from 'electron-updater'
 import path from 'node:path'
 import os from 'node:os'
@@ -15,6 +15,7 @@ import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import { VELA_HOME } from '../utils/config-utils'
+import { guardedHandle } from '../security/ipc-guard'
 
 // ===== 状态管理 =====
 
@@ -165,7 +166,7 @@ export function registerUpdateController(): void {
 
   // ---- 更新相关 ----
 
-  ipcMain.handle('update:check', async () => {
+  guardedHandle('update:check', async () => {
     try {
       sendStatusToRenderer('checking')
       const result = await autoUpdater.checkForUpdates()
@@ -191,7 +192,7 @@ export function registerUpdateController(): void {
     }
   })
 
-  ipcMain.handle('update:download', async () => {
+  guardedHandle('update:download', async () => {
     try {
       sendStatusToRenderer('downloading')
       await autoUpdater.downloadUpdate()
@@ -203,7 +204,7 @@ export function registerUpdateController(): void {
     }
   })
 
-  ipcMain.handle('update:install', () => {
+  guardedHandle('update:install', () => {
     try {
       autoUpdater.quitAndInstall(false, true)
       return { success: true }
@@ -213,14 +214,14 @@ export function registerUpdateController(): void {
     }
   })
 
-  ipcMain.handle('update:get-version', () => {
+  guardedHandle('update:get-version', () => {
     return {
       currentVersion: app.getVersion(),
       appName: app.getName(),
     }
   })
 
-  ipcMain.handle('update:get-status', () => {
+  guardedHandle('update:get-status', () => {
     return {
       status: currentStatus,
       info: currentUpdateInfo ? {
@@ -238,16 +239,16 @@ export function registerUpdateController(): void {
 
   // ---- 卸载相关 ----
 
-  ipcMain.handle('uninstall:trigger', () => {
+  guardedHandle('uninstall:trigger', () => {
     return triggerUninstall()
   })
 
-  ipcMain.handle('uninstall:clean-user-data', () => {
+  guardedHandle('uninstall:clean-user-data', () => {
     return cleanUserData()
   })
 
   // ---- 辅助 ----
-  ipcMain.handle('update:open-releases', () => {
+  guardedHandle('update:open-releases', () => {
     openReleasesPage()
     return { success: true }
   })

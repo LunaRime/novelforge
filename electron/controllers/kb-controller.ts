@@ -1,4 +1,4 @@
-import { ipcMain, dialog } from 'electron'
+import { dialog } from 'electron'
 import { t } from '../../src/shared/locale'
 import fs from 'node:fs'
 import {
@@ -13,6 +13,7 @@ import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
 import { embeddingService } from '../embedding-service'
+import { guardedHandle } from '../security/ipc-guard'
 
 function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
@@ -42,7 +43,7 @@ function getCurrentProjectPath(): string | null {
 }
 
 export function registerKBController() {
-  ipcMain.handle('kb:import-document', async (_event, filePath: string) => {
+  guardedHandle('kb:import-document', async (_event, filePath: string) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, error: t('error.noProject') }
@@ -51,7 +52,7 @@ export function registerKBController() {
     return importDocument(filePath, projectPath, protocol, model)
   })
 
-  ipcMain.handle('kb:import-folder', async (_event, folderPath: string) => {
+  guardedHandle('kb:import-folder', async (_event, folderPath: string) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, error: t('error.noProject') }
@@ -60,14 +61,14 @@ export function registerKBController() {
     return importFolder(folderPath, projectPath, protocol, model)
   })
 
-  ipcMain.handle('kb:import-text', async (_event, text: string, fileName: string, projectPath: string) => {
+  guardedHandle('kb:import-text', async (_event, text: string, fileName: string, projectPath: string) => {
     const embConfig = getEmbeddingConfig()
     const protocol = embConfig?.protocol ?? 'openai'
     const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
     return importText(text, fileName, projectPath, protocol, model)
   })
 
-  ipcMain.handle('kb:search', async (_event, query: string, topK?: number) => {
+  guardedHandle('kb:search', async (_event, query: string, topK?: number) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return []
@@ -78,7 +79,7 @@ export function registerKBController() {
     return searchKnowledgeFTS(query, projectPath, topK ?? 5)
   })
 
-  ipcMain.handle('kb:search-with-scope', async (_event, query: string, fromChapter: number, toChapter: number, topK?: number) => {
+  guardedHandle('kb:search-with-scope', async (_event, query: string, fromChapter: number, toChapter: number, topK?: number) => {
     const embConfig = getEmbeddingConfig()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return []
@@ -90,31 +91,31 @@ export function registerKBController() {
     return searchKnowledgeFTS(query, projectPath, topK ?? 5, scope)
   })
 
-  ipcMain.handle('kb:list-documents', async () => {
+  guardedHandle('kb:list-documents', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return []
     return listDocuments(projectPath)
   })
 
-  ipcMain.handle('kb:remove-document', async (_event, docId: string) => {
+  guardedHandle('kb:remove-document', async (_event, docId: string) => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false }
     return { success: removeDocument(docId, projectPath) }
   })
 
-  ipcMain.handle('kb:stats', async () => {
+  guardedHandle('kb:stats', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { documentCount: 0, totalChunks: 0, vectorDimension: 0 }
     return getKnowledgeStats(projectPath)
   })
 
-  ipcMain.handle('kb:get-vectorless-count', async () => {
+  guardedHandle('kb:get-vectorless-count', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { count: 0 }
     return getVectorlessCount(projectPath)
   })
 
-  ipcMain.handle('kb:backfill-vectors', async () => {
+  guardedHandle('kb:backfill-vectors', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
 
@@ -200,7 +201,7 @@ export function registerKBController() {
   })
 
   // L3 T2：中文分词回填（纯本地 jieba 分词，无需 Embedding 配置）
-  ipcMain.handle('kb:backfill-tokens', async () => {
+  guardedHandle('kb:backfill-tokens', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
     try {
@@ -212,7 +213,7 @@ export function registerKBController() {
     }
   })
 
-  ipcMain.handle('dialog:select-files', async () => {
+  guardedHandle('dialog:select-files', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openFile', 'multiSelections'],
       title: t('dialog.selectDocs'),
@@ -223,7 +224,7 @@ export function registerKBController() {
     return result.filePaths
   })
 
-  ipcMain.handle('dialog:select-import-folder', async () => {
+  guardedHandle('dialog:select-import-folder', async () => {
     const result = await dialog.showOpenDialog({
       properties: ['openDirectory'],
       title: t('dialog.selectDocsFolder'),
