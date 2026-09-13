@@ -1,7 +1,7 @@
 import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
 import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
-import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
+// L4：registerMCPHandlers 已并入 electron/ipc-handlers.ts 的 registerIPCHandlers()（唯一注册入口）
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
 import { migrateLegacyDirs } from './utils/config-utils'
@@ -273,7 +273,6 @@ app.whenReady().then(async () => {
   const logEnv = detectLogEnvironment(Boolean(VITE_DEV_SERVER_URL), app.getVersion())
   installGlobalErrorHandlers(logEnv, app.getVersion())
   registerIPCHandlers()
-  registerMCPHandlers()
   createWindow()
   logger.info('Main', t('log.main.startupDone').replace('{env}', t(logEnv === LogEnvironment.Dev ? 'log.envDev' : 'log.envRelease')))
 })

@@ -5,7 +5,6 @@
  * 让渲染进程能够通过 IPC 管理和调用 MCP 服务器。
  */
 
-import { ipcMain } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { mcpManager } from './mcp-manager'
@@ -13,6 +12,7 @@ import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import { safeErrorMessage } from '../utils/error-utils'
 import { VELA_HOME } from '../utils/config-utils'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** MCP 配置文件路径（与 mcpManager.getDefaultConfigPath 一致） */
 function mcpConfigPath(): string {
@@ -43,7 +43,7 @@ async function writeMcpConfig(
  */
 export function registerMCPHandlers(): void {
   // 加载配置文件
-  ipcMain.handle('mcp:load-config', async (_event, configPath?: string) => {
+  guardedHandle('mcp:load-config', async (_event, configPath?: string) => {
     try {
       const configs = await mcpManager.loadConfig(configPath)
       return { success: true, configs }
@@ -53,7 +53,7 @@ export function registerMCPHandlers(): void {
   })
 
   // 连接服务器
-  ipcMain.handle('mcp:connect', async (_event, config) => {
+  guardedHandle('mcp:connect', async (_event, config) => {
     try {
       await mcpManager.connect(config)
       return { success: true }
@@ -63,7 +63,7 @@ export function registerMCPHandlers(): void {
   })
 
   // 断开服务器
-  ipcMain.handle('mcp:disconnect', async (_event, serverId: string) => {
+  guardedHandle('mcp:disconnect', async (_event, serverId: string) => {
     try {
       await mcpManager.disconnect(serverId)
       return { success: true }
@@ -73,7 +73,7 @@ export function registerMCPHandlers(): void {
   })
 
   // 断开所有
-  ipcMain.handle('mcp:disconnect-all', async () => {
+  guardedHandle('mcp:disconnect-all', async () => {
     try {
       await mcpManager.disconnectAll()
       return { success: true }
@@ -83,27 +83,27 @@ export function registerMCPHandlers(): void {
   })
 
   // 获取所有可用 Tool
-  ipcMain.handle('mcp:list-tools', async () => {
+  guardedHandle('mcp:list-tools', async () => {
     return mcpManager.getAllTools()
   })
 
   // 获取所有可用资源
-  ipcMain.handle('mcp:list-resources', async () => {
+  guardedHandle('mcp:list-resources', async () => {
     return mcpManager.getAllResources()
   })
 
   // 调用 MCP Tool
-  ipcMain.handle('mcp:call-tool', async (_event, serverId: string, toolName: string, args: Record<string, unknown>) => {
+  guardedHandle('mcp:call-tool', async (_event, serverId: string, toolName: string, args: Record<string, unknown>) => {
     return await mcpManager.callTool(serverId, toolName, args)
   })
 
   // 获取服务器状态
-  ipcMain.handle('mcp:get-servers-status', async () => {
+  guardedHandle('mcp:get-servers-status', async () => {
     return mcpManager.getServersStatus()
   })
 
   // 添加服务器（写入 mcp_config.json）
-  ipcMain.handle('mcp:add-server', async (_event, payload: {
+  guardedHandle('mcp:add-server', async (_event, payload: {
     id: string; command: string; args?: string[]; env?: Record<string, string>
   }) => {
     try {
@@ -120,7 +120,7 @@ export function registerMCPHandlers(): void {
   })
 
   // 删除服务器（从 mcp_config.json 移除）
-  ipcMain.handle('mcp:remove-server', async (_event, serverId: string) => {
+  guardedHandle('mcp:remove-server', async (_event, serverId: string) => {
     try {
       const servers = await readMcpConfig()
       if (!(serverId in servers)) return { success: false, error: `服务器不存在: ${serverId}` }
@@ -134,7 +134,7 @@ export function registerMCPHandlers(): void {
   })
 
   // 获取默认配置文件路径
-  ipcMain.handle('mcp:get-config-path', async () => {
+  guardedHandle('mcp:get-config-path', async () => {
     return mcpManager.getDefaultConfigPath()
   })
 

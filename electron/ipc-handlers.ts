@@ -20,6 +20,9 @@ import { registerTemplatesController } from './controllers/templates-controller'
 import { registerHealthCheckIPC } from './controllers/health-check'
 import { registerMemoryController } from './controllers/memory-controller'
 import { registerStylesController } from './controllers/styles-controller'
+// L4：MCP 桥此前由 main.ts 单独注册（第二入口），使 11 个 mcp: 通道绕过收口策略表；
+// 现并入本函数，`registerIPCHandlers()` 成为**唯一**的 IPC 注册入口。
+import { registerMCPHandlers } from './mcp/mcp-ipc-bridge'
 
 /**
  * 注册所有 IPC 通道 — 在主进程启动时调用
@@ -48,6 +51,8 @@ export function registerIPCHandlers() {
   registerHealthCheckIPC()
   registerMemoryController()
   registerStylesController()
+  // L4：MCP 桥（11 个 mcp: 通道）——并入唯一入口，不再由 main.ts 单独注册
+  registerMCPHandlers()
 
   logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', VELA_HOME))
 }
