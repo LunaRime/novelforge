@@ -136,8 +136,13 @@ function currentPathPolicy(): PathPolicy {
     projectRoot: getCurrentProjectPath(),
     granted: currentGrants(),
     blockedPaths: BLOCKED_PATHS,
-    // ⚠️ S9：把这一行改成 `null` 即完成「移除主目录根」（单点收紧、可单点回滚）
-    legacyHomeDir: os.homedir(),
+    // ⚠️ S9（本行即「移除主目录根」的**单点开关**）：
+    //   改造前 `SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` —— 整个用户主目录可读写。
+    //   现在起边界 = VELA_HOME ∪ 当前项目根 ∪ 主进程对话框签发的授权，其余默认拒绝。
+    //   回滚方式：把本行改回 `os.homedir()` 即恢复 S8 的过渡态（行为与改造前等价）。
+    //   注意：项目根是 `getCurrentProjectPath()`，与盘符无关 —— 因此「主目录之外的
+    //   项目」（如 D:\…）反而因此**修好了**（改造前它连文件树都读不出来）。
+    legacyHomeDir: null,
   }
 }
 
