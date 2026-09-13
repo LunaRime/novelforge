@@ -357,7 +357,9 @@ export interface LLMChannels {
   }
   'llm:delete-model': {
     args: [modelId: string]
-    return: { success: boolean }
+    // error 字段此前**没有声明**（而主进程一直会返回它）→ 渲染层即使想提示也无从取用；
+    // 真机回归修复时一并补上。
+    return: { success: boolean; error?: string }
   }
   'llm:set-default-model': {
     args: [modelId: string | null]

@@ -1275,6 +1275,7 @@ export const UI_TEXTS_DATA = {
   'model.addFirst': { 'zh-CN': '添加第一个模型', 'en-US': 'Add first model', 'ru-RU': 'Добавить первую модель' },
   'model.setDefault': { 'zh-CN': '设为默认', 'en-US': 'Set as default', 'ru-RU': 'По умолчанию' },
   'model.default': { 'zh-CN': '默认', 'en-US': 'Default', 'ru-RU': 'По умолчанию' },
+  'model.deleteFailed': { 'zh-CN': '删除模型失败：{error}', 'en-US': 'Failed to delete model: {error}', 'ru-RU': 'Не удалось удалить модель: {error}' },
   'model.newConfig': { 'zh-CN': '新建模型配置', 'en-US': 'New model config', 'ru-RU': 'Новая конфигурация' },
   'model.editConfig': { 'zh-CN': '编辑：{name}', 'en-US': 'Edit: {name}', 'ru-RU': 'Изменить: {name}' },
   'model.namePlaceholder': { 'zh-CN': '如：DeepSeek 主力 / GPT-4o 备用', 'en-US': 'e.g.: DeepSeek Main / GPT-4o Backup', 'ru-RU': 'Напр.: DeepSeek основной / GPT-4o запасной' },
@@ -2897,6 +2898,7 @@ export const UI_TEXTS_DATA = {
   // —— 模型（ModelSettings / SettingsModal）——
   'log.render.modelSaveSuccess': { 'zh-CN': '模型保存成功 {id}（{ms}ms）', 'en-US': 'Model saved: {id} ({ms}ms)', 'ru-RU': 'Модель сохранена: {id} ({ms}ms)' },
   'log.render.modelSaveFailed': { 'zh-CN': '模型保存失败 {id}: {error}', 'en-US': 'Failed to save model {id}: {error}', 'ru-RU': 'Не удалось сохранить модель {id}: {error}' },
+  'log.render.modelDeleteFailed': { 'zh-CN': '模型删除失败: {err}', 'en-US': 'Failed to delete model: {err}', 'ru-RU': 'Не удалось удалить модель: {err}' },
   'log.render.modelListLoadFailed': { 'zh-CN': '模型列表加载失败 {err}', 'en-US': 'Failed to load model list {err}', 'ru-RU': 'Не удалось загрузить список моделей {err}' },
   'error.modelNameEmpty': { 'zh-CN': '模型名称不能为空', 'en-US': 'Model name is required', 'ru-RU': 'Имя модели не может быть пустым' },
   'error.modelPurposesEmpty': { 'zh-CN': '模型至少需要一个用途（生成/嵌入）', 'en-US': 'Model needs at least one purpose (generation/embedding)', 'ru-RU': 'Модели нужна хотя бы одна роль (генерация/эмбеддинг)' },

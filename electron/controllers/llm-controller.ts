@@ -227,10 +227,27 @@ export function registerLLMController() {
 
   guardedHandle('llm:delete-model', async (_event, modelId: string) => {
     try {
-      const models = loadModelConfigs().filter((m) => m.id !== modelId)
-      saveModelConfigs(models)
+      // ⚠️ 真机回归修复（2026-09-13）：原先 `loadModelConfigs().filter(m => m.id !== modelId)`
+      //   在 modelId 非法/模型不存在时会**空转**，然后照样 saveModelConfigs + 返回 success:true
+      //   —— 界面上就是「点了删除没反应」（模型还在，且没有任何报错）。现在两种情况都显式报错。
+      if (typeof modelId !== 'string' || !modelId.trim()) {
+        const msg = `invalid modelId: ${String(modelId)}`
+        logger.error('LLM', `[delete-model] ${msg}`)
+        return { success: false, error: msg }
+      }
+      const before = loadModelConfigs()
+      const after = before.filter((m) => m.id !== modelId)
+      if (after.length === before.length) {
+        const msg = `model not found: ${modelId}`
+        logger.warn('LLM', `[delete-model] ${msg}`)
+        return { success: false, error: msg }
+      }
+      saveModelConfigs(after)
+      logger.info('LLM', `[delete-model] removed: ${modelId}`)
       return { success: true }
     } catch (error) {
+      // 写盘失败（writeJsonFile 会 rethrow）等：必须留日志，否则只有渲染层一行 toast，排障全靠猜
+      logger.error('LLM', `[delete-model] failed: ${safeErrorMessage(error)}`)
       return { success: false, error: safeErrorMessage(error) }
     }
   })

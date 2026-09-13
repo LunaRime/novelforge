@@ -2,6 +2,7 @@ import { t } from '../shared/locale'
 import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
+import { toast } from '../components/ui/Toast'
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -128,6 +129,14 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   deleteModel: async (modelId) => {
     const result = await ipc.invoke('llm:delete-model', modelId)
+    if (!result.success) {
+      // ⚠️ 真机回归修复（2026-09-13）：此前失败路径**完全静默**（没有 else 分支，无 toast 无日志），
+      //   用户只能看到「点击删除按钮没反应」。按 save-feedback-standard 补齐视觉反馈 + 日志。
+      const detail = result.error ?? t('status.unknown')
+      renderLog('error', 'Save:Model', t('log.render.modelDeleteFailed').replace('{err}', () => detail))
+      toast.error(t('model.deleteFailed').replace('{error}', () => detail))
+      return false
+    }
     if (result.success) {
       // 从三层路由中清理该模型引用（防 ModelRoutingSection 读到已删除 id 显示空白）
       const routes = get().modelRoutes
