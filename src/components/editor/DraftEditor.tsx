@@ -110,16 +110,23 @@ export default function DraftEditor({ filePath, content }: Props) {
         // 非法 id（旧 ch{n} 格式 / 空）不写入 DB，避免 NaN 传入查询
         if (/^\d+$/.test(idRaw)) {
           // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
-          await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+          // ⚠️ L4 S5：写通道**返回 {success:false} 而不是抛错**（见 fs-controller / db-controller 的
+          //   try→return 形态）。不检查返回值就会在写失败后继续往下走 markTabSaved()——
+          //   用户看到「保存成功」而磁盘/DB 并未写入（静默丢稿）。此处显式抛错，交给既有的
+          //   catch 走 error toast + error 日志，并**跳过** markTabSaved。
+          const res = await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+          if (!res.success) throw new Error(res.error ?? t('status.unknown'))
           // 通知侧栏/工作台刷新草稿数据（编辑器保存后草稿箱计数/状态陈旧的运行链闭环；
           // 自动保存默认 30s 间隔，全量 loadAllDrafts 成本可接受）
           const { globalEventBus } = await import('../../shared/event-bus')
           globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
         } else {
-          await ipc.invoke('fs:write-file', filePath, text)
+          const res = await ipc.invoke('fs:write-file', filePath, text)
+          if (!res.success) throw new Error(res.error ?? t('status.unknown'))
         }
       } else {
-        await ipc.invoke('fs:write-file', filePath, text)
+        const res = await ipc.invoke('fs:write-file', filePath, text)
+        if (!res.success) throw new Error(res.error ?? t('status.unknown'))
       }
       const tabs = useEditorStore.getState().tabs
       const targetTab = tabs.find(t => t.filePath === filePath)

@@ -636,7 +636,10 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
           .replace('{title}', () => this.params.chapterInfo.title)
         : t('inject.chapterTitleLineNoTitle').replace('{chapter}', String(this.params.chapterNumber))
       const contentToWrite = titleLine + refinedDraftText.replace(/^#+ .*\n*/, '')
-      await ipc.invoke('fs:write-file', physicalPath, contentToWrite)
+      // L4 S5：写通道返回 {success:false} 而不抛错 —— 不检查就会在物理文件写失败后
+      //   仍然往下 log「已写入」（下方 :644），并把失败伪装成成功。
+      const writeRes = await ipc.invoke('fs:write-file', physicalPath, contentToWrite)
+      if (!writeRes.success) throw new Error(writeRes.error ?? t('status.unknown'))
     } catch (e) {
       callbacks.log(t('log.finalize.fileWriteFailed').replace('{error}', () => String(e)))
     }

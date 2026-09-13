@@ -32,9 +32,11 @@ beforeEach(() => {
       case 'fs:read-file':
         return { success: true, content: OLD_CUSTOM }
       case 'fs:write-file':
-        return null
+        // ⚠️ 必须返回 {success:true}：真实通道是「返回 {success:false} 而非抛错」的形态
+        //（L4 S5 起调用方会检查 success，mock 返回 null 会被判为写失败 → 断言假红）
+        return { success: true }
       case 'fs:mkdir':
-        return null
+        return { success: true }
       default:
         return null
     }
@@ -147,6 +149,25 @@ describe('localizeTemplate（Issue #18 多语言模板）', () => {
     })
     const tpl = mod.getPromptTemplate('premise')!
     expect(tpl.content).toBe('用户保存的内容 {{genre}}')
+  })
+
+  it('L4 S5：写通道返回 {success:false} → 保存失败（不再假成功）', async () => {
+    // 真实 fs:write-file 是「返回 {success:false} 而非抛错」的形态；改造前调用方不检查返回值，
+    // 写盘失败也会 return true 并写内存 Map（UI 显示已保存，磁盘没有）。本用例锁死该契约。
+    mockInvoke.mockImplementation(async (channel: string) => {
+      switch (channel) {
+        case 'config:get-vela-home': return 'C:/Users/test/.novelforge'
+        case 'fs:check-exists': return true
+        case 'fs:write-file': return { success: false, error: 'EACCES: permission denied' }
+        default: return null
+      }
+    })
+    const mod = await loadModule()
+    const ok = await mod.saveCustomPrompt({
+      key: 'premise', name: '自定义', description: 'd',
+      content: '写不进去的内容', variables: {},
+    })
+    expect(ok).toBe(false)
   })
 })
 

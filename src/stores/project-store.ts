@@ -3,6 +3,7 @@ import { ipc } from '../services/ipc-client'
 import { loadProjectCustomPrompts, clearProjectCustomPrompts } from '../services/prompt-templates'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
 import { alertError } from '../components/ui/Confirm'
+import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { t } from '../shared/locale'
 
@@ -159,7 +160,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       return false
     } catch (e) {
       console.error('[Project] IPC 通信异常:', e)
-      try { await ipc.invoke('fs:write-file', '/tmp/vela_error.log', String(e)) } catch { /* ignore error writing to log */ }
+      // L4 S5：原实现写死 `'/tmp/vela_error.log'` —— Windows 上解析为**当前盘的 \tmp\**
+      //   （会在用户盘根目录外造目录），且返回值从不检查（失败静默）。改为走应用日志流：
+      //   LogsView 可见、跟着日志保留策略走、不再向用户磁盘写垃圾文件。
+      renderLog('error', 'Project', `${t('dialog.openError')}: ${String(e)}`)
       alertError(String(e), { title: t('dialog.openError') })
       return false
     } finally {

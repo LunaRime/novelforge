@@ -27,6 +27,7 @@ import { countUndecided } from '../../services/diff/hunk-model'
 import { ipc } from '../../services/ipc-client'
 import { computeTextStats } from '../../services/text-stats'
 import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 import { useTranslation } from '../../hooks/useTranslation'
 
 import { clearChapterTitleCache } from './Sidebar'
@@ -622,16 +623,29 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             tab={activeTab}
             onSave={async (text) => {
               if (!activeTab.filePath) return
-              if (activeTab.filePath.startsWith(VELA.MANUSCRIPT)) {
-                // vela://manuscript/{id}：定稿内容在 DB（drafts 行），伪协议无物理文件
-                // —— 不能走 fs:write-file（会被当作相对路径写到错误位置，内容丢失）
-                const idRaw = activeTab.filePath.replace(VELA.MANUSCRIPT, '')
-                if (/^\d+$/.test(idRaw)) {
-                  // wordCount 用统一"有效字数"口径
-                  await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+              // ⚠️ L4 S5：写通道**返回 {success:false} 而不抛错**；而 ProseEditorWrapper.handleSave
+              //   是 try/finally（无 catch）。因此这里必须自己兜住失败：否则写盘失败后仍然
+              //   markTabSaved() → 页签显示已保存、dirty 被清 → 内容没落盘却无人知晓（静默丢稿）。
+              try {
+                if (activeTab.filePath.startsWith(VELA.MANUSCRIPT)) {
+                  // vela://manuscript/{id}：定稿内容在 DB（drafts 行），伪协议无物理文件
+                  // —— 不能走 fs:write-file（会被当作相对路径写到错误位置，内容丢失）
+                  const idRaw = activeTab.filePath.replace(VELA.MANUSCRIPT, '')
+                  if (/^\d+$/.test(idRaw)) {
+                    // wordCount 用统一"有效字数"口径
+                    const res = await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
+                    if (!res.success) throw new Error(res.error ?? t('status.unknown'))
+                  }
+                } else {
+                  const res = await ipc.invoke('fs:write-file', activeTab.filePath, text)
+                  if (!res.success) throw new Error(res.error ?? t('status.unknown'))
                 }
-              } else {
-                await ipc.invoke('fs:write-file', activeTab.filePath, text)
+              } catch (e) {
+                renderLog('error', 'Save:Editor', t('log.render.draftSaveFailed')
+                  .replace('{path}', () => activeTab.filePath ?? '')
+                  .replace('{error}', () => String(e)))
+                toast.error(t('save.failed').replace('{error}', () => String(e)))
+                return // 未写盘 → 不清 dirty、不同步内容
               }
               // 清除 dirty 标记 + 同步内容 + 刷新章节名缓存
               useEditorStore.getState().markTabSaved(activeTab.id)

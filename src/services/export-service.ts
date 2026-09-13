@@ -78,7 +78,9 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
         }
 
         outputPath = `${options.outputDir}/${project.name}.md`
-        await ipc.invoke('fs:write-file', outputPath, content)
+        // L4 S5：写通道返回 {success:false} 而不抛错 —— 必须检查，否则导出失败也报成功
+        const mergedRes = await ipc.invoke('fs:write-file', outputPath, content)
+        if (!mergedRes.success) throw new Error(mergedRes.error ?? t('status.unknown'))
         break
       }
 
@@ -88,7 +90,8 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
         await ipc.invoke('fs:mkdir', splitDir)
 
         for (const ch of chapterContents) {
-          await ipc.invoke('fs:write-file', `${splitDir}/${ch.name}`, ch.content)
+          const chRes = await ipc.invoke('fs:write-file', `${splitDir}/${ch.name}`, ch.content)
+          if (!chRes.success) throw new Error(chRes.error ?? t('status.unknown'))
         }
 
         outputPath = splitDir
@@ -113,7 +116,8 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
         }
 
         outputPath = `${options.outputDir}/${project.name}.txt`
-        await ipc.invoke('fs:write-file', outputPath, content)
+        const txtRes = await ipc.invoke('fs:write-file', outputPath, content)
+        if (!txtRes.success) throw new Error(txtRes.error ?? t('status.unknown'))
         break
       }
     }

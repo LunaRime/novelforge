@@ -374,7 +374,9 @@ export async function saveCustomPrompt(template: PromptTemplate): Promise<boolea
     if (!exists) await ipc.invoke('fs:mkdir', dirPath)
     const filePath = `${dirPath}/${template.key}.json`
 
-    await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
+    // L4 S5：写通道返回 {success:false} 而不抛错；不检查会在此返回 true（假成功）
+    const writeRes = await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
+    if (!writeRes.success) throw new Error(writeRes.error ?? 'write failed')
     customPrompts.set(template.key, template)
     // 保存成功即视为已加载——否则 getPromptTemplate 的 customPromptsLoaded 检查
     // 会跳过内存 Map，导致"保存后 UI 仍显示内置模板"（Issue #19 根因）
@@ -398,7 +400,9 @@ export async function saveProjectCustomPrompt(projectPath: string, template: Pro
     }
     const filePath = `${dirPath}/${template.key}.json`
 
-    await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
+    // L4 S5：同上——写失败必须返回 false，不能假成功
+    const projWriteRes = await ipc.invoke('fs:write-file', filePath, JSON.stringify(template, null, 2))
+    if (!projWriteRes.success) throw new Error(projWriteRes.error ?? 'write failed')
     projectCustomPrompts.set(template.key, template)
     return true
   } catch {
