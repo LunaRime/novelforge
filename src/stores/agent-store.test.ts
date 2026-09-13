@@ -419,7 +419,7 @@ describe('sendMessage 意图预路由', () => {
     }
   })
 
-  it('工作流启动失败 ERR_GUARD：注入 intentGuardFail 文案（不做 ReAct 兜底）', async () => {
+  it('工作流启动失败 ERR_GUARD：通用文案 + guard 具体原因（真机反馈：只提示「检查项目配置」不够）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
     mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
@@ -430,9 +430,23 @@ describe('sendMessage 意图预路由', () => {
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
-    expect(last.content).toBe(t('agent.intentGuardFail'))
+    // 具体原因必须回显（否则用户不知道该补什么）
+    expect(last.content).toBe(`${t('agent.intentGuardFail')}：前置条件失败（guard 明细）`)
     expect(mockRunAgentLoop).not.toHaveBeenCalled()
     expect(useAgentStore.getState().generating).toBe(false)
+  })
+
+  it('ERR_GUARD 只有通用占位（error.prereqNotMet）时不重复啰嗦', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', t('error.prereqNotMet')))
+
+    await useAgentStore.getState().sendMessage('写第3章')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.content).toBe(t('agent.intentGuardFail'))
   })
 
   it('工作流启动失败 ERR_NO_BLUEPRINT：透传 e.message（蓝图缺失文案归因）', async () => {

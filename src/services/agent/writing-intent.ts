@@ -28,6 +28,15 @@ function parseChapterNum(s: string): number | null {
   return null
 }
 
+/**
+ * 只读查询动词（真机 bug 修复 2026-09-13）。
+ *
+ * 这些词表明用户要「看/列」，不是要「做」，一律不预路由（交给 ReAct）。
+ * 背景：`列出小说大纲` 曾被「大纲」判定命中并启动架构工作流 → 前置条件不满足而失败。
+ * 与文件开头「查询类（文风/设定/聊天）不预路由」的原则一致。
+ */
+const QUERY_VERB = /(列出|列举|罗列|查看|看看|看一下|显示|展示|给我看|有哪些|有什么|是什么|在哪|多少)/
+
 export function detectWritingIntent(input: string): WritingIntent {
   // @提及由既有链路处理（parseMentions），预路由不抢
   if (input.includes('@')) return { kind: 'none' }
@@ -48,7 +57,12 @@ export function detectWritingIntent(input: string): WritingIntent {
   if (charUpdate) return { kind: 'character', name: charUpdate[1].trim(), action: 'update' }
 
   // ==== 大纲/架构 ====
-  if (/(?:生成|重新|创建|帮我)?\s*(?:大纲|蓝图)/.test(input)) return { kind: 'architecture', target: 'blueprint' }
+  // ⚠️ 真机 bug 修复（2026-09-13）：原正则的动词组是 `(?:生成|重新|创建|帮我)?`——**可选**，
+  //   于是只要文本里出现「大纲/蓝图」就命中。用户说「列出小说大纲」被当成「生成大纲」，
+  //   直接启动架构工作流，随后因前置条件不满足报「前置条件未满足，无法开始」。
+  //   「列出/查看/显示/有哪些…」是**只读查询**，按本文件开头「查询类不预路由」的原则必须交给 ReAct。
+  if (!QUERY_VERB.test(input)
+    && /(?:生成|重新|创建|帮我)?\s*(?:大纲|蓝图)/.test(input)) return { kind: 'architecture', target: 'blueprint' }
   if (/(?:重新)?\s*(?:规划|设计|搭建|写)\s*(?:剧情|架构|世界观|剧情架构)/.test(input)) return { kind: 'architecture', target: 'architecture' }
 
   // ==== 无名字角色操作（M3，评审裁定） ====
@@ -95,9 +109,13 @@ export function detectWritingIntent(input: string): WritingIntent {
     //   祈使句「帮我写」不含这些形态 → 仍 ambiguous；带章号「写第3章」已先于护栏返回。
     // I3 扩展（deferred 评审裁决）：负向白名单——邮件/报告/文案/代码/方案/简历等明确非小说写作目标 → none；
     //   误伤面：目标词判定在章号判定（range/单章）之后——「帮我写第三章」先命中章号不受影响。
+    // ⚠️ 真机 bug 修复（2026-09-13）：补 **配置/参数** —— 用户说「对这本小说重新生成配置」时，
+    //   裸「生成」动词命中本分支，被当成「要写稿但没说章节号」→ 连续追问「你想写第几章？」，
+    //   连问两次都答非所问。配置重新生成是**设置类**意图（有 config_generation 工作流/工具），
+    //   不该由写稿预路由拦截；这里放行给 ReAct，由 LLM 选正确工具。
     if (/(写作|写法|写得|写好|写作风格|怎么写)/.test(input)
       || /(什么|怎么|如何|？|\?)/.test(input)
-      || /(邮件|报告|文案|代码|方案|简历)/.test(input)) {
+      || /(邮件|报告|文案|代码|方案|简历|配置|参数)/.test(input)) {
       return { kind: 'none' }
     }
     return { kind: 'ambiguous', hint: 'chapter' }

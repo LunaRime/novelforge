@@ -991,9 +991,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       }
     } catch (e) {
       if (e instanceof WorkflowStartError) {
-        // P0-3：ERR_NO_BLUEPRINT 用 e.message（buildDraftWorkflow 内已带 wfBlueprintDataMissing 文案，归因精准）；
-        // ERR_GUARD 用意图层文案
-        const msg = e.code === 'ERR_GUARD' ? t('agent.intentGuardFail') : e.message
+        // P0-3：ERR_NO_BLUEPRINT 用 e.message（buildDraftWorkflow 内已带 wfBlueprintDataMissing 文案，归因精准）
+        //
+        // ⚠️ 真机反馈修复（2026-09-13）：ERR_GUARD 此前**一律**替换成通用文案
+        // （`agent.intentGuardFail`「前置条件未满足，无法开始。请检查项目配置」），把 guard 给出的
+        // **具体原因**（如「请先生成蓝图」「前一章未定稿」）丢掉了 —— 用户只被告知「去检查项目配置」，
+        // 不知道该补什么。现在：有具体原因就带上；只有通用占位时保持原文案（不重复啰嗦）。
+        const guardDetail = typeof e.message === 'string' ? e.message.trim() : ''
+        const isGenericDetail = !guardDetail
+          || guardDetail === t('error.prereqNotMet')
+          || guardDetail === t('agent.intentGuardFail')
+        const msg = e.code === 'ERR_GUARD'
+          ? (isGenericDetail ? t('agent.intentGuardFail') : `${t('agent.intentGuardFail')}：${guardDetail}`)
+          : e.message
         appendMsg({ id: genId(), role: 'assistant', content: msg, createdAt: Date.now() })
         return { status: 'handled' }
       }

@@ -26,6 +26,26 @@ describe('detectWritingIntent 命中表', () => {
   it('生成大纲 → architecture(blueprint)', () => {
     expect(detectWritingIntent('生成大纲')).toEqual({ kind: 'architecture', target: 'blueprint' })
   })
+
+  // ===== 真机 bug 回归（2026-09-13）=====
+  // 症状：用户说「列出小说大纲」→ 被当成「生成大纲」启动架构工作流 → 前置条件不满足而失败
+  it('列出小说大纲 → none（只读查询，不许启动架构工作流）', () => {
+    expect(detectWritingIntent('列出小说大纲')).toEqual({ kind: 'none' })
+  })
+  it('查询护栏不影响真正的生成类请求（回归）', () => {
+    expect(detectWritingIntent('帮我生成蓝图')).toEqual({ kind: 'architecture', target: 'blueprint' })
+    expect(detectWritingIntent('重新生成大纲')).toEqual({ kind: 'architecture', target: 'blueprint' })
+  })
+
+  // 症状：用户说「对这本小说重新生成配置」→ 被当成「要写稿但没给章节号」→ 连续追问「你想写第几章？」
+  it('重新生成配置 → none（设置类意图，不该被写稿预路由拦截）', () => {
+    expect(detectWritingIntent('对这本小说重新生成配置')).toEqual({ kind: 'none' })
+    expect(detectWritingIntent('我说的是重新生成小说的配置')).toEqual({ kind: 'none' })
+  })
+  it('配置类负向白名单不影响带章号的写稿（回归）', () => {
+    expect(detectWritingIntent('写第3章')).toEqual({ kind: 'chapter_creation', chapter: 3 })
+    expect(detectWritingIntent('帮我写第三章')).toEqual({ kind: 'chapter_creation', chapter: 3 })
+  })
   it('重新规划剧情 → architecture(architecture)', () => {
     expect(detectWritingIntent('重新规划剧情')).toEqual({ kind: 'architecture', target: 'architecture' })
   })
