@@ -14,6 +14,8 @@ import { readCharactersTool } from './read-characters.tool'
 import { readProjectStateTool } from './read-project-state.tool'
 import { readDraftsTool } from './read-drafts.tool'
 import { listChaptersTool } from './list-chapters.tool'
+// 大纲汇总（只读，自动执行）— 一次读完架构/蓝图/草稿，并对空数据显式给出下一步指引
+import { listOutlineTool } from './list-outline.tool'
 import { writeFileTool } from './write-file.tool'
 import { editFileTool } from './edit-file.tool'
 import { openEditorTool } from './open-editor.tool'
@@ -40,6 +42,7 @@ export const builtinTools = [
   readProjectStateTool,
   readDraftsTool,
   listChaptersTool,
+  listOutlineTool,
   // 字数统计（只读，自动执行）— 字数限制场景免 LLM 逐字计数
   countCharactersTool,
   // 防缺陷工具（只读，自动执行）— 计算/伏笔/设定多样性

@@ -2424,6 +2424,28 @@ export const UI_TEXTS_DATA = {
   'tool.readArchFileContent': { 'zh-CN': '📐 架构文件：{name}\n\n{content}', 'en-US': '📐 Architecture file: {name}\n\n{content}', 'ru-RU': '📐 Файл архитектуры: {name}\n\n{content}' },
   'tool.readArchEmpty': { 'zh-CN': '⚠️ 架构为空，暂无架构文件。建议通过工作流生成故事架构。', 'en-US': '⚠️ Architecture is empty — no architecture files yet. Generate the story architecture via a workflow.', 'ru-RU': '⚠️ Архитектура пуста — файлов пока нет. Создайте архитектуру истории через рабочий процесс.' },
   'tool.readArchList': { 'zh-CN': '📐 故事架构（{count} 个文件）\n\n{contents}', 'en-US': '📐 Story architecture ({count} files)\n\n{contents}', 'ru-RU': '📐 Архитектура истории ({count} файлов)\n\n{contents}' },
+  // list_outline（大纲汇总，2026-09-13 真机反馈新增：一次读完所有大纲数据源，避免 Agent 多轮摸索）
+  'tool.listOutlineDesc': {
+    'zh-CN': '一次列出该小说的全部大纲相关内容：故事架构（前提/世界观/角色图谱/大纲）、章节蓝图、章节草稿。用户问「列出大纲」「看看大纲」「大纲是什么」等**只读查询**时优先用它（比逐个读架构/蓝图/章节快得多）。每节会显式标注「（空）」，若全空会给出下一步建议。',
+    'en-US': 'List everything outline-related in one call: story architecture (premise/worldbuilding/character map/synopsis), chapter blueprints, and chapter drafts. Prefer this for read-only outline questions ("list the outline", "show me the outline") — far faster than reading architecture, blueprints and chapters one by one. Each section is explicitly marked "(empty)" and a next step is suggested when everything is empty.',
+    'ru-RU': 'Одним вызовом перечисляет всё, что относится к плану романа: архитектуру истории (предпосылка/мир/карта персонажей/синопсис), блюпринты глав и черновики. Используйте для запросов-чтения («покажи план»). Каждый раздел помечается «(пусто)»; если пусто всё — даётся следующий шаг.',
+  },
+  'tool.listOutlineArchHeader': { 'zh-CN': '故事架构', 'en-US': 'Story architecture', 'ru-RU': 'Архитектура истории' },
+  'tool.listOutlinePremise': { 'zh-CN': '前提', 'en-US': 'Premise', 'ru-RU': 'Предпосылка' },
+  'tool.listOutlineWorld': { 'zh-CN': '世界观', 'en-US': 'Worldbuilding', 'ru-RU': 'Мир' },
+  'tool.listOutlineCharacters': { 'zh-CN': '角色图谱', 'en-US': 'Character map', 'ru-RU': 'Карта персонажей' },
+  'tool.listOutlineSynopsis': { 'zh-CN': '大纲', 'en-US': 'Synopsis', 'ru-RU': 'Синопсис' },
+  'tool.listOutlineBlueprintHeader': { 'zh-CN': '章节蓝图', 'en-US': 'Chapter blueprints', 'ru-RU': 'Блюпринты глав' },
+  'tool.listOutlineBlueprintCount': { 'zh-CN': '共 {count} 章有蓝图：第 {chapters} 章', 'en-US': '{count} chapters have blueprints: ch. {chapters}', 'ru-RU': 'Блюпринты есть для {count} глав: гл. {chapters}' },
+  'tool.listOutlineDraftHeader': { 'zh-CN': '章节草稿', 'en-US': 'Chapter drafts', 'ru-RU': 'Черновики глав' },
+  'tool.listOutlineDraftCount': { 'zh-CN': '共 {count} 章草稿', 'en-US': '{count} chapter drafts', 'ru-RU': 'Черновиков глав: {count}' },
+  'tool.listOutlineEmptyItem': { 'zh-CN': '（空）', 'en-US': '(empty)', 'ru-RU': '(пусто)' },
+  'tool.listOutlineAllEmpty': {
+    'zh-CN': '该项目目前**没有任何大纲内容**（故事架构、章节蓝图、章节草稿均为空）。要得到大纲，需先通过工作流生成故事架构，再生成章节蓝图——请询问用户是否现在执行。',
+    'en-US': 'This project currently has **no outline content** (story architecture, chapter blueprints and drafts are all empty). To get an outline, first generate the story architecture via a workflow, then the chapter blueprints — ask the user whether to run it now.',
+    'ru-RU': 'В проекте **нет содержимого плана** (архитектура, блюпринты и черновики пусты). Чтобы получить план, сначала создайте архитектуру истории через рабочий процесс, затем блюпринты глав — спросите пользователя, запускать ли сейчас.',
+  },
+  'tool.listOutlineFailed': { 'zh-CN': '读取大纲数据失败：{error}', 'en-US': 'Failed to read outline data: {error}', 'ru-RU': 'Не удалось прочитать данные плана: {error}' },
   'tool.readArchFailed': { 'zh-CN': '读取架构失败：{error}', 'en-US': 'Failed to read architecture: {error}', 'ru-RU': 'Ошибка чтения архитектуры: {error}' },
   // read_blueprint
   'tool.readBlueprintNotFound': { 'zh-CN': '第 {chapter} 章蓝图不存在或读取失败', 'en-US': 'Blueprint for Chapter {chapter} not found or failed to load', 'ru-RU': 'План главы {chapter} не найден или не читается' },
