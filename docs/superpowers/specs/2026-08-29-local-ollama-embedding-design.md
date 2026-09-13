@@ -1,6 +1,7 @@
 # Ollama 本地向量模型设计（2026-08-29）
 
 > 对应实施计划：后续产出（0.1.6 发布后实施）
+> **实施状态：⏸️ 未实施**（2026-09-14 核对：全库无 `detectOllama`/`pullModel`/`ollama-embedding` 等任何实现代码；仅有 `provider-presets.ts` 的 Ollama **聊天** provider 与 `url-utils.ts` 的 URL 归一化——与本设计的**本地向量**目标无关）
 > 触发背景：2026-08-29 冒烟实测——embedding API 请求挂起 30s（限流环境）导致 kb:import-text 三次 IPC 超时、后处理管线中止。用户提出"可自行开启的基于本地的向量检索模型"以摆脱对远程 API 的依赖（免费/隐私/离线可用）。
 
 ## 1. 背景与目标

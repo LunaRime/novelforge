@@ -1,7 +1,7 @@
 # L3 中文检索升级设计
 
 > **For agentic workers:** 本设计供 subagent-driven-development / executing-plans 实现。每个 SDD 任务先设计后执行。
-**Status:** 设计草案 v1（待用户审阅：分词器选型 + RRF + 索引重建策略）
+**Status:** 设计草案 v1（待用户审阅：分词器选型 + RRF + 索引重建策略）；**实施状态：✅ 已落地（L3，commit `746ae0b`，107 files / 1254 tests 全绿；分词器裁定 jieba-wasm）**
 **范围归属:** 档 3 L3（CC 计划 `docs/superpowers/plans/2026-08-29-cc-remaining-implementation.md` Task L3 §五.3）
 **基线:** master @ `f648afd`（L2 + Agent 能力规划完成后）
 

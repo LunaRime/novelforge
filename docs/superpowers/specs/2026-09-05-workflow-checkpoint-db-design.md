@@ -2,7 +2,7 @@
 
 > **For agentic workers:** 本设计供 subagent-driven-development / executing-plans 实现。每个 SDD 任务先设计后执行；rehydrate 各 workflow 审计表以 `§5` 为准（由审计 subagent 补全）。
 
-**Status:** 设计中（v1 草案，用户已裁定方案 A = 迁 DB + 完整真续跑）
+**Status:** 设计中（v1 草案，用户已裁定方案 A = 迁 DB + 完整真续跑）；**实施状态：✅ 已落地（L2，commit `f0c2949`，104 files / 1178 tests 全绿）**
 **范围归属:** 档 3 L2（CC 对比报告剩余项，Task 定义见 `docs/superpowers/plans/2026-08-29-cc-remaining-implementation.md` §五.2）
 **基线:** master @ `ee2f730`（L1 全量交付后）
 
