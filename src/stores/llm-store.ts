@@ -3,6 +3,12 @@ import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
+
+/**
+ * 正在删除中的模型 id（防重复点击）—— 真机反馈：删除耗时较长且删除按钮**没有任何等待反馈**，
+ * 用户会连点多次；每次点击都会发出一个 llm:delete-model。
+ */
+const deletingModelIds = new Set<string>()
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -128,7 +134,22 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   },
 
   deleteModel: async (modelId) => {
-    const result = await ipc.invoke('llm:delete-model', modelId)
+    // 防重复点击：删除耗时较长时用户会连点。此前每次点击都会发一个 llm:delete-model，
+    // 除第一次外全部命中「model not found」→ 弹多条错误 toast（比「没反应」更糟）。
+    // 守卫只覆盖**慢的那一段**（IPC），后面的本地清理很快，不需要一直锁着。
+    if (deletingModelIds.has(modelId)) return false
+    deletingModelIds.add(modelId)
+    let result: { success: boolean; error?: string }
+    try {
+      result = await ipc.invoke('llm:delete-model', modelId)
+    } catch (e) {
+      // invoke 本身 reject（超时/主进程异常）也要解锁，否则该模型本次会话内再也删不掉
+      deletingModelIds.delete(modelId)
+      renderLog('error', 'Save:Model', t('log.render.modelDeleteFailed').replace('{err}', () => String(e)))
+      toast.error(t('model.deleteFailed').replace('{error}', () => String(e)))
+      return false
+    }
+    deletingModelIds.delete(modelId)
     if (!result.success) {
       // ⚠️ 真机回归修复（2026-09-13）：此前失败路径**完全静默**（没有 else 分支，无 toast 无日志），
       //   用户只能看到「点击删除按钮没反应」。按 save-feedback-standard 补齐视觉反馈 + 日志。

@@ -214,6 +214,8 @@ function LLMSection({
   const setDefaultEmbeddingModel = useLLMStore(s => s.setDefaultEmbeddingModel)
   const [editingModel, setEditingModel] = useState<ModelProfile | null>(null)
   const [saving, setSaving] = useState(false)
+  /** 正在删除的模型 id —— 删除可能较慢，必须给等待反馈并禁用按钮（否则用户连点） */
+  const [deletingId, setDeletingId] = useState<string | null>(null)
   useEffect(() => {
     if (!loaded) loadModels()
   }, [loaded, loadModels])
@@ -339,7 +341,15 @@ function LLMSection({
                     ? setDefaultEmbeddingModel(model.id)
                     : setDefaultModel(model.id)}
                   onEdit={() => setEditingModel({ ...model })}
-                  onDelete={() => deleteModel(model.id)}
+                  onDelete={async () => {
+                    setDeletingId(model.id)
+                    try {
+                      await deleteModel(model.id)
+                    } finally {
+                      setDeletingId(null)
+                    }
+                  }}
+                  deleting={deletingId === model.id}
                 />
               ))}
             </div>
@@ -510,13 +520,15 @@ function ConcurrencySection() {
 
 /** 模型卡片 */
 function ModelCard({
-  model, isDefault, onSetDefault, onEdit, onDelete,
+  model, isDefault, onSetDefault, onEdit, onDelete, deleting = false,
 }: {
   model: ModelProfile
   isDefault: boolean
   onSetDefault: () => void
   onEdit: () => void
   onDelete: () => void
+  /** 删除进行中：显示旋转图标并禁用（防连点） */
+  deleting?: boolean
 }) {
   const { t } = useTranslation()
   return (
@@ -574,10 +586,11 @@ function ModelCard({
         </button>
         <button
           onClick={onDelete}
+          disabled={deleting}
           title={t('action.delete')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-400"
+          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          <Trash2 size={14} />
+          {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
         </button>
       </div>
     </div>

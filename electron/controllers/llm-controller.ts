@@ -201,9 +201,20 @@ export function registerLLMController() {
     return { success: false }
   })
 
-  guardedHandle('llm:list-models', async () => loadModelConfigs())
+  // 真机反馈「列表/保存/删除都很慢」的定位埋点：只在**超过阈值**时告警，避免刷日志。
+  // 这三条覆盖了设置页模型增删的全部主进程侧开销（每次改动都会伴随一次 list）。
+  const SLOW_IPC_MS = 200
+
+  guardedHandle('llm:list-models', async () => {
+    const t0 = Date.now()
+    const models = loadModelConfigs()
+    const ms = Date.now() - t0
+    if (ms > SLOW_IPC_MS) logger.warn('LLM', `[list-models] slow ${ms}ms (models=${models.length})`)
+    return models
+  })
 
   guardedHandle('llm:save-model', async (_event, model: ModelProfile) => {
+    const t0 = Date.now()
     try {
       // 业务校验（P3 修复）：
       // - modelName 空 → 运行时 API 必报错（ollama 空名等）
@@ -219,6 +230,8 @@ export function registerLLMController() {
       if (idx >= 0) models[idx] = model
       else models.push(model)
       saveModelConfigs(models)
+      const ms = Date.now() - t0
+      if (ms > SLOW_IPC_MS) logger.warn('LLM', `[save-model] slow ${ms}ms (models=${models.length})`)
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
@@ -226,6 +239,7 @@ export function registerLLMController() {
   })
 
   guardedHandle('llm:delete-model', async (_event, modelId: string) => {
+    const t0 = Date.now()
     try {
       // ⚠️ 真机回归修复（2026-09-13）：原先 `loadModelConfigs().filter(m => m.id !== modelId)`
       //   在 modelId 非法/模型不存在时会**空转**，然后照样 saveModelConfigs + 返回 success:true
@@ -243,7 +257,9 @@ export function registerLLMController() {
         return { success: false, error: msg }
       }
       saveModelConfigs(after)
-      logger.info('LLM', `[delete-model] removed: ${modelId}`)
+      const ms = Date.now() - t0
+      logger.info('LLM', `[delete-model] removed: ${modelId} (${ms}ms)`)
+      if (ms > SLOW_IPC_MS) logger.warn('LLM', `[delete-model] slow ${ms}ms`)
       return { success: true }
     } catch (error) {
       // 写盘失败（writeJsonFile 会 rethrow）等：必须留日志，否则只有渲染层一行 toast，排障全靠猜
