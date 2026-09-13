@@ -35,7 +35,7 @@
 - Produces: `PROJECT_VELA_DIR = '.vela'`（config-utils 导出，**占位值**，V2 改 `.novelforge`）；`VELA_HOME` 值不变
 - Consumes: 无
 
-- [ ] **Step 1: 写分类清单（防误伤）**
+- [x] **Step 1: 写分类清单（防误伤）**
 
   全库 grep `.vela`，逐处分类（核验基准：electron+src 源码字面量 17 处 + 1 测试文件；docs 12 文件 68 处；locale-data 6 处含 5 条用户可见）：
   - **目录语义（收敛为常量引用）**：`'.vela'` 字符串路径、`~/.vela/...` 路径拼装、注释/文档中的目录描述（`{project}/.vela/vela.db` 描述等）
@@ -43,7 +43,7 @@
   - **保留（不动）**：`vela.db`、`vela://`、`velaAPI`、`VELA_HOME` 标识符、CSS 类名（.vela-editor-content + index.html 启动屏 6 类 + 4 keyframes）、`vela_` 前缀（如 DB 表/字段）
   - 清单写入任务报告（替换数/保留数），作为评审输入
 
-- [ ] **Step 2: 常量收敛（先做，替换基础）**
+- [x] **Step 2: 常量收敛（先做，替换基础）**
 
 ```ts
 // electron/utils/config-utils.ts（V1：值均不动——P0-5 修订：改值推迟到 V2 与迁移同提交）
@@ -58,7 +58,7 @@ import { PROJECT_VELA_DIR } from './utils/config-utils'
 const dbPath = path.join(projectPath, PROJECT_VELA_DIR, 'vela.db')
 ```
 
-- [ ] **Step 3: 字面量收敛为常量引用（白名单纪律；P0-5 修订——值不改，只改引用）**
+- [x] **Step 3: 字面量收敛为常量引用（白名单纪律；P0-5 修订——值不改，只改引用）**
 
   对 Step 1 分类清单中的「目录语义」「直开点」项逐一**把字面量替换为常量引用**（值仍 `.vela`，零行为变化）：
   - `path.join(projectPath, '.vela', ...)` → `path.join(projectPath, PROJECT_VELA_DIR, ...)`（database.ts:29 / activity-repository :55 / usage-repository :64 / project-controller :305 / memory-controller :12 / vector-store :167/:182/:845 / knowledge-base :39）
@@ -71,12 +71,12 @@ const dbPath = path.join(projectPath, PROJECT_VELA_DIR, 'vela.db')
 
   ⚠️ 不用全局 find-replace——用白名单清单逐处核对。**V1 提交后全库不再有散落 `.vela` 路径字面量（均走常量）**——V2 一处改值即全库生效。
 
-- [ ] **Step 4: 全量回归（零行为变化验证）**
+- [x] **Step 4: 全量回归（零行为变化验证）**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿（**值未变**：所有路径仍指向 `.vela`，行为与提交前逐位一致）。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add -A  # 替换面大，逐文件 add 或 -A 后 review
@@ -102,7 +102,7 @@ EOF
 - Produces: `migrateLegacyDirs(): Promise<void>`（全局 + 项目目录迁移入口）；`getProjectVelaDir(projectPath): string`（**双路径兜底 + 惰性迁移** helper——原独立 migrateProjectVelaDir 并入）
 - Consumes: `PROJECT_VELA_DIR`（V1）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // electron/utils/config-utils.test.ts（或迁移模块测试，用临时目录 mock os.homedir/fs）
@@ -141,12 +141,12 @@ describe('项目目录迁移 + 双路径（P0-6 覆盖直开点语义）', () =>
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch electron/utils/config-utils.test.ts`
 Expected: FAIL（迁移/惰性迁移不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // electron/utils/config-utils.ts：值改（V2 一处改值全库生效——V1 已收敛全部引用）
@@ -200,16 +200,16 @@ if (n.name === '.novelforge' || n.name === '.vela' || n.name === 'node_modules' 
   测试同步：intent-router.test.ts:65-66 mock 目录名 + :81 断言（not.toContain 加 `.novelforge/` 与 `.vela/` 双断言）。
   卸载双删（update-controller.ts:135，os.homedir 硬编码 → VELA_HOME）：`fs.rmSync(velaHome)` 改为删除 `VELA_HOME`（新）+ 旧 `~/.vela` 若存在也删除（迁移失败残留场景）——否则卸载残留 ~/.novelforge。
 
-- [ ] **Step 4: 运行确认通过 + 全量回归**
+- [x] **Step 4: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿（V1 常量引用 + V2 改值迁移 + 安全名单双前缀全部就位）。
 
-- [ ] **Step 5: 直开点全覆盖自检（P0-6）**
+- [x] **Step 5: 直开点全覆盖自检（P0-6）**
 
   grep 全库 `'.vela'` 与 `app.getPath('home')`/`os.homedir()` 拼装——确认**无遗留路径字面量**（除白名单保留项）；逐个直开点确认已走 `getProjectVelaDir`/`VELA_HOME`（activity/usage/project-controller/memory/vector-store/knowledge-base/update-controller/mcp 两处）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add -A  # 改值 + 迁移 + 直开点 + 安全名单同 commit（P0-5：杜绝中间态——值改与迁移必须同时落地）
@@ -230,7 +230,7 @@ EOF
 - README.md / README.en.md：**核验确认零提及——该分支为空操作，跳过**
 - 历史计划文档（docs 顶层 6 个：ccr-memory-p0/p1/p2/p3-plan、ccr-memory-design、llm-anti-hallucination-tools-plan 等 21 处 .vela）**不改**——历史任务记录保持原貌（评审建议明确决策，否则改动面失控）
 
-- [ ] **Step 1: 核查并更新文档**
+- [x] **Step 1: 核查并更新文档**
 
 grep `.vela` 于 CLAUDE.md/CHANGELOG/docs，目录语义处更新为 `.novelforge`；`vela.db`/`vela://`/`velaAPI` 描述保留（技术标识符说明同步更新：`.novelforge/vela.db`、`vela://draft/{id}` 不变）。**历史计划文档不改**（明确决策）。
 
@@ -240,7 +240,7 @@ CLAUDE.md 品牌约束改为：
 3. **品牌标识**：用户可见用 NovelForge；目录名 `.novelforge/`；技术标识符（velaAPI, vela://, vela.db）保留不改
 ```
 
-- [ ] **Step 2: 用户可见文本核查（核验已给出清单）**
+- [x] **Step 2: 用户可见文本核查（核验已给出清单）**
 
 | 键（:行号） | 修订 |
 |---|---|
@@ -250,7 +250,7 @@ CLAUDE.md 品牌约束改为：
 | agent.skillHint（:1557） | `~/.vela/skills/` → `~/.novelforge/skills/`（三语） |
 | tool.writeProtectedPath（:2440） | `.vela` 提及 → `.novelforge / .vela`（双目录——与安全名单双前缀一致，三语） |
 
-- [ ] **Step 3: 全量回归 + Commit**
+- [x] **Step 3: 全量回归 + Commit**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。

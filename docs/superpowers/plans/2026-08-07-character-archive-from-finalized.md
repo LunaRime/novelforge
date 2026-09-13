@@ -32,7 +32,7 @@
   - `hasBlankArchiveFields(char: { gender: string; age: string; appearance: string; personality: string; background: string; abilities: string; motivation: string; relationships: string; arc: string; notes: string }): boolean` — 10 字段任一为空/哨兵(`isNoChangeValue`)→ true
   - `parseArchiveJson(raw: string, charName: string): Record<string, string> | null` — robustParseJSON + 字段白名单(仅 10 档案字段 + tags)+ normalizeTagsValue;无效 → null
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // src/services/character-archive.test.ts
@@ -98,12 +98,12 @@ describe('parseArchiveJson', () => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run src/services/character-archive.test.ts`
 Expected: FAIL — 模块不存在
 
-- [ ] **Step 3: 实现 character-archive.ts**
+- [x] **Step 3: 实现 character-archive.ts**
 
 ```ts
 // src/services/character-archive.ts
@@ -165,12 +165,12 @@ export function parseArchiveJson(raw: string, charName: string): Record<string, 
 }
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `npx vitest run src/services/character-archive.test.ts`
 Expected: PASS(重叠合并场景若断言失败,以"合并后含所有出现点文本"为准调整断言)
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -196,7 +196,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
   - `CharacterRepository.mergeFields(name: string, fields: Record<string, string>): void`
   - IPC `db:character-merge-fields`: args `[name: string, fields: Record<string, string>]`, return `{ success: boolean; error?: string }`
 
-- [ ] **Step 1: 写失败测试(append 到 character-repository.test.ts)**
+- [x] **Step 1: 写失败测试(append 到 character-repository.test.ts)**
 
 ```ts
 describe('CharacterRepository.mergeFields 仅填充空白(写时刻保旧)', () => {
@@ -233,12 +233,12 @@ describe('CharacterRepository.mergeFields 仅填充空白(写时刻保旧)', () 
 })
 ```
 
-- [ ] **Step 2: 跑测试确认失败**
+- [x] **Step 2: 跑测试确认失败**
 
 Run: `npx vitest run electron/repositories/character-repository.test.ts`
 Expected: FAIL — mergeFields 不存在
 
-- [ ] **Step 3: 实现 repository.mergeFields**
+- [x] **Step 3: 实现 repository.mergeFields**
 
 ```ts
 /** 仅填充空白:档案字段非空才写(SQL CASE 写时刻保旧,与 updateState 同构);tags COALESCE */
@@ -263,7 +263,7 @@ static mergeFields(name: string, fields: Record<string, string>): void {
 }
 ```
 
-- [ ] **Step 4: db-controller + ipc-channels**
+- [x] **Step 4: db-controller + ipc-channels**
 
 ```ts
 // db-controller.ts(near line 163)
@@ -280,7 +280,7 @@ ipcMain.handle('db:character-merge-fields', async (_event, name: string, fields:
 'db:character-merge-fields': { args: [name: string, fields: Record<string, string>]; return: { success: boolean; error?: string } }
 ```
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -303,7 +303,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 **Interfaces:**
 - Produces: 模板 key `extract_from_finalized`(getPromptTemplate 可获取),variables: `character_name` / `chapters_segments`
 
-- [ ] **Step 1: 添加中文模板(characters.ts)**
+- [x] **Step 1: 添加中文模板(characters.ts)**
 
 ```ts
 {
@@ -345,7 +345,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 },
 ```
 
-- [ ] **Step 2: 注册(i18n + prompt-templates)**
+- [x] **Step 2: 注册(i18n + prompt-templates)**
 
 ```ts
 // prompt-templates.ts — PROMPT_NAMES
@@ -360,11 +360,11 @@ extract_from_finalized: 'prompt.desc.archiveFromFinalized',
 'prompt.desc.archiveFromFinalized': { 'zh-CN': '基于已定稿章节中该角色出现的相关段落,提取/补全角色静态档案(仅填充空白)', 'en-US': 'Extract/complete static character profile from finalized chapters where the character appears (fill blanks only)', 'ru-RU': 'Извлечение/заполнение статического профиля персонажа из завершённых глав (только пустые поля)' },
 ```
 
-- [ ] **Step 3: 英文/俄语 content + systemRole**
+- [x] **Step 3: 英文/俄语 content + systemRole**
 
 `en-US.ts` / `ru-RU.ts` 的 `extract_from_finalized` 条目:翻译 Step 1 的 content 全文与 systemRole(en 与 ru 模板对应中文语义;哨兵纪律与 JSON 格式约束保持)。
 
-- [ ] **Step 4: 模板存在性验证测试**
+- [x] **Step 4: 模板存在性验证测试**
 
 ```ts
 // append 到 src/services/character-archive.test.ts
@@ -377,7 +377,7 @@ it('extract_from_finalized 模板已注册且变量完整', () => {
 })
 ```
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -399,7 +399,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Task 1 `extractRoleContextSegments`/`hasBlankArchiveFields`/`parseArchiveJson`;Task 2 `db:character-merge-fields`;Task 3 `extract_from_finalized`
 - Produces: `runCharacterArchive(projectPath: string, nameFilter?: string): void` — 启动 post_process 工作流;完成 emit `REFRESH_RESOURCE` `{ types: ['characterCards'] }`
 
-- [ ] **Step 1: 实现工作流(仿 createCharacterExtractSteps)**
+- [x] **Step 1: 实现工作流(仿 createCharacterExtractSteps)**
 
 ```ts
 // src/services/workflows/character-archive-workflow.ts
@@ -496,14 +496,14 @@ export function runCharacterArchive(_projectPath: string, nameFilter?: string): 
 
 (需确认 `PostProcessPromptBuilder` 有 `withCharacterName`/`withChaptersSegments` 方法——若无则改用泛用变量注入;若 builder 不支持任意变量,可在 Task 4 一并扩展 builder。)
 
-- [ ] **Step 2: i18n key(workflow.archiveTitle/Steps/StepsDesc + log.archiveStart/NoMention/ParseFailed/Done/CharFailed/FailedSummary/AllComplete + error.noFinalizedChapters)三语**
+- [x] **Step 2: i18n key(workflow.archiveTitle/Steps/StepsDesc + log.archiveStart/NoMention/ParseFailed/Done/CharFailed/FailedSummary/AllComplete + error.noFinalizedChapters)三语**
 
-- [ ] **Step 3: 确认 PostProcessPromptBuilder 变量注入能力**
+- [x] **Step 3: 确认 PostProcessPromptBuilder 变量注入能力**
 
 Run: `grep -n "withChapter\|class PostProcessPromptBuilder\|variables" src/services/prompts/prompt-builder.ts`
 若 builder 仅支持固定变量:在 prompt-builder.ts 增加 `withCharacterName`/`withChaptersSegments` 两个方法(透传 template 变量),并同步 en-US/ru-RU 变量表。
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -526,7 +526,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 - Consumes: Task 4 `runCharacterArchive`
 - Produces: 全局按钮 + 单角色按钮,均带确认弹窗与执行中 loading
 
-- [ ] **Step 1: i18n key**
+- [x] **Step 1: i18n key**
 
 ```ts
 // locale-data.ts 三语
@@ -536,7 +536,7 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 'character.archiveRunning': { 'zh-CN': '正在从定稿文本生成角色档案…', 'en-US': 'Generating character profiles from finalized text…', 'ru-RU': 'Создание профилей из завершённого текста…' },
 ```
 
-- [ ] **Step 2: CharactersView 全局按钮**
+- [x] **Step 2: CharactersView 全局按钮**
 
 ```tsx
 // import 增补
@@ -570,11 +570,11 @@ const handleArchive = async () => {
 
 (实施时以实际工作流状态驱动 loading;若 EventBus 事件类型不匹配,简化为"点击后禁用 5 秒防重入"。)
 
-- [ ] **Step 3: CharacterEditor 单角色按钮**
+- [x] **Step 3: CharacterEditor 单角色按钮**
 
 工具栏(编辑/关系/反向链接按钮旁)加「从定稿生成」按钮:确认弹窗 → `runCharacterArchive(currentProject.path, selectedName)`。无选中角色时禁用。
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -588,17 +588,17 @@ Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"
 
 ### Task 6: 全量验证
 
-- [ ] **Step 1: 完整门禁**
+- [x] **Step 1: 完整门禁**
 
 Run: `pnpm run typecheck && pnpm run lint && pnpm run test`
 Expected: 零错误零警告,全部测试通过(新增 ~20 条)
 
-- [ ] **Step 2: i18n 残留检查**
+- [x] **Step 2: i18n 残留检查**
 
 Run: `pnpm run gen:tokens` 或 grep 新增中文字符串是否全部走 t()
 Expected: 新 UI 文本(archiveBtn/archiveConfirm/workflow.archiveTitle/log.archive*)全部三语
 
-- [ ] **Step 3: 手工冒烟清单(dev 环境)**
+- [x] **Step 3: 手工冒烟清单(dev 环境)**
 
 - 打开项目 → 角色管理 → 点「从定稿生成」→ 确认弹窗文案正确
 - 工作流启动,逐角色日志输出,角色卡刷新(空白字段被填充,已有值未变)

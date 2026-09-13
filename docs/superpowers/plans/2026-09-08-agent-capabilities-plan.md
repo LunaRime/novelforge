@@ -2,6 +2,10 @@
 
 > **Purpose:** 评审 NovelForge Agent 能力的四项升级提议，输出价值/成本/风险评审 + 分档排期，作为后续细化实现计划（SDD）的起点。
 > **Status:** 规划草案（2026-09-08）。用户裁定：DSH 插件**移植完整（拉源码学习并自建）**、**全部排期**、**写入本规划文档**。
+>
+> **执行状态（2026-09-13 审计）：⏸️ 未实施。** 本档只交付了评审与排期（`af90a2d`、`f648afd`），**A/B/C 三档无任何实现提交**：
+> A 档——`src/services/llm/model-router.ts:44` 的 `PURPOSE_TIER_MAP` 仍为静态 purpose→tier，无 `/models` 自动拉取、无多模型 UI；B 档——`src/services/agent/tools/` 30 个文件中无 refine 工具、无 context 一卡；C 档——全库 `subAgent|hindsight|knowledgePage` **0 命中**。
+> 计划 §7 指定的下一步（**A 档细化为 SDD 计划**）尚未产出。**本档没有 checkbox；若日后回填，须注意它描述的是「评审/排期」动作，不代表 A/B/C 已实现。**
 > **基线:** master @ `f0c2949`（L2 checkpoint 迁 DB 完成）。
 
 ## 1. NovelForge Agent 现状矩阵

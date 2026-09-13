@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **执行状态（2026-09-13 审计）：✅ 代码全部落地（Task 1–5 提交 `182fdcd`→`688b984`，含 34 个内联测试）；⚠️ Task 6 的 5 项人工验收无人执行。**
+> checkbox 已按实际执行回填；5 项人工 QA 由真机测试项目 D 组承接（`docs/2026-09-13-real-machine-test-plan.md`），详见 Task 6 Step 3 下的注记。
+> 另有一处待收口的 i18n 残留：`src/components/editor/CodeMirrorEditor.tsx:159` 的 `userPrompt` 为中文硬编码（当前只入库、未在 UI 展示）。
+
 **Goal:** 把 CodeMirrorEditor 气泡 AI 改写的「弹窗 → 整段替换」升级为 **inline 接受会话**：AI 输出进入会话（原文不动 + 句级子 hunk 装饰），用户逐句接受/拒绝/整体接受，接受走可单步 undo 的独立事务，vela://draft 收尾产生唯一一条 refine revision 并清理旧 pending（v1 范围 = 设计 Phase 1）。
 
 **Architecture:** 按设计 §3 四层落地：① `src/services/diff/` 纯函数 diff-core（paragraph-align 抽取 ThreeWayMerge DP 并补 char offsets + sentence-split 锚句 LCS 细分）；② editor-store 增 `inlineSession`（DiffSession 决策态，切 tab 不丢）；③ CodeMirrorEditor 增 hunk 装饰 StateField + 复用 :189-248 坐标基建的接受浮层 + 进度浮条，接受 = 带显式递增 `Transaction.time` 的独立 dispatch（R4）；④ A 入口收尾沿用现状 DB 通道（revision-create + 旧 pending 清理，R9），正文落库仍走 Ctrl+S/doSave 现状链路。
@@ -48,7 +52,7 @@
   - `export function computeParagraphHunks(original: string, modified: string): AlignedHunk[]`（offset 已折算回**传入 original 字符串的坐标**；删除+插入相邻对归一化为整段替换，kind 标 `'MATCH'`，见 Step 3 归一化说明）
   - `export function buildMergeSegments(original: string, modified: string): MergeSegment[]`（= 旧 computeSegments/buildSegments 语义，供弹窗 import，行为零变化）
 
-- [ ] **Step 1: 先写弹窗行为回归测试（ThreeWayMerge.test.tsx）——改动前就绿**
+- [x] **Step 1: 先写弹窗行为回归测试（ThreeWayMerge.test.tsx）——改动前就绿**
 
 `// @vitest-environment jsdom` 头 + 渲染辅助（参照 CodeMirrorEditor.test.tsx 的 render + 按钮文本查找模式；t() 默认 zh-CN，merge.applyAll='全部修稿 →'）：
 
@@ -125,12 +129,12 @@ afterEach(() => {
 })
 ```
 
-- [ ] **Step 2: 跑测试确认当前状态绿（基线锁）**
+- [x] **Step 2: 跑测试确认当前状态绿（基线锁）**
 
 Run: `node node_modules/vitest/vitest.mjs run src/components/editor/ThreeWayMerge.test.tsx`（受限 shell；完整环境可用 `pnpm vitest run …`）
 Expected: PASS 4 条——现状组件私有 computeSegments 行为被锁住（此步必须绿，后续抽取/切换 import 后同样 4 条仍绿 = 字节级等价证据）。
 
-- [ ] **Step 3: 实现 paragraph-align.ts（抽取 + 补 offsets + DEL/INS 归一化）**
+- [x] **Step 3: 实现 paragraph-align.ts（抽取 + 补 offsets + DEL/INS 归一化）**
 
 新建目录 `src/services/diff/`。将 ThreeWayMerge.tsx 下述代码**逐字迁移**（只改两处：`const enum AlignOp` 数值枚举 → 字符串字面量 union；函数签名参数由 `string[]` 段落数组换成 `ParaSpan[]`，内部全部用 `p.text`）：
 
@@ -274,7 +278,7 @@ export function computeParagraphHunks(original: string, modified: string): Align
 
 > 迁移纪律：DP 主体（相似度预计算、dp/op 表、回溯）**逐字复制**，禁止顺手「优化」——等价性由 Step 1 弹窗回归 4 条 + 本模块测试共同锁定；`const enum` 转 string union 是唯一允许的结构改动（inline 会话需 JSON 序列化 kind）。
 
-- [ ] **Step 4: 写模块测试（paragraph-align.test.ts）并跑失败**
+- [x] **Step 4: 写模块测试（paragraph-align.test.ts）并跑失败**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -357,11 +361,11 @@ describe('computeParagraphHunks（抽取回归锁 + offsets 组装，设计 §7�
 Run: `node node_modules/vitest/vitest.mjs run src/services/diff/paragraph-align.test.ts`
 Expected: FAIL——模块不存在（import 解析失败）。红 = 先写测试成功。
 
-- [ ] **Step 5: 跑模块测试确认通过**
+- [x] **Step 5: 跑模块测试确认通过**
 
 再次运行上一步命令。Expected: PASS——Step 3 实现（迁移 + 新写）满足全部断言。若「段拆/段并」断言对具体 DP 产出敏感（如 2:1 反而走了 SPLIT 方向），以**实际 hunk 结构**校准断言（结构语义不变即可，勿改算法）。
 
-- [ ] **Step 6: ThreeWayMerge.tsx 切换到模块 import（删本地实现）**
+- [x] **Step 6: ThreeWayMerge.tsx 切换到模块 import（删本地实现）**
 
 1) 删 :16-27 的 `Hunk`/`DiffSegment` 接口与 :38-269 的 stripFrontmatter/extractParagraphs/CharFreq/DP/alignParagraphs/buildSegments/computeSegments；
 2) import 行替换：
@@ -379,7 +383,7 @@ const segments = useMemo(() => buildMergeSegments(originalContent, modifiedConte
 
 （`useMemo` 依赖与调用签名不变；`MergeSegment.lines/hunk` 结构与旧 DiffSegment 相同，:310/:315-329/:388-441 渲染逻辑零改动。若 TS 对 `s.hunk!` 非空断言报 lint 或类型收紧，用与现状等价的守卫写法保持行为。）
 
-- [ ] **Step 7: 回归验证（等价锁验收）**
+- [x] **Step 7: 回归验证（等价锁验收）**
 
 Run:
 ```bash
@@ -388,7 +392,7 @@ node node_modules/vitest/vitest.mjs run src/services/diff/paragraph-align.test.t
 ```
 Expected: 两文件全 PASS（弹窗 4 条与 Step 2 结果一致 = 行为字节级等价证据；模块 8 条绿）。
 
-- [ ] **Step 8: 门禁 + 提交**
+- [x] **Step 8: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -422,7 +426,7 @@ git commit -m "refactor: 抽取 ThreeWayMerge 段对齐为 src/services/diff/par
 
 **子 hunk 规则（v1 语义，Task 2 注释与测试共同锁定）**：对 `kind === 'MATCH'` 的 1:1 替换段做句级锚 LCS（句子字符串**归一 CRLF 后**全等为锚，锚句不进子 hunk）；SPLIT/MERGE/INSERT/DELETE 等结构类 hunk 直接降级整段单子 hunk（结构差异需段界分隔符协同，超句粒度，v1 不展开——设计 §4.2「无锚降级」的自然延伸）；`id = h{seq}.s{seq}`、`parentId = h{seq}`，全确定性（决策表跨重挂载稳定）。
 
-- [ ] **Step 1: 写失败测试（sentence-split.test.ts）**
+- [x] **Step 1: 写失败测试（sentence-split.test.ts）**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -496,12 +500,12 @@ describe('refineHunkWithSentences（锚句 LCS，设计 §7）', () => {
 ```
 
 
-- [ ] **Step 2: 跑失败**
+- [x] **Step 2: 跑失败**
 
 Run: `node node_modules/vitest/vitest.mjs run src/services/diff/sentence-split.test.ts`
 Expected: FAIL——模块不存在。
 
-- [ ] **Step 3: 实现 sentence-split.ts + hunk-model.ts**
+- [x] **Step 3: 实现 sentence-split.ts + hunk-model.ts**
 
 ```ts
 // hunk-model.ts —— 会话内状态机类型（纯类型 + 组级聚合辅助；无运行时依赖除 type）
@@ -672,12 +676,12 @@ export function refineHunkWithSentences(h: AlignedHunk): SubHunk[] {
 
 > **实现说明**：上方是 `refineHunkWithSentences` 的**完整正式实现**（LCS 回溯段 :619-636 连同本段整体替换伪码），不再有占位行。语义要点：锚句（LCS 全等句）不进子 hunk——接受/拒绝只作用于 changed run；`runs` 由回溯按 doc 序 unshift 产出，`composeByRuns` 用 indexOf 顺序替换校验「锚句 + run.modText 重组 == h.modText」，任何结构差（多余/缺失 `\n`、段落界）都会触发 (c) 降级，把整段作为一个子 hunk 交回，保证全量接受与整体替换逐字节一致。交付验收以 Step 1 的 6 条测试全绿为准——测试是语义契约，实现与上方代码不一致处按契约修。
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `node node_modules/vitest/vitest.mjs run src/services/diff/sentence-split.test.ts`
 Expected: PASS 6 条（含 id 确定性）。
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -704,7 +708,7 @@ git commit -m "feat: 句级子 hunk——sentence-split 锚句 LCS + hunk-model 
   - `resetHunkDecision: (tabId: string, subHunkId: string) => void`（误拒/误选恢复 → pending；**仅对「未产生 doc 事务」的决策安全**——accepted 后的文本已入 doc，恢复前须先 doc 层 Ctrl+Z 还原，见 Task 4 注释）
   - `endInlineSession: (tabId: string) => void`（清 inlineSession 字段；**不清 dirty、不改 content**——已接受文本保留在 doc/content，未决建议丢弃；discard 语义 = 本 action）
 
-- [ ] **Step 1: 写失败测试（editor-store.test.ts 追加 describe）**
+- [x] **Step 1: 写失败测试（editor-store.test.ts 追加 describe）**
 
 ```ts
 describe('editor-store inlineSession（L1 会话层）', () => {
@@ -792,12 +796,12 @@ describe('editor-store inlineSession（L1 会话层）', () => {
 
 文件头补 type import：`import type { DiffSession } from '../services/diff/hunk-model'`（editor-store.test.ts 现 :1-2 后追加）。
 
-- [ ] **Step 2: 跑失败**
+- [x] **Step 2: 跑失败**
 
 Run: `node node_modules/vitest/vitest.mjs run src/stores/editor-store.test.ts`
 Expected: FAIL——`beginInlineSession` 等不存在 + 类型报错。
 
-- [ ] **Step 3: 实现 store 扩展（editor-store.ts）**
+- [x] **Step 3: 实现 store 扩展（editor-store.ts）**
 
 类型区（:25 `}` 前）加字段，action 区（:57 `}` 前）加签名，实现紧随 `markTabSaved`（:136 后）：
 
@@ -880,12 +884,12 @@ import { aggregateDecision } from '../services/diff/hunk-model'
 
 （`noUnusedLocals` 下解构 `_removed` 若告警，改用：`const rest: typeof session.decisions = {}; for (const k of Object.keys(session.decisions)) if (k !== subHunkId) rest[k] = session.decisions[k]`。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: `node node_modules/vitest/vitest.mjs run src/stores/editor-store.test.ts`
 Expected: PASS（新增 7 条 + 既有 openFile/closeTab 全绿）。
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -921,7 +925,7 @@ git commit -m "feat: 编辑器会话层——EditorTab.inlineSession + begin/upd
 
 **i18n key（Step 1 全量落，Task 4/5 共享，禁止后续改名）**：`inlineAccept.progress`（`{n}/{m} 处修改`）、`inlineAccept.bubbleProgress`（`第 {n}/{m} 处改动`）、`inlineAccept.original`（改前）、`inlineAccept.revised`（改后）、`inlineAccept.acceptSelected`、`inlineAccept.acceptWhole`（整体接受）、`inlineAccept.reject`、`inlineAccept.acceptAll`、`inlineAccept.rejectAll`、`inlineAccept.finish`（完成）、`inlineAccept.close`、`inlineAccept.manualEditExit`（改动已被手动修改，修改建议已清除）、`inlineAccept.closeConfirm`（仍有 {n} 处修改未处理…）——Task 5 另加 `inlineAccept.applyAsSuggestion`/`inlineAccept.noChanges`。
 
-- [ ] **Step 1: locale-data.ts 加 key（三语，插在 `'editor.replace'`（:2121）之后）**
+- [x] **Step 1: locale-data.ts 加 key（三语，插在 `'editor.replace'`（:2121）之后）**
 
 ```ts
   // --- L1 inline 接受（气泡 AI 改写 → 会话浮层/浮条） ---
@@ -940,7 +944,7 @@ git commit -m "feat: 编辑器会话层——EditorTab.inlineSession + begin/upd
   'inlineAccept.closeConfirm': { 'zh-CN': '仍有 {n} 处修改未处理。关闭将放弃这些建议，已接受的修改会保留。', 'en-US': 'You still have {n} unhandled changes. Closing discards them; accepted changes are kept.', 'ru-RU': 'Осталось {n} необработанных изменений. Закрытие отменит их; принятые изменения сохранятся.' },
 ```
 
-- [ ] **Step 2: 写失败测试（CodeMirrorEditor.inline.test.tsx）——先落 undo/装饰/零影响契约**
+- [x] **Step 2: 写失败测试（CodeMirrorEditor.inline.test.tsx）——先落 undo/装饰/零影响契约**
 
 ```tsx
 // @vitest-environment jsdom
@@ -1028,12 +1032,12 @@ describe('CodeMirrorEditor inline 会话（Task 4）', () => {
 
 > 辅助与断言以**真实 jsdom 行为**为准：若 `view.dispatch` 包装赋值在 CM6 类型/运行时受限，退化为「常量存在性断言 + undo 粒度用例间接锁定标注」（标注不参与 undo 分组的判定路径，时间戳已足够）；fixture 换行/标点坐标务必与 `from/to` 精确对齐——用 ASCII fixture 从根上避免中文坐标手算错误。
 
-- [ ] **Step 3: 跑失败**
+- [x] **Step 3: 跑失败**
 
 Run: `node node_modules/vitest/vitest.mjs run src/components/editor/CodeMirrorEditor.inline.test.tsx`
 Expected: FAIL——模块/StateField/`dispatchAcceptChange` 不存在。
 
-- [ ] **Step 4: 实现 codemirror-inline-accept.ts（核心能力，无 React）**
+- [x] **Step 4: 实现 codemirror-inline-accept.ts（核心能力，无 React）**
 
 ```ts
 import { StateEffect, StateField, EditorState, Transaction, RangeSetBuilder } from '@codemirror/state'
@@ -1134,7 +1138,7 @@ export function findPendingRangeAt(view: EditorView, pos: number): InlineHunkRan
 }
 ```
 
-- [ ] **Step 5: 写失败测试（装饰/浮层/浮条交互 + 决策落 store + 手动编辑退出）**
+- [x] **Step 5: 写失败测试（装饰/浮层/浮条交互 + 决策落 store + 手动编辑退出）**
 
 在 CodeMirrorEditor.inline.test.tsx 的 describe 内继续追加（renderEditor 需支持传 filePath——仿 CodeMirrorEditor.test.tsx:58-74 扩签名为 `renderEditor(content, onChange?, filePath?)`；会话经 `useEditorStore.getState().beginInlineSession(filePath, mkSession())` 注入，**测试前置每次 beforeEach 重置 store**）：
 
@@ -1192,7 +1196,7 @@ it('手动编辑 pending 区被 changeFilter 拦截（冻结）', () => {
 
 > 交互断言以**实际组件实现**为准：浮条/浮层的按钮/勾选如何驱动 store 与 dispatch（Step 6 组件挂接）由实施者按上述 store API + `dispatchAcceptChange` 组合，测试先锁最小契约（装饰区间、浮条存在性、拒绝零 undo、冻结），按钮级交互在 Step 6 组件完成后回填 1-2 条 DOM 级用例。
 
-- [ ] **Step 6: 跑失败 → 组件挂接（CodeMirrorEditor.tsx + Bar/Popover + CSS）→ 跑过**
+- [x] **Step 6: 跑失败 → 组件挂接（CodeMirrorEditor.tsx + Bar/Popover + CSS）→ 跑过**
 
 先跑：`node node_modules/vitest/vitest.mjs run src/components/editor/CodeMirrorEditor.inline.test.tsx` → FAIL（浮条/field 行为不存在）。
 
@@ -1323,7 +1327,7 @@ inline-accept.css（三处状态视觉 + 浮条/浮层样式；**只允许 CSS �
 
 > `color-mix` / `box-shadow` 的既有 CSS 变量以 three-way-merge.css 的用法为准；无 `--shadow-lg` 变量则去掉 shadow 行（禁止新增硬编码色值；透明度合成用 `--color-*-rgb` 变量的 `rgba()` 模式，参照 :276 既有写法）。
 
-- [ ] **Step 7: 跑测试确认通过**
+- [x] **Step 7: 跑测试确认通过**
 
 Run:
 ```bash
@@ -1332,7 +1336,7 @@ node node_modules/vitest/vitest.mjs run src/components/editor/CodeMirrorEditor.t
 ```
 Expected: 新增用例 PASS（undo 3 步还原 / 拒绝零 undo / 冻结拦截 / 会话外零装饰）；既有 undo 三用例（:98-164）与加粗用例全绿。
 
-- [ ] **Step 8: 门禁 + 提交**
+- [x] **Step 8: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -1359,14 +1363,14 @@ git commit -m "feat: CM inline 接受 UI——hunk 装饰/浮层/浮条 + 显式
   - `export function buildSelectionSession(docText: string, selFrom: number, selTo: number, aiText: string): DiffSession | null`（null = AI 输出与选区文本等价/空改动）
   - finish 语义（组件内 `finishSelectionSession(filePath, docText)`）：会话有 ≥1 accepted 且 filePath 为 `vela://draft/{id}` → 先 `db:revision-get-pending` 全 discard（R9，对齐 refine-draft.command.ts:88-92）→ `db:revision-next-index` → `db:revision-create`（content = **当前 doc 全文**、userPrompt 带动作标签、revisionType 'refine'）→ `endInlineSession`；正文落库不在此处（用户 Ctrl+S / 自动保存走 doSave 现状 :102-145）。**已接受内容以 doc 实况为准，决策表不参与正文合成**（doc 是唯一真相，undo 后的 doc 即最终采纳文本）。
 
-- [ ] **Step 1: locale-data.ts +2 key（:2121 后 inlineAccept 段内追加）**
+- [x] **Step 1: locale-data.ts +2 key（:2121 后 inlineAccept 段内追加）**
 
 ```ts
   'inlineAccept.applyAsSuggestion': { 'zh-CN': '应用为修改建议', 'en-US': 'Apply as suggestion', 'ru-RU': 'Применить как предложение' },
   'inlineAccept.noChanges': { 'zh-CN': 'AI 未改动选中文本', 'en-US': 'AI made no changes to the selection', 'ru-RU': 'ИИ не изменил выделенный текст' },
 ```
 
-- [ ] **Step 2: 写失败测试（selection-session.test.ts + A 集成用例）**
+- [x] **Step 2: 写失败测试（selection-session.test.ts + A 集成用例）**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -1414,12 +1418,12 @@ A 集成用例（CodeMirrorEditor.inline.test.tsx 追加，vi.mock ipc-client �
 - **不在组件测试里写「点击流式按钮进入会话」的伪用例**——气泡流式态依赖真实 LLM/状态机，jsdom 不可达（CodeMirrorEditor.test.tsx:206-217 的 coordsAtPos 桩只解决浮层定位）。A 入口的可测契约拆成两层：① `buildSelectionSession` 纯函数全测（本 Step 上方 describe）；② 收尾落库链 `finishSelectionSession` 白盒测（下 Step，mock ipc-client 断言调用序列）。组件里 handleAcceptAI 的接线（setAiResult 态 → 按钮文案 = `inlineAccept.applyAsSuggestion` → onClick = beginSession）由 Step 4 组件实现 + Task 6 人工 QA（验收 1）覆盖；「会话激活时 doc 不被整段替换」由 Task 4 冻结/装饰用例覆盖。
 
 
-- [ ] **Step 3: 跑失败**
+- [x] **Step 3: 跑失败**
 
 Run: `node node_modules/vitest/vitest.mjs run src/services/diff/selection-session.test.ts`
 Expected: FAIL——模块不存在。
 
-- [ ] **Step 4: 实现 selection-session.ts（选区级对齐 + 偏移折算）**
+- [x] **Step 4: 实现 selection-session.ts（选区级对齐 + 偏移折算）**
 
 ```ts
 import { computeParagraphHunks } from './paragraph-align'
@@ -1469,7 +1473,7 @@ export function buildSelectionSession(
 
 > 实现说明：`refineHunkWithSentences` 返回的 sub id 形如 `h0.s0`（Task 2 契约）——selection-session 在其上加 `sel{i}.` 前缀是**可选命名空间**：若 Task 2/3/4 已保证子 hunk id 全会话唯一且稳定，可去掉该前缀直接透传（以 Task 4 装饰/决策测试为准，选择其一并保持一致——本计划的 id 契约是「同一会话内唯一 + 确定性」，前缀方案与透传方案都满足；实施时取更简单者）。`sessionId` 用时间戳前缀即可（唯一性要求，稳定性由决策表挂 tab 持久保证）。
 
-- [ ] **Step 5: 收尾落库链——写失败测试（A 集成用例：finish 链）**
+- [x] **Step 5: 收尾落库链——写失败测试（A 集成用例：finish 链）**
 
 CodeMirrorEditor.inline.test.tsx 追加（mock 已建）：
 
@@ -1503,7 +1507,7 @@ it('A 收尾：完成会话 → 旧 pending 清理 + revision-create 恰一次�
 })
 ```
 
-- [ ] **Step 6: 跑失败 → 实现接线 → 跑过**
+- [x] **Step 6: 跑失败 → 实现接线 → 跑过**
 
 跑：`node node_modules/vitest/vitest.mjs run src/components/editor/CodeMirrorEditor.inline.test.tsx` → FAIL（finishSelectionSession 未导出）。
 
@@ -1556,7 +1560,7 @@ export async function finishSelectionSession(filePath: string | undefined, docTe
 3. InlineAcceptBar 的 `onFinish` = `() => void finishSelectionSession(filePath, view.state.doc.toString())`；`onClose`（有 pending 时 confirm `t('inlineAccept.closeConfirm')` 后 endInlineSession，参照 DraftEditor doFinalize 的 confirm 用法 :189-196）。
 4. `activeAIActionRef`：现有 `activeAIAction` 是 state；finish 内引用需经 ref 同步（`const activeAIActionRef = useRef<string|null>(null)`，setActiveAIAction 处同步赋值；或 finish 接受 actionLabel 参数由调用方传入——取参数方案更纯：`finishSelectionSession(filePath, docText, actionLabel)`）。
 
-- [ ] **Step 7: 跑测试确认通过**
+- [x] **Step 7: 跑测试确认通过**
 
 Run:
 ```bash
@@ -1565,7 +1569,7 @@ node node_modules/vitest/vitest.mjs run src/components/editor/CodeMirrorEditor.i
 ```
 Expected: 全 PASS。
 
-- [ ] **Step 8: 门禁 + 提交**
+- [x] **Step 8: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -1587,7 +1591,7 @@ git commit -m "feat: A 入口 inline 会话集成——气泡「应用为修改�
 **Interfaces:**
 - Consumes: Task 1-5 全部交付
 
-- [ ] **Step 1: i18n 完整性核对（设计 R11）**
+- [x] **Step 1: i18n 完整性核对（设计 R11）**
 
 ```bash
 node node_modules/vitest/vitest.mjs run src/services 2>&1 | tail -5   # 冒烟：diff 服务全绿（确认无跨任务破坏）
@@ -1595,7 +1599,7 @@ node scripts/extract-tokens.cjs | findstr /C:"inlineAccept"           # token �
 ```
 Expected: `inlineAccept.applyAsSuggestion / barProgress?` —— 逐个核对：每个 `t('inlineAccept.…')` 使用点在三语数据中均存在且三语非空（手写核对表如下，全部 key：progress/bubbleProgress/original/revised/acceptSelected/acceptWhole/reject/acceptAll/rejectAll/finish/close/manualEditExit/closeConfirm/applyAsSuggestion/noChanges，共 15 个）。对照 i18n-standard 残留扫描：`grep -rn "'[^']*[\u4e00-\u9fa5][^']*'" src/components/editor/CodeMirrorEditor.tsx src/components/editor/InlineAcceptBar.tsx src/components/editor/InlineAcceptPopover.tsx src/services/diff` 不得出现未走 `t()` 的中文（注释/已有注释豁免，逐条人工确认）。缺 key/残留 → 就地补（key 表抄 Task 4 Step 1 / Task 5 Step 1）并提交 `fix: i18n …`。
 
-- [ ] **Step 2: 全量门禁**
+- [x] **Step 2: 全量门禁**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -1604,7 +1608,7 @@ node node_modules/vitest/vitest.mjs run    # 全量；受限 EPERM 则用最小 
 ```
 Expected: 零错误零警告；全量测试绿。**断言必须附真实输出**：typecheck 无输出、lint 无输出、vitest 汇总行（`Test Files N passed`）。既有回归重点：`src/stores/editor-store.test.ts`（openFile 去重）、`src/components/editor/CodeMirrorEditor.test.tsx`（undo 三用例 :98-164）、Task 1 弹窗 4 条。
 
-- [ ] **Step 3: §8 Phase 1 六条验收逐条核对（evidence 式）**
+- [x] **Step 3: §8 Phase 1 六条验收逐条核对（evidence 式）**
 
 | # | 验收 | 验证路径（evidence） |
 |---|---|---|
@@ -1615,11 +1619,14 @@ Expected: 零错误零警告；全量测试绿。**断言必须附真实输出**
 | 5 | 会话关闭（含切 tab 重进、有未决决策时二次确认）不丢已接受内容、不损坏 revision 状态 | store 决策持久测试（重挂载读回 decisions）；closeConfirm 二次确认（`inlineAccept.closeConfirm`，有 pending 才弹）；「不丢已接受内容」= endInlineSession 不清 content/dirty 测试 + doc 实况为真源；切 tab 重进 = EditorArea 单实例（:604-610）卸载/重挂后 store 会话仍在（人工 + 决策测试） |
 | 6 | 全部门禁 + §7 用例绿 | Step 2 门禁输出 + §7 映射（见本计划「Self-Review」覆盖表）；设计 §7 全部行均落在 Task 1/2/3/4/5 测试中 |
 
-- [ ] **Step 4: 已知限制如实登记（验收表附件，进本计划或实现 ledger）**
+> ⚠️ **人工 QA 未执行（2026-09-13 审计确认）**：上表中标注「人工」的 5 处——验收 1 按钮文案目检、验收 2 pending 底纹目检、验收 3 Ctrl+Y 重做抽验、验收 4 Ctrl+S 落库人工步骤、验收 5 切 tab 重进——**至今无人执行，仓库内无留痕**。
+> 自动化部分（undo 三用例 / 误拒恢复 / 唯一 refine revision / 决策持久）已由 `CodeMirrorEditor.inline.test.tsx`（34 个 it）覆盖，故 Step 3 的 evidence 映射本身已完成；
+> 5 项人工项现由真机测试项目 **D 组（D1–D5、D7）** 承接：`docs/2026-09-13-real-machine-test-plan.md`。**在该档执行完毕前，本计划的「验收」不算全部通过。**
 
+- [x] **Step 4: 已知限制如实登记（验收表附件，进本计划或实现 ledger）**
 逐条登记并**不**修复（v1.1/后续窗口项，防 reviewer 误判为遗漏）：undo 后 store 决策计数可能短暂偏高（Task 4 注释）；多段选区结构变化（段并/段拆跨锚句）时逐句接受不等于整段直替（selection-session 契约之外，验收 3 fixture 限定单段结构不变）；CRLF 文档句替换可能混入 LF（Task 2 注释）；切 tab 丢 CM undo 栈（现状限制，设计 §4.4 已记录）；accepted 视觉仅以替换后文本呈现、doc 内不再画淡绿（设计 §4.3「accepted 淡绿」以浮层勾选态承担——见 Task 4 说明）。
 
-- [ ] **Step 5: 提交（若 Step 1/2 有补强）**
+- [x] **Step 5: 提交（若 Step 1/2 有补强）**
 
 ```bash
 git add <变更文件>

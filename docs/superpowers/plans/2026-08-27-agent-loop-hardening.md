@@ -32,7 +32,7 @@
 
 **现状（已核实）**：未知工具（:238-244）、用户拒绝（:255-261）、执行异常（:286-291）均已转 `<\tool_result error="true">` 回上下文 ✓；**但** `parseErrors` 只在 `parseErrors.length > 0 && toolCalls.length === 0`（全失败）时注入自检反馈（:179）——**部分成功 + 部分解析失败时失败项被静默丢弃**，LLM 不知情（CC 对每个解析失败都回 `<\tool_use_error>` 带 tool_use_id）。
 
-- [ ] **Step 1: 写失败测试（部分失败场景）**
+- [x] **Step 1: 写失败测试（部分失败场景）**
 
 ```ts
 // src/services/agent/agent-engine.test.ts（或追加）
@@ -52,12 +52,12 @@ describe('agent-engine 工具解析错误反馈', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/services/agent/agent-engine.test.ts`
 Expected: FAIL（部分失败场景无诊断注入）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `agent-engine.ts` :177-188 的逻辑改为：
 
@@ -92,12 +92,12 @@ const observationParts = parseFeedbackForObservation
 
   `parseFeedbackForObservation` 为循环级变量（每轮重置为 undefined）。新增 i18n 键 `engine.parsePartialDiagnosis`（三语：「以下工具调用未能解析，已忽略」/ "Some tool calls could not be parsed and were ignored" / "Некоторые вызовы инструментов не удалось разобрать и они проигнорированы"）。
 
-- [ ] **Step 4: 运行确认通过 + 全量回归**
+- [x] **Step 4: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/agent/agent-engine.ts src/services/agent/agent-engine.test.ts src/shared/locale-data.ts
@@ -124,7 +124,7 @@ EOF
 
 **v1 范围决策**：只做「同路径重复读 → 桩」，**不做**「先读后写硬拒」（write_file 有创建新文件场景，硬拒破坏工作流）与「Windows mtime 内容回退」（需 execute 签名带 context，改动面大）——二者记 deferred。
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // src/services/agent/tools/read-file.tool.test.ts
@@ -160,12 +160,12 @@ describe('read_file 读去重', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/services/agent/tools/read-file.tool.test.ts`
 Expected: FAIL（无去重）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // read-file.tool.ts 顶部追加
@@ -208,7 +208,7 @@ if (state && !args.offset && !args.limit) {
   `pathKey`：项目内用 `pathCheck.fullPath`，外部用绝对路径（两者不冲突，天然按路径区分）。
   ⚠️ 桩内容含 i18n 提示——桩文本是给 LLM 看的（非用户 UI），但按 i18n 铁律仍走 `t()`：`tool.fileUnchangedStub` 键（三语）。
 
-- [ ] **Step 4: agent-store 会话生命周期清理**
+- [x] **Step 4: agent-store 会话生命周期清理**
 
 ```ts
 // agent-store.ts import { clearReadState } from '../services/agent/tools/read-file.tool'
@@ -218,7 +218,7 @@ if (state && !args.offset && !args.limit) {
 
   测试：`src/stores/agent-store.test.ts` 追加——切换会话后 read_file 重复读返回全文（clearReadState 生效）。
 
-- [ ] **Step 5: write_file 成功路径失效缓存（P0-2 修订）**
+- [x] **Step 5: write_file 成功路径失效缓存（P0-2 修订）**
 
   write-file.tool.ts 成功返回前加单键清除（write_file 与 read-file.tool 同目录，import 无障碍）：
 
@@ -238,12 +238,12 @@ return { success: true, ... }
 
   测试：`read-file.tool.test.ts` 追加——write 后重复读返回全文（缓存已失效）；write_file 只接受相对路径（validatePath），无外部绝对路径 key，外部分支无需处理。
 
-- [ ] **Step 6: 运行确认通过 + 全量回归**
+- [x] **Step 6: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/services/agent/tools/read-file.tool.ts src/services/agent/tools/read-file.tool.test.ts src/services/agent/tools/write-file.tool.ts src/stores/agent-store.ts src/shared/locale-data.ts
@@ -267,7 +267,7 @@ EOF
 
 **背景（对照 CC 两段式估算 + readFileInRange）**：NF 现状 read_file 全量返回 → 引擎层 truncateResult 800 token 截断——**I/O 与 IPC 传全文后丢弃**。CC 读前估算 + 超限抛错教模型用 offset/limit。NF v1：读全量但**注入限制**（省的是上下文注入与截断损耗）+ offset/limit 分页（大文件分段读）。
 
-- [ ] **Step 1: 写失败测试（追加）**
+- [x] **Step 1: 写失败测试（追加）**
 
 ```ts
 // read-file.tool.test.ts 追加 describe
@@ -291,12 +291,12 @@ describe('read_file token 约束与分页', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/services/agent/tools/read-file.tool.test.ts`
 Expected: FAIL（无约束/无分页）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // schema properties 追加：
@@ -331,12 +331,12 @@ const content = truncatedNotice + truncated
   ③ 全量读（无 offset/limit）才写 readState；
   ④ 若 H2 未实现、H3 单独落地：短路豁免无对象，无影响——但两条契约都属于「去重」行为，建议按 H2 → H3 顺序实现，H2 commit 内含豁免条件（见 H2 Step 3 修订）。
 
-- [ ] **Step 4: 运行确认通过 + 全量回归**
+- [x] **Step 4: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/agent/tools/read-file.tool.ts src/services/agent/tools/read-file.tool.test.ts src/shared/locale-data.ts

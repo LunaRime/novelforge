@@ -33,7 +33,7 @@
 - Consumes: 既有 `ToolResult` / `truncateResult` / `sanitizeObservation` / `t()`
 - Produces: i18n key `engine.emptyToolResult`（`{toolName}` 占位，三语）——Task D6-2 复用同段
 
-- [ ] **Step 1: 在 locale-data.ts 加三语 key**
+- [x] **Step 1: 在 locale-data.ts 加三语 key**
 
 在 `src/shared/locale-data.ts` 的 engine.* 段（`'engine.modeMax'` 之前）插入：
 
@@ -41,7 +41,7 @@
   'engine.emptyToolResult': { 'zh-CN': '（{toolName} 已完成，无输出）', 'en-US': '({toolName} completed with no output)', 'ru-RU': '({toolName} завершено без вывода)' },
 ```
 
-- [ ] **Step 2: 写失败测试（agent-engine.test.ts）**
+- [x] **Step 2: 写失败测试（agent-engine.test.ts）**
 
 在 agent-engine.test.ts 的「工具执行与 observation」describe 内追加（参照既有 `runLoopWithResponses` 辅助——responses 按序作为每次 LLM 生成返回值，messagesLog 收集 generateFn 收到的消息副本）：
 
@@ -73,12 +73,12 @@ describe('空结果占位注入（D6-1）', () => {
 
 > 若 `runLoopWithResponses` 辅助不支持返回空 content 的工具，实施时在测试顶部自建一个 `{ name: 'empty_tool', execute: async () => ({ success: true, content: '' }) }` 并 `vi.mocked(toolRegistry.get).mockImplementation(...)`（参照本文件既有 mock 手法）。两个用例须都验证「无输出」占位出现。
 
-- [ ] **Step 3: 运行测试确认失败**
+- [x] **Step 3: 运行测试确认失败**
 
 Run: `pnpm vitest run src/services/agent/agent-engine.test.ts`
 Expected: FAIL——observation 仍是空壳，占位文案不存在。
 
-- [ ] **Step 4: 实现空结果占位（agent-engine.ts:290-294）**
+- [x] **Step 4: 实现空结果占位（agent-engine.ts:290-294）**
 
 ```ts
         if (result.success) {
@@ -91,12 +91,12 @@ Expected: FAIL——observation 仍是空壳，占位文案不存在。
         } else {
 ```
 
-- [ ] **Step 5: 运行测试确认通过**
+- [x] **Step 5: 运行测试确认通过**
 
 Run: `pnpm vitest run src/services/agent/agent-engine.test.ts`
 Expected: PASS（新增 2 条 + 既有全绿）
 
-- [ ] **Step 6: 门禁 + 提交**
+- [x] **Step 6: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint
@@ -125,7 +125,7 @@ git commit -m "feat: 工具空结果注入占位文本（防模型把空 tool_re
   - IPC 通道 `fs:agent-result-write`：`invoke('fs:agent-result-write', content: string) → { success: boolean; path?: string; error?: string }`
   - i18n key `engine.resultSpilledToDisk`（`{total}`/`{path}` 占位，三语）
 
-- [ ] **Step 1: locale-data.ts 加 key**
+- [x] **Step 1: locale-data.ts 加 key**
 
 engine.* 段插入：
 
@@ -133,7 +133,7 @@ engine.* 段插入：
   'engine.resultSpilledToDisk': { 'zh-CN': '结果过长: {total} tokens，全文已写入 {path}，如需全文用 read_file 读取', 'en-US': 'Result too long: {total} tokens, full text written to {path}; use read_file to read it if needed', 'ru-RU': 'Результат слишком длинный: {total} токенов, полный текст сохранён в {path}; при необходимости прочитайте его через read_file' },
 ```
 
-- [ ] **Step 2: ipc-channels.ts 加通道类型**
+- [x] **Step 2: ipc-channels.ts 加通道类型**
 
 在 `src/shared/ipc-channels.ts` 的 fs:* 通道定义区（`fs:agent-archive-delete` 附近）追加：
 
@@ -147,7 +147,7 @@ engine.* 段插入：
 
 （通道对象的具体字段名对照本文件既有 fs:* 条目的结构——request/response 或类似命名，以既有条目为准）
 
-- [ ] **Step 3: fs-controller.ts 实现通道**
+- [x] **Step 3: fs-controller.ts 实现通道**
 
 在 `electron/controllers/fs-controller.ts` 的 agent-archive 段（`fs:agent-archive-delete` 之后、函数收尾 `}` 之前）追加：
 
@@ -176,7 +176,7 @@ engine.* 段插入：
 
 文件头部 import 补 `createHash`（`node:crypto`）：`import { createHash } from 'node:crypto'`（检查既有 import 是否已有 node:crypto，有则合并）。
 
-- [ ] **Step 4: 引擎常量 + 类型 + 签名（agent-engine.ts）**
+- [x] **Step 4: 引擎常量 + 类型 + 签名（agent-engine.ts）**
 
 常量区（`TOOL_RESULT_MAX_TOKENS` 之后）追加：
 
@@ -219,7 +219,7 @@ export async function runAgentLoop(
 ): Promise<void> {
 ```
 
-- [ ] **Step 5: 引擎 success 分支接写盘（替换 Task D6-1 的 success 分支）**
+- [x] **Step 5: 引擎 success 分支接写盘（替换 Task D6-1 的 success 分支）**
 
 ```ts
         if (result.success) {
@@ -247,7 +247,7 @@ export async function runAgentLoop(
 
 import 补 `truncateToTokenBudget`（token-budget 既有 import `estimateTokens, truncateToTokenBudget`——检查 :18 是否已含，未含则追加）。
 
-- [ ] **Step 6: agent-store.ts 调用点注入 deps**
+- [x] **Step 6: agent-store.ts 调用点注入 deps**
 
 `src/stores/agent-store.ts:756` 的 `runAgentLoop(...)` 调用：
 
@@ -278,7 +278,7 @@ import 补 `truncateToTokenBudget`（token-budget 既有 import `estimateTokens,
 
 import 补 `type AgentEngineDeps`（agent-store.ts:5 既有 `runAgentLoop` import 处合并）。
 
-- [ ] **Step 7: 写失败测试（agent-engine.test.ts，D6-2 describe）**
+- [x] **Step 7: 写失败测试（agent-engine.test.ts，D6-2 describe）**
 
 ```ts
 describe('长结果写盘引用（D6-2）', () => {
@@ -346,12 +346,12 @@ describe('长结果写盘引用（D6-2）', () => {
 
 > 辅助 `runLoopWithResponses` 需扩展第三参 `deps` 传入 `runAgentLoop`（既有辅助只传 6 参——实施时补 `undefined, deps`）。长工具需注册（顶部自建 `{ name: 'long_tool', execute: async () => ({ success: true, content: longContent }) }`，mock toolRegistry.get）。文案断言用中文「已写入」即可（t() 默认 zh-CN；如测试环境 locale 非 zh 则改断言 key 相关英文——以本文件既有断言风格为准）。
 
-- [ ] **Step 8: 运行测试确认失败 → 实现 → 确认通过**
+- [x] **Step 8: 运行测试确认失败 → 实现 → 确认通过**
 
 Run: `pnpm vitest run src/services/agent/agent-engine.test.ts`
 Expected: 先 FAIL（辅助不支持 deps）→ 按 Step 7 说明补齐辅助与 mock → PASS
 
-- [ ] **Step 9: 门禁 + 提交**
+- [x] **Step 9: 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -376,7 +376,7 @@ git commit -m "feat: 长工具结果写盘引用——fs:agent-result-write 通�
   - `isRecoverableError(message: string): boolean`（导出纯函数）
   - i18n key `engine.resumeDirectly`（三语）
 
-- [ ] **Step 1: locale-data.ts 加 key**
+- [x] **Step 1: locale-data.ts 加 key**
 
 engine.* 段插入：
 
@@ -384,7 +384,7 @@ engine.* 段插入：
   'engine.resumeDirectly': { 'zh-CN': '请直接从上次中断处继续，无需道歉或复述。', 'en-US': 'Resume directly from where you left off. No apology, no recap.', 'ru-RU': 'Продолжайте сразу с того места, где остановились. Без извинений и повторений.' },
 ```
 
-- [ ] **Step 2: 常量改造（agent-engine.ts）**
+- [x] **Step 2: 常量改造（agent-engine.ts）**
 
 删除 `const MESSAGE_BUDGET_TOKENS = 16_000`（:36），替换为：
 
@@ -403,7 +403,7 @@ const MIN_RECOVERY_BUDGET_TOKENS = 8_000
 const MAX_CONSECUTIVE_RECOVERY_FAILURES = 3
 ```
 
-- [ ] **Step 3: 两个纯函数（agent-engine.ts 工具函数区，compressMessagesToBudget 之前）**
+- [x] **Step 3: 两个纯函数（agent-engine.ts 工具函数区，compressMessagesToBudget 之前）**
 
 ```ts
 /**
@@ -435,7 +435,7 @@ export function isRecoverableError(message: string): boolean {
 }
 ```
 
-- [ ] **Step 4: runAgentLoop 恢复阶梯状态 + 调用点改造**
+- [x] **Step 4: runAgentLoop 恢复阶梯状态 + 调用点改造**
 
 循环前（`let rounds = 0` 附近）追加：
 
@@ -496,7 +496,7 @@ generateFn 调用 + catch（:138-151）替换：
     }
 ```
 
-- [ ] **Step 5: agent-store.ts 传 options**
+- [x] **Step 5: agent-store.ts 传 options**
 
 `runAgentLoop` 调用（Task D6-2 已传 `undefined, agentDeps`）改 `undefined` 为：
 
@@ -506,7 +506,7 @@ generateFn 调用 + catch（:138-151）替换：
 
 > `llmStore` 引用方式以 agent-store.ts 既有用法为准（:686 已有 `llmStore.models.find(...)` 同款）。
 
-- [ ] **Step 6: 写失败测试（agent-engine.test.ts，D7-1 describe）**
+- [x] **Step 6: 写失败测试（agent-engine.test.ts，D7-1 describe）**
 
 ```ts
 describe('动态预算与恢复阶梯（D7-1）', () => {
@@ -591,12 +591,12 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
 
 > 辅助：`sumTokens = (msgs: LLMMessage[]) => msgs.reduce((s, m) => s + estimateTokens(m.content), 0)`（import 自 token-budget）；`createCallbacks` 若不存在于既有辅助则自建（onTextChunk/onToolCallStart/onToolCallComplete/onToolCallConfirmRequired/onDone/onError 全 vi.fn）。恢复阶梯测试需保证循环在 tool-less 回复处正常结束（'最终回复' 无 tool_call → onDone）。
 
-- [ ] **Step 7: 运行测试确认失败 → 实现 → 确认通过**
+- [x] **Step 7: 运行测试确认失败 → 实现 → 确认通过**
 
 Run: `pnpm vitest run src/services/agent/agent-engine.test.ts`
 Expected: 先 FAIL（computeMessageBudget/isRecoverableError 未导出、阶梯未实现）→ PASS
 
-- [ ] **Step 8: 全量回归 + 门禁 + 提交**
+- [x] **Step 8: 全量回归 + 门禁 + 提交**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -616,7 +616,7 @@ git commit -m "feat: 压缩预算按模型窗口动态化 + 可恢复错误 with
 **Interfaces:**
 - Consumes: D6-1/D6-2/D7-1 全部交付
 
-- [ ] **Step 1: 全量门禁**
+- [x] **Step 1: 全量门禁**
 
 ```bash
 pnpm run typecheck && pnpm run lint && pnpm run test
@@ -624,13 +624,13 @@ pnpm run typecheck && pnpm run lint && pnpm run test
 
 Expected: 零错误零警告，全量测试绿（现状 826 基线 + 新增）。
 
-- [ ] **Step 2: 补强检查（三选一，按实际情况）**
+- [x] **Step 2: 补强检查（三选一，按实际情况）**
 
 - 若 D6-2 的 512KB 超限回退路径未覆盖 → 补 1 条用例（content length > 524288 的假内容走 mock——用 `'x'.repeat(524_289)`）
 - 若 read_file 豁免无注释 → 在 agent-engine.ts shouldSpill 判定处补注释（计划代码已含，确认在）
 - 若「压缩确定性（不同预算前部一致）」未覆盖 → 补 1 条纯函数测试：`compressMessagesToBudget`（导出或经 computeMessageBudget 间接触发）同输入不同预算 → 前部保留集合一致
 
-- [ ] **Step 3: 提交（若有代码变更）**
+- [x] **Step 3: 提交（若有代码变更）**
 
 ```bash
 git add <变更文件>

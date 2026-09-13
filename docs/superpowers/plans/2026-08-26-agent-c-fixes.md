@@ -33,11 +33,11 @@
 
 **背景（已验证的链路）**：`DraftEditor.tsx:375` 与 `ArchFileViewer.tsx:104` 的 onChange → `updateTabContent(filePath, text)`（editor-store.ts:118）→ store 更新 → content prop → CodeMirrorEditor `useEffect`（:69-82）`content !== lastEmittedContentRef.current` 时 `setEditorContent(content)`。正常输入回路被 `lastEmittedContentRef` 阻断（handleUpdate:133 已同步），**怀疑点**：切换文件/外部刷新时 content prop 真变化 → ReactCodeMirror 受控 value 同步 dispatch 进入 undo 栈 → 用户 Ctrl+Z 先撤销"整文替换"而非自身编辑。
 
-- [ ] **Step 1: 阅读 ReactCodeMirror 的 value 同步实现**
+- [x] **Step 1: 阅读 ReactCodeMirror 的 value 同步实现**
 
   打开 `node_modules/@uiw/react-codemirror/esm/useCodeMirror.js`，定位 updateListener 中 value 同步逻辑（`docChanged && state.doc.toString() !== prevValue` 分支），确认其 dispatch 是否带 `addToHistory`。记录结论到任务注释。
 
-- [ ] **Step 2: 写验证测试（模拟外部 content 变化后的 undo 行为）**
+- [x] **Step 2: 写验证测试（模拟外部 content 变化后的 undo 行为）**
 
 ```tsx
 // src/components/editor/CodeMirrorEditor.test.tsx
@@ -76,12 +76,12 @@ describe('CodeMirrorEditor 撤销行为', () => {
   2. 打开草稿 → 输入 → 切到另一 Tab → 切回 → Ctrl+Z → 观察是否跳回旧内容（若跳回 → 根因确认）
   3. 打开架构文件（ArchFileViewer 路径）→ 编辑 → Ctrl+Z → 观察
 
-- [ ] **Step 3: 运行测试确认失败（或手动验证确认根因）**
+- [x] **Step 3: 运行测试确认失败（或手动验证确认根因）**
 
 Run: `pnpm run test:watch src/components/editor/CodeMirrorEditor.test.tsx`
 Expected: 撤销回到旧内容（根因成立）或测试通过（根因不在此——回到 systematic-debugging 重查，不硬套方案）。
 
-- [ ] **Step 4: 根因成立则实现修复——外部同步改为手动 dispatch（不进历史）**
+- [x] **Step 4: 根因成立则实现修复——外部同步改为手动 dispatch（不进历史）**
 
 在 `CodeMirrorEditor.tsx` 的 useEffect（:69-82）中，把 `setEditorContent(content)` 改为手动 dispatch：
 
@@ -115,16 +115,16 @@ useEffect(() => {
 
   关键点：`editorContent` state 保持不变 → ReactCodeMirror 的 value prop 不变 → 不会再次 dispatch；手动 dispatch 触发的 handleUpdate 会把 `lastEmittedContentRef` 同步为相同内容，回路防护自然成立。
 
-- [ ] **Step 5: 运行测试与既有编辑器相关测试**
+- [x] **Step 5: 运行测试与既有编辑器相关测试**
 
 Run: `pnpm run test src/components/editor/` + `pnpm run typecheck`
 Expected: 全部通过。
 
-- [ ] **Step 6: 手动回归（dev 环境按 Step 2 清单重复实验 1-3）**
+- [x] **Step 6: 手动回归（dev 环境按 Step 2 清单重复实验 1-3）**
 
 Expected: 撤销只影响用户自身编辑；切换文件后 Ctrl+Z 不再跳回旧内容。
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/components/editor/CodeMirrorEditor.tsx src/components/editor/CodeMirrorEditor.test.tsx
@@ -147,7 +147,7 @@ EOF
 
 **根因**：`:439` `hidden group-hover:flex` 删除按钮与 `:446` `group-hover:hidden` 时间文本做 display 切换，两者宽度不同（时间文本可变 vs 24px 按钮）→ hover 时布局跳动。
 
-- [ ] **Step 1: 写失败测试（断言右侧区域结构固定、无 display 切换）**
+- [x] **Step 1: 写失败测试（断言右侧区域结构固定、无 display 切换）**
 
 ```tsx
 // AgentConversation.test.tsx 追加
@@ -164,12 +164,12 @@ describe('RecentConversationItem hover 行为', () => {
 
   ⚠️ 注意：jsdom 不做 CSS 布局计算，`hidden` 类本身不隐藏元素——**必须断言类名/结构而非可见性**，否则测试假绿（当前实现也能通过"按钮存在"断言）。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentConversation.test.tsx`
 Expected: 断言 3 失败（当前实现无固定宽度容器）——证明测试能区分新旧实现。
 
-- [ ] **Step 3: 实现修复——右侧固定宽度容器 + 绝对定位 + opacity 过渡**
+- [x] **Step 3: 实现修复——右侧固定宽度容器 + 绝对定位 + opacity 过渡**
 
 替换 RecentConversationItem 的右侧区块（:432-451）：
 
@@ -198,16 +198,16 @@ Expected: 断言 3 失败（当前实现无固定宽度容器）——证明测�
 
   宽度 72px 依据：`formatRelativeTime` 最长形态（zh「N 天前」/日期「8月26日」@ 0.7rem ≈ 60px，en 更短），72px 留安全余量；两元素始终渲染（仅 opacity 变化），DOM 结构稳定。
 
-- [ ] **Step 4: 运行测试确认通过**
+- [x] **Step 4: 运行测试确认通过**
 
 Run: `pnpm run test src/components/panels/agent/AgentConversation.test.tsx`
 Expected: PASS。
 
-- [ ] **Step 5: 手动验证（dev 环境）**
+- [x] **Step 5: 手动验证（dev 环境）**
 
 Expected: 鼠标在历史列表项上来回移动，右侧时间淡出/删除按钮淡入，整行无位移跳动；历史面板与空状态两处均生效。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/panels/agent/AgentConversation.tsx src/components/panels/agent/AgentConversation.test.tsx
@@ -230,7 +230,7 @@ EOF
 
 **根因**：`markdown()` 扩展仅 `mode === 'document'` 添加（:306-308）；加粗按钮仅 document 显示（:597）；DraftEditor/EditorArea 均用 prose → 插入的 `**` 无高亮渲染。
 
-- [ ] **Step 1: 写失败测试（prose 模式有加粗按钮、点击后输出 `**包裹**`）**
+- [x] **Step 1: 写失败测试（prose 模式有加粗按钮、点击后输出 `**包裹**`）**
 
 ```tsx
 // CodeMirrorEditor.test.tsx 追加
@@ -247,12 +247,12 @@ describe('CodeMirrorEditor 加粗（prose 模式）', () => {
 
   若 jsdom 选区/按钮点击链路不可行，降级断言：prose 模式渲染后加粗按钮存在（`screen.getByTitle('Bold')` 或按 aria/title 定位），document 模式同样存在。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `pnpm run test:watch src/components/editor/CodeMirrorEditor.test.tsx`
 Expected: prose 模式找不到加粗按钮（FAIL）。
 
-- [ ] **Step 3: 实现修复（三处）**
+- [x] **Step 3: 实现修复（三处）**
 
 a) extensions 条件（:306）：
 
@@ -275,18 +275,18 @@ c) 加粗按钮条件（:597）：
 {(mode === 'document' || mode === 'prose') && (
 ```
 
-- [ ] **Step 4: 运行测试确认通过 + typecheck**
+- [x] **Step 4: 运行测试确认通过 + typecheck**
 
 Run: `pnpm run test src/components/editor/CodeMirrorEditor.test.tsx && pnpm run typecheck`
 Expected: PASS。
 
-- [ ] **Step 5: 手动验证（dev 环境）**
+- [x] **Step 5: 手动验证（dev 环境）**
 
 1. 打开草稿 → 选中文字 → 点加粗 → 文字以粗体视觉显示（`**` 标记存在但渲染为粗体）
 2. 中文正文/大文档滚动流畅、搜索面板正常
 3. 检查编辑 Tab 中文段落无异常高亮闪烁
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/editor/CodeMirrorEditor.tsx src/components/editor/CodeMirrorEditor.test.tsx
@@ -311,7 +311,7 @@ EOF
 
 **背景**：agent-engine.ts:205-206 拼 `_${t('agent.thinkingPrefix')}_\n> ${thinking}\n\n${cleanedOutput}`；thinkingContent 为空时不拼思考块。
 
-- [ ] **Step 1: 写失败测试（思考块折叠渲染 + ToolCallBlock 文件摘要）**
+- [x] **Step 1: 写失败测试（思考块折叠渲染 + ToolCallBlock 文件摘要）**
 
 ```tsx
 // src/components/panels/agent/AgentMessage.test.tsx
@@ -361,12 +361,12 @@ describe('ToolCallBlock 文件摘要', () => {
 })
 ```
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentMessage.test.tsx`
 Expected: FAIL（思考内容平铺可见；无文件摘要）。
 
-- [ ] **Step 3: 创建 ThinkingCollapse 组件**
+- [x] **Step 3: 创建 ThinkingCollapse 组件**
 
 ```tsx
 // src/components/panels/agent/ThinkingCollapse.tsx
@@ -403,7 +403,7 @@ export default function ThinkingCollapse({ thinking }: Props) {
 }
 ```
 
-- [ ] **Step 4: AgentMessage 拆思考块**
+- [x] **Step 4: AgentMessage 拆思考块**
 
 ```tsx
 // AgentMessage.tsx 内新增
@@ -431,7 +431,7 @@ function splitThinking(content: string): { thinking: string | null; rest: string
 ) : null}
 ```
 
-- [ ] **Step 5: ToolCallBlock 头部 📄 文件摘要**
+- [x] **Step 5: ToolCallBlock 头部 📄 文件摘要**
 
 ```tsx
 // ToolCallBlock.tsx 内新增辅助（t 取自组件内 useTranslation()，i18n 铁律：用户可见文本不走硬编码）
@@ -470,18 +470,18 @@ function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: T
 })()}
 ```
 
-- [ ] **Step 6: 运行测试确认通过 + typecheck + lint**
+- [x] **Step 6: 运行测试确认通过 + typecheck + lint**
 
 Run: `pnpm run test src/components/panels/agent/ && pnpm run typecheck && pnpm run lint`
 Expected: 全部通过。
 
-- [ ] **Step 7: 手动验证（dev 环境）**
+- [x] **Step 7: 手动验证（dev 环境）**
 
 1. 与 agent 对话触发一次带思考的回复（deep/max 模式）→ 思考默认折叠、点击展开
 2. 触发 read_file/read-drafts 工具 → 头部显示 📄/📖 摘要
 3. 旧归档会话（思考块已在 content 内）打开 → 折叠生效
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add src/components/panels/agent/ThinkingCollapse.tsx src/components/panels/agent/AgentMessage.tsx src/components/panels/agent/ToolCallBlock.tsx src/components/panels/agent/AgentMessage.test.tsx
@@ -506,7 +506,7 @@ EOF
 
 **背景**：EmptyState `slice(0, 3)` 硬编码（:52-54）；渲染层读配置模式参照 `useAutoSave.ts:31`（try/catch 静默降级）。
 
-- [ ] **Step 1: 写失败测试（mock config:get 返回值影响条数）**
+- [x] **Step 1: 写失败测试（mock config:get 返回值影响条数）**
 
 ```tsx
 // AgentConversation.test.tsx 追加
@@ -527,12 +527,12 @@ describe('EmptyState 历史条数配置', () => {
 
   注：需要 import `ipc`（`src/services/ipc-client`）并 mock；store 状态构造参照既有测试的 `useAgentStore.setState(...)` 模式。
 
-- [ ] **Step 2: 运行测试确认失败**
+- [x] **Step 2: 运行测试确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentConversation.test.tsx`
 Expected: FAIL（当前忽略 config，恒 3 条）。
 
-- [ ] **Step 3: 类型与默认值**
+- [x] **Step 3: 类型与默认值**
 
 `src/shared/ipc-channels.ts` GlobalConfig 追加：
 
@@ -547,7 +547,7 @@ recentConversationCount?: number
 recentConversationCount: 3,
 ```
 
-- [ ] **Step 4: EmptyState 读取配置**
+- [x] **Step 4: EmptyState 读取配置**
 
 ```tsx
 // EmptyState 内
@@ -575,18 +575,18 @@ const recentConvs = conversations
 
 「加载更多」显示条件（:102）`> 3` 改为 `> recentCount`。
 
-- [ ] **Step 5: 运行测试确认通过 + typecheck + lint**
+- [x] **Step 5: 运行测试确认通过 + typecheck + lint**
 
 Run: `pnpm run test src/components/panels/agent/AgentConversation.test.tsx && pnpm run typecheck && pnpm run lint`
 Expected: 全部通过。
 
-- [ ] **Step 6: 手动验证（dev 环境）**
+- [x] **Step 6: 手动验证（dev 环境）**
 
 1. 编辑 `~/.vela/config.json` 加 `"recentConversationCount": 5` → 空状态显示 5 条
 2. 删除该字段 → 恢复 3 条
 3. 无项目场景（打开应用无项目）→ 默认 3 条不报错
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add src/shared/ipc-channels.ts electron/utils/config-utils.ts src/components/panels/agent/AgentConversation.tsx src/components/panels/agent/AgentConversation.test.tsx

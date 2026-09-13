@@ -33,7 +33,7 @@
   - `export async function ensureChunksSchema(db: LanceDB): Promise<{ migrated: boolean; error?: string }>`（幂等自检：tableNames 含 chunks → openTable → schema fields 缺 chapterNumber → add_columns + 从 fileName 解析回填 → 返回 migrated；无缺列 → 不动作）
   - 调用点：`ensureChunksSchema` 在检索入口（纯文本/向量检索前）与启动时（kb 初始化）调用——检索不再抛 `No field named "chapterNumber"`
 
-- [ ] **Step 1: 写失败测试（回填纯函数）**
+- [x] **Step 1: 写失败测试（回填纯函数）**
 
 ⚠️ **审阅修正（前提错误）**：现有 `parseChapterMetaFromFileName`（knowledge-base.ts:292）正则为 `/^第(\d+)章\s+(.+?)\s+(正文|要点|蓝图)\.md$/`——匹配 `.md` 后缀 + 尾缀，**不匹配真实定稿导入文件名**（`第${chapterNumber}章 ${chapterTitle}.txt`，finalize-chapter.command.ts:131）。不可复用，需**新写**匹配真实格式的解析函数。
 
@@ -56,7 +56,7 @@ describe('存量回填章节号解析（真实定稿导入格式）', () => {
 })
 ```
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 ```ts
 // electron/vector-store.ts（独立函数，不依赖 knowledge-base 的旧解析器）
@@ -100,9 +100,9 @@ export async function ensureChunksSchema(db: LanceDB): Promise<{ migrated: boole
 
 （注：LanceDB add_columns/update API 签名以项目已用版本（v0.27）为准——实施时对照 vector-store.ts 既有用法；update 逐行可能慢（行数大），可改为分页批量或仅回填 NULL 章节（按需，实施时评估）
 
-- [ ] **Step 3: 接线检索入口**（纯文本/向量检索前 `await ensureChunksSchema(db)`——幂等，迁移过一次后零开销；kb 初始化/启动时也可预热一次）
+- [x] **Step 3: 接线检索入口**（纯文本/向量检索前 `await ensureChunksSchema(db)`——幂等，迁移过一次后零开销；kb 初始化/启动时也可预热一次）
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint` + 测试
 ```bash
@@ -125,7 +125,7 @@ git commit -m "fix: LanceDB 存量表 chapterNumber 迁移（add_columns + fileN
 **Interfaces:**
 - Produces: `llm_calls.cached_tokens` 列（INTEGER，默认 0）——CacheAligner 效果事后统计（设计 §6/P2 目的）
 
-- [ ] **Step 1: 写失败测试（node:sqlite 迁移幂等）**
+- [x] **Step 1: 写失败测试（node:sqlite 迁移幂等）**
 
 ```ts
 // electron/database.test.ts 追加（node:sqlite 内存 DB——项目唯一可行路径）
@@ -151,11 +151,11 @@ describe('v16 cached_tokens 迁移', () => {
 })
 ```
 
-- [ ] **Step 2: database.ts 迁移段**（v15 → v16：safeAddColumn 'llm_calls' 'cached_tokens' + **基础 CREATE TABLE llm_calls 同步加列**（全新库路径不跑 safeAddColumn）+ CURRENT_SCHEMA_VERSION 16——照 db-migration-standard 幂等/哨兵 checklist）
+- [x] **Step 2: database.ts 迁移段**（v15 → v16：safeAddColumn 'llm_calls' 'cached_tokens' + **基础 CREATE TABLE llm_calls 同步加列**（全新库路径不跑 safeAddColumn）+ CURRENT_SCHEMA_VERSION 16——照 db-migration-standard 幂等/哨兵 checklist）
 
-- [ ] **Step 3: repository + 三处写入端**（`LLMHistoryRepository.logCall` INSERT 列清单补 cached_tokens（llm-repository.ts:23）；ccr-summary.ts / chapter-memory.ts 成功落库 + agent-store.ts 成功/失败落库——`cached_tokens: usage?.cachedTokens ?? 0`）
+- [x] **Step 3: repository + 三处写入端**（`LLMHistoryRepository.logCall` INSERT 列清单补 cached_tokens（llm-repository.ts:23）；ccr-summary.ts / chapter-memory.ts 成功落库 + agent-store.ts 成功/失败落库——`cached_tokens: usage?.cachedTokens ?? 0`）
 
-- [ ] **Step 4: 门禁 + 提交**
+- [x] **Step 4: 门禁 + 提交**
 
 ```bash
 git add electron/database.ts electron/database.test.ts src/services/agent/ccr-summary.ts src/services/memory/chapter-memory.ts src/stores/agent-store.ts
@@ -178,7 +178,7 @@ git commit -m "feat: v14 cached_tokens 列迁移（llm_calls + 三处写入端�
   - `export async function rebuildBookState(): Promise<{ success: boolean; file: string | null; reason?: string }>`（扫描 volume-NNN.md（非 stale）→ 聚合 → memory:write book-state.md；无分卷 → 直接聚合最新 chapters 文件）
   - 触发：**按非 stale volume-NNN.md 数量计数**（每满 3 卷触发一次——低频；⚠️ 审阅修正：卷号是用户自定可跳号，`卷号 % 3` 与「每 3-5 分卷」语义脱节，改计数）；查看器手动重建按钮（P1 仅标 stale → 改为真实重建）
 
-- [ ] **Step 1: 写失败测试（聚合纯函数）**
+- [x] **Step 1: 写失败测试（聚合纯函数）**
 
 ```ts
 // src/services/memory/book-memory.test.ts
@@ -203,9 +203,9 @@ describe('buildBookSummaryFile', () => {
 })
 ```
 
-- [ ] **Step 2: 实现 + 触发接线**（rebuildBookState + 卷聚合后每 3 卷触发 + 查看器重建按钮改真实重建）
+- [x] **Step 2: 实现 + 触发接线**（rebuildBookState + 卷聚合后每 3 卷触发 + 查看器重建按钮改真实重建）
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 git add src/services/memory/book-memory.ts src/services/memory/book-memory.test.ts src/components/panels/sidebar/MemoryGroup.tsx
@@ -223,11 +223,11 @@ git commit -m "feat: book-state 全书摘要（每 3 卷检查点聚合 + 手动
 **Interfaces:**
 - Produces: `ensureVolumeSummary` 对进行中卷（chapterEnd === 0）：聚合区间 = chapterStart..**已有条目的最大章节号**（⚠️ 审阅修正：文件 range 的 end 是窗口上界（如 16-30）非实际定稿最大章——取 range 最大 end 会让未定稿窗口的完整性检查永远失败；正确上界 = 跨 chapters 文件解析条目后的最大 chapterNumber）；沿用 stale 过滤 + 完整性检查（区间内条目齐全才写）
 
-- [ ] **Step 1: 写失败测试**（进行中卷 16 起、已定稿至 25（26-30 未定稿）→ 聚合 16-25 条目 → volume-002.md 生成——**若按 range 上界 30 则完整性失败，测试即暴露**）
+- [x] **Step 1: 写失败测试**（进行中卷 16 起、已定稿至 25（26-30 未定稿）→ 聚合 16-25 条目 → volume-002.md 生成——**若按 range 上界 30 则完整性失败，测试即暴露**）
 
-- [ ] **Step 2: 实现**（进行中卷分支：先扫描收集条目（P1 F6 跨窗口逻辑），上界 = 条目最大 chapterNumber；完整性检查同 P1）
+- [x] **Step 2: 实现**（进行中卷分支：先扫描收集条目（P1 F6 跨窗口逻辑），上界 = 条目最大 chapterNumber；完整性检查同 P1）
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 git add src/services/memory/chapter-memory.ts src/services/memory/chapter-memory.test.ts
@@ -246,11 +246,11 @@ git commit -m "feat: 进行中卷卷级聚合（区间 = 卷起始..当前最大
 - Consumes: `memory:write`（safeFile 校验已有）、`memory:read`
 - Produces: 编辑模式交互——查看区「编辑」按钮 → textarea（pre-wrap）→「保存」（memory:write + 清除 frontmatter status——同 upsert 语义）+ 失败 toast；「取消」还原
 
-- [ ] **Step 1: 交互实现**（编辑/保存/取消三态 + i18n 3 key：memory.edit/save/cancel 三语）
+- [x] **Step 1: 交互实现**（编辑/保存/取消三态 + i18n 3 key：memory.edit/save/cancel 三语）
 
 ⚠️ **审阅修正（结构校验）**：保存前校验内容可解析出章节块（`## 第 N 章` 至少 1 块或 frontmatter 完整）——坏格式文件会让 ensureVolumeSummary 的块解析静默失败。校验不过 → toast 阻止保存（`memory.invalidFormat` 新 key 三语：zh `记忆文件格式无效（缺少章节块）` / en `Invalid memory file format (missing chapter blocks)` / ru `Недопустимый формат файла памяти (нет блоков глав)`）
 
-- [ ] **Step 2: 门禁 + 提交**
+- [x] **Step 2: 门禁 + 提交**
 
 ```bash
 git add src/components/panels/sidebar/MemoryGroup.tsx src/stores/memory-store.ts src/shared/locale-data.ts
@@ -273,11 +273,11 @@ git commit -m "feat: 记忆手动编辑（查看器编辑模式 + 保存清除 s
 - Produces:
   - `'db:usage-stats': { args: [{ from: number; to: number }]; return: { byPurpose: { purpose: string; calls: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number }[]; byModel: { model: string; calls: number; cost: number }[]; total: { calls: number; cost: number } } }`
 
-- [ ] **Step 1: 主进程聚合查询**（db-controller 新通道：GROUP BY purpose/model + SUM；时间区间过滤）
+- [x] **Step 1: 主进程聚合查询**（db-controller 新通道：GROUP BY purpose/model + SUM；时间区间过滤）
 
-- [ ] **Step 2: UI 面板**（purpose 维度表 + 模型维度 + 合计；参照 ModelsView 样式；入口：设置→模型/用量）
+- [x] **Step 2: UI 面板**（purpose 维度表 + 模型维度 + 合计；参照 ModelsView 样式；入口：设置→模型/用量）
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 git add electron/controllers/db-controller.ts src/shared/ipc-channels.ts src/components/settings/UsageStatsView.tsx src/shared/locale-data.ts

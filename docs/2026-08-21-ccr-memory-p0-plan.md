@@ -37,7 +37,7 @@
   - `export function serializeArchive(conv: AgentConversation): string`
   - `export function parseArchive(raw: string): AgentConversation | null`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // src/services/agent/archive-codec.test.ts
@@ -106,12 +106,12 @@ describe('archive 序列化', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/agent/archive-codec.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 ```ts
 // src/services/agent/archive-codec.ts
@@ -173,12 +173,12 @@ export function parseArchive(raw: string): AgentConversation | null {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run src/services/agent/archive-codec.test.ts`
 Expected: PASS（6 条）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/services/agent/archive-codec.ts src/services/agent/archive-codec.test.ts
@@ -201,7 +201,7 @@ git commit -m "feat: CCR archive 编解码与压缩批次选择纯函数"
   - `'fs:agent-archive-write': { args: [id: string, content: string]; return: { success: boolean } }`
   - `'fs:agent-archive-delete': { args: [id: string]; return: { success: boolean } }`
 
-- [ ] **Step 1: 类型定义（先写契约）**
+- [x] **Step 1: 类型定义（先写契约）**
 
 在 `src/shared/ipc-channels.ts` 的 InvokeChannels 中、现有 `'fs:write-json'` 通道之后追加：
 
@@ -224,7 +224,7 @@ git commit -m "feat: CCR archive 编解码与压缩批次选择纯函数"
   },
 ```
 
-- [ ] **Step 2: 主进程实现**
+- [x] **Step 2: 主进程实现**
 
 在 `electron/controllers/fs-controller.ts` 顶部 import 区补 `import path from 'path'`（若已存在则跳过），`registerFSController()` 内、现有 handler 之后追加：
 
@@ -291,12 +291,12 @@ git commit -m "feat: CCR archive 编解码与压缩批次选择纯函数"
   })
 ```
 
-- [ ] **Step 3: 验证类型与门禁**
+- [x] **Step 3: 验证类型与门禁**
 
 Run: `pnpm run typecheck && pnpm run lint`
 Expected: 零错误零警告（preload 白名单 `'fs:'` 前缀已覆盖新通道，无需改 preload）
 
-- [ ] **Step 4: 提交**
+- [x] **Step 4: 提交**
 
 ```bash
 git add electron/controllers/fs-controller.ts src/shared/ipc-channels.ts
@@ -317,7 +317,7 @@ git commit -m "feat: agent-archive 主进程通道（list/read/write/delete，~/
   - `export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): string`
   - `export async function generateConversationSummary(opts: { oldSummary: string; batch: AgentMessage[]; modelId: string }): Promise<string>`
 
-- [ ] **Step 1: 写失败测试（prompt 组装 + 落库参数）**
+- [x] **Step 1: 写失败测试（prompt 组装 + 落库参数）**
 
 ```ts
 // src/services/agent/ccr-summary.test.ts
@@ -341,12 +341,12 @@ describe('buildCcrSummaryPrompt', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/agent/ccr-summary.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 最小实现**
+- [x] **Step 3: 最小实现**
 
 ```ts
 // src/services/agent/ccr-summary.ts
@@ -406,12 +406,12 @@ export async function generateConversationSummary(opts: {
 }
 ```
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run src/services/agent/ccr-summary.test.ts`
 Expected: PASS（2 条）
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/services/agent/ccr-summary.ts src/services/agent/ccr-summary.test.ts
@@ -433,7 +433,7 @@ git commit -m "feat: CCR 对话摘要生成（budget 路由 + purpose ccr_summar
   - `AgentState.restoreArchives: () => Promise<void>`（启动调用）
   - `AgentState.persistCurrent: () => Promise<void>`（内部，防抖 500ms）
 
-- [ ] **Step 1: 写失败测试（jsdom store 行为）**
+- [x] **Step 1: 写失败测试（jsdom store 行为）**
 
 ```ts
 // src/stores/agent-store.test.ts
@@ -505,12 +505,12 @@ describe('agent-store 持久化', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/stores/agent-store.test.ts`
 Expected: FAIL（restoreArchives 不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 在 `src/stores/agent-store.ts`：
 
@@ -639,12 +639,12 @@ useAgentStore.getState().restoreArchives().catch(() => {})
 ```
 （main.tsx 需 import `useAgentStore`；已在 `main.tsx` 顶部 import 区追加）
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run src/stores/agent-store.test.ts`
 Expected: PASS（4 条）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`
 Expected: 零错误零警告
@@ -666,7 +666,7 @@ git commit -m "feat: Agent 会话持久化（archive 快照/恢复/删除同步 
 - Consumes: Task 1 `selectCompressionBatch`、Task 3 `generateConversationSummary`、Task 4 `compressed`/`rollingSummary` 字段
 - Produces: 压缩流程行为——超 `HISTORY_MAX_TOKENS` 时：最旧批移入 `compressed`（保留 2-3 代）、`rollingSummary` 增量覆盖、`messages` 只剩 rest；失败降级硬截断
 
-- [ ] **Step 1: 写失败测试（压缩触发与降级）**
+- [x] **Step 1: 写失败测试（压缩触发与降级）**
 
 在 `agent-store.test.ts` 追加（`describe('CCR 压缩集成')`，mock `useLLMStore.generate` 返回固定摘要；构造超预算会话后调用 `sendMessage`，断言 store 状态）：
 
@@ -719,12 +719,12 @@ describe('CCR 压缩集成', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/stores/agent-store.test.ts`
 Expected: 新用例 FAIL（rollingSummary 未更新）
 
-- [ ] **Step 3: 实现——替换 `agent-store.ts:456-469` 历史消息构造**
+- [x] **Step 3: 实现——替换 `agent-store.ts:456-469` 历史消息构造**
 
 将原「构造历史消息（Token 感知窗口：最多 4000 tokens）」块替换为：
 
@@ -791,12 +791,12 @@ Expected: 新用例 FAIL（rollingSummary 未更新）
 
 （`HISTORY_MAX_TOKENS` 常量上移到压缩块可见处；`CompressedBatch` 类型已由 Task 4 import）
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run src/stores/agent-store.test.ts`
 Expected: 全部 PASS（含新增 2 条）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`
 
@@ -819,7 +819,7 @@ git commit -m "feat: CCR 压缩集成 — 超预算滚动摘要 + 2-3 代原文�
   - `export function buildAgentSystemSegments(mode: AgentMode): { base: string; memory: string }`
   - `buildAgentSystemPrompt(mode)` 签名不变（内部 = base + memory + 语言指令，语言指令保持最末尾）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 在 `context-builder.test.ts` 追加：
 
@@ -859,12 +859,12 @@ describe('buildAgentSystemSegments M1 会话摘要', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/agent/context-builder.test.ts`
 Expected: FAIL（buildAgentSystemSegments 不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 重构 `context-builder.ts`：将 `buildAgentSystemPrompt` 拆为 `buildAgentSystemSegments`（返回 base/memory 两段），原函数拼接两段 + 语言指令：
 
@@ -940,12 +940,12 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
 
 （原函数内从「身份」到「Tool」的构建逻辑原样保留，仅改返回值结构；`useAgentStore` 加入顶部 import）
 
-- [ ] **Step 4: 运行确认通过**
+- [x] **Step 4: 运行确认通过**
 
 Run: `npx vitest run src/services/agent/context-builder.test.ts`
 Expected: PASS（原 1 条 + 新增 4 条）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`
 
@@ -971,7 +971,7 @@ git commit -m "feat: context-builder M1 会话摘要节注入（segments 拆分 
   - `export interface ContextUsage { base: number; memory: number; history: number; current: number; modelMax: number; total: number }`
   - `export function computeContextUsage(opts: { base: string; memory: string; historyMessages: LLMMessage[]; currentContent: string; modelMax: number }): ContextUsage`
 
-- [ ] **Step 1: 写失败测试（分段计算纯函数）**
+- [x] **Step 1: 写失败测试（分段计算纯函数）**
 
 ```ts
 // src/services/agent/context-usage.test.ts
@@ -996,12 +996,12 @@ describe('computeContextUsage', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/agent/context-usage.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // src/services/agent/context-usage.ts
@@ -1040,7 +1040,7 @@ export function computeContextUsage(opts: {
 }
 ```
 
-- [ ] **Step 4: 组件实现**
+- [x] **Step 4: 组件实现**
 
 `CompressedBatchCard.tsx`（压缩事件卡片——CCR 可解释性出口）：
 
@@ -1167,12 +1167,12 @@ d) 底部预算条——`AgentConversation.tsx:206` 底部工具栏 div 上方�
 
 （组件顶部计算 `contextUsage`：`const systemSegments = buildAgentSystemSegments(activeConv.mode)`；`modelMax` 取 `provider-presets` 当前会话模型 maxTokens（`useLLMStore.getState().models.find(m => m.id === modelId)?.maxTokens ?? 131072`）；history 段用当前 messages 估算；current 用输入框内容。import 对应组件与函数）
 
-- [ ] **Step 5: 运行确认通过**
+- [x] **Step 5: 运行确认通过**
 
 Run: `npx vitest run src/services/agent/context-usage.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: 门禁 + 提交**
+- [x] **Step 6: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`
 
@@ -1191,7 +1191,7 @@ git commit -m "feat: 压缩事件卡片 + 上下文预算条（CCR 可解释性�
 **Interfaces:**
 - Consumes: 前 7 任务所有 t() 引用（`ccr.*` key 共 14 个）
 
-- [ ] **Step 1: 新增 i18n key（三语）**
+- [x] **Step 1: 新增 i18n key（三语）**
 
 在 locale 数据中新增 `ccr` 命名空间（zh-CN / en-US / ru-RU 三语各一份）：
 
@@ -1222,11 +1222,11 @@ ccr.restoreProjectHint      zh: 此会话基于项目「{name}」，当前打开
 
 （locale 数据结构以现有 `locale-data.ts` 的嵌套对象/前缀风格为准，`t()` 调用方已统一为 `ccr.xxx` 路径）
 
-- [ ] **Step 2: 残留扫描（i18n-standard 五步法）**
+- [x] **Step 2: 残留扫描（i18n-standard 五步法）**
 
 Run: `pnpm run gen:tokens`（token 报告）或手工 grep 确认 `ccr.` 引用全部有定义、无中文硬编码残留于新组件
 
-- [ ] **Step 3: 全量质量门禁**
+- [x] **Step 3: 全量质量门禁**
 
 Run:
 ```bash
@@ -1236,7 +1236,7 @@ pnpm run test
 ```
 Expected: tsc 零错误 / eslint 零警告 / **全部测试通过（含新增 ~14 条）**
 
-- [ ] **Step 4: 冒烟验证**
+- [x] **Step 4: 冒烟验证**
 
 Run: `pnpm run dev`
 手动验证（对照设计 §10 P0 验收）：
@@ -1246,7 +1246,7 @@ Run: `pnpm run dev`
 4. 删除会话 → `~/.vela/agent-archive/` 对应文件消失
 5. `~/.vela/agent-archive/` 文件为 UTF-8 合法 JSON
 
-- [ ] **Step 5: 提交**
+- [x] **Step 5: 提交**
 
 ```bash
 git add src/shared/locale-data.ts

@@ -2,6 +2,10 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: 参照 `.claude/skills/novelforge-release.md`（三版本制 + 发版 checklist）；执行方式按 Superpowers SDD 或 Inline（改动面小，可 Inline）。
 
+> **执行状态（2026-09-13 审计）：✅ 已完成（v0.1.6 于 2026-08-29 正式发布，tag `v0.1.6`，4 资产齐）。**
+> ⚠️ 唯一无留痕项：**Task R5 的 12 条 dev 冒烟清单是纯人工验证，仓库内无执行证据**（其中 4 条计划自标「Cannot-verify 补项」）。
+> 该清单的真机版本已由 `docs/2026-09-13-real-machine-test-plan.md` 承接（E 组覆盖其 9–12 项等）。
+
 **Goal:** 将 2026-08-26~29 的 Agent 对话升级全链（Agent 循环加固 / .novelforge 目录改名 / 意图预路由 + fork-rewind 分支 / D6-D7 压缩优化）发布为 **v0.1.6 正式版**（0.1.5 → 0.1.6：patch bump——用户裁决 2026-08-29；功能群照实记录但版本语义为补丁级，符合 SemVer）。
 
 **Architecture:** ① CHANGELOG 三大功能群条目 ② README 功能表/架构更新 ③ 版本 5 文件 ④ 完整构建 ⑤ dev 冒烟清单（本次功能实操验证）⑥ 发布（tag + Release 双语 Notes）。

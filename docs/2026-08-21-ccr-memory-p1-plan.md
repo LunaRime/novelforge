@@ -48,7 +48,7 @@
   - `export function buildChapterSummaryFile(range: string, entries: ChapterSummaryEntry[]): string`（frontmatter + 正文组装）
   - `export interface ChapterSummaryEntry { chapterNumber: number; title: string; keyEvents: string; characters: string; foreshadowing: string; newElements: string; currentState: string }`
 
-- [ ] **Step 1: 写失败测试（编解码纯函数）**
+- [x] **Step 1: 写失败测试（编解码纯函数）**
 
 ```ts
 // src/services/memory/memory-codec.test.ts
@@ -101,12 +101,12 @@ describe('buildChapterSummaryFile', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/memory/memory-codec.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现 memory-codec.ts**
+- [x] **Step 3: 实现 memory-codec.ts**
 
 ⚠️ **位置定案（审阅修正）**：纯函数唯一源放 **`electron/utils/memory-codec.ts`**（主进程 memory-controller 直接 import）；`src/services/memory/memory-codec.ts` 仅 re-export：`export * from '../../../electron/utils/memory-codec'`（渲染层经 re-export 消费；纯函数无 electron 依赖，Vite 打包安全）。**测试文件放 `src/services/memory/memory-codec.test.ts`**（import 经 src re-export，验证 re-export 链路完整）。
 
@@ -181,7 +181,7 @@ export function buildChapterSummaryFile(range: string, entries: ChapterSummaryEn
 }
 ```
 
-- [ ] **Step 4: 实现主进程 memory-controller**
+- [x] **Step 4: 实现主进程 memory-controller**
 
 ```ts
 // electron/controllers/memory-controller.ts
@@ -261,7 +261,7 @@ export function registerMemoryController() {
 
 （注意：`memory-codec` 为纯函数——按项目惯例放 `src/services/` 主进程可直接 import；若遇 CJS/ESM 边界问题，复制到 `electron/utils/memory-codec.ts` 并在 src 侧 re-export，二选一保持一致。ipc-channels.ts 追加 5 通道类型；preload 白名单前缀 `memory:` 需新增（CLAUDE.md 要求），`electron/preload.ts` 的 `ALLOWED_INVOKE_CHANNELS` 数组加 `'memory:'`）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`（零错误零警告）+ `npx vitest run src/services/memory/memory-codec.test.ts`
 ```bash
@@ -288,7 +288,7 @@ git commit -m "feat: 作品记忆文件通道（memory:* 5 通道 + frontmatter 
   - `export function buildVolumeSummaryFile(volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number }, chapterEntries: ChapterSummaryEntry[]): string`（卷级聚合——纯函数组装章节条目，无需额外 LLM 调用）
   - `export async function ensureVolumeSummary(volume: { volumeNumber: number; title: string; chapterStart: number; chapterEnd: number }, chapterFile: string): Promise<{ file: string | null; success: boolean }>`（章节文件写入后调用：若卷内章节全部有条目（章节号连续覆盖卷范围）→ 从章节文件解析条目聚合生成 `volume-{n}.md`；否则跳过——**分卷定稿触发条件 = 卷内章节全部定稿（设计留确认项，按建议定案）**）
 
-- [ ] **Step 1: 写失败测试（纯函数部分）**
+- [x] **Step 1: 写失败测试（纯函数部分）**
 
 ```ts
 // src/services/memory/chapter-memory.test.ts
@@ -334,12 +334,12 @@ describe('buildChapterSummaryPrompt', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/memory/chapter-memory.test.ts`
 Expected: FAIL（模块不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // src/services/memory/chapter-memory.ts
@@ -464,7 +464,7 @@ export async function upsertChapterMemory(entry: ChapterSummaryEntry, file: stri
 
 （`parseMemoryFile` 从 Task 1 import；六字段解析的 LLM 输出格式约束写在 `memory.summaryPrompt` i18n 文案中——zh 模板要求「逐行输出 关键事件：/ 出场角色：/ 伏笔：/ 新设定：/ 当前状态：」）
 
-- [ ] **Step 3.5: 卷级聚合实现（Task 2 内追加——分卷定稿触发条件 = 卷内章节全部定稿）**
+- [x] **Step 3.5: 卷级聚合实现（Task 2 内追加——分卷定稿触发条件 = 卷内章节全部定稿）**
 
 ```ts
 /** 卷级摘要文件：纯函数组装（卷头 + 卷内章节条目），不额外 LLM */
@@ -517,7 +517,7 @@ export async function ensureVolumeSummary(
 
 （在 `upsertChapterMemory` 成功后调用：`const vol = volumes.find(v => v.volumeNumber === entry.chapterNumber 所在卷)；if (vol) await ensureVolumeSummary(vol, file)`——挂在 DAG 步骤 executor 内，非关键容错）
 
-- [ ] **Step 4: DAG 步骤接入（finalize-chapter.command.ts）**
+- [x] **Step 4: DAG 步骤接入（finalize-chapter.command.ts）**
 
 在 `buildFinalizePostProcessSteps` 的 content_audit 步骤之后追加（非关键，dependsOn kb_import，try/catch 容错）：
 
@@ -550,7 +550,7 @@ export async function ensureVolumeSummary(
 
 （`db:volume-get-all` 已确认（ipc-channels.ts:461）；`useLLMStore` 按需 import。**重定稿一次完成语义**：upsert 写回已清除 frontmatter status（stale 闭环）——文件已有本章条目时覆盖生成即恢复非 stale，无需在 DAG 内先标 stale 再生成；Task 3 不挂重定稿分支）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `npx vitest run src/services/memory/` + `pnpm run typecheck && pnpm run lint`
 ```bash
@@ -573,7 +573,7 @@ git commit -m "feat: 章节记忆摘要生成（定稿 DAG 新步骤 + 分卷边
   - `export function affectedFiles(chapterNumber: number, volumes: { volumeNumber: number; chapterStart: number; chapterEnd: number }[]): { file: string; reason: 'finalize' | 'chapter-add' | 'volume-change' }[]`（返回受影响区间文件——当前章所在文件 + 卷边界变更涉及的相邻文件）
   - `export async function invalidateMemoryFiles(files: string[]): Promise<number>`（逐文件 read → markStale → write，返回成功数）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // src/services/memory/memory-invalidation.test.ts
@@ -603,12 +603,12 @@ describe('affectedFiles（失效区间）', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/memory/memory-invalidation.test.ts`
 Expected: FAIL
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // src/services/memory/memory-invalidation.ts
@@ -649,7 +649,7 @@ export async function invalidateMemoryFiles(files: string[]): Promise<number> {
 }
 ```
 
-- [ ] **Step 4: VolumeDialog 钩子接入（卷成员变更 → 失效标记）**
+- [x] **Step 4: VolumeDialog 钩子接入（卷成员变更 → 失效标记）**
 
 `src/components/dialogs/VolumeDialog.tsx`（或实际卷编辑组件——以 `db:volume-upsert`/`db:volume-delete` 调用点为锚）在 upsert/delete 成功后调用：
 ```ts
@@ -663,7 +663,7 @@ try {
 ```
 （重定稿分支不再单独挂——upsert 覆盖即清 stale，见 Global Constraints）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `npx vitest run src/services/memory/` + 门禁
 ```bash
@@ -683,7 +683,7 @@ git commit -m "feat: 记忆文件失效规则（重定稿/边界变更 → stale
 - Consumes: Task 1 `memory:list`/`memory:read` 通道、Task 2 `computeMemoryFileRange`（节选定位）
 - Produces: `buildAgentSystemSegments` memory 段扩展——`{ base, memory }` 的 memory 现为 M1 + M2 两节（M2 预算 800，节选 book-state 精要 + 当前分卷 + 最近章节；**同步读盘，失败降级只注入 M1**）
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 `context-builder.test.ts` **文件顶部加 `// @vitest-environment jsdom`**（现有 5 条用例不依赖 window，jsdom 下兼容；新用例需要 window.velaAPI mock——P0 agent-store.test.ts 先例）。在文件内追加：
 
@@ -717,12 +717,12 @@ describe('M2 作品记忆节（P1）', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `npx vitest run src/services/agent/context-builder.test.ts`
 Expected: 新用例 FAIL（buildAgentSystemSegmentsAsync 不存在）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 **定稿方案（消除 async/sync 摇摆）**：`buildAgentSystemSegments` 保持同步（仅 M1——向后兼容现有测试与调用方）；新增 `buildAgentSystemSegmentsAsync`（同步版 + 异步读盘 M2，失败降级仅 M1）；新增 `buildAgentSystemPromptAsync`（async 版最终拼装 + 语言指令）；`buildAgentSystemPrompt` 保持同步（M1 only）；**sendMessage（agent-store.ts:421）改用 `await buildAgentSystemPromptAsync(currentConv.mode)`**：
 
@@ -770,7 +770,7 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ 
 
 （`ipc`/`parseMemoryFile` 加入 import；`buildAgentSystemPrompt` 保持同步调用 buildAgentSystemSegments；**sendMessage（agent-store.ts:421）切到 `await buildAgentSystemSegmentsAsync`**——同步→异步改造点仅此一处，调用方 await 即可）
 
-- [ ] **Step 4: sendMessage 切异步版 + 门禁**
+- [x] **Step 4: sendMessage 切异步版 + 门禁**
 
 agent-store.ts 的 `let systemPrompt = buildAgentSystemPrompt(currentConv.mode)` 改 `let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode)`（该构造点在 async sendMessage 内，直接 await；同步版 buildAgentSystemPrompt 保留给既有测试/其他调用方——全仓 grep 确认无其他调用方后可选删，P1 保守保留）。
 
@@ -795,7 +795,7 @@ git commit -m "feat: M2 作品记忆注入（async segments + 节选 800 tokens 
   - `export const useMemoryStore = create<MemoryState>()(...)`——`{ files: MemoryFileMeta[]; loading: boolean; load(): Promise<void>; refresh(): Promise<void> }`
   - `MemoryGroup` 组件：文件列表（kind 徽标 + stale 徽标「待重建」）+ 内容查看（memory:read 只读）+ 手动重建按钮（分卷/全书：调用生成逻辑；章节级：标记 stale 提示走定稿重建）
 
-- [ ] **Step 1: memory-store（状态 + load/refresh）**
+- [x] **Step 1: memory-store（状态 + load/refresh）**
 
 ```ts
 // src/stores/memory-store.ts
@@ -832,7 +832,7 @@ export const useMemoryStore = create<MemoryState>()((set) => ({
 }))
 ```
 
-- [ ] **Step 2: MemoryGroup 组件**
+- [x] **Step 2: MemoryGroup 组件**
 
 仿 VolumeGroup 结构（自绘 section：标题行「AI 记忆」+ 刷新按钮 + 折叠；列表行：文件类型徽标（章节/分卷/全书）+ 文件名/范围 + stale 徽标 + 查看展开 + 重建按钮）。**必须实现的交互清单**（实现前先读 `src/components/panels/sidebar/VolumeGroup.tsx` 参照同构结构）：① 挂载时 load + 折叠状态 useState（默认展开）② 每行点击切换查看（memory:read 内容 pre-wrap 只读区，max-h 滚动）③ 刷新按钮 re-load ④ stale 徽标（`memory.stale`）⑤ 重建按钮：`memory:mark-stale` 标记后 toast（`memory.rebuildHint`）——章节级重建走下次定稿 DAG，分卷/全书同规则（P1 简化）⑥ 空态（`memory.empty`）⑦ 全部文案 t()：
 
@@ -870,16 +870,16 @@ export default function MemoryGroup() {
 
 （完整 JSX 按 VolumeGroup/PublicationGroup 同构实现——Self-drawn section：muted 操作按钮 + 折叠按钮最后 + hover 行；i18n key 见 Task 6）
 
-- [ ] **Step 3: ProjectTree 挂载**（`src/components/panels/sidebar/ProjectTree.tsx`——在 PublicationGroup 附近追加 `<MemoryGroup />`，import 加入）
+- [x] **Step 3: ProjectTree 挂载**（`src/components/panels/sidebar/ProjectTree.tsx`——在 PublicationGroup 附近追加 `<MemoryGroup />`，import 加入）
 
-- [ ] **Step 4: 手动重建（审阅修正——真实重建，非仅标 stale）**
+- [x] **Step 4: 手动重建（审阅修正——真实重建，非仅标 stale）**
 
 - **卷级重建**（`volume-NNN.md` 行）：直接复用聚合逻辑——从对应章节文件（`computeMemoryFileRange` 定位卷起始窗口）解析条目 → `buildVolumeSummaryFile` 组装 → `memory:write` 覆盖（**分卷重建是纯函数聚合，无 LLM 成本**，即时完成；进行中卷 → 提示 `memory.rebuildHint` 不可重建）
 - **章节级重建**（`chapters-*.md` 行）：标记 stale + toast（`memory.rebuildHint`）——章节条目来自定稿 LLM 提取，重建走下次定稿 DAG（重定稿即恢复非 stale）
 - **全书重建**（`book-state.md`）：P1 无自动生成链路——仅标 stale + 提示（P2）
 - 重建完成后 `refresh()` 刷新列表（stale 徽标消失）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 Run: `pnpm run typecheck && pnpm run lint`（jsdom 组件测试可省——项目 UI 组件测试惯例少）
 ```bash
@@ -897,7 +897,7 @@ git commit -m "feat: 记忆查看器（侧栏 AI 记忆组 + 只读查看 + stal
 **Interfaces:**
 - Consumes: 前 5 任务所有 t() 引用（memory.* + workflow.chapterMemory + log.finalize.memoryDone/memoryFailed）
 
-- [ ] **Step 1: 新增 i18n key（三语）**
+- [x] **Step 1: 新增 i18n key（三语）**
 
 ```
 ⚠️ **审阅修正（解析锚点不翻译）**：`memory.summaryPrompt` 是 LLM 输入侧模板，其字段标签（关键事件/出场角色/伏笔/新设定/当前状态）是 `generateChapterSummary` 的**解析锚点**——三语界面共用同一份 **zh 模板**（模型按 zh 标签输出、parser 按 zh 锚点解析，任何界面语言下自洽；i18n-standard「解析依赖中文键不可翻译」先例，与 P0 `ccr.summaryPrompt` 的做法一致——P0 该 key 已按三语翻译但压缩摘要无字段解析需求，此处字段解析场景必须锚点固定）。`memory.draftLabel` 等 UI 文案照常三语。
@@ -921,14 +921,14 @@ log.finalize.memoryFailed zh: ⚠️ 章节记忆生成失败 / en: ⚠️ Chapt
 
 （18 个 key 三语；`memory.summaryPrompt` 的字段标签「关键事件/出场角色/伏笔/新设定/当前状态」与 Task 2 的解析字段**必须一致**——zh 为解析锚点，en/ru 界面下字段标签随 locale 需同步解析（parseMemoryFile 侧按 locale 选标签），P1 首版以 zh 为解析锚点并文档化（同 i18n-standard「解析依赖中文键不可翻译」先例））
 
-- [ ] **Step 2: 残留扫描 + 全量门禁**
+- [x] **Step 2: 残留扫描 + 全量门禁**
 
 Run: `pnpm run typecheck` / `pnpm run lint` / `pnpm run test`（全量 **559/559 全过**——activity-repository 已随 better-sqlite3 ABI 恢复修复（2026-08-21 rebuild 后实测通过），**无豁免**）+ grep 核对 memory.* 引用无缺失
 Expected: 零错误零警告 + **全量全过**
 
 （非 zh 界面解析验证：`memory.summaryPrompt` 三语共用 zh 模板——模型按 zh 标签输出，parser 按 zh 锚点解析，任何界面语言自洽；如未来需验证可加 locale 切换用例，P1 以锚点固定为设计）
 
-- [ ] **Step 3: 提交**
+- [x] **Step 3: 提交**
 
 ```bash
 git add src/shared/locale-data.ts

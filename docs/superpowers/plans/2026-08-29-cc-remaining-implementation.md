@@ -2,6 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development（每档独立窗口，档 1 可并行/连续执行）。Steps use checkbox（`- [ ]`）syntax for tracking。
 
+> **执行状态（2026-09-13 审计）：⚠️ 部分完成。**
+> 档 1（C1–C4）、档 2（M1–M2）、**L1 / L2 / L3 全部已落地并提交**（L1 `182fdcd`→`688b984`；L2 `f0c2949`；L3 `746ae0b`，其中 reranker 为计划内可选步、明确排除 v1）。
+> **L4「IPC 权限粒度细化」四项全部未开工**：`event.senderFrame` 全库 0 命中；fs 沙箱仍为 `SANDBOX_ROOTS = [VELA_HOME, homedir()]` 黑名单式；`db:` 仍 73 个扁平通道；无设计文档。
+> L4 的设计已于 2026-09-13 补齐：`docs/superpowers/specs/2026-09-13-ipc-permission-granularity-design.md`（**仅设计，实现未开始**）。**本计划在 L4 实现并验证前不算完成。**
+
 **Goal:** 将 `docs/2026-08-26-claude-code-compare.md`（commit 0b2837b）§三.3/4/5/7/8/9 + §五.1/2/3/4 的未实施落地项按性价比分档排期，每档产出独立 SDD 计划。
 
 **Architecture:** 已完成的基线（P0-1/P0-2 于 2026-08-29 D6/D7 落地；§三.1/2/6 与 §三.9 的 offset/limit 部分于 H 计划 + D 档落地）。剩余项按「档 1 低成本快赢 → 档 2 中等改造 → 档 3 大项独立设计」三档，档 3 各项先产出设计文档再拆任务（同 D6/D7 流程）。

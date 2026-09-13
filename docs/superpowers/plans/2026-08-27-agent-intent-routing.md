@@ -41,7 +41,7 @@ export type WritingIntent =
   | { kind: 'none' }
 ```
 
-- [ ] **Step 1: 写失败测试（命中表）**
+- [x] **Step 1: 写失败测试（命中表）**
 
 ```ts
 // src/services/agent/writing-intent.test.ts
@@ -96,12 +96,12 @@ describe('detectWritingIntent 命中表', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/services/agent/writing-intent.test.ts`
 Expected: FAIL（模块不存在）。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```ts
 // src/services/agent/writing-intent.ts
@@ -182,12 +182,12 @@ export function detectWritingIntent(input: string): WritingIntent {
 
   注：正则优先级（角色 → 架构 → 修稿 → 写稿）保证「修改苏晚晴的角色设定」不被 refine 抢走；「润色第2章」先命中 refine。
 
-- [ ] **Step 4: 运行确认通过 + typecheck + lint**
+- [x] **Step 4: 运行确认通过 + typecheck + lint**
 
 Run: `pnpm run test src/services/agent/writing-intent.test.ts && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/services/agent/writing-intent.ts src/services/agent/writing-intent.test.ts
@@ -212,7 +212,7 @@ EOF
 
 **背景**：现状失败语义不统一——buildDraftWorkflow guard 失败 **throw**（:209）、buildReviewWorkflow 无草稿 **返回 null**（:224）。预路由需要单路 catch，必须统一。
 
-- [ ] **Step 1: 写失败测试（错误语义 + 正常触发）**
+- [x] **Step 1: 写失败测试（错误语义 + 正常触发）**
 
 ```ts
 // src/services/workflows/workflow-starter.test.ts
@@ -246,12 +246,12 @@ describe('workflow-starter', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/services/workflows/workflow-starter.test.ts`
 Expected: FAIL（模块不存在）。
 
-- [ ] **Step 3: 实现 workflow-starter.ts**
+- [x] **Step 3: 实现 workflow-starter.ts**
 
 把 `start-workflow.tool.ts` 的以下部分**原样迁移**到 `src/services/workflows/workflow-starter.ts`：
 - `getWorkflowDisplayName`（:15-25）
@@ -306,7 +306,7 @@ export async function startArchitectureWorkflow(): Promise<{ runId: string; disp
   - ⚠️ 顺带修正 start-workflow.tool.ts:208 与实码相反的注释（写「guard 失败时返回 null」实为 throw）
   - **`tool.wfNoDraft` 键不存在**（核验确认；locale-data 现为 `tool.wfNoReviewDraft` :2428 / `tool.wfNoRefineDraft` :2429 / `tool.wfNoFinalizeDraft` :2430 三细分键）——**错误码统一、文案保留细分**：startChapterWorkflow 不返回文案，由调用方（工具层 Step 4 / 预路由 A3）按 workflow 映射回三键，**零用户可见变化**；不新增 wfNoDraft（评审偏差 1 落地）
 
-- [ ] **Step 4: 改造 start-workflow.tool.ts 调用 starter**
+- [x] **Step 4: 改造 start-workflow.tool.ts 调用 starter**
 
 工具层 execute 改为：
 
@@ -335,12 +335,12 @@ try {
 
   行为等价性（P0-3/评审偏差 1 修订）：guard 失败文案与原来一致（error.prereqNotMet）；「无草稿」按 workflow 映射回原三键（wfNoReviewDraft/wfNoRefineDraft/wfNoFinalizeDraft）——**零用户可见变化**；蓝图缺失：原来走 :126 `tool.wfStartFailed` 兜底（错误信息被通用文案包裹），现在直接 `wfBlueprintDataMissing` 文案——唯一用户可见变化，属修订目标（归因精准化）。
 
-- [ ] **Step 5: 全量回归（重点 start-workflow 相关与 workflow 测试）**
+- [x] **Step 5: 全量回归（重点 start-workflow 相关与 workflow 测试）**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿（原有 700 + 新增）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/services/workflows/workflow-starter.ts src/services/workflows/workflow-starter.test.ts src/services/agent/tools/start-workflow.tool.ts
@@ -364,7 +364,7 @@ EOF
 
 **接线位置（核验修订——评审偏差 2）**：实际时序 = RAG 注入（:455-468，进 systemPrompt）**在前**、parseMentions/@ 预取（:473-512，进 enrichedUserMessage）**在后**——计划初稿声称的「@ 解析在 RAG 注入前」不实（接线位置结论不受影响）。预路由插入点：**`/` 命令拦截（:306-363）结束之后、userMsg 构建（:373）之前**——此时 convId/content 已就绪、消息尚未 append；A1 内部已排除含 `@` 的消息（`input.includes('@')` → none），预路由在前不与 @ 链路冲突；RAG 与 @ 预取保持在预路由之后原样执行（预路由短路 return 时二者自然跳过）。
 
-- [ ] **Step 1: 写失败测试（接线行为）**
+- [x] **Step 1: 写失败测试（接线行为）**
 
 ```ts
 // agent-store.test.ts 追加 describe
@@ -397,12 +397,12 @@ describe('sendMessage 意图预路由', () => {
 
   注：agent-store.test.ts 的既有 mock 模式（window.velaAPI.invoke 通道路由）沿用；runAgentLoop 通过 vi.mock agent-engine 模块 stub。
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/stores/agent-store.test.ts`
 Expected: FAIL（无预路由逻辑）。
 
-- [ ] **Step 3: 实现接线**
+- [x] **Step 3: 实现接线**
 
 ```ts
 // store 接口新增：
@@ -514,12 +514,12 @@ handleWritingIntent: async (intent, rawContent) => {
 
   ⚠️ character 分支语义（P0-4 修订后确定）：返回 `{ status: 'none', enhancedContent }`，**不 append 任何消息**；主流程在 userMsg 构建（:373）处用 enhancedContent 替换 content（:396 append 的 userMsg 即增强后的完整请求，用户历史可见 1 次）；后续 RAG（:455）/@ 预取（:473）基于增强后文本执行。核验确认：原「主流程 append 时替换」方案可行——预路由调用点在 :373 之前（/ 拦截后立即），增强内容在 userMsg 构建前已就绪。
 
-- [ ] **Step 4: 运行确认通过 + 全量回归**
+- [x] **Step 4: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/stores/agent-store.ts src/stores/agent-store.test.ts
@@ -540,7 +540,7 @@ EOF
 - Consumes: A3 引用的全部 `agent.*` / `tool.*` 键
 - Produces: 三语键齐备
 
-- [ ] **Step 1: 核查并新增 i18n 键**
+- [x] **Step 1: 核查并新增 i18n 键**
 
 先查 locale-data.ts 已有键（`agent.*`、`tool.*` 区），缺失的新增（三语 zh-CN / en-US / ru-RU）：
 
@@ -557,11 +557,11 @@ EOF
 
   **无 `tool.wfNoDraft`**（评审偏差 1 核验确认：该键不存在）——A2/A3 复用现有三细分键 `tool.wfNoReviewDraft`（locale-data :2428）/`tool.wfNoRefineDraft`（:2429）/`tool.wfNoFinalizeDraft`（:2430），按 workflow 映射，**零新增零变化**；ERR_NO_BLUEPRINT 复用 `tool.wfBlueprintDataMissing`（:2433 已有）。
 
-- [ ] **Step 2: i18n 残留扫描**
+- [x] **Step 2: i18n 残留扫描**
 
 Run: `pnpm run gen:tokens`（或项目 i18n-standard 的残留扫描方式），确认无硬编码新增文本。
 
-- [ ] **Step 3: 全量回归 + Commit**
+- [x] **Step 3: 全量回归 + Commit**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。

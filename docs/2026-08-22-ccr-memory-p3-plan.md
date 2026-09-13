@@ -41,7 +41,7 @@
   - `export function parseSharedFile(raw: string): string[]`（损坏兼容）
   - `export async function upsertSharedFacts(facts: string[]): Promise<boolean>`（memory:read shared.md → merge → memory:write；文件不存在则新建）
 
-- [ ] **Step 1: 写失败测试（纯函数）**
+- [x] **Step 1: 写失败测试（纯函数）**
 
 ```ts
 // src/services/memory/shared-memory.test.ts
@@ -79,9 +79,9 @@ describe('buildSharedFile / parseSharedFile', () => {
 })
 ```
 
-- [ ] **Step 2: 实现**（shared-memory.ts 纯函数 + ccr-summary.ts 的 `buildCcrSummaryPrompt` 追加「另输出 3-5 条可跨会话复用的用户偏好/项目事实，格式：[可复用事实] 后每行一条 `- 事实`」（⚠️ `[可复用事实]` 锚点三语字面量一致不翻译——机器锚） + `generateConversationSummary` 成功后 `parseSharedFacts(response.content)` → `upsertSharedFacts`（失败降级跳过不阻断） + context-builder.ts M2 节选 picks 追加 shared（优先级最低，⚠️ **保底 150 tokens 配额**——先预留 shared 段再按序累计其余段） + memory-controller.ts `classifyMemoryFileKind` 识别 shared.md（frontmatter `type: shared` 或文件名 `shared.md` → 新 kind `'shared'`，加入 M2 节选 picks 的 kind 白名单 + MemoryGroup 查看器 shared 分组/徽标））
+- [x] **Step 2: 实现**（shared-memory.ts 纯函数 + ccr-summary.ts 的 `buildCcrSummaryPrompt` 追加「另输出 3-5 条可跨会话复用的用户偏好/项目事实，格式：[可复用事实] 后每行一条 `- 事实`」（⚠️ `[可复用事实]` 锚点三语字面量一致不翻译——机器锚） + `generateConversationSummary` 成功后 `parseSharedFacts(response.content)` → `upsertSharedFacts`（失败降级跳过不阻断） + context-builder.ts M2 节选 picks 追加 shared（优先级最低，⚠️ **保底 150 tokens 配额**——先预留 shared 段再按序累计其余段） + memory-controller.ts `classifyMemoryFileKind` 识别 shared.md（frontmatter `type: shared` 或文件名 `shared.md` → 新 kind `'shared'`，加入 M2 节选 picks 的 kind 白名单 + MemoryGroup 查看器 shared 分组/徽标））
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 git add src/services/memory/shared-memory.ts src/services/memory/shared-memory.test.ts src/services/agent/ccr-summary.ts src/services/agent/context-builder.ts electron/controllers/memory-controller.ts src/components/panels/sidebar/MemoryGroup.tsx
@@ -104,7 +104,7 @@ git commit -m "feat: 跨会话记忆复用（SharedContext——压缩摘要附�
   - `'db:usage-stats-global': { args: []; return: { projects: { path: string; name: string; calls: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number; degraded: boolean }[]; total: { calls: number; cost: number; cachedTokens: number }; degradedProjects: string[] } }`（⚠️ `degraded`/`degradedProjects`：旧项目库（user_version < 16）缺 cached_tokens 列时的降级标记——评审项 2）
   - `export async function getGlobalUsageStats(currentProjectPath?: string): Promise<GlobalUsageStats>`（recentProjects → 逐项目只读 DB 聚合——`new Database(path, readonly)` + WAL -shm 容错，同 activity-repository 模式；⚠️ **当前项目始终纳入**（评审项 3）：getRecentProjects() 只返回 fs.existsSync 的路径，新打开尚未写入全局配置的项目会漏——currentProjectPath 存在且不在列表时补入，参照 getDailyActivity 的 currentProjectPath 参数语义；无项目/只读失败项目跳过；⚠️ **60 秒结果缓存**（同 getDailyActivity 模式））
 
-- [ ] **Step 1: 写失败测试（聚合纯逻辑——SQL 字符串/项目过滤）**
+- [x] **Step 1: 写失败测试（聚合纯逻辑——SQL 字符串/项目过滤）**
 
 ```ts
 // electron/repositories/usage-repository.test.ts
@@ -125,9 +125,9 @@ describe('跨项目聚合', () => {
 })
 ```
 
-- [ ] **Step 2: 实现**（usage-repository：getGlobalUsageStats（getRecentProjectPaths → 补入当前项目（评审项 3）→ 逐项目 `new Database(path, { readonly: true })` 聚合 llm_calls——WAL 只读依赖 -shm 的容错同 activity-repository 既有处理；⚠️ **每项目先 PRAGMA table_info(llm_calls) 检查 cached_tokens 列存在**（评审项 2）——缺列（user_version < 16 旧库）时按 0 聚合 cached_tokens 并在结果标记 degraded + degradedProjects 列表，不抛错不静默缺失；60s 结果缓存（评审项 6））+ db-controller 新通道 + ipc-channels 类型 + UsageStatsView 全局 tab（P2 面板扩展——显示项目维度表 + 合计 + degraded 标记；无项目打开 → 提示文案））
+- [x] **Step 2: 实现**（usage-repository：getGlobalUsageStats（getRecentProjectPaths → 补入当前项目（评审项 3）→ 逐项目 `new Database(path, { readonly: true })` 聚合 llm_calls——WAL 只读依赖 -shm 的容错同 activity-repository 既有处理；⚠️ **每项目先 PRAGMA table_info(llm_calls) 检查 cached_tokens 列存在**（评审项 2）——缺列（user_version < 16 旧库）时按 0 聚合 cached_tokens 并在结果标记 degraded + degradedProjects 列表，不抛错不静默缺失；60s 结果缓存（评审项 6））+ db-controller 新通道 + ipc-channels 类型 + UsageStatsView 全局 tab（P2 面板扩展——显示项目维度表 + 合计 + degraded 标记；无项目打开 → 提示文案））
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 git add electron/repositories/usage-repository.ts electron/repositories/usage-repository.test.ts electron/controllers/db-controller.ts src/shared/ipc-channels.ts src/components/settings/UsageStatsView.tsx src/shared/locale-data.ts
@@ -147,9 +147,9 @@ git commit -m "feat: 跨项目 token 聚合（recentProjects 逐项目只读 + �
 - Consumes: `useMemoryStore`（P1 Task 5 已建——load/refresh/files）、`memory:read`、卷级重建逻辑（P1）
 - Produces: AgentHeader 新增「记忆」按钮（记忆图标 + `memory.menuTitle` i18n）→ 切换 AgentMemoryView（AI 面板内嵌：文件列表 + 查看 + 重建；关闭返回对话视图——参照 AgentHeader 的 skills/mcp 子视图模式）
 
-- [ ] **Step 1: 实现**（AgentHeader 按钮 + 视图切换（setSubView('memory') 模式——参照既有 skills/mcp 子视图）+ AgentMemoryView 组件（复用 MemoryGroup 数据流，布局适配 AI 面板宽度）+ ⚠️ **无项目打开空态**（评审项 7——memory-store 依赖项目路径，无项目时显示"打开项目后可查看记忆"提示而非报错）+ i18n 3 key：memory.menuTitle/back/rebuild 复用既有）
+- [x] **Step 1: 实现**（AgentHeader 按钮 + 视图切换（setSubView('memory') 模式——参照既有 skills/mcp 子视图）+ AgentMemoryView 组件（复用 MemoryGroup 数据流，布局适配 AI 面板宽度）+ ⚠️ **无项目打开空态**（评审项 7——memory-store 依赖项目路径，无项目时显示"打开项目后可查看记忆"提示而非报错）+ i18n 3 key：memory.menuTitle/back/rebuild 复用既有）
 
-- [ ] **Step 2: 门禁 + 提交**
+- [x] **Step 2: 门禁 + 提交**
 
 ```bash
 git add src/components/panels/agent/AgentHeader.tsx src/components/panels/agent/AgentConversation.tsx src/components/panels/agent/AgentMemoryView.tsx src/shared/locale-data.ts

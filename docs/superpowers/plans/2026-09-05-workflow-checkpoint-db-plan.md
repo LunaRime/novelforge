@@ -40,7 +40,7 @@
   - `export function registerWorkflow(type: WorkflowType, factory: WorkflowRehydrateFactory): void`（重复注册 = 覆盖，或 throw？取覆盖——重启热重载不炸）
   - `export function rehydrateWorkflow(type: WorkflowType, params: WorkflowParams): WorkflowDefinition | null`（未注册 → null）
 
-- [ ] **Step 1: 写失败测试（workflow-registry.test.ts）**
+- [x] **Step 1: 写失败测试（workflow-registry.test.ts）**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -72,12 +72,12 @@ describe('workflow-registry（rehydrate 重建，设计 §4.3）', () => {
 })
 ```
 
-- [ ] **Step 2: 跑失败**（模块不存在）
+- [x] **Step 2: 跑失败**（模块不存在）
 
 Run: `node node_modules/vitest/vitest.mjs run src/services/workflows/workflow-registry.test.ts`
 Expected: FAIL——import 解析失败。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `workflow-registry.ts`：
 
@@ -116,11 +116,11 @@ export interface WorkflowDefinition {
 
 （`WorkflowParams` 定义在 store 侧，`workflow-registry` 从 store type-only import——避免 store←→registry 运行时循环；`workflow-store` 不 import registry。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
 Run: 上一步命令。Expected: PASS 3 条。
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -144,7 +144,7 @@ git commit -m "feat: workflow-registry（type→factory(params) 重建）+ Workf
   - `async function executeRunFromIndex(run: WorkflowRun, definition: WorkflowDefinition, startIndex: number, contextData: Record<string, unknown>): Promise<void>`
   - 内部：`const context = { data: contextData, cancelled: false }`；`activeContexts.set(run.id, context)`；从 `startIndex` 起逐 step（复用原 :390-451 逻辑——步骤状态更新 / callbacks / stepByStep waiting / 完成判定 / onComplete / 入历史 / 清理）
 
-- [ ] **Step 1: 写失败测试（断点重放契约）**
+- [x] **Step 1: 写失败测试（断点重放契约）**
 
 在 `workflow-store.test.ts` 追加 describe（复用现有 mkDefinition helper 若有；无则建 `mkDef(steps)`）：
 
@@ -179,9 +179,9 @@ describe('executeRunFromIndex（断点重放，L2 任务2）', () => {
 
 > 说明：给 `executeRunFromIndex` 加 `export`（Task 5 restore + 单测白盒用）。若测试对 run 状态/入历史断言敏感，以「seen 数组含 b/c 且不含 a」为契约核心（重放精确性），其余状态断言放宽。
 
-- [ ] **Step 2: 跑失败**（executeRunFromIndex 未导出）
+- [x] **Step 2: 跑失败**（executeRunFromIndex 未导出）
 
-- [ ] **Step 3: 实现（抽取 + export）**
+- [x] **Step 3: 实现（抽取 + export）**
 
 把 :382-451 循环主体迁入 `executeRunFromIndex`（从 `const stepDef = definition.steps[i]` 到循环结束 :451，含 :453-507 的完成判定/入历史/清理），`context` 由 `{ data: contextData, cancelled: false }` 构造，`activeContexts.set(run.id, context)` 重建。`startWorkflow` 尾部改为 `return executeRunFromIndex(run, definition, 0, {})`（消除原内联循环 + 原 :453-507 尾部逻辑——全部进 executeRunFromIndex）。保留 `startWorkflow` 里 run 构建 / addLog / 打开面板 / 建 context（context 移到 executeRunFromIndex 建）。
 
@@ -213,9 +213,9 @@ confirmContinue: (runId) => {
 
 > 注：`WorkflowRun` 需加 `rehydrateParams?: WorkflowParams` 字段（Task 5 存；confirmContinue 读）。Task 2 先在 `WorkflowRun` 加该可选字段。`rehydrateWorkflow` 从 `workflow-registry` import（store←registry，运行时 import registry 会回环 registry←store？registry type-only import store，store 运行时 import registry → 循环。改为 store 通过**动态 import** `import('../workflows/workflow-registry').then(m => m.rehydrateWorkflow(...))`（避免静态循环）。）
 
-- [ ] **Step 4: 跑测试确认通过**（断点重放用例 + 现有 startWorkflow 回归全绿）
+- [x] **Step 4: 跑测试确认通过**（断点重放用例 + 现有 startWorkflow 回归全绿）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -239,7 +239,7 @@ git commit -m "refactor: 工作流执行循环抽 executeRunFromIndex（可重�
   - 表 `workflow_checkpoints (id INTEGER PRIMARY KEY CHECK (id = 1), state_json TEXT NOT NULL DEFAULT '{}', updated_at INTEGER DEFAULT (unixepoch() * 1000))`
   - `CURRENT_SCHEMA_VERSION = 17`
 
-- [ ] **Step 1: 写失败/验证测试（迁移幂等 + 全新库）**
+- [x] **Step 1: 写失败/验证测试（迁移幂等 + 全新库）**
 
 参照现有 database 测试（若有）。核心断言：
 - 全新库（user_version=0）：createTables 后 `workflow_checkpoints` 表存在（`sqlite_master` 查）。
@@ -248,7 +248,7 @@ git commit -m "refactor: 工作流执行循环抽 executeRunFromIndex（可重�
 
 （若项目无 database 单测基建，此任务以「门禁 + 人工验证 migrate 结构」为主，测试在 Task 4 repo 测试里覆盖表存在性。）
 
-- [ ] **Step 2: 实现**
+- [x] **Step 2: 实现**
 
 database.ts：
 ```ts
@@ -284,7 +284,7 @@ const CURRENT_SCHEMA_VERSION = 17  // was 16（v17：workflow_checkpoints 表—
 
 （`ensureSchemaVersion`/:146-155 已含 user_version 递增机制——migrate 成功后 `db.pragma('user_version = 17')` 自动执行。）
 
-- [ ] **Step 3: 门禁 + 提交**
+- [x] **Step 3: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -316,7 +316,7 @@ git commit -m "feat: v17 迁移——workflow_checkpoints 表（checkpoint 迁 D
     - `'db:checkpoint-load': { args: []; return: { success: boolean; data?: unknown; error?: string } }`
     - `'db:checkpoint-clear': { args: []; return: { success: boolean; error?: string } }`
 
-- [ ] **Step 1: 写失败测试（repo，mock getProjectDb 内存库）**
+- [x] **Step 1: 写失败测试（repo，mock getProjectDb 内存库）**
 
 参照 `preference-repository.test.ts` 模式（mock `getProjectDb` 返回内存 `DatabaseSync`）：
 
@@ -347,9 +347,9 @@ describe('WorkflowCheckpointRepository（checkpoint 单行读写，L2 任务4）
 
 （若项目 repo test 实际用 better-sqlite3 + `globalThis.__testDb` mock，照做。）
 
-- [ ] **Step 2: 跑失败**
+- [x] **Step 2: 跑失败**
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 `workflow-checkpoint-repository.ts`：
 
@@ -405,9 +405,9 @@ db-controller.ts（revisions 段后加）：
   })
 ```
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -434,7 +434,7 @@ git commit -m "feat: WorkflowCheckpointRepository + db:checkpoint-save/load/clea
   - `loadCheckpoint()` → `ipc.invoke('db:checkpoint-load').then(r => r?.data ?? null)`（DB 读；空则 localStorage 兜底）
   - `restoreCheckpoint()` v2（见 §4.8 决断）
 
-- [ ] **Step 1: 写失败测试（checkpoint v2 契约）**
+- [x] **Step 1: 写失败测试（checkpoint v2 契约）**
 
 `workflow-store.checkpoint.test.ts`（mock `ipc` + 复用 `sanitizeCheckpointData`；参照现有 test 的 ipc mock 方式）：
 
@@ -461,9 +461,9 @@ describe('workflow-checkpoint v2（L2）', () => {
 
 （测试聚焦契约；具体 mock 以 `ipc-client` 现有 mock 模式为准。断点重放断言「已完成步骤不重跑」复用 Task 2 的 seen 数组思路。）
 
-- [ ] **Step 2: 跑失败**（saveCheckpoint 仍写 localStorage）
+- [x] **Step 2: 跑失败**（saveCheckpoint 仍写 localStorage）
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 关键改造（`workflow-store.ts`）：
 
@@ -524,9 +524,9 @@ function loadCheckpoint(): Promise<CheckpointData | null> {
 
 （`loadCheckpoint` 变 async（IPC）；`restoreCheckpoint` 变 async；调用方（应用启动恢复点）改为 await。）
 
-- [ ] **Step 4: 跑测试确认通过**
+- [x] **Step 4: 跑测试确认通过**
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -552,7 +552,7 @@ git commit -m "feat: checkpoint 迁 DB——save/load/restore v2（runDefs+conte
 - Consumes: Task 1 registry + `WorkflowDefinition.rehydrateParams`
 - Produces: rehydrateWorkflow(type, params) 对 §5.1/§5.2 全部可重建 workflow 返回等价 definition；config_generation 返回 null（未注册）
 
-- [ ] **Step 1: 写失败测试（workflow-rehydrate.test.ts）**
+- [x] **Step 1: 写失败测试（workflow-rehydrate.test.ts）**
 
 ```ts
 import { describe, it, expect } from 'vitest'
@@ -588,9 +588,9 @@ describe('workflow rehydrate（重建 definition，L2 任务6）', () => {
 })
 ```
 
-- [ ] **Step 2: 跑失败**
+- [x] **Step 2: 跑失败**
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 - 各 `create*Workflow` 返回 definition 时附 `rehydrateParams`（= 其入参 params 的可序列化子集；`config_generation` 因含 `onGenerated` 函数**不附 rehydrateParams 且不注册**）。
 - §5.2 三内联：现 `run*` 函数（fire-and-forget void）改造为返回 `WorkflowDefinition` 的工厂 + 附 rehydrateParams；现有调用点改为 `useWorkflowStore.getState().startWorkflow(createXxxWorkflow(...))`。
@@ -604,9 +604,9 @@ registerWorkflow('architecture_generation', (p) => createArchitectureWorkflow(p 
 // 其余工厂同理；config_generation 不注册
 ```
 
-- [ ] **Step 4: 跑测试确认通过**（rehydrate 表全绿；若真实 factory 对 params 校验严格需校准 params 构造）
+- [x] **Step 4: 跑测试确认通过**（rehydrate 表全绿；若真实 factory 对 params 校验严格需校准 params 构造）
 
-- [ ] **Step 5: 门禁 + 提交**
+- [x] **Step 5: 门禁 + 提交**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -625,7 +625,7 @@ git commit -m "feat: 各 workflow 附 rehydrateParams + registry 注册（§5.1 
 - Verify: 全量测试 / typecheck / lint
 - Docs: 设计 §7 已知限制对照（config_generation 降级、context.data 重放不自动回滚、new_project_setup/batch_generate 预留）
 
-- [ ] **Step 1: i18n 完整性核对**
+- [x] **Step 1: i18n 完整性核对**
 
 ```bash
 node node_modules/typescript/bin/tsc --noEmit
@@ -634,14 +634,14 @@ grep -rn "'[^']*[\u4e00-\u9fa5][^']*'" src/stores/workflow-store.ts src/services
 ```
 Expected: 本档无新增用户可见文本（全部既有/内部）；若新增须三语 + TextKey。
 
-- [ ] **Step 2: 全量门禁（官方复跑）**
+- [x] **Step 2: 全量门禁（官方复跑）**
 
 ```bash
 node node_modules/vitest/vitest.mjs run
 ```
 Expected: 全绿（基线 1141 + 本档新增）。断言附真实输出（`Test Files N passed`）。
 
-- [ ] **Step 3: 已知限制登记 + 提交（若有补强）**
+- [x] **Step 3: 已知限制登记 + 提交（若有补强）**
 
 若 Task 1-6 无漏，本任务结束 = L2 全量交付。提交若补强。
 

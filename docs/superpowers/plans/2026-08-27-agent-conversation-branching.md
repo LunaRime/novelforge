@@ -36,7 +36,7 @@
   - `restoreRewound(entryIndex: number): boolean`
 - Consumes: 现有 `genId` / `persistCurrent` / `set` / `get`
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```ts
 // agent-store.test.ts 追加 describe
@@ -87,12 +87,12 @@ describe('对话分支 fork/rewind', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/stores/agent-store.test.ts`
 Expected: FAIL（类型/action 不存在）。
 
-- [ ] **Step 3: 类型扩展**
+- [x] **Step 3: 类型扩展**
 
 ```ts
 /** fork/rewind 分支：rewind 归档（可恢复） */
@@ -113,7 +113,7 @@ export interface AgentConversation {
 }
 ```
 
-- [ ] **Step 4: 实现 3 个 action**
+- [x] **Step 4: 实现 3 个 action**
 
 ```ts
 // store 接口新增：
@@ -190,12 +190,12 @@ restoreRewound: (entryIndex) => {
 
   说明：fork 的 `persistCurrent` 会走 serializeArchive 全量 stringify——新字段自动落盘；旧归档 parse 展开式无新字段则 undefined，兼容。
 
-- [ ] **Step 5: 运行确认通过 + 全量回归**
+- [x] **Step 5: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿（新增 6 用例）。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/stores/agent-store.ts src/stores/agent-store.test.ts
@@ -221,7 +221,7 @@ EOF
 - 助手消息与用户消息右下角各一个「操作区」（固定宽度 48px 容器）：默认 opacity-0，group-hover 淡入两个小图标按钮（ForkRight = 从此分支 / Undo2 = 回退到此处）
 - 按钮点击 → 回调 → ActiveConversation 层调 store action；rewind 前弹 confirm 确认
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // AgentMessage.test.tsx 追加
@@ -246,12 +246,12 @@ describe('AgentMessage 分支操作', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentMessage.test.tsx`
 Expected: FAIL（无操作区）。
 
-- [ ] **Step 3: AgentMessage 操作区实现**
+- [x] **Step 3: AgentMessage 操作区实现**
 
 ```tsx
 import { ForkRight, Undo2 } from 'lucide-react'
@@ -297,7 +297,7 @@ interface Props {
   助手消息：操作区放消息左下角（MarkdownContent 之后、toolCalls 之前）；用户消息：放气泡右下角。
   ⚠️ 操作区是「行内 flex」而非绝对定位——消息区是 `flex-col`，行内追加不会引起整行位移（按钮 hover 时仅自身透明度变化，无尺寸变化，满足零跳动）。
 
-- [ ] **Step 4: AgentConversation 接线**
+- [x] **Step 4: AgentConversation 接线**
 
 ```tsx
 // ActiveConversation 中渲染 AgentMessage 处：
@@ -326,12 +326,12 @@ const handleRewind = async (messageId: string) => {
 
   注意：fork 后 activeConversationId 变化 → ActiveConversation 自动切换；滚动处理在切换后 effect 中（现有 scroll effect 依赖 messages 变化）。
 
-- [ ] **Step 5: 运行确认通过 + 全量回归**
+- [x] **Step 5: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/components/panels/agent/AgentMessage.tsx src/components/panels/agent/AgentConversation.tsx src/components/panels/agent/AgentMessage.test.tsx
@@ -352,7 +352,7 @@ EOF
 - Consumes: `parentId` / 父会话 title（B1 数据）
 - Produces: 历史列表 fork 子会话缩进 + ForkRight 图标 + 「来自『父标题』」小字
 
-- [ ] **Step 1: 写失败测试**
+- [x] **Step 1: 写失败测试**
 
 ```tsx
 // AgentConversation.test.tsx 追加 describe
@@ -369,12 +369,12 @@ describe('AgentHistoryPanel fork 层级', () => {
 })
 ```
 
-- [ ] **Step 2: 运行确认失败**
+- [x] **Step 2: 运行确认失败**
 
 Run: `pnpm run test:watch src/components/panels/agent/AgentConversation.test.tsx`
 Expected: FAIL。
 
-- [ ] **Step 3: 实现**
+- [x] **Step 3: 实现**
 
 ```tsx
 // AgentHistoryPanel 中：构建 title 查找表 + 传入父标题
@@ -399,12 +399,12 @@ const titleById = useMemo(() => {
 // 外层行：有 parentTitle 时 pl-5（缩进）——固定缩进，无布局跳动
 ```
 
-- [ ] **Step 4: 运行确认通过 + 全量回归**
+- [x] **Step 4: 运行确认通过 + 全量回归**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`
 Expected: 全绿。
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/components/panels/agent/AgentConversation.tsx src/components/panels/agent/AgentConversation.test.tsx
@@ -423,7 +423,7 @@ EOF
 **Interfaces:**
 - Consumes: B2/B3 引用的全部 `agent.*` 键
 
-- [ ] **Step 1: 核查并新增 i18n 键**
+- [x] **Step 1: 核查并新增 i18n 键**
 
 | 键 | zh-CN | en-US | ru-RU |
 |---|---|---|---|
@@ -435,7 +435,7 @@ EOF
 | `agent.forkedFrom` | 来自「{title}」 | from "{title}" | из "{title}" |
 | `dialog.confirmRewind` | 回退 | Rewind | Откатить |
 
-- [ ] **Step 2: i18n 残留扫描 + 全量回归 + Commit**
+- [x] **Step 2: i18n 残留扫描 + 全量回归 + Commit**
 
 Run: `pnpm run test && pnpm run typecheck && pnpm run lint`（+ i18n 残留扫描）
 Expected: 全绿。
