@@ -1,48 +1,102 @@
 # L4 IPC 权限粒度细化设计
 
-> **For agentic workers:** 本设计供 subagent-driven-development / executing-plans 实现。**本档只做设计，不含实现**；实现计划（SDD 任务拆分）在本档评审通过后另出。
-> **Status:** 设计草案 v1（待用户审阅：§4 方案取舍 + §9 三处裁决）
+> **For agentic workers:** 本设计供 subagent-driven-development / executing-plans 实现。
+> **Status:** 设计草案 **v3**（2026-09-13）。v1→v2 修 9 处（§0）；**v2→v3 并入独立安全评审 + 独立可行性评审的发现（§0.2），其中 2 个 blocker 改变了本档的优先级排序**。
 > **范围归属:** 档 3 L4（CC 计划 `docs/superpowers/plans/2026-08-29-cc-remaining-implementation.md` Task L4「IPC 权限粒度细化（§五.4，安全敏感）」）
-> **基线:** master @ `dd7dc4f`（L3 收口 + 计划书回填 + 真机测试项目提交后）
+> **基线:** master @ `1754259`
+
+---
+
+## 0. 评审记录（v1 → v2 修订）
+
+v1 写完未经独立核对就当作依据，复核后发现 **9 处问题**，其中 5 处会直接导致实施出错。逐条修订：
+
+| # | v1 的说法 | 复核结果（证据） | v2 修订 |
+|---|---|---|---|
+| 1 | 「200 处 `ipcMain.handle` 散布 **17 个 controller**」 | 实为 **19 个文件**：17 个 controller + `electron/mcp/mcp-ipc-bridge.ts`（**11 个 `mcp:` 通道**）+ `electron/controllers/health-check.ts`（2 个）。且注册有**两个入口**：`ipc-handlers.ts:28 registerIPCHandlers()` 与 `main.ts:276 registerMCPHandlers()` | §4.1 收口必须覆盖**两个入口**；策略表覆盖 19 个文件 |
+| 2 | 「策略表键集合 === `ipc-channels.ts` 通道集合」 | 实际 200 注册 vs 201 声明，其中 **5 个是事件通道**；**4 个通道注册了但零声明**（`health:check`/`health:check-llm` @ `health-check.ts:111,129`；`embedding:clear-dedup`/`embedding:dedup-stats` @ `embedding-controller.ts:153,158`） | 断言改为「策略表键集合 === **已注册 invoke 通道集合**」；并要求补全 4 处声明（§5.3） |
+| 3 | 未提事件通道 | 主→渲染事件共 5 个：`llm:stream-chunk/done/error`、`update:download-progress`、`update:status-changed`（`webContents.send`） | 事件通道**不进策略表**，单独保留 preload 的 event 白名单（§4.1） |
+| 4 | P1「当前项目根」直接可用 | `getCurrentProjectPath()` 是 `kb-controller.ts:35` 的**局部函数**，非共享模块 | 新增 §4.3(e)：先建共享 active-project 模块 |
+| 5 | P1 授权改用**一次性 nonce** | **过度设计**：`dialog:select-folder`（`project-controller.ts:285`）与 `dialog:save-file`（`:299`）**已经在主进程内登记授权**。缺这条的只有 4 个对话框（`kb-controller.ts:215,226`、`import-controller.ts:272`、`skill-controller.ts:93`） | 删掉 nonce 方案，改为「把既有 1 行模式补到缺失的 4 处，然后**删除** `fs:grant-external-file`」（§4.3(d)） |
+| 6 | 未评估测试破坏面 | 全仓仅 **4 处** `ipcMain` 引用（`import-controller.test.ts`、`memory-controller.test.ts` 各 2） | §6 据此下调 P0 风险；§7 顺序不变 |
+| 7 | 未点名 `dev:invoke` | `dev-controller.ts`：对已配置 baseUrl 发**任意 path/method** 的 HTTP——通用出网桥 | §4.6 列为「非 dev 构建不注册」的首要对象 |
+| 8 | 「业务 handler 签名不变」只是暗示 | 未写清实施机制 | §4.1 明确：`guardedHandle` **保持 `(event, ...args)` 签名** → P0 是**纯改名**（handler 函数体零改动）；路径校验按策略表 `pathArgs` 集中在 guard 内做 |
+| 9 | 未发现 `skill-controller.ts` 的 i18n 残留 | `skill-controller.ts:97,98` 硬编码中文对话框标题/过滤器名 | 记入 §8 顺带修复项（非 L4 主范围） |
+
+> 说明：本档引用的行号均为 2026-09-13 于 `1754259` 实测。**P0 的第一步是重新生成这些清单**（§5），不要直接信任本档行号。
+
+### 0.2 独立评审补充（v2 → v3）——**改变了优先级排序**
+
+两位独立评审（安全 / 可行性）在 v2 后给出如下发现，均已**由我逐条复核证据属实**。
+
+**A. 两个 blocker：破坏点根本不在 `fs:` 通道上**（v2 的着力点选错了）
+
+| # | 通道 | 问题 | 证据 |
+|---|---|---|---|
+| B1 | **`project:delete-folder`** | **`fs.rmSync(projectPath, {recursive:true, force:true})`，入参直接来自渲染层，无任何沙箱/项目校验**（只查 `existsSync` + `isDirectory`）→ 可递归删除用户任意目录 | `project-controller.ts:247-266`；调用点 `src/stores/project-store.ts:247` |
+| B2 | **`export:export-chapters`** | `params.outputPath` 来自渲染层 → `path.join(outputPath, safeProjectName)` → `mkdir` + `writeFile` / `zip.writeToFile`，**全程无 `validateSandbox`**；只有 `export:select-output-dir` 才 `grantDirectory` | `export-controller.ts:217-223`、`:257-265`、`:272-282` |
+
+> 含义：**先建策略表并把这些通道登记为 `destructive` + `pathArgs`，优先级高于 fs 白名单**。只做 fs 收紧而放过这两条，等于门锁好了却把墙留着。
+
+**B. 一条与路径无关的高危项：官方 API Key 明文出主进程**
+
+`llm:list-models`（`llm-controller.ts:203`）直接返回 `loadModelConfigs()`，而该函数在 `:34` 做 `{...m, apiKey: decryptApiKey(m.apiKey)}` ——**解密后的明文**；`embedding:list-llm-candidates`（`embedding-controller.ts:210-214`）同样（`ModelProfile.apiKey` 见 `ipc-channels.ts:450-461`）。
+→ 主帧 XSS **不需要任何 fs 通道**就能拿到用户的全部模型 Key。**v2 §9-2「把 config.json 关进主进程」对此基本无效**，必须单独修（list 类通道脱敏 / 明文 Key 不出主进程）。
+
+**C. 其它高危 / 中危**
+
+| # | 问题 | 证据 |
+|---|---|---|
+| H1 | `mcp:connect` 接受渲染层 `config` → `spawn(command,args,{env:{...process.env,...env}})`；`mcp:add-server` 落盘持久化 → **任意代码执行**，绕过整个 fs 白名单。v2 标了 `spawn` 但把「授权上下文」推到 P2 且未定义 | `mcp-ipc-bridge.ts:56-63,106-123`；`mcp-manager.ts:225-233` |
+| H2 | `project:create` / `project:open` / `project:get-summary` 用渲染层入参拼路径 → 任意目录建库/开库 | `project-controller.ts:49-61,105-113,304-319` |
+| H3 | `dev:test` 接受渲染层 `override.apiBaseUrl` 并 GET，未纳入 dev-only → 主进程侧任意 URL 探测 | `dev-controller.ts:112-116,48-51` |
+| M1 | **`os.tmpdir()` 白名单根没有生产调用点**（全仓 `os.tmpdir` 仅在 6 个测试文件里）→ v2 §4.3(a) 标注的「截图/工作流临时」与证据不符，**应删该根**（纯增攻击面） | `vector-store.test.ts:138` 等；生产截图走 `dialog:save-file`→`grantDirectory` |
+| M2 | `~/.vela` 遗留根被产品逻辑依赖（`readJsonFile` 回退、uninstall 双删）；`src/stores/project-store.ts:162` 硬编码写 **`/tmp/vela_error.log`**（Windows 上落到当前盘 `\tmp\`）→ 白名单生效后怎么处置未写 | `config-utils.ts:142-147`；`update-controller.ts:136-137`；`project-store.ts:162` |
+| M3 | **v2 §4.1「只换函数名、其余不动」与 P1 自相矛盾**：`fs-controller.ts` 内仍有 **10 处**显式调用旧 `validateSandbox`（`:188/287/303/319/327/337/345/357/369`），其根仍是 `SANDBOX_ROOTS=[VELA_HOME, homedir()]` → 不重定向它就是「新守卫有白名单、旧守卫继续放行主目录」 | `fs-controller.ts:16,131-152` |
+| M4 | `db:get-daily-activity` 路径参数在**第 2/3 位**（`[days?, projectPath?, currentProjectPath?]`）→ `pathArgs` 必须支持**多索引/按名**声明，否则漏检 | `ipc-channels.ts:576`；`db-controller.ts:538-540`；`activity-repository.ts:48-51,92-97` |
+
+**D. 可行性评审对 v2 机制描述的 4 处修正**（§4.1 已据此改写）
+
+- **不是「纯改名」**：首参普查 `_event` 112 / 无参 58 / `_e` 16 / **活 `event` 4**。用活 event 的 4 处必须拿到原始 event：`import-controller.ts:272→273`、`llm-controller.ts:129→136`、`skill-controller.ts:93→94`（`BrowserWindow.fromWebContents(event.sender)`）+ `import-controller.ts:313/318/365/370`（`event.sender.send('import:progress')`）。
+- **「注册即抛错」是最危险的失败模式**：`registerIPCHandlers()` 全库仅 `main.ts:275` 调用、**0 测试覆盖** → 漏登记 = 应用启动即死而 CI 全绿。必须降级。
+- **preload 构建约束**：`vite.config.ts:47-63` 的 preload 块**没有** `rollupOptions.external`（main 块 `:38` 有）→ preload import 什么就被打进 `preload.cjs`。故策略表**必须放 `src/shared/` 且零 import 纯字面量**（v2 已选对位置，但没写清这个约束的原因）。
+- **事件方向已有反向漂移（现存 bug）**：`ALLOWED_EVENT_CHANNELS = ['llm:','update:','menu:']` 不含 `import:`，而 `import-controller.ts:313` 确实 `send('import:progress')` → 渲染层订阅会被 `checkChannel` 抛错，是一条**静默死通道**；另有 `menu:check-update`（`main.ts:63,79`）绕开类型化 `ipc.on` 走裸 `api.on`。
+
+**E. 另外两处事件通道两边都没声明**：`import:progress`（`import-controller.ts:313,318,365,370`）、`menu:check-update`（`main.ts:63,79`）。加上 §5.1 的 4 条 invoke 缺口，**共 6 条声明要在 S1 补齐**。
+
+**F. 缺口 A 的调用点清单漏了主链路**：除 `audit-context.ts:80` 外，真实还有 `src/components/panels/agent/FilePickerMenu.tsx:49`（`:46` 先 `dialog:select-files`、`:49` 再把 `paths[0]` 报回）——正是「Agent 添加外部文件」链路。`grantDirectory` 全库仅 3 处（`project-controller.ts:285,299`、`export-controller.ts:308`）。
 
 ---
 
 ## 1. 背景与现状
 
-### 1.1 实测事实（本设计全部基于代码核对，非推测）
+### 1.1 实测事实
 
 | 事实 | 证据 |
 |---|---|
-| 主进程 `ipcMain.handle` **200 处**，散布 17 个 controller | `grep -c 'ipcMain.handle('` = 200；`electron/controllers/*-controller.ts` 17 个 |
+| 主进程 `ipcMain.handle` **200 处**，分布 **19 个文件** | 逐文件：`db-controller` 73 / `fs-controller` 19 / `embedding-controller` 16 / `llm-controller` 15 / `kb-controller` 13 / **`mcp/mcp-ipc-bridge` 11** / `project-controller` 10 / `config-controller` 9 / `update-controller` 8 / `memory-controller` 5 / `skill-controller` 4 / `templates-controller` 4 / `dev-controller` 2 / **`health-check` 2** / `import-controller` 2 / `styles-controller` 2 / `export-controller` 2 / `browser-controller` 2 / `report-controller` 1 |
+| **两个注册入口**（并列，互不覆盖） | `electron/ipc-handlers.ts:28 registerIPCHandlers()`；`electron/main.ts:276 registerMCPHandlers()`（定义在 `electron/mcp/mcp-ipc-bridge.ts:44`） |
 | **无 `ipcMain.on`**（全部请求/响应式） | `grep -c 'ipcMain.on('` = 0 |
-| 注册集中于一个函数 | `electron/ipc-handlers.ts:28 registerIPCHandlers()` → 依次调 18 个 `register*Controller()` |
-| preload 白名单是**前缀式**，共 22 个 invoke 前缀 + 3 个 event 前缀 | `electron/preload.ts:11-34`；校验实现 `:49-53` 用 `channel.startsWith(prefix)` |
-| 前缀一放就是**整族**授权：`db:` 一个前缀放行 **73** 个通道 | 通道数统计：`db:` 73 / `fs:` 19 / `llm:` 18 / `embedding:` 14 / `mcp:` 11 / `kb:` 11 / `project:` 8 / `update:` 8 / `dialog:` 6 / `log:` 5 / `memory:` 5 / … |
-| 渲染进程已是最严配置 | `electron/main.ts:152-154`：`nodeIntegration:false` / `contextIsolation:true` / `sandbox:true`；另有 CSP（`:163-181`） |
-| **全应用只有 2 个 `BrowserWindow`**，其中只有 1 个能调 IPC | `main.ts:138`（主窗口，带 preload）；`report-controller.ts:16-21`（离屏截图窗，`data:` URL，**无 preload** → 结构上无法 invoke） |
+| preload 白名单为**前缀式**：22 个 invoke 前缀 + 3 个 event 前缀 | `electron/preload.ts:11-34`；`startsWith(prefix)` 校验 `:49-53` |
+| 前缀=整族授权：`db:` 一个前缀放行 **73** 个通道 | 通道统计见上 |
+| 渲染进程已是最严 | `main.ts:152-154`：`nodeIntegration:false`/`contextIsolation:true`/`sandbox:true`；CSP `:163-181` |
+| **只有 2 个 `BrowserWindow`，只 1 个能 invoke** | `main.ts:138`（主窗，带 preload）；`report-controller.ts:16-21`（离屏截图窗，`data:` URL，**无 preload** → 结构上无法 invoke） |
 | dev 走 `VITE_DEV_SERVER_URL`，生产走 `file://{RENDERER_DIST}/index.html` | `main.ts:233-239` |
-| fs 沙箱根 = **`~/.novelforge` + 整个用户主目录** | `fs-controller.ts:16 SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` |
-| 该沙箱之上只有一个**黑名单**兜底 | `fs-controller.ts:95-106 BLOCKED_PATHS`：`.ssh/.gnupg/.aws/.docker/AppData/Roaming/AppData/Local/Windows` + `/etc,/sys,/proc,/dev` |
-| 路径校验是**白名单 + 黑名单串行** | `fs-controller.ts:131-152 validateSandbox()`：先 `isGranted` 放行 → 再 `SANDBOX_ROOTS` 必须命中 → 再 `BLOCKED_PATHS` 必须不命中 |
-| 有两条会话级授权集（进程重启即失效） | `grantedDirs`（`fs-controller.ts:113`，`grantDirectory()` :116）；`grantedExternalFiles`（`:84`） |
-| 目录授权**只来自对话框** | `grantDirectory` 调用点仅 `project-controller.ts:285`（选项目目录）、`:299`（保存文件）、`export-controller.ts:308`（选输出目录） |
-| ⚠️ **外部文件授权通道可被渲染层自行调用** | `fs-controller.ts:273 ipcMain.handle('fs:grant-external-file', (_e, filePath) => { grantedExternalFiles.add(path.resolve(filePath)) })` —— **入参即真相**，通道内不校验「刚发生过一次系统对话框」 |
+| fs 沙箱根 = `~/.novelforge` + **整个用户主目录** | `fs-controller.ts:16 SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` |
+| 之上只有**黑名单**兜底 | `fs-controller.ts:95-106 BLOCKED_PATHS`：`.ssh/.gnupg/.aws/.docker/AppData/Roaming/AppData/Local/Windows` + `/etc,/sys,/proc,/dev` |
+| 授权集为进程内会话级 | `grantedDirs` `fs-controller.ts:113` + `grantDirectory()` `:116`；`grantedExternalFiles` `:84` |
+| 目录授权**已由主进程对话框签发** | `project-controller.ts:285`（select-folder）、`:299`（save-file）、`export-controller.ts:308` |
+| ⚠️ 但**外部文件授权通道可被渲染层自行调用** | `fs-controller.ts:273`：`grantedExternalFiles.add(path.resolve(filePath))`——入参即真相 |
 
-### 1.2 由此得到的三个真实缺口
+### 1.2 四个真实缺口
 
-**缺口 A — 文件系统权限实质是「整个用户主目录」，且授权可自我签发。**
+**A — 文件权限实质是「整个用户主目录」，且授权可自我签发。** `SANDBOX_ROOTS` 含 `os.homedir()`，主目录下任意路径放行（除黑名单 7 处）；`fs:grant-external-file` 可对任意路径登记，`fs:read-external-file` 随后按「1MB + 可读扩展名」读取。黑名单是网不是墙：`~/.kube`、`~/.npmrc`、`~/.config`、`~/.local`、`~/.vscode`、`AppData/LocalLow` 都不在其中。
 
-把 1.1 的两条合起来看：`SANDBOX_ROOTS` 含 `os.homedir()`，`validateSandbox` 对主目录下**任意路径**放行（除黑名单那 7 个目录）。而 `fs:grant-external-file` 可以对**任意路径**登记授权，`fs:read-external-file` 随后按「1MB + 可读扩展名（`.md/.txt/.json/.yaml/.yml/.csv/.markdown`）」读取它。
+**B — 前缀白名单把「通道存在」等同于「有权限」。** preload 的 `startsWith` 决定的是「能不能发出这个通道」，不是「这次调用该不该被允许」。`db:` 一放就是 73 个，含删除/覆盖式写入；`fs:` 一放 19 个，含 `fs:delete-file`。新增通道只要前缀在列就自动获得整族权限——**默认放行**。
 
-也就是说：**能调用 `fs:` 前缀的代码，可以读主目录下任何 `.json/.md/.txt/...`，也可以写/删主目录下任何文件（除黑名单目录）。** 授权机制（granted*）本意是「用户点过对话框」，但 `fs:grant-external-file` 没有把授权绑定到那次对话框——它是渲染层自己报的路径。黑名单是网，不是墙：`~/.kube`、`~/.npmrc`、`~/.config`、`~/.local`、`~/.vscode`、`AppData/LocalLow` 都不在其中。
+**C — 没有来源校验，且新增窗口会静默获得全部权限。** 全仓 `event.senderFrame` **0 命中**。今天能 invoke 的只有主窗一个 webContents，现状侥幸安全；但结构是默认放行，任何未来带 preload 的新窗口都自动拿到全部 200 个通道。
 
-**缺口 B — 前缀白名单把「通道存在」等同于「有权限」。**
-
-preload 的 `startsWith` 校验决定的是**渲染层能不能发出这个通道**，不是**这次调用该不该被允许**。`db:` 一放就是 73 个通道，其中既有只读查询，也有删除/覆盖式写入；`fs:` 一放就是 19 个，含 `fs:delete-file`。新增通道时，只要前缀在列，就自动获得整族权限——**默认放行**。
-
-**缺口 C — 没有来源校验，且新增窗口会静默获得全部权限。**
-
-当前没有一处 `event.senderFrame` 校验。今天能 invoke 的只有主窗口一个 webContents（离屏截图窗无 preload），所以现状侥幸安全；但这是**默认放行**结构：任何未来新增的、带 preload 的窗口（或 Electron 默认值变化）都会自动拿到全部 200 个通道。
+**D — 通道类型声明与实际注册已经漂移。** 4 个通道有实现无声明（§0 #2），且 `ipc-channels.ts` 混装 invoke 与事件通道——这让「权限清单」无法用类型系统兜住，只能靠人工记忆。这既是本次要修的，也是策略表能否落地的**前提**。
 
 ---
 
@@ -50,213 +104,262 @@ preload 的 `startsWith` 校验决定的是**渲染层能不能发出这个通�
 
 ### 2.1 目标
 
-1. **默认拒绝**：权限由「前缀是否存在」变为「策略表里是否登记；未登记 = 不注册」。
-2. **文件权限从「主目录白名单」改为「显式白名单」**：`~/.novelforge` + 当前项目根 + 会话内对话框授权的目录/文件，其余一律拒绝。
-3. **授权必须由主进程签发**：对话框结果由主进程登记，渲染层不得自行申报路径。
-4. **读写意图分级**：同一路径的「读」与「写/删」分开授权。
-5. **来源校验**：只接受应用自己的帧（top frame + 己方 origin/webContents）。
-6. **破坏面可核对**：产出 200 个通道的权限分类表，作为后续新增通道的强制登记处。
+1. **默认拒绝**：权限由「前缀是否存在」变为「策略表是否登记；未登记 = 注册期抛错」。
+2. **收口覆盖两个入口**（含 `registerMCPHandlers`），不留平行注册路径。
+3. **文件权限从「主目录白名单」改为显式白名单**：`VELA_HOME` + 当前项目根 + 对话框授权目录/文件，其余拒绝。
+4. **授权只能由主进程签发**：删除可被渲染层自行调用的 `fs:grant-external-file`。
+5. **读写删意图分级**。
+6. **来源校验**：只接受应用自己的 top frame + 已知 webContents + 己方 URL。
+7. **通道清单可核对**：补全 4 处缺失声明；策略表与注册集合有双向断言测试。
 
 ### 2.2 非目标
 
-- 不引入沙箱新机制（不改成 utility process / 不拆 preload 之外的新进程）。
-- 不做加密、不做签名校验、不做杀软对抗。
-- 不重写 73 个 `db:` 通道名（理由见 §4.5；改名列为可选阶段，非本档必做）。
-- 不改渲染层业务逻辑（调用方只在自己需要授权时才需要改动）。
-- 不在本档做实现——本档交付设计 + 破坏面清单方法。
+- 不引入沙箱新机制（不改 utility process、不拆 preload 之外的新进程）。
+- 不做加密/签名/杀软对抗。
+- **不重写 73 个 `db:` 通道名**（理由 §4.5）。
+- 不改渲染层业务逻辑（除 §4.3(d) 的授权链路外，调用方无需改动）。
+- 不改事件通道机制（§0 #3）。
 
 ---
 
-## 3. 威胁模型（**先把「防得住什么」说清楚**）
+## 3. 威胁模型（**先说清防得住什么**）
 
-主进程持有的能力是「以用户身份读写文件 + 起子进程 + 持有 API Key」。渲染层是唯一入口，且渲染层里跑的是**应用自己的代码 + 用户内容**（导入的小说、AI 生成文本、分享卡 HTML）。
-
-| 攻击路径 | L4 是否防得住 | 说明 |
+| 攻击路径 | L4 是否防住 | 说明 |
 |---|---|---|
-| **A. 其它 webContents / iframe / webview 调 IPC** | ✅ 防住（§4.4） | 来源校验 + 默认拒绝；今天无此路径，属**防未来** |
-| **B. 渲染层 XSS / 恶意依赖 / 供应链在**主帧**内执行** | ⚠️ **不能完全防住** | 主帧就是合法来源，它调用任何已登记通道都会通过来源校验。L4 对这条路径的作用是**收窄爆炸半径**：默认拒绝 + 路径显式白名单 + 授权不可自签发，使「一次 XSS = 整个主目录读写」变成「一次 XSS = 项目目录 + 显式授权目录」 |
-| **C. Agent（LLM 工具链）被提示注入后诱导读写** | ✅ 显著收窄 | 工具侧走 `fs:` 通道，L4 后 LLM 无法再用「自报路径登记 + 读取」绕过确认 |
+| **A. 其它 webContents / iframe / webview 调 IPC** | ✅ | 来源校验 + 默认拒绝。今天无此路径，属**防未来** |
+| **B. 渲染层 XSS / 供应链在**主帧**执行** | ⚠️ **不能完全防住** | 主帧就是合法来源，它调用任何**已登记**通道都会通过来源校验。L4 对这条的作用是**收窄爆炸半径**：从「一次 XSS = 整个主目录读写 + 全部 200 通道」变为「项目目录 + 显式授权目录 + 按权限类分级的通道」 |
+| **C. Agent 工具链被提示注入** | ✅ 显著收窄 | 工具走 `fs:` 通道；删掉自签发授权后，LLM 无法再靠自报路径越出项目 |
 | **D. 恶意项目文件 / 导入内容** | ✅ 部分 | 路径白名单把可触达范围限制在项目内 |
-| **E. 本地其它进程伪装** | ❌ 不在本档范围 | 进程级对抗另立专项（可考虑 OS keychain 存储 Key） |
+| **E. 本地其它进程伪装 / OS 级对抗** | ❌ 不在本档 | 另立专项（可考虑 keychain 存 Key） |
 
-> **一句话**：L4 的主要价值是**把默认从「放行」翻成「拒绝」并收窄爆炸半径**，而不是「让 XSS 无法作恶」。任何把 L4 描述成后者的说法都是不准确的（对照：`event.senderFrame` 校验挡不住主帧 XSS）。
+> **一句话**：L4 的价值是**把默认从「放行」翻成「拒绝」并收窄半径**，不是「让 XSS 无法作恶」。任何把 L4 说成后者的表述都不准确（`event.senderFrame` 挡不住主帧 XSS）。
 
 ---
 
 ## 4. 设计
 
-### 4.1 单一收口：策略表 + `guardedHandle`（替代裸 `ipcMain.handle`）
+### 4.1 收口：策略表 + `guardedHandle`（覆盖两个注册入口）
 
-现状 200 处 `ipcMain.handle` 散在 17 个文件，没有一处统一入口。**先立收口，再谈粒度**——否则策略表无处生效。
+现状 200 处裸 `ipcMain.handle`，两个入口，没有统一处。**先立收口，再谈粒度。**
 
 ```
-electron/security/
-├── ipc-policy.ts        # 唯一真源：channel → { authority, senderTier, pathArgs?, note }
-├── ipc-guard.ts         # guardedHandle / assertPathAllowed / classifySender
-└── grants.ts            # 主进程签发的授权集（目录/文件/意图）
+src/shared/ipc-policy.ts      # 唯一真源：通道 → { authority, pathArgs? }。放 shared
+                              #   —— 主进程与 preload 都要用，放 electron/ 会让 preload 反向依赖主进程代码
+electron/security/ipc-guard.ts # guardedHandle / assertSenderTrusted（主进程侧强制）
+electron/security/grants.ts    # 主进程签发的授权集（目录/文件/意图）+ assertPathAllowed
 ```
 
-**接口（刻意小，深的实现藏在里面）：**
+**关键：`guardedHandle` 保持与 `ipcMain.handle` 完全相同的回调签名。**
 
 ```ts
-// ipc-guard.ts —— 对外只有这几个词
-export function guardedHandle<C extends IpcChannel>(
-  channel: C,
-  handler: (ctx: GuardedCtx, ...args: ChannelArgs<C>) => Promise<ChannelReturn<C>>,
-): void
-
-export function assertPathAllowed(candidate: string, intent: 'read' | 'write' | 'delete'): string
-export function grantFromDialog(kind: 'dir' | 'file', absPath: string, intent: 'read' | 'write'): void
+export function guardedHandle(
+  channel: IpcInvokeChannel,
+  handler: (event: Electron.IpcMainInvokeEvent, ...args: any[]) => unknown,
+): void {
+  const policy = IPC_CHANNEL_POLICY[channel]
+  if (!policy) throw new Error(`[ipc-guard] 未登记策略的通道: ${channel}`)  // 注册期即失败
+  ipcMain.handle(channel, (event, ...args) => {
+    assertSenderTrusted(event)                 // §4.4
+    assertPathArgs(channel, policy, args)      // §4.3，按 pathArgs 声明逐个校验
+    return handler(event, ...args)
+  })
+}
 ```
 
-- `guardedHandle` 内部依次做：① 通道是否在策略表（不在 → **注册即抛错**，启动期就炸，不留到运行期）② 来源校验（§4.4）③ 路径参数按 `pathArgs` 声明的意图逐个 `assertPathAllowed` ④ 才调业务 handler。
-- 业务 handler 签名**不变**：现有 controller 只把 `ipcMain.handle(` 换成 `guardedHandle(`，其余不动。这是刻意的——收口不应引发业务代码重写。
+**由此得到的实施性质（§0 #8）**：P0 是**纯改名**——200 处 `ipcMain.handle(` → `guardedHandle(`，**handler 函数体一行不动**，路径校验集中在 guard。这让 P0 的风险面被压到最小，也让它可以独立回归。
 
-**为什么用策略表而不是 200 个守卫函数**：策略表是数据，可以整体审阅、可以 diff、可以测试（`it('每个通道都有策略')`）；200 个散落的 if 不行。
+**为什么用数据表而不是 200 个守卫函数**：表可整体审阅、可 diff、可测试；散落的 200 个 if 不行。
 
-**契约（写进代码注释与测试）：**
-- 策略表键集合 **必须**等于 `src/shared/ipc-channels.ts` 的通道集合；测试断言双向相等（防漏登记、防幽灵条目）。
-- preload 白名单**由策略表生成**（构建期或启动期校验一致），消除「两处白名单漂移」这个既有的长期隐患。
+**契约（写成测试）**：
+- 策略表键集合 **=== 已注册 invoke 通道集合**（双向，见 §6）。
+- preload 的 invoke 前缀**由策略表派生**（消除两处白名单漂移）；事件前缀（`llm:`/`update:`/`menu:`）保持独立常量。
+- **两个入口都必须改用 `guardedHandle`**；`electron/ipc-handlers.ts` 增加一条「注册后自检」：断言两个入口注册的通道总数与策略表一致（防未来有人重新用裸 `ipcMain.handle` 绕开）。
 
 ### 4.2 权限分类（`authority`）
 
-每个通道登记一个权限类，决定它能触达什么：
-
 | authority | 含义 | 例 |
 |---|---|---|
-| `read-project` | 只读当前项目数据 | `kb:search`、`db:draft-list` |
-| `write-project` | 改当前项目数据 | `db:revision-create`、`fs:write-file`（项目内） |
-| `read-global` | 读全局配置/用户数据 | `config:get`、`log:read` |
-| `write-global` | 改全局配置 | `config:set`（含 API Key） |
-| `destructive` | 不可逆 / 覆盖面大 | `db:*delete*`、`fs:delete-file`、`uninstall:clean-user-data` |
-| `spawn` | 起子进程 | `mcp:*`（`mcp-manager.ts:13,230` spawn）、`update:*`（`update-controller.ts:14`） |
+| `read-project` | 只读当前项目 | `kb:search`、`db:draft-list` |
+| `write-project` | 改当前项目 | `db:revision-create`、`fs:write-file`（项目内） |
+| `read-global` | 读全局配置/用户数据 | `config:get`、`log:*` |
+| `write-global` | 改全局配置（含 API Key） | `config:set` |
+| `destructive` | 不可逆/覆盖面大 | `db:*delete*`、`fs:delete-file`、`uninstall:clean-user-data` |
+| `spawn` | 起子进程 | `mcp:*`（`mcp-manager.ts:13,230` spawn）、`update:*` |
 | `network-secret` | 携带 API Key 出网 | `llm:*`、`embedding:*` |
-| `dev-only` | 仅开发/内嵌桥接 | `dev:invoke`、`browser:list-tabs` |
+| `dev-only` | 仅开发/桥接 | `dev:invoke`、`browser:*` |
 
-`destructive` / `spawn` 两类**要求显式授权上下文**（见 §4.3），不是「有前缀就能调」。
+`destructive` / `spawn` 在 P2 起要求显式授权上下文（§7）。
 
-### 4.3 文件权限：显式白名单 + 意图分级 + 授权不可自签发
+### 4.3 文件权限
 
 **(a) 白名单根（默认拒绝）**
 
 | 根 | 读 | 写/删 | 来源 |
 |---|---|---|---|
-| `VELA_HOME`（`~/.novelforge`） | ✅ | ✅（限定子目录，见下） | 常量 |
-| 当前项目根 | ✅ | ✅ | **主进程在「打开/切换项目」时登记**（不依赖对话框） |
-| 对话框选中的目录 | ✅ | ✅（仅 write 意图） | `grantFromDialog()` |
-| 对话框选中的单个文件 | ✅ | ✅ | `grantFromDialog()` |
-| `os.tmpdir()` 的己方子目录 | ✅ | ✅ | 常量（工作流输出/截图临时） |
+| `VELA_HOME`（`~/.novelforge`） | ✅ | ✅（子目录分层，见 (b)） | 常量 |
+| 当前项目根 | ✅ | ✅ | **主进程在打开/切换项目时登记** |
+| 对话框选中的目录 | ✅ | ✅ | 主进程对话框处理器 |
+| 对话框选中的单个文件 | ✅ | ✅ | 同上 |
+| `os.tmpdir()` 己方子目录 | ✅ | ✅ | 常量 |
 | 其它 | ❌ | ❌ | 默认 |
 
-`VELA_HOME` 内部再分层（避免「全局目录=全权」）：`config.json`（含 API Key）**只允许主进程自己读写**，不经 `fs:` 通道；`agent-archive/`、`agent-results/`、`workflow-output/` 走各自专用通道（已有 `fs:agent-*` / `fs:workflow-output-*`），**不接受任意路径入参**（现有实现已用 `sha1`/`RUN_ID_RE` 白名单正则，保持并统一到 `assertPathAllowed`）。
+**(b) `VELA_HOME` 内部分层**：`config.json`（含 API Key）**只允许主进程内部读写，不经 `fs:` 通道**；`agent-archive/`、`agent-results/`、`workflow-output/` 走各自专用通道，**不接受任意路径入参**（现有实现已用 sha1 / `RUN_ID_RE` 白名单正则，统一到 `assertPathAllowed`）。
 
-**(b) 意图分级**：`assertPathAllowed(p, 'read' | 'write' | 'delete')` —— 同一目录的读授权不等于写授权；`fs:delete-file` 一律要 `delete` 意图。
+**(c) 意图分级**：`assertPathAllowed(p, 'read'|'write'|'delete')`——读授权 ≠ 写授权；`fs:delete-file` 一律要 `delete` 意图。
 
-**(c) 授权不可自签发（修缺口 A）** —— 这是本档**最高价值**的一条：
+**(d) 授权只能由主进程签发（修缺口 A）—— 本档最高价值项**
 
-- `grantedExternalFiles` / `grantedDirs` **只由 `grantFromDialog()` 写入**，调用方是对话框的实际结果处理点（`dialog:select-folder` / `dialog:select-files` / `dialog:save-file` / `export:select-output-dir`），不经 IPC。
-- `fs:grant-external-file` 通道**行为改变**：不再是「登记入参路径」，而是「**回执确认**」——渲染层传回主进程在对话框环节签发的一次性 nonce；主进程核对后把**自己记下的**路径登记授权，入参里的路径**不被信任**。
-- 需要外部文件的正常链路（Agent「添加外部文件」）改为：渲染层发起 `dialog:select-files` → 主进程弹框 → 主进程把结果路径登记 + 返回 nonce/路径给渲染层。**用户点过框**这个事实由主进程掌握，而不是由渲染层声称。
-- `audit-context.ts:80`（当前直接调 `fs:grant-external-file` 登记项目内文件）改为走项目根白名单，不再需要该通道。
+v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确范式：
 
-**(d) 黑名单保留但降级为「纵深防御」**：BLOCKED_PATHS 不再承担边界职责（边界是白名单），保留作为第二道，并补上 `.kube/.npmrc/.git-credentials/.config/.local/.vscode/AppData/LocalLow` 等条目。
+- `dialog:select-folder`（`project-controller.ts:285`）与 `dialog:save-file`（`:299`）**已经在对话框处理器内部**调用 `grantDirectory(...)`——路径来自主进程自己弹的框，渲染层无法伪造。
+- 缺这条的只有 4 处：`dialog:select-files`（`kb-controller.ts:215`）、`dialog:select-import-folder`（`kb-controller.ts:226`）、`dialog:select-novel-files`（`import-controller.ts:272`）、`dialog:select-skill-file`（`skill-controller.ts:93`）。
+- **修法**：这 4 处在返回路径前登记授权（目录授目录、文件授文件）；然后 **删除 `fs:grant-external-file` 通道**（`fs-controller.ts:273`）及其调用点（`src/services/audit/audit-context.ts:80` 改为依赖项目根白名单）。
+- 为什么不保留 nonce：对话框结果本来就在主进程手里，nonce 只是把「主进程已知道的路径」再绕一圈回传，多一个可重放的东西。**能用「删掉通道」解决，就不要引入新协议。**
+
+**(e) 当前项目根的单一真源（§0 #4）**：`getCurrentProjectPath()` 现为 `kb-controller.ts:35` 的局部函数。P1 先建 `electron/utils/active-project.ts`（`setActiveProject(p)` / `getActiveProject()` / `subscribe`），由项目打开/关闭路径调用，供 `assertPathAllowed` 与既有 `kb-controller`、`project-controller` 共用。
+
+**(f) 黑名单降级为纵深防御**：边界由白名单承担；`BLOCKED_PATHS` 保留为第二道，并补 `.kube/.npmrc/.git-credentials/.config/.local/.vscode/AppData/LocalLow`。
 
 ### 4.4 来源校验（诚实定位）
 
-```ts
-// classifySender：只认应用自己的帧
-//  - 已知 webContents（主窗口）→ 'app'
-//  - 其余（含未来新增窗口、iframe、devtools 扩展）→ 'denied'
-//  - 生产：url 必须 file:// 指向 RENDERER_DIST/index.html
-//  - 开发：url 必须 VITE_DEV_SERVER_URL 的 origin（且仅在 dev 构建放开）
-```
+只认应用自己的帧：`event.senderFrame` 必须是 **top frame**（无 parent）+ `webContents.id` 在己方白名单 + URL 命中：
+- 生产：`file://` 且指向 `RENDERER_DIST/index.html`
+- 开发：`VITE_DEV_SERVER_URL` 的 origin（仅 dev 构建放开）
 
-- 校验 `event.senderFrame`：必须是 **top frame**（`frame.parent === null`）+ `webContents.id` 在己方白名单 + url 命中生产/开发二者之一。
-- **今天只有 1 个可 invoke 的 webContents**（离屏截图窗无 preload），所以这一条**不是修既有漏洞，而是把「默认放行」改成「默认拒绝」**，防未来新增窗口静默提权。
-- 不给「aux tier」这种今天无对象的抽象：**一个适配器不构成接缝**。等真有第二个带 preload 的窗口时再加分层（记录为 §8 已知限制）。
+今天只有 1 个可 invoke 的 webContents（离屏截图窗无 preload），所以这条**不是修既有漏洞，而是把「默认放行」改成「默认拒绝」**。
 
-### 4.5 `db:` 粒度：策略表优先，改名可选
+**刻意不做 sender 分级抽象**：一个适配器不构成接缝。等真有第二个带 preload 的窗口时再加策略层（§8 记录）。
 
-计划原文给了两条路：「按 controller 分组前缀**或**通道级校验」。**本设计选通道级校验（策略表），不改名**，理由：
+### 4.5 `db:` 粒度：策略表优先，不改名
+
+计划原文允许「分组前缀**或**通道级校验」。选**通道级校验（策略表）不改名**：
 
 | 方案 | 成本 | 收益 |
 |---|---|---|
-| 策略表（不动通道名） | 中：200 条登记 + 收口替换 | 默认拒绝 + 分类 + 可测试；调用点零改动（渲染层的 `ipc.invoke('db:...')` 原样可用） |
-| 改名细粒度前缀（`db:character:*` 等） | 高：`ipc-channels.ts` + preload + 全部调用点 + 测试全量改；且**改动本身就是新的破坏面** | 前缀语义更清晰；但安全性并不比策略表更高（策略表已能逐通道判权） |
+| 策略表（不动通道名） | 中：200 条登记 + 收口替换 | 默认拒绝 + 分类 + 可测；渲染层调用点零改动 |
+| 改名细粒度前缀 | 高：`ipc-channels.ts` + preload + 全部调用点 + 测试；**改动本身即新破坏面** | 前缀语义更清晰，但安全性不高于策略表 |
 
-**结论**：先把「权限判定」做对（策略表），改名作为**可选阶段 3**，仅在有实际收益（例如要让第三方插件只拿 `db:character:*`）时再做。这避免了为「看起来细」而引入 73 处 + 调用点的机械改动风险。
+改名列为可选阶段 3，仅在确有收益（如第三方插件只拿 `db:character:*`）时做。
 
-### 4.6 `dev-only` 通道的处理
+### 4.6 `dev-only` 通道
 
-`dev:invoke` / `browser:*` 是开发者模式的桥（外部 API + CDP 回环查询）。策略：
-- `dev:invoke` 归属 `dev-only`，**非 dev 构建下不注册**（发布版从结构上就不存在该通道，而不是靠运行时开关）。
-- `browser:*` 保持仅回环 `127.0.0.1` + 端口校验（现状已如此，`browser-controller.ts:40-47`），归 `dev-only`。
+- **`dev:invoke`**：通用出网桥（任意 path/method），`dev-only` → **非 dev 构建不注册**（发布版结构上不存在，而非运行时开关）。
+- **`browser:*`**：保持仅回环 `127.0.0.1` + 端口校验（`browser-controller.ts:40-47`），归 `dev-only`。
 
 ---
 
-## 5. 破坏面评估（Step 0，实现的第一步）
+## 5. Step 0：破坏面评估（实现的第 0 步，产出即清单）
 
-计划要求「现有 70 通道调用点全量核对」。方法（产出物 = 分类表 + 变更点清单）：
+**已完成（2026-09-13 实测）**，实施时用同样方法**重新生成**，不要信任本文行号：
 
-1. **枚举**：`ipcMain.handle` 200 处 → `(channel, controller, file:line)`。
-2. **分类**：按 §4.2 打 `authority`；不确定的一律先按**更严**的一类登记。
-3. **定位路径参数**：每个通道的哪些入参是路径（`pathArgs`），给 intent。**只读**通道里凡接受任意路径的（`fs:read-file`/`fs:read-external-file`/`fs:list-dir`/`fs:check-exists`/`fs:read-json`）逐个确认白名单根是否覆盖真实调用点。
-4. **核对真实调用点**：渲染层每个 `ipc.invoke('fs:...')` 的实际入参从哪来（对话框？项目内？用户输入？）——**这里是本档最大的未知**（见 §8）。
-5. **产出**：`ipc-policy.ts` 初稿 + 一份「本次收紧会影响到的调用点」清单，二者进同一个 PR 便于评审。
+1. **枚举**：19 个文件的 200 处 `ipcMain.handle` → `(channel, file:line, handler)`。
+   ⚠️ 注意**多行写法**（如 `embedding-controller.ts:79,102` 的 `ipcMain.handle(\n  'embedding:compare',`）——行级正则漏过，必须用跨行匹配或人工核对。
+2. **分类**：按 §4.2 打 `authority`；不确定一律往更严的一类登记。
+3. **路径参数**：标出每个通道哪些入参是路径（`pathArgs` + intent）。重点核对只读通道里接受任意路径的：`fs:read-file`/`fs:read-external-file`/`fs:list-dir`/`fs:check-exists`/`fs:read-json`。
+4. **核对真实调用点**：渲染层每个 `ipc.invoke('fs:...')` 的入参从哪来（对话框？项目内？用户输入？）——**本档最大未知**，见 §8。
+5. **补全声明**（§5.3）。
 
-**已知高风险清单（Step 0 优先核对）**：
+### 5.1 通道清单实况（2026-09-13 实测）
+
+| 集合 | 数量 |
+|---|---|
+| 注册的 invoke 通道 | **200** |
+| `ipc-channels.ts` 声明的键 | **201**（含 5 个事件通道 → 196 个 invoke 声明） |
+| preload invoke 前缀 | 22（+3 event 前缀 = 25） |
+| **注册但未声明** | **4**：`health:check`、`health:check-llm`、`embedding:clear-dedup`、`embedding:dedup-stats` |
+| **声明但非 invoke（事件）** | **5**：`llm:stream-chunk/done/error`、`update:download-progress`、`update:status-changed` |
+
+恒等式：196（声明 invoke）+ 4（未声明注册）= **200** ✔
+
+### 5.2 已知高风险清单（P0/P1 优先）
 
 | 通道 | 风险 |
 |---|---|
-| `fs:grant-external-file` | 可自我签发（缺口 A）——**必须改造** |
-| `fs:read-file` / `fs:write-file` / `fs:delete-file` | 主目录全通（缺口 A） |
+| `fs:grant-external-file` | 可自我签发（缺口 A）——**删除** |
+| `fs:read-file` / `fs:write-file` / `fs:delete-file` | 主目录全通 |
 | `fs:read-external-file` | 依赖自签发的授权 |
-| `db:` 中一切 delete/overwrite | 73 个通道同把钥匙，破坏面无区分（缺口 B） |
+| `db:` 中一切 delete/overwrite | 73 通道同把钥匙 |
 | `uninstall:clean-user-data` | 不可逆 |
-| `mcp:*` | spawn 子进程，启动即执行 |
+| `mcp:*`（11） | spawn 子进程，连接即执行 |
 | `llm:*` / `config:` | API Key 读取与出网 |
 | `dev:invoke` | 通用出网桥 |
+
+### 5.3 必须补的声明（P0 一并做）
+
+`src/shared/ipc-channels.ts` 补 `HealthChannels`（2 条）+ `EmbeddingChannels` 的 `clear-dedup`/`dedup-stats`（2 条），并把 invoke/event 集合在类型层分开（事件通道单列 `EventChannels`），使策略表键类型与 invoke 集合一致。
 
 ---
 
 ## 6. 测试策略
 
-- **策略表完整性**：`ipc-policy` 的键集合 === `ipc-channels.ts` 通道集合（双向），漏登记即失败。
-- **默认拒绝**：未登记通道 `guardedHandle` 抛错（启动期失败，测 `registerIPCHandlers()` 不抛）。
-- **路径白名单**：对每个 `authority` 的样例通道，构造「项目内 / VELA_HOME 内 / 授权目录内 / 主目录其它位置 / 白名单外盘符」五种路径断言放行与否；**读/写/删三意图交叉**（读放行 ≠ 写放行）。
-- **授权不可自签发**：直接 invoke `fs:grant-external-file`（伪造路径）→ 未授权；走对话框链路 → 授权；nonce 重放 → 拒绝。
-- **来源校验**：伪造 sender（非 top frame / 非己方 webContents / 错误 origin）→ 拒绝；dev 与生产两种 URL 形态各测。
-- **回归（既有链路不许断）**：对话框授权 / 外部文件读取 / 导出到任意目录 / 分享卡 PNG 落盘 / 工作流输出读写 / 项目在**主目录之外**（如 `D:\`）时打开与保存。
-- **electron 侧测试**：遵循 `ci-parity-standard` —— 凡 import 到 `electron` 的测试必须 `vi.mock('electron')`（CI 无 electron 二进制）。
+| # | 测试 | 可行性 |
+|---|---|---|
+| 1 | **策略表完整性**：策略表键集合 === 注册的 invoke 通道集合（双向）。实现方式：导出「注册登记表」（`guardedHandle` 每次调用时记录 channel），在测试里与 `IPC_CHANNEL_POLICY` 比对 | ✅ 可写（`vi.mock('electron')` 打桩后调 `registerIPCHandlers()` + `registerMCPHandlers()`） |
+| 2 | **默认拒绝**：未登记通道调 `guardedHandle` → 抛错（注册期） | ✅ 纯单测 |
+| 3 | **路径白名单**：五形态（项目内 / `VELA_HOME` 内 / 授权目录内 / 主目录其它 / 白名单外）× 三意图（读/写/删）交叉断言 | ✅ 纯单测（`grants.ts` 不 import electron 即可纯测——**设计上把纯逻辑与 electron 依赖分开**） |
+| 4 | **授权不可自签发**：`fs:grant-external-file` 已不存在（断言通道不在策略表）；走对话框链路后 `assertPathAllowed` 放行 | ✅ 单测 + 集成 |
+| 5 | **来源校验**：伪造 sender（非 top frame / 未知 webContents / 错误 URL）→ 拒绝；dev 与生产 URL 各测 | ✅ 构造假 event 对象纯测（`assertSenderTrusted(event, ctx)` 接受注入的窗口注册表） |
+| 6 | **既有链路回归**：见下清单 | ⚠️ 部分需真机 |
+
+**回归不许断清单**（P1 后必须逐一验证；括号内为现有覆盖情况）：
+对话框授权（`project-controller` 有测试？）→ 外部文件读取 → 导出到任意目录 → 分享卡 PNG 落盘 → 工作流输出读写 → **项目在主目录之外**（`D:\…`）打开与保存 → 记忆文件读写删（`memory-controller.test.ts` 已覆盖）→ 风格/模板/技能目录读写 → 导入源文件。
+
+> **测试约束**：`ci-parity-standard` —— CI 无 electron 二进制，`electron/**` 凡 import 到 electron 的测试必须 `vi.mock('electron')`。破坏面实测很小：全仓仅 4 处 `ipcMain` 引用（`import-controller.test.ts`、`memory-controller.test.ts` 各 2）。
+
+### 6.1 测试评审的修正（v2 §6 有 3 类写不出来）
+
+| 问题 | 结论 |
+|---|---|
+| **第 1 类「策略表完整性」按 v2 文字写不出来** | `src/shared/ipc-channels.ts` **是纯类型文件（零运行时导出）**，运行期无法枚举通道集合。已采用的解：**源码↔源码对账**（正则扫 `ipcMain.handle('…')` vs 声明键），不 import electron，CI 可跑 —— **S1 已落地并通过**（`src/shared/ipc-channel-parity.test.ts`）。S2 起再加一条「策略表键 === 声明 invoke 集合」用 `satisfies Record<InvokeChannel, ChannelPolicy>` 让 **tsc 双向把关**（漏一条/多一条都编译失败） |
+| **「注册即抛错」不可观测** | `registerIPCHandlers()` 全库仅 `main.ts:275` 调用 → 107 个测试 **0 覆盖**；漏登记 = 应用启动即死而 CI 全绿。**改为**：dev 抛错 / 生产记 error 日志 + 该通道不注册（等价默认拒绝）继续启动；正确性由上面的静态对账测试兜底，而不是靠运行时抛错 |
+| **第 6 类「回归」会集体假绿** | `ipc.invoke` 不因 `{success:false}` 抛错（`ipc-client.ts:79-95` 直接 return），渲染层测试只断言通道名+参数 → P1 收紧后照旧全绿。**必须新增**：写失败可见性断言（S5） |
+| **验证成本被低估** | 「启动不抛」要真跑注册需 mock better-sqlite3 / electron-updater / apache-arrow / jieba-wasm 全链重依赖 → 不划算。改用静态对账 + 真机冒烟 |
+| **静默丢稿（P1 的前置风险）** | `DraftEditor.tsx:119/122`、`EditorArea.tsx:634` 不检查 `fs:write-file` 返回值即 `markTabSaved()` 并记成功日志 → 先修可见性（S5）再收紧 |
+
+**只能真机验证的**：`report:render-html` 截图链（`data:` URL + paint + `executeJavaScript` + `capturePage`）、原生对话框真实返回、启动期未登记的真实后果。
 
 ---
 
-## 7. 分阶段落地建议
+## 7. 分阶段落地（已按可行性 + 测试评审重排）
 
-| 阶段 | 内容 | 可独立发布 |
-|---|---|---|
-| **P0（收口 + 来源）** | `guardedHandle` + 策略表（先按现状宽松登记）+ 来源校验 + 完整性测试 | ✅ 行为基本不变，纯加固 |
-| **P1（文件权限，最高价值）** | 显式白名单 + 意图分级 + 授权改由主进程签发（修缺口 A） | ✅ 需 §5 Step 4 的调用点核对 |
-| **P2（权威分类收紧）** | `destructive` / `spawn` 要求授权上下文；`dev-only` 非 dev 不注册 | ✅ |
-| **P3（可选）** | `db:` 前缀改名细粒度 | 按需 |
+> **两条排序铁律**（评审结论，v2 没有）：
+> ① **`event` 语义先行**：有 4 处 handler 用活的 `event`（§0.2 D），若先大批替换会在「看似成功」中把 `import:progress` 推送链改断 → 必须先立 `GuardedCtx` 契约并只迁这几个文件。
+> ② **失败可见性先于收紧**：`DraftEditor.tsx:119/122`、`EditorArea.tsx:634` **不检查 `fs:write-file` 的返回值**就 `markTabSaved()` 并记成功日志 → P1 一旦开始拒绝写盘，用户会**静默丢稿**。必须先把「写失败」变成可见错误，再收紧权限。
 
-> P0 与 P1 分开，是为了让「结构性改造」与「行为收紧」可以分别回归——两者混在一个 PR 里出问题很难定位。
+| 阶段 | 内容 | 可独立回滚 | 客观验收 |
+|---|---|---|---|
+| **S0** | 只读盘点：200 invoke + 8 event 通道 + 不一致表（本文档 §5 即其产物） | 0 改动 | 人工核对 |
+| **S1 ✅ 已完成**（`41994c5`） | 消差：补 4 条 invoke 声明（health ×2 / embedding ×2）+ 2 条事件声明（`import:progress`、`menu:check-update`）+ **修 `import:` 事件前缀缺失（静默死通道）** + 新增通道对账测试 | ✅ | `src/shared/ipc-channel-parity.test.ts` 4 断言绿；全量 108 files / 1258 tests 绿；tsc/eslint 0 |
+| **S2** | 金丝雀收口：建 `src/shared/ipc-policy.ts`（纯数据、零运行时 import）+ `electron/security/ipc-guard.ts`，**只迁 `styles-controller.ts`**（2 通道、无事件、无路径） | ✅ | 全量测试仍绿（2 个 mock electron 的测试不许红） |
+| **S3** | `GuardedCtx` 契约：迁含活 `event` 的 3 个文件（`import-controller` / `llm-controller` / `skill-controller`），确认 `event.sender.send('import:progress')` 4 处行为不变 | ✅ | 全量测试 + `vite build` 绿 |
+| **S4** | 分批替换其余 197 处（每批一次提交）：批1 templates/report/browser/dev/config/health-check/memory/export → 批2 kb/project/embedding/update → 批3 llm → 批4 fs → 批5 db(73) → **批6 mcp-ipc-bridge(11)，同时把 `registerMCPHandlers()` 并入 `registerIPCHandlers()`** | ✅ 每批 | 每批 `ipcMain.handle(` 计数递减且有对账测试兜底 |
+| **S5** | **失败可见性修复**（前置！）：`fs:write-file` 等写通道的返回值必须被检查，失败 → toast + 不 `markTabSaved()` | ✅ | 新增断言「写失败时 `markTabSaved()` 不被调用」 |
+| **S6** | 默认拒绝 + 来源校验 + `dev-only` 非 dev 不注册（`dev:*` 含 `dev:test`、`browser:*`） | ✅ | `electron/security/ipc-guard.test.ts`（伪造 senderFrame / 非 top frame / 错 origin） |
+| **S7** | preload 前缀由策略表派生 + 事件前缀由 `AllEventChannels` 派生（两套分开） | ✅ | 构建期对账（`verify-build-contract.cjs` 或导出数组） |
+| **S8（原 P1）** | 文件权限收紧：白名单根 + 意图分级 + active-project 模块 + 4 处对话框补登记 + 删 `fs:grant-external-file` + `validateSandbox` 收敛为 `assertPathAllowed` | ⚠️ 见下 | 五形态×三意图 ≥15 条断言；回归清单全过 |
+| **S9** | **单独一次提交**：移除 `os.homedir()` 根（关键的最后一步，可单点 revert） | ✅ 单点 | 门禁全绿 + 真机冒烟 |
+| **S10** | `destructive`/`spawn` 要求授权上下文（含 `project:delete-folder`、`mcp:connect`）——**不要与其它收紧同批**（不可逆） | ⚠️ | destructive 无上下文被拒测试绿 |
+
+> **回滚成本提示**：`project:delete-folder` 与 `uninstall:clean-user-data` 不可逆，不与其它收紧同批；会话授权不落盘（`fs-controller.ts:84,113`），无持久化数据需迁移，故回滚成本总体低。
+> **必须保留**：`fs-controller.ts:463` 的 `agent-result-write` **主进程自发授权**——删了它，LLM 读回自己写的 spill 文件会被拒。
 
 ---
 
 ## 8. 风险 / 已知限制 / 待确认
 
-**已知风险**
+**必须在实施中确认的未知**
+1. **主目录之外的项目**：当前 `validateSandbox` 对 `D:\…` 本就不放行（`SANDBOX_ROOTS` 只含主目录），实际靠 `dialog:select-folder` 的 `grantDirectory`（`project-controller.ts:285`）兜住。**从「最近项目」列表直接打开（无对话框）时是否还能读写项目内文件**，Step 4 必须实测——若今天就有洞，P1 的「打开项目即登记项目根」顺带修掉。
+2. **渲染层对 `fs:` 的真实调用点分布**（决定白名单是否漏根）。
+3. `VELA_HOME/config.json` 现有读取点是否全部在主进程内（决定 §4.3(b) 能否直接落地）。
 
-1. **主目录之外的项目**：当前 `validateSandbox` 对 `D:\...` 的项目路径**本来就不放行**（`SANDBOX_ROOTS` 只含主目录），实际靠对话框选目录时的 `grantDirectory` 兜住（`project-controller.ts:285`）。**从最近项目列表直接打开（无对话框）**是否仍能读写项目内文件，Step 0 必须实测确认——若今天就有洞，L4 的「打开项目即登记项目根」正好补上（属于顺带修 bug）。
-2. **dev 模式 origin 校验**：dev server URL 可变（端口/主机），策略须限定 origin 且仅 dev 生效；误配会让开发环境全挂。
-3. **未覆盖的内核级逃逸**：L4 不改 OS 边界，Node 侧仍有完整 fs 能力（设计与实现都在主进程内），这是有意的。
+**已知风险**
+- dev 模式的 origin 校验：dev server URL 可变（端口/主机），策略须限定 origin 且仅 dev 生效；误配会让开发环境全挂。
+- 主帧 XSS 仍可调用一切已登记通道（§3 已明示）——L4 只收窄半径。
+- 授权集仍是进程内会话级（与现状一致）；不做持久化授权。
 
 **已知限制**
-
-- 离屏截图窗（`report-controller.ts:16`）无 preload，今天不构成来源风险；**未来若给它加 preload，必须同时给它一个窄策略层**（本档刻意不预造该抽象，避免空接缝）。
-- 主帧 XSS 仍可调用一切**已登记**通道（§3 已明示）——L4 只收窄半径。
-- 授权集是进程内会话级（重启失效），与现状一致；不做持久化授权（持久化会扩大攻击面，需单独设计）。
+- 离屏截图窗（`report-controller.ts:16`）无 preload，今天不构成来源风险；**未来若给它加 preload，必须同时给它窄策略层**（本档刻意不预造该抽象）。
+- `skill-controller.ts:97,98` 硬编码中文对话框标题/过滤器名（i18n-standard §八违规）——**非 L4 主范围**，顺带修复项。
 
 ---
 
@@ -264,10 +367,11 @@ export function grantFromDialog(kind: 'dir' | 'file', absPath: string, intent: '
 
 | # | 裁决点 | 选项 | 建议 |
 |---|---|---|---|
-| 1 | `db:` 是否改名细粒度 | (a) 只做策略表不改名 (b) 策略表 + 改名 | **(a)** 先做 (a)；改名收益不足、改动面大（§4.5） |
-| 2 | `VELA_HOME/config.json`（含 API Key）是否允许经 `fs:` 通道读写 | (a) 只允许主进程内部访问 (b) 维持现状 | **(a)**；(b) 等于把 Key 放在渲染层可读路径上 |
-| 3 | 阶段 P0/P1 是否一起做 | (a) 分两批 (b) 一批 | **(a)** 分开才可分别回归（§7） |
+| 1 | `db:` 是否改名细粒度 | (a) 只做策略表 (b) 策略表 + 改名 | **(a)**（§4.5） |
+| 2 | `VELA_HOME/config.json` 是否禁止经 `fs:` 通道读写 | (a) 只允许主进程内部 (b) 维持现状 | **(a)** |
+| 3 | P0/P1 是否分批提交 | (a) 分批 (b) 一批 | **(a)**（§7） |
+| 4 | `fs:grant-external-file` 删除 vs 保留为回执 | (a) 删除 (b) 保留 | **(a)**（§4.3(d)） |
 
 ---
 
-*设计草案 v1。本文档只做设计——实现计划（SDD 任务拆分）待本档评审通过后另出，见 `docs/superpowers/plans/`。*
+*v2 — 已按独立评审修订 §0 的 9 处问题。本文档仍只做设计；实施按 §7 分阶段，P0 先行。*
