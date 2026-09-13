@@ -6,7 +6,7 @@
  * 2. 卸载 — 触发 NSIS 卸载程序 + 清理用户数据
  */
 
-import { app, BrowserWindow, shell } from 'electron'
+import { app, BrowserWindow, dialog, shell } from 'electron'
 import { autoUpdater, UpdateInfo as EUUpdateInfo } from 'electron-updater'
 import path from 'node:path'
 import os from 'node:os'
@@ -239,11 +239,38 @@ export function registerUpdateController(): void {
 
   // ---- 卸载相关 ----
 
-  guardedHandle('uninstall:trigger', () => {
+  /**
+   * 破坏性操作的主进程原生确认（L4 S10）。
+   *
+   * 为什么还要确认一次：渲染层的确认弹窗（`confirm()`）对**主帧 XSS 无效** —— 攻击者
+   * 可以直接 `ipc.invoke('uninstall:clean-user-data')` 跳过它。原生对话框由主进程弹出，
+   * 用户不点「确定」就什么都不做。
+   */
+  async function confirmDestructive(message: string, title: string): Promise<boolean> {
+    const win = BrowserWindow.getFocusedWindow()
+    const opts: Electron.MessageBoxOptions = {
+      type: 'warning',
+      buttons: [t('dialog.buttons.cancel'), t('dialog.buttons.ok')],
+      defaultId: 0,
+      cancelId: 0,
+      title,
+      message,
+    }
+    const { response } = win ? await dialog.showMessageBox(win, opts) : await dialog.showMessageBox(opts)
+    return response === 1
+  }
+
+  guardedHandle('uninstall:trigger', async () => {
+    const ok = await confirmDestructive(t('settings.uninstallConfirmMsg'), t('settings.uninstall'))
+    if (!ok) return { success: false, error: t('status.cancelled') }
     return triggerUninstall()
   })
 
-  guardedHandle('uninstall:clean-user-data', () => {
+  guardedHandle('uninstall:clean-user-data', async () => {
+    // 该通道当前**没有渲染层调用方**（UI 只做「卸载但保留项目数据」），但它在白名单里、
+    // 且会抹掉整个 ~/.novelforge —— 属「不可逆 + 无正常入口」，必须由主进程确认才能执行。
+    const ok = await confirmDestructive(t('settings.cleanUserDataConfirmMsg'), t('settings.cleanUserData'))
+    if (!ok) return { success: false, error: t('status.cancelled') }
     return cleanUserData()
   })
 

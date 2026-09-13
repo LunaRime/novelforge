@@ -363,7 +363,7 @@ v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确�
 - 真正的保护已经由**路径意图**承担：`fs:delete-file` 现在要求 `delete` 意图，而路径必须落在 `VELA_HOME` / 当前项目根 / 主进程签发的授权内（S9 之后主目录根已移除）；
 - 两个已知的破坏性 blocker 已单独修复（`project:delete-folder` 要求「确实是 NovelForge 项目」；`export:export-chapters` 走写意图断言）。
 
-**仍未收口的破坏性通道**（如实登记）：`uninstall:clean-user-data`（抹掉 `~/.novelforge`）与 `uninstall:trigger` 目前只依赖**渲染层的**确认弹窗 —— 主帧 XSS 可直接调用。若要收口，正确做法是**主进程自己弹一次原生确认**再执行，属独立小改动（未做，留待裁决）。
+**仍未收口的破坏性通道** —— **已收口（2026-09-13 补做）**：`uninstall:trigger` 与 `uninstall:clean-user-data` 现由**主进程弹原生确认对话框**（`confirmDestructive`），用户不点「确定」就什么都不执行。之所以必须做：渲染层的 `confirm()` 对**主帧 XSS 无效**（攻击者可绕过它直接 invoke）；而 `uninstall:clean-user-data` 会抹掉整个 `~/.novelforge`，且**当前没有任何 UI 入口**（属「不可逆 + 无正常入口」）。新增三语 key：`settings.cleanUserData`、`settings.cleanUserDataConfirmMsg`、`status.cancelled`。
 
 **② `dev-only` 按构建类型门控 —— 已否决**（理由见 §4.6：`dev:` 指「开发者选项」这一**已发布用户功能**，按构建门控等于删功能；且 `dev:test` 的覆盖参数不构成提权，因为渲染层本就能用 `config:set` 改同一个 base URL）。该类权限更名为 `dev-bridge`，语义为「用户启用的桥接能力」。
 

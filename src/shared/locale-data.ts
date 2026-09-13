@@ -1244,6 +1244,10 @@ export const UI_TEXTS_DATA = {
   'settings.uninstallDesc': { 'zh-CN': '从计算机中移除程序文件，项目数据不会被删除', 'en-US': 'Remove program files. Your project data will not be deleted.', 'ru-RU': 'Удалить файлы программы. Данные проектов не будут удалены.' },
   'settings.uninstallConfirm': { 'zh-CN': '确认卸载', 'en-US': 'Uninstall', 'ru-RU': 'Удалить' },
   'settings.uninstallConfirmMsg': { 'zh-CN': '确定要卸载 NovelForge 吗？项目数据不会被删除。', 'en-US': 'Uninstall NovelForge? Your project data will not be deleted.', 'ru-RU': 'Удалить NovelForge? Данные проектов не будут удалены.' },
+  // L4 S10：clean-user-data 的主进程原生确认（该通道无 UI 入口，但会抹掉整个用户数据目录）
+  'settings.cleanUserData': { 'zh-CN': '清除用户数据', 'en-US': 'Erase user data', 'ru-RU': 'Удалить данные пользователя' },
+  'settings.cleanUserDataConfirmMsg': { 'zh-CN': '这将永久删除全部配置、模型密钥、记忆与日志（项目数据不受影响）。此操作不可撤销，确定继续？', 'en-US': 'This permanently deletes all settings, model keys, memory and logs (project data is unaffected). This cannot be undone. Continue?', 'ru-RU': 'Будут безвозвратно удалены все настройки, ключи моделей, память и журналы (данные проектов не затрагиваются). Действие необратимо. Продолжить?' },
+  'status.cancelled': { 'zh-CN': '已取消', 'en-US': 'Cancelled', 'ru-RU': 'Отменено' },
   'settings.quitConfirm': { 'zh-CN': '确认退出', 'en-US': 'Quit', 'ru-RU': 'Выйти' },
   'settings.quitConfirmMsg': { 'zh-CN': '确定要退出 NovelForge 吗？', 'en-US': 'Quit NovelForge?', 'ru-RU': 'Выйти из NovelForge?' },
   'settings.language': { 'zh-CN': '界面语言', 'en-US': 'Interface Language', 'ru-RU': 'Язык интерфейса' },
