@@ -1,4 +1,3 @@
-import { ipcMain } from 'electron'
 import { DEFAULT_LOCALE, t } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
@@ -11,6 +10,7 @@ import { safeErrorMessage } from '../utils/error-utils'
 import { scanTextWindow } from '../utils/read-text-window'
 import { logger } from '../utils/logger'
 import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** 路径沙箱：允许访问的根目录列表 */
 const SANDBOX_ROOTS = [VELA_HOME, os.homedir()]
@@ -183,7 +183,7 @@ async function withFileMutex<T>(filePath: string, task: () => Promise<T>): Promi
 
 export function registerFSController() {
   // 安全的异步读取
-  ipcMain.handle('fs:read-file', async (_event, filePath: string, options?: unknown) => {
+  guardedHandle('fs:read-file', async (_event, filePath: string, options?: unknown) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
@@ -217,7 +217,7 @@ export function registerFSController() {
   // 扩展名白名单 + 1MB 大小限制 + 只读（无写通道）
   // ⚠️ 安全边界：仅放行「用户对话框显式选择过」的路径（fs:grant-external-file 登记）或项目目录内文件；
   //    BLOCKED_PATHS（.ssh/.aws/AppData/Windows 等）同样适用——此前 LLM 可传任意绝对路径无确认读取
-  ipcMain.handle('fs:read-external-file', async (_event, filePath: string, options?: unknown) => {
+  guardedHandle('fs:read-external-file', async (_event, filePath: string, options?: unknown) => {
     try {
       const resolved = path.resolve(filePath)
 
@@ -270,7 +270,7 @@ export function registerFSController() {
   })
 
   // 用户显式选择外部文件后登记授权（dialog:select-files 成功路径由渲染层调用）
-  ipcMain.handle('fs:grant-external-file', async (_event, filePath: string) => {
+  guardedHandle('fs:grant-external-file', async (_event, filePath: string) => {
     try {
       if (typeof filePath === 'string' && filePath.trim()) {
         grantedExternalFiles.add(path.resolve(filePath))
@@ -282,7 +282,7 @@ export function registerFSController() {
   })
 
   // 二进制写入（PNG 截图导出——年度报告/分享卡；与 write-file 同安全模式）
-  ipcMain.handle('fs:write-buffer', async (_event, filePath: string, content: Uint8Array) => {
+  guardedHandle('fs:write-buffer', async (_event, filePath: string, content: Uint8Array) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
@@ -298,7 +298,7 @@ export function registerFSController() {
   })
 
   // 跨平台绝对安全异步写入（防踩空）
-  ipcMain.handle('fs:write-file', async (_event, filePath: string, content: string) => {
+  guardedHandle('fs:write-file', async (_event, filePath: string, content: string) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
@@ -314,7 +314,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:list-dir', async (_event, dirPath: string): Promise<FileNode[]> => {
+  guardedHandle('fs:list-dir', async (_event, dirPath: string): Promise<FileNode[]> => {
     try {
       return readDirRecursive(validateSandbox(dirPath))
     } catch {
@@ -322,7 +322,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:mkdir', async (_event, dirPath: string) => {
+  guardedHandle('fs:mkdir', async (_event, dirPath: string) => {
     try {
       const safePath = validateSandbox(dirPath)
       fs.mkdirSync(safePath, { recursive: true })
@@ -332,7 +332,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:check-exists', async (_event, filePath: string) => {
+  guardedHandle('fs:check-exists', async (_event, filePath: string) => {
     try {
       return fs.existsSync(validateSandbox(filePath))
     } catch {
@@ -340,7 +340,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:delete-file', async (_event, filePath: string) => {
+  guardedHandle('fs:delete-file', async (_event, filePath: string) => {
     try {
       const safePath = validateSandbox(filePath)
       await fsPromises.unlink(safePath)
@@ -352,7 +352,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:read-json', async (_event, filePath: string) => {
+  guardedHandle('fs:read-json', async (_event, filePath: string) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
@@ -364,7 +364,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:write-json', async (_event, filePath: string, data: unknown) => {
+  guardedHandle('fs:write-json', async (_event, filePath: string, data: unknown) => {
     try {
       const safePath = validateSandbox(filePath)
       return await withFileMutex(filePath, async () => {
@@ -386,7 +386,7 @@ export function registerFSController() {
     return path.join(VELA_HOME, 'agent-archive', `${safe}.json`)
   }
 
-  ipcMain.handle('fs:agent-archive-list', async (): Promise<{ id: string; title: string; updatedAt: number }[]> => {
+  guardedHandle('fs:agent-archive-list', async (): Promise<{ id: string; title: string; updatedAt: number }[]> => {
     const dir = path.join(VELA_HOME, 'agent-archive')
     try {
       await fsPromises.mkdir(dir, { recursive: true })
@@ -409,7 +409,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:agent-archive-read', async (_e, id: string): Promise<string | null> => {
+  guardedHandle('fs:agent-archive-read', async (_e, id: string): Promise<string | null> => {
     try {
       return await fsPromises.readFile(archivePath(id), 'utf-8')
     } catch {
@@ -417,7 +417,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:agent-archive-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
+  guardedHandle('fs:agent-archive-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
     try {
       const dir = path.join(VELA_HOME, 'agent-archive')
       await fsPromises.mkdir(dir, { recursive: true })
@@ -431,7 +431,7 @@ export function registerFSController() {
     }
   })
 
-  ipcMain.handle('fs:agent-archive-delete', async (_e, id: string): Promise<{ success: boolean }> => {
+  guardedHandle('fs:agent-archive-delete', async (_e, id: string): Promise<{ success: boolean }> => {
     try {
       await fsPromises.unlink(archivePath(id))
       return { success: true }
@@ -444,7 +444,7 @@ export function registerFSController() {
 
   // ===== Agent 长工具结果落盘（~/.novelforge/agent-results/<sha1-12>.txt，P0-1 写盘引用） =====
   // 同内容同哈希同文件（确定性命名 + wx 防重 = 决策冻结）；文件保留（rewind/fork/存档重放需引用仍在）
-  ipcMain.handle('fs:agent-result-write', async (_e, content: unknown): Promise<{ success: boolean; path?: string; error?: string }> => {
+  guardedHandle('fs:agent-result-write', async (_e, content: unknown): Promise<{ success: boolean; path?: string; error?: string }> => {
     try {
       const text = typeof content === 'string' ? content : String(content ?? '')
       const dir = path.join(VELA_HOME, 'agent-results')
@@ -471,16 +471,16 @@ export function registerFSController() {
   // 双轨补充通道：渲染层在既有 appendText 100ms 共享 flush 点把流式文本镜像到文件（fd 'w' 直写、
   // 显式字节偏移），内存 step.result 流式渲染不变；文件供崩溃恢复续读 + 尾部轮询。
   // 渲染进程不持有 VELA_HOME 路径，目录由主进程统一定位（同 agent-archive/agent-results 惯例）。
-  ipcMain.handle('fs:workflow-output-append', async (_e, runId: string, stepIndex: number, text: string) => {
+  guardedHandle('fs:workflow-output-append', async (_e, runId: string, stepIndex: number, text: string) => {
     return workflowOutputStore.append(runId, stepIndex, text)
   })
 
-  ipcMain.handle('fs:workflow-output-tail', async (_e, runId: string, stepIndex: number, options?: WorkflowOutputTailOptions) => {
+  guardedHandle('fs:workflow-output-tail', async (_e, runId: string, stepIndex: number, options?: WorkflowOutputTailOptions) => {
     // M-7：直接引用共享类型（ipc-channels 两端同源）；readTail 内部已对数值入参做防御清洗
     return workflowOutputStore.readTail(runId, stepIndex, options)
   })
 
-  ipcMain.handle('fs:workflow-output-delete-run', async (_e, runId: string) => {
+  guardedHandle('fs:workflow-output-delete-run', async (_e, runId: string) => {
     const res = await workflowOutputStore.deleteRun(runId)
     // W-3：清理失败不能静默——任务级清理不变量破坏（残留目录将由 7 天 sweep 兜底），主进程日志留痕
     if (!res.success) {
