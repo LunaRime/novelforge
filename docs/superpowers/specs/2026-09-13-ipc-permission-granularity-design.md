@@ -1,8 +1,11 @@
 # L4 IPC 权限粒度细化设计
 
 > **For agentic workers:** 本设计供 subagent-driven-development / executing-plans 实现。
-> **Status:** 设计草案 **v3**（2026-09-13）。v1→v2 修 9 处（§0）；**v2→v3 并入独立安全评审 + 独立可行性评审的发现（§0.2），其中 2 个 blocker 改变了本档的优先级排序**。
-> **范围归属:** 档 3 L4（CC 计划 `docs/superpowers/plans/2026-08-29-cc-remaining-implementation.md` Task L4「IPC 权限粒度细化（§五.4，安全敏感）」）
+> **Status:** 设计草案 **v3**（2026-09-13）。v1→v2 修 9 处（§0）；**v2→v3 并入独立安全评审 + 独立可行性评审 + 独立测试评审的发现（§0.2）**。
+> **实施状态（2026-09-13 完成）：S0–S10 全部落地并各自提交** —— 23 个提交，每阶段过 `tsc` / `eslint --max-warnings 0` / 全量 `vitest`（终态 **111 files / 1308 tests 全绿**）。
+> **两处有意偏离**（理由见 §7 文末）：① `dev-only` 按构建类型门控被**否决**（会删掉已发布的「开发者选项」功能）；② `destructive` 不做「逐次交互授权」，改由**路径意图** + 破坏性通道主进程原生确认承担。
+> ⚠️ **残余风险（未消除）**：S6 来源校验 / S8b 权限接线 / S9 边界翻转 三层行为变更**均未做真机验证**（本环境无法启动 GUI，CI 无 electron 二进制）。离线证据为纯函数分支全覆盖 + 1308 条回归，**不等于**真机上 200 个通道与文件读写都正常。真机冒烟清单见 §6 回归清单与 `docs/2026-09-13-real-machine-test-plan.md`（A 组 + 回归项）。
+> **范围归属:** 档 3 L4（CC 计划 `docs/superpowers/plans/2026-08-29-cc-remaining-implementation.md` Task L4）
 > **基线:** master @ `1754259`
 
 ---
