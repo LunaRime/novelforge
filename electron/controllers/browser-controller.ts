@@ -11,11 +11,11 @@
  * - 端口校验（1-65535 整数）
  * - 超时（3s，本地快速失败） + 结果截断
  */
-import { ipcMain } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import type { BrowserTabInfo, GlobalConfig } from '../../src/shared/ipc-channels'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** CDP 查询超时（ms） */
 const CDP_TIMEOUT_MS = 3000
@@ -63,7 +63,7 @@ async function cdpFetchJson(port: number, endpoint: string): Promise<unknown | n
 
 export function registerBrowserController() {
   /** 查询标签页列表 */
-  ipcMain.handle('browser:list-tabs', async (): Promise<{ success: boolean; tabs?: BrowserTabInfo[]; error?: string }> => {
+  guardedHandle('browser:list-tabs', async (): Promise<{ success: boolean; tabs?: BrowserTabInfo[]; error?: string }> => {
     const b = getBrowserConfig()
     if (!b) return { success: false, error: t('browser.notEnabled') }
     if (!isValidPort(b.cdpPort)) return { success: false, error: t('browser.invalidCdpPort').replace('{port}', String(b.cdpPort)) }
@@ -92,7 +92,7 @@ export function registerBrowserController() {
   })
 
   /** 测试 CDP 连接（cdpPort 可选覆盖——设置页未保存也能测 UI 当前值） */
-  ipcMain.handle('browser:test', async (_event, override?: { cdpPort?: number }): Promise<{ success: boolean; version?: string; error?: string }> => {
+  guardedHandle('browser:test', async (_event, override?: { cdpPort?: number }): Promise<{ success: boolean; version?: string; error?: string }> => {
     const b = getBrowserConfig()
     // 覆盖端口优先（UI 测试用）；否则要求已启用
     const port = override?.cdpPort ?? b?.cdpPort

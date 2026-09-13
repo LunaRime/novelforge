@@ -1,4 +1,4 @@
-import { BrowserWindow, ipcMain, shell } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
 import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
@@ -6,6 +6,7 @@ import { logger, LogLevel, LogEnvironment, LOG_DIRS, getLogPathFor } from '../ut
 import { safeErrorMessage } from '../utils/error-utils'
 import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
 import { GlobalConfig, type LogEnvMode, type LogFileInfo } from '../../src/shared/ipc-channels'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
 const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {
@@ -41,12 +42,12 @@ function listLogFilesIn(dir: string, env: LogEnvMode): LogFileInfo[] {
 
 export function registerConfigController() {
   /** 读取全局配置 */
-  ipcMain.handle('config:get', async () => {
+  guardedHandle('config:get', async () => {
     return readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
   })
 
   /** 保存全局配置 */
-  ipcMain.handle('config:set', async (_event, config: Partial<GlobalConfig>) => {
+  guardedHandle('config:set', async (_event, config: Partial<GlobalConfig>) => {
     try {
       const existing = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       const updated = { ...existing, ...config }
@@ -58,12 +59,12 @@ export function registerConfigController() {
   })
 
   /** 获取 ~/.novelforge 路径 */
-  ipcMain.handle('config:get-vela-home', async () => {
+  guardedHandle('config:get-vela-home', async () => {
     return VELA_HOME
   })
 
   /** 同步 UI 语言到主进程（主进程对话框/菜单/窗口标题用 t() 读取当前 locale） */
-  ipcMain.handle('config:set-locale', async (_event, locale: SupportedLocale) => {
+  guardedHandle('config:set-locale', async (_event, locale: SupportedLocale) => {
     setCurrentLocale(locale)
     // 同步更新窗口标题（渲染层 document.title 是主覆盖源，此处兜底原生标题栏/焦点窗口场景）
     for (const w of BrowserWindow.getAllWindows()) w.setTitle(t('window.title'))
@@ -73,7 +74,7 @@ export function registerConfigController() {
   // ===== 日志管理（双环境：dev=开发/内测，release=公测/正式） =====
 
   /** 获取指定环境今天的日志文件内容（默认当前环境） */
-  ipcMain.handle('log:get-today', async (_event, env?: LogEnvMode, maxLines?: number) => {
+  guardedHandle('log:get-today', async (_event, env?: LogEnvMode, maxLines?: number) => {
     try {
       const logPath = getLogPathFor(envFromMode(env))
       if (!fs.existsSync(logPath)) return ''
@@ -88,7 +89,7 @@ export function registerConfigController() {
   })
 
   /** 获取两个环境的日志文件列表（新→旧，带环境标记/大小/时间） */
-  ipcMain.handle('log:list-files', async () => {
+  guardedHandle('log:list-files', async () => {
     return [
       { env: 'release' as const, files: listLogFilesIn(LOG_DIRS[LogEnvironment.Release], 'release') },
       { env: 'dev' as const, files: listLogFilesIn(LOG_DIRS[LogEnvironment.Dev], 'dev') },
@@ -96,7 +97,7 @@ export function registerConfigController() {
   })
 
   /** 读取指定环境的日志文件（maxLines 截断为尾部 N 行，防大文件卡 UI） */
-  ipcMain.handle('log:read-file', async (_event, env: LogEnvMode, fileName: string, maxLines?: number) => {
+  guardedHandle('log:read-file', async (_event, env: LogEnvMode, fileName: string, maxLines?: number) => {
     try {
       // 安全检查：文件名必须合法（basename 防路径遍历）+ 前缀/后缀校验
       const safeName = path.basename(fileName)
@@ -116,7 +117,7 @@ export function registerConfigController() {
   })
 
   /** 在系统文件管理器中打开日志目录（用户反馈问题时可快速定位日志文件） */
-  ipcMain.handle('log:open-dir', async () => {
+  guardedHandle('log:open-dir', async () => {
     try {
       const dir = logger.getLogDir()
       if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
@@ -129,7 +130,7 @@ export function registerConfigController() {
   })
 
   /** 记录前端日志（渲染进程通过 IPC 写入；level 为字符串，主进程映射到 LogLevel） */
-  ipcMain.handle('log:write', async (_event, level: 'debug' | 'info' | 'warn' | 'error', source: string, message: string) => {
+  guardedHandle('log:write', async (_event, level: 'debug' | 'info' | 'warn' | 'error', source: string, message: string) => {
     const logLevel = RENDER_LOG_LEVELS[level] ?? LogLevel.INFO
     switch (logLevel) {
       case LogLevel.DEBUG: logger.debug(source, message); break

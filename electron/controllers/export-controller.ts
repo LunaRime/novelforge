@@ -6,7 +6,7 @@
  * - 文件夹格式 / ZIP 压缩格式
  * - 跨平台（Windows/macOS/Linux）
  */
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
@@ -14,6 +14,7 @@ import { getProjectDb } from '../database'
 import { grantDirectory } from './fs-controller'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
+import { guardedHandle } from '../security/ipc-guard'
 
 // ===== ZIP 写入器（纯 Node.js 内置模块，零外部依赖） =====
 
@@ -214,7 +215,7 @@ function chapterFileName(ch: ChapterExportMeta, ext = '.md'): string {
 // ===== IPC 注册 =====
 
 export function registerExportController(): void {
-  ipcMain.handle('export:export-chapters', async (_event, params: {
+  guardedHandle('export:export-chapters', async (_event, params: {
     chapterNumbers?: number[]
     format: 'zip' | 'folder'
     fileFormat: 'md' | 'txt'
@@ -293,7 +294,7 @@ export function registerExportController(): void {
   })
 
   /** 打开原生保存/目录选择对话框 */
-  ipcMain.handle('export:select-output-dir', async () => {
+  guardedHandle('export:select-output-dir', async () => {
     try {
       const win = BrowserWindow.getFocusedWindow()
       if (!win) return null

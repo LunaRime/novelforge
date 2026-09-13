@@ -11,13 +11,13 @@
  * - 响应大小限制（1MB 截断，防大响应拖垮主进程）
  * - 错误信息 sanitize（不含敏感请求头）
  */
-import { ipcMain } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { isValidHttpUrl, isValidRelativePath, buildDevApiUrl, truncateResponse } from '../utils/dev-api-utils'
 import type { DevApiRequest, DevApiResponse, GlobalConfig } from '../../src/shared/ipc-channels'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** 响应体最大字节数（1MB，超出截断） */
 const MAX_RESPONSE_BYTES = 1024 * 1024
@@ -99,7 +99,7 @@ async function invokeDevApi(req: DevApiRequest, baseUrlOverride?: string): Promi
 
 export function registerDevController() {
   /** 调用外部 API（AI 工具 call_external_api 与设置页测试共用） */
-  ipcMain.handle('dev:invoke', async (_event, req: DevApiRequest): Promise<DevApiResponse> => {
+  guardedHandle('dev:invoke', async (_event, req: DevApiRequest): Promise<DevApiResponse> => {
     try {
       return await invokeDevApi(req)
     } catch (e) {
@@ -109,7 +109,7 @@ export function registerDevController() {
   })
 
   /** 测试连接（GET baseUrl 根路径；apiBaseUrl 可选覆盖——设置页未保存也能测 UI 当前值） */
-  ipcMain.handle('dev:test', async (_event, override?: { apiBaseUrl?: string }): Promise<{ success: boolean; status?: number; error?: string }> => {
+  guardedHandle('dev:test', async (_event, override?: { apiBaseUrl?: string }): Promise<{ success: boolean; status?: number; error?: string }> => {
     const res = await invokeDevApi({ path: '', method: 'GET' }, override?.apiBaseUrl)
     if (res.success) return { success: true, status: res.status }
     return { success: false, error: res.error }

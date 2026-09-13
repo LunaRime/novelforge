@@ -1,11 +1,11 @@
 // 作品记忆文件通道控制器 — memory:* 5 通道
-import { ipcMain } from 'electron'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getCurrentProjectPath } from '../database'
 import { parseMemoryFile, markStaleFrontmatter } from '../utils/memory-codec'
 import { getProjectVelaDir } from '../utils/config-utils'
 import type { MemoryFileMeta } from '../utils/memory-codec'
+import { guardedHandle } from '../security/ipc-guard'
 
 const memoryDir = (): string => {
   const p = getCurrentProjectPath()
@@ -45,7 +45,7 @@ const safeFile = (file: string): string => {
 }
 
 export function registerMemoryController() {
-  ipcMain.handle('memory:list', async (): Promise<MemoryFileMeta[]> => {
+  guardedHandle('memory:list', async (): Promise<MemoryFileMeta[]> => {
     try {
       const dir = memoryDir()
       await fsPromises.mkdir(dir, { recursive: true })
@@ -64,11 +64,11 @@ export function registerMemoryController() {
     } catch { return [] }
   })
 
-  ipcMain.handle('memory:read', async (_e, file: string): Promise<string | null> => {
+  guardedHandle('memory:read', async (_e, file: string): Promise<string | null> => {
     try { return await fsPromises.readFile(safeFile(file), 'utf-8') } catch { return null }
   })
 
-  ipcMain.handle('memory:write', async (_e, file: string, content: string): Promise<{ success: boolean }> => {
+  guardedHandle('memory:write', async (_e, file: string, content: string): Promise<{ success: boolean }> => {
     let temp: string | null = null
     try {
       const dir = memoryDir()
@@ -86,7 +86,7 @@ export function registerMemoryController() {
     }
   })
 
-  ipcMain.handle('memory:mark-stale', async (_e, file: string): Promise<{ success: boolean }> => {
+  guardedHandle('memory:mark-stale', async (_e, file: string): Promise<{ success: boolean }> => {
     let temp: string | null = null
     try {
       const target = safeFile(file)
@@ -105,7 +105,7 @@ export function registerMemoryController() {
     }
   })
 
-  ipcMain.handle('memory:delete', async (_e, file: string): Promise<{ success: boolean }> => {
+  guardedHandle('memory:delete', async (_e, file: string): Promise<{ success: boolean }> => {
     try { await fsPromises.unlink(safeFile(file)); return { success: true } }
     catch (err) { return (err as NodeJS.ErrnoException).code === 'ENOENT' ? { success: true } : { success: false } }
   })

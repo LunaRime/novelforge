@@ -4,7 +4,8 @@
  * 渲染进程构造 HTML（年度报告/章节分享卡，内联样式零外部依赖）
  * → report:render-html 离屏截图 → PNG buffer 返回 → fs:write-buffer 保存。
  */
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow } from 'electron'
+import { guardedHandle } from '../security/ipc-guard'
 
 /** 分享卡固定宽度（与 yearly-report HTML 宽度一致） */
 const REPORT_WIDTH = 1200
@@ -12,7 +13,7 @@ const REPORT_WIDTH = 1200
 const MAX_HEIGHT = 8000
 
 export function registerReportController() {
-  ipcMain.handle('report:render-html', async (_event, html: string): Promise<{ success: boolean; png?: Uint8Array; error?: string }> => {
+  guardedHandle('report:render-html', async (_event, html: string): Promise<{ success: boolean; png?: Uint8Array; error?: string }> => {
     const win = new BrowserWindow({
       show: false,
       width: REPORT_WIDTH,

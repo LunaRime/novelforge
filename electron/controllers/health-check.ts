@@ -8,12 +8,12 @@
  *
  * 所有检查结果通过 IPC `health:check` 暴露给渲染进程。
  */
-import { ipcMain } from 'electron'
 import fs from 'node:fs'
 import { getProjectDb } from '../database'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
+import { guardedHandle } from '../security/ipc-guard'
 
 // ===== 类型 =====
 
@@ -108,7 +108,7 @@ async function checkLLMConnectivity(baseUrl: string, apiKey: string): Promise<He
 // ===== IPC 注册 =====
 
 export function registerHealthCheckIPC(): void {
-  ipcMain.handle('health:check', async (_event, projectPath?: string) => {
+  guardedHandle('health:check', async (_event, projectPath?: string) => {
     const checks = {
       database: checkDatabase(),
       diskSpace: checkDiskSpace(projectPath),
@@ -126,7 +126,7 @@ export function registerHealthCheckIPC(): void {
     return result
   })
 
-  ipcMain.handle('health:check-llm', async (_event, baseUrl: string, apiKey: string) => {
+  guardedHandle('health:check-llm', async (_event, baseUrl: string, apiKey: string) => {
     const llmCheck = await checkLLMConnectivity(baseUrl, apiKey)
     return { ok: llmCheck.ok, message: llmCheck.message, detail: llmCheck.detail }
   })
