@@ -18,21 +18,14 @@
 import { describe, it, expect } from 'vitest'
 import fs from 'node:fs'
 import path from 'node:path'
-import { IPC_CHANNEL_POLICY } from './ipc-policy'
+import { IPC_CHANNEL_POLICY, IPC_EVENT_CHANNELS } from './ipc-policy'
 
 /**
  * 主→渲染事件通道（由 `webContents.send` 发出，不走 `ipcMain.handle`，不进策略表）。
- * 新增事件通道时必须同步此表 + `AllEventChannels` + preload 的 ALLOWED_EVENT_CHANNELS 前缀。
+ * L4 S7：改为引用 `IPC_EVENT_CHANNELS` 这一**运行时单一真源**（preload 的 event 前缀也由它派生），
+ * 不再在本测试里另存一份——否则本文件自己就成了一处会漂移的白名单。
  */
-const EVENT_CHANNELS = [
-  'llm:stream-chunk',
-  'llm:stream-done',
-  'llm:stream-error',
-  'update:status-changed',
-  'update:download-progress',
-  'import:progress',
-  'menu:check-update',
-]
+const EVENT_CHANNELS: readonly string[] = IPC_EVENT_CHANNELS
 
 const ROOT = process.cwd()
 
@@ -115,5 +108,12 @@ describe('IPC 通道对账（L4 §6 第 1 类）', () => {
     expect([...registered.keys()].filter(c => !policyKeys.has(c)), '已注册但策略表未登记').toEqual([])
     expect([...policyKeys].filter(c => !registered.has(c)), '策略表登记了未注册的通道').toEqual([])
     expect(policyKeys.size).toBe(200)
+  })
+
+  it('⑥ 事件通道清单 === 声明中「非注册」的那部分（运行时清单与类型侧双向一致）', () => {
+    const declaredNotRegistered = [...declared].filter(c => !registered.has(c)).sort()
+    expect(declaredNotRegistered, 'IPC_EVENT_CHANNELS 与 ipc-channels.ts 的声明不一致').toEqual(
+      [...IPC_EVENT_CHANNELS].sort(),
+    )
   })
 })

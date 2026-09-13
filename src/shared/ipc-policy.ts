@@ -43,7 +43,27 @@ export interface ChannelPolicy {
 }
 
 /**
- * 通道 → 策略。S2 阶段只填 authority（行为不变），pathArgs 由 S8 补齐。
+ * 主→渲染**事件**通道的运行时清单（L4 S7）——与 invoke 通道分开的单一真源。
+ *
+ * 为什么需要它：preload 的事件前缀白名单此前是手工维护的元组，与事件通道的实际使用
+ * **发生过漂移**（`import:progress` 一直被 `import-controller` 发送却不在白名单里 →
+ * 渲染层订阅被 `checkChannel` 抛错，成了一条静默死通道，直到 S1 才发现）。
+ * 现在 preload 的 event 前缀由本清单派生，这类漂移在结构上不可能再发生。
+ *
+ * 新增事件通道时改这里 + `AllEventChannels`（类型侧）；parity 测试会校验两者一致。
+ */
+export const IPC_EVENT_CHANNELS = [
+  'llm:stream-chunk',
+  'llm:stream-done',
+  'llm:stream-error',
+  'update:status-changed',
+  'update:download-progress',
+  'import:progress',
+  'menu:check-update',
+] as const
+
+/**
+ * 通道 → 策略。S2 阶段只填 authority；pathArgs 由 S8 补齐。
  */
 export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'browser:list-tabs': { authority: 'dev-bridge' },
