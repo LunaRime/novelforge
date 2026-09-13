@@ -2,6 +2,7 @@ import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
 import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 // L4：registerMCPHandlers 已并入 electron/ipc-handlers.ts 的 registerIPCHandlers()（唯一注册入口）
+import { trustWebContents, untrustWebContents } from './security/ipc-guard'
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
 import { migrateLegacyDirs } from './utils/config-utils'
@@ -154,6 +155,12 @@ function createWindow() {
       sandbox: true,
     },
   })
+
+  // L4 S6：来源校验白名单 —— 只有显式登记的己方窗口才能调 IPC，未登记者（含未来新增的、
+  // 带 preload 的窗口；以及任何子帧）默认拒绝。窗口销毁时注销，避免 id 复用导致误放行。
+  const trustedId = win.webContents.id
+  trustWebContents(trustedId)
+  win.on('closed', () => { untrustWebContents(trustedId) })
 
   // 通过 session API 设置 Content-Security-Policy（Electron 推荐方式，防御 XSS）
   // 开发模式下需要 'unsafe-inline' 支持 Vite HMR 注入脚本 + react-refresh preamble。

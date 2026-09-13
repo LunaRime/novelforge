@@ -154,7 +154,8 @@ describe('localizeTemplate（Issue #18 多语言模板）', () => {
   it('L4 S5：写通道返回 {success:false} → 保存失败（不再假成功）', async () => {
     // 真实 fs:write-file 是「返回 {success:false} 而非抛错」的形态；改造前调用方不检查返回值，
     // 写盘失败也会 return true 并写内存 Map（UI 显示已保存，磁盘没有）。本用例锁死该契约。
-    mockInvoke.mockImplementation(async (channel: string) => {
+    mockInvoke.mockImplementation(async (channel: string, ...args: unknown[]) => {
+      void args // 本用例只按 channel 分支（签名需与强类型 mock 一致）
       switch (channel) {
         case 'config:get-vela-home': return 'C:/Users/test/.novelforge'
         case 'fs:check-exists': return true

@@ -241,10 +241,23 @@ v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确�
 
 改名列为可选阶段 3，仅在确有收益（如第三方插件只拿 `db:character:*`）时做。
 
-### 4.6 `dev-only` 通道
+### 4.6 开发者模式桥接（**S6 修正：原「按构建类型门控」方案被否决**）
 
-- **`dev:invoke`**：通用出网桥（任意 path/method），`dev-only` → **非 dev 构建不注册**（发布版结构上不存在，而非运行时开关）。
-- **`browser:*`**：保持仅回环 `127.0.0.1` + 端口校验（`browser-controller.ts:40-47`），归 `dev-only`。
+⚠️ **安全评审建议「`dev:*` 一律「非 dev 构建不注册」，本档经复核后否决该建议** —— 理由是它会把一个**已发布的用户功能**删掉：
+
+| 证据 | 内容 |
+|---|---|
+| 设置项 | `settings.developer`「开发者选项」/ `settings.developerDesc`「接入外部程序 API（如浏览器），AI 工具可调用」（`locale-data.ts:684-685`） |
+| 发布记录 | CHANGELOG 0.1.5 与 0.1.5-beta.2 均列为正式功能（「开发者模式（外部 API 接入 + 浏览器 CDP 桥接）」） |
+| 命名歧义 | `dev:` 前缀指**开发者选项**，不是「development build」；按构建类型门控会误删功能 |
+| 覆盖参数非提权 | `dev:test` 的 `apiBaseUrl` 覆盖**不构成新的能力**：渲染层本就能用 `config:set`（`config-controller.ts:50`）改同一个 `devMode.apiBaseUrl`，再走 `dev:invoke`。两者能力等价 |
+
+**保留的真实风险（如实登记，不掩饰）**：开发者模式让主进程成为「对用户配置端点发 HTTP 的客户端」，这是该功能的本意（`dev-controller.ts:1-13` 的模块头明确写了「SSRF 面收窄到配置的单一端点」），且需用户显式启用。**缓解措施**：`path` 只接受相对路径、拒绝绝对 URL/协议注入（`dev-controller.ts:59-60`）、method 白名单、响应 1MB 截断、超时。
+
+**因此本档对该类的处理**：
+- 权限类由 `dev-only` **更名为 `dev-bridge`**，语义是「用户启用的桥接能力」，**不按构建类型门控**；
+- `browser:*` 保持仅回环 `127.0.0.1` + 端口校验（`browser-controller.ts:40-47`）；
+- 若未来要收窄，正确的方向是**给该功能加显式授权上下文**（S10 的 `destructive`/`spawn` 同类机制），而不是删除它。
 
 ---
 
@@ -334,7 +347,7 @@ v1 设计了一次性 nonce；复核后**否决**，因为代码里已有正确�
 | **S3 ✅ 已完成** | `GuardedCtx` 契约 —— **实际不需要 ctx**：`guardedHandle` 保持 `ipcMain.handle` 同签名并**原样透传 `event`**，故 4 处用活 `event` 的 handler 零改动。已迁含活 event 的 3 个文件（`import-controller` 2 / `skill-controller` 4 / `llm-controller` 15），`event.sender.send('import:progress')` 4 处逐行核对保持原样 | ✅ | 全量 108 files / 1259 tests 绿；tsc/eslint 0 |
 | **S4 ✅ 已完成** | 其余 198 处全部迁移（b1 templates/report/browser/dev/config/health-check/memory/export = 27；b2 kb/project/embedding/update = 47；b3 fs = 19；b4 db = 73；b5 mcp = 11 + **`registerMCPHandlers()` 并入 `registerIPCHandlers()`，收口为唯一注册入口**） | ✅ 每批一次提交 | 每批 tsc/eslint/全量 vitest 全绿；**迁移后全仓 `ipcMain.handle(` 只剩守卫自身调用与其注释**（200/200 收口）；策略表对账测试持续绿 |
 | **S5 ✅ 已完成** | **失败可见性修复**（S8 的前置条件）：写通道返回 `{success:false}` 而非抛错，改造前 7 处调用方不检查返回值即报成功。已修 6 处数据丢失路径：`DraftEditor.doSave`（草稿/DB 双路径）、`EditorArea` 终稿保存、`export-service`（3 处格式）、`finalize-chapter.command`（物理文件）、`prompt-templates`（全局+项目级模板）、`project-store` 的写死 `/tmp/vela_error.log`（改为应用日志流）。未改：`ChapterCreationDialog` 的创建日志（非数据丢失路径，低危，已登记） | ✅ | 全量 108 files / **1260 tests** 绿；新增契约测试「写通道返回 `{success:false}` → 保存返回 false（不再假成功）」；修正 `prompt-templates.test.ts` 中不真实的 mock（原返回 `null`） |
-| **S6** | 默认拒绝 + 来源校验 + `dev-only` 非 dev 不注册（`dev:*` 含 `dev:test`、`browser:*`） | ✅ | `electron/security/ipc-guard.test.ts`（伪造 senderFrame / 非 top frame / 错 origin） |
+| **S6 ✅ 已完成** | **来源校验**：`isSenderTrusted(probe, policy)` 纯函数（top frame + 存活 + 己方 webContents 白名单 + URL 判定）→ 接入 `guardedHandle`（默认拒绝 + 拒绝日志含 senderId/top/alive/url）；`main.ts` 显式登记己方窗口、`closed` 时注销（防 id 复用误放行）。**`dev-only` 按构建类型门控的方案被否决**（见 §4.6），权限类更名 `dev-bridge` | ✅ | 全量 109 files / **1272 tests** 绿；新增 `ipc-guard.test.ts` 12 例覆盖全部分支（子帧/帧销毁/null URL/未登记 id/远程 http/非法 URL/dev origin 命中与不命中/登记→放行→注销→再拒）；`dev:` 相关分类误判一并修正 29 条 |
 | **S7** | preload 前缀由策略表派生 + 事件前缀由 `AllEventChannels` 派生（两套分开） | ✅ | 构建期对账（`verify-build-contract.cjs` 或导出数组） |
 | **S8（原 P1）** | 文件权限收紧：白名单根 + 意图分级 + active-project 模块 + 4 处对话框补登记 + 删 `fs:grant-external-file` + `validateSandbox` 收敛为 `assertPathAllowed` | ⚠️ 见下 | 五形态×三意图 ≥15 条断言；回归清单全过 |
 | **S9** | **单独一次提交**：移除 `os.homedir()` 根（关键的最后一步，可单点 revert） | ✅ 单点 | 门禁全绿 + 真机冒烟 |
