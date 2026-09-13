@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
@@ -8,6 +8,7 @@ import { llmConcurrencyController } from '../utils/concurrency-controller'
 import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
+import { guardedHandle } from '../security/ipc-guard'
 
 const activeStreams = new Map<string, AbortController>()
 
@@ -100,7 +101,7 @@ function restoreConcurrencyConfig() {
 export function registerLLMController() {
   restoreConcurrencyConfig()
 
-  ipcMain.handle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
+  guardedHandle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
     return llmConcurrencyController.execute(
       async () => {
         applyProxyConfig()
@@ -126,7 +127,7 @@ export function registerLLMController() {
     }))
   })
 
-  ipcMain.handle('llm:generate-stream', async (event, requestId: string, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
+  guardedHandle('llm:generate-stream', async (event, requestId: string, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
     applyProxyConfig()
     const model = getModelConfig(request.modelId)
     if (!model) return { requestId, started: false }
@@ -190,7 +191,7 @@ export function registerLLMController() {
     return { requestId, started: true }
   })
 
-  ipcMain.handle('llm:cancel', async (_event, requestId: string) => {
+  guardedHandle('llm:cancel', async (_event, requestId: string) => {
     const controller = activeStreams.get(requestId)
     if (controller) {
       controller.abort()
@@ -200,9 +201,9 @@ export function registerLLMController() {
     return { success: false }
   })
 
-  ipcMain.handle('llm:list-models', async () => loadModelConfigs())
+  guardedHandle('llm:list-models', async () => loadModelConfigs())
 
-  ipcMain.handle('llm:save-model', async (_event, model: ModelProfile) => {
+  guardedHandle('llm:save-model', async (_event, model: ModelProfile) => {
     try {
       // 业务校验（P3 修复）：
       // - modelName 空 → 运行时 API 必报错（ollama 空名等）
@@ -224,7 +225,7 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:delete-model', async (_event, modelId: string) => {
+  guardedHandle('llm:delete-model', async (_event, modelId: string) => {
     try {
       const models = loadModelConfigs().filter((m) => m.id !== modelId)
       saveModelConfigs(models)
@@ -234,7 +235,7 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:set-default-model', async (_event, modelId: string | null) => {
+  guardedHandle('llm:set-default-model', async (_event, modelId: string | null) => {
     try {
       const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       config.defaultModelId = modelId
@@ -245,12 +246,12 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:get-default-model', async () => {
+  guardedHandle('llm:get-default-model', async () => {
     const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
     return config.defaultModelId
   })
 
-  ipcMain.handle('llm:set-default-embedding-model', async (_event, modelId: string | null) => {
+  guardedHandle('llm:set-default-embedding-model', async (_event, modelId: string | null) => {
     try {
       const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       config.defaultEmbeddingModelId = modelId
@@ -261,12 +262,12 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:get-default-embedding-model', async () => {
+  guardedHandle('llm:get-default-embedding-model', async () => {
     const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
     return config.defaultEmbeddingModelId ?? null
   })
 
-  ipcMain.handle('llm:test-connection', async (_event, model: ModelProfile) => {
+  guardedHandle('llm:test-connection', async (_event, model: ModelProfile) => {
     try {
       applyProxyConfig()
 
@@ -293,11 +294,11 @@ export function registerLLMController() {
 
   // ===== 并发控制 =====
 
-  ipcMain.handle('llm:concurrency-status', async () => {
+  guardedHandle('llm:concurrency-status', async () => {
     return llmConcurrencyController.getStatus()
   })
 
-  ipcMain.handle('llm:concurrency-config', async (_event, config: { maxConcurrent?: number; maxQueueSize?: number }) => {
+  guardedHandle('llm:concurrency-config', async (_event, config: { maxConcurrent?: number; maxQueueSize?: number }) => {
     try {
       // IPC 层钳制（UI 已有 min 1，主进程独立校验防死锁排队：maxConcurrent<=0 时所有请求卡队列）
       const next = {
@@ -320,7 +321,7 @@ export function registerLLMController() {
 
   // ===== 模型路由配置（三层 elite/standard/budget，持久化到全局配置） =====
 
-  ipcMain.handle('llm:set-routes', async (_event, routes: { elite: string[]; standard: string[]; budget: string[] }) => {
+  guardedHandle('llm:set-routes', async (_event, routes: { elite: string[]; standard: string[]; budget: string[] }) => {
     try {
       const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       g.modelRoutes = {
@@ -335,7 +336,7 @@ export function registerLLMController() {
     }
   })
 
-  ipcMain.handle('llm:get-routes', async () => {
+  guardedHandle('llm:get-routes', async () => {
     const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
     return g.modelRoutes ?? { elite: [], standard: [], budget: [] }
   })

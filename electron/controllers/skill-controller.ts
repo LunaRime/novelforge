@@ -6,10 +6,11 @@
  * - 列表：扫描目录，解析 frontmatter description 作为描述
  * - 删除：移除文件
  */
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import { VELA_HOME } from '../utils/config-utils'
+import { guardedHandle } from '../security/ipc-guard'
 
 const SKILLS_DIR = path.join(VELA_HOME, 'skills')
 
@@ -44,7 +45,7 @@ function sanitizeSkillName(name: string): string {
 
 export function registerSkillController(): void {
   // 列表：扫描技能目录
-  ipcMain.handle('skill:list', async (): Promise<SkillInfo[]> => {
+  guardedHandle('skill:list', async (): Promise<SkillInfo[]> => {
     try {
       await ensureSkillsDir()
       const files = await fs.readdir(SKILLS_DIR)
@@ -65,7 +66,7 @@ export function registerSkillController(): void {
   })
 
   // 导入：写入技能文件
-  ipcMain.handle('skill:import', async (_event, payload: { name: string; content: string }) => {
+  guardedHandle('skill:import', async (_event, payload: { name: string; content: string }) => {
     try {
       const name = sanitizeSkillName(payload?.name ?? '')
       const content = String(payload?.content ?? '')
@@ -79,7 +80,7 @@ export function registerSkillController(): void {
   })
 
   // 删除技能文件
-  ipcMain.handle('skill:delete', async (_event, name: string) => {
+  guardedHandle('skill:delete', async (_event, name: string) => {
     try {
       const safe = sanitizeSkillName(name)
       await fs.unlink(path.join(SKILLS_DIR, `${safe}.md`))
@@ -90,7 +91,7 @@ export function registerSkillController(): void {
   })
 
   // 选择技能文件（.md 过滤器）
-  ipcMain.handle('dialog:select-skill-file', async (event) => {
+  guardedHandle('dialog:select-skill-file', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win) return null
     const result = await dialog.showOpenDialog(win, {

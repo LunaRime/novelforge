@@ -1,10 +1,11 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron'
+import { dialog, BrowserWindow } from 'electron'
 import { t, getCurrentLocale } from '../../src/shared/locale'
 import fs from 'node:fs'
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import readline from 'node:readline'
 import { safeErrorMessage } from '../utils/error-utils'
+import { guardedHandle } from '../security/ipc-guard'
 
 /**
  * 导入小说控制器 — 处理文件选择与章节拆分
@@ -269,7 +270,7 @@ async function splitFileContentStream(
 
 export function registerImportController() {
   // ===== 文件/文件夹选择对话框 =====
-  ipcMain.handle('dialog:select-novel-files', async (event) => {
+  guardedHandle('dialog:select-novel-files', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
     const options: Electron.OpenDialogOptions = {
       title: t('dialog.selectNovelFiles'),
@@ -299,7 +300,7 @@ export function registerImportController() {
   })
 
   // ===== 读取并拆分章节 =====
-  ipcMain.handle('import:split-chapters', async (event, filePaths: string[]) => {
+  guardedHandle('import:split-chapters', async (event, filePaths: string[]) => {
     try {
       const allChapters: ParsedChapter[] = []
 
