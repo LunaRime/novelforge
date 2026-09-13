@@ -40,6 +40,9 @@ const ALLOWED_EVENT_CHANNELS = [
   'llm:',
   'update:',
   'menu:',
+  // L4 S1 修复：import-controller 一直 send('import:progress')（:313/318/365/370），
+  // 但此前不在白名单 → 渲染层订阅被 checkChannel 抛错，是一条静默死通道
+  'import:',
 ] as const
 
 /** 合法的 event 通道前缀字面量类型 */

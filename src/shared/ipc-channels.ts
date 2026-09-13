@@ -471,6 +471,8 @@ import type { PostProcessRunData, PostProcessStepData } from '../../electron/rep
 import type { VolumeData } from '../../electron/repositories/volume-repository'
 import type { PreferenceData } from '../../electron/repositories/preference-repository'
 import type { PublicationEntry } from '../../electron/repositories/publication-repository'
+// L4 S1：health: 通道（类型仅用于 HealthChannels；`import type` 会被完全擦除，不产生运行时依赖）
+import type { HealthStatus } from '../../electron/controllers/health-check'
 
 // ===== 数据库操作 =====
 export interface DatabaseChannels {
@@ -664,6 +666,15 @@ export interface EmbeddingChannels {
   'embedding:list-llm-candidates': {
     args: []
     return: ModelProfile[]
+  }
+  // L4 S1 声明补齐：此前已注册（embedding-controller.ts:153/158）但无类型声明
+  'embedding:dedup-stats': {
+    args: []
+    return: { size: number; totalHits: number }
+  }
+  'embedding:clear-dedup': {
+    args: []
+    return: { success: boolean }
   }
 }
 
@@ -978,9 +989,28 @@ export interface StyleChannels {
   }
 }
 
+// ===== 健康检查（L4 S1 声明补齐：此前已注册但零声明，preload 却已放行 health: 前缀） =====
+export interface HealthChannels {
+  'health:check': { args: [projectPath?: string]; return: HealthStatus }
+  'health:check-llm': {
+    args: [baseUrl: string, apiKey: string]
+    return: { ok: boolean; message: string; detail?: string }
+  }
+}
+
+// ===== 导入进度事件（L4 S1 补充：此前两侧均未声明） =====
+export interface ImportEvents {
+  'import:progress': { filePath: string; bytesRead: number; totalBytes: number }
+}
+
+// ===== 菜单事件（L4 S1 补充：此前两侧均未声明） =====
+export interface MenuEvents {
+  'menu:check-update': void
+}
+
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels
-export type AllEventChannels = LLMStreamEvents & UpdateEvents
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels & HealthChannels
+export type AllEventChannels = LLMStreamEvents & UpdateEvents & ImportEvents & MenuEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels
