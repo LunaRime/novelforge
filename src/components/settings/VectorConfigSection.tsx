@@ -68,11 +68,20 @@ export default function VectorConfigSection() {
     store.lastTestResult,
   )
 
-  // 初始化加载
+  // 初始化加载（**只在挂载时跑一次**）
+  //
+  // ⚠️ 真机 bug 修复（2026-09-13）：原实现依赖 `[store]`，而 store 是 `useVectorConfigStore()`
+  //  ——**无选择器订阅，返回整个 state 对象**。每次 set() 都会产生新的 state 对象 → 组件重渲染
+  //  → `store` 引用变化 → 本 effect 重跑 → 而 `loadLLMCandidates()` 内部又会
+  //  `set({ llmCandidates })`（vector-config-store.ts:186）→ **无限循环**：
+  //  持续重渲染 + 每秒上百次 `embedding:list-llm-candidates` IPC。
+  //  真机表现：该设置页卡顿、保存/删除慢到像「几分钟没反应」。
+  //  修法：用 `getState()` 取动作（不再依赖 store 身份）并固定空依赖，语义就是「初始化一次」。
   useEffect(() => {
-    store.load()
-    store.loadLLMCandidates()
-  }, [store])
+    const s = useVectorConfigStore.getState()
+    s.load()
+    void s.loadLLMCandidates()
+  }, [])
 
   // ===== 工作分配说明 =====
 
