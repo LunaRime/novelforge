@@ -71,8 +71,6 @@ const h = vi.hoisted(() => ({
   existingDim: 0,
   /** 维度读取次数（用于锁定「仅在确有向量写入时才读表」） */
   dimReadCalls: 0,
-  /** 全局配置（readJsonFile 命中 GLOBAL_CONFIG_PATH 时返回；null → 返回调用方 fallback） */
-  globalConfig: null as null | Record<string, unknown>,
   /** 调用记录 */
   addChunksCalls: [] as Array<{
     projectPath: string

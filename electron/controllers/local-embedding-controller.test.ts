@@ -109,7 +109,7 @@ afterEach(() => {
 // ===== 用例 =====
 
 describe('注册与收口（L4 铁律 4/6）', () => {
-  it('6 条 embeddng:local-* 通道全部注册', () => {
+  it('6 条 embedding:local-* 通道全部注册', () => {
     for (const ch of [
       'embedding:local-detect',
       'embedding:local-list-models',

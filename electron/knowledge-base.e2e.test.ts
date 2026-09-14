@@ -305,6 +305,10 @@ describe('向量维度硬校验端到端（T3，真实 LanceDB）', () => {
       expect(res.processed).toBe(0)
       expect(res.error).toContain('1536')
       expect(res.error).toContain('1024')
+      // T4 R1（M1）：`errorCode` 是 controller 判定「维度错误是终态、不得降级」的唯一依据，
+      // 此前只有 kb-controller.test.ts 用 **mock 的** backfillVectors 覆盖 →
+      // 这里在**真实模块 + 真实 LanceDB** 上锁住标记的真实产出链路（knowledge-base.ts:775-776）
+      expect(res.errorCode).toBe('dim-mismatch')
 
       const stats = await getStats(projectPath)
       expect(stats.vectorDimension).toBe(1536) // 维度未被污染

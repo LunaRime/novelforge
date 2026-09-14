@@ -187,9 +187,20 @@ export function registerKBController() {
             if (updates.length > 0) {
               const res = await updateChunkVectors(projectPath, updates)
               if (!res.success) {
-                failed = updates.length
-                return { success: false, processed: 0, failed, error: t('kb.llmWriteFailed') }
+                // T4 R1（M2）：透传 updateChunkVectors 的**具体**错误（维度拒绝时含「重建索引」指引）
+                // 与**真实**计数——旧写法只回泛化文案 `kb.llmWriteFailed`，把可操作的指引丢掉了；
+                // `failed` 含「空向量行」（未进入 updates 的那部分），即所有没拿到向量的行
+                return {
+                  success: false,
+                  processed: res.count,                  // 零成功时必然为 0（success:false 的定义）
+                  failed: vectorless.length - res.count,
+                  error: res.error ?? t('kb.llmWriteFailed'),
+                }
               }
+              // 部分成功：`res.count` 是真正写成功的行数（T4 起 updateChunkVectors 如实上报），
+              // 用它覆盖「拿到向量的行数」，未写成功的行计入 failed
+              processed = res.count
+              failed += updates.length - res.count
             }
           } catch (e) {
             failed = vectorless.length

@@ -226,4 +226,28 @@ describe('A4.2 ③（回归锁）：非维度错误仍按既有语义降级', ()
     expect(h.updateChunkVectors.mock.calls[0][1]).toEqual([{ id: 'row-1', vector: [0.1, 0.2, 0.3, 0.4] }])
     expect(res).toEqual({ success: true, processed: 1, failed: 0 })
   })
+
+  // T4 R1（M2）：方式 2 曾丢弃 updateChunkVectors 的 error/count → 具体错误（含「重建索引」指引）
+  // 被泛化文案 kb.llmWriteFailed 顶掉，且 processed 把「没写进去」算成成功。
+  it('方式 2 写入被拒 → 透传具体 error（非 kb.llmWriteFailed）与真实计数', async () => {
+    setGlobalConfig({ theme: 'dark', localEmbedding: { enabled: true } })
+    h.canUseLLMEmbedding.mockReturnValue(true)
+    h.backfillVectors.mockResolvedValue({ success: false, processed: 0, failed: 0, error: 'fetch failed' })
+    h.getVectorlessCount.mockResolvedValue({ count: 1 })
+    h.getConnection.mockResolvedValue({
+      openTable: async () => ({
+        query: () => ({ select: () => ({ toArray: async () => [{ id: 'row-1', text: '无向量块' }] }) }),
+      }),
+    })
+    h.embedBatchWithLLM.mockResolvedValue([{ vector: [0.1, 0.2, 0.3, 0.4] }])
+    const specific = '向量维度不一致：知识库现有向量为 1536 维，本次生成 1024 维。…请重建知识库索引…'
+    h.updateChunkVectors.mockResolvedValue({ success: false, count: 0, failed: 1, error: specific })
+
+    const res = await invokeBackfill()
+
+    expect(res.success).toBe(false)
+    expect(res.error).toBe(specific) // 具体错误原样透传（旧写法恒为 kb.llmWriteFailed）
+    expect(res.processed).toBe(0)
+    expect(res.failed).toBe(1) // vectorless.length(1) - 真实写入数(0)
+  })
 })
