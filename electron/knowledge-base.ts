@@ -19,6 +19,7 @@ import { getProjectVelaDir, readLocalEmbeddingConfig } from './utils/config-util
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
 import { resolveEmbeddingOrder, hasUsableVectors, firstVectorDim } from './embedding-order'
+import type { EmbeddingSource } from './embedding-order'
 import { detectOllama, embedLocal } from './ollama-embedding'
 import { tokenize } from './chinese-tokenizer'
 import { getCurrentProjectPath, getProjectDb } from './database'
@@ -389,6 +390,85 @@ function readCharacterAliasMap(projectPath: string): Map<string, string[]> {
 }
 
 /**
+ * 查询侧降级链（T3b）：为**检索 query** 取一个「可用且维度兼容」的查询向量。
+ *
+ * 与写入侧（`importContent` / `backfillVectors`）共用 `resolveEmbeddingOrder` 的档位顺序，
+ * 但**查询侧只有语义档**：`local` / `api`。`llm` 是写侧档位（把文本变成向量存库，查询侧没有
+ * 对应实现）、`fts` 是终态（无向量），两者在此直接跳过。
+ *
+ * 为什么维度判断必须在这里做（而不是继续依赖 `vector-store` 内部那个 `catch {}`）：
+ * 维度不符的查询向量会被 `searchWithScope` 静默吞掉并退回 FTS —— 对用户就是「开了本地档，
+ * 语义检索反而没了」，且在日志上不可观察。此处显式决策：**不采用、记一条 warn、继续下一档**。
+ *
+ * 契约（brief 行为契约 2）：
+ * - `tableDim === 0`（表不存在 / 无 vector 列 / 读不到）→ 维度未知 → **放行**
+ * - 维度不符 → warn + 继续下一档；本地档抛错（Ollama 未运行）→ warn + 继续下一档
+ * - api 档沿用 `model.apiKey` gate；其失败保持今天的**静默**降级
+ * - 全部档位都没拿到兼容向量 → 返回 `undefined`（FTS），外加一条 warn；**永不 throw、永不阻断检索**
+ *
+ * ⚠️ 每次查询会真实调用一次本地模型（不采用维度缓存；缓存是 v2 的 Non-Goal）。
+ */
+async function resolveQueryVector(
+  effectiveQuery: string,
+  projectPath: string,
+  protocol: 'openai' | 'gemini',
+  model: { baseUrl: string; apiKey: string },
+  localCfg: LocalEmbeddingConfig,
+): Promise<number[] | undefined> {
+  // 表维度：只在 enabled 分支读（且只读一次）。读不到现状时按「维度未知」放行 ——
+  // 查询侧不阻断检索（写入侧的硬校验仍由 assertVectorDimCompatible 兜底），但要留下痕迹。
+  let tableDim = 0
+  try {
+    tableDim = await getChunksTableVectorDim(projectPath)
+  } catch (e) {
+    logger.warn('KB', t('log.embedding.queryDimReadFailed').replace('{err}', String(e)))
+  }
+
+  const order = resolveEmbeddingOrder({ enabled: localCfg.enabled, preferLocal: localCfg.preferLocal })
+
+  /** 该档产出的向量是否可用于本次查询（空向量视为该档失败，与 `hasUsableVectors` 同口径） */
+  const adoptable = (vec: number[] | undefined, tier: EmbeddingSource): number[] | undefined => {
+    if (!vec || vec.length === 0) return undefined
+    if (tableDim > 0 && vec.length !== tableDim) {
+      logger.warn('KB', t('log.embedding.queryDimMismatch')
+        .replace('{source}', tier)
+        .replace('{expected}', String(tableDim))
+        .replace('{actual}', String(vec.length)))
+      return undefined
+    }
+    return vec
+  }
+
+  for (const tier of order) {
+    if (tier === 'fts') break // 终态：无向量可写
+    if (tier === 'llm') continue // 查询侧无 LLM 档（写侧才有）
+
+    if (tier === 'local') {
+      try {
+        const [vec] = await embedLocal([effectiveQuery], localCfg.baseUrl, localCfg.model)
+        const adopted = adoptable(vec, tier)
+        if (adopted) return adopted
+      } catch (e) {
+        // Ollama 未运行是最常见的生产形态（T2：错误串为英文，只进日志、不作 UI 文案）
+        logger.warn('KB', t('log.embedding.localFailed').replace('{err}', String(e)))
+      }
+    } else if (tier === 'api') {
+      if (!model.apiKey) continue // 与改造前的 gate 一致：无 Key 不进 api 档
+      try {
+        const [vec] = await generateEmbeddings([effectiveQuery], protocol, model)
+        const adopted = adoptable(vec, tier)
+        if (adopted) return adopted
+      } catch {
+        // Embedding 不可用，静默降级（沿用改造前行为）
+      }
+    }
+  }
+
+  logger.warn('KB', t('log.embedding.queryVectorUnavailable'))
+  return undefined
+}
+
+/**
  * 检索知识库
  * 有 Embedding 配置时 → 混合检索（FTS + 向量）
  * 无 Embedding 配置时 → 纯 FTS 检索
@@ -398,6 +478,9 @@ function readCharacterAliasMap(projectPath: string): Map<string, string[]> {
  * 失败路径（无 characters / 别名缺失 / 解析失败 / 项目不匹配）一律退回原 query；
  * 分词器不可用时退化为子串命中判定（仍可扩展，只是不再按词匹配）。
  * 收益边界（只保证词法通道与候选池不减；结果集排序/top-K 成员仍可能被替换）见函数内注释。
+ *
+ * T3b：查询向量改走**降级链**（本地档参与 + 维度兼容门）。`localEmbedding.enabled === false`
+ * （默认）时逐字沿用改造前的单次远端 API 路径，且零新增开销（不读表维度、不碰本地档）。
  */
 export async function searchKnowledge(
   query: string,
@@ -411,35 +494,49 @@ export async function searchKnowledge(
 
   // 可选：生成查询向量
   let queryVector: number[] | undefined
-  if (model.apiKey && query.trim()) {
-    // L3 T5：角色别名扩展——query 命中角色名/别名时，并入该角色的正名 + 别名后再向量化，
-    //   使「角色在不同章节以别名出现」的 chunk 也能被召回到（正名与别名都参与检索）。
-    //
-    // ⚠️ 扩展**只喂语义通道**：`storeSearchWithScope` 的 queryText 仅被 FTS 通道消费，而 T3 的
-    //   词级检索是 **AND**——把变体并进 query 等于追加 AND 约束，候选集只会收紧
-    //   （query「阿晚」→ 并入 苏晚/晚儿 后要求 chunk 同时含三种形态），反向丢失既有召回。
-    //   故词法通道沿用原 query；任何失败（无 characters / 别名缺失 / 解析失败 / 项目不匹配）
-    //   都退回原 query。
-    //
-    // ⚠️ 收益边界（T5 review Important-1 收窄，勿再表述为「纯增益」）：上述保证只到
-    //   **「词法通道不变、候选池不减」**。扩展后的 query 向量会改变语义通道的候选与品秩，
-    //   而 T4 的 RRF 融合是在**融合排序之后**才 `slice(topK)`——因此 **结果集排序与 top-K
-    //   成员可能被替换**（同一 query、topK=1 时 top1 就可能换块），并非「只增不减」。
-    //   带硬阈值的消费者（rag-context-provider 的 vector ≥0.6、search-knowledge.tool 的
-    //   min_score 0.5）因此可能丢弃改造前会注入的 chunk。该风险只能在**有 API Key 的真实
-    //   embedding 环境**复测确认（发布前置项：真实 embedding 下别名 query 的 top-K 与
-    //   阈值命中率不得低于改造前）。
-    const effectiveQuery = rewriteQuery(query, readCharacterAliasMap(projectPath))
-    try {
-      const [vec] = await generateEmbeddings([effectiveQuery], protocol, model)
-      if (vec && vec.length > 0) {
-        queryVector = vec
-      }
-    } catch {
-      // Embedding 不可用，降级为 FTS
-    }
-  }
+  const localCfg = readLocalEmbeddingConfig()
 
+  // L3 T5：角色别名扩展——query 命中角色名/别名时，并入该角色的正名 + 别名后再向量化，
+  //   使「角色在不同章节以别名出现」的 chunk 也能被召回到（正名与别名都参与检索）。
+  //
+  // ⚠️ 扩展**只喂语义通道**：`storeSearchWithScope` 的 queryText 仅被 FTS 通道消费，而 T3 的
+  //   词级检索是 **AND**——把变体并进 query 等于追加 AND 约束，候选集只会收紧
+  //   （query「阿晚」→ 并入 苏晚/晚儿 后要求 chunk 同时含三种形态），反向丢失既有召回。
+  //   故词法通道沿用原 query；任何失败（无 characters / 别名缺失 / 解析失败 / 项目不匹配）
+  //   都退回原 query。
+  //
+  // ⚠️ 收益边界（T5 review Important-1 收窄，勿再表述为「纯增益」）：上述保证只到
+  //   **「词法通道不变、候选池不减」**。扩展后的 query 向量会改变语义通道的候选与品秩，
+  //   而 T4 的 RRF 融合是在**融合排序之后**才 `slice(topK)`——因此 **结果集排序与 top-K
+  //   成员可能被替换**（同一 query、topK=1 时 top1 就可能换块），并非「只增不减」。
+  //   带硬阈值的消费者（rag-context-provider 的 vector ≥0.6、search-knowledge.tool 的
+  //   min_score 0.5）因此可能丢弃改造前会注入的 chunk。该风险只能在**有 API Key 的真实
+  //   embedding 环境**复测确认（发布前置项：真实 embedding 下别名 query 的 top-K 与
+  //   阈值命中率不得低于改造前）。
+  //
+  // ⚠️ T3b：`effectiveQuery` **只算一次**，谁赢谁用（本地档与 api 档共用同一个值）。
+  if (!localCfg.enabled) {
+    // ==== 兼容路径（默认）与改造前逐字等价，且零新增开销 ====
+    // 不读表维度、不碰本地档；gate 与异常静默降级都保持原样。
+    if (model.apiKey && query.trim()) {
+      const effectiveQuery = rewriteQuery(query, readCharacterAliasMap(projectPath))
+      try {
+        const [vec] = await generateEmbeddings([effectiveQuery], protocol, model)
+        if (vec && vec.length > 0) {
+          queryVector = vec
+        }
+      } catch {
+        // Embedding 不可用，降级为 FTS
+      }
+    }
+  } else if (query.trim()) {
+    // ==== 降级链路径（T3b）：本地档参与，逐档取维度兼容的查询向量 ====
+    const effectiveQuery = rewriteQuery(query, readCharacterAliasMap(projectPath))
+    queryVector = await resolveQueryVector(effectiveQuery, projectPath, protocol, model, localCfg)
+  }
+  // 空/纯空白 query：显式不进语义通道（与改造前的 `query.trim()` 门一致），故也不报「不可用」
+
+  // ⚠️ 词法通道拿到的**始终是原 query**（别名扩展只喂语义通道，见上）
   return storeSearchWithScope(projectPath, query, queryVector, topK, chapterScope)
 }
 

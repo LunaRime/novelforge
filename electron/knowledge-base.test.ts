@@ -11,15 +11,22 @@
  * ④ `importContent` / `backfillVectors` 的**降级链调用序列**（mock 各档，断言顺序/短路/降级）
  * ⑤ 维度硬校验的接线与「不写入/不删旧文档」（mock 维度读取；真实 LanceDB 见 e2e 文件）
  *
+ * T3b 追加（查询侧接入降级链）：
+ * ⑥ `searchKnowledge` 的查询向量：`enabled=false` 兼容性锁（零新增开销）/ 逐档取维度兼容向量 /
+ *    维度不符与本地不可用的降级 / 全档不可用时 FTS 且不抛 / 别名扩展只喂语义通道
+ *
  * ⚠️ better-sqlite3 编译目标为 Electron ABI，vitest（Node ABI）无法加载 → mock `./database`
  *    （与 `electron/repositories/character-repository.test.ts` 同法，用 node:sqlite 内存库）
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import type { MockInstance } from 'vitest'
 import fs from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tokenize } from './chinese-tokenizer'
 import { logger } from './utils/logger'
 import { GLOBAL_CONFIG_PATH, writeJsonFile } from './utils/config-utils'
+import { t, SUPPORTED_LOCALES, getCurrentLocale, setCurrentLocale } from '../src/shared/locale'
+import type { TextKey } from '../src/shared/locale'
 import {
   rewriteQuery,
   buildCharacterAliasMap,
@@ -71,6 +78,8 @@ const h = vi.hoisted(() => ({
   existingDim: 0,
   /** 维度读取次数（用于锁定「仅在确有向量写入时才读表」） */
   dimReadCalls: 0,
+  /** 维度读取本身抛错（T3b：查询侧读不到现状 → 按维度未知放行） */
+  dimReadShouldFail: false,
   /** 调用记录 */
   addChunksCalls: [] as Array<{
     projectPath: string
@@ -138,6 +147,7 @@ vi.mock('./vector-store', () => ({
   // T3 维度校验：现有表维度（0 = 首建放行）
   getChunksTableVectorDim: async () => {
     h.dimReadCalls++
+    if (h.dimReadShouldFail) throw new Error('lancedb open failed')
     return h.existingDim
   },
   // T3 backfillVectors 需要的假连接（断言点：createTable/dropTable 未被调用 = 无半写入）
@@ -264,6 +274,31 @@ function makeDbWithoutCharacters(): DatabaseSync {
   return db
 }
 
+/**
+ * 带计数的 characters 库（T3b）：断言 `effectiveQuery` **只算一次**——
+ * `readCharacterAliasMap` 每调用一次就 `prepare` 一次，逐档重算会让计数 > 1。
+ */
+function makeCountingCharactersDb(rows: Array<{ name: string; aliases: string }>): {
+  db: unknown
+  prepareCalls: () => number
+} {
+  const real = makeCharactersDb(rows)
+  let count = 0
+  const db = new Proxy(real, {
+    get(target, prop) {
+      if (prop === 'prepare') {
+        return (sql: string) => {
+          count++
+          return target.prepare(sql)
+        }
+      }
+      const value = Reflect.get(target, prop, target) as unknown
+      return typeof value === 'function' ? (value as (...a: unknown[]) => unknown).bind(target) : value
+    },
+  })
+  return { db, prepareCalls: () => count }
+}
+
 beforeEach(() => {
   h.searchCalls.length = 0
   h.searchResults.length = 0
@@ -284,6 +319,7 @@ beforeEach(() => {
   h.llmVectors = null
   h.existingDim = 0
   h.dimReadCalls = 0
+  h.dimReadShouldFail = false
   fs.rmSync(GLOBAL_CONFIG_PATH, { force: true }) // 每个用例从「无 localEmbedding 字段」开始
   h.existingDocs = []
   h.addChunksCalls.length = 0
@@ -923,6 +959,367 @@ describe('backfillVectors 四级接入 + 维度拒绝（T3）', () => {
       expect(res.processed).toBe(1) // 只有 row-2 拿到向量（row-1 对应空向量 → 跳过）
       expect(h.dbWrites).toContain('create:chunks_backfill')
       expect(h.dbWrites).toContain('create:chunks')
+    })
+  })
+})
+
+// ============================================================
+// ⑥ T3b：查询侧降级链（`searchKnowledge` 的查询向量）
+//
+// 背景：T3 只把**写入侧**接进降级链，查询侧仍只用远端 Embedding API ——
+// 开启本地档后纯本地用户**拿不到查询向量**、有 API Key 的用户则「1536 维 query 打 1024 维表」
+// 被 `vector-store` 内部的 `catch {}` 静默吞掉 → 语义检索从「能用」变成「不能用」。
+// 本段锁的就是「查询向量也走同一个 order，且逐档做维度兼容门」。
+// ============================================================
+
+/** 日志断言辅助：取文案「首个占位符之前」的稳定前缀（跟着字典走，不写死文案） */
+function logPrefix(key: TextKey): string {
+  return t(key).split('{')[0]
+}
+
+/** 把 logger.warn 的调用参数摊平成一段文本（沿用 T3 用例的既有写法） */
+function warnText(spy: MockInstance): string {
+  return spy.mock.calls.map(args => args.map(String).join(' ')).join('\n')
+}
+
+/** 子串出现次数（断言「恰好一条 warn」而不是「至少一条」） */
+function countOf(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1
+}
+
+const vec1024 = (fill = 0.1): number[] => new Array<number>(1024).fill(fill)
+const vec1536 = (fill = 0.2): number[] => new Array<number>(1536).fill(fill)
+
+describe('查询侧降级链（T3b）', () => {
+  describe('E1 兼容性锁：enabled=false 与改造前逐字等价，且零新增开销', () => {
+    it('不读表维度 / 不碰本地档；api 成功 → 向量透传且无任何新增 warn', async () => {
+      setGlobalConfig({ localEmbedding: { enabled: false, preferLocal: true, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } })
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.dimReadCalls).toBe(0)          // 硬约束：enabled=false 不得读表维度
+      expect(h.localEmbedCalls).toHaveLength(0)
+      expect(h.detectCalls).toHaveLength(0)   // 连本地探测都不做
+      expect(h.embedCalls).toHaveLength(1)    // api 档恰好一次（原路径）
+      expect(h.searchCalls[0].queryVector).toEqual(h.embedVector)
+      expect(warnText(warnSpy)).toBe('')      // 零新增日志
+    })
+
+    it('apiKey 为空 → generateEmbeddings 0 次、不读表、不碰本地档（纯 FTS 路径逐字等价）', async () => {
+      setGlobalConfig({ localEmbedding: { enabled: false, preferLocal: true, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } })
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 5)
+
+      expect(h.embedCalls).toHaveLength(0)
+      expect(h.dimReadCalls).toBe(0)
+      expect(h.localEmbedCalls).toHaveLength(0)
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(warnText(warnSpy)).toBe('')
+    })
+
+    it('api 抛错 → 静默降级 FTS（今天不 warn，改造后也不得新增 warn）', async () => {
+      setGlobalConfig({})
+      h.embedShouldFail = true
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(h.dimReadCalls).toBe(0)
+      expect(warnText(warnSpy)).toBe('')
+    })
+
+    it('空 query / 纯空白 query → 不进语义通道（与今天的 query.trim() 门一致），无 warn', async () => {
+      setGlobalConfig({ localEmbedding: { enabled: true, preferLocal: true, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } })
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('   ', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.embedCalls).toHaveLength(0)
+      expect(h.localEmbedCalls).toHaveLength(0)
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(warnText(warnSpy)).toBe('')
+    })
+  })
+
+  describe('E2 本地胜出（enabled=true, preferLocal=true）', () => {
+    it('tableDim=1024 + 本地 1024 维 → 采用本地向量，api 一次都不调', async () => {
+      enableLocal(true)
+      h.existingDim = 1024
+      const localVec = vec1024(0.11)
+      h.localVectors = [localVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.dimReadCalls).toBe(1) // 只在 enabled 分支读表（且只读一次）
+      expect(h.localEmbedCalls).toEqual([['阿晚今天做了什么']])
+      expect(h.embedCalls).toHaveLength(0)
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+    })
+
+    it('纯本地用户（apiKey 为空）也能拿到查询向量 —— T3b 存在的理由', async () => {
+      enableLocal(true)
+      h.existingDim = 1024
+      const localVec = vec1024(0.12)
+      h.localVectors = [localVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 5)
+
+      expect(h.embedCalls).toHaveLength(0)
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+    })
+  })
+
+  describe('E3 维度不兼容 → 不采用、不抛，落下一档', () => {
+    it('表 1536 / 本地 1024 / API 1536 → 用 API 向量 + 恰好一条 queryDimMismatch', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [vec1024(0.13)]
+      const apiVec = vec1536(0.14)
+      h.apiVectors = [apiVec]
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.localEmbedCalls).toHaveLength(1)
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryDimMismatch'))).toBe(1)
+    })
+
+    it('两档维度都不符 → 都不采用（各一条 queryDimMismatch），最终 FTS + queryVectorUnavailable', async () => {
+      enableLocal(false) // 顺序 api → local
+      h.existingDim = 1536
+      h.apiVectors = [vec1024(0.15)]  // api 返回 1024，与表 1536 不符
+      h.localVectors = [vec1024(0.16)] // 本地同样不符
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.localEmbedCalls).toHaveLength(1)
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryDimMismatch'))).toBe(2)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryVectorUnavailable'))).toBe(1)
+    })
+
+    it('本地返回空向量（[] / [[]]）→ 视为该档失败，落下一档（不采用空向量）', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [[]] // 本地"成功"但向量为空
+      const apiVec = vec1536(0.161)
+      h.apiVectors = [apiVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.localEmbedCalls).toHaveLength(1)
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+    })
+  })
+
+  describe('E4 全档不可用 → FTS 且不抛（检索不被阻断）', () => {
+    it('本地维度不符 + 无 API Key → queryVector undefined、不 reject、一条 queryVectorUnavailable', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [vec1024(0.17)]
+      h.searchResults.push({ text: '命中', score: 0.7, fileName: 'a.txt', source: 'fts' })
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await expect(searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 5))
+        .resolves.toEqual(h.searchResults)
+
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryVectorUnavailable'))).toBe(1)
+    })
+
+    it('本地抛错（Ollama 未运行）+ 无 API Key → 同上（纯本地用户的主路径）', async () => {
+      enableLocal(true)
+      h.localEmbedShouldFail = true
+      h.localEmbedError = new TypeError('fetch failed')
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      const res = await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 5)
+
+      expect(Array.isArray(res)).toBe(true)
+      expect(h.searchCalls[0].queryVector).toBeUndefined()
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.localFailed'))).toBe(1)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryVectorUnavailable'))).toBe(1)
+    })
+  })
+
+  describe('E5 本地抛错降级到 API（Ollama 未运行的真实主路径）', () => {
+    it('embedLocal reject + apiKey 有值 + 维度一致 → 用 API 向量，且不报「无向量」', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localEmbedShouldFail = true
+      h.localEmbedError = new TypeError('fetch failed')
+      const apiVec = vec1536(0.18)
+      h.apiVectors = [apiVec]
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.localEmbedCalls).toHaveLength(1)
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.localFailed'))).toBe(1)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryVectorUnavailable'))).toBe(0)
+    })
+  })
+
+  describe('E6 preferLocal=false：顺序反转（api 先，local 兜底）', () => {
+    it('API 可用 → API 胜出，本地档一次都不调用', async () => {
+      enableLocal(false)
+      h.existingDim = 1536
+      const apiVec = vec1536(0.19)
+      h.apiVectors = [apiVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.dimReadCalls).toBe(1)
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+      expect(h.localEmbedCalls).toHaveLength(0)
+    })
+
+    it('API 不可用 → 回落本地，维度匹配时采用', async () => {
+      enableLocal(false)
+      h.existingDim = 1536
+      h.embedShouldFail = true
+      const localVec = vec1536(0.21)
+      h.localVectors = [localVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.localEmbedCalls).toHaveLength(1)
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+    })
+  })
+
+  describe('E7 维度未知（tableDim=0：表不存在 / 无 vector 列 / 读不到）→ 放行', () => {
+    it('本地可用 → 采用本地向量（不因维度未知而拒绝）', async () => {
+      enableLocal(true)
+      h.existingDim = 0
+      const localVec = vec1024(0.22)
+      h.localVectors = [localVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.dimReadCalls).toBe(1)
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+    })
+
+    it('本地不可用 → API 向量放行（维度未知不拦）', async () => {
+      enableLocal(true)
+      h.existingDim = 0
+      h.localEmbedShouldFail = true
+      const apiVec = vec1536(0.23)
+      h.apiVectors = [apiVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+    })
+
+    it('读表维度**抛错** → 视为维度未知（放行）+ 一条 queryDimReadFailed，检索照常', async () => {
+      enableLocal(true)
+      h.dimReadShouldFail = true
+      const localVec = vec1024(0.29)
+      h.localVectors = [localVec]
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.dimReadCalls).toBe(1)
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+      expect(countOf(warnText(warnSpy), logPrefix('log.embedding.queryDimReadFailed'))).toBe(1)
+    })
+  })
+
+  describe('E8 别名扩展只喂语义通道（L3 T5 契约在 T3b 后不变）', () => {
+    it('本地档赢：向量用扩展 query，词法通道仍拿原 query', async () => {
+      enableLocal(true)
+      h.existingDim = 1024
+      h.db = makeCharactersDb([{ name: '苏晚', aliases: '["阿晚","晚儿"]' }])
+      const localVec = vec1024(0.24)
+      h.localVectors = [localVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.localEmbedCalls).toEqual([['阿晚今天做了什么 苏晚 晚儿']])
+      expect(h.embedCalls).toHaveLength(0)
+      expect(h.searchCalls[0].query).toBe('阿晚今天做了什么')
+      expect(h.searchCalls[0].queryVector).toEqual(localVec)
+    })
+
+    it('API 档赢（本地维度不符后回落）：扩展 query 依旧只喂语义通道', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [vec1024(0.25)] // 本地维度不符 → 落 api 档
+      h.db = makeCharactersDb([{ name: '苏晚', aliases: '["阿晚","晚儿"]' }])
+      const apiVec = vec1536(0.26)
+      h.apiVectors = [apiVec]
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.embedCalls).toEqual([['阿晚今天做了什么 苏晚 晚儿']])
+      expect(h.searchCalls[0].query).toBe('阿晚今天做了什么')
+      expect(h.searchCalls[0].queryVector).toEqual(apiVec)
+    })
+
+    it('effectiveQuery 只算一次：两档都走过时别名映射只读一次（prepare 计数 1）', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [vec1024(0.27)]
+      h.apiVectors = [vec1536(0.28)]
+      const counting = makeCountingCharactersDb([{ name: '苏晚', aliases: '["阿晚","晚儿"]' }])
+      h.db = counting.db
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(counting.prepareCalls()).toBe(1)
+      expect(h.localEmbedCalls).toEqual([['阿晚今天做了什么 苏晚 晚儿']])
+      expect(h.embedCalls).toEqual([['阿晚今天做了什么 苏晚 晚儿']])
+    })
+  })
+
+  describe('E9 新增 log 键三语对账', () => {
+    const NEW_KEYS = [
+      'log.embedding.queryDimMismatch',
+      'log.embedding.queryVectorUnavailable',
+      'log.embedding.queryDimReadFailed',
+    ] as const satisfies readonly TextKey[]
+
+    it('三个新键在 zh-CN / en-US / ru-RU 下都有译文（不回落成 key 本身）', () => {
+      const saved = getCurrentLocale()
+      try {
+        for (const key of NEW_KEYS) {
+          for (const locale of SUPPORTED_LOCALES) {
+            setCurrentLocale(locale)
+            const text = t(key)
+            expect(text, `missing ${locale} for "${key}"`).toBeTruthy()
+            expect(text, `missing ${locale} for "${key}"`).not.toBe(key)
+          }
+        }
+      } finally {
+        setCurrentLocale(saved)
+      }
+    })
+
+    it('queryDimMismatch 文案含 {expected} / {actual} 占位符（维度不符时可读）', () => {
+      const saved = getCurrentLocale()
+      try {
+        for (const locale of SUPPORTED_LOCALES) {
+          setCurrentLocale(locale)
+          expect(t('log.embedding.queryDimMismatch')).toContain('{expected}')
+          expect(t('log.embedding.queryDimMismatch')).toContain('{actual}')
+        }
+      } finally {
+        setCurrentLocale(saved)
+      }
     })
   })
 })
