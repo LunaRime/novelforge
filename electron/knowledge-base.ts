@@ -721,7 +721,14 @@ export async function backfillVectors(
     // 使用显式 Arrow Schema 确保 vector 列正确持久化
     // LanceDB 自动推断无法正确识别 number[] 为 FixedSizeList 向量类型
     // 从实际生成的向量中检测维度
-    const VECTOR_DIM = vectors.length > 0 && vectors[0].length > 0 ? vectors[0].length : 0
+    // ⚠️ T3 R1（reviewer I1）：**必须**取首个**非空**向量（`firstVectorDim`），不能用
+    //    `vectors[0].length` 捷径——本函数的 LLM 档是 `vectors = llmResults.map(r => r.vector)`
+    //    （**不过滤空向量**，而 embedding-service 对失败项合法返回 `{vector: []}`），
+    //    故 `vectors = [[], [1024…]]` 是可达形状：首元素为 0 维会让
+    //    ① `assertVectorDimCompatible(…, 0)` 按"本次不写向量"提前放行 → 维度守卫**静默自跳过**；
+    //    ② 下面 `VECTOR_DIM === 0` 构造出**不带 vector 列**的 schema，与非空向量行冲突
+    //       （真实 LanceDB 原始报错：`Found field not in schema: vector at row 0`）。
+    const VECTOR_DIM = firstVectorDim(vectors)
 
     // T3 向量维度硬校验：与 importContent 同一道防线——**任何写盘动作之前**拒绝混维
     //（不静默降级、不半写入；抛出的错误由本函数外层 catch 转成明确 error 上交，不进降级链）

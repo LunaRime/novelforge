@@ -161,7 +161,20 @@ vi.mock('./vector-store', () => ({
         countRows: async () => h.backfillFullRows.length,
         createIndex: async () => { h.dbWrites.push('createIndex') },
       }),
-      createTable: async (name: string) => { h.dbWrites.push(`create:${name}`) },
+      createTable: async (
+        name: string,
+        rows: Array<Record<string, unknown>>,
+        opts?: { schema?: { fields: Array<{ name: string }> } },
+      ) => {
+        h.dbWrites.push(`create:${name}`)
+        // 忠实模拟 LanceDB 的 schema 契约（reviewer I1 实测原文：`Found field not in schema: vector at row 0`）：
+        // schema 里没有 vector 列、数据却带 vector → 真实 LanceDB 抛错。假库不做这个校验的话，
+        // 「VECTOR_DIM 读成 0 → 构造出无 vector 列的 schema」这条缺陷在单测里会静默通过。
+        const hasVectorField = opts?.schema?.fields.some(f => f.name === 'vector') ?? false
+        if (!hasVectorField && rows.some(r => r.vector !== undefined && r.vector !== null)) {
+          throw new Error('Found field not in schema: vector at row 0')
+        }
+      },
       dropTable: async (name: string) => { h.dbWrites.push(`drop:${name}`) },
     }
   },
@@ -840,5 +853,67 @@ describe('backfillVectors 四级接入 + 维度拒绝（T3）', () => {
     expect(res.failed).toBe(0)
     expect(h.dbWrites).toContain('create:chunks_backfill')
     expect(h.dbWrites).toContain('create:chunks')
+  })
+
+  /**
+   * T3 R1（reviewer I1 修复的回归锁）：**守卫不得因「首个向量为空」而自跳过**。
+   *
+   * 可达形状：LLM 档在 `backfillVectors` 里是 `vectors = llmResults.map(r => r.vector)`（**未过滤空向量**，
+   * 与 importContent 的 `.filter(v => v.length > 0)` 不同），而 `embedding-service` 对失败项合法返回
+   * `{ vector: [] }` → `vectors = [[], [1024…]]`。若维度取自 `vectors[0].length` 就会得到 0，
+   * 而 `assertVectorDimCompatible(…, 0)` 按「本次不写向量」提前放行 → 守卫**从未运行**，
+   * 且 `VECTOR_DIM === 0` 还会构造出**不带 vector 列**的 schema，与携带向量的行冲突。
+   */
+  describe('T3 R1：空向量在首位（LLM 档不过滤空向量）→ 守卫不得静默自跳过', () => {
+    beforeEach(() => {
+      h.embedShouldFail = true // api 档失败 → 降级 LLM 档
+      h.llmEnabled = true
+    })
+
+    it('表 1536 维 + LLM 结果 [[], 1024 维] → 拒绝，文案含 1536 与 1024，且无半写入', async () => {
+      h.existingDim = 1536
+      h.llmVectors = [[], new Array(1024).fill(0.5)]
+
+      const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toMatch(/1536/)
+      expect(res.error).toMatch(/1024/)
+      expect(h.dbWrites).toHaveLength(0) // 守卫在写盘前拦下（临时表都未创建）
+    })
+
+    it('表 1536 维 + LLM 结果 [[], [1,2,3,4]] → 取首个**非空**向量（4 维）而非首元素（0 维）', async () => {
+      h.existingDim = 1536
+      h.llmVectors = [[], [1, 2, 3, 4]]
+
+      const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toMatch(/1536/)
+      expect(res.error).toMatch(/本次生成 4 维/)
+      expect(res.error).not.toMatch(/本次生成 0 维/)
+      expect(h.dbWrites).toHaveLength(0)
+    })
+
+    it('同维度变体（表 4 维 / LLM 结果 [[], [1,2,3,4]]）→ 放行且落库成功（schema 带 vector 列）', async () => {
+      h.existingDim = 4
+      h.vectorlessCount = 2
+      h.backfillRows = [
+        { id: 'row-1', text: '块1', vector: null },
+        { id: 'row-2', text: '块2', vector: null },
+      ]
+      h.backfillFullRows = [
+        { id: 'row-1', text: '块1', vector: null },
+        { id: 'row-2', text: '块2', vector: [1, 2, 3, 4] },
+      ]
+      h.llmVectors = [[], [1, 2, 3, 4]]
+
+      const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(res.processed).toBe(1) // 只有 row-2 拿到向量（row-1 对应空向量 → 跳过）
+      expect(h.dbWrites).toContain('create:chunks_backfill')
+      expect(h.dbWrites).toContain('create:chunks')
+    })
   })
 })

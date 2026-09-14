@@ -28,6 +28,11 @@ const h = vi.hoisted(() => ({
   embedCalls: [] as string[][],
   /** T3：stub 向量的维度（0 = 用检索用例的 5 维 stubEmbed）——模拟「换了 Embedding 模型」 */
   embedDim: 0,
+  /** T3 R1：api 档失败开关（→ 降级 LLM 档，复现"LLM 结果含空向量"的可达形状） */
+  apiShouldFail: false,
+  llmEnabled: false,
+  llmVectors: null as null | number[][],
+  llmCalls: [] as string[][],
 }))
 
 vi.mock('./database', () => ({
@@ -47,9 +52,23 @@ vi.mock('./embedding', () => ({
   chunkText: (text: string) => text.split('\n').map(l => l.trim()).filter(l => l !== ''),
   generateEmbeddings: async (texts: string[]) => {
     h.embedCalls.push(texts)
+    // T3 R1：api 档失败开关 → 降级到 LLM 档
+    if (h.apiShouldFail) throw new Error('stub: api embedding unavailable')
     // T3：embedDim > 0 → 该维度常量向量（模拟本地 1024 维 / API 1536 维）；
     //    否则用 5 维 stubEmbed（检索用例）
     return texts.map(t => (h.embedDim > 0 ? new Array(h.embedDim).fill(0.1) : stubEmbed(t)))
+  },
+}))
+
+/** T3 R1：LLM 档（`backfillVectors` 里**不过滤空向量**的档 —— R1 缺陷的入口） */
+vi.mock('./embedding-service', () => ({
+  embeddingService: {
+    canUseLLMEmbedding: () => h.llmEnabled,
+    embedBatchWithLLM: async (texts: string[]) => {
+      h.llmCalls.push(texts)
+      // 与真实 embedding-service 一致：单条失败合法返回 { vector: [] }
+      return (h.llmVectors ?? texts.map(() => [0.1, 0.2, 0.3, 0.4])).map(vector => ({ vector }))
+    },
   },
 }))
 
@@ -89,6 +108,10 @@ beforeEach(() => {
   h.currentProjectPath = null
   h.embedCalls.length = 0
   h.embedDim = 0
+  h.apiShouldFail = false
+  h.llmEnabled = false
+  h.llmVectors = null
+  h.llmCalls.length = 0
 })
 
 describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L3 T5）', () => {
@@ -307,6 +330,58 @@ describe('向量维度硬校验端到端（T3，真实 LanceDB）', () => {
       // failed 可能算出负数），是既有行为、非本任务范围——断言真正的终点不变量
       expect((await getChunksWithoutVectors(projectPath)).count).toBe(0)
       expect((await getStats(projectPath)).vectorDimension).toBe(1536)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  /**
+   * T3 R1（reviewer I1）：LLM 档在 `backfillVectors` 里**不过滤空向量**，而
+   * `embedding-service` 对失败项合法返回 `{ vector: [] }` → `vectors = [[], [1024…]]` 可达。
+   * 若维度取自 `vectors[0].length`：真实 LanceDB 上既**拦不住真冲突**（守卫按 0 提前放行），
+   * 同维度时也**照样炸**（schema 被构造成不带 vector 列 → `Found field not in schema: vector`）。
+   */
+  it('T3 R1：LLM 结果首位空向量（[[], 1024 维]）+ 表 1536 维 → 仍须以 i18n 文案拒绝且无半写入', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1536)
+      // ⚠️ 必须有**待回填行**：无缺向量行时 backfillVectors 会提前 `{success:true, processed:0}` 返回，
+      //    根本走不到守卫（本用例首版即因此假绿，已修）
+      await addChunks(projectPath, randomUUID(), '第2章 无向量.txt', ['无向量块'])
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(1)
+      h.apiShouldFail = true // api 档失败 → 降级 LLM 档
+      h.llmEnabled = true
+      h.llmVectors = [[], new Array(1024).fill(0.1)]
+
+      const res = await backfillVectors(projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toContain('1536')
+      expect(res.error).toContain('1024')
+
+      const stats = await getStats(projectPath)
+      expect(stats.vectorDimension).toBe(1536) // 维度未被污染
+      expect(stats.totalChunks).toBe(2)        // 表未被重建/丢行
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(1)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('T3 R1：LLM 结果首位空向量 + 同维度（表 4 维 / [[], [1,2,3,4]]）→ 落库成功（schema 带 vector 列）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await addChunks(projectPath, randomUUID(), '第1章 四维.txt', ['四维块'], [vec(4)])
+      await addChunks(projectPath, randomUUID(), '第2章 无向量.txt', ['无向量块'])
+      h.apiShouldFail = true
+      h.llmEnabled = true
+      h.llmVectors = [[], [1, 2, 3, 4]]
+
+      const res = await backfillVectors(projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect((await getStats(projectPath)).vectorDimension).toBe(4)
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(0)
     } finally {
       await cleanupProject(projectPath)
     }
