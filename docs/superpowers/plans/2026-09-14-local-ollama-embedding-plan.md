@@ -113,7 +113,7 @@
     - 未开启 → `['api','llm','fts']`（现状三级，逐字等价）
     - 开启 + preferLocal → `['local','api','llm','fts']`
     - 开启 + !preferLocal → `['api','local','llm','fts']`
-  - 维度校验：`assertVectorDimConsistent(projectPath, dim)`（现表已有向量且维度不同 → throw 明确错误）
+  - 维度校验：`assertVectorDimCompatible(projectPath, dim)`（现表已有向量且维度不同 → throw 明确错误）
 
 - [ ] **Step 1: 写失败测试**
   - `resolveEmbeddingOrder` 三分支（未开启 / 本地优先 / API 优先）纯函数断言。
@@ -148,6 +148,9 @@
 - Modify: `src/shared/ipc-channels.ts` 的 `IPC_EVENT_CHANNELS`（**登记 1 条 event**：`embedding:local-pull-progress`）
 - Modify: `electron/controllers/kb-controller.ts`（或新建 `electron/controllers/local-embedding-controller.ts`）——**全部用 `guardedHandle`**
 - Modify: `electron/utils/config-utils.ts`（`DEFAULT_GLOBAL_CONFIG.localEmbedding` 默认值）
+- Modify: `electron/vector-store.ts`（**T3 review 路由**：`updateChunkVectors` 入口维度守卫 + 修掉 `:1199` 零成功仍报 `success:true`）
+- Modify: `electron/knowledge-base.ts`（**T3 review 路由**：`LocalEmbeddingConfig` 与 `GlobalConfig.localEmbedding` 收敛为单一来源，消除双份默认值）
+- Modify: `electron/controllers/kb-controller.ts`（**T3 review 路由 I2**：`kb:backfill-vectors` 门控改 `localEmbedding.enabled || canUseEmbeddingAPI`；维度错误为终态，不再降级进 `updateChunkVectors`）
 - Modify: 通道对账测试（若需同步快照）
 
 **Interfaces:**
@@ -174,15 +177,51 @@
   - 通道签名 + **策略表登记**（`ChannelPolicy`：这 5 条无路径参数 → 路径类 none；`local-pull` 涉及外部进程 → 按 L4 语义选择是否需要 `destructive`/`spawn` 类标记，**读 `src/shared/ipc-policy.ts` 现有同类通道的 policy 取值**）。
   - controller：`guardedHandle` 注册；pull 发起后在主进程订阅 `pullModel` 进度 → `event.sender.send('embedding:local-pull-progress', ...)`（**不要**在 invoke 里等 pull 完成——IPC 30s 超时）。
   - preload **不改**（派生）。
+  - **追加（T3 review 路由，详见 `task-4-brief.md` §⭐）**：
+    - **A4.1** `updateChunkVectors` 入口维度守卫（该写入路径唯一 choke point；实测 8 值写 4 维列会静默写 `null` 销毁向量、1024 写 1536 抛错被逐行吞掉并谎报 `failed: 0`）；守卫不兼容时**先返回再写**；`:1199` 的 `success:true` 改为按真实成功行数判定。
+    - **A4.2** `kb:backfill-vectors` 门控与拒绝语义（本地用户当前走不到方式 1；T3 的维度拒绝被 controller 降级成方式 2 的无守卫写入）。
+    - **A4.3** `LocalEmbeddingConfig`（T3 在 `knowledge-base.ts:60` 自建）与 `GlobalConfig.localEmbedding` 单一来源化。
 
 - [ ] **Step 4: 跑测试通过**（含通道对账）
 
 - [ ] **Step 5: 门禁 + 提交**
   ```bash
   pnpm run typecheck && pnpm run lint && node node_modules/vitest/vitest.mjs run src/shared/ipc-channel-parity.test.ts
-  git add src/shared/ipc-channels.ts src/shared/ipc-policy.ts electron/controllers/ electron/utils/config-utils.ts
+  git add src/shared/ipc-channels.ts src/shared/ipc-policy.ts electron/controllers/ electron/utils/config-utils.ts electron/vector-store.ts electron/knowledge-base.ts
   git commit -m "feat: GlobalConfig.localEmbedding + embedding:local-* 通道（guardedHandle + 策略表 + pull 进度 event，T4）"
   ```
+
+---
+
+### Task 3b: 查询侧接入本地向量（`searchKnowledge`）〔T3 review 新增〕
+
+> **来源**：T3 review residual risk 2 裁定——写入侧接进本地档、查询侧没接，等于**开启开关反而让语义检索从「能用」变「不能用」**（纯本地用户查询时根本没有查询向量；有 API Key 的用户是 1536 维 query 打 1024 维表 → `vector-store` 内部 `catch {}` 静默退回 FTS）。开关因此不具可观察价值。**排在 T4 之后（消费 T4 的 `GlobalConfig.localEmbedding`）、T5 之前（T5 的开关不得在 T3b 合并前上线）。**
+
+**Files:**
+- Modify: `electron/knowledge-base.ts`（`searchKnowledge` 查询向量段 `:447-479`；复用 `readLocalEmbeddingConfig()` `:89` / `tryLocalEmbedding()` `:118`）
+- Modify: `electron/knowledge-base.test.ts`
+- Modify: `src/shared/locale-data.ts`（新增 log 键三语）
+
+**Interfaces:**
+- Consumes: T2 `embedLocal`；T3 `resolveEmbeddingOrder` / `getChunksTableVectorDim`（`vector-store.ts:165`，0 = 维度未知）；T4 `GlobalConfig.localEmbedding`
+- Produces: 无新导出（`searchKnowledge` 签名不变）
+
+- [ ] **Step 1: 写失败测试**：
+  - **E1 兼容性锁**：`enabled=false` → 原路径逐字等价，且 `getChunksTableVectorDim` 调用 **0 次**（零新增开销）、`embedLocal` 0 次。
+  - **E2–E4**：本地胜出（tableDim 匹配）；维度不兼容 → 回落 API；全档不可用 → `queryVector undefined` 走 FTS 且**不 throw**。
+  - **E5–E7**：本地抛错（Ollama 未运行）→ 降级 API；`preferLocal=false` 顺序反转（API 先命中时 `embedLocal` 0 次）；`tableDim === 0`（新库/无向量列）放行。
+  - **E8**：L3 T5 契约不破——`storeSearchWithScope` 收到的 `query` 仍是**原 query**（别名扩展只喂语义通道）。
+  - **E9**：新增 log 键三语对账通过。
+- [ ] **Step 2: 跑失败**（附原始输出）
+- [ ] **Step 3: 实现**：`enabled=false` 走原路径；`enabled=true` 时取 `tableDim`，按 `resolveEmbeddingOrder(cfg)` 在 `local`/`api` 档中取第一个「可用且维度兼容」的向量（`llm`/`fts` 在查询侧无档位 → 跳过/FTS 终态）；全部失败 → warn 一次 + FTS 兜底。
+- [ ] **Step 4: 跑测试通过**（含既有 KB / e2e / embedding-order / locale 回归）
+- [ ] **Step 5: 门禁 + 提交**
+  ```bash
+  pnpm run typecheck && pnpm run lint && node node_modules/vitest/vitest.mjs run electron/knowledge-base.test.ts electron/knowledge-base.e2e.test.ts electron/embedding-order.test.ts src/shared/locale.test.ts
+  git add electron/knowledge-base.ts electron/knowledge-base.test.ts src/shared/locale-data.ts
+  git commit -m "feat: 查询侧接入本地向量（searchKnowledge 走降级链 + 维度兼容门，T3b）"
+  ```
+- **Non-Goals**：本地维度缓存、检索侧阈值/RRF 权重/top-K 调参（设计 §8 v2）、`storeSearchWithScope` 内部维度 `catch {}` 改造、查询侧 LLM 档。
 
 ---
 
@@ -219,13 +258,26 @@
   - 导入文档 → 日志显示走本地向量；`embedding:local-test` 显示 1024 维。
   - 停掉 Ollama → 导入仍成功（降级 api/llm/fts）+ 不阻断。
   - **维度切换**：本地(1024) ↔ API(1536) 切换 → 拒绝写入 + 提示重建（不静默）。
-- [ ] **Step 3: 登记已知限制**：Ollama 进程守护（v2）、`/api/embeddings` 旧接口（v2）、检索侧维度/阈值适配（v2）。
+  - **查询侧（T3b 验收）**：本地档开启且库为本地维度时，检索**仍走语义通道**（不是静默 FTS）；把库切成 1536 维后同一 query 不报错、按维度兼容门回落（日志有 `queryDimMismatch` 痕迹）。
+  - **`kb:backfill-vectors` 本地可达（T4 A4.2 验收）**：仅开启本地档、**不配**远端 Embedding API 模型 → 回填仍走本地向量（不是 FTS-only 报 `kb.noVectorMethod`）；构造维度不匹配 → 返回维度错误且**不**掉进 LLM 逐行写入路径。
+- [ ] **Step 3: 登记已知限制**：Ollama 进程守护（v2）、`/api/embeddings` 旧接口（v2）、检索侧阈值/RRF 权重/top-K 调参（v2；查询侧**接入**已由 T3b 落地 v1）。
+- [ ] **Step 4: 文档回更（T3 review M1/M7 债）**：
+  - `docs/superpowers/specs/2026-08-29-local-ollama-embedding-design.md:37` —— `detectOllama` 写的是 `/api/tags`，与 brief/决策 6 的 `/api/version` 冲突（实现按 brief），改文档。
+  - 同文档 `:4` 的「⏸️ 未实施」→ 回更为已实施（T1–T6 + T3b）。
+  - 同文档补记本次实测发现：`addChunks` 既有维度守卫是**死代码**（普通文档缺章节列 → `hasAllFields=false` → 走重建分支绕过；`dropTable` 先于 `createTable` 且无恢复），T3 写前校验与 T4 的 `updateChunkVectors` 守卫是其后的两道拦截。
+  - 本计划文件自身：把「检索侧适配」从 v2 移出（T3b 已做）。
 
 ---
 
 ## Self-Review
 
-**① Spec 覆盖**：设计 §3.1→T2；§3.2（四级+优先级+维度硬校验）→T3；§3.3 双通道→T2(pull)+T5(UI)；§3.4 UI→T5；§3.5 错误处理→T3/T5；§3.6 fetchWithTimeout→T1；§6 T1–T5→本计划 T1–T5（+T6 门禁）。
+**① Spec 覆盖**：设计 §3.1→T2；§3.2（四级+优先级+维度硬校验）→T3；§3.3 双通道→T2(pull)+T5(UI)；§3.4 UI→T5；§3.5 错误处理→T3/T5；§3.6 fetchWithTimeout→T1；§6 T1–T5→本计划 T1–T5（+T6 门禁）；**设计 §8 的「检索侧适配」原列 v2 → 经 T3 review 裁定提升为 T3b（v1 必做）**，理由见 T3b 段。
 **② 占位符扫描**：无 TBD；各任务给接口签名/测试契约；T4 的策略表 policy 取值要求 implementer 参照现有同类通道（已指明文件）。
-**③ 跨任务一致性**：`fetchWithTimeout(url,init,timeoutMs?)`（T1）被 T2 消费；`detectOllama/listOllamaModels/pullModel/embedLocal`（T2）被 T3/T4 消费；`GlobalConfig.localEmbedding`（T4）被 T3/T5 消费；`resolveEmbeddingOrder`（T3）纯函数独立；IPC 通道（T4）被 T5 消费。
-**④ 非目标无任务**：内置 ollama 安装/代管、ONNX、`/api/embeddings` 旧接口、进程守护、检索侧适配——均仅声明。
+**③ 跨任务一致性**：`fetchWithTimeout(url,init,timeoutMs?)`（T1）被 T2 消费；`detectOllama/listOllamaModels/pullModel/embedLocal`（T2）被 T3/T3b/T4 消费；`GlobalConfig.localEmbedding`（T4）被 T3/T3b/T5 消费且经 A4.3 收敛为单一来源；`resolveEmbeddingOrder`/`firstVectorDim`/`getChunksTableVectorDim`（T3）被 T3b/T4 消费；IPC 通道（T4）被 T5 消费。
+**④ 非目标无任务**：内置 ollama 安装/代管、ONNX、`/api/embeddings` 旧接口、进程守护、检索侧**阈值/RRF/top-K 调参**——均仅声明（查询侧**接线**已移出非目标，见 T3b）。
+
+## 执行记录（2026-09-14 SDD）
+
+- T1 `d534ab9` ✅ review pass；T2 `6ef64d4` ✅ review pass（0 Critical / 0 Important）；T3 `0ea04d8` → review **needs_revision**（1 Important：backfill 守卫被喂 `vectors[0].length`，空向量形状下静默自跳过）→ 修复轮 R1。
+- 任务序列变为 **T1 → T2 → T3(+R1 修复) → T4 → T3b → T5 → T6**。
+- T3 review 顺带确证的既有缺陷（均已路由，勿重复排查）：`addChunks` 维度守卫死代码（见 Step 4 文档回更）；`updateChunkVectors` 无守卫 + `success:true` 谎报（→T4 A4.1）；`kb:backfill-vectors` 对本地档不可达且把维度拒绝降级（→T4 A4.2）。
