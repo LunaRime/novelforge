@@ -44,6 +44,29 @@ function getCurrentProjectPath(): string | null {
   } catch { return null }
 }
 
+/**
+ * 查询 handler（`kb:search` / `kb:search-with-scope`）的向量化参数（T3b R1 / I1）。
+ *
+ * - **有远端 Embedding 模型** → 原样沿用（对象与 `getEmbeddingConfig()` 返回的是同一个，含
+ *   `modelName`），既有路径逐字不变；
+ * - **无远端模型但 `localEmbedding.enabled`** → 按 `kb:import-*` / `kb:backfill-vectors` 既有约定
+ *   给空远端配置（`protocol: 'openai'` + 空 `model`）：查询向量由 `knowledge-base` 内部的降级链
+ *   **local 档**产出，api 档拿到空配置即失败降级（不会误发请求）；
+ * - 两者皆无 → `null` → 调用方落 FTS-only 入口（`searchKnowledgeFTS`，恒无查询向量）。
+ *
+ * ⚠️ 为什么必须有这一层：`getEmbeddingConfig()` 在无远端 Embedding 模型时返回 `null`，改造前
+ *    handler 据此直接落 `searchKnowledgeFTS` —— 「纯本地用户」在检索侧根本走不到 `searchKnowledge`，
+ *    T3b 在模块层接好的降级链对真实用户不可达（与 T4/A4.2 修好的**回填侧**门控是同一类缺陷）。
+ *
+ * ⚠️ 本地档只作为**追加**放行条件：`embConfig` 存在时连配置都不读，有远端配置的既有路径零影响。
+ */
+function getQueryEmbeddingArgs(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string } } | null {
+  const embConfig = getEmbeddingConfig()
+  if (embConfig) return { protocol: embConfig.protocol, model: embConfig.model }
+  if (readLocalEmbeddingConfig().enabled) return { protocol: 'openai', model: { baseUrl: '', apiKey: '' } }
+  return null
+}
+
 export function registerKBController() {
   guardedHandle('kb:import-document', async (_event, filePath: string) => {
     const embConfig = getEmbeddingConfig()
@@ -71,24 +94,24 @@ export function registerKBController() {
   })
 
   guardedHandle('kb:search', async (_event, query: string, topK?: number) => {
-    const embConfig = getEmbeddingConfig()
+    const emb = getQueryEmbeddingArgs()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return []
 
-    if (embConfig) {
-      return searchKnowledge(query, projectPath, embConfig.protocol, embConfig.model, topK ?? 5)
+    if (emb) {
+      return searchKnowledge(query, projectPath, emb.protocol, emb.model, topK ?? 5)
     }
     return searchKnowledgeFTS(query, projectPath, topK ?? 5)
   })
 
   guardedHandle('kb:search-with-scope', async (_event, query: string, fromChapter: number, toChapter: number, topK?: number) => {
-    const embConfig = getEmbeddingConfig()
+    const emb = getQueryEmbeddingArgs()
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return []
 
     const scope: [number, number] = [fromChapter, toChapter]
-    if (embConfig) {
-      return searchKnowledge(query, projectPath, embConfig.protocol, embConfig.model, topK ?? 5, scope)
+    if (emb) {
+      return searchKnowledge(query, projectPath, emb.protocol, emb.model, topK ?? 5, scope)
     }
     return searchKnowledgeFTS(query, projectPath, topK ?? 5, scope)
   })

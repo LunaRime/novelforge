@@ -25,7 +25,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { tokenize } from './chinese-tokenizer'
 import { logger } from './utils/logger'
 import { GLOBAL_CONFIG_PATH, writeJsonFile } from './utils/config-utils'
-import { t, SUPPORTED_LOCALES, getCurrentLocale, setCurrentLocale } from '../src/shared/locale'
+import { t, SUPPORTED_LOCALES, UI_TEXTS, getCurrentLocale, setCurrentLocale } from '../src/shared/locale'
 import type { TextKey } from '../src/shared/locale'
 import {
   rewriteQuery,
@@ -1286,6 +1286,30 @@ describe('查询侧降级链（T3b）', () => {
     })
   })
 
+  /**
+   * R1（M4，覆盖缺口）：`enabled=true` 路径下 **api 档抛错必须保持静默**（沿用改造前的语义）。
+   * E1-3 只覆盖了 `enabled=false` 的静默降级；enabled 路径是新增分支，需要自己的锁。
+   */
+  describe('R1 M4：enabled=true 路径下 api 档抛错同样静默', () => {
+    it('本地维度不符 → api 档抛错 → 只留「维度不符 + 终态」两条 warn，api 错误串不进日志', async () => {
+      enableLocal(true)
+      h.existingDim = 1536
+      h.localVectors = [vec1024(0.31)] // 本地维度不符 → 落 api 档
+      h.embedShouldFail = true         // api 档抛错（'embedding unavailable'）
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      await searchKnowledge('阿晚今天做了什么', PROJECT, 'openai', MODEL, 5)
+
+      expect(h.embedCalls).toHaveLength(1) // api 档确实被尝试过（否则「静默」是废话）
+      expect(h.searchCalls[0].queryVector).toBeUndefined() // 最终 FTS
+      const logged = warnText(warnSpy)
+      expect(logged).not.toContain('embedding unavailable') // ← 核心：api 档的异常不上日志
+      expect(countOf(logged, logPrefix('log.embedding.queryDimMismatch'))).toBe(1) // 只本地档那条
+      expect(countOf(logged, logPrefix('log.embedding.queryVectorUnavailable'))).toBe(1) // 终态一条
+      expect(warnSpy).toHaveBeenCalledTimes(2) // 没有第三条（api 档静默）
+    })
+  })
+
   describe('E9 新增 log 键三语对账', () => {
     const NEW_KEYS = [
       'log.embedding.queryDimMismatch',
@@ -1293,15 +1317,29 @@ describe('查询侧降级链（T3b）', () => {
       'log.embedding.queryDimReadFailed',
     ] as const satisfies readonly TextKey[]
 
-    it('三个新键在 zh-CN / en-US / ru-RU 下都有译文（不回落成 key 本身）', () => {
+    /**
+     * ⚠️ R1（M2）断言设计的修正：**不能**只靠 `t(key)` 守三语 —— `t()` 对缺失语言会
+     * `?? entry['zh-CN']` 静默回落（locale.ts:121），所以「en-US/ru-RU 缺条目」在 `t()` 下
+     * 永远看不出来（一个看起来在守三语、实际守不住的断言）。此处直读 `UI_TEXTS` 的**每条语言成分**。
+     * 全量对账（所有键 × 三语）由 `src/shared/locale.test.ts:12-18` 承担，本条只锁本次新增的 3 个键。
+     */
+    it('三个新键在字典里各自带 zh-CN / en-US / ru-RU 条目（直读 UI_TEXTS，不吃 t() 的 zh-CN 回落）', () => {
+      for (const key of NEW_KEYS) {
+        const entry = UI_TEXTS[key]
+        expect(entry, `missing dictionary entry for "${key}"`).toBeTruthy()
+        for (const locale of SUPPORTED_LOCALES) {
+          expect(entry[locale], `missing ${locale} for "${key}"`).toBeTruthy()
+        }
+      }
+    })
+
+    it('三个新键在三种 locale 下都能取到译文（t() 不回落成 key 本身）', () => {
       const saved = getCurrentLocale()
       try {
-        for (const key of NEW_KEYS) {
-          for (const locale of SUPPORTED_LOCALES) {
-            setCurrentLocale(locale)
-            const text = t(key)
-            expect(text, `missing ${locale} for "${key}"`).toBeTruthy()
-            expect(text, `missing ${locale} for "${key}"`).not.toBe(key)
+        for (const locale of SUPPORTED_LOCALES) {
+          setCurrentLocale(locale)
+          for (const key of NEW_KEYS) {
+            expect(t(key), `${locale}: "${key}"`).not.toBe(key)
           }
         }
       } finally {

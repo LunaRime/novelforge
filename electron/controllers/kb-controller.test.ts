@@ -9,12 +9,19 @@
  *    （方式 2 的 `updateChunkVectors` 写入路径遇混维会静默破坏数据）且原样透传该错误；
  * ③ **非维度错误仍降级**（回归锁）：网络/API 失败照旧落到方式 2。
  *
+ * T3b R1（I1）追加 —— **查询侧同一类缺陷**：
+ * `kb:search` / `kb:search-with-scope` 原先只在 `getEmbeddingConfig()` 非 null 时进
+ * `searchKnowledge`，否则落 `searchKnowledgeFTS`（其内部硬编码 `queryVector: undefined`）→
+ * 「纯本地用户（local 启用 + 无远端模型）」在检索侧走不到模块层的降级链，开关不可观察。
+ * 现锁定：本地档开启即可放行；远端配置优先（本地只作为**追加**放行条件）；两者皆无仍走 FTS。
+ *
  * ⚠️ CI 一致性（ci-parity-standard）：本文件 import 到 electron → **必须 `vi.mock('electron')`**；
  *    `node:os` homedir 指向临时目录，绝不读写真实 `~/.novelforge`；better-sqlite3 编译目标为
  *    Electron ABI（vitest 为 Node ABI）→ mock `../database`。
  */
 import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vitest'
 import fs from 'node:fs'
+import type { ModelProfile } from '../../src/shared/ipc-channels'
 
 // ===== mock 状态（vi.hoisted：模块工厂先于 import 求值）=====
 
@@ -27,6 +34,9 @@ const h = vi.hoisted(() => ({
   getConnection: vi.fn(),
   canUseLLMEmbedding: vi.fn(),
   embedBatchWithLLM: vi.fn(),
+  // T3b R1（I1）：查询 handler 的两个出口（模块已被 mock，这里是唯一的观测点）
+  searchKnowledge: vi.fn(),
+  searchKnowledgeFTS: vi.fn(),
 }))
 
 vi.mock('node:os', async (importOriginal) => {
@@ -51,8 +61,8 @@ vi.mock('../knowledge-base', () => ({
   importDocument: vi.fn(),
   importFolder: vi.fn(),
   importText: vi.fn(),
-  searchKnowledge: vi.fn(),
-  searchKnowledgeFTS: vi.fn(),
+  searchKnowledge: h.searchKnowledge,
+  searchKnowledgeFTS: h.searchKnowledgeFTS,
   listDocuments: vi.fn(),
   removeDocument: vi.fn(),
   getKnowledgeStats: vi.fn(),
@@ -89,7 +99,7 @@ vi.mock('../utils/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), getLogDir: () => '' },
 }))
 
-import { GLOBAL_CONFIG_PATH, RECENT_PROJECTS_PATH, writeJsonFile } from '../utils/config-utils'
+import { GLOBAL_CONFIG_PATH, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH, writeJsonFile } from '../utils/config-utils'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { registerKBController } from './kb-controller'
 
@@ -104,6 +114,7 @@ const fakeEvent = {
 }
 
 type BackfillResult = { success: boolean; processed: number; failed: number; error?: string; errorCode?: string }
+type SearchHit = { text: string; score: number; fileName: string }
 
 function invokeBackfill(): Promise<BackfillResult> {
   const fn = h.handlers.get('kb:backfill-vectors')
@@ -111,8 +122,47 @@ function invokeBackfill(): Promise<BackfillResult> {
   return Promise.resolve(fn(fakeEvent) as BackfillResult)
 }
 
+/** T3b R1（I1）：`kb:search` handler 的调用入口 */
+function invokeSearch(query: string, topK?: number): Promise<SearchHit[]> {
+  const fn = h.handlers.get('kb:search')
+  if (!fn) throw new Error('通道未注册: kb:search')
+  return Promise.resolve(fn(fakeEvent, query, topK) as SearchHit[])
+}
+
+/** T3b R1（I1）：`kb:search-with-scope` handler 的调用入口 */
+function invokeSearchScoped(query: string, fromChapter: number, toChapter: number, topK?: number): Promise<SearchHit[]> {
+  const fn = h.handlers.get('kb:search-with-scope')
+  if (!fn) throw new Error('通道未注册: kb:search-with-scope')
+  return Promise.resolve(fn(fakeEvent, query, fromChapter, toChapter, topK) as SearchHit[])
+}
+
+const REMOTE_MODEL_ID = 'emb-remote-1'
+
 function setGlobalConfig(config: Record<string, unknown>): void {
   writeJsonFile(GLOBAL_CONFIG_PATH, config)
+}
+
+/** 打开本地档（无远端模型）：T4 定义的「纯本地用户」形态 */
+function enableLocalOnly(): void {
+  setGlobalConfig({ theme: 'dark', localEmbedding: { enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'bge-m3' } })
+}
+
+/** 配置一个可用的远端 Embedding 模型（defaultEmbeddingModelId + models.json 条目） */
+function setRemoteEmbeddingModel(): void {
+  const profile: ModelProfile = {
+    id: REMOTE_MODEL_ID,
+    name: 'Remote Embedding',
+    provider: 'openai',
+    protocol: 'openai',
+    modelName: 'text-embedding-3-small',
+    apiKey: 'sk-plain-key', // 明文（无 ENC: 前缀）→ decryptApiKey 原样返回
+    baseUrl: 'https://api.example.com/v1',
+    temperature: 0,
+    maxTokens: 0,
+    purposes: ['embedding'],
+  }
+  writeJsonFile(MODELS_CONFIG_PATH, [profile])
+  setGlobalConfig({ theme: 'dark', defaultEmbeddingModelId: REMOTE_MODEL_ID })
 }
 
 beforeAll(() => {
@@ -134,6 +184,10 @@ beforeEach(() => {
   h.getVectorlessCount.mockResolvedValue({ count: 0 })
   h.backfillVectors.mockResolvedValue({ success: true, processed: 0, failed: 0 })
   h.updateChunkVectors.mockResolvedValue({ success: true, count: 0, failed: 0 })
+
+  // T3b R1（I1）：查询出口的返回值（透传断言用）
+  h.searchKnowledge.mockResolvedValue([{ text: '语义命中', score: 0.9, fileName: 'a.txt' }])
+  h.searchKnowledgeFTS.mockResolvedValue([{ text: '词法命中', score: 0.5, fileName: 'b.txt' }])
 })
 
 afterEach(() => {
@@ -249,5 +303,76 @@ describe('A4.2 ③（回归锁）：非维度错误仍按既有语义降级', ()
     expect(res.error).toBe(specific) // 具体错误原样透传（旧写法恒为 kb.llmWriteFailed）
     expect(res.processed).toBe(0)
     expect(res.failed).toBe(1) // vectorless.length(1) - 真实写入数(0)
+  })
+})
+
+// ============================================================
+// T3b R1（I1）：查询 handler 的门控 —— 纯本地用户在**检索侧**必须可达
+//
+// 模块层（`knowledge-base.ts`）在 T3b 已能按降级链取本地查询向量，但 IPC 门控
+// （`if (embConfig)`）在无远端 Embedding 模型时直接把用户导向 `searchKnowledgeFTS`
+// （其内部硬编码 `queryVector: undefined`）→ 开关在检索侧依然不可观察。
+// 与 T4/A4.2 修好的回填侧门控（`canUseLocal || canUseEmbeddingAPI`）是同一类缺陷。
+// ============================================================
+
+describe('T3b R1（I1）：kb:search 门控放行纯本地用户', () => {
+  it('local 启用 + 无远端模型 → 进 searchKnowledge（1 次、入参正确），不进 FTS-only 入口', async () => {
+    enableLocalOnly()
+
+    const res = await invokeSearch('阿晚今天做了什么')
+
+    expect(h.searchKnowledge).toHaveBeenCalledTimes(1)
+    // 无远端配置时的传参：与 kb:import-* / kb:backfill-vectors 既有约定一致（protocol 默认 openai、model 空配置）
+    expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚今天做了什么', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 5)
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(0) // ← 核心断言：不被静默导向 FTS
+    expect(res).toEqual([{ text: '语义命中', score: 0.9, fileName: 'a.txt' }]) // 结果原样透传
+  })
+
+  it('回归锁：local 未启用 + 无远端模型 → 仍走 searchKnowledgeFTS（默认路径逐字不变）', async () => {
+    const res = await invokeSearch('阿晚今天做了什么')
+
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(1)
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledWith('阿晚今天做了什么', PROJECT, 5)
+    expect(h.searchKnowledge).toHaveBeenCalledTimes(0)
+    expect(res).toEqual([{ text: '词法命中', score: 0.5, fileName: 'b.txt' }])
+  })
+
+  it('远端模型优先：有远端配置时逐字沿用远端参数（local 开不开都不影响）', async () => {
+    setRemoteEmbeddingModel()
+    // 远端 + 本地同时可用 → 必须仍用远端参数（local 只是**追加**放行条件，不改既有路径）
+    setGlobalConfig({
+      theme: 'dark',
+      defaultEmbeddingModelId: REMOTE_MODEL_ID,
+      localEmbedding: { enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'bge-m3' },
+    })
+
+    await invokeSearch('阿晚今天做了什么', 3)
+
+    expect(h.searchKnowledge).toHaveBeenCalledTimes(1)
+    // 远端参数原样透传（含 modelName）；不是本地档的空配置
+    expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚今天做了什么', PROJECT, 'openai',
+      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-plain-key', modelName: 'text-embedding-3-small' }, 3)
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(0)
+  })
+})
+
+describe('T3b R1（I1）：kb:search-with-scope 门控放行纯本地用户', () => {
+  it('local 启用 + 无远端模型 → 进 searchKnowledge（1 次、chapterScope 原样透传）', async () => {
+    enableLocalOnly()
+
+    const res = await invokeSearchScoped('阿晚', 1, 5, 3)
+
+    expect(h.searchKnowledge).toHaveBeenCalledTimes(1)
+    expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚', PROJECT, 'openai', { baseUrl: '', apiKey: '' }, 3, [1, 5])
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(0)
+    expect(res).toEqual([{ text: '语义命中', score: 0.9, fileName: 'a.txt' }])
+  })
+
+  it('回归锁：local 未启用 + 无远端模型 → 仍走 searchKnowledgeFTS（scope 原样透传）', async () => {
+    await invokeSearchScoped('阿晚', 1, 5, 3)
+
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(1)
+    expect(h.searchKnowledgeFTS).toHaveBeenCalledWith('阿晚', PROJECT, 3, [1, 5])
+    expect(h.searchKnowledge).toHaveBeenCalledTimes(0)
   })
 })
