@@ -417,8 +417,8 @@ function TestResultRow({
 type LocalDetectResult = { ok: boolean; version?: string; error?: string }
 /** 已装模型（T4 `embedding:local-list-models`） */
 type LocalModel = { name: string; size: number }
-/** 拉取进度帧（T4 事件 `embedding:local-pull-progress`，同 T2 的 PullProgress） */
-type LocalPullProgress = { status: string; completed?: number; total?: number; percent?: number }
+/** 拉取进度帧（T4 事件 `embedding:local-pull-progress`，同 T2 的 PullProgress；`error` 仅终态失败帧有） */
+type LocalPullProgress = { status: string; completed?: number; total?: number; percent?: number; error?: string }
 
 /** 未知异常 → 可读详情。T2/T4 的错误串是**英文技术描述**，只作「原始详情」呈现（U4） */
 function errorDetail(e: unknown): string {
@@ -428,12 +428,16 @@ function errorDetail(e: unknown): string {
 
 /**
  * 模型是否已安装。
- * Ollama 的 `:latest` 是默认 tag 别名（T2 的 `listOllamaModels` 已规范化，这里再容忍一次手填的 `bge-m3:latest`）。
+ * Ollama 的 `:latest` 是默认 tag 别名，**两侧都要归一化**：
+ * 列表可能给 `bge-m3:latest` 而配置是 `bge-m3`（方向一），也可能配置里手填/历史遗留
+ * `bge-m3:latest` 而列表是 T2 规范化后的 `bge-m3`（方向二，T5-M4）——只归一化单侧时
+ * 方向二会误报「模型未安装」。
  */
 function hasLocalModel(models: LocalModel[], model: string): boolean {
   const target = model.trim()
   if (!target) return false
-  return models.some((m) => m.name === target || m.name.replace(/:latest$/, '') === target)
+  const stripLatest = (name: string): string => name.replace(/:latest$/, '')
+  return models.some((m) => stripLatest(m.name) === stripLatest(target))
 }
 
 /** 地址基础校验：必须能被 URL 解析且为 http/https；空串按非法（**不写库**） */
@@ -553,6 +557,15 @@ function LocalEmbeddingCard() {
         setPull(null)
         setPulling(false)
         void refreshModels()
+        return
+      }
+      // FW-1 终态失败帧：和 success 一样收掉进度条并退出「下载中」（否则进度条永久停在最后一帧、
+      // 下载按钮永久 disabled —— 用户唯一的主动作变成无法重试的假进行态）。失败原文交给既有
+      // pullError 面：主文案 t('localEmbedding.pullFailed') + 可折叠的原始详情（U4）。
+      if (p.status === 'error') {
+        setPull(null)
+        setPulling(false)
+        setPullError(p.error ?? '')
         return
       }
       setPull(p)

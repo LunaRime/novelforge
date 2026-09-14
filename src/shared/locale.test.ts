@@ -17,6 +17,15 @@ describe('i18n dictionary', () => {
     }
   })
 
+  it('localEmbedding.pullFailed 是通用「下载失败」文案（FW-1：同一键还服务下载中途失败的终态帧）', () => {
+    // 触发源有两类：① local-pull 发起失败（{started:false}）② 下载中途失败的终态错误帧。
+    // 文案不得限定为「无法开始」，否则下载跑到一半断网时提示会误导用户（FW-1 修复点）。
+    const entry = UI_TEXTS['localEmbedding.pullFailed']
+    expect(entry['zh-CN']).toBeTruthy()
+    expect(entry['en-US']).not.toMatch(/start/i)
+    expect(entry['ru-RU']).not.toMatch(/начать/i)
+  })
+
   it('t() returns zh-CN by default', () => {
     expect(t('action.save')).toBe('保存')
     expect(t('action.cancel')).toBe('取消')

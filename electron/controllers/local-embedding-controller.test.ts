@@ -91,6 +91,11 @@ function captureProgressCallback(): (p: unknown) => void {
   return args[2] as (p: unknown) => void
 }
 
+/** 等一整个宏任务：让 `pullModel(...).then/.catch/.finally` 链全部落地 */
+function settle(): Promise<void> {
+  return new Promise((resolve) => { setTimeout(resolve, 0) })
+}
+
 beforeAll(() => {
   registerLocalEmbeddingController()
 })
@@ -217,6 +222,32 @@ describe('embedding:local-pull（仅发起，立即返回 + 进度事件）', ()
     // 收尾：让进行中的拉取结束（清掉 in-flight 标记，避免污染后续用例）
     release({ success: true })
     await pending
+  })
+
+  it('FW-1：pull 结束但失败（res.success=false）→ 补发终态 error 帧（渲染层否则永久停在「下载中」）', async () => {
+    h.pullModel.mockResolvedValue({ success: false, error: 'Ollama /api/pull failed: HTTP 500' })
+
+    await call('embedding:local-pull')
+    await settle()
+
+    // T2 的 pullModel 只把 {"error"} 帧消费成返回值（ollama-embedding.ts:174-177），
+    // 渲染层看不到 → 必须由控制器从自己的 .then 合成一条终态帧
+    expect(h.senderSend).toHaveBeenCalledWith('embedding:local-pull-progress', {
+      status: 'error',
+      error: 'Ollama /api/pull failed: HTTP 500',
+    })
+  })
+
+  it('FW-1：pull 直接抛错（reject）→ 同样补发终态 error 帧（原文经 safeErrorMessage）', async () => {
+    h.pullModel.mockRejectedValue(new Error('socket hang up'))
+
+    await call('embedding:local-pull')
+    await settle()
+
+    expect(h.senderSend).toHaveBeenCalledWith('embedding:local-pull-progress', {
+      status: 'error',
+      error: 'socket hang up',
+    })
   })
 
   it('同一 (baseUrl, model) 已在拉取中 → 第二次 { started:false }（防连点重复下载）', async () => {

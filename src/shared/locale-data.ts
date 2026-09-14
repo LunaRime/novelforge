@@ -1383,7 +1383,7 @@ export const UI_TEXTS_DATA = {
   'localEmbedding.download': { 'zh-CN': '下载模型 {model}', 'en-US': 'Download model {model}', 'ru-RU': 'Скачать модель {model}' },
   'localEmbedding.downloading': { 'zh-CN': '下载中 {percent}%', 'en-US': 'Downloading {percent}%', 'ru-RU': 'Загрузка {percent}%' },
   'localEmbedding.downloadingPending': { 'zh-CN': '正在下载…', 'en-US': 'Downloading…', 'ru-RU': 'Загрузка…' },
-  'localEmbedding.pullFailed': { 'zh-CN': '下载模型失败', 'en-US': 'Failed to start model download', 'ru-RU': 'Не удалось начать загрузку модели' },
+  'localEmbedding.pullFailed': { 'zh-CN': '下载模型失败', 'en-US': 'Model download failed', 'ru-RU': 'Не удалось загрузить модель' },
   'localEmbedding.test': { 'zh-CN': '测试模型', 'en-US': 'Test model', 'ru-RU': 'Проверить модель' },
   'localEmbedding.testing': { 'zh-CN': '测试中…', 'en-US': 'Testing…', 'ru-RU': 'Проверка…' },
   'localEmbedding.testOk': { 'zh-CN': '测试成功：{dim} 维', 'en-US': 'Test succeeded: {dim} dimensions', 'ru-RU': 'Проверка успешна: {dim} измерений' },

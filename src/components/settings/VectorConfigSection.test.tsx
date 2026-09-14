@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach, afterEach, vi } from 'vite
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import VectorConfigSection from './VectorConfigSection'
+import { t } from '../../shared/locale'
 import type { LocalEmbeddingConfig } from '../../shared/ipc-channels'
 
 // ===== IPC 桩（组件与 store 共用同一 mock 模块）=====
@@ -27,7 +28,7 @@ vi.mock('../../services/ipc-client', () => ({
   ipc: { invoke: mocks.invoke, on: mocks.on, isElectron: false },
 }))
 
-type PullProgress = { status: string; completed?: number; total?: number; percent?: number }
+type PullProgress = { status: string; completed?: number; total?: number; percent?: number; error?: string }
 type Handler = () => unknown
 type LocalModel = { name: string; size: number }
 
@@ -185,6 +186,23 @@ describe('本地向量模型卡片 · 三态徽标', () => {
     act(() => { root.unmount() })
   })
 
+  it('T5-M4：配置写 :latest 而列表是规范化后的裸名（方向二）→ 仍判「就绪」，不误报未安装', async () => {
+    // Ollama /api/tags 的 name 可能带 :latest（T2 已规范化去掉）；用户手填/配置里仍可能是 bge-m3:latest
+    // → 归一化必须**双向**：m.name.replace(:latest) === model.replace(:latest)
+    stubLocal({
+      ok: true,
+      version: '0.5.7',
+      models: [{ name: 'bge-m3', size: 1 }],
+      config: { ...DEFAULT_CONFIG, model: 'bge-m3:latest' },
+    })
+    const { container, root } = render()
+    await flush()
+
+    expect(container.textContent).toContain('就绪')
+    expect(container.textContent).not.toContain('未安装')
+    act(() => { root.unmount() })
+  })
+
   it('U3：本地连通性只走 embedding:local-detect，不复用 kb:search 自检', async () => {
     stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'bge-m3', size: 1 }] })
     const { root } = render()
@@ -300,6 +318,36 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     const listCalls = mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-list-models')
     expect(listCalls.length).toBeGreaterThanOrEqual(2) // 挂载一次 + 终帧后一次
     expect(container.textContent).toContain('就绪')
+    act(() => { root.unmount() })
+  })
+
+  it('FW-1：pull 失败终帧（status=error）→ 进度条收掉 + 按钮恢复可重试 + t() 主文案 + 原始串只在可折叠详情', async () => {
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'llama3', size: 1 }] })
+    handlers['embedding:local-pull'] = () => ({ started: true })
+    const { container, root } = render()
+    await flush()
+
+    click(button(container, '下载模型'))
+    await flush()
+    // 发起成功 → 进入「下载中」：按钮 disabled（bug 里会永久停在这个假进行态）
+    expect(requireEl(container, '[role="status"]')).toBeTruthy()
+    expect(button(container, '下载模型').disabled).toBe(true)
+
+    const raw = 'Ollama /api/pull failed: HTTP 500 {"error":"manifest unavailable"}'
+    await act(async () => {
+      progressHandler?.({ status: 'error', error: raw })
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    // ① 进度条收掉（不再停在最后一帧）② 按钮恢复可点（用户唯一的主动作可以重试）
+    expect(query(container, '[role="status"]')).toBeNull()
+    expect(button(container, '下载模型').disabled).toBe(false)
+    // ③ 主文案走 t()（U4：英文技术串不得当主文案）④ 原始串只在 <details> 里
+    expect(textOutsideDetails(container)).toContain(t('localEmbedding.pullFailed'))
+    expect(textOutsideDetails(container)).not.toContain('Ollama /api/pull failed')
+    expect(query(container, 'details')?.textContent).toContain(raw)
+    // 失败不重取模型列表（刷新只发生在 success 终帧）
+    expect(mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-list-models')).toHaveLength(1)
     act(() => { root.unmount() })
   })
 

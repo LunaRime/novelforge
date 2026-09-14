@@ -1088,8 +1088,22 @@ export interface ImportEvents {
 
 // ===== 本地 Ollama 拉取进度事件（T4：主→渲染，payload 同 T2 的 PullProgress） =====
 export interface EmbeddingEvents {
-  /** 模型下载进度帧（`pullModel` 的 NDJSON 每帧一条；percent 仅在 completed/total 就绪时给出） */
-  'embedding:local-pull-progress': { status: string; completed?: number; total?: number; percent?: number }
+  /**
+   * 模型下载进度帧（`pullModel` 的 NDJSON 每帧一条；percent 仅在 completed/total 就绪时给出）。
+   *
+   * `status: 'error'` 是**终态失败帧**（FW-1）：T2 的 `pullModel` 把 Ollama 的 `{"error"}` 帧
+   * 消费成返回值后不再 emit（ollama-embedding.ts:174-177），所以「下载跑到一半失败」对渲染层
+   * 本来完全不可见（进度条永久停在最后一帧、下载按钮永久 disabled）。该帧由控制器从自己的
+   * `.then/.catch` 合成：`error` 为原始技术串（英文），渲染层只放进可折叠「原始详情」，
+   * 主文案走 `localEmbedding.pullFailed`。
+   */
+  'embedding:local-pull-progress': {
+    status: string
+    completed?: number
+    total?: number
+    percent?: number
+    error?: string
+  }
 }
 
 // ===== 菜单事件（L4 S1 补充：此前两侧均未声明） =====

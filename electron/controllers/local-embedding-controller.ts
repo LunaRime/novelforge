@@ -88,6 +88,20 @@ export function registerLocalEmbeddingController(): void {
     }
     pullsInFlight.add(key)
 
+    /**
+     * 终态失败帧（FW-1）：`pullModel` 只把失败写进返回值 / reject，**从不 emit error 帧**
+     * （ollama-embedding.ts:174-177 消费掉 `{"error"}` 后直接 return），若不在这里补发，
+     * 「下载中途失败」对渲染层完全不可见 —— 进度条永久停在最后一帧、下载按钮永久 disabled。
+     * 渲染层可能已关闭 → send 会抛；与进度帧同样的容忍（失败只落日志，不影响下载收尾）。
+     */
+    const sendTerminalError = (error: string): void => {
+      try {
+        event.sender.send('embedding:local-pull-progress', { status: 'error', error })
+      } catch (e) {
+        logger.warn('Embedding', `pull error frame send failed: ${safeErrorMessage(e)}`)
+      }
+    }
+
     void pullModel(cfg.baseUrl, cfg.model, (progress) => {
       // 渲染层可能已关闭 → send 会抛；进度只是信息，不能让它影响下载本身
       try {
@@ -97,10 +111,14 @@ export function registerLocalEmbeddingController(): void {
       }
     })
       .then((res) => {
-        if (!res.success) logger.warn('Embedding', `pull model failed: ${res.error ?? 'unknown'}`)
+        if (!res.success) {
+          logger.warn('Embedding', `pull model failed: ${res.error ?? 'unknown'}`)
+          sendTerminalError(res.error ?? '') // 无 error 串时给空串：主文案仍会显示，只是没有原始详情
+        }
       })
       .catch((e) => {
         logger.warn('Embedding', `pull model crashed: ${safeErrorMessage(e)}`)
+        sendTerminalError(safeErrorMessage(e))
       })
       .finally(() => {
         pullsInFlight.delete(key)
