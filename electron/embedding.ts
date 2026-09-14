@@ -20,7 +20,12 @@ const QUERY_CACHE_TTL = 30 * 60 * 1000 // 30 分钟
 /** Embedding API fetch 超时（此前无 AbortController——API 挂起时章节写作被无限阻塞） */
 const EMBEDDING_TIMEOUT_MS = 10_000
 
-function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+/** 带 AbortController 超时兜底的 fetch（导出自 T1：Ollama pull 等长任务复用，传 timeoutMs 覆盖默认 10s） */
+export function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number = EMBEDDING_TIMEOUT_MS,
+): Promise<Response> {
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined
   // ⚠️ abort 兜底（2026-08-29 冒烟实测根因）：API 请求挂起（限流/网络）时，
@@ -31,7 +36,7 @@ function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
     timer = setTimeout(() => {
       controller.abort()
       reject(new DOMException('This operation was aborted', 'AbortError'))
-    }, EMBEDDING_TIMEOUT_MS)
+    }, timeoutMs)
   })
   return Promise.race([
     fetch(url, { ...init, signal: controller.signal }),
