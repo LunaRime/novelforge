@@ -14,9 +14,11 @@ import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
-import { getProjectVelaDir } from './utils/config-utils'
+import { getProjectVelaDir, readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from './utils/config-utils'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
+import { resolveEmbeddingOrder, hasUsableVectors, firstVectorDim } from './embedding-order'
+import { detectOllama, embedLocal } from './ollama-embedding'
 import { tokenize } from './chinese-tokenizer'
 import { getCurrentProjectPath, getProjectDb } from './database'
 import {
@@ -28,6 +30,7 @@ import {
   migrateFromJSON,
   getChunksWithoutVectors as storeGetChunksWithoutVectors,
   backfillTokens as storeBackfillTokens,
+  getChunksTableVectorDim,
 } from './vector-store'
 
 // ===== 迁移状态跟踪 =====
@@ -46,9 +49,116 @@ async function ensureMigration(projectPath: string): Promise<void> {
   }
 }
 
+// ===== T3：本地向量档配置 + 四级降级链 =====
+
+/**
+ * 本地向量档配置（**结构同形**于 T4 的 `GlobalConfig.localEmbedding`）。
+ *
+ * T4 尚未落地时本模块自带同值回退默认（不阻塞 T3）；T4 落地后以
+ * `DEFAULT_GLOBAL_CONFIG.localEmbedding` 为单一事实源，两处默认值不会漂移。
+ */
+interface LocalEmbeddingConfig {
+  enabled: boolean
+  baseUrl: string
+  model: string
+  preferLocal: boolean
+}
+
+/** 回退默认值（与 T4 brief 的 `DEFAULT_GLOBAL_CONFIG.localEmbedding` 逐字一致） */
+const FALLBACK_LOCAL_EMBEDDING: LocalEmbeddingConfig = {
+  enabled: false,
+  baseUrl: 'http://localhost:11434',
+  model: 'bge-m3',
+  preferLocal: true,
+}
+
+/** 默认值：优先取 T4 的全局默认，未落地时用同值回退 */
+function defaultLocalEmbedding(): LocalEmbeddingConfig {
+  const fromGlobal = (DEFAULT_GLOBAL_CONFIG as { localEmbedding?: Partial<LocalEmbeddingConfig> }).localEmbedding
+  return fromGlobal ? { ...FALLBACK_LOCAL_EMBEDDING, ...fromGlobal } : FALLBACK_LOCAL_EMBEDDING
+}
+
+/**
+ * 读全局配置的 `localEmbedding`（T4）。
+ *
+ * 零损失降级：读失败 / 缺字段 / 类型不符 → 回退默认（`enabled=false`）→ 降级链退回**现状三级**，
+ * 导入行为与改造前完全一致。
+ * `enabled` 用**严格真值**判定：配置损坏（如 `"true"` 字符串）时宁可不启用本地档
+ * （不向用户机器发起网络探测），也不误开。
+ */
+function readLocalEmbeddingConfig(): LocalEmbeddingConfig {
+  const fallback = defaultLocalEmbedding()
+  try {
+    const global = readJsonFile<{ localEmbedding?: Partial<LocalEmbeddingConfig> }>(GLOBAL_CONFIG_PATH, {})
+    const raw = global?.localEmbedding
+    if (!raw || typeof raw !== 'object') return fallback
+    return {
+      enabled: raw.enabled === true,
+      // 默认 true（T4 默认值）：仅显式 false 才改为 API 优先
+      preferLocal: raw.preferLocal !== false,
+      baseUrl: typeof raw.baseUrl === 'string' && raw.baseUrl.trim() !== '' ? raw.baseUrl : fallback.baseUrl,
+      model: typeof raw.model === 'string' && raw.model.trim() !== '' ? raw.model : fallback.model,
+    }
+  } catch (e) {
+    // 非用户可见文本（仅落日志），沿用本文件既有 raw 日志惯例
+    logger.warn('KB', `read localEmbedding config failed, fallback to defaults: ${safeErrorMessage(e)}`)
+    return fallback
+  }
+}
+
+/**
+ * 本地档（`local`）：探测 Ollama → `/api/embed` 批量向量化。
+ *
+ * - 未配置 baseUrl / model → 返回 `[]`（不发请求）
+ * - `detectOllama` 不可用（三态不抛）→ 记日志后返回 `[]`：**不**发起必然超时的 `/api/embed`
+ * - `embedLocal` 失败会 **throw**（T2 契约）：错误串为**英文**，**不得**直接当 UI 文案 →
+ *   由调用方捕获后只写日志并降级到下一档（导入不阻断）
+ * - 空输入/空结果（T2：空输入返回 `[]`）→ `[]` → 由 `hasUsableVectors` 判为该档失败
+ */
+async function tryLocalEmbedding(texts: string[], cfg: LocalEmbeddingConfig): Promise<number[][]> {
+  if (!cfg.baseUrl || !cfg.model) return []
+
+  const probe = await detectOllama(cfg.baseUrl)
+  if (!probe.ok) {
+    logger.warn('KB', t('log.embedding.localUnavailable').replace('{err}', probe.error ?? 'unknown'))
+    return []
+  }
+
+  return embedLocal(texts, cfg.baseUrl, cfg.model)
+}
+
+/**
+ * 向量维度硬校验（T3 v1 必做）：写入前比对待写维度与现有 LanceDB 表的向量维度。
+ *
+ * - `newDim <= 0`（本次不写向量）→ 放行，且**不读表**（纯文本库/FTS-only 路径零开销）
+ * - 表不存在 / 无 vector 列（现有维度 0）→ 放行（首建）
+ * - 维度一致 → 放行；**不一致 → throw**（i18n 文案，提示重建索引）
+ *
+ * ⚠️ 为什么必须 throw 而不是降级：LanceDB 的 vector 列是 `FixedSizeList(dim)`，把 1024 维写进
+ *    1536 维的表**不会报错**——实测 `addChunks` 会把整列**静默重写成 1024**（既有向量一并被改写，
+ *    `getStats().vectorDimension` 从 1536 变 1024）。故此处必须**写盘前硬拒绝**：不静默降级、
+ *    不半写入。抛出的错误由调用方沿用各自对外契约（返回式 `{success:false,error}`）上交，
+ *    但**绝不能**被当成"该档失败、继续降级"的信号。
+ */
+export async function assertVectorDimCompatible(projectPath: string, newDim: number): Promise<void> {
+  if (newDim <= 0) return
+
+  const existingDim = await getChunksTableVectorDim(projectPath)
+  if (existingDim > 0 && existingDim !== newDim) {
+    throw new Error(t('error.embeddingDimMismatch')
+      .replace('{expected}', String(existingDim))
+      .replace('{actual}', String(newDim)))
+  }
+}
+
 // ===== 导出函数（保持旧签名，IPC 层零改动） =====
 
-/** 核心导入逻辑（复用体）：分块 → 向量化 → 清理旧数据 → 写入 LanceDB */
+/**
+ * 核心导入逻辑（复用体）：分块 → 向量化 → 清理旧数据 → 写入 LanceDB
+ *
+ * 降级链（T3）：`resolveEmbeddingOrder` 决定档位顺序，逐档尝试、成功即短路；
+ * 每档失败只 `logger.warn` 并降级，链路尽头是 FTS-only（导入不阻断）。
+ */
 async function importContent(
   projectPath: string,
   fileName: string,
@@ -67,45 +177,70 @@ async function importContent(
   // 2. 解析章节元数据（从文件名提取）
   const chapterMeta = parseChapterMetaFromFileName(fileName)
 
-  // 3. 可选：生成向量（三级降级：Embedding API → LLM 向量化 → FTS-only）
+  // 3. 可选：生成向量（降级链：档位顺序由 resolveEmbeddingOrder 唯一决定——
+  //    默认 enabled=false 时即改造前的三级 api → llm → fts，逐字等价）
+  const localCfg = readLocalEmbeddingConfig()
+  const order = resolveEmbeddingOrder({ enabled: localCfg.enabled, preferLocal: localCfg.preferLocal })
   let vectors: number[][] | undefined
-  const embedMethod = model.apiKey ? 'Embedding API' : 'N/A'
 
-  if (model.apiKey) {
-    try {
-      options?.onProgress?.(20, t('kb.vectorizingWith')
-        .replace('{method}', embedMethod)
-        .replace('{count}', String(chunks.length)))
-      vectors = await generateEmbeddings(chunks, protocol, model)
-    } catch (e) {
-      logger.warn('KB', t('log.embedding.apiFailedTryLlm').replace('{err}', String(e)))
-    }
-  }
+  for (const source of order) {
+    // fts 是**终态**档（不尝试向量化）：落到循环外统一按 FTS-only 处理
+    if (source === 'fts') break
 
-  // Embedding API 失败或未配置 → 尝试 LLM 向量化
-  if (!vectors || vectors.length === 0 || vectors.every(v => v.length === 0)) {
-    try {
-      const { embeddingService } = await import('./embedding-service')
-      if (embeddingService.canUseLLMEmbedding()) {
-        options?.onProgress?.(25, t('kb.vectorizingWith')
-          .replace('{method}', 'LLM')
+    if (source === 'local') {
+      try {
+        options?.onProgress?.(20, t('kb.vectorizingWith')
+          .replace('{method}', `Ollama (${localCfg.model})`)
           .replace('{count}', String(chunks.length)))
-        const results = await embeddingService.embedBatchWithLLM(chunks)
-        vectors = results.map(r => r.vector).filter(v => v.length > 0)
-        if (vectors.length > 0) {
-          logger.info('KB', t('log.kb.llmVectorizeSuccess')
-            .replace('{ok}', String(vectors.length))
-            .replace('{total}', String(chunks.length)))
-        }
+        vectors = await tryLocalEmbedding(chunks, localCfg)
+      } catch (e) {
+        // T2：embedLocal 抛出的错误串为英文，只进日志（LogsView），不作为 UI 文案
+        logger.warn('KB', t('log.embedding.localFailed').replace('{err}', String(e)))
       }
-    } catch (e) {
-      logger.warn('KB', t('log.kb.llmAlsoFailedFtsOnly').replace('{err}', String(e)))
+    } else if (source === 'api') {
+      // 未配置 API Key → 跳过该档（与改造前一致：不调用、不告警）
+      if (!model.apiKey) continue
+      try {
+        options?.onProgress?.(20, t('kb.vectorizingWith')
+          .replace('{method}', 'Embedding API')
+          .replace('{count}', String(chunks.length)))
+        vectors = await generateEmbeddings(chunks, protocol, model)
+      } catch (e) {
+        logger.warn('KB', t('log.embedding.apiFailedTryLlm').replace('{err}', String(e)))
+      }
+    } else if (source === 'llm') {
+      try {
+        const { embeddingService } = await import('./embedding-service')
+        if (embeddingService.canUseLLMEmbedding()) {
+          options?.onProgress?.(25, t('kb.vectorizingWith')
+            .replace('{method}', 'LLM')
+            .replace('{count}', String(chunks.length)))
+          const results = await embeddingService.embedBatchWithLLM(chunks)
+          vectors = results.map(r => r.vector).filter(v => v.length > 0)
+          if (vectors.length > 0) {
+            logger.info('KB', t('log.kb.llmVectorizeSuccess')
+              .replace('{ok}', String(vectors.length))
+              .replace('{total}', String(chunks.length)))
+          }
+        }
+      } catch (e) {
+        logger.warn('KB', t('log.kb.llmAlsoFailedFtsOnly').replace('{err}', String(e)))
+      }
     }
+
+    // 该档拿到可用向量 → 短路后续档位
+    if (hasUsableVectors(vectors)) break
   }
 
   // 全部失败 → FTS-only 模式（仍可全文搜索，但无语义搜索）
-  if (!vectors || vectors.length === 0) {
+  if (!hasUsableVectors(vectors)) {
     options?.onProgress?.(30, t('kb.ftsFallback'))
+  }
+
+  // 3.5 向量维度硬校验（T3 v1 必做）：**写入前、删旧文档前**拒绝混维。
+  //     ⚠️ 必须在删除同名旧文档之前——否则"校验失败"会伴随旧文档已被删除（半写入/数据丢失）。
+  if (hasUsableVectors(vectors)) {
+    await assertVectorDimCompatible(projectPath, firstVectorDim(vectors))
   }
 
   // 4. 删除同名旧文档，确保幂等性
@@ -163,7 +298,12 @@ export async function importDocument(
     const content = fs.readFileSync(filePath, 'utf-8')
 
     // 2. 委托核心导入逻辑
-    return importContent(projectPath, fileName, content, protocol, model, { filePath, onProgress })
+    // ⚠️ 必须显式 await（不能用 `return importContent(...)`）：async 函数里 `return <promise>` 会让
+    //    try 块**正常退出**、函数以该 promise 结算，异步 reject **不会**被本 catch 捕获而直接逃逸到
+    //    调用方（IPC 层变成原始 rejection，用户看到无文案的报错）。T3 实测（node 复现 + 用例锁定）
+    //    ——维度硬校验的 i18n 错误必须经此 catch 转成 {success:false,error} 才有用户可见文案。
+    const result = await importContent(projectPath, fileName, content, protocol, model, { filePath, onProgress })
+    return result
   } catch (error) {
     return { success: false, error: safeErrorMessage(error) }
   }
@@ -451,7 +591,10 @@ export async function importText(
 ): Promise<{ success: boolean; docId?: string; chunkCount?: number; error?: string }> {
   try {
     if (!text.trim()) return { success: false, error: t('error.textEmpty') }
-    return importContent(projectPath, fileName, text, protocol, model)
+    // ⚠️ 显式 await（同 importDocument）：`return importContent(...)` 的异步 reject 逃逸本 catch，
+    //    维度硬校验的 i18n 错误会退化成 IPC 层原始 rejection（无用户可见文案）
+    const result = await importContent(projectPath, fileName, text, protocol, model)
+    return result
   } catch (error) {
     return { success: false, error: safeErrorMessage(error) }
   }
@@ -506,35 +649,49 @@ export async function backfillVectors(
       return { success: true, processed: 0, failed: 0 }
     }
 
-    // 批量生成向量（三级降级：Embedding API → LLM 向量化 → FTS-only）
+    // 批量生成向量（降级链同 importContent：local → api → llm → fts，默认即现状三级）
+    // 存量库重建走本地向量化是本档的主要用户场景（离线、零成本）
     const texts = allRecords.map(r => r.text)
+    const localCfg = readLocalEmbeddingConfig()
+    const order = resolveEmbeddingOrder({ enabled: localCfg.enabled, preferLocal: localCfg.preferLocal })
     let vectors: number[][] = []
 
-    // 尝试 1：专用 Embedding API
-    try {
-      vectors = await generateEmbeddings(texts, protocol, model)
-    } catch (e) {
-      logger.warn('KB', t('log.kb.backfillApiFailed').replace('{err}', String(e)))
-    }
+    for (const source of order) {
+      if (source === 'fts') break
 
-    // 尝试 2：LLM 向量化（Embedding API 失败或无有效结果时自动降级）
-    if (vectors.length === 0 || vectors.every(v => v.length === 0)) {
-      try {
-        const { embeddingService } = await import('./embedding-service')
-        if (embeddingService.canUseLLMEmbedding()) {
-          logger.info('KB', t('log.kb.apiUnavailableDegradeLlm').replace('{count}', String(texts.length)))
-          const llmResults = await embeddingService.embedBatchWithLLM(texts)
-          vectors = llmResults.map(r => r.vector)
-          const validCount = vectors.filter(v => v.length > 0).length
-          logger.info('KB', t('log.kb.llmVectorizeDone')
-            .replace('{ok}', String(validCount))
-            .replace('{total}', String(texts.length)))
-        } else {
-          logger.info('KB', t('log.kb.llmNotEnabledSkipVectors'))
+      if (source === 'local') {
+        try {
+          vectors = await tryLocalEmbedding(texts, localCfg)
+        } catch (e) {
+          logger.warn('KB', t('log.embedding.localFailed').replace('{err}', String(e)))
         }
-      } catch (e2) {
-        logger.warn('KB', t('log.kb.llmAlsoFailedFtsMode').replace('{err}', String(e2)))
+      } else if (source === 'api') {
+        try {
+          vectors = await generateEmbeddings(texts, protocol, model)
+        } catch (e) {
+          logger.warn('KB', t('log.kb.backfillApiFailed').replace('{err}', String(e)))
+        }
+      } else if (source === 'llm') {
+        // LLM 向量化（Embedding API 失败或无有效结果时自动降级）
+        try {
+          const { embeddingService } = await import('./embedding-service')
+          if (embeddingService.canUseLLMEmbedding()) {
+            logger.info('KB', t('log.kb.apiUnavailableDegradeLlm').replace('{count}', String(texts.length)))
+            const llmResults = await embeddingService.embedBatchWithLLM(texts)
+            vectors = llmResults.map(r => r.vector)
+            const validCount = vectors.filter(v => v.length > 0).length
+            logger.info('KB', t('log.kb.llmVectorizeDone')
+              .replace('{ok}', String(validCount))
+              .replace('{total}', String(texts.length)))
+          } else {
+            logger.info('KB', t('log.kb.llmNotEnabledSkipVectors'))
+          }
+        } catch (e2) {
+          logger.warn('KB', t('log.kb.llmAlsoFailedFtsMode').replace('{err}', String(e2)))
+        }
       }
+
+      if (hasUsableVectors(vectors)) break
     }
 
     // 构建更新后的完整数据
@@ -565,6 +722,11 @@ export async function backfillVectors(
     // LanceDB 自动推断无法正确识别 number[] 为 FixedSizeList 向量类型
     // 从实际生成的向量中检测维度
     const VECTOR_DIM = vectors.length > 0 && vectors[0].length > 0 ? vectors[0].length : 0
+
+    // T3 向量维度硬校验：与 importContent 同一道防线——**任何写盘动作之前**拒绝混维
+    //（不静默降级、不半写入；抛出的错误由本函数外层 catch 转成明确 error 上交，不进降级链）
+    await assertVectorDimCompatible(projectPath, VECTOR_DIM)
+
     const arrowFields: Field[] = [
       new Field('id', new Utf8()),
       new Field('docId', new Utf8()),

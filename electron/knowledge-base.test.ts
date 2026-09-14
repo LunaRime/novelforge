@@ -7,17 +7,25 @@
  *    各类失败降级零损失
  * ③ 真实 LanceDB 端到端：`electron/knowledge-base.e2e.test.ts`
  *
+ * T3 追加（降级链四级 + 维度硬校验）：
+ * ④ `importContent` / `backfillVectors` 的**降级链调用序列**（mock 各档，断言顺序/短路/降级）
+ * ⑤ 维度硬校验的接线与「不写入/不删旧文档」（mock 维度读取；真实 LanceDB 见 e2e 文件）
+ *
  * ⚠️ better-sqlite3 编译目标为 Electron ABI，vitest（Node ABI）无法加载 → mock `./database`
  *    （与 `electron/repositories/character-repository.test.ts` 同法，用 node:sqlite 内存库）
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { tokenize } from './chinese-tokenizer'
+import { logger } from './utils/logger'
 import {
   rewriteQuery,
   buildCharacterAliasMap,
   searchKnowledge,
   searchKnowledgeFTS,
+  importText,
+  backfillVectors,
+  assertVectorDimCompatible,
 } from './knowledge-base'
 
 // ===== mock 状态（vi.hoisted：模块工厂先于 import 求值） =====
@@ -36,6 +44,47 @@ const h = vi.hoisted(() => ({
   embedShouldFail: false,
   db: null as unknown,
   currentProjectPath: null as string | null,
+
+  // ===== T3：降级链 + 维度硬校验 =====
+  /** importContent 的分块实现（默认 null → `() => []`，保持既有检索用例行为不变） */
+  chunkTextImpl: null as null | ((text: string) => string[]),
+  /** API 档返回值（null → 既有 embedVector 4 维）；用于指定维度 */
+  apiVectors: null as null | number[][],
+  /** 本地档探测结果 / 向量化结果 / 是否 throw（可指定抛出的错误形态） */
+  localDetectOk: true,
+  localEmbedShouldFail: false,
+  localEmbedError: null as Error | null,
+  localVectors: null as null | number[][],
+  /** LLM 档：canUseLLMEmbedding 返回值 + 调用计数 */
+  llmEnabled: false,
+  llmCanUseCalls: 0,
+  llmVectors: null as null | number[][],
+  /** 现有表向量维度（0 = 无表/无向量列） */
+  existingDim: 0,
+  /** 维度读取次数（用于锁定「仅在确有向量写入时才读表」） */
+  dimReadCalls: 0,
+  /** 全局配置（readJsonFile 命中 GLOBAL_CONFIG_PATH 时返回；null → 返回调用方 fallback） */
+  globalConfig: null as null | Record<string, unknown>,
+  /** 调用记录 */
+  addChunksCalls: [] as Array<{
+    projectPath: string
+    docId: string
+    fileName: string
+    chunks: string[]
+    vectors?: number[][]
+  }>,
+  removeDocCalls: [] as string[],
+  /** 已导入文档（驱动 importContent 的「删同名旧文档」分支；默认空 = 不触发） */
+  existingDocs: [] as Array<{ id: string; fileName: string; importedAt: string; chunkCount: number; filePath: string }>,
+  detectCalls: [] as string[],
+  localEmbedCalls: [] as string[][],
+  llmCalls: [] as string[][],
+  /** backfillVectors 的假库写入记录（应保持为空 = 无半写入） */
+  dbWrites: [] as string[],
+  /** backfillVectors 待回填行（缺向量扫描 + 全表读取；后者含"回填目标行"） */
+  backfillRows: [{ id: 'row-1', text: '无向量块', vector: null as unknown }],
+  backfillFullRows: [{ id: 'row-1', text: '无向量块', vector: null as unknown }],
+  vectorlessCount: 0,
 }))
 
 vi.mock('./database', () => ({
@@ -54,24 +103,122 @@ vi.mock('./vector-store', () => ({
     h.searchCalls.push({ projectPath, query, queryVector, topK, chapterScope })
     return h.searchResults
   },
-  // knowledge-base 顶层 import 的其余符号（本文件不触发，仅为模块图完整）
-  addChunks: async () => ({ success: true, chunkCount: 0 }),
-  removeDocument: async () => true,
-  listDocuments: async () => [],
+  // knowledge-base 顶层 import 的其余符号（检索用例不触发，仅为模块图完整 / T3 链用例使用）
+  addChunks: async (
+    projectPath: string,
+    docId: string,
+    fileName: string,
+    chunks: string[],
+    vectors?: number[][],
+  ) => {
+    h.addChunksCalls.push({ projectPath, docId, fileName, chunks, vectors })
+    return { success: true, chunkCount: chunks.length }
+  },
+  removeDocument: async (_projectPath: string, docId: string) => {
+    h.removeDocCalls.push(docId)
+    return true
+  },
+  listDocuments: async () => h.existingDocs,
   getStats: async () => ({ documentCount: 0, totalChunks: 0, vectorDimension: 0, hasVectors: false }),
   migrateFromJSON: async () => ({ success: true, migrated: 0 }),
-  getChunksWithoutVectors: async () => ({ count: 0 }),
+  getChunksWithoutVectors: async () => ({ count: h.vectorlessCount }),
   backfillTokens: async () => ({ success: true, processed: 0, failed: 0 }),
+  // T3 维度校验：现有表维度（0 = 首建放行）
+  getChunksTableVectorDim: async () => {
+    h.dimReadCalls++
+    return h.existingDim
+  },
+  // T3 backfillVectors 需要的假连接（断言点：createTable/dropTable 未被调用 = 无半写入）
+  getConnection: async () => {
+    // 第 1 次 query = 缺向量行扫描；之后 = 全表读取（重建用）——与真实调用序一致
+    let queryCount = 0
+    const makeChain = (rows: Array<{ id: string; text: string; vector: unknown }>) => {
+      const chain: {
+        select: () => unknown
+        limit: () => unknown
+        toArray: () => Promise<Array<{ id: string; text: string; vector: unknown }>>
+      } = {
+        select: () => chain,
+        limit: () => chain,
+        toArray: async () => rows,
+      }
+      return chain
+    }
+    return {
+      tableNames: async () => ['chunks'],
+      openTable: async () => ({
+        schema: async () => ({
+          fields: [
+            { name: 'id', type: {} },
+            { name: 'text', type: {} },
+            { name: 'vector', type: { listSize: h.existingDim } },
+          ],
+        }),
+        query: () => {
+          queryCount++
+          return makeChain(queryCount === 1 ? h.backfillRows : h.backfillFullRows)
+        },
+        countRows: async () => h.backfillFullRows.length,
+        createIndex: async () => { h.dbWrites.push('createIndex') },
+      }),
+      createTable: async (name: string) => { h.dbWrites.push(`create:${name}`) },
+      dropTable: async (name: string) => { h.dbWrites.push(`drop:${name}`) },
+    }
+  },
 }))
 
 vi.mock('./embedding', () => ({
-  chunkText: () => [],
+  // T3：importContent 的分块（默认空，保持既有检索用例零影响）
+  chunkText: (text: string) => (h.chunkTextImpl ? h.chunkTextImpl(text) : []),
   generateEmbeddings: async (texts: string[]) => {
     h.embedCalls.push(texts)
     if (h.embedShouldFail) throw new Error('embedding unavailable')
-    return texts.map(() => h.embedVector)
+    return h.apiVectors ?? texts.map(() => h.embedVector)
+  },
+  fetchWithTimeout: async () => { throw new Error('fetchWithTimeout not used in this test') },
+}))
+
+/** T3：本地档（Ollama）——真实模块只做 fetch，测试里全部桩死以便断言调用序列 */
+vi.mock('./ollama-embedding', () => ({
+  detectOllama: async (baseUrl: string) => {
+    h.detectCalls.push(baseUrl)
+    return h.localDetectOk ? { ok: true, version: '0.6.0' } : { ok: false, error: 'connect ECONNREFUSED' }
+  },
+  embedLocal: async (texts: string[]) => {
+    h.localEmbedCalls.push(texts)
+    if (h.localEmbedShouldFail) {
+      // T2 交接：错误串为**英文**（不得直接当 UI 文案）；网络不可用时为 raw TypeError('fetch failed')
+      throw h.localEmbedError ?? new Error('Ollama /api/embed failed: HTTP 500')
+    }
+    return h.localVectors ?? texts.map(() => [0.1, 0.2, 0.3])
   },
 }))
+
+/** T3：LLM 档（embedding-service，importContent/backfillVectors 内均为动态 import） */
+vi.mock('./embedding-service', () => ({
+  embeddingService: {
+    canUseLLMEmbedding: () => {
+      h.llmCanUseCalls++
+      return h.llmEnabled
+    },
+    embedBatchWithLLM: async (texts: string[]) => {
+      h.llmCalls.push(texts)
+      return (h.llmVectors ?? texts.map(() => [0.5, 0.5])).map(vector => ({ vector }))
+    },
+  },
+}))
+
+/** T3：全局配置读取（localEmbedding）——只拦截 GLOBAL_CONFIG_PATH，其余文件走真实读取 */
+vi.mock('./utils/config-utils', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils/config-utils')>()
+  return {
+    ...actual,
+    readJsonFile: (filePath: string, fallback: unknown) => {
+      if (filePath === actual.GLOBAL_CONFIG_PATH && h.globalConfig) return h.globalConfig
+      return actual.readJsonFile(filePath, fallback)
+    },
+  }
+})
 
 // ===== 测试夹具 =====
 
@@ -102,6 +249,32 @@ beforeEach(() => {
   h.embedShouldFail = false
   h.db = null
   h.currentProjectPath = PROJECT
+
+  // T3
+  h.chunkTextImpl = null
+  h.apiVectors = null
+  h.localDetectOk = true
+  h.localEmbedShouldFail = false
+  h.localEmbedError = null
+  h.localVectors = null
+  h.llmEnabled = false
+  h.llmCanUseCalls = 0
+  h.llmVectors = null
+  h.existingDim = 0
+  h.dimReadCalls = 0
+  h.globalConfig = null
+  h.existingDocs = []
+  h.addChunksCalls.length = 0
+  h.removeDocCalls.length = 0
+  h.detectCalls.length = 0
+  h.localEmbedCalls.length = 0
+  h.llmCalls.length = 0
+  h.dbWrites.length = 0
+  h.vectorlessCount = 0
+})
+
+afterEach(() => {
+  vi.restoreAllMocks()
 })
 
 // ===== ① 纯函数 =====
@@ -330,5 +503,342 @@ describe('检索入口接线（L3 T5）', () => {
       vi.doUnmock('./chinese-tokenizer')
       vi.resetModules()
     }
+  })
+})
+
+// ============================================================
+// ④ T3：降级链四级（调用序列 / 短路 / 降级）
+// ============================================================
+
+const LOCAL_BASE = 'http://127.0.0.1:11434'
+const LOCAL_MODEL = 'bge-m3'
+
+/** 打开本地档（字段同形于 T4 `GlobalConfig.localEmbedding`；读写走全局 config.json） */
+function enableLocal(preferLocal: boolean): void {
+  h.globalConfig = { localEmbedding: { enabled: true, preferLocal, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } }
+}
+
+describe('降级链四级：调用序列（T3）', () => {
+  beforeEach(() => {
+    // 一个文本一个块（默认 `() => []` 会让降级链空转，链用例统一覆盖分块）
+    h.chunkTextImpl = (text: string) => [text]
+  })
+
+  describe('兼容性：enabled=false（默认）与现状逐字等价', () => {
+    it('无 localEmbedding 字段 → api 成功即短路（本地档零调用）', async () => {
+      h.globalConfig = {}
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.embedCalls).toEqual([['正文内容']])
+      expect(h.llmCanUseCalls).toBe(0)      // api 成功 → 不再问 LLM 档
+      expect(h.detectCalls).toHaveLength(0) // 本地档不在链上
+      expect(h.localEmbedCalls).toHaveLength(0)
+      expect(h.addChunksCalls[0].vectors).toEqual([[1, 0, 0, 1]])
+    })
+
+    it('api 失败 → LLM 档；LLM 未启用 → FTS-only（无向量写入，导入不阻断）', async () => {
+      h.globalConfig = {}
+      h.embedShouldFail = true
+      h.llmEnabled = false
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)                     // 降级链尽头不阻断导入
+      expect(h.llmCanUseCalls).toBe(1)                   // 问过 LLM 档
+      expect(h.llmCalls).toHaveLength(0)                 // 未启用 → 不调用
+      expect(h.addChunksCalls[0].vectors).toBeUndefined() // FTS-only：不写向量
+      expect(h.detectCalls).toHaveLength(0)
+    })
+
+    it('api 失败 → LLM 成功 → 用 LLM 向量（现状第二档顺序不变）', async () => {
+      h.globalConfig = {}
+      h.embedShouldFail = true
+      h.llmEnabled = true
+      h.llmVectors = [[0.7, 0.7, 0.7]]
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.llmCalls).toEqual([['正文内容']])
+      expect(h.addChunksCalls[0].vectors).toEqual([[0.7, 0.7, 0.7]])
+    })
+
+    it('无 API Key → api 档不尝试（现状：apiKey 为空时不调用 generateEmbeddings），直接 LLM 档', async () => {
+      h.globalConfig = {}
+      h.llmEnabled = true
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', { baseUrl: '', apiKey: '' })
+
+      expect(res.success).toBe(true)
+      expect(h.embedCalls).toHaveLength(0) // api 档未被尝试
+      expect(h.llmCalls).toHaveLength(1)
+    })
+
+    it('enabled=false 但本地可用 → 仍不探测（兼容性硬要求：默认路径逐字等价）', async () => {
+      h.globalConfig = {
+        localEmbedding: { enabled: false, preferLocal: true, baseUrl: LOCAL_BASE, model: LOCAL_MODEL },
+      }
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.detectCalls).toHaveLength(0)
+      expect(h.localEmbedCalls).toHaveLength(0)
+      expect(h.embedCalls).toHaveLength(1)
+    })
+
+    it('配置损坏（localEmbedding 非对象 / enabled 非布尔）→ 回退默认，不探测本地', async () => {
+      h.globalConfig = { localEmbedding: 'yes' }
+      await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+      h.globalConfig = { localEmbedding: { enabled: 'true', preferLocal: true } }
+      await importText('正文内容', 'b.txt', PROJECT, 'openai', MODEL)
+
+      expect(h.detectCalls).toHaveLength(0)
+      expect(h.embedCalls).toHaveLength(2)
+    })
+  })
+
+  describe('四级：enabled=true（本地档参与 + 用户优先级）', () => {
+    it('preferLocal=true：本地成功即短路（api/llm 都不调用）', async () => {
+      enableLocal(true)
+      h.localVectors = [[1, 1, 1, 1]]
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.detectCalls).toEqual([LOCAL_BASE])     // 探测用的是配置里的 baseUrl
+      expect(h.localEmbedCalls).toEqual([['正文内容']])
+      expect(h.embedCalls).toHaveLength(0)            // api 档未尝试
+      expect(h.llmCanUseCalls).toBe(0)
+      expect(h.addChunksCalls[0].vectors).toEqual([[1, 1, 1, 1]])
+    })
+
+    it('preferLocal=false：api 成功即短路，本地档连探测都不做（优先级生效）', async () => {
+      enableLocal(false)
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.detectCalls).toHaveLength(0)
+      expect(h.localEmbedCalls).toHaveLength(0)
+    })
+
+    it('preferLocal=false：api 失败 → 降级本地（顺序 api → local）', async () => {
+      enableLocal(false)
+      h.embedShouldFail = true
+      h.localVectors = [[2, 2, 2]]
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.embedCalls).toHaveLength(1)
+      expect(h.detectCalls).toEqual([LOCAL_BASE])
+      expect(h.addChunksCalls[0].vectors).toEqual([[2, 2, 2]])
+    })
+
+    it('preferLocal=true：本地探测失败 → 跳过本地档（不发起 /api/embed）并降级 api', async () => {
+      enableLocal(true)
+      h.localDetectOk = false
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.detectCalls).toEqual([LOCAL_BASE])
+      expect(h.localEmbedCalls).toHaveLength(0) // 探测失败不浪费 embed 超时
+      expect(h.embedCalls).toHaveLength(1)      // 降级到 api
+    })
+
+    it('本地向量化 throw（T2：英文错误串）→ 降级 api；英文串只进日志，不作 UI 文案', async () => {
+      enableLocal(true)
+      h.localEmbedShouldFail = true
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)          // 导入不阻断
+      expect(h.embedCalls).toHaveLength(1)    // 降级到 api
+      const logged = warnSpy.mock.calls.map(args => args.map(String).join(' ')).join('\n')
+      expect(logged).toContain('Ollama /api/embed failed: HTTP 500')
+      expect(res.error).toBeUndefined()       // 英文原始错误串不上交 UI
+    })
+
+    it('本地网络 reject（T2：raw `TypeError: fetch failed`）→ 同样只进日志并降级 api', async () => {
+      enableLocal(true)
+      h.localEmbedShouldFail = true
+      h.localEmbedError = new TypeError('fetch failed') // Ollama 未运行时 undici 的原始 reject 形态
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.embedCalls).toHaveLength(1)
+      const logged = warnSpy.mock.calls.map(args => args.map(String).join(' ')).join('\n')
+      expect(logged).toContain('fetch failed')
+      expect(res.error).toBeUndefined()
+    })
+
+    it('本地返回空向量（T2：空输入 → [] / 全空）→ 视为该档失败，继续降级', async () => {
+      enableLocal(true)
+      h.localVectors = []
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(h.detectCalls).toHaveLength(1)
+      expect(h.embedCalls).toHaveLength(1) // 空结果不算成功
+    })
+
+    it('四级全败 → FTS-only，导入仍成功（链尽头不阻断）', async () => {
+      enableLocal(true)
+      h.localDetectOk = false
+      h.embedShouldFail = true
+      h.llmEnabled = false
+
+      const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      // FTS-only：不写任何向量（本地档失败返回 [] → addChunks 收到的可能是 [] 而非 undefined，
+      // 但两者对 addChunks 等价：无任何非空向量可写）
+      expect(h.addChunksCalls[0].vectors ?? []).toHaveLength(0)
+      expect(h.addChunksCalls[0].chunks).toEqual(['正文内容']) // 文本照常入库（FTS 可用）
+    })
+  })
+})
+
+// ============================================================
+// ⑤ T3：向量维度硬校验（写入前拒绝；真实 LanceDB 见 e2e 文件）
+// ============================================================
+
+describe('向量维度硬校验接线（T3）', () => {
+  beforeEach(() => {
+    h.chunkTextImpl = (text: string) => [text]
+  })
+
+  it('assertVectorDimCompatible：现有 1536 维 vs 待写 1024 维 → throw（不返回、不静默降级）', async () => {
+    h.existingDim = 1536
+
+    await expect(assertVectorDimCompatible(PROJECT, 1024)).rejects.toThrow(/1536/)
+    await expect(assertVectorDimCompatible(PROJECT, 1024)).rejects.toThrow(/1024/)
+    await expect(assertVectorDimCompatible(PROJECT, 1024)).rejects.toThrow(/重建/)
+  })
+
+  it('维度一致 → 放行；首建（无表/无向量列 → 0）→ 放行', async () => {
+    h.existingDim = 1024
+    await expect(assertVectorDimCompatible(PROJECT, 1024)).resolves.toBeUndefined()
+
+    h.existingDim = 0
+    await expect(assertVectorDimCompatible(PROJECT, 1536)).resolves.toBeUndefined()
+  })
+
+  it('本次不写向量（newDim=0）→ 放行（存量纯文本库 / FTS-only 不受影响）', async () => {
+    h.existingDim = 1536
+    await expect(assertVectorDimCompatible(PROJECT, 0)).resolves.toBeUndefined()
+  })
+
+  it('importText：维度不一致 → 拒绝（明确错误），不写入、不删同名旧文档（无半写入/无数据丢失）', async () => {
+    h.existingDim = 1536
+    h.apiVectors = [new Array(1024).fill(0.1)]
+    h.existingDocs = [{ id: 'doc-old', fileName: 'a.txt', importedAt: '', chunkCount: 1, filePath: '' }]
+
+    const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/1536/)
+    expect(res.error).toMatch(/1024/)
+    expect(h.dimReadCalls).toBe(1)
+    expect(h.addChunksCalls).toHaveLength(0) // 未写入
+    expect(h.removeDocCalls).toHaveLength(0) // 未删除旧文档（校验先于清理）
+  })
+
+  it('importText：维度一致 → 校验放行并正常写入（同名旧文档照常清理，幂等性不受影响）', async () => {
+    h.existingDim = 1024
+    h.apiVectors = [new Array(1024).fill(0.1)]
+    h.existingDocs = [{ id: 'doc-old', fileName: 'a.txt', importedAt: '', chunkCount: 1, filePath: '' }]
+
+    const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+    expect(res.success).toBe(true)
+    expect(h.dimReadCalls).toBe(1)
+    expect(h.removeDocCalls).toEqual(['doc-old'])
+    expect(h.addChunksCalls).toHaveLength(1)
+    expect(h.addChunksCalls[0].vectors?.[0]).toHaveLength(1024)
+  })
+
+  it('importText：FTS-only（无向量可写）→ 不做维度校验（不读表），导入照常', async () => {
+    h.existingDim = 1536
+    h.embedShouldFail = true
+    h.llmEnabled = false
+
+    const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
+
+    expect(res.success).toBe(true)
+    expect(h.dimReadCalls).toBe(0)
+    expect(h.addChunksCalls[0].vectors).toBeUndefined()
+  })
+})
+
+describe('backfillVectors 四级接入 + 维度拒绝（T3）', () => {
+  beforeEach(() => {
+    // 1 个待回填块（table.query() 第 1 次 = 缺向量扫描；之后 = 全表读取）
+    h.vectorlessCount = 1
+    h.backfillRows = [{ id: 'row-1', text: '无向量块', vector: null }]
+    h.backfillFullRows = [{ id: 'row-1', text: '无向量块', vector: null }]
+  })
+
+  it('默认（enabled=false）→ 仅 api 档，不探测本地（兼容）', async () => {
+    h.existingDim = 1536 // 与 api 桩向量 4 维不一致 → 走拒绝分支（无需跑通全量重建写盘）
+
+    const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+    expect(h.embedCalls).toHaveLength(1)
+    expect(h.detectCalls).toHaveLength(0)
+    expect(h.localEmbedCalls).toHaveLength(0)
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/1536/)
+    expect(h.dbWrites).toHaveLength(0) // 无半写入（临时表都未创建）
+  })
+
+  it('enabled + preferLocal：本地档先试并短路 api → 维度不一致时同样拒绝且无写入', async () => {
+    enableLocal(true)
+    h.existingDim = 1536 // 本地桩向量 3 维 → 不一致
+
+    const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+    expect(h.detectCalls).toEqual([LOCAL_BASE])
+    expect(h.localEmbedCalls).toHaveLength(1)
+    expect(h.embedCalls).toHaveLength(0) // 本地成功 → api 不再尝试
+    expect(res.success).toBe(false)
+    expect(res.error).toMatch(/1536/)
+    expect(h.dbWrites).toHaveLength(0)
+  })
+
+  it('enabled + !preferLocal：api 失败后降级本地（顺序 api → local）', async () => {
+    enableLocal(false)
+    h.embedShouldFail = true
+    h.existingDim = 1536
+
+    const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+    expect(h.embedCalls).toHaveLength(1)
+    expect(h.detectCalls).toEqual([LOCAL_BASE])
+    expect(h.localEmbedCalls).toHaveLength(1)
+    expect(res.success).toBe(false)
+    expect(h.dbWrites).toHaveLength(0)
+  })
+
+  it('维度一致 → 校验放行，既有回填写盘路径原样跑通（临时表 → 替换 → 校验）', async () => {
+    h.existingDim = 4
+    h.backfillFullRows = [{ id: 'row-1', text: '无向量块', vector: [1, 0, 0, 1] }]
+
+    const res = await backfillVectors(PROJECT, 'openai', MODEL)
+
+    expect(res.success).toBe(true)
+    expect(res.processed).toBe(1)
+    expect(res.failed).toBe(0)
+    expect(h.dbWrites).toContain('create:chunks_backfill')
+    expect(h.dbWrites).toContain('create:chunks')
   })
 })

@@ -9,6 +9,9 @@
  * ① 别名 query 经扩展 → 召回只含**正名**的 chunk（扩展生效；无 characters 时为改造前行为）
  * ② 有/无 characters 时 **FTS-only 入口结果完全相同**（扩展不得进入 T3 的词级 AND 通道——
  *    并入变体等于增加 AND 约束，会把别名查询的召回清零；见 task-5-report.md §落点与语义选择）
+ *
+ * T3 追加（真实 LanceDB）：**向量维度硬校验端到端**——现有表向量维度 ≠ 待写维度 →
+ * 拒绝且给出明确错误（提示重建索引），**不产生半写入**（表维度不被污染、既有同名文档不被破坏）。
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import fs from 'node:fs'
@@ -16,13 +19,15 @@ import os from 'node:os'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { DatabaseSync } from 'node:sqlite'
-import { searchKnowledge, searchKnowledgeFTS } from './knowledge-base'
-import { addChunks, closeConnection } from './vector-store'
+import { searchKnowledge, searchKnowledgeFTS, importText, backfillVectors } from './knowledge-base'
+import { addChunks, closeConnection, getStats, listDocuments, getChunksWithoutVectors } from './vector-store'
 
 const h = vi.hoisted(() => ({
   db: null as unknown,
   currentProjectPath: null as string | null,
   embedCalls: [] as string[][],
+  /** T3：stub 向量的维度（0 = 用检索用例的 5 维 stubEmbed）——模拟「换了 Embedding 模型」 */
+  embedDim: 0,
 }))
 
 vi.mock('./database', () => ({
@@ -37,11 +42,27 @@ function stubEmbed(text: string): number[] {
 }
 
 vi.mock('./embedding', () => ({
-  chunkText: () => [],
+  // T3 起 importText 也走本文件：真实 chunkText 换成分行 chunker（每个非空行一个块），
+  // 保证「文本 → 块 → 向量 → 写入」链路可端到端断言（原 `() => []` 只服务检索用例）
+  chunkText: (text: string) => text.split('\n').map(l => l.trim()).filter(l => l !== ''),
   generateEmbeddings: async (texts: string[]) => {
     h.embedCalls.push(texts)
-    return texts.map(stubEmbed)
+    // T3：embedDim > 0 → 该维度常量向量（模拟本地 1024 维 / API 1536 维）；
+    //    否则用 5 维 stubEmbed（检索用例）
+    return texts.map(t => (h.embedDim > 0 ? new Array(h.embedDim).fill(0.1) : stubEmbed(t)))
   },
+}))
+
+/**
+ * T3：本地档在测试环境恒不可用。
+ *
+ * 目的：**降级链行为不依赖宿主 config.json**——若开发机/CI 恰好开启了 `localEmbedding`，
+ * 真实 `detectOllama` 会去探测 127.0.0.1:11434，用例行为将随环境漂移。此处桩死"本地不可用"
+ * 后，四级链必然落到 api 档，断言与宿主配置无关（确定性）。
+ */
+vi.mock('./ollama-embedding', () => ({
+  detectOllama: async () => ({ ok: false, error: 'stub: no local Ollama in tests' }),
+  embedLocal: async () => { throw new Error('stub: no local Ollama in tests') },
 }))
 
 const MODEL = { baseUrl: '', apiKey: 'test-key' }
@@ -67,6 +88,7 @@ beforeEach(() => {
   h.db = null
   h.currentProjectPath = null
   h.embedCalls.length = 0
+  h.embedDim = 0
 })
 
 describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L3 T5）', () => {
@@ -130,6 +152,161 @@ describe('端到端：别名 query 召回含正名的 chunk（真实 LanceDB，L
       h.db = makeCharactersDb([{ name: '苏晚', aliases: '["阿晚","晚儿"]' }])
       const withCharacters = await searchKnowledgeFTS('阿晚', projectPath, 2)
       expect(withCharacters).toEqual(withoutCharacters)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+})
+
+/**
+ * 向量维度硬校验端到端（T3 v1 必做，真实 LanceDB）
+ *
+ * 背景：本地 Ollama 模型（如 bge-m3 1024 维）与远程 Embedding API（1536 维）**不得**混入
+ * 同一张 LanceDB 表——LanceDB 的 vector 列是 `FixedSizeList(dim)`，混维写入会污染/破坏整表。
+ * 故写入前读现有表维度，不一致 → 明确拒绝（提示重建索引），**不静默降级、不半写入**。
+ *
+ * 用例覆盖 brief Step 1 B 三条 + 数据保护 + backfillVectors 同法接线。
+ */
+describe('向量维度硬校验端到端（T3，真实 LanceDB）', () => {
+  const E2E_TIMEOUT_MS = 30_000
+
+  /** 定维常量向量（值不重要，测的是维度契约） */
+  const vec = (dim: number): number[] => new Array(dim).fill(0.1)
+
+  /** 建一张「已有向量的表」：1536 或 1024 维，1 行 */
+  async function seedTable(projectPath: string, dim: number, fileName = '第1章 已有.txt'): Promise<void> {
+    await addChunks(projectPath, randomUUID(), fileName, ['已有块内容'], [vec(dim)])
+  }
+
+  it('现有 1536 维 → 以 1024 维写入 → 拒绝，错误明确并提示重建索引', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1536)
+      h.embedDim = 1024
+
+      const res = await importText('新文档正文内容', '新文档.txt', projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toContain('1536')
+      expect(res.error).toContain('1024')
+      // 提示重建索引（i18n 文案，默认 locale = zh-CN）
+      expect(res.error).toContain('重建')
+      expect(res.docId).toBeUndefined()
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('拒绝时无半写入：表维度未被污染、无新增行、文档表无新记录', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1536)
+      h.embedDim = 1024
+
+      await importText('新文档正文内容', '新文档.txt', projectPath, 'openai', MODEL)
+
+      const stats = await getStats(projectPath)
+      expect(stats.vectorDimension).toBe(1536) // 维度未被 1024 覆盖
+      expect(stats.totalChunks).toBe(1)        // 没有多出半写入的块
+      expect((await listDocuments(projectPath)).map(d => d.fileName)).toEqual(['第1章 已有.txt'])
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('拒绝不破坏既有同名文档（删旧文档发生在校验之后——无「删了再失败」的数据丢失）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      h.embedDim = 1536
+      const first = await importText('旧版正文', '同名.txt', projectPath, 'openai', MODEL)
+      expect(first.success).toBe(true)
+
+      h.embedDim = 1024
+      const second = await importText('新版正文', '同名.txt', projectPath, 'openai', MODEL)
+      expect(second.success).toBe(false)
+
+      expect((await listDocuments(projectPath)).map(d => d.fileName)).toEqual(['同名.txt'])
+      expect((await getStats(projectPath)).totalChunks).toBe(1) // 旧块仍在，未被清空
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('同维度（1024 → 1024）→ 放行写入成功', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1024)
+      h.embedDim = 1024
+
+      const res = await importText('新文档正文内容', '新文档.txt', projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      expect(res.chunkCount).toBeGreaterThan(0)
+      const stats = await getStats(projectPath)
+      expect(stats.vectorDimension).toBe(1024)
+      expect(stats.totalChunks).toBe(1 + (res.chunkCount ?? 0))
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('方向对称：现有 1024 维 → 以 1536 维写入 → 同样拒绝', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1024)
+      h.embedDim = 1536
+
+      const res = await importText('新文档正文内容', '新文档.txt', projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.error).toContain('1024')
+      expect(res.error).toContain('1536')
+      expect((await getStats(projectPath)).vectorDimension).toBe(1024)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('backfillVectors：现有 1536 维 + 无向量行 → 以 1024 维回填 → 显式拒绝且表不变', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1536)
+      // 无向量行（存量库重建的痛点场景：回填正是要处理这种行）
+      await addChunks(projectPath, randomUUID(), '第2章 无向量.txt', ['无向量块'])
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(1)
+
+      h.embedDim = 1024 // 本地模型 1024 维 vs 表 1536 维
+      const res = await backfillVectors(projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(false)
+      expect(res.processed).toBe(0)
+      expect(res.error).toContain('1536')
+      expect(res.error).toContain('1024')
+
+      const stats = await getStats(projectPath)
+      expect(stats.vectorDimension).toBe(1536) // 维度未被污染
+      expect(stats.totalChunks).toBe(2)        // 表未被重建/丢行
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(1)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('backfillVectors：同维度（1536 → 1536）→ 回填成功（维度校验不阻断既有重建链）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedTable(projectPath, 1536)
+      await addChunks(projectPath, randomUUID(), '第2章 无向量.txt', ['无向量块'])
+
+      h.embedDim = 1536
+      const res = await backfillVectors(projectPath, 'openai', MODEL)
+
+      expect(res.success).toBe(true)
+      // 不断言 processed / failed 的确切值：`backfillVectors` 内部的缺向量扫描用
+      // `!Array.isArray(r.vector)` 判定（Arrow Vector 行也被算作缺向量 → processed 偏大、
+      // failed 可能算出负数），是既有行为、非本任务范围——断言真正的终点不变量
+      expect((await getChunksWithoutVectors(projectPath)).count).toBe(0)
+      expect((await getStats(projectPath)).vectorDimension).toBe(1536)
     } finally {
       await cleanupProject(projectPath)
     }

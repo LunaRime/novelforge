@@ -140,12 +140,36 @@ function detectVectorDim(records: ChunkRecord[]): number {
   return 0
 }
 
-/** 从既有表 schema 的 vector 列解析维度（FixedSizeList listSize）；无该列返回 0 */
-function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
+/**
+ * 从既有表 schema 的 vector 列解析维度（FixedSizeList listSize）；无该列返回 0。
+ *
+ * ⚠️ **不用 `instanceof`**（L3 T2 实证）：打包产物里 apache-arrow 有**两份实例**
+ * （Rolldown 内联的 ESM 副本 vs `@lancedb/lancedb` 自己 require 的 CJS 副本），
+ * `instanceof FixedSizeList` 恒 false → 判断静默失效。此处只做**schema 字段读取**
+ * （`vectorField.type.listSize`），跨副本安全。
+ */
+export function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
   const vectorField = fields.find(f => f.name === 'vector')
   if (!vectorField) return 0
   const listSize = (vectorField.type as { listSize?: number }).listSize
   return typeof listSize === 'number' ? listSize : 0
+}
+
+/**
+ * 读现有 chunks 表的向量维度（T3 维度硬校验的数据源）。
+ *
+ * - 表不存在 / 无 vector 列 → `0`（首建或纯 FTS 库：无维度可冲突，调用方放行）
+ * - 读取异常**照实抛出**（不吞成 0）：读不到现状时宁可由上层报错，也不假装"无维度冲突"
+ *   （`addChunks` 内既有的采样守卫在该场景会静默跳过，实测 1536→1024 混写会**静默重写列维度**）
+ */
+export async function getChunksTableVectorDim(projectPath: string): Promise<number> {
+  const db = await getConnection(projectPath)
+  const tableNames = await db.tableNames()
+  if (!tableNames.includes(TABLE_NAME)) return 0
+
+  const table = await db.openTable(TABLE_NAME)
+  const schema = await table.schema()
+  return detectVectorDimFromSchema(schema.fields)
 }
 
 /**
