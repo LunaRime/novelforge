@@ -59,8 +59,14 @@ function getCurrentProjectPath(): string | null {
  *    T3b 在模块层接好的降级链对真实用户不可达（与 T4/A4.2 修好的**回填侧**门控是同一类缺陷）。
  *
  * ⚠️ 本地档只作为**追加**放行条件：`embConfig` 存在时连配置都不读，有远端配置的既有路径零影响。
+ *
+ * ⚠️ final wave W5：声明返回类型必须**如实**包含可选的 `modelName` —— `:65` 返回的
+ *   `embConfig.model` 是 `getEmbeddingConfig()` 那个**同一个对象引用**（运行时确实带 `modelName`），
+ *   旧声明把它排除在外，形成「类型说没有、实参有」的锐边：将来若有人照类型把它改写成
+ *   `{ baseUrl: …, apiKey: … }` 字面量，`modelName` 会被**静默丢弃**（模型名回落默认值）。
+ *   一行类型收口，零运行时影响。
  */
-function getQueryEmbeddingArgs(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string } } | null {
+function getQueryEmbeddingArgs(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName?: string } } | null {
   const embConfig = getEmbeddingConfig()
   if (embConfig) return { protocol: embConfig.protocol, model: embConfig.model }
   if (readLocalEmbeddingConfig().enabled) return { protocol: 'openai', model: { baseUrl: '', apiKey: '' } }

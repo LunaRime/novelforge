@@ -18,7 +18,7 @@ import {
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
-import type { LocalEmbeddingConfig } from '../../shared/ipc-channels'
+import type { AllEventChannels, AllInvokeChannels, LocalEmbeddingConfig } from '../../shared/ipc-channels'
 import { Switch } from '../ui/Switch'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
@@ -391,17 +391,20 @@ function TestResultRow({
   detail: string
 }) {
   const { t } = useTranslation()
+  // final wave W4：本行原用硬编码色（`text-green-500` / `text-red-500` / `#16a34a` / `#dc2626`）
+  // ——违反 AGENTS.md 核心约束（颜色只走 CSS 变量）。改用同文件 `:42/:60` 已在用的语义 token，
+  // 零行为变化（同色系，且随主题变量而非固定色）。
   return (
     <div className="flex items-start gap-2 text-xs">
       {ok ? (
-        <CheckCircle2 size={14} className="text-green-500 flex-shrink-0 mt-0.5" />
+        <CheckCircle2 size={14} className="text-[var(--color-success)] flex-shrink-0 mt-0.5" />
       ) : (
-        <XCircle size={14} className="text-red-500 flex-shrink-0 mt-0.5" />
+        <XCircle size={14} className="text-[var(--color-error)] flex-shrink-0 mt-0.5" />
       )}
       <div>
         <span
           className="font-medium"
-          style={{ color: ok ? '#16a34a' : '#dc2626' }}
+          style={{ color: ok ? 'var(--color-success)' : 'var(--color-error)' }}
         >
           {label}: {ok ? t('status.normal') : t('status.abnormal')}
         </span>
@@ -413,12 +416,19 @@ function TestResultRow({
 
 // ===== 本地向量模型卡片（T5）=====
 
-/** Ollama 探测结果（T4 `embedding:local-detect`，三态不抛） */
-type LocalDetectResult = { ok: boolean; version?: string; error?: string }
-/** 已装模型（T4 `embedding:local-list-models`） */
-type LocalModel = { name: string; size: number }
-/** 拉取进度帧（T4 事件 `embedding:local-pull-progress`，同 T2 的 PullProgress；`error` 仅终态失败帧有） */
-type LocalPullProgress = { status: string; completed?: number; total?: number; percent?: number; error?: string }
+/**
+ * Ollama 探测结果 / 已装模型 / 拉取进度帧。
+ *
+ * ⚠️ final wave W8：三者原为**手写镜像**（`{ ok: boolean; version?: string; … }` 等），与
+ * `src/shared/ipc-channels.ts` 的通道声明构成两份独立真相 —— 主进程改了载荷，渲染层这边不会
+ * 有任何编译错误，只会静默错位。现改为**派生自通道声明**（L4 铁律：`ipc-channels.ts` 是唯一
+ * 声明源），零运行时影响：
+ *  · `embedding:local-detect` / `embedding:local-list-models` 是 invoke 通道 → `AllInvokeChannels[C]['return']`
+ *  · `embedding:local-pull-progress` 是 event 通道 → `AllEventChannels[C]`（事件载荷就是它本身）
+ */
+type LocalDetectResult = AllInvokeChannels['embedding:local-detect']['return']
+type LocalModel = AllInvokeChannels['embedding:local-list-models']['return'][number]
+type LocalPullProgress = AllEventChannels['embedding:local-pull-progress']
 
 /** 未知异常 → 可读详情。T2/T4 的错误串是**英文技术描述**，只作「原始详情」呈现（U4） */
 function errorDetail(e: unknown): string {

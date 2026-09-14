@@ -961,6 +961,52 @@ describe('backfillVectors 四级接入 + 维度拒绝（T3）', () => {
       expect(h.dbWrites).toContain('create:chunks')
     })
   })
+
+  /**
+   * Final wave W1：`backfillVectors` 的 api 档缺少 `model.apiKey` 门控。
+   *
+   * 用户形态（`kb-controller.ts:162` 的 `{ baseUrl: '', apiKey: '' }`）：纯本地用户没有远端
+   * Embedding 模型，controller 按既有约定传**空** model。本地档失败后 api 档仍被调用 →
+   * `buildOpenAIUrl('')` = `/v1/embeddings` → `fetch` 立即 `TypeError` → 既有重试 3 次
+   * （500/1000ms 退避）白等约 1.5s，并打出**误导性**的 `log.kb.backfillApiFailed`
+   * （文案写的是「Embedding API 回填失败」——用户根本没配远端 API）。
+   *
+   * `importContent`（`:168`）与 `resolveQueryVector`（`:456`）两处同档都已有该门控，本档是漏网。
+   */
+  describe('W1（final wave）：api 档的 apiKey 门控（与 importContent/:168、resolveQueryVector/:456 同形）', () => {
+    it('本地档失败 + apiKey 为空 → api 档被**跳过**（不调用、不 warn「API 回填失败」），降级链继续到 LLM 档', async () => {
+      enableLocal(true) // preferLocal：本地档排在最前
+      h.localEmbedShouldFail = true
+      h.llmEnabled = true
+      h.llmVectors = [[1, 2, 3, 4]]
+      h.existingDim = 4
+      h.backfillFullRows = [{ id: 'row-1', text: '无向量块', vector: [1, 2, 3, 4] }]
+      const warnSpy = vi.spyOn(logger, 'warn')
+
+      // 纯本地用户的 controller 传参（kb-controller.ts:162）
+      const res = await backfillVectors(PROJECT, 'openai', { baseUrl: '', apiKey: '' })
+
+      expect(h.localEmbedCalls).toHaveLength(1)                  // 本地档确实试过且失败
+      expect(h.embedCalls).toHaveLength(0)                       // ← 核心断言：api 档一次都没调
+      expect(countOf(warnText(warnSpy), logPrefix('log.kb.backfillApiFailed'))).toBe(0)
+      expect(h.llmCalls).toHaveLength(1)                         // 链继续到下一档（LLM 拿到向量）
+      expect(res.success).toBe(true)
+      expect(res.processed).toBe(1)
+    })
+
+    it('回归锁：apiKey 非空时 api 档照旧尝试（门控不得误伤既有远端路径）', async () => {
+      enableLocal(true)
+      h.localEmbedShouldFail = true
+      h.existingDim = 4
+      h.backfillFullRows = [{ id: 'row-1', text: '无向量块', vector: [1, 0, 0, 1] }]
+
+      const res = await backfillVectors(PROJECT, 'openai', { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-x' })
+
+      expect(h.embedCalls).toHaveLength(1)
+      expect(res.success).toBe(true)
+      expect(res.processed).toBe(1)
+    })
+  })
 })
 
 // ============================================================

@@ -66,7 +66,8 @@ describe('embedOpenAI fetchWithTimeout（abort 兜底，2026-08-29 根因修复�
  * T2 的 Ollama pull 是长任务（300s），需要复用同一个 abort 兜底实现而不改默认 10s 行为。
  */
 describe('fetchWithTimeout 超时参数化（T1：Ollama pull 长任务复用）', () => {
-  const URL = 'https://example.com/v1/embeddings'
+  // T1 nit：原为 `const URL`，遮蔽了全局 URL 构造器（同文件内再想用 `new URL(...)` 就会炸）→ 改名
+  const EMBEDDINGS_URL = 'https://example.com/v1/embeddings'
   const INIT: RequestInit = { method: 'POST' }
 
   beforeEach(() => {
@@ -82,12 +83,20 @@ describe('fetchWithTimeout 超时参数化（T1：Ollama pull 长任务复用）
     // 挂起连接：promise 永不 settle
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
 
-    const pending = fetchWithTimeout(URL, INIT)
-    const rejection = pending.catch((e: Error) => e)
+    // T1 M1：原用例只锁**上界**（advance(10_001) 后要求 reject → 任何 ≤10_001 的默认值都绿）。
+    // 先推进到超时点**之前** 1ms 断言仍未 settle，再推进 1ms → 同时锁住下界与上界。
+    let settled: 'pending' | 'rejected' | 'resolved' = 'pending'
+    const pending = fetchWithTimeout(EMBEDDINGS_URL, INIT).then(
+      () => { settled = 'resolved'; return null },
+      (e: Error) => { settled = 'rejected'; return e },
+    )
 
-    await vi.advanceTimersByTimeAsync(EMBEDDING_TIMEOUT_MS + 1)
+    await vi.advanceTimersByTimeAsync(EMBEDDING_TIMEOUT_MS - 1)
+    expect(settled).toBe('pending') // 9_999ms 时**不得**已超时（下界）
 
-    const err = await rejection
+    await vi.advanceTimersByTimeAsync(1)
+    const err = await pending
+    expect(settled).toBe('rejected')
     expect(err).toBeInstanceOf(Error)
     expect((err as DOMException).name).toBe('AbortError')
   })
@@ -96,17 +105,19 @@ describe('fetchWithTimeout 超时参数化（T1：Ollama pull 长任务复用）
     vi.stubGlobal('fetch', vi.fn(() => new Promise<Response>(() => {})))
 
     let settled: 'pending' | 'rejected' | 'resolved' = 'pending'
-    const pending = fetchWithTimeout(URL, INIT, 300_000).then(
+    const pending = fetchWithTimeout(EMBEDDINGS_URL, INIT, 300_000).then(
       () => { settled = 'resolved'; return null },
       (e: Error) => { settled = 'rejected'; return e },
     )
 
     // 跨过默认 10s 超时点：显式 300s 未到 → 不得 abort/reject（这正是 T2 依赖的行为）
-    await vi.advanceTimersByTimeAsync(EMBEDDING_TIMEOUT_MS + 1)
+    const pastDefault = EMBEDDING_TIMEOUT_MS + 1
+    await vi.advanceTimersByTimeAsync(pastDefault)
     expect(settled).toBe('pending')
 
-    // 推进到显式超时点 → abort + 立即 reject
-    await vi.advanceTimersByTimeAsync(300_000 - EMBEDDING_TIMEOUT_MS)
+    // 推进**到**显式超时点。T1 M3：原为 `300_000 - EMBEDDING_TIMEOUT_MS`（未扣除上面那 1ms）→
+    // 累计 300_001ms，多推进 1ms 掩盖了显式值偏大 1ms 的实现。这里补齐 1ms，总时长正好 300_000ms。
+    await vi.advanceTimersByTimeAsync(300_000 - pastDefault)
     const err = await pending
     expect(settled).toBe('rejected')
     expect((err as DOMException).name).toBe('AbortError')
@@ -121,16 +132,21 @@ describe('fetchWithTimeout 超时参数化（T1：Ollama pull 长任务复用）
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const res = await fetchWithTimeout(URL, INIT)
+    const res = await fetchWithTimeout(EMBEDDINGS_URL, INIT)
     expect(res).toBe(okResponse)
 
     // 真实传参断言：url 原样透传，signal 存在且未被 abort
     expect(calls).toHaveLength(1)
-    expect(calls[0][0]).toBe(URL)
+    expect(calls[0][0]).toBe(EMBEDDINGS_URL)
     expect(calls[0][1].signal).toBeInstanceOf(AbortSignal)
     expect(calls[0][1].signal?.aborted).toBe(false)
+    // 立刻返回时超时 timer 已清（`finally` 在 Promise.race 落地后即 clearTimeout）
+    expect(vi.getTimerCount()).toBe(0)
 
-    // 推进超时点后无异常（finally 已清 timer）
+    // T1 M2：原断言在此**推进之前**求值 → 「timer 已清理」其实从未被断言（推进后无异常并不能
+    // 区分「timer 被清」与「timer 触发但 abort 无副作用」）。改为推进之后直接数残留 timer：
+    // 若 `fetchWithTimeout` 的 `finally` 漏掉 `clearTimeout`，此处会是 1 → 转红。
     await vi.advanceTimersByTimeAsync(EMBEDDING_TIMEOUT_MS + 1)
+    expect(vi.getTimerCount()).toBe(0)
   })
 })

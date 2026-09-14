@@ -37,6 +37,12 @@ const h = vi.hoisted(() => ({
   // T3b R1（I1）：查询 handler 的两个出口（模块已被 mock，这里是唯一的观测点）
   searchKnowledge: vi.fn(),
   searchKnowledgeFTS: vi.fn(),
+  /**
+   * Final wave W7/T4-M2 专用：方式 2 读取的「缺向量行」集合。
+   * null（默认）→ 沿用下面的固定单行桩；给值 → 用本值（用于注入「空向量行」等形状）。
+   * 让 `[vector]` 这类**正交**维度在 W7 用例里可直接摆出，而不必借道无关的计数变化。
+   */
+  rowsForLlm: null as null | Array<{ id: string; text: string; vector?: number[] }>,
 }))
 
 vi.mock('node:os', async (importOriginal) => {
@@ -184,6 +190,7 @@ beforeEach(() => {
   h.getVectorlessCount.mockResolvedValue({ count: 0 })
   h.backfillVectors.mockResolvedValue({ success: true, processed: 0, failed: 0 })
   h.updateChunkVectors.mockResolvedValue({ success: true, count: 0, failed: 0 })
+  h.rowsForLlm = null
 
   // T3b R1（I1）：查询出口的返回值（透传断言用）
   h.searchKnowledge.mockResolvedValue([{ text: '语义命中', score: 0.9, fileName: 'a.txt' }])
@@ -303,6 +310,72 @@ describe('A4.2 ③（回归锁）：非维度错误仍按既有语义降级', ()
     expect(res.error).toBe(specific) // 具体错误原样透传（旧写法恒为 kb.llmWriteFailed）
     expect(res.processed).toBe(0)
     expect(res.failed).toBe(1) // vectorless.length(1) - 真实写入数(0)
+  })
+})
+
+// ============================================================
+// Final wave W7 / T4-M2：方式 2 计数的**判别**用例
+//
+// 背景：T4 R1 把方式 2 的计数改成「processed = 真正写成功数、failed 含空向量行」，
+// 但原用例 fixture 是 `N=1,U=1,E=0,res.count=0`（N=缺向量行数、U=push 进 updates 的行数、
+// E=拿到空向量未进 updates 的行数、res.count=真实写入成功数）—— 该形态下
+// `processed`/`failed` 在**新旧两版代码上取值相同**（processed=0、failed=1），
+// 故这次修复本身**没有被判别**；而「部分成功」分支（`processed = res.count`、
+// `failed += U - res.count`）与原「空向量行计入 failed」在这次修复前**零用例**。
+// 下面两条把这两处补成有判别力的形状。
+// ============================================================
+
+describe('W7/T4-M2：方式 2 计数（部分成功 / 空向量行）', () => {
+  /** 进入方式 2 的公共前置：方式 1 失败且无 errorCode、LLM 可用 */
+  function enterMethod2(rows: Array<{ id: string; text: string; vector?: number[] }>): void {
+    setGlobalConfig({ theme: 'dark', localEmbedding: { enabled: true } })
+    h.canUseLLMEmbedding.mockReturnValue(true)
+    h.backfillVectors.mockResolvedValue({ success: false, processed: 0, failed: 0, error: 'fetch failed' })
+    h.getVectorlessCount.mockResolvedValue({ count: rows.length })
+    h.rowsForLlm = rows
+    h.getConnection.mockResolvedValue({
+      openTable: async () => ({
+        query: () => ({ select: () => ({ toArray: async () => h.rowsForLlm }) }),
+      }),
+    })
+  }
+
+  it('部分成功：N=2,U=2 其中 1 行未写成功 → processed===1 && failed===1（旧码报 2/0）', async () => {
+    enterMethod2([
+      { id: 'row-1', text: '块1' },
+      { id: 'row-2', text: '块2' },
+    ])
+    // 两行都拿到非空向量 → U=2
+    h.embedBatchWithLLM.mockResolvedValue([{ vector: [0.1, 0.2, 0.3, 0.4] }, { vector: [0.5, 0.6, 0.7, 0.8] }])
+    // 真实写入只成功 1 行（LanceDB `rowsUpdated` 未命中第 2 行）
+    h.updateChunkVectors.mockResolvedValue({ success: true, count: 1, failed: 1 })
+
+    const res = await invokeBackfill()
+
+    expect(h.updateChunkVectors.mock.calls[0][1]).toHaveLength(2) // U=2 确实全推给了写入层
+    expect(res.success).toBe(true)                                 // 部分成功仍是成功
+    expect(res.processed).toBe(1) // = res.count（旧码是 updates.length = 2）
+    expect(res.failed).toBe(1)    // = U - res.count（旧码恒 0）
+    expect(res.processed + res.failed).toBe(2) // 与 N 相等（不漏计）
+  })
+
+  it('空向量行：E=1 未进入 updates → 计入 failed，且 processed 只有真实写入的 1 行', async () => {
+    enterMethod2([
+      { id: 'row-1', text: '块1', vector: [] }, // 空向量行（vectorless 扫描命中）
+      { id: 'row-2', text: '块2' },
+    ])
+    // row-1 拿到空向量（LLM 对失败项合法返回 {vector: []}）→ E=1；row-2 拿到非空 → U=1
+    h.embedBatchWithLLM.mockResolvedValue([{ vector: [] }, { vector: [0.1, 0.2, 0.3, 0.4] }])
+    h.updateChunkVectors.mockResolvedValue({ success: true, count: 1, failed: 0 })
+
+    const res = await invokeBackfill()
+
+    // 唯一进写入层的只有 row-2（空向量行被 `results[i].vector.length > 0` 挡下）
+    expect(h.updateChunkVectors.mock.calls[0][1]).toEqual([{ id: 'row-2', vector: [0.1, 0.2, 0.3, 0.4] }])
+    expect(res.success).toBe(true)
+    expect(res.processed).toBe(1)
+    expect(res.failed).toBe(1) // = E(1) + (U - res.count)(0)：空向量行如实计入
+    expect(res.processed + res.failed).toBe(2)
   })
 })
 

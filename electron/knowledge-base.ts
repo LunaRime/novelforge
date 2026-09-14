@@ -79,8 +79,14 @@ async function tryLocalEmbedding(texts: string[], cfg: LocalEmbeddingConfig): Pr
  *
  * ⚠️ 用 `code` 字段做**鸭子判定**（见 `isVectorDimMismatchError`），不用 `instanceof`——
  *    打包产物里同类错误可能跨模块实例（apache-arrow 双实例的教训，见 vector-store.ts 注释）。
+ *
+ * ⚠️ final wave W8：本类**不导出** —— 全仓唯一构造点在本文件 `:114`，唯一消费口径是
+ *    `isVectorDimMismatchError()`（零 instanceof、只读 `code`），**没有任何跨模块引用**
+ *    （含测试；`kb-controller.test.ts` 与 `knowledge-base.e2e.test.ts` 都只断言
+ *    `errorCode === 'dim-mismatch'` 这个**契约值**，不是类本身）。类的对外意义由
+ *    `src/shared/ipc-channels.ts:644` 声明的 `errorCode?: 'dim-mismatch'` 承载，故保持内部即可。
  */
-export class VectorDimMismatchError extends Error {
+class VectorDimMismatchError extends Error {
   readonly code = 'dim-mismatch' as const
   constructor(message: string) {
     super(message)
@@ -88,8 +94,13 @@ export class VectorDimMismatchError extends Error {
   }
 }
 
-/** 是否为维度不匹配错误（零 instanceof：只读 `code` 字段） */
-export function isVectorDimMismatchError(e: unknown): boolean {
+/**
+ * 是否为维度不匹配错误（零 instanceof：只读 `code` 字段）。
+ *
+ * ⚠️ final wave W8：**不导出** —— 唯一调用点在本文件 `:878`（`backfillVectors` 的外层 catch）。
+ *    做成公开 API 会诱导外部按 `instanceof` 判定，正是本设计要避免的（见上面的双实例告警）。
+ */
+function isVectorDimMismatchError(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'dim-mismatch'
 }
 
@@ -98,7 +109,7 @@ export function isVectorDimMismatchError(e: unknown): boolean {
  *
  * - `newDim <= 0`（本次不写向量）→ 放行，且**不读表**（纯文本库/FTS-only 路径零开销）
  * - 表不存在 / 无 vector 列（现有维度 0）→ 放行（首建）
- * - 维度一致 → 放行；**不一致 → throw `VectorDimMismatchError`**（i18n 文案，提示重建索引）
+ * - 维度一致 → 放行；**不一致 → throw {@link VectorDimMismatchError}**（i18n 文案，提示重建索引）
  *
  * ⚠️ 为什么必须 throw 而不是降级：LanceDB 的 vector 列是 `FixedSizeList(dim)`，把 1024 维写进
  *    1536 维的表**不会报错**——实测 `addChunks` 会把整列**静默重写成 1024**（既有向量一并被改写，
@@ -728,6 +739,12 @@ export async function backfillVectors(
           logger.warn('KB', t('log.embedding.localFailed').replace('{err}', String(e)))
         }
       } else if (source === 'api') {
+        // Final wave W1：**未配置 API Key → 跳过该档**（与 `importContent` / `resolveQueryVector`
+        // 的同档门控同形）。纯本地用户（`kb-controller` 按既有约定传 `{baseUrl:'',apiKey:''}`）
+        // 在本地档失败后本会带着**空 baseUrl** 进这一档：`buildOpenAIUrl('')` = `/v1/embeddings`
+        // → `fetch` 立即 `TypeError` → 3 次重试白等 ~1.5s，且打出**误导性**的
+        // `log.kb.backfillApiFailed`（「Embedding API 回填失败」）——用户根本没配远端 API。
+        if (!model.apiKey) continue
         try {
           vectors = await generateEmbeddings(texts, protocol, model)
         } catch (e) {

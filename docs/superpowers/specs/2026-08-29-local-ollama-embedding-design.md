@@ -94,7 +94,8 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 | ollama 未安装/未运行 | 状态徽标引导（安装 Ollama → 启动）；降级链自动走下一档，不阻断导入 |
 | 模型缺失 | 双通道提示（应用内下载 / ollama pull）；降级 |
 | pull 网络失败 | 错误原文展示 + 提示配置代理/镜像；通道 B 兜底。**✅ 已实施（FW-1 `314edcc`）**：控制器在 pull 落定时补发终态帧 `{status:'error', error}`（渲染层原来看不到失败 → 进度条永久停帧 + 按钮永久 disabled），UI 据此收进度条 / 恢复下载按钮 / 落 `localEmbedding.pullFailed` 主文案（原始错误串只进「原始详情」折叠区，不作主文案）。**遗留**：连接既不返 `{"error"}` 也不 EOF 时无 app 级超时 → §8 的 v2 已知限制 |
-| embed 推理失败（OOM/维度不符） | 降级下一档 + 日志 warn（错误脱敏） |
+| embed 推理失败（OOM / 网络 / 5xx 等**瞬时性**失败） | 降级下一档 + 日志 warn（错误脱敏） |
+| embed **维度不符**（本次生成维度 ≠ 现有索引维度） | ⛔ **终态，不降级** —— 与 §3.2 / §9.4 及实现一致（T4/A4.2）：`assertVectorDimCompatible` 抛 `VectorDimMismatchError`，`backfillVectors` 以 `errorCode: 'dim-mismatch'` 上交，controller 见即**原样透传**、绝不进「换下一种方式」。理由：写侧换档只会得到另一组维度，继续尝试等于用**静默破坏**（§9.3 实测：两方向都静默写坏）换一个假成功；正确出路是提示用户重建索引。**final wave W3 更正**：本行原与「OOM」合并为「降级下一档」，与实际行为及 §3.2/§9.4 自相矛盾 |
 | 配置损坏 | 读失败回退默认值（既有 GlobalConfig 模式） |
 
 ### 3.6 与 fetchWithTimeout 修复的关系
@@ -153,11 +154,19 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 - /api/embeddings 旧接口兼容——v2
 - 本地模型与 RAG 检索链路检索侧优化（searchKnowledge 混合检索对本地模型维度/阈值的适配）——v2（**维度一致性硬校验已升为 v1 必做，见 §3.2 / T3**；**查询侧接线已由 T3b 落地 v1**——v2 只剩阈值 / RRF 权重 / top-K 调参）
 
-### 8.1 已知限制（v2 待修，登记于 T6）
+### 8.1 已知限制（v2 待修，登记于 T6；W3/W9 于 final wave 补充）
 
-- **v2 已知限制：`pullModel` 的 NDJSON 流读取无 app 级超时**（`fetchWithTimeout` 的 300s 仅覆盖响应头，`clearTimeout` 在 `electron/embedding.ts:45` 已执行）；若连接既不返 `{"error"}` 也不 EOF，进度条将保持不确定态直至用户重开设置页/重启。**修法（v2）**：在 `electron/ollama-embedding.ts:194` 的 `reader.read()` 外包 idle watchdog（如 300s 无数据帧 → `reader.cancel()` + 返回 `{success:false,error}`），并补 fake-timer 用例证明「慢但在进展」不误杀。
+- **v2 已知限制：`pullModel` 的 NDJSON 流读取无 app 级超时**（`fetchWithTimeout` 的 300s 仅覆盖响应头，`clearTimeout` 在 `electron/embedding.ts:45` 已执行）；若连接既不返 `{"error"}` 也不 EOF，进度条将保持不确定态。**修法（v2）**：在 `electron/ollama-embedding.ts:194` 的 `reader.read()` 外包 idle watchdog（如 300s 无数据帧 → `reader.cancel()` + 返回 `{success:false,error}`），并补 fake-timer 用例证明「慢但在进展」不误杀。
   - 影响面：仅通道 A（应用内 pull）的**不确定态**；已有 `{"error"}` 帧 / 流截断 / 非 200 / 发起超时四类失败均由 FW-1 的终态帧正常收敛（终态帧补发见 §3.3、§3.5）。
   - 来源：FW-1 报告 §⑦.1（reviewer 指定 T2 不动，作为独立后续项登记）。
+  - **如何摆脱该状态（W3 更正）**：这是本页原表述**写错**的一点。`pullsInFlight`（`electron/controllers/local-embedding-controller.ts` 的**模块级** Map）是**主进程模块**状态：
+    - ✅ **只有重启 app**（主进程模块重新求值）才会清掉它 → 之后可以重新发起 pull；
+    - ❌ **重开设置页不会清** —— 重开只重置**渲染层** React state（进度条消失、按钮看起来可点），主进程 Map 里的 key 还在；用户一点「下载模型」就撞上 `{started:false, error: …}`（`error.localPullInProgress` 的「该模型正在下载中」），而**进度事件早已不再产生** → 呈现出「没在下但说在下」的**假进行态**，比原表述的「重开即恢复」更糟。
+    - **交叉引用**：上面那条 v2 idle-watchdog 修法的 `reader.cancel()` 分支**也应同时 `pullsInFlight.delete(key)`**（与 FW-1 在 `.finally` 里补的删除同法），否则 watchdog 只让进度条收敛、重试仍被同一个 Map 挡住。
+- **v2 已知限制：pull 进度载荷没有模型标识（W9-a）** —— `embedding:local-pull-progress` 的 payload 只有 `{status, completed, total, percent, error?}`，**不含 model**。两个并发 pull（不同 `(baseUrl, model)` 键可各自 in-flight）的进度帧因此无法区分，**后到的第一个终态帧会把另一个仍在下载的进度条一并清掉** → 表现为另一个下载的进度条提前消失。
+  - 严重度：**外观级、自愈** —— 下载本身在 Ollama 进程内继续，模型最终仍会装好；`local-list-models` 轮询/重开设置页即可看到真实状态；无数据损坏、无假成功。
+  - **修法（v2）**：payload 加 `model: string`，UI 只消费与当前展示模型匹配的帧（`p.model === model` 时才 setPull/收进度条）。**v1 不作**：需要同时改 T4 的 payload 类型、控制器补发点与 T5 的消费侧（3 处 + 三语无关），而收益只是并发 pull 的外观，不值当在合并前动 T2/T4 已冻结的载荷契约。
+- **v2 待办清单（W9）**：以上两条即为 v2 的全部未结项 —— (a) pull 进度载荷缺模型标识（外观级）；(b) `pullModel` NDJSON 无 idle watchdog（含「顺带清 `pullsInFlight`」）。**除此之外无其它未登记项。**
 
 ## 9. 实施记录与文档回更（2026-09-14，T6）
 
@@ -193,24 +202,42 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 ### 9.3 实测更正：维度不匹配是**静默破坏**，不是客户端报错
 
 - **原表述（不成立）**：设计 §3.2 / T3 brief 记「1024 维写进 1536 维列 → 客户端抛 `TypeError`」。
-- **实测（lancedb 0.27.2；T3 review 与 T4 review 各自独立复现一次）**：
+- **实测（lancedb 0.27.2；T3 review、T4 review 与 final wave 各自独立复现一次）**：
 
-| 写入形状 | 目标列 | 实测结果 |
+| 写入路径 | 写入形状 | 目标列 | 实测结果 |
+|---|---|---|---|
+| `table.update` | 1024 值 | `FixedSizeList(1536)` | **不抛错**：`rowsUpdated = 1`，该行向量被写成 **`null`**（向量被销毁，行退回「无向量」态） |
+| `table.update` | 8 值 | `FixedSizeList(4)` | **不抛错**：同上，静默写 `null` |
+| `table.update` | `[]`（空数组） | 任意维度 | **抛错**：`concat requires input of at least one array`（唯一会抛的形状） |
+| **`table.add`** | **6 值** | **`FixedSizeList(4)`** | **不抛错，且列维度不变（仍 `FixedSizeList[4]<Float32>`）**：长向量被**静默截断**为 `[0.5,0.5,0.5,0.5]` |
+| **`table.add`** | **2 值** | **`FixedSizeList(4)`** | **不抛错，列维度不变**：短向量被**静默补零**为 `[0.1,0.2,0,0]` |
+
+> W3 补充的第 4/5 行（`table.add` 的截断/补零）来自 final wave 的真实 LanceDB 探针；前 3 行此前已在 T3/T4 review 各复现一次。**`table.add` 既不改列维度也不报错**这一点尤其值得记住 —— 它意味着「加列」不是维度不符时的兜底出路，只会静静篡改向量本身。
+
+⇒ **维度不符时，两条写入路径都会在零报错的情况下改变向量内容**（`update` 把该行置 `null` = 销毁；`add` 截断/补零 = 篡改）——「写后校验」等于数据已毁。这就是守卫必须置于**写盘之前**的原因，也是 T4/A4.1 把守卫放在 `updateChunkVectors` **两条写分支之前**、T3 把校验放在**删除同名旧文档之前**的理由（§3.2 落点）。
+
+### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫**只在特定库形态下可达**（T6 只记录，不修）
+
+`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫，其可达性取决于**库是怎么诞生的**（W3 更正：T6 原写「在真实路径上永远跑不到」**过于绝对**，整支复审已用真实探针证否）。
+
+**剪枝机制（W3 实测订正）**：剪枝发生在 **schema 推断**这一步，不在「全 null 列」这一步 —— 实测 lancedb 0.27.2：
+
+| 首建方式 | 记录形状 | 结果 |
 |---|---|---|
-| 1024 值 | `FixedSizeList(1536)` | **不抛错**：`rowsUpdated = 1`，该行向量被写成 **`null`**（向量被销毁，行退回「无向量」态） |
-| 8 值 | `FixedSizeList(4)` | **不抛错**：同上，静默写 `null` |
-| `[]`（空数组） | 任意维度 | **抛错**：`concat requires input of at least one array`（唯一会抛的形状） |
+| `createTable(rows, {})`（**代码实际走的**首建路径，`vector-store.ts:472`） | `chapterTitle: undefined` | **该列不被推断出来**（实测列 = `id,text,tokens,importedAt`） |
+| 同上 | `chapterTitle: '第1章'` 非空 | **该列被推断出来**（实测列 = `id,text,tokens,importedAt,chapterNumber,chapterTitle`） |
+| `createTable(rows, { schema })`（显式 schema） | `chapterTitle: null` | **列保留**（不剪枝）→ **「全 null 列被剪」的说法不准确**，真因是 `undefined` 键在推断期不产生列 |
+| 同上 | `chapterNumber: null` | 显式 schema 下保留；**但无 schema 时 `null` 会直接抛** `Failed to infer data type for field chapterNumber at row 0` |
 
-⇒ **两个方向都是静默破坏**，「写后校验」等于数据已毁 —— 这就是守卫必须置于**写盘之前**的原因，也是 T4/A4.1 把守卫放在 `updateChunkVectors` **两条写分支之前**、T3 把校验放在**删除同名旧文档之前**的理由（§3.2 落点）。
+⇒ 真实分叉：`addChunks` 构记录时**总是**带上 `chapterNumber`/`chapterTitle` 两个键（无章节元数据时为 `undefined`，`vector-store.ts:398-399`），故
 
-### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫是**死代码**（T6 只记录，不修）
+1. **首导是 chapter-less 文档**（最常见）→ 首建走 `:472` 的**推断**路径 → `chapterTitle`（及 `chapterNumber`）**根本没进 schema**；此后 `ensureChunksSchema`（`:269`）只补 `chapterNumber` 与 `tokens`、**从不补 `chapterTitle`** → `requiredFields`（`:418` 的 11 个字段）**此后恒为 false** → 每次导入都走**重建分支**，而守卫（`:422-442`）只存在于 `hasAllFields === true` 的**非重建分支** → **守卫不可达**（T6 原结论在此形态下成立）。
+2. **首导是章节化文档**（文件名形如 `第1章 xxx.txt`，`chapterTitle` 非空）→ 首建同样走推断路径但**该列被推断出来** → 11 个字段齐全 → `hasAllFields === true` → **守卫可达**（W3 更正：整支复审用真实探针证实此形态存在）。
+3. 即：**该守卫仅对「由章节化首导诞生的库」可达**。原「永远跑不到」只在形态 1 成立，形态 2 下该守卫是活代码。
 
-`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫，但它**在真实路径上永远跑不到**：
+**重建分支的具体危害**（形态 1，即守卫不可达的那条路）：
 
-1. 无章节元数据（chapter-less）的文档首次导入后，LanceDB 剪枝掉全 `null` 列 → `chapterNumber`/`chapterTitle` 不在 schema 里；
-2. 于是 `requiredFields`（`vector-store.ts:418` 的 11 个字段）**此后恒为 false** → 每次导入都走**重建分支**；
-3. 而该守卫（`vector-store.ts:422-442`）只存在于**非重建分支**（`hasAllFields === true`）；
-4. 重建分支里 `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : …`（`vector-store.ts:465-467`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
+4. `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : …`（`vector-store.ts:465-467`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
 5. `await db.dropTable(TABLE_NAME)`（`vector-store.ts:461`）先于 `await db.createTable(...)`（`:468`），**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
    > 注：T6 brief 引的 `:459 dropTable` / `:466 createTable` 比实际行号小 2，实际为 `:461` / `:468`（以本仓 `314edcc` 为准）。
 
@@ -218,15 +245,15 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 
 | 写入路径 | 拦截者 | 落点 |
 |---|---|---|
-| `importContent` → `addChunks`（含 `kb:import-*`） | **T3 的写前校验** `assertVectorDimCompatible`（在删旧文档 / 任何写盘动作之前） | `electron/knowledge-base.ts` |
+| `importContent` → `addChunks`（含 `kb:import-*`） | **T3 的写前校验** `assertVectorDimCompatible`（在删旧文档 / 任何写盘动作之前）。**主拦截者**——因为 `addChunks` 自带的守卫在形态 1（chapter-less 首导）下不可达 | `electron/knowledge-base.ts` |
 | `backfillVectors`（含 controller 方式 2 的 LLM 逐行写入） | T3 的写前校验 **+ T4 的 `updateChunkVectors` 入口守卫** `checkUpdateVectorsDim` | `electron/knowledge-base.ts` / `electron/vector-store.ts` |
 
 **T6 不改**：本任务是验证 + 文档，任何生产代码改动都会让本次门禁与真机结论脱离最终产物；修 `addChunks` 应当独立成任务（连带 `drop`/`create` 的失败恢复）。
 
-### 9.5 与实测冲突的代码注释（T6 不修，仅登记）
+### 9.5 与实测冲突的代码注释
 
-- `electron/vector-store.ts:1178` 注释仍写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。按 T6 边界（**禁改生产代码**）未修改，建议随下一次代码改动一并订正。
-- `electron/knowledge-base.ts:103-105` 的注释记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**，T6 未复现该条，**不主张其已订正或已证伪**（列入真机/后续核对）。
+- `electron/vector-store.ts` 的 `checkUpdateVectorsDim` 文档注释原写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。**✅ 已由 final wave W2 订正**（该 commit）：注释改为记录两条路径的真实失败模式（`update` 静默写 `null`；`add` 静默截断/补零且不改列维度），并点明这正是写前守卫存在的理由。
+- `electron/knowledge-base.ts:103-105` 的注释记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。
 
 ## 10. 真机验证清单（人工执行；**截至 2026-09-14 尚未执行**）
 

@@ -145,6 +145,40 @@ function setConfigCalls(): unknown[][] {
   return mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-set-config')
 }
 
+function listModelsCalls(): unknown[][] {
+  return mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-list-models')
+}
+
+/**
+ * 打开 Radix Select（T5-Minor 2 需要）。
+ *
+ * Radix 的 Trigger 在 `onPointerDown` 里判定 `event.pointerType === 'mouse'` 才开面板
+ * （`@radix-ui/react-select` dist：`if (event.button === 0 && event.ctrlKey === false &&
+ * event.pointerType === 'mouse') handleOpen(...)`），而 jsdom 的 `HTMLElement.click()`
+ * 合成的是 `pointerType === ''` 的事件 → 普通 click **打不开**。这里按 jsdom 的常规做法
+ * 显式派发一个 `pointerType: 'mouse'` 的 pointerdown，模拟真实鼠标按下。
+ */
+function openSelect(trigger: HTMLElement): void {
+  act(() => {
+    // jsdom 未实现 Pointer Capture API，而 Radix 在 onPointerDown 里**先**调用它
+    // （`target.hasPointerCapture(event.pointerId)` 抛 TypeError → handleOpen 根本执行不到）→ 补最小桩
+    const el = trigger as HTMLElement & { hasPointerCapture?: unknown; releasePointerCapture?: unknown }
+    el.hasPointerCapture ??= () => false
+    el.releasePointerCapture ??= () => {}
+    const ev = new MouseEvent('pointerdown', { bubbles: true, cancelable: true, button: 0, ctrlKey: false })
+    Object.defineProperty(ev, 'pointerType', { value: 'mouse' })
+    Object.defineProperty(ev, 'pointerId', { value: 1 })
+    trigger.dispatchEvent(ev)
+  })
+}
+
+/** 面板 Portal 到 document.body → 在 body 上找选项（任务书指定的做法） */
+function optionOnBody(text: string): HTMLElement {
+  const el = [...document.body.querySelectorAll('[role="option"]')].find((o) => o.textContent?.includes(text))
+  expect(el, `未找到选项「${text}」`).toBeDefined()
+  return el as HTMLElement
+}
+
 // ===== 测试 =====
 
 describe('本地向量模型卡片 · 三态徽标', () => {
@@ -267,6 +301,32 @@ describe('本地向量模型卡片 · 配置写入', () => {
     expect(setConfigCalls().at(-1)?.[1]).toEqual({ preferLocal: false })
     act(() => { root.unmount() })
   })
+
+  // T5-Minor 2：模型下拉（`:720` 的 `onValueChange → patchConfig({ model })`）此前**零用例**。
+  // Radix Select 的面板 Portal 到 document.body，故触发与选项选择都在 body 上完成。
+  it('模型下拉选另一模型 → local-set-config { model }（部分更新，只有 model 键）', async () => {
+    stubLocal({
+      ok: true,
+      version: '0.5.7',
+      models: [{ name: 'bge-m3', size: 1 }, { name: 'llama3', size: 1 }],
+    })
+    handlers['embedding:local-set-config'] = () => ({ success: true })
+    const { container, root } = render()
+    await flush()
+
+    const trigger = requireEl(container, '[role="combobox"]')
+    expect(trigger.textContent).toContain('bge-m3') // 当前值来自 local-get-config
+
+    openSelect(trigger)
+    const llama = optionOnBody('llama3')
+    click(llama)
+    await flush()
+
+    const call = setConfigCalls().at(-1)
+    expect(call?.[0]).toBe('embedding:local-set-config')
+    expect(call?.[1]).toEqual({ model: 'llama3' }) // 部分更新：不得顺带覆盖 enabled/baseUrl/preferLocal
+    act(() => { root.unmount() })
+  })
 })
 
 describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () => {
@@ -293,6 +353,8 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     const indeterminate = requireEl(container, '[role="status"]').textContent ?? ''
     expect(indeterminate).not.toMatch(/%/)
     expect(indeterminate).toContain('正在下载')
+    // T5-Minor 1：模型列表刷新**只**发生在 success 终帧 —— 下载中/不确定态帧都不得触发
+    expect(listModelsCalls()).toHaveLength(1)
     act(() => { root.unmount() })
   })
 
@@ -348,6 +410,26 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     expect(query(container, 'details')?.textContent).toContain(raw)
     // 失败不重取模型列表（刷新只发生在 success 终帧）
     expect(mocks.invoke.mock.calls.filter((c) => c[0] === 'embedding:local-list-models')).toHaveLength(1)
+    act(() => { root.unmount() })
+  })
+
+  it('T5-Minor 3：local-pull 返回 { started:false, error } → 主文案 pullFailed + 原始串只在 details，且从不进「下载中」', async () => {
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'llama3', size: 1 }] })
+    const raw = 'already in progress'
+    handlers['embedding:local-pull'] = () => ({ started: false, error: raw })
+    const { container, root } = render()
+    await flush()
+
+    click(button(container, '下载模型'))
+    await flush()
+
+    // ① 主文案走 t()（U4：英文技术串不得当主文案）② 原始串只在 <details> 里
+    expect(textOutsideDetails(container)).toContain(t('localEmbedding.pullFailed'))
+    expect(textOutsideDetails(container)).not.toContain(raw)
+    expect(query(container, 'details')?.textContent).toContain(raw)
+    // ③ started:false → **从未**进入 pulling 态：进度条不存在、按钮保持可点（用户可重试）
+    expect(query(container, '[role="status"]')).toBeNull()
+    expect(button(container, '下载模型').disabled).toBe(false)
     act(() => { root.unmount() })
   })
 

@@ -10,6 +10,24 @@
 
 import { t } from '../../src/shared/locale'
 
+/**
+ * 两个向量长度不同时抛出**通用**文案（final wave W6）。
+ *
+ * ⚠️ 本模块是纯数学工具（相似度/距离/点积），与知识库索引、迁移、重建**毫无关系**。
+ * 改造前这里复用的是 KB 专用键 `error.embeddingDimMismatch`，其文案是
+ * 「…已中止本次操作以保护现有索引。请重建知识库索引（删除项目下 .novelforge/lancedb 后重新导入）再试。」
+ * —— 用户在 `embedding:similarity-search` 这类普通比较上收到「去删 lancedb 重建索引」的错误指引
+ * （该路径本轮已可达：`embedding-controller.ts:89` 的 `cosineSimilarity` 对纯长度不符即抛）。
+ * KB 路径继续用 KB 专用键；长度不符在这里用 `error.vectorLengthMismatch`。
+ */
+function lengthMismatch(a: number[], b: number[]): Error {
+  return new Error(
+    t('error.vectorLengthMismatch')
+      .replace('{expected}', String(a.length))
+      .replace('{actual}', String(b.length)),
+  )
+}
+
 // ===== 相似度/距离计算 =====
 
 /**
@@ -17,9 +35,7 @@ import { t } from '../../src/shared/locale'
  * 返回值范围 [-1, 1]，1 表示完全相同方向
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
-  }
+  if (a.length !== b.length) throw lengthMismatch(a, b)
 
   let dotProduct = 0
   let normA = 0
@@ -41,9 +57,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  * 计算两个向量的欧几里得距离
  */
 export function euclideanDistance(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
-  }
+  if (a.length !== b.length) throw lengthMismatch(a, b)
 
   let sum = 0
   for (let i = 0; i < a.length; i++) {
@@ -58,9 +72,7 @@ export function euclideanDistance(a: number[], b: number[]): number {
  * 计算两个向量的点积
  */
 export function dotProduct(a: number[], b: number[]): number {
-  if (a.length !== b.length) {
-    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
-  }
+  if (a.length !== b.length) throw lengthMismatch(a, b)
 
   let sum = 0
   for (let i = 0; i < a.length; i++) {

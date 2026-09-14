@@ -60,9 +60,21 @@ export async function searchKB(query: string, topK: number): Promise<SearchResul
   return ipc.invoke('kb:search', query, topK)
 }
 
-/** 执行向量回填 */
-export async function backfillVectors(): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
-  return ipc.invoke('kb:backfill-vectors') as Promise<{ success: boolean; processed: number; failed: number; error?: string }>
+/**
+ * 执行向量回填。
+ *
+ * ⚠️ final wave W8：返回类型**保留 `errorCode`**。`ipc.invoke('kb:backfill-vectors')` 本身就推导出
+ * `{ success; processed; failed; error?; errorCode?: 'dim-mismatch' }`（`ipc-channels.ts:644`），
+ * 原实现的 `as Promise<{… error?: string }>` 是**比推导结果更窄**的断言 —— 它把 T4/A4.2 新增的
+ * `errorCode` 从下游视野里抹掉（将来有人按 `errorCode === 'dim-mismatch'` 分支就会踩到「类型里没有」）。
+ * 现在直接沿用推导类型，**零运行时影响**（断言本来就只是类型层）。
+ *
+ * 现状说明：唯一的渲染层调用方 `KnowledgeOverview.tsx:157` 目前**不读** `errorCode`，
+ * 只展示随错误一起返回的 `error` 文案（维度拒绝的文案里已含「重建知识库索引」指引）
+ * —— 即本次加宽是「别把契约信息弄丢」，不是新功能接线。
+ */
+export async function backfillVectors(): Promise<{ success: boolean; processed: number; failed: number; error?: string; errorCode?: 'dim-mismatch' }> {
+  return ipc.invoke('kb:backfill-vectors')
 }
 
 /**

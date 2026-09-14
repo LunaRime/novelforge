@@ -147,8 +147,11 @@ function detectVectorDim(records: ChunkRecord[]): number {
  * （Rolldown 内联的 ESM 副本 vs `@lancedb/lancedb` 自己 require 的 CJS 副本），
  * `instanceof FixedSizeList` 恒 false → 判断静默失效。此处只做**schema 字段读取**
  * （`vectorField.type.listSize`），跨副本安全。
+ *
+ * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点在本文件内（`:172` / `:467` / `:1241`），
+ *    导出只会扩大 API 面（`export` 关键字本身就是本分支 T4 加的）。
  */
-export function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
+function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
   const vectorField = fields.find(f => f.name === 'vector')
   if (!vectorField) return 0
   const listSize = (vectorField.type as { listSize?: number }).listSize
@@ -1174,13 +1177,24 @@ export async function getChunksForBackfill(
  * 两条判定（任一命中即拒绝，**一行都不写**）：
  *  ① **入参内部混维** —— 无 vector 列分支按**首个非空向量**建 `FixedSizeList(dim)`，
  *     混维时其余行会被静默写成 null（数据被销毁）；
- *  ② **与现有列维度不一致** —— `existingDim > 0` 时比对（`FixedSizeList` 不校验长度：
- *     8 值写进 4 维列不报错而是写 null；1024 写 1536 列在客户端抛 TypeError）。
+ *  ② **与现有列维度不一致** —— `existingDim > 0` 时比对。
+ *     ⚠️ **修正（final wave W2；lancedb 0.27.2 真实探针复核）**：原注释写「1024 写 1536 列在
+ *     客户端抛 TypeError」**不成立**。实测两条写入路径**都是静默的**，没有任何客户端报错：
+ *       · `table.update`（本函数走的路）：**不抛错**、`rowsUpdated = 1`，但该行向量被写成 **`null`**
+ *         —— 向量被销毁、行退回「无向量」态（8 值写 4 维列、1024 值写 1536 维列、2 值写 4 维列
+ *         三种形状全部如此）。唯一会抛的形状是**空数组**（`concat requires input of at least one array`）。
+ *       · `table.add`（`addChunks` 走的路）：**不抛错**，且**不改列维度** —— 长向量被**静默截断**
+ *         （6 值写 `FixedSizeList(4)` 得到 `[0.5,0.5,0.5,0.5]`）、短向量被**静默补零**
+ *         （2 值写 4 维列得到 `[0.1,0.2,0,0]`）。两个方向都不报错。
+ *     即：**维度不符的两个方向都是静默破坏**，「写后校验」等于数据已毁 —— 这正是本守卫必须置于
+ *     **写盘之前**的原因（T3 把同一道校验放在删除同名旧文档之前，同理）。
  *
  * 维度取**首个非空向量**（与 `firstVectorDim`/`detectVectorDim` 同口径）；全空向量 → 本次不写向量 → 放行。
  * 文案与 `knowledge-base.assertVectorDimCompatible` **共用同一个 i18n 键**（T3 review M2 收敛）。
+ *
+ * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点是本文件 `:1241`，导出只会扩大 API 面。
  */
-export function checkUpdateVectorsDim(
+function checkUpdateVectorsDim(
   updates: Array<{ id: string; vector: number[] }>,
   existingDim: number,
 ): string | undefined {
