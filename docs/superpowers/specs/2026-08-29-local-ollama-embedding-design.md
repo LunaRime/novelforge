@@ -16,12 +16,14 @@
 
 | 锚点 | 现状 |
 |---|---|
-| `electron/embedding.ts:23-45` | `fetchWithTimeout`（10s abort 兜底，2026-08-29 修复）——Ollama 调用复用 |
-| `electron/knowledge-base.ts:71-101` | `importContent` 三级降级：Embedding API → LLM 向量化 → FTS-only（:104） |
-| `electron/knowledge-base.ts:332`（`backfillVectors`） | 同三级降级 |
-| `electron/kb-controller.ts:16-32` | `getEmbeddingConfig()` 读 config.json + models.json |
+| `electron/embedding.ts` 的 `fetchWithTimeout` | 10s abort 兜底（2026-08-29 修复）——Ollama 调用复用 |
+| `electron/knowledge-base.ts` 的 `importContent` | 三级降级：Embedding API → LLM 向量化 → FTS-only |
+| `electron/knowledge-base.ts` 的 `backfillVectors` | 同三级降级 |
+| `electron/controllers/kb-controller.ts` 的 `getEmbeddingConfig()` | 读 config.json + models.json |
 | `~/.novelforge/config.json` | GlobalConfig（模型列表/默认模型/路由）——本地模型配置并入 |
 | 模型列表 | 已有 ollama 协议先例（llama3.3 等本地模型走 ollama baseUrl） |
+
+> **锚点形式（R3 起）**：本表原用**文件:行号**形式（例如 `importContent` 那格原写 `:71-101`、`backfillVectors` 那格原写 `:332`），但本支的改动让这些行号全部漂移（`importContent` 已移到 `:141`、`backfillVectors` 已移到 `:691`），且其中一行还写着已不存在的路径（`electron/kb-controller.ts`，实为 `electron/controllers/kb-controller.ts`）。**现一律改为「文件 + 符号名」**——符号名不会因插行而失效。同理，本文件其余小节的行号锚点也在 R3 一并改为符号名（见 §9.4 末注）。
 
 ## 3. 设计
 
@@ -36,7 +38,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 ```
 
 导出（全部 mock-fetch 可测）：
-- `detectOllama(baseUrl): Promise<{ ok: boolean; version?: string; error?: string }>`（**`/api/version` 探测**——2026-09-14 更正：本文档此处原写 `/api/tags`，与决策 6 及实现冲突；实现在 `electron/ollama-embedding.ts:54`，`version` 即由此端点返回）
+- `detectOllama(baseUrl): Promise<{ ok: boolean; version?: string; error?: string }>`（**`/api/version` 探测**——2026-09-14 更正：本文档此处原写 `/api/tags`，与决策 6 及实现冲突；实现在 `electron/ollama-embedding.ts` 的 `detectOllama`，`version` 即由此端点返回）
 - `listModels(baseUrl): Promise<Array<{ name: string; size: number }>>`（已装模型，过滤 `:latest` 标签规范化）
 - `pullModel(baseUrl, model, onProgress): Promise<{ success: boolean; error?: string }>`（/api/pull，NDJSON 行解析 → onProgress({ status, completed, total, percent })；复用 fetchWithTimeout 的 abort 兜底语义——**pull 是长任务，超时需更长（如 5 分钟）**，单独超时参数）
 - `embedLocal(texts: string[], baseUrl, model): Promise<number[][]>`（/api/embed 批量；按 index 排序保序；失败 throw 供降级）
@@ -156,7 +158,8 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 
 ### 8.1 已知限制（v2 待修，登记于 T6；W3/W9 于 final wave 补充）
 
-- **v2 已知限制：`pullModel` 的 NDJSON 流读取无 app 级超时**（`fetchWithTimeout` 的 300s 仅覆盖响应头，`clearTimeout` 在 `electron/embedding.ts:45` 已执行）；若连接既不返 `{"error"}` 也不 EOF，进度条将保持不确定态。**修法（v2）**：在 `electron/ollama-embedding.ts:194` 的 `reader.read()` 外包 idle watchdog（如 300s 无数据帧 → `reader.cancel()` + 返回 `{success:false,error}`），并补 fake-timer 用例证明「慢但在进展」不误杀。
+- **v2 已知限制：`pullModel` 的 NDJSON 流读取无 app 级超时**（`fetchWithTimeout` 的 300s 仅覆盖响应头，其 `finally` 里的 `clearTimeout(timer)` 在**响应头到达时**就已执行）；若连接既不返 `{"error"}` 也不 EOF，进度条将保持不确定态。**修法（v2）**：在 `electron/ollama-embedding.ts` 的 `pullModel` 里给 `await reader.read()` 外包 idle watchdog（如 300s 无数据帧 → `reader.cancel()` + 返回 `{success:false,error}`），并补 fake-timer 用例证明「慢但在进展」不误杀。
+  > 行号处置（R3）：本条原引 `electron/embedding.ts:45` 与 `electron/ollama-embedding.ts:194`，**两个编号在 HEAD `9b70f4c` 上核对后仍然正确**；但按本文件 R3 起的统一原则改为**符号名**（`fetchWithTimeout` 的 `finally` / `pullModel` 的 `reader.read()`），以免下次插行再漂。
   - 影响面：仅通道 A（应用内 pull）的**不确定态**；已有 `{"error"}` 帧 / 流截断 / 非 200 / 发起超时四类失败均由 FW-1 的终态帧正常收敛（终态帧补发见 §3.3、§3.5）。
   - 来源：FW-1 报告 §⑦.1（reviewer 指定 T2 不动，作为独立后续项登记）。
   - **如何摆脱该状态（W3 更正）**：这是本页原表述**写错**的一点。`pullsInFlight`（`electron/controllers/local-embedding-controller.ts` 的**模块级** Map）是**主进程模块**状态：
@@ -192,7 +195,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 |---|---|---|
 | `:4` | 「**实施状态：⏸️ 未实施**」 | ✅ 已实施（T1–T6 + T3b + FW-1）+ 标注**真机验证尚未执行** |
 | `:33` | `/api/version → 健康检查（可选，tags 可兼作）` | `/api/version → 健康检查 + 版本`（**实现口径**：`detectOllama` 的探测端点；`/api/tags` 只服务模型列表） |
-| `:37` | `detectOllama … （/api/tags 探测）` | `（/api/version 探测）`——与决策 6 及实现一致（`electron/ollama-embedding.ts:54`） |
+| `:37` | `detectOllama … （/api/tags 探测）` | `（/api/version 探测）`——与决策 6 及实现一致（`electron/ollama-embedding.ts` 的 `detectOllama`） |
 | `:57` | §3.2 维度硬校验（未标状态） | 标注 ✅ 已实施 + 三条落点 + 「为什么必须写前拦截」（§9.3） |
 | `:62` | §3.3「pull 失败错误原文展示 + 通道 B 兜底」 | 标注 ✅ **FW-1 `314edcc`** 已实施（终态帧机制）+ 遗留限制指向 §8.1 |
 | `:90` | §3.5「pull 网络失败」行 | 同上（终态帧 + 原文只进折叠详情 + v2 遗留） |
@@ -218,7 +221,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 
 ### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫**只在特定数据形状下可达**（T6 只记录，不修）
 
-`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫（`if (hasAllFields)` 分支内，`vector-store.ts:425-445`），其可达性取决于**表 schema 当前是否含全部 11 个 `requiredFields`**（`vector-store.ts:421`）——而这又取决于**建表时那些列有没有数据**。
+`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫（在 `if (hasAllFields)` 分支内），其可达性取决于**表 schema 当前是否含全部 11 个 `requiredFields`**（`addChunks` 内的那份清单，含 `vector`）——而这又取决于**建表时那些列有没有数据**。
 
 > **本节曾两次写错机制**（`def2fdf` 的 T6 版写「在真实路径上永远跑不到」过于绝对；`ab5193c` 的 W3 版把因果错记为「剪枝只发生在 schema 推断路径」）。**以下为第三次订正，依据是 final wave R2 的 2×3 矩阵探针 + 形态复刻探针（lancedb 0.27.2）**，且规则已与整支复审的独立探针一致。
 
@@ -236,22 +239,22 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 | 无 schema（推断） | 全 `null` | **抛错** `Failed to infer data type for field chapterNumber at row 0` |
 | 显式 schema | 多行混合：1 行 `undefined` / 1 行有值 | **保留**（「当且仅当**每条**都 `undefined`」） |
 
-⇒ **上一版把因果记错了**：`addChunks` 的**首次建表也传显式 schema**（`await db.createTable(TABLE_NAME, records, { schema: targetSchema })`，`vector-store.ts:475`），并不是推断路径 —— 而全 `undefined` 列**在那条路上照样被剪**。故「剪枝发生在推断路径」这一因果**不成立**，唯一决定因素是**数据**。
+⇒ **上一版把因果记错了**：`addChunks` 的**首次建表也传显式 schema**（`await db.createTable(TABLE_NAME, records, { schema: targetSchema })`，`vector-store.ts:478`），并不是推断路径 —— 而全 `undefined` 列**在那条路上照样被剪**。故「剪枝发生在推断路径」这一因果**不成立**，唯一决定因素是**数据**。
 
-`addChunks` 构记录时**总是**带上 `chapterNumber`/`chapterTitle` 两个键（无章节元数据时为 `undefined`，`vector-store.ts:401-402`）→
+`addChunks` 构记录时**总是**带上 `chapterNumber`/`chapterTitle` 两个键（无章节元数据时为 `undefined`；构造处即 `chapterNumber: metadata?.chapterNumber` 与 `chapterTitle: metadata?.chapterTitle`）→
 
-1. **首导是 chapter-less 文档**（最常见）→ 两列全 `undefined` → **首建即被剪**（实测列 = `id,docId,fileName,text,tokens,chunkIndex,totalChunks,importedAt`）→ `requiredFields` 缺 `chapterTitle`（首导无向量时还缺 `vector`；`chapterNumber` 会被 `ensureChunksSchema`（`vector-store.ts:272`）补上、`tokens` 已在）→ `hasAllFields === false` → 走**重建分支**，而守卫只存在于 `hasAllFields === true` 的**非重建分支** → **该次导入的守卫不可达**。
+1. **首导是 chapter-less 文档**（最常见）→ 两列全 `undefined` → **首建即被剪**（实测列 = `id,docId,fileName,text,tokens,chunkIndex,totalChunks,importedAt`）→ `requiredFields` 缺 `chapterTitle`（首导无向量时还缺 `vector`；`chapterNumber` 会被 `ensureChunksSchema` 补上、`tokens` 已在）→ `hasAllFields === false` → 走**重建分支**，而守卫只存在于 `hasAllFields === true` 的**非重建分支** → **该次导入的守卫不可达**。
 2. **首导同时满足「带章节元数据」与「带向量」** → 11 个字段在首建时即齐全（探针：列 = `…,chapterNumber,chapterTitle,…,vector,…`）→ 下一次导入 `hasAllFields === true` → **守卫可达**。
-   - ⚠️ **两个条件都必需**：`requiredFields` 含 `vector`（`:421`），所以「章节名首导但**没有**向量」同样 `missing=[vector]` → `hasAllFields === false` → **该次导入守卫仍不可达**（W3 版漏了这条条件，R2 补上）。
-3. **可达性是「每次导入」判定的，不是库的永久属性** —— 这一点与 T6/W3 两版都不同。形态 1 的库并非**永远**不可达：若后续来一次「**章节化 + 带向量**」的导入，它因 `missing` 非空触发**重建分支**（`drop` + `create`，`vector-store.ts:464` / `:471`），重建后 `chapterTitle` 由**那次导入的行**重新带回 schema → 11 字段齐全 → **此后守卫可达**（探针实测：`导入2 重建后 missing=[] hasAllFields=true` → `导入3 判定 hasAllFields=true → 守卫可达`）。
-   - 唯一**不能**靠时间自然恢复的情形：`ensureChunksSchema` **从不补 `chapterTitle`**（它只补 `chapterNumber` 与 `tokens`，`:272`）—— 所以若一个库**从未**经历过任何带章节元数据的（重）建表，`chapterTitle` 就回不来。
+   - ⚠️ **两个条件都必需**：`requiredFields` 里就有 `vector`，所以「章节名首导但**没有**向量」同样 `missing=[vector]` → `hasAllFields === false` → **该次导入守卫仍不可达**（W3 版漏了这条条件，R2 补上）。
+3. **可达性是「每次导入」判定的，不是库的永久属性** —— 这一点与 T6/W3 两版都不同。形态 1 的库并非**永远**不可达：若后续来一次「**章节化 + 带向量**」的导入，它因 `missing` 非空触发**重建分支**（即 `addChunks` 重建分支里的 `await db.dropTable(TABLE_NAME)` 与随后那次 `db.createTable(TABLE_NAME, [...cleanRows, ...records], …)`），重建后 `chapterTitle` 由**那次导入的行**重新带回 schema → 11 字段齐全 → **此后守卫可达**（探针实测：`导入2 重建后 missing=[] hasAllFields=true` → `导入3 判定 hasAllFields=true → 守卫可达`）。
+   - 唯一**不能**靠时间自然恢复的情形：`ensureChunksSchema` **从不补 `chapterTitle`**（它只补 `chapterNumber` 与 `tokens`）—— 所以若一个库**从未**经历过任何带章节元数据的（重）建表，`chapterTitle` 就回不来。
 4. 即：**原「永远跑不到」不成立**。守卫是活代码；它是否生效取决于「当前表 schema 是否齐全」，而 schema 齐全与否由**最近一次建表时行的数据形状**决定。
 
 **重建分支的具体危害**（守卫不可达的那条路）：
 
-5. `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : buildChunksSchema(detectVectorDimFromSchema(existingSchema.fields))`（`vector-store.ts:468-470`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
-6. `await db.dropTable(TABLE_NAME)`（`vector-store.ts:464`）先于 `await db.createTable(...)`（`:471`），**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
-   > 行号锚点已于 R2 按 `ab5193c` 复核（T6/W3 版引的 `:418/:422-442/:461/:468/:472` 分别为本波改动所挤后，现为 `:421/:425-445/:464/:471/:475`）。
+5. `addChunks` 重建分支里的 `rebuildSchema` 赋值（`VECTOR_DIM > 0 ? targetSchema : buildChunksSchema(detectVectorDimFromSchema(existingSchema.fields))`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
+6. 同一分支里 `await db.dropTable(TABLE_NAME)` 先于紧随其后的 `await db.createTable(TABLE_NAME, [...cleanRows, ...records], …)`，**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
+   > **行号锚点处置（R2 → R3）**：R2 曾把这些**行号**按 `ab5193c` 重算过一遍，但 R2 自己的注释插入又让它们在 HEAD 上整体偏 +3（同一处栽了两次）。**R3 起改为「文件 + 符号名」**——`addChunks` / `hasAllFields` / `requiredFields` / `ensureChunksSchema` / `rebuildSchema` / `backfillVectors` 都是唯一符号，足够定位且不会因插行失效。**仅当符号名不足以定位时才留行号**，且必须按当轮 HEAD 复核：本段唯一保留的是「首次建表那一行」`vector-store.ts:478`（`await db.createTable(TABLE_NAME, records, { schema: targetSchema })`），已于 **HEAD `9b70f4c`** 逐行核对。
 
 **防线现状（这才是真正拦住混维的两道）**：
 
@@ -265,7 +268,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 ### 9.5 与实测冲突的代码注释
 
 - `electron/vector-store.ts` 的 `checkUpdateVectorsDim` 文档注释原写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。**✅ 已由 final wave W2 订正**（该 commit）：注释改为记录两条路径的真实失败模式（`update` 静默写 `null`；`add` 静默截断/补零且不改列维度），并点明这正是写前守卫存在的理由。
-- `electron/knowledge-base.ts` 的 `assertVectorDimCompatible` 注释里记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。行号锚点 R2 已改为**符号名**（原引 `:103-105` 已因本波注释插入而漂移）。
+- `electron/knowledge-base.ts` 的 `assertVectorDimCompatible` 注释里记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。行号锚点已在 R2 起改为**符号名**（原引 `:103-105` 因本波注释插入而漂移，R3 沿用同一原则复核全文件）。
 
 ## 10. 真机验证清单（人工执行；**截至 2026-09-14 尚未执行**）
 
