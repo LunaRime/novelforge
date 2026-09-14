@@ -9,18 +9,21 @@ import { getCurrentLocale, type TextKey } from '../../shared/locale'
  * 4. 工作模式显示（auto / model_only / module_only / disabled）
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Database, WifiOff, RefreshCw, CheckCircle2,
   XCircle, AlertTriangle, Sparkles, Cpu, ArrowRight,
-  Brain,
+  Brain, Download, HardDrive,
 } from 'lucide-react'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
+import { ipc } from '../../services/ipc-client'
+import type { LocalEmbeddingConfig } from '../../shared/ipc-channels'
 import { Switch } from '../ui/Switch'
 import { Button } from '../ui/Button'
 import { Badge } from '../ui/Badge'
 import { Label } from '../ui/Label'
+import { Input } from '../ui/Input'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 
 // ===== 工作模式配置 =====
@@ -220,6 +223,9 @@ export default function VectorConfigSection() {
         </div>
       </div>
 
+      {/* ===== 本地向量模型（T5，设计 §3.4）===== */}
+      <LocalEmbeddingCard />
+
       {/* ===== LLM 向量化 ===== */}
       <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center justify-between mb-3">
@@ -400,6 +406,473 @@ function TestResultRow({
           {label}: {ok ? t('status.normal') : t('status.abnormal')}
         </span>
         <div className="text-[var(--color-text-muted)] mt-0.5">{detail}</div>
+      </div>
+    </div>
+  )
+}
+
+// ===== 本地向量模型卡片（T5）=====
+
+/** Ollama 探测结果（T4 `embedding:local-detect`，三态不抛） */
+type LocalDetectResult = { ok: boolean; version?: string; error?: string }
+/** 已装模型（T4 `embedding:local-list-models`） */
+type LocalModel = { name: string; size: number }
+/** 拉取进度帧（T4 事件 `embedding:local-pull-progress`，同 T2 的 PullProgress） */
+type LocalPullProgress = { status: string; completed?: number; total?: number; percent?: number }
+
+/** 未知异常 → 可读详情。T2/T4 的错误串是**英文技术描述**，只作「原始详情」呈现（U4） */
+function errorDetail(e: unknown): string {
+  if (e instanceof Error) return e.message
+  return typeof e === 'string' ? e : String(e)
+}
+
+/**
+ * 模型是否已安装。
+ * Ollama 的 `:latest` 是默认 tag 别名（T2 的 `listOllamaModels` 已规范化，这里再容忍一次手填的 `bge-m3:latest`）。
+ */
+function hasLocalModel(models: LocalModel[], model: string): boolean {
+  const target = model.trim()
+  if (!target) return false
+  return models.some((m) => m.name === target || m.name.replace(/:latest$/, '') === target)
+}
+
+/** 地址基础校验：必须能被 URL 解析且为 http/https；空串按非法（**不写库**） */
+function isValidBaseUrl(raw: string): boolean {
+  const value = raw.trim()
+  if (!value) return false
+  try {
+    const url = new URL(value)
+    return url.protocol === 'http:' || url.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 可折叠的原始详情（U4）。
+ * 主进程的错误串是英文技术描述（T2 契约），因此**不得**当主文案：统一收进 `<details>`，
+ * 用户需要诊断时展开，不需要时不打扰。
+ */
+function RawDetail({ text }: { text: string }) {
+  const { t } = useTranslation()
+  return (
+    <details className="mt-0.5">
+      <summary className="cursor-pointer text-[10px] text-[var(--color-text-muted)]">
+        {t('localEmbedding.detail')}
+      </summary>
+      <pre className="mt-0.5 whitespace-pre-wrap break-all text-[10px] text-[var(--color-text-muted)]">
+        {text}
+      </pre>
+    </details>
+  )
+}
+
+/**
+ * 本地向量模型卡片 —— 本地 Ollama 向量档的三个真实状态：
+ * 「未连接」/「已连接但模型缺失」/「就绪」，外加 U2 的维度重建告警。
+ *
+ * 数据来源（U5）：挂载时**并行**取 `local-get-config` / `local-detect` / `local-list-models`，
+ * 任一失败只降级该项（可折叠详情），不破整卡片。
+ * 本地连通性一律来自 `local-detect`，**不复用** `vector-config-store` 的 `kb:search` 自检（U3）。
+ */
+function LocalEmbeddingCard() {
+  const { t } = useTranslation()
+
+  const [config, setConfig] = useState<LocalEmbeddingConfig | null>(null)
+  const [detect, setDetect] = useState<LocalDetectResult | null>(null)
+  const [models, setModels] = useState<LocalModel[]>([])
+  // 三路数据各自的失败详情（U5）
+  const [configError, setConfigError] = useState<string | null>(null)
+  const [detectError, setDetectError] = useState<string | null>(null)
+  const [modelsError, setModelsError] = useState<string | null>(null)
+
+  const [baseUrlDraft, setBaseUrlDraft] = useState('')
+  const [baseUrlInvalid, setBaseUrlInvalid] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const [pull, setPull] = useState<LocalPullProgress | null>(null)
+  const [pulling, setPulling] = useState(false)
+  const [pullError, setPullError] = useState<string | null>(null)
+
+  const [testRunning, setTestRunning] = useState(false)
+  const [testDim, setTestDim] = useState<number | null>(null)
+  const [testError, setTestError] = useState<string | null>(null)
+  const [dimMismatch, setDimMismatch] = useState<{ local: number; index: number } | null>(null)
+
+  /** 重新拉取已装模型列表（下载成功终帧后刷新下拉） */
+  const refreshModels = useCallback(async (): Promise<void> => {
+    try {
+      const list = await ipc.invoke('embedding:local-list-models')
+      setModels(Array.isArray(list) ? list : [])
+      setModelsError(null)
+    } catch (e) {
+      setModels([])
+      setModelsError(errorDetail(e))
+    }
+  }, [])
+
+  // 挂载：三路并行（Promise.allSettled → 单路失败不影响其它两路，U5）
+  useEffect(() => {
+    let cancelled = false
+    void Promise.allSettled([
+      ipc.invoke('embedding:local-get-config'),
+      ipc.invoke('embedding:local-detect'),
+      ipc.invoke('embedding:local-list-models'),
+    ]).then(([cfg, det, list]) => {
+      if (cancelled) return
+      if (cfg.status === 'fulfilled') {
+        setConfig(cfg.value)
+        setBaseUrlDraft(cfg.value.baseUrl)
+        setConfigError(null)
+      } else {
+        setConfigError(errorDetail(cfg.reason))
+      }
+      if (det.status === 'fulfilled') {
+        setDetect(det.value)
+        setDetectError(det.value.ok ? null : (det.value.error ?? null))
+      } else {
+        setDetect(null)
+        setDetectError(errorDetail(det.reason))
+      }
+      if (list.status === 'fulfilled' && Array.isArray(list.value)) {
+        setModels(list.value)
+        setModelsError(null)
+      } else if (list.status === 'rejected') {
+        setModels([])
+        setModelsError(errorDetail(list.reason))
+      }
+    })
+    return () => { cancelled = true }
+  }, [])
+
+  // 下载进度事件（U1）：挂载即订阅；**卸载必须 unsub**（否则监听器泄漏，参照 llm-store 的 unsubChunk）
+  useEffect(() => {
+    const unsub = ipc.on('embedding:local-pull-progress', (p) => {
+      if (p.status === 'success') {
+        // 终帧：进度条收掉（否则会一直停在「正在下载」），并重取列表——此前列表不含新模型
+        setPull(null)
+        setPulling(false)
+        void refreshModels()
+        return
+      }
+      setPull(p)
+    })
+    return unsub
+  }, [refreshModels])
+
+  const model = config?.model ?? ''
+  const connected = detect?.ok === true
+  const modelInstalled = hasLocalModel(models, model)
+  // 配置读取失败时无法诚实呈现任何档位状态 → 归到「未连接」并由详情交代原因（U5）
+  const status: 'disconnected' | 'modelMissing' | 'ready' =
+    config === null || !connected ? 'disconnected' : modelInstalled ? 'ready' : 'modelMissing'
+  const editable = config !== null
+  const canAct = editable && connected
+
+  const statusLabel =
+    status === 'ready'
+      ? t('localEmbedding.statusReady')
+      : status === 'modelMissing'
+        ? t('localEmbedding.statusModelMissing').replace('{model}', model)
+        : t('localEmbedding.statusDisconnected')
+
+  const modelOptions = useMemo(() => {
+    const names = new Set(models.map((m) => m.name))
+    if (model) names.add(model)
+    return [...names].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
+  }, [models, model])
+
+  // U1：T2 的 pullModel **不 clamp** percent（completed > total 时会 >100）→ UI 侧必须 clamp，
+  //     且 total 缺失时退化为不确定态（不显示百分比）
+  const pullPercent =
+    pull && typeof pull.total === 'number' && pull.total > 0
+      ? Math.min(100, Math.max(0, pull.percent ?? 0))
+      : null
+
+  /** 写配置（部分更新，主进程合并写回） */
+  const patchConfig = async (patch: Partial<LocalEmbeddingConfig>): Promise<void> => {
+    setSaveError(null)
+    try {
+      const res = await ipc.invoke('embedding:local-set-config', patch)
+      if (res.success) setConfig((prev) => (prev ? { ...prev, ...patch } : prev))
+      else setSaveError(res.error ?? '')
+    } catch (e) {
+      setSaveError(errorDetail(e))
+    }
+  }
+
+  /** 地址提交（失焦 / Enter）：非法 → 内联提示且不写库 */
+  const commitBaseUrl = (): void => {
+    const next = baseUrlDraft.trim()
+    if (!isValidBaseUrl(next)) {
+      setBaseUrlInvalid(true)
+      return
+    }
+    setBaseUrlInvalid(false)
+    if (next === config?.baseUrl) return
+    void patchConfig({ baseUrl: next })
+  }
+
+  /** 下载模型：`local-pull` **只发起**（下载分钟级，等它会撞 30s IPC 超时）→ 进度靠事件 */
+  const handlePull = async (): Promise<void> => {
+    setPullError(null)
+    try {
+      const res = await ipc.invoke('embedding:local-pull')
+      if (res.started) {
+        // 只置「下载中」标志：不伪造进度帧，首帧真实进度到了才渲染百分比（U1 不确定态）
+        setPulling(true)
+      } else {
+        setPulling(false)
+        setPullError(res.error ?? '')
+      }
+    } catch (e) {
+      setPulling(false)
+      setPullError(errorDetail(e))
+    }
+  }
+
+  /** 测试：local-test 拿真实维度 → 另取 kb:stats 做 U2 维度比对 */
+  const handleLocalTest = async (): Promise<void> => {
+    setTestRunning(true)
+    setTestError(null)
+    setTestDim(null)
+    setDimMismatch(null)
+    try {
+      const res = await ipc.invoke('embedding:local-test')
+      const dim = typeof res.dim === 'number' && res.dim > 0 ? res.dim : null
+      if (!res.success || dim === null) {
+        setTestError(res.error ?? '')
+        return
+      }
+      setTestDim(dim)
+      // U2：维度与现有索引不一致 → 写入会被 T3/T4 的维度守卫**硬拒绝**，必须提前告警；
+      //     vectorDimension === 0（新库）不告警
+      try {
+        const stats = await ipc.invoke('kb:stats')
+        if (stats.vectorDimension > 0 && stats.vectorDimension !== dim) {
+          setDimMismatch({ local: dim, index: stats.vectorDimension })
+        }
+      } catch {
+        // kb:stats 失败只影响「能否告警」，不影响测试结果本身
+      }
+    } catch (e) {
+      setTestError(errorDetail(e))
+    } finally {
+      setTestRunning(false)
+    }
+  }
+
+  return (
+    <div className="border rounded-lg p-4" style={{ borderColor: 'var(--color-border)' }}>
+      {/* 标题 + 三态徽标 + 开关 */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <HardDrive size={16} style={{ color: 'var(--color-text)' }} />
+          <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
+            {t('localEmbedding.title')}
+          </h4>
+          <Badge
+            variant={status === 'ready' ? 'success' : status === 'modelMissing' ? 'warning' : 'outline'}
+          >
+            {statusLabel}
+          </Badge>
+          {connected && detect?.version && (
+            <span className="text-[10px] text-[var(--color-text-muted)]">
+              {t('localEmbedding.statusConnected').replace('{version}', detect.version)}
+            </span>
+          )}
+        </div>
+        <Switch
+          checked={config?.enabled ?? false}
+          onCheckedChange={(checked) => { void patchConfig({ enabled: checked }) }}
+          disabled={!editable}
+          aria-label={t('localEmbedding.enable')}
+        />
+      </div>
+      <p className="text-xs text-[var(--color-text-muted)] mt-1">{t('localEmbedding.enableDesc')}</p>
+
+      {/* 地址 + 模型 */}
+      {editable && (
+        <div className="grid grid-cols-2 gap-3 mt-3">
+          <div>
+            <Label>{t('localEmbedding.baseUrl')}</Label>
+            <Input
+              className="mt-1"
+              aria-label={t('localEmbedding.baseUrl')}
+              value={baseUrlDraft}
+              onChange={(e) => {
+                setBaseUrlDraft(e.target.value)
+                if (baseUrlInvalid) setBaseUrlInvalid(false)
+              }}
+              onBlur={commitBaseUrl}
+              onKeyDown={(e) => { if (e.key === 'Enter') commitBaseUrl() }}
+            />
+            {baseUrlInvalid && (
+              <p className="text-[10px] mt-1" style={{ color: 'var(--color-warning)' }}>
+                {t('localEmbedding.baseUrlInvalid')}
+              </p>
+            )}
+          </div>
+          <div>
+            <Label>{t('localEmbedding.model')}</Label>
+            <Select
+              value={model}
+              onValueChange={(v) => { void patchConfig({ model: v }) }}
+            >
+              <SelectTrigger className="mt-1">
+                <SelectValue placeholder={t('localEmbedding.model')} />
+              </SelectTrigger>
+              <SelectContent>
+                {modelOptions.map((name) => (
+                  <SelectItem key={name} value={name}>{name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+      )}
+
+      {/* 操作：下载 / 测试 */}
+      <div className="flex items-center gap-2 mt-3">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { void handlePull() }}
+          disabled={!canAct || pulling}
+        >
+          <Download size={12} />
+          {t('localEmbedding.download').replace('{model}', model).trim()}
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => { void handleLocalTest() }}
+          disabled={!canAct || testRunning}
+        >
+          <RefreshCw size={12} className={testRunning ? 'animate-spin' : ''} />
+          {testRunning ? t('localEmbedding.testing') : t('localEmbedding.test')}
+        </Button>
+      </div>
+
+      {/* 三态引导 + 说明 */}
+      <div className="mt-2 space-y-1">
+        {status === 'disconnected' && (
+          <div className="flex items-start gap-1 text-xs" style={{ color: 'var(--color-warning)' }}>
+            <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+            <span>{t('localEmbedding.installGuide')}</span>
+          </div>
+        )}
+        {status === 'modelMissing' && (
+          <div className="flex items-start gap-1 text-xs" style={{ color: 'var(--color-warning)' }}>
+            <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+            <span>{t('localEmbedding.modelMissingHint').replace('{model}', model)}</span>
+          </div>
+        )}
+        <p className="text-[10px] text-[var(--color-text-muted)]">{t('localEmbedding.hint')}</p>
+      </div>
+
+      {/* 优先级：本地优先 / API 优先 → local-set-config */}
+      {editable && (
+        <div className="mt-3">
+          <Label>{t('localEmbedding.priority')}</Label>
+          <div className="flex items-center gap-4 mt-1">
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: 'var(--color-text)' }}>
+              <input
+                type="radio"
+                name="local-embedding-priority"
+                aria-label={t('localEmbedding.preferLocal')}
+                checked={config?.preferLocal === true}
+                onChange={() => { void patchConfig({ preferLocal: true }) }}
+              />
+              {t('localEmbedding.preferLocal')}
+            </label>
+            <label className="flex items-center gap-1.5 text-xs cursor-pointer" style={{ color: 'var(--color-text)' }}>
+              <input
+                type="radio"
+                name="local-embedding-priority"
+                aria-label={t('localEmbedding.preferApi')}
+                checked={config?.preferLocal === false}
+                onChange={() => { void patchConfig({ preferLocal: false }) }}
+              />
+              {t('localEmbedding.preferApi')}
+            </label>
+          </div>
+        </div>
+      )}
+
+      {/* 下载进度（U1：clamp + 不确定态；发起后到首帧之间也是不确定态）*/}
+      {(pull !== null || pulling) && (
+        <div className="mt-3">
+          <div role="status" aria-live="polite" className="text-[10px] text-[var(--color-text-muted)]">
+            {pullPercent === null
+              ? t('localEmbedding.downloadingPending')
+              : t('localEmbedding.downloading').replace('{percent}', String(pullPercent))}
+          </div>
+          <div
+            className="mt-1 h-1 rounded-full overflow-hidden"
+            style={{ backgroundColor: 'var(--color-border)' }}
+          >
+            <div
+              className={pullPercent === null ? 'h-full rounded-full animate-pulse' : 'h-full rounded-full'}
+              style={{
+                width: pullPercent === null ? '100%' : `${pullPercent}%`,
+                backgroundColor: 'var(--color-accent)',
+                opacity: pullPercent === null ? 0.4 : 1,
+              }}
+            />
+          </div>
+          {pull && <RawDetail text={pull.status} />}
+        </div>
+      )}
+
+      {/* 测试结果 / U2 维度告警 */}
+      {(testDim !== null || testError !== null || dimMismatch !== null) && (
+        <div className="mt-3 space-y-1 text-xs">
+          {testDim !== null && (
+            <div className="flex items-center gap-1" style={{ color: 'var(--color-success)' }}>
+              <CheckCircle2 size={12} />
+              <span>{t('localEmbedding.testOk').replace('{dim}', String(testDim))}</span>
+            </div>
+          )}
+          {testError !== null && (
+            <div className="flex items-start gap-1" style={{ color: 'var(--color-error)' }}>
+              <XCircle size={12} className="mt-0.5 flex-shrink-0" />
+              <div>
+                <div>{t('localEmbedding.testFailed')}</div>
+                {testError !== '' && <RawDetail text={testError} />}
+              </div>
+            </div>
+          )}
+          {dimMismatch && (
+            <div className="flex items-start gap-1" style={{ color: 'var(--color-warning)' }}>
+              <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
+              <span>
+                {t('localEmbedding.dimMismatch')
+                  .replace('{local}', String(dimMismatch.local))
+                  .replace('{index}', String(dimMismatch.index))}
+              </span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 失败面：写入失败给 t() 主文案；读取/探测失败只给可折叠原始详情（U4/U5） */}
+      <div className="mt-2 space-y-0.5">
+        {saveError !== null && (
+          <div className="text-[10px]" style={{ color: 'var(--color-error)' }}>
+            {t('localEmbedding.saveFailed')}
+            {saveError !== '' && <RawDetail text={saveError} />}
+          </div>
+        )}
+        {pullError !== null && (
+          <div className="text-[10px]" style={{ color: 'var(--color-error)' }}>
+            {t('localEmbedding.pullFailed')}
+            {pullError !== '' && <RawDetail text={pullError} />}
+          </div>
+        )}
+        {configError && <RawDetail text={configError} />}
+        {detectError && <RawDetail text={detectError} />}
+        {modelsError && <RawDetail text={modelsError} />}
       </div>
     </div>
   )
