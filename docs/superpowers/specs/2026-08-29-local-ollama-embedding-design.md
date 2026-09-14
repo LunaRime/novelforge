@@ -1,7 +1,9 @@
 # Ollama 本地向量模型设计（2026-08-29）
 
 > 对应实施计划：后续产出（0.1.6 发布后实施）
-> **实施状态：⏸️ 未实施**（2026-09-14 核对：全库无 `detectOllama`/`pullModel`/`ollama-embedding` 等任何实现代码；仅有 `provider-presets.ts` 的 Ollama **聊天** provider 与 `url-utils.ts` 的 URL 归一化——与本设计的**本地向量**目标无关）
+> **实施状态：✅ 已实施（2026-09-14，分支 `feat/ollama-local-embedding`）** —— SDD 任务 T1–T6 + T3b + FW-1 全部落地：T1 `d534ab9`（`fetchWithTimeout` 导出 + 超时参数化）、T2 `6ef64d4`（`electron/ollama-embedding.ts` 新模块）、T3 `0ea04d8`+R1 `482f569`（四级降级链 + 维度硬校验）、T4 `232c6cf`+R1 `f6b8196`（`GlobalConfig.localEmbedding` + `embedding:local-*` 通道）、T3b `6166259`+R1 `685a4a1`（查询侧接入）、T5 `50c0da5`（设置卡片 + i18n 三语）、FW-1 `314edcc`（pull 失败终态帧 + `:latest` 双向规范化）；T6（本任务）= 全量门禁 + 真机验证清单 + 文档回更，**无生产代码改动**。逐条差异、任务序列变更与实测更正见 §9，真机清单见 §10。
+> ~~**实施状态：⏸️ 未实施**（2026-09-14 核对：全库无 `detectOllama`/`pullModel`/`ollama-embedding` 等任何实现代码；仅有 `provider-presets.ts` 的 Ollama **聊天** provider 与 `url-utils.ts` 的 URL 归一化——与本设计的**本地向量**目标无关）~~ ← 该状态行已过时（描述的是本次改造**之前**的状态），保留仅为追溯。
+> ⚠️ **真机（Ollama 实机）验证尚未执行**：本分支的结论止于「单元测试 + 门禁 + 代码审查」；安装/拉模型/导入/降级/维度切换等实机链路**待人工按 §10 清单执行**，本设计不主张已通过。
 > 触发背景：2026-08-29 冒烟实测——embedding API 请求挂起 30s（限流环境）导致 kb:import-text 三次 IPC 超时、后处理管线中止。用户提出"可自行开启的基于本地的向量检索模型"以摆脱对远程 API 的依赖（免费/隐私/离线可用）。
 
 ## 1. 背景与目标
@@ -30,11 +32,11 @@
 GET  {base}/api/tags            → 已装模型列表 [{name, size, ...}]
 POST {base}/api/embed           → { embeddings: number[][] }（批量，v0.3.5+ 推荐接口）
 POST {base}/api/pull            → NDJSON 流式进度（{"status":"pulling","digest":...,"completed":...}）
-GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
+GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`detectOllama` 的探测端点；`/api/tags` 只服务模型列表）
 ```
 
 导出（全部 mock-fetch 可测）：
-- `detectOllama(baseUrl): Promise<{ ok: boolean; version?: string; error?: string }>`（/api/tags 探测）
+- `detectOllama(baseUrl): Promise<{ ok: boolean; version?: string; error?: string }>`（**`/api/version` 探测**——2026-09-14 更正：本文档此处原写 `/api/tags`，与决策 6 及实现冲突；实现在 `electron/ollama-embedding.ts:54`，`version` 即由此端点返回）
 - `listModels(baseUrl): Promise<Array<{ name: string; size: number }>>`（已装模型，过滤 `:latest` 标签规范化）
 - `pullModel(baseUrl, model, onProgress): Promise<{ success: boolean; error?: string }>`（/api/pull，NDJSON 行解析 → onProgress({ status, completed, total, percent })；复用 fetchWithTimeout 的 abort 兜底语义——**pull 是长任务，超时需更长（如 5 分钟）**，单独超时参数）
 - `embedLocal(texts: string[], baseUrl, model): Promise<number[][]>`（/api/embed 批量；按 index 排序保序；失败 throw 供降级）
@@ -54,12 +56,16 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 - **集成点**：`knowledge-base.ts` 的 `importContent`（降级段 :67-106）与 `backfillVectors`（:332）——新增纯函数 `resolveEmbeddingOrder(cfg): ('local'|'api'|'llm'|'fts')[]` 决定尝试顺序（可单测）；每档失败（throw/空向量）按序降级
 - **推理失败语义**：本地失败（未连接/模型缺失/embed 报错）→ 降级下一档（不阻断导入；与现有 `AbortError` 修复后的降级路径一致）
 - **backfillVectors 同步接入**（存量库重建索引也走本地——用户痛点场景）
-- **维度硬校验（v1 必做，T3 实现）**：bge-m3（1024 维）与 API 模型（1536 维）不得混入同一 LanceDB 表——`importContent`/`backfillVectors` 写入前检测现有表向量维度，不一致则**拒绝写入并返回明确错误（提示重建索引）**，不做静默降级；切换模型形态（本地↔API）时 UI 同步提示重建（含 i18n 错误文案）
+- **维度硬校验（v1 必做）— ✅ 已实施（T3 `0ea04d8` + R1 `482f569`、T4 `232c6cf` + R1 `f6b8196`）**：bge-m3（1024 维）与 API 模型（1536 维）不得混入同一 LanceDB 表——`importContent`/`backfillVectors` 写入前检测现有表向量维度，不一致则**拒绝写入并返回明确错误（提示重建索引）**，不做静默降级；切换模型形态（本地↔API）时 UI 同步提示重建（含 i18n 错误文案）
+  - **落点**：`electron/knowledge-base.ts` 的 `assertVectorDimCompatible`（`importContent` 在**删除同名旧文档之前**调用；`backfillVectors` 在**任何写盘动作之前**调用，维度取首个**非空**向量 `firstVectorDim`——T3 R1 修的正是「首位空向量 → `newDim=0` → 守卫静默自跳过」）；`electron/vector-store.ts` 的 `checkUpdateVectorsDim`（回填写入路径 `updateChunkVectors` 的**入口唯一收口点**，T4/A4.1，置于两条写分支之前）；`electron/controllers/kb-controller.ts` 的 `kb:backfill-vectors`（维度错误为**终态**，不再被降级成方式 2 的无守卫写入，T4/A4.2）
+  - ⚠️ **为什么必须写前拦截**：实测（lancedb 0.27.2，两方向各被独立复现一次，见 §9.3）维度不匹配**不抛错**，而是静默把该行向量写成 `null`（数据被销毁）——「写后校验」等于数据已毁。
 
 ### 3.3 双通道获取
 
 - **通道 A 应用内 pull**：设置页「下载模型」→ `detectOllama` 检查运行 → `pullModel(baseUrl, model)` 轮询进度（设置页进度条 + 状态文本；`{"status":"success"}` 完成）→ 完成后 `listModels` 刷新下拉
   - 网络应对：ollama 自身 registry 下载走 ollama 进程；国内网络问题 → 设置卡片提示文案引导配置 `OLLAMA_MODELS` 目录/代理环境变量（应用不代管代理；**pull 失败错误原文展示 + 手动导入作为通道 B 兜底**）
+    - ✅ **已实施（FW-1 `314edcc`）**：原实现只在主进程日志里记录失败——渲染层收不到任何终态信号，进度条永久停帧、下载按钮永久 disabled。FW-1 让控制器在 pull 落定（`success:false` 或 reject）时**补发一帧** `{status:'error', error}` 到 `embedding:local-pull-progress`，渲染层据此收进度条 + 恢复按钮 + 落 `localEmbedding.pullFailed` 主文案（原始错误串只进「原始详情」折叠区，不当主文案）。
+    - ⚠️ 遗留：**连接既不返 `{"error"}` 也不 EOF** 时无 app 级超时（`reader.read()` 永久挂起）——见 §8 的 v2 已知限制。
 - **通道 B 手动导入**：用户自行 `ollama pull bge-m3`（或已有模型）→ 应用 `detectOllama` + `listModels` 自动检测 → 下拉选择启用；模型缺失状态徽标提示「模型未安装——应用内下载或 ollama pull」
 
 ### 3.4 UI（设置页「本地向量模型」卡片，参照 ModelsView 既有模式）
@@ -87,7 +93,7 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 |---|---|
 | ollama 未安装/未运行 | 状态徽标引导（安装 Ollama → 启动）；降级链自动走下一档，不阻断导入 |
 | 模型缺失 | 双通道提示（应用内下载 / ollama pull）；降级 |
-| pull 网络失败 | 错误原文展示 + 提示配置代理/镜像；通道 B 兜底 |
+| pull 网络失败 | 错误原文展示 + 提示配置代理/镜像；通道 B 兜底。**✅ 已实施（FW-1 `314edcc`）**：控制器在 pull 落定时补发终态帧 `{status:'error', error}`（渲染层原来看不到失败 → 进度条永久停帧 + 按钮永久 disabled），UI 据此收进度条 / 恢复下载按钮 / 落 `localEmbedding.pullFailed` 主文案（原始错误串只进「原始详情」折叠区，不作主文案）。**遗留**：连接既不返 `{"error"}` 也不 EOF 时无 app 级超时 → §8 的 v2 已知限制 |
 | embed 推理失败（OOM/维度不符） | 降级下一档 + 日志 warn（错误脱敏） |
 | 配置损坏 | 读失败回退默认值（既有 GlobalConfig 模式） |
 
@@ -122,6 +128,13 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 - **T5**：设置页 UI 卡片（开关/地址/模型下拉/下载进度/测试/优先级单选 + i18n 三语）+ 组件测试
 - **顺序**：T1 → T2 → T3 → T4 → T5（每任务独立 commit，SDD 或 Inline）
 
+**实际执行序列（2026-09-14，SDD）**：**T1 → T2 → T3(+R1) → T4(+R1) → T3b(+R1) → T5 → FW-1 → T6** —— 与原建议的两处差异，均已落进计划文件：
+
+- **T3b（查询侧接入，新增，v1 必做）**：T3 review 裁定原 §8 的「检索侧适配」**不能留 v2** —— 写入侧接了本地档、查询侧未接，等于**开启开关反而让语义检索从「能用」变「不能用」**（纯本地用户没有查询向量；有 API Key 的用户是 1536 维 query 打 1024 维表）。开关因此不具可观察价值，故提升为 T3b（`6166259` + R1 `685a4a1`）。**v2 只剩检索侧「阈值/RRF 权重/top-K 调参」**（查询侧**接线**已 v1 落地）。
+- **T3b 的范围由 review 追加（scope override）**：模块层 `searchKnowledge` 接好后，「纯本地用户」在 controller 层仍走不到它（`getEmbeddingConfig()` 返回 `null` → handler 直接落 `searchKnowledgeFTS`）——R1 因此追加了 `kb-controller.ts` 的查询 handler 门控（`kb:search` / `kb:search-with-scope`）。这与 T4/A4.2 修好的**回填侧**门控是同一类「模块层修好但用户不可达」缺陷。
+- **R1 修复轮**：T3 R1 `482f569`（backfill 守卫改用首个**非空**向量）、T4 R1 `f6b8196`（review Minor 收口）、T3b R1 `685a4a1`（上述门控）。
+- **FW-1（final fix wave）`314edcc`**：pull 失败终态帧 + 模型名 `:latest` 双向规范化。
+
 ## 7. 决策记录（已裁决）
 
 | # | 决策 | 理由 |
@@ -138,4 +151,143 @@ GET  {base}/api/version         → 健康检查（可选，tags 可兼作）
 
 - Ollama 进程自管理（内置安装/启动守护）——v2
 - /api/embeddings 旧接口兼容——v2
-- 本地模型与 RAG 检索链路检索侧优化（searchKnowledge 混合检索对本地模型维度/阈值的适配）——v2（**维度一致性硬校验已升为 v1 必做，见 §3.2 / T3**）
+- 本地模型与 RAG 检索链路检索侧优化（searchKnowledge 混合检索对本地模型维度/阈值的适配）——v2（**维度一致性硬校验已升为 v1 必做，见 §3.2 / T3**；**查询侧接线已由 T3b 落地 v1**——v2 只剩阈值 / RRF 权重 / top-K 调参）
+
+### 8.1 已知限制（v2 待修，登记于 T6）
+
+- **v2 已知限制：`pullModel` 的 NDJSON 流读取无 app 级超时**（`fetchWithTimeout` 的 300s 仅覆盖响应头，`clearTimeout` 在 `electron/embedding.ts:45` 已执行）；若连接既不返 `{"error"}` 也不 EOF，进度条将保持不确定态直至用户重开设置页/重启。**修法（v2）**：在 `electron/ollama-embedding.ts:194` 的 `reader.read()` 外包 idle watchdog（如 300s 无数据帧 → `reader.cancel()` + 返回 `{success:false,error}`），并补 fake-timer 用例证明「慢但在进展」不误杀。
+  - 影响面：仅通道 A（应用内 pull）的**不确定态**；已有 `{"error"}` 帧 / 流截断 / 非 200 / 发起超时四类失败均由 FW-1 的终态帧正常收敛（终态帧补发见 §3.3、§3.5）。
+  - 来源：FW-1 报告 §⑦.1（reviewer 指定 T2 不动，作为独立后续项登记）。
+
+## 9. 实施记录与文档回更（2026-09-14，T6）
+
+### 9.1 交付物 ↔ commit
+
+| 任务 | commit | 交付物 |
+|---|---|---|
+| T1 | `d534ab9` | `electron/embedding.ts`：`fetchWithTimeout` 导出 + 第三参 `timeoutMs`（默认 10s 不变） |
+| T2 | `6ef64d4` | `electron/ollama-embedding.ts` + 单测（detect/list/pull/embed，纯 HTTP，不 import electron） |
+| T3 | `0ea04d8` | `electron/embedding-order.ts`（`resolveEmbeddingOrder`/`hasUsableVectors`/`firstVectorDim`）+ `electron/knowledge-base.ts` 四级降级链 + `assertVectorDimCompatible` |
+| T3 R1 | `482f569` | backfill 守卫改用 `firstVectorDim`（首位空向量不再让守卫静默自跳过） |
+| T4 | `232c6cf` | `GlobalConfig.localEmbedding` + 6 条 invoke（`embedding:local-*`）+ 1 条 event（`embedding:local-pull-progress`，经策略表 + `guardedHandle`）+ `updateChunkVectors` 入口守卫 + backfill 门控 |
+| T4 R1 | `f6b8196` | review Minor 收口（errorCode 真实断言 / 方式 2 错误面 / 文案清理） |
+| T3b | `6166259` | `searchKnowledge` 查询侧接入本地档 + 维度兼容门 |
+| T3b R1 | `685a4a1` | `kb:search` / `kb:search-with-scope` 的 controller 门控（纯本地用户可达性） |
+| T5 | `50c0da5` | `src/components/settings/VectorConfigSection.tsx` 卡片 + `localEmbedding.*` 27 key × 三语 |
+| FW-1 | `314edcc` | pull 失败终态帧（payload `error` + 控制器补发 + UI 落 `pullFailed`）+ `:latest` 双向规范化 |
+| T6 | （本文档所在 commit） | 全量门禁 + 真机清单 + 本次回更，**无生产代码改动** |
+
+### 9.2 本次回更的过时点（行号为回更**前**的行号）
+
+| 原行 | 原文（要点） | 回更后 |
+|---|---|---|
+| `:4` | 「**实施状态：⏸️ 未实施**」 | ✅ 已实施（T1–T6 + T3b + FW-1）+ 标注**真机验证尚未执行** |
+| `:33` | `/api/version → 健康检查（可选，tags 可兼作）` | `/api/version → 健康检查 + 版本`（**实现口径**：`detectOllama` 的探测端点；`/api/tags` 只服务模型列表） |
+| `:37` | `detectOllama … （/api/tags 探测）` | `（/api/version 探测）`——与决策 6 及实现一致（`electron/ollama-embedding.ts:54`） |
+| `:57` | §3.2 维度硬校验（未标状态） | 标注 ✅ 已实施 + 三条落点 + 「为什么必须写前拦截」（§9.3） |
+| `:62` | §3.3「pull 失败错误原文展示 + 通道 B 兜底」 | 标注 ✅ **FW-1 `314edcc`** 已实施（终态帧机制）+ 遗留限制指向 §8.1 |
+| `:90` | §3.5「pull 网络失败」行 | 同上（终态帧 + 原文只进折叠详情 + v2 遗留） |
+| `:123` | §6「顺序：T1 → T2 → T3 → T4 → T5」 | 追加**实际序列**：T1 → T2 → T3(+R1) → T4(+R1) → **T3b(+R1)** → T5 → **FW-1** → T6，并记录 T3b 从 §8 v2 提升为 v1 的理由与 T3b 的 review 驱动扩权（查询 handler 门控） |
+| `:141` | §8「检索侧优化——v2」 | v2 只剩**阈值/RRF/top-K 调参**（查询侧接线已由 T3b 落地 v1）；新增 §8.1 v2 已知限制（`pullModel` NDJSON idle watchdog） |
+
+### 9.3 实测更正：维度不匹配是**静默破坏**，不是客户端报错
+
+- **原表述（不成立）**：设计 §3.2 / T3 brief 记「1024 维写进 1536 维列 → 客户端抛 `TypeError`」。
+- **实测（lancedb 0.27.2；T3 review 与 T4 review 各自独立复现一次）**：
+
+| 写入形状 | 目标列 | 实测结果 |
+|---|---|---|
+| 1024 值 | `FixedSizeList(1536)` | **不抛错**：`rowsUpdated = 1`，该行向量被写成 **`null`**（向量被销毁，行退回「无向量」态） |
+| 8 值 | `FixedSizeList(4)` | **不抛错**：同上，静默写 `null` |
+| `[]`（空数组） | 任意维度 | **抛错**：`concat requires input of at least one array`（唯一会抛的形状） |
+
+⇒ **两个方向都是静默破坏**，「写后校验」等于数据已毁 —— 这就是守卫必须置于**写盘之前**的原因，也是 T4/A4.1 把守卫放在 `updateChunkVectors` **两条写分支之前**、T3 把校验放在**删除同名旧文档之前**的理由（§3.2 落点）。
+
+### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫是**死代码**（T6 只记录，不修）
+
+`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫，但它**在真实路径上永远跑不到**：
+
+1. 无章节元数据（chapter-less）的文档首次导入后，LanceDB 剪枝掉全 `null` 列 → `chapterNumber`/`chapterTitle` 不在 schema 里；
+2. 于是 `requiredFields`（`vector-store.ts:418` 的 11 个字段）**此后恒为 false** → 每次导入都走**重建分支**；
+3. 而该守卫（`vector-store.ts:422-442`）只存在于**非重建分支**（`hasAllFields === true`）；
+4. 重建分支里 `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : …`（`vector-store.ts:465-467`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
+5. `await db.dropTable(TABLE_NAME)`（`vector-store.ts:461`）先于 `await db.createTable(...)`（`:468`），**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
+   > 注：T6 brief 引的 `:459 dropTable` / `:466 createTable` 比实际行号小 2，实际为 `:461` / `:468`（以本仓 `314edcc` 为准）。
+
+**防线现状（这才是真正拦住混维的两道）**：
+
+| 写入路径 | 拦截者 | 落点 |
+|---|---|---|
+| `importContent` → `addChunks`（含 `kb:import-*`） | **T3 的写前校验** `assertVectorDimCompatible`（在删旧文档 / 任何写盘动作之前） | `electron/knowledge-base.ts` |
+| `backfillVectors`（含 controller 方式 2 的 LLM 逐行写入） | T3 的写前校验 **+ T4 的 `updateChunkVectors` 入口守卫** `checkUpdateVectorsDim` | `electron/knowledge-base.ts` / `electron/vector-store.ts` |
+
+**T6 不改**：本任务是验证 + 文档，任何生产代码改动都会让本次门禁与真机结论脱离最终产物；修 `addChunks` 应当独立成任务（连带 `drop`/`create` 的失败恢复）。
+
+### 9.5 与实测冲突的代码注释（T6 不修，仅登记）
+
+- `electron/vector-store.ts:1178` 注释仍写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。按 T6 边界（**禁改生产代码**）未修改，建议随下一次代码改动一并订正。
+- `electron/knowledge-base.ts:103-105` 的注释记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**，T6 未复现该条，**不主张其已订正或已证伪**（列入真机/后续核对）。
+
+## 10. 真机验证清单（人工执行；**截至 2026-09-14 尚未执行**）
+
+> 目的：本分支的全部自动化证据止于「mock fetch 单测 + 组件测试 + 门禁」，**没有任何一步跑在真实 Ollama 上**。
+> 环境：Windows/macOS/Linux 桌面机 + `feat/ollama-local-embedding` 分支；`pnpm install` 后 `pnpm run dev`（或安装打包产物）。
+> 日志：`~/.novelforge/logs/vela-YYYY-MM-DD.log`（LogsView 亦可）；文案以 zh-CN 为准。
+> 每步都写「操作」+「期望观察」；**任何一步不符即为真机不通过**，请连同日志片段回填。
+
+**A. Ollama 未安装**
+1. 确认本机没有 `ollama` 命令/进程（`ollama --version` 报命令不存在）。
+2. 打开 设置 → 向量配置，找到「本地向量模型」卡片。
+3. 期望：状态徽标 = **「未连接」**；卡片出现**安装引导**（含 https://ollama.com）；「下载模型」与「测试模型」按钮**均不可点**（二者均要求「已连接」）；模型下拉仍列出配置里的默认模型名（`bge-m3`）。
+
+**B. Ollama 已安装、模型缺失**
+4. 安装并启动 Ollama（`ollama serve` 或桌面端），**不**拉任何模型；回到设置页（或点「测试模型」触发一次探测）。
+5. 期望：状态徽标 = **「已连接，但模型 bge-m3 未安装」** + 版本号；出现**双通道提示**：①点上方「下载模型」在应用内下载 ②终端执行 `ollama pull bge-m3`；此时「下载模型」按钮**可点**（已连接）。
+
+**C. 应用内 pull（通道 A）**
+6. 点「下载模型 bge-m3」。
+7. 期望：先出现**不确定态**「正在下载…」（进度条动画），随后出现百分比并推进；期间按钮保持 disabled。
+8. 完成后期望：进度条**消失**；模型下拉**自动刷新**并出现 `bge-m3`；状态徽标变 **「就绪」**。
+9. 验证模型名规范化：`ollama list` 显示 `bge-m3:latest`，而卡片下拉显示 `bge-m3`（不应因此误报「未安装」）。
+
+**D. ⭐ 拉取不存在的模型（FW-1 验收，最关键的一条）**
+10. 把模型（下拉/配置）改成一个**不存在**的名字（如 `definitely-not-a-model`），点「下载模型」。
+11. 期望（三条同时成立）：① 进度条**被清掉**（不留永久停帧）；②「下载模型」按钮**恢复可点**（可重试）；③ 出现 `localEmbedding.pullFailed`（「下载模型失败」）**主文案**，其后附可折叠的**原始错误详情**（含 Ollama 返回的原文）；④ 卡片不显示任何英文技术串当主文案。
+    - 反例（改造前的行为，供对照）：进度条永久停帧 + 按钮永久 disabled。
+
+**E. 导入走本地档**
+12. 打开/新建一个测试项目；把本地向量开关**打开**、优先级选「本地优先」；点「测试模型」。
+13. 期望：测试成功 → **「测试成功：1024 维」**（bge-m3 = 1024 维）。
+14. 导入一份文档（设置页同页的导入入口或 `kb:import-*` 对应 UI）。
+15. 期望：导入成功；日志出现本地档路径（`kb.vectorizingWith` 带 `Ollama (bge-m3)`）；`kb:stats` 的向量维度 = 1024。
+
+**F. 停掉 Ollama 后导入不被阻断**
+16. 退出 Ollama（确认 `ollama --version` 仍可用但服务不再监听 11434）。
+17. 再导入一份文档。
+18. 期望：导入**仍然成功**；日志出现本地档失败 warn 并降级（api → llm → FTS）；**不出现**导入失败对话框、不阻断后续流程。
+
+**G. 查询侧（T3b 验收）**
+19. 在「本地维度（1024）+ 本地档开启」的库上执行一次知识库检索（Agent 检索或 `kb:search` 入口）。
+20. 期望：检索**走语义通道**（不是静默 FTS 兜底）；日志无 `log.embedding.queryDimMismatch`。
+21. 把库切成 1536 维（例如用远端 Embedding API 模型重建一次，或换一个 1536 维的测试库），再用同一 query 检索。
+22. 期望：**不报错**；按维度兼容门回落（本地档被跳过）；日志出现 `log.embedding.queryDimMismatch`（`table 1536 / got 1024`），随后仍有结果返回。
+
+**H. 维度切换被拒绝 + U2 告警**
+23. 库为 1536 维（API）时，开启本地档并导入一份文档。
+24. 期望：写入**被拒绝**并给出 `error.embeddingDimMismatch`（中文：向量维度不一致…请重建知识库索引…），**不静默降级、不半写入**（文档不应出现在已导入列表里）。
+25. 反向：库为 1024 维（本地）时改用 1536 维 API 模型导入 → 同样被拒绝。
+26. 在设置页点「测试模型」：期望出现 **U2 黄色维度不匹配告警**（本地 1024 维 vs 索引 1536 维），文案为 `localEmbedding.dimMismatch`。
+    - 注意：该告警由**点「测试模型」**触发（测试成功后另取 `kb:stats` 比对），不是打开卡片就自动出现。
+
+**I. `kb:backfill-vectors` 纯本地可达（T4/A4.2 验收）**
+27. 项目**不配置**任何远端 Embedding 模型（模型列表里没有 embedding 模型），仅开启本地档。
+28. 触发 `kb:backfill-vectors`（向量回填入口）。
+29. 期望：回填**走本地向量**并成功（`processed > 0`）；**不**出现 `kb.noVectorMethod`（「无可用向量化方式」）、**不**掉进 FTS-only。
+30. 构造维度不匹配（表 1536 维 + 本地 1024 维）再回填。
+31. 期望：返回维度错误并**原样透传**（终态），**不**降级到 LLM 逐行写入路径（日志中不应出现 `log.kb.embeddingFailedTryLlm` 的「换方式」提示）。
+
+**J. 重启后配置持久**
+32. 关掉应用、重启。
+33. 期望：本地向量开关、Ollama 地址、模型、优先级单选**逐项保持**；卡片状态徽标重新探测后仍为三态中的正确一态（未连接 / 模型缺失 / 就绪）。
+
+**回填格式**：逐步记录「步骤号 / 实际观察 / 是否一致 / 日志时间戳片段」；不一致项请附 `~/.novelforge/logs` 对应片段与截图。
