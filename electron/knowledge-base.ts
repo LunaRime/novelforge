@@ -12,9 +12,10 @@ import { t } from '../src/shared/locale'
 import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
+import type { LocalEmbeddingConfig } from '../src/shared/ipc-channels'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
-import { getProjectVelaDir, readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from './utils/config-utils'
+import { getProjectVelaDir, readLocalEmbeddingConfig } from './utils/config-utils'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
 import { resolveEmbeddingOrder, hasUsableVectors, firstVectorDim } from './embedding-order'
@@ -52,61 +53,6 @@ async function ensureMigration(projectPath: string): Promise<void> {
 // ===== T3：本地向量档配置 + 四级降级链 =====
 
 /**
- * 本地向量档配置（**结构同形**于 T4 的 `GlobalConfig.localEmbedding`）。
- *
- * T4 尚未落地时本模块自带同值回退默认（不阻塞 T3）；T4 落地后以
- * `DEFAULT_GLOBAL_CONFIG.localEmbedding` 为单一事实源，两处默认值不会漂移。
- */
-interface LocalEmbeddingConfig {
-  enabled: boolean
-  baseUrl: string
-  model: string
-  preferLocal: boolean
-}
-
-/** 回退默认值（与 T4 brief 的 `DEFAULT_GLOBAL_CONFIG.localEmbedding` 逐字一致） */
-const FALLBACK_LOCAL_EMBEDDING: LocalEmbeddingConfig = {
-  enabled: false,
-  baseUrl: 'http://localhost:11434',
-  model: 'bge-m3',
-  preferLocal: true,
-}
-
-/** 默认值：优先取 T4 的全局默认，未落地时用同值回退 */
-function defaultLocalEmbedding(): LocalEmbeddingConfig {
-  const fromGlobal = (DEFAULT_GLOBAL_CONFIG as { localEmbedding?: Partial<LocalEmbeddingConfig> }).localEmbedding
-  return fromGlobal ? { ...FALLBACK_LOCAL_EMBEDDING, ...fromGlobal } : FALLBACK_LOCAL_EMBEDDING
-}
-
-/**
- * 读全局配置的 `localEmbedding`（T4）。
- *
- * 零损失降级：读失败 / 缺字段 / 类型不符 → 回退默认（`enabled=false`）→ 降级链退回**现状三级**，
- * 导入行为与改造前完全一致。
- * `enabled` 用**严格真值**判定：配置损坏（如 `"true"` 字符串）时宁可不启用本地档
- * （不向用户机器发起网络探测），也不误开。
- */
-function readLocalEmbeddingConfig(): LocalEmbeddingConfig {
-  const fallback = defaultLocalEmbedding()
-  try {
-    const global = readJsonFile<{ localEmbedding?: Partial<LocalEmbeddingConfig> }>(GLOBAL_CONFIG_PATH, {})
-    const raw = global?.localEmbedding
-    if (!raw || typeof raw !== 'object') return fallback
-    return {
-      enabled: raw.enabled === true,
-      // 默认 true（T4 默认值）：仅显式 false 才改为 API 优先
-      preferLocal: raw.preferLocal !== false,
-      baseUrl: typeof raw.baseUrl === 'string' && raw.baseUrl.trim() !== '' ? raw.baseUrl : fallback.baseUrl,
-      model: typeof raw.model === 'string' && raw.model.trim() !== '' ? raw.model : fallback.model,
-    }
-  } catch (e) {
-    // 非用户可见文本（仅落日志），沿用本文件既有 raw 日志惯例
-    logger.warn('KB', `read localEmbedding config failed, fallback to defaults: ${safeErrorMessage(e)}`)
-    return fallback
-  }
-}
-
-/**
  * 本地档（`local`）：探测 Ollama → `/api/embed` 批量向量化。
  *
  * - 未配置 baseUrl / model → 返回 `[]`（不发请求）
@@ -128,24 +74,43 @@ async function tryLocalEmbedding(texts: string[], cfg: LocalEmbeddingConfig): Pr
 }
 
 /**
+ * 维度不匹配的**标记错误**（T4 / A4.2）：调用方据此判定「终态，不得降级到别的写入路径」。
+ *
+ * ⚠️ 用 `code` 字段做**鸭子判定**（见 `isVectorDimMismatchError`），不用 `instanceof`——
+ *    打包产物里同类错误可能跨模块实例（apache-arrow 双实例的教训，见 vector-store.ts 注释）。
+ */
+export class VectorDimMismatchError extends Error {
+  readonly code = 'dim-mismatch' as const
+  constructor(message: string) {
+    super(message)
+    this.name = 'VectorDimMismatchError'
+  }
+}
+
+/** 是否为维度不匹配错误（零 instanceof：只读 `code` 字段） */
+export function isVectorDimMismatchError(e: unknown): boolean {
+  return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'dim-mismatch'
+}
+
+/**
  * 向量维度硬校验（T3 v1 必做）：写入前比对待写维度与现有 LanceDB 表的向量维度。
  *
  * - `newDim <= 0`（本次不写向量）→ 放行，且**不读表**（纯文本库/FTS-only 路径零开销）
  * - 表不存在 / 无 vector 列（现有维度 0）→ 放行（首建）
- * - 维度一致 → 放行；**不一致 → throw**（i18n 文案，提示重建索引）
+ * - 维度一致 → 放行；**不一致 → throw `VectorDimMismatchError`**（i18n 文案，提示重建索引）
  *
  * ⚠️ 为什么必须 throw 而不是降级：LanceDB 的 vector 列是 `FixedSizeList(dim)`，把 1024 维写进
  *    1536 维的表**不会报错**——实测 `addChunks` 会把整列**静默重写成 1024**（既有向量一并被改写，
  *    `getStats().vectorDimension` 从 1536 变 1024）。故此处必须**写盘前硬拒绝**：不静默降级、
  *    不半写入。抛出的错误由调用方沿用各自对外契约（返回式 `{success:false,error}`）上交，
- *    但**绝不能**被当成"该档失败、继续降级"的信号。
+ *    但**绝不能**被当成"该档失败、继续降级"的信号（T4/A4.2 由 `errorCode: 'dim-mismatch'` 显式标记）。
  */
 export async function assertVectorDimCompatible(projectPath: string, newDim: number): Promise<void> {
   if (newDim <= 0) return
 
   const existingDim = await getChunksTableVectorDim(projectPath)
   if (existingDim > 0 && existingDim !== newDim) {
-    throw new Error(t('error.embeddingDimMismatch')
+    throw new VectorDimMismatchError(t('error.embeddingDimMismatch')
       .replace('{expected}', String(existingDim))
       .replace('{actual}', String(newDim)))
   }
@@ -617,7 +582,7 @@ export async function backfillVectors(
   projectPath: string,
   protocol: 'openai' | 'gemini',
   model: { baseUrl: string; apiKey: string },
-): Promise<{ success: boolean; processed: number; failed: number; error?: string }> {
+): Promise<{ success: boolean; processed: number; failed: number; error?: string; errorCode?: 'dim-mismatch' }> {
   try {
     const { count: total } = await storeGetChunksWithoutVectors(projectPath)
     if (total === 0) return { success: true, processed: 0, failed: 0 }
@@ -805,7 +770,10 @@ export async function backfillVectors(
     return { success: true, processed: idToVector.size, failed: total - idToVector.size }
   } catch (error) {
     logger.error('KB', t('log.kb.backfillError').replace('{err}', String(error)))
-    return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
+    // T4/A4.2：维度不匹配是**终态** —— 显式标记，避免调用方把它当成「该档失败，换下一种方式」
+    // （controller 侧曾经因此静默降级到无维度守卫的 updateChunkVectors 路径）
+    const errorCode = isVectorDimMismatchError(error) ? 'dim-mismatch' as const : undefined
+    return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error), errorCode }
   }
 }
 

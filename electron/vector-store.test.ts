@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
@@ -27,7 +27,14 @@ import {
   tokenizeQueryWords,
   selectQueryTerms,
   rrfFuse,
+  updateChunkVectors,
 } from './vector-store'
+
+// T4：失败路径（逐行 update 抛错 / 全表写失败）会调 logger.warn/error —— 真实 logger 会往
+// `~/.novelforge/logs/` 写盘（受限沙箱下 EPERM、CI 下污染真实用户目录）。日志内容无断言 → 打桩。
+vi.mock('./utils/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), getLogDir: () => '' },
+}))
 
 describe('computeFTSRelevance（P1-1 FTS 相关性打分）', () => {
   it('空输入返回基础分 0.5', () => {
@@ -823,4 +830,189 @@ describe('LanceDB 端到端：RRF 融合排序在截断之前（L3 T4）', () =>
       await cleanupProject(projectPath)
     }
   })
+})
+
+// ============================================================
+// T4 / A4.1：updateChunkVectors 入口维度守卫 + 诚实计数（真实 LanceDB）
+// ============================================================
+
+describe('updateChunkVectors 入口维度守卫 + 诚实计数（T4 / A4.1）', () => {
+  const E2E_TIMEOUT_MS = 30_000
+
+  function makeTempProject(): string {
+    return fs.mkdtempSync(path.join(os.tmpdir(), 'nf-update-vectors-'))
+  }
+
+  async function cleanupProject(projectPath: string): Promise<void> {
+    await closeConnection(projectPath)
+    fs.rmSync(projectPath, { recursive: true, force: true })
+  }
+
+  /** 建 chunks 表（显式 schema；vectorDim=0 → 旧表形态：无 vector 列） */
+  async function seedChunks(
+    projectPath: string,
+    vectorDim: number,
+    rows: Array<Record<string, unknown>>,
+  ): Promise<void> {
+    const db = await getConnection(projectPath)
+    const fields: Field[] = [
+      new Field('id', new Utf8()),
+      new Field('docId', new Utf8()),
+      new Field('fileName', new Utf8()),
+      new Field('chapterNumber', new Int32(), true),
+      new Field('chapterTitle', new Utf8(), true),
+      new Field('text', new Utf8()),
+      new Field('tokens', new Utf8(), true),
+    ]
+    if (vectorDim > 0) {
+      fields.push(new Field('vector', new ArrowFixedSizeList(vectorDim, new Field('item', new Float32())), true))
+    }
+    fields.push(
+      new Field('chunkIndex', new Int32()),
+      new Field('totalChunks', new Int32()),
+      new Field('importedAt', new Utf8()),
+    )
+    await db.createTable('chunks', rows, { schema: new ArrowSchema(fields) })
+  }
+
+  async function readRows(projectPath: string): Promise<Array<{ id: string; vector?: unknown }>> {
+    const db = await getConnection(projectPath)
+    const table = await db.openTable('chunks')
+    return await table.query().toArray() as Array<{ id: string; vector?: unknown }>
+  }
+
+  /** Arrow FixedSizeList → 纯 number[]（零 instanceof，跨 apache-arrow 双实例安全） */
+  function toPlainVector(v: unknown): number[] | null {
+    if (v === null || v === undefined) return null
+    const maybe = v as { toArray?: () => ArrayLike<number> }
+    // toArray() 可能返回 Float32Array（真机实测）→ 统一成 number[] 再断言
+    if (typeof maybe.toArray === 'function') return Array.from(maybe.toArray())
+    return Array.isArray(v) ? (v as number[]) : null
+  }
+
+  function row(id: string, text: string, vector?: number[]): Record<string, unknown> {
+    const base: Record<string, unknown> = {
+      id, docId: 'doc-1', fileName: '第1章 测试.txt', chapterNumber: 1, chapterTitle: '测试',
+      text, tokens: '分词', chunkIndex: 0, totalChunks: 1, importedAt: '2026-01-01T00:00:00.000Z',
+    }
+    if (vector) base.vector = vector
+    return base
+  }
+
+  it('表 4 维 + 传入 8 值 → success:false 且该行向量**未被改写**（不是变成 null）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 4, [row('row-1', '原文本', [1, 0, 0, 1])])
+
+      const res = await updateChunkVectors(projectPath, [{ id: 'row-1', vector: new Array(8).fill(0.5) }])
+
+      expect(res.success).toBe(false)
+      expect(res.count).toBe(0)
+      expect(res.error).toMatch(/4/)
+      expect(res.error).toMatch(/8/)
+
+      const rows = await readRows(projectPath)
+      expect(toPlainVector(rows[0].vector)).toEqual([1, 0, 0, 1]) // 原向量完好（既未改维度也未置 null）
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('表 1536 维 + 传入 1024 → success:false + 文案含两个维度 + 不再是 failed:0 的谎报', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 1536, [row('row-1', '原文本', new Array(1536).fill(0.25))])
+
+      const res = await updateChunkVectors(projectPath, [{ id: 'row-1', vector: new Array(1024).fill(0.5) }])
+
+      expect(res.success).toBe(false)
+      expect(res.count).toBe(0)
+      expect(res.failed).toBe(1) // 「全部被拒」照实上报（改造前是 success:true / failed:0）
+      expect(res.error).toMatch(/1536/)
+      expect(res.error).toMatch(/1024/)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('同维度 → success:true，count = **真正写成功**的行数，且向量确实落库', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 4, [row('row-1', '文本1', [1, 0, 0, 0]), row('row-2', '文本2', [0, 1, 0, 0])])
+
+      const res = await updateChunkVectors(projectPath, [
+        { id: 'row-1', vector: [0, 0, 0, 1] },
+        { id: 'row-2', vector: [0, 0, 1, 0] },
+      ])
+
+      expect(res.success).toBe(true)
+      expect(res.count).toBe(2)
+      expect(res.failed).toBe(0)
+
+      const byId = new Map((await readRows(projectPath)).map(r => [r.id, toPlainVector(r.vector)]))
+      expect(byId.get('row-1')).toEqual([0, 0, 0, 1])
+      expect(byId.get('row-2')).toEqual([0, 0, 1, 0])
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('全部行 update 抛错（id 非法）→ success:false（锁死改造前「无条件 success:true / count=入参条数」的谎报）', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 4, [row('row-1', '文本1', [1, 0, 0, 0]), row('row-2', '文本2', [0, 1, 0, 0])])
+
+      // 维度合法（4 维，放行守卫）但 id 非法（空串 / 非字符串）→ 每行的 filter 构造必抛
+      const res = await updateChunkVectors(projectPath, [
+        { id: '', vector: [0, 0, 0, 1] },
+        { id: 0 as unknown as string, vector: [0, 0, 1, 0] },
+      ])
+
+      expect(res.success).toBe(false)
+      expect(res.count).toBe(0)
+      expect(res.failed).toBe(2)
+      expect(res.error).toBeTruthy()
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('id 不存在的行（update 静默 0 行）不再被算作成功：success:false + count:0', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 4, [row('row-1', '文本1', [1, 0, 0, 0])])
+
+      const res = await updateChunkVectors(projectPath, [{ id: 'ghost-row', vector: [0, 0, 0, 1] }])
+
+      expect(res.success).toBe(false) // 改造前：success:true, count:1（实际一行未写）
+      expect(res.count).toBe(0)
+      expect(res.failed).toBe(1)
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
+
+  it('无 vector 列（旧表）分支同样被守卫：入参内部混维 → 拒绝且**不重建 schema**', async () => {
+    const projectPath = makeTempProject()
+    try {
+      await seedChunks(projectPath, 0, [row('row-1', '文本1'), row('row-2', '文本2')])
+
+      const res = await updateChunkVectors(projectPath, [
+        { id: 'row-1', vector: [1, 0, 0, 0] },
+        { id: 'row-2', vector: new Array(8).fill(0.5) }, // 与首个非空向量维度不一致
+      ])
+
+      expect(res.success).toBe(false)
+      expect(res.count).toBe(0)
+      expect(res.error).toBeTruthy()
+
+      // 未走「覆写全表加列」分支：表结构不变、存量行完好
+      const db = await getConnection(projectPath)
+      const fields = (await (await db.openTable('chunks')).schema()).fields.map(f => f.name)
+      expect(fields).not.toContain('vector')
+      expect((await readRows(projectPath)).map(r => r.id).sort()).toEqual(['row-1', 'row-2'])
+    } finally {
+      await cleanupProject(projectPath)
+    }
+  }, E2E_TIMEOUT_MS)
 })

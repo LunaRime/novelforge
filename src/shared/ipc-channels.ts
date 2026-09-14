@@ -19,6 +19,25 @@ export interface ConfigChannels {
   }
 }
 
+/**
+ * 本地向量档配置（T4 单一真源）—— 本地 Ollama 向量化（`/api/embed`）。
+ *
+ * ⚠️ 本接口是**主进程与渲染进程共用**的唯一类型定义：`electron/knowledge-base.ts`（降级链读配置）
+ * 与设置页 UI 都从这里 import（主进程侧用 `import type`，纯类型文件 → 零运行时依赖）。
+ * 默认值同样只有一份：`electron/utils/config-utils.ts` 的 `DEFAULT_LOCAL_EMBEDDING`
+ * （`DEFAULT_GLOBAL_CONFIG.localEmbedding` 与 `readLocalEmbeddingConfig()` 共用它，避免双份漂移）。
+ */
+export interface LocalEmbeddingConfig {
+  /** 是否启用本地档（默认 false → 降级链退回改造前的 api → llm → fts 三级） */
+  enabled: boolean
+  /** Ollama 服务地址（默认 http://localhost:11434） */
+  baseUrl: string
+  /** 本地向量模型名（默认 bge-m3） */
+  model: string
+  /** true=本地优先（local → api → llm → fts）；false=API 优先（api → local → llm → fts） */
+  preferLocal: boolean
+}
+
 export interface GlobalConfig {
   theme: string
   defaultModelId: string | null
@@ -42,6 +61,11 @@ export interface GlobalConfig {
   concurrency?: { maxConcurrent: number; maxQueueSize: number }
   /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */
   modelRoutes?: { elite: string[]; standard: string[]; budget: string[] }
+  /**
+   * 本地 Ollama 向量档（T4）。可选字段：缺字段/读失败 → 回退
+   * `DEFAULT_GLOBAL_CONFIG.localEmbedding`（既有 GlobalConfig 可选字段模式）。
+   */
+  localEmbedding?: LocalEmbeddingConfig
   /** 开发者模式：接入外部程序 API（如本地浏览器服务），AI 工具 call_external_api 可调用 */
   devMode?: {
     enabled: boolean
@@ -611,7 +635,14 @@ export interface KnowledgeBaseChannels {
   'dialog:select-files': { args: []; return: string[] | null }
   'dialog:select-import-folder': { args: []; return: string | null }
   'kb:get-vectorless-count': { args: []; return: { count: number } }
-  'kb:backfill-vectors': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
+  'kb:backfill-vectors': {
+    args: []
+    /**
+     * `errorCode: 'dim-mismatch'`（T4/A4.2）= 维度不匹配的**终态**错误：调用方（与渲染层日志）
+     * 据此判定「不得降级到别的写入路径」，而不是把它当成可重试/可降级的一般失败。
+     */
+    return: { success: boolean; processed: number; failed: number; error?: string; errorCode?: 'dim-mismatch' }
+  }
   'kb:backfill-tokens': { args: []; return: { success: boolean; processed: number; failed: number; error?: string } }
 }
 
@@ -682,6 +713,46 @@ export interface EmbeddingChannels {
   'embedding:clear-dedup': {
     args: []
     return: { success: boolean }
+  }
+  // ===== 本地 Ollama 向量档（T4）=====
+  // ⚠️ 四条探测/拉取通道**不收任何渲染层入参**：baseUrl/model 一律由主进程从全局配置读取。
+  //    若允许渲染层传 baseUrl，被 XSS 的渲染层就能让主进程向任意内网地址发请求
+  //    （与 L4 S10 对 mcp:connect 的收紧同一理由）。
+  /** 探测 Ollama 是否可用（三态不抛） */
+  'embedding:local-detect': {
+    args: []
+    return: { ok: boolean; version?: string; error?: string }
+  }
+  /** 列出本地已安装模型 */
+  'embedding:local-list-models': {
+    args: []
+    return: Array<{ name: string; size: number }>
+  }
+  /**
+   * 拉取/更新本地模型：**仅发起**，立即返回（不 await 下载完成——规避 30s IPC 超时）。
+   * 下载进度经事件 `embedding:local-pull-progress` 推送。
+   */
+  'embedding:local-pull': {
+    args: []
+    return: { started: boolean; error?: string }
+  }
+  /** 用配置的模型实测一次向量化，返回向量维度（设置页「测试」按钮） */
+  'embedding:local-test': {
+    args: []
+    return: { success: boolean; dim?: number; error?: string }
+  }
+  /**
+   * 读本地向量档配置。返回值**恒为完整配置**（缺字段/损坏时已由主进程回退默认值）——
+   * 因此比 `GlobalConfig['localEmbedding']`（含 undefined）更窄，渲染层无需再处理 undefined。
+   */
+  'embedding:local-get-config': {
+    args: []
+    return: LocalEmbeddingConfig
+  }
+  /** 写本地向量档配置（部分更新，合并写回；不覆盖其它全局配置字段） */
+  'embedding:local-set-config': {
+    args: [config: Partial<LocalEmbeddingConfig>]
+    return: { success: boolean; error?: string }
   }
 }
 
@@ -1015,6 +1086,12 @@ export interface ImportEvents {
   'import:progress': { filePath: string; bytesRead: number; totalBytes: number }
 }
 
+// ===== 本地 Ollama 拉取进度事件（T4：主→渲染，payload 同 T2 的 PullProgress） =====
+export interface EmbeddingEvents {
+  /** 模型下载进度帧（`pullModel` 的 NDJSON 每帧一条；percent 仅在 completed/total 就绪时给出） */
+  'embedding:local-pull-progress': { status: string; completed?: number; total?: number; percent?: number }
+}
+
 // ===== 菜单事件（L4 S1 补充：此前两侧均未声明） =====
 export interface MenuEvents {
   'menu:check-update': void
@@ -1022,7 +1099,7 @@ export interface MenuEvents {
 
 // ===== 合并所有频道 =====
 export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels & HealthChannels
-export type AllEventChannels = LLMStreamEvents & UpdateEvents & ImportEvents & MenuEvents
+export type AllEventChannels = LLMStreamEvents & UpdateEvents & ImportEvents & MenuEvents & EmbeddingEvents
 
 /** 提取 invoke 频道名 */
 export type InvokeChannel = keyof AllInvokeChannels

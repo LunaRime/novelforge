@@ -15,7 +15,16 @@ vi.mock('node:os', () => ({
 
 // config-utils 模块级计算 VELA_HOME = path.join(os.homedir(), '.novelforge')——
 // 静态 import 在 vi.mock 生效后求值，拿到的是 mock home
-import { VELA_HOME, GLOBAL_CONFIG_PATH, migrateLegacyDirs, getProjectVelaDir, readJsonFile } from './config-utils'
+import {
+  VELA_HOME,
+  GLOBAL_CONFIG_PATH,
+  migrateLegacyDirs,
+  getProjectVelaDir,
+  readJsonFile,
+  DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_LOCAL_EMBEDDING,
+  readLocalEmbeddingConfig,
+} from './config-utils'
 
 const legacyHome = path.join(fakeHome, '.vela')
 
@@ -278,5 +287,95 @@ describe('项目目录迁移 + 双路径（getProjectVelaDir）', () => {
     expect(result).toBe(path.join(proj, '.novelforge'))
     // 函数本身只返回路径，实际创建由调用方（database.ts mkdirSync）负责
     expect(fs.existsSync(path.join(proj, '.novelforge'))).toBe(false)
+  })
+})
+
+// ============================================================
+// T4：GlobalConfig.localEmbedding 默认值 + 读取（单一真源）
+// ============================================================
+
+describe('T4 默认值：DEFAULT_GLOBAL_CONFIG.localEmbedding', () => {
+  it('默认值 = { enabled:false, baseUrl:http://localhost:11434, model:bge-m3, preferLocal:true }', () => {
+    expect(DEFAULT_GLOBAL_CONFIG.localEmbedding).toEqual({
+      enabled: false,
+      baseUrl: 'http://localhost:11434',
+      model: 'bge-m3',
+      preferLocal: true,
+    })
+  })
+
+  it('与 DEFAULT_LOCAL_EMBEDDING 同值（单一真源：不是两份会漂移的字面量）', () => {
+    expect(DEFAULT_GLOBAL_CONFIG.localEmbedding).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+
+  it('默认 enabled=false（改造前行为：本地档完全不参与，默认路径用户无感）', () => {
+    expect(DEFAULT_GLOBAL_CONFIG.localEmbedding?.enabled).toBe(false)
+  })
+})
+
+describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', () => {
+  const writeGlobalConfig = (value: unknown) => {
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(value), 'utf-8')
+  }
+
+  it('文件不存在（全新安装）→ 默认值（enabled=false）', () => {
+    expect(fs.existsSync(GLOBAL_CONFIG_PATH)).toBe(false)
+    expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+
+  it('配置存在但缺 localEmbedding 字段 → 默认值', () => {
+    writeGlobalConfig({ theme: 'light', defaultModelId: null })
+    expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+
+  it('JSON 损坏 → 默认值（不抛，不阻塞 IPC）', () => {
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(GLOBAL_CONFIG_PATH, '{ this is not json', 'utf-8')
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+
+  it('localEmbedding 不是对象（如字符串）→ 默认值', () => {
+    writeGlobalConfig({ localEmbedding: 'on' })
+    expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+
+  it('部分字段 → 逐字段回退；preferLocal 缺省为 true（本地优先）', () => {
+    writeGlobalConfig({ localEmbedding: { enabled: true } })
+    expect(readLocalEmbeddingConfig()).toEqual({
+      enabled: true,
+      baseUrl: 'http://localhost:11434',
+      model: 'bge-m3',
+      preferLocal: true,
+    })
+  })
+
+  it('baseUrl/model 为空白串 → 回退默认（不向空 URL 发请求）', () => {
+    writeGlobalConfig({ localEmbedding: { enabled: true, baseUrl: '   ', model: '' } })
+    const cfg = readLocalEmbeddingConfig()
+    expect(cfg.baseUrl).toBe('http://localhost:11434')
+    expect(cfg.model).toBe('bge-m3')
+  })
+
+  it('enabled 非严格真值（字符串 "true"）→ false（不误开本地档、不向用户机器发起网络探测）', () => {
+    writeGlobalConfig({ localEmbedding: { enabled: 'true', baseUrl: 'http://127.0.0.1:11434', model: 'bge-m3' } })
+    expect(readLocalEmbeddingConfig().enabled).toBe(false)
+  })
+
+  it('preferLocal 显式 false → 保留 false（顺序变为 api 优先、本地兜底）', () => {
+    writeGlobalConfig({ localEmbedding: { enabled: true, preferLocal: false } })
+    expect(readLocalEmbeddingConfig().preferLocal).toBe(false)
+  })
+
+  it('返回副本：调用方改动不污染 DEFAULT_LOCAL_EMBEDDING（防跨调用/跨模块污染）', () => {
+    const first = readLocalEmbeddingConfig()
+    first.model = 'mutated'
+    first.enabled = true
+
+    expect(DEFAULT_LOCAL_EMBEDDING.model).toBe('bge-m3')
+    expect(DEFAULT_LOCAL_EMBEDDING.enabled).toBe(false)
+    expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
   })
 })

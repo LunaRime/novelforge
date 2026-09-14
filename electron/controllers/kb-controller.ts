@@ -6,7 +6,7 @@ import {
   listDocuments, removeDocument, getKnowledgeStats,
   getVectorlessCount, backfillVectors, backfillTokens,
 } from '../knowledge-base'
-import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH } from '../utils/config-utils'
+import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH, readLocalEmbeddingConfig } from '../utils/config-utils'
 import { getProjectDb } from '../database'
 import { decryptApiKey } from '../utils/secure-config'
 import { logger } from '../utils/logger'
@@ -125,11 +125,23 @@ export function registerKBController() {
     const embConfig = getEmbeddingConfig()
     const canUseEmbeddingAPI = embConfig !== null
     const canUseLLM = embeddingService.canUseLLMEmbedding()
+    // T4/A4.2：本地档开启时即使没有远端 API 模型也要进方式 1 —— T3 的 backfillVectors 内部
+    // 已按 resolveEmbeddingOrder 处理档位顺序（local → api → llm → fts），此处不重算顺序。
+    const localCfg = readLocalEmbeddingConfig()
+    const canUseLocal = localCfg.enabled
 
-    // 方式 1：专用 Embedding API（内部已含 LLM 降级，失败会自动切换）
-    if (canUseEmbeddingAPI) {
-      logger.info('KB', t('log.kb.rebuildWithEmbeddingApi'))
-      const result = await backfillVectors(projectPath, embConfig!.protocol, embConfig!.model)
+    // 方式 1：专用 Embedding API / 本地 Ollama（内部已含 LLM 降级，失败会自动切换）
+    if (canUseLocal || canUseEmbeddingAPI) {
+      logger.info('KB', canUseLocal ? t('log.kb.rebuildWithLocalOrApi') : t('log.kb.rebuildWithEmbeddingApi'))
+      // 远端参数仅 api 档使用（本地档内部自读 readLocalEmbeddingConfig）；无 API 配置时沿用
+      // kb:import-* 既有约定（protocol='openai' + 空 model → 该档失败即降级，不误发请求）
+      const protocol = embConfig?.protocol ?? 'openai'
+      const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
+      const result = await backfillVectors(projectPath, protocol, model)
+      // T4/A4.2：维度不匹配是**终态** —— 原样透传，绝不降级到方式 2
+      // （方式 2 的 updateChunkVectors 写入路径遇到混维会静默破坏数据；改造前这里被当成
+      //  「换下一种方式」的信号 → 模块层的硬拒绝在 controller 层被静默降级了）
+      if (result.errorCode === 'dim-mismatch') return result
       // 如果 processed > 0 说明至少部分成功了
       if (result.success || result.processed > 0) return result
       // 完全失败 → 降级到 LLM 向量化

@@ -430,7 +430,9 @@ export async function addChunks(
                 return {
                   success: false,
                   chunkCount: 0,
-                  error: t('error.vectorDimMismatch')
+                  // T4：与 knowledge-base 的写前校验 / updateChunkVectors 守卫**共用同一个键**
+                  //（T3 review M2：error.vectorDimMismatch 与 error.embeddingDimMismatch 曾是重复文案）
+                  error: t('error.embeddingDimMismatch')
                     .replace('{expected}', String(existingDim))
                     .replace('{actual}', String(vectors[0].length)),
                 }
@@ -1167,49 +1169,120 @@ export async function getChunksForBackfill(
 }
 
 /**
- * 更新指定块的向量（回填用）
+ * `updateChunkVectors` 的维度守卫（纯函数）：不兼容 → 返回 i18n 错误文案；兼容 → `undefined`。
+ *
+ * 两条判定（任一命中即拒绝，**一行都不写**）：
+ *  ① **入参内部混维** —— 无 vector 列分支按**首个非空向量**建 `FixedSizeList(dim)`，
+ *     混维时其余行会被静默写成 null（数据被销毁）；
+ *  ② **与现有列维度不一致** —— `existingDim > 0` 时比对（`FixedSizeList` 不校验长度：
+ *     8 值写进 4 维列不报错而是写 null；1024 写 1536 列在客户端抛 TypeError）。
+ *
+ * 维度取**首个非空向量**（与 `firstVectorDim`/`detectVectorDim` 同口径）；全空向量 → 本次不写向量 → 放行。
+ * 文案与 `knowledge-base.assertVectorDimCompatible` **共用同一个 i18n 键**（T3 review M2 收敛）。
+ */
+export function checkUpdateVectorsDim(
+  updates: Array<{ id: string; vector: number[] }>,
+  existingDim: number,
+): string | undefined {
+  const nonEmpty = updates.filter(u => Array.isArray(u.vector) && u.vector.length > 0)
+  if (nonEmpty.length === 0) return undefined
+
+  const inputDim = nonEmpty[0].vector.length
+  const mixed = nonEmpty.find(u => u.vector.length !== inputDim)
+  if (mixed) return dimMismatchMessage(inputDim, mixed.vector.length)
+  if (existingDim > 0 && existingDim !== inputDim) return dimMismatchMessage(existingDim, inputDim)
+  return undefined
+}
+
+/** 维度不匹配的 i18n 文案（与既有 `error.vectorDimMismatch` 收敛后的单一键） */
+function dimMismatchMessage(expected: number, actual: number): string {
+  return t('error.embeddingDimMismatch')
+    .replace('{expected}', String(expected))
+    .replace('{actual}', String(actual))
+}
+
+/**
+ * 更新指定块的向量（回填用）。
+ *
+ * 返回契约（T4 / A4.1 修订）：
+ * - `count` = **真正写成功**的行数（改造前是「入参条数」——逐行 `table.update` 的失败被吞掉后
+ *   仍无条件 `return { success: true, count: updates.length }`，属**谎报**：controller 层据此
+ *   汇报「`success:true, failed:0`」，而实际上可能一行都没写）。
+ * - `failed` = 未写成功的行数（逐行异常 + 守卫整体拒绝；`count + failed === updates.length`）。
+ * - `success` = **零成功时为 false**（部分成功仍为 true，但计数如实）。
+ * - `error` = 维度守卫 / 全部失败的 i18n 文案。
+ *
+ * ⚠️ 入口维度守卫是本路径**唯一收口点**（比在 controller 补更可靠）：守卫在**两条写分支之前**判定，
+ *    含「无 vector 列 → 覆写全表加列」那条会重建 schema 的分支。
  */
 export async function updateChunkVectors(
   projectPath: string,
   updates: Array<{ id: string; vector: number[] }>,
-): Promise<{ success: boolean; count: number }> {
+): Promise<{ success: boolean; count: number; failed: number; error?: string }> {
   try {
     const db = await getConnection(projectPath)
     const tableNames = await db.tableNames()
-    if (!tableNames.includes(TABLE_NAME)) return { success: false, count: 0 }
+    if (!tableNames.includes(TABLE_NAME)) return { success: false, count: 0, failed: updates.length }
 
     const table = await db.openTable(TABLE_NAME)
     const schema = await table.schema()
     const hasVectorCol = schema.fields.some(f => f.name === 'vector')
 
+    // ---- 维度守卫（置于分支之前：两条写路径都受保护，且拒绝时一行都不写）----
+    const dimError = checkUpdateVectorsDim(updates, hasVectorCol ? detectVectorDimFromSchema(schema.fields) : 0)
+    if (dimError) return { success: false, count: 0, failed: updates.length, error: dimError }
+
     if (hasVectorCol) {
       // 如果已有 vector 列，直接 update（⚠️ 统一 L2 归一化——与 addChunks 度量一致）
+      let written = 0
       for (const update of updates) {
         try {
-          await table.update({
-            where: `id = '${update.id}'`,
+          const updated = await table.update({
+            // 与 1104 行同法转义（单引号是主要的 SQL 注入/语法破坏向量）
+            where: `id = '${sanitizeFilterValue(update.id, 'id')}'`,
             values: { vector: normalizeVector(update.vector) },
           })
+          // `UpdateResult.rowsUpdated` = 真实更新行数：id 未匹配时为 0（不算写成功）。
+          // 旧版 lancedb 无该字段时按 1 计（保守：不把「调用成功」误报成全失败）。
+          const rowsUpdated = (updated as { rowsUpdated?: unknown } | null)?.rowsUpdated
+          written += typeof rowsUpdated === 'number' ? rowsUpdated : 1
         } catch (e) {
           logger.warn('VectorStore', t('log.vectorStore.updateVectorFailed').replace('{id}', update.id).replace('{err}', String(e)))
         }
       }
       // 回填后尝试创建向量索引
       await ensureVectorIndex(projectPath)
-      return { success: true, count: updates.length }
+
+      // 零成功 → 不得报 success（既有调用方的降级判断依赖它）
+      if (written === 0 && updates.length > 0) {
+        return {
+          success: false,
+          count: 0,
+          failed: updates.length,
+          error: t('error.vectorWriteAllFailed').replace('{count}', String(updates.length)),
+        }
+      }
+      // 部分成功：success 仍为 true，但计数如实（未写成功的行含「逐行抛错」与「id 未匹配到行」两种）
+      return { success: true, count: written, failed: updates.length - written }
     } else {
-      // 没有 vector 列，必须覆写全表以增加列
+      // 没有 vector 列，必须覆写全表以增加列（守卫已在分支前放行：入参维度自洽）
       const allRecords = await table.query().toArray()
+      let applied = 0
       const newData = allRecords.map((r: { [key: string]: unknown; id: string }) => {
         const up = updates.find(u => u.id === r.id)
-        if (up) return { ...r, vector: normalizeVector(up.vector) }
+        if (up) {
+          applied++
+          return { ...r, vector: normalizeVector(up.vector) }
+        }
         return r
       })
 
       // 使用显式 Schema 确保 vector 列正确持久化
       // ⚠️ P1 修复：维度从实际向量探测——此前硬编码 2048，而 LLM 向量化默认 256 维
       //    → 纯 FTS 库的 LLM 回填写入 FixedSizeList(2048) 必败，回填整体失效
-      const VECTOR_DIM = updates[0]?.vector?.length ?? 2048
+      // ⚠️ T4：改取**首个非空**向量（`updates[0]?.vector?.length ?? 2048` 在首元素为空向量时
+      //    会得到 0 维固定列表，与携带向量的行冲突——T3 已在 backfillVectors 修过同类形状）
+      const VECTOR_DIM = updates.find(u => u.vector.length > 0)?.vector.length ?? 2048
       const vectorField = new Field('vector', new ArrowFixedSizeList(VECTOR_DIM, new Field('item', new Float32())), true)
       const schema = new ArrowSchema([
         new Field('id', new Utf8()),
@@ -1240,11 +1313,13 @@ export async function updateChunkVectors(
       // 回填后尝试创建向量索引
       await ensureVectorIndex(projectPath)
 
-      return { success: true, count: updates.length }
+      // 无 vector 列分支：全表覆写只有「一次 createTable」一个写动作，要么整体成功要么抛错；
+      // `applied` = 真正匹配到行并写入向量的条数（未匹配的 id 照实计入 failed）
+      return { success: true, count: applied, failed: updates.length - applied }
     }
   } catch (error) {
     logger.error('VectorStore', t('log.vectorStore.batchUpdateFailed').replace('{err}', String(error)))
-    return { success: false, count: 0 }
+    return { success: false, count: 0, failed: updates.length }
   }
 }
 

@@ -60,6 +60,7 @@ export const IPC_EVENT_CHANNELS = [
   'update:download-progress',
   'import:progress',
   'menu:check-update',
+  'embedding:local-pull-progress',
 ] as const
 
 /**
@@ -165,6 +166,17 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'embedding:get-model': { authority: 'network-secret' },
   'embedding:list-llm-candidates': { authority: 'network-secret' },
   'embedding:list-models': { authority: 'network-secret' },
+  // T4 本地向量档。四条探测/拉取通道与既有 `embedding:*` 同档（network-secret）：
+  //   `local-pull` 触发的是 **Ollama 侧**经 HTTP 下载模型（本应用不起子进程 → 不是 `spawn` 语义，
+  //   见设计 §4.2「spawn = 起子进程」），与 detect/list/test 打的是同一个本地 HTTP 服务，
+  //   单独给 spawn 会让同一组按钮在 P2 出现不一致的授权要求而无安全收益。
+  'embedding:local-detect': { authority: 'network-secret' },
+  // 读/写全局配置分别对齐 `config:get`（read-global）/ `config:set`（write-global）
+  'embedding:local-get-config': { authority: 'read-global' },
+  'embedding:local-list-models': { authority: 'network-secret' },
+  'embedding:local-pull': { authority: 'network-secret' },
+  'embedding:local-set-config': { authority: 'write-global' },
+  'embedding:local-test': { authority: 'network-secret' },
   'embedding:set-llm-config': { authority: 'network-secret' },
   'embedding:set-model': { authority: 'network-secret' },
   'embedding:similarity-search': { authority: 'network-secret' },

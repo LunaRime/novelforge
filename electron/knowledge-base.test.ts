@@ -15,9 +15,11 @@
  *    （与 `electron/repositories/character-repository.test.ts` 同法，用 node:sqlite 内存库）
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
+import fs from 'node:fs'
 import { DatabaseSync } from 'node:sqlite'
 import { tokenize } from './chinese-tokenizer'
 import { logger } from './utils/logger'
+import { GLOBAL_CONFIG_PATH, writeJsonFile } from './utils/config-utils'
 import {
   rewriteQuery,
   buildCharacterAliasMap,
@@ -31,6 +33,12 @@ import {
 // ===== mock 状态（vi.hoisted：模块工厂先于 import 求值） =====
 
 const h = vi.hoisted(() => ({
+  /**
+   * 临时假 home（T4/A4.3）：`readLocalEmbeddingConfig` 已从 knowledge-base 下沉到 config-utils，
+   * 其内部读的是**模块级 GLOBAL_CONFIG_PATH**（拦截导出的 readJsonFile 影响不到它）→
+   * 用假 home 把真实路径重定向到临时目录，测的就是**真实读取实现**。
+   */
+  home: `${process.env.TEMP ?? process.env.TMP ?? process.cwd()}/nf-kb-localcfg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   searchCalls: [] as Array<{
     projectPath: string
     query: string
@@ -91,6 +99,12 @@ vi.mock('./database', () => ({
   getProjectDb: () => h.db,
   getCurrentProjectPath: () => h.currentProjectPath,
 }))
+
+vi.mock('node:os', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('node:os')>()
+  const homedir = () => h.home
+  return { ...actual, homedir, default: { ...actual, homedir } }
+})
 
 vi.mock('./vector-store', () => ({
   searchWithScope: async (
@@ -221,17 +235,14 @@ vi.mock('./embedding-service', () => ({
   },
 }))
 
-/** T3：全局配置读取（localEmbedding）——只拦截 GLOBAL_CONFIG_PATH，其余文件走真实读取 */
-vi.mock('./utils/config-utils', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils/config-utils')>()
-  return {
-    ...actual,
-    readJsonFile: (filePath: string, fallback: unknown) => {
-      if (filePath === actual.GLOBAL_CONFIG_PATH && h.globalConfig) return h.globalConfig
-      return actual.readJsonFile(filePath, fallback)
-    },
-  }
-})
+/**
+ * T4/A4.3：全局配置改为**真实落盘**到假 home 的 config.json（不再拦截 readJsonFile 导出）——
+ * `readLocalEmbeddingConfig` 现在住在 config-utils 内部，直接读真实 GLOBAL_CONFIG_PATH。
+ * 每个用例前由 beforeEach 删除该文件（默认 = 无 localEmbedding 字段）。
+ */
+function setGlobalConfig(config: Record<string, unknown>): void {
+  writeJsonFile(GLOBAL_CONFIG_PATH, config)
+}
 
 // ===== 测试夹具 =====
 
@@ -275,7 +286,7 @@ beforeEach(() => {
   h.llmVectors = null
   h.existingDim = 0
   h.dimReadCalls = 0
-  h.globalConfig = null
+  fs.rmSync(GLOBAL_CONFIG_PATH, { force: true }) // 每个用例从「无 localEmbedding 字段」开始
   h.existingDocs = []
   h.addChunksCalls.length = 0
   h.removeDocCalls.length = 0
@@ -528,7 +539,7 @@ const LOCAL_MODEL = 'bge-m3'
 
 /** 打开本地档（字段同形于 T4 `GlobalConfig.localEmbedding`；读写走全局 config.json） */
 function enableLocal(preferLocal: boolean): void {
-  h.globalConfig = { localEmbedding: { enabled: true, preferLocal, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } }
+  setGlobalConfig({ localEmbedding: { enabled: true, preferLocal, baseUrl: LOCAL_BASE, model: LOCAL_MODEL } })
 }
 
 describe('降级链四级：调用序列（T3）', () => {
@@ -539,7 +550,7 @@ describe('降级链四级：调用序列（T3）', () => {
 
   describe('兼容性：enabled=false（默认）与现状逐字等价', () => {
     it('无 localEmbedding 字段 → api 成功即短路（本地档零调用）', async () => {
-      h.globalConfig = {}
+      setGlobalConfig({})
 
       const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
 
@@ -552,7 +563,7 @@ describe('降级链四级：调用序列（T3）', () => {
     })
 
     it('api 失败 → LLM 档；LLM 未启用 → FTS-only（无向量写入，导入不阻断）', async () => {
-      h.globalConfig = {}
+      setGlobalConfig({})
       h.embedShouldFail = true
       h.llmEnabled = false
 
@@ -566,7 +577,7 @@ describe('降级链四级：调用序列（T3）', () => {
     })
 
     it('api 失败 → LLM 成功 → 用 LLM 向量（现状第二档顺序不变）', async () => {
-      h.globalConfig = {}
+      setGlobalConfig({})
       h.embedShouldFail = true
       h.llmEnabled = true
       h.llmVectors = [[0.7, 0.7, 0.7]]
@@ -579,7 +590,7 @@ describe('降级链四级：调用序列（T3）', () => {
     })
 
     it('无 API Key → api 档不尝试（现状：apiKey 为空时不调用 generateEmbeddings），直接 LLM 档', async () => {
-      h.globalConfig = {}
+      setGlobalConfig({})
       h.llmEnabled = true
 
       const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', { baseUrl: '', apiKey: '' })
@@ -590,9 +601,9 @@ describe('降级链四级：调用序列（T3）', () => {
     })
 
     it('enabled=false 但本地可用 → 仍不探测（兼容性硬要求：默认路径逐字等价）', async () => {
-      h.globalConfig = {
+      setGlobalConfig({
         localEmbedding: { enabled: false, preferLocal: true, baseUrl: LOCAL_BASE, model: LOCAL_MODEL },
-      }
+      })
 
       const res = await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
 
@@ -603,9 +614,9 @@ describe('降级链四级：调用序列（T3）', () => {
     })
 
     it('配置损坏（localEmbedding 非对象 / enabled 非布尔）→ 回退默认，不探测本地', async () => {
-      h.globalConfig = { localEmbedding: 'yes' }
+      setGlobalConfig({ localEmbedding: 'yes' })
       await importText('正文内容', 'a.txt', PROJECT, 'openai', MODEL)
-      h.globalConfig = { localEmbedding: { enabled: 'true', preferLocal: true } }
+      setGlobalConfig({ localEmbedding: { enabled: 'true', preferLocal: true } })
       await importText('正文内容', 'b.txt', PROJECT, 'openai', MODEL)
 
       expect(h.detectCalls).toHaveLength(0)

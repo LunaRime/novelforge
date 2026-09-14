@@ -18,7 +18,7 @@ import { t } from '../../src/shared/locale'
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
+    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
   }
 
   let dotProduct = 0
@@ -42,7 +42,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
  */
 export function euclideanDistance(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
+    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
   }
 
   let sum = 0
@@ -59,7 +59,7 @@ export function euclideanDistance(a: number[], b: number[]): number {
  */
 export function dotProduct(a: number[], b: number[]): number {
   if (a.length !== b.length) {
-    throw new Error(t('error.vectorDimMismatch').replace('{a}', String(a.length)).replace('{b}', String(b.length)))
+    throw new Error(t('error.embeddingDimMismatch').replace('{expected}', String(a.length)).replace('{actual}', String(b.length)))
   }
 
   let sum = 0

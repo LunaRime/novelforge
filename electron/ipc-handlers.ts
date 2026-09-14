@@ -8,6 +8,7 @@ import { registerFSController } from './controllers/fs-controller'
 import { registerLLMController } from './controllers/llm-controller'
 import { registerDatabaseController } from './controllers/db-controller'
 import { registerKBController } from './controllers/kb-controller'
+import { registerLocalEmbeddingController } from './controllers/local-embedding-controller'
 import { registerImportController } from './controllers/import-controller'
 import { registerEmbeddingController } from './controllers/embedding-controller'
 import { registerUpdateController } from './controllers/update-controller'
@@ -39,6 +40,7 @@ export function registerIPCHandlers() {
   registerLLMController()
   registerDatabaseController()
   registerKBController()
+  registerLocalEmbeddingController()
   registerImportController()
   registerEmbeddingController()
   registerUpdateController()

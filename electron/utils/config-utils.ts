@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { GlobalConfig } from '../../src/shared/ipc-channels'
+import type { GlobalConfig, LocalEmbeddingConfig } from '../../src/shared/ipc-channels'
 
 export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 
@@ -170,6 +170,41 @@ export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
 export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
 export const RECENT_PROJECTS_PATH = path.join(VELA_HOME, 'recent-projects.json')
 
+/**
+ * 本地 Ollama 向量档默认值（T4 **唯一字面量**）。
+ *
+ * `DEFAULT_GLOBAL_CONFIG.localEmbedding` 与 `readLocalEmbeddingConfig()` 都取自它 ——
+ * T3 曾在 knowledge-base.ts 另存一份 `FALLBACK_LOCAL_EMBEDDING`，T5 改默认值时必然漂移，
+ * 已收敛到这里（A4.3）。
+ */
+export const DEFAULT_LOCAL_EMBEDDING: LocalEmbeddingConfig = {
+  enabled: false,
+  baseUrl: 'http://localhost:11434',
+  model: 'bge-m3',
+  preferLocal: true,
+}
+
+/**
+ * 读全局配置里的 `localEmbedding`（缺字段 / 读失败 / 类型不符 → 逐字段回退默认）。
+ *
+ * - 读失败走 `readJsonFile` 的兜底（返回 fallback，不抛）→ 本函数**永不抛**
+ * - `enabled` 严格真值：配置损坏（如 `"true"` 字符串）时宁可不启用本地档
+ *   （不向用户机器发起网络探测），也不误开
+ * - `preferLocal` 缺省 true（仅显式 false 才改为 API 优先）
+ * - 恒返回**新对象**（调用方改动不会污染 `DEFAULT_LOCAL_EMBEDDING`）
+ */
+export function readLocalEmbeddingConfig(): LocalEmbeddingConfig {
+  const fallback = DEFAULT_LOCAL_EMBEDDING
+  const raw = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)?.localEmbedding
+  if (!raw || typeof raw !== 'object') return { ...fallback }
+  return {
+    enabled: raw.enabled === true,
+    preferLocal: raw.preferLocal !== false,
+    baseUrl: typeof raw.baseUrl === 'string' && raw.baseUrl.trim() !== '' ? raw.baseUrl : fallback.baseUrl,
+    model: typeof raw.model === 'string' && raw.model.trim() !== '' ? raw.model : fallback.model,
+  }
+}
+
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   theme: 'dark',
   defaultModelId: null,
@@ -187,4 +222,6 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
     host: '',
     port: 7890,
   },
+  // 拷贝一份（不共享引用）：DEFAULT_GLOBAL_CONFIG 被各控制器当 fallback 传来传去
+  localEmbedding: { ...DEFAULT_LOCAL_EMBEDDING },
 }
