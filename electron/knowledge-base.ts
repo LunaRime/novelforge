@@ -80,11 +80,12 @@ async function tryLocalEmbedding(texts: string[], cfg: LocalEmbeddingConfig): Pr
  * ⚠️ 用 `code` 字段做**鸭子判定**（见 `isVectorDimMismatchError`），不用 `instanceof`——
  *    打包产物里同类错误可能跨模块实例（apache-arrow 双实例的教训，见 vector-store.ts 注释）。
  *
- * ⚠️ final wave W8：本类**不导出** —— 全仓唯一构造点在本文件 `:114`，唯一消费口径是
- *    `isVectorDimMismatchError()`（零 instanceof、只读 `code`），**没有任何跨模块引用**
+ * ⚠️ final wave W8：本类**不导出** —— 全仓唯一构造点在 `assertVectorDimCompatible` 内（本文件），
+ *    唯一消费口径是 `isVectorDimMismatchError()`（零 instanceof、只读 `code`），**没有任何跨模块引用**
  *    （含测试；`kb-controller.test.ts` 与 `knowledge-base.e2e.test.ts` 都只断言
  *    `errorCode === 'dim-mismatch'` 这个**契约值**，不是类本身）。类的对外意义由
- *    `src/shared/ipc-channels.ts:644` 声明的 `errorCode?: 'dim-mismatch'` 承载，故保持内部即可。
+ *    `ipc-channels.ts` 声明的 `errorCode?: 'dim-mismatch'` 承载，故保持内部即可。
+ *    > R2：原引「本文件 `:114`」已因本波注释插入漂移 → 改为**符号名**，避免下一轮再漂。
  */
 class VectorDimMismatchError extends Error {
   readonly code = 'dim-mismatch' as const
@@ -97,8 +98,9 @@ class VectorDimMismatchError extends Error {
 /**
  * 是否为维度不匹配错误（零 instanceof：只读 `code` 字段）。
  *
- * ⚠️ final wave W8：**不导出** —— 唯一调用点在本文件 `:878`（`backfillVectors` 的外层 catch）。
+ * ⚠️ final wave W8：**不导出** —— 唯一调用点在 `backfillVectors` 的外层 catch（本文件）。
  *    做成公开 API 会诱导外部按 `instanceof` 判定，正是本设计要避免的（见上面的双实例告警）。
+ *    > R2：原引「本文件 `:878`」已漂移 → 改为**符号名**。
  */
 function isVectorDimMismatchError(e: unknown): boolean {
   return typeof e === 'object' && e !== null && (e as { code?: unknown }).code === 'dim-mismatch'
@@ -742,7 +744,9 @@ export async function backfillVectors(
         // Final wave W1：**未配置 API Key → 跳过该档**（与 `importContent` / `resolveQueryVector`
         // 的同档门控同形）。纯本地用户（`kb-controller` 按既有约定传 `{baseUrl:'',apiKey:''}`）
         // 在本地档失败后本会带着**空 baseUrl** 进这一档：`buildOpenAIUrl('')` = `/v1/embeddings`
-        // → `fetch` 立即 `TypeError` → 3 次重试白等 ~1.5s，且打出**误导性**的
+        // → `fetch` 立即 `TypeError` → 白等约 1.5s（`generateEmbeddings` 的批次级重试为
+        // **3 次尝试 / 2 次重试**，退避 500ms + 1000ms，见 `embedding.ts` 的
+        // `for (let attempt = 0; attempt < 3 && !embeddings; attempt++)`），且打出**误导性**的
         // `log.kb.backfillApiFailed`（「Embedding API 回填失败」）——用户根本没配远端 API。
         if (!model.apiKey) continue
         try {

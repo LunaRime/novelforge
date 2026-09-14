@@ -216,36 +216,48 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 
 ⇒ **维度不符时，两条写入路径都会在零报错的情况下改变向量内容**（`update` 把该行置 `null` = 销毁；`add` 截断/补零 = 篡改）——「写后校验」等于数据已毁。这就是守卫必须置于**写盘之前**的原因，也是 T4/A4.1 把守卫放在 `updateChunkVectors` **两条写分支之前**、T3 把校验放在**删除同名旧文档之前**的理由（§3.2 落点）。
 
-### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫**只在特定库形态下可达**（T6 只记录，不修）
+### 9.4 既有缺陷登记：`addChunks` 自带的维度守卫**只在特定数据形状下可达**（T6 只记录，不修）
 
-`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫，其可达性取决于**库是怎么诞生的**（W3 更正：T6 原写「在真实路径上永远跑不到」**过于绝对**，整支复审已用真实探针证否）。
+`electron/vector-store.ts` 的 `addChunks` 里有一段「采样现有行比维度」的守卫（`if (hasAllFields)` 分支内，`vector-store.ts:425-445`），其可达性取决于**表 schema 当前是否含全部 11 个 `requiredFields`**（`vector-store.ts:421`）——而这又取决于**建表时那些列有没有数据**。
 
-**剪枝机制（W3 实测订正）**：剪枝发生在 **schema 推断**这一步，不在「全 null 列」这一步 —— 实测 lancedb 0.27.2：
+> **本节曾两次写错机制**（`def2fdf` 的 T6 版写「在真实路径上永远跑不到」过于绝对；`ab5193c` 的 W3 版把因果错记为「剪枝只发生在 schema 推断路径」）。**以下为第三次订正，依据是 final wave R2 的 2×3 矩阵探针 + 形态复刻探针（lancedb 0.27.2）**，且规则已与整支复审的独立探针一致。
 
-| 首建方式 | 记录形状 | 结果 |
+**剪枝规则（探针确立，请以此为准）**：
+
+> 某列被剪 **当且仅当每条记录该字段的值都是 `undefined`** —— **与是否显式 schema 无关**。
+> `null` **是一个值**：显式 schema 下保留；无显式 schema 走推断时 `null` 会**抛错**（而非被剪）。
+
+| 建表方式 | 记录中该字段 | 探针结果 |
 |---|---|---|
-| `createTable(rows, {})`（**代码实际走的**首建路径，`vector-store.ts:472`） | `chapterTitle: undefined` | **该列不被推断出来**（实测列 = `id,text,tokens,importedAt`） |
-| 同上 | `chapterTitle: '第1章'` 非空 | **该列被推断出来**（实测列 = `id,text,tokens,importedAt,chapterNumber,chapterTitle`） |
-| `createTable(rows, { schema })`（显式 schema） | `chapterTitle: null` | **列保留**（不剪枝）→ **「全 null 列被剪」的说法不准确**，真因是 `undefined` 键在推断期不产生列 |
-| 同上 | `chapterNumber: null` | 显式 schema 下保留；**但无 schema 时 `null` 会直接抛** `Failed to infer data type for field chapterNumber at row 0` |
+| 显式 schema | 全 `undefined`（键存在） | **剪掉** |
+| 显式 schema | 全 `null` | **保留**（`null` 是值） |
+| 显式 schema | 有值 | **保留** |
+| 无 schema（推断） | 全 `undefined`（键存在或键缺失，等价） | **剪掉** |
+| 无 schema（推断） | 全 `null` | **抛错** `Failed to infer data type for field chapterNumber at row 0` |
+| 显式 schema | 多行混合：1 行 `undefined` / 1 行有值 | **保留**（「当且仅当**每条**都 `undefined`」） |
 
-⇒ 真实分叉：`addChunks` 构记录时**总是**带上 `chapterNumber`/`chapterTitle` 两个键（无章节元数据时为 `undefined`，`vector-store.ts:398-399`），故
+⇒ **上一版把因果记错了**：`addChunks` 的**首次建表也传显式 schema**（`await db.createTable(TABLE_NAME, records, { schema: targetSchema })`，`vector-store.ts:475`），并不是推断路径 —— 而全 `undefined` 列**在那条路上照样被剪**。故「剪枝发生在推断路径」这一因果**不成立**，唯一决定因素是**数据**。
 
-1. **首导是 chapter-less 文档**（最常见）→ 首建走 `:472` 的**推断**路径 → `chapterTitle`（及 `chapterNumber`）**根本没进 schema**；此后 `ensureChunksSchema`（`:269`）只补 `chapterNumber` 与 `tokens`、**从不补 `chapterTitle`** → `requiredFields`（`:418` 的 11 个字段）**此后恒为 false** → 每次导入都走**重建分支**，而守卫（`:422-442`）只存在于 `hasAllFields === true` 的**非重建分支** → **守卫不可达**（T6 原结论在此形态下成立）。
-2. **首导是章节化文档**（文件名形如 `第1章 xxx.txt`，`chapterTitle` 非空）→ 首建同样走推断路径但**该列被推断出来** → 11 个字段齐全 → `hasAllFields === true` → **守卫可达**（W3 更正：整支复审用真实探针证实此形态存在）。
-3. 即：**该守卫仅对「由章节化首导诞生的库」可达**。原「永远跑不到」只在形态 1 成立，形态 2 下该守卫是活代码。
+`addChunks` 构记录时**总是**带上 `chapterNumber`/`chapterTitle` 两个键（无章节元数据时为 `undefined`，`vector-store.ts:401-402`）→
 
-**重建分支的具体危害**（形态 1，即守卫不可达的那条路）：
+1. **首导是 chapter-less 文档**（最常见）→ 两列全 `undefined` → **首建即被剪**（实测列 = `id,docId,fileName,text,tokens,chunkIndex,totalChunks,importedAt`）→ `requiredFields` 缺 `chapterTitle`（首导无向量时还缺 `vector`；`chapterNumber` 会被 `ensureChunksSchema`（`vector-store.ts:272`）补上、`tokens` 已在）→ `hasAllFields === false` → 走**重建分支**，而守卫只存在于 `hasAllFields === true` 的**非重建分支** → **该次导入的守卫不可达**。
+2. **首导同时满足「带章节元数据」与「带向量」** → 11 个字段在首建时即齐全（探针：列 = `…,chapterNumber,chapterTitle,…,vector,…`）→ 下一次导入 `hasAllFields === true` → **守卫可达**。
+   - ⚠️ **两个条件都必需**：`requiredFields` 含 `vector`（`:421`），所以「章节名首导但**没有**向量」同样 `missing=[vector]` → `hasAllFields === false` → **该次导入守卫仍不可达**（W3 版漏了这条条件，R2 补上）。
+3. **可达性是「每次导入」判定的，不是库的永久属性** —— 这一点与 T6/W3 两版都不同。形态 1 的库并非**永远**不可达：若后续来一次「**章节化 + 带向量**」的导入，它因 `missing` 非空触发**重建分支**（`drop` + `create`，`vector-store.ts:464` / `:471`），重建后 `chapterTitle` 由**那次导入的行**重新带回 schema → 11 字段齐全 → **此后守卫可达**（探针实测：`导入2 重建后 missing=[] hasAllFields=true` → `导入3 判定 hasAllFields=true → 守卫可达`）。
+   - 唯一**不能**靠时间自然恢复的情形：`ensureChunksSchema` **从不补 `chapterTitle`**（它只补 `chapterNumber` 与 `tokens`，`:272`）—— 所以若一个库**从未**经历过任何带章节元数据的（重）建表，`chapterTitle` 就回不来。
+4. 即：**原「永远跑不到」不成立**。守卫是活代码；它是否生效取决于「当前表 schema 是否齐全」，而 schema 齐全与否由**最近一次建表时行的数据形状**决定。
 
-4. `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : …`（`vector-store.ts:465-467`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
-5. `await db.dropTable(TABLE_NAME)`（`vector-store.ts:461`）先于 `await db.createTable(...)`（`:468`），**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
-   > 注：T6 brief 引的 `:459 dropTable` / `:466 createTable` 比实际行号小 2，实际为 `:461` / `:468`（以本仓 `314edcc` 为准）。
+**重建分支的具体危害**（守卫不可达的那条路）：
+
+5. `rebuildSchema = VECTOR_DIM > 0 ? targetSchema : buildChunksSchema(detectVectorDimFromSchema(existingSchema.fields))`（`vector-store.ts:468-470`）→ **drop + create 静默采纳新维度**（实测 1536 → 1024），既有行的向量被静默截断；
+6. `await db.dropTable(TABLE_NAME)`（`vector-store.ts:464`）先于 `await db.createTable(...)`（`:471`），**中途失败无恢复路径**（临时表 + 恢复逻辑只存在于 `backfillVectors`，不覆盖 `addChunks`）。
+   > 行号锚点已于 R2 按 `ab5193c` 复核（T6/W3 版引的 `:418/:422-442/:461/:468/:472` 分别为本波改动所挤后，现为 `:421/:425-445/:464/:471/:475`）。
 
 **防线现状（这才是真正拦住混维的两道）**：
 
 | 写入路径 | 拦截者 | 落点 |
 |---|---|---|
-| `importContent` → `addChunks`（含 `kb:import-*`） | **T3 的写前校验** `assertVectorDimCompatible`（在删旧文档 / 任何写盘动作之前）。**主拦截者**——因为 `addChunks` 自带的守卫在形态 1（chapter-less 首导）下不可达 | `electron/knowledge-base.ts` |
+| `importContent` → `addChunks`（含 `kb:import-*`） | **T3 的写前校验** `assertVectorDimCompatible`（在删旧文档 / 任何写盘动作之前）。**主拦截者**——`addChunks` 自带的那段守卫只在 `hasAllFields === true` 时执行，而 `hasAllFields` 由建表时的数据形状决定（见上），不能依赖 | `electron/knowledge-base.ts` |
 | `backfillVectors`（含 controller 方式 2 的 LLM 逐行写入） | T3 的写前校验 **+ T4 的 `updateChunkVectors` 入口守卫** `checkUpdateVectorsDim` | `electron/knowledge-base.ts` / `electron/vector-store.ts` |
 
 **T6 不改**：本任务是验证 + 文档，任何生产代码改动都会让本次门禁与真机结论脱离最终产物；修 `addChunks` 应当独立成任务（连带 `drop`/`create` 的失败恢复）。
@@ -253,7 +265,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 ### 9.5 与实测冲突的代码注释
 
 - `electron/vector-store.ts` 的 `checkUpdateVectorsDim` 文档注释原写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。**✅ 已由 final wave W2 订正**（该 commit）：注释改为记录两条路径的真实失败模式（`update` 静默写 `null`；`add` 静默截断/补零且不改列维度），并点明这正是写前守卫存在的理由。
-- `electron/knowledge-base.ts:103-105` 的注释记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。
+- `electron/knowledge-base.ts` 的 `assertVectorDimCompatible` 注释里记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。行号锚点 R2 已改为**符号名**（原引 `:103-105` 已因本波注释插入而漂移）。
 
 ## 10. 真机验证清单（人工执行；**截至 2026-09-14 尚未执行**）
 

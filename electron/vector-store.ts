@@ -148,8 +148,11 @@ function detectVectorDim(records: ChunkRecord[]): number {
  * `instanceof FixedSizeList` 恒 false → 判断静默失效。此处只做**schema 字段读取**
  * （`vectorField.type.listSize`），跨副本安全。
  *
- * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点在本文件内（`:172` / `:467` / `:1241`），
- *    导出只会扩大 API 面（`export` 关键字本身就是本分支 T4 加的）。
+ * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点都在本文件内，共 3 处：
+ *    `getChunksTableVectorDim`（读现有表维度）、`addChunks` 重建分支的 `rebuildSchema` 计算、
+ *    `updateChunkVectors` 入口的 `checkUpdateVectorsDim(...)` 实参。导出只会扩大 API 面
+ *    （`export` 关键字本身就是本分支 T4 加的）。
+ *    > R2：原按行号列举（`:172` / `:467` / `:1241`）已漂移 → 改为**符号名**。
  */
 function detectVectorDimFromSchema(fields: Array<{ name: string; type: unknown }>): number {
   const vectorField = fields.find(f => f.name === 'vector')
@@ -1192,7 +1195,9 @@ export async function getChunksForBackfill(
  * 维度取**首个非空向量**（与 `firstVectorDim`/`detectVectorDim` 同口径）；全空向量 → 本次不写向量 → 放行。
  * 文案与 `knowledge-base.assertVectorDimCompatible` **共用同一个 i18n 键**（T3 review M2 收敛）。
  *
- * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点是本文件 `:1241`，导出只会扩大 API 面。
+ * ⚠️ final wave W8：**不导出** —— 全仓（含测试）唯一调用点是 `updateChunkVectors` 内的守卫判定
+ *    （本文件），导出只会扩大 API 面。
+ *    > R2：原引「本文件 `:1241`」已漂移 → 改为**符号名**。
  */
 function checkUpdateVectorsDim(
   updates: Array<{ id: string; vector: number[] }>,
