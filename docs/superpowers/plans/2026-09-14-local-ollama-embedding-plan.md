@@ -265,6 +265,8 @@
   - `docs/superpowers/specs/2026-08-29-local-ollama-embedding-design.md:37` —— `detectOllama` 写的是 `/api/tags`，与 brief/决策 6 的 `/api/version` 冲突（实现按 brief），改文档。
   - 同文档 `:4` 的「⏸️ 未实施」→ 回更为已实施（T1–T6 + T3b）。
   - 同文档补记本次实测发现：`addChunks` 既有维度守卫是**死代码**（普通文档缺章节列 → `hasAllFields=false` → 走重建分支绕过；`dropTable` 先于 `createTable` 且无恢复），T3 写前校验与 T4 的 `updateChunkVectors` 守卫是其后的两道拦截。
+  - 同文档**纠正维度不匹配的实测行为**（T3 review 与 T4 review 各测一次）：lancedb **0.27.2** 下「1024 写 1536 列」与「8 值写 `FixedSizeList(4)`」**都不抛错**，而是 `rowsUpdated=1` 且把值写成 **`null`**（静默销毁向量、退回「无向量」态）；只有写 `[]` 才抛 `concat requires input of at least one array`。原 brief/T3-review 所记的「1024→1536 抛客户端 TypeError」不成立 → 即**两个方向都是静默破坏**，这也是 T4 A4.1 守卫必须置于写前的原因。
+  - **代码注释同步**：`electron/vector-store.ts:1172-1181` 注释里同样写着「1024 写 1536 列 = 客户端 `TypeError`」的旧表述，与实测不符，本次一并改正（T4 R1 报告 ⑤ concern ③ 提出）。
   - 本计划文件自身：把「检索侧适配」从 v2 移出（T3b 已做）。
 
 ---
