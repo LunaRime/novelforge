@@ -382,7 +382,7 @@ describe('embedLocal（保序 + 失败 throw）', () => {
     const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
     expect(url).toBe(`${BASE}/api/embed`)
     expect(init.method).toBe('POST')
-    expect(JSON.parse(String(init.body))).toEqual({ model: 'bge-m3', input: texts })
+    expect(JSON.parse(String(init.body))).toEqual({ model: 'bge-m3', input: texts, keep_alive: '30m' })
   })
 
   it('响应带乱序 index（OpenAI 形状兼容）→ 按 index 排序后与输入同序', async () => {
@@ -438,5 +438,71 @@ describe('embedLocal（保序 + 失败 throw）', () => {
 
     await expect(embedLocal([], BASE, 'bge-m3')).resolves.toEqual([])
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+// ===== embedLocal 冷启动超时（2026-09-14 真机缺陷回归）=====
+//
+// 真机实测：bge-m3（F16 / 1.08 GB）首次调用 total_duration 11.98s，其中 load_duration 9.53s
+// 全是模型加载。原先 embedLocal 用默认 EMBEDDING_TIMEOUT_MS = 10s → 加载没完就 abort，
+// 用户看到 "This operation was aborted"，且写入侧本地档永远失败、静默降级到 FTS。
+
+describe('embedLocal 冷启动超时（真机：模型加载 9.53s > 默认 10s）', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
+    vi.unstubAllGlobals()
+  })
+
+  /** 挂起请求：永不返回；被 abort 时按 undici 行为 reject AbortError */
+  function hangingFetch() {
+    return vi.fn((_url: unknown, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener('abort', () => {
+        reject(new DOMException('This operation was aborted', 'AbortError'))
+      })
+    }))
+  }
+
+  /** 记录 embedLocal 是否已 settle（'resolved' / 错误 name / 未 settle 则数组为空） */
+  function trackSettle(): string[] {
+    const settled: string[] = []
+    void embedLocal(['测试文本'], BASE, 'bge-m3').then(
+      () => settled.push('resolved'),
+      (e: unknown) => settled.push(e instanceof Error ? e.name : 'unknown'),
+    )
+    return settled
+  }
+
+  it('越过默认 10s 上限仍不中断（修复前此处即 abort —— 本地档必然失败）', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+
+    const settled = trackSettle()
+    await vi.advanceTimersByTimeAsync(10_001)
+
+    expect(settled).toEqual([])
+  })
+
+  it('到 120s 本地档超时才中断（AbortError，供 T3 降级链捕获）', async () => {
+    vi.stubGlobal('fetch', hangingFetch())
+
+    const settled = trackSettle()
+    await vi.advanceTimersByTimeAsync(10_001)
+    expect(settled).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(120_000 - 10_001)
+    expect(settled).toEqual(['AbortError'])
+  })
+
+  it('请求体带 keep_alive（避免闲置 5 分钟后每次重付 9.53s 加载）', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse({ embeddings: [[1, 2]] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await embedLocal(['a'], BASE, 'bge-m3')
+
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(JSON.parse(String(init.body))).toMatchObject({ keep_alive: '30m' })
   })
 })

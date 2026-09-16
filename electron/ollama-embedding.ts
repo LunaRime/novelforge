@@ -16,6 +16,24 @@ import { fetchWithTimeout } from './embedding'
 /** 拉模型是分钟级长任务——默认 10s 超时会把大模型 pull 腰斩（T1 导出 fetchWithTimeout 的动机） */
 const PULL_TIMEOUT_MS = 300_000
 
+/**
+ * 本地 `/api/embed` 同样是**冷启动长任务**：首次调用要把整个模型权重读进内存，
+ * 与「拉模型」一样不能用默认 10s。
+ *
+ * 2026-09-14 真机实测（bge-m3 F16 / 1.08 GB，本机 566.7M 参数）：
+ * `total_duration = 11.98s`，其中 `load_duration = 9.53s` 全是模型加载
+ * → 默认 10s 会在加载完成前 abort，用户看到 "This operation was aborted"，
+ * 且**写入侧本地档会因此永远失败并静默降级到 FTS**（付了本地模型的代价却没用上）。
+ * 模型闲置 5 分钟后 Ollama 会卸载，慢机器上的重载更久，故给足 120s。
+ */
+const LOCAL_EMBED_TIMEOUT_MS = 120_000
+
+/**
+ * 模型保活：Ollama 默认闲置 5 分钟即卸载模型，不保活则每次导入都要重付一次加载
+ * （实测 9.53s）。30 分钟覆盖连续导入场景，又不至于让模型长期常驻占内存。
+ */
+const LOCAL_EMBED_KEEP_ALIVE = '30m'
+
 /** 错误详情截断长度（远端/本地 body 可能很长，避免日志与 IPC 载荷被灌爆） */
 const ERROR_DETAIL_MAX = 200
 
@@ -262,6 +280,9 @@ function normalizeEmbeddings(data: { embeddings?: unknown; data?: unknown } | nu
  * 本地批量向量化（`POST /api/embed`），返回与 `texts` **同序**的向量数组。
  * 失败一律 **throw**（非 200 / 响应畸形 / 空 / 数量不匹配 / 网络或超时）——
  * 供 T3 降级链捕获后回退到远程 Embedding API。
+ *
+ * 超时用 `LOCAL_EMBED_TIMEOUT_MS`（120s）而**不是**默认 10s：冷启动要加载整个模型
+ * （真机实测 9.53s），10s 会让本地档必然失败。请求带 `keep_alive` 避免闲置后反复重载。
  */
 export async function embedLocal(texts: string[], baseUrl: string, model: string): Promise<number[][]> {
   if (texts.length === 0) return []
@@ -269,8 +290,8 @@ export async function embedLocal(texts: string[], baseUrl: string, model: string
   const res = await fetchWithTimeout(apiUrl(baseUrl, '/api/embed'), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ model, input: texts }),
-  })
+    body: JSON.stringify({ model, input: texts, keep_alive: LOCAL_EMBED_KEEP_ALIVE }),
+  }, LOCAL_EMBED_TIMEOUT_MS)
 
   if (!res.ok) {
     const detail = await safeText(res)
