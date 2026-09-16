@@ -3,7 +3,7 @@
 > 对应实施计划：后续产出（0.1.6 发布后实施）
 > **实施状态：✅ 已实施（2026-09-14，分支 `feat/ollama-local-embedding`）** —— SDD 任务 T1–T6 + T3b + FW-1 全部落地：T1 `d534ab9`（`fetchWithTimeout` 导出 + 超时参数化）、T2 `6ef64d4`（`electron/ollama-embedding.ts` 新模块）、T3 `0ea04d8`+R1 `482f569`（四级降级链 + 维度硬校验）、T4 `232c6cf`+R1 `f6b8196`（`GlobalConfig.localEmbedding` + `embedding:local-*` 通道）、T3b `6166259`+R1 `685a4a1`（查询侧接入）、T5 `50c0da5`（设置卡片 + i18n 三语）、FW-1 `314edcc`（pull 失败终态帧 + `:latest` 双向规范化）；T6（本任务）= 全量门禁 + 真机验证清单 + 文档回更，**无生产代码改动**。逐条差异、任务序列变更与实测更正见 §9，真机清单见 §10。
 > ~~**实施状态：⏸️ 未实施**（2026-09-14 核对：全库无 `detectOllama`/`pullModel`/`ollama-embedding` 等任何实现代码；仅有 `provider-presets.ts` 的 Ollama **聊天** provider 与 `url-utils.ts` 的 URL 归一化——与本设计的**本地向量**目标无关）~~ ← 该状态行已过时（描述的是本次改造**之前**的状态），保留仅为追溯。
-> ⚠️ **真机（Ollama 实机）验证尚未执行**：本分支的结论止于「单元测试 + 门禁 + 代码审查」；安装/拉模型/导入/降级/维度切换等实机链路**待人工按 §10 清单执行**，本设计不主张已通过。
+> ⚠️ **真机（Ollama 实机）验证自 2026-09-14 起部分执行**：A 组（未安装态）**通过**；B 组暴露一个**只有真机能发现的缺陷**——本地档冷启动超时（`This operation was aborted`），已修 `40e78a1`，见 §9.6。C–J 组**待续**；本设计不主张端到端已通过。
 > 触发背景：2026-08-29 冒烟实测——embedding API 请求挂起 30s（限流环境）导致 kb:import-text 三次 IPC 超时、后处理管线中止。用户提出"可自行开启的基于本地的向量检索模型"以摆脱对远程 API 的依赖（免费/隐私/离线可用）。
 
 ## 1. 背景与目标
@@ -270,7 +270,20 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 - `electron/vector-store.ts` 的 `checkUpdateVectorsDim` 文档注释原写「1024 写 1536 列在客户端抛 TypeError」——与 §9.3 的实测不符（实际是静默写 `null`）。**✅ 已由 final wave W2 订正**（该 commit）：注释改为记录两条路径的真实失败模式（`update` 静默写 `null`；`add` 静默截断/补零且不改列维度），并点明这正是写前守卫存在的理由。
 - `electron/knowledge-base.ts` 的 `assertVectorDimCompatible` 注释里记的是 `addChunks`（`table.add`）路径「整列静默重写成 1024」——与 §9.3 的 `table.update`（`rowsUpdated`）路径是**两条不同路径**；§9.3 新增的 `table.add` 行（截断/补零、**不改列维度**）与之方向一致但机制不同，**该条仍未逐字复现，不主张其已订正或已证伪**（列入真机/后续核对）。行号锚点已在 R2 起改为**符号名**（原引 `:103-105` 因本波注释插入而漂移，R3 沿用同一原则复核全文件）。
 
-## 10. 真机验证清单（人工执行；**截至 2026-09-14 尚未执行**）
+### 9.6 真机发现：本地档**冷启动超时**缺陷（2026-09-14，已修 `40e78a1`）
+
+**这是本档唯一由真机（而非单测/审查）发现的缺陷**——四轮 review 全部漏过。
+
+- **现象**：设置页「测试模型」返回 `测试失败 / This operation was aborted`。
+- **根因**：`electron/ollama-embedding.ts` 的 `embedLocal` 调 `fetchWithTimeout` **未传超时参数** → 落到默认 `EMBEDDING_TIMEOUT_MS = 10_000`（`electron/embedding.ts:21`）。而本地 `/api/embed` 首次调用是**冷启动长任务**：
+  - 真机实测（bge-m3 F16 / 1.08 GB / 566.7M 参数）：`total_duration = 11.98s`，其中 **`load_duration = 9.53s` 全是模型加载** → 10s 超时先触发。
+  - T1 已为 `pullModel` 设 300s（注释原文即「拉模型是分钟级长任务」），**但 `/api/embed` 的同类冷启动被漏掉**。
+- **影响面大于「测试按钮」**：写入侧 `importContent` 的本地档会同样超时失败 → 降级到 api/llm/fts → 用户付出了本地模型的磁盘代价（Ollama 2.75 GB + bge-m3 1.08 GB）却**仍然走 FTS**；且**刚 pull 完模型时必然失败**（那时模型必不在内存）。
+- **修法**：① `LOCAL_EMBED_TIMEOUT_MS = 120_000`（本地档专用，**不动共享默认值**，远端 API 路径行为不变）；② 请求体加 `keep_alive: '30m'`（Ollama 默认闲置 5 分钟卸载，否则每次导入都要重付 9.53s 加载）。回归用例见 `electron/ollama-embedding.test.ts` 的「冷启动超时」段，含变异验证（改回 10s 即红）。
+- **为什么四轮 review 都没拦住**：T2/T3/T3b/T5 的测试**全部 mock fetch**，没有任何一条会真的加载 1 GB 模型。模型加载延迟这类事实只有真机能提供。
+- **方法论结论**：涉及外部推理引擎的档位，「超时值」必须按**冷启动路径**单独设定，不能沿用为轻量请求（`/api/version`、`/api/tags`）定的默认值。
+
+## 10. 真机验证清单（人工执行；**2026-09-14 起部分执行：A 组通过，B 组暴露缺陷已修，C–J 待续**）
 
 > 目的：本分支的全部自动化证据止于「mock fetch 单测 + 组件测试 + 门禁」，**没有任何一步跑在真实 Ollama 上**。
 > 环境：Windows/macOS/Linux 桌面机 + `feat/ollama-local-embedding` 分支；`pnpm install` 后 `pnpm run dev`（或安装打包产物）。
@@ -300,6 +313,7 @@ GET  {base}/api/version         → 健康检查 + 版本（**实现口径**：`
 **E. 导入走本地档**
 12. 打开/新建一个测试项目；把本地向量开关**打开**、优先级选「本地优先」；点「测试模型」。
 13. 期望：测试成功 → **「测试成功：1024 维」**（bge-m3 = 1024 维）。
+    - ⚠️ **首次调用、或模型闲置 5 分钟以上后的首次调用，要先把模型读进内存**：真机实测 bge-m3 `load_duration ≈ 9.5s`、`total ≈ 12s`。界面在此期间保持「测试中」**属正常**；本地档超时为 120s（§9.6），超过 ~2 分钟仍无响应才算异常。
 14. 导入一份文档（设置页同页的导入入口或 `kb:import-*` 对应 UI）。
 15. 期望：导入成功；日志出现本地档路径（`kb.vectorizingWith` 带 `Ollama (bge-m3)`）；`kb:stats` 的向量维度 = 1024。
 
