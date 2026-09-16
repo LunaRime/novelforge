@@ -1379,7 +1379,13 @@ export const UI_TEXTS_DATA = {
   'localEmbedding.statusModelMissing': { 'zh-CN': '已连接，但模型 {model} 未安装', 'en-US': 'Connected, but model {model} is not installed', 'ru-RU': 'Подключено, но модель {model} не установлена' },
   'localEmbedding.statusReady': { 'zh-CN': '就绪', 'en-US': 'Ready', 'ru-RU': 'Готово' },
   'localEmbedding.model': { 'zh-CN': '模型', 'en-US': 'Model', 'ru-RU': 'Модель' },
-  'localEmbedding.download': { 'zh-CN': '下载模型 {model}', 'en-US': 'Download model {model}', 'ru-RU': 'Скачать модель {model}' },
+  // Minor 4（review 建议）：按钮只写「下载模型」没预告副作用——而实现是「先写配置再 pull」，
+  // 即点下载会把该项同时切为当前模型（`local-pull` 的 args 是硬性 []，只能下载配置里的模型）。
+  // 文案如实预告，避免用户以为只是「下载」。
+  'localEmbedding.download': { 'zh-CN': '下载并切换为 {model}', 'en-US': 'Download and switch to {model}', 'ru-RU': 'Скачать и переключиться на {model}' },
+  // Minor 3（review 建议）：参数规模原先渲染成裸数字（`567M`）且紧挨下载按钮，会被读成下载体积
+  // （bge-m3 实际 ~1.2 GB）——与「把地址误读成下载地址」是同一类歧义，故标明这是参数量。
+  'localEmbedding.paramCount': { 'zh-CN': '{n} 参数', 'en-US': '{n} params', 'ru-RU': '{n} параметров' },
   'localEmbedding.downloading': { 'zh-CN': '下载中 {percent}%', 'en-US': 'Downloading {percent}%', 'ru-RU': 'Загрузка {percent}%' },
   'localEmbedding.downloadingPending': { 'zh-CN': '正在下载…', 'en-US': 'Downloading…', 'ru-RU': 'Загрузка…' },
   'localEmbedding.pullFailed': { 'zh-CN': '下载模型失败', 'en-US': 'Model download failed', 'ru-RU': 'Не удалось загрузить модель' },

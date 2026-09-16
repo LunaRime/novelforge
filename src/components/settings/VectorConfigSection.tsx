@@ -835,7 +835,10 @@ function LocalEmbeddingCard() {
                         {opt.name}
                       </span>
                       {opt.params !== '' && (
-                        <span className="text-[10px] text-[var(--color-text-muted)]">{opt.params}</span>
+                        // Minor 3：裸数字紧挨下载按钮会被读成「下载体积」（bge-m3 实际 ~1.2 GB）→ 标明这是参数量
+                        <span className="text-[10px] text-[var(--color-text-muted)]">
+                          {t('localEmbedding.paramCount').replace('{n}', opt.params)}
+                        </span>
                       )}
                       <Badge variant={installed ? 'success' : 'outline'} className="text-[10px]">
                         {installed ? t('localEmbedding.installed') : t('localEmbedding.downloadable')}
@@ -877,10 +880,13 @@ function LocalEmbeddingCard() {
           <AlertTriangle size={12} className="mt-0.5 flex-shrink-0" />
           <div>
             <div>{t('localEmbedding.addressTroubleshoot').replace('{url}', config.baseUrl)}</div>
-            <Button variant="outline" size="sm" className="mt-1" onClick={resetBaseUrl}>
-              <RefreshCw size={12} />
-              {t('localEmbedding.resetBaseUrl')}
-            </Button>
+            {/* Minor 5：地址已是默认值时「重置为默认」是无效按钮（点了什么也不会变）→ 只在地址非默认时显示 */}
+            {config.baseUrl !== DEFAULT_OLLAMA_BASE_URL && (
+              <Button variant="outline" size="sm" className="mt-1" onClick={resetBaseUrl}>
+                <RefreshCw size={12} />
+                {t('localEmbedding.resetBaseUrl')}
+              </Button>
+            )}
           </div>
         </div>
       )}

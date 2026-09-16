@@ -124,6 +124,13 @@ function button(container: HTMLElement, text: string): HTMLButtonElement {
   return el as HTMLButtonElement
 }
 
+/**
+ * 下载按钮文案前缀（zh 为「下载并切换为 」）——**从 i18n 取，不硬编码中文**。
+ * 该文案在 R1 review 后调整过（Minor 4：如实预告「点下载会同时把该项切为当前模型」），
+ * 硬编码字面量会让每次文案微调都误伤一批用例，并掩盖真正的行为回归。
+ */
+const DOWNLOAD_LABEL = t('localEmbedding.download').split('{model}')[0].trim()
+
 function click(el: Element): void {
   act(() => { (el as HTMLElement).click() })
 }
@@ -224,7 +231,7 @@ describe('本地向量模型卡片 · 三态徽标', () => {
     expect(container.textContent).toContain('已连接 0.5.7')
     expect(container.textContent).toContain('模型 bge-m3 未安装')
     expect(container.textContent).toContain('ollama pull bge-m3')
-    expect(container.textContent).toContain('下载模型')
+    expect(container.textContent).toContain(DOWNLOAD_LABEL)
     act(() => { root.unmount() })
   })
 
@@ -314,7 +321,7 @@ describe('本地向量模型卡片 · R1 精选清单（不可自由输入）', 
     const { container, root } = render()
     await flush()
 
-    click(button(rowFor(container, 'nomic-embed-text'), '下载模型'))
+    click(button(rowFor(container, 'nomic-embed-text'), DOWNLOAD_LABEL))
     await flush()
 
     // `embedding:local-pull` **不收渲染层入参**（T4 契约：baseUrl/model 由主进程读配置）→
@@ -339,11 +346,42 @@ describe('本地向量模型卡片 · R1 精选清单（不可自由输入）', 
     const { container, root } = render()
     await flush()
 
-    click(button(rowFor(container, 'bge-m3'), '下载模型'))
+    click(button(rowFor(container, 'bge-m3'), DOWNLOAD_LABEL))
     await flush()
 
     expect(setConfigCalls()).toHaveLength(0)
     expect(mocks.invoke).toHaveBeenCalledWith('embedding:local-pull')
+    act(() => { root.unmount() })
+  })
+
+  it('R1 / Minor 1 回归锁：写配置失败 → 不发 pull（否则会静默下载旧模型）', async () => {
+    // `local-pull` 拉的是**配置里**的模型 → 写配置失败还继续 pull，用户以为在下载 A，实际下的是 B。
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'bge-m3', size: 1 }] })
+    handlers['embedding:local-set-config'] = () => ({ success: false })
+    handlers['embedding:local-pull'] = () => ({ started: true })
+    handlers['kb:stats'] = () => ({ documentCount: 0, totalChunks: 0, vectorDimension: 0 })
+    const { container, root } = render()
+    await flush()
+
+    click(button(rowFor(container, 'nomic-embed-text'), DOWNLOAD_LABEL))
+    await flush()
+
+    expect(setConfigCalls().at(-1)?.[1]).toEqual({ model: 'nomic-embed-text' })
+    expect(mocks.invoke).not.toHaveBeenCalledWith('embedding:local-pull')
+    act(() => { root.unmount() })
+  })
+
+  it('R1 / Minor 2 回归锁：已装 bge-m3:latest 不产生重复行；挂载只读不写配置', async () => {
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'bge-m3:latest', size: 1 }] })
+    const { container, root } = render()
+    await flush()
+
+    // `:latest` 两侧归一化 → bge-m3 只出现一行（既是清单项、又是已安装项），不会多出第 5 项。
+    // 卡片里 radio 总数 = 清单项 + 优先级单选的 2 项（本地优先 / API 优先）；重复行会让它变成 7。
+    expect(container.querySelectorAll('input[type="radio"]').length).toBe(CATALOG.length + 2)
+    expect(radioFor(container, 'bge-m3').checked).toBe(true)
+    // 挂载只走读通道：不写配置（避免「打开设置页就把用户配置改掉」）
+    expect(setConfigCalls()).toHaveLength(0)
     act(() => { root.unmount() })
   })
 
@@ -498,7 +536,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     const { container, root } = render()
     await flush()
 
-    click(button(container, '下载模型'))
+    click(button(container, DOWNLOAD_LABEL))
     await flush()
     expect(mocks.invoke).toHaveBeenCalledWith('embedding:local-pull')
 
@@ -530,7 +568,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     await flush()
     expect(container.textContent).toContain('未安装')
 
-    click(button(container, '下载模型'))
+    click(button(container, DOWNLOAD_LABEL))
     await flush()
 
     models = [{ name: 'bge-m3', size: 12 }]
@@ -551,11 +589,11 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     const { container, root } = render()
     await flush()
 
-    click(button(container, '下载模型'))
+    click(button(container, DOWNLOAD_LABEL))
     await flush()
     // 发起成功 → 进入「下载中」：按钮 disabled（bug 里会永久停在这个假进行态）
     expect(requireEl(container, '[role="status"]')).toBeTruthy()
-    expect(button(container, '下载模型').disabled).toBe(true)
+    expect(button(container, DOWNLOAD_LABEL).disabled).toBe(true)
 
     const raw = 'Ollama /api/pull failed: HTTP 500 {"error":"manifest unavailable"}'
     await act(async () => {
@@ -565,7 +603,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
 
     // ① 进度条收掉（不再停在最后一帧）② 按钮恢复可点（用户唯一的主动作可以重试）
     expect(query(container, '[role="status"]')).toBeNull()
-    expect(button(container, '下载模型').disabled).toBe(false)
+    expect(button(container, DOWNLOAD_LABEL).disabled).toBe(false)
     // ③ 主文案走 t()（U4：英文技术串不得当主文案）④ 原始串只在 <details> 里
     expect(textOutsideDetails(container)).toContain(t('localEmbedding.pullFailed'))
     expect(textOutsideDetails(container)).not.toContain('Ollama /api/pull failed')
@@ -582,7 +620,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     const { container, root } = render()
     await flush()
 
-    click(button(container, '下载模型'))
+    click(button(container, DOWNLOAD_LABEL))
     await flush()
 
     // ① 主文案走 t()（U4：英文技术串不得当主文案）② 原始串只在 <details> 里
@@ -591,7 +629,7 @@ describe('本地向量模型卡片 · U1 进度 / U2 维度 / U4 错误面', () 
     expect(query(container, 'details')?.textContent).toContain(raw)
     // ③ started:false → **从未**进入 pulling 态：进度条不存在、按钮保持可点（用户可重试）
     expect(query(container, '[role="status"]')).toBeNull()
-    expect(button(container, '下载模型').disabled).toBe(false)
+    expect(button(container, DOWNLOAD_LABEL).disabled).toBe(false)
     act(() => { root.unmount() })
   })
 
