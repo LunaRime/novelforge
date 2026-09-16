@@ -1396,6 +1396,23 @@ export const UI_TEXTS_DATA = {
   'localEmbedding.detail': { 'zh-CN': '原始详情', 'en-US': 'Raw details', 'ru-RU': 'Подробности' },
   'localEmbedding.hint': { 'zh-CN': '需先安装 Ollama；模型文件由 Ollama 管理（可用 OLLAMA_MODELS 环境变量自定目录）。', 'en-US': 'Ollama must be installed first; model files are managed by Ollama (set the OLLAMA_MODELS environment variable to change the directory).', 'ru-RU': 'Сначала установите Ollama; файлами моделей управляет Ollama (каталог задаётся переменной окружения OLLAMA_MODELS).' },
   'localEmbedding.saveFailed': { 'zh-CN': '保存失败', 'en-US': 'Save failed', 'ru-RU': 'Ошибка сохранения' },
+  // ===== 本地向量模型：R1 内置精选清单（2026-09-14 真机可用性修复）=====
+  // 只放「模型名 + 参数规模 + 一句话定位 + 状态徽标」：维度由 local-test 实测、体积取 pull 进度的
+  // total，**不在这里硬编码**。参数规模取自 Ollama 官方博客（bge-m3 为真机实测）。
+  'localEmbedding.installed': { 'zh-CN': '已安装', 'en-US': 'Installed', 'ru-RU': 'Установлена' },
+  'localEmbedding.downloadable': { 'zh-CN': '可下载', 'en-US': 'Downloadable', 'ru-RU': 'Доступна для загрузки' },
+  'localEmbedding.customBadge': { 'zh-CN': '非精选', 'en-US': 'Not curated', 'ru-RU': 'Вне списка' },
+  'localEmbedding.catalog.bgeM3': { 'zh-CN': '默认推荐：多语言，中文最强（小说场景主力）', 'en-US': 'Recommended default: multilingual, strongest for Chinese (mainstay for novel writing)', 'ru-RU': 'Рекомендуется по умолчанию: многоязычная, лучшая для китайского (основная для романов)' },
+  'localEmbedding.catalog.nomicEmbedText': { 'zh-CN': '体积小、速度快，英文为主', 'en-US': 'Small and fast; English-focused', 'ru-RU': 'Компактная и быстрая, ориентирована на английский' },
+  'localEmbedding.catalog.mxbaiEmbedLarge': { 'zh-CN': '英文检索质量高', 'en-US': 'High retrieval quality for English', 'ru-RU': 'Высокое качество поиска для английского' },
+  'localEmbedding.catalog.allMinilm': { 'zh-CN': '最轻量，低配机器兜底', 'en-US': 'Lightest option; fallback for low-end machines', 'ru-RU': 'Самая лёгкая — запасной вариант для слабых машин' },
+  'localEmbedding.catalogCustom': { 'zh-CN': '当前配置里的模型（不在精选清单内，保持选中）', 'en-US': 'Model from the current config (not in the curated list; kept selected)', 'ru-RU': 'Модель из текущей конфигурации (вне списка; выбор сохранён)' },
+  'localEmbedding.moreModels': { 'zh-CN': '只列常用模型；更多见 ollama.com/library（需自行在终端 ollama pull）。', 'en-US': 'Only common models are listed; see ollama.com/library for more (pull them in a terminal with ollama pull).', 'ru-RU': 'Показаны только частые модели; остальные — на ollama.com/library (загрузите их в терминале: ollama pull).' },
+  'localEmbedding.addressTroubleshoot': { 'zh-CN': '连接失败：当前 Ollama 地址 {url}', 'en-US': 'Connection failed: current Ollama address {url}', 'ru-RU': 'Не удалось подключиться: текущий адрес Ollama {url}' },
+  'localEmbedding.resetBaseUrl': { 'zh-CN': '重置为默认', 'en-US': 'Reset to default', 'ru-RU': 'Сбросить по умолчанию' },
+  'localEmbedding.advanced': { 'zh-CN': '高级设置', 'en-US': 'Advanced settings', 'ru-RU': 'Дополнительные настройки' },
+  'localEmbedding.advancedHint': { 'zh-CN': '仅当 Ollama 不在本机默认端口时修改；默认 http://localhost:11434。', 'en-US': 'Change this only if Ollama does not run on the default local port; default is http://localhost:11434.', 'ru-RU': 'Меняйте, только если Ollama работает не на стандартном локальном порту; по умолчанию http://localhost:11434.' },
+  'localEmbedding.modelSwitchDimWarn': { 'zh-CN': '切换模型可能改变向量维度：现有知识库索引需要在重建后才能继续写入。', 'en-US': 'Switching the model may change the vector dimension: the existing knowledge base index must be rebuilt before writes can continue.', 'ru-RU': 'Смена модели может изменить размерность векторов: индекс базы знаний нужно пересобрать, иначе запись будет отклонена.' },
   'prompt.builtin': { 'zh-CN': '内置', 'en-US': 'Built-in', 'ru-RU': 'Встроенный' },
   'prompt.global': { 'zh-CN': '全局', 'en-US': 'Global', 'ru-RU': 'Глобальный' },
   'prompt.project': { 'zh-CN': '项目', 'en-US': 'Project', 'ru-RU': 'Проект' },
