@@ -4,7 +4,8 @@
  *
  * 验证：
  * 1. 评审项 7：无项目打开空态（显示「打开项目后可查看记忆」而非报错/空白）
- * 2. 文件列表渲染 + 行展开查看（memory:read）
+ * 2. 文件列表渲染 + 行点击把记忆文件开到**编辑器标签页**（真机反馈 2026-09-19 改造：
+ *    面板内不再行内展开内容，编辑器是唯一查看/编辑面）
  * 3. 返回按钮 → memoryView=false（恢复对话视图）
  * 4. AgentHeader「记忆」按钮 → toggleMemoryView（active 态切换）
  * 5. AgentConversation memoryView=true → 渲染记忆视图（视图切换链路）
@@ -17,6 +18,7 @@ import AgentHeader from './AgentHeader'
 import AgentConversation from './AgentConversation'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useProjectStore } from '../../../stores/project-store'
+import { useEditorStore } from '../../../stores/editor-store'
 
 const MEMORY_CONTENT = '---\n---\n\n# 记忆内容测试'
 
@@ -62,6 +64,7 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
       configurable: true,
     })
     useProjectStore.setState({ currentProject: null })
+    useEditorStore.setState({ tabs: [], activeTabId: null })
     resetView()
   })
 
@@ -73,7 +76,7 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     act(() => { root.unmount() })
   })
 
-  it('有项目：文件列表渲染，行展开后 memory:read 内容展示（只读，无编辑按钮）', async () => {
+  it('有项目：文件列表渲染，行点击把记忆文件开到编辑器标签页（面板内不渲染内容，无编辑按钮）', async () => {
     openProject()
     const { container, root } = render(<AgentMemoryView />)
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
@@ -87,9 +90,22 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     const row = rowDivs[rowDivs.length - 1]!
     act(() => { row.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
-    expect(container.textContent).toContain('记忆内容测试')
     const invoke = (window.velaAPI.invoke as ReturnType<typeof vi.fn>)
     expect(invoke).toHaveBeenCalledWith('memory:read', 'book-state.md')
+    // 内容在编辑器标签页打开（AI 面板不再行内展开）
+    const st = useEditorStore.getState()
+    expect(st.tabs).toHaveLength(1)
+    expect(st.tabs[0]).toMatchObject({
+      id: 'vela://memory/book-state.md',
+      name: 'book-state.md',
+      type: 'memory',
+      filePath: 'vela://memory/book-state.md',
+    })
+    expect(st.tabs[0].content).toBe(MEMORY_CONTENT)
+    expect(st.activeTabId).toBe('vela://memory/book-state.md')
+    // 面板内不再渲染记忆正文（无行内查看器）
+    expect(container.querySelector('pre')).toBeNull()
+    expect(container.textContent).not.toContain('记忆内容测试')
     // 面板视图只读：行内无编辑按钮
     expect(container.textContent).not.toContain('编辑')
     act(() => { root.unmount() })

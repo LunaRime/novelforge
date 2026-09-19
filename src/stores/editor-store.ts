@@ -6,7 +6,7 @@ import type { DiffSession } from '../services/diff/hunk-model'
 export interface EditorTab {
   id: string
   name: string
-  type: 'chapter' | 'outline' | 'character' | 'config' | 'diff' | 'chapter-card' | 'world-building' | 'arch-file' | 'version-history' | 'review-report'
+  type: 'chapter' | 'outline' | 'character' | 'config' | 'diff' | 'chapter-card' | 'world-building' | 'arch-file' | 'version-history' | 'review-report' | 'memory'
   filePath?: string
   content?: string
   /** diff 视图的原始内容 */

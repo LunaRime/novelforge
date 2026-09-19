@@ -16,6 +16,7 @@ export const VELA = {
   CORE: 'vela://core/',
   REVISION: 'vela://revision/',
   REVIEW: 'vela://review/',
+  MEMORY: 'vela://memory/',
 } as const
 
 // ===== vela://core/ 架构字段映射 =====
@@ -51,6 +52,20 @@ export async function writeCoreContent(velaPath: string, content: string): Promi
     if (!dbField) return false
     const res = await ipc.invoke('db:project-core-update', { [dbField]: content })
     return res.success !== false
+}
+
+// ===== vela://memory/ 记忆文件读取 =====
+
+/**
+ * 从 vela://memory/ 路径读取记忆文件内容（.novelforge/memory/*.md）。
+ * 文件名 = 前缀之后的部分，原样传给主进程（**不取 basename、不做编码改写**）——
+ * 路径安全由主进程 safeFile（assertSafeMemoryFileName 白名单校验）兜底，
+ * 渲染进程改写文件名只会读到/写到另一个文件。
+ */
+export async function readMemoryContent(velaPath: string): Promise<string> {
+    const file = velaPath.slice(VELA.MEMORY.length)
+    const raw = await ipc.invoke('memory:read', file)
+    return raw ?? ''
 }
 
 // ===== vela://draft/ | vela://revision/ | vela://review/ 内容读取 =====
@@ -100,6 +115,10 @@ export async function readVelaContent(filePath: string): Promise<string> {
 
     if (filePath.startsWith(VELA.CORE)) {
         return readCoreContent(filePath)
+    }
+
+    if (filePath.startsWith(VELA.MEMORY)) {
+        return readMemoryContent(filePath)
     }
 
     console.warn('[readVelaContent] 不支持的路径协议:', filePath)

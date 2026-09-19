@@ -1,11 +1,12 @@
 /**
- * AgentMemoryView — AI 面板内嵌记忆查看器（CCR P3 Task 3，第二入口）
+ * AgentMemoryView — AI 面板内嵌记忆列表（CCR P3 Task 3，第二入口）
  *
  * 入口：AgentHeader 工具栏「记忆」按钮 → setMemoryView(true) → AgentConversation
  * 切换渲染本视图；头部返回按钮恢复对话视图。
  * 数据流复用侧栏 MemoryGroup：useMemoryStore（memory:list）+ MemoryList/useMemoryRebuild
- * （memory:read 展开查看 + 卷级/全书真实重建/章节标记 stale）——只读（无行内编辑，
- * 编辑模式为侧栏入口 P2 Task 5），布局适配 AI 面板宽度。
+ * （卷级/全书真实重建、章节标记 stale）。行点击与侧栏一致：把记忆文件开到**编辑器标签页**
+ * 查看/编辑（2026-09-19 真机反馈改造：面板内不再行内展开内容，编辑器是唯一查看/编辑面，
+ * 面板自身依旧不提供行内编辑控件）。
  * 评审项 7：无项目打开时显示「打开项目后可查看记忆」提示（memory-store 依赖项目路径，
  * 不报错不空白）。
  */
@@ -83,13 +84,12 @@ export default function AgentMemoryView() {
             {t('memory.empty')}
           </div>
         ) : (
-          // key=projectPath：项目切换时重挂载，行级查看/内容缓存不跨项目串味
+          // key=projectPath：项目切换时重挂载，行级打开状态不跨项目串味
           <MemoryList
             key={projectPath}
             files={files}
             onRebuild={handleRebuild}
             onSaved={refresh}
-            editable={false}
           />
         )}
       </div>

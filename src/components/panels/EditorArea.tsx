@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -21,11 +21,13 @@ import KnowledgeOverview from '../pages/KnowledgeOverview'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useMemoryStore } from '../../stores/memory-store'
 import { countUndecided } from '../../services/diff/hunk-model'
 
 
 import { ipc } from '../../services/ipc-client'
 import { computeTextStats } from '../../services/text-stats'
+import { isValidMemoryContent, stripStatusFrontmatter } from '../../services/memory/memory-codec'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -479,6 +481,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     if (type === 'world-building') return <Globe size={14} />
     if (type === 'version-history') return <History size={14} />
     if (type === 'review-report') return <ClipboardCheck size={14} />
+    if (type === 'memory') return <Brain size={14} />
     return <FileText size={14} />
   }
 
@@ -651,6 +654,51 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
               useEditorStore.getState().markTabSaved(activeTab.id)
               useEditorStore.getState().syncTabContent(activeTab.id, text)
               clearChapterTitleCache(activeTab.filePath)
+            }}
+          />
+        )}
+        {activeTab?.type === 'memory' && activeTab.filePath?.startsWith(VELA.MEMORY) && (
+          // AI 记忆文件（.novelforge/memory/*.md）：真机反馈「记忆为什么在侧边栏直接打开，
+          // 侧边栏那么小的位置」——改为在编辑区整幅打开（侧栏只留导航：列表/重建/删除）。
+          // 复用 ProseEditorWrapper：全宽、正常字号（mode=prose 16px）、可搜索/可关闭/可多开。
+          <ProseEditorWrapper
+            key={activeTab.id}
+            tab={activeTab}
+            onSave={async (text) => {
+              const file = activeTab.filePath?.slice(VELA.MEMORY.length)
+              if (!file) return
+              // ⚠️ 结构校验（与侧栏手册保存同一口径）：记忆文件是定稿 DAG 的输入，
+              //    坏结构（无章节块、frontmatter 不完整）会让下游块解析静默产生空洞记忆
+              //    —— 拒绝落盘并给出可见反馈，绝不静默写坏文件。
+              if (!isValidMemoryContent(text)) {
+                toast.error(t('memory.invalidFormat'))
+                return // 未写盘 → 保持 dirty
+              }
+              const t0 = Date.now()
+              try {
+                // stripStatusFrontmatter：手动编辑同 upsert 语义——编辑后不再视为 stale
+                const saved = stripStatusFrontmatter(text)
+                const res = await ipc.invoke('memory:write', file, saved)
+                if (!res.success) throw new Error(t('status.unknown'))
+                renderLog('info', 'Save:Memory', t('log.render.memorySaveSuccess')
+                  .replace('{file}', () => file)
+                  .replace('{ms}', String(Date.now() - t0)))
+                // 清 dirty。⚠️ 刻意**不同步 tab.content**：落盘内容已去掉 status，与编辑器当前
+                // 文本不同 → syncTabContent 会触发 CodeMirrorEditor 的外部内容同步
+                // （CodeMirrorEditor.tsx:386-408），而该同步经 updateListener 的 onChange 回显
+                // （:498-500 对所有 docChanged 无条件回调）→ updateTabContent 立刻把 Tab 重新置脏
+                // （保存成功却显示「有未保存修改」）。编辑器文本保持用户所写，重开文件时读盘即最新。
+                useEditorStore.getState().markTabSaved(activeTab.id)
+                toast.success(t('save.success'))
+                // 刷新记忆列表：stale 徽标随写入消失（侧栏与 AI 面板共用 memory-store）
+                await useMemoryStore.getState().refresh()
+              } catch (e) {
+                // 写通道返回 {success:false} 不抛错 → 这里自己兜住，失败不清 dirty（不得假装已保存）
+                renderLog('error', 'Save:Memory', t('log.render.memorySaveFailed')
+                  .replace('{file}', () => file)
+                  .replace('{error}', () => String(e)))
+                toast.error(t('save.failed').replace('{error}', () => String(e)))
+              }
             }}
           />
         )}
