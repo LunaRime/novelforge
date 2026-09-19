@@ -207,6 +207,15 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     }
   }, [sidebarView, activeTabId])
 
+  // 记忆标签页是**用户点击记忆行**直接打开的（不是程序性后台加载）→ 与「主动点击 Tab」同等对待。
+  // 否则在知识库视图下（侧栏为知识库、AI 面板可见）点记忆会开了标签却仍显示检索界面，
+  // 看起来像「点了没反应」（review Minor 5）。其他类型的程序化打开仍不抢占视图（见上方注释）。
+  useEffect(() => {
+    if (sidebarView === 'knowledge' && activeTab?.type === 'memory') {
+      Promise.resolve().then(() => setKnowledgeTabActive(true))
+    }
+  }, [sidebarView, activeTab])
+
   /** 点击左右箭头时切换到上/下一个 Tab */
   const switchTab = useCallback((direction: 'left' | 'right') => {
     if (tabs.length === 0) return

@@ -179,4 +179,19 @@ describe('EditorArea — 记忆文件标签页', () => {
     expect(useEditorStore.getState().tabs[0].dirty).toBe(true)
     act(() => { root.unmount() })
   })
+
+  // ===== review Minor 5：知识库视图下的可见性（2026-09-19）=====
+  // 记忆行点击是**用户主动动作**，不能出现「开了标签但主区还显示检索界面」的假死感。
+
+  it('知识库视图下打开记忆标签 → 主区切到记忆内容（不再停在 KnowledgeOverview）', async () => {
+    useLayoutStore.setState({ sidebarView: 'knowledge' })
+    const { container, root } = render(VALID_STALE)
+    // 视图接管用微任务置 knowledgeTabActive（与既有两条 effect 同法）→ 等一拍
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+
+    // 修复前：knowledgeTabActive 恒 false → 这里会渲染 KnowledgeOverview（点了像没反应）
+    expect(container.querySelector('.cm-editor')).toBeTruthy()
+    expect(container.querySelector('.cm-content')?.textContent).toContain('第 1 章 · 开端')
+    act(() => { root.unmount() })
+  })
 })
