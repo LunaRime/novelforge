@@ -56,7 +56,7 @@ function depthIcon(mode: AgentMode): React.ReactNode {
   if (mode === 'balanced' || mode === 'swift') {
     return <Gauge size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
   }
-  return <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning, #eab308)' }} />
+  return <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
 }
 
 /**

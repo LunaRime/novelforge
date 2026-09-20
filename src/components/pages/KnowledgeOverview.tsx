@@ -281,19 +281,19 @@ export default function KnowledgeOverview() {
           >
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg bg-amber-500/15 flex items-center justify-center">
-                  <Zap size={16} className="text-amber-400" />
+                <div className="w-8 h-8 rounded-lg bg-[rgba(var(--color-warning-rgb),0.15)] flex items-center justify-center">
+                  <Zap size={16} className="text-[var(--color-warning)]" />
                 </div>
                 <div>
-                  <div className="text-sm font-medium text-amber-300">{t('knowledge.vectorUpgrade')}</div>
-                  <div className="text-[0.7rem] text-amber-400/70">
+                  <div className="text-sm font-medium text-[var(--color-warning)]">{t('knowledge.vectorUpgrade')}</div>
+                  <div className="text-[0.7rem] text-[var(--color-warning)] opacity-70">
                     {t('knowledge.vectorUpgradeDesc').replace('{n}', String(vectorlessCount))}
                   </div>
                 </div>
               </div>
               <Button
                 variant="outline"
-                className="text-xs border-amber-500/30 text-amber-400 hover:bg-amber-500/20"
+                className="text-xs border-[rgba(var(--color-warning-rgb),0.3)] text-[var(--color-warning)] hover:bg-[rgba(var(--color-warning-rgb),0.2)]"
                 onClick={handleBackfill}
                 disabled={backfilling}
               >
@@ -306,8 +306,8 @@ export default function KnowledgeOverview() {
             </div>
             {/* 进度条（回填时显示） */}
             {backfilling && (
-              <div className="h-1 w-full bg-amber-500/10">
-                <div className="h-full bg-gradient-to-r from-amber-500 to-amber-300 animate-pulse rounded-full w-full" />
+              <div className="h-1 w-full bg-[rgba(var(--color-warning-rgb),0.1)]">
+                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[rgba(var(--color-warning-rgb),0.5)] animate-pulse rounded-full w-full" />
               </div>
             )}
           </div>
@@ -324,8 +324,8 @@ export default function KnowledgeOverview() {
             <span className={cn(
               'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
               hasVectors
-                ? 'bg-emerald-500/15 text-emerald-400'
-                : 'bg-blue-500/15 text-blue-400'
+                ? 'bg-[rgba(var(--color-success-rgb),0.15)] text-[var(--color-success)]'
+                : 'bg-[rgba(var(--color-info-rgb),0.15)] text-[var(--color-info)]'
             )}>
               {searchMode}
             </span>
@@ -391,8 +391,8 @@ export default function KnowledgeOverview() {
                       </span>
                       <span className={cn(
                         'text-[0.7rem] px-1.5 py-0.5 rounded font-mono',
-                        r.score > 0.8 ? 'bg-green-500/20 text-green-400' :
-                        r.score > 0.6 ? 'bg-yellow-500/20 text-yellow-400' :
+                        r.score > 0.8 ? 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]' :
+                        r.score > 0.6 ? 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]' :
                         'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                       )}>
                         {r.score === 0.5 ? t('knowledge.fullTextMatch') : t('knowledge.similarity').replace('{percent}', (r.score * 100).toFixed(1))}

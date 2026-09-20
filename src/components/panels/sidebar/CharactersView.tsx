@@ -287,7 +287,7 @@ function CharItem({ char: c, selected, onClick }: {
           <span
             className="text-[0.55rem] px-1 rounded flex-shrink-0"
             style={{
-              backgroundColor: c.status === 'dead' ? 'rgba(239,68,68,0.15)' : 'var(--color-hover)',
+              backgroundColor: c.status === 'dead' ? 'rgba(var(--color-error-rgb),0.15)' : 'var(--color-hover)',
               color: c.status === 'dead' ? 'var(--color-error)' : 'var(--color-text-muted)',
             }}
           >

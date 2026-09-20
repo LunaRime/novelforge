@@ -30,7 +30,7 @@ const PHASE_LABEL_KEYS: Record<string, TextKey> = {
 }
 
 export const ProgressBar: React.FC<ProgressBarProps> = ({ progress, className = '' }) => {
-  const color = PHASE_COLORS[progress.phase] || '#6b7280'
+  const color = PHASE_COLORS[progress.phase] || 'var(--color-text-muted)'
   const label = PHASE_LABEL_KEYS[progress.phase] ? t(PHASE_LABEL_KEYS[progress.phase]) : progress.phase
 
   return (

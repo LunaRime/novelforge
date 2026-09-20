@@ -272,7 +272,7 @@ function MCPSubView({
                 </span>
               )}
               {server.status === 'error' && (
-                <span className="text-[0.65rem] text-red-400 truncate max-w-[80px]" title={server.error}>
+                <span className="text-[0.65rem] text-[var(--color-error)] truncate max-w-[80px]" title={server.error}>
                   {t('agent.serverError')}
                 </span>
               )}
@@ -307,9 +307,9 @@ function SkillSubView({
   /** 来源徽章颜色 */
   const sourceBadge = (source: string) => {
     switch (source) {
-      case 'builtin': return { bg: 'rgba(59,130,246,0.12)', color: 'var(--color-info)', label: t('agent.toolBuiltin') }
-      case 'user': return { bg: 'rgba(168,85,247,0.12)', color: 'var(--color-accent)', label: t('agent.sourceUser') }
-      case 'project': return { bg: 'rgba(34,197,94,0.12)', color: 'var(--color-success)', label: t('agent.sourceProject') }
+      case 'builtin': return { bg: 'rgba(var(--color-info-rgb),0.12)', color: 'var(--color-info)', label: t('agent.toolBuiltin') }
+      case 'user': return { bg: 'rgba(var(--color-accent-rgb),0.12)', color: 'var(--color-accent)', label: t('agent.sourceUser') }
+      case 'project': return { bg: 'rgba(var(--color-success-rgb),0.12)', color: 'var(--color-success)', label: t('agent.sourceProject') }
       default: return { bg: 'var(--color-hover)', color: 'var(--color-text-muted)', label: source }
     }
   }

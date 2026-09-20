@@ -446,7 +446,7 @@ function WorkflowStepItem({
             {step.error && (
               <div
                 className="text-[0.7rem] px-2 py-1 rounded mb-1"
-                style={{ backgroundColor: 'rgba(192,57,74,0.08)', color: 'var(--color-error)' }}
+                style={{ backgroundColor: 'rgba(var(--color-error-rgb),0.08)', color: 'var(--color-error)' }}
               >
                 {step.error}
               </div>

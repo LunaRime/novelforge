@@ -104,8 +104,8 @@ export default function SlashCommandMenu({ query, onSelect, onClose, position }:
             <span
               className="text-[0.6rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
               style={{
-                backgroundColor: 'rgba(34, 197, 94, 0.12)',
-                color: '#22c55e',
+                backgroundColor: 'rgba(var(--color-success-rgb), 0.12)',
+                color: 'var(--color-success)',
               }}
             >
               Skill
