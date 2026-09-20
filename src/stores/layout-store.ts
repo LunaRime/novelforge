@@ -56,11 +56,15 @@ interface LayoutState {
   toggleBottomPanel: () => void
   setBottomTab: (tab: BottomTab) => void
   openBottomTab: (tab: BottomTab) => void
-  // ⚠️ 这里曾有 `collapseRegion(region)`：打算在面板被拖到 minSize 以下时把 `*Open` 置 false。
-  //    2026-09-20 实测**必须不要这么做**——`collapsible` 面板折叠时库仍在注册表里保留它，
-  //    卸载会让「注册 3 个面板 / DOM 只有 2 个」不一致，ResizeObserver 回调抛
-  //    `Invalid 3 panel layout`。区域收起交给库自身的 `collapsible`（折到 collapsedSize=0），
-  //    显式开关仍由 `toggle*` 系列与活动栏负责。
+  /**
+   * 关闭（隐藏）某个区域 —— 由「分隔条拖过阈值后的**松手**」触发（见 `App.tsx` 的 `closeOnDragBelow`）。
+   *
+   * ⚠️ **只能在松手后调用，不要在拖拽过程中调用**：`react-resizable-panels` 在拖拽中持有布局，
+   * 此时卸载面板会让「注册 N 个面板 / DOM N−1 个」不一致，`ResizeObserver` 回调随即抛
+   * `Invalid N panel layout: …` 并刷屏（2026-09-20 实测事故）。
+   * 恢复走各区域的显式开关：侧栏 / 底栏 ← 左侧活动栏，AI 面板 ← 右侧图标栏。
+   */
+  closeRegion: (region: 'sidebar' | 'ai' | 'bottom') => void
 
   // ===== 专注写作模式 =====
   focusMode: boolean
@@ -120,6 +124,10 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       bottomPanelOpen: s.bottomTab === tab ? !s.bottomPanelOpen : true,
     })),
   openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab }),
+
+  // 拖过阈值后的**松手**才调用（时序见接口注释：拖拽中卸载面板会触发库的 Invalid N panel layout）
+  closeRegion: (region) =>
+    set(region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false }),
 
   // 全局弹窗 Actions
   openSettings: (section) => set({ settingsOpen: true, settingsSection: section }),

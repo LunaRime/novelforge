@@ -34,14 +34,49 @@ import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 // 否则恢复时 registry 空 → 所有 run 走降级）。
 import './services/workflows/workflow-registry-init'
 
+/** 区域可停靠的最小宽度（%）。低于 `REGION_CLOSE_PERCENT` 松手即关闭该区域。 */
+const REGION_MIN_PERCENT = 2
+/** 拖过该阈值后松手 → 关闭该区域（VS Code 式「缩到一定程度再往里收就关掉」） */
+const REGION_CLOSE_PERCENT = 6
+
+/**
+ * 分隔条拖过阈值 → **松手时**关闭该区域（区域整体消失，从活动栏图标找回）。
+ *
+ * ⚠️ **时序是关键**：`react-resizable-panels` 在拖拽过程中持有布局，此时卸载面板会让
+ * 「注册 N 个面板 / DOM N−1 个」不一致，`ResizeObserver` 回调随即抛
+ * `Invalid N panel layout: …` 并疯狂刷屏（2026-09-20 实测事故）。
+ * 所以这里只**武装**一个一次性 `pointerup`，真正关闭发生在松手之后一个宏任务；
+ * 拖回阈值外会自动解除武装。
+ *
+ * 为什么「任意 pointerup 就关」是安全的：面板不可能在**没有拖拽**的情况下停在 ≤ 阈值处——
+ * 挂载时用的是 `defaultSize`（20/25），而任何一次拖进阈值都必然以 pointerup 结束并触发关闭。
+ *
+ * 模块级单例：闭包内的 `handler` 必须跨渲染稳定，否则每次 render 都会重置武装状态。
+ */
+function closeOnDragBelow(region: 'sidebar' | 'ai' | 'bottom') {
+  let handler: (() => void) | null = null
+  const disarm = (): void => {
+    if (handler) { window.removeEventListener('pointerup', handler); handler = null }
+  }
+  return (size: { asPercentage: number }): void => {
+    if (size.asPercentage > REGION_CLOSE_PERCENT) { disarm(); return }
+    if (handler) return
+    handler = () => {
+      disarm()
+      setTimeout(() => useLayoutStore.getState().closeRegion(region), 0)
+    }
+    window.addEventListener('pointerup', handler, { once: true })
+  }
+}
+
+const closeSidebarOnDragBelow = closeOnDragBelow('sidebar')
+const closeAiPanelOnDragBelow = closeOnDragBelow('ai')
+const closeBottomPanelOnDragBelow = closeOnDragBelow('bottom')
+
 /**
  * NovelForge 主应用组件
- * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局
- *
- * ⚠️ 区域「缩到最小尺寸以下即收起」由 `collapsible` 自身实现（库会把面板折到 `collapsedSize`，
- * 默认 0%，并在注册表里**保留**该面板以便拖回）。**不要**在 `onResize` 里把面板卸载掉——
- * 2026-09-20 实测：那样会让库的注册表（3 面板）与 DOM（2 面板）不一致，
- * ResizeObserver 回调随即抛 `Invalid 3 panel layout` 并刷屏。
+ * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局：
+ * 分隔条拖到阈值以下并松手 → 该区域**关闭（消失）**，从活动栏 / 右侧图标栏可重新打开。
  */
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
@@ -201,7 +236,7 @@ export default function App() {
               {/* 左侧边栏 — 专注模式下隐藏 */}
               {(sidebarOpen && !focusMode) && (
                 <>
-                  <Panel id="sidebar" defaultSize={20} minSize={10} collapsible aria-label={t('panel.sidebar')}>
+                  <Panel id="sidebar" defaultSize={20} minSize={REGION_MIN_PERCENT} onResize={closeSidebarOnDragBelow} aria-label={t('panel.sidebar')}>
                     <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
                       <Sidebar />
                     </ErrorBoundary>
@@ -224,7 +259,7 @@ export default function App() {
               {(aiPanelOpen && !focusMode) && (
                 <>
                   <PanelResizeHandle />
-                  <Panel id="ai-panel" defaultSize={20} minSize={10} collapsible aria-label={t('panel.ai')}>
+                  <Panel id="ai-panel" defaultSize={20} minSize={REGION_MIN_PERCENT} onResize={closeAiPanelOnDragBelow} aria-label={t('panel.ai')}>
                     <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                       {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
                     </ErrorBoundary>
@@ -237,7 +272,7 @@ export default function App() {
           {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
           {(bottomPanelOpen && !focusMode) && <PanelResizeHandle />}
           {(bottomPanelOpen && !focusMode) && (
-            <Panel id="bottom" defaultSize={25} minSize={8} collapsible aria-label={t('panel.bottom')}>
+            <Panel id="bottom" defaultSize={25} minSize={REGION_MIN_PERCENT} onResize={closeBottomPanelOnDragBelow} aria-label={t('panel.bottom')}>
               <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                 <BottomPanel />
               </ErrorBoundary>
