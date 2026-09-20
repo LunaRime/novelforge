@@ -137,10 +137,10 @@ export default function TitleBar() {
               width: 7,
               height: 7,
               borderRadius: '50%',
-              backgroundColor: 'var(--color-warning, #f59e0b)',
+              backgroundColor: 'var(--color-warning)',
               marginLeft: 7,
               flexShrink: 0,
-              boxShadow: '0 0 4px var(--color-warning, #f59e0b)',
+              boxShadow: '0 0 4px var(--color-warning)',
               animation: 'pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
             }}
           />

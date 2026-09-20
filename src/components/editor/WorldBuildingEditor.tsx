@@ -242,7 +242,7 @@ export default function WorldBuildingEditor() {
           const charExtractFailed = isCharacters && charExtractStatus && !charExtractStatus.allCriticalPassed
           // 动态边框颜色：提取失败 → 红 | 已生成 → 绿 | 未生成 → 默认
           const cardBorderColor = charExtractFailed
-            ? 'var(--color-error, #ef4444)'
+            ? 'var(--color-error)'
             : generated
               ? 'var(--color-success)'
               : 'var(--color-border)'
@@ -252,7 +252,7 @@ export default function WorldBuildingEditor() {
                 className="rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
                 style={{
                   borderColor: cardBorderColor,
-                  backgroundColor: charExtractFailed ? 'rgba(239, 68, 68, 0.03)' : 'var(--color-panel)',
+                  backgroundColor: charExtractFailed ? 'rgba(var(--color-error-rgb), 0.03)' : 'var(--color-panel)',
                   opacity: loading ? 0.6 : 1,
                 }}
                 onClick={() => openArchFile(f)}
@@ -283,7 +283,7 @@ export default function WorldBuildingEditor() {
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {generated ? (
                     <>
-                      <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-green-500/10 text-green-600 dark:text-green-400">
+                      <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-[rgba(var(--color-success-rgb),0.1)] text-[var(--color-success)]">
                         {t('status.generated')}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -303,7 +303,7 @@ export default function WorldBuildingEditor() {
                     <Button
                       size="sm"
                       disabled={extracting}
-                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-sm hover:from-red-600 hover:to-orange-600 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-sm hover:from-[var(--color-error)] hover:to-[var(--color-warning)] border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleExtractCharacters()

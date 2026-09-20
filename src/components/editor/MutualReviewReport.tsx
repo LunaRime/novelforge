@@ -48,7 +48,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
                 variant="outline"
                 className="text-xs"
                 style={{
-                  borderColor: PERSPECTIVE_COLORS[ro.perspective] || '#6b7280',
+                  borderColor: PERSPECTIVE_COLORS[ro.perspective] || 'var(--color-text-muted)',
                 }}
               >
                 {ro.perspective}: {ro.overallScore}/10
@@ -84,13 +84,13 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
       {/* 共识优点 */}
       {report.consensusStrengths.length > 0 && (
         <div className="border rounded p-3">
-          <h4 className="text-xs font-medium text-green-600 mb-2 flex items-center gap-1">
+          <h4 className="text-xs font-medium text-[var(--color-success)] mb-2 flex items-center gap-1">
             <ThumbsUp size={12} /> {t('mutual.consensusStrengths')}
           </h4>
           <ul className="space-y-1">
             {report.consensusStrengths.map((s, i) => (
               <li key={i} className="text-xs text-muted-foreground flex gap-1">
-                <span className="text-green-500">✓</span> {s}
+                <span className="text-[var(--color-success)]">✓</span> {s}
               </li>
             ))}
           </ul>
@@ -100,13 +100,13 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
       {/* 共识问题 */}
       {report.consensusWeaknesses.length > 0 && (
         <div className="border rounded p-3">
-          <h4 className="text-xs font-medium text-yellow-600 mb-2 flex items-center gap-1">
+          <h4 className="text-xs font-medium text-[var(--color-warning)] mb-2 flex items-center gap-1">
             <AlertCircle size={12} /> {t('mutual.consensusWeaknesses')}
           </h4>
           <ul className="space-y-1">
             {report.consensusWeaknesses.map((w, i) => (
               <li key={i} className="text-xs text-muted-foreground flex gap-1">
-                <span className="text-yellow-500">!</span> {w}
+                <span className="text-[var(--color-warning)]">!</span> {w}
               </li>
             ))}
           </ul>
@@ -119,14 +119,14 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
           <h4
             className="text-xs font-medium mb-2 flex items-center gap-1"
             style={{
-              color: PERSPECTIVE_COLORS[ro.perspective] || '#6b7280',
+              color: PERSPECTIVE_COLORS[ro.perspective] || 'var(--color-text-muted)',
             }}
           >
             <Zap size={12} /> {ro.perspective} — {ro.overallScore}/10
           </h4>
           {ro.strengths.length > 0 && (
             <div className="mb-1">
-              <span className="text-xs text-green-600">{t('review.pros')}</span>
+              <span className="text-xs text-[var(--color-success)]">{t('review.pros')}</span>
               <span className="text-xs text-muted-foreground">
                 {ro.strengths.join('、')}
               </span>
@@ -134,7 +134,7 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
           )}
           {ro.weaknesses.length > 0 && (
             <div className="mb-1">
-              <span className="text-xs text-yellow-600">{t('review.cons')}</span>
+              <span className="text-xs text-[var(--color-warning)]">{t('review.cons')}</span>
               <span className="text-xs text-muted-foreground">
                 {ro.weaknesses.join('、')}
               </span>
@@ -158,14 +158,14 @@ export const MutualReviewReportView: React.FC<MutualReviewReportProps> = ({
 
       {/* 分歧标注 */}
       {report.divergenceNotes.length > 0 && (
-        <div className="border rounded p-3 border-yellow-300">
-          <h4 className="text-xs font-medium text-yellow-700 mb-2 flex items-center gap-1">
+        <div className="border rounded p-3 border-[var(--color-warning)]">
+          <h4 className="text-xs font-medium text-[var(--color-warning)] mb-2 flex items-center gap-1">
             <AlertCircle size={12} /> {t('mutual.disagreements')}
           </h4>
           {report.divergenceNotes.map((note, i) => (
             <div
               key={i}
-              className="text-xs text-yellow-700 whitespace-pre-line mb-1"
+              className="text-xs text-[var(--color-warning)] whitespace-pre-line mb-1"
             >
               {note}
             </div>

@@ -110,10 +110,10 @@ export default function VersionHistory() {
   }
 
   const TYPE_COLORS: Record<string, string> = {
-    draft: 'bg-blue-500/20 text-blue-400',
-    refined: 'bg-yellow-500/20 text-yellow-400',
+    draft: 'bg-[rgba(var(--color-info-rgb),0.2)] text-[var(--color-info)]',
+    refined: 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]',
     reviewed: 'bg-purple-500/20 text-purple-400',
-    final: 'bg-green-500/20 text-green-400',
+    final: 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]',
   }
 
   if (loading) {

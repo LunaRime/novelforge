@@ -590,7 +590,7 @@ export default function ChapterCardEditor() {
                   className="p-3 rounded-lg border"
                   style={{
                     borderColor: 'var(--color-border)',
-                    backgroundColor: 'rgba(34,197,94,0.04)',
+                    backgroundColor: 'rgba(var(--color-success-rgb),0.04)',
                   }}
                 >
                   <Label className="flex items-center gap-1.5">

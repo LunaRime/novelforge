@@ -83,7 +83,7 @@ function getAIActions(t: (key: string) => string) {
     polish: t('ai.prompt.polish'), expand: t('ai.prompt.expand'), shrink: t('ai.prompt.shrink'), style: t('ai.prompt.style'), conflict: t('ai.prompt.conflict'),
   }
   const colors: Record<string, string> = {
-    polish: 'text-blue-400', expand: 'text-amber-400', shrink: 'text-purple-400', style: 'text-emerald-400', conflict: 'text-rose-400',
+    polish: 'text-[var(--color-info)]', expand: 'text-[var(--color-warning)]', shrink: 'text-purple-400', style: 'text-[var(--color-success)]', conflict: 'text-[var(--color-error)]',
   }
   return AI_ACTION_KEYS.map(k => ({ key: k, label: t(labelKeys[k]), color: colors[k], prompt: prompts[k] }))
 }

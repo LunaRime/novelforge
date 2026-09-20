@@ -34,9 +34,9 @@ const ROLE_DISPLAY: Record<string, TextKey> = {
 
 /** 严重程度配置（labelKey 由组件渲染时 t() 取当前语言） */
 const SEVERITY_CONFIG: Record<string, { icon: React.ReactNode; color: string; labelKey: TextKey }> = {
-  ok: { icon: <CheckCircle size={14} />, color: 'text-green-500', labelKey: 'verification.ok' },
-  warning: { icon: <AlertTriangle size={14} />, color: 'text-yellow-500', labelKey: 'verification.hasGaps' },
-  critical: { icon: <XCircle size={14} />, color: 'text-red-500', labelKey: 'verification.critical' },
+  ok: { icon: <CheckCircle size={14} />, color: 'text-[var(--color-success)]', labelKey: 'verification.ok' },
+  warning: { icon: <AlertTriangle size={14} />, color: 'text-[var(--color-warning)]', labelKey: 'verification.hasGaps' },
+  critical: { icon: <XCircle size={14} />, color: 'text-[var(--color-error)]', labelKey: 'verification.critical' },
 }
 
 export const VerificationPanel: React.FC<VerificationPanelProps> = ({
@@ -136,7 +136,7 @@ export const VerificationPanel: React.FC<VerificationPanelProps> = ({
                       className="border rounded p-2 text-xs bg-[var(--color-bg)]"
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="font-medium text-yellow-600">
+                        <span className="font-medium text-[var(--color-warning)]">
                           缺失: 第 {gap.missingChapterNumbers[0]}
                           {gap.gapSize > 1 &&
                             `–${gap.missingChapterNumbers[gap.gapSize - 1]}`}
