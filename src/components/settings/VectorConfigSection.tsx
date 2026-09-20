@@ -918,7 +918,11 @@ function LocalEmbeddingCard() {
             <span>{t('localEmbedding.modelMissingHint').replace('{model}', model)}</span>
           </div>
         )}
-        <p className="text-[10px] text-[var(--color-text-muted)]">{t('localEmbedding.hint')}</p>
+        {/* 文案分流：未连接时「需先安装 Ollama」是准确的；已连接时那句话是错误信息
+            （真机反馈：卡片显示「就绪 / 已连接」却仍在提示先安装 Ollama），只留中性的目录说明。 */}
+        <p className="text-[10px] text-[var(--color-text-muted)]">
+          {connected ? t('localEmbedding.hintConnected') : t('localEmbedding.hint')}
+        </p>
       </div>
 
       {/* 优先级：本地优先 / API 优先 → local-set-config */}

@@ -1401,6 +1401,8 @@ export const UI_TEXTS_DATA = {
   'localEmbedding.dimMismatch': { 'zh-CN': '维度不匹配：本地模型 {local} 维，现有知识库索引 {index} 维 —— 此时写入会被拒绝，请先重建知识库索引再启用本地向量。', 'en-US': 'Dimension mismatch: local model {local} dims vs. existing knowledge base index {index} dims — writes will be rejected; rebuild the knowledge base index before enabling local embedding.', 'ru-RU': 'Несовпадение размерности: локальная модель {local}, индекс базы знаний {index} — записи будут отклонены; пересоберите индекс перед включением локальных эмбеддингов.' },
   'localEmbedding.detail': { 'zh-CN': '原始详情', 'en-US': 'Raw details', 'ru-RU': 'Подробности' },
   'localEmbedding.hint': { 'zh-CN': '需先安装 Ollama；模型文件由 Ollama 管理（可用 OLLAMA_MODELS 环境变量自定目录）。', 'en-US': 'Ollama must be installed first; model files are managed by Ollama (set the OLLAMA_MODELS environment variable to change the directory).', 'ru-RU': 'Сначала установите Ollama; файлами моделей управляет Ollama (каталог задаётся переменной окружения OLLAMA_MODELS).' },
+  // 已连接时不能说「需先安装 Ollama」（2026-09-19 真机反馈：卡片显示「就绪 / 已连接」却仍提示先安装）
+  'localEmbedding.hintConnected': { 'zh-CN': '模型文件由 Ollama 管理（可用 OLLAMA_MODELS 环境变量自定目录）。', 'en-US': 'Model files are managed by Ollama (set the OLLAMA_MODELS environment variable to change the directory).', 'ru-RU': 'Файлами моделей управляет Ollama (каталог задаётся переменной окружения OLLAMA_MODELS).' },
   'localEmbedding.saveFailed': { 'zh-CN': '保存失败', 'en-US': 'Save failed', 'ru-RU': 'Ошибка сохранения' },
   // ===== 本地向量模型：R1 内置精选清单（2026-09-14 真机可用性修复）=====
   // 只放「模型名 + 参数规模 + 一句话定位 + 状态徽标」：维度由 local-test 实测、体积取 pull 进度的

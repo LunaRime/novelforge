@@ -810,3 +810,29 @@ describe('本地向量模型卡片 · 事件订阅生命周期', () => {
     expect(unsubSpy).toHaveBeenCalledTimes(1)
   })
 })
+
+// ===== ⑥ 文案分流（2026-09-19 真机反馈）=====
+// 卡片显示「就绪 / 已连接」时仍在提示「需先安装 Ollama」——那句话对已连接用户是错误信息。
+
+describe('本地向量模型卡片 · 底部说明文案分流', () => {
+  it('已连接 → 只显示中性目录说明，不出现「需先安装 Ollama」', async () => {
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'bge-m3', size: 1 }] })
+    const { container, root } = render()
+    await flush()
+
+    expect(container.textContent).toContain(t('localEmbedding.hintConnected'))
+    expect(container.textContent).not.toContain(t('localEmbedding.hint'))
+    act(() => { root.unmount() })
+  })
+
+  it('未连接 → 显示安装指引（含「需先安装 Ollama」）', async () => {
+    stubLocal({ ok: false })
+    const { container, root } = render()
+    await flush()
+
+    expect(container.textContent).toContain(t('localEmbedding.hint'))
+    // 注意：不能再断言「不含 hintConnected」——`hint` = 安装前缀 + `hintConnected` 全文，
+    // 两者是包含关系。判别力由上面那条用例（已连接时 not.toContain(hint)）承担。
+    act(() => { root.unmount() })
+  })
+})
