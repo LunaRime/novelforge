@@ -56,13 +56,11 @@ interface LayoutState {
   toggleBottomPanel: () => void
   setBottomTab: (tab: BottomTab) => void
   openBottomTab: (tab: BottomTab) => void
-  /**
-   * 区域被拖到 minSize 以下而折叠 → 收起该区域（显隐仍由各区域的 `*Open` 标志决定）。
-   * react-resizable-panels 的 `collapsible` 面板在尺寸小于 `minSize` 时会折叠到 `collapsedSize`，
-   * 折叠时 `onResize` 回调给出 `asPercentage === 0` —— App.tsx 据此调用本方法。
-   * 三个区域都有重新打开的入口：侧栏 / 底栏 ← 左侧活动栏，AI 面板 ← 右侧图标栏。
-   */
-  collapseRegion: (region: 'sidebar' | 'ai' | 'bottom') => void
+  // ⚠️ 这里曾有 `collapseRegion(region)`：打算在面板被拖到 minSize 以下时把 `*Open` 置 false。
+  //    2026-09-20 实测**必须不要这么做**——`collapsible` 面板折叠时库仍在注册表里保留它，
+  //    卸载会让「注册 3 个面板 / DOM 只有 2 个」不一致，ResizeObserver 回调抛
+  //    `Invalid 3 panel layout`。区域收起交给库自身的 `collapsible`（折到 collapsedSize=0），
+  //    显式开关仍由 `toggle*` 系列与活动栏负责。
 
   // ===== 专注写作模式 =====
   focusMode: boolean
@@ -122,10 +120,6 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       bottomPanelOpen: s.bottomTab === tab ? !s.bottomPanelOpen : true,
     })),
   openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab }),
-
-  // 拖到 minSize 以下 → 折叠 → 收起（见接口处注释；三个区域都有重新打开的入口）
-  collapseRegion: (region) =>
-    set(region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false }),
 
   // 全局弹窗 Actions
   openSettings: (section) => set({ settingsOpen: true, settingsSection: section }),

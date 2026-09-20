@@ -1,66 +1,22 @@
 /**
- * layout-store — 「缩到阈值即收起该区域」（UI 真机反馈 2026-09-19 第 ② 条）
+ * layout-store —— 布局相关契约（UI 真机反馈 2026-09-19/20）
  *
- * 契约：
- * - 拖拽把区域缩到 `minSize` 以下时，`react-resizable-panels` 的 `collapsible` 面板会折到
- *   `collapsedSize`（默认 0%），其 `onResize` 随之给出 `asPercentage === 0`；
- *   App.tsx 据此调用 `collapseRegion` 把该区域**收起**（而不是停在死窄条）。
- * - 三个区域都必须能**重新打开**，否则「收起」会变成找不回来的单向陷阱：
- *   侧栏 / 底栏 ← 左侧活动栏（`toggleSidebar` / `setBottomTab` / `openBottomTab`），
- *   AI 面板 ← 右侧图标栏（`toggleAIPanel`）。
- * - 旧的 `sidebarWidth` / `aiPanelWidth` / `bottomPanelHeight` 字段已删除：它们从未被读写，
- *   留着会让人误以为布局尺寸由 store 管（2026-09-19 已因此给出过错误结论）。
+ * 1. 旧的 `sidebarWidth` / `aiPanelWidth` / `bottomPanelHeight` 字段与 setter 已删除：
+ *    它们从未被读写，留着会让人以为四个区域的尺寸归 store 管（2026-09-19 已因此给出过错误结论）。
+ *    真实尺寸由 `App.tsx` 的 `react-resizable-panels`（`defaultSize` / `minSize` / `collapsible`）承担。
+ *
+ * 2. ⚠️ 这里**刻意没有** `collapseRegion` 之类的「拖到最小尺寸以下就把区域关掉」动作。
+ *    2026-09-20 实测：`collapsible` 面板折叠时库仍在自己的注册表里保留该面板，
+ *    如果此时把 `*Open` 置 false 让 `App.tsx` 卸载它，就会出现「注册 3 个面板 / DOM 只有 2 个」
+ *    的不一致，`ResizeObserver` 回调随即抛 `Invalid 3 panel layout: …` 并刷屏。
+ *    区域「缩到一定程度即收起」由库自身的 `collapsible` 完成（折到 `collapsedSize`，默认 0%），
+ *    拖回即可恢复；显式开关仍走 `toggleSidebar` / `toggleAIPanel` / `toggleBottomPanel`。
  */
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { useLayoutStore } from './layout-store'
 
-describe('layout-store · collapseRegion（缩到阈值即收起）', () => {
-  beforeEach(() => {
-    useLayoutStore.setState({ sidebarOpen: true, aiPanelOpen: true, bottomPanelOpen: true })
-  })
-
-  it('collapseRegion(sidebar) → 只收起侧栏，另两区不受影响', () => {
-    useLayoutStore.getState().collapseRegion('sidebar')
-
-    const s = useLayoutStore.getState()
-    expect(s.sidebarOpen).toBe(false)
-    expect(s.aiPanelOpen).toBe(true)
-    expect(s.bottomPanelOpen).toBe(true)
-  })
-
-  it('collapseRegion(ai) → 只收起 AI 面板，另两区不受影响', () => {
-    useLayoutStore.getState().collapseRegion('ai')
-
-    const s = useLayoutStore.getState()
-    expect(s.aiPanelOpen).toBe(false)
-    expect(s.sidebarOpen).toBe(true)
-    expect(s.bottomPanelOpen).toBe(true)
-  })
-
-  it('collapseRegion(bottom) → 只收起底栏，另两区不受影响', () => {
-    useLayoutStore.getState().collapseRegion('bottom')
-
-    const s = useLayoutStore.getState()
-    expect(s.bottomPanelOpen).toBe(false)
-    expect(s.sidebarOpen).toBe(true)
-    expect(s.aiPanelOpen).toBe(true)
-  })
-
-  it('三区收起后都能重新打开（收起不是单向陷阱）', () => {
-    const s = () => useLayoutStore.getState()
-    s().collapseRegion('sidebar')
-    s().collapseRegion('ai')
-    s().collapseRegion('bottom')
-    expect([s().sidebarOpen, s().aiPanelOpen, s().bottomPanelOpen]).toEqual([false, false, false])
-
-    // 对应三个真实入口：左侧活动栏 ×2、右侧图标栏 ×1
-    s().toggleSidebar()
-    s().toggleAIPanel()
-    s().toggleBottomPanel()
-    expect([s().sidebarOpen, s().aiPanelOpen, s().bottomPanelOpen]).toEqual([true, true, true])
-  })
-
-  it('旧布局尺寸字段与其 setter 已移除（防止「尺寸归 store 管」的误导）', () => {
+describe('layout-store · 布局尺寸不再由 store 承担', () => {
+  it('旧尺寸字段与其 setter 均已移除（防止「尺寸归 store 管」的误导）', () => {
     const s = useLayoutStore.getState() as unknown as Record<string, unknown>
 
     expect(s.sidebarWidth).toBeUndefined()
@@ -69,5 +25,23 @@ describe('layout-store · collapseRegion（缩到阈值即收起）', () => {
     expect(s.setSidebarWidth).toBeUndefined()
     expect(s.setAIPanelWidth).toBeUndefined()
     expect(s.setBottomPanelHeight).toBeUndefined()
+  })
+
+  it('刻意不提供「折叠即关闭区域」的 store 动作（会导致面板注册表与 DOM 不一致）', () => {
+    const s = useLayoutStore.getState() as unknown as Record<string, unknown>
+
+    expect(s.collapseRegion).toBeUndefined()
+  })
+
+  it('三个区域仍有显式开关动作（收起后可从活动栏找回）', () => {
+    const s = useLayoutStore.getState()
+    useLayoutStore.setState({ sidebarOpen: false, aiPanelOpen: false, bottomPanelOpen: false })
+
+    s.toggleSidebar()
+    s.toggleAIPanel()
+    s.toggleBottomPanel()
+
+    const after = useLayoutStore.getState()
+    expect([after.sidebarOpen, after.aiPanelOpen, after.bottomPanelOpen]).toEqual([true, true, true])
   })
 })
