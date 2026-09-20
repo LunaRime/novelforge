@@ -264,15 +264,20 @@ export default function KnowledgeOverview() {
             label={t('knowledge.retrievalMode')}
             value={hasVectors ? t('knowledge.ftsVector') : t('knowledge.fts')}
             badge={hasVectors ? t('knowledge.hybrid') : t('knowledge.basic')}
-            badgeColor={hasVectors ? '#22c55e' : '#3b82f6'}
+            badgeTone={hasVectors ? 'success' : 'info'}
           />
         </div>
 
         {/* ===== 向量回填卡片 ===== */}
         {vectorlessCount > 0 && (
           <div
-            className="rounded-xl border border-amber-500/20 mb-6 overflow-hidden"
-            style={{ backgroundColor: 'rgba(245, 158, 11, 0.06)' }}
+            className="rounded-xl border mb-6 overflow-hidden"
+            style={{
+              // 原为 border-amber-500/20 + rgba(245,158,11,.06)：Tailwind 调色板类与硬编码色
+              // 都违反「颜色只用 CSS 变量」；245,158,11 正是 --color-warning-rgb。
+              borderColor: 'rgba(var(--color-warning-rgb), 0.2)',
+              backgroundColor: 'rgba(var(--color-warning-rgb), 0.06)',
+            }}
           >
             <div className="flex items-center justify-between px-4 py-3">
               <div className="flex items-center gap-2">
@@ -417,38 +422,42 @@ export default function KnowledgeOverview() {
 }
 
 /** 统计卡片子组件 */
-function StatCard({ icon, label, value, accent, badge, badgeColor }: {
+function StatCard({ icon, label, value, accent, badge, badgeTone = 'info' }: {
   icon: React.ReactNode
   label: string
   value: number | string
   accent?: boolean
+  /** 行内小徽标（**放在标题之后**：窄卡片里长本地化文案不会再把它挤成竖排胶囊） */
   badge?: string
-  badgeColor?: string
+  /** 徽标语义色调——用 CSS 变量 token，禁止硬编码色（AGENTS.md 核心约束） */
+  badgeTone?: 'success' | 'info'
 }) {
   return (
     <div
       className="rounded-xl p-4 border border-[var(--color-border)]"
       style={{ backgroundColor: 'var(--color-sidebar)' }}
     >
-      <div className="flex items-center gap-2 mb-2">
+      {/* 徽标与标题同行：value 独占下一行整宽 */}
+      <div className="flex items-center gap-2 mb-2 flex-wrap">
         <span className="text-[var(--color-text-muted)]">{icon}</span>
         <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
-      </div>
-      <div className="flex items-center gap-2">
-        <div className={cn(
-          'text-2xl font-bold',
-          accent ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'
-        )}>
-          {value}
-        </div>
         {badge && (
           <span
-            className="text-[0.6rem] px-1.5 py-0.5 rounded-full font-medium"
-            style={{ backgroundColor: `${badgeColor}20`, color: badgeColor }}
+            className="text-[0.6rem] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+            style={{
+              color: `var(--color-${badgeTone})`,
+              backgroundColor: `rgba(var(--color-${badgeTone}-rgb), 0.14)`,
+            }}
           >
             {badge}
           </span>
         )}
+      </div>
+      <div className={cn(
+        'text-2xl font-bold break-words',
+        accent ? 'text-[var(--color-accent)]' : 'text-[var(--color-text)]'
+      )}>
+        {value}
       </div>
     </div>
   )
