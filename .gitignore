@@ -66,4 +66,4 @@ scripts/font-char-set.txt
 .vitest-min.config.mjs
 
 # git worktrees（隔离工作区）.worktrees/
-
+.worktrees/
