@@ -180,15 +180,15 @@ function UpdateBanner({
   onDismiss?: () => void
 }) {
   const bgColor = variant === 'error'
-    ? 'rgba(239, 68, 68, 0.12)'
+    ? 'rgba(var(--color-error-rgb), 0.12)'
     : variant === 'success'
-      ? 'rgba(34, 197, 94, 0.12)'
+      ? 'rgba(var(--color-success-rgb), 0.12)'
       : 'rgba(var(--color-accent-rgb), 0.1)'
 
   const borderColor = variant === 'error'
-    ? 'rgba(239, 68, 68, 0.3)'
+    ? 'rgba(var(--color-error-rgb), 0.3)'
     : variant === 'success'
-      ? 'rgba(34, 197, 94, 0.3)'
+      ? 'rgba(var(--color-success-rgb), 0.3)'
       : 'rgba(var(--color-accent-rgb), 0.25)'
 
   return (
