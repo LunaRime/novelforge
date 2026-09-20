@@ -307,7 +307,7 @@ export default function KnowledgeOverview() {
             {/* 进度条（回填时显示） */}
             {backfilling && (
               <div className="h-1 w-full bg-[rgba(var(--color-warning-rgb),0.1)]">
-                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[rgba(var(--color-warning-rgb),0.5)] animate-pulse rounded-full w-full" />
+                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[color-mix(in_srgb,var(--color-warning)_65%,white)] animate-pulse rounded-full w-full" />
               </div>
             )}
           </div>

@@ -303,7 +303,7 @@ export default function WorldBuildingEditor() {
                     <Button
                       size="sm"
                       disabled={extracting}
-                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-sm hover:from-[var(--color-error)] hover:to-[var(--color-warning)] border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-sm hover:brightness-90 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleExtractCharacters()

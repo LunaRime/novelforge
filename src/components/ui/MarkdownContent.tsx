@@ -279,7 +279,7 @@ function ThinkingBlock({ content, streaming }: { content: string; streaming?: bo
       className="my-2 rounded-lg overflow-hidden transition-all duration-200"
       style={{
         border: '1px solid var(--color-border)',
-        backgroundColor: 'rgba(var(--accent-rgb, 99, 102, 241), 0.03)',
+        backgroundColor: 'rgba(var(--color-accent-rgb), 0.03)',
       }}
     >
       {/* 头部：点击可展开/折叠 */}
