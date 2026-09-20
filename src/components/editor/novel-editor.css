@@ -71,7 +71,8 @@
 
 [data-group][style*="flex-direction: row"] > [data-separator] {
   width: 1px;
-  background: var(--color-border);
+  /* 静止态也要看得见区域边界：--color-sash 比 --color-border 与面板底色拉开更多明度差 */
+  background: var(--color-sash);
   cursor: col-resize;
 }
 
@@ -83,7 +84,7 @@
 
 [data-group][style*="flex-direction: column"] > [data-separator] {
   height: 1px;
-  background: var(--color-border);
+  background: var(--color-sash);
   cursor: row-resize;
 }
 

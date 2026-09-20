@@ -152,6 +152,9 @@
 
     /* 边框 */
     --color-border: #DEE3ED;
+    /* 区域分隔线（静止态）：必须比相邻面板底色**明显更深或更浅**，否则看不出区域边界。
+       与 --color-border 的区别就在这里——border 只做细微的分界，sash 要能一眼看见。 */
+    --color-sash: #C4CEDF;
 
     /* 强调色（Logo 星空蓝） */
     --color-accent: #5B9ED6;
@@ -274,6 +277,8 @@
 
     /* 边框 — 深蓝色边框，微弱可见 */
     --color-border: #172B42;
+    /* 区域分隔线（静止态）——深色主题下取**更浅**的一档 */
+    --color-sash: #2A4967;
 
     /* 强调色 — Logo 冰蓝 #7EC8E3 */
     --color-accent: #7EC8E3;
@@ -353,6 +358,8 @@
     --color-text-muted: #A89888;
 
     --color-border: #DDD8D0;
+    /* 区域分隔线（静止态）——纸质主题下取更深的一档 */
+    --color-sash: #C7C0B2;
 
     /* 强调色 — Logo 薰衣草紫 #9B8EC8 */
     --color-accent: #9B8EC8;
@@ -431,6 +438,8 @@
     --color-text-muted: #888888;
 
     --color-border: #3C3C3C;
+    /* 区域分隔线（静止态）——黑夜主题下取更浅的一档 */
+    --color-sash: #585858;
 
     --color-accent: #0E639C;
     --color-accent-hover: #1177BB;
