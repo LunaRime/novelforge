@@ -43,6 +43,21 @@ import './services/workflows/workflow-registry-init'
  */
 const REGION_MIN_PX = { sidebar: 176, ai: 232, bottom: 88 } as const
 
+/**
+ * ⚠️ **单位必须显式写清**（2026-09-20 连环踩坑的根源）：
+ * `react-resizable-panels` 的尺寸 prop —— **数字 = 像素**（`dist/…js:95-110` 用 `sizeStyleToPx` 换算），
+ * 只有带单位的字符串才是别的语义（`"20%"` 百分比、`"176px"` 像素）。
+ *
+ * 原代码的 `defaultSize={20}/{60}/{20}` 其实是 **20px/60px/20px**，只因库把各面板尺寸做了**比例归一化**
+ * 才看起来像 20%:60%:20%。所以一旦引入 176/232 像素下限，下限就会把默认布局顶开、比例失真
+ * （真机现象：重启后各区域大小不对）。**默认尺寸一律写成百分比字符串，下限一律写成像素。**
+ */
+const SIDEBAR_DEFAULT = '20%'
+const AI_PANEL_DEFAULT = '20%'
+const EDITOR_DEFAULT = '60%'
+/** 编辑区下限：两侧面板现在都有真实下限，编辑区不能被挤成一条缝 */
+const EDITOR_MIN_PX = 320
+
 /** 区域 → 我们自己的 DOM 标记属性值（`[data-region]`，见面板内的包装 div） */
 const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai', bottom: 'bottom' } as const
 
@@ -229,13 +244,13 @@ export default function App() {
         <PanelGroup orientation="vertical" className="flex-1">
 
           {/* 上层：侧边栏 | 编辑区 | AI 面板（水平分割） */}
-          <Panel id="top" defaultSize={75} minSize={30}>
+          <Panel id="top" defaultSize="75%" minSize="25%">
             <PanelGroup orientation="horizontal" className="flex-1 h-full">
 
               {/* 左侧边栏 — 专注模式下隐藏 */}
               {(sidebarOpen && !focusMode) && (
                 <>
-                  <Panel id="sidebar" defaultSize={20} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
+                  <Panel id="sidebar" defaultSize={SIDEBAR_DEFAULT} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
                     {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
                         ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
                         拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
@@ -251,7 +266,7 @@ export default function App() {
               )}
 
               {/* 编辑区 — 专注模式下居中 + 大字号 */}
-              <Panel id="editor" defaultSize={60} minSize={10} aria-label={t('panel.editor')}>
+              <Panel id="editor" defaultSize={EDITOR_DEFAULT} minSize={EDITOR_MIN_PX} aria-label={t('panel.editor')}>
                 <div id="main-editor-area" />
                 <div className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
                   <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
@@ -265,7 +280,7 @@ export default function App() {
                 <>
                   {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
                   <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
-                  <Panel id="ai-panel" defaultSize={20} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
+                  <Panel id="ai-panel" defaultSize={AI_PANEL_DEFAULT} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
                     <div data-region="ai" className="h-full">
                       <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                         {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
@@ -280,7 +295,7 @@ export default function App() {
           {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
           {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
           {(bottomPanelOpen && !focusMode) && (
-            <Panel id="bottom" defaultSize={25} minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
+            <Panel id="bottom" defaultSize="25%" minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
               <div data-region="bottom" className="h-full">
                 <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                   <BottomPanel />
