@@ -43,14 +43,14 @@ import './services/workflows/workflow-registry-init'
  */
 const REGION_MIN_PX = { sidebar: 176, ai: 232, bottom: 88 } as const
 
-/** 区域 → 库透传到 DOM 的 `[data-panel]` 值（`Panel` 的 `id` prop 会写进该属性） */
-const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai-panel', bottom: 'bottom' } as const
+/** 区域 → 我们自己的 DOM 标记属性值（`[data-region]`，见面板内的包装 div） */
+const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai', bottom: 'bottom' } as const
 
 /**
  * 分隔条**松手**时：若该区域已贴到内容下限 → 关闭它。
  *
  * 三个设计决定，都是踩坑换来的（2026-09-20，勿回退）：
- * - **直接量 DOM**（`[data-panel]` 的 `getBoundingClientRect`），不引入 ref / 模块级可变状态：
+ * - **直接量 DOM**（我们自己的 `[data-region]` 标记 div 的 `getBoundingClientRect`），不引入 ref / 模块级可变状态：
  *   `App.tsx` 每次热更新都会重新求值模块顶层，模块级变量与 `window.addEventListener` 会**累积**，
  *   旧闭包不失效 → 表现为「区域莫名自己关掉」。
  * - **不用 `collapsible`**：库按 panel id 记账折叠态，关闭时卸载、重开时同 id 注册，可能恢复
@@ -60,7 +60,7 @@ const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai-panel', bottom: 'bottom' }
  *   `ResizeObserver` 回调随即抛 `Invalid N panel layout: …` 并刷屏。
  */
 function closeIfAtFloor(region: 'sidebar' | 'ai' | 'bottom'): void {
-  const el = document.querySelector(`[data-panel="${REGION_PANEL_ID[region]}"]`)
+  const el = document.querySelector(`[data-region="${REGION_PANEL_ID[region]}"]`)
   if (!(el instanceof HTMLElement)) return
   const rect = el.getBoundingClientRect()
   const px = region === 'bottom' ? rect.height : rect.width
@@ -236,9 +236,14 @@ export default function App() {
               {(sidebarOpen && !focusMode) && (
                 <>
                   <Panel id="sidebar" defaultSize={20} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
-                    <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
-                      <Sidebar />
-                    </ErrorBoundary>
+                    {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
+                        ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
+                        拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
+                    <div data-region="sidebar" className="h-full">
+                      <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
+                        <Sidebar />
+                      </ErrorBoundary>
+                    </div>
                   </Panel>
                   {/* 松手时若侧栏已贴到内容下限 → 关闭它（见组件内 closeIfAtFloor 注释） */}
                   <PanelResizeHandle onPointerUp={() => closeIfAtFloor('sidebar')} />
@@ -261,9 +266,11 @@ export default function App() {
                   {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
                   <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
                   <Panel id="ai-panel" defaultSize={20} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
-                    <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
-                    </ErrorBoundary>
+                    <div data-region="ai" className="h-full">
+                      <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
+                        {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
+                      </ErrorBoundary>
+                    </div>
                   </Panel>
                 </>
               )}
@@ -274,9 +281,11 @@ export default function App() {
           {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
           {(bottomPanelOpen && !focusMode) && (
             <Panel id="bottom" defaultSize={25} minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
-              <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
-                <BottomPanel />
-              </ErrorBoundary>
+              <div data-region="bottom" className="h-full">
+                <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
+                  <BottomPanel />
+                </ErrorBoundary>
+              </div>
             </Panel>
           )}
         </PanelGroup>
