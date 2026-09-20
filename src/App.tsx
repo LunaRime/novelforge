@@ -35,6 +35,22 @@ import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 import './services/workflows/workflow-registry-init'
 
 /**
+ * 拖到 minSize 以下 → react-resizable-panels 把 `collapsible` 面板折到 `collapsedSize`（默认 0%）,
+ * `onResize` 随之给出 `asPercentage === 0` → 收起该区域（用户不必再手动去关）。
+ *
+ * ⚠️ 用微任务延迟 setState：拖拽手势进行中就把 Panel 卸载掉会打断库的内部拖拽状态。
+ * 三个区域都有重新打开的入口（侧栏 / 底栏 ← 左侧活动栏，AI 面板 ← 右侧图标栏），
+ * 因此「收起」不会变成无法找回的单向操作。
+ */
+function collapseOnZero(region: 'sidebar' | 'ai' | 'bottom') {
+  return (size: { asPercentage: number }): void => {
+    if (size.asPercentage === 0) {
+      Promise.resolve().then(() => useLayoutStore.getState().collapseRegion(region))
+    }
+  }
+}
+
+/**
  * NovelForge 主应用组件
  * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局
  */
@@ -196,7 +212,7 @@ export default function App() {
               {/* 左侧边栏 — 专注模式下隐藏 */}
               {(sidebarOpen && !focusMode) && (
                 <>
-                  <Panel id="sidebar" defaultSize={20} minSize={10} aria-label={t('panel.sidebar')}>
+                  <Panel id="sidebar" defaultSize={20} minSize={10} collapsible onResize={collapseOnZero('sidebar')} aria-label={t('panel.sidebar')}>
                     <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
                       <Sidebar />
                     </ErrorBoundary>
@@ -219,7 +235,7 @@ export default function App() {
               {(aiPanelOpen && !focusMode) && (
                 <>
                   <PanelResizeHandle />
-                  <Panel id="ai-panel" defaultSize={20} minSize={10} aria-label={t('panel.ai')}>
+                  <Panel id="ai-panel" defaultSize={20} minSize={10} collapsible onResize={collapseOnZero('ai')} aria-label={t('panel.ai')}>
                     <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                       {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
                     </ErrorBoundary>
@@ -232,7 +248,7 @@ export default function App() {
           {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
           {(bottomPanelOpen && !focusMode) && <PanelResizeHandle />}
           {(bottomPanelOpen && !focusMode) && (
-            <Panel id="bottom" defaultSize={25} minSize={8} aria-label={t('panel.bottom')}>
+            <Panel id="bottom" defaultSize={25} minSize={8} collapsible onResize={collapseOnZero('bottom')} aria-label={t('panel.bottom')}>
               <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                 <BottomPanel />
               </ErrorBoundary>
