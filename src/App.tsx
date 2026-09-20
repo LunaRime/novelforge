@@ -43,62 +43,38 @@ import './services/workflows/workflow-registry-init'
  */
 const REGION_MIN_PX = { sidebar: 176, ai: 232, bottom: 88 } as const
 
-/**
- * 用户是否正**抓着分隔条**在拖。
- *
- * 为什么需要它：库在容器装不下各面板下限时会**自动**把面板折到 0（不是用户意图）。
- * 若不设防，那种自动折叠也会「武装」关闭，于是之后任意一次点击都会把该区域关掉。
- * 只有 pointerdown 落在 `[data-separator]` 上才算真正的拖拽。
- */
-let draggingSeparator = false
-if (typeof window !== 'undefined') {
-  window.addEventListener('pointerdown', (e) => {
-    const el = e.target
-    draggingSeparator = el instanceof Element && el.closest('[data-separator]') !== null
-  }, true)
-  window.addEventListener('pointerup', () => { draggingSeparator = false }, true)
-}
+/** 区域 → 库透传到 DOM 的 `[data-panel]` 值（`Panel` 的 `id` prop 会写进该属性） */
+const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai-panel', bottom: 'bottom' } as const
 
 /**
- * 面板被拖到内容下限以下 → 库把它折到 `collapsedSize`（`asPercentage === 0`）
- * → **松手时**关闭该区域（区域整体消失，从活动栏 / 右侧图标栏重新打开）。
+ * 分隔条**松手**时：若该区域已贴到内容下限 → 关闭它。
  *
- * ⚠️ **时序是关键**：拖拽过程中库持有布局，此时卸载面板会让「注册 N 个 / DOM N−1 个」不一致，
- * `ResizeObserver` 回调随即抛 `Invalid N panel layout: …` 并疯狂刷屏（2026-09-20 实测事故）。
- * 所以这里只在折叠态**武装**一个一次性 `pointerup`，真正关闭发生在松手之后一个宏任务。
- *
- * 两道防误关（都由实测教训换来）：
- * - `draggingSeparator`：库自动折叠（容器过小）不算用户意图，不武装。
- * - `seenNonZero`：挂载首帧可能短暂报告 0，不设防则之后任意一次点击都会误关该区域。
- *
- * 模块级单例：闭包状态必须跨渲染稳定，否则每次 render 都会重置武装状态。
+ * 三个设计决定，都是踩坑换来的（2026-09-20，勿回退）：
+ * - **直接量 DOM**（`[data-panel]` 的 `getBoundingClientRect`），不引入 ref / 模块级可变状态：
+ *   `App.tsx` 每次热更新都会重新求值模块顶层，模块级变量与 `window.addEventListener` 会**累积**，
+ *   旧闭包不失效 → 表现为「区域莫名自己关掉」。
+ * - **不用 `collapsible`**：库按 panel id 记账折叠态，关闭时卸载、重开时同 id 注册，可能恢复
+ *   「已折叠」记忆 → 区域看似回来了却仍是 0 宽；而且 `collapsible` 是「一过下限立刻折到 0」，
+ *   没有「停在下限」这一步。
+ * - **只在松手后关闭**：拖拽中库持有布局，此时卸载面板会让「注册 N 个 / DOM N−1 个」不一致，
+ *   `ResizeObserver` 回调随即抛 `Invalid N panel layout: …` 并刷屏。
  */
-function closeWhenCollapsed(region: 'sidebar' | 'ai' | 'bottom') {
-  let handler: (() => void) | null = null
-  let seenNonZero = false
-  const disarm = (): void => {
-    if (handler) { window.removeEventListener('pointerup', handler); handler = null }
-  }
-  return (size: { asPercentage: number }): void => {
-    if (size.asPercentage > 0) { seenNonZero = true; disarm(); return }
-    if (!seenNonZero || handler || !draggingSeparator) return
-    handler = () => {
-      disarm()
-      setTimeout(() => useLayoutStore.getState().closeRegion(region), 0)
-    }
-    window.addEventListener('pointerup', handler, { once: true })
+function closeIfAtFloor(region: 'sidebar' | 'ai' | 'bottom'): void {
+  const el = document.querySelector(`[data-panel="${REGION_PANEL_ID[region]}"]`)
+  if (!(el instanceof HTMLElement)) return
+  const rect = el.getBoundingClientRect()
+  const px = region === 'bottom' ? rect.height : rect.width
+  // 容差 1px：`minSize` 也是像素，贴住下限时两者应当相等
+  if (px > 0 && px <= REGION_MIN_PX[region] + 1) {
+    useLayoutStore.getState().closeRegion(region)
   }
 }
-
-const closeSidebarWhenCollapsed = closeWhenCollapsed('sidebar')
-const closeAiPanelWhenCollapsed = closeWhenCollapsed('ai')
-const closeBottomPanelWhenCollapsed = closeWhenCollapsed('bottom')
 
 /**
  * NovelForge 主应用组件
  * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局：
- * 每个区域有**内容下限**（到下限即停住）；再往里拖并松手 → 该区域**关闭（消失）**，
- * 从活动栏 / 右侧图标栏可重新打开。
+ * 每个区域有**内容下限**（到下限即停住）；在下限处松手 → 该区域**关闭（消失）**，
+ * 从活动栏 / 右侧图标栏可重新打开。实现细节见 `closeIfAtFloor` 的注释。
  */
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
@@ -127,6 +103,7 @@ export default function App() {
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
+
 
   // 初始化：主题 + LLM 模型 + 最近项目 + 缩放级别
   useEffect(() => {
@@ -258,12 +235,13 @@ export default function App() {
               {/* 左侧边栏 — 专注模式下隐藏 */}
               {(sidebarOpen && !focusMode) && (
                 <>
-                  <Panel id="sidebar" defaultSize={20} minSize={REGION_MIN_PX.sidebar} collapsible onResize={closeSidebarWhenCollapsed} aria-label={t('panel.sidebar')}>
+                  <Panel id="sidebar" defaultSize={20} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
                     <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
                       <Sidebar />
                     </ErrorBoundary>
                   </Panel>
-                  <PanelResizeHandle />
+                  {/* 松手时若侧栏已贴到内容下限 → 关闭它（见组件内 closeIfAtFloor 注释） */}
+                  <PanelResizeHandle onPointerUp={() => closeIfAtFloor('sidebar')} />
                 </>
               )}
 
@@ -280,8 +258,9 @@ export default function App() {
               {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
               {(aiPanelOpen && !focusMode) && (
                 <>
-                  <PanelResizeHandle />
-                  <Panel id="ai-panel" defaultSize={20} minSize={REGION_MIN_PX.ai} collapsible onResize={closeAiPanelWhenCollapsed} aria-label={t('panel.ai')}>
+                  {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
+                  <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
+                  <Panel id="ai-panel" defaultSize={20} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
                     <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                       {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
                     </ErrorBoundary>
@@ -292,9 +271,9 @@ export default function App() {
           </Panel>
 
           {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
-          {(bottomPanelOpen && !focusMode) && <PanelResizeHandle />}
+          {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
           {(bottomPanelOpen && !focusMode) && (
-            <Panel id="bottom" defaultSize={25} minSize={REGION_MIN_PX.bottom} collapsible onResize={closeBottomPanelWhenCollapsed} aria-label={t('panel.bottom')}>
+            <Panel id="bottom" defaultSize={25} minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
               <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                 <BottomPanel />
               </ErrorBoundary>
