@@ -93,17 +93,17 @@ function ToastContainer() {
 const TOAST_STYLE: Record<ToastType, { border: string; bg: string; icon: React.ReactNode }> = {
   success: {
     border: 'var(--color-success)',
-    bg: 'linear-gradient(135deg, rgba(16, 185, 129, 0.12), rgba(16, 185, 129, 0.04))',
+    bg: 'linear-gradient(135deg, rgba(var(--color-success-rgb), 0.12), rgba(var(--color-success-rgb), 0.04))',
     icon: <CheckCircle2 size={15} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
   },
   error: {
     border: 'var(--color-error)',
-    bg: 'linear-gradient(135deg, rgba(244, 63, 94, 0.12), rgba(244, 63, 94, 0.04))',
+    bg: 'linear-gradient(135deg, rgba(var(--color-error-rgb), 0.12), rgba(var(--color-error-rgb), 0.04))',
     icon: <AlertTriangle size={15} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
   },
   warning: {
     border: 'var(--color-warning)',
-    bg: 'linear-gradient(135deg, rgba(245, 158, 11, 0.12), rgba(245, 158, 11, 0.04))',
+    bg: 'linear-gradient(135deg, rgba(var(--color-warning-rgb), 0.12), rgba(var(--color-warning-rgb), 0.04))',
     icon: <AlertTriangle size={15} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
   },
   info: {

@@ -27,8 +27,8 @@ import { renderLog } from '../../services/render-logger'
 function getSourceConfig(t: (key: TextKey) => string) {
   return {
     builtin: { label: t('prompt.builtin'), color: 'var(--color-text-muted)', bg: 'var(--color-hover)' },
-    global: { label: t('prompt.global'), color: 'var(--color-info)', bg: 'rgba(59, 130, 246, 0.1)' },
-    project: { label: t('prompt.project'), color: 'var(--color-warning)', bg: 'rgba(245, 158, 11, 0.1)' },
+    global: { label: t('prompt.global'), color: 'var(--color-info)', bg: 'rgba(var(--color-info-rgb), 0.1)' },
+    project: { label: t('prompt.project'), color: 'var(--color-warning)', bg: 'rgba(var(--color-warning-rgb), 0.1)' },
   }
 }
 

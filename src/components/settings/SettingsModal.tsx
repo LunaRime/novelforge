@@ -87,7 +87,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   return (
     <div
       className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center"
-      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      style={{ backgroundColor: 'var(--color-backdrop)', backdropFilter: 'blur(4px)' }}
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
@@ -588,7 +588,7 @@ function ModelCard({
           onClick={onDelete}
           disabled={deleting}
           title={t('action.delete')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-red-500/10 text-[var(--color-text-muted)] hover:text-red-400 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
         </button>
@@ -885,7 +885,7 @@ function ModelForm({
         <Button variant="ghost" onClick={onCancel}>{t('action.cancel')}</Button>
       </div>
       {testResult && (
-        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-green-500/10 text-green-500 border border-green-500/20' : 'bg-red-500/10 text-red-500 border border-red-500/20'} break-all`}>
+        <div className={`text-xs p-2 rounded ${testResult.success ? 'bg-[rgba(var(--color-success-rgb),0.1)] text-[var(--color-success)] border border-[rgba(var(--color-success-rgb),0.2)]' : 'bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-error)] border border-[rgba(var(--color-error-rgb),0.2)]'} break-all`}>
           {testResult.success ? `✅ ${t('model.testSuccess')}` : `❌ ${t('model.testFailed').replace('{error}', testResult.error ?? '')}`}
         </div>
       )}
