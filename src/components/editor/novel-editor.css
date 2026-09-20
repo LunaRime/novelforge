@@ -71,8 +71,9 @@
 
 [data-group][style*="flex-direction: row"] > [data-separator] {
   width: 1px;
-  /* 静止态也要看得见区域边界：--color-sash 比 --color-border 与面板底色拉开更多明度差 */
-  background: var(--color-sash);
+  /* 静止态也要看得见区域边界：--color-separator 比 --color-border 与面板底色拉开更多明度差。
+     ⚠️ 不能指向 --color-sash —— 那是旧 .sash 组件的令牌，值是 transparent（会把线变没）。 */
+  background: var(--color-separator);
   cursor: col-resize;
 }
 
@@ -84,7 +85,7 @@
 
 [data-group][style*="flex-direction: column"] > [data-separator] {
   height: 1px;
-  background: var(--color-sash);
+  background: var(--color-separator);
   cursor: row-resize;
 }
 
