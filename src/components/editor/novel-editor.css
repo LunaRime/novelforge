@@ -70,27 +70,45 @@
 }
 
 [data-group][style*="flex-direction: row"] > [data-separator] {
-  width: 1px;
-  /* 静止态也要看得见区域边界：--color-separator 比 --color-border 与面板底色拉开更多明度差。
-     ⚠️ 不能指向 --color-sash —— 那是旧 .sash 组件的令牌，值是 transparent（会把线变没）。 */
-  background: var(--color-separator);
+  /* ⚠️ 6px 是**命中带**宽度，不是可见线宽（真机反馈：1px 时编辑区右边缘的滚动条与拖拽区
+     几乎贴在一起，想拖分隔条会抓到滚动条）。可见的仍是居中 1px 细线，靠渐变画出来。 */
+  width: 6px;
+  background-image: linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(50% - 0.5px),
+    var(--color-separator) calc(50% - 0.5px),
+    var(--color-separator) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px),
+    transparent 100%
+  );
   cursor: col-resize;
 }
 
 [data-group][style*="flex-direction: row"] > [data-separator]:hover,
 [data-group][style*="flex-direction: row"] > [data-separator][data-separator="dragging"] {
-  width: 2px;
-  background: var(--color-sash-hover);  /* 白色微光，非蓝色 */
+  /* 悬停/拖拽时整条带高亮；**不再改变宽度**（原实现 1px→2px 会让布局在悬停瞬间抖动） */
+  background-image: none;
+  background-color: var(--color-sash-hover);
 }
 
 [data-group][style*="flex-direction: column"] > [data-separator] {
-  height: 1px;
-  background: var(--color-separator);
+  /* 同理：横向分隔条也加宽命中带，可见线仍为居中 1px */
+  height: 6px;
+  background-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    transparent calc(50% - 0.5px),
+    var(--color-separator) calc(50% - 0.5px),
+    var(--color-separator) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px),
+    transparent 100%
+  );
   cursor: row-resize;
 }
 
 [data-group][style*="flex-direction: column"] > [data-separator]:hover,
 [data-group][style*="flex-direction: column"] > [data-separator][data-separator="dragging"] {
-  height: 2px;
-  background: var(--color-sash-hover);  /* 白色微光，非蓝色 */
+  background-image: none;
+  background-color: var(--color-sash-hover);  /* 白色微光，非蓝色 */
 }
