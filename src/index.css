@@ -152,10 +152,6 @@
 
     /* 边框 */
     --color-border: #DEE3ED;
-    /* 区域分隔线（react-resizable-panels 的 [data-separator]，静止态）：
-       目标是**低对比 hairline**——只比面板底色暗约 10~20 级，够看见边界但不抢视线。
-       ⚠️ 不要复用 --color-sash —— 那是旧 .sash 组件的令牌，值为 transparent。 */
-    --color-separator: #E2E7F0;
 
     /* 强调色（Logo 星空蓝） */
     --color-accent: #5B9ED6;
@@ -278,8 +274,6 @@
 
     /* 边框 — 深蓝色边框，微弱可见 */
     --color-border: #172B42;
-    /* 区域分隔线（静止态）——深色主题下取**略浅**的一档（低对比 hairline） */
-    --color-separator: #1D2A3F;
 
     /* 强调色 — Logo 冰蓝 #7EC8E3 */
     --color-accent: #7EC8E3;
@@ -359,8 +353,6 @@
     --color-text-muted: #A89888;
 
     --color-border: #DDD8D0;
-    /* 区域分隔线（静止态）——纸质主题下取略深的一档（低对比 hairline） */
-    --color-separator: #DFDAD2;
 
     /* 强调色 — Logo 薰衣草紫 #9B8EC8 */
     --color-accent: #9B8EC8;
@@ -439,8 +431,6 @@
     --color-text-muted: #888888;
 
     --color-border: #3C3C3C;
-    /* 区域分隔线（静止态）——黑夜主题下取略浅的一档（低对比 hairline） */
-    --color-separator: #373738;
 
     --color-accent: #0E639C;
     --color-accent-hover: #1177BB;

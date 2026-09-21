@@ -64,29 +64,32 @@
 /* ═══════════════════════════════════════════════════════════════════════════
    react-resizable-panels 分隔条样式
    ═══════════════════════════════════════════════════════════════════════════ */
+/* 区域之间留出**缓冲地带**：分隔条本身占一条可见的间隔带（用应用底色 `--color-bg`，
+   与面板色 `--color-panel` 有明度差），而不是一条紧贴两个面板的 1px 线。
+   真机反馈迭代史（勿回退）：
+   - 1px 线：只是"一条线"，两个面板视觉上仍然贴着，达不到"区域之间有缓冲"的效果。
+   - 6px 带 + 线画在带中央：线到不了带边缘，横向/竖向两条线在拐角处对不上。
+   现在：整条带就是缓冲（不再在带内画线），拐角由两条带自然相接。
+   命中区无需额外处理：库自己按指针类型扩展（`resizeTargetMinimumSize.coarse/fine`）。 */
 [data-separator] {
   flex-shrink: 0;
   transition: background 0.15s ease;
+  background: var(--color-bg);
 }
 
 [data-group][style*="flex-direction: row"] > [data-separator] {
-  /* **1px 且贴边**：必须占满分隔条本身的宽度，这样竖线与横向分隔条能在拐角处**直角相接**
-     （曾把线画在 6px 命中带的正中间，结果线到不了边缘、拐角对不上——真机反馈）。
-     命中区无需靠加宽元素：库自己按指针类型扩展（`resizeTargetMinimumSize.coarse/fine`）。 */
-  width: 1px;
-  background: var(--color-separator);
+  width: 6px;
   cursor: col-resize;
 }
 
 [data-group][style*="flex-direction: row"] > [data-separator]:hover,
 [data-group][style*="flex-direction: row"] > [data-separator][data-separator="dragging"] {
-  /* 只变色、**不变宽**：原实现 1px→2px 会让布局在悬停瞬间抖动 */
+  /* 只变色、**不变宽**：改变宽度会让布局在悬停/拖拽瞬间抖动 */
   background: var(--color-sash-hover);
 }
 
 [data-group][style*="flex-direction: column"] > [data-separator] {
-  height: 1px;
-  background: var(--color-separator);
+  height: 6px;
   cursor: row-resize;
 }
 
