@@ -55,9 +55,14 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     useLLMStore.setState({ models: [], defaultModelId: null })
   })
 
+  // 从预算条的 data 属性取四段 token（base,memory,history,current）的第 2 段。
+  // 2026-09-22 UI 重做后，窄面板放不下「记忆 N」这类标签（已挪进 title），
+  // 原本按文案正则匹配的写法会失效 —— 改读 data 属性，与文案解耦。
   const readMemoryToken = (container: HTMLElement): number => {
-    const m = container.textContent?.match(/记忆 (\d+)/)
-    return m ? Number(m[1]) : -1
+    const raw = container.querySelector('[data-budget-segments]')?.getAttribute('data-budget-segments')
+    if (!raw) return -1
+    const parts = raw.split(',')
+    return parts[1] === undefined ? -1 : Number(parts[1])
   }
 
   it('async 加载后记忆段反映 M2 真实值（与注入共用数据源）', async () => {
@@ -122,9 +127,13 @@ describe('RecentConversationItem hover 行为', () => {
     }))
     const { container, root } = render(<AgentConversation />)
 
-    const row = Array.from(container.querySelectorAll('button')).find(b => b.className.includes('group'))
+    // 2026-09-22 起外层的 role="button" 的 div（内联重命名要放 input，不能嵌在 <button> 里）
+    const row = Array.from(container.querySelectorAll<HTMLElement>('[role="button"], button'))
+      .find(el => el.className.includes('group'))
     expect(row).toBeTruthy()
-    const deleteBtn = row!.querySelector<HTMLButtonElement>('button[title]')
+    // 操作组里**最后一个**才是删除（前面还有 置顶 / 重命名 / 分叉 / 归档）
+    const opBtns = Array.from(row!.querySelectorAll<HTMLButtonElement>('button[title]'))
+    const deleteBtn = opBtns[opBtns.length - 1]
     const timeSpan = row!.querySelector<HTMLSpanElement>('span')
     expect(deleteBtn).toBeTruthy()
     expect(timeSpan).toBeTruthy()
@@ -134,11 +143,13 @@ describe('RecentConversationItem hover 行为', () => {
     // 断言 2：时间元素不含 'group-hover:hidden' 类（当前实现含——display 切换导致布局跳动根因）
     expect(timeSpan!.className).not.toContain('group-hover:hidden')
     // 断言 3：删除按钮的祖先容器有固定宽度 style（当前实现无固定宽度——修复前此断言失败，防假绿）
-    const rightBox = deleteBtn!.parentElement!
+    // ⚠️ 2026-09-22 起多了一层「操作组容器」：删除按钮的**祖父**才是固定宽度容器
+    const rightBox = deleteBtn!.parentElement!.parentElement!
     expect(rightBox.style.width).not.toBe('')
     // 正向锁定：固定宽度容器 + 两端 opacity 过渡替代 display 切换
     expect(rightBox.className).toContain('relative')
-    expect(deleteBtn!.className).toContain('group-hover:opacity-100')
+    // hover 淡入的是**操作组容器**（2026-09-22 起按钮本身只带 ACT_BTN 样式）
+    expect(rightBox.lastElementChild!.className).toContain('group-hover:opacity-100')
     expect(timeSpan!.className).toContain('group-hover:opacity-0')
     // 时间元素基础透明度须走类而非内联 style（内联 opacity 会压过 group-hover:opacity-0，hover 永不淡出）
     expect(timeSpan!.style.opacity).toBe('')
@@ -189,10 +200,11 @@ describe('EmptyState 历史条数配置', () => {
     useAgentStore.setState({ activeConversationId: null })
   }
 
-  /** 统计最近会话行数（RecentConversationItem 外层按钮 token 恰为 group；内层删除按钮为 group-hover:* 不算） */
+  /** 统计最近会话行数（RecentConversationItem 外层 token 恰为 group；
+   *  2026-09-22 起外层是 role="button" 的 div —— 内联重命名要放 input，不能嵌在 button 里） */
   const recentRowCount = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll('button'))
-      .filter(b => b.className.split(' ').includes('group')).length
+    Array.from(container.querySelectorAll<HTMLElement>('[role="button"]'))
+      .filter(el => el.className.split(' ').includes('group')).length
 
   it('按 config recentConversationCount 显示条数（mock 5 → 显示 5 条）', async () => {
     configValue = { recentConversationCount: 5 }
@@ -254,10 +266,11 @@ describe('AgentHistoryPanel fork 层级', () => {
     return { rootConv, childConv }
   }
 
-  /** RecentConversationItem 外层行（外层按钮 token 恰为 group；内层删除按钮为 group-hover:* 不算） */
+  /** RecentConversationItem 外层行（外层 token 恰为 group；内层按钮为 group-hover:* 不算）。
+   *  2026-09-22 起外层是 role="button" 的 div —— 内联重命名要放 input，不能嵌在 button 里 */
   const historyRows = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll('button'))
-      .filter(b => b.className.split(' ').includes('group'))
+    Array.from(container.querySelectorAll<HTMLElement>('[role="button"]'))
+      .filter(el => el.className.split(' ').includes('group'))
 
   it('fork 子会话缩进显示 + GitFork 图标 + 父会话标注', () => {
     const { rootConv, childConv } = makeForkState()
@@ -289,9 +302,11 @@ describe('AgentHistoryPanel fork 层级', () => {
       r.textContent?.includes(rootConv.title) && !r.textContent?.includes(childConv.title)
     )!
     expect(rowR).toBeTruthy()
-    // 根会话：无缩进、无分支图标、无标注文本
+    // 根会话：无缩进、无**标注**、无标注文本。
+    // ⚠️ 2026-09-22 起操作组里的「分叉」按钮也用 GitFork 图标，笼统查 svg.lucide-git-fork
+    // 会命中按钮本身 —— 改用数量锁定：根会话只有按钮那 1 个（子会话还会有标注用的第 2 个）
     expect(rowR.className).not.toContain('pl-5')
-    expect(rowR.querySelector('svg.lucide-git-fork')).toBeNull()
+    expect(rowR.querySelectorAll('svg.lucide-git-fork')).toHaveLength(1)
     expect(rowR.textContent).not.toContain('agent.forkedFrom')
     expect(rowR.textContent).not.toContain('来自')
     act(() => { root.unmount() })
@@ -337,15 +352,18 @@ describe('AgentConversation 末条消息 rewind 禁用（D1/F6）', () => {
     // rewind 按钮：正常态 title=agent.rewindToHere；禁用态 title=agent.rewindLastMessage（二选一匹配）
     const rewindBtns = Array.from(container.querySelectorAll<HTMLButtonElement>('button'))
       .filter(b => b.title === t('agent.rewindToHere') || b.title === t('agent.rewindLastMessage'))
-    expect(rewindBtns).toHaveLength(4)
-    // 末条（DOM 序最后一个）禁用 + 解释性 tooltip
+    // 2026-09-22：分支 / 回退只在**模型回复**下方渲染，用户消息不再有 ——
+    // 本 fixture 是 2 条用户 + 2 条助手，所以只剩 2 个
+    expect(rewindBtns).toHaveLength(2)
+    // 末条助手消息（DOM 序最后一个）禁用 + 解释性 tooltip
     const last = rewindBtns[rewindBtns.length - 1]!
     expect(last.disabled).toBe(true)
     expect(last.title).toBe(t('agent.rewindLastMessage'))
-    // 其余 3 条可点且 tooltip 不变
-    expect(rewindBtns.slice(0, -1).every(b => !b.disabled && b.title === t('agent.rewindToHere'))).toBe(true)
-    // 禁用不影响末条 fork 入口（4 条消息仍全部可见 GitFork 按钮）
-    expect(container.querySelectorAll('svg.lucide-git-fork')).toHaveLength(4)
+    // 另一条助手消息可点且 tooltip 不变
+    expect(rewindBtns[0]!.disabled).toBe(false)
+    expect(rewindBtns[0]!.title).toBe(t('agent.rewindToHere'))
+    // 禁用不影响 fork 入口（两条助手消息均可见 GitFork 按钮）
+    expect(container.querySelectorAll('svg.lucide-git-fork')).toHaveLength(2)
 
     act(() => { root.unmount() })
   })

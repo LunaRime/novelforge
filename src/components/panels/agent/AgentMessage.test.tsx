@@ -54,8 +54,10 @@ describe('AgentMessage 思考折叠', () => {
     }
     const { container, root } = render(<AgentMessage message={msg} />)
     expect(container.textContent).toContain('普通正文内容没有思考块')
-    // 无折叠按钮（思考块头部）
-    expect(container.querySelector('button')).toBeNull()
+    // 无思考折叠按钮 —— 按折叠头部的特征类判断：
+    // 2026-09-22 起每条回复底部固定有「复制 / 满意 / 不满意」按钮，
+    // 再笼统断言 `querySelector('button') === null` 已不成立
+    expect(container.querySelector('[class*="w-full text-left"]')).toBeNull()
     act(() => { root.unmount() })
   })
 })
@@ -63,16 +65,15 @@ describe('AgentMessage 思考折叠', () => {
 describe('AgentMessage 分支操作', () => {
   afterEach(() => { document.body.innerHTML = '' })
 
-  it('hover 操作区默认不可见（opacity-0 + 无 display 切换），提供 onFork/onRewind 回调时渲染按钮', () => {
+  it('操作区**持续显示**（2026-09-22 起不再 hover 显隐），提供 onFork/onRewind 回调时渲染按钮', () => {
     const onFork = vi.fn()
     const onRewind = vi.fn()
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onFork={onFork} onRewind={onRewind} />)
-    // 操作区容器存在：opacity 过渡模式（C1：固定容器，禁止 display 切换导致布局跳动）
-    const actions = container.querySelector<HTMLElement>('[class*="group-hover:opacity-100"]')
+    // 操作区容器常显：仍用固定容器（禁止 display 切换导致布局跳动）
+    const actions = container.querySelector<HTMLElement>('[title="从此处分支"]')?.parentElement
     expect(actions).toBeTruthy()
-    expect(actions!.classList.contains('opacity-0')).toBe(true)
-    expect(actions!.classList.contains('transition-opacity')).toBe(true)
+    expect(actions!.classList.contains('opacity-0')).toBe(false)
     expect(actions!.classList.contains('hidden')).toBe(false)
     // 两个按钮 title 存在（B4 键落地后为真实 zh-CN 文案，按键值断言——键名断言已随 cast 移除失效）
     expect(container.querySelector('[title="从此处分支"]')).toBeTruthy()
@@ -102,27 +103,30 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
-  it('用户消息（role=user）气泡变体：右对齐 + 内容原样 + 分支操作区可用（B2 补强）', () => {
+  it('用户消息（role=user）气泡变体：右对齐 + 内容原样 + 气泡下方只有时间与复制', () => {
     const onFork = vi.fn()
     const onRewind = vi.fn()
     const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onFork={onFork} onRewind={onRewind} />)
     const wrap = container.firstElementChild as HTMLElement
-    // 用户消息右对齐（助手消息为 justify-start——两类消息的视觉区分点）
-    expect(wrap.className).toContain('justify-end')
-    expect(wrap.className).not.toContain('justify-start')
-    // 气泡样式：accent 半透明背景（内联 style，用户消息专用视觉）
-    const bubble = wrap.firstElementChild as HTMLElement
+    // 用户消息右对齐（助手消息为 left）。
+    // 2026-09-22 起改为纵向布局（flex-col items-end）：气泡在上、时间与操作在气泡**下方**
+    expect(wrap.className).toContain('items-end')
+    expect(wrap.className).not.toContain('items-start')
+    // 气泡样式：accent 半透明背景（内联 style，用户消息专用视觉）。
+    // 2026-09-22 起操作区移到气泡**外**，气泡不再是 wrap 的第一个子元素 —— 改为按内容定位。
+    const bubble = [...wrap.children].find(el => (el.textContent || '').includes('用户输入的原样文本')) as HTMLElement
+    expect(bubble).toBeTruthy()
     expect(bubble.style.backgroundColor).toBe('rgba(var(--color-accent-rgb), 0.12)')
     // 内容原样渲染（不走 Markdown/思考块拆分）
     expect(container.textContent).toContain('用户输入的原样文本')
-    // 分支操作区在气泡内且可用（fork/rewind 回调均触发）
-    act(() => {
-      container.querySelector<HTMLButtonElement>('[title="从此处分支"]')!.click()
-      container.querySelector<HTMLButtonElement>('[title="回退到此处"]')!.click()
-    })
-    expect(onFork).toHaveBeenCalledWith('u1')
-    expect(onRewind).toHaveBeenCalledWith('u1')
+    // 2026-09-22：用户气泡下方只保留「时间 + 复制」——
+    // 分支 / 回退只在模型回复下方渲染，用户消息不再出现这两个按钮
+    expect(container.querySelector('[title="从此处分支"]')).toBeNull()
+    expect(container.querySelector('[title="回退到此处"]')).toBeNull()
+    expect(container.querySelector('[title="复制消息"]')).toBeTruthy()
+    expect(onFork).not.toHaveBeenCalled()
+    expect(onRewind).not.toHaveBeenCalled()
     act(() => { root.unmount() })
   })
 

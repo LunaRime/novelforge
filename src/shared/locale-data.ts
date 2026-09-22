@@ -750,6 +750,23 @@ export const UI_TEXTS_DATA = {
   'tip.retryFailed': { 'zh-CN': '重试失败步骤', 'en-US': 'Retry failed steps', 'ru-RU': 'Повторить сбойные шаги' },
   'tip.retryStep': { 'zh-CN': '重试此步骤', 'en-US': 'Retry this step', 'ru-RU': 'Повторить шаг' },
   'tip.copyResult': { 'zh-CN': '复制结果', 'en-US': 'Copy result', 'ru-RU': 'Копировать результат' },
+  'tip.copyMessage': { 'zh-CN': '复制消息', 'en-US': 'Copy message', 'ru-RU': 'Копировать сообщение' },
+  'tip.copied': { 'zh-CN': '已复制', 'en-US': 'Copied', 'ru-RU': 'Скопировано' },
+  'tip.copyFailed': { 'zh-CN': '复制失败', 'en-US': 'Copy failed', 'ru-RU': 'Не удалось скопировать' },
+  'agent.feedbackUp': { 'zh-CN': '有帮助', 'en-US': 'Helpful', 'ru-RU': 'Полезно' },
+  'agent.feedbackDown': { 'zh-CN': '没帮助', 'en-US': 'Not helpful', 'ru-RU': 'Бесполезно' },
+  'agent.noWorkspace': { 'zh-CN': '未关联项目', 'en-US': 'No project', 'ru-RU': 'Без проекта' },
+  'agent.renameConversation': { 'zh-CN': '重命名', 'en-US': 'Rename', 'ru-RU': 'Переименовать' },
+  'agent.archiveConversation': { 'zh-CN': '归档', 'en-US': 'Archive', 'ru-RU': 'В архив' },
+  'agent.unarchiveConversation': { 'zh-CN': '取消归档', 'en-US': 'Unarchive', 'ru-RU': 'Из архива' },
+  'agent.showArchived': { 'zh-CN': '显示已归档', 'en-US': 'Show archived', 'ru-RU': 'Показать архив' },
+  'agent.pinConversation': { 'zh-CN': '置顶', 'en-US': 'Pin', 'ru-RU': 'Закрепить' },
+  'agent.unpinConversation': { 'zh-CN': '取消置顶', 'en-US': 'Unpin', 'ru-RU': 'Открепить' },
+  'agent.duplicateConversation': { 'zh-CN': '分叉为新会话', 'en-US': 'Fork as new chat', 'ru-RU': 'Ответвить как новый чат' },
+  'agent.newChatInWorkspace': { 'zh-CN': '在此工作区新建对话', 'en-US': 'New chat in workspace', 'ru-RU': 'Новый чат в рабочей области' },
+  'agent.renameWorkspace': { 'zh-CN': '重命名工作区', 'en-US': 'Rename workspace', 'ru-RU': 'Переименовать область' },
+  'agent.deleteWorkspace': { 'zh-CN': '删除工作区', 'en-US': 'Delete workspace', 'ru-RU': 'Удалить рабочую область' },
+  'agent.deleteWorkspaceConfirm': { 'zh-CN': '确定删除工作区「{name}」下的全部 {count} 个对话吗？此操作不可撤销。', 'en-US': 'Delete all {count} chats under workspace "{name}"? This cannot be undone.', 'ru-RU': 'Удалить все {count} чатов в области «{name}»? Действие необратимо.' },
   'tip.clickView': { 'zh-CN': '点击查看', 'en-US': 'Click to view', 'ru-RU': 'Нажмите для просмотра' },
   'tip.scrollBottom': { 'zh-CN': '回到底部', 'en-US': 'Scroll to bottom', 'ru-RU': 'Вниз' },
   'tip.switchAIOutput': { 'zh-CN': '切换到 AI 输出面板', 'en-US': 'Switch to AI output panel', 'ru-RU': 'Панель вывода ИИ' },
@@ -1594,18 +1611,24 @@ export const UI_TEXTS_DATA = {
   'agent.workflowCmd': { 'zh-CN': '工作流命令', 'en-US': 'Workflow command', 'ru-RU': 'Команда рабочего процесса' },
   'agent.placeholder': { 'zh-CN': '输入消息，@ 提及，/ 使用工作流...', 'en-US': 'Type a message, @ mention, / workflow...', 'ru-RU': 'Сообщение, @упоминание, /команда...' },
   'agent.depthTitle': { 'zh-CN': '思考等级', 'en-US': 'Thinking level', 'ru-RU': 'Уровень мышления' },
-  /* 思考档位名统一用**英文简写**（用户 2026-09-22 指定）：三种语言都显示同一组英文——
-     它们是稳定的能力档位代号，且各语言长度差异极大（俄语「Стремительно」13 字符会把
-     窄面板里的输入工具栏撑变形，见 AgentInputBox 的档位标签），统一后长度可预期。 */
-  'agent.depthL1': { 'zh-CN': 'Quick', 'en-US': 'Quick', 'ru-RU': 'Quick' },
+  /* 思考档位名：**对称阶梯 + 英文简写**（用户 2026-09-22 指定）。
+     ① 三语言显示同一组英文 —— 各语言长度差异极大（俄语「Стремительно」13 字符会把窄面板的
+        输入工具栏撑变形），统一后长度可预期；
+     ② 命名沿 MIN→MAX 的强度阶梯，而不是"能力描述"（原先 Quick/Swift/Balanced/Reflective/Deep
+        既不成阶梯、也没有用户预期的 MIN/LOW 这类低端档位名）。
+     六档：MIN / LOW / MID / HIGH / DEEP / MAX */
+  'ccr.contextUsage': { 'zh-CN': '上下文占用', 'en-US': 'Context usage', 'ru-RU': 'Использование контекста' },
+  'ccr.clickForDetail': { 'zh-CN': '点击查看上下文明细', 'en-US': 'Click for context details', 'ru-RU': 'Нажмите для подробностей' },
+  'ccr.total': { 'zh-CN': '合计', 'en-US': 'Total', 'ru-RU': 'Итого' },
+  'agent.depthL1': { 'zh-CN': 'MIN', 'en-US': 'MIN', 'ru-RU': 'MIN' },
   'agent.depthL1Desc': { 'zh-CN': '直接执行，适合简单快速任务', 'en-US': 'Direct execution, suitable for simple quick tasks', 'ru-RU': 'Прямое выполнение, для простых задач' },
-  'agent.depthL2': { 'zh-CN': 'Swift', 'en-US': 'Swift', 'ru-RU': 'Swift' },
+  'agent.depthL2': { 'zh-CN': 'LOW', 'en-US': 'LOW', 'ru-RU': 'LOW' },
   'agent.depthL2Desc': { 'zh-CN': '快速响应，在保证基础质量的前提下尽量简洁', 'en-US': 'Quick response, concise while keeping basic quality', 'ru-RU': 'Быстрый ответ, лаконично при сохранении базового качества' },
-  'agent.depthL3': { 'zh-CN': 'Balanced', 'en-US': 'Balanced', 'ru-RU': 'Balanced' },
+  'agent.depthL3': { 'zh-CN': 'MID', 'en-US': 'MID', 'ru-RU': 'MID' },
   'agent.depthL3Desc': { 'zh-CN': '先评估复杂度：简单直接执行，复杂先规划', 'en-US': 'Assess complexity: execute simple directly, plan complex ones', 'ru-RU': 'Оценка сложности: простые сразу, сложные — с планом' },
-  'agent.depthL4': { 'zh-CN': 'Reflective', 'en-US': 'Reflective', 'ru-RU': 'Reflective' },
+  'agent.depthL4': { 'zh-CN': 'HIGH', 'en-US': 'HIGH', 'ru-RU': 'HIGH' },
   'agent.depthL4Desc': { 'zh-CN': '先分析再行动，注重完成质量，可适当多轮推演', 'en-US': 'Analyze before acting, emphasize quality, allow multi-pass reasoning', 'ru-RU': 'Сначала анализ, затем действие; акцент на качестве' },
-  'agent.depthL5': { 'zh-CN': 'Deep', 'en-US': 'Deep', 'ru-RU': 'Deep' },
+  'agent.depthL5': { 'zh-CN': 'DEEP', 'en-US': 'DEEP', 'ru-RU': 'DEEP' },
   'agent.depthL5Desc': { 'zh-CN': '深度规划后执行，适合复杂多步骤任务', 'en-US': 'Deep planning before execution, for complex multi-step tasks', 'ru-RU': 'Глубокое планирование перед выполнением' },
   'agent.depthL6': { 'zh-CN': 'MAX', 'en-US': 'MAX', 'ru-RU': 'MAX' },
   'agent.depthL6Desc': { 'zh-CN': '全力模式：深度规划 + 完整工具链，逐步严谨验证', 'en-US': 'MAX: deep planning + full toolchain, rigorously verified step by step', 'ru-RU': 'МАКС: глубокое планирование + полный набор инструментов' },

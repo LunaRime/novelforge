@@ -254,8 +254,8 @@ const UNDEFINED_TOKEN_EXEMPT: { name: string; count: number; reason: string }[] 
   },
   {
     name: '--color-bg-hover',
-    count: 2,
-    reason: 'FOLLOW-UP(待决策): 同上（CompressedBatchCard / ContextBudgetBar 底）；与既有 --color-hover 是否语义等同需产品确认',
+    count: 1,
+    reason: 'FOLLOW-UP(待决策): CompressedBatchCard 底；与既有 --color-hover 是否语义等同需产品确认（ContextBudgetBar 底环已于 2026-09-22 改用 --color-border，故本条从 2 降为 1）',
   },
   {
     name: '--color-input',

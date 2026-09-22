@@ -38,6 +38,8 @@ export interface AgentMessage {
   toolCalls?: ToolCallInfo[]
   /** 产物列表（Agent 创建/修改的文件、触发的工作流等） */
   artifacts?: ToolArtifact[]
+  /** 用户反馈（2026-09-22）：对模型回复满意/不满意；再次点击同一档即取消。随会话一起落盘 */
+  feedback?: 'up' | 'down'
 }
 
 /** fork/rewind 分支：rewind 归档（可恢复） */
@@ -74,6 +76,10 @@ export interface AgentConversation {
   forkMessageId?: string
   /** rewind 归档：被截断消息，可 restoreRewound 恢复 */
   rewound?: RewoundBranch[]
+  /** 归档（2026-09-22）：默认从历史列表隐藏，可切换显示 */
+  archived?: boolean
+  /** 置顶（2026-09-22）：排在同工作区（同项目）最前 */
+  pinned?: boolean
 }
 
 // ===== Store 状态接口 =====
@@ -104,7 +110,19 @@ interface AgentState {
   /** 初始化 Tool 系统 */
   initializeTools: () => void
   /** 新建会话并激活 */
-  createConversation: (opts?: { roleplayCharacter?: string; title?: string }) => AgentConversation
+  createConversation: (opts?: { roleplayCharacter?: string; title?: string; projectPath?: string; projectName?: string }) => AgentConversation
+  /** 重命名会话（空白标题忽略） */
+  renameConversation: (id: string, title: string) => void
+  /** 归档 / 取消归档（归档的默认不显示在历史列表） */
+  archiveConversation: (id: string, archived: boolean) => void
+  /** 置顶 / 取消置顶（同工作区内排最前） */
+  pinConversation: (id: string, pinned: boolean) => void
+  /** **整条会话**分叉：复制全部消息为新会话（区别于消息级的 forkConversation） */
+  duplicateConversation: (id: string) => void
+  /** 重命名**工作区**（只改该组会话的显示名，不动磁盘上的实际项目） */
+  renameWorkspace: (projectPath: string, name: string) => void
+  /** 删除**工作区**：删掉该分组下全部会话（含归档）。调用方必须先二次确认 */
+  deleteWorkspace: (projectPath: string) => void
   /** 激活指定会话 */
   selectConversation: (id: string) => void
   /** 删除指定会话 */
@@ -146,6 +164,8 @@ interface AgentState {
   restoreRewound: (entryIndex: number) => boolean
   /** 持久化会话（防抖 500ms，fire-and-forget）；convId 缺省取当前活跃会话 */
   persistCurrent: (convId?: string) => Promise<void>
+  /** 设置某条消息的反馈（满意/不满意）；再次传入相同值即取消该反馈 */
+  setMessageFeedback: (messageId: string, feedback: 'up' | 'down') => void
 }
 
 // ===== 工具函数 =====
@@ -233,7 +253,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ toolsInitialized: true })
   },
 
-  createConversation: (opts?: { roleplayCharacter?: string; title?: string }) => {
+  createConversation: (opts?: { roleplayCharacter?: string; title?: string; projectPath?: string; projectName?: string }) => {
     // 确保 Tool 已初始化
     get().initializeTools()
 
@@ -248,8 +268,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       mode: get().defaultMode,
       modelId: llmStore.defaultModelId,
       roleplayCharacter: opts?.roleplayCharacter,
-      projectPath: project?.path,
-      projectName: project?.name,
+      // 显式指定优先（历史面板的「在该工作区新建对话」）；未指定则取当前项目（普通新建）
+      projectPath: opts?.projectPath ?? project?.path,
+      projectName: opts?.projectName ?? project?.name,
     }
     set(state => ({
       conversations: [newConv, ...state.conversations],
@@ -1148,6 +1169,92 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
     get().persistCurrent(conv.id)
     return true
+  },
+
+  setMessageFeedback: (messageId, feedback) => {
+    const { conversations, activeConversationId } = get()
+    if (!activeConversationId) return
+    set({
+      conversations: conversations.map(c =>
+        c.id === activeConversationId
+          ? {
+              ...c,
+              messages: c.messages.map(m =>
+                // 再点同一档即取消（toggle）——与常见反馈控件的行为一致
+                m.id === messageId ? { ...m, feedback: m.feedback === feedback ? undefined : feedback } : m
+              ),
+            }
+          : c
+      ),
+    })
+    get().persistCurrent(activeConversationId)
+  },
+
+  renameConversation: (id, title) => {
+    const next = title.trim()
+    if (!next) return
+    set({
+      conversations: get().conversations.map(c =>
+        c.id === id ? { ...c, title: next, updatedAt: Date.now() } : c
+      ),
+    })
+    get().persistCurrent(id)
+  },
+
+  archiveConversation: (id, archived) => {
+    set({
+      conversations: get().conversations.map(c => (c.id === id ? { ...c, archived } : c)),
+    })
+    get().persistCurrent(id)
+  },
+
+  pinConversation: (id, pinned) => {
+    set({
+      conversations: get().conversations.map(c => (c.id === id ? { ...c, pinned } : c)),
+    })
+    get().persistCurrent(id)
+  },
+
+  duplicateConversation: (id) => {
+    const src = get().conversations.find(c => c.id === id)
+    if (!src) return
+    // 消息 id 必须重新生成：沿用原 id 会让「消息级 fork/rewind/feedback」在两条会话间串味
+    const copy: AgentConversation = {
+      ...src,
+      id: genId(),
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      parentId: src.id,
+      forkMessageId: undefined,   // 整条复制 ≠ 从某条消息分叉
+      pinned: false,
+      archived: false,
+      messages: src.messages.map(m => ({ ...m, id: genId() })),
+    }
+    set(state => ({ conversations: [copy, ...state.conversations], activeConversationId: copy.id }))
+    get().persistCurrent(copy.id)
+  },
+
+  renameWorkspace: (projectPath, name) => {
+    const next = name.trim()
+    if (!next) return
+    const key = projectPath || '__none__'
+    const inGroup = (p?: string) => (p || '__none__') === key
+    set({
+      conversations: get().conversations.map(c => (inGroup(c.projectPath) ? { ...c, projectName: next } : c)),
+    })
+    // 该组每条都要落盘（persistCurrent 是按会话的）
+    for (const c of get().conversations) {
+      if (inGroup(c.projectPath)) get().persistCurrent(c.id)
+    }
+  },
+
+  deleteWorkspace: (projectPath) => {
+    const key = projectPath || '__none__'
+    const ids = get().conversations
+      .filter(c => (c.projectPath || '__none__') === key)
+      .map(c => c.id)
+    // 逐条复用 deleteConversation：活跃会话回退、读去重清空、归档文件删除都已覆盖
+    for (const id of ids) get().deleteConversation(id)
   },
 
   persistCurrent: async (convId?: string) => {

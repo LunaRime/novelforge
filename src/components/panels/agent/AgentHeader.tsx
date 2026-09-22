@@ -1,4 +1,4 @@
-import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, Brain } from 'lucide-react'
+import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, Brain, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMCPStore } from '../../../stores/mcp-store'
@@ -15,7 +15,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
  * Agent 面板顶部工具栏
  */
 export default function AgentHeader() {
-  const { createConversation, toggleHistory, showHistory, getActiveConversation, memoryView, toggleMemoryView } = useAgentStore()
+  const { createConversation, toggleHistory, getActiveConversation, toggleMemoryView } = useAgentStore()
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
@@ -79,41 +79,8 @@ export default function AgentHeader() {
           <Plus size={13} strokeWidth={1.5} />
         </Button>
 
-        {/* 历史记录按钮 */}
-        <Button
-          variant="ghost"
-          title={t('tip.historyConversations')}
-          onClick={toggleHistory}
-          active={showHistory}
-          style={{ width: 18, height: 18, padding: 0 }}
-        >
-          <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width={15}
-            height={15}
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.5}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-            <path d="M3 3v5h5" />
-            <path d="M12 7v5l4 2" />
-          </svg>
-        </Button>
-
-        {/* 记忆查看器按钮（P3 Task 3：切换 AI 面板内嵌记忆视图） */}
-        <Button
-          variant="ghost"
-          title={t('memory.menuTitle')}
-          onClick={() => { setShowMore(false); toggleMemoryView() }}
-          active={memoryView}
-          style={{ width: 18, height: 18, padding: 0 }}
-        >
-          <Brain size={15} strokeWidth={1.5} />
-        </Button>
+        {/* 历史 / 记忆 已收进「更多」菜单（2026-09-22 UI 重做：264px 窄面板里
+            五个图标（+ ⟲ 🧠 ⋯ ✕）过于拥挤，只留高频的新建与更多，其余进菜单） */}
 
         {/* 更多菜单 */}
         <div className="relative" ref={moreRef}>
@@ -146,6 +113,17 @@ export default function AgentHeader() {
               {/* ===== 主菜单视图 ===== */}
               {subView === 'main' && (
                 <>
+                  {/* 历史对话 / 记忆查看（原为标题栏独立图标，UI 重做后收进此处） */}
+                  <MenuItem
+                    label={t('tip.historyConversations')}
+                    icon={<History size={13} />}
+                    onClick={() => { setShowMore(false); toggleHistory() }}
+                  />
+                  <MenuItem
+                    label={t('memory.menuTitle')}
+                    icon={<Brain size={13} />}
+                    onClick={() => { setShowMore(false); toggleMemoryView() }}
+                  />
                   <MenuItem
                     label={t('agent.mcpServers')}
                     icon={<Server size={13} />}

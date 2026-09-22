@@ -77,6 +77,10 @@
   align-items: center;
   gap: 4px;
   font-size: 0.7rem;
+  /* 2026-09-22 真机实测：264px 窄面板里状态文字（「完成」）被挤成竖排两行、
+     导致每个工具块高度参差 —— 状态区不参与收缩，也不允许换行。 */
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
 .tool-call-status.completed {
