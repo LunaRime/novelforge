@@ -4,7 +4,6 @@ import {
 } from 'lucide-react'
 import { useLayoutStore, type SidebarView, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { useEditorStore } from '../../stores/editor-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import ProjectSquareList from './ProjectSquareList'
 
@@ -39,20 +38,10 @@ export default function LeftToolWindowBar() {
   const setBottomTab = useLayoutStore(s => s.setBottomTab)
   const currentRun = useWorkflowStore(s => s.currentRun)
 
-  /** 写作统计页是否已在编辑区打开（按钮激活态） */
-  const activityPageOpen = useEditorStore(s => s.tabs.some(tab => tab.type === 'activity'))
-
   const openSettings = useLayoutStore(s => s.openSettings)
-
-  /** 打开「写作统计」编辑区页面（2026-09-22 从底栏 tab 搬出：
-      它是结果型看板，与「任务/日志」那种运行态信息不同类，且需要编辑区的宽度才展得开） */
-  const openActivityPage = () => {
-    useEditorStore.getState().openFile({
-      id: 'activity-page',
-      name: t('panel.activityShort'),
-      type: 'activity',
-    })
-  }
+  // 写作统计弹窗（2026-09-22：底栏 tab → 编辑区页面 → 弹窗，最终形态）
+  const activityDialogOpen = useLayoutStore(s => s.activityDialogOpen)
+  const openActivityDialog = useLayoutStore(s => s.openActivityDialog)
 
   /** Home 按钮是否激活 */
   const homeActive = sidebarOpen && sidebarView === 'home'
@@ -167,18 +156,18 @@ export default function LeftToolWindowBar() {
           )
         })}
 
-        {/* 写作统计 — 打开**编辑区页面**（不是底栏 tab）：点一次打开/激活，已打开时保持高亮 */}
+        {/* 写作统计 — 打开**弹窗**（2026-09-22 定为弹窗形态：结果型看板，偶发查看，不该占编辑区页签） */}
         <div className="relative w-full">
           <button
-            onClick={openActivityPage}
+            onClick={() => openActivityDialog()}
             title={t('panel.activityShort')}
             className="tool-btn"
             style={{
-              boxShadow: activityPageOpen ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
-              color: activityPageOpen ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
+              boxShadow: activityDialogOpen ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
+              color: activityDialogOpen ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
             }}
           >
-            <Activity size={15} strokeWidth={activityPageOpen ? 2 : 1.5} />
+            <Activity size={15} strokeWidth={activityDialogOpen ? 2 : 1.5} />
           </button>
         </div>
 

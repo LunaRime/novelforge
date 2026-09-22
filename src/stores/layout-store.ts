@@ -34,6 +34,8 @@ interface LayoutState {
   // ===== 全局弹窗状态（替代 window.dispatchEvent 事件总线）=====
   /** 设置弹窗是否打开 */
   settingsOpen: boolean
+  /** 写作统计弹窗是否打开（2026-09-22 由"编辑区页面"改为弹窗） */
+  activityDialogOpen: boolean
   /** 打开设置时指定的初始分区（无则回默认 llm） */
   settingsSection?: string
   /** 新建项目对话框是否打开 */
@@ -74,6 +76,8 @@ interface LayoutState {
   /** 打开设置弹窗，可指定初始分区（如 'llm'） */
   openSettings: (section?: string) => void
   closeSettings: () => void
+  openActivityDialog: () => void
+  closeActivityDialog: () => void
   openNewProject: () => void
   closeNewProject: () => void
   openImportNovel: () => void
@@ -98,6 +102,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
 
   // 全局弹窗默认关闭
   settingsOpen: false,
+  activityDialogOpen: false,
   settingsSection: undefined,
   newProjectOpen: false,
   importNovelOpen: false,
@@ -132,6 +137,8 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   // 全局弹窗 Actions
   openSettings: (section) => set({ settingsOpen: true, settingsSection: section }),
   closeSettings: () => set({ settingsOpen: false }),
+  openActivityDialog: () => set({ activityDialogOpen: true }),
+  closeActivityDialog: () => set({ activityDialogOpen: false }),
   openNewProject: () => set({ newProjectOpen: true }),
   closeNewProject: () => set({ newProjectOpen: false }),
   openImportNovel: () => set({ importNovelOpen: true }),

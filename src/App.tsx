@@ -21,6 +21,7 @@ import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
+import ActivityDialog from './components/dialogs/ActivityDialog'
 import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { toast } from './components/ui/Toast'
@@ -99,6 +100,7 @@ export default function App() {
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
     focusMode, bottomPanelOpen,
+    activityDialogOpen, closeActivityDialog,
   } = useLayoutStore(useShallow(s => ({
     sidebarOpen: s.sidebarOpen,
     aiPanelOpen: s.aiPanelOpen,
@@ -114,6 +116,8 @@ export default function App() {
     closeChapterCreation: s.closeChapterCreation,
     focusMode: s.focusMode,
     bottomPanelOpen: s.bottomPanelOpen,
+    activityDialogOpen: s.activityDialogOpen,
+    closeActivityDialog: s.closeActivityDialog,
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -354,6 +358,13 @@ export default function App() {
           isOpen={chapterCreationOpen}
           prefill={chapterCreationPrefill}
           onClose={closeChapterCreation}
+        />
+      </ErrorBoundary>
+      {/* 写作统计弹窗（2026-09-22 由"编辑区页面"改为弹窗） */}
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <ActivityDialog
+          open={activityDialogOpen}
+          onClose={closeActivityDialog}
         />
       </ErrorBoundary>
       {/* 全屏设置弹窗 — key 随开关变化重新挂载，保证每次打开回到默认分区 */}

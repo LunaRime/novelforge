@@ -568,7 +568,32 @@
     -webkit-user-select: text;
   }
 
-  /* ===== 滚动条样式（细腻 6px） ===== */
+  /* ===== 滚动条（细腻 6px，**默认隐形**，鼠标进入所在面板才显形）=====
+     真机反馈：常驻的滚动条"有点碍眼"。::-webkit-scrollbar-thumb 是伪元素、不能自己 hover，
+     所以用「默认透明 + 祖先 :hover 时改写变量」的写法：
+     --scrollbar-thumb 默认 transparent，鼠标进入所在面板（卡片 / 弹窗 / 图标栏）时被改写成
+     active 色，由伪元素继承。四套主题只需覆盖 active / hover 两个变量。 */
+  :root {
+    --scrollbar-thumb: transparent;
+    --scrollbar-thumb-active: rgba(128, 128, 128, 0.25);
+    --scrollbar-thumb-hover: rgba(128, 128, 128, 0.45);
+  }
+
+  .galaxy {
+    --scrollbar-thumb-active: rgba(126, 200, 227, 0.25);
+    --scrollbar-thumb-hover: rgba(126, 200, 227, 0.45);
+  }
+
+  .dark {
+    --scrollbar-thumb-active: rgba(128, 128, 128, 0.20);
+    --scrollbar-thumb-hover: rgba(128, 128, 128, 0.40);
+  }
+
+  .paper {
+    --scrollbar-thumb-active: rgba(120, 100, 80, 0.20);
+    --scrollbar-thumb-hover: rgba(120, 100, 80, 0.35);
+  }
+
   ::-webkit-scrollbar {
     width: 6px;
     height: 6px;
@@ -579,36 +604,21 @@
   }
 
   ::-webkit-scrollbar-thumb {
-    background: rgba(128, 128, 128, 0.25);
+    background: var(--scrollbar-thumb);
     border-radius: 3px;
+    transition: background 0.2s ease;
   }
 
+  /* 鼠标进入滚动区域所在的面板 → 该面板内的滚动条显形 */
+  [data-region]:hover,
+  [role="dialog"]:hover,
+  [data-activity-bar]:hover {
+    --scrollbar-thumb: var(--scrollbar-thumb-active);
+  }
+
+  /* 直接悬停滚动条本身 → 加深 */
   ::-webkit-scrollbar-thumb:hover {
-    background: rgba(128, 128, 128, 0.45);
-  }
-
-  .galaxy ::-webkit-scrollbar-thumb {
-    background: rgba(126, 200, 227, 0.12);
-  }
-
-  .galaxy ::-webkit-scrollbar-thumb:hover {
-    background: rgba(126, 200, 227, 0.25);
-  }
-
-  .dark ::-webkit-scrollbar-thumb {
-    background: rgba(128, 128, 128, 0.20);
-  }
-
-  .dark ::-webkit-scrollbar-thumb:hover {
-    background: rgba(128, 128, 128, 0.40);
-  }
-
-  .paper ::-webkit-scrollbar-thumb {
-    background: rgba(120, 100, 80, 0.20);
-  }
-
-  .paper ::-webkit-scrollbar-thumb:hover {
-    background: rgba(120, 100, 80, 0.35);
+    background: var(--scrollbar-thumb-hover);
   }
 
   /* ===== 键盘可访问性：Tab 导航焦点指示器 ===== */
