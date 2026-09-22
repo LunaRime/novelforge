@@ -7,18 +7,23 @@
  * - 选中回调 path（相对项目根），由调用方以 "@路径 " 追加到输入框，
  *   发送时走与 @ 提及一致的预取链路（parseMentions → read_file）
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback, type RefObject } from 'react'
 import { FileText, Search, FolderOpen } from 'lucide-react'
 import { searchProjectFiles } from '../../../services/agent/intent-router'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 
 interface Props {
   onSelect: (path: string) => void
   onClose: () => void
+  /** 定位锚点（输入框容器）——菜单浮在整个窗口之上 */
+  anchorRef: RefObject<HTMLElement | null>
 }
 
-export default function FilePickerMenu({ onSelect, onClose }: Props) {
+export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) {
   const { t } = useTranslation()
+  // 浮在整个窗口之上（锚点：输入框容器）
+  const menuRef = useFloatingPosition<HTMLDivElement>(anchorRef, true, { placement: 'above', align: 'start' })
   const [query, setQuery] = useState('')
   const [selectedIndex, setSelectedIndex] = useState(0)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -77,9 +82,16 @@ export default function FilePickerMenu({ onSelect, onClose }: Props) {
 
   return (
     <div
-      className="absolute bottom-[calc(100%+8px)] left-0 z-[var(--z-dropdown)] rounded-lg shadow-lg"
+      ref={menuRef}
+      className="z-[var(--z-dropdown)] rounded-lg shadow-lg"
       style={{
+        // 浮在整个窗口之上（useFloatingPosition 定位）
+        position: 'fixed',
+        visibility: 'hidden',
         width: 280,
+        maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
+        maxHeight: 'calc(100vh - 120px)',
+        overflowY: 'auto',
         backgroundColor: 'var(--color-sidebar)',
         border: '1px solid var(--color-border)',
         boxShadow: '0 8px 24px rgba(0,0,0,0.25)',

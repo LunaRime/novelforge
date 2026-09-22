@@ -8,6 +8,7 @@ import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 
 /**
@@ -20,6 +21,9 @@ export default function AgentHeader() {
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
   const moreRef = useRef<HTMLDivElement>(null)
+
+  // 更多菜单浮在整个窗口之上（锚点：⋯ 按钮容器；面板顶部 → 朝下展开）
+  const moreMenuRef = useFloatingPosition<HTMLDivElement>(moreRef, showMore, { placement: 'below', align: 'end' })
 
   // 点击外部关闭更多菜单
   useOutsideClick(moreRef, () => { setShowMore(false); setSubView('main') }, showMore)
@@ -126,8 +130,12 @@ export default function AgentHeader() {
           {/* 更多菜单下拉 */}
           {showMore && (
             <div
-              className="absolute right-0 top-full mt-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+              ref={moreMenuRef}
+              className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
               style={{
+                // 浮在整个窗口之上（useFloatingPosition 定位）
+                position: 'fixed',
+                visibility: 'hidden',
                 width: subView === 'main' ? 200 : 260,
                 backgroundColor: 'var(--color-sidebar)',
                 border: '1px solid var(--color-border)',

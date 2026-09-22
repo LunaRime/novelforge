@@ -13,7 +13,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Database, WifiOff, RefreshCw, CheckCircle2,
   XCircle, AlertTriangle, Sparkles, Cpu, ArrowRight,
-  Brain, Download, HardDrive,
+  Brain, Download, HardDrive, ChevronRight,
 } from 'lucide-react'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -1043,8 +1043,19 @@ function LocalEmbeddingCard() {
         `<details>` 的既有用例按 DOM 顺序取首个 details，这里不能插到它们前面。
       */}
       {editable && (
-        <details className="mt-3">
-          <summary className="cursor-pointer text-[10px] text-[var(--color-text-muted)]">
+        <details className="group mt-3">
+          {/* 真机反馈（2026-09-22）：「看起来不能点击」——原来的 10px 灰字、行高仅 14px、
+              无箭头无 hover，虽然点得动但完全不像可点。补上箭头（展开时旋转 90°）+ hover 底色
+              + 加大点击区 + 提亮文字。 */}
+          <summary
+            className="cursor-pointer flex items-center gap-1 text-[11px] font-medium -mx-1.5 px-1.5 py-1 rounded transition-colors select-none hover:bg-[var(--color-hover)]"
+            style={{ color: 'var(--color-text-secondary)' }}
+          >
+            <ChevronRight
+              size={11}
+              strokeWidth={2}
+              className="flex-shrink-0 transition-transform group-open:rotate-90"
+            />
             {t('localEmbedding.advanced')}
           </summary>
           <div className="mt-2">

@@ -3,10 +3,11 @@
  *
  * 用户输入 / 时弹出的命令搜索和选择面板。
  */
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback, type RefObject } from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import { searchSlashCommands, type SlashCommand } from '../../../services/agent/intent-router'
 import { t } from '../../../shared/locale'
+import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 
 interface Props {
   /** 搜索关键词（/ 后面的文字） */
@@ -15,13 +16,14 @@ interface Props {
   onSelect: (command: SlashCommand) => void
   /** 关闭菜单 */
   onClose: () => void
-  /** 菜单位置 */
-  position?: { bottom: number; left: number }
+  /** 定位锚点（输入框容器）——菜单浮在整个窗口之上 */
+  anchorRef: RefObject<HTMLElement | null>
 }
 
-export default function SlashCommandMenu({ query, onSelect, onClose, position }: Props) {
+export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0)
-  const menuRef = useRef<HTMLDivElement>(null)
+  // 浮在整个窗口之上（锚点：输入框容器）
+  const menuRef = useFloatingPosition<HTMLDivElement>(anchorRef, true, { placement: 'above', align: 'start' })
 
   const results = searchSlashCommands(query)
 
@@ -62,11 +64,13 @@ export default function SlashCommandMenu({ query, onSelect, onClose, position }:
   return (
     <div
       ref={menuRef}
-      className="absolute z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+      className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
       style={{
-        bottom: position?.bottom ?? 'calc(100% + 4px)',
-        left: position?.left ?? 0,
+        // 浮在整个窗口之上（useFloatingPosition 定位）
+        position: 'fixed',
+        visibility: 'hidden',
         width: 280,
+        maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
         maxHeight: 300,
         overflowY: 'auto',
         backgroundColor: 'var(--color-sidebar)',

@@ -17,6 +17,7 @@ import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { ModelProfile } from '../../../shared/ipc-channels'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
@@ -160,6 +161,11 @@ export default function AgentInputBox() {
   const modeRef = useRef<HTMLDivElement>(null)
   const modelRef = useRef<HTMLDivElement>(null)
   const filePickerRef = useRef<HTMLDivElement>(null)
+  /** 输入区容器 = 三个辅助菜单（@提及 / 斜杠命令 / 文件选择）的定位锚点 */
+  const inputAreaRef = useRef<HTMLDivElement>(null)
+
+  // 上下文菜单浮在整个窗口之上（锚点：+ 按钮容器；须在 contextRef 之后声明）
+  const contextMenuRef = useFloatingPosition<HTMLDivElement>(contextRef, showContextMenu, { placement: 'above', align: 'start' })
 
   // 调整文本框高度的通用函数
   const adjustHeight = useCallback(() => {
@@ -251,36 +257,9 @@ export default function AgentInputBox() {
         borderRadius: 'var(--radius-md)',  /* 4px 方正风格 */
       }}
     >
-      {/* / 命令菜单 */}
-      {showSlashMenu && (
-        <SlashCommandMenu
-          query={slashQuery}
-          onSelect={handleSlashSelect}
-          onClose={() => setShowSlashMenu(false)}
-        />
-      )}
-
-      {/* @ 提及菜单 */}
-      {showMentionMenu && (
-        <MentionMenu
-          query={mentionQuery}
-          onSelect={handleMentionSelect}
-          onClose={() => setShowMentionMenu(false)}
-        />
-      )}
-
-      {/* 可视化文件选择器（+ 菜单 → 添加文件） */}
-      {showFilePicker && (
-        <div ref={filePickerRef}>
-          <FilePickerMenu
-            onSelect={handleFileSelect}
-            onClose={() => setShowFilePicker(false)}
-          />
-        </div>
-      )}
-
-      {/* 输入区域 */}
-      <div className="relative w-full">
+      {/* 输入区域 — 同时是 @提及 / 斜杠命令 / 文件选择三个辅助菜单的定位锚点
+          （三个菜单渲染在本容器内部，各自用 useFloatingPosition 算 fixed 坐标） */}
+      <div className="relative w-full" ref={inputAreaRef}>
           <textarea
             ref={textareaRef}
             value={inputText}
@@ -298,6 +277,33 @@ export default function AgentInputBox() {
             }}
           />
         {/* 占位文字颜色已通过 tailwind placeholder 设置 */}
+
+        {/* 三个辅助菜单：一律浮在整个窗口之上（useFloatingPosition 以输入区容器为锚点计算坐标） */}
+        {showSlashMenu && (
+          <SlashCommandMenu
+            query={slashQuery}
+            onSelect={handleSlashSelect}
+            onClose={() => setShowSlashMenu(false)}
+            anchorRef={inputAreaRef}
+          />
+        )}
+        {showMentionMenu && (
+          <MentionMenu
+            query={mentionQuery}
+            onSelect={handleMentionSelect}
+            onClose={() => setShowMentionMenu(false)}
+            anchorRef={inputAreaRef}
+          />
+        )}
+        {showFilePicker && (
+          <div ref={filePickerRef}>
+            <FilePickerMenu
+              onSelect={handleFileSelect}
+              onClose={() => setShowFilePicker(false)}
+              anchorRef={inputAreaRef}
+            />
+          </div>
+        )}
       </div>
 
       {/* 底部工具栏 */}
@@ -325,8 +331,12 @@ export default function AgentInputBox() {
             {/* 上下文菜单（+ 按钮弹出） */}
             {showContextMenu && (
               <div
-                className="absolute bottom-[calc(100%+8px)] left-0 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+                ref={contextMenuRef}
+                className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
                 style={{
+                  // 浮在整个窗口之上（useFloatingPosition 定位）：初始在视口外 + 隐藏，定位后显示
+                  position: 'fixed',
+                  visibility: 'hidden',
                   width: 180,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
@@ -362,8 +372,10 @@ export default function AgentInputBox() {
             )}
           </div>
 
-          {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板） */}
-          <div ref={modeRef} className="relative">
+          {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板）
+              flex-shrink-0：档位名偏长（俄语「Глубоко」约为「深度」的 3 倍宽），不加会被
+              模型选择器那一侧挤到换行——控件高度立刻变形（2026-09-22 切 ru-RU 实测）。 */}
+          <div ref={modeRef} className="relative flex-shrink-0">
             <button
               onClick={() => {
                 setShowContextMenu(false)
@@ -375,7 +387,8 @@ export default function AgentInputBox() {
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.75,
-              }}
+                anchorName: '--menu-depth',
+              } as React.CSSProperties}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -386,7 +399,8 @@ export default function AgentInputBox() {
               }}
             >
               {depthIcon(currentMode)}
-              <span className="select-none font-medium">
+              {/* whitespace-nowrap：档位名绝不换行（换行会撑高整条工具栏） */}
+              <span className="select-none font-medium whitespace-nowrap">
                 {t((DEPTH_LEVELS.find(l => l.mode === currentMode) ?? DEPTH_LEVELS[0]).labelKey)}
               </span>
               <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
@@ -409,13 +423,14 @@ export default function AgentInputBox() {
 
               return (
                 <div
-                  className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] p-2.5 rounded-lg shadow-lg"
+                  className="floating-menu floating-menu--above-start p-2.5 rounded-lg shadow-lg"
                   style={{
                     width: 210,
                     backgroundColor: 'var(--color-sidebar)',
                     border: '1px solid var(--color-border)',
                     boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
-                  }}
+                    positionAnchor: '--menu-depth',
+                  } as React.CSSProperties}
                 >
                   {/* 标题行：思考等级 + 当前档位名 */}
                   <div className="flex items-center justify-between mb-2">
@@ -546,8 +561,13 @@ export default function AgentInputBox() {
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.75,
-                maxWidth: 140,
-              }}
+                // ⚠️ 用 min(140px, 100%) 而不是固定 140：button 即使 display:flex 也是
+                // shrink-to-fit，宽度不会自己收进容器。固定 140 时它在窄面板（AI 面板 ~264px）
+                // 下会直接顶出容器（俄语实测 98px 内容塞在 71px 容器里）。100% 兜住上限，
+                // 140px 仍保留「超长模型名不占满」的意图。
+                maxWidth: 'min(140px, 100%)',
+                anchorName: '--menu-model',
+              } as React.CSSProperties}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -558,7 +578,9 @@ export default function AgentInputBox() {
               }}
             >
               <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
-              <span className="truncate select-none">
+              {/* min-w-0 + truncate：flex item 默认 min-width:auto 不收缩到内容以下，
+                  只写 truncate 时模型名会顶出容器（俄语下实测 71px 容器装 98px 内容） */}
+              <span className="truncate select-none min-w-0">
                 {currentModel?.name ?? (chatModels.length === 0 ? t('statusbar.noModel') : t('agent.selectModel'))}
               </span>
             </button>
@@ -566,15 +588,17 @@ export default function AgentInputBox() {
             {/* 模型选择下拉 */}
             {showModelMenu && (
               <div
-                className="absolute bottom-full left-0 mb-1 z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+                /* floating-menu：fixed + 锚点定位（原先左对齐时右缘顶出窗口 25px 被裁，
+                   右对齐只是绕开——换面板宽度又会复现，见 index.css 的 .floating-menu） */
+                className="floating-menu floating-menu--above-end py-1 rounded-lg shadow-lg"
                 style={{
                   width: 220,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
                   boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                   maxHeight: 280,
-                  overflowY: 'auto',
-                }}
+                  positionAnchor: '--menu-model',
+                } as React.CSSProperties}
               >
                 <div className="text-[0.7rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('agent.selectModel')}
