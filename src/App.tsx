@@ -10,7 +10,6 @@ import { useWorkflowStore } from './stores/workflow-store'
 import { useUpdateStore } from './stores/update-store'
 import { t } from './shared/locale'
 import { ipc } from './services/ipc-client'
-import TitleBar from './components/layout/TitleBar'
 import StatusBar from './components/layout/StatusBar'
 import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
 import RightToolWindowBar from './components/layout/RightToolWindowBar'
@@ -183,13 +182,28 @@ export default function App() {
     }
   }, [initTheme, initLLM, loadRecentProjects])
 
-  // 全局快捷键: Cmd+N 新建项目，Cmd+O 打开项目
-  // 注意：Cmd+=/- 缩放已由 TitleBar.tsx 统一处理，此处不重复注册
+  // 全局快捷键: Cmd+N 新建项目，Cmd+O 打开项目，Cmd+=/-/0 缩放，F11 专注模式
+  // （缩放与 F11 原由 TitleBar.tsx 注册；2026-09-22 标题栏移除后统一并入此处）
   useEffect(() => {
     const handleKeyDown = async (e: KeyboardEvent) => {
+      // F11 — 专注模式（本身不带修饰键，须在 mod 判断之前拦截，并阻止浏览器默认全屏）
+      if (e.key === 'F11') {
+        e.preventDefault()
+        useLayoutStore.getState().toggleFocusMode()
+        return
+      }
       const mod = e.metaKey || e.ctrlKey
       if (!mod) return
-      if (e.key === 'n' || e.key === 'N') {
+      if (e.key === '=' || e.key === '+') {
+        e.preventDefault()
+        useThemeStore.getState().zoomIn()
+      } else if (e.key === '-') {
+        e.preventDefault()
+        useThemeStore.getState().zoomOut()
+      } else if (e.key === '0') {
+        e.preventDefault()
+        useThemeStore.getState().zoomReset()
+      } else if (e.key === 'n' || e.key === 'N') {
         e.preventDefault()
         useLayoutStore.getState().openNewProject()
       } else if (e.key === 'o' || e.key === 'O') {
@@ -210,9 +224,6 @@ export default function App() {
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
-      {/* 标题栏 */}
-      <TitleBar />
-
       {/* 更新通知栏 */}
       <UpdateNotification />
 
@@ -235,75 +246,87 @@ export default function App() {
         {t('tip.skipToContent')}
       </a>
 
-      <div className="flex flex-1 overflow-hidden">
+      {/* 整块内容区就是「画布」：padding 3px = 外围缝隙，恰为卡片之间内部缝隙（6px）的一半，
+          且与内部缝隙同为画布色、连成一体。图标栏与相邻面板之间不留缝——它们绑定成一张卡片。
+          （标题栏已于 2026-09-22 移除，四边缝因此等宽对称。） */}
+      <div
+        className="flex flex-1 overflow-hidden"
+        style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
+      >
 
         {/* 左侧工具窗口栏（全高，包括底部面板区域）— 专注模式下隐藏（与其余面板一致） */}
         {!focusMode && <LeftToolWindowBar />}
 
-        {/* 纵向 PanelGroup：上层主区域 + 下层底部面板 */}
-        <PanelGroup orientation="vertical" className="flex-1">
+        {/* 卡片层：卡片之间的缝隙露出的就是画布底色 */}
+        <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
 
-          {/* 上层：侧边栏 | 编辑区 | AI 面板（水平分割） */}
-          <Panel id="top" defaultSize="75%" minSize="25%">
-            <PanelGroup orientation="horizontal" className="flex-1 h-full">
+          {/* 横向 PanelGroup：侧边栏 | 中列（编辑区 + 底栏） | AI 面板。
+              ⚠️ 底栏只占**中列**（编辑区正下方），两侧面板向下延伸到底——2026-09-22 用户定的布局；
+              此前底栏是全宽（挂在纵向 group 的下层），侧栏/AI 够不到底部。 */}
+          <PanelGroup orientation="horizontal" className="flex-1">
 
-              {/* 左侧边栏 — 专注模式下隐藏 */}
-              {(sidebarOpen && !focusMode) && (
-                <>
-                  <Panel id="sidebar" defaultSize={SIDEBAR_DEFAULT} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
-                    {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
-                        ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
-                        拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
-                    <div data-region="sidebar" className="h-full">
-                      <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
-                        <Sidebar />
+            {/* 左侧边栏 — 专注模式下隐藏 */}
+            {(sidebarOpen && !focusMode) && (
+              <>
+                <Panel id="sidebar" defaultSize={SIDEBAR_DEFAULT} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
+                  {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
+                      ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
+                      拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
+                  <div data-region="sidebar" className="h-full">
+                    <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
+                      <Sidebar />
+                    </ErrorBoundary>
+                  </div>
+                </Panel>
+                {/* 松手时若侧栏已贴到内容下限 → 关闭它（见组件内 closeIfAtFloor 注释） */}
+                <PanelResizeHandle onPointerUp={() => closeIfAtFloor('sidebar')} />
+              </>
+            )}
+
+            {/* 中列：编辑区（上）+ 底栏（下）。这一列的宽度下限就是编辑区下限（EDITOR_MIN_PX） */}
+            <Panel id="middle" defaultSize={EDITOR_DEFAULT} minSize={EDITOR_MIN_PX}>
+              <PanelGroup orientation="vertical" className="h-full">
+
+                {/* 编辑区 — 专注模式下居中 + 大字号 */}
+                <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
+                  <div id="main-editor-area" />
+                  <div data-region="editor" className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
+                    <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
+                      <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
+                    </ErrorBoundary>
+                  </div>
+                </Panel>
+
+                {/* 底栏 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
+                {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
+                {(bottomPanelOpen && !focusMode) && (
+                  <Panel id="bottom" defaultSize="25%" minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
+                    <div data-region="bottom" className="h-full">
+                      <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
+                        <BottomPanel />
                       </ErrorBoundary>
                     </div>
                   </Panel>
-                  {/* 松手时若侧栏已贴到内容下限 → 关闭它（见组件内 closeIfAtFloor 注释） */}
-                  <PanelResizeHandle onPointerUp={() => closeIfAtFloor('sidebar')} />
-                </>
-              )}
-
-              {/* 编辑区 — 专注模式下居中 + 大字号 */}
-              <Panel id="editor" defaultSize={EDITOR_DEFAULT} minSize={EDITOR_MIN_PX} aria-label={t('panel.editor')}>
-                <div id="main-editor-area" />
-                <div className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
-                  <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
-                    <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
-                  </ErrorBoundary>
-                </div>
-              </Panel>
-
-              {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
-              {(aiPanelOpen && !focusMode) && (
-                <>
-                  {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
-                  <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
-                  <Panel id="ai-panel" defaultSize={AI_PANEL_DEFAULT} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
-                    <div data-region="ai" className="h-full">
-                      <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
-                        {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
-                      </ErrorBoundary>
-                    </div>
-                  </Panel>
-                </>
-              )}
-            </PanelGroup>
-          </Panel>
-
-          {/* 下层：底部面板 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
-          {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
-          {(bottomPanelOpen && !focusMode) && (
-            <Panel id="bottom" defaultSize="25%" minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
-              <div data-region="bottom" className="h-full">
-                <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
-                  <BottomPanel />
-                </ErrorBoundary>
-              </div>
+                )}
+              </PanelGroup>
             </Panel>
-          )}
-        </PanelGroup>
+
+            {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
+            {(aiPanelOpen && !focusMode) && (
+              <>
+                {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
+                <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
+                <Panel id="ai-panel" defaultSize={AI_PANEL_DEFAULT} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
+                  <div data-region="ai" className="h-full">
+                    <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
+                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
+                    </ErrorBoundary>
+                  </div>
+                </Panel>
+              </>
+            )}
+          </PanelGroup>
+        </div>
 
         {/* 右侧工具窗口栏 — 专注模式下隐藏 */}
         {!focusMode && <RightToolWindowBar />}

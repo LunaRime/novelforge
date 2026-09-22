@@ -44,7 +44,7 @@ export default function Sidebar() {
       className="w-full h-full flex flex-col overflow-hidden"
       style={{
         backgroundColor: 'var(--color-sidebar)',
-        borderRight: '1px solid var(--color-border)',
+        // 朝向缓冲带的一侧不再画 1px 边框：那条线正好压在缓冲带边上，会变回「一根线」（见 novel-editor.css [data-separator]）
       }}
     >
       <div className="panel-header">

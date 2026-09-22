@@ -140,10 +140,26 @@
     --color-bg: #F7F9FC;
     --color-sidebar: #EFF2F7;
     --color-panel: #EFF2F7;
-    --color-titlebar: #F7F9FC;
+    /* 与画布同色（用户 2026-09-22 指定）：标题栏与卡片之间的缝隙连成一片背景，
+       顶部白 → 缝隙白 是连续的，卡片才像浮在同一张画布上。改用变量引用而非复制色值，
+       两者永远一致；要单独调标题栏时再拆开。 */
+    --color-titlebar: var(--color-canvas);
     --color-activity-bar: #E5E9F0;
     --color-hover: #EBF0F7;
     --color-active: #DDE3ED;
+    /* 卡片浮起感（区域卡片化后的极轻投影）。⚠️ 不能省：浅色主题下 `--color-bg` 与
+       `--color-editor-bg` 同为 #F7F9FC，编辑区卡片与画布底色一模一样，
+       边界只剩 `--color-border` 的 1px 边框可依靠，太弱——加这层阴影才"浮"得起来。 */
+    --color-card-shadow: 0 1px 3px rgba(26, 34, 51, 0.07), 0 1px 2px rgba(26, 34, 51, 0.04);
+    /* 编辑区专用：边框比通用 --color-border 深一档 + 投影更重，突出它是主工作区 */
+    --color-card-edge: #C3CEDF;
+    --color-card-shadow-strong: 0 2px 10px rgba(26, 34, 51, 0.10), 0 1px 3px rgba(26, 34, 51, 0.06);
+    /* 「画布」底色 = 卡片之间那 6px 缝隙露出的那层。⚠️ 两条要求（2026-09-22 用户定的方向，勿回退）：
+       ① **比四个区域的面色（sidebar/panel/editor-bg）都更浅**——缝隙是"透光"的，不是凹槽；
+          反过来取更深一档时缝隙会读成"埂/坎"，与卡片式布局的语义冲突；
+       ② 浅到什么程度：要浅过最浅的那个区域（编辑区 `--color-editor-bg` #F7F9FC），否则缝隙隐形。
+       边界靠卡片自己那圈 1px `--color-border` 细线来标（浅画布 + 深细线，界限最清楚）。 */
+    --color-canvas: #FFFFFF;
 
     /* 文字层次 */
     --color-text: #1A2233;
@@ -214,7 +230,6 @@
     --color-badge-text: #5B9ED6;
 
     /* ===== 尺寸规范 ===== */
-    --height-titlebar: 40px;
     --height-statusbar: 28px;
     --height-tab: 36px;
     --height-panel-header: 36px;
@@ -262,10 +277,17 @@
     --color-bg: #0A1628;
     --color-sidebar: #0E1B30;
     --color-panel: #0E1B30;
-    --color-titlebar: #0A1628;
+    --color-titlebar: var(--color-canvas); /* 与画布同色（同浅色主题） */
     --color-activity-bar: #071220;
     --color-hover: #142640;
     --color-active: #1C3050;
+    /* 卡片浮起感：深色下投影几乎不可见，靠更黑的阴影 + `--color-border` 边框共同界定卡片 */
+    --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
+    /* 编辑区专用：边框提亮一档 + 投影加重（深色下靠边框亮线界定主工作区） */
+    --color-card-edge: #2A4666;
+    --color-card-shadow-strong: 0 2px 10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
+    /* 画布底色：比四个区域的面色都更浅一档（缝隙透光），边界靠卡片 1px 细线 */
+    --color-canvas: #14243D;
 
     /* 文字层次 — 冰蓝色阶梯，与Logo蓝色调和谐 */
     --color-text: #E0ECF4;
@@ -343,10 +365,17 @@
     --color-bg: #F5F0E8;
     --color-sidebar: #EDE8E0;
     --color-panel: #EDE8E0;
-    --color-titlebar: #F5F0E8;
+    --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #E4DDD4;
     --color-hover: #E8E3DB;
     --color-active: #DCD5CB;
+    /* 卡片浮起感：米色画布上的极轻暖调投影，与 `--color-border` 边框共同界定卡片 */
+    --color-card-shadow: 0 1px 3px rgba(44, 37, 32, 0.08), 0 1px 2px rgba(44, 37, 32, 0.05);
+    /* 编辑区专用：边框加深一档 + 投影加重 */
+    --color-card-edge: #C4B9A8;
+    --color-card-shadow-strong: 0 2px 10px rgba(44, 37, 32, 0.10), 0 1px 3px rgba(44, 37, 32, 0.06);
+    /* 画布底色：比四个区域的面色都更浅一档（缝隙透光） */
+    --color-canvas: #FFFDF9;
 
     --color-text: #2C2520;
     --color-text-secondary: #6B6058;
@@ -421,10 +450,17 @@
     --color-bg: #1E1E1E;
     --color-sidebar: #252526;
     --color-panel: #252526;
-    --color-titlebar: #181818;
+    --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #333333;
     --color-hover: #2A2D2E;
     --color-active: #37373D;
+    /* 卡片浮起感：VSCode 深灰画布上的黑色投影，与 `--color-border` 边框共同界定卡片 */
+    --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
+    /* 编辑区专用：边框提亮一档 + 投影加重 */
+    --color-card-edge: #4E4E4E;
+    --color-card-shadow-strong: 0 2px 10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45);
+    /* 画布底色：比四个区域的面色都更浅一档（缝隙透光） */
+    --color-canvas: #3A3A3A;
 
     --color-text: #D4D4D4;
     --color-text-secondary: #A0A0A0;
@@ -718,7 +754,41 @@
   }
 
   /* ===== 工具窗口按钮 — 三条工具栏共用，带增强悬停效果 ===== */
-  .tool-btn {
+  /* ═══ 浮动菜单：浮在整个窗口之上（2026-09-22）═══
+   面板/图标栏里的下拉菜单一律用它。`position: fixed` 脱离所有祖先的 overflow 裁剪与层叠顺序，
+   再配 CSS 锚点定位跟随触发按钮；`position-try-fallbacks` 在空间不足时**自动翻到另一侧**。
+   此前的问题都是没这层机制：模型菜单右缘超出窗口 25px 被切、主题菜单超出窗口底部 58px 被切；
+   右对齐/上对齐只是逐个绕开，换个面板宽度或窗口尺寸又会复现。
+
+   用法：锚点按钮 `style={{ anchorName: '--menu-xxx' }}`，
+        菜单 `className="floating-menu floating-menu--above-end"` +
+        `style={{ positionAnchor: '--menu-xxx' }}`。
+   注意：菜单仍在原 DOM 位置（不搬去 body），所以 useOutsideClick 的 ref 包含关系照旧有效。 */
+.floating-menu {
+  position: fixed;
+  z-index: var(--z-dropdown);
+  max-width: calc(100vw - 16px);
+  max-height: calc(100vh - 16px);
+  overflow-y: auto;
+  /* 视口内空间不足时依次尝试：上下翻转 → 左右翻转 → 都翻 */
+  position-try-fallbacks: flip-block, flip-inline, flip-both;
+}
+.floating-menu--above-start { bottom: anchor(top); left: anchor(left); margin-bottom: 6px; }
+.floating-menu--above-end   { bottom: anchor(top); right: anchor(right); margin-bottom: 6px; }
+.floating-menu--below-start { top: anchor(bottom); left: anchor(left); margin-top: 6px; }
+.floating-menu--below-end   { top: anchor(bottom); right: anchor(right); margin-top: 6px; }
+
+/* ── 图标栏 = 窗口拖拽区（标题栏已于 2026-09-22 移除）──
+   `WebkitAppRegion: 'drag'` 设在栏容器上（见 LeftToolWindowBar / RightToolWindowBar），
+   栏内的交互元素必须显式恢复 no-drag，否则按钮点不动。 */
+[data-activity-bar] button,
+[data-activity-bar] [role="button"],
+[data-activity-bar] a,
+[data-activity-bar] input {
+  -webkit-app-region: no-drag;
+}
+
+.tool-btn {
     @apply flex items-center justify-center relative;
     width: 100%;
     height: 30px;

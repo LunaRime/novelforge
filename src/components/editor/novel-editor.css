@@ -62,38 +62,109 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
-   react-resizable-panels 分隔条样式
+   区域卡片化：四个区域 = 四张独立 UI 卡片
    ═══════════════════════════════════════════════════════════════════════════ */
-/* 区域之间留出**缓冲地带**：分隔条本身占一条可见的间隔带（用应用底色 `--color-bg`，
-   与面板色 `--color-panel` 有明度差），而不是一条紧贴两个面板的 1px 线。
-   真机反馈迭代史（勿回退）：
-   - 1px 线：只是"一条线"，两个面板视觉上仍然贴着，达不到"区域之间有缓冲"的效果。
-   - 6px 带 + 线画在带中央：线到不了带边缘，横向/竖向两条线在拐角处对不上。
-   现在：整条带就是缓冲（不再在带内画线），拐角由两条带自然相接。
-   命中区无需额外处理：库自己按指针类型扩展（`resizeTargetMinimumSize.coarse/fine`）。 */
-[data-separator] {
-  flex-shrink: 0;
-  transition: background 0.15s ease;
-  background: var(--color-bg);
+/* 卡片浮在「画布」上（画布 = App.tsx 里包住 PanelGroup 的那层，底色 `--color-canvas`——比四个区域
+   的面色都更深一档；取 `--color-bg` 时正好等于编辑区，间隙会整条隐形）：
+   - **卡片**：圆角 6px + `--color-border` 细边框 + `--color-card-shadow` 极轻投影；
+   - **卡片之间的 6px 间隙**：就是分隔条本身——透明，露出画布底色，不画任何线。
+   ⚠️ 三条硬约束（都是真机反馈换来的，勿回退）：
+   - **分隔条必须保持透明**：它现在扮演的是「卡片间距」，任何底色/边框都会让它变回「一条线」。
+   - **卡片层必须 `overflow: hidden`**：侧栏/AI/底栏的面板组件自身已 overflow-hidden（再裁一层零副作用），
+     编辑区则靠它把内部直角（tab 栏等底色）裁成圆角——不加则圆角处露出直角，等于没圆角。
+   - **除卡片自己的 1px 边框外不要再加线**：与 TitleBar.borderBottom / StatusBar.borderTop 会叠成 2px 双线。
+   迭代史：1px 线 → 6px 田埂带 → 田埂带 + 两侧细边 → 现在（卡片 + 透明间隙）。 */
+[data-region] {
+  border-radius: 6px;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--color-card-shadow);
+  overflow: hidden;
 }
 
-[data-group][style*="flex-direction: row"] > [data-separator] {
+/* ── 卡片的边与角 ──
+   现在每张卡片**四周都有缝**：内部缝 6px，外围（贴标题栏 / 状态栏 / 窗口左右）是它的一半 3px，
+   且同色相连（见 App.tsx 内容区的 `padding: 3`）。所以卡片一律「四边细边框 + 四角圆角」——
+   基础 [data-region] 规则已经够用（2026-09-22 收敛：此前的「外部边」直角/无边框、底栏开关的
+   动态类、侧栏开关的 :has() 判定全部不再需要，卡片状态与面板开关彻底解耦）。
+   唯一的例外是两侧图标栏：它和自己的相邻面板绑定成**一张卡片**（中间不留缝），
+   所以贴合的那条边无边框、直角——圆角由图标栏那一侧提供（见 LeftToolWindowBar / RightToolWindowBar）。 */
+[data-region="sidebar"] {
+  border-left: 0; /* 与左图标栏绑定，无缝 */
+  border-radius: 0 6px 6px 0;
+}
+[data-region="ai"] {
+  border-right: 0; /* 与右图标栏绑定，无缝 */
+  border-radius: 6px 0 0 6px;
+  /* ⚠️ 放开裁剪：AGENT 面板底部那排浮层（+/深度/模型/@提及）向上弹出，面板一矮就会被
+     `overflow: hidden` 裁掉上半截（2026-09-22）。裁剪职责交回面板自己——AIPanel 根节点
+     也是 overflow: visible，滚动由它内层的对话区容器自管。 */
+  overflow: visible;
+}
+
+/* 编辑区是主工作区：单独加深边框 + 加重投影，把「独立卡片」的效果顶出来
+   （2026-09-22 用户指定；其它卡片仍用通用的 --color-border / --color-card-shadow） */
+[data-region="editor"] {
+  border-color: var(--color-card-edge);
+  box-shadow: var(--color-card-shadow-strong);
+}
+
+/* 分隔条 = 卡片间隙：6px，透明（露出画布底色）。
+   命中区无需额外处理：库自己按指针类型扩展（resizeTargetMinimumSize.coarse/fine）。 */
+[data-separator] {
+  flex-shrink: 0;
+  position: relative;
+  background: transparent;
+}
+
+/* hover / 拖拽提示 = 居中「药丸」，**不整条变色**——整条 6px 亮起又变回「一根线」 */
+[data-separator]::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: transparent;
+  transition: background 0.15s ease;
+  pointer-events: none;
+}
+
+/* 竖缝（左右分割）：6px 宽，药丸竖直居中（2px 宽 × 40% 高，每边 2px）。
+   ⚠️ 药丸宽度与缝宽必须**同奇偶**才能整数居中：奇数缝配奇数丸（7px→3px）、
+   偶数缝配偶数丸（6px/8px/10px→2px 或 4px）；错开会落在半像素上、边缘发虚。
+   药丸也不宜超过缝宽的一半：6px 缝配 4px 丸只剩 1px 余量，hover 时又像「整条变色」。
+   ⚠️ 方向判定用 `aria-orientation="vertical"`，**不要**改用父元素 style 里的
+   `flex-direction: row` 匹配 —— 库现在渲染的是 `flex-flow: row`（2026-09-22 实测），
+   旧选择器永远匹配不到，分隔条宽度因此一直是 0：区域"紧紧挨在一起"的真正原因（此前几轮
+   查样式值查不出来的那种"改了没反应"，先量一眼 getComputedStyle 的 width 即可定性）。 */
+[data-separator][aria-orientation="vertical"] {
   width: 6px;
   cursor: col-resize;
 }
 
-[data-group][style*="flex-direction: row"] > [data-separator]:hover,
-[data-group][style*="flex-direction: row"] > [data-separator][data-separator="dragging"] {
+[data-separator][aria-orientation="vertical"]::after {
+  width: 2px;
+  height: 40%;
+}
+
+[data-separator][aria-orientation="vertical"]:hover::after,
+[data-separator][aria-orientation="vertical"][data-separator="dragging"]::after {
   /* 只变色、**不变宽**：改变宽度会让布局在悬停/拖拽瞬间抖动 */
   background: var(--color-sash-hover);
 }
 
-[data-group][style*="flex-direction: column"] > [data-separator] {
+/* 横缝（上下分割）：6px 高，药丸水平居中（40% 宽 × 2px 高），方向判定同竖缝 */
+[data-separator][aria-orientation="horizontal"] {
   height: 6px;
   cursor: row-resize;
 }
 
-[data-group][style*="flex-direction: column"] > [data-separator]:hover,
-[data-group][style*="flex-direction: column"] > [data-separator][data-separator="dragging"] {
-  background: var(--color-sash-hover);  /* 白色微光，非蓝色 */
+[data-separator][aria-orientation="horizontal"]::after {
+  width: 40%;
+  height: 2px;
+}
+
+[data-separator][aria-orientation="horizontal"]:hover::after,
+[data-separator][aria-orientation="horizontal"][data-separator="dragging"]::after {
+  background: var(--color-sash-hover);
 }

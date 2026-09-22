@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Activity } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -18,6 +18,7 @@ import ReviewReport from '../editor/ReviewReport'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
+import ActivityView from './activity/ActivityView'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -491,6 +492,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     if (type === 'version-history') return <History size={14} />
     if (type === 'review-report') return <ClipboardCheck size={14} />
     if (type === 'memory') return <Brain size={14} />
+    if (type === 'activity') return <Activity size={14} />
     return <FileText size={14} />
   }
 
@@ -619,6 +621,8 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
       {/* 编辑区主体 */}
       <div className="flex-1 overflow-hidden">
+        {/* 写作统计页（2026-09-22 从底栏 tab 搬来：结果型看板，需要编辑区的宽度才展得开） */}
+        {activeTab?.type === 'activity' && <ActivityView />}
         {activeTab?.type === 'chapter' && activeTab.filePath?.startsWith(VELA.DRAFT) && (
           // 草稿文件：使用 DraftEditor（工具栏含修稿/审稿/定稿按鈕）
           <DraftEditor

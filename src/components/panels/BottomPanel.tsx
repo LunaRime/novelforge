@@ -3,12 +3,11 @@ import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
   Loader2, CheckCircle2, XCircle, Clock,
-  Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Activity,
+  Play, X, ChevronDown, ChevronRight, Zap, ScrollText,
 } from 'lucide-react'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
-import ActivityView from './activity/ActivityView'
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
 export default function BottomPanel() {
@@ -17,9 +16,6 @@ export default function BottomPanel() {
   const TAB_LABELS: Record<string, string> = {
     tasks:    t('panel.tasks'),
     log:      t('panel.log'),
-    activity: t('panel.activityShort'),
-    // 旧版本持久化兼容：bottomTab='models' 时映射到活动视图
-    models:   t('panel.activityShort'),
   }
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
@@ -29,7 +25,9 @@ export default function BottomPanel() {
 
   // 声明为 string：兼容旧版本持久化的 bottomTab='models'（已映射到活动视图）
   const activeTab: string = bottomTab || 'tasks'
-  const effectiveTab = activeTab === 'models' ? 'activity' : activeTab
+  // 兼容旧持久化值：'activity'（写作统计已于 2026-09-22 搬去编辑区页面）与 'models' 一律回落到
+  // 任务视图——否则老用户升级后会看到一个空白底栏
+  const effectiveTab = (activeTab === 'activity' || activeTab === 'models') ? 'tasks' : activeTab
   // 任何活跃任务运行中
   const hasRunning = activeRuns.some(r => r.status === 'running')
   const hasWaiting = activeRuns.some(r => r.status === 'waiting')
@@ -43,7 +41,6 @@ export default function BottomPanel() {
   const TAB_ICONS: Record<string, typeof Zap> = {
     tasks: Zap,
     log: ScrollText,
-    activity: Activity,
   }
 
   return (
@@ -51,7 +48,7 @@ export default function BottomPanel() {
       className="w-full h-full flex flex-col overflow-hidden"
       style={{
         backgroundColor: 'var(--color-panel)',
-        borderTop: '1px solid var(--color-border)',
+        // 朝向缓冲带的一侧不再画 1px 边框（见 novel-editor.css [data-separator]）
       }}
     >
       {/* 面板标题头 — 内置 Tab 切换（就近原则，无需移回左栏） */}
@@ -61,7 +58,7 @@ export default function BottomPanel() {
       >
         {/* 左侧：Tab 组 */}
         <div className="flex items-center gap-1">
-          {(['tasks', 'log', 'activity'] as const).map(id => {
+          {(['tasks', 'log'] as const).map(id => {
             const Icon = TAB_ICONS[id]
             const active = effectiveTab === id
             return (
@@ -105,9 +102,8 @@ export default function BottomPanel() {
 
       {/* 内容区 */}
       <div className="flex-1 overflow-hidden">
-        {activeTab === 'tasks' && <TaskRunView />}
-        {activeTab === 'log' && <LogsView />}
-        {(activeTab === 'activity' || activeTab === 'models') && <ActivityView />}
+        {effectiveTab === 'tasks' && <TaskRunView />}
+        {effectiveTab === 'log' && <LogsView />}
       </div>
     </div>
   )

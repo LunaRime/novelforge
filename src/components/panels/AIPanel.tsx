@@ -19,10 +19,14 @@ export default function AIPanel() {
 
   return (
     <div
-      className="w-full h-full flex flex-col overflow-hidden"
+      className="w-full h-full flex flex-col"
       style={{
         backgroundColor: 'var(--color-sidebar)',
-        borderLeft: '1px solid var(--color-border)',
+        // ⚠️ 这里**不能**用 overflow-hidden：面板底部那排浮层（+/深度/模型/@提及）都是向上弹出的，
+        //    面板一矮就被裁掉上半截（skill 记录过的老坑）。滚动由内层 flex-1 容器自管。
+        //    圆角改由本层自己画——卡片层已放开裁剪（见 novel-editor.css [data-region="ai"]），
+        //    补上左侧两角才能和卡片外框保持一致。
+        borderRadius: '6px 0 0 6px',
       }}
     >
       {/* 顶部工具栏 */}

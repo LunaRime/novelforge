@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen, Thermometer } from 'lucide-react'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen, Thermometer, ZoomIn, ZoomOut } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -7,7 +7,9 @@ import { t } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useUsageStore } from '../../stores/usage-store'
+import { useThemeStore } from '../../stores/theme-store'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
@@ -51,17 +53,12 @@ export default function StatusBar() {
           </>
         )}
 
-        <StatusBarDivider />
-        <StatusBarSegment
-          title={t('settings.title')}
-          onClick={openSettings}
-        >
-          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.title')}</span>
-        </StatusBarSegment>
+        {/* 设置入口已于 2026-09-22 迁到左侧图标栏底部（图标形式）——
+            这里的文字入口对非中文使用者不友好，移除避免重复入口 */}
 
       </div>
 
-      {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 */}
+      {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
       <div className="flex items-center h-full">
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
@@ -86,6 +83,10 @@ export default function StatusBar() {
             <span className="opacity-50">{t('statusbar.noModel')}</span>
           </StatusBarSegment>
         )}
+
+        {/* 缩放控制 — 原标题栏控件，标题栏移除后搬入状态栏右侧（VSCode 的缩放也在这个位置） */}
+        <StatusBarDivider />
+        <ZoomControl />
       </div>
     </div>
   )
@@ -110,6 +111,9 @@ function TemperatureControl({
   const [tempDraft, setTempDraft] = useState<number>(defaultModel?.temperature ?? 0.7)
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const panelRef = useRef<HTMLDivElement>(null)
+
+  // 水温面板浮在整个窗口之上（锚点：温度计分段；状态栏在底部 → 朝上展开）
+  const tempMenuRef = useFloatingPosition<HTMLDivElement>(panelRef, open, { placement: 'above', align: 'end' })
 
   useOutsideClick(panelRef, () => setOpen(false), open)
 
@@ -154,8 +158,12 @@ function TemperatureControl({
 
       {open && (
         <div
-          className="absolute bottom-[calc(100%+6px)] right-0 z-[var(--z-dropdown)] py-2 px-3 rounded-lg shadow-lg"
+          ref={tempMenuRef}
+          className="z-[var(--z-dropdown)] py-2 px-3 rounded-lg shadow-lg"
           style={{
+            // 浮在整个窗口之上（useFloatingPosition 定位）
+            position: 'fixed',
+            visibility: 'hidden',
             width: 200,
             backgroundColor: 'var(--color-sidebar)',
             border: '1px solid var(--color-border)',
@@ -403,5 +411,67 @@ function StatusBarSegment({
 function StatusBarDivider() {
   return (
     <span style={{ opacity: 0.25, fontSize: "0.75rem", userSelect: 'none' }}>|</span>
+  )
+}
+
+/**
+ * 缩放控制 — 原标题栏控件，标题栏移除后搬到状态栏右侧（VSCode 的缩放同样在状态栏）。
+ * 快捷键（Ctrl/⌘ + = / - / 0）由 App.tsx 统一注册，此处只是可视化入口。
+ */
+function ZoomControl() {
+  const { t } = useTranslation()
+  const { zoom, zoomIn, zoomOut, zoomReset } = useThemeStore()
+  const mod = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl'
+  const zoomLabel = `${Math.round(zoom * 100)}%`
+  const btn: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    height: '100%',
+    minWidth: 16,
+    padding: 0,
+    background: 'transparent',
+    border: 'none',
+    cursor: 'pointer',
+    color: 'inherit',
+    opacity: 0.75,
+    transition: 'opacity var(--transition-fast)',
+  }
+  return (
+    <div className="flex items-center h-full gap-0.5 px-1">
+      <button
+        onClick={zoomOut}
+        title={`${t('zoom.out')} (${mod}+-)`}
+        style={btn}
+        onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
+        onMouseLeave={e => { e.currentTarget.style.opacity = '0.75' }}
+      >
+        <ZoomOut size={11} strokeWidth={1.5} />
+      </button>
+      {/* 百分比：点击重置为 100%；非 100% 时用强调色提示已缩放 */}
+      <button
+        onClick={zoomReset}
+        title={`${t('zoom.reset')} (${mod}+0)`}
+        style={{
+          ...btn,
+          minWidth: 34,
+          fontFamily: 'var(--font-mono)',
+          fontSize: '0.68rem',
+          color: zoom !== 1.0 ? 'var(--color-accent)' : 'inherit',
+          opacity: 1,
+        }}
+      >
+        {zoomLabel}
+      </button>
+      <button
+        onClick={zoomIn}
+        title={`${t('zoom.in')} (${mod}+=)`}
+        style={btn}
+        onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
+        onMouseLeave={e => { e.currentTarget.style.opacity = '0.75' }}
+      >
+        <ZoomIn size={11} strokeWidth={1.5} />
+      </button>
+    </div>
   )
 }
