@@ -13,6 +13,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
+import { EmptyState } from '../ui/EmptyState'
 import { t, getCurrentLocale } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
 import { getCurrentLogEnv } from '../../services/render-logger'
@@ -225,7 +226,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
             </div>
             <div className="flex-1 overflow-y-auto py-1">
             {sortedFiles.length === 0 ? (
-              <div className="text-center py-8 text-xs opacity-50">{t('log.noFiles')}</div>
+              <EmptyState message={t('log.noFiles')} size="xs" className="text-center" />
             ) : sortedFiles.map((file) => (
               <button
                 key={`${file.env}-${file.name}`}

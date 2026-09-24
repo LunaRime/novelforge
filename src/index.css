@@ -912,7 +912,7 @@
     border: none;
     border-radius: 0;
     background: transparent;
-    font-size: 0.68rem;
+    font-size: var(--text-micro);
     font-family: var(--font-sans);
     color: var(--color-statusbar-text);
     cursor: pointer;

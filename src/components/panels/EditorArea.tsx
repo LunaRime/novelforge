@@ -6,6 +6,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
+import { EmptyState } from '../ui/EmptyState'
 import CodeMirrorEditor from '../editor/CodeMirrorEditor'
 import NovelConfigEditor from '../editor/NovelConfigEditor'
 import CharacterEditor from '../editor/CharacterEditor'
@@ -470,12 +471,13 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         style={{ backgroundColor: 'var(--color-editor-bg)' }}
       >
         <div className="flex-1 flex items-center justify-center">
-          <div className="text-center opacity-40">
-            <PenTool size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5, display: 'block', margin: '0 auto 12px' }} />
-            <span className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
-              {t('editor.noProject')}
-            </span>
-          </div>
+          {/* 图标与文字间距由 EmptyState 的 gap-3（12px）提供，与原 margin-bottom 12px 等值 */}
+          <EmptyState
+            icon={<PenTool size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />}
+            message={t('editor.noProject')}
+            opacity={0.4}
+            className="text-center text-[var(--color-text-secondary)]"
+          />
         </div>
       </div>
     )

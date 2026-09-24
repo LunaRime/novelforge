@@ -33,9 +33,18 @@ const badgeVariants = cva(
         /** 错误 — 红色系 */
         error:
           'bg-[color-mix(in_srgb,var(--color-error)_15%,transparent)] text-[var(--color-error)]',
+        /** 信息 — 蓝色系 */
+        info:
+          'bg-[color-mix(in_srgb,var(--color-info)_15%,transparent)] text-[var(--color-info)]',
+        /** 品牌软底 — 品牌色 15% 底 + 品牌色文字（区别于 solid 的实底白字） */
+        accent:
+          'bg-[color-mix(in_srgb,var(--color-accent)_15%,transparent)] text-[var(--color-accent)]',
         /** 轮廓 — 透明底 + 边框 */
         outline:
           'border border-[var(--color-border)] text-[var(--color-text-secondary)] bg-transparent',
+        /** 中性 — 灰底灰字的次要标签（无边框、无语义色） */
+        muted:
+          'bg-[var(--color-border)] text-[var(--color-text-muted)]',
         /** 纯色强调 — 白字品牌底（如"默认"标签） */
         solid:
           'bg-[var(--color-accent)] text-white',

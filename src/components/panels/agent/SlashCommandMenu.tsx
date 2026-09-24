@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback, type RefObject } from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import { searchSlashCommands, type SlashCommand } from '../../../services/agent/intent-router'
+import { Badge } from '../../ui/Badge'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 
@@ -112,15 +113,9 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
             </div>
           </div>
           {cmd.source === 'skill' && (
-            <span
-              className="text-2xs px-1.5 py-0.5 rounded-full flex-shrink-0"
-              style={{
-                backgroundColor: 'rgba(var(--color-success-rgb), 0.12)',
-                color: 'var(--color-success)',
-              }}
-            >
+            <Badge variant="success" className="px-1.5 text-2xs font-normal flex-shrink-0">
               Skill
-            </span>
+            </Badge>
           )}
         </button>
       ))}

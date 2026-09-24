@@ -8,6 +8,8 @@ import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
+import { Badge } from '../ui/Badge'
+import { cn } from '../../lib/utils'
 import { Textarea } from '../ui/Textarea'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -247,18 +249,18 @@ export default function ArchitectureConfirmDialog({
                     </span>
                   </span>
 
-                  {/* 状态标签 */}
-                  <span
-                    className="text-micro px-1.5 py-0.5 rounded flex-shrink-0"
-                    style={exists
-                      ? isChecked
-                        ? { backgroundColor: 'rgba(var(--color-warning-rgb), 0.15)', color: 'var(--color-warning)' }
-                        : { backgroundColor: 'rgba(var(--color-success-rgb), 0.1)', color: 'var(--color-success)' }
-                      : { backgroundColor: 'rgba(var(--color-accent-rgb), 0.1)', color: 'var(--color-accent)' }
-                    }
+                  {/* 状态标签（「将保留/将生成」支的底色为 0.1，低于变体标准的 0.15，按原值覆盖） */}
+                  <Badge
+                    variant={exists ? (isChecked ? 'warning' : 'success') : 'accent'}
+                    className={cn(
+                      'px-1.5 rounded font-normal flex-shrink-0',
+                      exists
+                        ? !isChecked && 'bg-[rgba(var(--color-success-rgb),0.1)]'
+                        : 'bg-[rgba(var(--color-accent-rgb),0.1)]'
+                    )}
                   >
                     {exists ? (isChecked ? t('archConfirm.willOverwrite') : t('archConfirm.willKeep')) : t('status.pendingGen')}
-                  </span>
+                  </Badge>
                 </label>
               )
             })}

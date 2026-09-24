@@ -17,6 +17,7 @@ import {
   AlertTriangle,
 } from 'lucide-react'
 import { Spinner } from '../../ui/Spinner'
+import { Badge } from '../../ui/Badge'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useTranslation } from '../../../hooks/useTranslation'
 import type { TextKey } from '../../../shared/locale'
@@ -105,9 +106,12 @@ export default function ToolCallBlock({ toolCall }: Props) {
 
         {/* 来源徽章 */}
         {source && (
-          <span className={`tool-call-source-badge ${source}`}>
+          <Badge
+            variant={source === 'builtin' ? 'info' : source === 'mcp' ? 'accent' : 'success'}
+            className="px-[5px] py-px rounded-[3px] text-2xs font-normal flex-shrink-0"
+          >
             {source === 'builtin' ? t('toolCall.builtin') : source === 'mcp' ? 'MCP' : 'Skill'}
-          </span>
+          </Badge>
         )}
 
         {/* 状态 */}

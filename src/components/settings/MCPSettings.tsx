@@ -8,6 +8,7 @@ import { Plus, Trash2, Plug, Unplug, Server } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
+import { EmptyState } from '../ui/EmptyState'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface MCPServerConfig {
@@ -255,9 +256,11 @@ export default function MCPSettings() {
             </button>
           </div>
         ) : servers.length === 0 && !showAdd ? (
-          <div className="text-center py-10 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
-            {t('mcp.empty')}
-          </div>
+          <EmptyState
+            message={t('mcp.empty')}
+            size="xs"
+            className="text-center text-[var(--color-text-muted)]"
+          />
         ) : (
           servers.map(server => {
             const st = statusLabel(server.id)

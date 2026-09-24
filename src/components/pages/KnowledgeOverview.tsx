@@ -6,6 +6,7 @@ import {
 import { ProgressBar } from '../ui/ProgressBar'
 import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
+import { Badge } from '../ui/Badge'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { useProjectStore } from '../../stores/project-store'
@@ -347,14 +348,9 @@ export default function KnowledgeOverview() {
           <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
-            <span className={cn(
-              'text-micro px-1.5 py-0.5 rounded-full font-medium',
-              hasVectors
-                ? 'bg-[rgba(var(--color-success-rgb),0.15)] text-[var(--color-success)]'
-                : 'bg-[rgba(var(--color-info-rgb),0.15)] text-[var(--color-info)]'
-            )}>
+            <Badge variant={hasVectors ? 'success' : 'info'} className="px-1.5">
               {searchMode}
-            </span>
+            </Badge>
             <span className="text-micro text-[var(--color-text-muted)] ml-auto">
               {hasVectors ? t('knowledge.fusionDesc') : t('knowledge.bm25Desc')}
             </span>
@@ -455,7 +451,7 @@ function StatCard({ icon, label, value, accent, badge, badgeTone = 'info' }: {
   accent?: boolean
   /** 行内小徽标（**放在标题之后**：窄卡片里长本地化文案不会再把它挤成竖排胶囊） */
   badge?: string
-  /** 徽标语义色调——用 CSS 变量 token，禁止硬编码色（AGENTS.md 核心约束） */
+  /** 徽标语义色调——映射到 Badge 的 success/info 变体（色值在变体内用 CSS 变量 token） */
   badgeTone?: 'success' | 'info'
 }) {
   return (
@@ -468,15 +464,9 @@ function StatCard({ icon, label, value, accent, badge, badgeTone = 'info' }: {
         <span className="text-[var(--color-text-muted)]">{icon}</span>
         <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
         {badge && (
-          <span
-            className="text-2xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
-            style={{
-              color: `var(--color-${badgeTone})`,
-              backgroundColor: `rgba(var(--color-${badgeTone}-rgb), 0.14)`,
-            }}
-          >
+          <Badge variant={badgeTone} className="px-1.5 text-2xs">
             {badge}
-          </span>
+          </Badge>
         )}
       </div>
       <div className={cn(

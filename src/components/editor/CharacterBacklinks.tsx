@@ -5,6 +5,7 @@
  */
 import { useMemo } from 'react'
 import { Hash, MessageCircle, Users } from 'lucide-react'
+import { Badge } from '../ui/Badge'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { CharacterCard } from '../../stores/character-store'
 
@@ -64,17 +65,13 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
         {appearChapters.length > 0 ? (
           <div className="flex flex-wrap gap-1">
             {appearChapters.map(ch => (
-              <span
+              <Badge
                 key={ch}
-                className="text-xs px-2 py-0.5 rounded-full"
-                style={{
-                  backgroundColor: 'var(--color-bg-elevated)',
-                  color: 'var(--color-text-secondary)',
-                  border: '1px solid var(--color-border)',
-                }}
+                variant="outline"
+                className="text-xs bg-[var(--color-bg-elevated)] font-normal"
               >
                 {t('chapter.label').replace('{n}', String(ch))}
-              </span>
+              </Badge>
             ))}
           </div>
         ) : (

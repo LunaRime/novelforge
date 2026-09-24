@@ -20,6 +20,7 @@ import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { Badge } from '../../ui/Badge'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
@@ -764,15 +765,9 @@ function ModelMenuItem({
         {model.name}
       </span>
       {model.provider && (
-        <span
-          className="ml-2 text-micro px-1.5 py-0.5 rounded-full flex-shrink-0"
-          style={{
-            backgroundColor: 'var(--color-border)',
-            color: 'var(--color-text-muted)',
-          }}
-        >
+        <Badge variant="muted" className="ml-2 px-1.5 font-normal flex-shrink-0">
           {model.provider}
-        </span>
+        </Badge>
       )}
     </button>
   )

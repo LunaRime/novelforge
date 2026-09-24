@@ -9,14 +9,14 @@ const meta = {
   argTypes: {
     variant: {
       control: 'select',
-      options: ['default', 'success', 'warning', 'error', 'outline', 'solid'],
+      options: ['default', 'success', 'warning', 'error', 'info', 'accent', 'outline', 'muted', 'solid'],
       description: 'Badge visual style',
     },
   },
   parameters: {
     docs: {
       description: {
-        component: 'NovelForge badge component for status indicators and labels. Supports 6 semantic variants.',
+        component: 'NovelForge badge component for status indicators and labels. Supports 9 semantic variants.',
       },
     },
   },
@@ -39,7 +39,10 @@ export const AllVariants: Story = {
       <Badge variant="success">Success</Badge>
       <Badge variant="warning">Warning</Badge>
       <Badge variant="error">Error</Badge>
+      <Badge variant="info">Info</Badge>
+      <Badge variant="accent">Accent</Badge>
       <Badge variant="outline">Outline</Badge>
+      <Badge variant="muted">Muted</Badge>
       <Badge variant="solid">Solid</Badge>
     </div>
   ),

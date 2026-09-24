@@ -6,6 +6,7 @@ import {
   BookMarked, Plug, BarChart3,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
+import { Badge } from '../ui/Badge'
 import { confirm } from '../ui/Confirm'
 import PromptSettings from './PromptSettings'
 import SkillsSettings from './SkillsSettings'
@@ -571,9 +572,9 @@ function ModelCard({
             {model.name || model.modelName}
           </span>
           {isDefault && (
-            <span className="text-micro px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white flex-shrink-0">
+            <Badge variant="solid" className="px-1.5 font-normal flex-shrink-0">
               {t('model.default')}
-            </span>
+            </Badge>
           )}
         </div>
         <p className="text-xs truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>

@@ -8,6 +8,7 @@ import { useState, useRef, useEffect, memo, useMemo } from 'react'
 import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
+import { EmptyState } from '../ui/EmptyState'
 import { t, type TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
 import LogFileDialog from '../dialogs/LogFileDialog'
@@ -130,7 +131,7 @@ export default memo(function LogsView() {
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-2 font-mono text-xs leading-5">
         {visibleLogs.length === 0 && (
-          <div className="text-center py-8 opacity-30">{t('status.noLogs')}</div>
+          <EmptyState message={t('status.noLogs')} size="xs" className="text-center" />
         )}
         {visibleLogs.map((log, i) => (
           <div key={i} className="flex gap-2">

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, Play, AlertCircle } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
+import { Badge } from '../ui/Badge'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -215,14 +216,14 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           <DialogDescription>
             {t('chapter.configDialogDesc')}
             {loadedFromBlueprint && (
-              <span className="ml-2 text-micro px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}>
+              <Badge variant="success" className="ml-2 px-1.5 font-normal">
                 {t('chapter.prefilled')}
-              </span>
+              </Badge>
             )}
             {loadedFromHistory && !loadedFromBlueprint && (
-              <span className="ml-2 text-micro px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}>
+              <Badge variant="accent" className="ml-2 px-1.5 font-normal">
                 {t('chapter.autoFilled')}
-              </span>
+              </Badge>
             )}
           </DialogDescription>
         </DialogHeader>

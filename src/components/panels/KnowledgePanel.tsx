@@ -276,7 +276,7 @@ export default function KnowledgePanel() {
           </div>
         )}
         {searchQuery.trim() !== '' && !searching && searchResults.length === 0 && (
-          <div className="text-center py-8 opacity-40 text-xs">{t('knowledge.searchEmpty')}</div>
+          <EmptyState message={t('knowledge.searchEmpty')} size="xs" className="text-center" />
         )}
         {searchResults.length === 0 && !(searchQuery.trim() !== '' && !searching) && (
           <DocListView
@@ -369,11 +369,15 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
           </Button>
         </EmptyState>
       ) : documents.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
-          <BookOpen size={36} />
-          <span className="text-xs">{t('knowledge.empty')}</span>
+        <EmptyState
+          icon={<BookOpen size={36} />}
+          message={t('knowledge.empty')}
+          size="xs"
+          opacity={0.4}
+          className="py-8"
+        >
           <span className="text-micro text-center px-4">{t('knowledge.autoIndexHint')}</span>
-        </div>
+        </EmptyState>
       ) : (
         <div className="pb-4">
           {pageDocs.map((doc) => (

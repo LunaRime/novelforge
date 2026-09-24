@@ -18,6 +18,7 @@ import { formatLocaleDateTime } from '../../shared/locale'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { confirmDeleteProject } from '../ui/Confirm'
+import { EmptyState } from '../ui/EmptyState'
 import { openBuiltinEditor } from '../panels/sidebar/SidebarShared'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -104,9 +105,11 @@ export default function ProjectSquareList() {
         style={{ maxHeight: LIST_MAX_HEIGHT }}
       >
         {targets.length === 0 && (
-          <div className="text-center py-3 text-2xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
-            {t('charList.noHistory')}
-          </div>
+          <EmptyState
+            message={t('charList.noHistory')}
+            size="2xs"
+            className="text-center text-[var(--color-text-muted)]"
+          />
         )}
         {targets.map((p, i) => {
           // 悬停提示：全名/完整路径/最近打开时间（无效时间戳不追加行）

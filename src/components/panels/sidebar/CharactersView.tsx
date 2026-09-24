@@ -202,7 +202,7 @@ export default function CharactersView() {
       {/* 角色列表 — 按 tier 分组 */}
       <div className="flex-1 overflow-y-auto p-1">
         {characters.length === 0 ? (
-          <div className="text-center py-6 opacity-30 text-xs">{t('character.empty')}</div>
+          <EmptyState message={t('character.empty')} size="xs" className="text-center" />
         ) : (
           [1, 2, 3].map(tier => {
             const chars = display[tier] || []

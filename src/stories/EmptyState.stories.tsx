@@ -10,6 +10,11 @@ const meta = {
   argTypes: {
     message: { control: 'text', description: 'Display message' },
     opacity: { control: { type: 'range', min: 0, max: 1, step: 0.05 }, description: 'Opacity level' },
+    size: {
+      control: 'select',
+      options: ['2xs', 'xs', 'sm'],
+      description: 'Message text size: sm = text-sm (default) / xs = text-xs / 2xs = text-2xs',
+    },
   },
   parameters: {
     docs: {

@@ -9,6 +9,7 @@ import { Upload, Trash2, FileText } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
+import { EmptyState } from '../ui/EmptyState'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface SkillItem {
@@ -115,9 +116,11 @@ export default function SkillsSettings() {
             </button>
           </div>
         ) : skills.length === 0 ? (
-          <div className="text-center py-10 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
-            {t('skill.empty')}
-          </div>
+          <EmptyState
+            message={t('skill.empty')}
+            size="xs"
+            className="text-center text-[var(--color-text-muted)]"
+          />
         ) : (
           <div className="space-y-2">
             {skills.map(skill => (
