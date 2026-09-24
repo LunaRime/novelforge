@@ -101,7 +101,7 @@ export function InlineAcceptPopover({
       onClick={e => e.stopPropagation()}
     >
       <div
-        className="text-[10px] font-medium mb-2"
+        className="text-2xs font-medium mb-2"
         style={{ color: 'var(--color-text-muted)' }}
       >{progress}</div>
 
@@ -121,7 +121,7 @@ export function InlineAcceptPopover({
               />
               <div className="flex-1 min-w-0 text-xs leading-relaxed">
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+                  <span className="text-2xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>
                     {t('inlineAccept.original')}
                   </span>
                   <span className="line-through break-all" style={{ color: 'var(--color-text-muted)' }}>
@@ -129,7 +129,7 @@ export function InlineAcceptPopover({
                   </span>
                 </div>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-[10px] shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+                  <span className="text-2xs shrink-0" style={{ color: 'var(--color-text-muted)' }}>
                     {t('inlineAccept.revised')}
                   </span>
                   <span className="break-all" style={{ color: 'var(--color-accent)' }}>
@@ -140,7 +140,7 @@ export function InlineAcceptPopover({
               {rejected && (
                 <button
                   data-act={`pv-restore-${s.id}`}
-                  className="shrink-0 self-center px-1.5 py-0.5 rounded text-[10px] transition-colors"
+                  className="shrink-0 self-center px-1.5 py-0.5 rounded text-2xs transition-colors"
                   style={{ border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}

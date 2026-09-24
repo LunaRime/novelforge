@@ -264,7 +264,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                 onChange={() => setGenerationMode('single')}
                 label={t('blueprintGen.singlePass')}
               />
-              <p className="text-[11px] pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              <p className="text-micro pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
                 {t('blueprintGen.singlePassHint')}
               </p>
               <RadioOption
@@ -289,7 +289,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                   </span>
                 }
               />
-              <p className="text-[11px] pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              <p className="text-micro pl-6 -mt-1" style={{ color: 'var(--color-text-muted)' }}>
                 {t('blueprintGen.batchedHint')}
               </p>
             </div>

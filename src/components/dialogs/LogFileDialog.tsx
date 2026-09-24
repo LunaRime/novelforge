@@ -241,7 +241,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
                   <FileText size={11} className="flex-shrink-0 opacity-60" />
                   <span className="truncate">{file.name}</span>
                 </span>
-                <span className="pl-[18px] text-[10px] text-[var(--color-text-muted)]">
+                <span className="pl-[18px] text-2xs text-[var(--color-text-muted)]">
                   {formatSize(file.size)} · {formatDate(file.mtime)}
                 </span>
               </button>
@@ -252,7 +252,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
           {/* 内容区 */}
           <div className="flex-1 min-w-0 flex flex-col">
             <div className="flex items-center justify-between px-3 py-1 border-b border-[var(--color-border)] flex-shrink-0">
-              <span className="text-[10px] text-[var(--color-text-muted)]">
+              <span className="text-2xs text-[var(--color-text-muted)]">
                 {selected
                   ? (totalLines > MAX_CONTENT_LINES
                       ? t('log.totalLines').replace('{total}', String(totalLines)).replace('{shown}', String(MAX_CONTENT_LINES))
@@ -296,7 +296,7 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
               ) : (
                 <pre
                   ref={contentRef}
-                  className="p-3 font-mono text-[11px] leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]"
+                  className="p-3 font-mono text-micro leading-5 whitespace-pre-wrap break-all text-[var(--color-text-secondary)]"
                 >
                   {displayedLines}
                 </pre>

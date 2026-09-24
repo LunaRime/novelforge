@@ -214,12 +214,12 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
           <DialogDescription>
             {t('chapter.configDialogDesc')}
             {loadedFromBlueprint && (
-              <span className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}>
+              <span className="ml-2 text-micro px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}>
                 {t('chapter.prefilled')}
               </span>
             )}
             {loadedFromHistory && !loadedFromBlueprint && (
-              <span className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}>
+              <span className="ml-2 text-micro px-1.5 py-0.5 rounded-full" style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}>
                 {t('chapter.autoFilled')}
               </span>
             )}
@@ -306,7 +306,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>{t('chapter.authorGuidance')} <span className="text-[0.7rem] opacity-50">{t('chapter.authorGuidanceHint').replace('{optional}', t('chapter.optional'))}</span></Label>
+                <Label>{t('chapter.authorGuidance')} <span className="text-micro opacity-50">{t('chapter.authorGuidanceHint').replace('{optional}', t('chapter.optional'))}</span></Label>
                 <Textarea
                   value={userGuidance}
                   onChange={(e) => setUserGuidance(e.target.value)}
@@ -316,7 +316,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
               </div>
 
               <div>
-                <Label>{t('chapter.kbKeywords')} <span className="text-[0.7rem] opacity-50">{t('chapter.kbKeywordsHint').replace('{optional}', t('chapter.optional'))}</span></Label>
+                <Label>{t('chapter.kbKeywords')} <span className="text-micro opacity-50">{t('chapter.kbKeywordsHint').replace('{optional}', t('chapter.optional'))}</span></Label>
                 <Input
                   value={knowledgeHint}
                   onChange={(e) => setKnowledgeHint(e.target.value)}

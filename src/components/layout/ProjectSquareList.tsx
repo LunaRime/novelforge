@@ -104,7 +104,7 @@ export default function ProjectSquareList() {
         style={{ maxHeight: LIST_MAX_HEIGHT }}
       >
         {targets.length === 0 && (
-          <div className="text-center py-3 text-[0.6rem] opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-center py-3 text-2xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
             {t('charList.noHistory')}
           </div>
         )}

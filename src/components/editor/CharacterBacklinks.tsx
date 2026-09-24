@@ -131,7 +131,7 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
               <div className="opacity-70">{t('character.backlinks.recent')}{character.currentState.recentEvents}</div>
             )}
           </div>
-          <div className="text-[0.65rem] mt-1 opacity-40">
+          <div className="text-micro mt-1 opacity-40">
             {t('character.lastUpdated').replace('{n}', String(character.currentState.updatedAtChapter || 0))}
           </div>
         </Section>
@@ -141,11 +141,11 @@ export default function CharacterBacklinks({ character, allCharacters }: Props) 
       {relations.length === 0 && backlinks.length === 0 && appearChapters.length === 0 && (
         <div className="text-center py-6">
           <div className="text-xs text-[var(--color-text-muted)] mb-1">{t('character.backlinks.noRelations')}</div>
-          <div className="text-[0.65rem] opacity-50">
+          <div className="text-micro opacity-50">
             {t('character.backlinks.autoHint')}
           </div>
           {implicitLinks.length > 0 && (
-            <div className="mt-2 text-[0.6rem] opacity-30">
+            <div className="mt-2 text-2xs opacity-30">
               {t('character.backlinks.potentialLinks').replace('{names}', implicitLinks.map(c => c.name).join('、'))}
             </div>
           )}

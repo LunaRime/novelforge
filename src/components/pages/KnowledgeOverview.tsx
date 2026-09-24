@@ -312,7 +312,7 @@ export default function KnowledgeOverview() {
                 </div>
                 <div>
                   <div className="text-sm font-medium text-[var(--color-warning)]">{t('knowledge.vectorUpgrade')}</div>
-                  <div className="text-[0.7rem] text-[var(--color-warning)] opacity-70">
+                  <div className="text-micro text-[var(--color-warning)] opacity-70">
                     {t('knowledge.vectorUpgradeDesc').replace('{n}', String(vectorlessCount))}
                   </div>
                 </div>
@@ -348,14 +348,14 @@ export default function KnowledgeOverview() {
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
             <span className={cn(
-              'text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium',
+              'text-micro px-1.5 py-0.5 rounded-full font-medium',
               hasVectors
                 ? 'bg-[rgba(var(--color-success-rgb),0.15)] text-[var(--color-success)]'
                 : 'bg-[rgba(var(--color-info-rgb),0.15)] text-[var(--color-info)]'
             )}>
               {searchMode}
             </span>
-            <span className="text-[0.7rem] text-[var(--color-text-muted)] ml-auto">
+            <span className="text-micro text-[var(--color-text-muted)] ml-auto">
               {hasVectors ? t('knowledge.fusionDesc') : t('knowledge.bm25Desc')}
             </span>
           </div>
@@ -369,7 +369,7 @@ export default function KnowledgeOverview() {
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
               <div className="flex items-center gap-1 flex-shrink-0">
-                <span className="text-[0.7rem] text-[var(--color-text-muted)]">{t('knowledge.topK')}</span>
+                <span className="text-micro text-[var(--color-text-muted)]">{t('knowledge.topK')}</span>
                 <Input
                   type="number"
                   min={1}
@@ -398,7 +398,7 @@ export default function KnowledgeOverview() {
                   {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
                 </span>
                 <button
-                  className="text-[0.7rem] text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                  className="text-micro text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
                   onClick={() => setSearchResults([])}
                 >
                   {t('knowledge.clear')}
@@ -416,7 +416,7 @@ export default function KnowledgeOverview() {
                         {r.fileName}
                       </span>
                       <span className={cn(
-                        'text-[0.7rem] px-1.5 py-0.5 rounded font-mono',
+                        'text-micro px-1.5 py-0.5 rounded font-mono',
                         r.score > 0.8 ? 'bg-[rgba(var(--color-success-rgb),0.2)] text-[var(--color-success)]' :
                         r.score > 0.6 ? 'bg-[rgba(var(--color-warning-rgb),0.2)] text-[var(--color-warning)]' :
                         'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
@@ -469,7 +469,7 @@ function StatCard({ icon, label, value, accent, badge, badgeTone = 'info' }: {
         <span className="text-xs text-[var(--color-text-muted)]">{label}</span>
         {badge && (
           <span
-            className="text-[0.6rem] px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
+            className="text-2xs px-1.5 py-0.5 rounded-full font-medium whitespace-nowrap"
             style={{
               color: `var(--color-${badgeTone})`,
               backgroundColor: `rgba(var(--color-${badgeTone}-rgb), 0.14)`,

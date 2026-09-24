@@ -72,7 +72,7 @@ export default function SidebarGroup({
           </span>
         </button>
         {count !== undefined && (
-          <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             {count}
           </span>
         )}

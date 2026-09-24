@@ -87,7 +87,7 @@ function EditorToolbar({
           {meta ? t('editor.chapterLabel').replace('{n}', String(meta.chapterNumber)).replace('{title}', meta.chapterTitle ?? '') : t('editor.draft')}
         </span>
         {meta && (
-          <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             v{meta.version}
           </span>
         )}
@@ -188,7 +188,7 @@ function RightActions({
 
       {/* 翻译为（生成新草稿）——带文字触发器，入口明确 */}
       <Select value="" onValueChange={(v) => onTranslate(v as 'zh' | 'en' | 'ru')}>
-        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-[0.68rem]" title={t('translate.title')}>
+        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-micro" title={t('translate.title')}>
           <Languages size={11} />
           <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
         </SelectTrigger>
@@ -201,7 +201,7 @@ function RightActions({
 
       {/* 状态标签 */}
       <span
-        className="text-[0.7rem] px-1.5 py-0.5 rounded flex-shrink-0"
+        className="text-micro px-1.5 py-0.5 rounded flex-shrink-0"
         style={{
           backgroundColor: 'var(--color-hover)',
           color: DRAFT_STATUS_COLOR[status] ?? 'var(--color-text-muted)',

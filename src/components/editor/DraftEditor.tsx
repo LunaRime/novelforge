@@ -412,7 +412,7 @@ export default function DraftEditor({ filePath, content }: Props) {
           onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
-            <DialogTitle className="flex items-center gap-2 text-[0.8rem]">
+            <DialogTitle className="flex items-center gap-2 text-xs">
               {t('editor.mergeTitle').replace('{n}', String(meta?.chapterNumber)).replace('{title}', meta?.chapterTitle ?? '')}
             </DialogTitle>
           </DialogHeader>

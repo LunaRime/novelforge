@@ -270,7 +270,7 @@ function DownloadProgressBar({ progress }: { progress: UpdateProgressInfo }) {
           }}
         />
       </div>
-      <span className="font-mono text-[0.62rem] opacity-60">
+      <span className="font-mono text-2xs opacity-60">
         {formatBytes(progress.bytesPerSecond)}/s
       </span>
     </div>

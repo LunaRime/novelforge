@@ -283,7 +283,7 @@ export default function WorldBuildingEditor() {
                 <div className="flex flex-col items-end gap-1 flex-shrink-0">
                   {generated ? (
                     <>
-                      <span className="text-[0.7rem] px-1.5 py-0.5 rounded font-medium bg-[rgba(var(--color-success-rgb),0.1)] text-[var(--color-success)]">
+                      <span className="text-micro px-1.5 py-0.5 rounded font-medium bg-[rgba(var(--color-success-rgb),0.1)] text-[var(--color-success)]">
                         {t('status.generated')}
                       </span>
                       <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -292,7 +292,7 @@ export default function WorldBuildingEditor() {
                     </>
                   ) : (
                     <span
-                      className="text-[0.7rem] px-1.5 py-0.5 rounded"
+                      className="text-micro px-1.5 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-accent-rgb,99 102 241),0.1)', color: 'var(--color-accent)' }}
                     >
                       {t('status.pendingGen')}
@@ -319,7 +319,7 @@ export default function WorldBuildingEditor() {
                   )}
                   {/* 查看箭头提示 */}
                   {generated && !(isCharacters && !loading && characterCount === 0) && (
-                    <span className="text-[0.7rem] flex items-center gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                    <span className="text-micro flex items-center gap-0.5" style={{ color: 'var(--color-text-muted)' }}>
                       <FileText size={10} /> {t('tip.clickView')}
                     </span>
                   )}

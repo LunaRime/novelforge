@@ -931,7 +931,7 @@ export default function CodeMirrorEditor({
           {aiResult !== null ? (
             <div className="w-[360px] p-2 flex flex-col">
               <div
-                className="text-[10px] mb-1.5 font-medium flex items-center gap-1"
+                className="text-2xs mb-1.5 font-medium flex items-center gap-1"
                 style={{ color: 'var(--color-text-muted)' }}
               >
                 <Sparkles size={11} style={{ color: 'var(--color-accent)' }} /> {activeAIAction ? t('codeEditor.previewSuffix').replace('{action}', activeAIAction) : t('codeEditor.aiPreview')}
@@ -1046,7 +1046,7 @@ export default function CodeMirrorEditor({
                 </>
               )}
               <div
-                className="flex items-center gap-0.5 pl-0.5 pr-1 text-[10px]"
+                className="flex items-center gap-0.5 pl-0.5 pr-1 text-2xs"
                 style={{ color: 'var(--color-text-muted)' }}
               >
                 <Sparkles size={11} />AI
@@ -1059,7 +1059,7 @@ export default function CodeMirrorEditor({
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                   onClick={() => handleAIAction(action.prompt, action.key)}
                 >
-                  <span className="text-[10px] tracking-widest">{action.label}</span>
+                  <span className="text-2xs tracking-widest">{action.label}</span>
                 </button>
               ))}
               <button

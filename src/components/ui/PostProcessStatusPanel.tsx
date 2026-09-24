@@ -96,7 +96,7 @@ export function PostProcessStatusPanel({
   if (!hasFailure) {
     return (
       <div className={cn(
-        'flex items-center gap-1.5 px-2 py-1 rounded text-[10px]',
+        'flex items-center gap-1.5 px-2 py-1 rounded text-2xs',
         className,
       )} style={{ color: 'var(--color-success)', backgroundColor: 'rgba(var(--color-success-rgb), 0.08)' }}>
         <CheckCircle2 size={12} />
@@ -121,10 +121,10 @@ export function PostProcessStatusPanel({
       >
         <div className="flex items-center gap-1.5">
           <AlertTriangle size={13} style={{ color: hasCriticalFailure ? errorColor : warnColor }} />
-          <span className="text-[11px] font-medium" style={{ color: 'var(--color-text)' }}>
+          <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
             {t('postprocess.failed').replace('{label}', status.sourceLabel).replace('{n}', String(failedSteps.length))}
           </span>
-          <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>
             ({successCount}/{totalCount})
           </span>
         </div>
@@ -139,7 +139,7 @@ export function PostProcessStatusPanel({
           {steps.map(([key, step]) => (
             <div
               key={key}
-              className="flex items-center justify-between gap-2 py-1 text-[11px]"
+              className="flex items-center justify-between gap-2 py-1 text-micro"
             >
               <div className="flex items-center gap-1.5 min-w-0">
                 {step.ok ? (
@@ -151,7 +151,7 @@ export function PostProcessStatusPanel({
                   {step.label}
                 </span>
                 {step.critical && !step.ok && (
-                  <span className="shrink-0 px-1 py-0.5 rounded text-[9px]" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-error)' }}>
+                  <span className="shrink-0 px-1 py-0.5 rounded text-2xs" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.15)', color: 'var(--color-error)' }}>
                     {t('postprocess.critical')}
                   </span>
                 )}
@@ -159,12 +159,12 @@ export function PostProcessStatusPanel({
 
               <div className="flex items-center gap-1.5 shrink-0">
                 {step.ok ? (
-                  <span className="text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+                  <span className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>
                     {step.completedAt ? new Date(step.completedAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' }) : ''}
                   </span>
                 ) : (
                   <>
-                    <span className="text-[10px] max-w-[120px] truncate" title={step.error} style={{ color: 'var(--color-error)' }}>
+                    <span className="text-2xs max-w-[120px] truncate" title={step.error} style={{ color: 'var(--color-error)' }}>
                       {step.error || t('status.failed')}
                     </span>
                     {onRetry && (
@@ -184,7 +184,7 @@ export function PostProcessStatusPanel({
 
           {/* 底部操作栏 */}
           <div className="flex items-center justify-between pt-1.5 border-t" style={{ borderColor: 'var(--color-border)' }}>
-            <div className="flex items-center gap-1 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="flex items-center gap-1 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
               <Clock size={10} />
               <span>
                 {t('postprocess.lastAttempt').replace('{time}', new Date(status.updatedAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' }))}

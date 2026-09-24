@@ -199,7 +199,7 @@ function ToastItemView({ item, onRemove }: { item: ToastItem; onRemove: (id: num
               key={i}
               type="button"
               onClick={() => handleAction(action)}
-              className="px-3 py-1 text-[0.7rem] font-medium cursor-pointer transition-all rounded-md"
+              className="px-3 py-1 text-micro font-medium cursor-pointer transition-all rounded-md"
               style={{
                 border: action.variant === 'ghost'
                   ? '1px solid var(--color-border)'

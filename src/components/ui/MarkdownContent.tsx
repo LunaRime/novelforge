@@ -224,12 +224,12 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
           borderBottom: '1px solid var(--color-border)',
         }}
       >
-        <span className="text-[0.7rem] font-mono" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="text-micro font-mono" style={{ color: 'var(--color-text-muted)' }}>
           {lang || 'text'}
         </span>
         <button
           onClick={handleCopy}
-          className="text-[0.7rem] px-2 py-0.5 rounded transition-opacity hover:opacity-100 opacity-60"
+          className="text-micro px-2 py-0.5 rounded transition-opacity hover:opacity-100 opacity-60"
           style={{ color: 'var(--color-text-secondary)' }}
           onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-border)')}
           onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}

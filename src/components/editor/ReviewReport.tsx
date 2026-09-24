@@ -373,7 +373,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
                           <div className="flex-1 min-w-0">
                             <span className="text-[var(--color-text-secondary)]">{item.description}</span>
                             <span
-                              className={cn('ml-2 text-[0.65rem] opacity-70', meta.colorClass)}
+                              className={cn('ml-2 text-micro opacity-70', meta.colorClass)}
                             >
                               [{meta.actionLabel}]
                             </span>
@@ -382,7 +382,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
                         {/* 引用原文（如有） */}
                         {item.quote && (
                           <div
-                            className="mt-1.5 ml-5 pl-2 text-[0.7rem] italic"
+                            className="mt-1.5 ml-5 pl-2 text-micro italic"
                             style={{
                               borderLeft: '2px solid var(--color-border)',
                               color: 'var(--color-text-muted)',
@@ -423,7 +423,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
               <Sparkles size={14} className="mr-1" />
               {t('review.aiFixBtn')}
             </Button>
-            <p className="text-[0.7rem] text-center mt-3" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="text-micro text-center mt-3" style={{ color: 'var(--color-text-muted)' }}>
               {t('review.aiFixDesc')}
             </p>
           </div>

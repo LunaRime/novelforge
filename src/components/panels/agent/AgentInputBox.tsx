@@ -352,7 +352,7 @@ export default function AgentInputBox() {
                   boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
                 }}
               >
-                <div className="text-[0.7rem] px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
+                <div className="text-micro px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('tip.addContext')}
                 </div>
                 {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
@@ -443,10 +443,10 @@ export default function AgentInputBox() {
                 >
                   {/* 标题行：思考等级 + 当前档位名 */}
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[0.7rem] font-medium" style={{ color: 'var(--color-text)' }}>
+                    <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
                       {t('agent.depthTitle')}
                     </span>
-                    <span className="text-[0.7rem] font-semibold" style={{ color: isMax ? 'var(--color-warning)' : 'var(--color-accent)' }}>
+                    <span className="text-micro font-semibold" style={{ color: isMax ? 'var(--color-warning)' : 'var(--color-accent)' }}>
                       {t(currentLv.labelKey)} · {currentLv.level}/6
                     </span>
                   </div>
@@ -541,7 +541,7 @@ export default function AgentInputBox() {
 
                   {/* 当前等级说明（固定 2 行高度 + 截断 → 面板高度恒定，滑块不上下跳动） */}
                   <div
-                    className="mt-2 text-[0.6rem] leading-relaxed overflow-hidden"
+                    className="mt-2 text-2xs leading-relaxed overflow-hidden"
                     style={{
                       color: 'var(--color-text-muted)',
                       minHeight: 31,
@@ -609,7 +609,7 @@ export default function AgentInputBox() {
                   positionAnchor: '--menu-model',
                 } as React.CSSProperties}
               >
-                <div className="text-[0.7rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+                <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('agent.selectModel')}
                 </div>
                 {chatModels.length === 0 ? (
@@ -728,7 +728,7 @@ function ContextMenuItem({
     >
       <span style={{ color: 'var(--color-text-secondary)' }}>{icon}</span>
       {label}
-      {disabled && <span className="ml-auto text-[0.7rem] opacity-40">{t('agent.comingSoon')}</span>}
+      {disabled && <span className="ml-auto text-micro opacity-40">{t('agent.comingSoon')}</span>}
     </button>
   )
 }
@@ -765,7 +765,7 @@ function ModelMenuItem({
       </span>
       {model.provider && (
         <span
-          className="ml-2 text-[0.7rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
+          className="ml-2 text-micro px-1.5 py-0.5 rounded-full flex-shrink-0"
           style={{
             backgroundColor: 'var(--color-border)',
             color: 'var(--color-text-muted)',

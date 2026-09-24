@@ -203,7 +203,7 @@ export default function KnowledgePanel() {
         <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1.5 min-w-0">
           <Database size={13} />
           <span className="truncate">{t('nav.knowledgeBase')}</span>
-          <span className="text-[0.7rem] text-[var(--color-text-muted)] flex-shrink-0">
+          <span className="text-micro text-[var(--color-text-muted)] flex-shrink-0">
             {t('knowledge.docChunks').replace('{docs}', String(stats.documentCount)).replace('{chunks}', String(stats.totalChunks))}
           </span>
         </span>
@@ -241,7 +241,7 @@ export default function KnowledgePanel() {
             onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]) }}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
             placeholder={t('knowledge.searchPlaceholder')}
-            className="flex-1 min-w-0 h-6 px-1.5 text-[0.7rem] rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+            className="flex-1 min-w-0 h-6 px-1.5 text-micro rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
           />
           {searchResults.length > 0 && (
             <button
@@ -260,13 +260,13 @@ export default function KnowledgePanel() {
         {searchResults.length > 0 && (
           <div className="pb-4">
             <div className="flex items-center justify-between px-3 py-1.5">
-              <span className="text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+              <span className="text-micro text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
                 {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
               </span>
             </div>
             {searchResults.map((r, i) => (
               <div key={i} className="px-3 py-2 hover:bg-[var(--color-hover)] transition-colors">
-                <div className="flex items-center gap-2 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+                <div className="flex items-center gap-2 text-micro" style={{ color: 'var(--color-text-muted)' }}>
                   <span className="truncate flex-1">{r.fileName}</span>
                   <span className="flex-shrink-0">{Math.round(r.score * 100)}%</span>
                 </div>
@@ -332,7 +332,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
     <>
       {/* 排序头 */}
       <div className="flex items-center justify-between px-3 py-1.5">
-        <span className="text-[0.7rem] text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+        <span className="text-micro text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
           {t('knowledge.indexedChapters')}
         </span>
         {/* 排序选择：章节号 / 导入时间 / 名称 */}
@@ -341,7 +341,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
           onValueChange={(v) => onSortModeChange(v as 'time' | 'chapter' | 'name')}
         >
           <SelectTrigger
-            className="h-6 gap-1 text-[0.7rem] px-1.5"
+            className="h-6 gap-1 text-micro px-1.5"
             title={t('knowledge.sortBy')}
             style={{ minWidth: 0, borderColor: 'var(--color-border)' }}
           >
@@ -372,7 +372,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
         <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
           <BookOpen size={28} />
           <span className="text-xs">{t('knowledge.empty')}</span>
-          <span className="text-[0.7rem] text-center px-4">{t('knowledge.autoIndexHint')}</span>
+          <span className="text-micro text-center px-4">{t('knowledge.autoIndexHint')}</span>
         </div>
       ) : (
         <div className="pb-4">
@@ -385,7 +385,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
                 <div className="text-xs text-[var(--color-text)] truncate" title={doc.fileName}>
                   {titleMap[doc.id] || doc.fileName}
                 </div>
-                <div className="flex items-center gap-2 text-[0.7rem] text-[var(--color-text-muted)] mt-0.5">
+                <div className="flex items-center gap-2 text-micro text-[var(--color-text-muted)] mt-0.5">
                   <span>{t('knowledge.chunks').replace('{n}', String(doc.chunkCount))}</span>
                   <span>{new Date(doc.importedAt).toLocaleDateString(getCurrentLocale())}</span>
                 </div>
@@ -415,13 +415,13 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
 
           {totalPages > 1 && (
             <div className="flex items-center justify-between px-3 pt-3">
-              <span className="text-[0.65rem] text-[var(--color-text-muted)]">
+              <span className="text-micro text-[var(--color-text-muted)]">
                 {currentPage} / {totalPages}
               </span>
               <div className="flex items-center gap-1">
                 <Button
                   variant="outline" size="sm"
-                  className="h-6 text-[0.65rem] px-2"
+                  className="h-6 text-micro px-2"
                   disabled={currentPage === 1}
                   onClick={() => onPageChange(Math.max(1, currentPage - 1))}
                 >
@@ -429,7 +429,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
                 </Button>
                 <Button
                   variant="outline" size="sm"
-                  className="h-6 text-[0.65rem] px-2"
+                  className="h-6 text-micro px-2"
                   disabled={currentPage === totalPages}
                   onClick={() => onPageChange(Math.min(totalPages, currentPage + 1))}
                 >

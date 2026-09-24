@@ -164,7 +164,7 @@ export default function VersionHistory() {
                 )}
                 onClick={() => setSelectedChapter(ch.id)}
               >
-                <span className="font-mono text-[0.7rem] opacity-50 mr-1">
+                <span className="font-mono text-micro opacity-50 mr-1">
                   {ch.chapter_number}
                 </span>
                 {ch.title || t('chapter.unnamed')}
@@ -203,7 +203,7 @@ export default function VersionHistory() {
                   >
                     <div className="flex items-center gap-2">
                       <span className={cn(
-                        'text-[0.7rem] px-1.5 py-0.5 rounded font-medium',
+                        'text-micro px-1.5 py-0.5 rounded font-medium',
                         TYPE_COLORS[ver.type] || 'bg-[var(--color-hover)]'
                       )}>
                         {TYPE_LABELS[ver.type] || ver.type}
@@ -211,10 +211,10 @@ export default function VersionHistory() {
                       <span className="text-xs text-[var(--color-text)]">
                         v{ver.version}
                       </span>
-                      <span className="text-[0.7rem] text-[var(--color-text-muted)]">
+                      <span className="text-micro text-[var(--color-text-muted)]">
                         {ver.word_count} {t('unit.chars')}
                       </span>
-                      <span className="text-[0.7rem] text-[var(--color-text-muted)]">
+                      <span className="text-micro text-[var(--color-text-muted)]">
                         {new Date(ver.created_at).toLocaleString(getCurrentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
                       </span>
                     </div>

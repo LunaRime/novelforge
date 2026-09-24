@@ -257,7 +257,7 @@ function TemplateItem({
                 : builtinTemplate.name}
             </span>
             <span
-              className="text-[0.65rem] px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
+              className="text-micro px-1.5 py-0.5 rounded-full font-medium flex-shrink-0"
               style={{ color: sourceConf.color, backgroundColor: sourceConf.bg }}
               title={source !== 'builtin' ? t('prompt.customLangTip') : undefined}
             >
@@ -277,7 +277,7 @@ function TemplateItem({
         <div className="px-4 pb-4 space-y-3" style={{ borderTop: '1px solid var(--color-border)' }}>
           {/* 变量标签栏 */}
           <div className="pt-3">
-            <p className="text-[0.68rem] font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="text-micro font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
               {t('prompt.variables')}
             </p>
             <div className="flex flex-wrap gap-1.5">
@@ -288,7 +288,7 @@ function TemplateItem({
                   key={varName}
                   onClick={() => insertVariable(varName)}
                   title={descText}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-micro transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
                   style={{
                     backgroundColor: 'var(--color-hover)',
                     color: 'var(--color-text-secondary)',

@@ -230,7 +230,7 @@ export function LeafItem({
         <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{label}</span>
         {badge && (
           <span
-            className="text-[0.7rem] flex-shrink-0 ml-1"
+            className="text-micro flex-shrink-0 ml-1"
             style={{ color: badgeColor || (badgeDone ? 'var(--color-success)' : 'var(--color-text-muted)') }}
           >
             {badge}

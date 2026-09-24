@@ -54,9 +54,19 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   --font-writing: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
 
-  /* 文字尺寸 */
+  /* 文字尺寸 —— 12px 以下的两档（2026-09-25 收敛）
+     此前 12px 以下有 **10 档手写值**（8.8/9/9.6/9.92/10/10.4/10.88/11/11.2/12.8px，共 253 处），
+     挤在 3px 区间内、肉眼无法区分，纯属逐次微调漂移（同一面板内常并存 3–4 档）。
+     现收敛为两档：
+       text-2xs   10px —— 密集徽标/标签（原 8.8/9/9.6/9.92/10px 共 70 处）
+       text-micro 11px —— 侧栏与面板的次级文字（原 10.4/10.88/11/11.2px 共 181 处）
+     12.8px 归入既有的 text-xs（12px）。
+
+     ⚠️ **故意不定义 `--line-height` 伴随值**：Tailwind 的 `text-2xs` 这类任意值**只设字号**，
+     若这里带上行高，253 处替换会连带改变行高、把布局节奏一起改掉。中性替换优先。
+     （此前存在的 `--text-2xs--line-height` 已移除——该档当时零引用。） */
   --text-2xs: 0.625rem;
-  --text-2xs--line-height: 0.875rem;
+  --text-micro: 0.6875rem;
 
   /* 间距 */
   --spacing-sidebar: 260px;

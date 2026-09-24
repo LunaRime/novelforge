@@ -134,7 +134,7 @@ function DraftChapterGroup({
           <span className="text-sm flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
             {displayTitle}
           </span>
-          <span className="ml-auto text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             {t('draftbox.revisionCount').replace('{n}', String(activeDrafts.length))}
           </span>
         </button>
@@ -163,7 +163,7 @@ function DraftChapterGroup({
                 onClick={() => setShowArchived(v => !v)}
                 className="flex items-center gap-1 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
               >
-                <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
+                <span className="text-micro" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
                   {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
                 </span>
               </button>
@@ -273,7 +273,7 @@ function DraftItem({
         </span>
         {/* 状态标签（始终显示） */}
         <span
-          className="text-[0.7rem] flex-shrink-0"
+          className="text-micro flex-shrink-0"
           style={{ color: DRAFT_STATUS_COLOR[draft.status] || 'var(--color-text-muted)' }}
         >
           {t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status}

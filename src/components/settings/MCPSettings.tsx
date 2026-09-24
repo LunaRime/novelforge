@@ -165,7 +165,7 @@ export default function MCPSettings() {
           className="p-3 rounded-xl border"
           style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
         >
-          <div className="text-[0.68rem] font-semibold mb-2" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-micro font-semibold mb-2" style={{ color: 'var(--color-text-muted)' }}>
             {t('mcp.recommended')}
           </div>
           <div className="flex flex-wrap gap-1.5">
@@ -173,7 +173,7 @@ export default function MCPSettings() {
               <button
                 key={rec.id}
                 type="button"
-                className="px-2 py-1 rounded-lg text-[0.65rem] transition-colors cursor-pointer hover:opacity-80"
+                className="px-2 py-1 rounded-lg text-micro transition-colors cursor-pointer hover:opacity-80"
                 style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)' }}
                 title={rec.id}
                 onClick={() => {
@@ -187,7 +187,7 @@ export default function MCPSettings() {
               </button>
             ))}
           </div>
-          <div className="text-[0.6rem] mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-2xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>
             {t('mcp.recommendedHint')}
           </div>
         </div>
@@ -275,7 +275,7 @@ export default function MCPSettings() {
                       {server.name}
                     </p>
                     <span
-                      className="flex items-center gap-1 text-[0.6rem] flex-shrink-0"
+                      className="flex items-center gap-1 text-2xs flex-shrink-0"
                       style={{ color: st.color }}
                     >
                       <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: st.color }} />
@@ -290,7 +290,7 @@ export default function MCPSettings() {
                 <button
                   type="button"
                   onClick={() => isConnected ? handleDisconnect(server.id) : handleConnect(server)}
-                  className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-[0.65rem] transition-colors cursor-pointer"
+                  className="flex-shrink-0 flex items-center gap-1 px-2 py-1 rounded-lg text-micro transition-colors cursor-pointer"
                   style={{
                     color: isConnected ? 'var(--color-text-secondary)' : 'var(--color-accent)',
                     backgroundColor: isConnected ? 'var(--color-hover)' : 'rgba(var(--color-accent-rgb), 0.1)',

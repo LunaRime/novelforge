@@ -59,7 +59,7 @@ export default function AgentMemoryView() {
           <ChevronRight size={12} style={{ transform: 'rotate(180deg)' }} />
           <span>{t('memory.menuTitle')}</span>
         </button>
-        <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
           {projectPath ? files.length : '—'}
         </span>
         <button
@@ -80,7 +80,7 @@ export default function AgentMemoryView() {
             {t('memory.openProjectHint')}
           </div>
         ) : files.length === 0 ? (
-          <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
             {t('memory.empty')}
           </div>
         ) : (

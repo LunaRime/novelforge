@@ -66,7 +66,7 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
               transform="rotate(-90 8 8)"
             />
           </svg>
-          <span className="text-[0.68rem] leading-none">{pct}%</span>
+          <span className="text-micro leading-none">{pct}%</span>
         </button>
 
         {/* 四段原始值（base,memory,history,current）：供测试等程序化读取 ——
@@ -87,13 +87,13 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
             padding: '8px 10px',
           }}
         >
-          <div className="mb-1.5 text-[0.68rem] font-medium" style={{ color: 'var(--color-text)' }}>
+          <div className="mb-1.5 text-micro font-medium" style={{ color: 'var(--color-text)' }}>
             {t('ccr.contextUsage')}
           </div>
           {segments.map(seg => (
             <div
               key={seg.label}
-              className="flex items-center justify-between gap-3 text-[0.68rem] leading-relaxed"
+              className="flex items-center justify-between gap-3 text-micro leading-relaxed"
               style={{ color: 'var(--color-text-secondary)' }}
             >
               <span className="flex items-center gap-1.5">
@@ -104,7 +104,7 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
             </div>
           ))}
           <div
-            className="mt-1.5 pt-1.5 flex items-center justify-between gap-3 text-[0.68rem]"
+            className="mt-1.5 pt-1.5 flex items-center justify-between gap-3 text-micro"
             style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text)' }}
           >
             <span>{t('ccr.total')}</span>

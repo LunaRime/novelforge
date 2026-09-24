@@ -32,7 +32,7 @@ export default function HomeSidebarPanel() {
               <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
                 {currentProject.name}
               </p>
-              <p className="text-[0.7rem] truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+              <p className="text-micro truncate mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
                 {t('project.current')}</p>
             </div>
           </div>

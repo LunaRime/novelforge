@@ -76,7 +76,7 @@ export default memo(function LogsView() {
               key={f.key}
               type="button"
               onClick={() => setFilter(f.key)}
-              className={`px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+              className={`px-1.5 py-0.5 rounded text-2xs transition-colors ${
                 filter === f.key
                   ? 'bg-[var(--color-accent)] text-white'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'

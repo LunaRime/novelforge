@@ -201,7 +201,7 @@ function ActiveRunView({
             <button
               key={r.id}
               onClick={() => onSwitchRun(r.id)}
-              className="text-[0.68rem] px-2 py-0.5 rounded transition-all flex-shrink-0"
+              className="text-micro px-2 py-0.5 rounded transition-all flex-shrink-0"
               style={{
                 backgroundColor: r.id === run.id ? 'var(--color-hover)' : 'transparent',
                 color: r.id === run.id ? 'var(--color-text)' : 'var(--color-text-muted)',
@@ -406,7 +406,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
 
         {/* 进度 */}
         {isRunning && step.progress !== undefined && (
-          <span className="font-mono text-[0.62rem] flex-shrink-0 opacity-60">
+          <span className="font-mono text-2xs flex-shrink-0 opacity-60">
             {step.progress}%
           </span>
         )}
@@ -422,7 +422,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
             }}
           />
         ) : (
-          <span className="font-mono text-[0.6rem] flex-shrink-0 opacity-30">
+          <span className="font-mono text-2xs flex-shrink-0 opacity-30">
             {index + 1}/{total}
           </span>
         )}
@@ -454,7 +454,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
       {recoveredContent && (
         <div className="pl-[4px] pr-1 pt-1 pb-3 text-xs w-full max-w-full break-words">
           <div
-            className="flex items-center gap-1.5 mb-1.5 text-[0.65rem]"
+            className="flex items-center gap-1.5 mb-1.5 text-micro"
             style={{ color: 'var(--color-text-muted)', opacity: 0.85 }}
           >
             <HardDrive size={10} />
@@ -565,7 +565,7 @@ function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id:
   return (
     <div>
       <p
-        className="text-[0.68rem] font-medium mb-2 px-1 uppercase tracking-widest"
+        className="text-micro font-medium mb-2 px-1 uppercase tracking-widest"
         style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
       >
         {t('agent.history')}
@@ -586,7 +586,7 @@ function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id:
             <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>
               {run.title.replace(/^[^\s]+\s/, '')}
             </span>
-            <span className="text-[0.6rem] flex-shrink-0 font-mono opacity-30">
+            <span className="text-2xs flex-shrink-0 font-mono opacity-30">
               {new Date(run.createdAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
             </span>
           </button>

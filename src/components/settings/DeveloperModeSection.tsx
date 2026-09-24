@@ -186,7 +186,7 @@ export default function DeveloperModeSection() {
             <Globe size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
             <div className="min-w-0">
               <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.browserTitle')}</div>
-              <div className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.browserDesc')}</div>
+              <div className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.browserDesc')}</div>
             </div>
           </div>
           <input
@@ -213,10 +213,10 @@ export default function DeveloperModeSection() {
                 {t('dev.browserTest')}
               </Button>
             </div>
-            <div className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
               {t('dev.browserLaunchHint').replace('{port}', String(browserPort || 9222))}
             </div>
-            <div className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
               {t('dev.browserToolHint')}
             </div>
             {browserTestResult && (
@@ -243,7 +243,7 @@ export default function DeveloperModeSection() {
           <FileText size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
           <div className="min-w-0">
             <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.logRetentionTitle')}</div>
-            <div className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.logRetentionDesc')}</div>
+            <div className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.logRetentionDesc')}</div>
           </div>
         </div>
 
@@ -329,7 +329,7 @@ function DevGuideDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
             <div className="font-semibold mb-1" style={{ color: 'var(--color-text)' }}>{t('dev.guideStep2Title')}</div>
             <div className="mb-1">{t('dev.guideStep2')}</div>
             <pre
-              className="p-2 rounded-lg font-mono text-[0.7rem] overflow-x-auto"
+              className="p-2 rounded-lg font-mono text-micro overflow-x-auto"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}
             >
               {`${t('dev.apiBaseUrl')}: ${exampleBase}\n${t('dev.headers')}: {}`}
@@ -344,7 +344,7 @@ function DevGuideDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (
               {[example1, example2, example3].map((ex, i) => (
                 <pre
                   key={i}
-                  className="p-2 rounded-lg font-mono text-[0.7rem] overflow-x-auto whitespace-pre-wrap break-all"
+                  className="p-2 rounded-lg font-mono text-micro overflow-x-auto whitespace-pre-wrap break-all"
                   style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)' }}
                 >
                   {ex}

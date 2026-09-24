@@ -112,7 +112,7 @@ export default function VolumeGroup({
         <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
           {t('volume.title')}
         </span>
-        <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
           {volumes.length}
         </span>
         {totalChapters > 0 && (
@@ -149,7 +149,7 @@ export default function VolumeGroup({
       </div>
 
       {!open ? null : volumes.length === 0 ? (
-        <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('volume.empty')}
         </div>
       ) : (
@@ -245,9 +245,9 @@ function VolumeRow({
               ? t('volume.ordinalTitle').replace('{n}', String(volume.volumeNumber)).replace('{title}', volume.title)
               : t('volume.ordinal').replace('{n}', String(volume.volumeNumber))}
           </span>
-          <span className="ml-auto text-[0.6rem] opacity-50 flex-shrink-0">{rangeText}</span>
+          <span className="ml-auto text-2xs opacity-50 flex-shrink-0">{rangeText}</span>
           <span
-            className="text-[0.6rem] flex-shrink-0"
+            className="text-2xs flex-shrink-0"
             style={{ color: doneAll ? 'var(--color-success)' : 'var(--color-text-muted)' }}
           >
             {progressText}
@@ -277,7 +277,7 @@ function VolumeRow({
       {open && (
         <div className="pl-2 pr-1.5 pb-1.5 space-y-0.5">
           {chapters.length === 0 ? (
-            <div className="text-[0.65rem] py-1 pl-1.5 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-micro py-1 pl-1.5 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
               {t('charList.emptyProject')}
             </div>
           ) : chapters.map(dc => (
@@ -285,7 +285,7 @@ function VolumeRow({
               key={dc.chapterNumber}
               type="button"
               onClick={() => onOpenDraft(dc.chapterNumber, dc.chapterTitle)}
-              className="w-full flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-[0.7rem] text-left transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
+              className="w-full flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-micro text-left transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
               style={{ color: 'var(--color-text-secondary)' }}
               title={t('action.openDraft')}
             >

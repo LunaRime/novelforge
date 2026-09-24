@@ -80,7 +80,7 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
         boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
       }}
     >
-      <div className="text-[0.68rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
         {t('agentPanel.mentionContext')}
       </div>
       {results.map((target, i) => (
@@ -98,7 +98,7 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
           <span className="font-medium">{target.displayName}</span>
           {/* 文件目标：右侧小字显示相对路径（插入后为 @路径 文本） */}
           {target.type === 'file' && (
-            <span className="ml-auto text-[0.62rem] opacity-50 truncate max-w-[90px]" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="ml-auto text-2xs opacity-50 truncate max-w-[90px]" style={{ color: 'var(--color-text-muted)' }}>
               {target.value}
             </span>
           )}

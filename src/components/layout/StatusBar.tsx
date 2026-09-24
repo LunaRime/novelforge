@@ -173,10 +173,10 @@ function TemperatureControl({
           }}
         >
           <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[0.7rem] font-medium" style={{ color: 'var(--color-text)' }}>
+            <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
               {t('statusbar.temperature')}
             </span>
-            <span className="text-[0.7rem] tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
               {tempDraft.toFixed(2)}
             </span>
           </div>
@@ -203,7 +203,7 @@ function TemperatureControl({
                 key={p.value}
                 type="button"
                 onClick={() => handleTempChange(p.value)}
-                className="flex-1 py-0.5 rounded text-[0.65rem] transition-colors cursor-pointer"
+                className="flex-1 py-0.5 rounded text-micro transition-colors cursor-pointer"
                 style={{
                   color: tempDraft === p.value ? 'var(--color-accent)' : 'var(--color-text-secondary)',
                   backgroundColor: tempDraft === p.value ? 'rgba(var(--color-accent-rgb), 0.1)' : 'transparent',
@@ -371,7 +371,7 @@ function AITaskCapsule() {
         />
       </div>
       {/* 进度百分比 */}
-      <span className="font-mono text-[0.62rem] flex-shrink-0 opacity-80">
+      <span className="font-mono text-2xs flex-shrink-0 opacity-80">
         {completed}/{total}
       </span>
     </div>

@@ -147,7 +147,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
               {/* 排序：章节号 / 标题 + 方向 */}
               <button
                 type="button"
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.65rem] transition-colors"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-micro transition-colors"
                 style={{ color: sortKey === 'number' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
                 onClick={() => toggleSort('number')}
               >
@@ -156,7 +156,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
               </button>
               <button
                 type="button"
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[0.65rem] transition-colors"
+                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-micro transition-colors"
                 style={{ color: sortKey === 'title' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
                 onClick={() => toggleSort('title')}
               >
@@ -166,7 +166,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
               {/* 全选 / 清空 */}
               <button
                 type="button"
-                className="px-1.5 py-0.5 rounded text-[0.65rem] transition-colors hover:opacity-80"
+                className="px-1.5 py-0.5 rounded text-micro transition-colors hover:opacity-80"
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={() => setSelected(new Set(displayChapters.map(c => c.number)))}
               >
@@ -174,7 +174,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
               </button>
               <button
                 type="button"
-                className="px-1.5 py-0.5 rounded text-[0.65rem] transition-colors hover:opacity-80"
+                className="px-1.5 py-0.5 rounded text-micro transition-colors hover:opacity-80"
                 style={{ color: 'var(--color-text-muted)' }}
                 onClick={() => setSelected(new Set())}
               >
@@ -323,7 +323,7 @@ function FormatCard({
           <Check size={14} className="ml-auto flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
         )}
       </div>
-      <span className="text-[0.65rem] leading-tight" style={{ color: 'var(--color-text-muted)' }}>
+      <span className="text-micro leading-tight" style={{ color: 'var(--color-text-muted)' }}>
         {desc}
       </span>
     </button>
@@ -357,7 +357,7 @@ function FileFormatSegment({
       >
         {label}
       </span>
-      <span className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+      <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
         {sub}
       </span>
     </button>

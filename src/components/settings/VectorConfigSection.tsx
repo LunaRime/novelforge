@@ -234,7 +234,7 @@ export default function VectorConfigSection() {
             <h4 className="font-medium" style={{ color: 'var(--color-text)' }}>
               {t('vector.llmVectorization')}
             </h4>
-            <Badge variant="outline" className="text-[10px]">{t('vector.experimental')}</Badge>
+            <Badge variant="outline" className="text-2xs">{t('vector.experimental')}</Badge>
           </div>
           <Switch
             checked={store.llmEmbeddingEnabled}
@@ -273,7 +273,7 @@ export default function VectorConfigSection() {
                 </SelectContent>
               </Select>
               {store.llmCandidates.length === 0 && (
-                <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
+                <p className="text-2xs text-[var(--color-text-muted)] mt-1">
                   {t('vector.noLLM')}
                 </p>
               )}
@@ -293,7 +293,7 @@ export default function VectorConfigSection() {
                 }}
                 className="w-full mt-1"
               />
-              <div className="flex justify-between text-[10px] text-[var(--color-text-muted)]">
+              <div className="flex justify-between text-2xs text-[var(--color-text-muted)]">
                 <span>64 ({t('vector.lowPrecision')})</span>
                 <span>256 ({t('vector.recommended')})</span>
                 <span>1024 ({t('vector.highPrecision')})</span>
@@ -301,7 +301,7 @@ export default function VectorConfigSection() {
             </div>
 
             {/* 说明 */}
-            <div className="p-2 rounded text-[10px]" style={{ backgroundColor: 'var(--color-hover)' }}>
+            <div className="p-2 rounded text-2xs" style={{ backgroundColor: 'var(--color-hover)' }}>
               <div className="font-medium mb-1" style={{ color: 'var(--color-text)' }}>{t('vector.howItWorks')}</div>
               <div className="text-[var(--color-text-muted)] leading-relaxed whitespace-pre-line">
                 {t('vector.llmWorkSteps')}
@@ -363,7 +363,7 @@ export default function VectorConfigSection() {
                   : t('vector.agentFail')
               }
             />
-            <div className="text-[10px] text-[var(--color-text-muted)] text-right">
+            <div className="text-2xs text-[var(--color-text-muted)] text-right">
               {t('vector.testTime')}{new Date(testResult.testedAt).toLocaleString(getCurrentLocale())}
             </div>
           </div>
@@ -527,10 +527,10 @@ function RawDetail({ text }: { text: string }) {
   const { t } = useTranslation()
   return (
     <details className="mt-0.5">
-      <summary className="cursor-pointer text-[10px] text-[var(--color-text-muted)]">
+      <summary className="cursor-pointer text-2xs text-[var(--color-text-muted)]">
         {t('localEmbedding.detail')}
       </summary>
-      <pre className="mt-0.5 whitespace-pre-wrap break-all text-[10px] text-[var(--color-text-muted)]">
+      <pre className="mt-0.5 whitespace-pre-wrap break-all text-2xs text-[var(--color-text-muted)]">
         {text}
       </pre>
     </details>
@@ -804,7 +804,7 @@ function LocalEmbeddingCard() {
             {statusLabel}
           </Badge>
           {connected && detect?.version && (
-            <span className="text-[10px] text-[var(--color-text-muted)]">
+            <span className="text-2xs text-[var(--color-text-muted)]">
               {t('localEmbedding.statusConnected').replace('{version}', detect.version)}
             </span>
           )}
@@ -852,20 +852,20 @@ function LocalEmbeddingCard() {
                       </span>
                       {opt.params !== '' && (
                         // Minor 3：裸数字紧挨下载按钮会被读成「下载体积」（bge-m3 实际 ~1.2 GB）→ 标明这是参数量
-                        <span className="text-[10px] text-[var(--color-text-muted)]">
+                        <span className="text-2xs text-[var(--color-text-muted)]">
                           {t('localEmbedding.paramCount').replace('{n}', opt.params)}
                         </span>
                       )}
-                      <Badge variant={installed ? 'success' : 'outline'} className="text-[10px]">
+                      <Badge variant={installed ? 'success' : 'outline'} className="text-2xs">
                         {installed ? t('localEmbedding.installed') : t('localEmbedding.downloadable')}
                       </Badge>
                       {opt.custom && (
-                        <Badge variant="warning" className="text-[10px]">
+                        <Badge variant="warning" className="text-2xs">
                           {t('localEmbedding.customBadge')}
                         </Badge>
                       )}
                     </div>
-                    <div className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                    <div className="text-2xs text-[var(--color-text-muted)] mt-0.5">
                       {t(opt.descKey)}
                     </div>
                   </label>
@@ -885,7 +885,7 @@ function LocalEmbeddingCard() {
               )
             })}
           </div>
-          <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{t('localEmbedding.moreModels')}</p>
+          <p className="text-2xs text-[var(--color-text-muted)] mt-1">{t('localEmbedding.moreModels')}</p>
         </div>
       )}
 
@@ -936,7 +936,7 @@ function LocalEmbeddingCard() {
         )}
         {/* 文案分流：未连接时「需先安装 Ollama」是准确的；已连接时那句话是错误信息
             （真机反馈：卡片显示「就绪 / 已连接」却仍在提示先安装 Ollama），只留中性的目录说明。 */}
-        <p className="text-[10px] text-[var(--color-text-muted)]">
+        <p className="text-2xs text-[var(--color-text-muted)]">
           {connected ? t('localEmbedding.hintConnected') : t('localEmbedding.hint')}
         </p>
       </div>
@@ -973,7 +973,7 @@ function LocalEmbeddingCard() {
       {/* 下载进度（U1：clamp + 不确定态；发起后到首帧之间也是不确定态）*/}
       {(pull !== null || pulling) && (
         <div className="mt-3">
-          <div role="status" aria-live="polite" className="text-[10px] text-[var(--color-text-muted)]">
+          <div role="status" aria-live="polite" className="text-2xs text-[var(--color-text-muted)]">
             {pullPercent === null
               ? t('localEmbedding.downloadingPending')
               : t('localEmbedding.downloading').replace('{percent}', String(pullPercent))}
@@ -994,7 +994,7 @@ function LocalEmbeddingCard() {
           {/* 智能下载（2026-09-25）：如实显示「走哪条路 + 实测多快」。
               选路是自动的，但不显示的话，用户无法区分「应用选错了路」和「网络就这样」。 */}
           {pull?.path && (
-            <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+            <div className="mt-1 text-2xs text-[var(--color-text-muted)]">
               {describeDownloadPath(pull, t)}
               {typeof pull.bytesPerSec === 'number' && pull.bytesPerSec > 0
                 ? ` · ${formatSpeed(pull.bytesPerSec)}`
@@ -1003,7 +1003,7 @@ function LocalEmbeddingCard() {
           )}
           {/* 换路是自动发生的，必须说明「刚才为什么慢了一下」，否则会被读成网络故障 */}
           {pull?.switchedFrom && (
-            <div className="mt-1 text-[10px]" style={{ color: 'var(--color-warning)' }}>
+            <div className="mt-1 text-2xs" style={{ color: 'var(--color-warning)' }}>
               {t('localEmbedding.switchedTo').replace('{path}', describeDownloadPath(pull, t))}
             </div>
           )}
@@ -1051,13 +1051,13 @@ function LocalEmbeddingCard() {
       {/* 失败面：写入失败给 t() 主文案；读取/探测失败只给可折叠原始详情（U4/U5） */}
       <div className="mt-2 space-y-0.5">
         {saveError !== null && (
-          <div className="text-[10px]" style={{ color: 'var(--color-error)' }}>
+          <div className="text-2xs" style={{ color: 'var(--color-error)' }}>
             {t('localEmbedding.saveFailed')}
             {saveError !== '' && <RawDetail text={saveError} />}
           </div>
         )}
         {pullError !== null && (
-          <div className="text-[10px]" style={{ color: 'var(--color-error)' }}>
+          <div className="text-2xs" style={{ color: 'var(--color-error)' }}>
             {t('localEmbedding.pullFailed')}
             {pullError !== '' && <RawDetail text={pullError} />}
           </div>
@@ -1080,7 +1080,7 @@ function LocalEmbeddingCard() {
               无箭头无 hover，虽然点得动但完全不像可点。补上箭头（展开时旋转 90°）+ hover 底色
               + 加大点击区 + 提亮文字。 */}
           <summary
-            className="cursor-pointer flex items-center gap-1 text-[11px] font-medium -mx-1.5 px-1.5 py-1 rounded transition-colors select-none hover:bg-[var(--color-hover)]"
+            className="cursor-pointer flex items-center gap-1 text-micro font-medium -mx-1.5 px-1.5 py-1 rounded transition-colors select-none hover:bg-[var(--color-hover)]"
             style={{ color: 'var(--color-text-secondary)' }}
           >
             <ChevronRight
@@ -1104,11 +1104,11 @@ function LocalEmbeddingCard() {
               onKeyDown={(e) => { if (e.key === 'Enter') commitBaseUrl() }}
             />
             {baseUrlInvalid && (
-              <p className="text-[10px] mt-1" style={{ color: 'var(--color-warning)' }}>
+              <p className="text-2xs mt-1" style={{ color: 'var(--color-warning)' }}>
                 {t('localEmbedding.baseUrlInvalid')}
               </p>
             )}
-            <p className="text-[10px] text-[var(--color-text-muted)] mt-1">
+            <p className="text-2xs text-[var(--color-text-muted)] mt-1">
               {t('localEmbedding.advancedHint')}
             </p>
           </div>

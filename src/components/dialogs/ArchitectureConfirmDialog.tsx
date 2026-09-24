@@ -170,7 +170,7 @@ export default function ArchitectureConfirmDialog({
             className="rounded-lg p-3 space-y-1.5 text-xs"
             style={{ backgroundColor: 'var(--color-panel)', border: '1px solid var(--color-border)' }}
           >
-            <p className="font-medium text-[0.7rem] mb-2" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="font-medium text-micro mb-2" style={{ color: 'var(--color-text-muted)' }}>
               {t('archConfirm.preview')}
             </p>
             <div className="grid grid-cols-2 gap-1">
@@ -242,14 +242,14 @@ export default function ArchitectureConfirmDialog({
                   {/* 步骤名 */}
                   <span className="text-xs flex-1" style={{ color: isChecked ? 'var(--color-text)' : 'var(--color-text-muted)' }}>
                     {f.label}
-                    <span className="ml-1 text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+                    <span className="ml-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>
                       — {f.desc}
                     </span>
                   </span>
 
                   {/* 状态标签 */}
                   <span
-                    className="text-[0.7rem] px-1.5 py-0.5 rounded flex-shrink-0"
+                    className="text-micro px-1.5 py-0.5 rounded flex-shrink-0"
                     style={exists
                       ? isChecked
                         ? { backgroundColor: 'rgba(var(--color-warning-rgb), 0.15)', color: 'var(--color-warning)' }
@@ -282,7 +282,7 @@ export default function ArchitectureConfirmDialog({
                 <div className="px-3 pb-3 space-y-3" style={{ backgroundColor: 'var(--color-panel)' }}>
                   {archFiles.filter(f => checked[f.key]).map(f => (
                     <div key={f.key}>
-                      <label className="text-[0.7rem] font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
+                      <label className="text-micro font-medium mb-1 block" style={{ color: 'var(--color-text-muted)' }}>
                         {f.label}
                       </label>
                       <Textarea

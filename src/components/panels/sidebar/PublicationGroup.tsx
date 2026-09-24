@@ -68,7 +68,7 @@ export default function PublicationGroup({ projectPath }: Props) {
         <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
           {t('pub.title')}
         </span>
-        <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
           {entries.length}
         </span>
         <button
@@ -92,19 +92,19 @@ export default function PublicationGroup({ projectPath }: Props) {
       </div>
 
       {!open ? null : entries.length === 0 ? (
-        <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('pub.empty')}
         </div>
       ) : (
         <div className="space-y-1">
           {entries.map((e) => (
             <div key={e.chapterNumber} className="flex items-center gap-1.5 px-1.5 py-1 rounded group hover:bg-[var(--color-hover)]">
-              <span className="text-[0.7rem] flex-1 truncate" style={{ color: 'var(--color-text)' }}>
+              <span className="text-micro flex-1 truncate" style={{ color: 'var(--color-text)' }}>
                 {t('pub.chapterLabel').replace('{n}', String(e.chapterNumber))}
                 {e.externalTitle ? ` · ${e.externalTitle}` : ''}
               </span>
               <span
-                className="text-[0.62rem] px-1 py-0.5 rounded flex-shrink-0"
+                className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
                 style={{ backgroundColor: 'var(--color-hover)', color: simColor(e.similarity) }}
                 title={t('pub.similarity').replace('{p}', String(Math.round(e.similarity * 100)))}
               >
@@ -112,7 +112,7 @@ export default function PublicationGroup({ projectPath }: Props) {
               </span>
               {e.auditIssues > 0 && (
                 <span
-                  className="text-[0.62rem] px-1 py-0.5 rounded flex-shrink-0"
+                  className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
                   style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-warning)' }}
                   title={t('pub.auditIssues').replace('{n}', String(e.auditIssues))}
                 >

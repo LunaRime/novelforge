@@ -382,7 +382,7 @@ function ArchFileRow({
         {f.label}
       </span>
       {!isGenerated && (
-        <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
           {t('status.pendingGen')}
         </span>
       )}

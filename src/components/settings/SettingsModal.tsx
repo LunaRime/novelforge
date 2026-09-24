@@ -415,7 +415,7 @@ function ModelRoutingSection() {
           <div key={tier.id} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2">
               <Label>{tier.label}</Label>
-              <span className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{tier.desc}</span>
+              <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{tier.desc}</span>
             </div>
             <Select
               value={current}
@@ -507,7 +507,7 @@ function ConcurrencySection() {
             value={String(maxConcurrent)}
             onChange={(e) => { userEditedRef.current = true; setMaxConcurrent(Math.max(1, parseInt(e.target.value) || 1)) }}
           />
-          <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyMaxDesc')}</p>
+          <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyMaxDesc')}</p>
         </div>
         <div className="space-y-1">
           <Label>{t('settings.concurrencyQueue')}</Label>
@@ -518,7 +518,7 @@ function ConcurrencySection() {
             value={String(maxQueueSize)}
             onChange={(e) => { userEditedRef.current = true; setMaxQueueSize(Math.max(1, parseInt(e.target.value) || 1)) }}
           />
-          <p className="text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyQueueDesc')}</p>
+          <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.concurrencyQueueDesc')}</p>
         </div>
       </div>
 
@@ -570,7 +570,7 @@ function ModelCard({
             {model.name || model.modelName}
           </span>
           {isDefault && (
-            <span className="text-[0.7rem] px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white flex-shrink-0">
+            <span className="text-micro px-1.5 py-0.5 rounded-full bg-[var(--color-accent)] text-white flex-shrink-0">
               {t('model.default')}
             </span>
           )}
@@ -1050,9 +1050,9 @@ function FontSelect({
                   <span className="text-xs font-medium" style={{ fontFamily: opt.family }}>
                     {opt.labelKey ? t(opt.labelKey as TextKey) : opt.label}
                   </span>
-                  <span className="text-[0.65rem] opacity-60">{opt.labelEn}</span>
+                  <span className="text-micro opacity-60">{opt.labelEn}</span>
                 </div>
-                <p className="text-[0.65rem] truncate opacity-60">
+                <p className="text-micro truncate opacity-60">
                   {opt.descKey ? t(opt.descKey as TextKey) : opt.desc}
                 </p>
               </div>
@@ -1082,7 +1082,7 @@ function EditorSection() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('settings.language')}</p>
-            <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               {t('settings.languageDesc')}
             </p>
           </div>
@@ -1106,7 +1106,7 @@ function EditorSection() {
         <div className="flex items-center justify-between">
           <div>
             <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('settings.uiFont')}</p>
-            <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+            <p className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
               {t('settings.uiFontDesc')}
             </p>
           </div>
@@ -1118,7 +1118,7 @@ function EditorSection() {
       <div className="space-y-1.5">
         <div>
           <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('settings.writingFont')}</p>
-          <p className="text-[0.68rem] mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
+          <p className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
             {t('settings.writingFontDesc')}
           </p>
         </div>
@@ -1195,10 +1195,10 @@ function AboutSection() {
         <p className="text-xs mt-1 leading-relaxed text-center max-w-[320px]" style={{ color: 'var(--color-text-muted)' }}>
           {t('about.slogan')}
         </p>
-        <p className="text-[11px] leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
+        <p className="text-micro leading-relaxed text-center max-w-[360px]" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
           {t('about.sloganEn')}
         </p>
-        <p className="text-[11px] mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
+        <p className="text-micro mt-3 px-3 py-1.5 rounded-full" style={{ backgroundColor: 'var(--color-sidebar)', color: 'var(--color-text-muted)' }}>
           {t('about.tagline')}
         </p>
       </div>

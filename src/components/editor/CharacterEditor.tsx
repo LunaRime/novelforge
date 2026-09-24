@@ -296,7 +296,7 @@ export default function CharacterEditor() {
                 </SelectTrigger>
                 <SelectContent>
                   {templates.length === 0 ? (
-                    <div className="px-2 py-1 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>{t('template.empty')}</div>
+                    <div className="px-2 py-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('template.empty')}</div>
                   ) : templates.map(tp => (
                     <SelectItem key={tp.name} value={tp.name}>{tp.name}</SelectItem>
                   ))}
@@ -465,7 +465,7 @@ export default function CharacterEditor() {
                   />
                   {/* 旧版关系文本（保留兼容） */}
                   <details className="mt-2">
-                    <summary className="text-[0.65rem] text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
+                    <summary className="text-micro text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
                       {t('character.legacyRelations')}
                     </summary>
                     <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
@@ -487,7 +487,7 @@ export default function CharacterEditor() {
 
               {/* tier 3 提示 */}
               {(selectedCard.tier ?? 2) >= 3 && (
-                <div className="p-2 rounded text-[0.65rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}>
+                <div className="p-2 rounded text-micro" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}>
                   {t('character.tier3Hint')}
                 </div>
               )}
@@ -576,7 +576,7 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
               ))}
             </SelectContent>
           </Select>
-          <div className="text-[0.6rem] mt-1" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-2xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
             {t('character.statusHint')}
           </div>
         </div>
@@ -592,18 +592,18 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
 
       {/* 疑似重复 */}
       <div className="mt-3 space-y-1.5">
-        <div className="text-[0.65rem] font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+        <div className="text-micro font-medium" style={{ color: 'var(--color-text-secondary)' }}>
           {t('character.duplicateTitle')}
         </div>
         {duplicates.length === 0 ? (
-          <div className="text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
             {t('character.noDuplicates')}
           </div>
         ) : (
           duplicates.map(pair => {
             const other = otherName(pair)
             return (
-              <div key={pair.a + pair.b} className="flex items-center gap-2 text-[0.7rem]">
+              <div key={pair.a + pair.b} className="flex items-center gap-2 text-micro">
                 <span className="px-1.5 py-0.5 rounded truncate max-w-[9rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
                   {other}
                 </span>
@@ -624,7 +624,7 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
         {/* 手动合并到任意角色 */}
         <div className="flex items-center gap-2 pt-1">
           <Select value={mergeTarget} onValueChange={setMergeTarget}>
-            <SelectTrigger className="h-7 text-[0.7rem] w-40">
+            <SelectTrigger className="h-7 text-micro w-40">
               <SelectValue placeholder={t('character.mergeToPlaceholder')} />
             </SelectTrigger>
             <SelectContent>
@@ -729,8 +729,8 @@ function StructuredRelations({
               }}
             >
               <span className="font-medium text-[var(--color-text)]">{r.target}</span>
-              <span className="text-[0.65rem] opacity-60">{relTypes[r.type] || r.type}</span>
-              {r.label && r.label !== r.type && <span className="text-[0.65rem] opacity-40">· {r.label}</span>}
+              <span className="text-micro opacity-60">{relTypes[r.type] || r.type}</span>
+              {r.label && r.label !== r.type && <span className="text-micro opacity-40">· {r.label}</span>}
               <button
                 className="ml-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-[var(--color-error)] transition-all"
                 onClick={() => removeRelation(r.target)}
@@ -782,7 +782,7 @@ function StructuredRelations({
       ) : (
         <button
           onClick={() => setAdding(true)}
-          className="text-[0.65rem] flex items-center gap-1 mt-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] cursor-pointer bg-transparent border-0"
+          className="text-micro flex items-center gap-1 mt-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] cursor-pointer bg-transparent border-0"
           type="button"
         >
           <Plus size={10} /> {available.length > 0 ? t('character.addRelation') : t('character.noTarget')}

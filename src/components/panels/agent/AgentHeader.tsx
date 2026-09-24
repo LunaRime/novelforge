@@ -215,7 +215,7 @@ function MCPSubView({
       >
         <ChevronRight size={12} style={{ transform: 'rotate(180deg)' }} />
         <span className="font-medium">{t('agent.mcpServers')}</span>
-        <span className="ml-auto text-[0.68rem] opacity-50">
+        <span className="ml-auto text-micro opacity-50">
           {t('agent.onlineRatio').replace('{n}', String(connectedCount)).replace('{total}', String(servers.length))}
         </span>
       </button>
@@ -226,7 +226,7 @@ function MCPSubView({
       {servers.length === 0 ? (
         <div className="px-3 py-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
           <div className="mb-1">{t('agent.noMcp')}</div>
-          <div className="text-[0.68rem] opacity-60">
+          <div className="text-micro opacity-60">
             {t('agent.mcpConfigHint')}
           </div>
         </div>
@@ -255,12 +255,12 @@ function MCPSubView({
                 {server.name}
               </span>
               {server.status === 'connected' && server.toolCount > 0 && (
-                <span className="text-[0.65rem] opacity-50 flex-shrink-0">
+                <span className="text-micro opacity-50 flex-shrink-0">
                   {server.toolCount} tools
                 </span>
               )}
               {server.status === 'error' && (
-                <span className="text-[0.65rem] text-[var(--color-error)] truncate max-w-[80px]" title={server.error}>
+                <span className="text-micro text-[var(--color-error)] truncate max-w-[80px]" title={server.error}>
                   {t('agent.serverError')}
                 </span>
               )}
@@ -273,7 +273,7 @@ function MCPSubView({
       {toolCount > 0 && (
         <>
           <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '2px 0' }} />
-          <div className="px-3 py-1.5 text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="px-3 py-1.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>
             {t('agent.mcpTools').replace('{n}', String(toolCount))}
           </div>
         </>
@@ -314,7 +314,7 @@ function SkillSubView({
       >
         <ChevronRight size={12} style={{ transform: 'rotate(180deg)' }} />
         <span className="font-medium">{t('agent.skillList')}</span>
-        <span className="ml-auto text-[0.68rem] opacity-50">
+        <span className="ml-auto text-micro opacity-50">
           {skills.length} {t('unit.skills')}
         </span>
       </button>
@@ -325,7 +325,7 @@ function SkillSubView({
       {skills.length === 0 ? (
         <div className="px-3 py-3 text-xs text-center" style={{ color: 'var(--color-text-muted)' }}>
           <div className="mb-1">{t('agent.noSkills')}</div>
-          <div className="text-[0.68rem] opacity-60">
+          <div className="text-micro opacity-60">
             {t('agent.skillHint')}
           </div>
         </div>
@@ -345,14 +345,14 @@ function SkillSubView({
                       {skill.metadata.displayName ?? skill.metadata.name}
                     </span>
                     <span
-                      className="text-[0.6rem] px-1 py-0 rounded flex-shrink-0"
+                      className="text-2xs px-1 py-0 rounded flex-shrink-0"
                       style={{ backgroundColor: badge.bg, color: badge.color }}
                     >
                       {badge.label}
                     </span>
                   </div>
                   <div
-                    className="text-[0.68rem] truncate mt-0.5"
+                    className="text-micro truncate mt-0.5"
                     style={{ color: 'var(--color-text-muted)' }}
                   >
                     {skill.metadata.description}
@@ -366,7 +366,7 @@ function SkillSubView({
 
       {/* 底部提示 */}
       <div style={{ height: 1, backgroundColor: 'var(--color-border)', margin: '2px 0' }} />
-      <div className="px-3 py-1.5 text-[0.68rem]" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="px-3 py-1.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>
         {(() => {
           const hint = t('agent.slashHint')
           const idx = hint.indexOf('/')

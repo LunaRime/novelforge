@@ -114,7 +114,7 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
       {/* 文件列表 */}
       <div ref={listRef} className="max-h-[280px] overflow-y-auto py-1">
         {files.length === 0 ? (
-          <div className="px-3 py-4 text-center text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="px-3 py-4 text-center text-micro" style={{ color: 'var(--color-text-muted)' }}>
             {t('agent.noFilesFound')}
           </div>
         ) : (
@@ -133,7 +133,7 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
               <FileText size={12} style={{ color: 'var(--color-text-secondary)', flexShrink: 0 }} />
               <span className="flex-1 min-w-0">
                 <span className="block truncate font-medium">{f.displayName}</span>
-                <span className="block truncate text-[0.62rem]" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="block truncate text-2xs" style={{ color: 'var(--color-text-muted)' }}>
                   {f.value}
                 </span>
               </span>

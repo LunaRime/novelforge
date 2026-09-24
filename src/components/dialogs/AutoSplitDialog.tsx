@@ -94,7 +94,7 @@ export default function AutoSplitDialog({ isOpen, onClose, totalChapters, existi
               onChange={e => setVolumeCount(e.target.value === '' ? '' : parseInt(e.target.value))}
               className="w-24"
             />
-            <span className="text-[0.65rem] opacity-50">
+            <span className="text-micro opacity-50">
               {t('volume.splitMax').replace('{n}', String(Math.max(1, totalChapters)))}
             </span>
           </div>
@@ -110,7 +110,7 @@ export default function AutoSplitDialog({ isOpen, onClose, totalChapters, existi
                 return (
                   <div
                     key={s.volumeNumber}
-                    className="flex items-center gap-2 text-[0.7rem] px-1.5 py-1 rounded"
+                    className="flex items-center gap-2 text-micro px-1.5 py-1 rounded"
                     style={{
                       backgroundColor: skipped ? 'rgba(var(--color-warning-rgb), 0.08)' : 'transparent',
                       color: skipped ? 'var(--color-warning)' : 'var(--color-text-secondary)',

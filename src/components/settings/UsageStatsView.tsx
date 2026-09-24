@@ -339,7 +339,7 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
       className="flex flex-col gap-1 rounded-lg px-3 py-2 min-w-[6rem]"
       style={{ backgroundColor: 'var(--color-hover)' }}
     >
-      <span className="text-[0.65rem] truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+      <span className="text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
       <span className="text-sm font-bold" style={{ color: 'var(--color-accent)' }}>{value}</span>
     </div>
   )

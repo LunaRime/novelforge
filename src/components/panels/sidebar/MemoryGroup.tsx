@@ -64,7 +64,7 @@ export default function MemoryGroup({ projectPath }: Props) {
         <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
           {t('memory.groupTitle')}
         </span>
-        <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
           {files.length}
         </span>
         <button
@@ -89,7 +89,7 @@ export default function MemoryGroup({ projectPath }: Props) {
 
       {!open ? null : loadFailed ? (
         /* 错误态与空态必须分开：失败渲染成「暂无记忆」会让用户以为本来就没有 */
-        <div className="flex items-center gap-1.5 py-1 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex items-center gap-1.5 py-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>
           <AlertCircle size={11} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
           <span>{t('common.loadFailed')}</span>
           <button
@@ -102,7 +102,7 @@ export default function MemoryGroup({ projectPath }: Props) {
           </button>
         </div>
       ) : files.length === 0 ? (
-        <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('memory.empty')}
         </div>
       ) : (
@@ -206,7 +206,7 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
           className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
         >
           <span
-            className="text-[0.6rem] px-1 py-0.5 rounded flex-shrink-0"
+            className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
             style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
           >
             {kindLabel}
@@ -216,7 +216,7 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
           </span>
           {meta.stale && (
             <span
-              className="text-[0.6rem] px-1 py-0.5 rounded flex-shrink-0"
+              className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-warning)' }}
             >
               {t('memory.stale')}

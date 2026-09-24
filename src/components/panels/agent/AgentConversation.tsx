@@ -94,7 +94,7 @@ function EmptyState() {
             let m: RegExpExecArray | null
             while ((m = re.exec(text)) !== null) {
               if (m.index > last) parts.push(text.slice(last, m.index))
-              parts.push(<code key={m.index} className="px-1 py-0.5 rounded text-[0.68rem]" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>{m[1]}</code>)
+              parts.push(<code key={m.index} className="px-1 py-0.5 rounded text-micro" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-accent)' }}>{m[1]}</code>)
               last = m.index + 1
             }
             if (last < text.length) parts.push(text.slice(last))
@@ -143,7 +143,7 @@ function EmptyState() {
           2026-09-22：去掉 borderTop —— 与对话视图同步，输入框上方不再有分隔线；
           披露声明也从内容区底部移到**这里**（紧贴输入框上方，用户指定） */}
       <div className="flex-shrink-0 px-3 pb-3 pt-2">
-        <div className="mb-1 px-1 text-center text-[0.62rem] leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="mb-1 px-1 text-center text-2xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {t('agent.disclaimer')}
         </div>
         <AgentInputBox />
@@ -487,7 +487,7 @@ function AgentHistoryPanel() {
                       if (e.key === 'Escape') setRenamingWs(null)
                     }}
                     onBlur={() => { renameWorkspace(g.key, wsDraft); setRenamingWs(null) }}
-                    className="flex-1 min-w-0 text-[0.68rem] bg-transparent outline-none"
+                    className="flex-1 min-w-0 text-micro bg-transparent outline-none"
                     style={{ color: 'var(--color-text)' }}
                   />
                 </div>
@@ -496,7 +496,7 @@ function AgentHistoryPanel() {
                   {/* 折叠箭头 + 工作区名 + 会话数（点整行切换折叠） */}
                   <button
                     onClick={() => setCollapsed(c => ({ ...c, [g.key]: !c[g.key] }))}
-                    className="flex items-center gap-1 flex-1 min-w-0 cursor-pointer text-[0.68rem] font-medium"
+                    className="flex items-center gap-1 flex-1 min-w-0 cursor-pointer text-micro font-medium"
                     style={{ color: 'var(--color-text-muted)' }}
                     title={g.name}
                   >
@@ -664,7 +664,7 @@ function RecentConversationItem({
         {parentTitle && (
           <div className="flex items-center gap-1 min-w-0">
             <GitFork size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-            <span className="text-[0.68rem] truncate" style={{ color: 'var(--color-text-muted)' }}>
+            <span className="text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>
               {t('agent.forkedFrom').replace('{title}', parentTitle)}
             </span>
           </div>
@@ -674,7 +674,7 @@ function RecentConversationItem({
       {/* 右侧：固定宽度容器，时间与操作组绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
       <div className="flex-shrink-0 ml-1 relative" style={{ width: 88, height: 16 }}>
         <span
-          className="absolute right-0 top-0 text-[0.7rem] whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+          className="absolute right-0 top-0 text-micro whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
           style={{ color: 'var(--color-text-muted)' }}
         >
           {formatRelativeTime(updatedAt)}

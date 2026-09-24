@@ -231,7 +231,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
         {([null, 1, 2, 3] as Array<number | null>).map(ti => (
           <button
             key={String(ti)}
-            className="text-[0.65rem] px-1.5 py-0.5 rounded transition-colors border cursor-pointer"
+            className="text-micro px-1.5 py-0.5 rounded transition-colors border cursor-pointer"
             style={{
               backgroundColor: tierFilter === ti ? 'rgba(var(--color-accent-rgb),0.15)' : 'var(--color-bg-elevated)',
               borderColor: tierFilter === ti ? 'var(--color-accent)' : 'var(--color-border)',
@@ -268,7 +268,7 @@ export default function RelationshipGraph({ characters, onSelect }: Props) {
       </div>
 
       {/* 图例 */}
-      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2 text-[0.6rem]"
+      <div className="absolute bottom-2 left-2 z-10 flex items-center gap-2 text-2xs"
         style={{ color: 'var(--color-text-muted)' }}>
         {Object.entries(RELATION_COLORS).slice(0, 6).map(([k, v]) => (
           <span key={k} className="flex items-center gap-0.5">

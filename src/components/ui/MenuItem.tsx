@@ -53,7 +53,7 @@ export function MenuItem({ label, onClick, icon, shortcut, disabled, danger }: M
       )}
       <span className="flex-1">{label}</span>
       {shortcut && (
-        <span className="text-[0.7rem] opacity-40 font-mono ml-2 flex-shrink-0">{shortcut}</span>
+        <span className="text-micro opacity-40 font-mono ml-2 flex-shrink-0">{shortcut}</span>
       )}
     </button>
   )

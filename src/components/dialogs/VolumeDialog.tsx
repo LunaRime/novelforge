@@ -167,7 +167,7 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
                 onChange={e => setChapterEnd(e.target.value === '' ? '' : parseInt(e.target.value))}
                 className="w-20"
               />
-              <span className="text-[0.65rem] opacity-50">{t('volume.endHint')}</span>
+              <span className="text-micro opacity-50">{t('volume.endHint')}</span>
             </div>
           </div>
 

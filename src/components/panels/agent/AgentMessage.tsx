@@ -138,7 +138,7 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
         </div>
         {/* 气泡**下方**一排（右对齐）：发送时间 + 复制 + 分支/回退
             （2026-09-22 用户要求：按钮不在气泡内、改到气泡下方，并补时间与复制） */}
-        <div className="mt-0.5 flex items-center gap-0.5 px-0.5 text-[0.62rem]" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="mt-0.5 flex items-center gap-0.5 px-0.5 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
           {/* 用户气泡下方只留「时间 + 复制」（2026-09-22 用户指定）；
               分支 / 回退只在模型回复下方出现 */}
           <span className="mr-0.5 tabular-nums">{formatLocaleTime(createdAt)}</span>

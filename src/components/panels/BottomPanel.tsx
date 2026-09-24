@@ -77,7 +77,7 @@ export default function BottomPanel() {
                 {/* 任务 Tab 状态点 + 活跃数徽章 */}
                 {id === 'tasks' && activeRuns.length > 0 && (
                   <span
-                    className="text-[0.68rem] font-mono px-1 rounded"
+                    className="text-micro font-mono px-1 rounded"
                     style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
                   >
                     {activeRuns.length}
@@ -156,7 +156,7 @@ function TaskRunView() {
       {/* 历史记录（简表） */}
       {history.length > 0 && (
         <div className="flex-shrink-0">
-          <div className="px-4 pt-3 pb-1 text-[0.68rem] font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="px-4 pt-3 pb-1 text-micro font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
             {t('panel.taskHistory')}
           </div>
           <div className="px-2 pb-2">
@@ -175,11 +175,11 @@ function TaskRunView() {
                   {run.title}
                 </span>
                 {/* 步骤计数 */}
-                <span className="text-[0.68rem] font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
                   {run.steps.filter(s => s.status === 'completed').length}/{run.steps.length}
                 </span>
                 {/* 时间 */}
-                <span className="text-[0.68rem] flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
+                <span className="text-micro flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
                   {new Date(run.createdAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -252,7 +252,7 @@ function ActiveRunPanel({
             <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
               {runningStep && isActive ? runningStep.name : run.title}
             </p>
-            <span className="text-[0.68rem] font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+            <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
               {progress}%
             </span>
           </div>
@@ -267,7 +267,7 @@ function ActiveRunPanel({
 
         {/* 右侧：步骤计数 + 折叠箭头 + 取消 */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-[0.68rem] font-mono" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-micro font-mono" style={{ color: 'var(--color-text-muted)' }}>
             {completedCount}/{totalCount}
           </span>
           {expanded
@@ -426,13 +426,13 @@ function WorkflowStepItem({
           </span>
           {/* 进度百分比 */}
           {step.progress !== undefined && step.status === 'running' && (
-            <span className="text-[0.68rem] font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+            <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
               {step.progress}%
             </span>
           )}
           {/* 完成耗时（若有时间戳）或简单标记 */}
           {step.status === 'skipped' && (
-            <span className="text-[0.68rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('status.aborted')}</span>
+            <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('status.aborted')}</span>
           )}
         </div>
 
@@ -441,7 +441,7 @@ function WorkflowStepItem({
           <div className="mb-1">
             {step.error && (
               <div
-                className="text-[0.7rem] px-2 py-1 rounded mb-1"
+                className="text-micro px-2 py-1 rounded mb-1"
                 style={{ backgroundColor: 'rgba(var(--color-error-rgb),0.08)', color: 'var(--color-error)' }}
               >
                 {step.error}
@@ -450,7 +450,7 @@ function WorkflowStepItem({
             {step.logs.length > 0 && (
               <div className="max-h-16 overflow-y-auto space-y-0.5">
                 {step.logs.slice(-6).map((log, i) => (
-                  <div key={i} className="text-[0.68rem] font-mono leading-4" style={{ color: 'var(--color-text-muted)' }}>
+                  <div key={i} className="text-micro font-mono leading-4" style={{ color: 'var(--color-text-muted)' }}>
                     {log}
                   </div>
                 ))}

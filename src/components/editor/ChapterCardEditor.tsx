@@ -321,7 +321,7 @@ export default function ChapterCardEditor() {
               </span>
             )}
           </span>
-          {dirty && <span className="text-[0.7rem]" style={{ color: 'var(--color-accent)' }}>{t('blueprint.unsaved')}</span>}
+          {dirty && <span className="text-micro" style={{ color: 'var(--color-accent)' }}>{t('blueprint.unsaved')}</span>}
         </div>
         <div className="flex items-center gap-1">
           {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
@@ -395,7 +395,7 @@ export default function ChapterCardEditor() {
                 onClick={() => setSelectedIdx(idx)}
               >
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono text-[0.7rem] opacity-40 flex-shrink-0">
+                  <span className="font-mono text-micro opacity-40 flex-shrink-0">
                     {bp.chapterNumber}
                   </span>
                   <span className="font-medium truncate flex-1">{bp.title || t('character.unnamed')}</span>
@@ -407,7 +407,7 @@ export default function ChapterCardEditor() {
                       (v.chapterEnd === 0 || bp.chapterNumber <= v.chapterEnd))
                     return vol ? (
                       <span
-                        className="text-[0.7rem] px-1 py-0.5 rounded"
+                        className="text-micro px-1 py-0.5 rounded"
                         style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
                         title={vol.title || undefined}
                       >
@@ -416,14 +416,14 @@ export default function ChapterCardEditor() {
                     ) : null
                   })()}
                   <span className={cn(
-                    'text-[0.7rem] px-1 py-0.5 rounded',
+                    'text-micro px-1 py-0.5 rounded',
                     ROLE_COLORS[bp.role] || 'bg-[var(--color-hover)] text-[var(--color-text-muted)]'
                   )}>
                     {t(ROLE_LABEL_KEYS[bp.role] ?? 'chapter.role.development')}
                   </span>
                   {bp.userGuidance && (
                     <span
-                      className="text-[0.7rem] px-1 py-0.5 rounded"
+                      className="text-micro px-1 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.15)', color: 'var(--color-accent)' }}
                       title={t('chapter.authorGuidance')}
                     >
@@ -432,7 +432,7 @@ export default function ChapterCardEditor() {
                   )}
                   {bp.notes && (
                     <span
-                      className="text-[0.7rem] px-1 py-0.5 rounded"
+                      className="text-micro px-1 py-0.5 rounded"
                       style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.15)', color: 'var(--color-success)' }}
                       title={t('chapter.blueprintNotes')}
                     >
@@ -571,7 +571,7 @@ export default function ChapterCardEditor() {
                   <Label className="flex items-center gap-1.5">
                     <span>{t('blueprint.authorGuidance')}</span>
                     <span
-                      className="text-[0.7rem] font-normal"
+                      className="text-micro font-normal"
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {t('chapter.guidanceHint')}
@@ -596,7 +596,7 @@ export default function ChapterCardEditor() {
                   <Label className="flex items-center gap-1.5">
                     <span>{t('blueprint.keyPoints')}</span>
                     <span
-                      className="text-[0.7rem] font-normal"
+                      className="text-micro font-normal"
                       style={{ color: 'var(--color-text-muted)' }}
                     >
                       {selected.notesUpdatedAt

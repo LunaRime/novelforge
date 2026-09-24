@@ -174,7 +174,7 @@ export default function CharactersView() {
           <button
             key={String(tier)}
             className={cn(
-              'text-[0.65rem] px-2 py-0.5 rounded-full transition-colors cursor-pointer border',
+              'text-micro px-2 py-0.5 rounded-full transition-colors cursor-pointer border',
               tierFilter === tier
                 ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]'
                 : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]'
@@ -195,7 +195,7 @@ export default function CharactersView() {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('charList.searchPlaceholder')}
-          className="w-full h-6 px-2 text-[0.7rem] rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+          className="w-full h-6 px-2 text-micro rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
         />
       </div>
 
@@ -212,7 +212,7 @@ export default function CharactersView() {
               <div key={tier}>
                 {/* tier 分组头 */}
                 <button
-                  className="flex items-center gap-1 px-2 py-1 w-full text-[0.65rem] font-medium text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] rounded cursor-pointer"
+                  className="flex items-center gap-1 px-2 py-1 w-full text-micro font-medium text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] rounded cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed })) }}
                   type="button"
                 >
@@ -292,7 +292,7 @@ function CharItem({ char: c, selected, onClick }: {
           {/* P1-6：生命周期状态徽标（退场/死亡角色列表可见，编辑器中可切换） */}
           {c.status && c.status !== 'active' && (
             <span
-              className="text-[0.55rem] px-1 rounded flex-shrink-0"
+              className="text-2xs px-1 rounded flex-shrink-0"
               style={{
                 backgroundColor: c.status === 'dead' ? 'rgba(var(--color-error-rgb),0.15)' : 'var(--color-hover)',
                 color: c.status === 'dead' ? 'var(--color-error)' : 'var(--color-text-muted)',
@@ -302,12 +302,12 @@ function CharItem({ char: c, selected, onClick }: {
             </span>
           )}
           {c.currentState?.updatedAtChapter ? (
-            <span className="text-[0.6rem] opacity-40 ml-auto flex-shrink-0">
+            <span className="text-2xs opacity-40 ml-auto flex-shrink-0">
               {t('chapter.nLabel').replace('{n}', String(c.currentState.updatedAtChapter))}
             </span>
           ) : null}
         </div>
-        <div className="text-[0.7rem] mt-0.5 opacity-60 flex items-center gap-1.5">
+        <div className="text-micro mt-0.5 opacity-60 flex items-center gap-1.5">
           <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
           {tier === 1 && chaps.length > 0 && (
             <span className="opacity-50">· {chapsDisplay}</span>
@@ -318,14 +318,14 @@ function CharItem({ char: c, selected, onClick }: {
             {tags.slice(0, 3).map(tag => (
               <span
                 key={tag}
-                className="text-[0.6rem] px-1 rounded"
+                className="text-2xs px-1 rounded"
                 style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
               >
                 #{tag}
               </span>
             ))}
             {tags.length > 3 && (
-              <span className="text-[0.6rem] opacity-40">+{tags.length - 3}</span>
+              <span className="text-2xs opacity-40">+{tags.length - 3}</span>
             )}
           </div>
         )}

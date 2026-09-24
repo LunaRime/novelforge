@@ -85,7 +85,7 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
         boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
       }}
     >
-      <div className="text-[0.68rem] px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
         {t('agentPanel.commands')}
       </div>
       {results.map((cmd, i) => (
@@ -105,7 +105,7 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
           <div className="flex-1 min-w-0">
             <div className="font-medium">/{cmd.name}</div>
             <div
-              className="text-[0.68rem] truncate"
+              className="text-micro truncate"
               style={{ color: 'var(--color-text-muted)' }}
             >
               {cmd.description}
@@ -113,7 +113,7 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
           </div>
           {cmd.source === 'skill' && (
             <span
-              className="text-[0.6rem] px-1.5 py-0.5 rounded-full flex-shrink-0"
+              className="text-2xs px-1.5 py-0.5 rounded-full flex-shrink-0"
               style={{
                 backgroundColor: 'rgba(var(--color-success-rgb), 0.12)',
                 color: 'var(--color-success)',

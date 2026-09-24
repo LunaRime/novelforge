@@ -148,7 +148,7 @@ export default function ActivityView() {
             <button
               type="button"
               onClick={() => setGranularity('daily')}
-              className={`px-1.5 py-0.5 text-[0.65rem] transition-colors ${
+              className={`px-1.5 py-0.5 text-micro transition-colors ${
                 granularity === 'daily'
                   ? 'bg-[var(--color-accent)] text-white'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
@@ -159,7 +159,7 @@ export default function ActivityView() {
             <button
               type="button"
               onClick={() => setGranularity('monthly')}
-              className={`px-1.5 py-0.5 text-[0.65rem] transition-colors ${
+              className={`px-1.5 py-0.5 text-micro transition-colors ${
                 granularity === 'monthly'
                   ? 'bg-[var(--color-accent)] text-white'
                   : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
@@ -172,7 +172,7 @@ export default function ActivityView() {
           {/* 年份选择（每日/每月共用；连续区间含无数据年份——从数据最早年至今） */}
           <Select value={String(viewYear)} onValueChange={(v) => setViewYear(parseInt(v, 10))}>
             <SelectTrigger
-              className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-[0.68rem]"
+              className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-micro"
               title={t('activity.selectYear')}
             >
               <SelectValue />
@@ -187,7 +187,7 @@ export default function ActivityView() {
           {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
           <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
             <SelectTrigger
-              className="h-6 w-auto max-w-[160px] rounded-[var(--radius-sm)] text-[0.68rem]"
+              className="h-6 w-auto max-w-[160px] rounded-[var(--radius-sm)] text-micro"
               title={t('activity.selectProject')}
             >
               <SelectValue />
@@ -204,7 +204,7 @@ export default function ActivityView() {
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={handleGenerateReport}
-            className="flex items-center gap-1 px-1.5 h-5 rounded text-[0.65rem] transition-colors cursor-pointer hover:opacity-80"
+            className="flex items-center gap-1 px-1.5 h-5 rounded text-micro transition-colors cursor-pointer hover:opacity-80"
             style={{ color: 'var(--color-accent)' }}
             title={t('report.generate')}
             disabled={!data}
@@ -252,7 +252,7 @@ export default function ActivityView() {
             {/* 全局总计（所有项目，恒定显示；选中单项目时展示） */}
             {selectedPath && (
               <div
-                className="flex items-center gap-4 pt-2 border-t text-[0.68rem]"
+                className="flex items-center gap-4 pt-2 border-t text-micro"
                 style={{ borderColor: 'var(--color-border)', color: 'var(--color-text-muted)' }}
               >
                 <span className="flex items-center gap-1">
@@ -277,7 +277,7 @@ export default function ActivityView() {
 
           {/* 图例 / 视图说明 */}
           {granularity === 'daily' ? (
-            <div className="flex items-center justify-center gap-1.5 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="flex items-center justify-center gap-1.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>
               <span>{t('activity.less')}</span>
               {LEVEL_COLORS.map((c, i) => (
                 <span
@@ -294,7 +294,7 @@ export default function ActivityView() {
               <span>{t('activity.more')}</span>
             </div>
           ) : (
-            <div className="text-center text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+            <div className="text-center text-micro" style={{ color: 'var(--color-text-muted)' }}>
               {t('activity.monthlyHint')}
             </div>
           )}
@@ -310,7 +310,7 @@ function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label
     <div className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 min-w-[5.5rem]" style={{ backgroundColor: 'var(--color-hover)' }}>
       <span className="flex-shrink-0" style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>{icon}</span>
       <div className="flex flex-col leading-tight min-w-0">
-        <span className="text-[0.62rem] truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
+        <span className="text-2xs truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
         <span className="text-xs font-bold truncate" style={{ color: accent ? 'var(--color-accent)' : 'var(--color-text)' }}>{value}</span>
       </div>
     </div>
@@ -424,7 +424,7 @@ function ContributionGrid({ rows, year }: { rows: DailyActivityRow[]; year: numb
           {colStarts.map((col, c) => (
             <span
               key={c}
-              className="text-[0.6rem] leading-none"
+              className="text-2xs leading-none"
               style={{
                 width: CELL_SIZE,
                 color: 'var(--color-text-muted)',
@@ -444,7 +444,7 @@ function ContributionGrid({ rows, year }: { rows: DailyActivityRow[]; year: numb
             {weekLabels.map((label, row) => (
               <span
                 key={row}
-                className="text-[0.6rem] leading-none flex items-center"
+                className="text-2xs leading-none flex items-center"
                 style={{ height: CELL_SIZE, color: 'var(--color-text-muted)' }}
               >
                 {label}
@@ -541,7 +541,7 @@ function MonthlyChart({ rows, year }: { rows: DailyActivityRow[]; year: number }
                   />
                 )}
               </div>
-              <span className="text-[0.6rem] leading-none truncate" style={{ color: 'var(--color-text-muted)' }}>
+              <span className="text-2xs leading-none truncate" style={{ color: 'var(--color-text-muted)' }}>
                 {monthLabel}
               </span>
             </div>
