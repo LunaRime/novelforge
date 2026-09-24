@@ -161,7 +161,7 @@ function TemperatureControl({
       {open && (
         <div
           ref={tempMenuRef}
-          className="z-[var(--z-dropdown)] py-2 px-3 rounded-lg shadow-lg"
+          className="z-[var(--z-dropdown)] py-2 px-3 rounded-lg"
           style={{
             // 浮在整个窗口之上（useFloatingPosition 定位）
             position: 'fixed',
@@ -169,7 +169,7 @@ function TemperatureControl({
             width: 200,
             backgroundColor: 'var(--color-sidebar)',
             border: '1px solid var(--color-border)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            boxShadow: 'var(--shadow-popover)',
           }}
         >
           <div className="flex items-center justify-between mb-1.5">

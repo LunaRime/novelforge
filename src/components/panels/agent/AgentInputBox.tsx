@@ -341,7 +341,7 @@ export default function AgentInputBox() {
             {showContextMenu && (
               <div
                 ref={contextMenuRef}
-                className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+                className="z-[var(--z-dropdown)] py-1 rounded-lg"
                 style={{
                   // 浮在整个窗口之上（useFloatingPosition 定位）：初始在视口外 + 隐藏，定位后显示
                   position: 'fixed',
@@ -349,7 +349,7 @@ export default function AgentInputBox() {
                   width: 180,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                  boxShadow: 'var(--shadow-popover)',
                 }}
               >
                 <div className="text-micro px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
@@ -432,12 +432,12 @@ export default function AgentInputBox() {
 
               return (
                 <div
-                  className="floating-menu floating-menu--above-start p-2.5 rounded-lg shadow-lg"
+                  className="floating-menu floating-menu--above-start p-2.5 rounded-lg"
                   style={{
                     width: 210,
                     backgroundColor: 'var(--color-sidebar)',
                     border: '1px solid var(--color-border)',
-                    boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                    boxShadow: 'var(--shadow-popover)',
                     positionAnchor: '--menu-depth',
                   } as React.CSSProperties}
                 >
@@ -599,12 +599,12 @@ export default function AgentInputBox() {
               <div
                 /* floating-menu：fixed + 锚点定位（原先左对齐时右缘顶出窗口 25px 被裁，
                    右对齐只是绕开——换面板宽度又会复现，见 index.css 的 .floating-menu） */
-                className="floating-menu floating-menu--above-end py-1 rounded-lg shadow-lg"
+                className="floating-menu floating-menu--above-end py-1 rounded-lg"
                 style={{
                   width: 220,
                   backgroundColor: 'var(--color-sidebar)',
                   border: '1px solid var(--color-border)',
-                  boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                  boxShadow: 'var(--shadow-popover)',
                   maxHeight: 280,
                   positionAnchor: '--menu-model',
                 } as React.CSSProperties}

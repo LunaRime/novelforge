@@ -51,7 +51,7 @@ const SelectContent = React.forwardRef<
         // z-index 必须高于 Modal（--z-modal: 1000）——Select 常在对话框/弹窗内打开，
         // 若低于遮罩层级会被盖住导致"打不开"（Portal 渲染在 body，不受父容器层叠约束）
         'relative z-[calc(var(--z-modal)+10)] min-w-[8rem] overflow-hidden rounded-xl border border-[var(--color-border)]',
-        'bg-[var(--color-panel)] text-[var(--color-text)] shadow-[var(--shadow-lg)]',
+        'bg-[var(--color-panel)] text-[var(--color-text)] shadow-[var(--shadow-popover)]',
         // 入场动画：缩放 + 淡入
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0',

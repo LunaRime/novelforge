@@ -43,7 +43,7 @@ const DialogContent = React.forwardRef<
         'fixed left-[50%] top-[50%] z-[var(--z-modal)] w-full max-w-lg translate-x-[-50%] translate-y-[-50%]',
         'rounded-2xl outline-none',
         'bg-[var(--color-bg)] border border-[var(--color-border)]',
-        'shadow-2xl shadow-black/20',
+        'shadow-[var(--shadow-popover)]',
         'duration-300 ease-out data-[state=open]:animate-in data-[state=closed]:animate-out',
         'data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0',
         'data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',

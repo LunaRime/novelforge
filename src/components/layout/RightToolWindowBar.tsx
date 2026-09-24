@@ -182,7 +182,7 @@ export default function RightToolWindowBar() {
           <div
             /* floating-menu：fixed + 锚点定位，浮在整个窗口之上、超界自动翻转
                （本按钮在图标栏底部，原先菜单向下展开会超出窗口底部 58px 被切） */
-            className="floating-menu floating-menu--above-end rounded-lg border shadow-lg overflow-hidden py-1"
+            className="floating-menu floating-menu--above-end rounded-lg border shadow-[var(--shadow-popover)] overflow-hidden py-1"
             style={{
               backgroundColor: 'var(--color-panel)',
               borderColor: 'var(--color-border)',

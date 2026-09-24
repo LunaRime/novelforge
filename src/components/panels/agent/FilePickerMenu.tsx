@@ -83,7 +83,7 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
   return (
     <div
       ref={menuRef}
-      className="z-[var(--z-dropdown)] rounded-lg shadow-lg"
+      className="z-[var(--z-dropdown)] rounded-lg"
       style={{
         // 浮在整个窗口之上（useFloatingPosition 定位）
         position: 'fixed',
@@ -94,7 +94,7 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
         overflowY: 'auto',
         backgroundColor: 'var(--color-sidebar)',
         border: '1px solid var(--color-border)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        boxShadow: 'var(--shadow-popover)',
       }}
     >
       {/* 搜索框 */}

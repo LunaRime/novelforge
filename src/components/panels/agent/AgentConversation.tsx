@@ -310,7 +310,7 @@ function ActiveConversation() {
       {!isAtBottom && (
         <button
           onClick={scrollToBottom}
-          className="absolute z-10 flex items-center justify-center w-7 h-7 rounded-full shadow-md transition-all"
+          className="absolute z-10 flex items-center justify-center w-7 h-7 rounded-full shadow-[var(--shadow-md)] transition-all"
           style={{
             right: 16,
             bottom: 100,

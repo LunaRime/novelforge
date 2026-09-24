@@ -268,7 +268,7 @@ function ActiveRunView({
           {waitingForConfirm && (
             <button
               onClick={() => confirmContinue(run.id)}
-              className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-md backdrop-blur-md"
+              className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-[var(--shadow-md)] backdrop-blur-md"
               style={{
                 color: 'var(--color-text)',
                 backgroundColor: 'var(--color-accent)',
@@ -281,7 +281,7 @@ function ActiveRunView({
           )}
           <button
             onClick={() => cancelWorkflow(run.id)}
-            className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-md backdrop-blur-md"
+            className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-[var(--shadow-md)] backdrop-blur-md"
             style={{
               color: 'var(--color-text)',
               backgroundColor: 'var(--color-hover)',

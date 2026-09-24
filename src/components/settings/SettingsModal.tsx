@@ -99,7 +99,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         role="dialog"
         aria-modal="true"
         aria-label={t('settings.title')}
-        className="relative flex w-[880px] h-[600px] rounded-2xl overflow-hidden shadow-2xl"
+        className="relative flex w-[880px] h-[600px] rounded-2xl overflow-hidden shadow-[var(--shadow-popover)]"
         style={{
           backgroundColor: 'var(--color-editor-bg)',
           border: '1px solid var(--color-border)',

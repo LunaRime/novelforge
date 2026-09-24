@@ -66,7 +66,7 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
   return (
     <div
       ref={menuRef}
-      className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+      className="z-[var(--z-dropdown)] py-1 rounded-lg"
       style={{
         // 浮在整个窗口之上（useFloatingPosition 定位）：初始在视口外 + 隐藏，定位后显示
         position: 'fixed',
@@ -77,7 +77,7 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
         overflowY: 'auto',
         backgroundColor: 'var(--color-sidebar)',
         border: '1px solid var(--color-border)',
-        boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+        boxShadow: 'var(--shadow-popover)',
       }}
     >
       <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>

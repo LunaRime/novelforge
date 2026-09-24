@@ -77,13 +77,13 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
       {open && (
         <div
           ref={menuRef}
-          className="z-[var(--z-dropdown)] rounded-lg shadow-lg min-w-[184px]"
+          className="z-[var(--z-dropdown)] rounded-lg min-w-[184px]"
           style={{
             position: 'fixed',
             visibility: 'hidden',
             backgroundColor: 'var(--color-sidebar)',
             border: '1px solid var(--color-border)',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+            boxShadow: 'var(--shadow-popover)',
             padding: '8px 10px',
           }}
         >

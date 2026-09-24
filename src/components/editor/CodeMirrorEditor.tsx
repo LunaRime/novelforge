@@ -919,7 +919,7 @@ export default function CodeMirrorEditor({
           旧 InlineAIToolbar 已废弃移除——曾与它同位置同时渲染造成双弹窗 */}
       {bubbleOpen && bubblePos.top !== 0 && (
         <div
-          className="fixed z-[var(--z-overlay)] flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-xl transform -translate-x-1/2 -translate-y-full"
+          className="fixed z-[var(--z-overlay)] flex items-center gap-0.5 p-1 rounded-xl border select-none shadow-[var(--shadow-popover)] transform -translate-x-1/2 -translate-y-full"
           style={{
             top: bubblePos.top,
             left: bubblePos.left,

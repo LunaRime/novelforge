@@ -54,7 +54,7 @@ const Switch = React.forwardRef<HTMLButtonElement, SwitchProps>(
       >
         {/* 滑块圆点 */}
         <span
-          className="inline-block w-4 h-4 rounded-full bg-white shadow-sm"
+          className="inline-block w-4 h-4 rounded-full bg-white shadow-[var(--shadow-sm)]"
           style={{
             transform: checked ? 'translateX(22px)' : 'translateX(2px)',
             transition: `transform var(--transition-fast)`,

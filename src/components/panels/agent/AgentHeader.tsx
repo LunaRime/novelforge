@@ -100,7 +100,7 @@ export default function AgentHeader() {
           {showMore && (
             <div
               ref={moreMenuRef}
-              className="z-[var(--z-dropdown)] py-1 rounded-lg shadow-lg"
+              className="z-[var(--z-dropdown)] py-1 rounded-lg"
               style={{
                 // 浮在整个窗口之上（useFloatingPosition 定位）
                 position: 'fixed',
@@ -108,7 +108,7 @@ export default function AgentHeader() {
                 width: subView === 'main' ? 200 : 260,
                 backgroundColor: 'var(--color-sidebar)',
                 border: '1px solid var(--color-border)',
-                boxShadow: '0 8px 24px rgba(0,0,0,0.25)',
+                boxShadow: 'var(--shadow-popover)',
                 transition: 'width 0.15s ease',
               }}
             >
