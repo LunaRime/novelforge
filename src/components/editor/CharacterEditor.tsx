@@ -291,7 +291,7 @@ export default function CharacterEditor() {
                 <BookmarkPlus size={12} />
               </Button>
               <Select value="" onValueChange={(v) => void handleApplyTemplate(v)} onOpenChange={(open) => { if (open) void loadTemplates() }}>
-                <SelectTrigger className="h-6 w-6 rounded-[var(--radius-sm)] justify-center" title={t('template.apply')}>
+                <SelectTrigger className="h-6 w-6 rounded justify-center" title={t('template.apply')}>
                   <FileInput size={12} />
                 </SelectTrigger>
                 <SelectContent>

@@ -37,7 +37,7 @@ export const BlueprintSortBar: React.FC = () => {
         value={config.key}
         onValueChange={(v) => setSortKey(v as BlueprintSortKey)}
       >
-        <SelectTrigger className="h-6 w-auto rounded-[var(--radius-sm)] text-xs" title={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
+        <SelectTrigger className="h-6 w-auto rounded text-xs" title={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
         <SelectContent>
           {SORT_OPTIONS.map((key) => (
             <SelectItem key={key} value={key}>
@@ -48,7 +48,7 @@ export const BlueprintSortBar: React.FC = () => {
       </Select>
       <button
         onClick={toggleDirection}
-        className="p-0.5 rounded-[var(--radius-sm)] hover:bg-[var(--color-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        className="p-0.5 rounded hover:bg-[var(--color-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
         title={t('sort.current').replace('{label}', t(SORT_DIRECTION_LABELS[config.direction] as TextKey))}
         aria-label={t('sort.toggleDirection')}
         style={{ color: 'var(--color-text-muted)' }}

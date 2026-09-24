@@ -348,7 +348,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
             </DialogFooter>
             {/* 前置校验失败提示（呈现在 Footer 下方） */}
             {guardError && (
-              <div className="mx-5 mb-4 flex items-start gap-2 px-3 py-2.5 rounded-[var(--radius-md)] text-xs" style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.1)', borderColor: 'rgba(var(--color-warning-rgb), 0.3)', borderWidth: 1, color: 'var(--color-warning)' }}>
+              <div className="mx-5 mb-4 flex items-start gap-2 px-3 py-2.5 rounded-md text-xs" style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.1)', borderColor: 'rgba(var(--color-warning-rgb), 0.3)', borderWidth: 1, color: 'var(--color-warning)' }}>
                 <AlertCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-warning)' }} />
                 <span className="whitespace-pre-line">{guardError}</span>
               </div>

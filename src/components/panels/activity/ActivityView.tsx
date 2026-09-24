@@ -172,7 +172,7 @@ export default function ActivityView() {
           {/* 年份选择（每日/每月共用；连续区间含无数据年份——从数据最早年至今） */}
           <Select value={String(viewYear)} onValueChange={(v) => setViewYear(parseInt(v, 10))}>
             <SelectTrigger
-              className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-micro"
+              className="h-6 w-auto min-w-[4.5rem] rounded text-micro"
               title={t('activity.selectYear')}
             >
               <SelectValue />
@@ -187,7 +187,7 @@ export default function ActivityView() {
           {/* 项目维度选择（'' = 全部项目，Radix 无空值 → __all__ 映射） */}
           <Select value={selectedPath || '__all__'} onValueChange={(v) => setSelectedPath(v === '__all__' ? '' : v)}>
             <SelectTrigger
-              className="h-6 w-auto max-w-[160px] rounded-[var(--radius-sm)] text-micro"
+              className="h-6 w-auto max-w-[160px] rounded text-micro"
               title={t('activity.selectProject')}
             >
               <SelectValue />

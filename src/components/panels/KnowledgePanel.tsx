@@ -392,7 +392,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
               </div>
               {/* 单章导出 — hover 显示 */}
               <button
-                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
+                className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                 style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                 title={t('export.singleExportTip')}
                 onClick={() => onExport(doc)}
@@ -402,7 +402,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
               </button>
               {/* P2-1：删除文档 — hover 显示 */}
               <button
-                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
+                className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                 style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                 title={t('action.delete')}
                 onClick={() => onDelete(doc)}

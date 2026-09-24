@@ -258,7 +258,7 @@ function CodeBlock({ lang, code }: { lang: string; code: string }) {
 export function StreamingCursor() {
   return (
     <span
-      className="inline-block w-[3px] h-3 ml-0.5 rounded-sm align-middle"
+      className="inline-block w-[3px] h-3 ml-0.5 rounded align-middle"
       style={{
         backgroundColor: 'var(--color-accent)',
         animation: 'agent-cursor-blink 0.8s ease-in-out infinite',

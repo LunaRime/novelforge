@@ -26,10 +26,10 @@ export const buttonVariants = cva(
           'bg-[var(--color-success)] text-white shadow-[var(--shadow-sm)] hover:shadow-[0_4px_12px_rgba(var(--color-success-rgb),0.3)] transition-all duration-200 hover:brightness-110 active:scale-[0.96]',
       },
       size: {
-        default: 'h-7 px-3 py-1 rounded-[var(--radius-md)]',    /* 28px 高 */
-        sm:      'h-6 px-2.5 py-0.5 rounded-[var(--radius-sm)]', /* 24px 高 */
-        lg:      'h-8 px-4 py-1.5 rounded-[var(--radius-lg)]',   /* 32px 高 */
-        icon:    'h-7 w-7 p-0 rounded-[var(--radius-md)]',       /* 28x28 方形图标按钮 */
+        default: 'h-7 px-3 py-1 rounded-md',    /* 28px 高 */
+        sm:      'h-6 px-2.5 py-0.5 rounded', /* 24px 高 */
+        lg:      'h-8 px-4 py-1.5 rounded-lg',   /* 32px 高 */
+        icon:    'h-7 w-7 p-0 rounded-md',       /* 28x28 方形图标按钮 */
       },
     },
     defaultVariants: {

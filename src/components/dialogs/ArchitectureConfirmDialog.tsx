@@ -300,13 +300,13 @@ export default function ArchitectureConfirmDialog({
           )}
 
           {noneSelected && (
-            <p className="text-xs px-3 py-2 rounded-[var(--radius-md)]" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.1)', borderColor: 'rgba(var(--color-error-rgb), 0.2)', borderWidth: 1, color: 'var(--color-error)' }}>
+            <p className="text-xs px-3 py-2 rounded-md" style={{ backgroundColor: 'rgba(var(--color-error-rgb), 0.1)', borderColor: 'rgba(var(--color-error-rgb), 0.2)', borderWidth: 1, color: 'var(--color-error)' }}>
               ⚠️ {t('error.selectStep')}
             </p>
           )}
           {/* 前置校验失败提示 */}
           {guardError && (
-            <div className="flex items-start gap-2 px-3 py-2.5 rounded-[var(--radius-md)] text-xs" style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.1)', borderColor: 'rgba(var(--color-warning-rgb), 0.3)', borderWidth: 1, color: 'var(--color-warning)' }}>
+            <div className="flex items-start gap-2 px-3 py-2.5 rounded-md text-xs" style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.1)', borderColor: 'rgba(var(--color-warning-rgb), 0.3)', borderWidth: 1, color: 'var(--color-warning)' }}>
               <AlertCircle size={13} className="flex-shrink-0 mt-0.5" style={{ color: 'var(--color-warning)' }} />
               <span className="whitespace-pre-line">{guardError}</span>
             </div>

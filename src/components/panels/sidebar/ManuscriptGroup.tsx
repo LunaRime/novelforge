@@ -232,7 +232,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                   </button>
                   {/* 单章导出按钮 — hover/focus-within 时显示（主按钮获得焦点同样能唤出） */}
                   <button
-                    className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
+                    className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                     style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                     title={t('export.singleExportTip')}
                     onClick={() => openSingleExport(chapterNum)}

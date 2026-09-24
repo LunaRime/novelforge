@@ -188,7 +188,7 @@ function RightActions({
 
       {/* 翻译为（生成新草稿）——带文字触发器，入口明确 */}
       <Select value="" onValueChange={(v) => onTranslate(v as 'zh' | 'en' | 'ru')}>
-        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded-[var(--radius-sm)] text-micro" title={t('translate.title')}>
+        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded text-micro" title={t('translate.title')}>
           <Languages size={11} />
           <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
         </SelectTrigger>

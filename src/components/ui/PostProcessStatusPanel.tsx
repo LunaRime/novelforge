@@ -112,7 +112,7 @@ export function PostProcessStatusPanel({
   const bgColor = hasCriticalFailure ? 'rgba(var(--color-error-rgb), 0.08)' : 'rgba(var(--color-warning-rgb), 0.08)'
 
   return (
-    <div className={cn('rounded-[var(--radius-md)] border overflow-hidden', className)}
+    <div className={cn('rounded-md border overflow-hidden', className)}
       style={{ borderColor, backgroundColor: bgColor }}>
       {/* 折叠头部 */}
       <button

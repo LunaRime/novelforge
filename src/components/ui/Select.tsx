@@ -4,7 +4,7 @@
  * 替代原生 select 弹层（无法定制样式）：
  * - 弹出面板：圆角 12px / 面板底色 / 边框 / 大阴影 / zoom+fade 入场动画
  * - 选项：hover 高亮、选中 accent 背景 + 对勾指示器
- * - 触发器：自定义下拉（h-8 / rounded-lg / 自定义箭头）
+ * - 触发器：自定义下拉（h-8 / rounded-md / 自定义箭头）
  */
 import * as React from 'react'
 import * as SelectPrimitive from '@radix-ui/react-select'
@@ -19,7 +19,7 @@ const SelectTrigger = React.forwardRef<
   <SelectPrimitive.Trigger
     ref={ref}
     className={cn(
-      'group flex h-8 w-full items-center justify-between gap-2 rounded-lg border border-[var(--color-border)]',
+      'group flex h-8 w-full items-center justify-between gap-2 rounded-md border border-[var(--color-border)]',
       'bg-[var(--color-panel)] px-3 py-1 text-xs text-[var(--color-text)]',
       'transition-all duration-150 cursor-pointer select-none',
       'hover:border-[var(--color-accent)] hover:bg-[color-mix(in_srgb,var(--color-accent)_4%,var(--color-panel))]',
@@ -50,7 +50,7 @@ const SelectContent = React.forwardRef<
       className={cn(
         // z-index 必须高于 Modal（--z-modal: 1000）——Select 常在对话框/弹窗内打开，
         // 若低于遮罩层级会被盖住导致"打不开"（Portal 渲染在 body，不受父容器层叠约束）
-        'relative z-[calc(var(--z-modal)+10)] min-w-[8rem] overflow-hidden rounded-xl border border-[var(--color-border)]',
+        'relative z-[calc(var(--z-modal)+10)] min-w-[8rem] overflow-hidden rounded-lg border border-[var(--color-border)]',
         'bg-[var(--color-panel)] text-[var(--color-text)] shadow-[var(--shadow-popover)]',
         // 入场动画：缩放 + 淡入
         'data-[state=open]:animate-in data-[state=closed]:animate-out',
