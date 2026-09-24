@@ -6,7 +6,8 @@
  *   子级：.md (Markdown) / .txt (纯文本)
  */
 import { useState, useMemo, useEffect } from 'react'
-import { Download, FolderArchive, FolderOpen, FileText, Check, Loader2, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Download, FolderArchive, FolderOpen, FileText, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { useProjectStore } from '../../stores/project-store'
@@ -273,7 +274,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
           <Button variant="ai" onClick={doExport} disabled={exporting}>
             {exporting ? (
               <>
-                <Loader2 size={14} className="mr-1 animate-spin" />
+                <Spinner size={14} className="mr-1" />
                 {t('status.generating')}
               </>
             ) : (

@@ -2,9 +2,10 @@ import { useState, useEffect, useRef } from 'react'
 import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
-  ExternalLink, RefreshCw, Loader2, Download, LogOut,
+  ExternalLink, RefreshCw, Download, LogOut,
   BookMarked, Plug, BarChart3,
 } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
 import PromptSettings from './PromptSettings'
 import SkillsSettings from './SkillsSettings'
@@ -524,7 +525,7 @@ function ConcurrencySection() {
 
       <div className="flex justify-end">
         <Button size="sm" onClick={handleSave} disabled={saving}>
-          {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          {saving ? <Spinner size={13}  /> : <Save size={13} />}
           {t('action.save')}
         </Button>
       </div>
@@ -604,7 +605,7 @@ function ModelCard({
           title={t('action.delete')}
           className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {deleting ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+          {deleting ? <Spinner size={14}  /> : <Trash2 size={14} />}
         </button>
       </div>
     </div>
@@ -1227,7 +1228,7 @@ function AboutSection() {
           </div>
           <Button size="sm" variant="outline" onClick={handleCheck} disabled={isChecking}>
             {isChecking
-              ? <Loader2 size={13} className="animate-spin" />
+              ? <Spinner size={13}  />
               : <RefreshCw size={13} />}
             {isChecking ? t('status.checking') : t('settings.checkUpdate')}
           </Button>
@@ -1248,7 +1249,7 @@ function AboutSection() {
             <div className="flex items-center gap-2">
               <Button size="sm" onClick={handleDownload} disabled={downloading}>
                 {downloading
-                  ? <Loader2 size={13} className="animate-spin" />
+                  ? <Spinner size={13}  />
                   : <Download size={13} />}
                 {downloading ? t('status.downloading') : t('update.installing')}
               </Button>

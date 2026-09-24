@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { History, RotateCcw, ArrowLeftRight, RefreshCw, AlertCircle } from 'lucide-react'
+import { History, RotateCcw, ArrowLeftRight, AlertCircle } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
@@ -123,7 +124,7 @@ export default function VersionHistory() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-[var(--color-text-muted)]">
-        <RefreshCw size={16} className="animate-spin" /> {t('status.loading')}
+        <Spinner size={16}  /> {t('status.loading')}
       </div>
     )
   }

@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react'
 import { FileUp, FolderOpen, BookOpen, Zap, Clock, AlertTriangle } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
@@ -155,7 +156,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
           {splitting && (
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg text-xs"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
-              <div className="animate-spin w-3 h-3 border-2 border-current border-t-transparent rounded-full" />
+              <Spinner size={12} />
               {t('project.analyzingChapters')}
             </div>
           )}

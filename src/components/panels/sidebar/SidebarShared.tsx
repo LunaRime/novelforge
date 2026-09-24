@@ -9,7 +9,7 @@ import React from 'react'
 import {
   Target, Users, Globe, Map, BookOpen, FolderTree, LayoutList,
   FilePen, PenTool, BrainCircuit, Sparkles, FolderOpen, Zap,
-  FileText, MessageCircle, RefreshCw, GitCompare,
+  FileText, MessageCircle, GitCompare, RefreshCw,
 } from 'lucide-react'
 import type { ContextMenuEntry } from '../../ui/ContextMenu'
 import type { TextKey } from '../../../shared/locale'

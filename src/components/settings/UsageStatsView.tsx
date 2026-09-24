@@ -5,7 +5,8 @@
  * 以及全部项目（跨项目聚合：最近项目 + 当前项目逐项目只读，主进程 60s 缓存；旧库缺列降级标记）。
  */
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
-import { AlertTriangle, BarChart3, Loader2, RefreshCw } from 'lucide-react'
+import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { ipc } from '../../services/ipc-client'
 import type {
   GlobalUsageProjectRow,
@@ -141,7 +142,7 @@ export default function UsageStatsView() {
 
       {view === 'current' ? (loading && !data && !error ? (
         <div className="flex items-center justify-center py-12 gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          <Loader2 size={14} className="animate-spin" />
+          <Spinner size={14}  />
           {t('status.loading')}
         </div>
       ) : error ? (
@@ -233,7 +234,7 @@ export default function UsageStatsView() {
         </>
       ) : null) : globalLoading && !globalData && !globalError ? (
         <div className="flex items-center justify-center py-12 gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-          <Loader2 size={14} className="animate-spin" />
+          <Spinner size={14}  />
           {t('status.loading')}
         </div>
       ) : globalError ? (

@@ -10,7 +10,8 @@
  * 统计条恒定显示全局总计 + 当前范围。
  */
 import { useEffect, useState } from 'react'
-import { Activity, PenLine, RefreshCw, Loader2, Sparkles, BookOpen, Wallet, AlertCircle } from 'lucide-react'
+import { Activity, PenLine, RefreshCw, Sparkles, BookOpen, Wallet, AlertCircle } from 'lucide-react'
+import { Spinner } from '../../ui/Spinner'
 import { getCurrentLocale, t } from '../../../shared/locale'
 import { getDailyActivity } from '../../../services/stats-service'
 import type { DailyActivityData, DailyActivityRow } from '../../../shared/ipc-channels'
@@ -102,7 +103,7 @@ export default function ActivityView() {
   if (loading && !data) {
     return (
       <div className="flex items-center justify-center h-full gap-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-        <Loader2 size={14} className="animate-spin" />
+        <Spinner size={14}  />
         {t('status.loading')}
       </div>
     )

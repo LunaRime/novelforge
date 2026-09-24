@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, Play, AlertCircle } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -334,7 +335,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
                 <Button variant="ai" size="lg" onClick={handleStart} disabled={isChapterRunning}>
                   {isChapterRunning ? (
                     <span className="flex items-center gap-2">
-                      <span className="animate-spin" style={{ filter: 'brightness(1.5)' }}>🌀</span>
+                      <Spinner size={14} />
                       {t('chapter.creating')}
                     </span>
                   ) : (

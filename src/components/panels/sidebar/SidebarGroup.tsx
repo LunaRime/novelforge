@@ -56,7 +56,9 @@ export default function SidebarGroup({
           button 嵌 button（非法 HTML + 焦点被外层吞掉）。
           做法：把「图标 + 标题」包进一个全宽按钮（flex-1），计数与操作类按钮**降为兄弟节点**。 */}
       <div
-        className="flex items-center gap-1.5"
+        // 2026-09-25：补 mb-1.5 —— VolumeGroup / PublicationGroup / MemoryGroup 三处自绘的同类卡片
+        // 标题行都有它，唯独本组件没有，导致同一侧栏里"标题到内容"的间距两种（审计实测）
+        className="flex items-center gap-1.5 mb-1.5"
         onContextMenu={onContextMenu}
         title={titleHint}
       >

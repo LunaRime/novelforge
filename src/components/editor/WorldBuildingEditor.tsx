@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTriangle, FolderTree } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useCharacterStore } from '../../stores/character-store'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
@@ -311,7 +312,7 @@ export default function WorldBuildingEditor() {
                       title={t('arch.charArchiveEmptyRetry')}
                     >
                       {extracting
-                        ? <RefreshCw size={12} className="animate-spin opacity-90" />
+                        ? <Spinner size={12} className="opacity-90" />
                         : <AlertTriangle size={12} className="opacity-90" />
                       }
                       {extracting ? t('arch.charExtracting') : t('arch.charExtractBtn')}

@@ -1,5 +1,6 @@
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { Save, RefreshCw, Sparkles, Loader2, AlertTriangle, FileText } from 'lucide-react'
+import { Save, RefreshCw, Sparkles, AlertTriangle, FileText } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
 import { useTranslation } from '../../hooks/useTranslation'
 
@@ -317,7 +318,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               title={t('arch.charExtractFailed')}
             >
               {extracting
-                ? <RefreshCw size={12} className="animate-spin opacity-90" />
+                ? <Spinner size={12} className="opacity-90" />
                 : <AlertTriangle size={12} className="opacity-90" />
               }
               {extracting ? t('arch.extracting') : t('arch.extractChars')}
@@ -333,7 +334,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               disabled={checkingArch}
               title={`AI ${generated ? t('archive.regenerate') : t('archive.generate')}「${meta?.label}」`}
             >
-              {checkingArch ? <Loader2 size={12} className="animate-spin" /> : <Sparkles size={12} />}
+              {checkingArch ? <Spinner size={12}  /> : <Sparkles size={12} />}
               {generated ? t('arch.aiRegenerate') : t('arch.aiGenerate')}
             </Button>
           )}

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { CheckCircle2, Loader2, Circle, Sparkles, X, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
+import { CheckCircle2, Circle, Sparkles, X, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useWorkflowStore, type WorkflowRun, type WorkflowStep } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import MarkdownContent from '../ui/MarkdownContent'
@@ -389,7 +390,7 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
         {/* 状态图标 */}
         <span className="flex-shrink-0 w-4 flex justify-center">
           {isCompleted && <CheckCircle2 size={11} style={{ color: 'var(--color-success)' }} />}
-          {isRunning && <Loader2 size={11} className="animate-spin" style={{ color: 'var(--color-accent)' }} />}
+          {isRunning && <Spinner size={11}  style={{ color: 'var(--color-accent)' }} />}
           {isFailed && <Circle size={11} style={{ color: 'var(--color-error)', fill: 'var(--color-error)' }} />}
           {(step.status === 'pending' || step.status === 'skipped') && (
             <span

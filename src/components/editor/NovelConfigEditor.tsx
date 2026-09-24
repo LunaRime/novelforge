@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react'
-import { Save, Sparkles, Info, Loader2 } from 'lucide-react'
+import { Save, Sparkles, Info } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -371,7 +372,7 @@ function Section({
             title={isGenerating ? t('status.generating') : t('tip.aiGenerateField').replace('{field}', title)}
           >
             {isGenerating
-              ? <Loader2 size={11} className="animate-spin" />
+              ? <Spinner size={11}  />
               : <Sparkles size={11} />
             }
             {isGenerating ? t('novelConfig.generatingBtn') : t('arch.aiGenLabel')}

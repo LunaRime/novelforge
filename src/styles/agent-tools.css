@@ -261,14 +261,7 @@
 
 /* ===== 旋转动画 ===== */
 
-@keyframes tool-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
 
-.tool-spinner {
-  animation: tool-spin 1s linear infinite;
-}
 
 /* ===== 脉冲动画（等待确认） ===== */
 

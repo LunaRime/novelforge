@@ -6,7 +6,8 @@
  * 安全：base URL 由主进程读取（LLM 只能传相对 path）；仅 http/https；响应 1MB 截断。
  */
 import { useState, useEffect } from 'react'
-import { Save, Loader2, Plug, ShieldAlert, HelpCircle, Globe, FileText } from 'lucide-react'
+import { Save, Plug, ShieldAlert, HelpCircle, Globe, FileText } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
@@ -209,7 +210,7 @@ export default function DeveloperModeSection() {
                 className="h-7 text-xs w-28"
               />
               <Button variant="outline" size="sm" onClick={handleBrowserTest} disabled={browserTesting}>
-                {browserTesting ? <Loader2 size={12} className="animate-spin" /> : <Globe size={12} />}
+                {browserTesting ? <Spinner size={12}  /> : <Globe size={12} />}
                 {t('dev.browserTest')}
               </Button>
             </div>
@@ -270,7 +271,7 @@ export default function DeveloperModeSection() {
       {/* 操作按钮 */}
       <div className="flex items-center gap-2">
         <Button variant="outline" size="sm" onClick={handleTest} disabled={testing || !enabled}>
-          {testing ? <Loader2 size={12} className="animate-spin" /> : <Plug size={12} />}
+          {testing ? <Spinner size={12}  /> : <Plug size={12} />}
           {t('dev.test')}
         </Button>
         <Button variant="default" size="sm" onClick={handleSave} disabled={saving}>

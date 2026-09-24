@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Database, BookOpen, FileText,
-  Search, RefreshCw, Layers, Zap, Server, Activity, Download, Languages, AlertCircle,
+  Search, Layers, Zap, Server, Activity, Download, Languages, AlertCircle,
 } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
@@ -237,7 +238,7 @@ export default function KnowledgeOverview() {
               disabled={tokenBackfilling}
             >
               {tokenBackfilling ? (
-                <><RefreshCw size={14} className="animate-spin mr-1.5" />{t('knowledge.tokenBackfilling')}</>
+                <><Spinner size={14} className="mr-1.5" />{t('knowledge.tokenBackfilling')}</>
               ) : (
                 <><Languages size={14} className="mr-1.5" />{t('knowledge.tokenBackfill')}</>
               )}
@@ -324,7 +325,7 @@ export default function KnowledgeOverview() {
                 disabled={backfilling}
               >
                 {backfilling ? (
-                  <><RefreshCw size={12} className="animate-spin mr-1.5" />{t('knowledge.rebuilding')}</>
+                  <><Spinner size={12} className="mr-1.5" />{t('knowledge.rebuilding')}</>
                 ) : (
                   <>{t('knowledge.rebuildBtn')}</>
                 )}
@@ -384,7 +385,7 @@ export default function KnowledgeOverview() {
                 onClick={handleSearch}
                 disabled={searching}
               >
-                {searching ? <RefreshCw size={13} className="animate-spin" /> : <Search size={13} />}
+                {searching ? <Spinner size={13}  /> : <Search size={13} />}
                 {t('knowledge.searchBtn')}
               </Button>
             </div>

@@ -6,7 +6,8 @@
  */
 
 import { useEffect, useState } from 'react'
-import { Download, CheckCircle2, AlertCircle, X, RefreshCw, ExternalLink, Loader2 } from 'lucide-react'
+import { Download, CheckCircle2, AlertCircle, X, RefreshCw, ExternalLink } from 'lucide-react'
+import { Spinner } from './ui/Spinner'
 import { useUpdateStore } from '../stores/update-store'
 import type { UpdateProgressInfo } from '../shared/ipc-channels'
 import { useTranslation } from '../hooks/useTranslation'
@@ -103,7 +104,7 @@ export default function UpdateNotification() {
   if (status === 'checking') {
     return (
       <UpdateBanner variant="info">
-        <Loader2 size={14} className="animate-spin flex-shrink-0" />
+        <Spinner size={14} className="flex-shrink-0" />
         <span>{t('status.checking')}</span>
       </UpdateBanner>
     )
@@ -122,7 +123,7 @@ export default function UpdateNotification() {
         </span>
         <UpdateButton onClick={handleDownload} disabled={isDownloading} variant="primary">
           {isDownloading ? (
-            <Loader2 size={12} className="animate-spin" />
+            <Spinner size={12}  />
           ) : (
             <Download size={12} />
           )}
@@ -140,7 +141,7 @@ export default function UpdateNotification() {
   if (status === 'downloading') {
     return (
       <UpdateBanner variant="info">
-        <Loader2 size={14} className="animate-spin flex-shrink-0" />
+        <Spinner size={14} className="flex-shrink-0" />
         <span className="flex-1">
           {t('status.downloading')} {downloadProgress ? `${Math.round(downloadProgress.percent)}%` : ''}
         </span>

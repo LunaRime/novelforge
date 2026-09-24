@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
-  Loader2, CheckCircle2, XCircle, Clock,
+  CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap, ScrollText,
 } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
@@ -239,7 +240,7 @@ function ActiveRunPanel({
         {/* 状态图标 */}
         <div className="flex-shrink-0">
           {run.status === 'running' && (
-            <Loader2 size={13} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
+            <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
           )}
           {run.status === 'waiting' && (
             <Clock size={13} style={{ color: 'var(--color-warning)' }} />
@@ -469,7 +470,7 @@ function StepStatusIcon({ status }: { status: WorkflowStep['status'] }) {
     case 'completed':
       return <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
     case 'running':
-      return <Loader2 size={13} className="animate-spin" style={{ color: 'var(--color-accent)' }} />
+      return <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
     case 'failed':
       return <XCircle size={13} style={{ color: 'var(--color-error)' }} />
     case 'skipped':

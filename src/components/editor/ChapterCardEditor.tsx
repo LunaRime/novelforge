@@ -4,6 +4,7 @@ import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
   Sparkles, PenLine
 } from 'lucide-react'
+import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useVolumeStore } from '../../stores/volume-store'
@@ -290,7 +291,7 @@ export default function ChapterCardEditor() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
-        <RefreshCw size={16} className="animate-spin" /> {t('chapterCard.loadingBlueprints')}
+        <Spinner size={16}  /> {t('chapterCard.loadingBlueprints')}
       </div>
     )
   }

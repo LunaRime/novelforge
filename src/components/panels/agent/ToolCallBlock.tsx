@@ -16,6 +16,7 @@ import {
   Loader2,
   AlertTriangle,
 } from 'lucide-react'
+import { Spinner } from '../../ui/Spinner'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useTranslation } from '../../../hooks/useTranslation'
 import type { TextKey } from '../../../shared/locale'
@@ -32,7 +33,7 @@ function StatusIcon({ status }: { status: ToolCallInfo['status'] }) {
     case 'failed':
       return <XCircle size={13} className="tool-call-status failed" />
     case 'running':
-      return <Loader2 size={13} className="tool-call-status running tool-spinner" />
+      return <Spinner size={13} className="tool-call-status running" />
     case 'waiting_confirm':
       return <AlertTriangle size={13} className="tool-call-status waiting_confirm tool-pulse" />
     case 'pending':
