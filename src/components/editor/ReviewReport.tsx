@@ -346,7 +346,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         {/* 分类展示 */}
         {issues.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
-            <CheckCircle size={32} className="mx-auto mb-2 text-[var(--color-success)]" />
+            <CheckCircle size={36} className="mx-auto mb-2 text-[var(--color-success)]" />
             {t('review.allPassed')}
           </div>
         ) : (
@@ -435,7 +435,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         <DialogContent className="max-w-[440px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Sparkles size={15} className="text-[var(--color-accent)]" />
+              <Sparkles size={14} className="text-[var(--color-accent)]" />
               {t('review.aiFixTitle')}
             </DialogTitle>
             <DialogDescription>

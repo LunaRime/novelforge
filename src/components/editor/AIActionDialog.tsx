@@ -64,7 +64,7 @@ export default memo(function AIActionDialog({
       <DialogContent className="max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles size={15} className="text-[var(--color-accent)]" />
+            <Sparkles size={14} className="text-[var(--color-accent)]" />
             {action === 'refine' ? t('dialog.aiPolishTitle') : t('dialog.aiReviewTitle')}
           </DialogTitle>
           <DialogDescription>

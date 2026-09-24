@@ -227,14 +227,14 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
           <div className="grid grid-cols-2 gap-2">
             <FormatCard
               selected={format === 'zip'}
-              icon={<FolderArchive size={18} />}
+              icon={<FolderArchive size={16} />}
               label={t('export.zipFormat')}
               desc={t('export.zipDesc')}
               onClick={() => setFormat('zip')}
             />
             <FormatCard
               selected={format === 'folder'}
-              icon={<FolderOpen size={18} />}
+              icon={<FolderOpen size={16} />}
               label={t('export.folderFormat')}
               desc={t('export.folderDesc')}
               onClick={() => setFormat('folder')}

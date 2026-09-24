@@ -378,7 +378,7 @@ export default function ChapterCardEditor() {
         >
           {blueprints.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 opacity-40 p-4">
-              <BookOpen size={28} />
+              <BookOpen size={36} />
               <span className="text-xs text-center">{t('blueprint.emptyHint')}</span>
             </div>
           ) : (

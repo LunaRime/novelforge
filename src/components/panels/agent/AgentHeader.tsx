@@ -93,7 +93,7 @@ export default function AgentHeader() {
             active={showMore}
             style={{ width: 18, height: 18, padding: 0 }}
           >
-            <MoreHorizontal size={15} strokeWidth={1.5} />
+            <MoreHorizontal size={14} strokeWidth={1.5} />
           </Button>
 
           {/* 更多菜单下拉 */}
@@ -182,7 +182,7 @@ export default function AgentHeader() {
           onClick={handleClose}
           style={{ width: 18, height: 18, padding: 0 }}
         >
-          <X size={15} strokeWidth={1.5} />
+          <X size={14} strokeWidth={1.5} />
         </Button>
       </div>
     </div>

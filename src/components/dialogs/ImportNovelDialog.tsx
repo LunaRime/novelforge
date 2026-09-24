@@ -120,7 +120,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       <DialogContent className="max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <FileUp size={18} className="text-[var(--color-accent)]" />
+            <FileUp size={16} className="text-[var(--color-accent)]" />
             {t('import.title')}
           </DialogTitle>
           <DialogDescription>{t('import.title')} — {t('import.chapterPreview')}</DialogDescription>

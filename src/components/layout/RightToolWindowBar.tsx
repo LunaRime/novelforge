@@ -124,7 +124,7 @@ export default function RightToolWindowBar() {
             : 'var(--color-activity-icon)',
         }}
       >
-        <Bot size={15} strokeWidth={aiPanelOpen && rightView === 'agent' ? 2 : 1.5} />
+        <Bot size={14} strokeWidth={aiPanelOpen && rightView === 'agent' ? 2 : 1.5} />
       </button>
 
       {/* AI 输出面板按钮 */}
@@ -142,7 +142,7 @@ export default function RightToolWindowBar() {
             : 'var(--color-activity-icon)',
         }}
       >
-        <Sparkles size={15} strokeWidth={aiPanelOpen && rightView === 'ai-output' ? 2 : 1.5} />
+        <Sparkles size={14} strokeWidth={aiPanelOpen && rightView === 'ai-output' ? 2 : 1.5} />
         {/* 工作流活跃时的脉冲指示点 */}
         {showPulse && !(aiPanelOpen && rightView === 'ai-output') && (
           <span
@@ -165,7 +165,7 @@ export default function RightToolWindowBar() {
           color: focusMode ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
         }}
       >
-        <PenLine size={15} strokeWidth={focusMode ? 2 : 1.5} />
+        <PenLine size={14} strokeWidth={focusMode ? 2 : 1.5} />
       </button>
 
       {/* 主题切换（原标题栏）：四主题菜单直选，菜单从按钮**左侧**展开（本栏贴窗口右边） */}
@@ -176,7 +176,7 @@ export default function RightToolWindowBar() {
           className="tool-btn"
           style={{ height: 30, color: 'var(--color-activity-icon)', anchorName: '--menu-theme' } as React.CSSProperties}
         >
-          <ThemeIcon size={15} strokeWidth={1.5} />
+          <ThemeIcon size={14} strokeWidth={1.5} />
         </button>
         {themeMenuOpen && (
           <div

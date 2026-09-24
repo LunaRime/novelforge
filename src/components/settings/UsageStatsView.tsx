@@ -149,7 +149,7 @@ export default function UsageStatsView() {
           className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl"
           style={{ border: '1px dashed var(--color-border)' }}
         >
-          <AlertTriangle size={22} style={{ color: 'var(--color-warning)', opacity: 0.7 }} />
+          <AlertTriangle size={36} style={{ color: 'var(--color-warning)', opacity: 0.7 }} />
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {t('usage.loadFailed')}
           </span>
@@ -168,7 +168,7 @@ export default function UsageStatsView() {
           className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl"
           style={{ border: '1px dashed var(--color-border)' }}
         >
-          <BarChart3 size={22} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+          <BarChart3 size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {t('usage.noData')}
           </span>
@@ -241,7 +241,7 @@ export default function UsageStatsView() {
           className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl"
           style={{ border: '1px dashed var(--color-border)' }}
         >
-          <AlertTriangle size={22} style={{ color: 'var(--color-warning)', opacity: 0.7 }} />
+          <AlertTriangle size={36} style={{ color: 'var(--color-warning)', opacity: 0.7 }} />
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {t('usage.loadFailed')}
           </span>
@@ -260,7 +260,7 @@ export default function UsageStatsView() {
           className="flex flex-col items-center justify-center py-12 gap-2 rounded-xl"
           style={{ border: '1px dashed var(--color-border)' }}
         >
-          <BarChart3 size={22} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+          <BarChart3 size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
           <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
             {t('usage.globalNoProjects')}
           </span>

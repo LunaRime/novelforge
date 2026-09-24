@@ -114,7 +114,7 @@ function ConfirmDialog({
         {/* 标题（alert 模式带错误图标） */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           {alert && (
-            <AlertCircle size={15} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+            <AlertCircle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
           )}
           <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)' }}>
             {title}

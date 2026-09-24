@@ -125,7 +125,7 @@ function TaskRunView() {
   if (activeRuns.length === 0 && history.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--color-text-muted)' }}>
-        <Zap size={24} style={{ opacity: 0.5 }} />
+        <Zap size={36} style={{ opacity: 0.5 }} />
         <span className="text-xs">{t('empty.noTasks')}</span>
       </div>
     )

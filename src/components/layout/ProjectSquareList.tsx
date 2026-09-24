@@ -160,7 +160,7 @@ export default function ProjectSquareList() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <AlertTriangle size={15} style={{ color: 'var(--color-warning)' }} />
+              <AlertTriangle size={14} style={{ color: 'var(--color-warning)' }} />
               {t('workspace.archIncomplete')}
             </DialogTitle>
             <DialogDescription>

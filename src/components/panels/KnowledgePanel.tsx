@@ -359,7 +359,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
       {loadFailed ? (
         /* 错误态与空态必须分开：失败渲染成「暂无数据」会让用户以为本来就没有 */
         <EmptyState
-          icon={<AlertCircle size={28} style={{ color: 'var(--color-error)' }} />}
+          icon={<AlertCircle size={36} style={{ color: 'var(--color-error)' }} />}
           message={t('common.loadFailed')}
           opacity={1}
           className="py-8"
@@ -370,7 +370,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
         </EmptyState>
       ) : documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
-          <BookOpen size={28} />
+          <BookOpen size={36} />
           <span className="text-xs">{t('knowledge.empty')}</span>
           <span className="text-micro text-center px-4">{t('knowledge.autoIndexHint')}</span>
         </div>

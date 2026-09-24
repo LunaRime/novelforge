@@ -262,8 +262,8 @@ export default function WorldBuildingEditor() {
               >
                 {/* 状态图标 */}
                 {generated
-                  ? <CheckCircle2 size={18} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-                  : <Circle size={18} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />
+                  ? <CheckCircle2 size={16} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
+                  : <Circle size={16} style={{ flexShrink: 0, color: 'var(--color-text-muted)' }} />
                 }
 
                 {/* 图标 */}

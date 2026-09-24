@@ -327,7 +327,7 @@ function LLMSection({
               className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
               style={{ border: '1.5px dashed var(--color-border)' }}
             >
-              <Zap size={28} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+              <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
               <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
                 {t('model.noLabelConfig').replace('{label}', purposeLabel)}
               </span>

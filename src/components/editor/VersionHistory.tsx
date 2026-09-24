@@ -184,7 +184,7 @@ export default function VersionHistory() {
             {versionsFailed ? (
               /* 错误态与空态必须分开：失败渲染成「无版本记录」会让用户以为本来就没有 */
               <div className="flex flex-col items-center gap-2 py-8 text-xs text-[var(--color-text-muted)]">
-                <AlertCircle size={18} style={{ color: 'var(--color-error)' }} />
+                <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
                 <span>{t('common.loadFailed')}</span>
                 <Button variant="outline" size="sm" onClick={() => void loadVersions(selectedChapter)}>
                   {t('action.retry')}

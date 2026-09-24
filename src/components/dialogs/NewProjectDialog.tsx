@@ -57,7 +57,7 @@ export default function NewProjectDialog({ open, onClose }: NewProjectDialogProp
       <DialogContent className="max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Sparkles size={18} className="text-[var(--color-accent)]" />
+            <Sparkles size={16} className="text-[var(--color-accent)]" />
             {t('dialog.newProject')}
           </DialogTitle>
           <DialogDescription>{t('project.createTitle')}</DialogDescription>

@@ -98,7 +98,7 @@ export default function LeftToolWindowBar() {
                 color: isActive ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
               }}
             >
-              <Icon size={17} strokeWidth={isActive ? 2 : 1.5} />
+              <Icon size={16} strokeWidth={isActive ? 2 : 1.5} />
             </button>
           )
         })}
@@ -140,7 +140,7 @@ export default function LeftToolWindowBar() {
                   color: isActive ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
                 }}
               >
-                <Icon size={15} strokeWidth={isActive ? 2 : 1.5} />
+                <Icon size={14} strokeWidth={isActive ? 2 : 1.5} />
               </button>
               {showPulse && (
                 <span
@@ -167,7 +167,7 @@ export default function LeftToolWindowBar() {
               color: activityDialogOpen ? 'var(--color-activity-icon-active)' : 'var(--color-activity-icon)',
             }}
           >
-            <Activity size={15} strokeWidth={activityDialogOpen ? 2 : 1.5} />
+            <Activity size={14} strokeWidth={activityDialogOpen ? 2 : 1.5} />
           </button>
         </div>
 
@@ -180,7 +180,7 @@ export default function LeftToolWindowBar() {
             className="tool-btn"
             style={{ color: 'var(--color-activity-icon)' }}
           >
-            <Settings size={15} strokeWidth={1.5} />
+            <Settings size={14} strokeWidth={1.5} />
           </button>
         </div>
       </div>

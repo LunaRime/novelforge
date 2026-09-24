@@ -221,7 +221,7 @@ export default function ActivityView() {
       {loadFailed ? (
         /* 错误态与空态必须分开：失败渲染成「暂无活动数据」会让用户以为本来就没有 */
         <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
-          <AlertCircle size={22} style={{ color: 'var(--color-error)' }} />
+          <AlertCircle size={36} style={{ color: 'var(--color-error)' }} />
           <span className="text-xs">{t('common.loadFailed')}</span>
           <button
             type="button"
@@ -234,7 +234,7 @@ export default function ActivityView() {
         </div>
       ) : allRows.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
-          <BookOpen size={22} style={{ opacity: 0.4 }} />
+          <BookOpen size={36} style={{ opacity: 0.4 }} />
           <span className="text-xs">{t('activity.noData')}</span>
         </div>
       ) : (

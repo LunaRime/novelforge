@@ -94,27 +94,27 @@ const TOAST_STYLE: Record<ToastType, { border: string; bg: string; icon: React.R
   success: {
     border: 'var(--color-success)',
     bg: 'linear-gradient(135deg, rgba(var(--color-success-rgb), 0.12), rgba(var(--color-success-rgb), 0.04))',
-    icon: <CheckCircle2 size={15} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+    icon: <CheckCircle2 size={14} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
   },
   error: {
     border: 'var(--color-error)',
     bg: 'linear-gradient(135deg, rgba(var(--color-error-rgb), 0.12), rgba(var(--color-error-rgb), 0.04))',
-    icon: <AlertTriangle size={15} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+    icon: <AlertTriangle size={14} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
   },
   warning: {
     border: 'var(--color-warning)',
     bg: 'linear-gradient(135deg, rgba(var(--color-warning-rgb), 0.12), rgba(var(--color-warning-rgb), 0.04))',
-    icon: <AlertTriangle size={15} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
+    icon: <AlertTriangle size={14} style={{ color: 'var(--color-warning)', flexShrink: 0 }} />
   },
   info: {
     border: 'var(--color-accent)',
     bg: 'linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.04))',
-    icon: <Info size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+    icon: <Info size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
   },
   ai: {
     border: 'var(--color-accent)',
     bg: 'linear-gradient(135deg, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.04))',
-    icon: <Sparkles size={15} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+    icon: <Sparkles size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
   },
 }
 
