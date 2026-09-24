@@ -240,7 +240,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
                     </span>
                   </div>
                   <button
-                    className="opacity-0 group-hover:opacity-60 hover:!opacity-100 flex-shrink-0 cursor-pointer transition-opacity"
+                    className="opacity-0 group-hover:opacity-60 group-focus-within:opacity-100 hover:!opacity-100 flex-shrink-0 cursor-pointer transition-opacity"
                     style={{ color: 'var(--color-text-muted)' }}
                     title={t('project.deleteTooltip')}
                     onClick={async (e) => {

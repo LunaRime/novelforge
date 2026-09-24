@@ -2,6 +2,8 @@ import { useRef, useState } from 'react'
 import type { ContextUsage } from '../../../services/agent/context-usage'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../../hooks/useEscapeKey'
 
 /** 数字缩写：131072 → 131k、2584 → 2.6k（窄面板下省宽度） */
 function fmtK(n: number): string {
@@ -21,6 +23,11 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
   const menuRef = useFloatingPosition<HTMLDivElement>(anchorRef, open, { placement: 'above', align: 'end' })
+  // 2026-09-25 补：此前这是全仓唯一**既无 Esc 也无点击外部**的自绘浮层——
+  // 唯一关闭方式是再点一次圆环，而菜单浮在窗口之上、盖住别处，用户很容易以为它关不掉。
+  // 菜单与触发按钮同在 anchorRef 容器内 → 容器内点击不算"外部"，点别处才关。
+  useOutsideClick(anchorRef, () => setOpen(false), open)
+  useEscapeKey(() => setOpen(false), open)
 
   if (!usage || usage.modelMax <= 0) return null
 

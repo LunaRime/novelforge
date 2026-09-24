@@ -21,6 +21,7 @@ import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
 import { switchLocale, useTranslation } from '../../hooks/useTranslation'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../shared/locale'
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import type { TextKey } from '../../shared/locale'
@@ -82,6 +83,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       : 'llm')
   )
 
+  // Esc 关闭：本组件自绘全屏模态（未走 ui/Dialog / Radix），此前**没有** Esc ——
+  // 键盘用户只能靠 Tab 找到 × 或点遮罩。hooks 必须在 `if (!open) return null` 之前。
+  useEscapeKey(onClose, open)
+
   if (!open) return null
 
   return (
@@ -91,6 +96,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-label={t('settings.title')}
         className="relative flex w-[880px] h-[600px] rounded-2xl overflow-hidden shadow-2xl"
         style={{
           backgroundColor: 'var(--color-editor-bg)',
@@ -342,6 +350,12 @@ function LLMSection({
                     : setDefaultModel(model.id)}
                   onEdit={() => setEditingModel({ ...model })}
                   onDelete={async () => {
+                    // 删除模型配置此前无二次确认（且入口是 hover 才显形的按钮，键盘用户极易误触）
+                    const ok = await confirm(
+                      t('settings.confirmDeleteModel').replace('{name}', model.name),
+                      { danger: true, confirmText: t('action.delete') },
+                    )
+                    if (!ok) return
                     setDeletingId(model.id)
                     try {
                       await deleteModel(model.id)
@@ -567,7 +581,7 @@ function ModelCard({
       </div>
 
       {/* 操作按钮（hover 显示） */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
         {!isDefault && (
           <button
             onClick={onSetDefault}

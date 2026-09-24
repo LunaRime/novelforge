@@ -114,36 +114,43 @@ export default function ProjectSquareList() {
           const tipText = `${p.name}\n${p.path}${timeText ? `\n${timeText}` : ''}`
           const color = projectColor(i)
           return (
-            <button
-              key={p.path}
-              type="button"
-              onClick={() => handleSquareClick(p.path, p.name)}
-              title={tipText}
-              className={cn(
-                'group relative w-[30px] h-[30px] rounded-md flex items-center justify-center',
-                'transition-all duration-150 cursor-pointer select-none overflow-hidden',
-                'hover:brightness-110',
-              )}
-              style={{
-                backgroundColor: color,
-                boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
-              }}
-            >
-              {/* 首字/首字母（完整信息在悬停提示） */}
-              <span className="text-sm font-bold leading-none text-white drop-shadow-sm">
-                {initialOf(p.name)}
-              </span>
-              {/* 删除/移出（悬停显示，半透明黑底保证彩色底上可见） */}
-              <span
-                role="button"
-                className="absolute top-0 right-0 p-[1px] rounded opacity-0 group-hover:opacity-80 hover:!opacity-100 transition-opacity cursor-pointer"
+            // ⚠️ 2026-09-25 修：删除入口此前是 `<span role="button">` **嵌在** `<button>` 内部，
+            // 既无 tabIndex 也无键盘处理 —— 键盘用户完全够不到「移出项目」这条路径，
+            // 且交互元素嵌套本身是非法 HTML。改为**兄弟节点 + 真 `<button>`**
+            // （原生支持 Enter/Space 触发，无需手写 onKeyDown）。
+            <div key={p.path} className="group relative w-[30px] h-[30px]">
+              <button
+                type="button"
+                data-project-square
+                onClick={() => handleSquareClick(p.path, p.name)}
+                title={tipText}
+                className={cn(
+                  'w-full h-full rounded-md flex items-center justify-center',
+                  'transition-all duration-150 cursor-pointer select-none overflow-hidden',
+                  'hover:brightness-110',
+                )}
+                style={{
+                  backgroundColor: color,
+                  boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.15)',
+                }}
+              >
+                {/* 首字/首字母（完整信息在悬停提示） */}
+                <span className="text-sm font-bold leading-none text-white drop-shadow-sm">
+                  {initialOf(p.name)}
+                </span>
+              </button>
+              {/* 删除/移出（悬停或组内获得焦点时显示，半透明黑底保证彩色底上可见） */}
+              <button
+                type="button"
+                className="absolute top-0 right-0 p-[1px] rounded opacity-0 group-hover:opacity-80 group-focus-within:opacity-100 hover:!opacity-100 transition-opacity cursor-pointer"
                 style={{ color: '#fff', backgroundColor: 'rgba(0,0,0,0.35)' }}
                 onClick={(e) => handleDelete(e, p.path)}
                 title={t('project.deleteTooltip')}
+                aria-label={t('project.deleteTooltip')}
               >
                 <Trash2 size={8} />
-              </span>
-            </button>
+              </button>
+            </div>
           )
         })}
       </div>

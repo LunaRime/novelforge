@@ -572,7 +572,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                 </span>
               ) : (
                 <button
-                  className="opacity-0 group-hover:opacity-100 ml-0.5 p-0.5 rounded transition-opacity"
+                  className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ml-0.5 p-0.5 rounded transition-opacity"
                   style={{ color: 'var(--color-text-muted)' }}
                   onClick={e => { e.stopPropagation(); tryCloseTab(tab.id) }}
                   onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}

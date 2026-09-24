@@ -121,7 +121,7 @@ export default function PublicationGroup({ projectPath }: Props) {
               )}
               <button
                 type="button"
-                className="p-0.5 rounded opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                className="p-0.5 rounded opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer"
                 title={t('action.delete')}
                 onClick={() => void handleDelete(e)}
                 style={{ color: 'var(--color-text-muted)' }}

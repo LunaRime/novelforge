@@ -10,6 +10,7 @@
  */
 import { useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import type { DiffSession, SubHunk } from '../../services/diff/hunk-model'
 
 export interface InlineAcceptPopoverProps {
@@ -68,6 +69,9 @@ export function InlineAcceptPopover({
   const hunk = session.hunks[hunkIdx]
   // 默认勾选当前点击的子句（句级快速接受路径）；rejected 子句不可再选
   const [checked, setChecked] = useState<Set<string>>(() => new Set([activeSubId]))
+
+  // Esc 关闭：此前只有「关闭」按钮与点正文两条路径（浮层盖在编辑器上，键盘用户无处可退）
+  useEscapeKey(onClose, true)
 
   if (!hunk) return null
 

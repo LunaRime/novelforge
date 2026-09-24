@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import {
-  Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2,
+  Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2, AlertCircle,
 } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
@@ -21,6 +21,7 @@ import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 export default function KnowledgePanel() {
   const { t } = useTranslation()
   const [documents, setDocuments] = useState<KBDocument[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [stats, setStats] = useState({ documentCount: 0, totalChunks: 0 })
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
@@ -108,7 +109,13 @@ export default function KnowledgePanel() {
       const { documents: docs, stats: s } = await loadKBData()
       setDocuments(docs)
       setStats(s)
-    } catch (e) { console.warn('[KnowledgePanel] 加载知识库数据失败:', e) }
+      setLoadFailed(false)
+    } catch (e) {
+      // 2026-09-25 修：此前只 console.warn → documents 停在 []，渲染出「还没有已入库的章节」**空态**
+      // —— 加载失败被伪装成"没有数据"，用户既不重试也不知道出了问题。
+      console.warn('[KnowledgePanel] 加载知识库数据失败:', e)
+      setLoadFailed(true)
+    }
   }, [])
 
   useEffect(() => { 
@@ -274,6 +281,8 @@ export default function KnowledgePanel() {
         {searchResults.length === 0 && !(searchQuery.trim() !== '' && !searching) && (
           <DocListView
             documents={documents}
+            loadFailed={loadFailed}
+            onRetry={() => { setLoadFailed(false); void loadData() }}
             titleMap={titleMap}
             sortMode={sortMode}
             onSortModeChange={(v) => { setSortMode(v); setCurrentPage(1) }}
@@ -303,8 +312,11 @@ export default function KnowledgePanel() {
  * 已入库章节列表视图（排序头 + 列表体）— 独立子组件：
  * 顶层 fragment 合法，避免父组件深层条件表达式中嵌套 fragment 的解析问题
  */
-function DocListView({ documents, titleMap, sortMode, onSortModeChange, pageDocs, currentPage, totalPages, onPageChange, onDelete, onExport, t }: {
+function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSortModeChange, pageDocs, currentPage, totalPages, onPageChange, onDelete, onExport, t }: {
   documents: KBDocument[]
+  /** 加载失败：与「加载成功但确实没数据」是两回事，必须分开渲染 */
+  loadFailed: boolean
+  onRetry: () => void
   titleMap: Record<string, string>
   sortMode: 'time' | 'chapter' | 'name'
   onSortModeChange: (v: 'time' | 'chapter' | 'name') => void
@@ -344,7 +356,19 @@ function DocListView({ documents, titleMap, sortMode, onSortModeChange, pageDocs
         </Select>
       </div>
 
-      {documents.length === 0 ? (
+      {loadFailed ? (
+        /* 错误态与空态必须分开：失败渲染成「暂无数据」会让用户以为本来就没有 */
+        <EmptyState
+          icon={<AlertCircle size={28} style={{ color: 'var(--color-error)' }} />}
+          message={t('common.loadFailed')}
+          opacity={1}
+          className="py-8"
+        >
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            {t('action.retry')}
+          </Button>
+        </EmptyState>
+      ) : documents.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 gap-2 opacity-40">
           <BookOpen size={28} />
           <span className="text-xs">{t('knowledge.empty')}</span>
@@ -368,7 +392,7 @@ function DocListView({ documents, titleMap, sortMode, onSortModeChange, pageDocs
               </div>
               {/* 单章导出 — hover 显示 */}
               <button
-                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 hover:bg-[var(--color-hover)]"
+                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                 style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                 title={t('export.singleExportTip')}
                 onClick={() => onExport(doc)}
@@ -378,7 +402,7 @@ function DocListView({ documents, titleMap, sortMode, onSortModeChange, pageDocs
               </button>
               {/* P2-1：删除文档 — hover 显示 */}
               <button
-                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 hover:bg-[var(--color-hover)]"
+                className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                 style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                 title={t('action.delete')}
                 onClick={() => onDelete(doc)}

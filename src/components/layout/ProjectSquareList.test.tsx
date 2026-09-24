@@ -57,7 +57,7 @@ describe('ProjectSquareList LT 方块列表', () => {
 
   it('渲染方块（显示首字/首字母 + 悬停全名）', () => {
     const { container } = render(<ProjectSquareList />)
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     expect(buttons.length).toBe(2)
     // 首字（中文取首字）
     expect(buttons[0].textContent).toContain('斗')
@@ -72,7 +72,7 @@ describe('ProjectSquareList LT 方块列表', () => {
       recentProjects: Array.from({ length: 7 }, (_, i) => makeProject(`项目${i + 1}`, `E:\\p${i + 1}`)),
     })
     const { container } = render(<ProjectSquareList />)
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     expect(buttons.length).toBe(5)
   })
 
@@ -81,15 +81,28 @@ describe('ProjectSquareList LT 方块列表', () => {
       currentProject: { name: '斗罗大陆虚界之痕', path: 'E:\\vale\\小说\\斗罗大陆虚界之痕' } as never,
     })
     const { container } = render(<ProjectSquareList />)
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     expect(buttons.length).toBe(1)
     expect(buttons[0].textContent).toContain('穿')
+  })
+
+  it('删除入口是**独立的** button 且不嵌在方块按钮内（回归：键盘此前完全够不到）', () => {
+    const { container } = render(<ProjectSquareList />)
+    const deleteButtons = Array.from(container.querySelectorAll('button[aria-label]'))
+
+    expect(deleteButtons.length).toBe(2) // 每个项目一个
+    for (const btn of deleteButtons) {
+      // ① 不能是 <button> 嵌 <button>（非法 HTML，且焦点会被外层吞掉）
+      expect(btn.closest('button[data-project-square]')).toBeNull()
+      // ② 必须是真 button（原生支持 Enter/Space），而不是 span[role=button]
+      expect(btn.tagName).toBe('BUTTON')
+    }
   })
 
   it('点击方块 → 调用 openProject 并切换到项目结构视图', async () => {
     const { container } = render(<ProjectSquareList />)
     const openProjectMock = useProjectStore.getState().openProject as ReturnType<typeof vi.fn>
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     await act(async () => { buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await Promise.resolve() })
     // openProject 被调用（keepView 模式）
@@ -100,7 +113,7 @@ describe('ProjectSquareList LT 方块列表', () => {
 
   it('故事架构未完成（archGenerated < 4）→ 弹出填充提示', async () => {
     const { container } = render(<ProjectSquareList />)
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     await act(async () => { buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     // 等待 summary 检查完成（异步 IPC；Dialog 用 Portal 渲染到 body）
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
@@ -111,7 +124,7 @@ describe('ProjectSquareList LT 方块列表', () => {
 
   it('关闭架构提示弹窗 → 弹窗消失', async () => {
     const { container } = render(<ProjectSquareList />)
-    const buttons = Array.from(container.querySelectorAll('button'))
+    const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
     await act(async () => { buttons[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     // 点击"关闭"（Portal 到 body）

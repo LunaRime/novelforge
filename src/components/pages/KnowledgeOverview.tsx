@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   Database, BookOpen, FileText,
-  Search, RefreshCw, Layers, Zap, Server, Activity, Download, Languages,
+  Search, RefreshCw, Layers, Zap, Server, Activity, Download, Languages, AlertCircle,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -24,6 +24,7 @@ import ChapterExportDialog from '../dialogs/ChapterExportDialog'
  */
 export default function KnowledgeOverview() {
   const [documents, setDocuments] = useState<KBDocument[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [stats, setStats] = useState<KBStatsData>({ documentCount: 0, totalChunks: 0, vectorDimension: 0 })
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
@@ -75,7 +76,13 @@ export default function KnowledgeOverview() {
       const { documents: docs, stats: s } = await loadKBData()
       setDocuments(docs)
       setStats(s)
-    } catch (e) { console.warn('[KnowledgeOverview] 加载知识库数据失败:', e) }
+      setLoadFailed(false)
+    } catch (e) {
+      // 2026-09-25 修：此前只 console.warn → 统计卡片全 0、导出按钮消失，
+      // 用户读到的是「这本书还没入库任何内容」，而事实是加载失败
+      console.warn('[KnowledgeOverview] 加载知识库数据失败:', e)
+      setLoadFailed(true)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.path])
 
@@ -248,6 +255,25 @@ export default function KnowledgeOverview() {
             </Button>
           )}
         </div>
+
+        {/* 加载失败横幅：统计卡片全 0 不等于「没有数据」，必须区分 */}
+        {loadFailed && (
+          <div
+            className="flex items-center gap-2 rounded-xl border px-4 py-2.5 mb-4 text-xs"
+            style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)', backgroundColor: 'color-mix(in srgb, var(--color-error) 8%, transparent)' }}
+          >
+            <AlertCircle size={14} />
+            <span>{t('common.loadFailed')}</span>
+            <button
+              type="button"
+              className="ml-auto px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              onClick={() => void loadData()}
+            >
+              {t('action.retry')}
+            </button>
+          </div>
+        )}
 
         {/* ===== 统计卡片 ===== */}
         <div className="grid grid-cols-4 gap-3 mb-6">

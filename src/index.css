@@ -750,6 +750,18 @@
     transform: scale(0.95);
   }
 
+  /* 2026-09-25：`.icon-btn` 此前只定义 :hover/:active，**没有 :disabled** ——
+     保存中/不可用时按钮外观与可点状态完全一致（用户反复点击却毫无反应）。
+     ⚠️ 必须排在 :hover/:active **之后**：`:`伪类与 `.`类特异性相同（0,2,0），靠源码顺序决胜；
+     写在前面会被 `:hover` 的 transform: scale 盖掉。 */
+  .icon-btn:disabled,
+  .icon-btn:disabled:hover,
+  .icon-btn:disabled:active {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+  }
+
   /* ===== 配置编辑器输入框 ===== */
   .config-input {
     @apply w-full px-2.5 py-1.5 text-xs outline-none;

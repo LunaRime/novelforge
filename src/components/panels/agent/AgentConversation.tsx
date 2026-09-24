@@ -112,7 +112,13 @@ function EmptyState() {
                   title={conv.title}
                   updatedAt={conv.updatedAt}
                   onClick={() => selectConversation(conv.id)}
-                  onDelete={() => useAgentStore.getState().deleteConversation(conv.id)}
+                  onDelete={async () => {
+                    const ok = await confirm(
+                      t('agent.confirmDeleteConversation').replace('{title}', conv.title),
+                      { danger: true, confirmText: t('agent.deleteConversation') },
+                    )
+                    if (ok) useAgentStore.getState().deleteConversation(conv.id)
+                  }}
                 />
               ))}
             </div>
@@ -504,7 +510,7 @@ function AgentHistoryPanel() {
                   </button>
                   {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示） */}
                   <div
-                    className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/ws:opacity-100 transition-opacity duration-150"
+                    className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/ws:opacity-100 group-focus-within/ws:opacity-100 transition-opacity duration-150"
                     style={{ color: 'var(--color-text-secondary)' }}
                   >
                     <button
@@ -553,7 +559,13 @@ function AgentHistoryPanel() {
                   pinned={conv.pinned}
                   archived={conv.archived}
                   onClick={() => selectConversation(conv.id)}
-                  onDelete={() => deleteConversation(conv.id)}
+                  onDelete={async () => {
+                    const ok = await confirm(
+                      t('agent.confirmDeleteConversation').replace('{title}', conv.title),
+                      { danger: true, confirmText: t('agent.deleteConversation') },
+                    )
+                    if (ok) deleteConversation(conv.id)
+                  }}
                   onRename={title => renameConversation(conv.id, title)}
                   onTogglePin={() => pinConversation(conv.id, !conv.pinned)}
                   onToggleArchive={() => archiveConversation(conv.id, !conv.archived)}
@@ -571,7 +583,8 @@ function AgentHistoryPanel() {
 // ===== 最近会话列表项 =====
 
 /** 会话项 hover 工具条里的小图标按钮统一样式 */
-const ACT_BTN = 'flex items-center justify-center w-4 h-4 rounded cursor-pointer hover:opacity-70'
+// 命中区 16×16 → 20×20（鼠标可点但偏小），并补 focus-visible 焦点环（键盘可达性）
+const ACT_BTN = 'flex items-center justify-center w-5 h-5 rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
 
 function RecentConversationItem({
   title,
@@ -661,14 +674,14 @@ function RecentConversationItem({
       {/* 右侧：固定宽度容器，时间与操作组绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
       <div className="flex-shrink-0 ml-1 relative" style={{ width: 88, height: 16 }}>
         <span
-          className="absolute right-0 top-0 text-[0.7rem] whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0"
+          className="absolute right-0 top-0 text-[0.7rem] whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
           style={{ color: 'var(--color-text-muted)' }}
         >
           {formatRelativeTime(updatedAt)}
         </span>
         {/* 操作组（2026-09-22）：置顶 / 重命名 / 分叉 / 归档 / 删除 */}
         <div
-          className="absolute right-0 top-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity duration-150"
+          className="absolute right-0 top-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
           style={{ color: 'var(--color-text-secondary)' }}
         >
           {/* 以下四项管理操作仅在调用方提供回调时渲染（空状态的「最近会话」列表不提供） */}

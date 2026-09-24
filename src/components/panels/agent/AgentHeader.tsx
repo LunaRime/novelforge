@@ -8,6 +8,7 @@ import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -27,6 +28,7 @@ export default function AgentHeader() {
 
   // 点击外部关闭更多菜单
   useOutsideClick(moreRef, () => { setShowMore(false); setSubView('main') }, showMore)
+  useEscapeKey(() => { setShowMore(false); setSubView('main') }, showMore)
 
   // MCP 状态
   const { servers: mcpServers, tools: mcpTools } = useMCPStore()

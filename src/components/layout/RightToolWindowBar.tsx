@@ -5,6 +5,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { t } from '../../shared/locale'
 
 /** 主题图标映射（原标题栏；标题栏移除后随主题切换按钮一起搬来） */
@@ -40,6 +41,7 @@ export default function RightToolWindowBar() {
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
   useOutsideClick(themeMenuRef, () => setThemeMenuOpen(false), themeMenuOpen)
+  useEscapeKey(() => setThemeMenuOpen(false), themeMenuOpen)
   const ThemeIcon = themeIcons[theme] || Sun
   const themeLabel = (id: Theme) => id === 'galaxy' ? ti('theme.starry') : id === 'paper' ? ti('theme.paper') : id === 'dark' ? ti('theme.dark') : ti('theme.light')
 

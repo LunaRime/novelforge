@@ -138,7 +138,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
               {result}
               <button
                 onClick={() => navigator.clipboard.writeText(result).catch(() => {})}
-                className="absolute top-1 right-1 text-[0.65rem] px-1.5 py-0.5 rounded transition-opacity opacity-0 hover:opacity-100"
+                className="absolute top-1 right-1 text-[0.65rem] px-1.5 py-0.5 rounded transition-opacity opacity-0 hover:opacity-100 focus-visible:opacity-100"
                 style={{
                   backgroundColor: 'var(--color-hover)',
                   color: 'var(--color-text-secondary)',

@@ -975,10 +975,12 @@ export default function CodeMirrorEditor({
                       onClick={handleRejectAI}
                     >{t('editor.cancel')}</button>
                     <button
-                      className="px-2.5 py-1 text-xs rounded-md font-medium transition-colors"
+                      // disabled 此前**没有任何视觉降级**（类名里无 disabled: 变体），
+                      // 按钮看起来可点、点了没反应 —— 用户只会以为功能坏了
+                      className="px-2.5 py-1 text-xs rounded-md font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text)' }}
-                      onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
-                      onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                      onMouseEnter={e => { if (!e.currentTarget.disabled) e.currentTarget.style.opacity = '0.9' }}
+                      onMouseLeave={e => { e.currentTarget.style.opacity = '1' }}
                       disabled={aiResult === ''}
                       onClick={handleAcceptAI}
                     >{t('inlineAccept.applyAsSuggestion')}</button>

@@ -36,6 +36,7 @@ const RECOMMENDED_MCPS: Array<{ id: string; name: string; command: string; args:
 export default function MCPSettings() {
   const { t } = useTranslation()
   const [servers, setServers] = useState<MCPServerConfig[]>([])
+  const [loadFailed, setLoadFailed] = useState(false)
   const [statuses, setStatuses] = useState<Record<string, string>>({})
   const [showAdd, setShowAdd] = useState(false)
   const [newId, setNewId] = useState('')
@@ -50,8 +51,12 @@ export default function MCPSettings() {
       const map: Record<string, string> = {}
       for (const s of st as ServerStatus[]) map[s.id] = s.status
       setStatuses(map)
+      setLoadFailed(false)
     } catch (e) {
+      // 2026-09-25 修：此前只 console.warn → servers 停在 []，渲染出「无服务器」**空态**，
+      // 把加载失败伪装成"你没有配过服务器"（用户既不重试也不知道出了问题）
       console.warn('[MCPSettings] 加载服务器失败:', e)
+      setLoadFailed(true)
     }
   }, [])
 
@@ -67,8 +72,10 @@ export default function MCPSettings() {
       const map: Record<string, string> = {}
       for (const s of st as ServerStatus[]) map[s.id] = s.status
       setStatuses(map)
+      setLoadFailed(false)
     }).catch(e => {
       console.warn('[MCPSettings] 加载服务器失败:', e)
+      if (!cancelled) setLoadFailed(true)
     })
     return () => { cancelled = true }
   }, [])
@@ -195,21 +202,21 @@ export default function MCPSettings() {
               value={newId}
               onChange={e => setNewId(e.target.value)}
               placeholder={t('mcp.serverId')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none"
+              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
             />
             <input
               value={newCommand}
               onChange={e => setNewCommand(e.target.value)}
               placeholder={t('mcp.commandPlaceholder')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none"
+              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
             />
             <input
               value={newArgs}
               onChange={e => setNewArgs(e.target.value)}
               placeholder={t('mcp.args')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none"
+              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
               style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
             />
             <div className="flex gap-2">
@@ -234,8 +241,20 @@ export default function MCPSettings() {
           </div>
         )}
 
-        {/* 服务器列表 */}
-        {servers.length === 0 && !showAdd ? (
+        {/* 服务器列表：加载失败与「确实没配过」必须分开，否则失败被读成空 */}
+        {loadFailed ? (
+          <div className="text-center py-10 text-xs space-y-2">
+            <div style={{ color: 'var(--color-error)' }}>{t('common.loadFailed')}</div>
+            <button
+              type="button"
+              className="px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              onClick={() => void load()}
+            >
+              {t('action.retry')}
+            </button>
+          </div>
+        ) : servers.length === 0 && !showAdd ? (
           <div className="text-center py-10 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
             {t('mcp.empty')}
           </div>

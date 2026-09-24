@@ -63,6 +63,9 @@ export const UI_TEXTS_DATA = {
   'action.import': { 'zh-CN': '导入', 'en-US': 'Import', 'ru-RU': 'Импорт' },
   'action.refresh': { 'zh-CN': '刷新', 'en-US': 'Refresh', 'ru-RU': 'Обновить' },
   'action.retry': { 'zh-CN': '重试', 'en-US': 'Retry', 'ru-RU': 'Повторить' },
+  // 列表加载失败此前大多只 console.warn → 渲染成「暂无数据」空态，把**失败伪装成没数据**。
+  // 用户以为"本来就没有"，于是既不重试也不上报。凡是"加载了才知道有没有"的列表都用它。
+  'common.loadFailed': { 'zh-CN': '加载失败', 'en-US': 'Failed to load', 'ru-RU': 'Не удалось загрузить' },
   'action.search': { 'zh-CN': '搜索', 'en-US': 'Search', 'ru-RU': 'Поиск' },
   'action.create': { 'zh-CN': '新建', 'en-US': 'Create', 'ru-RU': 'Создать' },
   'action.edit': { 'zh-CN': '编辑', 'en-US': 'Edit', 'ru-RU': 'Изменить' },
@@ -1189,6 +1192,8 @@ export const UI_TEXTS_DATA = {
   'arch.charExtracting': { 'zh-CN': '提取中...', 'en-US': 'Extracting...', 'ru-RU': 'Извлечение...' },
   'arch.charExtractBtn': { 'zh-CN': '提取角色卡', 'en-US': 'Extract Characters', 'ru-RU': 'Извлечь персонажей' },
   'settings.title': { 'zh-CN': '设置', 'en-US': 'Settings', 'ru-RU': 'Настройки' },
+  // 删除模型配置此前无二次确认；而这颗按钮是 hover 才显形的，键盘用户看不到却 Tab 得到，风险更高
+  'settings.confirmDeleteModel': { 'zh-CN': '删除模型「{name}」？此操作不可撤销。', 'en-US': 'Delete model "{name}"? This cannot be undone.', 'ru-RU': 'Удалить модель «{name}»? Это действие необратимо.' },
   'settings.aiModel': { 'zh-CN': 'AI 模型', 'en-US': 'AI Models', 'ru-RU': 'Модели ИИ' },
   'settings.aiModelDesc': { 'zh-CN': '配置生成、改写、摘要模型与三层路由调度', 'en-US': 'Configure generation, refinement, and summarization models with tiered routing', 'ru-RU': 'Настройка моделей генерации, переписывания, реферирования и маршрутизации' },
   'settings.vectorModel': { 'zh-CN': '向量检索', 'en-US': 'Vector Search', 'ru-RU': 'Векторный поиск' },
@@ -1470,6 +1475,8 @@ export const UI_TEXTS_DATA = {
   'agent.allConversations': { 'zh-CN': '全部对话', 'en-US': 'All conversations', 'ru-RU': 'Все диалоги' },
   'agent.noConversations': { 'zh-CN': '暂无对话记录', 'en-US': 'No conversation history', 'ru-RU': 'Нет истории диалогов' },
   'agent.deleteConversation': { 'zh-CN': '删除对话', 'en-US': 'Delete conversation', 'ru-RU': 'Удалить диалог' },
+  // 删除会话此前**无二次确认**（一点即清空整段对话历史），而删除工作区/回退都有 —— 补齐一致性
+  'agent.confirmDeleteConversation': { 'zh-CN': '删除对话「{title}」？此操作不可撤销。', 'en-US': 'Delete conversation "{title}"? This cannot be undone.', 'ru-RU': 'Удалить диалог «{title}»? Это действие необратимо.' },
   'agent.confirmClearTitle': { 'zh-CN': '清空对话记录', 'en-US': 'Clear conversation history', 'ru-RU': 'Очистить историю диалогов' },
   'agent.confirmClearMsg': { 'zh-CN': '确定要清空所有对话记录？此操作不可撤销。', 'en-US': 'Clear all conversation history? This cannot be undone.', 'ru-RU': 'Очистить всю историю? Необратимо.' },
   'agent.forkConversation': { 'zh-CN': '从此处分支', 'en-US': 'Fork from here', 'ru-RU': 'Ветвить отсюда' },

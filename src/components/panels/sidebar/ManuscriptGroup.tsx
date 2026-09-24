@@ -221,7 +221,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                   </span>
                   {/* 单章导出按钮 — hover 时显示 */}
                   <button
-                    className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 hover:bg-[var(--color-hover)]"
+                    className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                     style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                     title={t('export.singleExportTip')}
                     onClick={(e) => { e.stopPropagation(); openSingleExport(chapterNum) }}

@@ -241,7 +241,7 @@ function TemplateItem({
     >
       {/* 折叠头部 */}
       <button
-        className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover)] outline-none focus:outline-none"
+        className="w-full flex items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-[var(--color-hover)] outline-none focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-accent)]"
         onClick={onToggle}
       >
         {isExpanded ? (
@@ -288,7 +288,7 @@ function TemplateItem({
                   key={varName}
                   onClick={() => insertVariable(varName)}
                   title={descText}
-                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus:outline-none"
+                  className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-[0.68rem] transition-colors hover:bg-[var(--color-accent)] hover:text-white outline-none focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
                   style={{
                     backgroundColor: 'var(--color-hover)',
                     color: 'var(--color-text-secondary)',

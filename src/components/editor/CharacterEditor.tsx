@@ -732,7 +732,7 @@ function StructuredRelations({
               <span className="text-[0.65rem] opacity-60">{relTypes[r.type] || r.type}</span>
               {r.label && r.label !== r.type && <span className="text-[0.65rem] opacity-40">· {r.label}</span>}
               <button
-                className="ml-0.5 opacity-0 group-hover:opacity-100 hover:text-[var(--color-error)] transition-all"
+                className="ml-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:text-[var(--color-error)] transition-all"
                 onClick={() => removeRelation(r.target)}
                 type="button"
               >

@@ -9,6 +9,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { useUsageStore } from '../../stores/usage-store'
 import { useThemeStore } from '../../stores/theme-store'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
 import type { ModelProfile } from '../../shared/ipc-channels'
@@ -116,6 +117,7 @@ function TemperatureControl({
   const tempMenuRef = useFloatingPosition<HTMLDivElement>(panelRef, open, { placement: 'above', align: 'end' })
 
   useOutsideClick(panelRef, () => setOpen(false), open)
+  useEscapeKey(() => setOpen(false), open)
 
   // 打开面板时同步当前模型温度（保存成功后 loadModels 刷新引用）
   const handleToggle = () => {

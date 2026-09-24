@@ -17,6 +17,7 @@ import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { ModelProfile } from '../../../shared/ipc-channels'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 import SlashCommandMenu from './SlashCommandMenu'
@@ -207,6 +208,11 @@ export default function AgentInputBox() {
   useOutsideClick(modeRef, () => setShowModeMenu(false), showModeMenu)
   useOutsideClick(modelRef, () => setShowModelMenu(false), showModelMenu)
   useOutsideClick(filePickerRef, () => setShowFilePicker(false), showFilePicker)
+  // Esc 与点击外部成对：四个自绘浮层此前只有后者（同应用内 Radix 系/右键菜单/气泡菜单都有 Esc）
+  useEscapeKey(() => setShowContextMenu(false), showContextMenu)
+  useEscapeKey(() => setShowModeMenu(false), showModeMenu)
+  useEscapeKey(() => setShowModelMenu(false), showModelMenu)
+  useEscapeKey(() => setShowFilePicker(false), showFilePicker)
 
   /** 可视化选择文件后追加 "@路径 " 到输入框（与 @ 提及同解析/预取链路） */
   const handleFileSelect = useCallback((path: string) => {
@@ -250,7 +256,10 @@ export default function AgentInputBox() {
 
   return (
     <div
-      className="relative flex flex-col gap-0 p-1.5"
+      // focus-within：textarea 自身写了 outline-none（去掉默认环以避免与外框叠成双层），
+      // 但此前**没有任何替代焦点样式** → 键盘用户看不到焦点落在 AI 主输入框（全应用最主要的输入入口）。
+      // 焦点落到内部任意元素时，把容器边框点亮。
+      className="relative flex flex-col gap-0 p-1.5 transition-colors focus-within:border-[var(--color-accent)]"
       style={{
         backgroundColor: 'var(--color-hover)',
         border: '1px solid var(--color-border)',
