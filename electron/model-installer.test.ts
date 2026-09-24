@@ -150,6 +150,20 @@ describe('installModel', () => {
     expect(usedPaths).toContain('proxy')
   })
 
+  it('探测对象是「最大的 layer」（权重），不是 config（回归：拿 config 测速会让选路退化成随机）', async () => {
+    const rangedUrls: string[] = []
+    deps.transport = makeTransport({
+      onRequest: (url, _path, headers) => { if (headers?.Range) rangedUrls.push(url) },
+    })
+
+    await installModel(deps, { name: MODEL })
+
+    // 只有探测会带 Range（首次下载 written=0 不发 Range）
+    expect(rangedUrls.length).toBeGreaterThan(0)
+    expect(rangedUrls.every((u) => u.includes(sha(WEIGHT_BLOB)))).toBe(true)
+    expect(rangedUrls.some((u) => u.includes(sha(CONFIG_BLOB)))).toBe(false)
+  })
+
   it('进度上报带上当前路径；配置了代理时两条候选都会被探测', async () => {
     const probed = new Set<string>()
     const seen = new Set<string>()

@@ -135,8 +135,14 @@ export async function installModel(deps: InstallDeps, opts: InstallOptions): Pro
 
   // ===== 测速选路 =====
   // 串行而非并行：并发探测会互相抢带宽，测出来的排序是「两条路同时跑」的假象
+  //
+  // ⚠️ 探测对象必须是**最大的那个 layer**（真实权重）。2026-09-25 真机实测踩坑：
+  // 原先用 `layers[0]`，而它是 config 层（337 字节的 JSON）——2 MiB 的 Range 请求只拿到
+  // 337 字节就结束，换算出的「速率」是个位数字节/秒（实测 direct=275、proxy=142），
+  // **排序退化成随机**，选路形同虚设。
+  const heaviest = layers.reduce((a, b) => (b.size > a.size ? b : a))
   const probes: PathProbe[] = []
-  const probeTarget = registryBlobUrl(opts.name, layers[0].digest)
+  const probeTarget = registryBlobUrl(opts.name, heaviest.digest)
   for (const path of candidates) {
     probes.push({ path, bytesPerSec: await probePath(deps.transport, probeTarget, path) })
   }
