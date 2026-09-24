@@ -18,7 +18,8 @@
     "better-sqlite3": "^12.8.0",
     "electron-updater": "^6.8.9",
     "flatbuffers": "^25.9.23",
-    "jieba-wasm": "^2.4.0"
+    "jieba-wasm": "^2.4.0",
+    "undici": "^8.9.0"
   },
   "scripts": {
     "dev": "node scripts/dev-utf8.cjs && vite",

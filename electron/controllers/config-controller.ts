@@ -7,6 +7,7 @@ import { safeErrorMessage } from '../utils/error-utils'
 import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
 import { GlobalConfig, type LogEnvMode, type LogFileInfo } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
+import { refreshOutboundProxy } from '../net/proxy-fetch'
 
 /** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
 const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {
@@ -52,6 +53,9 @@ export function registerConfigController() {
       const existing = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       const updated = { ...existing, ...config }
       writeJsonFile(GLOBAL_CONFIG_PATH, updated)
+      // 代理配置经此通道写入 → 立即同步出站链路，用户改完设置**下一次请求**即生效
+      // （否则要等下一次 LLM 调用触发 applyProxyConfig，Embedding 路径会有一段用旧代理）
+      refreshOutboundProxy()
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }

@@ -10,6 +10,7 @@
 
 import { t } from '../src/shared/locale'
 import { buildOpenAIUrl } from './llm/url-utils'
+import { proxyFetch } from './net/proxy-fetch'
 
 /** ⚠️ P2 修复：查询向量 LRU 缓存——RAG 是每次章节写作/对话的必经路径，同一查询重复向量化
  *  （此前每次检索都发一次 Embedding API 请求，无缓存） */
@@ -39,7 +40,7 @@ export function fetchWithTimeout(
     }, timeoutMs)
   })
   return Promise.race([
-    fetch(url, { ...init, signal: controller.signal }),
+    proxyFetch(url, { ...init, signal: controller.signal }),
     timeoutPromise,
   ]).finally(() => {
     if (timer) clearTimeout(timer)

@@ -9,6 +9,7 @@ import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-co
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { guardedHandle } from '../security/ipc-guard'
+import { refreshOutboundProxy } from '../net/proxy-fetch'
 
 const activeStreams = new Map<string, AbortController>()
 
@@ -64,7 +65,19 @@ function resolveMaxTokens(requested: number | undefined, model: ModelProfile): n
   return clamped
 }
 
+/**
+ * 同步代理配置。**两条链路都要更新，别只做一半**：
+ *
+ * 1. `refreshOutboundProxy()` —— 主进程**自己的**出站请求（LLM/Embedding/开发者 API）。
+ *    这是 2026-09-25 补的：此前只设环境变量，而主进程 `globalThis.fetch` 是 Node undici，
+ *    **不读**代理环境变量（除非进程启动时就带 `NODE_USE_ENV_PROXY=1`）——实测把 HTTPS_PROXY
+ *    指向死端口，请求照样 200。即「用户配了代理，应用自己的请求一直直连」。
+ * 2. 下面那组 `process.env.*` —— 保留，它服务的是**子进程**：`mcp-manager` 用
+ *    `env: { ...process.env }` 拉起 MCP 服务器，子进程（npx 下载的第三方工具）会继承它。
+ *    对主进程自身无效，别指望。
+ */
 function applyProxyConfig() {
+  refreshOutboundProxy()
   try {
     const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
     if (config.proxy?.enabled && config.proxy.host) {
@@ -100,6 +113,9 @@ function restoreConcurrencyConfig() {
 
 export function registerLLMController() {
   restoreConcurrencyConfig()
+  // 启动即同步一次代理：Embedding / 健康检查可能在任何 LLM 调用**之前**发生，
+  // 不能只依赖 applyProxyConfig 那几处「LLM 操作前」的调用点
+  applyProxyConfig()
 
   guardedHandle('llm:generate', async (_event, request: { modelId: string; messages: Array<{ role: string; content: string }>; temperature?: number; maxTokens?: number; responseFormat?: { type: string }; thinking?: boolean; priority?: number }) => {
     return llmConcurrencyController.execute(

@@ -14,6 +14,7 @@ import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { guardedHandle } from '../security/ipc-guard'
+import { proxyFetch } from '../net/proxy-fetch'
 
 // ===== 类型 =====
 
@@ -90,7 +91,7 @@ async function checkLLMConnectivity(baseUrl: string, apiKey: string): Promise<He
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 5000)
 
-    const res = await fetch(baseUrl.replace(/\/$/, '') + '/v1/models', {
+    const res = await proxyFetch(baseUrl.replace(/\/$/, '') + '/v1/models', {
       headers: { 'Authorization': `Bearer ${apiKey}` },
       signal: controller.signal,
     })

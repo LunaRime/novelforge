@@ -5,6 +5,7 @@ import { buildOpenAIUrl } from './url-utils'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
+import { proxyFetch } from '../net/proxy-fetch'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -37,7 +38,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (opts.responseFormat) body.response_format = opts.responseFormat
 
-      const res = await fetch(url, {
+      const res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -120,7 +121,7 @@ export class OpenAIProvider implements ILLMProvider {
 
       if (opts.responseFormat) body.response_format = opts.responseFormat
 
-      const res = await fetch(url, {
+      const res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

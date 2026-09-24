@@ -4,6 +4,7 @@ import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
+import { proxyFetch } from '../net/proxy-fetch'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -73,7 +74,7 @@ export class GeminiProvider implements ILLMProvider {
         body.systemInstruction = { parts: [{ text: systemInstruction }] }
       }
 
-      const res = await fetch(url, {
+      const res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -147,7 +148,7 @@ export class GeminiProvider implements ILLMProvider {
         body.systemInstruction = { parts: [{ text: systemInstruction }] }
       }
 
-      const res = await fetch(url, {
+      const res = await proxyFetch(url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

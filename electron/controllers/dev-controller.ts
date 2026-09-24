@@ -18,6 +18,7 @@ import { t } from '../../src/shared/locale'
 import { isValidHttpUrl, isValidRelativePath, buildDevApiUrl, truncateResponse } from '../utils/dev-api-utils'
 import type { DevApiRequest, DevApiResponse, GlobalConfig } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
+import { proxyFetch } from '../net/proxy-fetch'
 
 /** 响应体最大字节数（1MB，超出截断） */
 const MAX_RESPONSE_BYTES = 1024 * 1024
@@ -72,7 +73,7 @@ async function invokeDevApi(req: DevApiRequest, baseUrlOverride?: string): Promi
   const timer = setTimeout(() => controller.abort(), timeoutMs)
 
   try {
-    const res = await fetch(url, {
+    const res = await proxyFetch(url, {
       method,
       headers: dev?.headers ?? {},
       body: (method === 'GET' || method === 'DELETE') ? undefined : (req.body ?? undefined),
