@@ -85,9 +85,11 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     expect(container.textContent).toContain('shared.md')
     expect(container.textContent).toContain('待重建') // shared stale 徽标
 
-    // 行点击 → memory:read（取最内层匹配 div = 可点击行）
-    const rowDivs = [...container.querySelectorAll('div')].filter(d => d.textContent?.includes('book-state.md'))
-    const row = rowDivs[rowDivs.length - 1]!
+    // 行点击 → memory:read（取行主按钮 = 可点击层）
+    // 2026-09-25 行重构：行点击从 `<div onClick>` 移到内层主 `<button>`（键盘可达），
+    // 故此处改取「文本含文件名的按钮」（重建/删除是纯图标按钮，textContent 不含文件名）
+    const rowButtons = [...container.querySelectorAll('button')].filter(b => b.textContent?.includes('book-state.md'))
+    const row = rowButtons[rowButtons.length - 1]!
     act(() => { row.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
     const invoke = (window.velaAPI.invoke as ReturnType<typeof vi.fn>)

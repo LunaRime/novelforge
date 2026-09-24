@@ -273,55 +273,63 @@ function CharItem({ char: c, selected, onClick }: {
   return (
     <div
       className={cn(
-        'px-2.5 py-1.5 rounded-md text-xs cursor-pointer mb-0.5 transition-colors',
+        'px-2.5 py-1.5 rounded-md text-xs mb-0.5 transition-colors',
         selected
           ? 'bg-[var(--color-active)] text-[var(--color-text)]'
           : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
       )}
-      onClick={onClick}
     >
-      <div className="flex items-center gap-1">
-        <span className="font-medium truncate">{c.name || t('character.unnamed')}</span>
-        {/* P1-6：生命周期状态徽标（退场/死亡角色列表可见，编辑器中可切换） */}
-        {c.status && c.status !== 'active' && (
-          <span
-            className="text-[0.55rem] px-1 rounded flex-shrink-0"
-            style={{
-              backgroundColor: c.status === 'dead' ? 'rgba(var(--color-error-rgb),0.15)' : 'var(--color-hover)',
-              color: c.status === 'dead' ? 'var(--color-error)' : 'var(--color-text-muted)',
-            }}
-          >
-            {c.status === 'dead' ? t('character.statusDead') : t('character.statusDeparted')}
-          </span>
-        )}
-        {c.currentState?.updatedAtChapter ? (
-          <span className="text-[0.6rem] opacity-40 ml-auto flex-shrink-0">
-            {t('chapter.nLabel').replace('{n}', String(c.currentState.updatedAtChapter))}
-          </span>
-        ) : null}
-      </div>
-      <div className="text-[0.7rem] mt-0.5 opacity-60 flex items-center gap-1.5">
-        <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
-        {tier === 1 && chaps.length > 0 && (
-          <span className="opacity-50">· {chapsDisplay}</span>
-        )}
-      </div>
-      {tags.length > 0 && (
-        <div className="flex gap-1 mt-1 flex-wrap">
-          {tags.slice(0, 3).map(tag => (
+      {/* 2026-09-25 重构：选中此前在 `<div onClick>` 上 —— 键盘完全够不到。
+          本行是多行块（姓名行 / 角色行 / 标签行纵向排列），故用 block w-full 而非参照实现的
+          flex 行布局，保持原有纵向堆叠与整宽热区；行内无其他按钮，纯转向。 */}
+      <button
+        type="button"
+        onClick={onClick}
+        className="block w-full text-left enabled:cursor-pointer"
+      >
+        <div className="flex items-center gap-1">
+          <span className="font-medium truncate">{c.name || t('character.unnamed')}</span>
+          {/* P1-6：生命周期状态徽标（退场/死亡角色列表可见，编辑器中可切换） */}
+          {c.status && c.status !== 'active' && (
             <span
-              key={tag}
-              className="text-[0.6rem] px-1 rounded"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+              className="text-[0.55rem] px-1 rounded flex-shrink-0"
+              style={{
+                backgroundColor: c.status === 'dead' ? 'rgba(var(--color-error-rgb),0.15)' : 'var(--color-hover)',
+                color: c.status === 'dead' ? 'var(--color-error)' : 'var(--color-text-muted)',
+              }}
             >
-              #{tag}
+              {c.status === 'dead' ? t('character.statusDead') : t('character.statusDeparted')}
             </span>
-          ))}
-          {tags.length > 3 && (
-            <span className="text-[0.6rem] opacity-40">+{tags.length - 3}</span>
+          )}
+          {c.currentState?.updatedAtChapter ? (
+            <span className="text-[0.6rem] opacity-40 ml-auto flex-shrink-0">
+              {t('chapter.nLabel').replace('{n}', String(c.currentState.updatedAtChapter))}
+            </span>
+          ) : null}
+        </div>
+        <div className="text-[0.7rem] mt-0.5 opacity-60 flex items-center gap-1.5">
+          <span>{t(ROLE_LABEL_KEYS[c.role] ?? 'character.roleLabel.supporting')}</span>
+          {tier === 1 && chaps.length > 0 && (
+            <span className="opacity-50">· {chapsDisplay}</span>
           )}
         </div>
-      )}
+        {tags.length > 0 && (
+          <div className="flex gap-1 mt-1 flex-wrap">
+            {tags.slice(0, 3).map(tag => (
+              <span
+                key={tag}
+                className="text-[0.6rem] px-1 rounded"
+                style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+              >
+                #{tag}
+              </span>
+            ))}
+            {tags.length > 3 && (
+              <span className="text-[0.6rem] opacity-40">+{tags.length - 3}</span>
+            )}
+          </div>
+        )}
+      </button>
     </div>
   )
 }

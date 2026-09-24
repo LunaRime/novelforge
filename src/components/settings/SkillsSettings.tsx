@@ -20,6 +20,7 @@ export default function SkillsSettings() {
   const { t } = useTranslation()
   const [skills, setSkills] = useState<SkillItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
 
   // 加载技能列表（初始挂载；导入/删除后手动调用 loadSkills 刷新）
   const loadSkills = useCallback(async () => {
@@ -27,8 +28,10 @@ export default function SkillsSettings() {
     try {
       const list = await ipc.invoke('skill:list')
       setSkills(list)
+      setLoadFailed(false)
     } catch (e) {
       console.warn('[SkillsSettings] 加载技能失败:', e)
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -37,9 +40,10 @@ export default function SkillsSettings() {
   useEffect(() => {
     let cancelled = false
     ipc.invoke('skill:list').then(list => {
-      if (!cancelled) setSkills(list)
+      if (!cancelled) { setSkills(list); setLoadFailed(false) }
     }).catch(e => {
       console.warn('[SkillsSettings] 加载技能失败:', e)
+      if (!cancelled) setLoadFailed(true)
     }).finally(() => {
       if (!cancelled) setLoading(false)
     })
@@ -96,6 +100,19 @@ export default function SkillsSettings() {
         {loading ? (
           <div className="text-center py-8 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>
             {t('status.loading')}
+          </div>
+        ) : loadFailed ? (
+          /* 错误态与空态必须分开：失败渲染成「暂无技能」会让用户以为本来就没有 */
+          <div className="text-center py-10 text-xs space-y-2">
+            <div style={{ color: 'var(--color-error)' }}>{t('common.loadFailed')}</div>
+            <button
+              type="button"
+              className="px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              onClick={() => void loadSkills()}
+            >
+              {t('action.retry')}
+            </button>
           </div>
         ) : skills.length === 0 ? (
           <div className="text-center py-10 text-xs opacity-40" style={{ color: 'var(--color-text-muted)' }}>

@@ -189,9 +189,9 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
               return (
                 <div
                   key={f.path}
-                  className="tree-item gap-1.5 cursor-pointer group"
-                  style={{ paddingLeft: 30 }}
-                  onClick={() => openChapterFile(f.path, displayName)}
+                  className="tree-item gap-1.5 group"
+                  // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
+                  style={{ paddingLeft: 0, paddingRight: 8 }}
                   onContextMenu={e => showSidebarMenu([
                     {
                       key: 'open',
@@ -215,16 +215,27 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
                   ], e)}
                   title={t('manuscript.tooltip').replace('{name}', displayName)}
                 >
-                  <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                  <span className="text-sm truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>
-                    {displayName}
-                  </span>
-                  {/* 单章导出按钮 — hover 时显示 */}
+                  {/* 2026-09-25 重构：章节点开此前在 `<div onClick>` 上 —— 键盘完全够不到，
+                      而它内部**本来就含**单章导出按钮，外层直接换 `<button>` 会 button 嵌 button。
+                      做法：文件图标 + 章节名包进主按钮，导出按钮降为兄弟节点
+                      （不再需要 stopPropagation，外层已无点击处理器）。 */}
+                  <button
+                    type="button"
+                    onClick={() => openChapterFile(f.path, displayName)}
+                    className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+                    style={{ paddingLeft: 30 }}
+                  >
+                    <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+                    <span className="text-sm truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>
+                      {displayName}
+                    </span>
+                  </button>
+                  {/* 单章导出按钮 — hover/focus-within 时显示（主按钮获得焦点同样能唤出） */}
                   <button
                     className="flex items-center justify-center rounded-sm transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
                     style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
                     title={t('export.singleExportTip')}
-                    onClick={(e) => { e.stopPropagation(); openSingleExport(chapterNum) }}
+                    onClick={() => openSingleExport(chapterNum)}
                     type="button"
                   >
                     <Download size={12} />

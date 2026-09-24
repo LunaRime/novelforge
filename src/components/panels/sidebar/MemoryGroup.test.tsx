@@ -41,10 +41,15 @@ function render(ui: React.ReactElement): { container: HTMLElement; root: Root } 
   return { container, root }
 }
 
-/** 取文件行的可点击层（最内层含文件名的 div，与既有用例同口径） */
+/**
+ * 取文件行的可点击层。
+ * 2026-09-25 行重构：行点击从 `<div onClick>`（键盘完全够不到）移到内层主 `<button>`，
+ * 重建/删除按钮降为兄弟节点 —— 故此处取「文本含文件名的按钮」即行主按钮
+ * （重建/删除是纯图标按钮，textContent 不含文件名）。
+ */
 function rowOf(container: HTMLElement, file: string): HTMLElement {
-  const divs = [...container.querySelectorAll('div')].filter(d => d.textContent?.includes(file))
-  return divs[divs.length - 1] as HTMLElement
+  const btns = [...container.querySelectorAll('button')].filter(b => b.textContent?.includes(file))
+  return btns[btns.length - 1] as HTMLElement
 }
 
 function buttonsByTitle(container: HTMLElement, title: string): HTMLButtonElement[] {
@@ -89,6 +94,41 @@ describe('MemoryGroup — 侧栏记忆导航（点击开编辑器标签页）', 
     expect(st.tabs[0].content).toBe(CHAPTERS_BODY)
     expect(st.activeTabId).toBe('vela://memory/chapters-1-3.md')
     expect(invoke).toHaveBeenCalledWith('memory:read', 'chapters-1-3.md')
+    act(() => { root.unmount() })
+  })
+
+  it('行键盘可达：主按钮是 <button>，操作按钮降为兄弟，且无 button 嵌套 button（2026-09-25 重构契约）', async () => {
+    const { container, root } = render(<MemoryGroup projectPath="/mock/proj" />)
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+
+    // 1) 行主按钮可由 querySelectorAll('button') 找到，且可聚焦（键盘 Tab/Enter 可达）
+    const main = rowOf(container, 'chapters-1-3.md') as HTMLButtonElement
+    expect(main.tagName).toBe('BUTTON')
+    expect(main.disabled).toBe(false)
+    main.focus()
+    expect(document.activeElement).toBe(main)
+
+    // 2) 硬约束：不允许 button 嵌 button（非法 HTML + 焦点被外层吞掉）
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
+
+    // 3) 重建/删除降为兄弟节点：行容器内共 3 个按钮，且它们不在主按钮内
+    const rowBox = main.parentElement as HTMLElement
+    const rowButtons = [...rowBox.querySelectorAll('button')]
+    expect(rowButtons).toHaveLength(3)
+    expect(main.contains(rowButtons[1])).toBe(false)
+    expect(main.contains(rowButtons[2])).toBe(false)
+
+    // 4) 行容器本身不再有点击处理器：点击外层 div 不打开标签页
+    act(() => { rowBox.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+    expect(useEditorStore.getState().tabs).toHaveLength(0)
+
+    // 5) 点击主按钮触发原回调（打开编辑器标签页）
+    act(() => { main.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+    const st = useEditorStore.getState()
+    expect(st.tabs).toHaveLength(1)
+    expect(st.tabs[0]).toMatchObject({ type: 'memory', filePath: 'vela://memory/chapters-1-3.md' })
     act(() => { root.unmount() })
   })
 

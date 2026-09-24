@@ -210,23 +210,33 @@ export function LeafItem({
 }) {
   return (
     <div
-      className="tree-item gap-1.5 cursor-pointer select-none"
-      style={{ paddingLeft: 10 }}
-      onClick={onClick}
+      className="tree-item gap-1.5 select-none"
+      // 左缩进交给主按钮（.tree-item 自带 `cursor-pointer` 与 px-2）：这样手型光标
+      // 与真实可点区完全重合，且缩进区仍然可点。右侧保留 8px 以免内容贴边。
+      style={{ paddingLeft: 0, paddingRight: 8 }}
       onContextMenu={onContextMenu}
       title={desc}
     >
-      <span style={{ width: 12, flexShrink: 0 }} />
-      <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(iconName, 14)}</span>
-      <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{label}</span>
-      {badge && (
-        <span
-          className="text-[0.7rem] flex-shrink-0 ml-1"
-          style={{ color: badgeColor || (badgeDone ? 'var(--color-success)' : 'var(--color-text-muted)') }}
-        >
-          {badge}
-        </span>
-      )}
+      {/* 2026-09-25：点击移到内层按钮 → 键盘可达（原为 <div onClick>，完全够不到） */}
+      <button
+        type="button"
+        onClick={onClick}
+        disabled={!onClick}
+        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+        style={{ paddingLeft: 10 }}
+      >
+        <span style={{ width: 12, flexShrink: 0 }} />
+        <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(iconName, 14)}</span>
+        <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{label}</span>
+        {badge && (
+          <span
+            className="text-[0.7rem] flex-shrink-0 ml-1"
+            style={{ color: badgeColor || (badgeDone ? 'var(--color-success)' : 'var(--color-text-muted)') }}
+          >
+            {badge}
+          </span>
+        )}
+      </button>
     </div>
   )
 }

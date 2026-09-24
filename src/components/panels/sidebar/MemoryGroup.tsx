@@ -16,7 +16,7 @@
  * 数据：useMemoryStore（memory:list / memory:read / memory:mark-stale）
  */
 import { useEffect, useState } from 'react'
-import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Trash2 } from 'lucide-react'
+import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Trash2, AlertCircle } from 'lucide-react'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { ipc } from '../../../services/ipc-client'
@@ -36,7 +36,7 @@ interface Props {
 
 export default function MemoryGroup({ projectPath }: Props) {
   const { t } = useTranslation()
-  const { files, loading, load, refresh } = useMemoryStore()
+  const { files, loading, loadFailed, load, refresh } = useMemoryStore()
   const { handleRebuild } = useMemoryRebuild()
   const [open, setOpen] = useState(true)
 
@@ -87,7 +87,21 @@ export default function MemoryGroup({ projectPath }: Props) {
         </button>
       </div>
 
-      {!open ? null : files.length === 0 ? (
+      {!open ? null : loadFailed ? (
+        /* 错误态与空态必须分开：失败渲染成「暂无记忆」会让用户以为本来就没有 */
+        <div className="flex items-center gap-1.5 py-1 text-[0.65rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <AlertCircle size={11} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+          <span>{t('common.loadFailed')}</span>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="ml-auto px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+          >
+            {t('action.retry')}
+          </button>
+        </div>
+      ) : files.length === 0 ? (
         <div className="text-[0.65rem] py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('memory.empty')}
         </div>
@@ -178,34 +192,43 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
 
   return (
     <div className="rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+      {/* 2026-09-25 重构：行点击此前在 `<div onClick>` 上 —— 键盘完全够不到，
+          而它内部**本来就含**重建/删除按钮，外层直接换 `<button>` 会 button 嵌 button。
+          做法：kind 徽标 + 文件名 + stale 徽标包进主按钮，重建/删除降为兄弟节点
+          （不再需要 stopPropagation，外层已无点击处理器）。 */}
       <div
-        className="flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer select-none hover:bg-[var(--color-hover)]"
+        className="flex items-center gap-1.5 px-1.5 py-1.5 select-none hover:bg-[var(--color-hover)]"
         title={meta.file}
-        onClick={() => void openInEditor()}
       >
-        <span
-          className="text-[0.6rem] px-1 py-0.5 rounded flex-shrink-0"
-          style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
+        <button
+          type="button"
+          onClick={() => void openInEditor()}
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
         >
-          {kindLabel}
-        </span>
-        <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text)' }}>
-          {meta.file}
-        </span>
-        {meta.stale && (
           <span
             className="text-[0.6rem] px-1 py-0.5 rounded flex-shrink-0"
-            style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-warning)' }}
+            style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}
           >
-            {t('memory.stale')}
+            {kindLabel}
           </span>
-        )}
+          <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text)' }}>
+            {meta.file}
+          </span>
+          {meta.stale && (
+            <span
+              className="text-[0.6rem] px-1 py-0.5 rounded flex-shrink-0"
+              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-warning)' }}
+            >
+              {t('memory.stale')}
+            </span>
+          )}
+        </button>
         <button
           type="button"
           className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
           style={{ color: 'var(--color-text-muted)' }}
           title={t('memory.rebuild')}
-          onClick={(e) => { e.stopPropagation(); onRebuild() }}
+          onClick={() => onRebuild()}
         >
           <RotateCw size={10} />
         </button>
@@ -214,7 +237,7 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
           className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
           style={{ color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
-          onClick={(e) => { e.stopPropagation(); void handleDelete() }}
+          onClick={() => void handleDelete()}
         >
           <Trash2 size={10} />
         </button>

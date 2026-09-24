@@ -109,27 +109,35 @@ function DraftChapterGroup({
 
   return (
     <div>
-      {/* 章节行 */}
+      {/* 章节行 — 2026-09-25 重构：展开/折叠此前在 `<div onClick>` 上 —— 键盘完全够不到。
+          做法：折叠箭头 + 状态图标 + 章节名 + 版本数包进主按钮（行内无其他按钮，纯转向）。 */}
       <div
-        className="tree-item gap-1.5 cursor-pointer select-none"
-        style={{ paddingLeft: 26 }}
-        onClick={() => setOpen(v => !v)}
+        className="tree-item gap-1.5 select-none"
+        // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
+        style={{ paddingLeft: 0, paddingRight: 8 }}
         title={displayTitle}
       >
-        {open
-          ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-        }
-        {hasFinalized
-          ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-          : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
-        }
-        <span className="text-sm flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
-          {displayTitle}
-        </span>
-        <span className="ml-auto text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {t('draftbox.revisionCount').replace('{n}', String(activeDrafts.length))}
-        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+          style={{ paddingLeft: 26 }}
+        >
+          {open
+            ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          }
+          {hasFinalized
+            ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
+            : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
+          }
+          <span className="text-sm flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
+            {displayTitle}
+          </span>
+          <span className="ml-auto text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {t('draftbox.revisionCount').replace('{n}', String(activeDrafts.length))}
+          </span>
+        </button>
       </div>
 
       {/* 草稿列表 */}
@@ -146,13 +154,19 @@ function DraftChapterGroup({
           {/* 显示归档草稿的切换按钮 */}
           {archivedDrafts.length > 0 && (
             <div
-              className="flex items-center gap-1 cursor-pointer select-none"
+              className="flex items-center gap-1 select-none"
               style={{ paddingLeft: 54 }}
-              onClick={() => setShowArchived(v => !v)}
             >
-              <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
-                {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
-              </span>
+              {/* 2026-09-25 重构：切换此前在 `<div onClick>` 上 —— 键盘完全够不到。 */}
+              <button
+                type="button"
+                onClick={() => setShowArchived(v => !v)}
+                className="flex items-center gap-1 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+              >
+                <span className="text-[0.7rem]" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
+                  {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
+                </span>
+              </button>
             </div>
           )}
           {showArchived && archivedDrafts.map(draft => (
@@ -209,7 +223,7 @@ function DraftItem({
 
   return (
     <div
-      className="relative flex items-center gap-1.5 cursor-pointer hover:bg-[var(--color-hover)]"
+      className="relative flex items-center gap-1.5 hover:bg-[var(--color-hover)]"
       style={{
         paddingLeft: 50,
         paddingRight: 8,
@@ -217,7 +231,6 @@ function DraftItem({
         paddingBottom: 3,
         opacity: archived ? 0.45 : 1,
       }}
-      onClick={openDraft}
       onContextMenu={e => showSidebarMenu([
         {
           key: 'open',
@@ -247,21 +260,29 @@ function DraftItem({
         .replace('{version}', String(draft.version))
         .replace('{status}', t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status)}
     >
-      <FileText size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-      <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
-        {t('draftbox.label').replace('{version}', String(draft.version))}
-      </span>
-      {/* 状态标签（始终显示） */}
-      <span
-        className="text-[0.7rem] flex-shrink-0"
-        style={{ color: DRAFT_STATUS_COLOR[draft.status] || 'var(--color-text-muted)' }}
+      {/* 2026-09-25 重构：打开草稿此前在 `<div onClick>` 上 —— 键盘完全够不到。
+          做法：文件图标 + 版本名 + 状态标签 + 定稿图标包进主按钮（行内无其他按钮，纯转向）。 */}
+      <button
+        type="button"
+        onClick={openDraft}
+        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
       >
-        {t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status}
-      </span>
-      {/* 已定稿图标 */}
-      {isFinalized && (
-        <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-      )}
+        <FileText size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+        <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
+          {t('draftbox.label').replace('{version}', String(draft.version))}
+        </span>
+        {/* 状态标签（始终显示） */}
+        <span
+          className="text-[0.7rem] flex-shrink-0"
+          style={{ color: DRAFT_STATUS_COLOR[draft.status] || 'var(--color-text-muted)' }}
+        >
+          {t(DRAFT_STATUS_LABEL_KEY[draft.status] as TextKey) || draft.status}
+        </span>
+        {/* 已定稿图标 */}
+        {isFinalized && (
+          <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+        )}
+      </button>
     </div>
   )
 }

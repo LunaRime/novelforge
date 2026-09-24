@@ -51,19 +51,28 @@ export default function SidebarGroup({
       className="rounded-xl border p-2.5"
       style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
+      {/* ⚠️ 2026-09-25 重构：标题行此前是 `<div onClick>` —— 键盘完全够不到，
+          而它内部**本来就含**折叠按钮（浏览器既已可见），直接把外层换成 `<button>` 会变成
+          button 嵌 button（非法 HTML + 焦点被外层吞掉）。
+          做法：把「图标 + 标题」包进一个全宽按钮（flex-1），计数与操作类按钮**降为兄弟节点**。 */}
       <div
         className="flex items-center gap-1.5"
-        style={{ cursor: onTitleClick ? 'pointer' : undefined }}
-        onClick={onTitleClick}
         onContextMenu={onContextMenu}
         title={titleHint}
       >
-        <span style={{ color: 'var(--color-accent)', flexShrink: 0, display: 'flex' }}>{icon}</span>
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-          {title}
-        </span>
+        <button
+          type="button"
+          onClick={onTitleClick}
+          disabled={!onTitleClick}
+          className="flex items-center gap-1.5 min-w-0 flex-1 text-left enabled:cursor-pointer"
+        >
+          <span style={{ color: 'var(--color-accent)', flexShrink: 0, display: 'flex' }}>{icon}</span>
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {title}
+          </span>
+        </button>
         {count !== undefined && (
-          <span className="ml-auto text-[0.7rem]" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="text-[0.7rem] flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             {count}
           </span>
         )}
@@ -71,7 +80,7 @@ export default function SidebarGroup({
         {collapsible && (
           <button
             type="button"
-            onClick={(e) => { e.stopPropagation(); setOpen(v => !v) }}
+            onClick={() => setOpen(v => !v)}
             className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
             style={{ color: 'var(--color-text-muted)' }}
             title={open ? t('action.close') : t('action.open')}

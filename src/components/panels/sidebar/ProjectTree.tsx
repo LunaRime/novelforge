@@ -343,9 +343,9 @@ function ArchFileRow({
   const { t } = useTranslation()
   return (
     <div
-      className="tree-item gap-1.5 cursor-pointer select-none"
-      style={{ paddingLeft: 26 }}
-      onClick={() => openArchFile(filePath, `${f.label}`)}
+      className="tree-item gap-1.5 select-none"
+      // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
+      style={{ paddingLeft: 0, paddingRight: 8 }}
       onContextMenu={e => showSidebarMenu([
         {
           key: 'open',
@@ -363,6 +363,13 @@ function ArchFileRow({
       ], e)}
       title={f.desc}
     >
+      {/* 2026-09-25：行的点击移到内层按钮 —— 键盘可达，且行内不再需要 stopPropagation */}
+      <button
+        type="button"
+        onClick={() => openArchFile(filePath, `${f.label}`)}
+        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left cursor-pointer"
+        style={{ paddingLeft: 26 }}
+      >
       {isGenerated
         ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
         : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
@@ -379,6 +386,7 @@ function ArchFileRow({
           {t('status.pendingGen')}
         </span>
       )}
+      </button>
     </div>
   )
 }

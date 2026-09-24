@@ -11,6 +11,8 @@ import type { MemoryFileMeta } from '../services/memory/memory-codec'
 interface MemoryState {
   files: MemoryFileMeta[]
   loading: boolean
+  /** 加载失败：与「确实没有记忆文件」是两回事，列表必须分开渲染 */
+  loadFailed: boolean
   load: () => Promise<void>
   refresh: () => Promise<void>
 }
@@ -20,15 +22,18 @@ let memoryLoadSeq = 0 // loadSeq 防竞态（项目惯例）
 export const useMemoryStore = create<MemoryState>()((set) => ({
   files: [],
   loading: false,
+  loadFailed: false,
   load: async () => {
     const mySeq = ++memoryLoadSeq
     set({ loading: true })
     try {
       const files = (await ipc.invoke('memory:list')) as MemoryFileMeta[]
       if (mySeq !== memoryLoadSeq) return
-      set({ files, loading: false })
-    } catch {
-      if (mySeq === memoryLoadSeq) set({ loading: false })
+      set({ files, loading: false, loadFailed: false })
+    } catch (e) {
+      if (mySeq !== memoryLoadSeq) return
+      console.warn('[MemoryGroup] 加载记忆文件列表失败:', e)
+      set({ loading: false, loadFailed: true })
     }
   },
   refresh: async () => {

@@ -224,32 +224,41 @@ function VolumeRow({
 
   return (
     <div className="rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+      {/* 2026-09-25 重构：折叠点击此前在 `<div onClick>` 上 —— 键盘完全够不到，
+          而它内部**本来就含**编辑/删除按钮，外层直接换 `<button>` 会 button 嵌 button。
+          做法：折叠箭头 + 卷名 + 区间 + 进度包进主按钮，编辑/删除降为兄弟节点
+          （不再需要 stopPropagation，外层已无点击处理器）。 */}
       <div
-        className="flex items-center gap-1.5 px-1.5 py-1.5 cursor-pointer select-none"
-        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-1.5 px-1.5 py-1.5 select-none"
         title={volume.description || undefined}
       >
-        {open
-          ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />}
-        <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-          {volume.title
-            ? t('volume.ordinalTitle').replace('{n}', String(volume.volumeNumber)).replace('{title}', volume.title)
-            : t('volume.ordinal').replace('{n}', String(volume.volumeNumber))}
-        </span>
-        <span className="ml-auto text-[0.6rem] opacity-50 flex-shrink-0">{rangeText}</span>
-        <span
-          className="text-[0.6rem] flex-shrink-0"
-          style={{ color: doneAll ? 'var(--color-success)' : 'var(--color-text-muted)' }}
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
         >
-          {progressText}
-        </span>
+          {open
+            ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+            : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />}
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {volume.title
+              ? t('volume.ordinalTitle').replace('{n}', String(volume.volumeNumber)).replace('{title}', volume.title)
+              : t('volume.ordinal').replace('{n}', String(volume.volumeNumber))}
+          </span>
+          <span className="ml-auto text-[0.6rem] opacity-50 flex-shrink-0">{rangeText}</span>
+          <span
+            className="text-[0.6rem] flex-shrink-0"
+            style={{ color: doneAll ? 'var(--color-success)' : 'var(--color-text-muted)' }}
+          >
+            {progressText}
+          </span>
+        </button>
         <button
           type="button"
           className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
           style={{ color: 'var(--color-text-muted)' }}
           title={t('volume.editVolume')}
-          onClick={(e) => { e.stopPropagation(); onEdit() }}
+          onClick={() => onEdit()}
         >
           <Pencil size={10} />
         </button>
@@ -258,7 +267,7 @@ function VolumeRow({
           className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
           style={{ color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
-          onClick={(e) => { e.stopPropagation(); onDelete() }}
+          onClick={() => onDelete()}
         >
           <Trash2 size={10} />
         </button>

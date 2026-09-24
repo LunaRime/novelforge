@@ -10,7 +10,7 @@
  * 统计条恒定显示全局总计 + 当前范围。
  */
 import { useEffect, useState } from 'react'
-import { Activity, PenLine, RefreshCw, Loader2, Sparkles, BookOpen, Wallet } from 'lucide-react'
+import { Activity, PenLine, RefreshCw, Loader2, Sparkles, BookOpen, Wallet, AlertCircle } from 'lucide-react'
 import { getCurrentLocale, t } from '../../../shared/locale'
 import { getDailyActivity } from '../../../services/stats-service'
 import type { DailyActivityData, DailyActivityRow } from '../../../shared/ipc-channels'
@@ -45,6 +45,7 @@ export default function ActivityView() {
   const currentProject = useProjectStore(s => s.currentProject)
   const [data, setData] = useState<DailyActivityData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   /** '' = 全部项目；否则为项目路径 */
   const [selectedPath, setSelectedPath] = useState('')
   /** 视图粒度：每日（热力图）/ 每月（柱状图） */
@@ -64,9 +65,11 @@ export default function ActivityView() {
       // 一次拉取全年数据，前端按粒度/范围过滤切换（月度视图与历史查看无需重新请求）
       const result = await getDailyActivity(FETCH_DAYS, undefined, currentProject?.path)
       setData(result)
+      setLoadFailed(false)
     } catch (e) {
       console.warn('[ActivityView] 加载每日活动数据失败:', e)
       setData(null)
+      setLoadFailed(true)
     }
     setLoading(false)
   }
@@ -215,7 +218,21 @@ export default function ActivityView() {
         </div>
       </div>
 
-      {allRows.length === 0 ? (
+      {loadFailed ? (
+        /* 错误态与空态必须分开：失败渲染成「暂无活动数据」会让用户以为本来就没有 */
+        <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
+          <AlertCircle size={22} style={{ color: 'var(--color-error)' }} />
+          <span className="text-xs">{t('common.loadFailed')}</span>
+          <button
+            type="button"
+            className="px-3 py-1 rounded-lg text-xs transition-colors cursor-pointer"
+            style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+            onClick={handleRefresh}
+          >
+            {t('action.retry')}
+          </button>
+        </div>
+      ) : allRows.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
           <BookOpen size={22} style={{ opacity: 0.4 }} />
           <span className="text-xs">{t('activity.noData')}</span>

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { History, RotateCcw, ArrowLeftRight, RefreshCw } from 'lucide-react'
+import { History, RotateCcw, ArrowLeftRight, RefreshCw, AlertCircle } from 'lucide-react'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import { Button } from '../ui/Button'
@@ -27,6 +27,8 @@ export default function VersionHistory() {
   const [selectedChapter, setSelectedChapter] = useState<string | null>(null)
   const [versions, setVersions] = useState<VersionRecord[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [versionsFailed, setVersionsFailed] = useState(false)
 
   const loadChapters = useCallback(async () => {
     if (!currentProject) return
@@ -39,7 +41,8 @@ export default function VersionHistory() {
         title: c.file_name,
         status: c.status || 'draft',
       })))
-    } catch (e) { console.warn('[VersionHistory] 加载章节列表失败:', e); setChapters([]) }
+      setLoadFailed(false)
+    } catch (e) { console.warn('[VersionHistory] 加载章节列表失败:', e); setChapters([]); setLoadFailed(true) }
     setLoading(false)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentProject?.id, getChapters])
@@ -56,7 +59,8 @@ export default function VersionHistory() {
     try {
       const vers = await getChapterVersions(chapterId)
       setVersions(vers)
-    } catch (e) { console.warn('[VersionHistory] 加载版本列表失败:', e); setVersions([]) }
+      setVersionsFailed(false)
+    } catch (e) { console.warn('[VersionHistory] 加载版本列表失败:', e); setVersions([]); setVersionsFailed(true) }
   }
 
   useEffect(() => {
@@ -135,7 +139,16 @@ export default function VersionHistory() {
           </span>
         </div>
         <div className="flex-1 overflow-y-auto p-1">
-          {chapters.length === 0 ? (
+          {loadFailed ? (
+            /* 错误态与空态必须分开：失败渲染成「暂无章节数据」会让用户以为本来就没有 */
+            <div className="flex flex-col items-center gap-1.5 py-4 text-xs text-[var(--color-text-muted)]">
+              <AlertCircle size={16} style={{ color: 'var(--color-error)' }} />
+              <span>{t('common.loadFailed')}</span>
+              <Button variant="outline" size="sm" onClick={() => void loadChapters()}>
+                {t('action.retry')}
+              </Button>
+            </div>
+          ) : chapters.length === 0 ? (
             <div className="text-center text-xs text-[var(--color-text-muted)] py-4">
               暂无章节数据
             </div>
@@ -168,7 +181,16 @@ export default function VersionHistory() {
             <h3 className="text-sm font-bold text-[var(--color-text)] mb-3">
               {t('version.history')}
             </h3>
-            {versions.length === 0 ? (
+            {versionsFailed ? (
+              /* 错误态与空态必须分开：失败渲染成「无版本记录」会让用户以为本来就没有 */
+              <div className="flex flex-col items-center gap-2 py-8 text-xs text-[var(--color-text-muted)]">
+                <AlertCircle size={18} style={{ color: 'var(--color-error)' }} />
+                <span>{t('common.loadFailed')}</span>
+                <Button variant="outline" size="sm" onClick={() => void loadVersions(selectedChapter)}>
+                  {t('action.retry')}
+                </Button>
+              </div>
+            ) : versions.length === 0 ? (
               <div className="text-center text-xs text-[var(--color-text-muted)] py-8">
                 {t('version.noRecords')}
               </div>
