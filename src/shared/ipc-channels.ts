@@ -1097,12 +1097,22 @@ export interface EmbeddingEvents {
    * `.then/.catch` 合成：`error` 为原始技术串（英文），渲染层只放进可折叠「原始详情」，
    * 主文案走 `localEmbedding.pullFailed`。
    */
+  /**
+   * 智能下载（2026-09-25）新增的可选字段：`path`/`pathLabel` 是当前所用网络路径，
+   * `bytesPerSec` 是实测速率，`switchedFrom` 表示**这一帧之前刚发生过换路**（一次性标记，
+   * 附在换路后的第一帧上——独立发一帧会把 percent 冲成 0，进度条会跳回起点）。
+   * 三个字段都可选：回退到 Ollama 自身 pull 时不会带它们。
+   */
   'embedding:local-pull-progress': {
     status: string
     completed?: number
     total?: number
     percent?: number
     error?: string
+    path?: 'direct' | 'proxy'
+    pathLabel?: string
+    bytesPerSec?: number
+    switchedFrom?: string
   }
 }
 

@@ -26,6 +26,8 @@ const h = vi.hoisted(() => ({
   listOllamaModels: vi.fn(),
   pullModel: vi.fn(),
   embedLocal: vi.fn(),
+  installModel: vi.fn(),
+  createElectronTransport: vi.fn(() => ({ request: vi.fn() })),
 }))
 
 vi.mock('node:os', async (importOriginal) => {
@@ -50,6 +52,11 @@ vi.mock('../ollama-embedding', () => ({
   pullModel: h.pullModel,
   embedLocal: h.embedLocal,
 }))
+
+// 智能下载（T4 接线）：真实实现要 electron 的 net/session，且已在 T1-T3 单测覆盖；
+// 这里只验**接线契约**——成功即终结、失败必回退
+vi.mock('../model-installer', () => ({ installModel: h.installModel }))
+vi.mock('../net/electron-net-transport', () => ({ createElectronTransport: h.createElectronTransport }))
 
 // 真实 logger 会往 `~/.novelforge/logs/` 写盘（本文件 homedir 已改为临时假 home → ENOENT）
 // 且日志内容无断言 → 打桩
@@ -105,6 +112,8 @@ beforeEach(() => {
   resetTrustedWebContentsForTest()
   trustWebContents(SENDER_ID)
   fs.rmSync(h.home, { recursive: true, force: true })
+  // 缺省让智能下载失败 → 既有用例走的都是「回退 pullModel」这条路径（= 本功能上线前的行为）
+  h.installModel.mockResolvedValue({ success: false, error: 'stub: 智能下载未在本用例启用' })
 })
 
 afterEach(() => {
@@ -196,6 +205,7 @@ describe('embedding:local-pull（仅发起，立即返回 + 进度事件）', ()
     h.pullModel.mockReturnValue(pending)
 
     await expect(call('embedding:local-pull')).resolves.toEqual({ started: true })
+    await settle() // 智能下载先跑一轮（本用例里它失败）才轮到回退
     expect(h.pullModel).toHaveBeenCalledTimes(1)
     expect(h.pullModel.mock.calls[0][0]).toBe('http://localhost:11434')
     expect(h.pullModel.mock.calls[0][1]).toBe('bge-m3')
@@ -210,6 +220,7 @@ describe('embedding:local-pull（仅发起，立即返回 + 进度事件）', ()
     h.pullModel.mockReturnValue(pending)
 
     await call('embedding:local-pull')
+    await settle() // 等智能下载先失败，回退的 pullModel 已被调用
     const onProgress = captureProgressCallback()
     onProgress({ status: 'pulling manifest' })
     onProgress({ status: 'downloading', completed: 512, total: 1024, percent: 50 })
@@ -251,15 +262,21 @@ describe('embedding:local-pull（仅发起，立即返回 + 进度事件）', ()
   })
 
   it('同一 (baseUrl, model) 已在拉取中 → 第二次 { started:false }（防连点重复下载）', async () => {
-    const pending = new Promise<{ success: boolean }>(() => { /* 保持进行中 */ })
+    let release: (v: { success: boolean }) => void = () => {}
+    const pending = new Promise<{ success: boolean }>((resolve) => { release = resolve })
     h.pullModel.mockReturnValue(pending)
 
     await expect(call('embedding:local-pull')).resolves.toEqual({ started: true })
+    await settle()
 
     const second = (await call('embedding:local-pull')) as { started: boolean; error?: string }
     expect(second.started).toBe(false)
     expect(second.error).toBeTruthy()
     expect(h.pullModel).toHaveBeenCalledTimes(1) // 未重复发起
+
+    // ⚠️ 必须放行：pullsInFlight 是模块级状态，悬挂的拉取会让**后续用例**全部拿到 {started:false}
+    release({ success: true })
+    await settle()
   })
 })
 
@@ -315,5 +332,109 @@ describe('embedding:local-get-config / local-set-config（读全局配置）', (
     expect(cfg.baseUrl).toBe('http://localhost:11434') // 空串回退默认
     expect(cfg.model).toBe('bge-m3')
     expect(fs.existsSync(VELA_HOME)).toBe(true)
+  })
+})
+
+describe('embedding:local-pull（T4：智能下载 → 失败回退）', () => {
+  /** 取最近一次 installModel 的 options（用它能驱动 onProgress / onSwitch） */
+  function captureInstallOptions(): {
+    name: string
+    onProgress?: (p: Record<string, unknown>) => void
+    onSwitch?: (from: Record<string, unknown>, to: Record<string, unknown>) => void
+  } {
+    const args = h.installModel.mock.calls[h.installModel.mock.calls.length - 1] as unknown[]
+    return args[1] as ReturnType<typeof captureInstallOptions>
+  }
+
+  /** 让 installModel 挂起（下载中），返回放行函数 */
+  function holdInstall(): () => void {
+    let release: (v: unknown) => void = () => {}
+    h.installModel.mockReturnValue(new Promise((resolve) => { release = resolve }))
+    return () => release({ success: true })
+  }
+
+  it('智能下载成功 → 只发 success 帧，且不回退 pullModel', async () => {
+    h.installModel.mockResolvedValue({ success: true, usedPath: { id: 'proxy', label: '127.0.0.1:7897' } })
+
+    await call('embedding:local-pull')
+    await settle()
+
+    expect(h.senderSend).toHaveBeenCalledWith('embedding:local-pull-progress', { status: 'success' })
+    expect(h.pullModel).not.toHaveBeenCalled()
+  })
+
+  it('模型名走配置（渲染层不传），且传入的 deps 能查回模型列表', async () => {
+    h.installModel.mockResolvedValue({ success: true })
+
+    await call('embedding:local-pull')
+    await settle()
+
+    expect(captureInstallOptions().name).toBe('bge-m3')
+    const deps = h.installModel.mock.calls[0][0] as { listModels: () => Promise<unknown> }
+    await deps.listModels()
+    expect(h.listOllamaModels).toHaveBeenCalledWith('http://localhost:11434')
+  })
+
+  it('智能下载失败 → 回退 Ollama 自身 pull（回退是设计的一部分）', async () => {
+    h.installModel.mockResolvedValue({ success: false, error: '模型目录不可写' })
+    h.pullModel.mockResolvedValue({ success: true })
+
+    await call('embedding:local-pull')
+    await settle()
+
+    expect(h.pullModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('智能下载抛错（契约外）→ 同样回退，不把用户的老路径一并堵死', async () => {
+    h.installModel.mockRejectedValue(new Error('boom'))
+    h.pullModel.mockResolvedValue({ success: true })
+
+    await call('embedding:local-pull')
+    await settle()
+
+    expect(h.pullModel).toHaveBeenCalledTimes(1)
+  })
+
+  it('进度帧带路径与实测速率，percent 由 completed/total 算出', async () => {
+    const release = holdInstall()
+    await call('embedding:local-pull')
+
+    captureInstallOptions().onProgress?.({
+      completed: 50, total: 200, bytesPerSec: 1_500_000, pathId: 'proxy', pathLabel: '127.0.0.1:7897',
+    })
+
+    expect(h.senderSend).toHaveBeenCalledWith('embedding:local-pull-progress', {
+      status: 'downloading',
+      completed: 50,
+      total: 200,
+      percent: 25,
+      path: 'proxy',
+      pathLabel: '127.0.0.1:7897',
+      bytesPerSec: 1_500_000,
+      switchedFrom: undefined,
+    })
+    release()
+    await settle()
+  })
+
+  it('换路不单独发帧：switchedFrom 附在换路后的第一帧（独立帧会把 percent 冲成 0，进度条跳回起点）', async () => {
+    const release = holdInstall()
+    await call('embedding:local-pull')
+    const opts = captureInstallOptions()
+
+    opts.onSwitch?.({ id: 'direct', label: 'direct' }, { id: 'proxy', label: '127.0.0.1:7897' })
+    expect(h.senderSend).not.toHaveBeenCalled() // 换路本身不推帧
+
+    opts.onProgress?.({ completed: 10, total: 100, pathId: 'proxy', pathLabel: '127.0.0.1:7897' })
+    expect(h.senderSend).toHaveBeenNthCalledWith(1, 'embedding:local-pull-progress',
+      expect.objectContaining({ completed: 10, percent: 10, switchedFrom: 'direct' }))
+
+    // 一次性标记：下一帧不再带
+    opts.onProgress?.({ completed: 20, total: 100, pathId: 'proxy', pathLabel: '127.0.0.1:7897' })
+    expect(h.senderSend).toHaveBeenNthCalledWith(2, 'embedding:local-pull-progress',
+      expect.objectContaining({ completed: 20, percent: 20, switchedFrom: undefined }))
+
+    release()
+    await settle()
   })
 })

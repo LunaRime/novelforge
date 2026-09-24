@@ -84,7 +84,10 @@ export interface InstallResult {
  * 模型目录解析：`OLLAMA_MODELS` 优先，否则 `~/.ollama/models`。
  * 空白值等同未设置（`set OLLAMA_MODELS=` 这种残留不该把模型下到当前目录）。
  */
-export function resolveModelsDir(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): string {
+export function resolveModelsDir(
+  env: Record<string, string | undefined> = process.env,
+  home: string = homedir(),
+): string {
   const fromEnv = env.OLLAMA_MODELS?.trim()
   return fromEnv ? fromEnv : join(home, '.ollama', 'models')
 }

@@ -12,7 +12,7 @@
  *   `IPC_EVENT_CHANNELS` 派生，无需手改 preload）。
  */
 import { t } from '../../src/shared/locale'
-import type { GlobalConfig, LocalEmbeddingConfig } from '../../src/shared/ipc-channels'
+import type { EmbeddingEvents, GlobalConfig, LocalEmbeddingConfig } from '../../src/shared/ipc-channels'
 import {
   DEFAULT_GLOBAL_CONFIG,
   GLOBAL_CONFIG_PATH,
@@ -21,6 +21,8 @@ import {
   writeJsonFile,
 } from '../utils/config-utils'
 import { detectOllama, listOllamaModels, pullModel, embedLocal } from '../ollama-embedding'
+import { installModel } from '../model-installer'
+import { createElectronTransport } from '../net/electron-net-transport'
 import { guardedHandle } from '../security/ipc-guard'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
@@ -30,6 +32,77 @@ const TEST_TEXT = '测试文本'
 
 /** 拉取中的 `<baseUrl>|<model>`：防连点 / 多窗口重复发起同一模型的下载（数 GB 级） */
 const pullsInFlight = new Set<string>()
+
+/** 进度帧载荷（事件通道类型的唯一来源在 src/shared/ipc-channels.ts） */
+type ProgressFrame = EmbeddingEvents['embedding:local-pull-progress']
+
+/** 代理配置（智能下载的候选路径来源；读失败退化为「只有直连」） */
+function readProxyConfig(): GlobalConfig['proxy'] {
+  try {
+    return readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG).proxy
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 智能下载 → 失败回退 Ollama 自身 pull。
+ *
+ * **回退是设计的一部分，不是兜底**：模型目录不可写 / registry 全路径不通 / 换路超限 /
+ * 落库自检失败，都走它——用户此时得到的就是本功能上线前的行为，不会更糟。
+ *
+ * ⚠️ 换路提示**不单独发帧**：独立一帧没有 `completed/percent`，渲染层会把它读成 0%
+ * （进度条跳回起点）。改为把 `switchedFrom` 挂在换路后的第一帧上。
+ */
+async function runModelDownload(
+  cfg: LocalEmbeddingConfig,
+  send: (frame: ProgressFrame) => void,
+): Promise<void> {
+  let switchedFrom: string | undefined
+
+  // 智能下载按契约不抛；万一抛了也必须回退——新路径崩掉不能把用户的老路径一并堵死
+  let smart: Awaited<ReturnType<typeof installModel>>
+  try {
+    smart = await installModel(
+      {
+        transport: createElectronTransport(),
+        proxy: readProxyConfig(),
+        listModels: () => listOllamaModels(cfg.baseUrl),
+        log: (message) => logger.info('Embedding', `smart download: ${message}`),
+      },
+      {
+        name: cfg.model,
+        onSwitch: (from) => { switchedFrom = from.label },
+        onProgress: (p) => {
+          send({
+            status: 'downloading',
+            completed: p.completed,
+            total: p.total,
+            percent: p.total > 0 ? Math.round((p.completed / p.total) * 100) : undefined,
+            path: p.pathId,
+            pathLabel: p.pathLabel,
+            bytesPerSec: p.bytesPerSec,
+            switchedFrom,
+          })
+          switchedFrom = undefined
+        },
+      },
+    )
+  } catch (e) {
+    logger.warn('Embedding', `smart download crashed: ${safeErrorMessage(e)}`)
+    smart = { success: false, error: safeErrorMessage(e) }
+  }
+
+  if (smart.success) {
+    logger.info('Embedding', `smart download finished via ${smart.usedPath?.label ?? 'unknown'}`)
+    send({ status: 'success' })
+    return
+  }
+
+  logger.warn('Embedding', `smart download failed, falling back to ollama pull: ${smart.error ?? 'unknown'}`)
+  const fallback = await pullModel(cfg.baseUrl, cfg.model, send)
+  if (!fallback.success) send({ status: 'error', error: fallback.error ?? '' })
+}
 
 /**
  * 过滤写回的补丁：只接受声明类型的字段。
@@ -102,20 +175,16 @@ export function registerLocalEmbeddingController(): void {
       }
     }
 
-    void pullModel(cfg.baseUrl, cfg.model, (progress) => {
-      // 渲染层可能已关闭 → send 会抛；进度只是信息，不能让它影响下载本身
+    /** 渲染层可能已关闭 → send 会抛；进度只是信息，不能让它影响下载本身 */
+    const send = (frame: ProgressFrame): void => {
       try {
-        event.sender.send('embedding:local-pull-progress', progress)
+        event.sender.send('embedding:local-pull-progress', frame)
       } catch (e) {
         logger.warn('Embedding', `pull progress send failed: ${safeErrorMessage(e)}`)
       }
-    })
-      .then((res) => {
-        if (!res.success) {
-          logger.warn('Embedding', `pull model failed: ${res.error ?? 'unknown'}`)
-          sendTerminalError(res.error ?? '') // 无 error 串时给空串：主文案仍会显示，只是没有原始详情
-        }
-      })
+    }
+
+    void runModelDownload(cfg, send)
       .catch((e) => {
         logger.warn('Embedding', `pull model crashed: ${safeErrorMessage(e)}`)
         sendTerminalError(safeErrorMessage(e))
