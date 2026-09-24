@@ -5,6 +5,7 @@ import {
   CheckCircle2, XCircle, Clock,
   Play, X, ChevronDown, ChevronRight, Zap, ScrollText,
 } from 'lucide-react'
+import { ProgressBar } from '../ui/ProgressBar'
 import { Spinner } from '../ui/Spinner'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
@@ -258,12 +259,7 @@ function ActiveRunPanel({
             </span>
           </div>
           {/* 2px 进度条 */}
-          <div className="h-[2px] rounded-full overflow-hidden" style={{ backgroundColor: 'var(--color-border)' }}>
-            <div
-              className="h-full rounded-full transition-all duration-500"
-              style={{ width: `${progress}%`, backgroundColor: 'var(--color-accent)' }}
-            />
-          </div>
+          <ProgressBar value={progress} />
         </div>
 
         {/* 右侧：步骤计数 + 折叠箭头 + 取消 */}

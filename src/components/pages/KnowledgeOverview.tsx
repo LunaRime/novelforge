@@ -3,6 +3,7 @@ import {
   Database, BookOpen, FileText,
   Search, Layers, Zap, Server, Activity, Download, Languages, AlertCircle,
 } from 'lucide-react'
+import { ProgressBar } from '../ui/ProgressBar'
 import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
@@ -333,9 +334,7 @@ export default function KnowledgeOverview() {
             </div>
             {/* 进度条（回填时显示） */}
             {backfilling && (
-              <div className="h-1 w-full bg-[rgba(var(--color-warning-rgb),0.1)]">
-                <div className="h-full bg-gradient-to-r from-[var(--color-warning)] to-[color-mix(in_srgb,var(--color-warning)_65%,white)] animate-pulse rounded-full w-full" />
-              </div>
+              <ProgressBar height={4} color="var(--color-warning)" indeterminate />
             )}
           </div>
         )}

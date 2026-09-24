@@ -15,6 +15,7 @@ import {
   XCircle, AlertTriangle, Sparkles, Cpu, ArrowRight,
   Brain, Download, HardDrive, ChevronRight,
 } from 'lucide-react'
+import { ProgressBar } from '../ui/ProgressBar'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -978,19 +979,12 @@ function LocalEmbeddingCard() {
               ? t('localEmbedding.downloadingPending')
               : t('localEmbedding.downloading').replace('{percent}', String(pullPercent))}
           </div>
-          <div
-            className="mt-1 h-1 rounded-full overflow-hidden"
-            style={{ backgroundColor: 'var(--color-border)' }}
-          >
-            <div
-              className={pullPercent === null ? 'h-full rounded-full animate-pulse' : 'h-full rounded-full'}
-              style={{
-                width: pullPercent === null ? '100%' : `${pullPercent}%`,
-                backgroundColor: 'var(--color-accent)',
-                opacity: pullPercent === null ? 0.4 : 1,
-              }}
-            />
-          </div>
+          <ProgressBar
+            className="mt-1"
+            height={4}
+            value={pullPercent ?? 0}
+            indeterminate={pullPercent === null}
+          />
           {/* 智能下载（2026-09-25）：如实显示「走哪条路 + 实测多快」。
               选路是自动的，但不显示的话，用户无法区分「应用选错了路」和「网络就这样」。 */}
           {pull?.path && (

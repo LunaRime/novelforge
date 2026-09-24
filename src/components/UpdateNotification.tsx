@@ -7,6 +7,7 @@
 
 import { useEffect, useState } from 'react'
 import { Download, CheckCircle2, AlertCircle, X, RefreshCw, ExternalLink } from 'lucide-react'
+import { ProgressBar } from './ui/ProgressBar'
 import { Spinner } from './ui/Spinner'
 import { useUpdateStore } from '../stores/update-store'
 import type { UpdateProgressInfo } from '../shared/ipc-channels'
@@ -252,25 +253,7 @@ function UpdateButton({
 function DownloadProgressBar({ progress }: { progress: UpdateProgressInfo }) {
   return (
     <div className="flex items-center gap-1 flex-shrink-0">
-      <div
-        style={{
-          width: 80,
-          height: 3,
-          borderRadius: 2,
-          backgroundColor: 'rgba(var(--color-accent-rgb), 0.2)',
-          overflow: 'hidden',
-        }}
-      >
-        <div
-          style={{
-            height: '100%',
-            width: `${Math.min(100, progress.percent)}%`,
-            backgroundColor: 'var(--color-accent)',
-            borderRadius: 2,
-            transition: 'width 0.3s ease',
-          }}
-        />
-      </div>
+      <ProgressBar className="w-20" height={3} value={progress.percent} />
       <span className="font-mono text-2xs opacity-60">
         {formatBytes(progress.bytesPerSecond)}/s
       </span>
