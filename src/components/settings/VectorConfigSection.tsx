@@ -454,6 +454,22 @@ function stripLatest(name: string): string {
   return name.replace(/:latest$/, '')
 }
 
+/**
+ * 智能下载的路径文案：`直连` / `经代理 127.0.0.1:7897`。
+ * 回退到 Ollama 自身 pull 时帧里没有 `path` 字段 → 该行整段不渲染（不是显示「未知」）。
+ */
+function describeDownloadPath(pull: { path?: 'direct' | 'proxy'; pathLabel?: string }, t: (key: TextKey) => string): string {
+  if (pull.path === 'proxy') return t('localEmbedding.pathProxy').replace('{proxy}', pull.pathLabel ?? '')
+  return t('localEmbedding.pathDirect')
+}
+
+/** 速率文案：单位（B/KB/MB）三语通用，不翻译；数值按量级选单位以免出现 1523456 B/s */
+function formatSpeed(bytesPerSec: number): string {
+  if (bytesPerSec >= 1024 * 1024) return `${(bytesPerSec / (1024 * 1024)).toFixed(1)} MB/s`
+  if (bytesPerSec >= 1024) return `${Math.round(bytesPerSec / 1024)} KB/s`
+  return `${Math.round(bytesPerSec)} B/s`
+}
+
 /** Ollama 默认地址（R2「重置为默认」的目标；与主进程 `DEFAULT_LOCAL_EMBEDDING.baseUrl` 同值） */
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434'
 
@@ -975,6 +991,22 @@ function LocalEmbeddingCard() {
               }}
             />
           </div>
+          {/* 智能下载（2026-09-25）：如实显示「走哪条路 + 实测多快」。
+              选路是自动的，但不显示的话，用户无法区分「应用选错了路」和「网络就这样」。 */}
+          {pull?.path && (
+            <div className="mt-1 text-[10px] text-[var(--color-text-muted)]">
+              {describeDownloadPath(pull, t)}
+              {typeof pull.bytesPerSec === 'number' && pull.bytesPerSec > 0
+                ? ` · ${formatSpeed(pull.bytesPerSec)}`
+                : ''}
+            </div>
+          )}
+          {/* 换路是自动发生的，必须说明「刚才为什么慢了一下」，否则会被读成网络故障 */}
+          {pull?.switchedFrom && (
+            <div className="mt-1 text-[10px]" style={{ color: 'var(--color-warning)' }}>
+              {t('localEmbedding.switchedTo').replace('{path}', describeDownloadPath(pull, t))}
+            </div>
+          )}
           {pull && <RawDetail text={pull.status} />}
         </div>
       )}

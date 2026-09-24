@@ -232,7 +232,37 @@ installModel(...) 成功 → 推终帧 success
 5. **staging 隔离**：下载中途杀掉应用 → 重启 Ollama → 期望：staging 残片未被 Ollama 误删误清，正式 blob 完好；再次下载能从残片续传或干净重来。
 6. **不干扰**：下载期间同时用 Ollama 跑一次推理 → 期望：互不影响。
 
-## 9. Deferred
+## 9. 实施记录（2026-09-25，同日完成 T1-T6）
+
+| 任务 | 交付 | 测试 |
+|---|---|---|
+| T1 | `electron/net-path.ts` | +17 |
+| T2 | `electron/ollama-registry.ts`（含 `probePath`） | +18 |
+| T3 | `electron/model-installer.ts` | +10 |
+| T4 | `electron/net/electron-net-transport.ts` + 控制器接线 | +6（控制器新用例） |
+| T5 | `VectorConfigSection` 路径/速率/换路展示 + 3 个 i18n key（三语） | +4 |
+
+**门禁**：`tsc --noEmit` 零错误 / `eslint . --ext ts,tsx --max-warnings 0` 零告警 /
+`vitest run` **1603 通过（127 文件）**——较改动前 1548 增 55 条。
+
+### 实施中发现并修掉的两个 bug（均已由回归测试锁定）
+
+1. **错误计数被「收到任意字节」重置 → 无限重试**：流被截断时每轮都能收到少量字节，
+   错误计数反复清零，重试永不终止且文件每轮增长（把测试 worker 撑爆，症状是
+   `Worker exited unexpectedly`）。修法 = 引入 `MIN_ATTEMPT_PROGRESS`（1 MiB）：一次失败的尝试
+   拿到 ≥1 MiB 才算「仍在推进」、不计错误。终止性因此可证（见 `ollama-registry.ts` 注释）。
+2. **亚毫秒探测被误判失败**：`scoreProbe` 原先对 `elapsedMs <= 0` 返回 null，而 `Date.now()`
+   只有毫秒粒度——最快的那条路（回环代理）恰恰最容易测出 0ms，于是被当成「不通」。
+   修法 = 耗时按 1ms 下界钳制。
+
+### 与设计的两处偏差（实施中修正，以此为准）
+
+- `downloadBlob` **不接受** `resumeFrom` 参数：断点即暂存文件的**实际大小**，单一真源，
+  避免调用方传入与磁盘不一致的值导致拼接错位。
+- `fetchManifest` 额外返回 `raw`（原始响应文本）：manifest 必须**原样落盘**，
+  解析再序列化会改变字节使 Ollama 校验失败。
+
+## 10. Deferred
 
 - **`applyProxyConfig()` 空操作**（§2 末）：应用自身的 LLM/Embedding 请求代理设置不生效。与本次同源但不同链路，需独立设计与回归（涉及 `llm-controller` 与所有 fetch 路径）。
 - SOCKS5 代理：`config.proxy.type` 支持 `socks5`，Chromium 的 `proxyRules` 用 `socks5://host:port` 形式（本次只验证了 HTTP 代理路径）。

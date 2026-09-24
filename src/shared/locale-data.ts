@@ -1406,6 +1406,13 @@ export const UI_TEXTS_DATA = {
   'localEmbedding.downloading': { 'zh-CN': '下载中 {percent}%', 'en-US': 'Downloading {percent}%', 'ru-RU': 'Загрузка {percent}%' },
   'localEmbedding.downloadingPending': { 'zh-CN': '正在下载…', 'en-US': 'Downloading…', 'ru-RU': 'Загрузка…' },
   'localEmbedding.pullFailed': { 'zh-CN': '下载模型失败', 'en-US': 'Model download failed', 'ru-RU': 'Не удалось загрузить модель' },
+  // 智能下载（2026-09-25）：进度条下方如实显示「走哪条路 + 实测多快」。
+  // 全自动选路对用户是无感的，但**无感不等于不可见**——不显示的话，用户无法区分
+  // 「应用选错了路」和「网络就是这样」，也没法反馈。
+  'localEmbedding.pathDirect': { 'zh-CN': '直连', 'en-US': 'Direct', 'ru-RU': 'Напрямую' },
+  'localEmbedding.pathProxy': { 'zh-CN': '经代理 {proxy}', 'en-US': 'Via proxy {proxy}', 'ru-RU': 'Через прокси {proxy}' },
+  // 换路是自动发生的，必须让用户知道「刚才为什么慢了一下」——否则会被读成网络故障
+  'localEmbedding.switchedTo': { 'zh-CN': '网络变慢，已切换到 {path}', 'en-US': 'Network slowed down, switched to {path}', 'ru-RU': 'Сеть замедлилась, переключено на {path}' },
   'localEmbedding.test': { 'zh-CN': '测试模型', 'en-US': 'Test model', 'ru-RU': 'Проверить модель' },
   'localEmbedding.testing': { 'zh-CN': '测试中…', 'en-US': 'Testing…', 'ru-RU': 'Проверка…' },
   'localEmbedding.testOk': { 'zh-CN': '测试成功：{dim} 维', 'en-US': 'Test succeeded: {dim} dimensions', 'ru-RU': 'Проверка успешна: {dim} измерений' },

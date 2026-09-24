@@ -35,7 +35,17 @@ vi.mock('../../services/ipc-client', () => ({
   ipc: { invoke: mocks.invoke, on: mocks.on, isElectron: false },
 }))
 
-type PullProgress = { status: string; completed?: number; total?: number; percent?: number; error?: string }
+type PullProgress = {
+  status: string
+  completed?: number
+  total?: number
+  percent?: number
+  error?: string
+  path?: 'direct' | 'proxy'
+  pathLabel?: string
+  bytesPerSec?: number
+  switchedFrom?: string
+}
 type Handler = () => unknown
 type LocalModel = { name: string; size: number }
 
@@ -833,6 +843,75 @@ describe('本地向量模型卡片 · 底部说明文案分流', () => {
     expect(container.textContent).toContain(t('localEmbedding.hint'))
     // 注意：不能再断言「不含 hintConnected」——`hint` = 安装前缀 + `hintConnected` 全文，
     // 两者是包含关系。判别力由上面那条用例（已连接时 not.toContain(hint)）承担。
+    act(() => { root.unmount() })
+  })
+})
+
+describe('本地向量模型卡片 · 智能下载路径展示（2026-09-25）', () => {
+  /** 走到「下载中」：桩好三态 → 渲染 → 点下载 */
+  async function startDownload(): Promise<{ container: HTMLElement; root: Root }> {
+    stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'llama3', size: 1 }] })
+    handlers['embedding:local-pull'] = () => ({ started: true })
+    const rendered = render()
+    await flush()
+    click(button(rendered.container, DOWNLOAD_LABEL))
+    await flush()
+    return rendered
+  }
+
+  async function push(progress: PullProgress): Promise<void> {
+    await act(async () => {
+      progressHandler?.(progress)
+      await new Promise((r) => setTimeout(r, 0))
+    })
+  }
+
+  it('走代理时显示「经代理 <host:port> · 速率」', async () => {
+    const { container, root } = await startDownload()
+
+    await push({
+      status: 'downloading', completed: 50, total: 200, percent: 25,
+      path: 'proxy', pathLabel: '127.0.0.1:7897', bytesPerSec: 1_572_864, // = 1.5 MB/s
+    })
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('经代理 127.0.0.1:7897')
+    expect(text).toContain('1.5 MB/s')
+    act(() => { root.unmount() })
+  })
+
+  it('直连时显示「直连 · 速率」（KB/s 量级不显示成 B/s）', async () => {
+    const { container, root } = await startDownload()
+
+    await push({ status: 'downloading', completed: 10, total: 100, percent: 10, path: 'direct', bytesPerSec: 245_760 })
+
+    const text = container.textContent ?? ''
+    expect(text).toContain('直连')
+    expect(text).toContain('240 KB/s')
+    act(() => { root.unmount() })
+  })
+
+  it('换路帧显示「网络变慢，已切换到 …」（自动换路必须对用户可见）', async () => {
+    const { container, root } = await startDownload()
+
+    await push({
+      status: 'downloading', completed: 60, total: 200, percent: 30,
+      path: 'proxy', pathLabel: '127.0.0.1:7897', switchedFrom: 'direct',
+    })
+
+    expect(container.textContent ?? '').toContain('网络变慢，已切换到 经代理 127.0.0.1:7897')
+    act(() => { root.unmount() })
+  })
+
+  it('回退到 Ollama 自身 pull 的帧没有 path → 不渲染路径行（而不是显示「未知」）', async () => {
+    const { container, root } = await startDownload()
+
+    await push({ status: 'downloading', completed: 10, total: 100, percent: 10 })
+
+    const text = container.textContent ?? ''
+    expect(text).not.toContain('经代理')
+    expect(text).not.toContain('直连')
+    expect(text).toContain('10%') // 进度本身照常显示
     act(() => { root.unmount() })
   })
 })
