@@ -237,32 +237,18 @@ const ALLOW: { file: string; allow: RegExp; reason: string }[] = [
  * **token 存在性豁免清单** —— 源码引用了 `src/index.css` 未定义的 token。
  *
  * 逐条记账（不静默）：这些引用**没有 fallback**，声明在 computed-value time 失效 → 该 longhand 取初始值，
- * `background-color` 即 `transparent`。**今天就是「没有底色」**；随便挑一个有值的 token 顶上会把
- * 「隐形面」变成可见色块 —— 属视觉变更，需产品决策后另行处理。
- * 每一行末尾的 `FOLLOW-UP` 是待决策标记，决策落地时**必须**删除对应豁免项。
+ * `background-color` 即 `transparent`。
+ *
+ * **2026-09-25：四条豁免已全部决策落地并清空**（此前是「待决策」，不是「忽略」）——
+ * - `--color-bg-elevated`（13 处）→ 在四套主题里**补上定义**（= `--color-panel`，四主题逐一同值，
+ *   不引入新色值）。仓内唯一写过 fallback 的 `NovelConfigEditor` 已指明本意即"退到面板面"。
+ * - `--color-bg-secondary`（2 处）→ `--color-hover`；`--color-bg-hover`（1 处）→ `--color-active`
+ *   （它嵌在 `--color-hover` 的卡内，取更深一档以保留父子层次）。
+ * - `--color-input`（1 处）→ `--color-panel`。
+ *
+ * 效果：12 处「有框无底」的隐形面恢复底色。**新增条目请照旧逐条记账**，`FOLLOW-UP` 一旦落地即删除。
  */
-const UNDEFINED_TOKEN_EXEMPT: { name: string; count: number; reason: string }[] = [
-  {
-    name: '--color-bg-elevated',
-    count: 13,
-    reason: 'FOLLOW-UP(待决策): 未定义且无 fallback → 底色实际 transparent。顶上真实 token 会把隐形面变可见色块，属视觉变更',
-  },
-  {
-    name: '--color-bg-secondary',
-    count: 2,
-    reason: 'FOLLOW-UP(待决策): 同上（AgentConversation 内置提示条 / CompressedBatchCard 底），勿机械替换',
-  },
-  {
-    name: '--color-bg-hover',
-    count: 1,
-    reason: 'FOLLOW-UP(待决策): CompressedBatchCard 底；与既有 --color-hover 是否语义等同需产品确认（ContextBudgetBar 底环已于 2026-09-22 改用 --color-border，故本条从 2 降为 1）',
-  },
-  {
-    name: '--color-input',
-    count: 1,
-    reason: 'FOLLOW-UP(待决策): 同上（ImportNovelDialog 输入框底）。--color-panel/--color-bg 都不是「输入面」语义',
-  },
-]
+const UNDEFINED_TOKEN_EXEMPT: { name: string; count: number; reason: string }[] = []
 
 /** 豁免名单只按**名字**豁免（不影响其他任何未定义引用） */
 const EXEMPT_TOKEN_NAMES = new Set(UNDEFINED_TOKEN_EXEMPT.map((e) => e.name))

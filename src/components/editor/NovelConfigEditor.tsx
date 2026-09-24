@@ -12,6 +12,7 @@ import { Textarea } from '../ui/Textarea'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import type { TextKey } from '../../shared/locale'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
@@ -385,7 +386,15 @@ function Section({
 /** 表单字段 */
 function Field({ label, tipItems, children }: { label: string; tipItems?: string[]; children: React.ReactNode }) {
   const [showTip, setShowTip] = useState(false)
-  const tipRef = useRef<HTMLDivElement>(null)
+  const tipAnchorRef = useRef<HTMLSpanElement>(null)
+  /**
+   * ⚠️ 2026-09-25 修：原实现是 `position: absolute; bottom: 100%` —— 而本组件的祖先是
+   * `:123` 的 `h-full overflow-y-auto`（`overflow-y: auto` 会把另一轴的 computed 也变成 auto，
+   * **两轴都裁**）→ 位于滚动区上方 ~150px 内的字段（如「结构」「视角」）向上展开时上半截被切掉。
+   * 改用与其它浮层同一套 `useFloatingPosition`：`position: fixed` 不受任何祖先 overflow 裁剪，
+   * 且自带翻转与双轴夹取（原先 260px 宽 + translateX(-50%) 完全无避让）。
+   */
+  const tipRef = useFloatingPosition<HTMLDivElement>(tipAnchorRef, showTip, { placement: 'above', align: 'start' })
 
   return (
     <div>
@@ -393,7 +402,8 @@ function Field({ label, tipItems, children }: { label: string; tipItems?: string
         {label}
         {tipItems && tipItems.length > 0 && (
           <span
-            style={{ position: 'relative', display: 'inline-flex' }}
+            ref={tipAnchorRef}
+            className="inline-flex"
             onMouseEnter={() => setShowTip(true)}
             onMouseLeave={() => setShowTip(false)}
           >
@@ -402,21 +412,21 @@ function Field({ label, tipItems, children }: { label: string; tipItems?: string
               <div
                 ref={tipRef}
                 style={{
-                  position: 'absolute',
-                  bottom: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  marginBottom: 6,
+                  // 初始位置：在视口外测量，定位后由 hook 写成实际坐标并显示
+                  position: 'fixed',
+                  visibility: 'hidden',
+                  top: 0,
+                  left: 0,
                   padding: '8px 12px',
                   borderRadius: 8,
                   fontSize: 11,
                   lineHeight: 1.6,
                   whiteSpace: 'pre-line',
                   color: 'var(--color-text)',
-                  background: 'var(--color-bg-elevated, var(--color-sidebar))',
+                  background: 'var(--color-bg-elevated)',
                   border: '1px solid var(--color-border)',
-                  boxShadow: '0 4px 16px rgba(0,0,0,0.25)',
-                  zIndex: 9999,
+                  boxShadow: 'var(--shadow-popover)',
+                  zIndex: 'var(--z-tooltip)',
                   width: 260,
                   pointerEvents: 'none',
                 }}

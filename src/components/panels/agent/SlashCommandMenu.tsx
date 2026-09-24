@@ -37,6 +37,16 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
 
   // 键盘导航
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape') {
+      e.preventDefault()
+      onClose()
+      return
+    }
+    // 空结果不拦截方向键/Enter——否则监听器会吞掉回车导致消息无法发送。
+    // ⚠️ 2026-09-25 修：MentionMenu 早就有这行守卫（并注明理由），本组件漏了 ——
+    // 输入 `/xyz`（无匹配）后按回车：preventDefault 已执行、results[selectedIndex] 又是 undefined
+    // → 既不换行也不发送，发送功能静默失灵。
+    if (results.length === 0) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       setSelectedIndex(i => Math.min(i + 1, results.length - 1))
@@ -48,9 +58,6 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
       if (results[selectedIndex]) {
         onSelect(results[selectedIndex])
       }
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      onClose()
     }
   }, [results, selectedIndex, onSelect, onClose])
 

@@ -140,6 +140,11 @@
     --color-bg: #F7F9FC;
     --color-sidebar: #EFF2F7;
     --color-panel: #EFF2F7;
+    /* 「抬升面」：比所在容器高一档的表面（对话框内的列表/图例/输入区、卡片内的提示条）。
+       2026-09-25 补：此前 13 处引用它但**四套主题都没定义**，且 12 处没写兜底
+       → `var()` 无兜底即整条声明失效，background 回落到 transparent（"有框无底"）。
+       取值 = --color-panel（四套主题里两者逐一同值），故不引入新色值。 */
+    --color-bg-elevated: var(--color-panel);
     /* 与画布同色（用户 2026-09-22 指定）：标题栏与卡片之间的缝隙连成一片背景，
        顶部白 → 缝隙白 是连续的，卡片才像浮在同一张画布上。改用变量引用而非复制色值，
        两者永远一致；要单独调标题栏时再拆开。 */
@@ -173,7 +178,10 @@
     --color-accent: #5B9ED6;
     --color-accent-hover: #4A8DC5;
     --color-accent-rgb: 91, 158, 214;
-    --color-info-rgb: 91, 158, 214;
+    /* ⚠️ info 必须与 accent 可区分：此前两者在本主题**完全同值**（#5B9ED6 / 同 rgb 三元组），
+       导致 5 处「并列但必须可区分」的语义失效——最严重的是上下文占用条相邻两段同色。
+       改取 logo 自带的薰衣草紫（与 accent 蓝拉开），四套主题里 .paper/.dark 本就不同值。 */
+    --color-info-rgb: 155, 142, 200;
     --color-success-rgb: 16, 185, 129;
     --color-warning-rgb: 245, 158, 11;
     --color-error-rgb: 244, 63, 94;
@@ -185,7 +193,7 @@
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-error: #f43f5e;
-    --color-info: #5B9ED6;
+    --color-info: #9B8EC8;
 
     /* Tab 系统 */
     --color-tab-bg: transparent;
@@ -277,6 +285,7 @@
     --color-bg: #0A1628;
     --color-sidebar: #0E1B30;
     --color-panel: #0E1B30;
+    --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色（同浅色主题） */
     --color-activity-bar: #071220;
     --color-hover: #142640;
@@ -301,7 +310,7 @@
     --color-accent: #7EC8E3;
     --color-accent-hover: #6AB8D8;
     --color-accent-rgb: 126, 200, 227;
-    --color-info-rgb: 126, 200, 227;
+    --color-info-rgb: 155, 142, 200;
     --color-success-rgb: 74, 222, 128;
     --color-warning-rgb: 251, 191, 36;
     --color-error-rgb: 251, 113, 133;
@@ -312,7 +321,7 @@
     --color-success: #4ade80;
     --color-warning: #fbbf24;
     --color-error: #fb7185;
-    --color-info: #7EC8E3;
+    --color-info: #9B8EC8;
 
     --color-tab-bg: transparent;
     --color-tab-active: #0E1E35;
@@ -365,6 +374,7 @@
     --color-bg: #F5F0E8;
     --color-sidebar: #EDE8E0;
     --color-panel: #EDE8E0;
+    --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #E4DDD4;
     --color-hover: #E8E3DB;
@@ -450,6 +460,7 @@
     --color-bg: #1E1E1E;
     --color-sidebar: #252526;
     --color-panel: #252526;
+    --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #333333;
     --color-hover: #2A2D2E;
@@ -846,6 +857,17 @@
   .bottom-tool-btn.active {
     color: var(--color-accent);
     box-shadow: inset -2px 0 0 var(--color-accent);
+  }
+
+  /* ===== 键盘焦点：压掉 outline 的按钮必须自己还回来 =====
+     2026-09-25 修：`.tool-btn`/`.bottom-tool-btn` 的 `outline: none` 位于 @layer components，
+     会**压过 @layer base 里的全局 `:focus-visible`**（层叠层优先级高于同特异性规则）——
+     左右图标栏共 9 个**主导航**按钮，键盘 Tab 到之后零焦点指示。
+     这里用负 offset：图标栏宽度只有 48px，正向 offset 会被裁掉。 */
+  .tool-btn:focus-visible,
+  .bottom-tool-btn:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: -2px;
   }
 
   /* ===== Agent 面板专用样式 ===== */
@@ -1373,9 +1395,13 @@
 
 /* 玻璃态效果 */
 .glass {
-  background: rgba(var(--color-bg), 0.8);
+  /* 2026-09-25 修：原写法 `rgba(var(--color-bg), 0.8)` 把 **hex 令牌塞进了 rgba 的通道位**，
+     而全仓并无 `--color-bg-rgb`/`--color-border-rgb` → 这两条声明被浏览器**整条丢弃**
+     （只剩 backdrop-filter 生效）。改用 color-mix——仓内既有先例：
+     inline-accept.css / DiffViewer.tsx / PromptSettings.tsx。 */
+  background: color-mix(in srgb, var(--color-bg) 80%, transparent);
   backdrop-filter: blur(20px);
-  border: 1px solid rgba(var(--color-border), 0.5);
+  border: 1px solid color-mix(in srgb, var(--color-border) 50%, transparent);
 }
 
 /* 渐变文字效果 */

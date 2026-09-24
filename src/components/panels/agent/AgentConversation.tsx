@@ -273,7 +273,7 @@ function ActiveConversation() {
         <div className="flex flex-col">
           {/* 恢复提示：会话基于快照项目，与当前打开项目不一致（P0 仅提示，不静默切换） */}
           {activeConv.projectName && currentProjectName && activeConv.projectName !== currentProjectName && (
-            <div className="mx-2 my-2 rounded-lg px-3 py-1.5 text-xs" style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
+            <div className="mx-2 my-2 rounded-lg px-3 py-1.5 text-xs" style={{ backgroundColor: 'var(--color-hover)', border: '1px solid var(--color-border)', color: 'var(--color-text-secondary)' }}>
               {t('ccr.restoreProjectHint').replace('{name}', activeConv.projectName).replace('{current}', currentProjectName)}
             </div>
           )}

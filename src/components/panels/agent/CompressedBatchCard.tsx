@@ -12,7 +12,7 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
   return (
     <div
       className="mx-2 my-2 rounded-lg px-3 py-2 text-xs"
-      style={{ backgroundColor: 'var(--color-bg-secondary)', border: '1px dashed var(--color-border)' }}
+      style={{ backgroundColor: 'var(--color-hover)', border: '1px dashed var(--color-border)' }}
     >
       <div className="flex items-center justify-between">
         <span style={{ color: 'var(--color-text-secondary)' }}>
@@ -31,7 +31,9 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
       {expanded && batch.original.length > 0 && (
         <div
           className="mt-2 max-h-48 overflow-y-auto rounded px-2 py-1"
-          style={{ backgroundColor: 'var(--color-bg-hover)' }}
+          // 嵌在上面那张卡（--color-hover）之内：父子都用 hover 会糊成一层，
+          // 故取比 hover 再深一档的 --color-active 保留层次
+          style={{ backgroundColor: 'var(--color-active)' }}
         >
           {batch.original.map(m => (
             <div key={m.id} className="mb-1">

@@ -134,7 +134,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
               <div
                 className="flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs truncate"
                 style={{
-                  backgroundColor: 'var(--color-input)',
+                  backgroundColor: 'var(--color-panel)',
                   border: '1px solid var(--color-border)',
                   color: selectedFiles.length > 0 ? 'var(--color-text)' : 'var(--color-text-muted)',
                 }}
