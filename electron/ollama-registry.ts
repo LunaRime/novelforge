@@ -150,6 +150,8 @@ async function readBody(body: AsyncIterable<Uint8Array>): Promise<string> {
 export interface FetchManifestResult {
   success: boolean
   manifest?: RegistryManifest
+  /** 原始响应文本——落盘必须**原样写入**（解析再序列化会改变字节，Ollama 会校验失败） */
+  raw?: string
   path?: NetPath
   error?: string
 }
@@ -168,12 +170,13 @@ export async function fetchManifest(
         lastError = `manifest HTTP ${res.status}`
         continue
       }
-      const manifest = parseManifest(await readBody(res.body))
+      const raw = await readBody(res.body)
+      const manifest = parseManifest(raw)
       if (!manifest) {
         lastError = 'manifest 响应畸形'
         continue
       }
-      return { success: true, manifest, path }
+      return { success: true, manifest, raw, path }
     } catch (e) {
       lastError = sanitize(describeError(e))
     }
