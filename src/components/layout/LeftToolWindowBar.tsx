@@ -60,16 +60,12 @@ export default function LeftToolWindowBar() {
         borderRight: 'none',
         flexShrink: 0,
         // 拖拽区之一（标题栏已移除）：整条栏可拖动窗口，栏内按钮由 index.css 的
-        // [data-activity-bar] 规则统一恢复 no-drag。
+        // [data-activity-bar] 规则统一恢复 no-drag。macOS 顶部给交通灯留位。
         //
-        // 顶部让位给**系统窗口按钮**：
-        // - macOS → 左侧交通灯，固定 28px
-        // - Windows → 窗口控件覆盖层（WCO）：高度由系统通过 `env(titlebar-area-height)` 告知，
-        //   未启用该覆盖层时为 0。⚠️ 2026-09-25 前 Windows 上根本没有覆盖层（titleBarStyle
-        //   是 macOS 专有值、被静默忽略），所以这条 padding 只在覆盖层真的启用后才有值。
-        //   留白区仍在拖拽区内（padding 属于本容器），故拖窗口不受影响。
+        // ⚠️ Windows 的窗口控件覆盖层**不在这里留位** —— 那必须做在 App 最外层容器上，
+        // 否则覆盖层会压在面板头部上、接缝看得见（2026-09-25 真机踩过）。
         WebkitAppRegion: 'drag',
-        paddingTop: isMac ? 28 : 'env(titlebar-area-height, 0px)',
+        paddingTop: isMac ? 28 : undefined,
       } as React.CSSProperties}
       data-activity-bar="left"
     >

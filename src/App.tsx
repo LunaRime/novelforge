@@ -227,7 +227,24 @@ export default function App() {
   }, [])
 
   return (
-    <div className="flex flex-col w-full h-full overflow-hidden">
+    <div
+      className="flex flex-col w-full h-full overflow-hidden"
+      style={{
+        /**
+         * 顶部让位给**系统窗口控件覆盖层（WCO）** —— 且让位必须做在**最外层**。
+         *
+         * ⚠️ 教训（2026-09-25 真机）：先只给两个图标栏加了顶部 padding，结果覆盖层
+         * 直接压在右侧 AGENT 面板头部上 —— 覆盖层的底色是 `--color-canvas`（最外围缝隙色），
+         * 而它盖住的是面板头部（另一种底色），于是右上角出现一块**看得出来接缝的方块**。
+         *
+         * 做在最外层后：顶部那一条 = 纯画布色，与覆盖层（渲染层同样按 `--color-canvas` 推送）同色 → 无缝。
+         * 高度由系统通过 `env(titlebar-area-height)` 告知；未启用覆盖层（macOS / 浏览器）时为 0。
+         * 这条也是**应用唯一真正的顶栏空间**（系统只占右侧放窗口按钮，左侧全空）。
+         */
+        paddingTop: 'env(titlebar-area-height, 0px)',
+        backgroundColor: 'var(--color-canvas)',
+      }}
+    >
       {/* 更新通知栏 */}
       <UpdateNotification />
 

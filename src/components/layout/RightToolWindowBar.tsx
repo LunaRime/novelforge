@@ -108,11 +108,9 @@ export default function RightToolWindowBar() {
         flexShrink: 0,
         // 拖拽区之一（标题栏已移除）：栏内按钮由 index.css 的 [data-activity-bar] 规则恢复 no-drag
         //
-        // ⚠️ 顶部留位不能省：Windows 的窗口控件覆盖层把**最小化/最大化/关闭画在右上角且浮在应用之上**，
-        // 不留位就会盖住本栏最上面那个按钮。高度由系统通过 `env(titlebar-area-height)` 给出
-        // （未启用覆盖层时为 0，macOS 无该变量也取 0）。留白区在本容器内，仍是拖拽区。
+        // ⚠️ Windows 的窗口控件覆盖层**不在这里留位** —— 那必须做在 App 最外层容器上，
+        // 否则覆盖层会压住本栏最上面那个按钮、且底色对不上（2026-09-25 真机踩过）。
         WebkitAppRegion: 'drag',
-        paddingTop: 'env(titlebar-area-height, 0px)',
       } as React.CSSProperties}
       data-activity-bar="right"
     >
