@@ -4,9 +4,10 @@
  * 双视图：当前项目（llm_calls 在项目库 {project}/.novelforge/vela.db）purpose/模型维度 + 合计 + 时间区间过滤，
  * 以及全部项目（跨项目聚合：最近项目 + 当前项目逐项目只读，主进程 60s 缓存；旧库缺列降级标记）。
  */
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { AlertTriangle, BarChart3, RefreshCw } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
+import { Table } from '../ui/Table'
 import { ipc } from '../../services/ipc-client'
 import type {
   GlobalUsageProjectRow,
@@ -16,8 +17,8 @@ import type {
   UsageStatsData,
 } from '../../shared/ipc-channels'
 import { useTranslation } from '../../hooks/useTranslation'
-import { cn } from '../../lib/utils'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
+import { SegmentedControl } from '../ui/SegmentedControl'
 
 /** 时间区间选项（days=0 表示全部时间） */
 const RANGE_OPTIONS = [
@@ -107,10 +108,14 @@ export default function UsageStatsView() {
     <div className="space-y-4">
       {/* 头部：视图切换（当前项目/全部项目）+ 时间区间（仅当前项目视图）+ 刷新 */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1 rounded-lg p-0.5" style={{ backgroundColor: 'var(--color-hover)' }}>
-          <TabButton active={view === 'current'} onClick={() => setView('current')}>{t('usage.tabCurrent')}</TabButton>
-          <TabButton active={view === 'global'} onClick={() => setView('global')}>{t('usage.tabGlobal')}</TabButton>
-        </div>
+        <SegmentedControl
+          value={view}
+          onChange={setView}
+          items={[
+            { value: 'current', label: t('usage.tabCurrent') },
+            { value: 'global', label: t('usage.tabGlobal') },
+          ]}
+        />
         <div className="flex items-center gap-2">
           {view === 'current' && (
             <Select
@@ -187,7 +192,8 @@ export default function UsageStatsView() {
             <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text)' }}>
               {t('usage.purposeTitle')}
             </p>
-            <StatsTable
+            <Table
+              nowrapCells
               headers={[
                 t('usage.purpose'),
                 t('usage.calls'),
@@ -215,7 +221,8 @@ export default function UsageStatsView() {
             <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text)' }}>
               {t('usage.byModelTitle')}
             </p>
-            <StatsTable
+            <Table
+              nowrapCells
               headers={[
                 t('usage.model'),
                 t('usage.calls'),
@@ -288,7 +295,8 @@ export default function UsageStatsView() {
             <p className="text-xs font-semibold mb-1.5" style={{ color: 'var(--color-text)' }}>
               {t('usage.globalProjectsTitle')}
             </p>
-            <StatsTable
+            <Table
+              nowrapCells
               headers={[
                 t('usage.project'),
                 t('usage.calls'),
@@ -318,21 +326,6 @@ export default function UsageStatsView() {
   )
 }
 
-/** 视图切换小 Tab（激活态 accent 底白字，非激活 hover 底——参照 SettingsModal 侧栏惯例） */
-function TabButton({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        'px-3 py-1 rounded-md text-xs transition-colors',
-        active ? 'bg-[var(--color-accent)] text-white' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]',
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
 /** 合计卡片 */
 function SummaryCard({ label, value }: { label: string; value: string }) {
   return (
@@ -342,51 +335,6 @@ function SummaryCard({ label, value }: { label: string; value: string }) {
     >
       <span className="text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>{label}</span>
       <span className="text-sm font-bold" style={{ color: 'var(--color-accent)' }}>{value}</span>
-    </div>
-  )
-}
-
-/** 通用统计表（表头 hover 底 + 边框惯例，参照 MarkdownContent 表格样式） */
-function StatsTable({ headers, rows }: { headers: string[]; rows: Array<{ key: string; cells: string[] }> }) {
-  return (
-    <div className="overflow-x-auto rounded-md" style={{ border: '1px solid var(--color-border)' }}>
-      <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ backgroundColor: 'var(--color-hover)' }}>
-            {headers.map((h) => (
-              <th
-                key={h}
-                className="px-3 py-1.5 text-left font-semibold"
-                style={{
-                  color: 'var(--color-text)',
-                  borderBottom: '1px solid var(--color-border)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row, ri) => (
-            <tr
-              key={row.key}
-              style={{ borderBottom: ri < rows.length - 1 ? '1px solid var(--color-border)' : undefined }}
-            >
-              {row.cells.map((cell, ci) => (
-                <td
-                  key={ci}
-                  className="px-3 py-1.5"
-                  style={{ color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}
-                >
-                  {cell}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </div>
   )
 }

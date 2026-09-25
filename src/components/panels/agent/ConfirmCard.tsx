@@ -5,6 +5,7 @@
  * 用户可以批准或拒绝操作。
  */
 import { ShieldAlert } from 'lucide-react'
+import { Button } from '../../ui/Button'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -53,20 +54,15 @@ export default function ConfirmCard({ toolCall }: Props) {
         )}
       </div>
 
-      {/* 操作按钮 */}
+      {/* 操作按钮：走 ui/Button —— 原 .confirm-card-btn 系列自带一套配色与 hover，
+          其中 .approve:hover 与常态同色（零反馈死规则），且没有焦点环与按下反馈 */}
       <div className="confirm-card-actions">
-        <button
-          className="confirm-card-btn reject"
-          onClick={() => resolveToolConfirmation(id, false)}
-        >
+        <Button variant="outline" size="sm" onClick={() => resolveToolConfirmation(id, false)}>
           {t('action.reject')}
-        </button>
-        <button
-          className="confirm-card-btn approve"
-          onClick={() => resolveToolConfirmation(id, true)}
-        >
+        </Button>
+        <Button variant="success" size="sm" onClick={() => resolveToolConfirmation(id, true)}>
           {t('action.approve')}
-        </button>
+        </Button>
       </div>
     </div>
   )

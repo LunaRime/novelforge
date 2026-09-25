@@ -15,12 +15,12 @@ import {
 import type { TextKey } from '../../../shared/locale'
 import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
-import type { ModelProfile } from '../../../shared/ipc-channels'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Badge } from '../../ui/Badge'
+import { MenuItem } from '../../ui/MenuItem'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
@@ -350,11 +350,11 @@ export default function AgentInputBox() {
                   {t('tip.addContext')}
                 </div>
                 {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
-                <ContextMenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
+                <MenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
                   setShowContextMenu(false)
                   setShowFilePicker(true)
                 }} />
-                <ContextMenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
+                <MenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
                   setShowContextMenu(false)
                   // 插入 @ 字符并触发 MentionMenu（handleInputChange 与 setInputText 用同源值，
                   // 避免闭包旧值在连续点击时丢字符）
@@ -363,7 +363,7 @@ export default function AgentInputBox() {
                   handleInputChange(next)
                   textareaRef.current?.focus()
                 }} />
-                <ContextMenuItem icon={<Workflow size={13} />} label={t('agent.workflowCmd')} onClick={() => {
+                <MenuItem icon={<Workflow size={13} />} label={t('agent.workflowCmd')} onClick={() => {
                   setShowContextMenu(false)
                   // 插入 / 字符并触发 SlashCommandMenu
                   const next = '/'
@@ -602,10 +602,17 @@ export default function AgentInputBox() {
                   </div>
                 ) : (
                   chatModels.map(model => (
-                    <ModelMenuItem
+                    <MenuItem
                       key={model.id}
-                      model={model}
-                      isActive={model.id === currentModelId}
+                      label={model.name}
+                      selected={model.id === currentModelId}
+                      trailing={
+                        model.provider ? (
+                          <Badge variant="muted" className="px-1.5 font-normal flex-shrink-0">
+                            {model.provider}
+                          </Badge>
+                        ) : undefined
+                      }
                       onClick={() => {
                         setModelId(model.id)
                         setShowModelMenu(false)
@@ -677,81 +684,6 @@ function ToolbarIconBtn({
       }}
     >
       {children}
-    </button>
-  )
-}
-
-/** 上下文菜单项 */
-function ContextMenuItem({
-  icon,
-  label,
-  onClick,
-  disabled,
-}: {
-  icon: React.ReactNode
-  label: string
-  onClick: () => void
-  disabled?: boolean
-}) {
-  const { t } = useTranslation()
-  return (
-    <button
-      onClick={!disabled ? onClick : undefined}
-      disabled={disabled}
-      className="w-full flex items-center gap-2 px-3 py-1.5 text-xs transition-colors"
-      style={{
-        color: disabled ? 'var(--color-text-muted)' : 'var(--color-text)',
-        cursor: disabled ? 'not-allowed' : 'pointer',
-      }}
-      onMouseEnter={e => {
-        if (!disabled) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      <span style={{ color: 'var(--color-text-secondary)' }}>{icon}</span>
-      {label}
-      {disabled && <span className="ml-auto text-micro opacity-40">{t('agent.comingSoon')}</span>}
-    </button>
-  )
-}
-
-/** 模型菜单项 */
-function ModelMenuItem({
-  model,
-  isActive,
-  onClick,
-}: {
-  model: ModelProfile
-  isActive: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="w-full flex items-center justify-between px-3 py-1.5 text-xs transition-colors"
-      style={{
-        backgroundColor: isActive ? 'var(--color-hover)' : 'transparent',
-      }}
-      onMouseEnter={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-      }}
-      onMouseLeave={e => {
-        if (!isActive) e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      <span
-        className="font-medium truncate"
-        style={{ color: 'var(--color-text)' }}
-      >
-        {model.name}
-      </span>
-      {model.provider && (
-        <Badge variant="muted" className="ml-2 px-1.5 font-normal flex-shrink-0">
-          {model.provider}
-        </Badge>
-      )}
     </button>
   )
 }

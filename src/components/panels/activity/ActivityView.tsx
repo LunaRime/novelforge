@@ -20,6 +20,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../../ui/Select'
 import { ipc } from '../../../services/ipc-client'
 import { toast } from '../../ui/Toast'
+import { SegmentedControl } from '../../ui/SegmentedControl'
 import { buildYearlySummary, buildYearlyReportHTML } from '../../../services/yearly-report'
 
 /** 数据拉取天数（10 年等效全量——月度视图按年切换需要多年历史；聚合 SQL 按天分组数据量极小） */
@@ -145,30 +146,16 @@ export default function ActivityView() {
           </span>
 
           {/* 粒度切换：每日 / 每月 */}
-          <div className="flex items-center rounded-md border border-[var(--color-border)] overflow-hidden flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => setGranularity('daily')}
-              className={`px-1.5 py-0.5 text-micro transition-colors ${
-                granularity === 'daily'
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-              }`}
-            >
-              {t('activity.viewDaily')}
-            </button>
-            <button
-              type="button"
-              onClick={() => setGranularity('monthly')}
-              className={`px-1.5 py-0.5 text-micro transition-colors ${
-                granularity === 'monthly'
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-              }`}
-            >
-              {t('activity.viewMonthly')}
-            </button>
-          </div>
+          <SegmentedControl
+            size="sm"
+            className="flex-shrink-0"
+            value={granularity}
+            onChange={setGranularity}
+            items={[
+              { value: 'daily', label: t('activity.viewDaily') },
+              { value: 'monthly', label: t('activity.viewMonthly') },
+            ]}
+          />
 
           {/* 年份选择（每日/每月共用；连续区间含无数据年份——从数据最早年至今） */}
           <Select value={String(viewYear)} onValueChange={(v) => setViewYear(parseInt(v, 10))}>

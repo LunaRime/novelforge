@@ -16,6 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
 import { Button } from '../ui/Button'
+import { SegmentedControl } from '../ui/SegmentedControl'
 
 export interface ChapterExportDialogProps {
   chapterNumbers: number[]
@@ -245,26 +246,33 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
 
         {/* ==== 文件格式（子级） ==== */}
         <div className="px-5 pb-3">
-          <div
-            className="flex items-center rounded-lg border p-1 gap-0.5"
-            style={{
-              backgroundColor: 'var(--color-bg-elevated)',
-              borderColor: 'var(--color-border)',
-            }}
-          >
-            <FileFormatSegment
-              label=".md"
-              sub="Markdown"
-              active={fileFormat === 'md'}
-              onClick={() => setFileFormat('md')}
-            />
-            <FileFormatSegment
-              label=".txt"
-              sub={t('export.txtChapterFormat')}
-              active={fileFormat === 'txt'}
-              onClick={() => setFileFormat('txt')}
-            />
-          </div>
+          {/* 原先这里用「浮起白药丸」（激活块靠硬编码 boxShadow 浮起）——已并入统一分段条，
+              激活态改由 accent 实底表达，不再需要非令牌阴影 */}
+          <SegmentedControl
+            fill
+            value={fileFormat}
+            onChange={setFileFormat}
+            items={[
+              {
+                value: 'md',
+                label: (
+                  <>
+                    <span className="font-mono font-bold">.md</span>
+                    <span className="text-micro opacity-70">Markdown</span>
+                  </>
+                ),
+              },
+              {
+                value: 'txt',
+                label: (
+                  <>
+                    <span className="font-mono font-bold">.txt</span>
+                    <span className="text-micro opacity-70">{t('export.txtChapterFormat')}</span>
+                  </>
+                ),
+              },
+            ]}
+          />
         </div>
 
         <DialogFooter>
@@ -331,36 +339,3 @@ function FormatCard({
   )
 }
 
-/** 子级文件格式切换段 */
-function FileFormatSegment({
-  label, sub, active, onClick,
-}: {
-  label: string
-  sub: string
-  active: boolean
-  onClick: () => void
-}) {
-  return (
-    <button
-      className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-md transition-all duration-150 cursor-pointer"
-      style={{
-        backgroundColor: active ? 'var(--color-bg)' : 'transparent',
-        boxShadow: active ? '0 1px 3px rgba(0,0,0,0.12)' : 'none',
-        color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
-        border: 'none',
-      }}
-      onClick={onClick}
-      type="button"
-    >
-      <span
-        className="text-xs font-mono font-bold"
-        style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
-      >
-        {label}
-      </span>
-      <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
-        {sub}
-      </span>
-    </button>
-  )
-}

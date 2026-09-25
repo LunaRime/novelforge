@@ -10,6 +10,7 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { t, type TextKey } from '../../shared/locale'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import { ipc } from '../../services/ipc-client'
 import LogFileDialog from '../dialogs/LogFileDialog'
 
@@ -71,22 +72,12 @@ export default memo(function LogsView() {
     <div className="flex flex-col h-full">
       <div className="flex items-center justify-between gap-1 px-2 py-1 flex-shrink-0">
         {/* 级别筛选 */}
-        <div className="flex items-center gap-0.5">
-          {FILTERS.map(f => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilter(f.key)}
-              className={`px-1.5 py-0.5 rounded text-2xs transition-colors ${
-                filter === f.key
-                  ? 'bg-[var(--color-accent)] text-white'
-                  : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-              }`}
-            >
-              {t(f.label)}
-            </button>
-          ))}
-        </div>
+        <SegmentedControl
+          size="sm"
+          value={filter}
+          onChange={setFilter}
+          items={FILTERS.map(f => ({ value: f.key, label: t(f.label) }))}
+        />
 
         <div className="flex items-center gap-1">
           <Button

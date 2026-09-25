@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
 import { t } from '../../shared/locale'
+import { Table } from './Table'
 
 interface MarkdownContentProps {
   content: string
@@ -349,45 +350,15 @@ function MarkdownTable({ lines }: { lines: string[] }) {
   const bodyRows = lines.slice(startRow).map(parseRow)
 
   return (
-    <div className="my-2 overflow-x-auto rounded-md" style={{ border: '1px solid var(--color-border)' }}>
-      <table className="w-full text-xs" style={{ borderCollapse: 'collapse' }}>
-        <thead>
-          <tr style={{ backgroundColor: 'var(--color-hover)' }}>
-            {headerCells.map((cell, j) => (
-              <th
-                key={j}
-                className="px-3 py-1.5 text-left font-semibold"
-                style={{
-                  color: 'var(--color-text)',
-                  borderBottom: '1px solid var(--color-border)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {renderInline(cell)}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {bodyRows.map((row, ri) => (
-            <tr
-              key={ri}
-              style={{
-                borderBottom: ri < bodyRows.length - 1 ? '1px solid var(--color-border)' : undefined,
-              }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-            >
-              {row.map((cell, ci) => (
-                <td key={ci} className="px-3 py-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-                  {renderInline(cell)}
-                </td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <Table
+      className="my-2"
+      hoverableRows
+      headers={headerCells}
+      rows={bodyRows.map((row, ri) => ({
+        key: String(ri),
+        cells: row.map(cell => renderInline(cell)),
+      }))}
+    />
   )
 }
 

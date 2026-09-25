@@ -164,35 +164,6 @@
   justify-content: flex-end;
 }
 
-.confirm-card-btn {
-  padding: 4px 14px;
-  border-radius: 4px;
-  font-size: var(--text-micro);
-  font-weight: 500;
-  border: none;
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-
-.confirm-card-btn.approve {
-  background-color: var(--color-success);
-  color: #fff;
-}
-
-.confirm-card-btn.approve:hover {
-  background-color: var(--color-success);
-}
-
-.confirm-card-btn.reject {
-  background-color: var(--color-hover);
-  color: var(--color-text);
-  border: 1px solid var(--color-border);
-}
-
-.confirm-card-btn.reject:hover {
-  background-color: var(--color-border);
-}
-
 /* ===== ArtifactCard — 产物卡片 ===== */
 
 .artifact-card {

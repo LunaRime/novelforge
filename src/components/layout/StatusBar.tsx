@@ -12,6 +12,7 @@ import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
@@ -189,29 +190,16 @@ function TemperatureControl({
             }}
           />
 
-          {/* 预设快捷 */}
-          <div className="flex items-center gap-1 mt-2">
-            {presets.map(p => (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => handleTempChange(p.value)}
-                className="flex-1 py-0.5 rounded text-micro transition-colors cursor-pointer"
-                style={{
-                  color: tempDraft === p.value ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                  backgroundColor: tempDraft === p.value ? 'rgba(var(--color-accent-rgb), 0.1)' : 'transparent',
-                }}
-                onMouseEnter={e => {
-                  if (tempDraft !== p.value) e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-                }}
-                onMouseLeave={e => {
-                  if (tempDraft !== p.value) e.currentTarget.style.backgroundColor = 'transparent'
-                }}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
+          {/* 预设快捷：这是「选一个值」而非「执行一个命令」，故用分段控件（原自绘按钮组的
+              激活态是 accent 文字 + accent 10% 底，与分段条不统一） */}
+          <SegmentedControl
+            size="sm"
+            fill
+            className="mt-2"
+            value={tempDraft}
+            onChange={handleTempChange}
+            items={presets.map(p => ({ value: p.value, label: p.label }))}
+          />
         </PopoverSurface>
       )}
     </div>

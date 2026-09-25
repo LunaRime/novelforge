@@ -16,6 +16,7 @@ import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
 import { t, getCurrentLocale } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import { getCurrentLogEnv } from '../../services/render-logger'
 import type { LogEnvMode, LogFileInfo } from '../../shared/ipc-channels'
 
@@ -176,32 +177,14 @@ export default function LogFileDialog({ open, onOpenChange }: LogFileDialogProps
           <DialogTitle>{t('log.title')}</DialogTitle>
           <div className="flex items-center gap-1">
             {/* 环境切换 */}
-            <div className="flex items-center rounded-lg border border-[var(--color-border)] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setEnv('dev')}
-                title={t('log.envDev')}
-                className={`px-2.5 py-1 text-xs transition-colors ${
-                  env === 'dev'
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                }`}
-              >
-                {t('log.envDev')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setEnv('release')}
-                title={t('log.envRelease')}
-                className={`px-2.5 py-1 text-xs transition-colors ${
-                  env === 'release'
-                    ? 'bg-[var(--color-accent)] text-white'
-                    : 'text-[var(--color-text-muted)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)]'
-                }`}
-              >
-                {t('log.envRelease')}
-              </button>
-            </div>
+            <SegmentedControl
+              value={env}
+              onChange={setEnv}
+              items={[
+                { value: 'dev', label: t('log.envDev'), title: t('log.envDev') },
+                { value: 'release', label: t('log.envRelease'), title: t('log.envRelease') },
+              ]}
+            />
             <Button variant="ghost" size="icon" onClick={loadFiles} title={t('log.refresh')}>
               <RefreshCw size={13} />
             </Button>

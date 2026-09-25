@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Bot, Sparkles, PenLine, Sun, Moon, ScrollText, Check } from 'lucide-react'
+import { Bot, Sparkles, PenLine, Sun, Moon, ScrollText } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
@@ -8,6 +8,7 @@ import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { t } from '../../shared/locale'
 import { PopoverSurface } from '../ui/PopoverSurface'
+import { MenuItem } from '../ui/MenuItem'
 
 /** 主题图标映射（原标题栏；标题栏移除后随主题切换按钮一起搬来） */
 const themeIcons: Record<Theme, typeof Sun> = {
@@ -188,19 +189,14 @@ export default function RightToolWindowBar() {
           >
             {themeOrder.map(id => {
               const Icon = themeIcons[id]
-              const active = theme === id
               return (
-                <button
+                <MenuItem
                   key={id}
-                  type="button"
+                  icon={<Icon size={12} />}
+                  label={themeLabel(id)}
+                  selected={theme === id}
                   onClick={(e) => { applyThemeWithTransition(id, e); setThemeMenuOpen(false) }}
-                  className="w-full flex items-center gap-2 px-2.5 py-1.5 text-xs text-left hover:bg-[var(--color-hover)] cursor-pointer"
-                  style={{ color: active ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
-                >
-                  <Icon size={12} />
-                  <span className="flex-1">{themeLabel(id)}</span>
-                  {active && <Check size={10} />}
-                </button>
+                />
               )
             })}
           </PopoverSurface>

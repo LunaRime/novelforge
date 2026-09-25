@@ -16,6 +16,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import { AlertCircle } from 'lucide-react'
 import { t } from '../../shared/locale'
 import { Button } from './Button'
+import { ModalShell } from './ModalShell'
 
 // ===== 内部组件 =====
 
@@ -33,6 +34,42 @@ interface ConfirmDialogProps extends ConfirmOptions {
   onResolve: (value: boolean) => void
 }
 
+/** 退场动画时长 —— 必须与 index.css 的 dialog-exit / backdrop-exit 对齐 */
+const EXIT_ANIMATION_MS = 200
+
+/**
+ * 退场延时：返回的 `exitThen` 先置 exiting（驱动 CSS 退场动画），
+ * 动画放完再执行 done（真正卸载）。两份模态此前各自重复这三行。
+ */
+function useExitDelay(): [boolean, (done: () => void) => void] {
+  const [isExiting, setIsExiting] = useState(false)
+  const exitThen = useCallback((done: () => void) => {
+    setIsExiting(true)
+    setTimeout(done, EXIT_ANIMATION_MS)
+  }, [])
+  return [isExiting, exitThen]
+}
+
+/**
+ * 命令式挂载：建容器 → 挂 body → createRoot → 渲染；resolve 时卸载并摘掉容器。
+ * 三个入口（confirm / alertError / confirmDeleteProject）共用。
+ */
+function mountDialog<T>(render: (resolve: (value: T) => void) => React.ReactNode): Promise<T> {
+  return new Promise<T>((resolve) => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+
+    const root = createRoot(container)
+    root.render(
+      render((value) => {
+        root.unmount()
+        document.body.removeChild(container)
+        resolve(value)
+      }),
+    )
+  })
+}
+
 function ConfirmDialog({
   title = t('dialog.confirmTitle'),
   message,
@@ -42,18 +79,12 @@ function ConfirmDialog({
   alert = false,
   onResolve,
 }: ConfirmDialogProps) {
-  const [isExiting, setIsExiting] = useState(false)
+  const [isExiting, exitThen] = useExitDelay()
   const confirmBtnRef = useRef<HTMLButtonElement>(null)
 
-  const handleConfirm = useCallback(() => {
-    setIsExiting(true)
-    setTimeout(() => onResolve(true), 200)
-  }, [onResolve])
+  const handleConfirm = useCallback(() => exitThen(() => onResolve(true)), [exitThen, onResolve])
 
-  const handleCancel = useCallback(() => {
-    setIsExiting(true)
-    setTimeout(() => onResolve(false), 200)
-  }, [onResolve])
+  const handleCancel = useCallback(() => exitThen(() => onResolve(false)), [exitThen, onResolve])
 
   // 进场聚焦确认按钮
   useEffect(() => {
@@ -73,44 +104,12 @@ function ConfirmDialog({
   }, [alert, handleCancel, handleConfirm])
 
   return (
-    /* 遮罩层 — 统一 CSS 变量和动画 */
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 'var(--z-modal)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-backdrop)',
-        backdropFilter: 'blur(8px)',
-        pointerEvents: 'auto',
-        /* 为遮罩层的进场同样加入 both 属性防闪烁 */
-        animation: isExiting
-          ? 'backdrop-exit 0.15s ease-out both'
-          : 'backdrop-enter 0.25s ease-out both',
-      }}
-      onClick={alert ? handleConfirm : handleCancel}
+    <ModalShell
+      exiting={isExiting}
+      role={alert ? 'alertdialog' : 'dialog'}
+      /* alert 模式点遮罩等同确认（用户只有「知道了」一条路） */
+      onBackdropClick={alert ? handleConfirm : handleCancel}
     >
-      {/* 弹窗主体 */}
-      <div
-        role={alert ? 'alertdialog' : 'dialog'}
-        aria-modal="true"
-        style={{
-          backgroundColor: 'var(--color-sidebar)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
-          boxShadow: 'var(--shadow-popover)',
-          padding: '20px 24px',
-          minWidth: 320,
-          maxWidth: 460,
-          /* CSS 动画，使用 both 从而提前应用 0% 关键帧，彻底杜绝闪烁现象 */
-          animation: isExiting
-            ? 'dialog-exit 0.15s ease-out both'
-            : 'dialog-enter 0.25s var(--transition-spring) both',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
         {/* 标题（alert 模式带错误图标） */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
           {alert && (
@@ -150,8 +149,7 @@ function ConfirmDialog({
             {confirmText}
           </Button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -167,29 +165,17 @@ export function confirm(
   message: string,
   options?: Partial<Omit<ConfirmOptions, 'message'>>,
 ): Promise<boolean> {
-  return new Promise(resolve => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-
-    const root = createRoot(container)
-    const cleanup = (value: boolean) => {
-      root.unmount()
-      document.body.removeChild(container)
-      resolve(value)
-    }
-
-    root.render(
-      <ConfirmDialog
-        message={message}
-        title={options?.title}
-        confirmText={options?.confirmText}
-        cancelText={options?.cancelText}
-        danger={options?.danger}
-        alert={options?.alert}
-        onResolve={cleanup}
-      />
-    )
-  })
+  return mountDialog<boolean>((resolve) => (
+    <ConfirmDialog
+      message={message}
+      title={options?.title}
+      confirmText={options?.confirmText}
+      cancelText={options?.cancelText}
+      danger={options?.danger}
+      alert={options?.alert}
+      onResolve={resolve}
+    />
+  ))
 }
 
 /**
@@ -219,13 +205,13 @@ interface ConfirmDeleteProjectProps {
 }
 
 function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
-  const [isExiting, setIsExiting] = useState(false)
+  const [isExiting, exitThen] = useExitDelay()
   const deleteBtnRef = useRef<HTMLButtonElement>(null)
 
-  const handleAction = useCallback((action: DeleteAction) => {
-    setIsExiting(true)
-    setTimeout(() => onResolve(action), 200)
-  }, [onResolve])
+  const handleAction = useCallback(
+    (action: DeleteAction) => exitThen(() => onResolve(action)),
+    [exitThen, onResolve],
+  )
 
   const handleCancel = useCallback(() => handleAction('cancel'), [handleAction])
 
@@ -242,40 +228,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
   }, [handleCancel])
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        zIndex: 'var(--z-modal)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        backgroundColor: 'var(--color-backdrop)',
-        backdropFilter: 'blur(8px)',
-        pointerEvents: 'auto',
-        animation: isExiting
-          ? 'backdrop-exit 0.15s ease-out both'
-          : 'backdrop-enter 0.25s ease-out both',
-      }}
-      onClick={handleCancel}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        style={{
-          backgroundColor: 'var(--color-sidebar)',
-          border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
-          boxShadow: 'var(--shadow-popover)',
-          padding: '20px 24px',
-          minWidth: 380,
-          maxWidth: 460,
-          animation: isExiting
-            ? 'dialog-exit 0.15s ease-out both'
-            : 'dialog-enter 0.25s var(--transition-spring) both',
-        }}
-        onClick={e => e.stopPropagation()}
-      >
+    <ModalShell exiting={isExiting} minWidth={380} onBackdropClick={handleCancel}>
         <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--color-text)', marginBottom: 10 }}>
           {t('project.deleteTitle')}
         </div>
@@ -305,8 +258,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
             {t('project.deleteFolder')}
           </Button>
         </div>
-      </div>
-    </div>
+    </ModalShell>
   )
 }
 
@@ -319,17 +271,7 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
  * else if (action === 'remove') removeRecentProject(path)
  */
 export function confirmDeleteProject(): Promise<DeleteAction> {
-  return new Promise(resolve => {
-    const container = document.createElement('div')
-    document.body.appendChild(container)
-
-    const root = createRoot(container)
-    const cleanup = (action: DeleteAction) => {
-      root.unmount()
-      document.body.removeChild(container)
-      resolve(action)
-    }
-
-    root.render(<ConfirmDeleteProjectDialog onResolve={cleanup} />)
-  })
+  return mountDialog<DeleteAction>((resolve) => (
+    <ConfirmDeleteProjectDialog onResolve={resolve} />
+  ))
 }
