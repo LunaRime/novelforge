@@ -28,6 +28,29 @@
 
 **收益评估**：视觉收益≈0（2b 已完成统一），主要价值是**防止将来漂移**。故优先级低于其他项。
 
+> ✅ **2026-09-25 已完成**：新增 `src/components/ui/PopoverSurface.tsx`（含 12 条测试），
+> 10 处外壳全部迁移。两套定位机制由 **`ref` / `anchorName` 二选一**区分，组件只做一次分支：
+> JS 模式补 `z-[var(--z-dropdown)]` + `position: fixed; visibility: hidden`；
+> 锚点模式补 `floating-menu floating-menu--{placement}` + `positionAnchor`。
+> 组件**只管外观**——不持有开关状态、不接管定位算法、不挂 Esc/点击外部（那些仍由各调用方负责）。
+>
+> 迁移中的两处事实更正：
+> - **`RightToolWindowBar` 用的是 `--color-panel`**，其余 9 处用 `--color-sidebar`。
+>   四主题下两者**取值完全相同**，故统一是**视觉零变化**（属命名漂移）。
+> - 类名层面原本还有第三套写法差异：`RightToolWindowBar` 用 Tailwind 的 `border` 类 + 内联
+>   `borderColor`，其余用内联 `border: 1px solid var(--color-border)`——等价，已统一为后者。
+>
+> 明确排除（非"同一外壳"）：`NovelConfigEditor` 的提示气泡是 **tooltip**
+> （`--color-bg-elevated` 底 + `--z-tooltip` + `pointerEvents: none`）；
+> `ui/ContextMenu` 是鼠标坐标定位的右键菜单（圆角 `radius-xl`、`minWidth 200`），
+> 若要复用需给组件加圆角变体，本轮不做。
+>
+> ⚠️ **待真机验证**（这 10 条主交互路径此前零测试覆盖，自动化证据只到「类名与样式令牌正确」）：
+> ① `+` 上下文菜单 ② @提及 ③ 斜杠命令 ④ 文件选择 ⑤ AGENT「更多」（含宽度 200↔260 过渡）
+> ⑥ 上下文明细 ⑦ 水温 ⑧ 主题菜单 ⑨ 深度档位 ⑩ 模型菜单
+> ——逐项确认：位置正确、不被裁切、底色/描边/阴影与其它菜单一致、点外部与 Esc 仍能关。
+
+
 ### 2. 共用组件抽取（需先设计 API + 审美定夺）
 
 | 重复项 | 处数 | 阻塞点 |
@@ -48,6 +71,22 @@
 
 **为什么不在本轮做**：要删 i18n key + 改 8 个调用点，删错 key 的后果（其他语言缺失 / 运行时取不到 key）
 比收益大。建议单独一批，**改完必须三语各切一遍**看空态。
+
+> ⚠️ **2026-09-25 已完成——但上文有三处失实，勿再沿用该判断**：
+> ① `error.noProject` **不是零引用**（41 处：agent 工具 17 + workflow 命令与守卫 20 + kb-controller 4）；
+> ② `guard.noProject` **不是零引用**（5 处，`workflow-guards.ts`）；
+> ③ `editor.noProject` **不属"同一句"**——其文案是「在左侧项目树中单击文件开始编辑」，
+> 场景是**「有项目但没有打开的 Tab」**（`EditorArea.tsx:466` 注释），与外三键语义无关。
+> 照上文删除会打断 46 处调用，用户与 **LLM 上下文**将直接看到 key 字面量。
+>
+> **实际完成范围**：`knowledge.openProjectFirst` + `blueprint.openProjectFirst` + `project.noProject`
+> 三键并入 `empty.pleaseOpenProject`（含 ProjectTree 文案由「未打开项目」改为「请先打开项目」），
+> 共 **7 个调用点**统一；真死键 `export.noProject` 删除；`error.` / `guard.` / `editor.noProject` 三键保留。
+> `empty.pleaseOpenProject` 的 ru 文案由「Откройте проект」改为多数派的「Сначала откройте проект」。
+>
+> **同时新增守卫** `src/shared/i18n-key-guard.test.ts`：扫描 `t()` 字面量引用，断言 key 均在字典中
+> （只做「用了但没有」单向检测；反向的零引用检测因动态 key 误报过多而刻意不做）。
+> 该守卫在本次合并中实测有效：删键后立即失败并精确列出 5 个悬空调用点。
 
 ### 4. 其他已知但未动的项
 
