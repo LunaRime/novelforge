@@ -1,5 +1,5 @@
 import { useState, useRef, useMemo, useEffect } from 'react'
-import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge } from 'lucide-react'
+import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge, MoreHorizontal } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -19,9 +19,17 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
+import { SegmentedControl } from '../ui/SegmentedControl'
+import { PopoverSurface } from '../ui/PopoverSurface'
+import { MenuItem } from '../ui/MenuItem'
+import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useTranslation } from '../../hooks/useTranslation'
 import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
 import type { TextKey } from '../../shared/locale'
+
+/** 四个并列视图（视图条上的分段值） */
+type ViewMode = 'edit' | 'state' | 'graph' | 'backlinks'
 
 /**
  * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
@@ -36,7 +44,14 @@ export default function CharacterEditor() {
   const updateField = useCharacterStore(s => s.updateField)
   const deleteCharacter = useCharacterStore(s => s.deleteCharacter)
   const saveAll = useCharacterStore(s => s.saveAll)
-  const [viewMode, setViewMode] = useState<'edit' | 'state' | 'graph' | 'backlinks'>('edit')
+  const dirty = useCharacterStore(s => s.dirty)
+  const [viewMode, setViewMode] = useState<ViewMode>('edit')
+
+  /** 「更多」菜单开关（低频操作：生成档案 / 试演 / 模板 / 删除） */
+  const [menuOpen, setMenuOpen] = useState(false)
+  const menuAnchorRef = useRef<HTMLDivElement>(null)
+  useOutsideClick(menuAnchorRef, () => setMenuOpen(false), menuOpen)
+  useEscapeKey(() => setMenuOpen(false), menuOpen)
 
   // 数据由 ProjectService 统一加载，组件只消费 store 数据
 
@@ -234,7 +249,10 @@ export default function CharacterEditor() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
-      {/* 统一顶部工具栏 */}
+      {/* ═══ 工具栏：动作只剩「保存」（主操作）+「更多」（低频操作收进去）═══
+          重构前这一条 36px 里塞了 **9 个控件**（4 个视图/动作按钮 + 生成档案 + 试演 +
+          2 个模板图标 + 删除 + 保存）—— 光按钮就要 ~340px，而编辑区下限只有 320px
+          （`EDITOR_MIN_PX`），窄编辑区必然挤出界。视图切换已独立成下面那条分段条。 */}
       <div
         className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
         style={{
@@ -243,79 +261,128 @@ export default function CharacterEditor() {
         }}
       >
         <div className="flex items-center gap-1.5 min-w-0">
-          <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-            {viewMode === 'graph'
-              ? t('character.viewGraph')
-              : selectedCard
-                ? `${selectedCard.name || t('character.newCharacter')} ${viewMode === 'state' ? `— ${t('character.viewState')}` : `— ${t('character.viewEdit')}`}`
-                : t('character.viewProfile')}
+          {/* 标题只说「在编谁」。视图名不再拼进标题（拼法带来 `名字 — 编辑档案` 这类
+              需要一个字符串拼出模式名的写法，而模式现在是下面那条分段条的当前段） */}
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {selectedCard
+              ? (selectedCard.name || t('character.newCharacter'))
+              : t('character.viewProfile')}
           </span>
-        </div>
-        
-        <div className="flex items-center gap-1.5 flex-shrink-0">
-          {viewMode === 'graph' ? (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToEdit')}>
-              <Users size={12} /> {t('character.editMode')}
-            </Button>
-          ) : viewMode === 'backlinks' ? (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToEdit')}>
-              <Users size={12} /> {t('character.editMode')}
-            </Button>
-          ) : selectedCard ? (
-            <>
-              {viewMode === 'state' ? (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('edit')} title={t('character.backToBasic')}>
-                  <Users size={12} /> {t('character.basicSettings')}
-                </Button>
-              ) : (
-                <Button variant="outline" size="sm" onClick={() => setViewMode('state')} title={t('character.viewCurrentState')}>
-                  📋 {t('character.currentState')}
-                </Button>
-              )}
-              <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
-                <Network size={12} /> {t('character.relationGraph')}
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => setViewMode('backlinks')} title={t('character.viewBacklinks')}>
-                <Link2 size={12} /> {t('character.backlinks')}
-              </Button>
-              {/* 从定稿生成档案：仅当前选中角色，确认后由工作流驱动（执行中禁用防重入） */}
-              <Button variant="outline" size="sm" onClick={handleArchive} disabled={archiving} title={t('character.archiveBtnTitle')}>
-                <Sparkles size={12} /> {archiving ? t('character.archiveRunning') : t('character.archiveBtn')}
-              </Button>
-              {/* 角色试演：新建绑定角色的 Agent 会话并打开 AI 面板（OOC 约束在 roleplay prompt 内） */}
-              <Button variant="outline" size="sm" onClick={handleRoleplay} title={t('roleplay.enter')}>
-                <MessagesSquare size={12} /> {t('roleplay.enter')}
-              </Button>
-              {/* 角色卡模板：存为模板（当前卡 → ~/.novelforge/templates/）/ 应用模板（下拉选择填充） */}
-              <Button variant="outline" size="sm" onClick={handleSaveTemplate} title={t('template.saveAs')}>
-                <BookmarkPlus size={12} />
-              </Button>
-              <Select value="" onValueChange={(v) => void handleApplyTemplate(v)} onOpenChange={(open) => { if (open) void loadTemplates() }}>
-                <SelectTrigger className="h-6 w-6 rounded justify-center" title={t('template.apply')}>
-                  <FileInput size={12} />
-                </SelectTrigger>
-                <SelectContent>
-                  {templates.length === 0 ? (
-                    <div className="px-2 py-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('template.empty')}</div>
-                  ) : templates.map(tp => (
-                    <SelectItem key={tp.name} value={tp.name}>{tp.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button variant="destructive" size="sm" onClick={handleDelete}>
-                <Trash2 size={12} /> {t('action.delete')}
-              </Button>
-              <Button variant="outline" size="sm" onClick={handleSave} disabled={saving}>
-                <Save size={12} /> {saving ? t('status.saving') : t('action.save')}
-              </Button>
-            </>
-          ) : (
-            <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
-              <Network size={12} /> {t('character.relationGraph')}
-            </Button>
+          {selectedCard && dirty && (
+            <span
+              className="text-2xs flex-shrink-0 px-1 rounded"
+              style={{ backgroundColor: 'rgba(var(--color-warning-rgb), 0.15)', color: 'var(--color-warning)' }}
+            >
+              {t('character.unsaved')}
+            </span>
           )}
         </div>
+
+        <div className="flex items-center gap-1.5 flex-shrink-0">
+          {/* 保存 = 唯一主操作：未保存时点亮成 accent（`dirty` 的全局提示就靠它）
+              只在两个可编辑视图出现 —— 图谱/反向链接是只读视图，摆个保存键是噪音 */}
+          {selectedCard && (viewMode === 'edit' || viewMode === 'state') && (
+            <Button variant={dirty ? 'default' : 'outline'} size="sm" onClick={handleSave} disabled={saving}>
+              <Save size={12} /> {saving ? t('status.saving') : t('action.save')}
+            </Button>
+          )}
+
+          {selectedCard ? (
+            <div className="relative" ref={menuAnchorRef}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="px-1.5"
+                onClick={() => { setMenuOpen(v => !v); if (!menuOpen) void loadTemplates() }}
+                title={t('charList.more')}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                style={{ anchorName: '--char-more' } as React.CSSProperties}
+              >
+                <MoreHorizontal size={14} />
+              </Button>
+              {menuOpen && (
+                <PopoverSurface anchorName="--char-more" placement="below-end" className="py-1" style={{ minWidth: 216 }}>
+                  {/* 从定稿生成档案：仅当前选中角色，确认后由工作流驱动（执行中禁用防重入） */}
+                  <MenuItem
+                    icon={<Sparkles size={12} />}
+                    label={archiving ? t('character.archiveRunning') : t('character.archiveBtn')}
+                    disabled={archiving}
+                    onClick={() => { setMenuOpen(false); void handleArchive() }}
+                  />
+                  {/* 角色试演：新建绑定角色的 Agent 会话并打开 AI 面板（OOC 约束在 roleplay prompt 内） */}
+                  <MenuItem
+                    icon={<MessagesSquare size={12} />}
+                    label={t('roleplay.enter')}
+                    onClick={() => { setMenuOpen(false); handleRoleplay() }}
+                  />
+                  <div className="my-1" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+                  {/* 角色卡模板：存为模板（当前卡 → ~/.novelforge/templates/） */}
+                  <MenuItem
+                    icon={<BookmarkPlus size={12} />}
+                    label={t('template.saveAs')}
+                    onClick={() => { setMenuOpen(false); void handleSaveTemplate() }}
+                  />
+                  {/* 应用模板：模板是「选一个值」而非命令，但数量少、又要在同一步完成，
+                      故就地平铺成菜单里的一个分组（不引子菜单） */}
+                  <div className="px-3 pt-1 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
+                    {t('template.apply')}
+                  </div>
+                  {templates.length === 0 ? (
+                    <div className="px-3 pb-1 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
+                      {t('template.empty')}
+                    </div>
+                  ) : (
+                    templates.map(tp => (
+                      <MenuItem
+                        key={tp.name}
+                        icon={<FileInput size={12} />}
+                        label={tp.name}
+                        onClick={() => { setMenuOpen(false); void handleApplyTemplate(tp.name) }}
+                      />
+                    ))
+                  )}
+                  <div className="my-1" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
+                  {/* 删除 = 不可逆且低频：收进菜单末尾，用 danger 着色与确认框双保险 */}
+                  <MenuItem
+                    icon={<Trash2 size={12} />}
+                    label={t('action.delete')}
+                    danger
+                    onClick={() => { setMenuOpen(false); void handleDelete() }}
+                  />
+                </PopoverSurface>
+              )}
+            </div>
+          ) : viewMode !== 'graph' ? (
+            /* 无选中角色时没有「卡」可编辑，只剩图谱值得看（点节点即回到档案） */
+            <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
+              <Network size={12} /> {t('character.viewGraph')}
+            </Button>
+          ) : null}
+        </div>
       </div>
+
+      {/* ═══ 视图条：四个视图各自成段，当前视图常驻可见 ═══
+          重构前这里是「按钮标签在两态之间互换」（当前状态 ⇄ 基础设定）+ 两个独立按钮，
+          从界面上看不出其实有四个视图。只在有选中角色时出现：四段里三段都需要一张卡。 */}
+      {selectedCard && (
+        <div
+          className="flex items-center px-3 py-1 flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}
+        >
+          <SegmentedControl<ViewMode>
+            size="sm"
+            value={viewMode}
+            onChange={setViewMode}
+            items={[
+              { value: 'edit', label: t('character.viewEdit'), title: t('character.backToEdit') },
+              { value: 'state', label: t('character.viewState'), title: t('character.viewCurrentState') },
+              { value: 'graph', label: t('character.viewGraph'), title: t('character.viewRelations') },
+              { value: 'backlinks', label: t('character.backlinks'), title: t('character.viewBacklinks') },
+            ]}
+          />
+        </div>
+      )}
 
       {/* 主体区 */}
       <div className="flex-1 overflow-y-auto relative">
@@ -377,8 +444,13 @@ export default function CharacterEditor() {
         ) : (
           <div className="max-w-2xl mx-auto px-6 py-4">
             <div className="space-y-3">
-              {/* 戏份等级 + 角色定位 */}
-              <div className="grid grid-cols-3 gap-3">
+              <SectionHeader title={t('character.basicSettings')} />
+              {/* 姓名 + 戏份等级 + 定位。
+                  ⚠️ 列数不能用 `grid-cols-3`：编辑区下限 320px（`EDITOR_MIN_PX`），
+                  三列各 ~100px 时「★★★ 核心」「🌟 主角」会被折成两行（截图实测）。
+                  用 auto-fit 按**容器宽度**（而非视口宽度）自动降到 2 列/1 列 ——
+                  Tailwind 的 `sm:` 断点看视口，1440px 窗口里塞个 320px 编辑区时不会降级。 */}
+              <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
                 <div><Label>{t('character.name')}</Label><Input ref={nameInputRef} value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
                 <div>
                   <Label>{t('character.tier')}</Label>
@@ -408,7 +480,7 @@ export default function CharacterEditor() {
               </div>
 
               {/* 出场章节 + 标签 — 所有 tier 通用 */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
                 <div>
                   <Label>{t('character.appearChapters')}</Label>
                   <Input
@@ -437,40 +509,41 @@ export default function CharacterEditor() {
                 />
               </div>
 
-              {/* === Tier 1-2: 核心字段 === */}
+              {/* === 档案区：tier 1-2 才有（tier 3 是配角简档，只有基础设定 + 备注） === */}
               {(selectedCard.tier ?? 2) <= 2 && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <SectionHeader title={t('character.viewProfile')} />
+                  <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
                     <div><Label>{t('character.gender')}</Label><Input value={selectedCard.gender} onChange={(e) => updateField(selectedCard.name, 'gender', e.target.value)} /></div>
                     <div><Label>{t('character.age')}</Label><Input value={selectedCard.age} onChange={(e) => updateField(selectedCard.name, 'age', e.target.value)} /></div>
                   </div>
                   <div><Label>{t('character.appearance')}</Label><Textarea value={selectedCard.appearance} onChange={(e) => updateField(selectedCard.name, 'appearance', e.target.value)} rows={3} /></div>
                   <div><Label>{t('character.personality')}</Label><Textarea value={selectedCard.personality} onChange={(e) => updateField(selectedCard.name, 'personality', e.target.value)} rows={3} /></div>
-                </>
-              )}
 
-              {/* === Tier 1: 完整档案 === */}
-              {(selectedCard.tier ?? 2) <= 1 && (
-                <>
-                  <div><Label>{t('character.background')}</Label><Textarea value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} /></div>
-                  <div><Label>{t('character.abilities')}</Label><Textarea value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} /></div>
-                  <div><Label>{t('character.motivation')}</Label><Textarea value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} /></div>
-                  {/* 结构化关系编辑器 */}
-                  <StructuredRelations
-                    relations={selectedCard.relations || '[]'}
-                    allCharacters={characters.map(c => c.name)}
-                    currentName={selectedCard.name}
-                    onChange={(val) => updateField(selectedCard.name, 'relations', val)}
-                    t={t}
-                  />
-                  {/* 旧版关系文本（保留兼容） */}
-                  <details className="mt-2">
-                    <summary className="text-micro text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
-                      {t('character.legacyRelations')}
-                    </summary>
-                    <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
-                  </details>
-                  <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
+                  {/* === Tier 1: 完整档案（嵌套在档案区内，少一层分区标题） === */}
+                  {(selectedCard.tier ?? 2) <= 1 && (
+                    <>
+                      <div><Label>{t('character.background')}</Label><Textarea value={selectedCard.background} onChange={(e) => updateField(selectedCard.name, 'background', e.target.value)} rows={4} /></div>
+                      <div><Label>{t('character.abilities')}</Label><Textarea value={selectedCard.abilities} onChange={(e) => updateField(selectedCard.name, 'abilities', e.target.value)} rows={3} /></div>
+                      <div><Label>{t('character.motivation')}</Label><Textarea value={selectedCard.motivation} onChange={(e) => updateField(selectedCard.name, 'motivation', e.target.value)} rows={2} /></div>
+                      {/* 结构化关系编辑器 */}
+                      <StructuredRelations
+                        relations={selectedCard.relations || '[]'}
+                        allCharacters={characters.map(c => c.name)}
+                        currentName={selectedCard.name}
+                        onChange={(val) => updateField(selectedCard.name, 'relations', val)}
+                        t={t}
+                      />
+                      {/* 旧版关系文本（保留兼容） */}
+                      <details className="mt-2">
+                        <summary className="text-micro text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
+                          {t('character.legacyRelations')}
+                        </summary>
+                        <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
+                      </details>
+                      <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -495,6 +568,24 @@ export default function CharacterEditor() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+// ===== 分区标题 =====
+
+/**
+ * 表单分区标题 —— 「小标题 + 一条细线」。
+ *
+ * 为什么需要它：tier 1 角色的档案有 16 个字段，从顶排到底全靠 Label 区分，
+ * 滚动时没有任何落点（此前唯一的分区手法是生命周期区前的一条 `border-t`）。
+ * 分区只加给「多字段成组」的段落，单个字段（备注）不配分区标题。
+ */
+function SectionHeader({ title }: { title: string }) {
+  return (
+    <div className="flex items-center gap-2 pt-2">
+      <span className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</span>
+      <div className="flex-1" style={{ height: 1, backgroundColor: 'var(--color-border)' }} />
     </div>
   )
 }
@@ -560,9 +651,12 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
   const otherName = (pair: DuplicatePair): string => pair.a === char.name ? pair.b : pair.a
 
   return (
-    <div className="pt-3 mt-3 border-t" style={{ borderColor: 'var(--color-border)' }}>
-      {/* 生命周期统计 + 状态 */}
-      <div className="grid grid-cols-2 gap-3">
+    <div>
+      {/* 分区标题（此前只有一条 border-t，看不出这一段是「生命周期 + 合并」） */}
+      <SectionHeader title={t('character.lifecycleSection')} />
+      {/* 生命周期统计 + 状态。`mt-3` 与其他分区的 `space-y-3` 对齐 ——
+          少了它，这个分区的标题会紧贴字段（截图实测：比其他分区紧 12px） */}
+      <div className="grid gap-3 mt-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
         <div>
           <Label>{t('character.status')}</Label>
           <Select

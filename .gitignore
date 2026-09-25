@@ -67,3 +67,5 @@ scripts/font-char-set.txt
 
 # git worktrees（隔离工作区）.worktrees/
 .worktrees/
+# UI 截图产出（scripts/shot-stories.mjs）
+.shots/

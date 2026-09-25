@@ -116,6 +116,9 @@ export const characterTexts = {
   'character.newCharacter': { 'zh-CN': '新角色', 'en-US': 'New Character', 'ru-RU': 'Новый персонаж' },
   'character.editMode': { 'zh-CN': '编辑模式', 'en-US': 'Edit Mode', 'ru-RU': 'Режим редактирования' },
   'character.basicSettings': { 'zh-CN': '基础设定', 'en-US': 'Basic Settings', 'ru-RU': 'Основные настройки' },
+  // 表单分区标题：把长表单切成分段（生命周期/合并是最后一段，此前只靠一条 border-t 分隔）
+  'character.lifecycleSection': { 'zh-CN': '生命周期与合并', 'en-US': 'Lifecycle & Merge', 'ru-RU': 'Жизненный цикл и объединение' },
+  'character.unsaved': { 'zh-CN': '● 未保存', 'en-US': '● Unsaved', 'ru-RU': '● Не сохранено' },
   'character.currentState': { 'zh-CN': '当前状态', 'en-US': 'Current State', 'ru-RU': 'Текущее состояние' },
   'character.relationGraph': { 'zh-CN': '关系图谱', 'en-US': 'Relationship Graph', 'ru-RU': 'Граф отношений' },
   'character.backlinks': { 'zh-CN': '反向链接', 'en-US': 'Backlinks', 'ru-RU': 'Обратные ссылки' },
