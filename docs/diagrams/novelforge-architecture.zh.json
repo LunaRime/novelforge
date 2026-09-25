@@ -1,0 +1,67 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "NovelForge 是怎么运转的",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [1180, 700],
+    "legend": { "mode": "auto" }
+  },
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "数据都留在本机",
+      "items": [
+        "章节、设定、向量索引都是本地文件，断网也能打开",
+        "只有模型请求出网，且可换成本地模型"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "一章的诞生",
+      "items": [
+        "写稿 → 修稿 → 审稿 → 定稿，每一步都由你确认",
+        "定稿后并行跑：剧情 / 角色 / 伏笔 / 声音 / 文风"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "省钱与不阻塞",
+      "items": [
+        "三层模型路由：重活给强模型，杂活给便宜模型",
+        "向量检索有本地兜底，模型不可用也不卡住创作"
+      ]
+    }
+  ],
+  "components": [
+    { "id": "author", "type": "external", "label": "作者", "sublabel": "写稿 · 审稿 · 定稿", "pos": [30, 300], "size": [110, 62] },
+    { "id": "ui", "type": "frontend", "label": "界面层", "sublabel": "React 19 · 四主题 · 三语", "pos": [200, 300], "size": [155, 62] },
+    { "id": "bridge", "type": "security", "label": "IPC 安全桥", "sublabel": "通道白名单 · 来源校验", "pos": [415, 300], "size": [145, 62] },
+    { "id": "engine", "type": "backend", "label": "创作引擎", "sublabel": "工作流 DAG · Agent · 模型路由", "pos": [620, 288], "size": [190, 86] },
+    { "id": "llm", "type": "external", "label": "大模型服务", "sublabel": "多供应商 · 协议自适应", "pos": [880, 150], "size": [170, 62] },
+    { "id": "embed", "type": "external", "label": "向量模型", "sublabel": "本地 Ollama（可选云端）", "pos": [880, 300], "size": [170, 62] },
+    { "id": "vectors", "type": "database", "label": "向量库", "sublabel": "LanceDB · 章节分块", "pos": [880, 470], "size": [170, 62] },
+    { "id": "db", "type": "database", "label": "项目库", "sublabel": "SQLite · 15 张表", "pos": [620, 470], "size": [190, 62] },
+    { "id": "vault", "type": "database", "label": "记忆与产物", "sublabel": "三级记忆 · 导出文件", "pos": [400, 470], "size": [170, 62] }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "你的电脑 —— 创作数据都在这里",
+      "wraps": ["ui", "bridge", "engine", "embed", "db", "vault", "vectors"],
+      "pad": 34
+    }
+  ],
+  "connections": [
+    { "id": "write", "from": "author", "to": "ui", "label": "写作 · 审稿", "variant": "emphasis" },
+    { "id": "ask", "from": "ui", "to": "bridge", "label": "发请求" },
+    { "id": "pass", "from": "bridge", "to": "engine", "label": "校验后放行" },
+    { "id": "generate", "from": "engine", "to": "llm", "label": "生成 · 审阅 · 摘要", "variant": "emphasis" },
+    { "id": "vectorize", "from": "engine", "to": "embed" },
+    { "id": "index", "from": "embed", "to": "vectors", "label": "写入索引", "fromSide": "bottom", "toSide": "right" },
+    { "id": "recall", "from": "engine", "to": "vectors", "label": "检索前文", "variant": "dashed" },
+    { "id": "persist", "from": "engine", "to": "db", "label": "章节 · 设定 · 偏好", "labelDy": 36 },
+    { "id": "memory", "from": "engine", "to": "vault", "label": "沉淀记忆" }
+  ]
+}

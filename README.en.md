@@ -39,9 +39,13 @@
 |-----------------------|----------------------|
 | ![Chinese UI](screenshots/main-editor-zh.png) | ![English UI](screenshots/main-editor-en.png) |
 
-| Settings | Prompt Library |
-|----------|---------------|
-| ![Settings](screenshots/settings.png) | ![Prompts](screenshots/prompt-library.png) |
+| Welcome (English) | Welcome (Chinese) |
+|-------------------|-------------------|
+| ![Welcome](screenshots/welcome-en.png) | ![Welcome ZH](screenshots/welcome-zh.png) |
+
+| Model & Provider Setup | Settings (English) |
+|------------------------|--------------------|
+| ![Settings](screenshots/settings-zh.png) | ![Settings EN](screenshots/settings-en.png) |
 
 ---
 
@@ -60,22 +64,15 @@ Writing a web novel is not just about typing words — it's about managing a com
 
 ## How It Works
 
-```
-┌─────────────────────────────────────────────────────┐
-│                    NovelForge                        │
-│                                                     │
-│  📋 Blueprint → ✍️ Draft → 🔍 Review → ✨ Finalize   │
-│       │            │           │           │         │
-│       ▼            ▼           ▼           ▼         │
-│  AI generates  AI writes  5 reviewers  Post-process  │
-│  chapter plan  chapter    score draft   pipeline     │
-│       │            │           │           │         │
-│       └────────────┴───────────┴───────────┘         │
-│                        │                             │
-│                  📚 Local RAG                        │
-│            (SQLite + LanceDB Vector)                 │
-└─────────────────────────────────────────────────────┘
-```
+![NovelForge architecture](screenshots/architecture.en.png)
+
+> Author → Interface → IPC Trust Bridge → Creation Engine → LLM Services. Chapters, settings and the vector
+> index all stay **on your machine** — only model calls go online.
+> Generated with [archify](https://github.com/tt-a1i/archify) from `docs/diagrams/novelforge-architecture.en.json`
+> (Chinese version in [README.md](README.md)).
+
+The chapter pipeline itself: 📋 Blueprint → ✍️ Draft → 🔍 Review → ✨ Finalize → post-process, all backed by a local
+RAG store (SQLite + LanceDB) and gated by your confirmation at every step.
 
 ## ✨ Key Features
 
@@ -118,8 +115,19 @@ Writing a web novel is not just about typing words — it's about managing a com
 |---------|-------------|
 | 🔍 LLM + Vector Hybrid Retrieval | Semantic search + full-text search, auto-injected into AI prompts |
 | 🧬 LLM-as-Vectorization | Use your LLM as the embedding model — no dedicated embedding API needed |
+| 🏠 Local Embedding Model | Optional local Ollama (e.g. bge-m3) for offline semantic search; four-step fallback: local ⇄ cloud API → LLM → full-text |
+| 🀄 Chinese Text Search | jieba tokenization + FTS index — Chinese queries no longer degrade to whole-sentence matching |
 | 📊 IVF_PQ Vector Index | LanceDB ANN index for large-scale vector search acceleration |
 | 🔒 100% Local Storage | SQLite + LanceDB, works offline |
+
+### 🧠 AI Memory (Story Memory)
+
+| Feature | Description |
+|---------|-------------|
+| 📖 Three-Level Summaries | Finalize a chapter → chapter memory; complete the volume → volume memory; every 3 volumes → book state |
+| 🔗 Cross-Session Facts | Conversation compaction extracts reusable facts so the next chat starts informed — at no extra cost |
+| ♻️ Invalidation & Rebuild | Editing volume boundaries or re-finalizing marks affected memory as "needs rebuild"; stale memory stops entering context |
+| 🔍 Inspect & Edit | The "AI Memory" sidebar group lets you view / edit / delete files and manually rebuild volumes and the book state |
 
 ### 💰 Cost Optimization Engine
 
@@ -138,6 +146,9 @@ Writing a web novel is not just about typing words — it's about managing a com
 | 🌿 Conversation Branching | Fork a new session from any message / rewind with recovery, branch hierarchy in history panel |
 | 📄 Tool Result Spill-to-Disk | Long tool results stored on disk with path + summary in context; LLM re-reads on demand (deterministic naming + dedupe) |
 | 📐 Adaptive Context Compression | Budget scales with model window; recoverable errors auto-degrade and retry (withhold-then-recover) |
+| 🧰 Tools & Skills | 23 built-in tools (read/write, retrieval, editing, workflows) + SKILL.md skill packs (built-in / user / project, Cursor-compatible) |
+| 🔌 MCP | Plug in any MCP server to extend the tool surface |
+| 📊 Context Visibility | Usage ring + detail popover (base / memory / history / current), live cost and cache-hit readout |
 
 ### 🛡️ Privacy & Security
 
@@ -229,7 +240,9 @@ pnpm run rebuild
 
 Supports `OpenAI` · `DeepSeek` · `Gemini` · `Claude` · `Ollama` · `Zhipu GLM` · any OpenAI-compatible API.
 
-Configure your AI generation model and vector model in Settings. Enable tiered routing and prompt caching to save costs.
+- **Provider accounts** — one credential, many models: add a provider and it **fetches the available model list automatically**; tick the models you want and switch between them without re-entering keys
+- **Tiered routing** — assign a model to each of the three tiers (creative writing / standard analysis / lightweight), so expensive models only handle the work that needs them
+- **Local embedding model** — one-click download inside the app (multi-path speed probing + resumable transfer + automatic rerouting when a path stalls)
 
 ---
 

@@ -1,0 +1,255 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "How NovelForge Works",
+    "locale": "en",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1120,
+      700
+    ],
+    "legend": {
+      "mode": "auto"
+    }
+  },
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "Your data stays local",
+      "items": [
+        "Chapters, settings and the vector index are local files — open it offline",
+        "Only model calls go online, and they can be switched to a local model"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "How a chapter is born",
+      "items": [
+        "Draft → Revise → Review → Finalize, each step confirmed by you",
+        "After finalizing, five passes run in parallel: plot / cast / setups / voice / style"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "Cheap and non-blocking",
+      "items": [
+        "Three-tier routing: heavy work to strong models, chores to cheap ones",
+        "Local vector fallback keeps writing unblocked when a model is down"
+      ]
+    }
+  ],
+  "components": [
+    {
+      "id": "author",
+      "type": "external",
+      "label": "Author",
+      "sublabel": "writes · reviews",
+      "pos": [
+        30,
+        300
+      ],
+      "size": [
+        110,
+        62
+      ]
+    },
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "Interface",
+      "sublabel": "React 19 · 4 themes",
+      "pos": [
+        200,
+        300
+      ],
+      "size": [
+        155,
+        62
+      ]
+    },
+    {
+      "id": "bridge",
+      "type": "security",
+      "label": "IPC Trust Bridge",
+      "sublabel": "allowlist · origin checks",
+      "pos": [
+        415,
+        300
+      ],
+      "size": [
+        145,
+        62
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "Creation Engine",
+      "sublabel": "workflow DAG · agent · routing",
+      "pos": [
+        620,
+        288
+      ],
+      "size": [
+        190,
+        86
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "external",
+      "label": "LLM Services",
+      "sublabel": "multi-provider · protocol-aware",
+      "pos": [
+        880,
+        150
+      ],
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "embed",
+      "type": "external",
+      "label": "Embedding Model",
+      "sublabel": "local Ollama (cloud optional)",
+      "pos": [
+        880,
+        300
+      ],
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "vectors",
+      "type": "database",
+      "label": "Vector Store",
+      "sublabel": "LanceDB · chapter chunks",
+      "pos": [
+        880,
+        470
+      ],
+      "size": [
+        170,
+        62
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "Project Database",
+      "sublabel": "SQLite · 15 tables",
+      "pos": [
+        620,
+        470
+      ],
+      "size": [
+        190,
+        62
+      ]
+    },
+    {
+      "id": "vault",
+      "type": "database",
+      "label": "Memory & Outputs",
+      "sublabel": "three-level memory · exports",
+      "pos": [
+        400,
+        470
+      ],
+      "size": [
+        170,
+        62
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "Your computer — all writing data stays here",
+      "wraps": [
+        "ui",
+        "bridge",
+        "engine",
+        "embed",
+        "db",
+        "vault",
+        "vectors"
+      ],
+      "pad": 34
+    }
+  ],
+  "connections": [
+    {
+      "id": "write",
+      "from": "author",
+      "to": "ui",
+      "label": "write · review",
+      "variant": "emphasis",
+      "labelAt": [
+        170,
+        384
+      ]
+    },
+    {
+      "id": "ask",
+      "from": "ui",
+      "to": "bridge",
+      "label": "request"
+    },
+    {
+      "id": "pass",
+      "from": "bridge",
+      "to": "engine",
+      "label": "validated",
+      "labelAt": [
+        490,
+        384
+      ]
+    },
+    {
+      "id": "generate",
+      "from": "engine",
+      "to": "llm",
+      "label": "generate · review · summarize",
+      "variant": "emphasis"
+    },
+    {
+      "id": "vectorize",
+      "from": "engine",
+      "to": "embed"
+    },
+    {
+      "id": "index",
+      "from": "embed",
+      "to": "vectors",
+      "label": "write index",
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "recall",
+      "from": "engine",
+      "to": "vectors",
+      "label": "recall context",
+      "variant": "dashed"
+    },
+    {
+      "id": "persist",
+      "from": "engine",
+      "to": "db",
+      "label": "chapters · settings · prefs",
+      "labelDy": 36
+    },
+    {
+      "id": "memory",
+      "from": "engine",
+      "to": "vault",
+      "label": "distill memory"
+    }
+  ]
+}
