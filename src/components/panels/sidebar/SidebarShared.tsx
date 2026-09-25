@@ -211,8 +211,9 @@ export function LeafItem({
   return (
     <div
       className="tree-item gap-1.5 select-none"
-      // 左缩进交给主按钮（.tree-item 自带 `cursor-pointer` 与 px-2）：这样手型光标
-      // 与真实可点区完全重合，且缩进区仍然可点。右侧保留 8px 以免内容贴边。
+      // 左缩进交给主按钮（.tree-item 自带 px-2）：这样手型光标与真实可点区完全重合，
+      // 且缩进区仍然可点。右侧保留 8px 以免内容贴边——该留白不可点，故 .tree-item
+      // 已移除 cursor-pointer（否则留白处会出现手型）。
       style={{ paddingLeft: 0, paddingRight: 8 }}
       onContextMenu={onContextMenu}
       title={desc}

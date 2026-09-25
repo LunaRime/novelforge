@@ -713,7 +713,10 @@
 
   /* ===== 树节点 — 舒适的 26px 行高，带增强悬停效果 ===== */
   .tree-item {
-    @apply flex items-center gap-1.5 px-2 cursor-pointer;
+    /* ⚠️ 刻意不给 cursor-pointer：点击由行内的主按钮承担，手型光标应由那个 <button> 提供
+       （它自带 enabled:cursor-pointer）。容器再带手型会让「不可点的右侧留白」也显示手型，
+       即假可供性——批次 3 已把 4 处行的左缩进移到主按钮上，正是为了让光标与可点区重合。 */
+    @apply flex items-center gap-1.5 px-2;
     height: 26px;
     font-size: 13px;
     color: var(--color-text);
