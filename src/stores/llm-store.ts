@@ -9,7 +9,7 @@ import { toast } from '../components/ui/Toast'
  * 用户会连点多次；每次点击都会发出一个 llm:delete-model。
  */
 const deletingModelIds = new Set<string>()
-import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
+import type { ModelProfile, LLMResponse, TokenUsage, ProviderAccount } from '../shared/ipc-channels'
 import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -35,12 +35,24 @@ interface LLMState {
   modelRouter: ModelRouter | null
   /** 模型路由配置 */
   modelRoutes: ModelRouteConfig
+  /** 供应商账户（一份凭据挂多个模型）—— 其派生条目仍在 models 里 */
+  providers: ProviderAccount[]
 
   // ===== Actions =====
   /** 初始化（加载模型列表 + 默认模型 ID） */
   init: () => Promise<void>
   /** 加载模型列表 */
   loadModels: () => Promise<void>
+  /** 加载供应商账户 */
+  loadProviders: () => Promise<void>
+  /** 保存账户（主进程会顺带同步其派生模型条目）→ 成功后重载 models */
+  saveProvider: (account: ProviderAccount) => Promise<boolean>
+  /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
+  deleteProvider: (accountId: string) => Promise<boolean>
+  /** 拉取某凭据下可用的模型名（失败返回可操作错误文案，不是异常） */
+  listProviderModels: (
+    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl'>,
+  ) => Promise<{ success: boolean; models?: string[]; error?: string }>
   /** 保存模型 */
   saveModel: (model: ModelProfile) => Promise<boolean>
   /** 删除模型 */
@@ -76,6 +88,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   models: [],
   defaultModelId: null,
   defaultEmbeddingModelId: null,
+  providers: [],
   activeRequests: new Map(),
   loaded: false,
   modelRouter: null,
@@ -91,7 +104,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       } catch { /* 静默：无持久化配置时走自动分配 */ }
     }
     // 从 ~/.novelforge/ 加载模型列表和默认模型 ID
-    await get().loadModels()
+    await Promise.all([get().loadModels(), get().loadProviders()])
     if (ipc.isElectron) {
       const [defaultId, defaultEmbeddingId] = await Promise.all([
         ipc.invoke('llm:get-default-model'),
@@ -128,6 +141,50 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       set({ loaded: true })
     }
   },
+
+  loadProviders: async () => {
+    if (!ipc.isElectron) return
+    try {
+      set({ providers: await ipc.invoke('llm:list-providers') })
+    } catch (e) {
+      renderLog('error', 'LLM', t('log.render.modelListLoadFailed').replace('{err}', () => String(e)))
+    }
+  },
+
+  saveProvider: async (account) => {
+    const result = await ipc.invoke('llm:save-provider', account)
+    // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据副本）→ 两边都重载
+    if (result.success) {
+      await Promise.all([get().loadProviders(), get().loadModels()])
+    }
+    return result.success
+  },
+
+  deleteProvider: async (accountId) => {
+    const result = await ipc.invoke('llm:delete-provider', accountId)
+    if (!result.success) return false
+    await Promise.all([get().loadProviders(), get().loadModels()])
+    // 与 deleteModel 同理：删账户会连带删掉其派生模型，三层路由里可能还留着它们的 id
+    // → 不清会让 ModelRoutingSection 读到不存在的 id 而显示空白
+    const alive = new Set(get().models.map((m) => m.id))
+    const routes = get().modelRoutes
+    const cleaned: ModelRouteConfig = {
+      elite: routes.elite.filter((id) => alive.has(id)),
+      standard: routes.standard.filter((id) => alive.has(id)),
+      budget: routes.budget.filter((id) => alive.has(id)),
+    }
+    if (
+      cleaned.elite.length !== routes.elite.length ||
+      cleaned.standard.length !== routes.standard.length ||
+      cleaned.budget.length !== routes.budget.length
+    ) {
+      await ipc.invoke('llm:set-routes', cleaned)
+      set({ modelRoutes: cleaned })
+    }
+    return true
+  },
+
+  listProviderModels: (credentials) => ipc.invoke('llm:list-provider-models', credentials),
 
   saveModel: async (model) => {
     const result = await ipc.invoke('llm:save-model', model)
