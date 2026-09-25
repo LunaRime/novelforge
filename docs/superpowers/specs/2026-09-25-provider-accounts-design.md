@@ -1,6 +1,6 @@
 # 模型供应商账户：一次配置 + 勾选模型 + 自动获取可用模型（2026-09-25）
 
-> **状态：待审阅 · 未实施**
+> **状态：✅ 已实施（2026-09-25，后端层 + UI 层两个提交）**
 > 来源：用户指出前一版模型表单**缺两件事** ——
 > **A** 没有「自动获取供应商有哪些模型可添加」；
 > **B（主要）** 应该「添加一个模型供应商 → 勾选旗下的模型 → 之后直接切换，不必再添加」。
@@ -205,3 +205,52 @@ listModels(model: ModelProfile): Promise<string[]>
    （现有可用的中转/自建服务各测一次），失败则按 §三 的降级提示走
 3. 勾选后新建模型的默认 `contextWindow / maxTokens` 取预设值还是账户级默认值？
    **建议**：先取预设（`tokenSpec`），预设没有则取 `MAX_TOKENS_CAP` / 4096
+
+---
+
+## 八、实施记录（2026-09-25）
+
+两个提交：`87678b4`（后端层）、`df72010`（UI 层）。
+
+### 交付
+
+| 层 | 内容 |
+|---|---|
+| 纯逻辑 | `src/shared/provider-accounts.ts`：`deriveModelId` / `isModelOfAccount` / `syncAccountModels` / `findModelReferences`（**17 条测试**） |
+| 能力 | `ILLMProvider.listModels(credentials)`；openai `/v1/models`、gemini `/v1beta/models`、ollama 复用既有 `listOllamaModels`；`buildOpenAIUrl` 加 `'models'` 端点（**6 条测试**） |
+| 通道 | `llm:list-providers` / `save-provider` / `delete-provider` / `list-provider-models`（凭据沿用「盘上密文、渲染层明文」） |
+| 存储 | `~/.novelforge/providers.json`（新增）；`models.json` **形状未动** |
+| UI | `ProviderAccountsSection` / `ProviderAccountForm`；接入生成模型区与向量模型区 |
+| 顺带 | `fetchWithTimeout` 从 `electron/embedding.ts` 挪到 `net/fetch-with-timeout.ts`（它早已是共用工具、只是住错了地方；不挪则 LLM provider 要从「嵌入服务」import 网络工具） |
+
+**门禁**：tsc 0 / eslint 0 / **1756 测试（143 文件）**（改动前 1733）。
+
+### 四处实现决定（与本文设计的差异）
+
+1. **未加逐行「显示名」输入框**（§四 的界面稿里有）。加了就会有**两个真相源** ——
+   显示名必须只住在 `ModelProfile` 上（用户在模型卡片里改的即权威值），账户同步按合并语义只换凭据。
+   否则改一次 API Key 就会把用户改过的名字冲掉。
+2. **候选清单默认列出预设模型**（而不只是「获取」回来的）：这让「获取可用模型」
+   从**前置条件**降级为**增强** —— 服务不支持该端点时用户照样能勾选。
+3. **引用检查放在二次确认之前**：模型被引用时根本不该走到「确认删除」那一步，
+   直接告诉用户「哪些位置在用」。
+4. **删账户后清理三层路由**：与 `deleteModel` 那次修复同因 —— 删掉模型条目后路由里仍留着
+   它的 id，`ModelRoutingSection` 会显示空白。`saveProvider` 同理重载 models。
+
+### ⚠️ 本仓守卫抓到的错（三道，都值得记）
+
+| 守卫 | 抓到的错 |
+|---|---|
+| `i18n-key-guard.test.ts` | 我**凭空用了 `error.modelNotFound`**（字典里没有）→ 新增 `error.providerNotFound` / `baseUrlRequired` / `modelListUnavailable` 三语键 |
+| `TextKey` 类型 | UI 层又凭空写 `model.saveFailed`（不存在）→ 改用既有的 `save.failed` |
+| `ipc-policy.ts` + `ipc-channel-parity.test.ts` | 新通道**没登记授权档位**、**没更新通道数量快照**（205→209） |
+
+→ 四个新通道全部登记为 `network-secret`（与既有 `llm:*` 一致）。
+
+### 遗留（未做）
+
+- **真机未验**：整个功能都没在真机跑过（账户增删改、勾选、获取模型、引用保护）
+- ⚠️ **`/v1/models` 在各中转服务上的实际可用率未知** —— 设计 §三 要求实施时真机打一遍，
+  尚未做。降级路径已就绪（提示可操作文案 + 预设清单兜底 + 手工输入）
+- 未决 1（向量模型并入账户）：**已按建议纳入** —— 勾选清单同时列出预设的
+  `models` 与 `embeddingModels`，新条目按来源决定 `purposes`
