@@ -885,7 +885,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         },
         abortController.signal,
         // options（Task D7-1）：模型上下文窗口 → 动态压缩预算；无窗口信息回退默认 16k
-        { modelContextWindow: llmStore.models.find(m => m.id === modelId)?.maxTokens },
+        // ⚠️ 取 contextWindow 而非 maxTokens —— 前者是「输入+输出总容量」，后者只是输出上限
+        { modelContextWindow: llmStore.models.find(m => m.id === modelId)?.contextWindow },
         agentDeps,
       )
     } catch (error) {

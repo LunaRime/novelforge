@@ -487,7 +487,16 @@ export interface ModelProfile {
   apiKey: string
   baseUrl: string
   temperature: number
+  /** 单次请求最大**输出** token 数 —— 会作为 `max_tokens` 发给 API */
   maxTokens: number
+  /**
+   * 上下文窗口：输入 + 输出**总容量** —— 上下文占用条的分母、动态压缩预算用。
+   *
+   * ⚠️ 与 `maxTokens` 是**两件事，不可互相推导**。2026-09-25 之前二者是同一个字段，
+   * 于是「占用条分母」和「发给 API 的输出上限」用了同一个数（预设一律写 131072）。
+   * 旧配置缺本字段时由 `normalizeModelProfile`（llm-constants）补齐。
+   */
+  contextWindow: number
   purposes: Array<'generation' | 'refinement' | 'summary' | 'embedding'>
 }
 

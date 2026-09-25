@@ -17,7 +17,7 @@ import { useConcurrencyStore } from '../../stores/concurrency-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
 import type { ModelTier, ModelRouteConfig } from '../../services/llm/model-router'
-import type { ProviderPreset } from '../../shared/provider-presets'
+import type { ModelPreset, ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
 import { Button } from '../ui/Button'
@@ -28,6 +28,7 @@ import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../sh
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import type { TextKey } from '../../shared/locale'
 import { Input } from '../ui/Input'
+import { Disclosure } from '../ui/Disclosure'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
@@ -205,6 +206,23 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
 
 // ==================== LLM & Embedding 通用区 ====================
 
+/**
+ * 从预设取「该模型的 token 规格」—— `maxTokens`（输出）与 `contextWindow`（窗口）**成对**返回。
+ *
+ * 成对的理由：切换预设模型 = 切换它的规格，两个数本就属于同一个模型，分开更新会留下
+ * 「旧窗口 + 新输出上限」这种自相矛盾的组合。
+ *
+ * `contextWindow` 省略时取 `maxTokens`（预设里只在该模型真实窗口 ≠ 上限时才显式写它，
+ * 避免 30+ 条重复数字漂移 —— 见 `provider-presets.ts` 的类型注释）。
+ */
+function tokenSpec(
+  presetModel: ModelPreset | null | undefined,
+  fallbackMaxTokens: number,
+): Pick<ModelProfile, 'maxTokens' | 'contextWindow'> {
+  const maxTokens = presetModel?.maxTokens ?? fallbackMaxTokens
+  return { maxTokens, contextWindow: presetModel?.contextWindow ?? maxTokens }
+}
+
 function LLMSection({
   purposes,
   purposeLabel,
@@ -257,7 +275,7 @@ function LLMSection({
       apiKey: '',
       baseUrl: openaiPreset?.baseUrl ?? 'https://api.openai.com',
       temperature: 0.7,
-      maxTokens: openaiPreset?.models[0]?.maxTokens ?? 4096,
+      ...tokenSpec(openaiPreset?.models[0], 4096),
       purposes: [...purposes],
     })
   }
@@ -676,7 +694,7 @@ function ModelForm({
       modelName: (customModelName && model.modelName)
         ? model.modelName
         : defaultModelName,
-      maxTokens: firstModel?.maxTokens ?? model.maxTokens,
+      ...tokenSpec(firstModel, model.maxTokens),
     })
   }
 
@@ -692,7 +710,7 @@ function ModelForm({
       onChange({
         ...model,
         modelName: val,
-        maxTokens: matched?.maxTokens ?? model.maxTokens,
+        ...tokenSpec(matched, model.maxTokens),
       })
     }
   }
@@ -760,72 +778,8 @@ function ModelForm({
         </div>
       </div>
 
-      {/* 模型标识：有预设时显示下拉，否则纯输入 */}
-      <div>
-        <div className="flex items-center justify-between mb-1">
-          <Label className="mb-0">{t('form.modelId')}</Label>
-          {presetModels.length > 0 && (
-            <button
-              type="button"
-              onClick={() => {
-                if (customModelName) {
-                  // 切回预设列表
-                  const first = presetModels[0]
-                  setCustomModelName(false)
-                  onChange({ ...model, modelName: first.name, maxTokens: first.maxTokens ?? model.maxTokens })
-                } else {
-                  // 切换到自定义输入
-                  setCustomModelName(true)
-                  up('modelName', '')
-                }
-              }}
-              className="text-xs transition-colors"
-              style={{ color: 'var(--color-accent)' }}
-            >
-              {customModelName ? t('form.selectFromList') : t('form.manualInput')}
-            </button>
-          )}
-        </div>
-
-        {/* 有预设模型 且 未切到手动输入 → 显示下拉 */}
-        {presetModels.length > 0 && !customModelName ? (
-          <Select value={selectValue} onValueChange={handleModelSelect}>
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              {presetModels.map((m) => (
-                <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
-              ))}
-              <SelectItem value="__custom__">{t('form.manualOption')}</SelectItem>
-            </SelectContent>
-          </Select>
-        ) : (
-          <div>
-            <Input
-              value={model.modelName}
-              onChange={(e) => up('modelName', e.target.value)}
-              placeholder={isEmbedding ? 'text-embedding-3-small' : 'gpt-4o'}
-              autoFocus={customModelName}
-            />
-          </div>
-        )}
-      </div>
-
-      {/* API 地址 */}
-      <div>
-        <Label>{t('form.apiAddress')}</Label>
-        <Input
-          value={model.baseUrl}
-          onChange={(e) => up('baseUrl', e.target.value)}
-          placeholder="https://api.openai.com"
-        />
-        {model.provider !== 'custom' && (
-          <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
-            {t('model.apiAutoFilled').replace('{provider}', model.provider)}
-          </p>
-        )}
-      </div>
-
-      {/* API Key */}
+      {/* API Key —— 刻意排在自定义设置**之前**：它是本表单唯一必填的凭据，
+          而下面的模型标识/地址多能从预设带出，属可折叠的次要项 */}
       <div>
         <Label>{t('form.apiKey')}</Label>
         <div className="relative">
@@ -846,39 +800,135 @@ function ModelForm({
         </div>
       </div>
 
-      {/* 温度 / Token（仅生成模型） */}
-      {!isEmbedding && (
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label>{t('form.temperature')}</Label>
-            <Input
-              type="number" min={0} max={2} step={0.1}
-              value={model.temperature}
-              onChange={(e) => up('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)}
-              onBlur={() => {
-                // 钳制到 [0, 2]——此前可保存 -5 等非法值，运行时 API 400（P2 修复）
-                const v = Number(model.temperature);
-                if (isNaN(v)) up('temperature', 0.7)
-                else if (v < 0) up('temperature', 0)
-                else if (v > 2) up('temperature', 2)
-              }}
-            />
+      {/* 自定义设置（默认收起）：地址默认值本来就是对的一般用户不必看见；
+          模型标识同理（上面选了服务商就已带出默认模型） */}
+      <Disclosure label={t('form.advanced')}>
+        {/* 模型标识：有预设时显示下拉，否则纯输入 */}
+        <div>
+          <div className="flex items-center justify-between mb-1">
+            <Label className="mb-0">{t('form.modelId')}</Label>
+            {presetModels.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (customModelName) {
+                    // 切回预设列表
+                    const first = presetModels[0]
+                    setCustomModelName(false)
+                    onChange({ ...model, modelName: first.name, ...tokenSpec(first, model.maxTokens) })
+                  } else {
+                    // 切换到自定义输入
+                    setCustomModelName(true)
+                    up('modelName', '')
+                  }
+                }}
+                className="text-xs transition-colors"
+                style={{ color: 'var(--color-accent)' }}
+              >
+                {customModelName ? t('form.selectFromList') : t('form.manualInput')}
+              </button>
+            )}
           </div>
-          <div>
-            <Label>{t('form.maxTokens')}</Label>
-            <Input
-              type="number"
-              value={model.maxTokens}
-              onChange={(e) => up('maxTokens', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
-              onBlur={() => {
-                // 钳制到 [1, MAX_TOKENS_CAP]（全局模型输出上限，与主进程运行时钳制共享常量）——此前可保存 9999999（P2 修复）
-                const v = Number(model.maxTokens);
-                if (isNaN(v) || v < 1) up('maxTokens', 4096)
-                else if (v > MAX_TOKENS_CAP) up('maxTokens', MAX_TOKENS_CAP)
-              }}
-            />
-          </div>
+
+          {/* 有预设模型 且 未切到手动输入 → 显示下拉 */}
+          {presetModels.length > 0 && !customModelName ? (
+            <Select value={selectValue} onValueChange={handleModelSelect}>
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {presetModels.map((m) => (
+                  <SelectItem key={m.name} value={m.name}>{m.name}</SelectItem>
+                ))}
+                <SelectItem value="__custom__">{t('form.manualOption')}</SelectItem>
+              </SelectContent>
+            </Select>
+          ) : (
+            <div>
+              <Input
+                value={model.modelName}
+                onChange={(e) => up('modelName', e.target.value)}
+                placeholder={isEmbedding ? 'text-embedding-3-small' : 'gpt-4o'}
+                autoFocus={customModelName}
+              />
+            </div>
+          )}
         </div>
+
+        {/* API 地址 */}
+        <div className="mt-3">
+          <Label>{t('form.apiAddress')}</Label>
+          <Input
+            value={model.baseUrl}
+            onChange={(e) => up('baseUrl', e.target.value)}
+            placeholder="https://api.openai.com"
+          />
+          {model.provider !== 'custom' && (
+            <p className="text-xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+              {t('model.apiAutoFilled').replace('{provider}', model.provider)}
+            </p>
+          )}
+        </div>
+      </Disclosure>
+
+      {/* 模型参数（仅生成模型）：**窗口与输出上限并排** —— 二者是同一个模型的两项规格，
+          含义不同且不可互相推导（窗口 = 输入+输出总容量；输出上限 = 单次回复上限），
+          故各带一行说明。2026-09-25 之前它们是同一个 maxTokens 字段。 */}
+      {!isEmbedding && (
+        <>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>{t('form.contextWindow')}</Label>
+              <Input
+                type="number" min={1} step={1024}
+                value={model.contextWindow}
+                onChange={(e) => up('contextWindow', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
+                onBlur={() => {
+                  // 只兜下界：本字段仅本地消费（占用条分母 / 压缩预算），**不发往 API**，
+                  // 故不像 maxTokens 那样需要上限（那个上限是为了防 API 400）
+                  const v = Number(model.contextWindow);
+                  if (isNaN(v) || v < 1) up('contextWindow', MAX_TOKENS_CAP)
+                }}
+              />
+              <p className="text-2xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                {t('form.contextWindowHint')}
+              </p>
+            </div>
+            <div>
+              <Label>{t('form.maxTokens')}</Label>
+              <Input
+                type="number"
+                value={model.maxTokens}
+                onChange={(e) => up('maxTokens', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
+                onBlur={() => {
+                  // 钳制到 [1, MAX_TOKENS_CAP]（全局模型输出上限，与主进程运行时钳制共享常量）——此前可保存 9999999（P2 修复）
+                  const v = Number(model.maxTokens);
+                  if (isNaN(v) || v < 1) up('maxTokens', 4096)
+                  else if (v > MAX_TOKENS_CAP) up('maxTokens', MAX_TOKENS_CAP)
+                }}
+              />
+              <p className="text-2xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
+                {t('form.maxTokensHint')}
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>{t('form.temperature')}</Label>
+              <Input
+                type="number" min={0} max={2} step={0.1}
+                value={model.temperature}
+                onChange={(e) => up('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)}
+                onBlur={() => {
+                  // 钳制到 [0, 2]——此前可保存 -5 等非法值，运行时 API 400（P2 修复）
+                  const v = Number(model.temperature);
+                  if (isNaN(v)) up('temperature', 0.7)
+                  else if (v < 0) up('temperature', 0)
+                  else if (v > 2) up('temperature', 2)
+                }}
+              />
+            </div>
+          </div>
+        </>
       )}
 
       <div className="flex items-center gap-2 pt-1">

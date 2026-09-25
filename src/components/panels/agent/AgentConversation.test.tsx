@@ -52,7 +52,26 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
       configurable: true,
     })
     useProjectStore.setState({ currentProject: null })
-    useLLMStore.setState({ models: [], defaultModelId: null })
+    // 必须配一个模型：占用条的分母是**上下文窗口**，窗口未知时它整体不渲染
+    // （ContextBudgetBar 在 modelMax <= 0 时 return null）。2026-09-25 拆出 contextWindow 之前，
+    // 这里靠 `?? 131072` 的兜底才渲染得出来 —— 那是个编造的分母，已去掉。
+    // 本组用例断言的是**记忆段的 token 数**（与分母无关），故补一个 mock 模型即可。
+    useLLMStore.setState({
+      models: [{
+        id: 'm-test',
+        name: 'Test Model',
+        provider: 'openai',
+        protocol: 'openai',
+        modelName: 'gpt-4o',
+        apiKey: '',
+        baseUrl: 'https://api.example.com',
+        temperature: 0.7,
+        maxTokens: 4096,
+        contextWindow: 128000,
+        purposes: ['generation'],
+      }],
+      defaultModelId: 'm-test',
+    })
   })
 
   // 从预算条的 data 属性取四段 token（base,memory,history,current）的第 2 段。

@@ -3,10 +3,22 @@
  * 渲染进程与主进程共同使用，持久化在 ~/.novelforge/provider-presets.json
  */
 
-/** 单个模型的预设 — name + 该模型的输出 token 上限 */
+/** 单个模型的预设 — name + 该模型的 token 规格 */
 export interface ModelPreset {
   name: string
+  /** 单次请求最大**输出** token 数（发给 API 的 max_tokens） */
   maxTokens: number
+  /**
+   * 上下文窗口（**可省略**）。省略时由 `tokenSpec` / `normalizeModelProfile` 取 `maxTokens` ——
+   * 2026-09-25 把窗口与输出上限拆成两个字段时的**忠实搬运**，不代表它是真实窗口。
+   *
+   * 只在该模型**真实窗口 ≠ maxTokens** 时才显式写这里（差异即例外）——
+   * 逐条照抄 maxTokens 会多出 30+ 个必然会漂移的重复数字。
+   *
+   * ⚠️ 本文件会持久化到 `~/.novelforge/provider-presets.json`，新增字段**一律可选**，
+   * 否则旧文件读进来会缺字段。
+   */
+  contextWindow?: number
 }
 
 /** 单个服务商的预设配置 */

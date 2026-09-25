@@ -237,7 +237,13 @@ export const uiTexts = {
   'form.apiAddress': { 'zh-CN': 'API 地址', 'en-US': 'API Address', 'ru-RU': 'Адрес API' },
   'form.apiKey': { 'zh-CN': 'API Key', 'en-US': 'API Key', 'ru-RU': 'Ключ API' },
   'form.temperature': { 'zh-CN': '温度 (Temperature)', 'en-US': 'Temperature', 'ru-RU': 'Температура' },
-  'form.maxTokens': { 'zh-CN': '最大 Tokens', 'en-US': 'Max Tokens', 'ru-RU': 'Макс. токенов' },
+  // 2026-09-25 拆字段：原先只写「最大 Tokens」，语义模糊 —— 它其实是**输出上限**，
+  // 上下文占用条却拿它当**窗口**用。两个标签现在都把话说全。
+  'form.maxTokens': { 'zh-CN': '最大输出 Tokens', 'en-US': 'Max output tokens', 'ru-RU': 'Макс. выходных токенов' },
+  'form.maxTokensHint': { 'zh-CN': '单次回复的上限', 'en-US': 'Upper bound for a single reply', 'ru-RU': 'Лимит одного ответа' },
+  'form.contextWindow': { 'zh-CN': '上下文窗口', 'en-US': 'Context window', 'ru-RU': 'Контекстное окно' },
+  'form.contextWindowHint': { 'zh-CN': '输入 + 输出的总容量', 'en-US': 'Total capacity for input + output', 'ru-RU': 'Общий объём ввода и вывода' },
+  'form.advanced': { 'zh-CN': '自定义设置', 'en-US': 'Advanced settings', 'ru-RU': 'Дополнительные настройки' },
   'form.testConnection': { 'zh-CN': '测试连接', 'en-US': 'Test Connection', 'ru-RU': 'Проверить связь' },
   'form.saveConfig': { 'zh-CN': '保存配置', 'en-US': 'Save Config', 'ru-RU': 'Сохранить конфигурацию' },
   'form.hostAddress': { 'zh-CN': '主机地址', 'en-US': 'Host Address', 'ru-RU': 'Адрес хоста' },

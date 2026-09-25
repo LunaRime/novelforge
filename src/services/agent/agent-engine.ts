@@ -89,7 +89,7 @@ export interface AgentEngineDeps {
 
 /** Agent 引擎选项（D6/D7：动态压缩预算等） */
 export interface AgentEngineOptions {
-  /** 模型上下文窗口（tokens，来自 ModelProfile.maxTokens）；用于动态压缩预算（Task D7-1 消费） */
+  /** 模型上下文窗口（tokens，来自 `ModelProfile.contextWindow`）；用于动态压缩预算（Task D7-1 消费） */
   modelContextWindow?: number
 }
 

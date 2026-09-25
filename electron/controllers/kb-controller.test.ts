@@ -165,6 +165,7 @@ function setRemoteEmbeddingModel(): void {
     baseUrl: 'https://api.example.com/v1',
     temperature: 0,
     maxTokens: 0,
+    contextWindow: 0, // embedding 模型无输出/窗口概念，与 maxTokens 同置 0
     purposes: ['embedding'],
   }
   writeJsonFile(MODELS_CONFIG_PATH, [profile])

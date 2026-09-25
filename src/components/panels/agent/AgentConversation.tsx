@@ -257,7 +257,9 @@ function ActiveConversation() {
   const usageSegments = asyncSegments ?? { base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '' }
   const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
   const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
-  const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.maxTokens ?? 131072
+  // 占用条的分母是**上下文窗口**，不是最大输出（2026-09-25 拆字段前二者混用同一个 maxTokens）。
+  // contextWindow 由 llm-store.loadModels 的归一化保证存在，故不再需要 ?? 兜底。
+  const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.contextWindow ?? 0
   const contextUsage = computeContextUsage({
     base: usageSegments.base,
     memory: [usageSegments.memoryM2, usageSegments.memoryM1].filter(Boolean).join('\n\n---\n\n'),

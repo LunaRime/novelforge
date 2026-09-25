@@ -10,6 +10,7 @@ import { toast } from '../components/ui/Toast'
  */
 const deletingModelIds = new Set<string>()
 import type { ModelProfile, LLMResponse, TokenUsage } from '../shared/ipc-channels'
+import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
 /** 流式生成的回调 */
@@ -114,7 +115,10 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   loadModels: async () => {
     if (!ipc.isElectron) return
     try {
-      const models = await ipc.invoke('llm:list-models')
+      // 迁移归一化：补齐旧配置缺的 contextWindow（取 maxTokens —— 拆字段前消费点读的就是它，
+      // 故零行为变化；见 normalizeModelProfile）。**这里是全仓 models 的唯一写入点**，
+      // 增删改模型后都会重新加载，所以归一化只需这一处。
+      const models = (await ipc.invoke('llm:list-models')).map(normalizeModelProfile)
       const routeConfig = get().modelRoutes
       const router = new ModelRouter(routeConfig, models)
       set({ models, modelRouter: router, modelRoutes: router.getConfig(), loaded: true })
