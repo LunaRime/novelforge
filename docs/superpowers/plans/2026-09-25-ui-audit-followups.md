@@ -128,6 +128,34 @@
 - **`.tree-item` 的 `cursor-pointer`**：批次 3 已把 4 处 `.tree-item` 行的左缩进移到主按钮上，
   但**类本身仍带 `cursor-pointer`**；若将来新增行仍用 `<div onClick>`，会重新引入假可供性
 
+> ✅ **2026-09-25 已完成前两项**（第三项仍待你拍板）。
+>
+> **① `.tree-item` 的 `cursor-pointer` 已移除**：批次 3 号称已消除假可供性，实际只是把它从
+> **左缩进区**挪到了**右侧 8px 留白**（该处 `paddingRight: 8` 且不可点，却因类自带手型光标而
+> 显示为可点）。4 处使用点（DraftBoxGroup / ManuscriptGroup / ProjectTree / SidebarShared）
+> 均已确认内层主按钮自带光标，移除后手型只出现在真实可点区。
+>
+> **② 表单控件收敛 —— 但清单里的「28 处」经逐处复核后只有 7 处成立**（本次第四次遇到
+> 「清单不能照单全改」）：
+>
+> | 清单说法 | 实况 |
+> |---|---|
+> | 手写 input 17 处 / textarea 5 处 / checkbox 3 处 | 其中 **3 处是 `input[range]` 滑块**（水温/深度/向量参数）、**3 处是 `input[radio]`**（向量配置，被记成了 checkbox）、**4 处是无外观内联编辑器**（重命名框/聊天输入/菜单内搜索，`bg-transparent outline-none` 属有意为之）、**3 处是原生/custom checkbox**（`accent-[var(--color-accent)]` 是刻意的原生风格，且 `ui/` 下并无 Checkbox） |
+> | 「`CharactersView` 与 `KnowledgePanel` 是两份几乎相同的搜索框」 | ✅ 属实 —— 但它们**就是 `ui/Input` 的紧凑版**（同一套 10 个外观类，只是 h-6/text-micro） |
+>
+> **已收敛 7 处**：2 搜索框 → `ui/Input`（`className="h-6 text-micro"`）；3 文本域
+> （DeveloperModeSection / AIActionDialog / ReviewReport）→ `ui/Textarea`；MCPSettings 添加表单
+> 3 输入框 → `ui/Input`（保留 `--color-hover` 底色，因嵌在 panel 底色卡片里）；
+> PromptSettings 提示词编辑器 → `ui/Textarea`（顺带删掉手工 onFocus/onBlur 改 borderColor）。
+>
+> ⚠️ **没有新建 `ui/SearchInput`** —— 那等于为一个 className 覆盖造一层 API。
+>
+> **③ 图标尺寸 10/11/12/13/14 五档（475 处）仍待你拍板**（§三 决策点 1）：
+> 保持现状 / 收敛到 12/14。我的建议仍是**保持**——收敛需动约 268 处，而图标变化会挤压
+> 固定高度的按钮与行，回归面大于收益。
+>
+> **仍未动的长尾**：手写 `<button>` 189 处、`<label>` 21 处。属长期收敛，建议按模块分多批。
+
 ---
 
 ## 二、真机待测清单（**本轮改动全部是视觉与行为改动，以下必须人工过**）
