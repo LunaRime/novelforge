@@ -13,6 +13,8 @@ import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
 import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
 import RightToolWindowBar from './components/layout/RightToolWindowBar'
+// 应用图标：直接引用**打包用的那个文件**（而非在 public/ 放一份副本），保证单一来源
+import appIcon from '../build/icon.png'
 import Sidebar from './components/panels/Sidebar'
 import EditorArea from './components/panels/EditorArea'
 import AIPanel from './components/panels/AIPanel'
@@ -84,8 +86,12 @@ function TitleStrip() {
         WebkitAppRegion: 'drag',
       } as React.CSSProperties}
     >
-      {/* 应用图标 —— 原生标题栏移除后，这里是唯一的应用标识处 */}
-      <img src="/icon.svg" alt="" width={14} height={14} style={{ flexShrink: 0 }} />
+      {/* 应用图标 —— 原生标题栏移除后，这里是唯一的应用标识处。
+          ⚠️ 必须与**打包用的图标是同一个文件**（`build/icon.png`，electron-builder 的
+          `icon.ico` 由它生成、窗口图标也用它）：复制一份到 public/ 会有两个来源、
+          改一次忘一处就会静默不一致（2026-09-25 首次实现时误用了 public/icon.svg ——
+          那是另一版设计，用户一眼看出不是他设计的那个）。 */}
+      <img src={appIcon} alt="" width={14} height={14} style={{ flexShrink: 0 }} />
       <span className="text-2xs font-medium brand-gradient">NovelForge</span>
     </div>
   )
