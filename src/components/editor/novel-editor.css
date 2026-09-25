@@ -168,3 +168,18 @@
 [data-separator][aria-orientation="horizontal"][data-separator="dragging"]::after {
   background: var(--color-sash-hover);
 }
+
+/* 键盘聚焦（TAB 到分隔条）：与 hover 同样是**居中那条药丸**，不整条变色。
+   ⚠️ 必须显式关掉浏览器默认焦点环：默认环画在元素**外沿**，而分隔条是 6px 宽的透明缝，
+   于是"外环"就成了缝左右两条竖线 —— 看起来像「两条蓝线」，而用户预期的是缝中间那一条。
+   （与 index.css @layer base 的全局 :focus-visible 不冲突：本文件是顶层 CSS，优先级更高。）
+   配色用 --color-focus-ring 而非 --color-sash-hover：焦点态要比悬停态更醒目，
+   两者可区分（sash-hover 透明度仅 0.12–0.15，用于鼠标悬停足够，做键盘指示偏弱）。 */
+[data-separator]:focus-visible {
+  outline: none;
+}
+
+[data-separator][aria-orientation="vertical"]:focus-visible::after,
+[data-separator][aria-orientation="horizontal"]:focus-visible::after {
+  background: var(--color-focus-ring);
+}

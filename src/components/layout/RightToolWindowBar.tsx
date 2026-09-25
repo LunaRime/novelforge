@@ -170,8 +170,12 @@ export default function RightToolWindowBar() {
         <PenLine size={14} strokeWidth={focusMode ? 2 : 1.5} />
       </button>
 
-      {/* 主题切换（原标题栏）：四主题菜单直选，菜单从按钮**左侧**展开（本栏贴窗口右边） */}
-      <div className="relative" ref={themeMenuRef}>
+      {/* 主题切换（原标题栏）：四主题菜单直选，菜单从按钮**左侧**展开（本栏贴窗口右边）
+          ⚠️ `w-full` 不可省：容器是 `flex flex-col items-center`，flex item 默认按内容宽度收缩，
+          而本按钮外面比其它按钮多包了一层 div（承载菜单锚点 ref）—— 少了它，
+          这层 div 会缩到图标宽（~14px），内部 `.tool-btn` 的 `width:100%` 只换来 14px，
+          悬浮底色便盖不满整条（左图标栏的分组容器同样都显式写了 w-full）。 */}
+      <div className="relative w-full" ref={themeMenuRef}>
         <button
           onClick={() => setThemeMenuOpen(v => !v)}
           title={ti('theme.label').replace('{theme}', themeLabel(theme))}
