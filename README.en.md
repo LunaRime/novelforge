@@ -80,84 +80,84 @@ RAG store (SQLite + LanceDB) and gated by your confirmation at every step.
 
 | Feature | Description |
 |---------|-------------|
-| 🌍 World & Setting Management | Global worldbuilding, plot backbone, character profiles (cross-chapter dynamic tracking) |
-| 📋 Auto Outline & Beats | AI generates structural skeleton → chapter beats → scene/emotion/pacing requirements |
-| 📐 Auto Chapter Splitting | AI analyzes outline and suggests chapter count, volume structure, and climax positions |
-| ✍️ Streaming Chapter Generation | Per-chapter streaming typewriter generation with precise context awareness |
-| 🎬 Chapter Transition Engine | Extracts scene cards from previous 3 chapters and injects into prompts for continuity |
-| 🔄 Paragraph-Level Rewriting | Expand / condense / style shift / conflict enhance / polish — five modes, no full rewrite |
-| 📝 Editorial Board Review | 5-role parallel review (editor-in-chief / plot / prose / continuity / style) + weighted scoring |
-| 🎤 Character Voice Consistency | Analyzes character dialogue style post-finalization, auto-injects for consistency |
-| 📊 Multi-Draft Comparison | Parallel generation of multiple versions per chapter, AI auto-scoring |
-| 🔮 Foreshadowing Manager | Auto-scans for new foreshadowing + detects resolution of existing threads |
-| 🔁 Post-Process Pipeline | Ingest → plot extraction → character update → foreshadowing scan → voice analysis → style learning (DAG parallel) |
-| 🌐 Multilingual Prompt Templates | Built-in templates in EN/RU (19 templates + system constraints + system roles), AI output language follows the UI language |
+| World & Setting Management | Global worldbuilding, plot backbone, character profiles (cross-chapter dynamic tracking) |
+| Auto Outline & Beats | AI generates structural skeleton → chapter beats → scene/emotion/pacing requirements |
+| Auto Chapter Splitting | AI analyzes outline and suggests chapter count, volume structure, and climax positions |
+| Streaming Chapter Generation | Per-chapter streaming typewriter generation with precise context awareness |
+| Chapter Transition Engine | Extracts scene cards from previous 3 chapters and injects into prompts for continuity |
+| Paragraph-Level Rewriting | Expand / condense / style shift / conflict enhance / polish — five modes, no full rewrite |
+| Editorial Board Review | 5-role parallel review (editor-in-chief / plot / prose / continuity / style) + weighted scoring |
+| Character Voice Consistency | Analyzes character dialogue style post-finalization, auto-injects for consistency |
+| Multi-Draft Comparison | Parallel generation of multiple versions per chapter, AI auto-scoring |
+| Foreshadowing Manager | Auto-scans for new foreshadowing + detects resolution of existing threads |
+| Post-Process Pipeline | Ingest → plot extraction → character update → foreshadowing scan → voice analysis → style learning (DAG parallel) |
+| Multilingual Prompt Templates | Built-in templates in EN/RU (19 templates + system constraints + system roles), AI output language follows the UI language |
 
 ### 📊 Writing Activity Dashboard
 
 | Feature | Description |
 |---------|-------------|
-| 🔥 Daily Activity Heatmap | GitHub Contribution-style full-year view, hover for per-day writing/revision/calls/cost |
-| 📅 Monthly Trend Chart | 12-month writing trend with year switching for history |
-| 💰 Global Statistics | Cross-project aggregation of written words / revisions / model calls / tokens / cost |
+| Daily Activity Heatmap | GitHub Contribution-style full-year view, hover for per-day writing/revision/calls/cost |
+| Monthly Trend Chart | 12-month writing trend with year switching for history |
+| Global Statistics | Cross-project aggregation of written words / revisions / model calls / tokens / cost |
 
 ### 🔍 Observability
 
 | Feature | Description |
 |---------|-------------|
-| 📝 Dual-Environment Logs | Dev (DEBUG full) vs release (INFO+) separate directories; renderer logs persisted + global error capture |
-| 🧩 LLM Extraction Logs | Call/JSON-parse/self-check retry fully visible, full diagnostics on parse failure |
-| 💾 Save Feedback | Toast feedback for every save operation + modular logs (Save:{Module}) |
+| Dual-Environment Logs | Dev (DEBUG full) vs release (INFO+) separate directories; renderer logs persisted + global error capture |
+| LLM Extraction Logs | Call/JSON-parse/self-check retry fully visible, full diagnostics on parse failure |
+| Save Feedback | Toast feedback for every save operation + modular logs (Save:{Module}) |
 
 ### 🧠 Million-Word Local Knowledge Base + Vector Engine
 
 | Feature | Description |
 |---------|-------------|
-| 🔍 LLM + Vector Hybrid Retrieval | Semantic search + full-text search, auto-injected into AI prompts |
-| 🧬 LLM-as-Vectorization | Use your LLM as the embedding model — no dedicated embedding API needed |
-| 🏠 Local Embedding Model | Optional local Ollama (e.g. bge-m3) for offline semantic search; four-step fallback: local ⇄ cloud API → LLM → full-text |
-| 🀄 Chinese Text Search | jieba tokenization + FTS index — Chinese queries no longer degrade to whole-sentence matching |
-| 📊 IVF_PQ Vector Index | LanceDB ANN index for large-scale vector search acceleration |
-| 🔒 100% Local Storage | SQLite + LanceDB, works offline |
+| LLM + Vector Hybrid Retrieval | Semantic search + full-text search, auto-injected into AI prompts |
+| LLM-as-Vectorization | Use your LLM as the embedding model — no dedicated embedding API needed |
+| Local Embedding Model | Optional local Ollama (e.g. bge-m3) for offline semantic search; four-step fallback: local ⇄ cloud API → LLM → full-text |
+| Chinese Text Search | jieba tokenization + FTS index — Chinese queries no longer degrade to whole-sentence matching |
+| IVF_PQ Vector Index | LanceDB ANN index for large-scale vector search acceleration |
+| 100% Local Storage | SQLite + LanceDB, works offline |
 
-### 🧠 AI Memory (Story Memory)
+### 💭 AI Memory (Story Memory)
 
 | Feature | Description |
 |---------|-------------|
-| 📖 Three-Level Summaries | Finalize a chapter → chapter memory; complete the volume → volume memory; every 3 volumes → book state |
-| 🔗 Cross-Session Facts | Conversation compaction extracts reusable facts so the next chat starts informed — at no extra cost |
-| ♻️ Invalidation & Rebuild | Editing volume boundaries or re-finalizing marks affected memory as "needs rebuild"; stale memory stops entering context |
-| 🔍 Inspect & Edit | The "AI Memory" sidebar group lets you view / edit / delete files and manually rebuild volumes and the book state |
+| Three-Level Summaries | Finalize a chapter → chapter memory; complete the volume → volume memory; every 3 volumes → book state |
+| Cross-Session Facts | Conversation compaction extracts reusable facts so the next chat starts informed — at no extra cost |
+| Invalidation & Rebuild | Editing volume boundaries or re-finalizing marks affected memory as "needs rebuild"; stale memory stops entering context |
+| Inspect & Edit | The "AI Memory" sidebar group lets you view / edit / delete files and manually rebuild volumes and the book state |
 
 ### 💰 Cost Optimization Engine
 
 | Feature | Description |
 |---------|-------------|
-| 🎯 Tiered Model Routing | elite / standard / budget — three tiers, saves 50-70% |
-| ⚡ Prompt Caching | Automatic cache hits, cuts input costs by 50% |
-| 📊 Real-Time Cost Tracking | Live session cost display in the status bar |
-| 📐 Token Budget Engine | Intelligent truncation with system prompt size control |
+| Tiered Model Routing | elite / standard / budget — three tiers, saves 50-70% |
+| Prompt Caching | Automatic cache hits, cuts input costs by 50% |
+| Real-Time Cost Tracking | Live session cost display in the status bar |
+| Token Budget Engine | Intelligent truncation with system prompt size control |
 
 ### 🤖 AI Agent Assistant
 
 | Feature | Description |
 |---------|-------------|
-| 🎯 Intent Pre-Routing | Zero-LLM local intent detection ("write chapter 3", "polish chapter 2") — strong hits trigger creative workflows directly, weak hits ask for clarification |
-| 🌿 Conversation Branching | Fork a new session from any message / rewind with recovery, branch hierarchy in history panel |
-| 📄 Tool Result Spill-to-Disk | Long tool results stored on disk with path + summary in context; LLM re-reads on demand (deterministic naming + dedupe) |
-| 📐 Adaptive Context Compression | Budget scales with model window; recoverable errors auto-degrade and retry (withhold-then-recover) |
-| 🧰 Tools & Skills | 23 built-in tools (read/write, retrieval, editing, workflows) + SKILL.md skill packs (built-in / user / project, Cursor-compatible) |
-| 🔌 MCP | Plug in any MCP server to extend the tool surface |
-| 📊 Context Visibility | Usage ring + detail popover (base / memory / history / current), live cost and cache-hit readout |
+| Intent Pre-Routing | Zero-LLM local intent detection ("write chapter 3", "polish chapter 2") — strong hits trigger creative workflows directly, weak hits ask for clarification |
+| Conversation Branching | Fork a new session from any message / rewind with recovery, branch hierarchy in history panel |
+| Tool Result Spill-to-Disk | Long tool results stored on disk with path + summary in context; LLM re-reads on demand (deterministic naming + dedupe) |
+| Adaptive Context Compression | Budget scales with model window; recoverable errors auto-degrade and retry (withhold-then-recover) |
+| Tools & Skills | 23 built-in tools (read/write, retrieval, editing, workflows) + SKILL.md skill packs (built-in / user / project, Cursor-compatible) |
+| MCP | Plug in any MCP server to extend the tool surface |
+| Context Visibility | Usage ring + detail popover (base / memory / history / current), live cost and cache-hit readout |
 
 ### 🛡️ Privacy & Security
 
 | Feature | Description |
 |---------|-------------|
-| 🔒 Electron Sandbox | `sandbox: true` + IPC allowlist + path sandbox |
-| 🔑 API Key Encryption | Electron safeStorage encrypted storage |
-| 🔄 Exponential Backoff Retry | Auto-retry for 429/503/5xx + streaming retry |
-| ✅ Database Integrity | SQLite PRAGMA checks + unified timestamps + CHECK constraints |
+| Electron Sandbox | `sandbox: true` + IPC allowlist + path sandbox |
+| API Key Encryption | Electron safeStorage encrypted storage |
+| Exponential Backoff Retry | Auto-retry for 429/503/5xx + streaming retry |
+| Database Integrity | SQLite PRAGMA checks + unified timestamps + CHECK constraints |
 
 ---
 
