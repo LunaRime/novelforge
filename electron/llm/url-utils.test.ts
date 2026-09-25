@@ -22,6 +22,15 @@ describe("buildOpenAIUrl(kind='models')", () => {
       .toBe('https://open.bigmodel.cn/api/paas/v4/models')
   })
 
+  it('任何已带版本段的地址都不再补 /v1（用户可填 baseUrl，填成 /v1 极常见）', () => {
+    expect(buildOpenAIUrl('https://api.moonshot.cn/v1', 'chat'))
+      .toBe('https://api.moonshot.cn/v1/chat/completions')
+    expect(buildOpenAIUrl('https://dashscope.aliyuncs.com/compatible-mode/v1', 'chat'))
+      .toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions')
+    expect(buildOpenAIUrl('https://dashscope.aliyuncs.com/compatible-mode/v1', 'models'))
+      .toBe('https://dashscope.aliyuncs.com/compatible-mode/v1/models')
+  })
+
   it('用户填了完整端点 → 换掉末段而不是叠加', () => {
     expect(buildOpenAIUrl('https://proxy.example.com/v1/chat/completions', 'models'))
       .toBe('https://proxy.example.com/v1/models')

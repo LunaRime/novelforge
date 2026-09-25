@@ -50,7 +50,7 @@ export function presetModelDefaults(
   modelName: string,
 ): { temperature: number; maxTokens: number; contextWindow: number; purposes: Array<'generation' | 'embedding'> } {
   const preset = BUILTIN_PRESETS.find((p) => p.provider === provider)
-  const isEmbedding = preset?.embeddingModels.includes(modelName) ?? false
+  const isEmbedding = preset?.embeddingModels.includes(modelName) || looksLikeEmbeddingModel(modelName)
   const model = preset?.models.find((m) => m.name === modelName)
   const maxTokens = model?.maxTokens ?? 131072
 
@@ -60,6 +60,20 @@ export function presetModelDefaults(
     contextWindow: model?.contextWindow ?? maxTokens,
     purposes: [isEmbedding ? 'embedding' : 'generation'],
   }
+}
+
+/**
+ * 模型名像不像向量模型 —— 仅在**预设没写**时兜底（新增的供应商 `embeddingModels` 一律留空，
+ * 靠「获取可用模型」拿真实清单，所以这里需要一条名字层面的判据）。
+ *
+ * ⚠️ **已知覆盖不全**：`bge-m3` / `bge-large` 这类名字不含 `embed` 的会判成生成模型，
+ * 而 `ModelForm` 的用途由所属分区决定、**表单里改不了** → 勾错就没有出路。
+ * 真要在意，得在账户的勾选清单上给每行一个显式的用途开关（属 UI 决策，另议）。
+ */
+const EMBEDDING_NAME = /embed|bge|gte-|(^|[-_/])e5([-_/]|$)|reranker/i
+
+export function looksLikeEmbeddingModel(modelName: string): boolean {
+  return EMBEDDING_NAME.test(modelName)
 }
 
 /** 内置默认预设（首次启动时写入持久化文件） */
@@ -137,6 +151,97 @@ export const BUILTIN_PRESETS: ProviderPreset[] = [
       { name: 'gemma3', maxTokens: 8192 },
     ],
     embeddingModels: ['nomic-embed-text', 'mxbai-embed-large', 'bge-m3'],
+  },
+  // ===== 2026-09-25 补充：市面上常见的 OpenAI 兼容服务 =====
+  //
+  // ⚠️ 这些条目的 `models` **刻意留空**：
+  //   ① 模型名在这个行业里周周在变，硬编码等于编造，且会误导用户去点一个已下线的名字；
+  //   ② 供应商账户的「获取可用模型」就是为此存在的 —— 它打 `GET {baseUrl}/v1/models`
+  //      拿到**真实**清单，比任何内置列表都准（上面几个老条目是历史遗留，暂不动）。
+  //
+  // baseUrl 的写法必须让 `buildOpenAIUrl` 拼出正确端点（它会补 `/v1/...`）：
+  // 末尾**不要**带 `/v1`（已带版本段的地址不会再补，但留空更统一）。
+  {
+    provider: 'moonshot',
+    displayName: 'Moonshot（Kimi）',
+    baseUrl: 'https://api.moonshot.cn',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    /** 阿里云通义千问 —— OpenAI 兼容通道在 /compatible-mode/v1（由 buildOpenAIUrl 补 /v1） */
+    provider: 'dashscope',
+    displayName: '通义千问（DashScope）',
+    baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'siliconflow',
+    displayName: 'SiliconFlow（硅基流动）',
+    baseUrl: 'https://api.siliconflow.cn',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    /** 聚合网关：一个 key 通多家模型，配合「获取可用模型」尤其好用 */
+    provider: 'openrouter',
+    displayName: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'groq',
+    displayName: 'Groq',
+    baseUrl: 'https://api.groq.com/openai',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'mistral',
+    displayName: 'Mistral AI',
+    baseUrl: 'https://api.mistral.ai',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'xai',
+    displayName: 'xAI（Grok）',
+    baseUrl: 'https://api.x.ai',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'yi',
+    displayName: '零一万物（Yi）',
+    baseUrl: 'https://api.lingyiwanwu.com',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'stepfun',
+    displayName: '阶跃星辰（StepFun）',
+    baseUrl: 'https://api.stepfun.com',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
+    provider: 'baichuan',
+    displayName: '百川智能',
+    baseUrl: 'https://api.baichuan-ai.com',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
   },
   {
     provider: 'custom',

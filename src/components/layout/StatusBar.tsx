@@ -14,6 +14,7 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { PopoverSurface } from '../ui/PopoverSurface'
+import { MenuItem } from '../ui/MenuItem'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
@@ -21,7 +22,6 @@ export default function StatusBar() {
   const currentProject = useProjectStore((s) => s.currentProject)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
-  const openSettings = useLayoutStore(s => s.openSettings)
   const defaultModel = models.find(
     (m) => m.id === defaultModelId && m.purposes?.some((p) => p !== 'embedding')
   )
@@ -70,22 +70,7 @@ export default function StatusBar() {
         {/* 水温控制（当前默认模型 temperature，拖动实时预览 + 防抖保存） */}
         <TemperatureControl defaultModel={defaultModel} />
 
-        {defaultModel ? (
-          <StatusBarSegment
-            title={`${t('statusbar.currentModel')}: ${defaultModel.modelName}${defaultModel.name !== defaultModel.modelName ? ` (${defaultModel.name})` : ''}`}
-            onClick={() => openSettings('llm')}
-          >
-            <Wifi size={11} />
-            <span className="opacity-80 max-w-[120px] truncate">{defaultModel.name}</span>
-          </StatusBarSegment>
-        ) : (
-          <StatusBarSegment
-            title={t('statusbar.clickToConfig')}
-            onClick={() => openSettings('llm')}
-          >
-            <span className="opacity-50">{t('statusbar.noModel')}</span>
-          </StatusBarSegment>
-        )}
+        <ModelPicker models={models} defaultModel={defaultModel} />
 
         {/* 缩放控制 — 原标题栏控件，标题栏移除后搬入状态栏右侧（VSCode 的缩放也在这个位置） */}
         <StatusBarDivider />
@@ -97,6 +82,88 @@ export default function StatusBar() {
 
 
 // ===== 水温控制（temperature 快速调节）=====
+
+/**
+ * 右下角的**模型选择器**（2026-09-25）。
+ *
+ * 此前这一段只显示当前模型、点击是「打开设置 → 模型页」—— 换模型要翻进设置里找。
+ * 改成直接列出可选的生成模型，点一下即切换（`setDefaultModel` 会持久化到 config.json）。
+ * 浮层底部保留「管理模型…」入口，需要增删改时仍能一步到位。
+ */
+function ModelPicker({
+  models,
+  defaultModel,
+}: {
+  models: ModelProfile[]
+  defaultModel: ModelProfile | undefined
+}) {
+  const { t } = useTranslation()
+  const openSettings = useLayoutStore((s) => s.openSettings)
+  const [open, setOpen] = useState(false)
+  const panelRef = useRef<HTMLDivElement>(null)
+  // 状态栏在窗口底部 → 朝上展开（与水温面板同款）
+  const menuRef = useFloatingPosition<HTMLDivElement>(panelRef, open, { placement: 'above', align: 'end' })
+
+  useOutsideClick(panelRef, () => setOpen(false), open)
+  useEscapeKey(() => setOpen(false), open)
+
+  // 只列**生成类**模型：embedding 模型不能用于对话，列进来点了会报错
+  const chatModels = models.filter((m) => m.purposes?.some((p) => p !== 'embedding'))
+
+  const choose = (id: string) => {
+    useLLMStore.getState().setDefaultModel(id)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={panelRef} className="relative">
+      <StatusBarSegment
+        title={
+          defaultModel
+            ? `${t('statusbar.selectModel')}: ${defaultModel.modelName}`
+            : t('statusbar.clickToConfig')
+        }
+        onClick={() => setOpen((v) => !v)}
+      >
+        <Wifi size={11} />
+        <span className={`opacity-80 max-w-[120px] truncate ${defaultModel ? '' : 'opacity-50'}`}>
+          {defaultModel ? defaultModel.name : t('statusbar.noModel')}
+        </span>
+      </StatusBarSegment>
+
+      {open && (
+        <PopoverSurface
+          ref={menuRef}
+          className="py-1"
+          style={{ width: 240, maxHeight: 280, overflowY: 'auto' }}
+        >
+          {chatModels.length === 0 ? (
+            <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+              {t('statusbar.noModel')}
+            </div>
+          ) : (
+            chatModels.map((m) => (
+              <MenuItem
+                key={m.id}
+                label={m.name}
+                selected={m.id === defaultModel?.id}
+                onClick={() => choose(m.id)}
+              />
+            ))
+          )}
+          <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+          <MenuItem
+            label={t('statusbar.manageModels')}
+            onClick={() => {
+              setOpen(false)
+              openSettings('llm')
+            }}
+          />
+        </PopoverSurface>
+      )}
+    </div>
+  )
+}
 
 /**
  * 右下角图标式温度控制：

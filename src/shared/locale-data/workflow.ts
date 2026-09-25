@@ -121,6 +121,8 @@ export const workflowTexts = {
   'statusbar.resetCostTitle': { 'zh-CN': '重置会话费用', 'en-US': 'Reset Session Cost', 'ru-RU': 'Сбросить стоимость сессии' },
   'statusbar.resetCostConfirm': { 'zh-CN': '确定要清空本次会话的费用统计吗？此操作不可撤销。', 'en-US': 'Clear this session\'s cost statistics? This cannot be undone.', 'ru-RU': 'Очистить статистику стоимости текущей сессии? Это действие необратимо.' },
   'statusbar.clickToConfig': { 'zh-CN': '点击配置模型', 'en-US': 'Click to configure model', 'ru-RU': 'Нажмите, чтобы настроить модель' },
+  'statusbar.selectModel': { 'zh-CN': '点击切换模型', 'en-US': 'Click to switch model', 'ru-RU': 'Нажмите, чтобы сменить модель' },
+  'statusbar.manageModels': { 'zh-CN': '管理模型…', 'en-US': 'Manage models…', 'ru-RU': 'Управление моделями…' },
   'statusbar.temperature': { 'zh-CN': '温度 (Temperature)', 'en-US': 'Temperature', 'ru-RU': 'Температура' },
   'statusbar.temperatureLow': { 'zh-CN': '严谨', 'en-US': 'Precise', 'ru-RU': 'Точно' },
   'statusbar.temperatureMid': { 'zh-CN': '平衡', 'en-US': 'Balanced', 'ru-RU': 'Сбалансировано' },

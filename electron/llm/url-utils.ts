@@ -33,8 +33,12 @@ export function buildOpenAIUrl(baseUrl: string, kind: OpenAIEndpointKind): strin
     return kind === 'chat' ? `${base}/completions` : `${base.slice(0, base.lastIndexOf('/'))}/models`
   }
 
-  // BigModel paas 路径自带 /v4 版本段（各端点均直接追加）
-  if (base.endsWith('/v4')) {
+  // 地址**已带版本段**（`/v1`、`/v4`、`/compatible-mode/v1` …）→ 直接追加端点，不再补 /v1
+  //
+  // 原先只特判 BigModel 的 `/v4`。泛化成 /v<N> 是因为：baseUrl 是**用户可填**的字段，
+  // 填成 `https://x/v1` 时旧逻辑会拼出 `/v1/v1/chat/completions`（400/404，且看着像密钥问题）。
+  // 阿里云 DashScope 的 `…/compatible-mode/v1` 属同一类（末段带版本号）。
+  if (/\/v\d+$/.test(base)) {
     if (kind === 'models') return `${base}/models`
     return kind === 'chat' ? `${base}/chat/completions` : `${base}/embeddings`
   }

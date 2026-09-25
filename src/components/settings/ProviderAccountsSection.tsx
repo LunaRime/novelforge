@@ -283,10 +283,11 @@ function ProviderAccountForm({
           >
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
+              {/* 直接映射预设 —— `custom`（自定义）**已经在预设里**，
+                  这里不要再补一条，否则会出现两个同值的「自定义」 */}
               {BUILTIN_PRESETS.map((p) => (
                 <SelectItem key={p.provider} value={p.provider}>{p.displayName ?? p.provider}</SelectItem>
               ))}
-              <SelectItem value="custom">{t('settings.providerCustom')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
