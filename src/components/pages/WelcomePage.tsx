@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X, Trash2 } from 'lucide-react'
+// 应用图标（与打包图标同一文件，见 App.tsx 的说明）
+import appIcon from '../../../build/icon.png'
 import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { confirmDeleteProject } from '../ui/Confirm'
@@ -46,15 +48,23 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
       style={{ backgroundColor: 'var(--color-editor-bg)' }}
     >
       <div className="max-w-lg w-full mx-auto px-8 py-16">
-        {/* Logo 区域 — 品牌极光光环 */}
+        {/* Logo 区域 —— 直接用**应用图标本身**
+            （此前是自绘仿制版：ai-glow 极光底 + lucide 的 BookOpen 字形，视觉上像"另一个 logo"） */}
         <div className="text-center mb-12">
-          <div
-            className="ai-glow inline-flex items-center justify-center w-20 h-20 rounded-2xl mb-5"
-            style={{
-              boxShadow: '0 8px 32px rgba(var(--color-accent-rgb), 0.25), 0 0 60px rgba(var(--color-accent-rgb), 0.12)',
-            }}
-          >
-            <BookOpen size={36} color="var(--color-text)" style={{ position: 'relative', zIndex: 1 }} />
+          <div className="inline-flex items-center justify-center mb-5">
+            {/* ⚠️ 阴影必须用 `filter: drop-shadow()` 而非 `box-shadow`：
+                图标是 512×512 RGBA、圆角靠**透明通道**实现，而 box-shadow 按元素**方框**绘制
+                → 圆角图标背后会多出一个**方形阴影**。drop-shadow 跟随 alpha，形状才对。 */}
+            <img
+              src={appIcon}
+              alt="NovelForge"
+              width={80}
+              height={80}
+              style={{
+                filter:
+                  'drop-shadow(0 8px 24px rgba(var(--color-accent-rgb), 0.28)) drop-shadow(0 0 40px rgba(var(--color-accent-rgb), 0.18))',
+              }}
+            />
           </div>
           <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
             {currentProject ? currentProject.name : t('welcome.title')}
