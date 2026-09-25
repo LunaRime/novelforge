@@ -13,9 +13,10 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Database, WifiOff, RefreshCw, CheckCircle2,
   XCircle, AlertTriangle, Sparkles, Cpu, ArrowRight,
-  Brain, Download, HardDrive, ChevronRight,
+  Brain, Download, HardDrive,
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
+import { Disclosure } from '../ui/Disclosure'
 import { useVectorConfigStore, type VectorWorkMode, type VectorTestResult } from '../../stores/vector-config-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -1067,46 +1068,31 @@ function LocalEmbeddingCard() {
         （默认 http://localhost:11434 本来就是对的，普通用户不需要看见它）。
         ⚠️ 位置固定在**卡片最末**：卡片上方已有若干「原始详情」details（U4/U5），
         `<details>` 的既有用例按 DOM 顺序取首个 details，这里不能插到它们前面。
+        （折叠外观已抽成 ui/Disclosure —— 箭头/hover/点击区/文字色那四样修复随之带走。）
       */}
       {editable && (
-        <details className="group mt-3">
-          {/* 真机反馈（2026-09-22）：「看起来不能点击」——原来的 10px 灰字、行高仅 14px、
-              无箭头无 hover，虽然点得动但完全不像可点。补上箭头（展开时旋转 90°）+ hover 底色
-              + 加大点击区 + 提亮文字。 */}
-          <summary
-            className="cursor-pointer flex items-center gap-1 text-micro font-medium -mx-1.5 px-1.5 py-1 rounded transition-colors select-none hover:bg-[var(--color-hover)]"
-            style={{ color: 'var(--color-text-secondary)' }}
-          >
-            <ChevronRight
-              size={11}
-              strokeWidth={2}
-              className="flex-shrink-0 transition-transform group-open:rotate-90"
-            />
-            {t('localEmbedding.advanced')}
-          </summary>
-          <div className="mt-2">
-            <Label>{t('localEmbedding.baseUrl')}</Label>
-            <Input
-              className="mt-1"
-              aria-label={t('localEmbedding.baseUrl')}
-              value={baseUrlDraft}
-              onChange={(e) => {
-                setBaseUrlDraft(e.target.value)
-                if (baseUrlInvalid) setBaseUrlInvalid(false)
-              }}
-              onBlur={commitBaseUrl}
-              onKeyDown={(e) => { if (e.key === 'Enter') commitBaseUrl() }}
-            />
-            {baseUrlInvalid && (
-              <p className="text-2xs mt-1" style={{ color: 'var(--color-warning)' }}>
-                {t('localEmbedding.baseUrlInvalid')}
-              </p>
-            )}
-            <p className="text-2xs text-[var(--color-text-muted)] mt-1">
-              {t('localEmbedding.advancedHint')}
+        <Disclosure label={t('localEmbedding.advanced')} className="mt-3">
+          <Label>{t('localEmbedding.baseUrl')}</Label>
+          <Input
+            className="mt-1"
+            aria-label={t('localEmbedding.baseUrl')}
+            value={baseUrlDraft}
+            onChange={(e) => {
+              setBaseUrlDraft(e.target.value)
+              if (baseUrlInvalid) setBaseUrlInvalid(false)
+            }}
+            onBlur={commitBaseUrl}
+            onKeyDown={(e) => { if (e.key === 'Enter') commitBaseUrl() }}
+          />
+          {baseUrlInvalid && (
+            <p className="text-2xs mt-1" style={{ color: 'var(--color-warning)' }}>
+              {t('localEmbedding.baseUrlInvalid')}
             </p>
-          </div>
-        </details>
+          )}
+          <p className="text-2xs text-[var(--color-text-muted)] mt-1">
+            {t('localEmbedding.advancedHint')}
+          </p>
+        </Disclosure>
       )}
     </div>
   )
