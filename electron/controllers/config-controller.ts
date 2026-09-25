@@ -70,11 +70,13 @@ export function registerConfigController() {
     return VELA_HOME
   })
 
-  /** 同步 UI 语言到主进程（主进程对话框/菜单/窗口标题用 t() 读取当前 locale） */
+  /** 同步 UI 语言到主进程（主进程对话框/菜单用 t() 读取当前 locale） */
   guardedHandle('config:set-locale', async (_event, locale: SupportedLocale) => {
     setCurrentLocale(locale)
-    // 同步更新窗口标题（渲染层 document.title 是主覆盖源，此处兜底原生标题栏/焦点窗口场景）
-    for (const w of BrowserWindow.getAllWindows()) w.setTitle(t('window.title'))
+    // ⚠️ 这里**不再**设窗口标题。原先是 `win.setTitle(t('window.title'))` 做「兜底」，
+    // 但渲染层的标题现在是「项目名 — NovelForge」，主进程只写应用名 → 每次切语言
+    // 都把项目名冲掉（且谁后写谁赢）。标题的唯一写入口在渲染层：
+    // src/lib/window-title.ts，document.title 变化由 Electron 自动同步到原生标题。
     return { success: true }
   })
 

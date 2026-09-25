@@ -15,8 +15,8 @@ installRendererErrorCapture()
 // 恢复 Agent 会话归档（~/.novelforge/agent-archive）——CCR 持久化层
 useAgentStore.getState().restoreArchives().catch(() => {})
 
-// 窗口标题跟随界面语言（index.html 静态 title 是 React 挂载前的启动兜底）
-document.title = t('window.title')
+// 窗口标题不在这里写：React 挂载前由 index.html 静态 title + public/theme-init.js 兜底，
+// 挂载后由 App 的 effect 统一写（含当前项目名）—— 唯一写入口见 src/lib/window-title.ts
 
 // 启动时同步 UI 语言到主进程（#26）：主进程 t() 模块初始化读不到渲染进程 localStorage，
 // 恒回退 zh-CN；此前仅 switchLocale()（用户手动切语言）才同步——重启应用后主进程

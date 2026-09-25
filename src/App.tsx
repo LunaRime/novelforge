@@ -9,6 +9,8 @@ import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useUpdateStore } from './stores/update-store'
 import { t } from './shared/locale'
+import { useTranslation } from './hooks/useTranslation'
+import { setWindowTitle } from './lib/window-title'
 import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
 import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
@@ -77,6 +79,7 @@ const EDITOR_MIN_PX = 320
  * 将来放命令面板入口时记得加）。
  */
 function TitleStrip() {
+  const currentProject = useProjectStore((s) => s.currentProject)
   return (
     <div
       className="flex items-center gap-2 pl-2.5 pr-3 overflow-hidden select-none flex-shrink-0"
@@ -97,8 +100,15 @@ function TitleStrip() {
         ⚠️ 标题栏不是放 logo 的地方：首版用了 `text-2xs`(10px) + `brand-gradient`（品牌渐变字），
         用户看出来的「不像正常应用」即此 —— 那更像宣传位而不是标题栏。
         常规应用就是 **12px 常规文字色**。
+
+        ⚠️ 写的是**会变的东西**（当前项目名），不是固定品牌名 —— 固定字符串占着这条栏
+        等于零信息，应用名在图标、启动器、关于页、任务栏都已有。没开项目时回落品牌名。
+        `min-w-0` 不可省：flex item 默认 `min-width: auto`，少了它 `truncate` 的省略号
+        不生效，长项目名会被父容器 `overflow-hidden` 直接切掉。
       */}
-      <span className="text-xs truncate" style={{ color: 'var(--color-text)' }}>NovelForge</span>
+      <span className="text-xs truncate min-w-0" style={{ color: 'var(--color-text)' }}>
+        {currentProject?.name ?? 'NovelForge'}
+      </span>
     </div>
   )
 }
@@ -166,6 +176,15 @@ export default function App() {
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
+  const currentProject = useProjectStore((s) => s.currentProject)
+  // 订阅 locale 只为让下面那个「窗口标题」effect 在**切语言时重跑**（回落标题是本地化的）
+  const { locale } = useTranslation()
+
+  // 窗口标题 = 「项目名 — NovelForge」（无项目回落应用标题）。见 lib/window-title 的说明：
+  // 我们是自绘顶栏，系统（任务栏 / Alt-Tab / Mission Control）看不到它，只认 document.title。
+  useEffect(() => {
+    setWindowTitle(currentProject?.name)
+  }, [currentProject?.name, locale])
 
 
   // 初始化：主题 + LLM 模型 + 最近项目 + 缩放级别

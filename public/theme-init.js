@@ -29,7 +29,8 @@
 })();
 
 // 启动加载页国际化（React 挂载前无法使用 t()，按持久化语言偏好做最小三语映射；
-// React 挂载后由 main.tsx / switchLocale 接管 document.title 与界面文案）
+// React 挂载后由 App 的 effect 接管 document.title —— 唯一写入口 src/lib/window-title.ts，
+// 它会在应用标题之外补上**当前项目名**，那是这一刻还读不到的信息）
 (function () {
   var locale = 'zh-CN';
   try { locale = localStorage.getItem('novelforge-locale') || 'zh-CN'; } catch (e) {}

@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, FolderOpen, Thermometer, ZoomIn, ZoomOut } from 'lucide-react'
-import { useProjectStore } from '../../stores/project-store'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, Thermometer, ZoomIn, ZoomOut } from 'lucide-react'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { t } from '../../shared/locale'
@@ -19,7 +18,6 @@ import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
 export default function StatusBar() {
-  const currentProject = useProjectStore((s) => s.currentProject)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   const defaultModel = models.find(
@@ -38,23 +36,15 @@ export default function StatusBar() {
         borderTop: '1px solid var(--color-border)',
       }}
     >
-      {/* 左侧 */}
+      {/* 左侧：品牌 + 版本。**项目名不在这里** —— 它已归顶栏（2026-09-25 拍板：
+          同一信息只出现一次；顶栏那条同时是任务栏/Alt-Tab 看得到的窗口标题来源，
+          见 lib/window-title）。版本号留在状态栏的理由：截图报 bug 时它是必需的。 */}
       <div className="flex items-center h-full">
         <StatusBarSegment title="NovelForge IDE">
           <BookOpen size={11} />
           <span className="font-medium brand-gradient">NovelForge</span>
           <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
         </StatusBarSegment>
-
-        {currentProject && (
-          <>
-            <StatusBarDivider />
-            <StatusBarSegment title={currentProject.path}>
-              <FolderOpen size={11} style={{ opacity: 0.7 }} />
-              <span className="opacity-80 max-w-[180px] truncate">{currentProject.name}</span>
-            </StatusBarSegment>
-          </>
-        )}
 
         {/* 设置入口已于 2026-09-22 迁到左侧图标栏底部（图标形式）——
             这里的文字入口对非中文使用者不友好，移除避免重复入口 */}
