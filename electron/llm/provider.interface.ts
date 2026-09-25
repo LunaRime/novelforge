@@ -48,4 +48,15 @@ export interface ILLMProvider {
     messages: Array<{ role: string; content: string }>,
     opts: LLMStreamOptions
   ): Promise<void>
+
+  /**
+   * 列出该凭据下可用的模型名（「获取可用模型」用，2026-09-25）。
+   *
+   * ⚠️ 只收**凭据**而不是整个 `ModelProfile`：列模型发生在「账户已填、模型还没勾选」的时刻，
+   * 那时根本没有模型可传 —— 传 profile 就得伪造一个假的。
+   *
+   * 失败时 **throw**（由调用方转成用户可读错误）—— 中转/自建服务未必实现该端点，
+   * 拿到 404/空列表属预期情况，不是异常。
+   */
+  listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]>
 }

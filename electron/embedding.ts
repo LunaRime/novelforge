@@ -10,7 +10,7 @@
 
 import { t } from '../src/shared/locale'
 import { buildOpenAIUrl } from './llm/url-utils'
-import { proxyFetch } from './net/proxy-fetch'
+import { fetchWithTimeout } from './net/fetch-with-timeout'
 
 /** ⚠️ P2 修复：查询向量 LRU 缓存——RAG 是每次章节写作/对话的必经路径，同一查询重复向量化
  *  （此前每次检索都发一次 Embedding API 请求，无缓存） */
@@ -18,34 +18,7 @@ const queryCache = new Map<string, { vector: number[]; ts: number }>()
 const QUERY_CACHE_MAX = 500
 const QUERY_CACHE_TTL = 30 * 60 * 1000 // 30 分钟
 
-/** Embedding API fetch 超时（此前无 AbortController——API 挂起时章节写作被无限阻塞） */
-const EMBEDDING_TIMEOUT_MS = 10_000
-
-/** 带 AbortController 超时兜底的 fetch（导出自 T1：Ollama pull 等长任务复用，传 timeoutMs 覆盖默认 10s） */
-export function fetchWithTimeout(
-  url: string,
-  init: RequestInit,
-  timeoutMs: number = EMBEDDING_TIMEOUT_MS,
-): Promise<Response> {
-  const controller = new AbortController()
-  let timer: ReturnType<typeof setTimeout> | undefined
-  // ⚠️ abort 兜底（2026-08-29 冒烟实测根因）：API 请求挂起（限流/网络）时，
-  // undici 对挂起连接的 abort reject 可能延迟 ~20s（实测），IPC 30s 窗口内降级链来不及完成
-  // → kb:import-text 三次超时 → 后处理管线中止。Promise.race 保证超时即 abort + 立即 reject，
-  // 不依赖 fetch 对 abort 信号的响应及时性。
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      controller.abort()
-      reject(new DOMException('This operation was aborted', 'AbortError'))
-    }, timeoutMs)
-  })
-  return Promise.race([
-    proxyFetch(url, { ...init, signal: controller.signal }),
-    timeoutPromise,
-  ]).finally(() => {
-    if (timer) clearTimeout(timer)
-  })
-}
+// fetch 超时统一由 net/fetch-with-timeout 的默认值（10s）承担 —— 2026-09-25 移出本文件
 
 // ===== Embedding API 调用 =====
 

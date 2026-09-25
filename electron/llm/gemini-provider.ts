@@ -5,6 +5,7 @@ import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { proxyFetch } from '../net/proxy-fetch'
+import { fetchWithTimeout } from '../net/fetch-with-timeout'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -250,5 +251,29 @@ export class GeminiProvider implements ILLMProvider {
         opts.onError(safeErrorMessage(error))
       }
     })
+  }
+
+  /**
+   * 列出可用模型（`GET {baseUrl}/v1beta/models`，Gemini 原生端点）。
+   *
+   * 返回名去掉 `models/` 前缀（API 给的是 `models/gemini-3.1-pro`，而 `modelName` 字段
+   * 用的是不带前缀的形式 —— 见 generate 里拼 URL 的写法）。
+   *
+   * ⚠️ 不过滤能力：列表里既有 `generateContent` 也有 embedding/tts 模型，
+   * 勾选清单交给用户决定（同一账户本来就可能既挂生成又挂向量模型）。
+   * ⚠️ 不套 `withRetry`：交互式调用，失败要立刻给可操作提示。
+   */
+  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]> {
+    const baseUrl = credentials.baseUrl.replace(/\/$/, '')
+    const res = await fetchWithTimeout(`${baseUrl}/v1beta/models`, {
+      method: 'GET',
+      headers: { 'x-goog-api-key': credentials.apiKey },
+    })
+    if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`)
+
+    const data = (await res.json()) as { models?: Array<{ name?: unknown }> }
+    return (data.models ?? [])
+      .map((m) => (typeof m.name === 'string' ? m.name.replace(/^models\//, '') : ''))
+      .filter((name) => name !== '')
   }
 }

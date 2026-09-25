@@ -168,6 +168,8 @@ export function writeJsonFile(filePath: string, data: unknown) {
 
 export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
 export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
+/** 供应商账户（一份凭据挂多个模型）—— 派生条目的凭据来源，见 src/shared/provider-accounts.ts */
+export const PROVIDERS_CONFIG_PATH = path.join(VELA_HOME, 'providers.json')
 export const RECENT_PROJECTS_PATH = path.join(VELA_HOME, 'recent-projects.json')
 
 /**

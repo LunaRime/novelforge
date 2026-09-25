@@ -8,7 +8,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { embedOpenAI, fetchWithTimeout } from './embedding'
+import { embedOpenAI } from './embedding'
+import { fetchWithTimeout } from './net/fetch-with-timeout'
 
 const EMBEDDING_TIMEOUT_MS = 10_000
 

@@ -1,8 +1,11 @@
 import { BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
-import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
-import { ModelProfile, GlobalConfig } from '../../src/shared/ipc-channels'
+import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, PROVIDERS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
+import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
+import { syncAccountModels } from '../../src/shared/provider-accounts'
+import { presetModelDefaults } from '../../src/shared/provider-presets'
+import { listOllamaModels } from '../ollama-embedding'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
 import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
@@ -283,6 +286,93 @@ export function registerLLMController() {
       return { success: false, error: safeErrorMessage(error) }
     }
   })
+
+  // ===== 供应商账户（2026-09-25）：一份凭据挂多个模型 =====
+  //
+  // 存储：providers.json 是账户的唯一真相；models.json 里的**派生条目**持有凭据副本，
+  // 由 syncAccountModels 维护（合并语义：只换凭据，保留用户的逐模型调参）。
+  // 这样做的理由见 src/shared/provider-accounts.ts 头注释。
+
+  guardedHandle('llm:list-providers', async () => {
+    return readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, []).map((a) => ({
+      ...a,
+      apiKey: decryptApiKey(a.apiKey), // 与模型一致：盘上密文、渲染层明文
+    }))
+  })
+
+  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount) => {
+    try {
+      const accounts = readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, [])
+      const toSave: ProviderAccount = {
+        ...account,
+        apiKey: isPlaintextKey(account.apiKey) ? encryptApiKey(account.apiKey) : account.apiKey,
+      }
+      const idx = accounts.findIndex((a) => a.id === account.id)
+      if (idx >= 0) accounts[idx] = toSave
+      else accounts.push(toSave)
+      writeJsonFile(PROVIDERS_CONFIG_PATH, accounts)
+
+      // 同步派生条目 —— 注意传**明文** account：派生条目要拿到可直接用的凭据，
+      // 而 saveModelConfigs 会统一加密落盘
+      saveModelConfigs(
+        syncAccountModels(account, loadModelConfigs(), (name) => presetModelDefaults(account.provider, name)),
+      )
+      return { success: true }
+    } catch (error) {
+      logger.error('LLM', `[save-provider] failed: ${safeErrorMessage(error)}`)
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
+  guardedHandle('llm:delete-provider', async (_event, accountId: string) => {
+    try {
+      const accounts = readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, [])
+      const next = accounts.filter((a) => a.id !== accountId)
+      // ⚠️ 与 llm:delete-model 那次真机回归同型的坑：目标不存在时不能"空转照样返回 success"
+      //   —— 界面上就是「点了删除没反应」。差别是那边回的是英文诊断串（给排障看），
+      //   这里按 i18n 标准回可翻译文案（该字符串会一路到渲染层的 toast）。
+      if (next.length === accounts.length) {
+        logger.warn('LLM', `[delete-provider] account not found: ${accountId}`)
+        return { success: false, error: t('error.providerNotFound') }
+      }
+      writeJsonFile(PROVIDERS_CONFIG_PATH, next)
+      // 清空该账户的勾选清单 → 其派生条目全部消失；手工条目与其它账户不受影响
+      const gone = accounts.find((a) => a.id === accountId)!
+      saveModelConfigs(
+        syncAccountModels({ ...gone, modelNames: [] }, loadModelConfigs(), (name) =>
+          presetModelDefaults(gone.provider, name),
+        ),
+      )
+      return { success: true }
+    } catch (error) {
+      logger.error('LLM', `[delete-provider] failed: ${safeErrorMessage(error)}`)
+      return { success: false, error: safeErrorMessage(error) }
+    }
+  })
+
+  guardedHandle(
+    'llm:list-provider-models',
+    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string }) => {
+      try {
+        if (!credentials.baseUrl?.trim()) {
+          return { success: false, error: t('error.baseUrlRequired') }
+        }
+        // Ollama 走原生 /api/tags（复用既有实现：比 OpenAI 兼容端点更可靠，老版本也有）
+        if (credentials.provider === 'ollama') {
+          const models = await listOllamaModels(credentials.baseUrl)
+          return { success: true, models: models.map((m) => m.name) }
+        }
+        const models = await LLMFactory.getProvider(
+          { protocol: credentials.protocol } as ModelProfile,
+        ).listModels({ baseUrl: credentials.baseUrl, apiKey: credentials.apiKey })
+        return { success: true, models }
+      } catch (error) {
+        // 中转/自建服务未必实现该端点 —— 这不是异常，是可预期的降级点，提示要可操作
+        logger.warn('LLM', `[list-provider-models] failed: ${safeErrorMessage(error)}`)
+        return { success: false, error: t('error.modelListUnavailable') }
+      }
+    },
+  )
 
   guardedHandle('llm:set-default-model', async (_event, modelId: string | null) => {
     try {

@@ -123,6 +123,10 @@ export const errorTexts = {
   'error.characterDuplicateName': { 'zh-CN': '角色名重复：{name}（角色名是唯一标识，请先修改或删除重名角色）', 'en-US': 'Duplicate character name: {name} (character names must be unique — rename or delete the conflicting character first)', 'ru-RU': 'Дубликат имени персонажа: {name} (имена персонажей должны быть уникальны — переименуйте или удалите конфликтующего персонажа)' },
   'error.modelNameEmpty': { 'zh-CN': '模型名称不能为空', 'en-US': 'Model name is required', 'ru-RU': 'Имя модели не может быть пустым' },
   'error.modelPurposesEmpty': { 'zh-CN': '模型至少需要一个用途（生成/嵌入）', 'en-US': 'Model needs at least one purpose (generation/embedding)', 'ru-RU': 'Модели нужна хотя бы одна роль (генерация/эмбеддинг)' },
+  // 供应商账户（2026-09-25）—— 这三个都会一路到渲染层 toast，故必须可翻译
+  'error.providerNotFound': { 'zh-CN': '供应商账户不存在', 'en-US': 'Provider account not found', 'ru-RU': 'Учётная запись поставщика не найдена' },
+  'error.baseUrlRequired': { 'zh-CN': '请先填写 API 地址', 'en-US': 'API address is required', 'ru-RU': 'Укажите адрес API' },
+  'error.modelListUnavailable': { 'zh-CN': '未能获取模型列表（该服务可能不支持），请手工填写模型 ID', 'en-US': 'Could not fetch the model list (the service may not support it) — enter the model ID manually', 'ru-RU': 'Не удалось получить список моделей (сервис может его не поддерживать) — введите ID вручную' },
   'error.blueprintSaveFailed': { 'zh-CN': '蓝图保存失败 (第{n}章): {error}', 'en-US': 'Failed to save blueprint (Ch.{n}): {error}', 'ru-RU': 'Ошибка сохранения блюпринта (гл.{n}): {error}' },
   'error.blueprintsSaveBatchFailed': { 'zh-CN': '批量蓝图保存失败: {error}', 'en-US': 'Failed to save blueprints in batch: {error}', 'ru-RU': 'Ошибка пакетного сохранения блюпринтов: {error}' },
   'error.headersValueString': { 'zh-CN': 'headers 值必须是字符串', 'en-US': 'headers value must be a string', 'ru-RU': 'Значение headers должно быть строкой' },

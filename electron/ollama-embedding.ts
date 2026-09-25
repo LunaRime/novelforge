@@ -11,7 +11,7 @@
  * 错误信息一律结构化返回 / 英文（用户可见文案由渲染层 i18n 负责，见 T5）。
  */
 
-import { fetchWithTimeout } from './embedding'
+import { fetchWithTimeout } from './net/fetch-with-timeout'
 
 /** 拉模型是分钟级长任务——默认 10s 超时会把大模型 pull 腰斩（T1 导出 fetchWithTimeout 的动机） */
 const PULL_TIMEOUT_MS = 300_000

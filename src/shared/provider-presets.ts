@@ -37,6 +37,31 @@ export interface ProviderPreset {
   embeddingModels: string[]
 }
 
+/**
+ * 勾选某个模型时，它的**逐模型设置初值**（2026-09-25，供供应商账户同步用）。
+ *
+ * 窗口省缺时取 `maxTokens` —— 与 `tokenSpec`（SettingsModal）/ `normalizeModelProfile`
+ * （llm-constants）同一约定，三处不可各写一套。
+ *
+ * 用途：账户同步**新建**派生条目时用；**已存在**的条目不碰（用户的逐模型调参是权威值）。
+ */
+export function presetModelDefaults(
+  provider: string,
+  modelName: string,
+): { temperature: number; maxTokens: number; contextWindow: number; purposes: Array<'generation' | 'embedding'> } {
+  const preset = BUILTIN_PRESETS.find((p) => p.provider === provider)
+  const isEmbedding = preset?.embeddingModels.includes(modelName) ?? false
+  const model = preset?.models.find((m) => m.name === modelName)
+  const maxTokens = model?.maxTokens ?? 131072
+
+  return {
+    temperature: 0.7,
+    maxTokens,
+    contextWindow: model?.contextWindow ?? maxTokens,
+    purposes: [isEmbedding ? 'embedding' : 'generation'],
+  }
+}
+
 /** 内置默认预设（首次启动时写入持久化文件） */
 export const BUILTIN_PRESETS: ProviderPreset[] = [
   {

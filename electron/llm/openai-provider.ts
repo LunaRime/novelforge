@@ -6,6 +6,7 @@ import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { proxyFetch } from '../net/proxy-fetch'
+import { fetchWithTimeout } from '../net/fetch-with-timeout'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -264,5 +265,25 @@ export class OpenAIProvider implements ILLMProvider {
         opts.onError(safeErrorMessage(error))
       }
     })
+  }
+
+  /**
+   * 列出可用模型（`GET {baseUrl}/v1/models`，OpenAI 兼容协议的标准端点）。
+   *
+   * ⚠️ 不套 `withRetry`：这是用户点出来的交互式调用，失败应**立刻**给出可操作提示
+   * （「该服务未提供模型列表，请手工填写模型 ID」），而不是让用户对着转圈等三次重试。
+   */
+  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]> {
+    const url = buildOpenAIUrl(credentials.baseUrl, 'models')
+    const res = await fetchWithTimeout(url, {
+      method: 'GET',
+      headers: { 'Authorization': `Bearer ${credentials.apiKey}` },
+    })
+    if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`)
+
+    const data = (await res.json()) as { data?: Array<{ id?: unknown }> }
+    return (data.data ?? [])
+      .map((m) => m.id)
+      .filter((id): id is string => typeof id === 'string' && id !== '')
   }
 }

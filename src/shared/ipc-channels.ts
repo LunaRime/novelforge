@@ -393,6 +393,27 @@ export interface LLMChannels {
     args: [modelId: string | null]
     return: { success: boolean; error?: string }
   }
+  // ===== 供应商账户（2026-09-25）：一份凭据挂多个模型 =====
+  'llm:list-providers': {
+    args: []
+    /** apiKey 已解密（与 llm:list-models 同一约定：盘上密文、渲染层明文） */
+    return: ProviderAccount[]
+  }
+  'llm:save-provider': {
+    args: [account: ProviderAccount]
+    /** 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目 */
+    return: { success: boolean; error?: string }
+  }
+  'llm:delete-provider': {
+    args: [accountId: string]
+    /** 删除账户及其全部派生模型条目。⚠️ 调用方须先做引用检查（见 provider-accounts.findModelReferences） */
+    return: { success: boolean; error?: string }
+  }
+  'llm:list-provider-models': {
+    args: [credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string }]
+    /** 拉取供应商可用模型。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
+    return: { success: boolean; models?: string[]; error?: string }
+  }
   'llm:get-default-model': {
     args: []
     return: string | null
@@ -498,6 +519,25 @@ export interface ModelProfile {
    */
   contextWindow: number
   purposes: Array<'generation' | 'refinement' | 'summary' | 'embedding'>
+}
+
+/**
+ * 模型供应商账户 —— 一份凭据可挂多个模型（2026-09-25）。
+ *
+ * **存储位置**：`~/.novelforge/providers.json`。
+ * **为什么是派生层而不是改 models.json 的形状**：`models.json` 有 10 个读点、
+ * 凭据字段有 91 处引用；而路由/默认模型/会话**只按 id 引用模型** —— 故保持
+ * `ModelProfile[]` 形状不变、由账户派生出条目，读点与引用一行都不用改。
+ */
+export interface ProviderAccount {
+  id: string
+  /** 与 `ModelProfile.provider` 同一个封闭联合 —— UI 从同一组选项里选，故是良性约束 */
+  provider: ModelProfile['provider']
+  protocol: 'openai' | 'gemini'
+  apiKey: string
+  baseUrl: string
+  /** 已勾选的模型名 —— 勾选清单的唯一真相（逐个模型的显示名等设置住在 ModelProfile 上） */
+  modelNames: string[]
 }
 
 // ===== 引入 DB 类型 =====

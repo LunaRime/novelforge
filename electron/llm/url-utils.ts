@@ -12,25 +12,33 @@
  * 两端点规则曾互相矛盾，统一收敛到本工具。
  */
 
-export type OpenAIEndpointKind = 'chat' | 'embedding'
+export type OpenAIEndpointKind = 'chat' | 'embedding' | 'models'
 
 export function buildOpenAIUrl(baseUrl: string, kind: OpenAIEndpointKind): string {
   const base = baseUrl.replace(/\/$/, '')
 
-  // 用户直接填了完整端点 → 原样使用
+  // 用户直接填了完整端点
   if (base.endsWith('/chat/completions') || base.endsWith('/embeddings')) {
+    // models 要**剥掉端点段**而不是原样使用（`…/v1/chat/completions` → `…/v1/models`）。
+    // ⚠️ `/chat/completions` 是**两段**，用 lastIndexOf('/') 只会剥掉一段，得出 `…/v1/chat/models`
+    if (kind === 'models') {
+      const endpoint = base.endsWith('/chat/completions') ? '/chat/completions' : '/embeddings'
+      return `${base.slice(0, -endpoint.length)}/models`
+    }
     return base
   }
 
-  // BigModel paas 路径自带 /v4 版本段（chat 与 embedding 均直接追加端点）
+  // 旧版特例：`…/v1/chat`（保留兼容）
+  if (base.endsWith('/v1/chat')) {
+    return kind === 'chat' ? `${base}/completions` : `${base.slice(0, base.lastIndexOf('/'))}/models`
+  }
+
+  // BigModel paas 路径自带 /v4 版本段（各端点均直接追加）
   if (base.endsWith('/v4')) {
+    if (kind === 'models') return `${base}/models`
     return kind === 'chat' ? `${base}/chat/completions` : `${base}/embeddings`
   }
 
-  // 已带完整 /v1/chat 路径（旧版特例，保留兼容）
-  if (kind === 'chat' && base.endsWith('/v1/chat')) {
-    return `${base}/completions`
-  }
-
+  if (kind === 'models') return `${base}/v1/models`
   return kind === 'chat' ? `${base}/v1/chat/completions` : `${base}/v1/embeddings`
 }
