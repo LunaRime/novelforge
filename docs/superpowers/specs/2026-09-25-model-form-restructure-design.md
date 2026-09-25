@@ -1,6 +1,6 @@
 # 模型配置：拆出 contextWindow + 表单重排（2026-09-25）
 
-> **状态：待审阅 · 未实施**
+> **状态：✅ 已实施（2026-09-25，步骤 1+2）**
 > 来源：用户提供的参考设计截图（DeepSeek Harness 的模型/插件管理界面）+ 一条约束：
 > **「风格按本程序，UI 排布可参考图片」**
 > 相关：`provider-presets.ts`、`llm-store`、`agent-engine`（D7-1 压缩预算）、`ui/Disclosure`（新建）
@@ -229,3 +229,56 @@ const normalized = raw.map((m) => ({ ...m, contextWindow: m.contextWindow ?? m.m
    自动填 `modelName`）；把必填项放在可见区、可自动带出的项沉入折叠区，符合参考图的分层意图。
 3. 步骤 3（provider → 1:N）**本轮不写 spec**：它与本设计耦合面大（config 结构 + ModelRouter
    引用方式 + 存量迁移），先让 1+2 落地并观察真实使用反馈，再决定是否值得动结构。
+
+---
+
+## 十、实施记录（2026-09-25）
+
+### 交付
+
+| # | 内容 |
+|---|---|
+| 1 | `ModelProfile.contextWindow` 新字段（语义边界写进类型注释） |
+| 2 | `normalizeModelProfile()`（`llm-constants.ts`，纯函数 + 6 条测试） |
+| 3 | 收口点 `llm-store.loadModels()`：`(await ipc.invoke('llm:list-models')).map(normalizeModelProfile)` |
+| 4 | 三个消费点改读 `contextWindow`（`AgentConversation` / `agent-store` / `agent-engine` 注释） |
+| 5 | `tokenSpec()`：预设的 `maxTokens` + `contextWindow` **成对**取用（4 处调用点统一） |
+| 6 | `ui/Disclosure`（新，10 条测试）+ 迁移 `VectorConfigSection` 那处手写折叠 |
+| 7 | `ModelForm` 重排：API 密钥提前 → `⌄ 自定义设置`（模型标识 + API 地址）→ 模型参数（窗口 / 输出 / 温度） |
+| 8 | i18n：`form.maxTokens` 改文案 + 新增 `form.maxTokensHint` / `form.contextWindow` / `form.contextWindowHint` / `form.advanced`（三语） |
+
+**门禁**：tsc 0 / eslint 0 / **1733 测试（141 文件）**（改动前 1717）。
+
+### ⚠️ 两处偏离原设计（据实记录）
+
+**① 预设**不逐条写 `contextWindow`**，改为可选 + 省略**
+
+原设计 §4.4 要求「每个模型加 `contextWindow`（= maxTokens）」。实施时改为：
+`ModelPreset.contextWindow` 设为**可选**、**不逐条填**，由 `tokenSpec` / `normalizeModelProfile`
+兜底取 `maxTokens`（忠实搬运的性质不变）。
+
+两条理由：
+- 逐条照抄会多出 **30+ 个必然会漂移的重复数字**（唯一作用是等于 `maxTokens`）；
+  改为「**差异即例外**」：只在该模型真实窗口 ≠ maxTokens 时才显式写
+- ⚠️ `provider-presets.json` 是**持久化文件**，新增**必填**字段会让旧文件读进来缺字段挂掉
+
+**② `AgentConversation` 的兜底：`?? 131072` → `?? 0`（一处有意的行为变化）**
+
+窗口未知时（模型列表为空、或 `modelId` 指向已删除的模型），`ContextBudgetBar` 现在**整体不渲染**
+（`modelMax <= 0` 时 `return null`）；此前会拿**编造的 131072** 当分母算出百分比。
+
+→ 这是**修正**而非回归：编造分母属于本仓一直在清理的「静默错误」。但它**确实改变了边界行为**，
+故记在此处。`AgentConversation.test.tsx` 的 F3 组原先依赖这个兜底才读得到占用条，
+已补一个 mock 模型（该组断言的是记忆段 token 数，与分母无关，补 fixture 不削弱用例）。
+
+### 验收：零行为变化（对**已配置的模型**成立）
+
+`normalizeModelProfile` 的测试直接证明了这一点：旧配置缺 `contextWindow` → 取到 `maxTokens`，
+而三个消费点在改动前读的正是 `maxTokens` → **取到的值逐一相同**。
+`maxTokens` 本身全程未被改写 → 发给 API 的 `max_tokens` 与输出预算不受影响。
+
+### 遗留
+
+- **预设的窗口真值未填**：现全部等于 `maxTokens`（迁移期忠实搬运）。按厂商文档填真值会
+  **真的改变占用条分母**，须单独立项 + 单独验证
+- 真机验证未做（属人工项）
