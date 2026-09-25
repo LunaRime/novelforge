@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { Textarea } from '../ui/Textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -451,16 +452,10 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
               {t('review.extraFixLabel')}
             </label>
-            <textarea
-              className="w-full px-3 py-2 rounded-md text-sm"
-              style={{
-                background: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text)',
-                minHeight: 72,
-                resize: 'vertical',
-                outline: 'none',
-              }}
+            {/* 描边/正文色/焦点环/禁用态走 ui/Textarea；只覆盖底色（与 AIActionDialog 同款）与最小高度 */}
+            <Textarea
+              className="px-3 py-2 text-sm"
+              style={{ background: 'var(--color-bg-elevated)', minHeight: 72 }}
               placeholder={t('review.extraFixPlaceholder')}
               value={userRefinePrompt}
               onChange={e => setUserRefinePrompt(e.target.value)}

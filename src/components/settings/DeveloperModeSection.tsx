@@ -13,6 +13,7 @@ import type { TextKey } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
+import { Textarea } from '../ui/Textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
@@ -159,12 +160,12 @@ export default function DeveloperModeSection() {
 
         <div>
           <label className="block text-xs mb-1" style={{ color: 'var(--color-text-muted)' }}>{t('dev.headers')}</label>
-          <textarea
+          {/* 描边/底色/焦点环/禁用态走 ui/Textarea；仅保留此处特有的圆角、内边距与等宽字体 */}
+          <Textarea
             value={headersText}
             onChange={(e) => setHeadersText(e.target.value)}
             rows={4}
-            className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-panel)] px-3 py-2 text-xs font-mono outline-none focus:border-[var(--color-accent)] resize-y"
-            style={{ color: 'var(--color-text)' }}
+            className="rounded-lg px-3 py-2 font-mono"
             spellCheck={false}
           />
         </div>

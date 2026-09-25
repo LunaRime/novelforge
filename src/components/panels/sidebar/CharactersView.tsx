@@ -10,6 +10,7 @@ import {
 import type { CharacterCard } from '../../../stores/character-store'
 import type { TextKey } from '../../../shared/locale'
 import { Button } from '../../ui/Button'
+import { Input } from '../../ui/Input'
 import { EmptyState } from '../../ui/EmptyState'
 import { confirm } from '../../ui/Confirm'
 import { toast } from '../../ui/Toast'
@@ -190,12 +191,14 @@ export default function CharactersView() {
 
       {/* P1-1：名字/别名搜索框 */}
       <div className="px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
-        <input
+        {/* 侧栏内的紧凑尺寸：h-7/text-xs → h-6/text-micro。其余外观与交互（描边、底色、
+            focus 环、hover 转描边、禁用态）全走 ui/Input，不再逐个手写 */}
+        <Input
           type="text"
           value={query}
           onChange={(e) => setQuery(e.target.value)}
           placeholder={t('charList.searchPlaceholder')}
-          className="w-full h-6 px-2 text-micro rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+          className="h-6 px-2 text-micro"
         />
       </div>
 

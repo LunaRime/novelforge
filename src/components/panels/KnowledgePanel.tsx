@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
+import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { useProjectStore } from '../../stores/project-store'
@@ -235,13 +236,14 @@ export default function KnowledgePanel() {
         {/* P2-1：搜索框（Enter 触发；有结果时显示结果视图） */}
         <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--color-border)]">
           <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          <input
+          {/* 同上：面板内的紧凑搜索框，外观与交互走 ui/Input（flex-1 让它吃掉图标与清除按钮之间的余量） */}
+          <Input
             type="text"
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]) }}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
             placeholder={t('knowledge.searchPlaceholder')}
-            className="flex-1 min-w-0 h-6 px-1.5 text-micro rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none focus:ring-1 focus:ring-[var(--color-accent)]"
+            className="flex-1 min-w-0 h-6 px-1.5 text-micro"
           />
           {searchResults.length > 0 && (
             <button

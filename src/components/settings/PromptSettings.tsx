@@ -19,6 +19,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { Textarea } from '../ui/Textarea'
 import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 
@@ -305,22 +306,20 @@ function TemplateItem({
 
           {/* 编辑 textarea */}
           <div>
-            <textarea
+            {/* 描边/正文色/焦点环（含聚焦时描边转 accent）/禁用态走 ui/Textarea——
+                原先靠 onFocus/onBlur 手工改 borderColor，现由 focus:border-[var(--color-accent)] 承担。
+                这里只留提示词编辑器特有的：编辑器底色、圆角、等宽字体与高度区间 */}
+            <Textarea
               ref={textareaRef}
               value={editContent}
               onChange={(e) => setEditContent(e.target.value)}
-              className="w-full rounded-lg px-3 py-2.5 text-xs font-mono resize-y outline-none focus:outline-none"
+              className="rounded-lg px-3 py-2.5 font-mono"
               style={{
                 backgroundColor: 'var(--color-editor-bg)',
-                color: 'var(--color-text)',
-                border: '1px solid var(--color-border)',
                 minHeight: '200px',
                 maxHeight: '500px',
                 lineHeight: 1.6,
-                transition: 'border-color 0.15s ease',
               }}
-              onFocus={(e) => { e.currentTarget.style.borderColor = 'var(--color-accent)' }}
-              onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--color-border)' }}
               spellCheck={false}
             />
           </div>

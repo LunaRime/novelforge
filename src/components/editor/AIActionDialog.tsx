@@ -10,6 +10,7 @@ import { memo, useMemo } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
+import { Textarea } from '../ui/Textarea'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -124,16 +125,10 @@ export default memo(function AIActionDialog({
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
               {t('review.extraPolishLabel')}
             </label>
-            <textarea
-              className="w-full px-3 py-2 rounded-md text-sm"
-              style={{
-                background: 'var(--color-bg-elevated)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text)',
-                minHeight: 72,
-                resize: 'vertical',
-                outline: 'none',
-              }}
+            {/* 描边/正文色/焦点环/禁用态走 ui/Textarea；只覆盖底色（对话框用 elevated 层）与最小高度 */}
+            <Textarea
+              className="px-3 py-2 text-sm"
+              style={{ background: 'var(--color-bg-elevated)', minHeight: 72 }}
               placeholder={t('review.extraPolishPlaceholder')}
               value={refinePrompt}
               onChange={e => onRefinePromptChange(e.target.value)}

@@ -9,6 +9,7 @@ import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
+import { Input } from '../ui/Input'
 import { useTranslation } from '../../hooks/useTranslation'
 
 interface MCPServerConfig {
@@ -193,32 +194,34 @@ export default function MCPSettings() {
           </div>
         </div>
 
-        {/* 添加表单 */}
+        {/* 添加表单
+            三个字段的描边/正文色/焦点环/禁用态走 ui/Input；底色刻意用 --color-hover 而非
+            --color-panel —— 它们嵌在本就 panel 底色的卡片里，同色会糊在一起 */}
         {showAdd && (
           <div
             className="p-3.5 rounded-xl border space-y-2.5"
             style={{ borderColor: 'var(--color-accent)', backgroundColor: 'var(--color-panel)' }}
           >
-            <input
+            <Input
               value={newId}
               onChange={e => setNewId(e.target.value)}
               placeholder={t('mcp.serverId')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              className="px-2.5 py-1.5 rounded-lg"
+              style={{ backgroundColor: 'var(--color-hover)' }}
             />
-            <input
+            <Input
               value={newCommand}
               onChange={e => setNewCommand(e.target.value)}
               placeholder={t('mcp.commandPlaceholder')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              className="px-2.5 py-1.5 rounded-lg"
+              style={{ backgroundColor: 'var(--color-hover)' }}
             />
-            <input
+            <Input
               value={newArgs}
               onChange={e => setNewArgs(e.target.value)}
               placeholder={t('mcp.args')}
-              className="w-full px-2.5 py-1.5 rounded-lg text-xs outline-none transition-colors focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-[var(--color-accent)]"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
+              className="px-2.5 py-1.5 rounded-lg"
+              style={{ backgroundColor: 'var(--color-hover)' }}
             />
             <div className="flex gap-2">
               <button
