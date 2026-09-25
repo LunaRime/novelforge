@@ -362,14 +362,28 @@ export function registerLLMController() {
           const models = await listOllamaModels(credentials.baseUrl)
           return { success: true, models: models.map((m) => m.name) }
         }
-        const models = await LLMFactory.getProvider(
-          { protocol: credentials.protocol } as ModelProfile,
-        ).listModels({ baseUrl: credentials.baseUrl, apiKey: credentials.apiKey })
+        if (!credentials.apiKey?.trim() && credentials.provider !== 'ollama') {
+          return { success: false, error: t('error.apiKeyRequired') }
+        }
+        const models = await LLMFactory.getProvider({ protocol: credentials.protocol })
+          .listModels({ baseUrl: credentials.baseUrl, apiKey: credentials.apiKey })
         return { success: true, models }
       } catch (error) {
-        // 中转/自建服务未必实现该端点 —— 这不是异常，是可预期的降级点，提示要可操作
-        logger.warn('LLM', `[list-provider-models] failed: ${safeErrorMessage(error)}`)
-        return { success: false, error: t('error.modelListUnavailable') }
+        // ⚠️ 必须**分类**：早先对所有失败都回同一句「该服务可能不支持」——
+        //   密钥无效(401)、没网、地址写错时那句是**误导**，用户据此排查只会越走越偏。
+        const status = (error as { status?: number }).status
+        const isTimeout = (error as { name?: string }).name === 'AbortError'
+        const detail = safeErrorMessage(error)
+        logger.warn('LLM', `[list-provider-models] failed (status=${status ?? 'n/a'}${isTimeout ? ', timeout' : ''}): ${detail}`)
+        const msg = status === 401 || status === 403
+          ? t('error.modelListAuth').replace('{status}', String(status))
+          : status === 404
+          ? t('error.modelListNotSupported')
+          : isTimeout
+          // 超时最常见于：要走代理却按直连（或反之）。原文 "This operation was aborted" 对用户毫无信息量
+          ? t('error.modelListTimeout')
+          : t('error.modelListUnavailable').replace('{detail}', () => detail)
+        return { success: false, error: msg }
       }
     },
   )

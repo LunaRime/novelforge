@@ -162,6 +162,49 @@ export const BUILTIN_PRESETS: ProviderPreset[] = [
   // baseUrl 的写法必须让 `buildOpenAIUrl` 拼出正确端点（它会补 `/v1/...`）：
   // 末尾**不要**带 `/v1`（已带版本段的地址不会再补，但留空更统一）。
   {
+    /**
+     * Anthropic Claude —— 走官方 **OpenAI SDK 兼容层**（`/v1/chat/completions`）。
+     *
+     * ⚠️ **已知限制（官方文档明列）**，别当原生 API 用：
+     *   - 兼容层标为 **beta，非生产就绪**
+     *   - **`response_format` 被静默忽略** → 本仓依赖 JSON 约束的流程（蓝图提取/评分等）
+     *     在这条路上会失效（模型照常回，但可能不是合法 JSON）。当**普通对话**模型没问题。
+     *   - `temperature` 上限为 1（本仓允许 0–2，超过 1 会被压到 1）
+     *   - **不支持 prompt 缓存**（本仓的 prompt-cache 机制在此无效）
+     *   - 要完整能力需原生 Messages API，那需要新写一个 provider（协议联合里目前只有 openai/gemini）
+     *
+     * baseUrl 用裸域名：`buildOpenAIUrl` 会补 `/v1/chat/completions`（官方建议 SDK 的 base_url 以 /v1 结尾，
+     * 即等价于这个写法）。
+     */
+    provider: 'anthropic',
+    displayName: 'Anthropic（Claude）',
+    baseUrl: 'https://api.anthropic.com',
+    protocol: 'openai',
+    models: [
+      { name: 'claude-opus-5-5', maxTokens: 64000 },
+      { name: 'claude-sonnet-5', maxTokens: 64000 },
+      { name: 'claude-fable-5-1', maxTokens: 64000 },
+      { name: 'claude-haiku-4-5-20251001', maxTokens: 32000 },
+    ],
+    embeddingModels: [],
+  },
+  {
+    /**
+     * 小米 MiMo API 开放平台 —— OpenAI 兼容：`https://api.xiaomimimo.com/v1`。
+     * 按量付费用这个地址；订阅制（Token Plan）是分区地址（`token-plan-{cn,sgp,ams}.xiaomimimo.com`），
+     * 用户可在「自定义设置 → API 地址」里改。
+     *
+     * ⚠️ 模型列表留空：小米的模型 ID 会随版本变，不硬编码；点「获取可用模型」拿真实清单
+     * （该地址支持 `/v1/models`），失败则手工填。
+     */
+    provider: 'xiaomi',
+    displayName: '小米 MiMo',
+    baseUrl: 'https://api.xiaomimimo.com',
+    protocol: 'openai',
+    models: [],
+    embeddingModels: [],
+  },
+  {
     provider: 'moonshot',
     displayName: 'Moonshot（Kimi）',
     baseUrl: 'https://api.moonshot.cn',

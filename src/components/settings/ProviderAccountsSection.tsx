@@ -205,6 +205,29 @@ function ProviderAccountForm({
   const up = <K extends keyof ProviderAccount>(key: K, value: ProviderAccount[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
 
+  /**
+   * 换服务商 → **协议与地址都要跟着换**（预设里写着该服务商走哪套协议、在哪个地址）。
+   *
+   * ⚠️ 早先只换 provider 不动 baseUrl 是个真 bug：选 Moonshot 却仍打
+   * `https://api.openai.com` → 必然 401 → 「获取可用模型」永远失败，
+   * 而当时的报错文案还说「该服务可能不支持模型列表」，把用户引向完全错误的方向。
+   *
+   * 保留用户自定义过的地址（≠ 旧预设地址时不覆盖）—— 与 ModelForm 的 P3 修复同一规则。
+   */
+  const handleProviderChange = (next: ProviderAccount['provider']) => {
+    const prevPreset = BUILTIN_PRESETS.find((p) => p.provider === draft.provider)
+    const nextPreset = BUILTIN_PRESETS.find((p) => p.provider === next)
+    setDraft((d) => ({
+      ...d,
+      provider: next,
+      protocol: (nextPreset?.protocol ?? 'openai') as ProviderAccount['protocol'],
+      baseUrl:
+        d.baseUrl && prevPreset && d.baseUrl !== prevPreset.baseUrl
+          ? d.baseUrl
+          : (nextPreset?.baseUrl ?? ''),
+    }))
+  }
+
   const candidates = [
     ...new Set([...(fetched ?? []), ...candidateModels(draft.provider, [...selected])]),
   ].sort()
@@ -273,13 +296,13 @@ function ProviderAccountForm({
         {account.modelNames.length > 0 ? t('provider.editTitle') : t('provider.newTitle')}
       </h3>
 
-      {/* 服务商 + 协议 */}
-      <div className="grid grid-cols-2 gap-3">
+      {/* 服务商（协议与地址由预设带出） */}
+      <div className={draft.provider === 'custom' ? 'grid grid-cols-2 gap-3' : ''}>
         <div>
           <Label>{t('form.provider')}</Label>
           <Select
             value={draft.provider}
-            onValueChange={(v) => up('provider', v as ProviderAccount['provider'])}
+            onValueChange={(v) => handleProviderChange(v as ProviderAccount['provider'])}
           >
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
@@ -291,19 +314,23 @@ function ProviderAccountForm({
             </SelectContent>
           </Select>
         </div>
-        <div>
-          <Label>{t('form.protocol')}</Label>
-          <Select
-            value={draft.protocol}
-            onValueChange={(v) => up('protocol', v as ProviderAccount['protocol'])}
-          >
-            <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="gemini">Gemini</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
+        {/* 协议只在「自定义」时才问：选定的服务商该走哪套协议是**既定事实**（预设里写着），
+            让用户选是多余的 —— 而且选错就整条链路不通 */}
+        {draft.provider === 'custom' && (
+          <div>
+            <Label>{t('form.protocol')}</Label>
+            <Select
+              value={draft.protocol}
+              onValueChange={(v) => up('protocol', v as ProviderAccount['protocol'])}
+            >
+              <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="openai">OpenAI 兼容</SelectItem>
+                <SelectItem value="gemini">Gemini 原生</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       {/* API Key —— 唯一必填的凭据，放在最前 */}

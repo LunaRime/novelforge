@@ -126,7 +126,13 @@ export const errorTexts = {
   // 供应商账户（2026-09-25）—— 这三个都会一路到渲染层 toast，故必须可翻译
   'error.providerNotFound': { 'zh-CN': '供应商账户不存在', 'en-US': 'Provider account not found', 'ru-RU': 'Учётная запись поставщика не найдена' },
   'error.baseUrlRequired': { 'zh-CN': '请先填写 API 地址', 'en-US': 'API address is required', 'ru-RU': 'Укажите адрес API' },
-  'error.modelListUnavailable': { 'zh-CN': '未能获取模型列表（该服务可能不支持），请手工填写模型 ID', 'en-US': 'Could not fetch the model list (the service may not support it) — enter the model ID manually', 'ru-RU': 'Не удалось получить список моделей (сервис может его не поддерживать) — введите ID вручную' },
+  'error.apiKeyRequired': { 'zh-CN': '请先填写 API 密钥', 'en-US': 'API key is required', 'ru-RU': 'Укажите ключ API' },
+  // ⚠️ 三条要分清：早先对所有失败都回同一句「该服务可能不支持」，
+  // 密钥无效/没网时那句是**误导**（用户会去怀疑服务，而问题在自己的配置）
+  'error.modelListAuth': { 'zh-CN': 'API 密钥无效或无权访问该服务（HTTP {status}）', 'en-US': 'Invalid API key or access denied (HTTP {status})', 'ru-RU': 'Неверный ключ API или доступ запрещён (HTTP {status})' },
+  'error.modelListNotSupported': { 'zh-CN': '该服务未提供模型列表端点（HTTP 404）—— 请手工填写模型 ID', 'en-US': 'This service does not expose a model-list endpoint (HTTP 404) — enter model IDs manually', 'ru-RU': 'Сервис не предоставляет список моделей (HTTP 404) — введите ID вручную' },
+  'error.modelListUnavailable': { 'zh-CN': '获取模型列表失败：{detail} —— 请检查网络与 API 地址，或手工填写模型 ID', 'en-US': 'Failed to fetch the model list: {detail} — check your network and API address, or enter model IDs manually', 'ru-RU': 'Не удалось получить список моделей: {detail} — проверьте сеть и адрес API либо введите ID вручную' },
+  'error.modelListTimeout': { 'zh-CN': '获取模型列表超时（10 秒）—— 请检查网络与代理设置，或手工填写模型 ID', 'en-US': 'Timed out fetching the model list (10s) — check your network and proxy settings, or enter model IDs manually', 'ru-RU': 'Тайм-аут при получении списка моделей (10 с) — проверьте сеть и прокси либо введите ID вручную' },
   'error.blueprintSaveFailed': { 'zh-CN': '蓝图保存失败 (第{n}章): {error}', 'en-US': 'Failed to save blueprint (Ch.{n}): {error}', 'ru-RU': 'Ошибка сохранения блюпринта (гл.{n}): {error}' },
   'error.blueprintsSaveBatchFailed': { 'zh-CN': '批量蓝图保存失败: {error}', 'en-US': 'Failed to save blueprints in batch: {error}', 'ru-RU': 'Ошибка пакетного сохранения блюпринтов: {error}' },
   'error.headersValueString': { 'zh-CN': 'headers 值必须是字符串', 'en-US': 'headers value must be a string', 'ru-RU': 'Значение headers должно быть строкой' },
