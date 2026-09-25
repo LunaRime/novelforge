@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, type RefObject } from 'react'
 import { searchMentionTargets, type MentionTarget } from '../../../services/agent/intent-router'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 
 interface Props {
   /** 搜索关键词（@ 后面的文字） */
@@ -64,20 +65,14 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
   if (results.length === 0) return null
 
   return (
-    <div
+    <PopoverSurface
       ref={menuRef}
-      className="z-[var(--z-dropdown)] py-1 rounded-lg"
+      className="py-1"
       style={{
-        // 浮在整个窗口之上（useFloatingPosition 定位）：初始在视口外 + 隐藏，定位后显示
-        position: 'fixed',
-        visibility: 'hidden',
         width: 240,
         maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
         maxHeight: 260,
         overflowY: 'auto',
-        backgroundColor: 'var(--color-sidebar)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-popover)',
       }}
     >
       <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
@@ -104,6 +99,6 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
           )}
         </button>
       ))}
-    </div>
+    </PopoverSurface>
   )
 }

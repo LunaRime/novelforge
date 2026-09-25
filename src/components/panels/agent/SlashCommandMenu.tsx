@@ -7,6 +7,7 @@ import { useState, useEffect, useCallback, type RefObject } from 'react'
 import { Sparkles, Zap } from 'lucide-react'
 import { searchSlashCommands, type SlashCommand } from '../../../services/agent/intent-router'
 import { Badge } from '../../ui/Badge'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 
@@ -70,20 +71,14 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
   if (results.length === 0) return null
 
   return (
-    <div
+    <PopoverSurface
       ref={menuRef}
-      className="z-[var(--z-dropdown)] py-1 rounded-lg"
+      className="py-1"
       style={{
-        // 浮在整个窗口之上（useFloatingPosition 定位）
-        position: 'fixed',
-        visibility: 'hidden',
         width: 280,
         maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
         maxHeight: 300,
         overflowY: 'auto',
-        backgroundColor: 'var(--color-sidebar)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-popover)',
       }}
     >
       <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
@@ -119,6 +114,6 @@ export default function SlashCommandMenu({ query, onSelect, onClose, anchorRef }
           )}
         </button>
       ))}
-    </div>
+    </PopoverSurface>
   )
 }

@@ -24,6 +24,7 @@ import { Badge } from '../../ui/Badge'
 import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 import type { SlashCommand, MentionTarget } from '../../../services/agent/intent-router'
 
 /** 输入框最大高度（px），超出后框内滚动 */
@@ -340,18 +341,10 @@ export default function AgentInputBox() {
 
             {/* 上下文菜单（+ 按钮弹出） */}
             {showContextMenu && (
-              <div
+              <PopoverSurface
                 ref={contextMenuRef}
-                className="z-[var(--z-dropdown)] py-1 rounded-lg"
-                style={{
-                  // 浮在整个窗口之上（useFloatingPosition 定位）：初始在视口外 + 隐藏，定位后显示
-                  position: 'fixed',
-                  visibility: 'hidden',
-                  width: 180,
-                  backgroundColor: 'var(--color-sidebar)',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: 'var(--shadow-popover)',
-                }}
+                className="py-1"
+                style={{ width: 180 }}
               >
                 <div className="text-micro px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('tip.addContext')}
@@ -378,7 +371,7 @@ export default function AgentInputBox() {
                   handleInputChange(next)
                   textareaRef.current?.focus()
                 }} />
-              </div>
+              </PopoverSurface>
             )}
           </div>
 
@@ -432,15 +425,11 @@ export default function AgentInputBox() {
               const fillWidth = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((currentLv.level - 1) / 5).toFixed(3)}))`
 
               return (
-                <div
-                  className="floating-menu floating-menu--above-start p-2.5 rounded-lg"
-                  style={{
-                    width: 210,
-                    backgroundColor: 'var(--color-sidebar)',
-                    border: '1px solid var(--color-border)',
-                    boxShadow: 'var(--shadow-popover)',
-                    positionAnchor: '--menu-depth',
-                  } as React.CSSProperties}
+                <PopoverSurface
+                  anchorName="--menu-depth"
+                  placement="above-start"
+                  className="p-2.5"
+                  style={{ width: 210 }}
                 >
                   {/* 标题行：思考等级 + 当前档位名 */}
                   <div className="flex items-center justify-between mb-2">
@@ -553,7 +542,7 @@ export default function AgentInputBox() {
                   >
                     {t(currentLv.descKey)}
                   </div>
-                </div>
+                </PopoverSurface>
               )
             })()}
           </div>
@@ -597,18 +586,12 @@ export default function AgentInputBox() {
 
             {/* 模型选择下拉 */}
             {showModelMenu && (
-              <div
-                /* floating-menu：fixed + 锚点定位（原先左对齐时右缘顶出窗口 25px 被裁，
-                   右对齐只是绕开——换面板宽度又会复现，见 index.css 的 .floating-menu） */
-                className="floating-menu floating-menu--above-end py-1 rounded-lg"
-                style={{
-                  width: 220,
-                  backgroundColor: 'var(--color-sidebar)',
-                  border: '1px solid var(--color-border)',
-                  boxShadow: 'var(--shadow-popover)',
-                  maxHeight: 280,
-                  positionAnchor: '--menu-model',
-                } as React.CSSProperties}
+              /* 触发器靠面板右侧：左对齐会让菜单右缘顶出窗口 25px 被裁 →
+                 右对齐锚点（换面板宽度也不会复现，见 index.css 的 .floating-menu） */
+              <PopoverSurface
+                anchorName="--menu-model"
+                className="py-1"
+                style={{ width: 220, maxHeight: 280 }}
               >
                 <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('agent.selectModel')}
@@ -630,7 +613,7 @@ export default function AgentInputBox() {
                     />
                   ))
                 )}
-              </div>
+              </PopoverSurface>
             )}
           </div>
         </div>

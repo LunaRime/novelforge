@@ -12,6 +12,7 @@ import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
+import { PopoverSurface } from '../ui/PopoverSurface'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
@@ -159,18 +160,10 @@ function TemperatureControl({
       </StatusBarSegment>
 
       {open && (
-        <div
+        <PopoverSurface
           ref={tempMenuRef}
-          className="z-[var(--z-dropdown)] py-2 px-3 rounded-lg"
-          style={{
-            // 浮在整个窗口之上（useFloatingPosition 定位）
-            position: 'fixed',
-            visibility: 'hidden',
-            width: 200,
-            backgroundColor: 'var(--color-sidebar)',
-            border: '1px solid var(--color-border)',
-            boxShadow: 'var(--shadow-popover)',
-          }}
+          className="py-2 px-3"
+          style={{ width: 200 }}
         >
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
@@ -219,7 +212,7 @@ function TemperatureControl({
               </button>
             ))}
           </div>
-        </div>
+        </PopoverSurface>
       )}
     </div>
   )

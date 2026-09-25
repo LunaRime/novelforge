@@ -12,6 +12,7 @@ import { FileText, Search, FolderOpen } from 'lucide-react'
 import { searchProjectFiles } from '../../../services/agent/intent-router'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 
 interface Props {
   onSelect: (path: string) => void
@@ -81,20 +82,13 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
   }, [selectedIndex])
 
   return (
-    <div
+    <PopoverSurface
       ref={menuRef}
-      className="z-[var(--z-dropdown)] rounded-lg"
       style={{
-        // 浮在整个窗口之上（useFloatingPosition 定位）
-        position: 'fixed',
-        visibility: 'hidden',
         width: 280,
         maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
         maxHeight: 'calc(100vh - 120px)',
         overflowY: 'auto',
-        backgroundColor: 'var(--color-sidebar)',
-        border: '1px solid var(--color-border)',
-        boxShadow: 'var(--shadow-popover)',
       }}
     >
       {/* 搜索框 */}
@@ -156,6 +150,6 @@ export default function FilePickerMenu({ onSelect, onClose, anchorRef }: Props) 
           <span className="flex-1 truncate">{t('agent.openExternalFile')}</span>
         </button>
       </div>
-    </div>
+    </PopoverSurface>
   )
 }

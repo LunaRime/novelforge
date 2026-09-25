@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import type { ContextUsage } from '../../../services/agent/context-usage'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 
@@ -75,17 +76,10 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
       </div>
 
       {open && (
-        <div
+        <PopoverSurface
           ref={menuRef}
-          className="z-[var(--z-dropdown)] rounded-lg min-w-[184px]"
-          style={{
-            position: 'fixed',
-            visibility: 'hidden',
-            backgroundColor: 'var(--color-sidebar)',
-            border: '1px solid var(--color-border)',
-            boxShadow: 'var(--shadow-popover)',
-            padding: '8px 10px',
-          }}
+          className="min-w-[184px]"
+          style={{ padding: '8px 10px' }}
         >
           <div className="mb-1.5 text-micro font-medium" style={{ color: 'var(--color-text)' }}>
             {t('ccr.contextUsage')}
@@ -110,7 +104,7 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
             <span>{t('ccr.total')}</span>
             <span>{fmtK(usage.total)}/{fmtK(usage.modelMax)} ({pct}%)</span>
           </div>
-        </div>
+        </PopoverSurface>
       )}
     </div>
   )

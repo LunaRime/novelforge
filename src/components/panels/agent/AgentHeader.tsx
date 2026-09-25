@@ -10,6 +10,7 @@ import { MenuItem } from '../../ui/MenuItem'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { PopoverSurface } from '../../ui/PopoverSurface'
 import { useTranslation } from '../../../hooks/useTranslation'
 
 /**
@@ -98,19 +99,10 @@ export default function AgentHeader() {
 
           {/* 更多菜单下拉 */}
           {showMore && (
-            <div
+            <PopoverSurface
               ref={moreMenuRef}
-              className="z-[var(--z-dropdown)] py-1 rounded-lg"
-              style={{
-                // 浮在整个窗口之上（useFloatingPosition 定位）
-                position: 'fixed',
-                visibility: 'hidden',
-                width: subView === 'main' ? 200 : 260,
-                backgroundColor: 'var(--color-sidebar)',
-                border: '1px solid var(--color-border)',
-                boxShadow: 'var(--shadow-popover)',
-                transition: 'width 0.15s ease',
-              }}
+              className="py-1"
+              style={{ width: subView === 'main' ? 200 : 260, transition: 'width 0.15s ease' }}
             >
               {/* ===== 主菜单视图 ===== */}
               {subView === 'main' && (
@@ -171,7 +163,7 @@ export default function AgentHeader() {
                   onBack={() => setSubView('main')}
                 />
               )}
-            </div>
+            </PopoverSurface>
           )}
         </div>
 
