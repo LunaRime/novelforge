@@ -381,6 +381,12 @@ function ProviderAccountForm({
         {fetchError && (
           <p className="text-2xs" style={{ color: 'var(--color-warning)' }}>{fetchError}</p>
         )}
+        {/* 清单为空且没拉过 → 说明为什么没有内置清单（否则用户会以为功能坏了） */}
+        {!fetched && candidates.length === 0 && (
+          <p className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>
+            {t('provider.noPresetHint')}
+          </p>
+        )}
 
         <div className="max-h-56 overflow-y-auto rounded-lg p-1 space-y-0.5"
              style={{ border: '1px solid var(--color-border)' }}>
