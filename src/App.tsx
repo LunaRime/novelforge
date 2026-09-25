@@ -79,7 +79,7 @@ const EDITOR_MIN_PX = 320
 function TitleStrip() {
   return (
     <div
-      className="flex items-center gap-1.5 px-3 overflow-hidden select-none flex-shrink-0"
+      className="flex items-center gap-2 pl-2.5 pr-3 overflow-hidden select-none flex-shrink-0"
       style={{
         height: 'env(titlebar-area-height, 0px)',
         backgroundColor: 'var(--color-canvas)',
@@ -90,9 +90,15 @@ function TitleStrip() {
           ⚠️ 必须与**打包用的图标是同一个文件**（`build/icon.png`，electron-builder 的
           `icon.ico` 由它生成、窗口图标也用它）：复制一份到 public/ 会有两个来源、
           改一次忘一处就会静默不一致（2026-09-25 首次实现时误用了 public/icon.svg ——
-          那是另一版设计，用户一眼看出不是他设计的那个）。 */}
-      <img src={appIcon} alt="" width={14} height={14} style={{ flexShrink: 0 }} />
-      <span className="text-2xs font-medium brand-gradient">NovelForge</span>
+          那是另一版设计，用户一眼看出不是他设计的那个）。
+          尺寸走**图标刻度体系的 16 档**（面板标题档），标题栏图标就是这个规格。 */}
+      <img src={appIcon} alt="" width={16} height={16} style={{ flexShrink: 0 }} />
+      {/*
+        ⚠️ 标题栏不是放 logo 的地方：首版用了 `text-2xs`(10px) + `brand-gradient`（品牌渐变字），
+        用户看出来的「不像正常应用」即此 —— 那更像宣传位而不是标题栏。
+        常规应用就是 **12px 常规文字色**。
+      */}
+      <span className="text-xs truncate" style={{ color: 'var(--color-text)' }}>NovelForge</span>
     </div>
   )
 }
