@@ -139,6 +139,7 @@ function buildAppMenu() {
 }
 
 function createWindow() {
+  const isMac = process.platform === 'darwin'
   win = new BrowserWindow({
     width: 1440,
     height: 900,
@@ -146,17 +147,27 @@ function createWindow() {
     minHeight: 640,
     title: t('window.title'),
     icon: path.join(process.env.APP_ROOT!, 'build', 'icon.png'),
-    // macOS 使用自定义标题栏
-    titleBarStyle: 'hiddenInset',
-    trafficLightPosition: { x: 12, y: 10 },
     /**
-     * 窗口控件覆盖层（Windows 标题栏那条）的配色。
+     * 自定义标题栏 —— **必须按平台分设**。
      *
-     * ⚠️ 这一条由**系统绘制、不在 DOM 里**，`--color-*` 管不到 → 默认是系统色、不跟应用主题
-     * （用户实测「最上面那一条主题切换时没变」）。这里给的是**启动瞬间**的值，对齐启动闪屏的深色底；
-     * 渲染层一就绪就会用真实主题色覆盖它（theme-store 的 syncTitlebarOverlay）。
+     * ⚠️ 真机实测（2026-09-25）：`titleBarStyle: 'hiddenInset'` 是 **macOS 专有**，
+     * 在 Windows 上被**静默忽略** → 退回标准窗口边框 = 一条系统标题栏（应用图标 + 窗口标题 +
+     * 最小化/最大化/关闭），底色由 Windows 按**系统**主题绘制、**不跟应用主题**。
+     * 用户报的「最上面那一条主题切换时没变」即此。
+     *
+     * 更要紧的是：本应用的布局**从 2026-09-22 起就按「无边框 + 拖拽区在图标栏」设计**
+     * （见 ui-layout-standard），而这条设置在 Windows 上从未生效 —— 即**设计形态没落地**。
+     *
+     * - macOS：`hiddenInset` + 左侧红绿灯
+     * - Windows/Linux：`hidden` 启用**窗口控件覆盖层（WCO）**——系统只画窗口按钮，
+     *   其余区域交还应用。配色由渲染层按当前主题推过来（见 window:set-titlebar-overlay）。
      */
-    titleBarOverlay: { color: '#1e1e1e', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
+    titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
+    ...(isMac ? { trafficLightPosition: { x: 12, y: 10 } } : {}),
+    ...(isMac ? {} : {
+      // 启动瞬间的值：对齐启动闪屏的深色底；渲染层一就绪就换成真实主题色
+      titleBarOverlay: { color: '#1e1e1e', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
+    }),
     backgroundColor: '#1e1e1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
