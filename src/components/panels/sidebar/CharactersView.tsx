@@ -140,7 +140,7 @@ export default function CharactersView() {
   }, [characters, tierFilter, q])
 
   if (!currentProject) {
-    return <EmptyState icon={<Users size={36} />} message={t('blueprint.openProjectFirst')} className="pb-[15vh]" opacity={0.4} />
+    return <EmptyState icon={<Users size={36} />} message={t('empty.pleaseOpenProject')} className="pb-[15vh]" opacity={0.4} />
   }
 
   return (

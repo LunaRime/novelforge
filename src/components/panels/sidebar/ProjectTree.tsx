@@ -118,7 +118,7 @@ export default function ProjectTree() {
         /* 图标淡度只有一个来源：muted 颜色本身（原实现同时套 muted 色 + opacity-60，且外层 span
            带着无效的 text-4xl —— 与 size={36} 冲突的残留） */
         icon={<FolderOpen size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.6 }} />}
-        message={t('project.noProject')}
+        message={t('empty.pleaseOpenProject')}
         className="p-4 pb-[15vh]"
         opacity={1}
       >

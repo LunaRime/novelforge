@@ -189,7 +189,7 @@ export default function KnowledgePanel() {
     return (
       <EmptyState 
         icon={<BookOpen size={36} />} 
-        message={t('knowledge.openProjectFirst')}
+        message={t('empty.pleaseOpenProject')}
         className="pb-[15vh]" 
         opacity={0.4} 
       />

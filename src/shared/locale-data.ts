@@ -277,7 +277,6 @@ export const UI_TEXTS_DATA = {
   'sort.asc': { 'zh-CN': '升序', 'en-US': 'Ascending', 'ru-RU': 'По возрастанию' },
   'sort.desc': { 'zh-CN': '降序', 'en-US': 'Descending', 'ru-RU': 'По убыванию' },
   'character.chapterRange': { 'zh-CN': '{start}-{end} ({n} 章)', 'en-US': '{start}-{end} ({n} ch)', 'ru-RU': '{start}-{end} ({n} гл.)' },
-  'knowledge.openProjectFirst': { 'zh-CN': '请先打开项目', 'en-US': 'Open a project first', 'ru-RU': 'Сначала откройте проект' },
   'knowledge.docChunks': { 'zh-CN': '{docs} 文档 / {chunks} 块', 'en-US': '{docs} docs / {chunks} chunks', 'ru-RU': '{docs} док. / {chunks} блоков' },
   'about.slogan': { 'zh-CN': '让每一个故事，都被认真锻造', 'en-US': 'Every story deserves to be forged with care.', 'ru-RU': 'Каждая история заслуживает быть выкованной с заботой.' },
   'about.sloganEn': { 'zh-CN': 'Every story deserves to be forged with care.', 'en-US': 'Every story deserves to be forged with care.', 'ru-RU': 'Every story deserves to be forged with care.' },
@@ -982,7 +981,6 @@ export const UI_TEXTS_DATA = {
   'project.saveLocation': { 'zh-CN': '保存位置', 'en-US': 'Save Location', 'ru-RU': 'Расположение' },
   'project.chooseDir': { 'zh-CN': '选择项目保存目录', 'en-US': 'Choose project save directory', 'ru-RU': 'Папка проекта' },
   'project.creatingBtn': { 'zh-CN': '创建项目', 'en-US': 'Create Project', 'ru-RU': 'Создать проект' },
-  'project.noProject': { 'zh-CN': '未打开项目', 'en-US': 'No project opened', 'ru-RU': 'Проект не открыт' },
   'project.noRecent': { 'zh-CN': '暂无其他最近项目', 'en-US': 'No other recent projects', 'ru-RU': 'Нет других недавних проектов' },
   'project.current': { 'zh-CN': '当前项目', 'en-US': 'Current project', 'ru-RU': 'Текущий проект' },
   'project.recent': { 'zh-CN': '最近项目', 'en-US': 'Recent projects', 'ru-RU': 'Недавние проекты' },
@@ -1907,7 +1905,8 @@ export const UI_TEXTS_DATA = {
   'empty.noHistoryTasks': { 'zh-CN': '历史任务', 'en-US': 'Task history', 'ru-RU': 'История задач' },
   'empty.selectChapter': { 'zh-CN': '选择一个章节', 'en-US': 'Select a chapter', 'ru-RU': 'Выберите главу' },
   'empty.startCreate': { 'zh-CN': '新建或打开一个小说项目开始创作', 'en-US': 'Create or open a novel project to start', 'ru-RU': 'Создайте или откройте проект' },
-  'empty.pleaseOpenProject': { 'zh-CN': '请先打开项目', 'en-US': 'Please open a project first', 'ru-RU': 'Откройте проект' },
+  // 跨面板通用空态（编辑区/蓝图/知识库/角色树/项目树共用）；此前各模块各有一个同义键（2026-09-25 合并）
+  'empty.pleaseOpenProject': { 'zh-CN': '请先打开项目', 'en-US': 'Please open a project first', 'ru-RU': 'Сначала откройте проект' },
   'empty.noArchGenerated': { 'zh-CN': '尚未生成内容，点击右上角「AI 生成」或直接在此编辑...', 'en-US': 'Not yet generated. Click AI Generate or edit...', 'ru-RU': 'Ещё не сгенерировано...' },
   'genConfig.scale': { 'zh-CN': '规模参数', 'en-US': 'Scale', 'ru-RU': 'Масштаб' },
   'genConfig.totalWords': { 'zh-CN': '全书约', 'en-US': '~Total words', 'ru-RU': '~Всего слов' },
@@ -2196,7 +2195,6 @@ export const UI_TEXTS_DATA = {
   'graph.tierImportant': { 'zh-CN': '重要', 'en-US': 'Important', 'ru-RU': 'Важные' },
   'graph.tierMinor': { 'zh-CN': '龙套', 'en-US': 'Minor', 'ru-RU': 'Эпизодические' },
   // --- ChapterCardEditor (blueprint editor) ---
-  'blueprint.openProjectFirst': { 'zh-CN': '请先打开项目', 'en-US': 'Please open a project first', 'ru-RU': 'Сначала откройте проект' },
   'blueprint.unsaved': { 'zh-CN': '● 未保存', 'en-US': '● Unsaved', 'ru-RU': '● Не сохранено' },
   'blueprint.emptyHint': { 'zh-CN': '暂无蓝图，点击「AI 生成」开始', 'en-US': 'No blueprint yet, click "AI Generate" to start', 'ru-RU': 'Нет плана, нажмите «AI Генерация»' },
   'blueprint.chapterNumber': { 'zh-CN': '章节号', 'en-US': 'Chapter Number', 'ru-RU': 'Номер главы' },
@@ -2413,7 +2411,6 @@ export const UI_TEXTS_DATA = {
   // --- PostProcess ---
   'postProcess.completed': { 'zh-CN': '{label} 完成（{done}/{total}）', 'en-US': '{label} Completed ({done}/{total})', 'ru-RU': '{label} Завершено ({done}/{total})' },
   // --- Export ---
-  'export.noProject': { 'zh-CN': '未打开项目', 'en-US': 'No project opened', 'ru-RU': 'Проект не открыт' },
   'export.noChapters': { 'zh-CN': '无可导出的章节（无定稿章节）', 'en-US': 'No chapters to export (no finalized chapters)', 'ru-RU': 'Нет глав для экспорта' },
   // --- Blueprint roles ---
   'blueprint.role.setup': { 'zh-CN': '建置', 'en-US': 'Setup', 'ru-RU': 'Завязка' },
@@ -3336,7 +3333,8 @@ export const UI_TEXTS_DATA = {
   'inject.charStateEmpty': { 'zh-CN': '{name}（{role}）| 状态未更新', 'en-US': '{name} ({role}) | state not updated', 'ru-RU': '{name} ({role}) | состояние не обновлено' },
   'inject.charStateCore': { 'zh-CN': '{name}（{role}）| 境界：{power} | 位置：{location} | 身体：{physical} | 心理：{mental} | 道具：{items} | 最近：第{chapter}章 {events}', 'en-US': '{name} ({role}) | Realm: {power} | Location: {location} | Body: {physical} | Mind: {mental} | Items: {items} | Recent: Ch.{chapter} {events}', 'ru-RU': '{name} ({role}) | Ступень: {power} | Место: {location} | Тело: {physical} | Психология: {mental} | Предметы: {items} | Недавнее: гл.{chapter} {events}' },
 
-  'inject.charStateStale': { 'zh-CN': '（⚠️ 状态较早，可能已过期）', 'en-US': ' (⚠️ stale state — may be outdated)', 'ru-RU': ' (⚠️ устаревшее состояние — может быть неактуальным)' },  'inject.charStateSupporting': { 'zh-CN': '{name}（配角）→ 第{chapter}章 | {location} | {events}', 'en-US': '{name} (supporting) → Ch.{chapter} | {location} | {events}', 'ru-RU': '{name} (второстепенный) → гл.{chapter} | {location} | {events}' },
+  'inject.charStateStale': { 'zh-CN': '（⚠️ 状态较早，可能已过期）', 'en-US': ' (⚠️ stale state — may be outdated)', 'ru-RU': ' (⚠️ устаревшее состояние — может быть неактуальным)' },
+  'inject.charStateSupporting': { 'zh-CN': '{name}（配角）→ 第{chapter}章 | {location} | {events}', 'en-US': '{name} (supporting) → Ch.{chapter} | {location} | {events}', 'ru-RU': '{name} (второстепенный) → гл.{chapter} | {location} | {events}' },
   'inject.stateNormal': { 'zh-CN': '正常', 'en-US': 'normal', 'ru-RU': 'нормально' },
   'inject.stateNone': { 'zh-CN': '无', 'en-US': 'none', 'ru-RU': 'нет' },
   'inject.stateUnknownLocation': { 'zh-CN': '未知位置', 'en-US': 'unknown location', 'ru-RU': 'неизвестное место' },

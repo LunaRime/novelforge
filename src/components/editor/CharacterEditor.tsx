@@ -329,7 +329,7 @@ export default function CharacterEditor() {
         ) : !selectedCard ? (
           <BaseEmptyState
             icon={<Users size={36} />}
-            message={currentProject ? t('character.selectOrCreate') : t('blueprint.openProjectFirst')}
+            message={currentProject ? t('character.selectOrCreate') : t('empty.pleaseOpenProject')}
             opacity={currentProject ? 0.3 : 0.4}
           />
         ) : viewMode === 'state' ? (

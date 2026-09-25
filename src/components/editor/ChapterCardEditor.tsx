@@ -300,7 +300,7 @@ export default function ChapterCardEditor() {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40">
         <BookOpen size={36} />
-        <span className="text-sm">{t('blueprint.openProjectFirst')}</span>
+        <span className="text-sm">{t('empty.pleaseOpenProject')}</span>
       </div>
     )
   }
