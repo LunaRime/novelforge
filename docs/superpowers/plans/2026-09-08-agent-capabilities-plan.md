@@ -1,12 +1,16 @@
-# Agent 能力升级：评审 + 排期（A/B/C 四档）
+# Agent 能力升级：评审 + 排期（A/B/C/D 四档）
 
-> **Purpose:** 评审 NovelForge Agent 能力的四项升级提议，输出价值/成本/风险评审 + 分档排期，作为后续细化实现计划（SDD）的起点。
+> **Purpose:** 评审 NovelForge Agent 能力的升级提议，输出价值/成本/风险评审 + 分档排期，作为后续细化实现计划（SDD）的起点。
 > **Status:** 规划草案（2026-09-08）。用户裁定：DSH 插件**移植完整（拉源码学习并自建）**、**全部排期**、**写入本规划文档**。
+> **2026-09-25 合并**：并入 **Denova 源码研究**（`D:\Code\denova`，Apache-2.0，克隆快照 2026-09-18）——
+> 用户见「有人用同类项目写小说赚钱」，要求取其精华去其糟粕后与本档合并为一份（见 **§7**，排期修订见 **§3.1 / §7.3**）。
+> 至此本档有两个外来参照：DSH 生态插件（§4）+ Denova（§7）。
 >
 > **执行状态（2026-09-13 审计）：⏸️ 未实施。** 本档只交付了评审与排期（`af90a2d`、`f648afd`），**A/B/C 三档无任何实现提交**：
 > A 档——`src/services/llm/model-router.ts:44` 的 `PURPOSE_TIER_MAP` 仍为静态 purpose→tier，无 `/models` 自动拉取、无多模型 UI；B 档——`src/services/agent/tools/` 30 个文件中无 refine 工具、无 context 一卡；C 档——全库 `subAgent|hindsight|knowledgePage` **0 命中**。
-> 计划 §7 指定的下一步（**A 档细化为 SDD 计划**）尚未产出。**本档没有 checkbox；若日后回填，须注意它描述的是「评审/排期」动作，不代表 A/B/C 已实现。**
-> **基线:** master @ `f0c2949`（L2 checkpoint 迁 DB 完成）。
+> **2026-09-25 更正一处**：A 档③「自动拉取 provider `/models`」**已被后来的工作覆盖**（模型供应商账户，`llm:list-provider-models` 等 4 通道，`87678b4`）→ A 档实际只剩 ①路由动态决定 ②每层多模型 UI（另见 §3.1 新增的③④）。
+> 计划 §8 指定的下一步（**A 档细化为 SDD 计划**）尚未产出。**本档没有 checkbox；若日后回填，须注意它描述的是「评审/排期」动作，不代表各档已实现。**
+> **基线:** master @ `f0c2949`（L2 checkpoint 迁 DB 完成）；Denova 研究部分基线 = NovelForge master @ `536ec72`（2026-09-25）。
 
 ## 1. NovelForge Agent 现状矩阵
 
@@ -18,6 +22,10 @@
 | 上下文 | context-builder / context-usage / ccr-summary（构建 + token 用量 + 压缩） | **无**可视化 context 面板（分类/演进/压缩事件） |
 | 工作流 | workflow-store（DAG 流水线，多任务并发，stepByStep 确认） | 输出到「任务面板」+ M2 输出文件 |
 | 模型路由 | 三层预设（`PURPOSE_TIER_MAP` purpose→tier 静态映射 + 用户可配每层模型列表） | 静态路由，非「主 agent 动态决定」 |
+| **工具审批** | `requiresConfirmation` 是**工具级静态标志**（7 个工具：`call-external-api` / `edit-file` / `index-content` / `open-editor` / `start-workflow` / `update-config` / `write-file`），由 `ConfirmCard` 弹一次性批准 | **无**批准记忆（全仓无 `alwaysAllow`/`approvedTools` 类结构）→ 同一工具每次都要再问；**无**参数语义判断；**无**危险操作分类（硬拒绝或区分展示都没有） |
+| **技能** | SKILL.md 三来源（builtin / `~/.novelforge/skills/` / 项目级），兼容 Cursor 生态，带 `allowedTools` 白名单与 `whenToUse` | 只有**两个注入面**：提示词列清单（`agent-store.ts:203`）+ `/命令` 时**全量注入**正文（`:416-422`）。**缺**「模型自主按名懒加载」的工具面 —— 清单里 23 个工具没有 `skill` 工具 |
+| **记忆驻留策略** | 作品记忆三级 markdown（章节/分卷/全书）+ 知识库向量检索 + 偏好表 | **无**「常驻 vs 按需」的显式分层：哪些设定必须每轮进上下文、哪些走检索，目前没有可编辑的载体 |
+| **自动化触发** | workflow-store 的 DAG 流水线（9 类工作流），**由人工或 agent 显式启动** | **无**触发器（定时 / 每 N 章 / 语义判定），**无**产物审批收件箱 |
 
 ## 2. 提议评审
 
@@ -54,7 +62,7 @@
 - **成本**：**中**（相对独立，改动 model-router + 模型配置 UI + provider /models 拉取）。
 - **风险**：低——需模型兼容性考量（provider 返回模型可能与 NovelForge 不兼容，需白名单/校验）。
 
-## 3. 排期（档 A/B/C）
+## 3. 排期（档 A/B/C；**D 档与修订见 §3.1**）
 
 ### A 档（Quick，独立快速，优先做）
 - **提议 4**：模型路由主 agent 决定（可选策略）+ 用户多模型 + 自动拉取/更新默认模型。
@@ -83,6 +91,21 @@ A 档（模型路由+自动拉取） ──→ B 档（工具化 + context 面�
 ```
 - A 档独立先行；B 档依赖 A 的 agent 基建成熟；C 档最重最后。
 
+### 3.1 2026-09-25 修订（并入 Denova 研究后的排期）
+
+> 逐条依据与证据在 **§7**；这里只给结论。**原 A/B/C 三档保留**，改动如下：
+
+| 档 | 变动 | 内容 |
+|---|---|---|
+| **A** | ③ 划掉 · **+2 项** | ③「自动拉取 `/models`」**已由供应商账户实现**；新增 **③′ 工具审批语义规则 + workspace 级批准记忆**、**④′ 危险操作硬拒绝清单**（两者都是 NF 真空白、成本低、§7.1-A） |
+| **B** | **+3 项** | ⑤′ 技能第三面（模型自主 `skill` 工具懒加载 + 有界引用）；⑥′ 压缩**可证明性**（真实请求重算 + `Degraded` 标记 + 原文永不删可重生成）+ 稳定前缀认证 + 副作用回执（protected receipt）；⑦′ context 明细弹层按 Denova 分区补齐（轮次分组 / 单段来源与字节 / 复制 / 移除当前压缩） |
+| **C** | **降本 + 换路线** | 多 agent 拆分派发**有完整参照设计**（`task` 工具 + mailbox 汇合 + untrusted 标注 + 子 Session 权威 + 幂等 TaskRef）→ 成本从「高」降为「中高」；长期记忆**先从 lore 式 `resident/on_demand` 分层起步**（§7.1-C），hindsight 引擎（18-28 人日）降为可选 |
+| **D（新增）** | **独立一档** | **写作流水线自动化：触发器（每 N 章 / 定时 / 语义判定）+ 审批收件箱（证据链 + confirm/dismiss）+ 跑批会话**。价值最高（直接对应「批量产出」——用户见到的「靠它赚钱」很可能就是这条），成本中高，与 A/B/C 无依赖 |
+| — | **待裁决（不排期）** | **外部执行引擎**（Denova 支持 Native / Codex CLI / Claude Code CLI 三选，复用本机登录）—— 这是产品定位级决策，动它意味着 NF 成为他人 agent 的前端；需你拍板 |
+
+**建议执行序**：A（含新增两项）→ D（自动化，价值最高）→ B → C。
+理由：A 的新增两项便宜且直接补安全空白；D 是「用它能持续产出」的关键且与 A 无依赖；B 是上下文工程质量账；C 最重。
+
 ## 4. DSH 插件移植评估（源码级细化，来自源码分析）
 
 > 已拉取 hindsight（v0.5.1）/ dsh-context（v0.46.0）源码到 `.superpowers/sdd/plugin-source-study/` 分析。二者都不是「复制代码能落地」，核心在自建引擎/事件流。
@@ -108,6 +131,9 @@ A 档（模型路由+自动拉取） ──→ B 档（工具化 + context 面�
   - **Workflow 输出**：确定性多步流水线（写稿/修稿/审稿/定稿/后处理）→ 任务面板 + 输出文件（workflow-output / M2）。
   - **边界**：agent 触发 workflow（start-workflow tool）→ agent 对话显示「已启动 workflow」，执行细节归任务面板；工具结果摘要归 agent，全量归 workflow 输出。
 - **待定**：具体哪些字段显示在哪（agent 工具结果折叠 / workflow 步骤详情）由 B 档展示归属任务细化。
+- **Denova 的对照（2026-09-25 补，见 §7.1-D3/E1）**：它把**自动化产物收进独立收件箱**（证据链 + confirm/dismiss + 一键拉起对应会话），
+  agent 产物则一律是**会话内卡片**（执行折叠块 + 工具调用树 + 文件变更摘要卡）—— 与我们的「AI 输出面板 / 底部任务面板」是两种切法。
+  **可借的是它「产物 → 证据 → 打开会话」的三段式**，而不是它的面板划分（它的自动化是独立顶层 mode，我们的是 DAG 任务面板）。
 
 ## 6. 非目标 / 风险 / 已知限制
 
@@ -117,13 +143,104 @@ A 档（模型路由+自动拉取） ──→ B 档（工具化 + context 面�
   - 多 agent 拆分质量/上下文成本 → 需评审/汇合 + 子 agent 上下文预算。
   - 自动拉取模型兼容性 → provider /models 白名单 + 校验。
   - 在位编辑流 undo 语义 → 复用 L1 CM 通道（显式 time/undo 逐级）。
+  - **无人值守跑批（D 档，2026-09-25 补）** → token 会自己烧：必须 `ActionPolicy=confirm/notify_only` 为默认、
+    每轮跑批有预算上限、且产物进收件箱要人确认才落库（Denova 的做法正是这三条，见 §7.1-D2/D3）。
+  - **外部执行引擎（§3.1 待裁决项 / §8 第 4 条）** → 一旦引入他人 CLI 作为执行体，NF 的「模型路由 / 上下文装配 / 记忆注入」全链路绕不过去，
+    产品边界与排障责任都会变；这是定位决策，不是工程量决策。
 - **已知限制**：A 档模型路由「主 agent 决定」是可选策略，需设计「agent 如何决定 tier」（提示词/规则），避免每次调转成本。
 
-## 7. 下一步
+## 7. Denova 源码研究（2026-09-25 合并）
 
-- 按用户优先级（全部排期）→ 建议**先 A 档**：细化为 SDD 计划（model-router 扩展 + provider /models + 设置 UI），worktree + implementer/reviewer 执行。
-- hindsight/dsh-context 源码已拉取到 `.superpowers/sdd/plugin-source-study/`（含逐文件分析报告 `plugin-study-report.md`）；实现 B/C 档时可直接参照，无需再拉 D:\Code。
-- B/C 档在 A 档后按评审方向细化。
+> **为什么看它**：用户见「有人用同类项目写小说赚钱」，拉取源码要求**取其精华、去其糟粕**，并与本档合并为一份。
+> **对象**：`D:\Code\denova`（作者 `alfredxw`）——**Apache-2.0**（借鉴无许可障碍），**v0.4.5** 已发布 + `Unreleased` 在途；
+> Go 后端 **1506** 文件 / Web 前端 **904** ts·tsx；测试 **436（Go）+ 127（前端）**。克隆快照 **2026-09-18**。
+> **形态**：目录即数据模型（`chapters/<卷>/*.md` + `setting/{outline,progress,character-states,lore}`）；单 agent 内核
+> + `task` 工具派子 agent + Skills(SKILL.md) + 自动化触发器 + 裸 git 快照版本管理 + 图像/互动分支。
+> **调查方式**：四路并行**只读**源码调查（内核与上下文 / 多 agent 与权限技能 / 写作域与自动化 / 前端 UX），
+> 结论均带 `文件:行`。⚠️ **实现前逐条复核** —— 本项目既有教训是「审计清单不能照单全改」（批次 3/4 共拦下 7 处失实）。
+
+### 7.1 精华 —— 建议采纳（判定基准：**NovelForge 缺它**；已有等价物的不列）
+
+**A. 安全与协作（→ A 档新增，成本低）**
+
+| # | 条目 | Denova 做法（证据） | NF 现状 |
+|---|---|---|---|
+| A1 | **审批规则的参数语义边界** | `internal/agents/toolapproval/rule_proposal.go`：shell 命令解析后**仅「单一静态调用 + 已知命令族」可固化为规则**；管道/变量/未知可执行文件一律一次性授权 | 只有工具级静态标志 → 粒度粗（`update-config` 与 `start-workflow` 同级） |
+| A2 | **批准记忆的 scope = 仅 workspace 持久** | `config/agent_approval.go` 明注 *deliberately the only persisted scope*；绑 ProjectID、`RuleID=approval-<sha16>`、`ApprovedArgsHash` 审计 | **全无**（同一工具每次都要再问） |
+| A3 | **危险操作硬拒绝** | `toolapproval/critical.go` 正则黑名单（`rm -rf /`、fork bomb、`mkfs`、`dd` 写块设备、改 `/etc/passwd`）→ **fail-closed 直接 block**，不是二次确认 | 无危险分类 |
+
+**B. 上下文工程（→ B 档新增）**
+
+| # | 条目 | Denova 做法（证据） | NF 现状 |
+|---|---|---|---|
+| B1 | **技能第三面：模型自主懒加载** | `internal/agents/skillassembly/assembly.go Bucket`：①提示词只放目录 ②`skill` 工具按名懒加载全文 ③`skill://` 有界引用；三 scope 覆盖 builtin<user<workspace | 只有①②的前半 —— 有清单 + `/命令` 全量注入，**没有 `skill` 工具** |
+| B2 | **压缩的可证明性** | `agent/definition_compaction.go:392 validateCompactionProjection`：用**真实请求重算**，no-progress 报错 + `MinimumChangeTokens` + `RecoveryBand=0.8` + `Degraded` 标记 | CCR 压完即信，**无「确实降下来了」的证明** |
+| B3 | **原文永不删 + 摘要可重生成** | `agent/compaction/standard.go:114-121`：超限时退回全量原文重生成；投影替换 `effectiveCompactionMessages` | 保留 2-3 代后丢弃 |
+| B4 | **稳定前缀认证** | `agent/model_loop.go:264 authenticatedStablePrefixMessages`：middleware 改动了前缀字节 → 缓存命中回退 0 | 有 CacheAligner，但无「前缀未被污染」的认证 |
+| B5 | **副作用回执随压缩保留** | `agent/compaction_receipts.go`：失败/副作用类工具的「参数+结论+artifact 路径」≤32 条/32KB 并入 checkpoint，未决优先 → 防重放 | 无 |
+| B6 | **context 明细的分区形态** | 弹窗 5 格指标 → System Prompt parts → Final Messages **按轮次分组**；每段可展开看 `source·kind·tool_name·chars/bytes` 并**单段/整组复制**；压缩段显示 `tokens_before→after` + **「移除当前压缩」**；另有 TokenUsage 两层（请求→调用 + 缓存命中率 + `requested→after tools`） | 有占用环 + 明细弹层，缺轮次分组/复制/移除压缩/调用级用量 |
+| B7 | **压缩/清理类历史依赖的失效语义** | `agent/canonical_messages.go:77-101`：前缀 hash 失配 → **作废 compaction/clear 等历史依赖 capability** | 只有 `stale` 标记 |
+
+**C. 记忆分层（→ C 档，作为 hindsight 的轻量先行项）**
+
+| # | 条目 | Denova 做法（证据） | NF 现状 |
+|---|---|---|---|
+| C1 | **`load_mode = resident / on_demand`** | `lore/types.go` + `lore/index.go`：条目带 `type/importance/tags/keywords/load_mode`，`resident` **常驻上下文**，其余走索引渐进披露 | 无可编辑的驻留策略（角色/设定要么全量读、要么全走检索） |
+| C2 | **分层覆盖 + Checkpoint 保留偏好** | `features/agents/AgentsView.tsx` 按 layer（default/global/user/workspace）覆盖；`AgentCheckpointSection.tsx` 的保留偏好**只影响未来压缩、不回改历史** | 无 |
+
+**D. 写作自动化（→ 新 D 档，价值最高）**
+
+| # | 条目 | Denova 做法（证据） | NF 现状 |
+|---|---|---|---|
+| D1 | **写作特有触发器** | `internal/automation/types.go` + `internal/app/automation/trigger_evaluation.go`：`manual` / `schedule`（每天·周·月·每 N 小时）/ **`chapter_batch`（每 N 章非空章节成批，默认 5，指纹去重）** / **`semantic`（LLM 判定 + 证据校验 + 确定性幂等）** | workflow 只能人工或 agent 显式启动 |
+| D2 | **审批策略与持久化 run** | `ActionPolicy`（auto_run / confirm / notify_only）+ `RunRecord`（durable run + 义务路径）+ 内置模板（续写章节 / 自动 Review） | 无 |
+| D3 | **产物收件箱（证据链）** | `AutomationInboxPanel.tsx`：条目卡含用途/状态、summary、**evidence 列表（source/title/ref/snippet）**、操作（已读/确认运行/确认写入/忽略/查看时间线），`openRun()` **直接拉起对应 Agent 会话** | 底部任务面板无审批卡与证据链 |
+
+**E. 交互与呈现（→ B/C 档落地时参照）**
+
+| # | 条目 | Denova 做法（证据） |
+|---|---|---|
+| E1 | **子 agent 的 UI** | 父时间线内 `SubAgentSessionCard`（"Output from {name}" + 状态 + 打开），打开则成为**工作台 Tab**（带 `parentTabId`），兜底右侧滑板；轨迹层有 parent Run 返回 + children 折叠列表 |
+| E2 | **评论锚点 + 批量回灌下一轮** | `ChangeReviewWorkspace.tsx` 锚点评论（utf8-bytes + revision + quote/prefix/suffix，失配标 `outdated`）+ `ReviewFeedbackTray.tsx` 把选中评论**暂存为下一轮 Agent 输入** |
+| E3 | **context 漂移检测** | `features/trajectory/trajectory-content.ts`：逐请求重建模型可见消息，检测 prefix 漂移（shared_prefix/前后条数/reason）与 system/tools 变更 —— 可并入现有明细弹层，不必做整套三泳道 |
+| E4 | **审批卡三态** | `Chat/ToolApprovalCard.tsx`：allow-once / allow-workspace / deny（与 A2 的 scope 呼应） |
+| E5 | **子 agent 结果标 untrusted** | `agent/tools/task_local_completion.go`：父端以 UserMessage 注入 `TASK_RESULT`，**显式标注 untrusted delegated output** 并截断（超出提示改用 `task observe` 回放）→ 提示注入防护，成本极低 |
+
+### 7.2 糟粕 / 不采纳（附理由，防重复讨论）
+
+| # | 不采纳 | 理由 |
+|---|---|---|
+| 1 | **目录即数据模型**（`chapters/<卷>/*.md` + 文件名解析 + `chapter_statuses.json`） | NF 的 SQLite（`volumes`/`contents`/`drafts` + `vela://` 内容寻址 + `user_version` 迁移）更强；回退到文件名解析会丢掉事务、索引、迁移与并发安全。**只借两条**：回滚前先建备份版本；`.git` 不落进用户内容目录 |
+| 2 | **无内联 diff 采纳** | Denova 只有全宽 diff 工作台 + 选区引用；NF 的 inline accept（L1）**更强**，不降级 |
+| 3 | **lore 无关系图**（仅 tags/keywords） | NF 有结构化 `relations` + 关系图谱 |
+| 4 | **互动/角色扮演**（多分支、回合版本、Director 模块） | NF 是小说创作 IDE，不是 RP 平台 |
+| 5 | **plugins 目录** | 只是编译期 Toolset、**无热插拔无沙箱**，价值仅「统一 ToolDescriptor 契约」；NF 工具注册已等价，扩展面走 MCP |
+| 6 | **goja 脚本工具** | 进程内 JS 沙箱与 NF 的 Electron 沙箱模型冲突（主进程是特权层）→ 引入即新增一个权限面，v1 不做 |
+| 7 | **`context: fork`** | **Denova 自己都没实现**（`types.go:26` 定义、零消费者）。不抄未验证的设计 |
+| 8 | `agent/context` Assembler 的 Fragment/Placement 体系、`agent/state` 文件管理 | Go 架构专属；NF 侧由 `context-builder` + SQLite 承担 |
+| 9 | **canonical 提交通道**（Identity + ExpectedRevision + 同事务 checkpoint） | 概念好（产品库为唯一真源），但 NF 的 IPC + better-sqlite3 事务边界已提供等价原子性。**只借 B7 的失效语义** |
+| 10 | Agent Profiles 的模型/工具覆盖 | NF 已有等价物（模型 `purposes` + 每层模型列表）。**只借两条**：委派白名单、context slot（stable/session/turn）分层 |
+| 11 | 定时快照版本管理（每 10 分钟 / 保留 100） | NF 有 `revisions` 表；且 NF 项目目录不是纯文本工作区，裸 git 快照收益低 |
+
+### 7.3 同一能力的路线取舍（DSH vs Denova）
+
+| 能力 | DSH 路线 | Denova 路线 | 采纳 |
+|---|---|---|---|
+| 长期记忆 | hindsight 引擎：LLM 事实提取→知识页合成，**18-28 人日** | lore 式分层：`resident/on_demand` + 重要度，复用现有向量检索 | **先 Denova 式**；hindsight 降为可选（仍留 §4 的评估） |
+| 上下文面板 | dsh-context 全量 9 卡，**25-40 人日**，且需先自建规范化事件流 | 补在现有明细弹层上：轮次分组 / 复制 / 移除压缩 / 调用级用量 | **Denova 式**；「9 卡全量」不再作为目标 |
+| 多 Agent | 无参照（§4 未涉及） | `task` 工具 + mailbox + 子 Session 权威（完整设计） | **Denova 式** |
+| 写作自动化 | 无 | 触发器四类 + 策略 + 收件箱证据链 | **Denova 式**（新 D 档） |
+| 工具结果落盘 | 无 | artifact + head/tail 预览 + `SupersessionKey` | 部分等价（NF 已有落盘 D6-2）；可补 supersession |
 
 ---
-*评审 + 排期草案。用户已裁定方向（移植完整 / 全部排期 / 写文档）。*
+
+## 8. 下一步
+
+1. **A 档细化为 SDD 计划**（本档一直缺的那一步）：model-router 动态路由策略 + 每层多模型 UI + **§7.1-A 的两项审批能力**（A1/A2/A3 可独立成一个小任务，成本低、纯补空白）。
+2. **D 档（写作自动化）单独立项**：先出设计（触发器模型 + 审批收件箱 + 与 workflow-store / 任务面板的边界），再排 SDD。**它是本档里唯一直接提升「产出」的档** —— 若「别人靠这类工具赚钱」的机制是批量产出，答案大概率在这条。
+3. **B / C 档**在 A 之后按 §3.1 的修订细化；C 档多 agent 落地时以 §7.1-E1 的 UI 形态为参照，长期记忆走 §7.3 的 Denova 式路线。
+4. **待用户裁决（本档不排期）**：外部执行引擎（Native / Codex CLI / Claude Code CLI 三选）是否纳入产品方向 —— 这是定位级决策。
+5. **参照物位置**：DSH 逐文件分析 `.superpowers/sdd/plugin-source-study/`（含 `plugin-study-report.md`）；Denova 源码 `D:\Code\denova`（快照 2026-09-18，落后上游约一周，需要最新版时先 `git pull`）。
+
+---
+*评审 + 排期草案，2026-09-25 与 Denova 源码研究合并。用户已裁定方向（移植完整 / 全部排期 / 写文档 / 取其精华去其糟粕）。*
