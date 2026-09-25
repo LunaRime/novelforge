@@ -58,6 +58,39 @@ const EDITOR_DEFAULT = '60%'
 /** 编辑区下限：两侧面板现在都有真实下限，编辑区不能被挤成一条缝 */
 const EDITOR_MIN_PX = 320
 
+/**
+ * 顶栏 —— 系统窗口控件覆盖层（WCO）留位 + **窗口拖拽区** + 应用标识。
+ *
+ * ⚠️ 为什么必须是**独立元素**、而不是给根容器加 `paddingTop`（2026-09-25 真机两轮反馈）：
+ *   ① `padding` 区**不属于任何拖拽元素** → 顶部那一条**拖不动窗口**（用户反馈）
+ *   ② 只在图标栏留位不够 —— 覆盖层宽度覆盖到右侧 AGENT 面板头部，而覆盖层底色是
+ *      `--color-canvas`（最外围缝隙色）、盖住的却是面板头部（另一种底色）→ 右上角出现**看得见的接缝**
+ *   做成独立元素后：它自己既是留位、又是拖拽区、还是应用标识的落点，且底色与覆盖层同色 → 无缝。
+ *
+ * 高度由系统通过 `env(titlebar-area-height)` 告知；**未启用覆盖层时为 0**
+ * （macOS / 浏览器），此时它不占位、内容被 overflow 裁掉 —— macOS 的交通灯在**左上角**，
+ * 标识放那里会撞，所以 macOS 走它自己的 28px 留位（见 LeftToolWindowBar）。
+ *
+ * ⚠️ 拖拽区内的交互元素若要可点，必须显式 `-webkit-app-region: no-drag`（本元素暂无按钮；
+ * 将来放命令面板入口时记得加）。
+ */
+function TitleStrip() {
+  return (
+    <div
+      className="flex items-center gap-1.5 px-3 overflow-hidden select-none flex-shrink-0"
+      style={{
+        height: 'env(titlebar-area-height, 0px)',
+        backgroundColor: 'var(--color-canvas)',
+        WebkitAppRegion: 'drag',
+      } as React.CSSProperties}
+    >
+      {/* 应用图标 —— 原生标题栏移除后，这里是唯一的应用标识处 */}
+      <img src="/icon.svg" alt="" width={14} height={14} style={{ flexShrink: 0 }} />
+      <span className="text-2xs font-medium brand-gradient">NovelForge</span>
+    </div>
+  )
+}
+
 /** 区域 → 我们自己的 DOM 标记属性值（`[data-region]`，见面板内的包装 div） */
 const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai', bottom: 'bottom' } as const
 
@@ -227,24 +260,10 @@ export default function App() {
   }, [])
 
   return (
-    <div
-      className="flex flex-col w-full h-full overflow-hidden"
-      style={{
-        /**
-         * 顶部让位给**系统窗口控件覆盖层（WCO）** —— 且让位必须做在**最外层**。
-         *
-         * ⚠️ 教训（2026-09-25 真机）：先只给两个图标栏加了顶部 padding，结果覆盖层
-         * 直接压在右侧 AGENT 面板头部上 —— 覆盖层的底色是 `--color-canvas`（最外围缝隙色），
-         * 而它盖住的是面板头部（另一种底色），于是右上角出现一块**看得出来接缝的方块**。
-         *
-         * 做在最外层后：顶部那一条 = 纯画布色，与覆盖层（渲染层同样按 `--color-canvas` 推送）同色 → 无缝。
-         * 高度由系统通过 `env(titlebar-area-height)` 告知；未启用覆盖层（macOS / 浏览器）时为 0。
-         * 这条也是**应用唯一真正的顶栏空间**（系统只占右侧放窗口按钮，左侧全空）。
-         */
-        paddingTop: 'env(titlebar-area-height, 0px)',
-        backgroundColor: 'var(--color-canvas)',
-      }}
-    >
+    <div className="flex flex-col w-full h-full overflow-hidden">
+      {/* 顶栏：系统窗口按钮留位 + 拖拽区 + 应用标识（见 TitleStrip 的说明） */}
+      <TitleStrip />
+
       {/* 更新通知栏 */}
       <UpdateNotification />
 
