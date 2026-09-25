@@ -893,6 +893,18 @@ export interface UpdateChannels {
     args: []
     return: { currentVersion: string; appName: string }
   }
+  /**
+   * 让窗口控件覆盖层（Windows 的 WCO / 标题栏那条）跟随应用主题。
+   *
+   * ⚠️ 颜色由**渲染层算好推过来**，主进程不复制调色板 —— 否则主题令牌就有了两份定义，
+   * 必然漂移（本项目吃过一次「四主题里有个令牌没定义」的亏）。
+   * 参数取 `getComputedStyle(document.documentElement)` 的**已解析值**，
+   * 所以 CSS 变量改成什么这里就跟着是什么。
+   */
+  'window:set-titlebar-overlay': {
+    args: [overlay: { color: string; symbolColor: string }]
+    return: void
+  }
   'update:get-status': {
     args: []
     return: { status: UpdateStatus; info?: UpdateInfo; progress?: UpdateProgressInfo; error?: string }

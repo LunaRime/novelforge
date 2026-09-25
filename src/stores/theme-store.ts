@@ -257,6 +257,27 @@ function applyTheme(theme: 'light' | 'galaxy' | 'paper' | 'dark') {
   } else if (theme === 'dark') {
     root.classList.add('dark')
   }
+  // 窗口 chrome 不属于 DOM，得单独同步（见下）
+  syncTitlebarOverlay()
+}
+
+/**
+ * 让**窗口控件覆盖层**（Windows 标题栏那一条、最小化/最大化/关闭所在区域）跟随主题。
+ *
+ * 它由系统绘制、**不在 DOM 里**，所以 `--color-*` 管不到它 —— 用户实测「最上面那一条
+ * 主题切换时没变」即此。修法是主题一变就用解析后的颜色调 `setTitleBarOverlay`。
+ *
+ * ⚠️ 颜色在这里算好再推给主进程，**主进程不复制调色板** —— 否则主题令牌有两份定义必然漂移。
+ * 取 `getComputedStyle` 的**已解析值**（class 刚改过，这次访问会强制重算样式）。
+ */
+function syncTitlebarOverlay() {
+  if (!ipc.isElectron) return
+  const cs = getComputedStyle(document.documentElement)
+  const color = cs.getPropertyValue('--color-canvas').trim()
+  const symbolColor = cs.getPropertyValue('--color-text').trim()
+  if (!color || !symbolColor) return
+  // 非 Windows / 未启用覆盖层时主进程会吞掉该调用（只记一条 warn），这里不必处理失败
+  void ipc.invoke('window:set-titlebar-overlay', { color, symbolColor }).catch(() => {})
 }
 
 /**

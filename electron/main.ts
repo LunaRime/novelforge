@@ -3,6 +3,9 @@ import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 // L4：registerMCPHandlers 已并入 electron/ipc-handlers.ts 的 registerIPCHandlers()（唯一注册入口）
 import { trustWebContents, untrustWebContents } from './security/ipc-guard'
+// 覆盖层高度常量与 setter 同处一地，避免两处写死的数字错位
+// （main.ts 已通过 ipc-handlers 传递依赖该模块，此处直接引用不引入循环）
+import { TITLEBAR_OVERLAY_HEIGHT } from './controllers/config-controller'
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
 import { migrateLegacyDirs } from './utils/config-utils'
@@ -146,6 +149,14 @@ function createWindow() {
     // macOS 使用自定义标题栏
     titleBarStyle: 'hiddenInset',
     trafficLightPosition: { x: 12, y: 10 },
+    /**
+     * 窗口控件覆盖层（Windows 标题栏那条）的配色。
+     *
+     * ⚠️ 这一条由**系统绘制、不在 DOM 里**，`--color-*` 管不到 → 默认是系统色、不跟应用主题
+     * （用户实测「最上面那一条主题切换时没变」）。这里给的是**启动瞬间**的值，对齐启动闪屏的深色底；
+     * 渲染层一就绪就会用真实主题色覆盖它（theme-store 的 syncTitlebarOverlay）。
+     */
+    titleBarOverlay: { color: '#1e1e1e', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
     backgroundColor: '#1e1e1e',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

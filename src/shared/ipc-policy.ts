@@ -281,4 +281,6 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'update:get-version': { authority: 'read-global' },
   'update:install': { authority: 'spawn' },
   'update:open-releases': { authority: 'write-global' },
+  // 窗口外观（标题栏覆盖层配色）—— 只改窗口 chrome，不读写任何数据
+  'window:set-titlebar-overlay': { authority: 'dev-bridge' },
 }

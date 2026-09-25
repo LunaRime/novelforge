@@ -9,6 +9,9 @@ import { GlobalConfig, type LogEnvMode, type LogFileInfo } from '../../src/share
 import { guardedHandle } from '../security/ipc-guard'
 import { refreshOutboundProxy } from '../net/proxy-fetch'
 
+/** 窗口控件覆盖层高度（px）—— 与 main.ts 建窗时的取值必须一致，否则按钮条与内容错位 */
+export const TITLEBAR_OVERLAY_HEIGHT = 32
+
 /** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
 const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {
   debug: LogLevel.DEBUG,
@@ -73,6 +76,31 @@ export function registerConfigController() {
     // 同步更新窗口标题（渲染层 document.title 是主覆盖源，此处兜底原生标题栏/焦点窗口场景）
     for (const w of BrowserWindow.getAllWindows()) w.setTitle(t('window.title'))
     return { success: true }
+  })
+
+  /**
+   * 窗口控件覆盖层（标题栏那条）跟随主题。
+   *
+   * ⚠️ 背景：`titleBarStyle: 'hiddenInset'` 在 Windows 上等价于 `hidden` → 系统会画一条
+   * **窗口控件覆盖层**，其配色默认是白色/系统色，**不跟应用主题**。用户实测「最上面那一条
+   * 主题切换时没变」即此。修法是主题一变就调 `setTitleBarOverlay`。
+   *
+   * ⚠️ 颜色由渲染层算好推来（`getComputedStyle` 的已解析值），主进程**不复制调色板** ——
+   * 否则主题令牌有两份定义，必然漂移（本项目吃过「四主题里某令牌没定义」的亏）。
+   */
+  guardedHandle('window:set-titlebar-overlay', async (event, overlay: { color: string; symbolColor: string }) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return
+    try {
+      win.setTitleBarOverlay({
+        color: overlay.color,
+        symbolColor: overlay.symbolColor,
+        height: TITLEBAR_OVERLAY_HEIGHT,
+      })
+    } catch (error) {
+      // 非 Windows / 未启用覆盖层时该 API 会抛 —— 属预期，降级为一条 warn 即可
+      logger.warn('Config', `[set-titlebar-overlay] skipped: ${safeErrorMessage(error)}`)
+    }
   })
 
   // ===== 日志管理（双环境：dev=开发/内测，release=公测/正式） =====
