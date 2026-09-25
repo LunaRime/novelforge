@@ -63,6 +63,37 @@
 附带死规则：`agent-tools.css:205-207` 的 `.confirm-card-btn.approve:hover` 与常态同色 → **hover 零反馈**，
 属可删的死规则。
 
+> ✅ **2026-09-25 已完成**。四个子项全部收敛，另**发现并修复一个存量系统性 bug**（见文末）。
+>
+> **审美拍板**（两项，均取多数派）：分段控件 = **描边分段条 + accent 实底白字**
+> （4/5 处现状；被弃的「浮起白药丸」用的是硬编码 boxShadow）；菜单选中 = **Check 图标 + accent 文字**
+> （不占底色，故与悬停态终生可分——模型菜单此前选中与悬停同色，无法分辨）。
+>
+> | 产物 | 收敛内容 |
+> |---|---|
+> | `ui/Table`（新） | 2 处逐字符相同的表格；差异做成 `hoverableRows` / `nowrapCells` 两个 prop，`my-2` 由调用方 className 传。**实为三处差异**（文档原写两处，漏了 `td` 的 `whiteSpace: nowrap`）。StatsTable 有 **3 个**调用点（非 1 个）。顺带修掉「以表头文本为 key」的重复 key 隐患 |
+> | `ui/ModalShell`（新） | Confirm.tsx 两份模态的遮罩 + 卡片；另抽出 `useExitDelay`（退场 200ms 与动画对齐）与 `mountDialog`（命令式挂载生命周期，三个入口共用） |
+> | `agent/ConfirmCard` | 按钮改用 `ui/Button`（success / outline），删掉 `.confirm-card-btn` 系列 5 条 CSS —— 其中 `.approve:hover` 与常态同色（零反馈死规则）。⚠️ `ConfirmCard` 是**消息流内联卡片**，不是模态，未并入 `ui/Confirm` |
+> | `ui/SegmentedControl`（新） | 6 处（ActivityView / UsageStatsView / LogsView / LogFileDialog / ChapterExportDialog / StatusBar 温度预设）。**3 处观感按拍板改变**：UsageStatsView（药丸容器→描边条）、LogsView（无容器→描边条）、ChapterExportDialog（浮起白药丸→accent 实底）。尺寸收敛为 sm(11px/text-micro) / md(12px/text-xs) 两档 |
+> | `ui/MenuItem`（扩展） | 3 处自绘菜单项（ContextMenuItem ×3 用法 / ModelMenuItem / 主题项）。新增 `selected` / `trailing` / `className`，`onClick` 放宽为可收 MouseEvent（主题切换要用点击坐标）。⚠️ **`compact` prop 最终没做**——「温度预设」经复核是「选一个值」而非「执行一个命令」，归了 SegmentedControl，API 因此少一档密度分叉。ContextMenuItem 的 `disabled`/`comingSoon` 分支经查无任何调用方使用（`agent.comingSoon` 成为零引用键，暂留字典） |
+>
+> ⚠️ **真机待看**（观感变化处）：① UsageStats / LogsView / ChapterExport 三处分段控件新形态
+> ② 模型菜单选中项（现为 accent 文字 + Check）③ 主题菜单（文字色由 secondary 收敛为正文色、间距 px-2.5→px-3）
+> ④ ConfirmCard 的两个按钮（换 ui/Button 后配色与按下/焦点反馈变化）⑤ 统计表与 Markdown 表格（应无变化）
+>
+> ### 🔴 附带发现并修复的存量 bug：`cn()` 吞掉自定义字号
+>
+> `cn()` 用**裸 `twMerge`，无自定义配置**。项目在 `@theme` 里自定义的字号档
+> `--text-2xs` / `--text-micro` 不被 twMerge 认识，它按 `text-<任意值>` 兜底规则把
+> `text-micro` 归进**文字颜色**组 → 与 `text-white` / `text-[var(--color-text-*)]` 判为同类冲突，
+> **后者胜、字号被静默丢弃**（不报错、不警告，只是字比预期大一号）。
+>
+> 影响面：全仓 262 处使用这两档，其中 **4 处在 `cn()` 里与文字颜色同现**而丢字号——
+> `ChapterCardEditor:419`（角色徽标）/ `KnowledgeOverview:414` / `CharactersView:176`（筛选 chip）/
+> `ui/Select.tsx:115`（Select 标签）。修复：`extendTailwindMerge` 把两档登记进 `font-size` 组
+> （`src/lib/utils.ts`，附 7 条测试）。**这 4 处字号会变小一号——是修复，非回归**，真机顺带确认。
+> 新增自定义字号档时必须同步加进该列表。
+
 ### 3. 空态文案 key 合并（5 → 1）
 
 同一句"请先打开项目"占了 5 个 key：`empty.pleaseOpenProject` / `knowledge.openProjectFirst` /
