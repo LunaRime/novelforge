@@ -3,13 +3,14 @@ import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
   CheckCircle2, XCircle, Clock,
-  Play, X, ChevronDown, ChevronRight, Zap, ScrollText,
+  Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Inbox,
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
 import { Spinner } from '../ui/Spinner'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
+import InboxPanel from './automation/InboxPanel'
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
 export default function BottomPanel() {
@@ -18,6 +19,7 @@ export default function BottomPanel() {
   const TAB_LABELS: Record<string, string> = {
     tasks:    t('panel.tasks'),
     log:      t('panel.log'),
+    inbox:    t('automation.inbox.tab'),
   }
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
@@ -43,6 +45,7 @@ export default function BottomPanel() {
   const TAB_ICONS: Record<string, typeof Zap> = {
     tasks: Zap,
     log: ScrollText,
+    inbox: Inbox,
   }
 
   return (
@@ -60,7 +63,7 @@ export default function BottomPanel() {
       >
         {/* 左侧：Tab 组 */}
         <div className="flex items-center gap-1">
-          {(['tasks', 'log'] as const).map(id => {
+          {(['tasks', 'log', 'inbox'] as const).map(id => {
             const Icon = TAB_ICONS[id]
             const active = effectiveTab === id
             return (
@@ -106,6 +109,7 @@ export default function BottomPanel() {
       <div className="flex-1 overflow-hidden">
         {effectiveTab === 'tasks' && <TaskRunView />}
         {effectiveTab === 'log' && <LogsView />}
+        {effectiveTab === 'inbox' && <InboxPanel />}
       </div>
     </div>
   )

@@ -17,4 +17,12 @@ export const automationTexts = {
   'automation.trigger.manualTitle': { 'zh-CN': '手动运行：{name}', 'en-US': 'Manual run: {name}', 'ru-RU': 'Ручной запуск: {name}' },
   'automation.trigger.manualSummary': { 'zh-CN': '由「立即运行」触发', 'en-US': 'Triggered by "Run now"', 'ru-RU': 'Запущено кнопкой «Запустить сейчас»' },
   'automation.trigger.semanticTitle': { 'zh-CN': '条件成立', 'en-US': 'Condition matched', 'ru-RU': 'Условие выполнено' },
+
+  // ===== 收件箱 =====
+  'automation.inbox.tab': { 'zh-CN': '收件箱', 'en-US': 'Inbox', 'ru-RU': 'Входящие' },
+  'automation.inbox.confirmRun': { 'zh-CN': '确认运行', 'en-US': 'Run it', 'ru-RU': 'Запустить' },
+  'automation.inbox.dismiss': { 'zh-CN': '忽略', 'en-US': 'Dismiss', 'ru-RU': 'Отклонить' },
+  'automation.inbox.notifyOnly': { 'zh-CN': '仅提醒', 'en-US': 'Notice only', 'ru-RU': 'Только уведомление' },
+  'automation.inbox.moreEvidence': { 'zh-CN': '还有 {n} 条', 'en-US': '{n} more', 'ru-RU': 'ещё {n}' },
+  'automation.inbox.empty': { 'zh-CN': '暂无自动化提醒', 'en-US': 'No automation notices', 'ru-RU': 'Нет уведомлений автоматизации' },
 }

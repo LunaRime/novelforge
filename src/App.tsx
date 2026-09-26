@@ -8,6 +8,7 @@ import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useUpdateStore } from './stores/update-store'
+import { useAutomationStore } from './stores/automation-store'
 import { t } from './shared/locale'
 import { useTranslation } from './hooks/useTranslation'
 import { setWindowTitle } from './lib/window-title'
@@ -185,6 +186,15 @@ export default function App() {
   useEffect(() => {
     setWindowTitle(currentProject?.name)
   }, [currentProject?.name, locale])
+
+  // 写作自动化调度器（D 档）：项目打开时启动、关闭/切换时停止。
+  // 执行宿主 = 渲染进程（应用开着才跑）；关窗中断的 run 由 checkpoint 机制在下次启动续跑。
+  useEffect(() => {
+    if (!currentProject?.path) return
+    const { startScheduler, stopScheduler } = useAutomationStore.getState()
+    startScheduler()
+    return () => stopScheduler()
+  }, [currentProject?.path])
 
 
   // 初始化：主题 + LLM 模型 + 最近项目 + 缩放级别
