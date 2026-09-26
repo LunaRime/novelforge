@@ -97,7 +97,11 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
                 >
                   <span className="truncate">
                     {t(`context.seg.${seg.key}` as never)}
-                    {seg.truncated ? ' ✂' : ''}
+                    {/* C 档第一轮：常驻段告警（接近上限 / 超上限未注入）——悬停给原因，
+                        比 ✂（截断）更严重故优先显示 */}
+                    {seg.warning
+                      ? <span title={seg.warning} style={{ color: 'var(--color-warning)' }}> ⚠</span>
+                      : seg.truncated ? ' ✂' : ''}
                   </span>
                   <span className="flex-shrink-0 font-mono">{fmtK(seg.tokens)} · {seg.chars}</span>
                 </div>

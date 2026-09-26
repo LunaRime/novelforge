@@ -389,3 +389,54 @@ describe('AgentConversation 末条消息 rewind 禁用（D1/F6）', () => {
     act(() => { root.unmount() })
   })
 })
+
+describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    // 常驻合计超硬上限 → 该段以 tokens=0 + warning 进明细（不静默截断的可见面）
+    Object.defineProperty(window, 'velaAPI', {
+      value: {
+        invoke: vi.fn(async (ch: string) => {
+          if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '全书精要', stale: false, mtime: 1 }]
+          if (ch === 'memory:read') return `---\nload_mode: resident\n---\n${'详'.repeat(6000)}`
+          return null
+        }),
+      },
+      configurable: true,
+    })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({
+      models: [{
+        id: 'm-test', name: 'Test Model', provider: 'openai', protocol: 'openai', modelName: 'gpt-4o',
+        apiKey: '', baseUrl: 'https://api.example.com', temperature: 0.7, maxTokens: 4096,
+        contextWindow: 128000, purposes: ['generation'],
+      }],
+      defaultModelId: 'm-test',
+    })
+  })
+
+  it('常驻超上限：明细面板给出 ⚠ 标记与告警文案（title 含上限值）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: Date.now() }],
+      } : c),
+    }))
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 30)) })
+
+    const ring = [...container.querySelectorAll('button')].find(b => b.title === t('ccr.clickForDetail')) as HTMLButtonElement
+    expect(ring).toBeTruthy()
+    act(() => { ring.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+
+    const panel = document.body.textContent ?? ''
+    expect(panel).toContain(t('context.seg.memory-resident'))   // 段仍在明细里（要知道它被跳过了）
+    expect(panel).toContain('⚠')
+    const warn = [...document.body.querySelectorAll('[title]')]
+      .find(el => (el.getAttribute('title') ?? '').includes('4000'))
+    expect(warn).toBeTruthy()
+    act(() => { root.unmount() })
+  })
+})
