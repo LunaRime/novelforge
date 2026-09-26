@@ -13,6 +13,7 @@
 
 import { t } from '../../shared/locale'
 import { toolRegistry, type AgentTool, type ToolResult, type ToolArtifact } from './tool-registry'
+import type { ApprovalDecision } from './approval'
 import { outputPostProcessor } from './output-post-processor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
@@ -61,6 +62,11 @@ export interface ToolCallInfo {
   error?: string
   /** Tool 来源标记 */
   source?: string
+  /**
+   * 审批决策（A 档）：waiting_confirm 时由 agent-store 的审批策略层注入，
+   * 供 ConfirmCard 展示风险级别与「本项目内始终允许」提案。
+   */
+  approval?: ApprovalDecision
 }
 
 /** Agent Engine 回调 */

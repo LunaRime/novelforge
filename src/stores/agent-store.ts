@@ -11,6 +11,7 @@ import { useCharacterStore } from './character-store'
 import { skillRegistry } from '../services/agent/skill-registry'
 import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
+import { evaluateApproval, loadApprovalRules, appendApprovalRule, ruleFromApproval, type ApprovalDecision } from '../services/agent/approval'
 import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
@@ -150,7 +151,7 @@ interface AgentState {
   /** 取消当前生成 */
   cancelGeneration: () => Promise<void>
   /** 响应 Tool 确认（用于 ConfirmCard） */
-  resolveToolConfirmation: (toolCallId: string, confirmed: boolean) => void
+  resolveToolConfirmation: (toolCallId: string, confirmed: boolean, alwaysAllow?: boolean) => void
   /** 启动恢复：扫描 ~/.novelforge/agent-archive 重建会话列表（loadSeq 防竞态） */
   restoreArchives: () => Promise<void>
   /** 从指定消息 fork 新会话：复制到起点（含）的历史（过滤 system），新会话立即可用（自动激活）；
@@ -208,9 +209,12 @@ const generateHelpText = (): string => {
 }
 
 // ===== Tool 确认回调管理 =====
-/** 存储待确认的 Tool 回调 */
+/** 存储待确认的 Tool 回调（A 档：随决策携带提案 / 项目路径 / 参数，供「始终允许」固化规则） */
 const pendingConfirmations = new Map<string, {
   resolve: (confirmed: boolean) => void
+  decision?: ApprovalDecision
+  projectPath?: string | null
+  args?: Record<string, unknown>
 }>()
 
 /** 当前活跃的 AbortController（用于取消 ReAct 循环） */
@@ -829,18 +833,40 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               ),
             }))
           },
-          onToolCallConfirmRequired: (toolCall) => {
-            // 更新 UI 显示确认状态
+          onToolCallConfirmRequired: async (toolCall) => {
+            // ===== A 档审批策略层：危险硬拒绝 / workspace 规则命中 → 不打扰用户 =====
+            const projectPath = useProjectStore.getState().currentProject?.path ?? null
+            const rules = projectPath ? await loadApprovalRules(projectPath) : []
+            const tool = toolRegistry.get(toolCall.toolName)
+            const args = (toolCall.arguments ?? {}) as Record<string, unknown>
+            const decision = evaluateApproval({
+              projectPath,
+              toolName: toolCall.toolName,
+              args,
+              descriptor: {
+                requiresConfirmation: tool?.requiresConfirmation ?? true,
+                isReadOnly: tool?.isReadOnly ?? false,
+              },
+              source: toolCall.toolName.startsWith('mcp__') ? 'mcp'
+                : toolCall.toolName.startsWith('skill__') ? 'skill' : 'builtin',
+              rules,
+            })
+            // 硬拒绝：走既有「拒绝」语义（error observation 回注，模型可换方案）
+            if (decision.action === 'deny') return false
+            // 规则命中 / 只读：等价用户已批准，直接放行
+            if (decision.action === 'allow') return true
+
+            // 更新 UI 显示确认状态（带上决策：ConfirmCard 展示 risk 与「始终允许」）
             updateAssistantMsg(m => ({
               ...m,
               toolCalls: (m.toolCalls ?? []).map(tc =>
-                tc.id === toolCall.id ? { ...tc, status: 'waiting_confirm' as const } : tc
+                tc.id === toolCall.id ? { ...tc, status: 'waiting_confirm' as const, approval: decision } : tc
               ),
             }))
 
             // 返回 Promise，等待用户通过 resolveToolConfirmation 响应
             return new Promise<boolean>((resolve) => {
-              pendingConfirmations.set(toolCall.id, { resolve })
+              pendingConfirmations.set(toolCall.id, { resolve, decision, projectPath, args })
             })
           },
           onDone: (fullText, toolCalls, artifacts) => {
@@ -1065,11 +1091,17 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
   },
 
-  resolveToolConfirmation: (toolCallId, confirmed) => {
+  resolveToolConfirmation: (toolCallId, confirmed, alwaysAllow = false) => {
     const pending = pendingConfirmations.get(toolCallId)
     if (pending) {
-      pending.resolve(confirmed)
       pendingConfirmations.delete(toolCallId)
+      // A 档：用户选「本项目内始终允许」且决策带可固化提案 → 落 workspace 规则。
+      // 写入失败不阻断本次批准（下次仍会询问，fail-closed）。
+      const rule = ruleFromApproval(pending.decision, pending.projectPath, pending.args ?? {}, confirmed, alwaysAllow)
+      if (rule && pending.projectPath) {
+        void appendApprovalRule(pending.projectPath, rule).catch(() => { /* 规则写入失败不影响本次执行 */ })
+      }
+      pending.resolve(confirmed)
     }
   },
 
