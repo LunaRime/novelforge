@@ -116,26 +116,38 @@ export function stripStatusFrontmatter(raw: string): string {
 /** 记忆目录 brief 的字符上限（Denova 目录只放一行摘要的 NF 版） */
 export const MEMORY_BRIEF_MAX_CHARS = 120
 
+/** 围栏行（空 frontmatter 的 `---` 残留不是内容，更不该当 brief——评审 Minor 9） */
+const isFenceLine = (s: string): boolean => /^-{3,}$/.test(s)
+
 /**
- * 目录/常驻展示用的 brief：正文**首个非空非标题行**，剥列表符（`- `）后截断。
- * 标题行（`# 全书精要`）没有信息量，故只在整篇没有正文行时回落标题文本——
- * shared.md 因此得到「用户偏好爽文节奏」这样的首条事实，而不是文件名。
+ * 目录/常驻展示用的 brief：正文首个非空非标题行，剥列表符（`- `）后截断。
+ * - 标题行（`# 全书精要`）没有信息量，故只在整段没有正文行时回落标题文本——
+ *   shared.md 因此得到「用户偏好爽文节奏」这样的首条事实，而不是文件名；
+ * - **章节文件取最后一个章节块**（最近章节）——长书里每个区间文件的头部是区间最早章，
+ *   而 brief 是 auto 分层下模型唯一拿到的东西，取旧状态会被当现状（同 F5 的取向，评审 Minor 8）；
+ * - 空 frontmatter（`---\n---`，FM_RE 不认）留下的围栏行直接跳过（评审 Minor 9）。
  */
 export function extractMemoryBrief(raw: string): string {
   const parsed = parseMemoryFile(raw)
   const body = parsed?.body ?? raw
-  let heading = ''
-  for (const line of body.split('\n')) {
-    const text = line.trim()
-    if (!text) continue
-    if (text.startsWith('#')) {
-      if (!heading) heading = text.replace(/^#+\s*/, '')
-      continue
+  const marks = body.split('\n## 第 ')
+  const scope = marks.length > 1 ? `## 第 ${marks[marks.length - 1]}` : body
+  const pick = (text: string): string => {
+    let heading = ''
+    for (const line of text.split('\n')) {
+      const trimmed = line.trim()
+      if (!trimmed || isFenceLine(trimmed)) continue
+      if (trimmed.startsWith('#')) {
+        if (!heading) heading = trimmed.replace(/^#+\s*/, '')
+        continue
+      }
+      return trimmed.replace(/^[-*]\s+/, '')
     }
-    const stripped = text.replace(/^[-*]\s+/, '')
-    return stripped.length > MEMORY_BRIEF_MAX_CHARS ? `${stripped.slice(0, MEMORY_BRIEF_MAX_CHARS)}…` : stripped
+    return heading
   }
-  return heading.length > MEMORY_BRIEF_MAX_CHARS ? `${heading.slice(0, MEMORY_BRIEF_MAX_CHARS)}…` : heading
+  // 最后一块只有标题（无正文行）时回落整篇
+  const brief = pick(scope) || pick(body)
+  return brief.length > MEMORY_BRIEF_MAX_CHARS ? `${brief.slice(0, MEMORY_BRIEF_MAX_CHARS)}…` : brief
 }
 
 /**
