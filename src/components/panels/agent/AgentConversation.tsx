@@ -9,7 +9,7 @@ import AgentInputBox from './AgentInputBox'
 import AgentMemoryView from './AgentMemoryView'
 import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
-import { computeContextUsage } from '../../../services/agent/context-usage'
+import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
 import { ipc } from '../../../services/ipc-client'
 import type { AgentMode } from '../../../stores/agent-store'
@@ -160,8 +160,18 @@ function EmptyState() {
  * 竞态/卸载安全：cancelled 标志丢弃过期响应；loaded 携带 key（会话/模式/项目），
  * 过期响应即使已 setState 也在渲染时按 key 丢弃——避免 effect 内同步 setState 级联渲染。
  */
-function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode } | null): { base: string; memoryM1: string; memoryM2: string } | null {
-  const [loaded, setLoaded] = useState<{ key: string; segments: { base: string; memoryM1: string; memoryM2: string } } | null>(null)
+type AsyncSegments = {
+  base: string
+  memoryM1: string
+  memoryM2: string
+  /** C 档第一轮：常驻记忆段（独立预算，须计入记忆段总量） */
+  memoryResident: string
+  /** C 档第一轮：逐段明细（含常驻/目录/手动三段） */
+  segments: ContextSegment[]
+}
+
+function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode } | null): AsyncSegments | null {
+  const [loaded, setLoaded] = useState<{ key: string; segments: AsyncSegments } | null>(null)
   const projectPath = useProjectStore.getState().currentProject?.path ?? null
   const convId = activeConv?.id ?? ''
   const mode = activeConv?.mode ?? 'quick'
@@ -254,7 +264,9 @@ function ActiveConversation() {
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
   // F3：与注入共用 async 数据源（M1+M2 真实值）；async 未就绪时同步 M1-only 兜底，避免闪烁
   const syncSegments = buildAgentSystemSegments(activeConv.mode)
-  const usageSegments = asyncSegments ?? { base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '' }
+  const usageSegments: AsyncSegments = asyncSegments ?? {
+    base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '', memoryResident: '', segments: syncSegments.segments,
+  }
   const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
   const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
   // 占用条的分母是**上下文窗口**，不是最大输出（2026-09-25 拆字段前二者混用同一个 maxTokens）。
@@ -262,14 +274,15 @@ function ActiveConversation() {
   const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.contextWindow ?? 0
   const contextUsage = computeContextUsage({
     base: usageSegments.base,
-    memory: [usageSegments.memoryM2, usageSegments.memoryM1].filter(Boolean).join('\n\n---\n\n'),
+    // 记忆段 = 常驻 + 名字目录 + 本轮手动 + M1（与 assembleFinalPrompt 的拼装口径一致）
+    memory: [usageSegments.memoryResident, usageSegments.memoryM2, usageSegments.memoryM1].filter(Boolean).join('\n\n---\n\n'),
     historyMessages: activeConv.messages
       .filter(m => m.role !== 'system')
       .map(m => ({ role: m.role, content: m.content })),
     currentContent: currentInput,
     modelMax,
-    // B6：逐段明细（同步段；M2 作品记忆来自 async 版，暂未纳入明细）
-    segments: syncSegments.segments,
+    // B6 明细：改取 async 段（含常驻/目录/手动三段；此前只有同步段，M2 缺席）
+    segments: usageSegments.segments,
   })
 
   return (

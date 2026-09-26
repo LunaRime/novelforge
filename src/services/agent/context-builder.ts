@@ -6,7 +6,8 @@
  * - L1 编辑器感知（~600 token 预算）：当前打开的 Tab 信息
  * - L2 按需获取：通过 Tool 调用获取详细数据
  *
- * 系统提示词总上限 ~4700 tokens（设计 §4.3：P1 加 M2 记忆层 800 + M1 300）。
+ * 系统提示词上限：非常驻部分 ~4700 tokens（设计 §4.3：身份/L0/L1/Tool + 名字目录 800 + M1 300）
+ * + 常驻记忆段按其自身硬上限另计（C 档第一轮，见 assembleFinalPrompt 注释）。
  */
 
 import { useProjectStore } from '../../stores/project-store'
@@ -17,18 +18,23 @@ import { t, getCurrentLocale } from '../../shared/locale'
 import { appendOutputLanguage } from '../prompt-templates'
 import { ipc } from '../ipc-client'
 import { parseMemoryFile } from '../memory/memory-codec'
+import type { MemoryFileMeta } from '../memory/memory-codec'
+import { normalizeLoadMode } from '../../shared/memory-types'
+import {
+  buildMemoryCatalog, buildResidentSection, catalogEntries, matchMentionedManuals, residentEntries,
+  RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS,
+  type MemoryLayerEntry,
+} from './memory-layers'
 import { toolRegistry } from './tool-registry'
 import { skillRegistry, sortSkillsBySource } from './skill-registry'
 import type { ContextSegment } from './context-usage'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
-/** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间 + shared 段，累计不超过此值） */
-const M2_BUDGET_TOKENS = 800
-
-/** P3：shared 段保底配额——节选预算内先预留 shared 再按序累计其余段（评审定案） */
-const SHARED_FLOOR_TOKENS = 150
-
-/** 系统提示词总上限（设计 §4.3：身份/L0/L1/Tool ~3000 + M2 800 + M1 300 ≈ 4700） */
+/**
+ * 系统提示词**非常驻部分**总上限（设计 §4.3：身份/L0/L1/Tool ~3000 + 名字目录 ≤800 + M1 300 ≈ 4700）。
+ * C 档第一轮起常驻记忆段另计（最终上限 = 本值 + 常驻段实际 tokens）——常驻有自身硬上限
+ * （RESIDENT_MEMORY_BUDGET_TOKENS），若并入本值会让它一超 ~1300 tokens 就在降级链里被整段丢弃。
+ */
 const TOTAL_BUDGET_TOKENS = 4700
 
 // ===== 上下文构建 =====
@@ -156,13 +162,18 @@ export function buildAgentSystemPrompt(mode: AgentMode): string {
  * 超限降级顺序 M1 → M2 → L1 → Tool（设计 §4.3，reviewer F1：此前 3800 上限把 M1+M2 整段一起丢）。
  * 导出供单测直接验证降级顺序（合成超限输入）。
  */
-export function assembleFinalPrompt(segments: { base: string; memoryM1: string; memoryM2: string }): string {
+export function assembleFinalPrompt(segments: { base: string; memoryM1: string; memoryM2: string; memoryResident?: string }): string {
   const join = (xs: Array<string | undefined>) => xs.filter((x): x is string => Boolean(x)).join('\n\n---\n\n')
-  // 索引：0=base，1=M2，2=M1
-  const parts: Array<string | undefined> = [segments.base, segments.memoryM2, segments.memoryM1]
+  // 索引：0=base，1=memoryResident，2=M2，3=M1
+  const resident = segments.memoryResident ?? ''
+  const parts: Array<string | undefined> = [segments.base, resident, segments.memoryM2, segments.memoryM1]
   const full = join(parts)
+  // C 档第一轮修正 1：常驻段有**独立预算**（RESIDENT_MEMORY_BUDGET_TOKENS，超限整段丢弃而非截断）。
+  // 若把它算进 4700，常驻一超 ~1300 tokens 就会在降级链里被整段丢掉——4000 的硬上限永远够不到，
+  // 用户设了常驻却什么都看不到且无提示。故最终上限 = 4700 + 常驻实际 tokens。
+  const budget = TOTAL_BUDGET_TOKENS + estimateTokens(resident)
 
-  if (estimateTokens(full) <= TOTAL_BUDGET_TOKENS) {
+  if (estimateTokens(full) <= budget) {
     return appendOutputLanguage(full, getCurrentLocale())
   }
 
@@ -171,9 +182,9 @@ export function assembleFinalPrompt(segments: { base: string; memoryM1: string; 
   const langSuffix = appendOutputLanguage('', getCurrentLocale())
   const langTokens = estimateTokens(langSuffix)
   // 1. 先丢 M1 会话摘要段（压缩滚动摘要，非创作必需）
-  parts[2] = undefined
-  // 2. 仍超限丢 M2 作品记忆段
-  if (estimateTokens(join(parts)) > TOTAL_BUDGET_TOKENS) parts[1] = undefined
+  parts[3] = undefined
+  // 2. 仍超限丢 M2 作品记忆段（名字目录 + 本轮 manual 正文；常驻段 parts[1] 不参与降级）
+  if (estimateTokens(join(parts)) > budget) parts[2] = undefined
   // 3. base 拆回节数组（拼接分隔符 '\n\n---\n\n'），按标题定位裁剪 L1
   const baseSections = (parts[0] ?? '').split('\n\n---\n\n')
   const l1Index = baseSections.findIndex(s => s.startsWith(t('engine.contextEditorHeader')))
@@ -188,7 +199,7 @@ export function assembleFinalPrompt(segments: { base: string; memoryM1: string; 
   if (toolIndex >= 0) {
     const othersTokens = estimateTokens(baseSections.filter((_, i) => i !== toolIndex).join('\n\n---\n\n'))
     const memoryTokens = estimateTokens(join(parts.slice(1)))
-    const toolBudget = TOTAL_BUDGET_TOKENS - langTokens - othersTokens - memoryTokens - markerTokens
+    const toolBudget = budget - langTokens - othersTokens - memoryTokens - markerTokens
     if (toolBudget > 0 && estimateTokens(baseSections[toolIndex]) > toolBudget) {
       baseSections[toolIndex] = truncateToTokenBudget(baseSections[toolIndex], toolBudget) + marker
       toolMarked = true
@@ -197,7 +208,7 @@ export function assembleFinalPrompt(segments: { base: string; memoryM1: string; 
   // 5. 兜底硬截断（各节独立预算下理论不可达）：主体按预算截断，语言指令保持最末尾（#30）。
   //    预算预留截断提示 token——tokenizer 分段拼接非可加，硬截断可能切掉尾部提示，补回保持语义不变量
   const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2]])
-  const mainBudget = TOTAL_BUDGET_TOKENS - langTokens - (toolMarked ? markerTokens : 0)
+  const mainBudget = budget - langTokens - (toolMarked ? markerTokens : 0)
   if (estimateTokens(main) > mainBudget) {
     const cut = truncateToTokenBudget(main, mainBudget)
     const suffix = (toolMarked && !cut.includes(marker) ? marker : '') + langSuffix
@@ -206,75 +217,106 @@ export function assembleFinalPrompt(segments: { base: string; memoryM1: string; 
   return appendOutputLanguage(main, getCurrentLocale())
 }
 
+/** 异步装配结果（C 档第一轮）：常驻段独立成段，明细段供 context 面板，M1/M2 保持既有降级语义 */
+export interface AgentSystemSegmentsAsync {
+  base: string
+  /** 常驻记忆段（全文，独立预算，不进 4700 降级链） */
+  memoryResident: string
+  /** 名字目录 + 本轮显式引用的 manual 正文 */
+  memoryM2: string
+  memoryM1: string
+  segments: ContextSegment[]
+}
+
 /**
- * 异步版：M2 作品记忆节（memory:* 读盘，预算 800，失败降级仅 M1）。
- * 返回 M1/M2 分两段（F1：超限可按段降级）；最终顺序 M2 → M1 由 assembleFinalPrompt 保证（F2）。
+ * 异步版：base + M1（同步段）+ 记忆分层两段（常驻 / 目录）。
+ * `userMessage` 用于 manual 的**硬门控**判定（@文件名）——只影响本轮 system 段，
+ * 不进会话历史，故后续轮次不会继承（每次 sendMessage 都重新装配）。
+ * 记忆读盘失败降级：base + M1 照常，不阻断对话。
  */
-export async function buildAgentSystemSegmentsAsync(mode: AgentMode): Promise<{ base: string; memoryM1: string; memoryM2: string }> {
-  const { base, memory: m1 } = buildAgentSystemSegments(mode)
+export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage = ''): Promise<AgentSystemSegmentsAsync> {
+  const { base, memory: m1, segments } = buildAgentSystemSegments(mode)
+  let residentText = ''
   let m2 = ''
   try {
-    const list = (await ipc.invoke('memory:list')) as { file: string; kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'; stale: boolean }[]
-    const fresh = list.filter(f => !f.stale)
-    // M2 节选只取 book/volume/chapters/shared（F9：未知前缀文件 kind=unknown，不参与注入）
-    const book = fresh.find(f => f.kind === 'book')
-    // ⚠️ 审阅修正：volume-010.md 字典序在 volume-002.md 前——按文件名中的卷号数值排序（最新卷优先）
-    const volumes = fresh.filter(f => f.kind === 'volume').sort((a, b) => {
-      const n = (f: string) => Number(f.match(/volume-(\d+)\.md/)?.[1] ?? 0)
-      return n(b.file) - n(a.file)
-    })
-    const chapters = fresh.filter(f => f.kind === 'chapters').sort((a, b) => b.file.localeCompare(a.file)) // 最近区间优先（零填充格式字典序=数值序）
-    const shared = fresh.find(f => f.kind === 'shared') // P3：跨会话可复用事实段
-    // picks 顺序：shared 最先（先按保底配额截断，used 从实际用量起算 → 其余段共用剩余——见下）
-    const picks = [shared, book, ...volumes.slice(0, 1), ...chapters.slice(0, 1)].filter(Boolean) as { file: string; kind: string }[]
-    const sections: string[] = []
-    let used = 0
-    for (const p of picks) {
-      if (used >= M2_BUDGET_TOKENS) break
-      const raw = await ipc.invoke('memory:read', p.file) as string | null
+    const list = (await ipc.invoke('memory:list')) as MemoryFileMeta[]
+    // stale 先行过滤（与既有口径一致）；F9 白名单保留——但**用户显式声明 resident 时尊重其选择**
+    const entries: MemoryLayerEntry[] = list
+      .filter(f => !f.stale)
+      .filter(f => f.kind !== 'unknown' || normalizeLoadMode(f.loadMode) === 'resident')
+      .map(f => ({
+        file: f.file, kind: f.kind, loadMode: normalizeLoadMode(f.loadMode), brief: f.brief ?? '', range: f.range,
+      }))
+
+    // ===== 段 1：常驻记忆（全文，独立预算）=====
+    const residents = residentEntries(entries)
+    if (residents.length > 0) {
+      const contents: Array<{ file: string; body: string }> = []
+      for (const e of residents) {
+        const raw = await ipc.invoke('memory:read', e.file) as string | null
+        if (!raw) continue // 读失败/已被删除：跳过该条，不阻断其余条目
+        contents.push({ file: e.file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
+      }
+      const built = buildResidentSection(contents)
+      const files = contents.map(c => c.file).join(', ')
+      if (built.overCap) {
+        console.warn(`[ContextBuilder] 常驻记忆 ${built.tokens} tokens 超过上限 ${RESIDENT_MEMORY_BUDGET_TOKENS}，本轮未注入`)
+        segments.push({
+          key: 'memory-resident', tokens: 0, chars: 0,
+          warning: t('memory.residentOverCap')
+            .replace('{tokens}', String(built.tokens))
+            .replace('{cap}', String(RESIDENT_MEMORY_BUDGET_TOKENS)),
+        })
+      } else if (built.text) {
+        residentText = built.text
+        segments.push({
+          key: 'memory-resident', tokens: built.tokens, chars: built.text.length,
+          source: t('context.segSourceResident').replace('{files}', files),
+          warning: built.tokens > RESIDENT_MEMORY_WARN_TOKENS
+            ? t('memory.residentNearLimit')
+              .replace('{tokens}', String(built.tokens))
+              .replace('{cap}', String(RESIDENT_MEMORY_BUDGET_TOKENS))
+            : undefined,
+        })
+      }
+    }
+
+    // ===== 段 2：名字目录（三级降级）+ 本轮 @ 提及的 manual 正文 =====
+    const parts: string[] = []
+    const catalog = buildMemoryCatalog(entries)
+    if (catalog.text) {
+      parts.push(catalog.text)
+      segments.push({
+        key: 'memory-catalog', tokens: estimateTokens(catalog.text), chars: catalog.text.length,
+        source: t('context.segSourceCatalog').replace('{n}', String(catalogEntries(entries).length)),
+      })
+    }
+    const bodies: string[] = []
+    for (const file of matchMentionedManuals(userMessage, entries)) {
+      const raw = await ipc.invoke('memory:read', file) as string | null
       if (!raw) continue
-      const { body } = parseMemoryFile(raw) ?? { body: raw }
-      // P3 保底配额：shared 段独立限额 SHARED_FLOOR_TOKENS（先预留再按序累计其余段——
-      // 长书 book/volume 占满预算时 shared 不被完全挤出）；其他段共用 800 − shared 实际用量
-      const budget = p.kind === 'shared' ? SHARED_FLOOR_TOKENS : M2_BUDGET_TOKENS - used
-      // chapters 文件从尾部节选（F5：最新章节优先——truncateToTokenBudget 从头保留会把最新章节丢光）；book/volume/shared 保持头部节选
-      const excerpt = p.kind === 'chapters' ? excerptLatestChapters(body, budget) : truncateToTokenBudget(body, budget)
-      sections.push(excerpt)
-      used += estimateTokens(excerpt)
+      bodies.push(`## ${file}\n\n${(parseMemoryFile(raw) ?? { body: raw }).body.trim()}`)
     }
-    if (sections.length > 0) {
-      m2 = `${t('memory.injectedHeader')}\n${sections.join('\n\n')}`
+    if (bodies.length > 0) {
+      const manualText = `${t('memory.manualMentionHeader')}\n\n${bodies.join('\n\n')}`
+      parts.push(manualText)
+      // source 用文件名（明细面板悬停可查"这段来自哪"）；段标签由 context.seg.memory-manual 提供
+      segments.push({
+        key: 'memory-manual', tokens: estimateTokens(manualText), chars: manualText.length,
+        source: bodies.map(b => b.split('\n')[0].replace(/^##\s*/, '')).join(', '),
+      })
     }
+    if (parts.length > 0) m2 = `${t('memory.injectedHeader')}\n\n${parts.join('\n\n')}`
   } catch {
-    // M2 读盘失败降级：仅 M1
+    // 记忆读盘失败降级：base + M1 照常
   }
-  return { base, memoryM1: m1, memoryM2: m2 }
+  return { base, memoryResident: residentText, memoryM2: m2, memoryM1: m1, segments }
 }
 
-/**
- * 章节记忆尾部节选（F5）：将 body 按「## 第」块切分，从尾部（最新章节）向前累积到预算——
- * 满窗口时注入最近章节而非最早章节；单块超预算时至少保留最新一块，由 truncateToTokenBudget 兜底。
- * 文件头（如 `# 章节记忆 001-015`）始终保留作为区间标注；book/volume 文件不适用本函数。
- */
-function excerptLatestChapters(body: string, maxTokens: number): string {
-  if (estimateTokens(body) <= maxTokens) return body
-  const parts = body.split('\n## 第')
-  const header = parts[0]
-  const blocks = parts.slice(1).map(b => `## 第${b}`)
-  const picked: string[] = []
-  let used = 0
-  for (let i = blocks.length - 1; i >= 0; i--) {
-    const blockTokens = estimateTokens(blocks[i])
-    if (picked.length > 0 && used + blockTokens > maxTokens) break
-    picked.unshift(blocks[i])
-    used += blockTokens
-  }
-  return truncateToTokenBudget([header, ...picked].join('\n'), maxTokens)
-}
-
-/** 异步版最终拼装：base + memory（M1 + M2）+ 语言指令（语言指令保持最末尾） */
-export async function buildAgentSystemPromptAsync(mode: AgentMode): Promise<string> {
-  return assembleFinalPrompt(await buildAgentSystemSegmentsAsync(mode))
+/** 异步版最终拼装：base + 常驻段 + M2 + M1 + 语言指令（语言指令保持最末尾） */
+export async function buildAgentSystemPromptAsync(mode: AgentMode, userMessage = ''): Promise<string> {
+  const s = await buildAgentSystemSegmentsAsync(mode, userMessage)
+  return assembleFinalPrompt({ base: s.base, memoryM1: s.memoryM1, memoryM2: s.memoryM2, memoryResident: s.memoryResident })
 }
 
 // ===== 内部构建方法 =====

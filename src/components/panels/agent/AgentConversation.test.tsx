@@ -15,6 +15,7 @@ import { useAgentStore, type AgentConversation as AgentConv } from '../../../sto
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { t } from '../../../shared/locale'
+import { RESIDENT_MEMORY_BUDGET_TOKENS } from '../../../services/agent/memory-layers'
 
 // jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
 beforeAll(() => {
@@ -44,7 +45,8 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     Object.defineProperty(window, 'velaAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => {
-          if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', stale: false, mtime: 1 }]
+          // C 档第一轮：常驻（resident）才是全文注入；auto 只进名字目录
+          if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '全书精要', stale: false, mtime: 1 }]
           if (ch === 'memory:read') return `---\n---\n\n# 全书精要\n\n${bookBody}`
           return null
         }),
@@ -97,10 +99,10 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     expect(readMemoryToken(container)).toBe(0)
     // 等待 async 段加载（microtask + effect 刷新）
     await act(async () => { await new Promise(r => setTimeout(r, 30)) })
-    // 记忆段 = M2 节选（≤800）+ M1（无）→ 应显著大于 0
+    // 记忆段 = 常驻全文（不节选；分量见 RESIDENT_MEMORY_BUDGET_TOKENS）+ M1（无）→ 应显著大于 0
     const memoryTokens = readMemoryToken(container)
     expect(memoryTokens).toBeGreaterThan(100)
-    expect(memoryTokens).toBeLessThanOrEqual(800)
+    expect(memoryTokens).toBeLessThanOrEqual(RESIDENT_MEMORY_BUDGET_TOKENS)
     act(() => { root.unmount() })
   })
 

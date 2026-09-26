@@ -588,8 +588,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         return
       }
 
-      // 构建系统提示词（包含项目上下文 + Tool 列表；M2 作品记忆异步读盘注入，失败降级仅 M1）
-      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode)
+      // 构建系统提示词（含项目上下文 + Tool 列表 + 记忆分层；manual 硬门控需要本轮用户消息，
+      // 只影响本轮 system 段、不进会话历史，故后续轮次不继承）
+      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode, content.trim())
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
       if (currentConv.roleplayCharacter) {

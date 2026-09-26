@@ -30,6 +30,8 @@ export interface ContextSegment {
   source?: string
   /** 该段发生过截断（预算裁剪） */
   truncated?: boolean
+  /** C 档第一轮：需在明细面板告警的原因（常驻接近上限 / 超上限未注入） */
+  warning?: string
 }
 
 /** 预算条分段计算：基础段（身份+L0+L1+Tool）+ 记忆段（M1）+ 历史 + 当前，无双计 */

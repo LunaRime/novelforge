@@ -62,14 +62,14 @@ describe('buildAgentSystemSegments M1 会话摘要', () => {
 
 describe('M2 作品记忆节（P1）', () => {
   const mockInvoke = vi.fn(async (ch: string): Promise<unknown> => {
-    if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', stale: false, mtime: 1 }]
+    if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', loadMode: 'auto', brief: '关键事件：主角觉醒', stale: false, mtime: 1 }]
     if (ch === 'memory:read') return '---\nrange: 001-015\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒'
     return null
   })
 
   beforeEach(() => {
     mockInvoke.mockImplementation(async (ch: string) => {
-      if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', stale: false, mtime: 1 }]
+      if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', loadMode: 'auto', brief: '关键事件：主角觉醒', stale: false, mtime: 1 }]
       if (ch === 'memory:read') return '---\nrange: 001-015\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒'
       return null
     })
@@ -95,7 +95,7 @@ describe('M2 作品记忆节（P1）', () => {
       conversations: state.conversations.map(c => c.id === conv.id ? { ...c, rollingSummary: '用户要求写甜文，已确认主角性格' } : c),
     }))
     mockInvoke.mockImplementation(async (ch: string) => {
-      if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', stale: false, mtime: 1 }]
+      if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', loadMode: 'auto', brief: '主角是苏晚晴', stale: false, mtime: 1 }]
       if (ch === 'memory:read') return '---\n---\n\n# 全书精要\n主角是苏晚晴'
       return null
     })
@@ -113,8 +113,8 @@ describe('M2 作品记忆节（P1）', () => {
   it('kind=unknown 文件（用户手放 notes.md）不参与 M2 节选（F9）', async () => {
     mockInvoke.mockImplementation(async (ch: string, file?: string) => {
       if (ch === 'memory:list') return [
-        { file: 'notes.md', kind: 'unknown', stale: false, mtime: 1 },
-        { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
+        { file: 'notes.md', kind: 'unknown', loadMode: 'auto', brief: '私人笔记', stale: false, mtime: 1 },
+        { file: 'book-state.md', kind: 'book', loadMode: 'auto', brief: '主角是苏晚晴', stale: false, mtime: 1 },
       ]
       if (ch === 'memory:read') return file === 'notes.md'
         ? '# notes 私人笔记\n不该注入的内容'
@@ -126,35 +126,23 @@ describe('M2 作品记忆节（P1）', () => {
     expect(memoryM2).not.toContain('不该注入的内容') // unknown 文件内容被排除
   })
 
-  it('章节文件尾部节选：满窗口时注入最新章节而非最早章节（F5）', async () => {
-    const blocks: string[] = []
-    for (let n = 1; n <= 15; n++) {
-      blocks.push([
-        `## 第 ${n} 章 · 标题${n}`,
-        `- 关键事件：第${n}章事件${'详'.repeat(60)}`,
-        `- 出场角色：角色${n}`,
-        `- 伏笔：伏笔${n}`,
-        `- 新设定：设定${n}`,
-        `- 当前状态：状态${n}`,
-      ].join('\n'))
-    }
+  it('章节文件（auto）只进名字目录：brief 到模型，正文不进（分层后不再节选注入）', async () => {
     mockInvoke.mockImplementation(async (ch: string) => {
-      if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', stale: false, mtime: 1 }]
-      if (ch === 'memory:read') return `---\nrange: 001-015\n---\n\n# 章节记忆 001-015\n\n${blocks.join('\n\n')}`
+      if (ch === 'memory:list') return [{ file: 'chapters-001-015.md', kind: 'chapters', loadMode: 'auto', brief: '关键事件：主角觉醒', stale: false, mtime: 1 }]
+      if (ch === 'memory:read') return '---\nrange: 001-015\n---\n\n# 章节记忆 001-015\n\n## 第 15 章 · 标题15\n- 关键事件：主角觉醒'
       return null
     })
     const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
-    expect(memoryM2).toContain('## 第 15 章 · 标题15') // 最新章节在节选内
-    expect(memoryM2).toContain('## 第 14 章 · 标题14')
-    expect(memoryM2).not.toContain('## 第 1 章 · 标题1') // 最早章节被丢弃
-    expect(memoryM2).not.toContain('## 第 2 章 · 标题2')
+    expect(memoryM2).toContain('chapters-001-015')      // 目录里知道它存在
+    expect(memoryM2).toContain('关键事件：主角觉醒')     // brief 有信息量
+    expect(memoryM2).not.toContain('## 第 15 章')        // 正文不进（要正文用 read_memory）
   })
 
-  it('P3：kind=shared 文件参与 M2 节选（unknown 仍不注入）', async () => {
+  it('P3 改造：shared 进名字目录（brief 到模型），正文不再自动注入；unknown 仍排除', async () => {
     mockInvoke.mockImplementation(async (ch: string, file?: string) => {
       if (ch === 'memory:list') return [
-        { file: 'shared.md', kind: 'shared', stale: false, mtime: 3 },
-        { file: 'notes.md', kind: 'unknown', stale: false, mtime: 2 },
+        { file: 'shared.md', kind: 'shared', loadMode: 'auto', brief: '用户偏好爽文节奏', stale: false, mtime: 3 },
+        { file: 'notes.md', kind: 'unknown', loadMode: 'auto', brief: '私人笔记', stale: false, mtime: 2 },
       ]
       if (ch === 'memory:read') return file === 'shared.md'
         ? buildSharedFile(['用户偏好爽文节奏', '主角名苏晚晴'])
@@ -162,26 +150,10 @@ describe('M2 作品记忆节（P1）', () => {
       return null
     })
     const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
-    expect(memoryM2).toContain('用户偏好爽文节奏') // shared 注入
-    expect(memoryM2).toContain('主角名苏晚晴')
-    expect(memoryM2).not.toContain('不该注入的内容') // unknown 文件仍被排除
-  })
-
-  it('P3：shared 段保底——book 占满预算时 shared 保底配额仍注入', async () => {
-    const bigBook = `# 全书精要\n${'详'.repeat(1200)}` // 启发式 >800 tokens，单段必触发截断
-    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
-      if (ch === 'memory:list') return [
-        { file: 'shared.md', kind: 'shared', stale: false, mtime: 1 },
-        { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
-      ]
-      if (ch === 'memory:read') return file === 'shared.md'
-        ? buildSharedFile(['用户偏好爽文节奏'])
-        : bigBook
-      return null
-    })
-    const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
-    expect(memoryM2).toContain('用户偏好爽文节奏') // shared 没被 book 挤出
-    expect(memoryM2).toContain('全书精要') // book 仍有节选
+    expect(memoryM2).toContain('用户偏好爽文节奏')   // brief 行
+    expect(memoryM2).toContain('[共享]')             // kind 标签
+    expect(memoryM2).not.toContain('主角名苏晚晴')   // 目录不含第二条正文
+    expect(memoryM2).not.toContain('不该注入的内容')
   })
 })
 
@@ -329,5 +301,110 @@ describe('assembleFinalPrompt 总上限与降级顺序（F1）', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: 'M1=小摘要', memoryM2: 'M2=小记忆' })
     expect(out).toContain('M1=小摘要')
     expect(out).toContain('M2=小记忆')
+  })
+})
+
+describe('记忆分层注入（C 档第一轮）', () => {
+  // ⚠️ 本 describe 自建 mock：既有的 mockInvoke 声明在 M2 那个 describe 内部，此处不在作用域内
+  const layerList = (files: Array<{ file: string; kind: string; loadMode: string; brief: string; stale: boolean; mtime: number }>) => files
+  let mockInvoke: ReturnType<typeof vi.fn>
+  beforeEach(() => {
+    mockInvoke = vi.fn(async (ch: string): Promise<unknown> => (ch === 'memory:list' ? [] : null))
+    Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+    useAgentStore.setState({ conversations: [], activeConversationId: null })
+  })
+
+  it('常驻文件：全文进 memoryResident 段（不节选）+ 逐段明细', async () => {
+    const body = '# 全书精要\n\n主角是苏晚晴，复仇线为主。'
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '主角是苏晚晴', stale: false, mtime: 1 }])
+      if (ch === 'memory:read') return file === 'book-state.md' ? `---\nload_mode: resident\n---\n${body}` : null
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick')
+    expect(seg.memoryResident).toContain('主角是苏晚晴，复仇线为主。')
+    expect(seg.memoryM2).toBe('')                                  // 常驻不进目录
+    const detail = seg.segments.find(s => s.key === 'memory-resident')
+    expect(detail?.tokens).toBeGreaterThan(0)
+    expect(detail?.source).toContain('book-state.md')
+  })
+
+  it('常驻合计超硬上限：整段不注入 + 明细面板告警（不静默截断）', async () => {
+    mockInvoke.mockImplementation(async (ch: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'a.md', kind: 'book', loadMode: 'resident', brief: 'x', stale: false, mtime: 1 }])
+      if (ch === 'memory:read') return `---\nload_mode: resident\n---\n${'详'.repeat(6000)}`
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick')
+    expect(seg.memoryResident).toBe('')
+    const detail = seg.segments.find(s => s.key === 'memory-resident')
+    expect(detail?.tokens).toBe(0)
+    expect(detail?.warning).toBeTruthy()
+    expect(detail?.warning).toContain('4000')
+  })
+
+  it('常驻接近上限：仍注入，但明细带「接近上限」告警', async () => {
+    mockInvoke.mockImplementation(async (ch: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'a.md', kind: 'book', loadMode: 'resident', brief: 'x', stale: false, mtime: 1 }])
+      if (ch === 'memory:read') return `---\nload_mode: resident\n---\n${'详'.repeat(2000)}`
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick')
+    expect(seg.memoryResident).not.toBe('')
+    expect(seg.segments.find(s => s.key === 'memory-resident')?.warning).toBeTruthy()
+  })
+
+  it('manual 硬门控：@提及 → 本轮注入正文；未提及 → 只有目录行', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'book-state.md', kind: 'book', loadMode: 'manual', brief: '主角是苏晚晴', stale: false, mtime: 1 }])
+      if (ch === 'memory:read') return file === 'book-state.md' ? '---\nload_mode: manual\n---\n# 全书精要\n主角是苏晚晴，复仇线为主。' : null
+      return null
+    })
+    const without = await buildAgentSystemSegmentsAsync('quick', '帮我写第 3 章')
+    expect(without.memoryM2).toContain('[manual]')          // 目录里知道它存在
+    expect(without.memoryM2).not.toContain('复仇线为主')     // 但正文不注入
+    const withMention = await buildAgentSystemSegmentsAsync('quick', '参考 @book-state 写第 3 章')
+    expect(withMention.memoryM2).toContain('复仇线为主')
+    expect(withMention.memoryM2).toContain('本轮显式引用')
+  })
+
+  it('stale 优先于分层：stale 的 manual 即使被 @ 也不注入', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'book-state.md', kind: 'book', loadMode: 'manual', brief: 'x', stale: true, mtime: 1 }])
+      if (ch === 'memory:read') return file === 'book-state.md' ? '---\nload_mode: manual\n---\n过期正文' : null
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick', '@book-state')
+    expect(seg.memoryM2).not.toContain('过期正文')
+  })
+
+  it('常驻条目读盘失败（已删除）→ 跳过该条不崩，其余条目照常', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return layerList([
+        { file: 'gone.md', kind: 'book', loadMode: 'resident', brief: 'x', stale: false, mtime: 2 },
+        { file: 'ok.md', kind: 'book', loadMode: 'resident', brief: 'y', stale: false, mtime: 1 },
+      ])
+      if (ch === 'memory:read') return file === 'gone.md' ? null : '---\nload_mode: resident\n---\n还在的记忆'
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick')
+    expect(seg.memoryResident).toContain('还在的记忆')
+  })
+})
+
+describe('assembleFinalPrompt 常驻段独立预算（C 档第一轮修正 1）', () => {
+  const big = '内容'.repeat(4000)
+
+  it('常驻段不参与降级链：超限时丢的是 M1 → M2，常驻保留', () => {
+    const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}`, memoryResident: `R=常驻原文` })
+    expect(out).toContain('R=常驻原文')
+    expect(out).not.toContain('M1=')
+    expect(out).not.toContain('M2=')
+    expect(estimateTokens(out)).toBeLessThanOrEqual(4700 + estimateTokens('R=常驻原文'))
+  })
+
+  it('不传常驻段时上限仍为 4700（既有 6 条用例的行为不变）', () => {
+    const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
+    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
   })
 })
