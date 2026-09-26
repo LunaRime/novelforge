@@ -18,7 +18,7 @@ import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../servi
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, computeConversationDependencyHash, type CompressedBatch } from '../services/agent/archive-codec'
-import { writeBatchOriginal } from '../services/agent/compaction-originals'
+import { writeBatchOriginal, readBatchOriginal } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
@@ -168,6 +168,10 @@ interface AgentState {
   rewindToMessage: (messageId: string) => boolean
   /** B7：把压缩产物标为失效（历史变更后调用 —— rewind / 恢复原文 / 编辑消息） */
   invalidateCompactions: () => void
+  /** B3：按需读某批次的分卷原文（展开压缩卡片时调用） */
+  loadBatchOriginal: (batch: number) => Promise<AgentMessage[] | null>
+  /** B3：移除该压缩 —— 原文插回历史、批次移出 compressed、摘要重算 */
+  removeCompaction: (batch: number) => Promise<void>
   /** 恢复第 entryIndex 个 rewind 归档：归档消息 append 回 messages（rewind 可逆）；
    *  返回是否成功；无归档或索引无效返回 false */
   restoreRewound: (entryIndex: number) => boolean
@@ -1258,6 +1262,43 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }
       }),
     }))
+  },
+
+  /** B3：按需读该批次的分卷原文 */
+  loadBatchOriginal: async (batch) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return null
+    return readBatchOriginal(conv.id, batch)
+  },
+
+  /** B3：移除该压缩 —— 原文插回历史、批次移出 compressed、摘要按剩余批次重算 */
+  removeCompaction: async (batch) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return
+    const target = (conv.compressed ?? []).find(b => b.batch === batch)
+    if (!target) return
+
+    // 原文不可恢复时不插回（宁可保留 rest，也不制造"部分历史"的错觉）
+    const originals = target.recoverable === false ? null : await readBatchOriginal(conv.id, batch)
+
+    set(state => ({
+      conversations: state.conversations.map(c => {
+        if (c.id !== conv.id) return c
+        const remaining = (c.compressed ?? []).filter(b => b.batch !== batch)
+        const messages = originals
+          ? [...c.messages, ...originals].sort((a, b) => a.createdAt - b.createdAt)
+          : c.messages
+        return {
+          ...c,
+          messages,
+          compressed: remaining,
+          rollingSummary: remaining.map(b => b.summary).join('\n\n') || undefined,
+          rollingSummaryInvalidated: false,
+          updatedAt: Date.now(),
+        }
+      }),
+    }))
+    get().persistCurrent(conv.id)
   },
 
   rewindToMessage: (messageId) => {
