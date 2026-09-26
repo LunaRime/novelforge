@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { runAgentLoop, computeMessageBudget, isRecoverableError, type LLMMessage, type AgentEngineDeps, type ToolCallInfo } from './agent-engine'
+import { runAgentLoop, computeMessageBudget, isRecoverableError, type LLMMessage, type AgentEngineDeps, type AgentEngineOptions, type ToolCallInfo } from './agent-engine'
 import { estimateTokens } from './token-budget'
 import { toolRegistry, buildAgentTool } from './tool-registry'
+import { t } from '../../shared/locale'
 
 /** 测试专用纯内存工具名（不触碰 IPC） */
 const TEST_TOOL_NAME = 'agent_test_echo'
@@ -44,6 +45,7 @@ function createCallbacks() {
 async function runLoopWithResponses(
   responses: string[],
   deps?: AgentEngineDeps,
+  options?: AgentEngineOptions,
 ): Promise<{ generateFn: ReturnType<typeof vi.fn>; messagesLog: LLMMessage[][]; callbacks: ReturnType<typeof createCallbacks> }> {
   const messagesLog: LLMMessage[][] = []
   const generateFn = vi.fn((messages: LLMMessage[]): Promise<string> => {
@@ -53,7 +55,7 @@ async function runLoopWithResponses(
     return Promise.resolve(responses.shift() ?? '')
   })
   const callbacks = createCallbacks()
-  await runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks, undefined, undefined, deps)
+  await runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks, undefined, options, deps)
   return { generateFn, messagesLog, callbacks }
 }
 
@@ -781,5 +783,57 @@ describe('工具分批并发（M1，对齐 CC toolOrchestration.ts）', () => {
     expect(observation).toContain(`<tool_result name="m1_solo">\nresult:m1_solo\n</tool_result>`)
     expect(callbacks.onError).not.toHaveBeenCalled()
     expect(callbacks.onDone).toHaveBeenCalled()
+  })
+})
+
+describe('委派白名单（C 档第二轮 T1）', () => {
+  const READ = 'agent_test_read'
+  const WRITE = 'agent_test_write'
+  const reg = (name: string): void => {
+    toolRegistry.register(buildAgentTool({
+      name,
+      description: `test ${name}`,
+      source: 'builtin',
+      inputSchema: { type: 'object', properties: {} },
+      requiresConfirmation: false,
+      execute: async () => ({ success: true, content: `${name}: ok` }),
+    }))
+  }
+  const statusesOf = (callbacks: ReturnType<typeof createCallbacks>): string[] =>
+    callbacks.onToolCallComplete.mock.calls.map(c => `${(c[0] as ToolCallInfo).toolName}:${(c[0] as ToolCallInfo).status}`)
+
+  beforeEach(() => { reg(READ); reg(WRITE) })
+  afterEach(() => { toolRegistry.unregister(READ); toolRegistry.unregister(WRITE) })
+
+  it('白名单外的工具不执行（fail-closed），观察文案点名原因并给出可用集合', async () => {
+    const { messagesLog, callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${WRITE}","arguments":{}}</tool_call>`,
+      'done',
+    ], undefined, { allowedTools: [READ] })
+
+    expect(statusesOf(callbacks)).toContain(`${WRITE}:failed`)
+    const observation = lastUserMessage(messagesLog, 1)
+    expect(observation).toContain(t('engine.toolNotDelegated').split('{name}')[0])   // 文案对得上
+    // 可用集合里只应出现白名单内的工具（被拒的工具名只会出现在 {name} 处，不出现在 {tools}）
+    const availableMarker = t('engine.toolNotDelegated').split('{name}')[1].split('{tools}')[0]
+    const available = observation.split(availableMarker)[1] ?? ''
+    expect(available).toContain(READ)
+    expect(available).not.toContain(WRITE)
+  })
+
+  it('白名单内的工具照常执行', async () => {
+    const { callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${READ}","arguments":{}}</tool_call>`,
+      'done',
+    ], undefined, { allowedTools: [READ] })
+    expect(statusesOf(callbacks)).toContain(`${READ}:completed`)
+  })
+
+  it('缺省 allowedTools：行为与现状一致（不在名单概念内的工具照常执行）', async () => {
+    const { callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${WRITE}","arguments":{}}</tool_call>`,
+      'done',
+    ])
+    expect(statusesOf(callbacks)).toContain(`${WRITE}:completed`)
   })
 })

@@ -176,8 +176,7 @@ class ToolRegistryImpl {
    * - file_path (string, 必填): 相对于项目根目录的文件路径
    * ```
    */
-  generateToolPrompt(): string {
-    const tools = this.listAll()
+  generateToolPrompt(tools: AgentTool[] = this.listAll()): string {
     if (tools.length === 0) return ''
 
     let prompt = `${t('engine.toolSystemTitle')}\n\n${t('engine.toolSystemBody')}\n\n`

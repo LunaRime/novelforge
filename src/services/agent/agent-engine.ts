@@ -91,12 +91,22 @@ export interface AgentEngineCallbacks {
 export interface AgentEngineDeps {
   /** 长工具结果写盘（>800 tokens 落盘引用；失败返回 success:false 时引擎回退截断注入） */
   writeResult?: (content: string) => Promise<{ success: boolean; path?: string; error?: string }>
+  /**
+   * 与 `AgentEngineOptions.allowedTools` **同源**（C 档第二轮）：仅供「未知工具 / 不在白名单」
+   * 两条观察文案列出可用集合。运行路径不读它（执行与否由 options 决定）。
+   */
+  allowedTools?: string[]
 }
 
 /** Agent 引擎选项（D6/D7：动态压缩预算等） */
 export interface AgentEngineOptions {
   /** 模型上下文窗口（tokens，来自 `ModelProfile.contextWindow`）；用于动态压缩预算（Task D7-1 消费） */
   modelContextWindow?: number
+  /**
+   * 委派白名单（C 档第二轮）：给定后**只允许**名单内的工具执行（fail-closed —— 不在名单里的
+   * 工具不执行，注入「不在白名单」观察）。缺省 undefined = 全量，父 agent 行为与现状逐字一致。
+   */
+  allowedTools?: string[]
 }
 
 /** LLM 消息格式 */
@@ -305,6 +315,7 @@ export async function runAgentLoop(
 
     // === M1 工具分批并发（对齐 CC toolOrchestration.ts）===
     // 预扫描：全部 tool_call 建 job（保持原始顺序注册 toolCallInfo——UI 列表与产物顺序 = 调用顺序）
+    const allowed = options?.allowedTools
     const jobs: ToolCallJob[] = toolCalls.map(tc => {
       const info: ToolCallInfo = {
         id: crypto.randomUUID(),
@@ -313,10 +324,19 @@ export async function runAgentLoop(
         status: 'pending',
       }
       allToolCalls.push(info)
-      const tool = toolRegistry.get(tc.name)
+      const registered = toolRegistry.get(tc.name)
+      // 白名单 fail-closed：名单外的工具按「不可用」处理（不执行、走拒绝观察）。
+      // tool 置 undefined 后，分批器已按「未知工具」单独成批（不会与只读批并行）——无需另改分批逻辑。
+      const permitted = !allowed || allowed.includes(tc.name)
+      const tool = permitted ? registered : undefined
       if (tool) info.source = tool.source
-      return { tc, tool, info }
+      return { tc, tool, deniedByAllowlist: Boolean(registered) && !permitted, info }
     })
+    // 白名单与 options 同源透传给执行层（供「不在白名单」观察文案列可用集合）——
+    // 两条执行路径（单元素批 / 只读并行批）共用同一个 execDeps，避免只补一处
+    const execDeps: AgentEngineDeps | undefined = options?.allowedTools
+      ? { ...deps, allowedTools: options.allowedTools }
+      : deps
 
     // 分批规则（分类依据 = tool.isReadOnly，勿按 source——read_file 等 builtin 只读，
     // index-content/embed-text/compare-texts 同属 builtin 但语义经 isReadOnly 已正确区分：
@@ -353,7 +373,7 @@ export async function runAgentLoop(
     for (const batch of batches) {
       if (batch.length === 1) {
         // 单工具批（写/需确认/未知工具 + 单个只读——现状串行路径逐字节等价）
-        const outcome = await executeToolJob(batch[0], callbacks, deps)
+        const outcome = await executeToolJob(batch[0], callbacks, execDeps)
         observationParts.push(outcome.observation)
         if (outcome.artifacts.length > 0) allArtifacts.push(...outcome.artifacts)
         continue
@@ -361,7 +381,7 @@ export async function runAgentLoop(
       // 只读并行批：Promise.all 并发执行（引擎无 electron 依赖，无新并行基础设施）；
       // 单工具失败由 executeToolJob 内部 try/catch 隔离——失败项照旧注入 error observation，
       // 不影响同批其他工具；每个工具仍走 executeToolWithTimeout 超时包装
-      const outcomes = await Promise.all(batch.map(job => executeToolJob(job, callbacks, deps)))
+      const outcomes = await Promise.all(batch.map(job => executeToolJob(job, callbacks, execDeps)))
       for (const outcome of outcomes) {
         observationParts.push(outcome.observation)
         if (outcome.artifacts.length > 0) allArtifacts.push(...outcome.artifacts)
@@ -412,7 +432,10 @@ interface ParsedToolCall {
 /** 单条 tool_call 的执行 job（M1 预扫描阶段创建，保持原始顺序） */
 interface ToolCallJob {
   tc: ParsedToolCall
+  /** 未注册 或 被白名单拒绝 → undefined（走「未知工具」/「不在白名单」两条观察） */
   tool: AgentTool | undefined
+  /** 存在于注册表但被白名单拒绝（文案与「未知工具」区分，C 档第二轮） */
+  deniedByAllowlist?: boolean
   info: ToolCallInfo
 }
 
@@ -440,13 +463,21 @@ async function executeToolJob(
   const { tc, tool, info } = job
   const artifacts: ToolArtifact[] = []
 
-  // 查找 Tool（预扫描已定位；此处 tool 不存在走未知工具错误注入）
+  // 查找 Tool（预扫描已定位；此处 tool 不存在走「不在白名单」/「未知工具」两条错误注入）
   if (!tool) {
     info.status = 'failed'
-    info.error = t('agent.unknownTool').replace('{name}', tc.name)
+    // 委派白名单（C 档第二轮）：可用集合取白名单（给定）而非全量注册表 ——
+    // 否则等于告诉子 agent 去调它调不了的工具
+    const availableNames = (deps?.allowedTools ?? toolRegistry.listAll().map(x => x.name)).join(', ')
+    const reason = job.deniedByAllowlist
+      ? t('engine.toolNotDelegated').replace('{name}', tc.name).replace('{tools}', availableNames)
+      : t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', availableNames)
+    info.error = job.deniedByAllowlist
+      ? t('engine.toolNotDelegated').replace('{name}', tc.name).replace('{tools}', availableNames)
+      : t('agent.unknownTool').replace('{name}', tc.name)
     callbacks.onToolCallComplete(info)
     return {
-      observation: `<tool_result name="${tc.name}" error="true">\n${t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}\n</tool_result>`,
+      observation: `<tool_result name="${tc.name}" error="true">\n${reason}\n</tool_result>`,
       artifacts,
     }
   }
