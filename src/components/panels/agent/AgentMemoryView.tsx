@@ -20,7 +20,7 @@ import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { toast } from '../../ui/Toast'
-import { changeMemoryLoadMode, sumResidentSectionTokens } from '../../../services/memory/load-mode'
+import { changeMemoryLoadMode, residentTargets, sumResidentSectionTokens } from '../../../services/memory/load-mode'
 import { RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS } from '../../../services/agent/memory-layers'
 import type { MemoryLoadMode } from '../../../shared/memory-types'
 
@@ -50,8 +50,7 @@ export default function AgentMemoryView() {
     let cancelled = false
     void (async () => {
       try {
-        const targets = files.filter(f => f.loadMode === 'resident').map(f => f.file)
-        const usage = await sumResidentSectionTokens(targets)
+        const usage = await sumResidentSectionTokens(residentTargets(files))
         if (!cancelled) setResident(usage)
       } catch {
         if (!cancelled) setResident(null)
@@ -66,7 +65,12 @@ export default function AgentMemoryView() {
       toast.success(t('memory.loadModeSaved'))
       await load()
     } else {
-      toast.error(t(res.reason === 'dirty' ? 'memory.loadModeDirty' : 'memory.loadModeFailed').replace('{error}', res.reason))
+      const key = res.reason === 'dirty'
+        ? 'memory.loadModeDirty'
+        : res.reason === 'openInEditor'
+          ? 'memory.loadModeOpenTab'
+          : 'memory.loadModeFailed'
+      toast.error(t(key).replace('{error}', res.reason))
     }
   }
 

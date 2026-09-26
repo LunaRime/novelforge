@@ -24,6 +24,12 @@ export const RESIDENT_MEMORY_BUDGET_TOKENS = 4000
 export const RESIDENT_MEMORY_WARN_TOKENS = 2000
 /** 记忆目录段预算（很小，且是模型发现记忆的唯一途径——与技能目录段同口径） */
 export const MEMORY_CATALOG_BUDGET_TOKENS = 800
+/**
+ * 本轮显式引用（@文件名）的 manual 正文预算（独立预算，同常驻段口径）。
+ * 评审 I1：不给它独立预算时，长书里 @ 两个章节区间就能把 M2 顶过 4700，降级链会把
+ * 「本轮 manual 正文 + 名字目录」整段丢掉且**无任何留痕** —— 用户显式索要的内容静默不到。
+ */
+export const MANUAL_MENTION_BUDGET_TOKENS = 4000
 /** 降级档 2 的 brief 截断长度 */
 const CATALOG_BRIEF_MAX_CHARS = 72
 /** 「…还有 N 条未列出」尾部提示的预算预留（降级档 2/3 才可能出现；不留预留会让整段超预算） */
@@ -49,6 +55,21 @@ export function buildResidentSection(contents: Array<{ file: string; body: strin
   const text = `${t('memory.residentHeader')}\n\n${blocks.join('\n\n')}`
   const tokens = estimateTokens(text)
   return tokens > RESIDENT_MEMORY_BUDGET_TOKENS
+    ? { text: '', tokens, overCap: true }
+    : { text, tokens, overCap: false }
+}
+
+/**
+ * 本轮显式引用的 manual 正文段（全文，独立预算）。
+ * 与常驻段同构：超硬上限 → 整段丢弃（text 空、overCap 真）并报真实用量，
+ * 由调用方记 warn + 明细告警（**不静默给半截**，也不连坐目录）。
+ */
+export function buildManualMentionSection(contents: Array<{ file: string; body: string }>): { text: string; tokens: number; overCap: boolean } {
+  if (contents.length === 0) return { text: '', tokens: 0, overCap: false }
+  const blocks = contents.map(c => `## ${c.file}\n\n${c.body.trim()}`)
+  const text = `${t('memory.manualMentionHeader')}\n\n${blocks.join('\n\n')}`
+  const tokens = estimateTokens(text)
+  return tokens > MANUAL_MENTION_BUDGET_TOKENS
     ? { text: '', tokens, overCap: true }
     : { text, tokens, overCap: false }
 }
@@ -108,6 +129,14 @@ export function buildMemoryCatalog(entries: MemoryLayerEntry[]): { text: string;
 const MENTION_TOKEN_RE = /@([^\s，。！？；：、（）《》【】·—…""'']+)/g
 
 /**
+ * token 尾部的 ASCII 标点（评审 I3）：字符类只排除全角标点，而英文/俄文行文的
+ * `@book-state,` / `(@book-state)` / `@book-state:` 极为常见 —— 完整相等匹配会让这些
+ * 写法**静默失效**（用户手打文件名，无 @ 菜单兜底）。剥尾部标点后再比对；
+ * 名字内部合法的连字符与点（`chapters-001-015.md`）不受影响。
+ */
+const TRAILING_ASCII_PUNCT_RE = /[.,;:!?)"'\]}>*]+$/
+
+/**
  * manual 硬门控的判定：本轮消息是否**显式引用**了某条手动记忆（@文件名 / @去后缀名）。
  * 零 LLM 成本、零 IPC；只认完整 token 相等（`@book` 不会命中 `book-state`）。
  * 注：记忆文件在 `.novelforge/` 下，不在项目文件树的 @ 菜单里——这里是**独立判定**，
@@ -120,7 +149,10 @@ export function matchMentionedManuals(userText: string, entries: MemoryLayerEntr
   const tokens = new Set<string>()
   MENTION_TOKEN_RE.lastIndex = 0 // 共享 /g 实例有 lastIndex 状态，跨调用必须重置
   let m: RegExpExecArray | null
-  while ((m = MENTION_TOKEN_RE.exec(userText)) !== null) tokens.add(m[1].toLowerCase())
+  while ((m = MENTION_TOKEN_RE.exec(userText)) !== null) {
+    const token = m[1].toLowerCase().replace(TRAILING_ASCII_PUNCT_RE, '')
+    if (token) tokens.add(token)
+  }
   if (tokens.size === 0) return []
   return manuals
     .filter(e => tokens.has(e.file.toLowerCase()) || tokens.has(e.file.replace(/\.md$/, '').toLowerCase()))

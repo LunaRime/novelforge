@@ -96,6 +96,19 @@ describe('matchMentionedManuals（manual 硬门控的判定）', () => {
     expect(matchMentionedManuals('@BOOK-STATE', entries)).toEqual(['book-state.md'])
     expect(matchMentionedManuals('@book 呢', entries)).toEqual([])
   })
+
+  it('@ 后紧跟 ASCII 标点也能命中（英文/俄文行文的自然写法；评审 I3）', () => {
+    expect(matchMentionedManuals('Summarize @book-state, then continue', entries)).toEqual(['book-state.md'])
+    expect(matchMentionedManuals('see (@book-state)', entries)).toEqual(['book-state.md'])
+    expect(matchMentionedManuals('@book-state: 补充一下', entries)).toEqual(['book-state.md'])
+    expect(matchMentionedManuals('Summarize @book-state.', entries)).toEqual(['book-state.md'])
+    expect(matchMentionedManuals('"@book-state" 对比', entries)).toEqual(['book-state.md'])
+  })
+
+  it('带 .md 的引用剥标点后命中；名字里的连字符与点是内容、不剥', () => {
+    expect(matchMentionedManuals('@chapters-001-015.md, please', entries)).toEqual(['chapters-001-015.md'])
+    expect(matchMentionedManuals('@book-state-x', entries)).toEqual([])   // 前缀不同仍不误命中
+  })
 })
 
 describe('scoreMemoryEntry / findLineHint（关键词检索）', () => {

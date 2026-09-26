@@ -217,4 +217,20 @@ describe('AgentMemoryView 加载方式选择器 + 常驻总量（C 档第一轮�
     expect(useEditorStore.getState().tabs[0].content).toBe('改了一半')  // 编辑缓冲不动
     act(() => { root.unmount() })
   })
+
+  it('编辑器里开着已保存的该文件 → 同样不写盘（评审 I2：两处写入互相覆盖）', async () => {
+    useEditorStore.setState({
+      tabs: [{ id: 'vela://memory/book-state.md', name: 'book-state.md', type: 'memory', filePath: 'vela://memory/book-state.md', content: '磁盘内容', dirty: false }],
+    })
+    const { container, root } = render(<AgentMemoryView />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const manualBtn = [...container.querySelectorAll('button')].find(b => b.textContent === t('memory.loadModeManual')) as HTMLButtonElement
+    act(() => { manualBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(invoke.mock.calls.some(c => c[0] === 'memory:write')).toBe(false)
+    // 不被写、不被标脏（同步编辑器缓冲会经 CodeMirror 回显置 dirty）
+    expect(useEditorStore.getState().tabs[0].dirty).toBe(false)
+    expect(useEditorStore.getState().tabs[0].content).toBe('磁盘内容')
+    act(() => { root.unmount() })
+  })
 })

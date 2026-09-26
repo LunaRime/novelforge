@@ -364,8 +364,24 @@ describe('记忆分层注入（C 档第一轮）', () => {
     expect(without.memoryM2).toContain('[manual]')          // 目录里知道它存在
     expect(without.memoryM2).not.toContain('复仇线为主')     // 但正文不注入
     const withMention = await buildAgentSystemSegmentsAsync('quick', '参考 @book-state 写第 3 章')
-    expect(withMention.memoryM2).toContain('复仇线为主')
-    expect(withMention.memoryM2).toContain('本轮显式引用')
+    // 正文进独立的 manual 段（独立预算，不再挂在 M2 上——评审 I1）
+    expect(withMention.memoryManual).toContain('复仇线为主')
+    expect(withMention.memoryManual).toContain('本轮显式引用')
+  })
+
+  it('manual 段独立预算：@ 引用的正文超上限 → 整段不注入 + 明细告警，目录不被连坐丢弃', async () => {
+    mockInvoke.mockImplementation(async (ch: string, file?: string) => {
+      if (ch === 'memory:list') return layerList([{ file: 'book-state.md', kind: 'book', loadMode: 'manual', brief: '主角是苏晚晴', stale: false, mtime: 1 }])
+      if (ch === 'memory:read') return file === 'book-state.md' ? `---\nload_mode: manual\n---\n${'详'.repeat(6000)}` : null
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick', '@book-state')
+    expect(seg.memoryM2).not.toContain('详')          // 超限整段不注入（不给半截）
+    expect(seg.memoryM2).toContain('记忆目录')         // 目录主体仍注入（不再被 manual 连坐丢弃）
+    const detail = seg.segments.find(s => s.key === 'memory-manual')
+    expect(detail?.tokens).toBe(0)
+    expect(detail?.warning).toBeTruthy()
+    expect(detail?.warning).toContain('4000')
   })
 
   it('stale 优先于分层：stale 的 manual 即使被 @ 也不注入', async () => {
@@ -406,5 +422,18 @@ describe('assembleFinalPrompt 常驻段独立预算（C 档第一轮修正 1）'
   it('不传常驻段时上限仍为 4700（既有 6 条用例的行为不变）', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
     expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+  })
+
+  it('manual 段也独立预算：超限时丢的仍是 M1 → M2，本轮显式引用的正文保留', () => {
+    const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}`, memoryManual: 'MAN=手动引用原文' })
+    expect(out).toContain('MAN=手动引用原文')   // 用户显式 @ 的内容不该被静默丢掉
+    expect(out).not.toContain('M2=')
+    expect(estimateTokens(out)).toBeLessThanOrEqual(4700 + estimateTokens('MAN=手动引用原文'))
+  })
+
+  it('manual 在不相关轮次不出现时的行为不变（缺省 = 空段）', () => {
+    const withEmpty = assembleFinalPrompt({ base: '## 身份', memoryM1: 'M1=小', memoryM2: 'M2=小', memoryManual: '' })
+    const without = assembleFinalPrompt({ base: '## 身份', memoryM1: 'M1=小', memoryM2: 'M2=小' })
+    expect(withEmpty).toBe(without)
   })
 })

@@ -438,6 +438,7 @@ export const uiTexts = {
   'memory.residentNearLimit': { 'zh-CN': '常驻记忆 {tokens} tokens，接近上限 {cap}', 'en-US': 'Resident memory {tokens} tokens, near the {cap} limit', 'ru-RU': 'Постоянная память {tokens} токенов, близко к лимиту {cap}' },
   'memory.residentOverCap': { 'zh-CN': '常驻记忆合计 {tokens} tokens，超过上限 {cap}——本轮未注入，请减少常驻记忆或改用自动/手动', 'en-US': 'Resident memory totals {tokens} tokens, over the {cap} limit — not injected this turn; trim resident memory or switch to auto/manual', 'ru-RU': 'Постоянная память {tokens} токенов, больше лимита {cap} — не добавлена в этот запрос; сократите её или переключите на авто/вручную' },
   'memory.manualMentionHeader': { 'zh-CN': '## 本轮显式引用的手动记忆', 'en-US': '## Manual memory referenced this turn', 'ru-RU': '## Память, явно запрошенная в этом сообщении' },
+  'memory.manualOverCap': { 'zh-CN': '本轮 @ 引用的记忆合计 {tokens} tokens，超过上限 {cap}——正文未注入（目录仍列出），请分批引用或先精简该记忆', 'en-US': 'Memory referenced with @ totals {tokens} tokens, over the {cap} limit — bodies not injected (still listed in the catalog); reference fewer files or trim the memory', 'ru-RU': 'Память по @ составляет {tokens} токенов, больше лимита {cap} — тексты не добавлены (в каталоге остаются); упомяните меньше файлов' },
   // 加载方式选择器（AgentMemoryView；hint 文案是选型的唯一解释面）
   'memory.loadModeLabel': { 'zh-CN': '加载方式', 'en-US': 'Load mode', 'ru-RU': 'Режим загрузки' },
   'memory.loadModeResident': { 'zh-CN': '常驻', 'en-US': 'Resident', 'ru-RU': 'Постоянно' },
@@ -449,5 +450,6 @@ export const uiTexts = {
   'memory.loadModeSaved': { 'zh-CN': '加载方式已更新', 'en-US': 'Load mode updated', 'ru-RU': 'Режим загрузки обновлён' },
   'memory.loadModeFailed': { 'zh-CN': '加载方式保存失败：{error}', 'en-US': 'Failed to save load mode: {error}', 'ru-RU': 'Не удалось сохранить режим: {error}' },
   'memory.loadModeDirty': { 'zh-CN': '编辑器里这条记忆有未保存的修改，请先保存再切换加载方式', 'en-US': 'This memory has unsaved edits in the editor — save first, then switch load mode', 'ru-RU': 'В редакторе есть несохранённые правки — сначала сохраните, затем переключите режим' },
+  'memory.loadModeOpenTab': { 'zh-CN': '这条记忆正在编辑器中打开——请先关闭标签页再切换加载方式（编辑器是唯一编辑面，两处写入会互相覆盖）', 'en-US': 'This memory is open in the editor — close the tab first, then switch load mode (two writers would overwrite each other)', 'ru-RU': 'Эта память открыта в редакторе — сначала закройте вкладку, затем переключите режим (иначе записи перезапишут друг друга)' },
   'memory.residentTotal': { 'zh-CN': '常驻记忆 {tokens} / {cap} tokens', 'en-US': 'Resident memory {tokens} / {cap} tokens', 'ru-RU': 'Постоянная память {tokens} / {cap} токенов' },
 } as const
