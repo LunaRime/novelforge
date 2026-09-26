@@ -16,4 +16,5 @@ export const automationTexts = {
   'automation.trigger.chapterBatchSummary': { 'zh-CN': '第 {from}-{to} 章已成批（{count} 章 / {words} 字），可运行后续处理', 'en-US': 'Chapters {from}-{to} form a batch ({count} chapters / {words} words) — ready for post-processing', 'ru-RU': 'Главы {from}-{to} образуют пакет ({count} глав / {words} слов) — готово к постобработке' },
   'automation.trigger.manualTitle': { 'zh-CN': '手动运行：{name}', 'en-US': 'Manual run: {name}', 'ru-RU': 'Ручной запуск: {name}' },
   'automation.trigger.manualSummary': { 'zh-CN': '由「立即运行」触发', 'en-US': 'Triggered by "Run now"', 'ru-RU': 'Запущено кнопкой «Запустить сейчас»' },
+  'automation.trigger.semanticTitle': { 'zh-CN': '条件成立', 'en-US': 'Condition matched', 'ru-RU': 'Условие выполнено' },
 }
