@@ -995,3 +995,98 @@ describe('runSubAgentTask（C 档第二轮 T5）', () => {
     expect(useAgentStore.getState().replaySubAgent('nope')).toBeNull()
   })
 })
+
+// ===== 子 agent 写操作审批（C 档第二轮 T6）=====
+vi.mock('../services/agent/approval', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/agent/approval')>()
+  return { ...actual, loadApprovalRules: vi.fn(async () => []) }
+})
+
+import { loadApprovalRules, proposeRule, makeRule } from '../services/agent/approval'
+import { SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
+import { registerBuiltinTools as registerForApproval } from '../services/agent/tools'
+
+describe('子 agent 写操作审批（C 档第二轮 T6）', () => {
+  const call = (name: string, args: Record<string, unknown> = {}, id = 'tc1'): ToolCallInfo =>
+    ({ id, toolName: name, arguments: args, status: 'pending' })
+  const ask = (tc: ToolCallInfo, signal?: AbortSignal): Promise<boolean> =>
+    useAgentStore.getState().requestSubAgentConfirmation('s1', '查玉佩伏笔', tc, signal)
+  /** 等决策层走完（它先 await 读规则，卡在 microtask 之后才 set） */
+  const tick = (): Promise<void> => new Promise(r => setTimeout(r, 0))
+
+  beforeEach(() => {
+    registerForApproval()
+    vi.mocked(loadApprovalRules).mockResolvedValue([])
+    useProjectStore.setState({ currentProject: { path: '/mock/proj' } as never })
+    useAgentStore.setState({ pendingSubAgentConfirmation: null } as never)
+  })
+
+  afterEach(() => {
+    useProjectStore.setState({ currentProject: null })
+  })
+
+  it('只读工具 → 直接放行，不出卡', async () => {
+    await expect(ask(call('read_drafts', { chapter: 3 }))).resolves.toBe(true)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+
+  it('critical 命中（路径逃逸）→ 硬拒绝且不出卡（沿用 A 档 fail-closed）', async () => {
+    // A 档 matchCritical 的「.. 段使深度 < 0」= 路径逃逸（绝对路径不算逃逸——那是 allowed 分支）
+    const res = await ask(call('write_file', { file_path: '../../outside/evil.md', content: 'x' }))
+    expect(res).toBe(false)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+
+  it('workspace 规则命中 → 放行且不出卡（沿用用户自己的常驻批准）', async () => {
+    const args = { file_path: 'drafts/c30.md', content: '正文' }
+    const req = {
+      projectPath: '/mock/proj', toolName: 'write_file', args,
+      descriptor: { requiresConfirmation: true, isReadOnly: false },
+      source: 'builtin' as const,
+      rules: [],
+    }
+    const proposal = proposeRule(req)!
+    vi.mocked(loadApprovalRules).mockResolvedValue([makeRule(proposal, '/mock/proj', args)])
+    await expect(ask(call('write_file', args))).resolves.toBe(true)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+
+  it('未覆盖的写操作 → 出卡；允许/拒绝两态；**不写** workspace 规则', async () => {
+    const appendSpy = vi.spyOn(await import('../services/agent/approval'), 'appendApprovalRule')
+    const allow = ask(call('write_file', { file_path: 'drafts/c30.md', content: 'x' }))
+    await tick()   // 决策层要先 await 读规则 → 卡在 microtask 之后才 set
+    const card = useAgentStore.getState().pendingSubAgentConfirmation
+    expect(card?.toolCall.toolName).toBe('write_file')
+    expect(card?.description).toBe('查玉佩伏笔')
+    useAgentStore.getState().resolveSubAgentConfirmation(true)
+    await expect(allow).resolves.toBe(true)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+    expect(appendSpy).not.toHaveBeenCalled()
+
+    const deny = ask(call('edit_file', { file_path: 'drafts/c30.md' }, 'tc2'))
+    await tick()
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).not.toBeNull()
+    useAgentStore.getState().resolveSubAgentConfirmation(false)
+    await expect(deny).resolves.toBe(false)
+  })
+
+  it('超时 → 自动拒绝且卡消失（Review Focus 4：无人场不悬挂）', async () => {
+    vi.useFakeTimers()
+    const p = ask(call('write_file', { file_path: 'drafts/c30.md' }))
+    await Promise.resolve()   // 让决策层的 await 走完（fake timers 不影响 microtask）
+    vi.advanceTimersByTime(SUBAGENT_CONFIRM_TIMEOUT_MS + 1)
+    await expect(p).resolves.toBe(false)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+    vi.useRealTimers()
+  })
+
+  it('父取消（signal abort）→ 卡消失且 promise 以拒绝收尾（Review Focus 3）', async () => {
+    const ac = new AbortController()
+    const p = ask(call('write_file', { file_path: 'drafts/c30.md' }), ac.signal)
+    await tick()
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).not.toBeNull()
+    ac.abort()
+    await expect(p).resolves.toBe(false)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+})

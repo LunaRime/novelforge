@@ -25,7 +25,7 @@ import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
 import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
-import { MAX_SUB_SESSIONS } from '../services/agent/subagent/types'
+import { MAX_SUB_SESSIONS, SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
 import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
@@ -114,6 +114,8 @@ interface AgentState {
   generating: boolean
   /** 当前流式请求 ID（用于取消） */
   activeRequestId: string | null
+  /** C 档第二轮：子 agent 的待审批写操作（非 null 时输入框上方渲染带来源标签的确认卡） */
+  pendingSubAgentConfirmation: { sessionId: string; description: string; toolCall: ToolCallInfo } | null
   /** Tool 系统是否已初始化 */
   toolsInitialized: boolean
 
@@ -172,10 +174,12 @@ interface AgentState {
   replaySubAgent: (sessionId: string) => string | null
   /** 可用子会话清单（错误文案里给出） */
   listSubAgents: () => string
-  /** 子 agent 的写操作审批（T5 为 fail-closed 占位；T6 接 A 档决策层 + 父方审批卡） */
+  /** 子 agent 的写操作审批（A 档决策层 + 父方审批卡；超时/取消一律拒绝） */
   requestSubAgentConfirmation: (
     sessionId: string, description: string, toolCall: ToolCallInfo, signal?: AbortSignal,
   ) => Promise<boolean>
+  /** 处理当前待审批卡（允许 / 拒绝；无卡时为 no-op） */
+  resolveSubAgentConfirmation: (allow: boolean) => void
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean, alwaysAllow?: boolean) => void
   /** 启动恢复：扫描 ~/.novelforge/agent-archive 重建会话列表（loadSeq 防竞态） */
@@ -358,6 +362,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   defaultMode: 'deep',
   generating: false,
   activeRequestId: null,
+  pendingSubAgentConfirmation: null,
   toolsInitialized: false,
 
   getActiveConversation: () => {
@@ -1352,15 +1357,48 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   listSubAgents: () => (get().getActiveConversation()?.subSessions ?? [])
     .map(s => `${s.id}（${s.description}）`).join('、'),
 
-  /**
-   * 子 agent 的写操作审批 —— **T5 阶段为 fail-closed 占位**：只读放行、写操作一律拒绝。
-   * T6 替换为：A 档决策层（critical 硬拒 / 规则命中放行）+ 父方审批卡（超时拒绝、无「始终允许」）。
-   */
   requestSubAgentConfirmation: async (sessionId, description, toolCall, signal) => {
-    void sessionId; void description; void signal   // T6 会用到（卡状态与取消绑定）
+    const projectPath = useProjectStore.getState().currentProject?.path ?? null
     const tool = toolRegistry.get(toolCall.toolName)
-    return Boolean(tool?.isReadOnly && !tool.requiresConfirmation)
+    const args = (toolCall.arguments ?? {}) as Record<string, unknown>
+    const rules = projectPath ? await loadApprovalRules(projectPath) : []
+    // 与父同一条决策链（A 档）：critical 硬拒绝 / 只读直跑 / 规则命中放行 / 其余 → 转人工
+    const decision = evaluateApproval({
+      projectPath,
+      toolName: toolCall.toolName,
+      args,
+      descriptor: {
+        requiresConfirmation: tool?.requiresConfirmation ?? true,
+        isReadOnly: tool?.isReadOnly ?? false,
+      },
+      source: toolCall.toolName.startsWith('mcp__') ? 'mcp'
+        : toolCall.toolName.startsWith('skill__') ? 'skill' : 'builtin',
+      rules,
+    })
+    if (decision.action === 'deny') return false
+    if (decision.action === 'allow') return true
+    // 未覆盖的写操作 → 父方审批卡（**无「始终允许」**：委派路径不写 workspace 规则，
+    // 否则子 agent 的批准会放大用户的常驻授权；批准只对本次调用有效）
+    return new Promise<boolean>((resolve) => {
+      let settled = false
+      const finish = (allow: boolean): void => {
+        if (settled) return
+        settled = true
+        clearTimeout(timer)
+        signal?.removeEventListener('abort', onAbort)
+        pendingSubAgent.resolve = null
+        set({ pendingSubAgentConfirmation: null })
+        resolve(allow)
+      }
+      const timer = setTimeout(() => finish(false), SUBAGENT_CONFIRM_TIMEOUT_MS)   // 无人场不悬挂
+      const onAbort = (): void => finish(false)                                    // 父取消 → 卡消失 + 拒绝
+      signal?.addEventListener('abort', onAbort, { once: true })
+      pendingSubAgent.resolve = finish
+      set({ pendingSubAgentConfirmation: { sessionId, description, toolCall } })
+    })
   },
+
+  resolveSubAgentConfirmation: (allow) => { pendingSubAgent.resolve?.(allow) },
 
   resolveToolConfirmation: (toolCallId, confirmed, alwaysAllow = false) => {
     const pending = pendingConfirmations.get(toolCallId)
