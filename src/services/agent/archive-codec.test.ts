@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { selectCompressionBatch, serializeArchive, parseArchive } from './archive-codec'
+import { selectCompressionBatch, serializeArchive, parseArchive, extractSideEffectReceipts } from './archive-codec'
 import type { AgentMessage, AgentConversation } from '../../stores/agent-store'
 
 const makeMsg = (id: string, role: 'user' | 'assistant' | 'system', content: string): AgentMessage => ({
@@ -54,6 +54,56 @@ describe('selectCompressionBatch', () => {
     // 非 system 消息顺序不变（batch + rest 拼接）
     expect([...batch, ...rest].filter(m => m.role !== 'system').map(m => m.id))
       .toEqual(withSysMid.filter(m => m.role !== 'system').map(m => m.id))
+  })
+})
+
+describe('extractSideEffectReceipts（B 档第二轮：副作用回执）', () => {
+  const msgWithTool = (
+    id: string, tool: string, target: string, status: string, paths: string[] = [],
+  ): AgentMessage => ({
+    id, role: 'assistant', content: '', createdAt: 0,
+    toolCalls: [{
+      id: `${id}-tc`, toolName: tool, arguments: { file_path: target }, status: status as never,
+    }],
+    artifacts: paths.map(path => ({ type: 'file_modified', path, name: path })) as never,
+  })
+
+  it('只抽已结束的工具调用（pending/running 不抽）', () => {
+    const receipts = extractSideEffectReceipts([
+      msgWithTool('a', 'write_file', 'drafts/c1.md', 'completed'),
+      msgWithTool('b', 'write_file', 'drafts/c2.md', 'running'),
+      msgWithTool('c', 'read_file', 'drafts/c3.md', 'pending'),
+    ])
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0].target).toBe('drafts/c1.md')
+  })
+
+  it('同 target 只留最新（防重放核心：旧回执不诱导重复写入）', () => {
+    const receipts = extractSideEffectReceipts([
+      msgWithTool('a', 'write_file', 'drafts/c1.md', 'completed'),
+      msgWithTool('b', 'write_file', 'drafts/c1.md', 'completed'),
+    ])
+    expect(receipts).toHaveLength(1)
+    expect(receipts[0].tool).toBe('write_file')
+  })
+
+  it('失败的工具标 failed（回执要能区分成败）', () => {
+    const receipts = extractSideEffectReceipts([msgWithTool('a', 'edit_file', 'drafts/c1.md', 'failed')])
+    expect(receipts[0].outcome).toBe('failed')
+  })
+
+  it('带上产物路径', () => {
+    const receipts = extractSideEffectReceipts([
+      msgWithTool('a', 'write_file', 'drafts/c1.md', 'completed', ['drafts/c1.md']),
+    ])
+    expect(receipts[0].artifactPaths).toEqual(['drafts/c1.md'])
+  })
+
+  it('上限 32 条（超出丢最旧）', () => {
+    const many = Array.from({ length: 40 }, (_, i) => msgWithTool(`m${i}`, 'write_file', `drafts/c${i}.md`, 'completed'))
+    const receipts = extractSideEffectReceipts(many)
+    expect(receipts.length).toBeLessThanOrEqual(32)
+    expect(receipts[receipts.length - 1].target).toBe('drafts/c39.md')   // 保留最新
   })
 })
 

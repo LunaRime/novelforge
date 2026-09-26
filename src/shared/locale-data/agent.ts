@@ -9,6 +9,7 @@ export const agentTexts = {
   'agent.taskComplete': { 'zh-CN': '已完成', 'en-US': 'completed', 'ru-RU': 'завершено' },
   'agent.skillCatalogHeader': { 'zh-CN': '可用技能（需要时用 skill 工具按名加载全文）：', 'en-US': 'Available skills (load full text by name with the skill tool):', 'ru-RU': 'Доступные навыки (полный текст загружается инструментом skill по имени):' },
   'agent.skillInjectTruncated': { 'zh-CN': '（技能内容较长已截断；完整内容可用 skill 工具按名加载）', 'en-US': '(skill content truncated — load the full text by name with the skill tool)', 'ru-RU': '(текст навыка обрезан — полную версию можно загрузить инструментом skill)' },
+  'ccr.receiptsHeader': { 'zh-CN': '本段已执行的操作（回执）：', 'en-US': 'Operations performed in this segment (receipts):', 'ru-RU': 'Выполненные в этом сегменте операции (квитанции):' },
   'agent.skillCatalogOmitted': { 'zh-CN': '（还有 {n} 个技能未列出，可用 skill 工具查看全部）', 'en-US': '({n} more skills not listed — use the skill tool to see all)', 'ru-RU': '(ещё {n} навыков не показано — используйте инструмент skill)' },
   'agentConfirm.writeFile': { 'zh-CN': '将写入文件：{path}', 'en-US': 'Will write file: {path}', 'ru-RU': 'Запишет файл: {path}' },
   'agentConfirm.openEditor': { 'zh-CN': '将在编辑器中打开：{path}', 'en-US': 'Will open in editor: {path}', 'ru-RU': 'Откроет в редакторе: {path}' },

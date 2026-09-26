@@ -4,10 +4,70 @@ import { sanitizeMessageList } from './conversation-recovery'
 
 export interface CompressedBatch {
   batch: number
+  /** ⚠️ 兼容旧档案：旧档案的原文内联于此；新档案恒为 `[]`（原文在分卷文件里） */
   original: AgentMessage[]
   summary: string
   compressedAt: number
   originalTokens: number
+  /** 原文字节数（分卷内该批次的体量；0 = 分卷不可用） */
+  originalBytes?: number
+  /** 原文可在分卷中恢复（展开原文 / 重生成摘要的前提） */
+  recoverable?: boolean
+  /** 真实降幅（面板展示；旧档案无此字段时回落到 originalTokens - estimateTokens(summary)） */
+  beforeTokens?: number
+  afterTokens?: number
+  changeTokens?: number
+  /** 产物依赖的历史指纹（历史变更后失配 → invalidated） */
+  dependencyHash?: string
+  invalidated?: boolean
+}
+
+/** 副作用回执（B5）：随压缩保留，供后续轮次核对"这批做过什么" */
+export interface SideEffectReceipt {
+  tool: string
+  target: string
+  outcome: 'ok' | 'failed'
+  artifactPaths: string[]
+}
+
+/** 回执上限：条数与字节（超出丢最旧） */
+const RECEIPT_MAX_ITEMS = 32
+const RECEIPT_MAX_BYTES = 32 * 1024
+
+/**
+ * 从被压缩的消息里抽副作用回执。
+ * - 只抽**已结束**的工具调用（pending/running 没有结论）
+ * - **同 target 只留最新** —— 防重放的核心：旧回执会让模型以为写入还没发生
+ * - 上限 32 条 / 32KB，超出丢最旧
+ */
+export function extractSideEffectReceipts(messages: AgentMessage[]): SideEffectReceipt[] {
+  const byKey = new Map<string, SideEffectReceipt>()
+  for (const m of messages) {
+    for (const tc of m.toolCalls ?? []) {
+      if (tc.status !== 'completed' && tc.status !== 'failed') continue
+      const args = (tc.arguments ?? {}) as Record<string, unknown>
+      const target = String(args.file_path ?? args.path ?? tc.toolName)
+      const artifactPaths = (m.artifacts ?? [])
+        .map(a => (a as { path?: string }).path)
+        .filter((p): p is string => typeof p === 'string' && p.length > 0)
+      // 后写覆盖 → 同 target 留最新
+      byKey.set(`${tc.toolName}:${target}`, {
+        tool: tc.toolName,
+        target,
+        outcome: tc.status === 'failed' ? 'failed' : 'ok',
+        artifactPaths: [...new Set(artifactPaths)],
+      })
+    }
+  }
+  const capped: SideEffectReceipt[] = []
+  let bytes = 0
+  for (const receipt of [...byKey.values()].slice(-RECEIPT_MAX_ITEMS)) {
+    const size = JSON.stringify(receipt).length
+    if (bytes + size > RECEIPT_MAX_BYTES) break
+    capped.push(receipt)
+    bytes += size
+  }
+  return capped
 }
 
 /**

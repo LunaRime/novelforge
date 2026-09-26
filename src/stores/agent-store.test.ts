@@ -159,6 +159,51 @@ describe('CCR 压缩集成', () => {
     expect(after.messages.length).toBeLessThan(longMsgs.length)
   })
 
+  it('压缩无收益（摘要比原文还长）→ 不替换历史（可证明性，B 档第二轮）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const longMsgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `n${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '这里是历史消息内容占位。'.repeat(100), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
+    }))
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    // 摘要比原文还长 → 降幅为负 → degraded → 必须保持原样
+    const generateMock = vi.fn(async () => ({ success: true, content: '超长摘要'.repeat(5000), usage: undefined }))
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed ?? []).toHaveLength(0)          // 未产生压缩批次
+    expect(after.messages.length).toBeGreaterThanOrEqual(longMsgs.length)   // 历史未被替换
+  })
+
+  it('正常压缩 → 原文写分卷、会话不内联原文档（B 档第二轮）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const longMsgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `p${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '这里是历史消息内容占位。'.repeat(100), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: longMsgs } : c),
+    }))
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    const generateMock = vi.fn(async () => ({ success: true, content: '短摘要', usage: undefined }))
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const batch = after.compressed?.[0]
+    expect(batch).toBeTruthy()
+    expect(batch!.original).toEqual([])              // 不内联（原文在分卷）
+    expect(batch!.recoverable).toBe(true)
+    expect(batch!.changeTokens).toBeGreaterThan(0)   // 记了真实降幅
+    expect(mockInvoke).toHaveBeenCalledWith('fs:agent-archive-original-write', conv.id, expect.any(String))
+  })
+
   it('摘要生成失败时降级硬截断（不阻断对话，rollingSummary 不变）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     const longMsgs = Array.from({ length: 12 }, (_, i) => ({

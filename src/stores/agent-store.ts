@@ -17,7 +17,8 @@ import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
-import { serializeArchive, parseArchive, selectCompressionBatch, type CompressedBatch } from '../services/agent/archive-codec'
+import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, type CompressedBatch } from '../services/agent/archive-codec'
+import { writeBatchOriginal } from '../services/agent/compaction-originals'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
@@ -212,6 +213,9 @@ const generateHelpText = (): string => {
 
 /** `/技能名` 注入的 token 上限（B 档第一轮）：超出则截断并提示可用 skill 工具加载全文 */
 const SKILL_INJECT_MAX_TOKENS = 2000
+
+/** 压缩的最小有效降幅（B 档第二轮 B2）：低于此值判无收益，**不替换历史** */
+const MINIMUM_CHANGE_TOKENS = 200
 
 // ===== Tool 确认回调管理 =====
 /** 存储待确认的 Tool 回调（A 档：随决策携带提案 / 项目路径 / 参数，供「始终允许」固化规则） */
@@ -649,27 +653,53 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               batch,
               modelId,
             })
-            const batchNum = (currentConv.compressed?.length ?? 0) + 1
-            const newBatch: CompressedBatch = {
-              batch: batchNum,
-              original: batch,
-              summary,
-              compressedAt: Date.now(),
-              originalTokens: batch.reduce((sum, m) => sum + estimateTokens(m.content), 0),
+            const batchTokens = batch.reduce((sum, m) => sum + estimateTokens(m.content), 0)
+
+            // ===== B2 可证明性：压缩后重算降幅，无收益则不替换历史 =====
+            // "压完即信"是本节的原病：摘要比原文还长时照样替换，等于白丢上下文。
+            const summaryTokens = estimateTokens(summary)
+            const changeTokens = batchTokens - summaryTokens
+            if (changeTokens < MINIMUM_CHANGE_TOKENS) {
+              renderLog('warn', 'Agent', `压缩无收益（${batchTokens} → ${summaryTokens} tokens），已跳过本次压缩`)
+            } else {
+              const batchNum = (currentConv.compressed?.length ?? 0) + 1
+
+              // ===== B5 副作用回执：附在摘要尾部（零额外上下文段），防重放 =====
+              const receipts = extractSideEffectReceipts(batch)
+              const summaryWithReceipts = receipts.length > 0
+                ? `${summary}\n\n${t('ccr.receiptsHeader')}\n${receipts.map(r => `- ${r.tool} → ${r.target} (${r.outcome})`).join('\n')}`
+                : summary
+
+              // ===== B3 原文写分卷：会话 JSON 只留引用，原文永不丢失 =====
+              let recoverable = true
+              try {
+                await writeBatchOriginal(convId, batchNum, batch)
+              } catch {
+                recoverable = false   // 分卷写失败不阻断压缩，但如实标记不可恢复
+              }
+
+              const newBatch: CompressedBatch = {
+                batch: batchNum,
+                original: [],                                   // 不再内联（旧字段保留仅为兼容读取）
+                summary: summaryWithReceipts,
+                compressedAt: Date.now(),
+                originalTokens: batchTokens,
+                originalBytes: JSON.stringify(batch).length,
+                recoverable,
+                beforeTokens: totalHistoryTokens,
+                afterTokens: totalHistoryTokens - changeTokens,
+                changeTokens,
+              }
+              const compressed = [...(currentConv.compressed ?? []), newBatch]
+              set(state => ({
+                conversations: state.conversations.map(c =>
+                  c.id === convId
+                    ? { ...c, messages: rest, compressed, rollingSummary: summaryWithReceipts, updatedAt: Date.now() }
+                    : c
+                ),
+              }))
+              get().persistCurrent(convId)
             }
-            // 保留 2-3 代原文防摘要漂移：超过 3 代时丢弃最旧一代的 original（仅留摘要）
-            const compressed = [...(currentConv.compressed ?? []), newBatch]
-            if (compressed.length > 3) {
-              compressed[0] = { ...compressed[0], original: [] }
-            }
-            set(state => ({
-              conversations: state.conversations.map(c =>
-                c.id === convId
-                  ? { ...c, messages: rest, compressed, rollingSummary: summary, updatedAt: Date.now() }
-                  : c
-              ),
-            }))
-            get().persistCurrent(convId)
           }
         } catch {
           // 摘要失败降级：不压缩，走下方硬截断（历史行为，不阻断对话）
