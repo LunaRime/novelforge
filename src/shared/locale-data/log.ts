@@ -88,6 +88,7 @@ export const logTexts = {
   'log.db.schemaDowngradeDetected': { 'zh-CN': '数据库 Schema 版本 (v{current}) 高于应用支持 (v{supported})，疑似应用降级', 'en-US': 'Database schema version (v{current}) is newer than the app supports (v{supported}); the app may have been downgraded', 'ru-RU': 'Версия схемы БД (v{current}) новее поддерживаемой приложением (v{supported}); возможно, приложение откатили' },
   'log.db.schemaMigration': { 'zh-CN': 'Schema 迁移: v{from} → v{to}', 'en-US': 'Schema migration: v{from} → v{to}', 'ru-RU': 'Миграция схемы: v{from} → v{to}' },
   'log.db.schemaMigrationDone': { 'zh-CN': 'Schema 迁移完成: v{version}', 'en-US': 'Schema migration complete: v{version}', 'ru-RU': 'Миграция схемы завершена: v{version}' },
+  'log.db.automationTablesEnsured': { 'zh-CN': '自动化三表就绪（schema v18）', 'en-US': 'Automation tables ensured (schema v18)', 'ru-RU': 'Таблицы автоматизации готовы (схема v18)' },
   'log.db.schemaMigrationFailed': { 'zh-CN': 'Schema 迁移失败，数据库保持 v{version} 不变: {err}', 'en-US': 'Schema migration failed; database stays at v{version}: {err}', 'ru-RU': 'Миграция схемы не удалась; БД остаётся на v{version}: {err}' },
   'log.db.freshSchemaMarked': { 'zh-CN': '全新数据库，Schema 版本已标记为 v{version}', 'en-US': 'Fresh database marked as schema v{version}', 'ru-RU': 'Новая база данных помечена как схема v{version}' },
   'log.db.columnBackfillDone': { 'zh-CN': '迁移列补齐检查完成', 'en-US': 'Migration column backfill check complete', 'ru-RU': 'Проверка дополнения колонок миграции завершена' },

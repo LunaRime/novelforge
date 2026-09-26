@@ -10,6 +10,7 @@ import fs from 'node:fs'
 import { dialog } from 'electron'
 import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
+import { AUTOMATION_SCHEMA_SQL } from './repositories/automation-schema'
 import { getProjectVelaDir } from './utils/config-utils'
 import type BetterSqlite3 from 'better-sqlite3'
 
@@ -118,8 +119,8 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 }
 
 // ===== Schema 版本管理 =====
-/** 当前数据库 schema 版本号（v17：workflow_checkpoints 表——L2 checkpoint 迁 DB） */
-const CURRENT_SCHEMA_VERSION = 17
+/** 当前数据库 schema 版本号（v18：写作自动化三表——D 档） */
+const CURRENT_SCHEMA_VERSION = 18
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -503,6 +504,9 @@ function createTables(db: BetterSqlite3.Database) {
     );
   `)
 
+  // v18：写作自动化三表（DDL 与 repository / 迁移 / 测试共用 automation-schema.ts 单一真相源）
+  db.exec(AUTOMATION_SCHEMA_SQL)
+
   // ===== 旧表迁移 =====
   // 对于全新数据库（user_version=0），表结构已是最新版本，直接标记为当前版本
   // 对于旧数据库（user_version<CURRENT_SCHEMA_VERSION），执行增量迁移补加缺失的列/约束
@@ -588,6 +592,15 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
   } catch (e) {
     logger.error('DB', t('log.db.migrationColumnsFailed').replace('{err}', String(e)))
     throw new Error(t('error.migrationStepFailed').replace('{step}', 'ensure columns').replace('{err}', String(e)))
+  }
+
+  // 0.5 v18：写作自动化三表（幂等 CREATE IF NOT EXISTS；不依赖任何既有表，故可最先执行）
+  try {
+    db.exec(AUTOMATION_SCHEMA_SQL)
+    logger.info('DB', t('log.db.automationTablesEnsured'))
+  } catch (e) {
+    logger.error('DB', t('log.db.migrationColumnsFailed').replace('{err}', String(e)))
+    throw new Error(t('error.migrationStepFailed').replace('{step}', 'automation tables').replace('{err}', String(e)))
   }
 
   // 1. contents 表：补加 updated_at 列
