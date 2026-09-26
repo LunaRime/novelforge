@@ -435,6 +435,10 @@ export function registerDatabaseController() {
     try { return { success: true, runs: automationRepo.getRunningRuns() } }
     catch (err) { return { success: false, error: String(err) } }
   })
+  guardedHandle('db:automation-finalized-chapters', async () => {
+    try { return { success: true, chapters: DraftRepository.listFinalizedChapters() } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
 
   // ============================================================
   // 6. reviews — 审稿

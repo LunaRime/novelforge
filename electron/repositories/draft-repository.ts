@@ -167,6 +167,31 @@ export class DraftRepository {
         return row?.maxChapter ?? 0
     }
 
+    /**
+     * D 档自动化：列出全部已定稿章节（chapter_batch 触发器判定用）。
+     * 同章多版本时取 version 最大的一条；drafts 表无标题，标题按章号生成。
+     */
+    static listFinalizedChapters(): Array<{ number: number; title: string; wordCount: number }> {
+        const db = getProjectDb()
+        if (!db) return []
+        const rows = db.prepare(`
+            SELECT d.chapter_number AS number, d.word_count AS wordCount
+            FROM drafts d
+            JOIN (
+                SELECT chapter_number, MAX(version) AS v
+                FROM drafts WHERE status = 'finalized'
+                GROUP BY chapter_number
+            ) m ON d.chapter_number = m.chapter_number AND d.version = m.v
+            WHERE d.status = 'finalized'
+            ORDER BY d.chapter_number ASC
+        `).all() as Array<{ number: number; wordCount: number | null }>
+        return rows.map(r => ({
+            number: r.number,
+            title: `第${r.number}章`,
+            wordCount: r.wordCount ?? 0,
+        }))
+    }
+
     /** 获取所有有草稿的章节号（去重、升序） */
     static getAllChapterNumbers(): number[] {
         const db = getProjectDb()

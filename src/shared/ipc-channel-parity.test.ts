@@ -99,15 +99,15 @@ describe('IPC 通道对账（L4 §6 第 1 类）', () => {
   })
 
   it('④ 通道数量快照（防无声增删；新增通道时同步更新）', () => {
-    expect(registered.size).toBe(221) // T4：+6 embedding:local-*；2026-09-25：+4 供应商账户、+1 标题栏覆盖层；D 档：+11 db:automation-*
-    expect(declared.size).toBe(229) // 221 invoke + 8 event（T4：+embedding:local-pull-progress）
+    expect(registered.size).toBe(222) // T4：+6 embedding:local-*；2026-09-25：+4 供应商账户、+1 标题栏覆盖层；D 档：+12 db:automation-*
+    expect(declared.size).toBe(230) // 222 invoke + 8 event（T4：+embedding:local-pull-progress）
   })
 
   it('⑤ 策略表与已注册集合双向一致', () => {
     const policyKeys = new Set(Object.keys(IPC_CHANNEL_POLICY))
     expect([...registered.keys()].filter(c => !policyKeys.has(c)), '已注册但策略表未登记').toEqual([])
     expect([...policyKeys].filter(c => !registered.has(c)), '策略表登记了未注册的通道').toEqual([])
-    expect(policyKeys.size).toBe(221) // 2026-09-25：+4 供应商账户通道、+1 标题栏覆盖层；D 档：+11 db:automation-*
+    expect(policyKeys.size).toBe(222) // 2026-09-25：+4 供应商账户通道、+1 标题栏覆盖层；D 档：+12 db:automation-*
   })
 
   it('⑥ 事件通道清单 === 声明中「非注册」的那部分（运行时清单与类型侧双向一致）', () => {
