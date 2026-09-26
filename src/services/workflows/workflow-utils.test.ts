@@ -5,7 +5,10 @@
  * 缺 isCharacter 分支）——改实现不改进测试会误报/漏报。现直接 import 生产模块。
  */
 import { describe, it, expect } from 'vitest'
-import { parseMarkdownTable, robustParseJSON, extractAndRepairJSON, splitCharacterUpdateSections } from './workflow-utils'
+import {
+  parseMarkdownTable, robustParseJSON, extractAndRepairJSON, splitCharacterUpdateSections,
+  extractThinkingTags, buildThinkingPrefixedOutput,
+} from './workflow-utils'
 
 describe('parseMarkdownTable', () => {
   describe('审稿表格解析 (Bug Fix)', () => {
@@ -235,5 +238,25 @@ describe('extractAndRepairJSON', () => {
     expect(r2.parsed).not.toBeNull()
     expect((r1.parsed as Array<Record<string, number>>)[0].chapterNumber).toBe(1)
     expect((r2.parsed as Array<Record<string, number>>)[0].chapterNumber).toBe(2)
+  })
+})
+
+describe('思考内容展示（issue #34）', () => {
+  it('extractThinkingTags 提取 <think> 内容，无标签返回空串', () => {
+    expect(extractThinkingTags('<think>先分析人物动机</think>正文')).toBe('先分析人物动机')
+    expect(extractThinkingTags('正文')).toBe('')
+    expect(extractThinkingTags('')).toBe('')
+    // 流式中断：只有开标签也算（与 stripThinkingTags 的容错一致）
+    expect(extractThinkingTags('<think>未闭合的推理')).toBe('未闭合的推理')
+  })
+
+  it('buildThinkingPrefixedOutput：有思考时前置思考块 + 状态提示', () => {
+    const out = buildThinkingPrefixedOutput('<think>推理过程</think>{"genre":"奇幻"}', '配置已应用')
+    expect(out).toBe('<think>推理过程</think>\n\n配置已应用')
+  })
+
+  it('buildThinkingPrefixedOutput：无思考时仅状态提示（模型未输出思考）', () => {
+    expect(buildThinkingPrefixedOutput('{"genre":"奇幻"}', '配置已应用')).toBe('配置已应用')
+    expect(buildThinkingPrefixedOutput('', '配置已应用')).toBe('配置已应用')
   })
 })

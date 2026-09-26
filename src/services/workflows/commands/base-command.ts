@@ -25,6 +25,18 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   /** 抽象执行入口 */
   abstract execute(params: CommandExecuteParams): Promise<TResult>
 
+  /**
+   * 最近一次 callLLM 的流式原文（含 <think> 思考标签，未清洗）。
+   * callLLM 的返回值仍是清洗后文本（既有语义不变），此字段供命令在步骤产出中
+   * 展示思考过程（issue #34）；每次调用开始时重置。
+   */
+  protected lastStreamText = ''
+
+  /** 取最近一次流式原文；未调用过 LLM 时为空串 */
+  protected getLastStreamText(): string {
+    return this.lastStreamText
+  }
+
   /** 获取 LLM 大模型连接代理（支持取消 + Prompt 缓存）
    *
    * 选模（产品决策「路由优先，默认模型兜底」）：
@@ -82,6 +94,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     return new Promise((resolve, reject) => {
       let fullContent = ''
       let streamRequestId = ''
+      this.lastStreamText = ''
 
       // 取消监听：轮询 context.cancelled，主动中断 LLM 流
       let cancelCheckTimer: ReturnType<typeof setInterval> | null = null
@@ -153,6 +166,8 @@ export abstract class BaseWorkflowCommand<TResult = string> {
             // 取消后不再追加输出
             if (context?.cancelled) return
             fullContent += chunk
+            // 保留含 <think> 的流式原文（返回值仍是清洗后文本）——供步骤产出展示思考（issue #34）
+            this.lastStreamText = fullContent
             callbacks.appendText(chunk)
           },
           onDone: (text, usage) => {

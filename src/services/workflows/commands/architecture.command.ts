@@ -3,7 +3,7 @@ import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ArchitecturePromptBuilder } from '../../prompts/prompt-builder'
-import { stripThinkingTags, stringifyField as stringifyFieldUtils } from '../workflow-utils'
+import { stripThinkingTags, stringifyField as stringifyFieldUtils, buildThinkingPrefixedOutput } from '../workflow-utils'
 import { ipc } from '../../ipc-client'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
 
@@ -107,7 +107,8 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       callbacks.log(t('log.arch.configSaveFailed'))
     }
     callbacks.setProgress(100)
-    return t('arch.configApplied')
+    // 步骤产出 = 思考过程（若有）+ 状态摘要——此前只返回摘要，模型思考随流式原文丢弃（issue #34）
+    return buildThinkingPrefixedOutput(this.getLastStreamText(), t('arch.configApplied'))
   }
 }
 
@@ -141,7 +142,7 @@ export class GenerateCoreSeedCommand extends BaseWorkflowCommand<string> {
     await writeArchToDb('premise', content)
 
     callbacks.log(t('log.arch.premiseDone'))
-    return result
+    return buildThinkingPrefixedOutput(this.getLastStreamText(), result)
   }
 }
 
@@ -182,7 +183,7 @@ export class GenerateCharactersCommand extends BaseWorkflowCommand<string> {
     runArchCharacterExtract(project.path, result, config.genre)
 
     callbacks.log(t('log.arch.charactersDone'))
-    return result
+    return buildThinkingPrefixedOutput(this.getLastStreamText(), result)
   }
 }
 
@@ -216,7 +217,7 @@ export class GenerateWorldBuildingCommand extends BaseWorkflowCommand<string> {
     await writeArchToDb('worldbuilding', `# ${t('arch.worldBuilding')}\n\n${result}\n`)
 
     callbacks.log(t('log.arch.worldDone'))
-    return result
+    return buildThinkingPrefixedOutput(this.getLastStreamText(), result)
   }
 }
 
@@ -259,6 +260,6 @@ export class GeneratePlotArchitectureCommand extends BaseWorkflowCommand<string>
     await writeArchToDb('synopsis', `# ${t('arch.plotOutline')}\n\n${result}\n`)
 
     callbacks.log(t('log.arch.synopsisDone'))
-    return result
+    return buildThinkingPrefixedOutput(this.getLastStreamText(), result)
   }
 }

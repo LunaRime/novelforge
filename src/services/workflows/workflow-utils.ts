@@ -24,6 +24,23 @@ export function stripThinkingTags(text: string): string {
   return text.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
 }
 
+/** 提取文本中的思维链内容（<think>…</think>）；无标签返回空串（容错未闭合，与 stripThinkingTags 一致） */
+export function extractThinkingTags(text: string): string {
+  if (!text) return ''
+  const m = text.match(/<think>([\s\S]*?)(?:<\/think>|$)/i)
+  return m ? m[1].trim() : ''
+}
+
+/**
+ * 构造步骤产出文本：模型输出了思考时，前置思考块再附状态提示。
+ * 让「AI 填充配置」这类返回值仅为状态摘要的步骤不再丢失思考过程（issue #34）——
+ * 此前 result 被摘要覆盖，用户看不到模型在想什么。
+ */
+export function buildThinkingPrefixedOutput(streamed: string, fallbackText: string): string {
+  const thinking = extractThinkingTags(streamed)
+  return thinking ? `<think>${thinking}</think>\n\n${fallbackText}` : fallbackText
+}
+
 /**
  * 防御性字段序列化：AI 可能把文本字段生成为对象/数组，统一转字符串。
  * 单一出口（原 architecture-workflow 与 architecture.command 各有一份，数组分隔符不一致）。
