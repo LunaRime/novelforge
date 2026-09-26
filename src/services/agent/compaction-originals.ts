@@ -73,14 +73,30 @@ export async function deleteAllOriginals(convId: string): Promise<void> {
 }
 
 /**
+ * 批量删除分卷（**一次读-改-写**）。
+ * ⚠️ 需要删多个批次时**必须**走本函数：整份 JSON 的读-改-写不是原子的（`guardedHandle`
+ * 不串行化），N 次并发调用会让每次写都基于同一份陈旧快照 —— 只有最后一次存活，
+ * 其余被"复活"（§7.1-C2 评审 I1 实测复现：并发删 3 批 → 残留 2 批；延迟压到 0ms 同样复现）。
+ */
+export async function deleteBatchOriginals(convId: string, batches: number[]): Promise<void> {
+  const file = await readAll(convId)
+  let changed = false
+  for (const b of batches) {
+    if (String(b) in file.batches) {
+      delete file.batches[String(b)]
+      changed = true
+    }
+  }
+  if (!changed) return
+  await ipc.invoke('fs:agent-archive-original-write', convId, JSON.stringify(file))
+}
+
+/**
  * 删除单个批次的分卷（`removeCompaction` 时同步调用）。
  * ⚠️ 必须与批次移除同步 —— 否则批号一旦被复用（C1），同号覆盖会销毁另一批的原文。
  */
 export async function deleteBatchOriginal(convId: string, batch: number): Promise<void> {
-  const file = await readAll(convId)
-  if (!(String(batch) in file.batches)) return
-  delete file.batches[String(batch)]
-  await ipc.invoke('fs:agent-archive-original-write', convId, JSON.stringify(file))
+  await deleteBatchOriginals(convId, [batch])
 }
 
 /** 统计分卷体量（批次数 + 字节数），供「原文可用性」展示与诊断 */

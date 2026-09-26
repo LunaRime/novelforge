@@ -10,7 +10,7 @@ const invokeMock = vi.hoisted(() => vi.fn())
 
 vi.mock('../ipc-client', () => ({ ipc: { invoke: invokeMock } }))
 
-import { writeBatchOriginal, readBatchOriginal, deleteAllOriginals, countOriginals } from './compaction-originals'
+import { writeBatchOriginal, readBatchOriginal, deleteAllOriginals, countOriginals, deleteBatchOriginals } from './compaction-originals'
 import type { AgentMessage } from '../../stores/agent-store'
 
 const msg = (id: string): AgentMessage => ({ id, role: 'user', content: `内容-${id}`, createdAt: 1 })
@@ -79,5 +79,35 @@ describe('分卷存储（compaction-originals）', () => {
     const counts = await countOriginals('c1')
     expect(counts.batches).toBe(2)
     expect(counts.bytes).toBeGreaterThan(0)
+  })
+})
+
+describe('deleteBatchOriginals（§7.1-C2 评审 I1：批量删必须一次读-改-写）', () => {
+  it('一次调用删掉全部指定批次，且只写一次盘（并发逐条删会丢更新）', async () => {
+    await writeBatchOriginal('c1', 1, [msg('a')])
+    await writeBatchOriginal('c1', 2, [msg('b')])
+    await writeBatchOriginal('c1', 3, [msg('c')])
+    const writesBefore = invokeMock.mock.calls.filter(c => c[0] === 'fs:agent-archive-original-write').length
+
+    await deleteBatchOriginals('c1', [1, 2, 3])
+
+    const writesAfter = invokeMock.mock.calls.filter(c => c[0] === 'fs:agent-archive-original-write').length
+    expect(writesAfter - writesBefore).toBe(1)          // 一次读-改-写
+    expect(JSON.parse(files['c1']).batches).toEqual({}) // 三批全释放（不是只释放最后一批）
+  })
+
+  it('待删批次不存在时不写盘（幂等，不制造无谓 IO）', async () => {
+    await writeBatchOriginal('c1', 5, [msg('e')])
+    const before = invokeMock.mock.calls.filter(c => c[0] === 'fs:agent-archive-original-write').length
+    await deleteBatchOriginals('c1', [99])
+    const after = invokeMock.mock.calls.filter(c => c[0] === 'fs:agent-archive-original-write').length
+    expect(after).toBe(before)
+    expect(JSON.parse(files['c1']).batches['5']).toBeTruthy()
+  })
+
+  it('只删指定的那些，保留集不受影响（批号有空洞时也不越界）', async () => {
+    for (const b of [1, 2, 4]) await writeBatchOriginal('c1', b, [msg(`m${b}`)])
+    await deleteBatchOriginals('c1', [1, 4])          // 2 不在删除集里
+    expect(Object.keys(JSON.parse(files['c1']).batches)).toEqual(['2'])
   })
 })

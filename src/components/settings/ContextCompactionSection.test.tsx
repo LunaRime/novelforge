@@ -50,7 +50,9 @@ describe('ContextCompactionSection', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     expect(container.textContent).toContain(t('settings.compactionDesc'))
     expect(container.textContent).not.toContain('**')   // 纯文本 <p> 里星号会原样显示给用户
-    expect(container.textContent).toContain('恢复原文')
+    // 命名要指向**真实存在**的入口（评审 Minor 5：曾写「恢复原文」，卡片上并无此按钮）
+    expect(container.textContent).toContain('展开恢复')
+    expect(container.textContent).toContain('该压缩卡片会从对话里消失')
     act(() => { root.unmount() })
   })
 
@@ -81,6 +83,8 @@ describe('ContextCompactionSection', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     const inputs = [...container.querySelectorAll('input')] as HTMLInputElement[]
     expect(inputs.map(i => i.value)).toEqual(['4000', '200', '0'])
+    // 读失败必须**明示**（显示的是默认值，不是盘上的值）——不冒充「已读到」
+    expect(container.textContent).toContain(t('settings.compactionLoadFailed'))
     act(() => { root.unmount() })
   })
 })

@@ -19,6 +19,7 @@ export default function ContextCompactionSection() {
   const { t } = useTranslation()
   const [prefs, setPrefs] = useState<CompactionPrefs>(DEFAULT_COMPACTION_PREFS)
   const [loaded, setLoaded] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
@@ -28,7 +29,8 @@ export default function ContextCompactionSection() {
         const cfg = await ipc.invoke('config:get') as { compaction?: unknown } | null
         if (!cancelled) setPrefs(resolveCompactionPrefs(cfg))
       } catch {
-        // 读失败 → 用缺省（与旧行为一致），不冒充「已读到」
+        // 读失败 → 用缺省，但**明确告知**（下面显示的不是盘上的值，保存会把默认值写回）
+        if (!cancelled) setLoadFailed(true)
       } finally {
         if (!cancelled) setLoaded(true)
       }
@@ -88,6 +90,12 @@ export default function ContextCompactionSection() {
           {t('settings.compactionDesc')}
         </p>
       </div>
+
+      {loadFailed && (
+        <p className="text-micro" style={{ color: 'var(--color-warning)' }}>
+          {t('settings.compactionLoadFailed')}
+        </p>
+      )}
 
       {row('historyMaxTokens', 1000, 32000, 'settings.compactionHistory', 'settings.compactionHistoryDesc')}
       {row('minimumChangeTokens', 0, 2000, 'settings.compactionMinChange', 'settings.compactionMinChangeDesc')}

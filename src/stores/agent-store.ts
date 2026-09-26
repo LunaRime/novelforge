@@ -18,7 +18,7 @@ import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../servi
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, computeConversationDependencyHash, type CompressedBatch } from '../services/agent/archive-codec'
-import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
+import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteBatchOriginals, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
@@ -850,10 +850,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               if (prefs.keepBatches > 0 && compressed.length > prefs.keepBatches) {
                 const dropped = compressed.slice(0, compressed.length - prefs.keepBatches)
                 compressed = compressed.slice(compressed.length - prefs.keepBatches)
-                for (const b of dropped) void deleteBatchOriginal(convId, b.batch).catch(() => { /* 分卷释放失败不阻断 */ })
-                renderLog('info', 'Agent', t('ccr.batchesPruned')
-                  .replace('{n}', String(dropped.length))
-                  .replace('{keep}', String(prefs.keepBatches)))
+                // ⚠️ 一次读-改-写删掉全部分卷（评审 I1：逐条并发删会丢更新 —— 每次写都基于
+                //    同一份陈旧快照，只有最后一次存活、其余被"复活"）
+                try {
+                  await deleteBatchOriginals(convId, dropped.map(b => b.batch))
+                  renderLog('info', 'Agent', t('ccr.batchesPruned')
+                    .replace('{n}', String(dropped.length))
+                    .replace('{keep}', String(prefs.keepBatches)))
+                } catch (e) {
+                  // 释放失败要如实说（卡片已消失、原文可能仍在盘上）——不谎报成功
+                  renderLog('warn', 'Agent', t('ccr.batchesPruneOriginalsFailed')
+                    .replace('{n}', String(dropped.length))
+                    .replace('{error}', String(e)))
+                }
               }
               set(state => ({
                 conversations: state.conversations.map(c =>
