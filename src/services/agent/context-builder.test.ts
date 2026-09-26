@@ -228,6 +228,28 @@ describe('技能目录段（B 档第一轮）', () => {
     const { base } = buildAgentSystemSegments('balanced')
     expect(base).not.toContain('skill__')
   })
+
+  it('单条超长描述不会清空目录（跳过长行而非中断，评审 I2）', () => {
+    // 隔离环境：清空后只留"一条超长 + 一条正常"，且长描述排最前（同 source 按注册序）
+    skillRegistry.clear()
+    skillRegistry.register({
+      metadata: { name: 'cb-huge-desc', displayName: '超长描述技能', description: '很长的描述'.repeat(200), userInvocable: true },
+      content: '正文',
+      source: 'project',
+      baseDir: '',
+      filePath: '/tmp/cb-huge-desc/SKILL.md',
+    })
+    skillRegistry.register({
+      metadata: { name: 'cb-normal', displayName: '正常技能', description: '短描述', userInvocable: true },
+      content: '正文',
+      source: 'project',
+      baseDir: '',
+      filePath: '/tmp/cb-normal/SKILL.md',
+    })
+    const { base } = buildAgentSystemSegments('balanced')
+    // break 会让长描述把预算吃光 → 后面的正常技能全消失；正确实现应跳过长行
+    expect(base).toContain('cb-normal')
+  })
 })
 
 describe('assembleFinalPrompt 总上限与降级顺序（F1）', () => {

@@ -45,6 +45,8 @@ const TOTAL_BUDGET_TOKENS = 4700
  */
 /** 技能目录段预算（独立于工具提示词的 1200 —— 它很小，且是模型发现技能的唯一途径） */
 const SKILL_CATALOG_BUDGET_TOKENS = 400
+/** 目录单行的字符上限：导入技能的 description 可能是整段话，截断以免独占整段预算 */
+const SKILL_LINE_MAX_CHARS = 120
 
 /**
  * 技能目录段：每技能一行（名字 + 一句话描述），超预算按行截断并提示剩余数量。
@@ -58,14 +60,23 @@ function buildSkillCatalogSnippet(): string {
   let used = estimateTokens(header)
   let omitted = 0
   for (const skill of skills) {
-    const line = `- ${skill.metadata.displayName ?? skill.metadata.name}（${skill.metadata.name}）：${skill.metadata.description}`
+    const raw = `- ${skill.metadata.displayName ?? skill.metadata.name}（${skill.metadata.name}）：${skill.metadata.description}`
+    // 单行过长（导入技能的 description 常是整段话）→ 截断该行；**跳过而不是中断**，
+    // 否则它一条就能吃光预算、让排在后面的正常技能全部消失（评审 I2）
+    const line = raw.length > SKILL_LINE_MAX_CHARS ? `${raw.slice(0, SKILL_LINE_MAX_CHARS)}…` : raw
     const cost = estimateTokens(line)
     if (used + cost > SKILL_CATALOG_BUDGET_TOKENS) {
-      omitted = skills.length - lines.length
-      break
+      omitted++
+      continue
     }
     lines.push(line)
     used += cost
+  }
+  // 保底：预算极紧时至少显示一行（模型至少要能发现"有技能可用"）
+  if (lines.length === 0 && skills.length > 0) {
+    const first = skills[0]
+    lines.push(`- ${first.metadata.displayName ?? first.metadata.name}（${first.metadata.name}）`)
+    omitted = skills.length - 1
   }
   const suffix = omitted > 0 ? `\n${t('agent.skillCatalogOmitted').replace('{n}', String(omitted))}` : ''
   return `${header}\n${lines.join('\n')}${suffix}`

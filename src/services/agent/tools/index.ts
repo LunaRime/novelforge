@@ -34,6 +34,10 @@ import { skillTool } from './skill.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
+  // ⚠️ 顺序敏感：工具提示词按注册序拼接、且有 1200 token 截断（context-builder），
+  //    排在后面的工具**契约不可见**。skill 元工具是模型自主加载技能的唯一入口，
+  //    必须排首位，否则模型只知道名字、不知道参数名（评审 I1）。
+  skillTool,
   // 只读 Tool（自动执行）
   readFileTool,
   searchKnowledgeTool,
@@ -55,8 +59,6 @@ export const builtinTools = [
   compareTextsTool,
   // 浏览器接入（只读，自动执行）— 内置 CDP 桥接查询标签页
   browserListTabsTool,
-  // 技能元工具（只读，自动执行）— B 档：模型按名懒加载技能全文（替代每技能一个 skill__* 工具）
-  skillTool,
   // 行动 Tool（需确认）
   writeFileTool,
   // 局部编辑（需确认）— CC FileEditTool 对齐：old_string→new_string + 三层降级链（C2）
