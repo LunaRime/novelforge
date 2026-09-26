@@ -37,6 +37,7 @@ import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
+import AutomationSection from './AutomationSection'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
@@ -182,6 +183,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {/* 并发控制（此前功能存在但无 UI 入口） */}
                 <div className="mt-6">
                   <ConcurrencySection />
+                </div>
+                {/* 写作自动化（D 档）：触发器 → 执行 → 三态处置 */}
+                <div className="mt-6">
+                  <AutomationSection />
                 </div>
               </>
             )}
