@@ -69,3 +69,6 @@ scripts/font-char-set.txt
 .worktrees/
 # UI 截图产出（scripts/shot-stories.mjs）
 .shots/
+
+# superpowers SDD 执行工作区（计划执行期间的 ledger / 评审包，不提交）
+.superpowers/
