@@ -21,6 +21,12 @@ export const agentTexts = {
   'context.seg.tools': { 'zh-CN': '工具说明', 'en-US': 'Tool descriptions', 'ru-RU': 'Описания инструментов' },
   'context.seg.skill-catalog': { 'zh-CN': '技能目录', 'en-US': 'Skill catalog', 'ru-RU': 'Каталог навыков' },
   'context.seg.memory-m1': { 'zh-CN': '会话摘要（M1）', 'en-US': 'Conversation summary (M1)', 'ru-RU': 'Сводка диалога (M1)' },
+  // C 档第一轮：记忆分层段（常驻全文 / 名字目录 / 本轮 @ 引用的手动记忆）
+  'context.segSourceResident': { 'zh-CN': '常驻记忆（{files}）', 'en-US': 'Resident memory ({files})', 'ru-RU': 'Постоянная память ({files})' },
+  'context.segSourceCatalog': { 'zh-CN': '{n} 条记忆目录', 'en-US': '{n} memory entries in catalog', 'ru-RU': '{n} записей в каталоге памяти' },
+  'context.seg.memory-resident': { 'zh-CN': '常驻记忆', 'en-US': 'Resident memory', 'ru-RU': 'Постоянная память' },
+  'context.seg.memory-catalog': { 'zh-CN': '记忆目录', 'en-US': 'Memory catalog', 'ru-RU': 'Каталог памяти' },
+  'context.seg.memory-manual': { 'zh-CN': '手动记忆（本轮引用）', 'en-US': 'Manual memory (this turn)', 'ru-RU': 'Память по запросу (это сообщение)' },
   'ccr.historyPanelVsSent': { 'zh-CN': '历史：面板 {panel} · 实发 {sent}', 'en-US': 'History: panel {panel} · sent {sent}', 'ru-RU': 'История: панель {panel} · отправлено {sent}' },
   'ccr.prefixChanged': { 'zh-CN': '前缀：已变化（与上轮共享 {n} 字符）', 'en-US': 'Prefix: changed (shares {n} chars with last turn)', 'ru-RU': 'Префикс: изменён (общих символов: {n})' },
   'ccr.prefixStable': { 'zh-CN': '前缀：稳定', 'en-US': 'Prefix: stable', 'ru-RU': 'Префикс: стабилен' },
