@@ -16,20 +16,25 @@ export class LLMHistoryRepository {
     cost?: number
     /** 缓存命中 token 数（v16：CacheAligner 效果事后统计；旧写入端不传时默认 0）。注意：IPC 参数走 Record<string, unknown>，键名与 model_id 等同为 snake_case */
     cached_tokens?: number
+    /** system 段前缀指纹（v19：B 档第二轮 B4 前缀记账；旧写入端不传时默认空串） */
+    prefix_fingerprint?: string
+    /** 与上轮 system 的公共前缀字符数（v19） */
+    prefix_shared_chars?: number
   }): void {
     const db = getProjectDb()
     if (!db) return
 
     const modelId = call.model_id || 'unknown'
     db.prepare(`
-      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, cached_tokens, duration_ms, success, error_message, cost)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO llm_calls (model_id, model_name, purpose, prompt_tokens, completion_tokens, total_tokens, cached_tokens, duration_ms, success, error_message, cost, prefix_fingerprint, prefix_shared_chars)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       modelId, call.model_name || '', call.purpose,
       call.prompt_tokens, call.completion_tokens, call.total_tokens,
       call.cached_tokens ?? 0,
       call.duration_ms, call.success ? 1 : 0, call.error_message ?? '',
-      call.cost ?? 0
+      call.cost ?? 0,
+      call.prefix_fingerprint ?? '', call.prefix_shared_chars ?? 0
     )
   }
 

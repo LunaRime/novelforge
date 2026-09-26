@@ -19,6 +19,7 @@ import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../s
 import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, type CompressedBatch } from '../services/agent/archive-codec'
 import { writeBatchOriginal } from '../services/agent/compaction-originals'
+import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
@@ -216,6 +217,12 @@ const SKILL_INJECT_MAX_TOKENS = 2000
 
 /** 压缩的最小有效降幅（B 档第二轮 B2）：低于此值判无收益，**不替换历史** */
 const MINIMUM_CHANGE_TOKENS = 200
+
+// ===== 前缀记账（B 档第二轮 B4）：只记不拦 =====
+/** 上一轮的 system 段文本（比较用；初始为空表示首轮） */
+let lastPrefixText = ''
+/** 上一轮的真实缓存命中 token（用于判断"前缀变化是否真的打掉了命中"） */
+let lastCachedTokens = 0
 
 // ===== Tool 确认回调管理 =====
 /** 存储待确认的 Tool 回调（A 档：随决策携带提案 / 项目路径 / 参数，供「始终允许」固化规则） */
@@ -758,6 +765,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           // 记录 LLM 调用日志（流式 usage 真实统计 + 缓存命中费用真实化）
           const model = llmStore.models.find(m => m.id === mid)
           const duration = Date.now() - startTime
+
+          // 前缀记账（B 档第二轮 B4）：只对 system 段取指纹 —— 含 history/user 会每轮必变
+          const prefixFingerprint = computePrefixFingerprint(systemPrompt)
+          const prefixCompare = comparePrefix(lastPrefixText, systemPrompt)
+          if (prefixCompare.changed && lastCachedTokens > 0) {
+            renderLog('warn', 'Agent', `前缀变化（与上轮共享 ${prefixCompare.sharedChars} 字符）→ 本轮缓存命中归零`)
+          }
+          lastPrefixText = systemPrompt
+          lastCachedTokens = usage?.cachedTokens ?? 0
+
           try {
             const cost = usage && model
               ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
@@ -774,6 +791,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               success: 1,
               error_message: '',
               cost,
+              prefix_fingerprint: prefixFingerprint,           // B 档第二轮 B4：前缀记账
+              prefix_shared_chars: prefixCompare.changed ? prefixCompare.sharedChars : 0,
             })
           } catch { /* 日志失败不影响主流程 */ }
 

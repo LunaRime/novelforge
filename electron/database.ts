@@ -120,7 +120,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号（v18：写作自动化三表——D 档） */
-const CURRENT_SCHEMA_VERSION = 18
+const CURRENT_SCHEMA_VERSION = 19
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -387,6 +387,8 @@ function createTables(db: BetterSqlite3.Database) {
       completion_tokens INTEGER DEFAULT 0,
       total_tokens INTEGER DEFAULT 0,
       cached_tokens INTEGER NOT NULL DEFAULT 0,  -- v16: 缓存命中 token 数（CacheAligner 效果事后统计）
+      prefix_fingerprint TEXT DEFAULT '',        -- v19: system 段前缀指纹（B 档 B4 前缀记账）
+      prefix_shared_chars INTEGER DEFAULT 0,     -- v19: 与上轮 system 的公共前缀字符数
       duration_ms INTEGER DEFAULT 0,
       success INTEGER DEFAULT 1,
       error_message TEXT DEFAULT '',
@@ -554,6 +556,9 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
 
   // llm_calls — v16 新增 cached_tokens（缓存命中 token 数，CacheAligner 效果事后统计）
   safeAddColumn(db, 'llm_calls', 'cached_tokens', 'INTEGER NOT NULL DEFAULT 0')
+  // llm_calls — v19 新增前缀记账两列（B 档第二轮 B4）
+  safeAddColumn(db, 'llm_calls', 'prefix_fingerprint', "TEXT DEFAULT ''")
+  safeAddColumn(db, 'llm_calls', 'prefix_shared_chars', 'INTEGER DEFAULT 0')
 
   // characters — v14 新增 aliases（别名/称呼注册表，角色名匹配的变体形态）
   safeAddColumn(db, 'characters', 'aliases', "TEXT DEFAULT '[]'")
