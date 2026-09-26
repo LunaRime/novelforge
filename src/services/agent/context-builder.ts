@@ -252,16 +252,21 @@ export interface AgentSystemSegmentsAsync {
 }
 
 /**
- * 异步版：base + M1（同步段）+ 记忆分层两段（常驻 / 目录）。
- * `userMessage` 用于 manual 的**硬门控**判定（@文件名）——只影响本轮 system 段，
- * 不进会话历史，故后续轮次不会继承（每次 sendMessage 都重新装配）。
- * 记忆读盘失败降级：base + M1 照常，不阻断对话。
+ * 记忆分层装配（父 / 子 agent 共用，C 档第二轮抽取）：
+ * 常驻段（全文，独立预算）+ 名字目录段（三级降级）+ 本轮 manual 正文（独立预算）。
+ * 返回的三段文本各自可独立拼装（父按 `injectedHeader + 目录 + manual` 拼 M2；子 agent 只取前两段）。
+ * 记忆读盘失败降级：返回全空，不抛（调用方照常继续）。
  */
-export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage = ''): Promise<AgentSystemSegmentsAsync> {
-  const { base, memory: m1, segments } = buildAgentSystemSegments(mode)
+export async function collectMemoryLayers(userMessage: string): Promise<{
+  resident: string
+  catalog: string
+  manual: string
+  segments: ContextSegment[]
+}> {
+  const segments: ContextSegment[] = []
   let residentText = ''
+  let catalogText = ''
   let manualText = ''
-  let m2 = ''
   try {
     const list = (await ipc.invoke('memory:list')) as MemoryFileMeta[]
     // stale 先行过滤（与既有口径一致）；F9 白名单保留——但**用户显式声明 resident 时尊重其选择**
@@ -306,10 +311,9 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage
     }
 
     // ===== 段 2：名字目录（三级降级）+ 本轮 @ 提及的 manual 正文 =====
-    const parts: string[] = []
     const catalog = buildMemoryCatalog(entries)
     if (catalog.text) {
-      parts.push(catalog.text)
+      catalogText = catalog.text
       segments.push({
         key: 'memory-catalog', tokens: estimateTokens(catalog.text), chars: catalog.text.length,
         // 评审 Minor 7：如实报数——被挤出时给「已列/总数」，不拿总数冒充已列数
@@ -346,11 +350,31 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage
         })
       }
     }
-    if (parts.length > 0) m2 = `${t('memory.injectedHeader')}\n\n${parts.join('\n\n')}`
   } catch {
-    // 记忆读盘失败降级：base + M1 照常
+    // 记忆读盘失败降级：三段全空
   }
-  return { base, memoryResident: residentText, memoryManual: manualText, memoryM2: m2, memoryM1: m1, segments }
+  return { resident: residentText, catalog: catalogText, manual: manualText, segments }
+}
+
+/**
+ * 异步版：base + M1（同步段）+ 记忆分层两段（常驻 / 目录）。
+ * `userMessage` 用于 manual 的**硬门控**判定（@文件名）——只影响本轮 system 段，
+ * 不进会话历史，故后续轮次不会继承（每次 sendMessage 都重新装配）。
+ * 记忆读盘失败降级：base + M1 照常，不阻断对话。
+ */
+export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage = ''): Promise<AgentSystemSegmentsAsync> {
+  const { base, memory: m1, segments: baseSegments } = buildAgentSystemSegments(mode)
+  const layers = await collectMemoryLayers(userMessage)
+  const parts = [layers.catalog, layers.manual].filter(Boolean)
+  const m2 = parts.length > 0 ? `${t('memory.injectedHeader')}\n\n${parts.join('\n\n')}` : ''
+  return {
+    base,
+    memoryResident: layers.resident,
+    memoryManual: layers.manual,
+    memoryM2: m2,
+    memoryM1: m1,
+    segments: [...baseSegments, ...layers.segments],
+  }
 }
 
 /** 异步版最终拼装：base + 常驻段 + M2 + M1 + manual 段 + 语言指令（语言指令保持最末尾） */
@@ -401,8 +425,9 @@ ${t('engine.identityRuleMultiStep')}`
 /**
  * L0 — 始终注入的项目上下文
  * Token 预算：~800 tokens
+ * （C 档第二轮起 export：子 agent 的 scoped 提示词也要项目事实）
  */
-function buildL0ProjectContext(): string | null {
+export function buildL0ProjectContext(): string | null {
   const project = useProjectStore.getState().currentProject
   if (!project) return null
 

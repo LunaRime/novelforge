@@ -27,6 +27,10 @@ export const agentTexts = {
   'context.seg.memory-resident': { 'zh-CN': '常驻记忆', 'en-US': 'Resident memory', 'ru-RU': 'Постоянная память' },
   'context.seg.memory-catalog': { 'zh-CN': '记忆目录', 'en-US': 'Memory catalog', 'ru-RU': 'Каталог памяти' },
   'context.seg.memory-manual': { 'zh-CN': '手动记忆（本轮引用）', 'en-US': 'Manual memory (this turn)', 'ru-RU': 'Память по запросу (это сообщение)' },
+  // --- 子 agent 派发（C 档第二轮：见 services/agent/subagent/）---
+  'subagent.identity': { 'zh-CN': '你是被派来执行**单一子任务**的执行者。你没有对话历史（派你的人只看到你的结论，看不到你的过程）；不要请求派发新任务；需要写文件时直接调用对应工具（父端会向你确认）；结论要具体、可核验（含章节号 / 文件路径等出处）。', 'en-US': 'You are a worker dispatched for **one sub-task**. You have no conversation history (whoever dispatched you sees only your conclusion, not your process); do not request new dispatches; call the write tools directly when you need to write files (the parent will confirm); make your conclusion concrete and citable (chapter numbers / file paths).', 'ru-RU': 'Вы исполнитель, назначенный на **одну подзадачу**. У вас нет истории диалога (заказчик видит только вывод, не процесс); не просите новых поручений; для записи файлов вызывайте инструменты напрямую (родитель подтвердит); вывод должен быть конкретным и со ссылками (главы, пути файлов).' },
+  'subagent.taskHeader': { 'zh-CN': '## 你的任务\n**{description}**', 'en-US': '## Your task\n**{description}**', 'ru-RU': '## Ваша задача\n**{description}**' },
+  'subagent.taskTruncated': { 'zh-CN': '（任务说明已按预算截断——如果关键信息缺失，请在结论里明确指出）', 'en-US': '(task instructions were truncated to fit the budget — if something essential is missing, say so explicitly in your conclusion)', 'ru-RU': '(инструкции урезаны под бюджет — если не хватает важного, укажите это в выводе)' },
   'ccr.historyPanelVsSent': { 'zh-CN': '历史：面板 {panel} · 实发 {sent}', 'en-US': 'History: panel {panel} · sent {sent}', 'ru-RU': 'История: панель {panel} · отправлено {sent}' },
   'ccr.prefixChanged': { 'zh-CN': '前缀：已变化（与上轮共享 {n} 字符）', 'en-US': 'Prefix: changed (shares {n} chars with last turn)', 'ru-RU': 'Префикс: изменён (общих символов: {n})' },
   'ccr.prefixStable': { 'zh-CN': '前缀：稳定', 'en-US': 'Prefix: stable', 'ru-RU': 'Префикс: стабилен' },
