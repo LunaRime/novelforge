@@ -3,6 +3,7 @@ import { toolRegistry } from './tool-registry'
 import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
 import { computePrefixFingerprint } from './prefix-accounting'
+import { MAX_SUB_SESSIONS, MAX_SUBAGENT_MESSAGES, type SubAgentSession } from './subagent/types'
 
 export interface CompressedBatch {
   batch: number
@@ -170,12 +171,29 @@ export function parseArchive(raw: string): AgentConversation | null {
             ),
           }))
       : []
-    // C4 会话恢复净化：形状防御之后再净化（三处消息数组同口径——CC §三.8 对齐）
+    // C 档第二轮：子会话（形状防御 + 净化 + 上限裁剪，同 messages/compressed/rewound 模式）
+    const subSessions: SubAgentSession[] = Array.isArray(data.subSessions)
+      ? (data.subSessions as unknown as SubAgentSession[])
+          .filter(s => !!s && typeof s === 'object' && typeof (s as { id?: unknown }).id === 'string'
+            && Array.isArray((s as { messages?: unknown }).messages))
+          .map(s => ({
+            ...s,
+            toolCalls: Array.isArray(s.toolCalls) ? s.toolCalls : [],
+            artifacts: Array.isArray(s.artifacts) ? s.artifacts : [],
+            allowedTools: Array.isArray(s.allowedTools) ? s.allowedTools : [],
+            result: typeof s.result === 'string' ? s.result : '',
+            messages: sanitizeMessageList(s.messages).slice(-MAX_SUBAGENT_MESSAGES),
+          }))
+          .sort((a, b) => b.startedAt - a.startedAt)
+          .slice(0, MAX_SUB_SESSIONS)
+      : []
+    // C4 会话恢复净化：形状防御之后再净化（四处消息数组同口径——CC §三.8 对齐）
     return {
       ...data,
       messages: sanitizeMessageList(messages),
       compressed: compressed.map(b => ({ ...b, original: sanitizeMessageList(b.original) })),
       rewound: rewound.map(e => ({ ...e, messages: sanitizeMessageList(e.messages) })),
+      subSessions,
     } as AgentConversation
   } catch {
     return null

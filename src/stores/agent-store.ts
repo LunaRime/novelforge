@@ -24,6 +24,7 @@ import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
+import type { SubAgentSession } from '../services/agent/subagent/types'
 
 // ===== 类型定义 =====
 
@@ -72,6 +73,8 @@ export interface AgentConversation {
   compressed?: CompressedBatch[]
   /** CCR：滚动摘要（M1，注入 system 尾部标注节） */
   rollingSummary?: string
+  /** C 档第二轮：子 agent 会话（派发转录；随归档落盘，/clear 一并清空） */
+  subSessions?: SubAgentSession[]
   /** B7 失效语义：历史已变动，该摘要与当前历史不符 —— 不注入上下文 */
   rollingSummaryInvalidated?: boolean
   /** 创建时项目快照（仅展示与恢复提示，P0 不做按快照注入） */
@@ -413,7 +416,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               set(state => ({
                 conversations: state.conversations.map(c =>
                   c.id === activeConv.id
-                    ? { ...c, messages: [], rollingSummary: undefined, compressed: undefined }
+                    ? { ...c, messages: [], rollingSummary: undefined, compressed: undefined, subSessions: undefined }
                     : c
                 ),
               }))

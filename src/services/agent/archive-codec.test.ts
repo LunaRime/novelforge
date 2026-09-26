@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { selectCompressionBatch, serializeArchive, parseArchive, extractSideEffectReceipts } from './archive-codec'
 import { registerBuiltinTools } from './tools'
 import type { AgentMessage, AgentConversation } from '../../stores/agent-store'
+import { MAX_SUB_SESSIONS, MAX_SUBAGENT_MESSAGES, type SubAgentSession } from './subagent/types'
 
 const makeMsg = (id: string, role: 'user' | 'assistant' | 'system', content: string): AgentMessage => ({
   id, role, content, createdAt: 0,
@@ -122,6 +123,8 @@ describe('archive 序列化', () => {
       rollingSummary: '滚动摘要',
       // F5：parse 同 messages/compressed 一样恒常附加缺省字段——rewound 缺失即 []（完整形状契约）
       rewound: [],
+      // C 档第二轮：parse 同 messages/compressed/rewound 一样恒常附加缺省字段（完整形状契约）
+      subSessions: [],
     }
     const parsed = parseArchive(serializeArchive(conv))
     expect(parsed).toEqual(conv)
@@ -223,6 +226,7 @@ describe('archive 序列化', () => {
         original: [{ id: 'u0', role: 'user', content: '旧的原文问题', createdAt: -1 }] }],
       rewound: [{ messageId: 'u1', rewoundAt: 2,
         messages: [{ id: 'a0', role: 'assistant', content: '被回退的回复', createdAt: -1 }] }],
+      subSessions: [],   // C 档第二轮：parse 恒常附加缺省字段（完整形状契约）
     }
     expect(parseArchive(serializeArchive(conv))).toEqual(conv)
   })
@@ -246,5 +250,69 @@ describe('archive 序列化', () => {
     expect(parsed.messages[1]!.content).toBe('文件里是 <think> 未闭合\n\n其后整段正文，不能被吞')
     expect(parsed.messages[2]!.content).toBe('系统注入：参考 <think> 折叠语法')
     expect(parsed.messages[3]!.content).toBe('\n正文回复')
+  })
+})
+
+describe('归档 subSessions（C 档第二轮 T4）', () => {
+  const baseConv = (): AgentConversation => ({
+    id: 'c1', title: 'T', messages: [], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: null,
+  })
+  const sess = (over: Partial<SubAgentSession> = {}): SubAgentSession => ({
+    id: 'abc123', taskId: 'abc123', description: '查玉佩伏笔', prompt: 'p', allowedTools: ['read_drafts'],
+    status: 'completed', messages: [{ id: 'm1', role: 'user', content: '查玉佩', createdAt: 0 }],
+    toolCalls: [], artifacts: [], result: '结论', startedAt: 1, endedAt: 2, ...over,
+  })
+
+  it('round-trip 保持 subSessions', () => {
+    const conv = { ...baseConv(), subSessions: [sess()] }
+    expect(parseArchive(serializeArchive(conv))!.subSessions).toEqual([sess()])
+  })
+
+  it('缺字段降级为 []（旧档兼容）', () => {
+    const parsed = parseArchive('{"id":"c1","title":"T","createdAt":0,"updatedAt":0,"mode":"quick","modelId":null}')
+    expect(parsed!.subSessions).toEqual([])
+  })
+
+  it('坏条目过滤：非对象 / 缺 id / messages 非数组（Review Focus 5：一条坏数据不毁整档）', () => {
+    const raw = JSON.stringify({
+      ...baseConv(),
+      subSessions: [sess(), '不是对象', { description: '缺 id' }, { ...sess({ id: 'ok2' }), messages: '不是数组' }],
+    })
+    const parsed = parseArchive(raw)!
+    expect(parsed.subSessions!.map(s => s.id)).toEqual(['abc123'])
+  })
+
+  it('超 MAX_SUB_SESSIONS 裁剪为最新 N 条（按 startedAt 倒序保留）', () => {
+    const many = Array.from({ length: 30 }, (_, i) => sess({ id: `s${i}`, taskId: `s${i}`, startedAt: i }))
+    const parsed = parseArchive(serializeArchive({ ...baseConv(), subSessions: many }))!
+    expect(parsed.subSessions!).toHaveLength(MAX_SUB_SESSIONS)
+    expect(parsed.subSessions![0].startedAt).toBe(29)          // 最新在前
+  })
+
+  it('单条超 MAX_SUBAGENT_MESSAGES 裁剪消息', () => {
+    const long = sess({ messages: Array.from({ length: 100 }, (_, i) => ({ id: `m${i}`, role: 'assistant' as const, content: 'x', createdAt: i })) })
+    expect(parseArchive(serializeArchive({ ...baseConv(), subSessions: [long] }))!.subSessions![0].messages)
+      .toHaveLength(MAX_SUBAGENT_MESSAGES)
+  })
+
+  it('子转录净化：崩溃残片（无配对 tool_call / thinking）与父同口径', () => {
+    const dirty = sess({
+      messages: [
+        { id: 'a1', role: 'assistant', content: '<tool_call>{"name":"x","arguments":{}}</tool_call>', createdAt: 0 },
+        { id: 'a2', role: 'assistant', content: '正文<think>残片', createdAt: 1 },
+      ],
+    })
+    const parsed = parseArchive(serializeArchive({ ...baseConv(), subSessions: [dirty] }))!
+    expect(parsed.subSessions![0].messages.map(m => m.id)).toEqual(['a2'])
+  })
+
+  it('toolCalls / artifacts / allowedTools 非数组时置空（渲染层不崩）', () => {
+    const broken = { ...sess(), toolCalls: 'x', artifacts: null, allowedTools: 3, result: 42 }
+    const parsed = parseArchive(JSON.stringify({ ...baseConv(), subSessions: [broken] }))!
+    const s = parsed.subSessions![0]
+    expect(s.toolCalls).toEqual([])
+    expect(s.artifacts).toEqual([])
+    expect(s.allowedTools).toEqual([])
+    expect(s.result).toBe('')
   })
 })
