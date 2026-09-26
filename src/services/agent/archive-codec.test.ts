@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { selectCompressionBatch, serializeArchive, parseArchive, extractSideEffectReceipts } from './archive-codec'
+import { registerBuiltinTools } from './tools'
 import type { AgentMessage, AgentConversation } from '../../stores/agent-store'
 
 const makeMsg = (id: string, role: 'user' | 'assistant' | 'system', content: string): AgentMessage => ({
@@ -58,6 +59,10 @@ describe('selectCompressionBatch', () => {
 })
 
 describe('extractSideEffectReceipts（B 档第二轮：副作用回执）', () => {
+  // 回执只在**有副作用**的工具上抽取（评审 I5）—— 需要真实注册表判定 isReadOnly
+  registerBuiltinTools()
+
+
   const msgWithTool = (
     id: string, tool: string, target: string, status: string, paths: string[] = [],
   ): AgentMessage => ({

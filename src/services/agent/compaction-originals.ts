@@ -33,15 +33,31 @@ async function readAll(convId: string): Promise<OriginalsFile> {
   }
 }
 
-/** 写入某批次原文（**同批次覆盖幂等** —— 重压缩/重生成不叠加） */
+/**
+ * 写入某批次原文（**同批次覆盖幂等** —— 重压缩/重生成不叠加）。
+ * 返回是否**真的写成功**：主进程写失败返回 `{success:false}` 而非 reject，
+ * 不检查返回值会让 `recoverable` 恒为 true、诚实标记失效（评审 I4）。
+ */
 export async function writeBatchOriginal(
   convId: string,
   batch: number,
   messages: AgentMessage[],
-): Promise<void> {
+): Promise<boolean> {
   const file = await readAll(convId)
   file.batches[String(batch)] = messages
-  await ipc.invoke('fs:agent-archive-original-write', convId, JSON.stringify(file))
+  const res = await ipc.invoke('fs:agent-archive-original-write', convId, JSON.stringify(file)) as
+    { success?: boolean } | null
+  return res?.success !== false
+}
+
+/**
+ * 把分卷整体复制到另一个会话 id（fork / duplicate 用）。
+ * ⚠️ 派生会话的原文按会话 id 寻址 —— 不复制的话展开必然 ENOENT（评审 I12）。
+ */
+export async function copyAllOriginals(fromConvId: string, toConvId: string): Promise<void> {
+  const file = await readAll(fromConvId)
+  if (Object.keys(file.batches).length === 0) return
+  await ipc.invoke('fs:agent-archive-original-write', toConvId, JSON.stringify(file))
 }
 
 /** 读取某批次原文（不存在/为空 → null） */
@@ -54,6 +70,17 @@ export async function readBatchOriginal(convId: string, batch: number): Promise<
 /** 删除会话的全部分卷（会话删除时级联调用） */
 export async function deleteAllOriginals(convId: string): Promise<void> {
   await ipc.invoke('fs:agent-archive-original-delete', convId)
+}
+
+/**
+ * 删除单个批次的分卷（`removeCompaction` 时同步调用）。
+ * ⚠️ 必须与批次移除同步 —— 否则批号一旦被复用（C1），同号覆盖会销毁另一批的原文。
+ */
+export async function deleteBatchOriginal(convId: string, batch: number): Promise<void> {
+  const file = await readAll(convId)
+  if (!(String(batch) in file.batches)) return
+  delete file.batches[String(batch)]
+  await ipc.invoke('fs:agent-archive-original-write', convId, JSON.stringify(file))
 }
 
 /** 统计分卷体量（批次数 + 字节数），供「原文可用性」展示与诊断 */

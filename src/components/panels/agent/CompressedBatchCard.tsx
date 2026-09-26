@@ -4,8 +4,12 @@ import type { AgentMessage } from '../../../stores/agent-store'
 import { useAgentStore } from '../../../stores/agent-store'
 import { t } from '../../../shared/locale'
 
-/** 回执段的起始标记（B5：回执附在摘要尾部，展示时拆出来独立成段） */
-const RECEIPTS_MARKER = '本段已执行的操作（回执）：'
+/**
+ * 回执段的起始标记（B5：回执头插在摘要里，展示时拆出来独立成段）。
+ * ⚠️ 必须与写入端同源（都取 `t('ccr.receiptsHeader')`）—— 硬编码中文字面量做解析锚点
+ * 会让 en-US/ru-RU 下拆段静默失效（评审 I7）。
+ */
+const receiptsMarker = (): string => t('ccr.receiptsHeader')
 
 /**
  * CCR 压缩事件卡片（B 档第二轮 T7）
@@ -28,18 +32,32 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
   const after = batch.afterTokens ?? Math.max(0, batch.originalTokens - (hasRealDelta ? batch.changeTokens! : 0))
   const savedTokens = before - after
 
-  // 回执拆段展示（B5）
-  const receiptsIndex = batch.summary.indexOf(RECEIPTS_MARKER)
-  const summaryText = receiptsIndex >= 0 ? batch.summary.slice(0, receiptsIndex).trim() : batch.summary
-  const receiptsText = receiptsIndex >= 0 ? batch.summary.slice(receiptsIndex + RECEIPTS_MARKER.length).trim() : ''
+  // 回执拆段展示（B5）：标记与写入端同源（i18n），跨语言不失效
+  const marker = receiptsMarker()
+  const receiptsIndex = batch.summary.indexOf(marker)
+  const summaryText = receiptsIndex >= 0
+    ? batch.summary.slice(receiptsIndex + marker.length).trim()   // 回执在头部，摘要其后
+    : batch.summary
+  const receiptsText = receiptsIndex >= 0
+    ? batch.summary.slice(receiptsIndex, batch.summary.indexOf('\n\n', receiptsIndex) > 0
+      ? batch.summary.indexOf('\n\n', receiptsIndex)
+      : batch.summary.length).trim()
+    : ''
 
-  const recoverable = batch.recoverable !== false
+  // 旧档案（升级前产出）的原文是 inline 数组、且无 recoverable 字段 —— 必须仍可展开（评审 I3）
+  const inlineOriginals = batch.original ?? []
+  const hasInline = inlineOriginals.length > 0
+  const recoverable = batch.recoverable !== false || hasInline
 
   const handleToggle = async () => {
-    // 首次展开时按需读分卷（原文已不在会话 JSON 里）
-    if (!expanded && originals === null && recoverable) {
-      const loaded = await loadBatchOriginal(batch.batch)
-      setOriginals(loaded ?? [])
+    if (!expanded && originals === null) {
+      if (hasInline) {
+        setOriginals(inlineOriginals)        // 旧档案：直接用内联原文
+      } else if (batch.recoverable !== false) {
+        // 新档案：按需从分卷读（原文已不在会话 JSON 里）
+        const loaded = await loadBatchOriginal(batch.batch)
+        setOriginals(loaded ?? [])
+      }
     }
     setExpanded(v => !v)
   }
@@ -77,7 +95,7 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
       {/* B5：回执独立成段 */}
       {receiptsText && (
         <div className="mt-1">
-          <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{RECEIPTS_MARKER}</div>
+          <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{marker}</div>
           <div className="whitespace-pre-wrap" style={{ color: 'var(--color-text-secondary)' }}>{receiptsText}</div>
         </div>
       )}

@@ -18,7 +18,7 @@ import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../servi
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, computeConversationDependencyHash, type CompressedBatch } from '../services/agent/archive-codec'
-import { writeBatchOriginal, readBatchOriginal } from '../services/agent/compaction-originals'
+import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
@@ -335,6 +335,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     ipc.invoke('fs:agent-archive-delete', id).catch(() => {
       console.warn('[Agent] 归档删除失败:', id)
     })
+    // B3 分卷同步删除 —— "保留全部"的前提就是会话删除时级联清理（评审 C2），
+    // 否则 .originals.json 变成 UI 看不见也清不掉的孤儿文件
+    void deleteAllOriginals(id).catch(() => { /* 分卷清理失败不阻断 */ })
   },
 
   clearAll: () => {
@@ -346,6 +349,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       ipc.invoke('fs:agent-archive-delete', id).catch(() => {
         console.warn('[Agent] 归档删除失败:', id)
       })
+      void deleteAllOriginals(id).catch(() => { /* 分卷清理失败不阻断 */ })
     }
   },
 
@@ -415,6 +419,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               }))
               // 清空同步落盘：否则重启后已清空的消息会从 archive 复活
               get().persistCurrent(activeConv.id)
+              // B3：分卷一并清空（旧批号会从 1 重新开始，留着会被覆盖成"张冠李戴"）
+              void deleteAllOriginals(activeConv.id).catch(() => { /* 分卷清理失败不阻断 */ })
             }
             return
           }
@@ -670,27 +676,38 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             })
             const batchTokens = batch.reduce((sum, m) => sum + estimateTokens(m.content), 0)
 
+            // ===== B5 副作用回执：**头插**进摘要（评审 I6）=====
+            // 尾部会被 M1 注入的 300-token 保头截断整段吃掉 → 防重放内容到不了模型
+            const receipts = extractSideEffectReceipts(batch)
+            const summaryWithReceipts = receipts.length > 0
+              ? `${t('ccr.receiptsHeader')}\n${receipts.map(r => `- ${r.tool} → ${r.target} (${r.outcome})`).join('\n')}\n\n${summary}`
+              : summary
+
             // ===== B2 可证明性：压缩后重算降幅，无收益则不替换历史 =====
             // "压完即信"是本节的原病：摘要比原文还长时照样替换，等于白丢上下文。
-            const summaryTokens = estimateTokens(summary)
+            // ⚠️ 口径必须含回执（评审 I9）：否则"有收益"可能是净增长
+            const summaryTokens = estimateTokens(summaryWithReceipts)
             const changeTokens = batchTokens - summaryTokens
             if (changeTokens < MINIMUM_CHANGE_TOKENS) {
-              renderLog('warn', 'Agent', `压缩无收益（${batchTokens} → ${summaryTokens} tokens），已跳过本次压缩`)
+              // B2：跳过必须留痕（spec §3.2，评审 I11）—— renderLog 是 agent-store 唯一的
+              // 用户可见通道（落盘 + LogsView 展示）；否则用户不知道上下文已靠硬截断在丢消息
+              renderLog('warn', 'Agent', t('ccr.compressionSkipped')
+                .replace('{before}', String(batchTokens))
+                .replace('{after}', String(summaryTokens)))
             } else {
-              const batchNum = (currentConv.compressed?.length ?? 0) + 1
-
-              // ===== B5 副作用回执：附在摘要尾部（零额外上下文段），防重放 =====
-              const receipts = extractSideEffectReceipts(batch)
-              const summaryWithReceipts = receipts.length > 0
-                ? `${summary}\n\n${t('ccr.receiptsHeader')}\n${receipts.map(r => `- ${r.tool} → ${r.target} (${r.outcome})`).join('\n')}`
-                : summary
+              // ⚠️ 批号必须取**历史最大值 + 1**，不能用 length+1 ——
+              // "移除某压缩"会造成数组空洞，length 回落后新批号会与既有批次**撞号**，
+              // 而分卷写入是同号覆盖 → 另一批原文被永久销毁（评审 C1）
+              const batchNum = Math.max(0, ...(currentConv.compressed ?? []).map(b => b.batch)) + 1
 
               // ===== B3 原文写分卷：会话 JSON 只留引用，原文永不丢失 =====
               let recoverable = true
               try {
-                await writeBatchOriginal(convId, batchNum, batch)
+                // 主进程写失败返回 {success:false}（不 reject）—— 必须读返回值，
+                // 否则 recoverable 恒真、诚实标记失效（评审 I4）
+                recoverable = await writeBatchOriginal(convId, batchNum, batch)
               } catch {
-                recoverable = false   // 分卷写失败不阻断压缩，但如实标记不可恢复
+                recoverable = false   // IPC 层 reject
               }
 
               const newBatch: CompressedBatch = {
@@ -700,6 +717,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 compressedAt: Date.now(),
                 originalTokens: batchTokens,
                 originalBytes: JSON.stringify(batch).length,
+                // 卡片文案说"已折叠 N 条历史"——原文不再内联，故在此记下条数（评审 I8）
+                originalCount: batch.length,
                 recoverable,
                 beforeTokens: totalHistoryTokens,
                 afterTokens: totalHistoryTokens - changeTokens,
@@ -1242,6 +1261,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeConversationId: newConv.id,
     }))
     get().persistCurrent(newConv.id)
+    // B3：分卷随 fork 复制 —— 派生会话按**自己的 id** 寻址分卷，不复制则展开必然 ENOENT（评审 I12）
+    void copyAllOriginals(conv.id, newConv.id).catch(() => { /* 复制失败不阻断 fork */ })
     return newConv.id
   },
 
@@ -1280,20 +1301,25 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     // 原文不可恢复时不插回（宁可保留 rest，也不制造"部分历史"的错觉）
     const originals = target.recoverable === false ? null : await readBatchOriginal(conv.id, batch)
+    // 分卷同步删除：批号一旦复用，同号覆盖会销毁另一批原文（评审 C1）
+    void deleteBatchOriginal(conv.id, batch).catch(() => { /* 分卷清理失败不阻断 */ })
 
     set(state => ({
       conversations: state.conversations.map(c => {
         if (c.id !== conv.id) return c
         const remaining = (c.compressed ?? []).filter(b => b.batch !== batch)
-        const messages = originals
-          ? [...c.messages, ...originals].sort((a, b) => a.createdAt - b.createdAt)
-          : c.messages
+        // ⚠️ 原文**整体前插**（不按 createdAt 排序）：同一次往返里 user/assistant 的
+        // createdAt 常相同，稳定排序会让被移除批次落到队尾、历史变成 assistant 先于 user（评审 I10）
+        const messages = originals ? [...originals, ...c.messages] : c.messages
         return {
           ...c,
           messages,
           compressed: remaining,
-          rollingSummary: remaining.map(b => b.summary).join('\n\n') || undefined,
-          rollingSummaryInvalidated: false,
+          // ⚠️ 摘要**不再拼接**（评审 I2）：它的契约是**迭代合并**（batch N 的摘要已含 batch 1..N-1），
+          // 拼接会造成内容重复、并轻易越过 300-token 注入上限。移除任一批次后摘要无法精确重算，
+          // 诚实的做法是标记"需重生成"（用户可经分卷原文重生成）
+          rollingSummary: remaining.length > 0 ? c.rollingSummary : undefined,
+          rollingSummaryInvalidated: remaining.length > 0 || undefined,
           updatedAt: Date.now(),
         }
       }),
@@ -1406,6 +1432,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     set(state => ({ conversations: [copy, ...state.conversations], activeConversationId: copy.id }))
     get().persistCurrent(copy.id)
+    // B3：分卷随 duplicate 复制（同 fork 的理由，评审 I12）
+    void copyAllOriginals(id, copy.id).catch(() => { /* 复制失败不阻断 */ })
   },
 
   renameWorkspace: (projectPath, name) => {

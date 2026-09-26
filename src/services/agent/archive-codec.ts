@@ -1,4 +1,5 @@
 import type { AgentMessage, AgentConversation, RewoundBranch } from '../../stores/agent-store'
+import { toolRegistry } from './tool-registry'
 import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
 import { computePrefixFingerprint } from './prefix-accounting'
@@ -12,6 +13,8 @@ export interface CompressedBatch {
   originalTokens: number
   /** 原文字节数（分卷内该批次的体量；0 = 分卷不可用） */
   originalBytes?: number
+  /** 原文消息条数（原文不再内联，卡片"已折叠 N 条历史"用它；旧档案回落到 original.length） */
+  originalCount?: number
   /** 原文可在分卷中恢复（展开原文 / 重生成摘要的前提） */
   recoverable?: boolean
   /** 真实降幅（面板展示；旧档案无此字段时回落到 originalTokens - estimateTokens(summary)） */
@@ -55,13 +58,19 @@ export function extractSideEffectReceipts(messages: AgentMessage[]): SideEffectR
   for (const m of messages) {
     for (const tc of m.toolCalls ?? []) {
       if (tc.status !== 'completed' && tc.status !== 'failed') continue
+      // 只抽**有副作用**的工具（评审 I5）：否则一批 40 次 read_file 会把
+      // 真正的写入回执挤出 32 条上限。未知工具保守跳过。
+      const tool = toolRegistry.get(tc.toolName)
+      if (tool?.isReadOnly !== false) continue
+
       const args = (tc.arguments ?? {}) as Record<string, unknown>
       const target = String(args.file_path ?? args.path ?? tc.toolName)
       const artifactPaths = (m.artifacts ?? [])
         .map(a => (a as { path?: string }).path)
         .filter((p): p is string => typeof p === 'string' && p.length > 0)
-      // 后写覆盖 → 同 target 留最新
-      byKey.set(`${tc.toolName}:${target}`, {
+      // 去重键用 **target**（不含工具名）：`write_file f` 后再 `edit_file f` 是同一条
+      // 最终态，两条并存会让模型以为写入还没发生（评审 I5：防重放核心）
+      byKey.set(target, {
         tool: tc.toolName,
         target,
         outcome: tc.status === 'failed' ? 'failed' : 'ok',
