@@ -7,6 +7,7 @@
 
 import { toolRegistry } from '../tool-registry'
 import { readFileTool } from './read-file.tool'
+import { readMemoryTool } from './read-memory.tool'
 import { searchKnowledgeTool } from './search-knowledge.tool'
 import { readArchitectureTool } from './read-architecture.tool'
 import { readBlueprintTool } from './read-blueprint.tool'
@@ -40,6 +41,9 @@ export const builtinTools = [
   skillTool,
   // 只读 Tool（自动执行）
   readFileTool,
+  // 记忆分层（C 档第一轮）：按名/关键词取作品记忆正文 —— 必须靠前：
+  // 工具提示词有 1200 token 截断，排太后契约不可见（技能轮 I1 的教训）
+  readMemoryTool,
   searchKnowledgeTool,
   readArchitectureTool,
   readBlueprintTool,

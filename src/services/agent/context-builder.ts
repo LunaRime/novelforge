@@ -116,7 +116,16 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
     push(
       'tools',
       isTruncated
-        ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}`
+        // 截断通知带**签名**（`name(p1?, p2?)`）而不只是名字：实测 30 个工具时提示词共 5435 tokens、
+        // 1200 的截断落在第 2 个工具内部 —— 仅列名字等于让被截断的工具**无法被调用**
+        // （模型知道有 read_memory，却不知道参数叫 name/keyword/type）。签名全长 ~240 tokens，
+        // 换来全部工具可调用（C 档第一轮 T4 实测发现）。
+        ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => {
+          const required = tool.inputSchema.required ?? []
+          const params = Object.keys(tool.inputSchema.properties)
+            .map(p => (required.includes(p) ? p : `${p}?`))
+          return params.length > 0 ? `${tool.name}(${params.join(', ')})` : tool.name
+        }).join('、'))}`
         : truncated,
       t('context.segSourceTools').replace('{n}', String(toolRegistry.listAll().length)),
       isTruncated,
