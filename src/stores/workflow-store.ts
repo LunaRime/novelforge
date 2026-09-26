@@ -205,7 +205,7 @@ interface WorkflowState {
 
   // ===== Actions =====
   /** 启动一个工作流（可并发），返回 runId */
-  startWorkflow: (definition: WorkflowDefinition, stepByStep?: boolean) => Promise<string>
+  startWorkflow: (definition: WorkflowDefinition, stepByStep?: boolean, options?: { headless?: boolean }) => Promise<string>
   /** 步进模式下确认继续执行下一步（需指定 runId） */
   confirmContinue: (runId?: string) => void
   /** 取消工作流（传 runId 取消指定，不传取消全部） */
@@ -396,7 +396,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
     })
   },
 
-  startWorkflow: async (definition, stepByStep = false) => {
+  startWorkflow: async (definition, stepByStep = false, options) => {
     const run: WorkflowRun = {
       id: randomUUID(),
       type: definition.type,
@@ -423,10 +423,13 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
     // 自动联动：打开底部任务面板（步进模式的"继续"确认按钮所在位置）+ 右侧 AI 输出视图
     // 非阻塞 import 避免循环依赖；不打开底栏时，步进模式下工作流会在等待确认时"隐形卡住"
-    import('./layout-store').then(m => {
-      m.useLayoutStore.getState().openBottomTab('tasks')
-      m.useLayoutStore.getState().openRightPanel('ai-output')
-    }).catch(() => {})
+    // headless（D 档自动化触发）：不抢焦点 —— 自动运行不该打断用户正在进行的编辑/阅读
+    if (!options?.headless) {
+      import('./layout-store').then(m => {
+        m.useLayoutStore.getState().openBottomTab('tasks')
+        m.useLayoutStore.getState().openRightPanel('ai-output')
+      }).catch(() => {})
+    }
 
     // 记录 run 可重建参数快照（Task 5 saveCheckpoint 消费；confirmContinue 跨重启重放读 run.rehydrateParams）
     runDefs.set(run.id, { type: run.type, params: definition.rehydrateParams ?? {} })
