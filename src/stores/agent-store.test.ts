@@ -890,3 +890,108 @@ describe('对话分支 fork/rewind', () => {
     expect(parsed2.rewound![0].messages.map(m => m.id)).toEqual(['a2'])
   })
 })
+
+// ===== 子 agent 派发（C 档第二轮 T5）=====
+// 只替换 runSubAgent（runner 换成假实现），其余（含 store 编排）走真实代码
+vi.mock('../services/agent/subagent/runner', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/agent/subagent/runner')>()
+  return { ...actual, runSubAgent: vi.fn() }
+})
+
+import { runSubAgent } from '../services/agent/subagent/runner'
+import type { SubAgentSession } from '../services/agent/subagent/types'
+import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
+
+const runMock = vi.mocked(runSubAgent)
+
+const fakeSession = (over: Partial<SubAgentSession> = {}): SubAgentSession => ({
+  id: 't1', taskId: 't1', description: '查玉佩', prompt: '查玉佩', allowedTools: [],
+  status: 'completed', messages: [], toolCalls: [], artifacts: [], result: '结论', startedAt: 0, endedAt: 1, ...over,
+})
+
+describe('runSubAgentTask（C 档第二轮 T5）', () => {
+  // 与 store 同源计算指纹（真实 runner 用传入的 taskId 做会话 id，mock 必须照此契约回填）
+  const taskRefFor = (description: string): string =>
+    computeSubAgentTaskRef('c1', description, resolveSubAgentTools(undefined))
+
+  beforeEach(() => {
+    runMock.mockReset()
+    runMock.mockImplementation(async (task) => fakeSession({ id: task.taskId, taskId: task.taskId }))
+    useAgentStore.setState({
+      conversations: [{ id: 'c1', title: 'T', messages: [], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: 'm' }],
+      activeConversationId: 'c1',
+    } as never)
+  })
+
+  it('幂等：同 description 第二次不重复派发，复用既有结果并附 task_id（Review Focus 6）', async () => {
+    const first = await useAgentStore.getState().runSubAgentTask({ description: '查玉佩' })
+    const second = await useAgentStore.getState().runSubAgentTask({ description: '查玉佩' })
+    expect(runMock).toHaveBeenCalledTimes(1)
+    const id = taskRefFor('查玉佩')
+    expect(first).toContain(id)
+    expect(second).toContain(id)
+    expect(second).toContain('untrusted')
+  })
+
+  it('running 中重复派发 → 返回「正在执行」提示，不新建', async () => {
+    const id = taskRefFor('查玉佩')
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => ({
+        ...c, subSessions: [fakeSession({ id, taskId: id, status: 'running', endedAt: undefined })],
+      })),
+    }))
+    const text = await useAgentStore.getState().runSubAgentTask({ description: '查玉佩' })
+    expect(text).toContain(id)
+    expect(runMock).not.toHaveBeenCalled()
+  })
+
+  it('工具集归一后指纹稳定：tools 顺序不同 = 同一子会话（不重复派发）', async () => {
+    await useAgentStore.getState().runSubAgentTask({ description: 'x', tools: ['read_drafts', 'read_memory'] })
+    await useAgentStore.getState().runSubAgentTask({ description: 'x', tools: ['read_memory', 'read_drafts'] })
+    expect(runMock).toHaveBeenCalledTimes(1)
+  })
+
+  it('取消传播：cancelSubAgent 中止该子 agent 的 signal（父保持生成）', async () => {
+    const signals: AbortSignal[] = []
+    runMock.mockImplementation(async (task, deps) => {
+      signals.push(deps.signal!)
+      // 先把会话落到 store（父端 50ms 缓冲同口径），再等取消
+      deps.onUpdate?.(fakeSession({ id: task.taskId, taskId: task.taskId, status: 'running' }))
+      return new Promise<SubAgentSession>(resolve => {
+        const done = (): void => resolve(fakeSession({ id: task.taskId, taskId: task.taskId }))
+        deps.signal!.addEventListener('abort', done, { once: true })
+        setTimeout(done, 200)
+      })
+    })
+    const p = useAgentStore.getState().runSubAgentTask({ description: 'x' })
+    await new Promise(r => setTimeout(r, 80))     // 等 onUpdate 的 50ms 缓冲 flush
+    const sessionId = useAgentStore.getState().getActiveConversation()!.subSessions![0].id
+    useAgentStore.getState().cancelSubAgent(sessionId)
+    expect(signals[0].aborted).toBe(true)
+    await p
+  })
+
+  it('子会话写进 conversation.subSessions（onUpdate 流式回写也被消费）', async () => {
+    runMock.mockImplementation(async (task, deps) => {
+      const s = fakeSession({ id: task.taskId, taskId: task.taskId })
+      deps.onUpdate?.(s)
+      return s
+    })
+    await useAgentStore.getState().runSubAgentTask({ description: 'x' })
+    await new Promise(r => setTimeout(r, 120))   // 等 50ms 缓冲 flush
+    expect(useAgentStore.getState().getActiveConversation()!.subSessions).toHaveLength(1)
+  })
+
+  it('replaySubAgent：已有会话给全文转录；未知 id 返回 null', async () => {
+    const id = taskRefFor('x')
+    runMock.mockImplementation(async (task, deps) => {
+      const s = fakeSession({ id: task.taskId, taskId: task.taskId })
+      deps.onUpdate?.(s)
+      return s
+    })
+    await useAgentStore.getState().runSubAgentTask({ description: 'x' })
+    await new Promise(r => setTimeout(r, 120))
+    expect(useAgentStore.getState().replaySubAgent(id)).toContain('untrusted')
+    expect(useAgentStore.getState().replaySubAgent('nope')).toBeNull()
+  })
+})

@@ -24,7 +24,12 @@ import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
-import type { SubAgentSession } from '../services/agent/subagent/types'
+import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
+import { MAX_SUB_SESSIONS } from '../services/agent/subagent/types'
+import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
+import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
+import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
+import type { LLMGenerateFn } from '../services/agent/agent-engine'
 
 // ===== 类型定义 =====
 
@@ -159,6 +164,18 @@ interface AgentState {
   handleWritingIntent: (intent: WritingIntent, rawContent: string) => Promise<{ status: 'handled' | 'none'; enhancedContent?: string }>
   /** 取消当前生成 */
   cancelGeneration: () => Promise<void>
+  /** C 档第二轮：派发子 agent（task 工具入口）——返回注入父端的 untrusted 文本 */
+  runSubAgentTask: (input: { description: string; prompt?: string; tools?: string[] }) => Promise<string>
+  /** 取消某个子 agent（只中止它，不取消父） */
+  cancelSubAgent: (sessionId: string) => void
+  /** 回放子会话转录（null = 未找到） */
+  replaySubAgent: (sessionId: string) => string | null
+  /** 可用子会话清单（错误文案里给出） */
+  listSubAgents: () => string
+  /** 子 agent 的写操作审批（T5 为 fail-closed 占位；T6 接 A 档决策层 + 父方审批卡） */
+  requestSubAgentConfirmation: (
+    sessionId: string, description: string, toolCall: ToolCallInfo, signal?: AbortSignal,
+  ) => Promise<boolean>
   /** 响应 Tool 确认（用于 ConfirmCard） */
   resolveToolConfirmation: (toolCallId: string, confirmed: boolean, alwaysAllow?: boolean) => void
   /** 启动恢复：扫描 ~/.novelforge/agent-archive 重建会话列表（loadSeq 防竞态） */
@@ -188,6 +205,73 @@ interface AgentState {
 
 /** 生成唯一 ID */
 const genId = () => crypto.randomUUID()
+
+/**
+ * 子 agent 的生成函数（C 档第二轮）：走与父相同的流式通道，但**不写前缀记账** ——
+ * 子 agent 的首轮前缀与父无关，混进父的 `lastPrefixText` 会污染父的缓存命中读数
+ * （B 档第二轮的前缀记账是「按会话连续两轮」的语义）。
+ */
+const generateForSubAgent: LLMGenerateFn = async (messages, modelId, onChunk) => {
+  const startTime = Date.now()
+  let usage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
+  try {
+    const text = await new Promise<string>((resolve, reject) => {
+      useLLMStore.getState().generateStream(
+        messages.map(m => ({ role: m.role, content: m.content })),
+        {
+          onChunk: (chunk) => onChunk?.(chunk),
+          onDone: (fullText, u) => { usage = u; resolve(fullText) },
+          onError: (error) => reject(new Error(error)),
+        },
+        modelId,
+        { priority: 11 }, // 子 agent 略低于父（12），高于批量任务
+      ).catch((error) => reject(error))
+    })
+    void logSubAgentCall(modelId, startTime, usage, true, '')
+    return text
+  } catch (error) {
+    void logSubAgentCall(modelId, startTime, undefined, false, String(error))
+    throw error
+  }
+}
+
+/** 子 agent 调用记账（purpose: 'subagent'，用量面板可见成本；不带前缀字段） */
+async function logSubAgentCall(
+  modelId: string,
+  startTime: number,
+  usage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined,
+  success: boolean,
+  errorMessage: string,
+): Promise<void> {
+  try {
+    const model = useLLMStore.getState().models.find(m => m.id === modelId)
+    const cost = usage && model
+      ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
+      : 0
+    await ipc.invoke('db:log-llm-call', {
+      model_id: modelId,
+      model_name: model?.name ?? model?.modelName ?? '',
+      purpose: 'subagent',
+      prompt_tokens: usage?.promptTokens ?? 0,
+      completion_tokens: usage?.completionTokens ?? 0,
+      total_tokens: usage?.totalTokens ?? 0,
+      cached_tokens: usage?.cachedTokens ?? 0,
+      duration_ms: Date.now() - startTime,
+      success: success ? 1 : 0,
+      error_message: errorMessage,
+      cost,
+    })
+  } catch { /* 记账失败不影响派发 */ }
+}
+
+/** 把子 agent 的 controller 绑到父的取消上（返回解绑函数）；父未在生成时（headless/独立调用）不绑 */
+function linkParentAbort(controller: AbortController): () => void {
+  const parent = activeAbortController
+  if (!parent) return () => {}
+  const onAbort = (): void => controller.abort()
+  parent.signal.addEventListener('abort', onAbort, { once: true })
+  return () => parent.signal.removeEventListener('abort', onAbort)
+}
 
 /** 从消息内容生成会话标题 */
 const generateTitle = (content: string, enhanced?: boolean): string => {
@@ -256,6 +340,13 @@ let generationSeq = 0
 /** archive 恢复请求序号 — 快速启动/重复调用时旧请求晚到不覆盖新状态 */
 let archiveLoadSeq = 0
 let persistTimer: ReturnType<typeof setTimeout> | null = null
+
+// ===== 子 agent 派发（C 档第二轮）=====
+/** 运行中的子 agent（sessionId → controller）：单个取消与父取消传播用 */
+const activeSubAgents = new Map<string, AbortController>()
+/** 待审批卡当前挂起的 resolve（顺序执行 ⇒ 同一时刻至多一张卡）。
+ *  用「持有对象」而非裸 let：模块级 let 在本文件跨函数的 CFA 收窄会让 `x?.()` 被判为 never */
+const pendingSubAgent = { resolve: null as ((allow: boolean) => void) | null }
 
 // ===== Zustand Store =====
 
@@ -1165,6 +1256,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeAbortController.abort()
       activeAbortController = null
     }
+    // C 档第二轮：父取消 → 连带中止所有运行中的子 agent（子 agent 的 signal 由 linkParentAbort 绑定）
+    for (const controller of activeSubAgents.values()) controller.abort()
+    pendingSubAgent.resolve?.(false)   // 卡在审批卡上的子 agent 一并收尾（否则悬挂到超时）
 
     // 真实取消底层流式请求（旧实现传 assistantMsg.id 给 llm:cancel 无效，底层 API 会跑完）
     if (activeStreamRequestId) {
@@ -1189,6 +1283,83 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         ),
       })),
     }))
+  },
+
+  runSubAgentTask: async ({ description, prompt, tools }) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return t('subagent.noActiveConversation')
+    const allowed = resolveSubAgentTools(tools)
+    const taskId = computeSubAgentTaskRef(conv.id, description, allowed)
+    // 幂等（spec §3.8）：同会话同描述同工具集 = 同一子任务
+    const existing = (conv.subSessions ?? []).find(s => s.taskId === taskId)
+    if (existing) {
+      return existing.status === 'running'
+        ? t('subagent.duplicateRunning').replace('{id}', existing.id)
+        : `${formatSubAgentResult(existing)}\n\n${t('subagent.idempotentHint').replace('{id}', existing.id)}`
+    }
+    const modelId = conv.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
+    if (!modelId) return t('subagent.noModel')
+
+    const task: SubAgentTask = { taskId, description, prompt: prompt || description, allowedTools: allowed, modelId }
+    const controller = new AbortController()
+    activeSubAgents.set(taskId, controller)
+    const unlink = linkParentAbort(controller)
+
+    // 50ms 缓冲写回（与父的 chunkBuffer 同口径：避免每个 chunk 一次 setState 阻塞主线程）
+    let pending: SubAgentSession | null = null
+    let flushTimer: ReturnType<typeof setTimeout> | null = null
+    const flush = (): void => {
+      flushTimer = null
+      const s = pending
+      pending = null
+      if (!s) return
+      const snapshot = JSON.parse(JSON.stringify(s)) as SubAgentSession   // 防后续 mutate 影响已落盘快照
+      set(state => ({
+        conversations: state.conversations.map(c => (c.id === conv.id
+          ? { ...c, subSessions: [snapshot, ...(c.subSessions ?? []).filter(x => x.id !== snapshot.id)].slice(0, MAX_SUB_SESSIONS) }
+          : c)),
+      }))
+    }
+    try {
+      const session = await runSubAgent(task, {
+        generate: generateForSubAgent,
+        buildPrompt: buildSubAgentPrompt,
+        confirm: (tc) => get().requestSubAgentConfirmation(taskId, description, tc, controller.signal),
+        signal: controller.signal,
+        onUpdate: (s) => {
+          pending = s
+          if (!flushTimer) flushTimer = setTimeout(flush, 50)
+        },
+      })
+      pending = session
+      flush()
+      get().persistCurrent(conv.id)
+      return formatSubAgentResult(session)
+    } finally {
+      if (flushTimer) clearTimeout(flushTimer)
+      activeSubAgents.delete(taskId)
+      unlink()
+    }
+  },
+
+  cancelSubAgent: (sessionId) => { activeSubAgents.get(sessionId)?.abort() },
+
+  replaySubAgent: (sessionId) => {
+    const s = (get().getActiveConversation()?.subSessions ?? []).find(x => x.id === sessionId)
+    return s ? formatSubAgentTranscript(s) : null
+  },
+
+  listSubAgents: () => (get().getActiveConversation()?.subSessions ?? [])
+    .map(s => `${s.id}（${s.description}）`).join('、'),
+
+  /**
+   * 子 agent 的写操作审批 —— **T5 阶段为 fail-closed 占位**：只读放行、写操作一律拒绝。
+   * T6 替换为：A 档决策层（critical 硬拒 / 规则命中放行）+ 父方审批卡（超时拒绝、无「始终允许」）。
+   */
+  requestSubAgentConfirmation: async (sessionId, description, toolCall, signal) => {
+    void sessionId; void description; void signal   // T6 会用到（卡状态与取消绑定）
+    const tool = toolRegistry.get(toolCall.toolName)
+    return Boolean(tool?.isReadOnly && !tool.requiresConfirmation)
   },
 
   resolveToolConfirmation: (toolCallId, confirmed, alwaysAllow = false) => {
