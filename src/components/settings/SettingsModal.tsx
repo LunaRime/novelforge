@@ -3,7 +3,7 @@ import {
   X, Plus, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, Zap, Eye, EyeOff, MessageSquare,
   ExternalLink, RefreshCw, Download, LogOut,
-  BookMarked, Plug, BarChart3,
+  BookMarked, Plug, BarChart3, ArrowUp,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { Badge } from '../ui/Badge'
@@ -405,8 +405,11 @@ function LLMSection({
 
 // ==================== 模型路由区 ====================
 
-/** 三层路由配置（elite/standard/budget）— 每层单选主用模型，自动降级链由 ModelRouter 处理 */
-function ModelRoutingSection() {
+/**
+ * 三层路由配置（elite/standard/budget）— 每层是**有序优先级列表**：
+ * 数组顺序即 ModelRouter 的取用顺序，层内为空时回退用户默认模型（不再有 autoDetectTiers 自动填充）。
+ */
+export function ModelRoutingSection() {
   const { t } = useTranslation()
   const models = useLLMStore(s => s.models)
   const modelRoutes = useLLMStore(s => s.modelRoutes)
@@ -414,15 +417,20 @@ function ModelRoutingSection() {
 
   const candidates = models.filter((m) => !m.purposes?.includes('embedding'))
 
+  const labelOf = (id: string) => {
+    const m = models.find(x => x.id === id)
+    return m ? `${m.name || m.modelName} (${m.provider})` : id
+  }
+
   const tiers: Array<{ id: ModelTier; label: string; desc: string }> = [
     { id: 'elite', label: t('settings.routeElite'), desc: t('settings.routeEliteDesc') },
     { id: 'standard', label: t('settings.routeStandard'), desc: t('settings.routeStandardDesc') },
     { id: 'budget', label: t('settings.routeBudget'), desc: t('settings.routeBudgetDesc') },
   ]
 
-  const handleChange = (tier: ModelTier, modelId: string) => {
+  const setTier = (tier: ModelTier, ids: string[]) => {
     const patch: Partial<ModelRouteConfig> = {}
-    patch[tier] = [modelId]
+    patch[tier] = ids
     updateModelRoutes(patch)
   }
 
@@ -436,40 +444,70 @@ function ModelRoutingSection() {
         <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {t('settings.routeDesc')}
         </p>
+        <p className="text-micro mt-1" style={{ color: 'var(--color-text-muted)' }}>
+          {t('settings.routePriorityHint')}
+        </p>
       </div>
 
       {tiers.map(tier => {
-        const current = modelRoutes[tier.id]?.[0] || ''
+        const ids = modelRoutes[tier.id] ?? []
         return (
           <div key={tier.id} className="space-y-1">
             <div className="flex items-baseline justify-between gap-2">
               <Label>{tier.label}</Label>
               <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{tier.desc}</span>
             </div>
-            <Select
-              value={current}
-              onValueChange={(v) => {
-                if (v !== '__none__') handleChange(tier.id, v)
-                else {
-                  const patch: Partial<ModelRouteConfig> = {}
-                  patch[tier.id] = []
-                  updateModelRoutes(patch)
-                }
-              }}
-            >
+
+            {ids.length === 0 && (
+              <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeClear')}</p>
+            )}
+
+            {ids.map((id, i) => (
+              <div
+                key={id}
+                className="flex items-center gap-2 rounded-md px-2 py-1"
+                style={{ backgroundColor: 'var(--color-hover)' }}
+              >
+                <span className="text-micro font-mono w-3 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{i + 1}</span>
+                <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text)' }}>{labelOf(id)}</span>
+                {i > 0 && (
+                  <button
+                    type="button"
+                    aria-label={t('settings.routeMoveUp')}
+                    onClick={() => {
+                      const next = [...ids]
+                      const prev = next[i - 1]
+                      next[i - 1] = next[i]
+                      next[i] = prev
+                      setTier(tier.id, next)
+                    }}
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <ArrowUp size={11} />
+                  </button>
+                )}
+                <button
+                  type="button"
+                  aria-label={t('settings.routeRemove')}
+                  onClick={() => setTier(tier.id, ids.filter((_, j) => j !== i))}
+                  style={{ color: 'var(--color-text-muted)' }}
+                >
+                  <X size={11} />
+                </button>
+              </div>
+            ))}
+
+            {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
+            <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
               <SelectTrigger className="w-full">
-                <SelectValue placeholder={t('settings.routeSelect')} />
+                <SelectValue placeholder={t('settings.routeAdd')} />
               </SelectTrigger>
               <SelectContent>
-                {candidates.length === 0 && (
-                  <SelectItem value="__loading__" disabled>{t('model.noLabelConfig').replace('{label}', '')}</SelectItem>
-                )}
-                {candidates.map((m) => (
+                {candidates.filter(m => !ids.includes(m.id)).map((m) => (
                   <SelectItem key={m.id} value={m.id}>
                     {m.name || m.modelName} ({m.provider})
                   </SelectItem>
                 ))}
-                <SelectItem value="__none__">{t('settings.routeClear')}</SelectItem>
               </SelectContent>
             </Select>
           </div>
