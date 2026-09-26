@@ -295,3 +295,47 @@ describe('重复词检测误报优化（用户实测回归）', () => {
     expect(high.issues.some(i => i.message.includes('「碎片」'))).toBe(true)
   })
 })
+
+describe('waterAudit 英文正文（issue #38 回归）', () => {
+  // 英文正文此前走中文字符滑窗：walked / painted 被拆成 ed / nt 等字母 2-gram，
+  // 假「重复词」混入审稿 prompt → 审稿模型先解释数据无意义，而不是给修改建议。
+
+  it('不把字母片段当重复词（ed/nt/ha 等）', () => {
+    const text = Array.from({ length: 12 }, (_, i) =>
+      `He walked through the market and looked at the painted wall near the old station number ${i}.`,
+    ).join(' ')
+    const r = waterAudit(text)
+    expect(r.issues.some(i => /「[a-z]{2}」/.test(i.message))).toBe(false)
+  })
+
+  it('按单词统计：高频英文实词正常检出', () => {
+    const text = 'The road was long and the night was cold. ' +
+      Array.from({ length: 12 }, (_, i) => `Suddenly the wind rose from the valley area ${i}.`).join(' ')
+    const r = waterAudit(text)
+    expect(r.issues.some(i => i.message.includes('suddenly'))).toBe(true)
+  })
+
+  it('英文虚词（the/and/was）不计入重复报警', () => {
+    const text = 'The night was cold and the road was long. ' +
+      Array.from({ length: 12 }, (_, i) =>
+        `The wind rose from the valley area ${i} and the sky was dark.`,
+      ).join(' ')
+    const r = waterAudit(text)
+    expect(r.issues.some(i => /「(the|and|was|from)」/.test(i.message))).toBe(false)
+  })
+
+  it('衔接审计按单词重叠，无共同词时报衔接不足', () => {
+    // 修复前按字母 2-gram 重叠：任意两句英文都有大量 (th/he/in…) 重叠 → 永远"衔接良好"（假阴性）
+    const prev = 'Zephyrs carried the warm scent across the quiet meadow.'
+    const curr = 'A brutal storm shattered every window of the abandoned lighthouse.'
+    const r = continuityAudit(curr, prev)
+    expect(r.passed).toBe(false)
+  })
+
+  it('蓝图审计按单词命中，无关事件判定为缺失', () => {
+    // 修复前字母 2-gram 恒有重叠 → 任意事件都"已体现"（假通过）
+    const text = 'The knight drew his sword and charged at the dragon.'
+    const r = blueprintAudit(text, ['A merchant sold silk in the eastern market'])
+    expect(r.passed).toBe(false)
+  })
+})

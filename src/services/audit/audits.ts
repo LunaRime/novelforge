@@ -61,16 +61,57 @@ function extractCnNgrams(text: string, n: 2 | 3): string[] {
   return out
 }
 
-/** 移除对话区（「」/“”）内容，用于非对话词频统计 */
-function stripDialogue(text: string): string {
-  return text
-    .replace(/「[^」]*」/g, ' ')
-    .replace(/“[^”]*”/g, ' ')
+// ===== 语言感知（issue #38：英文正文此前走中文滑窗，退化为 ed/nt 等字母 2-gram） =====
+
+/** 英文高频功能词——与中文 stop 表同职责：重复出现不构成水文信号 */
+const EN_STOP_WORDS = new Set([
+  'the', 'and', 'that', 'was', 'were', 'are', 'is', 'be', 'been', 'being', 'for', 'with',
+  'his', 'her', 'him', 'she', 'they', 'them', 'their', 'this', 'these', 'those', 'from',
+  'have', 'has', 'had', 'not', 'but', 'you', 'your', 'its', 'our', 'there', 'here', 'when',
+  'where', 'what', 'which', 'who', 'whom', 'will', 'would', 'could', 'should', 'can', 'may',
+  'might', 'must', 'shall', 'into', 'onto', 'over', 'under', 'about', 'after', 'before',
+  'than', 'then', 'just', 'only', 'also', 'even', 'still', 'yet', 'more', 'most', 'much',
+  'many', 'some', 'any', 'all', 'each', 'every', 'other', 'another', 'such', 'own', 'same',
+  'too', 'very', 'did', 'does', 'done', 'one', 'two', 'out', 'off', 'down', 'through',
+  'between', 'because', 'while', 'as', 'at', 'by', 'in', 'of', 'on', 'or', 'so', 'to',
+  'up', 'it', 'no', 'do', 'if', 'am', 'my', 'me', 'us', 'he', 'we',
+])
+
+/**
+ * 语言判定：以拉丁字母为主且几乎无 CJK → 按英文处理。
+ * 中英混排（中文小说夹英文词）中文占比通常远高于阈值，仍走中文路径。
+ */
+function looksLikeEnglish(text: string): boolean {
+  const cjk = (text.match(/[一-鿿]/g) ?? []).length
+  const latin = (text.match(/[a-zA-Z]/g) ?? []).length
+  if (latin === 0) return false
+  if (cjk === 0) return true
+  return latin / (latin + cjk) > 0.9
 }
 
-/** 提取正文中的中文 2 字词集合（用于重叠检测） */
-function cnBigramSet(text: string): Set<string> {
-  return new Set(extractCnNgrams(text, 2))
+/** 提取英文单词（小写归一；滤除虚词与单字母） */
+function extractEnWords(text: string): string[] {
+  return (text.toLowerCase().match(/[a-z][a-z'’-]*/g) ?? [])
+    .filter(w => w.length >= 2 && !EN_STOP_WORDS.has(w))
+}
+
+/** 语言感知分词：中文 2-3 字滑窗；英文按词边界（n 对英文无意义——英文词本身就是信号单元） */
+function extractNgrams(text: string, n: 2 | 3): string[] {
+  return looksLikeEnglish(text) ? extractEnWords(text) : extractCnNgrams(text, n)
+}
+
+/** 移除对话区（「」/“”/英文直引号）内容，用于非对话词频统计 */
+function stripDialogue(text: string): string {
+  const base = text
+    .replace(/「[^」]*」/g, ' ')
+    .replace(/“[^”]*”/g, ' ')
+  // 英文直引号仅英文路径剥离（中文正文里的 " 多为强调而非对话）
+  return looksLikeEnglish(text) ? base.replace(/"[^"\n]*"/g, ' ') : base
+}
+
+/** 提取正文词单元集合（中文 2 字词 / 英文单词），用于重叠检测 */
+function ngramSet(text: string): Set<string> {
+  return new Set(extractNgrams(text, 2))
 }
 
 /**
@@ -121,16 +162,28 @@ export interface RepetitionAuditOptions {
   whitelist?: AuditWhitelist
 }
 
-/** 按句末标点切分句子（保留对话引导语） */
+/**
+ * 按句末标点切分句子（保留对话引导语）。
+ * 英文按 .!? 切并要求后接空白——避开小数与缩写歧义（3.5 / Mr. Smith 不被切开）。
+ */
 function splitSentences(text: string): string[] {
+  if (looksLikeEnglish(text)) {
+    return text
+      .split(/(?<=[.!?])\s+/)
+      .map(s => s.replace(/[.!?]+$/, '').trim())
+      .filter(s => s.length > 0)
+  }
   return text
     .split(/(?<=[。！？；])/)
     .map(s => s.replace(/[。！？；]+$/, '').trim())
     .filter(s => s.length > 0)
 }
 
-/** 句首 3 字模式（跳过前导引号/空白） */
-function sentenceStart3(sentence: string): string {
+/** 句首模式：中文取前 3 字（跳过前导引号/空白）；英文取前 2 个词 */
+function sentenceStart(sentence: string): string {
+  if (looksLikeEnglish(sentence)) {
+    return (sentence.toLowerCase().match(/[a-z][a-z'’-]*/g) ?? []).slice(0, 2).join(' ')
+  }
   return sentence.replace(/^[\s“「"'‘]+/, '').slice(0, 3)
 }
 
@@ -174,7 +227,7 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
     if (w && w.length >= 2) freqSource = freqSource.split(w).join(' ')
   }
   const freq = new Map<string, number>()
-  for (const word of extractCnNgrams(freqSource, 2)) {
+  for (const word of extractNgrams(freqSource, 2)) {
     if (isExcludedNgram(word, excludeWords)) continue
     freq.set(word, (freq.get(word) ?? 0) + 1)
   }
@@ -221,7 +274,7 @@ export function waterAudit(text: string, options: RepetitionAuditOptions = {}): 
   const startFreq = new Map<string, number>()
   for (const s of sentences) {
     if (s.length < 6) continue // 太短的句子不参与句式统计
-    const start3 = sentenceStart3(s)
+    const start3 = sentenceStart(s)
     if (start3.length < 2) continue
     if (isExcludedNgram(start3, excludeWords)) continue // 角色名开头的句子（"苏晚向前"）正常
     if (whitelist?.words?.some(w => w.length >= 2 && start3.includes(w))) continue // 白名单文风词开头的句子
@@ -271,7 +324,7 @@ export function buildBaselineFreqs(chapters: string[]): Record<string, number> {
     .filter(ch => ch && ch.trim())
     .map(ch => {
       const m = new Map<string, number>()
-      for (const w of extractCnNgrams(stripDialogue(ch), 2)) {
+      for (const w of extractNgrams(stripDialogue(ch), 2)) {
         m.set(w, (m.get(w) ?? 0) + 1)
       }
       return m
@@ -356,10 +409,10 @@ export function continuityAudit(
   }
 
   const head = new Set(
-    [...cnBigramSet(chapterText.slice(0, chapterHeadLen))].filter(w => !isExcludedNgram(w, excludeWords)),
+    [...ngramSet(chapterText.slice(0, chapterHeadLen))].filter(w => !isExcludedNgram(w, excludeWords)),
   )
   const tail = new Set(
-    [...cnBigramSet(prevChapterEnding.slice(-prevTailLen))].filter(w => !isExcludedNgram(w, excludeWords)),
+    [...ngramSet(prevChapterEnding.slice(-prevTailLen))].filter(w => !isExcludedNgram(w, excludeWords)),
   )
   let overlap = 0
   for (const w of tail) if (head.has(w)) overlap++
@@ -433,13 +486,13 @@ export function terminologyAudit(text: string, terms: string[]): AuditResult {
  */
 export function blueprintAudit(chapterText: string, keyEvents: string[]): AuditResult {
   const body = stripDialogue(chapterText)
-  const bodySet = cnBigramSet(body)
+  const bodySet = ngramSet(body)
   const stop = new Set(['一个', '什么', '自己', '没有', '就是', '这个', '那个', '时候', '已经', '知道', '可以', '现在', '起来', '他们', '我们', '你们', '怎么', '然后', '最后', '本章', '关键', '事件', '重要', '剧情'])
 
   const issues: AuditIssue[] = []
   for (const ev of keyEvents) {
     if (!ev || !ev.trim()) continue
-    const words = extractCnNgrams(ev.replace(/[，。！？；：""''《》、（）—…·～【】]/g, ''), 2)
+    const words = extractNgrams(ev.replace(/[，。！？；：""''《》、（）—…·～【】]/g, ''), 2)
       .filter(w => !stop.has(w))
     const hit = words.some(w => bodySet.has(w))
     if (!hit) {
