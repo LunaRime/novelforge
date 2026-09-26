@@ -14,6 +14,8 @@ export interface ContextUsage {
   historyPanelTokens?: number
   /** **实发**的历史 token（发送前裁剪后的真实值；与面板值不同时两者都给出） */
   historySentTokens?: number
+  /** B 档第二轮 B4：前缀记账（system 段是否变化 + 与上轮的共享字符数） */
+  prefix?: { changed: boolean; sharedChars: number }
 }
 
 /**
@@ -37,6 +39,12 @@ export function computeContextUsage(opts: {
   historyMessages: LLMMessage[]
   currentContent: string
   modelMax: number
+  /** B6：逐段明细（由 buildAgentSystemSegments 产出） */
+  segments?: ContextSegment[]
+  /** B6：实发历史 token（发送前裁剪后的真实值）；不传则面板值与实发值视为一致 */
+  historySentTokens?: number
+  /** B4：前缀记账 */
+  prefix?: { changed: boolean; sharedChars: number }
 }): ContextUsage {
   const base = estimateTokens(opts.base)
   const memory = estimateTokens(opts.memory)
@@ -49,5 +57,10 @@ export function computeContextUsage(opts: {
     current,
     modelMax: opts.modelMax,
     total: base + memory + history + current,
+    segments: opts.segments,
+    // 面板值 = 当前 messages 全量；实发值由调用方在发送处回填
+    historyPanelTokens: history,
+    historySentTokens: opts.historySentTokens,
+    prefix: opts.prefix,
   }
 }

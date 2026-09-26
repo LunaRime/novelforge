@@ -268,6 +268,8 @@ function ActiveConversation() {
       .map(m => ({ role: m.role, content: m.content })),
     currentContent: currentInput,
     modelMax,
+    // B6：逐段明细（同步段；M2 作品记忆来自 async 版，暂未纳入明细）
+    segments: syncSegments.segments,
   })
 
   return (

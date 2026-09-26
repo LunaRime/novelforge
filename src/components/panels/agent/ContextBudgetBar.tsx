@@ -84,19 +84,64 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
           <div className="mb-1.5 text-micro font-medium" style={{ color: 'var(--color-text)' }}>
             {t('ccr.contextUsage')}
           </div>
-          {segments.map(seg => (
-            <div
-              key={seg.label}
-              className="flex items-center justify-between gap-3 text-micro leading-relaxed"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              <span className="flex items-center gap-1.5">
-                <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: seg.color }} />
-                {seg.label}
-              </span>
-              <span>{seg.value}</span>
+
+          {/* B6：逐段明细 —— 每段给出 token 与**字符数**，来源挂在 title（悬停可查"这段来自哪"） */}
+          {usage.segments && usage.segments.length > 0 ? (
+            <div className="mb-1">
+              {usage.segments.map(seg => (
+                <div
+                  key={seg.key}
+                  className="flex items-center justify-between gap-3 text-micro leading-relaxed"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                  title={seg.source}
+                >
+                  <span className="truncate">
+                    {t(`context.seg.${seg.key}` as never)}
+                    {seg.truncated ? ' ✂' : ''}
+                  </span>
+                  <span className="flex-shrink-0 font-mono">{fmtK(seg.tokens)} · {seg.chars}</span>
+                </div>
+              ))}
             </div>
-          ))}
+          ) : (
+            segments.map(seg => (
+              <div
+                key={seg.label}
+                className="flex items-center justify-between gap-3 text-micro leading-relaxed"
+                style={{ color: 'var(--color-text-secondary)' }}
+              >
+                <span className="flex items-center gap-1.5">
+                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: seg.color }} />
+                  {seg.label}
+                </span>
+                <span>{seg.value}</span>
+              </div>
+            ))
+          )}
+
+          {/* B6 口径诚实：面板值（当前历史全量）与**实发**值（发送前裁剪后）不同时必须分列 */}
+          {usage.historySentTokens !== undefined
+            && usage.historyPanelTokens !== undefined
+            && usage.historySentTokens !== usage.historyPanelTokens && (
+            <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
+              {t('ccr.historyPanelVsSent')
+                .replace('{panel}', fmtK(usage.historyPanelTokens))
+                .replace('{sent}', fmtK(usage.historySentTokens))}
+            </div>
+          )}
+
+          {/* B4：前缀记账（只记不拦）——变化时给出与上轮的共享字符数 */}
+          {usage.prefix && (
+            <div
+              className="text-micro"
+              style={{ color: usage.prefix.changed ? 'var(--color-warning)' : 'var(--color-text-muted)' }}
+            >
+              {usage.prefix.changed
+                ? t('ccr.prefixChanged').replace('{n}', String(usage.prefix.sharedChars))
+                : t('ccr.prefixStable')}
+            </div>
+          )}
+
           <div
             className="mt-1.5 pt-1.5 flex items-center justify-between gap-3 text-micro"
             style={{ borderTop: '1px solid var(--color-border)', color: 'var(--color-text)' }}
