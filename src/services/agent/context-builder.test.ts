@@ -394,6 +394,19 @@ describe('记忆分层注入（C 档第一轮）', () => {
     expect(seg.memoryM2).not.toContain('过期正文')
   })
 
+  it('目录段来源如实报数：被挤出时给「已列/总数」（评审 Minor 7）', async () => {
+    mockInvoke.mockImplementation(async (ch: string) => {
+      if (ch === 'memory:list') return layerList(Array.from({ length: 80 }, (_, i) => ({
+        file: `file-${String(i).padStart(2, '0')}-with-a-long-name.md`, kind: 'auto', loadMode: 'auto', brief: '详'.repeat(150), stale: false, mtime: i,
+      })))
+      return null
+    })
+    const seg = await buildAgentSystemSegmentsAsync('quick')
+    const source = seg.segments.find(s => s.key === 'memory-catalog')?.source ?? ''
+    expect(source).toMatch(/\d+\/80/)
+    expect(seg.memoryM2).toContain('还有')   // 未列出的部分有提示
+  })
+
   it('常驻条目读盘失败（已删除）→ 跳过该条不崩，其余条目照常', async () => {
     mockInvoke.mockImplementation(async (ch: string, file?: string) => {
       if (ch === 'memory:list') return layerList([

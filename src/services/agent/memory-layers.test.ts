@@ -130,3 +130,17 @@ describe('scoreMemoryEntry / findLineHint（关键词检索）', () => {
     expect(findLineHint(`x${'详'.repeat(200)}`, 'x')).toHaveLength(81) // 80 + 省略号
   })
 })
+
+describe('评审 Minor 6/7：目录条数与降级档位可观测', () => {
+  it('返回 listed/omitted（明细面板要如实报数，不能拿总数当已列数）', () => {
+    const many = Array.from({ length: 40 }, (_, i) => e(`file-${String(i).padStart(2, '0')}-with-a-long-name.md`, 'auto', '详'.repeat(150)))
+    const r = buildMemoryCatalog(many)
+    expect(r.listed).toBeLessThan(40)          // 挤不下
+    expect(r.listed + r.omitted).toBe(40)      // 守恒
+    expect(r.level).toBe(3)
+  })
+
+  it('未截断时 listed = 条目数、omitted = 0', () => {
+    expect(buildMemoryCatalog([e('a.md', 'manual', '短摘要')])).toMatchObject({ listed: 1, omitted: 0, level: 1 })
+  })
+})

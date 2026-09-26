@@ -24,7 +24,7 @@ beforeEach(() => {
 describe('changeMemoryLoadMode', () => {
   it('读-改-写：写回的文件带 load_mode 且原有键与正文保留', async () => {
     const res = await changeMemoryLoadMode('book-state.md', 'resident')
-    expect(res).toEqual({ ok: true, mode: 'resident' })
+    expect(res).toEqual({ ok: true, mode: 'resident', changed: true })
     expect(invoke).toHaveBeenCalledWith('memory:write', 'book-state.md', '---\ntype: shared\nload_mode: resident\n---\n\n# 全书精要\n主角是苏晚晴')
   })
 
@@ -86,5 +86,19 @@ describe('sumResidentSectionTokens', () => {
   it('读盘失败的文件被跳过（不抛出）', async () => {
     invoke.mockImplementation(async () => null)
     expect(await sumResidentSectionTokens(['a.md', 'b.md'])).toEqual({ tokens: 0, overCap: false })
+  })
+})
+
+describe('评审 Minor 5：点当前档位不写盘', () => {
+  it('目标值已是当前值 → 不写盘、changed=false（否则虚假「已更新」+ mtime 漂移伤前缀缓存）', async () => {
+    invoke.mockImplementation(async (ch: string) => (ch === 'memory:read' ? '---\nload_mode: resident\n---\n正文' : { success: true }))
+    const res = await changeMemoryLoadMode('book-state.md', 'resident')
+    expect(res).toEqual({ ok: true, mode: 'resident', changed: false })
+    expect(invoke).not.toHaveBeenCalledWith('memory:write', expect.anything(), expect.anything())
+  })
+
+  it('真正变更时 changed=true（既有的写盘路径不变）', async () => {
+    const res = await changeMemoryLoadMode('book-state.md', 'resident')
+    expect(res).toEqual({ ok: true, mode: 'resident', changed: true })
   })
 })

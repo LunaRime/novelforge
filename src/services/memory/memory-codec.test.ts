@@ -177,3 +177,27 @@ describe('setLoadModeFrontmatter（C 档第一轮：写入分层）', () => {
     expect(setLoadModeFrontmatter('', 'resident')).toBe('')
   })
 })
+
+describe('评审 Minor 8/9：chapters brief 取最新章节 + 空 frontmatter 退化', () => {
+  it('chapters 文件取**最后**一个章节块的关键事件行（长书里区间头部会把旧状态当现状）', () => {
+    const body = [
+      '---', 'range: 001-003', '---', '',
+      '# 章节记忆 001-003',
+      '', '## 第 1 章 · 开局', '- 关键事件：主角觉醒',
+      '', '## 第 2 章 · 试炼', '- 关键事件：初入秘境',
+      '', '## 第 3 章 · 决裂', '- 关键事件：与师尊决裂',
+    ].join('\n')
+    expect(extractMemoryBrief(body)).toBe('关键事件：与师尊决裂')
+  })
+
+  it('单章节块行为不变（既有 fixture 的期望保持）', () => {
+    expect(extractMemoryBrief('---\nrange: 1-1\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒'))
+      .toBe('关键事件：主角觉醒')
+  })
+
+  it('空 frontmatter（---\n---，无空行）不把围栏当 brief', () => {
+    expect(extractMemoryBrief('---\n---\n\n# 全书精要\n主角是苏晚晴')).toBe('主角是苏晚晴')
+    // 正文只有围栏时回落标题/空串，绝不返回 '---'
+    expect(extractMemoryBrief('---\n---\n')).not.toBe('---')
+  })
+})

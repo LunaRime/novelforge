@@ -14,7 +14,7 @@ import { buildResidentSection } from '../agent/memory-layers'
 import type { MemoryLoadMode } from '../../shared/memory-types'
 
 export type LoadModeChangeResult =
-  | { ok: true; mode: MemoryLoadMode }
+  | { ok: true; mode: MemoryLoadMode; changed: boolean }
   | { ok: false; reason: 'dirty' | 'openInEditor' | 'readFailed' | 'writeFailed' }
 
 export async function changeMemoryLoadMode(file: string, mode: MemoryLoadMode): Promise<LoadModeChangeResult> {
@@ -30,9 +30,12 @@ export async function changeMemoryLoadMode(file: string, mode: MemoryLoadMode): 
   const raw = await ipc.invoke('memory:read', file)
   if (raw === null || raw === undefined) return { ok: false, reason: 'readFailed' }
   const updated = setLoadModeFrontmatter(raw, mode)
+  // 评审 Minor 5：内容没变就不写盘 —— 写盘会 bump mtime，而 memory:list 按 mtime 排序，
+  // 目录行顺序随之漂移（M2 在前缀区 → 伤前缀缓存），且会给用户虚假的「加载方式已更新」反馈
+  if (updated === raw) return { ok: true, mode, changed: false }
   const res = await ipc.invoke('memory:write', file, updated)
   if (!res?.success) return { ok: false, reason: 'writeFailed' }
-  return { ok: true, mode }
+  return { ok: true, mode, changed: true }
 }
 
 /**

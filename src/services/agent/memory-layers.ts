@@ -93,7 +93,7 @@ function catalogLine(e: MemoryLayerEntry, level: 1 | 2 | 3): string {
   return brief ? `- ${label}：${brief}` : `- ${label}`
 }
 
-function renderCatalog(list: MemoryLayerEntry[], level: 1 | 2 | 3): { text: string; omitted: number } {
+function renderCatalog(list: MemoryLayerEntry[], level: 1 | 2 | 3): { text: string; listed: number; omitted: number } {
   const hint = level === 1 ? '' : level === 2 ? t('memory.catalogHintTruncated') : t('memory.catalogHintNamesOnly')
   const head = hint ? `${t('memory.catalogHeader')}\n${hint}` : t('memory.catalogHeader')
   // 档 2/3 可能带尾部「还有 N 条」提示，其预算先预留（档 1 无提示、不预留）
@@ -108,21 +108,32 @@ function renderCatalog(list: MemoryLayerEntry[], level: 1 | 2 | 3): { text: stri
     used += cost
   }
   const suffix = omitted > 0 ? `\n${t('memory.catalogOmitted').replace('{n}', String(omitted))}` : ''
-  return { text: `${head}\n${lines.join('\n')}${suffix}`, omitted }
+  return { text: `${head}\n${lines.join('\n')}${suffix}`, listed: lines.length, omitted }
+}
+
+/** 目录结果：text 供注入，listed/omitted 供明细面板**如实报数**（评审 Minor 7） */
+export interface MemoryCatalogResult {
+  text: string
+  level: 1 | 2 | 3
+  /** 实际列出的条目数 */
+  listed: number
+  /** 因预算未列出的条目数 */
+  omitted: number
 }
 
 /**
  * 名字目录：三级降级 —— ① brief 全 → ② brief 截 72 + 提示 → ③ 仅名字 + 提示。
  * 取第一个「无条目被挤出」的档位；三档都挤不完则用第三档并附「还有 N 条」。
  */
-export function buildMemoryCatalog(entries: MemoryLayerEntry[]): { text: string; level: 1 | 2 | 3 } {
+export function buildMemoryCatalog(entries: MemoryLayerEntry[]): MemoryCatalogResult {
   const list = catalogEntries(entries)
-  if (list.length === 0) return { text: '', level: 1 }
+  if (list.length === 0) return { text: '', level: 1, listed: 0, omitted: 0 }
   for (const level of [1, 2, 3] as const) {
     const r = renderCatalog(list, level)
-    if (r.omitted === 0) return { text: r.text, level }
+    if (r.omitted === 0) return { text: r.text, level, listed: r.listed, omitted: 0 }
   }
-  return { text: renderCatalog(list, 3).text, level: 3 }
+  const r = renderCatalog(list, 3)
+  return { text: r.text, level: 3, listed: r.listed, omitted: r.omitted }
 }
 
 /** @ 提及 token（与 intent-router.parseMentions 阶段 2 同字符类，故用户输入习惯一致） */

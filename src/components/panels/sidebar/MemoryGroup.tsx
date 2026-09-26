@@ -260,7 +260,8 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
             size="sm"
             fill
             value={meta.loadMode}
-            onChange={(mode) => onLoadModeChange?.(meta.file, mode)}
+            // 点当前档位是 no-op（SegmentedControl 不判 active）——不写盘、不 toast（评审 Minor 5）
+            onChange={(mode) => { if (mode !== meta.loadMode) onLoadModeChange?.(meta.file, mode) }}
             items={[
               { value: 'resident', label: t('memory.loadModeResident'), title: t('memory.loadModeResidentHint') },
               { value: 'auto', label: t('memory.loadModeAuto'), title: t('memory.loadModeAutoHint') },

@@ -62,8 +62,11 @@ export default function AgentMemoryView() {
   const handleLoadModeChange = async (file: string, mode: MemoryLoadMode) => {
     const res = await changeMemoryLoadMode(file, mode)
     if (res.ok) {
-      toast.success(t('memory.loadModeSaved'))
-      await load()
+      // 评审 Minor 5：值没变就不给「已更新」的假反馈，也不刷新列表（磁盘没动）
+      if (res.changed) {
+        toast.success(t('memory.loadModeSaved'))
+        await load()
+      }
     } else {
       const key = res.reason === 'dirty'
         ? 'memory.loadModeDirty'

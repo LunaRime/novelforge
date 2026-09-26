@@ -21,7 +21,7 @@ import { parseMemoryFile } from '../memory/memory-codec'
 import type { MemoryFileMeta } from '../memory/memory-codec'
 import { normalizeLoadMode } from '../../shared/memory-types'
 import {
-  buildManualMentionSection, buildMemoryCatalog, buildResidentSection, catalogEntries, matchMentionedManuals, residentEntries,
+  buildManualMentionSection, buildMemoryCatalog, buildResidentSection, matchMentionedManuals, residentEntries,
   MANUAL_MENTION_BUDGET_TOKENS, RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS,
   type MemoryLayerEntry,
 } from './memory-layers'
@@ -312,7 +312,10 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage
       parts.push(catalog.text)
       segments.push({
         key: 'memory-catalog', tokens: estimateTokens(catalog.text), chars: catalog.text.length,
-        source: t('context.segSourceCatalog').replace('{n}', String(catalogEntries(entries).length)),
+        // 评审 Minor 7：如实报数——被挤出时给「已列/总数」，不拿总数冒充已列数
+        source: t('context.segSourceCatalog').replace('{n}', catalog.omitted > 0
+          ? `${catalog.listed}/${catalog.listed + catalog.omitted}`
+          : String(catalog.listed)),
       })
     }
     const bodies: Array<{ file: string; body: string }> = []
