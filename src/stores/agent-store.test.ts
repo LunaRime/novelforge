@@ -298,6 +298,51 @@ describe('审批策略接线（评审 I4：allow/deny 分支此前无测试）',
   })
 })
 
+describe('/技能名 注入预算（B 档第一轮）', () => {
+  const registerSkill = (name: string, content: string) =>
+    skillRegistry.register({
+      metadata: { name, displayName: `显示-${name}`, description: `描述-${name}`, userInvocable: true },
+      content,
+      source: 'builtin',
+      baseDir: '',
+      filePath: `builtin://${name}`,
+    })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  /** 发一条 `/技能名` 并取回注入后的用户消息 */
+  async function injectedMessage(skillName: string): Promise<string> {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    await useAgentStore.getState().sendMessage(`/${skillName}`)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    return after.messages.find(m => m.role === 'user')?.content ?? ''
+  }
+
+  it('超长技能被截断（此前无任何上限）', async () => {
+    registerSkill('b-long-skill', '长'.repeat(4000))
+    const msg = await injectedMessage('b-long-skill')
+    expect(msg.length).toBeGreaterThan(0)
+    expect(msg.length).toBeLessThan(4000)
+  })
+
+  it('被截断时追加「可用 skill 工具加载全文」提示', async () => {
+    registerSkill('b-long-skill-2', '长'.repeat(4000))
+    const msg = await injectedMessage('b-long-skill-2')
+    expect(msg).toContain('已截断')
+    expect(msg).toContain('skill 工具')
+  })
+
+  it('未超限时不加提示（既有语义不变）', async () => {
+    registerSkill('b-short-skill', '简短技能正文')
+    const msg = await injectedMessage('b-short-skill')
+    expect(msg).toContain('简短技能正文')
+    expect(msg).not.toContain('已截断')
+  })
+})
+
 describe('sendMessage 意图预路由', () => {
   const mockDetect = vi.mocked(detectWritingIntent)
   const mockStartChapter = vi.mocked(startChapterWorkflow)

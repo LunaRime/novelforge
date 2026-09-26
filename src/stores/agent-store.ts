@@ -210,6 +210,9 @@ const generateHelpText = (): string => {
   return lines.join('\n')
 }
 
+/** `/技能名` 注入的 token 上限（B 档第一轮）：超出则截断并提示可用 skill 工具加载全文 */
+const SKILL_INJECT_MAX_TOKENS = 2000
+
 // ===== Tool 确认回调管理 =====
 /** 存储待确认的 Tool 回调（A 档：随决策携带提案 / 项目路径 / 参数，供「始终允许」固化规则） */
 const pendingConfirmations = new Map<string, {
@@ -424,8 +427,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               if (args) {
                 skillContent = skillContent.replace(/\$\{args\}/g, args).replace(/\$1/g, args)
               }
+              // 预算兜底（B 档第一轮）：单篇技能最大 1442 字、且每次调用都进会话历史 ——
+              // 无上限的全量注入会让长技能持续占用上下文。截断并指明可用 skill 工具按需加载全文。
+              const budgeted = truncateToTokenBudget(skillContent, SKILL_INJECT_MAX_TOKENS)
+              const truncatedNotice = budgeted.length < skillContent.length
+                ? `\n\n${t('agent.skillInjectTruncated')}`
+                : ''
               // 改写 content：用户意图 + Skill 指令拼接
-              content = `${t('agent.skillUsed').replace('{name}', command.skill.metadata.displayName ?? command.name).replace('{args}', args || t('agent.noExtraArgs'))}\n\n${skillContent}`
+              content = `${t('agent.skillUsed').replace('{name}', command.skill.metadata.displayName ?? command.name).replace('{args}', args || t('agent.noExtraArgs'))}\n\n${budgeted}${truncatedNotice}`
             }
             break
         }
