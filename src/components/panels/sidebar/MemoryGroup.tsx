@@ -27,7 +27,9 @@ import { confirm } from '../../ui/Confirm'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
+import { SegmentedControl } from '../../ui/SegmentedControl'
 import type { MemoryFileMeta } from '../../../services/memory/memory-codec'
+import type { MemoryLoadMode } from '../../../shared/memory-types'
 
 interface Props {
   /** 项目路径（项目切换时重载） */
@@ -115,15 +117,19 @@ export default function MemoryGroup({ projectPath }: Props) {
 
 // ===== 记忆文件列表（侧栏与 AI 面板共享，P3 Task 3） =====
 
-export function MemoryList({ files, onRebuild, onSaved }: {
+export function MemoryList({ files, onRebuild, onSaved, showLoadMode, onLoadModeChange }: {
   files: MemoryFileMeta[]
   onRebuild: (f: MemoryFileMeta) => void
   onSaved: () => Promise<void>
+  /** C 档第一轮：AI 面板的记忆视图开启加载方式选择器（侧栏不传——264px 放不下） */
+  showLoadMode?: boolean
+  onLoadModeChange?: (file: string, mode: MemoryLoadMode) => void
 }) {
   return (
     <div className="space-y-1">
       {files.map(f => (
-        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved} />
+        <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved}
+          showLoadMode={showLoadMode} onLoadModeChange={onLoadModeChange} />
       ))}
     </div>
   )
@@ -131,10 +137,13 @@ export function MemoryList({ files, onRebuild, onSaved }: {
 
 // ===== 记忆文件行 =====
 
-function MemoryRow({ meta, onRebuild, onSaved }: {
+function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }: {
   meta: MemoryFileMeta
   onRebuild: () => void
   onSaved: () => Promise<void>
+  /** C 档第一轮：显示加载方式三态选择器（常驻 / 自动 / 手动） */
+  showLoadMode?: boolean
+  onLoadModeChange?: (file: string, mode: MemoryLoadMode) => void
 }) {
   const { t } = useTranslation()
 
@@ -242,6 +251,24 @@ function MemoryRow({ meta, onRebuild, onSaved }: {
           <Trash2 size={10} />
         </button>
       </div>
+      {/* C 档第一轮：加载方式三态（仅 AI 面板记忆视图；侧栏 264px 放不下）。
+          与上面行容器是兄弟节点 —— 不嵌进行主按钮（button 嵌 button 非法 HTML），
+          故不影响侧栏「每行 3 按钮」的既有契约。 */}
+      {showLoadMode && (
+        <div className="px-1.5 pb-1.5" style={{ borderTop: '1px solid var(--color-border)' }}>
+          <SegmentedControl
+            size="sm"
+            fill
+            value={meta.loadMode}
+            onChange={(mode) => onLoadModeChange?.(meta.file, mode)}
+            items={[
+              { value: 'resident', label: t('memory.loadModeResident'), title: t('memory.loadModeResidentHint') },
+              { value: 'auto', label: t('memory.loadModeAuto'), title: t('memory.loadModeAutoHint') },
+              { value: 'manual', label: t('memory.loadModeManual'), title: t('memory.loadModeManualHint') },
+            ]}
+          />
+        </div>
+      )}
     </div>
   )
 }

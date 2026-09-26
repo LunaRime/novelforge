@@ -10,7 +10,7 @@
  * 评审项 7：无项目打开时显示「打开项目后可查看记忆」提示（memory-store 依赖项目路径，
  * 不报错不空白）。
  */
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ChevronRight, RefreshCw } from 'lucide-react'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { useAgentStore } from '../../../stores/agent-store'
@@ -19,6 +19,10 @@ import { MemoryList } from '../sidebar/MemoryGroup'
 import { useMemoryRebuild } from '../../../hooks/useMemoryRebuild'
 import { globalEventBus } from '../../../shared/event-bus'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { toast } from '../../ui/Toast'
+import { changeMemoryLoadMode, sumResidentSectionTokens } from '../../../services/memory/load-mode'
+import { RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS } from '../../../services/agent/memory-layers'
+import type { MemoryLoadMode } from '../../../shared/memory-types'
 
 export default function AgentMemoryView() {
   const { t } = useTranslation()
@@ -39,6 +43,32 @@ export default function AgentMemoryView() {
     })
     return () => { unsub() }
   }, [load])
+
+  // 常驻合计（C 档第一轮）：与注入同口径（同一个 buildResidentSection）——文件列表变化时重算
+  const [resident, setResident] = useState<{ tokens: number; overCap: boolean } | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const targets = files.filter(f => f.loadMode === 'resident').map(f => f.file)
+        const usage = await sumResidentSectionTokens(targets)
+        if (!cancelled) setResident(usage)
+      } catch {
+        if (!cancelled) setResident(null)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [files])
+
+  const handleLoadModeChange = async (file: string, mode: MemoryLoadMode) => {
+    const res = await changeMemoryLoadMode(file, mode)
+    if (res.ok) {
+      toast.success(t('memory.loadModeSaved'))
+      await load()
+    } else {
+      toast.error(t(res.reason === 'dirty' ? 'memory.loadModeDirty' : 'memory.loadModeFailed').replace('{error}', res.reason))
+    }
+  }
 
   return (
     <div className="flex flex-col h-full">
@@ -73,6 +103,21 @@ export default function AgentMemoryView() {
         </button>
       </div>
 
+      {/* 常驻合计指示（C 档第一轮）：超警告阈值转黄——用户能一眼看到「常驻吃了多少预算」 */}
+      {resident && (
+        <div
+          className="px-3 py-1 text-micro flex-shrink-0"
+          style={{
+            borderBottom: '1px solid var(--color-border)',
+            color: resident.overCap || resident.tokens > RESIDENT_MEMORY_WARN_TOKENS ? 'var(--color-warning)' : 'var(--color-text-muted)',
+          }}
+        >
+          {t('memory.residentTotal')
+            .replace('{tokens}', String(resident.tokens))
+            .replace('{cap}', String(RESIDENT_MEMORY_BUDGET_TOKENS))}
+        </div>
+      )}
+
       {/* 内容区 */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {!projectPath ? (
@@ -90,6 +135,8 @@ export default function AgentMemoryView() {
             files={files}
             onRebuild={handleRebuild}
             onSaved={refresh}
+            showLoadMode
+            onLoadModeChange={(file, mode) => void handleLoadModeChange(file, mode)}
           />
         )}
       </div>

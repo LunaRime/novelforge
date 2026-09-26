@@ -19,6 +19,7 @@ import AgentConversation from './AgentConversation'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { useEditorStore } from '../../../stores/editor-store'
+import { t } from '../../../shared/locale'
 
 const MEMORY_CONTENT = '---\n---\n\n# 记忆内容测试'
 
@@ -53,8 +54,8 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
         invoke: vi.fn(async (ch: string) => {
           if (ch === 'memory:list') {
             return [
-              { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
-              { file: 'shared.md', kind: 'shared', stale: true, mtime: 2 },
+              { file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '主角是苏晚晴', stale: false, mtime: 1 },
+              { file: 'shared.md', kind: 'shared', loadMode: 'auto', brief: '用户偏好爽文节奏', stale: true, mtime: 2 },
             ]
           }
           if (ch === 'memory:read') return MEMORY_CONTENT
@@ -146,6 +147,74 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
     expect(container.textContent).toContain('book-state.md')
     expect(container.textContent).toContain('记忆')
+    act(() => { root.unmount() })
+  })
+})
+
+describe('AgentMemoryView 加载方式选择器 + 常驻总量（C 档第一轮）', () => {
+  let invoke: ReturnType<typeof vi.fn>
+  const FILES = [
+    { file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '主角是苏晚晴', stale: false, mtime: 1 },
+    { file: 'shared.md', kind: 'shared', loadMode: 'auto', brief: '用户偏好爽文节奏', stale: false, mtime: 2 },
+  ]
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    useEditorStore.setState({ tabs: [], activeTabId: null })
+    invoke = vi.fn(async (ch: string) => {
+      if (ch === 'memory:list') return FILES
+      if (ch === 'memory:read') return '---\nload_mode: resident\n---\n\n# 全书精要\n主角是苏晚晴'
+      if (ch === 'memory:write') return { success: true }
+      return null
+    })
+    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    openProject()
+  })
+
+  it('每行三态选择器 + 三档语义 title（选型解释面）', async () => {
+    const { container, root } = render(<AgentMemoryView />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).toContain('book-state.md')
+    for (const label of [t('memory.loadModeResident'), t('memory.loadModeAuto'), t('memory.loadModeManual')]) {
+      expect(container.textContent).toContain(label)
+    }
+    const btns = [...container.querySelectorAll('button')] as HTMLButtonElement[]
+    expect(btns.filter(b => b.title === t('memory.loadModeAutoHint')).length).toBe(FILES.length)
+    act(() => { root.unmount() })
+  })
+
+  it('点「手动」→ 读-改-写 load_mode: manual，并刷新列表', async () => {
+    const { container, root } = render(<AgentMemoryView />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const manualBtn = [...container.querySelectorAll('button')].find(b => b.textContent === t('memory.loadModeManual')) as HTMLButtonElement
+    act(() => { manualBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    // ⚠️ mock 声明的形参只有 (ch)，元组类型长度 1 —— 直接索引 [1]/[2] 会触发 TS2493；
+    // 转成 unknown[] 再取（本项目既有踩坑：mock 泛型须显式声明参数类型）
+    const write = invoke.mock.calls.find(c => c[0] === 'memory:write') as unknown[] | undefined
+    expect(write?.[1]).toBe('book-state.md')          // 第一行是 book-state
+    expect(String(write?.[2])).toContain('load_mode: manual')
+    act(() => { root.unmount() })
+  })
+
+  it('常驻总量指示：与注入同源（常驻 N / 4000 tokens）', async () => {
+    const { container, root } = render(<AgentMemoryView />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).toMatch(/常驻记忆 \d+ \/ 4000 tokens/)
+    act(() => { root.unmount() })
+  })
+
+  it('编辑器里有该文件未保存修改 → 不写盘（守卫，防静默覆盖用户编辑）', async () => {
+    useEditorStore.setState({
+      tabs: [{ id: 'vela://memory/book-state.md', name: 'book-state.md', type: 'memory', filePath: 'vela://memory/book-state.md', content: '改了一半', dirty: true }],
+    })
+    const { container, root } = render(<AgentMemoryView />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const manualBtn = [...container.querySelectorAll('button')].find(b => b.textContent === t('memory.loadModeManual')) as HTMLButtonElement
+    act(() => { manualBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(invoke.mock.calls.some(c => c[0] === 'memory:write')).toBe(false)
+    expect(useEditorStore.getState().tabs[0].content).toBe('改了一半')  // 编辑缓冲不动
     act(() => { root.unmount() })
   })
 })
