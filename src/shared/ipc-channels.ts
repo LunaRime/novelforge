@@ -295,6 +295,19 @@ export interface FileChannels {
     args: [id: string];
     return: { success: boolean };
   },
+  /** 被压缩对话的原文分卷（B 档第二轮）：与会话 JSON 同目录、`.originals.json` 后缀 */
+  'fs:agent-archive-original-read': {
+    args: [id: string];
+    return: { success: boolean; content?: string | null };
+  },
+  'fs:agent-archive-original-write': {
+    args: [id: string, content: string];
+    return: { success: boolean };
+  },
+  'fs:agent-archive-original-delete': {
+    args: [id: string];
+    return: { success: boolean };
+  },
   /** Agent 长工具结果落盘（P0-1 写盘引用）：主进程 sha1-12 哈希命名 + wx 防重；返回落盘绝对路径 */
   'fs:agent-result-write': {
     args: [content: string];

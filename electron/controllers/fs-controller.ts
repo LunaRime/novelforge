@@ -405,6 +405,11 @@ export function registerFSController() {
     const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '') // uuid 防御性清洗，防路径穿越
     return path.join(VELA_HOME, 'agent-archive', `${safe}.json`)
   }
+  /** 被压缩对话的原文分卷（B 档第二轮）：与会话 JSON 同目录、不同后缀 */
+  const archiveOriginalsPath = (id: string): string => {
+    const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '')
+    return path.join(VELA_HOME, 'agent-archive', `${safe}.originals.json`)
+  }
 
   guardedHandle('fs:agent-archive-list', async (): Promise<{ id: string; title: string; updatedAt: number }[]> => {
     const dir = path.join(VELA_HOME, 'agent-archive')
@@ -457,6 +462,39 @@ export function registerFSController() {
       return { success: true }
     } catch (error) {
       // 文件不存在视为成功（幂等删除），与 fs:delete-file 惯例对齐
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true }
+      return { success: false }
+    }
+  })
+
+  // 原文分卷（B 档第二轮）：写用临时文件 + rename（与 archive-write 同款原子写）
+  guardedHandle('fs:agent-archive-original-read', async (_e, id: string): Promise<{ success: boolean; content?: string | null }> => {
+    try {
+      const content = await fsPromises.readFile(archiveOriginalsPath(id), 'utf-8')
+      return { success: true, content }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true, content: null }
+      return { success: false }
+    }
+  })
+  guardedHandle('fs:agent-archive-original-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
+    try {
+      const dir = path.join(VELA_HOME, 'agent-archive')
+      await fsPromises.mkdir(dir, { recursive: true })
+      const target = archiveOriginalsPath(id)
+      const temp = `${target}.${Date.now()}.tmp`
+      await fsPromises.writeFile(temp, content, 'utf-8')
+      await fsPromises.rename(temp, target)
+      return { success: true }
+    } catch {
+      return { success: false }
+    }
+  })
+  guardedHandle('fs:agent-archive-original-delete', async (_e, id: string): Promise<{ success: boolean }> => {
+    try {
+      await fsPromises.unlink(archiveOriginalsPath(id))
+      return { success: true }
+    } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return { success: true }
       return { success: false }
     }
