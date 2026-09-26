@@ -252,6 +252,30 @@ describe('技能目录段（B 档第一轮）', () => {
   })
 })
 
+describe('上下文逐段明细（B 档第二轮 T5）', () => {
+  it('逐段给出 key / tokens / chars', () => {
+    const { segments } = buildAgentSystemSegments('balanced')
+    const keys = segments.map(s => s.key)
+    expect(keys).toContain('identity')
+    expect(keys).toContain('tools')
+    for (const seg of segments) {
+      expect(seg.tokens).toBeGreaterThan(0)
+      expect(seg.chars).toBeGreaterThan(0)
+    }
+  })
+
+  it('关键段带来源描述（明细面板要能回答"这段来自哪"）', () => {
+    const { segments } = buildAgentSystemSegments('balanced')
+    expect(segments.find(s => s.key === 'tools')?.source).toBeTruthy()
+    expect(segments.find(s => s.key === 'skill-catalog')?.source).toBeTruthy()
+  })
+
+  it('未触发截断的段不标 truncated', () => {
+    const { segments } = buildAgentSystemSegments('balanced')
+    expect(segments.find(s => s.key === 'identity')?.truncated).toBeFalsy()
+  })
+})
+
 describe('assembleFinalPrompt 总上限与降级顺序（F1）', () => {
   const big = '内容'.repeat(4000) // 启发式 ~6000 tokens
 
