@@ -71,6 +71,12 @@ export interface ModelRouteConfig {
   elite: string[]
   standard: string[]
   budget: string[]
+  /**
+   * 路由策略（A 档）：`static`（默认）= 按 PURPOSE_TIER_MAP 静态定层；
+   * `dynamic` = 按 Agent 对话档位（agentModeToTier）动态定层。
+   * 由 llm-store 消费并随 modelRoutes 一起持久化；ModelRouter 自身只透传、不解释。
+   */
+  strategy?: 'static' | 'dynamic'
 }
 
 /** 默认配置（用户可自定义） */
@@ -78,6 +84,28 @@ export const DEFAULT_ROUTE_CONFIG: ModelRouteConfig = {
   elite: [],
   standard: [],
   budget: [],
+}
+
+/**
+ * 对话档位 → 路由层（A 档动态策略的判据，**零 LLM 成本**）。
+ *
+ * 复用 Agent 对话现成的六档「思考等级」（用户可见、可控的投入旋钮）：
+ * quick/swift = 快速问答 → budget；balanced/reflective = 常规 → standard；deep/max = 深度推理 → elite。
+ * 注意：参数刻意用字符串联合而非 import AgentMode —— 避免 model-router 反向依赖 store。
+ */
+export function agentModeToTier(
+  mode: 'quick' | 'swift' | 'balanced' | 'reflective' | 'deep' | 'max',
+): ModelTier {
+  switch (mode) {
+    case 'quick':
+    case 'swift':
+      return 'budget'
+    case 'deep':
+    case 'max':
+      return 'elite'
+    default:
+      return 'standard'
+  }
 }
 
 // ===== 模型路由器 =====
@@ -99,9 +127,13 @@ export class ModelRouter {
     return !model.purposes?.includes('embedding')
   }
 
-  /** 根据 purpose 选择最佳可用模型 */
-  route(purpose: CallPurpose): string | null {
-    const tier = PURPOSE_TIER_MAP[purpose] || 'standard'
+  /**
+   * 根据 purpose 选择最佳可用模型。
+   * `tierOverride` 供动态策略使用（A 档）：给定则跳过静态 purpose→tier 映射、直接定位到该层，
+   * 层内选择与降级链逻辑完全复用；不传时行为与既有一致。
+   */
+  route(purpose: CallPurpose, tierOverride?: ModelTier): string | null {
+    const tier = tierOverride ?? (PURPOSE_TIER_MAP[purpose] || 'standard')
 
     // 尝试 tier 内的模型（仅聊天模型；embedding 模型可能因 autoDetectTiers 误入各层）
     const tierModelIds = this.config[tier] || []
@@ -218,6 +250,7 @@ export class ModelRouter {
     if (config.elite) this.config.elite = config.elite
     if (config.standard) this.config.standard = config.standard
     if (config.budget) this.config.budget = config.budget
+    if (config.strategy) this.config.strategy = config.strategy
   }
 
   /** 更新模型列表 */
@@ -226,12 +259,13 @@ export class ModelRouter {
     // 不再自动填充 tier（见构造注释——路由配置只来自用户持久化配置）
   }
 
-  /** 获取配置 */
+  /** 获取配置（含策略；getConfig 是 llm-store 的 state 回写源，漏掉 strategy 会让它被覆盖丢失） */
   getConfig(): ModelRouteConfig {
     return {
       elite: [...this.config.elite],
       standard: [...this.config.standard],
       budget: [...this.config.budget],
+      ...(this.config.strategy ? { strategy: this.config.strategy } : {}),
     }
   }
 }

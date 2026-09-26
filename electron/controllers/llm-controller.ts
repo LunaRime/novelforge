@@ -474,13 +474,15 @@ export function registerLLMController() {
 
   // ===== 模型路由配置（三层 elite/standard/budget，持久化到全局配置） =====
 
-  guardedHandle('llm:set-routes', async (_event, routes: { elite: string[]; standard: string[]; budget: string[] }) => {
+  guardedHandle('llm:set-routes', async (_event, routes: { elite: string[]; standard: string[]; budget: string[]; strategy?: 'static' | 'dynamic' }) => {
     try {
       const g = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
       g.modelRoutes = {
         elite: Array.isArray(routes.elite) ? routes.elite : [],
         standard: Array.isArray(routes.standard) ? routes.standard : [],
         budget: Array.isArray(routes.budget) ? routes.budget : [],
+        // 白名单值域：非法值一律回落 static（fail-safe 到既有行为）
+        strategy: routes.strategy === 'dynamic' ? 'dynamic' : 'static',
       }
       writeJsonFile(GLOBAL_CONFIG_PATH, g)
       return { success: true }

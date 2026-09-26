@@ -449,6 +449,20 @@ export function ModelRoutingSection() {
         </p>
       </div>
 
+      {/* A 档动态策略：按 Agent 对话的「思考等级」档位自动选层（默认关闭 = 静态映射） */}
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <Label>{t('settings.routeDynamic')}</Label>
+          <p className="text-micro mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.routeDynamicDesc')}
+          </p>
+        </div>
+        <Switch
+          checked={modelRoutes.strategy === 'dynamic'}
+          onCheckedChange={(v) => updateModelRoutes({ strategy: v ? 'dynamic' : 'static' })}
+        />
+      </div>
+
       {tiers.map(tier => {
         const ids = modelRoutes[tier.id] ?? []
         return (

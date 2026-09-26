@@ -173,6 +173,8 @@ export const settingsTexts = {
   'settings.routeSelect': { 'zh-CN': '选择该层主用模型', 'en-US': 'Select the main model', 'ru-RU': 'Выберите основную модель' },
   'settings.routeClear': { 'zh-CN': '未指定（回退默认模型）', 'en-US': 'Not set (falls back to the default model)', 'ru-RU': 'Не задано (используется модель по умолчанию)' },
   'settings.routePriorityHint': { 'zh-CN': '顺序即优先级：靠前者先被选用，全部不可用时按层级降级', 'en-US': 'Order is priority: earlier entries are preferred; tier fallback applies when none are available', 'ru-RU': 'Порядок — приоритет: первые в списке используются раньше; при недоступности применяется откат по уровням' },
+  'settings.routeDynamic': { 'zh-CN': '动态路由（按对话档位选层）', 'en-US': 'Dynamic routing (tier by conversation mode)', 'ru-RU': 'Динамическая маршрутизация (уровень по режиму диалога)' },
+  'settings.routeDynamicDesc': { 'zh-CN': '开启后 Agent 对话按当前「思考等级」选层：快速 → 经济层、深度推理 → 旗舰层；关闭时按任务类型静态映射', 'en-US': 'When on, Agent chats pick the tier from the current thinking level: quick → budget, deep reasoning → elite. When off, the static purpose mapping applies', 'ru-RU': 'Если включено, уровень выбирается по текущему уровню мышления: быстрый → экономичный, глубокий → флагманский. Если выключено — статическое сопоставление по типу задачи' },
   'settings.routeAdd': { 'zh-CN': '添加模型…', 'en-US': 'Add model…', 'ru-RU': 'Добавить модель…' },
   'settings.routeMoveUp': { 'zh-CN': '上移', 'en-US': 'Move up', 'ru-RU': 'Переместить вверх' },
   'settings.routeRemove': { 'zh-CN': '移除', 'en-US': 'Remove', 'ru-RU': 'Удалить' },

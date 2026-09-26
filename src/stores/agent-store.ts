@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
+import { agentModeToTier } from '../services/llm/model-router'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage, type AgentEngineDeps } from '../services/agent/agent-engine'
 import { clearReadState } from '../services/agent/tools/read-file.tool'
@@ -535,7 +536,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       const mySeq = ++generationSeq
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
-      const modelId = currentConv.modelId ?? llmStore.defaultModelId ?? undefined
+      // A 档动态策略：strategy='dynamic' 时按对话档位（用户可见的投入旋钮）决定路由层；
+      // 静态（默认）保持现状 —— 直接取默认模型、不走路由（Agent 主对话此前完全绕过路由器）
+      const routeStrategy = llmStore.modelRoutes?.strategy ?? 'static'
+      const modelId = currentConv.modelId
+        ?? (routeStrategy === 'dynamic'
+          ? llmStore.getModelForTier(agentModeToTier(currentConv.mode))
+          : llmStore.defaultModelId)
+        ?? undefined
 
       if (!modelId) {
         updateAssistantMsg(m => ({

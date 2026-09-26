@@ -60,7 +60,7 @@ export interface GlobalConfig {
   /** LLM 并发配置（主进程启动时恢复，重启不丢） */
   concurrency?: { maxConcurrent: number; maxQueueSize: number }
   /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */
-  modelRoutes?: { elite: string[]; standard: string[]; budget: string[] }
+  modelRoutes?: { elite: string[]; standard: string[]; budget: string[]; strategy?: 'static' | 'dynamic' }
   /**
    * 本地 Ollama 向量档（T4）。可选字段：缺字段/读失败 → 回退
    * `DEFAULT_GLOBAL_CONFIG.localEmbedding`（既有 GlobalConfig 可选字段模式）。

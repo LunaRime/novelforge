@@ -11,7 +11,7 @@ import { toast } from '../components/ui/Toast'
 const deletingModelIds = new Set<string>()
 import type { ModelProfile, LLMResponse, TokenUsage, ProviderAccount } from '../shared/ipc-channels'
 import { normalizeModelProfile } from '../shared/llm-constants'
-import { ModelRouter, type CallPurpose, type ModelRouteConfig, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
+import { ModelRouter, type CallPurpose, type ModelRouteConfig, type ModelTier, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
 /** 流式生成的回调 */
 interface StreamCallbacks {
@@ -78,8 +78,10 @@ interface LLMState {
   cancelGeneration: (requestId: string) => Promise<void>
   /** 测试模型连接 */
   testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
-  /** 根据 purpose 获取最优模型 ID */
-  getModelForPurpose: (purpose: CallPurpose) => string | null
+  /** 根据 purpose 获取最优模型 ID；tierOverride 供 A 档动态策略直接指定路由层 */
+  getModelForPurpose: (purpose: CallPurpose, tierOverride?: ModelTier) => string | null
+  /** 按层取模型（A 档动态策略）：层内为空 → 既有降级链 → 用户默认模型 */
+  getModelForTier: (tier: ModelTier) => string | null
   /** 更新模型路由配置 */
   updateModelRoutes: (config: Partial<ModelRouteConfig>) => void
 }
@@ -352,10 +354,17 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return ipc.invoke('llm:test-connection', model)
   },
 
-  getModelForPurpose: (purpose) => {
+  getModelForPurpose: (purpose, tierOverride) => {
     const { modelRouter } = get()
     if (!modelRouter) return get().defaultModelId
-    return modelRouter.route(purpose) || get().defaultModelId
+    return modelRouter.route(purpose, tierOverride) || get().defaultModelId
+  },
+
+  getModelForTier: (tier) => {
+    const { modelRouter } = get()
+    if (!modelRouter) return get().defaultModelId
+    // purpose 传 'default' 占位——tier 覆盖优先，静态映射不参与
+    return modelRouter.route('default', tier) || get().defaultModelId
   },
 
   updateModelRoutes: (config) => {
