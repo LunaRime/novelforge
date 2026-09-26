@@ -160,6 +160,30 @@ export type TriggerStateMap = Record<string, {
   lastFingerprint?: string
 }>
 
+/**
+ * 一次触发处置的完整产物 —— **事务写入的输入**（`db:automation-apply-outcome`）。
+ * 定义在渲染层 types 里（而非主进程 repository）：渲染层是构造方，
+ * 主进程 repository 反向 import 本文件使用（electron 侧已依赖 src 的类型）。
+ */
+export interface TriggerOutcomeInput {
+  automationId: string
+  /** 该次评估后要写回的 per-trigger 状态（覆盖式） */
+  triggerState: TriggerStateMap
+  /** 要入箱的条目（可为空：指纹已处置但无新条目时只推进状态） */
+  inboxItems: Array<{
+    id: string
+    triggerId: string
+    status: InboxStatus
+    actionPolicy: ActionPolicy
+    match: TriggerMatch
+    /** auto_run 时关联的 run id（调用方构造产物时确定，入库前显式带过来） */
+    runId?: string | null
+  }>
+  /** auto_run 策略下同时建 run */
+  runs: AutomationRun[]
+  now: number
+}
+
 /** 一次 tick 的产出（调度器内部使用，供测试断言） */
 export interface TickOutcome {
   /** 本次提交的收件箱条目 */

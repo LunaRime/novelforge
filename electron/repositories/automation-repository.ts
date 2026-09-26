@@ -16,9 +16,12 @@ import type {
   AutomationTask,
   InboxItem,
   InboxStatus,
-  TriggerMatch,
+  TriggerOutcomeInput,
   TriggerStateMap,
 } from '../../src/services/automation/types'
+
+// 事务输入类型定义在渲染层 types（构造方在渲染层），此处 re-export 保持既有导入路径可用
+export type { TriggerOutcomeInput }
 
 // ===== DDL（单一真相源） =====
 
@@ -85,26 +88,6 @@ function rowToRun(r: Record<string, unknown>): AutomationRun {
     finishedAt: (r.finished_at as number | null) ?? null,
     recoveryState: (r.recovery_state as string | null) ?? null,
   }
-}
-
-/** 一次触发处置的完整产物（applyTriggerOutcome 的事务输入） */
-export interface TriggerOutcomeInput {
-  automationId: string
-  /** 该次评估后要写回的 per-trigger 状态（覆盖式） */
-  triggerState: TriggerStateMap
-  /** 要入箱的条目（可为空：指纹已处置但无新条目时只推进状态） */
-  inboxItems: Array<{
-    id: string
-    triggerId: string
-    status: InboxStatus
-    actionPolicy: InboxItem['actionPolicy']
-    match: TriggerMatch
-    /** auto_run 时关联的 run id（由调用方在构造产物时确定，入库前显式带过来） */
-    runId?: string | null
-  }>
-  /** auto_run 策略下同时建 run */
-  runs: AutomationRun[]
-  now: number
 }
 
 // ===== Repository =====
