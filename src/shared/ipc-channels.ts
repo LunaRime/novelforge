@@ -57,6 +57,8 @@ export interface GlobalConfig {
   recentProjects?: Array<{ name: string; path: string; updatedAt?: number }>
   /** 日志保留策略（双约束：数量 + 时间窗；设置 → 开发者 → 日志保留） */
   logRetention?: { files: number; days: number }
+  /** 压缩保留偏好（§7.1-C2）：只影响之后的压缩；缺省/坏值一律回默认可读（见 compaction-prefs） */
+  compaction?: { historyMaxTokens?: number; minimumChangeTokens?: number; keepBatches?: number }
   /** LLM 并发配置（主进程启动时恢复，重启不丢） */
   concurrency?: { maxConcurrent: number; maxQueueSize: number }
   /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */

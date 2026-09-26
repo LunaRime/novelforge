@@ -7,6 +7,17 @@
  */
 export const uiTexts = {
   'action.save': { 'zh-CN': '保存', 'en-US': 'Save', 'ru-RU': 'Сохранить' },
+  // --- 上下文与压缩（§7.1-C2 保留偏好；口径：只影响之后的压缩）---
+  'settings.compactionTitle': { 'zh-CN': '上下文与压缩', 'en-US': 'Context & compaction', 'ru-RU': 'Контекст и сжатие' },
+  'settings.compactionDesc': { 'zh-CN': '只影响之后的压缩——已压缩的批次不会重算，也不会改写历史。', 'en-US': 'Affects future compactions only — existing batches are never recomputed nor rewritten.', 'ru-RU': 'Влияет только на будущие сжатия — уже сжатые пакеты не пересчитываются и не перезаписываются.' },
+  'settings.compactionHistory': { 'zh-CN': '历史预算（tokens）', 'en-US': 'History budget (tokens)', 'ru-RU': 'Бюджет истории (токены)' },
+  'settings.compactionHistoryDesc': { 'zh-CN': '对话历史超过它就压缩最旧的批次（1000–32000，默认 4000）', 'en-US': 'Compress the oldest batch once history exceeds this (1000–32000, default 4000)', 'ru-RU': 'Сжимать самый старый пакет при превышении (1000–32000, по умолчанию 4000)' },
+  'settings.compactionMinChange': { 'zh-CN': '最小有效降幅（tokens）', 'en-US': 'Minimum effective reduction (tokens)', 'ru-RU': 'Минимальное сокращение (токены)' },
+  'settings.compactionMinChangeDesc': { 'zh-CN': '压完降幅低于它就跳过压缩（免得摘要比原文还长；0–2000，默认 200）', 'en-US': 'Skip compaction when the reduction is smaller (avoids summaries longer than the original; 0–2000, default 200)', 'ru-RU': 'Пропускать сжатие при меньшем сокращении (0–2000, по умолчанию 200)' },
+  'settings.compactionKeep': { 'zh-CN': '保留最新批数', 'en-US': 'Keep latest batches', 'ru-RU': 'Хранить последних пакетов' },
+  'settings.compactionKeepDesc': { 'zh-CN': '只保留最近 N 批压缩（含原文）；更旧的批次连同其分卷原文一并释放，该卡片的「恢复原文」随之消失。0 = 不裁剪（默认，原文永不删）', 'en-US': 'Keep only the latest N compaction batches (originals included); older batches and their stored originals are released, so their "restore original" disappears. 0 = never prune (default; originals are never deleted)', 'ru-RU': 'Хранить только последние N пакетов (с оригиналами); старые пакеты и их оригиналы удаляются. 0 = не удалять (по умолчанию)' },
+  'settings.compactionSaved': { 'zh-CN': '压缩偏好已保存（对之后的压缩生效）', 'en-US': 'Compaction preferences saved (applies to future compactions)', 'ru-RU': 'Настройки сжатия сохранены (для будущих сжатий)' },
+  'settings.compactionSaveFailed': { 'zh-CN': '保存失败：{error}', 'en-US': 'Save failed: {error}', 'ru-RU': 'Не удалось сохранить: {error}' },
   'action.cancel': { 'zh-CN': '取消', 'en-US': 'Cancel', 'ru-RU': 'Отмена' },
   'action.stop': { 'zh-CN': '停止', 'en-US': 'Stop', 'ru-RU': 'Стоп' },
   'action.confirm': { 'zh-CN': '确认', 'en-US': 'Confirm', 'ru-RU': 'Подтвердить' },

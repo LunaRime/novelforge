@@ -9,6 +9,7 @@ export const agentTexts = {
   'agent.taskComplete': { 'zh-CN': '已完成', 'en-US': 'completed', 'ru-RU': 'завершено' },
   'agent.skillCatalogHeader': { 'zh-CN': '可用技能（需要时用 skill 工具按名加载全文）：', 'en-US': 'Available skills (load full text by name with the skill tool):', 'ru-RU': 'Доступные навыки (полный текст загружается инструментом skill по имени):' },
   'agent.skillInjectTruncated': { 'zh-CN': '（技能内容较长已截断；完整内容可用 skill 工具按名加载）', 'en-US': '(skill content truncated — load the full text by name with the skill tool)', 'ru-RU': '(текст навыка обрезан — полную версию можно загрузить инструментом skill)' },
+  'ccr.batchesPruned': { 'zh-CN': '按保留偏好释放了 {n} 个更旧的压缩批次（当前保留最近 {keep} 批，其原文一并释放）', 'en-US': 'Released {n} older compaction batch(es) per your retention preference (keeping the latest {keep}; their originals were released too)', 'ru-RU': 'Освобождено {n} старых пакетов сжатия согласно настройке хранения (оставлены последние {keep}; оригиналы также удалены)' },
   'ccr.receiptsHeader': { 'zh-CN': '本段已执行的操作（回执）：', 'en-US': 'Operations performed in this segment (receipts):', 'ru-RU': 'Выполненные в этом сегменте операции (квитанции):' },
   'context.segSourceL0': { 'zh-CN': '项目上下文（架构 / 蓝图 / 角色）', 'en-US': 'Project context (architecture / blueprint / characters)', 'ru-RU': 'Контекст проекта (архитектура / план / персонажи)' },
   'context.segSourceL1': { 'zh-CN': '编辑器上下文（当前文件与选中）', 'en-US': 'Editor context (current file and selection)', 'ru-RU': 'Контекст редактора (текущий файл и выделение)' },

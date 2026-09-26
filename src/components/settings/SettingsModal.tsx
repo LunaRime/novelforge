@@ -38,6 +38,7 @@ import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
 import AutomationSection from './AutomationSection'
+import ContextCompactionSection from './ContextCompactionSection'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
@@ -187,6 +188,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                 {/* 写作自动化（D 档）：触发器 → 执行 → 三态处置 */}
                 <div className="mt-6">
                   <AutomationSection />
+                </div>
+                {/* 上下文与压缩（§7.1-C2）：三个保留旋钮，只影响之后的压缩 */}
+                <div className="mt-6">
+                  <ContextCompactionSection />
                 </div>
               </>
             )}

@@ -61,13 +61,20 @@ const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
     }
     case 'fs:read-file':
       return { success: true, content: '长文本内容' }
+    // §7.1-C2：压缩保留偏好从全局配置读（逐用例覆写 configResponse）
+    case 'config:get':
+      return configResponse
     default:
       return null
   }
 })
 
+/** §7.1-C2：config:get 的返回值（逐用例覆写） */
+let configResponse: unknown = null
+
 beforeEach(() => {
   archiveFiles.clear()
+  configResponse = null
   deleteCalls = []
   useAgentStore.setState({ conversations: [], activeConversationId: null })
   // 项目快照 fixture：createConversation 读取 currentProject 写入 projectPath/projectName
@@ -1152,5 +1159,83 @@ describe('派发顺序化与取消传到底（C 档第二轮评审修复）', ()
     )
     expect(res).toBe(false)
     expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+})
+
+// ===== 压缩保留偏好（§7.1-C2）=====
+vi.mock('../services/render-logger', () => ({ renderLog: vi.fn() }))
+
+import { renderLog } from '../services/render-logger'
+
+describe('压缩保留偏好（§7.1-C2）', () => {
+  const renderLogMock = vi.mocked(renderLog)
+
+  /** 构造会话 + 约 `repeat` 规模的历史（repeat=50 → 启发式 ~1000 tokens/条） */
+  const seed = (count: number, repeat: number, batches = 0) => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const msgs = Array.from({ length: count }, (_, i) => ({
+      id: `p${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '历史消息占位。'.repeat(repeat), createdAt: i,
+    }))
+    const compressed = Array.from({ length: batches }, (_, i) => ({
+      batch: i + 1, original: [], summary: `旧摘要${i + 1}`, compressedAt: i, originalTokens: 500, recoverable: true,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs, compressed } : c),
+    }))
+    return conv
+  }
+
+  const setupLlm = (summary = '迭代摘要') => {
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: summary, usage: undefined })) as never })
+  }
+
+  beforeEach(() => {
+    renderLogMock.mockClear()
+    // 测试卫生（非产品行为）：前置 describe 会把 detectWritingIntent 留成非 none
+    //（并可能把 generating 留成 true）——两者都会让本 describe 的 sendMessage 走岔路
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    setupLlm()
+  })
+
+  it('historyMaxTokens 调小 → 同规模历史从「不压」变「压」（偏好真的生效）', async () => {
+    // 4 条 × ~1000 tokens ≈ 4000 出头但 < 默认 4000 的触发线？——直接对比两次不同配置更稳
+    const a = seed(6, 40)
+    configResponse = { compaction: { historyMaxTokens: 32000 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().conversations.find(c => c.id === a.id)!.compressed ?? []).toHaveLength(0)
+
+    const b = seed(6, 40)
+    configResponse = { compaction: { historyMaxTokens: 1000 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().conversations.find(c => c.id === b.id)!.compressed).toHaveLength(1)
+  })
+
+  it('minimumChangeTokens 调高 → 跳过压缩并留痕（不静默丢上下文）', async () => {
+    const conv = seed(6, 40)
+    configResponse = { compaction: { historyMaxTokens: 1000, minimumChangeTokens: 2000 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed ?? []).toHaveLength(0)
+    expect(renderLogMock).toHaveBeenCalledWith('warn', 'Agent', expect.any(String))
+  })
+
+  it('keepBatches=1 → 只留最新 1 批（更旧的连同分卷释放，卡片消失）', async () => {
+    const conv = seed(6, 40, 2)                 // 已有 2 批
+    configResponse = { compaction: { historyMaxTokens: 1000, keepBatches: 1 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed).toHaveLength(1)
+    expect(after.compressed![0].batch).toBe(3)   // 保留的是新产生的第 3 批
+    expect(renderLogMock).toHaveBeenCalledWith('info', 'Agent', expect.any(String))
+  })
+
+  it('keepBatches 缺省 0 → 不裁剪（维持「原文永不删」）', async () => {
+    const conv = seed(6, 40, 2)
+    configResponse = { compaction: { historyMaxTokens: 1000 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().conversations.find(c => c.id === conv.id)!.compressed).toHaveLength(3)
   })
 })

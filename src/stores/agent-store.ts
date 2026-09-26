@@ -27,6 +27,7 @@ import { useProjectStore } from './project-store'
 import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
 import { MAX_SUB_SESSIONS, SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
 import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
+import { DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs } from '../services/agent/compaction-prefs'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
 import type { LLMGenerateFn } from '../services/agent/agent-engine'
@@ -323,8 +324,8 @@ const generateHelpText = (): string => {
 /** `/技能名` 注入的 token 上限（B 档第一轮）：超出则截断并提示可用 skill 工具加载全文 */
 const SKILL_INJECT_MAX_TOKENS = 2000
 
-/** 压缩的最小有效降幅（B 档第二轮 B2）：低于此值判无收益，**不替换历史** */
-const MINIMUM_CHANGE_TOKENS = 200
+// 压缩的最小有效降幅（B 档第二轮 B2）与历史预算已迁到用户偏好：见 compaction-prefs
+// （§7.1-C2：默认值与旧常量逐字一致 —— 200 / 4000）
 
 // ===== 前缀记账（B 档第二轮 B4）：只记不拦 =====
 /** 上一轮的 system 段文本（比较用；初始为空表示首轮） */
@@ -770,8 +771,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       }
 
       // ===== CCR 压缩检查（替换原 4000-token 硬丢弃）：超预算时先压缩最旧批 =====
-      // 压缩后 messages 剩 rest（最新轮次），压缩批移入 compressed 保留原文（2-3 代）
-      const HISTORY_MAX_TOKENS = 4000 // 常量随块上移（原 456-457 行块内 const）
+      // §7.1-C2：三个策略旋钮从硬编码常量改为**用户偏好**（只影响之后的压缩——
+      // 不重算已压批次、不重写历史；keepBatches>0 时才会裁剪更旧的批次，默认 0 不裁）
+      let prefs = DEFAULT_COMPACTION_PREFS
+      try {
+        prefs = resolveCompactionPrefs(await ipc.invoke('config:get') as { compaction?: unknown } | null)
+      } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
+      const HISTORY_MAX_TOKENS = prefs.historyMaxTokens
       const preCompressMessages = currentConv.messages.filter(m => !m.streaming && m.role !== 'system')
       const totalHistoryTokens = preCompressMessages.reduce(
         (sum, m) => sum + estimateTokens(m.content), 0,
@@ -799,7 +805,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             // ⚠️ 口径必须含回执（评审 I9）：否则"有收益"可能是净增长
             const summaryTokens = estimateTokens(summaryWithReceipts)
             const changeTokens = batchTokens - summaryTokens
-            if (changeTokens < MINIMUM_CHANGE_TOKENS) {
+            if (changeTokens < prefs.minimumChangeTokens) {
               // B2：跳过必须留痕（spec §3.2，评审 I11）—— renderLog 是 agent-store 唯一的
               // 用户可见通道（落盘 + LogsView 展示）；否则用户不知道上下文已靠硬截断在丢消息
               renderLog('warn', 'Agent', t('ccr.compressionSkipped')
@@ -837,7 +843,18 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 // B7：记下生成时的历史指纹（诊断用；失效由 rewind/恢复等事件驱动标记）
                 dependencyHash: computeConversationDependencyHash({ messages: rest }),
               }
-              const compressed = [...(currentConv.compressed ?? []), newBatch]
+              let compressed = [...(currentConv.compressed ?? []), newBatch]
+              // §7.1-C2 keepBatches：仅当用户**显式**设了 N>0 才裁剪更旧的批次
+              // （连同分卷原文释放 → 该压缩卡片的「恢复原文」随之消失）。默认 0 = 不裁，
+              // 维持 B 档第二轮「原文永不删」的承诺。
+              if (prefs.keepBatches > 0 && compressed.length > prefs.keepBatches) {
+                const dropped = compressed.slice(0, compressed.length - prefs.keepBatches)
+                compressed = compressed.slice(compressed.length - prefs.keepBatches)
+                for (const b of dropped) void deleteBatchOriginal(convId, b.batch).catch(() => { /* 分卷释放失败不阻断 */ })
+                renderLog('info', 'Agent', t('ccr.batchesPruned')
+                  .replace('{n}', String(dropped.length))
+                  .replace('{keep}', String(prefs.keepBatches)))
+              }
               set(state => ({
                 conversations: state.conversations.map(c =>
                   c.id === convId
