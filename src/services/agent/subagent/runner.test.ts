@@ -15,6 +15,8 @@ import { t } from '../../../shared/locale'
  * （vitest 不做类型检查，只有 tsc 会拦；本项目既有踩坑）。
  */
 type GenFn = (messages: { role: string; content: string }[]) => Promise<string>
+/** 带流式回调的形态（I3 清洗用例用） */
+type GenFn3 = (messages: { role: string; content: string }[], modelId: string, onChunk?: (chunk: string) => void) => Promise<string>
 
 const task = (over: Partial<SubAgentTask> = {}): SubAgentTask =>
   ({ taskId: 'abc123', description: '查玉佩伏笔', prompt: '查清玉佩伏笔', allowedTools: ['read_drafts'], modelId: 'm', ...over })
@@ -154,5 +156,30 @@ describe('formatSubAgentTranscript（task(task_id) 回放）', () => {
       messages: [], toolCalls: [], artifacts: [], result: '', error: 'model down', startedAt: 0, endedAt: 1,
     }
     expect(formatSubAgentTranscript(s)).toContain('model down')
+  })
+})
+
+describe('评审修复：写入侧净化与产物合并（C 档第二轮）', () => {
+  it('I3：流式 chunk 里的 tool_call/tool_result 标签被清洗（父同口径，否则卡片给用户看 JSON）', async () => {
+    const generate = vi.fn<GenFn3>(async (_m, _id, onChunk) => {
+      onChunk?.('<tool_call>{"name":"read_drafts","arguments":{"chapter":3}}</tool_call>')
+      onChunk?.('玉佩在第 3 章。')
+      return '<tool_call>{"name":"read_drafts","arguments":{"chapter":3}}</tool_call>\n玉佩在第 3 章。'
+    })
+    const s = await runSubAgent(task(), baseDeps({ generate: generate as never }))
+    const all = s.messages.map(m => m.content).join('\n')
+    expect(all).not.toContain('<tool_call>')
+    expect(all).toContain('玉佩在第 3 章。')
+  })
+
+  it('I3：onDone 用清洗后的全文重写（跨 chunk 被切开的标签也能清掉）', async () => {
+    const generate = vi.fn<GenFn3>(async (_m, _id, onChunk) => {
+      onChunk?.('<tool_')            // 半截
+      onChunk?.('call>{"name":"x","arguments":{}}</tool_call>')
+      return '结论：玉佩在第 3 章。<tool_call>{"name":"x","arguments":{}}</tool_call>'
+    })
+    const s = await runSubAgent(task(), baseDeps({ generate: generate as never }))
+    expect(s.result).not.toContain('<tool_call>')
+    expect(s.messages.map(m => m.content).join('\n')).not.toContain('<tool_call>')
   })
 })

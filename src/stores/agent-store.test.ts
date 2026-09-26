@@ -928,9 +928,9 @@ describe('runSubAgentTask（C 档第二轮 T5）', () => {
     const second = await useAgentStore.getState().runSubAgentTask({ description: '查玉佩' })
     expect(runMock).toHaveBeenCalledTimes(1)
     const id = taskRefFor('查玉佩')
-    expect(first).toContain(id)
-    expect(second).toContain(id)
-    expect(second).toContain('untrusted')
+    expect(first.text).toContain(id)
+    expect(second.text).toContain(id)
+    expect(second.text).toContain('untrusted')
   })
 
   it('running 中重复派发 → 返回「正在执行」提示，不新建', async () => {
@@ -941,7 +941,7 @@ describe('runSubAgentTask（C 档第二轮 T5）', () => {
       })),
     }))
     const text = await useAgentStore.getState().runSubAgentTask({ description: '查玉佩' })
-    expect(text).toContain(id)
+    expect(text.text).toContain(id)
     expect(runMock).not.toHaveBeenCalled()
   })
 
@@ -1087,6 +1087,70 @@ describe('子 agent 写操作审批（C 档第二轮 T6）', () => {
     expect(useAgentStore.getState().pendingSubAgentConfirmation).not.toBeNull()
     ac.abort()
     await expect(p).resolves.toBe(false)
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
+  })
+})
+
+describe('派发顺序化与取消传到底（C 档第二轮评审修复）', () => {
+  beforeEach(() => {
+    runMock.mockReset()
+    runMock.mockImplementation(async (task) => fakeSession({ id: task.taskId, taskId: task.taskId }))
+    useAgentStore.setState({
+      conversations: [{ id: 'c1', title: 'T', messages: [], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: 'm' }],
+      activeConversationId: 'c1',
+    } as never)
+  })
+
+  it('I2：一个子 agent 在跑时，另一个（不同描述的）派发被拒（顺序执行，spec §1.2）', async () => {
+    runMock.mockImplementation(async (task, deps) => {
+      deps.onUpdate?.(fakeSession({ id: task.taskId, taskId: task.taskId, status: 'running' }))
+      return new Promise<SubAgentSession>(resolve => setTimeout(() => resolve(fakeSession({ id: task.taskId, taskId: task.taskId })), 60))
+    })
+    const first = useAgentStore.getState().runSubAgentTask({ description: '任务A' })
+    await new Promise(r => setTimeout(r, 10))
+    const second = await useAgentStore.getState().runSubAgentTask({ description: '任务B' })
+    expect(second.text).toContain(t('subagent.anotherRunning'))
+    expect(runMock).toHaveBeenCalledTimes(1)
+    await first
+  })
+
+  it('I2：同一指纹并发派发也拦（不重复烧 token）', async () => {
+    runMock.mockImplementation(async (task) => new Promise<SubAgentSession>(resolve => setTimeout(() => resolve(fakeSession({ id: task.taskId, taskId: task.taskId })), 60)))
+    const first = useAgentStore.getState().runSubAgentTask({ description: '任务A' })
+    await new Promise(r => setTimeout(r, 10))
+    const second = await useAgentStore.getState().runSubAgentTask({ description: '任务A' })
+    expect(second.text).toContain(t('subagent.duplicateRunning').split('{')[0])
+    expect(runMock).toHaveBeenCalledTimes(1)
+    await first
+  })
+
+  it('I5：cancelSubAgent 连底层流式请求一起取消（否则停不下来的 token 燃烧）', async () => {
+    const cancelSpy = vi.spyOn(useLLMStore.getState(), 'cancelGeneration').mockResolvedValue(undefined)
+    // 模拟真实链路：store 的 generateForSubAgent → llm.generateStream 返回 requestId → 登记
+    const streamSpy = vi.spyOn(useLLMStore.getState(), 'generateStream').mockImplementation(async () => 'req-42')
+    runMock.mockImplementation(async (task, deps) => {
+      void deps.generate([], 'm')   // 不 await：mock 的 generateStream 不会回调 onDone（真实生成才回）
+      deps.onUpdate?.(fakeSession({ id: task.taskId, taskId: task.taskId, status: 'running' }))
+      // 300ms 才完成：确保取消发生在 finally（它会清掉 requestIds）之前
+      return new Promise<SubAgentSession>(resolve => setTimeout(() => resolve(fakeSession({ id: task.taskId, taskId: task.taskId })), 300))
+    })
+    const p = useAgentStore.getState().runSubAgentTask({ description: '任务A' })
+    await new Promise(r => setTimeout(r, 80))   // 等 50ms 缓冲 flush 后才有会话可取消
+    const id = useAgentStore.getState().getActiveConversation()!.subSessions![0].id
+    useAgentStore.getState().cancelSubAgent(id)
+    await p
+    expect(cancelSpy).toHaveBeenCalledWith('req-42')
+    cancelSpy.mockRestore()
+    streamSpy.mockRestore()
+  })
+
+  it('M1：signal 已中止 → 立即拒绝且不出卡（不挂幽灵卡）', async () => {
+    const ac = new AbortController()
+    ac.abort()
+    const res = await useAgentStore.getState().requestSubAgentConfirmation(
+      's1', 'd', { id: 'tc1', toolName: 'write_file', arguments: { file_path: 'drafts/c30.md' }, status: 'pending' }, ac.signal,
+    )
+    expect(res).toBe(false)
     expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
   })
 })

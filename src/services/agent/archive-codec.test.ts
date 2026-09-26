@@ -316,3 +316,21 @@ describe('归档 subSessions（C 档第二轮 T4）', () => {
     expect(s.result).toBe('')
   })
 })
+
+describe('归档 running 归一（C 档第二轮评审 I4）', () => {
+  const baseConv = (): AgentConversation => ({
+    id: 'c1', title: 'T', messages: [], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: null,
+  })
+  it('半途崩溃留下的 running 子会话 → 归一为 cancelled（否则永远「执行中」+ 幂等锁死）', () => {
+    const raw = JSON.stringify({
+      ...baseConv(),
+      subSessions: [{
+        id: 's1', taskId: 's1', description: 'd', prompt: 'p', allowedTools: [], status: 'running',
+        messages: [], toolCalls: [], artifacts: [], result: '', startedAt: 1,
+      }],
+    })
+    const s = parseArchive(raw)!.subSessions![0]
+    expect(s.status).toBe('cancelled')
+    expect(s.error).toBeTruthy()      // 带原因（不静默）
+  })
+})

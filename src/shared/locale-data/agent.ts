@@ -59,6 +59,8 @@ export const agentTexts = {
   'subagent.confirmHint': { 'zh-CN': '允许只对本次生效（子 agent 的批准不会写进「始终允许」规则）；120 秒未回应将自动拒绝。', 'en-US': 'Allow applies to this call only (a sub-agent\'s approval is never remembered as an "always allow" rule); it auto-denies after 120 seconds.', 'ru-RU': 'Разрешение действует только для этого вызова (оно не запоминается как «всегда разрешать»); через 120 секунд — автоотказ.' },
   'subagent.confirmAllow': { 'zh-CN': '允许', 'en-US': 'Allow', 'ru-RU': 'Разрешить' },
   'subagent.confirmDeny': { 'zh-CN': '拒绝', 'en-US': 'Deny', 'ru-RU': 'Отклонить' },
+  'subagent.anotherRunning': { 'zh-CN': '已有子 agent 正在执行（同时只跑一个）——等它完成后再派发。', 'en-US': 'A sub-agent is already running (only one at a time) — wait for it to finish, then dispatch again.', 'ru-RU': 'Субагент уже выполняется (только один одновременно) — дождитесь завершения.' },
+  'subagent.interrupted': { 'zh-CN': '上次运行被中断（应用退出或崩溃）——可重新派发同一子任务。', 'en-US': 'The previous run was interrupted (app quit or crashed) — you can dispatch the same sub-task again.', 'ru-RU': 'Прошлый запуск прерван (выход или сбой приложения) — можно запустить ту же подзадачу снова.' },
   'ccr.historyPanelVsSent': { 'zh-CN': '历史：面板 {panel} · 实发 {sent}', 'en-US': 'History: panel {panel} · sent {sent}', 'ru-RU': 'История: панель {panel} · отправлено {sent}' },
   'ccr.prefixChanged': { 'zh-CN': '前缀：已变化（与上轮共享 {n} 字符）', 'en-US': 'Prefix: changed (shares {n} chars with last turn)', 'ru-RU': 'Префикс: изменён (общих символов: {n})' },
   'ccr.prefixStable': { 'zh-CN': '前缀：稳定', 'en-US': 'Prefix: stable', 'ru-RU': 'Префикс: стабилен' },

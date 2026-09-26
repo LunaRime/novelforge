@@ -4,6 +4,7 @@ import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
 import { computePrefixFingerprint } from './prefix-accounting'
 import { MAX_SUB_SESSIONS, MAX_SUBAGENT_MESSAGES, type SubAgentSession } from './subagent/types'
+import { t } from '../../shared/locale'
 
 export interface CompressedBatch {
   batch: number
@@ -178,6 +179,11 @@ export function parseArchive(raw: string): AgentConversation | null {
             && Array.isArray((s as { messages?: unknown }).messages))
           .map(s => ({
             ...s,
+            // 评审 I4：半途崩溃/退出留下的 running 归一为 cancelled —— 否则重启后卡片永远
+            // 「执行中」（取消按钮点了没反应，activeSubAgents 重启后为空），且幂等检查会
+            // 永久返回「该子任务已在执行中」= 这个子任务在本会话里再也跑不了
+            status: s.status === 'running' ? 'cancelled' : s.status,
+            error: s.status === 'running' ? t('subagent.interrupted') : s.error,
             toolCalls: Array.isArray(s.toolCalls) ? s.toolCalls : [],
             artifacts: Array.isArray(s.artifacts) ? s.artifacts : [],
             allowedTools: Array.isArray(s.allowedTools) ? s.allowedTools : [],

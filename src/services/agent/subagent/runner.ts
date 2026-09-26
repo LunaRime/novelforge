@@ -30,6 +30,20 @@ export interface SubAgentDeps {
   now?: () => number
 }
 
+/**
+ * 流式文本清洗（与父 `agent-store` 的 onTextChunk 同口径，评审 I3）：
+ * 清掉**完整对**与孤立片段的 tool_call / tool_result 标签 —— 否则转录首条就是
+ * `<tool_call>{"name":"read_drafts"…}</tool_call>` 这样的原始 JSON：卡片把它给用户看、
+ * 归档净化会因此删掉整条消息（转录静默少步）、回放还会把它灌回父上下文。
+ * 跨 chunk 被切开的标签由 onDone 的全文重写兜住（父也是这么兜的）。
+ */
+function stripToolTags(text: string): string {
+  return text
+    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+    .replace(/<\/?tool_call>/g, '')
+    .replace(/<\/?tool_result[^>]*>/g, '')
+}
+
 /** 转录尾部追加文本（末条 assistant 若仍在流式则续写，否则新起一条） */
 function appendText(session: SubAgentSession, text: string): void {
   const last = session.messages[session.messages.length - 1]
@@ -82,7 +96,10 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
   emit()
 
   const callbacks: AgentEngineCallbacks = {
-    onTextChunk: (chunk) => { appendText(session, chunk); emit() },
+    onTextChunk: (chunk) => {
+      const cleaned = stripToolTags(chunk).trim()
+      if (cleaned) { appendText(session, cleaned); emit() }
+    },
     onToolCallStart: (tc) => { upsertToolCall(session, tc); emit() },
     onToolCallComplete: (tc) => { upsertToolCall(session, tc); emit() },
     onToolCallConfirmRequired: (tc) => deps.confirm(tc),
@@ -90,6 +107,11 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
       session.result = fullText
       session.toolCalls = toolCalls
       session.artifacts = artifacts
+      // 用清洗后的全文**重写**最后一条 assistant 消息（跨 chunk 切开的标签只有这里能清干净）
+      const cleanedFull = stripToolTags(fullText)
+      const last = session.messages[session.messages.length - 1]
+      if (last?.role === 'assistant') last.content = cleanedFull
+      else if (cleanedFull) session.messages.push({ id: `sa-${session.messages.length}`, role: 'assistant', content: cleanedFull, createdAt: Date.now() })
     },
     onError: (error) => { session.error = error },
   }

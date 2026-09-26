@@ -166,8 +166,13 @@ interface AgentState {
   handleWritingIntent: (intent: WritingIntent, rawContent: string) => Promise<{ status: 'handled' | 'none'; enhancedContent?: string }>
   /** 取消当前生成 */
   cancelGeneration: () => Promise<void>
-  /** C 档第二轮：派发子 agent（task 工具入口）——返回注入父端的 untrusted 文本 */
-  runSubAgentTask: (input: { description: string; prompt?: string; tools?: string[] }) => Promise<string>
+  /** C 档第二轮：派发子 agent（task 工具入口）——`ok=false` 表示未完成（工具侧据此报失败）；
+   *  `artifacts` 供父消息展示子 agent 改过哪些文件（spec §3.6 的产物合并） */
+  runSubAgentTask: (input: { description: string; prompt?: string; tools?: string[] }) => Promise<{
+    text: string
+    ok: boolean
+    artifacts?: ToolArtifact[]
+  }>
   /** 取消某个子 agent（只中止它，不取消父） */
   cancelSubAgent: (sessionId: string) => void
   /** 回放子会话转录（null = 未找到） */
@@ -215,7 +220,7 @@ const genId = () => crypto.randomUUID()
  * 子 agent 的首轮前缀与父无关，混进父的 `lastPrefixText` 会污染父的缓存命中读数
  * （B 档第二轮的前缀记账是「按会话连续两轮」的语义）。
  */
-const generateForSubAgent: LLMGenerateFn = async (messages, modelId, onChunk) => {
+const generateForSubAgent: LLMGenerateFn = async (messages, modelId, onChunk, onRequestId) => {
   const startTime = Date.now()
   let usage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
   try {
@@ -229,7 +234,11 @@ const generateForSubAgent: LLMGenerateFn = async (messages, modelId, onChunk) =>
         },
         modelId,
         { priority: 11 }, // 子 agent 略低于父（12），高于批量任务
-      ).catch((error) => reject(error))
+      ).then((requestId) => {
+        // 回填 requestId：否则子 agent 飞行中的流式请求**任何 UI 动作都取消不了**
+        // （取消只 abort signal，而引擎只在轮次之间查 abort；请求本身要 llm:cancel）
+        onRequestId?.(requestId)
+      }).catch((error) => reject(error))
     })
     void logSubAgentCall(modelId, startTime, usage, true, '')
     return text
@@ -348,6 +357,8 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null
 // ===== 子 agent 派发（C 档第二轮）=====
 /** 运行中的子 agent（sessionId → controller）：单个取消与父取消传播用 */
 const activeSubAgents = new Map<string, AbortController>()
+/** 运行中子 agent 的飞行请求 id（sessionId → requestIds）：取消时一并 llm:cancel */
+const activeSubAgentRequests = new Map<string, Set<string>>()
 /** 待审批卡当前挂起的 resolve（顺序执行 ⇒ 同一时刻至多一张卡）。
  *  用「持有对象」而非裸 let：模块级 let 在本文件跨函数的 CFA 收窄会让 `x?.()` 被判为 never */
 const pendingSubAgent = { resolve: null as ((allow: boolean) => void) | null }
@@ -1261,8 +1272,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeAbortController.abort()
       activeAbortController = null
     }
-    // C 档第二轮：父取消 → 连带中止所有运行中的子 agent（子 agent 的 signal 由 linkParentAbort 绑定）
+    // C 档第二轮：父取消 → 连带中止所有运行中的子 agent（signal + 飞行请求一起收）
     for (const controller of activeSubAgents.values()) controller.abort()
+    for (const ids of activeSubAgentRequests.values()) {
+      for (const id of ids) void useLLMStore.getState().cancelGeneration(id)
+    }
     pendingSubAgent.resolve?.(false)   // 卡在审批卡上的子 agent 一并收尾（否则悬挂到超时）
 
     // 真实取消底层流式请求（旧实现传 assistantMsg.id 给 llm:cancel 无效，底层 API 会跑完）
@@ -1292,22 +1306,36 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   runSubAgentTask: async ({ description, prompt, tools }) => {
     const conv = get().getActiveConversation()
-    if (!conv) return t('subagent.noActiveConversation')
+    if (!conv) return { text: t('subagent.noActiveConversation'), ok: false }
     const allowed = resolveSubAgentTools(tools)
     const taskId = computeSubAgentTaskRef(conv.id, description, allowed)
+    // 顺序执行（spec §1.2）：引擎会把连续只读工具并发成批（task 的 requiresConfirmation:false
+    // ⇒ isReadOnly:true），故模型同轮发两个 task 会**真并发** —— 同指纹的会互相覆盖快照、
+    // 先完成的会把后者从 activeSubAgents 删掉（取消失灵）；异指纹的会让单槽审批卡互相覆盖
+    // （第二张卡被第一张的超时清掉 = 再也无法批准）。故此处单飞。
+    if (activeSubAgents.has(taskId)) {
+      return { text: t('subagent.duplicateRunning').replace('{id}', taskId), ok: false }
+    }
+    if (activeSubAgents.size > 0) {
+      return { text: t('subagent.anotherRunning'), ok: false }
+    }
     // 幂等（spec §3.8）：同会话同描述同工具集 = 同一子任务
     const existing = (conv.subSessions ?? []).find(s => s.taskId === taskId)
     if (existing) {
-      return existing.status === 'running'
-        ? t('subagent.duplicateRunning').replace('{id}', existing.id)
-        : `${formatSubAgentResult(existing)}\n\n${t('subagent.idempotentHint').replace('{id}', existing.id)}`
+      return {
+        text: `${formatSubAgentResult(existing)}\n\n${t('subagent.idempotentHint').replace('{id}', existing.id)}`,
+        ok: existing.status === 'completed',
+      }
     }
     const modelId = conv.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
-    if (!modelId) return t('subagent.noModel')
+    if (!modelId) return { text: t('subagent.noModel'), ok: false }
 
     const task: SubAgentTask = { taskId, description, prompt: prompt || description, allowedTools: allowed, modelId }
     const controller = new AbortController()
     activeSubAgents.set(taskId, controller)
+    // 该子 agent 飞行中的流式请求 id（取消时一并 llm:cancel，否则 signal abort 只作用于轮次之间）
+    const requestIds = new Set<string>()
+    activeSubAgentRequests.set(taskId, requestIds)
     const unlink = linkParentAbort(controller)
 
     // 50ms 缓冲写回（与父的 chunkBuffer 同口径：避免每个 chunk 一次 setState 阻塞主线程）
@@ -1327,7 +1355,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     try {
       const session = await runSubAgent(task, {
-        generate: generateForSubAgent,
+        generate: (messages, modelId, onChunk, onRequestId) =>
+          generateForSubAgent(messages, modelId, onChunk, (id) => {
+            requestIds.add(id)
+            onRequestId?.(id)
+          }),
         buildPrompt: buildSubAgentPrompt,
         confirm: (tc) => get().requestSubAgentConfirmation(taskId, description, tc, controller.signal),
         signal: controller.signal,
@@ -1339,15 +1371,26 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       pending = session
       flush()
       get().persistCurrent(conv.id)
-      return formatSubAgentResult(session)
+      // 失败/取消 → 工具侧如实报失败（spec §3.6：success:false + 原因）；结论与回放线索仍在文本里
+      return {
+        text: formatSubAgentResult(session),
+        ok: session.status === 'completed',
+        artifacts: session.artifacts,   // spec §3.6：产物并入父消息（父能看到子 agent 改过哪些文件）
+      }
     } finally {
       if (flushTimer) clearTimeout(flushTimer)
       activeSubAgents.delete(taskId)
+      activeSubAgentRequests.delete(taskId)
       unlink()
     }
   },
 
-  cancelSubAgent: (sessionId) => { activeSubAgents.get(sessionId)?.abort() },
+  cancelSubAgent: (sessionId) => {
+    activeSubAgents.get(sessionId)?.abort()
+    // 中止飞行中的流式请求（signal 只作用于轮次之间，请求本身要 llm:cancel）
+    const ids = activeSubAgentRequests.get(sessionId)
+    if (ids) for (const id of ids) void useLLMStore.getState().cancelGeneration(id)
+  },
 
   replaySubAgent: (sessionId) => {
     const s = (get().getActiveConversation()?.subSessions ?? []).find(x => x.id === sessionId)
@@ -1362,6 +1405,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const tool = toolRegistry.get(toolCall.toolName)
     const args = (toolCall.arguments ?? {}) as Record<string, unknown>
     const rules = projectPath ? await loadApprovalRules(projectPath) : []
+    // 评审 M1：读规则期间被取消（signal 已 abort）→ 立即拒绝，别再挂卡
+    // （abort 事件不会再触发，挂上的卡没人能批准，会悬到 120s 超时）
+    if (signal?.aborted) return false
     // 与父同一条决策链（A 档）：critical 硬拒绝 / 只读直跑 / 规则命中放行 / 其余 → 转人工
     const decision = evaluateApproval({
       projectPath,

@@ -365,7 +365,9 @@ export async function collectMemoryLayers(userMessage: string): Promise<{
 export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage = ''): Promise<AgentSystemSegmentsAsync> {
   const { base, memory: m1, segments: baseSegments } = buildAgentSystemSegments(mode)
   const layers = await collectMemoryLayers(userMessage)
-  const parts = [layers.catalog, layers.manual].filter(Boolean)
+  // ⚠️ M2 只放**目录**：manual 正文已由 assembleFinalPrompt 作为独立 part（memoryManual）拼在末尾，
+  //    再塞进 M2 就是同一段正文注入两次（每轮白烧 ~body tokens + 提前触发 M1→M2 降级链）
+  const parts = [layers.catalog].filter(Boolean)
   const m2 = parts.length > 0 ? `${t('memory.injectedHeader')}\n\n${parts.join('\n\n')}` : ''
   return {
     base,

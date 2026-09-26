@@ -123,6 +123,8 @@ export type LLMGenerateFn = (
   messages: LLMMessage[],
   modelId: string,
   onChunk?: (chunk: string) => void,
+  /** 底层流式请求 id 回填（C 档第二轮：子 agent 的飞行中请求要能被取消） */
+  onRequestId?: (requestId: string) => void,
 ) => Promise<string>
 
 // ===== 核心引擎 =====
@@ -504,7 +506,9 @@ async function executeToolJob(
   callbacks.onToolCallStart(info)
 
   try {
-    const result = await executeToolWithTimeout(tool.execute, tc.arguments, TOOL_TIMEOUT_MS)
+    // 工具级超时覆盖（C 档第二轮 C1）：`task` 派子 agent 的设计上限 300s + 审批卡 120s，
+    // 用全局 30s 会把所有 >30s 的子任务腰斩（结论永远回不到父端，子 agent 还在空烧 token）
+    const result = await executeToolWithTimeout(tool.execute, tc.arguments, tool.timeoutMs ?? TOOL_TIMEOUT_MS)
 
     // 截断过长的结果
     const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)

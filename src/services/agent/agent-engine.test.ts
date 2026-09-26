@@ -837,3 +837,49 @@ describe('委派白名单（C 档第二轮 T1）', () => {
     expect(statusesOf(callbacks)).toContain(`${WRITE}:completed`)
   })
 })
+
+describe('工具级超时覆盖（C 档第二轮 C1 修复）', () => {
+  const SLOW = 'agent_test_slow'
+  const reg = (name: string, ms: number, timeoutMs?: number): void => {
+    toolRegistry.register(buildAgentTool({
+      name,
+      description: `slow ${name}`,
+      source: 'builtin',
+      inputSchema: { type: 'object', properties: {} },
+      requiresConfirmation: false,
+      ...(timeoutMs !== undefined ? { timeoutMs } : {}),
+      execute: async () => { await new Promise(r => setTimeout(r, ms)); return { success: true, content: 'done' } },
+    }))
+  }
+  const statusesOf = (callbacks: ReturnType<typeof createCallbacks>): string[] =>
+    callbacks.onToolCallComplete.mock.calls.map(c => `${(c[0] as ToolCallInfo).toolName}:${(c[0] as ToolCallInfo).status}`)
+
+  afterEach(() => { toolRegistry.unregister(SLOW) })
+
+  it('工具声明 timeoutMs 时按它判超时（不再吃全局 30s）——长任务不被腰斩', async () => {
+    reg(SLOW, 60, 200)     // 执行 60ms < 自定义 200ms → 完成
+    const { callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${SLOW}","arguments":{}}</tool_call>`,
+      'done',
+    ])
+    expect(statusesOf(callbacks)).toContain(`${SLOW}:completed`)
+  })
+
+  it('工具声明的 timeoutMs 确实生效（更短即超时）', async () => {
+    reg(SLOW, 80, 20)      // 执行 80ms > 自定义 20ms → 超时失败
+    const { callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${SLOW}","arguments":{}}</tool_call>`,
+      'done',
+    ])
+    expect(statusesOf(callbacks)).toContain(`${SLOW}:failed`)
+  })
+
+  it('未声明 timeoutMs 的工具沿用全局默认（行为不变）', async () => {
+    reg(SLOW, 10)
+    const { callbacks } = await runLoopWithResponses([
+      `<tool_call>{"name":"${SLOW}","arguments":{}}</tool_call>`,
+      'done',
+    ])
+    expect(statusesOf(callbacks)).toContain(`${SLOW}:completed`)
+  })
+})

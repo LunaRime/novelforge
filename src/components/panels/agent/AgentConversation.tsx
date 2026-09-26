@@ -273,8 +273,11 @@ function ActiveConversation() {
       for (const tc of tasks) {
         const description = typeof tc.arguments?.description === 'string' ? tc.arguments.description : ''
         if (!description) continue
+        // 评审 M3：与 store 侧同口径——description 存的是 trim 过的，比对也要 trim
+        // （否则模型在描述前后带空格/换行时，跑完了却没有卡片）
+        const wanted = description.trim()
         for (const s of subSessions ?? []) {
-          if (claimed.has(s.id) || s.description !== description) continue
+          if (claimed.has(s.id) || s.description !== wanted) continue
           claimed.add(s.id)
           map.set(msg.id, [...(map.get(msg.id) ?? []), s])
         }

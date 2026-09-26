@@ -87,6 +87,12 @@ export interface AgentTool {
   requiresConfirmation: boolean
   /** 是否为只读操作 */
   isReadOnly: boolean
+  /**
+   * 工具级执行超时覆盖（C 档第二轮）：缺省 = 引擎全局 `TOOL_TIMEOUT_MS`（30s）。
+   * 长耗时工具必须自己声明 —— 否则会在 30s 处被腰斩，而调用方（模型）只看到「超时」，
+   * 拿不到本应返回的结果（`task` 派子 agent 就是这么被切的）。
+   */
+  timeoutMs?: number
   /** 执行函数 */
   execute: (args: Record<string, unknown>) => Promise<ToolResult>
   /** 可选的用户友好名称（UI 显示用，比 name 更可读） */

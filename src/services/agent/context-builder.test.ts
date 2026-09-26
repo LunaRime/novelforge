@@ -367,6 +367,10 @@ describe('记忆分层注入（C 档第一轮）', () => {
     // 正文进独立的 manual 段（独立预算，不再挂在 M2 上——评审 I1）
     expect(withMention.memoryManual).toContain('复仇线为主')
     expect(withMention.memoryManual).toContain('本轮显式引用')
+    // ⚠️ 且**不得**同时留在 M2 里：两处都有会是每轮白烧 ~body 的 token + 提前触发降级链
+    //    （C 档第二轮评审 I1：抽取重构曾把 manual 又塞回 M2 的 parts）
+    expect(withMention.memoryM2).not.toContain('复仇线为主')
+    expect(withMention.memoryM2).toContain('记忆目录')
   })
 
   it('manual 段独立预算：@ 引用的正文超上限 → 整段不注入 + 明细告警，目录不被连坐丢弃', async () => {
