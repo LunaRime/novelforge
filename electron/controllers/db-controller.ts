@@ -11,6 +11,7 @@ import { RevisionRepository } from '../repositories/revision-repository'
 import { ReviewRepository } from '../repositories/review-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
 import { WorkflowCheckpointRepository } from '../repositories/workflow-checkpoint-repository'
+import { createAutomationRepository, type TriggerOutcomeInput } from '../repositories/automation-repository'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
@@ -379,6 +380,60 @@ export function registerDatabaseController() {
       WorkflowCheckpointRepository.clear()
       return { success: true }
     } catch (err) { return { success: false, error: String(err) } }
+  })
+
+  // ============================================================
+  // automation — 写作自动化（D 档：任务 / 收件箱 / 运行记录）
+  // 注：仓库实例内部每次 getProjectDb() 取当前项目库，项目切换自动跟随，无需重建
+  // ============================================================
+  const automationRepo = createAutomationRepository()
+
+  guardedHandle('db:automation-list', async () => {
+    try { return { success: true, tasks: automationRepo.listTasks() } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-save', async (_event, task: unknown) => {
+    try { automationRepo.saveTask(task as Parameters<typeof automationRepo.saveTask>[0]); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-delete', async (_event, id: string) => {
+    try { automationRepo.deleteTask(id); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-set-enabled', async (_event, id: string, enabled: boolean) => {
+    try { automationRepo.setEnabled(id, enabled, Date.now()); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-trigger-states', async () => {
+    try {
+      const states: Record<string, unknown> = {}
+      for (const task of automationRepo.listTasks()) states[task.id] = automationRepo.getTriggerState(task.id)
+      return { success: true, states }
+    } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-apply-outcome', async (_event, input: unknown) => {
+    try { automationRepo.applyTriggerOutcome(input as TriggerOutcomeInput); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-inbox-list', async () => {
+    try { return { success: true, items: automationRepo.listInbox() } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-inbox-update', async (_event, id: string, patch: unknown) => {
+    try { automationRepo.updateInboxStatus(id, patch as Parameters<typeof automationRepo.updateInboxStatus>[1]); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-run-append', async (_event, run: unknown) => {
+    try { automationRepo.appendRun(run as Parameters<typeof automationRepo.appendRun>[0]); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-run-update', async (_event, id: string, patch: unknown) => {
+    try { automationRepo.updateRun(id, patch as Parameters<typeof automationRepo.updateRun>[1]); return { success: true } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-running-runs', async () => {
+    try { return { success: true, runs: automationRepo.getRunningRuns() } }
+    catch (err) { return { success: false, error: String(err) } }
   })
 
   // ============================================================

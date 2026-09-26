@@ -615,6 +615,21 @@ export interface DatabaseChannels {
   'db:checkpoint-load': { args: []; return: { success: boolean; data?: unknown; error?: string } },
   'db:checkpoint-clear': { args: []; return: { success: boolean; error?: string } },
 
+  // automation — 写作自动化（D 档：任务 / 收件箱 / 运行记录）
+  // 返回以 unknown 承载实体（shared 层不依赖 services 的类型定义，与 checkpoint 通道同风格；
+  // 渲染层在 automation-store 侧断言为 AutomationTask / InboxItem / AutomationRun）
+  'db:automation-list': { args: []; return: { success: boolean; tasks?: unknown[]; error?: string } },
+  'db:automation-save': { args: [task: unknown]; return: { success: boolean; error?: string } },
+  'db:automation-delete': { args: [id: string]; return: { success: boolean; error?: string } },
+  'db:automation-set-enabled': { args: [id: string, enabled: boolean]; return: { success: boolean; error?: string } },
+  'db:automation-trigger-states': { args: []; return: { success: boolean; states?: Record<string, unknown>; error?: string } },
+  'db:automation-apply-outcome': { args: [input: unknown]; return: { success: boolean; error?: string } },
+  'db:automation-inbox-list': { args: []; return: { success: boolean; items?: unknown[]; error?: string } },
+  'db:automation-inbox-update': { args: [id: string, patch: unknown]; return: { success: boolean; error?: string } },
+  'db:automation-run-append': { args: [run: unknown]; return: { success: boolean; error?: string } },
+  'db:automation-run-update': { args: [id: string, patch: unknown]; return: { success: boolean; error?: string } },
+  'db:automation-running-runs': { args: []; return: { success: boolean; runs?: unknown[]; error?: string } },
+
   // 6. reviews
   'db:review-create': { args: [params: { baseDraftId: number; reviewIndex: number; content: string }]; return: { success: boolean; id?: number; error?: string } }
   'db:review-list': { args: [baseDraftId: number]; return: ReviewMeta[] }
