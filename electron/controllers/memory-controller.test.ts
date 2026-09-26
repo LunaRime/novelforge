@@ -18,7 +18,7 @@ vi.mock('electron', () => ({
   ipcMain: { handle: vi.fn(), removeHandler: vi.fn() },
 }))
 
-import { assertSafeMemoryFileName, classifyMemoryFileKind } from './memory-controller'
+import { assertSafeMemoryFileName, classifyMemoryFileKind, buildMemoryFileMeta } from './memory-controller'
 
 describe('assertSafeMemoryFileName（F7 安全守卫）', () => {
   it('拒绝空名/./..', () => {
@@ -65,5 +65,26 @@ describe('classifyMemoryFileKind（F9 白名单分类）', () => {
     expect(classifyMemoryFileKind('facts.md', '---\ntype: shared\n---\n\n- 事实A')).toBe('shared')
     // 无 type: shared 不误判
     expect(classifyMemoryFileKind('facts.md', '# 普通笔记')).toBe('unknown')
+  })
+})
+
+describe('buildMemoryFileMeta（C 档第一轮：列表回传分层与 brief）', () => {
+  it('声明 resident → loadMode=resident；缺省 → auto', () => {
+    expect(buildMemoryFileMeta('book-state.md', '---\nload_mode: resident\n---\n# 全书精要\n主角是苏晚晴', 1).loadMode).toBe('resident')
+    expect(buildMemoryFileMeta('book-state.md', '# 全书精要\n主角是苏晚晴', 1).loadMode).toBe('auto')
+  })
+
+  it('非法值回落 auto（坏 frontmatter 不放大成「每轮全文注入」）', () => {
+    expect(buildMemoryFileMeta('shared.md', '---\nload_mode: always\n---\n- 事实', 1).loadMode).toBe('auto')
+  })
+
+  it('brief 与 kind 一并回传（列表读盘本来就为了分类，零额外 IO）', () => {
+    const meta = buildMemoryFileMeta('shared.md', '---\ntype: shared\n---\n\n# 跨会话可复用事实\n- 用户偏好爽文节奏', 3)
+    expect(meta).toMatchObject({ file: 'shared.md', kind: 'shared', loadMode: 'auto', brief: '用户偏好爽文节奏', stale: false, mtime: 3 })
+  })
+
+  it('chapters 文件带 range、stale 标记沿用既有口径', () => {
+    const meta = buildMemoryFileMeta('chapters-001-015.md', '---\nstatus: stale\n---\n\n# 章节记忆 001-015\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒', 7)
+    expect(meta).toMatchObject({ kind: 'chapters', range: '001-015', stale: true, brief: '关键事件：主角觉醒' })
   })
 })

@@ -1,3 +1,9 @@
+import { DEFAULT_MEMORY_LOAD_MODE, normalizeLoadMode, type MemoryLoadMode } from '../../src/shared/memory-types'
+
+// 主进程与渲染层都从这里取分层类型（渲染侧的 src/services/memory/memory-codec.ts 整体 re-export 本文件）
+export { MEMORY_LOAD_MODES, DEFAULT_MEMORY_LOAD_MODE, normalizeLoadMode } from '../../src/shared/memory-types'
+export type { MemoryLoadMode } from '../../src/shared/memory-types'
+
 export interface ChapterSummaryEntry {
   chapterNumber: number
   title: string
@@ -12,6 +18,10 @@ export interface MemoryFileMeta {
   file: string
   /** F9：白名单分类——unknown = 非 book-state/chapters-/volume-/shared 的任意 .md，不参与 M2 注入 */
   kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'
+  /** C 档第一轮：分层（frontmatter load_mode；缺省/非法 → auto） */
+  loadMode: MemoryLoadMode
+  /** C 档第一轮：目录行摘要（正文首个非标题行，≤120 字符） */
+  brief: string
   range?: string
   stale: boolean
   mtime: number
@@ -99,6 +109,51 @@ export function stripStatusFrontmatter(raw: string): string {
   if (entries.length === Object.keys(parsed.frontmatter).length) return raw
   const fm = entries.length > 0
     ? `---\n${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n\n`
+    : ''
+  return `${fm}${parsed.body}`
+}
+
+/** 记忆目录 brief 的字符上限（Denova 目录只放一行摘要的 NF 版） */
+export const MEMORY_BRIEF_MAX_CHARS = 120
+
+/**
+ * 目录/常驻展示用的 brief：正文**首个非空非标题行**，剥列表符（`- `）后截断。
+ * 标题行（`# 全书精要`）没有信息量，故只在整篇没有正文行时回落标题文本——
+ * shared.md 因此得到「用户偏好爽文节奏」这样的首条事实，而不是文件名。
+ */
+export function extractMemoryBrief(raw: string): string {
+  const parsed = parseMemoryFile(raw)
+  const body = parsed?.body ?? raw
+  let heading = ''
+  for (const line of body.split('\n')) {
+    const text = line.trim()
+    if (!text) continue
+    if (text.startsWith('#')) {
+      if (!heading) heading = text.replace(/^#+\s*/, '')
+      continue
+    }
+    const stripped = text.replace(/^[-*]\s+/, '')
+    return stripped.length > MEMORY_BRIEF_MAX_CHARS ? `${stripped.slice(0, MEMORY_BRIEF_MAX_CHARS)}…` : stripped
+  }
+  return heading.length > MEMORY_BRIEF_MAX_CHARS ? `${heading.slice(0, MEMORY_BRIEF_MAX_CHARS)}…` : heading
+}
+
+/**
+ * 写入 load_mode（读-改-写：保留其他 frontmatter 键与正文逐字不动）。
+ * `auto` 表示**删除该键**——缺省即 auto，不留冗余行（同 stripStatusFrontmatter 的处置）。
+ * 空内容/无 frontmatter 均安全；已是目标值时原样返回（幂等，避免无谓写盘）。
+ */
+export function setLoadModeFrontmatter(raw: string, mode: MemoryLoadMode): string {
+  const parsed = parseMemoryFile(raw)
+  if (!parsed) return raw
+  const declared = parsed.frontmatter.load_mode
+  if (mode === DEFAULT_MEMORY_LOAD_MODE ? declared === undefined : normalizeLoadMode(declared) === mode) {
+    return raw
+  }
+  const entries = Object.entries(parsed.frontmatter).filter(([k]) => k !== 'load_mode')
+  if (mode !== DEFAULT_MEMORY_LOAD_MODE) entries.push(['load_mode', mode])
+  const fm = entries.length > 0
+    ? `---\n${entries.map(([k, v]) => `${k}: ${v}`).join('\n')}\n---\n`
     : ''
   return `${fm}${parsed.body}`
 }

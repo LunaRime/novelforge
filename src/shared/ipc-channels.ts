@@ -1114,7 +1114,7 @@ export interface LogChannels {
 export interface MemoryChannels {
   'memory:list': {
     args: []
-    return: Array<{ file: string; kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'; range?: string; stale: boolean; mtime: number }>
+    return: Array<{ file: string; kind: 'chapters' | 'volume' | 'book' | 'shared' | 'unknown'; loadMode: 'resident' | 'auto' | 'manual'; brief: string; range?: string; stale: boolean; mtime: number }>
   }
   'memory:read': {
     args: [file: string]

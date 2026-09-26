@@ -2,7 +2,7 @@
 import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getCurrentProjectPath } from '../database'
-import { parseMemoryFile, markStaleFrontmatter } from '../utils/memory-codec'
+import { parseMemoryFile, markStaleFrontmatter, extractMemoryBrief, normalizeLoadMode } from '../utils/memory-codec'
 import { getProjectVelaDir } from '../utils/config-utils'
 import type { MemoryFileMeta } from '../utils/memory-codec'
 import { guardedHandle } from '../security/ipc-guard'
@@ -44,6 +44,24 @@ const safeFile = (file: string): string => {
   return path.join(memoryDir(), assertSafeMemoryFileName(file))
 }
 
+/**
+ * 单行元数据（纯函数，供 memory:list 与单测）：列表循环本来就逐个读文件做 kind 分类，
+ * 分层与 brief 顺带算出 —— 不额外读盘。
+ */
+export function buildMemoryFileMeta(name: string, raw: string, mtime: number): MemoryFileMeta {
+  const parsed = parseMemoryFile(raw)
+  const kind = classifyMemoryFileKind(name, raw)
+  return {
+    file: name,
+    kind,
+    loadMode: normalizeLoadMode(parsed?.frontmatter.load_mode),
+    brief: extractMemoryBrief(raw),
+    range: kind === 'chapters' ? name.replace(/^chapters-(\d+)-(\d+)\.md$/, '$1-$2') : undefined,
+    stale: parsed ? parsed.frontmatter.status === 'stale' : false,
+    mtime,
+  }
+}
+
 export function registerMemoryController() {
   guardedHandle('memory:list', async (): Promise<MemoryFileMeta[]> => {
     try {
@@ -54,11 +72,8 @@ export function registerMemoryController() {
       for (const e of entries) {
         if (!e.isFile() || !e.name.endsWith('.md')) continue
         const raw = await fsPromises.readFile(path.join(dir, e.name), 'utf-8').catch(() => '')
-        const parsed = parseMemoryFile(raw)
-        const kind = classifyMemoryFileKind(e.name, raw) // F9：白名单分类（P3：frontmatter type: shared 识别），未知前缀 → unknown
-        const range = kind === 'chapters' ? e.name.replace(/^chapters-(\d+)-(\d+)\.md$/, '$1-$2') : undefined
         const stat = await fsPromises.stat(path.join(dir, e.name))
-        out.push({ file: e.name, kind, range, stale: parsed ? parsed.frontmatter.status === 'stale' : false, mtime: stat.mtimeMs })
+        out.push(buildMemoryFileMeta(e.name, raw, stat.mtimeMs))
       }
       return out.sort((a, b) => b.mtime - a.mtime)
     } catch { return [] }

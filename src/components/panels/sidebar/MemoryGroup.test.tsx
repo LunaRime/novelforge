@@ -21,8 +21,8 @@ import { t } from '../../../shared/locale'
 import type { MemoryFileMeta } from '../../../services/memory/memory-codec'
 
 const FILES: MemoryFileMeta[] = [
-  { file: 'chapters-1-3.md', kind: 'chapters', range: '1-3', stale: true, mtime: 3 },
-  { file: 'book-state.md', kind: 'book', stale: false, mtime: 1 },
+  { file: 'chapters-1-3.md', kind: 'chapters', loadMode: 'auto', brief: '关键事件：主角醒来', range: '1-3', stale: true, mtime: 3 },
+  { file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '主角是苏晚晴', stale: false, mtime: 1 },
 ]
 
 /** 章节记忆文件正文（含章节块，符合 isValidMemoryContent） */

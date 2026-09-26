@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseMemoryFile, isStale, markStaleFrontmatter, buildChapterSummaryFile, isValidMemoryContent, stripStatusFrontmatter } from './memory-codec'
+import { parseMemoryFile, isStale, markStaleFrontmatter, buildChapterSummaryFile, isValidMemoryContent, stripStatusFrontmatter, extractMemoryBrief, setLoadModeFrontmatter } from './memory-codec'
 
 describe('parseMemoryFile', () => {
   it('解析 frontmatter 与正文', () => {
@@ -116,5 +116,64 @@ describe('stripStatusFrontmatter（编辑保存清除 stale）', () => {
   it('无 frontmatter 原样返回', () => {
     const raw = '纯正文'
     expect(stripStatusFrontmatter(raw)).toBe(raw)
+  })
+})
+
+describe('extractMemoryBrief（C 档第一轮：目录 brief）', () => {
+  it('取首个非空、非标题行；剥列表符', () => {
+    expect(extractMemoryBrief('---\ntype: shared\n---\n\n# 跨会话可复用事实\n- 用户偏好爽文节奏\n- 主角名苏晚晴'))
+      .toBe('用户偏好爽文节奏')
+    expect(extractMemoryBrief('# 全书精要\n\n主角是苏晚晴')).toBe('主角是苏晚晴')
+  })
+
+  it('正文只有标题时回落标题文本', () => {
+    expect(extractMemoryBrief('# 章节记忆 001-015')).toBe('章节记忆 001-015')
+  })
+
+  it('无 frontmatter 的纯正文同样可用', () => {
+    expect(extractMemoryBrief('纯正文首行\n第二行')).toBe('纯正文首行')
+  })
+
+  it('超 120 字符截断加省略号；空文件为空串', () => {
+    const long = '详'.repeat(200)
+    expect(extractMemoryBrief(long)).toBe(`${'详'.repeat(120)}…`)
+    expect(extractMemoryBrief('   \n\n ')).toBe('')
+  })
+})
+
+describe('setLoadModeFrontmatter（C 档第一轮：写入分层）', () => {
+  it('无 frontmatter 的纯正文：追加块且正文逐字保留', () => {
+    expect(setLoadModeFrontmatter('纯正文', 'resident')).toBe('---\nload_mode: resident\n---\n纯正文')
+  })
+
+  it('已有其他键：保留并追加 load_mode', () => {
+    expect(setLoadModeFrontmatter('---\nstatus: stale\n---\n正文', 'manual'))
+      .toBe('---\nstatus: stale\nload_mode: manual\n---\n正文')
+  })
+
+  it('已有 load_mode：原位替换（不重复追加）', () => {
+    expect(setLoadModeFrontmatter('---\ntype: shared\nload_mode: auto\n---\n正文', 'resident'))
+      .toBe('---\ntype: shared\nload_mode: resident\n---\n正文')
+  })
+
+  it('切回 auto = 删除该键（缺省即 auto，不留冗余行）', () => {
+    expect(setLoadModeFrontmatter('---\nstatus: ok\nload_mode: resident\n---\n正文', 'auto'))
+      .toBe('---\nstatus: ok\n---\n正文')
+    expect(setLoadModeFrontmatter('---\nload_mode: resident\n---\n正文', 'auto')).toBe('正文')
+  })
+
+  it('幂等：已是目标值（含 auto 无键）时原样返回', () => {
+    const resident = '---\nload_mode: resident\n---\n正文'
+    expect(setLoadModeFrontmatter(resident, 'resident')).toBe(resident)
+    const plain = '无 frontmatter 正文'
+    expect(setLoadModeFrontmatter(plain, 'auto')).toBe(plain)
+  })
+
+  it('非法既有值 + auto → 清掉非法键（不保留坏值）', () => {
+    expect(setLoadModeFrontmatter('---\nload_mode: bogus\n---\n正文', 'auto')).toBe('正文')
+  })
+
+  it('空内容返回原样（parseMemoryFile 为 null 分支，不抛）', () => {
+    expect(setLoadModeFrontmatter('', 'resident')).toBe('')
   })
 })
