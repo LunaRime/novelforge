@@ -1,6 +1,7 @@
 import type { AgentMessage, AgentConversation, RewoundBranch } from '../../stores/agent-store'
 import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
+import { computePrefixFingerprint } from './prefix-accounting'
 
 export interface CompressedBatch {
   batch: number
@@ -20,6 +21,15 @@ export interface CompressedBatch {
   /** 产物依赖的历史指纹（历史变更后失配 → invalidated） */
   dependencyHash?: string
   invalidated?: boolean
+}
+
+/**
+ * 会话依赖指纹（B7）：压缩产物（摘要/批次）是基于**当时的非 system 历史**生成的。
+ * 历史变更（rewind / 恢复原文 / 编辑消息）后重算比对，失配即标 `invalidated` —— 失效产物**不注入**上下文。
+ */
+export function computeConversationDependencyHash(conv: { messages: AgentMessage[] }): string {
+  const ids = conv.messages.filter(m => m.role !== 'system').map(m => m.id)
+  return computePrefixFingerprint(ids.join('|'))
 }
 
 /** 副作用回执（B5）：随压缩保留，供后续轮次核对"这批做过什么" */

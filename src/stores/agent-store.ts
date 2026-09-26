@@ -17,7 +17,7 @@ import type { ToolArtifact } from '../services/agent/tool-registry'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
-import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, type CompressedBatch } from '../services/agent/archive-codec'
+import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, computeConversationDependencyHash, type CompressedBatch } from '../services/agent/archive-codec'
 import { writeBatchOriginal } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
@@ -72,6 +72,8 @@ export interface AgentConversation {
   compressed?: CompressedBatch[]
   /** CCR：滚动摘要（M1，注入 system 尾部标注节） */
   rollingSummary?: string
+  /** B7 失效语义：历史已变动，该摘要与当前历史不符 —— 不注入上下文 */
+  rollingSummaryInvalidated?: boolean
   /** 创建时项目快照（仅展示与恢复提示，P0 不做按快照注入） */
   projectPath?: string
   projectName?: string
@@ -164,6 +166,8 @@ interface AgentState {
   /** 回退到指定消息（截断到起点含，被截断消息入 rewound 归档可恢复）；
    *  返回是否成功；无活跃会话或 messageId 无效返回 false */
   rewindToMessage: (messageId: string) => boolean
+  /** B7：把压缩产物标为失效（历史变更后调用 —— rewind / 恢复原文 / 编辑消息） */
+  invalidateCompactions: () => void
   /** 恢复第 entryIndex 个 rewind 归档：归档消息 append 回 messages（rewind 可逆）；
    *  返回是否成功；无归档或索引无效返回 false */
   restoreRewound: (entryIndex: number) => boolean
@@ -696,6 +700,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 beforeTokens: totalHistoryTokens,
                 afterTokens: totalHistoryTokens - changeTokens,
                 changeTokens,
+                // B7：记下生成时的历史指纹（诊断用；失效由 rewind/恢复等事件驱动标记）
+                dependencyHash: computeConversationDependencyHash({ messages: rest }),
               }
               const compressed = [...(currentConv.compressed ?? []), newBatch]
               set(state => ({
@@ -1235,6 +1241,25 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     return newConv.id
   },
 
+  /**
+   * B7：把压缩产物标为失效（历史变更后调用）。
+   * 为什么事件驱动而非指纹比对：`dependencyHash` 覆盖的是**被压缩的那批消息**，
+   * 而那批已移出历史、无从重算。rewind / 恢复原文都是"历史大改"，
+   * 摘要与当前历史必然不符 —— 直接标记：宁可不注入，也不让模型拿过期摘要当事实。
+   */
+  invalidateCompactions: () => {
+    set(state => ({
+      conversations: state.conversations.map(conv => {
+        if (!conv.compressed?.length) return conv
+        return {
+          ...conv,
+          compressed: conv.compressed.map(batch => ({ ...batch, invalidated: true })),
+          rollingSummaryInvalidated: true,
+        }
+      }),
+    }))
+  },
+
   rewindToMessage: (messageId) => {
     // 生成期间不可回退：截断占位符进归档而 LLM 仍继续烧 token（onDone 写回旧 conv——回复丢失无信号）。
     // 守卫放 store 层最稳（发送方唯一入口），UI 禁用留后续
@@ -1254,6 +1279,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           : c
       ),
     }))
+    // B7：截断历史 → 既有压缩产物与当前历史不符，标失效（不注入）
+    get().invalidateCompactions()
     get().persistCurrent(conv.id)
     return true
   },
@@ -1271,6 +1298,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           : c
       ),
     }))
+    // B7：恢复被截断的消息 → 历史变了，压缩产物同样失效
+    get().invalidateCompactions()
     get().persistCurrent(conv.id)
     return true
   },

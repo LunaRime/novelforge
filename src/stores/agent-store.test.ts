@@ -388,6 +388,45 @@ describe('/技能名 注入预算（B 档第一轮）', () => {
   })
 })
 
+describe('压缩产物失效语义（B 档第二轮 T4）', () => {
+  /** 构造带一个压缩批次的会话 */
+  const withBatch = () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T4' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? {
+        ...c,
+        messages: [{ id: 'm-live', role: 'user' as const, content: '当前历史', createdAt: 9 }],
+        rollingSummary: '旧摘要',
+        compressed: [{
+          batch: 1, original: [], summary: '批摘要', compressedAt: 1, originalTokens: 100,
+          recoverable: true, dependencyHash: '生成时的历史指纹',
+        }],
+      } : c),
+    }))
+    return conv.id
+  }
+
+  it('历史变更（rewind 等）→ 批次与摘要都标 invalidated', () => {
+    withBatch()
+    useAgentStore.getState().invalidateCompactions()
+    const conv = useAgentStore.getState().conversations[0]
+    expect(conv.compressed?.[0].invalidated).toBe(true)
+    expect(conv.rollingSummaryInvalidated).toBe(true)
+  })
+
+  it('未发生历史变更时不标记（由事件驱动，不误伤）', () => {
+    withBatch()
+    const conv = useAgentStore.getState().conversations[0]
+    expect(conv.compressed?.[0].invalidated).toBeFalsy()
+    expect(conv.rollingSummaryInvalidated).toBeFalsy()
+  })
+
+  it('无压缩产物的会话不受影响（幂等且安全）', () => {
+    useAgentStore.getState().createConversation({ title: '空会话' })
+    expect(() => useAgentStore.getState().invalidateCompactions()).not.toThrow()
+  })
+})
+
 describe('sendMessage 意图预路由', () => {
   const mockDetect = vi.mocked(detectWritingIntent)
   const mockStartChapter = vi.mocked(startChapterWorkflow)
