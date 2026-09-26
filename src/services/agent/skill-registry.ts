@@ -12,7 +12,7 @@
 
 import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
-import { toolRegistry, type AgentTool } from './tool-registry'
+import { toolRegistry } from './tool-registry'
 import { t } from '../../shared/locale'
 import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
@@ -166,51 +166,11 @@ class SkillRegistryImpl {
    * 将 Skill 注册为 Agent Tool
    */
   private registerToToolRegistry(): void {
-    // 先清理旧的 Skill Tool
+    // B 档第一轮：技能不再逐个注册为 `skill__<name>` 工具 —— 那套把全部技能塞进工具提示词，
+    // 而工具提示词有 1200 token 截断、技能又排在内置工具之后 → **先被砍掉的正是技能**。
+    // 改为「技能目录段（context-builder）+ `skill` 元工具按名懒加载」。
+    // 这里只清理历史注册，避免老会话/热更新残留旧工具。
     toolRegistry.unregisterBySource('skill')
-
-    for (const skill of this.listAll()) {
-      // allowedTools 白名单提示：SKILL.md frontmatter 声明的工具约束注入描述
-      // （此前解析后从未执行——LLM 加载技能后仍可调全部工具；至少以提示约束收窄）
-      const allowedHint = skill.metadata.allowedTools?.length
-        ? ` — ${t('skill.allowedToolsHint')}: ${skill.metadata.allowedTools.join(', ')}`
-        : ''
-      const agentTool: AgentTool = {
-        name: `skill__${skill.metadata.name}`,
-        description: skill.metadata.description
-          + (skill.metadata.whenToUse ? ` — ${skill.metadata.whenToUse}` : '')
-          + allowedHint,
-        source: 'skill',
-        inputSchema: {
-          type: 'object',
-          properties: {
-            args: {
-              type: 'string',
-              description: skill.metadata.argumentHint ?? t('skill.optionalArgs'),
-            },
-          },
-        },
-        requiresConfirmation: false,
-        isReadOnly: true,
-        userFacingName: skill.metadata.displayName ?? skill.metadata.name,
-        execute: async (toolArgs) => {
-          const userArgs = (toolArgs.args as string) ?? ''
-          // 变量替换
-          let content = skill.content
-          if (userArgs) {
-            content = content.replace(/\$\{args\}/g, userArgs)
-            content = content.replace(/\$1/g, userArgs)
-          }
-          content = content.replace(/\$\{SKILL_DIR\}/g, skill.baseDir)
-
-          return {
-            success: true,
-            content: `[Skill: ${skill.metadata.displayName ?? skill.metadata.name}]\n\n${content}`,
-          }
-        },
-      }
-      toolRegistry.register(agentTool)
-    }
   }
 }
 

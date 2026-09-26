@@ -18,6 +18,7 @@ import { appendOutputLanguage } from '../prompt-templates'
 import { ipc } from '../ipc-client'
 import { parseMemoryFile } from '../memory/memory-codec'
 import { toolRegistry } from './tool-registry'
+import { skillRegistry } from './skill-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 /** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间 + shared 段，累计不超过此值） */
@@ -42,6 +43,34 @@ const TOTAL_BUDGET_TOKENS = 4700
  * - memory：M1 会话摘要（自动生成标注节，预算 300 tokens）+ 可扩展 M2 作品记忆（P1）
  * 语言指令由 buildAgentSystemPrompt 统一追加（保持最末尾，#30）
  */
+/** 技能目录段预算（独立于工具提示词的 1200 —— 它很小，且是模型发现技能的唯一途径） */
+const SKILL_CATALOG_BUDGET_TOKENS = 400
+
+/**
+ * 技能目录段：每技能一行（名字 + 一句话描述），超预算按行截断并提示剩余数量。
+ * `userInvocable` 不参与过滤 —— 该字段只约束 `/命令`，不约束模型。
+ */
+function buildSkillCatalogSnippet(): string {
+  const skills = skillRegistry.listAll()
+  if (skills.length === 0) return ''
+  const header = t('agent.skillCatalogHeader')
+  const lines: string[] = []
+  let used = estimateTokens(header)
+  let omitted = 0
+  for (const skill of skills) {
+    const line = `- ${skill.metadata.displayName ?? skill.metadata.name}（${skill.metadata.name}）：${skill.metadata.description}`
+    const cost = estimateTokens(line)
+    if (used + cost > SKILL_CATALOG_BUDGET_TOKENS) {
+      omitted = skills.length - lines.length
+      break
+    }
+    lines.push(line)
+    used += cost
+  }
+  const suffix = omitted > 0 ? `\n${t('agent.skillCatalogOmitted').replace('{n}', String(omitted))}` : ''
+  return `${header}\n${lines.join('\n')}${suffix}`
+}
+
 export function buildAgentSystemSegments(mode: AgentMode): { base: string; memory: string } {
   const sections: string[] = []
 
@@ -65,6 +94,13 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
       ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => tool.name).join(', '))}`
       : truncated)
   }
+
+  // 5. 技能目录（B 档第一轮）：独立成段、独立预算 —— 模型发现技能的**唯一途径**。
+  //    此前技能以 `skill__<name>` 工具形式排在工具清单末尾，而工具提示词有 1200 token 截断
+  //    → 先被砍掉的正是技能，模型只能看到一份名字清单。目录只放名字与一句话描述，
+  //    全文由 skill 元工具按名加载（懒加载）。
+  const catalog = buildSkillCatalogSnippet()
+  if (catalog) sections.push(catalog)
 
   const base = sections.join('\n\n---\n\n')
 

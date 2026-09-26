@@ -7,6 +7,8 @@
  */
 export const agentTexts = {
   'agent.taskComplete': { 'zh-CN': '已完成', 'en-US': 'completed', 'ru-RU': 'завершено' },
+  'agent.skillCatalogHeader': { 'zh-CN': '可用技能（需要时用 skill 工具按名加载全文）：', 'en-US': 'Available skills (load full text by name with the skill tool):', 'ru-RU': 'Доступные навыки (полный текст загружается инструментом skill по имени):' },
+  'agent.skillCatalogOmitted': { 'zh-CN': '（还有 {n} 个技能未列出，可用 skill 工具查看全部）', 'en-US': '({n} more skills not listed — use the skill tool to see all)', 'ru-RU': '(ещё {n} навыков не показано — используйте инструмент skill)' },
   'agentConfirm.writeFile': { 'zh-CN': '将写入文件：{path}', 'en-US': 'Will write file: {path}', 'ru-RU': 'Запишет файл: {path}' },
   'agentConfirm.openEditor': { 'zh-CN': '将在编辑器中打开：{path}', 'en-US': 'Will open in editor: {path}', 'ru-RU': 'Откроет в редакторе: {path}' },
   'agentConfirm.startWorkflow': { 'zh-CN': '将启动工作流：{name}{chapter}', 'en-US': 'Will start workflow: {name}{chapter}', 'ru-RU': 'Запустит workflow: {name}{chapter}' },

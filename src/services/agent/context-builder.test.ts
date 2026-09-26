@@ -15,6 +15,7 @@ import {
 } from './context-builder'
 import { estimateTokens } from './token-budget'
 import { useAgentStore } from '../../stores/agent-store'
+import { skillRegistry } from './skill-registry'
 import { buildSharedFile } from '../memory/shared-memory'
 
 describe('buildAgentSystemPrompt 输出语言约束', () => {
@@ -181,6 +182,47 @@ describe('M2 作品记忆节（P1）', () => {
     const { memoryM2 } = await buildAgentSystemSegmentsAsync('quick')
     expect(memoryM2).toContain('用户偏好爽文节奏') // shared 没被 book 挤出
     expect(memoryM2).toContain('全书精要') // book 仍有节选
+  })
+})
+
+describe('技能目录段（B 档第一轮）', () => {
+  const reg = (name: string, displayName: string, userInvocable = true) =>
+    skillRegistry.register({
+      metadata: { name, displayName, description: `描述-${name}`, userInvocable },
+      content: `正文-${name}`,
+      source: 'builtin',
+      baseDir: '',
+      filePath: `builtin://${name}`,
+    })
+
+  beforeEach(() => {
+    reg('cb-skill-x', '目录技能X')
+    reg('cb-skill-hidden', '目录技能Hidden', false)
+  })
+
+  it('系统提示词含技能目录段（displayName 与 name）', () => {
+    expect(skillRegistry.listAll().length).toBeGreaterThan(0)   // 诊断：注册表非空
+    const { base } = buildAgentSystemSegments('balanced')
+    expect(base).toContain('目录技能X')
+    expect(base).toContain('cb-skill-x')
+  })
+
+  it('userInvocable:false 的技能也在目录里（该字段只约束 /命令）', () => {
+    const { base } = buildAgentSystemSegments('balanced')
+    expect(base).toContain('cb-skill-hidden')
+  })
+
+  it('目录段超预算时截断并提示剩余数量', () => {
+    for (let i = 0; i < 60; i++) {
+      reg(`cb-bulk-${i}`, `批量技能${i}`, true)
+    }
+    const { base } = buildAgentSystemSegments('balanced')
+    expect(base).toMatch(/还有|and \d+ more/)   // 剩余提示（三语文案之一）
+  })
+
+  it('工具提示词里不再出现 skill__ 前缀（收敛为元工具）', () => {
+    const { base } = buildAgentSystemSegments('balanced')
+    expect(base).not.toContain('skill__')
   })
 })
 
