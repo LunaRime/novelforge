@@ -68,6 +68,18 @@ export const skillTool = buildAgentTool({
     }
 
     const args = typeof input.args === 'string' ? input.args : ''
-    return { success: true, content: applySkillArgs(skill.content, args) }
+    let content = applySkillArgs(skill.content, args)
+
+    // allowedTools 三态（B 档第一轮）：原实现用 `?.length` 判空，导致显式 `[]`（"禁止调用工具"）
+    // 不产生任何提示、语义丢失。现在：未声明 → 无提示；显式空 → 禁止提示；非空 → 白名单提示。
+    // 消费点随 `skill__*` 注册一并迁移到这里（加载全文时立即看到约束）。
+    const tools = skill.metadata.allowedTools
+    if (Array.isArray(tools)) {
+      content += tools.length === 0
+        ? `\n\n---\n${t('skill.allowedToolsNone')}`
+        : `\n\n---\n${t('skill.allowedToolsHint')}: ${tools.join(', ')}`
+    }
+
+    return { success: true, content }
   },
 })

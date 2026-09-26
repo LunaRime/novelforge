@@ -56,6 +56,24 @@ describe('skill 元工具', () => {
     expect(String(res.error)).toContain('b-skill-a')   // 附目录，便于下一轮纠正
   })
 
+  it('allowedTools 未声明 → 无工具约束提示', async () => {
+    skillRegistry.register(mk('b-skill-tools-undeclared'))
+    const res = await skillTool.execute({ name: 'b-skill-tools-undeclared' })
+    expect(res.content).not.toContain('不应调用任何工具')
+  })
+
+  it('allowedTools: [] → 提示"不应调用任何工具"（显式语义不丢失）', async () => {
+    skillRegistry.register(mk('b-skill-tools-empty', { allowedTools: [] }))
+    const res = await skillTool.execute({ name: 'b-skill-tools-empty' })
+    expect(res.content).toContain('不应调用任何工具')
+  })
+
+  it('allowedTools: ["read_file"] → 提示白名单', async () => {
+    skillRegistry.register(mk('b-skill-tools-list', { allowedTools: ['read_file'] }))
+    const res = await skillTool.execute({ name: 'b-skill-tools-list' })
+    expect(res.content).toContain('read_file')
+  })
+
   it('只读且不需确认（纯读操作）', () => {
     expect(skillTool.requiresConfirmation).toBe(false)
     expect(skillTool.isReadOnly).toBe(true)

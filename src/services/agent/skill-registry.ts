@@ -111,6 +111,29 @@ class SkillRegistryImpl {
     let count = 0
     try {
       const entries = await ipc.invoke('fs:list-dir', dir)
+
+      // 形态 B：扁平 `<name>.md`（与设置页导入格式对齐，B 档第一轮修）
+      // 先处理 —— `register` 是同名覆盖，随后的目录形态因此能拿到优先权
+      for (const entry of entries) {
+        if (entry.isDir || !entry.name.toLowerCase().endsWith('.md')) continue
+        try {
+          const result = await ipc.invoke('fs:read-file', entry.path)
+          if (!result.success) continue
+
+          const baseName = entry.name.replace(/\.md$/i, '')
+          const sep = entry.path.includes('\\') ? '\\' : '/'
+          const baseDir = entry.path.slice(0, entry.path.lastIndexOf(sep)) || entry.path
+          const skill = parseSkillMd(result.content, baseName, source, baseDir, entry.path)
+          if (skill) {
+            this.register(skill)
+            count++
+          }
+        } catch {
+          // 单个 Skill 加载失败不影响整体
+        }
+      }
+
+      // 形态 A：`<dir>/SKILL.md`（既有形态，优先）
       for (const entry of entries) {
         if (!entry.isDir) continue
 
