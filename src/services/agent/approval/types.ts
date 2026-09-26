@@ -29,6 +29,12 @@ export interface ApprovalRule {
   matcherVersion: number
   /** 参数身份 JSON（稳定序列化）；命中需与当次提案逐字节一致 */
   matchKey: string
+  /**
+   * 归一化后的项目根路径 —— 规则只在同一项目内有效。
+   * 规则文件随项目目录走（复制/改名/迁移后仍会被读到），匹配时必须重新比对路径，
+   * 否则 A 项目的授权会在 B 项目静默生效。
+   */
+  projectPath: string
   /** 人类可读描述（如 `write_file → drafts/`） */
   displayPattern: string
   /** 审计：批准时的参数哈希 */

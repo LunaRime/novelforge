@@ -13,6 +13,7 @@ const rule: ApprovalRule = {
   matcher: 'args-identity',
   matcherVersion: 1,
   matchKey: '["start_workflow","generate_draft"]',
+  projectPath: 'e:/novels/demo',
   displayPattern: 'start_workflow → generate_draft',
   approvedArgsHash: 'cafebabe',
   createdAt: '2026-09-26T00:00:00.000Z',
@@ -59,6 +60,13 @@ describe('workspace 批准记忆（.novelforge/approvals.json）', () => {
     const written = JSON.parse(String(writeCall[2]))
     expect(written.version).toBe(1)
     expect(written.rules).toHaveLength(1)   // 同 id 去重，不重复追加
+  })
+
+  it('写入失败（success:false）→ 抛出（调用方据此记日志，不得静默成功）', async () => {
+    mockInvoke
+      .mockResolvedValueOnce({ success: true, content: JSON.stringify({ version: 1, rules: [] }) })
+      .mockResolvedValueOnce({ success: false, error: 'EACCES' })
+    await expect(appendApprovalRule('E:/novels/demo', rule)).rejects.toThrow()
   })
 
   it('追加：新规则进入列表尾部', async () => {

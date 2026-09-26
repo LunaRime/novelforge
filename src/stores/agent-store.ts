@@ -20,6 +20,7 @@ import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, type CompressedBatch } from '../services/agent/archive-codec'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { ipc } from '../services/ipc-client'
+import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
 
 // ===== 类型定义 =====
@@ -1107,7 +1108,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // 写入失败不阻断本次批准（下次仍会询问，fail-closed）。
       const rule = ruleFromApproval(pending.decision, pending.projectPath, pending.args ?? {}, confirmed, alwaysAllow)
       if (rule && pending.projectPath) {
-        void appendApprovalRule(pending.projectPath, rule).catch(() => { /* 规则写入失败不影响本次执行 */ })
+        const target = pending.projectPath
+        void appendApprovalRule(target, rule).catch((e) => {
+          // 写入失败不阻断本次批准（下次会重新询问），但必须留痕 —— 否则用户以为「已记住」（评审 I3）
+          renderLog('error', 'Approval', t('log.render.approvalRuleSaveFailed').replace('{err}', () => String(e)))
+        })
       }
       pending.resolve(confirmed)
     }

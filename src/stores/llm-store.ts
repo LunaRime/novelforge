@@ -170,7 +170,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     // → 不清会让 ModelRoutingSection 读到不存在的 id 而显示空白
     const alive = new Set(get().models.map((m) => m.id))
     const routes = get().modelRoutes
+    // ⚠️ 展开 routes 以保留 strategy —— 否则每次删账户都会把「动态路由」开关静默重置为 static（评审 I2）
     const cleaned: ModelRouteConfig = {
+      ...routes,
       elite: routes.elite.filter((id) => alive.has(id)),
       standard: routes.standard.filter((id) => alive.has(id)),
       budget: routes.budget.filter((id) => alive.has(id)),
@@ -224,7 +226,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     if (result.success) {
       // 从三层路由中清理该模型引用（防 ModelRoutingSection 读到已删除 id 显示空白）
       const routes = get().modelRoutes
+      // ⚠️ 展开 routes 以保留 strategy —— 否则每次删模型都会把「动态路由」开关静默重置为 static（评审 I2）
       const cleaned: ModelRouteConfig = {
+        ...routes,
         elite: routes.elite.filter(id => id !== modelId),
         standard: routes.standard.filter(id => id !== modelId),
         budget: routes.budget.filter(id => id !== modelId),

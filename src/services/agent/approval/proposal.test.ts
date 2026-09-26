@@ -67,17 +67,37 @@ describe('matchesRule 匹配与失效', () => {
 
   it('同工具同 identity 命中（章节号等非 identity 参数不影响）', () => {
     const next = proposeRule(req('start_workflow', { workflow: 'generate_draft', chapter_number: 9 }))!
-    expect(matchesRule(rule, next)).toBe(true)
+    expect(matchesRule(rule, next, 'E:/novels/demo')).toBe(true)
   })
 
   it('不同 identity 不命中', () => {
     const other = proposeRule(req('start_workflow', { workflow: 'finalize' }))!
-    expect(matchesRule(rule, other)).toBe(false)
+    expect(matchesRule(rule, other, 'E:/novels/demo')).toBe(false)
   })
 
   it('matcherVersion 不同 → 不命中（fail-closed）', () => {
     const p = proposeRule(req('start_workflow', { workflow: 'generate_draft' }))!
-    expect(matchesRule(rule, { ...p, matcherVersion: p.matcherVersion + 1 })).toBe(false)
+    expect(matchesRule(rule, { ...p, matcherVersion: p.matcherVersion + 1 }, 'E:/novels/demo')).toBe(false)
+  })
+
+  it('项目路径不符 → 不命中（规则不随项目复制/改名迁移）', () => {
+    const next = proposeRule(req('start_workflow', { workflow: 'generate_draft' }))!
+    expect(matchesRule(rule, next, 'E:/novels/other')).toBe(false)
+    expect(matchesRule(rule, next, 'E:/novels/demo-copy')).toBe(false)
+  })
+
+  it('旧规则无 projectPath 字段 → 不命中（fail-closed）', () => {
+    const next = proposeRule(req('start_workflow', { workflow: 'generate_draft' }))!
+    const legacy = { ...rule, projectPath: undefined } as unknown as typeof rule
+    expect(matchesRule(legacy, next, 'E:/novels/demo')).toBe(false)
+  })
+
+  it('路径归一化：尾分隔符与分隔符风格不影响匹配', () => {
+    const next = proposeRule(req('start_workflow', { workflow: 'generate_draft' }))!
+    const trailing = makeRule(proposal, 'E:/novels/demo/', base.args)
+    expect(matchesRule(trailing, next, 'E:/novels/demo')).toBe(true)
+    const backslash = makeRule(proposal, 'E:\\novels\\demo', base.args)
+    expect(matchesRule(backslash, next, 'E:/novels/demo')).toBe(true)
   })
 
   it('规则 id 稳定且含项目隔离', () => {

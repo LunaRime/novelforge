@@ -1,12 +1,13 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
 import { startChapterWorkflow, WorkflowStartError } from '../services/workflows/workflow-starter'
-import { runAgentLoop } from '../services/agent/agent-engine'
+import { runAgentLoop, type AgentEngineCallbacks, type ToolCallInfo } from '../services/agent/agent-engine'
+import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry } from '../services/agent/skill-registry'
 import { serializeArchive, parseArchive } from '../services/agent/archive-codec'
 import { t } from '../shared/locale'
@@ -249,6 +250,51 @@ describe('read_file 读去重与会话生命周期', () => {
     const r3 = await readFileTool.execute({ file_path: 'chap1.md' })
     expect(r3.content).toContain('长文本内容')
     expect(r3.content).not.toContain('file_unchanged')
+  })
+})
+
+describe('审批策略接线（评审 I4：allow/deny 分支此前无测试）', () => {
+  const mockRunAgentLoop = vi.mocked(runAgentLoop)
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  // 清理责任：sendMessage 首行有 `if (get().generating) return` 守卫，
+  // 本 describe 用桩引擎跑 sendMessage，收尾状态若不复位会把后续用例整片挡掉（实测 18 例连带失败）
+  afterEach(() => {
+    useAgentStore.setState({ generating: false, conversations: [], activeConversationId: null })
+  })
+
+  // 工具注册表需有 read_file（判定 isReadOnly）——模块级注册一次，避免逐用例重复注册刷警告
+  registerBuiltinTools()
+
+  /**
+   * 捕获引擎回调并直接调用确认门（不跑真实 ReAct）——这正是接线所在：
+   * 策略层返回 true=放行 / false=拒绝时，用户不应看到确认卡。
+   * 两个分支在同一次 sendMessage 内验证，避免第二次调用受首次残留状态影响。
+   */
+  it('危险工具 → 拒绝；只读工具 → 放行（都不进确认卡）', async () => {
+    const decisions: boolean[] = []
+    mockRunAgentLoop.mockImplementationOnce(async (
+      _sys: string, _hist: unknown[], _user: string, _model: string, _gen: unknown, callbacks: AgentEngineCallbacks,
+    ) => {
+      decisions.push(await callbacks.onToolCallConfirmRequired({
+        id: 'tc-danger', toolName: 'write_file',
+        arguments: { file_path: '.novelforge/x.json', content: 'x' }, status: 'pending',
+      } as ToolCallInfo))
+      decisions.push(await callbacks.onToolCallConfirmRequired({
+        id: 'tc-readonly', toolName: 'read_file',
+        arguments: { file_path: 'drafts/ch01.md' }, status: 'pending',
+      } as ToolCallInfo))
+      return { text: '', toolCalls: [], artifacts: [] } as never
+    })
+
+    useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    await useAgentStore.getState().sendMessage('测试接线')
+
+    expect(decisions).toEqual([false, true])
   })
 })
 

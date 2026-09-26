@@ -32,10 +32,11 @@ export function evaluateApproval(req: ApprovalRequest): ApprovalDecision {
     return { action: 'allow', risk: 'low', ruleId: 'read_only', reasonKey: 'approval.readOnly' }
   }
 
-  // ③ 已固化规则命中（仅当次调用仍能产出同一身份时才算数——fail-closed）
+  // ③ 已固化规则命中（仅当次调用仍能产出同一身份、且**同一项目**时才算数——fail-closed）
   const proposal = proposeRule(req)
-  if (proposal) {
-    const hit = req.rules.find(r => matchesRule(r, proposal))
+  const projectPath = req.projectPath
+  if (proposal && projectPath) {
+    const hit = req.rules.find(r => matchesRule(r, proposal, projectPath))
     if (hit) {
       return {
         action: 'allow',

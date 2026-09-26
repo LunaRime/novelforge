@@ -32,6 +32,8 @@ function isValidRule(v: unknown): v is ApprovalRule {
     && typeof r.matcher === 'string'
     && typeof r.matcherVersion === 'number'
     && typeof r.matchKey === 'string'
+    // projectPath 必填：旧格式（无此字段）的规则一律丢弃 —— fail-closed，重新询问一次
+    && typeof r.projectPath === 'string' && r.projectPath.length > 0
 }
 
 /**
@@ -51,16 +53,24 @@ export async function loadApprovalRules(projectPath: string): Promise<ApprovalRu
   }
 }
 
+/**
+ * 写入规则文件；失败必须抛出 —— 调用方据此记录日志（评审 I3）。
+ * 静默吞掉 `{success:false}` 会让用户以为"已记住"（确认卡上写了「将记住：…」），
+ * 而下次同一调用又弹卡且无任何解释。
+ */
+async function writeApprovalsFile(projectPath: string, payload: ApprovalsFile): Promise<void> {
+  const res = await ipc.invoke('fs:write-file', fullPath(projectPath), JSON.stringify(payload, null, 2)) as { success?: boolean; error?: string } | null
+  if (!res?.success) throw new Error(res?.error ?? 'approval rule write failed')
+}
+
 /** 追加规则（同 id 去重）：读-合并-写全量 */
 export async function appendApprovalRule(projectPath: string, rule: ApprovalRule): Promise<void> {
   const existing = await loadApprovalRules(projectPath)
   const merged = existing.some(r => r.id === rule.id) ? existing : [...existing, rule]
-  const payload: ApprovalsFile = { version: 1, rules: merged }
-  await ipc.invoke('fs:write-file', fullPath(projectPath), JSON.stringify(payload, null, 2))
+  await writeApprovalsFile(projectPath, { version: 1, rules: merged })
 }
 
 /** 清空项目全部规则（规则管理 UI 的预留接口） */
 export async function clearApprovalRules(projectPath: string): Promise<void> {
-  const payload: ApprovalsFile = { version: 1, rules: [] }
-  await ipc.invoke('fs:write-file', fullPath(projectPath), JSON.stringify(payload, null, 2))
+  await writeApprovalsFile(projectPath, { version: 1, rules: [] })
 }

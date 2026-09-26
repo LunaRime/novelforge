@@ -32,6 +32,13 @@ function dirOf(p: string): string {
   return idx >= 0 ? normalized.slice(0, idx) : '.'
 }
 
+/** 路径归一化：统一分隔符、去尾分隔符；Windows 路径大小写不敏感 */
+function normalizeProjectPath(p: string): string {
+  const unified = p.replace(/\\/g, '/').replace(/\/+$/, '')
+  const isWindows = typeof navigator !== 'undefined' && /Windows/i.test(navigator.userAgent)
+  return isWindows ? unified.toLowerCase() : unified
+}
+
 /** FNV-1a 32 位哈希（零依赖、确定性；仅用于 id/审计，非安全用途） */
 function fnv1a(input: string): string {
   let h = 0x811c9dc5
@@ -94,23 +101,32 @@ export function proposeRule(req: ApprovalRequest): RuleProposal | null {
   }
 }
 
-/** 规则是否匹配当次提案（工具名 + matcher + matcherVersion + matchKey 四者全等） */
-export function matchesRule(rule: ApprovalRule, proposal: RuleProposal): boolean {
+/**
+ * 规则是否匹配当次提案：**项目路径 + 工具名 + matcher + matcherVersion + matchKey** 五项全等。
+ * 项目路径必须重新比对：规则文件随项目目录走（复制/改名/迁移后仍会被读到），
+ * 少了这一项，用户在 A 项目的授权会在 B 项目静默生效。
+ * 旧规则无 projectPath 字段一律不匹配（fail-closed：多问一次，绝不静默放行）。
+ */
+export function matchesRule(rule: ApprovalRule, proposal: RuleProposal, projectPath: string): boolean {
+  if (!rule.projectPath) return false
+  if (normalizeProjectPath(rule.projectPath) !== normalizeProjectPath(projectPath)) return false
   return rule.toolName === proposal.toolName
     && rule.matcher === proposal.matcher
     && rule.matcherVersion === proposal.matcherVersion
     && rule.matchKey === proposal.matchKey
 }
 
-/** 由提案生成可持久化规则（id 绑定项目路径 —— 项目复制/改名后规则自然失效） */
+/** 由提案生成可持久化规则（id 与 projectPath 字段都绑定项目 —— 复制/改名后规则失效） */
 export function makeRule(proposal: RuleProposal, projectPath: string, args: Record<string, unknown>): ApprovalRule {
-  const hash = fnv1a(`${projectPath}::${proposal.toolName}::${proposal.matchKey}`)
+  const normalized = normalizeProjectPath(projectPath)
+  const hash = fnv1a(`${normalized}::${proposal.toolName}::${proposal.matchKey}`)
   return {
     id: `approval-${hash}`,
     toolName: proposal.toolName,
     matcher: proposal.matcher,
     matcherVersion: proposal.matcherVersion,
     matchKey: proposal.matchKey,
+    projectPath: normalized,
     displayPattern: proposal.displayPattern,
     approvedArgsHash: fnv1a(JSON.stringify(args)),
     createdAt: new Date().toISOString(),
