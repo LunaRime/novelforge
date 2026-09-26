@@ -13,6 +13,7 @@ import { Button } from '../ui/Button'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
+import { renderLog } from '../../services/render-logger'
 import { DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs, type CompactionPrefs } from '../../services/agent/compaction-prefs'
 
 export default function ContextCompactionSection() {
@@ -52,8 +53,14 @@ export default function ContextCompactionSection() {
       if (res && res.success === false) throw new Error('config:set failed')
       setPrefs(clamped)
       toast.success(t('settings.compactionSaved'))
+      // 仓库规范：设置页保存同时进 LogsView（对照 DeveloperModeSection / ProviderAccountsSection）
+      renderLog('info', 'Save:Settings', t('log.render.compactionPrefsSaved')
+        .replace('{history}', String(clamped.historyMaxTokens))
+        .replace('{minChange}', String(clamped.minimumChangeTokens))
+        .replace('{keep}', String(clamped.keepBatches)))
     } catch (e) {
       toast.error(t('settings.compactionSaveFailed').replace('{error}', String(e)))
+      renderLog('error', 'Save:Settings', t('log.render.compactionPrefsSaveFailed').replace('{error}', String(e)))
     } finally {
       setSaving(false)
     }

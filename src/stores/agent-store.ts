@@ -27,7 +27,7 @@ import { useProjectStore } from './project-store'
 import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
 import { MAX_SUB_SESSIONS, SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
 import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
-import { DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs } from '../services/agent/compaction-prefs'
+import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs } from '../services/agent/compaction-prefs'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
 import type { LLMGenerateFn } from '../services/agent/agent-engine'
@@ -773,15 +773,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // ===== CCR 压缩检查（替换原 4000-token 硬丢弃）：超预算时先压缩最旧批 =====
       // §7.1-C2：三个策略旋钮从硬编码常量改为**用户偏好**（只影响之后的压缩——
       // 不重算已压批次、不重写历史；keepBatches>0 时才会裁剪更旧的批次，默认 0 不裁）
-      let prefs = DEFAULT_COMPACTION_PREFS
-      try {
-        prefs = resolveCompactionPrefs(await ipc.invoke('config:get') as { compaction?: unknown } | null)
-      } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
-      const HISTORY_MAX_TOKENS = prefs.historyMaxTokens
       const preCompressMessages = currentConv.messages.filter(m => !m.streaming && m.role !== 'system')
       const totalHistoryTokens = preCompressMessages.reduce(
         (sum, m) => sum + estimateTokens(m.content), 0,
       )
+      // 只在历史**够得着**任何偏好的下界时才读配置（评审 Minor 8）：短对话下每次发消息都多一次
+      // 同步 config:get（主进程 readFileSync + JSON.parse）纯属浪费；下界取钳制下限 1000
+      let prefs = DEFAULT_COMPACTION_PREFS
+      if (totalHistoryTokens > COMPACTION_HISTORY_MIN_TOKENS) {
+        try {
+          prefs = resolveCompactionPrefs(await ipc.invoke('config:get') as { compaction?: unknown } | null)
+        } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
+      }
+      const HISTORY_MAX_TOKENS = prefs.historyMaxTokens
       if (totalHistoryTokens > HISTORY_MAX_TOKENS) {
         try {
           const { batch, rest } = selectCompressionBatch(currentConv.messages, HISTORY_MAX_TOKENS)
@@ -880,7 +884,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         }
       }
 
-      // 构造历史消息（Token 感知窗口：最多 4000 tokens；CCR 压缩后剩余消息通常已达标）
+      // 构造历史消息（Token 感知窗口：上限 = 上面的 HISTORY_MAX_TOKENS，来自**用户偏好**
+      // historyMaxTokens；CCR 压缩后剩余消息通常已达标。评审 Minor 9：注释别写死 4000）
       const afterCompress = get().conversations.find(c => c.id === convId)!
       const candidateMessages = afterCompress.messages
         .filter(m => !m.streaming && m.role !== 'system')

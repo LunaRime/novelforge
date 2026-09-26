@@ -15,6 +15,9 @@ export interface CompactionPrefs {
   keepBatches: number
 }
 
+/** 历史预算的钳制下限（= 任何偏好下都不可能触发压缩的阈值；供调用方**省掉无谓的配置读取**） */
+export const COMPACTION_HISTORY_MIN_TOKENS = 1000
+
 /** 缺省 = 现状常量（行为零变化的前提） */
 export const DEFAULT_COMPACTION_PREFS: CompactionPrefs = {
   historyMaxTokens: 4000,

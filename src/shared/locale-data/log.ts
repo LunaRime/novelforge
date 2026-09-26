@@ -27,6 +27,8 @@ export const logTexts = {
   'log.refresh': { 'zh-CN': '刷新', 'en-US': 'Refresh', 'ru-RU': 'Обновить' },
   'log.totalLines': { 'zh-CN': '共 {total} 行，显示后 {shown} 行', 'en-US': '{total} lines, showing last {shown}', 'ru-RU': '{total} строк, показаны последние {shown}' },
   'log.selectHint': { 'zh-CN': '选择左侧日志文件查看内容', 'en-US': 'Select a log file to view', 'ru-RU': 'Выберите файл журнала слева' },
+  'log.render.compactionPrefsSaved': { 'zh-CN': '压缩偏好已保存：历史预算 {history} / 最小降幅 {minChange} / 保留批数 {keep}', 'en-US': 'Compaction preferences saved: history {history} / min reduction {minChange} / keep {keep}', 'ru-RU': 'Настройки сжатия сохранены: история {history} / минимум {minChange} / хранить {keep}' },
+  'log.render.compactionPrefsSaveFailed': { 'zh-CN': '压缩偏好保存失败：{error}', 'en-US': 'Failed to save compaction preferences: {error}', 'ru-RU': 'Не удалось сохранить настройки сжатия: {error}' },
   'log.render.characterDeleted': { 'zh-CN': '删除角色: {name}', 'en-US': 'Character deleted: {name}', 'ru-RU': 'Персонаж удалён: {name}' },
   'log.render.characterDeleteFailed': { 'zh-CN': '角色删除失败 {error}', 'en-US': 'Failed to delete character {error}', 'ru-RU': 'Не удалось удалить персонажа {error}' },
   'log.render.characterLoadFailed': { 'zh-CN': '角色列表加载失败 {error}', 'en-US': 'Failed to load character list {error}', 'ru-RU': 'Не удалось загрузить список персонажей {error}' },

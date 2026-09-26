@@ -43,6 +43,8 @@ vi.mock('../services/agent/agent-engine', async (importOriginal) => {
 
 // mock IPC（fs:agent-archive-* + fs:read-file 通道）
 const archiveFiles = new Map<string, string>()
+/** 分卷原文仿真（convId → JSON 文本）；供「分卷真的被释放」的断言 */
+const originals = new Map<string, string>()
 let deleteCalls: string[] = []
 const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
   switch (ch) {
@@ -64,6 +66,16 @@ const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
     // §7.1-C2：压缩保留偏好从全局配置读（逐用例覆写 configResponse）
     case 'config:get':
       return configResponse
+    // 分卷存储仿真（评审 Minor 7：不仿真就读不出「删了」与「从没写过」的区别）
+    case 'fs:agent-archive-original-write': {
+      originals.set(String(args[0]), String(args[1]))
+      return { success: true }
+    }
+    case 'fs:agent-archive-original-read':
+      return { success: true, content: originals.get(String(args[0])) ?? null }
+    case 'fs:agent-archive-original-delete':
+      originals.delete(String(args[0]))
+      return { success: true }
     default:
       return null
   }
@@ -74,6 +86,7 @@ let configResponse: unknown = null
 
 beforeEach(() => {
   archiveFiles.clear()
+  originals.clear()
   configResponse = null
   deleteCalls = []
   useAgentStore.setState({ conversations: [], activeConversationId: null })
@@ -1166,12 +1179,13 @@ describe('派发顺序化与取消传到底（C 档第二轮评审修复）', ()
 vi.mock('../services/render-logger', () => ({ renderLog: vi.fn() }))
 
 import { renderLog } from '../services/render-logger'
+import { readBatchOriginal, writeBatchOriginal } from '../services/agent/compaction-originals'
 
 describe('压缩保留偏好（§7.1-C2）', () => {
   const renderLogMock = vi.mocked(renderLog)
 
   /** 构造会话 + 约 `repeat` 规模的历史（repeat=50 → 启发式 ~1000 tokens/条） */
-  const seed = (count: number, repeat: number, batches = 0) => {
+  const seed = async (count: number, repeat: number, batches = 0) => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     const msgs = Array.from({ length: count }, (_, i) => ({
       id: `p${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
@@ -1183,6 +1197,10 @@ describe('压缩保留偏好（§7.1-C2）', () => {
     useAgentStore.setState(state => ({
       conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs, compressed } : c),
     }))
+    // 预置批次也要**真的写分卷**：否则删除是空操作，断言读到的 null 分不清"删了"与"从没写过"
+    for (let i = 1; i <= batches; i++) {
+      await writeBatchOriginal(conv.id, i, [{ id: `o`, role: 'user', content: `原文`, createdAt: i }])
+    }
     return conv
   }
 
@@ -1202,19 +1220,19 @@ describe('压缩保留偏好（§7.1-C2）', () => {
 
   it('historyMaxTokens 调小 → 同规模历史从「不压」变「压」（偏好真的生效）', async () => {
     // 4 条 × ~1000 tokens ≈ 4000 出头但 < 默认 4000 的触发线？——直接对比两次不同配置更稳
-    const a = seed(6, 40)
+    const a = await seed(6, 40)
     configResponse = { compaction: { historyMaxTokens: 32000 } }
     await useAgentStore.getState().sendMessage('新消息')
     expect(useAgentStore.getState().conversations.find(c => c.id === a.id)!.compressed ?? []).toHaveLength(0)
 
-    const b = seed(6, 40)
+    const b = await seed(6, 40)
     configResponse = { compaction: { historyMaxTokens: 1000 } }
     await useAgentStore.getState().sendMessage('新消息')
     expect(useAgentStore.getState().conversations.find(c => c.id === b.id)!.compressed).toHaveLength(1)
   })
 
   it('minimumChangeTokens 调高 → 跳过压缩并留痕（不静默丢上下文）', async () => {
-    const conv = seed(6, 40)
+    const conv = await seed(6, 40)
     configResponse = { compaction: { historyMaxTokens: 1000, minimumChangeTokens: 2000 } }
     await useAgentStore.getState().sendMessage('新消息')
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
@@ -1223,19 +1241,58 @@ describe('压缩保留偏好（§7.1-C2）', () => {
   })
 
   it('keepBatches=1 → 只留最新 1 批（更旧的连同分卷释放，卡片消失）', async () => {
-    const conv = seed(6, 40, 2)                 // 已有 2 批
+    const conv = await seed(6, 40, 2)                 // 已有 2 批
     configResponse = { compaction: { historyMaxTokens: 1000, keepBatches: 1 } }
     await useAgentStore.getState().sendMessage('新消息')
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     expect(after.compressed).toHaveLength(1)
     expect(after.compressed![0].batch).toBe(3)   // 保留的是新产生的第 3 批
-    expect(renderLogMock).toHaveBeenCalledWith('info', 'Agent', expect.any(String))
+    expect(renderLogMock).toHaveBeenCalledWith('info', 'Agent', expect.stringContaining('释放'))
+    // ⚠️ 断言**分卷真的被删**（评审 Minor 7：此前的用例只数数组长度，Important 1 的漏删 bug
+    //    因此全绿通过——补上这条即可复现）
+    expect(await readBatchOriginal(conv.id, 1)).toBeNull()
+    expect(await readBatchOriginal(conv.id, 2)).toBeNull()
+    expect(await readBatchOriginal(conv.id, 3)).not.toBeNull()   // 保留集不受影响
   })
 
   it('keepBatches 缺省 0 → 不裁剪（维持「原文永不删」）', async () => {
-    const conv = seed(6, 40, 2)
+    const conv = await seed(6, 40, 2)
     configResponse = { compaction: { historyMaxTokens: 1000 } }
     await useAgentStore.getState().sendMessage('新消息')
     expect(useAgentStore.getState().conversations.find(c => c.id === conv.id)!.compressed).toHaveLength(3)
+  })
+})
+
+describe('Minor 8：短对话不读配置（省掉无谓的 config:get）', () => {
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: 'S', usage: undefined })) as never })
+  })
+
+  it('历史远低于任何偏好的下界（1000）→ 压缩路径不读配置（对比长历史那次调用差 ≥1）', async () => {
+    // sendMessage 里另有别处也会读 config（RAG 等）→ 用「短 vs 长」两次发送的差值隔离本优化
+    const count = (): number => mockInvoke.mock.calls.filter(c => c[0] === 'config:get').length
+    const short = useAgentStore.getState().createConversation({ title: 'S' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === short.id
+        ? { ...c, messages: [{ id: 'p0', role: 'user' as const, content: '短消息', createdAt: 0 }] } : c),
+    }))
+    const before = count()
+    await useAgentStore.getState().sendMessage('新消息')
+    const shortDelta = count() - before
+
+    const long = useAgentStore.getState().createConversation({ title: 'L' })
+    // 6 条 × ~400 tokens ≈ 2400 > 钳制下限 1000（够得着任何偏好）
+    const longMsgs = Array.from({ length: 6 }, (_, i) => ({
+      id: `p${i}`, role: 'user' as const, content: '历史消息占位。'.repeat(40), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === long.id ? { ...c, messages: longMsgs } : c),
+    }))
+    const before2 = count()
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(count() - before2).toBeGreaterThan(shortDelta)
   })
 })
