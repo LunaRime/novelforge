@@ -18,7 +18,7 @@ import { appendOutputLanguage } from '../prompt-templates'
 import { ipc } from '../ipc-client'
 import { parseMemoryFile } from '../memory/memory-codec'
 import { toolRegistry } from './tool-registry'
-import { skillRegistry } from './skill-registry'
+import { skillRegistry, sortSkillsBySource } from './skill-registry'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 /** M2 作品记忆节 Token 预算（book 精要 + 最新分卷 + 最近章节区间 + shared 段，累计不超过此值） */
@@ -51,7 +51,7 @@ const SKILL_CATALOG_BUDGET_TOKENS = 400
  * `userInvocable` 不参与过滤 —— 该字段只约束 `/命令`，不约束模型。
  */
 function buildSkillCatalogSnippet(): string {
-  const skills = skillRegistry.listAll()
+  const skills = sortSkillsBySource(skillRegistry.listAll())
   if (skills.length === 0) return ''
   const header = t('agent.skillCatalogHeader')
   const lines: string[] = []

@@ -186,13 +186,14 @@ describe('M2 作品记忆节（P1）', () => {
 })
 
 describe('技能目录段（B 档第一轮）', () => {
+  // 用 project 来源：目录按 项目>用户>内置 排序，测试技能才能稳定排在（可能残留的）内置技能之前
   const reg = (name: string, displayName: string, userInvocable = true) =>
     skillRegistry.register({
       metadata: { name, displayName, description: `描述-${name}`, userInvocable },
       content: `正文-${name}`,
-      source: 'builtin',
+      source: 'project',
       baseDir: '',
-      filePath: `builtin://${name}`,
+      filePath: `/tmp/${name}/SKILL.md`,
     })
 
   beforeEach(() => {
@@ -201,8 +202,11 @@ describe('技能目录段（B 档第一轮）', () => {
   })
 
   it('系统提示词含技能目录段（displayName 与 name）', () => {
-    expect(skillRegistry.listAll().length).toBeGreaterThan(0)   // 诊断：注册表非空
+    // 诊断：注册表内容（失败时会打印实际值）
+    expect(skillRegistry.listAll().map(s => s.metadata.name)).toContain('cb-skill-x')
     const { base } = buildAgentSystemSegments('balanced')
+    // 诊断：目录段是否被 push（文案随 locale 变化，用宽匹配）
+    expect(base).toMatch(/可用技能|Available skills|Доступные навыки/)
     expect(base).toContain('目录技能X')
     expect(base).toContain('cb-skill-x')
   })

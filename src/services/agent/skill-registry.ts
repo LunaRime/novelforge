@@ -42,6 +42,7 @@ export interface SkillMetadata {
 }
 
 /** 加载后的 Skill */
+/** 技能来源（决定目录排序与覆盖优先级） */
 export interface LoadedSkill {
   /** 元数据 */
   metadata: SkillMetadata
@@ -56,6 +57,17 @@ export interface LoadedSkill {
 }
 
 // ===== Skill Registry =====
+
+/** 目录排序权重：项目 > 用户 > 内置（同名时后加载者覆盖前者） */
+const SOURCE_ORDER: Record<LoadedSkill['source'], number> = { project: 0, user: 1, builtin: 2 }
+
+/**
+ * 技能目录的统一排序（`skill` 元工具与系统提示词的目录段共用）。
+ * 项目技能排最前 —— 它们最贴合作品，被目录预算截断时也应最后被砍。
+ */
+export function sortSkillsBySource(skills: LoadedSkill[]): LoadedSkill[] {
+  return [...skills].sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source])
+}
 
 class SkillRegistryImpl {
   private skills: Map<string, LoadedSkill> = new Map()

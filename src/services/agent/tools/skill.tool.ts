@@ -10,14 +10,11 @@
  */
 import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
-import { skillRegistry, type LoadedSkill } from '../skill-registry'
-
-/** 目录排序：项目 > 用户 > 内置（同名时后加载者覆盖前者，见 skill-registry） */
-const SOURCE_ORDER: Record<LoadedSkill['source'], number> = { project: 0, user: 1, builtin: 2 }
+import { skillRegistry, sortSkillsBySource } from '../skill-registry'
 
 /** 技能目录（模型据此决定要不要按名加载） */
 export function buildSkillCatalog(): string {
-  const skills = [...skillRegistry.listAll()].sort((a, b) => SOURCE_ORDER[a.source] - SOURCE_ORDER[b.source])
+  const skills = sortSkillsBySource(skillRegistry.listAll())
   if (skills.length === 0) return t('tool.skill.empty')
   return skills
     .map(s => {
