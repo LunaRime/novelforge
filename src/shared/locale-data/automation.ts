@@ -40,6 +40,7 @@ export const automationTexts = {
   'automation.settings.targetAgent': { 'zh-CN': '发起 Agent 任务', 'en-US': 'Start an Agent task', 'ru-RU': 'Задача агента' },
   'automation.settings.workflowRef': { 'zh-CN': '工作流（JSON：{type, params}）', 'en-US': 'Workflow (JSON: {type, params})', 'ru-RU': 'Workflow (JSON: {type, params})' },
   'automation.settings.workflowRefPlaceholder': { 'zh-CN': '{"type":"post_process"}', 'en-US': '{"type":"post_process"}', 'ru-RU': '{"type":"post_process"}' },
+  'automation.settings.workflowHint': { 'zh-CN': '可用目标：{types}；参数里的 "$chapters" / "$chapterFrom" / "$chapterTo" 会替换为本次触发的章节号', 'en-US': 'Available targets: {types}; "$chapters" / "$chapterFrom" / "$chapterTo" in params are replaced with the triggering chapters', 'ru-RU': 'Доступные цели: {types}; "$chapters" / "$chapterFrom" / "$chapterTo" заменяются главами этого срабатывания' },
   'automation.settings.prompt': { 'zh-CN': '任务提示词', 'en-US': 'Task prompt', 'ru-RU': 'Промпт задачи' },
   'automation.settings.promptPlaceholder': { 'zh-CN': '如：根据大纲续写下一章', 'en-US': 'e.g. continue the next chapter from the outline', 'ru-RU': 'напр. продолжить следующую главу по плану' },
   'automation.settings.triggerType': { 'zh-CN': '触发器', 'en-US': 'Trigger', 'ru-RU': 'Триггер' },

@@ -630,6 +630,7 @@ export interface DatabaseChannels {
   'db:automation-run-update': { args: [id: string, patch: unknown]; return: { success: boolean; error?: string } },
   'db:automation-running-runs': { args: []; return: { success: boolean; runs?: unknown[]; error?: string } },
   'db:automation-finalized-chapters': { args: []; return: { success: boolean; chapters?: Array<{ number: number; title: string; wordCount: number }>; error?: string } },
+  'db:automation-chapter-texts': { args: []; return: { success: boolean; texts?: Record<string, string>; error?: string } },
 
   // 6. reviews
   'db:review-create': { args: [params: { baseDraftId: number; reviewIndex: number; content: string }]; return: { success: boolean; id?: number; error?: string } }

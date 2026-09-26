@@ -39,6 +39,23 @@ interface AutomationState {
 const executor = createProductionExecutor()
 
 let scheduler: Scheduler | null = null
+let unsubscribeRunCompletion: (() => void) | null = null
+
+/**
+ * 订阅工作流完成/失败事件 → 回写 automation_runs（评审 Important 3）。
+ * 仅对带 `runId` 的事件生效（手动触发的工作流不带），因此对既有路径零影响。
+ */
+async function attachRunCompletionListener(): Promise<void> {
+  if (unsubscribeRunCompletion) return
+  const { globalEventBus } = await import('../shared/event-bus')
+  unsubscribeRunCompletion = globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
+    if (!payload.runId) return
+    void ipc.invoke('db:automation-run-update', payload.runId, {
+      status: payload.status ?? 'success',
+      finishedAt: Date.now(),
+    }).catch(() => { /* run 回写失败不阻断主流程 */ })
+  })
+}
 
 /** 组装调度器依赖（唯一一处把 IPC 与执行层接起来的地方） */
 function buildSchedulerDeps(): SchedulerDeps {
@@ -63,14 +80,23 @@ function buildSchedulerDeps(): SchedulerDeps {
     markRunRef: async (runId, refId) => {
       await ipc.invoke('db:automation-run-update', runId, { refId })
     },
+    markRunFailed: async (runId, error) => {
+      await ipc.invoke('db:automation-run-update', runId, {
+        status: 'failed', error, finishedAt: Date.now(),
+      })
+    },
     markInboxError: async (id, error) => {
       await ipc.invoke('db:automation-inbox-update', id, { actionError: error })
     },
     executor,
     now: () => Date.now(),
-    // ⚠️ 已知限制（v1）：semantic 的正文上下文暂不注入（只用章节标题/章号），
-    //    正文读取需新增批量取正文的 IPC，留待后续（spec §4.4 的截断策略已就绪，只缺数据源）
-    readChapterText: () => '',
+    // semantic 的正文上下文：主进程侧按上限截断后批量返回（评审 Important 8）
+    getChapterTexts: async () => {
+      const res = await ipc.invoke('db:automation-chapter-texts') as { texts?: Record<string, string> } | null
+      const out: Record<number, string> = {}
+      for (const [key, value] of Object.entries(res?.texts ?? {})) out[Number(key)] = value
+      return out
+    },
     // semantic 的模型调用：走三层路由的 budget 层（判定是轻量分类任务）
     callModel: async (prompt) => {
       const { useLLMStore } = await import('./llm-store')
@@ -198,6 +224,7 @@ export const useAutomationStore = create<AutomationState>()((set, get) => ({
 
   startScheduler: () => {
     if (scheduler) return
+    void attachRunCompletionListener()
     scheduler = createScheduler(buildSchedulerDeps())
     scheduler.start()
   },

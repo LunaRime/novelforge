@@ -158,6 +158,11 @@ export interface AutomationRun {
 export type TriggerStateMap = Record<string, {
   lastCheckedAt?: number
   lastFingerprint?: string
+  /**
+   * semantic 专用：上次观察到的章节身份（章节号列表）。
+   * 未变化时跳过模型调用 —— 指纹只挡重复入箱，挡不住"每 tick 一次调用"的固定成本。
+   */
+  lastObservationFingerprint?: string
 }>
 
 /**

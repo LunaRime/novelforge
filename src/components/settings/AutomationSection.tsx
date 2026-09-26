@@ -14,6 +14,7 @@ import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '.
 import { useTranslation } from '../../hooks/useTranslation'
 import { useAutomationStore } from '../../stores/automation-store'
 import { randomUUID } from '../../utils/id'
+import { AUTOMATION_WORKFLOW_TARGETS } from '../../services/automation/executor'
 import type {
   ActionPolicy,
   AutomationTask,
@@ -31,7 +32,8 @@ function emptyTask(): AutomationTask {
     name: '',
     enabled: true,
     targetType: 'workflow',
-    targetRef: '',
+    // 默认给一个**真正可重建**的目标（评审 Critical 1：原计划的占位符 {"type":"post_process"} 必然重建失败）
+    targetRef: AUTOMATION_WORKFLOW_TARGETS[0].example,
     sessionStrategy: 'per_run',
     triggers: [{ id: randomUUID(), type: 'chapter_batch', enabled: true, chapterBatchSize: 3 }],
     defaultActionPolicy: 'confirm',
@@ -158,7 +160,7 @@ export default function AutomationSection() {
             </Select>
           </div>
 
-          {/* 目标类型决定第二项的形态：workflow 选工作流 / agent 填提示词 */}
+          {/* 目标类型决定第二项的形态：workflow 填 JSON 目标 / agent 填提示词 */}
           <div className="space-y-1">
             <Label>
               {editing.targetType === 'workflow'
@@ -170,14 +172,31 @@ export default function AutomationSection() {
               value={editing.targetRef}
               onChange={e => patchEditing({ targetRef: e.target.value })}
               placeholder={editing.targetType === 'workflow'
-                ? t('automation.settings.workflowRefPlaceholder')
+                ? AUTOMATION_WORKFLOW_TARGETS[0].example
                 : t('automation.settings.promptPlaceholder')}
             />
+            {editing.targetType === 'workflow' && (
+              <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+                {t('automation.settings.workflowHint')
+                  .replace('{types}', AUTOMATION_WORKFLOW_TARGETS.map(x => x.type).join(' / '))}
+              </p>
+            )}
           </div>
 
           <div className="space-y-1">
             <Label>{t('automation.settings.triggerType')}</Label>
-            <Select value={trigger?.type ?? 'chapter_batch'} onValueChange={v => patchTrigger({ type: v as TriggerType })}>
+            <Select
+              value={trigger?.type ?? 'chapter_batch'}
+              onValueChange={v => {
+                // 切换类型时补齐该类型的必填默认值（评审 Important 7：选「定时」后未动输入框
+                // 直接保存 → 没有 schedule 对象 → 永久静默不触发）
+                const patch: Partial<TriggerDefinition> = { type: v as TriggerType }
+                if (v === 'schedule' && !trigger?.schedule) patch.schedule = { kind: 'daily', hour: 9, minute: 0 }
+                if (v === 'chapter_batch' && !trigger?.chapterBatchSize) patch.chapterBatchSize = 3
+                if (v === 'semantic' && trigger?.semanticCondition === undefined) patch.semanticCondition = ''
+                patchTrigger(patch)
+              }}
+            >
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {TRIGGER_TYPES.map(type => (

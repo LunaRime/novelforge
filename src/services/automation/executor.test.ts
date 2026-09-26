@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { createExecutor, buildAutomationUserMessage, type ExecutorDeps } from './executor'
+import { createExecutor, buildAutomationUserMessage, withMatchParams, type ExecutorDeps } from './executor'
 import type { AutomationTask, TriggerMatch } from './types'
 
 const task = (over: Partial<AutomationTask> = {}): AutomationTask => ({
@@ -67,5 +67,34 @@ describe('buildAutomationUserMessage', () => {
   it('无证据时不渲染证据段', () => {
     const msg = buildAutomationUserMessage(task(), { ...match, evidence: [] })
     expect(msg).not.toContain('相关证据')
+  })
+})
+
+describe('withMatchParams（章节参数注入，评审 Critical 1）', () => {
+  const withChapters = {
+    ...match,
+    evidence: [
+      { source: 'chapter', title: '第1章', ref: '1' },
+      { source: 'chapter', title: '第2章', ref: '2' },
+      { source: 'chapter', title: '第3章', ref: '3' },
+    ],
+  }
+
+  it('$chapters / $chapterFrom / $chapterTo 按命中章节替换', () => {
+    const out = withMatchParams({ chapters: '$chapters', from: '$chapterFrom', to: '$chapterTo' }, withChapters)
+    expect(out.chapters).toEqual([1, 2, 3])
+    expect(out.from).toBe(1)
+    expect(out.to).toBe(3)
+  })
+
+  it('嵌套对象与数组内的占位符同样替换；普通文本不受影响', () => {
+    const out = withMatchParams({ nested: { list: ['$chapterFrom', 'x'] }, keep: '普通文本' }, withChapters)
+    expect((out.nested as { list: unknown[] }).list).toEqual([1, 'x'])
+    expect(out.keep).toBe('普通文本')
+  })
+
+  it('非章节证据不参与替换（semantic 的 ref 不是章号）', () => {
+    const out = withMatchParams({ c: '$chapters' }, { ...match, evidence: [{ source: 'semantic', title: 'x', ref: 'abc' }] })
+    expect(out.c).toEqual([])
   })
 })

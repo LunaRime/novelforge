@@ -16,6 +16,10 @@ export default function InboxPanel() {
 
   useEffect(() => {
     void loadAll()
+    // 调度器在后台写入新条目（评审 Important 10）：轻量轮询让界面跟得上，
+    // 30s 一次读两张表的成本可忽略；卸载即停
+    const timer = setInterval(() => { void loadAll() }, 30_000)
+    return () => clearInterval(timer)
   }, [loadAll])
 
   if (inbox.length === 0) {

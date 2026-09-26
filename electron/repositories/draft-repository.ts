@@ -192,6 +192,32 @@ export class DraftRepository {
         }))
     }
 
+    /**
+     * D 档 semantic 触发器：已定稿章节的正文，**在主进程侧按上限截断**
+     * （避免整篇正文灌进渲染进程；截断策略见 spec §4.4）。
+     * 返回 { 章节号: 截断后的正文 }。
+     */
+    static getFinalizedChapterTexts(truncate: number): Record<number, string> {
+        const db = getProjectDb()
+        if (!db) return {}
+        const rows = db.prepare(`
+            SELECT d.chapter_number AS number, c.body AS body
+            FROM drafts d
+            JOIN contents c ON c.id = d.content_id
+            JOIN (
+                SELECT chapter_number, MAX(version) AS v
+                FROM drafts WHERE status = 'finalized'
+                GROUP BY chapter_number
+            ) m ON d.chapter_number = m.chapter_number AND d.version = m.v
+            WHERE d.status = 'finalized'
+            ORDER BY d.chapter_number ASC
+        `).all() as Array<{ number: number; body: string | null }>
+        const limit = Math.max(0, truncate)
+        const out: Record<number, string> = {}
+        for (const row of rows) out[row.number] = (row.body ?? '').slice(0, limit)
+        return out
+    }
+
     /** 获取所有有草稿的章节号（去重、升序） */
     static getAllChapterNumbers(): number[] {
         const db = getProjectDb()

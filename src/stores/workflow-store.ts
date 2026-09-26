@@ -205,7 +205,7 @@ interface WorkflowState {
 
   // ===== Actions =====
   /** 启动一个工作流（可并发），返回 runId */
-  startWorkflow: (definition: WorkflowDefinition, stepByStep?: boolean, options?: { headless?: boolean }) => Promise<string>
+  startWorkflow: (definition: WorkflowDefinition, stepByStep?: boolean, options?: { headless?: boolean; onStarted?: (runId: string) => void }) => Promise<string>
   /** 步进模式下确认继续执行下一步（需指定 runId） */
   confirmContinue: (runId?: string) => void
   /** 取消工作流（传 runId 取消指定，不传取消全部） */
@@ -433,6 +433,10 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
     // 记录 run 可重建参数快照（Task 5 saveCheckpoint 消费；confirmContinue 跨重启重放读 run.rehydrateParams）
     runDefs.set(run.id, { type: run.type, params: definition.rehydrateParams ?? {} })
+
+    // 启动即回执（D 档 Critical 2）：本函数要等整个 run 结束才 return，
+    // 自动化侧不能为此阻塞（否则 tick 会自锁到工作流跑完）
+    options?.onStarted?.(run.id)
 
     // 交给可重入执行函数（断点 index 0 + 空上下文字段）——行为与原内联循环 + 收尾等价
     await executeRunFromIndex(run, definition, 0, {}, stepByStep)
@@ -759,6 +763,11 @@ export async function executeRunFromIndex(
         completedAt: new Date().toISOString(),
       })
       updateRunById(set, run.id, { status: 'failed', completedAt: new Date().toISOString() })
+      // D 档：失败也要广播（带 runId）——自动化侧据此把 automation_runs 标 failed，
+      // 否则 run 表会留下永久 running 的幽灵记录（评审 Important 3）
+      import('../shared/event-bus').then(m => {
+        m.globalEventBus.emit('WORKFLOW_COMPLETE', { type: definition.type, runId: run.id, status: 'failed' })
+      }).catch(() => {})
       get().addLog('error', `[${definition.title}] ${stepDef.name} — FAIL: ${errorMsg}`)
       break
     }
@@ -773,7 +782,7 @@ export async function executeRunFromIndex(
 
     // 通过 EventBus 广播工作流完成事件（替代 window.dispatchEvent）
     import('../shared/event-bus').then(m => {
-      m.globalEventBus.emit('WORKFLOW_COMPLETE', { type: definition.type })
+      m.globalEventBus.emit('WORKFLOW_COMPLETE', { type: definition.type, runId: run.id, status: 'success' })
     }).catch(() => {})
 
     // ===== 执行 onComplete 通知/跳转 =====

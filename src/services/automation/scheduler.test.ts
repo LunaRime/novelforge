@@ -36,10 +36,11 @@ function deps(over: Partial<SchedulerDeps> = {}): SchedulerDeps & {
     getChapters: async () => chapters,
     applyOutcome: async (input) => { applied.push(input) },
     markRunRef: vi.fn(async () => {}),
+    markRunFailed: vi.fn(async () => {}),
     markInboxError: vi.fn(async () => {}),
     executor,
     now: () => 1_000_000,
-    readChapterText: n => `正文${n}`,
+    getChapterTexts: async () => ({ 1: '正文1', 2: '正文2', 3: '正文3' }),
     callModel: async () => '{}',
     applied, started,
     ...over,
@@ -125,5 +126,48 @@ describe('createScheduler', () => {
     expect(second.inboxed).toBe(0)
     release()
     await first
+  })
+})
+
+describe('评审修复（Important 4/5/9）', () => {
+  it('auto_run 启动失败 → run 同步标 failed（不留幽灵 running）', async () => {
+    const d = deps({ getTasks: async () => [task({ defaultActionPolicy: 'auto_run' })] })
+    d.executor.start = vi.fn(async () => { throw new Error('启动失败') }) as never
+    await createScheduler(d).tick()
+    expect(d.markRunFailed).toHaveBeenCalledTimes(1)
+    expect(d.markInboxError).toHaveBeenCalledTimes(1)
+  })
+
+  it('单任务写入失败 → 其余任务照常评估（隔离，不中断整 tick）', async () => {
+    const bad = task({ id: 'a-bad' })
+    const good = task({ id: 'a-good' })
+    let calls = 0
+    const d = deps({
+      getTasks: async () => [bad, good],
+      applyOutcome: async (input) => {
+        calls++
+        if (input.automationId === 'a-bad') throw new Error('外键违约')
+      },
+    })
+    const r = await createScheduler(d).tick()
+    expect(calls).toBe(2)                    // 两个任务都被处理
+    expect(r.inboxed).toBe(1)                // 只有好的那个产出入箱
+  })
+
+  it('semantic 章节身份未变 → 跳过模型调用（成本短路）', async () => {
+    const semanticTask = task({
+      triggers: [{ id: 's1', type: 'semantic', enabled: true, semanticCondition: '伏笔过多' }],
+    })
+    const callModel = vi.fn(async () => '{"matched":false,"confidence":0,"reason":"","title":"","evidence_refs":[]}')
+    const d = deps({ getTasks: async () => [semanticTask], callModel })
+    const s = createScheduler(d)
+
+    await s.tick()
+    expect(callModel).toHaveBeenCalledTimes(1)      // 首次评估（未命中也会记录观察身份）
+
+    // 模拟状态已落库：第二次 tick 章节未变 → 不再调用
+    d.getTriggerStates = async () => ({ a1: { s1: { lastObservationFingerprint: '1,2,3' } } })
+    await s.tick()
+    expect(callModel).toHaveBeenCalledTimes(1)      // 未新增调用
   })
 })

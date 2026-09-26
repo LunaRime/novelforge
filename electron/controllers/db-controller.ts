@@ -12,6 +12,7 @@ import { ReviewRepository } from '../repositories/review-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
 import { WorkflowCheckpointRepository } from '../repositories/workflow-checkpoint-repository'
 import { createAutomationRepository, type TriggerOutcomeInput } from '../repositories/automation-repository'
+import { SEMANTIC_CHAPTER_TRUNCATE } from '../../src/services/automation/types'
 
 // 沿用的旧表
 import { LLMHistoryRepository } from '../repositories/llm-repository'
@@ -437,6 +438,10 @@ export function registerDatabaseController() {
   })
   guardedHandle('db:automation-finalized-chapters', async () => {
     try { return { success: true, chapters: DraftRepository.listFinalizedChapters() } }
+    catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('db:automation-chapter-texts', async () => {
+    try { return { success: true, texts: DraftRepository.getFinalizedChapterTexts(SEMANTIC_CHAPTER_TRUNCATE) } }
     catch (err) { return { success: false, error: String(err) } }
   })
 

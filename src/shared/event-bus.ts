@@ -31,6 +31,9 @@ export interface EventPayloadMap {
   }
   'WORKFLOW_COMPLETE': {
     type: string
+    /** D 档：自动化 run 回写用（手动触发的工作流不带这两个字段） */
+    runId?: string
+    status?: 'success' | 'failed'
   }
   'WORKFLOW_ERROR': {
     title: string

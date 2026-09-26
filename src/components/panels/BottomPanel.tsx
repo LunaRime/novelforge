@@ -11,6 +11,7 @@ import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import InboxPanel from './automation/InboxPanel'
+import { useAutomationStore } from '../../stores/automation-store'
 
 /** 下方工具窗口 — 显隐由 App.tsx 通过 bottomPanelOpen 条件渲染 Panel 容器控制 */
 export default function BottomPanel() {
@@ -26,6 +27,8 @@ export default function BottomPanel() {
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段
   const activeRuns = useWorkflowStore(s => s.activeRuns)
+  // 收件箱未处理数（D 档徽章）：用长度而非数组本身订阅，避免每次 loadAll 都触发重渲染
+  const pendingInboxCount = useAutomationStore(s => s.inbox.filter(i => i.status === 'pending').length)
 
   // 声明为 string：兼容旧版本持久化的 bottomTab='models'（已映射到活动视图）
   const activeTab: string = bottomTab || 'tasks'
@@ -93,6 +96,15 @@ export default function BottomPanel() {
                 )}
                 {id === 'tasks' && activeRuns.length > 0 && hasWaiting && !hasRunning && (
                   <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-warning)' }} />
+                )}
+                {/* 收件箱未处理数徽章（D 档） */}
+                {id === 'inbox' && pendingInboxCount > 0 && (
+                  <span
+                    className="text-micro font-mono px-1 rounded"
+                    style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
+                  >
+                    {pendingInboxCount}
+                  </span>
                 )}
               </button>
             )

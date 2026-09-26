@@ -102,6 +102,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:automation-inbox-list': { authority: 'read-project' },
   'db:automation-running-runs': { authority: 'read-project' },
   'db:automation-finalized-chapters': { authority: 'read-project' },
+  'db:automation-chapter-texts': { authority: 'read-project' },
   'db:automation-save': { authority: 'write-project' },
   'db:automation-set-enabled': { authority: 'write-project' },
   'db:automation-apply-outcome': { authority: 'write-project' },

@@ -78,4 +78,32 @@ describe('startWorkflow headless 选项', () => {
     expect(run.steps[0].status).toBe('completed')
     expect(run.steps[0].result).toBe('产出')
   })
+
+  it('onStarted 在 run 结束前回调 runId（自动化侧据此立刻拿到 refId，不必等执行完成）', async () => {
+    let startedId: string | null = null
+    let stepFinished = false
+    const slow: WorkflowDefinition = {
+      type: 'chapter_creation',
+      title: '慢工作流',
+      steps: [{
+        name: '步骤一',
+        description: '',
+        executor: async () => {
+          await new Promise(resolve => setTimeout(resolve, 30))
+          stepFinished = true
+          return undefined
+        },
+      }],
+    }
+    const pending = useWorkflowStore.getState().startWorkflow(slow, false, {
+      headless: true,
+      onStarted: (id) => { startedId = id },
+    })
+    await new Promise(resolve => setTimeout(resolve, 10))
+    // 10ms 时：已拿到 runId，而步骤仍在执行
+    expect(startedId).toBeTruthy()
+    expect(stepFinished).toBe(false)
+    const runId = await pending
+    expect(startedId).toBe(runId)
+  })
 })
