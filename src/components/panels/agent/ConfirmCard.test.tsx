@@ -74,3 +74,50 @@ describe('ConfirmCard', () => {
     expect(mockResolve).toHaveBeenCalledWith('tc-42', false)
   })
 })
+
+/** A 档：审批决策（可固化提案 / 高风险不可固化） */
+const DECISION_REMEMBERABLE = {
+  action: 'prompt',
+  risk: 'medium',
+  ruleId: 'prompt_rememberable',
+  reasonKey: 'approval.promptWithRemember',
+  remember: {
+    toolName: 'write_file',
+    matcher: 'args-identity',
+    matcherVersion: 1,
+    matchKey: '["write_file","drafts"]',
+    displayPattern: 'write_file → drafts/',
+  },
+} as const
+
+const DECISION_ONE_SHOT = {
+  action: 'prompt',
+  risk: 'high',
+  ruleId: 'prompt_one_shot',
+  reasonKey: 'approval.promptOneShot',
+} as const
+
+describe('ConfirmCard × A 档审批决策', () => {
+  it('有可固化提案 → 渲染「始终允许」并展示将记住的规则描述', () => {
+    const el = render(<ConfirmCard toolCall={{ ...TOOL_CALL, approval: DECISION_REMEMBERABLE } as unknown as ToolCallInfo} />)
+    expect(buttons()).toHaveLength(3)
+    expect(el.textContent).toContain('write_file → drafts/')   // 规则描述 = 用户判断"记住什么"的依据
+  })
+
+  it('点「始终允许」→ resolveToolConfirmation(id, true, true)', () => {
+    render(<ConfirmCard toolCall={{ ...TOOL_CALL, approval: DECISION_REMEMBERABLE } as unknown as ToolCallInfo} />)
+    act(() => buttons()[1].click())          // 顺序：拒绝 | 始终允许 | 批准
+    expect(mockResolve).toHaveBeenCalledWith('tc-42', true, true)
+  })
+
+  it('无可固化提案（MCP 工具 / 高风险）→ 仍是两个按钮，不出现「始终允许」', () => {
+    const el = render(<ConfirmCard toolCall={{ ...TOOL_CALL, approval: DECISION_ONE_SHOT } as unknown as ToolCallInfo} />)
+    expect(buttons()).toHaveLength(2)
+    expect(el.textContent).not.toContain('始终允许')
+  })
+
+  it('高风险决策渲染风险提示', () => {
+    const el = render(<ConfirmCard toolCall={{ ...TOOL_CALL, approval: DECISION_ONE_SHOT } as unknown as ToolCallInfo} />)
+    expect(el.textContent).toContain('风险')
+  })
+})

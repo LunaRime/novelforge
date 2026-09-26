@@ -18,10 +18,14 @@ interface Props {
 export default function ConfirmCard({ toolCall }: Props) {
   const { t } = useTranslation()
   const { resolveToolConfirmation } = useAgentStore()
-  const { id, toolName, arguments: args } = toolCall
+  const { id, toolName, arguments: args, approval } = toolCall
 
   // 生成操作描述
   const description = generateDescription(toolName, args, t)
+
+  // A 档：可固化提案 → 「始终允许」按钮（用户照着规则描述判断"记住什么"）
+  const rememberPattern = approval?.action === 'prompt' ? approval.remember?.displayPattern : undefined
+  const showRiskHint = approval?.risk === 'high' || approval?.risk === 'critical'
 
   return (
     <div className="confirm-card">
@@ -34,6 +38,16 @@ export default function ConfirmCard({ toolCall }: Props) {
       {/* 内容 */}
       <div className="confirm-card-body">
         <div>{description}</div>
+        {rememberPattern && (
+          <div style={{ marginTop: 4, fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+            {t('agentConfirm.rememberHint').replace('{pattern}', rememberPattern)}
+          </div>
+        )}
+        {showRiskHint && (
+          <div style={{ marginTop: 4, fontSize: '0.68rem', color: 'var(--color-warning)' }}>
+            {t('agentConfirm.riskHigh')}
+          </div>
+        )}
         {Object.keys(args).length > 0 && (
           <div
             style={{
@@ -60,6 +74,16 @@ export default function ConfirmCard({ toolCall }: Props) {
         <Button variant="outline" size="sm" onClick={() => resolveToolConfirmation(id, false)}>
           {t('action.reject')}
         </Button>
+        {rememberPattern && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => resolveToolConfirmation(id, true, true)}
+            title={t('agentConfirm.rememberHint').replace('{pattern}', rememberPattern)}
+          >
+            {t('agentConfirm.alwaysAllow')}
+          </Button>
+        )}
         <Button variant="success" size="sm" onClick={() => resolveToolConfirmation(id, true)}>
           {t('action.approve')}
         </Button>
@@ -89,6 +113,16 @@ function generateDescription(
     }
     case 'update_config':
       return t('agentConfirm.updateConfig').replace('{field}', String(args.field ?? t('agentConfirm.unknownField')))
+    case 'edit_file':
+      return t('agentConfirm.editFile').replace('{path}', String(args.file_path ?? t('agentConfirm.unknownPath')))
+    case 'index_content': {
+      const name = args.file_name ?? args.chapter_number ?? t('agentConfirm.unknownFile')
+      return t('agentConfirm.indexContent').replace('{name}', String(name))
+    }
+    case 'call_external_api':
+      return t('agentConfirm.callExternalApi')
+        .replace('{method}', String(args.method ?? 'GET'))
+        .replace('{path}', String(args.path ?? t('agentConfirm.unknownPath')))
     default:
       return t('agentConfirm.defaultAction').replace('{name}', toolName)
   }
