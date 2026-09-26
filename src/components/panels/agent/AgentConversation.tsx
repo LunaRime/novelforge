@@ -9,6 +9,9 @@ import AgentInputBox from './AgentInputBox'
 import AgentMemoryView from './AgentMemoryView'
 import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
+import SubAgentSessionCard from './SubAgentSessionCard'
+import SubAgentConfirmCard from './SubAgentConfirmCard'
+import type { SubAgentSession } from '../../../services/agent/subagent/types'
 import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
 import { ipc } from '../../../services/ipc-client'
@@ -254,10 +257,34 @@ function ActiveConversation() {
     if (ok) useAgentStore.getState().rewindToMessage(messageId)
   }
 
+  // ⚠️ 两个 hook 必须放在 `if (!activeConv) return null` **之前**（条件调用 useMemo 会被
+  //    react-hooks/rules-of-hooks 拦下）；故此处对 activeConv 做可空处理
+  const subSessions = activeConv?.subSessions
+  // 可见消息列表（过滤 system——显示层与 store 层独立：store 按物理序截断，展示按可见序）
+  const visibleMessages = useMemo(() => (activeConv?.messages ?? []).filter(m => m.role !== 'system'), [activeConv?.messages])
+  // C 档第二轮：子会话卡的消息归属——按 task 工具调用的 description 匹配（同一子会话只挂一次：
+  // 从最早的匹配消息认领，后续重复出现的同描述调用不再重复挂）
+  const subAgentCards = useMemo(() => {
+    const map = new Map<string, SubAgentSession[]>()
+    const claimed = new Set<string>()
+    for (const msg of visibleMessages) {
+      const tasks = (msg.toolCalls ?? []).filter(tc => tc.toolName === 'task')
+      if (tasks.length === 0) continue
+      for (const tc of tasks) {
+        const description = typeof tc.arguments?.description === 'string' ? tc.arguments.description : ''
+        if (!description) continue
+        for (const s of subSessions ?? []) {
+          if (claimed.has(s.id) || s.description !== description) continue
+          claimed.add(s.id)
+          map.set(msg.id, [...(map.get(msg.id) ?? []), s])
+        }
+      }
+    }
+    return map
+  }, [visibleMessages, subSessions])
+
   if (!activeConv) return null
 
-  // 可见消息列表（过滤 system——显示层与 store 层独立：store 按物理序截断，展示按可见序）
-  const visibleMessages = activeConv.messages.filter(m => m.role !== 'system')
   /** 末条可见消息 id（F6/D1）：rewind 到末条无内容可截断（store 静默 no-op）——按钮禁用 + 解释性 tooltip */
   const lastVisibleId = visibleMessages.length > 0 ? visibleMessages[visibleMessages.length - 1].id : null
 
@@ -309,14 +336,20 @@ function ActiveConversation() {
               <CompressedBatchCard key={b.batch} batch={b} />
             ))}
           {visibleMessages.map(msg => (
-            <AgentMessage
-              key={msg.id}
-              message={msg}
-              onFork={handleFork}
-              onRewind={handleRewind}
-              // 末条：不可回退（F6 store 已 no-op）——禁用 + 解释性 tooltip 消除无声失败
-              rewindDisabled={msg.id === lastVisibleId}
-            />
+            <div key={msg.id}>
+              <AgentMessage
+                message={msg}
+                onFork={handleFork}
+                onRewind={handleRewind}
+                // 末条：不可回退（F6 store 已 no-op）——禁用 + 解释性 tooltip 消除无声失败
+                rewindDisabled={msg.id === lastVisibleId}
+              />
+              {/* C 档第二轮：挂在触发派发的助手消息下（按 task 调用的 description 关联——
+                  不做假关联：description 不匹配就不渲染） */}
+              {(subAgentCards.get(msg.id) ?? []).map(s => (
+                <SubAgentSessionCard key={s.id} session={s} />
+              ))}
+            </div>
           ))}
         </div>
         {/* 底部空间 */}
@@ -355,6 +388,8 @@ function ActiveConversation() {
           2026-09-22：上下文圆环与「工作流输出」移到输入框**下方**，
           并去掉输入框上方那条分隔线（borderTop）—— 底栏与对话区改由留白分隔 */}
       <div className="flex-shrink-0 px-3 pb-2 pt-2">
+        {/* C 档第二轮：子 agent 写操作的父方审批卡（与父自己的确认卡不同渲染面——父卡在消息内） */}
+        <SubAgentConfirmCard />
         <AgentInputBox />
         <div className="mt-1.5 flex items-center justify-between gap-2 px-0.5">
           <ContextBudgetBar usage={contextUsage} />

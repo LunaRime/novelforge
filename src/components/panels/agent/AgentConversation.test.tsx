@@ -16,6 +16,7 @@ import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
 import { t } from '../../../shared/locale'
 import { RESIDENT_MEMORY_BUDGET_TOKENS } from '../../../services/agent/memory-layers'
+import type { SubAgentSession } from '../../../services/agent/subagent/types'
 
 // jsdom 未实现 scrollTo / ResizeObserver（组件滚动效果与消息卡片依赖）
 beforeAll(() => {
@@ -437,6 +438,139 @@ describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
     const warn = [...document.body.querySelectorAll('[title]')]
       .find(el => (el.getAttribute('title') ?? '').includes('4000'))
     expect(warn).toBeTruthy()
+    act(() => { root.unmount() })
+  })
+})
+
+describe('SubAgentSessionCard / SubAgentConfirmCard（C 档第二轮 T7）', () => {
+  const session = (over: Partial<SubAgentSession> = {}): SubAgentSession => ({
+    id: 's1', taskId: 's1', description: '查玉佩伏笔', prompt: 'p', allowedTools: ['read_drafts'],
+    status: 'completed',
+    messages: [
+      { id: 'm1', role: 'user', content: '查玉佩伏笔', createdAt: 0 },
+      { id: 'm2', role: 'assistant', content: '玉佩在第 3 章首次出现。', createdAt: 1 },
+    ],
+    toolCalls: [{ id: 'tc1', toolName: 'read_drafts', arguments: {}, status: 'completed' }],
+    artifacts: [], result: '玉佩在第 3 章首次出现。', startedAt: 0, endedAt: 1000, ...over,
+  })
+
+  /** 构造活跃会话：一条助手消息带 task 工具调用（description 与子会话对应）+ subSessions */
+  const withSession = (s: SubAgentSession, toolDescription = '查玉佩伏笔'): void => {
+    useAgentStore.setState({
+      conversations: [{
+        id: 'c1', title: 'T', createdAt: 0, updatedAt: 0, mode: 'quick', modelId: 'm',
+        messages: [
+          { id: 'u1', role: 'user', content: '帮我查伏笔', createdAt: 0 },
+          {
+            id: 'a1', role: 'assistant', content: '我派一个子 agent 去查。', createdAt: 1,
+            toolCalls: [{
+              id: 'tc-task', toolName: 'task', status: 'completed',
+              arguments: { description: toolDescription },
+            }],
+          },
+        ],
+        subSessions: [s],
+      }],
+      activeConversationId: 'c1',
+      pendingSubAgentConfirmation: null,
+    } as never)
+  }
+
+  beforeEach(() => {
+    document.body.innerHTML = ''
+    Object.defineProperty(window, 'velaAPI', { value: { invoke: vi.fn(async () => null) }, configurable: true })
+    useProjectStore.setState({ currentProject: null })
+    useLLMStore.setState({ models: [], defaultModelId: null })
+  })
+
+  it('父时间线内渲染子会话卡（挂在触发派发的助手消息处）：描述 + 状态 + 工具数', async () => {
+    withSession(session())
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).toContain('查玉佩伏笔')
+    expect(container.textContent).toContain(t('subagent.cardStatusCompleted'))
+    expect(container.textContent).toContain('1')            // 工具数
+    expect(container.textContent).not.toContain('玉佩在第 3 章首次出现。')
+    act(() => { root.unmount() })
+  })
+
+  it('展开显示子转录（默认收起）', async () => {
+    withSession(session())
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const show = [...container.querySelectorAll('button')].find(b => b.title === t('subagent.cardShow'))!
+    expect(show).toBeTruthy()
+    act(() => { show.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(container.textContent).toContain('玉佩在第 3 章首次出现。')
+    act(() => { root.unmount() })
+  })
+
+  it('运行中卡片有取消入口，点击调 cancelSubAgent(该子会话)（只中止它）', async () => {
+    withSession(session({ status: 'running', endedAt: undefined }))
+    const spy = vi.spyOn(useAgentStore.getState(), 'cancelSubAgent').mockImplementation(() => {})
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const cancel = [...container.querySelectorAll('button')].find(b => b.title === t('subagent.cardCancel'))!
+    expect(cancel).toBeTruthy()
+    act(() => { cancel.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(spy).toHaveBeenCalledWith('s1')
+    spy.mockRestore()
+    act(() => { root.unmount() })
+  })
+
+  it('失败卡片显示原因（不静默）', async () => {
+    withSession(session({ status: 'failed', error: 'model down' }))
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).toContain('model down')
+    act(() => { root.unmount() })
+  })
+
+  it('description 不匹配的消息不渲染卡片（不做假关联）', async () => {
+    withSession(session(), '另一个任务')
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).not.toContain(t('subagent.cardStatusCompleted'))
+    act(() => { root.unmount() })
+  })
+
+  it('子确认卡：来源标签（子 agent 描述 + 工具 + 目标），按钮恰为 允许/拒绝（**无**「始终允许」）', async () => {
+    useAgentStore.setState({
+      conversations: [{ id: 'c1', title: 'T', messages: [{ id: 'u1', role: 'user', content: '你好', createdAt: 0 }], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: 'm' }],
+      activeConversationId: 'c1',
+      pendingSubAgentConfirmation: {
+        sessionId: 's1', description: '查玉佩伏笔',
+        toolCall: { id: 'tc1', toolName: 'write_file', arguments: { file_path: 'drafts/c30.md' }, status: 'waiting_confirm' },
+      },
+    } as never)
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect(container.textContent).toContain('查玉佩伏笔')
+    expect(container.textContent).toContain('write_file')
+    expect(container.textContent).toContain('drafts/c30.md')
+    const labels = [...container.querySelectorAll('button')].map(b => b.textContent?.trim())
+    expect(labels).toContain(t('subagent.confirmAllow'))
+    expect(labels).toContain(t('subagent.confirmDeny'))
+    expect(container.textContent).not.toContain(t('agentConfirm.alwaysAllow'))
+    act(() => { root.unmount() })
+  })
+
+  it('点允许 → resolveSubAgentConfirmation(true)', async () => {
+    useAgentStore.setState({
+      conversations: [{ id: 'c1', title: 'T', messages: [{ id: 'u1', role: 'user', content: '你好', createdAt: 0 }], createdAt: 0, updatedAt: 0, mode: 'quick', modelId: 'm' }],
+      activeConversationId: 'c1',
+      pendingSubAgentConfirmation: {
+        sessionId: 's1', description: '查玉佩伏笔',
+        toolCall: { id: 'tc1', toolName: 'write_file', arguments: { file_path: 'drafts/c30.md' }, status: 'waiting_confirm' },
+      },
+    } as never)
+    const spy = vi.spyOn(useAgentStore.getState(), 'resolveSubAgentConfirmation').mockImplementation(() => {})
+    const { container, root } = render(<AgentConversation />)
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const allow = [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('subagent.confirmAllow'))!
+    act(() => { allow.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(spy).toHaveBeenCalledWith(true)
+    spy.mockRestore()
     act(() => { root.unmount() })
   })
 })
