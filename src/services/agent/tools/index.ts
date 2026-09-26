@@ -30,6 +30,7 @@ import { queryForeshadowingTool } from './query-foreshadowing.tool'
 import { settingSamplerTool } from './setting-sampler.tool'
 import { callExternalApiTool } from './call-external-api.tool'
 import { browserListTabsTool } from './browser-list-tabs.tool'
+import { skillTool } from './skill.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
@@ -54,6 +55,8 @@ export const builtinTools = [
   compareTextsTool,
   // 浏览器接入（只读，自动执行）— 内置 CDP 桥接查询标签页
   browserListTabsTool,
+  // 技能元工具（只读，自动执行）— B 档：模型按名懒加载技能全文（替代每技能一个 skill__* 工具）
+  skillTool,
   // 行动 Tool（需确认）
   writeFileTool,
   // 局部编辑（需确认）— CC FileEditTool 对齐：old_string→new_string + 三层降级链（C2）
