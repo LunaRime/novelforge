@@ -126,3 +126,23 @@
 ## 九、标准本身的修正记录
 
 本报告同时产出了一条**标准自我修正**：`<`（`ChevronRight` + `rotate(180deg)`）在 AI 面板里是**返回上一层**（`AgentHeader.tsx:208/307`、`AgentMemoryView.tsx:96`），占的正是"折叠箭头该在的左端"。故标准 §1 已加边界：**本标准只管卡片/列表行；视图头部的返回键与下拉选择器不在其中**，判据是"**同一容器内必须唯一**，跨容器允许有别"。**不要把返回键改成折叠开关。**
+
+---
+
+## 十、修复记录（2026-09-27 执行）
+
+三批修复全部完成（每批：`tsc` 零错 + `eslint --max-warnings 0` + 全量 vitest 绿）：
+
+| 批次 | 提交 | 内容 |
+|---|---|---|
+| 1/3 | `ddbbc25` | **三个坏模板**：ToolCallBlock 头部 div→button + 箭头移左 + 整块 hover 收窄到头部（`:has`）；ThinkingCollapse 箭头移左 + 补 hover 反馈；CompressedBatchCard 通知文案（含计数）进主按钮 + 文字按钮热区 21px（`py-1 -my-1`） |
+| 2/3 | `2722320` | **侧栏 8 卡**：SidebarGroup 按四类契约重写（计数进主按钮 / 折叠卡 chevron 置左 / 导航卡 `>` 装饰 / 纯状态卡不渲染 disabled 按钮）；Volume / Publication / Memory 三处自绘头部归并同一形态；DraftItem / MemoryRow 死带（hover 收窄进主按钮）；**RM-SB-01**（ChapterExportDialog 移出折叠门 + 回归测试）；连载行接线（点行打开平台正文，新增 `publication` 只读标签页）；命中区批量固定 22×22 |
+| 3/3 | `e71ebd9` | **AI 面板 / 收件箱**：SubAgentSessionCard 头部主按钮化（chevron 置左、取消按钮兄弟）；RecentConversationItem 由 `role="button"` div → 主按钮 + 工具条兄弟（清掉 5 处 stopPropagation 残骸）；ACT_BTN `w-5 h-5`(17.5px) → 20px（9 处调用点）；ArtifactCard 接线（file→编辑器 / blueprint_generated→跳章节草稿 / workflow_started→底部「任务」面板；**无可达目标的类型改静态卡，不再假装可点**）；BottomPanel 历史行可展开步骤详情、运行条与步骤行按钮化；AgentMessage / AgentHeader / AgentMemoryView 命中区 22px；LeafItem（未使用，但会被照抄的坏模板）disabled 表达修复 |
+
+**验证**：全量 **2168/2168**（187 文件，新增 19 个契约测试）；标准 §7 自检四项 grep 归零（`p-0.5` / `disabled={!on` / `role="button"` / `tabIndex={0}` / `w-5 h-5`）。真机复验另有文档（本轮按 computer-use 约束未动真机）。
+
+**仍未做（挂起项）**：
+
+- §八 待定三件：`AgentMessage` rewind `disabled` + tooltip 的 Chromium 真机 hover（未定案前按标准不动）；`SubAgentConfirmCard` 主次按钮（产品拍板）；`SubAgentSessionCard` 步数 / tokens（spec 确认）
+- 本轮未审：`CharactersView`（角色视图，不属「项目结构」8 卡范围）；`.tree-item` 右 8px 刻意留白（标准 §3 已注明"按注释刻意不可点"，涉全仓行样式，需单独拍板）
+- 真机验证发现但本批未动的观察：导出弹窗章节标题列「第1章 第1章」重复（titleMap 未就绪时 fallback，样本一例未深查）
