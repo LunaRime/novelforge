@@ -102,8 +102,8 @@ export default function AgentMemoryView() {
         <button
           type="button"
           onClick={() => void load()}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('action.refresh')}
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />

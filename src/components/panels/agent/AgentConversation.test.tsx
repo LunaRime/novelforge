@@ -149,14 +149,15 @@ describe('RecentConversationItem hover 行为', () => {
     }))
     const { container, root } = render(<AgentConversation />)
 
-    // 2026-09-22 起外层的 role="button" 的 div（内联重命名要放 input，不能嵌在 <button> 里）
-    const row = Array.from(container.querySelectorAll<HTMLElement>('[role="button"], button'))
-      .find(el => el.className.includes('group'))
+    // 2026-09-27 起：行外层是普通 div（class 含 group token），主区域/工具条是兄弟按钮；
+    // 重命名编辑态走独立渲染分支（input 不进主按钮）
+    const row = Array.from(container.querySelectorAll<HTMLElement>('.group'))
+      .find(el => el.className.split(' ').includes('group'))
     expect(row).toBeTruthy()
     // 操作组里**最后一个**才是删除（前面还有 置顶 / 重命名 / 分叉 / 归档）
     const opBtns = Array.from(row!.querySelectorAll<HTMLButtonElement>('button[title]'))
     const deleteBtn = opBtns[opBtns.length - 1]
-    const timeSpan = row!.querySelector<HTMLSpanElement>('span')
+    const timeSpan = row!.querySelector<HTMLSpanElement>('span[class*="group-hover:opacity-0"]')!
     expect(deleteBtn).toBeTruthy()
     expect(timeSpan).toBeTruthy()
 
@@ -222,10 +223,10 @@ describe('EmptyState 历史条数配置', () => {
     useAgentStore.setState({ activeConversationId: null })
   }
 
-  /** 统计最近会话行数（RecentConversationItem 外层 token 恰为 group；
-   *  2026-09-22 起外层是 role="button" 的 div —— 内联重命名要放 input，不能嵌在 button 里） */
+  /** 统计最近会话行数（RecentConversationItem 外层 token 恰为 group；2026-09-27 起为普通 div，
+   *  主区域/工具条按钮是其子节点——不再用 role="button" 的 div） */
   const recentRowCount = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLElement>('[role="button"]'))
+    Array.from(container.querySelectorAll<HTMLElement>('.group'))
       .filter(el => el.className.split(' ').includes('group')).length
 
   it('按 config recentConversationCount 显示条数（mock 5 → 显示 5 条）', async () => {
@@ -289,9 +290,9 @@ describe('AgentHistoryPanel fork 层级', () => {
   }
 
   /** RecentConversationItem 外层行（外层 token 恰为 group；内层按钮为 group-hover:* 不算）。
-   *  2026-09-22 起外层是 role="button" 的 div —— 内联重命名要放 input，不能嵌在 button 里 */
+   *  2026-09-27 起外层是普通 div，主区域/工具条按钮是其子节点 */
   const historyRows = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLElement>('[role="button"]'))
+    Array.from(container.querySelectorAll<HTMLElement>('.group'))
       .filter(el => el.className.split(' ').includes('group'))
 
   it('fork 子会话缩进显示 + GitFork 图标 + 父会话标注', () => {
@@ -498,7 +499,8 @@ describe('SubAgentSessionCard / SubAgentConfirmCard（C 档第二轮 T7）', () 
     withSession(session())
     const { container, root } = render(<AgentConversation />)
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
-    const show = [...container.querySelectorAll('button')].find(b => b.title === t('subagent.cardShow'))!
+    // 2026-09-27 起：头部整行是主按钮（chevron 内置、无独立显隐按钮）——按描述文本定位
+    const show = [...container.querySelectorAll('button')].find(b => b.textContent?.includes('查玉佩伏笔'))!
     expect(show).toBeTruthy()
     act(() => { show.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(container.textContent).toContain('玉佩在第 3 章首次出现。')

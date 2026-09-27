@@ -77,7 +77,7 @@ export default function AgentHeader() {
           title={isCurrentEmpty ? t('tip.emptyAgent') : t('tip.newConversation')}
           disabled={isCurrentEmpty}
           onClick={handleNew}
-          style={{ width: 18, height: 18, padding: 0 }}
+          style={{ width: 22, height: 22, padding: 0 }}
         >
           <Plus size={13} strokeWidth={1.5} />
         </Button>
@@ -92,7 +92,7 @@ export default function AgentHeader() {
             title={t('tip.moreOptions')}
             onClick={() => { setShowMore(v => !v); setSubView('main') }}
             active={showMore}
-            style={{ width: 18, height: 18, padding: 0 }}
+            style={{ width: 22, height: 22, padding: 0 }}
           >
             <MoreHorizontal size={14} strokeWidth={1.5} />
           </Button>
@@ -172,7 +172,7 @@ export default function AgentHeader() {
           variant="ghost"
           title={t('agent.closeAgent')}
           onClick={handleClose}
-          style={{ width: 18, height: 18, padding: 0 }}
+          style={{ width: 22, height: 22, padding: 0 }}
         >
           <X size={14} strokeWidth={1.5} />
         </Button>

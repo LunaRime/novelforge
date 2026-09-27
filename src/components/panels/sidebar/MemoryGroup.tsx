@@ -98,7 +98,7 @@ export default function MemoryGroup({ projectPath }: Props) {
           <button
             type="button"
             onClick={() => void load()}
-            className="ml-auto px-1.5 py-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            className="ml-auto px-1.5 py-1 -my-1 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
             style={{ color: 'var(--color-text)', border: '1px solid var(--color-border)' }}
           >
             {t('action.retry')}

@@ -53,7 +53,8 @@ function CopyButton({ text }: { text: string }) {
           toast.error(t('tip.copyFailed'))
         }
       }}
-      className="p-1 rounded cursor-pointer hover:opacity-70"
+      className="flex items-center justify-center rounded cursor-pointer hover:opacity-70"
+      style={{ width: 22, height: 22 }}
       title={t('tip.copyMessage')}
     >
       <Copy size={12} />
@@ -70,16 +71,16 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
     <>
       <button
         onClick={() => setMessageFeedback(message.id, 'up')}
-        className="p-1 rounded cursor-pointer hover:opacity-70"
-        style={{ color: fb === 'up' ? 'var(--color-success)' : 'var(--color-text-muted)' }}
+        className="flex items-center justify-center rounded cursor-pointer hover:opacity-70"
+        style={{ width: 22, height: 22, color: fb === 'up' ? 'var(--color-success)' : 'var(--color-text-muted)' }}
         title={t('agent.feedbackUp')}
       >
         <ThumbsUp size={12} />
       </button>
       <button
         onClick={() => setMessageFeedback(message.id, 'down')}
-        className="p-1 rounded cursor-pointer hover:opacity-70"
-        style={{ color: fb === 'down' ? 'var(--color-error)' : 'var(--color-text-muted)' }}
+        className="flex items-center justify-center rounded cursor-pointer hover:opacity-70"
+        style={{ width: 22, height: 22, color: fb === 'down' ? 'var(--color-error)' : 'var(--color-text-muted)' }}
         title={t('agent.feedbackDown')}
       >
         <ThumbsDown size={12} />
@@ -99,8 +100,8 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
       {onFork && (
         <button
           onClick={() => onFork(message.id)}
-          className="p-1 rounded hover:opacity-80"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:opacity-80"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('agent.forkConversation')}
         >
           <GitFork size={12} />
@@ -110,9 +111,9 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
         <button
           onClick={() => onRewind(message.id)}
           disabled={rewindDisabled}
-          className="p-1 rounded hover:opacity-80"
+          className="flex items-center justify-center rounded hover:opacity-80"
           // 禁用态用内联 opacity/cursor（inline 压过 hover:opacity-80 类，hover 时禁用态不失效）
-          style={{ color: 'var(--color-text-muted)', opacity: rewindDisabled ? 0.4 : undefined, cursor: rewindDisabled ? 'not-allowed' : undefined }}
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)', opacity: rewindDisabled ? 0.4 : undefined, cursor: rewindDisabled ? 'not-allowed' : undefined }}
           title={rewindDisabled ? t('agent.rewindLastMessage') : t('agent.rewindToHere')}
         >
           <Undo2 size={12} />

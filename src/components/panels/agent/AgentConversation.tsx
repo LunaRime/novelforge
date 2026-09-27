@@ -637,9 +637,13 @@ function AgentHistoryPanel() {
 
 // ===== 最近会话列表项 =====
 
-/** 会话项 hover 工具条里的小图标按钮统一样式 */
-// 命中区 16×16 → 20×20（鼠标可点但偏小），并补 focus-visible 焦点环（键盘可达性）
-const ACT_BTN = 'flex items-center justify-center w-5 h-5 rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
+/**
+ * 会话项 hover 工具条里的小图标按钮统一样式（含 focus-visible 焦点环）。
+ * ⚠️ 2026-09-27：原写 `w-5 h-5`（rem 制）在本仓 `html{font-size:14px}` 下实渲染 17.5px，
+ * 低于 20×20 底线——旧注释写了「16×16 → 20×20」但数值没改对（标准 §5 的 rem 陷阱）。
+ * 改用原生 px 任意值，9 处调用点随此常量一并达标。
+ */
+const ACT_BTN = 'flex items-center justify-center w-[20px] h-[20px] rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
 
 function RecentConversationItem({
   title,
@@ -671,8 +675,10 @@ function RecentConversationItem({
   onDuplicate?: () => void
 }) {
   const { t } = useTranslation()
-  // 内联重命名（2026-09-22）：外层原来是 <button>，里面塞 input 是非法的，
-  // 因此改为 role="button" 的 div（键盘 Enter 仍可选中）
+  // 内联重命名（2026-09-22）：外层不能是 <button>（里面塞 input 非法），
+  // 因此编辑态走**独立渲染分支**（下方 if (editing) return，input 不进主按钮）。
+  // 2026-09-27 可供性修复：非编辑态由 role="button" 的 div 改为「主按钮 + 工具条兄弟」——
+  // 原形态 onKeyDown 只判 Enter（缺 Space）、且容器内含 5 个真按钮（button 角色不得有交互后代）。
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
 
@@ -697,34 +703,32 @@ function RecentConversationItem({
 
   return (
     <div
-      onClick={onClick}
-      role="button"
-      tabIndex={0}
-      onKeyDown={e => { if (e.key === 'Enter') onClick() }}
       className={`group w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors${parentTitle ? ' pl-5' : ''}`}
       style={{ backgroundColor: isActive ? 'var(--color-hover)' : 'transparent' }}
-      onMouseEnter={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'var(--color-hover)' }}
-      onMouseLeave={e => { if (!isActive) e.currentTarget.style.backgroundColor = 'transparent' }}
     >
-      {/* 标题 */}
-      <div className="flex items-center gap-x-1 overflow-hidden flex-1 min-w-0">
+      {/* 主区域 = 原生 button（键盘 Tab/Enter/Space 可达）；hover 反馈 = 热区 */}
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex items-center gap-x-1 overflow-hidden flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
+      >
         {pinned && <Pin size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />}
-        <div
+        <span
           className="truncate text-xs"
           style={{ color: 'var(--color-text)', opacity: isActive ? 1 : 0.65 }}
         >
           {title}
-        </div>
+        </span>
         {/* fork 子会话标注：分支图标 + 「来自『父标题』」（固定 pl-5 缩进，无布局跳动） */}
         {parentTitle && (
-          <div className="flex items-center gap-1 min-w-0">
+          <span className="flex items-center gap-1 min-w-0">
             <GitFork size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
             <span className="text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>
               {t('agent.forkedFrom').replace('{title}', parentTitle)}
             </span>
-          </div>
+          </span>
         )}
-      </div>
+      </button>
 
       {/* 右侧：固定宽度容器，时间与操作组绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
       <div className="flex-shrink-0 ml-1 relative" style={{ width: 88, height: 16 }}>
@@ -734,7 +738,8 @@ function RecentConversationItem({
         >
           {formatRelativeTime(updatedAt)}
         </span>
-        {/* 操作组（2026-09-22）：置顶 / 重命名 / 分叉 / 归档 / 删除 */}
+        {/* 操作组（2026-09-22）：置顶 / 重命名 / 分叉 / 归档 / 删除 —— 主按钮的兄弟节点。
+            2026-09-27：不再需要 stopPropagation（外层已无点击处理器） */}
         <div
           className="absolute right-0 top-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
           style={{ color: 'var(--color-text-secondary)' }}
@@ -742,44 +747,49 @@ function RecentConversationItem({
           {/* 以下四项管理操作仅在调用方提供回调时渲染（空状态的「最近会话」列表不提供） */}
           {onTogglePin && (
             <button
+              type="button"
               className={ACT_BTN}
               title={pinned ? t('agent.unpinConversation') : t('agent.pinConversation')}
-              onClick={e => { e.stopPropagation(); onTogglePin?.() }}
+              onClick={() => onTogglePin?.()}
             >
               <Pin size={12} />
             </button>
           )}
           {onRename && (
             <button
+              type="button"
               className={ACT_BTN}
               title={t('agent.renameConversation')}
-              onClick={e => { e.stopPropagation(); setDraft(title); setEditing(true) }}
+              onClick={() => { setDraft(title); setEditing(true) }}
             >
               <Pencil size={12} />
             </button>
           )}
           {onDuplicate && (
             <button
+              type="button"
               className={ACT_BTN}
               title={t('agent.duplicateConversation')}
-              onClick={e => { e.stopPropagation(); onDuplicate?.() }}
+              onClick={() => onDuplicate?.()}
             >
               <GitFork size={12} />
             </button>
           )}
           {onToggleArchive && (
             <button
+              type="button"
               className={ACT_BTN}
               title={archived ? t('agent.unarchiveConversation') : t('agent.archiveConversation')}
-              onClick={e => { e.stopPropagation(); onToggleArchive?.() }}
+              onClick={() => onToggleArchive?.()}
             >
               <Archive size={12} />
             </button>
           )}
           <button
+            type="button"
             className={ACT_BTN}
             title={t('agent.deleteConversation')}
-            onClick={e => { e.stopPropagation(); onDelete() }}
+            onClick={() => onDelete()}
           >
             <Trash2 size={12} />
           </button>

@@ -33,39 +33,41 @@ export default function SubAgentSessionCard({ session }: { session: SubAgentSess
 
   return (
     <div className="mx-2 my-1.5 rounded-lg border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+      {/* 2026-09-27 可供性修复：头部唯一主按钮（chevron 置左 + 状态/描述/工具数全在其内，
+          整行可点展开）；取消按钮（运行中）作兄弟、命中区 22×22。 */}
       <div className="flex items-center gap-1.5 px-2 py-1.5">
-        {session.status === 'running'
-          ? <Loader2 size={12} className="animate-spin flex-shrink-0" style={{ color: STATUS_COLOR.running }} />
-          : <Bot size={12} className="flex-shrink-0" style={{ color: STATUS_COLOR[session.status] }} />}
-        <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text)' }} title={session.description}>
-          {session.description}
-        </span>
-        <span className="text-2xs flex-shrink-0" style={{ color: STATUS_COLOR[session.status] }}>
-          {t(STATUS_KEY[session.status] as never)}
-        </span>
-        <span className="text-2xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {t('subagent.cardTools').replace('{n}', String(session.toolCalls.length))}
-        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1.5 flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
+        >
+          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </span>
+          {session.status === 'running'
+            ? <Loader2 size={12} className="animate-spin flex-shrink-0" style={{ color: STATUS_COLOR.running }} />
+            : <Bot size={12} className="flex-shrink-0" style={{ color: STATUS_COLOR[session.status] }} />}
+          <span className="text-xs truncate flex-1" style={{ color: 'var(--color-text)' }} title={session.description}>
+            {session.description}
+          </span>
+          <span className="text-2xs flex-shrink-0" style={{ color: STATUS_COLOR[session.status] }}>
+            {t(STATUS_KEY[session.status] as never)}
+          </span>
+          <span className="text-2xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {t('subagent.cardTools').replace('{n}', String(session.toolCalls.length))}
+          </span>
+        </button>
         {session.status === 'running' && (
           <button
             type="button"
             onClick={() => cancelSubAgent(session.id)}
-            className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
             title={t('subagent.cardCancel')}
           >
             <XCircle size={11} />
           </button>
         )}
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={open ? t('subagent.cardHide') : t('subagent.cardShow')}
-        >
-          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-        </button>
       </div>
       {session.error && (
         <div className="px-2 pb-1.5 text-2xs" style={{ color: 'var(--color-warning)' }}>{session.error}</div>

@@ -161,7 +161,7 @@ function DraftChapterGroup({
               <button
                 type="button"
                 onClick={() => setShowArchived(v => !v)}
-                className="flex items-center gap-1 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+                className="flex items-center gap-1 flex-1 min-w-0 py-1 -my-1 text-left cursor-pointer"
               >
                 <span className="text-micro" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
                   {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}

@@ -171,7 +171,8 @@ function TaskRunView() {
         </div>
       )}
 
-      {/* 历史记录（简表） */}
+      {/* 历史记录（简表；2026-09-27 可供性修复：行 = 主按钮，点击就地展开步骤详情 ——
+          此前行有 hover 变色却无点击处理器） */}
       {history.length > 0 && (
         <div className="flex-shrink-0">
           <div className="px-4 pt-3 pb-1 text-micro font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
@@ -179,30 +180,58 @@ function TaskRunView() {
           </div>
           <div className="px-2 pb-2">
             {history.map((run) => (
-              <div
-                key={run.id}
-                className="flex items-center gap-2 px-2 py-1.5 rounded transition-colors hover:bg-[var(--color-hover)]"
-              >
-                {/* 状态图标 */}
-                {run.status === 'completed'
-                  ? <CheckCircle2 size={12} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-                  : <XCircle size={12} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
-                }
-                {/* 标题 */}
-                <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
-                  {run.title}
-                </span>
-                {/* 步骤计数 */}
-                <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-                  {run.steps.filter(s => s.status === 'completed').length}/{run.steps.length}
-                </span>
-                {/* 时间 */}
-                <span className="text-micro flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
-                  {new Date(run.createdAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
+              <HistoryRunItem key={run.id} run={run} />
             ))}
           </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ===== 历史运行行（可展开步骤详情） =====
+
+/**
+ * 2026-09-27 可供性修复：历史行此前「hover 变色但无点击处理器」——
+ * 现行为主按钮（键盘可达），点击就地展开该次运行的步骤详情（复用 WorkflowStepItem）。
+ */
+function HistoryRunItem({ run }: { run: WorkflowRun }) {
+  const [expanded, setExpanded] = useState(false)
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer transition-colors hover:bg-[var(--color-hover)]"
+      >
+        <ChevronRight
+          size={10}
+          className={expanded ? 'rotate-90' : ''}
+          style={{ transition: 'transform 0.15s', flexShrink: 0, color: 'var(--color-text-muted)' }}
+        />
+        {/* 状态图标 */}
+        {run.status === 'completed'
+          ? <CheckCircle2 size={12} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+          : <XCircle size={12} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
+        }
+        {/* 标题 */}
+        <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
+          {run.title}
+        </span>
+        {/* 步骤计数 */}
+        <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+          {run.steps.filter(s => s.status === 'completed').length}/{run.steps.length}
+        </span>
+        {/* 时间 */}
+        <span className="text-micro flex-shrink-0 w-14 text-right" style={{ color: 'var(--color-text-muted)' }}>
+          {new Date(run.createdAt).toLocaleTimeString(getCurrentLocale(), { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      </button>
+      {expanded && (
+        <div className="px-4 pb-1">
+          {run.steps.map((step, i) => (
+            <WorkflowStepItem key={step.id} step={step} index={i} isLast={i === run.steps.length - 1} />
+          ))}
         </div>
       )}
     </div>
@@ -249,54 +278,58 @@ function ActiveRunPanel({
 
   return (
     <div>
-      {/* ── 状态条（始终可见，点击折叠/展开） ── */}
-      <div
-        className="flex items-center gap-2.5 px-3 py-2 cursor-pointer select-none"
-        onClick={() => setExpanded(v => !v)}
-      >
-        {/* 状态图标 */}
-        <div className="flex-shrink-0">
-          {run.status === 'running' && (
-            <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
-          )}
-          {run.status === 'waiting' && (
-            <Clock size={13} style={{ color: 'var(--color-warning)' }} />
-          )}
-        </div>
-
-        {/* 标题 + 进度条 */}
-        <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-1.5 mb-1">
-            <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-              {runningStep && isActive ? runningStep.name : run.title}
-            </p>
-            <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
-              {progress}%
-            </span>
+      {/* ── 状态条（始终可见）：主按钮 = 折叠/展开（原生 button，键盘可达）；
+             取消按钮作兄弟、独立触发（2026-09-27：不再需要 stopPropagation） ── */}
+      <div className="flex items-center gap-1 px-3 py-2 select-none">
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
+        >
+          {/* 状态图标 */}
+          <div className="flex-shrink-0">
+            {run.status === 'running' && (
+              <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
+            )}
+            {run.status === 'waiting' && (
+              <Clock size={13} style={{ color: 'var(--color-warning)' }} />
+            )}
           </div>
-          {/* 2px 进度条 */}
-          <ProgressBar value={progress} />
-        </div>
 
-        {/* 右侧：步骤计数 + 折叠箭头 + 取消 */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="text-micro font-mono" style={{ color: 'var(--color-text-muted)' }}>
-            {completedCount}/{totalCount}
-          </span>
-          {expanded
-            ? <ChevronDown size={11} style={{ color: 'var(--color-text-muted)' }} />
-            : <ChevronRight size={11} style={{ color: 'var(--color-text-muted)' }} />
-          }
-          {/* 取消按钮——阻止冒泡到折叠点击 */}
-          <button
-            onClick={(e) => { e.stopPropagation(); onCancel() }}
-            className="icon-btn"
-            style={{ width: 18, height: 18 }}
-            title={t('tip.cancelTask')}
-          >
-            <X size={11} />
-          </button>
-        </div>
+          {/* 标题 + 进度条 */}
+          <div className="flex-1 min-w-0">
+            <div className="flex items-baseline gap-1.5 mb-1">
+              <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+                {runningStep && isActive ? runningStep.name : run.title}
+              </p>
+              <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+                {progress}%
+              </span>
+            </div>
+            {/* 2px 进度条 */}
+            <ProgressBar value={progress} />
+          </div>
+
+          {/* 右侧：步骤计数 + 折叠箭头 */}
+          <div className="flex items-center gap-1 flex-shrink-0">
+            <span className="text-micro font-mono" style={{ color: 'var(--color-text-muted)' }}>
+              {completedCount}/{totalCount}
+            </span>
+            {expanded
+              ? <ChevronDown size={11} style={{ color: 'var(--color-text-muted)' }} />
+              : <ChevronRight size={11} style={{ color: 'var(--color-text-muted)' }} />
+            }
+          </div>
+        </button>
+        {/* 取消按钮（独立行为 → 兄弟节点；命中区 icon-btn = 22×22） */}
+        <button
+          type="button"
+          onClick={onCancel}
+          className="icon-btn"
+          title={t('tip.cancelTask')}
+        >
+          <X size={11} />
+        </button>
       </div>
 
       {/* ── 步骤详情列表（展开时显示） ── */}
@@ -375,6 +408,40 @@ function WorkflowStepItem({
   const [expanded, setExpanded] = useState(false)
   const hasDetail = !!step.error || step.logs.length > 0
 
+  /** 步骤标题行内容（有详情时整行 = 按钮；无详情 = 纯状态行，见下方渲染分支） */
+  const rowContent = (
+    <>
+      {hasDetail && (
+        expanded
+          ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+          : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+      )}
+      <span
+        className="text-xs flex-1 truncate"
+        style={{
+          color: step.status === 'running'
+            ? 'var(--color-text)'
+            : step.status === 'pending'
+              ? 'var(--color-text-muted)'
+              : 'var(--color-text-secondary)',
+          fontWeight: step.status === 'running' ? 500 : 400,
+        }}
+      >
+        {index + 1}. {step.name}
+      </span>
+      {/* 进度百分比 */}
+      {step.progress !== undefined && step.status === 'running' && (
+        <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+          {step.progress}%
+        </span>
+      )}
+      {/* 完成耗时（若有时间戳）或简单标记 */}
+      {step.status === 'skipped' && (
+        <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('status.aborted')}</span>
+      )}
+    </>
+  )
+
   // 运行中自动展开
   useEffect(() => {
     let mounted = true
@@ -414,40 +481,21 @@ function WorkflowStepItem({
         className="flex-1 min-w-0 pb-2"
         style={{ minHeight: isLast ? undefined : 28 }}
       >
-        {/* 步骤标题行 */}
-        <div
-          className={`flex items-center gap-1 py-1 ${hasDetail ? 'cursor-pointer' : ''}`}
-          onClick={hasDetail ? () => setExpanded(v => !v) : undefined}
-        >
-          {hasDetail && (
-            expanded
-              ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-              : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          )}
-          <span
-            className="text-xs flex-1 truncate"
-            style={{
-              color: step.status === 'running'
-                ? 'var(--color-text)'
-                : step.status === 'pending'
-                  ? 'var(--color-text-muted)'
-                  : 'var(--color-text-secondary)',
-              fontWeight: step.status === 'running' ? 500 : 400,
-            }}
+        {/* 步骤标题行 — 2026-09-27 可供性修复：有详情时行 = 原生 button（键盘可达，
+            hover 反馈 = 热区）；无详情的行是纯状态行，不渲染可点形态 */}
+        {hasDetail ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(v => !v)}
+            className="w-full flex items-center gap-1 py-1 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
           >
-            {index + 1}. {step.name}
-          </span>
-          {/* 进度百分比 */}
-          {step.progress !== undefined && step.status === 'running' && (
-            <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
-              {step.progress}%
-            </span>
-          )}
-          {/* 完成耗时（若有时间戳）或简单标记 */}
-          {step.status === 'skipped' && (
-            <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{t('status.aborted')}</span>
-          )}
-        </div>
+            {rowContent}
+          </button>
+        ) : (
+          <div className="flex items-center gap-1 py-1">
+            {rowContent}
+          </div>
+        )}
 
         {/* 详情区（展开时显示：日志 + 错误） */}
         {expanded && hasDetail && (

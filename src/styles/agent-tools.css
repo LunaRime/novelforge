@@ -183,13 +183,22 @@
   border: 1px solid var(--color-border);
   background-color: var(--color-hover);
   font-size: var(--text-micro);
-  cursor: pointer;
   transition: all 0.15s ease;
 }
 
-.artifact-card:hover {
+/* 2026-09-27 可供性修复：hover/手型只属于「真能点」的卡片（button.artifact-card）；
+   没有可达目标的产物卡是纯状态卡（.artifact-card-static），不得有任何可点暗示 */
+button.artifact-card {
+  cursor: pointer;
+}
+
+button.artifact-card:hover {
   border-color: var(--color-accent);
   background-color: rgba(var(--color-accent-rgb), 0.06);
+}
+
+.artifact-card-static {
+  cursor: default;
 }
 
 .artifact-icon {
