@@ -90,4 +90,16 @@ describe('CompressedBatchCard（B 档第二轮 T7）', () => {
     await act(async () => { btn.click() })
     expect(storeMock.removeCompaction).toHaveBeenCalledWith(1)
   })
+
+  it('可供性契约（2026-09-27）：通知文案（含计数）即主按钮——可聚焦、可点击展开、无 button 嵌套', async () => {
+    const el = render(<CompressedBatchCard batch={batch()} />)
+    // 主按钮 = textContent 含真实降幅计数的那个按钮（此前 savedTokens / before → after 在无热区 span 上）
+    const main = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('4000'))!
+    expect(main).toBeTruthy()
+    main.focus()
+    expect(document.activeElement).toBe(main)
+    expect(el.querySelectorAll('button button')).toHaveLength(0)
+    await act(async () => { main.click() })
+    expect(storeMock.loadBatchOriginal).toHaveBeenCalled()
+  })
 })

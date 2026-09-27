@@ -19,15 +19,17 @@ export default function ThinkingCollapse({ thinking }: Props) {
   const [expanded, setExpanded] = useState(false)  // 默认折叠（与 AIOutputPanel ThinkingBlock 语义一致）
   return (
     <div className="mb-1.5 rounded-md border" style={{ borderColor: 'var(--color-border)' }}>
+      {/* 2026-09-27 可供性修复：折叠箭头移左（与树/行语言统一，右端留给「进入」）+
+          补 hover 反馈（此前可点却无任何暗示）。整行原生 button 的形态不动。 */}
       <button
+        type="button"
         onClick={() => setExpanded(v => !v)}
-        className="flex items-center gap-1.5 px-2 py-1 text-xs w-full text-left transition-colors"
+        className="flex items-center gap-1.5 px-2 py-1 text-xs w-full text-left transition-colors rounded-md hover:bg-[var(--color-hover)]"
         style={{ color: 'var(--color-text-muted)' }}
       >
-        <Brain size={11} style={{ color: 'var(--color-accent)' }} />
+        <ChevronRight size={11} className={expanded ? 'rotate-90' : ''} style={{ transition: 'transform 0.15s', flexShrink: 0 }} />
+        <Brain size={11} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
         <span className="font-medium">{t('agent.thinkingPrefix')}</span>
-        <span className="flex-1" />
-        <ChevronRight size={11} className={expanded ? 'rotate-90' : ''} style={{ transition: 'transform 0.15s' }} />
       </button>
       {expanded && (
         <div className="px-3 pb-2 text-xs leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>

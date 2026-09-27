@@ -85,8 +85,15 @@ export default function ToolCallBlock({ toolCall }: Props) {
 
   return (
     <div className="tool-call-block">
-      {/* 折叠头部 */}
-      <div className="tool-call-header" onClick={() => setExpanded(v => !v)}>
+      {/* 折叠头部 — 2026-09-27 可供性修复：div onClick → 原生 button（键盘 Tab/Enter 可达）；
+          折叠箭头移左（右端在本仓语言里是「进入」，不得与展开语义混用）。 */}
+      <button type="button" className="tool-call-header" onClick={() => setExpanded(v => !v)}>
+        {/* 展开箭头（置左） */}
+        <ChevronRight
+          size={12}
+          className={`tool-call-arrow ${expanded ? 'expanded' : ''}`}
+        />
+
         <div className="tool-call-icon">
           <Wrench size={12} style={{ color: 'var(--color-text-muted)' }} />
         </div>
@@ -119,13 +126,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
           <StatusIcon status={status} />
           <span>{statusLabel(status, t)}</span>
         </div>
-
-        {/* 展开箭头 */}
-        <ChevronRight
-          size={12}
-          className={`tool-call-arrow ${expanded ? 'expanded' : ''}`}
-        />
-      </div>
+      </button>
 
       {/* 展开区域 */}
       {expanded && (
@@ -142,8 +143,9 @@ export default function ToolCallBlock({ toolCall }: Props) {
             <div className="tool-call-result" style={{ position: 'relative' }}>
               {result}
               <button
+                type="button"
                 onClick={() => navigator.clipboard.writeText(result).catch(() => {})}
-                className="absolute top-1 right-1 text-micro px-1.5 py-0.5 rounded transition-opacity opacity-0 hover:opacity-100 focus-visible:opacity-100"
+                className="absolute top-1 right-1 text-micro px-1.5 py-1 -my-1 rounded transition-opacity opacity-0 hover:opacity-100 focus-visible:opacity-100"
                 style={{
                   backgroundColor: 'var(--color-hover)',
                   color: 'var(--color-text-secondary)',

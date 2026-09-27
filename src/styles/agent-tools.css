@@ -16,7 +16,9 @@
   transition: border-color 0.2s ease;
 }
 
-.tool-call-block:hover {
+/* 2026-09-27 可供性修复：边框 hover 收窄到头部 —— 此前挂整块，
+   展开后悬停参数/结果区边框亮着却点不动（hover ⊃ 热区） */
+.tool-call-block:has(.tool-call-header:hover) {
   border-color: var(--color-text-muted);
 }
 
@@ -24,6 +26,9 @@
   display: flex;
   align-items: center;
   gap: 6px;
+  /* 2026-09-27：header 由 div 改原生 button（键盘可达）——按钮默认宽度需显式撑满 */
+  width: 100%;
+  text-align: left;
   padding: 6px 10px;
   background-color: var(--color-hover);
   cursor: pointer;
@@ -121,10 +126,12 @@
 }
 
 .tool-call-arrow {
-  margin-left: auto;
+  /* 2026-09-27 可供性修复：箭头移左（此前 margin-left:auto 顶在右端 —— 该位置在本仓
+     语言里是「进入」，与展开语义冲突；同面板的工作区折叠已在左端） */
   transition: transform 0.2s ease;
   color: var(--color-text-muted);
   opacity: 0.5;
+  flex-shrink: 0;
 }
 
 .tool-call-arrow.expanded {

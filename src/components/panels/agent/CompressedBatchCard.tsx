@@ -67,27 +67,34 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
       className="mx-2 my-2 rounded-lg px-3 py-2 text-xs"
       style={{ backgroundColor: 'var(--color-hover)', border: '1px dashed var(--color-border)' }}
     >
-      <div className="flex items-center justify-between">
-        <span style={{ color: 'var(--color-text-secondary)' }}>
+      {/* 2026-09-27 可供性修复：通知文案（含 savedTokens / before → after 计数）此前落在
+          无热区的 span 上——改为整段包进主按钮（点它 = 展开/收起，尾部保留「展开/收起」标签
+          作可点暗示）；「移除该压缩」作兄弟节点。文字型按钮热区用 py-1 -my-1 撑到 21px。 */}
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => void handleToggle()}
+          className="flex-1 min-w-0 text-left cursor-pointer"
+          style={{ color: 'var(--color-text-secondary)' }}
+        >
           {t('ccr.compressedNotice').replace('{n}', String(batch.originalTokens))}
           {savedTokens > 0 && ` · ${t('ccr.savedTokens').replace('{n}', String(savedTokens))}`}
           {hasRealDelta && ` (${before} → ${after})`}
           {batch.invalidated && ` · ${t('ccr.batchInvalidated')}`}
-        </span>
-        <div className="flex items-center gap-2">
-          {recoverable && (
-            <button
-              onClick={() => void removeCompaction(batch.batch)}
-              style={{ color: 'var(--color-accent)' }}
-              className="hover:underline"
-            >
-              {t('ccr.removeCompaction')}
-            </button>
-          )}
-          <button onClick={() => void handleToggle()} style={{ color: 'var(--color-accent)' }} className="hover:underline">
+          <span className="ml-1" style={{ color: 'var(--color-accent)' }}>
             {expanded ? t('ccr.collapse') : t('ccr.expand')}
+          </span>
+        </button>
+        {recoverable && (
+          <button
+            type="button"
+            onClick={() => void removeCompaction(batch.batch)}
+            style={{ color: 'var(--color-accent)' }}
+            className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer"
+          >
+            {t('ccr.removeCompaction')}
           </button>
-        </div>
+        )}
       </div>
 
       <div className="mt-1 whitespace-pre-wrap">{summaryText}</div>
