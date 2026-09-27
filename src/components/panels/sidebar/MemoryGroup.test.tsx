@@ -218,4 +218,26 @@ describe('MemoryGroup — 侧栏记忆导航（点击开编辑器标签页）', 
     expect(container.textContent).not.toContain(t('action.edit'))
     act(() => { root.unmount() })
   })
+
+  it('行 hover 与热区重合（RM-SB-05，2026-09-27）：hover 底色在主按钮上、行容器不再整行高亮', async () => {
+    const { container, root } = render(<MemoryGroup projectPath="/mock/proj" />)
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+
+    const main = rowOf(container, 'chapters-1-3.md') as HTMLButtonElement
+    expect(main.className).toContain('hover:bg-')        // hover 反馈 = 主按钮热区
+    const rowBox = main.parentElement as HTMLElement
+    expect(rowBox.className).not.toContain('hover:bg-')  // 容器不再高亮（原死带来源）
+    act(() => { root.unmount() })
+  })
+
+  it('卡片头整行主按钮（RM-SB-04，2026-09-27）：含标题与计数；无嵌套按钮', async () => {
+    const { container, root } = render(<MemoryGroup projectPath="/mock/proj" />)
+    await act(async () => { await new Promise(r => setTimeout(r, 10)) })
+
+    const head = [...container.querySelectorAll('button')].find(b => b.textContent?.includes(t('memory.groupTitle')))!
+    expect(head).toBeTruthy()
+    expect(head.textContent).toContain(String(FILES.length))  // 计数在主按钮内
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
+    act(() => { root.unmount() })
+  })
 })

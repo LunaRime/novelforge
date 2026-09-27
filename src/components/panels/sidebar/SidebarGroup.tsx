@@ -1,9 +1,16 @@
 /**
  * SidebarGroup — 侧栏区块卡片容器（VolumeGroup 风格统一）
  *
- * rounded-xl border + panel 背景卡片；标题行：accent 图标 + 标题 + 数量 + 操作按钮 + 折叠
- * 用于项目结构侧栏各部件（故事架构 / 章节蓝图 / 草稿箱 / 正文章节…）
- * 与 VolumeGroup 的 section 结构保持一致，保证侧栏视觉统一。
+ * rounded-xl border + panel 背景卡片。
+ *
+ * 2026-09-27 可供性重构（依据 card-affordance-standard §1/§2/§3 + 真机验证 RM-SB-02/03/04/06）：
+ *  - 头部唯一主按钮（flex-1）：图标 + 标题 + 计数全在其内 → 整行可点（计数死区清零）
+ *  - 折叠卡（无 onTitleClick）：主按钮 = 展开/折叠，chevron 在主按钮内**置左**，右侧不放 `>`
+ *  - 导航卡（onTitleClick + collapsible=false）：主按钮 = 进入，`>` 装饰在主按钮内末尾
+ *  - 导航+折叠卡（两者都有）：左 chevron 独立按钮（折叠）+ 主按钮（进入，内含 `>`）
+ *  - 纯状态卡（都没有）：无热区、无 hover、无手型
+ *  - 操作按钮（独立行为）一律作主按钮的**兄弟**；不渲染任何 disabled 按钮（反模式）
+ *  - 头部图标按钮固定像素 22×22（≥20×20 底线；rem 档位在 html{font-size:14px} 下不足）
  */
 import { useState, type ReactNode } from 'react'
 import { ChevronRight, ChevronDown } from 'lucide-react'
@@ -14,13 +21,13 @@ interface SidebarGroupProps {
   icon: ReactNode
   /** 区块标题 */
   title: string
-  /** 数量/进度（标题行右侧，ml-auto 推右） */
+  /** 数量/进度（纯展示 → 进主按钮，标题行右侧 ml-auto） */
   count?: ReactNode
-  /** 操作按钮组（数量右侧） */
+  /** 有独立行为的操作按钮组（数量右侧，主按钮的兄弟） */
   actions?: ReactNode
-  /** 点击标题行（打开编辑器等；不设则标题行仅展示） */
+  /** 点击主按钮（打开编辑器等）。不传 → 主行为 = 展开/折叠（折叠卡） */
   onTitleClick?: () => void
-  /** 标题行悬停提示 */
+  /** 主按钮悬停提示（挂在动作所在的元素上——不得挂整行容器，否则暗示超热区） */
   titleHint?: string
   /** 标题行右键菜单 */
   onContextMenu?: (e: React.MouseEvent) => void
@@ -46,53 +53,83 @@ export default function SidebarGroup({
   const { t } = useTranslation()
   const [open, setOpen] = useState(defaultOpen)
 
+  const toggle = () => setOpen(v => !v)
+  const foldIcon = open ? <ChevronDown size={12} /> : <ChevronRight size={12} />
+  const iconSlot = (
+    <span style={{ color: 'var(--color-accent)', flexShrink: 0, display: 'flex' }}>{icon}</span>
+  )
+  const titleText = (
+    <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+      {title}
+    </span>
+  )
+  const countText = count !== undefined && (
+    <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+      {count}
+    </span>
+  )
+
   return (
     <section
       className="rounded-xl border p-2.5"
       style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      {/* ⚠️ 2026-09-25 重构：标题行此前是 `<div onClick>` —— 键盘完全够不到，
-          而它内部**本来就含**折叠按钮（浏览器既已可见），直接把外层换成 `<button>` 会变成
-          button 嵌 button（非法 HTML + 焦点被外层吞掉）。
-          做法：把「图标 + 标题」包进一个全宽按钮（flex-1），计数与操作类按钮**降为兄弟节点**。 */}
-      <div
-        // 2026-09-25：补 mb-1.5 —— VolumeGroup / PublicationGroup / MemoryGroup 三处自绘的同类卡片
-        // 标题行都有它，唯独本组件没有，导致同一侧栏里"标题到内容"的间距两种（审计实测）
-        className="flex items-center gap-1.5 mb-1.5"
-        onContextMenu={onContextMenu}
-        title={titleHint}
-      >
-        <button
-          type="button"
-          onClick={onTitleClick}
-          disabled={!onTitleClick}
-          className="flex items-center gap-1.5 min-w-0 flex-1 text-left enabled:cursor-pointer"
-        >
-          <span style={{ color: 'var(--color-accent)', flexShrink: 0, display: 'flex' }}>{icon}</span>
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-            {title}
-          </span>
-        </button>
-        {count !== undefined && (
-          <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {count}
-          </span>
-        )}
-        {actions}
-        {collapsible && (
+      {/* 头部：唯一主按钮（图标 + 标题 + 计数全在其内）+ 操作按钮兄弟。
+          ⚠️ 不得改回「标题按钮 + 计数兄弟」——那正是计数死区的根因（真机 S1b/S2b/S3b NO_CHANGE）。 */}
+      <div className="flex items-center gap-1.5 mb-1.5" onContextMenu={onContextMenu}>
+        {/* 导航+折叠卡：折叠箭头是独立按钮（置左；右端留给「进入」） */}
+        {onTitleClick && collapsible && (
           <button
             type="button"
-            onClick={() => setOpen(v => !v)}
-            className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-            style={{ color: 'var(--color-text-muted)' }}
+            onClick={toggle}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
             title={open ? t('action.close') : t('action.open')}
           >
-            {open
-              ? <ChevronDown size={12} />
-              : <ChevronRight size={12} />}
+            {foldIcon}
           </button>
         )}
+
+        {onTitleClick ? (
+          /* 导航卡（含导航+折叠）：主按钮 = 进入；`>` 纯装饰在主按钮内末尾 */
+          <button
+            type="button"
+            onClick={onTitleClick}
+            className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
+            title={titleHint}
+          >
+            {iconSlot}
+            {titleText}
+            {countText}
+            <ChevronRight size={12} className="flex-shrink-0" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }} />
+          </button>
+        ) : collapsible ? (
+          /* 折叠卡：主按钮 = 展开/折叠；chevron 在主按钮内、置左；右侧不放 `>` */
+          <button
+            type="button"
+            onClick={toggle}
+            className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
+            title={titleHint}
+          >
+            <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              {foldIcon}
+            </span>
+            {iconSlot}
+            {titleText}
+            {countText}
+          </button>
+        ) : (
+          /* 纯状态卡：无热区、无 hover、无手型（不得渲染 disabled 按钮） */
+          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+            {iconSlot}
+            {titleText}
+            {countText}
+          </div>
+        )}
+
+        {actions}
       </div>
+
       {collapsible ? (open ? children : null) : children}
     </section>
   )

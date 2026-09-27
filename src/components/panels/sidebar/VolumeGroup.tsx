@@ -107,20 +107,31 @@ export default function VolumeGroup({
       className="rounded-xl border p-2.5"
       style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
+      {/* 2026-09-27 可供性重构：折叠卡 = 整行主按钮（chevron 置左、计数在内），
+          操作按钮（自动划分/新建卷）作兄弟；命中区固定 22×22 */}
       <div className="flex items-center gap-1.5 mb-1.5">
-        <BookMarked size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-          {t('volume.title')}
-        </span>
-        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
-          {volumes.length}
-        </span>
+        <button
+          type="button"
+          onClick={() => setOpen(v => !v)}
+          className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
+        >
+          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </span>
+          <BookMarked size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {t('volume.title')}
+          </span>
+          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {volumes.length}
+          </span>
+        </button>
         {totalChapters > 0 && (
           <button
             type="button"
             onClick={() => setAutoSplitOpen(true)}
-            className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-            style={{ color: 'var(--color-text-muted)' }}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
             title={t('volume.autoSplit')}
           >
             <Layers size={12} />
@@ -129,22 +140,11 @@ export default function VolumeGroup({
         <button
           type="button"
           onClick={() => setVolumeDialog({ open: true, editing: null })}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('volume.newVolume')}
         >
           <Plus size={12} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={open ? t('action.close') : t('action.open')}
-        >
-          {open
-            ? <ChevronDown size={12} />
-            : <ChevronRight size={12} />}
         </button>
       </div>
 
@@ -255,8 +255,8 @@ function VolumeRow({
         </button>
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('volume.editVolume')}
           onClick={() => onEdit()}
         >
@@ -264,8 +264,8 @@ function VolumeRow({
         </button>
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
           onClick={() => onDelete()}
         >

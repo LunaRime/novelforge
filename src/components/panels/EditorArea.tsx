@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -493,6 +493,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     if (type === 'version-history') return <History size={14} />
     if (type === 'review-report') return <ClipboardCheck size={14} />
     if (type === 'memory') return <Brain size={14} />
+    if (type === 'publication') return <Satellite size={14} />
     return <FileText size={14} />
   }
 
@@ -752,6 +753,15 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             chapterNumber={activeTab.chapterNumber}
             chapterDir={activeTab.chapterDir}
           />
+        )}
+        {activeTab?.type === 'publication' && (
+          /* 平台章节正文（连载监控）：只读整幅展示 —— 正文随 db:publication-list 已返回，
+             侧栏行点击只做导航（与记忆文件同一约定：编辑器是唯一查看面） */
+          <div className="h-full overflow-y-auto p-6">
+            <div className="text-sm leading-7 whitespace-pre-wrap" style={{ color: 'var(--color-text)' }}>
+              {activeTab.content || ''}
+            </div>
+          </div>
         )}
         {/* diff 合并视图 — 统一使用弹出式 Dialog（与 DraftEditor 一致） */}
         <Dialog

@@ -159,6 +159,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
   const chapterFiles = files.filter(f => !f.name.includes('_notes'))
 
   return (
+    <>
     <SidebarGroup
       icon={<PenTool size={12} />}
       title={t('manuscript.title')}
@@ -169,10 +170,10 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
       actions={chapterFiles.length > 0 && (
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('export.batchExportTip')}
-          onClick={(e) => { e.stopPropagation(); openBatchExport() }}
+          onClick={() => openBatchExport()}
         >
           <Archive size={12} />
         </button>
@@ -245,13 +246,16 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
             })
           )}
 
-      {/* 章节导出对话框 */}
-      <ChapterExportDialog
-        chapterNumbers={exportChapters}
-        chapterTitles={exportTitleMap}
-        open={exportOpen}
-        onClose={() => setExportOpen(false)}
-      />
     </SidebarGroup>
+    {/* 章节导出对话框 — 2026-09-27 修复 RM-SB-01：必须挂在折叠门之外。
+        此前它在 SidebarGroup 的 children 里，收起态 `open ? children : null` 不渲染 →
+        收起态点导出零响应、exportOpen 静默置位，之后展开时弹窗"报复性"自行出现（真机 S8 实锤）。 */}
+    <ChapterExportDialog
+      chapterNumbers={exportChapters}
+      chapterTitles={exportTitleMap}
+      open={exportOpen}
+      onClose={() => setExportOpen(false)}
+    />
+    </>
   )
 }

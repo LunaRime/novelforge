@@ -208,6 +208,21 @@ export function LeafItem({
   onClick?: () => void
   onContextMenu?: (e: React.MouseEvent) => void
 }) {
+  const content = (
+    <>
+      <span style={{ width: 12, flexShrink: 0 }} />
+      <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(iconName, 14)}</span>
+      <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{label}</span>
+      {badge && (
+        <span
+          className="text-micro flex-shrink-0 ml-1"
+          style={{ color: badgeColor || (badgeDone ? 'var(--color-success)' : 'var(--color-text-muted)') }}
+        >
+          {badge}
+        </span>
+      )}
+    </>
+  )
   return (
     <div
       className="tree-item gap-1.5 select-none"
@@ -218,26 +233,22 @@ export function LeafItem({
       onContextMenu={onContextMenu}
       title={desc}
     >
-      {/* 2026-09-25：点击移到内层按钮 → 键盘可达（原为 <div onClick>，完全够不到） */}
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={!onClick}
-        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
-        style={{ paddingLeft: 10 }}
-      >
-        <span style={{ width: 12, flexShrink: 0 }} />
-        <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(iconName, 14)}</span>
-        <span className="text-sm font-medium flex-1 min-w-0 truncate" style={{ color: 'var(--color-text)' }}>{label}</span>
-        {badge && (
-          <span
-            className="text-micro flex-shrink-0 ml-1"
-            style={{ color: badgeColor || (badgeDone ? 'var(--color-success)' : 'var(--color-text-muted)') }}
-          >
-            {badge}
-          </span>
-        )}
-      </button>
+      {/* 2026-09-27 可供性修复：无 onClick 时不得渲染 `disabled` 按钮（"没有点击行为" ≠
+          "按钮不可用"，标准 §2 坏形态 3）——改为纯内容 div：无热区、无 hover、无手型。 */}
+      {onClick ? (
+        <button
+          type="button"
+          onClick={onClick}
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left cursor-pointer"
+          style={{ paddingLeft: 10 }}
+        >
+          {content}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 flex-1 min-w-0" style={{ paddingLeft: 10 }}>
+          {content}
+        </div>
+      )}
     </div>
   )
 }

@@ -60,32 +60,33 @@ export default function MemoryGroup({ projectPath }: Props) {
       className="rounded-xl border p-2.5"
       style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      {/* 头部：与 VolumeGroup 同构（icon + title + ml-auto 数量 + muted 操作按钮 + 折叠按钮最后） */}
+      {/* 头部（2026-09-27 可供性重构）：折叠卡 = 整行主按钮（chevron 置左、计数在内），
+          刷新按钮作兄弟；命中区固定 22×22 */}
       <div className="flex items-center gap-1.5 mb-1.5">
-        <Brain size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>
-          {t('memory.groupTitle')}
-        </span>
-        <span className="ml-auto text-micro" style={{ color: 'var(--color-text-muted)' }}>
-          {files.length}
-        </span>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={t('action.refresh')}
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
-          title={open ? t('action.close') : t('action.open')}
+          className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
         >
-          {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+          </span>
+          <Brain size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {t('memory.groupTitle')}
+          </span>
+          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {files.length}
+          </span>
+        </button>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+          title={t('action.refresh')}
+        >
+          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
       </div>
 
@@ -205,14 +206,16 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
           而它内部**本来就含**重建/删除按钮，外层直接换 `<button>` 会 button 嵌 button。
           做法：kind 徽标 + 文件名 + stale 徽标包进主按钮，重建/删除降为兄弟节点
           （不再需要 stopPropagation，外层已无点击处理器）。 */}
+      {/* 2026-09-27 可供性修复（RM-SB-05）：hover 从行容器移到主按钮 —— 此前容器
+          px-1.5/py-1.5 整行高亮，主按钮只盖中间，上下各 6px 是「高亮但点不动」的死带。 */}
       <div
-        className="flex items-center gap-1.5 px-1.5 py-1.5 select-none hover:bg-[var(--color-hover)]"
+        className="flex items-center gap-1.5 pr-1.5 select-none"
         title={meta.file}
       >
         <button
           type="button"
           onClick={() => void openInEditor()}
-          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+          className="flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-left cursor-pointer hover:bg-[var(--color-hover)]"
         >
           <span
             className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
@@ -234,8 +237,8 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
         </button>
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('memory.rebuild')}
           onClick={() => onRebuild()}
         >
@@ -243,8 +246,8 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
         </button>
         <button
           type="button"
-          className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ color: 'var(--color-text-muted)' }}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
           onClick={() => void handleDelete()}
         >
