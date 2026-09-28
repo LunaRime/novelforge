@@ -272,10 +272,10 @@ function ModelCard({
       )}
       style={{ backgroundColor: isDefault ? 'color-mix(in srgb, var(--color-accent) 5%, var(--color-panel))' : 'var(--color-panel)' }}
     >
-      {/* 图标 */}
+      {/* 图标 — 固定 32×32（`w-9` 在本仓 html{font-size:14px} 下 = 31.5px，半像素修正） */}
       <div
-        className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
-        style={{ backgroundColor: 'var(--color-hover)' }}
+        className="rounded-lg flex items-center justify-center flex-shrink-0 text-lg"
+        style={{ width: 32, height: 32, backgroundColor: 'var(--color-hover)' }}
       >
         {providerEmoji(model.provider)}
       </div>
