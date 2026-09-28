@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   defaultEmbeddingModelId: null as string | null,
   loaded: true,
   loadModels: vi.fn(),
-  saveModel: vi.fn(async () => {}),
+  saveModel: vi.fn<(m: ModelProfile) => Promise<void>>(async () => {}),
   deleteModel: vi.fn(async () => {}),
   setDefaultModel: vi.fn(async () => {}),
   setDefaultEmbeddingModel: vi.fn(async () => {}),
@@ -200,7 +200,7 @@ describe('新增草稿卡', () => {
       saveBtn!.click()
       await new Promise(r => setTimeout(r, 10))
     })
-    const lastCall = state.saveModel.mock.calls.at(-1)?.[0] as { name?: string } | undefined
+    const lastCall = state.saveModel.mock.calls.at(-1)?.[0]
     expect(lastCall?.name).toBe('我的模型')
   })
 })
