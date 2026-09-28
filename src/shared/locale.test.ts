@@ -137,3 +137,15 @@ describe('compareLocaleStrings', () => {
     expect(result).toEqual(['第1章', '第2章', '第10章'])
   })
 })
+
+describe('文案与图标的前缀重复（2026-09-28 走查修复）', () => {
+  it('character.addRelation 不得带 "+" 前缀 —— UI 已配 Plus 图标，双写会渲染成「+ + 添加关系」', () => {
+    const entry = UI_TEXTS['character.addRelation']
+    for (const loc of SUPPORTED_LOCALES) {
+      expect(
+        entry[loc].trim().startsWith('+'),
+        `${loc}：「${entry[loc]}」以 + 开头，与按钮上的 Plus 图标重复（见 CharacterEditor.tsx 添加关系按钮）`,
+      ).toBe(false)
+    }
+  })
+})

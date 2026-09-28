@@ -104,7 +104,8 @@ export const characterTexts = {
   'character.mergeFailed': { 'zh-CN': '合并失败：{error}', 'en-US': 'Merge failed: {error}', 'ru-RU': 'Ошибка объединения: {error}' },
   'character.relations': { 'zh-CN': '结构化关系', 'en-US': 'Relations (Structured)', 'ru-RU': 'Связи' },
   'character.legacyRelations': { 'zh-CN': '旧版关系文本（兼容保留）', 'en-US': 'Legacy Relations (text)', 'ru-RU': 'Связи (текст)' },
-  'character.addRelation': { 'zh-CN': '+ 添加关系', 'en-US': '+ Add Relation', 'ru-RU': '+ Добавить связь' },
+  // ⚠️ 不带 "+" 前缀：按钮在 CharacterEditor 已配 Plus 图标，文案再带加号会渲染成「+ + 添加关系」
+  'character.addRelation': { 'zh-CN': '添加关系', 'en-US': 'Add Relation', 'ru-RU': 'Добавить связь' },
   'character.noTarget': { 'zh-CN': '无可选角色', 'en-US': 'No targets available', 'ru-RU': 'Нет доступных целей' },
   'character.relLabel': { 'zh-CN': '关系描述', 'en-US': 'Label', 'ru-RU': 'Метка' },
   'character.relSince': { 'zh-CN': '起始章', 'en-US': 'Since ch.', 'ru-RU': 'С главы' },

@@ -169,13 +169,15 @@ export default function CharactersView() {
         </div>
       </div>
 
-      {/* 分级筛选标签 */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
+      {/* 分级筛选标签 — ⚠️ 容器 flex-wrap + 胶囊 whitespace-nowrap/flex-shrink-0：
+          4 个胶囊（含「★★★ 核心 3」这类长文案）在侧栏宽度里放不下一行，
+          缺这三项会被 flex 压缩成「胶囊内不均折行」（2026-09-28 真机走查缺陷） */}
+      <div className="flex flex-wrap items-center gap-1 px-2 py-1.5 border-b border-[var(--color-border)] flex-shrink-0">
         {[null, 1, 2, 3].map(tier => (
           <button
             key={String(tier)}
             className={cn(
-              'text-micro px-2 py-0.5 rounded-full transition-colors cursor-pointer border',
+              'text-micro px-2 py-0.5 rounded-full transition-colors cursor-pointer border whitespace-nowrap flex-shrink-0',
               tierFilter === tier
                 ? 'bg-[var(--color-accent)]/20 border-[var(--color-accent)] text-[var(--color-accent)]'
                 : 'border-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-hover)]'
