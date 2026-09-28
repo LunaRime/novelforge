@@ -55,15 +55,17 @@
 
 ### 悬停置换（关键交互）
 
+> 2026-09-28 更新（用户拍板）：箭头语言**全侧栏统一 ›/⌄**——收起/折叠态 = `›`，展开态 = `⌄`；不再使用 `⌃`。下文中已按此更新。
+
 - **默认态**：功能图标 + 标题 + 计数（界面干净）
 - **悬停态**：功能图标**交叉渐隐**（≥100ms）为指示箭头
   - 跳转 / 滑出（纯导航卡）→ `›`
-  - 原地展开（折叠卡）→ `⌄`；**已展开 → `⌃`**（方向随状态）
-- **导航+折叠卡（双行为，如「故事架构」）**：左 chevron 独立按钮**常驻**（`⌄`/`⌃`，承担折叠 + 状态显示）；主按钮功能图标悬停置换为 `›`
+  - 原地展开（折叠卡）→ 收起态 `›`、已展开 `⌄`（与行语言同一套，方向随状态）
+- **导航+折叠卡（双行为，如「故事架构」）**：左 chevron 独立按钮**常驻**（`›`/`⌄`，承担折叠 + 状态显示）；主按钮功能图标悬停置换为 `›`
 
   ```
-  静止态：  │ ⌄  📖 故事架构        4/4 │
-  悬停态：  │ ⌄  ›  故事架构        4/4 │
+  静止态：  │ ›  📖 故事架构        4/4 │
+  悬停态：  │ ›  ›  故事架构        4/4 │
              ↑          ↑
             折叠按钮    主图标置换为「进入」（指示、不可单独点）
           （独立、常驻）
@@ -83,7 +85,7 @@
 
 1. **`HoverSwapIcon`**（新，`src/components/ui/HoverSwapIcon.tsx`）
    - 职责：功能图标 ↔ 指示箭头的交叉渐隐置换
-   - Props：`icon: ReactNode`、`swap: 'nav' | 'expand'`、`state?: 'collapsed' | 'expanded'`（展开方向用）、`size?: number`（默认 12）
+   - Props：`icon: ReactNode`、`swap: 'nav' | 'expand'`、`expanded?: boolean`（展开方向用）、`size?: number`（默认 12）
    - 实现：固定尺寸 `relative` 容器 + 两图层 `opacity` 交叉渐隐；`transition ≥100ms`；**纯 CSS 触发**（父级 `group-hover` + `group-focus-within`），不用 JS hover state（无闪烁、键盘等价天然成立）；`prefers-reduced-motion` 降级为瞬时
 2. **`MenuRow`**（新，`src/components/ui/MenuRow.tsx`）
    - 职责：**行片的唯一实现** —— 外层片（挂 `menu-chip`）+ `flex-1` 主按钮（HoverSwapIcon + 标题 + 计数）+ 兄弟 `actions`
