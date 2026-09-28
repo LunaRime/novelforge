@@ -300,7 +300,7 @@ export function registerLLMController() {
     }))
   })
 
-  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount) => {
+  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>) => {
     try {
       const accounts = readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, [])
       const toSave: ProviderAccount = {
@@ -313,9 +313,20 @@ export function registerLLMController() {
       writeJsonFile(PROVIDERS_CONFIG_PATH, accounts)
 
       // 同步派生条目 —— 注意传**明文** account：派生条目要拿到可直接用的凭据，
-      // 而 saveModelConfigs 会统一加密落盘
+      // 而 saveModelConfigs 会统一加密落盘。
+      // 规格来源（2026-09-28 批量采纳）：**本次拉取所得优先，回落内置预设** —— 拉回的规格
+      // 是端点真实值；预设只是多数场景的缺省。只覆盖传入的实值键（undefined 不遮蔽回落值）。
       saveModelConfigs(
-        syncAccountModels(account, loadModelConfigs(), (name) => presetModelDefaults(account.provider, name)),
+        syncAccountModels(account, loadModelConfigs(), (name) => {
+          const base = presetModelDefaults(account.provider, name)
+          const spec = modelSpecs?.[name]
+          if (!spec) return base
+          return {
+            ...base,
+            ...(spec.maxTokens !== undefined ? { maxTokens: spec.maxTokens } : {}),
+            ...(spec.contextWindow !== undefined ? { contextWindow: spec.contextWindow } : {}),
+          }
+        }),
       )
       return { success: true }
     } catch (error) {
@@ -360,7 +371,8 @@ export function registerLLMController() {
         // Ollama 走原生 /api/tags（复用既有实现：比 OpenAI 兼容端点更可靠，老版本也有）
         if (credentials.provider === 'ollama') {
           const models = await listOllamaModels(credentials.baseUrl)
-          return { success: true, models: models.map((m) => m.name) }
+          // /api/tags 不提供 token 规格 → 仅 id（2026-09-28 候选对象化）
+          return { success: true, models: models.map((m) => ({ id: m.name })) }
         }
         if (!credentials.apiKey?.trim() && credentials.provider !== 'ollama') {
           return { success: false, error: t('error.apiKeyRequired') }

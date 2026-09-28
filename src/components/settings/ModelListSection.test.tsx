@@ -19,7 +19,7 @@ const state = vi.hoisted(() => ({
   deleteModel: vi.fn(async () => {}),
   setDefaultModel: vi.fn(async () => {}),
   setDefaultEmbeddingModel: vi.fn(async () => {}),
-  listProviderModels: vi.fn<() => Promise<{ success: boolean; models?: string[]; error?: string }>>(
+  listProviderModels: vi.fn<() => Promise<{ success: boolean; models?: { id: string; contextWindow?: number; maxTokens?: number }[]; error?: string }>>(
     async () => ({ success: true, models: [] }),
   ),
 }))
@@ -242,7 +242,7 @@ describe('模型表单「获取模型」面板', () => {
   }
 
   it('点击 → 用当前表单值调 listProviderModels；点选候选 → 切自定义输入并填入模型标识', async () => {
-    const lm = vi.fn(async () => ({ success: true, models: ['qwen-max', 'qwen-plus'] }))
+    const lm = vi.fn(async () => ({ success: true, models: [{ id: 'qwen-max' }, { id: 'qwen-plus' }] }))
     state.listProviderModels = lm
     state.models = [makeModel('m1', 'GPT-4o')]
     const el = render()
@@ -270,7 +270,7 @@ describe('模型表单「获取模型」面板', () => {
   })
 
   it('面板打开时按 Esc → 只关面板；不得冒泡到设置弹窗级监听（Esc 连带关闭回归锁，I2）', async () => {
-    state.listProviderModels = vi.fn(async () => ({ success: true, models: ['qwen-max'] }))
+    state.listProviderModels = vi.fn(async () => ({ success: true, models: [{ id: 'qwen-max' }] }))
     state.models = [makeModel('m1', 'GPT-4o')]
     const el = render()
     openFormForEdit(el)

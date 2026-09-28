@@ -409,7 +409,7 @@ function ModelForm({
       setFetchCandidates([])
       return
     }
-    setFetchCandidates(res.models ?? [])
+    setFetchCandidates((res.models ?? []).map((m) => m.id)) // 候选带规格后取 id（面板当前只用名字；规格在 v2 批量采纳时消费）
     if ((res.models ?? []).length === 0) setFetchError(t('provider.fetchedEmpty'))
   }
 

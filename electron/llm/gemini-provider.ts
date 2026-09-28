@@ -1,5 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
-import { ModelProfile } from '../../src/shared/ipc-channels'
+import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
@@ -263,7 +264,7 @@ export class GeminiProvider implements ILLMProvider {
    * 勾选清单交给用户决定（同一账户本来就可能既挂生成又挂向量模型）。
    * ⚠️ 不套 `withRetry`：交互式调用，失败要立刻给可操作提示。
    */
-  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]> {
+  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<LLMModelCandidate[]> {
     const baseUrl = credentials.baseUrl.replace(/\/$/, '')
     const res = await fetchWithTimeout(`${baseUrl}/v1beta/models`, {
       method: 'GET',
@@ -271,9 +272,12 @@ export class GeminiProvider implements ILLMProvider {
     })
     if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`)
 
-    const data = (await res.json()) as { models?: Array<{ name?: unknown }> }
-    return (data.models ?? [])
-      .map((m) => (typeof m.name === 'string' ? m.name.replace(/^models\//, '') : ''))
-      .filter((name) => name !== '')
+    const data = (await res.json()) as { models?: Array<Record<string, unknown>> }
+    // Gemini 的规格字段：inputTokenLimit / outputTokenLimit（由 model-listing 的多拼写表覆盖）；
+    // name 需剥 `models/` 前缀
+    return toCandidates(
+      data.models ?? [],
+      (e) => (typeof e.name === 'string' ? e.name.replace(/^models\//, '') : undefined),
+    )
   }
 }

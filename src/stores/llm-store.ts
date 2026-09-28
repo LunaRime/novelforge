@@ -9,7 +9,7 @@ import { toast } from '../components/ui/Toast'
  * 用户会连点多次；每次点击都会发出一个 llm:delete-model。
  */
 const deletingModelIds = new Set<string>()
-import type { ModelProfile, LLMResponse, TokenUsage, ProviderAccount } from '../shared/ipc-channels'
+import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount } from '../shared/ipc-channels'
 import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, type ModelTier, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -49,10 +49,10 @@ interface LLMState {
   saveProvider: (account: ProviderAccount) => Promise<boolean>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<boolean>
-  /** 拉取某凭据下可用的模型名（失败返回可操作错误文案，不是异常） */
+  /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常） */
   listProviderModels: (
     credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl'>,
-  ) => Promise<{ success: boolean; models?: string[]; error?: string }>
+  ) => Promise<{ success: boolean; models?: LLMModelCandidate[]; error?: string }>
   /** 保存模型 */
   saveModel: (model: ModelProfile) => Promise<boolean>
   /** 删除模型 */

@@ -416,7 +416,8 @@ export interface LLMChannels {
     return: ProviderAccount[]
   }
   'llm:save-provider': {
-    args: [account: ProviderAccount]
+    /** modelSpecs：本次采纳的模型规格（拉取所得）——主进程优先用它、回落预设（2026-09-28，批量采纳带规格） */
+    args: [account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>]
     /** 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目 */
     return: { success: boolean; error?: string }
   }
@@ -427,8 +428,8 @@ export interface LLMChannels {
   }
   'llm:list-provider-models': {
     args: [credentials: { provider: string; protocol: LLMProtocol; apiKey: string; baseUrl: string }]
-    /** 拉取供应商可用模型。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
-    return: { success: boolean; models?: string[]; error?: string }
+    /** 拉取供应商可用模型（带可选的容量规格，采纳即用免手填）。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
+    return: { success: boolean; models?: LLMModelCandidate[]; error?: string }
   }
   'llm:get-default-model': {
     args: []
@@ -513,6 +514,13 @@ export interface TokenUsage {
   totalTokens: number
   /** API 返回的真实缓存命中输入 token 数（OpenAI cached_tokens / DeepSeek prompt_cache_hit_tokens） */
   cachedTokens?: number
+}
+
+/** 「获取可用模型」的候选条目：id + 可选的容量规格（拉回即用，免手填；2026-09-28） */
+export interface LLMModelCandidate {
+  id: string
+  contextWindow?: number
+  maxTokens?: number
 }
 
 export interface ModelProfile {

@@ -1,5 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, LLMUsage } from './provider.interface'
-import { ModelProfile } from '../../src/shared/ipc-channels'
+import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
@@ -310,7 +311,7 @@ export class AnthropicProvider implements ILLMProvider {
    * 列出可用模型（`GET {root}/v1/models?limit=1000`，x-api-key）。
    * 不套 withRetry（与 openai-provider 一致）：交互式调用，失败立刻给可操作提示。
    */
-  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]> {
+  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<LLMModelCandidate[]> {
     const url = `${anthropicRoot(credentials.baseUrl)}/v1/models?limit=1000`
     const res = await fetchWithTimeout(url, {
       method: 'GET',
@@ -321,9 +322,7 @@ export class AnthropicProvider implements ILLMProvider {
     })
     if (!res.ok) throw mapAnthropicError(res.status, await res.text().catch(() => ''))
 
-    const data = (await res.json()) as { data?: Array<{ id?: unknown }> }
-    return (data.data ?? [])
-      .map((m) => m.id)
-      .filter((id): id is string => typeof id === 'string' && id !== '')
+    const data = (await res.json()) as { data?: Array<Record<string, unknown>> }
+    return toCandidates(data.data ?? [], (e) => (typeof e.id === 'string' ? e.id : undefined))
   }
 }

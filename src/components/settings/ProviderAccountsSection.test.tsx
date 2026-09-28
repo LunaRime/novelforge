@@ -12,7 +12,9 @@ import { ProviderAccountForm } from './ProviderAccountsSection'
 
 const listModels = vi.hoisted(() => vi.fn(async () => ({
   success: true,
-  models: ['bge-m3', 'bge-large-zh', 'nomic-embed-text', 'BGE-Reranker'],
+  models: [
+    { id: 'bge-m3' }, { id: 'bge-large-zh' }, { id: 'nomic-embed-text' }, { id: 'BGE-Reranker' },
+  ],
 })))
 
 vi.mock('../../stores/llm-store', () => ({

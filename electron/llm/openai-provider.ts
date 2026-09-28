@@ -1,5 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
-import { ModelProfile } from '../../src/shared/ipc-channels'
+import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { buildOpenAIUrl } from './url-utils'
 import { logger } from '../utils/logger'
@@ -273,7 +274,7 @@ export class OpenAIProvider implements ILLMProvider {
    * ⚠️ 不套 `withRetry`：这是用户点出来的交互式调用，失败应**立刻**给出可操作提示
    * （「该服务未提供模型列表，请手工填写模型 ID」），而不是让用户对着转圈等三次重试。
    */
-  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]> {
+  async listModels(credentials: { baseUrl: string; apiKey: string }): Promise<LLMModelCandidate[]> {
     const url = buildOpenAIUrl(credentials.baseUrl, 'models')
     const res = await fetchWithTimeout(url, {
       method: 'GET',
@@ -281,9 +282,8 @@ export class OpenAIProvider implements ILLMProvider {
     })
     if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`)
 
-    const data = (await res.json()) as { data?: Array<{ id?: unknown }> }
-    return (data.data ?? [])
-      .map((m) => m.id)
-      .filter((id): id is string => typeof id === 'string' && id !== '')
+    const data = (await res.json()) as { data?: Array<Record<string, unknown>> }
+    // 容量字段多拼写解析（context_length / max_tokens 等）——对齐 dsh readListing
+    return toCandidates(data.data ?? [], (e) => (typeof e.id === 'string' ? e.id : undefined))
   }
 }

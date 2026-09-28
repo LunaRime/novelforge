@@ -261,7 +261,7 @@ export function ProviderAccountForm({
       setFetchError(res.error ?? t('status.unknown'))
       return
     }
-    const list = res.models ?? []
+    const list = (res.models ?? []).map((m) => m.id) // 候选带规格后取 id（勾选清单仍存名字数组）
     setFetched(list)
     // 空列表**不是错误**（有些服务就返回空），但要说清为什么看不到模型
     if (list.length === 0) setFetchError(t('provider.fetchedEmpty'))
