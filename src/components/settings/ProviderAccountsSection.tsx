@@ -19,6 +19,7 @@ import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { EmptyState } from '../ui/EmptyState'
 import { Disclosure } from '../ui/Disclosure'
+import { LLM_PROTOCOLS } from '../../shared/llm-protocols'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
@@ -339,8 +340,11 @@ export function ProviderAccountForm({
             >
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="openai">OpenAI 兼容</SelectItem>
-                <SelectItem value="gemini">Gemini 原生</SelectItem>
+                {/* 选项来自协议单源（src/shared/llm-protocols.ts）——custom 账户也能选 anthropic
+                    （复核 Important 2：此前硬编码两员，单源在这条路径上不成立） */}
+                {LLM_PROTOCOLS.map((p) => (
+                  <SelectItem key={p.id} value={p.id}>{t(p.labelKey)}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>

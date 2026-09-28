@@ -41,13 +41,16 @@ export interface AnthropicBody {
   temperature?: number
   system?: string
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
+  /** 流式专用：**缺了它 Anthropic 返回单条 JSON 而非 SSE**，解析器会零事件静默空交付（复核 Critical 1） */
+  stream?: boolean
 }
 
-/** 构造 Messages API 请求（纯函数，直测）。 */
+/** 构造 Messages API 请求（纯函数，直测）。`stream=true` 时请求 SSE 响应（generateStream 专用）。 */
 export function toAnthropicRequest(
   model: ModelProfile,
   messages: Array<{ role: string; content: string }>,
   opts?: Pick<LLMGenerateOptions, 'temperature' | 'maxTokens'>,
+  stream = false,
 ): { url: string; headers: Record<string, string>; body: AnthropicBody } {
   const systemParts = messages.filter((m) => m.role === 'system').map((m) => m.content)
   const body: AnthropicBody = {
@@ -58,6 +61,7 @@ export function toAnthropicRequest(
       .filter((m) => m.role !== 'system')
       .map((m) => ({ role: m.role === 'assistant' ? ('assistant' as const) : ('user' as const), content: m.content })),
   }
+  if (stream) body.stream = true
   if (systemParts.length > 0) body.system = systemParts.join('\n\n')
 
   const temperature = opts?.temperature ?? model.temperature
@@ -81,6 +85,7 @@ export type AnthropicStreamEvent =
   | { type: 'text'; text: string }
   | { type: 'usage'; inputTokens: number; outputTokens: number }
   | { type: 'finish' }
+  | { type: 'error'; message: string }
 
 /**
  * 增量 SSE 解析器（行缓冲，跨 chunk 分片安全 —— Review Focus 1）。
@@ -106,6 +111,7 @@ export function createAnthropicStreamParser(emit: (e: AnthropicStreamEvent) => v
       message?: { usage?: { input_tokens?: number; output_tokens?: number } }
       usage?: { output_tokens?: number }
       delta?: { type?: string; text?: string }
+      error?: { message?: string }
     }
     try {
       payload = JSON.parse(dataLines.join('\n'))
@@ -130,14 +136,22 @@ export function createAnthropicStreamParser(emit: (e: AnthropicStreamEvent) => v
         emit({ type: 'finish' })
         finished = true
         return
+      case 'error':
+        // 中流错误是 HTTP 200 里的事件（如 overloaded_error）——不交给 HTTP 层兜底，直接上报并停止
+        // （复核 Important 3：吞掉它会让半截文本按成功交付）
+        emit({ type: 'error', message: payload.error?.message ?? 'stream error' })
+        finished = true
+        return
       default:
-        return // ping / content_block_start|stop / error 帧：不产出（error 由 HTTP 层兜底）
+        return // ping / content_block_start|stop 等：不产出
     }
   }
 
   return (chunk: string) => {
     if (finished) return
-    buffer += chunk
+    // CRLF 容忍：`\r\n` 在**拼接后**统一归一为 `\n`（跨 chunk 的 \r|\n 拆分在此合并）；
+    // 不归一则 `\r\n\r\n` 中不存在 `\n\n` 子串，事件永不切块、全程静默（复核 Important 4）
+    buffer = (buffer + chunk).replace(/\r\n/g, '\n')
     let idx: number
     while ((idx = buffer.indexOf('\n\n')) !== -1) {
       const block = buffer.slice(0, idx)
@@ -218,7 +232,7 @@ export class AnthropicProvider implements ILLMProvider {
     // 已输出内容标记：中途断流不得重试（重试会重复推送已输出前缀）
     let emittedAny = false
     await withStreamRetry(async () => {
-      const req = toAnthropicRequest(model, messages, opts)
+      const req = toAnthropicRequest(model, messages, opts, true)
       const res = await proxyFetch(req.url, {
         method: 'POST',
         headers: req.headers,
@@ -245,6 +259,8 @@ export class AnthropicProvider implements ILLMProvider {
       const decoder = new TextDecoder()
       let fullText = ''
       let lastUsage: LLMUsage | undefined
+      /** 中流错误已上报：此后不得再走 onDone（成功回调），否则半截文本被按成功交付 */
+      let streamErrored = false
       const parser = createAnthropicStreamParser((e) => {
         if (e.type === 'text') {
           fullText += e.text
@@ -257,6 +273,9 @@ export class AnthropicProvider implements ILLMProvider {
             totalTokens: e.inputTokens + e.outputTokens,
           }
           opts.onTokenUsage?.(lastUsage)
+        } else if (e.type === 'error') {
+          streamErrored = true
+          opts.onError(e.message)
         }
       })
 
@@ -266,6 +285,7 @@ export class AnthropicProvider implements ILLMProvider {
         parser(decoder.decode(value, { stream: true }))
       }
 
+      if (streamErrored) return
       opts.onDone(fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim(), lastUsage)
     }, { canRetry: () => !emittedAny }).catch((error) => {
       if ((error as Error).name === 'AbortError') {

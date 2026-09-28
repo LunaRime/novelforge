@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { toAnthropicRequest, createAnthropicStreamParser, mapAnthropicError } from './anthropic-provider'
+import { describe, it, expect, vi } from 'vitest'
+import { toAnthropicRequest, createAnthropicStreamParser, mapAnthropicError, AnthropicProvider } from './anthropic-provider'
+import { proxyFetch } from '../net/proxy-fetch'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
+import type { LLMUsage } from './provider.interface'
+
+vi.mock('../net/proxy-fetch', () => ({ proxyFetch: vi.fn() }))
 
 const model = {
   id: 'a1', name: 'Claude', provider: 'anthropic', protocol: 'anthropic',
@@ -84,6 +88,60 @@ describe('createAnthropicStreamParser', () => {
     parse('event: ping\ndata: {"type":"ping"}\n\n')
     parse('event: x\ndata: not-json{{{\n\n')
     expect(seen).toEqual([])
+  })
+
+  it('流中 error 帧：emit error 事件并停止（HTTP 200 内的中途错误，复核 Important 3）', () => {
+    const seen: string[] = []
+    const parse = createAnthropicStreamParser((e) => seen.push(e.type === 'error' ? `err:${e.message}` : e.type))
+    parse('event: error\ndata: {"type":"error","error":{"message":"overloaded"}}\n\n')
+    parse('event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"迟到"}}\n\n')
+    expect(seen).toEqual(['err:overloaded'])
+  })
+
+  it('CRLF 行终止符（\\r\\n\\r\\n）也能切帧，含跨 chunk 的 \\r|\\n 拆分（复核 Important 4）', () => {
+    let text = ''
+    const parse = createAnthropicStreamParser((e) => { if (e.type === 'text') text += e.text })
+    const line = 'event: content_block_delta\r\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"CRLF"}}\r\n\r\n'
+    // 在最刁钻的位置切：`\r` 与 `\n` 分属两个 chunk
+    const cut = line.indexOf('\r\n\r\n') + 1
+    parse(line.slice(0, cut))
+    parse(line.slice(cut))
+    expect(text).toBe('CRLF')
+  })
+})
+
+describe('AnthropicProvider.generateStream（类级：mock proxyFetch，复核 Critical 1 回归锁）', () => {
+  it('请求体必须带 stream:true，且 SSE 全流程交付文本与 usage', async () => {
+    const frames = [
+      'event: message_start\ndata: {"type":"message_start","message":{"usage":{"input_tokens":5,"output_tokens":1}}}\n\n',
+      'event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"你好"}}\n\n',
+      'event: message_delta\ndata: {"type":"message_delta","usage":{"output_tokens":3}}\n\n',
+      'event: message_stop\ndata: {"type":"message_stop"}\n\n',
+    ].join('')
+    const stream = new ReadableStream<Uint8Array>({
+      start(c) { c.enqueue(new TextEncoder().encode(frames)); c.close() },
+    })
+    vi.mocked(proxyFetch).mockResolvedValueOnce(new Response(stream, { status: 200 }))
+
+    const provider = new AnthropicProvider()
+    let doneText = ''
+    let usage: LLMUsage | undefined
+    let errMsg = ''
+    await provider.generateStream(model, [{ role: 'user', content: 'hi' }], {
+      temperature: 0.7,
+      maxTokens: 100,
+      signal: new AbortController().signal,
+      onChunk: () => {},
+      onDone: (t, u) => { doneText = t; usage = u },
+      onError: (e) => { errMsg = e },
+    })
+
+    const init = vi.mocked(proxyFetch).mock.calls.at(-1)?.[1] as RequestInit
+    const body = JSON.parse(String(init.body)) as { stream?: boolean }
+    expect(body.stream, '流式请求必须带 stream:true（否则 Anthropic 返回单条 JSON，解析器零事件）').toBe(true)
+    expect(doneText).toBe('你好')
+    expect(usage?.totalTokens).toBe(8)
+    expect(errMsg).toBe('')
   })
 })
 
