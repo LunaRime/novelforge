@@ -152,3 +152,55 @@ describe('行内编辑（列表常驻 + 单展开 + 切换保护）', () => {
     expect(el.textContent).not.toContain('编辑：') // 收回（保持现状语义：失败也收回）
   })
 })
+
+describe('新增草稿卡', () => {
+  it('点「添加」→ 列表头部出现编辑表单，且空态被隐藏（不与编辑卡同屏）', () => {
+    const el = render() // 空列表
+    act(() => {
+      const addBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('添加生成模型'))
+      addBtn!.click()
+    })
+    expect(el.textContent).toContain('新建模型配置') // t('model.newConfig')
+    expect(el.textContent).not.toContain('暂无生成模型配置') // 空态不与之同屏（Review Focus 2）
+  })
+
+  it('取消新增 → 表单消失且不产生卡片', () => {
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    act(() => {
+      const addBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('添加生成模型'))
+      addBtn!.click()
+    })
+    act(() => {
+      const cancelBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('取消'))
+      cancelBtn!.click()
+    })
+    expect(el.textContent).not.toContain('新建模型配置')
+    expect(el.querySelectorAll('button[aria-label="编辑"]')).toHaveLength(1) // 仍只有原卡
+  })
+
+  it('保存新增 → saveModel 收到草稿（填入显示名称 + API Key 以解除保存禁用）', async () => {
+    const el = render()
+    act(() => {
+      const addBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('添加生成模型'))
+      addBtn!.click()
+    })
+    // 保存按钮 disabled 条件：无名称 或（非 ollama 且无 key）→ 两处都要填
+    const setValue = (input: HTMLInputElement, v: string) => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, v)
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+    const inputs = [...el.querySelectorAll('input')]
+    const nameInput = inputs.find(i => i.placeholder === '如：DeepSeek 主力 / GPT-4o 备用')!
+    const keyInput = inputs.find(i => i.placeholder === 'sk-...')!
+    act(() => { setValue(nameInput, '我的模型'); setValue(keyInput, 'sk-test') })
+    await act(async () => {
+      const saveBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('保存配置'))
+      saveBtn!.click()
+      await new Promise(r => setTimeout(r, 10))
+    })
+    const lastCall = state.saveModel.mock.calls.at(-1)?.[0] as { name?: string } | undefined
+    expect(lastCall?.name).toBe('我的模型')
+  })
+})
