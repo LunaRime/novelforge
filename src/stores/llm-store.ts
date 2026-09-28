@@ -46,7 +46,11 @@ interface LLMState {
   /** 加载供应商账户 */
   loadProviders: () => Promise<void>
   /** 保存账户（主进程会顺带同步其派生模型条目）→ 成功后重载 models */
-  saveProvider: (account: ProviderAccount) => Promise<boolean>
+  /** modelSpecs：本次采纳的模型规格（拉取所得）；主进程侧"本次优先、回落预设"（2026-09-28） */
+  saveProvider: (
+    account: ProviderAccount,
+    modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>,
+  ) => Promise<boolean>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<boolean>
   /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常） */
@@ -153,8 +157,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     }
   },
 
-  saveProvider: async (account) => {
-    const result = await ipc.invoke('llm:save-provider', account)
+  saveProvider: async (account, modelSpecs) => {
+    const result = await ipc.invoke('llm:save-provider', account, modelSpecs)
     // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据副本）→ 两边都重载
     if (result.success) {
       await Promise.all([get().loadProviders(), get().loadModels()])
