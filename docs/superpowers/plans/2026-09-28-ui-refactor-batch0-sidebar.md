@@ -192,7 +192,7 @@ import type { ReactNode } from 'react'
 interface HoverSwapIconProps {
   /** 功能图标（默认态显示；12px 档） */
   icon: ReactNode
-  /** nav = 跳转/滑出（悬停显 ›）；expand = 原地展开（收起 ⌄ / 展开 ⌃） */
+  /** nav = 跳转/滑出（悬停显 ›）；expand = 原地展开（收起 › / 展开 ⌄） */
   swap: 'nav' | 'expand'
   /** swap='expand'：当前是否已展开（决定箭头方向） */
   expanded?: boolean
@@ -375,7 +375,7 @@ interface MenuRowProps {
   count?: ReactNode
   /** 主行为：导航=进入；折叠卡=展开/折叠。不传 = 该行没有主行为 */
   onPrimary?: () => void
-  /** 悬停置换语义：nav=›；expand=⌄/⌃ 随 expanded */
+  /** 悬停置换语义：nav=›；expand 收起=› / 展开=⌄（随 expanded） */
   swap?: 'nav' | 'expand'
   /** swap='expand'：当前是否已展开 */
   expanded?: boolean
@@ -573,7 +573,7 @@ Expected: PASS（SidebarGroup 6 例 + DraftBoxGroup/ManuscriptGroup/MemoryGroup/
 
 ```bash
 git add src/components/panels/sidebar/SidebarGroup.tsx src/components/panels/sidebar/SidebarGroup.test.tsx
-git commit -m "refactor(sidebar): SidebarGroup 接入 MenuRow（四类契约不变；去尾箭头、⌄/⌃ 置换、32×32）"
+git commit -m "refactor(sidebar): SidebarGroup 接入 MenuRow（四类契约不变；去尾箭头、›/⌄ 置换、32×32）"
 ```
 
 ---
