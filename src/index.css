@@ -711,26 +711,33 @@
     flex-shrink: 0;
   }
 
-  /* ===== 树节点 — 舒适的 26px 行高，带增强悬停效果 ===== */
+  /* ===== 行片（menu-chip）——菜单行/列表行的统一形态（2026-09-28 UI 重构批 0） =====
+     行高 32px / 圆角 --radius-lg / 左右 4px / 悬停片底色。
+     hover 只对「本身是 <button> 或行内含 <button>」的行生效 —— 纯展示行不得有悬停暗示。 */
+  .menu-chip,
+  .tree-item {
+    display: flex;
+    align-items: center;
+    height: 32px;
+    border-radius: var(--radius-lg);
+    margin: 0 4px;
+    transition: background var(--transition-fast),
+                box-shadow var(--transition-fast);
+  }
+  .menu-chip:where(button, :has(button)):hover,
+  .tree-item:where(button, :has(button)):hover {
+    background: var(--color-hover);
+  }
+
+  /* ===== 树节点 — 32px 行高行片；点击由行内主按钮承担 ===== */
   .tree-item {
     /* ⚠️ 刻意不给 cursor-pointer：点击由行内的主按钮承担，手型光标应由那个 <button> 提供
        （它自带 enabled:cursor-pointer）。容器再带手型会让「不可点的右侧留白」也显示手型，
        即假可供性——批次 3 已把 4 处行的左缩进移到主按钮上，正是为了让光标与可点区重合。 */
     @apply flex items-center gap-1.5 px-2;
-    height: 26px;
     font-size: 13px;
     color: var(--color-text);
-    transition: background var(--transition-fast),
-                box-shadow var(--transition-fast),
-                transform 0.12s ease;
     position: relative;
-    border-radius: var(--radius-sm);
-    margin: 0 4px;
-  }
-
-  .tree-item:hover {
-    background: var(--color-hover);
-    transform: translateX(2px);
   }
 
   /* 激活节点：背景 + 左侧 2px 品牌色竖线 */
