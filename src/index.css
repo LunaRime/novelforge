@@ -191,8 +191,12 @@
     --color-text-secondary: #4A5568;
     --color-text-muted: #8A9AAB;
 
-    /* 边框 */
-    --color-border: #DEE3ED;
+    /* 「边界线叠加层」= 10% 的 --color-text 叠在元素**实际所在的表面**上（2026-09-28 走查：边界线整体加强）。
+       ⚠️ 与 --color-hover 同族机制，值必须保持派生式，不要改回固定 hex —— 固定色必然在某个面上失效，
+       实测四个死点：浅色/纸色的**活动栏面** ΔL* 2.1/1.9、深色/星空的**画布面** 0.90/2.90
+       （深色旧值 #3C3C3C 与画布 #3A3A3A 几乎同色）；叠加式下四主题 × 五表面收敛到 ΔL* 6.4~10.5。
+       ⚠️ 四套主题**逐一同值**（本仓惯例，勿只改这里）；守卫：color-token-guard.test.ts「边框可见性守卫」。 */
+    --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
     /* 强调色（Logo 星空蓝） */
     --color-accent: #5B9ED6;
@@ -324,8 +328,8 @@
     --color-text-secondary: #8BA4BE;
     --color-text-muted: #5A7A96;
 
-    /* 边框 — 深蓝色边框，微弱可见 */
-    --color-border: #172B42;
+    /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
     /* 强调色 — Logo 冰蓝 #7EC8E3 */
     --color-accent: #7EC8E3;
@@ -413,7 +417,8 @@
     --color-text-secondary: #6B6058;
     --color-text-muted: #A89888;
 
-    --color-border: #DDD8D0;
+    /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
     /* 强调色 — Logo 薰衣草紫 #9B8EC8 */
     --color-accent: #9B8EC8;
@@ -500,7 +505,8 @@
     --color-text-secondary: #A0A0A0;
     --color-text-muted: #888888;
 
-    --color-border: #3C3C3C;
+    /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
     --color-accent: #0E639C;
     --color-accent-hover: #1177BB;

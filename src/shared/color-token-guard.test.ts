@@ -641,4 +641,68 @@ describe('悬停底色（--color-hover）守卫 —— FB-1/FB-2 相对叠加不
   })
 })
 
+// ==================== 边框可见性守卫（2026-09-28 走查：边界线整体加强） ====================
+
+/**
+ * `--color-border` 的「相对叠加」不变式 —— 与 `--color-hover` 同族机制（复用其形态正则）：
+ * 值 = p% 的主题文字色叠在元素所在表面上，任意面自动同强度。
+ * 固定 hex 必然在某个面上失效 —— 2026-09-28 实测四个死点：浅色/纸色的**活动栏面** ΔL* 2.1/1.9、
+ * 深色/星空的**画布面** 0.90/2.90（深色下 #3C3C3C 与画布 #3A3A3A 几乎同色）；叠加式下全线收敛到
+ * ΔL* 6.4~10.5（四主题 × 五个常驻表面）。
+ *
+ * 本组锁定：① 四主题逐一同值 + 派生式形态（改回 hex 即红）；② 实算 —— 各常驻表面 ≥ ΔL* 5.0
+ *（细线可辨下限，参考现状正常面 5.27；掉到死点水平必定触发）。
+ */
+const BORDER_SURFACE_VARS = [
+  '--color-activity-bar',
+  '--color-sidebar',
+  '--color-panel',
+  '--color-canvas',
+  '--color-editor-bg',
+] as const
+
+describe('边框可见性守卫 —— --color-border 相对叠加不变式', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src', 'index.css'), 'utf-8')
+
+  it('四套主题逐一同值，且形态为「color-mix(in srgb, var(--color-text) p%, transparent)」', () => {
+    const values = HOVER_THEMES.map(({ name, anchor }) => {
+      const body = cssBlockBody(css, anchor)
+      const value = cssVarOf(body ?? '', '--color-border')
+      expect(value, `${name} 未定义 --color-border`).not.toBeNull()
+      expect(
+        value,
+        `${name} 的 --color-border 不是相对叠加派生式（改回固定 hex 会让某类表面上的线消失，见守卫注释）`,
+      ).toMatch(HOVER_OVERLAY_RE)
+      return { name, value }
+    })
+    const unique = new Set(values.map((v) => v.value))
+    expect(
+      unique.size,
+      '四套主题的 --color-border 定义不一致（改比例时必须四处同改）：\n' +
+        values.map((v) => `  ${v.name}: ${v.value}`).join('\n'),
+    ).toBe(1)
+  })
+
+  it('实算：五个常驻表面（活动栏/侧栏/面板/画布/编辑区）≥ ΔL* 5.0（四主题）', () => {
+    for (const { name, anchor } of HOVER_THEMES) {
+      const body = cssBlockBody(css, anchor) ?? ''
+      const border = cssVarOf(body, '--color-border') ?? ''
+      const text = cssVarOf(body, '--color-text') ?? ''
+      const ratio = border.match(HOVER_OVERLAY_RE)
+      expect(ratio, `${name}：--color-border 不是派生式，无法实算`).not.toBeNull()
+      const p = Number(ratio?.[1] ?? NaN) / 100
+      for (const surfaceVar of BORDER_SURFACE_VARS) {
+        const base = cssVarOf(body, surfaceVar)
+        expect(base, `${name} 主题块缺 ${surfaceVar}`).not.toBeNull()
+        const line = overlayOn(base ?? '', text, p)
+        const d = Math.abs(labL(line) - labL(base ?? ''))
+        expect(
+          d,
+          `${name}：--color-border 在 ${surfaceVar} 上的亮度差仅 ΔL* ${d.toFixed(2)}（< 5.0 = 细线不可辨）`,
+        ).toBeGreaterThanOrEqual(5)
+      }
+    }
+  })
+})
+
 export { UNDEFINED_TOKEN_EXEMPT }
