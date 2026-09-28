@@ -87,6 +87,45 @@
 ## 九、非目标
 
 - 不动 `models.json` / 账户存储结构；不自动迁移无归属模型
-- 不新增协议（Anthropic 原生 / Bedrock 等）——NF 现有 openai/gemini 双协议不变（Gemini 拉取本已支持，优于 dsh）
+- **协议范围**：本次仅新增 `anthropic` 原生协议（§十一）；Bedrock / Vertex / Azure / OAuth 类**不进表**（见 §十的准入标准）
 - 不动模型路由区 / 并发设置 / 本地向量（Ollama embedding）配置
 - 不引入 `@earendil-works/pi-ai` 依赖（只移植数据）
+
+## 十、协议注册表单源收敛（2026-09-28 并入，源自 dsh 协议调研）
+
+**问题**：协议枚举现在散在三处——`llm-factory.ts` 的 if/else、UI 的协议 `SelectItem` 硬编码、`ProviderPreset.protocol` 的 string 类型——加协议时容易漂移（dsh 的做法是 UI 从 schema 反读，保证"UI 可选集 ≡ 适配器可服务集"）。
+
+**方案**：新建 `src/shared/llm-protocols.ts` 作为单一来源：
+
+```ts
+/** 协议准入标准（dsh 同款理念）：能被「一把 key + 一个 endpoint + headers」完整描述的协议才进表；
+ *  Bedrock（SigV4）/ Vertex（project/ADC）/ Azure（env+api-version）/ OAuth 类一律排除——
+ *  配置形状表达不了的认证，放进来只会交回一个「能选中但必然认证失败」的 provider。 */
+export const LLM_PROTOCOLS = [
+  { id: 'openai', labelKey: 'form.protocolOpenAI' },   // 含所有 OpenAI 兼容端点（多数供应商）
+  { id: 'gemini', labelKey: 'form.protocolGemini' },
+  { id: 'anthropic', labelKey: 'form.protocolAnthropic' },  // 原生 Messages API（§十一）
+] as const
+export type LLMProtocol = (typeof LLM_PROTOCOLS)[number]['id']
+```
+
+- `ModelProfile.protocol`、`ProviderPreset.protocol` 引用 `LLMProtocol`
+- `llm-factory` 改为**映射表**（`Record<LLMProtocol, () => ILLMProvider>`，无匹配抛错明确）
+- UI 协议下拉从 `LLM_PROTOCOLS` 生成（label 走 i18n）
+- **错误码化核对**（dsh 教训："按文本判 429，每加协议重写一份正则"）：核对 `retry-handler` 只按 status/code 判定（现状已按 HTTP status ✓）；在 `provider.interface.ts` 写明契约"新协议失败必须抛带 `status` 的 `HttpError`（或等价），不得依赖 message 文本"
+
+## 十一、`anthropic` 原生协议（2026-09-28 并入）
+
+**动机**：NF 的 Anthropic 预设现走官方 **OpenAI 兼容层（beta）**——已文档化的限制：`response_format` 被静默忽略（JSON 约束流程失效）/ `temperature` 上限 1 / 无 prompt 缓存。换原生 Messages API 全部解除。
+
+**实现**（照 dsh `llm-deepseek` 的 5 文件单一职责模式，按 NF 规模压缩为 1 个 provider 文件）：
+- `electron/llm/anthropic-provider.ts`（新，~300-400 行）实现 `ILLMProvider`：
+  - 端点 `POST {baseUrl}/v1/messages`；头 `x-api-key` + `anthropic-version: 2023-06-01`
+  - system 从 messages 中提为顶层 `system` 字段；`max_tokens` 必填（取 `model.maxTokens`）
+  - **SSE 解析**：`message_start` / `content_block_start` / `content_block_delta`（`text_delta`）/ `content_block_stop` / `message_delta`(usage) / `message_stop`——usage 先于 finish 交付、finish 后不再产出（dsh 流式契约三条）
+  - `listModels`：`GET {baseUrl}/v1/models?limit=1000`（x-api-key；§五的"带规格"解析复用）
+  - 错误映射：401/403→AUTH 类、429→限流（带 `retry-after`）、其它→HTTP status；**沿用现有 `HttpError(status)`**，retry-handler 无需改动
+  - 注：NF 无 tool-calling（接口只有 generate/stream/listModels），故不做 tool 块映射
+- `llm-factory` 注册（映射表一行）；预设 `anthropic` 的注释更新（原生协议，限制解除）
+- UI 协议下拉自动出现（单源后零额外改动）
+- 测试：mock fetch——请求构造（system 提取/max_tokens/头）、SSE 帧序列（含分片跨 chunk）、错误映射（401/429）、listModels
