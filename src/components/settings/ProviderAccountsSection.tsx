@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components -- 有意混合导出：blockingReferences（引用检查，
+   依赖三个 store 无法下沉 shared）与账户表单强内聚，容器（ModelListSection）复用；ModelForm.tsx 同款先例。 */
 /**
  * 供应商账户 —— 一份凭据挂多个模型（2026-09-25）
  *
@@ -19,6 +21,7 @@ import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { EmptyState } from '../ui/EmptyState'
 import { Disclosure } from '../ui/Disclosure'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import { LLM_PROTOCOLS } from '../../shared/llm-protocols'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
@@ -47,7 +50,7 @@ function collectReferenceSources(): ModelReferenceSources {
  * ⚠️ 取消勾选 / 删账户会**真的删掉模型条目** —— 不查引用的话，默认模型、三层路由、
  * 会话会指向不存在的 id（界面上表现为空白或静默回退）。
  */
-function blockingReferences(modelIds: string[]): string | null {
+export function blockingReferences(modelIds: string[]): string | null {
   const sources = collectReferenceSources()
   const hits = modelIds.flatMap((id) => findModelReferences(id, sources))
   if (hits.length === 0) return null
@@ -208,6 +211,25 @@ export function ProviderAccountForm({
   const up = <K extends keyof ProviderAccount>(key: K, value: ProviderAccount[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
 
+  /** 两模式（2026-09-28 v2，dsh 同款分流）：目录 = 预设家（协议/地址自动带出）；自定义 = 手填地址 */
+  const [mode, setMode] = useState<'catalog' | 'custom'>(account.provider === 'custom' ? 'custom' : 'catalog')
+  const switchMode = (m: 'catalog' | 'custom') => {
+    setMode(m)
+    if (m === 'custom') {
+      setDraft((d) => ({ ...d, provider: 'custom' }))
+    } else {
+      const preset = BUILTIN_PRESETS.find(
+        (p) => p.provider !== 'custom' && (p.models.length > 0 || p.embeddingModels.length > 0),
+      ) ?? BUILTIN_PRESETS[0]
+      setDraft((d) => ({
+        ...d,
+        provider: preset.provider as ProviderAccount['provider'],
+        protocol: preset.protocol,
+        baseUrl: preset.baseUrl,
+      }))
+    }
+  }
+
   /**
    * 换服务商 → **协议与地址都要跟着换**（预设里写着该服务商走哪套协议、在哪个地址）。
    *
@@ -311,8 +333,20 @@ export function ProviderAccountForm({
         {account.modelNames.length > 0 ? t('provider.editTitle') : t('provider.newTitle')}
       </h3>
 
-      {/* 服务商（协议与地址由预设带出） */}
-      <div className={draft.provider === 'custom' ? 'grid grid-cols-2 gap-3' : ''}>
+      {/* 两模式（2026-09-28 v2，dsh 同款分流）：从供应商目录 / 自定义 API */}
+      <SegmentedControl
+        items={[
+          { value: 'catalog', label: t('provider.modeCatalog') },
+          { value: 'custom', label: t('provider.modeCustom') },
+        ]}
+        value={mode}
+        onChange={switchMode}
+        fill
+      />
+
+      {/* 服务商（协议与地址由预设带出；自定义模式不选家，直接手填地址） */}
+      <div className={mode === 'custom' ? 'grid grid-cols-2 gap-3' : ''}>
+        {mode === 'catalog' ? (
         <div>
           <Label>{t('form.provider')}</Label>
           <Select
@@ -321,17 +355,17 @@ export function ProviderAccountForm({
           >
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              {/* 直接映射预设 —— `custom`（自定义）**已经在预设里**，
-                  这里不要再补一条，否则会出现两个同值的「自定义」 */}
-              {BUILTIN_PRESETS.map((p) => (
+              {/* 目录模式只列真实供应商（`custom` 由「自定义 API」模式承担，混在下拉里是双重入口） */}
+              {BUILTIN_PRESETS.filter((p) => p.provider !== 'custom').map((p) => (
                 <SelectItem key={p.provider} value={p.provider}>{p.displayName ?? p.provider}</SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
+        ) : null}
         {/* 协议只在「自定义」时才问：选定的服务商该走哪套协议是**既定事实**（预设里写着），
             让用户选是多余的 —— 而且选错就整条链路不通 */}
-        {draft.provider === 'custom' && (
+        {mode === 'custom' && (
           <div>
             <Label>{t('form.protocol')}</Label>
             <Select

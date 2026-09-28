@@ -22,7 +22,6 @@ import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../shared/locale'
 import type { TextKey } from '../../shared/locale'
 import { Input } from '../ui/Input'
-import { ProviderAccountsSection } from './ProviderAccountsSection'
 import { ModelListSection } from './ModelListSection'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
@@ -166,11 +165,9 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           <div className="flex-1 overflow-y-auto px-6 py-5">
             {section === 'llm' && (
               <>
-                {/* 供应商账户 —— 一份凭据挂多个模型；其下勾选的模型会出现在下面的模型列表里 */}
-                <ProviderAccountsSection />
-                <div className="mt-6">
-                  <ModelListSection purposes={['generation', 'refinement', 'summary']} purposeLabel={t('model.purposeGen')} />
-                </div>
+                {/* 模型（一体卡，v2）：供应商凭据与其名下模型（生成/向量混排）同卡管理；
+                    账户的新建走「添加供应商」（目录/自定义两模式），编辑/删除在卡头 */}
+                <ModelListSection />
                 {/* 模型路由 — 三层调度（此前功能存在但无 UI 入口，静默失效） */}
                 <div className="mt-6">
                   <ModelRoutingSection />
@@ -193,14 +190,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             {section === 'embedding' && (
               <>
                 <VectorConfigSection />
-                {/* 嵌入模型的供应商账户 —— 同一账户既可挂生成也可挂向量模型（勾选清单里一并列出） */}
-                <div className="mt-6">
-                  <ProviderAccountsSection />
-                </div>
-                {/* 嵌入模型管理 — 与生成模型同套增删改/默认标记（原散落在向量配置内且无编辑/删除） */}
-                <div className="mt-6">
-                  <ModelListSection purposes={['embedding']} purposeLabel={t('model.purposeEmbedding')} />
-                </div>
+                {/* 嵌入模型管理已并入「AI 模型」段的一体卡（2026-09-28 v2：生成/向量同账户混排，不分段重复维护） */}
               </>
             )}
             {section === 'proxy' && <ProxySection />}

@@ -416,23 +416,6 @@ export function ModelForm({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <Label>{t('form.temperature')}</Label>
-              <Input
-                type="number" min={0} max={2} step={0.1}
-                value={model.temperature}
-                onChange={(e) => up('temperature', (e.target.value === '' ? '' : parseFloat(e.target.value)) as number)}
-                onBlur={() => {
-                  // 钳制到 [0, 2]——此前可保存 -5 等非法值，运行时 API 400（P2 修复）
-                  const v = Number(model.temperature);
-                  if (isNaN(v)) up('temperature', 0.7)
-                  else if (v < 0) up('temperature', 0)
-                  else if (v > 2) up('temperature', 2)
-                }}
-              />
-            </div>
-          </div>
         </>
       )}
 

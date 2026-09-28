@@ -20,6 +20,9 @@ export interface ModelProviderCardProps {
   account: ProviderAccount | null
   /** 本卡的行（账户卡 = 派生条目；其他卡 = 无归属孤儿） */
   models: ModelProfile[]
+  /** 账户卡操作（容器层处理：编辑打开建卡表单；删除做引用检查 + deleteProvider） */
+  onEditAccount?: () => void
+  onDeleteAccount?: () => void
 }
 
 /**
@@ -30,7 +33,7 @@ export interface ModelProviderCardProps {
  * 行内编辑沿用 ModelForm（切换保护与「失败保留草稿」同 v1）。
  * ⚠️ 行操作一律按 `model.id` 定位（倒序是显示层，Review Focus 3）。
  */
-export function ModelProviderCard({ account, models }: ModelProviderCardProps) {
+export function ModelProviderCard({ account, models, onEditAccount, onDeleteAccount }: ModelProviderCardProps) {
   const { t } = useTranslation()
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   const defaultEmbeddingModelId = useLLMStore(s => s.defaultEmbeddingModelId)
@@ -173,10 +176,29 @@ export function ModelProviderCard({ account, models }: ModelProviderCardProps) {
           )}
         </div>
         {account && (
-          <Button size="sm" variant="outline" disabled={saving} onClick={() => setPickerOpen(true)}>
-            <Plus size={13} />
-            {t('modelCard.addModel')}
-          </Button>
+          <div className="flex items-center gap-1">
+            <Button size="sm" variant="outline" disabled={saving} onClick={() => setPickerOpen(true)}>
+              <Plus size={13} />
+              {t('modelCard.addModel')}
+            </Button>
+            {onEditAccount && (
+              <Button variant="ghost" size="sm" onClick={onEditAccount}>
+                {t('action.edit')}
+              </Button>
+            )}
+            {onDeleteAccount && (
+              <button
+                type="button"
+                onClick={onDeleteAccount}
+                title={t('provider.delete')}
+                aria-label={t('provider.delete')}
+                className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)]"
+                style={{ width: 32, height: 32 }}
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         )}
       </div>
 
