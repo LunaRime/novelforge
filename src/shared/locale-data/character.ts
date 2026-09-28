@@ -85,6 +85,7 @@ export const characterTexts = {
   'character.statusDeparted': { 'zh-CN': '退场', 'en-US': 'Departed', 'ru-RU': 'Ушёл' },
   'character.statusDead': { 'zh-CN': '死亡·移除', 'en-US': 'Dead', 'ru-RU': 'Мёртв' },
   'character.statusHint': { 'zh-CN': '死亡/移除的角色将退出自动关系检测与出场统计，避免角色库持续膨胀。', 'en-US': 'Dead characters are excluded from automatic relation detection and appearance stats.', 'ru-RU': 'Мёртвые персонажи исключаются из автоматического поиска связей и статистики появлений.' },
+  'character.appearStats': { 'zh-CN': '出场统计', 'en-US': 'Appearance stats', 'ru-RU': 'Статистика появлений' },
   'character.appearCount': { 'zh-CN': '出场章数', 'en-US': 'Appearances', 'ru-RU': 'Появлений' },
   'character.firstChapter': { 'zh-CN': '首次出场', 'en-US': 'First seen', 'ru-RU': 'Первое появление' },
   'character.lastChapter': { 'zh-CN': '最近出场', 'en-US': 'Last seen', 'ru-RU': 'Последнее появление' },

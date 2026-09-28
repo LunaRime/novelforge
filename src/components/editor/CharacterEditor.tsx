@@ -534,9 +534,11 @@ export default function CharacterEditor() {
                         onChange={(val) => updateField(selectedCard.name, 'relations', val)}
                         t={t}
                       />
-                      {/* 旧版关系文本（保留兼容） */}
+                      {/* 旧版关系文本（保留兼容）——折叠头提升到「可点」层级
+                          （2026-09-28 走查：此前 text-micro+muted 与说明文字同款，看不出可点）；
+                          `w-fit` 让点击区与视觉区一致（summary 默认占满整行宽） */}
                       <details className="mt-2">
-                        <summary className="text-micro text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
+                        <summary className="text-xs text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-accent)] w-fit">
                           {t('character.legacyRelations')}
                         </summary>
                         <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
@@ -674,12 +676,17 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
             {t('character.statusHint')}
           </div>
         </div>
-        <div className="text-xs space-y-1 pt-1" style={{ color: 'var(--color-text-secondary)' }}>
-          <div>{t('character.appearCount')}: <span className="font-medium">{char.appearCount ?? 0}</span></div>
-          <div>
-            {t('character.firstChapter')}: <span className="font-medium">{char.firstChapter ?? 0}</span>
-            {' · '}
-            {t('character.lastChapter')}: <span className="font-medium">{char.lastChapter ?? 0}</span>
+        <div>
+          {/* ⚠️ 必须有 Label：与左列「Label + 控件」结构对等，两列才会基线对齐——
+              此前用 `pt-1` 硬凑（2026-09-28 走查：统计文字与状态下拉框不对齐） */}
+          <Label>{t('character.appearStats')}</Label>
+          <div className="text-xs space-y-1" style={{ color: 'var(--color-text-secondary)' }}>
+            <div>{t('character.appearCount')}: <span className="font-medium">{char.appearCount ?? 0}</span></div>
+            <div>
+              {t('character.firstChapter')}: <span className="font-medium">{char.firstChapter ?? 0}</span>
+              {' · '}
+              {t('character.lastChapter')}: <span className="font-medium">{char.lastChapter ?? 0}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -874,13 +881,18 @@ function StructuredRelations({
           </button>
         </div>
       ) : (
-        <button
+        /* 2026-09-28 走查：此前是 text-micro+muted 的手写文字按钮，与说明文字同款、看不出可点；
+           改用同页范式（「合并」「角色图谱」同款 Button outline/sm），无可选角色时 disabled + title */
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-1"
+          disabled={available.length === 0}
+          title={available.length === 0 ? t('character.noTarget') : undefined}
           onClick={() => setAdding(true)}
-          className="text-micro flex items-center gap-1 mt-1 text-[var(--color-text-muted)] hover:text-[var(--color-accent)] cursor-pointer bg-transparent border-0"
-          type="button"
         >
-          <Plus size={10} /> {available.length > 0 ? t('character.addRelation') : t('character.noTarget')}
-        </button>
+          <Plus size={11} /> {t('character.addRelation')}
+        </Button>
       )}
     </div>
   )
