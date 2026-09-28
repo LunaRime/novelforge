@@ -2,6 +2,7 @@
  * 服务商预设配置 — 共享类型定义
  * 渲染进程与主进程共同使用，持久化在 ~/.novelforge/provider-presets.json
  */
+import type { LLMProtocol } from './llm-protocols'
 
 /** 单个模型的预设 — name + 该模型的 token 规格 */
 export interface ModelPreset {
@@ -29,8 +30,8 @@ export interface ProviderPreset {
   displayName?: string
   /** 默认 API 地址 */
   baseUrl: string
-  /** 默认调用协议：openai 兼容 或 gemini 原生 */
-  protocol: string
+  /** 默认调用协议（单源：src/shared/llm-protocols.ts；openai 兼容 / gemini 原生 / anthropic 原生） */
+  protocol: LLMProtocol
   /** 支持的生成模型列表（含各自的 maxTokens） */
   models: ModelPreset[]
   /** 支持的向量模型列表（embedding 模型不需要 maxTokens） */

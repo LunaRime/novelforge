@@ -9,6 +9,7 @@ import { Check, Download, Eye, EyeOff, Plus, Save, Settings2, Trash2, Zap } from
 import { cn } from '../../lib/utils'
 import { useLLMStore } from '../../stores/llm-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
+import { LLM_PROTOCOLS, type LLMProtocol } from '../../shared/llm-protocols'
 import type { ModelPreset, ProviderPreset } from '../../shared/provider-presets'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import { randomUUID } from '../../utils/id'
@@ -524,11 +525,14 @@ function ModelForm({
         </div>
         <div>
           <Label>{t('form.protocol')}</Label>
-          <Select value={model.protocol} onValueChange={(v) => up('protocol', v as 'openai' | 'gemini')}>
+          {/* 选项来自协议单源（src/shared/llm-protocols.ts）——加协议只需注册表加员，
+              此处与 llm-factory 自动同步（"UI 可选集 ≡ 适配器可服务集"） */}
+          <Select value={model.protocol} onValueChange={(v) => up('protocol', v as LLMProtocol)}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="gemini">Gemini</SelectItem>
+              {LLM_PROTOCOLS.map((p) => (
+                <SelectItem key={p.id} value={p.id}>{t(p.labelKey)}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

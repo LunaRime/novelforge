@@ -60,3 +60,10 @@ export interface ILLMProvider {
    */
   listModels(credentials: { baseUrl: string; apiKey: string }): Promise<string[]>
 }
+
+/**
+ * 错误契约（2026-09-28 加协议前码化，源自 deepseek-harness 的教训）：
+ * **失败一律抛带 `status` 的 `HttpError`**（或等价携带 HTTP 状态的对象），调用方与
+ * retry-handler 只按 status/code 判定，**绝不解析 message 文本** —— 否则每加一个协议
+ * 就要重写一份文本正则。新写 provider 时对照本契约。
+ */

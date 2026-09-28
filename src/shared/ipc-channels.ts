@@ -2,6 +2,7 @@
  * NovelForge IPC 频道定义 — 渲染进程与主进程的类型安全通信契约
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
+import type { LLMProtocol } from './llm-protocols'
 
 // ===== 全局配置 =====
 export interface ConfigChannels {
@@ -425,7 +426,7 @@ export interface LLMChannels {
     return: { success: boolean; error?: string }
   }
   'llm:list-provider-models': {
-    args: [credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string }]
+    args: [credentials: { provider: string; protocol: LLMProtocol; apiKey: string; baseUrl: string }]
     /** 拉取供应商可用模型。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
     return: { success: boolean; models?: string[]; error?: string }
   }
@@ -518,7 +519,7 @@ export interface ModelProfile {
   id: string
   name: string
   provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'custom'
-  protocol: 'openai' | 'gemini'
+  protocol: LLMProtocol
   modelName: string
   apiKey: string
   baseUrl: string
@@ -548,7 +549,7 @@ export interface ProviderAccount {
   id: string
   /** 与 `ModelProfile.provider` 同一个封闭联合 —— UI 从同一组选项里选，故是良性约束 */
   provider: ModelProfile['provider']
-  protocol: 'openai' | 'gemini'
+  protocol: LLMProtocol
   apiKey: string
   baseUrl: string
   /** 已勾选的模型名 —— 勾选清单的唯一真相（逐个模型的显示名等设置住在 ModelProfile 上） */

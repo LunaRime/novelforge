@@ -25,6 +25,8 @@ export const uiTexts = {
   'provider.selectAll': { 'zh-CN': '全选', 'en-US': 'Select all', 'ru-RU': 'Выбрать все' },
   'provider.deselectAll': { 'zh-CN': '取消全选', 'en-US': 'Deselect all', 'ru-RU': 'Снять выделение' },
   'provider.fetchNoMatches': { 'zh-CN': '没有匹配的模型', 'en-US': 'No matching models', 'ru-RU': 'Нет подходящих моделей' },
+  'form.protocolOpenai': { 'zh-CN': 'OpenAI 兼容', 'en-US': 'OpenAI-compatible', 'ru-RU': 'Совместимый с OpenAI' },
+  'form.protocolGemini': { 'zh-CN': 'Gemini 原生', 'en-US': 'Gemini native', 'ru-RU': 'Нативный Gemini' },
   'action.stop': { 'zh-CN': '停止', 'en-US': 'Stop', 'ru-RU': 'Стоп' },
   'action.confirm': { 'zh-CN': '确认', 'en-US': 'Confirm', 'ru-RU': 'Подтвердить' },
   'common.unknownWord': { 'zh-CN': '未知', 'en-US': 'Unknown', 'ru-RU': 'Неизвестно' },
