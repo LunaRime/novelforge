@@ -145,6 +145,22 @@ describe('ModelProviderCard 一体卡', () => {
     )
   })
 
+  it('删除被引用的行（当前默认模型）→ 引用检查拦下：确认框都不出现（复核 I1 回归锁）', async () => {
+    state.defaultModelId = 'm2' // m2 正被引为默认模型
+    render(ACCOUNT, [makeModel('m1', 'gen-1'), makeModel('m2', 'gen-2')])
+    await act(async () => {
+      buttonByLabel('删除')[0].click() // 倒序后第一个 = gen-2（m2）
+      await new Promise(r => setTimeout(r, 10))
+    })
+    // 被引用 → 在确认之前直接拦下（确认框不应出现，也不应写任何东西）
+    const box = document.body.lastElementChild as HTMLElement
+    const hasConfirm = [...box.querySelectorAll('button')].some(b => b.textContent?.trim() === '删除')
+    expect(hasConfirm).toBe(false)
+    expect(state.saveProvider).not.toHaveBeenCalled()
+    expect(state.deleteModel).not.toHaveBeenCalled()
+    state.defaultModelId = 'gen-1'
+  })
+
   it('「其他」卡（account=null）：无「添加模型」入口；删除走 deleteModel', async () => {
     const el = render(null, [makeModel('orphan-1', 'orphan-model')])
     expect([...el.querySelectorAll('button')].some(b => b.textContent?.includes('添加模型'))).toBe(false)

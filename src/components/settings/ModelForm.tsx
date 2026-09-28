@@ -201,12 +201,14 @@ export function ModelForm({
           <Select value={model.provider} onValueChange={(v) => handleProviderChange(v as ModelProfile['provider'])}>
             <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="openai">OpenAI</SelectItem>
-              <SelectItem value="deepseek">DeepSeek</SelectItem>
-              <SelectItem value="gemini">Google Gemini</SelectItem>
-              <SelectItem value="ollama">{t('settings.providerOllama')}</SelectItem>
-              <SelectItem value="bigmodel">{t('settings.providerBigModel')}</SelectItem>
-              <SelectItem value="custom">{t('settings.providerCustom')}</SelectItem>
+              {/* 单源（presets = BUILTIN_PRESETS，含 pi-ai 移植的 9 家新供应商——2026-09-29 复核 I3：
+                  旧硬编码 6 项让新家的值匹配不到 Item，Radix 渲染空白且选不回原值）；当前值兜底防"单向陷阱" */}
+              {presets.map((p) => (
+                <SelectItem key={p.provider} value={p.provider}>{p.displayName ?? p.provider}</SelectItem>
+              ))}
+              {!presets.some((p) => p.provider === model.provider) && (
+                <SelectItem value={model.provider}>{model.provider}</SelectItem>
+              )}
             </SelectContent>
           </Select>
         </div>

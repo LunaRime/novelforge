@@ -14,6 +14,7 @@ import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
 import { ModelForm } from './ModelForm'
 import { ModelPickerDialog } from './ModelPickerDialog'
+import { blockingReferences } from './ProviderAccountsSection'
 
 export interface ModelProviderCardProps {
   /** null = 「其他」卡（无归属历史模型；无添加入口，删除直删配置） */
@@ -108,6 +109,15 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
 
   /** 删除行：账户卡 = 取消勾选（saveProvider 同步名册/派生条目）；其他卡 = 直删配置 */
   const handleDelete = async (m: ModelProfile) => {
+    if (account) {
+      // ⚠️ 引用检查在确认**之前**（v1 同口径，2026-09-29 复核 I1）：saveProvider 只 reload、
+      // 不做路由/默认清理——删掉被引用的行会让 defaultModelId 悬空（状态栏消失/工作流报"未配置默认模型"）
+      const blocking = blockingReferences([m.id])
+      if (blocking) {
+        toast.error(t('provider.referenced').replace('{list}', () => blocking))
+        return
+      }
+    }
     const ok = await confirm(
       t('settings.confirmDeleteModel').replace('{name}', m.name || m.modelName),
       { danger: true, confirmText: t('action.delete') },
