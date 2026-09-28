@@ -1,10 +1,9 @@
 import { useState } from 'react'
-import { Sparkles, FolderOpen, Clock, BookOpen, FileUp, Settings, PenLine, ArrowRight, X, Trash2 } from 'lucide-react'
+import { Sparkles, FolderOpen, FileUp, Settings, PenLine, ArrowRight, X } from 'lucide-react'
 // 应用图标（与打包图标同一文件，见 App.tsx 的说明）
 import appIcon from '../../../build/icon.png'
 import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
-import { confirmDeleteProject } from '../ui/Confirm'
 
 const FIRST_RUN_KEY = 'vela-first-run'
 
@@ -29,11 +28,10 @@ interface WelcomePageProps {
   onOpenSettings?: () => void
 }
 
-/** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导 */
+/** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导
+ *  （2026-09-28：「最近项目」列表已迁至侧栏主页 HomeSidebarPanel，本页不再渲染） */
 export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings }: WelcomePageProps) {
   const { t } = useTranslation()
-  const recentProjects = useProjectStore(s => s.recentProjects)
-  const openProject = useProjectStore(s => s.openProject)
   const currentProject = useProjectStore(s => s.currentProject)
   const [showGuide, setShowGuide] = useState(isFirstRun())
 
@@ -215,67 +213,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
           </button>
         </div>
 
-        {/* 最近项目 */}
-        {recentProjects.length > 0 && (
-          <div>
-            <div className="flex items-center gap-1.5 mb-3">
-              <Clock size={14} style={{ color: 'var(--color-text-muted)' }} />
-              <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-                {t('project.recent')}
-              </span>
-            </div>
-            <div className="space-y-1">
-              {recentProjects.map((p, i) => (
-                <div
-                  key={i}
-                  className="group flex items-center gap-3 px-3 py-2.5 rounded-lg cursor-pointer transition-all"
-                  style={{ backgroundColor: 'transparent', borderLeft: '2px solid transparent' }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-                    e.currentTarget.style.borderLeftColor = 'var(--color-accent)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.backgroundColor = 'transparent'
-                    e.currentTarget.style.borderLeftColor = 'transparent'
-                  }}
-                  onClick={() => openProject(p.path)}
-                >
-                  <BookOpen size={14} style={{ color: 'var(--color-accent)', opacity: 0.6 }} />
-                  <div className="flex-1 min-w-0">
-                    <span className="text-sm block truncate" style={{ color: 'var(--color-text)' }}>
-                      {p.name}
-                    </span>
-                    <span className="text-xs block truncate" style={{ color: 'var(--color-text-muted)' }}>
-                      {p.path}
-                    </span>
-                  </div>
-                  <button
-                    className="opacity-0 group-hover:opacity-60 group-focus-within:opacity-100 hover:!opacity-100 flex-shrink-0 cursor-pointer transition-opacity"
-                    style={{ color: 'var(--color-text-muted)' }}
-                    title={t('project.deleteTooltip')}
-                    onClick={async (e) => {
-                      e.stopPropagation()
-                      const action = await confirmDeleteProject()
-                      if (action === 'delete') {
-                        await useProjectStore.getState().deleteProjectFolder(p.path)
-                      } else if (action === 'remove') {
-                        await useProjectStore.getState().removeRecentProject(p.path)
-                      }
-                    }}
-                    onMouseEnter={(e) => {
-                      e.currentTarget.style.color = 'var(--color-error)'
-                    }}
-                    onMouseLeave={(e) => {
-                      e.currentTarget.style.color = 'var(--color-text-muted)'
-                    }}
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        {/* 最近项目已迁至侧栏主页（HomeSidebarPanel；2026-09-28） */}
 
         <div className="text-center mt-12">
           <p className="text-xs" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
