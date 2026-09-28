@@ -510,4 +510,135 @@ describe('颜色 token 守卫（AGENTS.md：颜色只用 CSS 变量）', () => {
   })
 })
 
+// ==================== 悬停底色守卫（FB-1/FB-2 · 2026-09-28 走查修复） ====================
+
+/**
+ * `--color-hover` 的「相对叠加」不变式 —— 2026-09-28 真机走查 FB-1/FB-2 修复后锁死（spec §八）。
+ *
+ * 形态：`color-mix(in srgb, var(--color-text) p%, transparent)` —— p% 的主题文字色叠在**元素实际
+ * 所在的表面**上（浅色/纸色 text 深 → 加深；星空/深色 text 浅 → 提亮，方向自动正确）。值本身
+ * 不含任何固定颜色，故对任意表面成立。这不是审美偏好，是走查实锤后的两条硬约束：
+ *   ① 固定 hex 只对某一种表面成立 —— 旧值 `#EBF0F7` 对 sidebar/panel `#EFF2F7` 仅差 ΔL* 0.79
+ *      （浅色主题"看不见"，FB-1；`.paper` 同病 1.76）；
+ *   ② 行片（`.menu-chip`）与其内部图标按钮若取**同一固定色**，同时点亮时净变化为零
+ *      （FB-2：按钮与所在行同色，看不出这一层被单独悬停）——叠加式下按钮自动叠出第二层。
+ *
+ * 本组锁三件事（改坏任何一条 = "悬停又看不见"回归）：
+ *   - 四套主题**逐一同值**且形态为派生式（改比例必须四处同改；单块漂移在此暴露）；
+ *   - 按定义中的 p **实算**：单层悬停对 sidebar 面 ≥ ΔL* 3.0（实测 3.2~5.2，VS Code 官方
+ *     list.hover 基线 ≈ 3.5；阈值取 3.0 留余量）；
+ *   - 嵌套第二层净变化 ≥ ΔL* 3.0（实测 3.2~4.6）。
+ */
+const HOVER_OVERLAY_RE = /^color-mix\(in srgb,\s*var\(--color-text\)\s+([\d.]+)%,\s*transparent\)$/
+
+/** 找到首个「锚点选择器 + `{`」的块体（大括号配平；找不到返回 null） */
+function cssBlockBody(css: string, anchor: RegExp): string | null {
+  const m = anchor.exec(css)
+  if (!m) return null
+  const open = m.index + m[0].length - 1
+  let depth = 0
+  for (let i = open; i < css.length; i++) {
+    if (css[i] === '{') depth++
+    else if (css[i] === '}') {
+      depth--
+      if (depth === 0) return css.slice(open + 1, i)
+    }
+  }
+  return null
+}
+
+/** 从主题块体里取变量值（`--x: value;`） */
+function cssVarOf(block: string, name: string): string | null {
+  const m = new RegExp(`${name}\\s*:\\s*([^;]+);`).exec(block)
+  return m ? m[1].trim() : null
+}
+
+/** `#RRGGBB` → 三个通道值 */
+function hexChannels(hex: string): number[] {
+  const s = hex.replace('#', '')
+  return [0, 2, 4].map((i) => parseInt(s.slice(i, i + 2), 16))
+}
+
+/** CIELAB 亮度 L*（本守卫只比较相近色相的亮度差，Y 分量足够） */
+function labL(hex: string): number {
+  const [r, g, b] = hexChannels(hex).map((c) => {
+    const x = c / 255
+    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4)
+  })
+  const y = 0.2126 * r + 0.7152 * g + 0.0722 * b
+  return 116 * (y > 0.008856 ? Math.cbrt(y) : 7.787 * y + 16 / 116) - 16
+}
+
+/** `color-mix(in srgb, color p%, transparent)` 叠在 base 上的渲染结果（sRGB 数值空间线性插值） */
+function overlayOn(base: string, color: string, p: number): string {
+  const [b, c] = [hexChannels(base), hexChannels(color)]
+  return (
+    '#' + c.map((v, i) => Math.round(v * p + b[i] * (1 - p)).toString(16).padStart(2, '0')).join('')
+  )
+}
+
+/** 四套主题块锚点：行首精确选择器（避免命中注释与后代选择器如 `.dark .cm-search`） */
+const HOVER_THEMES: { name: string; anchor: RegExp }[] = [
+  { name: 'light(:root)', anchor: /(?:^|\n)[ \t]*:root\s*\{/ },
+  { name: 'galaxy(.galaxy)', anchor: /(?:^|\n)[ \t]*\.galaxy\s*\{/ },
+  { name: 'paper(.paper)', anchor: /(?:^|\n)[ \t]*\.paper\s*\{/ },
+  { name: 'dark(.dark)', anchor: /(?:^|\n)[ \t]*\.dark\s*\{/ },
+]
+
+describe('悬停底色（--color-hover）守卫 —— FB-1/FB-2 相对叠加不变式', () => {
+  const css = fs.readFileSync(path.join(ROOT, 'src', 'index.css'), 'utf-8')
+
+  it('四套主题逐一同值，且形态为「color-mix(in srgb, var(--color-text) p%, transparent)」', () => {
+    const values = HOVER_THEMES.map(({ name, anchor }) => {
+      const body = cssBlockBody(css, anchor)
+      expect(body, `index.css 找不到 ${name} 主题块`).not.toBeNull()
+      const value = cssVarOf(body ?? '', '--color-hover')
+      expect(
+        value,
+        `${name} 未定义 --color-hover —— 勿删除：固定 hex 只对一种表面成立（FB-1/FB-2 根因），` +
+          '四主题逐一同值是本仓惯例',
+      ).not.toBeNull()
+      expect(
+        value,
+        `${name} 的 --color-hover 不是相对叠加派生式（改回固定 hex 会让「悬停看不见」回归，见 spec §八）`,
+      ).toMatch(HOVER_OVERLAY_RE)
+      return { name, value }
+    })
+    const unique = new Set(values.map((v) => v.value))
+    expect(
+      unique.size,
+      '四套主题的 --color-hover 定义不一致（改比例时必须四处同改）：\n' +
+        values.map((v) => `  ${v.name}: ${v.value}`).join('\n'),
+    ).toBe(1)
+  })
+
+  it('实算可见性：单层悬停 ≥ ΔL* 3.0，嵌套第二层净变化 ≥ ΔL* 3.0（四主题）', () => {
+    for (const { name, anchor } of HOVER_THEMES) {
+      const body = cssBlockBody(css, anchor) ?? ''
+      const hover = cssVarOf(body, '--color-hover') ?? ''
+      const text = cssVarOf(body, '--color-text') ?? ''
+      const sidebar = cssVarOf(body, '--color-sidebar') ?? ''
+      const ratio = hover.match(HOVER_OVERLAY_RE)
+      expect(ratio, `${name}：--color-hover 不是派生式，无法实算`).not.toBeNull()
+      const p = Number(ratio?.[1] ?? NaN) / 100
+
+      // ① 单层：悬停片（行/按钮）直接坐在侧栏面上 → 必须看得见
+      const row = overlayOn(sidebar, text, p)
+      const single = Math.abs(labL(row) - labL(sidebar))
+      expect(
+        single,
+        `${name}：悬停底色对 sidebar 面的亮度差仅 ΔL* ${single.toFixed(2)}（< 3.0 = 肉眼不可辨，FB-1 回归）`,
+      ).toBeGreaterThanOrEqual(3)
+
+      // ② 嵌套：片内按钮（同一令牌）叠在已点亮的行片上 → 必须出现第二层变化（FB-2）
+      const button = overlayOn(row, text, p)
+      const nested = Math.abs(labL(button) - labL(row))
+      expect(
+        nested,
+        `${name}：行片内按钮的嵌套悬停净变化仅 ΔL* ${nested.toFixed(2)}（< 3.0 = 与行同色，FB-2 回归）`,
+      ).toBeGreaterThanOrEqual(3)
+    }
+  })
+})
+
 export { UNDEFINED_TOKEN_EXEMPT }

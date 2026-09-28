@@ -160,7 +160,17 @@
        两者永远一致；要单独调标题栏时再拆开。 */
     --color-titlebar: var(--color-canvas);
     --color-activity-bar: #E5E9F0;
-    --color-hover: #EBF0F7;
+    /* 「悬停叠加层」= 5% 的 --color-text 叠在元素**实际所在的表面**上（2026-09-28 走查修复 FB-1/FB-2）。
+       ⚠️ 值必须保持派生式，不要改回固定 hex —— 固定色只对某一种表面成立：
+       旧值 #EBF0F7 对 sidebar/panel #EFF2F7 只差 ΔL* 0.79（浅色主题悬停「看不见」，FB-1）；
+       且行片（.menu-chip）与其内部图标按钮取同一固定色时同时点亮 → 净变化为零（FB-2）。
+       派生式下 text 深则加深、浅则提亮（浅色/纸色 vs 星空/深色），方向自动正确：
+       单层悬停对任意表面 ≈ ΔL* 3.5（对齐 VS Code 官方 list.hover 基线），
+       嵌套按钮在已点亮的行片上自动叠出第二层（净变化 ≈ ΔL* 3.4）—— 一条令牌覆盖两级。
+       取 5%：单层可见性达基线，且与 --color-active 保持 ≈ ΔL* 1.8 分离（同 VS Code 梯度结构）。
+       ⚠️ 四套主题**逐一同值**（本仓惯例，勿只改这里）——分量 --color-text 按当前主题惰性求值。
+       守卫测试：src/shared/color-token-guard.test.ts「悬停底色守卫」。 */
+    --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
     --color-active: #DDE3ED;
     /* 卡片浮起感（区域卡片化后的极轻投影）。⚠️ 不能省：浅色主题下 `--color-bg` 与
        `--color-editor-bg` 同为 #F7F9FC，编辑区卡片与画布底色一模一样，
@@ -298,7 +308,8 @@
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色（同浅色主题） */
     --color-activity-bar: #071220;
-    --color-hover: #142640;
+    /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
     --color-active: #1C3050;
     /* 卡片浮起感：深色下投影几乎不可见，靠更黑的阴影 + `--color-border` 边框共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
@@ -387,7 +398,8 @@
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #E4DDD4;
-    --color-hover: #E8E3DB;
+    /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
     --color-active: #DCD5CB;
     /* 卡片浮起感：米色画布上的极轻暖调投影，与 `--color-border` 边框共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(44, 37, 32, 0.08), 0 1px 2px rgba(44, 37, 32, 0.05);
@@ -473,7 +485,8 @@
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
     --color-activity-bar: #333333;
-    --color-hover: #2A2D2E;
+    /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
+    --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
     --color-active: #37373D;
     /* 卡片浮起感：VSCode 深灰画布上的黑色投影，与 `--color-border` 边框共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
