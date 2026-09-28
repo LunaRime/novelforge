@@ -3,6 +3,7 @@
  * 渲染进程与主进程共同使用，持久化在 ~/.novelforge/provider-presets.json
  */
 import type { LLMProtocol } from './llm-protocols'
+import { PI_AI_MODEL_SPECS, PI_AI_PROVIDER_PRESETS } from './model-specs.generated'
 
 /** 单个模型的预设 — name + 该模型的 token 规格 */
 export interface ModelPreset {
@@ -53,12 +54,14 @@ export function presetModelDefaults(
   const preset = BUILTIN_PRESETS.find((p) => p.provider === provider)
   const isEmbedding = preset?.embeddingModels.includes(modelName) || looksLikeEmbeddingModel(modelName)
   const model = preset?.models.find((m) => m.name === modelName)
-  const maxTokens = model?.maxTokens ?? 131072
+  // 规格来源三级（2026-09-28 目录移植）：NF 手写字面量优先 → pi-ai 生成表补缺 → 常量兜底
+  const spec = PI_AI_MODEL_SPECS[provider]?.[modelName]
+  const maxTokens = model?.maxTokens ?? spec?.maxTokens ?? 131072
 
   return {
     temperature: 0.7,
     maxTokens,
-    contextWindow: model?.contextWindow ?? maxTokens,
+    contextWindow: model?.contextWindow ?? spec?.contextWindow ?? maxTokens,
     purposes: [isEmbedding ? 'embedding' : 'generation'],
   }
 }
@@ -284,6 +287,10 @@ export const BUILTIN_PRESETS: ProviderPreset[] = [
     models: [],
     embeddingModels: [],
   },
+  // pi-ai（MIT）移植的新供应商（2026-09-28）——数据见 model-specs.generated.ts；
+  // minimax / kimi 系走 anthropic 原生协议（正因新增该协议才可服务）；
+  // 自定义条目保持在数组**最后**（UI 按数组序渲染）
+  ...PI_AI_PROVIDER_PRESETS,
   {
     provider: 'custom',
     displayName: '自定义',
