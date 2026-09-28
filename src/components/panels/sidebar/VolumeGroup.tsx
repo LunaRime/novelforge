@@ -10,6 +10,7 @@ import {
   ChevronRight, ChevronDown, BookMarked, Plus, Pencil, Trash2, Layers,
   CheckCircle2, Circle,
 } from 'lucide-react'
+import MenuRow from '../../ui/MenuRow'
 import { useVolumeStore } from '../../../stores/volume-store'
 import { globalEventBus } from '../../../shared/event-bus'
 import type { VolumeData } from '../../../../electron/repositories/volume-repository'
@@ -103,57 +104,50 @@ export default function VolumeGroup({
   }, [upsertVolume, t])
 
   return (
-    <section
-      className="rounded-xl border p-2.5"
-      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
-      {/* 2026-09-27 可供性重构：折叠卡 = 整行主按钮（chevron 置左、计数在内），
-          操作按钮（自动划分/新建卷）作兄弟；命中区固定 22×22 */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
-        >
-          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </span>
-          <BookMarked size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-            {t('volume.title')}
-          </span>
-          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {volumes.length}
-          </span>
-        </button>
-        {totalChapters > 0 && (
-          <button
-            type="button"
-            onClick={() => setAutoSplitOpen(true)}
-            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-            style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
-            title={t('volume.autoSplit')}
-          >
-            <Layers size={12} />
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => setVolumeDialog({ open: true, editing: null })}
-          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
-          title={t('volume.newVolume')}
-        >
-          <Plus size={12} />
-        </button>
-      </div>
+    <section>
+      {/* 头部行片（2026-09-28 批 0）：折叠卡 = MenuRow 主按钮（功能图标悬停置换 ›/⌄、计数在内），
+          操作按钮（自动划分/新建卷）作兄弟；命中区固定 32×32（标准 §5.2） */}
+      <MenuRow
+        icon={<BookMarked size={12} />}
+        title={t('volume.title')}
+        count={volumes.length}
+        swap="expand"
+        expanded={open}
+        onPrimary={() => setOpen(v => !v)}
+        actions={
+          <>
+            {totalChapters > 0 && (
+              <button
+                type="button"
+                onClick={() => setAutoSplitOpen(true)}
+                className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+                style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+                title={t('volume.autoSplit')}
+              >
+                <Layers size={12} />
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => setVolumeDialog({ open: true, editing: null })}
+              className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+              style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+              title={t('volume.newVolume')}
+            >
+              <Plus size={12} />
+            </button>
+          </>
+        }
+      />
 
       {!open ? null : volumes.length === 0 ? (
-        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 pl-3 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('volume.empty')}
         </div>
       ) : (
-        <div className="space-y-1">
+        <div>
+          {/* 行间距由片自带的 `margin: 2px 4px` 承担（spec 片间距 2px）——容器不得再加 space-y-*，
+              否则 utilities 层的 margin-top 会盖掉片的竖向 margin（实测间距被顶到 3.5px） */}
           {volumes.map(v => (
             <VolumeRow
               key={v.volumeNumber}
@@ -223,19 +217,22 @@ function VolumeRow({
   const doneAll = totalCount > 0 && doneCount >= totalCount
 
   return (
-    <div className="rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+    <div>
       {/* 2026-09-25 重构：折叠点击此前在 `<div onClick>` 上 —— 键盘完全够不到，
           而它内部**本来就含**编辑/删除按钮，外层直接换 `<button>` 会 button 嵌 button。
           做法：折叠箭头 + 卷名 + 区间 + 进度包进主按钮，编辑/删除降为兄弟节点
-          （不再需要 stopPropagation，外层已无点击处理器）。 */}
+          （不再需要 stopPropagation，外层已无点击处理器）。
+          2026-09-28 批 0：卷行容器改「行片」（`.menu-chip`）——去掉卡片边框/底色，悬停底色由片承担。
+          外层 wrapper 无类名：`.menu-chip` 是 `display:flex`，卷内章节子列表必须留在片外
+          （否则会变成与主按钮并排的 flex 项），故用它把「片 + 章节列表」绑成一行。 */}
       <div
-        className="flex items-center gap-1.5 px-1.5 py-1.5 select-none"
+        className="menu-chip group flex items-center gap-1.5 select-none"
         title={volume.description || undefined}
       >
         <button
           type="button"
           onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full px-2 text-left enabled:cursor-pointer"
         >
           {open
             ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
@@ -256,7 +253,7 @@ function VolumeRow({
         <button
           type="button"
           className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
           title={t('volume.editVolume')}
           onClick={() => onEdit()}
         >
@@ -265,7 +262,7 @@ function VolumeRow({
         <button
           type="button"
           className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
           onClick={() => onDelete()}
         >
@@ -275,7 +272,8 @@ function VolumeRow({
 
       {/* 卷内章节（有草稿的章） */}
       {open && (
-        <div className="pl-2 pr-1.5 pb-1.5 space-y-0.5">
+        <div className="pl-6 pr-1.5 pb-1.5 space-y-0.5">
+          {/* pl-6（21px）：父卷行内容起于 11px，章节行缩进需拉出明确层级（去卡片后 pl-2 父子齐平） */}
           {chapters.length === 0 ? (
             <div className="text-micro py-1 pl-1.5 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
               {t('charList.emptyProject')}

@@ -219,14 +219,18 @@ describe('MemoryGroup — 侧栏记忆导航（点击开编辑器标签页）', 
     act(() => { root.unmount() })
   })
 
-  it('行 hover 与热区重合（RM-SB-05，2026-09-27）：hover 底色在主按钮上、行容器不再整行高亮', async () => {
+  it('行片形态（2026-09-28）：hover 由 .menu-chip 承担，主按钮与容器均不带独立 hover 类', async () => {
     const { container, root } = render(<MemoryGroup projectPath="/mock/proj" />)
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
 
     const main = rowOf(container, 'chapters-1-3.md') as HTMLButtonElement
-    expect(main.className).toContain('hover:bg-')        // hover 反馈 = 主按钮热区
     const rowBox = main.parentElement as HTMLElement
-    expect(rowBox.className).not.toContain('hover:bg-')  // 容器不再高亮（原死带来源）
+    expect(rowBox.className).toContain('menu-chip')      // 片 = 悬停与热区边界
+    expect(main.className).not.toContain('hover:bg-')     // hover 不再挂主按钮
+    expect(rowBox.className).not.toContain('hover:bg-')   // 也不挂容器（统一由 menu-chip 承接）
+    // 32×32 命中区（标准 §5.2）：重建按钮
+    const rebuild = [...rowBox.querySelectorAll('button')].find(b => b.title === t('memory.rebuild'))!
+    expect((rebuild as HTMLButtonElement).style.width).toBe('32px')
     act(() => { root.unmount() })
   })
 

@@ -85,7 +85,7 @@ describe('PublicationGroup — 可供性（2026-09-27）', () => {
     })
   })
 
-  it('行容器不再有 hover 类（hover 已收进主按钮，死带清零）；无 button 嵌套', async () => {
+  it('行容器为 .menu-chip 且不再有 hover 类（hover 由片承接，死带清零）；无 button 嵌套', async () => {
     const el = render(<PublicationGroup projectPath="/mock/proj" />)
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
     const head = [...el.querySelectorAll('button')].find(b => b.textContent?.includes(t('pub.title')))!
@@ -94,6 +94,7 @@ describe('PublicationGroup — 可供性（2026-09-27）', () => {
     expect(el.querySelectorAll('button button')).toHaveLength(0)
     const rowBox = [...el.querySelectorAll('div')].find(d =>
       String(d.className).includes('group') && d.textContent?.includes('平台改标题'))!
+    expect(rowBox.className).toContain('menu-chip')
     expect(rowBox.className).not.toContain('hover:bg-')
   })
 })

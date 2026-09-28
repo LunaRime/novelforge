@@ -5,7 +5,8 @@
  * （字符频率 Dice）+ 审计告警（术语/水文）。相似度徽标分色提示平台删改风险。
  */
 import { useState, useEffect } from 'react'
-import { Satellite, Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
+import { Satellite, Plus, Trash2 } from 'lucide-react'
+import MenuRow from '../../ui/MenuRow'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { ipc } from '../../../services/ipc-client'
 import { useEditorStore } from '../../../stores/editor-store'
@@ -76,54 +77,46 @@ export default function PublicationGroup({ projectPath }: Props) {
   }
 
   return (
-    <section
-      className="rounded-xl border p-2.5"
-      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
-      {/* 头部（2026-09-27 可供性重构）：折叠卡 = 整行主按钮（chevron 置左、计数在内），
-          导入按钮作兄弟；命中区固定 22×22 */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
-        >
-          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </span>
-          <Satellite size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-            {t('pub.title')}
-          </span>
-          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {entries.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => setDialogOpen(true)}
-          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
-          title={t('pub.import')}
-        >
-          <Plus size={12} />
-        </button>
-      </div>
+    <section>
+      {/* 头部行片（2026-09-28 批 0）：折叠卡 = MenuRow 主按钮（功能图标悬停置换 ›/⌄、计数在内），
+          导入按钮作兄弟；命中区固定 32×32（标准 §5.2） */}
+      <MenuRow
+        icon={<Satellite size={12} />}
+        title={t('pub.title')}
+        count={entries.length}
+        swap="expand"
+        expanded={open}
+        onPrimary={() => setOpen(v => !v)}
+        actions={
+          <button
+            type="button"
+            onClick={() => setDialogOpen(true)}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+            title={t('pub.import')}
+          >
+            <Plus size={12} />
+          </button>
+        }
+      />
 
       {!open ? null : entries.length === 0 ? (
-        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 pl-3 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('pub.empty')}
         </div>
       ) : (
-        <div className="space-y-1">
+        <div>
+          {/* 行间距由片自带的 `margin: 2px 4px` 承担（spec 片间距 2px）——容器不得再加 space-y-*，
+              否则 utilities 层的 margin-top 会盖掉片的竖向 margin（实测间距被顶到 3.5px） */}
           {entries.map((e) => (
-            <div key={e.chapterNumber} className="flex items-center gap-1.5 pr-1.5 group select-none">
+            <div key={e.chapterNumber} className="menu-chip group flex items-center gap-1.5 select-none">
               {/* 2026-09-27 可供性修复：行主按钮 = 打开平台正文（编辑器只读标签页）。
-                  此前整行 hover 变色却无点击处理器（「高亮但点不动」死带的源头）。 */}
+                  此前整行 hover 变色却无点击处理器（「高亮但点不动」死带的源头）。
+                  2026-09-28 批 0：行容器改「行片」——悬停底色由片承担，主按钮不再自带 hover/圆角。 */}
               <button
                 type="button"
                 onClick={() => openEntry(e)}
-                className="flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1 rounded-lg text-left cursor-pointer hover:bg-[var(--color-hover)]"
+                className="flex items-center gap-1.5 flex-1 min-w-0 h-full px-2 text-left cursor-pointer"
               >
                 <span className="text-micro flex-1 truncate" style={{ color: 'var(--color-text)' }}>
                   {t('pub.chapterLabel').replace('{n}', String(e.chapterNumber))}
@@ -151,7 +144,7 @@ export default function PublicationGroup({ projectPath }: Props) {
                 className="flex items-center justify-center rounded-lg opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity cursor-pointer flex-shrink-0"
                 title={t('action.delete')}
                 onClick={() => void handleDelete(e)}
-                style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+                style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
               >
                 <Trash2 size={11} />
               </button>

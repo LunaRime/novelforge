@@ -16,7 +16,8 @@
  * 数据：useMemoryStore（memory:list / memory:read / memory:mark-stale）
  */
 import { useEffect, useState } from 'react'
-import { Brain, RefreshCw, ChevronDown, ChevronRight, RotateCw, Trash2, AlertCircle } from 'lucide-react'
+import { Brain, RefreshCw, RotateCw, Trash2, AlertCircle } from 'lucide-react'
+import MenuRow from '../../ui/MenuRow'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { ipc } from '../../../services/ipc-client'
@@ -56,43 +57,32 @@ export default function MemoryGroup({ projectPath }: Props) {
   }, [load])
 
   return (
-    <section
-      className="rounded-xl border p-2.5"
-      style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
-      {/* 头部（2026-09-27 可供性重构）：折叠卡 = 整行主按钮（chevron 置左、计数在内），
-          刷新按钮作兄弟；命中区固定 22×22 */}
-      <div className="flex items-center gap-1.5 mb-1.5">
-        <button
-          type="button"
-          onClick={() => setOpen(v => !v)}
-          className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
-        >
-          <span className="flex items-center flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-          </span>
-          <Brain size={12} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
-          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-            {t('memory.groupTitle')}
-          </span>
-          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {files.length}
-          </span>
-        </button>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
-          title={t('action.refresh')}
-        >
-          <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
-        </button>
-      </div>
+    <section>
+      {/* 头部行片（2026-09-28 批 0）：折叠卡 = MenuRow 主按钮（功能图标悬停置换 ›/⌄、计数在内），
+          刷新按钮作兄弟；命中区固定 32×32（标准 §5.2） */}
+      <MenuRow
+        icon={<Brain size={12} />}
+        title={t('memory.groupTitle')}
+        count={files.length}
+        swap="expand"
+        expanded={open}
+        onPrimary={() => setOpen(v => !v)}
+        actions={
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+            title={t('action.refresh')}
+          >
+            <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
+          </button>
+        }
+      />
 
       {!open ? null : loadFailed ? (
         /* 错误态与空态必须分开：失败渲染成「暂无记忆」会让用户以为本来就没有 */
-        <div className="flex items-center gap-1.5 py-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="flex items-center gap-1.5 py-1 pl-3 text-micro" style={{ color: 'var(--color-text-muted)' }}>
           <AlertCircle size={11} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
           <span>{t('common.loadFailed')}</span>
           <button
@@ -105,7 +95,7 @@ export default function MemoryGroup({ projectPath }: Props) {
           </button>
         </div>
       ) : files.length === 0 ? (
-        <div className="text-micro py-1 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="text-micro py-1 pl-3 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
           {t('memory.empty')}
         </div>
       ) : (
@@ -127,7 +117,9 @@ export function MemoryList({ files, onRebuild, onSaved, showLoadMode, onLoadMode
   onLoadModeChange?: (file: string, mode: MemoryLoadMode) => void
 }) {
   return (
-    <div className="space-y-1">
+    <div>
+      {/* 行间距由片自带的 `margin: 2px 4px` 承担（spec 片间距 2px）——容器不得再加 space-y-*，
+          否则 utilities 层的 margin-top 会盖掉片的竖向 margin（实测间距被顶到 3.5px） */}
       {files.map(f => (
         <MemoryRow key={f.file} meta={f} onRebuild={() => onRebuild(f)} onSaved={onSaved}
           showLoadMode={showLoadMode} onLoadModeChange={onLoadModeChange} />
@@ -201,21 +193,22 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
   }
 
   return (
-    <div className="rounded-lg border" style={{ borderColor: 'var(--color-border)' }}>
+    <div>
       {/* 2026-09-25 重构：行点击此前在 `<div onClick>` 上 —— 键盘完全够不到，
           而它内部**本来就含**重建/删除按钮，外层直接换 `<button>` 会 button 嵌 button。
           做法：kind 徽标 + 文件名 + stale 徽标包进主按钮，重建/删除降为兄弟节点
-          （不再需要 stopPropagation，外层已无点击处理器）。 */}
-      {/* 2026-09-27 可供性修复（RM-SB-05）：hover 从行容器移到主按钮 —— 此前容器
-          px-1.5/py-1.5 整行高亮，主按钮只盖中间，上下各 6px 是「高亮但点不动」的死带。 */}
+          （不再需要 stopPropagation，外层已无点击处理器）。
+          2026-09-28 批 0：行容器改「行片」（`.menu-chip`，32px 高）——悬停底色由片承担
+          （`menu-chip:has(button):hover`），主按钮不再自带 hover/圆角；片容器不加 padding
+          （否则片底色上出现「亮起但点不动」的死带），内边距仍挂在可点的主按钮上。 */}
       <div
-        className="flex items-center gap-1.5 pr-1.5 select-none"
+        className="menu-chip group flex items-center gap-1.5 select-none"
         title={meta.file}
       >
         <button
           type="button"
           onClick={() => void openInEditor()}
-          className="flex items-center gap-1.5 flex-1 min-w-0 px-1.5 py-1.5 rounded-lg text-left cursor-pointer hover:bg-[var(--color-hover)]"
+          className="flex items-center gap-1.5 flex-1 min-w-0 h-full px-2 text-left cursor-pointer"
         >
           <span
             className="text-2xs px-1 py-0.5 rounded flex-shrink-0"
@@ -238,7 +231,7 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
         <button
           type="button"
           className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
           title={t('memory.rebuild')}
           onClick={() => onRebuild()}
         >
@@ -247,7 +240,7 @@ function MemoryRow({ meta, onRebuild, onSaved, showLoadMode, onLoadModeChange }:
         <button
           type="button"
           className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 22, height: 22, color: 'var(--color-text-muted)' }}
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
           title={t('action.delete')}
           onClick={() => void handleDelete()}
         >
