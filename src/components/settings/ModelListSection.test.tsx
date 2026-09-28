@@ -15,7 +15,7 @@ const state = vi.hoisted(() => ({
   defaultEmbeddingModelId: null as string | null,
   loaded: true,
   loadModels: vi.fn(),
-  saveModel: vi.fn<(m: ModelProfile) => Promise<void>>(async () => {}),
+  saveModel: vi.fn<(m: ModelProfile) => Promise<boolean>>(async () => true),
   deleteModel: vi.fn(async () => {}),
   setDefaultModel: vi.fn(async () => {}),
   setDefaultEmbeddingModel: vi.fn(async () => {}),
@@ -145,17 +145,30 @@ describe('行内编辑（列表常驻 + 单展开 + 切换保护）', () => {
     expect([...el.querySelectorAll('input')].some(i => i.value === 'Claude 改')).toBe(true)
   })
 
-  it('保存失败（IPC reject）→ 表单收回 + toast.error（现状行为钉住）', async () => {
+  it('保存失败（saveModel resolve false，真实可达路径）→ 草稿保留，不丢编辑', async () => {
+    state.saveModel.mockResolvedValueOnce(false)
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
+    await act(async () => {
+      const saveBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('保存配置'))
+      saveBtn!.click()
+      await new Promise(r => setTimeout(r, 10))
+    })
+    expect(el.textContent).toContain('编辑：') // 表单仍在 = 草稿未丢（2026-09-28 复核 I1 修复）
+  })
+
+  it('保存异常（IPC reject）→ 草稿保留', async () => {
     state.saveModel.mockRejectedValueOnce(new Error('disk full'))
     state.models = [makeModel('m1', 'GPT-4o')]
     const el = render()
     act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
     await act(async () => {
-      const saveBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('保存'))
+      const saveBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('保存配置'))
       saveBtn!.click()
       await new Promise(r => setTimeout(r, 10))
     })
-    expect(el.textContent).not.toContain('编辑：') // 收回（保持现状语义：失败也收回）
+    expect(el.textContent).toContain('编辑：')
   })
 })
 
@@ -254,5 +267,27 @@ describe('模型表单「获取模型」面板', () => {
     await clickFetch(el)
     expect(el.textContent).toContain('ECONNREFUSED')
     expect((el.querySelector('input[placeholder="sk-..."]') as HTMLInputElement).value).toBe('sk-x')
+  })
+
+  it('面板打开时按 Esc → 只关面板；不得冒泡到设置弹窗级监听（Esc 连带关闭回归锁，I2）', async () => {
+    state.listProviderModels = vi.fn(async () => ({ success: true, models: ['qwen-max'] }))
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    openFormForEdit(el)
+    await clickFetch(el)
+    expect(el.textContent).toContain('qwen-max') // 面板开着
+
+    // 代理断言：bubble 阶段的 window 监听 = 设置弹窗 useEscapeKey 的注册方式；
+    // 未被调用即证明事件被面板的 capture 监听阻断（否则一次 Esc 会连设置弹窗一起关）
+    let outerListenerCalled = false
+    const spy = () => { outerListenerCalled = true }
+    window.addEventListener('keydown', spy)
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }))
+    })
+    window.removeEventListener('keydown', spy)
+
+    expect(el.textContent).not.toContain('qwen-max') // 面板已关
+    expect(outerListenerCalled).toBe(false)          // 外层监听未收到
   })
 })

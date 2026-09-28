@@ -5,7 +5,7 @@
  * 行为与拆分前完全一致，后续改动（按钮规范化/行内编辑/拉取面板）均在本文件内进行。
  */
 import { useEffect, useRef, useState } from 'react'
-import { Check, Eye, EyeOff, Plus, Save, Settings2, Trash2, Zap } from 'lucide-react'
+import { Check, Download, Eye, EyeOff, Plus, Save, Settings2, Trash2, Zap } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useLLMStore } from '../../stores/llm-store'
 import type { ModelProfile } from '../../shared/ipc-channels'
@@ -21,7 +21,6 @@ import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
-import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useTranslation } from '../../hooks/useTranslation'
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import { renderLog } from '../../services/render-logger'
@@ -128,35 +127,47 @@ export function ModelListSection({
 
   const isEmbeddingSection = purposes.includes('embedding')
 
-  /** 保存模型；若是该分类第一个则自动设为默认 */
+  /** 保存模型；若是该分类第一个则自动设为默认。
+   *  ⚠️ 失败（saveModel 返回 false 或抛异常）时**保留草稿**——2026-09-28 整分支复核 I1：
+   *  主进程对空 modelName/purposes 等返回 {success:false}（不抛），旧实现不检查返回值，
+   *  会弹「保存成功」并收回表单，编辑静默丢失。失败必须可继续改。 */
   const handleSave = async () => {
     if (!editing) return
+    const draft = editing.draft
     const t0 = Date.now()
     setSaving(true)
     try {
-      await saveModel(editing.draft)
+      const ok = await saveModel(draft)
+      if (!ok) {
+        renderLog('error', 'Save:Settings', t('log.render.modelSaveFailed')
+          .replace('{id}', () => draft.id)
+          .replace('{error}', () => t('status.unknown')))
+        toast.error(t('save.failed').replace('{error}', () => t('status.unknown')))
+        return // 保留草稿（失败不丢编辑）
+      }
       // 新增模型后，如果该分类还没有默认则自动设为默认
-      const countBefore = filtered.length
-      if (countBefore === 0) {
+      if (filtered.length === 0) {
         if (isEmbeddingSection) {
-          setDefaultEmbeddingModel(editing.draft.id)
+          setDefaultEmbeddingModel(draft.id)
         } else {
-          setDefaultModel(editing.draft.id)
+          setDefaultModel(draft.id)
         }
       }
       // 保存行为日志流：成功 info + toast 视觉反馈
       renderLog('info', 'Save:Settings', t('log.render.modelSaveSuccess')
-        .replace('{id}', () => editing.draft.id)
+        .replace('{id}', () => draft.id)
         .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
+      setEditing(null) // 仅成功才收回
     } catch (e) {
       renderLog('error', 'Save:Settings', t('log.render.modelSaveFailed')
-        .replace('{id}', () => editing.draft.id)
+        .replace('{id}', () => draft.id)
         .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
+      // 保留草稿
+    } finally {
+      setSaving(false)
     }
-    setEditing(null)
-    setSaving(false)
   }
 
 
@@ -369,7 +380,20 @@ function ModelForm({
   const [fetchQuery, setFetchQuery] = useState('')
   const fetchPanelRef = useRef<HTMLDivElement | null>(null)
   useOutsideClick(fetchPanelRef, () => setFetchPanelOpen(false), fetchPanelOpen)
-  useEscapeKey(() => setFetchPanelOpen(false), fetchPanelOpen)
+  // Esc 关闭面板：必须 capture + stopImmediatePropagation —— 设置弹窗自己也挂了 window 级
+  // Esc（bubble 阶段，useEscapeKey），不阻断的话一次 Esc 会连设置弹窗一起关掉（丢未保存编辑）。
+  // 2026-09-28 整分支复核 I2（通用 Esc 栈是更大的独立任务，此处局部修复本面板的冲突）。
+  useEffect(() => {
+    if (!fetchPanelOpen) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      e.stopImmediatePropagation()
+      e.preventDefault()
+      setFetchPanelOpen(false)
+    }
+    window.addEventListener('keydown', onKeyDown, { capture: true })
+    return () => window.removeEventListener('keydown', onKeyDown, { capture: true })
+  }, [fetchPanelOpen])
 
   const doFetchModels = async () => {
     setFetching(true)
@@ -568,9 +592,10 @@ function ModelForm({
                 onClick={() => void doFetchModels()}
                 disabled={fetching || !model.baseUrl}
                 aria-expanded={fetchPanelOpen}
-                className="text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="inline-flex items-center gap-1 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 style={{ color: 'var(--color-accent)', anchorName: '--model-fetch' } as React.CSSProperties}
               >
+                <Download size={12} />
                 {fetching ? t('provider.fetching') : t('provider.fetchModels')}
               </button>
             </div>
