@@ -138,6 +138,7 @@ export const settingsTexts = {
   'model.default': { 'zh-CN': '默认', 'en-US': 'Default', 'ru-RU': 'По умолчанию' },
   'model.deleteFailed': { 'zh-CN': '删除模型失败：{error}', 'en-US': 'Failed to delete model: {error}', 'ru-RU': 'Не удалось удалить модель: {error}' },
   'model.newConfig': { 'zh-CN': '新建模型配置', 'en-US': 'New model config', 'ru-RU': 'Новая конфигурация' },
+  'model.discardEdit': { 'zh-CN': '放弃未保存的修改？', 'en-US': 'Discard unsaved changes?', 'ru-RU': 'Отменить несохранённые изменения?' },
   'model.editConfig': { 'zh-CN': '编辑：{name}', 'en-US': 'Edit: {name}', 'ru-RU': 'Изменить: {name}' },
   'model.namePlaceholder': { 'zh-CN': '如：DeepSeek 主力 / GPT-4o 备用', 'en-US': 'e.g.: DeepSeek Main / GPT-4o Backup', 'ru-RU': 'Напр.: DeepSeek основной / GPT-4o запасной' },
   'model.namePlaceholderSidebar': { 'zh-CN': '如: GPT-4o 主力', 'en-US': 'e.g.: GPT-4o Main', 'ru-RU': 'Напр.: GPT-4o основной' },

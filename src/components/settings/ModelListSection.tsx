@@ -59,7 +59,9 @@ export function ModelListSection({
   const deleteModel = useLLMStore(s => s.deleteModel)
   const setDefaultModel = useLLMStore(s => s.setDefaultModel)
   const setDefaultEmbeddingModel = useLLMStore(s => s.setDefaultEmbeddingModel)
-  const [editingModel, setEditingModel] = useState<ModelProfile | null>(null)
+  // 列表常驻，编辑器在对应位置原地展开（2026-09-28 替代旧的 editingModel「整列表替换」）；
+  // baseline = 进入编辑时的 JSON 快照，用于「有实际改动才拦切换」的判定
+  const [editing, setEditing] = useState<{ draft: ModelProfile; isNew: boolean; baseline: string } | null>(null)
   const [saving, setSaving] = useState(false)
   /** 正在删除的模型 id —— 删除可能较慢，必须给等待反馈并禁用按钮（否则用户连点） */
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -79,135 +81,166 @@ export function ModelListSection({
     return m.purposes.some((p) => purposes.includes(p as ModelProfile['purposes'][number]))
   })
 
-  /** 创建新模型，使用预设中 openai 的默认属性 */
+  /**
+   * 应用编辑态变更：无未保存改动时**同步**生效（点编辑立即展开，不等微任务）；
+   * 有改动则先弹确认，确认后才应用——静默丢改动是 bug。
+   */
+  const withDirtyGuard = (apply: () => void) => {
+    const dirty = editing !== null && JSON.stringify(editing.draft) !== editing.baseline
+    if (!dirty) {
+      apply()
+      return
+    }
+    void confirm(t('model.discardEdit'), { danger: true, confirmText: t('action.discard') })
+      .then((ok) => { if (ok) apply() })
+  }
+
+  /** 创建新模型：进入 isNew 编辑态（草稿卡在列表头部展开，不入 store，取消即消失） */
   const handleAdd = () => {
-    const isEmbedding = purposes.includes('embedding')
-    const openaiPreset = presets.find((p) => p.provider === 'openai') ?? presets[0]
-    setEditingModel({
-      id: randomUUID(),
-      name: '',
-      provider: 'openai',
-      protocol: (openaiPreset?.protocol ?? 'openai') as 'openai' | 'gemini',
-      modelName: isEmbedding
-        ? (openaiPreset?.embeddingModels[0] ?? 'text-embedding-3-small')
-        : (openaiPreset?.models[0]?.name ?? 'gpt-4o'),
-      apiKey: '',
-      baseUrl: openaiPreset?.baseUrl ?? 'https://api.openai.com',
-      temperature: 0.7,
-      ...tokenSpec(openaiPreset?.models[0], 4096),
-      purposes: [...purposes],
+    withDirtyGuard(() => {
+      const isEmbedding = purposes.includes('embedding')
+      const openaiPreset = presets.find((p) => p.provider === 'openai') ?? presets[0]
+      const draft: ModelProfile = {
+        id: randomUUID(),
+        name: '',
+        provider: 'openai',
+        protocol: (openaiPreset?.protocol ?? 'openai') as 'openai' | 'gemini',
+        modelName: isEmbedding
+          ? (openaiPreset?.embeddingModels[0] ?? 'text-embedding-3-small')
+          : (openaiPreset?.models[0]?.name ?? 'gpt-4o'),
+        apiKey: '',
+        baseUrl: openaiPreset?.baseUrl ?? 'https://api.openai.com',
+        temperature: 0.7,
+        ...tokenSpec(openaiPreset?.models[0], 4096),
+        purposes: [...purposes],
+      }
+      setEditing({ draft, isNew: true, baseline: JSON.stringify(draft) })
     })
+  }
+
+  /** 进入编辑：该卡在列表原位置展开（2026-09-28 行内编辑） */
+  const startEdit = (m: ModelProfile) => {
+    withDirtyGuard(() => setEditing({ draft: { ...m }, isNew: false, baseline: JSON.stringify(m) }))
   }
 
   const isEmbeddingSection = purposes.includes('embedding')
 
   /** 保存模型；若是该分类第一个则自动设为默认 */
   const handleSave = async () => {
-    if (!editingModel) return
+    if (!editing) return
     const t0 = Date.now()
     setSaving(true)
     try {
-      await saveModel(editingModel)
+      await saveModel(editing.draft)
       // 新增模型后，如果该分类还没有默认则自动设为默认
       const countBefore = filtered.length
       if (countBefore === 0) {
         if (isEmbeddingSection) {
-          setDefaultEmbeddingModel(editingModel.id)
+          setDefaultEmbeddingModel(editing.draft.id)
         } else {
-          setDefaultModel(editingModel.id)
+          setDefaultModel(editing.draft.id)
         }
       }
       // 保存行为日志流：成功 info + toast 视觉反馈
       renderLog('info', 'Save:Settings', t('log.render.modelSaveSuccess')
-        .replace('{id}', () => editingModel.id)
+        .replace('{id}', () => editing.draft.id)
         .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
       renderLog('error', 'Save:Settings', t('log.render.modelSaveFailed')
-        .replace('{id}', () => editingModel.id)
+        .replace('{id}', () => editing.draft.id)
         .replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
     }
-    setEditingModel(null)
+    setEditing(null)
     setSaving(false)
   }
 
 
   return (
     <div className="space-y-4">
-      {/* 模型编辑表单 */}
-      {editingModel && (
-        <ModelForm
-          model={editingModel}
-          onChange={setEditingModel}
-          onSave={handleSave}
-          onCancel={() => setEditingModel(null)}
-          saving={saving}
-          purposeOptions={purposes}
-          presets={presets}
-        />
-      )}
+      <div className="flex items-center justify-between">
+        <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+          {t('model.configured').replace('{n}', String(filtered.length)).replace('{label}', purposeLabel)}
+        </span>
+        <Button size="sm" onClick={() => void handleAdd()}>
+          <Plus size={13} />
+          {t('model.addLabel').replace('{label}', purposeLabel)}
+        </Button>
+      </div>
 
-      {/* 模型列表 */}
-      {!editingModel && (
-        <>
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
-              {t('model.configured').replace('{n}', String(filtered.length)).replace('{label}', purposeLabel)}
-            </span>
-            <Button size="sm" onClick={handleAdd}>
-              <Plus size={13} />
-              {t('model.addLabel').replace('{label}', purposeLabel)}
-            </Button>
-          </div>
-
-          {filtered.length === 0 ? (
-            <div
-              className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
-              style={{ border: '1.5px dashed var(--color-border)' }}
-            >
-              <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
-              <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
-                {t('model.noLabelConfig').replace('{label}', purposeLabel)}
-              </span>
-              <Button size="sm" variant="outline" onClick={handleAdd}>
-                <Plus size={13} />
-                {t('model.addFirstLabel').replace('{label}', purposeLabel)}
-              </Button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {filtered.map((model) => (
-                <ModelCard
-                  key={model.id}
-                  model={model}
-                  isDefault={isEmbeddingSection
-                    ? defaultEmbeddingModelId === model.id
-                    : defaultModelId === model.id}
-                  onSetDefault={() => isEmbeddingSection
-                    ? setDefaultEmbeddingModel(model.id)
-                    : setDefaultModel(model.id)}
-                  onEdit={() => setEditingModel({ ...model })}
-                  onDelete={async () => {
-                    // 删除模型配置此前无二次确认（且入口是 hover 才显形的按钮，键盘用户极易误触）
-                    const ok = await confirm(
-                      t('settings.confirmDeleteModel').replace('{name}', model.name),
-                      { danger: true, confirmText: t('action.delete') },
-                    )
-                    if (!ok) return
-                    setDeletingId(model.id)
-                    try {
-                      await deleteModel(model.id)
-                    } finally {
-                      setDeletingId(null)
-                    }
-                  }}
-                  deleting={deletingId === model.id}
-                />
-              ))}
-            </div>
+      {/* 空态：新增草稿卡存在时不显示（避免「空态 + 编辑卡」同屏） */}
+      {filtered.length === 0 && !editing?.isNew ? (
+        <div
+          className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
+          style={{ border: '1.5px dashed var(--color-border)' }}
+        >
+          <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {t('model.noLabelConfig').replace('{label}', purposeLabel)}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => void handleAdd()}>
+            <Plus size={13} />
+            {t('model.addFirstLabel').replace('{label}', purposeLabel)}
+          </Button>
+        </div>
+      ) : (
+        /* 行内编辑（2026-09-28）：列表常驻；编辑中的卡在原位置展开为 ModelForm，
+           新增草稿卡出现在列表头部 */
+        <div className="space-y-2">
+          {editing?.isNew && (
+            <ModelForm
+              model={editing.draft}
+              onChange={(m) => setEditing((e) => (e ? { ...e, draft: m } : e))}
+              onSave={handleSave}
+              onCancel={() => setEditing(null)}
+              saving={saving}
+              purposeOptions={purposes}
+              presets={presets}
+            />
           )}
-        </>
+          {filtered.map((model) => (
+            editing && !editing.isNew && editing.draft.id === model.id ? (
+              <ModelForm
+                key={model.id}
+                model={editing.draft}
+                onChange={(m) => setEditing((e) => (e ? { ...e, draft: m } : e))}
+                onSave={handleSave}
+                onCancel={() => setEditing(null)}
+                saving={saving}
+                purposeOptions={purposes}
+                presets={presets}
+              />
+            ) : (
+              <ModelCard
+                key={model.id}
+                model={model}
+                isDefault={isEmbeddingSection
+                  ? defaultEmbeddingModelId === model.id
+                  : defaultModelId === model.id}
+                onSetDefault={() => isEmbeddingSection
+                  ? setDefaultEmbeddingModel(model.id)
+                  : setDefaultModel(model.id)}
+                onEdit={() => void startEdit(model)}
+                onDelete={async () => {
+                  // 删除模型配置此前无二次确认（且入口是 hover 才显形的按钮，键盘用户极易误触）
+                  const ok = await confirm(
+                    t('settings.confirmDeleteModel').replace('{name}', model.name),
+                    { danger: true, confirmText: t('action.delete') },
+                  )
+                  if (!ok) return
+                  setDeletingId(model.id)
+                  try {
+                    await deleteModel(model.id)
+                  } finally {
+                    setDeletingId(null)
+                  }
+                }}
+                deleting={deletingId === model.id}
+              />
+            )
+          ))}
+        </div>
       )}
     </div>
   )

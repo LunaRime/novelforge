@@ -20,6 +20,7 @@ export const uiTexts = {
   'settings.compactionLoadFailed': { 'zh-CN': '读取已存偏好失败——下面显示的是默认值，直接保存会把默认值写回。建议先确认配置文件正常。', 'en-US': 'Failed to read the stored preferences — the values below are defaults; saving now would write them back. Check the config file first.', 'ru-RU': 'Не удалось прочитать сохранённые настройки — ниже значения по умолчанию; сохранение перезапишет их.' },
   'settings.compactionSaveFailed': { 'zh-CN': '保存失败：{error}', 'en-US': 'Save failed: {error}', 'ru-RU': 'Не удалось сохранить: {error}' },
   'action.cancel': { 'zh-CN': '取消', 'en-US': 'Cancel', 'ru-RU': 'Отмена' },
+  'action.discard': { 'zh-CN': '放弃', 'en-US': 'Discard', 'ru-RU': 'Отменить' },
   'action.stop': { 'zh-CN': '停止', 'en-US': 'Stop', 'ru-RU': 'Стоп' },
   'action.confirm': { 'zh-CN': '确认', 'en-US': 'Confirm', 'ru-RU': 'Подтвердить' },
   'common.unknownWord': { 'zh-CN': '未知', 'en-US': 'Unknown', 'ru-RU': 'Неизвестно' },

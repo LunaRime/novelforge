@@ -82,3 +82,73 @@ describe('ModelCard 操作按钮（常驻 32×32 + aria-label）', () => {
     }
   })
 })
+
+describe('行内编辑（列表常驻 + 单展开 + 切换保护）', () => {
+  it('点「编辑」→ 该位展开表单，其余卡仍在 DOM（列表不被替换）', () => {
+    state.models = [makeModel('m1', 'GPT-4o'), makeModel('m2', 'Claude')]
+    const el = render()
+    act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
+    expect(el.textContent).toContain('编辑：') // ModelForm 标题（t('model.editConfig') = "编辑：{name}"）
+    expect(el.textContent).toContain('Claude') // 另一张卡仍在
+  })
+
+  it('取消 → 表单收回，列表恢复', () => {
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
+    act(() => {
+      const cancelBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('取消'))
+      cancelBtn!.click()
+    })
+    expect(el.textContent).not.toContain('编辑：')
+  })
+
+  it('未改动直接切换编辑 → 不弹确认；改动后切换 → 弹确认，取消则保持原编辑态', async () => {
+    state.models = [makeModel('m1', 'GPT-4o'), makeModel('m2', 'Claude')]
+    const el = render()
+    const editBtns = () => Array.from(el.querySelectorAll<HTMLButtonElement>('button[aria-label="编辑"]'))
+
+    // ① 未改动直接切换 → 不弹确认（此时编辑按钮只剩 Claude 的一个）
+    act(() => { editBtns()[0].click() })
+    await act(async () => { editBtns()[0].click() })
+    expect(document.body.textContent).not.toContain('放弃未保存的修改')
+
+    // ② 改动显示名称字段 → 切换时弹确认
+    const nameInput = [...el.querySelectorAll('input')].find(i => i.value === 'Claude') as HTMLInputElement
+    act(() => {
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(nameInput, 'Claude 改')
+      nameInput.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {
+      editBtns()[0].click() // 现在只剩 GPT-4o 的编辑按钮
+      await new Promise(r => setTimeout(r, 10))
+    })
+    expect(document.body.textContent).toContain('放弃未保存的修改')
+
+    // ③ 取消 → 仍停在「Claude 改」的原编辑态（未切走）
+    //    确认框挂在 body 末尾的独立容器（命令式 confirm），且按钮有退出动画——
+    //    必须限定在**最后一个 body 子节点**内找「取消」（页面上 ModelForm 也有一个「取消」），
+    //    并等动画延迟结束（exitThen）再断言
+    await act(async () => {
+      const confirmRoot = document.body.lastElementChild as HTMLElement
+      const cancelBtn = [...confirmRoot.querySelectorAll('button')].find(b => b.textContent?.trim() === '取消')
+      cancelBtn!.click()
+      await new Promise(r => setTimeout(r, 300))
+    })
+    expect([...el.querySelectorAll('input')].some(i => i.value === 'Claude 改')).toBe(true)
+  })
+
+  it('保存失败（IPC reject）→ 表单收回 + toast.error（现状行为钉住）', async () => {
+    state.saveModel.mockRejectedValueOnce(new Error('disk full'))
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
+    await act(async () => {
+      const saveBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('保存'))
+      saveBtn!.click()
+      await new Promise(r => setTimeout(r, 10))
+    })
+    expect(el.textContent).not.toContain('编辑：') // 收回（保持现状语义：失败也收回）
+  })
+})
