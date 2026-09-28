@@ -233,6 +233,24 @@ describe('本地向量模型卡片 · 三态徽标', () => {
     act(() => { root.unmount() })
   })
 
+  it('「原始详情」折叠头按 Disclosure 四要素渲染（箭头 / hover 底色 / 扩点击区 / 次级色）', async () => {
+    handlers['embedding:local-get-config'] = () => DEFAULT_CONFIG
+    handlers['embedding:local-detect'] = () => ({ ok: false, error: 'ECONNREFUSED 127.0.0.1:11434' })
+    handlers['embedding:local-list-models'] = () => []
+    const { container, root } = render()
+    await flush()
+
+    const detail = detailsBySummary(container, '原始详情')
+    expect(detail, '未找到「原始详情」折叠区（detect 失败应出现）').not.toBeNull()
+    const summary = detail?.querySelector('summary') as HTMLElement
+    // 2026-09-28 走查：与 ui/Disclosure 同款四要素；缺任一都会退回「像说明文字，看不出可点」的老样子
+    expect(summary.querySelector('svg'), '缺展开箭头').not.toBeNull()
+    expect(summary.className, '缺 hover 底色').toContain('hover:bg-')
+    expect(summary.className, '缺扩点击区负边距').toContain('-mx-')
+    expect(summary.style.color, '折叠头应为次级色（非 muted 说明文字色）').toBe('var(--color-text-secondary)')
+    act(() => { root.unmount() })
+  })
+
   it('已连接但模型缺失：提示模型未安装 + 双通道引导（应用内下载 / ollama pull）', async () => {
     stubLocal({ ok: true, version: '0.5.7', models: [{ name: 'llama3', size: 1 }] })
     const { container, root } = render()

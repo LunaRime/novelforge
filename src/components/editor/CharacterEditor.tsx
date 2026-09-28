@@ -18,6 +18,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
+import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { PopoverSurface } from '../ui/PopoverSurface'
@@ -534,15 +535,12 @@ export default function CharacterEditor() {
                         onChange={(val) => updateField(selectedCard.name, 'relations', val)}
                         t={t}
                       />
-                      {/* 旧版关系文本（保留兼容）——折叠头提升到「可点」层级
-                          （2026-09-28 走查：此前 text-micro+muted 与说明文字同款，看不出可点）；
-                          `w-fit` 让点击区与视觉区一致（summary 默认占满整行宽） */}
-                      <details className="mt-2">
-                        <summary className="text-xs text-[var(--color-text-secondary)] cursor-pointer hover:text-[var(--color-accent)] w-fit">
-                          {t('character.legacyRelations')}
-                        </summary>
-                        <div className="mt-1"><Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} /></div>
-                      </details>
+                      {/* 旧版关系文本（保留兼容）——2026-09-28 走查：折叠头与设置页「高级设置」统一
+                          走 ui/Disclosure（箭头/hover 底色/扩点击区/次级色四要素由其保证）；
+                          此前手写 details+summary 是 micro+muted，与说明文字同款、看不出可点 */}
+                      <Disclosure label={t('character.legacyRelations')} className="mt-2">
+                        <Textarea value={selectedCard.relationships} onChange={(e) => updateField(selectedCard.name, 'relationships', e.target.value)} rows={3} placeholder={t('character.legacyPlaceholder')} />
+                      </Disclosure>
                       <div><Label>{t('character.arc')}</Label><Textarea value={selectedCard.arc} onChange={(e) => updateField(selectedCard.name, 'arc', e.target.value)} rows={3} /></div>
                     </>
                   )}

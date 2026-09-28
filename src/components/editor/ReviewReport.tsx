@@ -5,6 +5,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { Textarea } from '../ui/Textarea'
+import { Disclosure } from '../ui/Disclosure'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from '../ui/Dialog'
@@ -402,15 +403,13 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
           </div>
         )}
 
-        {/* 原始文本折叠 */}
-        <details className="mt-6">
-          <summary className="text-xs text-[var(--color-text-muted)] cursor-pointer hover:text-[var(--color-text)]">
-            {t('review.rawText')}
-          </summary>
-          <pre className="mt-2 text-xs whitespace-pre-wrap font-mono leading-5 text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
+        {/* 原始文本折叠 —— 2026-09-28 走查：折叠头统一走 ui/Disclosure（箭头/hover 底色/扩点击区/
+            次级色四要素）；此前手写 summary 是 text-xs+muted，与说明文字同款、看不出可点 */}
+        <Disclosure label={t('review.rawText')} className="mt-6">
+          <pre className="text-xs whitespace-pre-wrap font-mono leading-5 text-[var(--color-text-secondary)] bg-[var(--color-sidebar)] rounded-md p-3 border border-[var(--color-border)]">
             {reportText}
           </pre>
-        </details>
+        </Disclosure>
 
         {/* 🔧 根据审稿意见修稿 — 核心循环入口 */}
         {canRefine && (

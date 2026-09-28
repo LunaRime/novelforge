@@ -524,18 +524,19 @@ function isValidBaseUrl(raw: string): boolean {
  * 可折叠的原始详情（U4）。
  * 主进程的错误串是英文技术描述（T2 契约），因此**不得**当主文案：统一收进 `<details>`，
  * 用户需要诊断时展开，不需要时不打扰。
+ *
+ * ⚠️ 2026-09-28 走查：此前是 `text-2xs + muted` 的手写 summary（与说明文字同款、看不出可点），
+ * 与「高级设置」的待遇不一致；改为复用 `ui/Disclosure`（箭头 / hover 底色 / 扩点击区 / 次级色
+ * 四要素由其统一保证）——以后新增折叠区一律走 Disclosure，别再手写 details。
  */
 function RawDetail({ text }: { text: string }) {
   const { t } = useTranslation()
   return (
-    <details className="mt-0.5">
-      <summary className="cursor-pointer text-2xs text-[var(--color-text-muted)]">
-        {t('localEmbedding.detail')}
-      </summary>
-      <pre className="mt-0.5 whitespace-pre-wrap break-all text-2xs text-[var(--color-text-muted)]">
+    <Disclosure label={t('localEmbedding.detail')} className="mt-0.5">
+      <pre className="whitespace-pre-wrap break-all text-2xs text-[var(--color-text-muted)]">
         {text}
       </pre>
-    </details>
+    </Disclosure>
   )
 }
 
