@@ -8,7 +8,7 @@
  * - 点击方块 → 打开该项目 + 侧边栏切换到「项目工作台」
  *   （聚焦章节蓝图/草稿箱/正式稿，非专注模式）
  */
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2, FolderOpen, AlertTriangle } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -28,6 +28,19 @@ import {
 
 /** 方块列表可见高度（5 个方块 + 间距 + 内边距），超出滚动 */
 const LIST_MAX_HEIGHT = 5 * 30 + 4 * 6 + 12
+
+/** 滚轮一次步进的累积阈值（px）：鼠标滚轮一格 ΔY≈100 恰好触发一次；触控板小步累积触发 */
+const WHEEL_STEP_THRESHOLD = 50
+
+/** 步长保底 = 方块高 30 + 间距 6（真实布局取相邻方块 offsetTop 差；jsdom / 测量失败时用它） */
+const FALLBACK_STEP = 36
+
+/** 相邻方块的滚动步长（实测；无法测量时保底） */
+function stepSize(el: HTMLElement): number {
+  const [a, b] = [el.children[0], el.children[1]] as (HTMLElement | undefined)[]
+  const d = a && b ? b.offsetTop - a.offsetTop : 0
+  return d > 0 ? d : FALLBACK_STEP
+}
 
 /** 项目色板 — 8 个色相均匀分布，按列表顺序取色（列表内保证不冲突） */
 const PROJECT_PALETTE = [15, 45, 90, 140, 190, 240, 285, 330]
@@ -57,10 +70,46 @@ export default function ProjectSquareList() {
   // 故事架构未完成提示弹窗（进入工作台前置检查）
   const [archPrompt, setArchPrompt] = useState<{ path: string; name: string; done: number } | null>(null)
 
-  // 过滤：排除当前项目 + 最多展示 5 个
-  const targets = recentProjects
-    .filter(p => p.path !== currentProject?.path)
-    .slice(0, 5)
+  // 过滤：排除当前项目（不再截断为 5 个 —— 可见窗口 5 个，其余用滚轮循环浏览，2026-09-28）
+  const targets = recentProjects.filter(p => p.path !== currentProject?.path)
+
+  // ===== 滚轮循环滚动（2026-09-28：替代原生滚动条） =====
+  // 超出 5 个时：滚轮一次走一个方块，到端后循环（底部再下滚 → 回顶部；顶部上滚 → 到底部）。
+  // ⚠️ 必须原生监听 + passive:false —— React 的 onWheel 以 passive 注册，preventDefault 无效。
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const wheelAccRef = useRef(0)
+  const offsetRef = useRef(0)
+  /** 可滚位置数（0 = 无需滚动） */
+  const maxOffset = Math.max(0, targets.length - 5)
+
+  useEffect(() => {
+    const el = listRef.current
+    if (!el) return
+    // 列表缩短（如删除项目）后钳制偏移，避免停在空白处
+    if (offsetRef.current > maxOffset) offsetRef.current = maxOffset
+    el.scrollTop = offsetRef.current * stepSize(el)
+
+    const onWheel = (e: WheelEvent) => {
+      if (maxOffset <= 0) return // 无可滚空间：不拦截、不移动
+      e.preventDefault()
+      // deltaMode=1（行）/2（页）折算为像素；Chromium 鼠标滚轮通常已是像素模式，此处兜底
+      const dy = e.deltaMode === 0 ? e.deltaY : e.deltaY * 40
+      const acc = wheelAccRef.current + dy
+      if (Math.abs(acc) < WHEEL_STEP_THRESHOLD) {
+        wheelAccRef.current = acc
+        return
+      }
+      wheelAccRef.current = 0 // 一次一格：触发后清零，不残留余量
+      const dir = acc > 0 ? 1 : -1
+      let next = offsetRef.current + dir
+      if (next > maxOffset) next = 0 // 循环：底部再下滚 → 回顶部
+      else if (next < 0) next = maxOffset // 顶部上滚 → 到底部
+      offsetRef.current = next
+      el.scrollTop = next * stepSize(el)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [maxOffset])
 
   // 点击方块：打开该项目 + 进入项目工作台（非专注模式）；
   // 进入后异步检查故事架构完整性（4 项），未完成弹窗提示可跳转填充
@@ -101,7 +150,9 @@ export default function ProjectSquareList() {
     <div className="flex flex-col items-center w-full">
       {/* 方块列表 — 竖排正方形小方块（与角色管理图标同尺寸），最多 5 个可见 */}
       <div
-        className="flex flex-col items-center gap-1.5 overflow-y-auto w-full py-1.5"
+        ref={listRef}
+        data-square-list
+        className="flex flex-col items-center gap-1.5 overflow-hidden w-full py-1.5"
         style={{ maxHeight: LIST_MAX_HEIGHT }}
       >
         {targets.length === 0 && (
@@ -121,7 +172,10 @@ export default function ProjectSquareList() {
             // 既无 tabIndex 也无键盘处理 —— 键盘用户完全够不到「移出项目」这条路径，
             // 且交互元素嵌套本身是非法 HTML。改为**兄弟节点 + 真 `<button>`**
             // （原生支持 Enter/Space 触发，无需手写 onKeyDown）。
-            <div key={p.path} className="group relative w-[30px] h-[30px]">
+            /* ⚠️ flex-shrink-0 必须保留：可见窗口靠 overflow-hidden 裁剪实现，
+               缺它则 flex 默认把超出 5 个的方块压缩塞进 maxHeight（2026-09-28 实测：
+               7 个项目全被挤在区域内、滚不出第 6 个之后的项目） */
+            <div key={p.path} className="group relative w-[30px] h-[30px] flex-shrink-0">
               <button
                 type="button"
                 data-project-square

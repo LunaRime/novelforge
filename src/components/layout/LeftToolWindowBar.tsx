@@ -107,17 +107,19 @@ export default function LeftToolWindowBar() {
         })}
       </div>
 
-      {/* ===== 中部：项目方块列表 — 紧挨角色管理（视图图标之后），完整边框界限 ===== */}
+      {/* ===== 中部：项目方块列表 — 紧挨角色管理（视图图标之后），两条横线划分区域 ===== */}
       <div
         className="flex flex-col items-center w-full px-1 py-1.5"
-        style={{ backgroundColor: 'color-mix(in srgb, var(--color-hover) 30%, transparent)' }}
+        style={{
+          // 两条横线划分出「可见 5 个方块」的项目区（2026-09-28 取代此前的圆角边框盒 + 底纹带）
+          borderTop: '1px solid var(--color-border)',
+          borderBottom: '1px solid var(--color-border)',
+          // ⚠️ 必须 no-drag：整栏是窗口拖拽区（-webkit-app-region 可继承），而 index.css 的
+          // no-drag 白名单只覆盖 button/a/input —— 方块区此前不在白名单里，滚轮被拖拽层吞掉
+          WebkitAppRegion: 'no-drag',
+        } as React.CSSProperties}
       >
-        <div
-          className="w-full border rounded-lg overflow-hidden"
-          style={{ borderColor: 'var(--color-border)' }}
-        >
-          <ProjectSquareList />
-        </div>
+        <ProjectSquareList />
       </div>
 
       {/* 弹性间隔 */}

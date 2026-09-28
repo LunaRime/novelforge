@@ -67,13 +67,13 @@ describe('ProjectSquareList LT 方块列表', () => {
     expect(buttons[0].getAttribute('title')).toContain('E:\\vale\\小说\\斗罗大陆虚界之痕')
   })
 
-  it('超过 5 个项目时只显示 5 个', () => {
+  it('超过 5 个项目时全部渲染（可见窗口 5 个，其余用滚轮循环浏览——不再截断丢弃）', () => {
     useProjectStore.setState({
       recentProjects: Array.from({ length: 7 }, (_, i) => makeProject(`项目${i + 1}`, `E:\\p${i + 1}`)),
     })
     const { container } = render(<ProjectSquareList />)
     const buttons = Array.from(container.querySelectorAll('[data-project-square]'))
-    expect(buttons.length).toBe(5)
+    expect(buttons.length).toBe(7)
   })
 
   it('当前项目被过滤（方块列表不含已打开项目）', () => {
@@ -134,5 +134,91 @@ describe('ProjectSquareList LT 方块列表', () => {
     await act(async () => { closeBtn!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     const bodyText = document.body.textContent || ''
     expect(bodyText).not.toContain('故事架构未填充完成')
+  })
+
+  // ===== 滚轮循环（2026-09-28：替代原生滚动条） =====
+
+  /** 滚动容器（[data-square-list]） */
+  function scroller(container: HTMLElement): HTMLElement {
+    return container.querySelector('[data-square-list]') as HTMLElement
+  }
+
+  /** 派发滚轮事件，返回事件对象（可查 defaultPrevented） */
+  function wheel(el: HTMLElement, deltaY: number, deltaMode = 0): WheelEvent {
+    const e = new WheelEvent('wheel', { deltaY, deltaMode, bubbles: true, cancelable: true })
+    el.dispatchEvent(e)
+    return e
+  }
+
+  /** 7 个最近项目（3 个滚动位置：0/1/2） */
+  function seedSeven() {
+    useProjectStore.setState({
+      recentProjects: Array.from({ length: 7 }, (_, i) => makeProject(`项目${i + 1}`, `E:\\p${i + 1}`)),
+    })
+  }
+
+  it('滚轮下滚一格 → 列表前进一个方块（循环模式，容器无原生滚动条）', () => {
+    seedSeven()
+    const { container } = render(<ProjectSquareList />)
+    const el = scroller(container)
+    expect(el.className).toContain('overflow-hidden')
+    expect(el.className).not.toContain('overflow-y-auto')
+    wheel(el, 100)
+    expect(el.scrollTop).toBe(36) // 一个方块步长（jsdom 无布局 → 保底 36）
+    wheel(el, 100)
+    expect(el.scrollTop).toBe(72)
+  })
+
+  it('滚到底继续下滚 → 循环回顶部；顶部上滚 → 循环到底部', () => {
+    seedSeven()
+    const { container } = render(<ProjectSquareList />)
+    const el = scroller(container)
+    wheel(el, 100)
+    wheel(el, 100) // offset → 2（末位）
+    expect(el.scrollTop).toBe(72)
+    wheel(el, 100) // 末位再下滚 → wrap 回顶部
+    expect(el.scrollTop).toBe(0)
+    wheel(el, -100) // 顶部上滚 → wrap 到末位
+    expect(el.scrollTop).toBe(72)
+  })
+
+  it('触控板小步累积到阈值才走一格（不逐事件触发）', () => {
+    seedSeven()
+    const { container } = render(<ProjectSquareList />)
+    const el = scroller(container)
+    wheel(el, 20)
+    wheel(el, 20)
+    expect(el.scrollTop).toBe(0) // 40 < 阈值 50：未达
+    wheel(el, 20)
+    expect(el.scrollTop).toBe(36) // 60 ≥ 50：走一格
+  })
+
+  it('行模式滚轮（deltaMode=1）按一格处理', () => {
+    seedSeven()
+    const { container } = render(<ProjectSquareList />)
+    const el = scroller(container)
+    wheel(el, 3, 1) // 3 行 ≈ 120px ≥ 阈值
+    expect(el.scrollTop).toBe(36)
+  })
+
+  it('方块不被 flex 压缩（可见窗口靠 overflow-hidden 裁剪，不挤压——2026-09-28 实测回归）', () => {
+    seedSeven()
+    const { container } = render(<ProjectSquareList />)
+    const squares = [...container.querySelectorAll('[data-project-square]')]
+    expect(squares).toHaveLength(7)
+    for (const sq of squares) {
+      expect(sq.parentElement?.className).toContain('flex-shrink-0')
+    }
+  })
+
+  it('项目 ≤5 个（无可滚空间）→ 滚轮不移动列表', () => {
+    // beforeEach 里是 2 个项目
+    const { container } = render(<ProjectSquareList />)
+    const el = scroller(container)
+    wheel(el, 100)
+    expect(el.scrollTop).toBe(0)
+    // 注：不断言 defaultPrevented —— jsdom 环境存在 document 级 wheel preventDefault
+    //（随 React root 卸载消失，已定位非本组件行为），该断言在此环境不可靠；
+    // 本组件契约「无可滚空间时不动列表」由 scrollTop 覆盖。
   })
 })
