@@ -720,7 +720,7 @@
     align-items: center;
     height: 32px;
     border-radius: var(--radius-lg);
-    margin: 0 4px;
+    margin: 2px 4px;
     transition: background var(--transition-fast),
                 box-shadow var(--transition-fast);
   }
