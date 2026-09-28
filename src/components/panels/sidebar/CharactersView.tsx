@@ -213,9 +213,13 @@ export default function CharactersView() {
             const collapsed = collapsedTiers[tier] ?? false
             return (
               <div key={tier}>
-                {/* tier 分组头 */}
+                {/* tier 分组头 — 2026-09-28 批 0：头行改「行片」（`.menu-chip`，32px 高），
+                    悬停底色由片承担（`menu-chip:where(button):hover`），原 `hover:bg-*`/`rounded` 随之删除。
+                    去 `w-full`：片是**块级** flex 容器本已铺满，而 `width:100%` 会与片自带的
+                    `margin: 2px 4px` 叠加，左右各溢出 4px。chevron 保持常驻 ›/⌄（头行只有折叠
+                    一个行为，箭头即状态指示，不做悬停置换）。 */}
                 <button
-                  className="flex items-center gap-1 px-2 py-1 w-full text-micro font-medium text-[var(--color-text-muted)] hover:bg-[var(--color-hover)] rounded cursor-pointer"
+                  className="menu-chip flex items-center gap-1 px-2 text-micro font-medium text-[var(--color-text-muted)] cursor-pointer"
                   onClick={(e) => { e.stopPropagation(); setCollapsedTiers(prev => ({ ...prev, [tier]: !collapsed })) }}
                   type="button"
                 >
@@ -273,22 +277,36 @@ function CharItem({ char: c, selected, onClick }: {
 
   const tier = c.tier ?? (c.role === 'protagonist' || c.role === 'antagonist' ? 1 : 2)
 
+  /* 2026-09-28 批 0：行容器改「行片」（`.menu-chip`）——圆角/左右外边距/悬停底色/2px 片间距
+     全部由片承担，原 `rounded-md`/`hover:bg-*`/`mb-0.5`/`transition-colors` 随之删除。
+     高度改由内容决定（`height:auto` + `minHeight:32`）：片的基础几何 `height:32px` 是为
+     **单行**菜单行定的，而本行是多行条目（姓名行 + 角色行 + 可选标签行，估算 ~40–58px），
+     照搬固定高会把内容压出片外。`minHeight:32` 保证内容再短也不低于片的基准高；
+     `items-stretch` 让主按钮铺满片高（片底色由 `:has(button)` 点亮，按钮短一截就会留下
+     「亮着点不动」的死带）。
+     ⚠️ 片内**唯一**元素子节点就是主按钮（flex 项按 CSS 规则被块化 ⇒ 块级载体），姓名/角色/标签
+     三行全是它的块级子块、在原位纵向堆叠 ⇒ **不存在**「并列子块被 flex 横排」的形态，故未再加
+     一层 wrapper、也未覆盖 `flex-col`（片只有这一个子项，两种写法都只是多一层空壳）。 */
   return (
     <div
       className={cn(
-        'px-2.5 py-1.5 rounded-md text-xs mb-0.5 transition-colors',
+        'menu-chip items-stretch text-xs',
         selected
           ? 'bg-[var(--color-active)] text-[var(--color-text)]'
-          : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
+          : 'text-[var(--color-text-secondary)]'
       )}
+      style={{ height: 'auto', minHeight: 32 }}
     >
       {/* 2026-09-25 重构：选中此前在 `<div onClick>` 上 —— 键盘完全够不到。
-          本行是多行块（姓名行 / 角色行 / 标签行纵向排列），故用 block w-full 而非参照实现的
-          flex 行布局，保持原有纵向堆叠与整宽热区；行内无其他按钮，纯转向。 */}
+          本行是多行块（姓名行 / 角色行 / 标签行纵向排列），故主按钮不用参考实现的单行 flex 布局，
+          保持原有纵向堆叠与整宽热区；行内无其他按钮，纯转向。
+          2026-09-28 批 0：内边距（`px-2.5 py-1.5`）由行容器移到**可点的主按钮**上 —— 挂在片上
+          会在片底色里造出「亮起但点不动」的死带（2026-09-27 修过的同类缺陷）；
+          并去 `block w-full`（主按钮已是 `flex-1` 铺满片宽，`w-full` 只会与片的 4px 外边距打架）。 */}
       <button
         type="button"
         onClick={onClick}
-        className="block w-full text-left enabled:cursor-pointer"
+        className="flex-1 min-w-0 px-2.5 py-1.5 text-left enabled:cursor-pointer"
       >
         <div className="flex items-center gap-1">
           <span className="font-medium truncate">{c.name || t('character.unnamed')}</span>

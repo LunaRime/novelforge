@@ -177,7 +177,7 @@ export default function ProjectTree() {
   const archDone = archFiles.filter(f => archStatus[f.key]).length
 
   return (
-    <div className="text-sm space-y-2">
+    <div className="text-sm space-y-3">
       {/* 项目名 + 刷新 */}
       <div className="flex items-center justify-between px-3 py-1.5 mb-0.5">
         <span className="font-semibold text-xs truncate" style={{ color: 'var(--color-text)' }}>
