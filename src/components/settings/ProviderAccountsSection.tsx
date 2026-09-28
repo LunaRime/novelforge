@@ -183,7 +183,8 @@ function candidateModels(provider: string, selected: string[]): string[] {
   return [...new Set(names)]
 }
 
-function ProviderAccountForm({
+/** 导出供测试直接驱动（与 ModelRoutingSection 同先例，2026-09-28） */
+export function ProviderAccountForm({
   account,
   onCancel,
   onDone,
@@ -199,6 +200,7 @@ function ProviderAccountForm({
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
   const [manual, setManual] = useState('')
+  const [query, setQuery] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -231,6 +233,18 @@ function ProviderAccountForm({
   const candidates = [
     ...new Set([...(fetched ?? []), ...candidateModels(draft.provider, [...selected])]),
   ].sort()
+
+  /** 搜索过滤（大小写不敏感）——全选/反选只对**可见项**生效（2026-09-28，dsh 同语义） */
+  const visibleCandidates = candidates.filter((n) => n.toLowerCase().includes(query.trim().toLowerCase()))
+  const allVisiblePicked = visibleCandidates.length > 0 && visibleCandidates.every((n) => selected.has(n))
+  const toggleAllVisible = () => {
+    setSelected((prev) => {
+      const next = new Set(prev)
+      if (allVisiblePicked) visibleCandidates.forEach((n) => next.delete(n))
+      else visibleCandidates.forEach((n) => next.add(n))
+      return next
+    })
+  }
 
   const handleFetch = async () => {
     setFetching(true)
@@ -375,6 +389,24 @@ function ProviderAccountForm({
             {fetching ? t('provider.fetching') : t('provider.fetchModels')}
           </Button>
         </div>
+        <div className="flex items-center gap-1.5">
+          <Input
+            type="search"
+            className="h-6 text-micro flex-1"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('provider.searchPlaceholder')}
+            aria-label={t('provider.searchPlaceholder')}
+          />
+          <Button
+            variant="ghost"
+            size="sm"
+            disabled={visibleCandidates.length === 0}
+            onClick={toggleAllVisible}
+          >
+            {allVisiblePicked ? t('provider.deselectAll') : t('provider.selectAll')}
+          </Button>
+        </div>
         <p className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>
           {t('provider.hintBeforeFetch')}
         </p>
@@ -390,7 +422,12 @@ function ProviderAccountForm({
 
         <div className="max-h-56 overflow-y-auto rounded-lg p-1 space-y-0.5"
              style={{ border: '1px solid var(--color-border)' }}>
-          {candidates.map((name) => (
+          {visibleCandidates.length === 0 && (
+            <p className="text-2xs px-2 py-1" style={{ color: 'var(--color-text-muted)' }}>
+              {t('provider.fetchNoMatches')}
+            </p>
+          )}
+          {visibleCandidates.map((name) => (
             <label
               key={name}
               className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer text-xs hover:bg-[var(--color-hover)]"
