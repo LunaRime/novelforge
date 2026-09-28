@@ -223,7 +223,7 @@ function DraftItem({
 
   return (
     <div
-      className="relative flex items-center"
+      className="menu-chip relative flex items-center"
       style={{
         opacity: archived ? 0.45 : 1,
       }}
@@ -258,12 +258,15 @@ function DraftItem({
     >
       {/* 2026-09-25 重构：打开草稿此前在 `<div onClick>` 上 —— 键盘完全够不到。
           做法：文件图标 + 版本名 + 状态标签 + 定稿图标包进主按钮（行内无其他按钮，纯转向）。 */}
-      {/* 2026-09-27 可供性修复：缩进/hover 全部移进主按钮 —— 此前容器 hover + pl-50，
-          左侧 50px 缩进带"高亮但点不动"（与记忆行 RM-SB-05 同款死带）。 */}
+      {/* 2026-09-27 可供性修复：缩进移进主按钮 —— 此前容器 hover + 主按钮只占内容宽，
+          左侧 50px 缩进带"高亮但点不动"（与记忆行 RM-SB-05 同款死带）。
+          2026-09-28 批 0：行容器改「行片」（`.menu-chip`，32px 高）——悬停底色由片承担
+          （`menu-chip:has(button):hover`），主按钮不再自带 hover/圆角；片容器自身无水平内边距、
+          主按钮 `flex-1 h-full` 铺满片，故悬停区与可点区仍完全重合，无死带。 */}
       <button
         type="button"
         onClick={openDraft}
-        className="flex items-center gap-1.5 flex-1 min-w-0 text-left cursor-pointer rounded-lg hover:bg-[var(--color-hover)]"
+        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left cursor-pointer"
         style={{ paddingLeft: 50, paddingRight: 8, paddingTop: 3, paddingBottom: 3 }}
       >
         <FileText size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
