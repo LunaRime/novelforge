@@ -261,29 +261,39 @@ function ModelCard({
         </p>
       </div>
 
-      {/* 操作按钮（hover 显示） */}
-      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+      {/* 操作按钮 —— 常驻 32×32（2026-09-28 走查：此前是 hover 才显形，违反
+          「操作按钮常驻」不变量；热区也低于 32×32 标准） */}
+      <div className="flex items-center gap-1">
         {!isDefault && (
           <button
+            type="button"
             onClick={onSetDefault}
             title={t('model.setDefault')}
-            className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            aria-label={t('model.setDefault')}
+            className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+            style={{ width: 32, height: 32 }}
           >
             <Check size={14} />
           </button>
         )}
         <button
+          type="button"
           onClick={onEdit}
           title={t('action.edit')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          aria-label={t('action.edit')}
+          className="flex items-center justify-center rounded-lg transition-colors hover:bg-[var(--color-hover)] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
+          style={{ width: 32, height: 32 }}
         >
           <Settings2 size={14} />
         </button>
         <button
+          type="button"
           onClick={onDelete}
           disabled={deleting}
           title={t('action.delete')}
-          className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+          aria-label={t('action.delete')}
+          className="flex items-center justify-center rounded-lg transition-colors hover:bg-[rgba(var(--color-error-rgb),0.1)] text-[var(--color-text-muted)] hover:text-[var(--color-error)] disabled:opacity-50 disabled:cursor-not-allowed"
+          style={{ width: 32, height: 32 }}
         >
           {deleting ? <Spinner size={14}  /> : <Trash2 size={14} />}
         </button>

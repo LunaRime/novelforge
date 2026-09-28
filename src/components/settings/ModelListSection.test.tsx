@@ -67,3 +67,18 @@ describe('ModelListSection 基座', () => {
     expect(el.textContent).toContain('添加第一个生成模型')
   })
 })
+
+describe('ModelCard 操作按钮（常驻 32×32 + aria-label）', () => {
+  it('设默认/编辑/删除三按钮常驻（无 hover 显形门控）、热区 32×32、带 aria-label', () => {
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    const ops = Array.from(el.querySelectorAll<HTMLButtonElement>('button[aria-label]'))
+      .filter(b => ['设为默认', '编辑', '删除'].includes(b.getAttribute('aria-label') ?? ''))
+    expect(ops).toHaveLength(3)
+    for (const b of ops) {
+      expect(b.className, '不得再用 hover 显形门控').not.toContain('opacity-0')
+      expect(b.style.width).toBe('32px')
+      expect(b.style.height).toBe('32px')
+    }
+  })
+})
