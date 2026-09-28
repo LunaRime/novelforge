@@ -19,10 +19,16 @@ const state = vi.hoisted(() => ({
   deleteModel: vi.fn(async () => {}),
   setDefaultModel: vi.fn(async () => {}),
   setDefaultEmbeddingModel: vi.fn(async () => {}),
+  listProviderModels: vi.fn<() => Promise<{ success: boolean; models?: string[]; error?: string }>>(
+    async () => ({ success: true, models: [] }),
+  ),
 }))
 
 vi.mock('../../stores/llm-store', () => ({
-  useLLMStore: (selector: (s: typeof state) => unknown) => selector(state),
+  useLLMStore: Object.assign(
+    (selector: (s: typeof state) => unknown) => selector(state),
+    { getState: () => state },
+  ),
 }))
 
 const makeModel = (id: string, name: string): ModelProfile => ({
@@ -202,5 +208,51 @@ describe('新增草稿卡', () => {
     })
     const lastCall = state.saveModel.mock.calls.at(-1)?.[0]
     expect(lastCall?.name).toBe('我的模型')
+  })
+})
+
+describe('模型表单「获取模型」面板', () => {
+  const openFormForEdit = (el: HTMLElement) => {
+    act(() => { (el.querySelector('button[aria-label="编辑"]') as HTMLButtonElement).click() })
+    // 展开「自定义设置」——模型标识（含拉取入口）在其中
+    act(() => {
+      const s = [...el.querySelectorAll('summary')].find(x => x.textContent?.includes('自定义设置'))
+      s!.click()
+    })
+  }
+  const clickFetch = async (el: HTMLElement) => {
+    await act(async () => {
+      const b = [...el.querySelectorAll('button')].find(x => x.textContent?.includes('获取可用模型'))
+      b!.click()
+      await new Promise(r => setTimeout(r, 10))
+    })
+  }
+
+  it('点击 → 用当前表单值调 listProviderModels；点选候选 → 切自定义输入并填入模型标识', async () => {
+    const lm = vi.fn(async () => ({ success: true, models: ['qwen-max', 'qwen-plus'] }))
+    state.listProviderModels = lm
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    openFormForEdit(el)
+    await clickFetch(el)
+    expect(lm).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', apiKey: 'sk-x' }))
+    expect(el.textContent).toContain('qwen-max') // 面板候选就位
+    act(() => {
+      const pick = [...el.querySelectorAll('button')].find(b => b.textContent?.trim() === 'qwen-max')
+      pick!.click()
+    })
+    // 点选 = 切到手动输入模式并填入（否则预设下拉会处于「值不在选项里」的非法态）
+    const modelIdInput = [...el.querySelectorAll('input')].find(i => i.value === 'qwen-max')
+    expect(modelIdInput).toBeTruthy()
+  })
+
+  it('拉取失败 → 面板内错误文案；表单字段不丢（Review Focus 4）', async () => {
+    state.listProviderModels = vi.fn(async () => ({ success: false, error: 'ECONNREFUSED' }))
+    state.models = [makeModel('m1', 'GPT-4o')]
+    const el = render()
+    openFormForEdit(el)
+    await clickFetch(el)
+    expect(el.textContent).toContain('ECONNREFUSED')
+    expect((el.querySelector('input[placeholder="sk-..."]') as HTMLInputElement).value).toBe('sk-x')
   })
 })

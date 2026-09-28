@@ -4,7 +4,7 @@
  * 拆出目的：① 给「行内编辑」重构一个可独立测试的边界；② SettingsModal 已 1460 行。
  * 行为与拆分前完全一致，后续改动（按钮规范化/行内编辑/拉取面板）均在本文件内进行。
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Eye, EyeOff, Plus, Save, Settings2, Trash2, Zap } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useLLMStore } from '../../stores/llm-store'
@@ -19,6 +19,9 @@ import { Badge } from '../ui/Badge'
 import { Spinner } from '../ui/Spinner'
 import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
+import { PopoverSurface } from '../ui/PopoverSurface'
+import { useOutsideClick } from '../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useTranslation } from '../../hooks/useTranslation'
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import { renderLog } from '../../services/render-logger'
@@ -357,6 +360,34 @@ function ModelForm({
   const [testResult, setTestResult] = useState<{ success: boolean, error?: string } | null>(null)
   const testConnection = useLLMStore(s => s.testConnection)
 
+  // 「获取模型」面板（2026-09-28）：用**当前表单值**（含未保存的 key）探测端点，
+  // 拉回候选点选填入——与供应商区同一 store action（listProviderModels）
+  const [fetchPanelOpen, setFetchPanelOpen] = useState(false)
+  const [fetching, setFetching] = useState(false)
+  const [fetchCandidates, setFetchCandidates] = useState<string[]>([])
+  const [fetchError, setFetchError] = useState<string | null>(null)
+  const [fetchQuery, setFetchQuery] = useState('')
+  const fetchPanelRef = useRef<HTMLDivElement | null>(null)
+  useOutsideClick(fetchPanelRef, () => setFetchPanelOpen(false), fetchPanelOpen)
+  useEscapeKey(() => setFetchPanelOpen(false), fetchPanelOpen)
+
+  const doFetchModels = async () => {
+    setFetching(true)
+    setFetchError(null)
+    const res = await useLLMStore.getState().listProviderModels({
+      provider: model.provider, protocol: model.protocol, apiKey: model.apiKey, baseUrl: model.baseUrl,
+    })
+    setFetching(false)
+    setFetchPanelOpen(true)
+    if (!res.success) {
+      setFetchError(res.error ?? t('status.unknown'))
+      setFetchCandidates([])
+      return
+    }
+    setFetchCandidates(res.models ?? [])
+    if ((res.models ?? []).length === 0) setFetchError(t('provider.fetchedEmpty'))
+  }
+
   const isEmbedding = model.purposes?.includes('embedding')
   // 将预设数组转换为以 provider 为键的 Map 方便查找
   const presetMap = new Map(presets.map((p) => [p.provider, p]))
@@ -508,27 +539,41 @@ function ModelForm({
         <div>
           <div className="flex items-center justify-between mb-1">
             <Label className="mb-0">{t('form.modelId')}</Label>
-            {presetModels.length > 0 && (
+            <div className="flex items-center gap-2">
+              {presetModels.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (customModelName) {
+                      // 切回预设列表
+                      const first = presetModels[0]
+                      setCustomModelName(false)
+                      onChange({ ...model, modelName: first.name, ...tokenSpec(first, model.maxTokens) })
+                    } else {
+                      // 切换到自定义输入
+                      setCustomModelName(true)
+                      up('modelName', '')
+                    }
+                  }}
+                  className="text-xs transition-colors"
+                  style={{ color: 'var(--color-accent)' }}
+                >
+                  {customModelName ? t('form.selectFromList') : t('form.manualInput')}
+                </button>
+              )}
+              {/* 获取模型（2026-09-28）：用当前表单值探测端点——与供应商区同一 action；
+                  anchorName 供下方候选面板定位（CSS 锚点模式） */}
               <button
                 type="button"
-                onClick={() => {
-                  if (customModelName) {
-                    // 切回预设列表
-                    const first = presetModels[0]
-                    setCustomModelName(false)
-                    onChange({ ...model, modelName: first.name, ...tokenSpec(first, model.maxTokens) })
-                  } else {
-                    // 切换到自定义输入
-                    setCustomModelName(true)
-                    up('modelName', '')
-                  }
-                }}
-                className="text-xs transition-colors"
-                style={{ color: 'var(--color-accent)' }}
+                onClick={() => void doFetchModels()}
+                disabled={fetching || !model.baseUrl}
+                aria-expanded={fetchPanelOpen}
+                className="text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                style={{ color: 'var(--color-accent)', anchorName: '--model-fetch' } as React.CSSProperties}
               >
-                {customModelName ? t('form.selectFromList') : t('form.manualInput')}
+                {fetching ? t('provider.fetching') : t('provider.fetchModels')}
               </button>
-            )}
+            </div>
           </div>
 
           {/* 有预设模型 且 未切到手动输入 → 显示下拉 */}
@@ -551,6 +596,49 @@ function ModelForm({
                 autoFocus={customModelName}
               />
             </div>
+          )}
+
+          {/* 候选面板：拉取结果 + 搜索 + 点选填入（点选 = 切手动输入模式，
+              预设下拉不含拉取结果，直接赋值会让 Select 处于「值不在选项里」的非法态） */}
+          {fetchPanelOpen && (
+            <PopoverSurface anchorName="--model-fetch" placement="below-end" className="p-1.5" style={{ width: 260 }}>
+              <div ref={fetchPanelRef}>
+                <Input
+                  type="search"
+                  className="h-6 text-micro mb-1"
+                  value={fetchQuery}
+                  onChange={(e) => setFetchQuery(e.target.value)}
+                  placeholder={t('provider.searchPlaceholder')}
+                  aria-label={t('provider.searchPlaceholder')}
+                />
+                {fetchError && (
+                  <p className="text-2xs px-1 py-0.5" style={{ color: 'var(--color-error)' }}>{fetchError}</p>
+                )}
+                <div className="max-h-48 overflow-y-auto">
+                  {fetchCandidates
+                    .filter((n) => n.toLowerCase().includes(fetchQuery.trim().toLowerCase()))
+                    .map((n) => (
+                      <button
+                        key={n}
+                        type="button"
+                        className="w-full text-left px-2 py-1 rounded text-xs hover:bg-[var(--color-hover)] cursor-pointer"
+                        onClick={() => {
+                          setCustomModelName(true)
+                          up('modelName', n)
+                          setFetchPanelOpen(false)
+                        }}
+                      >
+                        {n}
+                      </button>
+                    ))}
+                  {!fetchError && fetchCandidates.length === 0 && (
+                    <p className="text-2xs px-1 py-0.5" style={{ color: 'var(--color-text-muted)' }}>
+                      {t('provider.fetchNoMatches')}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </PopoverSurface>
           )}
         </div>
 
