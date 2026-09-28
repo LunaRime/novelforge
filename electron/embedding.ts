@@ -9,6 +9,7 @@
  */
 
 import { t } from '../src/shared/locale'
+import type { LLMProtocol } from '../src/shared/llm-protocols'
 import { buildOpenAIUrl } from './llm/url-utils'
 import { fetchWithTimeout } from './net/fetch-with-timeout'
 
@@ -96,9 +97,14 @@ export async function embedGemini(
 /** 统一的 Embedding 调用接口（单文本查询走 LRU 缓存——RAG 热路径） */
 export async function generateEmbeddings(
   texts: string[],
-  protocol: 'openai' | 'gemini',
+  protocol: LLMProtocol,
   model: { baseUrl: string; apiKey: string; modelName?: string },
 ): Promise<number[][]> {
+  // Anthropic 不提供嵌入 API（协议注册表里它只服务生成）——显式报错，
+  // 否则会落入 OpenAI 兼容分支静默打错端点（2026-09-28 加原生协议时收窄）
+  if (protocol === 'anthropic') {
+    throw new Error('Anthropic protocol has no embeddings API')
+  }
   // 空文本处理
   if (texts.length === 0) return []
 

@@ -3,6 +3,7 @@ import { ModelProfile } from '../../src/shared/ipc-channels'
 import type { LLMProtocol } from '../../src/shared/llm-protocols'
 import { OpenAIProvider } from './openai-provider'
 import { GeminiProvider } from './gemini-provider'
+import { AnthropicProvider } from './anthropic-provider'
 
 /**
  * 协议 → provider 工厂（单源：src/shared/llm-protocols.ts）。
@@ -12,6 +13,7 @@ import { GeminiProvider } from './gemini-provider'
 const PROVIDER_FACTORY: Record<LLMProtocol, () => ILLMProvider> = {
   openai: () => new OpenAIProvider(),
   gemini: () => new GeminiProvider(),
+  anthropic: () => new AnthropicProvider(),
 }
 
 export class LLMFactory {

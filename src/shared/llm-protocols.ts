@@ -14,6 +14,7 @@ import type { TextKey } from './locale'
 export const LLM_PROTOCOLS = [
   { id: 'openai', labelKey: 'form.protocolOpenai' },
   { id: 'gemini', labelKey: 'form.protocolGemini' },
+  { id: 'anthropic', labelKey: 'form.protocolAnthropic' },
 ] as const satisfies readonly { id: string; labelKey: TextKey }[]
 
 export type LLMProtocol = (typeof LLM_PROTOCOLS)[number]['id']

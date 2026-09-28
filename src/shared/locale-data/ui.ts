@@ -27,6 +27,7 @@ export const uiTexts = {
   'provider.fetchNoMatches': { 'zh-CN': '没有匹配的模型', 'en-US': 'No matching models', 'ru-RU': 'Нет подходящих моделей' },
   'form.protocolOpenai': { 'zh-CN': 'OpenAI 兼容', 'en-US': 'OpenAI-compatible', 'ru-RU': 'Совместимый с OpenAI' },
   'form.protocolGemini': { 'zh-CN': 'Gemini 原生', 'en-US': 'Gemini native', 'ru-RU': 'Нативный Gemini' },
+  'form.protocolAnthropic': { 'zh-CN': 'Anthropic 原生（Claude）', 'en-US': 'Anthropic native (Claude)', 'ru-RU': 'Нативный Anthropic (Claude)' },
   'action.stop': { 'zh-CN': '停止', 'en-US': 'Stop', 'ru-RU': 'Стоп' },
   'action.confirm': { 'zh-CN': '确认', 'en-US': 'Confirm', 'ru-RU': 'Подтвердить' },
   'common.unknownWord': { 'zh-CN': '未知', 'en-US': 'Unknown', 'ru-RU': 'Неизвестно' },

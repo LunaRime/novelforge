@@ -164,23 +164,20 @@ export const BUILTIN_PRESETS: ProviderPreset[] = [
   // 末尾**不要**带 `/v1`（已带版本段的地址不会再补，但留空更统一）。
   {
     /**
-     * Anthropic Claude —— 走官方 **OpenAI SDK 兼容层**（`/v1/chat/completions`）。
+     * Anthropic Claude —— **原生 Messages API**（2026-09-28 起，`electron/llm/anthropic-provider.ts`）。
      *
-     * ⚠️ **已知限制（官方文档明列）**，别当原生 API 用：
-     *   - 兼容层标为 **beta，非生产就绪**
-     *   - **`response_format` 被静默忽略** → 本仓依赖 JSON 约束的流程（蓝图提取/评分等）
-     *     在这条路上会失效（模型照常回，但可能不是合法 JSON）。当**普通对话**模型没问题。
-     *   - `temperature` 上限为 1（本仓允许 0–2，超过 1 会被压到 1）
-     *   - **不支持 prompt 缓存**（本仓的 prompt-cache 机制在此无效）
-     *   - 要完整能力需原生 Messages API，那需要新写一个 provider（协议联合里目前只有 openai/gemini）
+     * 此前走官方 OpenAI SDK 兼容层（beta）——兼容层的问题（response_format 被静默忽略、
+     * 非生产就绪）随原生协议一并脱离。**如实保留的限制**：
+     *   - `temperature` 上限 1（Anthropic API 固有，非兼容层特有；provider 侧钳到 [0,1]）
+     *   - 无 `response_format` 等价参数 → JSON 约束仍依赖提示词与调用方提取兜底（与兼容层持平，非回归）
+     *   - prompt 缓存需显式 cache_control 块，本仓暂不发送
      *
-     * baseUrl 用裸域名：`buildOpenAIUrl` 会补 `/v1/chat/completions`（官方建议 SDK 的 base_url 以 /v1 结尾，
-     * 即等价于这个写法）。
+     * baseUrl 用裸域名（`https://api.anthropic.com`）：provider 侧归一化后拼 `/v1/messages`。
      */
     provider: 'anthropic',
     displayName: 'Anthropic（Claude）',
     baseUrl: 'https://api.anthropic.com',
-    protocol: 'openai',
+    protocol: 'anthropic',
     models: [
       { name: 'claude-opus-5-5', maxTokens: 64000 },
       { name: 'claude-sonnet-5', maxTokens: 64000 },
