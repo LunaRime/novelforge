@@ -9,6 +9,7 @@ import { apiKeyFailure, deriveCredentialRef } from '../../src/shared/credential-
 import { readCredentialFile, setStoredValue } from '../credentials/store'
 import { resolveRequestKey, stripApiKey } from '../credentials/resolve'
 import { hasLegacyKey, legacyKeyOf, runCredentialMigration } from '../credentials/migrate'
+import type { LegacyAccount, LegacyModel } from '../credentials/migrate'
 import type { ResolvedModelProfile } from '../llm/provider.interface'
 import { serialize } from '../utils/config-write-queue'
 import { presetModelDefaults } from '../../src/shared/provider-presets'
@@ -75,6 +76,23 @@ function loadModelConfigs(): ModelProfile[] {
 /** 写 models.json —— v3 T5 起不再加解密：落盘类型里没有可加密的字段了 */
 function saveModelConfigs(models: ModelProfile[]) {
   writeJsonFile(MODELS_CONFIG_PATH, models)
+}
+
+/**
+ * 保存时把**盘上残留的密钥字段**原样带过去（T5 修复 round 1）。
+ *
+ * 为什么必须有：渲染层拿到的是**出站剥离过**的条目（没有 `apiKey`），而我们保存走的是**整条替换**
+ * —— 于是盘上尚未迁移的明文/密文会被静默抹掉，此后 `hasLegacyKey` 恒 false、迁移**永不再搬**，
+ * 密钥只剩重填一条路。派生同步（`syncAccountModels`）用的是 `{...m, ...credentials}` 合并语义，
+ * 本来就有这层保护 —— 两处口径必须一致。
+ *
+ * 取值顺序：调用方自带（内部调用方）→ 盘上残留；**都没有则不加这个键**
+ * （「落盘不含密码字段」是 T5 的性质，不能因为保全而回退）。
+ */
+function carryLegacyKey(next: { apiKey?: string }, onDisk: object | undefined): void {
+  const own = legacyKeyOf(next)
+  const carried = hasLegacyKey(own) ? own : legacyKeyOf(onDisk ?? {})
+  if (hasLegacyKey(carried)) next.apiKey = carried
 }
 
 /**
@@ -377,8 +395,10 @@ export function registerLLMController() {
           ?? owner?.apiKeyRef
           ?? deriveCredentialRef(model.provider, collectTakenRefs(accounts))
         allocated[0] = apiKeyRef
-        const next: ModelProfile = { ...model, apiKeyRef }
         const idx = models.findIndex((m) => m.id === model.id)
+        const next: LegacyModel = { ...model, apiKeyRef }
+        // 整条替换前把盘上残留带过去（见 carryLegacyKey：否则未迁移的明文被静默抹掉）
+        carryLegacyKey(next, idx >= 0 ? models[idx] : undefined)
         if (idx >= 0) return models.map((m, i) => (i === idx ? next : m))
         return [...models, next]
       })
@@ -458,9 +478,11 @@ export function registerLLMController() {
       const allocated: ProviderAccount[] = []
       const outcome = await mutateProviders(expectedRevision, (accounts) => {
         const apiKeyRef = account.apiKeyRef ?? deriveCredentialRef(account.provider, collectTakenRefs(accounts))
-        const next: ProviderAccount = { ...account, apiKeyRef }
-        allocated[0] = next
         const idx = accounts.findIndex((a) => a.id === account.id)
+        const next: LegacyAccount = { ...account, apiKeyRef }
+        // 整条替换前把盘上残留带过去（与 save-model 同一道保全，见 carryLegacyKey）
+        carryLegacyKey(next, idx >= 0 ? accounts[idx] : undefined)
+        allocated[0] = next
         if (idx >= 0) return accounts.map((a, i) => (i === idx ? next : a))
         return [...accounts, next]
       })

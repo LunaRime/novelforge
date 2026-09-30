@@ -97,6 +97,11 @@ function mkAccount(over: Partial<ProviderAccount> & { id: string }): ProviderAcc
   }
 }
 
+/** 落盘的 models.json（**原样 JSON 文本**：保全类断言要看「成员在不在」，不能走类型后的对象） */
+function rawModels(): string {
+  return JSON.stringify(files.get(MODELS_CONFIG_PATH) ?? [])
+}
+
 /** 每用例一份凭据文件对象（默认空） */
 let credFile: Record<string, unknown>
 
@@ -461,5 +466,50 @@ describe('apiKeyDraft（一次性草稿 → 凭据库）', () => {
 
     const refs = modelsFile().map((m) => m.apiKeyRef).sort()
     expect(refs).toEqual(['OPENAI_API_KEY', 'OPENAI_API_KEY_2'])
+  })
+})
+
+// ===== 盘上残留密钥的保全（T5 修复 round 1，评审 Important）=====
+//
+// 出站剥离后，渲染层回传的条目**已无 apiKey** —— 若整条替换，盘上尚未迁移的明文就被静默抹掉，
+// 此后 hasLegacyKey 恒 false、迁移永不再搬，密钥只剩重填一条路。
+// 派生同步（syncAccountModels）用 `{...m, ...credentials}` 合并语义本来就有这层保护 —— 两处口径必须一致。
+
+describe('盘上残留密钥的保全（保存不得抹掉未迁移的明文）', () => {
+  const handModel = (id: string): ModelProfile => ({
+    id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
+    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+  })
+
+  it('save-model：盘上有残留明文 + 只改一个字段 → 残留**原样带过去**，其余字段同样无损', async () => {
+    const onDisk = { ...handModel('m1'), apiKey: 'sk-plain-residual', name: '旧名' }
+    files.set(MODELS_CONFIG_PATH, [onDisk])
+
+    await call('llm:save-model', { ...handModel('m1'), name: '新名' })
+
+    const raw = JSON.parse(rawModels())
+    expect(raw[0].apiKey, '盘上未迁移的明文被抹掉了 —— 迁移再也搬不到它').toBe('sk-plain-residual')
+    expect(raw[0].name).toBe('新名')
+    // 盘上原本的每个字段都还在（保存只该**增**——补发 apiKeyRef，不该减）
+    expect(Object.keys(onDisk).filter((k) => !(k in raw[0])), '有字段被保存丢掉了').toEqual([])
+    expect(raw[0].apiKeyRef).toBe('OPENAI_API_KEY')
+  })
+
+  it('save-provider：账户上的残留同样带过去（密文残留也照带）', async () => {
+    const onDisk = { ...mkAccount({ id: 'acc-1' }), apiKey: 'ENC:legacy-cipher' }
+    files.set(PROVIDERS_CONFIG_PATH, { version: 2, revision: 3, accounts: [onDisk] })
+
+    await call('llm:save-provider', mkAccount({ id: 'acc-1', baseUrl: 'https://changed.example' }))
+
+    const raw = JSON.parse(JSON.stringify(files.get(PROVIDERS_CONFIG_PATH)))
+    expect(raw.accounts[0].apiKey).toBe('ENC:legacy-cipher')
+    expect(raw.accounts[0].baseUrl).toBe('https://changed.example')
+    expect(raw.revision).toBe(4)
+  })
+
+  it('反向守卫：全新条目落盘**不含** apiKey 键（保全不等于把密码字段写回去）', async () => {
+    await call('llm:save-model', handModel('m-new'))
+
+    expect(JSON.stringify(files.get(MODELS_CONFIG_PATH))).not.toContain('"apiKey"')
   })
 })
