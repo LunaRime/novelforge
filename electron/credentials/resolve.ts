@@ -79,6 +79,21 @@ export function resolveCredential(ref: string | undefined): string | undefined {
   return resolveFrom(ref, envSource, readCredentialValue)?.value
 }
 
+/**
+ * 取「本次请求实际要用的密钥」：`apiKeyRef` 命中（env 非空 → store 非空）**优先**，
+ * 否则回落到条目自带的明文 `apiKey`；两者皆无 → 空串。
+ *
+ * ⚠️ 明文回落是**过渡形态**（v3 §4.4）：迁移（T4）前凭据库里没有任何 ref，全部走这一支
+ * —— 于是本函数接进既有链路时行为零变化。T5 删掉 `ModelProfile.apiKey` 字段后，
+ * 回落项恒为 undefined，这条分支自然成为死路径（届时收敛为 ref-only）。
+ *
+ * ⚠️ 调用方给进来的 `apiKey` 必须是**明文**（密文先经 `decryptApiKey`）——本函数不做解密：
+ * 它只负责「ref 还是明文」的选择，密文误入回落项会被原样当密钥发出去（401 且难排查）。
+ */
+export function resolveModelKey(profile: { apiKeyRef?: string; apiKey?: string }): string {
+  return resolveCredential(profile.apiKeyRef) ?? profile.apiKey ?? ''
+}
+
 /** 批量状态查询（`credential:describe` 的实现） */
 export function describeCredentials(refs: string[]): Record<string, CredentialInfo> {
   return describeFrom(refs, envSource, readCredentialValue)

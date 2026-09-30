@@ -6,6 +6,7 @@ import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { syncAccountModels, isModelOfAccount } from '../../src/shared/provider-accounts'
 import { deriveCredentialRef } from '../../src/shared/credential-rules'
 import { readCredentialFile } from '../credentials/store'
+import { resolveModelKey } from '../credentials/resolve'
 import { serialize } from '../utils/config-write-queue'
 import { presetModelDefaults } from '../../src/shared/provider-presets'
 import { listOllamaModels } from '../ollama-embedding'
@@ -116,9 +117,25 @@ function collectTakenRefs(accounts: ProviderAccount[]): Set<string> {
   return taken
 }
 
+/**
+ * 交给 provider 前的**唯一收口点**（v3 §4.4）：把条目上的 `apiKeyRef` 解析成实际密钥，
+ * 解析不到则原样保留（明文回落）。
+ *
+ * 为什么收在这里而不进 provider：密钥来源（凭据库 / env）是**主进程配置层**的事，
+ * provider 只该拿到「一串可用的密钥」——分散到各 provider 里会变成三份各自演化的兜底逻辑。
+ *
+ * ⚠️ 入参的 `apiKey` 必须已是明文：`loadModelConfigs()` 的返回值满足这一点（密文已解）；
+ *    直接读盘的调用方要先 `decryptApiKey`（见 embedding-controller / kb-controller）。
+ */
+function withResolvedKey(model: ModelProfile): ModelProfile {
+  return { ...model, apiKey: resolveModelKey(model) }
+}
+
+/** 生成路径（`llm:generate` / `llm:generate-stream` 共用）取模型配置，密钥已解析 */
 function getModelConfig(modelId: string): ModelProfile | null {
   const models = loadModelConfigs()
-  return models.find((m) => m.id === modelId) ?? null
+  const model = models.find((m) => m.id === modelId) ?? null
+  return model ? withResolvedKey(model) : null
 }
 
 /**
@@ -459,7 +476,7 @@ export function registerLLMController() {
 
   guardedHandle(
     'llm:list-provider-models',
-    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string }) => {
+    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string; apiKeyRef?: string }) => {
       try {
         if (!credentials.baseUrl?.trim()) {
           return { success: false, error: t('error.baseUrlRequired') }
@@ -470,11 +487,14 @@ export function registerLLMController() {
           // /api/tags 不提供 token 规格 → 仅 id（2026-09-28 候选对象化）
           return { success: true, models: models.map((m) => ({ id: m.name })) }
         }
-        if (!credentials.apiKey?.trim() && credentials.provider !== 'ollama') {
+        // 密钥解析（v3 §4.4）：带 ref 时以凭据库/env 为准，否则用传进来的明文
+        //（表单里刚输入的草稿，T5 起改由 apiKeyDraft 表达）
+        const apiKey = resolveModelKey(credentials)
+        if (!apiKey.trim() && credentials.provider !== 'ollama') {
           return { success: false, error: t('error.apiKeyRequired') }
         }
         const models = await LLMFactory.getProvider({ protocol: credentials.protocol })
-          .listModels({ baseUrl: credentials.baseUrl, apiKey: credentials.apiKey })
+          .listModels({ baseUrl: credentials.baseUrl, apiKey })
         return { success: true, models }
       } catch (error) {
         // ⚠️ 必须**分类**：早先对所有失败都回同一句「该服务可能不支持」——
@@ -532,15 +552,18 @@ export function registerLLMController() {
     try {
       applyProxyConfig()
 
+      // 收到的 profile 来自渲染层（表单草稿 / 列表条目）—— 它只是一个**回落项**：
+      // 条目带 apiKeyRef 时以凭据库为准（v3 §4.4）。
+      const target = withResolvedKey(model)
       const messages = [{ role: 'user', content: 'Say "hello" and nothing else.' }]
-      const provider = LLMFactory.getProvider(model)
+      const provider = LLMFactory.getProvider(target)
 
       let result = { success: true, error: undefined as undefined | string }
-      if (model.purposes?.includes('embedding')) {
+      if (target.purposes?.includes('embedding')) {
         const { generateEmbeddings } = await import('../embedding')
-        await generateEmbeddings(['hello'], model.protocol, model)
+        await generateEmbeddings(['hello'], target.protocol, target)
       } else {
-        const res = await provider.generate(model, messages, {
+        const res = await provider.generate(target, messages, {
           temperature: 0.7,
           maxTokens: 10,
         })

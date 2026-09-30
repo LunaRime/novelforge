@@ -106,6 +106,7 @@ vi.mock('../utils/logger', () => ({
 }))
 
 import { GLOBAL_CONFIG_PATH, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH, writeJsonFile } from '../utils/config-utils'
+import { __setStoredForTest } from '../credentials/store'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { registerKBController } from './kb-controller'
 
@@ -153,8 +154,12 @@ function enableLocalOnly(): void {
   setGlobalConfig({ theme: 'dark', localEmbedding: { enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'bge-m3' } })
 }
 
-/** 配置一个可用的远端 Embedding 模型（defaultEmbeddingModelId + models.json 条目） */
-function setRemoteEmbeddingModel(): void {
+/**
+ * 配置一个可用的远端 Embedding 模型（defaultEmbeddingModelId + models.json 条目）
+ *
+ * @param apiKeyRef 凭据引用名（v3 §4.4）—— 给了就在条目上挂 ref，用于验证「ref 优先」分支
+ */
+function setRemoteEmbeddingModel(apiKeyRef?: string): void {
   const profile: ModelProfile = {
     id: REMOTE_MODEL_ID,
     name: 'Remote Embedding',
@@ -162,6 +167,7 @@ function setRemoteEmbeddingModel(): void {
     protocol: 'openai',
     modelName: 'text-embedding-3-small',
     apiKey: 'sk-plain-key', // 明文（无 ENC: 前缀）→ decryptApiKey 原样返回
+    ...(apiKeyRef !== undefined ? { apiKeyRef } : {}),
     baseUrl: 'https://api.example.com/v1',
     temperature: 0,
     maxTokens: 0,
@@ -180,6 +186,8 @@ beforeEach(() => {
   vi.clearAllMocks()
   resetTrustedWebContentsForTest()
   trustWebContents(SENDER_ID)
+  // 凭据缓存清零：T3 起 handler 会读它（ref 分支），不重置会让注入值跨用例泄漏
+  __setStoredForTest({})
   fs.rmSync(h.home, { recursive: true, force: true })
 
   // 当前项目：recent-projects[0]（getCurrentProjectPath 的数据源）
@@ -448,5 +456,31 @@ describe('T3b R1（I1）：kb:search-with-scope 门控放行纯本地用户', ()
     expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(1)
     expect(h.searchKnowledgeFTS).toHaveBeenCalledWith('阿晚', PROJECT, 3, [1, 5])
     expect(h.searchKnowledge).toHaveBeenCalledTimes(0)
+  })
+})
+
+// ===== 模型管理 v3 T3：Embedding 取密钥统一走 resolveModelKey（ref 优先、明文回落）=====
+//
+// `kb:import-*` / `kb:backfill-vectors` / `kb:search*` 的向量化参数都出自 `getEmbeddingConfig()`，
+// 这里从查询侧（观测点最清晰）锁定两个分支；ref 名用不可能出现在环境变量里的占位（env 优先于 store）。
+
+describe('T3：getEmbeddingConfig 的密钥解析（ref 优先）', () => {
+  it('条目带 ref 且已配置 → 用凭据库的值，而非盘上明文', async () => {
+    __setStoredForTest({ V3_KB_WIRING_REF: 'sk-from-store' })
+    setRemoteEmbeddingModel('V3_KB_WIRING_REF')
+
+    await invokeSearch('阿晚', 3)
+
+    expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚', PROJECT, 'openai',
+      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-from-store', modelName: 'text-embedding-3-small' }, 3)
+  })
+
+  it('条目带 ref 但凭据库没有 → 回落盘上明文', async () => {
+    setRemoteEmbeddingModel('V3_KB_WIRING_REF_MISSING')
+
+    await invokeSearch('阿晚', 3)
+
+    expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚', PROJECT, 'openai',
+      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-plain-key', modelName: 'text-embedding-3-small' }, 3)
   })
 })

@@ -9,6 +9,7 @@ import {
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, MODELS_CONFIG_PATH, RECENT_PROJECTS_PATH, readLocalEmbeddingConfig } from '../utils/config-utils'
 import { getProjectDb } from '../database'
 import { decryptApiKey } from '../utils/secure-config'
+import { resolveModelKey } from '../credentials/resolve'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { GlobalConfig, ModelProfile } from '../../src/shared/ipc-channels'
@@ -29,7 +30,10 @@ function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl
     protocol: model.protocol as 'openai' | 'gemini',
     model: {
       baseUrl: model.baseUrl,
-      apiKey: decryptApiKey(model.apiKey),
+      // 密钥解析（v3 §4.4）：ref 命中优先，否则回落盘上明文的解密值。
+      // ⚠️ 回落项必须先解密：这里读的是文件原始内容，`model.apiKey` 还是 `ENC:` 密文，
+      // 少解一层就会把密文串当密钥发出去。
+      apiKey: resolveModelKey({ ...model, apiKey: decryptApiKey(model.apiKey) }),
       modelName: model.modelName,
     },
   }

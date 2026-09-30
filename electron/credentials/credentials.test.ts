@@ -32,7 +32,7 @@ vi.mock('../utils/logger', () => ({
 }))
 
 import { logger } from '../utils/logger'
-import { resolveFrom, describeFrom, resolveCredential } from './resolve'
+import { resolveFrom, describeFrom, resolveCredential, resolveModelKey } from './resolve'
 import {
   readCredentialFile,
   writeCredentialFile,
@@ -105,6 +105,25 @@ describe('resolve（env 优先）', () => {
     const d = describeFrom(['BAD', 'OK'], env({}), broken)
     expect(d.BAD).toEqual({ configured: false, writable: true })
     expect(d.OK).toEqual({ configured: true, source: 'store', writable: true })
+  })
+})
+
+// ===== ①b resolveModelKey（模型条目 → 请求要用的密钥，v3 §4.4）=====
+//
+// 契约：`resolveCredential(apiKeyRef) ?? apiKey ?? ''` —— ref 命中（env 非空 → store 非空）
+// 优先，否则**回落条目上的明文**（T4 迁移前凭据库为空，全部走这条路 → 行为零变化）。
+// 测试辅助 `__setStoredForTest(map)` 注入 store 内存缓存（T1 store.ts 提供，与本文件 store 段共用）。
+
+describe('resolveModelKey（ref 优先、明文回落）', () => {
+  it('resolveModelKey：ref 命中优先于明文', () => {
+    __setStoredForTest({ R: 'sk-ref' })
+    expect(resolveModelKey({ apiKeyRef: 'R', apiKey: 'sk-plain' })).toBe('sk-ref')
+  })
+
+  it('resolveModelKey：无 ref / ref 未配置 → 回落明文；两者皆无 → 空串', () => {
+    expect(resolveModelKey({ apiKey: 'sk-plain' })).toBe('sk-plain')
+    expect(resolveModelKey({ apiKeyRef: 'MISSING', apiKey: 'sk-plain' })).toBe('sk-plain')
+    expect(resolveModelKey({})).toBe('')
   })
 })
 

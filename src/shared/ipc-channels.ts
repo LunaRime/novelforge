@@ -436,7 +436,7 @@ export interface LLMChannels {
     return: { success: boolean; error?: string }
   }
   'llm:list-provider-models': {
-    args: [credentials: { provider: string; protocol: LLMProtocol; apiKey: string; baseUrl: string }]
+    args: [credentials: { provider: string; protocol: LLMProtocol; apiKey: string; baseUrl: string; apiKeyRef?: string }]
     /** 拉取供应商可用模型（带可选的容量规格，采纳即用免手填）。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
     return: { success: boolean; models?: LLMModelCandidate[]; error?: string }
   }

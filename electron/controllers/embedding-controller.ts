@@ -8,19 +8,25 @@ import { embeddingService, type EmbeddingConfig, type LLMEmbeddingConfig } from 
 import { cosineSimilarity, findMostSimilar } from '../utils/vector-utils'
 import { readJsonFile, MODELS_CONFIG_PATH } from '../utils/config-utils'
 import { decryptApiKey } from '../utils/secure-config'
+import { resolveModelKey } from '../credentials/resolve'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 
-/** 从全局配置加载嵌入模型配置（自动解密 apiKey） */
+/**
+ * 从全局配置加载嵌入模型配置（密钥：ref 优先、回落盘上明文的解密值）
+ *
+ * ⚠️ 回落项必须是**已解密的明文**：这里读的是文件的原始内容，`model.apiKey` 还是 `ENC:` 密文，
+ *    直接 `resolveModelKey(model)` 会在 ref 未命中时把密文串当密钥发出去（401 且难排查）。
+ */
 function loadEmbeddingModelConfig(): ModelProfile | null {
   try {
     const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
     const model = models.find((m) => m.purposes?.includes('embedding')) || null
     if (model) {
-      model.apiKey = decryptApiKey(model.apiKey)
+      model.apiKey = resolveModelKey({ ...model, apiKey: decryptApiKey(model.apiKey) })
     }
     return model
   } catch {
@@ -28,11 +34,16 @@ function loadEmbeddingModelConfig(): ModelProfile | null {
   }
 }
 
-/** 获取 LLM model configs 文件（自动解密 apiKey） */
+/**
+ * 获取 LLM model configs 文件（自动解密 apiKey）
+ *
+ * 与上面同解（先解密 → 再解析 ref）：返回值会被渲染层拿去 `embedding:set-model` 配置服务，
+ * 最终进请求，因此这里同样按「ref 优先」取值。
+ */
 function getLLMModels(): ModelProfile[] {
   try {
     const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-    return models.map((m) => ({ ...m, apiKey: decryptApiKey(m.apiKey) }))
+    return models.map((m) => ({ ...m, apiKey: resolveModelKey({ ...m, apiKey: decryptApiKey(m.apiKey) }) }))
   } catch {
     return []
   }
