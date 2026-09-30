@@ -21,6 +21,8 @@ import {
   migrateLegacyDirs,
   getProjectVelaDir,
   readJsonFile,
+  backupFileOnce,
+  CREDENTIAL_MIGRATION_BACKUP_SUFFIX,
   DEFAULT_GLOBAL_CONFIG,
   DEFAULT_LOCAL_EMBEDDING,
   readLocalEmbeddingConfig,
@@ -377,5 +379,58 @@ describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', (
     expect(DEFAULT_LOCAL_EMBEDDING.model).toBe('bge-m3')
     expect(DEFAULT_LOCAL_EMBEDDING.enabled).toBe(false)
     expect(readLocalEmbeddingConfig()).toEqual(DEFAULT_LOCAL_EMBEDDING)
+  })
+})
+
+/**
+ * `backupFileOnce`（T4 迁移留档）—— 终审小修③：直写 `dest` 会留下截断的 .bak，
+ * 而下次运行只看「目标存在」即 skipped → 回退点永久坏在半截。
+ * 本组钉住：字节一致、已存在不覆盖、中转文件不残留、**写的是 tmp 再 rename**。
+ */
+describe('backupFileOnce（*.pre-credentials.bak）', () => {
+  const srcPath = () => path.join(VELA_HOME, 'providers.json')
+  const bakPath = () => srcPath() + CREDENTIAL_MIGRATION_BACKUP_SUFFIX
+
+  const seedSource = (text: string) => {
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.writeFileSync(srcPath(), text, 'utf-8')
+  }
+
+  it('首次 → copied（按原始字节）；目标已存在 → skipped 且不覆盖（第一次的回退点更珍贵）', () => {
+    seedSource('{"version":2,\n  "revision":3}\n')
+    expect(backupFileOnce(srcPath())).toBe('copied')
+    // 字节级一致（不是「解析后再写」：注释/格式/换行都要原样）
+    expect(fs.readFileSync(bakPath(), 'utf-8')).toBe('{"version":2,\n  "revision":3}\n')
+
+    seedSource('{"version":2,"revision":9}')
+    expect(backupFileOnce(srcPath())).toBe('skipped')
+    expect(fs.readFileSync(bakPath(), 'utf-8')).toBe('{"version":2,\n  "revision":3}\n')
+  })
+
+  it('原子写：先复制到 dest.tmp.…，再 rename 到 dest（目录里不留中转文件）', () => {
+    seedSource('{"a":1}')
+    const copySpy = vi.spyOn(fs, 'copyFileSync')
+    const renameSpy = vi.spyOn(fs, 'renameSync')
+
+    expect(backupFileOnce(srcPath())).toBe('copied')
+
+    const [copySrc, copyDest] = copySpy.mock.calls[0] as unknown as [string, string]
+    expect(copySrc).toBe(srcPath())
+    expect(copyDest).not.toBe(bakPath())            // 绝不直写 .bak（崩溃 = 截断的回退点）
+    expect(copyDest.startsWith(bakPath() + '.tmp.')).toBe(true)
+    expect(renameSpy).toHaveBeenCalledWith(copyDest, bakPath())
+    // 中转产物不残留（成功路径）
+    expect(fs.readdirSync(VELA_HOME).filter((n) => n.includes('.tmp.'))).toEqual([])
+  })
+
+  it('源不存在 → missing（不产生 .bak）；目标已存在时源消失也只是 skipped', () => {
+    fs.mkdirSync(VELA_HOME, { recursive: true })
+    expect(backupFileOnce(srcPath())).toBe('missing')
+    expect(fs.existsSync(bakPath())).toBe(false)
+
+    seedSource('{"a":1}')
+    expect(backupFileOnce(srcPath())).toBe('copied')
+    fs.rmSync(srcPath())
+    expect(backupFileOnce(srcPath())).toBe('skipped')
   })
 })

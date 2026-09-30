@@ -22,13 +22,29 @@ import {
 
 const BASE = 'http://127.0.0.1:11434'
 
-/** 造一个最小 JSON Response（只实现被测代码用到的字段） */
-function jsonResponse(body: unknown, status = 200): Response {
+/**
+ * 造一个最小 JSON Response（只实现被测代码用到的字段）。
+ *
+ * `headers` + `body` 是给 `readListingJson` 用的（/api/tags 的读取上限，终审小修②）：
+ * 少了它们，那条路径会走 `arrayBuffer()` 兜底然后整个抛掉（表现为「永远空列表」——
+ * 用例会红，但红在一个与真实行为无关的地方）。`headers` 可注入 `content-length`
+ * 来模拟「声称超限」而**不必真造 4MB 字节**。
+ */
+function jsonResponse(body: unknown, status = 200, headers: Record<string, string> = {}): Response {
+  const text = JSON.stringify(body)
+  const bytes = new TextEncoder().encode(text)
   return {
     ok: status >= 200 && status < 300,
     status,
+    headers: new Headers({ 'content-type': 'application/json', ...headers }),
+    body: new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(bytes)
+        controller.close()
+      },
+    }),
     json: async () => body,
-    text: async () => JSON.stringify(body),
+    text: async () => text,
   } as unknown as Response
 }
 
@@ -178,6 +194,18 @@ describe('listOllamaModels（:latest 规范化 + 去重 + 排序）', () => {
     expect(await listOllamaModels(BASE)).toEqual([])
 
     vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed') }))
+    expect(await listOllamaModels(BASE)).toEqual([])
+  })
+
+  it('响应体超 4MB 上限 → []（不整份读进内存），与其他失败路径同语义', async () => {
+    // 只要 content-length 声称超限就会在读体之前中止（4MB 上限见 model-listing.readListingJson）：
+    // 地址是用户可编辑的，一个配错的网关不该能把主进程拖垮
+    const overLimit = String(5 * 1024 * 1024)
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(
+      { models: [{ name: 'bge-m3', size: 1 }] },
+      200,
+      { 'content-length': overLimit },
+    )))
     expect(await listOllamaModels(BASE)).toEqual([])
   })
 })

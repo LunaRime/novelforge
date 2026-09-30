@@ -215,6 +215,10 @@ export type BackupOutcome = 'copied' | 'skipped' | 'missing' | 'failed'
  * 源不存在 → `missing`（没东西可备份，也谈不上失败：该文件本来就没有数据要迁）；
  * 目标已存在 → `skipped`（**不覆盖**：第一次的回退点比后来的更珍贵）。
  * 注入态下在替身 Map 内完成同样语义（不触真实磁盘）。
+ *
+ * **原子写**（终审小修③）：先复制到 `dest.tmp.…` 再 `rename`（同 `writeJsonFile` 的形态）——
+ * 直写 `dest` 的话，中途崩溃/断电会留下一个**截断的 .bak**，而下次运行只看「目标存在」即
+ * `skipped`：回退点从此是一份半截数据，且再也不会被修复。
  */
 export function backupFileOnce(filePath: string): BackupOutcome {
   const dest = filePath + CREDENTIAL_MIGRATION_BACKUP_SUFFIX
@@ -225,12 +229,16 @@ export function backupFileOnce(filePath: string): BackupOutcome {
     files.set(dest, structuredClone(files.get(filePath)))
     return 'copied'
   }
+  const tmpPath = dest + '.tmp.' + Date.now() + '.' + Math.random().toString(36).slice(2, 8)
   try {
     if (fs.existsSync(dest)) return 'skipped'
     if (!fs.existsSync(filePath)) return 'missing'
-    fs.copyFileSync(filePath, dest)
+    fs.copyFileSync(filePath, tmpPath)
+    fs.renameSync(tmpPath, dest)
     return 'copied'
   } catch (error) {
+    // 清理中转文件（复制到一半失败时它可能已经存在）
+    try { if (fs.existsSync(tmpPath)) fs.unlinkSync(tmpPath) } catch { /* ignore */ }
     console.error(`[NovelForge] 备份 ${filePath} 失败:`, error)
     return 'failed'
   }

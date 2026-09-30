@@ -12,6 +12,7 @@
  */
 
 import { fetchWithTimeout } from './net/fetch-with-timeout'
+import { readListingJson } from './llm/model-listing'
 
 /** 拉模型是分钟级长任务——默认 10s 超时会把大模型 pull 腰斩（T1 导出 fetchWithTimeout 的动机） */
 const PULL_TIMEOUT_MS = 300_000
@@ -90,14 +91,19 @@ function normalizeModelName(name: string): string {
 
 /**
  * 列出本地已装模型（规范化 `:latest` + 去重 + 按 name 升序，size 取首次出现的值）。
- * 空 / 畸形 / 非 200 / 连接失败 → `[]`（**不抛**：列表只服务 UI 下拉，失败等价于"没有可选模型"）。
+ * 空 / 畸形 / 非 200 / 连接失败 / 响应过大 → `[]`（**不抛**：列表只服务 UI 下拉，
+ * 失败等价于"没有可选模型"）。
+ *
+ * 读体走 `readListingJson`（4MB 上限）：地址是用户可编辑的，一个配错的网关回一份
+ * 几百 MB 的体（或无限流的错误页）就能把主进程拖垮 —— 与 `llm:list-provider-models`
+ * 的端点探测同一条纪律（终审小修②）。失败路径语义不变（超限与解析失败同样落到 `[]`）。
  */
 export async function listOllamaModels(baseUrl: string): Promise<Array<{ name: string; size: number }>> {
   try {
     const res = await fetchWithTimeout(apiUrl(baseUrl, '/api/tags'), { method: 'GET' })
     if (!res.ok) return []
 
-    const data = await res.json() as { models?: unknown } | null
+    const data = await readListingJson(res) as { models?: unknown } | null
     const models = data?.models
     if (!Array.isArray(models)) return []
 
