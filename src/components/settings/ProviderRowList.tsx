@@ -151,6 +151,16 @@ export function ProviderRowList() {
   }, [])
 
   /**
+   * 打开添加卡 —— 与 `openEditor` 同口径先清上一条播报。
+   * 不清的话「连续添加两个显示名相同的供应商」（两家 openai，或两个都回落预设名）第二次是静默的：
+   * aria-live 只在**内容变化**时发声，而文本一模一样（T6 评审 Minor ⑤ 的另一半）。
+   */
+  const openAdd = useCallback(() => {
+    setSavedName(null)
+    setAdding(true)
+  }, [])
+
+  /**
    * 空态（无账户且无任何条目 = 首次运行的「保留空态」，v3 §2.4）。
    *
    * ⚠️ 它住在行列表里而不是容器（`ModelListSection`）里：添加入口**只有一个**、
@@ -238,14 +248,14 @@ export function ProviderRowList() {
           <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             {t('model.noLabelConfig').replace('{label}', '')}
           </span>
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <Button size="sm" variant="outline" onClick={openAdd}>
             <Plus size={13} />
             {t('provider.addVendor')}
           </Button>
         </div>
       ) : (
         <div className="flex items-center px-1 pt-1">
-          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+          <Button size="sm" variant="outline" onClick={openAdd}>
             <Plus size={13} />
             {t('provider.addVendor')}
           </Button>

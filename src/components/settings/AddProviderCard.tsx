@@ -12,11 +12,21 @@ import { ProviderEditorCard } from './ProviderEditorCard'
 type AddProviderMode = 'catalog' | 'custom'
 
 /**
- * 目录模式可选的家：**有内置目录**者（目录命中可以免网络直答）且不是 `custom`
- * —— `custom` 由「自定义 API」模式承担，混进下拉是双重入口。
+ * 添加卡的两份「家」清单 —— 用途不同，**不可互相替换**（2026-10-01 评审 I1）：
+ *
+ * - `selectableProviders()` = **下拉全量**（所有非 custom 预设）。手写 models/embeddingModels 为空、
+ *   也不在生成表里的家（dashscope / siliconflow / mistral / xai / yi / stepfun / baichuan）不因此消失：
+ *   它们的模型清单由「获取可用模型」的**端点探测**服务（design §5「未装的打端点」），
+ *   把下拉收窄到「有内置目录」等于让这 7 家从添加流程里彻底消失。
+ *   `custom` 仍不进下拉：它由「自定义 API」模式承担，混进来是双重入口。
+ * - `catalogProviders()` = 只有**有内置目录**的家，仅用于「首次运行默认选中」与「只剩一种模式」判据。
  */
+function selectableProviders() {
+  return BUILTIN_PRESETS.filter((p) => p.provider !== 'custom')
+}
+
 function catalogProviders() {
-  return BUILTIN_PRESETS.filter((p) => p.provider !== 'custom' && builtinCatalogFor(p.provider).length > 0)
+  return selectableProviders().filter((p) => builtinCatalogFor(p.provider).length > 0)
 }
 
 /**
@@ -70,7 +80,7 @@ export interface AddProviderCardProps {
  * 添加模型提供商
  * （ 第三方模型提供商 | 自定义模型 API ）   ← 分段两模式
  *   说明行（当前模式的一句话）
- *   ┌ 目录模式：服务商下拉 + 编辑卡（hideTitle：无卡头/无边框，外壳由本卡给）
+ *   ┌ 目录模式：服务商下拉（**全部非 custom 预设**）+ 编辑卡（hideTitle：无卡头/无边框，外壳由本卡给）
  *   └ 自定义模式：编辑卡（advancedOpen：显示名/端点/协议是路由字段，直接摊开）
  * ```
  *
@@ -169,7 +179,8 @@ export function AddProviderCard({ onCancel, onDone }: AddProviderCardProps) {
             <Select value={catalogAccount.provider} onValueChange={changeProvider}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
-                {catalogProviders().map((p) => (
+                {/* 全量非 custom 预设（评审 I1）：没有内置目录的家靠「获取可用模型」端点探测 */}
+                {selectableProviders().map((p) => (
                   <SelectItem key={p.provider} value={p.provider}>{p.displayName ?? p.provider}</SelectItem>
                 ))}
               </SelectContent>

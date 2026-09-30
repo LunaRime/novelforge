@@ -10,7 +10,7 @@
  * 3. **写入 / 探测中锁定切换**：保存中或「获取可用模型」进行中，分段控件禁用。
  * 4. **首次运行**：无账户 → 空态保留；点开默认选中第一家**有内置目录**的预设 + 密钥框聚焦。
  */
-import { describe, it, expect, vi, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { AddProviderCard } from './AddProviderCard'
@@ -102,6 +102,12 @@ function setValue(input: HTMLInputElement, value: string) {
 
 const tick = () => new Promise((r) => setTimeout(r, 10))
 
+beforeEach(() => {
+  // jsdom 没实现 scrollIntoView，而 Radix Select 打开时要把选中项滚进视野——
+  // 不补的话下拉根本打不开（`candidate?.scrollIntoView is not a function`）
+  Element.prototype.scrollIntoView = vi.fn()
+})
+
 afterEach(() => {
   act(() => root?.unmount())
   container?.remove()
@@ -137,6 +143,26 @@ describe('AddProviderCard 两模式', () => {
     expect(hasLabel(custom, '服务商')).toBe(false)     // 自定义模式不选家
     expect(hasLabel(custom, 'API 地址')).toBe(true)    // 路由字段直接可见（不是折叠的次要项）
     expect(hasLabel(custom, '调用协议')).toBe(true)
+  })
+
+  it('目录模式下拉 = 全部非 custom 预设（含没有内置目录的家，如 xAI）；custom 不进下拉', async () => {
+    renderAdd()
+    const trigger = panel(MODE_CATALOG)!.querySelector<HTMLElement>('[role="combobox"]')!
+    trigger.focus()
+    await act(async () => {
+      // ARIA combobox 的展开键（Radix：OPEN_KEYS）——jsdom 里比 pointerdown 可靠
+      trigger.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }))
+      await tick()
+    })
+
+    // 候选面板走 Portal 挂在 body 上（不在本用例的 container 里）
+    const options = [...document.querySelectorAll<HTMLElement>('[role="option"]')].map((o) => o.textContent?.trim())
+    expect(options.length, '下拉没打开或没有选项').toBeGreaterThan(0)
+    expect(options, '有内置目录的家').toContain('OpenAI')
+    // 手写 models/embeddingModels 为空、也不在生成表里的家（评审 I1 抓到的 7 家里取一例）：
+    // 它靠端点探测服务，绝不能从添加流程里消失
+    expect(options, '无内置目录的家也要在下拉里').toContain('xAI（Grok）')
+    expect(options, 'custom 由「自定义 API」模式承担').not.toContain('自定义')
   })
 
   it('面板首访后保持挂载：没访问过的模式不在 DOM 里，访问过的一直在', async () => {
@@ -265,5 +291,34 @@ describe('AddProviderCard 首次运行', () => {
 
     expect(el.querySelector('[role="status"][aria-live="polite"]')?.textContent).toContain('已保存 OpenAI')
     expect(panel(MODE_CATALOG), '保存成功即收起添加卡').toBeNull()
+  })
+
+  it('连续添加两个**同名**供应商（两家 OpenAI）→ 两次都发声（开卡即清上一条播报）', async () => {
+    state.saveProvider.mockImplementation(async (account) => {
+      state.providers = [...state.providers, account]
+      return { success: true, revision: 2 }
+    })
+    const el = renderRows()
+    const addBtn = () => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const live = () => el.querySelector('[role="status"][aria-live="polite"]')?.textContent
+
+    const addOne = async () => {
+      await act(async () => { addBtn().click() })
+      await act(async () => {
+        buttonIn(panel(MODE_CATALOG)!, '应用').click()
+        await tick()
+      })
+    }
+
+    await addOne()
+    expect(live()).toContain('已保存 OpenAI')
+    // 第二次开卡：播报先清空 —— aria-live 只在内容变化时发声，而两家的显示名一模一样
+    await act(async () => { addBtn().click() })
+    expect(live()).toBe('')
+    await act(async () => {
+      buttonIn(panel(MODE_CATALOG)!, '应用').click()
+      await tick()
+    })
+    expect(live()).toContain('已保存 OpenAI')
   })
 })
