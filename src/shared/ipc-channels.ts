@@ -1183,6 +1183,48 @@ export interface HealthChannels {
   }
 }
 
+/**
+ * 凭据是否可用（模型管理 v3 §4.4）—— **只描述状态，永不携带值**。
+ *
+ * 类型上就没有 value 字段：密钥**只进不出** —— 渲染层要拿密钥只有一条路（用户当场输入 →
+ * `apiKeyDraft` 一次性参数），已存的密钥读不回来，于是它不可能出现在渲染层日志/崩溃报告/devtools 里。
+ */
+export interface CredentialInfo {
+  /** env 非空 或 store 非空（判据同 `resolveCredential`） */
+  configured: boolean
+  /** 值的来源；`configured:false` 时缺省（不写 `source`） */
+  source?: 'env' | 'store'
+  /** 能否写入 store：env 影子（同名环境变量非空）→ false，此时 set/unset 一律被拒 */
+  writable: boolean
+}
+
+/**
+ * 凭据层通道（模型管理 v3 §4.1）—— ref = 环境变量名（`OPENAI_API_KEY`，见 credential-rules）。
+ *
+ * `error` 正常路径下是**拒因码**而非文案：`'keyBlank' | 'keyIllegalCharacters'`（来自 `apiKeyFailure`，
+ * 与渲染层行内红字同一套码）或 `'envShadowed'`（环境变量影子，不可覆盖）——渲染层映射到
+ * `settings` 分片文案，主进程不拼人类可读句子（i18n 语言就不由主进程决定）。
+ * 唯一例外是**写盘失败**（磁盘满/权限）：那时给出的是技术错误串（`safeErrorMessage`），
+ * 渲染层按「未知错误」兜底展示即可。
+ */
+export interface CredentialChannels {
+  /** 批量查状态（设置段打开时一次拉全）；只回状态不回值 */
+  'credential:describe': {
+    args: [refs: string[]]
+    return: Record<string, CredentialInfo>
+  }
+  /** 写入（值为明文，主进程加密落盘）；空串 = 不提供（保留已存值，不写） */
+  'credential:set': {
+    args: [ref: string, value: string]
+    return: { success: boolean; error?: string }
+  }
+  /** 删除已存值（幂等：不存在也算成功）；env 影子时拒绝 */
+  'credential:unset': {
+    args: [ref: string]
+    return: { success: boolean; error?: string }
+  }
+}
+
 // ===== 导入进度事件（L4 S1 补充：此前两侧均未声明） =====
 export interface ImportEvents {
   'import:progress': { filePath: string; bytesRead: number; totalBytes: number }
@@ -1224,7 +1266,7 @@ export interface MenuEvents {
 }
 
 // ===== 合并所有频道 =====
-export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels & HealthChannels
+export type AllInvokeChannels = ConfigChannels & ProjectChannels & FileChannels & LLMChannels & DatabaseChannels & KnowledgeBaseChannels & EmbeddingChannels & ImportChannels & MCPChannels & UpdateChannels & ExportChannels & LogChannels & DevChannels & BrowserChannels & ReportChannels & TemplateChannels & MemoryChannels & StyleChannels & HealthChannels & CredentialChannels
 export type AllEventChannels = LLMStreamEvents & UpdateEvents & ImportEvents & MenuEvents & EmbeddingEvents
 
 /** 提取 invoke 频道名 */

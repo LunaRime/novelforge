@@ -170,6 +170,14 @@ export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
 export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
 /** 供应商账户（一份凭据挂多个模型）—— 派生条目的凭据来源，见 src/shared/provider-accounts.ts */
 export const PROVIDERS_CONFIG_PATH = path.join(VELA_HOME, 'providers.json')
+/**
+ * 凭据库（模型管理 v3 §4.2）：`{ version: 1, refs: { [ref]: '<ENC:…>' } }`。
+ *
+ * 为什么独立成文件：密钥此前混在 models.json/providers.json 里，任何「把配置文件交给别人看」
+ * 或「整份读-改-写」的路径都会顺带搬运密文；搬出来之后配置文件的形状里**不再有密码字段**，
+ * 且 set/unset 只碰本文件（T4 迁移会把存量 `ENC:` 值原样搬进来）。
+ */
+export const CREDENTIALS_CONFIG_PATH = path.join(VELA_HOME, 'credentials.json')
 export const RECENT_PROJECTS_PATH = path.join(VELA_HOME, 'recent-projects.json')
 
 /**

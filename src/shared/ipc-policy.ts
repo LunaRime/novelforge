@@ -73,6 +73,13 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'config:get-vela-home': { authority: 'read-global' },
   'config:set': { authority: 'write-global' },
   'config:set-locale': { authority: 'write-global' },
+  // 凭据层（模型管理 v3 §4.1）—— 与 `llm:save-provider` 同档（network-secret）：
+  //   三者都只碰**密钥本体**。写目标是全局凭据库（~/.novelforge/credentials.json），
+  //   读侧（describe）虽然只是状态查询，但「哪些 ref 已配置」本身就是攻击面（枚举+时序），
+  //   且它与写侧成对使用 —— 同档可避免「读得到写不了」这种半开状态。
+  'credential:describe': { authority: 'network-secret' },
+  'credential:set': { authority: 'network-secret' },
+  'credential:unset': { authority: 'network-secret' },
   'db:blueprint-delete': { authority: 'destructive' },
   'db:blueprint-get': { authority: 'read-project' },
   'db:blueprint-get-all': { authority: 'read-project' },
