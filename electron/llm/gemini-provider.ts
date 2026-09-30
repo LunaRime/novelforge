@@ -1,6 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, ResolvedModelProfile } from './provider.interface'
 import { LLMModelCandidate } from '../../src/shared/ipc-channels'
-import { toCandidates } from './model-listing'
+import { readListingJson, toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
@@ -272,7 +272,8 @@ export class GeminiProvider implements ILLMProvider {
     })
     if (!res.ok) throw new HttpError(res.status, `HTTP ${res.status}`)
 
-    const data = (await res.json()) as { models?: Array<Record<string, unknown>> }
+    // 读取带上限（v3 §5）：地址是用户填的，配错的网关可以回一份巨大响应体
+    const data = (await readListingJson(res)) as { models?: Array<Record<string, unknown>> }
     // Gemini 的规格字段：inputTokenLimit / outputTokenLimit（由 model-listing 的多拼写表覆盖）；
     // name 需剥 `models/` 前缀
     return toCandidates(

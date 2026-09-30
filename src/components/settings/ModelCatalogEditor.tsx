@@ -4,13 +4,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
-import { parseCapacity } from '../../shared/capacity'
+import { formatCapacity, parseCapacity } from '../../shared/capacity'
 import { builtinCatalogFor, presetModelDefaults } from '../../shared/provider-presets'
 import type { ModelOverrides } from '../../shared/provider-accounts'
-import type { ModelProfile } from '../../shared/ipc-channels'
+import type { ModelProfile, ProviderModelQuery } from '../../shared/ipc-channels'
 import type { TextKey } from '../../shared/locale'
 import type { InputType } from './ModelInputTypes'
 import { ModelCatalogRow } from './ModelCatalogRow'
+import { ModelPickerDialog, type AdoptedModel } from './ModelPickerDialog'
 
 /**
  * 目录行草稿（模型管理 v3 §3.3/§5）。
@@ -33,6 +34,12 @@ export interface ModelDraft {
   inputTypes?: InputType[]
 }
 
+/**
+ * 「获取可用模型」要用的凭据快照（v3 §4.7）：草稿密钥优先，否则主进程按 ref 解析。
+ * provider 不在其中 —— 它就是本区的 `provider` prop（同一次挂载里两者不可能不一致）。
+ */
+export type CatalogFetchCredentials = Omit<ProviderModelQuery, 'provider'>
+
 export interface ModelCatalogEditorProps {
   /** 供应商 id —— 决定继承源（内置目录）与规格兜底 */
   provider: string
@@ -46,6 +53,11 @@ export interface ModelCatalogEditorProps {
   onChange: (next: ModelDraft[] | undefined) => void
   /** 校验结果（id 空/重复、容量非法）—— 父级据此禁「应用」 */
   onValidityChange?: (valid: boolean) => void
+  /**
+   * 「获取可用模型」用的凭据。**`undefined` = 入口禁用** —— 门控（无 API 地址 / 密钥草稿不合法）
+   * 由父级判定：只有它同时握着地址与密钥草稿这两个草稿值。
+   */
+  fetchCredentials?: CatalogFetchCredentials
   disabled?: boolean
 }
 
@@ -176,6 +188,66 @@ export function catalogOverrides(
   return Object.keys(out).length > 0 ? out : undefined
 }
 
+/** 采纳项 → 新行（只带**有值**的字段：`undefined` = 没这个信息，别写成空串把继承态抹平） */
+function adoptedRowOf(id: string, model: AdoptedModel): ModelDraft {
+  const displayName = model.displayName?.trim()
+  return {
+    modelName: id,
+    ...(displayName ? { name: displayName } : {}),
+    ...(model.contextWindow !== undefined ? { contextWindowText: formatCapacity(model.contextWindow) } : {}),
+    ...(model.maxTokens !== undefined ? { maxTokensText: formatCapacity(model.maxTokens) } : {}),
+    ...(model.inputTypes !== undefined && model.inputTypes.length > 0 ? { inputTypes: [...model.inputTypes] } : {}),
+  }
+}
+
+/**
+ * 采纳结果 → 目录草稿（v3 §5「采纳时已存在行保留用户值、只补齐缺失字段」）。
+ *
+ * 两条分支：
+ *  - **目录里没有** → 追加在**末尾**（存储序；显示层倒序会让它自然置顶），规格照填；
+ *  - **目录里已有** → 一个字都不覆盖：只在该字段**两边都缺**（行草稿没填过 + 既有条目也没有）时
+ *    才用采纳值补上。用户改过的容量、显示名、输入类型都是权威值 —— 端点说的不算。
+ *
+ * ⚠️ 传入的是**生效行**（继承态下 = 内置目录那一组），不是 `value`：采纳 = 一次编辑，
+ * 必须先把继承态物化，否则目录会被这次采纳「换掉」（只剩被采纳的那一个）。
+ */
+export function mergeAdopted(
+  rows: readonly ModelDraft[],
+  adopted: readonly AdoptedModel[],
+  existing: readonly ModelProfile[],
+): ModelDraft[] {
+  const byName = new Map(existing.map((m) => [m.modelName, m]))
+  const next = [...rows]
+  for (const model of adopted) {
+    const id = model.name.trim()
+    if (id.length === 0) continue
+    const at = next.findIndex((row) => row.modelName.trim() === id)
+    if (at < 0) {
+      next.push(adoptedRowOf(id, model))
+      continue
+    }
+    const row = next[at]
+    const entry = byName.get(id)
+    const filled: ModelDraft = { ...row }
+    if (filled.name === undefined && entry?.name === undefined && model.displayName?.trim()) {
+      filled.name = model.displayName
+    }
+    if (filled.contextWindowText === undefined && entry?.contextWindow === undefined && model.contextWindow !== undefined) {
+      filled.contextWindowText = formatCapacity(model.contextWindow)
+    }
+    if (filled.maxTokensText === undefined && entry?.maxTokens === undefined && model.maxTokens !== undefined) {
+      filled.maxTokensText = formatCapacity(model.maxTokens)
+    }
+    const adoptedTypes = model.inputTypes
+    const entryHasTypes = (entry?.inputTypes?.length ?? 0) > 0
+    if (filled.inputTypes === undefined && !entryHasTypes && adoptedTypes !== undefined && adoptedTypes.length > 0) {
+      filled.inputTypes = [...adoptedTypes]
+    }
+    next[at] = filled
+  }
+  return next
+}
+
 /** 一行的错误（按字段带 key，不预先翻译 —— 行组件要按字段决定 `aria-invalid` 与红字位置） */
 export interface ModelRowErrors {
   id?: TextKey
@@ -207,6 +279,14 @@ function rowErrorsOf(rows: ModelDraft[]): ModelRowErrors[] {
   })
 }
 
+/**
+ * 目录区操作行里的文字型按钮（恢复默认 / 获取可用模型）。
+ *
+ * py-1 + 11px 行高 ≈ 21px 高 —— 文字型目标下限 20px（card-affordance-standard）：
+ * `py-0.5` 只有 17px，低于下限。两个按钮共用同一串类名，免得分头演化出两种长相。
+ */
+const HEADER_ACTION = 'text-micro px-1.5 py-1 rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] disabled:opacity-50 disabled:cursor-not-allowed'
+
 /** 删掉某行后把它后面展开着的行号往前挪一格 */
 function shiftAfterRemove(expanded: ReadonlySet<number>, removed: number): Set<number> {
   const next = new Set<number>()
@@ -235,10 +315,12 @@ function shiftAfterRemove(expanded: ReadonlySet<number>, removed: number): Set<n
  * 3. **显示层倒序**（用户既定）：新加/新采纳的行显示在最上；**存储序不动**，行操作的定位一律走
  *    条目下标（不是显示下标）—— 倒排显示 + 按下标删除是最容易错位的一处。
  *
- * 「获取可用模型」（T8）会挂在本区的操作行里，本任务不渲染它。
+ * 「获取可用模型」（T8，v3 §5）：入口在本区操作行，候选 Modal 打开时**才挂载**（key 即重置），
+ * 采纳结果走 `mergeAdopted` 合并 —— 新行追加在存储序末尾（倒序显示 → 看起来置顶），
+ * 已存在行只补缺、不覆盖用户值。
  */
 export function ModelCatalogEditor({
-  provider, existing, value, onChange, onValidityChange, disabled,
+  provider, existing, value, onChange, onValidityChange, fetchCredentials, disabled,
 }: ModelCatalogEditorProps) {
   const { t } = useTranslation()
   const inheriting = value === undefined
@@ -252,6 +334,8 @@ export function ModelCatalogEditor({
 
   /** 展开的行（**存储序**下标）：显示倒排，但状态按条目存，删行后靠 `shiftAfterRemove` 对齐 */
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(() => new Set())
+  /** 候选 Modal：`true` 时**才挂载**（挂载即重置 —— 见 ModelPickerDialog 的生命周期约定） */
+  const [pickerOpen, setPickerOpen] = useState(false)
 
   const byName = useMemo(() => new Map(existing.map((m) => [m.modelName, m])), [existing])
 
@@ -281,17 +365,28 @@ export function ModelCatalogEditor({
         <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
           {inheriting ? t('catalog.inherited') : t('catalog.customized')}
         </span>
-        {!inheriting && (
+        <div className="ml-auto flex items-center gap-1">
+          {!inheriting && (
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => { onChange(undefined); setExpanded(new Set()) }}
+              className={HEADER_ACTION}
+            >
+              {t('catalog.reset')}
+            </button>
+          )}
           <button
             type="button"
-            disabled={disabled}
-            onClick={() => { onChange(undefined); setExpanded(new Set()) }}
-            // 文字型目标 ≥ 20px 高（py-1 + 11px 行高 ≈ 21px）；py-0.5 只有 17px，低于命中区下限
-            className="ml-auto text-micro px-1.5 py-1 rounded transition-colors text-[var(--color-text-secondary)] hover:text-[var(--color-text)] hover:bg-[var(--color-hover)] disabled:opacity-50 disabled:cursor-not-allowed"
+            disabled={disabled || fetchCredentials === undefined}
+            // 禁用一个「看起来能点」的按钮必须说明为什么（ui-interaction-standard 的 disabled 边界）
+            title={fetchCredentials === undefined ? t('catalog.fetchDisabled') : undefined}
+            onClick={() => setPickerOpen(true)}
+            className={HEADER_ACTION}
           >
-            {t('catalog.reset')}
+            {t('provider.fetchModels')}
           </button>
-        )}
+        </div>
       </div>
 
       {/* 空目录只在**自定义态**才有意义（继承态为空 = 该家本来就没有内置目录，没什么可恢复的） */}
@@ -341,6 +436,21 @@ export function ModelCatalogEditor({
         <Plus size={12} />
         {t('catalog.add')}
       </button>
+
+      {/* 候选 Modal：**打开时才挂载**（组件按挂载重置草稿状态，见其文件头约定） */}
+      {pickerOpen && fetchCredentials && (
+        <ModelPickerDialog
+          open
+          credentials={{ provider, ...fetchCredentials }}
+          existing={existing.map((m) => m.modelName)}
+          onAdopt={(models) => {
+            // 采纳 = 一次编辑：继承态下 `rows` 是内置目录那一组，合并结果即物化后的草稿
+            onChange(mergeAdopted(rows, models, existing))
+            setPickerOpen(false)
+          }}
+          onClose={() => setPickerOpen(false)}
+        />
+      )}
     </section>
   )
 }

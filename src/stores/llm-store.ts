@@ -9,7 +9,7 @@ import { toast } from '../components/ui/Toast'
  * 用户会连点多次；每次点击都会发出一个 llm:delete-model。
  */
 const deletingModelIds = new Set<string>()
-import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount, CredentialInfo } from '../shared/ipc-channels'
+import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount, CredentialInfo, ProviderModelQuery } from '../shared/ipc-channels'
 import type { ModelOverrides } from '../shared/provider-accounts'
 import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, type ModelTier, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
@@ -89,9 +89,10 @@ interface LLMState {
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<{ success: boolean; error?: string }>
   /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常）。
-   *  密钥二选一（v3 §4.7）：`apiKeyDraft`（当场输入，优先）→ `apiKeyRef` 解析。 */
+   *  密钥二选一（v3 §4.7）：`apiKeyDraft`（当场输入，优先）→ `apiKeyRef` 解析。
+   *  入参形状与 IPC 通道同源（`ProviderModelQuery`）；有内置目录的 provider 由主进程免网络直答。 */
   listProviderModels: (
-    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'baseUrl' | 'apiKeyRef'> & { apiKeyDraft?: string },
+    credentials: ProviderModelQuery,
   ) => Promise<{ success: boolean; models?: LLMModelCandidate[]; error?: string }>
   /**
    * 保存模型（`apiKeyDraft`：用户当场输入的密钥，一次性；空/缺省 = 不改已存值）。

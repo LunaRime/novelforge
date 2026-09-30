@@ -2,7 +2,7 @@ import { BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, readProvidersFile, writeProvidersFile } from '../utils/config-utils'
 import type { ProvidersFileState } from '../utils/config-utils'
-import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
+import { ModelProfile, GlobalConfig, ProviderAccount, ProviderModelQuery } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { syncAccountModels, isModelOfAccount, type ModelOverrides } from '../../src/shared/provider-accounts'
 import { apiKeyFailure, deriveCredentialRef } from '../../src/shared/credential-rules'
@@ -12,7 +12,7 @@ import { hasLegacyKey, legacyKeyOf, runCredentialMigration } from '../credential
 import type { LegacyAccount, LegacyModel } from '../credentials/migrate'
 import type { ResolvedModelProfile } from '../llm/provider.interface'
 import { serialize } from '../utils/config-write-queue'
-import { presetModelDefaults } from '../../src/shared/provider-presets'
+import { builtinCatalogFor, presetModelDefaults } from '../../src/shared/provider-presets'
 import { listOllamaModels } from '../ollama-embedding'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
@@ -564,16 +564,42 @@ export function registerLLMController() {
 
   guardedHandle(
     'llm:list-provider-models',
-    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }) => {
+    // 入参形状与通道定义同源（ProviderModelQuery）—— 别再手抄一份（此前抄的那份漏了 anthropic 协议）
+    async (_event, credentials: ProviderModelQuery) => {
       try {
-        if (!credentials.baseUrl?.trim()) {
-          return { success: false, error: t('error.baseUrlRequired') }
-        }
-        // Ollama 走原生 /api/tags（复用既有实现：比 OpenAI 兼容端点更可靠，老版本也有）
+        // Ollama 走原生 /api/tags（复用既有实现：比 OpenAI 兼容端点更可靠，老版本也有）。
+        //
+        // ⚠️ **必须排在下面的「内置目录直答」之前**：ollama 的内置目录只是一份起步猜测
+        //    （llama3.3 / qwen2.5 / …），用户本地真正 pull 了什么只有端点知道。直答一旦
+        //    抢先，这条路就永远不可达 —— 装了 deepseek-r1:14b 的人反而在清单里看不到它。
         if (credentials.provider === 'ollama') {
+          if (!credentials.baseUrl?.trim()) {
+            return { success: false, error: t('error.baseUrlRequired') }
+          }
           const models = await listOllamaModels(credentials.baseUrl)
           // /api/tags 不提供 token 规格 → 仅 id（2026-09-28 候选对象化）
           return { success: true, models: models.map((m) => ({ id: m.name })) }
+        }
+
+        // 内置目录命中 → **免网络直答**（v3 §5「已装目录 provider 免网络直答」）：
+        // 清单与容量都在本地（`builtinCatalogFor` × `presetModelDefaults` 三级规格），
+        // 没有理由为一个已知答案去打端点 —— 没网、密钥还没填、地址写错，照样能勾模型。
+        // `custom`（以及任何没内置目录的家）落到下面的端点探测：那种目录编不出来，只能问端点。
+        const builtin = builtinCatalogFor(credentials.provider)
+        if (builtin.length > 0) {
+          return {
+            success: true,
+            models: builtin.map((name) => {
+              const { contextWindow, maxTokens } = presetModelDefaults(credentials.provider, name)
+              // `name` = 显示名（此处与 id 同串，界面上等宽 id + title 都用它）；
+              // `inputTypes` 刻意不编造：采纳时按继承链回落既有条目 → 规格 → ['text']
+              return { id: name, name, contextWindow, maxTokens }
+            }),
+          }
+        }
+
+        if (!credentials.baseUrl?.trim()) {
+          return { success: false, error: t('error.baseUrlRequired') }
         }
         // 密钥解析（v3 §4.4/§4.7）：表单里刚输入的草稿优先，否则按 ref 解析
         const apiKey = resolveRequestKey(credentials.apiKeyRef, credentials.apiKeyDraft)

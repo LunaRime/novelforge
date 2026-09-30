@@ -468,10 +468,10 @@ export interface LLMChannels {
   }
   'llm:list-provider-models': {
     /**
-     * `apiKeyDraft`（用户当场输入）**优先于** `apiKeyRef` 解析 —— 表单里刚敲的键要能当场验证
-     * （v3 §4.7「typed key wins」，保住 v2 的「保存前探测」）。已存的密钥读不回来，故没有回传字段。
+     * **有内置目录的 provider 免网络直答**（v3 T8 §5）：那种调用不看 `baseUrl` 也不看密钥，
+     * 直接回内置目录 × 规格。其余（`custom` 等）走端点探测。
      */
-    args: [credentials: { provider: string; protocol: LLMProtocol; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }]
+    args: [credentials: ProviderModelQuery]
     /** 拉取供应商可用模型（带可选的容量规格，采纳即用免手填）。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
     return: { success: boolean; models?: LLMModelCandidate[]; error?: string }
   }
@@ -561,11 +561,34 @@ export interface TokenUsage {
   cachedTokens?: number
 }
 
-/** 「获取可用模型」的候选条目：id + 可选的容量规格（拉回即用，免手填；2026-09-28） */
+/**
+ * 「获取可用模型」的入参（v3 §4.7）：**密钥二选一** —— `apiKeyDraft`（用户当场输入）**优先于**
+ * `apiKeyRef` 解析（表单里刚敲的键要能当场验证）。已存的密钥读不回来，故没有回传字段。
+ *
+ * 形状是三处共用的（IPC 通道 / store action / 候选 Modal）：供应商 id 是开放的 `string`
+ * （预设表里不止 ModelProfile 联合那一组家），别在这里收窄。
+ */
+export interface ProviderModelQuery {
+  provider: string
+  protocol: LLMProtocol
+  baseUrl: string
+  apiKeyRef?: string
+  apiKeyDraft?: string
+}
+
+/** 「获取可用模型」的候选条目：id + 可选的规格（拉回即用，免手填；2026-09-28 / v3 T8 扩展） */
 export interface LLMModelCandidate {
+  /** 模型 ID —— 采纳后进 `modelNames` 的就是它（派生的条目 id = `账户::它`） */
   id: string
+  /**
+   * **显示名**（v3 §5「等宽 id + title 显示名」）：端点给的、给人看的名字，可与 id 不同。
+   * 缺省 = 这一行没有显示名 → 界面回落 id。⚠️ 不是模型 ID，别拿它当 key。
+   */
+  name?: string
   contextWindow?: number
   maxTokens?: number
+  /** 输入类型（v3 §3.2）：端点/内置目录没给 → 保持 undefined（采纳时按继承链回落） */
+  inputTypes?: Array<'text' | 'image'>
 }
 
 export interface ModelProfile {

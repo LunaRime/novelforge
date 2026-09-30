@@ -113,6 +113,21 @@ export function ProviderEditorCard({
 
   const presetName = BUILTIN_PRESETS.find((p) => p.provider === account.provider)?.displayName ?? account.provider
 
+  /**
+   * 「获取可用模型」的凭据快照（v3 §4.7）—— 用**卡内的草稿值**（地址可能刚改、密钥可能刚敲），
+   * 不是账户上的旧值。`undefined` = 入口禁用：地址空、或密钥草稿本身不合法（那种键拿去探测
+   * 只会换回一个 401，不如先把红字改掉）。`saving` 期间由 `disabled` 一并锁住。
+   */
+  const fetchCredentials = baseUrl.trim() !== '' && failure === undefined
+    ? {
+      protocol,
+      baseUrl: baseUrl.trim(),
+      apiKeyRef: account.apiKeyRef,
+      // 空草稿 = 不提供（主进程按 ref 解析）；有值即胜出（typed key wins）
+      ...(keyDraft.trim() ? { apiKeyDraft: keyDraft.trim() } : {}),
+    }
+    : undefined
+
   const handleApply = async () => {
     // 行内红字已是门控：非法值不提交（主进程还会再判一次 —— 渲染层可被绕过）
     if (failure || saving || !catalogValid) return
@@ -248,7 +263,7 @@ export function ProviderEditorCard({
               </Select>
             </div>
 
-            {/* 模型目录（v3 §2.3）：三态 + 行内展开；「获取可用模型」由 T8 挂进这一行 */}
+            {/* 模型目录（v3 §2.3）：三态 + 行内展开 + 「获取可用模型」（T8） */}
             <div style={{ borderTop: '1px solid var(--color-border)' }} className="pt-2">
               <ModelCatalogEditor
                 provider={account.provider}
@@ -256,6 +271,7 @@ export function ProviderEditorCard({
                 value={catalog}
                 onChange={setCatalog}
                 onValidityChange={setCatalogValid}
+                fetchCredentials={fetchCredentials}
                 disabled={saving}
               />
             </div>

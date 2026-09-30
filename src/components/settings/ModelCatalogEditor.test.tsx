@@ -21,8 +21,18 @@ import { act } from 'react'
 import {
   ModelCatalogEditor, catalogModelNames, catalogOverrides, initialCatalogDraft, type ModelDraft,
 } from './ModelCatalogEditor'
+import { formatCapacity } from '../../shared/capacity'
 import { builtinCatalogFor } from '../../shared/provider-presets'
 import type { ModelProfile } from '../../shared/ipc-channels'
+
+/** 「获取可用模型」的拉取（T8：入口在目录区，候选 Modal 由它拉起） */
+const listProviderModels = vi.hoisted(() => vi.fn(async () => ({ success: true, models: [] as unknown[] })))
+
+vi.mock('../../stores/llm-store', () => ({
+  useLLMStore: Object.assign(() => undefined, {
+    getState: () => ({ listProviderModels }),
+  }),
+}))
 
 /** 编辑器本次上报的草稿（= 父级「应用」时会提交的东西） */
 let latest: ModelDraft[] | undefined
@@ -31,10 +41,11 @@ let latest: ModelDraft[] | undefined
  * 最小父级（与 ProviderEditorCard 的接线同形）：持有草稿 + 用上报的校验结果门控「应用」。
  * 断言提交形状走 `latest`（编辑器**上报**的值），断言门控走「应用」按钮。
  */
-function Harness({ provider, existing, modelNames }: {
+function Harness({ provider, existing, modelNames, fetchCredentials }: {
   provider: string
   existing?: ModelProfile[]
   modelNames?: string[]
+  fetchCredentials?: { protocol: 'openai' | 'gemini' | 'anthropic'; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }
 }) {
   // 与 ProviderEditorCard 的接线同形：初值由「账户的 modelNames + 现有派生条目」算出
   const [rows, setRows] = useState<ModelDraft[] | undefined>(
@@ -49,6 +60,7 @@ function Harness({ provider, existing, modelNames }: {
         value={rows}
         onChange={(next) => { latest = next; setRows(next) }}
         onValidityChange={setValid}
+        fetchCredentials={fetchCredentials}
       />
       <button disabled={!valid}>应用</button>
     </>
@@ -72,12 +84,22 @@ function mkModel(over: Partial<ModelProfile> & { id: string; modelName: string }
 let container: HTMLDivElement | null = null
 let root: Root | null = null
 
-function render(props: { provider: string; existing?: ModelProfile[]; modelNames?: string[] }) {
+function render(props: {
+  provider: string
+  existing?: ModelProfile[]
+  modelNames?: string[]
+  fetchCredentials?: { protocol: 'openai' | 'gemini' | 'anthropic'; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }
+}) {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
   act(() => { root!.render(<Harness {...props} />) })
   return container
+}
+
+/** 候选 Modal 的拉取是异步的：等它落地再断言 */
+async function flush() {
+  await act(async () => { await new Promise(r => setTimeout(r, 10)) })
 }
 
 beforeEach(() => { latest = undefined })
@@ -393,6 +415,125 @@ describe('ModelCatalogEditor 目录区', () => {
     click(buttonByLabel('删除模型 2')!) // 显示第 2 行 = 存储序的 b
     expect(idInputs().map((i) => i.value)).toEqual(['c', 'a'])
     expect(catalogModelNames(latest)).toEqual(['a', 'c'])
+  })
+})
+
+describe('ModelCatalogEditor「获取可用模型」入口（v3 §5，T8）', () => {
+  const CREDS = { protocol: 'openai' as const, baseUrl: 'https://gateway.example/v1', apiKeyDraft: 'sk-x' }
+  /** Modal 里的按钮（「采用所选（N）」带计数 → 前缀匹配；全选两态是精确文案） */
+  const modalButton = (text: string) =>
+    [...document.body.querySelectorAll('button')].find(b => b.textContent?.startsWith(text)) as HTMLButtonElement | undefined
+
+  it('门控：无凭据（地址空 / 密钥非法 / 只读）→ 入口禁用；有凭据 → 可点开候选 Modal', async () => {
+    render({ provider: 'custom', modelNames: ['a'] })
+    const btn = buttonByText('获取可用模型') as HTMLButtonElement
+    expect(btn.disabled).toBe(true)
+    expect(btn.title).toContain('API 地址')   // 禁用一个能点的按钮必须说明为什么（ui-interaction-standard）
+
+    // 只读账户同样禁用（disabled 三件套：禁用 + 理由）
+    act(() => root!.unmount())
+    container!.remove()
+    container = document.createElement('div')
+    document.body.appendChild(container)
+    root = createRoot(container)
+    act(() => {
+      root!.render(
+        <ModelCatalogEditor
+          provider="custom" existing={[]} value={undefined}
+          onChange={vi.fn()} disabled fetchCredentials={CREDS}
+        />,
+      )
+    })
+    expect((buttonByText('获取可用模型') as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it('采纳新模型 → 追加在**存储序末尾**（显示层倒序 → 自然置顶），显示名/容量/输入类型一并填进行', async () => {
+    listProviderModels.mockResolvedValueOnce({
+      success: true,
+      models: [{ id: 'gpt-brand-new', name: '新模型', contextWindow: 262144, maxTokens: 8192, inputTypes: ['text', 'image'] }],
+    } as never)
+    render({ provider: 'custom', modelNames: ['a', 'b'], fetchCredentials: CREDS })
+
+    click(buttonByText('获取可用模型')!)
+    await flush()
+    click(modalButton('采用所选')!)           // 新候选默认勾选（无需全选）
+
+    expect(catalogModelNames(latest)).toEqual(['a', 'b', 'gpt-brand-new'])
+    expect(idInputs()[0].value).toBe('gpt-brand-new')      // 倒序显示：新行在最上
+    expect(nameInputOf(idInputs()[0]).value).toBe('新模型')
+  })
+
+  it('采纳的规格写进行（展开可见）且进 overrides —— 采纳即用，免手填', async () => {
+    listProviderModels.mockResolvedValueOnce({
+      success: true,
+      models: [{ id: 'gpt-brand-new', name: '新模型', contextWindow: 262144, maxTokens: 8192, inputTypes: ['text', 'image'] }],
+    } as never)
+    render({ provider: 'custom', modelNames: ['a'], fetchCredentials: CREDS })
+
+    click(buttonByText('获取可用模型')!)
+    await flush()
+    click(modalButton('采用所选')!)
+    expand(1)                                               // 新行显示在最上
+
+    expect(inputByLabel('上下文窗口 1')!.value).toBe(formatCapacity(262144))
+    expect(inputByLabel('最大输出 token 1')!.value).toBe(formatCapacity(8192))
+    const text = container!.querySelector('input[aria-label="文本 1"]') as HTMLInputElement
+    const image = container!.querySelector('input[aria-label="图片 1"]') as HTMLInputElement
+    expect([text.checked, image.checked]).toEqual([true, true])
+
+    expect(catalogOverrides(latest, [])).toEqual({
+      'gpt-brand-new': { name: '新模型', contextWindow: 262144, maxTokens: 8192, inputTypes: ['text', 'image'] },
+    })
+  })
+
+  it('继承态下采纳 → 先物化内置目录再追加（不是只剩被采纳的那一个）', async () => {
+    listProviderModels.mockResolvedValueOnce({
+      success: true, models: [{ id: 'gpt-brand-new', contextWindow: 400000 }],
+    } as never)
+    render({ provider: 'openai', fetchCredentials: CREDS })   // modelNames 缺省 = 继承
+    expect(idInputs()).toHaveLength(builtinCatalogFor('openai').length)
+
+    click(buttonByText('获取可用模型')!)
+    await flush()
+    click(modalButton('采用所选')!)   // 该账户一条派生条目都没有 → 候选全是「新」→ 默认已勾
+
+    const catalog = builtinCatalogFor('openai')
+    expect(latest).toHaveLength(catalog.length + 1)
+    expect(catalogModelNames(latest)!.slice(0, catalog.length)).toEqual(catalog) // 原目录整组保留
+    expect(latest![latest!.length - 1].modelName).toBe('gpt-brand-new')
+    expect(container!.textContent).toContain('已自定义模型目录')  // 物化 = 离开继承态
+  })
+
+  it('采纳**已存在**的模型 → 保留用户值（容量/显示名不动），只补齐缺失字段（inputTypes）', async () => {
+    // 盘上条目：用户改过容量与显示名，但没声明过输入类型
+    const base = [mkModel({
+      id: 'acct::gpt-5.6-sol', modelName: 'gpt-5.6-sol', name: '主力',
+      contextWindow: 200_000, maxTokens: 64_000,
+    })]
+    listProviderModels.mockResolvedValueOnce({
+      success: true,
+      models: [{
+        id: 'gpt-5.6-sol', name: '端点给的显示名',
+        contextWindow: 400_000, maxTokens: 32_000, inputTypes: ['text', 'image'],
+      }],
+    } as never)
+    render({ provider: 'openai', existing: base, modelNames: ['gpt-5.6-sol'], fetchCredentials: CREDS })
+
+    click(buttonByText('获取可用模型')!)
+    await flush()
+    click(modalButton('全选')!)                               // 已存在项默认不勾 → 显式勾上
+    await flush()
+    click(modalButton('采用所选')!)
+
+    // 保留：显示名与容量（用户在盘上的值一个都没被端点覆盖）
+    expect(nameInputOf(idInputs()[0]).value).toBe('主力')
+    expand(1)
+    expect(inputByLabel('上下文窗口 1')!.value).toBe('')      // 容量框仍空（继承条目值），未被写成 400000
+    expect(inputByLabel('上下文窗口 1')!.placeholder).toBe('200K')
+    // 补齐：条目没有 inputTypes → 采纳值落进行
+    const image = container!.querySelector('input[aria-label="图片 1"]') as HTMLInputElement
+    expect(image.checked).toBe(true)
+    expect(catalogOverrides(latest, base)).toEqual({ 'gpt-5.6-sol': { inputTypes: ['text', 'image'] } })
   })
 })
 

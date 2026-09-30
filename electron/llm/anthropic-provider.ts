@@ -1,6 +1,6 @@
 import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, LLMUsage, ResolvedModelProfile } from './provider.interface'
 import { LLMModelCandidate } from '../../src/shared/ipc-channels'
-import { toCandidates } from './model-listing'
+import { readListingJson, toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
@@ -322,7 +322,8 @@ export class AnthropicProvider implements ILLMProvider {
     })
     if (!res.ok) throw mapAnthropicError(res.status, await res.text().catch(() => ''))
 
-    const data = (await res.json()) as { data?: Array<Record<string, unknown>> }
+    // 读取带上限（v3 §5）：地址是用户填的，配错的网关可以回一份巨大响应体
+    const data = (await readListingJson(res)) as { data?: Array<Record<string, unknown>> }
     return toCandidates(data.data ?? [], (e) => (typeof e.id === 'string' ? e.id : undefined))
   }
 }

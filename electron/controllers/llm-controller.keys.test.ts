@@ -29,6 +29,8 @@ const h = vi.hoisted(() => {
     /** 通道 → 真实注册的 handler（由 mock 的 ipcMain.handle 捕获） */
     handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
     seen,
+    /** Ollama 原生清单（T8 起：它在直答**之前**，不能被内置目录遮蔽） */
+    listOllamaModels: vi.fn(async () => [] as Array<{ name: string }>),
     provider: {
       generate: vi.fn(async (model: { apiKey?: string }) => {
         seen.generate = model
@@ -71,10 +73,16 @@ vi.mock('../llm/llm-factory', () => ({
   LLMFactory: { getProvider: () => h.provider },
 }))
 
+vi.mock('../ollama-embedding', () => ({
+  listOllamaModels: h.listOllamaModels,
+}))
+
+import { t } from '../../src/shared/locale'
 import { registerLLMController } from './llm-controller'
 import { MODELS_CONFIG_PATH, writeJsonFile, __setConfigFilesForTest } from '../utils/config-utils'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { __setStoredForTest } from '../credentials/store'
+import { builtinCatalogFor, presetModelDefaults } from '../../src/shared/provider-presets'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
 
 const SENDER_ID = 31
@@ -207,7 +215,9 @@ describe('llm:test-connection（草稿优先 → ref 解析）', () => {
 })
 
 describe('llm:list-provider-models（草稿优先 → apiKeyRef 解析）', () => {
-  const base = { provider: 'openai', protocol: 'openai', baseUrl: 'https://api.example.com/v1' } as const
+  // ⚠️ provider 用 `custom`（**无内置目录**）：v3 T8 起内置目录命中的 provider 免网络直答，
+  //    键解析根本不会发生（要测的是「探测这道门上的键接线」，不是目录直答 —— 直答另有专测块）。
+  const base = { provider: 'custom', protocol: 'openai', baseUrl: 'https://api.example.com/v1' } as const
 
   it('入参带 ref → listModels 收到凭据库的值', async () => {
     __setStoredForTest({ [REF]: 'sk-from-store' })
@@ -238,6 +248,93 @@ describe('llm:list-provider-models（草稿优先 → apiKeyRef 解析）', () =
     const res = await call('llm:list-provider-models', { ...base, apiKeyDraft: '  ' })
 
     expect(res).toMatchObject({ success: false })
+    expect(h.seen.listModels).toBeNull()
+  })
+})
+
+describe('llm:list-provider-models（内置目录直答，v3 §5）', () => {
+  /** 直答的期望形状：id + name（同串）+ 三级规格补全出的两个容量 */
+  const directAnswer = (id: string) => {
+    const { contextWindow, maxTokens } = presetModelDefaults('openai', id)
+    return { id, name: id, contextWindow, maxTokens }
+  }
+
+  it('内置目录命中（openai）→ 免网络直答：不调 fetch、不碰 provider，名字 × 规格容量全数返回', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    try {
+      const res = (await call('llm:list-provider-models', {
+        provider: 'openai', protocol: 'openai', baseUrl: 'https://api.openai.com',
+      })) as { success: boolean; models: Array<Record<string, unknown>> }
+
+      expect(res.success).toBe(true)
+      expect(h.seen.listModels, '内置目录命中却打了端点 —— 免网络直答没生效').toBeNull()
+      expect(fetchSpy, '免网络直答不该发起任何真实请求').not.toHaveBeenCalled()
+      expect(res.models.map((m) => m.id)).toEqual(builtinCatalogFor('openai'))
+      // 容量走三级规格补全（字面量 → 生成表 → 兜底），与目录区的继承值同源
+      const sample = builtinCatalogFor('openai')[0]
+      expect(res.models[0]).toEqual(directAnswer(sample))
+      // 输入类型不由直答编造（保持 undefined → 采纳时按继承链回落）
+      expect(res.models.every((m) => !('inputTypes' in m))).toBe(true)
+    } finally {
+      fetchSpy.mockRestore()
+    }
+  })
+
+  it('无密钥/无地址也照样直答（这条路根本不发请求，别在门口拦它）', async () => {
+    const res = await call('llm:list-provider-models', {
+      provider: 'deepseek', protocol: 'openai', baseUrl: '',
+    })
+
+    expect(res).toMatchObject({ success: true })
+    expect(h.seen.listModels).toBeNull()
+  })
+
+  it('生成表并入后才非空的 provider（moonshot）同样直答 —— 不再打端点', async () => {
+    const res = (await call('llm:list-provider-models', {
+      provider: 'moonshot', protocol: 'openai', baseUrl: 'https://api.moonshot.cn',
+    })) as { success: boolean; models: Array<{ id: string }> }
+
+    expect(builtinCatalogFor('moonshot').length).toBeGreaterThan(0) // 防「目录其实为空」把这条断言变成空转
+    expect(res.models.map((m) => m.id)).toEqual(builtinCatalogFor('moonshot'))
+    expect(h.seen.listModels).toBeNull()
+  })
+
+  it('无内置目录（custom）→ 仍走端点探测（直答不是把所有家都短路掉）', async () => {
+    __setStoredForTest({ [REF]: 'sk-from-store' })
+
+    const res = (await call('llm:list-provider-models', {
+      provider: 'custom', protocol: 'openai', baseUrl: 'https://gateway.example/v1', apiKeyRef: REF,
+    })) as { success: boolean; models: Array<{ id: string }> }
+
+    expect(res.models.map((m) => m.id)).toEqual(['candidate-1'])
+    expect(h.seen.listModels?.apiKey).toBe('sk-from-store')
+  })
+
+  it('重排只动了成功分支：空地址的失败路径两条都原样（ollama / 端点探测）', async () => {
+    // 「ollama 原生分支保持在最前」是 team-lead 的裁决（2026-10-01）——连同它的**失败路径**一起
+    // 保真：这次重排把地址校验挪进了 ollama 分支内，出错文案与「不发起调用」的语义都没变
+    const ollama = await call('llm:list-provider-models', {
+      provider: 'ollama', protocol: 'openai', baseUrl: '   ',
+    })
+    expect(ollama).toEqual({ success: false, error: t('error.baseUrlRequired') })
+    expect(h.listOllamaModels, '空地址不该去打本地端点').not.toHaveBeenCalled()
+
+    const custom = await call('llm:list-provider-models', {
+      provider: 'custom', protocol: 'openai', baseUrl: '',
+    })
+    expect(custom).toEqual({ success: false, error: t('error.baseUrlRequired') })
+    expect(h.seen.listModels).toBeNull()
+  })
+
+  it('ollama 仍走原生 /api/tags（**刻意排在直答之前**：内置那几个名字只是起步猜测，本地装了什么只有端点知道）', async () => {
+    h.listOllamaModels.mockResolvedValueOnce([{ name: 'deepseek-r1:14b' }, { name: 'qwen3:32b' }])
+
+    const res = (await call('llm:list-provider-models', {
+      provider: 'ollama', protocol: 'openai', baseUrl: 'http://localhost:11434',
+    })) as { success: boolean; models: Array<{ id: string }> }
+
+    expect(h.listOllamaModels).toHaveBeenCalledWith('http://localhost:11434')
+    expect(res.models.map((m) => m.id)).toEqual(['deepseek-r1:14b', 'qwen3:32b'])
     expect(h.seen.listModels).toBeNull()
   })
 })
