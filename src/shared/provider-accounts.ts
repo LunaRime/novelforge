@@ -30,6 +30,19 @@ export function isModelOfAccount(modelId: string, accountId: string): boolean {
   return modelId.startsWith(`${accountId}${SEP}`)
 }
 
+/**
+ * 账户的**有效目录清单**（v3 §3.4 三态）：`modelNames` 非空 = 就是这份清单；
+ * 缺省 / 空数组 = 内置目录全集（`builtinCatalogFor`）。
+ *
+ * ⚠️ **单源在这里**：`syncAccountModels` 与渲染层的「这次提交会删掉哪些派生条目」守卫
+ * （`ProviderEditorCard.handleApply` 的引用检查）必须逐字一致 —— 口径一旦漂移，
+ * 守卫会在真的删条目时放行（留下悬空 id），或者反过来误拦一次干净的保存。
+ */
+export function effectiveCatalogFor(account: { provider: string; modelNames?: string[] }): string[] {
+  const names = account.modelNames
+  return names && names.length > 0 ? names : builtinCatalogFor(account.provider)
+}
+
 /** 新建派生条目时，逐模型设置的初值（由调用方按预设给出） */
 export type NewModelDefaults = Pick<
   ModelProfile,
@@ -140,9 +153,7 @@ export function syncAccountModels(
     baseUrl: account.baseUrl,
     apiKeyRef: account.apiKeyRef,
   }
-  const names = account.modelNames && account.modelNames.length > 0
-    ? account.modelNames
-    : builtinCatalogFor(account.provider)
+  const names = effectiveCatalogFor(account)
   const wanted = names.map((name) => ({ name, id: deriveModelId(account.id, name) }))
   const wantedIds = new Set(wanted.map((w) => w.id))
 

@@ -13,6 +13,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import { ProviderEditorCard, type ProviderEditorCardProps } from './ProviderEditorCard'
+import { builtinCatalogFor } from '../../shared/provider-presets'
 import { toast } from '../ui/Toast'
 import type { CredentialInfo, ProviderAccount } from '../../shared/ipc-channels'
 
@@ -38,6 +39,12 @@ const state = vi.hoisted(() => ({
   /** 全局模型表 —— 目录区按账户过滤出**派生条目**（初值/placeholder/用途标签） */
   models: [] as Array<{ id: string; modelName: string; name: string }>,
   credentialInfo: {} as Record<string, unknown>,
+  /** 引用检查（`blockingReferences` 从三个 store 汇集）—— 默认全空 = 无引用 */
+  defaultModelId: null as string | null,
+  defaultEmbeddingModelId: null as string | null,
+  modelRoutes: { elite: [] as string[], standard: [] as string[], budget: [] as string[], strategy: 'static' },
+  conversations: [] as Array<{ id: string; title?: string | null; modelId?: string | null }>,
+  llmEmbeddingModelId: null as string | null,
 }))
 
 vi.mock('../../stores/llm-store', () => ({
@@ -45,6 +52,14 @@ vi.mock('../../stores/llm-store', () => ({
     (selector: (s: typeof state) => unknown) => selector(state),
     { getState: () => state },
   ),
+}))
+
+// 引用检查要跨三个 store 汇集（默认模型/路由在 llm，会话在 agent，向量配置在 vector）
+vi.mock('../../stores/agent-store', () => ({
+  useAgentStore: { getState: () => ({ conversations: state.conversations }) },
+}))
+vi.mock('../../stores/vector-config-store', () => ({
+  useVectorConfigStore: { getState: () => ({ llmEmbeddingSettings: { modelId: state.llmEmbeddingModelId } }) },
 }))
 
 const ACCOUNT: ProviderAccount = {
@@ -95,6 +110,12 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.clearAllMocks()
   state.saveProvider.mockImplementation(async () => ({ success: true, revision: 2 }))
+  state.models = []
+  state.defaultModelId = null
+  state.defaultEmbeddingModelId = null
+  state.modelRoutes = { elite: [], standard: [], budget: [], strategy: 'static' }
+  state.conversations = []
+  state.llmEmbeddingModelId = null
 })
 
 /** 关联 Label 的输入框（Label[for] → id）——顺带把「标签与控件已关联」钉住 */
@@ -374,5 +395,96 @@ describe('ProviderEditorCard × 目录区', () => {
     const [patch, , , , overrides] = state.saveProvider.mock.calls[0]
     expect((patch as ProviderAccount).modelNames).toBeUndefined()
     expect(overrides).toBeUndefined()
+  })
+})
+
+/**
+ * 引用检查（v2 有、v3 重建时丢掉的守卫 —— 终审 I1 的真回归）。
+ *
+ * 目录区删行 / 恢复默认**会真的删掉派生条目**，而默认模型、三层路由、会话按 id 引用它们：
+ * 不查就提交 = 一串悬空 id（界面报「已保存」，状态栏/工作流报未配置，只能人工修）。
+ * 判据：被引用 → **整张卡不提交**（`saveProvider` 未被调用）+ toast 点名引用位置 + 草稿保留。
+ */
+describe('ProviderEditorCard × 引用检查（删目录条目的守卫）', () => {
+  /** 该账户当前唯一的派生条目（目录行删掉后，主进程就会把它删掉） */
+  const DERIVED = { id: 'acct-1::gen-1', modelName: 'gen-1', name: 'gen-1' }
+
+  const removeFirstRow = async () => {
+    await act(async () => {
+      container!.querySelector<HTMLButtonElement>('button[aria-label="删除模型 1"]')!.click()
+    })
+  }
+
+  it('删掉当前默认模型所在行 → 拦下：saveProvider 未被调用 + toast + 草稿保留', async () => {
+    state.models = [DERIVED]
+    state.defaultModelId = DERIVED.id
+    render()
+
+    await removeFirstRow()
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('默认生成模型'))
+    // 草稿保留（整张卡原地不动）：目录仍是删掉后的那份，不是被静默回滚
+    expect(container!.textContent).toContain('已自定义模型目录')
+  })
+
+  it('路由 / 会话引用同样拦得住（引用源跨三个 store）', async () => {
+    state.models = [DERIVED]
+    state.modelRoutes = { elite: [DERIVED.id], standard: [], budget: [], strategy: 'static' }
+    state.conversations = [{ id: 'c1', title: '第一章', modelId: DERIVED.id }]
+    render()
+
+    await removeFirstRow()
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('三层路由 · elite、会话 · 第一章'))
+  })
+
+  it('「恢复默认模型」把被引用的条目挤出目录 → 同样拦（清空走的也是这条差集）', async () => {
+    // 自定义清单里的模型**不在**内置目录里：恢复默认后它就会被删掉
+    state.models = [{ id: 'acct-1::my-custom', modelName: 'my-custom', name: 'my-custom' }]
+    state.defaultModelId = 'acct-1::my-custom'
+    render({ account: { ...ACCOUNT, provider: 'deepseek' as never, modelNames: ['my-custom'] } })
+
+    await act(async () => { buttonByText('恢复默认模型').click() })
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith(expect.stringContaining('默认生成模型'))
+    // 草稿保留：目录仍停在用户点下的「恢复默认」态（没有被静默回滚成自定义清单）
+    expect(container!.textContent).toContain('默认模型目录')
+    expect(container!.textContent).not.toContain('已自定义模型目录')
+  })
+
+  it('删掉**未被引用**的行 → 照常提交（守卫不是一刀切）', async () => {
+    state.models = [DERIVED]
+    render()
+
+    await removeFirstRow()
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(toastError).not.toHaveBeenCalled()
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ modelNames: [] }), undefined, 7, undefined, undefined,
+    )
+  })
+
+  it('「删光 = 恢复默认」不误拦：条目名仍在内置目录里 → 差集为空', async () => {
+    // provider 自带内置目录时，空清单在存储层是**继承**（下次保存会把全集重建出来）——
+    // 用 `??` 直算差集会对这家误报「整个目录被删掉」
+    const builtin = builtinCatalogFor('openai')[0]
+    state.models = [{ id: `acct-1::${builtin}`, modelName: builtin, name: builtin }]
+    state.defaultModelId = `acct-1::${builtin}`
+    render({ account: { ...ACCOUNT, provider: 'openai' as never, modelNames: [builtin] } })
+
+    await removeFirstRow()
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(toastError).not.toHaveBeenCalled()
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ modelNames: [] }), undefined, 7, undefined, undefined,
+    )
   })
 })

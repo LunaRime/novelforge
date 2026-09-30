@@ -5,7 +5,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { apiKeyFailure, credentialFailureKey } from '../../shared/credential-rules'
 import { LLM_PROTOCOLS, type LLMProtocol } from '../../shared/llm-protocols'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
-import { isModelOfAccount } from '../../shared/provider-accounts'
+import { effectiveCatalogFor, isModelOfAccount } from '../../shared/provider-accounts'
 import type { CredentialInfo, ProviderAccount } from '../../shared/ipc-channels'
 import type { TextKey } from '../../shared/locale'
 import { renderLog } from '../../services/render-logger'
@@ -16,6 +16,7 @@ import { Label } from '../ui/Label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { toast } from '../ui/Toast'
 import { credentialFieldState } from './credential-field'
+import { blockingReferences } from './model-references'
 import {
   ModelCatalogEditor, catalogModelNames, catalogOverrides, catalogsEqual, initialCatalogDraft,
   type ModelDraft,
@@ -185,6 +186,27 @@ export function ProviderEditorCard({
   const handleApply = async () => {
     // 行内红字已是门控：非法值不提交（主进程还会再判一次 —— 渲染层可被绕过）
     if (failure || saving || !catalogValid) return
+
+    /**
+     * 引用检查（v2 有、v3 重建时丢掉的守卫，2026-10-01 终审 I1）：
+     * 目录区**删行 / 恢复默认会真的删掉派生条目**（主进程 `syncAccountModels` 按下发清单重建），
+     * 而默认模型、三层路由、会话、向量配置都按 id 引用它们 —— 不查就提交，删完是一串悬空 id：
+     * 界面报「已保存」，状态栏/工作流那边报未配置，只能人工修。
+     *
+     * 被引用 → **整张卡不提交**（草稿保留，用户改掉引用再点一次即可），与删账户同一句文案。
+     * 差集口径走 `effectiveCatalogFor`（与同步函数同源）：空数组/缺省 = 继承内置目录，
+     * 用 `??` 直算会把「删光 = 恢复默认」误判成「删光全部条目」（对自带内置目录的家是假警报）。
+     */
+    const nextNames = catalogModelNames(catalog)
+    const kept = effectiveCatalogFor({ provider: account.provider, modelNames: nextNames })
+    const removed = accountModels.filter((m) => !kept.includes(m.modelName.trim())).map((m) => m.id)
+    const blocking = removed.length > 0 ? blockingReferences(removed) : null
+    if (blocking) {
+      renderLog('warn', 'Save:Settings', `provider save blocked by references: ${account.provider} → ${blocking}`)
+      toast.error(t('provider.referenced').replace('{list}', () => blocking))
+      return
+    }
+
     setConflict(false)
     setSaving(true)
     const t0 = Date.now()
