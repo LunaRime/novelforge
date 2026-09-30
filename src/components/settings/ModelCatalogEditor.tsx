@@ -26,9 +26,9 @@ export interface ModelDraft {
   modelName: string
   /** 显示名草稿（空 = 回落 `modelName`） */
   name?: string
-  /** 上下文窗口的输入原文（`undefined`/空 = 继承） */
+  /** 上下文窗口的输入原文：`undefined` = 本次不动；`''`（或纯空白）= **移除覆盖**（回规格） */
   contextWindowText?: string
-  /** 最大输出 token 的输入原文（`undefined`/空 = 继承） */
+  /** 最大输出 token 的输入原文：`undefined` = 本次不动；`''`（或纯空白）= **移除覆盖**（回规格） */
   maxTokensText?: string
   /** 输入类型的**显式**值（`undefined` = 继承 → `['text']`） */
   inputTypes?: InputType[]
@@ -393,10 +393,14 @@ export function ModelCatalogEditor({
         </div>
       </div>
 
-      {/* 空目录只在**自定义态**才有意义（继承态为空 = 该家本来就没有内置目录，没什么可恢复的） */}
-      {!inheriting && rows.length === 0 && (
+      {/* 空目录两种来源，文案各不相同（都只在真的空着时出现）：
+          - 自定义态为空 = 「删光 = 恢复默认」那条语义，说清保存后的去向；
+          - 继承态为空 = 该家**没有内置目录**（`custom` 这类，`builtinCatalogFor` 给不出东西）——
+            这不是「已删光」，得给出下一步：点「获取可用模型」拉真实清单，或手输。
+            两种合并成一个分支，免得多一层包含关系（互斥条件，各自一行文案）。 */}
+      {rows.length === 0 && (
         <p className="text-micro mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          {t('catalog.emptyCustomized')}
+          {inheriting ? t('catalog.emptyInherited') : t('catalog.emptyCustomized')}
         </p>
       )}
 

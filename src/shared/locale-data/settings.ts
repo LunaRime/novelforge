@@ -189,6 +189,8 @@ export const settingsTexts = {
   'catalog.reset': { 'zh-CN': '恢复默认模型', 'en-US': 'Restore defaults', 'ru-RU': 'Вернуть по умолчанию' },
   'catalog.fetchDisabled': { 'zh-CN': '需先填 API 地址，且密钥草稿没有错误', 'en-US': 'Needs an API address and an error-free key draft', 'ru-RU': 'Нужны адрес API и корректный черновик ключа' },
   'catalog.emptyCustomized': { 'zh-CN': '目录为空 —— 保存后恢复默认模型目录', 'en-US': 'Catalog is empty — saving restores the default model catalog', 'ru-RU': 'Каталог пуст — после сохранения вернётся каталог по умолчанию' },
+  // 继承态 + 空内置目录（custom 这类）：不是「已删光」，而是要用户去拉/去输
+  'catalog.emptyInherited': { 'zh-CN': '该服务商没有内置目录 —— 点「获取可用模型」拉取，或「添加模型」手动输入', 'en-US': 'No built-in catalog for this provider — use “Fetch available models”, or “Add model” to type one', 'ru-RU': 'У этого провайдера нет встроенного каталога — нажмите «Получить модели» или добавьте модель вручную' },
   'catalog.add': { 'zh-CN': '添加模型', 'en-US': 'Add model', 'ru-RU': 'Добавить модель' },
   'catalog.modelId': { 'zh-CN': '模型 ID', 'en-US': 'Model ID', 'ru-RU': 'ID модели' },
   'catalog.modelIdPlaceholder': { 'zh-CN': '如：gpt-5.6-sol', 'en-US': 'e.g. gpt-5.6-sol', 'ru-RU': 'напр. gpt-5.6-sol' },

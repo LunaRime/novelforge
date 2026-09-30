@@ -63,7 +63,8 @@ interface LLMState {
   /**
    * 批量查凭据状态并写入 `credentialInfo`。
    *
-   * - 不传 `refs` = 全量刷新（当前所有账户的 ref；**整体替换**缓存）
+   * - 不传 `refs` = 全量刷新（**所有已知 ref**：账户的 ∪ 条目（含「其他」卡手工条目）的；
+   *   **整体替换**缓存）
    * - 传 `refs` = 定点刷新（**合并**，不动其它条目的已知状态）
    */
   describeCredentials: (refs?: string[]) => Promise<void>

@@ -602,3 +602,36 @@ describe('ModelCatalogEditor 键盘可达性', () => {
     }
   })
 })
+
+/**
+ * 空目录的两种文案（终审小修⑤c）。
+ *
+ * 继承态为空**不是**「已删光」—— 那是这家本来就没有内置目录（`custom` 这类，
+ * `builtinCatalogFor` 给不出东西）。此处必须给出下一步（获取可用模型 / 手动添加），
+ * 否则目录区就是一片沉默的空白，用户不知道「继承了一个空目录」该怎么办。
+ */
+describe('空目录文案（继承态 vs 自定义态）', () => {
+  it('自定义态删光 → 「目录为空 —— 保存后恢复默认模型目录」', () => {
+    render({ provider: 'custom', modelNames: ['m-1'] })
+    click(buttonByLabel('删除模型 1')!)
+
+    expect(container!.textContent).toContain('目录为空 —— 保存后恢复默认模型目录')
+    expect(container!.textContent).not.toContain('该服务商没有内置目录')
+  })
+
+  it('继承态 + 该家没有内置目录（custom）→ 引导「获取可用模型 / 添加模型」', () => {
+    render({ provider: 'custom', modelNames: undefined })
+    expect(idInputs()).toHaveLength(0) // 前置：确实一行都没有（不是文案写错位置）
+    expect(container!.textContent).toContain('该服务商没有内置目录')
+    // 引导要指向真能点的两个入口
+    expect(buttonByText('获取可用模型')).toBeTruthy()
+    expect(buttonByText('添加模型')).toBeTruthy()
+  })
+
+  it('继承态 + 有内置目录 → 不出现任何空目录文案（行本身就是目录）', () => {
+    render({ provider: 'openai', modelNames: undefined })
+    expect(idInputs().length).toBeGreaterThan(0)
+    expect(container!.textContent).not.toContain('该服务商没有内置目录')
+    expect(container!.textContent).not.toContain('目录为空')
+  })
+})
