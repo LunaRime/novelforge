@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { deriveModelId, isModelOfAccount, syncAccountModels, findModelReferences } from './provider-accounts'
+import { BUILTIN_PRESETS, builtinCatalogFor, presetModelDefaults } from './provider-presets'
+import { PI_AI_MODEL_SPECS } from './model-specs.generated'
 import type { ModelProfile, ProviderAccount } from './ipc-channels'
 
 const ACCOUNT: ProviderAccount = {
@@ -7,6 +9,7 @@ const ACCOUNT: ProviderAccount = {
   provider: 'deepseek',
   protocol: 'openai',
   apiKey: 'sk-account',
+  apiKeyRef: 'DEEPSEEK_API_KEY',
   baseUrl: 'https://api.deepseek.com',
   modelNames: ['deepseek-v4-pro', 'deepseek-v4-flash'],
 }
@@ -63,6 +66,7 @@ describe('syncAccountModels', () => {
     expect(out[0].baseUrl).toBe('https://api.deepseek.com')
     expect(out[0].provider).toBe('deepseek')
     expect(out[0].maxTokens).toBe(8192)
+    expect(out[0].apiKeyRef, '凭据副本必须带上账户的 ref（T5 删 apiKey 后它是唯一通路）').toBe('DEEPSEEK_API_KEY')
   })
 
   it('新条目的显示名初值取模型名（之后用户在卡片里改的就是权威值）', () => {
@@ -98,6 +102,93 @@ describe('syncAccountModels', () => {
     })
   })
 
+  describe('目录三态（v3 §3.4）：undefined / 空数组 = 继承内置目录', () => {
+    /** 有完整手写目录的 provider（models + embeddingModels 都有） */
+    const heir: ProviderAccount = {
+      id: 'heir-1',
+      provider: 'openai',
+      protocol: 'openai',
+      apiKey: 'sk-heir',
+      apiKeyRef: 'OPENAI_API_KEY',
+      baseUrl: 'https://api.openai.com',
+      modelNames: [],
+    }
+
+    it('modelNames 空数组 = 继承内置目录全集（名序 = models 序 + embeddingModels 序）', () => {
+      const out = syncAccountModels(heir, [], (n) => presetModelDefaults(heir.provider, n))
+
+      expect(out.map(m => m.modelName)).toEqual(builtinCatalogFor('openai'))
+      // 名序 = 预设 models 序 + embeddingModels 序（用预设本身做 oracle，不另写字面量）
+      const preset = BUILTIN_PRESETS.find(p => p.provider === 'openai')!
+      expect(out.map(m => m.modelName)).toEqual([
+        ...preset.models.map(m => m.name),
+        ...preset.embeddingModels,
+      ])
+      expect(out.length).toBeGreaterThan(preset.models.length) // 向量模型确实进来了
+    })
+
+    it('继承而来的派生条目同样携带凭据副本（apiKeyRef 随账户走）', () => {
+      const out = syncAccountModels(heir, [], (n) => presetModelDefaults(heir.provider, n))
+      expect(out.every(m => m.apiKeyRef === 'OPENAI_API_KEY')).toBe(true)
+      expect(out.every(m => m.apiKey === 'sk-heir')).toBe(true)
+      expect(out.every(m => m.provider === 'openai')).toBe(true)
+    })
+
+    it('modelNames 缺省（undefined）与空数组同义', () => {
+      const undef: ProviderAccount = { ...heir, modelNames: undefined }
+      const a = syncAccountModels(undef, [], (n) => presetModelDefaults(heir.provider, n))
+      const b = syncAccountModels(heir, [], (n) => presetModelDefaults(heir.provider, n))
+      expect(a.map(m => m.id)).toEqual(b.map(m => m.id))
+      expect(a).toHaveLength(builtinCatalogFor('openai').length)
+    })
+
+    it('继承态下已有条目的逐模型设置仍原样保留（合并语义不因继承而变）', () => {
+      const mine = mkModel({
+        id: deriveModelId(heir.id, 'gpt-5.6-sol'),
+        modelName: 'gpt-5.6-sol',
+        name: '我的主力',
+        temperature: 1.1,
+        apiKey: 'sk-old',
+      })
+      const out = syncAccountModels(heir, [mine], (n) => presetModelDefaults(heir.provider, n))
+      const got = out.find(m => m.id === mine.id)!
+      expect(got.name).toBe('我的主力')
+      expect(got.temperature).toBe(1.1)
+      expect(got.apiKey).toBe('sk-heir')
+      expect(out).toHaveLength(builtinCatalogFor('openai').length) // 不重复追加
+    })
+
+    it('生成表（PI_AI_MODEL_SPECS）的键并入继承目录，排在两个手写来源之后', () => {
+      const provider = 'deepseek'
+      const preset = BUILTIN_PRESETS.find(p => p.provider === provider)!
+      const handwritten = [...preset.models.map(m => m.name), ...preset.embeddingModels]
+      const generated = Object.keys(PI_AI_MODEL_SPECS[provider] ?? {})
+
+      expect(builtinCatalogFor(provider)).toEqual([...new Set([...handwritten, ...generated])])
+      expect(builtinCatalogFor(provider).length).toBeGreaterThan(handwritten.length) // 生成表确实带来新键
+    })
+
+    it('手写 models 刻意留空的 provider 由生成表兜住（继承不再为空）', () => {
+      for (const provider of ['moonshot', 'xiaomi', 'groq', 'openrouter']) {
+        expect(BUILTIN_PRESETS.find(p => p.provider === provider)!.models, provider).toEqual([])
+        expect(builtinCatalogFor(provider), provider).toEqual(Object.keys(PI_AI_MODEL_SPECS[provider] ?? {}))
+        expect(builtinCatalogFor(provider).length, provider).toBeGreaterThan(0)
+      }
+    })
+
+    it('自定义清单只需要所列模型（非空 = 自定义态，不再继承）', () => {
+      const out = syncAccountModels(ACCOUNT, [], (n) => presetModelDefaults(ACCOUNT.provider, n))
+      expect(out.map(m => m.modelName)).toEqual(['deepseek-v4-pro', 'deepseek-v4-flash'])
+      expect(out).toHaveLength(2) // 内置目录里还有别的 deepseek 规格项 → 证明未继承
+    })
+
+    it('未知/自定义 provider 的内置目录为空 → 继承态下不产生条目', () => {
+      const custom: ProviderAccount = { ...heir, provider: 'custom', protocol: 'openai', modelNames: undefined }
+      expect(builtinCatalogFor('custom')).toEqual([])
+      expect(syncAccountModels(custom, [], (n) => presetModelDefaults(custom.provider, n))).toEqual([])
+    })
+  })
+
   it('取消勾选 → 删除该条目', () => {
     const existing = syncAccountModels(ACCOUNT, [], newModelDefaults)
     const shrunk: ProviderAccount = { ...ACCOUNT, modelNames: ['deepseek-v4-pro'] }
@@ -105,10 +196,15 @@ describe('syncAccountModels', () => {
     expect(out.map(m => m.id)).toEqual(['acc-1::deepseek-v4-pro'])
   })
 
-  it('删账户（modelNames 清空）→ 其派生条目全部消失', () => {
+  it('⚠️ 语义变更（v3）：空 modelNames 现在是「继承」而非「清空」——删除账户不再走它', () => {
     const existing = syncAccountModels(ACCOUNT, [], newModelDefaults)
     const out = syncAccountModels({ ...ACCOUNT, modelNames: [] }, existing, newModelDefaults)
-    expect(out).toHaveLength(0)
+    // 旧语义（空 = 删光派生条目）已废弃：现在空 = 继承内置目录 → 条目按目录重建
+    // （既有条目仍按 existing 序保留 —— 合并语义不变，只有**新建**条目才取目录序）
+    expect(out.map(m => m.id).sort()).toEqual(
+      builtinCatalogFor('deepseek').map(n => deriveModelId(ACCOUNT.id, n)).sort(),
+    )
+    expect(out).not.toHaveLength(0)
   })
 
   describe('不越界', () => {

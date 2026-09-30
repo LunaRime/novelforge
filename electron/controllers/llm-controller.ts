@@ -1,9 +1,12 @@
 import { BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
-import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, PROVIDERS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
+import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, readProvidersFile, writeProvidersFile } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
-import { syncAccountModels } from '../../src/shared/provider-accounts'
+import { syncAccountModels, isModelOfAccount } from '../../src/shared/provider-accounts'
+import { deriveCredentialRef } from '../../src/shared/credential-rules'
+import { readCredentialFile } from '../credentials/store'
+import { serialize } from '../utils/config-write-queue'
 import { presetModelDefaults } from '../../src/shared/provider-presets'
 import { listOllamaModels } from '../ollama-embedding'
 import { LLMFactory } from '../llm/llm-factory'
@@ -43,6 +46,74 @@ function saveModelConfigs(models: ModelProfile[]) {
   // 保存前加密所有 apiKey
   const toSave = models.map((m) => ({ ...m, apiKey: encryptApiKey(m.apiKey) }))
   writeJsonFile(MODELS_CONFIG_PATH, toSave)
+}
+
+/**
+ * models.json 的**受保护**读-改-写（v3 §5）：整次「读 → 改 → 写」都在同一个写队列任务内。
+ *
+ * ⚠️ 保护的正确性取决于**整次**读-改-写都在 fn 里：只把 write 包起来等于没包
+ * （两个调用者仍会各自基于同一份旧快照改，后写者覆盖前者的改动）。
+ * 返回写入后的数组，供调用方做日志/计数（不必再读一次盘）。
+ */
+function mutateModels(fn: (models: ModelProfile[]) => ModelProfile[]): Promise<ModelProfile[]> {
+  return serialize('models', () => {
+    const next = fn(loadModelConfigs())
+    saveModelConfigs(next)
+    return next
+  })
+}
+
+/** `mutateProviders` 的结果（写入成功 / 版本冲突 / 写盘失败） */
+type ProvidersMutationResult =
+  | { kind: 'written'; revision: number }
+  | { kind: 'conflict' }
+  | { kind: 'failed'; error: string }
+
+/**
+ * providers.json 的受保护读-改-写 + revision 门控（v3 §5「写入：逐字段最小操作 + revision 冲突拒绝」）。
+ *
+ * - `expectedRevision === undefined` → **不校验**（老调用方零改动；unfenced 写入）
+ * - 不符 → `conflict`：**一个字节都不写**（含 revision 不 bump）——调用方据此提示「配置已被
+ *   其他窗口修改，请重载」
+ * - 成功 → revision = 旧值 + 1（下次提交带它 → 期间别处的修改会被检出）
+ * - 写盘抛错 → `failed`（与其他 IPC 一致：报错不抛给渲染层，但要留日志 —— 由调用方打）
+ */
+function mutateProviders(
+  expectedRevision: number | undefined,
+  fn: (accounts: ProviderAccount[]) => ProviderAccount[],
+): Promise<ProvidersMutationResult> {
+  return serialize<ProvidersMutationResult>('providers', () => {
+    const state = readProvidersFile()
+    if (expectedRevision !== undefined && expectedRevision !== state.revision) {
+      return { kind: 'conflict' }
+    }
+    const revision = state.revision + 1
+    writeProvidersFile({ revision, accounts: fn(state.accounts) })
+    return { kind: 'written', revision }
+  }).catch((error) => ({ kind: 'failed', error: safeErrorMessage(error) }))
+}
+
+/**
+ * 分配 ref 时的「已占用」全集（v3 §4.3）：凭据库已有 ref ∪ 账户的 ref ∪ **手工条目**的 ref。
+ *
+ * 为什么要连手工条目一起收：ref 是**全局命名空间**（就是环境变量名）—— 与账户的 ref
+ * 分开算的话，一个手工模型条目用掉的 `OPENAI_API_KEY` 会被下一个账户再分配一次，
+ * 两个来源从此指向同一个环境变量（静默串钥匙）。
+ *
+ * ⚠️ 传进来的 `accounts` 必须是**队列任务内刚读到的那份**，否则两次并发保存会分到同名 ref。
+ * 只读 `apiKeyRef`（不是密文），所以这里对 models.json 用**裸读**（readJsonFile）：
+ * 顺带避开 `loadModelConfigs` 的明文迁移写盘（那也该发生在队列里）。
+ */
+function collectTakenRefs(accounts: ProviderAccount[]): Set<string> {
+  const taken = new Set<string>(Object.keys(readCredentialFile().refs))
+  for (const a of accounts) if (a.apiKeyRef) taken.add(a.apiKeyRef)
+  const accountIds = new Set(accounts.map((a) => a.id))
+  for (const m of readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])) {
+    // 「无账户前缀」= 手工条目；派生条目（`{accountId}::{modelName}`）的 ref 已由上面的循环覆盖
+    const isDerived = [...accountIds].some((id) => isModelOfAccount(m.id, id))
+    if (!isDerived && m.apiKeyRef) taken.add(m.apiKeyRef)
+  }
+  return taken
 }
 
 function getModelConfig(modelId: string): ModelProfile | null {
@@ -244,13 +315,14 @@ export function registerLLMController() {
       if (!model.purposes || model.purposes.length === 0) {
         return { success: false, error: t('error.modelPurposesEmpty') }
       }
-      const models = loadModelConfigs()
-      const idx = models.findIndex((m) => m.id === model.id)
-      if (idx >= 0) models[idx] = model
-      else models.push(model)
-      saveModelConfigs(models)
+      // 读-改-写全程在 models 队列内（v3 §5）：并发保存两个模型不再互相覆盖
+      const saved = await mutateModels((models) => {
+        const idx = models.findIndex((m) => m.id === model.id)
+        if (idx >= 0) return models.map((m, i) => (i === idx ? model : m))
+        return [...models, model]
+      })
       const ms = Date.now() - t0
-      if (ms > SLOW_IPC_MS) logger.warn('LLM', `[save-model] slow ${ms}ms (models=${models.length})`)
+      if (ms > SLOW_IPC_MS) logger.warn('LLM', `[save-model] slow ${ms}ms (models=${saved.length})`)
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
@@ -268,14 +340,15 @@ export function registerLLMController() {
         logger.error('LLM', `[delete-model] ${msg}`)
         return { success: false, error: msg }
       }
-      const before = loadModelConfigs()
-      const after = before.filter((m) => m.id !== modelId)
-      if (after.length === before.length) {
+      // 存在性判定用**裸读**（与里面那次受队列保护的真实删除分离）：只比 id，
+      // 顺带避开 loadModelConfigs 的明文迁移写盘跑到队列外面去
+      const ids = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, []).map((m) => m.id)
+      if (!ids.includes(modelId)) {
         const msg = `model not found: ${modelId}`
         logger.warn('LLM', `[delete-model] ${msg}`)
         return { success: false, error: msg }
       }
-      saveModelConfigs(after)
+      await mutateModels((models) => models.filter((m) => m.id !== modelId))
       const ms = Date.now() - t0
       logger.info('LLM', `[delete-model] removed: ${modelId} (${ms}ms)`)
       if (ms > SLOW_IPC_MS) logger.warn('LLM', `[delete-model] slow ${ms}ms`)
@@ -294,30 +367,51 @@ export function registerLLMController() {
   // 这样做的理由见 src/shared/provider-accounts.ts 头注释。
 
   guardedHandle('llm:list-providers', async () => {
-    return readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, []).map((a) => ({
+    return readProvidersFile().accounts.map((a) => ({
       ...a,
       apiKey: decryptApiKey(a.apiKey), // 与模型一致：盘上密文、渲染层明文
     }))
   })
 
-  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>) => {
+  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number) => {
     try {
-      const accounts = readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, [])
       const toSave: ProviderAccount = {
         ...account,
         apiKey: isPlaintextKey(account.apiKey) ? encryptApiKey(account.apiKey) : account.apiKey,
       }
-      const idx = accounts.findIndex((a) => a.id === account.id)
-      if (idx >= 0) accounts[idx] = toSave
-      else accounts.push(toSave)
-      writeJsonFile(PROVIDERS_CONFIG_PATH, accounts)
+
+      // ref 分配（v3 §4.3）必须在**队列任务内**做：taken 要用刚读到的那份 accounts，
+      // 否则两次并发保存会各自算出同一个名字。
+      // 分配结果经 holder 带出（数组 holder：TS 的控制流分析看不到闭包内赋值，`let` 变量
+      // 会在闭包外被收窄成 null 而报「属性不存在」，元素访问则不会）。
+      const allocated: ProviderAccount[] = []
+      const outcome = await mutateProviders(expectedRevision, (accounts) => {
+        const apiKeyRef = toSave.apiKeyRef ?? deriveCredentialRef(toSave.provider, collectTakenRefs(accounts))
+        const next: ProviderAccount = { ...toSave, apiKeyRef }
+        allocated[0] = next
+        const idx = accounts.findIndex((a) => a.id === account.id)
+        if (idx >= 0) return accounts.map((a, i) => (i === idx ? next : a))
+        return [...accounts, next]
+      })
+
+      if (outcome.kind === 'conflict') {
+        logger.warn('LLM', `[save-provider] revision conflict: account=${account.id} expected=${String(expectedRevision)}`)
+        return { success: false, conflict: true, error: 'provider/conflict' }
+      }
+      if (outcome.kind === 'failed') {
+        logger.error('LLM', `[save-provider] failed: ${outcome.error}`)
+        return { success: false, error: outcome.error }
+      }
 
       // 同步派生条目 —— 注意传**明文** account：派生条目要拿到可直接用的凭据，
       // 而 saveModelConfigs 会统一加密落盘。
       // 规格来源（2026-09-28 批量采纳）：**本次拉取所得优先，回落内置预设** —— 拉回的规格
       // 是端点真实值；预设只是多数场景的缺省。只覆盖传入的实值键（undefined 不遮蔽回落值）。
-      saveModelConfigs(
-        syncAccountModels(account, loadModelConfigs(), (name) => {
+      // 账户条目走自己的队列键（providers），派生同步走 models —— 两次写各自原子，
+      // 且都在「读→改→写」全程受保护（v3 §5）。
+      const plainAccount: ProviderAccount = { ...account, apiKeyRef: allocated[0]?.apiKeyRef ?? account.apiKeyRef }
+      await mutateModels((models) =>
+        syncAccountModels(plainAccount, models, (name) => {
           const base = presetModelDefaults(account.provider, name)
           const spec = modelSpecs?.[name]
           if (!spec) return base
@@ -328,7 +422,7 @@ export function registerLLMController() {
           }
         }),
       )
-      return { success: true }
+      return { success: true, revision: outcome.revision }
     } catch (error) {
       logger.error('LLM', `[save-provider] failed: ${safeErrorMessage(error)}`)
       return { success: false, error: safeErrorMessage(error) }
@@ -337,23 +431,25 @@ export function registerLLMController() {
 
   guardedHandle('llm:delete-provider', async (_event, accountId: string) => {
     try {
-      const accounts = readJsonFile<ProviderAccount[]>(PROVIDERS_CONFIG_PATH, [])
-      const next = accounts.filter((a) => a.id !== accountId)
       // ⚠️ 与 llm:delete-model 那次真机回归同型的坑：目标不存在时不能"空转照样返回 success"
       //   —— 界面上就是「点了删除没反应」。差别是那边回的是英文诊断串（给排障看），
       //   这里按 i18n 标准回可翻译文案（该字符串会一路到渲染层的 toast）。
-      if (next.length === accounts.length) {
+      //   故存在性先在队列外判（也顺带避免「没得删却 bump 一次 revision」）。
+      if (!readProvidersFile().accounts.some((a) => a.id === accountId)) {
         logger.warn('LLM', `[delete-provider] account not found: ${accountId}`)
         return { success: false, error: t('error.providerNotFound') }
       }
-      writeJsonFile(PROVIDERS_CONFIG_PATH, next)
-      // 清空该账户的勾选清单 → 其派生条目全部消失；手工条目与其它账户不受影响
-      const gone = accounts.find((a) => a.id === accountId)!
-      saveModelConfigs(
-        syncAccountModels({ ...gone, modelNames: [] }, loadModelConfigs(), (name) =>
-          presetModelDefaults(gone.provider, name),
-        ),
-      )
+
+      const outcome = await mutateProviders(undefined, (accounts) => accounts.filter((a) => a.id !== accountId))
+      if (outcome.kind === 'failed') {
+        logger.error('LLM', `[delete-provider] failed: ${outcome.error}`)
+        return { success: false, error: outcome.error }
+      }
+
+      // 删账户的语义 = 移除该账户的**全部派生条目**。⚠️ 不能再用 `{ ...gone, modelNames: [] }`
+      // 表达（v3 起空数组 = 继承内置目录 → 反而会把目录整组重建出来）；按 id 前缀过滤才是本意。
+      // 手工条目与其它账户不受影响（前缀不匹配）。
+      await mutateModels((models) => models.filter((m) => !isModelOfAccount(m.id, accountId)))
       return { success: true }
     } catch (error) {
       logger.error('LLM', `[delete-provider] failed: ${safeErrorMessage(error)}`)

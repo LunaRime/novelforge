@@ -417,9 +417,18 @@ export interface LLMChannels {
   }
   'llm:save-provider': {
     /** modelSpecs：本次采纳的模型规格（拉取所得）——主进程优先用它、回落预设（2026-09-28，批量采纳带规格） */
-    args: [account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>]
-    /** 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目 */
-    return: { success: boolean; error?: string }
+    args: [
+      account: ProviderAccount,
+      modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>,
+      /** 打开编辑卡时记下的版本号（v3 §5）：不符 = 别处已改 → 拒绝写入。缺省 = 不校验（老调用方零改动） */
+      expectedRevision?: number,
+    ]
+    /**
+     * 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目。
+     * - `revision`：本次写成功后的版本号（调用方下次提交时带上）
+     * - `conflict`：`expectedRevision` 不符 —— 写入被拒（文件未动），UI 提示重载
+     */
+    return: { success: boolean; error?: string; revision?: number; conflict?: boolean }
   }
   'llm:delete-provider': {
     args: [accountId: string]
@@ -530,6 +539,15 @@ export interface ModelProfile {
   protocol: LLMProtocol
   modelName: string
   apiKey: string
+  /**
+   * 凭据引用名（模型管理 v3 §3.2）：派生条目 = 所属账户的 `apiKeyRef`；手工条目 = 迁移/新建时分配。
+   *
+   * 过渡期（T2-T4）与 `apiKey` 并存；**T5 删 `apiKey` 后它是唯一通路**（取值一律走
+   * `electron/credentials` 的 resolve，配置文件里不再出现密码字段）。
+   */
+  apiKeyRef?: string
+  /** 输入类型（v3 §3.2）：缺省 = 继承规格 → `['text']`（目录区行内展开可改） */
+  inputTypes?: Array<'text' | 'image'>
   baseUrl: string
   temperature: number
   /** 单次请求最大**输出** token 数 —— 会作为 `max_tokens` 发给 API */
@@ -559,9 +577,23 @@ export interface ProviderAccount {
   provider: ModelProfile['provider']
   protocol: LLMProtocol
   apiKey: string
+  /**
+   * 凭据引用名（模型管理 v3 §4.3）：**由主进程在保存账户时分配**（渲染层不分配），
+   * `deriveCredentialRef(provider, taken)` 派生 —— `<PROVIDER>_API_KEY`，已占用则 `_2`、`_3`…。
+   * 一旦写入**不可改**（provider 字段同理锁定：换家 = 删除重建）。
+   * 旧数据（T4 迁移前）可能没有 → 可选；出现在保存路径上的账户会被补发。
+   */
+  apiKeyRef?: string
+  /** 界面显示名（自定义账户可设）；缺省 = 预设名 / `provider` */
+  displayName?: string
   baseUrl: string
-  /** 已勾选的模型名 —— 勾选清单的唯一真相（逐个模型的显示名等设置住在 ModelProfile 上） */
-  modelNames: string[]
+  /**
+   * 已勾选的模型名 —— 勾选清单的唯一真相（逐个模型的显示名等设置住在 ModelProfile 上）。
+   *
+   * **三态（v3 §3.1）**：`undefined` 或**空数组** = 继承内置目录（`builtinCatalogFor`）；
+   * 非空 = 自定义清单。新建账户默认 `undefined`；存量账户保持数组、不自动切换。
+   */
+  modelNames?: string[]
 }
 
 // ===== 引入 DB 类型 =====

@@ -10,6 +10,7 @@
  * 持有凭据**副本**，由本模块的同步函数维护。
  */
 import type { ModelProfile, ProviderAccount } from './ipc-channels'
+import { builtinCatalogFor } from './provider-presets'
 
 /** 派生条目 id 的分隔符 —— 手工条目是 uuid，不含它 */
 const SEP = '::'
@@ -43,6 +44,11 @@ export type NewModelDefaults = Pick<
  * 只更新由账户提供的三个凭据字段。否则改一次 API Key 就会把用户的逐模型调参全部冲掉。
  *
  * 不碰手工条目（无账户）与其它账户的条目；保持既有顺序，新条目追加在后。
+ *
+ * **目录三态（v3 §3.4）**：`modelNames` 缺省（undefined）或空数组 = **继承内置目录全集**
+ * （`builtinCatalogFor`，新建账户的默认态：「默认可用的模型」不要用户一个个点）；非空 = 自定义清单（现语义）。
+ * ⚠️ 于是「空数组」**不再**是「删光派生条目」的表达（那是旧语义）——删账户见
+ * `llm:delete-provider`（按 `isModelOfAccount` 过滤），两者不可混用。
  */
 export function syncAccountModels(
   account: ProviderAccount,
@@ -54,8 +60,13 @@ export function syncAccountModels(
     protocol: account.protocol,
     apiKey: account.apiKey,
     baseUrl: account.baseUrl,
+    // 过渡期（T5 删 apiKey 前）两个字段并存：apiKeyRef 是 T5 之后唯一通路，现在就随副本一起维护
+    apiKeyRef: account.apiKeyRef,
   }
-  const wanted = account.modelNames.map((name) => ({ name, id: deriveModelId(account.id, name) }))
+  const names = account.modelNames && account.modelNames.length > 0
+    ? account.modelNames
+    : builtinCatalogFor(account.provider)
+  const wanted = names.map((name) => ({ name, id: deriveModelId(account.id, name) }))
   const wantedIds = new Set(wanted.map((w) => w.id))
 
   const out: ModelProfile[] = []

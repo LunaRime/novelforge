@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import type { GlobalConfig, LocalEmbeddingConfig } from '../../src/shared/ipc-channels'
+import type { GlobalConfig, LocalEmbeddingConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 
 export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 
@@ -131,7 +131,31 @@ export function ensureVelaHome() {
   }
 }
 
+// ===== 测试辅助：文件层注入（与 credentials/store 的 __setCredentialFileForTest 同款纪律）=====
+
+/**
+ * 注入**文件层**替身（内存 Map）：此后 readJsonFile / writeJsonFile 只碰它，**不碰真实磁盘**。
+ *
+ * ⚠️ 为什么注入点必须落在**函数体内**：「配置文件的写路径」都是「读全量 → 改 → 写全量」，
+ *    用例若走真实 IO 就会覆盖用户 home 下的真实配置。而 `vi.mock('…/config-utils')` 只替换
+ *    模块的**外部**引用 —— 真实 `readProvidersFile` 内部调用的是同模块的 `readJsonFile`，
+ *    不经过替身，于是「已打桩文件层」的用例照样读写 `~/.novelforge/providers.json`
+ *    （2026-10-01 T2 实测踩到）。要挡住这条，替身只能挂在函数体里。
+ */
+let fileInjected = false
+let fileOverride: Map<string, unknown> | null = null
+
+/** 注入文件层替身（用例在 beforeEach 里给一份新 Map；路径作 key，与真实路径字符串一致） */
+export function __setConfigFilesForTest(files: Map<string, unknown>): void {
+  fileInjected = true
+  fileOverride = files
+}
+
 export function readJsonFile<T>(filePath: string, fallback: T): T {
+  if (fileInjected) {
+    // 深拷贝：真实 IO 每次都是新对象，替身也必须如此（否则调用方改动会污染「盘上」数据）
+    return fileOverride!.has(filePath) ? (structuredClone(fileOverride!.get(filePath)) as T) : fallback
+  }
   try {
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
@@ -152,6 +176,10 @@ export function readJsonFile<T>(filePath: string, fallback: T): T {
 }
 
 export function writeJsonFile(filePath: string, data: unknown) {
+  if (fileInjected) {
+    fileOverride!.set(filePath, structuredClone(data))
+    return
+  }
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   // 原子写入：先写临时文件，再 rename（避免并发写入导致数据截断）
   const tmpPath = filePath + '.tmp.' + Date.now() + '.' + Math.random().toString(36).slice(2, 8)
@@ -170,6 +198,49 @@ export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
 export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
 /** 供应商账户（一份凭据挂多个模型）—— 派生条目的凭据来源，见 src/shared/provider-accounts.ts */
 export const PROVIDERS_CONFIG_PATH = path.join(VELA_HOME, 'providers.json')
+
+/** providers.json 当前形状版本（v1 = 裸数组，无版本号） */
+export const PROVIDERS_FILE_VERSION = 2
+
+/** providers.json 的**逻辑状态**（读/写都走它，调用方不必关心盘上版本与包装字段） */
+export interface ProvidersFileState {
+  /** 乐观并发版本号：每次成功写入 +1。旧数组形读入时视作 0（见 readProvidersFile） */
+  revision: number
+  accounts: ProviderAccount[]
+}
+
+/**
+ * 读 providers.json（**已归一化**，不抛）。
+ *
+ * 两种盘上形状都认：
+ * - v1 裸数组 `[account, …]` → `{ revision: 0, accounts }`（老用户零感知，写时自动升级 v2）
+ * - v2 `{ version: 2, revision, accounts }`
+ *
+ * 坏形状（accounts 非数组 / revision 非自然数）逐字段降级 —— 与 credentials store 同一纪律：
+ * 配置损坏不该让应用起不来，但也不该被当成有效数据用。
+ */
+export function readProvidersFile(): ProvidersFileState {
+  const raw = readJsonFile<unknown>(PROVIDERS_CONFIG_PATH, [])
+  if (Array.isArray(raw)) return { revision: 0, accounts: raw as ProviderAccount[] }
+  if (raw && typeof raw === 'object') {
+    const { revision, accounts } = raw as { revision?: unknown; accounts?: unknown }
+    return {
+      revision: typeof revision === 'number' && Number.isInteger(revision) && revision >= 0 ? revision : 0,
+      accounts: Array.isArray(accounts) ? (accounts as ProviderAccount[]) : [],
+    }
+  }
+  return { revision: 0, accounts: [] }
+}
+
+/** 写 providers.json（**恒 v2 形**；原子写由 writeJsonFile 负责） */
+export function writeProvidersFile(state: ProvidersFileState): void {
+  writeJsonFile(PROVIDERS_CONFIG_PATH, {
+    version: PROVIDERS_FILE_VERSION,
+    revision: state.revision,
+    accounts: state.accounts,
+  })
+}
+
 /**
  * 凭据库（模型管理 v3 §4.2）：`{ version: 1, refs: { [ref]: '<ENC:…>' } }`。
  *

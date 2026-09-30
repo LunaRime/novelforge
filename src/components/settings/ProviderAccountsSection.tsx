@@ -199,7 +199,7 @@ export function ProviderAccountForm({
 }) {
   const { t } = useTranslation()
   const [draft, setDraft] = useState<ProviderAccount>(account)
-  const [selected, setSelected] = useState<Set<string>>(() => new Set(account.modelNames))
+  const [selected, setSelected] = useState<Set<string>>(() => new Set(account.modelNames ?? []))
   const [fetched, setFetched] = useState<string[] | null>(null)
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
@@ -300,7 +300,8 @@ export function ProviderAccountForm({
 
   const handleSave = async () => {
     // 取消勾选 = 删除模型条目 → 先查引用，被引用就不让存
-    const removed = account.modelNames
+    // `?? []`：v3 起 modelNames 可缺省（= 继承内置目录，本任务只加类型；继承态 UI 见 T6/T7）
+    const removed = (account.modelNames ?? [])
       .filter((n) => !selected.has(n))
       .map((n) => deriveModelId(account.id, n))
     const blocking = blockingReferences(removed)
@@ -330,7 +331,7 @@ export function ProviderAccountForm({
       style={{ border: '1.5px solid var(--color-accent)', backgroundColor: 'var(--color-panel)' }}
     >
       <h3 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-        {account.modelNames.length > 0 ? t('provider.editTitle') : t('provider.newTitle')}
+        {(account.modelNames?.length ?? 0) > 0 ? t('provider.editTitle') : t('provider.newTitle')}
       </h3>
 
       {/* 两模式（2026-09-28 v2，dsh 同款分流）：从供应商目录 / 自定义 API */}

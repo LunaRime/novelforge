@@ -127,7 +127,8 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
     try {
       if (account) {
         const saved = await saveProvider(
-          { ...account, modelNames: account.modelNames.filter(n => n !== m.modelName) },
+          // `?? []`：v3 起 modelNames 可缺省（= 继承内置目录）；本任务仅保持既有行为（设置页重写见 v3 T6/T7）
+          { ...account, modelNames: (account.modelNames ?? []).filter(n => n !== m.modelName) },
           undefined,
         )
         if (!saved) toast.error(t('save.failed').replace('{error}', () => t('status.unknown')))
@@ -143,7 +144,7 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
   const handleAdopt = async (names: string[], specs: Record<string, { contextWindow?: number; maxTokens?: number }>) => {
     if (!account) return
     setPickerOpen(false)
-    const merged = [...account.modelNames]
+    const merged = [...(account.modelNames ?? [])]
     for (const n of names) if (!merged.includes(n)) merged.push(n)
     setSaving(true)
     try {
@@ -248,7 +249,7 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
         <ModelPickerDialog
           open
           credentials={account}
-          existing={account.modelNames}
+          existing={account.modelNames ?? []}
           onAdopt={(names, specs) => void handleAdopt(names, specs)}
           onClose={() => setPickerOpen(false)}
         />

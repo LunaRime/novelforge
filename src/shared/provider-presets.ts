@@ -67,6 +67,36 @@ export function presetModelDefaults(
 }
 
 /**
+ * 某 provider 的**内置模型目录全集**（v3 §3.3）—— 账户 `modelNames` 缺省/空数组时的继承源。
+ *
+ * 三个来源，按序去重（先到者保留原位）：
+ *   ① 手写预设 `models` 序 → ② 手写 `embeddingModels` 序 → ③ `PI_AI_MODEL_SPECS[provider]` 的键（pi-ai 移植目录）。
+ *
+ * ③ 不是可有可无的补丁：moonshot / xiaomi / groq / openrouter 这几家手写 `models` 是**刻意留空**的
+ * （见下方预设注释：「模型名周周在变，硬编码等于编造」），生成表就是它们唯一的离线目录来源；
+ * 对 deepseek / anthropic / bigmodel 则是把生成表里的额外型号补齐到继承目录里。
+ * 顺序有意义：账户继承后物化出的派生条目顺序、设置页目录区的行序都取自这里。
+ *
+ * 三个来源都没有的 provider（如 `custom`）→ 空数组：继承态下不产生任何条目 ——
+ * 编不出来的目录不能假装有（用户走「获取可用模型」拿真实清单）。
+ */
+export function builtinCatalogFor(provider: string): string[] {
+  const preset = BUILTIN_PRESETS.find((p) => p.provider === provider)
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const name of [
+    ...(preset?.models.map((m) => m.name) ?? []),
+    ...(preset?.embeddingModels ?? []),
+    ...Object.keys(PI_AI_MODEL_SPECS[provider] ?? {}),
+  ]) {
+    if (seen.has(name)) continue
+    seen.add(name)
+    out.push(name)
+  }
+  return out
+}
+
+/**
  * 模型名像不像向量模型 —— 仅在**预设没写**时兜底（新增的供应商 `embeddingModels` 一律留空，
  * 靠「获取可用模型」拿真实清单，所以这里需要一条名字层面的判据）。
  *
