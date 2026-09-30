@@ -183,6 +183,69 @@ describe('syncAccountModels', () => {
     })
   })
 
+  describe('modelOverrides（v3 T7 目录区）：只覆盖所列字段，其它用户字段原样保留', () => {
+    it('新建条目：override 覆盖 preset 默认（容量/显示名/输入类型）', () => {
+      const out = syncAccountModels(ACCOUNT, [], newModelDefaults, {
+        'deepseek-v4-pro': { name: '主力', contextWindow: 256_000, maxTokens: 24_576, inputTypes: ['text', 'image'] },
+      })
+      const got = out.find(m => m.modelName === 'deepseek-v4-pro')!
+      expect(got.name).toBe('主力')
+      expect(got.contextWindow).toBe(256_000)
+      expect(got.maxTokens).toBe(24_576)
+      expect(got.inputTypes).toEqual(['text', 'image'])
+      expect(got.modelName).toBe('deepseek-v4-pro') // id 语义不变
+      // 未列出的字段仍取 preset 默认（purposes / temperature）
+      expect(got.purposes).toEqual(DEFAULTS.purposes)
+      expect(got.temperature).toBe(DEFAULTS.temperature)
+      // 没被 overrides 提到的另一行完全不受影响
+      expect(out.find(m => m.modelName === 'deepseek-v4-flash')!.name).toBe('deepseek-v4-flash')
+    })
+
+    it('⚠️ 已有条目：override 叠加在**用户已改的值**之上，只覆盖所列字段', () => {
+      const mine = mkModel({
+        id: deriveModelId(ACCOUNT.id, 'deepseek-v4-pro'),
+        modelName: 'deepseek-v4-pro',
+        name: '我的主力',
+        temperature: 1.1,
+        contextWindow: 65_536,
+        purposes: ['generation', 'refinement'],
+      })
+      const out = syncAccountModels(
+        ACCOUNT,
+        [mine],
+        newModelDefaults,
+        { 'deepseek-v4-pro': { contextWindow: 256_000 } }, // 只改窗口
+      )
+      const got = out.find(m => m.id === mine.id)!
+      expect(got.contextWindow).toBe(256_000)   // 所列字段：覆盖
+      expect(got.name).toBe('我的主力')          // 未列出的用户设置：原样保留
+      expect(got.temperature).toBe(1.1)
+      expect(got.purposes).toEqual(['generation', 'refinement'])
+    })
+
+    it('构造出的 override 里值为 undefined 的键不落盘（不能把已有值抹成 undefined）', () => {
+      const mine = mkModel({
+        id: deriveModelId(ACCOUNT.id, 'deepseek-v4-pro'),
+        modelName: 'deepseek-v4-pro',
+        name: '我的主力',
+        maxTokens: 4_096,
+      })
+      const out = syncAccountModels(ACCOUNT, [mine], newModelDefaults, {
+        'deepseek-v4-pro': { name: '我的主力', maxTokens: undefined, inputTypes: undefined },
+      })
+      const got = out.find(m => m.id === mine.id)!
+      expect(got.maxTokens).toBe(4_096)                      // 未被抹掉
+      expect('inputTypes' in got).toBe(false)                // 没凭空多出键
+      expect(got.apiKeyRef).toBe('DEEPSEEK_API_KEY')         // 凭据引用照常同步
+    })
+
+    it('缺省（undefined）= 旧行为：一个字段都不动', () => {
+      const withOut = syncAccountModels(ACCOUNT, [], newModelDefaults)
+      const withEmpty = syncAccountModels(ACCOUNT, [], newModelDefaults, {})
+      expect(withEmpty).toEqual(withOut)
+    })
+  })
+
   it('取消勾选 → 删除该条目', () => {
     const existing = syncAccountModels(ACCOUNT, [], newModelDefaults)
     const shrunk: ProviderAccount = { ...ACCOUNT, modelNames: ['deepseek-v4-pro'] }

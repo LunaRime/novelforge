@@ -51,7 +51,7 @@ import { MODELS_CONFIG_PATH, PROVIDERS_CONFIG_PATH, __setConfigFilesForTest } fr
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { __setCredentialFileForTest } from '../credentials/store'
 import { decryptApiKey } from '../utils/secure-config'
-import { BUILTIN_PRESETS, builtinCatalogFor } from '../../src/shared/provider-presets'
+import { BUILTIN_PRESETS, builtinCatalogFor, presetModelDefaults } from '../../src/shared/provider-presets'
 import { deriveModelId } from '../../src/shared/provider-accounts'
 import type { ModelProfile, ProviderAccount } from '../../src/shared/ipc-channels'
 
@@ -291,6 +291,44 @@ describe('派生条目同步', () => {
   it('自定义清单 → 只物化所列模型（现语义）', async () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-luna'] }))
     expect(modelsFile().map((m) => m.id)).toEqual([deriveModelId('acc-1', 'gpt-5.6-luna')])
+  })
+
+  it('目录区 overrides（第 5 参）落到派生条目：只改所列字段，未列字段仍取规格', async () => {
+    await call(
+      'llm:save-provider',
+      mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol', 'gpt-5.6-luna'] }),
+      undefined, undefined, undefined,
+      { 'gpt-5.6-sol': { name: '主力', contextWindow: 256_000, maxTokens: 24_576, inputTypes: ['text', 'image'] } },
+    )
+
+    const sol = modelsFile().find((m) => m.modelName === 'gpt-5.6-sol')!
+    expect(sol.name).toBe('主力')
+    expect(sol.contextWindow).toBe(256_000)
+    expect(sol.maxTokens).toBe(24_576)
+    expect(sol.inputTypes).toEqual(['text', 'image'])
+    // 没进 overrides 的那一行：规格默认原样
+    const luna = modelsFile().find((m) => m.modelName === 'gpt-5.6-luna')!
+    const spec = presetModelDefaults('openai', 'gpt-5.6-luna')
+    expect(luna.contextWindow).toBe(spec.contextWindow)
+    expect(luna.maxTokens).toBe(spec.maxTokens)
+  })
+
+  it('overrides 二次保存：叠加在已有条目上（用户此前在别处改的字段不被冲掉）', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol'] }))
+    // 模拟「用户此前改过的逐模型设置」（比如 temperature —— 目录区改不了它）
+    files.set(MODELS_CONFIG_PATH, modelsFile().map((m) => ({ ...m, temperature: 1.2, purposes: ['refinement'] })))
+
+    await call(
+      'llm:save-provider',
+      mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol'] }),
+      undefined, undefined, undefined,
+      { 'gpt-5.6-sol': { maxTokens: 4_096 } },
+    )
+
+    const sol = modelsFile().find((m) => m.modelName === 'gpt-5.6-sol')!
+    expect(sol.maxTokens).toBe(4_096)
+    expect(sol.temperature).toBe(1.2)             // 目录区碰不到的字段原样保留
+    expect(sol.purposes).toEqual(['refinement'])
   })
 
   it('并发两次保存不丢更新（整次读→改→写在同一个队列任务内）', async () => {

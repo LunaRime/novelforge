@@ -3,6 +3,9 @@
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
 import type { LLMProtocol } from './llm-protocols'
+// 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
+// 双向都是 `import type`，编译后互相擦除，不构成运行时环。
+import type { ModelOverrides } from './provider-accounts'
 
 // ===== 全局配置 =====
 export interface ConfigChannels {
@@ -442,6 +445,11 @@ export interface LLMChannels {
       expectedRevision?: number,
       /** 用户当场输入的密钥（一次性；同 `llm:save-model`）。空/缺省 = 不改已存值 */
       apiKeyDraft?: string,
+      /**
+       * 目录区的行级字段覆盖（v3 T7）：key = 模型名，只含**这次改过**的字段
+       * （`ModelOverride` 的 `undefined` 键 = 没改）。缺省 = 一个字段都不动。
+       */
+      modelOverrides?: ModelOverrides,
     ]
     /**
      * 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目。

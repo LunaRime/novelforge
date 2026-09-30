@@ -1,10 +1,11 @@
-import { useEffect, useId, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import { apiKeyFailure, credentialFailureKey } from '../../shared/credential-rules'
 import { LLM_PROTOCOLS, type LLMProtocol } from '../../shared/llm-protocols'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
+import { isModelOfAccount } from '../../shared/provider-accounts'
 import type { CredentialInfo, ProviderAccount } from '../../shared/ipc-channels'
 import type { TextKey } from '../../shared/locale'
 import { renderLog } from '../../services/render-logger'
@@ -14,6 +15,10 @@ import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { toast } from '../ui/Toast'
+import {
+  ModelCatalogEditor, catalogModelNames, catalogOverrides, catalogsEqual, initialCatalogDraft,
+  type ModelDraft,
+} from './ModelCatalogEditor'
 
 export interface ProviderEditorCardProps {
   /** 编辑对象（打开时的快照；应用时以卡内草稿覆盖 saveProvider 的 account 参数） */
@@ -57,6 +62,7 @@ export function ProviderEditorCard({
 }: ProviderEditorCardProps) {
   const { t } = useTranslation()
   const saveProvider = useLLMStore((s) => s.saveProvider)
+  const models = useLLMStore((s) => s.models)
   const keyFieldId = useId()
 
   /** 密钥草稿：初值**恒空**（只写语义），提交时 trim 后作为一次性参数 */
@@ -67,12 +73,31 @@ export function ProviderEditorCard({
   const [protocol, setProtocol] = useState<LLMProtocol>(account.protocol)
   const [saving, setSaving] = useState(false)
 
+  /** 本账户的派生条目 —— 目录区的初值/placeholder/用途标签来源（按 id 前缀取，别拿全局表） */
+  const accountModels = useMemo(
+    () => models.filter((m) => isModelOfAccount(m.id, account.id)),
+    [models, account.id],
+  )
+  /** 目录草稿（`undefined` = 继承内置目录，三态之一） */
+  const [catalog, setCatalog] = useState<ModelDraft[] | undefined>(
+    () => initialCatalogDraft(account.modelNames, accountModels),
+  )
+  /** 目录行级校验（id 空/重复、容量非法）—— 坏行拦的是**整张卡**的「应用」 */
+  const [catalogValid, setCatalogValid] = useState(true)
+
+  /**
+   * 初值每渲染重算（纯函数、行数很小）：不缓存引用就能直接做「脏没脏」比较，
+   * 也不必在 `models` 重载后手动同步 —— 卡片打开期间重载只影响 placeholder。
+   */
+  const initialCatalog = initialCatalogDraft(account.modelNames, accountModels)
+
   const failure = apiKeyFailure(keyDraft)
   const dirty =
     keyDraft.length > 0 ||
     displayName !== (account.displayName ?? '') ||
     baseUrl !== account.baseUrl ||
-    protocol !== account.protocol
+    protocol !== account.protocol ||
+    !catalogsEqual(initialCatalog, catalog)
 
   useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
 
@@ -90,17 +115,22 @@ export function ProviderEditorCard({
 
   const handleApply = async () => {
     // 行内红字已是门控：非法值不提交（主进程还会再判一次 —— 渲染层可被绕过）
-    if (failure || saving) return
+    if (failure || saving || !catalogValid) return
     setSaving(true)
     const t0 = Date.now()
     try {
+      /** 目录清单：`undefined` = 继承（三态的原样表达）；空数组 = 空目录（主进程按继承语义重建） */
+      const modelNames = catalogModelNames(catalog)
       const result = await saveProvider(
-        // provider / id / modelNames 不在卡里改（身份 = 凭据词干来源，换家 = 删除重建）
-        { ...account, displayName: displayName.trim() || undefined, baseUrl: baseUrl.trim(), protocol },
+        // provider / id 不在卡里改（身份 = 凭据词干来源，换家 = 删除重建）；
+        // modelNames 由目录区接管（清单 + 逐行差异在同一次提交里落盘，不留半成品）
+        { ...account, displayName: displayName.trim() || undefined, baseUrl: baseUrl.trim(), protocol, modelNames },
         undefined,
         revision,
         // 空草稿 = 不改已存密钥（§4.4）；有值 = 主进程按 trim 后的值写入凭据库
         keyDraft.trim() || undefined,
+        // 只带改过的字段 —— 没碰过的容量/名字不该覆盖条目上的真值（§3.4 合并语义）
+        catalogOverrides(catalog, accountModels),
       )
       if (result.conflict) {
         // 一个字节都没写（主进程在写队列内校验）：只提示重载，草稿与卡都留着
@@ -217,6 +247,18 @@ export function ProviderEditorCard({
                 </SelectContent>
               </Select>
             </div>
+
+            {/* 模型目录（v3 §2.3）：三态 + 行内展开；「获取可用模型」由 T8 挂进这一行 */}
+            <div style={{ borderTop: '1px solid var(--color-border)' }} className="pt-2">
+              <ModelCatalogEditor
+                provider={account.provider}
+                existing={accountModels}
+                value={catalog}
+                onChange={setCatalog}
+                onValidityChange={setCatalogValid}
+                disabled={saving}
+              />
+            </div>
           </div>
         </Disclosure>
 
@@ -224,7 +266,7 @@ export function ProviderEditorCard({
           <Button variant="ghost" size="sm" disabled={saving} onClick={() => onClose(false)}>
             {t('action.cancel')}
           </Button>
-          <Button size="sm" disabled={saving || failure !== undefined} onClick={() => void handleApply()}>
+          <Button size="sm" disabled={saving || failure !== undefined || !catalogValid} onClick={() => void handleApply()}>
             {saving ? t('status.saving') : t('action.apply')}
           </Button>
         </div>

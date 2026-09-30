@@ -16,14 +16,25 @@ import { ProviderEditorCard, type ProviderEditorCardProps } from './ProviderEdit
 import { toast } from '../ui/Toast'
 import type { CredentialInfo, ProviderAccount } from '../../shared/ipc-channels'
 
+/** saveProvider 的签名（测试要读 `mock.calls[0][4]` = 目录 overrides 那一格，故实参元组要齐） */
+type SaveProviderArgs = [
+  account: ProviderAccount,
+  modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>,
+  expectedRevision?: number,
+  apiKeyDraft?: string,
+  modelOverrides?: Record<string, unknown>,
+]
+
 const state = vi.hoisted(() => ({
-  saveProvider: vi.fn(async () => ({ success: true, revision: 2 }) as {
+  saveProvider: vi.fn<(...args: SaveProviderArgs) => Promise<{
     success: boolean; error?: string; revision?: number; conflict?: boolean
-  }),
+  }>>(async () => ({ success: true, revision: 2 })),
   describeCredentials: vi.fn(async () => {}),
   unsetCredential: vi.fn(async () => ({ success: true })),
   deleteProvider: vi.fn(async () => ({ success: true })),
   providers: [] as Array<{ id: string; displayName?: string }>,
+  /** 全局模型表 —— 目录区按账户过滤出**派生条目**（初值/placeholder/用途标签） */
+  models: [] as Array<{ id: string; modelName: string; name: string }>,
   credentialInfo: {} as Record<string, unknown>,
 }))
 
@@ -103,6 +114,13 @@ function buttonByText(text: string): HTMLButtonElement {
   return btn as HTMLButtonElement
 }
 
+/** 目录区的控件没有 `<Label for>`（行号进 aria-label，多行才分得清） */
+function inputByAriaLabel(label: string): HTMLInputElement {
+  const input = container!.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement | null
+  expect(input, `未找到输入框「${label}」`).toBeTruthy()
+  return input!
+}
+
 const tick = () => new Promise((r) => setTimeout(r, 10))
 
 describe('ProviderEditorCard 行内编辑卡', () => {
@@ -163,6 +181,7 @@ describe('ProviderEditorCard 行内编辑卡', () => {
       undefined,
       7,
       'sk-abc', // 边缘空白是粘贴噪声：提交前 trim
+      undefined, // 目录没动过 → 不带 overrides
     )
     expect(onClose).toHaveBeenCalledWith(true)
     expect(inputByLabel('API 密钥').value).toBe('')
@@ -171,7 +190,7 @@ describe('ProviderEditorCard 行内编辑卡', () => {
   it('应用（空草稿）→ apiKeyDraft 缺省 = 不改已存密钥', async () => {
     render()
     await act(async () => { buttonByText('应用').click(); await tick() })
-    expect(state.saveProvider).toHaveBeenCalledWith(expect.anything(), undefined, 7, undefined)
+    expect(state.saveProvider).toHaveBeenCalledWith(expect.anything(), undefined, 7, undefined, undefined)
   })
 
   it('自定义设置：显示名/地址随应用一起提交（provider 锁定不变）', async () => {
@@ -188,8 +207,9 @@ describe('ProviderEditorCard 行内编辑卡', () => {
         provider: 'custom',                       // 身份字段：换家 = 删除重建，卡里改不了
         displayName: '我的中转',
         baseUrl: 'https://relay.example.com',
+        modelNames: ['gen-1'],                    // 目录没动 → 清单原样带走（不是 undefined！）
       }),
-      undefined, 7, undefined,
+      undefined, 7, undefined, undefined,
     )
   })
 
@@ -245,5 +265,53 @@ describe('ProviderEditorCard 行内编辑卡', () => {
     expect(onDirtyChange).toHaveBeenLastCalledWith(true)
     await act(async () => { setValue(inputByLabel('API 密钥'), '') })
     expect(onDirtyChange).toHaveBeenLastCalledWith(false)
+  })
+})
+
+/**
+ * 目录区接线（v3 T7 §2.3）—— 编辑卡把「行列表 + overrides」并进**同一次**「应用」：
+ * 账户与派生条目要么一起落盘，要么都不动（拆成两次 IPC 时中途失败会留下不一致的半成品）。
+ */
+describe('ProviderEditorCard × 目录区', () => {
+  it('目录行的改动随「应用」一次提交：modelNames + 第 5 参 modelOverrides', async () => {
+    render() // ACCOUNT.modelNames = ['gen-1']
+    await act(async () => { setValue(inputByAriaLabel('显示名 1'), '主力') })
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'acct-1', modelNames: ['gen-1'] }),
+      undefined, 7, undefined,
+      { 'gen-1': { name: '主力' } },
+    )
+  })
+
+  it('目录行非法（id 清空）→「应用」禁用 + 不提交（account 与目录一起被拦住）', async () => {
+    render()
+    await act(async () => { setValue(inputByAriaLabel('模型 ID 1'), '') })
+
+    expect(container!.textContent).toContain('模型 ID 不能为空')
+    expect(buttonByText('应用').disabled).toBe(true)
+    await act(async () => { buttonByText('应用').click(); await tick() })
+    expect(state.saveProvider).not.toHaveBeenCalled()
+  })
+
+  it('删除目录行 → 该行连同其派生条目一起消失（不改显示名也能提交目录变化）', async () => {
+    render()
+    await act(async () => { container!.querySelector<HTMLButtonElement>('button[aria-label="删除模型 1"]')!.click() })
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ modelNames: [] }), // 删光 = 空清单（主进程按继承语义重建全集）
+      undefined, 7, undefined, undefined,
+    )
+  })
+
+  it('继承态（modelNames 缺省）：没碰目录 → 提交仍是「继承」（modelNames undefined + 无 overrides）', async () => {
+    render({ account: { ...ACCOUNT, modelNames: undefined } })
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    const [patch, , , , overrides] = state.saveProvider.mock.calls[0]
+    expect((patch as ProviderAccount).modelNames).toBeUndefined()
+    expect(overrides).toBeUndefined()
   })
 })

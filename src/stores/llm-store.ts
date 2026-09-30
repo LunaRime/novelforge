@@ -10,6 +10,7 @@ import { toast } from '../components/ui/Toast'
  */
 const deletingModelIds = new Set<string>()
 import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount, CredentialInfo } from '../shared/ipc-channels'
+import type { ModelOverrides } from '../shared/provider-accounts'
 import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, type ModelTier, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -82,6 +83,8 @@ interface LLMState {
     expectedRevision?: number,
     /** 用户当场输入的密钥（一次性）；空/缺省 = 不改已存值 */
     apiKeyDraft?: string,
+    /** 目录区的行级字段覆盖（v3 T7，key = 模型名；只含改过的字段）—— 缺省 = 一个字段都不动 */
+    modelOverrides?: ModelOverrides,
   ) => Promise<{ success: boolean; error?: string; revision?: number; conflict?: boolean }>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<{ success: boolean; error?: string }>
@@ -228,8 +231,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     }
   },
 
-  saveProvider: async (account, modelSpecs, expectedRevision, apiKeyDraft) => {
-    const result = await ipc.invoke('llm:save-provider', account, modelSpecs, expectedRevision, apiKeyDraft)
+  saveProvider: async (account, modelSpecs, expectedRevision, apiKeyDraft, modelOverrides) => {
+    const result = await ipc.invoke('llm:save-provider', account, modelSpecs, expectedRevision, apiKeyDraft, modelOverrides)
     // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据引用）→ 两边都重载。
     // ⚠️ 判据不是 `success`：凭据写盘失败时 success:false 但**配置已写**（带 revision，spec §4.7）——
     // 不重载的话 UI 停在旧态，用户重试草稿还没有 ref 可挂 → 主进程再分配一个 `_2`。

@@ -37,6 +37,43 @@ export type NewModelDefaults = Pick<
 >
 
 /**
+ * 一条派生条目的字段覆盖（模型管理 v3 T7 目录区）—— key = **模型名**（`modelNames` 里的那个）。
+ *
+ * 目录区的行编辑（显示名/上下文窗口/最大输出/输入类型）随 `llm:save-provider` 一并提交，
+ * 由 `syncAccountModels` 合并进派生条目。**只覆盖所列字段**：`undefined` 的键必须当作
+ * 「这次没改」而不是「改成 undefined」—— 否则用户在别处改过的值会被一次无关的保存抹掉。
+ *
+ * `name` 有一个**回落语义**（目录区 Resolution 5）：显示名留空 = 用模型名，
+ * 所以目录区提交的是**已解析过的**值（空 → 模型名），本层只做覆盖、不再判空。
+ */
+export interface ModelOverride {
+  name?: string
+  contextWindow?: number
+  maxTokens?: number
+  inputTypes?: Array<'text' | 'image'>
+}
+
+/** 模型名 → 字段覆盖（目录区一次「应用」提交的整份差异） */
+export type ModelOverrides = Record<string, ModelOverride>
+
+/**
+ * 丢掉值为 `undefined` 的键。
+ *
+ * 目录区用 `{ ...row, contextWindow: undefined }` 这种**形状统一的草稿对象**构造 override，
+ * 展开后会把「没改的字段」也写成 `undefined`。直接展开到条目上就是拿 undefined 覆盖真值
+ * （`maxTokens` 会变成 `undefined`，运行时发不出 max_tokens）。
+ */
+function definedOnly(override: ModelOverride | undefined): ModelOverride | undefined {
+  if (!override) return undefined
+  const out: ModelOverride = {}
+  if (override.name !== undefined) out.name = override.name
+  if (override.contextWindow !== undefined) out.contextWindow = override.contextWindow
+  if (override.maxTokens !== undefined) out.maxTokens = override.maxTokens
+  if (override.inputTypes !== undefined) out.inputTypes = override.inputTypes
+  return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
  * 按账户的勾选清单同步派生条目。
  *
  * ⚠️ **合并语义，不是覆盖**：派生条目上的 `name` / `temperature` / `maxTokens` /
@@ -50,11 +87,16 @@ export type NewModelDefaults = Pick<
  * （`builtinCatalogFor`，新建账户的默认态：「默认可用的模型」不要用户一个个点）；非空 = 自定义清单（现语义）。
  * ⚠️ 于是「空数组」**不再**是「删光派生条目」的表达（那是旧语义）——删账户见
  * `llm:delete-provider`（按 `isModelOfAccount` 过滤），两者不可混用。
+ *
+ * `overrides`（v3 T7 目录区）：模型名 → 字段覆盖，**叠加在**上面两条之上（见 `ModelOverride`）。
+ * 目录区的行编辑全走这里 —— 不另开一条「逐字段写条目」的通道，是因为一次「应用」必须
+ * 原子地落成「清单 + 差异」一个整体：拆成多次 IPC 时中途失败会留下清单与字段不一致的半成品。
  */
 export function syncAccountModels(
   account: ProviderAccount,
   existing: ModelProfile[],
   newModelDefaults: (modelName: string) => NewModelDefaults,
+  overrides?: ModelOverrides,
 ): ModelProfile[] {
   // 派生条目只带**引用**（v3 §3.4）：值住在凭据库/env，请求前由 resolve 取 —— 条目上是密码字段
   // 的时代随 T5 结束，配置文件里不再有可搬运的密文。
@@ -75,7 +117,9 @@ export function syncAccountModels(
 
   for (const m of existing) {
     if (wantedIds.has(m.id)) {
-      out.push({ ...m, ...credentials }) // 保留逐模型设置，只换凭据
+      const override = definedOnly(overrides?.[m.modelName])
+      // 保留逐模型设置，只换凭据；override 是用户在这次「应用」里显式改过的字段
+      out.push(override ? { ...m, ...credentials, ...override } : { ...m, ...credentials })
       seen.add(m.id)
     } else if (!isModelOfAccount(m.id, account.id)) {
       out.push(m) // 手工条目 / 其它账户：原样
@@ -85,12 +129,14 @@ export function syncAccountModels(
 
   for (const w of wanted) {
     if (seen.has(w.id)) continue
+    const override = definedOnly(overrides?.[w.name])
     out.push({
       id: w.id,
       name: w.name, // 初值取模型名；之后用户改的就是权威值
       modelName: w.name,
       ...credentials,
       ...newModelDefaults(w.name),
+      ...override,
     })
   }
 

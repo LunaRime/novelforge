@@ -4,7 +4,7 @@ import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DE
 import type { ProvidersFileState } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
-import { syncAccountModels, isModelOfAccount } from '../../src/shared/provider-accounts'
+import { syncAccountModels, isModelOfAccount, type ModelOverrides } from '../../src/shared/provider-accounts'
 import { apiKeyFailure, deriveCredentialRef } from '../../src/shared/credential-rules'
 import { readCredentialFile, setStoredValue } from '../credentials/store'
 import { resolveRequestKey, stripApiKey } from '../credentials/resolve'
@@ -466,7 +466,7 @@ export function registerLLMController() {
     return { accounts: state.accounts.map(stripApiKey), revision: state.revision }
   })
 
-  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number, apiKeyDraft?: string) => {
+  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number, apiKeyDraft?: string, modelOverrides?: ModelOverrides) => {
     try {
       // 密钥草稿先校验（同 credential:set 的判据/拒因码），非法值不写盘
       const draft = apiKeyDraft ?? ''
@@ -513,7 +513,7 @@ export function registerLLMController() {
             ...(spec.maxTokens !== undefined ? { maxTokens: spec.maxTokens } : {}),
             ...(spec.contextWindow !== undefined ? { contextWindow: spec.contextWindow } : {}),
           }
-        }),
+        }, modelOverrides),
       )
 
       // 凭据写在**配置写成功之后**（spec §4.7）：失败 → 账户已存（幂等），重试只补凭据这一步。
