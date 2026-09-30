@@ -6,6 +6,9 @@ import { registerConfigController } from './controllers/config-controller'
 import { registerProjectController } from './controllers/project-controller'
 import { registerFSController } from './controllers/fs-controller'
 import { registerLLMController } from './controllers/llm-controller'
+// 模型管理 v3 T1：凭据层三通道（credential:describe/set/unset）——紧邻 LLM 控制器注册，
+// 它服务的就是 LLM 账户的密钥（当前尚无渲染层调用方，调用方在 T6）
+import { registerCredentialController } from './controllers/credential-controller'
 import { registerDatabaseController } from './controllers/db-controller'
 import { registerKBController } from './controllers/kb-controller'
 import { registerLocalEmbeddingController } from './controllers/local-embedding-controller'
@@ -38,6 +41,7 @@ export function registerIPCHandlers() {
   registerProjectController()
   registerFSController()
   registerLLMController()
+  registerCredentialController() // 模型管理 v3 T1：密钥本体（describe/set/unset）
   registerDatabaseController()
   registerKBController()
   registerLocalEmbeddingController()

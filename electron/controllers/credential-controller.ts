@@ -8,8 +8,8 @@
  * `keyBlank`/`keyIllegalCharacters` 与渲染层行内红字（`apiKeyFailure`，T6）是**同一套码**，
  * 渲染层映射到 settings 分片文案即可；主进程不拼句子，i18n 语言就不会由主进程决定。
  *
- * ⚠️ 本文件注册的通道目前**没有调用方**（接线在后续任务：账户删除→unset、应用→set、设置段→describe）；
- *    `guardedHandle` 的注册与策略表登记现在就位，是为了让「通道已存在但权限未定」的窗口期为零。
+ * 生命周期：**注册**在本任务就位（`electron/ipc-handlers.ts` 的 `registerIPCHandlers()` 已调用本函数，
+ * 通道运行期存在）；**调用方**在后续任务（账户删除→unset、应用→set、设置段→describe，T6 起）。
  */
 import { guardedHandle } from '../security/ipc-guard'
 import { apiKeyFailure } from '../../src/shared/credential-rules'
@@ -39,7 +39,9 @@ export function registerCredentialController(): void {
     if (value.length === 0) return { success: true }
     if (isEnvShadowed(ref)) return { success: false, error: 'envShadowed' }
     try {
-      setStoredValue(ref, value)
+      // 存 **trim 后的值**：校验（apiKeyFailure）判的就是 trim 后的串，落库必须与校验同一个值，
+      // 否则「校验通过」的东西会被带着首尾空白存进去（粘贴噪声入库，报错难查）
+      setStoredValue(ref, value.trim())
       return { success: true }
     } catch (error) {
       // 写盘失败（writeJsonFile 会 rethrow）：必须留日志，否则渲染层只有一行 toast
@@ -49,8 +51,9 @@ export function registerCredentialController(): void {
   })
 
   guardedHandle('credential:unset', async (_event, ref: string) => {
-    // env 影子时同样拒绝（§4.4）：要求「让该 ref 变成未配置」而这个目标达不到，
-    // 返回成功才是撒谎（删除账户流程会据此中止并保留行，见 §4.7）
+    // env 影子时同样拒绝（§4.4）：调用方要的是「让该 ref 变成未配置」，而影子下这个目标
+    // 达不到（值由环境变量提供，删了 store 条目照样解析得到），返回成功才是撒谎。
+    // ⚠️ 删除账户流程**不会**因此卡住：§4.7 已裁定先看 `writable`（影子 → 跳过凭据步骤、直接删配置）。
     if (isEnvShadowed(ref)) return { success: false, error: 'envShadowed' }
     try {
       unsetStoredValue(ref)

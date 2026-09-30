@@ -10,10 +10,10 @@
 /**
  * 合法密钥字符集：可打印 ASCII（`!`~`~`，**不含空格**）。
  *
- * ⚠️ 为什么必须按**原始输入**判定（而非 `trim()` 后的值）：
- *   空格与制表符都在本集合之外 —— 用户从网页复制密钥常带首尾空白/换行，
- *   若先 trim 再判，`'sk-abc\t'` 会被判为合法并**把制表符当密钥内容**发出去（401 难排查）。
- *   渲染层提交前会 `.trim()`，但主进程拿到的可能是任意串 —— 校验一律以收到的原始串为准。
+ * ⚠️ 判定基准是 **`draft.trim()` 之后的值**（dsh 语义）：首尾空白/换行是从网页或 `.env`
+ *   复制粘贴时的**噪声**，不是密钥内容 —— `'sk-abc\t'`、`' sk-abc '` 都应通过，
+ *   但值**内部**的空格/控制符/非 ASCII（`'sk-密钥'`、`'sk ab'`）仍一律拒绝。
+ *   写入时同样落 trim 后的值（见 `credential:set`），保证「校验通过」与「实际存下」是同一个串。
  */
 const LEGAL_API_KEY = /^[\x21-\x7E]+$/
 /** `NAME=value` 形（用户误把 `.env` 整行粘进来）：要求 `=` 后有内容且该内容不以 `=` 开头 */
@@ -46,19 +46,21 @@ export function deriveCredentialRef(provider: string, taken: ReadonlySet<string>
  * 校验密钥草稿。返回 `undefined` = 通过；否则返回拒因码。
  *
  * - 空串 = **不提供**（保留已存值；新账户 = 无密钥/原生，如 Ollama）→ 通过
- * - 纯空白 → `keyBlank`（用户想填但没填出内容）
+ * - trim 后为空（纯空白）→ `keyBlank`（用户想填但没填出内容）
  * - `NAME=value` 行 / 引号包裹 / 含可打印 ASCII 之外的字符 → `keyIllegalCharacters`
  *
- * ⚠️ 后三类判据都作用在**原始草稿**上（不 trim）——见 `LEGAL_API_KEY` 的说明。
+ * ⚠️ 后三类判据都作用在 **`draft.trim()`** 上（dsh 语义）——粘贴带来的首尾空白先清掉再判，
+ *    详见 `LEGAL_API_KEY` 的说明；调用方**存值也要存 trim 后的串**（否则校验与落库不是同一个值）。
  */
 export function apiKeyFailure(draft: string): ApiKeyFailure | undefined {
   if (draft.length === 0) return undefined
-  if (draft.trim().length === 0) return 'keyBlank'
-  if (ENV_LINE.test(draft)) return 'keyIllegalCharacters'
-  const first = draft[0]
-  if (QUOTES.includes(first as (typeof QUOTES)[number]) && draft.length > 1 && draft.endsWith(first)) {
+  const value = draft.trim()
+  if (value.length === 0) return 'keyBlank'
+  if (ENV_LINE.test(value)) return 'keyIllegalCharacters'
+  const first = value[0]
+  if (QUOTES.includes(first as (typeof QUOTES)[number]) && value.length > 1 && value.endsWith(first)) {
     return 'keyIllegalCharacters'
   }
-  if (!LEGAL_API_KEY.test(draft)) return 'keyIllegalCharacters'
+  if (!LEGAL_API_KEY.test(value)) return 'keyIllegalCharacters'
   return undefined
 }

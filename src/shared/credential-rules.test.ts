@@ -32,6 +32,7 @@ describe('apiKeyFailure', () => {
   it('空串通过（= 不提供）；纯空白拒绝', () => {
     expect(apiKeyFailure('')).toBeUndefined()
     expect(apiKeyFailure('   ')).toBe('keyBlank')
+    expect(apiKeyFailure(' \t ')).toBe('keyBlank')
     expect(apiKeyFailure('\t\n')).toBe('keyBlank')
   })
 
@@ -42,11 +43,18 @@ describe('apiKeyFailure', () => {
     expect(apiKeyFailure('`sk-abc`')).toBe('keyIllegalCharacters')
   })
 
-  it('拒绝非可打印 ASCII（含中文/控制符）', () => {
+  it('拒绝值内部的非可打印 ASCII（含中文/控制符/空格）', () => {
     expect(apiKeyFailure('sk-密钥')).toBe('keyIllegalCharacters')
-    expect(apiKeyFailure('sk-abc\t')).toBe('keyIllegalCharacters')
-    expect(apiKeyFailure(' sk-abc')).toBe('keyIllegalCharacters')
-    expect(apiKeyFailure('sk-abc ')).toBe('keyIllegalCharacters')
+    expect(apiKeyFailure('sk-ab\tc')).toBe('keyIllegalCharacters')
+    expect(apiKeyFailure('sk ab')).toBe('keyIllegalCharacters')
+  })
+
+  it('首尾空白 = 粘贴噪声：trim 后判定，通过', () => {
+    expect(apiKeyFailure('sk-abc\t')).toBeUndefined()
+    expect(apiKeyFailure('sk-abc\n')).toBeUndefined()
+    expect(apiKeyFailure(' sk-abc ')).toBeUndefined()
+    expect(apiKeyFailure('\t"sk-abc"\n')).toBe('keyIllegalCharacters') // trim 后才做包裹判定
+    expect(apiKeyFailure(' OPENAI_API_KEY=sk-abc ')).toBe('keyIllegalCharacters')
   })
 
   it('正常 key 通过（含 sk- 前缀与 base64 形）', () => {

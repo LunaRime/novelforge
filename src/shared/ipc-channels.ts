@@ -1213,7 +1213,7 @@ export interface CredentialChannels {
     args: [refs: string[]]
     return: Record<string, CredentialInfo>
   }
-  /** 写入（值为明文，主进程加密落盘）；空串 = 不提供（保留已存值，不写） */
+  /** 写入（值为明文，主进程加密落盘）；空串 = 不提供（保留已存值，不写）；存的是 **trim 后**的值 */
   'credential:set': {
     args: [ref: string, value: string]
     return: { success: boolean; error?: string }

@@ -43,6 +43,7 @@ import { registerCredentialController } from './credential-controller'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import {
   readCredentialFile,
+  readCredentialValue,
   __setCredentialFileForTest,
   __setStoredForTest,
 } from '../credentials/store'
@@ -137,6 +138,12 @@ describe('credential:set', () => {
     await expect(call('credential:set', TEST_REF, 'sk-密钥')).resolves.toEqual({ success: false, error: 'keyIllegalCharacters' })
     await expect(call('credential:set', TEST_REF, 'OPENAI_API_KEY=sk-x')).resolves.toEqual({ success: false, error: 'keyIllegalCharacters' })
     expect(JSON.stringify(file)).not.toContain('ENC:')
+  })
+
+  it('存的是 trim 后的值（校验判 trim 后的串 → 落库必须同一个值）', async () => {
+    await expect(call('credential:set', TEST_REF, '  sk-abc\t ')).resolves.toEqual({ success: true })
+    expect(readCredentialValue(TEST_REF)).toBe('sk-abc')
+    expect(JSON.stringify(file)).toContain('ENC:')
   })
 
   it('空串 = 不提供：success:true 且保留已存值（不覆盖、不清空）', async () => {
