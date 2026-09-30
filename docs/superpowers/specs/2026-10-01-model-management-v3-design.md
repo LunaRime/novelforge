@@ -121,7 +121,8 @@
 - 新增 `electron/credentials/store.ts`（读写；**加解密复用既有 `electron/utils/secure-config.ts` 的
   `ENC:` 格式**）、`resolve.ts`（resolve / describe）、`refs.ts`（派生与去重）、
   `electron/controllers/credential-controller.ts`（走 `guardedHandle`）。
-- IPC（`src/shared/ipc-channels.ts` 定义、`preload.ts` 白名单加 `credential:` 前缀）：
+- IPC（`src/shared/ipc-channels.ts` 定义 + `src/shared/ipc-policy.ts` 登记；preload 白名单由
+  `IPC_CHANNEL_POLICY` 自动派生，**无需改 preload**）：
   - `credential:describe`：`(refs: string[]) => Record<string, CredentialInfo>`
   - `credential:set`：`(ref, value) => { success } | { success:false, error }`
   - `credential:unset`：`(ref) => { success } | { success:false, error }`
@@ -178,7 +179,7 @@
   typed key wins）——保住 v2 已对齐的「保存前探测」。
 - **渲染层剥离**：`llm:get-models*` 等回传的 profile **不含 apiKey**（类型天然保证），带 `apiKeyRef`；
   凭据状态一律走 `credential:describe` 批量（设置段打开时一次拉全）。
-- **删除账户**：先 `credential:describe(ref)`——`writable === true` 时先 `unset`（失败 → 中止、行保留、可重试）；
+- **删除账户**：先 `credential:describe([ref])`——`writable === true` 时先 `unset`（失败 → 中止、行保留、可重试）；
   env 影子（`writable === false`）时**跳过凭据步骤**（该值由环境提供、不归本页管理——dsh `targetOf` 同款判定）
   → 再删 providers.json 条目 + 同步派生；两步分别幂等。
 - **「应用」顺序照 dsh**：先落账户配置（含 revision 校验），成功后写凭据；凭据阶段失败 → 账户已存、
@@ -211,7 +212,7 @@
 - **改造**：`ModelListSection.tsx`（容器改行列表）、`ProviderAccountsSection.tsx` / `ProviderAccountForm`（拆并）、
   `ModelPickerDialog.tsx`（候选规则升级）、`ModelForm.tsx`（仅「其他」卡保留；凭据只写化 + 测试按钮 gating
   改凭据状态）、`llm-store.ts`、`llm-controller.ts`、`llm-factory.ts`、`openai/gemini/anthropic-provider.ts`
-  （签名收 ResolvedModelProfile）、`provider-accounts.ts`、`config-utils.ts`（队列）、`preload.ts`、
+  （签名收 ResolvedModelProfile）、`provider-accounts.ts`、`config-utils.ts`（队列）、`ipc-policy.ts`、
   `ipc-channels.ts`、locale 分片（三语新 key：灯/placeholder/目录 meta/候选/校验/revision 冲突/迁移告警）。
 - **退役**：`ModelProviderCard.tsx`（一体卡；渲染逻辑迁入新组件）。
 - SettingsModal 的 llm 段：模型管理区替换为行列表 + 添加卡；路由区（ModelRoutingSection）与并发设置**不动**。

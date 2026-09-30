@@ -62,7 +62,7 @@
   - `deriveCredentialRef(provider: string, taken: ReadonlySet<string>): string` —— `<PROVIDER>_API_KEY`，
     非字母数字 → `_`，`custom` → `CUSTOM`；占用则 `_2`、`_3`…
   - `apiKeyFailure(draft: string): 'keyBlank' | 'keyIllegalCharacters' | undefined`
-    （纯空白 → keyBlank；`^[A-Z][A-Z0-9_]*=[^=]` 行 / 引号包裹 / 非 `^[\x21-\x7E]+$` → keyIllegalCharacters）
+    （对 **trim 后**值判：trim 后空 → keyBlank；`^[A-Z][A-Z0-9_]*=[^=]` 行 / 引号包裹 / 非 `^[\x21-\x7E]+$` → keyIllegalCharacters）
   - `CredentialInfo = { configured: boolean; source?: 'env' | 'store'; writable: boolean }`
   - `describeCredentials(refs: string[]): Record<string, CredentialInfo>`（**永不回传值**）
   - `resolveCredential(ref: string | undefined): string | undefined`（env 非空优先 → store；**每次调用即读**）
