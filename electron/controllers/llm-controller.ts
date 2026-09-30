@@ -7,6 +7,7 @@ import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { syncAccountModels, isModelOfAccount, type ModelOverrides } from '../../src/shared/provider-accounts'
 import { apiKeyFailure, deriveCredentialRef } from '../../src/shared/credential-rules'
 import { readCredentialFile, setStoredValue } from '../credentials/store'
+import { gcOrphanRefs } from '../credentials/gc'
 import { resolveRequestKey, stripApiKey } from '../credentials/resolve'
 import { hasLegacyKey, legacyKeyOf, runCredentialMigration } from '../credentials/migrate'
 import type { LegacyAccount, LegacyModel } from '../credentials/migrate'
@@ -442,6 +443,10 @@ export function registerLLMController() {
         return { success: false, error: msg }
       }
       await mutateModels((models) => models.filter((m) => m.id !== modelId))
+      // 孤儿 ref 回收（终审小修④）：**队列任务之外**（任务内 await 同队列任务 = 自死锁），
+      // 且必须在 mutation 成功之后 —— 删失败时那条 ref 还有人用着，不能动
+      const gcRemoved = gcOrphanRefs()
+      if (gcRemoved.length > 0) logger.info('LLM', `[delete-model] gc orphan refs: ${gcRemoved.join(', ')}`)
       const ms = Date.now() - t0
       logger.info('LLM', `[delete-model] removed: ${modelId} (${ms}ms)`)
       if (ms > SLOW_IPC_MS) logger.warn('LLM', `[delete-model] slow ${ms}ms`)
@@ -555,6 +560,11 @@ export function registerLLMController() {
       // 表达（v3 起空数组 = 继承内置目录 → 反而会把目录整组重建出来）；按 id 前缀过滤才是本意。
       // 手工条目与其它账户不受影响（前缀不匹配）。
       await mutateModels((models) => models.filter((m) => !isModelOfAccount(m.id, accountId)))
+      // 孤儿 ref 回收（终审小修④）：与 delete-model 同一口径（队列之外、mutation 之后）。
+      // 这里捞的是「凭据步骤没删掉的那些」：env 影子下渲染层**有意跳过** unset（H5），
+      // 或半迁移的旧条目带着自己的 ref —— 只要确实无人引用且非影子，就该清掉。
+      const gcRemoved = gcOrphanRefs()
+      if (gcRemoved.length > 0) logger.info('LLM', `[delete-provider] gc orphan refs: ${gcRemoved.join(', ')}`)
       return { success: true }
     } catch (error) {
       logger.error('LLM', `[delete-provider] failed: ${safeErrorMessage(error)}`)

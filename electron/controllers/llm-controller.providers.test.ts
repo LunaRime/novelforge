@@ -50,7 +50,7 @@ import { registerLLMController } from './llm-controller'
 import { MODELS_CONFIG_PATH, PROVIDERS_CONFIG_PATH, __setConfigFilesForTest } from '../utils/config-utils'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { __setCredentialFileForTest } from '../credentials/store'
-import { decryptApiKey } from '../utils/secure-config'
+import { decryptApiKey, encryptApiKey } from '../utils/secure-config'
 import { BUILTIN_PRESETS, builtinCatalogFor, presetModelDefaults } from '../../src/shared/provider-presets'
 import { deriveModelId } from '../../src/shared/provider-accounts'
 import type { ModelProfile, ProviderAccount } from '../../src/shared/ipc-channels'
@@ -580,5 +580,95 @@ describe('盘上残留密钥的保全（保存不得抹掉未迁移的明文）'
     await call('llm:save-model', handModel('m-new'))
 
     expect(JSON.stringify(files.get(MODELS_CONFIG_PATH))).not.toContain('"apiKey"')
+  })
+})
+
+// ===== 孤儿 ref 回收（终审小修④：删除路径 gc）=====
+
+/**
+ * 判据：凭据库的全部 ref 减去「账户 ∪ 全部条目」的引用集合 = 孤儿。
+ *
+ * 为什么必须有：ref 是**全局命名空间**（就是环境变量名）——删条目/删账户后留下的死 ref
+ * 永久占住裸名，下一个同 provider 的条目只能拿 `_2`，用户 shell 里的裸名影子失效。
+ * 三条边界各有一条用例：账户（含继承态）引用、共享 ref、env 影子。
+ */
+describe('gcOrphanRefs（删除路径的孤儿 ref 回收）', () => {
+  const credRefs = (): Record<string, string> => (credFile as { refs: Record<string, string> }).refs
+
+  const handModel = (id: string, apiKeyRef?: string): ModelProfile => ({
+    id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
+    ...(apiKeyRef ? { apiKeyRef } : {}),
+    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+  })
+
+  /** 往注入的凭据库里塞一条真密文（走 encryptApiKey，与写路径同形） */
+  const seedRef = (ref: string, value: string) => { credRefs()[ref] = encryptApiKey(value) }
+
+  it('删手工条目 → 它独有的 ref 被清（死 ref 不再占住裸名）', async () => {
+    files.set(MODELS_CONFIG_PATH, [handModel('uuid-1', 'HAND_API_KEY')])
+    seedRef('HAND_API_KEY', 'sk-hand')
+
+    expect(await call('llm:delete-model', 'uuid-1')).toMatchObject({ success: true })
+    expect(Object.keys(credRefs())).toEqual([])
+  })
+
+  it('共享 ref 保留：账户还在用同一个名字 → 不删（并集判定）', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1', apiKeyRef: 'SHARED_API_KEY' }))
+    files.set(MODELS_CONFIG_PATH, [...modelsFile(), handModel('uuid-1', 'SHARED_API_KEY')])
+    seedRef('SHARED_API_KEY', 'sk-shared')
+
+    await call('llm:delete-model', 'uuid-1')
+
+    expect(Object.keys(credRefs())).toEqual(['SHARED_API_KEY'])
+  })
+
+  it('继承态账户（无派生条目）的 ref 不算孤儿：账户本身就是引用者', async () => {
+    // 继承 + 该家没有内置目录 = 一个派生条目都没有 —— 只看条目会把这把钥匙删掉
+    await call('llm:save-provider', mkAccount({ id: 'acc-1', provider: 'custom', modelNames: undefined }))
+    seedRef('CUSTOM_API_KEY', 'sk-custom')
+    files.set(MODELS_CONFIG_PATH, [handModel('uuid-1', 'HAND_API_KEY')])
+    seedRef('HAND_API_KEY', 'sk-hand')
+
+    await call('llm:delete-model', 'uuid-1')
+
+    expect(Object.keys(credRefs())).toEqual(['CUSTOM_API_KEY'])
+  })
+
+  it('env 影子跳过：那条值由环境提供（写了也不生效），不归应用删', async () => {
+    files.set(MODELS_CONFIG_PATH, [handModel('uuid-1', 'GC_SHADOW_API_KEY')])
+    seedRef('GC_SHADOW_API_KEY', 'sk-store')
+    process.env.GC_SHADOW_API_KEY = 'from-shell'
+    try {
+      expect(await call('llm:delete-model', 'uuid-1')).toMatchObject({ success: true })
+    } finally {
+      delete process.env.GC_SHADOW_API_KEY
+    }
+
+    expect(Object.keys(credRefs())).toEqual(['GC_SHADOW_API_KEY'])
+  })
+
+  it('存量孤儿（迁移留下的无主 ref）在下一次删除后被顺带清掉', async () => {
+    files.set(MODELS_CONFIG_PATH, [handModel('uuid-1', 'HAND_API_KEY')])
+    seedRef('LEGACY_ORPHAN_API_KEY', 'sk-orphan') // 没有任何账户/条目引用它
+    seedRef('HAND_API_KEY', 'sk-hand')
+
+    await call('llm:delete-model', 'uuid-1')
+
+    expect(Object.keys(credRefs())).toEqual([])
+  })
+
+  it('删账户 → 其 ref（渲染层跳过 unset / 半迁移残留）由 gc 兜底清掉', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' })) // ref = OPENAI_API_KEY
+    seedRef('OPENAI_API_KEY', 'sk-openai')
+
+    expect(await call('llm:delete-provider', 'acc-1')).toEqual({ success: true })
+
+    expect(Object.keys(credRefs())).toEqual([])
+  })
+
+  it('删除失败（目标不存在）→ 一次 gc 都不跑（ref 还有人用着，不能动）', async () => {
+    seedRef('HAND_API_KEY', 'sk-hand')
+    expect(await call('llm:delete-model', 'nope')).toMatchObject({ success: false })
+    expect(Object.keys(credRefs())).toEqual(['HAND_API_KEY'])
   })
 })
