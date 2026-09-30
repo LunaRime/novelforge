@@ -118,8 +118,9 @@
 
 ### 4.1 模块与 IPC
 
-- 新增 `electron/credentials/store.ts`（读写 + 加解密）、`resolve.ts`（resolve / describe）、
-  `refs.ts`（派生与去重）、`electron/controllers/credential-controller.ts`。
+- 新增 `electron/credentials/store.ts`（读写；**加解密复用既有 `electron/utils/secure-config.ts` 的
+  `ENC:` 格式**）、`resolve.ts`（resolve / describe）、`refs.ts`（派生与去重）、
+  `electron/controllers/credential-controller.ts`（走 `guardedHandle`）。
 - IPC（`src/shared/ipc-channels.ts` 定义、`preload.ts` 白名单加 `credential:` 前缀）：
   - `credential:describe`：`(refs: string[]) => Record<string, CredentialInfo>`
   - `credential:set`：`(ref, value) => { success } | { success:false, error }`
@@ -128,10 +129,11 @@
 
 ### 4.2 存储
 
-- `~/.novelforge/credentials.json`：`{ "version": 1, "refs": { [ref]: { "cipher": "<base64>" } } }`。
-- 加解密：Electron `safeStorage.encryptString/decryptString`（Windows = DPAPI）；
-  `isEncryptionAvailable() === false` 时**降级明文**（`{ "value": "..." }`，字段与 cipher 区分）+
-  启动 `log.warn` 告警——NS 环境（无 keyring）的既定取舍。
+- `~/.novelforge/credentials.json`：`{ "version": 1, "refs": { [ref]: "<ENC:…> 密文串" } }`
+  （沿用 `ENC:` 前缀格式）。
+- 加解密：**复用既有 `secure-config`**（safeStorage/DPAPI；不可用时 `ENC:B64:` 降级——已有行为，
+  非明文）+ 启动告警。**现状 key 本就以 `ENC:` 密文存在两配置文件中**（`loadModelConfigs`/`saveModelConfigs`
+  就地加解密），本层的增量是把它**搬出配置文件**并叠加只写/引用/环境变量语义；迁移原样搬运 `ENC:` 值。
 - 原子写复用 `writeJsonFile`（tmp+rename，已有）；本进程为唯一写者：启动加载一次 + set/unset 后更新缓存；
   不追求外部手改文件的热感知（记录为已知限制）。
 
