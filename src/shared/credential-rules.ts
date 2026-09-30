@@ -5,7 +5,11 @@
  * 渲染层（T6 密钥框行内红字）用它在提交前给即时反馈，主进程（`credential:set`）用它做
  * **权威校验**（渲染层可被绕过，主进程这一道不可省）。两处判据必须逐字一致，故单源在这里。
  * `deriveCredentialRef` 目前只有主进程用（T2 创建账户时分配 ref），放同一文件避免规则分裂。
+ *
+ * 依赖面：只 import `locale` 的 **`TextKey` 类型**（编译期擦除）——运行期仍然零依赖，
+ * 主进程可以照常引用本文件（同 `llm-protocols.ts` 的 `labelKey` 先例）。
  */
+import type { TextKey } from './locale'
 
 /**
  * 合法密钥字符集：可打印 ASCII（`!`~`~`，**不含空格**）。
@@ -21,8 +25,35 @@ const ENV_LINE = /^[A-Z][A-Z0-9_]*=[^=]/
 /** 包裹字符：引号（含反引号）成对包裹 = 从配置文件里复制粘贴的形态 */
 const QUOTES = ['"', '\'', '`'] as const
 
-/** 拒因码（渲染层据此取 i18n 文案，见 settings 分片 `credentialFailure.*`） */
+/** 拒因码（渲染层据此取 i18n 文案，见 settings 分片 `credential.failure.*`） */
 export type ApiKeyFailure = 'keyBlank' | 'keyIllegalCharacters'
+
+/**
+ * 凭据通道可能回来的**全部**拒因码：`apiKeyFailure` 的两个 ∪ 主进程侧的 `envShadowed`。
+ *
+ * 单源在这里的理由：主进程 `credential:set` / `save-provider` 会回 `envShadowed`，
+ * 而渲染层若不认识它就会把「环境变量影子」显示成一句技术串 —— 两边各写一份映射必然漂移
+ * （T1 评审 minor：T6 手写映射的预警）。
+ */
+export type CredentialFailure = ApiKeyFailure | 'envShadowed'
+
+/**
+ * 拒因码 → i18n key（**只认码**；返回 `undefined` = 不是拒因码）。
+ *
+ * 调用方拿到 `undefined` 时应把原文（技术错误串：磁盘满/权限…）**原样展示** ——
+ * 排障要看得到原文，硬套一句「未知错误」会让界面与日志同时失去线索。
+ *
+ * ⚠️ 键名与拒因码**同名**（`credential.failure.<code>`），加码时两处一起加
+ * （`switch` 的穷尽性由 `CredentialFailure` 联合类型保证）。
+ */
+export function credentialFailureKey(code: string): TextKey | undefined {
+  switch (code as CredentialFailure) {
+    case 'keyBlank': return 'credential.failure.keyBlank'
+    case 'keyIllegalCharacters': return 'credential.failure.keyIllegalCharacters'
+    case 'envShadowed': return 'credential.failure.envShadowed'
+    default: return undefined
+  }
+}
 
 /**
  * 由 provider 派生环境变量名（= 凭据引用名）：`<PROVIDER>_API_KEY`。

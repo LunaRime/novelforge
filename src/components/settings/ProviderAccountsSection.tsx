@@ -87,7 +87,12 @@ export function ProviderAccountsSection() {
           .replace('{n}', String(derived.length)),
         { danger: true, confirmText: t('action.delete') },
       )
-      if (ok) await useLLMStore.getState().deleteProvider(account.id)
+      if (!ok) return
+      // 失败要说话（deleteProvider 现在带回原因）：静默失败在界面上就是「点了删除没反应」
+      const res = await useLLMStore.getState().deleteProvider(account.id)
+      if (!res.success) {
+        toast.error(t('provider.deleteFailed').replace('{error}', () => res.error ?? t('status.unknown')))
+      }
     },
     [models, t],
   )

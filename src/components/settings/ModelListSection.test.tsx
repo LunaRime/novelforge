@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 /**
- * ModelListSection —— 「模型」一体卡区（v2，薄容器）
+ * ModelListSection —— 「模型」段（v3 薄容器，2026-10-01）
  *
- * 容器契约：账户 → 每户一张卡；无归属模型 → 「其他」卡（仅存在时）；全空 → 空态；
- * 「添加供应商」/空态按钮 → 打开两模式建卡表单（ProviderAccountForm）。
- * （卡内行为见 ModelProviderCard.test；Picker 见 ModelPickerDialog.test——v1 的本文件用例已随重构迁移。）
+ * 容器契约：标题（计数）+ `ProviderRowList`（供应商行，行内编辑卡）+ 「其他」卡（仅存在时）
+ * + 全空时的空态；「添加供应商」→ 两模式建卡表单。
+ * 行/卡/删除顺序的契约见 `ProviderRowList.test` 与 `ProviderEditorCard.test`。
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
@@ -15,14 +15,18 @@ import type { ModelProfile, ProviderAccount } from '../../shared/ipc-channels'
 const state = vi.hoisted(() => ({
   models: [] as unknown[],
   providers: [] as unknown[],
+  credentialInfo: {} as Record<string, unknown>,
+  providersRevision: 0,
   defaultModelId: null as string | null,
   defaultEmbeddingModelId: null as string | null,
-  saveModel: vi.fn(async () => true),
-  deleteModel: vi.fn(async () => {}),
-  saveProvider: vi.fn(async () => true),
+  saveModel: vi.fn(async () => ({ success: true })),
+  deleteModel: vi.fn(async () => true),
+  saveProvider: vi.fn(async () => ({ success: true })),
   setDefaultModel: vi.fn(async () => {}),
   setDefaultEmbeddingModel: vi.fn(async () => {}),
-  deleteProvider: vi.fn(async () => {}),
+  describeCredentials: vi.fn(async () => {}),
+  unsetCredential: vi.fn(async () => ({ success: true })),
+  deleteProvider: vi.fn(async () => ({ success: true })),
   listProviderModels: vi.fn(async () => ({ success: true, models: [] })),
 }))
 
@@ -35,6 +39,7 @@ vi.mock('../../stores/llm-store', () => ({
 
 const ACCOUNT: ProviderAccount = {
   id: 'acct-1', provider: 'custom', protocol: 'openai',
+  displayName: 'Acme Gateway',
   apiKeyRef: 'CUSTOM_API_KEY', baseUrl: 'https://gw.example.com', modelNames: ['gen-1'],
 }
 
@@ -60,24 +65,31 @@ afterEach(() => {
   container?.remove()
   root = null
   container = null
+  document.body.innerHTML = ''
   state.models = []
   state.providers = []
+  state.credentialInfo = {}
 })
 
-describe('ModelListSection 一体卡容器', () => {
+describe('ModelListSection 薄容器', () => {
   it('全空 → 空态（含「添加供应商」入口）', () => {
     const el = render()
+    expect(el.textContent).toContain('暂无')
     expect(el.textContent).toContain('添加供应商')
-    // 空态区块存在（唯一按钮就是空态里的入口）
-    expect([...el.querySelectorAll('button')].length).toBeGreaterThanOrEqual(2) // 头部 + 空态
+    expect([...el.querySelectorAll('button')]).toHaveLength(1) // 空态里的那一个
   })
 
-  it('有账户 → 渲染账户卡（名下派生模型在该卡内）', () => {
+  it('有账户 → 行列表（行上是供应商，不再常驻模型条目）', () => {
     state.providers = [ACCOUNT]
     state.models = [makeModel('acct-1::gen-1', 'gen-1')]
+    state.credentialInfo = { CUSTOM_API_KEY: { configured: true, source: 'store', writable: true } }
     const el = render()
-    expect(el.textContent).toContain('gw.example.com') // 卡头地址
-    expect(el.textContent).toContain('gen-1')          // 卡内行
+
+    expect(el.textContent).toContain('Acme Gateway')          // 行 = 供应商
+    expect(el.textContent).toContain('自定义')                 // provider=custom 的标签
+    expect(el.textContent).not.toContain('gw.example.com')    // 地址移到编辑卡的自定义设置里
+    expect([...el.querySelectorAll('button[aria-label="编辑"]')]).toHaveLength(1)
+    expect([...el.querySelectorAll('button[aria-label="删除供应商"]')]).toHaveLength(1)
   })
 
   it('无归属模型 → 「其他」卡仅在其存在时出现', () => {
@@ -90,6 +102,15 @@ describe('ModelListSection 一体卡容器', () => {
     const el2 = render()
     expect(el2.textContent).toContain('其他（无归属）')
     expect(el2.textContent).toContain('legacy-model')
+  })
+
+  it('「其他」卡的模型不进供应商行（无归属 = 无账户归属）', () => {
+    state.providers = [ACCOUNT]
+    state.models = [makeModel('legacy-1', 'legacy-model')]
+    const el = render()
+    expect(el.textContent).toContain('其他（无归属）')
+    expect(el.textContent).toContain('legacy-model')
+    expect(el.textContent).toContain('Acme Gateway')
   })
 
   it('「添加供应商」→ 打开两模式建卡表单', () => {

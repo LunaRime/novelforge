@@ -6,6 +6,8 @@ interface MenuRowProps {
   icon?: ReactNode
   /** 行标题（纯展示，进主按钮） */
   title: string
+  /** 标题后缀（纯展示，进主按钮）—— 如供应商行的「自定义」标签；与标题同处主按钮热区内 */
+  titleSuffix?: ReactNode
   /** 右侧计数/状态（纯展示，进主按钮） */
   count?: ReactNode
   /** 主行为：导航=进入；折叠卡=展开/折叠。不传 = 该行没有主行为 */
@@ -36,12 +38,13 @@ interface MenuRowProps {
  * 上，**不挂片容器**——容器上的 padding 会造出「hover 亮起但点不动」的死带（2026-09-27 修过的同类缺陷）。
  */
 export default function MenuRow({
-  icon, title, count, onPrimary, swap, expanded, leadingButton, actions, titleHint, active, onContextMenu,
+  icon, title, titleSuffix, count, onPrimary, swap, expanded, leadingButton, actions, titleHint, active, onContextMenu,
 }: MenuRowProps) {
   const content = (
     <>
       {swap ? <HoverSwapIcon icon={icon} swap={swap} expanded={expanded} /> : icon}
       <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>{title}</span>
+      {titleSuffix}
       {count !== undefined && (
         <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{count}</span>
       )}

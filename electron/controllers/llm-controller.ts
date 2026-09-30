@@ -460,8 +460,10 @@ export function registerLLMController() {
   // 这样做的理由见 src/shared/provider-accounts.ts 头注释。
 
   guardedHandle('llm:list-providers', async () => {
-    // 出站剥离（v3 §4.7）：账户只带 apiKeyRef；值不过境，凭据状态走 credential:describe
-    return readProvidersFileLazy().accounts.map(stripApiKey)
+    // 出站剥离（v3 §4.7）：账户只带 apiKeyRef；值不过境，凭据状态走 credential:describe。
+    // revision 同快照返回（v3 §5）：编辑卡据此做版本门控，拆开读会拿到不匹配的一对
+    const state = readProvidersFileLazy()
+    return { accounts: state.accounts.map(stripApiKey), revision: state.revision }
   })
 
   guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number, apiKeyDraft?: string) => {

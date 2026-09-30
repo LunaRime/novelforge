@@ -236,9 +236,12 @@ describe('providers.json v2 + revision 门控', () => {
 // ===== 读取端（v2 形换了盘上形状，读点必须跟着换）=====
 
 describe('llm:list-providers', () => {
-  it('v2 形下照常返回账号数组：apiKeyRef 随行、**不含密钥**（不能把包装对象漏给渲染层）', async () => {
+  it('v2 形下返回 {accounts, revision}：apiKeyRef 随行、**不含密钥**（不能把包装对象漏给渲染层）', async () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, 'sk-secret')
-    const list = (await call('llm:list-providers')) as ProviderAccount[]
+    const { accounts: list, revision } = (await call('llm:list-providers')) as {
+      accounts: ProviderAccount[]
+      revision: number
+    }
 
     expect(Array.isArray(list)).toBe(true)
     expect(list).toHaveLength(1)
@@ -246,6 +249,8 @@ describe('llm:list-providers', () => {
     expect(list[0].apiKeyRef).toBe('OPENAI_API_KEY')
     expect(list[0]).not.toHaveProperty('apiKey')
     expect(JSON.stringify(list)).not.toContain('sk-secret')
+    // revision 与 accounts 同快照（v3 §5）：存了一次 → 版本号必须是存后那个
+    expect(revision).toBe(1)
   })
 
   it('迁移失败残留（盘上还带明文）→ 出站剥离，值不过境', async () => {
@@ -254,10 +259,15 @@ describe('llm:list-providers', () => {
       revision: 1,
       accounts: [{ ...mkAccount({ id: 'acc-1', apiKeyRef: 'OPENAI_API_KEY' }), apiKey: 'sk-residual' }],
     })
-    const list = (await call('llm:list-providers')) as ProviderAccount[]
+    const { accounts: list, revision } = (await call('llm:list-providers')) as {
+      accounts: ProviderAccount[]
+      revision: number
+    }
 
     expect(list[0]).not.toHaveProperty('apiKey')
     expect(JSON.stringify(list)).not.toContain('sk-residual')
+    // 盘上 revision 1 原样带出（读点不 bump）
+    expect(revision).toBe(1)
   })
 })
 

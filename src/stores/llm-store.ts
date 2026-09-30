@@ -9,7 +9,7 @@ import { toast } from '../components/ui/Toast'
  * 用户会连点多次；每次点击都会发出一个 llm:delete-model。
  */
 const deletingModelIds = new Set<string>()
-import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount } from '../shared/ipc-channels'
+import type { ModelProfile, LLMModelCandidate, LLMResponse, TokenUsage, ProviderAccount, CredentialInfo } from '../shared/ipc-channels'
 import { normalizeModelProfile } from '../shared/llm-constants'
 import { ModelRouter, type CallPurpose, type ModelRouteConfig, type ModelTier, DEFAULT_ROUTE_CONFIG } from '../services/llm/model-router'
 
@@ -37,14 +37,42 @@ interface LLMState {
   modelRoutes: ModelRouteConfig
   /** 供应商账户（一份凭据挂多个模型）—— 其派生条目仍在 models 里 */
   providers: ProviderAccount[]
+  /**
+   * providers.json 的版本号（v3 §5）—— 随 `loadProviders` 一起拿到。
+   *
+   * 编辑卡打开时记下它、提交时带 `expectedRevision`：期间别处（另一个窗口）改过 → 主进程拒写
+   * （conflict）。**必须与 accounts 同一次读取**（同一个快照），否则会拿新版本号去撞一份旧配置。
+   */
+  providersRevision: number
+  /**
+   * 凭据状态缓存（ref → `credential:describe` 结果）—— 行上三态灯的数据源（v3 §4.5）。
+   *
+   * 只在「设置段打开时一次拉全」与写后刷新时更新；缺键 = **describe 未完成/失败**（无灯，
+   * 凭据是增强信息，缺它不阻塞行）。
+   */
+  credentialInfo: Record<string, CredentialInfo>
 
   // ===== Actions =====
   /** 初始化（加载模型列表 + 默认模型 ID） */
   init: () => Promise<void>
   /** 加载模型列表 */
   loadModels: () => Promise<void>
-  /** 加载供应商账户 */
+  /** 加载供应商账户（连同 revision；就地刷新 credentialInfo） */
   loadProviders: () => Promise<void>
+  /**
+   * 批量查凭据状态并写入 `credentialInfo`。
+   *
+   * - 不传 `refs` = 全量刷新（当前所有账户的 ref；**整体替换**缓存）
+   * - 传 `refs` = 定点刷新（**合并**，不动其它条目的已知状态）
+   */
+  describeCredentials: (refs?: string[]) => Promise<void>
+  /**
+   * 删除已存的密钥（删除账户前的**凭据步骤**，spec §4.7）。
+   *
+   * env 影子时主进程会拒绝（`envShadowed`）——调用方应先看 `credentialInfo[ref].writable`，
+   * 影子态**跳过**本步（该值由环境提供、不归本页管理）。
+   */
+  unsetCredential: (ref: string) => Promise<{ success: boolean; error?: string }>
   /** 保存账户（主进程会顺带同步其派生模型条目）→ 成功后重载 models */
   /** modelSpecs：本次采纳的模型规格（拉取所得）；主进程侧"本次优先、回落预设"（2026-09-28） */
   saveProvider: (
@@ -56,14 +84,19 @@ interface LLMState {
     apiKeyDraft?: string,
   ) => Promise<{ success: boolean; error?: string; revision?: number; conflict?: boolean }>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
-  deleteProvider: (accountId: string) => Promise<boolean>
+  deleteProvider: (accountId: string) => Promise<{ success: boolean; error?: string }>
   /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常）。
    *  密钥二选一（v3 §4.7）：`apiKeyDraft`（当场输入，优先）→ `apiKeyRef` 解析。 */
   listProviderModels: (
     credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'baseUrl' | 'apiKeyRef'> & { apiKeyDraft?: string },
   ) => Promise<{ success: boolean; models?: LLMModelCandidate[]; error?: string }>
-  /** 保存模型（`apiKeyDraft`：用户当场输入的密钥，一次性；空/缺省 = 不改已存值） */
-  saveModel: (model: ModelProfile, apiKeyDraft?: string) => Promise<boolean>
+  /**
+   * 保存模型（`apiKeyDraft`：用户当场输入的密钥，一次性；空/缺省 = 不改已存值）。
+   *
+   * 返回整个结果而不是布尔：主进程会给出拒因码（`keyBlank`/`keyIllegalCharacters`）或技术串，
+   * 压成布尔后调用方只能弹一句「未知错误」（T5 评审 m5）。
+   */
+  saveModel: (model: ModelProfile, apiKeyDraft?: string) => Promise<{ success: boolean; error?: string }>
   /** 删除模型 */
   deleteModel: (modelId: string) => Promise<boolean>
   /** 设置默认生成模型（持久化到 ~/.novelforge/config.json） */
@@ -100,6 +133,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   defaultModelId: null,
   defaultEmbeddingModelId: null,
   providers: [],
+  providersRevision: 0,
+  credentialInfo: {},
   activeRequests: new Map(),
   loaded: false,
   modelRouter: null,
@@ -156,16 +191,49 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   loadProviders: async () => {
     if (!ipc.isElectron) return
     try {
-      set({ providers: await ipc.invoke('llm:list-providers') })
+      // accounts 与 revision 必须是**同一次读**的快照：分开读会拿到「新版本号 + 旧账户」，
+      // 编辑卡据此提交时冲突检测形同虚设
+      const { accounts, revision } = await ipc.invoke('llm:list-providers')
+      set({ providers: accounts, providersRevision: revision })
+      await get().describeCredentials()
     } catch (e) {
       renderLog('error', 'LLM', t('log.render.modelListLoadFailed').replace('{err}', () => String(e)))
     }
   },
 
+  describeCredentials: async (refs) => {
+    if (!ipc.isElectron) return
+    const list = refs ?? [...new Set(get().providers.map((p) => p.apiKeyRef).filter((r): r is string => !!r))]
+    if (list.length === 0) {
+      // 全量刷新且一个 ref 都没有 → 清缓存（定点刷新传空数组时无事可做）
+      if (!refs) set({ credentialInfo: {} })
+      return
+    }
+    try {
+      const info = await ipc.invoke('credential:describe', list)
+      set(refs ? { credentialInfo: { ...get().credentialInfo, ...info } } : { credentialInfo: info })
+    } catch (e) {
+      // 凭据是增强信息：describe 失败只降级「无灯」，不阻塞行、不弹 toast
+      renderLog('error', 'LLM', t('log.render.modelListLoadFailed').replace('{err}', () => String(e)))
+    }
+  },
+
+  unsetCredential: async (ref) => {
+    try {
+      const result = await ipc.invoke('credential:unset', ref)
+      if (result.success) await get().describeCredentials([ref])
+      return result
+    } catch (e) {
+      return { success: false, error: String(e) }
+    }
+  },
+
   saveProvider: async (account, modelSpecs, expectedRevision, apiKeyDraft) => {
     const result = await ipc.invoke('llm:save-provider', account, modelSpecs, expectedRevision, apiKeyDraft)
-    // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据引用）→ 两边都重载
-    if (result.success) {
+    // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据引用）→ 两边都重载。
+    // ⚠️ 判据不是 `success`：凭据写盘失败时 success:false 但**配置已写**（带 revision，spec §4.7）——
+    // 不重载的话 UI 停在旧态，用户重试草稿还没有 ref 可挂 → 主进程再分配一个 `_2`。
+    if (result.success || result.revision !== undefined) {
       await Promise.all([get().loadProviders(), get().loadModels()])
     }
     // 返回整个结果而不是布尔：调用方要分辨 conflict（版本冲突 → 提示重载、保留草稿）
@@ -175,7 +243,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   deleteProvider: async (accountId) => {
     const result = await ipc.invoke('llm:delete-provider', accountId)
-    if (!result.success) return false
+    // 返回整个结果（不是布尔）：主进程会给出「account not found」这类可操作原因，
+    // 布尔会把它们压成一句无信息的失败（删除失败时界面上「点了没反应」的来源）
+    if (!result.success) return result
     await Promise.all([get().loadProviders(), get().loadModels()])
     // 与 deleteModel 同理：删账户会连带删掉其派生模型，三层路由里可能还留着它们的 id
     // → 不清会让 ModelRoutingSection 读到不存在的 id 而显示空白
@@ -196,7 +266,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       await ipc.invoke('llm:set-routes', cleaned)
       set({ modelRoutes: cleaned })
     }
-    return true
+    return result
   },
 
   listProviderModels: (credentials) => ipc.invoke('llm:list-provider-models', credentials),
@@ -206,7 +276,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     if (result.success) {
       await get().loadModels()
     }
-    return result.success
+    return result
   },
 
   deleteModel: async (modelId) => {

@@ -424,8 +424,14 @@ export interface LLMChannels {
   // ===== 供应商账户（2026-09-25）：一份凭据挂多个模型 =====
   'llm:list-providers': {
     args: []
-    /** **不含密钥**（v3 §4.7 渲染层剥离）：账户只带 `apiKeyRef`，凭据状态走 `credential:describe` */
-    return: ProviderAccount[]
+    /**
+     * **不含密钥**（v3 §4.7 渲染层剥离）：账户只带 `apiKeyRef`，凭据状态走 `credential:describe`。
+     *
+     * `revision` 与 `accounts` 是**同一次读的快照**（v3 §5）——编辑卡打开时记下它，提交带
+     * `expectedRevision`，期间别处改过即被检出（conflict）。分两个通道读会拿到「新版本号 + 旧账户」，
+     * 版本门控就形同虚设，故不拆。
+     */
+    return: { accounts: ProviderAccount[]; revision: number }
   }
   'llm:save-provider': {
     /** modelSpecs：本次采纳的模型规格（拉取所得）——主进程优先用它、回落预设（2026-09-28，批量采纳带规格） */

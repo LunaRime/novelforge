@@ -163,6 +163,26 @@ export const settingsTexts = {
   'model.addFirstLabel': { 'zh-CN': '添加第一个{label}', 'en-US': 'Add first {label}', 'ru-RU': 'Добавить первый {label}' },
   'model.purposeGen': { 'zh-CN': '生成模型', 'en-US': 'Generation model', 'ru-RU': 'Модель генерации' },
   'model.purposeEmbedding': { 'zh-CN': '嵌入模型', 'en-US': 'Embedding model', 'ru-RU': 'Модель эмбеддингов' },
+  // ===== 供应商行列表 + 行内编辑卡（模型管理 v3 §2，T6）=====
+  'model.savedNotice': { 'zh-CN': '已保存 {name}', 'en-US': 'Saved {name}', 'ru-RU': 'Сохранено: {name}' },
+  'model.conflictReload': { 'zh-CN': '配置已被其他窗口修改，请重载', 'en-US': 'The configuration was changed in another window — please reload', 'ru-RU': 'Конфигурация изменена в другом окне — перезагрузите' },
+  'provider.deleteFailed': { 'zh-CN': '删除供应商失败：{error}', 'en-US': 'Failed to delete provider: {error}', 'ru-RU': 'Не удалось удалить поставщика: {error}' },
+  // ===== 凭据（v3 §4.5）：只写密钥框的三态 placeholder + 行上三态灯 + 拒因文案 =====
+  'credential.keyLabel': { 'zh-CN': 'API 密钥', 'en-US': 'API key', 'ru-RU': 'Ключ API' },
+  'credential.placeholderEnv': { 'zh-CN': '由环境变量 {name} 提供（只读）', 'en-US': 'Provided by environment variable {name} (read-only)', 'ru-RU': 'Задан переменной среды {name} (только чтение)' },
+  'credential.placeholderConfigured': { 'zh-CN': '已配置（留空保持不变）', 'en-US': 'Configured (leave empty to keep)', 'ru-RU': 'Настроен (оставьте пустым, чтобы сохранить)' },
+  'credential.placeholderEnter': { 'zh-CN': '输入 API 密钥', 'en-US': 'Enter API key', 'ru-RU': 'Введите ключ API' },
+  'credential.placeholderOllama': { 'zh-CN': '留空 = 不使用密钥', 'en-US': 'Leave empty to use no key', 'ru-RU': 'Оставьте пустым — без ключа' },
+  'credential.dotConfigured': { 'zh-CN': '密钥已配置', 'en-US': 'Key configured', 'ru-RU': 'Ключ настроен' },
+  'credential.dotMissing': { 'zh-CN': '未配置密钥', 'en-US': 'Key not configured', 'ru-RU': 'Ключ не настроен' },
+  'credential.dotEnv': { 'zh-CN': '由环境变量 {name} 提供（只读）', 'en-US': 'Provided by environment variable {name} (read-only)', 'ru-RU': 'Задан переменной среды {name} (только чтение)' },
+  // 拒因码 → 文案（与主进程 credential:set 的拒因码同一套，见 credential-rules.ts）
+  'credential.failure.keyBlank': { 'zh-CN': '密钥不能是空白', 'en-US': 'The key cannot be blank', 'ru-RU': 'Ключ не может быть пустым' },
+  'credential.failure.keyIllegalCharacters': { 'zh-CN': '密钥含非法字符（请勿粘贴整行 .env 或带引号的值）', 'en-US': 'The key contains illegal characters (do not paste a whole .env line or a quoted value)', 'ru-RU': 'Ключ содержит недопустимые символы (не вставляйте строку .env целиком или значение в кавычках)' },
+  'credential.failure.envShadowed': { 'zh-CN': '该密钥由环境变量提供，不能在应用内修改', 'en-US': 'This key comes from an environment variable and cannot be changed here', 'ru-RU': 'Этот ключ задан переменной среды, изменить его здесь нельзя' },
+  // 凭据阶段的失败：账户配置**已落盘**，只有密钥没写进去（spec §4.7「重试只补凭据这一步」）
+  'credential.keyNotWritten': { 'zh-CN': '配置已保存，密钥未写入：{error}', 'en-US': 'Configuration saved, but the key was not written: {error}', 'ru-RU': 'Конфигурация сохранена, но ключ не записан: {error}' },
+  'credential.unsetFailed': { 'zh-CN': '删除已存密钥失败，账户未删除：{error}', 'en-US': 'Failed to delete the stored key — the account was not deleted: {error}', 'ru-RU': 'Не удалось удалить сохранённый ключ — учётная запись не удалена: {error}' },
   'settings.routeTitle': { 'zh-CN': '模型路由（分层调度）', 'en-US': 'Model Routing (Tiered)', 'ru-RU': 'Маршрутизация моделей' },
   'settings.routeDesc': { 'zh-CN': '按任务难度自动选择模型，降低 API 费用。每层选择主用模型，任务会自动降级到可用模型。', 'en-US': 'Automatically pick models by task difficulty to cut API costs. Pick the main model per tier; tasks fall back automatically.', 'ru-RU': 'Автоматический выбор моделей по сложности задачи для экономии API. Выберите основную модель для каждого уровня; задачи автоматически используют запасные.' },
   'settings.routeElite': { 'zh-CN': '创意写作层', 'en-US': 'Creative Tier', 'ru-RU': 'Творческий уровень' },

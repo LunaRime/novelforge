@@ -24,7 +24,7 @@ beforeEach(() => {
     // 注意：loadModels 直接对返回值调 .map，通道必须返回数组本身（返回 {models:[]} 会抛错，
     // 走 catch 分支 → 测试变成假阳性）
     if (channel === 'llm:list-models') return []
-    if (channel === 'llm:list-providers') return []
+    if (channel === 'llm:list-providers') return { accounts: [], revision: 0 }
     return { success: true }
   })
   useLLMStore.setState({
