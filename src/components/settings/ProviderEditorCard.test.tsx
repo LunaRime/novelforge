@@ -227,6 +227,31 @@ describe('ProviderEditorCard 行内编辑卡', () => {
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('配置已被其他窗口修改，请重载'))
   })
 
+  it('换家重播种（添加卡的 provider 下拉）：地址/协议跟新家走，密钥草稿与卡都不动', async () => {
+    // 编辑卡拿的是快照，provider 锁定；只有添加卡会换 `account.provider` —— 这里直接模拟那次重渲染
+    render({ keyInfo: MISSING })
+    await act(async () => { setValue(inputByLabel('API 密钥'), 'sk-keep') })
+
+    await act(async () => {
+      root!.render(
+        <ProviderEditorCard
+          account={{ ...ACCOUNT, provider: 'deepseek' as never, baseUrl: 'https://api.deepseek.com' }}
+          revision={7}
+          keyInfo={MISSING}
+          onClose={vi.fn()}
+        />,
+      )
+    })
+    expect(inputByLabel('API 密钥').value, '换家不动密钥草稿').toBe('sk-keep')
+
+    await act(async () => { buttonByText('应用').click(); await tick() })
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      // 新家的身份与地址：旧家的地址若被带过去，就是一个打不通的账户
+      expect.objectContaining({ provider: 'deepseek', baseUrl: 'https://api.deepseek.com' }),
+      undefined, 7, 'sk-keep', undefined,
+    )
+  })
+
   it('conflict → 卡内「重新加载」就地出口：重读账户与条目、草稿不动，重载后可再提交', async () => {
     state.saveProvider.mockImplementationOnce(async () => ({ success: false, conflict: true, error: 'provider/conflict' }))
     const onClose = vi.fn()
