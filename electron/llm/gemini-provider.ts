@@ -1,5 +1,5 @@
-import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
-import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, ResolvedModelProfile } from './provider.interface'
+import { LLMModelCandidate } from '../../src/shared/ipc-channels'
 import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { logger } from '../utils/logger'
@@ -50,7 +50,7 @@ export function toGeminiContents(messages: Array<{ role: string; content: string
 
 export class GeminiProvider implements ILLMProvider {
 
-  async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
+  async generate(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     return withRetry(async () => {
       const baseUrl = model.baseUrl.replace(/\/$/, '')
       const url = `${baseUrl}/v1beta/models/${model.modelName}:generateContent`
@@ -125,7 +125,7 @@ export class GeminiProvider implements ILLMProvider {
     })
   }
 
-  async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
+  async generateStream(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
     await withStreamRetry(async () => {
       const baseUrl = model.baseUrl.replace(/\/$/, '')
       const url = `${baseUrl}/v1beta/models/${model.modelName}:streamGenerateContent?alt=sse`

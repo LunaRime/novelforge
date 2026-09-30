@@ -56,7 +56,6 @@ export function ModelListSection() {
       id: randomUUID(),
       provider: preset.provider as ProviderAccount['provider'],
       protocol: preset.protocol,
-      apiKey: '',
       baseUrl: preset.baseUrl,
       modelNames: [],
     }

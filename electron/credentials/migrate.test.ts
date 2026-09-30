@@ -46,7 +46,7 @@ vi.mock('../utils/logger', () => ({
 }))
 
 import { logger } from '../utils/logger'
-import { planMigration, runCredentialMigration, hasLegacyKey } from './migrate'
+import { planMigration, runCredentialMigration, hasLegacyKey, type LegacyAccount, type LegacyModel } from './migrate'
 import { encryptApiKey, decryptApiKey } from '../utils/secure-config'
 import {
   MODELS_CONFIG_PATH,
@@ -68,7 +68,9 @@ import type { ModelProfile, ProviderAccount } from '../../src/shared/ipc-channel
 
 const BAK = (p: string) => p + CREDENTIAL_MIGRATION_BACKUP_SUFFIX
 
-function account(over: Partial<ProviderAccount> = {}): ProviderAccount {
+// 夹具是**迁移期形状**（`LegacyAccount` / `LegacyModel`）：v3 T5 起 `ProviderAccount` /
+// `ModelProfile` 上已经没有 `apiKey` 了，而迁移处理的正是「旧文件里还带着它」的数据。
+function account(over: Partial<LegacyAccount> = {}): LegacyAccount {
   return {
     id: 'a1',
     provider: 'openai',
@@ -80,7 +82,7 @@ function account(over: Partial<ProviderAccount> = {}): ProviderAccount {
   }
 }
 
-function model(over: Partial<ModelProfile> = {}): ModelProfile {
+function model(over: Partial<LegacyModel> = {}): LegacyModel {
   return {
     id: 'm1',
     name: 'DeepSeek Chat',
@@ -107,17 +109,17 @@ beforeEach(() => {
 // ===== ① planMigration（纯函数）=====
 
 describe('planMigration（纯函数）', () => {
-  it('账户与手工条目明文/密文 key 全量搬入 refs，文件字段清空', () => {
+  it('账户与手工条目明文/密文 key 全量搬入 refs，文件**摘掉**密钥字段', () => {
     const accounts = [account({ apiKey: 'ENC:xxx' })]
     const models = [model({ apiKey: 'sk-plain' })]
 
     const plan = planMigration(accounts, models, {})
 
     expect(plan.changed).toBe(true)
-    expect(plan.accounts[0].apiKey).toBe('')
+    expect('apiKey' in plan.accounts[0]).toBe(false)
     expect(plan.accounts[0].apiKeyRef).toBe('OPENAI_API_KEY')
     expect(plan.models[0].apiKeyRef).toBe('DEEPSEEK_API_KEY')
-    expect(plan.models[0].apiKey).toBe('')
+    expect('apiKey' in plan.models[0]).toBe(false)
     expect(plan.refs['OPENAI_API_KEY']).toBe('ENC:xxx')
     expect(plan.refs['DEEPSEEK_API_KEY']).toMatch(/^ENC:/) // 明文被加密
     // 「密文原样搬运、明文真加密」——解回来必须是原值（不是套了一层壳的密文）
@@ -146,7 +148,7 @@ describe('planMigration（纯函数）', () => {
 
     expect(plan.changed).toBe(true)
     expect(plan.accounts[0].apiKeyRef).toBe('OPENAI_API_KEY') // 沿用，不新开 _2
-    expect(plan.accounts[0].apiKey).toBe('')
+    expect('apiKey' in plan.accounts[0]).toBe(false)
     expect(Object.keys(plan.refs)).toEqual(['OPENAI_API_KEY'])
   })
 
@@ -231,7 +233,7 @@ describe('planMigration（纯函数）', () => {
     )
 
     expect(plan.refs['OPENAI_API_KEY']).toBe('ENC:from-store')
-    expect(plan.accounts[0].apiKey).toBe('') // 文件字段仍清空（值已在库里）
+    expect('apiKey' in plan.accounts[0]).toBe(false) // 文件字段仍摘掉（值已在库里）
   })
 
   it('空 provider 名也能派生（不崩、不产生空 ref）', () => {
@@ -288,11 +290,15 @@ describe('runCredentialMigration（真实文件层 · tmp home）', () => {
     expect(decryptApiKey(creds.OPENAI_API_KEY)).toBe('sk-openai-plain')
     expect(creds.DEEPSEEK_API_KEY).toBe(legacyCipher)
     expect(decryptApiKey(creds.DEEPSEEK_API_KEY)).toBe('sk-legacy-cipher-source')
-    // ② 配置文件：字段清空 + 补发 ref；revision 记一次修改（+1）
+    // ② 配置文件：**摘掉密钥字段** + 补发 ref；revision 记一次修改（+1）
+    //（断言用「原始 JSON 里没有 apiKey 成员」而不是 toMatchObject —— 后者对**多出来的键**不敏感，
+    //  而本任务要证明的恰恰是「字段没了」，留个 `apiKey: ''` 也算没清干净）
     const providers = readProvidersFile()
     expect(providers.revision).toBe(4)
-    expect(providers.accounts[0]).toMatchObject({ apiKey: '', apiKeyRef: 'OPENAI_API_KEY' })
-    expect(readModels()[0]).toMatchObject({ apiKey: '', apiKeyRef: 'DEEPSEEK_API_KEY' })
+    expect(providers.accounts[0]).toMatchObject({ apiKeyRef: 'OPENAI_API_KEY' })
+    expect(Object.keys(JSON.parse(rawRead(PROVIDERS_CONFIG_PATH)).accounts[0])).not.toContain('apiKey')
+    expect(readModels()[0]).toMatchObject({ apiKeyRef: 'DEEPSEEK_API_KEY' })
+    expect(Object.keys(JSON.parse(rawRead(MODELS_CONFIG_PATH))[0])).not.toContain('apiKey')
     // ③ 备份 = 回退点：留的是**迁移前**的字节（明文还在里面，这才叫可回退）
     expect(JSON.parse(rawRead(BAK(PROVIDERS_CONFIG_PATH))).accounts[0].apiKey).toBe('sk-openai-plain')
     expect(JSON.parse(rawRead(BAK(MODELS_CONFIG_PATH)))[0].apiKey).toBe(legacyCipher)
@@ -337,7 +343,8 @@ describe('runCredentialMigration（真实文件层 · tmp home）', () => {
     expect(Object.keys(readCredentialFile().refs)).toEqual(['OPENAI_API_KEY'])
     expect(readCredentialFile().refs.OPENAI_API_KEY).toBe(cipher) // 库里原值不动
     const providers = readProvidersFile()
-    expect(providers.accounts[0]).toMatchObject({ apiKey: '', apiKeyRef: 'OPENAI_API_KEY' })
+    expect(providers.accounts[0]).toMatchObject({ apiKeyRef: 'OPENAI_API_KEY' })
+    expect(Object.keys(JSON.parse(rawRead(PROVIDERS_CONFIG_PATH)).accounts[0])).not.toContain('apiKey')
     expect(providers.revision).toBe(4)
   })
 
@@ -373,8 +380,9 @@ describe('runCredentialMigration（真实文件层 · tmp home）', () => {
     expect(providers.accounts[0]).toMatchObject({ apiKey: 'sk-CHANGED', baseUrl: 'https://changed.example' })
     expect(providers.accounts[0].apiKeyRef).toBeUndefined()
     expect(providers.revision).toBe(6)
-    // ② models 侧没被改过 → 照常清字段（计划里已分配的 ref 用上）
-    expect(readModels()[0]).toMatchObject({ apiKey: '', apiKeyRef: 'DEEPSEEK_API_KEY' })
+    // ② models 侧没被改过 → 照常摘掉字段（计划里已分配的 ref 用上）
+    expect(readModels()[0]).toMatchObject({ apiKeyRef: 'DEEPSEEK_API_KEY' })
+    expect(Object.keys(JSON.parse(rawRead(MODELS_CONFIG_PATH))[0])).not.toContain('apiKey')
     // ③ providers 的密钥仍留在文件里（没被搬走也没被清），下次读取会再迁一次 —— 数据不丢
     expect(Object.keys(readCredentialFile().refs).sort()).toEqual(['DEEPSEEK_API_KEY', 'OPENAI_API_KEY'])
   })
@@ -389,7 +397,8 @@ describe('runCredentialMigration（真实文件层 · tmp home）', () => {
 
     expect(first).toEqual({ changed: true, refs: 1 })
     expect(rawRead(BAK(PROVIDERS_CONFIG_PATH))).toBe('"sentinel"') // 未被覆盖
-    expect(readProvidersFile().accounts[0].apiKey).toBe('') // 迁移照做
+    expect(readProvidersFile().accounts[0].apiKeyRef).toBe('OPENAI_API_KEY') // 迁移照做
+    expect(Object.keys(JSON.parse(rawRead(PROVIDERS_CONFIG_PATH)).accounts[0])).not.toContain('apiKey')
 
     // ② 备份**失败** = 整体失败（宁可不动，也不能没有回退点）：不抛、留日志、原状保留。
     //    制造真实的 copyFileSync 失败：把源路径做成**目录**（跨平台一致地失败：EPERM / EISDIR）

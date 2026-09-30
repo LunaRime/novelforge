@@ -1,13 +1,11 @@
 /**
- * llm-controller 密钥解析接线（模型管理 v3 T3 §4.4）—— 在**请求边界**上验证「ref 优先、明文回落」。
+ * llm-controller 密钥接线（模型管理 v3 §4.4/§4.7；**T5 起 ref-only**）—— 请求边界上的三条通路：
  *
- * 三个接线点：
  *  - `llm:generate` / `llm:generate-stream` —— 共用 `getModelConfig`（给 provider 前的唯一收口点）
- *  - `llm:test-connection` —— 收到的 profile 自带 ref（可能是账户派生条目）
- *  - `llm:list-provider-models` —— 入参带 `apiKeyRef` 时以凭据库为准
- *
- * 每处都**成对**断言：ref 命中 → 用凭据库的值；无 ref → 用明文。
- * 后者就是本任务「零行为变化」的那一半（此刻凭据库为空/无 ref，全走这一支）。
+ *    → 按条目 `apiKeyRef` 解析；盘上残留的明文**不再参与**（回落随 `apiKey` 字段一起删了）
+ *  - `llm:test-connection` / `llm:list-provider-models` —— 渲染层送来的 profile **不带密钥**，
+ *    用户当场输入的键走 `apiKeyDraft` 一次性参数，且**草稿优先**（typed key wins）
+ *  - `llm:list-models` —— 出站剥离：条目上残留的密钥字段一律不回渲染层
  *
  * ⚠️ CI 一致性（ci-parity-standard）：本文件 import 到 electron → **必须 `vi.mock('electron')`**；
  *    另打桩 logger 与 `LLMFactory`（fake provider 记录收到的 model，绝不发真实 HTTP）。
@@ -101,7 +99,13 @@ function call(channel: string, ...args: unknown[]): Promise<unknown> {
 
 const MODEL_ID = 'm-wiring-1'
 
-function modelFixture(over: Partial<ModelProfile> = {}): ModelProfile {
+/**
+ * 盘上条目 = **迁移期形状**：`ModelProfile` 上已经没有 `apiKey` 了，但旧文件（迁移失败的残留）
+ * 可能还带着它 —— 夹具保留该字段正是为了证明「残留明文不会被当密钥用」。
+ */
+type LegacyModelFixture = ModelProfile & { apiKey?: string }
+
+function modelFixture(over: Partial<LegacyModelFixture> = {}): LegacyModelFixture {
   return {
     id: MODEL_ID,
     name: 'Wiring Model',
@@ -116,6 +120,13 @@ function modelFixture(over: Partial<ModelProfile> = {}): ModelProfile {
     purposes: ['generation'],
     ...over,
   }
+}
+
+/** 渲染层送来的 profile：**类型上就没有密钥**（只有 ref）——`apiKeyDraft` 是独立的第二参 */
+function rendererModel(over: Partial<ModelProfile> = {}): ModelProfile {
+  const model: ModelProfile = { ...modelFixture(), ...over }
+  delete (model as { apiKey?: string }).apiKey
+  return model
 }
 
 const MESSAGES = [{ role: 'user', content: 'hi' }]
@@ -145,12 +156,13 @@ describe('llm:generate（生成路径收口点 getModelConfig）', () => {
     expect(h.seen.generate?.apiKey).toBe('sk-from-store')
   })
 
-  it('无 ref / ref 未配置 → provider 拿到条目上的明文（零行为变化的那一半）', async () => {
+  it('无 ref → 空串；盘上残留的明文**不再**被当回落值用（T5 收敛 ref-only）', async () => {
     writeJsonFile(MODELS_CONFIG_PATH, [modelFixture()])
 
     await call('llm:generate', { modelId: MODEL_ID, messages: MESSAGES })
 
-    expect(h.seen.generate?.apiKey).toBe('sk-plain')
+    expect(h.seen.generate?.apiKey).toBe('')
+    expect(h.seen.generate?.apiKey).not.toBe('sk-plain')
   })
 
   it('llm:generate-stream 走同一个收口点（核对一次，避免两条链路演化出分歧）', async () => {
@@ -163,46 +175,89 @@ describe('llm:generate（生成路径收口点 getModelConfig）', () => {
   })
 })
 
-describe('llm:test-connection（收到的 profile 可能自带 ref）', () => {
-  it('profile 带 ref → 用凭据库的值（表单里那片明文只作回落项）', async () => {
+describe('llm:test-connection（草稿优先 → ref 解析）', () => {
+  it('profile 带 ref、无草稿 → 用凭据库的值', async () => {
     __setStoredForTest({ [REF]: 'sk-from-store' })
 
-    const res = await call('llm:test-connection', modelFixture({ apiKeyRef: REF }))
+    const res = await call('llm:test-connection', rendererModel({ apiKeyRef: REF }))
 
     expect(res).toEqual({ success: true, error: undefined })
     expect(h.seen.generate?.apiKey).toBe('sk-from-store')
   })
 
-  it('profile 无 ref → 用 profile 里的明文（手输草稿仍可直接测试）', async () => {
-    const res = await call('llm:test-connection', modelFixture())
+  it('草稿非空即胜出 —— 即便条目带 ref 且库里有值（typed key wins，§4.7）', async () => {
+    __setStoredForTest({ [REF]: 'sk-from-store' })
 
-    expect(res).toEqual({ success: true, error: undefined })
-    expect(h.seen.generate?.apiKey).toBe('sk-plain')
+    await call('llm:test-connection', rendererModel({ apiKeyRef: REF }), 'sk-typed')
+
+    expect(h.seen.generate?.apiKey).toBe('sk-typed')
+  })
+
+  it('无 ref + 有草稿 → 用草稿（保存前先探一手仍可行）', async () => {
+    await call('llm:test-connection', rendererModel(), 'sk-typed')
+
+    expect(h.seen.generate?.apiKey).toBe('sk-typed')
+  })
+
+  it('无 ref 且无草稿 → 空串（profile 上没有可回落的明文了）', async () => {
+    await call('llm:test-connection', rendererModel())
+
+    expect(h.seen.generate?.apiKey).toBe('')
   })
 })
 
-describe('llm:list-provider-models（入参可带 apiKeyRef）', () => {
+describe('llm:list-provider-models（草稿优先 → apiKeyRef 解析）', () => {
   const base = { provider: 'openai', protocol: 'openai', baseUrl: 'https://api.example.com/v1' } as const
 
   it('入参带 ref → listModels 收到凭据库的值', async () => {
     __setStoredForTest({ [REF]: 'sk-from-store' })
 
-    const res = await call('llm:list-provider-models', { ...base, apiKey: 'sk-plain', apiKeyRef: REF })
+    const res = await call('llm:list-provider-models', { ...base, apiKeyRef: REF })
 
     expect(res).toEqual({ success: true, models: [{ id: 'candidate-1' }] })
     expect(h.seen.listModels?.apiKey).toBe('sk-from-store')
   })
 
-  it('无 ref → 沿用入参明文（既有行为不变）', async () => {
-    await call('llm:list-provider-models', { ...base, apiKey: 'sk-plain' })
+  it('草稿非空即胜出（表单里刚敲的键要能当场验证）', async () => {
+    __setStoredForTest({ [REF]: 'sk-from-store' })
 
-    expect(h.seen.listModels?.apiKey).toBe('sk-plain')
+    await call('llm:list-provider-models', { ...base, apiKeyRef: REF, apiKeyDraft: 'sk-typed' })
+
+    expect(h.seen.listModels?.apiKey).toBe('sk-typed')
   })
 
-  it('无 ref 且明文为空 → 仍落「需要密钥」分支（空串回落不改既有错误路径）', async () => {
-    const res = await call('llm:list-provider-models', { ...base, apiKey: '  ' })
+  it('草稿为纯空白 → 不遮蔽 ref（空输入 = 没输入）', async () => {
+    __setStoredForTest({ [REF]: 'sk-from-store' })
+
+    await call('llm:list-provider-models', { ...base, apiKeyRef: REF, apiKeyDraft: '   ' })
+
+    expect(h.seen.listModels?.apiKey).toBe('sk-from-store')
+  })
+
+  it('无 ref 且无草稿 → 仍落「需要密钥」分支（不放行空密钥探测）', async () => {
+    const res = await call('llm:list-provider-models', { ...base, apiKeyDraft: '  ' })
 
     expect(res).toMatchObject({ success: false })
     expect(h.seen.listModels).toBeNull()
+  })
+})
+
+describe('llm:list-models（出站剥离）', () => {
+  it('条目带 ref → 回渲染层的是同一条目（含 apiKeyRef），但**不含密钥**', async () => {
+    writeJsonFile(MODELS_CONFIG_PATH, [modelFixture({ apiKeyRef: REF })])
+
+    const models = await call('llm:list-models') as Array<Record<string, unknown>>
+
+    expect(models[0]).toMatchObject({ id: MODEL_ID, apiKeyRef: REF })
+    expect(models[0]).not.toHaveProperty('apiKey')
+  })
+
+  it('迁移失败残留（盘上还有明文）→ 剥离后才回传，值不过境', async () => {
+    writeJsonFile(MODELS_CONFIG_PATH, [modelFixture({ apiKey: 'sk-residual' })])
+
+    const models = await call('llm:list-models')
+
+    expect(JSON.stringify(models)).not.toContain('sk-residual')
+    expect((models as Array<Record<string, unknown>>)[0]).not.toHaveProperty('apiKey')
   })
 })

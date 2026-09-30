@@ -7,43 +7,40 @@
 import { embeddingService, type EmbeddingConfig, type LLMEmbeddingConfig } from '../embedding-service'
 import { cosineSimilarity, findMostSimilar } from '../utils/vector-utils'
 import { readJsonFile, MODELS_CONFIG_PATH } from '../utils/config-utils'
-import { decryptApiKey } from '../utils/secure-config'
-import { resolveModelKey } from '../credentials/resolve'
+import { resolveModelKey, stripApiKey } from '../credentials/resolve'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import type { ModelProfile } from '../../src/shared/ipc-channels'
+import type { ResolvedModelProfile } from '../llm/provider.interface'
 import { guardedHandle } from '../security/ipc-guard'
 
 /**
- * 从全局配置加载嵌入模型配置（密钥：ref 优先、回落盘上明文的解密值）
+ * 从全局配置加载嵌入模型配置 —— **此处才解析密钥**（返回 `ResolvedModelProfile`）。
  *
- * ⚠️ 回落项必须是**已解密的明文**：这里读的是文件的原始内容，`model.apiKey` 还是 `ENC:` 密文，
- *    直接 `resolveModelKey(model)` 会在 ref 未命中时把密文串当密钥发出去（401 且难排查）。
+ * 与 `getLLMModels()` 的分工是刻意的：这个值直接进 `embeddingService` 的请求路径，
+ * 必须带密钥；而列表通道的值要回渲染层，必须不带。
  */
-function loadEmbeddingModelConfig(): ModelProfile | null {
+function loadEmbeddingModelConfig(): ResolvedModelProfile | null {
   try {
     const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
     const model = models.find((m) => m.purposes?.includes('embedding')) || null
-    if (model) {
-      model.apiKey = resolveModelKey({ ...model, apiKey: decryptApiKey(model.apiKey) })
-    }
-    return model
+    return model ? { ...model, apiKey: resolveModelKey(model) } : null
   } catch {
     return null
   }
 }
 
 /**
- * 获取 LLM model configs 文件（自动解密 apiKey）
+ * 获取 LLM model configs 文件（**不含密钥**）。
  *
- * 与上面同解（先解密 → 再解析 ref）：返回值会被渲染层拿去 `embedding:set-model` 配置服务，
- * 最终进请求，因此这里同样按「ref 优先」取值。
+ * 返回值有两个去处，都不该带密钥：`embedding:list-models` / `embedding:list-llm-candidates`
+ * 回渲染层（后者还会被原样回传回来配置服务）—— 请求侧要用的密钥由 `embedding-service`
+ * 在**发起调用前**按 `apiKeyRef` 现场解析（见 `embedWithLLM`），配置对象因此不必携带它。
  */
 function getLLMModels(): ModelProfile[] {
   try {
-    const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-    return models.map((m) => ({ ...m, apiKey: resolveModelKey({ ...m, apiKey: decryptApiKey(m.apiKey) }) }))
+    return readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
   } catch {
     return []
   }
@@ -143,10 +140,9 @@ export function registerEmbeddingController() {
     }
   })
 
-  // 可用嵌入模型列表
+  // 可用嵌入模型列表（出站剥离：条目上可能残留的密钥字段一律删掉再回渲染层，v3 §4.7）
   guardedHandle('embedding:list-models', async () => {
-    const models = getLLMModels()
-    return models.filter((m) => m.purposes?.includes('embedding'))
+    return getLLMModels().filter((m) => m.purposes?.includes('embedding')).map(stripApiKey)
   })
 
   // 缓存统计
@@ -219,9 +215,9 @@ export function registerEmbeddingController() {
 
   // 获取可用作向量的 LLM 模型列表（从 models.json 中筛选）
   guardedHandle('embedding:list-llm-candidates', async () => {
-    const models = getLLMModels()
-    // 排除已经是 embedding 用途的模型
-    return models.filter(m => !m.purposes?.includes('embedding'))
+    // 排除已经是 embedding 用途的模型；出站剥离同 embedding:list-models
+    // （这条的值会被渲染层原样回传回 set-llm-config —— 密钥由服务侧现场解析，不经渲染层）
+    return getLLMModels().filter(m => !m.purposes?.includes('embedding')).map(stripApiKey)
   })
 
   logger.info('Embedding', t('log.ipc.handlersRegistered'))

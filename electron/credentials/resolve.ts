@@ -80,18 +80,39 @@ export function resolveCredential(ref: string | undefined): string | undefined {
 }
 
 /**
- * 取「本次请求实际要用的密钥」：`apiKeyRef` 命中（env 非空 → store 非空）**优先**，
- * 否则回落到条目自带的明文 `apiKey`；两者皆无 → 空串。
+ * 取「本次请求实际要用的密钥」：按条目的 `apiKeyRef` 解析（env 非空 → store 非空）；
+ * ref 未分配 / 解析不到 → **空串**（由调用方给出「请配置密钥」这类可操作提示）。
  *
- * ⚠️ 明文回落是**过渡形态**（v3 §4.4）：迁移（T4）前凭据库里没有任何 ref，全部走这一支
- * —— 于是本函数接进既有链路时行为零变化。T5 删掉 `ModelProfile.apiKey` 字段后，
- * 回落项恒为 undefined，这条分支自然成为死路径（届时收敛为 ref-only）。
- *
- * ⚠️ 调用方给进来的 `apiKey` 必须是**明文**（密文先经 `decryptApiKey`）——本函数不做解密：
- * 它只负责「ref 还是明文」的选择，密文误入回落项会被原样当密钥发出去（401 且难排查）。
+ * v3 T5 起是 **ref-only**：过渡期的「明文回落」随 `ModelProfile.apiKey` 字段一起删除 ——
+ * 密钥已全部搬进凭据库（T4），配置文件里没有可回落的明文，留着那条分支只会掩盖
+ * 「迁移没跑成」这件事（现在它会表现成「无 key」，用户/日志看得见）。
  */
-export function resolveModelKey(profile: { apiKeyRef?: string; apiKey?: string }): string {
-  return resolveCredential(profile.apiKeyRef) ?? profile.apiKey ?? ''
+export function resolveModelKey(profile: { apiKeyRef?: string }): string {
+  return resolveCredential(profile.apiKeyRef) ?? ''
+}
+
+/**
+ * 本次请求实际要用的密钥：**草稿优先**（用户当场输入、trim 后非空）→ 否则按 ref 解析。
+ *
+ * 「草稿非空即胜出」是 v3 §4.7 的裁定（dsh 同款 typed key wins）：刚敲进去的键必须能被
+ * 测试连接 / 获取模型 / 保存**当场验证**，而不是被已存的 ref 值悄悄顶掉 —— 后者是
+ * 「改了密钥却一直在用旧的」这类最难自查的故障。空串/纯空白 = 没输入（不遮蔽 ref）。
+ */
+export function resolveRequestKey(ref: string | undefined, draft: string | undefined): string {
+  const typed = draft?.trim()
+  if (typed) return typed
+  return resolveCredential(ref) ?? ''
+}
+
+/**
+ * 出站剥离（v3 §4.7「渲染层剥离」）：把条目上**可能残留**的密钥字段删掉再交给渲染层。
+ *
+ * 类型上已经没有该字段，这里是**防御层**：迁移失败（或用户手改）的窗口里盘上仍有明文/密文，
+ * 而「值不过境」不取决于迁移跑没跑成 —— 列表通道一律先剥再回。
+ */
+export function stripApiKey<T extends object>(entry: T): T {
+  delete (entry as { apiKey?: unknown }).apiKey
+  return entry
 }
 
 /** 批量状态查询（`credential:describe` 的实现） */

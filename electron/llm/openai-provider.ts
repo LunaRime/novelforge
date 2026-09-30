@@ -1,5 +1,5 @@
-import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions } from './provider.interface'
-import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, ResolvedModelProfile } from './provider.interface'
+import { LLMModelCandidate } from '../../src/shared/ipc-channels'
 import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { buildOpenAIUrl } from './url-utils'
@@ -20,7 +20,7 @@ class HttpError extends Error {
 }
 
 export class OpenAIProvider implements ILLMProvider {
-  async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
+  async generate(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     return withRetry(async () => {
       const url = buildOpenAIUrl(model.baseUrl, 'chat')
 
@@ -101,7 +101,7 @@ export class OpenAIProvider implements ILLMProvider {
     })
   }
 
-  async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
+  async generateStream(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
     // 已输出内容标记：中途断流（网络错误）不得重试——重试会重复推送已输出前缀
     let emittedAny = false
     await withStreamRetry(async () => {

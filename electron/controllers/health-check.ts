@@ -15,6 +15,7 @@ import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { guardedHandle } from '../security/ipc-guard'
 import { proxyFetch } from '../net/proxy-fetch'
+import { resolveRequestKey } from '../credentials/resolve'
 
 // ===== 类型 =====
 
@@ -127,8 +128,9 @@ export function registerHealthCheckIPC(): void {
     return result
   })
 
-  guardedHandle('health:check-llm', async (_event, baseUrl: string, apiKey: string) => {
-    const llmCheck = await checkLLMConnectivity(baseUrl, apiKey)
+  guardedHandle('health:check-llm', async (_event, baseUrl: string, apiKeyDraft?: string, apiKeyRef?: string) => {
+    // 密钥来源（v3 §4.4/§4.7）：当场输入的草稿优先，否则按 ref 解析（env → 凭据库）
+    const llmCheck = await checkLLMConnectivity(baseUrl, resolveRequestKey(apiKeyRef, apiKeyDraft))
     return { ok: llmCheck.ok, message: llmCheck.message, detail: llmCheck.detail }
   })
 

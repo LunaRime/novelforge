@@ -46,7 +46,7 @@ const render = () => {
   act(() => {
     root!.render(
       <ProviderAccountForm
-        account={{ id: 'p1', provider: 'ollama', protocol: 'openai', apiKey: '', baseUrl: 'http://localhost:11434', modelNames: [] }}
+        account={{ id: 'p1', provider: 'ollama', protocol: 'openai', baseUrl: 'http://localhost:11434', modelNames: [] }}
         onCancel={() => {}}
         onDone={() => {}}
       />,

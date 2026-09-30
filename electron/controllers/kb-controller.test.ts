@@ -154,20 +154,23 @@ function enableLocalOnly(): void {
   setGlobalConfig({ theme: 'dark', localEmbedding: { enabled: true, baseUrl: 'http://127.0.0.1:11434', model: 'bge-m3' } })
 }
 
+/** 远端 Embedding 条目默认挂的 ref（v3 T5 起条目上只剩引用，值在凭据库/env） */
+const REMOTE_REF = 'V3_KB_REMOTE_TEST_REF'
+
 /**
  * 配置一个可用的远端 Embedding 模型（defaultEmbeddingModelId + models.json 条目）
  *
- * @param apiKeyRef 凭据引用名（v3 §4.4）—— 给了就在条目上挂 ref，用于验证「ref 优先」分支
+ * @param apiKeyRef 凭据引用名（v3 §4.4）—— 值要从凭据库注入（`__setStoredForTest`）才解析得到；
+ *                  条目不挂 ref 时该模型等于「没有密钥」（T5 起没有明文可回落）。
  */
-function setRemoteEmbeddingModel(apiKeyRef?: string): void {
+function setRemoteEmbeddingModel(apiKeyRef: string = REMOTE_REF): void {
   const profile: ModelProfile = {
     id: REMOTE_MODEL_ID,
     name: 'Remote Embedding',
     provider: 'openai',
     protocol: 'openai',
     modelName: 'text-embedding-3-small',
-    apiKey: 'sk-plain-key', // 明文（无 ENC: 前缀）→ decryptApiKey 原样返回
-    ...(apiKeyRef !== undefined ? { apiKeyRef } : {}),
+    apiKeyRef,
     baseUrl: 'https://api.example.com/v1',
     temperature: 0,
     maxTokens: 0,
@@ -420,6 +423,7 @@ describe('T3b R1（I1）：kb:search 门控放行纯本地用户', () => {
   })
 
   it('远端模型优先：有远端配置时逐字沿用远端参数（local 开不开都不影响）', async () => {
+    __setStoredForTest({ [REMOTE_REF]: 'sk-remote' })
     setRemoteEmbeddingModel()
     // 远端 + 本地同时可用 → 必须仍用远端参数（local 只是**追加**放行条件，不改既有路径）
     setGlobalConfig({
@@ -433,7 +437,7 @@ describe('T3b R1（I1）：kb:search 门控放行纯本地用户', () => {
     expect(h.searchKnowledge).toHaveBeenCalledTimes(1)
     // 远端参数原样透传（含 modelName）；不是本地档的空配置
     expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚今天做了什么', PROJECT, 'openai',
-      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-plain-key', modelName: 'text-embedding-3-small' }, 3)
+      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-remote', modelName: 'text-embedding-3-small' }, 3)
     expect(h.searchKnowledgeFTS).toHaveBeenCalledTimes(0)
   })
 })
@@ -459,13 +463,13 @@ describe('T3b R1（I1）：kb:search-with-scope 门控放行纯本地用户', ()
   })
 })
 
-// ===== 模型管理 v3 T3：Embedding 取密钥统一走 resolveModelKey（ref 优先、明文回落）=====
+// ===== 模型管理 v3 §4.4（T5 起 ref-only）：Embedding 取密钥统一走 resolveModelKey =====
 //
 // `kb:import-*` / `kb:backfill-vectors` / `kb:search*` 的向量化参数都出自 `getEmbeddingConfig()`，
 // 这里从查询侧（观测点最清晰）锁定两个分支；ref 名用不可能出现在环境变量里的占位（env 优先于 store）。
 
-describe('T3：getEmbeddingConfig 的密钥解析（ref 优先）', () => {
-  it('条目带 ref 且已配置 → 用凭据库的值，而非盘上明文', async () => {
+describe('getEmbeddingConfig 的密钥解析（ref-only）', () => {
+  it('条目带 ref 且已配置 → 用凭据库的值', async () => {
     __setStoredForTest({ V3_KB_WIRING_REF: 'sk-from-store' })
     setRemoteEmbeddingModel('V3_KB_WIRING_REF')
 
@@ -475,12 +479,12 @@ describe('T3：getEmbeddingConfig 的密钥解析（ref 优先）', () => {
       { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-from-store', modelName: 'text-embedding-3-small' }, 3)
   })
 
-  it('条目带 ref 但凭据库没有 → 回落盘上明文', async () => {
+  it('条目带 ref 但解析不到 → **空串**（T5 删了明文回落：迁移没跑成时表现成「无 key」，不再静默用盘上残留）', async () => {
     setRemoteEmbeddingModel('V3_KB_WIRING_REF_MISSING')
 
     await invokeSearch('阿晚', 3)
 
     expect(h.searchKnowledge).toHaveBeenCalledWith('阿晚', PROJECT, 'openai',
-      { baseUrl: 'https://api.example.com/v1', apiKey: 'sk-plain-key', modelName: 'text-embedding-3-small' }, 3)
+      { baseUrl: 'https://api.example.com/v1', apiKey: '', modelName: 'text-embedding-3-small' }, 3)
   })
 })

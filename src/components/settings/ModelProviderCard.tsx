@@ -73,13 +73,14 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
   }
 
   /** 行保存（同 v1：saveModel 返回 false 或抛异常时**保留草稿**——复核 I1 语义） */
-  const handleSave = async () => {
+  const handleSave = async (apiKeyDraft?: string) => {
     if (!editing) return
     const draft = editing.draft
     const t0 = Date.now()
     setSaving(true)
     try {
-      const ok = await saveModel(draft)
+      // apiKeyDraft：ModelForm 里刚输入的密钥（v3 §4.7 一次性草稿；空 = 不变更已存值）
+      const ok = await saveModel(draft, apiKeyDraft)
       if (!ok) {
         renderLog('error', 'Save:Settings', t('log.render.modelSaveFailed')
           .replace('{id}', () => draft.id)
@@ -139,7 +140,7 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
           { ...account, modelNames: (account.modelNames ?? []).filter(n => n !== m.modelName) },
           undefined,
         )
-        if (!saved) toast.error(t('save.failed').replace('{error}', () => t('status.unknown')))
+        if (!saved.success) toast.error(t('save.failed').replace('{error}', () => saved.error ?? t('status.unknown')))
       } else {
         await deleteModel(m.id)
       }
@@ -156,9 +157,9 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
     for (const n of names) if (!merged.includes(n)) merged.push(n)
     setSaving(true)
     try {
-      const ok = await saveProvider({ ...account, modelNames: merged }, specs)
-      if (ok) toast.success(t('save.success'))
-      else toast.error(t('save.failed').replace('{error}', () => t('status.unknown')))
+      const saved = await saveProvider({ ...account, modelNames: merged }, specs)
+      if (saved.success) toast.success(t('save.success'))
+      else toast.error(t('save.failed').replace('{error}', () => saved.error ?? t('status.unknown')))
     } finally {
       setSaving(false)
     }
@@ -180,11 +181,13 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
               {displayName}
             </span>
             {account && (
+              // ⚠️ 过渡判据（v3 T5）：只看 `apiKeyRef` 是否已分配 —— 值已不在账户上（密钥只进不出），
+              // 真实状态得等 T6 的 credential:describe 三态灯。此处宁可粗也不回传值。
               <span
                 className="text-2xs flex-shrink-0"
-                style={{ color: account.apiKey ? 'var(--color-success)' : 'var(--color-warning)' }}
+                style={{ color: account.apiKeyRef ? 'var(--color-success)' : 'var(--color-warning)' }}
               >
-                {account.apiKey ? t('modelCard.keyConfigured') : t('modelCard.keyMissing')}
+                {account.apiKeyRef ? t('modelCard.keyConfigured') : t('modelCard.keyMissing')}
               </span>
             )}
           </div>

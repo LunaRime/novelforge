@@ -1,5 +1,17 @@
 import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
 
+/**
+ * **已解析密钥**的模型条目（v3 §3.2）—— provider 侧的入参类型。
+ *
+ * `ModelProfile` 上**没有** `apiKey`（密钥只住在凭据库/env，配置文件与 IPC 都不携带），
+ * 于是「把条目交给 provider」这件事在类型上就必经一次 resolve：没解析就没有 `apiKey`，
+ * 编译不过。解析点见 `electron/credentials/resolve.ts` 的 `resolveRequestKey`。
+ *
+ * ⚠️ 字段是**明文**：密文串一旦被当密钥发出去，故障表现是 401 且极难排查 ——
+ * 所以构造它只有 resolve 一条路，不要把盘上读到的原始值塞进来。
+ */
+export type ResolvedModelProfile = ModelProfile & { apiKey: string }
+
 export interface LLMGenerateOptions {
   temperature: number
   maxTokens: number
@@ -37,14 +49,14 @@ export interface LLMResponse {
 export interface ILLMProvider {
   /** 非流式生成 */
   generate(
-    model: ModelProfile,
+    model: ResolvedModelProfile,
     messages: Array<{ role: string; content: string }>,
     opts: LLMGenerateOptions
   ): Promise<LLMResponse>
 
   /** 流式生成 */
   generateStream(
-    model: ModelProfile,
+    model: ResolvedModelProfile,
     messages: Array<{ role: string; content: string }>,
     opts: LLMStreamOptions
   ): Promise<void>

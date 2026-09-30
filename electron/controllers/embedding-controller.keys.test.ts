@@ -1,13 +1,11 @@
 /**
- * embedding-controller 密钥解析接线（模型管理 v3 T3 §4.4）—— 「ref 优先、明文回落」落在
- * **交给服务/渲染层之前**的两个取数点：
+ * embedding-controller 密钥接线（模型管理 v3 §4.4/§4.7，T5 起 ref-only）—— 两个取数点
+ * 的去向相反，这正是本文件要锁住的性质：
  *
  *  - `loadEmbeddingModelConfig`（注册时自动配置）→ 值进 `embeddingService`，随后进请求
- *  - `getLLMModels`（`embedding:list-models` / `embedding:list-llm-candidates`）→ 渲染层拿去
- *    配置服务，同样是请求参数的来源
- *
- * 另锁一条**回落项必须已解密**的约束：这两个取数点读的是文件的原始内容（`ENC:` 密文），
- * 少解一层就会把密文当「明文回落值」发给 API（401 且难排查）—— 用一条真密文夹住。
+ *    → **必须解析出密钥**（按 `apiKeyRef`；盘上残留的明文不再参与，T5 删除了回落）
+ *  - `getLLMModels`（`embedding:list-models` / `list-llm-candidates`）→ 值回**渲染层**
+ *    → **一律不带密钥**（即便盘上还有迁移失败残留的明文）
  *
  * ⚠️ CI 一致性（ci-parity-standard）：import 到 electron → **必须 `vi.mock('electron')`**；
  *    打桩 embedding-service（真实模块会拉起向量库）与 logger；文件层用
@@ -75,7 +73,10 @@ function call(channel: string, ...args: unknown[]): Promise<unknown> {
 
 const EMB_MODEL_ID = 'emb-wiring-1'
 
-function embeddingFixture(over: Partial<ModelProfile> = {}): ModelProfile {
+/** 盘上条目 = **迁移期形状**（旧文件可能还带着 `apiKey`）——用它模拟「迁移失败的残留」 */
+type LegacyEmbeddingModel = ModelProfile & { apiKey?: string }
+
+function embeddingFixture(over: Partial<LegacyEmbeddingModel> = {}): LegacyEmbeddingModel {
   return {
     id: EMB_MODEL_ID,
     name: 'Wiring Embedding',
@@ -92,7 +93,7 @@ function embeddingFixture(over: Partial<ModelProfile> = {}): ModelProfile {
   }
 }
 
-/** 一份**真密文**（ENC:B64: 形态，`decryptApiKey` 能解回 plaintext） */
+/** 一份**真密文**（ENC:B64: 形态）—— 迁移残留的另一种形态 */
 const CIPHER = `ENC:B64:${Buffer.from('sk-secret', 'utf-8').toString('base64')}`
 
 beforeEach(() => {
@@ -113,31 +114,60 @@ describe('loadEmbeddingModelConfig（注册时自动配置）', () => {
     expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-from-store' }))
   })
 
-  it('无 ref → 回落盘上明文（零行为变化）', () => {
+  it('无 ref → **交不出密钥**（T5 收敛 ref-only：盘上残留的明文不再被当回落值使用）', () => {
     writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture()])
 
     registerEmbeddingController()
 
-    expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-plain' }))
+    expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '' }))
   })
 
-  it('回落项必须是明文：盘上是 ENC: 密文时先解密再解析 ref', () => {
+  it('无 ref 且盘上是 ENC: 密文 → 同样交空串（**绝不把密文串当密钥发出去**）', () => {
     writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture({ apiKey: CIPHER })])
 
     registerEmbeddingController()
 
-    expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'sk-secret' }))
+    expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '' }))
+  })
+
+  it('ref 已分配但解析不到（env/store 皆空）→ 空串', () => {
+    writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture({ apiKeyRef: REF })])
+
+    registerEmbeddingController()
+
+    expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '' }))
   })
 })
 
-describe('getLLMModels（embedding:list-models 的取数点）', () => {
-  it('条目带 ref → 返回给渲染层的密钥同样以凭据库为准', async () => {
+describe('getLLMModels（embedding:list-models / list-llm-candidates 的取数点）', () => {
+  it('带 ref → 回渲染层的条目**不含密钥**（值由服务侧现场解析，不过境）', async () => {
     __setStoredForTest({ [REF]: 'sk-from-store' })
     writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture({ apiKeyRef: REF })])
 
     registerEmbeddingController()
     const models = await call('embedding:list-models')
 
-    expect(models).toEqual([expect.objectContaining({ id: EMB_MODEL_ID, apiKey: 'sk-from-store' })])
+    expect(models).toEqual([expect.objectContaining({ id: EMB_MODEL_ID, apiKeyRef: REF })])
+    expect((models as Array<Record<string, unknown>>)[0]).not.toHaveProperty('apiKey')
+  })
+
+  it('迁移失败残留（盘上还有明文）→ 出站剥离，照样不回传', async () => {
+    writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture({ apiKey: 'sk-residual' })])
+
+    registerEmbeddingController()
+    const models = await call('embedding:list-models')
+
+    expect((models as Array<Record<string, unknown>>)[0]).not.toHaveProperty('apiKey')
+    expect(JSON.stringify(models)).not.toContain('sk-residual')
+  })
+
+  it('list-llm-candidates 同款剥离（它的值会被渲染层原样回传回来）', async () => {
+    writeJsonFile(MODELS_CONFIG_PATH, [embeddingFixture({ purposes: ['generation'], apiKey: 'sk-residual' })])
+
+    registerEmbeddingController()
+    const models = await call('embedding:list-llm-candidates')
+
+    expect(models).toHaveLength(1)
+    expect(JSON.stringify(models)).not.toContain('sk-residual')
   })
 })

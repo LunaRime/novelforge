@@ -1,5 +1,5 @@
-import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, LLMUsage } from './provider.interface'
-import { ModelProfile, LLMModelCandidate } from '../../src/shared/ipc-channels'
+import { ILLMProvider, LLMGenerateOptions, LLMResponse, LLMStreamOptions, LLMUsage, ResolvedModelProfile } from './provider.interface'
+import { LLMModelCandidate } from '../../src/shared/ipc-channels'
 import { toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { safeErrorMessage } from '../utils/error-utils'
@@ -48,7 +48,7 @@ export interface AnthropicBody {
 
 /** 构造 Messages API 请求（纯函数，直测）。`stream=true` 时请求 SSE 响应（generateStream 专用）。 */
 export function toAnthropicRequest(
-  model: ModelProfile,
+  model: ResolvedModelProfile,
   messages: Array<{ role: string; content: string }>,
   opts?: Pick<LLMGenerateOptions, 'temperature' | 'maxTokens'>,
   stream = false,
@@ -189,7 +189,7 @@ function toUsage(usage: AnthropicMessagesResponse['usage']): LLMUsage | undefine
 }
 
 export class AnthropicProvider implements ILLMProvider {
-  async generate(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
+  async generate(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMGenerateOptions): Promise<LLMResponse> {
     return withRetry(async () => {
       const req = toAnthropicRequest(model, messages, opts)
       const res = await proxyFetch(req.url, {
@@ -229,7 +229,7 @@ export class AnthropicProvider implements ILLMProvider {
     })
   }
 
-  async generateStream(model: ModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
+  async generateStream(model: ResolvedModelProfile, messages: Array<{ role: string; content: string }>, opts: LLMStreamOptions): Promise<void> {
     // 已输出内容标记：中途断流不得重试（重试会重复推送已输出前缀）
     let emittedAny = false
     await withStreamRetry(async () => {

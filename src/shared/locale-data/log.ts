@@ -58,8 +58,6 @@ export const logTexts = {
   'log.kb.rebuildWithLlm': { 'zh-CN': '使用 LLM 向量化重建向量索引', 'en-US': 'Rebuilding vector index with LLM vectorization', 'ru-RU': 'Пересоздание векторного индекса через LLM-векторизацию' },
   'log.kb.llmBackfillFailed': { 'zh-CN': 'LLM 向量化回填失败: {err}', 'en-US': 'LLM vectorization backfill failed: {err}', 'ru-RU': 'Ошибка обратного заполнения LLM-векторами: {err}' },
   'log.kb.noVectorMethodFtsOnly': { 'zh-CN': '无可用的向量化方式，文本块将保持 FTS 纯文本模式', 'en-US': 'No vectorization method available; chunks will stay in FTS plain-text mode', 'ru-RU': 'Нет доступного способа векторизации; фрагменты останутся в режиме FTS (чистый текст)' },
-  'log.llm.migrateKeyAuto': { 'zh-CN': '自动迁移 API 密钥到加密格式: {name} ({id})', 'en-US': 'Auto-migrating API key to encrypted format: {name} ({id})', 'ru-RU': 'Автоматический перенос API-ключа в зашифрованный формат: {name} ({id})' },
-  'log.llm.migrateKeyDone': { 'zh-CN': 'API 密钥加密迁移完成', 'en-US': 'API key encryption migration complete', 'ru-RU': 'Перенос API-ключей в шифрование завершён' },
   'log.llm.concurrencyRestored': { 'zh-CN': '已恢复并发配置：最大并发 {max}、排队上限 {queue}', 'en-US': 'Concurrency config restored: max {max}, queue {queue}', 'ru-RU': 'Восстановлена конфигурация параллельности: макс. {max}, очередь {queue}' },
   'log.llm.nonRetryableError': { 'zh-CN': '不可重试的错误，直接返回: {err}', 'en-US': 'Non-retryable error, returning directly: {err}', 'ru-RU': 'Неповторяемая ошибка, возврат напрямую: {err}' },
   'log.llm.nonRetryableStreamError': { 'zh-CN': '不可重试的流错误，直接返回: {err}', 'en-US': 'Non-retryable stream error, returning directly: {err}', 'ru-RU': 'Неповторяемая ошибка потока, возврат напрямую: {err}' },

@@ -10,7 +10,11 @@ import {
 
 export interface ModelPickerDialogProps {
   open: boolean
-  credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl'>
+  /**
+   * 拉取用的凭据（v3 §4.7）：密钥二选一 —— `apiKeyRef`（已存值由主进程解析）或
+   * `apiKeyDraft`（表单里刚输入、尚未保存的一次性草稿）。
+   */
+  credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'baseUrl' | 'apiKeyRef'> & { apiKeyDraft?: string }
   /** 已在卡内的模型名（禁用勾选 + 「已添加」标） */
   existing: string[]
   /** 批量采纳：勾选的模型名 + 其规格（仅含实值键；非流式拉不到的模型无规格） */

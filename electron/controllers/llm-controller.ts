@@ -5,16 +5,16 @@ import type { ProvidersFileState } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { syncAccountModels, isModelOfAccount } from '../../src/shared/provider-accounts'
-import { deriveCredentialRef } from '../../src/shared/credential-rules'
-import { readCredentialFile } from '../credentials/store'
-import { resolveModelKey } from '../credentials/resolve'
-import { hasLegacyKey, runCredentialMigration } from '../credentials/migrate'
+import { apiKeyFailure, deriveCredentialRef } from '../../src/shared/credential-rules'
+import { readCredentialFile, setStoredValue } from '../credentials/store'
+import { resolveRequestKey, stripApiKey } from '../credentials/resolve'
+import { hasLegacyKey, legacyKeyOf, runCredentialMigration } from '../credentials/migrate'
+import type { ResolvedModelProfile } from '../llm/provider.interface'
 import { serialize } from '../utils/config-write-queue'
 import { presetModelDefaults } from '../../src/shared/provider-presets'
 import { listOllamaModels } from '../ollama-embedding'
 import { LLMFactory } from '../llm/llm-factory'
 import { llmConcurrencyController } from '../utils/concurrency-controller'
-import { encryptApiKey, decryptApiKey, isPlaintextKey } from '../utils/secure-config'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { guardedHandle } from '../security/ipc-guard'
@@ -32,11 +32,12 @@ let credentialMigrationScheduled = false
  *
  * ⚠️ **绝不能 await**：本模块的读路径（`loadModelConfigs` / `readProvidersFile`）大量运行在
  * `serialize(...)` 任务**内部**，而迁移自己的写盘也排同一个队列 —— 任务内等自己 = 自死锁
- * （`llm:save-provider` 会直接卡死）。不 await 的代价只是「本次读仍看到迁移前的数据」，
- * 而明文回落路径本来就支持这个形态（行为零变化）；迁移在后台完成后，**下一次**读即生效。
+ * （`llm:save-provider` 会直接卡死）。不 await 的代价只是「本次读仍看到迁移前的数据」——
+ * v3 T5 起密钥解析是 ref-only，那个窗口里该条目表现成**「无 key」**（用户看到「请配置密钥」），
+ * 迁移在后台完成后**下一次**读即恢复 —— 不再有「明文回落」把窗口遮住。
  *
  * ⚠️ 进程内只排一次：读路径是热路径（每次生成都会走），失败重排会让队列堆满注定失败的任务。
- * 迁移失败不阻断任何功能（文件里的 key 照旧走明文回落），下次启动时启动路径会再试一次。
+ * 迁移失败不阻断任何功能（文件里的明文仍在、`.bak` 也在），下次启动时启动路径会再试一次。
  */
 function scheduleCredentialMigration(): void {
   if (credentialMigrationScheduled) return
@@ -53,38 +54,27 @@ function scheduleCredentialMigration(): void {
  */
 function readProvidersFileLazy(): ProvidersFileState {
   const state = readProvidersFile()
-  if (state.accounts.some((a) => hasLegacyKey(a.apiKey))) scheduleCredentialMigration()
+  if (state.accounts.some((a) => hasLegacyKey(legacyKeyOf(a)))) scheduleCredentialMigration()
   return state
 }
 
+/**
+ * 读 models.json（**返回条目不含密钥**；类型上也没有该字段）。
+ *
+ * ⚠️ 盘上可能仍有 `apiKey` 残留（迁移失败的窗口）——这里**原样读、原样写回**，
+ * **不在此处剥离**：剥离意味着下一次「读-改-写」会把明文从文件里抹掉，而迁移还没把值搬进
+ * 凭据库 → 密钥静默丢失（要重启或让用户重填）。剥离只发生在**出站边界**
+ * （`llm:list-models` 的 `stripApiKey`）——那里删的是内存副本，盘上数据不受影响。
+ */
 function loadModelConfigs(): ModelProfile[] {
   const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-  if (models.some((m) => hasLegacyKey(m.apiKey))) scheduleCredentialMigration()
-  let migrated = false
-
-  for (const model of models) {
-    // 向后兼容：检测明文 key 并自动迁移到加密格式
-    if (isPlaintextKey(model.apiKey)) {
-      model.apiKey = encryptApiKey(model.apiKey)
-      migrated = true
-      logger.info('LLM', t('log.llm.migrateKeyAuto').replace('{name}', model.name).replace('{id}', model.id))
-    }
-  }
-
-  // 如果有迁移，立即写回加密后的配置
-  if (migrated) {
-    writeJsonFile(MODELS_CONFIG_PATH, models)
-    logger.info('LLM', t('log.llm.migrateKeyDone'))
-  }
-
-  // 返回时解密 key 供运行时使用
-  return models.map((m) => ({ ...m, apiKey: decryptApiKey(m.apiKey) }))
+  if (models.some((m) => hasLegacyKey(legacyKeyOf(m)))) scheduleCredentialMigration()
+  return models
 }
 
+/** 写 models.json —— v3 T5 起不再加解密：落盘类型里没有可加密的字段了 */
 function saveModelConfigs(models: ModelProfile[]) {
-  // 保存前加密所有 apiKey
-  const toSave = models.map((m) => ({ ...m, apiKey: encryptApiKey(m.apiKey) }))
-  writeJsonFile(MODELS_CONFIG_PATH, toSave)
+  writeJsonFile(MODELS_CONFIG_PATH, models)
 }
 
 /**
@@ -156,21 +146,19 @@ function collectTakenRefs(accounts: ProviderAccount[]): Set<string> {
 }
 
 /**
- * 交给 provider 前的**唯一收口点**（v3 §4.4）：把条目上的 `apiKeyRef` 解析成实际密钥，
- * 解析不到则原样保留（明文回落）。
+ * 交给 provider 前的**唯一收口点**（v3 §4.4）：把条目上的 `apiKeyRef` 解析成实际密钥
+ * （`draft` 给定时它优先 —— 用户当场输入的一次性草稿）。
  *
- * 为什么收在这里而不进 provider：密钥来源（凭据库 / env）是**主进程配置层**的事，
+ * 为什么收在这里而不进 provider：密钥来源（凭据库 / env / 本次草稿）是**主进程配置层**的事，
  * provider 只该拿到「一串可用的密钥」——分散到各 provider 里会变成三份各自演化的兜底逻辑。
- *
- * ⚠️ 入参的 `apiKey` 必须已是明文：`loadModelConfigs()` 的返回值满足这一点（密文已解）；
- *    直接读盘的调用方要先 `decryptApiKey`（见 embedding-controller / kb-controller）。
+ * 返回 `ResolvedModelProfile`：类型上给 `apiKey` 盖章，provider 拿不到未解析的条目。
  */
-function withResolvedKey(model: ModelProfile): ModelProfile {
-  return { ...model, apiKey: resolveModelKey(model) }
+function withResolvedKey(model: ModelProfile, draft?: string): ResolvedModelProfile {
+  return { ...model, apiKey: resolveRequestKey(model.apiKeyRef, draft) }
 }
 
 /** 生成路径（`llm:generate` / `llm:generate-stream` 共用）取模型配置，密钥已解析 */
-function getModelConfig(modelId: string): ModelProfile | null {
+function getModelConfig(modelId: string): ResolvedModelProfile | null {
   const models = loadModelConfigs()
   const model = models.find((m) => m.id === modelId) ?? null
   return model ? withResolvedKey(model) : null
@@ -352,13 +340,14 @@ export function registerLLMController() {
 
   guardedHandle('llm:list-models', async () => {
     const t0 = Date.now()
-    const models = loadModelConfigs()
+    // 出站剥离（v3 §4.7）：条目上可能残留的密钥字段一律删掉再回渲染层
+    const models = loadModelConfigs().map(stripApiKey)
     const ms = Date.now() - t0
     if (ms > SLOW_IPC_MS) logger.warn('LLM', `[list-models] slow ${ms}ms (models=${models.length})`)
     return models
   })
 
-  guardedHandle('llm:save-model', async (_event, model: ModelProfile) => {
+  guardedHandle('llm:save-model', async (_event, model: ModelProfile, apiKeyDraft?: string) => {
     const t0 = Date.now()
     try {
       // 业务校验（P3 修复）：
@@ -370,12 +359,41 @@ export function registerLLMController() {
       if (!model.purposes || model.purposes.length === 0) {
         return { success: false, error: t('error.modelPurposesEmpty') }
       }
+      // 密钥草稿先校验（与 credential:set 同一套判据/拒因码）：非法值不该先写进配置文件
+      const draft = apiKeyDraft ?? ''
+      const failure = apiKeyFailure(draft)
+      if (failure) return { success: false, error: failure }
+
+      // ref 分配（v3 §4.3）在**队列任务内**做，且与 save-provider 共用同一份 taken 全集口径：
+      // 新建的手工条目也要占名，否则下一个账户会再派生一次同名 ref（两个来源指向同一把钥匙）。
+      const allocated: string[] = []
       // 读-改-写全程在 models 队列内（v3 §5）：并发保存两个模型不再互相覆盖
       const saved = await mutateModels((models) => {
+        const accounts = readProvidersFileLazy().accounts
+        // 派生条目（`{accountId}::{modelName}`）的凭据属于**账户**：继承它的 ref 而不是另分配一个
+        // —— 否则同一把钥匙会有两个名字，用户在账户里换键时这条永远跟不上（半迁移的旧条目会走到这）
+        const owner = accounts.find((a) => isModelOfAccount(model.id, a.id))
+        const apiKeyRef = model.apiKeyRef
+          ?? owner?.apiKeyRef
+          ?? deriveCredentialRef(model.provider, collectTakenRefs(accounts))
+        allocated[0] = apiKeyRef
+        const next: ModelProfile = { ...model, apiKeyRef }
         const idx = models.findIndex((m) => m.id === model.id)
-        if (idx >= 0) return models.map((m, i) => (i === idx ? model : m))
-        return [...models, model]
+        if (idx >= 0) return models.map((m, i) => (i === idx ? next : m))
+        return [...models, next]
       })
+
+      // 凭据写在**配置写成功之后**（spec §4.7 顺序）：写盘失败 → 配置已存（幂等），重试只补凭据
+      const ref = allocated[0]
+      if (draft.trim().length > 0 && ref) {
+        try {
+          setStoredValue(ref, draft.trim())
+        } catch (error) {
+          logger.error('LLM', `[save-model] 凭据写入失败 ref=${ref}: ${safeErrorMessage(error)}`)
+          return { success: false, error: safeErrorMessage(error) }
+        }
+      }
+
       const ms = Date.now() - t0
       if (ms > SLOW_IPC_MS) logger.warn('LLM', `[save-model] slow ${ms}ms (models=${saved.length})`)
       return { success: true }
@@ -417,23 +435,21 @@ export function registerLLMController() {
 
   // ===== 供应商账户（2026-09-25）：一份凭据挂多个模型 =====
   //
-  // 存储：providers.json 是账户的唯一真相；models.json 里的**派生条目**持有凭据副本，
-  // 由 syncAccountModels 维护（合并语义：只换凭据，保留用户的逐模型调参）。
+  // 存储：providers.json 是账户的唯一真相；models.json 里的**派生条目**持有凭据引用
+  // （apiKeyRef），由 syncAccountModels 维护（合并语义：只换连通字段，保留用户的逐模型调参）。
   // 这样做的理由见 src/shared/provider-accounts.ts 头注释。
 
   guardedHandle('llm:list-providers', async () => {
-    return readProvidersFileLazy().accounts.map((a) => ({
-      ...a,
-      apiKey: decryptApiKey(a.apiKey), // 与模型一致：盘上密文、渲染层明文
-    }))
+    // 出站剥离（v3 §4.7）：账户只带 apiKeyRef；值不过境，凭据状态走 credential:describe
+    return readProvidersFileLazy().accounts.map(stripApiKey)
   })
 
-  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number) => {
+  guardedHandle('llm:save-provider', async (_event, account: ProviderAccount, modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>, expectedRevision?: number, apiKeyDraft?: string) => {
     try {
-      const toSave: ProviderAccount = {
-        ...account,
-        apiKey: isPlaintextKey(account.apiKey) ? encryptApiKey(account.apiKey) : account.apiKey,
-      }
+      // 密钥草稿先校验（同 credential:set 的判据/拒因码），非法值不写盘
+      const draft = apiKeyDraft ?? ''
+      const failure = apiKeyFailure(draft)
+      if (failure) return { success: false, error: failure }
 
       // ref 分配（v3 §4.3）必须在**队列任务内**做：taken 要用刚读到的那份 accounts，
       // 否则两次并发保存会各自算出同一个名字。
@@ -441,8 +457,8 @@ export function registerLLMController() {
       // 会在闭包外被收窄成 null 而报「属性不存在」，元素访问则不会）。
       const allocated: ProviderAccount[] = []
       const outcome = await mutateProviders(expectedRevision, (accounts) => {
-        const apiKeyRef = toSave.apiKeyRef ?? deriveCredentialRef(toSave.provider, collectTakenRefs(accounts))
-        const next: ProviderAccount = { ...toSave, apiKeyRef }
+        const apiKeyRef = account.apiKeyRef ?? deriveCredentialRef(account.provider, collectTakenRefs(accounts))
+        const next: ProviderAccount = { ...account, apiKeyRef }
         allocated[0] = next
         const idx = accounts.findIndex((a) => a.id === account.id)
         if (idx >= 0) return accounts.map((a, i) => (i === idx ? next : a))
@@ -458,15 +474,13 @@ export function registerLLMController() {
         return { success: false, error: outcome.error }
       }
 
-      // 同步派生条目 —— 注意传**明文** account：派生条目要拿到可直接用的凭据，
-      // 而 saveModelConfigs 会统一加密落盘。
+      // 同步派生条目（账户条目走自己的队列键 providers，派生同步走 models —— 两次写各自原子，
+      // 且都在「读→改→写」全程受保护，v3 §5）。派生条目只带 apiKeyRef，不再有凭据副本。
       // 规格来源（2026-09-28 批量采纳）：**本次拉取所得优先，回落内置预设** —— 拉回的规格
       // 是端点真实值；预设只是多数场景的缺省。只覆盖传入的实值键（undefined 不遮蔽回落值）。
-      // 账户条目走自己的队列键（providers），派生同步走 models —— 两次写各自原子，
-      // 且都在「读→改→写」全程受保护（v3 §5）。
-      const plainAccount: ProviderAccount = { ...account, apiKeyRef: allocated[0]?.apiKeyRef ?? account.apiKeyRef }
+      const saved: ProviderAccount = { ...account, apiKeyRef: allocated[0]?.apiKeyRef ?? account.apiKeyRef }
       await mutateModels((models) =>
-        syncAccountModels(plainAccount, models, (name) => {
+        syncAccountModels(saved, models, (name) => {
           const base = presetModelDefaults(account.provider, name)
           const spec = modelSpecs?.[name]
           if (!spec) return base
@@ -477,6 +491,18 @@ export function registerLLMController() {
           }
         }),
       )
+
+      // 凭据写在**配置写成功之后**（spec §4.7）：失败 → 账户已存（幂等），重试只补凭据这一步。
+      // 返回里带上新 revision，让调用方不至于拿旧版本号再撞一次冲突。
+      const ref = allocated[0]?.apiKeyRef
+      if (draft.trim().length > 0 && ref) {
+        try {
+          setStoredValue(ref, draft.trim())
+        } catch (error) {
+          logger.error('LLM', `[save-provider] 凭据写入失败 ref=${ref}: ${safeErrorMessage(error)}`)
+          return { success: false, error: safeErrorMessage(error), revision: outcome.revision }
+        }
+      }
       return { success: true, revision: outcome.revision }
     } catch (error) {
       logger.error('LLM', `[save-provider] failed: ${safeErrorMessage(error)}`)
@@ -514,7 +540,7 @@ export function registerLLMController() {
 
   guardedHandle(
     'llm:list-provider-models',
-    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; apiKey: string; baseUrl: string; apiKeyRef?: string }) => {
+    async (_event, credentials: { provider: string; protocol: 'openai' | 'gemini'; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }) => {
       try {
         if (!credentials.baseUrl?.trim()) {
           return { success: false, error: t('error.baseUrlRequired') }
@@ -525,10 +551,9 @@ export function registerLLMController() {
           // /api/tags 不提供 token 规格 → 仅 id（2026-09-28 候选对象化）
           return { success: true, models: models.map((m) => ({ id: m.name })) }
         }
-        // 密钥解析（v3 §4.4）：带 ref 时以凭据库/env 为准，否则用传进来的明文
-        //（表单里刚输入的草稿，T5 起改由 apiKeyDraft 表达）
-        const apiKey = resolveModelKey(credentials)
-        if (!apiKey.trim() && credentials.provider !== 'ollama') {
+        // 密钥解析（v3 §4.4/§4.7）：表单里刚输入的草稿优先，否则按 ref 解析
+        const apiKey = resolveRequestKey(credentials.apiKeyRef, credentials.apiKeyDraft)
+        if (!apiKey.trim()) {
           return { success: false, error: t('error.apiKeyRequired') }
         }
         const models = await LLMFactory.getProvider({ protocol: credentials.protocol })
@@ -586,13 +611,13 @@ export function registerLLMController() {
     return config.defaultEmbeddingModelId ?? null
   })
 
-  guardedHandle('llm:test-connection', async (_event, model: ModelProfile) => {
+  guardedHandle('llm:test-connection', async (_event, model: ModelProfile, apiKeyDraft?: string) => {
     try {
       applyProxyConfig()
 
-      // 收到的 profile 来自渲染层（表单草稿 / 列表条目）—— 它只是一个**回落项**：
-      // 条目带 apiKeyRef 时以凭据库为准（v3 §4.4）。
-      const target = withResolvedKey(model)
+      // 收到的 profile 来自渲染层（表单草稿 / 列表条目）。密钥来源二选一（v3 §4.7）：
+      // 表单里刚输入的草稿（apiKeyDraft）优先 —— 用户要能当场验证新键；否则按 apiKeyRef 解析。
+      const target = withResolvedKey(model, apiKeyDraft)
       const messages = [{ role: 'user', content: 'Say "hello" and nothing else.' }]
       const provider = LLMFactory.getProvider(target)
 

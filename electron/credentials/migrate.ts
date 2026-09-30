@@ -4,7 +4,7 @@
  *
  * **本批唯一触碰用户真实数据的操作**，故三条硬性质写在最前面：
  *  ① **幂等**：判据 = 两文件里还有没有非空 `apiKey`（明文或 `ENC:` 密文都算）。没有 → 立刻返回，
- *     不写盘、不备份；有 → 全量搬完并清空字段。半迁移（凭据已落盘、文件未清）重跑时
+ *     不写盘、不备份；有 → 全量搬完并**摘掉字段**（不置空串）。半迁移（凭据已落盘、文件未清）重跑时
  *     **沿用条目上已有的 `apiKeyRef`**，不会另开 `_2` 把同一把钥匙存在两个名字下。
  *  ② **可回退**：首次执行前把两份配置文件按**原始字节**复制为 `*.pre-credentials.bak`
  *     （仅当 .bak 尚不存在）；备份失败 = 整体失败，宁可不迁移也不能没有回退点。
@@ -37,8 +37,36 @@ import { mergeStoredCiphertext, readCredentialFile } from './store'
  *
  * 空串 = 已迁移 / 从未配置（两者对迁移而言等价：无事可做）。
  */
-export function hasLegacyKey(value: string | undefined): boolean {
+export function hasLegacyKey(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0
+}
+
+/**
+ * 盘上条目的**迁移期形状**：`ModelProfile` / `ProviderAccount` 上已经没有 `apiKey` 字段
+ * （v3 T5），但旧文件里可能有 —— 本模块是**全仓唯一还需要看这个字段的地方**，故在此显式声明。
+ */
+export type LegacyAccount = ProviderAccount & { apiKey?: string }
+export type LegacyModel = ModelProfile & { apiKey?: string }
+
+/**
+ * 读盘上残留的密钥字段。返回 `unknown` 的原值给 `hasLegacyKey` 判 —— 由它负责
+ * 「非字符串 / 空串 = 没有」的收窄，两处判据不会漂移。
+ */
+export function legacyKeyOf(entry: object): unknown {
+  return (entry as { apiKey?: unknown }).apiKey
+}
+
+/**
+ * 把密钥字段从条目上**摘掉**（不是置空串）——迁移的写回形状。
+ *
+ * 为什么不留 `apiKey: ''`：那样配置文件里永远躺着一个密码字段，而 v3 的落盘类型
+ * （`ModelProfile` / `ProviderAccount`）已经不认它了 —— 类型与盘面对不上，
+ * 下一个读这段代码的人得先分辨「空串是已迁移还是从没配过」。摘掉则两者同形。
+ */
+function withoutLegacyKey<T extends { apiKey?: string }>(entry: T): T {
+  const rest = { ...entry }
+  delete (rest as { apiKey?: string }).apiKey
+  return rest
 }
 
 /** 迁移计划（纯函数产物）：`refs` = **合并后**的完整凭据表（含原有项） */
@@ -123,8 +151,8 @@ function reuseOrAssignRef(
  * 用户可见的 ref 名因此稳定；后来的同 provider 条目顺延 `_2`、`_3`。
  */
 export function planMigration(
-  accounts: ProviderAccount[],
-  models: ModelProfile[],
+  accounts: LegacyAccount[],
+  models: LegacyModel[],
   storedRefs: Record<string, string>,
 ): MigrationPlan {
   const refs: Record<string, string> = { ...storedRefs }
@@ -139,20 +167,22 @@ export function planMigration(
   let changed = false
 
   const nextAccounts = accounts.map((a) => {
-    if (!hasLegacyKey(a.apiKey)) return a
+    const legacyKey = legacyKeyOf(a)
+    if (!hasLegacyKey(legacyKey)) return a
     changed = true
-    const ref = reuseOrAssignRef(a.provider, a.apiKeyRef, a.apiKey, taken, lookup)
+    const ref = reuseOrAssignRef(a.provider, a.apiKeyRef, legacyKey, taken, lookup)
     // 同名项不覆盖：盘上已有的值可能来自上一次半迁移，也可能来自用户手设（都比本次快照新）
-    if (!(ref in refs)) refs[ref] = encodeStoredValue(a.apiKey)
-    return { ...a, apiKey: '', apiKeyRef: ref }
+    if (!(ref in refs)) refs[ref] = encodeStoredValue(legacyKey)
+    return { ...withoutLegacyKey(a), apiKeyRef: ref }
   })
 
   const nextModels = models.map((m) => {
-    if (!hasLegacyKey(m.apiKey)) return m
+    const legacyKey = legacyKeyOf(m)
+    if (!hasLegacyKey(legacyKey)) return m
     changed = true
-    const ref = reuseOrAssignRef(m.provider, m.apiKeyRef, m.apiKey, taken, lookup)
-    if (!(ref in refs)) refs[ref] = encodeStoredValue(m.apiKey)
-    return { ...m, apiKey: '', apiKeyRef: ref }
+    const ref = reuseOrAssignRef(m.provider, m.apiKeyRef, legacyKey, taken, lookup)
+    if (!(ref in refs)) refs[ref] = encodeStoredValue(legacyKey)
+    return { ...withoutLegacyKey(m), apiKeyRef: ref }
   })
 
   return { refs, accounts: nextAccounts, models: nextModels, changed }
@@ -185,19 +215,22 @@ function applyPlannedInTask<T extends { id: string; apiKey?: string; apiKeyRef?:
   baseline: T[],
   planned: T[],
 ): T[] | null {
-  const planById = new Map<string, { source: T; ref: string }>()
+  const planById = new Map<string, { source: T; legacyKey: string; ref: string }>()
   baseline.forEach((b, i) => {
     const ref = planned[i].apiKeyRef
-    if (hasLegacyKey(b.apiKey) && ref) planById.set(b.id, { source: b, ref })
+    if (hasLegacyKey(b.apiKey) && ref) planById.set(b.id, { source: b, legacyKey: b.apiKey, ref })
   })
 
   let touched = false
   const next = current.map((c) => {
     const entry = planById.get(c.id)
     if (!entry) return c
-    if (c.apiKey !== entry.source.apiKey || c.apiKeyRef !== entry.source.apiKeyRef) return c
+    if (c.apiKey !== entry.legacyKey || c.apiKeyRef !== entry.source.apiKeyRef) return c
     touched = true
-    return { ...c, apiKey: '', apiKeyRef: entry.ref }
+    // 字段级替换 + **摘掉密钥字段**（与 planMigration 同一终态：盘上不再有 apiKey）
+    const nextEntry: T = { ...c, apiKeyRef: entry.ref }
+    delete (nextEntry as { apiKey?: string }).apiKey
+    return nextEntry
   })
   return touched ? next : null
 }
@@ -219,10 +252,11 @@ function applyPlannedInTask<T extends { id: string; apiKey?: string; apiKeyRef?:
 export async function runCredentialMigration(): Promise<MigrationOutcome> {
   try {
     // ① 值不值得动手 —— 幂等判据也在这里（终态重跑连备份都不做）
-    const accounts = readProvidersFile().accounts
-    const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-    const accountsDirty = accounts.some((a) => hasLegacyKey(a.apiKey))
-    const modelsDirty = models.some((m) => hasLegacyKey(m.apiKey))
+    // 注：这两处读的是**盘上原始条目**（类型上已无 apiKey，见 LegacyAccount/LegacyModel）
+    const accounts: LegacyAccount[] = readProvidersFile().accounts
+    const models: LegacyModel[] = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+    const accountsDirty = accounts.some((a) => hasLegacyKey(legacyKeyOf(a)))
+    const modelsDirty = models.some((m) => hasLegacyKey(legacyKeyOf(m)))
     if (!accountsDirty && !modelsDirty) return { changed: false, refs: 0 }
 
     // ② 回退点。失败 = 整体失败：没有备份就没有回退，宁可这次不迁
@@ -236,6 +270,8 @@ export async function runCredentialMigration(): Promise<MigrationOutcome> {
     // ③ 计划（纯函数）
     const storedRefs = readCredentialFile().refs
     const plan = planMigration(accounts, models, storedRefs)
+    const plannedAccounts: LegacyAccount[] = plan.accounts
+    const plannedModels: LegacyModel[] = plan.models
     // 只把**本次新分配**的项交给 store：已有项一律以盘上为准（并发写入可能比本快照新）
     const freshRefs: Record<string, string> = {}
     for (const [ref, cipher] of Object.entries(plan.refs)) {
@@ -249,14 +285,14 @@ export async function runCredentialMigration(): Promise<MigrationOutcome> {
     if (accountsDirty) {
       await serialize('providers', () => {
         const state = readProvidersFile()
-        const next = applyPlannedInTask(state.accounts, accounts, plan.accounts)
+        const next = applyPlannedInTask<LegacyAccount>(state.accounts, accounts, plannedAccounts)
         if (next) writeProvidersFile({ revision: state.revision + 1, accounts: next })
       })
     }
     if (modelsDirty) {
       await serialize('models', () => {
-        const current = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
-        const next = applyPlannedInTask(current, models, plan.models)
+        const current: LegacyModel[] = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+        const next = applyPlannedInTask<LegacyModel>(current, models, plannedModels)
         if (next) writeJsonFile(MODELS_CONFIG_PATH, next)
       })
     }

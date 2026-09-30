@@ -9,6 +9,8 @@
 
 import { generateEmbeddings } from './embedding'
 import type { ModelProfile } from '../src/shared/ipc-channels'
+import type { ResolvedModelProfile } from './llm/provider.interface'
+import { resolveModelKey } from './credentials/resolve'
 import { LLMFactory } from './llm/llm-factory'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
@@ -138,8 +140,8 @@ export class EmbeddingService {
     return this.config
   }
 
-  /** 从 ModelProfile 配置 Embedding API */
-  configureFromModel(model: ModelProfile): void {
+  /** 从 ModelProfile 配置 Embedding API（模型须已解析密钥 —— 见 embedding-controller） */
+  configureFromModel(model: ResolvedModelProfile): void {
     this.configure({
       modelId: model.id,
       protocol: model.protocol as 'openai' | 'gemini',
@@ -200,7 +202,9 @@ export class EmbeddingService {
       return { vector: cached.vector, text, tokens: 0, source: 'llm' }
     }
 
-    const model = this.llmConfig.model!
+    // 密钥**每次调用现场解析**（v3 §4.4 热轮换）：配置里的 model 来自渲染层回传
+    // （`embedding:list-llm-candidates` → `set-llm-config`），那条路刻意不带密钥 —— 值只在主进程里取。
+    const model: ResolvedModelProfile = { ...this.llmConfig.model!, apiKey: resolveModelKey(this.llmConfig.model!) }
     const dims = this.llmConfig.dimensions
 
     // ===== 层1+2：文本优化管道（预处理 + 压缩） =====
@@ -301,7 +305,7 @@ export class EmbeddingService {
    */
   private async tryGenerateEmbedding(
     provider: ReturnType<typeof LLMFactory.getProvider>,
-    model: ModelProfile,
+    model: ResolvedModelProfile,
     prompt: string,
     dims: number,
   ): Promise<{ success: boolean; content: string; error?: string; usage?: { totalTokens: number } }> {
@@ -491,7 +495,7 @@ export class EmbeddingService {
         maxTokens: 0,
         provider: '' as string,
         purposes: [] as string[],
-      } as ModelProfile
+      } as ResolvedModelProfile
 
       try {
         const vectors = await generateEmbeddings([text], this.config!.protocol, model)
@@ -560,7 +564,7 @@ export class EmbeddingService {
         maxTokens: 0,
         provider: '' as string,
         purposes: [] as string[],
-      } as ModelProfile
+      } as ResolvedModelProfile
 
       const batchSize = this.config.protocol === 'gemini' ? 100 : 50
       const totalBatches = Math.ceil(uncached.length / batchSize)

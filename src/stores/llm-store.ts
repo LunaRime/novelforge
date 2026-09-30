@@ -50,16 +50,20 @@ interface LLMState {
   saveProvider: (
     account: ProviderAccount,
     modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>,
-  ) => Promise<boolean>
+    /** 打开编辑卡时记下的版本号（v3 §5）：不符 → 主进程拒写（conflict） */
+    expectedRevision?: number,
+    /** 用户当场输入的密钥（一次性）；空/缺省 = 不改已存值 */
+    apiKeyDraft?: string,
+  ) => Promise<{ success: boolean; error?: string; revision?: number; conflict?: boolean }>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<boolean>
   /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常）。
-   *  `apiKeyRef`（v3 §4.4）：迁移后存量账户的 `apiKey` 已空、值在凭据库 —— 带上 ref 才取得到 key。 */
+   *  密钥二选一（v3 §4.7）：`apiKeyDraft`（当场输入，优先）→ `apiKeyRef` 解析。 */
   listProviderModels: (
-    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl' | 'apiKeyRef'>,
+    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'baseUrl' | 'apiKeyRef'> & { apiKeyDraft?: string },
   ) => Promise<{ success: boolean; models?: LLMModelCandidate[]; error?: string }>
-  /** 保存模型 */
-  saveModel: (model: ModelProfile) => Promise<boolean>
+  /** 保存模型（`apiKeyDraft`：用户当场输入的密钥，一次性；空/缺省 = 不改已存值） */
+  saveModel: (model: ModelProfile, apiKeyDraft?: string) => Promise<boolean>
   /** 删除模型 */
   deleteModel: (modelId: string) => Promise<boolean>
   /** 设置默认生成模型（持久化到 ~/.novelforge/config.json） */
@@ -81,8 +85,8 @@ interface LLMState {
   ) => Promise<string>
   /** 取消生成 */
   cancelGeneration: (requestId: string) => Promise<void>
-  /** 测试模型连接 */
-  testConnection: (model: ModelProfile) => Promise<{ success: boolean; error?: string }>
+  /** 测试模型连接（`apiKeyDraft`：表单里刚输入的键，一次性 —— 给了就用它探测） */
+  testConnection: (model: ModelProfile, apiKeyDraft?: string) => Promise<{ success: boolean; error?: string }>
   /** 根据 purpose 获取最优模型 ID；tierOverride 供 A 档动态策略直接指定路由层 */
   getModelForPurpose: (purpose: CallPurpose, tierOverride?: ModelTier) => string | null
   /** 按层取模型（A 档动态策略）：层内为空 → 既有降级链 → 用户默认模型 */
@@ -158,13 +162,15 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     }
   },
 
-  saveProvider: async (account, modelSpecs) => {
-    const result = await ipc.invoke('llm:save-provider', account, modelSpecs)
-    // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据副本）→ 两边都重载
+  saveProvider: async (account, modelSpecs, expectedRevision, apiKeyDraft) => {
+    const result = await ipc.invoke('llm:save-provider', account, modelSpecs, expectedRevision, apiKeyDraft)
+    // 主进程已按 modelNames 同步了 models.json（新建/删除派生条目、更新凭据引用）→ 两边都重载
     if (result.success) {
       await Promise.all([get().loadProviders(), get().loadModels()])
     }
-    return result.success
+    // 返回整个结果而不是布尔：调用方要分辨 conflict（版本冲突 → 提示重载、保留草稿）
+    // 与普通失败（toast）—— 两者 UI 行为不同（T6 编辑卡）
+    return result
   },
 
   deleteProvider: async (accountId) => {
@@ -195,8 +201,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   listProviderModels: (credentials) => ipc.invoke('llm:list-provider-models', credentials),
 
-  saveModel: async (model) => {
-    const result = await ipc.invoke('llm:save-model', model)
+  saveModel: async (model, apiKeyDraft) => {
+    const result = await ipc.invoke('llm:save-model', model, apiKeyDraft)
     if (result.success) {
       await get().loadModels()
     }
@@ -359,8 +365,8 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     await ipc.invoke('llm:cancel', requestId)
   },
 
-  testConnection: async (model) => {
-    return ipc.invoke('llm:test-connection', model)
+  testConnection: async (model, apiKeyDraft) => {
+    return ipc.invoke('llm:test-connection', model, apiKeyDraft)
   },
 
   getModelForPurpose: (purpose, tierOverride) => {

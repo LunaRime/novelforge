@@ -50,6 +50,7 @@ import { registerLLMController } from './llm-controller'
 import { MODELS_CONFIG_PATH, PROVIDERS_CONFIG_PATH, __setConfigFilesForTest } from '../utils/config-utils'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { __setCredentialFileForTest } from '../credentials/store'
+import { decryptApiKey } from '../utils/secure-config'
 import { BUILTIN_PRESETS, builtinCatalogFor } from '../../src/shared/provider-presets'
 import { deriveModelId } from '../../src/shared/provider-accounts'
 import type { ModelProfile, ProviderAccount } from '../../src/shared/ipc-channels'
@@ -90,7 +91,6 @@ function mkAccount(over: Partial<ProviderAccount> & { id: string }): ProviderAcc
   return {
     provider: 'openai',
     protocol: 'openai',
-    apiKey: 'sk-test',
     baseUrl: 'https://api.openai.com',
     modelNames: ['gpt-5.6-sol'],
     ...over,
@@ -154,24 +154,26 @@ describe('apiKeyRef 分配（主进程侧）', () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1', provider: 'custom', protocol: 'openai', modelNames: [] }))
     expect(providersFile().accounts[0].apiKeyRef).toBe('CUSTOM_API_KEY')
 
-    await call('llm:save-provider', mkAccount({ id: 'acc-2', provider: 'custom', protocol: 'openai', modelNames: [], apiKey: 'sk-2' }))
+    await call('llm:save-provider', mkAccount({ id: 'acc-2', provider: 'custom', protocol: 'openai', modelNames: [] }))
     expect(providersFile().accounts[1].apiKeyRef).toBe('CUSTOM_API_KEY_2')
   })
 
   it('手工模型条目已占用的 ref 也计入 taken（账户与手工条目共用同一命名空间）', async () => {
     files.set(MODELS_CONFIG_PATH, [
-      { id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm', apiKey: 'ENC:xx', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'], apiKeyRef: 'OPENAI_API_KEY' },
+      { id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm', apiKeyRef: 'OPENAI_API_KEY', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'] },
     ])
     await call('llm:save-provider', mkAccount({ id: 'acc-1' }))
     expect(providersFile().accounts[0].apiKeyRef).toBe('OPENAI_API_KEY_2')
   })
 
-  it('派生条目的凭据副本带上同一个 ref（T5 之后唯一通路）', async () => {
+  it('派生条目只带引用、不带凭据副本（T5：条目上的密钥字段已消失）', async () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1', apiKeyRef: 'OPENAI_API_KEY' }))
     const derived = modelsFile().filter((m) => m.id.startsWith('acc-1::'))
     expect(derived.length).toBeGreaterThan(0)
     expect(derived.every((m) => m.apiKeyRef === 'OPENAI_API_KEY')).toBe(true)
-    expect(derived.every((m) => m.apiKey.startsWith('ENC:'))).toBe(true) // 落盘仍是密文
+    expect(derived.every((m) => !('apiKey' in m))).toBe(true)
+    // 落盘也一样：文件里不该出现任何密钥字段（连空串都不留）
+    expect(JSON.stringify(files.get(MODELS_CONFIG_PATH))).not.toContain('"apiKey"')
   })
 })
 
@@ -229,15 +231,28 @@ describe('providers.json v2 + revision 门控', () => {
 // ===== 读取端（v2 形换了盘上形状，读点必须跟着换）=====
 
 describe('llm:list-providers', () => {
-  it('v2 形下照常返回账号数组：apiKey 解密、apiKeyRef 随行（不能把包装对象漏给渲染层）', async () => {
-    await call('llm:save-provider', mkAccount({ id: 'acc-1', apiKey: 'sk-secret' }))
+  it('v2 形下照常返回账号数组：apiKeyRef 随行、**不含密钥**（不能把包装对象漏给渲染层）', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, 'sk-secret')
     const list = (await call('llm:list-providers')) as ProviderAccount[]
 
     expect(Array.isArray(list)).toBe(true)
     expect(list).toHaveLength(1)
     expect(list[0].id).toBe('acc-1')
-    expect(list[0].apiKey).toBe('sk-secret') // 盘上密文、渲染层明文（与 llm:list-models 同一约定）
     expect(list[0].apiKeyRef).toBe('OPENAI_API_KEY')
+    expect(list[0]).not.toHaveProperty('apiKey')
+    expect(JSON.stringify(list)).not.toContain('sk-secret')
+  })
+
+  it('迁移失败残留（盘上还带明文）→ 出站剥离，值不过境', async () => {
+    files.set(PROVIDERS_CONFIG_PATH, {
+      version: 2,
+      revision: 1,
+      accounts: [{ ...mkAccount({ id: 'acc-1', apiKeyRef: 'OPENAI_API_KEY' }), apiKey: 'sk-residual' }],
+    })
+    const list = (await call('llm:list-providers')) as ProviderAccount[]
+
+    expect(list[0]).not.toHaveProperty('apiKey')
+    expect(JSON.stringify(list)).not.toContain('sk-residual')
   })
 })
 
@@ -285,7 +300,7 @@ describe('派生条目同步', () => {
 describe('llm:save-model / llm:delete-model 入队', () => {
   const mkModel = (id: string): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
-    apiKey: 'sk-x', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
   })
 
   it('并发保存两个模型：都落盘（各自基于最新快照改，不丢更新）', async () => {
@@ -332,17 +347,119 @@ describe('llm:delete-provider', () => {
     expect(JSON.stringify(files.get(PROVIDERS_CONFIG_PATH))).toBe(before)
   })
 
-  it('手工条目在删账户后原样保留', async () => {
+  it('手工条目在删账户后原样保留（逐字段相同 —— 写盘不再加解密，没有任何字段被改写）', async () => {
     const hand: ModelProfile = {
       id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm',
-      apiKey: 'ENC:xx', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+      apiKeyRef: 'OPENAI_API_KEY_9', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
     }
     await call('llm:save-provider', mkAccount({ id: 'acc-1' }))
     files.set(MODELS_CONFIG_PATH, [...modelsFile(), hand])
 
     await call('llm:delete-provider', 'acc-1')
-    expect(modelsFile()).toHaveLength(1)
-    // apiKey 除外：任何一次 saveModelConfigs 都会重新加密一遍（既有行为，非本次改动）→ 只比其余字段
-    expect({ ...modelsFile()[0], apiKey: hand.apiKey }).toEqual(hand)
+    expect(modelsFile()).toEqual([hand])
+  })
+})
+
+// ===== 密钥草稿（v3 §4.4/§4.7）：写路径的「一次性草稿」========
+
+describe('apiKeyDraft（一次性草稿 → 凭据库）', () => {
+  const handModel = (id: string): ModelProfile => ({
+    id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
+    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+  })
+
+  /** 凭据库里的 ref 集合（`{ref → ENC: 密文}`）—— `credFile` 由用例注入 */
+  const credRefs = (): Record<string, string> => (credFile as { refs: Record<string, string> }).refs
+
+  it('save-provider：草稿非空 → 按分配到的 ref 写入凭据库（密文落盘）', async () => {
+    const res = await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, 'sk-draft')
+
+    expect(res).toMatchObject({ success: true })
+    expect(Object.keys(credRefs())).toEqual(['OPENAI_API_KEY'])
+    expect(credRefs().OPENAI_API_KEY).toMatch(/^ENC:/) // 盘上是密文
+  })
+
+  it('save-provider：草稿为空 → 不碰凭据库（保留已存值，§4.4）', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, '')
+
+    expect(credRefs()).toEqual({})
+    expect(providersFile().accounts[0].apiKeyRef).toBe('OPENAI_API_KEY') // 配置照写
+  })
+
+  it('save-provider：草稿先 trim 再入库（粘贴噪声不进库）', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, '  sk-draft\t')
+
+    expect(decryptApiKey(credRefs().OPENAI_API_KEY)).toBe('sk-draft')
+  })
+
+  it('save-provider：非法草稿（形如 NAME=value）→ 拒写且配置也不落盘', async () => {
+    const res = await call('llm:save-provider', mkAccount({ id: 'acc-1' }), undefined, undefined, 'OPENAI_API_KEY=sk-x')
+
+    expect(res).toEqual({ success: false, error: 'keyIllegalCharacters' })
+    expect(files.has(PROVIDERS_CONFIG_PATH)).toBe(false) // 配置压根没落盘（校验在最前）
+    expect(credRefs()).toEqual({})
+  })
+
+  it('save-model：新手工条目分配 ref（OPENAI_API_KEY）并写入草稿密钥', async () => {
+    const res = await call('llm:save-model', handModel('m1'), 'sk-draft')
+
+    expect(res).toMatchObject({ success: true })
+    expect(modelsFile()[0].apiKeyRef).toBe('OPENAI_API_KEY')
+    expect(decryptApiKey(credRefs().OPENAI_API_KEY)).toBe('sk-draft')
+  })
+
+  it('save-model：已有 ref 的条目沿用原 ref（只补写草稿值，不重分配）', async () => {
+    files.set(MODELS_CONFIG_PATH, [{ ...handModel('m1'), apiKeyRef: 'MY_OWN_KEY' }])
+
+    await call('llm:save-model', { ...handModel('m1'), apiKeyRef: 'MY_OWN_KEY' }, 'sk-draft')
+
+    expect(modelsFile()[0].apiKeyRef).toBe('MY_OWN_KEY')
+    expect(Object.keys(credRefs())).toEqual(['MY_OWN_KEY'])
+  })
+
+  it('save-model：草稿为空 → 不写凭据库（新建条目就只有 ref、没有值）', async () => {
+    await call('llm:save-model', handModel('m1'))
+
+    expect(modelsFile()[0].apiKeyRef).toBe('OPENAI_API_KEY')
+    expect(credRefs()).toEqual({})
+  })
+
+  it('save-model：非法草稿 → 拒写（配置与凭据都不动）', async () => {
+    files.set(MODELS_CONFIG_PATH, [])
+    const res = await call('llm:save-model', handModel('m1'), '   ')
+
+    expect(res).toEqual({ success: false, error: 'keyBlank' })
+    expect(modelsFile()).toHaveLength(0)
+    expect(credRefs()).toEqual({})
+  })
+
+  it('save-model：派生条目（账户名下）继承账户的 ref，不另分配一个', async () => {
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' }))  // 分配 OPENAI_API_KEY
+    const derivedId = deriveModelId('acc-1', 'gpt-5.6-sol')
+
+    // 模拟「半迁移的旧条目」：账户有 ref，models.json 里的派生条目还没写上
+    await call('llm:save-model', { ...handModel(derivedId), modelName: 'gpt-5.6-sol' })
+
+    const row = modelsFile().find((m) => m.id === derivedId)!
+    expect(row.apiKeyRef).toBe('OPENAI_API_KEY')      // 继承账户的，不是 OPENAI_API_KEY_2
+    expect(modelsFile().every((m) => m.apiKeyRef !== 'OPENAI_API_KEY_2')).toBe(true)
+  })
+
+  it('save-model 与 save-provider 共用 taken 命名空间（先到者拿裸名，后到者 _2）', async () => {
+    await call('llm:save-model', handModel('m1'))
+    await call('llm:save-provider', mkAccount({ id: 'acc-1' }))
+
+    expect(modelsFile().find((m) => m.id === 'm1')?.apiKeyRef).toBe('OPENAI_API_KEY')
+    expect(providersFile().accounts[0].apiKeyRef).toBe('OPENAI_API_KEY_2')
+  })
+
+  it('并发保存两个新手工条目 → 各得一个 ref（taken 在队列任务内重算）', async () => {
+    await Promise.all([
+      call('llm:save-model', handModel('m1')),
+      call('llm:save-model', handModel('m2')),
+    ])
+
+    const refs = modelsFile().map((m) => m.apiKeyRef).sort()
+    expect(refs).toEqual(['OPENAI_API_KEY', 'OPENAI_API_KEY_2'])
   })
 })

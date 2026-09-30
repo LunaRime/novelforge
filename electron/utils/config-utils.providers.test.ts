@@ -14,7 +14,6 @@ const ACC: ProviderAccount = {
   id: 'a1',
   provider: 'openai',
   protocol: 'openai',
-  apiKey: 'ENC:x',
   apiKeyRef: 'OPENAI_API_KEY',
   baseUrl: 'https://api.openai.com',
   modelNames: ['gpt-5.6-sol'],

@@ -393,11 +393,23 @@ export interface LLMChannels {
   }
   'llm:list-models': {
     args: []
+    /** **不含密钥**（v3 §4.7 渲染层剥离）：条目只带 `apiKeyRef`，值一律不过境 */
     return: ModelProfile[]
   }
   'llm:save-model': {
-    args: [model: ModelProfile]
-    return: { success: boolean }
+    /**
+     * `apiKeyDraft`：用户**当场输入**的密钥（一次性，trim 后非空才写凭据库）—— 空/缺省 =
+     * 「不改密钥，保留已存值」（§4.4）。没有「读回旧值再回传」这条路：密钥只进不出。
+     */
+    args: [model: ModelProfile, apiKeyDraft?: string]
+    /**
+     * error 此前**没有声明**而处理器一直在返回它（modelName/purposes 为空、密钥草稿非法）
+     * → 渲染层无从取用；v3 T5 补上（同 llm:delete-model 那次的修复）。
+     *
+     * 密钥草稿非法时给的是**拒因码**（`'keyBlank' | 'keyIllegalCharacters'`，与 `credential:set`
+     * 同一套），其余失败是可直接展示的技术串。
+     */
+    return: { success: boolean; error?: string }
   }
   'llm:delete-model': {
     args: [modelId: string]
@@ -412,7 +424,7 @@ export interface LLMChannels {
   // ===== 供应商账户（2026-09-25）：一份凭据挂多个模型 =====
   'llm:list-providers': {
     args: []
-    /** apiKey 已解密（与 llm:list-models 同一约定：盘上密文、渲染层明文） */
+    /** **不含密钥**（v3 §4.7 渲染层剥离）：账户只带 `apiKeyRef`，凭据状态走 `credential:describe` */
     return: ProviderAccount[]
   }
   'llm:save-provider': {
@@ -422,11 +434,16 @@ export interface LLMChannels {
       modelSpecs?: Record<string, { contextWindow?: number; maxTokens?: number }>,
       /** 打开编辑卡时记下的版本号（v3 §5）：不符 = 别处已改 → 拒绝写入。缺省 = 不校验（老调用方零改动） */
       expectedRevision?: number,
+      /** 用户当场输入的密钥（一次性；同 `llm:save-model`）。空/缺省 = 不改已存值 */
+      apiKeyDraft?: string,
     ]
     /**
      * 保存账户的同时，按其 modelNames 同步 models.json 里的派生条目。
      * - `revision`：本次写成功后的版本号（调用方下次提交时带上）
      * - `conflict`：`expectedRevision` 不符 —— 写入被拒（文件未动），UI 提示重载
+     *
+     * 密钥草稿非法（拒因码，同 `credential:set`）或**凭据写盘失败**时 `revision` 仍带上
+     * —— 后者账户配置已存（spec §4.7 顺序），重试只需补凭据那一步，调用方别拿旧版本号再撞冲突。
      */
     return: { success: boolean; error?: string; revision?: number; conflict?: boolean }
   }
@@ -436,7 +453,11 @@ export interface LLMChannels {
     return: { success: boolean; error?: string }
   }
   'llm:list-provider-models': {
-    args: [credentials: { provider: string; protocol: LLMProtocol; apiKey: string; baseUrl: string; apiKeyRef?: string }]
+    /**
+     * `apiKeyDraft`（用户当场输入）**优先于** `apiKeyRef` 解析 —— 表单里刚敲的键要能当场验证
+     * （v3 §4.7「typed key wins」，保住 v2 的「保存前探测」）。已存的密钥读不回来，故没有回传字段。
+     */
+    args: [credentials: { provider: string; protocol: LLMProtocol; baseUrl: string; apiKeyRef?: string; apiKeyDraft?: string }]
     /** 拉取供应商可用模型（带可选的容量规格，采纳即用免手填）。中转/自建服务未实现该端点属预期 → success:false + 可操作 error */
     return: { success: boolean; models?: LLMModelCandidate[]; error?: string }
   }
@@ -453,7 +474,8 @@ export interface LLMChannels {
     return: string | null
   }
   'llm:test-connection': {
-    args: [model: ModelProfile]
+    /** `apiKeyDraft`：表单里刚输入的键（一次性）—— 给了就用它探测，否则按 `apiKeyRef` 解析 */
+    args: [model: ModelProfile, apiKeyDraft?: string]
     return: { success: boolean; error?: string }
   }
 }
@@ -538,12 +560,12 @@ export interface ModelProfile {
   provider: 'openai' | 'gemini' | 'deepseek' | 'ollama' | 'bigmodel' | 'custom'
   protocol: LLMProtocol
   modelName: string
-  apiKey: string
   /**
    * 凭据引用名（模型管理 v3 §3.2）：派生条目 = 所属账户的 `apiKeyRef`；手工条目 = 迁移/新建时分配。
    *
-   * 过渡期（T2-T4）与 `apiKey` 并存；**T5 删 `apiKey` 后它是唯一通路**（取值一律走
-   * `electron/credentials` 的 resolve，配置文件里不再出现密码字段）。
+   * **密钥的唯一通路**（v3 T5 删了 `apiKey`）：取值一律走 `electron/credentials` 的 resolve，
+   * 本类型（= 落盘形状）不含密码字段。渲染层要提交「用户当场输入的键」走 `apiKeyDraft`
+   * 一次性参数（见 `llm:save-model` 等通道），已存的密钥读不回来。
    */
   apiKeyRef?: string
   /** 输入类型（v3 §3.2）：缺省 = 继承规格 → `['text']`（目录区行内展开可改） */
@@ -576,12 +598,14 @@ export interface ProviderAccount {
   /** 与 `ModelProfile.provider` 同一个封闭联合 —— UI 从同一组选项里选，故是良性约束 */
   provider: ModelProfile['provider']
   protocol: LLMProtocol
-  apiKey: string
   /**
    * 凭据引用名（模型管理 v3 §4.3）：**由主进程在保存账户时分配**（渲染层不分配），
    * `deriveCredentialRef(provider, taken)` 派生 —— `<PROVIDER>_API_KEY`，已占用则 `_2`、`_3`…。
    * 一旦写入**不可改**（provider 字段同理锁定：换家 = 删除重建）。
    * 旧数据（T4 迁移前）可能没有 → 可选；出现在保存路径上的账户会被补发。
+   *
+   * **密钥的唯一通路**（v3 T5 删了 `apiKey`）：落盘类型不含密码字段，取值走
+   * `electron/credentials` 的 resolve；用户当场输入的键走 `apiKeyDraft` 一次性参数。
    */
   apiKeyRef?: string
   /** 界面显示名（自定义账户可设）；缺省 = 预设名 / `provider` */
@@ -1210,7 +1234,8 @@ export interface StyleChannels {
 export interface HealthChannels {
   'health:check': { args: [projectPath?: string]; return: HealthStatus }
   'health:check-llm': {
-    args: [baseUrl: string, apiKey: string]
+    /** `apiKeyDraft`（一次性，优先）→ `apiKeyRef` 解析 —— 与 `llm:test-connection` 同口径 */
+    args: [baseUrl: string, apiKeyDraft?: string, apiKeyRef?: string]
     return: { ok: boolean; message: string; detail?: string }
   }
 }

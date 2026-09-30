@@ -1,17 +1,19 @@
 import { describe, it, expect, vi } from 'vitest'
 import { toAnthropicRequest, createAnthropicStreamParser, mapAnthropicError, AnthropicProvider } from './anthropic-provider'
 import { proxyFetch } from '../net/proxy-fetch'
-import type { ModelProfile } from '../../src/shared/ipc-channels'
-import type { LLMUsage } from './provider.interface'
+import type { ResolvedModelProfile, LLMUsage } from './provider.interface'
 
 vi.mock('../net/proxy-fetch', () => ({ proxyFetch: vi.fn() }))
 
-const model = {
-  id: 'a1', name: 'Claude', provider: 'anthropic', protocol: 'anthropic',
+// 夹具 = **已解析密钥**的条目（provider 的入参类型，v3 §3.2）：`ModelProfile` 上已无 `apiKey`，
+// 能带上密钥的只有 `ResolvedModelProfile`。provider 用 'custom' —— 这正是 anthropic 协议
+// 在 NF 里的实际用法（自定义端点走 Messages API）。
+const model: ResolvedModelProfile = {
+  id: 'a1', name: 'Claude', provider: 'custom', protocol: 'anthropic',
   modelName: 'claude-sonnet-5', apiKey: 'sk-ant-x',
   baseUrl: 'https://api.anthropic.com', temperature: 0.7, maxTokens: 8192, contextWindow: 200000,
   purposes: ['generation'],
-} as unknown as ModelProfile
+}
 
 describe('toAnthropicRequest', () => {
   it('URL 归一化：裸域名/尾斜杠/已含 /v1 都拼成 {root}/v1/messages（不重复）', () => {

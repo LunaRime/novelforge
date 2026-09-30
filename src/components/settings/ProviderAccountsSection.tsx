@@ -6,8 +6,11 @@
  * 设计见 `docs/superpowers/specs/2026-09-25-provider-accounts-design.md`。
  * 用户的痛点原话：「添加一个模型供应商然后勾选旗下的模型然后就可以便携切换而不需要又添加」。
  *
- * **存储**：`providers.json` 是账户的唯一真相；`models.json` 里由账户**派生**的条目持有凭据副本。
+ * **存储**：`providers.json` 是账户的唯一真相；`models.json` 里由账户**派生**的条目持有凭据**引用**。
  * 这么做是为了不动 `models.json` 的 10 个读点与 91 处凭据引用（详见 provider-accounts.ts 头注释）。
+ *
+ * ⚠️ 本文件的表单是**过渡形态**（v3 T5）：密钥框改为**只写** —— 值不再住在 `ProviderAccount` 上，
+ * 用户输入进本地 `keyDraft`，提交时作一次性参数交给主进程。T6 会把它换成行内编辑卡。
  */
 import { useCallback, useState } from 'react'
 import { Plus, Trash2, Download, KeyRound } from 'lucide-react'
@@ -166,7 +169,6 @@ function newAccount(): ProviderAccount {
     id: crypto.randomUUID(),
     provider: (preset?.provider ?? 'openai') as ProviderAccount['provider'],
     protocol: (preset?.protocol ?? 'openai') as ProviderAccount['protocol'],
-    apiKey: '',
     baseUrl: preset?.baseUrl ?? '',
     modelNames: [],
   }
@@ -207,6 +209,11 @@ export function ProviderAccountForm({
   const [query, setQuery] = useState('')
   const [showKey, setShowKey] = useState(false)
   const [saving, setSaving] = useState(false)
+  /**
+   * 密钥草稿（v3 §4.4 只写语义）：初值**恒空** —— 已存的密钥读不回来（值在主进程凭据库里），
+   * 框里显示什么都没有 = 「不变更」。提交时作为一次性参数交给主进程，不进 `draft`。
+   */
+  const [keyDraft, setKeyDraft] = useState('')
 
   const up = <K extends keyof ProviderAccount>(key: K, value: ProviderAccount[K]) =>
     setDraft((d) => ({ ...d, [key]: value }))
@@ -275,9 +282,8 @@ export function ProviderAccountForm({
     const res = await useLLMStore.getState().listProviderModels({
       provider: draft.provider,
       protocol: draft.protocol,
-      apiKey: draft.apiKey,
-      // 凭据引用（v3 §4.4）：磁盘上的存量账户在迁移后 `apiKey` 为空、值在凭据库里 ——
-      // 不带 ref 的话「获取可用模型」会以「需要密钥」失败（主进程侧 ref 优先，T3 已支持）
+      // 密钥二选一（v3 §4.7）：表单里刚敲的草稿优先（要能当场验证），否则由主进程按 ref 解析
+      apiKeyDraft: keyDraft.trim() || undefined,
       apiKeyRef: draft.apiKeyRef,
       baseUrl: draft.baseUrl,
     })
@@ -316,9 +322,15 @@ export function ProviderAccountForm({
     const t0 = Date.now()
     // 保存反馈按 save-feedback-standard：成功/失败都要有**日志 + toast**，
     // 与 LLMSection 的模型保存同一套 key 与 source 标签
-    const ok = await useLLMStore.getState().saveProvider({ ...draft, modelNames: [...selected] })
+    const result = await useLLMStore.getState().saveProvider(
+      { ...draft, modelNames: [...selected] },
+      undefined,
+      undefined,
+      // 空草稿 = 不改已存密钥（§4.4）；有值时主进程按 trim 后的值写入凭据库
+      keyDraft.trim() || undefined,
+    )
     setSaving(false)
-    if (ok) {
+    if (result.success) {
       renderLog('info', 'Save:Settings', `provider saved: ${draft.provider} (${Date.now() - t0}ms)`)
       toast.success(t('save.success'))
       onDone()
@@ -395,8 +407,8 @@ export function ProviderAccountForm({
         <div className="relative">
           <Input
             type={showKey ? 'text' : 'password'}
-            value={draft.apiKey}
-            onChange={(e) => up('apiKey', e.target.value)}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
             placeholder={draft.provider === 'ollama' ? t('model.apiKeyPlaceholder') : 'sk-...'}
             className="pr-9"
           />

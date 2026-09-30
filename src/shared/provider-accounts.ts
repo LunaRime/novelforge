@@ -7,7 +7,7 @@
  * `ModelProfile[]` 形状不变，那些读点与引用**一行都不用改**。
  *
  * 存储：`~/.novelforge/providers.json` 是账户的唯一真相；`models.json` 里的派生条目
- * 持有凭据**副本**，由本模块的同步函数维护。
+ * 持有凭据**引用**（`apiKeyRef`），由本模块的同步函数维护。
  */
 import type { ModelProfile, ProviderAccount } from './ipc-channels'
 import { builtinCatalogFor } from './provider-presets'
@@ -41,7 +41,8 @@ export type NewModelDefaults = Pick<
  *
  * ⚠️ **合并语义，不是覆盖**：派生条目上的 `name` / `temperature` / `maxTokens` /
  * `contextWindow` / `purposes` 是用户在「模型卡片」里改的，**账户同步必须原样保留**；
- * 只更新由账户提供的三个凭据字段。否则改一次 API Key 就会把用户的逐模型调参全部冲掉。
+ * 只更新由账户提供的连通字段（`provider` / `protocol` / `baseUrl` / `apiKeyRef`）。
+ * 否则改一次账户配置就会把用户的逐模型调参全部冲掉。
  *
  * 不碰手工条目（无账户）与其它账户的条目；保持既有顺序，新条目追加在后。
  *
@@ -55,12 +56,12 @@ export function syncAccountModels(
   existing: ModelProfile[],
   newModelDefaults: (modelName: string) => NewModelDefaults,
 ): ModelProfile[] {
+  // 派生条目只带**引用**（v3 §3.4）：值住在凭据库/env，请求前由 resolve 取 —— 条目上是密码字段
+  // 的时代随 T5 结束，配置文件里不再有可搬运的密文。
   const credentials = {
     provider: account.provider,
     protocol: account.protocol,
-    apiKey: account.apiKey,
     baseUrl: account.baseUrl,
-    // 过渡期（T5 删 apiKey 前）两个字段并存：apiKeyRef 是 T5 之后唯一通路，现在就随副本一起维护
     apiKeyRef: account.apiKeyRef,
   }
   const names = account.modelNames && account.modelNames.length > 0

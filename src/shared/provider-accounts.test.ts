@@ -8,7 +8,6 @@ const ACCOUNT: ProviderAccount = {
   id: 'acc-1',
   provider: 'deepseek',
   protocol: 'openai',
-  apiKey: 'sk-account',
   apiKeyRef: 'DEEPSEEK_API_KEY',
   baseUrl: 'https://api.deepseek.com',
   modelNames: ['deepseek-v4-pro', 'deepseek-v4-flash'],
@@ -20,7 +19,6 @@ function mkModel(over: Partial<ModelProfile> & { id: string }): ModelProfile {
     provider: 'openai',
     protocol: 'openai',
     modelName: 'gpt-4o',
-    apiKey: '',
     baseUrl: '',
     temperature: 0.7,
     maxTokens: 4096,
@@ -62,7 +60,6 @@ describe('syncAccountModels', () => {
     expect(out).toHaveLength(2)
     expect(out[0].id).toBe('acc-1::deepseek-v4-pro')
     expect(out[0].modelName).toBe('deepseek-v4-pro')
-    expect(out[0].apiKey).toBe('sk-account')
     expect(out[0].baseUrl).toBe('https://api.deepseek.com')
     expect(out[0].provider).toBe('deepseek')
     expect(out[0].maxTokens).toBe(8192)
@@ -74,7 +71,7 @@ describe('syncAccountModels', () => {
   })
 
   describe('⚠️ 合并语义（不是覆盖）：逐模型设置必须保留', () => {
-    it('改账户凭据 → 只更新凭据三字段，用户改过的显示名/温度/上限/窗口/用途原样保留', () => {
+    it('改账户凭据 → 只更新连通字段（ref/地址/协议/家），用户改过的显示名/温度/上限/窗口/用途原样保留', () => {
       const mine = mkModel({
         id: 'acc-1::deepseek-v4-pro',
         name: '我的主力模型',
@@ -82,14 +79,13 @@ describe('syncAccountModels', () => {
         maxTokens: 16384,
         contextWindow: 200000,
         purposes: ['generation', 'refinement'],
-        apiKey: 'sk-old',
         baseUrl: 'https://old',
       })
-      const changed: ProviderAccount = { ...ACCOUNT, apiKey: 'sk-new', baseUrl: 'https://new', protocol: 'gemini', provider: 'custom' }
+      const changed: ProviderAccount = { ...ACCOUNT, apiKeyRef: 'CUSTOM_API_KEY', baseUrl: 'https://new', protocol: 'gemini', provider: 'custom' }
       const out = syncAccountModels(changed, [mine], newModelDefaults)
       const got = out.find(m => m.id === 'acc-1::deepseek-v4-pro')!
 
-      expect(got.apiKey).toBe('sk-new')
+      expect(got.apiKeyRef).toBe('CUSTOM_API_KEY')
       expect(got.baseUrl).toBe('https://new')
       expect(got.protocol).toBe('gemini')
       expect(got.provider).toBe('custom')
@@ -108,7 +104,6 @@ describe('syncAccountModels', () => {
       id: 'heir-1',
       provider: 'openai',
       protocol: 'openai',
-      apiKey: 'sk-heir',
       apiKeyRef: 'OPENAI_API_KEY',
       baseUrl: 'https://api.openai.com',
       modelNames: [],
@@ -127,10 +122,10 @@ describe('syncAccountModels', () => {
       expect(out.length).toBeGreaterThan(preset.models.length) // 向量模型确实进来了
     })
 
-    it('继承而来的派生条目同样携带凭据副本（apiKeyRef 随账户走）', () => {
+    it('继承而来的派生条目只带凭据**引用**（apiKeyRef 随账户走；条目上没有密钥值）', () => {
       const out = syncAccountModels(heir, [], (n) => presetModelDefaults(heir.provider, n))
       expect(out.every(m => m.apiKeyRef === 'OPENAI_API_KEY')).toBe(true)
-      expect(out.every(m => m.apiKey === 'sk-heir')).toBe(true)
+      expect(out.every(m => !('apiKey' in m))).toBe(true) // v3 T5：派生条目不再持有凭据副本
       expect(out.every(m => m.provider === 'openai')).toBe(true)
     })
 
@@ -148,13 +143,12 @@ describe('syncAccountModels', () => {
         modelName: 'gpt-5.6-sol',
         name: '我的主力',
         temperature: 1.1,
-        apiKey: 'sk-old',
       })
       const out = syncAccountModels(heir, [mine], (n) => presetModelDefaults(heir.provider, n))
       const got = out.find(m => m.id === mine.id)!
       expect(got.name).toBe('我的主力')
       expect(got.temperature).toBe(1.1)
-      expect(got.apiKey).toBe('sk-heir')
+      expect(got.apiKeyRef).toBe('OPENAI_API_KEY')
       expect(out).toHaveLength(builtinCatalogFor('openai').length) // 不重复追加
     })
 
@@ -209,13 +203,13 @@ describe('syncAccountModels', () => {
 
   describe('不越界', () => {
     it('手工添加的条目不受任何影响', () => {
-      const hand = mkModel({ id: 'uuid-hand', name: '手工模型', apiKey: 'sk-hand' })
+      const hand = mkModel({ id: 'uuid-hand', name: '手工模型' })
       const out = syncAccountModels(ACCOUNT, [hand], newModelDefaults)
       expect(out.find(m => m.id === 'uuid-hand')).toEqual(hand)
     })
 
     it('别的账户的条目不受影响', () => {
-      const other = mkModel({ id: 'acc-2::m', name: '别的', apiKey: 'sk-other' })
+      const other = mkModel({ id: 'acc-2::m', name: '别的' })
       const out = syncAccountModels(ACCOUNT, [other], newModelDefaults)
       expect(out.find(m => m.id === 'acc-2::m')).toEqual(other)
     })

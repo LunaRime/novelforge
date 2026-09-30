@@ -40,13 +40,12 @@ export function tokenSpec(
 /**
  * 「这个条目有可用的凭据来源」—— 测试连接与保存共用的 gating 判据。
  *
- * 过渡期（T4-T5）两种来源并存：条目自带明文（手工条目 / 表单里刚输入的草稿）
- * 或凭据引用（迁移后由账户派生：`apiKey` 已被搬空，值在凭据库里）。
- * ⚠️ 只看 `apiKey` 会让迁移后的派生条目**整排按钮变灰**（保存都点不动）；
- * 两处判据必须同源，否则同一状态下测试能点、保存不能点，用户只会当成 bug。
+ * v3 T5 起两种来源（都**不是**条目上的值，类型上已经没有 `apiKey` 了）：
+ * 凭据引用 `apiKeyRef`（值在凭据库里，由主进程解析）或**表单里刚输入的草稿**。
+ * ⚠️ 两处判据必须同源，否则同一状态下测试能点、保存不能点，用户只会当成 bug。
  */
-function hasUsableKey(model: ModelProfile): boolean {
-  return Boolean(model.apiKey || model.apiKeyRef) || model.provider === 'ollama'
+function hasUsableKey(model: ModelProfile, keyDraft: string): boolean {
+  return Boolean(model.apiKeyRef || keyDraft.trim()) || model.provider === 'ollama'
 }
 
 /** 模型编辑表单 */
@@ -55,7 +54,8 @@ export function ModelForm({
 }: {
   model: ModelProfile
   onChange: (m: ModelProfile) => void
-  onSave: () => void
+  /** 保存：`apiKeyDraft` = 本次输入的密钥（空 = 不变更已存值）——一次性参数，不进 model */
+  onSave: (apiKeyDraft?: string) => void
   onCancel: () => void
   saving: boolean
   purposeOptions: ModelProfile['purposes']
@@ -64,6 +64,11 @@ export function ModelForm({
 }) {
   const { t } = useTranslation()
   const [showKey, setShowKey] = useState(false)
+  /**
+   * 密钥草稿（v3 §4.4 只写语义）：初值**恒空**（已存的键读不回来，框里空 = 不变更）。
+   * ⚠️ 过渡形态：T9 会把本表单改成「其他」卡专用并接 describe 三态 placeholder。
+   */
+  const [keyDraft, setKeyDraft] = useState('')
   // 标记"模型标识"是否使用自定义输入模式
   const [customModelName, setCustomModelName] = useState(false)
 
@@ -99,9 +104,10 @@ export function ModelForm({
     setFetching(true)
     setFetchError(null)
     const res = await useLLMStore.getState().listProviderModels({
-      provider: model.provider, protocol: model.protocol, apiKey: model.apiKey,
-      // 凭据引用（v3 §4.4）：迁移后由账户派生的条目 `apiKey` 已被搬空、值在凭据库 ——
-      // 不带 ref 这一路会以「需要密钥」失败（与 ProviderAccountsSection 同一处口径）
+      provider: model.provider, protocol: model.protocol,
+      // 密钥二选一（v3 §4.7）：表单里刚敲的草稿优先，否则按 apiKeyRef 解析
+      //（与 ProviderAccountsSection 同一处口径）
+      apiKeyDraft: keyDraft.trim() || undefined,
       apiKeyRef: model.apiKeyRef,
       baseUrl: model.baseUrl,
     })
@@ -185,7 +191,7 @@ export function ModelForm({
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
-    const result = await testConnection(model)
+    const result = await testConnection(model, keyDraft.trim() || undefined)
     setTestResult(result)
     setTesting(false)
     setTimeout(() => setTestResult(null), 3000)
@@ -250,8 +256,8 @@ export function ModelForm({
         <div className="relative">
           <Input
             type={showKey ? 'text' : 'password'}
-            value={model.apiKey}
-            onChange={(e) => up('apiKey', e.target.value)}
+            value={keyDraft}
+            onChange={(e) => setKeyDraft(e.target.value)}
             placeholder={model.provider === 'ollama' ? t('model.apiKeyPlaceholder') : 'sk-...'}
             className="pr-9"
           />
@@ -441,15 +447,15 @@ export function ModelForm({
         <Button
           variant="outline"
           onClick={handleTest}
-          disabled={testing || !model.baseUrl || !hasUsableKey(model)}
+          disabled={testing || !model.baseUrl || !hasUsableKey(model, keyDraft)}
         >
           <Zap size={13} />
           {testing ? t('model.testing') : t('model.testBtn')}
         </Button>
         <Button
           className="flex-1"
-          onClick={onSave}
-          disabled={saving || !model.name || !hasUsableKey(model)}
+          onClick={() => onSave(keyDraft.trim() || undefined)}
+          disabled={saving || !model.name || !hasUsableKey(model, keyDraft)}
         >
           <Save size={13} />
           {saving ? t('model.saving') : t('model.saveBtn')}

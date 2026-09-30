@@ -32,7 +32,7 @@ vi.mock('../utils/logger', () => ({
 }))
 
 import { logger } from '../utils/logger'
-import { resolveFrom, describeFrom, resolveCredential, resolveModelKey } from './resolve'
+import { resolveFrom, describeFrom, resolveCredential, resolveModelKey, resolveRequestKey, stripApiKey } from './resolve'
 import {
   readCredentialFile,
   writeCredentialFile,
@@ -108,22 +108,64 @@ describe('resolve（env 优先）', () => {
   })
 })
 
-// ===== ①b resolveModelKey（模型条目 → 请求要用的密钥，v3 §4.4）=====
+// ===== ①b resolveModelKey / resolveRequestKey（模型条目 → 请求要用的密钥，v3 §4.4/§4.7）=====
 //
-// 契约：`resolveCredential(apiKeyRef) ?? apiKey ?? ''` —— ref 命中（env 非空 → store 非空）
-// 优先，否则**回落条目上的明文**（T4 迁移前凭据库为空，全部走这条路 → 行为零变化）。
+// 契约（T5 起 **ref-only**）：`resolveCredential(apiKeyRef) ?? ''` —— 明文回落随
+// `ModelProfile.apiKey` 字段一起删除（迁移后盘上没有可回落的明文；留那条分支只会把
+// 「迁移没跑成」伪装成正常态）。草稿通路见 `resolveRequestKey`。
 // 测试辅助 `__setStoredForTest(map)` 注入 store 内存缓存（T1 store.ts 提供，与本文件 store 段共用）。
 
-describe('resolveModelKey（ref 优先、明文回落）', () => {
-  it('resolveModelKey：ref 命中优先于明文', () => {
+describe('resolveModelKey（ref-only）', () => {
+  it('ref 命中 → 取该值（不再有明文可回落）', () => {
     __setStoredForTest({ R: 'sk-ref' })
-    expect(resolveModelKey({ apiKeyRef: 'R', apiKey: 'sk-plain' })).toBe('sk-ref')
+    expect(resolveModelKey({ apiKeyRef: 'R' })).toBe('sk-ref')
   })
 
-  it('resolveModelKey：无 ref / ref 未配置 → 回落明文；两者皆无 → 空串', () => {
-    expect(resolveModelKey({ apiKey: 'sk-plain' })).toBe('sk-plain')
-    expect(resolveModelKey({ apiKeyRef: 'MISSING', apiKey: 'sk-plain' })).toBe('sk-plain')
+  it('ref 未配置 / 未分配 → 空串（不抛、不猜）', () => {
+    __setStoredForTest({})
+    expect(resolveModelKey({ apiKeyRef: 'MISSING' })).toBe('')
     expect(resolveModelKey({})).toBe('')
+  })
+})
+
+describe('resolveRequestKey（草稿优先 → ref 解析）', () => {
+  it('草稿非空即胜出 —— 即便 ref 有值（typed key wins，§4.7）', () => {
+    __setStoredForTest({ R: 'sk-ref' })
+    expect(resolveRequestKey('R', 'sk-typed')).toBe('sk-typed')
+  })
+
+  it('草稿的**边缘空白先 trim**（粘贴噪声；与 credential:set 存入的值同形）', () => {
+    __setStoredForTest({})
+    expect(resolveRequestKey(undefined, '  sk-typed\t')).toBe('sk-typed')
+  })
+
+  it('草稿为空/纯空白/缺省 → 按 ref 解析（空草稿不遮蔽已存值）', () => {
+    __setStoredForTest({ R: 'sk-ref' })
+    expect(resolveRequestKey('R', '')).toBe('sk-ref')
+    expect(resolveRequestKey('R', '   ')).toBe('sk-ref')
+    expect(resolveRequestKey('R', undefined)).toBe('sk-ref')
+  })
+
+  it('草稿与 ref 皆无 → 空串', () => {
+    __setStoredForTest({})
+    expect(resolveRequestKey(undefined, undefined)).toBe('')
+  })
+})
+
+// ===== ①c stripApiKey（出站剥离，v3 §4.7）=====
+//
+// 类型上条目已无密钥字段，但**迁移失败的窗口**里盘上仍有残留 —— 值不过境不取决于迁移跑没跑成。
+
+describe('stripApiKey（渲染层剥离）', () => {
+  it('删掉残留的密钥字段，其余字段原样', () => {
+    const entry = { id: 'm1', modelName: 'gpt-4o', apiKey: 'sk-residual' }
+    expect(stripApiKey(entry)).toEqual({ id: 'm1', modelName: 'gpt-4o' })
+    expect('apiKey' in entry).toBe(false)
+  })
+
+  it('条目上没有该字段时无损（幂等）', () => {
+    const entry = { id: 'm1', apiKeyRef: 'OPENAI_API_KEY' }
+    expect(stripApiKey(entry)).toEqual({ id: 'm1', apiKeyRef: 'OPENAI_API_KEY' })
   })
 })
 

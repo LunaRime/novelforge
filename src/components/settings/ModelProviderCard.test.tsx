@@ -36,13 +36,13 @@ vi.mock('../../stores/llm-store', () => ({
 
 const ACCOUNT: ProviderAccount = {
   id: 'acct-1', provider: 'custom', protocol: 'openai',
-  apiKey: 'sk-x', baseUrl: 'https://gw.example.com', modelNames: ['gen-1', 'gen-2'],
+  apiKeyRef: 'CUSTOM_API_KEY', baseUrl: 'https://gw.example.com', modelNames: ['gen-1', 'gen-2'],
 }
 
 /** 行 fixture：id 与 modelName 对齐名册语义（modelNames 存的是 modelName；显示名同值） */
 const makeModel = (id: string, modelName: string, purposes: string[] = ['generation']): ModelProfile => ({
   id, name: modelName, provider: 'custom', protocol: 'openai',
-  modelName, apiKey: 'sk-x', baseUrl: 'https://gw.example.com',
+  modelName, apiKeyRef: 'CUSTOM_API_KEY', baseUrl: 'https://gw.example.com',
   temperature: 0.7, maxTokens: 4096, contextWindow: 4096, purposes,
 } as unknown as ModelProfile)
 
