@@ -130,7 +130,7 @@ const dots    = [...document.querySelectorAll('[role=\"img\"]')];
 editBtn[0]?.setAttribute('data-rm-probe','row0.edit');
 delBtn[0]?.setAttribute('data-rm-probe','row0.del');
 dots[0]?.setAttribute('data-rm-probe','row0.dot');
-const add = btns.find(b => /添加供应商|Add a provider/.test(b.textContent));
+const add = btns.find(b => /添加供应商|Add provider/.test(b.textContent));
 add?.setAttribute('data-rm-probe','add');
 return JSON.stringify({
   rowCount: editBtn.length,
@@ -174,7 +174,7 @@ node "$D" eval "const b=window.__rm.split('\n'), a=document.body.innerText.split
 | A7b | 三态灯·绿 | 在各账户行之外，**新建夹具账户并给它填一个假 key → 应用** → 看该行 | 变绿点 + 「密钥已配置」；`role="img"`；hover 出 tooltip | |
 | A8 | 三态灯·红（新账户） | 新建夹具账户（不填密钥）来看 | 行上为红点 + 「未配置密钥」 | |
 | A9 | placeholder 三态 | 依次看：新建夹具账户（红）→ **「其他」卡里 `apiKeyRef = DEEPSEEK_API_KEY` 的那一条**（本机**现成**的已配置样本）→ 新建 ollama 账户 | 分别出现「输入 API 密钥」/「已配置（留空保持不变）」/「留空 = 不使用密钥」。⚠️ 已配置态**不在任何账户行上**（`DEEPSEEK_API_KEY` 不属于 providers.json 的任何账户），它在底部「其他」卡的条目里 | |
-| A10 | describe 失败不降级行 | 断网/主进程异常下打开设置段 | 灯**消失**（不是变红），行仍可点、编辑卡仍可开 —— 凭据是增强信息 | |
+| A10 | describe 失败不降级行（**本机不可诱导 → 标阻塞**） | 无法按原口径「断网」复现：`credential:describe` 是**本机 IPC**，与网络无关；灯消失只在 IPC **reject** 时发生（`llm-store.ts:208-229` 的 catch 把状态留在 `undefined` → `CredentialDot.tsx:30` 返回 `null`）。**本档不做，标阻塞** | 应有行为（静态面已覆盖）：灯**消失**（不是变红），行仍可点、编辑卡仍可开 —— 凭据是增强信息。若要真机复现需临时改主进程抛错（**改代码，超本档授权**） | |
 | A11 | 保存播报 | 在夹具账户改显示名 → 应用 | 读屏可闻「已保存 {name}」；**连续两次同名保存第二次也要发声**（clear-on-open 生效） | |
 
 ### B 组 — 环境变量优先与只读
@@ -204,18 +204,26 @@ node "$D" eval "const b=window.__rm.split('\n'), a=document.body.innerText.split
 | C5 | 写盘失败文案 | 制造写失败（见下方「制造写盘失败」框），应用一次带新 key 的保存 | toast 文案是「**配置已保存，密钥未写入：{error}**」（不是笼统的「保存失败」）；**卡不关、草稿还在**；恢复权限后再点一次应用 → 成功 | |
 | C6 | 账号配置先落盘 | 接 C5：失败后查 `providers.json` | 账户/地址/目录的改动**已经落盘**（revision 已 +1）——「配置先、凭据后」的顺序成立 | |
 
-> **制造写盘失败（C5 / H4 共用）**：`writeJsonFile()` 是 **tmp + rename** 的原子写（`config-utils.ts:178-195`），
-> 所以「把某个 json 设成只读」**挡不住**它（rename 会替换掉）；必须让**目录**不允许新建文件：
+> **制造写盘失败（C5 / H4 共用）**：把**凭据文件本身**设成只读即可，**不要**动目录权限。
 >
 > ```bash
-> icacls "$USERPROFILE\.novelforge" /deny "$USERNAME:(WD,AD)"   # 施加
+> attrib +R "$USERPROFILE\.novelforge\credentials.json"   # 施加（ls -l 应见 -r--r--r--）
 > # ... 跑 C5 / H4 ...
-> icacls "$USERPROFILE\.novelforge" /remove:d "$USERNAME"       # 立刻解除（§9 清单里也有一条）
+> attrib -R "$USERPROFILE\.novelforge\credentials.json"   # 立刻解除（§9 清单里也有一条）
 > ```
 >
-> 副作用：施加期间**任何**配置写入都会失败（包括会话中其他保存动作）。请在这两步之间**只**跑目标用例。
-> 若执行人不愿动 ACL，C5/H4 可标 **阻塞** —— 它们的核心判据（写失败不关卡、账户不删、文案区分）
-> 在静态测试里已有覆盖，标阻塞不算失败。
+> **为什么这样就能失败**：`writeJsonFile()` 是 **tmp + rename** 的原子写（`config-utils.ts:178-195`）——
+> 临时文件建在**同一个目录**里（目录可写 → `writeFileSync(tmp)` 成功），最后一步 `renameSync(tmp,target)`
+> 覆盖一个带只读属性的文件，在 Windows 上返回 **EPERM**（2026-10-01 本机实测：`writeFileSync(tmp): OK` /
+> `renameSync: FAIL EPERM`；`attrib -R` 后同一操作 OK）。失败点正好落在**凭据那一步**，
+> 于是「配置已落盘、密钥没写进去」这个待测状态自然出现。
+>
+> ⚠️ **不要用 `icacls` 把整个目录 deny 掉**（初版文档的错误建议）：那会让**同目录的 `providers.json`
+> 也写不进去**，保存链路在第一步 `mutateProviders` 就失败、`save-provider` 提前返回**不带 revision**
+> 的失败 → toast 是笼统的「保存失败」、C6 的 `revision +1` 也不会发生 —— C5/C6 会双双变成**假缺陷**。
+>
+> 副作用：施加期间**只有凭据写入**会失败（其它配置照常）。若执行人不愿改文件属性，C5/H4 可标
+> **阻塞** —— 核心判据（写失败不关卡、账户不删、文案区分）在静态测试里已有覆盖，标阻塞不算失败。
 
 ### D 组 — 迁移后旧账户可用 / 密文损坏与换机
 
@@ -237,10 +245,10 @@ node "$D" eval "const b=window.__rm.split('\n'), a=document.body.innerText.split
 | E3 | 恢复默认 | 点「恢复默认模型」→ 应用 → 重开编辑卡 | 回到全集 + meta 回「默认模型目录」；行区又是内置目录 | |
 | E4 | 再编辑可再次自定义 | 接 E3：再删一行 | 又能物化（三态可来回切换，不是一次性） | |
 | E5 | 删光 = 恢复默认 | 自定义态下把所有行删光 | 显示「目录为空 —— 保存后恢复默认模型目录」；保存后重开 = 回到全集（**这是设计语义，不是 bug**） | |
-| E6 | 容量清空=回规格值 | 给某行的「上下文窗口」填 `9999` → 应用 → 重开（placeholder 应显示 9999）→ 清空该框 → 应用 → 重开 | 重开后 placeholder = **内置规格值**（不是 9999、不是空白）。⚠️ 实现口径是「写回规格值」而非「删键」（spec §5 注记）——不要按「字段消失」判 | |
+| E6 | 容量清空=回规格值 | 给某行的「上下文窗口」填 `9999` → 应用 → 重开（框内**为空**、placeholder 显示 9999）→ **在框内敲一个字符再删掉**（必须制造一次编辑事件）→ 应用 → 重开 | 重开后 placeholder = **内置规格值**（不是 9999、不是空白）。⚠️ 两个坑：① 重开后框里本来就是空的、9999 只是 placeholder，**直接"清空"是空操作**（不产生 `onChange`，什么都不会提交）——`catalogRowsOf`（`ModelCatalogEditor.tsx:76-82`）不预填容量文本；② 实现口径是「写回规格值」而非「删键」（spec §5 注记）——不要按「字段消失」判 | |
 | E7 | 容量 K/M | 依次输入 `256K` / `1M` / `131072` / `1000` 并应用 | 分别解析成 256000 / 1000000 / 131072 / 1000；**键盘缓冲不被打断**（敲 `1000` 的中途不会被改写成 `1K`） | |
 | E8 | 非法容量红字 | 输入 `0` / `-1` / `abc` | 行内红字「上下文窗口必须是正数…」；**「应用」禁用** | |
-| E9 | 行校验 | 清空某行 ID / 把两行 ID 改成同名 | 「模型 ID 不能为空」/「模型 ID 不能重复」；重复只标**后出现**的那一行；应用禁用 | |
+| E9 | 行校验 | 清空某行 ID / 把两行 ID 改成同名 | 「模型 ID 不能为空」/「模型 ID 不能重复」；重复只标**后出现**的那一行；应用禁用。⚠️ 「后出现」按**存储序**判（`rowErrorsOf` 遍历的是存储序），而列表是**倒序显示**的 → 屏幕上看红字可能落在**上面**那一行，别按屏幕上下判 | |
 | E10 | 倒序显示 | 添加一行新模型 → 应用 → 重开 | 新行显示在**最上**（显示层倒序）；**操作定位仍按存储序**（点某行的删除删掉的是那一行，不是显示位置错位的那一行） | |
 | E11 | 未编辑行不受影响 | 只改 A 行的容量 → 应用 → 检查 B 行 | B 行的 name / 容量 / 输入类型**一个都没变**（「没碰过的字段不覆盖」） | |
 
@@ -282,7 +290,7 @@ node "$D" eval "const b=window.__rm.split('\n'), a=document.body.innerText.split
 | H1 | 引用检查在前 | 先**记下当前默认模型**，再用**状态栏右下角的模型选择器**（`StatusBar.tsx:76` 的 ModelPicker）把默认模型切成夹具账户的某个模型 → 点该夹具账户的删除 | **不弹确认框**，直接 toast「以下位置正在使用这些模型，请先改掉再删除：…」（引用源含默认模型 / 三层路由 / 会话 / 向量配置） | |
 | H2 | 确认文案 | **先把默认模型切回原值**（消除引用）→ 再点删除 | 弹「删除供应商账户「{name}」？其下已勾选的 {n} 个模型条目会一并删除。」；**取消 → 账户还在** | |
 | H3 | **顺序：先凭据后配置** | 删除前记下 `credentials.json` 的 refs 集合 → 确认删除 → 事后查 | refs 集合**少了该账户的那一个**且**不多出孤儿**：说明 `credential:unset` 在 `llm:delete-provider` 之前跑过（反序会先丢掉 `apiKeyRef`，那条密文就永远无人认领）。失败路径的日志在 `Save:Settings` 源 | |
-| H4 | unset 失败中止 | 人为让凭据写盘失败（C 组末尾「制造写盘失败」框，**用完立刻解除**）→ 删除夹具账户 | 中止：toast「删除已存密钥失败，账户未删除：…」；**账户仍在行列表里**；恢复权限后可重试成功 | |
+| H4 | unset 失败中止 | 人为让凭据写盘失败（C 组末尾「制造写盘失败」框：`attrib +R credentials.json`，**用完立刻 `attrib -R`**）→ 删除夹具账户 | 中止：toast「删除已存密钥失败，账户未删除：…」；**账户仍在行列表里**；恢复权限后可重试成功 | |
 | H5 | env 影子跳过凭据步骤 | ① 先建一个「自定义 API」夹具账户（ref = `CUSTOM_API_KEY`）并给它填个假 key ② 重启：`CUSTOM_API_KEY=rm-shadow-2 pnpm run dev`（假值）③ 删除该夹具账户。⚠️ **不要**用 `OPENAI_API_KEY` 造这条 —— 它已被真实账户占用，新 openai 账户只会拿到 `OPENAI_API_KEY_2`，造不出影子 | **成功删除**（不卡在「该密钥由环境变量提供」）——影子下跳过凭据步骤（dsh `targetOf` 同款）；`credentials.json` 里那条 `CUSTOM_API_KEY` 值**留着**（环境提供的值不归本页管，删配置不删它） | |
 | H6 | 删光落库 | 删除后查 `providers.json` / `models.json` | 账户与其派生条目都没了；**手工条目与其它账户一个不动** | |
 
@@ -348,7 +356,7 @@ node "$D" eval "const b=window.__rm.split('\n'), a=document.body.innerText.split
 
 ```
 执行人：                            日期：
-构建：dev 未打包（master 7762b68；electron/main.ts 临时 CDP 端口行验后已还原，git diff 干净）
+构建：dev 未打包（执行时 HEAD：__________；electron/main.ts 临时 CDP 端口行验后已还原，git diff 干净）
 门禁基线（2026-10-01 实测）：tsc 0 / eslint 0 / vitest 214 files · 2526 tests 全绿
 CDP target：
 夹具账户：RM-V3-2026-10-01（用后已删）
@@ -405,8 +413,8 @@ CDP target：
 - [ ] 确认夹具账户 `RM-V3-2026-10-01` 已删除、凭据库里无它的孤儿 ref
 - [ ] 确认 `*.pre-credentials.bak` 两份仍在
 - [ ] 证据目录保留在 Temp（不进仓库）
-- [ ] 解除所有临时权限改动：`icacls "$USERPROFILE\.novelforge" /remove:d "$USERNAME"`（C5/H4 用过就要做）；
-      `icacls "$USERPROFILE\.novelforge"` 确认输出里**没有** `(DENY)` 行
+- [ ] 解除所有临时权限改动：`attrib -R "$USERPROFILE\.novelforge\credentials.json"`（C5/H4 用过就要做）；
+      `ls -l "$USERPROFILE/.novelforge/credentials.json"` 确认**不再是** `-r--r--r--`
 - [ ] 关掉带 `OPENAI_API_KEY` / `CUSTOM_API_KEY` 环境变量的那些 shell（B / H5 组），后续重启用**干净**环境
 
 ## 10. 已知限制与外部阻塞
