@@ -148,8 +148,9 @@
 - **resolve(ref)**：env 非空 → `{ value, source: 'env' }`；否则 store 非空 → `'store'`；否则 undefined。
   **每次使用前解析**（热轮换：改动在下一次请求生效）。
 - **describe**：configured = 上述非空；writable = env 未影子（env 命中 → false）。
-- **set**：拒绝 纯空白 / 非可打印 ASCII（`^[\x21-\x7E]+$`）/ `NAME=value` 形（`^[A-Z][A-Z0-9_]*=[^=]`）/
-  引号包裹；env 影子时拒绝（提示由环境变量提供、不可覆盖）。
+- **set**：对 **trim 后**的值判定——纯空白 → 拒绝（keyBlank）；含非可打印 ASCII（`^[\x21-\x7E]+$` 外）/
+  `NAME=value` 形（`^[A-Z][A-Z0-9_]*=[^=]`）/ 引号包裹 → 拒绝；**边缘空白是粘贴噪声，trim 清理后存入**；
+  env 影子时拒绝（提示由环境变量提供、不可覆盖）。
 - **unset**：幂等；env 影子时同样拒绝。
 - 空输入 = 不提供（保留已存值；新账户 = 无密钥/原生，如 Ollama）。
 
@@ -177,8 +178,9 @@
   typed key wins）——保住 v2 已对齐的「保存前探测」。
 - **渲染层剥离**：`llm:get-models*` 等回传的 profile **不含 apiKey**（类型天然保证），带 `apiKeyRef`；
   凭据状态一律走 `credential:describe` 批量（设置段打开时一次拉全）。
-- **删除账户**：先 `credential:unset(ref)`（失败 → 中止、行保留、可重试）→ 再删 providers.json 条目 + 同步派生；
-  两步分别幂等。
+- **删除账户**：先 `credential:describe(ref)`——`writable === true` 时先 `unset`（失败 → 中止、行保留、可重试）；
+  env 影子（`writable === false`）时**跳过凭据步骤**（该值由环境提供、不归本页管理——dsh `targetOf` 同款判定）
+  → 再删 providers.json 条目 + 同步派生；两步分别幂等。
 - **「应用」顺序照 dsh**：先落账户配置（含 revision 校验），成功后写凭据；凭据阶段失败 → 账户已存、
   提示仅重试凭据（下次应用只补凭据写）。
 
