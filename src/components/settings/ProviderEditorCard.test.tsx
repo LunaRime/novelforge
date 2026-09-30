@@ -30,6 +30,8 @@ const state = vi.hoisted(() => ({
     success: boolean; error?: string; revision?: number; conflict?: boolean
   }>>(async () => ({ success: true, revision: 2 })),
   describeCredentials: vi.fn(async () => {}),
+  loadProviders: vi.fn(async () => {}),
+  loadModels: vi.fn(async () => {}),
   unsetCredential: vi.fn(async () => ({ success: true })),
   deleteProvider: vi.fn(async () => ({ success: true })),
   providers: [] as Array<{ id: string; displayName?: string }>,
@@ -223,6 +225,26 @@ describe('ProviderEditorCard 行内编辑卡', () => {
     expect(onClose).not.toHaveBeenCalled()
     expect(inputByLabel('API 密钥').value).toBe('sk-abc')
     expect(toastError).toHaveBeenCalledWith(expect.stringContaining('配置已被其他窗口修改，请重载'))
+  })
+
+  it('conflict → 卡内「重新加载」就地出口：重读账户与条目、草稿不动，重载后可再提交', async () => {
+    state.saveProvider.mockImplementationOnce(async () => ({ success: false, conflict: true, error: 'provider/conflict' }))
+    const onClose = vi.fn()
+    render({ keyInfo: MISSING, onClose })
+    await act(async () => { setValue(inputByLabel('API 密钥'), 'sk-abc') })
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    await act(async () => { buttonByText('重新加载').click(); await tick() })
+    expect(state.loadProviders).toHaveBeenCalled()
+    expect(state.loadModels).toHaveBeenCalled()
+    expect(inputByLabel('API 密钥').value, '重载不动草稿').toBe('sk-abc')
+
+    // 版本号跟上后再点「应用」即可写入（这就是 conflict 的恢复路径）
+    await act(async () => { buttonByText('应用').click(); await tick() })
+    expect(state.saveProvider).toHaveBeenLastCalledWith(
+      expect.objectContaining({ id: 'acct-1' }), undefined, 7, 'sk-abc', undefined,
+    )
+    expect(onClose).toHaveBeenCalledWith(true)
   })
 
   it('凭据阶段失败（带 revision = 配置已写）→ 文案说清「配置已保存，密钥未写入」+ 草稿保留', async () => {

@@ -77,6 +77,8 @@ export function ProviderEditorCard({
   const { t } = useTranslation()
   const saveProvider = useLLMStore((s) => s.saveProvider)
   const models = useLLMStore((s) => s.models)
+  const loadProviders = useLLMStore((s) => s.loadProviders)
+  const loadModels = useLLMStore((s) => s.loadModels)
   const keyFieldId = useId()
 
   /** 密钥草稿：初值**恒空**（只写语义），提交时 trim 后作为一次性参数 */
@@ -88,6 +90,8 @@ export function ProviderEditorCard({
   const [saving, setSaving] = useState(false)
   /** 候选 Modal（探测）是否开着 —— 上报给添加卡做模式切换锁（见 onBusyChange） */
   const [catalogBusy, setCatalogBusy] = useState(false)
+  /** 上次提交撞了 revision 冲突 —— 卡内给一条「重新加载」的就地出口（见 handleReload） */
+  const [conflict, setConflict] = useState(false)
   /** 上一次见到的 provider —— 用于识别「换家」（只有添加卡会换；编辑卡的 provider 锁定） */
   const providerRef = useRef(account.provider)
 
@@ -166,9 +170,22 @@ export function ProviderEditorCard({
     }
     : undefined
 
+  /**
+   * conflict 的就地出口：重读盘上真值（账户 + revision + 派生条目 + 凭据状态）。
+   *
+   * 草稿**原样留着** —— 这正是冲突后用户要的：另一窗口写完之后，他手上这份编辑仍然算数，
+   * 只要版本号跟上，再点一次「应用」即可写入。不自动重载：那会把用户还没提交的修改
+   * 与另一窗口的结果静默合并，冲突提示就失去意义了（T6 评审 Minor ④ 的收编）。
+   */
+  const handleReload = async () => {
+    await Promise.all([loadProviders(), loadModels()])
+    setConflict(false)
+  }
+
   const handleApply = async () => {
     // 行内红字已是门控：非法值不提交（主进程还会再判一次 —— 渲染层可被绕过）
     if (failure || saving || !catalogValid) return
+    setConflict(false)
     setSaving(true)
     const t0 = Date.now()
     try {
@@ -192,8 +209,9 @@ export function ProviderEditorCard({
         catalogOverrides(catalog, accountModels),
       )
       if (result.conflict) {
-        // 一个字节都没写（主进程在写队列内校验）：只提示重载，草稿与卡都留着
+        // 一个字节都没写（主进程在写队列内校验）：草稿与卡都留着，卡内给一条就地「重新加载」
         renderLog('error', 'Save:Settings', `provider save conflict: ${account.provider}`)
+        setConflict(true)
         toast.error(t('model.conflictReload'))
         return
       }
@@ -329,6 +347,19 @@ export function ProviderEditorCard({
             </div>
           </div>
         </Disclosure>
+
+        {/* conflict 的就地出口：提示 + 一个真能点的动作（此前只有 toast 里一句「请重载」，
+            而「重载」在界面上无路可走 —— 编辑卡会随设置段标签切走而卸载，草稿一起没） */}
+        {conflict && (
+          <div className="flex items-center gap-2" role="alert">
+            <span className="text-2xs flex-1" style={{ color: 'var(--color-warning)' }}>
+              {t('model.conflictReload')}
+            </span>
+            <Button variant="outline" size="sm" disabled={saving} onClick={() => void handleReload()}>
+              {t('action.reload')}
+            </Button>
+          </div>
+        )}
 
         <div className="flex items-center justify-end gap-2">
           <Button variant="ghost" size="sm" disabled={saving} onClick={() => onClose(false)}>

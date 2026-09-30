@@ -22,6 +22,7 @@ export const uiTexts = {
   'action.cancel': { 'zh-CN': '取消', 'en-US': 'Cancel', 'ru-RU': 'Отмена' },
   'action.discard': { 'zh-CN': '放弃', 'en-US': 'Discard', 'ru-RU': 'Отменить' },
   'action.apply': { 'zh-CN': '应用', 'en-US': 'Apply', 'ru-RU': 'Применить' },
+  'action.reload': { 'zh-CN': '重新加载', 'en-US': 'Reload', 'ru-RU': 'Перезагрузить' },
   // 只写密钥框的显示/隐藏（掩码切换）—— 不叫「显示密码」：这类框里没有已存的密码可显示，
   // 只在用户**自己刚输入**的草稿上切掩码
   'action.showKey': { 'zh-CN': '显示输入的密钥', 'en-US': 'Show the typed key', 'ru-RU': 'Показать введённый ключ' },
