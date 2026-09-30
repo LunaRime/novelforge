@@ -102,9 +102,11 @@ describe('apiKeyFailure', () => {
     expect(apiKeyFailure('"sk-abc"')).toBe('keyIllegalCharacters')
     expect(apiKeyFailure("'sk-abc'")).toBe('keyIllegalCharacters')
   })
-  it('拒绝非可打印 ASCII（含中文/控制符）', () => {
+  it('拒绝非可打印 ASCII（含中文）；边缘空白是粘贴噪声（trim 后判定）', () => {
     expect(apiKeyFailure('sk-密钥')).toBe('keyIllegalCharacters')
-    expect(apiKeyFailure('sk-abc\t')).toBe('keyIllegalCharacters')
+    // 2026-10-01 裁定（trim-first，照 dsh；spec §4.4 修订版）：\t 属边缘空白，trim 后有效
+    expect(apiKeyFailure('sk-abc\t')).toBeUndefined()
+    expect(apiKeyFailure(' sk-abc ')).toBeUndefined()
   })
   it('正常 key 通过（含 sk- 前缀与 base64 形）', () => {
     expect(apiKeyFailure('sk-proj-abcDEF123')).toBeUndefined()
