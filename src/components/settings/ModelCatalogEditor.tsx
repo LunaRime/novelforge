@@ -1,6 +1,6 @@
 /* eslint-disable react-refresh/only-export-components -- 有意混合导出：目录草稿的四个纯函数
    与组件同属一处语义（草稿形状 = 提交形状），拆文件只会让「改了 ModelDraft 字段却没改解析」这类
-   漂移变成两个文件之间的事；ModelForm.tsx / ProviderAccountsSection.tsx 同款先例。 */
+   漂移变成两个文件之间的事；ModelForm.tsx 同款先例。 */
 import { useEffect, useMemo, useState } from 'react'
 import { Plus } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'

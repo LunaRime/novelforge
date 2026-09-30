@@ -1,5 +1,5 @@
 /**
- * 模型引用检查（模型管理 T9 自 `ProviderAccountsSection` 迁出，行为零变化）。
+ * 模型引用检查（模型管理 v3 T9 迁出自**已删**的 `ProviderAccountsSection`，行为零变化）。
  *
  * 为什么住在渲染层：判据要从**三个 store** 汇集（llm 的默认模型与路由、agent 的会话、
  * vector 的向量化配置）；下沉 `src/shared/` 会把 store 依赖带进主进程，得不偿失。

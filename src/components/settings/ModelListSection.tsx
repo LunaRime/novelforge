@@ -4,8 +4,8 @@
  * 本文件是**薄容器**：标题（计数）+ `ProviderRowList`（供应商行 + 行内编辑卡 + 添加卡 + 空态）
  * + 「其他」卡。行的行为（单开/三态灯/删除顺序/添加卡）全在 `ProviderRowList` 里，这里不重复。
  *
- * 与 v2 的差异：一体卡（`ModelProviderCard`）退役 —— 卡头变行、卡内模型行搬进编辑卡的目录区
- * （T7 挂载）；本段不再常驻显示任何模型条目。「其他」卡自 T9 起住在 `OrphanCard.tsx`。
+ * 与 v2 的差异：一体卡已退役 —— 卡头变行、卡内模型行搬进编辑卡的目录区（T7 挂载）；
+ * 本段不再常驻显示任何模型条目。「其他」卡自 T9 起住在 `OrphanCard.tsx`。
  */
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'

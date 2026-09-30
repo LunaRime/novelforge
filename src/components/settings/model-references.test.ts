@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * 引用检查（T9 从 `ProviderAccountsSection` 迁到 `model-references.ts`）—— 行为**零变化**，
+ * 引用检查（T9 从**已删**的 `ProviderAccountsSection` 迁到 `model-references.ts`）—— 行为**零变化**，
  * 迁移后必须仍能拦住「删掉还被引用的模型」：默认模型 / 默认向量模型 / LLM 向量化 / 三层路由 / 会话。
  *
  * 三个 store 在本用例里直接打桩（判据是「谁在引用」的汇集，不是 store 本身）。

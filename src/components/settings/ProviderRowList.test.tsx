@@ -307,6 +307,33 @@ describe('ProviderRowList 供应商行列表', () => {
     expect(keyInput()).toBeNull() // 成功后关卡
   })
 
+  it('连续保存：重新开卡即清空上一条播报（同一个名字再存一次也会发声）', async () => {
+    state.providers = [CUSTOM]
+    state.credentialInfo = { CUSTOM_API_KEY: CONFIGURED }
+    const el = render()
+    const live = () => el.querySelector('[role="status"][aria-live="polite"]')?.textContent
+
+    await act(async () => { buttonByLabel('编辑')[0].click() })
+    await act(async () => {
+      const apply = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === '应用')!
+      apply.click()
+      await tick()
+    })
+    expect(live()).toContain('已保存')
+    expect(keyInput()).toBeNull() // 成功后关卡
+
+    // 再开一次（同名账户）→ 播报先清空，保存后再出现 —— aria-live 只在内容变化时发声
+    await act(async () => { buttonByLabel('编辑')[0].click() })
+    expect(live()).toBe('')
+
+    await act(async () => {
+      const apply = [...el.querySelectorAll('button')].find((b) => b.textContent?.trim() === '应用')!
+      apply.click()
+      await tick()
+    })
+    expect(live()).toContain('已保存')
+  })
+
   it('取消（没写过盘）→ 关卡且不播报', async () => {
     state.providers = [CUSTOM]
     state.credentialInfo = { CUSTOM_API_KEY: CONFIGURED }

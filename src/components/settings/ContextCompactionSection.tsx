@@ -53,7 +53,7 @@ export default function ContextCompactionSection() {
       if (res && res.success === false) throw new Error('config:set failed')
       setPrefs(clamped)
       toast.success(t('settings.compactionSaved'))
-      // 仓库规范：设置页保存同时进 LogsView（对照 DeveloperModeSection / ProviderAccountsSection）
+      // 仓库规范：设置页保存同时进 LogsView（对照 DeveloperModeSection / ProviderEditorCard）
       renderLog('info', 'Save:Settings', t('log.render.compactionPrefsSaved')
         .replace('{history}', String(clamped.historyMaxTokens))
         .replace('{minChange}', String(clamped.minimumChangeTokens))

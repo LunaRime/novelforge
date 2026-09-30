@@ -70,6 +70,9 @@ export function ProviderRowList() {
       if (!ok) return
     }
     dirtyRef.current = false
+    // 开卡即清掉上一条播报：aria-live 只在**内容变化**时发声，不清的话
+    // 「同一个名字连存两次」第二次是静默的（T6 评审 Minor ⑤）
+    setSavedName(null)
     setEditingId(id)
   }
 

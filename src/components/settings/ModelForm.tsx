@@ -116,7 +116,7 @@ export function ModelForm({
     const res = await useLLMStore.getState().listProviderModels({
       provider: model.provider, protocol: model.protocol,
       // 密钥二选一（v3 §4.7）：表单里刚敲的草稿优先，否则按 apiKeyRef 解析
-      //（与 ProviderAccountsSection 同一处口径）
+      //（与行内编辑卡同一处口径）
       apiKeyDraft: keyDraft.trim() || undefined,
       apiKeyRef: model.apiKeyRef,
       baseUrl: model.baseUrl,
