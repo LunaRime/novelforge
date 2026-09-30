@@ -139,6 +139,18 @@ describe('describeCredentials 的合并/替换语义', () => {
     })
   })
 
+  it('全量（不传 refs）→ refs 取自账户**与手工条目**（T9：「其他」卡的状态不许被全量刷新抹掉）', async () => {
+    useLLMStore.setState({
+      providers: [ACCOUNT],
+      models: [{ id: 'legacy-1', apiKeyRef: 'LEGACY_API_KEY' } as never],
+    })
+    stubIPC({ 'credential:describe': () => ({}) })
+
+    await useLLMStore.getState().describeCredentials()
+
+    expect(invokeMock).toHaveBeenCalledWith('credential:describe', ['CUSTOM_API_KEY', 'LEGACY_API_KEY'])
+  })
+
   it('全量且一个 ref 都没有 → 清空缓存（删光账户后旧灯色不许滞留）', async () => {
     useLLMStore.setState({
       providers: [],
@@ -243,5 +255,22 @@ describe('返回值形状（评审 m5：error 要能被消费）', () => {
 
     expect(result).toEqual({ success: true })
     expect(channels()).toContain('llm:list-models')
+  })
+
+  it('saveModel 成功 → 顺带刷新凭据状态（T9：手工条目保存时**首次分配**的 ref 要立刻被认账）', async () => {
+    stubIPC({
+      'llm:save-model': () => ({ success: true }),
+      'llm:list-models': () => [{
+        id: 'm1', name: 'm1', provider: 'custom', protocol: 'openai', modelName: 'm1',
+        apiKeyRef: 'M1_API_KEY', baseUrl: '', temperature: 0.7,
+        maxTokens: 4096, contextWindow: 4096, purposes: ['generation'],
+      }],
+      'credential:describe': () => ({ M1_API_KEY: { configured: true, source: 'store', writable: true } }),
+    })
+
+    await useLLMStore.getState().saveModel({ id: 'm1' } as never)
+
+    expect(invokeMock).toHaveBeenCalledWith('credential:describe', ['M1_API_KEY'])
+    expect(useLLMStore.getState().credentialInfo.M1_API_KEY.configured).toBe(true)
   })
 })

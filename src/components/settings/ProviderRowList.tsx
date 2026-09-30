@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Plus, Settings2, Trash2 } from 'lucide-react'
+import { Plus, Settings2, Trash2, Zap } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
 import type { ProviderAccount } from '../../shared/ipc-channels'
-import { randomUUID } from '../../utils/id'
 import { renderLog } from '../../services/render-logger'
 import { Button } from '../ui/Button'
 import MenuRow from '../ui/MenuRow'
@@ -14,28 +13,14 @@ import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { CredentialDot } from './CredentialDot'
 import { ProviderEditorCard } from './ProviderEditorCard'
-import { ProviderAccountForm, blockingReferences } from './ProviderAccountsSection'
+import { AddProviderCard } from './AddProviderCard'
+import { blockingReferences } from './model-references'
 
 /** 行的显示名：自定义显示名 → 预设名 → provider id 兜底 */
 function displayNameOf(account: ProviderAccount): string {
   const custom = account.displayName?.trim()
   if (custom) return custom
   return BUILTIN_PRESETS.find((p) => p.provider === account.provider)?.displayName ?? account.provider
-}
-
-/** 新建账户的初值：目录模式第一家（有模型的家）；两模式在表单里切换 */
-function newAccount(): ProviderAccount {
-  const preset =
-    BUILTIN_PRESETS.find((p) => p.provider !== 'custom' && (p.models.length > 0 || p.embeddingModels.length > 0)) ??
-    BUILTIN_PRESETS[0]
-  return {
-    id: randomUUID(),
-    provider: preset.provider as ProviderAccount['provider'],
-    protocol: preset.protocol,
-    baseUrl: preset.baseUrl,
-    // ⚠️ 不写 `modelNames: []`（v3 §3.1：空数组 = **继承内置目录**，与「一个模型都没有」表达相反）——
-    //    缺省才是「新账户 = 用该家默认目录」的本意
-  }
 }
 
 /**
@@ -47,6 +32,9 @@ function newAccount(): ProviderAccount {
  *
  * 凭据灯的数据源是 `credential:describe`（**批量**，设置段打开时一次拉全）——行上没有密钥值，
  * 只有状态（`CredentialDot` 三态）。删除顺序见 spec §4.7：**先凭据后配置**（见 `handleDelete`）。
+ *
+ * 本列表还承载两个入口（T9）：**添加卡**（`AddProviderCard`，与行列表并存而非替换 —— 见下）
+ * 与**首次运行的空态**（无账户且无条目时；它的按钮与底部按钮是同一个开关）。
  *
  * store 驱动、无 props：容器（`ModelListSection`）只负责标题与「其他」卡，行的一切自持。
  */
@@ -61,7 +49,7 @@ export function ProviderRowList() {
   const unsetCredential = useLLMStore((s) => s.unsetCredential)
 
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [adding, setAdding] = useState<ProviderAccount | null>(null)
+  const [adding, setAdding] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
   /** 保存成功的播报文案（spec §2.7 的 aria-live；名字取 reload 后的那一行） */
   const [savedName, setSavedName] = useState<string | null>(null)
@@ -152,10 +140,20 @@ export function ProviderRowList() {
     }
   }
 
-  // 添加卡（复用 v2 的两模式表单；T9 换成 dsh 式「添加模型提供商」卡）
-  if (adding) {
-    return <ProviderAccountForm account={adding} onCancel={() => setAdding(null)} onDone={() => setAdding(null)} />
-  }
+  /** 添加成功后：收起添加卡 + 播报「已保存 {name}」（名字取**重载后**的那一行，同编辑卡口径） */
+  const announceAdded = useCallback((accountId: string) => {
+    setAdding(false)
+    const fresh = useLLMStore.getState().providers.find((p) => p.id === accountId)
+    if (fresh) setSavedName(displayNameOf(fresh))
+  }, [])
+
+  /**
+   * 空态（无账户且无任何条目 = 首次运行的「保留空态」，v3 §2.4）。
+   *
+   * ⚠️ 它住在行列表里而不是容器（`ModelListSection`）里：添加入口**只有一个**、
+   * `adding` 状态也就只有一处 —— 空态的按钮与列表底部的按钮是同一个开关。
+   */
+  const isEmpty = providers.length === 0 && models.length === 0
 
   return (
     <div>
@@ -222,12 +220,34 @@ export function ProviderRowList() {
         )
       })}
 
-      <div className="flex items-center px-1 pt-1">
-        <Button size="sm" variant="outline" onClick={() => setAdding(newAccount())}>
-          <Plus size={13} />
-          {t('provider.addVendor')}
-        </Button>
-      </div>
+      {/* 添加卡（v3 §2.3）：**替换按钮、不替换行列表** —— 打开它不会卸载任何已展开的编辑卡，
+          那条「点了添加就丢掉未保存草稿」的路径（T6 评审 Minor ①）到此封死。 */}
+      {adding ? (
+        <div className="pt-1">
+          <AddProviderCard onCancel={() => setAdding(false)} onDone={announceAdded} />
+        </div>
+      ) : isEmpty ? (
+        <div
+          className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
+          style={{ border: '1.5px dashed var(--color-border)' }}
+        >
+          <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+          <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
+            {t('model.noLabelConfig').replace('{label}', '')}
+          </span>
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus size={13} />
+            {t('provider.addVendor')}
+          </Button>
+        </div>
+      ) : (
+        <div className="flex items-center px-1 pt-1">
+          <Button size="sm" variant="outline" onClick={() => setAdding(true)}>
+            <Plus size={13} />
+            {t('provider.addVendor')}
+          </Button>
+        </div>
+      )}
     </div>
   )
 }

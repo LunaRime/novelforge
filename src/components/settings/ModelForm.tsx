@@ -1,8 +1,14 @@
 /* eslint-disable react-refresh/only-export-components -- 有意混合导出：tokenSpec 与 ModelForm
    强关联（切换预设即重算规格），拆文件只会把一处内聚逻辑劈两半；Button.tsx 同款先例。 */
 /**
- * ModelForm — 模型编辑表单（自 ModelListSection 迁出，2026-09-28；一体卡内行内编辑复用）。
- * tokenSpec 随迁并导出：行内编辑（本文件）与卡片的新增默认值（ModelProviderCard）共用。
+ * ModelForm — 「其他」卡（无归属手工条目）的行内编辑表单（模型管理 v3 §2.8）。
+ *
+ * 一体的供应商卡退役后，本表单只服务一种情形：`models.json` 里**不属于任何供应商账户**的
+ * 历史条目（P3 兼容层，可见可编辑可删、不自动迁移）。它的 provider/地址是用户手填的，
+ * 猜错了会静默改掉他的端点，所以这里保留完整的 provider / 地址 / 模型标识字段。
+ *
+ * 凭据**只写**（v3 §4.4）：框里恒空（已存的键读不回来），输入的值走一次性 `apiKeyDraft`；
+ * placeholder 三态与行内编辑卡同口径（`credential-field.ts`，两处各写一套必然漂移）。
  */
 import { useEffect, useRef, useState } from 'react'
 import { Download, Eye, EyeOff, Save, Zap } from 'lucide-react'
@@ -15,10 +21,11 @@ import { PopoverSurface } from '../ui/PopoverSurface'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
-import type { ModelProfile } from '../../shared/ipc-channels'
+import type { CredentialInfo, ModelProfile } from '../../shared/ipc-channels'
 import { LLM_PROTOCOLS, type LLMProtocol } from '../../shared/llm-protocols'
 import type { ModelPreset, ProviderPreset } from '../../shared/provider-presets'
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
+import { credentialFieldState } from './credential-field'
 
 /**
  * 从预设取「该模型的 token 规格」—— `maxTokens`（输出）与 `contextWindow`（窗口）**成对**返回。
@@ -48,9 +55,9 @@ function hasUsableKey(model: ModelProfile, keyDraft: string): boolean {
   return Boolean(model.apiKeyRef || keyDraft.trim()) || model.provider === 'ollama'
 }
 
-/** 模型编辑表单 */
+/** 模型编辑表单（「其他」卡专用） */
 export function ModelForm({
-  model, onChange, onSave, onCancel, saving, presets,
+  model, onChange, onSave, onCancel, saving, presets, keyInfo,
 }: {
   model: ModelProfile
   onChange: (m: ModelProfile) => void
@@ -58,15 +65,18 @@ export function ModelForm({
   onSave: (apiKeyDraft?: string) => void
   onCancel: () => void
   saving: boolean
-  purposeOptions: ModelProfile['purposes']
   /** 服务商预设（来自 BUILTIN_PRESETS 常量） */
   presets: ProviderPreset[]
+  /**
+   * 该条目 `apiKeyRef` 的 describe 结果（`undefined` = 还没查到 / 该条目尚无 ref）。
+   * 驱动密钥框的 placeholder 三态与 env 只读（与行内编辑卡同口径）。
+   */
+  keyInfo?: CredentialInfo
 }) {
   const { t } = useTranslation()
   const [showKey, setShowKey] = useState(false)
   /**
    * 密钥草稿（v3 §4.4 只写语义）：初值**恒空**（已存的键读不回来，框里空 = 不变更）。
-   * ⚠️ 过渡形态：T9 会把本表单改成「其他」卡专用并接 describe 三态 placeholder。
    */
   const [keyDraft, setKeyDraft] = useState('')
   // 标记"模型标识"是否使用自定义输入模式
@@ -191,11 +201,15 @@ export function ModelForm({
   const handleTest = async () => {
     setTesting(true)
     setTestResult(null)
+    // 草稿密钥优先（typed key wins）：刚敲的键要能当场验证，不必先保存一轮
     const result = await testConnection(model, keyDraft.trim() || undefined)
     setTestResult(result)
     setTesting(false)
     setTimeout(() => setTestResult(null), 3000)
   }
+
+  /** 密钥框状态（只写 placeholder 三态 + env 影子只读）——与行内编辑卡同一条判据 */
+  const { envLocked, placeholder } = credentialFieldState(keyInfo, model.provider, model.apiKeyRef, t)
 
   return (
     <div
@@ -256,15 +270,22 @@ export function ModelForm({
         <div className="relative">
           <Input
             type={showKey ? 'text' : 'password'}
+            autoComplete="off"
+            spellCheck={false}
             value={keyDraft}
+            disabled={envLocked}
             onChange={(e) => setKeyDraft(e.target.value)}
-            placeholder={model.provider === 'ollama' ? t('model.apiKeyPlaceholder') : 'sk-...'}
+            placeholder={placeholder}
+            aria-label={t('form.apiKey')}
             className="pr-9"
           />
           <button
             type="button"
             onClick={() => setShowKey(!showKey)}
-            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+            disabled={envLocked}
+            title={showKey ? t('action.hideKey') : t('action.showKey')}
+            aria-label={showKey ? t('action.hideKey') : t('action.showKey')}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {showKey ? <EyeOff size={14} /> : <Eye size={14} />}
           </button>

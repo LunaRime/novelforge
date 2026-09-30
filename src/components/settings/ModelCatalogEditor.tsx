@@ -58,6 +58,8 @@ export interface ModelCatalogEditorProps {
    * 由父级判定：只有它同时握着地址与密钥草稿这两个草稿值。
    */
   fetchCredentials?: CatalogFetchCredentials
+  /** 候选 Modal 开关上报（= 探测/采纳流程进行中）——添加卡据此锁住模式切换 */
+  onBusyChange?: (busy: boolean) => void
   disabled?: boolean
 }
 
@@ -320,7 +322,7 @@ function shiftAfterRemove(expanded: ReadonlySet<number>, removed: number): Set<n
  * 已存在行只补缺、不覆盖用户值。
  */
 export function ModelCatalogEditor({
-  provider, existing, value, onChange, onValidityChange, fetchCredentials, disabled,
+  provider, existing, value, onChange, onValidityChange, fetchCredentials, onBusyChange, disabled,
 }: ModelCatalogEditorProps) {
   const { t } = useTranslation()
   const inheriting = value === undefined
@@ -340,6 +342,8 @@ export function ModelCatalogEditor({
   const byName = useMemo(() => new Map(existing.map((m) => [m.modelName, m])), [existing])
 
   useEffect(() => { onValidityChange?.(valid) }, [valid, onValidityChange])
+  // 探测/采纳流程 = 候选 Modal 开着（打开即拉取）。它是模态，背后点不到 —— 锁是第二道防线
+  useEffect(() => { onBusyChange?.(pickerOpen) }, [pickerOpen, onBusyChange])
 
   const patch = (index: number, next: Partial<ModelDraft>) => {
     onChange(rows.map((row, at) => (at === index ? { ...row, ...next } : row)))

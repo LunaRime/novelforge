@@ -321,10 +321,28 @@ describe('ProviderRowList 供应商行列表', () => {
     expect(el.querySelector('[role="status"]')?.textContent).toBe('')
   })
 
-  it('底部「添加模型提供商」→ 打开建卡表单（T9 换成添加卡）', async () => {
+  it('底部「添加模型提供商」→ 打开添加卡（两模式分段）', async () => {
     const el = render()
     const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
     await act(async () => { add.click() })
-    expect(el.textContent).toContain('从供应商目录')
+    expect(el.textContent).toContain('添加模型提供商')
+    expect(el.textContent).toContain('第三方模型提供商')
+    expect(el.textContent).toContain('自定义模型 API')
+  })
+
+  it('打开添加卡不卸载行列表：编辑卡里未保存的草稿仍在（第三条草稿丢失路径已封）', async () => {
+    state.providers = [CUSTOM]
+    state.credentialInfo = { CUSTOM_API_KEY: CONFIGURED }
+    const el = render()
+
+    await act(async () => { buttonByLabel('编辑')[0].click() })
+    await act(async () => { setValue(keyInput(), 'sk-draft') })
+
+    const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    await act(async () => { add.click() })
+
+    // 行列表没被卸载（此前 `if (adding) return <表单/>` 会把整棵行列表换掉，草稿随之蒸发）
+    const drafts = [...el.querySelectorAll<HTMLInputElement>('input[type="password"]')].map((i) => i.value)
+    expect(drafts).toContain('sk-draft')
   })
 })

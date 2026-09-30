@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import { Eye, EyeOff } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
@@ -15,6 +15,7 @@ import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/Select'
 import { toast } from '../ui/Toast'
+import { credentialFieldState } from './credential-field'
 import {
   ModelCatalogEditor, catalogModelNames, catalogOverrides, catalogsEqual, initialCatalogDraft,
   type ModelDraft,
@@ -39,12 +40,25 @@ export interface ProviderEditorCardProps {
    * 「应用失败保留草稿」的语义散成两处。容器只记一个布尔 —— 切换行前问它一次。
    */
   onDirtyChange?: (dirty: boolean) => void
+  /**
+   * 添加卡内的**内嵌形态**（模型管理 v3 §2.3）：不出卡头、不画卡片外观 ——
+   * 标题、边框与底色由添加卡（模式标题 + 一张卡）提供，避免卡中卡的双层描边。
+   */
+  hideTitle?: boolean
+  /** 添加卡的「自定义 API」模式：自定义设置**默认展开** —— 地址/协议是路由字段，不是次要项 */
+  advancedOpen?: boolean
+  /**
+   * 写入 / 探测进行中上报（添加卡据此锁住两模式的分段切换）。
+   * `saving || 候选面板打开`：后者是模态，理论上点不到背后的分段控件，锁是第二道防线。
+   */
+  onBusyChange?: (busy: boolean) => void
 }
 
 /**
  * ProviderEditorCard —— 行内编辑卡（模型管理 v3 §2.2，2026-10-01）。
  *
  * 形态：行下展开、一次只开一张（单开由容器保证）；密钥**只写**、自定义设置折叠、[取消][应用]。
+ * T9 起也承载添加卡的内嵌形态（`hideTitle`/`advancedOpen`）—— 同一张卡，两种外壳。
  *
  * 三条语义（都来自 spec，别在重构里丢掉）：
  * 1. **只写密钥**（§4.4）：框的初值**恒空** —— 已存的密钥读不回来（值在主进程凭据库里），
@@ -58,7 +72,7 @@ export interface ProviderEditorCardProps {
  * 卡挂载的 live region 会在播报前被卸载 —— 由容器（`ProviderRowList`）用重载后的行名播报。
  */
 export function ProviderEditorCard({
-  account, revision, keyInfo, onClose, onDirtyChange,
+  account, revision, keyInfo, onClose, onDirtyChange, hideTitle = false, advancedOpen = false, onBusyChange,
 }: ProviderEditorCardProps) {
   const { t } = useTranslation()
   const saveProvider = useLLMStore((s) => s.saveProvider)
@@ -72,6 +86,10 @@ export function ProviderEditorCard({
   const [baseUrl, setBaseUrl] = useState(account.baseUrl)
   const [protocol, setProtocol] = useState<LLMProtocol>(account.protocol)
   const [saving, setSaving] = useState(false)
+  /** 候选 Modal（探测）是否开着 —— 上报给添加卡做模式切换锁（见 onBusyChange） */
+  const [catalogBusy, setCatalogBusy] = useState(false)
+  /** 上一次见到的 provider —— 用于识别「换家」（只有添加卡会换；编辑卡的 provider 锁定） */
+  const providerRef = useRef(account.provider)
 
   /** 本账户的派生条目 —— 目录区的初值/placeholder/用途标签来源（按 id 前缀取，别拿全局表） */
   const accountModels = useMemo(
@@ -101,15 +119,35 @@ export function ProviderEditorCard({
 
   useEffect(() => { onDirtyChange?.(dirty) }, [dirty, onDirtyChange])
 
-  /** placeholder 三态（v3 §4.5）——env 影子 > 已配置 > ollama 无密钥 > 待输入 */
-  const envLocked = keyInfo !== undefined && !keyInfo.writable
-  const placeholder = envLocked
-    ? t('credential.placeholderEnv').replace('{name}', () => account.apiKeyRef ?? '')
-    : keyInfo?.configured
-      ? t('credential.placeholderConfigured')
-      : account.provider === 'ollama'
-        ? t('credential.placeholderOllama')
-        : t('credential.placeholderEnter')
+  /** 写入 / 探测中上报（添加卡据此锁模式切换） */
+  useEffect(() => { onBusyChange?.(saving || catalogBusy) }, [saving, catalogBusy, onBusyChange])
+
+  /**
+   * 换家重播种（**只有添加卡会发生**：目录模式的 provider 下拉）。
+   *
+   * `provider` 是身份（凭据词干跟着家走，见 §3.1），它的预设决定 protocol/baseUrl ——
+   * 换家后旧家的地址与协议不成立，必须跟着换（否则会把 OpenAI 的地址存进 DeepSeek 账户）。
+   * 卡内别的草稿不动：密钥与家无关；目录的**继承源**变了，故已物化的清单回落继承态
+   * （留着就是上一家的模型名，写进去只会是个坏账户）。
+   *
+   * 编辑卡不会触发：`account` 是打开时的快照，provider 锁定（换家 = 删除重建）。
+   */
+  useEffect(() => {
+    if (account.provider === providerRef.current) return
+    providerRef.current = account.provider
+    setProtocol(account.protocol)
+    setBaseUrl(account.baseUrl)
+    setCatalog(undefined)
+  }, [account.provider, account.protocol, account.baseUrl])
+
+  /** placeholder 三态（v3 §4.5）——env 影子 > 已配置 > ollama 无密钥 > 待输入（与「其他」卡同口径） */
+  const { envLocked, placeholder } = credentialFieldState(keyInfo, account.provider, account.apiKeyRef, t)
+
+  /**
+   * 显示名**仅自定义账户可编**（v3 §3.1）：预设家的名字由预设给（改了也没处显示）。
+   * 组合 patch 时只在这条成立时才带上 displayName —— 否则会把存量账户上的显示名静默清掉。
+   */
+  const canEditDisplayName = account.provider === 'custom'
 
   const presetName = BUILTIN_PRESETS.find((p) => p.provider === account.provider)?.displayName ?? account.provider
 
@@ -139,7 +177,13 @@ export function ProviderEditorCard({
       const result = await saveProvider(
         // provider / id 不在卡里改（身份 = 凭据词干来源，换家 = 删除重建）；
         // modelNames 由目录区接管（清单 + 逐行差异在同一次提交里落盘，不留半成品）
-        { ...account, displayName: displayName.trim() || undefined, baseUrl: baseUrl.trim(), protocol, modelNames },
+        {
+          ...account,
+          ...(canEditDisplayName ? { displayName: displayName.trim() || undefined } : {}),
+          baseUrl: baseUrl.trim(),
+          protocol,
+          modelNames,
+        },
         undefined,
         revision,
         // 空草稿 = 不改已存密钥（§4.4）；有值 = 主进程按 trim 后的值写入凭据库
@@ -177,23 +221,26 @@ export function ProviderEditorCard({
 
   return (
     <section
-      className="rounded-xl overflow-hidden mx-1 mb-1.5"
-      style={{ border: '1px solid var(--color-accent)', backgroundColor: 'var(--color-panel)' }}
+      className={`rounded-xl overflow-hidden${hideTitle ? '' : ' mx-1 mb-1.5'}`}
+      style={hideTitle ? undefined : { border: '1px solid var(--color-accent)', backgroundColor: 'var(--color-panel)' }}
     >
-      {/* 头：身份（provider 锁定 —— 换家 = 删除重建，凭据词干跟着家走） */}
-      <div
-        className="flex items-center gap-2 px-3 h-8"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
-      >
-        <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-          {displayName.trim() || presetName}
-        </span>
-        <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {account.provider}
-        </span>
-      </div>
+      {/* 头：身份（provider 锁定 —— 换家 = 删除重建，凭据词干跟着家走）。
+          添加卡内嵌形态（hideTitle）不出卡头：标题由添加卡的模式承担，边框/底色也由它给。 */}
+      {!hideTitle && (
+        <div
+          className="flex items-center gap-2 px-3 h-8"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
+            {displayName.trim() || presetName}
+          </span>
+          <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+            {account.provider}
+          </span>
+        </div>
+      )}
 
-      <div className="p-3 space-y-3">
+      <div className={hideTitle ? 'space-y-3' : 'p-3 space-y-3'}>
         {/* API 密钥 —— 只写，永不回显 */}
         <div>
           <Label htmlFor={keyFieldId}>{t('credential.keyLabel')}</Label>
@@ -229,18 +276,22 @@ export function ProviderEditorCard({
           )}
         </div>
 
-        {/* 自定义设置（地址/协议多数场景默认就对；模型目录区由 T7 挂进这里） */}
-        <Disclosure label={t('form.advanced')}>
+        {/* 自定义设置（地址/协议多数场景默认就对；模型目录区由 T7 挂进这里）。
+            advancedOpen：添加卡的「自定义 API」模式把它默认摊开 —— 那模式下这些都是路由字段 */}
+        <Disclosure label={t('form.advanced')} defaultOpen={advancedOpen}>
           <div className="space-y-3">
-            <div>
-              <Label htmlFor={`${keyFieldId}-name`}>{t('form.displayName')}</Label>
-              <Input
-                id={`${keyFieldId}-name`}
-                value={displayName}
-                onChange={(e) => setDisplayName(e.target.value)}
-                placeholder={presetName}
-              />
-            </div>
+            {/* 显示名仅自定义账户可编（预设家的名字由预设给；字段出现也只是个改不动的东西） */}
+            {canEditDisplayName && (
+              <div>
+                <Label htmlFor={`${keyFieldId}-name`}>{t('form.displayName')}</Label>
+                <Input
+                  id={`${keyFieldId}-name`}
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  placeholder={presetName}
+                />
+              </div>
+            )}
             <div>
               <Label htmlFor={`${keyFieldId}-url`}>{t('form.apiAddress')}</Label>
               <Input
@@ -271,6 +322,7 @@ export function ProviderEditorCard({
                 value={catalog}
                 onChange={setCatalog}
                 onValidityChange={setCatalogValid}
+                onBusyChange={setCatalogBusy}
                 fetchCredentials={fetchCredentials}
                 disabled={saving}
               />

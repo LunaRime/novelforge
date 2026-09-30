@@ -207,7 +207,13 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
 
   describeCredentials: async (refs) => {
     if (!ipc.isElectron) return
-    const list = refs ?? [...new Set(get().providers.map((p) => p.apiKeyRef).filter((r): r is string => !!r))]
+    // 全量 = **所有已知 ref**：账户的 + 手工条目（「其他」卡）的。
+    // 只收账户会让全量刷新把手工条目的状态一并抹掉（全量是**替换**语义），
+    // 于是「已配置（留空保持不变）」会在任一次账户保存后悄悄退回「输入 API 密钥」。
+    const list = refs ?? [...new Set([
+      ...get().providers.map((p) => p.apiKeyRef),
+      ...get().models.map((m) => m.apiKeyRef),
+    ].filter((r): r is string => !!r))]
     if (list.length === 0) {
       // 全量刷新且一个 ref 都没有 → 清缓存（定点刷新传空数组时无事可做）
       if (!refs) set({ credentialInfo: {} })
@@ -279,6 +285,9 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     const result = await ipc.invoke('llm:save-model', model, apiKeyDraft)
     if (result.success) {
       await get().loadModels()
+      // 保存可能**首次分配** apiKeyRef（手工条目）或刚写入密钥 → 顺带刷新凭据状态，
+      // 否则「其他」卡的 placeholder / 灯要等到设置段重开才认账
+      await get().describeCredentials()
     }
     return result
   },

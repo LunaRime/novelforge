@@ -19,6 +19,8 @@ interface Props<T extends string | number> {
   size?: 'sm' | 'md'
   /** 等宽铺满：容器 w-full、各项等分（弹层里的值选择器用） */
   fill?: boolean
+  /** 整条禁用（写入/探测进行中不许切档）——各项都置 `disabled`，不只是视觉 */
+  disabled?: boolean
   className?: string
 }
 
@@ -46,6 +48,7 @@ export function SegmentedControl<T extends string | number>({
   onChange,
   size = 'md',
   fill = false,
+  disabled = false,
   className,
 }: Props<T>) {
   return (
@@ -63,11 +66,13 @@ export function SegmentedControl<T extends string | number>({
             key={item.value}
             type="button"
             title={item.title}
+            disabled={disabled}
             aria-pressed={active}
             onClick={() => onChange(item.value)}
             className={cn(
               'flex items-center justify-center gap-1 transition-colors',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[var(--color-focus-ring)]',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
               SIZE_CLASS[size],
               fill && 'flex-1',
               active
