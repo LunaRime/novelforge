@@ -194,6 +194,48 @@ export function writeJsonFile(filePath: string, data: unknown) {
   }
 }
 
+/**
+ * 迁移留档后缀（T4）：`providers.json` → `providers.json.pre-credentials.bak`。
+ *
+ * 与 `writeJsonFile` 的 `.tmp.…` 临时文件**不同**——那些是原子写的中转产物（写完即 rename），
+ * 这个是给用户留的**回退点**：迁移把密钥搬进 credentials.json 之前的原始字节。
+ */
+export const CREDENTIAL_MIGRATION_BACKUP_SUFFIX = '.pre-credentials.bak'
+
+/** `backupFileOnce` 的结果：`copied` 已备份 / `skipped` 目标已存在 / `missing` 源不存在 / `failed` 失败 */
+export type BackupOutcome = 'copied' | 'skipped' | 'missing' | 'failed'
+
+/**
+ * 把一个文件**按原始字节**复制成 `*.pre-credentials.bak`（仅当目标不存在；调用方是 T4 迁移）。
+ *
+ * 为什么是字节复制而不是「readJsonFile + writeJsonFile」：备份的语义是**回退点**，
+ * 必须与源文件逐字节一致 —— 走 JSON 解析会把注释/格式丢掉，遇到解析不了的源文件更糟
+ * （`readJsonFile` 会兜底返回 fallback 并照写，于是「备份」变成一份凭空捏造的数据）。
+ *
+ * 源不存在 → `missing`（没东西可备份，也谈不上失败：该文件本来就没有数据要迁）；
+ * 目标已存在 → `skipped`（**不覆盖**：第一次的回退点比后来的更珍贵）。
+ * 注入态下在替身 Map 内完成同样语义（不触真实磁盘）。
+ */
+export function backupFileOnce(filePath: string): BackupOutcome {
+  const dest = filePath + CREDENTIAL_MIGRATION_BACKUP_SUFFIX
+  if (fileInjected) {
+    const files = fileOverride!
+    if (files.has(dest)) return 'skipped'
+    if (!files.has(filePath)) return 'missing'
+    files.set(dest, structuredClone(files.get(filePath)))
+    return 'copied'
+  }
+  try {
+    if (fs.existsSync(dest)) return 'skipped'
+    if (!fs.existsSync(filePath)) return 'missing'
+    fs.copyFileSync(filePath, dest)
+    return 'copied'
+  } catch (error) {
+    console.error(`[NovelForge] 备份 ${filePath} 失败:`, error)
+    return 'failed'
+  }
+}
+
 export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
 export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
 /** 供应商账户（一份凭据挂多个模型）—— 派生条目的凭据来源，见 src/shared/provider-accounts.ts */

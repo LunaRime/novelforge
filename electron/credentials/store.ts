@@ -109,6 +109,43 @@ export function setStoredValue(ref: string, value: string): void {
   current[ref] = value
 }
 
+/**
+ * 并入一批**已是密文**的 ref 值（迁移专用，T4）—— 写盘 + **同步进程内缓存**。
+ *
+ * 为什么不是 `setStoredValue`：那个入口收**明文**并负责加密；迁移搬的是配置文件里原有的
+ * 密文串（`ENC:` 原样搬运），再走一次加密会把密文当明文二次加密。
+ *
+ * 为什么必须由 store 提供、而不是让迁移自己调 `writeCredentialFile`：后者**有意不碰缓存**
+ * （T1 语义：缓存只在首次读时加载）。迁移若直接用它，本进程里已经加载过缓存的会话
+ * 会在「文件字段已清空、缓存里又没有新 ref」的窗口里把密钥解析成空 —— 密钥静默丢失，
+ * 要重启才好（`resolveModelKey` 的明文回落项也已被迁移清掉了）。
+ *
+ * 合并语义：**已有的 ref 一律不被覆盖**（并发写入 / 本进程先前 set 过的值都比调用方的快照新），
+ * 只并入新增项；没有新增 → 不写盘。
+ */
+export function mergeStoredCiphertext(cipherRefs: Record<string, string>): void {
+  // 缓存先取：它是**本进程的权威视图**（含 setStoredValue 写入的、以及用例注入的值），
+  // 而盘上内容可能落后（缓存为冷时这里会从盘上加载一次，语义不变）。
+  // ⚠️ 去重必须连缓存一起看：只看盘会把「盘上没有、进程里已有」的值冲掉 ——
+  //    那正是迁移最不该做的事（把一把已经在用的钥匙改成另一个值）。
+  const current = ensureCache()
+  const file = readCredentialFile()
+  const merged = { ...file.refs }
+  const added: Array<[string, string]> = []
+  for (const [ref, cipher] of Object.entries(cipherRefs)) {
+    if (ref in current || ref in merged) continue
+    merged[ref] = cipher
+    added.push([ref, cipher])
+  }
+  if (added.length === 0) return
+
+  writeCredentialFile({ version: 1, refs: merged })
+  for (const [ref, cipher] of added) {
+    const plain = decryptPlain(cipher)
+    if (plain !== undefined) current[ref] = plain
+  }
+}
+
 /** 删除一个 ref（幂等：不存在 → 不写盘、不抛） */
 export function unsetStoredValue(ref: string): void {
   const file = readCredentialFile()

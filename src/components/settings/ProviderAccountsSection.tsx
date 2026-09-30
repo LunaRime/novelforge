@@ -276,6 +276,9 @@ export function ProviderAccountForm({
       provider: draft.provider,
       protocol: draft.protocol,
       apiKey: draft.apiKey,
+      // 凭据引用（v3 §4.4）：磁盘上的存量账户在迁移后 `apiKey` 为空、值在凭据库里 ——
+      // 不带 ref 的话「获取可用模型」会以「需要密钥」失败（主进程侧 ref 优先，T3 已支持）
+      apiKeyRef: draft.apiKeyRef,
       baseUrl: draft.baseUrl,
     })
     setFetching(false)

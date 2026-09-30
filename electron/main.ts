@@ -9,6 +9,8 @@ import { TITLEBAR_OVERLAY_HEIGHT } from './controllers/config-controller'
 import { closeProjectDatabase } from './database'
 import { installGlobalErrorHandlers, logger, detectLogEnvironment, LogEnvironment } from './utils/logger'
 import { migrateLegacyDirs } from './utils/config-utils'
+import { runCredentialMigration } from './credentials/migrate'
+import { safeErrorMessage } from './utils/error-utils'
 
 import path from 'node:path'
 import { exec } from 'node:child_process'
@@ -297,6 +299,17 @@ app.whenReady().then(async () => {
   // 失败静默、旧路径兜底读取；在 logger/ensureVelaHome 首次写入新目录之前执行，
   // 避免新目录固化出非 auto 形态后迁移永久搁浅）
   await migrateLegacyDirs()
+  // 存量密钥迁移（v3 T4）：把 models.json / providers.json 里的明文（含 ENC: 密文）key
+  // 搬进 credentials.json 并给条目补发 apiKeyRef。幂等（没有遗留 key 时一个字节都不写）
+  // 且可回退（首次执行前留 *.pre-credentials.bak）；必须赶在 registerIPCHandlers/createWindow
+  // 之前 —— 那时还没有任何读写配置的 IPC 在跑，迁移独占三份文件。
+  // 失败不阻断启动：runCredentialMigration 自身已兜底（返回 outcome 不抛），这里的 try/catch
+  // 是启动路径上的最后一道保险（任何异常都不该让应用起不来），且懒迁移钩子还会再试。
+  try {
+    await runCredentialMigration()
+  } catch (error) {
+    logger.error('Main', `[migrate] 存量密钥迁移失败（已忽略，下次启动再试）：${safeErrorMessage(error)}`)
+  }
   // 双环境日志：dev 模式 / 内测版（-alpha.N 或历史日期式）→ 开发日志（DEBUG 全量）；
   // 公测版（-beta.N）/ 正式版 → 发布日志（INFO 起）
   const logEnv = detectLogEnvironment(Boolean(VITE_DEV_SERVER_URL), app.getVersion())

@@ -1,12 +1,14 @@
 import { BrowserWindow } from 'electron'
 import { t } from '../../src/shared/locale'
 import { readJsonFile, writeJsonFile, MODELS_CONFIG_PATH, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, readProvidersFile, writeProvidersFile } from '../utils/config-utils'
+import type { ProvidersFileState } from '../utils/config-utils'
 import { ModelProfile, GlobalConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { MAX_TOKENS_CAP, clampMaxTokens } from '../../src/shared/llm-constants'
 import { syncAccountModels, isModelOfAccount } from '../../src/shared/provider-accounts'
 import { deriveCredentialRef } from '../../src/shared/credential-rules'
 import { readCredentialFile } from '../credentials/store'
 import { resolveModelKey } from '../credentials/resolve'
+import { hasLegacyKey, runCredentialMigration } from '../credentials/migrate'
 import { serialize } from '../utils/config-write-queue'
 import { presetModelDefaults } from '../../src/shared/provider-presets'
 import { listOllamaModels } from '../ollama-embedding'
@@ -20,8 +22,44 @@ import { refreshOutboundProxy } from '../net/proxy-fetch'
 
 const activeStreams = new Map<string, AbortController>()
 
+/** 懒迁移是否已排过（进程内去重；见 scheduleCredentialMigration） */
+let credentialMigrationScheduled = false
+
+/**
+ * 懒迁移（模型管理 v3 T4）：读到**非空 `apiKey`**（明文或 `ENC:` 密文）时补跑一次存量迁移 ——
+ * 把密钥搬进 `credentials.json` 并给条目补发 `apiKeyRef`。启动路径（main.ts）是主入口，
+ * 这里是**安全网**：老数据在运行期才出现（比如用户手工改了配置文件）也不会一直不迁。
+ *
+ * ⚠️ **绝不能 await**：本模块的读路径（`loadModelConfigs` / `readProvidersFile`）大量运行在
+ * `serialize(...)` 任务**内部**，而迁移自己的写盘也排同一个队列 —— 任务内等自己 = 自死锁
+ * （`llm:save-provider` 会直接卡死）。不 await 的代价只是「本次读仍看到迁移前的数据」，
+ * 而明文回落路径本来就支持这个形态（行为零变化）；迁移在后台完成后，**下一次**读即生效。
+ *
+ * ⚠️ 进程内只排一次：读路径是热路径（每次生成都会走），失败重排会让队列堆满注定失败的任务。
+ * 迁移失败不阻断任何功能（文件里的 key 照旧走明文回落），下次启动时启动路径会再试一次。
+ */
+function scheduleCredentialMigration(): void {
+  if (credentialMigrationScheduled) return
+  credentialMigrationScheduled = true
+  void runCredentialMigration().catch((error) => {
+    // runCredentialMigration 内部已兜底（不抛）；这里是最后一道保险，避免未处理的 rejection
+    logger.warn('LLM', `[lazy-migrate] 意外异常（已忽略）：${safeErrorMessage(error)}`)
+  })
+}
+
+/**
+ * 读 providers.json + 懒迁移钩子：让「读 providers」的每个入口都自动带上判定，
+ * 不必各处记得手写一遍（漏一处就会出现「某个入口读到的还是旧形状」的分裂）。
+ */
+function readProvidersFileLazy(): ProvidersFileState {
+  const state = readProvidersFile()
+  if (state.accounts.some((a) => hasLegacyKey(a.apiKey))) scheduleCredentialMigration()
+  return state
+}
+
 function loadModelConfigs(): ModelProfile[] {
   const models = readJsonFile<ModelProfile[]>(MODELS_CONFIG_PATH, [])
+  if (models.some((m) => hasLegacyKey(m.apiKey))) scheduleCredentialMigration()
   let migrated = false
 
   for (const model of models) {
@@ -84,7 +122,7 @@ function mutateProviders(
   fn: (accounts: ProviderAccount[]) => ProviderAccount[],
 ): Promise<ProvidersMutationResult> {
   return serialize<ProvidersMutationResult>('providers', () => {
-    const state = readProvidersFile()
+    const state = readProvidersFileLazy()
     if (expectedRevision !== undefined && expectedRevision !== state.revision) {
       return { kind: 'conflict' }
     }
@@ -384,7 +422,7 @@ export function registerLLMController() {
   // 这样做的理由见 src/shared/provider-accounts.ts 头注释。
 
   guardedHandle('llm:list-providers', async () => {
-    return readProvidersFile().accounts.map((a) => ({
+    return readProvidersFileLazy().accounts.map((a) => ({
       ...a,
       apiKey: decryptApiKey(a.apiKey), // 与模型一致：盘上密文、渲染层明文
     }))
@@ -452,7 +490,7 @@ export function registerLLMController() {
       //   —— 界面上就是「点了删除没反应」。差别是那边回的是英文诊断串（给排障看），
       //   这里按 i18n 标准回可翻译文案（该字符串会一路到渲染层的 toast）。
       //   故存在性先在队列外判（也顺带避免「没得删却 bump 一次 revision」）。
-      if (!readProvidersFile().accounts.some((a) => a.id === accountId)) {
+      if (!readProvidersFileLazy().accounts.some((a) => a.id === accountId)) {
         logger.warn('LLM', `[delete-provider] account not found: ${accountId}`)
         return { success: false, error: t('error.providerNotFound') }
       }

@@ -53,9 +53,10 @@ interface LLMState {
   ) => Promise<boolean>
   /** 删除账户（连同其派生条目）。⚠️ 调用方须先做引用检查（findModelReferences） */
   deleteProvider: (accountId: string) => Promise<boolean>
-  /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常） */
+  /** 拉取某凭据下可用的模型（带可选容量规格；失败返回可操作错误文案，不是异常）。
+   *  `apiKeyRef`（v3 §4.4）：迁移后存量账户的 `apiKey` 已空、值在凭据库 —— 带上 ref 才取得到 key。 */
   listProviderModels: (
-    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl'>,
+    credentials: Pick<ProviderAccount, 'provider' | 'protocol' | 'apiKey' | 'baseUrl' | 'apiKeyRef'>,
   ) => Promise<{ success: boolean; models?: LLMModelCandidate[]; error?: string }>
   /** 保存模型 */
   saveModel: (model: ModelProfile) => Promise<boolean>

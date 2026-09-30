@@ -37,6 +37,18 @@ export function tokenSpec(
   return { maxTokens, contextWindow: presetModel?.contextWindow ?? maxTokens }
 }
 
+/**
+ * 「这个条目有可用的凭据来源」—— 测试连接与保存共用的 gating 判据。
+ *
+ * 过渡期（T4-T5）两种来源并存：条目自带明文（手工条目 / 表单里刚输入的草稿）
+ * 或凭据引用（迁移后由账户派生：`apiKey` 已被搬空，值在凭据库里）。
+ * ⚠️ 只看 `apiKey` 会让迁移后的派生条目**整排按钮变灰**（保存都点不动）；
+ * 两处判据必须同源，否则同一状态下测试能点、保存不能点，用户只会当成 bug。
+ */
+function hasUsableKey(model: ModelProfile): boolean {
+  return Boolean(model.apiKey || model.apiKeyRef) || model.provider === 'ollama'
+}
+
 /** 模型编辑表单 */
 export function ModelForm({
   model, onChange, onSave, onCancel, saving, presets,
@@ -87,7 +99,11 @@ export function ModelForm({
     setFetching(true)
     setFetchError(null)
     const res = await useLLMStore.getState().listProviderModels({
-      provider: model.provider, protocol: model.protocol, apiKey: model.apiKey, baseUrl: model.baseUrl,
+      provider: model.provider, protocol: model.protocol, apiKey: model.apiKey,
+      // 凭据引用（v3 §4.4）：迁移后由账户派生的条目 `apiKey` 已被搬空、值在凭据库 ——
+      // 不带 ref 这一路会以「需要密钥」失败（与 ProviderAccountsSection 同一处口径）
+      apiKeyRef: model.apiKeyRef,
+      baseUrl: model.baseUrl,
     })
     setFetching(false)
     setFetchPanelOpen(true)
@@ -425,7 +441,7 @@ export function ModelForm({
         <Button
           variant="outline"
           onClick={handleTest}
-          disabled={testing || !model.baseUrl || (!model.apiKey && model.provider !== 'ollama')}
+          disabled={testing || !model.baseUrl || !hasUsableKey(model)}
         >
           <Zap size={13} />
           {testing ? t('model.testing') : t('model.testBtn')}
@@ -433,7 +449,7 @@ export function ModelForm({
         <Button
           className="flex-1"
           onClick={onSave}
-          disabled={saving || !model.name || (!model.apiKey && model.provider !== 'ollama')}
+          disabled={saving || !model.name || !hasUsableKey(model)}
         >
           <Save size={13} />
           {saving ? t('model.saving') : t('model.saveBtn')}
