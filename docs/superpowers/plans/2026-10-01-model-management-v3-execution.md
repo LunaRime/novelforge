@@ -250,7 +250,8 @@ git commit -m "feat(credentials): 凭据层模块——ref 派生/校验/resolve
 - Test: `electron/controllers/llm-controller.providers.test.ts`（新：ref 分配/冲突）
 
 **Interfaces:**
-- `builtinCatalogFor(provider: string): string[]` —— `preset.models.map(m => m.name) ∪ preset.embeddingModels`（去重）。
+- `builtinCatalogFor(provider: string): string[]` —— `preset.models` 名 ∪ `preset.embeddingModels` ∪
+  `PI_AI_MODEL_SPECS[provider]` 的键（顺序：手写 models → embeddingModels → 生成表键；全程去重，先到者保留原位）。
 - `syncAccountModels(account, existing, defaults)`：`account.modelNames === undefined || length === 0` →
   wanted = `builtinCatalogFor(account.provider)`；否则现语义。派生条目凭据副本 = `{provider, protocol, apiKey, baseUrl, apiKeyRef: account.apiKeyRef}`
   （`apiKey` 过渡保留至 T5）。
