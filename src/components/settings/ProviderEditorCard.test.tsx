@@ -285,6 +285,20 @@ describe('ProviderEditorCard × 目录区', () => {
     )
   })
 
+  it('目录区：清空容量框 → 随应用提交 contextWindow: null（移除覆盖，回落内置规格）', async () => {
+    render() // ACCOUNT.modelNames = ['gen-1']
+    await act(async () => { container!.querySelector<HTMLButtonElement>('button[aria-label="模型选项 1"]')!.click() })
+    await act(async () => { setValue(inputByAriaLabel('上下文窗口 1'), '256K') }) // 先设
+    await act(async () => { setValue(inputByAriaLabel('上下文窗口 1'), '') })     // 再清空
+    await act(async () => { buttonByText('应用').click(); await tick() })
+
+    expect(state.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'acct-1', modelNames: ['gen-1'] }),
+      undefined, 7, undefined,
+      { 'gen-1': { contextWindow: null } },
+    )
+  })
+
   it('目录行非法（id 清空）→「应用」禁用 + 不提交（account 与目录一起被拦住）', async () => {
     render()
     await act(async () => { setValue(inputByAriaLabel('模型 ID 1'), '') })

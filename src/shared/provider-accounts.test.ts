@@ -244,6 +244,61 @@ describe('syncAccountModels', () => {
       const withEmpty = syncAccountModels(ACCOUNT, [], newModelDefaults, {})
       expect(withEmpty).toEqual(withOut)
     })
+
+    it('⚠️ 三态之 null = **移除覆盖**：字段回到 preset 默认，用户旧值消失', () => {
+      const mine = mkModel({
+        id: deriveModelId(ACCOUNT.id, 'deepseek-v4-pro'),
+        modelName: 'deepseek-v4-pro',
+        contextWindow: 9_999,
+        maxTokens: 4_096,
+        temperature: 1.1,
+        purposes: ['generation', 'refinement'],
+      })
+      const out = syncAccountModels(
+        ACCOUNT,
+        [mine],
+        newModelDefaults,
+        { 'deepseek-v4-pro': { contextWindow: null } }, // 目录区清空该框
+      )
+      const got = out.find(m => m.id === mine.id)!
+
+      expect(got.contextWindow).toBe(DEFAULTS.contextWindow) // 回落内置规格（= 新建条目时的值）
+      expect(got.contextWindow).not.toBe(9_999)
+      expect(got.maxTokens).toBe(4_096)                      // 未列出的字段零影响
+      expect(got.temperature).toBe(1.1)                      // 其它用户字段零影响
+      expect(got.purposes).toEqual(['generation', 'refinement'])
+    })
+
+    it('三态并存：null 回默认 / undefined 不动 / 有值覆盖（同一份 overrides 里各走各的）', () => {
+      const mine = mkModel({
+        id: deriveModelId(ACCOUNT.id, 'deepseek-v4-pro'),
+        modelName: 'deepseek-v4-pro',
+        contextWindow: 9_999,
+        maxTokens: 4_096,
+      })
+      const out = syncAccountModels(ACCOUNT, [mine], newModelDefaults, {
+        'deepseek-v4-pro': { contextWindow: null, maxTokens: 65_536 },
+        'deepseek-v4-flash': { maxTokens: undefined, contextWindow: undefined }, // 空壳 = 没改
+      })
+      const pro = out.find(m => m.modelName === 'deepseek-v4-pro')!
+      expect(pro.contextWindow).toBe(DEFAULTS.contextWindow) // null → 回默认
+      expect(pro.maxTokens).toBe(65_536)                     // 有值 → 覆盖
+      expect(out.find(m => m.modelName === 'deepseek-v4-flash')!.maxTokens).toBe(DEFAULTS.maxTokens)
+    })
+
+    it('新条目：null 覆盖 = 与「不传 override 的新建」同值（默认值的唯一来源仍是 defaults）', () => {
+      const withNull = syncAccountModels(ACCOUNT, [], newModelDefaults, {
+        'deepseek-v4-pro': { contextWindow: null, maxTokens: null },
+      })
+      const plain = syncAccountModels(ACCOUNT, [], newModelDefaults)
+      const a = withNull.find(m => m.modelName === 'deepseek-v4-pro')!
+      const b = plain.find(m => m.modelName === 'deepseek-v4-pro')!
+
+      expect(a.contextWindow).toBe(b.contextWindow)
+      expect(a.maxTokens).toBe(b.maxTokens)
+      expect(Number.isFinite(a.contextWindow)).toBe(true) // 落盘字段仍是有意义的数（不是 null/缺键）
+      expect(Number.isFinite(a.maxTokens)).toBe(true)
+    })
   })
 
   it('取消勾选 → 删除该条目', () => {

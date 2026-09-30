@@ -40,16 +40,21 @@ export type NewModelDefaults = Pick<
  * 一条派生条目的字段覆盖（模型管理 v3 T7 目录区）—— key = **模型名**（`modelNames` 里的那个）。
  *
  * 目录区的行编辑（显示名/上下文窗口/最大输出/输入类型）随 `llm:save-provider` 一并提交，
- * 由 `syncAccountModels` 合并进派生条目。**只覆盖所列字段**：`undefined` 的键必须当作
- * 「这次没改」而不是「改成 undefined」—— 否则用户在别处改过的值会被一次无关的保存抹掉。
+ * 由 `syncAccountModels` 合并进派生条目。
+ *
+ * **每个字段三态**：
+ *   - `undefined` = **这次没改**（不碰条目上的真值 —— 否则用户在别处改过的值会被一次无关的保存抹掉）
+ *   - `null`（仅两个容量字段）= **移除覆盖**（回落内置规格，spec §5「留空=继承」）
+ *   - 有值 = 覆盖
  *
  * `name` 有一个**回落语义**（目录区 Resolution 5）：显示名留空 = 用模型名，
  * 所以目录区提交的是**已解析过的**值（空 → 模型名），本层只做覆盖、不再判空。
  */
 export interface ModelOverride {
   name?: string
-  contextWindow?: number
-  maxTokens?: number
+  /** `null` = 移除这条覆盖（回落到内置规格）；`undefined` = 本次没改 */
+  contextWindow?: number | null
+  maxTokens?: number | null
   inputTypes?: Array<'text' | 'image'>
 }
 
@@ -57,13 +62,14 @@ export interface ModelOverride {
 export type ModelOverrides = Record<string, ModelOverride>
 
 /**
- * 丢掉值为 `undefined` 的键。
+ * 丢掉值为 `undefined` 的键 —— **`null` 必须留下**：它是「移除覆盖」的显式意图，
+ * 与「没改」是两回事，混为一谈的话「清空容量框」就永远落不了地。
  *
- * 目录区用 `{ ...row, contextWindow: undefined }` 这种**形状统一的草稿对象**构造 override，
- * 展开后会把「没改的字段」也写成 `undefined`。直接展开到条目上就是拿 undefined 覆盖真值
- * （`maxTokens` 会变成 `undefined`，运行时发不出 max_tokens）。
+ * （目录区用 `{ ...row, contextWindow: undefined }` 这种**形状统一的草稿对象**构造 override，
+ * 展开后会把「没改的字段」也写成 `undefined`；直接展开到条目上就是拿 undefined 覆盖真值，
+ * `maxTokens` 会变成 `undefined`，运行时发不出 max_tokens。）
  */
-function definedOnly(override: ModelOverride | undefined): ModelOverride | undefined {
+function cleanOverride(override: ModelOverride | undefined): ModelOverride | undefined {
   if (!override) return undefined
   const out: ModelOverride = {}
   if (override.name !== undefined) out.name = override.name
@@ -71,6 +77,34 @@ function definedOnly(override: ModelOverride | undefined): ModelOverride | undef
   if (override.maxTokens !== undefined) out.maxTokens = override.maxTokens
   if (override.inputTypes !== undefined) out.inputTypes = override.inputTypes
   return Object.keys(out).length > 0 ? out : undefined
+}
+
+/**
+ * 把一条覆盖合进条目。
+ *
+ * `null` 的落点是 **`defaults` 里同一个字段的取值**（= 内置规格 / 本次采纳的规格，
+ * 也就是这条派生条目刚被创建时会拿到的值）—— 语义就是「移除覆盖、回落继承」。
+ *
+ * ⚠️ **为什么不是把键删掉**：条目的读取路径（`normalizeModelProfile`，llm-store 的
+ * `loadModels` 是唯一写入口）对**缺** `contextWindow` 的条目用 `maxTokens` 兜底 ——
+ * 那是拆字段时为旧配置做的忠实搬运，不代表真实窗口。删键于是会把「回落继承」变成
+ * 「窗口悄悄缩水」：实测 openai/gpt-5.6-sol 的内置规格窗口是 1050000，而 maxTokens 只有
+ * 131072（差 8 倍）。要真按删键走，得先让读取路径的兜底变成规格感知 —— 那是跨模块的
+ * 行为变更（占用条分母跟着变），不在本任务范围。回落值写回条目则与「新建条目取规格」
+ * 完全同源，用户看得见、也解释得清。
+ */
+function mergeOverride(
+  entry: ModelProfile,
+  override: ModelOverride | undefined,
+  defaults: NewModelDefaults,
+): ModelProfile {
+  if (!override) return entry
+  const next: ModelProfile = { ...entry }
+  if (override.name !== undefined) next.name = override.name
+  if (override.contextWindow !== undefined) next.contextWindow = override.contextWindow ?? defaults.contextWindow
+  if (override.maxTokens !== undefined) next.maxTokens = override.maxTokens ?? defaults.maxTokens
+  if (override.inputTypes !== undefined) next.inputTypes = [...override.inputTypes]
+  return next
 }
 
 /**
@@ -117,9 +151,13 @@ export function syncAccountModels(
 
   for (const m of existing) {
     if (wantedIds.has(m.id)) {
-      const override = definedOnly(overrides?.[m.modelName])
       // 保留逐模型设置，只换凭据；override 是用户在这次「应用」里显式改过的字段
-      out.push(override ? { ...m, ...credentials, ...override } : { ...m, ...credentials })
+      // （`null` = 移除覆盖 → 该字段回到 defaults，故这里也要拿到默认值）
+      out.push(mergeOverride(
+        { ...m, ...credentials },
+        cleanOverride(overrides?.[m.modelName]),
+        newModelDefaults(m.modelName),
+      ))
       seen.add(m.id)
     } else if (!isModelOfAccount(m.id, account.id)) {
       out.push(m) // 手工条目 / 其它账户：原样
@@ -129,15 +167,14 @@ export function syncAccountModels(
 
   for (const w of wanted) {
     if (seen.has(w.id)) continue
-    const override = definedOnly(overrides?.[w.name])
-    out.push({
+    const defaults = newModelDefaults(w.name)
+    out.push(mergeOverride({
       id: w.id,
       name: w.name, // 初值取模型名；之后用户改的就是权威值
       modelName: w.name,
       ...credentials,
-      ...newModelDefaults(w.name),
-      ...override,
-    })
+      ...defaults,
+    }, cleanOverride(overrides?.[w.name]), defaults))
   }
 
   return out

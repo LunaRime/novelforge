@@ -329,6 +329,50 @@ describe('ModelCatalogEditor 目录区', () => {
     //    ↑ maxTokens 没碰 → 不在 overrides 里（undefined 键不得覆盖条目上的真值）
   })
 
+  it('清空容量框 = 移除覆盖（提交 null）；未碰的字段与其它行零影响', () => {
+    const base = [mkModel({ id: 'acct::gpt-5.6-sol', modelName: 'gpt-5.6-sol', contextWindow: 9_999 })]
+    render({ provider: 'openai', existing: base, modelNames: ['gpt-5.6-sol'] })
+    expand(1)
+
+    // 先显式设过（9999），再清空 —— 清空是**显式意图**，不是「没改过」
+    act(() => { setValue(inputByLabel('上下文窗口 1')!, '9999') })
+    expect(catalogOverrides(latest, base)).toEqual({ 'gpt-5.6-sol': { contextWindow: 9_999 } })
+    act(() => { setValue(inputByLabel('上下文窗口 1')!, '') })
+
+    expect(isValid()).toBe(true)                                   // 空不是错误
+    expect(catalogOverrides(latest, base)).toEqual({ 'gpt-5.6-sol': { contextWindow: null } })
+    //    ↑ 只带这一个字段：maxTokens 没碰过 → 不在 overrides 里
+  })
+
+  it('一次应用可混合「改一行、清另一行」', () => {
+    const base = [
+      mkModel({ id: 'acct::a', modelName: 'a', maxTokens: 1_024, contextWindow: 5_000 }),
+      mkModel({ id: 'acct::b', modelName: 'b', maxTokens: 2_048 }),
+    ]
+    render({ provider: 'custom', existing: base, modelNames: ['a', 'b'] })
+    // 存储序 [a, b] → 显示序 [b, a]：显示第 1 行是 b，第 2 行是 a
+    act(() => { setValue(nameInputOf(idInputs()[0]), 'B 主力') })    // 改 b 的显示名
+    expand(2)                                                        // 展开 a
+    act(() => { setValue(inputByLabel('最大输出 token 2')!, '8K') }) // 先设过
+    act(() => { setValue(inputByLabel('最大输出 token 2')!, '') })   // 再清空
+
+    expect(catalogOverrides(latest, base)).toEqual({
+      b: { name: 'B 主力' },   // 改过名字的行
+      a: { maxTokens: null },  // 清空的行 = 移除覆盖
+    })
+  })
+
+  it('未编辑的行 / 未编辑的字段零影响（不得误删）', () => {
+    const base = [
+      mkModel({ id: 'acct::a', modelName: 'a', contextWindow: 9_999, maxTokens: 1_024 }),
+      mkModel({ id: 'acct::b', modelName: 'b', contextWindow: 8_888 }),
+    ]
+    render({ provider: 'custom', existing: base, modelNames: ['a', 'b'] })
+    expand(1) // 展开但什么都不改
+
+    expect(catalogOverrides(latest, base)).toBeUndefined()
+  })
+
   it('显示名清空 = 回落模型名（提交时自动填，不报错、不拦应用）', () => {
     const base = [mkModel({ id: 'acct::gpt-5.6-sol', modelName: 'gpt-5.6-sol', name: '旧名' })]
     render({ provider: 'openai', existing: base, modelNames: ['gpt-5.6-sol'] })
@@ -371,6 +415,16 @@ describe('目录纯函数（父级提交时用）', () => {
     expect(catalogOverrides([{ modelName: 'a', contextWindowText: '256KK' }], [])).toBeUndefined()
     expect(catalogOverrides([{ modelName: 'a', contextWindowText: '256K', maxTokensText: '8K' }], []))
       .toEqual({ a: { contextWindow: 256_000, maxTokens: 8_000 } })
+  })
+
+  it('catalogOverrides：容量三态 —— 空串 = null（移除覆盖）/ 未填 = 不出现 / 有值 = 覆盖', () => {
+    expect(catalogOverrides([{ modelName: 'a', contextWindowText: '' }], []))
+      .toEqual({ a: { contextWindow: null } })
+    expect(catalogOverrides([{ modelName: 'a', maxTokensText: '   ' }], []))
+      .toEqual({ a: { maxTokens: null } })              // 只有空白也算清空
+    expect(catalogOverrides([{ modelName: 'a', contextWindowText: '256K', maxTokensText: '' }], []))
+      .toEqual({ a: { contextWindow: 256_000, maxTokens: null } })
+    expect(catalogOverrides([{ modelName: 'a' }], [])).toBeUndefined() // 压根没填过 → 一个字段都不带
   })
 
   it('额外兜底：非法容量在纯函数层也被挡（不依赖 UI 校验就位）', () => {

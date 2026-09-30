@@ -117,12 +117,28 @@ function isLegalCapacity(value: number | undefined): value is number {
 }
 
 /**
- * 草稿 → `modelOverrides`（**只含改过的字段**）。
+ * 一个容量框的原文 → 该字段的覆盖值（三态）。
+ *
+ *   - `undefined`（根本没填过）→ 本次不动这个字段
+ *   - 空串 / 纯空白 → `null` = **移除覆盖**（spec §5「留空=继承」：清空即回落内置规格）
+ *   - 数字 → 覆盖；非法文本 → 不上报（行级校验已拦住提交，这里是第二道防线）
+ */
+function capacityOverride(text: string | undefined): number | null | undefined {
+  if (text === undefined) return undefined
+  const value = parseCapacity(text)
+  if (value === undefined) return null
+  return isLegalCapacity(value) ? value : undefined
+}
+
+/**
+ * 草稿 → `modelOverrides`（**只含本次动过的字段**）。
  *
  * 三条判据，缺一条都会静默毁掉用户的数据：
  *  - `name`：与「该行当前的显示名」比（既有条目 → 它的 name；新行 → 模型名）。
  *    显示名清空 = 回落模型名，所以**空也要发**（那是「把改过的名字改回去」的意思，不发就改不回来）。
- *  - 容量/输入类型：只在草稿里**显式设过**时才发。空 = 继承 = 这一项不归本次编辑管。
+ *  - 容量（见 `capacityOverride`）：`undefined` = 没填过（不发）/ **空串 = `null`（移除覆盖，
+ *    spec §5「留空=继承」）** / 有值 = 覆盖。
+ *  - 输入类型：只在草稿里**显式改过**时才发（至少留一种，没有「清空」态）。
  *  - 非法容量（NaN/0/负数/非整数）**不上报**：主进程侧没有类型约束，坏值一旦出这个函数
  *    就会原样写进 models.json。UI 的禁应用是门控，这行是防线。
  */
@@ -147,10 +163,10 @@ export function catalogOverrides(
       if (desiredName !== (base?.name ?? id)) override.name = desiredName
     }
 
-    const contextWindow = draftCapacity(row.contextWindowText)
-    if (isLegalCapacity(contextWindow)) override.contextWindow = contextWindow
-    const maxTokens = draftCapacity(row.maxTokensText)
-    if (isLegalCapacity(maxTokens)) override.maxTokens = maxTokens
+    const contextWindow = capacityOverride(row.contextWindowText)
+    if (contextWindow !== undefined) override.contextWindow = contextWindow
+    const maxTokens = capacityOverride(row.maxTokensText)
+    if (maxTokens !== undefined) override.maxTokens = maxTokens
 
     if (row.inputTypes !== undefined && row.inputTypes.length > 0) override.inputTypes = [...row.inputTypes]
 

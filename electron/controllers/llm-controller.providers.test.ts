@@ -313,6 +313,27 @@ describe('派生条目同步', () => {
     expect(luna.maxTokens).toBe(spec.maxTokens)
   })
 
+  it('目录区清空容量（null 覆盖）→ 该字段回到内置规格，用户旧值消失、落盘是有效的数', async () => {
+    const save = (overrides?: Record<string, { contextWindow?: number | null }>) =>
+      call('llm:save-provider', mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol'] }),
+        undefined, undefined, undefined, overrides)
+
+    await save()                                                   // 建条目（= 规格默认）
+    await save({ 'gpt-5.6-sol': { contextWindow: 9_999 } })        // 覆盖
+    expect(modelsFile().find((m) => m.modelName === 'gpt-5.6-sol')!.contextWindow).toBe(9_999)
+
+    await save({ 'gpt-5.6-sol': { contextWindow: null } })         // 清空 = 移除覆盖
+
+    const sol = modelsFile().find((m) => m.modelName === 'gpt-5.6-sol')!
+    const spec = presetModelDefaults('openai', 'gpt-5.6-sol')
+    expect(sol.contextWindow).toBe(spec.contextWindow)             // 回落内置规格
+    expect(sol.contextWindow).not.toBe(9_999)
+    expect(sol.maxTokens).toBe(spec.maxTokens)                     // 未动的字段零影响
+    // 落盘是**有效的数**（不是 null、也不是缺键 —— 缺键会被读取路径按 maxTokens 兜底，
+    // 那等于把「回继承」变成「窗口缩水」；见 provider-accounts.mergeOverride 的注释）
+    expect(Number.isFinite(JSON.parse(rawModels())[0].contextWindow)).toBe(true)
+  })
+
   it('overrides 二次保存：叠加在已有条目上（用户此前在别处改的字段不被冲掉）', async () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol'] }))
     // 模拟「用户此前改过的逐模型设置」（比如 temperature —— 目录区改不了它）
