@@ -264,3 +264,31 @@ T6 目录区（三态 / 行内展开 / K-M / 输入类型 / 校验 / 恢复默�
 T8 添加卡（两模式 / 草稿保持 / 首次运行 / 「其他」卡兼容）→ T9 revision + 写队列 → T10 i18n / 走查 / 真机。
 
 > 依赖次序：T1→T2→T3→T4 为地基链；T5-T8 依赖 T3；T9 可与 T5-T8 并行；T10 收尾。
+
+## 实施记录（2026-10-01）
+
+**任务数**：10（T1 凭据层 → T2 迁移 → T3 数据模型 → T4 主进程接线 → T5 行列表+编辑卡 →
+T6 目录区 → T7 获取模型 → T8 添加卡 → T9 revision+写队列 → T10 收尾），
+另有 6 轮评审修复（T2/T5/T6/T7/T9 各一轮 post-review fix + T1 一轮 pre-review fix）。
+
+**提交范围**：`2d10109..7762b68`，**25 个提交**，76 files，+8935/−1600（起点 `2d10109` 为实施前最后提交）。
+每任务一提交；T8 有一次 amend（`eb3f3e4`→`c7c6540`，落实 ollama 分支裁决）。
+
+**测试基线**：**214 文件 / 2526 测试全绿**；`tsc --noEmit` 0 错误；`eslint --max-warnings 0` 0 错误 0 警告（2026-10-01 实测，退出码直查）。
+
+**i18n**：字典 **3568 key × 三语**（12 分片，无跨分片重复、无空缺值）；本轮**新增 49 / 删除 14**
+（删除侧 12 条随退役组件消失：`provider.section*/editTitle/newTitle/add/manualAdd/none/noPresetHint/
+selectedCount/modeCatalog/modeCustom`、`model.apiKeyPlaceholder`；另 2 条 `log.llm.migrateKey*` 是旧的就地
+迁移日志键，被 `electron/credentials/migrate.ts` 取代）。
+新增面：`catalog.*` 24 / `credential.*` 13 / `addProvider.*` 5 / `action.*` 4 / `model.conflictReload` /
+`model.savedNotice` / `provider.deleteFailed`（`modelPicker.*` 为 v2 既有，本批只改规则未增键）。
+
+**未推送状态**：**全部本地、未推送**。按用户 2026-10-01 选定「直接落在 master、推送单独等指令」。
+
+**待真机**（唯一未完成验收面）：`docs/2026-10-01-model-management-v3-real-machine-test-plan.md`——
+设置页全流程 / 环境变量影子 / 密钥轮换 / 迁移后账户 / 目录三态 / 获取模型三路 / 添加卡 / 删除顺序 /
+conflict（并发写入被拒）/ 观感走查 / 已知行为登记，共 11 组 **86 条用例**（A–K；其中 1 条因本机数据
+不可达，可执行 **85** 条）。
+
+**本机迁移已于 2026-10-01 02:55:14 在真实数据上执行完毕**（`.pre-credentials.bak` 为其备份），
+故该档「迁移」一栏的实测口径是「迁移后旧账户照常可用」，不是「跑一次首次迁移」。
