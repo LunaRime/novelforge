@@ -76,6 +76,27 @@ afterEach(() => {
   container = null
 })
 
+describe('零勾选守卫（v3 T2 fix round 1）', () => {
+  const saveBtn = (el: HTMLElement) =>
+    [...el.querySelectorAll<HTMLButtonElement>('button')].find(b => b.textContent?.trim() === '保存')!
+
+  it('零勾选：保存按钮 disabled + title 说明（零勾选会送 [] → 主进程按继承物化整目录）', async () => {
+    const el = render()
+    await fetchList(el)
+    const save = saveBtn(el)
+    expect(save.disabled).toBe(true)
+    expect(save.getAttribute('title')).toBe('至少保留一个模型')
+  })
+
+  it('勾选一个模型 → 保存恢复可用（守卫只挡零勾选）', async () => {
+    const el = render()
+    await fetchList(el)
+    const box = el.querySelector<HTMLInputElement>('input[type="checkbox"]')!
+    act(() => box.click())
+    expect(saveBtn(el).disabled).toBe(false)
+  })
+})
+
 describe('供应商区候选清单（搜索 + 全选/反选）', () => {
   it('搜索过滤：大小写不敏感（输入大写 BGE- 也能过滤出小写模型名）', async () => {
     const el = render()

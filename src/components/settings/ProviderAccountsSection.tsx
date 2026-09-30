@@ -507,7 +507,14 @@ export function ProviderAccountForm({
 
       <div className="flex items-center justify-end gap-2 pt-1">
         <Button variant="outline" onClick={onCancel}>{t('action.cancel')}</Button>
-        <Button onClick={() => void handleSave()} disabled={saving}>
+        {/* ⚠️ 过渡期守卫（v3 T2 fix round 1，T6/T7 目录区接管后退役）：零勾选会送 `modelNames: []`，
+            而 v3 起空数组 = **继承内置目录** → 等于一次性物化整份目录。守卫只挡「一个都没勾」，
+            不挡「勾了又全取消」（那是明确的清空动作 —— 目录区的三态语义接管后由它表达）。 */}
+        <Button
+          onClick={() => void handleSave()}
+          disabled={saving || selected.size === 0}
+          title={selected.size === 0 ? t('provider.keepAtLeastOne') : undefined}
+        >
           {t('action.save')}
         </Button>
       </div>

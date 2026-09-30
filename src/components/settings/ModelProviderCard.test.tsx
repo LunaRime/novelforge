@@ -161,6 +161,20 @@ describe('ModelProviderCard 一体卡', () => {
     state.defaultModelId = 'gen-1'
   })
 
+  it('删账户卡的**最后一个**模型 → 确认后被阻止：不写盘 + toast 说明（v3 T2 fix round 1）', async () => {
+    render({ ...ACCOUNT, modelNames: ['gen-1'] }, [makeModel('m1', 'gen-1')])
+    await act(async () => {
+      buttonByLabel('删除')[0].click()
+      await new Promise(r => setTimeout(r, 10))
+    })
+    await confirmDialog()
+
+    // 空 modelNames 现在是「继承内置目录」→ 送上去会把整目录（含刚删的这个）重新物化出来
+    expect(state.saveProvider).not.toHaveBeenCalled()
+    expect(state.deleteModel).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain('至少保留一个模型')
+  })
+
   it('「其他」卡（account=null）：无「添加模型」入口；删除走 deleteModel', async () => {
     const el = render(null, [makeModel('orphan-1', 'orphan-model')])
     expect([...el.querySelectorAll('button')].some(b => b.textContent?.includes('添加模型'))).toBe(false)

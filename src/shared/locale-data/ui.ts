@@ -284,6 +284,7 @@ export const uiTexts = {
   'provider.add': { 'zh-CN': '添加供应商', 'en-US': 'Add provider', 'ru-RU': 'Добавить поставщика' },
   'provider.none': { 'zh-CN': '尚未添加供应商账户', 'en-US': 'No provider accounts yet', 'ru-RU': 'Учётных записей пока нет' },
   'provider.newTitle': { 'zh-CN': '新建供应商账户', 'en-US': 'New provider account', 'ru-RU': 'Новая учётная запись' },
+  'provider.keepAtLeastOne': { 'zh-CN': '至少保留一个模型', 'en-US': 'Keep at least one model', 'ru-RU': 'Оставьте хотя бы одну модель' },
   'provider.editTitle': { 'zh-CN': '编辑供应商账户', 'en-US': 'Edit provider account', 'ru-RU': 'Изменить учётную запись' },
   'provider.fetchModels': { 'zh-CN': '获取可用模型', 'en-US': 'Fetch available models', 'ru-RU': 'Получить список моделей' },
   'provider.fetching': { 'zh-CN': '正在获取…', 'en-US': 'Fetching…', 'ru-RU': 'Получение…' },

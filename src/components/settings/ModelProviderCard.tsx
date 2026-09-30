@@ -123,6 +123,14 @@ export function ModelProviderCard({ account, models, onEditAccount, onDeleteAcco
       { danger: true, confirmText: t('action.delete') },
     )
     if (!ok) return
+    // ⚠️ 过渡期守卫（v3 T2 fix round 1，T6/T7 目录区接管后退役）：删掉账户的**最后一行**会送
+    //    `modelNames: []`，而 v3 起空数组 = **继承内置目录** → 主进程按目录把整组模型
+    //    （含刚删的这个）重新物化出来，表现为「删了又回来」。放在确认**之后**：用户已表达删除意图，
+    //    这里回答的是「为什么不能删」（与上面那条「被引用就别问」的引用检查分工不同）。
+    if (account && models.length <= 1) {
+      toast.error(t('provider.keepAtLeastOne'))
+      return
+    }
     setDeletingId(m.id)
     try {
       if (account) {
