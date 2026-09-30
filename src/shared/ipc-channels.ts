@@ -812,9 +812,18 @@ export interface EmbeddingChannels {
   }
   'embedding:get-model': {
     args: []
-    return: { modelId: string; protocol: string; modelName: string; baseUrl: string; apiKey: string; dimensions: number } | null
+    /**
+     * **不含密钥**（v3 §4.7 渲染层剥离）：服务内部那份 `EmbeddingConfig` 带 `apiKey`（发起请求要用），
+     * 但回渲染层的一律是不带它的投影 —— 处理器显式列出字段，新增字段不会自动跟出去。
+     */
+    return: { modelId: string; protocol: string; modelName: string; baseUrl: string; dimensions: number } | null
   }
   'embedding:set-model': {
+    /**
+     * ⚠️ 入参仍带 `apiKey`（**输入面**，与 `apiKeyDraft` 同性质的单向通道）：渲染层目前无调用方
+     * （唯一的配置来源是主进程 `configureFromModel`），v3 T5 未动它；若将来接 UI，应改成
+     * `apiKeyDraft` 或按 ref 解析，而不是让渲染层持有值。
+     */
     args: [config: { modelId: string; protocol: string; modelName: string; baseUrl: string; apiKey: string; dimensions: number }]
     return: { success: boolean; error?: string }
   }

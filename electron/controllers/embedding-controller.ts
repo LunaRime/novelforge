@@ -125,9 +125,18 @@ export function registerEmbeddingController() {
     },
   )
 
-  // 获取嵌入模型配置
+  // 获取嵌入模型配置（**出站剥离**：服务内部那份带 apiKey，回渲染层的一律不带）
   guardedHandle('embedding:get-model', async () => {
-    return embeddingService.getConfig()
+    const config = embeddingService.getConfig()
+    if (!config) return null
+    // 显式投影而不是整包透传：字段集由这里唯一决定（将来给 EmbeddingConfig 加字段也不会自动外泄）
+    return {
+      modelId: config.modelId,
+      protocol: config.protocol,
+      modelName: config.modelName,
+      baseUrl: config.baseUrl,
+      dimensions: config.dimensions,
+    }
   })
 
   // 设置嵌入模型
@@ -169,9 +178,12 @@ export function registerEmbeddingController() {
 
   // ===== LLM 向量化 =====
 
-  // 获取 LLM 向量化配置
+  // 获取 LLM 向量化配置（出站剥离：返回值里有整个 ModelProfile —— 迁移残留的密钥字段不回渲染层）
   guardedHandle('embedding:get-llm-config', async () => {
-    return embeddingService.getLLMEmbeddingConfig()
+    const config = embeddingService.getLLMEmbeddingConfig()
+    // ⚠️ 必须先**拷贝**再剥：`model` 与服务内部 `llmConfig.model` 是同一个对象引用，
+    //    就地 delete 会把服务自己那份配置也改掉（下次请求密钥就没了）
+    return { ...config, model: config.model ? stripApiKey({ ...config.model }) : null }
   })
 
   // 设置 LLM 向量化配置

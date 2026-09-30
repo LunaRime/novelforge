@@ -19,6 +19,9 @@ const h = vi.hoisted(() => ({
   home: `${process.env.TEMP ?? process.env.TMP ?? process.cwd()}/nf-emb-ctl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   configureFromModel: vi.fn(),
+  /** 服务内部那份配置（get-model / get-llm-config 的取数点）—— 用例按需注入 */
+  getConfig: vi.fn(),
+  getLLMEmbeddingConfig: vi.fn(),
 }))
 
 vi.mock('node:os', async (importOriginal) => {
@@ -43,7 +46,11 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('../embedding-service', () => ({
-  embeddingService: { configureFromModel: h.configureFromModel },
+  embeddingService: {
+    configureFromModel: h.configureFromModel,
+    getConfig: h.getConfig,
+    getLLMEmbeddingConfig: h.getLLMEmbeddingConfig,
+  },
 }))
 
 vi.mock('../utils/logger', () => ({
@@ -136,6 +143,59 @@ describe('loadEmbeddingModelConfig（注册时自动配置）', () => {
     registerEmbeddingController()
 
     expect(h.configureFromModel).toHaveBeenCalledWith(expect.objectContaining({ apiKey: '' }))
+  })
+})
+
+describe('embedding:get-model（配置回读，投影剥离）', () => {
+  const serviceConfig = {
+    modelId: 'emb-1',
+    protocol: 'openai' as const,
+    modelName: 'text-embedding-3-small',
+    baseUrl: 'https://api.example.com/v1',
+    apiKey: 'sk-service-key',
+    dimensions: 1536,
+  }
+
+  it('返回值**不含 apiKey**：投影的键集逐字锁定（服务那份带钥匙也不外泄）', async () => {
+    h.getConfig.mockReturnValue(serviceConfig)
+
+    registerEmbeddingController()
+    const cfg = await call('embedding:get-model') as Record<string, unknown>
+
+    expect(Object.keys(cfg).sort()).toEqual(['baseUrl', 'dimensions', 'modelId', 'modelName', 'protocol'])
+    expect(JSON.stringify(cfg)).not.toContain('sk-service-key')
+  })
+
+  it('未配置 → null（投影不改空态语义）', async () => {
+    h.getConfig.mockReturnValue(null)
+
+    registerEmbeddingController()
+
+    expect(await call('embedding:get-model')).toBeNull()
+  })
+})
+
+describe('embedding:get-llm-config（回读整个 ModelProfile）', () => {
+  it('模型上残留的密钥字段被剥离，且**不动服务内部那份配置**', async () => {
+    // 服务内部那份与返回值里的 model 是同一个对象引用 —— 就地 delete 会把服务自己的配置也改掉
+    const internal: LegacyEmbeddingModel = { ...embeddingFixture(), purposes: ['generation'], apiKey: 'sk-residual' }
+    h.getLLMEmbeddingConfig.mockReturnValue({ enabled: true, model: internal, dimensions: 256, promptTemplate: 'x' })
+
+    registerEmbeddingController()
+    const cfg = await call('embedding:get-llm-config') as { model: Record<string, unknown> }
+
+    expect(cfg.model).not.toHaveProperty('apiKey')
+    expect(JSON.stringify(cfg)).not.toContain('sk-residual')
+    expect(internal.apiKey, '服务内部配置被就地改掉了（下次请求就没钥匙了）').toBe('sk-residual')
+  })
+
+  it('未选模型（model=null）→ 原样返回 null，不抛', async () => {
+    h.getLLMEmbeddingConfig.mockReturnValue({ enabled: false, model: null, dimensions: 256, promptTemplate: 'x' })
+
+    registerEmbeddingController()
+    const cfg = await call('embedding:get-llm-config') as { model: unknown }
+
+    expect(cfg.model).toBeNull()
   })
 })
 
