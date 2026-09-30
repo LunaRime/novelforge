@@ -443,7 +443,7 @@ export function registerLLMController() {
         return { success: false, error: msg }
       }
       await mutateModels((models) => models.filter((m) => m.id !== modelId))
-      // 孤儿 ref 回收（终审小修④）：**队列任务之外**（任务内 await 同队列任务 = 自死锁），
+      // 孤儿 ref 回收（终审小修③）：**队列任务之外**（任务内 await 同队列任务 = 自死锁），
       // 且必须在 mutation 成功之后 —— 删失败时那条 ref 还有人用着，不能动
       const gcRemoved = gcOrphanRefs()
       if (gcRemoved.length > 0) logger.info('LLM', `[delete-model] gc orphan refs: ${gcRemoved.join(', ')}`)
@@ -560,7 +560,7 @@ export function registerLLMController() {
       // 表达（v3 起空数组 = 继承内置目录 → 反而会把目录整组重建出来）；按 id 前缀过滤才是本意。
       // 手工条目与其它账户不受影响（前缀不匹配）。
       await mutateModels((models) => models.filter((m) => !isModelOfAccount(m.id, accountId)))
-      // 孤儿 ref 回收（终审小修④）：与 delete-model 同一口径（队列之外、mutation 之后）。
+      // 孤儿 ref 回收（终审小修③）：与 delete-model 同一口径（队列之外、mutation 之后）。
       // 这里捞的是「凭据步骤没删掉的那些」：env 影子下渲染层**有意跳过** unset（H5），
       // 或半迁移的旧条目带着自己的 ref —— 只要确实无人引用且非影子，就该清掉。
       const gcRemoved = gcOrphanRefs()

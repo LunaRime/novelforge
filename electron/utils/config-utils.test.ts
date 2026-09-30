@@ -383,7 +383,7 @@ describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', (
 })
 
 /**
- * `backupFileOnce`（T4 迁移留档）—— 终审小修③：直写 `dest` 会留下截断的 .bak，
+ * `backupFileOnce`（T4 迁移留档）—— 终审小修②：直写 `dest` 会留下截断的 .bak，
  * 而下次运行只看「目标存在」即 skipped → 回退点永久坏在半截。
  * 本组钉住：字节一致、已存在不覆盖、中转文件不残留、**写的是 tmp 再 rename**。
  */

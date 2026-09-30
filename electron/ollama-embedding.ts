@@ -96,7 +96,7 @@ function normalizeModelName(name: string): string {
  *
  * 读体走 `readListingJson`（4MB 上限）：地址是用户可编辑的，一个配错的网关回一份
  * 几百 MB 的体（或无限流的错误页）就能把主进程拖垮 —— 与 `llm:list-provider-models`
- * 的端点探测同一条纪律（终审小修②）。失败路径语义不变（超限与解析失败同样落到 `[]`）。
+ * 的端点探测同一条纪律（终审小修①）。失败路径语义不变（超限与解析失败同样落到 `[]`）。
  */
 export async function listOllamaModels(baseUrl: string): Promise<Array<{ name: string; size: number }>> {
   try {

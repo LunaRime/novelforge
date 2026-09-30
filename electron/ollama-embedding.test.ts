@@ -25,7 +25,7 @@ const BASE = 'http://127.0.0.1:11434'
 /**
  * 造一个最小 JSON Response（只实现被测代码用到的字段）。
  *
- * `headers` + `body` 是给 `readListingJson` 用的（/api/tags 的读取上限，终审小修②）：
+ * `headers` + `body` 是给 `readListingJson` 用的（/api/tags 的读取上限，终审小修①）：
  * 少了它们，那条路径会走 `arrayBuffer()` 兜底然后整个抛掉（表现为「永远空列表」——
  * 用例会红，但红在一个与真实行为无关的地方）。`headers` 可注入 `content-length`
  * 来模拟「声称超限」而**不必真造 4MB 字节**。

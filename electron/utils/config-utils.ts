@@ -216,7 +216,7 @@ export type BackupOutcome = 'copied' | 'skipped' | 'missing' | 'failed'
  * 目标已存在 → `skipped`（**不覆盖**：第一次的回退点比后来的更珍贵）。
  * 注入态下在替身 Map 内完成同样语义（不触真实磁盘）。
  *
- * **原子写**（终审小修③）：先复制到 `dest.tmp.…` 再 `rename`（同 `writeJsonFile` 的形态）——
+ * **原子写**（终审小修②）：先复制到 `dest.tmp.…` 再 `rename`（同 `writeJsonFile` 的形态）——
  * 直写 `dest` 的话，中途崩溃/断电会留下一个**截断的 .bak**，而下次运行只看「目标存在」即
  * `skipped`：回退点从此是一份半截数据，且再也不会被修复。
  */
