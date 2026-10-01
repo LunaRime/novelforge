@@ -168,7 +168,10 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
           <DialogDescription>{t('provider.hintBeforeFetch')}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-2 mt-1">
+      {/* 中段内容包一层内边距：`DialogContent` 自身**不带 padding**，头/脚各自 `px-6`——
+          不包的话搜索框/全选按钮/手工输入全都贴着弹窗左右边界（房内惯例：px-5 py-4 space-y-3） */}
+      <div className="px-5 py-4 space-y-3">
+        <div className="flex items-center gap-2">
           <Input
             type="search"
             className="h-6 text-micro flex-1"
@@ -183,14 +186,14 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
         </div>
 
         {loading && (
-          <p className="text-2xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>{t('provider.fetching')}</p>
+          <p className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>{t('provider.fetching')}</p>
         )}
         {error && (
-          <p className="text-2xs mt-1.5 break-all" style={{ color: 'var(--color-error)' }}>{error}</p>
+          <p className="text-2xs break-all" style={{ color: 'var(--color-error)' }}>{error}</p>
         )}
 
         <div
-          className="mt-1.5 max-h-72 overflow-y-auto rounded-lg p-1 space-y-0.5"
+          className="max-h-72 overflow-y-auto rounded-lg p-1 space-y-0.5"
           style={{ border: '1px solid var(--color-border)' }}
         >
           {visible.map((c) => {
@@ -229,7 +232,7 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
 
         {/* 手工输入：端点无列表/拉取失败时的出路（也是「清单里没有的模型」的出路）。
             2026-10-01 布局优化：移出滚动区独立成行 —— 候选再多也常驻可见，不会被列表滚走。 */}
-        <div className="flex items-center gap-1.5 mt-1.5">
+        <div className="flex items-center gap-1.5">
           <Input
             type="text"
             className="h-6 text-micro flex-1"
@@ -243,8 +246,9 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
             {t('modelPicker.manualAdd')}
           </Button>
         </div>
+      </div>
 
-        <DialogFooter>
+      <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('action.cancel')}</Button>
           <Button disabled={picked.size === 0 || adoptionLock} onClick={adopt}>
             {t('modelPicker.adopt').replace('{n}', String(picked.size))}
