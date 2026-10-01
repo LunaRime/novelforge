@@ -278,7 +278,7 @@ export function ModelRoutingSection() {
           return (
             <div key={tier.id} className="flex items-start gap-2">
               <span
-                className="w-20 flex-shrink-0 pt-1 text-xs font-medium truncate"
+                className="w-24 flex-shrink-0 pt-1 text-xs font-medium truncate"
                 style={{ color: 'var(--color-text-secondary)' }}
                 title={tier.desc}
               >
@@ -297,7 +297,6 @@ export function ModelRoutingSection() {
                         className="flex items-center gap-1 rounded-md pl-1.5 pr-0.5 py-0.5"
                         style={{ backgroundColor: 'var(--color-hover)' }}
                       >
-                        <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{i + 1}</span>
                         <span
                           className="text-xs truncate"
                           style={{ color: 'var(--color-text)', maxWidth: 180 }}
@@ -338,7 +337,7 @@ export function ModelRoutingSection() {
 
                 {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
                 <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
-                  <SelectTrigger className="h-6 w-auto px-2 text-micro">
+                  <SelectTrigger className="h-6 w-full px-2 text-micro">
                     <SelectValue placeholder={t('settings.routeAdd')} />
                   </SelectTrigger>
                   <SelectContent>
