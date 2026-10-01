@@ -184,6 +184,12 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
         const isCustom = account.provider === 'custom'
         return (
           <div key={account.id}>
+            {/* 行卡片壳（2026-10-01 用户要求）：与「其他」卡 / 编辑卡 / 添加卡同族的圆角描边
+                （行片本身只有 hover 底色，单看与卡片家族不统一）。展开的编辑卡仍是独立的 accent 描边卡。 */}
+            <div
+              className="rounded-xl overflow-hidden mx-1 mb-1.5"
+              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+            >
             <MenuRow
               title={name}
               titleSuffix={isCustom ? (
@@ -223,6 +229,7 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
                 </div>
               }
             />
+            </div>
             {editingId === account.id && (
               <ProviderEditorCard
                 account={account}
