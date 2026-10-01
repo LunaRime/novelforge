@@ -1,17 +1,16 @@
 /**
  * ModelListSection — 「模型」段（模型管理 v3 §2，2026-10-01）。
  *
- * 本文件是**薄容器**：标题（计数）+ `ProviderRowList`（供应商行 + 行内编辑卡 + 添加卡 + 空态）
- * + 「其他」卡。行的行为（单开/三态灯/删除顺序/添加卡）全在 `ProviderRowList` 里，这里不重复。
+ * 本文件是**薄容器**：标题（计数）+ `ProviderRowList`。
+ * 行的行为（单开/三态灯/删除顺序/添加块/「其他」卡）全在 `ProviderRowList` 里，这里不重复。
  *
- * 与 v2 的差异：一体卡已退役 —— 卡头变行、卡内模型行搬进编辑卡的目录区（T7 挂载）；
- * 本段不再常驻显示任何模型条目。「其他」卡自 T9 起住在 `OrphanCard.tsx`。
+ * 渲染顺序（2026-10-01 用户要求）：供应商行 → 「其他」卡（无归属条目）→ 添加块；
+ * 容器只计算 `orphans` 并传入（数据在容器、版位在行列表）。
  */
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ProviderRowList } from './ProviderRowList'
-import { OrphanCard } from './OrphanCard'
 
 export function ModelListSection() {
   const { t } = useTranslation()
@@ -29,8 +28,7 @@ export function ModelListSection() {
         </span>
       </div>
 
-      <ProviderRowList />
-      {orphans.length > 0 && <OrphanCard models={orphans} />}
+      <ProviderRowList orphans={orphans} />
     </div>
   )
 }

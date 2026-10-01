@@ -78,10 +78,10 @@ afterEach(() => {
 })
 
 describe('ModelListSection 薄容器', () => {
-  it('全空 → 空态（含「添加供应商」入口）', () => {
+  it('全空 → 空态（含「添加模型」入口）', () => {
     const el = render()
     expect(el.textContent).toContain('暂无')
-    expect(el.textContent).toContain('添加供应商')
+    expect(el.textContent).toContain('添加模型')
     expect([...el.querySelectorAll('button')]).toHaveLength(1) // 空态里的那一个
   })
 
@@ -119,9 +119,9 @@ describe('ModelListSection 薄容器', () => {
     expect(el.textContent).toContain('Acme Gateway')
   })
 
-  it('「添加供应商」→ 打开两模式添加卡', () => {
+  it('「添加模型」→ 打开两模式添加卡', () => {
     const el = render()
-    const addBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('添加供应商'))!
+    const addBtn = [...el.querySelectorAll('button')].find(b => b.textContent?.includes('添加模型'))!
     act(() => { addBtn.click() })
     expect(el.textContent).toContain('第三方模型提供商')
     expect(el.textContent).toContain('自定义模型 API')

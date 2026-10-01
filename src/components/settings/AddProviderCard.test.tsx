@@ -233,7 +233,7 @@ describe('AddProviderCard 首次运行', () => {
     const el = renderRows()
     expect(el.textContent, '空态应保留').toContain('暂无')
 
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加模型'))!
     await act(async () => { addBtn.click() })
 
     const key = keyInputIn(panel(MODE_CATALOG)!)!
@@ -282,7 +282,7 @@ describe('AddProviderCard 首次运行', () => {
     })
     const el = renderRows()
 
-    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const addBtn = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加模型'))!
     await act(async () => { addBtn.click() })
     await act(async () => {
       buttonIn(panel(MODE_CATALOG)!, '应用').click()
@@ -299,7 +299,7 @@ describe('AddProviderCard 首次运行', () => {
       return { success: true, revision: 2 }
     })
     const el = renderRows()
-    const addBtn = () => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const addBtn = () => [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加模型'))!
     const live = () => el.querySelector('[role="status"][aria-live="polite"]')?.textContent
 
     const addOne = async () => {

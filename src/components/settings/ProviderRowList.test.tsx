@@ -350,7 +350,7 @@ describe('ProviderRowList 供应商行列表', () => {
 
   it('底部「添加模型提供商」→ 打开添加卡（两模式分段）', async () => {
     const el = render()
-    const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加模型'))!
     await act(async () => { add.click() })
     expect(el.textContent).toContain('添加模型提供商')
     expect(el.textContent).toContain('第三方模型提供商')
@@ -365,7 +365,7 @@ describe('ProviderRowList 供应商行列表', () => {
     await act(async () => { buttonByLabel('编辑')[0].click() })
     await act(async () => { setValue(keyInput(), 'sk-draft') })
 
-    const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加供应商'))!
+    const add = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('添加模型'))!
     await act(async () => { add.click() })
 
     // 行列表没被卸载（此前 `if (adding) return <表单/>` 会把整棵行列表换掉，草稿随之蒸发）

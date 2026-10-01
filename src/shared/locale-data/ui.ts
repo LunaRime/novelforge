@@ -45,7 +45,7 @@ export const uiTexts = {
   'modelCard.embeddingTag': { 'zh-CN': '向量', 'en-US': 'Embedding', 'ru-RU': 'Эмбеддинг' },
   'modelCard.keyConfigured': { 'zh-CN': '凭据已配置', 'en-US': 'Key configured', 'ru-RU': 'Ключ настроен' },
   'modelCard.keyMissing': { 'zh-CN': '未配置密钥', 'en-US': 'Key missing', 'ru-RU': 'Нет ключа' },
-  'provider.addVendor': { 'zh-CN': '添加供应商', 'en-US': 'Add provider', 'ru-RU': 'Добавить провайдера' },
+  'provider.addVendor': { 'zh-CN': '添加模型', 'en-US': 'Add model', 'ru-RU': 'Добавить модель' },
   'action.stop': { 'zh-CN': '停止', 'en-US': 'Stop', 'ru-RU': 'Стоп' },
   'action.confirm': { 'zh-CN': '确认', 'en-US': 'Confirm', 'ru-RU': 'Подтвердить' },
   'common.unknownWord': { 'zh-CN': '未知', 'en-US': 'Unknown', 'ru-RU': 'Неизвестно' },

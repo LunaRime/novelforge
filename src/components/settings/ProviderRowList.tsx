@@ -4,7 +4,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import { isModelOfAccount } from '../../shared/provider-accounts'
 import { BUILTIN_PRESETS } from '../../shared/provider-presets'
-import type { ProviderAccount } from '../../shared/ipc-channels'
+import type { ModelProfile, ProviderAccount } from '../../shared/ipc-channels'
 import { renderLog } from '../../services/render-logger'
 import { Button } from '../ui/Button'
 import MenuRow from '../ui/MenuRow'
@@ -14,6 +14,7 @@ import { toast } from '../ui/Toast'
 import { CredentialDot } from './CredentialDot'
 import { ProviderEditorCard } from './ProviderEditorCard'
 import { AddProviderCard } from './AddProviderCard'
+import { OrphanCard } from './OrphanCard'
 import { blockingReferences } from './model-references'
 
 /** 行的显示名：自定义显示名 → 预设名 → provider id 兜底 */
@@ -33,12 +34,14 @@ function displayNameOf(account: ProviderAccount): string {
  * 凭据灯的数据源是 `credential:describe`（**批量**，设置段打开时一次拉全）——行上没有密钥值，
  * 只有状态（`CredentialDot` 三态）。删除顺序见 spec §4.7：**先凭据后配置**（见 `handleDelete`）。
  *
- * 本列表还承载两个入口（T9）：**添加卡**（`AddProviderCard`，与行列表并存而非替换 —— 见下）
- * 与**首次运行的空态**（无账户且无条目时；它的按钮与底部按钮是同一个开关）。
+ * 本列表还承载三个区块（T9 + 2026-10-01 版位调整）：**「其他」卡**（`orphans` prop，渲染在行列表
+ * 之后、添加块之前——用户要求「添加模型」入口位于「其他」整块的下面）、**添加卡**
+ * （`AddProviderCard`，与行列表并存而非替换 —— 见下）与**首次运行的空态**（无账户且无条目时；
+ * 它的按钮与底部按钮是同一个开关）。
  *
- * store 驱动、无 props：容器（`ModelListSection`）只负责标题与「其他」卡，行的一切自持。
+ * store 驱动：行的一切自持；唯一 prop 是容器算好的 `orphans`（数据在容器、版位在本列表）。
  */
-export function ProviderRowList() {
+export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
   const { t } = useTranslation()
   const providers = useLLMStore((s) => s.providers)
   const models = useLLMStore((s) => s.models)
@@ -233,10 +236,17 @@ export function ProviderRowList() {
         )
       })}
 
+      {/* 「其他」卡（无归属手工条目）：渲染在行列表之后、添加块之前（2026-10-01 用户要求的版位） */}
+      {orphans !== undefined && orphans.length > 0 && (
+        <div className="pt-3">
+          <OrphanCard models={orphans} />
+        </div>
+      )}
+
       {/* 添加卡（v3 §2.3）：**替换按钮、不替换行列表** —— 打开它不会卸载任何已展开的编辑卡，
           那条「点了添加就丢掉未保存草稿」的路径（T6 评审 Minor ①）到此封死。 */}
       {adding ? (
-        <div className="pt-1">
+        <div className="pt-3">
           <AddProviderCard onCancel={() => setAdding(false)} onDone={announceAdded} />
         </div>
       ) : isEmpty ? (
@@ -254,7 +264,7 @@ export function ProviderRowList() {
           </Button>
         </div>
       ) : (
-        <div className="flex items-center px-1 pt-1">
+        <div className="flex items-center px-1 pt-3">
           <Button size="sm" variant="outline" onClick={openAdd}>
             <Plus size={13} />
             {t('provider.addVendor')}
