@@ -165,6 +165,7 @@ NF 现状 → 目标差距表：
 - **语义变量层**：`packages/client/ui-theme/src/styles/design-platform.css`——`--dsw-static-*`（静态色板）→ `--dsw-alias-*`（语义别名）两层，亮 / 暗各一份（选择器 `body[data-ds-dark-theme]`），含 `--dsw-specific-bubble` 等聊天专属变量；
 - **基础层**：`base.css`（字体栈 + 圆角刻度 4/8/12/16/20/28）、`gradient-shadow-text.css`（字号轴派生 `--dsh-content-font-delta` / `-secondary` + 阴影 `--dsw-shadow-lv*`）；
 - **行语言三原语**：`ui-primitives` 的 `DisclosureRow` + `StateDot` + `TextShimmer`——dsh 所有「流程行」（工具 / 思考 / 命令 / 工作流成员）都是这三者组合，照搬这三个等于拿到整套行语言的骨架；
+- **行前导置换（悬停）**：不悬停时显示语义图标；悬停时 100ms 交叉渐隐为 chevron（`DisclosureRow.module.css:63-83`；`DisclosureRow.tsx:71-81` 注释「Replaces the collapsed icon with a chevron while the row is hovered」）；展开态固定为静态上折角；行文字同步 tertiary → secondary 提色。dsh 全部流程行通用（工具 / 思考 / 命令卡 / 工作流 phase / 过程组头 `ChatGroupSeat.tsx:117-122`）；斜杠菜单的行不做置换。NF 已有同族 `HoverSwapIcon`（`src/components/ui/HoverSwapIcon.tsx`，2026-09-28 批 0，`group-hover` + `group-focus-within` 双触发；箭头对 `›/⌄`、12px、accent 色、150ms）——照搬时按 dsh 语义统一（箭头对 `⌄/⌃`、14px、tertiary → secondary 行色、100ms）；NF 的 focus-within 键盘等价建议保留，实施期定。
 - 关键样式文件清单见 §5「视觉源」。
 
 实施期待定：dsh 为亮 / 暗两套主题，NF 为多主题体系——映射方式实施时决定。
