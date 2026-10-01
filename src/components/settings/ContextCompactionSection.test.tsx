@@ -52,7 +52,7 @@ describe('ContextCompactionSection', () => {
     expect(container.textContent).not.toContain('**')   // 纯文本 <p> 里星号会原样显示给用户
     // 命名要指向**真实存在**的入口（评审 Minor 5：曾写「恢复原文」，卡片上并无此按钮）
     expect(container.textContent).toContain('展开恢复')
-    expect(container.textContent).toContain('该压缩卡片会从对话里消失')
+    expect(container.textContent).toContain('压缩卡片会从对话里消失')
     act(() => { root.unmount() })
   })
 
