@@ -61,11 +61,11 @@ let root: Root | null = null
 /** toast 打桩（只截文案不挂 DOM）：避免跨用例的 DOM 残留把「断言已失败」变成「断言刚好通过」 */
 let toastError: ReturnType<typeof vi.spyOn>
 
-function render() {
+function render(orphans?: ModelProfile[]) {
   container = document.createElement('div')
   document.body.appendChild(container)
   root = createRoot(container)
-  act(() => { root!.render(<ProviderRowList />) })
+  act(() => { root!.render(<ProviderRowList orphans={orphans} />) })
   return container
 }
 
@@ -371,5 +371,32 @@ describe('ProviderRowList 供应商行列表', () => {
     // 行列表没被卸载（此前 `if (adding) return <表单/>` 会把整棵行列表换掉，草稿随之蒸发）
     const drafts = [...el.querySelectorAll<HTMLInputElement>('input[type="password"]')].map((i) => i.value)
     expect(drafts).toContain('sk-draft')
+  })
+})
+
+describe('无归属条目并入主列表（2026-10-01 用户要求）', () => {
+  it('每条例目与供应商行同款行卡渲染（名称 + [编辑] 动作），不再是独立「其他」容器', () => {
+    state.providers = [CUSTOM]
+    state.models = [makeModel('acct-1::gen-1', 'gen-1')]
+    const el = render([makeModel('orphan-1', 'legacy-model')])
+
+    expect(el.textContent).toContain('legacy-model')
+    // 行卡壳：与供应商行同一形态（rounded-xl 描边，含 legacy-model 文本的那一层）
+    const carded = [...el.querySelectorAll('div')].some(
+      (d) => d.className.includes('rounded-xl') && d.textContent?.includes('legacy-model'),
+    )
+    expect(carded).toBe(true)
+    // 无归属行与供应商行各有 [编辑]
+    expect(buttonByLabel('编辑').length).toBeGreaterThanOrEqual(2)
+  })
+
+  it('点「编辑」→ 行保持可见、行下挂内联 ModelForm（不再"替换行"）', async () => {
+    state.providers = []
+    state.models = [makeModel('orphan-1', 'legacy-model')]
+    const el = render(state.models)
+
+    await act(async () => { buttonByLabel('编辑')[0].click() })
+    expect(el.textContent).toContain('legacy-model')                 // 行没被替换
+    expect(el.querySelector('input[type="password"]')).toBeTruthy()  // ModelForm 已展开
   })
 })

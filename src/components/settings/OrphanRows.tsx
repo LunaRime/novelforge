@@ -13,16 +13,19 @@ import { confirm } from '../ui/Confirm'
 import { ModelForm } from './ModelForm'
 
 /**
- * 「其他」卡 —— 无归属手工条目（v3 §2.8 兼容层，T9 自 `ModelListSection` 独立成文件）。
+ * OrphanRows —— 无归属手工条目的**行组**（v3 §2.8 兼容层，2026-10-01 由 `OrphanCard` 改造而来）。
  *
- * 行 = 名称 + 类型标签 + [设为默认][编辑][删除]，编辑走「其他」卡专用的 `ModelForm`。
+ * 2026-10-01 用户要求**并入主列表**：「其他（无归属）」容器与标题取消，每条目与供应商行**同款的
+ * 圆角描边行卡**并列（由 `ProviderRowList` 渲染在供应商行之后、添加块之前）；点行内展开
+ * `ModelForm` 编辑 —— 行保持可见、表单挂在行下方（与供应商行的展开方式一致，不再"替换行"）。
+ *
  * **不自动迁移**到账户 —— 手工条目的 baseUrl/provider 是用户手填的，猜错了会静默改掉他的端点。
  *
- * 凭据灯/placeholder 的数据源与行列表同一条（`credential:describe`）：本卡挂载与**条目 ref 变化**时
+ * 凭据灯/placeholder 的数据源与行列表同一条（`credential:describe`）：本组挂载与**条目 ref 变化**时
  * 定点刷新一次。手工条目不在账户表里，全量刷新（不传 refs）只覆盖账户 ref —— 保存后新分配的 ref
  * 要靠这里补上，否则 placeholder 会一直停在「输入 API 密钥」。
  */
-export function OrphanCard({ models }: { models: ModelProfile[] }) {
+export function OrphanRows({ models }: { models: ModelProfile[] }) {
   const { t } = useTranslation()
   const defaultModelId = useLLMStore((s) => s.defaultModelId)
   const defaultEmbeddingModelId = useLLMStore((s) => s.defaultEmbeddingModelId)
@@ -37,7 +40,7 @@ export function OrphanCard({ models }: { models: ModelProfile[] }) {
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  /** 本卡条目的凭据状态（定点问，别指望账户那次全量刷新带上它们） */
+  /** 本组条目的凭据状态（定点问，别指望账户那次全量刷新带上它们） */
   const refs = useMemo(
     () => [...new Set(models.map((m) => m.apiKeyRef).filter((r): r is string => Boolean(r)))],
     [models],
@@ -80,7 +83,7 @@ export function OrphanCard({ models }: { models: ModelProfile[] }) {
         toast.error(t('save.failed').replace('{error}', () => result.error ?? t('status.unknown')))
         return
       }
-      // v2 的「本卡第一行保存后自动设为默认」在此**不适用**：本卡只在有孤儿条目时渲染，
+      // v2 的「本卡第一行保存后自动设为默认」在此**不适用**：本组只在有孤儿条目时渲染，
       // 编辑的必是既有条目 —— 自动设默认会把用户当前的选择顶掉
       renderLog('info', 'Save:Settings', `model saved: ${draft.id} (${Date.now() - t0}ms)`)
       toast.success(t('save.success'))
@@ -105,36 +108,15 @@ export function OrphanCard({ models }: { models: ModelProfile[] }) {
   }
 
   return (
-    <section
-      className="rounded-xl overflow-hidden"
-      style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-    >
-      <div
-        className="flex items-center gap-2 px-3 h-8"
-        style={{ borderBottom: '1px solid var(--color-border)' }}
-      >
-        <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-          {t('modelCard.orphanTitle')}
-        </span>
-      </div>
-
-      <div className="py-1">
-        {rows.map((m) => (
-          editing && editing.draft.id === m.id ? (
-            <div key={m.id} className="p-2">
-              <ModelForm
-                model={editing.draft}
-                onChange={(next) => setEditing((e) => (e ? { ...e, draft: next } : e))}
-                onSave={handleSave}
-                onCancel={() => setEditing(null)}
-                saving={saving}
-                presets={BUILTIN_PRESETS}
-                keyInfo={m.apiKeyRef ? credentialInfo[m.apiKeyRef] : undefined}
-              />
-            </div>
-          ) : (
+    <>
+      {rows.map((m) => (
+        <div key={m.id}>
+          {/* 行卡壳：与供应商行同款（rounded-xl + 描边 + panel 底）——并入主列表后不再有「其他」容器 */}
+          <div
+            className="rounded-xl overflow-hidden mx-1 mb-1.5"
+            style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+          >
             <MenuRow
-              key={m.id}
               title={m.name || m.modelName}
               titleSuffix={
                 <>
@@ -154,6 +136,8 @@ export function OrphanCard({ models }: { models: ModelProfile[] }) {
                 </>
               }
               count={m.modelName}
+              onPrimary={() => startEdit(m)}
+              titleHint={t('action.edit')}
               actions={
                 <div className="flex items-center gap-1 pr-1">
                   {!isDefault(m) && (
@@ -192,9 +176,23 @@ export function OrphanCard({ models }: { models: ModelProfile[] }) {
                 </div>
               }
             />
-          )
-        ))}
-      </div>
-    </section>
+          </div>
+          {/* 行内编辑：行保持可见、表单挂在行下方（与供应商行的展开方式一致） */}
+          {editing && editing.draft.id === m.id && (
+            <div className="mx-1 mb-1.5">
+              <ModelForm
+                model={editing.draft}
+                onChange={(next) => setEditing((e) => (e ? { ...e, draft: next } : e))}
+                onSave={handleSave}
+                onCancel={() => setEditing(null)}
+                saving={saving}
+                presets={BUILTIN_PRESETS}
+                keyInfo={m.apiKeyRef ? credentialInfo[m.apiKeyRef] : undefined}
+              />
+            </div>
+          )}
+        </div>
+      ))}
+    </>
   )
 }

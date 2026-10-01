@@ -98,25 +98,25 @@ describe('ModelListSection 薄容器', () => {
     expect([...el.querySelectorAll('button[aria-label="删除供应商"]')]).toHaveLength(1)
   })
 
-  it('无归属模型 → 「其他」卡仅在其存在时出现', () => {
+  it('无归属模型 → 以主列表行出现（2026-10-01 起并入主列表，「其他（无归属）」容器已取消）', () => {
     const el = render()
-    expect(el.textContent).not.toContain('其他（无归属）')
+    expect(el.textContent).not.toContain('legacy-model')
 
     act(() => { root!.unmount() })
     container?.remove()
     state.models = [makeModel('legacy-1', 'legacy-model')]
     const el2 = render()
-    expect(el2.textContent).toContain('其他（无归属）')
     expect(el2.textContent).toContain('legacy-model')
+    expect(el2.textContent).not.toContain('其他（无归属）')
   })
 
-  it('「其他」卡的模型不进供应商行（无归属 = 无账户归属）', () => {
+  it('无归属模型与供应商行并列渲染（互不吞并；无账户归属不等于进账户卡）', () => {
     state.providers = [ACCOUNT]
     state.models = [makeModel('legacy-1', 'legacy-model')]
     const el = render()
-    expect(el.textContent).toContain('其他（无归属）')
     expect(el.textContent).toContain('legacy-model')
     expect(el.textContent).toContain('Acme Gateway')
+    expect(el.textContent).not.toContain('其他（无归属）')
   })
 
   it('「添加模型」→ 打开两模式添加卡', () => {

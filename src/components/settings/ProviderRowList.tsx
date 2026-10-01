@@ -14,7 +14,7 @@ import { toast } from '../ui/Toast'
 import { CredentialDot } from './CredentialDot'
 import { ProviderEditorCard } from './ProviderEditorCard'
 import { AddProviderCard } from './AddProviderCard'
-import { OrphanCard } from './OrphanCard'
+import { OrphanRows } from './OrphanRows'
 import { blockingReferences } from './model-references'
 
 /** 行的显示名：自定义显示名 → 预设名 → provider id 兜底 */
@@ -34,8 +34,8 @@ function displayNameOf(account: ProviderAccount): string {
  * 凭据灯的数据源是 `credential:describe`（**批量**，设置段打开时一次拉全）——行上没有密钥值，
  * 只有状态（`CredentialDot` 三态）。删除顺序见 spec §4.7：**先凭据后配置**（见 `handleDelete`）。
  *
- * 本列表还承载三个区块（T9 + 2026-10-01 版位调整）：**「其他」卡**（`orphans` prop，渲染在行列表
- * 之后、添加块之前——用户要求「添加模型」入口位于「其他」整块的下面）、**添加卡**
+ * 本列表还承载三个区块（T9 + 2026-10-01 版位/形态调整）：**无归属条目行组**（`orphans` prop，
+ * `OrphanRows` —— 与供应商行同款行卡、**并入主列表**，渲染在行列表之后、添加块之前）、**添加卡**
  * （`AddProviderCard`，与行列表并存而非替换 —— 见下）与**首次运行的空态**（无账户且无条目时；
  * 它的按钮与底部按钮是同一个开关）。
  *
@@ -243,12 +243,9 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
         )
       })}
 
-      {/* 「其他」卡（无归属手工条目）：渲染在行列表之后、添加块之前（2026-10-01 用户要求的版位） */}
-      {orphans !== undefined && orphans.length > 0 && (
-        <div className="pt-3">
-          <OrphanCard models={orphans} />
-        </div>
-      )}
+      {/* 无归属手工条目（2026-10-01 用户要求**并入主列表**）：与供应商行同款行卡并列在行列表之后、
+          添加块之前；「其他（无归属）」容器取消（OrphanRows）。 */}
+      {orphans !== undefined && orphans.length > 0 && <OrphanRows models={orphans} />}
 
       {/* 添加卡（v3 §2.3）：**替换按钮、不替换行列表** —— 打开它不会卸载任何已展开的编辑卡，
           那条「点了添加就丢掉未保存草稿」的路径（T6 评审 Minor ①）到此封死。 */}
