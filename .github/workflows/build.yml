@@ -4,11 +4,23 @@ on:
   push:
     branches: [ "master" ]
     tags: [ "v*" ]
+    # docs-only 推送跳过（文档不触达构建/测试；tag 推送不受 paths 过滤影响）
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   pull_request:
     branches: [ "master" ]
 
+# 同一 ref 连推时取消仍在跑的旧运行（2026-10-01 加）
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
-  # ===== 多平台质量检查（lint + typecheck + vite build） =====
+  # ===== 质量检查（2026-10-01 起分职制：ubuntu 全查 + 全平台 Test） =====
+  # 分职依据：lint/typecheck/build 是语义检查，产出基本与平台无关（大小写敏感度上 ubuntu 反而最严格）；
+  # Test 是平台相关行为的探针（历史事故：electron 二进制缺失、path.basename 跨平台——均在 POSIX 侧抓到），
+  # 故 Test 保持三平台矩阵，其余步骤只在 ubuntu 跑；wall 从 ~3m32s 收敛到 ubuntu 侧时长。
   check:
     runs-on: ${{ matrix.os }}
 
@@ -37,19 +49,25 @@ jobs:
         ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
       run: pnpm install --frozen-lockfile
 
+    # ---- 语义检查（平台无关；ubuntu 单平台） ----
     - name: Lint (ESLint)
+      if: matrix.os == 'ubuntu-latest'
       run: pnpm run lint
+
+    # ---- 行为检查（平台相关；三平台矩阵） ----
     - name: Test (Vitest)
       run: pnpm run test
 
     - name: Type check (TypeScript)
+      if: matrix.os == 'ubuntu-latest'
       run: pnpm tsc --noEmit
 
     - name: Build (Vite)
+      if: matrix.os == 'ubuntu-latest'
       run: pnpm vite build
 
     - name: Smoke check — verify build output
-      if: ${{ !cancelled() }}
+      if: ${{ !cancelled() && matrix.os == 'ubuntu-latest' }}
       shell: bash
       run: |
         # 1. preload 文件存在且格式正确
