@@ -290,16 +290,16 @@ export function ModelRoutingSection() {
                 )}
 
                 {ids.length > 0 && (
-                  <div className="flex flex-wrap gap-1">
+                  <div className="space-y-1">
                     {ids.map((id, i) => (
-                      <span
+                      <div
                         key={id}
-                        className="flex items-center gap-1 h-7 rounded-md pl-2 pr-0.5"
+                        className="flex items-center gap-2 h-7 rounded-md pl-2 pr-0.5"
                         style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
                       >
                         <span
-                          className="text-xs truncate"
-                          style={{ color: 'var(--color-text)', maxWidth: 260 }}
+                          className="text-xs flex-1 min-w-0 truncate"
+                          style={{ color: 'var(--color-text)' }}
                           title={labelOf(id)}
                         >
                           {labelOf(id)}
@@ -330,7 +330,7 @@ export function ModelRoutingSection() {
                         >
                           <X size={11} />
                         </button>
-                      </span>
+                      </div>
                     ))}
                   </div>
                 )}
