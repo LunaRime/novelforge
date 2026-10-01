@@ -30,6 +30,7 @@ import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
+import { Disclosure } from '../ui/Disclosure'
 import AutomationSection from './AutomationSection'
 import ContextCompactionSection from './ContextCompactionSection'
 import VectorConfigSection from './VectorConfigSection'
@@ -241,97 +242,118 @@ export function ModelRoutingSection() {
 
   return (
     <div
-      className="rounded-xl p-4 space-y-4"
+      className="rounded-xl p-4 space-y-3"
       style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      <div>
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</p>
-        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('settings.routeDesc')}
-        </p>
-        <p className="text-micro mt-1" style={{ color: 'var(--color-text-muted)' }}>
-          {t('settings.routePriorityHint')}
-        </p>
-      </div>
-
-      {/* A 档动态策略：按 Agent 对话的「思考等级」档位自动选层（默认关闭 = 静态映射） */}
+      {/* 标题行：动态路由开关体化到右侧；说明文字收进「说明」折叠（2026-10-01 用户要求） */}
       <div className="flex items-center justify-between gap-3">
-        <div>
-          <Label>{t('settings.routeDynamic')}</Label>
-          <p className="text-micro mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-            {t('settings.routeDynamicDesc')}
-          </p>
+        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</p>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span
+            className="text-xs cursor-default"
+            style={{ color: 'var(--color-text-secondary)' }}
+            title={t('settings.routeDynamicDesc')}
+          >
+            {t('settings.routeDynamic')}
+          </span>
+          <Switch
+            checked={modelRoutes.strategy === 'dynamic'}
+            onCheckedChange={(v) => updateModelRoutes({ strategy: v ? 'dynamic' : 'static' })}
+          />
         </div>
-        <Switch
-          checked={modelRoutes.strategy === 'dynamic'}
-          onCheckedChange={(v) => updateModelRoutes({ strategy: v ? 'dynamic' : 'static' })}
-        />
       </div>
 
-      {tiers.map(tier => {
-        const ids = modelRoutes[tier.id] ?? []
-        return (
-          <div key={tier.id} className="space-y-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <Label>{tier.label}</Label>
-              <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{tier.desc}</span>
-            </div>
+      <Disclosure label={t('settings.cardHint')}>
+        <div className="space-y-1">
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDesc')}</p>
+          <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routePriorityHint')}</p>
+          <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDynamicDesc')}</p>
+        </div>
+      </Disclosure>
 
-            {ids.length === 0 && (
-              <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeClear')}</p>
-            )}
-
-            {ids.map((id, i) => (
-              <div
-                key={id}
-                className="flex items-center gap-2 rounded-md px-2 py-1"
-                style={{ backgroundColor: 'var(--color-hover)' }}
+      {/* 三层：每层一行 —— 标签列 + 芯片列表（顺序即优先级）+ 紧凑「添加模型」 */}
+      <div className="space-y-2">
+        {tiers.map(tier => {
+          const ids = modelRoutes[tier.id] ?? []
+          return (
+            <div key={tier.id} className="flex items-start gap-2">
+              <span
+                className="w-20 flex-shrink-0 pt-1 text-xs font-medium truncate"
+                style={{ color: 'var(--color-text-secondary)' }}
+                title={tier.desc}
               >
-                <span className="text-micro font-mono w-3 flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{i + 1}</span>
-                <span className="text-xs flex-1 truncate" style={{ color: 'var(--color-text)' }}>{labelOf(id)}</span>
-                {i > 0 && (
-                  <button
-                    type="button"
-                    aria-label={t('settings.routeMoveUp')}
-                    onClick={() => {
-                      const next = [...ids]
-                      const prev = next[i - 1]
-                      next[i - 1] = next[i]
-                      next[i] = prev
-                      setTier(tier.id, next)
-                    }}
-                    style={{ color: 'var(--color-text-muted)' }}
-                  >
-                    <ArrowUp size={11} />
-                  </button>
+                {tier.label}
+              </span>
+              <div className="flex-1 min-w-0 space-y-1">
+                {ids.length === 0 && (
+                  <p className="text-micro pt-1" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeClear')}</p>
                 )}
-                <button
-                  type="button"
-                  aria-label={t('settings.routeRemove')}
-                  onClick={() => setTier(tier.id, ids.filter((_, j) => j !== i))}
-                  style={{ color: 'var(--color-text-muted)' }}
-                >
-                  <X size={11} />
-                </button>
-              </div>
-            ))}
 
-            {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
-            <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder={t('settings.routeAdd')} />
-              </SelectTrigger>
-              <SelectContent>
-                {candidates.filter(m => !ids.includes(m.id)).map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name || m.modelName} ({m.provider})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-        )
-      })}
+                {ids.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {ids.map((id, i) => (
+                      <span
+                        key={id}
+                        className="flex items-center gap-1 rounded-md pl-1.5 pr-0.5 py-0.5"
+                        style={{ backgroundColor: 'var(--color-hover)' }}
+                      >
+                        <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{i + 1}</span>
+                        <span
+                          className="text-xs truncate"
+                          style={{ color: 'var(--color-text)', maxWidth: 180 }}
+                          title={labelOf(id)}
+                        >
+                          {labelOf(id)}
+                        </span>
+                        {i > 0 && (
+                          <button
+                            type="button"
+                            aria-label={t('settings.routeMoveUp')}
+                            onClick={() => {
+                              const next = [...ids]
+                              const prev = next[i - 1]
+                              next[i - 1] = next[i]
+                              next[i] = prev
+                              setTier(tier.id, next)
+                            }}
+                            className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] flex-shrink-0"
+                            style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
+                          >
+                            <ArrowUp size={11} />
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          aria-label={t('settings.routeRemove')}
+                          onClick={() => setTier(tier.id, ids.filter((_, j) => j !== i))}
+                          className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] flex-shrink-0"
+                          style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
+                        >
+                          <X size={11} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+
+                {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
+                <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
+                  <SelectTrigger className="h-6 w-auto px-2 text-micro">
+                    <SelectValue placeholder={t('settings.routeAdd')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {candidates.filter(m => !ids.includes(m.id)).map((m) => (
+                      <SelectItem key={m.id} value={m.id}>
+                        {m.name || m.modelName} ({m.provider})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -376,11 +398,13 @@ function ConcurrencySection() {
       className="rounded-xl p-4 space-y-4"
       style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      <div>
+      <div className="space-y-1">
         <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.concurrencyTitle')}</p>
-        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('settings.concurrencyDesc')}
-        </p>
+        <Disclosure label={t('settings.cardHint')}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.concurrencyDesc')}
+          </p>
+        </Disclosure>
       </div>
 
       <div className="grid grid-cols-2 gap-4">

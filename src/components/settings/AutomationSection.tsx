@@ -10,6 +10,7 @@ import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Switch } from '../ui/Switch'
+import { Disclosure } from '../ui/Disclosure'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useAutomationStore } from '../../stores/automation-store'
@@ -93,13 +94,15 @@ export default function AutomationSection() {
       className="rounded-xl p-4 space-y-4"
       style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      <div>
+      <div className="space-y-1">
         <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
           {t('automation.settings.title')}
         </p>
-        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('automation.settings.desc')}
-        </p>
+        <Disclosure label={t('settings.cardHint')}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+            {t('automation.settings.desc')}
+          </p>
+        </Disclosure>
       </div>
 
       {/* 任务列表 */}

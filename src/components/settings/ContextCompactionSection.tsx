@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Button } from '../ui/Button'
+import { Disclosure } from '../ui/Disclosure'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
@@ -91,11 +92,13 @@ export default function ContextCompactionSection() {
       className="rounded-xl p-4 space-y-4"
       style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      <div>
+      <div className="space-y-1">
         <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.compactionTitle')}</p>
-        <p className="text-xs mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('settings.compactionDesc')}
-        </p>
+        <Disclosure label={t('settings.cardHint')}>
+          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+            {t('settings.compactionDesc')}
+          </p>
+        </Disclosure>
       </div>
 
       {loadFailed && (
