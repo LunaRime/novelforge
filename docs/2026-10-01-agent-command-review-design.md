@@ -190,13 +190,33 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 | 自动展开策略 | running / 异常自动展开，转 clean 延迟收起 |
 | turn 尾部交付物卡 | 完成后在对话尾挂交付物卡（对齐 NF 既有 `ArtifactCard` 12 类产物） |
 
+### 3.5 手动 AI 动作的产出审查（§3.2 不变量的镜像面）
+
+**判断**：这些入口的「判据」没有问题——用户手动点按钮 = 显式命令。问题全在**产出侧**：一份 AI 产出可以绕过任何接受门直接变成项目状态。这就是 §3.2 的镜像面：「一句话不得绕过审查变成动作」↔「**一份 AI 产出不得绕过接受变成项目状态**」。
+
+**现状要点**（2026-10-01 盘点 16 处入口；证据见 §5）：
+
+- **配置编辑器双实现**：批量「AI 填充配置」走 `config_generation` 工作流——生成前列举覆盖确认、**生成后零复核**（`onGenerated` 直接 `updateNovelConfig()` 浅合并 + `saveProject()`，无预览 / diff / 撤销 / 快照；对话框内规模参数打开即直写项目、取消不还原；`onComplete: silent`；错误只进日志）。单字段生成**绕过 WorkflowEngine**（假 step、不可取消、无流式、无覆盖确认、错误只进日志）。两条路互不共享组件 / 对话框 / 错误处理。
+- 其余 14 处入口形态散：**5 套确认弹窗**（GenerateConfig / ArchitectureConfirm / DirectoryConfig / AIActionDialog / ReviewReport 内联复制）+ 若干 confirm / toast；角色档案状态机重复两份、失败靠 60s 超时兜底；错误提示不一致（有无 toast 各行其是）。
+- 共享层**不存在**：无 AI 动作注册 / 服务层；`AIActionDialog` 名为通用实为 refine / review 专用（唯一 caller = DraftEditor）。
+- **唯一完整闭环范本**：段落级内联改写（`CodeMirrorEditor`）——流式 + 预览 + 可停止 + 逐句接受 + 不接受不动原文。
+
+**改法方向（按优先级）**：
+
+1. **产出审查层（最高优先）**：统一「生成 → 复核 → 应用」。最小可行一步 = **前置快照 + 撤销出口**（现在连快照都没有，浅合并落库无退路）；破坏性覆盖（配置 12 字段、角色卡重建）再加「查看变更」diff。终态向范本看齐：结构化内容「预览 + 逐字段接受」，文本改写「流式 + 接受 / 拒绝」。单字段至少补齐与批量同级的覆盖确认。
+2. **统一执行路径**：单字段走 `startWorkflow`（可取消、流式、进面板、统一失败面），删假 step；配置生成补 `isTypeRunning` 守卫 + 按钮随工作流禁用（对齐架构 / 蓝图弹窗）。
+3. **收敛确认壳**：`AIActionDialog` 泛化为「action 描述（key + 参数 + 提示词模板）」驱动的统一壳，配置 / 架构 / 蓝图 / 报告共用（先删 ReviewReport 的复制体）；角色档案状态机抽公共 hook、60s 超时改显式失败事件；错误面统一 toast + 日志（对齐 DraftEditor 标准）。
+4. **与 Agent / 命令层打通**：`start_workflow` 工具补 `config_generation`（现在 Agent 起不了配置生成）；长期让按钮与 Agent 共用底层命令层——**按钮 = 显式命令通道**，与「两套判据」精神一致，两份入口一份实现。
+5. **补能力入口（产品决策）**：`fill-gaps`「AI 补全」有能力无入口；知识面板无任何 AI 动作。
+
 ---
 
 ## 4. 实施边界与已拍板事项
 
-- 本文档**不含实施**。两条独立线：
+- 本文档**不含实施**。三条工作线（③为候选）：
   - 线①「命令审查」（小）：按 3.2 方案 B 改 `agent-store.ts` + `writing-intent.ts` + 测试；真机用例：「列出小说大纲」不再启动任何东西、「写第三章」经确认后启动；
-  - 线②「输出格式」（大）：3.3 AGENT 窗口 + 3.4 工作流输出两批 UI 重构（含视觉照搬，源见 §3.3 / §5）。
+  - 线②「输出格式」（大）：3.3 AGENT 窗口 + 3.4 工作流输出两批 UI 重构（含视觉照搬，源见 §3.3 / §5）；
+  - 线③「手动 AI 产出审查」（候选）：按 3.5——产出审查层 / 统一执行路径 / 收敛确认壳 / Agent 打通。
 - 建议顺序：线① 先（信任边界优先），线② 后。
 
 **已拍板（2026-10-01，用户）**：
@@ -218,6 +238,7 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 - `src/services/agent/tools/start-workflow.tool.ts:40`；`src/services/agent/agent-engine.ts:488`；`src/services/agent/approval/policy.ts:17-59`
 - `src/services/automation/types.ts:18`；`src/services/automation/scheduler.ts:148-167`
 - UI：`AgentMessage.tsx`、`ToolCallBlock.tsx`、`ConfirmCard.tsx`、`ArtifactCard.tsx:96-98`、`BottomPanel.tsx:243-394`、`AIOutputPanel.tsx:313-477`
+- 手动 AI 入口盘点（§3.5）：`NovelConfigEditor.tsx:75-137, 322-329`、`GenerateConfigDialog.tsx:46-65, 81-114`、`generate-field.command.ts:55-67`、`architecture.command.ts:56-108`、`architecture-workflow.ts:102-119`（配置双实现）；`AIActionDialog.tsx:19-26`（唯一 caller = DraftEditor）、`ReviewReport.tsx:434-470`（复制体）、`CharacterEditor.tsx:119-141` + `CharactersView.tsx:59-82`（重复状态机）；`CodeMirrorEditor.tsx:686-744, 817-843`（闭环范本）
 - 提交：`4c88178` / `9ddcb3c` / `8cc4634` / `0a7011e` / `974cc44` / `04d2718` / `f6f9240` / `a986a51`
 
 **Claude Code**（`D:\Code\Claude-code-2.1.188-源码学习\Claude-Code-main\src`）：
