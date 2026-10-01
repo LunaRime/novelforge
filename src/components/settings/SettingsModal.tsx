@@ -294,12 +294,12 @@ export function ModelRoutingSection() {
                     {ids.map((id, i) => (
                       <span
                         key={id}
-                        className="flex items-center gap-1 rounded-md pl-1.5 pr-0.5 py-0.5"
-                        style={{ backgroundColor: 'var(--color-hover)' }}
+                        className="flex items-center gap-1 h-7 rounded-md pl-2 pr-0.5"
+                        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
                       >
                         <span
                           className="text-xs truncate"
-                          style={{ color: 'var(--color-text)', maxWidth: 180 }}
+                          style={{ color: 'var(--color-text)', maxWidth: 260 }}
                           title={labelOf(id)}
                         >
                           {labelOf(id)}
@@ -337,7 +337,7 @@ export function ModelRoutingSection() {
 
                 {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
                 <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
-                  <SelectTrigger className="h-6 w-full px-2 text-micro">
+                  <SelectTrigger className="h-7 w-full px-2 text-micro">
                     <SelectValue placeholder={t('settings.routeAdd')} />
                   </SelectTrigger>
                   <SelectContent>
