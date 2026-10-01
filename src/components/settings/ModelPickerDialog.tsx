@@ -168,7 +168,7 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
           <DialogDescription>{t('provider.hintBeforeFetch')}</DialogDescription>
         </DialogHeader>
 
-        <div className="flex items-center gap-1.5 mt-1">
+        <div className="flex items-center gap-2 mt-1">
           <Input
             type="search"
             className="h-6 text-micro flex-1"
@@ -183,14 +183,14 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
         </div>
 
         {loading && (
-          <p className="text-2xs" style={{ color: 'var(--color-text-muted)' }}>{t('provider.fetching')}</p>
+          <p className="text-2xs mt-1.5" style={{ color: 'var(--color-text-muted)' }}>{t('provider.fetching')}</p>
         )}
         {error && (
-          <p className="text-2xs break-all" style={{ color: 'var(--color-error)' }}>{error}</p>
+          <p className="text-2xs mt-1.5 break-all" style={{ color: 'var(--color-error)' }}>{error}</p>
         )}
 
         <div
-          className="max-h-72 overflow-y-auto rounded-lg p-1 space-y-0.5"
+          className="mt-1.5 max-h-72 overflow-y-auto rounded-lg p-1 space-y-0.5"
           style={{ border: '1px solid var(--color-border)' }}
         >
           {visible.map((c) => {
@@ -198,7 +198,7 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
             return (
               <label
                 key={c.id}
-                className="flex items-center gap-2 px-2 py-1 rounded text-xs hover:bg-[var(--color-hover)]"
+                className="flex items-center gap-2 px-2 py-1.5 rounded text-xs hover:bg-[var(--color-hover)]"
               >
                 <input
                   type="checkbox"
@@ -223,22 +223,25 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
             )
           })}
           {!loading && visible.length === 0 && (
-            <p className="text-2xs px-2 py-1" style={{ color: 'var(--color-text-muted)' }}>{t('modelPicker.empty')}</p>
+            <p className="text-2xs px-2 py-2 text-center" style={{ color: 'var(--color-text-muted)' }}>{t('modelPicker.empty')}</p>
           )}
-          {/* 手工输入：端点无列表/拉取失败时的出路（也是「清单里没有的模型」的出路） */}
-          <div className="flex items-center gap-1.5 px-2 py-1">
-            <Input
-              type="text"
-              className="h-6 text-micro"
-              value={manual}
-              onChange={(e) => setManual(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') addManual() }}
-              placeholder={t('modelPicker.manualPlaceholder')}
-            />
-            <Button variant="outline" size="sm" disabled={!manual.trim()} onClick={addManual}>
-              {t('modelPicker.manualAdd')}
-            </Button>
-          </div>
+        </div>
+
+        {/* 手工输入：端点无列表/拉取失败时的出路（也是「清单里没有的模型」的出路）。
+            2026-10-01 布局优化：移出滚动区独立成行 —— 候选再多也常驻可见，不会被列表滚走。 */}
+        <div className="flex items-center gap-1.5 mt-1.5">
+          <Input
+            type="text"
+            className="h-6 text-micro flex-1"
+            value={manual}
+            onChange={(e) => setManual(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') addManual() }}
+            placeholder={t('modelPicker.manualPlaceholder')}
+            aria-label={t('modelPicker.manualPlaceholder')}
+          />
+          <Button variant="outline" size="sm" disabled={!manual.trim()} onClick={addManual}>
+            {t('modelPicker.manualAdd')}
+          </Button>
         </div>
 
         <DialogFooter>
