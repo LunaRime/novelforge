@@ -2,6 +2,7 @@
 
 **日期**：2026-10-01
 **状态**：设计方向文档——**未开始实施**。
+**已拍板（2026-10-01）**：① 直出处置 = 方案 B（§3.2）；② 澄清 / 增强分支保留；③ 输出格式**连视觉一并照搬** dsh（§3.3 视觉源）。
 **指定约束**（用户）：
 
 1. 命令审查机制（判据 / 审查）学习 Claude Code 与 dsh；
@@ -81,9 +82,24 @@
 
 ### 2.2 dsh（`D:\Code\deepseek-harness`，Web / Electron；React + cordis）
 
-- **命令 = 本地精确分派，绝不交给模型猜**：菜单 / 空格 / 回车三条判定全部基于会话目录精确匹配（`packages/client/ui-commands/src/client/service.ts:252-349`）；解析先按 `descriptor.name` 精确匹配、再按本地化别名表回落（`resolution.ts:44-59`）；README 原文：「a command line is never silently downgraded to a plain prompt」（`ui-commands/README.md:12`）。命令本身不进会话日志（宿主写审计事件）。
-- **自然语言无本地分类**：唯一本地判定是「行首 `/`」（`service.ts:279`、`ui-conversation/.../InputBar.tsx:308`）；其余一切输入作为普通 user message 提交。
-- **执行前必审查（fail-closed）**：审批**接管输入区**（composer takeover），不进聊天流；会话策略 `ask`（默认；无 answerer 时 fail closed）/ `never`（`packages/interaction/user-approval/src/index.ts:54-75`）；结果词汇 `allowed-once | rejected | cancelled | unavailable`——**授权仅对请求的那一次动作生效**（`types.ts:32`）；沙箱三档（read-only / workspace-write / danger-full-access），被拒调用可经**一次性**用户审批升级（`packages/sandbox/README.md:5-9`）；审批卡 = 「拒绝」/「允许一次」+ Enter/Esc（`packages/client/ui-approval/src/client/ApprovalPanel.tsx:59-87`）。权限档位在输入区单独选择，选高危档先勾「我已了解风险」。
+**命令 = 本地精确分派，绝不交给模型猜**：
+
+- 菜单 / 空格 / 回车三条判定全部基于会话目录精确匹配（`packages/client/ui-commands/src/client/service.ts:252-349`）；解析先按 `descriptor.name` 精确匹配、再按本地化别名表回落（`resolution.ts:44-59`）；README 原文：「a command line is never silently downgraded to a plain prompt」（`ui-commands/README.md:12`）。命令本身不进会话日志（宿主写审计事件），结果以单行命令卡呈现（`GenericCommandCard.tsx`：命令名 + 结果摘要 + 展开 `<pre>`）。
+- 校验失败可见且不丢输入：未知 / 畸形命令 → 错误卡（`service.ts:406-409`）；不接受附件的命令 → 输入条 Toast「请先移除附件」，草稿与附件原位保留（`input/facade.ts:333-337`）。
+- 输入 `/` 弹 combobox 菜单（`ui-input-trigger/.../MenuView.tsx:94-220`：Add 区 + Commands 区、本地过滤、面包屑下钻、textarea 不失焦）。
+
+**自然语言无本地分类**：唯一本地判定是「行首 `/`」（`service.ts:279`、`ui-conversation/.../InputBar.tsx:308`）；其余一切输入作为普通 user message 提交。
+
+**审批（执行前必审查，fail-closed）**——判定链路四阶段（`packages/core/tools/src/index.ts`）：
+
+1. `tools/pre-execute` 瀑布（`:1505-1511`）：词表 `allow | deny | cancel | ask`（`:598-611`）；auto-review 以 `prepend` 排最前（`experimental/auto-review/src/index.ts:686-726`）；
+2. `ask` → 审批服务（`:1709-1768`）：无审批服务 / 无 agent 可路由 / `unavailable` 一律 **deny**——注释原文「missing approval support turns ask into denial」；
+3. 会话策略先于一切应答者（`interaction/user-approval/src/index.ts:243-306`）：`never` 就地拒绝；无终端应答者 → `unavailable`；与 abort 竞速，先到者胜；
+4. 单调 guard（`:724-730`）：只能拒绝、不能翻案——「listener ordering cannot turn a denial back into permission」。
+
+**授权语义**：`allowed-once | rejected | cancelled | unavailable`（`user-approval/src/types.ts:32`）——授权仅对请求的那一次动作生效。沙箱三档（read-only / workspace-write / danger-full-access）只允许**严格更宽**的一次性升级，且 `sandbox_permissions` + `justification` 必须成对（`packages/sandbox/sandbox/src/escalation.ts:28-61, 171-208`）。auto-review 判 deny：策略 `never` → 直接拒绝（结构化 `AUTO_REVIEW_DENIED`），否则转问用户（`auto-review/src/index.ts:710-718`）。「直接拒绝而不询问」的典型条件：策略 `never` / 无应答者（fail-closed 归一 `unavailable`）/ abort / guard 命中 / hook 合并出 deny（`hook-protocol/src/merge.ts`：`deny > ask > allow`）。
+
+**审批生命周期与呈现**：审批期间 turn 保持 open、agent loop 阻塞在该调用内（`user-approval/src/index.ts:215-223`）；审计 `approval/asked` + `approval/decided` 成对、**log-only 不进对话流**（`types.ts:35-59`）；策略中途变更追加一条 user 消息告知模型（`:186-195`）。客户端审批**接管输入区**（composer takeover，与输入条互为兄弟座、共用同高上限）：pending 期间输入不可达、双 Esc 停止键被禁用（`ui-conversation/.../stop-shortcut.ts:44-53`）；审批卡 Enter=`allowed-once`、Esc=`rejected`（`ApprovalPanel.tsx:46-58`，含 IME 防护）。权限档位在输入区单独选择，选高危档先勾「我已了解风险」。
 
 ### 2.3 两条不变量（NF 现状对照）
 
@@ -105,13 +121,16 @@
 
 ### 3.2 审查层：执行前必审查
 
-目标不变量：**任何一句话都不会绕过审查变成动作**。三个方案：
+目标不变量：**任何一句话都不会绕过审查变成动作**。
 
-- **方案 A（最小接线）**：保留强命中，但在 `startChapterWorkflow` 等调用前插入与工具路径同级的确认（`ConfirmCard` 级）——点「批准执行」才起工作流。直出仍零模型；正则误判的代价从「误执行」降为「误弹确认」（噪音但无害）。
-- **方案 B（对齐 CC / dsh，推荐）**：移除直出分支——全部自然语言 → ReAct → 模型调 `start_workflow` 工具 → 确认卡 + approval policy → 执行。NF 的审查设施已齐（`requiresConfirmation` + `approval/policy.ts`），唯一代价是「说写第三章」多一轮模型往返；换来判据统一（确定性判据只剩 `/` 命令与模型）与全路径审查。
-- **方案 C（折中）**：仅保留「整句恰为最严形态」（如 `^写第\d+章$` 全句匹配）走方案 A，其余交模型。注意：C 保留的仍是「猜」，只是把射程收窄；B 才是与 CC/dsh 完全同构的终态。
+**已拍板（2026-10-01）：方案 B**——直出分支移除，全部自然语言 → ReAct → 模型调 `start_workflow` 工具 → 确认（`requiresConfirmation` + `approval/policy.ts`）→ 执行；**澄清 / 增强分支保留**（不产生动作，§1.4）。判据从此统一为两套：`/` 命令与模型——第三套本地正则不再执行任何东西；代价是「说写第三章」多一轮模型往返。
 
-若未来扩展 D 档自动化触发写作，直出路径的审查语义应与 `ActionPolicy` 的 `confirm` 一致（确认后才执行）。
+方案 A / C 留档备查（未选）：
+
+- 方案 A（最小接线）：保留强命中，在 `startChapterWorkflow` 等调用前置 ConfirmCard 级确认；
+- 方案 C（折中）：仅「整句恰为最严形态」（如 `^写第\d+章$` 全句匹配）保留直出并加确认，其余交模型。
+
+确认环节的呈现随 §3.3 一并对齐 dsh（接管输入区的审批卡：拒绝 / 允许一次 + Enter/Esc）。注：dsh 的授权语义是**一次性**（仅本次调用），NF 的「本项目内始终允许」是记忆式规则——保留或收敛留实施期决定。若未来扩展 D 档自动化触发写作，审查语义应与 `ActionPolicy` 的 `confirm` 一致。
 
 ### 3.3 AGENT 窗口输出格式 = dsh
 
@@ -141,6 +160,15 @@ NF 现状 → 目标差距表：
 | 错误 | 写进正文 markdown | 专用错误行（状态点 + 人类化 + code） |
 | 元信息 | `ContextBudgetBar`（输入框下） | 三层化（至少收尾「已完成，用时」+ 统计药丸） |
 
+**视觉一并照搬（2026-10-01 拍板；修订原「视觉服从 NF 令牌」口径，§3.3 / §3.4 共用）**。dsh 视觉源头（照搬指针）：
+
+- **语义变量层**：`packages/client/ui-theme/src/styles/design-platform.css`——`--dsw-static-*`（静态色板）→ `--dsw-alias-*`（语义别名）两层，亮 / 暗各一份（选择器 `body[data-ds-dark-theme]`），含 `--dsw-specific-bubble` 等聊天专属变量；
+- **基础层**：`base.css`（字体栈 + 圆角刻度 4/8/12/16/20/28）、`gradient-shadow-text.css`（字号轴派生 `--dsh-content-font-delta` / `-secondary` + 阴影 `--dsw-shadow-lv*`）；
+- **行语言三原语**：`ui-primitives` 的 `DisclosureRow` + `StateDot` + `TextShimmer`——dsh 所有「流程行」（工具 / 思考 / 命令 / 工作流成员）都是这三者组合，照搬这三个等于拿到整套行语言的骨架；
+- 关键样式文件清单见 §5「视觉源」。
+
+实施期待定：dsh 为亮 / 暗两套主题，NF 为多主题体系——映射方式实施时决定。
+
 ### 3.4 工作流输出格式 = dsh
 
 dsh 的对应物（三类并存）：
@@ -163,18 +191,20 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 
 ---
 
-## 4. 实施边界与建议分期
+## 4. 实施边界与已拍板事项
 
-- 本文档**不含实施**。若批准，建议拆两条独立线：
-  - 线①「命令审查」（小）：按 3.2 方案 B（或 C→B）改 `agent-store.ts` + `writing-intent.ts` + 测试；真机用例：「列出小说大纲」不再启动任何东西、「写第三章」经确认后启动；
-  - 线②「输出格式」（大）：3.3 AGENT 窗口 + 3.4 工作流输出两批 UI 重构。
+- 本文档**不含实施**。两条独立线：
+  - 线①「命令审查」（小）：按 3.2 方案 B 改 `agent-store.ts` + `writing-intent.ts` + 测试；真机用例：「列出小说大纲」不再启动任何东西、「写第三章」经确认后启动；
+  - 线②「输出格式」（大）：3.3 AGENT 窗口 + 3.4 工作流输出两批 UI 重构（含视觉照搬，源见 §3.3 / §5）。
 - 建议顺序：线① 先（信任边界优先），线② 后。
 
-**开放决策点（待拍板）**：
+**已拍板（2026-10-01，用户）**：
 
-1. 直出处置：A / B / C 选哪个（推荐 B）；
-2. 澄清 / 增强分支是否保留（建议保留或一并交模型）；
-3. 输出格式：按既有口径「信息架构照 dsh、视觉服从 NF 令牌」执行；如需连视觉一并照搬 dsh 请指出。
+1. 直出处置：**方案 B**——直出退场，全走模型 + 工具 + 确认；
+2. 澄清 / 增强分支：**保留**；
+3. 输出格式：**连视觉一并照搬 dsh**（修订原「信息架构照 dsh、视觉服从 NF 令牌」口径）。
+
+实施期待定（非方向性）：dsh 亮 / 暗两套主题与 NF 多主题体系的映射；审批授权记忆（dsh 一次性授权 vs NF「本项目内始终允许」）去留。
 
 ---
 
@@ -201,3 +231,7 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 - `packages/client/ui-chat/src/client/chat/`（`MessageItem.tsx:162-234`、`ReasoningRow.tsx:76-101`、`process-groups.ts`、`ChatGroupSeat.tsx:91-128`）
 - `packages/client/ui-tool/src/client/tool/components/ToolRow.module.css:1-7`、`ToolCallTree.tsx`
 - `packages/client/ui-workflow-run/src/client/WorkflowRunPanel.tsx:203-344`；`packages/client/ui-deliverables/src/client/Deliverables.tsx:68-129`；`packages/client/ui-primitives/src/client/StateDot.tsx:5-9`
+- 审批判定链路（深挖）：`packages/core/tools/src/index.ts:598-611, 724-730, 1505-1511, 1709-1768`；`packages/interaction/user-approval/src/index.ts:186-306`、`types.ts:32-59`；`packages/sandbox/sandbox/src/escalation.ts:28-61, 171-208`；`packages/experimental/auto-review/src/index.ts:686-726`；`packages/hooks/hook-protocol/src/merge.ts:1-8`
+- 审批生命周期 / 接管（深挖）：`packages/client/ui-approval/src/client/contract/slots.ts:74-176`、`index.ts:36-103`、`ApprovalPanel.tsx:46-87`；`packages/client/ui-conversation/src/client/stop-shortcut.ts:44-53`
+- 命令补充（深挖）：`packages/client/ui-chat/src/client/chat/GenericCommandCard.tsx`；`packages/client/ui-input-trigger/src/client/MenuView.tsx:94-220`；`packages/client/ui-conversation/src/client/input/facade.ts:333-337`
+- **视觉源**：`packages/client/ui-theme/src/styles/design-platform.css`、`base.css`、`gradient-shadow-text.css`；`packages/client/ui-primitives/src/{DisclosureRow,StateDot,TextShimmer}.module.css`；`packages/client/ui-approval/.../ApprovalPanel.module.css`、`ui-tool/.../ToolRow.module.css`、`ui-chat/.../{ChatView,MessageItem,ReasoningRow}.module.css`、`ui-workflow-run/.../WorkflowRunPanel.module.css`
