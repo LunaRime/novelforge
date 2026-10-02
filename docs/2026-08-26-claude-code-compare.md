@@ -3,6 +3,8 @@
 > 背景：外部评审（Codex）对 NovelForge（`src/` + `electron/`，~7 万行 TS）与 Claude Code 源码（`D:\Code\Claude-code-2.1.188-源码学习\Claude-Code-main\src`，~47 万行，sourcemap 反推重建，`999.0.0-restored`）做了差距评审。本报告对其**逐条源码核验**，并补充其遗漏的学习点与 NF 自身强弱项。
 >
 > 方法：人工核验 Codex 引用的全部关键文件（toolResultStorage / compact / hooks / permissions / skillSearch / agent-engine / tool-registry / skill-registry / context-builder / prompt-cache / token-budget / safe-path）+ 3 个探索代理深扫（CC 工具层与主循环、NF 未覆盖子系统、CC 全景）。
+>
+> **2026-10-02 标注（执行单源）**：本档建议的落地状态以《`superpowers/plans/2026-08-29-cc-remaining-implementation.md`》**头部总表为单源**（档 1 / 档 2 / L1–L4 全部落地 + 剩余 3 项人工/发布验证）；P0-1 / P0-2 的实现见《`superpowers/specs/2026-08-29-agent-tool-result-compression-design.md`》。本档保留为源码分析原文。
 
 ## 一、Codex 评审复核结论
 

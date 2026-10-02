@@ -110,6 +110,8 @@
 2. 分组清单里**没有「AI 记忆」**（`MemoryGroup` 是后加的）
 3. 它的 P1-1（`--color-danger` 不存在）与 P1-2（硬编码「第{n}章」前缀）**当前都已修**：`PublicationGroup.tsx:50` 已是 `--color-error`，`DraftBoxGroup.tsx:107` 已用 `t('chapter.label')`
 
+> **2026-10-02（同主题单源）**：`project-tree-ui-review.md`（同一视图的旧检查报告）与 `2026-09-27-sidebar-cards-real-machine-test-plan.md`（真机取证）与本档主题重复，均**已按合并口径归入本档**——该视图（侧栏/项目结构）的检查、修复与挂起状态**以本档为单源**。
+
 ## 七、修复顺序建议
 
 1. **先修三个"坏模板"**——它们是后续卡片会被照抄的范式：

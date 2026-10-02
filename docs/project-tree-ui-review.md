@@ -3,6 +3,7 @@
 > 检查范围：应用侧边栏"项目结构"视图全链路——Sidebar 容器、ProjectTree 根组件、子分组组件（SidebarGroup / WorldBuildingGroup / VolumeGroup / DraftBoxGroup / ManuscriptGroup / PublicationGroup）与共享工具（SidebarShared）。
 > 注意：本报告针对**应用界面中的"项目结构"视图**，非仓库目录结构。
 > **2026-10-02 标注（部分过期）**：本报告三处已与现码不符（架构子文件 5→4 / 分组缺「AI 记忆」/ P1 两条已修——详见 `docs/card-affordance-review.md` §六）；「项目结构」视图其后又经 2026-09-28「UI 重构批 0」行片化重构——**不要将本报告当作现状**（现行见 `docs/superpowers/specs/2026-09-28-ui-refactor-design.md`）。
+> **2026-10-02 合并标注（同主题单源）**：本报告与《`card-affordance-review.md`》在**「项目结构」视图的检查上重复**——按「重复主题合并」口径，**该视图的检查与挂起状态以《card-affordance-review》为单源**；本档保留为 2026-08 阶段的检查与修复记录。
 
 ---
 
