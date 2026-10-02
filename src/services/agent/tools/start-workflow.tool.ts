@@ -34,6 +34,10 @@ export const startWorkflowTool = buildAgentTool({
         type: 'number',
         description: t('tool.startWorkflowChapter'),
       },
+      chapter_end: {
+        type: 'number',
+        description: t('tool.startWorkflowChapterEnd'),
+      },
     },
     required: ['workflow'],
   },
@@ -42,6 +46,7 @@ export const startWorkflowTool = buildAgentTool({
   execute: async (args) => {
     const workflow = args.workflow as string
     const chapterNumber = args.chapter_number as number | undefined
+    const chapterEnd = args.chapter_end as number | undefined
 
     if (!workflow) {
       return { success: false, content: '', error: t('error.missingWorkflow') }
@@ -50,6 +55,12 @@ export const startWorkflowTool = buildAgentTool({
     const chapterWorkflows = ['generate_draft', 'review', 'refine', 'finalize']
     if (chapterWorkflows.includes(workflow) && chapterNumber === undefined) {
       return { success: false, content: '', error: t('tool.wfNeedChapter').replace('{workflow}', workflow) }
+    }
+
+    // 区间校验（2026-10-02）：仅章节工作流生效；chapter_end 必须与 chapter_number 组成合法闭区间
+    if (chapterWorkflows.includes(workflow) && chapterEnd !== undefined
+      && (!Number.isInteger(chapterEnd) || chapterEnd < chapterNumber!)) {
+      return { success: false, content: '', error: t('tool.wfRangeInvalid') }
     }
 
     // 打开右侧面板到 AI 输出视图
@@ -61,6 +72,21 @@ export const startWorkflowTool = buildAgentTool({
         case 'review':
         case 'refine':
         case 'finalize': {
+          // 区间（chapter_end，2026-10-02）：串行启动闭区间每一章——与旧直出行为对齐（v1 串行）；
+          // 中途失败按既有错误映射返回（已启动的章节不回滚——工作流已入队列）
+          if (chapterEnd !== undefined) {
+            const started: { runId: string; displayName: string; chapterTag: string }[] = []
+            for (let n = chapterNumber!; n <= chapterEnd; n++) {
+              started.push(await startChapterWorkflow(workflow as 'generate_draft' | 'review' | 'refine' | 'finalize', n))
+            }
+            return {
+              success: true,
+              content: started.map(r =>
+                t('tool.workflowStarted').replace('{name}', r.displayName).replace('{chapter}', r.chapterTag),
+              ).join('\n'),
+              artifacts: started.map(r => ({ type: 'workflow_started' as const, name: `${r.displayName} ${r.chapterTag}` })),
+            }
+          }
           const result = await startChapterWorkflow(
             workflow as 'generate_draft' | 'review' | 'refine' | 'finalize',
             chapterNumber!,
@@ -99,9 +125,12 @@ export const startWorkflowTool = buildAgentTool({
         const msg = e.code === 'ERR_GUARD'
           ? (e.message || t('error.prereqNotMet'))
           : e.code === 'ERR_NO_DRAFT'
-            ? (workflow === 'review' ? t('tool.wfNoReviewDraft')
+            // 2026-10-02（区间配套）：优先透传 e.message——workflow-starter 已按 workflow + 实际章号参数化；
+            // 区间调用下 chapterNumber 只是起始章，重建文案会把「第6章无草稿」误报成「第5章」。
+            // 空 message 兜底回重建（既有单章语义不变）
+            ? (e.message || (workflow === 'review' ? t('tool.wfNoReviewDraft')
               : workflow === 'refine' ? t('tool.wfNoRefineDraft')
-              : t('tool.wfNoFinalizeDraft')).replace('{chapter}', String(chapterNumber))
+              : t('tool.wfNoFinalizeDraft')).replace('{chapter}', String(chapterNumber)))
             : e.message
         return { success: false, content: '', error: msg }
       }

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { startWorkflowTool } from './start-workflow.tool'
-import { startChapterWorkflow, WorkflowStartError } from '../../workflows/workflow-starter'
+import { startChapterWorkflow, startBlueprintWorkflow, WorkflowStartError } from '../../workflows/workflow-starter'
 import { t } from '../../../shared/locale'
 
 // 工具层触发由 workflow-starter 驱动——mock 掉全部启动入口（仅保留 WorkflowStartError 等真实导出）
@@ -58,5 +58,65 @@ describe('start_workflow 错误语义映射', () => {
 
     expect(r.success).toBe(true)
     expect(r.content).toContain(t('tool.wfRefine'))
+  })
+})
+
+describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('闭区间：串行启动每一章，逐章返回文案与产物', async () => {
+    mockStartChapter.mockImplementation(async (_wf, n) => ({
+      runId: `run-${n}`,
+      displayName: t('tool.wfDraft'),
+      chapterTag: t('tool.chapterTag').replace('{n}', String(n)),
+    }))
+
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: 7 })
+
+    expect(r.success).toBe(true)
+    expect(mockStartChapter).toHaveBeenCalledTimes(3)
+    expect(mockStartChapter.mock.calls.map(c => c[1])).toEqual([5, 6, 7])
+    expect(r.artifacts).toHaveLength(3)
+    expect(r.content).toContain(t('tool.chapterTag').replace('{n}', '7'))
+  })
+
+  it('chapter_end < chapter_number → wfRangeInvalid（不启动任何工作流）', async () => {
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: 3 })
+
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('tool.wfRangeInvalid'))
+    expect(mockStartChapter).not.toHaveBeenCalled()
+  })
+
+  it('chapter_end === chapter_number → 等价单章（一次调用一次启动）', async () => {
+    mockStartChapter.mockResolvedValue({ runId: 'r', displayName: t('tool.wfDraft'), chapterTag: t('tool.chapterTag').replace('{n}', '5') })
+
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: 5 })
+
+    expect(r.success).toBe(true)
+    expect(mockStartChapter).toHaveBeenCalledTimes(1)
+    expect(r.artifacts).toHaveLength(1)
+  })
+
+  it('区间中途失败：错误按既有映射返回，已启动章节保留', async () => {
+    mockStartChapter
+      .mockResolvedValueOnce({ runId: 'r5', displayName: t('tool.wfReview'), chapterTag: t('tool.chapterTag').replace('{n}', '5') })
+      .mockRejectedValueOnce(new WorkflowStartError('ERR_NO_DRAFT', t('tool.wfNoReviewDraft').replace('{chapter}', '6')))
+
+    const r = await startWorkflowTool.execute({ workflow: 'review', chapter_number: 5, chapter_end: 7 })
+
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('tool.wfNoReviewDraft').replace('{chapter}', '6'))
+    expect(mockStartChapter).toHaveBeenCalledTimes(2) // 5 已启动、6 失败即止（7 未触达）
+  })
+
+  it('非章节工作流携带 chapter_end → 忽略（不报错，按原路径执行）', async () => {
+    vi.mocked(startBlueprintWorkflow).mockResolvedValue({ runId: 'rb', displayName: t('tool.wfBlueprint') })
+
+    const r = await startWorkflowTool.execute({ workflow: 'generate_blueprint', chapter_end: 9 })
+
+    expect(r.success).toBe(true)
   })
 })
