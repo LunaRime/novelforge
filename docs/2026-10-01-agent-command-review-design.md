@@ -1,13 +1,19 @@
 # 对话命令审查与输出格式设计（向 CC / dsh 学习）
 
 **日期**：2026-10-01
-**状态**：设计方向文档——**未开始实施**。
-**已拍板（2026-10-01）**：① 直出处置 = 方案 B（§3.2）；② 澄清 / 增强分支保留；③ 输出格式**连视觉一并照搬** dsh（§3.3 视觉源）。
+**状态**：设计方向文档——**未开始实施；2026-10-02 已自审并拆分为三份实施 spec**（见下指引）。
+**已拍板（2026-10-01）**：① 直出处置 = 方案 B（线①）；② 澄清 / 增强分支保留；③ 输出格式**连视觉一并照搬** dsh（线②）。
 **指定约束**（用户）：
 
 1. 命令审查机制（判据 / 审查）学习 Claude Code 与 dsh；
 2. **AGENT 窗口输出格式采取 dsh**；
 3. **工作流输出格式采取 dsh**。
+
+> **2026-10-02：已自审并拆分**（实施主体）——
+> ① 命令审查：`docs/superpowers/specs/2026-10-02-command-review-design.md`
+> ② 输出格式：`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`
+> ③ 手动 AI 产出审查（候选）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`
+> 原 §3 设计内容已迁入三份 spec；§4 更新为拆分指引；本文保留共享背景（§1/§2）、证据索引（§5）与自审记录（§6）。
 
 本文的出发点是一条既有结论：
 
@@ -112,120 +118,38 @@
 
 ---
 
-## 3. 设计方向
+## 3. 设计（已拆分为三份实施 spec）
 
-### 3.1 命令层：判据显式化（学习 CC / dsh）
+### 3.1 / 3.2 → 已迁出
 
-- 保留 `/` 命令体系作为**唯一的「确定性直达」通道**（已与 CC/dsh 同形；后续可增量吸收 dsh 的别名 / 装饰思路）。
-- 非 `/` 输入取消「本地分类 → 执行」。`writing-intent` 三种产出按 §1.4 分别处置：直接执行分支移除或改道（见 3.2）；澄清 / 增强分支可保留（无动作）或一并交模型。
+> 命令层与审查层的设计（原 §3.1 / §3.2：判据显式化、方案 B 拍板、A / C 留档、授权语义备注）已迁入
+> **`docs/superpowers/specs/2026-10-02-command-review-design.md`（线①）**——实施以该档为准，本文不再保留副本。
 
-### 3.2 审查层：执行前必审查
+### 3.3 → 已迁出
 
-目标不变量：**任何一句话都不会绕过审查变成动作**。
+> AGENT 窗口输出格式（原 §3.3：dsh 形态速记、NF 差距表、视觉照搬源与行前导置换）已迁入
+> **`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`（线②）**——实施以该档为准，本文不再保留副本。
 
-**已拍板（2026-10-01）：方案 B**——直出分支移除，全部自然语言 → ReAct → 模型调 `start_workflow` 工具 → 确认（`requiresConfirmation` + `approval/policy.ts`）→ 执行；**澄清 / 增强分支保留**（不产生动作，§1.4）。判据从此统一为两套：`/` 命令与模型——第三套本地正则不再执行任何东西；代价是「说写第三章」多一轮模型往返。
+### 3.4 → 已迁出
 
-方案 A / C 留档备查（未选）：
+> 工作流输出格式（原 §3.4：dsh 三类对应物、NF 现状、映射表）已迁入
+> **`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`（线②）**——实施以该档为准，本文不再保留副本。
 
-- 方案 A（最小接线）：保留强命中，在 `startChapterWorkflow` 等调用前置 ConfirmCard 级确认；
-- 方案 C（折中）：仅「整句恰为最严形态」（如 `^写第\d+章$` 全句匹配）保留直出并加确认，其余交模型。
+### 3.5 → 已迁出
 
-确认环节的呈现随 §3.3 一并对齐 dsh（接管输入区的审批卡：拒绝 / 允许一次 + Enter/Esc）。注：dsh 的授权语义是**一次性**（仅本次调用），NF 的「本项目内始终允许」是记忆式规则——保留或收敛留实施期决定。若未来扩展 D 档自动化触发写作，审查语义应与 `ActionPolicy` 的 `confirm` 一致。
-
-### 3.3 AGENT 窗口输出格式 = dsh
-
-dsh 形态速记（信息架构级）：
-
-1. 用户消息：右对齐气泡 + 附件卡 + 悬停动作行；
-2. 助手：流式 markdown，中断追加「已停止」；
-3. 思考：24px 折叠行「思考」+ **首行摘要** + 流式尾部渐隐；展开为 compact markdown；
-4. 工具：**24px 单行**「[icon] 标题 · 摘要」（2px 点分隔、摘要单行省略）；状态靠颜色 + shimmer（错误红 / 中断琥珀）；展开为 IN/OUT 双栏卡或专用卡（terminal / diff / read / search / web / image）；子调用左竖线缩进 22px；
-5. **过程组**：连续工具 / 思考自动折叠为一行「正在…」→ 结束变「已读取文件、执行了命令」（单行 + 计数）；
-6. **审批 / 提问 / 计划审批不进聊天流**，接管输入区（composer takeover，2-3 按钮 + Enter/Esc；聊天流里故意不双渲染）；
-7. 元信息三层：流内实时「深度求索中，用时 x」→ turn 收尾「已完成，用时 x」→ 输入区统计药丸（轮 / 步、TPS、缓存命中）+ 点击 dialog；
-8. 错误：Turn 级专用行（状态点 + 人类化文案 + code）；另有重试行 / token 上限行；
-9. 状态点全站统一语义：绿 done / 琥珀 attention / 灰 loading / 红 error / 中性 idle。
-
-NF 现状 → 目标差距表：
-
-| 元素 | NF 现状 | 建议（采取 dsh） |
-|---|---|---|
-| 用户消息 | 右对齐气泡、纯文本（`AgentMessage.tsx:125-149`） | 已对齐；补附件卡 / 悬停动作行形态 |
-| 助手 | 流式 markdown +「_已停止生成_」 | 已对齐 |
-| 思考 | **双链路**：`_思考过程_` 前缀 + `<think>` 标签（`AgentMessage.tsx:37-41`、`MarkdownContent.tsx:273-332`） | **单链路化** + 首行摘要 + 渐隐 |
-| 工具行 | 折叠块（chevron + wrench + 名字 + 摘要 + 状态图标，`ToolCallBlock.tsx:81-171`） | 单行化（icon + 标题 · 摘要 + 点分隔 + shimmer + 错误红 / 中断琥珀） |
-| 工具展开 | 参数 JSON + 结果（maxH 200） | IN/OUT 双栏 + 专用卡分层（至少 diff / read / search） |
-| 过程组 | ❌ 无 | **采纳**（dsh 最强的降噪机制） |
-| 审批 | `ConfirmCard` 内联流内；子 agent 确认在输入框上方 | **流内审批改接管输入区**（已有一半先例） |
-| 错误 | 写进正文 markdown | 专用错误行（状态点 + 人类化 + code） |
-| 元信息 | `ContextBudgetBar`（输入框下） | 三层化（至少收尾「已完成，用时」+ 统计药丸） |
-
-**视觉一并照搬（2026-10-01 拍板；修订原「视觉服从 NF 令牌」口径，§3.3 / §3.4 共用）**。dsh 视觉源头（照搬指针）：
-
-- **语义变量层**：`packages/client/ui-theme/src/styles/design-platform.css`——`--dsw-static-*`（静态色板）→ `--dsw-alias-*`（语义别名）两层，亮 / 暗各一份（选择器 `body[data-ds-dark-theme]`），含 `--dsw-specific-bubble` 等聊天专属变量；
-- **基础层**：`base.css`（字体栈 + 圆角刻度 4/8/12/16/20/28）、`gradient-shadow-text.css`（字号轴派生 `--dsh-content-font-delta` / `-secondary` + 阴影 `--dsw-shadow-lv*`）；
-- **行语言三原语**：`ui-primitives` 的 `DisclosureRow` + `StateDot` + `TextShimmer`——dsh 所有「流程行」（工具 / 思考 / 命令 / 工作流成员）都是这三者组合，照搬这三个等于拿到整套行语言的骨架；
-- **行前导置换（悬停）**：不悬停时显示语义图标；悬停时 100ms 交叉渐隐为 chevron（`DisclosureRow.module.css:63-83`；`DisclosureRow.tsx:71-81` 注释「Replaces the collapsed icon with a chevron while the row is hovered」）；展开态固定为静态上折角；行文字同步 tertiary → secondary 提色。dsh 全部流程行通用（工具 / 思考 / 命令卡 / 工作流 phase / 过程组头 `ChatGroupSeat.tsx:117-122`）；斜杠菜单的行不做置换。NF 已有同族 `HoverSwapIcon`（`src/components/ui/HoverSwapIcon.tsx`，2026-09-28 批 0，`group-hover` + `group-focus-within` 双触发；箭头对 `›/⌄`、12px、accent 色、150ms）——照搬时按 dsh 语义统一（箭头对 `⌄/⌃`、14px、tertiary → secondary 行色、100ms）；NF 的 focus-within 键盘等价建议保留，实施期定。
-- 关键样式文件清单见 §5「视觉源」。
-
-实施期待定：dsh 为亮 / 暗两套主题，NF 为多主题体系——映射方式实施时决定。
-
-### 3.4 工作流输出格式 = dsh
-
-dsh 的对应物（三类并存）：
-
-- **过程组**（流内）：多步执行折叠为一行动词标题 + 计数；
-- **WorkflowRunPanel**（流内节点）：run → phase → member 三层折叠 + 状态点 + 计数摘要（「已完成 2 · 运行中 1」）+ 成员可点进子会话；自动展开策略（非 clean 自动展开、转 clean 延迟收起）；
-- **结束后交付物**：turn 尾部交付物卡（变更文件卡 + 显式呈递文件卡 + 计划文档卡；超过 4 个折叠）。
-
-NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + 进度条 + 「下一步 / 继续执行」确认条，`BottomPanel.tsx:243-394`）+ 右侧 ai-output（步骤流式正文 + 思考块 + 整体进度条 + 「整个工作流已全部完成」，`AIOutputPanel.tsx:313-477`）；启动即双开（`workflow-store.ts:427-432`）；对话内仅 `workflow_started` 产物卡做跳转（`ArtifactCard.tsx:96-98`）。
-
-映射建议：
-
-| dsh 元素 | NF 映射 |
-|---|---|
-| WorkflowRunPanel run → phase → member | NF：run = WorkflowRun、member = WorkflowStep（phase 暂无，不强行造）；面板信息架构向三层折叠 + 计数摘要对齐 |
-| 状态点五态 | 统一语义核对（NF 现图标已接近：CheckCircle2 / Spinner / XCircle…） |
-| 过程组（流内单行 + 计数） | **对话内新增单行折叠组**作进度入口（详情仍在下方 / 右侧面板） |
-| 自动展开策略 | running / 异常自动展开，转 clean 延迟收起 |
-| turn 尾部交付物卡 | 完成后在对话尾挂交付物卡（对齐 NF 既有 `ArtifactCard` 12 类产物） |
-
-### 3.5 手动 AI 动作的产出审查（§3.2 不变量的镜像面）
-
-**判断**：这些入口的「判据」没有问题——用户手动点按钮 = 显式命令。问题全在**产出侧**：一份 AI 产出可以绕过任何接受门直接变成项目状态。这就是 §3.2 的镜像面：「一句话不得绕过审查变成动作」↔「**一份 AI 产出不得绕过接受变成项目状态**」。
-
-**现状要点**（2026-10-01 盘点 16 处入口；证据见 §5）：
-
-- **配置编辑器双实现**：批量「AI 填充配置」走 `config_generation` 工作流——生成前列举覆盖确认、**生成后零复核**（`onGenerated` 直接 `updateNovelConfig()` 浅合并 + `saveProject()`，无预览 / diff / 撤销 / 快照；对话框内规模参数打开即直写项目、取消不还原；`onComplete: silent`；错误只进日志）。单字段生成**绕过 WorkflowEngine**（假 step、不可取消、无流式、无覆盖确认、错误只进日志）。两条路互不共享组件 / 对话框 / 错误处理。
-- 其余 14 处入口形态散：**5 套确认弹窗**（GenerateConfig / ArchitectureConfirm / DirectoryConfig / AIActionDialog / ReviewReport 内联复制）+ 若干 confirm / toast；角色档案状态机重复两份、失败靠 60s 超时兜底；错误提示不一致（有无 toast 各行其是）。
-- 共享层**不存在**：无 AI 动作注册 / 服务层；`AIActionDialog` 名为通用实为 refine / review 专用（唯一 caller = DraftEditor）。
-- **唯一完整闭环范本**：段落级内联改写（`CodeMirrorEditor`）——流式 + 预览 + 可停止 + 逐句接受 + 不接受不动原文。
-
-**改法方向（按优先级）**：
-
-1. **产出审查层（最高优先）**：统一「生成 → 复核 → 应用」。最小可行一步 = **前置快照 + 撤销出口**（现在连快照都没有，浅合并落库无退路）；破坏性覆盖（配置 12 字段、角色卡重建）再加「查看变更」diff。终态向范本看齐：结构化内容「预览 + 逐字段接受」，文本改写「流式 + 接受 / 拒绝」。单字段至少补齐与批量同级的覆盖确认。
-2. **统一执行路径**：单字段走 `startWorkflow`（可取消、流式、进面板、统一失败面），删假 step；配置生成补 `isTypeRunning` 守卫 + 按钮随工作流禁用（对齐架构 / 蓝图弹窗）。
-3. **收敛确认壳**：`AIActionDialog` 泛化为「action 描述（key + 参数 + 提示词模板）」驱动的统一壳，配置 / 架构 / 蓝图 / 报告共用（先删 ReviewReport 的复制体）；角色档案状态机抽公共 hook、60s 超时改显式失败事件；错误面统一 toast + 日志（对齐 DraftEditor 标准）。
-4. **与 Agent / 命令层打通**：`start_workflow` 工具补 `config_generation`（现在 Agent 起不了配置生成）；长期让按钮与 Agent 共用底层命令层——**按钮 = 显式命令通道**，与「两套判据」精神一致，两份入口一份实现。
-5. **补能力入口（产品决策）**：`fill-gaps`「AI 补全」有能力无入口；知识面板无任何 AI 动作。
+> 手动 AI 产出审查（原 §3.5：镜像面判断、16 处入口现状、五层改法）已迁入
+> **`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`（线③，候选）**——实施以该档为准，本文不再保留副本。
 
 ---
 
-## 4. 实施边界与已拍板事项
+## 4. 实施边界与已拍板事项（拆分后）
 
-- 本文档**不含实施**。三条工作线（③为候选）：
-  - 线①「命令审查」（小）：按 3.2 方案 B 改 `agent-store.ts` + `writing-intent.ts` + 测试；真机用例：「列出小说大纲」不再启动任何东西、「写第三章」经确认后启动；
-  - 线②「输出格式」（大）：3.3 AGENT 窗口 + 3.4 工作流输出两批 UI 重构（含视觉照搬，源见 §3.3 / §5）；
-  - 线③「手动 AI 产出审查」（候选）：按 3.5——产出审查层 / 统一执行路径 / 收敛确认壳 / Agent 打通。
-- 建议顺序：线① 先（信任边界优先），线② 后。
-
-**已拍板（2026-10-01，用户）**：
-
-1. 直出处置：**方案 B**——直出退场，全走模型 + 工具 + 确认；
-2. 澄清 / 增强分支：**保留**；
-3. 输出格式：**连视觉一并照搬 dsh**（修订原「信息架构照 dsh、视觉服从 NF 令牌」口径）。
-
-实施期待定（非方向性）：dsh 亮 / 暗两套主题与 NF 多主题体系的映射；审批授权记忆（dsh 一次性授权 vs NF「本项目内始终允许」）去留。
+- 三条工作线（全档不含实施；③为候选）——实施主体已拆出（见 §3 指引）：
+  - 线①「命令审查」（小）：`docs/superpowers/specs/2026-10-02-command-review-design.md`；建议先做；
+  - 线②「输出格式」（大）：`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`；建议线①后；
+  - 线③「手动 AI 产出审查」（候选）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`。
+- **已拍板存档（2026-10-01，用户）**：① 直出处置 = 方案 B（直出退场，全走模型 + 工具 + 确认）；② 澄清 / 增强分支保留；③ 输出格式连视觉一并照搬 dsh。
+- 实施期待定（已随拆分落到各 spec 的「待定」节）：线① D1 区间行为 / D2 模式库收留；线② D0 与 09-28 UI 重构批 1–4 的关系 / D1 主题映射 / D2 箭头语义 / D3 授权记忆。
 
 ---
 
@@ -257,3 +181,22 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 - 审批生命周期 / 接管（深挖）：`packages/client/ui-approval/src/client/contract/slots.ts:74-176`、`index.ts:36-103`、`ApprovalPanel.tsx:46-87`；`packages/client/ui-conversation/src/client/stop-shortcut.ts:44-53`
 - 命令补充（深挖）：`packages/client/ui-chat/src/client/chat/GenericCommandCard.tsx`；`packages/client/ui-input-trigger/src/client/MenuView.tsx:94-220`；`packages/client/ui-conversation/src/client/input/facade.ts:333-337`
 - **视觉源**：`packages/client/ui-theme/src/styles/design-platform.css`、`base.css`、`gradient-shadow-text.css`；`packages/client/ui-primitives/src/{DisclosureRow,StateDot,TextShimmer}.module.css`；`packages/client/ui-approval/.../ApprovalPanel.module.css`、`ui-tool/.../ToolRow.module.css`、`ui-chat/.../{ChatView,MessageItem,ReasoningRow}.module.css`、`ui-workflow-run/.../WorkflowRunPanel.module.css`
+
+---
+
+## 6. 自审记录（2026-10-02）
+
+对本文 + 所引代码做了一轮核对（行号以 2026-10-02 实测；相关文件自 10-01 起未改动）：
+
+**核实为准确**：时间线 5 项提交日期全部对上（`4c88178` 2026-04-21 / `9ddcb3c` 08-27 / 五次加固 08-27~09-13 / `f6f9240` 09-13 / `a986a51` 09-26）；内置 4 命令（clear / new / help / status，`agent-store.ts:519-558`）与 `/status` 不拦截注释（`:554-557`）属实；`requiresConfirmation`（`start-workflow.tool.ts:40`）与确认流程（`agent-engine.ts:488`）属实；**消费者核查**：`detectWritingIntent` 仅 agent-store 一处消费——线① 改动面可收窄。
+
+**修正 / 补强（已随拆分落入各 spec）**：
+
+1. 行号微漂移（±3-5 行；如 `onGenerated` 实为 `NovelConfigEditor.tsx:325-327`）——各 spec 已标「动手前复核」；
+2. 线① 补充：直出移除的**配套死码**（`workflow-starter` 动态 import、`makeStartedMsg`、`WorkflowStartError` catch `:1278-1296`）此前未列；
+3. 线① 新增待定 D1：区间（「写五到八章」）在案 B 下的目标行为未定义；
+4. 线② 新增 D0：与《2026-09-28 UI 重构》批 1–4 **改同一批组件**——两条未执行轨道需先定关系；
+5. 线② 新增 D2：箭头语义冲突（dsh `⌄/⌃` vs NF 批 0 已拍板 `›/⌄` 且禁 `⌃`）；
+6. 线② 补强：思考单链路化须覆盖 `_思考过程_`（含 **#34** 工作流命令产出）+ `<think>` 渲染 + `conversation-recovery` 存储语义三处，不得让 #34 回退。
+
+**相邻、不属本档**：`base-command.ts:214` 未传 modelId（工作流命令全走默认模型）——另行分诊。
