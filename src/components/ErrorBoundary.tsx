@@ -54,7 +54,7 @@ export class ErrorBoundary extends Component<Props, State> {
           </p>
           <pre
             style={{
-              fontSize: '0.75rem',
+              fontSize: 'var(--text-micro)',
               color: 'var(--color-error)',
               backgroundColor: 'color-mix(in srgb, var(--color-error) 10%, transparent)',
               padding: '8px 12px',
@@ -79,7 +79,7 @@ export class ErrorBoundary extends Component<Props, State> {
               backgroundColor: 'var(--color-hover)',
               color: 'var(--color-text)',
               cursor: 'pointer',
-              fontSize: '0.8rem',
+              fontSize: 'var(--text-micro)',
               transition: 'background-color var(--transition-fast)',
             }}
             onClick={() => this.setState({ hasError: false, error: null, componentStack: '' })}

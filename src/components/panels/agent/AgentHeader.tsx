@@ -63,7 +63,7 @@ export default function AgentHeader() {
       {/* 标题 */}
       <div
         className="flex min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap gap-1"
-        style={{ color: 'var(--color-text-secondary)', fontSize: '0.75rem', fontWeight: 500 }}
+        style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-micro)', fontWeight: 500 }}
       >
         AGENT
       </div>

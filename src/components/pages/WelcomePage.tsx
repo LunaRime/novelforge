@@ -246,7 +246,7 @@ function StepItem({
         style={{
           backgroundColor: 'var(--color-accent)',
           color: 'var(--color-text)',
-          fontSize: '0.7rem',
+          fontSize: 'var(--text-2xs)',
           fontWeight: 600,
         }}
       >

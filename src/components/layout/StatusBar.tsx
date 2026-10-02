@@ -31,7 +31,7 @@ export default function StatusBar() {
         height: 'var(--height-statusbar)',  /* 22px */
         backgroundColor: 'var(--color-statusbar)',
         color: 'var(--color-statusbar-text)',
-        fontSize: "0.75rem",
+        fontSize: "var(--text-micro)",
         flexShrink: 0,
         borderTop: '1px solid var(--color-border)',
       }}
@@ -450,7 +450,7 @@ function StatusBarSegment({
 /** 状态栏分隔符 */
 function StatusBarDivider() {
   return (
-    <span style={{ opacity: 0.25, fontSize: "0.75rem", userSelect: 'none' }}>|</span>
+    <span style={{ opacity: 0.25, fontSize: "var(--text-micro)", userSelect: 'none' }}>|</span>
   )
 }
 
@@ -496,7 +496,8 @@ function ZoomControl() {
           ...btn,
           minWidth: 34,
           fontFamily: 'var(--font-mono)',
-          fontSize: '0.68rem',
+          fontSize: 'var(--text-2xs)',
+          fontVariantNumeric: 'tabular-nums',
           color: zoom !== 1.0 ? 'var(--color-accent)' : 'inherit',
           opacity: 1,
         }}

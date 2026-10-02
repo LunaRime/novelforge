@@ -39,12 +39,12 @@ export default function ConfirmCard({ toolCall }: Props) {
       <div className="confirm-card-body">
         <div>{description}</div>
         {rememberPattern && (
-          <div style={{ marginTop: 4, fontSize: '0.68rem', color: 'var(--color-text-muted)' }}>
+          <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)' }}>
             {t('agentConfirm.rememberHint').replace('{pattern}', rememberPattern)}
           </div>
         )}
         {showRiskHint && (
-          <div style={{ marginTop: 4, fontSize: '0.68rem', color: 'var(--color-warning)' }}>
+          <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--color-warning)' }}>
             {t('agentConfirm.riskHigh')}
           </div>
         )}
@@ -55,8 +55,8 @@ export default function ConfirmCard({ toolCall }: Props) {
               padding: '4px 8px',
               borderRadius: 4,
               backgroundColor: 'var(--color-hover)',
-              fontFamily: "'JetBrains Mono', monospace",
-              fontSize: '0.68rem',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--text-2xs)',
               color: 'var(--color-text-secondary)',
               whiteSpace: 'pre-wrap',
               maxHeight: 120,

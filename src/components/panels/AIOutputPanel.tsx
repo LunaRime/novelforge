@@ -546,7 +546,6 @@ function ThinkingBlock({ thinking, showCursor, hasContent }: { thinking: string;
             color: 'var(--color-text-muted)',
             maxHeight: 250,
             fontFamily: 'var(--font-mono)',
-            fontSize: '0.75rem',
             lineHeight: 1.6,
           }}
         >
