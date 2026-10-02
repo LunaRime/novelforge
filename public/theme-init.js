@@ -5,27 +5,26 @@
  * 外移至 public/。同步阻塞执行（render-blocking），行为与内联完全一致。
  */
 (function () {
-  // 同步读取主题，避免加载页与主界面背景色闪跳
-  var bgMap = { light: '#F7F9FC', galaxy: '#0A1628', paper: '#F5F0E8', dark: '#1E1E1E' };
-  var theme = 'dark';
+  // 同步读取主题（仅为提前注入 html class，确保全局 CSS 变量立即生效）
+  var theme = 'light'; // 默认主题（与 theme-store 初始值保持一致）
   try {
     var raw = localStorage.getItem('vela-theme');
     if (raw) {
       var state = JSON.parse(raw).state;
-      theme = state.resolvedTheme || state.theme || 'dark';
+      theme = state.resolvedTheme || state.theme || 'light';
       if (theme === 'night') theme = 'dark'; // 兼容旧版
     }
   } catch (e) {}
-
-  var bg = bgMap[theme] || bgMap.galaxy;
 
   // 提前给 html 注入主题 class，确保所有全局 CSS 变量立即生效
   document.documentElement.classList.remove('light', 'dark', 'galaxy', 'paper');
   document.documentElement.classList.add(theme);
 
-  document.body.style.backgroundColor = bg;
-  /* 将背景色注入 CSS 变量供 .vela-initial-loader 引用 */
-  document.documentElement.style.setProperty('--loader-bg', bg);
+  // 启动页固定品牌色（2026-10-02 用户拍板：取 build/icon.png 的渐变——青→绿，不再随主题）
+  // ⚠️ 本脚本在 <head> 同步执行，`document.body` 此时为 null——不得对 body 赋值
+  //（原实现在此处抛错中断，导致 --loader-bg 从未被设置、启动页长年吃 CSS 回退值；body 背景改由
+  // 启动页容器自身及后续主题 CSS 负责）
+  document.documentElement.style.setProperty('--loader-bg', 'linear-gradient(90deg, #0E9EA8, #70D261)');
 })();
 
 // 启动加载页国际化（React 挂载前无法使用 t()，按持久化语言偏好做最小三语映射；

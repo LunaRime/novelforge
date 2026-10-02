@@ -23,7 +23,7 @@
           align-items: center;
           height: 100vh;
           width: 100vw;
-          background-color: var(--loader-bg, #0A1628);
+          background: var(--loader-bg, linear-gradient(90deg, #0E9EA8, #70D261));
           font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
           user-select: none;
         }
@@ -74,7 +74,8 @@
           font-weight: 500;
           letter-spacing: 4px;
           text-transform: uppercase;
-          background: linear-gradient(90deg, #7EC8E3, #9B8EC8, #C9A76C, #7EC8E3);
+          /* 品牌底（青→绿）上改用白系微光，保证可读性（2026-10-02） */
+          background: linear-gradient(90deg, rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.95));
           background-size: 200% auto;
           color: transparent;
           -webkit-background-clip: text;
@@ -108,7 +109,7 @@
           <div class="vela-core"></div>
         </div>
         <div id="vela-splash-text" class="vela-text">NovelForge 初始化中</div>
-        <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.35);font-family:monospace;letter-spacing:1px;"></div>
+        <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.55);font-family:monospace;letter-spacing:1px;"></div>
       </div>
     </div>
     <!-- 启动计时：记录 HTML 解析完成时间，并在加载页实时显示耗时（原内联脚本外移，满足 CSP） -->

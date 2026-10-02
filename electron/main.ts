@@ -167,10 +167,11 @@ function createWindow() {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 12, y: 10 } } : {}),
     ...(isMac ? {} : {
-      // 启动瞬间的值：对齐启动闪屏的深色底；渲染层一就绪就换成真实主题色
-      titleBarOverlay: { color: '#1e1e1e', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
+      // 启动瞬间的值：对齐启动闪屏品牌色（图标渐变中段 #3FB884）；渲染层一就绪就换成真实主题色
+      titleBarOverlay: { color: '#3FB884', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
     }),
-    backgroundColor: '#1e1e1e',
+    // 启动瞬间的窗口底色：对齐启动闪屏品牌色（图标渐变中段 #3FB884）
+    backgroundColor: '#3FB884',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       // 安全性设置
