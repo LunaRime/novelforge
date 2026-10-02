@@ -13,7 +13,8 @@ import type { ApprovalRequest, ApprovalRule, RuleProposal } from './types'
 
 /** 匹配器标识：语义边界一旦调整必须同时 +1 MATCHER_VERSION，旧规则自动失效（fail-closed 回到询问） */
 export const MATCHER = 'args-identity'
-export const MATCHER_VERSION = 1
+/** v2（2026-10-02 I2 裁决）：start_workflow 语义边界加入「单章 / 多章区间」维度——旧规则经版本失配 fail-closed */
+export const MATCHER_VERSION = 2
 
 /** 稳定序列化：同一语义的提案逐字节一致（顺序固定，无键排序问题） */
 function stableKey(parts: string[]): string {
@@ -74,7 +75,14 @@ export function proposeRule(req: ApprovalRequest): RuleProposal | null {
     case 'start_workflow': {
       const workflow = str(req.args, 'workflow')
       if (!workflow) return null
-      return p(['start_workflow', workflow], `start_workflow → ${workflow}`)
+      // I2（2026-10-02 用户裁决）：单章与多章区间**分键记忆**——区间是新的放大面（一次常驻授权最多
+      // 触发 20 个 run，见工具层 chapter_end 护栏），首次出现必须单独过一次确认卡；单章便捷照旧。
+      // 判定与工具层同构：chapter_end > chapter_number 才算区间（=== 等价单章）。
+      const chapterNumber = req.args['chapter_number']
+      const chapterEnd = req.args['chapter_end']
+      const isRange = typeof chapterNumber === 'number' && typeof chapterEnd === 'number' && chapterEnd > chapterNumber
+      const scope = isRange ? 'range' : 'single'
+      return p(['start_workflow', workflow, scope], `start_workflow → ${workflow} (${scope})`)
     }
     case 'update_config': {
       const field = str(req.args, 'field')

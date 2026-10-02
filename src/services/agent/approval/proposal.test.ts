@@ -25,9 +25,9 @@ describe('proposeRule 可固化边界（对标 Denova「单一静态调用 + 已
     expect(p?.matchKey).toContain('drafts')
   })
 
-  it('start_workflow：按工作流名固化（章节号不影响 identity）', () => {
+  it('start_workflow：按工作流名固化（章节号不影响 identity；范围类型并入 identity 见 I2 组）', () => {
     const p = proposeRule(req('start_workflow', { workflow: 'generate_draft', chapter_number: 3 }))
-    expect(p?.matchKey).toBe(JSON.stringify(['start_workflow', 'generate_draft']))
+    expect(p?.matchKey).toBe(JSON.stringify(['start_workflow', 'generate_draft', 'single']))
     expect(p?.displayPattern).toContain('generate_draft')
   })
 
@@ -106,5 +106,44 @@ describe('matchesRule 匹配与失效', () => {
     expect(rule.id.startsWith('approval-')).toBe(true)
     // 同项目同提案 → 同 id（稳定）
     expect(makeRule(proposal, 'E:/novels/demo', base.args).id).toBe(rule.id)
+  })
+})
+
+describe('I2：单章 / 多章区间分键记忆（2026-10-02 用户裁决）', () => {
+  const single = req('start_workflow', { workflow: 'generate_draft', chapter_number: 3 })
+  const range = req('start_workflow', { workflow: 'generate_draft', chapter_number: 5, chapter_end: 8 })
+
+  it('范围类型并入 identity：单章 / 区间分键、显示描述明示', () => {
+    const ps = proposeRule(single)!
+    const pr = proposeRule(range)!
+    expect(ps.matchKey).toBe(JSON.stringify(['start_workflow', 'generate_draft', 'single']))
+    expect(pr.matchKey).toBe(JSON.stringify(['start_workflow', 'generate_draft', 'range']))
+    expect(ps.displayPattern).toContain('single')
+    expect(pr.displayPattern).toContain('range')
+  })
+
+  it('chapter_end === chapter_number → 等价单章（同一记忆域）', () => {
+    const eq = proposeRule(req('start_workflow', { workflow: 'generate_draft', chapter_number: 5, chapter_end: 5 }))!
+    expect(eq.matchKey).toBe(proposeRule(single)!.matchKey)
+  })
+
+  it('单章规则不覆盖区间提案（首次区间必须过一次卡）——反之亦然', () => {
+    const ps = proposeRule(single)!
+    const pr = proposeRule(range)!
+    const ruleSingle = makeRule(ps, 'E:/novels/demo', single.args)
+    const ruleRange = makeRule(pr, 'E:/novels/demo', range.args)
+    expect(matchesRule(ruleSingle, pr, 'E:/novels/demo')).toBe(false) // ← 核心：区间不被单章常驻授权覆盖
+    expect(matchesRule(ruleRange, ps, 'E:/novels/demo')).toBe(false)
+    expect(matchesRule(ruleSingle, ps, 'E:/novels/demo')).toBe(true)
+    expect(matchesRule(ruleRange, pr, 'E:/novels/demo')).toBe(true)
+  })
+
+  it('旧版规则（无范围维度的 matchKey）→ 不命中（fail-closed）', () => {
+    const ps = proposeRule(single)!
+    const legacy = {
+      ...makeRule(ps, 'E:/novels/demo', single.args),
+      matchKey: JSON.stringify(['start_workflow', 'generate_draft']),
+    }
+    expect(matchesRule(legacy, ps, 'E:/novels/demo')).toBe(false)
   })
 })
