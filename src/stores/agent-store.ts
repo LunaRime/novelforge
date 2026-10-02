@@ -584,9 +584,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     const convId = conv.id
 
-    // ===== 意图预路由（阶段 A）：/命令与@未命中后，本地意图识别 → 确定性触发 or 澄清 or 兜底 =====
+    // ===== 意图预路由（阶段 A）：本地识别 → 澄清 / 增强 / 交 ReAct（方案 B 2026-10-02）=====
     // 守卫：/ 前缀输入（/status 穿透分支、未知/自定义 skill 命令改写分支——皆未 return 到达此处）
-    // 全量保持改动前落 ReAct 的行为不变——预路由只对非 slash 输入有增量价值（查询→写工作流零切换）
+    // 方案 B：本地分类不再执行任何东西（直出退场）——仅保留无动作产出：ambiguous→澄清、character→增强；
+    // 其余 kind 一律返回 none 落 ReAct，由模型经 start_workflow 工具（确认后）执行
     const intent = !trimmedContent.startsWith('/') ? detectWritingIntent(trimmedContent) : { kind: 'none' as const }
     let enhancedContent: string | undefined
     try {
@@ -599,10 +600,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         if (enhancedContent !== undefined) content = enhancedContent
       }
     } catch (error) {
-      // 评审修复（I2）：预路由无兜底——handleWritingIntent 对非 WorkflowStartError 一律 rethrow（真实可达源：
-      // workflow-starter.ts 的 startWorkflow 在 starter try 之外直抛），此前 sendMessage 直接 reject：
-      // 无错误消息、无用户消息、generating 未置位。兜底：注入 `发生异常` 文案（与下方 ReAct try/catch
-      // 的既有形态一致）并 return——不让 sendMessage reject，会话保持可继续对话
+      // 兜底（沿用 I2 评审结论；方案 B 2026-10-02 后直出已退场，handleWritingIntent 对异常一律 rethrow）：
+      // 注入 `发生异常` 文案（与下方 ReAct try/catch 的既有形态一致）并 return——不让 sendMessage reject，
+      // 会话保持可继续对话
       const errorMsg: AgentMessage = {
         id: genId(), role: 'assistant',
         content: t('agent.errorException').replace('{error}', String(error)),
@@ -1166,13 +1166,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   handleWritingIntent: async (intent, rawContent) => {
     const conv = get().getActiveConversation()
     if (!conv) return { status: 'none' }
-    // 评审修复（M5）：t 已在模块顶部静态导入——动态 import 冗余（handleWritingIntent 不受影响）
-    const { startChapterWorkflow, startBlueprintWorkflow, startArchitectureWorkflow, WorkflowStartError } = await import('../services/workflows/workflow-starter')
 
     // ⚠️ P0-4 修订：**用户消息不得在此重复 append**——原实现「这里 append 原文 + character 分支 append
     //    增强 + 主流程再 append 原文」= 用户原文 2 次 + 增强 1 次，三重复；
-    //    D5 例外补充：强命中/澄清路径在本函数内先 append 用户原文转录（下方守卫块）再 return handled——
-    //    主流程 :423 直接 return 不再 append，每轮用户输入仍恰好 1 次（「恰 1 次」合同未变）
+    //    D5 例外补充：澄清路径在本函数内先 append 用户原文转录（下方守卫块）再 return handled——
+    //    主流程直接 return 不再 append，每轮用户输入仍恰好 1 次（「恰 1 次」合同未变）
     const appendMsg = (msg: AgentMessage) => {
       set(state => ({
         conversations: state.conversations.map(c =>
@@ -1182,18 +1180,18 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       get().persistCurrent(conv.id)
     }
 
-    // ⚠️ D5 修订（转录形态）：强命中/澄清路径 append 用户原文 1 次——P0-4 修复后主流程在 handled 时
+    // ⚠️ D5 修订（转录形态）：澄清路径 append 用户原文 1 次——P0-4 修复后主流程在 handled 时
     //    直接 return，用户原文曾零出现（对话断链、标题停「新对话」、CCR batch 无原文、fork 无源节点）。
-    //    防三重复接线：仅非 character/none 分支在此 append——character 仍由主流程 append 增强形态（恰 1 次）；
-    //    handled 分支主流程 return 不再 append；none 分支主流程走 ReAct append 原文——用户输入在本轮历史恰好 1 次
-    if (intent.kind !== 'character' && intent.kind !== 'none') {
+    //    防三重复接线：仅 ambiguous 在此 append；character 由主流程 append 增强形态（恰 1 次）；
+    //    强命中直出已随方案 B（2026-10-02）退场——那些输入落 ReAct，由主流程正常 append 原文。
+    if (intent.kind === 'ambiguous') {
       const userMsg: AgentMessage = { id: genId(), role: 'user', content: rawContent, createdAt: Date.now() }
       set(state => ({
         conversations: state.conversations.map(c =>
           c.id === conv.id
             ? {
                 ...c,
-                // 首条用户消息标题合同（与主流程 :471 的 generateTitle 一致）：补齐强命中会话「新对话」不可区分缺陷
+                // 首条用户消息标题合同（与主流程 :471 的 generateTitle 一致）：补齐澄清会话「新对话」不可区分缺陷
                 title: c.messages.length === 0 ? generateTitle(rawContent) : c.title,
                 messages: [...c.messages, userMsg],
                 updatedAt: Date.now(),
@@ -1204,96 +1202,35 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       get().persistCurrent(conv.id)
     }
 
-    const makeStartedMsg = (displayName: string, chapterTag: string): AgentMessage => ({
-      id: genId(), role: 'assistant',
-      content: t('agent.intentStarted').replace('{name}', displayName).replace('{chapter}', chapterTag),
-      createdAt: Date.now(),
-      artifacts: [{ type: 'workflow_started', name: `${displayName} ${chapterTag}`.trim() }],
-    })
-
-    try {
-      switch (intent.kind) {
-        case 'chapter_creation': {
-          const chapter = intent.chapter
-          if (chapter === null) {  // 「写」无章号
-            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyChapter'), createdAt: Date.now() })
-            return { status: 'handled' }
-          }
-          if (typeof chapter === 'object') {
-            // 批量：逐章触发（v1 串行）
-            for (let n = chapter.from; n <= chapter.to; n++) {
-              const r = await startChapterWorkflow('generate_draft', n)
-              appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
-            }
-          } else {
-            const r = await startChapterWorkflow('generate_draft', chapter)
-            appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
-          }
-          return { status: 'handled' }
-        }
-        case 'refine': {
-          const chap = intent.chapter
-          if (chap === null) {  // 无定位 → 澄清
-            appendMsg({ id: genId(), role: 'assistant', content: t('agent.intentClarifyRefine'), createdAt: Date.now() })
-            return { status: 'handled' }
-          }
-          const r = await startChapterWorkflow('refine', chap)
-          appendMsg(makeStartedMsg(r.displayName, r.chapterTag))
-          return { status: 'handled' }
-        }
-        case 'architecture': {
-          const r = intent.target === 'blueprint'
-            ? await startBlueprintWorkflow()
-            : await startArchitectureWorkflow()
-          appendMsg({
-            id: genId(), role: 'assistant',
-            content: t('agent.intentStartedNoChapter').replace('{name}', r.displayName),
-            createdAt: Date.now(),
-            artifacts: [{ type: 'workflow_started', name: r.displayName }],
-          })
-          return { status: 'handled' }
-        }
-        case 'character': {
-          // v1：角色无现成工作流 → 参数提取 + 增强内容返回主流程（P0-4：不 append 任何消息，
-          // 主流程在 userMsg 构建时替换 content——用户历史中为增强后的完整请求，原文仅出现 1 次）
-          const op = intent.action === 'create' ? t('agent.intentCharCreate') : t('agent.intentCharUpdate')
-          return { status: 'none', enhancedContent: `${op}：${intent.name}\n\n${rawContent}` }
-        }
-        case 'ambiguous':
-          // 评审修复（M2）：按 hint 映射澄清文案——hint='chapter'（「帮我写」等缺章号写稿祈使）用
-          // intentClarifyChapter（此前该键不可达，用户收到通用模糊句）；character 与其他 hint 用通用澄清
-          appendMsg({
-            id: genId(), role: 'assistant',
-            content: intent.hint === 'character'
-              ? t('agent.intentClarifyGeneric')
-              : intent.hint === 'chapter'
-                ? t('agent.intentClarifyChapter')
-                : t('agent.intentClarifyGeneric'),
-            createdAt: Date.now(),
-          })
-          return { status: 'handled' }
-        case 'none':
-          return { status: 'none' }
+    switch (intent.kind) {
+      // 方案 B（2026-10-02）：本地直出退场——不再启动任何工作流。
+      // 全部自然语言交 ReAct，由模型经 start_workflow 工具（requiresConfirmation + A 档审批）→ 确认 → 执行；
+      // 判据收敛为两套：/ 命令与模型。意图解析保留（供澄清/增强与未来复用），执行已退役。
+      case 'chapter_creation':
+      case 'refine':
+      case 'architecture':
+        return { status: 'none' }
+      case 'character': {
+        // v1：角色无现成工作流 → 参数提取 + 增强内容返回主流程（P0-4：不 append 任何消息，
+        // 主流程在 userMsg 构建时替换 content——用户历史中为增强后的完整请求，原文仅出现 1 次）
+        const op = intent.action === 'create' ? t('agent.intentCharCreate') : t('agent.intentCharUpdate')
+        return { status: 'none', enhancedContent: `${op}：${intent.name}\n\n${rawContent}` }
       }
-    } catch (e) {
-      if (e instanceof WorkflowStartError) {
-        // P0-3：ERR_NO_BLUEPRINT 用 e.message（buildDraftWorkflow 内已带 wfBlueprintDataMissing 文案，归因精准）
-        //
-        // ⚠️ 真机反馈修复（2026-09-13）：ERR_GUARD 此前**一律**替换成通用文案
-        // （`agent.intentGuardFail`「前置条件未满足，无法开始。请检查项目配置」），把 guard 给出的
-        // **具体原因**（如「请先生成蓝图」「前一章未定稿」）丢掉了 —— 用户只被告知「去检查项目配置」，
-        // 不知道该补什么。现在：有具体原因就带上；只有通用占位时保持原文案（不重复啰嗦）。
-        const guardDetail = typeof e.message === 'string' ? e.message.trim() : ''
-        const isGenericDetail = !guardDetail
-          || guardDetail === t('error.prereqNotMet')
-          || guardDetail === t('agent.intentGuardFail')
-        const msg = e.code === 'ERR_GUARD'
-          ? (isGenericDetail ? t('agent.intentGuardFail') : `${t('agent.intentGuardFail')}：${guardDetail}`)
-          : e.message
-        appendMsg({ id: genId(), role: 'assistant', content: msg, createdAt: Date.now() })
+      case 'ambiguous':
+        // 评审修复（M2）：按 hint 映射澄清文案——hint='chapter'（「帮我写」等缺章号写稿祈使）用
+        // intentClarifyChapter（此前该键不可达，用户收到通用模糊句）；character 与其他 hint 用通用澄清
+        appendMsg({
+          id: genId(), role: 'assistant',
+          content: intent.hint === 'character'
+            ? t('agent.intentClarifyGeneric')
+            : intent.hint === 'chapter'
+              ? t('agent.intentClarifyChapter')
+              : t('agent.intentClarifyGeneric'),
+          createdAt: Date.now(),
+        })
         return { status: 'handled' }
-      }
-      throw e
+      case 'none':
+        return { status: 'none' }
     }
   },
 

@@ -1,9 +1,13 @@
 /**
  * 意图预路由（阶段 A）——本地零 LLM 成本的自然语言意图识别。
- * 判定原则：只拦截「执行成本/破坏性」高的意图（写稿/修稿/角色/大纲——都会触发工作流或写库）；
+ * 判定原则：只识别「执行成本/破坏性」高的意图（写稿/修稿/角色/大纲）。
+ * ⚠️ 方案 B（2026-10-02 拍板）：本模块**不再直接触发任何执行**——chapter_creation / refine /
+ *    architecture 三类仅作解析（执行已退役，落 ReAct，由模型经 start_workflow 工具 + 确认执行）；
+ *    本地保留的无动作产出只有两类：ambiguous → 澄清、character → 内容增强。
  * 查询类（文风/设定/聊天）不预路由，留给 ReAct 兜底。
  */
 
+// kind 保留完整分类：三类执行意图的解析仍会返回（当前消费方将其落回 ReAct；留作澄清/提示/未来复用）
 export type WritingIntent =
   | { kind: 'chapter_creation'; chapter: number | { from: number; to: number } | null }
   | { kind: 'refine'; chapter: number | null }

@@ -5,7 +5,7 @@ import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
-import { startChapterWorkflow, WorkflowStartError } from '../services/workflows/workflow-starter'
+import { startChapterWorkflow } from '../services/workflows/workflow-starter'
 import { runAgentLoop, type AgentEngineCallbacks, type ToolCallInfo } from '../services/agent/agent-engine'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry } from '../services/agent/skill-registry'
@@ -457,30 +457,52 @@ describe('sendMessage 意图预路由', () => {
     vi.clearAllMocks()
   })
 
-  it('强命中写稿意图：不调 runAgentLoop，注入开始消息 + workflow_started 产物', async () => {
+  it('方案 B：强命中写稿意图不再本地启动——落 ReAct，无 workflow_started 产物', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
     mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
-    mockStartChapter.mockResolvedValue({ runId: 'run-1', displayName: '写稿', chapterTag: '第3章' })
 
     await useAgentStore.getState().sendMessage('写第3章')
 
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    // D5：强命中路径保留用户原文转录 1 次（P0-4 后零出现的缺陷修复）——转录在「已开始」消息之前
+    // 直出退场（方案 B）：不经本地工作流启动；由模型经 start_workflow 工具（确认后）处理
+    expect(mockStartChapter).not.toHaveBeenCalled()
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
+    // 原文恰好 1 次（ReAct 主流程 append）+ 首条标题合同保持
     const userMsgs = after.messages.filter(m => m.role === 'user')
     expect(userMsgs).toHaveLength(1)
     expect(userMsgs[0].content).toBe('写第3章')
-    expect(after.messages[0].role).toBe('user')
-    // 首条用户消息标题合同：强命中会话不再停「新对话」
     expect(after.title).toBe('写第3章')
-    const started = after.messages[after.messages.length - 1]
-    expect(started.role).toBe('assistant')
-    expect(started.content).toContain('已开始')
-    expect(started.content).toContain('写稿')
-    expect(started.content).toContain('第3章')
-    expect(started.artifacts?.[0]).toMatchObject({ type: 'workflow_started', name: '写稿 第3章' })
-    expect(mockRunAgentLoop).not.toHaveBeenCalled()
-    expect(useAgentStore.getState().generating).toBe(false)
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+  })
+
+  it('方案 B：refine 强命中（含无章号）落 ReAct——本地澄清一并退场', async () => {
+    // 有章号
+    useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'refine', chapter: 2 })
+    await useAgentStore.getState().sendMessage('润色第2章')
+    expect(mockStartChapter).not.toHaveBeenCalled()
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+
+    // 无章号：不再本地回 intentClarifyRefine（拍板 2026-10-02），同样落 ReAct
+    useAgentStore.getState().createConversation({ title: 'T' })
+    mockDetect.mockReturnValue({ kind: 'refine', chapter: null })
+    await useAgentStore.getState().sendMessage('润色一下')
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(2)
+  })
+
+  it('方案 B：architecture 强命中落 ReAct（不再本地启动蓝图/架构工作流）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    mockDetect.mockReturnValue({ kind: 'architecture', target: 'blueprint' })
+
+    await useAgentStore.getState().sendMessage('生成大纲')
+
+    expect(mockStartChapter).not.toHaveBeenCalled()
+    expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
   })
 
   it('弱命中 hint=chapter：注入 intentClarifyChapter 文案（M2：clarifyChapter 键可达——「帮我写」不再收通用模糊句）', async () => {
@@ -614,88 +636,32 @@ describe('sendMessage 意图预路由', () => {
     }
   })
 
-  it('工作流启动失败 ERR_GUARD：通用文案 + guard 具体原因（真机反馈：只提示「检查项目配置」不够）', async () => {
+  // 注：原「直出 ERR_GUARD / ERR_NO_BLUEPRINT / ERR_NO_DRAFT → 文案映射」四例随方案 B（2026-10-02）删除——
+  // 直出退场后启动工作流的唯一入口是 start_workflow 工具，其错误语义映射由 start-workflow.tool.test.ts 覆盖。
+
+  it('预路由异常兜底（I2 沿用）：handleWritingIntent 直抛 → 注入异常消息不 reject', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ defaultModelId: 'test-model' })
-    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
-    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', '前置条件失败（guard 明细）'))
+    mockDetect.mockReturnValue({ kind: 'ambiguous', hint: 'chapter' })
+    // 触发源随方案 B 退役（原 startWorkflow 直抛）——本用例以被 mock 的 handleWritingIntent 直抛验证 sendMessage 兜底契约
+    const original = useAgentStore.getState().handleWritingIntent
+    useAgentStore.setState({
+      handleWritingIntent: vi.fn().mockRejectedValue(new Error('pre-router 直抛：工作流实例内部异常')),
+    })
 
-    await useAgentStore.getState().sendMessage('写第3章')
+    try {
+      // 此前 sendMessage 直接 reject（无错误消息、无用户消息、generating 未置位）——兜底后正常 resolve
+      await expect(useAgentStore.getState().sendMessage('帮我写')).resolves.toBeUndefined()
 
-    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    const last = after.messages[after.messages.length - 1]
-    expect(last.role).toBe('assistant')
-    // 具体原因必须回显（否则用户不知道该补什么）
-    expect(last.content).toBe(`${t('agent.intentGuardFail')}：前置条件失败（guard 明细）`)
-    expect(mockRunAgentLoop).not.toHaveBeenCalled()
-    expect(useAgentStore.getState().generating).toBe(false)
-  })
-
-  it('ERR_GUARD 只有通用占位（error.prereqNotMet）时不重复啰嗦', async () => {
-    const conv = useAgentStore.getState().createConversation({ title: 'T' })
-    useLLMStore.setState({ defaultModelId: 'test-model' })
-    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
-    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', t('error.prereqNotMet')))
-
-    await useAgentStore.getState().sendMessage('写第3章')
-
-    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    const last = after.messages[after.messages.length - 1]
-    expect(last.content).toBe(t('agent.intentGuardFail'))
-  })
-
-  it('工作流启动失败 ERR_NO_BLUEPRINT：透传 e.message（蓝图缺失文案归因）', async () => {
-    const conv = useAgentStore.getState().createConversation({ title: 'T' })
-    useLLMStore.setState({ defaultModelId: 'test-model' })
-    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
-    const blueprintMissingMsg = '未找到第3章的蓝图数据，请先生成章节蓝图（e.message 透传）'
-    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_NO_BLUEPRINT', blueprintMissingMsg))
-
-    await useAgentStore.getState().sendMessage('写第3章')
-
-    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    const last = after.messages[after.messages.length - 1]
-    expect(last.role).toBe('assistant')
-    expect(last.content).toBe(blueprintMissingMsg)
-    expect(mockRunAgentLoop).not.toHaveBeenCalled()
-    expect(useAgentStore.getState().generating).toBe(false)
-  })
-
-  it('refine 意图 ERR_NO_DRAFT：助理消息为 wfNoRefineDraft 修稿语义（I1：e.message 透传不再报「审稿」）', async () => {
-    const conv = useAgentStore.getState().createConversation({ title: 'T' })
-    useLLMStore.setState({ defaultModelId: 'test-model' })
-    mockDetect.mockReturnValue({ kind: 'refine', chapter: 3 })
-    const refineNoDraftMsg = t('tool.wfNoRefineDraft').replace('{chapter}', '3')
-    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_NO_DRAFT', refineNoDraftMsg))
-
-    await useAgentStore.getState().sendMessage('润色第3章')
-
-    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    const last = after.messages[after.messages.length - 1]
-    expect(last.role).toBe('assistant')
-    expect(last.content).toBe(refineNoDraftMsg)
-    expect(mockRunAgentLoop).not.toHaveBeenCalled()
-    expect(useAgentStore.getState().generating).toBe(false)
-  })
-
-  it('预路由异常兜底：非 WorkflowStartError（startWorkflow 直抛）→ 注入异常消息不 reject、用户转录保留（I2）', async () => {
-    const conv = useAgentStore.getState().createConversation({ title: 'T' })
-    useLLMStore.setState({ defaultModelId: 'test-model' })
-    mockDetect.mockReturnValue({ kind: 'chapter_creation', chapter: 3 })
-    mockStartChapter.mockRejectedValue(new Error('startWorkflow 直抛：工作流实例内部异常'))
-
-    // 此前 sendMessage 直接 reject（无错误消息、无用户消息、generating 未置位）——兜底后正常 resolve
-    await expect(useAgentStore.getState().sendMessage('写第3章')).resolves.toBeUndefined()
-
-    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    const last = after.messages[after.messages.length - 1]
-    expect(last.role).toBe('assistant')
-    expect(last.content).toBe(t('agent.errorException').replace('{error}', 'Error: startWorkflow 直抛：工作流实例内部异常'))
-    // D5：错误兜底前转录已 append（用户原文仍保留在历史，顺序为转录在前、异常消息在后）
-    expect(after.messages.filter(m => m.role === 'user')).toHaveLength(1)
-    expect(after.messages[0].role).toBe('user')
-    expect(mockRunAgentLoop).not.toHaveBeenCalled()
-    expect(useAgentStore.getState().generating).toBe(false)
+      const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+      const last = after.messages[after.messages.length - 1]
+      expect(last.role).toBe('assistant')
+      expect(last.content).toBe(t('agent.errorException').replace('{error}', 'Error: pre-router 直抛：工作流实例内部异常'))
+      expect(mockRunAgentLoop).not.toHaveBeenCalled()
+      expect(useAgentStore.getState().generating).toBe(false)
+    } finally {
+      useAgentStore.setState({ handleWritingIntent: original })
+    }
   })
 })
 
