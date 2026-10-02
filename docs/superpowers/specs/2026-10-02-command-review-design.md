@@ -96,7 +96,7 @@
 - **I1 区间护栏**：`chapter_end` 上限 20 章（`tool.wfRangeTooLarge`）+ `chapter_number / chapter_end` 整数且 ≥1 校验（防幻觉大区间与小数章号）。
 - **I3 部分失败清单**：区间中途失败时错误附「已启动：第N章」（`tool.wfRangePartial`）——模型据此恢复，不必重发整区间。
 - **I4 覆盖回填**：`ERR_GUARD` 工具层映射补 2 例测试（既有行为，非变更）。
-- **I2 留用户裁决**：A 档批准记忆粒度（工具名 + 工作流类型）× 区间放大（「始终允许」后可免卡启动任意区间）——改 rule identity 属用户设计选择，未改；上限（I1）已把单次爆炸半径封顶 20。
+- **I2 已裁决并落地（2026-10-02）**：**区间单列记忆域**——`start_workflow` 的规则 identity 加入「范围类型」维度（`single` / `range`；判定与工具层同构：`chapter_end > chapter_number` 才算区间，`===` 等价单章）：单章便捷照旧，**首次区间必须单独过一次确认卡**（可再选「始终允许区间」）；`MATCHER_VERSION` 1→2，旧规则经版本失配 fail-closed 回到询问。提交见当日 `feat(agent): I2 裁决落地`。
 
 **复审补遗（Minor 处置）**：M1（`chapter_end / chapter_number: null` 归一为未传——模型常对未用可选参数发 null，复审升级并入本 pass）+ M2（不可达括注随 I1 文案重写顺带解决）+ M3（区间注释按「回执即返回，不等 run 结束」修正）+ M5（计划死键计数对齐 4 键）；**M4**（`chapterNumber!` 非空断言收窄）记 deferred minor 未修。
 
