@@ -90,4 +90,12 @@
 
 **死键登记（暂留字典，不删——先例 `agent.comingSoon`）**：`agent.intentStarted` / `agent.intentStartedNoChapter` / `agent.intentClarifyRefine` / `agent.intentGuardFail`（4 键随直出退役成为零引用）。
 
+**终审修复 pass（2026-10-02，提交 `026459b`）**：独立评审（Opus，fresh context）1 Critical + 4 Important，处置如下——
+
+- **C1 启动即回执（必修）**：`startWorkflow` 要等整个 run 结束才 resolve，而 agent-engine 对工具调用有 **30s 超时且超时不中止执行** → 方案 B 后每次「写第X章」都会被假超时腰斩（工具返回值与 artifacts 被丢弃、工作流其实在后台跑；区间把问题放大 N 倍）。修复：`workflow-starter` 三个入口改用 store 既有 `onStarted` 回执（D 档同款语义），run 开始即返回 runId，进度交给任务面板 / AI 输出面板。⚠️ **此项不修则 §6 真机用例 2 会以误导形态失败**。
+- **I1 区间护栏**：`chapter_end` 上限 20 章（`tool.wfRangeTooLarge`）+ `chapter_number / chapter_end` 整数且 ≥1 校验（防幻觉大区间与小数章号）。
+- **I3 部分失败清单**：区间中途失败时错误附「已启动：第N章」（`tool.wfRangePartial`）——模型据此恢复，不必重发整区间。
+- **I4 覆盖回填**：`ERR_GUARD` 工具层映射补 2 例测试（既有行为，非变更）。
+- **I2 留用户裁决**：A 档批准记忆粒度（工具名 + 工作流类型）× 区间放大（「始终允许」后可免卡启动任意区间）——改 rule identity 属用户设计选择，未改；上限（I1）已把单次爆炸半径封顶 20。
+
 **待跑**：§6 真机四用例（按 computer-use 约束另立测试文档后执行）。
