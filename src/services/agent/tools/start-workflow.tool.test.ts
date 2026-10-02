@@ -164,4 +164,18 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
 
     expect(mockStartChapter).not.toHaveBeenCalled()
   })
+
+  it('可选参数为 null → 视为未传（M1 复审升级：模型常对未用可选参数发 null，不得误报区间无效）', async () => {
+    mockStartChapter.mockResolvedValue({ runId: 'r5', displayName: t('tool.wfDraft'), chapterTag: t('tool.chapterTag').replace('{n}', '5') })
+
+    // chapter_end: null → 单章正常启动（而非「区间无效」）
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: null })
+    expect(r.success).toBe(true)
+    expect(mockStartChapter).toHaveBeenCalledTimes(1)
+
+    // chapter_number: null → 命中「需要 chapter_number」（而非「区间无效」）
+    const r2 = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: null })
+    expect(r2.success).toBe(false)
+    expect(r2.error).toBe(t('tool.wfNeedChapter').replace('{workflow}', 'generate_draft'))
+  })
 })

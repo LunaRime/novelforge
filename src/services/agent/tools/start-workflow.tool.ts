@@ -48,8 +48,9 @@ export const startWorkflowTool = buildAgentTool({
   isReadOnly: false,
   execute: async (args) => {
     const workflow = args.workflow as string
-    const chapterNumber = args.chapter_number as number | undefined
-    const chapterEnd = args.chapter_end as number | undefined
+    // null 归一（2026-10-02 复审 M1）：模型对未用的可选参数常发 null——一律视为未传（否则误报「区间无效」）
+    const chapterNumber = args.chapter_number == null ? undefined : (args.chapter_number as number)
+    const chapterEnd = args.chapter_end == null ? undefined : (args.chapter_end as number)
 
     if (!workflow) {
       return { success: false, content: '', error: t('error.missingWorkflow') }
@@ -85,8 +86,8 @@ export const startWorkflowTool = buildAgentTool({
         case 'review':
         case 'refine':
         case 'finalize': {
-          // 区间（chapter_end，2026-10-02）：串行启动闭区间每一章——与旧直出行为对齐（v1 串行）；
-          // 中途失败按既有错误映射返回（已启动的章节不回滚——工作流已入队列）
+          // 区间（chapter_end，2026-10-02）：串行启动闭区间每一章；
+          // 中途失败按既有错误映射返回（已启动的章节不回滚——run 已进入 activeRuns；回执即返回，不等 run 结束）
           if (chapterEnd !== undefined) {
             const started: { runId: string; displayName: string; chapterTag: string }[] = []
             try {
@@ -149,7 +150,7 @@ export const startWorkflowTool = buildAgentTool({
           : e.code === 'ERR_NO_DRAFT'
             // 2026-10-02（区间配套）：优先透传 e.message——workflow-starter 已按 workflow + 实际章号参数化；
             // 区间调用下 chapterNumber 只是起始章，重建文案会把「第6章无草稿」误报成「第5章」。
-            // 空 message 兜底回重建（既有单章语义不变）
+            // 空 message 兜底回重建（仅防御——starter 抛出的 message 恒非空）
             ? (e.message || (workflow === 'review' ? t('tool.wfNoReviewDraft')
               : workflow === 'refine' ? t('tool.wfNoRefineDraft')
               : t('tool.wfNoFinalizeDraft')).replace('{chapter}', String(chapterNumber)))
