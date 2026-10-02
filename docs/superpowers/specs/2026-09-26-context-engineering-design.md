@@ -1,6 +1,6 @@
 # 上下文工程：压缩可证明性 / 原文保留 / 前缀记账 / 回执 / 明细面板（B 档第二轮）设计
 
-> **Status**: 设计已获批准（2026-09-26 用户拍板：原文分卷落盘保留全部、前缀认证做记账告警），待实施。
+> **Status**: 设计已获批准（2026-09-26 用户拍板：原文分卷落盘保留全部、前缀认证做记账告警）；**已实施（2026-09-26，B 档第二轮 `f356e33..e93553a`）**。
 > **依据**: `docs/superpowers/plans/2026-09-08-agent-capabilities-plan.md`（§7.1-B 条目 B2-B7 / §3.1 B 档 ⑥′⑦′）
 > **参照**: Denova `agent/definition_compaction.go`（可证明性）、`agent/compaction/standard.go`（原文退回）、`agent/model_loop.go`（前缀认证）、`agent/compaction_receipts.go`（副作用回执）
 

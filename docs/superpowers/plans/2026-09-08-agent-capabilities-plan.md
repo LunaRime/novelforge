@@ -10,6 +10,7 @@
 > A 档——`src/services/llm/model-router.ts:44` 的 `PURPOSE_TIER_MAP` 仍为静态 purpose→tier，无 `/models` 自动拉取、无多模型 UI；B 档——`src/services/agent/tools/` 30 个文件中无 refine 工具、无 context 一卡；C 档——全库 `subAgent|hindsight|knowledgePage` **0 命中**。
 > **2026-09-25 更正一处**：A 档③「自动拉取 provider `/models`」**已被后来的工作覆盖**（模型供应商账户，`llm:list-provider-models` 等 4 通道，`87678b4`）→ A 档实际只剩 ①路由动态决定 ②每层多模型 UI（另见 §3.1 新增的③④）。
 > 计划 §8 指定的下一步（**A 档细化为 SDD 计划**）尚未产出。**本档没有 checkbox；若日后回填，须注意它描述的是「评审/排期」动作，不代表各档已实现。**
+> **2026-10-02 更新：A/B/C/D 四档已全部实施**（A `a986a51..b1daf32`，SDD 计划 `2026-09-26-a-tier-approval-and-routing.md`；B `7f59b27..e93553a`；C `9851159..a375874`、`2b6dcb0`；D `4cb59ab..93e6033`；2026-10-01 已全部推送）。**仍未执行**：① §7.1-C2「配置四层覆盖」（拍板缓做，记档于 `2026-09-26-multi-agent-dispatch-design.md`）；② hindsight 引擎 / ③ dsh-context 全量（均可选未排期）；④ §8.4 外部执行引擎三选（待用户裁决）。
 > **基线:** master @ `f0c2949`（L2 checkpoint 迁 DB 完成）；Denova 研究部分基线 = NovelForge master @ `536ec72`（2026-09-25）。
 
 ## 1. NovelForge Agent 现状矩阵

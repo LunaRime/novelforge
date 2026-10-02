@@ -1,6 +1,6 @@
 # 写作自动化（D 档）设计
 
-> **Status**: 设计已获批准（2026-09-26 用户确认三态全做、应用内执行、四类触发器全做），待实施。
+> **Status**: 设计已获批准（2026-09-26 用户确认三态全做、应用内执行、四类触发器全做）；**已实施（2026-09-26，D 档 `4cb59ab..93e6033`）**。
 > **依据**: `docs/superpowers/plans/2026-09-08-agent-capabilities-plan.md`（§3.1 D 档新增 / §7.1-D 条目 D1-D3 / §8 第 2 条）
 > **参照实现**: Denova `internal/automation/`、`internal/app/automation/`、`web/src/features/automations/`（源码级调研已完成，关键发现见 §2 决策记录）
 

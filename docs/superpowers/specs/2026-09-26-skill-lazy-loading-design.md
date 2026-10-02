@@ -1,6 +1,6 @@
 # 技能第三面：模型自主懒加载（B 档第一轮）设计
 
-> **Status**: 设计已获批准（2026-09-26），待实施。
+> **Status**: 设计已获批准（2026-09-26）；**已实施（2026-09-26，B 档第一轮 `7f59b27..5353438`）**。
 > **依据**: `docs/superpowers/plans/2026-09-08-agent-capabilities-plan.md`（§7.1-B 条目 B1 / §3.1 B 档 ⑤′）
 > **参照实现**: Denova `internal/agents/skillassembly/assembly.go` 的 `Bucket` 三面：①提示词只放目录 ②`skill` 工具按名懒加载全文 ③`skill://` 有界引用
 

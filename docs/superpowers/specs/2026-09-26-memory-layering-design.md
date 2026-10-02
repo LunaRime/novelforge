@@ -1,6 +1,6 @@
 # 记忆分层：常驻 / 自动 / 手动（C 档第一轮）设计
 
-> **Status**: 设计已获批准（2026-09-26 用户拍板：三值 resident/auto/manual，**manual 的硬门控要真正实现**），待实施。
+> **Status**: 设计已获批准（2026-09-26 用户拍板：三值 resident/auto/manual，**manual 的硬门控要真正实现**）；**已实施（2026-09-26，C 档第一轮 `9851159..bc89f8d`，含修复 `c4ecab8`/`8c240e8`）**。
 > **依据**: `docs/superpowers/plans/2026-09-08-agent-capabilities-plan.md`（§7.1-C 条目 C1/C2 / §3.1 C 档「先从 lore 式 resident/on_demand 分层起步」）
 > **参照**: Denova `internal/book/lore/`（`types.go` 的数据模型 / `store_read.go` 的渐进装配 / `index.go` 的分级降级 / `lore_catalog.go` 的名字目录）
 
