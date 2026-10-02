@@ -12,7 +12,7 @@
 > **2026-10-02：已自审并拆分**（实施主体）——
 > ① 命令审查：`docs/superpowers/specs/2026-10-02-command-review-design.md`
 > ② 输出格式：`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`
-> ③ 手动 AI 产出审查（候选）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`
+> ③ 手动 AI 产出审查（已纳入）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`
 > 原 §3 设计内容已迁入三份 spec；§4 更新为拆分指引；本文保留共享背景（§1/§2）、证据索引（§5）与自审记录（§6）。
 
 本文的出发点是一条既有结论：
@@ -138,18 +138,18 @@
 ### 3.5 → 已迁出
 
 > 手动 AI 产出审查（原 §3.5：镜像面判断、16 处入口现状、五层改法）已迁入
-> **`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`（线③，候选）**——实施以该档为准，本文不再保留副本。
+> **`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`（线③，已纳入）**——实施以该档为准，本文不再保留副本。
 
 ---
 
 ## 4. 实施边界与已拍板事项（拆分后）
 
-- 三条工作线（全档不含实施；③为候选）——实施主体已拆出（见 §3 指引）：
+- 三条工作线（全档不含实施）——实施主体已拆出（见 §3 指引）：
   - 线①「命令审查」（小）：`docs/superpowers/specs/2026-10-02-command-review-design.md`；建议先做；
   - 线②「输出格式」（大）：`docs/superpowers/specs/2026-10-02-agent-output-format-design.md`；建议线①后；
-  - 线③「手动 AI 产出审查」（候选）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`。
+  - 线③「手动 AI 产出审查」（已纳入，排①/②后）：`docs/superpowers/specs/2026-10-02-manual-ai-output-review-design.md`。
 - **已拍板存档（2026-10-01，用户）**：① 直出处置 = 方案 B（直出退场，全走模型 + 工具 + 确认）；② 澄清 / 增强分支保留；③ 输出格式连视觉一并照搬 dsh。
-- 实施期待定（已随拆分落到各 spec 的「待定」节）：线① D1 区间行为 / D2 模式库收留；线② D0 与 09-28 UI 重构批 1–4 的关系 / D1 主题映射 / D2 箭头语义 / D3 授权记忆。
+- 实施期待定（已随拆分落到各 spec 的「待定」节）：线① D1 区间行为 / D2 模式库收留；线② D1 主题映射 / D3 授权记忆（**D0 批 1–4 取消、D2 箭头按 dsh 已于 2026-10-02 拍板**）。
 
 ---
 

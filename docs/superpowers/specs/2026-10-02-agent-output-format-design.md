@@ -4,7 +4,7 @@
 > **状态**：方向已拍板（**输出格式连视觉一并照搬 dsh**，2026-10-01）——**待实施**（大）；建议线①之后。
 > **拆分来源**：总纲 §3.3 / §3.4 / §5 视觉源（内容已迁入本文，总纲不再保留副本）。
 
-## 0. ⚠️ 拆分自审发现（需先拍板）：与《2026-09-28 UI 重构》批 1–4 重叠
+## 0. 与《2026-09-28 UI 重构》批 1–4 的关系（**已拍板：批 1–4 取消，由本线取代**）
 
 两条**均未执行**的轨道改同一批组件：
 
@@ -13,7 +13,7 @@
 
 **目标语言不同**：批 1–4 = NF 行片化 + 悬停置换 + 32×32（NF 令牌，批 0 已定型）；本线 = dsh 照搬（工具单行化 / 过程组 / 审批接管 / 视觉变量）。
 
-**建议（待拍板 D0）**：批 1–4 **并入本线执行**（行片化 / 悬停置换是 dsh 行语言的子集，避免同一组件改两遍）；或明确冻结批 1–4、本线取代。**先定关系再动工**。
+**已拍板（2026-10-02，用户）**：**批 1–4 不执行（取消）**——AI 面板 / 消息族 / 产物族 / 底部面板的形态由本线按 dsh 统一负责（不并轨、不重复改造）；09-28 spec 已同步标注（批 1–4 ❌、批 5–9 保留）。
 
 ## 1. 范围与视觉源
 
@@ -23,7 +23,7 @@
   - **语义变量层**：`packages/client/ui-theme/src/styles/design-platform.css`——`--dsw-static-*`（静态色板）→ `--dsw-alias-*`（语义别名）两层，亮 / 暗各一份（选择器 `body[data-ds-dark-theme]`），含 `--dsw-specific-bubble` 等聊天专属变量；
   - **基础层**：`base.css`（字体栈 + 圆角刻度 4/8/12/16/20/28）、`gradient-shadow-text.css`（字号轴派生 `--dsh-content-font-delta` / `-secondary` + 阴影 `--dsw-shadow-lv*`）；
   - **行语言三原语**：`ui-primitives` 的 `DisclosureRow` + `StateDot` + `TextShimmer`——dsh 所有「流程行」（工具 / 思考 / 命令 / 工作流成员）都是这三者组合，照搬这三个等于拿到整套行语言的骨架；
-  - **行前导置换（悬停）**：不悬停时显示语义图标；悬停时 100ms 交叉渐隐为 chevron（`DisclosureRow.module.css:63-83`；`DisclosureRow.tsx:71-81` 注释「Replaces the collapsed icon with a chevron while the row is hovered」）；展开态固定为静态上折角；行文字同步 tertiary → secondary 提色。dsh 全部流程行通用（工具 / 思考 / 命令卡 / 工作流 phase / 过程组头 `ChatGroupSeat.tsx:117-122`）；斜杠菜单的行不做置换。NF 已有同族 `HoverSwapIcon`（`src/components/ui/HoverSwapIcon.tsx`，2026-09-28 批 0，`group-hover` + `group-focus-within` 双触发）——统一口径见待定 D2。
+  - **行前导置换（悬停）**：不悬停时显示语义图标；悬停时 100ms 交叉渐隐为 chevron（`DisclosureRow.module.css:63-83`；`DisclosureRow.tsx:71-81` 注释「Replaces the collapsed icon with a chevron while the row is hovered」）；展开态固定为静态上折角；行文字同步 tertiary → secondary 提色。dsh 全部流程行通用（工具 / 思考 / 命令卡 / 工作流 phase / 过程组头 `ChatGroupSeat.tsx:117-122`）；斜杠菜单的行不做置换。NF 已有同族 `HoverSwapIcon`（`src/components/ui/HoverSwapIcon.tsx`，2026-09-28 批 0，`group-hover` + `group-focus-within` 双触发）——统一口径：**按 dsh**（2026-10-02 拍板，见 §4 D2）。
   - 关键样式文件清单见总纲 §5「视觉源」。
 
 ## 2. 2a：AGENT 窗口（dsh 形态速记）
@@ -76,9 +76,9 @@ NF 现状：底部 tasks 面板（步骤树：竖线连接器 + 状态图标 + �
 
 ## 4. 待定（实施前需定）
 
-- **D0**：与《2026-09-28 UI 重构》批 1–4 的关系（§0，**最高优先**）；
+- ~~D0~~ **（已定 2026-10-02）：批 1–4 取消**——由本线取代（§0）；09-28 批 5–9 不受影响；
 - **D1 主题映射**：dsh 亮 / 暗两套主题 vs NF 多主题（4 套）——映射方式实施时决定；
-- **D2 箭头语义（冲突需拍板）**：总纲原口径「照搬时按 dsh 语义统一（箭头对 `⌄/⌃`、14px、tertiary → secondary、100ms）」**与 NF 2026-09-28 批 0 已拍板并写入标准的口径冲突**——NF 标准现为 `›/⌄` 且**禁用 `⌃`**（`ui-interaction-standard` / `card-affordance-standard`，`HoverSwapIcon` 已实现）。需定：全按 dsh（并回改两份标准）或仅信息架构照搬、箭头维持 NF 口径（**倾向后者**：批 0 刚由用户拍板统一）；
+- **D2（已定 2026-10-02）：按照 dsh**——箭头对 `⌄/⌃`、14px、tertiary → secondary 行色、100ms；两份标准已同步收窄（原「全侧栏统一 `›/⌄`、禁 `⌃`」改为**限侧栏/导航行**，AI 面板流程行按 dsh）；
 - **D3 授权记忆**：dsh 一次性授权（`allowed-once`）vs NF「本项目内始终允许」的去留（总纲 §3.2 原待定）；
 - **D4**：`group-focus-within` 键盘等价保留（NF 无障碍要求，建议保留）。
 

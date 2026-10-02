@@ -116,10 +116,10 @@
 | 批 | 范围 |
 |---|---|
 | **0** | 样板：`panels/sidebar/**`（行片化 + 卡片减重 + 悬停置换 + 32×32 + 三个共享件） |
-| 1 | AI 面板 · 会话列表族（`AgentConversation` 会话行与工具条、`AgentHeader`） |
-| 2 | AI 面板 · 消息卡族（`AgentMessage`、`ThinkingCollapse`、`CompressedBatchCard`、`ToolCallBlock`） |
-| 3 | AI 面板 · 产物与任务族（`ArtifactCard`、`SubAgentSessionCard`、`SubAgentConfirmCard`、任务面板行）+ 收件箱（`automation`） |
-| 4 | 底部面板（历史行 / 运行条 / 步骤行） |
+| ~~1~~ ❌ | ~~AI 面板 · 会话列表族（`AgentConversation` 会话行与工具条、`AgentHeader`）~~ **已取消（2026-10-02）** |
+| ~~2~~ ❌ | ~~AI 面板 · 消息卡族（`AgentMessage`、`ThinkingCollapse`、`CompressedBatchCard`、`ToolCallBlock`）~~ **已取消（2026-10-02）** |
+| ~~3~~ ❌ | ~~AI 面板 · 产物与任务族（`ArtifactCard`、`SubAgentSessionCard`、`SubAgentConfirmCard`、任务面板行）+ 收件箱（`automation`）~~ **已取消（2026-10-02）** |
+| ~~4~~ ❌ | ~~底部面板（历史行 / 运行条 / 步骤行）~~ **已取消（2026-10-02）** |
 | 5 | 编辑器区（标签页条、编辑器内的列表/行） |
 | 6 | 布局框架（`ActivityBar` / `ToolWindowBar` / `StatusBar` / `TitleBar` 的按钮与列表） |
 | 7 | 设置页（模型 / 供应商等列表） |
@@ -128,7 +128,7 @@
 
 每批 = 独立提交 + 三门禁全绿 + 标准与记忆同步。
 
-> **2026-10-02 状态**：**批 0 ✅ 已落地**（提交链与遗留见 §八末「批 0 执行记录」）；**批 1–9 未跑**。
+> **2026-10-02 状态**：**批 0 ✅ 已落地**（提交链与遗留见 §八末「批 0 执行记录」）；**批 1–4 ❌ 已取消**——用户拍板「不要 09-28 批 1–4」，AI 面板 / 消息族 / 产物族 / 底部面板改由《`2026-10-02-agent-output-format-design.md`》（线②，dsh 照搬）统一负责；**批 5–9 未跑**（不受影响）。
 
 ## 七、验证策略
 
