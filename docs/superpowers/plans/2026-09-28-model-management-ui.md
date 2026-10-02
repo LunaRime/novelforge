@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-model-management-ui-design.md`
 
+> **2026-10-02 标注：已执行；形态已被新文档取代** —— 本计划按 v1 落地（行内编辑 / 按钮规范 / 搜索全选 / 获取面板）；随后 v2（一体卡）→ v3（行列表 + 行内编辑卡 + 完整凭据层）两轮重构，**现行实现 = v3**（`2026-10-01-model-management-v3-execution.md`）。
+
 ## Global Constraints
 
 - 三门禁全绿：`npx tsc --noEmit`、`npx eslint . --ext ts,tsx --max-warnings 0`、`npx vitest run`（提交前每任务都跑）

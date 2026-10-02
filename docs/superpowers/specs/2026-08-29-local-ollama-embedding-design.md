@@ -1,6 +1,7 @@
 # Ollama 本地向量模型设计（2026-08-29）
 
 > 对应实施计划：后续产出（0.1.6 发布后实施）
+> **2026-10-02 标注（局部已被新文档取代）**：「应用内 pull」通道已由后继文档 **`2026-09-25-smart-model-download-design.md`** 接手（智能下载：测速选路 + 换路续传，失败回退 `pullModel`——已实施）；本档其余设计（detect / embed / 四级降级链 / 维度校验）仍为现行实现。
 > **实施状态：✅ 已实施（2026-09-14，分支 `feat/ollama-local-embedding`）** —— SDD 任务 T1–T6 + T3b + FW-1 全部落地：T1 `d534ab9`（`fetchWithTimeout` 导出 + 超时参数化）、T2 `6ef64d4`（`electron/ollama-embedding.ts` 新模块）、T3 `0ea04d8`+R1 `482f569`（四级降级链 + 维度硬校验）、T4 `232c6cf`+R1 `f6b8196`（`GlobalConfig.localEmbedding` + `embedding:local-*` 通道）、T3b `6166259`+R1 `685a4a1`（查询侧接入）、T5 `50c0da5`（设置卡片 + i18n 三语）、FW-1 `314edcc`（pull 失败终态帧 + `:latest` 双向规范化）；T6（本任务）= 全量门禁 + 真机验证清单 + 文档回更，**无生产代码改动**。逐条差异、任务序列变更与实测更正见 §9，真机清单见 §10。
 > ~~**实施状态：⏸️ 未实施**（2026-09-14 核对：全库无 `detectOllama`/`pullModel`/`ollama-embedding` 等任何实现代码；仅有 `provider-presets.ts` 的 Ollama **聊天** provider 与 `url-utils.ts` 的 URL 归一化——与本设计的**本地向量**目标无关）~~ ← 该状态行已过时（描述的是本次改造**之前**的状态），保留仅为追溯。
 > ⚠️ **真机（Ollama 实机）验证自 2026-09-14 起部分执行**：A 组（未安装态）**通过**；B 组暴露一个**只有真机能发现的缺陷**——本地档冷启动超时（`This operation was aborted`），已修 `40e78a1`（CI `35091714876` 三平台全绿）**并在真机复测通过（「测试模型」成功）**，见 §9.6。C–J 组**待续**；本设计不主张端到端已通过。

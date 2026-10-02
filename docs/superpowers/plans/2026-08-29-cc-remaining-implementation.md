@@ -6,6 +6,7 @@
 > 档 1（C1–C4）、档 2（M1–M2）、档 3 **L1 / L2 / L3 / L4 全部已落地并提交**（L1 `182fdcd`→`688b984`；L2 `f0c2949`；L3 `746ae0b`，其中 reranker 为计划内可选步、明确排除 v1；**L4 `0154867`→`92f32d3` 共 23 个提交，S0–S10 全部落地，终态 111 files / 1308 tests 全绿**，设计见 `docs/superpowers/specs/2026-09-13-ipc-permission-granularity-design.md`）。
 > **剩余仅为人工/发布验证（非代码实现）**：① **L1 Task 6 的五项人工验收**（无人执行）；② **L4 真机验证缺口**（S8b/S9/S10 为行为变更，需真机回归——L4 设计文档已登记）；③ **L3 发布前置项**（真实 `pnpm build` + 实机启动冒烟、真实 embedding 下别名 query 的 top-K/阈值收益）。
 > ⚠️ 本段早先版本（同一 2026-09-13 审计）曾记「L4 四项全未开工」，那是写于 L4 实现**之前**；L4 随后由 23 个提交落地，故此处回更。
+> **2026-10-02 标注（实施载体）**：档 3 四项的实际设计与实施均由后继新文档承担——L1→`2026-09-03-editor-inline-accept-design.md`（+ plan）；L2→`2026-09-05-workflow-checkpoint-db-design.md`（+ plan）；L3→`2026-09-08-chinese-search-design.md`（+ plan）；L4→`2026-09-13-ipc-permission-granularity-design.md`。本档保留为总纲与审计记录。
 
 **Goal:** 将 `docs/2026-08-26-claude-code-compare.md`（commit 0b2837b）§三.3/4/5/7/8/9 + §五.1/2/3/4 的未实施落地项按性价比分档排期，每档产出独立 SDD 计划。
 

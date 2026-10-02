@@ -11,6 +11,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-09-28-model-management-v2-design.md`（§一~§九）
 
+> **2026-10-02 标注：已执行；形态已被 v3 取代** —— 一体卡随本计划落地后，被 v3（`2026-10-01-model-management-v3-execution.md`：紧凑行 + 行内编辑卡 + 完整凭据层）重构；**现行实现 = v3**。
+
 ## Global Constraints
 
 - 三门禁每任务提交前跑，**退出码直查**（`> /tmp/x.log 2>&1; echo $?`）

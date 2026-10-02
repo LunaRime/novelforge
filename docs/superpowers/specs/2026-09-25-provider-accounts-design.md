@@ -7,6 +7,7 @@
 > B 即上一版设计里被推迟的「步骤 3」（provider → 1:N）。本文件把它补上。
 > 相关：`docs/superpowers/specs/2026-09-25-model-form-restructure-design.md`（已实施）、
 > `provider.interface.ts`、`config-utils.ts`、`SettingsModal` 的 `LLMSection`
+> **2026-10-02 标注**：本档已实施（见上）；其账户/凭据形态其后经 v1 → v2 → v3 演进——密钥存储已由 v3 凭据层取代（`~/.novelforge/credentials.json` + refs；账户概念沿用）；**现行实现 = v3（2026-10-01）**。
 
 ---
 

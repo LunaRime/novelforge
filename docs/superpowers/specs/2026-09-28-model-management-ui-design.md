@@ -2,6 +2,7 @@
 
 > 2026-09-28 · 状态：待审 · 依据：用户指令（"学习 D:\Code\deepseek-harness 的添加模型 UI…改进 NF 的模型管理 UI"）+ 四工作项经用户全选确认
 > 参照物：`D:\Code\deepseek-harness`（DeepSeek 官方 harness）`packages/client/ui-settings-models`
+> **2026-10-02 标注：已被新文档取代** —— v2（`2026-09-28-model-management-v2-design.md`，一体卡）取代本档信息架构，v2 又被 v3（`2026-10-01-model-management-v3-design.md`）取代；**现行实现 = v3**（2026-10-01 完成，`2d10109..2e87fe6`，34 提交）。本档保留为 v1 阶段记录（其四项工作项曾随 v1 落地）。
 
 ## 一、背景与目标
 
