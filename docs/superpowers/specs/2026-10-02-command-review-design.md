@@ -100,4 +100,6 @@
 
 **复审补遗（Minor 处置）**：M1（`chapter_end / chapter_number: null` 归一为未传——模型常对未用可选参数发 null，复审升级并入本 pass）+ M2（不可达括注随 I1 文案重写顺带解决）+ M3（区间注释按「回执即返回，不等 run 结束」修正）+ M5（计划死键计数对齐 4 键）；**M4**（`chapterNumber!` 非空断言收窄）记 deferred minor 未修。
 
+**对照 CC / dsh 复核（2026-10-02，用户要求）**：CC `BashTool` 长命令 `run_in_background` → 立即返回 `backgroundTaskId` + 输出路径，超阻塞预算**自动转后台（不杀）**，完成时注入通知；dsh `tool-workflow` 前景执行 `await run.result`，`run_in_background: true` → 注册为 `ctx.jobs` job **立即返回 id**，run 值随 job 完成通知抵达。「启动即回执」与两参照一致（NF 工作流恒为长任务 ⇒ 无需 opt-in，直接回执）；**唯一未对齐项 = 完成回执到对话**——两参照都会通知发起方，NF 现状仅面板呈现 ⇒ 归**线②**（run 节点 / 过程组 / 交付物卡为其载体，已记 ② spec §4 D5）。
+
 **待跑**：§6 真机四用例（按 computer-use 约束另立测试文档后执行）。
