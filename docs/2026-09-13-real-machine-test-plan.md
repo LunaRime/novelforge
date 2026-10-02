@@ -51,6 +51,8 @@
 | `2026-09-08-agent-capabilities-plan.md` | **A/B/C 三档全部未实施**：A 档（主 agent 决定路由 + 自动拉取 `/models` + 多模型 UI）、B 档（RefineParagraphs 工具化 / context 一卡 / 任务-工作流展示归属）、C 档（多 agent 拆分派发 / 在位编辑流 / hindsight 记忆 / dsh-context 全量） | 该档为**规划草案**（`Status: 规划草案` + 用户裁定「全部排期」），排期待启动 → 不可测。实施后按 A/B/C 各补一组用例 |
 
 > 换句话说：**本档通过 ≠ 所有计划书完成**。它证明的是「已实施的 18 份计划的交付物在真机上可用」。
+>
+> **2026-10-02 标注（上表已过时）**：两项均已实施——**L4** 由 `2026-09-13-ipc-permission-granularity-design.md` 落地（S0–S10，23 提交）；**agent-capabilities A/B/C/D** 由 `2026-09-26` 六份新 spec/plan 承接实施（映射见该档 2026-10-02 标注）。本档仍待跑的真机项：B 组夹具校验 3 项未勾（jieba-wasm 打包加载 / 导入 / 回填）等。
 
 ---
 
