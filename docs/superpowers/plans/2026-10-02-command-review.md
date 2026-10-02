@@ -1,6 +1,8 @@
 # 命令审查（线①）实施计划：本地直出退场 + start_workflow 区间
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **执行状态（2026-10-02 回填）：✅ 已全部执行。** Task 1 `f8bf031`（直出退场）/ Task 2 `39df86e`（区间扩展）/ Task 3 `2529417`（收尾）；另有终审修复 pass `026459b`+`ff069f9`（C1 启动即回执等）与 I2 裁决落地 `043458e`（区间分键记忆）。门禁三绿 **2561/2561**。**真机四用例档已出、用户拍板「暂不跑」**（`docs/2026-10-02-command-review-real-machine-test-plan.md`）。本档 **checkbox 未回填**（执行以提交链为准）。
 
 **Goal:** 按方案 B 让本地正则直出退场——自然语言不再绕过审查直接启动工作流，全部经 ReAct → `start_workflow` 工具（确认）→ 执行；并为该工具补上多章区间能力（D1 拍板）。
 
