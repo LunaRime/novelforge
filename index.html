@@ -16,6 +16,14 @@
   <body style="margin: 0;">
     <div id="root">
       <style>
+        /* Inter——与应用全局 UI 字体一致（同一文件已由 <link rel="preload"> 预载，此处供启动页自带声明） */
+        @font-face {
+          font-family: 'Inter';
+          src: url('/fonts/Inter-VariableFont_opsz,wght.ttf') format('truetype');
+          font-weight: 100 900;
+          font-style: normal;
+          font-display: swap;
+        }
         .vela-initial-loader {
           display: flex;
           flex-direction: column;
@@ -24,7 +32,7 @@
           height: 100vh;
           width: 100vw;
           background: var(--loader-bg, linear-gradient(90deg, #0E9EA8, #70D261));
-          font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+          font-family: 'Inter', system-ui, sans-serif;
           user-select: none;
         }
         
@@ -109,7 +117,7 @@
           <div class="vela-core"></div>
         </div>
         <div id="vela-splash-text" class="vela-text">NovelForge 初始化中</div>
-        <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.55);font-family:monospace;letter-spacing:1px;"></div>
+        <div id="vela-startup-timer" style="margin-top:12px;font-size:11px;color:rgba(255,255,255,0.55);font-family:'JetBrains Mono','Fira Code',Consolas,monospace;font-variant-numeric:tabular-nums;letter-spacing:1px;"></div>
       </div>
     </div>
     <!-- 启动计时：记录 HTML 解析完成时间，并在加载页实时显示耗时（原内联脚本外移，满足 CSP） -->
