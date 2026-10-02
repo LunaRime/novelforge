@@ -28,6 +28,15 @@ const SHOW_DELAY = 400
 /** 元素 → 原始 title 文本（DOM 属性移除后唯一事实来源） */
 const titleStore = new WeakMap<Element, string>()
 
+/** 提取 title 到 WeakMap 并移除属性 —— title 在 DOM 中**永不存活**（全链路唯一入口） */
+function extractTitle(el: Element): void {
+  const text = el.getAttribute('title')
+  if (text !== null) {
+    titleStore.set(el, text)
+    el.removeAttribute('title')
+  }
+}
+
 interface TipAnchor {
   text: string
   /** 锚点：元素水平中心 */
@@ -53,38 +62,24 @@ export default function GlobalTitleTooltip() {
   // 远早于 mouseover 事件排队（task 级）——竞态窗口收敛到微任务延迟
   useLayoutEffect(() => {
     // 挂载时全量扫描（useLayoutEffect：paint 前完成，首帧即无 title）
-    const existing = document.querySelectorAll<HTMLElement>('[title]')
-    for (const el of existing) {
-      const text = el.getAttribute('title')
-      if (text) {
-        titleStore.set(el, text)
-        el.removeAttribute('title')
-      }
-    }
+    for (const el of document.querySelectorAll('[title]')) extractTitle(el)
 
     // 全局观察器：拦截后续所有 title 出现（React 重挂载插入 / 代码 setAttribute）。
-    // 快速路径：仅处理 addedNodes 自身——React 挂载是逐节点插入，带 title 的
-    // 节点必作为 addedNodes 出现；不做子树递归（CodeMirror 等高频 DOM 变更下
-    // 递归 O(N) 扫描会卡顿）。innerHTML 批量插入的 title 由 mouseover 兜底移除。
+    // ⚠️ 必须做**子树扫描**（2026-10-02 修复）：React 把整棵子树作为**一个** addedNode 批量
+    // 插入（条件挂载 / 数据到达后的列表）——只查 addedNode 自身会让整棵子树的 title 全部漏网，
+    // 而 Chromium 对「无 title 的悬停元素」会**回退取最近祖先的 title**弹原生提示
+    // （实测：模型行「未配置密钥」红点悬停弹出祖先主按钮的「编辑」原生提示；全文档同型漏网 44 处）。
+    // 成本可控：querySelectorAll 只扫**新增子树**（与本次 DOM 变更量成正比），不做全文档重扫。
     const globalObserver = new MutationObserver((records) => {
       for (const r of records) {
         if (r.type === 'attributes') {
-          // title 属性被（重）设置——提取并移除
-          const el = r.target as Element
-          const text = el.getAttribute('title')
-          if (text !== null) {
-            titleStore.set(el, text)
-            el.removeAttribute('title')
-          }
+          extractTitle(r.target as Element)
         } else {
           for (const node of r.addedNodes) {
             if (node.nodeType !== 1) continue
             const el = node as Element
-            const text = el.getAttribute('title')
-            if (text !== null) {
-              titleStore.set(el, text)
-              el.removeAttribute('title')
-            }
+            extractTitle(el)
+            for (const sub of el.querySelectorAll('[title]')) extractTitle(sub)
           }
         }
       }
@@ -121,6 +116,10 @@ export default function GlobalTitleTooltip() {
       while (el && !titleStore.has(el) && !el.hasAttribute('title')) {
         el = el.parentElement
       }
+      // 防御性全链提取（2026-10-02）：把光标路径上仍存活的 title 一律剥入 titleStore——
+      // 被悬停元素自身已处理时，祖先 title 只要存活仍会触发原生提示（本次 bug 的形态）；
+      // 该循环同时兜住观察器的任何漏网（mouseover 是事件最早时机，同步剥离无计时窗口）
+      for (let p: Element | null = target; p; p = p.parentElement) extractTitle(p)
       const current = titleElRef.current
       if (current) {
         // 关键：鼠标仍在当前处理元素内部移动（按钮内图标↔padding 穿越时
@@ -130,12 +129,7 @@ export default function GlobalTitleTooltip() {
       }
       if (!el) { hide(); return }
       hide()
-      // 兜底：DOM 上仍有 title（观察器漏网）→ 立即提取并移除
-      const domTitle = el.getAttribute('title')
-      if (domTitle !== null) {
-        titleStore.set(el, domTitle)
-        el.removeAttribute('title')
-      }
+      // 文本取 titleStore（提取已由观察器 / 上方全链提取完成）
       const text = titleStore.get(el)
       if (!text) return // 空 title 不显示（与原生行为一致）
       titleElRef.current = el as HTMLElement
