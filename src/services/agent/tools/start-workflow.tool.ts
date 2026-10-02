@@ -18,6 +18,9 @@ import {
   WorkflowStartError,
 } from '../../workflows/workflow-starter'
 
+/** 区间单次最多章数（2026-10-02 评审 I1：模型幻觉大区间 → 无界静默启动的护栏） */
+const MAX_RANGE_CHAPTERS = 20
+
 export const startWorkflowTool = buildAgentTool({
   name: 'start_workflow',
   description: t('tool.startWorkflowDesc'),
@@ -57,10 +60,20 @@ export const startWorkflowTool = buildAgentTool({
       return { success: false, content: '', error: t('tool.wfNeedChapter').replace('{workflow}', workflow) }
     }
 
-    // 区间校验（2026-10-02）：仅章节工作流生效；chapter_end 必须与 chapter_number 组成合法闭区间
+    // 章号合法性（2026-10-02 评审 I1）：整数且 ≥1——模型可能给小数/0（此前直接透传给 starter）
+    if (chapterWorkflows.includes(workflow) && chapterNumber !== undefined
+      && (!Number.isInteger(chapterNumber) || chapterNumber < 1)) {
+      return { success: false, content: '', error: t('tool.wfRangeInvalid') }
+    }
+
+    // 区间合法性（2026-10-02）：chapter_end 整数且 ≥ chapter_number；上限护栏防幻觉大区间无界启动
     if (chapterWorkflows.includes(workflow) && chapterEnd !== undefined
       && (!Number.isInteger(chapterEnd) || chapterEnd < chapterNumber!)) {
       return { success: false, content: '', error: t('tool.wfRangeInvalid') }
+    }
+    if (chapterWorkflows.includes(workflow) && chapterEnd !== undefined
+      && chapterEnd - chapterNumber! + 1 > MAX_RANGE_CHAPTERS) {
+      return { success: false, content: '', error: t('tool.wfRangeTooLarge').replace('{max}', String(MAX_RANGE_CHAPTERS)) }
     }
 
     // 打开右侧面板到 AI 输出视图
@@ -76,8 +89,17 @@ export const startWorkflowTool = buildAgentTool({
           // 中途失败按既有错误映射返回（已启动的章节不回滚——工作流已入队列）
           if (chapterEnd !== undefined) {
             const started: { runId: string; displayName: string; chapterTag: string }[] = []
-            for (let n = chapterNumber!; n <= chapterEnd; n++) {
-              started.push(await startChapterWorkflow(workflow as 'generate_draft' | 'review' | 'refine' | 'finalize', n))
+            try {
+              for (let n = chapterNumber!; n <= chapterEnd; n++) {
+                started.push(await startChapterWorkflow(workflow as 'generate_draft' | 'review' | 'refine' | 'finalize', n))
+              }
+            } catch (e) {
+              // 部分失败（2026-10-02 评审 I3）：已启动清单并入错误——否则模型会重发整个区间（重复启动/重复花费）
+              if (e instanceof WorkflowStartError && started.length > 0) {
+                const startedTags = started.map(r => r.chapterTag).join('、')
+                throw new WorkflowStartError(e.code, `${e.message}${t('tool.wfRangePartial').replace('{started}', startedTags)}`)
+              }
+              throw e
             }
             return {
               success: true,

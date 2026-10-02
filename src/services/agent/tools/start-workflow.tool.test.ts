@@ -59,6 +59,24 @@ describe('start_workflow 错误语义映射', () => {
     expect(r.success).toBe(true)
     expect(r.content).toContain(t('tool.wfRefine'))
   })
+
+  it('ERR_GUARD → e.message 透传（带 guard 明细；I4 覆盖回填）', async () => {
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', '第2章尚未定稿，请先完成'))
+
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 3 })
+
+    expect(r.success).toBe(false)
+    expect(r.error).toBe('第2章尚未定稿，请先完成')
+  })
+
+  it('ERR_GUARD 空 message → 回退 error.prereqNotMet（I4 覆盖回填）', async () => {
+    mockStartChapter.mockRejectedValue(new WorkflowStartError('ERR_GUARD', ''))
+
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 3 })
+
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('error.prereqNotMet'))
+  })
 })
 
 describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', () => {
@@ -100,7 +118,7 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
     expect(r.artifacts).toHaveLength(1)
   })
 
-  it('区间中途失败：错误按既有映射返回，已启动章节保留', async () => {
+  it('区间中途失败：错误附已启动清单（模型可据此恢复，不重发整个区间），后续章未触达', async () => {
     mockStartChapter
       .mockResolvedValueOnce({ runId: 'r5', displayName: t('tool.wfReview'), chapterTag: t('tool.chapterTag').replace('{n}', '5') })
       .mockRejectedValueOnce(new WorkflowStartError('ERR_NO_DRAFT', t('tool.wfNoReviewDraft').replace('{chapter}', '6')))
@@ -108,7 +126,10 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
     const r = await startWorkflowTool.execute({ workflow: 'review', chapter_number: 5, chapter_end: 7 })
 
     expect(r.success).toBe(false)
-    expect(r.error).toBe(t('tool.wfNoReviewDraft').replace('{chapter}', '6'))
+    expect(r.error).toBe(
+      t('tool.wfNoReviewDraft').replace('{chapter}', '6')
+      + t('tool.wfRangePartial').replace('{started}', t('tool.chapterTag').replace('{n}', '5')),
+    )
     expect(mockStartChapter).toHaveBeenCalledTimes(2) // 5 已启动、6 失败即止（7 未触达）
   })
 
@@ -118,5 +139,29 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
     const r = await startWorkflowTool.execute({ workflow: 'generate_blueprint', chapter_end: 9 })
 
     expect(r.success).toBe(true)
+  })
+
+  it('区间过大（> 20 章）→ wfRangeTooLarge（不启动任何工作流；I1）', async () => {
+    const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 1, chapter_end: 21 })
+
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('tool.wfRangeTooLarge').replace('{max}', '20'))
+    expect(mockStartChapter).not.toHaveBeenCalled()
+  })
+
+  it('非整数 / 越界章号 → wfRangeInvalid（I1：5.5 / chapter_end 25.5 / chapter_number 0）', async () => {
+    const r1 = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5.5 })
+    expect(r1.success).toBe(false)
+    expect(r1.error).toBe(t('tool.wfRangeInvalid'))
+
+    const r2 = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: 25.5 })
+    expect(r2.success).toBe(false)
+    expect(r2.error).toBe(t('tool.wfRangeInvalid'))
+
+    const r3 = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 0 })
+    expect(r3.success).toBe(false)
+    expect(r3.error).toBe(t('tool.wfRangeInvalid'))
+
+    expect(mockStartChapter).not.toHaveBeenCalled()
   })
 })

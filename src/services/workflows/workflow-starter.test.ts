@@ -31,8 +31,12 @@ const mockInvoke = vi.fn(async (ch: string) => {
   }
 })
 
-/** startWorkflow mock（workflow-starter 经 useWorkflowStore.getState().startWorkflow 触发） */
-const startWorkflowMock = vi.fn(async () => 'run-1-test')
+/** startWorkflow mock（workflow-starter 经 useWorkflowStore.getState().startWorkflow 触发）
+ *  C1（2026-10-02）：真实 store 在 run 开始即回调 options.onStarted——mock 按同契约提供回执 */
+const startWorkflowMock = vi.fn(async (_def: unknown, _sb?: boolean, options?: { onStarted?: (id: string) => void }) => {
+  options?.onStarted?.('run-1-test')
+  return 'run-1-test'
+})
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -135,5 +139,61 @@ describe('workflow-starter', () => {
     expect(r.displayName).toBeTruthy()
     expect(r.chapterTag).toBeTruthy()
     expect(startWorkflowMock).toHaveBeenCalledTimes(1)
+  })
+
+  // ===== C1（2026-10-02 评审）：启动即回执——引擎工具超时 30s 且不中止执行，等待型回执必被腰斩 =====
+
+  /** guard 放行 fixture（与「正常触发」同） */
+  function passGuardFixtures(): void {
+    blueprintGetAll = [{ id: 1, title: '第1章 山门' }]
+    characterGetAll = [{ id: 'c1', name: '主角' }]
+    draftGetFinalizedResult = { id: 'd2', title: '第2章' }
+    blueprintGetResult = {
+      id: 1,
+      chapterNumber: 3,
+      title: '第3章 惊变',
+      role: '过渡',
+      purpose: '推进主线',
+      characters: ['主角'],
+      keyEvents: '山门剧变',
+      userGuidance: '保持悬念',
+    }
+  }
+
+  it('启动即回执：onStarted 一到即 resolve，不等整个 run 结束', async () => {
+    passGuardFixtures()
+    let settleRun: (v: string) => void = () => {}
+    const runPending = new Promise<string>(res => { settleRun = res })
+    let runSettled = false
+    useWorkflowStore.setState({
+      startWorkflow: vi.fn((_def: unknown, _sb?: boolean, options?: { onStarted?: (id: string) => void }) => {
+        options?.onStarted?.('run-early')
+        return runPending.then(v => { runSettled = true; return v })
+      }) as never,
+    })
+
+    const r = await startChapterWorkflow('generate_draft', 3)
+
+    expect(r.runId).toBe('run-early')
+    expect(runSettled).toBe(false) // 回执不等待 run 结束——否则引擎 30s 超时腰斩（C1）
+    settleRun('run-early') // 收口后台 promise（防泄漏）
+  })
+
+  it('run 晚到 rejection 被吞掉（不产生 unhandledrejection，不影响回执）', async () => {
+    passGuardFixtures()
+    let rejectRun: (e: unknown) => void = () => {}
+    const runPending = new Promise<string>((_res, rej) => { rejectRun = rej })
+    useWorkflowStore.setState({
+      startWorkflow: vi.fn((_def: unknown, _sb?: boolean, options?: { onStarted?: (id: string) => void }) => {
+        options?.onStarted?.('run-early')
+        return runPending
+      }) as never,
+    })
+
+    const r = await startChapterWorkflow('generate_draft', 3)
+    expect(r.runId).toBe('run-early')
+
+    rejectRun(new Error('run 体内爆'))
+    await new Promise(res => setTimeout(res, 0)) // 让晚到 rejection settle；若未被吞掉会以 unhandledrejection 使用例失败
   })
 })

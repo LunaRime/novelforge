@@ -12,6 +12,10 @@
  * - buildDraftWorkflow 从不返回 null——guard 失败 throw（catch 转 ERR_GUARD）、
  *   蓝图缺失 throw WorkflowStartError('ERR_NO_BLUEPRINT')（防止被 catch 误归 ERR_GUARD）
  * - review/refine/finalize 无草稿 return null → startChapterWorkflow 统一转 ERR_NO_DRAFT
+ *
+ * 启动即回执（2026-10-02 评审 C1 修复）：三个 start* 均在 run 开始即返回 runId，**不等 run 结束**——
+ * agent-engine 对工具调用有 30s 超时且超时不中止执行，等待型调用必被腰斩（模型看到假超时、返回值与
+ * artifacts 被丢弃）；进度交给任务面板 / AI 输出面板（与现有交互一致）。
  */
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
@@ -41,6 +45,17 @@ function getWorkflowDisplayName(workflow: string): string {
     case 'generate_architecture': return t('tool.wfArchitecture')
     default: return workflow
   }
+}
+
+/**
+ * 启动即回执（2026-10-02 评审 C1 修复）：用 store 既有 `onStarted` 回执（D 档同款语义）——
+ * run 一开始就 resolve runId，不等整个 run 跑完。run 体晚到的 rejection 在此吞掉
+ * （run 失败已由 workflow-store 的状态呈现），避免 unhandledrejection。
+ */
+function startWithReceipt(definition: WorkflowDefinition): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    useWorkflowStore.getState().startWorkflow(definition, false, { onStarted: resolve }).catch(reject)
+  })
 }
 
 // ===== 章节工作流入口 =====
@@ -87,7 +102,7 @@ export async function startChapterWorkflow(
         : t('tool.wfNoReviewDraft')
     throw new WorkflowStartError('ERR_NO_DRAFT', noDraftMsg.replace('{chapter}', String(chapterNumber)))
   }
-  const runId = await useWorkflowStore.getState().startWorkflow(definition)
+  const runId = await startWithReceipt(definition)
   return { runId, displayName, chapterTag }
 }
 
@@ -102,7 +117,7 @@ export async function startBlueprintWorkflow(): Promise<{ runId: string; display
     throw new WorkflowStartError('ERR_GUARD', guard.message || t('error.prereqNotMet'))
   }
   const { createDirectoryWorkflow } = await import('./directory-workflow')
-  const runId = await useWorkflowStore.getState().startWorkflow(createDirectoryWorkflow({ mode: 'full' }))
+  const runId = await startWithReceipt(createDirectoryWorkflow({ mode: 'full' }))
   return { runId, displayName }
 }
 
@@ -115,7 +130,7 @@ export async function startArchitectureWorkflow(): Promise<{ runId: string; disp
     throw new WorkflowStartError('ERR_GUARD', guard.message || t('error.prereqNotMet'))
   }
   const { createArchitectureWorkflow } = await import('./architecture-workflow')
-  const runId = await useWorkflowStore.getState().startWorkflow(createArchitectureWorkflow())
+  const runId = await startWithReceipt(createArchitectureWorkflow())
   return { runId, displayName }
 }
 

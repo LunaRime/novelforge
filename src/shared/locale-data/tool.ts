@@ -249,7 +249,9 @@ export const toolTexts = {
   'tool.wfNoRefineDraft': { 'zh-CN': '第{chapter}章没有可修稿的草稿', 'en-US': 'Chapter {chapter} has no draft to revise', 'ru-RU': 'В главе {chapter} нет черновика для правки' },
   'tool.wfNoFinalizeDraft': { 'zh-CN': '第{chapter}章没有可定稿的草稿', 'en-US': 'Chapter {chapter} has no draft to finalize', 'ru-RU': 'В главе {chapter} нет черновика для финализации' },
   'tool.wfUnsupported': { 'zh-CN': '不支持的工作流类型: {workflow}', 'en-US': 'Unsupported workflow type: {workflow}', 'ru-RU': 'Неподдерживаемый тип рабочего процесса: {workflow}' },
-  'tool.wfRangeInvalid': { 'zh-CN': '区间无效：chapter_end 需不小于 chapter_number（且需同时提供 chapter_number）', 'en-US': 'Invalid range: chapter_end must be ≥ chapter_number (with chapter_number provided).', 'ru-RU': 'Неверный диапазон: chapter_end должен быть ≥ chapter_number (при указанном chapter_number).' },
+  'tool.wfRangeInvalid': { 'zh-CN': '区间无效：chapter_number / chapter_end 需为不小于 1 的整数，且 chapter_end 不小于 chapter_number', 'en-US': 'Invalid range: chapter_number/chapter_end must be integers ≥ 1, and chapter_end ≥ chapter_number.', 'ru-RU': 'Неверный диапазон: chapter_number/chapter_end — целые числа ≥ 1, при этом chapter_end ≥ chapter_number.' },
+  'tool.wfRangeTooLarge': { 'zh-CN': '区间过大：单次最多启动 {max} 章', 'en-US': 'Range too large: at most {max} chapters per call.', 'ru-RU': 'Диапазон слишком большой: не более {max} глав за вызов.' },
+  'tool.wfRangePartial': { 'zh-CN': '（区间中止；已启动：{started}）', 'en-US': ' (range aborted; already started: {started})', 'ru-RU': ' (диапазон прерван; уже запущены: {started})' },
   'tool.wfStartFailed': { 'zh-CN': '启动工作流失败: {error}', 'en-US': 'Failed to start workflow: {error}', 'ru-RU': 'Ошибка запуска рабочего процесса: {error}' },
   'tool.wfBlueprintDataMissing': { 'zh-CN': '未找到第{chapter}章的蓝图数据，请先生成章节蓝图', 'en-US': 'Blueprint data for Chapter {chapter} not found — generate the chapter blueprint first', 'ru-RU': 'Данные плана главы {chapter} не найдены — сначала создайте план главы' },
   // update_config
