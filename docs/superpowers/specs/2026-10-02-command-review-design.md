@@ -1,7 +1,7 @@
 # 命令审查（线①）：本地直出退场——方案 B 实施设计
 
 > **日期**：2026-10-02（自 `docs/2026-10-01-agent-command-review-design.md` 拆分）
-> **状态**：方向已拍板（方案 B，2026-10-01）——**待实施**；建议最先做（信任边界优先）。
+> **状态**：✅ **已实施（2026-10-02，提交 `f8bf031` + `39df86e`）**——见文末「实施记录」；真机四用例（§6）待跑。
 > **拆分来源**：总纲 §3.1 / §3.2（内容已迁入本文，总纲不再保留副本）。
 > **行号基线**：2026-10-02 实测（引用文件自 10-01 全未改动）；动手前按行号复核一次。
 
@@ -73,3 +73,21 @@
 
 - 总纲 §5「NF」全部条目（`agent-store.ts` / `writing-intent.ts` / `intent-router.ts` / 工具与审批 / 提交清单）；
 - 自审实测：`agent-store.ts:519-558`（内置 4 命令与 `/status` 不拦截）、`:590-595`、`:1166-1296`；`start-workflow.tool.ts:40`；`agent-engine.ts:488`；`approval/policy.ts:17-59`。
+
+---
+
+## 实施记录（2026-10-02）
+
+**提交**：`f8bf031`（直出退场）+ `39df86e`（区间扩展）。门禁三绿：tsc 0 / eslint 0 / **2550 测试全过**（214 文件）。
+
+**改动文件**：`src/stores/agent-store.ts`（`handleWritingIntent` 重写：三类执行分支退场、`WorkflowStartError` catch 与 `makeStartedMsg` / 动态 import 一并移除；转写守卫收窄为 `ambiguous`）、`src/services/agent/writing-intent.ts`（语义注释）、`src/services/agent/tools/start-workflow.tool.ts`（`chapter_end` + 校验 + `ERR_NO_DRAFT` 透传修正）、`src/shared/locale-data/tool.ts`（`tool.startWorkflowChapterEnd` / `tool.wfRangeInvalid` 三语）、`src/stores/agent-store.test.ts` + `start-workflow.tool.test.ts`。
+
+**D1 结论（多章区间）**：按推荐**扩展工具**——可选 `chapter_end` 与 `chapter_number` 组成闭区间串行启动（一次确认卡覆盖；`===` 等价单章）；`chapter_end < chapter_number` → `tool.wfRangeInvalid`（不启动）；非章节工作流忽略该参数。配套修正：`ERR_NO_DRAFT` 文案改为优先透传 `e.message`（区间调用下按起始章重建会误报章号）。
+
+**D2 结论（模式库收留）**：**保留解析、退役执行**——`detectWritingIntent` 分类与既有解析测试零改动；`chapter_creation / refine / architecture` 在 `handleWritingIntent` 统一 `return { status: 'none' }` 落 ReAct。无章号的「润色一下」本地澄清随 refine 分支一并退场（拍板 2026-10-02）。
+
+**测试面变化（2547 → 2550）**：删除 4 例直出错误映射用例（行为随案 B 退役；同类映射由 `start-workflow.tool.test.ts` 覆盖）；新增「强命中落 ReAct」3 例 + 区间 5 例；I2 兜底 1 例改造为「mock `handleWritingIntent` 直抛」版。
+
+**死键登记（暂留字典，不删——先例 `agent.comingSoon`）**：`agent.intentStarted` / `agent.intentStartedNoChapter` / `agent.intentClarifyRefine` / `agent.intentGuardFail`（4 键随直出退役成为零引用）。
+
+**待跑**：§6 真机四用例（按 computer-use 约束另立测试文档后执行）。
