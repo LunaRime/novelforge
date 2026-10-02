@@ -1,6 +1,8 @@
 # UI 重构批 0（侧栏样板）实施计划
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+>
+> **执行状态（2026-10-02 回填）：✅ 已全部执行。** 提交链 `fc195a3`→`4b240bd`→`77e34bd`→`6497d57`→`58cc7b1`→`ada29e8`→`1942765`（三绿门禁 **2178 测试**；已随 2026-10-01 全量推送）。⚠️ **遗留 2 处 <32px**（宿主条 31.5px 装不下）：`CharactersView` 工具条 4×21px、`ProjectTree` 刷新 24.5px——待拍板。批 0 走查 FB-1/FB-2 与边界线加强同日修复（记录见 spec §八）；本档 **checkbox 未回填**，执行以提交链为准；§23「不 push（提交留本地）」约束已随 2026-10-01 全量推送解除。
 
 **Goal:** 把「项目结构」侧边栏做成新形态样板：菜单行片化（32px 高 / 10px 圆角 / 悬停片底色）、分组卡片去边框减重（纯间距分组）、悬停态图标置换（功能图标 → 指示箭头），并提炼三个共享件供后续批次复用。
 
