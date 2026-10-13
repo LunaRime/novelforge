@@ -75,6 +75,7 @@ export const projectTexts = {
   'artifact.verificationReport': { 'zh-CN': '校验', 'en-US': 'Verification', 'ru-RU': 'Проверка' },
   'artifact.embeddingIndexed': { 'zh-CN': '向量', 'en-US': 'Vector', 'ru-RU': 'Вектор' },
   'artifact.mutualReview': { 'zh-CN': '互评', 'en-US': 'Peer review', 'ru-RU': 'Взаимная оценка' },
+  'artifact.workflowCompleted': { 'zh-CN': '工作流完成', 'en-US': 'Workflow completed', 'ru-RU': 'Рабочий процесс завершён' },
   'about.slogan': { 'zh-CN': '让每一个故事，都被认真锻造', 'en-US': 'Every story deserves to be forged with care.', 'ru-RU': 'Каждая история заслуживает быть выкованной с заботой.' },
   'about.sloganEn': { 'zh-CN': 'Every story deserves to be forged with care.', 'en-US': 'Every story deserves to be forged with care.', 'ru-RU': 'Every story deserves to be forged with care.' },
   'about.tagline': { 'zh-CN': 'AI 智能写作 IDE · 开源 · 为创作者而生', 'en-US': 'AI writing IDE · Open source · For creators', 'ru-RU': 'AI-IDE для письма · Open source · Для авторов' },

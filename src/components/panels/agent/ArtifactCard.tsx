@@ -11,7 +11,7 @@
  *    workflow_started → 打开底部「任务」面板。
  *  - **没有可达目标的类型不再假装可点**：渲染为静态卡片（无 hover、无手型）。
  */
-import { FileText, FolderOpen, Play, ExternalLink, BookOpen, Edit3, CheckCircle, UserPlus, FileBarChart, Database, Users } from 'lucide-react'
+import { FileText, FolderOpen, Play, ExternalLink, BookOpen, Edit3, CheckCircle, XCircle, UserPlus, FileBarChart, Database, Users } from 'lucide-react'
 import type { ToolArtifact } from '../../../services/agent/tool-registry'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
@@ -24,7 +24,8 @@ interface Props {
 }
 
 /** 根据产物类型选择图标 */
-function ArtifactIcon({ type }: { type: ToolArtifact['type'] }) {
+function ArtifactIcon({ artifact }: { artifact: ToolArtifact }) {
+  const { type } = artifact
   switch (type) {
     case 'file_created':       return <FileText size={13} />
     case 'file_modified':      return <FolderOpen size={13} />
@@ -38,6 +39,8 @@ function ArtifactIcon({ type }: { type: ToolArtifact['type'] }) {
     case 'verification_report': return <FileBarChart size={13} />
     case 'embedding_indexed':  return <Database size={13} />
     case 'mutual_review_completed': return <Users size={13} />
+    // 线② 2b：完成回执按 status 区分图标（失败 = XCircle，成功 = CheckCircle）
+    case 'workflow_completed': return artifact.metadata?.status === 'failed' ? <XCircle size={13} /> : <CheckCircle size={13} />
     default:                   return <FileText size={13} />
   }
 }
@@ -57,6 +60,7 @@ function typeLabel(type: ToolArtifact['type']): string {
     case 'verification_report':  return t('artifact.verificationReport')
     case 'embedding_indexed':    return t('artifact.embeddingIndexed')
     case 'mutual_review_completed': return t('artifact.mutualReview')
+    case 'workflow_completed':   return t('artifact.workflowCompleted')
     default:                     return ''
   }
 }
@@ -96,13 +100,16 @@ export default function ArtifactCard({ artifact }: Props) {
     if (type === 'workflow_started') {
       return () => useLayoutStore.getState().openBottomTab('tasks')
     }
+    if (type === 'workflow_completed') {
+      return () => useLayoutStore.getState().openRightPanel('ai-output')
+    }
     return null
   })()
 
   const body = (
     <>
       <div className="artifact-icon">
-        <ArtifactIcon type={type} />
+        <ArtifactIcon artifact={artifact} />
       </div>
       <span className="artifact-name">{name}</span>
       <span className="artifact-type">{typeLabel(type)}</span>

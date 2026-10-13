@@ -216,6 +216,9 @@ export const workflowTexts = {
   'nextStep.label': { 'zh-CN': '下一步：{name}', 'en-US': 'Next: {name}', 'ru-RU': 'Далее: {name}' },
   'nextStep.continue': { 'zh-CN': '继续', 'en-US': 'Continue', 'ru-RU': 'Продолжить' },
   'nextStep.waiting': { 'zh-CN': '等待指令响应...', 'en-US': 'Awaiting response...', 'ru-RU': 'Ожидание ответа...' },
+  // --- 对话内工作流进度入口（线② 2b）---
+  'workflow.progressTitle': { 'zh-CN': '工作流', 'en-US': 'Workflow', 'ru-RU': 'Рабочий процесс' },
+  'workflow.progressSummary': { 'zh-CN': '已完成 {done} 步 · 运行中 {running}', 'en-US': '{done} done · {running} running', 'ru-RU': '{done} готово · {running} выполняется' },
   'review.refineScope': { 'zh-CN': '本次【审稿修稿】范围：', 'en-US': 'Scope of this review-based fix:', 'ru-RU': 'Область исправления по рецензии:' },
   'review.refineScopeItem1': { 'zh-CN': '1. 重点修复审稿报告中指出的「严重问题」与「改进建议」。', 'en-US': '1. Focus on fixing "Critical" and "Suggestion" issues from the review report.', 'ru-RU': '1. Исправить «критичные» проблемы и «рекомендации» из отчёта.' },
   'review.refineScopeItem2': { 'zh-CN': '2. 可在下方指定的额外修稿要求。', 'en-US': '2. Additional fix requirements can be specified below.', 'ru-RU': '2. Дополнительные требования можно указать ниже.' },

@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
-  CheckCircle2, XCircle, Clock,
+  Clock,
   Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Inbox,
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
-import { Spinner } from '../ui/Spinner'
+import { StateDot, type StateDotState } from '../ui/StateDot'
 import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
@@ -209,11 +209,8 @@ function HistoryRunItem({ run }: { run: WorkflowRun }) {
           className={expanded ? 'rotate-90' : ''}
           style={{ transition: 'transform 0.15s', flexShrink: 0, color: 'var(--color-text-muted)' }}
         />
-        {/* 状态图标 */}
-        {run.status === 'completed'
-          ? <CheckCircle2 size={12} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-          : <XCircle size={12} style={{ color: 'var(--color-error)', flexShrink: 0 }} />
-        }
+        {/* 状态点（线② 2b：StateDot 五态，替代 CheckCircle2/XCircle） */}
+        <StateDot state={runDotState(run)} />
         {/* 标题 */}
         <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
           {run.title}
@@ -230,7 +227,7 @@ function HistoryRunItem({ run }: { run: WorkflowRun }) {
       {expanded && (
         <div className="px-4 pb-1">
           {run.steps.map((step, i) => (
-            <WorkflowStepItem key={step.id} step={step} index={i} isLast={i === run.steps.length - 1} />
+            <WorkflowStepItem key={step.id} step={step} index={i} />
           ))}
         </div>
       )}
@@ -286,14 +283,9 @@ function ActiveRunPanel({
           onClick={() => setExpanded(v => !v)}
           className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
         >
-          {/* 状态图标 */}
+          {/* 状态点（线② 2b：StateDot 五态，替代 Spinner/Clock） */}
           <div className="flex-shrink-0">
-            {run.status === 'running' && (
-              <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
-            )}
-            {run.status === 'waiting' && (
-              <Clock size={13} style={{ color: 'var(--color-warning)' }} />
-            )}
+            <StateDot state={runDotState(run)} />
           </div>
 
           {/* 标题 + 进度条 */}
@@ -338,7 +330,7 @@ function ActiveRunPanel({
           {/* 步骤列表——扁平连接器风格 */}
           <div className="px-4">
             {run.steps.map((step, i) => (
-              <WorkflowStepItem key={step.id} step={step} index={i} isLast={i === run.steps.length - 1} />
+              <WorkflowStepItem key={step.id} step={step} index={i} />
             ))}
           </div>
 
@@ -398,11 +390,9 @@ function ActiveRunPanel({
 function WorkflowStepItem({
   step,
   index,
-  isLast,
 }: {
   step: WorkflowStep
   index: number
-  isLast: boolean
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
@@ -416,6 +406,8 @@ function WorkflowStepItem({
           ? <ChevronDown size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
           : <ChevronRight size={10} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
       )}
+      {/* 状态点（线② 2b：StateDot 五态，替代原竖线连接器 + 状态图标） */}
+      <StepStatusIcon status={step.status} />
       <span
         className="text-xs flex-1 truncate"
         style={{
@@ -454,100 +446,73 @@ function WorkflowStepItem({
   }, [step.status])
 
   return (
-    <div className="relative flex gap-2.5">
-      {/* ── 左侧：图标 + 竖线连接器 ── */}
-      <div className="flex flex-col items-center flex-shrink-0" style={{ paddingTop: 8 }}>
-        {/* 状态图标 */}
-        <div className="flex-shrink-0">
-          <StepStatusIcon status={step.status} />
+    <div className="pb-0.5">
+      {/* 步骤标题行（线② 2b：StateDot 已在 rowContent 行首，去掉原竖线连接器——
+          dsh member 行 = 状态点 + 名字 + 状态，无竖线） */}
+      {hasDetail ? (
+        <button
+          type="button"
+          onClick={() => setExpanded(v => !v)}
+          className="w-full flex items-center gap-1.5 py-1 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
+        >
+          {rowContent}
+        </button>
+      ) : (
+        <div className="flex items-center gap-1.5 py-1">
+          {rowContent}
         </div>
-        {/* 竖线（非最后一步时显示） */}
-        {!isLast && (
-          <div
-            className="w-px flex-1 mt-1"
-            style={{
-              minHeight: 12,
-              backgroundColor: step.status === 'completed'
-                ? 'var(--color-success)'
-                : 'var(--color-border)',
-              opacity: step.status === 'completed' ? 0.4 : 0.6,
-            }}
-          />
-        )}
-      </div>
+      )}
 
-      {/* ── 右侧：内容 ── */}
-      <div
-        className="flex-1 min-w-0 pb-2"
-        style={{ minHeight: isLast ? undefined : 28 }}
-      >
-        {/* 步骤标题行 — 2026-09-27 可供性修复：有详情时行 = 原生 button（键盘可达，
-            hover 反馈 = 热区）；无详情的行是纯状态行，不渲染可点形态 */}
-        {hasDetail ? (
-          <button
-            type="button"
-            onClick={() => setExpanded(v => !v)}
-            className="w-full flex items-center gap-1 py-1 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
-          >
-            {rowContent}
-          </button>
-        ) : (
-          <div className="flex items-center gap-1 py-1">
-            {rowContent}
-          </div>
-        )}
-
-        {/* 详情区（展开时显示：日志 + 错误） */}
-        {expanded && hasDetail && (
-          <div className="mb-1">
-            {step.error && (
-              <div
-                className="text-micro px-2 py-1 rounded mb-1"
-                style={{ backgroundColor: 'rgba(var(--color-error-rgb),0.08)', color: 'var(--color-error)' }}
-              >
-                {step.error}
-              </div>
-            )}
-            {step.logs.length > 0 && (
-              <div className="max-h-16 overflow-y-auto space-y-0.5">
-                {step.logs.slice(-6).map((log, i) => (
-                  <div key={i} className="text-micro font-mono leading-4" style={{ color: 'var(--color-text-muted)' }}>
-                    {log}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      {/* 详情区（展开时显示：日志 + 错误） */}
+      {expanded && hasDetail && (
+        <div className="mb-1 pl-6">
+          {step.error && (
+            <div
+              className="text-micro px-2 py-1 rounded mb-1"
+              style={{ backgroundColor: 'rgba(var(--color-error-rgb),0.08)', color: 'var(--color-error)' }}
+            >
+              {step.error}
+            </div>
+          )}
+          {step.logs.length > 0 && (
+            <div className="max-h-16 overflow-y-auto space-y-0.5">
+              {step.logs.slice(-6).map((log, i) => (
+                <div key={i} className="text-micro font-mono leading-4" style={{ color: 'var(--color-text-muted)' }}>
+                  {log}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-/** 步骤状态图标（对齐竖线连接器） */
+/** 步骤状态图标（对齐竖线连接器）—— 线② 2b 改用 StateDot 五态（dsh 状态点统一语义） */
 function StepStatusIcon({ status }: { status: WorkflowStep['status'] }) {
+  return <StateDot state={stepDotState(status)} />
+}
+
+/** StepStatus → StateDot 五态 */
+function stepDotState(status: WorkflowStep['status']): StateDotState {
   switch (status) {
-    case 'completed':
-      return <CheckCircle2 size={13} style={{ color: 'var(--color-success)' }} />
-    case 'running':
-      return <Spinner size={13}  style={{ color: 'var(--color-accent)' }} />
-    case 'failed':
-      return <XCircle size={13} style={{ color: 'var(--color-error)' }} />
-    case 'skipped':
-      return (
-        <div
-          className="w-3 h-3 rounded-full flex items-center justify-center"
-          style={{ border: '1.5px dashed var(--color-text-muted)' }}
-        />
-      )
-    default:
-      // pending
-      return (
-        <div
-          className="w-3 h-3 rounded-full"
-          style={{ border: '1.5px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-        />
-      )
+    case 'completed': return 'done'
+    case 'running': return 'ongoing'
+    case 'failed': return 'error'
+    case 'skipped': case 'pending':
+    default: return 'idle'
+  }
+}
+
+/** WorkflowStatus → StateDot 五态（run 级） */
+function runDotState(run: WorkflowRun): StateDotState {
+  switch (run.status) {
+    case 'running': return 'ongoing'
+    case 'waiting': case 'paused': return 'warning'
+    case 'failed': return 'error'
+    case 'completed': return 'done'
+    default: return 'idle'
   }
 }
 

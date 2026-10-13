@@ -7,6 +7,7 @@ import { useLLMStore } from './stores/llm-store'
 import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
+import { useAgentStore } from './stores/agent-store'
 import { useUpdateStore } from './stores/update-store'
 import { useAutomationStore } from './stores/automation-store'
 import { t } from './shared/locale'
@@ -235,12 +236,17 @@ export default function App() {
       initializeHub()
     }).catch(e => console.warn('[HubService] 初始化失败:', e))
 
-    // C) 工作流完成时弹出 ActionToast 通知（不依赖任何面板状态）
-    const unsubActionToast = globalEventBus.on('WORKFLOW_COMPLETE', () => {
-      const { history } = useWorkflowStore.getState()
-      const latest = history.find(r => r.status === 'completed')
+    // C) 工作流完成时弹出 ActionToast 通知（不依赖任何面板状态）+ 线② 2b D5 注入对话内完成回执卡片
+    const unsubActionToast = globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
+      const { activeRuns, history } = useWorkflowStore.getState()
+      // emit 早于「移入 history」：刚完成的 run 此刻仍在 activeRuns（status=completed/failed）
+      const latest = payload.runId
+        ? (activeRuns.find(r => r.id === payload.runId) ?? history.find(r => r.id === payload.runId))
+        : history.find(r => r.status === 'completed')
       if (!latest) return
       const shortTitle = latest.title.replace(/^[^\s]+\s/, '')
+      // D5：对话内卡片为主——往活跃会话追加 workflow_completed 产物（无活跃会话时静默 no-op）
+      useAgentStore.getState().appendWorkflowCompletion(latest.title, payload.status ?? 'success')
       toast.workflowComplete(
         `✅ 「${shortTitle}」${t('agent.taskComplete')}`,
         () => useLayoutStore.getState().openRightPanel('ai-output')

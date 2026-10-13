@@ -61,6 +61,14 @@ describe('ArtifactCard — 可供性接线（2026-09-27）', () => {
     expect(useLayoutStore.getState().bottomPanelOpen).toBe(true)
   })
 
+  it('workflow_completed（线② 2b D5）→ 点击打开右侧 AI 输出面板', async () => {
+    useLayoutStore.setState({ aiPanelOpen: false, rightView: 'agent' })
+    const el = render(<ArtifactCard artifact={{ type: 'workflow_completed', name: '第1章创作' }} />)
+    await act(async () => { (el.querySelector('button') as HTMLButtonElement).click() })
+    expect(useLayoutStore.getState().aiPanelOpen).toBe(true)
+    expect(useLayoutStore.getState().rightView).toBe('ai-output')
+  })
+
   it('无可达目标的类型（如 summary_updated）→ 静态卡：不渲染按钮、不做可点暗示', () => {
     const el = render(<ArtifactCard artifact={{ type: 'summary_updated', name: '摘要更新' }} />)
     expect(el.querySelector('button')).toBeNull()

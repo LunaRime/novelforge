@@ -44,6 +44,8 @@ export interface ToolArtifact {
     | 'verification_report'
     | 'embedding_indexed'
     | 'mutual_review_completed'
+    // 线② 2b：工作流完成回执（D5——对话内卡片为主）
+    | 'workflow_completed'
   /** 文件路径或资源标识 */
   path?: string
   /** 显示名称 */

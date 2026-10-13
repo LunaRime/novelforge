@@ -13,6 +13,7 @@ import SubAgentSessionCard from './SubAgentSessionCard'
 import SubAgentConfirmCard from './SubAgentConfirmCard'
 import RunningStatus from './RunningStatus'
 import PendingToolConfirmation from './PendingToolConfirmation'
+import WorkflowProgressEntry from './WorkflowProgressEntry'
 import type { SubAgentSession } from '../../../services/agent/subagent/types'
 import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
@@ -362,6 +363,10 @@ function ActiveConversation() {
             if (!lastAssistant || !generating || !lastAssistant.streaming) return null
             return <RunningStatus startTime={lastAssistant.createdAt} running />
           })()}
+          {/* 线② 2b：对话内工作流进度入口（单行折叠组，详情在底部任务面板） */}
+          <div className="mt-2">
+            <WorkflowProgressEntry />
+          </div>
         </div>
         {/* 底部空间 */}
         <div className="h-4" />

@@ -1263,3 +1263,23 @@ describe('Minor 8：短对话不读配置（省掉无谓的 config:get）', () =
     expect(count() - before2).toBeGreaterThan(shortDelta)
   })
 })
+
+describe('appendWorkflowCompletion（线② 2b D5：完成回执对话内卡片为主）', () => {
+  it('往活跃会话追加 workflow_completed 产物消息（assistant + artifacts）', () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.getState().appendWorkflowCompletion('第1章创作', 'success')
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const last = after.messages[after.messages.length - 1]
+    expect(last.role).toBe('assistant')
+    expect(last.artifacts).toHaveLength(1)
+    expect(last.artifacts![0].type).toBe('workflow_completed')
+    expect(last.artifacts![0].name).toBe('第1章创作')
+    expect(last.artifacts![0].metadata).toEqual({ status: 'success' })
+  })
+
+  it('无活跃会话（自动化 headless）→ 静默 no-op，不新建会话', () => {
+    useAgentStore.setState({ conversations: [], activeConversationId: null })
+    useAgentStore.getState().appendWorkflowCompletion('x', 'success')
+    expect(useAgentStore.getState().conversations).toHaveLength(0)
+  })
+})

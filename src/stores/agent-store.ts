@@ -211,6 +211,8 @@ interface AgentState {
   persistCurrent: (convId?: string) => Promise<void>
   /** 设置某条消息的反馈（满意/不满意）；再次传入相同值即取消该反馈 */
   setMessageFeedback: (messageId: string, feedback: 'up' | 'down') => void
+  /** 线② 2b D5：工作流完成回执——往活跃会话追加一条 workflow_completed 产物消息（对话内卡片为主） */
+  appendWorkflowCompletion: (title: string, status: 'success' | 'failed') => void
 }
 
 // ===== 工具函数 =====
@@ -1616,6 +1618,30 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 m.id === messageId ? { ...m, feedback: m.feedback === feedback ? undefined : feedback } : m
               ),
             }
+          : c
+      ),
+    })
+    get().persistCurrent(activeConversationId)
+  },
+
+  appendWorkflowCompletion: (title, status) => {
+    // 线② 2b D5：工作流完成回执（对话内卡片为主）。无活跃会话（自动化 headless）时静默 no-op——
+    // 该场景无对话上下文可挂卡，完成通知仍由 App.tsx 的 ActionToast 兜底。
+    const { conversations, activeConversationId } = get()
+    if (!activeConversationId) return
+    const conv = conversations.find(c => c.id === activeConversationId)
+    if (!conv) return
+    const receipt: AgentMessage = {
+      id: genId(),
+      role: 'assistant',
+      content: '',
+      createdAt: Date.now(),
+      artifacts: [{ type: 'workflow_completed', name: title, metadata: { status } }],
+    }
+    set({
+      conversations: conversations.map(c =>
+        c.id === activeConversationId
+          ? { ...c, messages: [...c.messages, receipt], updatedAt: Date.now() }
           : c
       ),
     })
