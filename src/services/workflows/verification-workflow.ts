@@ -118,3 +118,45 @@ export function createVerificationWorkflow(
 
 // 顶层自注册（rehydrate 重建，L2 任务6 修复 round 1）
 registerWorkflow('post_process', (p) => createVerificationWorkflow(p as VerificationWorkflowParams), (p) => p.__subflow === 'verification')
+
+/**
+ * 补全指定缺口工作流（线③ 第 5 条：逐处补全入口）
+ * 跳过扫描，直接对指定 gaps 执行 FillGapsCommand。
+ */
+export function createGapFillWorkflow(gaps: BlueprintGap[]): WorkflowDefinition {
+  return {
+    type: 'post_process',
+    rehydrateParams: { gaps, __subflow: 'gap_fill' },
+    title: t('workflow.gapFillTitle'),
+    steps: [
+      {
+        name: t('workflow.aiFill'),
+        description: t('workflow.verifyAiFillDesc'),
+        executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
+          const project = useProjectStore.getState().currentProject
+          if (!project) throw new Error(t('error.noProject'))
+          // 加载架构（补全上下文，与 verification-workflow 同款）
+          try {
+            const { ipc } = await import('../ipc-client')
+            const core = await ipc.invoke('db:project-core-get')
+            if (core) {
+              const parts: string[] = []
+              const c = core as ProjectCoreData
+              if (c.premise?.length > 50) parts.push(c.premise)
+              if (c.charactersArch?.length > 50) parts.push(c.charactersArch)
+              if (c.worldbuilding?.length > 50) parts.push(c.worldbuilding)
+              if (c.synopsis?.length > 50) parts.push(c.synopsis)
+              context.data.architecture = parts.join('\n\n---\n\n')
+            }
+          } catch { /* 架构加载失败不阻塞 */ }
+          const cmd = new FillGapsCommand({ gaps })
+          const filled = await cmd.execute({ step, context, callbacks })
+          return t('workflow.filledCount').replace('{n}', String(filled.length))
+        },
+      },
+    ],
+    onComplete: { mode: 'silent', message: t('workflow.verifyDone') },
+  }
+}
+
+registerWorkflow('post_process', (p) => createGapFillWorkflow((p as { gaps: BlueprintGap[] }).gaps), (p) => p.__subflow === 'gap_fill')

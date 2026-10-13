@@ -99,6 +99,8 @@ export const workflowTexts = {
   'workflow.verifyTitleOnly': { 'zh-CN': '🔍 蓝图完整性校验', 'en-US': '🔍 Verify blueprint integrity', 'ru-RU': '🔍 Проверка целостности' },
   'workflow.verifyDone': { 'zh-CN': '✅ 蓝图校验与补全完成', 'en-US': '✅ Verification & fill complete', 'ru-RU': '✅ Проверка и заполнение завершены' },
   'workflow.verifyDoneOnly': { 'zh-CN': '✅ 蓝图完整性校验完成', 'en-US': '✅ Integrity check complete', 'ru-RU': '✅ Проверка целостности завершена' },
+  // 线③ 第 5 条：逐处补全缺口的工作流标题
+  'workflow.gapFillTitle': { 'zh-CN': 'AI 补全缺口', 'en-US': 'AI fill gaps', 'ru-RU': 'Заполнение пробелов ИИ' },
   'verification.ok': { 'zh-CN': '完整', 'en-US': 'Complete', 'ru-RU': 'Полная' },
   'verification.hasGaps': { 'zh-CN': '有缺口', 'en-US': 'Has gaps', 'ru-RU': 'Есть пробелы' },
   'verification.critical': { 'zh-CN': '严重缺失', 'en-US': 'Critical', 'ru-RU': 'Критично' },
@@ -166,6 +168,7 @@ export const workflowTexts = {
   'review.dim.continuity': { 'zh-CN': '前后章节串联', 'en-US': 'Chapter continuity', 'ru-RU': 'Непрерывность глав' },
   'review.dim.continuityDesc': { 'zh-CN': '伏笔、悬念连贯', 'en-US': 'Foreshadowing and suspense continuity', 'ru-RU': 'Непрерывность предвестий и саспенса' },
   'verify.title': { 'zh-CN': '蓝图校检', 'en-US': 'Blueprint Verification', 'ru-RU': 'Проверка плана' },
+  'verify.verifyFailed': { 'zh-CN': '校检失败: {error}', 'en-US': 'Verification failed: {error}', 'ru-RU': 'Проверка не удалась: {error}' },
   'verify.reverify': { 'zh-CN': '重新校验', 'en-US': 'Re-verify', 'ru-RU': 'Перепроверить' },
   'verify.verifying': { 'zh-CN': '正在校验...', 'en-US': 'Verifying...', 'ru-RU': 'Проверка...' },
   'verify.clickToStart': { 'zh-CN': '点击校验按钮开始检查蓝图完整性', 'en-US': 'Click verify button to check blueprint completeness', 'ru-RU': 'Нажмите для проверки полноты плана' },

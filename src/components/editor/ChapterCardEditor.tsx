@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
-  Sparkles, PenLine
+  Sparkles, PenLine, ScanSearch, X
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
@@ -21,6 +21,8 @@ import {
 } from '../../services/workflows/directory-workflow'
 import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
+import { generateVerificationReport, type VerificationReport, type BlueprintGap } from '../../services/blueprint-verification-service'
+import { createGapFillWorkflow } from '../../services/workflows/verification-workflow'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
@@ -77,6 +79,10 @@ export default function ChapterCardEditor() {
   // 蓝图生成弹窗（替代原 inline 批量面板）
   const [showBlueprintDialog, setShowBlueprintDialog] = useState(false)
 
+  // 线③ 第 5 条：蓝图校检（校检报告 + 逐处补全入口）
+  const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null)
+  const [verifying, setVerifying] = useState(false)
+
   // 加载分卷（蓝图列表显示所属卷徽标）
   useEffect(() => {
     let mounted = true
@@ -121,8 +127,40 @@ export default function ChapterCardEditor() {
       if (payload.type === 'directory') {
         loadBlueprints()
       }
+      // 线③ 第 5 条：补全缺口完成后，刷新蓝图 + 重新校检（用 DB 最新数据）。
+      // 仅响应 gap_fill 子流——角色档案等其他 post_process 完成不触发蓝图重新校检
+      if (payload.type === 'post_process' && payload.status !== 'failed') {
+        const run = payload.runId
+          ? useWorkflowStore.getState().activeRuns.find(r => r.id === payload.runId)
+          : undefined
+        if (run?.rehydrateParams?.__subflow === 'gap_fill') {
+          loadBlueprints()
+          void runVerify()
+        }
+      }
     })
-  }, [loadBlueprints])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadBlueprints, currentProject])
+
+  /** 线③ 第 5 条：校检蓝图——扫描缺口 + 角色不一致 + 缺标题（用 DB 最新蓝图） */
+  const runVerify = async () => {
+    if (!currentProject) return
+    setVerifying(true)
+    try {
+      const latest = await loadDirectoryBlueprints()
+      const report = await generateVerificationReport(currentProject.novelConfig.totalChapters, latest)
+      setVerificationReport(report)
+    } catch (e) {
+      toast.error(t('verify.verifyFailed').replace('{error}', String(e)))
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  /** 线③ 第 5 条：补全指定缺口（走 startWorkflow，完成后监听里刷新 + 重新校检） */
+  const handleFillGap = (gap: BlueprintGap) => {
+    startWorkflow(createGapFillWorkflow([gap]))
+  }
 
   const selected = blueprints[selectedIdx] ?? null
 
@@ -338,6 +376,17 @@ export default function ChapterCardEditor() {
           )}
           {/* 排序工具栏 */}
           <BlueprintSortBar />
+          {/* 线③ 第 5 条：蓝图校检按钮 */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={runVerify}
+            disabled={verifying}
+            title={t('verify.title')}
+          >
+            <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
+            {verifying ? t('verify.verifying') : t('verify.title')}
+          </Button>
           {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
           <Button
             variant="ai"
@@ -361,6 +410,63 @@ export default function ChapterCardEditor() {
           )}
         </div>
       </div>
+
+      {/* 线③ 第 5 条：校检报告（缺口列表 + 逐处补全） */}
+      {verificationReport && (
+        <div
+          className="px-3 py-2 border-b space-y-1.5"
+          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-elevated)' }}
+        >
+          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text)' }}>
+            <ScanSearch size={12} />
+            <span className="font-medium">{verificationReport.summary}</span>
+            <button
+              onClick={() => setVerificationReport(null)}
+              className="ml-auto opacity-50 hover:opacity-100"
+              style={{ color: 'var(--color-text-muted)' }}
+              aria-label={t('action.cancel')}
+            >
+              <X size={12} />
+            </button>
+          </div>
+          {verificationReport.gaps.length > 0 && (
+            <div className="space-y-1">
+              {verificationReport.gaps.map((gap, i) => {
+                const first = gap.missingChapterNumbers[0]
+                const last = gap.missingChapterNumbers[gap.missingChapterNumbers.length - 1]
+                const label = first === last ? String(first) : `${first}–${last}`
+                return (
+                  <div key={i} className="flex items-center gap-2 text-xs">
+                    <span style={{ color: 'var(--color-warning)' }}>
+                      {t('verify.missingChapter').replace('{n}', label)}
+                    </span>
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {t('verify.chapterFormat').replace('{n}', String(gap.gapSize))}
+                    </span>
+                    <Button variant="outline" size="sm" onClick={() => handleFillGap(gap)}>
+                      {t('verify.fill')}
+                    </Button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+          {verificationReport.inconsistentRoles.length > 0 && (
+            <div className="text-xs space-y-0.5" style={{ color: 'var(--color-warning)' }}>
+              {verificationReport.inconsistentRoles.map((r, i) => (
+                <div key={i}>
+                  {t('verify.roleChapter').replace('{n}', String(r.chapter)).replace('{role}', r.role).replace('{expectedRole}', r.expectedRole)}
+                </div>
+              ))}
+            </div>
+          )}
+          {verificationReport.gaps.length === 0 && verificationReport.inconsistentRoles.length === 0 && verificationReport.missingTitles.length === 0 && (
+            <div className="text-xs" style={{ color: 'var(--color-success)' }}>
+              {t('verification.ok')}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* 蓝图生成配置弹窗 */}
       <DirectoryConfigDialog

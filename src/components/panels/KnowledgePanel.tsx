@@ -1,14 +1,16 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import {
-  Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2, AlertCircle,
+  Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2, AlertCircle, Sparkles,
 } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { useProjectStore } from '../../stores/project-store'
+import { useLLMStore } from '../../stores/llm-store'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
 import { loadKBData, type KBDocument } from '../../services/knowledge-service'
@@ -37,6 +39,43 @@ export default function KnowledgePanel() {
   const [exportOpen, setExportOpen] = useState(false)
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
+
+  // 线③ 第 5 条：知识文档 AI 总结
+  const [summarizing, setSummarizing] = useState(false)
+  const [summaryDoc, setSummaryDoc] = useState<KBDocument | null>(null)
+  const [summaryText, setSummaryText] = useState('')
+
+  /** 线③ 第 5 条：AI 总结文档（读文档 → LLM → 摘要） */
+  const handleSummarize = async (doc: KBDocument) => {
+    if (summarizing) return
+    setSummarizing(true)
+    setSummaryDoc(doc)
+    setSummaryText('')
+    try {
+      const res = await ipc.invoke('fs:read-file', doc.filePath) as { content?: string }
+      const content = res.content ?? ''
+      if (!content.trim()) {
+        toast.warning(t('knowledge.searchEmpty'))
+        setSummaryDoc(null)
+        return
+      }
+      const { generate } = useLLMStore.getState()
+      const resp = await generate([
+        { role: 'system', content: t('knowledge.summarySystemPrompt') },
+        { role: 'user', content: content.slice(0, 30000) },
+      ])
+      if (resp.success && resp.content) {
+        setSummaryText(resp.content)
+      } else {
+        throw new Error(resp.error || 'empty summary')
+      }
+    } catch (e) {
+      toast.error(t('knowledge.summaryFailed').replace('{error}', String(e)))
+      setSummaryDoc(null)
+    } finally {
+      setSummarizing(false)
+    }
+  }
 
   /** 从文档文件名提取章节号 */
   const extractChapterNumber = (doc: KBDocument): number => {
@@ -294,10 +333,32 @@ export default function KnowledgePanel() {
             onPageChange={setCurrentPage}
             onDelete={(doc) => void handleDelete(doc)}
             onExport={(doc) => openSingleExport(doc)}
+            onSummarize={(doc) => void handleSummarize(doc)}
+            summarizing={summarizing}
             t={t}
           />
         )}
       </div>
+
+      {/* 线③ 第 5 条：知识文档 AI 总结对话框 */}
+      <Dialog open={summaryDoc !== null} onOpenChange={(v) => !v && setSummaryDoc(null)}>
+        <DialogContent className="max-w-[520px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles size={14} className="text-[var(--color-accent)]" />
+              {t('knowledge.summaryTitle')}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="px-5 py-2 pb-4 text-sm space-y-2">
+            <div className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
+              {summaryDoc ? (titleMap[summaryDoc.id] || summaryDoc.fileName) : ''}
+            </div>
+            <div className="text-sm whitespace-pre-wrap leading-relaxed" style={{ color: 'var(--color-text-secondary)' }}>
+              {summarizing ? t('knowledge.summarizing') : summaryText}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* 章节导出对话框 */}
       <ChapterExportDialog
@@ -314,7 +375,7 @@ export default function KnowledgePanel() {
  * 已入库章节列表视图（排序头 + 列表体）— 独立子组件：
  * 顶层 fragment 合法，避免父组件深层条件表达式中嵌套 fragment 的解析问题
  */
-function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSortModeChange, pageDocs, currentPage, totalPages, onPageChange, onDelete, onExport, t }: {
+function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSortModeChange, pageDocs, currentPage, totalPages, onPageChange, onDelete, onExport, onSummarize, summarizing, t }: {
   documents: KBDocument[]
   /** 加载失败：与「加载成功但确实没数据」是两回事，必须分开渲染 */
   loadFailed: boolean
@@ -328,6 +389,8 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
   onPageChange: (p: number) => void
   onDelete: (doc: KBDocument) => void
   onExport: (doc: KBDocument) => void
+  onSummarize: (doc: KBDocument) => void
+  summarizing: boolean
   t: ReturnType<typeof useTranslation>['t']
 }) {
   return (
@@ -396,6 +459,17 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
                   <span>{new Date(doc.importedAt).toLocaleDateString(getCurrentLocale())}</span>
                 </div>
               </div>
+              {/* 线③ 第 5 条：AI 总结 — hover 显示 */}
+              <button
+                className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
+                style={{ width: 22, height: 22, flexShrink: 0, color: 'var(--color-text-muted)' }}
+                title={t('knowledge.summarize')}
+                onClick={() => onSummarize(doc)}
+                disabled={summarizing}
+                type="button"
+              >
+                <Sparkles size={12} />
+              </button>
               {/* 单章导出 — hover 显示 */}
               <button
                 className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"

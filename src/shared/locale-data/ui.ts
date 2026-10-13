@@ -390,6 +390,12 @@ export const uiTexts = {
   'action.deleteDraft': { 'zh-CN': '删除草稿', 'en-US': 'Delete draft', 'ru-RU': 'Удалить черновик' },
   // --- KnowledgePanel ---
   'knowledge.empty': { 'zh-CN': '暂无数据', 'en-US': 'No data', 'ru-RU': 'Нет данных' },
+  // 线③ 第 5 条：知识文档 AI 总结
+  'knowledge.summarize': { 'zh-CN': 'AI 总结', 'en-US': 'AI summarize', 'ru-RU': 'ИИ-краткое содержание' },
+  'knowledge.summarizing': { 'zh-CN': '总结中…', 'en-US': 'Summarizing…', 'ru-RU': 'Суммирование…' },
+  'knowledge.summaryTitle': { 'zh-CN': '文档总结', 'en-US': 'Document summary', 'ru-RU': 'Краткое содержание документа' },
+  'knowledge.summaryFailed': { 'zh-CN': '总结失败：{error}', 'en-US': 'Summarize failed: {error}', 'ru-RU': 'Ошибка суммирования: {error}' },
+  'knowledge.summarySystemPrompt': { 'zh-CN': '你是小说写作助手。请用简洁的中文概括下面这份章节内容：用 3-6 句话总结核心情节、关键事件与人物走向。直接输出摘要，不要复述原文、不要加额外说明。', 'en-US': 'You are a novel-writing assistant. Summarize the following chapter in concise prose: capture the core plot, key events, and character developments in 3-6 sentences. Output the summary directly without restating the source or adding commentary.', 'ru-RU': 'Вы помощник по написанию романов. Кратко изложите содержание главы на русском: в 3-6 предложениях передайте основной сюжет, ключевые события и развитие персонажей. Выведите только резюме.' },
   'knowledge.autoIndexHint': { 'zh-CN': '定稿后章节内容将自动入库', 'en-US': 'Chapter content will be auto-indexed after finalization', 'ru-RU': 'Главы автоматически индексируются после финализации' },
   'knowledge.searchEmpty': { 'zh-CN': '无匹配结果，换个关键词试试', 'en-US': 'No matching results — try another keyword', 'ru-RU': 'Нет совпадений — попробуйте другое слово' },
   'knowledge.searchFailed': { 'zh-CN': '搜索失败：{error}', 'en-US': 'Search failed: {error}', 'ru-RU': 'Ошибка поиска: {error}' },
