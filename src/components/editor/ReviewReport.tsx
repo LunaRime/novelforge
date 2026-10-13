@@ -4,11 +4,8 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
-import { Textarea } from '../ui/Textarea'
 import { Disclosure } from '../ui/Disclosure'
-import {
-  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
-} from '../ui/Dialog'
+import AIActionDialog from './AIActionDialog'
 
 /** 审稿问题条目（JSON 格式） */
 interface ReviewIssue {
@@ -430,44 +427,25 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         )}
       </div>
 
-      {/* 修稿确认弹窗（含自定义提示词） */}
-      <Dialog open={showRefineDialog} onOpenChange={(v) => !v && setShowRefineDialog(false)}>
-        <DialogContent className="max-w-[440px]">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles size={14} className="text-[var(--color-accent)]" />
-              {t('review.aiFixTitle')}
-            </DialogTitle>
-            <DialogDescription>
-              {t('review.aiFixDesc2')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="px-5 py-2 text-sm space-y-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-            <div className="font-medium text-[var(--color-text)]">{t('review.refineScope')}</div>
-            <div>{t('review.refineScopeItem1')}</div>
-            <div>{t('review.refineScopeItem2')}</div>
-          </div>
-          <div className="px-5 pb-2">
-            <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-              {t('review.extraFixLabel')}
-            </label>
-            {/* 描边/正文色/焦点环/禁用态走 ui/Textarea；只覆盖底色（与 AIActionDialog 同款）与最小高度 */}
-            <Textarea
-              className="px-3 py-2 text-sm"
-              style={{ background: 'var(--color-bg-elevated)', minHeight: 72 }}
-              placeholder={t('review.extraFixPlaceholder')}
-              value={userRefinePrompt}
-              onChange={e => setUserRefinePrompt(e.target.value)}
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setShowRefineDialog(false)}>{t('action.cancel')}</Button>
-            <Button variant="ai" onClick={doRefineFromReview}>
-              {t('review.confirmPolish')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* 审稿修稿确认弹窗（线③ 第 3 条：复用 AIActionDialog 壳，删内联复制体） */}
+      <AIActionDialog
+        action={showRefineDialog ? 'refine' : null}
+        refinePrompt={userRefinePrompt}
+        reviewDims={{}}
+        onClose={() => setShowRefineDialog(false)}
+        onRefinePromptChange={setUserRefinePrompt}
+        onReviewDimToggle={() => {}}
+        onConfirm={doRefineFromReview}
+        refineCopy={{
+          titleKey: 'review.aiFixTitle',
+          descKey: 'review.aiFixDesc2',
+          scopeTitleKey: 'review.refineScope',
+          scopeItems: ['review.refineScopeItem1', 'review.refineScopeItem2'],
+          promptLabelKey: 'review.extraFixLabel',
+          promptPlaceholderKey: 'review.extraFixPlaceholder',
+          confirmTextKey: 'review.confirmPolish',
+        }}
+      />
     </div>
   )
 }

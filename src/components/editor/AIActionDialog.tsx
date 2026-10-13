@@ -25,6 +25,21 @@ export function getReviewDims(t: (key: TextKey) => string) {
   ] as const
 }
 
+/**
+ * AI 修稿场景的可定制文案（线③ 第 3 条：AIActionDialog 泛化第一步）。
+ * 缺省 = 「直接修稿」（DraftEditor）；ReviewReport 传入「审稿修稿」文案复用同一壳。
+ */
+export interface AIActionRefineCopy {
+  titleKey?: TextKey
+  /** 完整描述（覆盖默认的「对象：{chapterTitle}」拼接） */
+  descKey?: TextKey
+  scopeTitleKey?: TextKey
+  scopeItems?: TextKey[]
+  promptLabelKey?: TextKey
+  promptPlaceholderKey?: TextKey
+  confirmTextKey?: TextKey
+}
+
 export interface AIActionDialogProps {
   /** 当前操作类型（null = 关闭弹窗） */
   action: 'refine' | 'review' | null
@@ -44,6 +59,8 @@ export interface AIActionDialogProps {
   onReviewDimToggle: (key: string) => void
   /** 确认执行 */
   onConfirm: () => void
+  /** 线③：修稿场景文案定制（审稿修稿复用本壳时传入） */
+  refineCopy?: AIActionRefineCopy
 }
 
 export default memo(function AIActionDialog({
@@ -56,9 +73,18 @@ export default memo(function AIActionDialog({
   onRefinePromptChange,
   onReviewDimToggle,
   onConfirm,
+  refineCopy,
 }: AIActionDialogProps) {
   const { t } = useTranslation()
   const reviewDimsData = useMemo(() => getReviewDims(t), [t])
+
+  // 修稿场景文案（refineCopy 覆盖默认「直接修稿」文案）
+  const refineTitleKey = refineCopy?.titleKey ?? 'dialog.aiPolishTitle'
+  const refineScopeTitleKey = refineCopy?.scopeTitleKey ?? 'review.directScope'
+  const refineScopeItems = refineCopy?.scopeItems ?? ['review.directScopeDesc', 'review.directScopeNote'] as const
+  const refinePromptLabelKey = refineCopy?.promptLabelKey ?? 'review.extraPolishLabel'
+  const refinePromptPlaceholderKey = refineCopy?.promptPlaceholderKey ?? 'review.extraPolishPlaceholder'
+  const refineConfirmKey = refineCopy?.confirmTextKey ?? 'dialog.confirmExecute'
 
   return (
     <Dialog open={action !== null} onOpenChange={(v) => !v && onClose()}>
@@ -66,19 +92,22 @@ export default memo(function AIActionDialog({
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={14} className="text-[var(--color-accent)]" />
-            {action === 'refine' ? t('dialog.aiPolishTitle') : t('dialog.aiReviewTitle')}
+            {action === 'refine' ? t(refineTitleKey) : t('dialog.aiReviewTitle')}
           </DialogTitle>
           <DialogDescription>
-            {t('dialog.targetObject')}{chapterTitle ? `${chapterTitle} v${version}` : t('dialog.currentDraft')}
+            {action === 'refine' && refineCopy?.descKey
+              ? t(refineCopy.descKey)
+              : t('dialog.targetObject') + (chapterTitle ? `${chapterTitle} v${version}` : t('dialog.currentDraft'))}
           </DialogDescription>
         </DialogHeader>
 
         <div className="px-5 py-2 text-sm space-y-1.5" style={{ color: 'var(--color-text-secondary)' }}>
           {action === 'refine' ? (
             <>
-              <div className="font-medium text-[var(--color-text)]">{t('review.directScope')}</div>
-              <div>1. {t('review.directScopeDesc')}</div>
-              <div>2. {t('review.directScopeNote')}</div>
+              <div className="font-medium text-[var(--color-text)]">{t(refineScopeTitleKey)}</div>
+              {refineScopeItems.map((key, i) => (
+                <div key={key}>{i + 1}. {t(key)}</div>
+              ))}
             </>
           ) : (
             <>
@@ -123,13 +152,13 @@ export default memo(function AIActionDialog({
         {action === 'refine' && (
           <div className="px-5 pb-2">
             <label className="text-xs font-medium block mb-1.5" style={{ color: 'var(--color-text-secondary)' }}>
-              {t('review.extraPolishLabel')}
+              {t(refinePromptLabelKey)}
             </label>
             {/* 描边/正文色/焦点环/禁用态走 ui/Textarea；只覆盖底色（对话框用 elevated 层）与最小高度 */}
             <Textarea
               className="px-3 py-2 text-sm"
               style={{ background: 'var(--color-bg-elevated)', minHeight: 72 }}
-              placeholder={t('review.extraPolishPlaceholder')}
+              placeholder={t(refinePromptPlaceholderKey)}
               value={refinePrompt}
               onChange={e => onRefinePromptChange(e.target.value)}
             />
@@ -138,7 +167,7 @@ export default memo(function AIActionDialog({
 
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t('action.cancel')}</Button>
-          <Button variant="ai" onClick={onConfirm}>{t('dialog.confirmExecute')}</Button>
+          <Button variant="ai" onClick={onConfirm}>{action === 'refine' ? t(refineConfirmKey) : t('dialog.confirmExecute')}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
