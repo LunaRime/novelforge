@@ -326,6 +326,7 @@ export const agentTexts = {
   'aiAction.previewLabel': { 'zh-CN': '{action}预览', 'en-US': '{action} preview', 'ru-RU': 'Предпросмотр {action}' },
   // --- Misc ---
   'tip.configModelFirst': { 'zh-CN': '请先在设置中配置 AI 模型', 'en-US': 'Please configure AI model in Settings first', 'ru-RU': 'Сначала настройте модель ИИ в Настройках' },
+  'tip.configRunning': { 'zh-CN': '配置正在生成中，请稍候', 'en-US': 'Config generation in progress, please wait', 'ru-RU': 'Генерация конфигурации выполняется, подождите' },
   'tip.characterSaving': { 'zh-CN': '角色正在保存，请稍候再切换项目', 'en-US': 'Characters are still saving — please wait before switching projects', 'ru-RU': 'Персонажи сохраняются — подождите перед переключением проекта' },
   // --- ConfirmCard ---
   'agent.confirmAction': { 'zh-CN': '需要确认操作', 'en-US': 'Action requires confirmation', 'ru-RU': 'Требуется подтверждение' },

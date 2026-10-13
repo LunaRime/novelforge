@@ -9,6 +9,7 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 
 import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 import { registerWorkflow } from './workflow-registry'
+import { getFieldLabel, type GeneratableField } from './commands/generate-field.command'
 
 // ==========================================
 // 1. 类型定义
@@ -115,6 +116,32 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
       },
     ],
     onComplete: { mode: 'silent', message: t('workflow.configDone') },
+  }
+}
+
+/**
+ * 单字段生成工作流（线③ 第 2 条：统一执行路径）
+ * 把单字段生成从「绕过 WorkflowEngine 的假 step」改为走 startWorkflow——
+ * 获得可取消 / 流式 / 进面板 / 统一失败面。type 复用 config_generation，
+ * rehydrateParams.mode='field' + fieldKey 供 UI 推导「哪个字段在生成」。
+ */
+export function createFieldGenerationWorkflow(fieldKey: GeneratableField): WorkflowDefinition {
+  const label = getFieldLabel(fieldKey)
+  return {
+    type: 'config_generation',
+    title: t('workflow.generateFieldTitle').replace('{label}', label),
+    steps: [
+      {
+        name: label,
+        description: t('workflow.generateFieldDesc').replace('{label}', label),
+        executor: async (step, context, callbacks) => {
+          const { GenerateFieldCommand } = await import('./commands/generate-field.command')
+          return new GenerateFieldCommand(fieldKey).execute({ step, context, callbacks })
+        },
+      },
+    ],
+    onComplete: { mode: 'silent', message: t('workflow.fieldDone').replace('{label}', label) },
+    rehydrateParams: { fieldKey, mode: 'field' },
   }
 }
 

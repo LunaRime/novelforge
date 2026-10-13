@@ -219,6 +219,10 @@ export const workflowTexts = {
   // --- 对话内工作流进度入口（线② 2b）---
   'workflow.progressTitle': { 'zh-CN': '工作流', 'en-US': 'Workflow', 'ru-RU': 'Рабочий процесс' },
   'workflow.progressSummary': { 'zh-CN': '已完成 {done} 步 · 运行中 {running}', 'en-US': '{done} done · {running} running', 'ru-RU': '{done} готово · {running} выполняется' },
+  // --- 单字段生成工作流（线③ 第 2 条：统一执行路径）---
+  'workflow.generateFieldTitle': { 'zh-CN': '生成「{label}」', 'en-US': 'Generate "{label}"', 'ru-RU': 'Генерация «{label}»' },
+  'workflow.generateFieldDesc': { 'zh-CN': '为「{label}」AI 生成内容', 'en-US': 'AI-generate content for "{label}"', 'ru-RU': 'ИИ-генерация «{label}»' },
+  'workflow.fieldDone': { 'zh-CN': '「{label}」生成完成', 'en-US': '"{label}" generated', 'ru-RU': '«{label}» создано' },
   'review.refineScope': { 'zh-CN': '本次【审稿修稿】范围：', 'en-US': 'Scope of this review-based fix:', 'ru-RU': 'Область исправления по рецензии:' },
   'review.refineScopeItem1': { 'zh-CN': '1. 重点修复审稿报告中指出的「严重问题」与「改进建议」。', 'en-US': '1. Focus on fixing "Critical" and "Suggestion" issues from the review report.', 'ru-RU': '1. Исправить «критичные» проблемы и «рекомендации» из отчёта.' },
   'review.refineScopeItem2': { 'zh-CN': '2. 可在下方指定的额外修稿要求。', 'en-US': '2. Additional fix requirements can be specified below.', 'ru-RU': '2. Дополнительные требования можно указать ниже.' },

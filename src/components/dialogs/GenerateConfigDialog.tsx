@@ -33,6 +33,8 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
   const startWorkflow = useWorkflowStore.getState().startWorkflow
   const currentProject = useProjectStore(s => s.currentProject)
   const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
+  // 线③ 第 2 条：config_generation 运行中守卫（批量 + 单字段共用同一 type）
+  const isConfigRunning = useWorkflowStore(s => s.isTypeRunning('config_generation'))
   const [idea, setIdea] = useState('')
 
   // 控制当外部 Confirm 弹窗显示时，阻止本 Dialog 因为"点击外部"而意外关闭
@@ -71,6 +73,11 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
     if (!idea.trim() || isSubmittingRef.current) return
     if (!defaultModelId) {
       addLog('error', '⚠️ ' + t('tip.configModelFirst'))
+      return
+    }
+    // 线③ 第 2 条：配置生成运行中守卫（防重复启动）
+    if (isConfigRunning) {
+      addLog('warn', t('tip.configRunning'))
       return
     }
 
@@ -272,7 +279,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
               variant="ai"
               size="lg"
               onClick={handleGenerate}
-              disabled={!idea.trim() || isSubmitting}
+              disabled={!idea.trim() || isSubmitting || isConfigRunning}
             >
               <><Sparkles size={13} /> {t('genConfig.btn')}</>
             </Button>

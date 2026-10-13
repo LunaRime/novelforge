@@ -18,7 +18,7 @@ export type GeneratableField =
   | 'writingStyle'
 
 /** 字段标签映射（i18n） */
-function getFieldLabel(fieldKey: GeneratableField): string {
+export function getFieldLabel(fieldKey: GeneratableField): string {
   const labels: Record<GeneratableField, string> = {
     coreOutline: t('field.label.coreOutline'),
     worldSetting: t('field.label.worldSetting'),

@@ -12,6 +12,7 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
+import { createFieldGenerationWorkflow } from '../../services/workflows/architecture-workflow'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import type { TextKey } from '../../shared/locale'
@@ -34,8 +35,12 @@ export default function NovelConfigEditor() {
   const [saving, setSaving] = useState(false)
   const [showGenerateConfig, setShowGenerateConfig] = useState(false)
 
-  // 各区块的独立生成状态
-  const [generatingField, setGeneratingField] = useState<GeneratableField | null>(null)
+  // 线③ 第 2 条：生成中字段从 workflow-store 推导（单字段走 startWorkflow，删假 step）。
+  // selector 返回 fieldKey 字符串，仅 fieldKey 变化时才重渲染（避免流式 steps 高频重渲染）
+  const generatingField = useWorkflowStore(s => {
+    const run = s.activeRuns.find(r => r.type === 'config_generation' && r.rehydrateParams?.mode === 'field')
+    return (run?.rehydrateParams?.fieldKey as GeneratableField | null) ?? null
+  })
 
   // 直接从 Store 读取配置 — 单一数据源，无需 local state 镜像
   const config = currentProject?.novelConfig ?? null
@@ -80,32 +85,14 @@ export default function NovelConfigEditor() {
     setShowGenerateConfig(true)
   }
 
-  /** 单字段 AI 生成 */
-  const handleFieldGenerate = async (fieldKey: GeneratableField) => {
+  /** 单字段 AI 生成（线③ 第 2 条：走 startWorkflow，删假 step——可取消/流式/进面板/统一失败面） */
+  const handleFieldGenerate = (fieldKey: GeneratableField) => {
     if (!defaultModelId) {
       addLog('error', t('tip.configModelFirst'))
       return
     }
-    if (generatingField) return // 防止并发
-
-    setGeneratingField(fieldKey)
-    try {
-      const { GenerateFieldCommand } = await import('../../services/workflows/commands/generate-field.command')
-      const cmd = new GenerateFieldCommand(fieldKey)
-      await cmd.execute({
-        step: { id: '', commandId: '', name: '', params: {} },
-        context: { data: {}, cancelled: false },
-        callbacks: {
-          log: (msg: string) => useWorkflowStore.getState().addLog('info', msg),
-          setProgress: () => { },
-          appendText: () => { },
-        },
-      })
-    } catch (e) {
-      addLog('error', t('error.genFailed') + '：' + String(e))
-    } finally {
-      setGeneratingField(null)
-    }
+    if (generatingField) return // 防止并发（generatingField 推导自 activeRuns 的 config_generation）
+    useWorkflowStore.getState().startWorkflow(createFieldGenerationWorkflow(fieldKey))
   }
 
   // 题材 value 保持中文原文（数据兼容），显示文本走 i18n
