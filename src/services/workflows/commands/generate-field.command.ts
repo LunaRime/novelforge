@@ -1,6 +1,7 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
+import { toast } from '../../../components/ui/Toast'
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
 /**
@@ -60,11 +61,24 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
       return ''
     }
 
-    // 写入 NovelConfig
-    const { updateNovelConfig, saveProject } = useProjectStore.getState()
+    // 线③：产出审查层——应用前快照，应用后可撤销（单字段此前无覆盖确认，至少补快照 + 撤销出口）
+    const { snapshotNovelConfig, updateNovelConfig, saveProject } = useProjectStore.getState()
+    snapshotNovelConfig()
     updateNovelConfig({ [this.fieldKey]: cleanResult })
     await saveProject()
     callbacks.log(t('log.generateField.saved').replace('{label}', label))
+    toast.show({
+      type: 'ai',
+      message: t('field.aiApplied').replace('{label}', label),
+      actions: [{
+        label: t('action.undoShort'),
+        onClick: () => {
+          if (useProjectStore.getState().restoreNovelConfigSnapshot()) {
+            toast.success(t('field.aiReverted').replace('{label}', label))
+          }
+        },
+      }],
+    })
 
     return cleanResult
   }

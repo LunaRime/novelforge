@@ -77,6 +77,12 @@ interface ProjectState {
   saveProject: () => Promise<boolean>
   /** 更新小说配置 */
   updateNovelConfig: (config: Partial<NovelConfig>) => void
+  /** 线③：AI 产出应用前的配置快照（撤销出口） */
+  configSnapshot: NovelConfig | null
+  /** 线③：快照当前配置（AI 产出应用前调用，供撤销恢复） */
+  snapshotNovelConfig: () => void
+  /** 线③：恢复快照（撤销 AI 产出）；无快照时 no-op 返回 false */
+  restoreNovelConfigSnapshot: () => boolean
   /** 刷新文件树 */
   refreshFileTree: () => Promise<void>
   /** 加载最近项目 */
@@ -96,6 +102,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   fileTree: [],
   recentProjects: [],
   loading: false,
+  configSnapshot: null,
 
   createProject: async (config) => {
     set({ loading: true })
@@ -132,7 +139,8 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     try {
       const result = await ipc.invoke('project:open', projectPath)
       if (result.success && result.project) {
-        set({ currentProject: result.project })
+        // 切换项目时清空配置快照——旧项目的快照不得跨项目残留（否则撤销会用 A 的快照覆盖 B）
+        set({ currentProject: result.project, configSnapshot: null })
         // 加载项目级 Prompt 覆盖（此前仅在设置页挂载时加载——未打开设置页时覆盖静默失效；
         // 挂到项目打开统一入口，新建/导入/切换均生效）
         loadProjectCustomPrompts(projectPath).catch(() => {})
@@ -204,6 +212,25 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         novelConfig: { ...project.novelConfig, ...config },
       },
     })
+  },
+
+  snapshotNovelConfig: () => {
+    const project = get().currentProject
+    if (!project) return
+    // 深拷贝快照（避免后续 updateNovelConfig 浅合并污染快照引用）
+    set({ configSnapshot: JSON.parse(JSON.stringify(project.novelConfig)) as NovelConfig })
+  },
+
+  restoreNovelConfigSnapshot: () => {
+    const { configSnapshot, currentProject } = get()
+    if (!configSnapshot || !currentProject) return false
+    set({
+      currentProject: { ...currentProject, novelConfig: configSnapshot },
+      configSnapshot: null,
+    })
+    // 撤销后落盘（快照是应用前的旧值，恢复即回到已保存状态）
+    void get().saveProject()
+    return true
   },
 
   refreshFileTree: async () => {

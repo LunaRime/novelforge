@@ -82,6 +82,7 @@ export const uiTexts = {
   'action.loadMore': { 'zh-CN': '查看全部对话', 'en-US': 'View all conversations', 'ru-RU': 'Все диалоги' },
   'action.runTest': { 'zh-CN': '运行测试', 'en-US': 'Run test', 'ru-RU': 'Запустить тест' },
   'action.undo': { 'zh-CN': '撤销 (Ctrl+Z)', 'en-US': 'Undo (Ctrl+Z)', 'ru-RU': 'Отменить (Ctrl+Z)' },
+  'action.undoShort': { 'zh-CN': '撤销', 'en-US': 'Undo', 'ru-RU': 'Отменить' },
   'action.redo': { 'zh-CN': '重做 (Ctrl+Y / Ctrl+Shift+Z)', 'en-US': 'Redo (Ctrl+Y / Ctrl+Shift+Z)', 'ru-RU': 'Повторить (Ctrl+Y)' },
   'panel.tasks': { 'zh-CN': '任务', 'en-US': 'Tasks', 'ru-RU': 'Задачи' },
   'panel.log': { 'zh-CN': '日志', 'en-US': 'Log', 'ru-RU': 'Журнал' },
@@ -425,6 +426,9 @@ export const uiTexts = {
   'dialog.close': { 'zh-CN': '关闭', 'en-US': 'Close', 'ru-RU': 'Закрыть' },
   // --- Field labels (generate-field) ---
   'field.label.coreOutline': { 'zh-CN': '核心大纲', 'en-US': 'Core outline', 'ru-RU': 'Основной план' },
+  // 线③：产出审查层——单字段 AI 生成应用后的撤销出口
+  'field.aiApplied': { 'zh-CN': '已应用「{label}」', 'en-US': 'Applied "{label}"', 'ru-RU': 'Применено «{label}»' },
+  'field.aiReverted': { 'zh-CN': '已撤销「{label}」', 'en-US': 'Reverted "{label}"', 'ru-RU': 'Отменено «{label}»' },
   'field.label.worldSetting': { 'zh-CN': '世界观设定', 'en-US': 'World setting', 'ru-RU': 'Мир' },
   'field.label.goldenFinger': { 'zh-CN': '金手指/核心卖点', 'en-US': 'Golden finger / core selling point', 'ru-RU': 'Козырь / главная фишка' },
   'field.label.protagonistProfile': { 'zh-CN': '主角人设', 'en-US': 'Protagonist profile', 'ru-RU': 'Протагонист' },

@@ -323,8 +323,20 @@ export default function NovelConfigEditor() {
         isOpen={showGenerateConfig}
         onClose={() => setShowGenerateConfig(false)}
         onGenerated={(parsed) => {
-          // 直接写 Store，组件自动重新渲染
+          // 线③：产出审查层——应用前快照，应用后可撤销（生成后零复核 → 快照 + 撤销出口）
+          const store = useProjectStore.getState()
+          store.snapshotNovelConfig()
           updateNovelConfig(parsed)
+          toast.show({
+            type: 'ai',
+            message: t('novelConfig.aiApplied'),
+            actions: [{
+              label: t('action.undoShort'),
+              onClick: () => {
+                if (store.restoreNovelConfigSnapshot()) toast.success(t('novelConfig.aiReverted'))
+              },
+            }],
+          })
         }}
       />
     </div>

@@ -352,6 +352,9 @@ export const settingsTexts = {
   'localEmbedding.modelSwitchDimWarn': { 'zh-CN': '切换模型可能改变向量维度：现有知识库索引需要在重建后才能继续写入。', 'en-US': 'Switching the model may change the vector dimension: the existing knowledge base index must be rebuilt before writes can continue.', 'ru-RU': 'Смена модели может изменить размерность векторов: индекс базы знаний нужно пересобрать, иначе запись будет отклонена.' },
   'novelConfig.title': { 'zh-CN': '小说配置', 'en-US': 'Novel Config', 'ru-RU': 'Конфигурация романа' },
   'novelConfig.desc': { 'zh-CN': '定义你的小说基本信息和写作参数', 'en-US': 'Define your novel basic info and writing parameters', 'ru-RU': 'Основная информация и параметры' },
+  // 线③：产出审查层——AI 配置应用后的撤销出口
+  'novelConfig.aiApplied': { 'zh-CN': '已应用 AI 生成的配置', 'en-US': 'AI-generated config applied', 'ru-RU': 'Конфигурация от ИИ применена' },
+  'novelConfig.aiReverted': { 'zh-CN': '已撤销，恢复为生成前配置', 'en-US': 'Reverted to the previous config', 'ru-RU': 'Отменено, восстановлена прежняя конфигурация' },
   'novelConfig.loading': { 'zh-CN': '加载配置中...', 'en-US': 'Loading config...', 'ru-RU': 'Загрузка конфигурации...' },
   'novelConfig.saved': { 'zh-CN': '小说配置已保存', 'en-US': 'Novel config saved', 'ru-RU': 'Конфигурация сохранена' },
   'novelConfig.basicInfo': { 'zh-CN': '基本信息', 'en-US': 'Basic info', 'ru-RU': 'Основная информация' },
