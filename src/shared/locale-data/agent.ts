@@ -7,6 +7,7 @@
  */
 export const agentTexts = {
   'agent.taskComplete': { 'zh-CN': '已完成', 'en-US': 'completed', 'ru-RU': 'завершено' },
+  'agent.taskFailed': { 'zh-CN': '失败，详见任务面板', 'en-US': 'failed — see the task panel for details', 'ru-RU': 'не выполнено — см. панель задач' },
   'agent.skillCatalogHeader': { 'zh-CN': '可用技能（需要时用 skill 工具按名加载全文）：', 'en-US': 'Available skills (load full text by name with the skill tool):', 'ru-RU': 'Доступные навыки (полный текст загружается инструментом skill по имени):' },
   'agent.skillInjectTruncated': { 'zh-CN': '（技能内容较长已截断；完整内容可用 skill 工具按名加载）', 'en-US': '(skill content truncated — load the full text by name with the skill tool)', 'ru-RU': '(текст навыка обрезан — полную версию можно загрузить инструментом skill)' },
   'ccr.batchesPruneOriginalsFailed': { 'zh-CN': '按保留偏好移除了 {n} 个更旧的压缩批次，但释放其分卷原文失败（{error}）——原文可能仍留在磁盘上，可在会话删除时一并清理', 'en-US': 'Removed {n} older compaction batch(es) per your retention preference, but releasing their stored originals failed ({error}) — they may still remain on disk and will be cleaned up when the conversation is deleted', 'ru-RU': 'Удалено {n} старых пакетов сжатия, но освободить их оригиналы не удалось ({error}) — они могут остаться на диске до удаления диалога' },
