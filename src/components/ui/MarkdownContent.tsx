@@ -1,7 +1,9 @@
 import React, { memo, useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
+import ReactMarkdown, { type Components } from 'react-markdown'
+import remarkGfm from 'remark-gfm'
 import { t } from '../../shared/locale'
-import { Table } from './Table'
+import { Table, type TableRow } from './Table'
 
 interface MarkdownContentProps {
   content: string
@@ -12,6 +14,10 @@ interface MarkdownContentProps {
  * Markdown 渲染组件（含 <think> 思考过程折叠支持）
  * 用于 Agent 对话、AI 输出面板的正文格式化显示。
  * memo：流式输出时历史消息 content 不变 → 跳过整段 markdown 解析与 DOM 重建（渲染卡顿主因）。
+ *
+ * 渲染内核：react-markdown + remark-gfm（GFM 表格/任务列表/删除线/自动链接），
+ * 自定义 components 保持既有视觉（代码块/表格/链接/标题/列表/引用）。
+ * 不启用 rehype-raw —— 原始 HTML 不渲染（与旧手写实现一致，规避 XSS）。
  */
 export default memo(function MarkdownContent({ content, streaming }: MarkdownContentProps) {
   // 解析 <think> 标签：将内容拆分为 [thinking?, ...markdownSegments]
@@ -23,9 +29,7 @@ export default memo(function MarkdownContent({ content, streaming }: MarkdownCon
         seg.type === 'think' ? (
           <ThinkingBlock key={`think-${i}`} content={seg.content} streaming={streaming && i === segments.length - 1} />
         ) : (
-          <React.Fragment key={`md-${i}`}>
-            {renderLines(seg.content.split('\n'))}
-          </React.Fragment>
+          <MarkdownBody key={`md-${i}`} content={seg.content} />
         )
       )}
       {streaming && <StreamingCursor />}
@@ -33,175 +37,125 @@ export default memo(function MarkdownContent({ content, streaming }: MarkdownCon
   )
 })
 
-/** 渲染行列表为 React 元素 */
-function renderLines(lines: string[]): React.ReactNode {
-  const elements: React.ReactNode[] = []
-  let i = 0
+// ===== react-markdown 正文渲染 =====
 
-  while (i < lines.length) {
-    const line = lines[i]
-
-    // 代码块
-    if (line.startsWith('```')) {
-      const lang = line.slice(3).trim()
-      const codeLines: string[] = []
-      i++
-      while (i < lines.length && !lines[i].startsWith('```')) {
-        codeLines.push(lines[i])
-        i++
-      }
-      elements.push(
-        <CodeBlock key={i} lang={lang} code={codeLines.join('\n')} />
-      )
-      i++ // 跳过结束的 ```
-      continue
-    }
-
-    // H1 ~ H3 标题
-    if (line.startsWith('### ')) {
-      elements.push(
-        <div key={i} className="font-semibold mt-3 mb-1 text-sm"
-          style={{ color: 'var(--color-text)' }}>
-          {renderInline(line.slice(4))}
-        </div>
-      )
-    } else if (line.startsWith('## ')) {
-      elements.push(
-        <div key={i} className="font-semibold mt-3 mb-1 text-sm"
-          style={{ color: 'var(--color-text)' }}>
-          {renderInline(line.slice(3))}
-        </div>
-      )
-    } else if (line.startsWith('# ')) {
-      elements.push(
-        <div key={i} className="font-bold mt-3 mb-1 text-base"
-          style={{ color: 'var(--color-text)' }}>
-          {renderInline(line.slice(2))}
-        </div>
-      )
-    }
-    // 无序列表
-    else if (line.match(/^[-*+] /)) {
-      elements.push(
-        <div key={i} className="flex gap-1.5 my-0.5">
-          <span style={{ color: 'var(--color-text-muted)' }} className="flex-shrink-0 mt-[1px]">•</span>
-          <span>{renderInline(line.slice(2))}</span>
-        </div>
-      )
-    }
-    // 有序列表
-    else if (line.match(/^\d+\. /)) {
-      const match = line.match(/^(\d+)\. (.*)$/)
-      if (match) {
-        elements.push(
-          <div key={i} className="flex gap-1.5 my-0.5">
-            <span style={{ color: 'var(--color-text-muted)' }} className="flex-shrink-0 min-w-[16px]">
-              {match[1]}.
-            </span>
-            <span>{renderInline(match[2])}</span>
-          </div>
-        )
-      }
-    }
-    // 分隔线
-    else if (line.match(/^---+$/) || line.match(/^===+$/)) {
-      elements.push(
-        <hr key={i} className="my-2" style={{ borderColor: 'var(--color-border)' }} />
-      )
-    }
-    // 引用块
-    else if (line.startsWith('> ')) {
-      elements.push(
-        <div
-          key={i}
-          className="pl-3 py-0.5 my-1 text-xs italic"
-          style={{
-            borderLeft: '3px solid var(--color-accent)',
-            color: 'var(--color-text-secondary)',
-          }}
-        >
-          {renderInline(line.slice(2))}
-        </div>
-      )
-    }
-    // Markdown 表格（以 | 开头的连续行）
-    else if (line.trimStart().startsWith('|')) {
-      const tableLines: string[] = [line]
-      while (i + 1 < lines.length && lines[i + 1].trimStart().startsWith('|')) {
-        i++
-        tableLines.push(lines[i])
-      }
-      elements.push(<MarkdownTable key={i} lines={tableLines} />)
-    }
-    // 空行
-    else if (line.trim() === '') {
-      elements.push(<div key={i} className="h-2" />)
-    }
-    // 普通段落
-    else {
-      elements.push(
-        <p key={i} className="my-0.5 leading-relaxed">
-          {renderInline(line)}
-        </p>
-      )
-    }
-
-    i++
+/** 递归提取 ReactNode 的纯文本（用于表头） */
+function extractText(node: React.ReactNode): string {
+  if (typeof node === 'string' || typeof node === 'number') return String(node)
+  if (Array.isArray(node)) return node.map(extractText).join('')
+  if (React.isValidElement(node)) {
+    return extractText((node as React.ReactElement<{ children?: React.ReactNode }>).props.children)
   }
-
-  return elements
+  return ''
 }
 
-/** 内联格式渲染（加粗、斜体、行内代码） */
-function renderInline(text: string): React.ReactNode {
-  // 将文本按 **bold**、*italic*、`code` 分割渲染
-  const parts: React.ReactNode[] = []
-  // 简单的正则分割处理
-  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`)/g
-  let lastIndex = 0
-  let match: RegExpExecArray | null
+/** 表格适配：react-markdown 的 <table>（thead/tbody）结构 → 既有 Table 组件 */
+type ChildEl = React.ReactElement<{ children?: React.ReactNode }>
+function MarkdownTableAdapter({ children }: { children?: React.ReactNode }) {
+  let headers: string[] = []
+  const rows: TableRow[] = []
 
-  while ((match = regex.exec(text)) !== null) {
-    // 文字前的普通文本
-    if (match.index > lastIndex) {
-      parts.push(text.slice(lastIndex, match.index))
+  React.Children.forEach(children, (section) => {
+    if (!React.isValidElement(section)) return
+    const sectionEl = section as ChildEl
+    if (sectionEl.type === 'thead') {
+      const tr = React.Children.toArray(sectionEl.props.children)[0]
+      if (React.isValidElement(tr)) {
+        const trEl = tr as ChildEl
+        headers = React.Children.toArray(trEl.props.children)
+          .filter(c => React.isValidElement(c))
+          .map(c => extractText((c as ChildEl).props.children))
+      }
+    } else if (sectionEl.type === 'tbody') {
+      React.Children.forEach(sectionEl.props.children, (tr, ri) => {
+        if (!React.isValidElement(tr)) return
+        const trEl = tr as ChildEl
+        const cells = React.Children.toArray(trEl.props.children)
+          .filter(c => React.isValidElement(c))
+          .map((c, ci) => <React.Fragment key={ci}>{(c as ChildEl).props.children}</React.Fragment>)
+        rows.push({ key: String(ri), cells })
+      })
     }
+  })
 
-    const token = match[0]
-    if (token.startsWith('**') && token.endsWith('**')) {
-      parts.push(
-        <strong key={match.index} className="font-semibold"
-          style={{ color: 'var(--color-text)' }}>
-          {token.slice(2, -2)}
-        </strong>
-      )
-    } else if (token.startsWith('*') && token.endsWith('*')) {
-      parts.push(<em key={match.index}>{token.slice(1, -1)}</em>)
-    } else if (token.startsWith('`') && token.endsWith('`')) {
-      parts.push(
-        <code
-          key={match.index}
-          className="px-1 py-0.5 rounded text-xs font-mono"
-          style={{
-            backgroundColor: 'var(--color-hover)',
-            color: 'var(--color-accent)',
-            border: '1px solid var(--color-border)',
-          }}
-        >
-          {token.slice(1, -1)}
-        </code>
-      )
+  return <Table className="my-2" hoverableRows headers={headers} rows={rows} />
+}
+
+/** 行内代码（保留既有视觉） */
+function InlineCode({ children }: { children?: React.ReactNode }) {
+  return (
+    <code
+      className="px-1 py-0.5 rounded text-xs font-mono"
+      style={{
+        backgroundColor: 'var(--color-hover)',
+        color: 'var(--color-accent)',
+        border: '1px solid var(--color-border)',
+      }}
+    >
+      {children}
+    </code>
+  )
+}
+
+/** 自定义 components：映射 react-markdown 输出到既有视觉 */
+const markdownComponents: Components = {
+  code({ className, children }) {
+    const match = /language-(\w+)/.exec(className || '')
+    if (match) {
+      return <CodeBlock lang={match[1]} code={String(children ?? '').replace(/\n$/, '')} />
     }
+    return <InlineCode>{children}</InlineCode>
+  },
+  table({ children }) {
+    return <MarkdownTableAdapter>{children}</MarkdownTableAdapter>
+  },
+  a({ href, children }) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener noreferrer"
+        style={{ color: 'var(--color-accent)', textDecoration: 'underline' }}
+      >
+        {children}
+      </a>
+    )
+  },
+  h1: ({ children }) => (
+    <div className="font-bold mt-3 mb-1 text-base" style={{ color: 'var(--color-text)' }}>{children}</div>
+  ),
+  h2: ({ children }) => (
+    <div className="font-semibold mt-3 mb-1 text-sm" style={{ color: 'var(--color-text)' }}>{children}</div>
+  ),
+  h3: ({ children }) => (
+    <div className="font-semibold mt-3 mb-1 text-sm" style={{ color: 'var(--color-text)' }}>{children}</div>
+  ),
+  p: ({ children }) => <p className="my-0.5 leading-relaxed">{children}</p>,
+  ul: ({ children }) => <ul className="my-0.5 pl-4 list-disc">{children}</ul>,
+  ol: ({ children }) => <ol className="my-0.5 pl-4 list-decimal">{children}</ol>,
+  li: ({ children }) => <li className="my-0.5">{children}</li>,
+  blockquote: ({ children }) => (
+    <div
+      className="pl-3 py-0.5 my-1 text-xs italic"
+      style={{ borderLeft: '3px solid var(--color-accent)', color: 'var(--color-text-secondary)' }}
+    >
+      {children}
+    </div>
+  ),
+  hr: () => <hr className="my-2" style={{ borderColor: 'var(--color-border)' }} />,
+  strong: ({ children }) => (
+    <strong className="font-semibold" style={{ color: 'var(--color-text)' }}>{children}</strong>
+  ),
+  em: ({ children }) => <em>{children}</em>,
+}
 
-    lastIndex = match.index + token.length
-  }
-
-  // 剩余文本
-  if (lastIndex < text.length) {
-    parts.push(text.slice(lastIndex))
-  }
-
-  return parts.length === 1 && typeof parts[0] === 'string' ? parts[0] : parts
+/** 用 react-markdown 渲染单段 markdown 正文 */
+function MarkdownBody({ content }: { content: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+      {content}
+    </ReactMarkdown>
+  )
 }
 
 // ===== 代码块组件 =====
@@ -329,37 +283,6 @@ function ThinkingBlock({ content, streaming }: { content: string; streaming?: bo
         </div>
       )}
     </div>
-  )
-}
-
-// ===== Markdown 表格渲染 =====
-
-/** 解析并渲染 Markdown 表格 */
-function MarkdownTable({ lines }: { lines: string[] }) {
-  // 解析表格单元格
-  const parseRow = (line: string): string[] =>
-    line.split('|').slice(1, -1).map(cell => cell.trim())
-
-  if (lines.length < 2) {
-    // 不足两行（至少表头 + 分隔线）
-    return <p className="my-0.5 leading-relaxed">{lines.join('\n')}</p>
-  }
-
-  const headerCells = parseRow(lines[0])
-  // 跳过分隔线（第二行通常是 |---|---|）
-  const startRow = lines[1].includes('---') ? 2 : 1
-  const bodyRows = lines.slice(startRow).map(parseRow)
-
-  return (
-    <Table
-      className="my-2"
-      hoverableRows
-      headers={headerCells}
-      rows={bodyRows.map((row, ri) => ({
-        key: String(ri),
-        cells: row.map(cell => renderInline(cell)),
-      }))}
-    />
   )
 }
 
