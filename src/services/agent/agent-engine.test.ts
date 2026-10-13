@@ -346,10 +346,10 @@ function sumTokens(msgs: LLMMessage[]): number {
 }
 
 describe('动态预算与恢复阶梯（D7-1）', () => {
-  it('computeMessageBudget：窗口 32000 → 28000', () => {
-    expect(computeMessageBudget(32_000)).toBe(28_000)
+  it('computeMessageBudget：窗口 32000 × 80% → 25600', () => {
+    expect(computeMessageBudget(32_000)).toBe(25_600)
   })
-  it('computeMessageBudget：窗口 131072 → 32000（工程上限）', () => {
+  it('computeMessageBudget：窗口 131072 × 80% → 32000（上阈值钳制）', () => {
     expect(computeMessageBudget(131_072)).toBe(32_000)
   })
   it('computeMessageBudget：窗口 8000（小窗口）→ 默认 16000', () => {
@@ -357,6 +357,9 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
   })
   it('computeMessageBudget：undefined → 默认 16000', () => {
     expect(computeMessageBudget(undefined)).toBe(16_000)
+  })
+  it('computeMessageBudget：百分比可配（窗口 32000 × 50% → 16000）', () => {
+    expect(computeMessageBudget(32_000, 50)).toBe(16_000)
   })
   it('isRecoverableError：英文上下文类 → true', () => {
     expect(isRecoverableError('This model\'s maximum context length is 32768 tokens')).toBe(true)

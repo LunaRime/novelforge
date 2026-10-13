@@ -56,6 +56,7 @@ export default function ContextCompactionSection() {
       toast.success(t('settings.compactionSaved'))
       // 仓库规范：设置页保存同时进 LogsView（对照 DeveloperModeSection / ProviderEditorCard）
       renderLog('info', 'Save:Settings', t('log.render.compactionPrefsSaved')
+        .replace('{percent}', String(clamped.budgetPercent))
         .replace('{history}', String(clamped.historyMaxTokens))
         .replace('{minChange}', String(clamped.minimumChangeTokens))
         .replace('{keep}', String(clamped.keepBatches)))
@@ -107,6 +108,7 @@ export default function ContextCompactionSection() {
         </p>
       )}
 
+      {row('budgetPercent', 50, 95, 'settings.compactionPercent', 'settings.compactionPercentDesc')}
       {row('historyMaxTokens', 1000, 32000, 'settings.compactionHistory', 'settings.compactionHistoryDesc')}
       {row('minimumChangeTokens', 0, 2000, 'settings.compactionMinChange', 'settings.compactionMinChangeDesc')}
       {row('keepBatches', 0, 20, 'settings.compactionKeep', 'settings.compactionKeepDesc')}

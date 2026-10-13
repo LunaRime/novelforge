@@ -7,7 +7,9 @@
  * 这一条默认关闭（0 = 不裁剪，维持 B 档第二轮「原文永不删」的承诺）。
  */
 export interface CompactionPrefs {
-  /** 历史超它才触发压缩（默认 4000 = 原 HISTORY_MAX_TOKENS） */
+  /** 上下文预算百分比：预算 = 模型窗口 × 此百分比（默认 80 = 留 20% 余量防单轮超窗） */
+  budgetPercent: number
+  /** 无模型窗口信息时的回退固定预算（默认 4000 = 原 HISTORY_MAX_TOKENS） */
   historyMaxTokens: number
   /** 压完降幅低于它就跳过（B 档 B2 可证明性阈值，默认 200 = 原 MINIMUM_CHANGE_TOKENS） */
   minimumChangeTokens: number
@@ -20,6 +22,7 @@ export const COMPACTION_HISTORY_MIN_TOKENS = 1000
 
 /** 缺省 = 现状常量（行为零变化的前提） */
 export const DEFAULT_COMPACTION_PREFS: CompactionPrefs = {
+  budgetPercent: 80,
   historyMaxTokens: 4000,
   minimumChangeTokens: 200,
   keepBatches: 0,
@@ -27,6 +30,7 @@ export const DEFAULT_COMPACTION_PREFS: CompactionPrefs = {
 
 /** 字段范围 [min, max]（越界钳制；非法值回默认——fail-safe，绝不抛） */
 const RANGES: Record<keyof CompactionPrefs, readonly [number, number]> = {
+  budgetPercent: [50, 95],
   historyMaxTokens: [1000, 32000],
   minimumChangeTokens: [0, 2000],
   keepBatches: [0, 20],
@@ -43,8 +47,19 @@ function pick(raw: unknown, key: keyof CompactionPrefs): number {
 export function resolveCompactionPrefs(config: { compaction?: unknown } | null | undefined): CompactionPrefs {
   const raw = (config?.compaction ?? {}) as Record<string, unknown>
   return {
+    budgetPercent: pick(raw.budgetPercent, 'budgetPercent'),
     historyMaxTokens: pick(raw.historyMaxTokens, 'historyMaxTokens'),
     minimumChangeTokens: pick(raw.minimumChangeTokens, 'minimumChangeTokens'),
     keepBatches: pick(raw.keepBatches, 'keepBatches'),
   }
+}
+
+/**
+ * 计算历史上下文预算（线③ 后续：百分比压缩）：
+ * 有模型窗口 → clamp(窗口 × budgetPercent%, 1000, 32000)；无窗口 → 回退固定 historyMaxTokens。
+ */
+export function computeHistoryBudget(prefs: CompactionPrefs, modelContextWindow?: number): number {
+  if (!modelContextWindow || modelContextWindow <= 0) return prefs.historyMaxTokens
+  const percentBudget = Math.floor(modelContextWindow * (prefs.budgetPercent / 100))
+  return Math.min(32000, Math.max(COMPACTION_HISTORY_MIN_TOKENS, percentBudget))
 }

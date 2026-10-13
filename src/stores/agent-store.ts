@@ -27,7 +27,7 @@ import { useProjectStore } from './project-store'
 import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
 import { MAX_SUB_SESSIONS, SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
 import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
-import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs } from '../services/agent/compaction-prefs'
+import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs, computeHistoryBudget } from '../services/agent/compaction-prefs'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
 import type { LLMGenerateFn } from '../services/agent/agent-engine'
@@ -790,7 +790,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           prefs = resolveCompactionPrefs(await ipc.invoke('config:get') as { compaction?: unknown } | null)
         } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
       }
-      const HISTORY_MAX_TOKENS = prefs.historyMaxTokens
+      // 线③ 后续：百分比预算——预算 = clamp(模型窗口 × budgetPercent%, 1000, 32000)；
+      // 无窗口信息回退固定 historyMaxTokens（旧模式）
+      const HISTORY_MAX_TOKENS = computeHistoryBudget(
+        prefs,
+        llmStore.models.find(m => m.id === modelId)?.contextWindow,
+      )
       if (totalHistoryTokens > HISTORY_MAX_TOKENS) {
         try {
           const { batch, rest } = selectCompressionBatch(currentConv.messages, HISTORY_MAX_TOKENS)
@@ -1154,9 +1159,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           },
         },
         abortController.signal,
-        // options（Task D7-1）：模型上下文窗口 → 动态压缩预算；无窗口信息回退默认 16k
+        // options：模型上下文窗口 + 百分比预算（线③ 后续：预算 = clamp(窗口 × %, 16k, 32k)，默认 80）
         // ⚠️ 取 contextWindow 而非 maxTokens —— 前者是「输入+输出总容量」，后者只是输出上限
-        { modelContextWindow: llmStore.models.find(m => m.id === modelId)?.contextWindow },
+        {
+          modelContextWindow: llmStore.models.find(m => m.id === modelId)?.contextWindow,
+          budgetPercent: prefs.budgetPercent,
+        },
         agentDeps,
       )
     } catch (error) {
