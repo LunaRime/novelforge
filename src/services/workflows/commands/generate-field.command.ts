@@ -2,6 +2,7 @@ import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
 import { toast } from '../../../components/ui/Toast'
+import { confirm } from '../../../components/ui/Confirm'
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
 /**
@@ -44,6 +45,19 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
 
     const config = project.novelConfig
     const label = getFieldLabel(this.fieldKey)
+
+    // 线③：单字段覆盖确认（与批量同级的覆盖确认——此前单字段无覆盖确认，直接覆盖）
+    const existing = config[this.fieldKey]
+    if (typeof existing === 'string' && existing.trim()) {
+      const ok = await confirm(
+        t('field.overwriteWarning').replace('{label}', label),
+        { title: t('field.overwriteTitle'), confirmText: t('dialog.confirmOverwrite'), cancelText: t('action.cancel') },
+      )
+      if (!ok) {
+        callbacks.log(t('log.generateField.cancelled').replace('{label}', label))
+        return ''
+      }
+    }
 
     callbacks.log(t('log.generateField.generating').replace('{label}', label))
 

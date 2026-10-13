@@ -429,6 +429,9 @@ export const uiTexts = {
   // 线③：产出审查层——单字段 AI 生成应用后的撤销出口
   'field.aiApplied': { 'zh-CN': '已应用「{label}」', 'en-US': 'Applied "{label}"', 'ru-RU': 'Применено «{label}»' },
   'field.aiReverted': { 'zh-CN': '已撤销「{label}」', 'en-US': 'Reverted "{label}"', 'ru-RU': 'Отменено «{label}»' },
+  // 线③：单字段覆盖确认（与批量同级的覆盖确认）
+  'field.overwriteWarning': { 'zh-CN': '「{label}」已有内容，继续生成将覆盖', 'en-US': '"{label}" already has content — generating will overwrite it', 'ru-RU': '«{label}» уже заполнено — генерация перезапишет его' },
+  'field.overwriteTitle': { 'zh-CN': '覆盖确认', 'en-US': 'Overwrite confirmation', 'ru-RU': 'Подтверждение перезаписи' },
   'field.label.worldSetting': { 'zh-CN': '世界观设定', 'en-US': 'World setting', 'ru-RU': 'Мир' },
   'field.label.goldenFinger': { 'zh-CN': '金手指/核心卖点', 'en-US': 'Golden finger / core selling point', 'ru-RU': 'Козырь / главная фишка' },
   'field.label.protagonistProfile': { 'zh-CN': '主角人设', 'en-US': 'Protagonist profile', 'ru-RU': 'Протагонист' },

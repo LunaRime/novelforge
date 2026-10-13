@@ -428,6 +428,7 @@ export const logTexts = {
   'log.generateField.generating': { 'zh-CN': '🧠 正在为「{label}」生成内容...', 'en-US': '🧠 Generating content for "{label}"...', 'ru-RU': '🧠 Генерация содержимого «{label}»...' },
   'log.generateField.emptyResult': { 'zh-CN': '⚠️ 「{label}」生成返回空结果', 'en-US': '⚠️ Generation for "{label}" returned an empty result', 'ru-RU': '⚠️ Генерация «{label}» вернула пустой результат' },
   'log.generateField.saved': { 'zh-CN': '✅ 「{label}」已生成并保存', 'en-US': '✅ "{label}" generated and saved', 'ru-RU': '✅ «{label}» создано и сохранено' },
+  'log.generateField.cancelled': { 'zh-CN': '⏹ 已取消「{label}」生成', 'en-US': '⏹ Cancelled generation for "{label}"', 'ru-RU': '⏹ Генерация «{label}» отменена' },
   'log.multiDrafts.starting': { 'zh-CN': '并行生成 {count} 个草稿版本...', 'en-US': 'Generating {count} draft versions in parallel...', 'ru-RU': 'Параллельная генерация {count} версий черновика...' },
   'log.multiDrafts.generating': { 'zh-CN': '  📝 {name} (t={temp}) 生成中...', 'en-US': '  📝 {name} (t={temp}) generating...', 'ru-RU': '  📝 {name} (t={temp}) генерируется...' },
   'log.multiDrafts.done': { 'zh-CN': '  ✅ {name} 完成 ({chars} 字)', 'en-US': '  ✅ {name} done ({chars} chars)', 'ru-RU': '  ✅ {name} готово ({chars} симв.)' },
