@@ -52,6 +52,8 @@ export interface AgentMessage {
   artifacts?: ToolArtifact[]
   /** 用户反馈（2026-09-22）：对模型回复满意/不满意；再次点击同一档即取消。随会话一起落盘 */
   feedback?: 'up' | 'down'
+  /** Turn 级错误（线②）：有值 = 该 assistant 消息是失败回执，渲染为专用错误行 */
+  error?: { message: string; code?: string }
 }
 
 /** fork/rewind 分支：rewind 归档（可恢复） */
@@ -605,8 +607,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // 会话保持可继续对话
       const errorMsg: AgentMessage = {
         id: genId(), role: 'assistant',
-        content: t('agent.errorException').replace('{error}', String(error)),
+        content: '',
         createdAt: Date.now(),
+        error: { message: String(error) },
       }
       set(state => ({
         conversations: state.conversations.map(c =>
@@ -693,7 +696,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
       if (!modelId) {
         updateAssistantMsg(m => ({
-          ...m, content: `⚠️ ${t('agent.noModel')}`, streaming: false,
+          ...m, content: '', streaming: false, error: { message: t('agent.noModel'), code: 'NO_MODEL' },
         }))
         set({ generating: false })
         return
@@ -1141,8 +1144,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             if (mySeq !== generationSeq) return
             updateAssistantMsg(m => ({
               ...m,
-              content: t('agent.errorGenerated').replace('{error}', error),
+              content: '',
               streaming: false,
+              error: { message: error },
             }))
             set({ generating: false, activeRequestId: null })
           },
@@ -1156,8 +1160,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     } catch (error) {
       updateAssistantMsg(m => ({
         ...m,
-        content: t('agent.errorException').replace('{error}', String(error)),
+        content: '',
         streaming: false,
+        error: { message: String(error) },
       }))
       set({ generating: false, activeRequestId: null })
     }

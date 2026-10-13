@@ -12,6 +12,8 @@ import ToolCallBlock from './ToolCallBlock'
 import ThinkingCollapse from './ThinkingCollapse'
 import ConfirmCard from './ConfirmCard'
 import ArtifactCard from './ArtifactCard'
+import ProcessGroup from './ProcessGroup'
+import TurnErrorRow from './TurnErrorRow'
 // 注：brief 声明使用 ForkRight，实测 lucide-react 1.8.0 无此导出；改用 lucide 规范 fork 图标 GitFork（语义等同「从此分支」）
 import { GitFork, Undo2, Copy, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -91,7 +93,7 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
 
 export default function AgentMessage({ message, onFork, onRewind, rewindDisabled }: Props) {
   const { t } = useTranslation()
-  const { role, content, createdAt, streaming, toolCalls, artifacts } = message
+  const { role, content, createdAt, streaming, toolCalls, artifacts, error } = message
 
   // 分支操作区（2026-09-22：由 hover 显隐改为**持续显示**；
   // 用于用户消息时渲染在气泡**外**，不再嵌在对话卡片里）
@@ -156,12 +158,15 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
         className="max-w-full text-xs leading-relaxed break-words w-full"
         style={{ color: 'var(--color-text)' }}
       >
+        {/* Turn 级错误行（线②）：失败回执走专用错误行，不写正文 markdown */}
+        {error && <TurnErrorRow message={error.message} code={error.code} />}
+
         {/* 文本内容（思考块拆分：默认折叠头部 + 正文 markdown） */}
-        {content ? (() => {
+        {!error && content ? (() => {
           const { thinking, rest } = splitThinking(content)
           return (
             <>
-              {thinking && <ThinkingCollapse thinking={thinking} />}
+              {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
               {rest && <MarkdownContent content={rest} streaming={streaming} />}
             </>
           )
@@ -171,18 +176,21 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
           </span>
         ) : null}
 
-        {/* Tool 调用区块列表 */}
-        {toolCalls && toolCalls.length > 0 && (
-          <div className="mt-2">
-            {toolCalls.map(tc => (
-              tc.status === 'waiting_confirm' ? (
-                <ConfirmCard key={tc.id} toolCall={tc} />
+        {/* Tool 调用区块列表（线②：≥2 个连续工具折叠为过程组；待确认卡单独渲染不进组） */}
+        {toolCalls && toolCalls.length > 0 && (() => {
+          const confirmCalls = toolCalls.filter(tc => tc.status === 'waiting_confirm')
+          const processCalls = toolCalls.filter(tc => tc.status !== 'waiting_confirm')
+          return (
+            <div className="mt-2">
+              {processCalls.length >= 2 ? (
+                <ProcessGroup toolCalls={processCalls} />
               ) : (
-                <ToolCallBlock key={tc.id} toolCall={tc} />
-              )
-            ))}
-          </div>
-        )}
+                processCalls.map(tc => <ToolCallBlock key={tc.id} toolCall={tc} />)
+              )}
+              {confirmCalls.map(tc => <ConfirmCard key={tc.id} toolCall={tc} />)}
+            </div>
+          )
+        })()}
 
         {/* 产物卡片列表 */}
         {artifacts && artifacts.length > 0 && (

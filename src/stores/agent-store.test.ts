@@ -656,7 +656,8 @@ describe('sendMessage 意图预路由', () => {
       const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
       const last = after.messages[after.messages.length - 1]
       expect(last.role).toBe('assistant')
-      expect(last.content).toBe(t('agent.errorException').replace('{error}', 'Error: pre-router 直抛：工作流实例内部异常'))
+      // 线②：错误改走专用 error 字段（Turn 级错误行），不再写正文
+      expect(last.error?.message).toBe('Error: pre-router 直抛：工作流实例内部异常')
       expect(mockRunAgentLoop).not.toHaveBeenCalled()
       expect(useAgentStore.getState().generating).toBe(false)
     } finally {

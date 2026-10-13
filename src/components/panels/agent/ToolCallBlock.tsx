@@ -1,23 +1,21 @@
 /**
- * ToolCallBlock — Tool 调用可视化区块
+ * ToolCallBlock — Tool 调用单行（线② · dsh 照搬）
  *
- * 显示 Agent 调用的每个 Tool：
- * - 折叠的头部：Tool 名称 + 来源徽章 + 状态指示
- * - 展开的主体：参数 JSON + 执行结果
+ * 从「折叠块（chevron + wrench + 名字 + 摘要 + 状态图标）」改为 dsh 的
+ * 24px 单行：「[icon] 标题 · 摘要」（2px 点分隔、摘要单行省略）；状态靠
+ * 颜色 + shimmer（错误红 / 中断琥珀）。展开为 IN/OUT 双栏卡（参数 JSON + 结果）。
  *
- * 参考 Cursor/Antigravity 的 tool-use 可视化设计。
+ * 复用线② 三原语：DisclosureRow（24px 流程行）+ StateDot（状态点）+ TextShimmer（流式扫光）。
+ * 状态五态映射（spec §2.9）：completed→done / failed→error / running·pending→ongoing /
+ * waiting_confirm→warning。
+ *
+ * 对照 dsh `ToolRow`（`ui-tool/src/client/tool/components/ToolRow.tsx`）。
+ * 用 NF 语义令牌，遵循 color-token-standard / card-affordance-standard / ui-interaction-standard。
  */
-import { useState } from 'react'
-import {
-  Wrench,
-  ChevronRight,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  AlertTriangle,
-} from 'lucide-react'
-import { Spinner } from '../../ui/Spinner'
-import { Badge } from '../../ui/Badge'
+import { useMemo, useState } from 'react'
+import { Wrench, FileText, Search, Terminal, GitCompare } from 'lucide-react'
+import { DisclosureRow } from '../../ui/DisclosureRow'
+import { TextShimmer } from '../../ui/TextShimmer'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import { useTranslation } from '../../../hooks/useTranslation'
 import type { TextKey } from '../../../shared/locale'
@@ -26,146 +24,130 @@ interface Props {
   toolCall: ToolCallInfo
 }
 
-/** 状态图标映射 */
-function StatusIcon({ status }: { status: ToolCallInfo['status'] }) {
-  switch (status) {
-    case 'completed':
-      return <CheckCircle2 size={13} className="tool-call-status completed" />
-    case 'failed':
-      return <XCircle size={13} className="tool-call-status failed" />
-    case 'running':
-      return <Spinner size={13} className="tool-call-status running" />
-    case 'waiting_confirm':
-      return <AlertTriangle size={13} className="tool-call-status waiting_confirm tool-pulse" />
-    case 'pending':
-    default:
-      return <Loader2 size={13} className="tool-call-status running" style={{ opacity: 0.3 }} />
+/** 工具图标（按 toolName 分族，dsh 的 PROCESS_ICONS 思路） */
+function ToolIcon({ toolName }: { toolName: string }) {
+  if (toolName === 'read_file' || toolName === 'read_characters' || toolName === 'read_drafts') {
+    return <FileText size={14} style={{ color: 'var(--color-text-muted)' }} />
   }
-}
-
-/** 状态文字 */
-function statusLabel(status: ToolCallInfo['status'], t: (key: TextKey) => string): string {
-  switch (status) {
-    case 'completed': return t('status.completed')
-    case 'failed': return t('status.failed')
-    case 'running': return t('status.running')
-    case 'waiting_confirm': return t('status.confirming')
-    case 'pending': return t('status.pending')
-    default: return ''
+  if (toolName === 'search_content' || toolName === 'search') {
+    return <Search size={14} style={{ color: 'var(--color-text-muted)' }} />
   }
+  if (toolName.includes('terminal') || toolName === 'run_command' || toolName === 'execute') {
+    return <Terminal size={14} style={{ color: 'var(--color-text-muted)' }} />
+  }
+  if (toolName === 'diff' || toolName === 'edit_file') {
+    return <GitCompare size={14} style={{ color: 'var(--color-text-muted)' }} />
+  }
+  return <Wrench size={14} style={{ color: 'var(--color-text-muted)' }} />
 }
 
 /**
- * 从工具参数提取文件/对象摘要（read_file/read_drafts 等）
- * - file_path / path → 📄 文件名（末尾段）
- * - chapter_number → 📖 章节（走 i18n chapter.label，禁止硬编码中文）
- * - read_characters 的 character_name 参数（read-characters.tool.ts:17）→ 👤 角色名
+ * 从工具参数提取摘要（read_file → 文件名；chapter_number → 章节；角色名等）。
+ * 单行省略展示，末尾段截断。
  */
-function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: TextKey) => string): string | null {
+function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: TextKey) => string): string {
   const path = typeof args.file_path === 'string' ? args.file_path
     : typeof args.path === 'string' ? args.path
     : null
   if (path) {
-    const base = path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path
-    return `📄 ${base}`
+    return path.replace(/[\\/]+$/, '').split(/[\\/]/).pop() ?? path
   }
   if (typeof args.chapter_number === 'number') {
-    return `📖 ${t('chapter.label').replace('{n}', String(args.chapter_number))}`
+    return t('chapter.label').replace('{n}', String(args.chapter_number))
   }
   if (toolName === 'read_characters' && typeof args.character_name === 'string') {
-    return `👤 ${args.character_name}`
+    return args.character_name
   }
-  return null
+  return ''
 }
 
 export default function ToolCallBlock({ toolCall }: Props) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
-  const { toolName, arguments: args, status, result, error, source } = toolCall
+  const { toolName, arguments: args, status, result, error } = toolCall
+
+  const summary = useMemo(() => fileSummary(toolName, args, t), [toolName, args, t])
+  const running = status === 'running' || status === 'pending'
+  // 错误行：摘要 = 失败首行（红）；中断（waiting_confirm）= 琥珀
+  const failed = status === 'failed'
+  const interrupted = status === 'waiting_confirm'
+  const summaryText = failed ? (error ?? t('status.failed')) : summary
+
+  // 展开体：IN/OUT 双栏卡（参数 JSON + 结果）。可展开 = 有参数或有结果/错误。
+  const hasBody = Object.keys(args).length > 0 || !!result || !!error
+  const body = expanded && hasBody ? (
+    <div style={{ margin: '4px 0 4px 22px', display: 'flex', flexDirection: 'column' }}>
+      <div
+        style={{
+          border: '0.5px solid var(--color-border)',
+          borderRadius: 'var(--radius-lg)',
+          background: 'var(--color-hover)',
+          display: 'flex',
+          flexDirection: 'column',
+          fontSize: 'var(--text-micro)',
+        }}
+      >
+        {/* IN：参数 */}
+        {Object.keys(args).length > 0 && (
+          <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 14, alignItems: 'baseline', padding: '8px 12px', maxHeight: 150, overflowY: 'auto' }}>
+            <span style={{ color: 'var(--color-text-muted)', alignSelf: 'start' }}>{t('toolCall.input')}</span>
+            <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: 'var(--color-text-secondary)', fontFamily: 'var(--font-mono)' }}>
+              {JSON.stringify(args, null, 2)}
+            </span>
+          </div>
+        )}
+        {/* OUT：结果 / 错误 */}
+        {(result || error) && (
+          <>
+            {Object.keys(args).length > 0 && <span style={{ height: '0.5px', background: 'var(--color-border)' }} />}
+            <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 14, alignItems: 'baseline', padding: '8px 12px', maxHeight: 150, overflowY: 'auto' }}>
+              <span style={{ color: 'var(--color-text-muted)', alignSelf: 'start' }}>{t('toolCall.output')}</span>
+              <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: error ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>
+                {error ? `❌ ${error}` : result}
+              </span>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ) : null
 
   return (
-    <div className="tool-call-block">
-      {/* 折叠头部 — 2026-09-27 可供性修复：div onClick → 原生 button（键盘 Tab/Enter 可达）；
-          折叠箭头移左（右端在本仓语言里是「进入」，不得与展开语义混用）。 */}
-      <button type="button" className="tool-call-header" onClick={() => setExpanded(v => !v)}>
-        {/* 展开箭头（置左） */}
-        <ChevronRight
-          size={12}
-          className={`tool-call-arrow ${expanded ? 'expanded' : ''}`}
-        />
-
-        <div className="tool-call-icon">
-          <Wrench size={12} style={{ color: 'var(--color-text-muted)' }} />
-        </div>
-
-        <span className="tool-call-name">{toolName}</span>
-
-        {/* 文件/章节摘要（📄/📖/👤） */}
-        {(() => {
-          const summary = fileSummary(toolName, args, t)
-          return summary ? (
-            <span className="tool-call-file-summary text-micro opacity-60 ml-1 truncate max-w-[160px]"
-              style={{ color: 'var(--color-text-muted)' }}>
-              {summary}
-            </span>
-          ) : null
-        })()}
-
-        {/* 来源徽章 */}
-        {source && (
-          <Badge
-            variant={source === 'builtin' ? 'info' : source === 'mcp' ? 'accent' : 'success'}
-            className="px-[5px] py-px rounded-[3px] text-2xs font-normal flex-shrink-0"
-          >
-            {source === 'builtin' ? t('toolCall.builtin') : source === 'mcp' ? 'MCP' : 'Skill'}
-          </Badge>
-        )}
-
-        {/* 状态 */}
-        <div className="tool-call-status" style={{ marginLeft: 'auto' }}>
-          <StatusIcon status={status} />
-          <span>{statusLabel(status, t)}</span>
-        </div>
-      </button>
-
-      {/* 展开区域 */}
-      {expanded && (
-        <div className="tool-call-body">
-          {/* 参数 */}
-          {Object.keys(args).length > 0 && (
-            <div className="tool-call-params">
-              {JSON.stringify(args, null, 2)}
-            </div>
-          )}
-
-          {/* 结果 */}
-          {result && (
-            <div className="tool-call-result" style={{ position: 'relative' }}>
-              {result}
-              <button
-                type="button"
-                onClick={() => navigator.clipboard.writeText(result).catch(() => {})}
-                className="absolute top-1 right-1 text-micro px-1.5 py-1 -my-1 rounded transition-opacity opacity-0 hover:opacity-100 focus-visible:opacity-100"
+    <div data-tool={toolName} data-state={status}>
+      <DisclosureRow
+        icon={<ToolIcon toolName={toolName} />}
+        title={toolName}
+        running={running}
+        open={expanded}
+        expandable={hasBody}
+        expandOnRowClick
+        keepContentWhenOpen
+        onToggle={() => setExpanded(v => !v)}
+        collapsedContent={
+          summaryText ? (
+            <>
+              {/* 2px 点分隔 */}
+              <span aria-hidden style={{ flex: 'none', width: 2, height: 2, margin: '0 8px', borderRadius: 1, background: 'var(--color-text-muted)' }} />
+              <span
                 style={{
-                  backgroundColor: 'var(--color-hover)',
-                  color: 'var(--color-text-secondary)',
-                  border: '1px solid var(--color-border)',
+                  flex: '1 1 auto',
+                  minWidth: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  fontSize: 13,
+                  lineHeight: '24px',
+                  color: failed ? 'var(--color-error)' : interrupted ? 'var(--color-warning)' : 'var(--color-text-muted)',
                 }}
-                title={t('toolCall.copyResult')}
               >
-                {t('action.copy')}
-              </button>
-            </div>
-          )}
-
-          {/* 错误 */}
-          {error && (
-            <div className="tool-call-result" style={{ color: 'var(--color-error)' }}>
-              ❌ {error}
-            </div>
-          )}
-        </div>
-      )}
+                <TextShimmer active={running}>{summaryText}</TextShimmer>
+              </span>
+            </>
+          ) : null
+        }
+      >
+        {body}
+      </DisclosureRow>
     </div>
   )
 }

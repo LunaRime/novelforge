@@ -1,11 +1,9 @@
 // @vitest-environment jsdom
 /**
- * ToolCallBlock — 头部可供性契约（2026-09-27 修复）
+ * ToolCallBlock — 单行可供性契约（线② · dsh 照搬）
  *
- * 修复前：头部是 `<div onClick>`（键盘完全够不到）；折叠箭头顶在右端
- * （`agent-tools.css` 的 `margin-left:auto`）——该位置在本仓语言里是「进入」，语义冲突；
- * hover 边框挂在整块上（展开后悬停参数/结果区边框亮着却点不动）。
- * 修复后：头部 = 原生 button + 箭头置左；边框 hover 收窄到头部（:has）。
+ * 从折叠块改为 dsh 的 24px 单行：「[icon] 标题 · 摘要」（点分隔 + 单行省略）；
+ * 展开为 IN/OUT 双栏卡。整行可点（expandOnRowClick），前导图标悬停置换为 chevron。
  */
 import { describe, it, expect, beforeAll, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
@@ -45,27 +43,40 @@ afterEach(() => {
   container = null
 })
 
-describe('ToolCallBlock — 头部可供性（2026-09-27）', () => {
-  it('头部是原生 button：可聚焦、点击切换展开、箭头位于最前（左端）', async () => {
+describe('ToolCallBlock — 单行（线② · dsh 照搬）', () => {
+  it('单行显示：工具名 + 点分隔 + 摘要（文件名），无块状边框', () => {
     const el = render(<ToolCallBlock toolCall={CALL} />)
-    const header = el.querySelector('.tool-call-header') as HTMLButtonElement
-    expect(header.tagName).toBe('BUTTON')
-    header.focus()
-    expect(document.activeElement).toBe(header)
-    // 折叠箭头置左（首个子元素）——不再靠 margin-left:auto 顶在右端
-    expect(header.firstElementChild?.classList.contains('tool-call-arrow')).toBe(true)
-    // 折叠态：参数区不可见
-    expect(el.textContent).not.toContain('"file_path"')
-    await act(async () => { header.click() })
-    // 展开态：参数 JSON 可见
-    expect(el.textContent).toContain('file_path')
+    expect(el.textContent).toContain('read_file')
+    expect(el.textContent).toContain('ch1.md')
+    // 折叠态：参数 JSON 不可见（不渲染展开体）
+    expect(el.textContent).not.toContain('file_path')
   })
 
-  it('无 button 嵌 button：展开后复制按钮在头部按钮之外', async () => {
+  it('整行可点展开（键盘可达：role=button + tabIndex），展开显示 IN/OUT', async () => {
     const el = render(<ToolCallBlock toolCall={CALL} />)
-    const header = el.querySelector('.tool-call-header') as HTMLButtonElement
-    await act(async () => { header.click() })
-    expect(el.querySelector('.tool-call-result button')).toBeTruthy()
+    const row = el.querySelector('[role="button"]') as HTMLElement
+    expect(row).toBeTruthy()
+    expect(row.getAttribute('tabindex')).toBe('0')
+    await act(async () => { row.click() })
+    // 展开：参数 JSON 可见
+    expect(el.textContent).toContain('file_path')
+    expect(el.textContent).toContain('正文内容')
+  })
+
+  it('无 button 嵌 button', async () => {
+    const el = render(<ToolCallBlock toolCall={CALL} />)
     expect(el.querySelectorAll('button button')).toHaveLength(0)
+  })
+
+  it('错误态：摘要显示错误信息（红），而非工具名摘要', () => {
+    const err = render(
+      <ToolCallBlock toolCall={{ ...CALL, status: 'failed', error: '读取失败：文件不存在' }} />,
+    )
+    expect(err.textContent).toContain('读取失败：文件不存在')
+  })
+
+  it('运行态：shimmer 装饰副本存在（流式扫光）', () => {
+    const running = render(<ToolCallBlock toolCall={{ ...CALL, status: 'running', result: '' }} />)
+    expect(running.querySelector('[aria-hidden="true"]')).toBeTruthy()
   })
 })

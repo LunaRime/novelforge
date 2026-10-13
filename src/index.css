@@ -1118,6 +1118,28 @@
   50% { opacity: 0.5; }
 }
 
+/* StateDot 状态点（线② · dsh 照搬）—— ongoing 旋转环：轨道淡、呼吸弧同色，1.5s 同周期 */
+@keyframes state-dot-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes state-dot-dash {
+  0% { stroke-dasharray: 12 150; stroke-dashoffset: 0; }
+  50% { stroke-dasharray: 24 150; stroke-dashoffset: -6; }
+  100% { stroke-dasharray: 12 150; stroke-dashoffset: 0; }
+}
+
+/* TextShimmer 流式扫光（线② · dsh 照搬）：共享掩码移动，两相反 transform 保持字形对齐 */
+@keyframes text-shimmer-sweep {
+  0% { transform: translateX(-100%); }
+  66.6667%, 100% { transform: translateX(100%); }
+}
+
+@keyframes text-shimmer-highlight {
+  0% { transform: translateX(100%); }
+  66.6667%, 100% { transform: translateX(-100%); }
+}
+
 /* ActionToast 从右侧滑入 */
 @keyframes action-toast-enter {
   0% { opacity: 0; transform: translateX(24px) scale(0.96); }

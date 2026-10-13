@@ -8,6 +8,8 @@
 export const toolTexts = {
   'toolCall.copyResult': { 'zh-CN': '复制结果', 'en-US': 'Copy result', 'ru-RU': 'Копировать результат' },
   'toolCall.builtin': { 'zh-CN': '内置', 'en-US': 'Built-in', 'ru-RU': 'Встроенный' },
+  'toolCall.input': { 'zh-CN': '输入', 'en-US': 'Input', 'ru-RU': 'Ввод' },
+  'toolCall.output': { 'zh-CN': '输出', 'en-US': 'Output', 'ru-RU': 'Вывод' },
   'tool.browserTabsDesc': { 'zh-CN': '查询浏览器当前打开的标签页列表（标题 + URL）。需在设置 → 开发者模式 → 浏览器接入中启用（Chrome/Edge 以 --remote-debugging-port 启动）。', 'en-US': 'List the browser tabs currently open (title + URL). Requires Browser Integration under Settings → Developer Mode (start Chrome/Edge with --remote-debugging-port).', 'ru-RU': 'Список открытых вкладок браузера (заголовок + URL). Требуется интеграция браузера в Настройки → Режим разработчика (запустите Chrome/Edge с --remote-debugging-port).' },
   'tool.calcDesc': { 'zh-CN': '精确数学计算。当需要计算数字（字数×章节数、百分比、加减乘除）时调用，返回精确结果。不要心算。', 'en-US': 'Precise math calculation. Call when numbers need computing (word count × chapters, percentages, arithmetic) and return exact results. Never do mental math.', 'ru-RU': 'Точный математический расчёт. Вызывайте при вычислениях (слова × главы, проценты, арифметика); верните точный результат. Не считайте в уме.' },
   'tool.calcParam': { 'zh-CN': '数学表达式，如 "3000 * 30" 或 "(12000 + 800) / 2"。仅支持数字与 + - * / ( ) . %', 'en-US': 'Math expression, e.g. "3000 * 30" or "(12000 + 800) / 2". Only digits and + - * / ( ) . % are allowed', 'ru-RU': 'Математическое выражение, напр. "3000 * 30" или "(12000 + 800) / 2". Допустимы только цифры и + - * / ( ) . %' },

@@ -23,7 +23,7 @@ function render(ui: React.ReactElement): { container: HTMLElement; root: Root } 
 describe('AgentMessage 思考折叠', () => {
   afterEach(() => { document.body.innerHTML = '' })
 
-  it('含思考块的助手消息渲染为折叠头部（默认不展开思考内容）', () => {
+  it('含思考块的助手消息渲染为 24px 折叠行（折叠显示首行摘要，展开显示完整正文）', () => {
     const msg = {
       id: '1',
       role: 'assistant' as const,
@@ -31,17 +31,12 @@ describe('AgentMessage 思考折叠', () => {
       createdAt: 0,
     }
     const { container, root } = render(<AgentMessage message={msg} />)
-    // 折叠头部存在（i18n agent.thinkingPrefix = 「思考过程：」）
+    // 折叠行标题存在（i18n agent.thinkingToggle = 「思考过程」）
     expect(container.textContent).toContain('思考过程')
-    // 思考正文默认不可见（折叠）
-    expect(container.textContent).not.toContain('先构思情节走向')
+    // dsh 形态：折叠时显示首行摘要（「先构思情节走向」作为摘要可见）
+    expect(container.textContent).toContain('先构思情节走向')
     // 正文内容可见
     expect(container.textContent).toContain('正式正文内容')
-    // 点击头部展开后思考正文可见
-    const toggle = container.querySelector<HTMLButtonElement>('button')
-    expect(toggle).toBeTruthy()
-    act(() => { toggle!.click() })
-    expect(container.textContent).toContain('先构思情节走向')
     act(() => { root.unmount() })
   })
 
@@ -141,10 +136,10 @@ describe('AgentMessage 分支操作', () => {
 })
 
 describe('ToolCallBlock 文件摘要', () => {
-  it('read_file 调用显示 📄 文件名摘要', () => {
+  it('read_file 调用显示文件名摘要（单行，工具类型由图标分族表达，不再用 emoji 前缀）', () => {
     const tc = { id: '1', toolName: 'read_file', arguments: { file_path: 'C:\\proj\\note.md' }, status: 'completed' as const }
     const { container, root } = render(<ToolCallBlock toolCall={tc} />)
-    expect(container.textContent).toContain('📄 note.md')
+    expect(container.textContent).toContain('note.md')
     act(() => { root.unmount() })
   })
 
@@ -155,23 +150,22 @@ describe('ToolCallBlock 文件摘要', () => {
     act(() => { root.unmount() })
   })
 
-  it('read_drafts 调用显示 📖 章节摘要（chapter_number 参数）', () => {
+  it('read_drafts 调用显示章节摘要（chapter_number 参数）', () => {
     const tc = { id: '3', toolName: 'read_drafts', arguments: { chapter_number: 3 }, status: 'completed' as const }
     const { container, root } = render(<ToolCallBlock toolCall={tc} />)
-    expect(container.textContent).toContain('📖')
     // chapter.label 三语：zh「第3章」/ en「Ch.3」/ ru「Гл.3」
     expect(container.textContent).toMatch(/第3章|Ch\.3|Гл\.3/)
     act(() => { root.unmount() })
   })
 
-  it('read_characters 调用显示 👤 角色摘要（character_name 参数）', () => {
+  it('read_characters 调用显示角色摘要（character_name 参数）', () => {
     const tc = { id: '4', toolName: 'read_characters', arguments: { character_name: '林晚' }, status: 'completed' as const }
     const { container, root } = render(<ToolCallBlock toolCall={tc} />)
-    expect(container.textContent).toContain('👤 林晚')
+    expect(container.textContent).toContain('林晚')
     act(() => { root.unmount() })
   })
 
-  it('角色工具使用 name 参数（非真实 schema）时不触发 👤 摘要', () => {
+  it('角色工具使用 name 参数（非真实 schema）时不触发角色摘要', () => {
     const tc = { id: '5', toolName: 'read_characters', arguments: { name: '林晚' }, status: 'completed' as const }
     const { container, root } = render(<ToolCallBlock toolCall={tc} />)
     expect(container.textContent).not.toContain('👤')

@@ -72,3 +72,6 @@ scripts/font-char-set.txt
 
 # superpowers SDD 执行工作区（计划执行期间的 ledger / 评审包，不提交）
 .superpowers/
+
+# WorkBuddy 本地工作记忆（与 .codex/.claude/.agents 同类，不随仓库分发）
+.workbuddy/

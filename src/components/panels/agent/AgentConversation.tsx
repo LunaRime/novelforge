@@ -11,6 +11,7 @@ import CompressedBatchCard from './CompressedBatchCard'
 import ContextBudgetBar from './ContextBudgetBar'
 import SubAgentSessionCard from './SubAgentSessionCard'
 import SubAgentConfirmCard from './SubAgentConfirmCard'
+import RunningStatus from './RunningStatus'
 import type { SubAgentSession } from '../../../services/agent/subagent/types'
 import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
@@ -354,6 +355,12 @@ function ActiveConversation() {
               ))}
             </div>
           ))}
+          {/* 元信息层①（线②）：流内实时计时行——最后一条 assistant 消息生成中时显示「生成中，用时 x」 */}
+          {(() => {
+            const lastAssistant = [...visibleMessages].reverse().find(m => m.role === 'assistant')
+            if (!lastAssistant || !generating || !lastAssistant.streaming) return null
+            return <RunningStatus startTime={lastAssistant.createdAt} running />
+          })()}
         </div>
         {/* 底部空间 */}
         <div className="h-4" />
