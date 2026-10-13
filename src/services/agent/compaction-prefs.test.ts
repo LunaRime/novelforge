@@ -48,8 +48,8 @@ describe('computeHistoryBudget（百分比压缩：上下阈值钳制）', () =>
     expect(computeHistoryBudget(prefs, 32_000)).toBe(25_600)
   })
 
-  it('大窗口 80% 超过上阈值 32000 → 钳制到 32000', () => {
-    expect(computeHistoryBudget(prefs, 128_000)).toBe(32_000)
+  it('大窗口 80% 超过上阈值 64000 → 钳制到 64000', () => {
+    expect(computeHistoryBudget(prefs, 128_000)).toBe(64_000)
   })
 
   it('小窗口 80% 低于下阈值 1000 → 钳制到 1000', () => {

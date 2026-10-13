@@ -82,10 +82,10 @@ function MarkdownTableAdapter({ children }: { children?: React.ReactNode }) {
 }
 
 /** 行内代码（保留既有视觉） */
-function InlineCode({ children }: { children?: React.ReactNode }) {
+function InlineCode({ className, children }: { className?: string; children?: React.ReactNode }) {
   return (
     <code
-      className="px-1 py-0.5 rounded text-xs font-mono"
+      className={['px-1 py-0.5 rounded text-xs font-mono', className].filter(Boolean).join(' ')}
       style={{
         backgroundColor: 'var(--color-hover)',
         color: 'var(--color-accent)',
@@ -100,11 +100,18 @@ function InlineCode({ children }: { children?: React.ReactNode }) {
 /** 自定义 components：映射 react-markdown 输出到既有视觉 */
 const markdownComponents: Components = {
   code({ className, children }) {
-    const match = /language-(\w+)/.exec(className || '')
-    if (match) {
-      return <CodeBlock lang={match[1]} code={String(children ?? '').replace(/\n$/, '')} />
-    }
-    return <InlineCode>{children}</InlineCode>
+    // 行内与块级都会经过这里；块级代码的 <code> 由 pre 组件「接管」重渲染为 CodeBlock。
+    // 这里透传 className（含 language-xxx），pre 组件据此提取语言。
+    return <InlineCode className={className}>{children}</InlineCode>
+  },
+  pre({ children }) {
+    // 块级代码（有语言 + 无语言）统一走 pre：从子 <code> 提取语言与内容。
+    // 修复：旧实现用 className 判断块级，导致无语言代码块（``` 不写语言）被误判为行内。
+    const codeEl = React.Children.only(children) as React.ReactElement<{ className?: string; children?: React.ReactNode }>
+    const match = /language-(\w+)/.exec(codeEl.props.className || '')
+    const lang = match ? match[1] : ''
+    const code = String(codeEl.props.children ?? '').replace(/\n$/, '')
+    return <CodeBlock lang={lang} code={code} />
   },
   table({ children }) {
     return <MarkdownTableAdapter>{children}</MarkdownTableAdapter>

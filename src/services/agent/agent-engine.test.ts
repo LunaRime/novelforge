@@ -349,8 +349,8 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
   it('computeMessageBudget：窗口 32000 × 80% → 25600', () => {
     expect(computeMessageBudget(32_000)).toBe(25_600)
   })
-  it('computeMessageBudget：窗口 131072 × 80% → 32000（上阈值钳制）', () => {
-    expect(computeMessageBudget(131_072)).toBe(32_000)
+  it('computeMessageBudget：窗口 131072 × 80% → 64000（上阈值钳制）', () => {
+    expect(computeMessageBudget(131_072)).toBe(64_000)
   })
   it('computeMessageBudget：窗口 8000（小窗口）→ 默认 16000', () => {
     expect(computeMessageBudget(8_000)).toBe(16_000)

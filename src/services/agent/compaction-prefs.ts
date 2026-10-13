@@ -61,5 +61,6 @@ export function resolveCompactionPrefs(config: { compaction?: unknown } | null |
 export function computeHistoryBudget(prefs: CompactionPrefs, modelContextWindow?: number): number {
   if (!modelContextWindow || modelContextWindow <= 0) return prefs.historyMaxTokens
   const percentBudget = Math.floor(modelContextWindow * (prefs.budgetPercent / 100))
-  return Math.min(32000, Math.max(COMPACTION_HISTORY_MIN_TOKENS, percentBudget))
+  // 2026-10-14 上阈值 32000 → 64000（与消息预算 64k 对齐，让 128k 窗口用足 50%）
+  return Math.min(64_000, Math.max(COMPACTION_HISTORY_MIN_TOKENS, percentBudget))
 }
