@@ -141,6 +141,9 @@ export const characterTexts = {
   'character.archiveBtnTitle': { 'zh-CN': '基于已定稿章节正文生成/补全角色档案', 'en-US': 'Generate/complete profiles from finalized chapters', 'ru-RU': 'Создать профили из завершённых глав' },
   'character.archiveConfirm': { 'zh-CN': '将基于已定稿正文为角色生成档案（仅填充空白，不覆盖已有内容，包括手动编辑）。确定继续？', 'en-US': 'Profiles will be generated from finalized text (fill blanks only — existing content, including manual edits, is kept). Continue?', 'ru-RU': 'Профили будут созданы из завершённого текста (только пустые поля — существующее содержимое, включая ручные правки, сохраняется). Продолжить?' },
   'character.archiveRunning': { 'zh-CN': '正在从定稿文本生成角色档案…', 'en-US': 'Generating character profiles from finalized text…', 'ru-RU': 'Создание профилей из завершённого текста…' },
+  // 线③ 第 3 条：角色档案生成失败/超时显式化（替代 60s 静默超时）
+  'character.archiveFailed': { 'zh-CN': '角色档案生成失败', 'en-US': 'Character profile generation failed', 'ru-RU': 'Не удалось создать профили персонажей' },
+  'character.archiveTimeout': { 'zh-CN': '角色档案生成超时（60 秒未完成）', 'en-US': 'Character profile generation timed out (60s)', 'ru-RU': 'Тайм-аут создания профилей (60 с)' },
   'character.defaultName': { 'zh-CN': '新角色', 'en-US': 'New Character', 'ru-RU': 'Новый персонаж' },
   // --- CharacterEditor: 空状态 ---
   'character.selectOrCreate': { 'zh-CN': '在左侧选择或创建角色卡', 'en-US': 'Select or create a character card on the left', 'ru-RU': 'Выберите или создайте карточку персонажа слева' },

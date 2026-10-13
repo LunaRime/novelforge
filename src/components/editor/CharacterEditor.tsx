@@ -26,6 +26,7 @@ import { MenuItem } from '../ui/MenuItem'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useWorkflowCompletion } from '../../hooks/useWorkflowCompletion'
 import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
 import type { TextKey } from '../../shared/locale'
 
@@ -117,27 +118,22 @@ export default function CharacterEditor() {
   }
 
   // 「从定稿生成档案」（单角色）：确认后仅针对当前选中角色执行
-  // 竞态防护：stop 统一 unsub + 清 timer，任何触发路径（完成/兜底）都彻底释放——
-  // 残留 timer 不再可能在前一轮结束后误伤下一轮的 setArchiving（此前 run1 到期残留
-  // timer 会在 run2 进行中提前解锁按钮 → 并发工作流 → 重复 LLM 计费）
-  const [archiving, setArchiving] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 线③ 第 3 条：状态机抽 useWorkflowCompletion（竞态防护 + 60s 超时显式失败）
+  const { running: archiving, start: startArchive } = useWorkflowCompletion()
   const handleArchive = async () => {
     if (!selectedCard || !currentProject) return
     const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
     if (!ok) return
-    const { globalEventBus } = await import('../../shared/event-bus')
-    setArchiving(true)
-    let unsub: () => void = () => {}
-    const stop = () => {
-      unsub()
-      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
-      setArchiving(false)
-    }
-    unsub = globalEventBus.on('WORKFLOW_COMPLETE', stop)
-    // 兜底：60s 后释放监听（失败路径 executor throw 不发 WORKFLOW_COMPLETE，悬挂至此）
-    timerRef.current = setTimeout(stop, 60000)
-    runCharacterArchive(currentProject.path, selectedCard.name)
+    startArchive(
+      () => runCharacterArchive(currentProject.path, selectedCard.name),
+      {
+        workflowType: 'post_process',
+        onDone: (status) => {
+          if (status === 'timeout') toast.error(t('character.archiveTimeout'))
+          else if (status === 'failed') toast.error(t('character.archiveFailed'))
+        },
+      },
+    )
   }
 
   // ===== 角色卡模板（~/.novelforge/templates/）：存为模板 / 应用模板 =====

@@ -1,7 +1,7 @@
 /**
  * CharactersView — 角色管理列表视图 (v7 戏份分级)
  */
-import { useState, useMemo, useRef } from 'react'
+import { useState, useMemo } from 'react'
 import { Users, RefreshCw, Plus, Sparkles, ChevronDown, ChevronRight, Radar } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import {
@@ -16,6 +16,7 @@ import { confirm } from '../../ui/Confirm'
 import { toast } from '../../ui/Toast'
 import { cn } from '../../../lib/utils'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { useWorkflowCompletion } from '../../../hooks/useWorkflowCompletion'
 import { openBuiltinEditor } from './SidebarShared'
 import { runCharacterArchive } from '../../../services/workflows/character-archive-workflow'
 import { parseAliases } from '../../../services/character-normalize'
@@ -56,29 +57,23 @@ export default function CharactersView() {
     }
     load(true) // 手动刷新（已确认）→ force 跳过 dirty 检查
   }
-  // 「从定稿生成档案」执行中状态：由 WORKFLOW_COMPLETE 事件驱动结束（60s 兜底释放监听）
-  // 竞态防护：stop 统一 unsub + 清 timer，任何触发路径（完成/兜底）都彻底释放——
-  // 残留 timer 不再可能在前一轮结束后误伤下一轮的 setArchiving（此前 run1 到期残留
-  // timer 会在 run2 进行中提前解锁按钮 → 并发工作流 → 重复 LLM 计费）
-  const [archiving, setArchiving] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 「从定稿生成档案」执行中状态：线③ 第 3 条——状态机抽 useWorkflowCompletion（60s 超时显式失败）
+  const { running: archiving, start: startArchive } = useWorkflowCompletion()
   const handleArchive = async () => {
     const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
     if (!ok) return
     const project = currentProject
     if (!project) return
-    const { globalEventBus } = await import('../../../shared/event-bus')
-    setArchiving(true)
-    let unsub: () => void = () => {}
-    const stop = () => {
-      unsub()
-      if (timerRef.current) { clearTimeout(timerRef.current); timerRef.current = null }
-      setArchiving(false)
-    }
-    unsub = globalEventBus.on('WORKFLOW_COMPLETE', stop)
-    // 兜底：60s 后释放监听（失败路径 executor throw 不发 WORKFLOW_COMPLETE，悬挂至此）
-    timerRef.current = setTimeout(stop, 60000)
-    runCharacterArchive(project.path)
+    startArchive(
+      () => runCharacterArchive(project.path),
+      {
+        workflowType: 'post_process',
+        onDone: (status) => {
+          if (status === 'timeout') toast.error(t('character.archiveTimeout'))
+          else if (status === 'failed') toast.error(t('character.archiveFailed'))
+        },
+      },
+    )
   }
   const [tierFilter, setTierFilter] = useState<number | null>(null)
   const [collapsedTiers, setCollapsedTiers] = useState<Record<number, boolean>>({ 2: false, 3: true })
