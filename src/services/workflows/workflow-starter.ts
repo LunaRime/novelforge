@@ -21,6 +21,8 @@ import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
+import { toast } from '../../components/ui/Toast'
+import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 
 /** 工作流启动失败：带错误 code，供调用方语义化映射文案 */
 export class WorkflowStartError extends Error {
@@ -43,6 +45,7 @@ function getWorkflowDisplayName(workflow: string): string {
     case 'finalize': return t('tool.wfFinalize')
     case 'generate_blueprint': return t('tool.wfBlueprint')
     case 'generate_architecture': return t('tool.wfArchitecture')
+    case 'config_generation': return t('tool.wfConfig')
     default: return workflow
   }
 }
@@ -131,6 +134,44 @@ export async function startArchitectureWorkflow(): Promise<{ runId: string; disp
   }
   const { createArchitectureWorkflow } = await import('./architecture-workflow')
   const runId = await startWithReceipt(createArchitectureWorkflow())
+  return { runId, displayName }
+}
+
+/**
+ * 启动配置生成工作流（线③ 第 4 条：Agent 起 config_generation）。
+ * idea = Agent 从用户意图提取的「创作脑洞」；规模参数读当前项目配置。
+ * onGenerated 复用线③ 第 1 条的快照 + 应用 + 撤销出口（与 NovelConfigEditor 同款）。
+ */
+export async function startConfigGenerationWorkflow(idea: string): Promise<{ runId: string; displayName: string }> {
+  const displayName = getWorkflowDisplayName('config_generation')
+  const { useProjectStore } = await import('../../stores/project-store')
+  const project = useProjectStore.getState().currentProject
+  if (!project) {
+    throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
+  }
+  const totalChapters = project.novelConfig.totalChapters || 100
+  const wordsPerChapter = project.novelConfig.wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER
+  const { createConfigGenerationWorkflow } = await import('./architecture-workflow')
+  const runId = await startWithReceipt(createConfigGenerationWorkflow({
+    idea,
+    totalChapters,
+    wordsPerChapter,
+    onGenerated: (parsed) => {
+      const store = useProjectStore.getState()
+      store.snapshotNovelConfig()
+      store.updateNovelConfig(parsed)
+      toast.show({
+        type: 'ai',
+        message: t('novelConfig.aiApplied'),
+        actions: [{
+          label: t('action.undoShort'),
+          onClick: () => {
+            if (store.restoreNovelConfigSnapshot()) toast.success(t('novelConfig.aiReverted'))
+          },
+        }],
+      })
+    },
+  }))
   return { runId, displayName }
 }
 

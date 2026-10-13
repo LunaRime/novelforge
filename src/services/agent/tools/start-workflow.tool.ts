@@ -15,6 +15,7 @@ import {
   startChapterWorkflow,
   startBlueprintWorkflow,
   startArchitectureWorkflow,
+  startConfigGenerationWorkflow,
   WorkflowStartError,
 } from '../../workflows/workflow-starter'
 
@@ -31,7 +32,7 @@ export const startWorkflowTool = buildAgentTool({
       workflow: {
         type: 'string',
         description: t('tool.startWorkflowType'),
-        enum: ['generate_draft', 'review', 'refine', 'finalize', 'generate_blueprint', 'generate_architecture'],
+        enum: ['generate_draft', 'review', 'refine', 'finalize', 'generate_blueprint', 'generate_architecture', 'config_generation'],
       },
       chapter_number: {
         type: 'number',
@@ -40,6 +41,10 @@ export const startWorkflowTool = buildAgentTool({
       chapter_end: {
         type: 'number',
         description: t('tool.startWorkflowChapterEnd'),
+      },
+      idea: {
+        type: 'string',
+        description: t('tool.startWorkflowIdea'),
       },
     },
     required: ['workflow'],
@@ -51,6 +56,7 @@ export const startWorkflowTool = buildAgentTool({
     // null 归一（2026-10-02 复审 M1）：模型对未用的可选参数常发 null——一律视为未传（否则误报「区间无效」）
     const chapterNumber = args.chapter_number == null ? undefined : (args.chapter_number as number)
     const chapterEnd = args.chapter_end == null ? undefined : (args.chapter_end as number)
+    const idea = args.idea == null ? undefined : String(args.idea).trim()
 
     if (!workflow) {
       return { success: false, content: '', error: t('error.missingWorkflow') }
@@ -130,6 +136,18 @@ export const startWorkflowTool = buildAgentTool({
         }
         case 'generate_architecture': {
           const result = await startArchitectureWorkflow()
+          return {
+            success: true,
+            content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
+            artifacts: [{ type: 'workflow_started', name: result.displayName }],
+          }
+        }
+        case 'config_generation': {
+          // 线③ 第 4 条：Agent 起配置生成——需要「创作脑洞」作为唯一输入
+          if (!idea) {
+            return { success: false, content: '', error: t('tool.wfNeedIdea') }
+          }
+          const result = await startConfigGenerationWorkflow(idea)
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),

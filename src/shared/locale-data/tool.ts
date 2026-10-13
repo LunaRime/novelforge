@@ -243,6 +243,10 @@ export const toolTexts = {
   'tool.wfFinalize': { 'zh-CN': '定稿', 'en-US': 'Finalize', 'ru-RU': 'Финализация' },
   'tool.wfBlueprint': { 'zh-CN': '生成蓝图', 'en-US': 'Generate Blueprint', 'ru-RU': 'Создание плана' },
   'tool.wfArchitecture': { 'zh-CN': '生成架构', 'en-US': 'Generate Architecture', 'ru-RU': 'Создание архитектуры' },
+  // 线③ 第 4 条：Agent 起 config_generation
+  'tool.wfConfig': { 'zh-CN': '生成配置', 'en-US': 'Generate Config', 'ru-RU': 'Создание конфигурации' },
+  'tool.startWorkflowIdea': { 'zh-CN': '创作脑洞（config_generation 用：一句话描述想写的小说，AI 据此生成全部配置字段）', 'en-US': 'Story idea (for config_generation: a one-line description of the novel, from which AI generates all config fields)', 'ru-RU': 'Идея романа (для config_generation: одно предложение о романе, по которому ИИ создаст все поля конфигурации)' },
+  'tool.wfNeedIdea': { 'zh-CN': '配置生成需要「创作脑洞」（idea 参数）', 'en-US': 'Config generation requires the "idea" parameter', 'ru-RU': 'Для генерации конфигурации нужен параметр «idea»' },
   'tool.chapterTag': { 'zh-CN': '第{n}章', 'en-US': 'Ch.{n}', 'ru-RU': 'гл.{n}' },
   'tool.wfNeedChapter': { 'zh-CN': '{workflow} 工作流需要指定 chapter_number 参数', 'en-US': 'The {workflow} workflow requires the chapter_number parameter', 'ru-RU': 'Рабочий процесс {workflow} требует параметр chapter_number' },
   'tool.workflowStarted': { 'zh-CN': '✅ 已启动「{name}」工作流（{chapter}），请在 AI 输出面板查看进度。', 'en-US': '✅ Workflow "{name}" started ({chapter}). Check progress in the AI Output panel.', 'ru-RU': '✅ Запущен рабочий процесс «{name}» ({chapter}). Ход выполнения — в панели вывода ИИ.' },
