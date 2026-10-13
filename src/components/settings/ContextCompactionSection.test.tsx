@@ -28,7 +28,7 @@ const render = (): { container: HTMLElement; root: Root } => {
 beforeEach(() => {
   document.body.innerHTML = ''
   invoke = vi.fn(async (ch: string) => {
-    if (ch === 'config:get') return { compaction: { historyMaxTokens: 6000, minimumChangeTokens: 300, keepBatches: 2 } }
+    if (ch === 'config:get') return { compaction: { budgetPercent: 80, historyMaxTokens: 6000, minimumChangeTokens: 300, keepBatches: 2 } }
     if (ch === 'config:set') return { success: true }
     return null
   })
@@ -36,12 +36,12 @@ beforeEach(() => {
 })
 
 describe('ContextCompactionSection', () => {
-  it('读出已存偏好并回填三个输入框', async () => {
+  it('读出已存偏好并回填四个输入框', async () => {
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     const inputs = [...container.querySelectorAll('input')] as HTMLInputElement[]
-    expect(inputs).toHaveLength(3)
-    expect(inputs.map(i => i.value)).toEqual(['6000', '300', '2'])
+    expect(inputs).toHaveLength(4)
+    expect(inputs.map(i => i.value)).toEqual(['80', '6000', '300', '2'])
     act(() => { root.unmount() })
   })
 
@@ -60,20 +60,21 @@ describe('ContextCompactionSection', () => {
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     const inputs = [...container.querySelectorAll('input')] as HTMLInputElement[]
-    // 把历史预算改成超上限（999999 → 32000）、最小降幅改负数（-5 → 0）
+    // 输入框顺序：budgetPercent[0] / historyMaxTokens[1] / minimumChangeTokens[2] / keepBatches[3]
+    // 把历史预算（inputs[1]）改成超上限（999999 → 32000）、最小降幅（inputs[2]）改负数（-5 → 0）
     act(() => {
       const setNative = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
-      setNative.call(inputs[0], '999999')
-      inputs[0].dispatchEvent(new Event('input', { bubbles: true }))
-      setNative.call(inputs[1], '-5')
+      setNative.call(inputs[1], '999999')
       inputs[1].dispatchEvent(new Event('input', { bubbles: true }))
+      setNative.call(inputs[2], '-5')
+      inputs[2].dispatchEvent(new Event('input', { bubbles: true }))
     })
     const saveBtn = [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('action.save'))!
     act(() => { saveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
 
     const call = invoke.mock.calls.find(c => c[0] === 'config:set')
-    expect(call?.[1]).toEqual({ compaction: { historyMaxTokens: 32000, minimumChangeTokens: 0, keepBatches: 2 } })
+    expect(call?.[1]).toEqual({ compaction: { budgetPercent: 80, historyMaxTokens: 32000, minimumChangeTokens: 0, keepBatches: 2 } })
     act(() => { root.unmount() })
   })
 
@@ -82,7 +83,7 @@ describe('ContextCompactionSection', () => {
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
     const inputs = [...container.querySelectorAll('input')] as HTMLInputElement[]
-    expect(inputs.map(i => i.value)).toEqual(['4000', '200', '0'])
+    expect(inputs.map(i => i.value)).toEqual(['80', '4000', '200', '0'])
     // 读失败必须**明示**（显示的是默认值，不是盘上的值）——不冒充「已读到」
     expect(container.textContent).toContain(t('settings.compactionLoadFailed'))
     act(() => { root.unmount() })
