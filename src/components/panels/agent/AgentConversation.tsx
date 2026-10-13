@@ -12,6 +12,7 @@ import ContextBudgetBar from './ContextBudgetBar'
 import SubAgentSessionCard from './SubAgentSessionCard'
 import SubAgentConfirmCard from './SubAgentConfirmCard'
 import RunningStatus from './RunningStatus'
+import PendingToolConfirmation from './PendingToolConfirmation'
 import type { SubAgentSession } from '../../../services/agent/subagent/types'
 import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
@@ -400,6 +401,8 @@ function ActiveConversation() {
       <div className="flex-shrink-0 px-3 pb-2 pt-2">
         {/* C 档第二轮：子 agent 写操作的父方审批卡（与父自己的确认卡不同渲染面——父卡在消息内） */}
         <SubAgentConfirmCard />
+        {/* 线②：父 agent 审批接管输入区（dsh composer takeover；流内不双渲染） */}
+        <PendingToolConfirmation />
         <AgentInputBox />
         <div className="mt-1.5 flex items-center justify-between gap-2 px-0.5">
           <ContextBudgetBar usage={contextUsage} />

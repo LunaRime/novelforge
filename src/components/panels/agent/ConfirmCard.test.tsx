@@ -75,6 +75,47 @@ describe('ConfirmCard', () => {
   })
 })
 
+describe('ConfirmCard 快捷键（线② · dsh ApprovalPanel 语义）', () => {
+  it('Enter → 允许一次 resolve(id, true)', () => {
+    render(<ConfirmCard toolCall={TOOL_CALL} />)
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }))
+    })
+    expect(mockResolve).toHaveBeenCalledWith('tc-42', true)
+  })
+
+  it('Esc → 拒绝 resolve(id, false)', () => {
+    render(<ConfirmCard toolCall={TOOL_CALL} />)
+    act(() => {
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    })
+    expect(mockResolve).toHaveBeenCalledWith('tc-42', false)
+  })
+
+  it('focus 在输入框时不拦截（IME/输入区的 Enter 归输入框）', () => {
+    render(<ConfirmCard toolCall={TOOL_CALL} />)
+    const input = document.createElement('textarea')
+    document.body.appendChild(input)
+    input.focus()
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    expect(mockResolve).not.toHaveBeenCalled()
+    input.remove()
+  })
+
+  it('focus 在按钮时 Enter 不拦截（按钮自身的 click 生效，避免双触发）', () => {
+    render(<ConfirmCard toolCall={TOOL_CALL} />)
+    const approve = buttons()[1]
+    approve.focus()
+    act(() => {
+      approve.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+    // Enter 落在按钮上：jsdom 不自动触发 click，但全局 handler 也不应 resolve（防双触发）
+    expect(mockResolve).not.toHaveBeenCalled()
+  })
+})
+
 /** A 档：审批决策（可固化提案 / 高风险不可固化） */
 const DECISION_REMEMBERABLE = {
   action: 'prompt',

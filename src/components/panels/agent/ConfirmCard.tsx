@@ -1,9 +1,11 @@
 /**
- * ConfirmCard — 操作确认卡片
+ * ConfirmCard — 操作确认卡片（线② · dsh 照搬，接管输入区形态）
  *
- * 当 Agent 调用需要确认的 Tool 时显示此卡片。
- * 用户可以批准或拒绝操作。
+ * 当 Agent 调用需要确认的 Tool 时显示此卡片（渲染在输入区上方，不进聊天流）。
+ * 用户可以批准或拒绝操作；支持快捷键 Enter=允许一次、Esc=拒绝（dsh ApprovalPanel 语义）。
+ * 保留「始终允许」（D3 已拍板：NF 的 A 档固化提案不随 dsh 的 allowed-once 收窄）。
  */
+import { useEffect } from 'react'
 import { ShieldAlert } from 'lucide-react'
 import { Button } from '../../ui/Button'
 import type { ToolCallInfo } from '../../../services/agent/agent-engine'
@@ -26,6 +28,27 @@ export default function ConfirmCard({ toolCall }: Props) {
   // A 档：可固化提案 → 「始终允许」按钮（用户照着规则描述判断"记住什么"）
   const rememberPattern = approval?.action === 'prompt' ? approval.remember?.displayPattern : undefined
   const showRiskHint = approval?.risk === 'high' || approval?.risk === 'critical'
+
+  // 快捷键（dsh ApprovalPanel 语义）：Enter = 允许一次、Esc = 拒绝。
+  // 防 IME / 防误触：focus 在输入框时不拦截（输入框自己处理 Enter/Esc）；
+  // focus 在按钮时 Enter 由按钮自己处理（避免双触发），Esc 仍拒绝。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.isComposing) return
+      const el = e.target instanceof Element ? e.target : null
+      if (el?.closest('input, textarea, select, [contenteditable="true"]')) return
+      if (e.key === 'Enter') {
+        if (el?.closest('button, a[href], [role="button"]')) return
+        e.preventDefault()
+        resolveToolConfirmation(id, true)
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        resolveToolConfirmation(id, false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [id, resolveToolConfirmation])
 
   return (
     <div className="confirm-card">
@@ -66,6 +89,10 @@ export default function ConfirmCard({ toolCall }: Props) {
             {JSON.stringify(args, null, 2)}
           </div>
         )}
+        {/* 快捷键提示（dsh ApprovalPanel：Enter=允许一次、Esc=拒绝） */}
+        <div style={{ marginTop: 4, fontSize: 'var(--text-2xs)', color: 'var(--color-text-muted)', opacity: 0.7 }}>
+          {t('agentConfirm.keyboardHint')}
+        </div>
       </div>
 
       {/* 操作按钮：走 ui/Button —— 原 .confirm-card-btn 系列自带一套配色与 hover，

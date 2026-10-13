@@ -87,6 +87,7 @@ export const agentTexts = {
   'agentConfirm.alwaysAllow': { 'zh-CN': '本项目内始终允许', 'en-US': 'Always allow in this project', 'ru-RU': 'Всегда разрешать в этом проекте' },
   'agentConfirm.rememberHint': { 'zh-CN': '将记住：{pattern}', 'en-US': 'Will remember: {pattern}', 'ru-RU': 'Будет запомнено: {pattern}' },
   'agentConfirm.riskHigh': { 'zh-CN': '⚠️ 风险较高：该工具的影响范围可能超出当前项目，请谨慎批准', 'en-US': '⚠️ High risk: this tool may act outside the current project — approve with care', 'ru-RU': '⚠️ Высокий риск: инструмент может выходить за пределы проекта — будьте осторожны' },
+  'agentConfirm.keyboardHint': { 'zh-CN': 'Enter 允许一次 · Esc 拒绝', 'en-US': 'Enter to allow once · Esc to reject', 'ru-RU': 'Enter — разрешить один раз · Esc — отклонить' },
   'agentPanel.commands': { 'zh-CN': '命令', 'en-US': 'Commands', 'ru-RU': 'Команды' },
   'agentPanel.mentionContext': { 'zh-CN': '@提及', 'en-US': '@Mention', 'ru-RU': '@Упоминание' },
   'agent.errorGenerated': { 'zh-CN': '❌ 生成失败：{error}', 'en-US': '❌ Generation failed: {error}', 'ru-RU': '❌ Ошибка генерации: {error}' },

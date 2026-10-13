@@ -10,7 +10,6 @@ import type { AgentMessage as AgentMessageType } from '../../../stores/agent-sto
 import MarkdownContent, { StreamingCursor } from '../../ui/MarkdownContent'
 import ToolCallBlock from './ToolCallBlock'
 import ThinkingCollapse from './ThinkingCollapse'
-import ConfirmCard from './ConfirmCard'
 import ArtifactCard from './ArtifactCard'
 import ProcessGroup from './ProcessGroup'
 import TurnErrorRow from './TurnErrorRow'
@@ -176,10 +175,11 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
           </span>
         ) : null}
 
-        {/* Tool 调用区块列表（线②：≥2 个连续工具折叠为过程组；待确认卡单独渲染不进组） */}
+        {/* Tool 调用区块列表（线②：≥2 个连续工具折叠为过程组；waiting_confirm 的审批卡
+            已接管输入区由 PendingToolConfirmation 渲染，流内不双渲染） */}
         {toolCalls && toolCalls.length > 0 && (() => {
-          const confirmCalls = toolCalls.filter(tc => tc.status === 'waiting_confirm')
           const processCalls = toolCalls.filter(tc => tc.status !== 'waiting_confirm')
+          if (processCalls.length === 0) return null
           return (
             <div className="mt-2">
               {processCalls.length >= 2 ? (
@@ -187,7 +187,6 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
               ) : (
                 processCalls.map(tc => <ToolCallBlock key={tc.id} toolCall={tc} />)
               )}
-              {confirmCalls.map(tc => <ConfirmCard key={tc.id} toolCall={tc} />)}
             </div>
           )
         })()}
