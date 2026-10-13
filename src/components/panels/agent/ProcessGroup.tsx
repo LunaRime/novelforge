@@ -50,7 +50,6 @@ export default function ProcessGroup({ toolCalls }: Props) {
   const [expanded, setExpanded] = useState(false)
 
   const running = toolCalls.some(tc => tc.status === 'running' || tc.status === 'pending')
-  const hasConfirm = toolCalls.some(tc => tc.status === 'waiting_confirm')
 
   // 类别计数（按首次出现排序）
   const counts = useMemo(() => {
@@ -64,21 +63,21 @@ export default function ProcessGroup({ toolCalls }: Props) {
 
   // 标题：运行中 = 「正在{首个运行中的动词}」；结束 = 前三类「已{动词}、{动词}」+ 计数
   const title = useMemo(() => {
-    if (running || hasConfirm) {
-      const runningKind = toolCalls.find(tc => tc.status === 'running' || tc.status === 'waiting_confirm')
+    if (running) {
+      const runningKind = toolCalls.find(tc => tc.status === 'running' || tc.status === 'pending')
       const kind = runningKind ? activity(runningKind.toolName) : (counts[0]?.[0] ?? 'tools')
       return verb(kind, t).running
     }
     // 结束：前三类完成动词，顿号连接
     const labels = counts.slice(0, 3).map(([kind]) => verb(kind, t).done)
     return labels.join(t('process.comma'))
-  }, [running, hasConfirm, counts, toolCalls, t])
+  }, [running, counts, toolCalls, t])
 
   const collapsedContent = (
     <>
       <span aria-hidden style={{ flex: 'none', width: 2, height: 2, margin: '0 8px', borderRadius: 1, background: 'var(--color-text-muted)' }} />
       <span style={{ flex: 'none', fontSize: 13, lineHeight: '24px', color: 'var(--color-text-muted)' }}>
-        <TextShimmer active={running || hasConfirm}>{title}</TextShimmer>
+        <TextShimmer active={running}>{title}</TextShimmer>
       </span>
       {/* 计数 */}
       <span style={{ flex: 'none', marginLeft: 4, fontSize: 11, lineHeight: '24px', color: 'var(--color-text-muted)', opacity: 0.7, fontVariantNumeric: 'tabular-nums' }}>
@@ -88,11 +87,11 @@ export default function ProcessGroup({ toolCalls }: Props) {
   )
 
   return (
-    <div data-process-group data-state={running ? 'running' : hasConfirm ? 'waiting' : 'done'}>
+    <div data-process-group data-state={running ? 'running' : 'done'}>
       <DisclosureRow
         icon={running ? <Spinner size={14} style={{ color: 'var(--color-text-muted)' }} /> : <ListChecks size={14} style={{ color: 'var(--color-text-muted)' }} />}
         title={t('process.title')}
-        running={running || hasConfirm}
+        running={running}
         open={expanded}
         expandable
         expandOnRowClick

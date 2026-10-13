@@ -75,7 +75,9 @@ const VALID_ROLES: ReadonlySet<string> = new Set(['user', 'assistant', 'system']
 export function sanitizeAgentMessage(msg: AgentMessage): AgentMessage | null {
   if (!msg || typeof msg.content !== 'string' || !VALID_ROLES.has(msg.role)) return null
   const cleaned = msg.role === 'assistant' ? cleanupMessageText(msg.content) : msg.content
-  if (cleaned.trim() === '') return null
+  // 线②：错误消息 content 为空、失败回执承载在 error 字段——不得按「纯空白消息」过滤
+  // （否则失败回执在会话持久化 → parseArchive → sanitizeMessageList 时被静默丢弃）
+  if (cleaned.trim() === '' && !msg.error) return null
   if (cleaned === msg.content && msg.streaming !== true) return msg
   if (cleaned === msg.content) {
     // 仅陈旧 streaming flag：清 flag，正文不变

@@ -776,7 +776,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // ===== CCR 压缩检查（替换原 4000-token 硬丢弃）：超预算时先压缩最旧批 =====
       // §7.1-C2：三个策略旋钮从硬编码常量改为**用户偏好**（只影响之后的压缩——
       // 不重算已压批次、不重写历史；keepBatches>0 时才会裁剪更旧的批次，默认 0 不裁）
-      const preCompressMessages = currentConv.messages.filter(m => !m.streaming && m.role !== 'system')
+      const preCompressMessages = currentConv.messages.filter(m => !m.streaming && m.role !== 'system' && !m.error)
       const totalHistoryTokens = preCompressMessages.reduce(
         (sum, m) => sum + estimateTokens(m.content), 0,
       )
@@ -891,7 +891,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // historyMaxTokens；CCR 压缩后剩余消息通常已达标。评审 Minor 9：注释别写死 4000）
       const afterCompress = get().conversations.find(c => c.id === convId)!
       const candidateMessages = afterCompress.messages
-        .filter(m => !m.streaming && m.role !== 'system')
+        .filter(m => !m.streaming && m.role !== 'system' && !m.error)
         .map(m => ({ role: m.role as 'user' | 'assistant', content: m.content }))
         .reverse() // 从最新到最旧
       const historyMessages: LLMMessage[] = []

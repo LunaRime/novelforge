@@ -68,9 +68,8 @@ export default function ToolCallBlock({ toolCall }: Props) {
 
   const summary = useMemo(() => fileSummary(toolName, args, t), [toolName, args, t])
   const running = status === 'running' || status === 'pending'
-  // 错误行：摘要 = 失败首行（红）；中断（waiting_confirm）= 琥珀
+  // 错误态：摘要 = 失败首行（红）。waiting_confirm 在 AgentMessage 层已单独走 ConfirmCard，不会到这里。
   const failed = status === 'failed'
-  const interrupted = status === 'waiting_confirm'
   const summaryText = failed ? (error ?? t('status.failed')) : summary
 
   // 展开体：IN/OUT 双栏卡（参数 JSON + 结果）。可展开 = 有参数或有结果/错误。
@@ -137,7 +136,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
                   whiteSpace: 'nowrap',
                   fontSize: 13,
                   lineHeight: '24px',
-                  color: failed ? 'var(--color-error)' : interrupted ? 'var(--color-warning)' : 'var(--color-text-muted)',
+                  color: failed ? 'var(--color-error)' : 'var(--color-text-muted)',
                 }}
               >
                 <TextShimmer active={running}>{summaryText}</TextShimmer>

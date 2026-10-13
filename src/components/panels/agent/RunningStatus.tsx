@@ -9,6 +9,7 @@
 import { useEffect, useState } from 'react'
 import { TextShimmer } from '../../ui/TextShimmer'
 import { useTranslation } from '../../../hooks/useTranslation'
+import type { TextKey } from '../../../shared/locale'
 
 interface Props {
   /** turn 开始时间戳（assistant 占位消息 createdAt） */
@@ -18,7 +19,7 @@ interface Props {
 }
 
 /** 格式化用时：<60s → 「x.xs」；≥60s → 「Xm Ys」 */
-function formatDuration(ms: number, t: (key: import('../../../shared/locale').TextKey) => string): string {
+function formatDuration(ms: number, t: (key: TextKey) => string): string {
   const s = ms / 1000
   if (s < 60) return t('duration.seconds').replace('{s}', (Math.round(s * 10) / 10).toString())
   const whole = Math.round(s)

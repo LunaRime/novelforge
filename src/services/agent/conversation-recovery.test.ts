@@ -181,6 +181,17 @@ describe('sanitizeAgentMessage', () => {
     const u = makeMsg('u1', 'user', '<think>未闭合\n\n其后整段正文不能吞')
     expect(sanitizeAgentMessage(u)).toBe(u)
   })
+
+  it('线②：错误消息 content 为空但带 error 字段 → 保留（不被「纯空白」过滤）', () => {
+    const err = makeMsg('e1', 'assistant', '', { error: { message: '模型调用超时', code: 'TIMEOUT' } })
+    const out = sanitizeAgentMessage(err)
+    expect(out).not.toBeNull()
+    expect(out!.error?.message).toBe('模型调用超时')
+    expect(out!.error?.code).toBe('TIMEOUT')
+    // 无 error 字段的空 content 消息仍应过滤（既有语义不变）
+    const blank = makeMsg('b1', 'assistant', '')
+    expect(sanitizeAgentMessage(blank)).toBeNull()
+  })
 })
 
 // ===== Checkpoint 净化 =====

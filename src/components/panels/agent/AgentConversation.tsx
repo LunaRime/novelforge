@@ -308,7 +308,7 @@ function ActiveConversation() {
     // 记忆段 = 常驻 + 名字目录 + 本轮手动 + M1（与 assembleFinalPrompt 的拼装口径一致）
     memory: [usageSegments.memoryResident, usageSegments.memoryM2, usageSegments.memoryM1].filter(Boolean).join('\n\n---\n\n'),
     historyMessages: activeConv.messages
-      .filter(m => m.role !== 'system')
+      .filter(m => m.role !== 'system' && !m.error)
       .map(m => ({ role: m.role, content: m.content })),
     currentContent: currentInput,
     modelMax,
