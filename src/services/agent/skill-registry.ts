@@ -13,7 +13,7 @@
 import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
 import { toolRegistry } from './tool-registry'
-import { t } from '../../shared/locale'
+import { t, type TextKey } from '../../shared/locale'
 import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
 // ===== 类型定义 =====
@@ -173,6 +173,8 @@ class SkillRegistryImpl {
     try {
       const velaHome = await ipc.invoke('config:get-vela-home')
       const userSkillsDir = `${velaHome}/skills`
+      // 预填充内置小说创作 skill 到用户目录（只填缺失、不覆盖已改）——用户可直接编辑 markdown
+      await seedNovelSkills(userSkillsDir)
       const userCount = await this.loadFromDirectory(userSkillsDir, 'user')
       if (userCount > 0) {
         console.log(`[Skills] 加载了 ${userCount} 个用户 Skill`)
@@ -282,6 +284,47 @@ function parseSkillMd(
     source,
     baseDir,
     filePath,
+  }
+}
+
+// ===== 小说创作 Skill 预填充落盘 =====
+
+/** 12 个小说创作 skill（name → description/content 的 i18n key）——预填充到用户可编辑目录 */
+const NOVEL_SKILL_SEED: Array<{ name: string; descKey: TextKey }> = [
+  { name: 'novel-outline', descKey: 'skill.outlineArchitectDesc' },
+  { name: 'chapter-architect', descKey: 'skill.chapterArchitectDesc' },
+  { name: 'dialogue-craft', descKey: 'skill.dialogueCraftDesc' },
+  { name: 'description-master', descKey: 'skill.descriptionMasterDesc' },
+  { name: 'plot-weaver', descKey: 'skill.plotWeaverDesc' },
+  { name: 'pacing-conductor', descKey: 'skill.paceDirectorDesc' },
+  { name: 'world-forge', descKey: 'skill.worldForgeDesc' },
+  { name: 'character-arc-designer', descKey: 'skill.characterArcDesc' },
+  { name: 'json-output-guard', descKey: 'skill.jsonGuardDesc' },
+  { name: 'self-review', descKey: 'skill.selfAuditDesc' },
+  { name: 'genre-compliance', descKey: 'skill.genreComplianceDesc' },
+  { name: 'chapter-hook-designer', descKey: 'skill.hookDesignerDesc' },
+]
+
+/**
+ * 预填充内置小说创作 skill 到用户目录（`<name>/SKILL.md`），让用户可直接编辑 markdown。
+ * 只落盘不存在的（用户已改的不覆盖）；内容跟随当前 UI 语言。
+ * 落盘后由 loadFromDirectory 以「用户 skill」加载，优先于内置同名 skill。
+ */
+export async function seedNovelSkills(userSkillsDir: string): Promise<void> {
+  for (const { name, descKey } of NOVEL_SKILL_SEED) {
+    try {
+      const skillDir = `${userSkillsDir}/${name}`
+      const skillFile = `${skillDir}/SKILL.md`
+      const exists = await ipc.invoke('fs:check-exists', skillFile)
+      if (exists) continue
+      const content = t(`skillContent.${name}` as TextKey)
+      const description = t(descKey)
+      const md = `---\nname: ${name}\ndescription: ${description}\n---\n\n${content}`
+      await ipc.invoke('fs:mkdir', skillDir)
+      await ipc.invoke('fs:write-file', skillFile, md)
+    } catch {
+      // 单个 skill 落盘失败不影响整体（下次启动重试）
+    }
   }
 }
 

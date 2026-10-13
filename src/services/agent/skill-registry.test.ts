@@ -13,7 +13,7 @@ vi.mock('../../stores/project-store', () => ({
   useProjectStore: { getState: () => ({ currentProject: null }) },
 }))
 
-import { skillRegistry } from './skill-registry'
+import { skillRegistry, seedNovelSkills } from './skill-registry'
 
 const SKILL_MD = (name: string) => `---\nname: ${name}\ndescription: 描述-${name}\n---\n\n正文-${name}`
 
@@ -76,5 +76,39 @@ describe('loadFromDirectory 两种形态（B 档第一轮 T3）', () => {
       return null
     })
     expect(await skillRegistry.loadFromDirectory('/skills', 'user')).toBe(0)
+  })
+})
+
+describe('seedNovelSkills（小说创作 skill 预填充落盘）', () => {
+  it('首次落盘：check-exists 为 false → mkdir + write-file（含 frontmatter + 正文）', async () => {
+    const writes: Array<{ path: string; content: string }> = []
+    invokeMock.mockImplementation(async (ch: string, ...args: unknown[]) => {
+      if (ch === 'fs:check-exists') return false
+      if (ch === 'fs:mkdir') return { success: true }
+      if (ch === 'fs:write-file') {
+        writes.push({ path: String(args[0]), content: String(args[1]) })
+        return { success: true }
+      }
+      return null
+    })
+    await seedNovelSkills('/skills')
+    // 12 个小说创作 skill 全部落盘
+    expect(writes.length).toBe(12)
+    // 首个是 novel-outline，落盘内容含 frontmatter name + 正文
+    const outline = writes.find(w => w.path.endsWith('/novel-outline/SKILL.md'))
+    expect(outline).toBeTruthy()
+    expect(outline!.content.startsWith('---\nname: novel-outline\n')).toBe(true)
+    expect(outline!.content).toContain('大纲架构师')
+  })
+
+  it('已存在则不覆盖（check-exists 为 true → 不 write-file）', async () => {
+    let writeCount = 0
+    invokeMock.mockImplementation(async (ch: string) => {
+      if (ch === 'fs:check-exists') return true
+      if (ch === 'fs:write-file') { writeCount++; return { success: true } }
+      return null
+    })
+    await seedNovelSkills('/skills')
+    expect(writeCount).toBe(0)
   })
 })
