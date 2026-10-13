@@ -301,7 +301,7 @@ export default function KnowledgePanel() {
         {searchResults.length > 0 && (
           <div className="pb-4">
             <div className="flex items-center justify-between px-3 py-1.5">
-              <span className="text-micro text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+              <span className="text-micro text-[var(--color-text-muted)] font-medium">
                 {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
               </span>
             </div>
@@ -397,7 +397,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
     <>
       {/* 排序头 */}
       <div className="flex items-center justify-between px-3 py-1.5">
-        <span className="text-micro text-[var(--color-text-muted)] font-medium uppercase tracking-wide">
+        <span className="text-micro text-[var(--color-text-muted)] font-medium">
           {t('knowledge.indexedChapters')}
         </span>
         {/* 排序选择：章节号 / 导入时间 / 名称 */}

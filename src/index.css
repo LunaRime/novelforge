@@ -75,6 +75,16 @@
   --spacing-statusbar: 24px;
   --spacing-activity-bar: 48px;
 
+  /* 圆角 —— 2026-10-14 从 :root 上移进 @theme：
+     此前只声明在 :root，className `rounded-*` 走 Tailwind 默认刻度（rounded-xl=12px）、
+     内联 `var(--radius-*)` 走自定义（14px）→ 同一「卡片」落 10/12/14/16/20px 多档。
+     放回 @theme 后 `rounded-*` 工具类与 `var(--radius-*)` 同源，像素一致。 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+  --radius-2xl: 20px;
+
   /* Tailwind 动画 - 扩展更多交互动画 */
   --animate-fade-in: fade-in 0.15s ease-out;
   --animate-fade-in-up: fade-in-up 0.25s ease-out;
@@ -268,13 +278,6 @@
     --width-left-bar: 44px;
     --width-right-bar: 44px;
     --width-bottom-bar: 32px;
-
-    /* 圆角（加大圆角，更现代） */
-    --radius-sm: 4px;
-    --radius-md: 6px;
-    --radius-lg: 10px;
-    --radius-xl: 14px;
-    --radius-2xl: 20px;
 
     /* 阴影（蓝调弥散阴影） */
     --shadow-sm: 0 1px 2px rgba(10, 22, 40, 0.05);
@@ -715,14 +718,12 @@
     right: 0;
   }
 
-  /* ===== 面板标题栏 — JetBrains 风格：紧凑、全大写、弱化 ===== */
+  /* ===== 面板标题栏 —— 弱化层级（句子大小写；2026-10-14 去 AI 味：不再全大写 + 字距）===== */
   .panel-header {
     @apply flex items-center px-3 gap-2;
     height: var(--height-panel-header);
     font-size: 11px;
     font-weight: 600;
-    letter-spacing: 0.05em;
-    text-transform: uppercase;
     color: var(--color-text-muted);
     border-bottom: 1px solid var(--color-border);
     background: transparent;
@@ -1020,25 +1021,13 @@
                 transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   }
 
-  .ai-glow::before {
-    content: '';
-    position: absolute;
-    inset: -3px;
-    border-radius: inherit;
-    background: linear-gradient(135deg, rgba(126, 200, 227, 0.5), rgba(155, 142, 200, 0.5), rgba(201, 167, 108, 0.3));
-    filter: blur(8px);
-    opacity: 0;
-    transition: opacity var(--transition-normal);
-    z-index: -1;
-  }
+  /* 2026-10-14 去 AI 味：移除 ::before 的 blur(8px) 模糊光晕——
+     「渐变底 + 模糊光晕」是近黑底荧光渐变这类模板化默认的经典形态，
+     按钮的 AI 语义由渐变底承担，hover 反馈保留克制的 box-shadow 即可。 */
 
   .ai-glow:hover {
     box-shadow: 0 6px 24px rgba(126, 200, 227, 0.35), 0 0 32px rgba(155, 142, 200, 0.25);
     transform: translateY(-2px);
-  }
-
-  .ai-glow:hover::before {
-    opacity: 1;
   }
 
   .ai-glow:active {

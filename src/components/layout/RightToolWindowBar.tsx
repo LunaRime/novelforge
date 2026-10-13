@@ -101,8 +101,8 @@ export default function RightToolWindowBar() {
         width: 'var(--width-right-bar)',  /* 30px */
         backgroundColor: 'var(--color-activity-bar)',
         // 与 AI 面板绑定成一张卡片：右两角圆角 + 朝窗口一侧的细边框；左边缘不画线（无缝相接）
-        borderTopRightRadius: 6,
-        borderBottomRightRadius: 6,
+        borderTopRightRadius: 'var(--radius-md)',
+        borderBottomRightRadius: 'var(--radius-md)',
         border: '1px solid var(--color-border)',
         borderLeft: 'none',
         flexShrink: 0,

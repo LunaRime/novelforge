@@ -1059,7 +1059,7 @@ export default function CodeMirrorEditor({
                   onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
                   onClick={() => handleAIAction(action.prompt, action.key)}
                 >
-                  <span className="text-2xs tracking-widest">{action.label}</span>
+                  <span className="text-2xs">{action.label}</span>
                 </button>
               ))}
               <button

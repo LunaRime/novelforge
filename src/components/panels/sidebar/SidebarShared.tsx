@@ -101,7 +101,7 @@ export async function openDraftByChapter(chapterNumber: number, chapterTitle?: s
   const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
   useEditorStore.getState().openFile({
     id: filePath,
-    name: `${chLabel}${titlePart} · 草稿`,
+    name: `${chLabel}${titlePart}（草稿）`,
     type: 'chapter',
     filePath,
     content: draft.content,

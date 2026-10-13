@@ -69,7 +69,7 @@ export default function AIOutputPanel() {
         }}
       >
         <span
-          className="text-xs font-medium uppercase tracking-widest"
+          className="text-xs font-medium"
           style={{ color: 'var(--color-text-muted)' }}
         >
           {t('agent.aiOutput')}
@@ -277,7 +277,7 @@ function ActiveRunView({
               }}
             >
               <Play size={13} />
-              <span className="font-medium tracking-wide">{t('nextStep.continue')}</span>
+              <span className="font-medium">{t('nextStep.continue')}</span>
             </button>
           )}
           <button
@@ -300,7 +300,7 @@ function ActiveRunView({
             }}
           >
             <StopCircle size={13} />
-            <span className="font-medium tracking-wide">{t('agent.abortGen')}</span>
+            <span className="font-medium">{t('agent.abortGen')}</span>
           </button>
         </div>
       )}
@@ -565,7 +565,7 @@ function HistoryList({ items, onSelect }: { items: WorkflowRun[]; onSelect: (id:
   return (
     <div>
       <p
-        className="text-micro font-medium mb-2 px-1 uppercase tracking-widest"
+        className="text-micro font-medium mb-2 px-1"
         style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}
       >
         {t('agent.history')}

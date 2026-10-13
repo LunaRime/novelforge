@@ -175,7 +175,7 @@ function TaskRunView() {
           此前行有 hover 变色却无点击处理器） */}
       {history.length > 0 && (
         <div className="flex-shrink-0">
-          <div className="px-4 pt-3 pb-1 text-micro font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-muted)' }}>
+          <div className="px-4 pt-3 pb-1 text-micro font-semibold" style={{ color: 'var(--color-text-muted)' }}>
             {t('panel.taskHistory')}
           </div>
           <div className="px-2 pb-2">

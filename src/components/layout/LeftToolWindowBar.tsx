@@ -54,8 +54,8 @@ export default function LeftToolWindowBar() {
         backgroundColor: 'var(--color-activity-bar)',
         // 与侧栏面板绑定成一张卡片：左两角圆角 + 朝窗口一侧的细边框；
         // 右边缘**不画线**——它与侧栏无缝相接，画了会变成卡片中间的一道隔断。
-        borderTopLeftRadius: 6,
-        borderBottomLeftRadius: 6,
+        borderTopLeftRadius: 'var(--radius-md)',
+        borderBottomLeftRadius: 'var(--radius-md)',
         border: '1px solid var(--color-border)',
         borderRight: 'none',
         flexShrink: 0,

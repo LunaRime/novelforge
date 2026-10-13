@@ -162,8 +162,6 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
                 style={{
                   fontSize: 11,
                   fontWeight: 600,
-                  letterSpacing: '0.04em',
-                  textTransform: 'uppercase',
                   color: 'var(--color-text-muted)',
                 }}
               >
@@ -245,8 +243,6 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
               style={{
                 fontSize: 11,
                 fontWeight: 600,
-                letterSpacing: '0.04em',
-                textTransform: 'uppercase',
                 color: 'var(--color-text-muted)',
               }}
             >
