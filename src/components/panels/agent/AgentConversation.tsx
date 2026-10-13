@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
@@ -243,22 +243,23 @@ function ActiveConversation() {
     })
   }
 
-  /** 分支：从指定消息 fork 新会话（B1 数据层：复制起点含历史，自动激活） */
-  const handleFork = (messageId: string) => {
+  /** 分支：从指定消息 fork 新会话（B1 数据层：复制起点含历史，自动激活）
+   *  useCallback：稳定引用，配合 AgentMessage 的 memo —— 流式输出时历史消息不重渲染 */
+  const handleFork = useCallback((messageId: string) => {
     useAgentStore.getState().forkFromMessage(messageId)
     // 自动滚动到新会话底部
     requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }))
-  }
+  }, [])
 
-  /** 回退：确认后截断到指定消息（可恢复） */
-  const handleRewind = async (messageId: string) => {
+  /** 回退：确认后截断到指定消息（可恢复）。useCallback 理由同上（t 为稳定引用） */
+  const handleRewind = useCallback(async (messageId: string) => {
     const ok = await confirm(t('agent.confirmRewind'), {
       title: t('agent.confirmRewindTitle'),
       confirmText: t('dialog.confirmRewind'),
       danger: true,
     })
     if (ok) useAgentStore.getState().rewindToMessage(messageId)
-  }
+  }, [t])
 
   // ⚠️ 两个 hook 必须放在 `if (!activeConv) return null` **之前**（条件调用 useMemo 会被
   //    react-hooks/rules-of-hooks 拦下）；故此处对 activeConv 做可空处理

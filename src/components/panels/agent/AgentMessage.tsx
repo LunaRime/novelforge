@@ -6,6 +6,7 @@
  * - 助手消息：左侧 Markdown 风格渲染
  * - Tool 调用：ToolCallBlock / ConfirmCard / ArtifactCard
  */
+import { memo } from 'react'
 import type { AgentMessage as AgentMessageType } from '../../../stores/agent-store'
 import MarkdownContent, { StreamingCursor } from '../../ui/MarkdownContent'
 import ToolCallBlock from './ToolCallBlock'
@@ -90,7 +91,7 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
   )
 }
 
-export default function AgentMessage({ message, onFork, onRewind, rewindDisabled }: Props) {
+export default memo(function AgentMessage({ message, onFork, onRewind, rewindDisabled }: Props) {
   const { t } = useTranslation()
   const { role, content, createdAt, streaming, toolCalls, artifacts, error } = message
 
@@ -210,4 +211,4 @@ export default function AgentMessage({ message, onFork, onRewind, rewindDisabled
       </div>
     </div>
   )
-}
+})

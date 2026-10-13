@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react'
+import React, { memo, useRef, useState } from 'react'
 import { Brain, ChevronRight } from 'lucide-react'
 import { t } from '../../shared/locale'
 import { Table } from './Table'
@@ -8,11 +8,12 @@ interface MarkdownContentProps {
   streaming?: boolean
 }
 
-/** 
+/**
  * Markdown 渲染组件（含 <think> 思考过程折叠支持）
- * 用于 Agent 对话、AI 输出面板的正文格式化显示
+ * 用于 Agent 对话、AI 输出面板的正文格式化显示。
+ * memo：流式输出时历史消息 content 不变 → 跳过整段 markdown 解析与 DOM 重建（渲染卡顿主因）。
  */
-export default function MarkdownContent({ content, streaming }: MarkdownContentProps) {
+export default memo(function MarkdownContent({ content, streaming }: MarkdownContentProps) {
   // 解析 <think> 标签：将内容拆分为 [thinking?, ...markdownSegments]
   const segments = parseThinkSegments(content)
 
@@ -30,7 +31,7 @@ export default function MarkdownContent({ content, streaming }: MarkdownContentP
       {streaming && <StreamingCursor />}
     </div>
   )
-}
+})
 
 /** 渲染行列表为 React 元素 */
 function renderLines(lines: string[]): React.ReactNode {
