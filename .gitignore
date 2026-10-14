@@ -35,6 +35,7 @@ Thumbs.db
 *.local
 dist-ssr
 tailwind.config.js.bak
+.package.json.bak
 
 # Claude Code 计划书（不提交）
 .codewhale-plans/

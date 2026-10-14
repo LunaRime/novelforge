@@ -120,6 +120,9 @@ jobs:
     - name: Build Electron app (Linux)
       env:
         CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+        # 走 npmmirror 下载 electron-builder 二进制（appimage/mksquashfs 等），
+        # 避免 CI 从 GitHub 直连下载超时/限流导致 AppImage 打包失败
+        ELECTRON_BUILDER_BINARIES_MIRROR: 'https://npmmirror.com/mirrors/electron-builder-binaries/'
       run: pnpm run build
 
     - name: Upload artifact
