@@ -1016,7 +1016,7 @@ export interface UpdateInfo {
   version: string
   releaseDate: string
   releaseNotes?: string
-  files: Array<{ url: string; size: number }>
+  files: Array<{ url: string; size: number; digest?: string }>
 }
 
 export interface UpdateChannels {

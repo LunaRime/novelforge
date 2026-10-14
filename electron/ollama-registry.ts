@@ -245,7 +245,8 @@ export async function downloadBlob(
   opts: {
     url: string
     destPath: string
-    digest: string
+    /** `sha256:hex` 格式；缺省时跳过校验（调用方自行保证完整性） */
+    digest?: string
     paths: NetPath[]
     expectedSize?: number
     stallTimeoutMs?: number
@@ -254,7 +255,7 @@ export async function downloadBlob(
     signal?: AbortSignal
   },
 ): Promise<DownloadBlobResult> {
-  const expectedHex = digestHex(opts.digest)
+  const expectedHex = opts.digest ? digestHex(opts.digest) : ''
   const stallTimeoutMs = opts.stallTimeoutMs ?? 20_000
   const candidates = opts.paths.length > 0 ? opts.paths : []
   if (candidates.length === 0) return { success: false, error: '无可用网络路径' }
@@ -380,7 +381,7 @@ export async function downloadBlob(
   const usedPath = candidates[pathIndex]
   emit(usedPath, true)
 
-  if (hash.digest('hex') !== expectedHex) {
+  if (opts.digest && hash.digest('hex') !== expectedHex) {
     // 坏 blob 进模型库 = 之后所有推理静默出错，宁可失败重下
     try {
       unlinkSync(opts.destPath)

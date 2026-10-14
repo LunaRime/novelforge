@@ -75,6 +75,7 @@ export const logTexts = {
   'log.update.upToDate': { 'zh-CN': '当前已是最新版本', 'en-US': 'Already up to date', 'ru-RU': 'Уже установлена последняя версия' },
   'log.update.downloaded': { 'zh-CN': '更新包下载完成: {version}', 'en-US': 'Update package downloaded: {version}', 'ru-RU': 'Пакет обновления скачан: {version}' },
   'log.update.error': { 'zh-CN': '更新错误: {err}', 'en-US': 'Update error: {err}', 'ru-RU': 'Ошибка обновления: {err}' },
+  'log.update.installFailed': { 'zh-CN': '启动更新安装程序失败: {err}', 'en-US': 'Failed to launch update installer: {err}', 'ru-RU': 'Не удалось запустить установщик обновления: {err}' },
   'log.uninstall.launchFailed': { 'zh-CN': '启动卸载程序失败: {err}', 'en-US': 'Failed to launch uninstaller: {err}', 'ru-RU': 'Не удалось запустить деинсталлятор: {err}' },
   'log.uninstall.cleanedUserData': { 'zh-CN': '已清理用户数据: {path}', 'en-US': 'User data cleaned: {path}', 'ru-RU': 'Данные пользователя очищены: {path}' },
   'log.db.openFailed': { 'zh-CN': '打开数据库失败: {err}', 'en-US': 'Failed to open database: {err}', 'ru-RU': 'Не удалось открыть базу данных: {err}' },

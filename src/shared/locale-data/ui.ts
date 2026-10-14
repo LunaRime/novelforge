@@ -99,6 +99,8 @@ export const uiTexts = {
   'toast.openView': { 'zh-CN': '打开查看', 'en-US': 'Open', 'ru-RU': 'Открыть' },
   'toast.dismiss': { 'zh-CN': '忽略', 'en-US': 'Dismiss', 'ru-RU': 'Скрыть' },
   'status.failed': { 'zh-CN': '失败', 'en-US': 'Failed', 'ru-RU': 'Ошибка' },
+  'status.noUpdateInfo': { 'zh-CN': '尚未检查到可用更新', 'en-US': 'No update available yet', 'ru-RU': 'Обновление ещё не найдено' },
+  'status.noInstaller': { 'zh-CN': '更新包不存在，请重新下载', 'en-US': 'Installer missing — please re-download', 'ru-RU': 'Установщик отсутствует — загрузите заново' },
   'action.compare': { 'zh-CN': '对比', 'en-US': 'Compare', 'ru-RU': 'Сравнить' },
   'action.rollback': { 'zh-CN': '回退', 'en-US': 'Rollback', 'ru-RU': 'Откатить' },
   'sort.byChapter': { 'zh-CN': '按章节号', 'en-US': 'By chapter', 'ru-RU': 'По главам' },
