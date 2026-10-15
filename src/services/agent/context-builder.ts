@@ -15,7 +15,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useAgentStore, type AgentMode } from '../../stores/agent-store'
-import { t, getCurrentLocale, UI_TEXTS } from '../../shared/locale'
+import { t, getCurrentLocale, localeVariants, type TextKey } from '../../shared/locale'
 import { appendOutputLanguage } from '../prompt-templates'
 import { ipc } from '../ipc-client'
 import { parseMemoryFile } from '../memory/memory-codec'
@@ -126,11 +126,9 @@ const SUMMARY_SECTION_PRIORITY: Record<string, number> = {
   'ccr.summarySectionInstructions': 1,
 }
 
-/** 取某文案键的全部语言变体（跨语言匹配历史摘要——用户切语言后旧摘要仍是旧语言标题） */
-function localeVariants(key: string): string[] {
-  const entry = (UI_TEXTS as Record<string, Record<string, string>>)[key]
-  return entry ? Object.values(entry) : []
-}
+// 跨语言标题匹配（用户切语言后旧摘要仍是旧语言标题）复用共享工具 localeVariants（locale.ts）——
+// 抽出的动机：CompressedBatchCard 的回执拆段此前只按**当前** locale 匹配，切语言即静默失效（评审）。
+
 
 interface SummaryBlock { text: string; priority: number }
 
@@ -141,7 +139,7 @@ interface SummaryBlock { text: string; priority: number }
 function splitSummaryBlocks(summary: string): SummaryBlock[] | null {
   const marks: Array<{ index: number; header: string; priority: number }> = []
   for (const [key, priority] of Object.entries(SUMMARY_SECTION_PRIORITY)) {
-    for (const header of localeVariants(key)) {
+    for (const header of localeVariants(key as TextKey)) {
       let idx = summary.indexOf(header)
       while (idx >= 0) {
         // 行首校验（允许文首）：避免正文里恰好引用到同名字符串造成误切
