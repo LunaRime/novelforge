@@ -24,7 +24,7 @@ NovelForge 的 Agent 对话系统当前对上下文采用**丢弃式硬截断**�
 | 1 | 直连式 ReAct，无 HTTP proxy | `agent-engine.ts:135` 直接 `generateFn` | headroom 代理不可行 |
 | 2 | 4000-token 滚动窗口硬丢弃 | `agent-store.ts:456-469`（`HISTORY_MAX_TOKENS = 4000`） | 升级为滚动摘要 |
 | 3 | 每轮 16K 预算压缩（丢弃式） | `agent-engine.ts:36,530` `compressMessagesToBudget` | 保留为最后防线 |
-| 4 | 三级注入挂载点 | `context-builder.ts:28-81`（身份 400/L0 800/L1 600/Tool 1200，总上限 3500） | 扩展 M1/M2 记忆层 |
+| 4 | 三级注入挂载点 | `context-builder.ts:28-81`（身份 400/L0 800/L1 600/Tool 1200，总上限 3500）<br>⚠️ 2026-10-15 更新：Tool 段改为随工具数伸缩（`computeToolPromptBudget`，封顶 4000）、总上限重估 7500 | 扩展 M1/M2 记忆层 |
 | 5 | 对话纯内存态（无 persist/无 DB 表） | `agent-store.ts` 无持久化 | **P0 必须补持久化** |
 | 6 | 模型上限 | `provider-presets.ts` 各模型 `maxTokens`（主流 131072） | 预算条数据源，按当前会话模型动态取 |
 | 7 | llm_calls 表 usage 统计 | `database.ts:379`：prompt/completion/total/cost | **无 cached_tokens 列**——缓存命中率无法事后统计 |
@@ -48,6 +48,8 @@ AgentConversation (agent-store, 内存态)
   身份(400) → L0 项目(800) → L1 编辑器(600) → Tool(1200)
   → M2 作品记忆(≈800) → M1 会话摘要(≈300)    [总上限 ~4700]
 ```
+> ⚠️ 2026-10-15 更新（P0-3）：Tool 段 1200 → 随工具数伸缩（≤4000）；总上限 ~4700 → 7500。
+> 顺序与裁剪原则（M1 → M2 → L1 → Tool）不变；现码见 `context-builder.computeToolPromptBudget` / `SYSTEM_PROMPT_BUDGET_TOKENS`。
 
 **注入顺序原则（CacheAligner）**：稳定内容前置。Tool 描述稳定（~1200 tokens）必须在记忆层之前；M2 比 M1 稳定（仅定稿/检查点变），故 M2 在 M1 前——M1 压缩更新时不会把 M2 拖失效。压缩事件发生时历史物理删除、前缀本来失效，这是 CCR 固有代价；缓存收益只存在于**两次压缩之间**。
 
@@ -101,6 +103,7 @@ buildAgentSystemPrompt 新增：
   5. M2 作品记忆节（P1 生效，P0 空）      ~800 tokens
   6. M1 会话摘要节（标注「自动生成」）     ~300 tokens
 总上限 3500 → ~4700（各节独立预算，超限裁剪 M1 → M2 → L1 → Tool 顺序降级）
+→ **7500**（2026-10-15：工具段随工具数伸缩后按同一合账重估）
 ```
 
 ### 4.4 压缩事件卡片（UI）

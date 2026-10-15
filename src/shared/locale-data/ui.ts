@@ -497,4 +497,6 @@ export const uiTexts = {
   'memory.loadModeDirty': { 'zh-CN': '编辑器里这条记忆有未保存的修改，请先保存再切换加载方式', 'en-US': 'This memory has unsaved edits in the editor — save first, then switch load mode', 'ru-RU': 'В редакторе есть несохранённые правки — сначала сохраните, затем переключите режим' },
   'memory.loadModeOpenTab': { 'zh-CN': '这条记忆正在编辑器中打开——请先关闭标签页再切换加载方式（编辑器是唯一编辑面，两处写入会互相覆盖）', 'en-US': 'This memory is open in the editor — close the tab first, then switch load mode (two writers would overwrite each other)', 'ru-RU': 'Эта память открыта в редакторе — сначала закройте вкладку, затем переключите режим (иначе записи перезапишут друг друга)' },
   'memory.residentTotal': { 'zh-CN': '常驻记忆 {tokens} / {cap} tokens', 'en-US': 'Resident memory {tokens} / {cap} tokens', 'ru-RU': 'Постоянная память {tokens} / {cap} токенов' },
+  // P2-4：注入口径提示——记忆分层后正文默认不自动注入（消除「写了记忆却没生效」的困惑）
+  'memory.injectHint': { 'zh-CN': '正文默认不自动注入——对话中 @文件名 或让 AI 用 read_memory 读取；设为「常驻」可全文注入', 'en-US': 'Bodies are not auto-injected — mention @file in chat or let the AI call read_memory; set “resident” to inject the full text', 'ru-RU': 'Тексты не вставляются автоматически — упомяните @файл в чате или пусть ИИ вызовет read_memory; режим «постоянный» вставляет текст целиком' },
 } as const

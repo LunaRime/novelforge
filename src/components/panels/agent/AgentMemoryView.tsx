@@ -125,6 +125,17 @@ export default function AgentMemoryView() {
         </div>
       )}
 
+      {/* P2-4：注入口径提示——记忆分层（2026-09-26）后正文默认不再自动注入，
+          在此明示「怎么让它进上下文」，消除「写了记忆却没生效」的困惑 */}
+      {projectPath && (
+        <div
+          className="px-3 py-1 text-micro flex-shrink-0"
+          style={{ borderBottom: '1px solid var(--color-border)', color: 'var(--color-text-muted)' }}
+        >
+          {t('memory.injectHint')}
+        </div>
+      )}
+
       {/* 内容区 */}
       <div className="flex-1 overflow-y-auto px-3 py-2">
         {!projectPath ? (

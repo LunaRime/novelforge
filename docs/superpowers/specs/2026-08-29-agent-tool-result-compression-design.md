@@ -95,20 +95,21 @@ Agent 引擎（`src/services/agent/agent-engine.ts`，单文件 ReAct 循环）�
 
 - **数据源**：`ModelProfile.maxTokens`（agent-store 调用时从 `useLLMStore.getState().models` 按 modelId 查得，随模型配置变化）。
 - **接口**：`runAgentLoop` 新增可选参数 `options?: { modelContextWindow?: number }`。
-- **公式**（保守裁决）：
+- **公式**（⚠️ 2026-10-15 按现码修正——原稿 `min(窗口−4000, 32000)` 已漂移两次）：
 
 ```
 budget = modelContextWindow && modelContextWindow >= 16_000
-  ? Math.min(modelContextWindow - 4_000, 32_000)   // 输出空间预留 4k；工程上限 32k
-  : 16_000                                          // 无信息/小窗口模型保持现状
+  ? clamp(floor(modelContextWindow × percent%), 16_000, 64_000)   // percent 默认 80（用户偏好 budgetPercent）
+  : 16_000                                                         // 无信息/小窗口模型保持现状
 ```
 
-| 窗口 | 预算 | 说明 |
+| 窗口 | 预算（percent=80） | 说明 |
 |---|---|---|
-| undefined | 16_000 | 现状不变 |
-| 8_000（llama3.3 等） | 16_000 | 窗口 < 16k 不适用动态（压缩是成本控制非防超窗；超窗由错误恢复兜底） |
-| 32_000 | 28_000 | 提升 75% |
-| 131_072 | 32_000 | 工程上限（成本/延迟裁决；缓存命中抵消部分成本） |
+| undefined / 8_000（llama3.3 等） | 16_000 | 窗口 < 16k 不适用动态（压缩是成本控制非防超窗；超窗由错误恢复兜底） |
+| 32_000 | 25_600 | 由 80% 决定（不再是「窗口 − 4k」） |
+| 131_072 | 64_000 | 上阈值由 32k → **64k**（2026-10-14 调整，与消息预算 64k 上限对齐；128k 窗口用约 49%） |
+
+> 演化记录：初稿「窗口 − 4k / 上限 32k」→ 2026-10-13 起改为百分比制（`compaction-prefs.budgetPercent`，仅影响之后的压缩）→ 2026-10-14 上阈值 32k → 64k。现码见 `agent-engine.computeMessageBudget` 与 `compaction-prefs.computeHistoryBudget`。
 
 - **MIN 档**（恢复阶梯用）：`minBudget = Math.max(8_000, Math.floor(budget / 2))`——降档压缩至少保留 8k（对话质量底线）。
 

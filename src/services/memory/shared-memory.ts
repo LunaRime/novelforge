@@ -3,7 +3,9 @@
  *
  * 数据链：CCR 压缩摘要生成成功 → 解析「[可复用事实]」锚点段（机器锚，三语字面量一致）
  * → 提取逐行事实 → 与既有 shared.md 合并（文本去重 + 上限 50 条丢最旧）→ 写回。
- * M2 注入（context-builder）：kind=shared 独立段，150 tokens 保底配额。
+ * 注入（context-builder，2026-10-15 修正）：shared 只进**名字目录**（brief 行 + [共享] 标签），
+ * 正文**不再自动注入**——由模型 read_memory 或用户 @ 显式引用获取（2026-09-26 记忆分层起；
+ * 旧注释「独立段 150 tokens 保底配额」已失效）。
  */
 import { ipc } from '../ipc-client'
 import { parseMemoryFile } from './memory-codec'
