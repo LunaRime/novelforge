@@ -1,25 +1,37 @@
 /**
- * ContextCompactionSection — 设置页「上下文与压缩」分区（§7.1-C2 保留偏好）。
+ * ContextCompactionSection — 设置页「上下文与压缩」分区（§7.1-C2 保留偏好 + 自学习压缩开关）。
  *
  * 三个旋钮写在 `GlobalConfig.compaction`：历史预算 / 最小降幅 / 保留批数。
  * ⚠️ 口径诚实（设计要点）：**只影响之后的压缩** —— 已压缩的批次不会重算、不重写历史；
  * `keepBatches > 0` 会**释放更旧批次的分卷原文**（该卡片的「恢复原文」随之消失），
  * 故默认 0 = 不裁剪（维持 B 档第二轮「原文永不删」的承诺）。
+ *
+ * 自学习压缩 v1（实验性，默认关闭）状态写在**独立顶层键** `GlobalConfig.compactionLearning`
+ * （config:set 是顶层浅合并——若与 compaction 同键会被本分区的保存覆盖）；
+ * 未触碰学习控件时保存不写该键（防用陈旧统计覆盖实时学习结果）。
  */
 import { useEffect, useState } from 'react'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Button } from '../ui/Button'
 import { Disclosure } from '../ui/Disclosure'
+import { Switch } from '../ui/Switch'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
 import { DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs, type CompactionPrefs } from '../../services/agent/compaction-prefs'
+import {
+  defaultCompressionLearning, resolveCompressionLearning, resetCompressionLearning,
+  activeRuleLabels, type CompressionLearningState,
+} from '../../services/agent/compression-learning'
 
 export default function ContextCompactionSection() {
   const { t } = useTranslation()
   const [prefs, setPrefs] = useState<CompactionPrefs>(DEFAULT_COMPACTION_PREFS)
+  const [learning, setLearning] = useState<CompressionLearningState>(() => defaultCompressionLearning())
+  /** 本轮是否触碰过学习控件——未触碰时保存不写 compactionLearning（防陈旧统计覆盖实时学习结果） */
+  const [learningDirty, setLearningDirty] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [loadFailed, setLoadFailed] = useState(false)
   const [saving, setSaving] = useState(false)
@@ -28,8 +40,11 @@ export default function ContextCompactionSection() {
     let cancelled = false
     void (async () => {
       try {
-        const cfg = await ipc.invoke('config:get') as { compaction?: unknown } | null
-        if (!cancelled) setPrefs(resolveCompactionPrefs(cfg))
+        const cfg = await ipc.invoke('config:get') as { compaction?: unknown; compactionLearning?: unknown } | null
+        if (!cancelled) {
+          setPrefs(resolveCompactionPrefs(cfg))
+          setLearning(resolveCompressionLearning(cfg?.compactionLearning))
+        }
       } catch {
         // 读失败 → 用缺省，但**明确告知**（下面显示的不是盘上的值，保存会把默认值写回）
         if (!cancelled) setLoadFailed(true)
@@ -50,9 +65,15 @@ export default function ContextCompactionSection() {
     try {
       // 钳制口径与读取侧同一真源（resolveCompactionPrefs）：写进去的一定能被读回
       const clamped = resolveCompactionPrefs({ compaction: prefs })
-      const res = await ipc.invoke('config:set', { compaction: clamped }) as { success?: boolean } | null
+      const payload: Record<string, unknown> = { compaction: clamped }
+      if (learningDirty) {
+        // 与读取侧同一真源解析（坏形状回默认）；形状见 compression-learning
+        payload.compactionLearning = resolveCompressionLearning(learning)
+      }
+      const res = await ipc.invoke('config:set', payload) as { success?: boolean } | null
       if (res && res.success === false) throw new Error('config:set failed')
       setPrefs(clamped)
+      setLearningDirty(false)
       toast.success(t('settings.compactionSaved'))
       // 仓库规范：设置页保存同时进 LogsView（对照 DeveloperModeSection / ProviderEditorCard）
       renderLog('info', 'Save:Settings', t('log.render.compactionPrefsSaved')
@@ -66,6 +87,12 @@ export default function ContextCompactionSection() {
     } finally {
       setSaving(false)
     }
+  }
+
+  const resetLearning = (): void => {
+    setLearning(l => resetCompressionLearning(l.enabled))
+    setLearningDirty(true)
+    toast.success(t('settings.learningResetDone'))
   }
 
   const row = (key: keyof CompactionPrefs, min: number, max: number, labelKey: string, descKey: string): React.ReactElement => (
@@ -112,6 +139,49 @@ export default function ContextCompactionSection() {
       {row('historyMaxTokens', 1000, 32000, 'settings.compactionHistory', 'settings.compactionHistoryDesc')}
       {row('minimumChangeTokens', 0, 2000, 'settings.compactionMinChange', 'settings.compactionMinChangeDesc')}
       {row('keepBatches', 0, 20, 'settings.compactionKeep', 'settings.compactionKeepDesc')}
+
+      {/* 自学习压缩 v1（实验性，默认关）：信号来自本地压缩事件（跳过/截断/保真缺失/移除），
+          只调提示与阈值倍率、只影响之后的压缩；可随时重置 */}
+      <div
+        className="rounded-lg p-3 space-y-2"
+        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex-1 min-w-0">
+            <Label className="text-xs">{t('settings.learningTitle')}</Label>
+            <p className="text-micro mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+              {t('settings.learningDesc')}
+            </p>
+          </div>
+          <Switch
+            checked={learning.enabled}
+            onCheckedChange={v => {
+              setLearning(l => ({ ...l, enabled: v }))
+              setLearningDirty(true)
+            }}
+            aria-label={t('settings.learningEnable')}
+          />
+        </div>
+        <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+          {t('settings.learningStats')
+            .replace('{compressions}', String(learning.stats.compressions))
+            .replace('{skipped}', String(learning.stats.skipped))
+            .replace('{truncations}', String(learning.stats.truncations))
+            .replace('{warns}', String(learning.stats.fidelityWarns))
+            .replace('{reverts}', String(learning.stats.reverts))
+            .replace('{regen}', String(learning.stats.regenerations))}
+        </p>
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-micro leading-relaxed min-w-0" style={{ color: 'var(--color-text-muted)' }}>
+            {activeRuleLabels(learning).length > 0
+              ? t('settings.learningRules').replace('{rules}', activeRuleLabels(learning).join('、'))
+              : t('settings.learningNoRules')}
+          </p>
+          <Button onClick={resetLearning} disabled={!loaded || saving}>
+            {t('settings.learningReset')}
+          </Button>
+        </div>
+      </div>
 
       <div className="flex items-center justify-end">
         <Button onClick={() => void save()} disabled={!loaded || saving}>

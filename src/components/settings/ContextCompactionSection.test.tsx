@@ -88,4 +88,54 @@ describe('ContextCompactionSection', () => {
     expect(container.textContent).toContain(t('settings.compactionLoadFailed'))
     act(() => { root.unmount() })
   })
+
+  // ===== 自学习压缩 v1（实验性开关）=====
+  it('默认关闭：开关 aria-checked=false；未触碰时保存载荷不含 compactionLearning（防陈旧覆盖）', async () => {
+    const { container, root } = render()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const sw = container.querySelector('[role="switch"]') as HTMLButtonElement
+    expect(sw).toBeTruthy()
+    expect(sw.getAttribute('aria-checked')).toBe('false')
+
+    const saveBtn = [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('action.save'))!
+    act(() => { saveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const payload = invoke.mock.calls.find(c => c[0] === 'config:set')?.[1] as Record<string, unknown>
+    expect('compactionLearning' in payload).toBe(false)
+    act(() => { root.unmount() })
+  })
+
+  it('开启开关 + 重置 → 保存时写入 compactionLearning（enabled=true、统计清零）', async () => {
+    invoke = vi.fn(async (ch: string) => {
+      if (ch === 'config:get') {
+        return {
+          compaction: { budgetPercent: 80, historyMaxTokens: 6000, minimumChangeTokens: 300, keepBatches: 2 },
+          compactionLearning: { enabled: false, minChangeFactor: 1.2, stats: { compressions: 5, skipped: 2 } },
+        }
+      }
+      if (ch === 'config:set') return { success: true }
+      return null
+    })
+    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+
+    const { container, root } = render()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const sw = container.querySelector('[role="switch"]') as HTMLButtonElement
+    act(() => { sw.dispatchEvent(new MouseEvent('click', { bubbles: true })) })   // 开启
+    const resetBtn = [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('settings.learningReset'))!
+    act(() => { resetBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    const saveBtn = [...container.querySelectorAll('button')].find(b => b.textContent?.trim() === t('action.save'))!
+    act(() => { saveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+
+    const payload = invoke.mock.calls.find(c => c[0] === 'config:set')?.[1] as {
+      compaction: unknown
+      compactionLearning: { enabled: boolean; minChangeFactor: number; stats: { compressions: number } }
+    }
+    expect(payload.compaction).toBeTruthy()                    // 保留偏好仍照写
+    expect(payload.compactionLearning.enabled).toBe(true)      // 开关落盘
+    expect(payload.compactionLearning.minChangeFactor).toBe(1) // 重置回默认
+    expect(payload.compactionLearning.stats.compressions).toBe(0)
+    act(() => { root.unmount() })
+  })
 })

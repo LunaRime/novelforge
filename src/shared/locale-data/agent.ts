@@ -371,6 +371,22 @@ export const agentTexts = {
   'ccr.summarySectionDecisions': { 'zh-CN': '## 已确认决策', 'en-US': '## Confirmed Decisions', 'ru-RU': '## Подтверждённые решения' },
   // 注入端按分节裁剪时，被裁分节的提示（防模型把残缺摘要当完整事实）
   'ccr.summaryPartial': { 'zh-CN': '（部分分节已省略）', 'en-US': '(some sections omitted)', 'ru-RU': '(часть разделов опущена)' },
+  // --- 自学习压缩 v1（TACO 式本地规则引擎，见 compression-learning.ts）---
+  // 学习到的提示（注入摘要 prompt；跟随界面语言）
+  'ccr.learnedHintsHeader': { 'zh-CN': '系统根据历史压缩效果自动学习的附加要求（务必遵守）：', 'en-US': 'Additional requirements learned from past compactions (must follow):', 'ru-RU': 'Дополнительные требования, выученные по прошлым сжатиям (обязательны):' },
+  'ccr.learnHintKeepTargets': { 'zh-CN': '摘要中必须保留所有写入/编辑过的文件路径', 'en-US': 'The summary must keep every written/edited file path', 'ru-RU': 'В сводке должны сохраняться все пути записанных/изменённых файлов' },
+  'ccr.learnHintKeepCharacters': { 'zh-CN': '摘要中必须保留出场的角色名', 'en-US': 'The summary must keep the names of characters that appeared', 'ru-RU': 'В сводке должны сохраняться имена появившихся персонажей' },
+  'ccr.learnHintKeepChapterRefs': { 'zh-CN': '摘要中必须保留涉及的章节号', 'en-US': 'The summary must keep every chapter number referenced', 'ru-RU': 'В сводке должны сохраняться все упомянутые номера глав' },
+  'ccr.learnHintOmitReadNoise': { 'zh-CN': '重复的只读工具输出（中间进度、无结论的重读）可省略，只保留结论', 'en-US': 'Repeated read-only tool output (progress noise, inconclusive re-reads) may be omitted; keep only conclusions', 'ru-RU': 'Повторяющийся вывод инструментов только для чтения (шум прогресса, безрезультатные перечитывания) можно опускать; сохраняйте только выводы' },
+  // 规则展示名（设置面板 + 学习决策日志）
+  'ccr.ruleKeepWriteTargets': { 'zh-CN': '保留写入目标', 'en-US': 'Keep write targets', 'ru-RU': 'Сохранять цели записи' },
+  'ccr.ruleKeepCharacters': { 'zh-CN': '保留角色名', 'en-US': 'Keep character names', 'ru-RU': 'Сохранять имена персонажей' },
+  'ccr.ruleKeepChapterRefs': { 'zh-CN': '保留章节号', 'en-US': 'Keep chapter numbers', 'ru-RU': 'Сохранять номера глав' },
+  'ccr.ruleOmitReadNoise': { 'zh-CN': '省略重复工具输出', 'en-US': 'Omit repeated tool output', 'ru-RU': 'Опускать повторяющийся вывод инструментов' },
+  // 学习决策留痕（renderLog）
+  'ccr.learnRuleActivated': { 'zh-CN': '自学习压缩：启用规则「{rule}」', 'en-US': 'Self-learning compaction: rule "{rule}" activated', 'ru-RU': 'Самообучающееся сжатие: правило «{rule}» включено' },
+  'ccr.learnRuleRetired': { 'zh-CN': '自学习压缩：退役规则「{rule}」（应用后未见改善）', 'en-US': 'Self-learning compaction: rule "{rule}" retired (no improvement after activation)', 'ru-RU': 'Самообучающееся сжатие: правило «{rule}» отключено (улучшения не было)' },
+  'ccr.learnFactorAdjusted': { 'zh-CN': '自学习压缩：最小降幅阈值 ×{factor}（根据跳过/截断反馈自适应）', 'en-US': 'Self-learning compaction: min-reduction threshold ×{factor} (adapted from skip/truncation feedback)', 'ru-RU': 'Самообучающееся сжатие: порог минимального сокращения ×{factor} (адаптация по пропускам/обрезке)' },
   'ccr.oldSummaryLabel': { 'zh-CN': '已有摘要：', 'en-US': 'Existing summary:', 'ru-RU': 'Существующая сводка:' },
   // P3 SharedContext：提取指令（[可复用事实] 是机器锚点，三语字面量恒为 [可复用事实]——不翻译，与 parseSharedFacts 解析锚点一致）
   'ccr.sharedFactsInstruction': { 'zh-CN': '如本次对话包含可跨会话复用的用户偏好或项目事实（例如写作偏好、角色设定、已确认的项目决策），请在摘要末尾另起一行输出 [可复用事实]，随后输出 3-5 条事实、每行一条，格式为「- 事实内容」。没有则省略。', 'en-US': 'If this conversation contains cross-session reusable user preferences or project facts (e.g. writing preferences, character settings, confirmed project decisions), append a line [可复用事实] at the end of the summary, then output 3-5 facts, one per line, formatted as "- fact content". Omit if none.', 'ru-RU': 'Если в этом диалоге есть переиспользуемые между сессиями предпочтения пользователя или факты проекта (например, предпочтения по стилю письма, настройки персонажей, подтверждённые решения по проекту), добавьте в конце сводки строку [可复用事实], затем укажите 3-5 фактов, по одному в строку в формате «- текст факта». Если таких фактов нет, ничего не добавляйте.' },

@@ -6,7 +6,7 @@ import { calculateCost } from '../llm/prompt-cache'
 import { parseSharedFacts, upsertSharedFacts } from '../memory/shared-memory'
 
 /** 组装 CCR 摘要 prompt：第 N 次压缩输入 = 旧 rollingSummary + 新压缩批原文（迭代规则见设计 §4.2） */
-export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): string {
+export function buildCcrSummaryPrompt(oldSummary: string, batchText: string, hints?: string[]): string {
   // P1-1：固定分节的标题字符串单一来源——prompt 里的 {facts}/{instructions}/{tasks}/{decisions}
   // 由分节标题键填充；注入端（context-builder.trimSessionSummary）按同源值跨语言裁剪
   const parts = [t('ccr.summaryPrompt')
@@ -14,6 +14,10 @@ export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): st
     .replace('{instructions}', t('ccr.summarySectionInstructions'))
     .replace('{tasks}', t('ccr.summarySectionTasks'))
     .replace('{decisions}', t('ccr.summarySectionDecisions'))]
+  // 自学习压缩 v1：激活规则的保留/省略提示（规则文本为 i18n 键，零注入风险）
+  if (hints && hints.length > 0) {
+    parts.push(`${t('ccr.learnedHintsHeader')}\n${hints.map(h => `- ${h}`).join('\n')}`)
+  }
   if (oldSummary) {
     parts.push(`${t('ccr.oldSummaryLabel')}\n${oldSummary}`)
   }
@@ -28,11 +32,13 @@ export async function generateConversationSummary(opts: {
   oldSummary: string
   batch: AgentMessage[]
   modelId: string
+  /** 自学习压缩：激活规则的提示（缺省 = 不追加，行为与引入前一致） */
+  hints?: string[]
 }): Promise<string> {
   const batchText = opts.batch
     .map(m => `${m.role === 'user' ? t('ccr.roleUser') : t('ccr.roleAssistant')}: ${m.content}`)
     .join('\n\n')
-  const prompt = buildCcrSummaryPrompt(opts.oldSummary, batchText)
+  const prompt = buildCcrSummaryPrompt(opts.oldSummary, batchText, opts.hints)
 
   // ⚠️ P0 修复：压缩摘要必须走 budget 路由（summarize→budget，设计 §7/计划 Global
   //    Constraints）——此前直接传 opts.modelId（Agent 的 elite/standard 模型），

@@ -21,7 +21,12 @@ import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffe
 import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteBatchOriginals, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
-import { collectBatchEntities, checkSummaryFidelity, shouldWarnFidelity } from '../services/agent/ccr-fidelity'
+import { collectBatchEntities, checkSummaryFidelity, shouldWarnFidelity, type FidelityEntityKind } from '../services/agent/ccr-fidelity'
+import {
+  resolveCompressionLearning, effectiveMinChangeTokens, composeLearningHints, applyCompressionOutcome,
+  recordCompressionRevert, recordCompressionRegeneration, defaultCompressionLearning,
+  type CompressionLearningState,
+} from '../services/agent/compression-learning'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
@@ -312,6 +317,22 @@ function linkParentAbort(controller: AbortController): () => void {
   const onAbort = (): void => controller.abort()
   parent.signal.addEventListener('abort', onAbort, { once: true })
   return () => parent.signal.removeEventListener('abort', onAbort)
+}
+
+/**
+ * 自学习压缩 v1：用户侧反馈事件（移除压缩 / 重生成摘要）——读配置 → 更新统计 → 写回。
+ * fire-and-forget：失败不影响主流程；关闭（默认）时零副作用。
+ */
+async function recordLearningFeedback(kind: 'revert' | 'regeneration'): Promise<void> {
+  try {
+    const cfg = await ipc.invoke('config:get') as { compactionLearning?: unknown } | null
+    const state = resolveCompressionLearning(cfg?.compactionLearning)
+    if (!state.enabled) return
+    const res = kind === 'revert' ? recordCompressionRevert(state) : recordCompressionRegeneration(state)
+    if (res.changed) await ipc.invoke('config:set', { compactionLearning: res.state })
+  } catch {
+    /* 学习统计失败不影响主流程 */
+  }
 }
 
 /** 从消息内容生成会话标题 */
@@ -815,11 +836,24 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // 只在历史**够得着**任何偏好的下界时才读配置（评审 Minor 8）：短对话下每次发消息都多一次
       // 同步 config:get（主进程 readFileSync + JSON.parse）纯属浪费；下界取钳制下限 1000
       let prefs = DEFAULT_COMPACTION_PREFS
+      // 自学习压缩 v1（默认关闭）：与 compaction 同一次 config:get 读取，零新增 IPC
+      let learning: CompressionLearningState = defaultCompressionLearning()
       if (totalHistoryTokens > COMPACTION_HISTORY_MIN_TOKENS) {
         try {
-          prefs = resolveCompactionPrefs(await ipc.invoke('config:get') as { compaction?: unknown } | null)
+          const cfg = await ipc.invoke('config:get') as { compaction?: unknown; compactionLearning?: unknown } | null
+          prefs = resolveCompactionPrefs(cfg)
+          learning = resolveCompressionLearning(cfg?.compactionLearning)
         } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
       }
+      // 自学习压缩：有效最小降幅 = 用户值 × 学习倍率（关闭时逐字等于用户值）
+      const effectiveMinChange = effectiveMinChangeTokens(prefs.minimumChangeTokens, learning)
+      // 本轮学习事件采集（默认关闭时零副作用；见文末 applyCompressionOutcome 调用）
+      let compressionAttempted = false
+      let compressionSkipped = false
+      let compressionSucceeded = false
+      let compressionGainRatio: number | undefined
+      let fidelityMissingKinds: FidelityEntityKind[] | undefined
+      let fidelityWarned = false
       // 线③ 后续：百分比预算——预算 = clamp(模型窗口 × budgetPercent%, 1000, 32000)；
       // 无窗口信息回退固定 historyMaxTokens（旧模式）
       const HISTORY_MAX_TOKENS = computeHistoryBudget(
@@ -830,10 +864,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         try {
           const { batch, rest } = selectCompressionBatch(currentConv.messages, HISTORY_MAX_TOKENS)
           if (batch.length > 0) {
+            compressionAttempted = true
             const summary = await generateConversationSummary({
               oldSummary: currentConv.rollingSummary ?? '',
               batch,
               modelId,
+              // 自学习压缩：激活规则的保留/省略提示（关闭或无激活规则 → 空数组，prompt 逐字同引入前）
+              hints: composeLearningHints(learning),
             })
             const batchTokens = batch.reduce((sum, m) => sum + estimateTokens(m.content), 0)
 
@@ -851,7 +888,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               characterNames: useCharacterStore.getState().characters.map(c => c.name),
             })
             const fidelity = checkSummaryFidelity(fidelityEntities, summaryWithReceipts)
-            if (shouldWarnFidelity(fidelity)) {
+            fidelityMissingKinds = fidelity.missingKinds
+            fidelityWarned = shouldWarnFidelity(fidelity)
+            if (fidelityWarned) {
               renderLog('warn', 'Agent', t('ccr.fidelityWarn')
                 .replace('{retained}', String(fidelity.retained))
                 .replace('{extracted}', String(fidelity.extracted)))
@@ -862,13 +901,16 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             // ⚠️ 口径必须含回执（评审 I9）：否则"有收益"可能是净增长
             const summaryTokens = estimateTokens(summaryWithReceipts)
             const changeTokens = batchTokens - summaryTokens
-            if (changeTokens < prefs.minimumChangeTokens) {
+            if (changeTokens < effectiveMinChange) {
+              compressionSkipped = true
               // B2：跳过必须留痕（spec §3.2，评审 I11）—— renderLog 是 agent-store 唯一的
               // 用户可见通道（落盘 + LogsView 展示）；否则用户不知道上下文已靠硬截断在丢消息
               renderLog('warn', 'Agent', t('ccr.compressionSkipped')
                 .replace('{before}', String(batchTokens))
                 .replace('{after}', String(summaryTokens)))
             } else {
+              compressionSucceeded = true
+              compressionGainRatio = batchTokens > 0 ? changeTokens / batchTokens : undefined
               // ⚠️ 批号必须取**历史最大值 + 1**，不能用 length+1 ——
               // "移除某压缩"会造成数组空洞，length 回落后新批号会与既有批次**撞号**，
               // 而分卷写入是同号覆盖 → 另一批原文被永久销毁（评审 C1）
@@ -964,6 +1006,28 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         renderLog('warn', 'Agent', t('ccr.historyTruncated')
           .replace('{n}', String(droppedMessages.length))
           .replace('{tokens}', String(panelHistoryTokens - historyTokens)))
+      }
+
+      // ===== 自学习压缩（v1）：事件驱动更新（TACO 式本地规则引擎；默认关闭时零副作用） =====
+      // 信号全部来自本轮已发生事件（跳过 / 截断 / 保真缺失），零新增 LLM 调用；
+      // 只在状态真的变化时写回配置（纯截断计数不单独触发——防长对话每轮 config:set），
+      // 每条决策经 renderLog 留痕（LogsView 可回放「学习器何时改了什么」）
+      if (learning.enabled && (compressionAttempted || droppedMessages.length > 0)) {
+        const update = applyCompressionOutcome(learning, {
+          attempted: compressionAttempted,
+          skipped: compressionSkipped,
+          success: compressionSucceeded,
+          gainRatio: compressionGainRatio,
+          missingKinds: fidelityMissingKinds,
+          fidelityWarned,
+          truncationDropped: droppedMessages.length,
+        })
+        if (update.changed) {
+          void ipc.invoke('config:set', { compactionLearning: update.state }).catch(() => {
+            console.warn('[Agent] 自学习压缩状态写入失败')
+          })
+          for (const ev of update.events) renderLog('info', 'Agent', ev.message)
+        }
       }
 
       // ===== P0-1：记录本轮实发口径（面板明细「历史：面板 X · 实发 Y」的数据源） =====
@@ -1641,6 +1705,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       }),
     }))
     get().persistCurrent(conv.id)
+    // 自学习压缩 v1：移除压缩 = 强负反馈（v1 只统计，不自动动作——移除动机多样，避免误伤）
+    void recordLearningFeedback('revert')
   },
 
   /**
@@ -1700,6 +1766,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       }),
     }))
     get().persistCurrent(conv.id)
+    // 自学习压缩 v1：重生成 = 弱负反馈（v1 只统计）
+    void recordLearningFeedback('regeneration')
   },
 
   rewindToMessage: (messageId) => {

@@ -63,6 +63,13 @@ export interface GlobalConfig {
   logRetention?: { files: number; days: number }
   /** 压缩保留偏好（§7.1-C2）：只影响之后的压缩；缺省/坏值一律回默认可读（见 compaction-prefs） */
   compaction?: { budgetPercent?: number; historyMaxTokens?: number; minimumChangeTokens?: number; keepBatches?: number }
+  /**
+   * 自学习压缩 v1 状态（TACO 式本地规则引擎）——**独立顶层键**：
+   * `config:set` 是顶层浅合并，设置页保存 `compaction` 时不得覆盖学习状态。
+   * 形状见 `src/services/agent/compression-learning.ts`（渲染层解析时逐字段防御，
+   * 主进程仅透传存储，故此处用 unknown 而非跨层 import）。
+   */
+  compactionLearning?: unknown
   /** LLM 并发配置（主进程启动时恢复，重启不丢） */
   concurrency?: { maxConcurrent: number; maxQueueSize: number }
   /** 模型路由三层配置（elite/standard/budget 模型 id 列表，重启不丢） */

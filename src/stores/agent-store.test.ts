@@ -1532,3 +1532,108 @@ describe('P1-2：压缩保真检查', () => {
       expect.stringContaining(t('ccr.fidelityWarn').split('：')[0]))
   })
 })
+
+// ===== 自学习压缩 v1：接线（默认关闭零副作用；开启后提示/统计/落盘） =====
+describe('自学习压缩 v1：接线', () => {
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useCharacterStore.setState({ characters: [] })
+  })
+
+  const seedLongHistory = async (withEntities = false) => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    if (withEntities) useCharacterStore.setState({ characters: [{ name: '苏晚晴' }] as never })
+    const msgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `sl${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: withEntities && i === 0
+        ? `苏晚晴要写第 3 章。${'历史消息占位。'.repeat(40)}`
+        : '历史消息占位。'.repeat(40),
+      createdAt: i,
+      ...(withEntities && i === 1
+        ? { toolCalls: [{ id: 'sltc', toolName: 'write_file', arguments: { file_path: 'drafts/c3.md' }, status: 'completed' as const }] }
+        : {}),
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs } : c),
+    }))
+    return conv
+  }
+
+  it('默认关闭：不注入学习提示、不写 compactionLearning（行为零变化）', async () => {
+    await seedLongHistory()
+    configResponse = { compaction: { historyMaxTokens: 1000 } }
+    const generateMock = vi.fn(async (messages: Array<{ role: string; content: string }>, modelId?: string, opts?: unknown) => {
+      void modelId
+      void opts
+      return { success: messages.length > 0, content: '短摘要', usage: undefined }
+    })
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const prompt = generateMock.mock.calls[0][0][0].content
+    expect(prompt).not.toContain(t('ccr.learnedHintsHeader'))
+    const setCalls = mockInvoke.mock.calls.filter(c => c[0] === 'config:set')
+    expect(setCalls.some(c => (c[1] as Record<string, unknown> | undefined)?.compactionLearning !== undefined)).toBe(false)
+  })
+
+  it('开启 + 预置激活规则：摘要 prompt 携带学习提示；成功后写回统计', async () => {
+    await seedLongHistory()
+    configResponse = {
+      compaction: { historyMaxTokens: 1000 },
+      compactionLearning: {
+        enabled: true,
+        rules: [{ id: 'keep-characters', active: true, evidence: 2, backfire: 0, evidenceAtLastDecision: 0, backfireAtActivation: 0 }],
+      },
+    }
+    const generateMock = vi.fn(async (messages: Array<{ role: string; content: string }>, modelId?: string, opts?: unknown) => {
+      void modelId
+      void opts
+      return { success: messages.length > 0, content: '短摘要', usage: undefined }
+    })
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const prompt = generateMock.mock.calls[0][0][0].content
+    expect(prompt).toContain(t('ccr.learnedHintsHeader'))
+    expect(prompt).toContain(t('ccr.learnHintKeepCharacters'))
+
+    await vi.waitFor(() => {
+      const call = mockInvoke.mock.calls.find(c =>
+        c[0] === 'config:set' && (c[1] as Record<string, unknown> | undefined)?.compactionLearning !== undefined)
+      expect(call).toBeTruthy()
+      const written = (call![1] as { compactionLearning: { stats: { compressions: number }; rules: Array<{ id: string; active: boolean }> } }).compactionLearning
+      expect(written.stats.compressions).toBe(1)
+      expect(written.rules.find(r => r.id === 'keep-characters')!.active).toBe(true)
+    })
+  })
+
+  it('保真缺失累计到门槛 → 规则激活并落盘 + LogsView 留痕', async () => {
+    await seedLongHistory(true)
+    configResponse = {
+      compaction: { historyMaxTokens: 1000 },
+      // 预置 1 条证据：本轮缺失再次 +1 → 达到门槛（2）激活
+      compactionLearning: { enabled: true, rules: [{ id: 'keep-characters', evidence: 1 }] },
+    }
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: '短摘要', usage: undefined })) as never })
+    const renderLogMock = vi.mocked(renderLog)
+    renderLogMock.mockClear()
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    expect(renderLogMock).toHaveBeenCalledWith('info', 'Agent',
+      expect.stringContaining(t('ccr.learnRuleActivated').split('：')[0]))
+    await vi.waitFor(() => {
+      const call = mockInvoke.mock.calls.find(c =>
+        c[0] === 'config:set' && (c[1] as Record<string, unknown> | undefined)?.compactionLearning !== undefined)
+      const written = (call![1] as { compactionLearning: { rules: Array<{ id: string; active: boolean; evidence: number }> } }).compactionLearning
+      const rule = written.rules.find(r => r.id === 'keep-characters')!
+      expect(rule.active).toBe(true)
+      expect(rule.evidence).toBe(2)
+    })
+  })
+})
