@@ -81,6 +81,13 @@ export const noticeTexts = {
   'metric.runningTasks': { 'zh-CN': '运行中', 'en-US': 'running', 'ru-RU': 'выполняется' },
   'metric.runningTasksHint': { 'zh-CN': '当前并发执行的任务数', 'en-US': 'Tasks running concurrently', 'ru-RU': 'Задач выполняется одновременно' },
 
+  // ===== ccr.* 明细面板（DSH ContextMeter 同款形态，2026-10-16）=====
+  // ⚠️ 既有 `ccr.*` key 在 locale-data/agent.ts（同一前缀、不同分片）—— 本段只放这次新增的。
+  'ccr.panelTitle': { 'zh-CN': '上下文已用 {percent}', 'en-US': '{percent} of context used', 'ru-RU': 'Использовано {percent} контекста' },
+  'ccr.usedOf': { 'zh-CN': '已用 / 上限', 'en-US': 'used / limit', 'ru-RU': 'использовано / лимит' },
+  'ccr.barHint': { 'zh-CN': '色条按四段占比着色，总长即占用百分比', 'en-US': 'The bar is tinted by the four sections; its length is the occupancy percentage', 'ru-RU': 'Полоса окрашена по четырём секциям; её длина — процент заполнения' },
+  'ccr.moreSegments': { 'zh-CN': '其它 {n} 段', 'en-US': '{n} more sections', 'ru-RU': 'Ещё секций: {n}' },
+
   // ===== theme.* / learning.* —— 仅新增（既有 key 在 ui.ts） =====
   'theme.appearance': { 'zh-CN': '界面主题', 'en-US': 'Appearance', 'ru-RU': 'Оформление' },
   'theme.appearanceDesc': { 'zh-CN': '选中即生效；与右侧图标栏底部的主题菜单同源，改一处两处同步', 'en-US': 'Applies immediately; same source as the theme menu at the bottom of the right activity bar', 'ru-RU': 'Применяется сразу; тот же источник, что и меню темы на правой панели' },
