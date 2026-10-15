@@ -70,6 +70,12 @@ export const agentTexts = {
   'ccr.batchInvalidated': { 'zh-CN': '已失效（历史已变动）', 'en-US': 'invalidated (history changed)', 'ru-RU': 'недействительно (история изменилась)' },
   'ccr.removeCompaction': { 'zh-CN': '移除该压缩', 'en-US': 'Remove this compaction', 'ru-RU': 'Убрать это сжатие' },
   'ccr.originalUnavailable': { 'zh-CN': '原文不可用（分卷已丢失）', 'en-US': 'Original text unavailable (shard lost)', 'ru-RU': 'Исходный текст недоступен (фрагмент утерян)' },
+  // P1-3：摘要重生成（移除压缩 / rewind 后摘要失效的修复路径）
+  'ccr.regenerateSummary': { 'zh-CN': '重生成摘要', 'en-US': 'Regenerate summary', 'ru-RU': 'Сгенерировать сводку заново' },
+  'ccr.regenerating': { 'zh-CN': '重生成中…', 'en-US': 'Regenerating…', 'ru-RU': 'Повторная генерация…' },
+  'ccr.regenerateFailed': { 'zh-CN': '摘要重生成失败：{error}', 'en-US': 'Failed to regenerate summary: {error}', 'ru-RU': 'Не удалось перегенерировать сводку: {error}' },
+  'ccr.regenerateNoOriginal': { 'zh-CN': '原文不可用（分卷已丢失），无法重生成', 'en-US': 'Original unavailable (shard lost); cannot regenerate', 'ru-RU': 'Оригинал недоступен (фрагмент утерян); регенерация невозможна' },
+  'ccr.regenerateNoModel': { 'zh-CN': '未配置可用模型，无法重生成摘要', 'en-US': 'No model available; cannot regenerate the summary', 'ru-RU': 'Нет доступной модели; невозможно перегенерировать сводку' },
   'ccr.compressionSkipped': { 'zh-CN': '本次压缩无收益（{before} → {after} tokens），已跳过', 'en-US': 'Compaction had no gain ({before} → {after} tokens); skipped', 'ru-RU': 'Сжатие без выигрыша ({before} → {after} токенов); пропущено' },
   'ccr.historyTruncated': { 'zh-CN': '本轮历史超出预算：{n} 条最旧消息未发送（约 {tokens} tokens，消息未删除）', 'en-US': 'History over budget: {n} oldest message(s) not sent this turn (~{tokens} tokens; not deleted)', 'ru-RU': 'История превышает бюджет: {n} старейших сообщений не отправлено (~{tokens} токенов; не удалены)' },
   'agent.skillCatalogOmitted': { 'zh-CN': '（还有 {n} 个技能未列出，可用 skill 工具查看全部）', 'en-US': '({n} more skills not listed — use the skill tool to see all)', 'ru-RU': '(ещё {n} навыков не показано — используйте инструмент skill)' },
@@ -353,7 +359,15 @@ export const agentTexts = {
   'roleplay.newConversation': { 'zh-CN': '试演：{name}', 'en-US': 'Roleplay: {name}', 'ru-RU': 'Ролевая игра: {name}' },
   'roleplay.created': { 'zh-CN': '已创建「{title}」会话并打开 AI 面板——试试说句话吧', 'en-US': 'Conversation "{title}" created and AI panel opened — say something!', 'ru-RU': 'Создан диалог «{title}», панель ИИ открыта — попробуйте заговорить!' },
   // --- CCR 上下文压缩（对话摘要生成，见 ccr-summary.ts）---
-  'ccr.summaryPrompt': { 'zh-CN': '请将以下对话历史压缩为简洁的中文摘要，保留：关键事实、用户指令、未完成任务、已确认的决策。不要编造对话中未出现的信息。输出纯摘要文本。', 'en-US': 'Compress the following conversation history into a concise summary. Keep: key facts, user instructions, unfinished tasks, and confirmed decisions. Do not invent information absent from the conversation. Output only the summary text.', 'ru-RU': 'Сожмите следующую историю диалога в краткую сводку. Сохраните: ключевые факты, указания пользователя, незавершённые задачи и принятые решения. Не выдумывайте информацию, отсутствующую в диалоге. Выведите только текст сводки.' },
+  // P1-1：固定分节 + 长度硬上限（{facts}/{instructions}/{tasks}/{decisions} 占位符由
+  // buildCcrSummaryPrompt 用下方分节标题键填充——标题字符串单一来源，注入端按同源值裁剪）
+  'ccr.summaryPrompt': { 'zh-CN': '请将以下对话历史压缩为简洁的中文摘要。必须使用以下四个固定分节，分节标题原样保留、按此顺序输出：{facts}、{instructions}、{tasks}、{decisions}。总长不超过 250 tokens（约 400 个汉字）。不要编造对话中未出现的信息。输出纯摘要文本。', 'en-US': 'Compress the following conversation history into a concise summary. Use the following four fixed sections, keeping the section headings verbatim and in this order: {facts}, {instructions}, {tasks}, {decisions}. Total length must not exceed 250 tokens (~400 Chinese characters). Do not invent information absent from the conversation. Output only the summary text.', 'ru-RU': 'Сожмите следующую историю диалога в краткую сводку. Используйте четыре фиксированных раздела, сохраняя заголовки дословно и в этом порядке: {facts}, {instructions}, {tasks}, {decisions}. Общая длина — не более 250 токенов (~400 иероглифов). Не выдумывайте информацию, отсутствующую в диалоге. Выведите только текст сводки.' },
+  'ccr.summarySectionFacts': { 'zh-CN': '## 关键事实', 'en-US': '## Key Facts', 'ru-RU': '## Ключевые факты' },
+  'ccr.summarySectionInstructions': { 'zh-CN': '## 用户指令', 'en-US': '## User Requests', 'ru-RU': '## Запросы пользователя' },
+  'ccr.summarySectionTasks': { 'zh-CN': '## 未完成任务', 'en-US': '## Open Tasks', 'ru-RU': '## Незавершённые задачи' },
+  'ccr.summarySectionDecisions': { 'zh-CN': '## 已确认决策', 'en-US': '## Confirmed Decisions', 'ru-RU': '## Подтверждённые решения' },
+  // 注入端按分节裁剪时，被裁分节的提示（防模型把残缺摘要当完整事实）
+  'ccr.summaryPartial': { 'zh-CN': '（部分分节已省略）', 'en-US': '(some sections omitted)', 'ru-RU': '(часть разделов опущена)' },
   'ccr.oldSummaryLabel': { 'zh-CN': '已有摘要：', 'en-US': 'Existing summary:', 'ru-RU': 'Существующая сводка:' },
   // P3 SharedContext：提取指令（[可复用事实] 是机器锚点，三语字面量恒为 [可复用事实]——不翻译，与 parseSharedFacts 解析锚点一致）
   'ccr.sharedFactsInstruction': { 'zh-CN': '如本次对话包含可跨会话复用的用户偏好或项目事实（例如写作偏好、角色设定、已确认的项目决策），请在摘要末尾另起一行输出 [可复用事实]，随后输出 3-5 条事实、每行一条，格式为「- 事实内容」。没有则省略。', 'en-US': 'If this conversation contains cross-session reusable user preferences or project facts (e.g. writing preferences, character settings, confirmed project decisions), append a line [可复用事实] at the end of the summary, then output 3-5 facts, one per line, formatted as "- fact content". Omit if none.', 'ru-RU': 'Если в этом диалоге есть переиспользуемые между сессиями предпочтения пользователя или факты проекта (например, предпочтения по стилю письма, настройки персонажей, подтверждённые решения по проекту), добавьте в конце сводки строку [可复用事实], затем укажите 3-5 фактов, по одному в строку в формате «- текст факта». Если таких фактов нет, ничего не добавляйте.' },

@@ -13,6 +13,8 @@ import type { CompressedBatch } from '../../../services/agent/archive-codec'
 
 const storeMock = vi.hoisted(() => ({
   removeCompaction: vi.fn(async () => {}),
+  regenerateBatchSummary: vi.fn(async () => {}),
+  generating: false,
   loadBatchOriginal: vi.fn(async () => [
     { id: 'o1', role: 'user' as const, content: '被压缩的原文', createdAt: 1 },
   ]),
@@ -101,5 +103,24 @@ describe('CompressedBatchCard（B 档第二轮 T7）', () => {
     expect(el.querySelectorAll('button button')).toHaveLength(0)
     await act(async () => { main.click() })
     expect(storeMock.loadBatchOriginal).toHaveBeenCalled()
+  })
+
+  // ===== P1-3：摘要重生成入口 =====
+  it('P1-3：批次失效（invalidated）出现「重生成摘要」→ 调 regenerateBatchSummary', async () => {
+    const el = render(<CompressedBatchCard batch={batch({ invalidated: true })} />)
+    const btn = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('重生成'))!
+    expect(btn).toBeTruthy()
+    await act(async () => { btn.click() })
+    expect(storeMock.regenerateBatchSummary).toHaveBeenCalledWith(1)
+  })
+
+  it('P1-3：会话级失效（summaryStale）同样给出入口；健康批次不出现', () => {
+    const stale = render(<CompressedBatchCard batch={batch()} summaryStale />)
+    expect(Array.from(stale.querySelectorAll('button')).some(b => b.textContent?.includes('重生成'))).toBe(true)
+  })
+
+  it('P1-3：健康批次不出现重生成入口（避免无失效时误触重算）', () => {
+    const el = render(<CompressedBatchCard batch={batch()} />)
+    expect(Array.from(el.querySelectorAll('button')).some(b => b.textContent?.includes('重生成'))).toBe(false)
   })
 })

@@ -340,13 +340,14 @@ function ActiveConversation() {
               {t('ccr.restoreProjectHint').replace('{name}', activeConv.projectName).replace('{current}', currentProjectName)}
             </div>
           )}
-          {/* CCR 压缩事件卡片：已折叠批次（按 batch 序，早的在前） */}
+          {/* CCR 压缩事件卡片：已折叠批次（按 batch 序，早的在前）；
+              P1-3：会话级摘要失效时各卡片给出「重生成摘要」修复入口 */}
           {(activeConv.compressed ?? [])
             .slice()
             .sort((a, b) => a.batch - b.batch)
             .filter(b => b.summary)
             .map(b => (
-              <CompressedBatchCard key={b.batch} batch={b} />
+              <CompressedBatchCard key={b.batch} batch={b} summaryStale={activeConv.rollingSummaryInvalidated === true} />
             ))}
           {visibleMessages.map(msg => (
             <div key={msg.id}>

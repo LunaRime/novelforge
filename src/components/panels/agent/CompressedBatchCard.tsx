@@ -19,12 +19,22 @@ const receiptsMarker = (): string => t('ccr.receiptsHeader')
  *   既非真实请求降幅、也不含注入截断）
  * - **原文按需读分卷**：原文已移出会话 JSON，展开时才从 `.originals.json` 取
  * - **回执独立成段**：副作用回执与摘要正文分开渲染，便于核对"这批做过什么"
+ *
+ * P1-3：摘要失效（`batch.invalidated` 或会话级 `summaryStale`——移除某批/rewind 后
+ * 迭代链已断）时给出「重生成摘要」按钮：读分卷原文以**该批为唯一输入**重建并恢复注入。
  */
-export default function CompressedBatchCard({ batch }: { batch: CompressedBatch }) {
+export default function CompressedBatchCard({ batch, summaryStale = false }: {
+  batch: CompressedBatch
+  /** 会话级摘要失效（rollingSummaryInvalidated；card 拿不到会话，由父传入） */
+  summaryStale?: boolean
+}) {
   const [expanded, setExpanded] = useState(false)
   const [originals, setOriginals] = useState<AgentMessage[] | null>(null)
+  const [regenerating, setRegenerating] = useState(false)
   const loadBatchOriginal = useAgentStore(s => s.loadBatchOriginal)
   const removeCompaction = useAgentStore(s => s.removeCompaction)
+  const regenerateBatchSummary = useAgentStore(s => s.regenerateBatchSummary)
+  const generating = useAgentStore(s => s.generating)
 
   // 真实降幅（B2）；旧档案无实测值时回落到估算
   const hasRealDelta = batch.changeTokens !== undefined
@@ -62,6 +72,20 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
     setExpanded(v => !v)
   }
 
+  /** P1-3：重生成摘要（以该批分卷原文为唯一输入；busy 期间防双击） */
+  const handleRegenerate = async () => {
+    if (regenerating) return
+    setRegenerating(true)
+    try {
+      await regenerateBatchSummary(batch.batch)
+    } finally {
+      setRegenerating(false)
+    }
+  }
+
+  // 摘要需要重生成：批次级失效（rewind 等）或会话级失效（移除某批后链断）
+  const needsRegenerate = batch.invalidated === true || summaryStale
+
   return (
     <div
       className="mx-2 my-2 rounded-lg px-3 py-2 text-xs"
@@ -93,6 +117,17 @@ export default function CompressedBatchCard({ batch }: { batch: CompressedBatch 
             className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer"
           >
             {t('ccr.removeCompaction')}
+          </button>
+        )}
+        {recoverable && needsRegenerate && (
+          <button
+            type="button"
+            onClick={() => void handleRegenerate()}
+            disabled={regenerating || generating}
+            style={{ color: 'var(--color-accent)' }}
+            className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {regenerating ? t('ccr.regenerating') : t('ccr.regenerateSummary')}
           </button>
         )}
       </div>

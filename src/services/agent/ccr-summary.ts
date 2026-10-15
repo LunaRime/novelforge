@@ -7,7 +7,13 @@ import { parseSharedFacts, upsertSharedFacts } from '../memory/shared-memory'
 
 /** 组装 CCR 摘要 prompt：第 N 次压缩输入 = 旧 rollingSummary + 新压缩批原文（迭代规则见设计 §4.2） */
 export function buildCcrSummaryPrompt(oldSummary: string, batchText: string): string {
-  const parts = [t('ccr.summaryPrompt')]
+  // P1-1：固定分节的标题字符串单一来源——prompt 里的 {facts}/{instructions}/{tasks}/{decisions}
+  // 由分节标题键填充；注入端（context-builder.trimSessionSummary）按同源值跨语言裁剪
+  const parts = [t('ccr.summaryPrompt')
+    .replace('{facts}', t('ccr.summarySectionFacts'))
+    .replace('{instructions}', t('ccr.summarySectionInstructions'))
+    .replace('{tasks}', t('ccr.summarySectionTasks'))
+    .replace('{decisions}', t('ccr.summarySectionDecisions'))]
   if (oldSummary) {
     parts.push(`${t('ccr.oldSummaryLabel')}\n${oldSummary}`)
   }

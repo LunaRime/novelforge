@@ -1353,3 +1353,100 @@ describe('P0-1：sendObservations（实发口径，仅内存态）', () => {
     expect(useAgentStore.getState().sendObservations).toEqual({})
   })
 })
+
+// ===== P1-3：regenerateBatchSummary（移除压缩 / rewind 后的摘要修复路径） =====
+describe('P1-3：regenerateBatchSummary', () => {
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+  })
+
+  /** 构造带 2 个可恢复批次 + 分卷原文的会话 */
+  const seedBatches = async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const compressed = [1, 2].map(i => ({
+      batch: i, original: [], summary: `旧摘要${i}`, compressedAt: i, originalTokens: 500, recoverable: true,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id
+        ? {
+            ...c,
+            compressed,
+            rollingSummary: '链式旧摘要',
+            messages: [{ id: 'm0', role: 'user' as const, content: '现存历史', createdAt: 0 }],
+          }
+        : c),
+    }))
+    for (const i of [1, 2]) {
+      await writeBatchOriginal(conv.id, i, [{ id: `o${i}`, role: 'user', content: `第${i}批原文`, createdAt: i }])
+    }
+    return conv
+  }
+
+  it('移除批次 → 摘要失效 → 重生成：以分卷原文为唯一输入，恢复 M1 注入', async () => {
+    const conv = await seedBatches()
+    await useAgentStore.getState().removeCompaction(2)
+    let after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.rollingSummaryInvalidated).toBe(true)   // 移除后摘要失效（不再注入）
+
+    const generateMock = vi.fn(
+      async (messages: Array<{ role: string; content: string }>, modelId?: string, opts?: unknown) => {
+        void modelId
+        void opts
+        return { success: messages.length > 0, content: '重生成摘要 v2', usage: undefined }
+      },
+    )
+    useLLMStore.setState({ generate: generateMock as never })
+    await useAgentStore.getState().regenerateBatchSummary(1)
+
+    after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed).toHaveLength(1)
+    expect(after.compressed![0].summary).toBe('重生成摘要 v2')
+    expect(after.compressed![0].invalidated).toBe(false)
+    expect(after.rollingSummary).toBe('重生成摘要 v2')          // 摘要恢复注入（失效标记清除）
+    expect(after.rollingSummaryInvalidated).toBe(false)
+    // 唯一输入语义：prompt 含该批原文、不含其余批次内容
+    const messagesArg = generateMock.mock.calls[0][0] as Array<{ content: string }>
+    expect(messagesArg[0].content).toContain('第1批原文')
+    expect(messagesArg[0].content).not.toContain('第2批原文')
+    // 历史未被改动（重生成只动摘要）
+    expect(after.messages.some(m => m.content === '现存历史')).toBe(true)
+  })
+
+  it('生成失败 → 留痕且不污染状态（批次摘要保持原样）', async () => {
+    const conv = await seedBatches()
+    const renderLogMock = vi.mocked(renderLog)
+    useLLMStore.setState({ generate: vi.fn(async () => { throw new Error('LLM 挂了') }) as never })
+    await useAgentStore.getState().regenerateBatchSummary(1)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed![0].summary).toBe('旧摘要1')
+    expect(renderLogMock).toHaveBeenCalledWith('error', 'Agent',
+      expect.stringContaining(t('ccr.regenerateFailed').split('：')[0]))
+  })
+
+  it('分卷不可用（recoverable=false）→ 可读错误，不产生状态变化', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id
+        ? { ...c, compressed: [{ batch: 1, original: [], summary: '旧', compressedAt: 0, originalTokens: 500, recoverable: false }] }
+        : c),
+    }))
+    const renderLogMock = vi.mocked(renderLog)
+    await useAgentStore.getState().regenerateBatchSummary(1)
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed![0].summary).toBe('旧')
+    expect(renderLogMock).toHaveBeenCalledWith('error', 'Agent', t('ccr.regenerateNoOriginal'))
+  })
+
+  it('生成中（generating）不可重生成（与 rewind 同款守卫）', async () => {
+    const conv = await seedBatches()
+    useAgentStore.setState({ generating: true })
+    const generateMock = vi.fn(async () => ({ success: true, content: 'X', usage: undefined }))
+    useLLMStore.setState({ generate: generateMock as never })
+    await useAgentStore.getState().regenerateBatchSummary(1)
+    expect(generateMock).not.toHaveBeenCalled()
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    expect(after.compressed![0].summary).toBe('旧摘要1')
+  })
+})

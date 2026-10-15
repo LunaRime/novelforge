@@ -223,6 +223,9 @@ interface AgentState {
   loadBatchOriginal: (batch: number) => Promise<AgentMessage[] | null>
   /** B3：移除该压缩 —— 原文插回历史、批次移出 compressed、摘要重算 */
   removeCompaction: (batch: number) => Promise<void>
+  /** P1-3：读分卷原文重生成该批摘要（移除压缩 / rewind 后摘要失效的修复路径）。
+   *  以该批原文为**唯一输入**重建（剩余批次的迭代链已断）；成功后清除失效标记恢复 M1 注入 */
+  regenerateBatchSummary: (batch: number) => Promise<void>
   /** 恢复第 entryIndex 个 rewind 归档：归档消息 append 回 messages（rewind 可逆）；
    *  返回是否成功；无归档或索引无效返回 false */
   restoreRewound: (entryIndex: number) => boolean
@@ -1617,6 +1620,65 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           // 诚实的做法是标记"需重生成"（用户可经分卷原文重生成）
           rollingSummary: remaining.length > 0 ? c.rollingSummary : undefined,
           rollingSummaryInvalidated: remaining.length > 0 || undefined,
+          updatedAt: Date.now(),
+        }
+      }),
+    }))
+    get().persistCurrent(conv.id)
+  },
+
+  /**
+   * P1-3：读分卷原文重生成该批摘要（设计已承诺、此前缺失）。
+   *
+   * 语义（评审注意）：以**该批原文为唯一输入**重建（oldSummary = ''）——移除批次后
+   * 剩余批次的迭代链已断，任何"拼接式重建"都会与既有摘要契约（迭代合并）冲突；
+   * 重建结果成为新的 M1 并清除失效标记（摘要恢复注入）。不改动历史消息。
+   */
+  regenerateBatchSummary: async (batch) => {
+    const conv = get().getActiveConversation()
+    if (!conv) return
+    // 生成期间禁止：与 rewind 同款守卫（历史/摘要写回会和流式回收竞争）
+    if (get().generating) return
+    const target = (conv.compressed ?? []).find(b => b.batch === batch)
+    if (!target) return
+
+    // 分卷缺失 / 标记不可恢复 → 可读错误（不静默）
+    const originals = target.recoverable === false ? null : await readBatchOriginal(conv.id, batch)
+    if (!originals || originals.length === 0) {
+      renderLog('error', 'Agent', t('ccr.regenerateNoOriginal'))
+      return
+    }
+    const modelId = conv.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
+    if (!modelId) {
+      renderLog('error', 'Agent', t('ccr.regenerateNoModel'))
+      return
+    }
+
+    let summary: string
+    try {
+      summary = await generateConversationSummary({ oldSummary: '', batch: originals, modelId })
+    } catch (e) {
+      // 失败不污染状态（批次/摘要保持原样，用户可重试）
+      renderLog('error', 'Agent', t('ccr.regenerateFailed').replace('{error}', () => String(e)))
+      return
+    }
+    // 回执与压缩主路径同口径（头插，防重放）
+    const receipts = extractSideEffectReceipts(originals)
+    const summaryWithReceipts = receipts.length > 0
+      ? `${t('ccr.receiptsHeader')}\n${receipts.map(r => `- ${r.tool} → ${r.target} (${r.outcome})`).join('\n')}\n\n${summary}`
+      : summary
+
+    set(state => ({
+      conversations: state.conversations.map(c => {
+        if (c.id !== conv.id) return c
+        return {
+          ...c,
+          compressed: (c.compressed ?? []).map(b => (b.batch === batch
+            ? { ...b, summary: summaryWithReceipts, invalidated: false }
+            : b)),
+          // 重建摘要成为新的 M1；失效标记清除 → 恢复注入（历史未变，观测保持有效）
+          rollingSummary: summaryWithReceipts,
+          rollingSummaryInvalidated: false,
           updatedAt: Date.now(),
         }
       }),

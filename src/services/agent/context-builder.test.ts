@@ -13,14 +13,17 @@ import {
   buildAgentSystemPromptAsync,
   assembleFinalPrompt,
   computeToolPromptBudget,
+  trimSessionSummary,
   SYSTEM_PROMPT_BUDGET_TOKENS,
+  SESSION_SUMMARY_BUDGET_TOKENS,
 } from './context-builder'
-import { estimateTokens, initTokenEngine } from './token-budget'
+import { estimateTokens, truncateToTokenBudget, initTokenEngine } from './token-budget'
 import { useAgentStore } from '../../stores/agent-store'
 import { skillRegistry } from './skill-registry'
 import { toolRegistry } from './tool-registry'
 import { registerBuiltinTools } from './tools'
 import { buildSharedFile } from '../memory/shared-memory'
+import { t, UI_TEXTS } from '../../shared/locale'
 
 // ⚠️ 本文件的预算断言统一按 tiktoken(cl100k) 口径（与生产一致）：强制加载编码器，
 // 避免「先跑的用例没加载、后跑的已加载」造成的 estimator 漂移
@@ -532,5 +535,61 @@ describe('工具段预算随工具数伸缩（P0-3）', () => {
     } finally {
       for (const name of registered) toolRegistry.unregister(name)
     }
+  })
+})
+
+describe('P1-1：会话摘要注入端按分节裁剪（trimSessionSummary）', () => {
+  /** 组装四节摘要；facts/instructions 用可调规模撑爆预算 */
+  const buildSections = (factsRepeat: number, instructionsRepeat: number): string => [
+    `${t('ccr.summarySectionFacts')}\n${'事实'.repeat(factsRepeat)}`,
+    `${t('ccr.summarySectionInstructions')}\n${'指令'.repeat(instructionsRepeat)}`,
+    `${t('ccr.summarySectionTasks')}\n写第 3 章`,
+    `${t('ccr.summarySectionDecisions')}\n主角改名苏晚晴`,
+  ].join('\n\n')
+
+  it('超长有分节：保住「未完成任务 + 已确认决策」，细节分节被裁并带省略提示', () => {
+    const out = trimSessionSummary(buildSections(400, 400))
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SESSION_SUMMARY_BUDGET_TOKENS)
+    expect(out).toContain(t('ccr.summarySectionTasks'))
+    expect(out).toContain('写第 3 章')
+    expect(out).toContain(t('ccr.summarySectionDecisions'))
+    expect(out).toContain('主角改名苏晚晴')
+    expect(out).toContain(t('ccr.summaryPartial'))
+    // 细节分节整段裁掉（不是砍半句）
+    expect(out).not.toContain('事实'.repeat(400))
+    expect(out).not.toContain('指令'.repeat(400))
+  })
+
+  it('回执段恒保留（防重放核心），细节分节可裁', () => {
+    const summary = `${t('ccr.receiptsHeader')}\n- write_file → drafts/c1.md (ok)\n\n${buildSections(400, 400)}`
+    const out = trimSessionSummary(summary)
+    expect(out).toContain('- write_file → drafts/c1.md (ok)')
+    expect(out).toContain('写第 3 章')
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SESSION_SUMMARY_BUDGET_TOKENS)
+  })
+
+  it('旧格式（无分节标题）：回落保头截断，行为不劣化', () => {
+    const legacy = '长摘要内容'.repeat(400)
+    const out = trimSessionSummary(legacy)
+    expect(out).toBe(truncateToTokenBudget(legacy, SESSION_SUMMARY_BUDGET_TOKENS))
+    expect(out).not.toContain(t('ccr.summaryPartial'))
+  })
+
+  it('正常长度：零改动', () => {
+    const short = `${t('ccr.summarySectionTasks')}\n写第 3 章`
+    expect(trimSessionSummary(short)).toBe(short)
+  })
+
+  it('跨语言分节标题可匹配（en 生成的摘要切到 zh 界面仍裁得对）', () => {
+    const en = UI_TEXTS as Record<string, Record<string, string>>
+    const summary = [
+      `${en['ccr.summarySectionFacts']['en-US']}\n${'fact '.repeat(300)}`,
+      `${en['ccr.summarySectionTasks']['en-US']}\nwrite chapter 3`,
+      `${en['ccr.summarySectionDecisions']['en-US']}\nrename protagonist`,
+    ].join('\n\n')
+    const out = trimSessionSummary(summary)
+    expect(out).toContain('write chapter 3')
+    expect(out).toContain('rename protagonist')
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SESSION_SUMMARY_BUDGET_TOKENS)
   })
 })
