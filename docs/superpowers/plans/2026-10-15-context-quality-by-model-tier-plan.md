@@ -1,6 +1,6 @@
 # 上下文治理二期：不拖累强模型、抬高弱模型（以小说生成质量为目标的上下文计划）
 
-> **状态**：**计划稿（未实施，待拍板）**——只写目标、判据、改法与验收，不含已落地代码。
+> **状态**：**批 1 已执行（2026-10-15）**——S1（口径降级可见）+ S2/W2（任务锚点）+ C1（阈值逐字断言）已落地并全绿；**批 2（W1 策略层）/ 批 3（W3+W4+用例集）未开工**，S4 仍为评估项。执行记录见 §8。
 > **日期**：2026-10-15 ｜ **行号基线**：master `52a4972`（附录 B 评审修复已入库并推送，CI 三平台绿）
 > **目标重述（用户拍板口径）**：**让好模型发挥它原有的性能；让差模型在此基础上再上一层。**
 > **依据**：`2026-10-14-agent-context-hardening-plan.md`（含附录 A 实测 / 附录 B 修复）、`2026-10-15-self-learning-compression-design.md`、本仓实测数据（工具契约 3612 tokens、base 2150→4577、启发式/tiktoken ≈ 1.68×）
@@ -169,3 +169,26 @@
 | 自动召回误注入无关记忆 | 阈值对齐 `scoreMemoryEntry` 现有分档，仅 `manual` 条目，≤400 tokens，可关闭 |
 | 未完成自检把简单请求变啰嗦 | 仅弱档 + 每会话至多一次 + 可关闭 |
 | 度量缺基线导致"改了但说不清好坏" | 批 1 起同步落 §4 用例集，先测基线再改 |
+
+## 8. 执行记录
+
+### 批 1（2026-10-15）
+
+**落地内容**
+
+| 项 | 实现 | 测试 |
+|---|---|---|
+| S1 口径降级可见 | `token-budget.ts` 增 `TokenEngineState`（`unknown`/`exact`/`heuristic`）+ `getTokenEngineState()`，`initTokenEngine()` 返回状态；`agent-store.initializeTools` 在降级时写 store 标记 + `renderLog('warn')`；`ContextBudgetBar` 明细弹层显示降级行（`tokenEngineDegraded` 由 AgentConversation 传入） | `token-budget.degraded.test.ts`（3 例，`vi.mock` 抛错模拟加载失败）+ `ContextBudgetBar.test.tsx`（降级/未降级各 1 例） |
+| S2/W2 任务锚点 | 新增 `task-anchor.ts`（纯函数，硬上限 120 tokens）；`assembleFinalPrompt` 增 `taskAnchor` part（**排在 manual 之后、语言指令之前**）；`buildAgentSystemSegmentsAsync` 每轮由「本轮用户消息 + 最近 30 条消息的失败回执」重建，并推 `task-anchor` 明细段 | `task-anchor.test.ts`（8 例：空/命令/首句/截断/失败回执/成功回执/失败后成功/硬上限）+ `context-builder.test.ts`（4 例：注入与位置、命令轮不注入、明细段与面板预览、失败回执跨轮保留） |
+| C1 阈值逐字 | 无需改代码（仅补断言） | `agent-store.test.ts` 1 例：先测出真实降幅 C，再验证「关闭 + 持久化倍率 0.5 → 仍逐字用用户值（跳过）」与「开启同一倍率 → 缩放生效（压缩）」 |
+
+**门禁**：`typecheck` 0 错 / `lint` 0 警告 / **231 文件 2721 测试全绿**（较批前 +2 文件 +18 用例）。
+
+**与计划的偏差（都是刻意，写在这里以免被当遗漏）**
+
+1. **锚点截断策略**：计划写"超 120 tokens 即截断"，实现改为**先给固定部分留额、只截诉求**——否则整段硬截断会先吃掉结尾那句「（本轮任务锚点，非历史消息…）」，而那正是防止模型把锚点误当新指令的关键。新增用例锁定"声明不被截掉"。
+2. **未接 `detectWritingIntent` 的意图标签**：计划 §S2 提到复用意图解析；本批只用"用户诉求首句 + 失败回执"（零语言耦合、零额外依赖），意图标签留待批 2 与 W1 的策略层一起接。
+3. **面板预览看不到锚点**：`AgentConversation.useAsyncSegments` 调 `buildAgentSystemSegmentsAsync(mode)` 不传 `userMessage`（避免每次按键重跑 `memory:list` IPC），故锚点只在**真实发送**的 system prompt 里存在。这是有意的取舍：面板显示的是稳态段，锚点是每轮瞬态。
+4. **锚点计入 `SYSTEM_PROMPT_BUDGET_TOKENS`**（不享常驻/manual 的独立预算），但**不参与降级链的丢弃顺序**（链只丢 M1/M2、裁 L1/Tool）——与计划一致。
+
+**批 1 未覆盖的验证面**：§4 的离线用例集（跨轮事实保持 / 长任务不跑偏）尚未建立，因此**锚点的收益目前只有单元与结构证据，没有端到端数字**。这正是批 3 的第一件事；在它落地前，不应把"锚点提升生成质量"当作已验证结论。
