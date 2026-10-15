@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight } from 'lucide-react'
+import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight, MoreHorizontal } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -23,6 +23,11 @@ import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
+import { MenuItem } from '../../ui/MenuItem'
+import { PopoverSurface } from '../../ui/PopoverSurface'
+import { useOutsideClick } from '../../../hooks/useOutsideClick'
+import { useEscapeKey } from '../../../hooks/useEscapeKey'
+import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 
 /**
  * 对话区域主组件
@@ -59,6 +64,8 @@ function EmptyState() {
   const { t } = useTranslation()
   // 最近会话条数默认 3，可通过全局配置 recentConversationCount 覆盖（读取失败/非法值静默降级为 3）
   const [recentCount, setRecentCount] = useState(3)
+  // 「更多」菜单互斥：同一列表里只有一行的菜单能打开（card-affordance-standard §1.2 第 4 条）
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
   useEffect(() => {
     let cancelled = false
     ipc.invoke('config:get')
@@ -119,6 +126,8 @@ function EmptyState() {
                   title={conv.title}
                   updatedAt={conv.updatedAt}
                   onClick={() => selectConversation(conv.id)}
+                  menuOpen={openMenuId === conv.id}
+                  onMenuOpenChange={open => setOpenMenuId(cur => (open ? conv.id : cur === conv.id ? null : cur))}
                   onDelete={async () => {
                     const ok = await confirm(
                       t('agent.confirmDeleteConversation').replace('{title}', conv.title),
@@ -501,6 +510,8 @@ function AgentHistoryPanel() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({})
   const [renamingWs, setRenamingWs] = useState<string | null>(null)
   const [wsDraft, setWsDraft] = useState('')
+  // 「更多」菜单互斥：同一列表里只有一行的菜单能打开（card-affordance-standard §1.2 第 4 条）
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   // title 查找表：fork 子会话标注父会话标题（父会话已被删除时 get 返回 undefined → 不标注，静默降级）
   const titleById = useMemo(() => {
@@ -605,14 +616,17 @@ function AgentHistoryPanel() {
                     <span className="truncate">{g.name}</span>
                     <span className="flex-shrink-0 opacity-60">({g.items.length})</span>
                   </button>
-                  {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示） */}
+                  {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示；热区同会话行 32×32） */}
                   <div
-                    className="flex items-center gap-0.5 flex-shrink-0 opacity-0 group-hover/ws:opacity-100 group-focus-within/ws:opacity-100 transition-opacity duration-150"
+                    className={`${ACT_BAR} flex-shrink-0 opacity-0 group-hover/ws:opacity-100 group-focus-within/ws:opacity-100 transition-opacity duration-150`}
                     style={{ color: 'var(--color-text-secondary)' }}
                   >
                     <button
+                      type="button"
                       className={ACT_BTN}
+                      style={ACT_BTN_SIZE}
                       title={t('agent.newChatInWorkspace')}
+                      aria-label={t('agent.newChatInWorkspace')}
                       onClick={() => createConversation({
                         // 空串 = 不关联项目（未关联项目组）；传 undefined 会回落到「当前项目」而非留空
                         projectPath: g.key === '__none__' ? '' : g.key,
@@ -622,15 +636,21 @@ function AgentHistoryPanel() {
                       <Plus size={12} />
                     </button>
                     <button
+                      type="button"
                       className={ACT_BTN}
+                      style={ACT_BTN_SIZE}
                       title={t('agent.renameWorkspace')}
+                      aria-label={t('agent.renameWorkspace')}
                       onClick={() => { setWsDraft(g.name); setRenamingWs(g.key) }}
                     >
                       <Pencil size={12} />
                     </button>
                     <button
+                      type="button"
                       className={ACT_BTN}
+                      style={ACT_BTN_SIZE}
                       title={t('agent.deleteWorkspace')}
+                      aria-label={t('agent.deleteWorkspace')}
                       onClick={async () => {
                         const ok = await confirm(
                           t('agent.deleteWorkspaceConfirm')
@@ -656,6 +676,8 @@ function AgentHistoryPanel() {
                   pinned={conv.pinned}
                   archived={conv.archived}
                   onClick={() => selectConversation(conv.id)}
+                  menuOpen={openMenuId === conv.id}
+                  onMenuOpenChange={open => setOpenMenuId(cur => (open ? conv.id : cur === conv.id ? null : cur))}
                   onDelete={async () => {
                     const ok = await confirm(
                       t('agent.confirmDeleteConversation').replace('{title}', conv.title),
@@ -680,12 +702,20 @@ function AgentHistoryPanel() {
 // ===== 最近会话列表项 =====
 
 /**
- * 会话项 hover 工具条里的小图标按钮统一样式（含 focus-visible 焦点环）。
+ * 会话列表行内的小图标按钮统一样式。
  * ⚠️ 2026-09-27：原写 `w-5 h-5`（rem 制）在本仓 `html{font-size:14px}` 下实渲染 17.5px，
  * 低于 20×20 底线——旧注释写了「16×16 → 20×20」但数值没改对（标准 §5 的 rem 陷阱）。
- * 改用原生 px 任意值，9 处调用点随此常量一并达标。
+ * ⚠️ 2026-10-13：热区由 20×20 收到 **32×32**（card-affordance-standard §5.2 桌面口径，
+ * §5.3 登记的 `ACT_BTN` 差距按批核销）；尺寸走 `ACT_BTN_SIZE` 固定像素，不写进类名。
+ * 图标视觉仍 12px，只涨热区；hover 一律同令牌 `--color-hover`。
  */
-const ACT_BTN = 'flex items-center justify-center w-[20px] h-[20px] rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
+const ACT_BTN = 'flex items-center justify-center rounded cursor-pointer hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
+const ACT_BTN_SIZE = { width: 32, height: 32 }
+/**
+ * 操作组排布：`gap-2.5`（8.75px）+ 32px = **相邻中心距 40.75px**，
+ * 同时满足 §5.2 的「间距 ≥40px」与「热区 ≥32×32」两个下限。
+ */
+const ACT_BAR = 'flex items-center gap-2.5'
 
 function RecentConversationItem({
   title,
@@ -696,6 +726,8 @@ function RecentConversationItem({
   archived,
   onClick,
   onDelete,
+  menuOpen,
+  onMenuOpenChange,
   onRename,
   onTogglePin,
   onToggleArchive,
@@ -710,6 +742,9 @@ function RecentConversationItem({
   archived?: boolean
   onClick: () => void
   onDelete: () => void
+  /** 「更多」菜单开关：状态由调用方持有 —— 同一列表内互斥（打开 A 行强制关闭 B 行） */
+  menuOpen: boolean
+  onMenuOpenChange: (open: boolean) => void
   /** 以下四项可选：空状态里的「最近会话」列表不提供这些管理操作 */
   onRename?: (title: string) => void
   onTogglePin?: () => void
@@ -723,6 +758,16 @@ function RecentConversationItem({
   // 原形态 onKeyDown 只判 Enter（缺 Space）、且容器内含 5 个真按钮（button 角色不得有交互后代）。
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(title)
+  // 「更多」菜单锚点 = 触发按钮所在的容器（useFloatingPosition 用容器算 fixed 坐标，
+  // 不受列表 overflow 裁剪；264px 面板里绝对定位会被裁掉）
+  const moreAnchorRef = useRef<HTMLDivElement>(null)
+  const moreMenuRef = useFloatingPosition<HTMLDivElement>(moreAnchorRef, menuOpen, { placement: 'below', align: 'end' })
+  // 通用浮层三件套（ui-interaction-standard §1）：Esc + 点击外部 + 菜单项点击时显式关闭。
+  // 「点击外部」的检测范围 = 右侧整块（含触发按钮与菜单本体）——若只包触发按钮，
+  // mousedown 会先把菜单判成外部并卸载，click 永远落不到菜单项上。
+  const rightRef = useRef<HTMLDivElement>(null)
+  useOutsideClick(rightRef, () => onMenuOpenChange(false), menuOpen)
+  useEscapeKey(() => onMenuOpenChange(false), menuOpen)
 
   if (editing) {
     return (
@@ -772,26 +817,36 @@ function RecentConversationItem({
         )}
       </button>
 
-      {/* 右侧：固定宽度容器，时间与操作组绝对定位重叠，hover 时 opacity 过渡（零布局跳动） */}
-      <div className="flex-shrink-0 ml-1 relative" style={{ width: 88, height: 16 }}>
+      {/* 右侧：**按内容自适应**（不再写死 88px —— 那正是「hover 亮起却点不动」的根因：
+          5×20 + 4×gap = 107px 已溢出容器）。时间与操作组用 grid 叠在同一格做 opacity 交叉渐隐，
+          hover/focus 时**零布局跳动**；容器自身不点亮，只有按钮在各自 32×32 热区内亮
+          —— hover 边界 ⊆ 热区边界（死带禁令，card-affordance-standard §3） */}
+      <div ref={rightRef} className="flex-shrink-0 ml-1 grid items-center justify-items-end" style={{ minHeight: 32 }}>
         <span
-          className="absolute right-0 top-0 text-micro whitespace-nowrap opacity-60 transition-opacity duration-150 group-hover:opacity-0 group-focus-within:opacity-0"
+          className={`col-start-1 row-start-1 text-micro whitespace-nowrap transition-opacity duration-150 ${
+            menuOpen ? 'opacity-0' : 'opacity-60 group-hover:opacity-0 group-focus-within:opacity-0'
+          }`}
           style={{ color: 'var(--color-text-muted)' }}
         >
           {formatRelativeTime(updatedAt)}
         </span>
-        {/* 操作组（2026-09-22）：置顶 / 重命名 / 分叉 / 归档 / 删除 —— 主按钮的兄弟节点。
+        {/* 操作组（2026-09-22）：置顶 / 重命名 常驻为兄弟按钮，分叉 / 归档 / 删除 收进「更多」菜单
+            （5 个横排按 32×32 需 167px，而 AI 面板仅 264px 宽 —— §5.3 的「必须先收进更多菜单」）。
             2026-09-27：不再需要 stopPropagation（外层已无点击处理器） */}
         <div
-          className="absolute right-0 top-0 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity duration-150"
+          className={`col-start-1 row-start-1 ${ACT_BAR} transition-opacity duration-150 ${
+            menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+          }`}
           style={{ color: 'var(--color-text-secondary)' }}
         >
-          {/* 以下四项管理操作仅在调用方提供回调时渲染（空状态的「最近会话」列表不提供） */}
+          {/* 以下两项主操作仅在调用方提供回调时渲染（空状态的「最近会话」列表不提供） */}
           {onTogglePin && (
             <button
               type="button"
               className={ACT_BTN}
+              style={ACT_BTN_SIZE}
               title={pinned ? t('agent.unpinConversation') : t('agent.pinConversation')}
+              aria-label={pinned ? t('agent.unpinConversation') : t('agent.pinConversation')}
               onClick={() => onTogglePin?.()}
             >
               <Pin size={12} />
@@ -801,41 +856,56 @@ function RecentConversationItem({
             <button
               type="button"
               className={ACT_BTN}
+              style={ACT_BTN_SIZE}
               title={t('agent.renameConversation')}
-              onClick={() => { setDraft(title); setEditing(true) }}
+              aria-label={t('agent.renameConversation')}
+              onClick={() => { onMenuOpenChange(false); setDraft(title); setEditing(true) }}
             >
               <Pencil size={12} />
             </button>
           )}
-          {onDuplicate && (
+          {/* 「更多」触发器：自身 32×32 且 hover 覆盖自身全热区；菜单项不参与行 hover */}
+          <div className="relative" ref={moreAnchorRef}>
             <button
               type="button"
               className={ACT_BTN}
-              title={t('agent.duplicateConversation')}
-              onClick={() => onDuplicate?.()}
+              style={ACT_BTN_SIZE}
+              title={t('tip.moreOptions')}
+              aria-label={t('tip.moreOptions')}
+              aria-haspopup="menu"
+              aria-expanded={menuOpen}
+              onClick={() => onMenuOpenChange(!menuOpen)}
             >
-              <GitFork size={12} />
+              <MoreHorizontal size={14} />
             </button>
-          )}
-          {onToggleArchive && (
-            <button
-              type="button"
-              className={ACT_BTN}
-              title={archived ? t('agent.unarchiveConversation') : t('agent.archiveConversation')}
-              onClick={() => onToggleArchive?.()}
-            >
-              <Archive size={12} />
-            </button>
-          )}
-          <button
-            type="button"
-            className={ACT_BTN}
-            title={t('agent.deleteConversation')}
-            onClick={() => onDelete()}
-          >
-            <Trash2 size={12} />
-          </button>
+          </div>
         </div>
+        {/* 菜单渲染在操作组**之外**：操作组带 opacity 门控，套在里面会连菜单一起透明 */}
+        {menuOpen && (
+          <PopoverSurface ref={moreMenuRef} className="py-1" style={{ minWidth: 180 }}>
+            {onDuplicate && (
+              <MenuItem
+                icon={<GitFork size={12} />}
+                label={t('agent.duplicateConversation')}
+                onClick={() => { onMenuOpenChange(false); onDuplicate() }}
+              />
+            )}
+            {onToggleArchive && (
+              <MenuItem
+                icon={<Archive size={12} />}
+                label={archived ? t('agent.unarchiveConversation') : t('agent.archiveConversation')}
+                onClick={() => { onMenuOpenChange(false); onToggleArchive() }}
+              />
+            )}
+            {/* 删除 = 不可逆且低频：菜单末尾 + danger 着色 + 既有二次确认 */}
+            <MenuItem
+              icon={<Trash2 size={12} />}
+              label={t('agent.deleteConversation')}
+              danger
+              onClick={() => { onMenuOpenChange(false); onDelete() }}
+            />
+          </PopoverSurface>
+        )}
       </div>
     </div>
   )

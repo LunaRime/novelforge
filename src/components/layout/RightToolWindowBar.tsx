@@ -1,8 +1,10 @@
 import { useRef, useState } from 'react'
-import { Bot, Sparkles, PenLine, Sun, Moon, ScrollText } from 'lucide-react'
+import { Bot, Sparkles, PenLine, Sun } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
-import { useThemeStore, type Theme } from '../../stores/theme-store'
+import { useThemeStore } from '../../stores/theme-store'
+import { applyThemeWithTransition } from '../../lib/theme-transition'
+import { THEME_ICONS, THEME_ORDER, themeLabel } from '../../lib/theme-meta'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -10,14 +12,7 @@ import { t } from '../../shared/locale'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 
-/** 主题图标映射（原标题栏；标题栏移除后随主题切换按钮一起搬来） */
-const themeIcons: Record<Theme, typeof Sun> = {
-  light: Sun,
-  galaxy: Sparkles,
-  paper: ScrollText,
-  dark: Moon,
-}
-const themeOrder: Theme[] = ['galaxy', 'dark', 'light', 'paper']
+// 主题图标 / 展示顺序 / 名称取值统一在 ../../lib/theme-meta（与「设置 → 编辑器」的主题卡片同源）
 
 /**
  * 右侧工具窗口栏（RightToolWindowBar）
@@ -38,43 +33,13 @@ export default function RightToolWindowBar() {
   const currentRun = useWorkflowStore((s) => s.currentRun)
 
   // ── 主题切换（原标题栏逻辑：四主题菜单直选 + 以点击点为圆心的视图过渡动画）──
+  // 过渡实现已抽到 ../../lib/theme-transition（设置 → 编辑器的主题卡片共用同一实现）
   const theme = useThemeStore(s => s.theme)
-  const setTheme = useThemeStore(s => s.setTheme)
   const [themeMenuOpen, setThemeMenuOpen] = useState(false)
   const themeMenuRef = useRef<HTMLDivElement>(null)
   useOutsideClick(themeMenuRef, () => setThemeMenuOpen(false), themeMenuOpen)
   useEscapeKey(() => setThemeMenuOpen(false), themeMenuOpen)
-  const ThemeIcon = themeIcons[theme] || Sun
-  const themeLabel = (id: Theme) => id === 'galaxy' ? ti('theme.starry') : id === 'paper' ? ti('theme.paper') : id === 'dark' ? ti('theme.dark') : ti('theme.light')
-
-  const applyThemeWithTransition = (nextTheme: Theme, e: React.MouseEvent) => {
-    if (
-      !('startViewTransition' in document) ||
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    ) {
-      setTheme(nextTheme)
-      return
-    }
-    const x = e.clientX
-    const y = e.clientY
-    const endRadius = Math.hypot(
-      Math.max(x, innerWidth - x),
-      Math.max(y, innerHeight - y)
-    )
-    const transition = (document as Document & { startViewTransition?: (cb: () => void) => { ready: Promise<void> } }).startViewTransition!(() => {
-      setTheme(nextTheme)
-    })
-    transition.ready.then(() => {
-      const clipPath = [
-        `circle(0px at ${x}px ${y}px)`,
-        `circle(${endRadius}px at ${x}px ${y}px)`
-      ]
-      document.documentElement.animate(
-        { clipPath },
-        { duration: 450, easing: 'cubic-bezier(0.4, 0, 0.2, 1)', pseudoElement: '::view-transition-new(root)' }
-      )
-    })
-  }
+  const ThemeIcon = THEME_ICONS[theme] || Sun
 
   /** 工作流活跃时给 AI 输出按钮显示脉冲 */
   const showPulse = currentRun && (currentRun.status === 'running' || currentRun.status === 'waiting')
@@ -181,7 +146,7 @@ export default function RightToolWindowBar() {
       <div className="relative w-full" ref={themeMenuRef}>
         <button
           onClick={() => setThemeMenuOpen(v => !v)}
-          title={ti('theme.label').replace('{theme}', themeLabel(theme))}
+          title={ti('theme.label').replace('{theme}', themeLabel(theme, ti))}
           className="tool-btn"
           style={{ height: 30, color: 'var(--color-activity-icon)', anchorName: '--menu-theme' } as React.CSSProperties}
         >
@@ -194,13 +159,13 @@ export default function RightToolWindowBar() {
             className="overflow-hidden py-1"
             style={{ minWidth: 128 }}
           >
-            {themeOrder.map(id => {
-              const Icon = themeIcons[id]
+            {THEME_ORDER.map(id => {
+              const Icon = THEME_ICONS[id]
               return (
                 <MenuItem
                   key={id}
                   icon={<Icon size={12} />}
-                  label={themeLabel(id)}
+                  label={themeLabel(id, ti)}
                   selected={theme === id}
                   onClick={(e) => { applyThemeWithTransition(id, e); setThemeMenuOpen(false) }}
                 />

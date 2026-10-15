@@ -18,6 +18,7 @@ import { editorTexts } from './editor'
 import { projectTexts } from './project'
 import { uiTexts } from './ui'
 import { automationTexts } from './automation'
+import { noticeTexts } from './notice'
 
 export const UI_TEXTS_DATA = {
   ...logTexts,
@@ -32,4 +33,5 @@ export const UI_TEXTS_DATA = {
   ...projectTexts,
   ...uiTexts,
   ...automationTexts,
+  ...noticeTexts,
 } as const

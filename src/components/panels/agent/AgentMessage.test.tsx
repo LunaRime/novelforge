@@ -98,6 +98,45 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
+  it('底部操作条：5 个图标按钮热区均 32×32（图标视觉仍 12px）+ aria-label + 同令牌 hover', () => {
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onFork={vi.fn()} onRewind={vi.fn()} />)
+    // 复制 / 满意 / 不满意 / 分支 / 回退 —— 按 zh-CN title 逐个取（键值断言，避免键名 cast）
+    const titles = ['复制消息', '有帮助', '没帮助', '从此处分支', '回退到此处']
+    for (const title of titles) {
+      const btn = container.querySelector<HTMLButtonElement>(`[title="${title}"]`)
+      expect(btn, `缺少按钮：${title}`).toBeTruthy()
+      // card-affordance-standard §5.2：桌面热区 ≥32×32，固定像素（不是 rem 档位倒推）
+      expect(btn!.style.width).toBe('32px')
+      expect(btn!.style.height).toBe('32px')
+      // ui-interaction-standard §3.2：title 服务看得见的人，aria-label 服务读屏，两者都要
+      expect(btn!.getAttribute('aria-label')).toBe(title)
+      // 单图标按钮必须有 hover 底色变化，且与行片同令牌
+      expect(btn!.className).toContain('hover:bg-[var(--color-hover)]')
+    }
+    // §5.2 相邻中心距 ≥40px：32px + gap-2.5(8.75px) = 40.75px
+    const bar = container.querySelector<HTMLElement>('[title="复制消息"]')!.parentElement!
+    expect(bar.className).toContain('gap-2.5')
+    // 操作条容器自身不点亮（否则留死带）
+    expect(bar.className).not.toContain('hover:bg-')
+    // 形态 A：操作按钮是外层 div 的兄弟，不存在 button 嵌 button
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
+    act(() => { root.unmount() })
+  })
+
+  it('末条回退禁用：热区仍 32×32，但禁用态不挂 hover 底色（禁用三件套之一）', () => {
+    const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} onRewind={vi.fn()} rewindDisabled />)
+    const btn = container.querySelector<HTMLButtonElement>('[title="最后一条消息，无需回退"]')
+    expect(btn).toBeTruthy()
+    expect(btn!.disabled).toBe(true)
+    expect(btn!.style.width).toBe('32px')
+    expect(btn!.style.height).toBe('32px')
+    expect(btn!.className).not.toContain('hover:bg-')
+    expect(btn!.style.cursor).toBe('not-allowed')
+    act(() => { root.unmount() })
+  })
+
   it('用户消息（role=user）气泡变体：右对齐 + 内容原样 + 气泡下方只有时间与复制', () => {
     const onFork = vi.fn()
     const onRewind = vi.fn()
@@ -122,6 +161,32 @@ describe('AgentMessage 分支操作', () => {
     expect(container.querySelector('[title="复制消息"]')).toBeTruthy()
     expect(onFork).not.toHaveBeenCalled()
     expect(onRewind).not.toHaveBeenCalled()
+    act(() => { root.unmount() })
+  })
+
+  it('用户消息那一行：时间 + 复制同处一条，复制热区 32×32；行容器不点亮（无死带）', () => {
+    const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    const copy = container.querySelector<HTMLButtonElement>('[title="复制消息"]')
+    expect(copy).toBeTruthy()
+    // 热区口径与助手消息一致：32×32 固定像素
+    expect(copy!.style.width).toBe('32px')
+    expect(copy!.style.height).toBe('32px')
+    expect(copy!.getAttribute('aria-label')).toBe('复制消息')
+    // 时间与按钮同处一条（同一行容器）
+    const row = copy!.parentElement as HTMLElement
+    expect(row.className).toContain('items-center')
+    expect(row.querySelectorAll('button')).toHaveLength(1)
+    // 时间仍是纯文本：不可点、无手型、无 hover 暗示
+    const time = row.querySelector('span') as HTMLElement
+    expect(time).toBeTruthy()
+    expect(time.className).not.toContain('cursor-pointer')
+    expect(time.className).not.toContain('hover:bg-')
+    // 死带禁令（§3）：行容器自身不点亮 —— hover 亮起的边界只有按钮的 32×32 热区，
+    // 不存在「亮了却点不动」的时间段/内边距
+    expect(row.className).not.toContain('hover:bg-')
+    expect(row.getAttribute('role')).toBeNull()
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
     act(() => { root.unmount() })
   })
 

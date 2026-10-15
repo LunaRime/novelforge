@@ -221,7 +221,8 @@ export const workflowTexts = {
   'nextStep.waiting': { 'zh-CN': '等待指令响应...', 'en-US': 'Awaiting response...', 'ru-RU': 'Ожидание ответа...' },
   // --- 对话内工作流进度入口（线② 2b）---
   'workflow.progressTitle': { 'zh-CN': '工作流', 'en-US': 'Workflow', 'ru-RU': 'Рабочий процесс' },
-  'workflow.progressSummary': { 'zh-CN': '已完成 {done} 步 · 运行中 {running}', 'en-US': '{done} done · {running} running', 'ru-RU': '{done} готово · {running} выполняется' },
+  // 原 `workflow.progressSummary`（「已完成 N 步 · 运行中 M」）已删除（2026-10 六项 UI 改进）：
+  // 该 `·` 串与行尾任务数重复表达，现由 metric.workflowSteps / metric.runningTasks 两个 chip 承担。
   // --- 单字段生成工作流（线③ 第 2 条：统一执行路径）---
   'workflow.generateFieldTitle': { 'zh-CN': '生成「{label}」', 'en-US': 'Generate "{label}"', 'ru-RU': 'Генерация «{label}»' },
   'workflow.generateFieldDesc': { 'zh-CN': '为「{label}」AI 生成内容', 'en-US': 'AI-generate content for "{label}"', 'ru-RU': 'ИИ-генерация «{label}»' },

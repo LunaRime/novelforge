@@ -224,4 +224,51 @@ describe('ContextCompactionSection', () => {
     expect('compactionLearning' in payload).toBe(false)
     act(() => { root.unmount() })
   })
+
+  // ===== 2026-10 §2.4：统计行改指标 chip（一条 `·` 串 → 6 个按功能个性化的指标）=====
+  it('统计行：6 个 MetricChip（顺序 / 语气 / 说明齐全），全 0 也照常渲染', async () => {
+    const { container, root } = render()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    const chips = [...container.querySelectorAll('[data-metric-chip]')] as HTMLElement[]
+    expect(chips).toHaveLength(6)
+    expect(chips.map(c => c.querySelector('[data-metric-label]')!.textContent)).toEqual([
+      t('metric.compactions'), t('metric.skipped'), t('metric.truncations'),
+      t('metric.fidelityWarns'), t('metric.reverts'), t('metric.regenerations'),
+    ])
+    // 全 0 也逐片渲染：0 是信息（学习尚未积累），不做整行隐藏
+    expect(chips.map(c => c.querySelector('[data-metric-value]')!.textContent))
+      .toEqual(['0', '0', '0', '0', '0', '0'])
+    // 语气：截断 / 保真告警 / 移除 = 要留意（warn），压缩 / 跳过 / 重生成 = 中性过程量
+    expect(chips.map(c => c.getAttribute('data-tone')))
+      .toEqual(['neutral', 'neutral', 'warn', 'warn', 'warn', 'neutral'])
+    // 解释型 tooltip：这个数是什么、来自哪
+    expect(chips.map(c => c.getAttribute('title'))).toEqual([
+      t('metric.compactionsHint'), t('metric.skippedHint'), t('metric.truncationsHint'),
+      t('metric.fidelityWarnsHint'), t('metric.revertsHint'), t('metric.regenerationsHint'),
+    ])
+    act(() => { root.unmount() })
+  })
+
+  it('统计行：数值取自盘上学习统计（不是写死的 0）', async () => {
+    invoke = vi.fn(async (ch: string) => {
+      if (ch === 'config:get') {
+        return {
+          compaction: { budgetPercent: 80, historyMaxTokens: 6000, minimumChangeTokens: 300, keepBatches: 2 },
+          compactionLearning: {
+            enabled: true,
+            stats: { compressions: 3, skipped: 1, truncations: 2, fidelityWarns: 4, reverts: 5, regenerations: 6 },
+          },
+        }
+      }
+      if (ch === 'config:set') return { success: true }
+      return null
+    })
+    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+
+    const { container, root } = render()
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    expect([...container.querySelectorAll('[data-metric-value]')].map(el => el.textContent))
+      .toEqual(['3', '1', '2', '4', '5', '6'])
+    act(() => { root.unmount() })
+  })
 })

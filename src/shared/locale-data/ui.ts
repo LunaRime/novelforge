@@ -24,8 +24,10 @@ export const uiTexts = {
   // --- 自学习压缩（v1 实验性；设置开关 + 统计 + 重置）---
   'settings.learningTitle': { 'zh-CN': '自学习压缩（实验性）', 'en-US': 'Self-learning compaction (experimental)', 'ru-RU': 'Самообучающееся сжатие (экспериментально)' },
   'settings.learningEnable': { 'zh-CN': '启用自学习压缩', 'en-US': 'Enable self-learning compaction', 'ru-RU': 'Включить самообучающееся сжатие' },
-  'settings.learningDesc': { 'zh-CN': '默认关闭。开启后：根据本地压缩事件（跳过 / 硬截断 / 保真缺失 / 用户移除）自适应调整「最小有效降幅」的倍率（±50% 以内），并把学习到的保留/省略要求追加到摘要提示；所有调整均写日志、可一键重置。只影响之后的压缩——不训练模型、不额外调用 LLM。', 'en-US': 'Off by default. When enabled: adapts the minimum-reduction multiplier (within ±50%) from local compaction events (skips / hard truncations / fidelity misses / user reverts), and appends learned keep/omit requirements to the summary prompt. Every adjustment is logged and resettable. Future compactions only — no model training, no extra LLM calls.', 'ru-RU': 'По умолчанию выключено. При включении: адаптирует множитель минимального сокращения (±50%) по локальным событиям (пропуски / обрезка / потери точности / отмены пользователем) и добавляет выученные требования к промпту сводки. Все изменения журналируются и сбрасываются. Только будущие сжатия — без обучения модели и лишних вызовов LLM.' },
-  'settings.learningStats': { 'zh-CN': '压缩 {compressions} · 跳过 {skipped} · 截断 {truncations} · 保真告警 {warns} · 移除 {reverts} · 重生成 {regen}', 'en-US': 'Compacted {compressions} · skipped {skipped} · truncated {truncations} · fidelity warnings {warns} · reverts {reverts} · regenerations {regen}', 'ru-RU': 'Сжатий {compressions} · пропусков {skipped} · обрезано {truncations} · предупреждений {warns} · отмен {reverts} · перегенераций {regen}' },
+  // 说明文字（2026-10 六项 UI 改进）：原 `settings.learningDesc` 的 130+ 字整段 + `settings.learningStats`
+  // 的「压缩 0 · 跳过 0 · …」`·` 串一并删除 —— 前者按项目约定收敛为 learning.summaryShort + 说明折叠
+  // （见 locale-data/notice.ts 的 learning.* 段），后者改为按功能个性化的 chip 行（metric.* 段）。
+  // ⚠️ 不要再把「A · B · C」形态的统计串加回字典：那是用户明确否掉的形态。
   'settings.learningRules': { 'zh-CN': '激活规则：{rules}', 'en-US': 'Active rules: {rules}', 'ru-RU': 'Активные правила: {rules}' },
   // 规则列表分隔符（此前硬编码中文顿号「、」，英/俄界面会出现中文标点）
   'settings.learningRulesSeparator': { 'zh-CN': '、', 'en-US': ', ', 'ru-RU': ', ' },

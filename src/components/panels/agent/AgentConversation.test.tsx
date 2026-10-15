@@ -136,8 +136,8 @@ describe('RecentConversationItem hover 行为', () => {
     useAgentStore.setState({ conversations: [], activeConversationId: null, showHistory: false, memoryView: false })
   })
 
-  it('右侧区域为固定宽度容器且时间/删除按钮无 hidden 切换类', () => {
-    // 构造：一条有消息的会话但当前激活会话为空 → EmptyState 渲染 RecentConversationItem
+  /** 构造：一条有消息的会话但当前激活会话为空 → EmptyState 渲染 RecentConversationItem */
+  const makeEmptyStateRow = () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useAgentStore.setState(state => ({
       conversations: state.conversations.map(c => c.id === conv.id ? {
@@ -146,36 +146,105 @@ describe('RecentConversationItem hover 行为', () => {
       } : c),
       activeConversationId: null,
     }))
-    const { container, root } = render(<AgentConversation />)
+    return conv
+  }
 
-    // 2026-09-27 起：行外层是普通 div（class 含 group token），主区域/工具条是兄弟按钮；
-    // 重命名编辑态走独立渲染分支（input 不进主按钮）
-    const row = Array.from(container.querySelectorAll<HTMLElement>('.group'))
-      .find(el => el.className.split(' ').includes('group'))
+  /** 会话行外层（外层 token 恰为 group；内层按钮为 group-hover:* 不算） */
+  const rowOf = (container: HTMLElement, text?: string): HTMLElement => {
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('.group'))
+      .filter(el => el.className.split(' ').includes('group'))
+    const row = text ? rows.find(r => r.textContent?.includes(text)) : rows[0]
     expect(row).toBeTruthy()
-    // 操作组里**最后一个**才是删除（前面还有 置顶 / 重命名 / 分叉 / 归档）
-    const opBtns = Array.from(row!.querySelectorAll<HTMLButtonElement>('button[title]'))
-    const deleteBtn = opBtns[opBtns.length - 1]
-    const timeSpan = row!.querySelector<HTMLSpanElement>('span[class*="group-hover:opacity-0"]')!
-    expect(deleteBtn).toBeTruthy()
+    return row!
+  }
+
+  it('右侧容器按内容自适应（不再写死 88px），时间/操作组 opacity 交叉渐隐 + 键盘等价', () => {
+    makeEmptyStateRow()
+    const { container, root } = render(<AgentConversation />)
+    const row = rowOf(container)
+
+    // 断言 1：不再写死宽度 —— 根因是 88px 容器里塞 5×20 + gap = 107px（已溢出，
+    // hover 亮起的范围里含点不动的按钮）。改为按内容自适应（grid 叠放同一格）。
+    const rightBox = row.lastElementChild as HTMLElement
+    expect(rightBox.style.width).toBe('')
+    expect(rightBox.className).toContain('grid')
+    // 断言 2：时间元素走类而非内联 opacity（内联会压过 group-hover:opacity-0，hover 永不淡出）
+    const timeSpan = rightBox.querySelector<HTMLSpanElement>('span[class*="group-hover:opacity-0"]')!
     expect(timeSpan).toBeTruthy()
+    expect(timeSpan.style.opacity).toBe('')
+    expect(timeSpan.className).toContain('opacity-60')
+    // 断言 3：操作组容器做 opacity 淡入，hover 与 focus-within（键盘等价）两半都在
+    const actions = rightBox.querySelector<HTMLElement>('[class*="group-hover:opacity-100"]')!
+    expect(actions).toBeTruthy()
+    expect(actions.className).toContain('group-focus-within:opacity-100')
+    // 反向的一半：悬停隐藏同样要有键盘等价
+    expect(timeSpan.className).toContain('group-focus-within:opacity-0')
+    // 无 display 切换（hidden）——防布局跳动
+    expect(actions.className).not.toContain('hidden')
+    expect(timeSpan.className).not.toContain('hidden')
 
-    // 断言 1：删除按钮不含 'hidden' 类（当前实现含 'hidden group-hover:flex' 做 display 切换）
-    expect(deleteBtn!.className).not.toContain('hidden')
-    // 断言 2：时间元素不含 'group-hover:hidden' 类（当前实现含——display 切换导致布局跳动根因）
-    expect(timeSpan!.className).not.toContain('group-hover:hidden')
-    // 断言 3：删除按钮的祖先容器有固定宽度 style（当前实现无固定宽度——修复前此断言失败，防假绿）
-    // ⚠️ 2026-09-22 起多了一层「操作组容器」：删除按钮的**祖父**才是固定宽度容器
-    const rightBox = deleteBtn!.parentElement!.parentElement!
-    expect(rightBox.style.width).not.toBe('')
-    // 正向锁定：固定宽度容器 + 两端 opacity 过渡替代 display 切换
-    expect(rightBox.className).toContain('relative')
-    // hover 淡入的是**操作组容器**（2026-09-22 起按钮本身只带 ACT_BTN 样式）
-    expect(rightBox.lastElementChild!.className).toContain('group-hover:opacity-100')
-    expect(timeSpan!.className).toContain('group-hover:opacity-0')
-    // 时间元素基础透明度须走类而非内联 style（内联 opacity 会压过 group-hover:opacity-0，hover 永不淡出）
-    expect(timeSpan!.style.opacity).toBe('')
+    // 形态 A：外层行是纯视觉 div（无 role / tabIndex / 点击处理器），操作按钮作兄弟
+    expect(row.className).toContain('group')
+    expect(row.getAttribute('role')).toBeNull()
+    expect(row.getAttribute('tabindex')).toBeNull()
+    // 嵌套按钮：恒为 0
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
 
+    act(() => { root.unmount() })
+  })
+
+  it('行内图标按钮热区 32×32；删除入口收在「更多」菜单内，点击后回调携带该会话 id', async () => {
+    const conv = makeEmptyStateRow()
+    const spy = vi.spyOn(useAgentStore.getState(), 'deleteConversation').mockImplementation(() => {})
+    const { container, root } = render(<AgentConversation />)
+    const row = rowOf(container)
+
+    // 「更多」触发按钮：32×32 + aria-label + aria-haspopup
+    const more = row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
+    expect(more).toBeTruthy()
+    expect(more.style.width).toBe('32px')
+    expect(more.style.height).toBe('32px')
+    expect(more.getAttribute('aria-label')).toBe(t('tip.moreOptions'))
+    expect(more.getAttribute('aria-haspopup')).toBe('menu')
+    expect(more.getAttribute('aria-expanded')).toBe('false')
+
+    // 行内不再横排删除入口（旧形态：5 个 20px 按钮挤在 88px 容器里）
+    const deleteIn = (scope: HTMLElement) =>
+      [...scope.querySelectorAll('button')].filter(b => b.textContent?.trim() === t('agent.deleteConversation'))
+    expect(deleteIn(row)).toHaveLength(0)
+
+    // 打开「更多」→ 删除入口出现在菜单里（danger 菜单项）
+    act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(more.getAttribute('aria-expanded')).toBe('true')
+    expect(deleteIn(row)).toHaveLength(1)
+    // 菜单项是**文字型目标**（§5 文字型下限 20px）：MenuItem = text-xs 行盒 + py-1.5 ≈ 24.5px
+    expect(deleteIn(row)[0].className).toContain('py-1.5')
+
+    // 点击删除 → 走既有的 confirm 二次确认（命令式挂到 body），确认后回调带**该行**会话 id
+    act(() => { deleteIn(row)[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 20)) })
+    // 菜单已显式关闭，故此刻 body 上只剩确认框那一个同名按钮
+    const confirmBtns = [...document.body.querySelectorAll('button')]
+      .filter(b => b.textContent?.trim() === t('agent.deleteConversation'))
+    expect(confirmBtns).toHaveLength(1)
+    act(() => { confirmBtns[0].dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    await act(async () => { await new Promise(r => setTimeout(r, 300)) })
+    expect(spy).toHaveBeenCalledWith(conv.id)
+
+    spy.mockRestore()
+    act(() => { root.unmount() })
+  })
+
+  it('Esc 关闭「更多」菜单（通用浮层至少两：Esc + 点击外部 + 显式关闭）', () => {
+    makeEmptyStateRow()
+    const { container, root } = render(<AgentConversation />)
+    const row = rowOf(container)
+    const more = row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
+    act(() => { more.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect([...row.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))).toBe(true)
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect([...row.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))).toBe(false)
+    expect(more.getAttribute('aria-expanded')).toBe('false')
     act(() => { root.unmount() })
   })
 })
@@ -325,12 +394,63 @@ describe('AgentHistoryPanel fork 层级', () => {
     )!
     expect(rowR).toBeTruthy()
     // 根会话：无缩进、无**标注**、无标注文本。
-    // ⚠️ 2026-09-22 起操作组里的「分叉」按钮也用 GitFork 图标，笼统查 svg.lucide-git-fork
-    // 会命中按钮本身 —— 改用数量锁定：根会话只有按钮那 1 个（子会话还会有标注用的第 2 个）
+    // ⚠️ 2026-10-13 起「分叉」入口收进「更多」菜单（默认不渲染）——根会话行内已无 GitFork 图标，
+    // 数量锁定改为 0（子会话行仍有标注用的 1 个，见上一条用例）
     expect(rowR.className).not.toContain('pl-5')
-    expect(rowR.querySelectorAll('svg.lucide-git-fork')).toHaveLength(1)
+    expect(rowR.querySelectorAll('svg.lucide-git-fork')).toHaveLength(0)
     expect(rowR.textContent).not.toContain('agent.forkedFrom')
     expect(rowR.textContent).not.toContain('来自')
+    act(() => { root.unmount() })
+  })
+
+  it('会话行：置顶/重命名作兄弟按钮（32×32），分叉/归档/删除在「更多」菜单内', () => {
+    makeForkState()
+    const { container, root } = render(<AgentConversation />)
+    const row = historyRows(container).find(r => r.textContent?.includes('父会话A'))!
+
+    // 兄弟按钮：置顶 + 重命名 + 更多 —— 全部 32×32（card-affordance-standard §5.2）
+    const siblings = ['置顶', '重命名', t('tip.moreOptions')]
+    for (const title of siblings) {
+      const btn = row.querySelector<HTMLButtonElement>(`[title="${title}"]`)
+      expect(btn, `缺少按钮：${title}`).toBeTruthy()
+      expect(btn!.style.width).toBe('32px')
+      expect(btn!.style.height).toBe('32px')
+      expect(btn!.getAttribute('aria-label')).toBe(title)
+      expect(btn!.className).toContain('hover:bg-[var(--color-hover)]')
+    }
+    // 行内不再横排 5 个按钮（旧形态 5×20 + gap 溢出 88px 容器 = 用户报的「窄且不含功能按钮」）
+    expect(row.querySelectorAll('button[title]')).toHaveLength(3)
+    expect(container.querySelectorAll('button button')).toHaveLength(0)
+
+    // 打开「更多」：分叉 / 归档 / 删除 三项都在菜单内（菜单项为文字型目标，MenuItem py-1.5）
+    act(() => { row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    const labels = [...row.querySelectorAll('button')].map(b => b.textContent?.trim())
+    expect(labels).toContain(t('agent.duplicateConversation'))
+    expect(labels).toContain(t('agent.archiveConversation'))
+    expect(labels).toContain(t('agent.deleteConversation'))
+    act(() => { root.unmount() })
+  })
+
+  it('同一列表内「更多」菜单互斥：打开 A 行会关掉 B 行（§1.2 第 4 条）', () => {
+    makeForkState()
+    const { container, root } = render(<AgentConversation />)
+    const rowR = historyRows(container).find(r => r.textContent?.includes('父会话A') && !r.textContent?.includes('子会话B'))!
+    const rowC = historyRows(container).find(r => r.textContent?.includes('子会话B'))!
+    const moreOf = (r: HTMLElement) => r.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
+    const menuOpenIn = (r: HTMLElement) =>
+      [...r.querySelectorAll('button')].some(b => b.textContent?.trim() === t('agent.deleteConversation'))
+
+    act(() => { moreOf(rowR).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(menuOpenIn(rowR)).toBe(true)
+    expect(menuOpenIn(rowC)).toBe(false)
+
+    act(() => { moreOf(rowC).dispatchEvent(new MouseEvent('click', { bubbles: true })) })
+    expect(menuOpenIn(rowR)).toBe(false)
+    expect(menuOpenIn(rowC)).toBe(true)
+
+    // Esc 一并收起（useEscapeKey）
+    act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+    expect(menuOpenIn(rowC)).toBe(false)
     act(() => { root.unmount() })
   })
 })

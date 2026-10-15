@@ -3,6 +3,7 @@ import type { ContextUsage } from '../../../services/agent/context-usage'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
 import { PopoverSurface } from '../../ui/PopoverSurface'
+import { MetricChip } from '../../ui/MetricChip'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 
@@ -19,6 +20,8 @@ function fmtK(n: number): string {
  * - 圆环按占用比例填充，旁边是百分比；占用越高颜色越警示（accent → warning → error）
  * - **点击圆环**展开该对话的上下文明细（四段 token + 合计 / 模型上限）；
  *   弹层走 useFloatingPosition 浮在窗口之上 —— 264px 的窄面板里绝对定位会被容器裁掉
+ * - 2026-10 §2.4：弹层内明细行统一到 `MetricChip` 语言（标签左 / 值右 / title 给来源与告警原因），
+ *   **数值口径不变**（不改 computeContextUsage）；圆环与 `data-budget-segments` 隐藏节点保持原样。
  */
 export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }: {
   usage: ContextUsage | null
@@ -89,42 +92,42 @@ export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }:
             {t('ccr.contextUsage')}
           </div>
 
-          {/* B6：逐段明细 —— 每段给出 token 与**字符数**，来源挂在 title（悬停可查"这段来自哪"） */}
+          {/* B6：逐段明细 —— 每段一个 chip（标签左 / 值右 / 来源挂 title，同一 chip 语言）；
+              ⚠ = 常驻段告警（接近上限 / 超上限未注入）、✂ = 硬截断，两者都走警示语气，
+              比 ✂ 更严重的 ⚠ 优先显示；告警原因与来源一起进 title（悬停整行即得）。
+              数值口径不变：token 估算 · 字符数。 */}
           {usage.segments && usage.segments.length > 0 ? (
-            <div className="mb-1">
-              {usage.segments.map(seg => (
-                <div
-                  key={seg.key}
-                  className="flex items-center justify-between gap-3 text-micro leading-relaxed"
-                  style={{ color: 'var(--color-text-secondary)' }}
-                  title={seg.source}
-                >
-                  <span className="truncate">
-                    {t(`context.seg.${seg.key}` as never)}
-                    {/* C 档第一轮：常驻段告警（接近上限 / 超上限未注入）——悬停给原因，
-                        比 ✂（截断）更严重故优先显示 */}
-                    {seg.warning
-                      ? <span title={seg.warning} style={{ color: 'var(--color-warning)' }}> ⚠</span>
-                      : seg.truncated ? ' ✂' : ''}
-                  </span>
-                  <span className="flex-shrink-0 font-mono">{fmtK(seg.tokens)} · {seg.chars}</span>
-                </div>
-              ))}
+            <div className="mb-1 flex flex-col gap-1">
+              {usage.segments.map(seg => {
+                const marked = Boolean(seg.warning || seg.truncated)
+                const title = [seg.source, seg.warning].filter(Boolean).join(' — ')
+                return (
+                  <MetricChip
+                    key={seg.key}
+                    className="w-full"
+                    tone={marked ? 'warn' : 'neutral'}
+                    icon={seg.warning
+                      ? <span aria-hidden>⚠</span>
+                      : seg.truncated ? <span aria-hidden>✂</span> : undefined}
+                    label={t(`context.seg.${seg.key}` as never)}
+                    value={`${fmtK(seg.tokens)} · ${seg.chars}`}
+                    title={title || undefined}
+                  />
+                )
+              })}
             </div>
           ) : (
-            segments.map(seg => (
-              <div
-                key={seg.label}
-                className="flex items-center justify-between gap-3 text-micro leading-relaxed"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                <span className="flex items-center gap-1.5">
-                  <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: seg.color }} />
-                  {seg.label}
-                </span>
-                <span>{seg.value}</span>
-              </div>
-            ))
+            <div className="mb-1 flex flex-col gap-1">
+              {segments.map(seg => (
+                <MetricChip
+                  key={seg.label}
+                  className="w-full"
+                  icon={<span className="inline-block w-1.5 h-1.5 rounded-full" style={{ backgroundColor: seg.color }} />}
+                  label={seg.label}
+                  value={seg.value}
+                />
+              ))}
+            </div>
           )}
 
           {/* B6 口径诚实：面板值（当前历史全量）与**实发**值（发送前裁剪后）不同时必须分列 */}

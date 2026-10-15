@@ -1,10 +1,15 @@
 // @vitest-environment jsdom
 /**
- * ModelRoutingSection — 三层路由的「每层多模型」有序列表（A 档）
+ * ModelRoutingSection — 三层路由的层卡形态（§2.3 排版改版）
  *
- * 数据模型与 ModelRouter 一直支持层内多模型（string[]，顺序即优先级），
- * 只有 UI 把它压成了单模型（patch[tier] = [modelId]）。本测试钉住列表语义：
- * 追加到尾部、上移交换、移除保留顺序、移除干净后回退空数组。
+ * 2026-10 改版前：每层「左标签列 + 芯片列表 + ArrowUp 一格一格挪 + Select 添加」；
+ * 改版后：标题独占一行在上、说明收进 `Disclosure`、每层一块**层卡**（层名 + 摘要 + 「编辑优先级」），
+ * 顺序调整一律进弹窗（见 `ModelRoutingTierDialog.test.tsx`）。
+ *
+ * ⚠️ 本文件钉住**三条不许退化的行为契约**（改版只换皮，不换语义）：
+ * 1. **顺序即优先级** —— 数组顺序 = ModelRouter 的取用顺序，界面按同序展示；
+ * 2. **单层 patch 形状** —— 写库一律 `updateModelRoutes({ elite: [...] })`，不整包覆盖三层；
+ * 3. **空层回退默认模型** —— 空层合法，文案说明回退口径。
  */
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
@@ -17,9 +22,15 @@ const state = vi.hoisted(() => ({
   models: [
     { id: 'e1', name: 'Elite One', modelName: 'elite-one', provider: 'openai' },
     { id: 'e2', name: 'Elite Two', modelName: 'elite-two', provider: 'anthropic' },
+    { id: 'e3', name: 'Elite Three', modelName: 'elite-three', provider: 'deepseek' },
+    { id: 'e4', name: 'Elite Four', modelName: 'elite-four', provider: 'gemini' },
     { id: 's1', name: 'Std One', modelName: 'std-one', provider: 'openai' },
+    // embedding 用途：弹窗候选里必须被过滤掉
+    { id: 'emb', name: 'Embed One', modelName: 'embed-one', provider: 'openai', purposes: ['embedding'] },
   ],
-  modelRoutes: { elite: [] as string[], standard: [] as string[], budget: [] as string[] },
+  modelRoutes: { elite: [] as string[], standard: [] as string[], budget: [] as string[] } as {
+    elite: string[]; standard: string[]; budget: string[]; strategy?: 'static' | 'dynamic'
+  },
 }))
 
 vi.mock('../../stores/llm-store', () => ({
@@ -38,47 +49,108 @@ function render() {
   return container
 }
 
-/** 按 aria-label 取按钮（与组件 a11y 标注一致） */
-const btn = (label: string) => Array.from(document.querySelectorAll<HTMLButtonElement>(`button[aria-label="${label}"]`))
+/** 层卡（按 data-testid 取） */
+const tierCard = (tier: string) =>
+  document.body.querySelector<HTMLElement>(`[data-testid="route-tier-${tier}"]`)
+/** 「编辑优先级」入口 */
+const editBtn = (tier: string) =>
+  document.body.querySelector<HTMLButtonElement>(`[data-testid="route-edit-${tier}"]`)!
+/** 行内摘要文案 */
+const summaryOf = (tier: string) => tierCard(tier)!.querySelector('p')!.textContent ?? ''
 
 afterEach(() => {
   act(() => root?.unmount())
   container?.remove()
   root = null
   container = null
+  document.body.innerHTML = ''
   mockUpdate.mockClear()
   state.modelRoutes = { elite: [], standard: [], budget: [] }
+  // locale 是运行时单例（其它测试切过语言会残留）——清掉偏好，t() 回落 zh-CN 默认
+  localStorage.removeItem('novelforge-locale')
 })
 
-describe('ModelRoutingSection 每层多模型', () => {
-  it('elite 层两个模型 → 渲染两行且顺序即数组顺序', () => {
-    state.modelRoutes.elite = ['e1', 'e2']
+describe('ModelRoutingSection 层卡排版', () => {
+  it('标题独占一行在上，动态路由开关同排右侧，说明收进「说明」折叠', () => {
     const el = render()
     const text = el.textContent ?? ''
-    expect(text).toContain('Elite One')
-    expect(text).toContain('Elite Two')
-    expect(text.indexOf('Elite One')).toBeLessThan(text.indexOf('Elite Two'))
+    // 标题 + 动态路由开关都在（开关是 role=switch）
+    expect(text).toContain('模型路由（分层调度）')
+    expect(document.body.querySelector('[role="switch"]')).toBeTruthy()
+    // 说明收进 details（默认收起 → 正文不在可见文本里，但折叠的「说明」摘要行在）
+    const details = el.querySelector('details')
+    expect(details).toBeTruthy()
+    expect(details!.querySelector('summary')!.textContent).toContain('说明')
+    // 标题是块级 h3（独占行），**不与动态路由开关同容器**：开关在标题的兄弟节点里
+    const title = el.querySelector('h3')!
+    expect(title.textContent).toBe('模型路由（分层调度）')
+    expect(title.parentElement!.querySelector('[role="switch"]')).toBeTruthy()
   })
 
-  it('移除第一个 → 提交保留顺序的剩余列表', () => {
+  it('三层各渲染一块层卡（含「编辑优先级」按钮）', () => {
+    render()
+    for (const tier of ['elite', 'standard', 'budget']) {
+      expect(tierCard(tier)).toBeTruthy()
+      expect(editBtn(tier).textContent).toContain('编辑优先级')
+    }
+  })
+
+  it('空层显示回退口径文案（顺序即优先级契约的另一半：空 = 回退默认模型）', () => {
+    render()
+    expect(summaryOf('elite')).toContain('未指定（回退默认模型）')
+  })
+
+  it('有模型：摘要在层名下方显示「N 个模型 · 首选 xxx」，模型名按数组顺序出现', () => {
     state.modelRoutes.elite = ['e1', 'e2']
     render()
-    act(() => btn('移除')[0].click())
-    expect(mockUpdate).toHaveBeenCalledWith({ elite: ['e2'] })
+    expect(summaryOf('elite')).toContain('2 个模型')
+    expect(summaryOf('elite')).toContain('首选 Elite One (openai)')
+    const body = tierCard('elite')!.textContent ?? ''
+    expect(body.indexOf('Elite One')).toBeLessThan(body.indexOf('Elite Two'))
   })
 
-  it('上移第二个 → 交换顺序', () => {
-    state.modelRoutes.elite = ['e1', 'e2']
+  it('超过 3 个：前 3 个带 ①②③，第 4 个起折叠为 +N', () => {
+    state.modelRoutes.elite = ['e1', 'e2', 'e3', 'e4']
     render()
-    // 首行没有上移按钮 → 唯一的「上移」属于第二行
-    act(() => btn('上移')[0].click())
-    expect(mockUpdate).toHaveBeenCalledWith({ elite: ['e2', 'e1'] })
+    const body = tierCard('elite')!.textContent ?? ''
+    expect(body).toContain('①')
+    expect(body).toContain('②')
+    expect(body).toContain('③')
+    expect(body).toContain('+1')
+    // 第 4 个不再逐个铺开
+    expect(body).not.toContain('Elite Four')
+    // 摘要仍是全量计数
+    expect(summaryOf('elite')).toContain('4 个模型')
   })
+})
 
-  it('移除全部 → 提交空数组（回退默认模型，而非保留 null）', () => {
+describe('ModelRoutingSection 改版后的写库纪律', () => {
+  it('点「编辑优先级」只开弹窗，**不写库**', () => {
     state.modelRoutes.elite = ['e1']
     render()
-    act(() => btn('移除')[0].click())
+    act(() => editBtn('elite').click())
+    expect(document.body.querySelector('[data-testid="route-tier-dialog"]')).toBeTruthy()
+    expect(mockUpdate).not.toHaveBeenCalled()
+  })
+
+  it('弹窗内保存 → 单层 patch 形状 `{ elite: [...] }`（不整包覆盖三层）', () => {
+    state.modelRoutes.elite = ['e1']
+    state.modelRoutes.standard = ['s1']
+    render()
+    act(() => editBtn('elite').click())
+    // 取消勾选 e1（= 空层，合法）后保存
+    const box = document.body.querySelector<HTMLInputElement>(`[data-testid="route-candidate-e1"] input`)!
+    act(() => box.click())
+    const save = [...document.body.querySelectorAll('button')].find(b => b.textContent === '保存')!
+    act(() => save.click())
+    expect(mockUpdate).toHaveBeenCalledTimes(1)
     expect(mockUpdate).toHaveBeenCalledWith({ elite: [] })
+  })
+
+  it('弹窗候选过滤掉 embedding 用途的模型', () => {
+    render()
+    act(() => editBtn('elite').click())
+    expect(document.body.querySelector('[data-testid="route-candidate-e1"]')).toBeTruthy()
+    expect(document.body.querySelector('[data-testid="route-candidate-emb"]')).toBeNull()
   })
 })

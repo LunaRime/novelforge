@@ -14,6 +14,7 @@ import { confirm } from '../ui/Confirm'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
+import NotificationCenter from './NotificationCenter'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
@@ -61,6 +62,9 @@ export default function StatusBar() {
         <TemperatureControl defaultModel={defaultModel} />
 
         <ModelPicker models={models} defaultModel={defaultModel} />
+
+        {/* 消息收纳中心（铃铛 + 未读角标）— 落在状态栏最右段、缩放控件左侧 */}
+        <NotificationCenter />
 
         {/* 缩放控制 — 原标题栏控件，标题栏移除后搬入状态栏右侧（VSCode 的缩放也在这个位置） */}
         <StatusBarDivider />

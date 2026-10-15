@@ -12,10 +12,12 @@
  * 「开关」这一个用户可控项（统计/规则/倍率取盘上最新值），除非用户点了「重置」。
  */
 import { useEffect, useState } from 'react'
+import { Minimize2, RefreshCw, Scissors, SkipForward, TriangleAlert, Undo2 } from 'lucide-react'
 import { Input } from '../ui/Input'
 import { Label } from '../ui/Label'
 import { Button } from '../ui/Button'
 import { Disclosure } from '../ui/Disclosure'
+import { MetricChip, MetricRow } from '../ui/MetricChip'
 import { Switch } from '../ui/Switch'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -27,6 +29,14 @@ import {
   defaultCompressionLearning, resolveCompressionLearning, resetCompressionLearning,
   activeRuleLabels, type CompressionLearningState,
 } from '../../services/agent/compression-learning'
+
+/** 自学习压缩的**完整口径**（默认收起）—— 四条短行，全部来自 locale-data/notice.ts 的 learning.* 段 */
+const LEARNING_DETAILS = [
+  'learning.signals',
+  'learning.effect',
+  'learning.noTraining',
+  'learning.resetScope',
+] as const
 
 export default function ContextCompactionSection() {
   const { t } = useTranslation()
@@ -175,8 +185,12 @@ export default function ContextCompactionSection() {
         <div className="flex items-start gap-3">
           <div className="flex-1 min-w-0">
             <Label className="text-xs">{t('settings.learningTitle')}</Label>
+            {/* 开关行只留一句话（与卡片其它旋钮同版式：Label + 一行 text-micro）——
+                全量口径（信号 / 调整范围 / 不训练 / 重置范围）收进下方同卡片的「说明」折叠。
+                见 docs/ui-6items-plan.md §2.6；旧的长段说明已拆成下方 learning.* 短句，
+                原 key `settings.learningDesc` 已在本轮由 lead 统一从字典删除（勿再复用） */}
             <p className="text-micro mt-0.5 leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-              {t('settings.learningDesc')}
+              {t('learning.summaryShort')}
             </p>
           </div>
           <Switch
@@ -188,15 +202,60 @@ export default function ContextCompactionSection() {
             aria-label={t('settings.learningEnable')}
           />
         </div>
-        <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
-          {t('settings.learningStats')
-            .replace('{compressions}', String(learning.stats.compressions))
-            .replace('{skipped}', String(learning.stats.skipped))
-            .replace('{truncations}', String(learning.stats.truncations))
-            .replace('{warns}', String(learning.stats.fidelityWarns))
-            .replace('{reverts}', String(learning.stats.reverts))
-            .replace('{regen}', String(learning.stats.regenerations))}
-        </p>
+
+        {/* 全量口径：默认收起（与卡片头的 settings.cardHint 折叠同一形态），四条短行 */}
+        <Disclosure label={t('settings.cardHint')}>
+          <ul className="space-y-1.5 text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
+            {LEARNING_DETAILS.map(key => (
+              <li key={key} className="flex items-start gap-1.5">
+                {/* 项目符号用 2px 中性圆点，不用文字字符 */}
+                <span
+                  aria-hidden
+                  style={{
+                    width: 2,
+                    height: 2,
+                    marginTop: 8,
+                    borderRadius: '50%',
+                    backgroundColor: 'var(--color-text-muted)',
+                    flexShrink: 0,
+                  }}
+                />
+                <span className="min-w-0">{t(key)}</span>
+              </li>
+            ))}
+          </ul>
+        </Disclosure>
+
+        {/* 统计行：一个指标 = 一个 chip（图标 + 标签 + 等宽数字），语气按语义着色 ——
+            截断 / 保真告警 / 移除 是要留意的（warn），压缩 / 跳过 / 重生成 是中性过程量。
+            全 0 也照常渲染：0 是信息（学习尚未积累），不做整行隐藏。
+            旧的 `·` 串文案（六项各占一词、无轻重）本轮已从字典删除，勿再复用该形态。 */}
+        <MetricRow>
+          <MetricChip
+            icon={<Minimize2 size={12} />} label={t('metric.compactions')}
+            value={learning.stats.compressions} title={t('metric.compactionsHint')}
+          />
+          <MetricChip
+            icon={<SkipForward size={12} />} label={t('metric.skipped')}
+            value={learning.stats.skipped} title={t('metric.skippedHint')}
+          />
+          <MetricChip
+            icon={<Scissors size={12} />} label={t('metric.truncations')} tone="warn"
+            value={learning.stats.truncations} title={t('metric.truncationsHint')}
+          />
+          <MetricChip
+            icon={<TriangleAlert size={12} />} label={t('metric.fidelityWarns')} tone="warn"
+            value={learning.stats.fidelityWarns} title={t('metric.fidelityWarnsHint')}
+          />
+          <MetricChip
+            icon={<Undo2 size={12} />} label={t('metric.reverts')} tone="warn"
+            value={learning.stats.reverts} title={t('metric.revertsHint')}
+          />
+          <MetricChip
+            icon={<RefreshCw size={12} />} label={t('metric.regenerations')}
+            value={learning.stats.regenerations} title={t('metric.regenerationsHint')}
+          />
+        </MetricRow>
         <div className="flex items-center justify-between gap-3">
           <p className="text-micro leading-relaxed min-w-0" style={{ color: 'var(--color-text-muted)' }}>
             {activeRuleLabels(learning).length > 0

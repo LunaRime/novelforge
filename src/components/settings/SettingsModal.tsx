@@ -3,7 +3,7 @@ import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
   ExternalLink, RefreshCw, Download, LogOut,
-  BookMarked, Plug, BarChart3, ArrowUp,
+  BookMarked, Plug, BarChart3,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
@@ -23,6 +23,7 @@ import { SUPPORTED_LOCALES, LOCALE_LABELS, type SupportedLocale } from '../../sh
 import type { TextKey } from '../../shared/locale'
 import { Input } from '../ui/Input'
 import { ModelListSection } from './ModelListSection'
+import { ModelRoutingTierDialog } from './ModelRoutingTierDialog'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import { cn } from '../../lib/utils'
@@ -33,6 +34,7 @@ import { Switch } from '../ui/Switch'
 import { Disclosure } from '../ui/Disclosure'
 import AutomationSection from './AutomationSection'
 import ContextCompactionSection from './ContextCompactionSection'
+import ThemeSection from './ThemeSection'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
@@ -221,6 +223,9 @@ export function ModelRoutingSection() {
   const modelRoutes = useLLMStore(s => s.modelRoutes)
   const updateModelRoutes = useLLMStore(s => s.updateModelRoutes)
 
+  /** 正在编辑优先级的层（null = 弹窗关闭）——弹窗按需挂载，草稿随卸载丢弃 */
+  const [editingTier, setEditingTier] = useState<ModelTier | null>(null)
+
   const candidates = models.filter((m) => !m.purposes?.includes('embedding'))
 
   const labelOf = (id: string) => {
@@ -240,119 +245,125 @@ export function ModelRoutingSection() {
     updateModelRoutes(patch)
   }
 
+  const editingMeta = editingTier ? tiers.find(x => x.id === editingTier) ?? null : null
+
   return (
     <div
-      className="rounded-xl p-4 space-y-3"
+      className="rounded-xl p-4"
       style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
     >
-      {/* 标题行：动态路由开关体化到右侧；说明文字收进「说明」折叠（2026-10-01 用户要求） */}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</p>
+      {/* 标题独占一行在上（用户：标题在上面）；动态路由开关收在同排右侧、标题行不再挂说明文字 */}
+      <div className="flex items-start justify-between gap-3">
+        <h3 className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{t('settings.routeTitle')}</h3>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span
-            className="text-xs cursor-default"
-            style={{ color: 'var(--color-text-secondary)' }}
-            title={t('settings.routeDynamicDesc')}
-          >
+          <span className="text-xs cursor-default" style={{ color: 'var(--color-text-secondary)' }}>
             {t('settings.routeDynamic')}
           </span>
           <Switch
+            aria-label={t('settings.routeDynamic')}
             checked={modelRoutes.strategy === 'dynamic'}
             onCheckedChange={(v) => updateModelRoutes({ strategy: v ? 'dynamic' : 'static' })}
           />
         </div>
       </div>
 
-      <Disclosure label={t('settings.cardHint')}>
-        <div className="space-y-1">
-          <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDesc')}</p>
-          <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routePriorityHint')}</p>
-          <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDynamicDesc')}</p>
-        </div>
-      </Disclosure>
+      {/* 说明折叠在标题下面（口径不变：三层说明 + 优先级说明 + 动态路由说明） */}
+      <div className="mt-2">
+        <Disclosure label={t('settings.cardHint')}>
+          <div className="space-y-1">
+            <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDesc')}</p>
+            <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routePriorityHint')}</p>
+            <p className="text-micro leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeDynamicDesc')}</p>
+          </div>
+        </Disclosure>
+      </div>
 
-      {/* 三层：每层一行 —— 标签列 + 芯片列表（顺序即优先级）+ 紧凑「添加模型」 */}
-      <div className="space-y-2">
+      {/* 三层：每层一块层卡 —— 层名 + 摘要（N 个模型 · 首选 xxx）+「编辑优先级」入口 */}
+      <div className="mt-3 space-y-2">
         {tiers.map(tier => {
           const ids = modelRoutes[tier.id] ?? []
+          const shown = ids.slice(0, 3)
+          const more = ids.length - shown.length
           return (
-            <div key={tier.id} className="flex items-start gap-2">
-              <span
-                className="w-24 flex-shrink-0 pt-1 text-xs font-medium truncate"
-                style={{ color: 'var(--color-text-secondary)' }}
-                title={tier.desc}
-              >
-                {tier.label}
-              </span>
-              <div className="flex-1 min-w-0 space-y-1">
-                {ids.length === 0 && (
-                  <p className="text-micro pt-1" style={{ color: 'var(--color-text-muted)' }}>{t('settings.routeClear')}</p>
-                )}
-
-                {ids.length > 0 && (
-                  <div className="space-y-1">
-                    {ids.map((id, i) => (
-                      <div
-                        key={id}
-                        className="flex items-center gap-2 h-7 rounded-md pl-2 pr-0.5"
-                        style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
-                      >
-                        <span
-                          className="text-xs flex-1 min-w-0 truncate"
-                          style={{ color: 'var(--color-text)' }}
-                          title={labelOf(id)}
-                        >
-                          {labelOf(id)}
-                        </span>
-                        {i > 0 && (
-                          <button
-                            type="button"
-                            aria-label={t('settings.routeMoveUp')}
-                            onClick={() => {
-                              const next = [...ids]
-                              const prev = next[i - 1]
-                              next[i - 1] = next[i]
-                              next[i] = prev
-                              setTier(tier.id, next)
-                            }}
-                            className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] flex-shrink-0"
-                            style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
-                          >
-                            <ArrowUp size={11} />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          aria-label={t('settings.routeRemove')}
-                          onClick={() => setTier(tier.id, ids.filter((_, j) => j !== i))}
-                          className="flex items-center justify-center rounded transition-colors hover:bg-[var(--color-hover)] flex-shrink-0"
-                          style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
-                        >
-                          <X size={11} />
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* key 随层内数量变化 → 添加后重挂载，选择器自动复位（非受控） */}
-                <Select key={`add-${tier.id}-${ids.length}`} onValueChange={(v) => { if (v) setTier(tier.id, [...ids, v]) }}>
-                  <SelectTrigger className="h-7 w-full px-2 text-micro">
-                    <SelectValue placeholder={t('settings.routeAdd')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {candidates.filter(m => !ids.includes(m.id)).map((m) => (
-                      <SelectItem key={m.id} value={m.id}>
-                        {m.name || m.modelName} ({m.provider})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div
+              key={tier.id}
+              data-testid={`route-tier-${tier.id}`}
+              className="rounded-lg p-3 space-y-2"
+              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-bg)' }}
+            >
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h4
+                    className="text-xs font-medium truncate"
+                    style={{ color: 'var(--color-text)' }}
+                    title={tier.desc}
+                  >
+                    {tier.label}
+                  </h4>
+                  {/* 无模型时说明回退口径（与弹窗内 `route.dialogHint` 同一口径） */}
+                  <p className="text-micro" style={{ color: 'var(--color-text-muted)' }} title={tier.desc}>
+                    {ids.length === 0
+                      ? t('route.tierEmpty')
+                      : `${t('route.tierCount').replace('{n}', String(ids.length))} · ${t('route.tierFirst').replace('{name}', labelOf(ids[0]))}`}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  data-testid={`route-edit-${tier.id}`}
+                  onClick={() => setEditingTier(tier.id)}
+                  className="text-xs whitespace-nowrap py-1 flex-shrink-0 rounded transition-colors hover:underline"
+                  style={{ color: 'var(--color-accent)' }}
+                >
+                  {t('route.editPriority')}
+                </button>
               </div>
+
+              {/* 层内按优先级展示前 3 个（① ② ③ + 模型名），其余折叠为 +N；顺序调整一律进弹窗 */}
+              {ids.length > 0 ? (
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  {shown.map((id, i) => (
+                    <span
+                      key={id}
+                      className="flex items-center gap-1.5 text-micro min-w-0"
+                      style={{ color: 'var(--color-text-secondary)' }}
+                    >
+                      <span
+                        className="font-mono flex-shrink-0"
+                        style={{ color: 'var(--color-accent)' }}
+                        aria-hidden="true"
+                      >
+                        {['①', '②', '③'][i]}
+                      </span>
+                      <span className="truncate" style={{ maxWidth: 180 }} title={labelOf(id)}>{labelOf(id)}</span>
+                    </span>
+                  ))}
+                  {more > 0 && (
+                    <span
+                      className="text-micro flex-shrink-0"
+                      style={{ color: 'var(--color-text-muted)' }}
+                      title={ids.slice(3).map(labelOf).join('、')}
+                    >
+                      {t('route.moreCount').replace('{n}', String(more))}
+                    </span>
+                  )}
+                </div>
+              ) : null}
             </div>
           )
         })}
       </div>
+
+      {/* 优先级弹窗：按需挂载（每次打开 = 最新已存值播种草稿），保存才写库 */}
+      {editingTier && editingMeta && (
+        <ModelRoutingTierDialog
+          tier={editingTier}
+          tierLabel={editingMeta.label}
+          routeIds={modelRoutes[editingTier] ?? []}
+          candidates={candidates}
+          onSave={setTier}
+          onClose={() => setEditingTier(null)}
+        />
+      )}
     </div>
   )
 }
@@ -611,6 +622,9 @@ function EditorSection() {
 
   return (
     <div className="max-w-md space-y-5">
+      {/* 界面主题（用户建议 5）：卡片网格，与右侧图标栏底部的主题菜单同源 */}
+      <ThemeSection />
+
       {/* 界面语言 */}
       <div className="space-y-1.5">
         <div className="flex items-center justify-between">

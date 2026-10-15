@@ -2,17 +2,20 @@
  * WorkflowProgressEntry — 对话内工作流进度入口（线② 2b · dsh 照搬，过程组/run 节点）
  *
  * 有活跃工作流（activeRuns）时，在对话流底部显示单行折叠组：
- * 状态点 + 工作流图标 + 「工作流」标题 + 摘要「已完成 N 步 · 运行中 M」。
+ * 状态点 + 工作流图标 + 「工作流」标题 + 指标 chip（「步骤 已完成/总数」+「运行中 N」）。
  * 展开显示各 run 的标题 + 状态点 + 步骤进度，点击跳转底部任务面板（详情仍在面板）。
  *
+ * 2026-10 §2.4：行尾摘要由 `·` 串（「已完成 N 步 · 运行中 M」）改成 MetricChip 语言，
+ * 并与行尾那个裸任务数（重复表达同一个 `activeRuns.length`）合并 —— 数字只出现一次。
+ *
  * 对照 dsh `WorkflowRunPanel` 的 RunHeader + `process-groups` 的计数摘要。
- * 复用 2a 三原语（DisclosureRow / StateDot / TextShimmer）。用 NF 语义令牌。
+ * 复用 2a 原语（DisclosureRow / StateDot）+ 指标原语（MetricChip）。用 NF 语义令牌。
  */
 import { useEffect, useRef, useState } from 'react'
-import { Workflow } from 'lucide-react'
+import { Activity, ListChecks, Workflow } from 'lucide-react'
 import { DisclosureRow } from '../../ui/DisclosureRow'
+import { MetricChip, MetricRow } from '../../ui/MetricChip'
 import { StateDot, type StateDotState } from '../../ui/StateDot'
-import { TextShimmer } from '../../ui/TextShimmer'
 import { useWorkflowStore, type WorkflowRun } from '../../../stores/workflow-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -58,7 +61,7 @@ export default function WorkflowProgressEntry() {
 
   // 步骤状态计数（dsh phaseStatusSummary 思路：member=step）
   const doneSteps = activeRuns.reduce((sum, r) => sum + r.steps.filter(s => s.status === 'completed').length, 0)
-  const runningSteps = activeRuns.reduce((sum, r) => sum + r.steps.filter(s => s.status === 'running').length, 0)
+  const totalSteps = activeRuns.reduce((sum, r) => sum + r.steps.length, 0)
 
   // 整体状态点：优先 running → warning → error
   const dotState: StateDotState = activeRuns.some(r => r.status === 'running')
@@ -68,10 +71,6 @@ export default function WorkflowProgressEntry() {
       : activeRuns.some(r => r.status === 'failed')
         ? 'error'
         : 'idle'
-
-  const summary = t('workflow.progressSummary')
-    .replace('{done}', String(doneSteps))
-    .replace('{running}', String(runningSteps))
 
   return (
     <div data-workflow-progress data-state={running ? 'running' : 'idle'}>
@@ -86,15 +85,25 @@ export default function WorkflowProgressEntry() {
         collapsedContent={
           <>
             <span aria-hidden style={{ flex: 'none', width: 2, height: 2, margin: '0 8px', borderRadius: 1, background: 'var(--color-text-muted)' }} />
-            <span style={{ flex: '1 1 auto', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 13, lineHeight: '24px', color: 'var(--color-text-muted)' }}>
-              <TextShimmer active={running}>{summary}</TextShimmer>
-            </span>
-            {/* 行尾状态点 + 任务数 */}
-            <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            {/* 指标 chip：步骤（已完成/总数）+ 运行中任务数。运行中数量同时承担了原来行尾
+                那个裸数字（两者本是同一个 activeRuns.length），数字不再出现两次。
+                整体状态仍由行尾 StateDot 表达（chip 只讲计数，不抢状态语义）。 */}
+            <MetricRow className="min-w-0 flex-1">
+              <MetricChip
+                icon={<ListChecks size={12} />}
+                label={t('metric.workflowSteps')}
+                value={`${doneSteps}/${totalSteps}`}
+                title={t('metric.workflowStepsHint')}
+              />
+              <MetricChip
+                icon={<Activity size={12} />}
+                label={t('metric.runningTasks')}
+                value={activeRuns.length}
+                title={t('metric.runningTasksHint')}
+              />
+            </MetricRow>
+            <span style={{ flex: 'none', display: 'inline-flex', alignItems: 'center' }}>
               <StateDot state={dotState} />
-              <span style={{ fontSize: 11, lineHeight: '24px', color: 'var(--color-text-muted)', fontVariantNumeric: 'tabular-nums' }}>
-                {activeRuns.length}
-              </span>
             </span>
           </>
         }
