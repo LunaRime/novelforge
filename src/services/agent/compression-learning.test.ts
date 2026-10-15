@@ -29,6 +29,20 @@ describe('resolveCompressionLearning：坏形状防御（fail-safe 回默认）'
     }
   })
 
+  it('version 失配 → 整段回默认（不做部分解析）；缺 version 仍宽容解析', () => {
+    // 显式写了别的版本号 = 形状已不属于本实现：部分解析会把未知字段当本版本语义，故整段回默认
+    const mismatched = resolveCompressionLearning({
+      version: 2, enabled: true, minChangeFactor: 1.4, stats: { compressions: 9 },
+    })
+    expect(mismatched.enabled).toBe(false)
+    expect(mismatched.minChangeFactor).toBe(1)
+    expect(mismatched.stats.compressions).toBe(0)
+    // 缺 version（早期写入 / 手工编辑）→ 按本文形状宽容解析，不因缺字段丢用户状态
+    const noVersion = resolveCompressionLearning({ enabled: true, minChangeFactor: 1.4 })
+    expect(noVersion.enabled).toBe(true)
+    expect(noVersion.minChangeFactor).toBe(1.4)
+  })
+
   it('坏字段逐项回默认；倍率钳制 [0.5, 1.5]；未知规则 id 不进池', () => {
     const s = resolveCompressionLearning({
       enabled: true,
@@ -88,16 +102,20 @@ describe('applyCompressionOutcome：时机倍率（有界 + 回中）', () => {
     expect(s.minChangeFactor).toBe(FACTOR_MIN)
   })
 
-  it('成功 → 向 1.0 回中（收敛信号）；纯截断计数不单独触发写盘', () => {
+  it('成功 → 向 1.0 回中（收敛信号）；倍率触底后截断计数仍会落盘', () => {
     const recentered = applyCompressionOutcome(enabled({ minChangeFactor: 1.5 }), outcome({ success: true }))
     expect(recentered.state.minChangeFactor).toBeLessThan(1.5)
     expect(recentered.state.minChangeFactor).toBeGreaterThan(1.0)
     expect(recentered.state.stats.compressions).toBe(1)
 
-    // 倍率已触底：截断不改倍率、不计入「需要写盘」
+    // 倍率已触底：截断不改倍率，但**计数必须落盘**——修复前被排除在 changed 之外，
+    // 导致「只发生硬截断」的会话里设置页「截断 N」永远停在旧值（本批主旨是观测，不能失真）
     const floored = applyCompressionOutcome(enabled({ minChangeFactor: FACTOR_MIN }), outcome({ success: false, truncationDropped: 3 }))
-    expect(floored.changed).toBe(false)
-    expect(floored.state.stats.truncations).toBe(1) // 状态推进了，但调用方无需写盘
+    expect(floored.changed).toBe(true)
+    expect(floored.state.stats.truncations).toBe(1)
+    // 健康会话（dropped=0）不因截断写盘
+    const healthy = applyCompressionOutcome(enabled({ minChangeFactor: FACTOR_MIN }), outcome({ success: false }))
+    expect(healthy.changed).toBe(false)
   })
 })
 

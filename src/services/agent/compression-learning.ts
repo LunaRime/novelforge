@@ -15,7 +15,8 @@
  *
  * 安全阀：默认关闭；倍率有界；证据门槛 + 迟滞（退役后需新增 ≥2 证据才可复活）；
  * 规则数固定 ≤4；全部决策由调用方 renderLog 留痕；一键重置。
- * 更新只在**压缩事件**（稀有）发生时进行；截断计数不单独触发写盘（防每轮 config:set）。
+ * 更新只在**压缩事件**（稀有）发生时进行——健康会话里不产生任何写盘；只有「上下文真的丢了消息」
+ * （硬截断）的会话会每轮写一次状态（统计真实性优先于写盘频率，见 applyCompressionOutcome 注释）。
  */
 import { t, type TextKey } from '../../shared/locale'
 import type { FidelityEntityKind } from './ccr-fidelity'
@@ -159,6 +160,10 @@ export function resolveCompressionLearning(raw: unknown): CompressionLearningSta
   const base = defaultCompressionLearning()
   if (!raw || typeof raw !== 'object') return base
   const r = raw as Record<string, unknown>
+  // 版本失配 → 整段回默认（设计 §3.6「形状破坏时 fail-safe」）。缺 version 仍按本文形状宽容解析
+  // （手工编辑/早期写入可能不带该字段）；显式写了别的版本号说明形状已不属于本实现，**不做部分解析**
+  // ——部分解析会把未知形状的字段当成本版本语义，比回默认更危险。
+  if (typeof r.version === 'number' && r.version !== 1) return base
 
   const num = (v: unknown, fallback: number, min = 0): number =>
     typeof v === 'number' && Number.isFinite(v) ? Math.max(min, Math.floor(v)) : fallback
@@ -257,10 +262,14 @@ export function applyCompressionOutcome(
   if (outcome.skipped) stats.skipped += 1
   if (outcome.truncationDropped > 0) stats.truncations += 1
   if (outcome.fidelityWarned) stats.fidelityWarns += 1
-  // 截断计数不单独触发写盘（长对话每轮都可能硬截断）；其余计数变化即写盘
+  // 截断计数**必须**触发写盘（修复）：此前把它排除在 changed 之外（怕长对话每轮 config:set），
+  // 结果是「只发生硬截断」的会话里计数每轮被推高又在调用方被丢弃 → 设置页的「截断 N」永远停在旧值，
+  // 恰好是本批（可观测性）最不该发生的失真。代价可控：该分支只在**上下文真的丢过消息**时进入，
+  // 健康会话 dropped=0、不写盘；病态会话每轮一次小 JSON 写，换来统计为真。
   if (stats.compressions !== state.stats.compressions
     || stats.skipped !== state.stats.skipped
-    || stats.fidelityWarns !== state.stats.fidelityWarns) {
+    || stats.fidelityWarns !== state.stats.fidelityWarns
+    || stats.truncations !== state.stats.truncations) {
     changed = true
   }
 

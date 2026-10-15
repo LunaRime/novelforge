@@ -19,7 +19,10 @@ import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../s
 import { calculateCost } from '../services/llm/prompt-cache'
 import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffectReceipts, computeConversationDependencyHash, type CompressedBatch } from '../services/agent/archive-codec'
 import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteBatchOriginals, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
-import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
+import { computePrefixFingerprint } from '../services/agent/prefix-accounting'
+import {
+  resetPrefixBaseline, peekPrefixChange, updatePrefixBaseline, getLastCachedTokens,
+} from '../services/agent/prefix-baseline'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
 import { collectBatchEntities, checkSummaryFidelity, shouldWarnFidelity, type FidelityEntityKind } from '../services/agent/ccr-fidelity'
 import {
@@ -230,8 +233,10 @@ interface AgentState {
   /** B3：移除该压缩 —— 原文插回历史、批次移出 compressed、摘要重算 */
   removeCompaction: (batch: number) => Promise<void>
   /** P1-3：读分卷原文重生成该批摘要（移除压缩 / rewind 后摘要失效的修复路径）。
-   *  以该批原文为**唯一输入**重建（剩余批次的迭代链已断）；成功后清除失效标记恢复 M1 注入 */
-  regenerateBatchSummary: (batch: number) => Promise<void>
+   *  以该批原文为**唯一输入**重建（剩余批次的迭代链已断）；成功后清除失效标记恢复 M1 注入。
+   *  @returns 失败时返回**可直接展示的错误文案**（已 i18n），成功返回 null ——
+   *  卡片据此给内联提示（此前失败只进 LogsView，按钮复位后用户看不到任何反馈） */
+  regenerateBatchSummary: (batch: number) => Promise<string | null>
   /** 恢复第 entryIndex 个 rewind 归档：归档消息 append 回 messages（rewind 可逆）；
    *  返回是否成功；无归档或索引无效返回 false */
   restoreRewound: (entryIndex: number) => boolean
@@ -376,10 +381,7 @@ const SKILL_INJECT_MAX_TOKENS = 2000
 // （§7.1-C2：默认值与旧常量逐字一致 —— 200 / 4000）
 
 // ===== 前缀记账（B 档第二轮 B4）：只记不拦 =====
-/** 上一轮的 system 段文本（比较用；初始为空表示首轮） */
-let lastPrefixText = ''
-/** 上一轮的真实缓存命中 token（用于判断"前缀变化是否真的打掉了命中"） */
-let lastCachedTokens = 0
+// 基线状态已抽到 `prefix-baseline` 模块（P0-1：可重置 + 可单测）；此处只保留调用点。
 
 // ===== Tool 确认回调管理 =====
 /** 存储待确认的 Tool 回调（A 档：随决策携带提案 / 项目路径 / 参数，供「始终允许」固化规则） */
@@ -398,6 +400,14 @@ let activeStreamRequestId: string | null = null
 
 /** 生成序号 — 取消后立即发新消息时，旧请求的 onDone/onError 晚到不覆盖新状态 */
 let generationSeq = 0
+
+/**
+ * 前缀基线重置（P0-1 修复）：基线是**模块级跨轮状态**（`prefix-baseline` 模块），
+ * 不随会话切换重置时，新会话首轮的「前缀：已变化（共享 N 字符）」与「缓存命中归零」告警
+ * 是拿**上一个会话**的 system 段在比 —— 面板与日志都会说谎。
+ * 与 `clearReadState()` 同址调用（同一类「跨会话模块级状态」）。
+ * ⚠️ `/clear` **不重置**：同一会话内 system 段确实变了（M1 被清），如实报告才对。
+ */
 
 /** archive 恢复请求序号 — 快速启动/重复调用时旧请求晚到不覆盖新状态 */
 let archiveLoadSeq = 0
@@ -470,6 +480,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }))
     // 新建会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
     clearReadState()
+    resetPrefixBaseline()   // P0-1：前缀基线同理（跨会话比较 = 面板/日志说谎）
     get().persistCurrent(newConv.id)
     return newConv
   },
@@ -479,6 +490,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ activeConversationId: id, showHistory: false, memoryView: false, sendObservations: {} })
     // 切换会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
     clearReadState()
+    resetPrefixBaseline()   // P0-1：切换会话后首轮不与上一会话的前缀比较
   },
 
   deleteConversation: (id) => {
@@ -495,6 +507,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 新活跃会话从未读过该文件，却会命中上一会话的 file_unchanged 桩（零内容）。
     // 与 createConversation/selectConversation 挂钩一致（后者即使选择同一会话也清空）
     clearReadState()
+    resetPrefixBaseline()   // P0-1：删除可能改变活跃会话，前缀基线一并重置
     // 同步删除归档文件（主进程幂等删除；fire-and-forget）
     ipc.invoke('fs:agent-archive-delete', id).catch(() => {
       console.warn('[Agent] 归档删除失败:', id)
@@ -509,6 +522,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     set({ conversations: [], activeConversationId: null, sendObservations: {} })
     // 清空所有会话后同步清空读去重状态（防会话间模块级状态残留）
     clearReadState()
+    resetPrefixBaseline()   // P0-1：会话全清 → 前缀基线同清
     for (const id of ids) {
       ipc.invoke('fs:agent-archive-delete', id).catch(() => {
         console.warn('[Agent] 归档删除失败:', id)
@@ -1038,7 +1052,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           [convId]: {
             historySentTokens: historyTokens,
             panelHistoryTokens,
-            prefix: lastPrefixText ? comparePrefix(lastPrefixText, systemPrompt) : undefined,
+            prefix: peekPrefixChange(systemPrompt),
             at: Date.now(),
           },
         },
@@ -1083,12 +1097,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
           // 前缀记账（B 档第二轮 B4）：只对 system 段取指纹 —— 含 history/user 会每轮必变
           const prefixFingerprint = computePrefixFingerprint(systemPrompt)
-          const prefixCompare = comparePrefix(lastPrefixText, systemPrompt)
-          if (prefixCompare.changed && lastCachedTokens > 0) {
+          const prefixCompare = peekPrefixChange(systemPrompt)
+          const priorCachedTokens = getLastCachedTokens()
+          if (prefixCompare && prefixCompare.changed && priorCachedTokens > 0) {
             renderLog('warn', 'Agent', `前缀变化（与上轮共享 ${prefixCompare.sharedChars} 字符）→ 本轮缓存命中归零`)
           }
-          lastPrefixText = systemPrompt
-          lastCachedTokens = usage?.cachedTokens ?? 0
+          updatePrefixBaseline(systemPrompt, usage?.cachedTokens ?? 0)
 
           try {
             const cost = usage && model
@@ -1107,7 +1121,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               error_message: '',
               cost,
               prefix_fingerprint: prefixFingerprint,           // B 档第二轮 B4：前缀记账
-              prefix_shared_chars: prefixCompare.changed ? prefixCompare.sharedChars : 0,
+              prefix_shared_chars: prefixCompare?.changed ? prefixCompare.sharedChars : 0,
             })
           } catch { /* 日志失败不影响主流程 */ }
 
@@ -1718,31 +1732,41 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
    */
   regenerateBatchSummary: async (batch) => {
     const conv = get().getActiveConversation()
-    if (!conv) return
+    if (!conv) return null
     // 生成期间禁止：与 rewind 同款守卫（历史/摘要写回会和流式回收竞争）
-    if (get().generating) return
+    if (get().generating) return t('ccr.regenerateBusy')
     const target = (conv.compressed ?? []).find(b => b.batch === batch)
-    if (!target) return
+    if (!target) return t('ccr.regenerateNoBatch')
 
     // 分卷缺失 / 标记不可恢复 → 可读错误（不静默）
     const originals = target.recoverable === false ? null : await readBatchOriginal(conv.id, batch)
     if (!originals || originals.length === 0) {
       renderLog('error', 'Agent', t('ccr.regenerateNoOriginal'))
-      return
+      return t('ccr.regenerateNoOriginal')
     }
     const modelId = conv.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
     if (!modelId) {
       renderLog('error', 'Agent', t('ccr.regenerateNoModel'))
-      return
+      return t('ccr.regenerateNoModel')
     }
+
+    // 自学习压缩：与压缩主路径**同口径**注入激活规则提示（D1 修复）——重生成正是用户
+    // 对摘要不满意时的修复入口，学到的保留/省略要求在此缺席等于规则在最需要处失效。
+    // 读配置失败 → 不带提示生成（与引入前逐字一致），不阻断。
+    let hints: string[] = []
+    try {
+      const cfg = await ipc.invoke('config:get') as { compactionLearning?: unknown } | null
+      hints = composeLearningHints(resolveCompressionLearning(cfg?.compactionLearning))
+    } catch { /* 读配置失败：不带提示（降级） */ }
 
     let summary: string
     try {
-      summary = await generateConversationSummary({ oldSummary: '', batch: originals, modelId })
+      summary = await generateConversationSummary({ oldSummary: '', batch: originals, modelId, hints })
     } catch (e) {
       // 失败不污染状态（批次/摘要保持原样，用户可重试）
-      renderLog('error', 'Agent', t('ccr.regenerateFailed').replace('{error}', () => String(e)))
-      return
+      const msg = t('ccr.regenerateFailed').replace('{error}', String(e))
+      renderLog('error', 'Agent', msg)
+      return msg
     }
     // 回执与压缩主路径同口径（头插，防重放）
     const receipts = extractSideEffectReceipts(originals)
@@ -1768,6 +1792,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     get().persistCurrent(conv.id)
     // 自学习压缩 v1：重生成 = 弱负反馈（v1 只统计）
     void recordLearningFeedback('regeneration')
+    return null   // 成功：卡片据此清除内联错误
   },
 
   rewindToMessage: (messageId) => {

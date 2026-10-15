@@ -11,6 +11,9 @@ import { runAgentLoop, type AgentEngineCallbacks, type ToolCallInfo } from '../s
 import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry } from '../services/agent/skill-registry'
 import { serializeArchive, parseArchive } from '../services/agent/archive-codec'
+import {
+  getLastPrefixText, updatePrefixBaseline, peekPrefixChange, resetPrefixBaseline,
+} from '../services/agent/prefix-baseline'
 import { t } from '../shared/locale'
 import type { AgentConversation } from './agent-store'
 
@@ -90,6 +93,9 @@ beforeEach(() => {
   originals.clear()
   configResponse = null
   deleteCalls = []
+  // 测试卫生：mockInvoke 是模块级 vi.fn —— 不清历史时，后文用 .find() 扫「config:set」的断言
+  // 会被**前序用例**的调用满足（假通过）。全局 beforeEach 清一次即可（用例内断言都在动作之后）。
+  mockInvoke.mockClear()
   useAgentStore.setState({ conversations: [], activeConversationId: null })
   // 项目快照 fixture：createConversation 读取 currentProject 写入 projectPath/projectName
   useProjectStore.setState({
@@ -1340,6 +1346,31 @@ describe('P0-1：sendObservations（实发口径，仅内存态）', () => {
     expect(useAgentStore.getState().sendObservations).toEqual({})
   })
 
+  it('前缀基线随会话生命周期重置（新建 / 切换 / 删除 / 全清）——不拿上一会话的前缀比较', () => {
+    resetPrefixBaseline()
+    const a = useAgentStore.getState().createConversation({ title: 'A' })
+    updatePrefixBaseline('AAA-system', 321)
+    expect(getLastPrefixText()).toBe('AAA-system')
+    expect(peekPrefixChange('BBB-system')).toEqual({ changed: true, sharedChars: 0 })
+
+    useAgentStore.getState().selectConversation(a.id)          // 切换 → 重置
+    expect(getLastPrefixText()).toBe('')
+    expect(peekPrefixChange('BBB-system')).toBeUndefined()     // 无基线 → 面板不渲染前缀行
+
+    updatePrefixBaseline('AAA-system-2', 1)
+    const b = useAgentStore.getState().createConversation({ title: 'B' })   // 新建 → 重置
+    expect(getLastPrefixText()).toBe('')
+
+    updatePrefixBaseline('SYSTEM-A3', 1)
+    useAgentStore.getState().deleteConversation(b.id)          // 删除 → 重置
+    expect(getLastPrefixText()).toBe('')
+
+    updatePrefixBaseline('SYSTEM-A4', 1)
+    useAgentStore.getState().clearAll()                        // 全清 → 重置
+    expect(getLastPrefixText()).toBe('')
+    resetPrefixBaseline()
+  })
+
   it('/clear 清空观测；rewind 等历史变更同样清空', async () => {
     const conv = await seedShort()
     await useAgentStore.getState().sendMessage('新消息')
@@ -1399,7 +1430,8 @@ describe('P1-3：regenerateBatchSummary', () => {
       },
     )
     useLLMStore.setState({ generate: generateMock as never })
-    await useAgentStore.getState().regenerateBatchSummary(1)
+    const err = await useAgentStore.getState().regenerateBatchSummary(1)
+    expect(err).toBeNull()   // 成功 → null（卡片据此清除内联提示）
 
     after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     expect(after.compressed).toHaveLength(1)
@@ -1419,11 +1451,13 @@ describe('P1-3：regenerateBatchSummary', () => {
     const conv = await seedBatches()
     const renderLogMock = vi.mocked(renderLog)
     useLLMStore.setState({ generate: vi.fn(async () => { throw new Error('LLM 挂了') }) as never })
-    await useAgentStore.getState().regenerateBatchSummary(1)
+    const err = await useAgentStore.getState().regenerateBatchSummary(1)
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     expect(after.compressed![0].summary).toBe('旧摘要1')
-    expect(renderLogMock).toHaveBeenCalledWith('error', 'Agent',
-      expect.stringContaining(t('ccr.regenerateFailed').split('：')[0]))
+    // 失败必须**返回可展示文案**（卡片内联提示；此前只能去 LogsView 找）+ 留痕
+    // 断言用错误正文（语言无关）而非按中文标点切前缀
+    expect(err).toContain('LLM 挂了')
+    expect(renderLogMock).toHaveBeenCalledWith('error', 'Agent', expect.stringContaining('LLM 挂了'))
   })
 
   it('分卷不可用（recoverable=false）→ 可读错误，不产生状态变化', async () => {
@@ -1434,10 +1468,49 @@ describe('P1-3：regenerateBatchSummary', () => {
         : c),
     }))
     const renderLogMock = vi.mocked(renderLog)
-    await useAgentStore.getState().regenerateBatchSummary(1)
+    const err = await useAgentStore.getState().regenerateBatchSummary(1)
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     expect(after.compressed![0].summary).toBe('旧')
     expect(renderLogMock).toHaveBeenCalledWith('error', 'Agent', t('ccr.regenerateNoOriginal'))
+    expect(err).toBe(t('ccr.regenerateNoOriginal'))   // 失败文案返回给卡片内联展示
+  })
+
+  it('自学习：重生成同样注入激活规则提示（规则此前只作用于自动压缩）', async () => {
+    await seedBatches()
+    configResponse = {
+      compactionLearning: { enabled: true, rules: [{ id: 'keep-characters', active: true, evidence: 2 }] },
+    }
+    const generateMock = vi.fn(
+      async (messages: Array<{ role: string; content: string }>) =>
+        ({ success: messages.length > 0, content: '带提示摘要', usage: undefined }),
+    )
+    useLLMStore.setState({ generate: generateMock as never })
+
+    await useAgentStore.getState().regenerateBatchSummary(1)
+
+    const prompt = (generateMock.mock.calls[0][0] as Array<{ content: string }>)[0].content
+    expect(prompt).toContain(t('ccr.learnedHintsHeader'))
+    expect(prompt).toContain(t('ccr.learnHintKeepCharacters'))
+  })
+
+  it('自学习：移除压缩 / 重生成 → 统计积分并落盘（开启时；此前零覆盖）', async () => {
+    await seedBatches()
+    configResponse = { compactionLearning: { enabled: true, stats: { reverts: 0, regenerations: 0 } } }
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: '重生成摘要 x', usage: undefined })) as never })
+
+    await useAgentStore.getState().removeCompaction(2)
+    await useAgentStore.getState().regenerateBatchSummary(1)
+
+    await vi.waitFor(() => {
+      const writes = mockInvoke.mock.calls
+        .filter(c => c[0] === 'config:set'
+          && (c[1] as Record<string, unknown> | undefined)?.compactionLearning !== undefined)
+        .map(c => (c[1] as {
+          compactionLearning: { stats: { reverts: number; regenerations: number } }
+        }).compactionLearning)
+      expect(writes.some(w => w.stats.reverts === 1)).toBe(true)
+      expect(writes.some(w => w.stats.regenerations === 1)).toBe(true)
+    })
   })
 
   it('生成中（generating）不可重生成（与 rewind 同款守卫）', async () => {
@@ -1625,8 +1698,9 @@ describe('自学习压缩 v1：接线', () => {
 
     await useAgentStore.getState().sendMessage('新消息')
 
+    // 断言用**规则名**（i18n 值本身）而非按中文标点切前缀——后者在文案/语言变更下会假失败
     expect(renderLogMock).toHaveBeenCalledWith('info', 'Agent',
-      expect.stringContaining(t('ccr.learnRuleActivated').split('：')[0]))
+      expect.stringContaining(t('ccr.ruleKeepCharacters')))
     await vi.waitFor(() => {
       const call = mockInvoke.mock.calls.find(c =>
         c[0] === 'config:set' && (c[1] as Record<string, unknown> | undefined)?.compactionLearning !== undefined)
