@@ -1207,6 +1207,20 @@ describe('压缩保留偏好（§7.1-C2）', () => {
     expect(renderLogMock).toHaveBeenCalledWith('warn', 'Agent', expect.any(String))
   })
 
+  it('P0-2：跳过后历史仍超预算 → 硬截断留痕（条数 + token 数，不再静默）', async () => {
+    const conv = await seed(6, 40)
+    configResponse = { compaction: { historyMaxTokens: 1000, minimumChangeTokens: 2000 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    // 压缩跳过 → 硬截断兜底真正丢消息的那一步：新增独立留痕（文案首段 + 数字）
+    expect(renderLogMock).toHaveBeenCalledWith('warn', 'Agent',
+      expect.stringContaining(t('ccr.historyTruncated').split('{')[0]))
+    // P0-1：观测如实分列（实发 < 面板，两者都非零）
+    const obs = useAgentStore.getState().sendObservations[conv.id]
+    expect(obs).toBeTruthy()
+    expect(obs.panelHistoryTokens).toBeGreaterThan(obs.historySentTokens)
+    expect(obs.historySentTokens).toBeGreaterThan(0)
+  })
+
   it('keepBatches=1 → 只留最新 1 批（更旧的连同分卷释放，卡片消失）', async () => {
     const conv = await seed(6, 40, 2)                 // 已有 2 批
     configResponse = { compaction: { historyMaxTokens: 1000, keepBatches: 1 } }
@@ -1281,5 +1295,61 @@ describe('appendWorkflowCompletion（线② 2b D5：完成回执对话内卡片�
     useAgentStore.setState({ conversations: [], activeConversationId: null })
     useAgentStore.getState().appendWorkflowCompletion('x', 'success')
     expect(useAgentStore.getState().conversations).toHaveLength(0)
+  })
+})
+
+// ===== P0-1：实发口径观测（预算条「面板 X · 实发 Y」的数据源） =====
+describe('P0-1：sendObservations（实发口径，仅内存态）', () => {
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: 'S', usage: undefined })) as never })
+  })
+
+  /** 构造会话 + 未超预算历史（6×~420 启发式 tokens < 默认 4000 → 无压缩无截断，两口径相等） */
+  const seedShort = async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    const msgs = Array.from({ length: 6 }, (_, i) => ({
+      id: `o${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '历史消息占位。'.repeat(40), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs } : c),
+    }))
+    return conv
+  }
+
+  it('发送后写入实发/面板口径；切会话与新建会话后清空（不串数据）', async () => {
+    const conv = await seedShort()
+    await useAgentStore.getState().sendMessage('新消息')
+    const obs = useAgentStore.getState().sendObservations[conv.id]
+    expect(obs).toBeTruthy()
+    expect(obs.historySentTokens).toBeGreaterThan(0)
+    // 未截断：两口径相等（同源数据）；首轮无上轮基线 → 不带 prefix
+    expect(obs.panelHistoryTokens).toBe(obs.historySentTokens)
+    expect(obs.prefix).toBeUndefined()
+
+    // 切会话（选中另一条）→ 清空
+    const other = useAgentStore.getState().createConversation({ title: 'T2' })
+    expect(useAgentStore.getState().sendObservations).toEqual({})
+    useAgentStore.getState().selectConversation(conv.id)
+    expect(useAgentStore.getState().sendObservations).toEqual({})
+    useAgentStore.getState().selectConversation(other.id)
+    expect(useAgentStore.getState().sendObservations).toEqual({})
+  })
+
+  it('/clear 清空观测；rewind 等历史变更同样清空', async () => {
+    const conv = await seedShort()
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().sendObservations[conv.id]).toBeTruthy()
+    await useAgentStore.getState().sendMessage('/clear')
+    expect(useAgentStore.getState().sendObservations).toEqual({})
+
+    // 历史变更路径：invalidateCompactions（rewind/恢复原文共用入口）也清空
+    await useAgentStore.getState().sendMessage('再来一条')
+    expect(Object.keys(useAgentStore.getState().sendObservations).length).toBeGreaterThan(0)
+    useAgentStore.getState().invalidateCompactions()
+    expect(useAgentStore.getState().sendObservations).toEqual({})
   })
 })

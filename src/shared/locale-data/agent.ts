@@ -71,6 +71,7 @@ export const agentTexts = {
   'ccr.removeCompaction': { 'zh-CN': '移除该压缩', 'en-US': 'Remove this compaction', 'ru-RU': 'Убрать это сжатие' },
   'ccr.originalUnavailable': { 'zh-CN': '原文不可用（分卷已丢失）', 'en-US': 'Original text unavailable (shard lost)', 'ru-RU': 'Исходный текст недоступен (фрагмент утерян)' },
   'ccr.compressionSkipped': { 'zh-CN': '本次压缩无收益（{before} → {after} tokens），已跳过', 'en-US': 'Compaction had no gain ({before} → {after} tokens); skipped', 'ru-RU': 'Сжатие без выигрыша ({before} → {after} токенов); пропущено' },
+  'ccr.historyTruncated': { 'zh-CN': '本轮历史超出预算：{n} 条最旧消息未发送（约 {tokens} tokens，消息未删除）', 'en-US': 'History over budget: {n} oldest message(s) not sent this turn (~{tokens} tokens; not deleted)', 'ru-RU': 'История превышает бюджет: {n} старейших сообщений не отправлено (~{tokens} токенов; не удалены)' },
   'agent.skillCatalogOmitted': { 'zh-CN': '（还有 {n} 个技能未列出，可用 skill 工具查看全部）', 'en-US': '({n} more skills not listed — use the skill tool to see all)', 'ru-RU': '(ещё {n} навыков не показано — используйте инструмент skill)' },
   'agentConfirm.writeFile': { 'zh-CN': '将写入文件：{path}', 'en-US': 'Will write file: {path}', 'ru-RU': 'Запишет файл: {path}' },
   'agentConfirm.openEditor': { 'zh-CN': '将在编辑器中打开：{path}', 'en-US': 'Will open in editor: {path}', 'ru-RU': 'Откроет в редакторе: {path}' },

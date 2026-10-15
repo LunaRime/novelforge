@@ -45,6 +45,11 @@ export function computeContextUsage(opts: {
   segments?: ContextSegment[]
   /** B6：实发历史 token（发送前裁剪后的真实值）；不传则面板值与实发值视为一致 */
   historySentTokens?: number
+  /**
+   * P0-1：面板口径历史 token 的**覆盖值**（最近一次发送时的快照）。
+   * 不传时用当前 messages 全量估算（旧行为）——两者同口径才能让「面板 X · 实发 Y」可比。
+   */
+  historyPanelTokens?: number
   /** B4：前缀记账 */
   prefix?: { changed: boolean; sharedChars: number }
 }): ContextUsage {
@@ -60,8 +65,9 @@ export function computeContextUsage(opts: {
     modelMax: opts.modelMax,
     total: base + memory + history + current,
     segments: opts.segments,
-    // 面板值 = 当前 messages 全量；实发值由调用方在发送处回填
-    historyPanelTokens: history,
+    // 面板值 = 当前 messages 全量；实发值由调用方在发送处回填；
+    // P0-1：发送后两者同用「发送时刻」快照（opts.historyPanelTokens），对照才有意义
+    historyPanelTokens: opts.historyPanelTokens ?? history,
     historySentTokens: opts.historySentTokens,
     prefix: opts.prefix,
   }

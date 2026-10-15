@@ -63,6 +63,20 @@ export interface RewoundBranch {
   rewoundAt: number
 }
 
+/**
+ * 本轮**实发口径**观测（P0-1 面板闭环）：预算条明细里「面板 X · 实发 Y」的数据源。
+ * 仅内存态（不随 archive 落盘——体积与恢复语义都不值得），切换会话 / 历史变更时清空。
+ */
+export interface SendObservation {
+  /** 实发历史 token（发送前按预算裁剪后的真实值） */
+  historySentTokens: number
+  /** 同一时刻面板口径的历史 token（裁剪前全量；与实发不等时 UI 分列展示） */
+  panelHistoryTokens: number
+  /** 前缀记账（与上轮比较；无上轮基线时缺省——首轮不渲染该行） */
+  prefix?: { changed: boolean; sharedChars: number }
+  at: number
+}
+
 /** 单个会话 */
 export interface AgentConversation {
   id: string
@@ -121,6 +135,11 @@ interface AgentState {
   pendingSubAgentConfirmation: { sessionId: string; description: string; toolCall: ToolCallInfo } | null
   /** Tool 系统是否已初始化 */
   toolsInitialized: boolean
+  /**
+   * 各会话最近一次发送的实发观测（P0-1）：仅内存态、不进 archive；
+   * 切换会话 / `/clear` / rewind / 恢复归档 / 移除压缩时清空（历史已变，读数即失效）。
+   */
+  sendObservations: Record<string, SendObservation>
 
   // ===== 计算属性（Getters） =====
   /** 获取当前活跃会话 */
@@ -380,6 +399,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   activeRequestId: null,
   pendingSubAgentConfirmation: null,
   toolsInitialized: false,
+  sendObservations: {},
 
   getActiveConversation: () => {
     const { conversations, activeConversationId } = get()
@@ -420,6 +440,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       activeConversationId: newConv.id,
       showHistory: false,
       memoryView: false,
+      // P0-1：切到新会话，旧读数即失效（仅内存态观测）
+      sendObservations: {},
     }))
     // 新建会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
     clearReadState()
@@ -428,7 +450,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   },
 
   selectConversation: (id) => {
-    set({ activeConversationId: id, showHistory: false, memoryView: false })
+    // P0-1：切换会话清空实发观测（不串数据）
+    set({ activeConversationId: id, showHistory: false, memoryView: false, sendObservations: {} })
     // 切换会话后清空读去重状态：新会话的重复读应重新全量注入（上下文不同）
     clearReadState()
   },
@@ -440,7 +463,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       const nextId = state.activeConversationId === id
         ? (filtered[0]?.id ?? null)
         : state.activeConversationId
-      return { conversations: filtered, activeConversationId: nextId }
+      // P0-1：删除可能改变活跃会话 → 实发观测一并清空
+      return { conversations: filtered, activeConversationId: nextId, sendObservations: {} }
     })
     // 清空读去重状态：删除活跃会话时 activeConversationId 会切换到既有会话——
     // 新活跃会话从未读过该文件，却会命中上一会话的 file_unchanged 桩（零内容）。
@@ -457,7 +481,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   clearAll: () => {
     const ids = get().conversations.map(c => c.id)
-    set({ conversations: [], activeConversationId: null })
+    set({ conversations: [], activeConversationId: null, sendObservations: {} })
     // 清空所有会话后同步清空读去重状态（防会话间模块级状态残留）
     clearReadState()
     for (const id of ids) {
@@ -531,6 +555,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                     ? { ...c, messages: [], rollingSummary: undefined, compressed: undefined, subSessions: undefined }
                     : c
                 ),
+                // P0-1：/clear 后历史全清，实发观测同步失效
+                sendObservations: {},
               }))
               // 清空同步落盘：否则重启后已清空的消息会从 archive 复活
               get().persistCurrent(activeConv.id)
@@ -909,6 +935,31 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         historyMessages.unshift(msg) // 还原为正序
         historyTokens += msgTokens
       }
+
+      // ===== P0-2：硬截断兜底必须留痕 =====
+      // 真正丢消息的一步此前是**静默的**：压缩失败 / 无收益跳过 / 压缩不足以降到预算下三种
+      // 情形下，用户都不知道这轮少了几条历史（消息未删除，只是未发送；日志给出条数与 token 量）
+      const panelHistoryTokens = candidateMessages.reduce((sum, m) => sum + estimateTokens(m.content), 0)
+      const droppedMessages = candidateMessages.slice(historyMessages.length)
+      if (droppedMessages.length > 0) {
+        renderLog('warn', 'Agent', t('ccr.historyTruncated')
+          .replace('{n}', String(droppedMessages.length))
+          .replace('{tokens}', String(panelHistoryTokens - historyTokens)))
+      }
+
+      // ===== P0-1：记录本轮实发口径（面板明细「历史：面板 X · 实发 Y」的数据源） =====
+      // 前缀比较在此**只读**——真实更新在 generateFn 首调时（避免未真正发出请求也改写基线）；
+      // 无上轮基线（首轮）时不带 prefix，面板不渲染该行。仅内存态，历史变更/切会话时清空。
+      set({
+        sendObservations: {
+          [convId]: {
+            historySentTokens: historyTokens,
+            panelHistoryTokens,
+            prefix: lastPrefixText ? comparePrefix(lastPrefixText, systemPrompt) : undefined,
+            at: Date.now(),
+          },
+        },
+      })
 
       // LLM 生成函数（流式调用：实时推送文本 + 底层可取消 + 真实 usage）
       // 返回 Promise<string> 完整文本供 ReAct 循环解析 tool_call
@@ -1516,6 +1567,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
    */
   invalidateCompactions: () => {
     set(state => ({
+      // P0-1：历史已变（rewind / 恢复原文）→ 实发观测同源失效
+      sendObservations: {},
       conversations: state.conversations.map(conv => {
         if (!conv.compressed?.length) return conv
         return {
@@ -1547,6 +1600,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     void deleteBatchOriginal(conv.id, batch).catch(() => { /* 分卷清理失败不阻断 */ })
 
     set(state => ({
+      // P0-1：原文插回历史 → 实发观测失效
+      sendObservations: {},
       conversations: state.conversations.map(c => {
         if (c.id !== conv.id) return c
         const remaining = (c.compressed ?? []).filter(b => b.batch !== batch)

@@ -264,6 +264,8 @@ function ActiveConversation() {
   // ⚠️ 两个 hook 必须放在 `if (!activeConv) return null` **之前**（条件调用 useMemo 会被
   //    react-hooks/rules-of-hooks 拦下）；故此处对 activeConv 做可空处理
   const subSessions = activeConv?.subSessions
+  // P0-1：本轮实发口径（发送后写入；未发送过/历史变更后被清空 → undefined，保持旧行为）
+  const sendObs = useAgentStore(s => (activeConv ? s.sendObservations[activeConv.id] : undefined))
   // 可见消息列表（过滤 system——显示层与 store 层独立：store 按物理序截断，展示按可见序）
   const visibleMessages = useMemo(() => (activeConv?.messages ?? []).filter(m => m.role !== 'system'), [activeConv?.messages])
   // C 档第二轮：子会话卡的消息归属——按 task 工具调用的 description 匹配（同一子会话只挂一次：
@@ -317,6 +319,10 @@ function ActiveConversation() {
     modelMax,
     // B6 明细：改取 async 段（含常驻/目录/手动三段；此前只有同步段，M2 缺席）
     segments: usageSegments.segments,
+    // P0-1：实发口径 + 前缀状态（两者都来自最近一次发送的观测快照；无记录时不传 → 不渲染）
+    historySentTokens: sendObs?.historySentTokens,
+    historyPanelTokens: sendObs?.panelHistoryTokens,
+    prefix: sendObs?.prefix,
   })
 
   return (
