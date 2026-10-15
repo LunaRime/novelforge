@@ -361,6 +361,12 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
   it('computeMessageBudget：百分比可配（窗口 32000 × 50% → 16000）', () => {
     expect(computeMessageBudget(32_000, 50)).toBe(16_000)
   })
+  it('W1：上限可放宽（强档 128k）——缺省仍是 64k，行为不变', () => {
+    expect(computeMessageBudget(200_000, 90, 128_000)).toBe(128_000)   // min(180k, 128k)
+    expect(computeMessageBudget(100_000, 90, 128_000)).toBe(90_000)    // 90k < 128k，不触上限
+    expect(computeMessageBudget(200_000, 90)).toBe(64_000)             // 缺省上限 = 引入前行为
+    expect(computeMessageBudget(32_000, 60, 32_000)).toBe(19_200)      // 弱档：60% 且上限 32k
+  })
   it('isRecoverableError：英文上下文类 → true', () => {
     expect(isRecoverableError('This model\'s maximum context length is 32768 tokens')).toBe(true)
     expect(isRecoverableError('Request failed with status code 413')).toBe(true)

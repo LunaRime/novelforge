@@ -67,3 +67,28 @@ describe('computeHistoryBudget（百分比压缩：上下阈值钳制）', () =>
     expect(computeHistoryBudget({ ...prefs, budgetPercent: 95 }, 32_000)).toBe(30_400)
   })
 })
+
+describe('W1 批 2：档位缺省值 + 历史预算绝对上限', () => {
+  it('defaults 只作**缺省**：用户显式写过的值优先', () => {
+    const strongDefaults = { ...DEFAULT_COMPACTION_PREFS, budgetPercent: 90 }
+    expect(resolveCompactionPrefs(null, strongDefaults).budgetPercent).toBe(90)
+    expect(resolveCompactionPrefs({ compaction: {} }, strongDefaults).budgetPercent).toBe(90)
+    // 显式值 70 不被策略的 90 覆盖
+    expect(resolveCompactionPrefs({ compaction: { budgetPercent: 70 } }, strongDefaults).budgetPercent).toBe(70)
+    // 非数字（手改配置写成字符串）仍回落到策略缺省，而不是猜
+    expect(resolveCompactionPrefs({ compaction: { budgetPercent: '90' } }, strongDefaults).budgetPercent).toBe(90)
+  })
+
+  it('上限可放宽：200k 窗口 × 90% 不再被 64k 天花板吃掉', () => {
+    const strong = { ...DEFAULT_COMPACTION_PREFS, budgetPercent: 90 }
+    expect(computeHistoryBudget(strong, 200_000, 128_000)).toBe(128_000)  // min(180k, 128k)
+    expect(computeHistoryBudget(strong, 100_000, 128_000)).toBe(90_000)   // 90k < 128k，不触上限
+    expect(computeHistoryBudget(strong, 200_000)).toBe(64_000)            // 缺省上限 = 引入前行为
+  })
+
+  it('弱档：60% + 32k 上限（更早压、上下文更干净）', () => {
+    const weak = { ...DEFAULT_COMPACTION_PREFS, budgetPercent: 60 }
+    expect(computeHistoryBudget(weak, 200_000, 32_000)).toBe(32_000)
+    expect(computeHistoryBudget(weak, 40_000, 32_000)).toBe(24_000)
+  })
+})

@@ -102,6 +102,8 @@ export interface AgentEngineOptions {
   modelContextWindow?: number
   /** 上下文预算百分比（预算 = 窗口 × %，默认 80 = 留 20% 余量防单轮超窗） */
   budgetPercent?: number
+  /** 消息预算绝对上限（W1 批 2：`context-policy` 按档位给出；缺省 = 64k，与引入前一致） */
+  maxMessageBudgetTokens?: number
   /**
    * 委派白名单（C 档第二轮）：给定后**只允许**名单内的工具执行（fail-closed —— 不在名单里的
    * 工具不执行，注入「不在白名单」观察）。缺省 undefined = 全量，父 agent 行为与现状逐字一致。
@@ -172,7 +174,9 @@ export async function runAgentLoop(
   type RecoveryStage = 'none' | 'compacting' | 'meta-injected'
   let recoveryStage: RecoveryStage = 'none'
   let consecutiveRecoveryFailures = 0
-  let currentBudget = computeMessageBudget(options?.modelContextWindow, options?.budgetPercent)
+  let currentBudget = computeMessageBudget(
+    options?.modelContextWindow, options?.budgetPercent, options?.maxMessageBudgetTokens,
+  )
 
   while (rounds < MAX_TOOL_ROUNDS) {
     // 检查中止信号
@@ -196,7 +200,9 @@ export async function runAgentLoop(
       // 调用成功：恢复计数清零、预算复原（下次调用生效）
       consecutiveRecoveryFailures = 0
       recoveryStage = 'none'
-      currentBudget = computeMessageBudget(options?.modelContextWindow, options?.budgetPercent)
+      currentBudget = computeMessageBudget(
+        options?.modelContextWindow, options?.budgetPercent, options?.maxMessageBudgetTokens,
+      )
     } catch (error) {
       // 取消导致的生成中断走"已停止"而不是错误提示
       if (abortSignal?.aborted) {
@@ -757,14 +763,20 @@ function sanitizeObservation(content: string): string {
 
 /**
  * 按模型窗口计算消息压缩预算（线③ 后续：百分比压缩，有上下阈值）：
- * 预算 = clamp(窗口 × percent%, 16k 下阈值, 32k 上阈值)。
+ * 预算 = clamp(窗口 × percent%, 16k 下阈值, 上限)。
  * 无窗口 / 窗口 < 16k → 默认 16_000（现状不变）。
  * percent 默认 80 = 留 20% 余量，防止单轮对话（输入+输出）把上下文推过窗口。
+ *
+ * @param maxBudgetTokens 上限（W1 批 2：由 `context-policy` 按档位给出；默认 64k = 引入前行为）
  */
-export function computeMessageBudget(modelContextWindow?: number, percent = 80): number {
+export function computeMessageBudget(
+  modelContextWindow?: number,
+  percent = 80,
+  maxBudgetTokens: number = MAX_MESSAGE_BUDGET_TOKENS,
+): number {
   if (!modelContextWindow || modelContextWindow < MIN_DYNAMIC_WINDOW_TOKENS) return DEFAULT_MESSAGE_BUDGET_TOKENS
   const percentBudget = Math.floor(modelContextWindow * (percent / 100))
-  return Math.min(Math.max(percentBudget, DEFAULT_MESSAGE_BUDGET_TOKENS), MAX_MESSAGE_BUDGET_TOKENS)
+  return Math.min(Math.max(percentBudget, DEFAULT_MESSAGE_BUDGET_TOKENS), maxBudgetTokens)
 }
 
 /** 可恢复错误识别（上下文超限类——压缩后重试真实有效；白名单收紧防误判烧钱）。 */

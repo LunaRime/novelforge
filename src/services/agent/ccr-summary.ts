@@ -5,15 +5,27 @@ import { ipc } from '../ipc-client'
 import { calculateCost } from '../llm/prompt-cache'
 import { parseSharedFacts, upsertSharedFacts } from '../memory/shared-memory'
 
-/** 组装 CCR 摘要 prompt：第 N 次压缩输入 = 旧 rollingSummary + 新压缩批原文（迭代规则见设计 §4.2） */
-export function buildCcrSummaryPrompt(oldSummary: string, batchText: string, hints?: string[]): string {
+/** 组装 CCR 摘要 prompt：第 N 次压缩输入 = 旧 rollingSummary + 新压缩批原文（迭代规则见设计 §4.2）
+ *  @param maxTokens 摘要**生成长度指令**（W1 批 2：与注入上限同源，由 `context-policy.m1BudgetTokens` 给；
+ *         缺省 250 = 引入前文案。只调注入端会出现"给了 400 额度、摘要仍按 250 生成"的死额度。） */
+export function buildCcrSummaryPrompt(
+  oldSummary: string,
+  batchText: string,
+  hints?: string[],
+  maxTokens?: number,
+): string {
   // P1-1：固定分节的标题字符串单一来源——prompt 里的 {facts}/{instructions}/{tasks}/{decisions}
   // 由分节标题键填充；注入端（context-builder.trimSessionSummary）按同源值跨语言裁剪
+  const maxT = maxTokens ?? SUMMARY_DEFAULT_MAX_TOKENS
+  // cl100k 中文实测 ≈1.6 字/token（原文案 250 tokens ↔ 约 400 汉字）——保留字数提示，帮模型估长
+  const maxChars = Math.round(maxT * 1.6)
   const parts = [t('ccr.summaryPrompt')
     .replace('{facts}', t('ccr.summarySectionFacts'))
     .replace('{instructions}', t('ccr.summarySectionInstructions'))
     .replace('{tasks}', t('ccr.summarySectionTasks'))
-    .replace('{decisions}', t('ccr.summarySectionDecisions'))]
+    .replace('{decisions}', t('ccr.summarySectionDecisions'))
+    .replace('{maxTokens}', String(maxT))
+    .replace('{maxChars}', String(maxChars))]
   // 自学习压缩 v1：激活规则的保留/省略提示（规则文本为 i18n 键，零注入风险）
   if (hints && hints.length > 0) {
     parts.push(`${t('ccr.learnedHintsHeader')}\n${hints.map(h => `- ${h}`).join('\n')}`)
@@ -27,6 +39,9 @@ export function buildCcrSummaryPrompt(oldSummary: string, batchText: string, hin
   return parts.join('\n\n')
 }
 
+/** 摘要生成长度指令的缺省值（与 `SESSION_SUMMARY_BUDGET_TOKENS` 300 的注入上限留余量） */
+export const SUMMARY_DEFAULT_MAX_TOKENS = 250
+
 /** 生成对话摘要（budget 路由 + purpose 'ccr_summary' 落库）；失败 throw 由调用方降级硬截断 */
 export async function generateConversationSummary(opts: {
   oldSummary: string
@@ -34,11 +49,13 @@ export async function generateConversationSummary(opts: {
   modelId: string
   /** 自学习压缩：激活规则的提示（缺省 = 不追加，行为与引入前一致） */
   hints?: string[]
+  /** W1 批 2：摘要生成长度指令上限（缺省 250；与注入上限同源，由档位策略给出） */
+  maxTokens?: number
 }): Promise<string> {
   const batchText = opts.batch
     .map(m => `${m.role === 'user' ? t('ccr.roleUser') : t('ccr.roleAssistant')}: ${m.content}`)
     .join('\n\n')
-  const prompt = buildCcrSummaryPrompt(opts.oldSummary, batchText, opts.hints)
+  const prompt = buildCcrSummaryPrompt(opts.oldSummary, batchText, opts.hints, opts.maxTokens)
 
   // ⚠️ P0 修复：压缩摘要必须走 budget 路由（summarize→budget，设计 §7/计划 Global
   //    Constraints）——此前直接传 opts.modelId（Agent 的 elite/standard 模型），

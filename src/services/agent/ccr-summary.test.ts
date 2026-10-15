@@ -37,6 +37,14 @@ describe('buildCcrSummaryPrompt', () => {
     expect(p).not.toContain('旧摘要')
     expect(p).toContain('新批内容')
   })
+
+  it('W1：长度指令由 maxTokens 驱动（缺省 250 = 引入前文案；档位可给 200/400）', () => {
+    expect(buildCcrSummaryPrompt('', '批')).toContain('250')
+    expect(buildCcrSummaryPrompt('', '批', undefined, 200)).toContain('200')
+    expect(buildCcrSummaryPrompt('', '批', undefined, 400)).toContain('400')
+    // 字数提示按 ≈1.6 字/token 同步（250→400、200→320），不是写死的 400
+    expect(buildCcrSummaryPrompt('', '批', undefined, 200)).toContain('320')
+  })
 })
 
 describe('generateConversationSummary', () => {

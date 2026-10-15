@@ -36,31 +36,46 @@ const RANGES: Record<keyof CompactionPrefs, readonly [number, number]> = {
   keepBatches: [0, 20],
 }
 
-function pick(raw: unknown, key: keyof CompactionPrefs): number {
+function pick(raw: unknown, key: keyof CompactionPrefs, defaults: CompactionPrefs = DEFAULT_COMPACTION_PREFS): number {
   const [min, max] = RANGES[key]
   // 只认真正的数字：手工编辑配置写成 "8000" 字符串不算（回默认而不是猜）
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return DEFAULT_COMPACTION_PREFS[key]
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return defaults[key]
   return Math.min(max, Math.max(min, Math.round(raw)))
 }
 
 /** 从 GlobalConfig（或其片段）解析；缺段/坏形状一律回默认 → 老配置零迁移 */
-export function resolveCompactionPrefs(config: { compaction?: unknown } | null | undefined): CompactionPrefs {
+export function resolveCompactionPrefs(
+  config: { compaction?: unknown } | null | undefined,
+  /**
+   * 缺省值（W1 批 2）：由 `context-policy` 按模型档位给出。
+   * ⚠️ 只是**缺省**——用户显式写过的值仍然优先（`pick` 只在原始值不是数字时才回落到这里）。
+   */
+  defaults: CompactionPrefs = DEFAULT_COMPACTION_PREFS,
+): CompactionPrefs {
   const raw = (config?.compaction ?? {}) as Record<string, unknown>
   return {
-    budgetPercent: pick(raw.budgetPercent, 'budgetPercent'),
-    historyMaxTokens: pick(raw.historyMaxTokens, 'historyMaxTokens'),
-    minimumChangeTokens: pick(raw.minimumChangeTokens, 'minimumChangeTokens'),
-    keepBatches: pick(raw.keepBatches, 'keepBatches'),
+    budgetPercent: pick(raw.budgetPercent, 'budgetPercent', defaults),
+    historyMaxTokens: pick(raw.historyMaxTokens, 'historyMaxTokens', defaults),
+    minimumChangeTokens: pick(raw.minimumChangeTokens, 'minimumChangeTokens', defaults),
+    keepBatches: pick(raw.keepBatches, 'keepBatches', defaults),
   }
 }
 
 /**
  * 计算历史上下文预算（线③ 后续：百分比压缩）：
- * 有模型窗口 → clamp(窗口 × budgetPercent%, 1000, 32000)；无窗口 → 回退固定 historyMaxTokens。
+ * 有模型窗口 → clamp(窗口 × budgetPercent%, 1000, ceiling)；无窗口 → 回退固定 historyMaxTokens。
+ *
+ * @param ceilingTokens 绝对上限（W1 批 2：由 `context-policy` 按档位给出）。
+ *   默认 64k 与引入前一致；**它才是"长窗口用不满"的真凶**——200k 窗口的 90% 会被 64k 吃掉，
+ *   所以策略必须同时放宽上限，改百分比才有意义。
  */
-export function computeHistoryBudget(prefs: CompactionPrefs, modelContextWindow?: number): number {
+export function computeHistoryBudget(
+  prefs: CompactionPrefs,
+  modelContextWindow?: number,
+  ceilingTokens: number = 64_000,
+): number {
   if (!modelContextWindow || modelContextWindow <= 0) return prefs.historyMaxTokens
   const percentBudget = Math.floor(modelContextWindow * (prefs.budgetPercent / 100))
   // 2026-10-14 上阈值 32000 → 64000（与消息预算 64k 对齐，让 128k 窗口用足 50%）
-  return Math.min(64_000, Math.max(COMPACTION_HISTORY_MIN_TOKENS, percentBudget))
+  return Math.min(ceilingTokens, Math.max(COMPACTION_HISTORY_MIN_TOKENS, percentBudget))
 }
