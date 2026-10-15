@@ -20,6 +20,8 @@ export const agentTexts = {
   'context.segSourceM1': { 'zh-CN': '会话摘要（M1 滚动）', 'en-US': 'Conversation summary (M1 rolling)', 'ru-RU': 'Сводка диалога (M1 прокрутка)' },
   'context.segSourceTaskAnchor': { 'zh-CN': '本轮任务锚点（每轮重建，不进历史）', 'en-US': 'Current-turn task anchor (rebuilt each turn, not in history)', 'ru-RU': 'Якорь текущей задачи (пересобирается каждый ход, не в истории)' },
   'context.seg.task-anchor': { 'zh-CN': '任务锚点', 'en-US': 'Task anchor', 'ru-RU': 'Якорь задачи' },
+  'context.seg.memory-auto-recall': { 'zh-CN': '自动召回记忆（W3）', 'en-US': 'Auto-recalled memory (W3)', 'ru-RU': 'Автопамять (W3)' },
+  'context.segSourceAutoRecall': { 'zh-CN': '命中本轮请求的 manual 记忆（{files}）', 'en-US': 'Manual memory matching this request ({files})', 'ru-RU': 'Память по запросу, совпавшая с сообщением ({files})' },
   'context.seg.identity': { 'zh-CN': '身份与行为指导', 'en-US': 'Identity and guidance', 'ru-RU': 'Роль и инструкции' },
   'context.seg.l0': { 'zh-CN': '项目上下文', 'en-US': 'Project context', 'ru-RU': 'Контекст проекта' },
   'context.seg.l1': { 'zh-CN': '编辑器上下文', 'en-US': 'Editor context', 'ru-RU': 'Контекст редактора' },

@@ -23,7 +23,8 @@ import type { MemoryFileMeta } from '../memory/memory-codec'
 import { normalizeLoadMode } from '../../shared/memory-types'
 import {
   buildManualMentionSection, buildMemoryCatalog, buildResidentSection, matchMentionedManuals, residentEntries,
-  MANUAL_MENTION_BUDGET_TOKENS, RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS,
+  buildAutoRecallSection, matchAutoRecallManuals,
+  MANUAL_MENTION_BUDGET_TOKENS, RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS, AUTO_RECALL_BUDGET_TOKENS,
   type MemoryLayerEntry,
 } from './memory-layers'
 import { toolRegistry } from './tool-registry'
@@ -72,6 +73,11 @@ export interface ContextBudgets {
   toolBudgetTokens?: number
   m1BudgetTokens?: number
   l1BudgetTokens?: number
+  /**
+   * W3 自动召回：本轮消息未写 `@`、但命中了某条 manual 记忆的名字/摘要 → 自动取回正文（≤400 tokens）。
+   * 默认关闭（**只在弱档开**：强模型会自己 `read_memory`，自动注入反而挤占它的上下文预算）。
+   */
+  autoRecall?: boolean
 }
 
 // ===== 上下文构建 =====
@@ -315,22 +321,27 @@ export function assembleFinalPrompt(segments: {
    * 但不参与降级链的丢弃顺序（链只丢 M1/M2、裁 L1/Tool）。
    */
   taskAnchor?: string
+  /**
+   * W3 自动召回段（弱档）：与 manual 同口径——**独立预算**（自身 400 上限），不进降级链丢弃顺序。
+   */
+  autoRecall?: string
 }): string {
   const join = (xs: Array<string | undefined>) => xs.filter((x): x is string => Boolean(x)).join('\n\n---\n\n')
-  // 索引：0=base，1=memoryResident，2=M2，3=M1，4=memoryManual，5=taskAnchor
-  // （manual 与锚点放最末：都是**本轮**才有的易变内容，放末尾可最大化稳定前缀的缓存命中；
-  //   锚点在最后 = 最贴近"当前轮"，对弱模型的提醒效果最强）
+  // 索引：0=base，1=memoryResident，2=M2，3=M1，4=memoryManual，5=autoRecall，6=taskAnchor
+  // （manual / 召回 / 锚点放最末：都是**本轮**才有的易变内容，放末尾可最大化稳定前缀的缓存命中；
+  //   **锚点在最末** = 最贴近"当前轮"，对弱模型的提醒效果最强）
   const resident = segments.memoryResident ?? ''
   const manual = segments.memoryManual ?? ''
+  const autoRecall = segments.autoRecall ?? ''
   const parts: Array<string | undefined> = [
-    segments.base, resident, segments.memoryM2, segments.memoryM1, manual, segments.taskAnchor,
+    segments.base, resident, segments.memoryM2, segments.memoryM1, manual, autoRecall, segments.taskAnchor,
   ]
   const full = join(parts)
   // C 档第一轮修正 1（+ 评审 I1）：常驻段与 manual 段各有**独立预算**（各自的硬上限，
   // 超限整段丢弃而非截断）。若把它们算进 SYSTEM_PROMPT_BUDGET_TOKENS，常驻一超 ~1300 tokens 就会在降级链里被整段
   // 丢掉——硬上限永远够不到，用户设了常驻/明确 @ 了文件却什么都看不到且无提示。
   // 故最终上限 = SYSTEM_PROMPT_BUDGET_TOKENS + 常驻实际 tokens + manual 实际 tokens。
-  const budget = SYSTEM_PROMPT_BUDGET_TOKENS + estimateTokens(resident) + estimateTokens(manual)
+  const budget = SYSTEM_PROMPT_BUDGET_TOKENS + estimateTokens(resident) + estimateTokens(manual) + estimateTokens(autoRecall)
 
   if (estimateTokens(full) <= budget) {
     return appendOutputLanguage(full, getCurrentLocale())
@@ -369,7 +380,7 @@ export function assembleFinalPrompt(segments: {
   }
   // 5. 兜底硬截断（各节独立预算下理论不可达）：主体按预算截断，语言指令保持最末尾（#30）。
   //    预算预留截断提示 token——tokenizer 分段拼接非可加，硬截断可能切掉尾部提示，补回保持语义不变量
-  const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2], parts[3], parts[4], parts[5]])
+  const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2], parts[3], parts[4], parts[5], parts[6]])
   const mainBudget = budget - langTokens - (toolMarked ? markerTokens : 0)
   if (estimateTokens(main) > mainBudget) {
     const cut = truncateToTokenBudget(main, mainBudget)
@@ -389,6 +400,8 @@ export interface AgentSystemSegmentsAsync {
   /** 名字目录 + 本轮显式引用的 manual 正文 */
   memoryM2: string
   memoryM1: string
+  /** W3：自动召回段（弱档且命中时非空；独立预算，同 manual 口径） */
+  autoRecall: string
   /** S2/W2：本轮任务锚点（无诉求/命令轮为空串；仅真实发送路径会构建——面板预览无用户消息故为空） */
   taskAnchor: string
   segments: ContextSegment[]
@@ -400,16 +413,19 @@ export interface AgentSystemSegmentsAsync {
  * 返回的三段文本各自可独立拼装（父按 `injectedHeader + 目录 + manual` 拼 M2；子 agent 只取前两段）。
  * 记忆读盘失败降级：返回全空，不抛（调用方照常继续）。
  */
-export async function collectMemoryLayers(userMessage: string): Promise<{
+export async function collectMemoryLayers(userMessage: string, opts?: { autoRecall?: boolean }): Promise<{
   resident: string
   catalog: string
   manual: string
+  /** W3：自动召回段（仅 opts.autoRecall 时可能非空） */
+  autoRecall: string
   segments: ContextSegment[]
 }> {
   const segments: ContextSegment[] = []
   let residentText = ''
   let catalogText = ''
   let manualText = ''
+  let autoRecallText = ''
   try {
     const list = (await ipc.invoke('memory:list')) as MemoryFileMeta[]
     // stale 先行过滤（与既有口径一致）；F9 白名单保留——但**用户显式声明 resident 时尊重其选择**
@@ -466,7 +482,8 @@ export async function collectMemoryLayers(userMessage: string): Promise<{
       })
     }
     const bodies: Array<{ file: string; body: string }> = []
-    for (const file of matchMentionedManuals(userMessage, entries)) {
+    const mentionedFiles = matchMentionedManuals(userMessage, entries)
+    for (const file of mentionedFiles) {
       const raw = await ipc.invoke('memory:read', file) as string | null
       if (!raw) continue
       bodies.push({ file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
@@ -493,10 +510,42 @@ export async function collectMemoryLayers(userMessage: string): Promise<{
         })
       }
     }
+
+    // ===== 段 3（W3）：自动召回——用户没写 @，但消息确实在说某条 manual 记忆 =====
+    // 只在显式引用缺席时兜底（显式优先）；命中判定零额外 IPC（只用 memory:list 的 file/brief），
+    // 命中后才读盘，且最多 2 条 / 400 tokens（宁少勿滥）。
+    if (opts?.autoRecall) {
+      const explicit = new Set(mentionedFiles)
+      const autoFiles = matchAutoRecallManuals(userMessage, entries).filter(f => !explicit.has(f))
+      const autoBodies: Array<{ file: string; body: string }> = []
+      for (const file of autoFiles) {
+        const raw = await ipc.invoke('memory:read', file) as string | null
+        if (!raw) continue
+        autoBodies.push({ file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
+      }
+      if (autoBodies.length > 0) {
+        const recalled = buildAutoRecallSection(autoBodies)
+        const files = autoBodies.map(b => b.file).join(', ')
+        if (recalled.overCap) {
+          console.warn(`[ContextBuilder] 自动召回的记忆 ${recalled.tokens} tokens 超过上限 ${AUTO_RECALL_BUDGET_TOKENS}，正文未注入`)
+          segments.push({
+            key: 'memory-auto-recall', tokens: 0, chars: 0, source: files,
+            warning: t('memory.autoRecallOverCap')
+              .replace('{tokens}', String(recalled.tokens))
+              .replace('{cap}', String(AUTO_RECALL_BUDGET_TOKENS)),
+          })
+        } else {
+          autoRecallText = recalled.text
+          segments.push({
+            key: 'memory-auto-recall', tokens: recalled.tokens, chars: recalled.text.length, source: files,
+          })
+        }
+      }
+    }
   } catch {
-    // 记忆读盘失败降级：三段全空
+    // 记忆读盘失败降级：各段全空
   }
-  return { resident: residentText, catalog: catalogText, manual: manualText, segments }
+  return { resident: residentText, catalog: catalogText, manual: manualText, autoRecall: autoRecallText, segments }
 }
 
 /**
@@ -511,7 +560,7 @@ export async function buildAgentSystemSegmentsAsync(
   budgets?: ContextBudgets,
 ): Promise<AgentSystemSegmentsAsync> {
   const { base, memory: m1, segments: baseSegments } = buildAgentSystemSegments(mode, budgets)
-  const layers = await collectMemoryLayers(userMessage)
+  const layers = await collectMemoryLayers(userMessage, { autoRecall: budgets?.autoRecall })
   // ⚠️ M2 只放**目录**：manual 正文已由 assembleFinalPrompt 作为独立 part（memoryManual）拼在末尾，
   //    再塞进 M2 就是同一段正文注入两次（每轮白烧 ~body tokens + 提前触发 M1→M2 降级链）
   const parts = [layers.catalog].filter(Boolean)
@@ -537,6 +586,7 @@ export async function buildAgentSystemSegmentsAsync(
     memoryManual: layers.manual,
     memoryM2: m2,
     memoryM1: m1,
+    autoRecall: layers.autoRecall,
     taskAnchor,
     segments,
   }
@@ -551,7 +601,8 @@ export async function buildAgentSystemPromptAsync(
   const s = await buildAgentSystemSegmentsAsync(mode, userMessage, budgets)
   return assembleFinalPrompt({
     base: s.base, memoryM1: s.memoryM1, memoryM2: s.memoryM2,
-    memoryResident: s.memoryResident, memoryManual: s.memoryManual, taskAnchor: s.taskAnchor,
+    memoryResident: s.memoryResident, memoryManual: s.memoryManual,
+    taskAnchor: s.taskAnchor, autoRecall: s.autoRecall,
   })
 }
 

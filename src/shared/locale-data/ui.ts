@@ -488,6 +488,9 @@ export const uiTexts = {
   // AI 面板入口（P3 Task 3：AgentHeader 工具栏按钮 + AgentMemoryView，返回按钮 title 复用 memory.back）
   'memory.menuTitle': { 'zh-CN': '记忆', 'en-US': 'Memory', 'ru-RU': 'Память' },
   'memory.back': { 'zh-CN': '返回对话', 'en-US': 'Back to chat', 'ru-RU': 'Назад к диалогу' },
+  // --- W3 自动召回（批 3）：消息命中某条 manual 记忆 → 自动取回正文（弱档） ---
+  'memory.autoRecallHeader': { 'zh-CN': '## 自动召回的记忆（命中本轮请求）', 'en-US': '## Auto-recalled memory (matched this request)', 'ru-RU': '## Автоподгруженная память (совпадение с запросом)' },
+  'memory.autoRecallOverCap': { 'zh-CN': '自动召回的记忆 {tokens} tokens 超过上限 {cap}，正文未注入（可 @文件名 显式引用）', 'en-US': 'Auto-recalled memory is {tokens} tokens, over the {cap} cap; body not injected (mention @file to include it)', 'ru-RU': 'Автопамять — {tokens} токенов, больше лимита {cap}; текст не вставлен (укажите @файл вручную)' },
   'memory.openProjectHint': { 'zh-CN': '打开项目后可查看记忆', 'en-US': 'Open a project to view memory', 'ru-RU': 'Откройте проект, чтобы просмотреть память' },
   // --- 记忆分层（C 档第一轮：常驻 / 自动 / 手动，见 memory-layers.ts）---
   'memory.residentHeader': { 'zh-CN': '## 常驻记忆（每轮进上下文）', 'en-US': '## Resident memory (in every request)', 'ru-RU': '## Постоянная память (в каждом запросе)' },

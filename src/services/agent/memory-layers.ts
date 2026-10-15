@@ -60,6 +60,81 @@ export function buildResidentSection(contents: Array<{ file: string; body: strin
 }
 
 /**
+ * 自动召回段（W3）：命中本轮请求的 manual 记忆正文（**比显式 @ 小得多**——它是"帮你想起"，
+ * 不是"给你全文"）。弱模型既不会 `@` 也很少主动调 `read_memory`，所以这类模型需要兜底召回。
+ */
+export const AUTO_RECALL_BUDGET_TOKENS = 400
+/** 自动召回最多几条（多于两条说明命中判定太松，宁少勿滥） */
+export const AUTO_RECALL_MAX_FILES = 2
+
+/**
+ * 自动召回段：与 manual 段同构（超硬上限 → 整段丢弃，不静默给半截）。
+ */
+export function buildAutoRecallSection(contents: Array<{ file: string; body: string }>): { text: string; tokens: number; overCap: boolean } {
+  if (contents.length === 0) return { text: '', tokens: 0, overCap: false }
+  const blocks = contents.map(c => `## ${c.file}\n\n${c.body.trim()}`)
+  const text = `${t('memory.autoRecallHeader')}\n\n${blocks.join('\n\n')}`
+  const tokens = estimateTokens(text)
+  return tokens > AUTO_RECALL_BUDGET_TOKENS
+    ? { text: '', tokens, overCap: true }
+    : { text, tokens, overCap: false }
+}
+
+/**
+ * 从用户消息切词：ASCII 词（≥2 字符）+ CJK **3-gram**。
+ *
+ * ⚠️ 为什么是 3-gram 而不是 2-gram：2-gram 下**单个专名**就会产出两个命中
+ * （「苏晚晴」→「苏晚」「晚晴」），把「≥2 词共识」的阈值直接绕过去 —— 实测踩到，
+ * 于是「苏晚晴是谁」会命中一切含该名字的 brief。3-gram 下「苏晚晴」只算一个命中，
+ * 阈值重新有效（一个 4 字名会命中两个 3-gram，仍算强信号）。
+ */
+function messageTokens(text: string): string[] {
+  const out = new Set<string>()
+  const lower = text.toLowerCase()
+  for (const m of lower.matchAll(/[a-z0-9]{2,}/g)) out.add(m[0])
+  for (const run of lower.match(/[\u4e00-\u9fff]{3,}/g) ?? []) {
+    for (let i = 0; i + 3 <= run.length; i++) out.add(run.slice(i, i + 3))
+  }
+  return [...out]
+}
+
+/**
+ * 自动召回的判定（W3）：**用户没写 `@`，但确实在说这条记忆**时把它取回来。
+ * 两条判据（零 LLM 成本、零额外 IPC —— 只用 `memory:list` 已有的 file/brief）：
+ * 1. **名字被直接提及**（`book-state` / `book-state.md` 出现在消息里）→ 强信号，直接命中；
+ * 2. **brief 命中 ≥2 个词**（消息切词 ∩ brief，CJK 按 3-gram）→ 弱信号，要求两个词共识以抑制噪声。
+ *
+ * 与 `@` 显式引用（`matchMentionedManuals`）互不干扰：显式引用优先级更高，本函数只在没人显式
+ * 引用时兜底（调用方负责排除已显式引用的文件）。
+ */
+export function matchAutoRecallManuals(userText: string, entries: MemoryLayerEntry[]): string[] {
+  const manuals = entries.filter(e => e.loadMode === 'manual')
+  if (!userText.trim() || manuals.length === 0) return []
+  const lower = userText.toLowerCase()
+  const tokens = messageTokens(userText)
+  const hits: Array<{ file: string; score: number }> = []
+  for (const e of manuals) {
+    const name = e.file.toLowerCase()
+    const nameNoExt = name.replace(/\.md$/, '')
+    if (lower.includes(name) || lower.includes(nameNoExt)) {
+      hits.push({ file: e.file, score: 10 })
+      continue
+    }
+    const brief = e.brief.toLowerCase()
+    if (!brief) continue
+    let briefHits = 0
+    for (const tk of tokens) {
+      if (brief.includes(tk)) briefHits++
+    }
+    if (briefHits >= 2) hits.push({ file: e.file, score: briefHits })
+  }
+  return hits
+    .sort((a, b) => b.score - a.score || a.file.localeCompare(b.file))
+    .slice(0, AUTO_RECALL_MAX_FILES)
+    .map(h => h.file)
+}
+
+/**
  * 本轮显式引用的 manual 正文段（全文，独立预算）。
  * 与常驻段同构：超硬上限 → 整段丢弃（text 空、overCap 真）并报真实用量，
  * 由调用方记 warn + 明细告警（**不静默给半截**，也不连坐目录）。
