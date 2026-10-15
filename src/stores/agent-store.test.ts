@@ -1214,6 +1214,36 @@ describe('压缩保留偏好（§7.1-C2）', () => {
     expect(renderLogMock).toHaveBeenCalledWith('warn', 'Agent', expect.any(String))
   })
 
+  it('C1：学习关闭时最小降幅**逐字**等于用户值（不受持久化倍率影响）；开启才缩放', async () => {
+    // 1) 先测出本轮真实降幅 C（minimumChangeTokens: 0 → 必然压缩，压缩批次里记着 changeTokens）
+    const probe = await seed(6, 40)
+    configResponse = { compaction: { historyMaxTokens: 1000, minimumChangeTokens: 0 } }
+    await useAgentStore.getState().sendMessage('新消息')
+    const C = useAgentStore.getState().conversations
+      .find(c => c.id === probe.id)!.compressed?.[0]?.changeTokens
+    expect(typeof C).toBe('number')
+    const userValue = (C as number) + 1   // 逐字判定 → 必然跳过（差 1 token）
+
+    // 2) 关闭 + 持久化倍率 0.5：阈值必须仍是 userValue。
+    //    若哪天误改成"无条件乘倍率"，阈值会变成 ~C/2 < C → 本轮会被压缩 → 用例红。
+    const off = await seed(6, 40)
+    configResponse = {
+      compaction: { historyMaxTokens: 1000, minimumChangeTokens: userValue },
+      compactionLearning: { enabled: false, minChangeFactor: 0.5 },
+    }
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().conversations.find(c => c.id === off.id)!.compressed ?? []).toHaveLength(0)
+
+    // 3) 开启同一倍率：阈值 userValue×0.5 < C → 压缩（证明倍率确实只在开启时生效）
+    const on = await seed(6, 40)
+    configResponse = {
+      compaction: { historyMaxTokens: 1000, minimumChangeTokens: userValue },
+      compactionLearning: { enabled: true, minChangeFactor: 0.5 },
+    }
+    await useAgentStore.getState().sendMessage('新消息')
+    expect(useAgentStore.getState().conversations.find(c => c.id === on.id)!.compressed).toHaveLength(1)
+  })
+
   it('P0-2：跳过后历史仍超预算 → 硬截断留痕（条数 + token 数，不再静默）', async () => {
     const conv = await seed(6, 40)
     configResponse = { compaction: { historyMaxTokens: 1000, minimumChangeTokens: 2000 } }
