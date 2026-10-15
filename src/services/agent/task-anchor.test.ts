@@ -6,7 +6,7 @@
  * 而它一旦误判（把命令当诉求、把已完成的写入当未完成），就会变成新的幻觉源。
  */
 import { describe, it, expect, beforeEach } from 'vitest'
-import { buildTaskAnchor, TASK_ANCHOR_BUDGET_TOKENS } from './task-anchor'
+import { buildTaskAnchor, looksMultiStep, TASK_ANCHOR_BUDGET_TOKENS } from './task-anchor'
 import { registerBuiltinTools } from './tools'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens } from './token-budget'
@@ -87,5 +87,25 @@ describe('task-anchor', () => {
     const out = buildTaskAnchor({ userMessage: `${'超长诉求。'.repeat(200)}`, messages: many })
     expect(estimateTokens(out)).toBeLessThanOrEqual(TASK_ANCHOR_BUDGET_TOKENS)
     expect(out.length).toBeGreaterThan(0)
+  })
+})
+
+describe('looksMultiStep（W4 未完成自检的触发判据）', () => {
+  it('单步请求 → false（不把简单请求变啰嗦）', () => {
+    expect(looksMultiStep('写第 1 章')).toBe(false)
+    expect(looksMultiStep('你好')).toBe(false)
+    expect(looksMultiStep('')).toBe(false)
+    expect(looksMultiStep('    ')).toBe(false)
+  })
+
+  it('含显式多步连词 → true（中/英/俄）', () => {
+    expect(looksMultiStep('先写第 1 章，然后检查伏笔')).toBe(true)
+    expect(looksMultiStep('write chapter 1, then check the foreshadowing')).toBe(true)
+    expect(looksMultiStep('сначала глава 1, затем проверь')).toBe(true)
+    expect(looksMultiStep('顺便把角色卡也更新一下')).toBe(true)
+  })
+
+  it('长请求 → true（多半含多个诉求，无需连词）', () => {
+    expect(looksMultiStep('把这一章重写一遍'.repeat(8))).toBe(true)
   })
 })

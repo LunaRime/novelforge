@@ -46,6 +46,8 @@ async function runLoopWithResponses(
   responses: string[],
   deps?: AgentEngineDeps,
   options?: AgentEngineOptions,
+  /** 第 3 参起可选：本轮用户消息（W4 未完成自检需要"多步请求"文本） */
+  userMessage = '测试用户消息',
 ): Promise<{ generateFn: ReturnType<typeof vi.fn>; messagesLog: LLMMessage[][]; callbacks: ReturnType<typeof createCallbacks> }> {
   const messagesLog: LLMMessage[][] = []
   const generateFn = vi.fn((messages: LLMMessage[]): Promise<string> => {
@@ -55,7 +57,7 @@ async function runLoopWithResponses(
     return Promise.resolve(responses.shift() ?? '')
   })
   const callbacks = createCallbacks()
-  await runAgentLoop('system prompt', [], '测试用户消息', 'test-model', generateFn, callbacks, undefined, options, deps)
+  await runAgentLoop('system prompt', [], userMessage, 'test-model', generateFn, callbacks, undefined, options, deps)
   return { generateFn, messagesLog, callbacks }
 }
 
@@ -66,6 +68,48 @@ function lastUserMessage(messagesLog: LLMMessage[][], callIndex: number): string
   expect(last.role).toBe('user')
   return last.content
 }
+
+describe('W4（批 3）：弱档未完成自检', () => {
+  const nudgeHead = t('engine.unfinishedCheckNudge').slice(0, 12)
+
+  it('启用 + 多步请求 + 首轮无工具调用 → 注入一次提醒并继续（调用 2 次）', async () => {
+    const { generateFn, messagesLog, callbacks } = await runLoopWithResponses(
+      ['我完成了第一步。', '好的，我继续完成第二步。'],
+      undefined,
+      { unfinishedCheck: true },
+      '先写第 1 章，然后检查伏笔',
+    )
+    expect(generateFn).toHaveBeenCalledTimes(2)
+    // 第二次调用能看到提醒（且是 user role，附在本轮回复之后）
+    const second = messagesLog[1]
+    expect(second.some(m => m.role === 'user' && m.content.includes(nudgeHead))).toBe(true)
+    expect(callbacks.onDone).toHaveBeenCalled()
+  })
+
+  it('未启用（默认）→ 不注入，直接收尾（调用 1 次）', async () => {
+    const { generateFn, messagesLog } = await runLoopWithResponses(
+      ['我完成了第一步。'], undefined, undefined, '先写第 1 章，然后检查伏笔',
+    )
+    expect(generateFn).toHaveBeenCalledTimes(1)
+    expect(messagesLog[0].some(m => m.content.includes(nudgeHead))).toBe(false)
+  })
+
+  it('单步请求 → 不注入（宁可漏判，也不把简单请求变啰嗦）', async () => {
+    const { generateFn } = await runLoopWithResponses(
+      ['好的。'], undefined, { unfinishedCheck: true }, '写第 1 章',
+    )
+    expect(generateFn).toHaveBeenCalledTimes(1)
+  })
+
+  it('提醒**每轮至多一次**：连续三轮无工具调用也只注入一次（调用 2 次而非 3 次）', async () => {
+    const { generateFn, messagesLog } = await runLoopWithResponses(
+      ['a', 'b', 'c'], undefined, { unfinishedCheck: true }, '先写第 1 章，然后检查伏笔',
+    )
+    expect(generateFn).toHaveBeenCalledTimes(2)
+    const injected = messagesLog.flat().filter(m => m.content.includes(nudgeHead))
+    expect(injected).toHaveLength(1)
+  })
+})
 
 describe('agent-engine 工具解析错误反馈', () => {
   // ⚠️ zh-CN 字面量断言说明（H1 补强）：本组用例直接断言诊断文案的中文字面量

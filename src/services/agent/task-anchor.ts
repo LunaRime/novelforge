@@ -36,6 +36,28 @@ function firstSentence(text: string): string {
   return sentence.length > REQUEST_MAX_CHARS ? `${sentence.slice(0, REQUEST_MAX_CHARS)}…` : sentence
 }
 
+/** 多步请求的显式标记（2 字以上，避免"再见/并排"这类单字误报；三语各取常用连词） */
+const MULTI_STEP_MARKERS = [
+  '然后', '接着', '之后', '顺便', '以及', '同时', '并且', '另外', '最后',
+  'then', 'after that', 'as well as', 'also',
+  'затем', 'потом', 'также',
+]
+/** 超过这个长度视为复合请求（多半含多个诉求），无需连词也能判定 */
+const MULTI_STEP_MIN_CHARS = 60
+
+/**
+ * 是否为"多步请求"（W4 弱档未完成自检的触发条件之一）。
+ * 刻意保守：只认显式连词或明显偏长的请求——宁可漏判（少数请求不被自检），也不要误判
+ * （把"你好"当成多步任务，白白多花一轮）。
+ */
+export function looksMultiStep(text: string): boolean {
+  const flat = (text ?? '').replace(/\s+/g, ' ').trim()
+  if (!flat) return false
+  if (flat.length >= MULTI_STEP_MIN_CHARS) return true
+  const lower = flat.toLowerCase()
+  return MULTI_STEP_MARKERS.some(marker => lower.includes(marker))
+}
+
 /**
  * 构建任务锚点段；无诉求 / 命令轮 → 返回 `''`（调用方据此不注入、不出现在明细段里）。
  */

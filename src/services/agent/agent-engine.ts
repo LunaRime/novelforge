@@ -15,6 +15,7 @@ import { t } from '../../shared/locale'
 import { toolRegistry, type AgentTool, type ToolResult, type ToolArtifact } from './tool-registry'
 import type { ApprovalDecision } from './approval'
 import { outputPostProcessor } from './output-post-processor'
+import { looksMultiStep } from './task-anchor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
@@ -105,6 +106,11 @@ export interface AgentEngineOptions {
   /** 消息预算绝对上限（W1 批 2：`context-policy` 按档位给出；缺省 = 64k，与引入前一致） */
   maxMessageBudgetTokens?: number
   /**
+   * W4（批 3）：弱档"未完成自检"——模型在**多步请求**上返回"无工具调用"时，注入一次提醒再走一轮。
+   * 每会话至多一次；缺省关闭（强/标准档不注入：它们自己会检查）。
+   */
+  unfinishedCheck?: boolean
+  /**
    * 委派白名单（C 档第二轮）：给定后**只允许**名单内的工具执行（fail-closed —— 不在名单里的
    * 工具不执行，注入「不在白名单」观察）。缺省 undefined = 全量，父 agent 行为与现状逐字一致。
    */
@@ -174,6 +180,8 @@ export async function runAgentLoop(
   type RecoveryStage = 'none' | 'compacting' | 'meta-injected'
   let recoveryStage: RecoveryStage = 'none'
   let consecutiveRecoveryFailures = 0
+  /** W4（批 3）：未完成自检是否已用过（每会话/每次 runAgentLoop 至多一次） */
+  let unfinishedCheckUsed = false
   let currentBudget = computeMessageBudget(
     options?.modelContextWindow, options?.budgetPercent, options?.maxMessageBudgetTokens,
   )
@@ -283,6 +291,24 @@ export async function runAgentLoop(
       // 部分失败：解析诊断追加到本轮 observation 头部（toolCalls 继续正常执行）
       // 诊断段延迟到 observation 组装时注入——此处仅保存，避免重复 push
       parseFeedbackForObservation = errorFeedback
+    }
+
+    // ===== W4（批 3，弱档）：未完成自检 =====
+    // 模型"自认为完成"时没有任何信号，弱模型很容易在多步请求上过早收尾（只答一半就停）。
+    // 条件全部满足才注入一次提醒：启用（弱档）**且**本轮无工具调用**且**请求像多步**且**尚未用过。
+    // 刻意一次性：反复提醒会变成新的循环风险与 token 浪费。
+    if (
+      toolCalls.length === 0
+      && options?.unfinishedCheck
+      && !unfinishedCheckUsed
+      && looksMultiStep(userMessage)
+    ) {
+      unfinishedCheckUsed = true
+      // 保留本轮回复（与解析失败分支同构）：历史里不能丢掉模型已经说过的话
+      messages.push({ role: 'assistant', content: llmResponse })
+      messages.push({ role: 'user', content: t('engine.unfinishedCheckNudge') })
+      console.warn('[AgentEngine] 弱档未完成自检：注入一次性提醒并继续一轮')
+      continue
     }
 
     // 如果没有 tool_call，循环结束
