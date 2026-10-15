@@ -1,6 +1,7 @@
 # Agent 上下文链加固建议（观测面闭环 / 压缩保真 / 结构演进）
 
-> **状态**：**建议稿（未实施、未拍板）**——本文只给改法与验收口径，不含已落地代码。
+> **状态**：**已执行（2026-10-15）**——P0-1/P0-2/P0-3、P1-1/P1-2/P1-3、P2-3、P2-4 已落地（批 1–5）；P2-1/P2-2 按 §3 裁决为「评估项」暂缓（理由见 §3 与自学习压缩审阅 §6）。
+> 压缩部分按用户要求引入**自学习式压缩**（TACO 式本地规则引擎，默认关闭、设置页可开关；引入审阅与取舍见 `docs/superpowers/specs/2026-10-15-self-learning-compression-design.md`）。
 > **日期**：2026-10-14 ｜ **行号基线**：master `HEAD 6e66e75`（与 `docs/frontend-design-review.md:174` 同基线；动手前按行号复核一次）
 > **依据**：本轮只读调研（上下文装配 / CCR 压缩 / 恢复阶梯 / 记忆分层 / 子 agent 全链路）+ 一次临时 vitest 实测（见附录 A，用例跑完已删）
 > **参照**：`docs/superpowers/specs/2026-09-26-context-engineering-design.md`（B 档第二轮）、`docs/2026-08-21-ccr-memory-design.md`（CCR 初版）、`docs/superpowers/specs/2026-08-29-agent-tool-result-compression-design.md`（D6/D7）
