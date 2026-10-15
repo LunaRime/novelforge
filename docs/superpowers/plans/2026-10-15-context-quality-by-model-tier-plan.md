@@ -192,3 +192,27 @@
 4. **锚点计入 `SYSTEM_PROMPT_BUDGET_TOKENS`**（不享常驻/manual 的独立预算），但**不参与降级链的丢弃顺序**（链只丢 M1/M2、裁 L1/Tool）——与计划一致。
 
 **批 1 未覆盖的验证面**：§4 的离线用例集（跨轮事实保持 / 长任务不跑偏）尚未建立，因此**锚点的收益目前只有单元与结构证据，没有端到端数字**。这正是批 3 的第一件事；在它落地前，不应把"锚点提升生成质量"当作已验证结论。
+
+### 批 2（2026-10-15）：W1 按档位上下文策略 + S3 上限放宽
+
+**落地内容**
+
+| 项 | 实现 | 测试 |
+|---|---|---|
+| 策略模块 | 新增 `src/services/agent/context-policy.ts`：纯函数 `resolveContextPolicy({contextWindow, tier})` + 读 store 的 `resolveContextPolicyFor(modelId)`；三档常量（强 90%/128k/6000/400/600、**标准 80%/64k/4000/300/600 = 引入前逐字**、弱 60%/32k/4000/200/300） | `context-policy.test.ts`（11 例：标准档跨模块不变量、无窗口→标准、窗口边界、budget 层尊重成本意图、elite 需 ≥128k、单调有界、路由成员识别、**getModelForTier 误判回归**） |
+| 缺省 vs 用户偏好 | `resolveCompactionPrefs(config, defaults?)` 增加 defaults 参数：**策略只给缺省**，用户显式写过的值优先（非数字仍回落缺省） | `compaction-prefs.test.ts`（+3 例） |
+| 绝对上限 | `computeHistoryBudget(prefs, window, ceilingTokens = 64k)`；`computeMessageBudget(window, percent, maxBudgetTokens = 64k)` + `AgentEngineOptions.maxMessageBudgetTokens` | `compaction-prefs.test.ts` / `agent-engine.test.ts`（200k×90% → 128k；缺省仍 64k） |
+| 段预算覆盖 | `ContextBudgets{toolBudgetTokens,m1BudgetTokens,l1BudgetTokens}` 贯穿 `buildAgentSystemSegments/Async/PromptAsync`；`computeToolPromptBudget(n, maxTokens)`；L1 预算常量化 | `context-builder.test.ts`（+4 例：未传=零变化、工具段收紧/放宽、M1 上限、L1 上限） |
+| 摘要长度同源 | `buildCcrSummaryPrompt(..., maxTokens)` / `generateConversationSummary({maxTokens})`；locale `ccr.summaryPrompt` 改为 `{maxTokens}`/`{maxChars}` 占位（字数按 ≈1.6 字/token 派生，保留原文案的估算提示） | `ccr-summary.test.ts`（+1 例：250/200/400 与字数同步） |
+| 接线 | store：策略 → 系统提示词段预算 / 历史预算（缺省+上限）/ 摘要生成长度 / 引擎 `maxMessageBudgetTokens`；重生成摘要同样按档位。面板：`useAsyncSegments` 与同步兜底同口径（否则面板显示与实发不符） | `agent-store.test.ts`（+4 例：200k→128k/90、32k→32k/60、用户 70 优先、短对话不读配置） |
+
+**门禁**：`typecheck` 0 错 / `lint` 0 警告 / **232 文件 2745 测试全绿**（较批 1 +1 文件 +24 用例）。
+
+**与计划的偏差（刻意，逐条写明理由）**
+
+1. **未实现计划的 `full-lite`（按意图给工具子集）**：没有可靠的"意图 → 工具"映射，而弱模型最需要完整契约（看不见的工具 = 不可调用，它又最不会从签名反推参数语义）。改为**按档位给工具预算上限**（强档 6000 让长窗口模型读全契约；标准/弱档维持 4000）。这同时落实了 S3 的"长窗口全量档"。
+2. **档位来源收窄为「显式路由成员 + 窗口」，不含 Agent 面板档位**：`agentModeToTier` 是**投入档位**而非模型能力，且 store 默认 mode 就是 `deep`——用它会把所有默认用户悄悄提到强档，违反批 1/2 反复强调的"标准档零变化"。另外实现中发现 `getModelForTier(tier)` 在没有 modelRouter 时对**任何**层都返回 `defaultModelId`，反查会把默认模型误判成 elite；已改为只读 `modelRoutes[tier].includes(modelId)`，并有回归用例锁定。
+3. **90% 必须与上限放宽同时给**：`computeHistoryBudget` 的 64k 天花板会让 200k 窗口的 90% 变成空动作，故策略同时给 `historyCeilingTokens`，并一路传到引擎的消息预算上限。
+4. **弱档不砍工具契约**（与标准档同为 4000）——理由同第 1 条。
+5. **工作流链路未接入**：工作流不经过 Agent 上下文构建器（走各自的 prompt/staticContext 注入），故 W1 本批只覆盖 Agent 会话路径；工作流侧如需同类策略应另立项。
+6. **发现并锁定一条既有语义**：`config:get` 只在历史 > 1000 tokens 时才读（评审 Minor 8 的性能优化），因此**短对话下策略缺省生效**——有用例写明了这一点，避免以后被当成 bug。
