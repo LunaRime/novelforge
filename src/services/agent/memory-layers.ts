@@ -26,7 +26,7 @@ export const RESIDENT_MEMORY_WARN_TOKENS = 2000
 export const MEMORY_CATALOG_BUDGET_TOKENS = 800
 /**
  * 本轮显式引用（@文件名）的 manual 正文预算（独立预算，同常驻段口径）。
- * 评审 I1：不给它独立预算时，长书里 @ 两个章节区间就能把 M2 顶过 4700，降级链会把
+ * 评审 I1：不给它独立预算时，长书里 @ 两个章节区间就能把 M2 顶过系统提示词总上限，降级链会把
  * 「本轮 manual 正文 + 名字目录」整段丢掉且**无任何留痕** —— 用户显式索要的内容静默不到。
  */
 export const MANUAL_MENTION_BUDGET_TOKENS = 4000

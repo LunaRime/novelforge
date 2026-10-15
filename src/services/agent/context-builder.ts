@@ -6,8 +6,9 @@
  * - L1 编辑器感知（~600 token 预算）：当前打开的 Tab 信息
  * - L2 按需获取：通过 Tool 调用获取详细数据
  *
- * 系统提示词上限：非常驻部分 ~4700 tokens（设计 §4.3：身份/L0/L1/Tool + 名字目录 800 + M1 300）
- * + 常驻记忆段按其自身硬上限另计（C 档第一轮，见 assembleFinalPrompt 注释）。
+ * 系统提示词上限：非常驻部分 ~7500 tokens（P0-3 重估：工具段改为随工具数伸缩，
+ * 上限 1200 → 4000；见 SYSTEM_PROMPT_BUDGET_TOKENS 注释）+ 常驻记忆段按其自身硬上限另计
+ * （C 档第一轮，见 assembleFinalPrompt 注释）。
  */
 
 import { useProjectStore } from '../../stores/project-store'
@@ -31,11 +32,33 @@ import type { ContextSegment } from './context-usage'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 
 /**
- * 系统提示词**非常驻部分**总上限（设计 §4.3：身份/L0/L1/Tool ~3000 + 名字目录 ≤800 + M1 300 ≈ 4700）。
+ * 系统提示词**非常驻部分**总上限。
+ *
+ * P0-3 重估（2026-10-15）：原值 4700 = 身份/L0/L1/Tool + 名字目录 ≤800 + M1 300 的合账，
+ * 其中 Tool 段是固定 1200。工具段改为随工具数伸缩（封顶 4000）后，按同一合账重估：
+ * ≈ 400 + 800 + 600 + **4000** + 技能目录 400 + 名字目录 800 + M1 300 = 7300，取整 7500（含分隔符余量）。
  * C 档第一轮起常驻记忆段另计（最终上限 = 本值 + 常驻段实际 tokens）——常驻有自身硬上限
  * （RESIDENT_MEMORY_BUDGET_TOKENS），若并入本值会让它一超 ~1300 tokens 就在降级链里被整段丢弃。
  */
-const TOTAL_BUDGET_TOKENS = 4700
+export const SYSTEM_PROMPT_BUDGET_TOKENS = 7500
+
+/**
+ * 工具段预算公式（P0-3）：与**工具数**挂钩，替代固定 1200。
+ *
+ * 实测（2026-10-14，tiktoken/cl100k）：26 个内置工具的完整契约 3612 tokens（约 139/工具）；
+ * 固定 1200 时约 1/3 契约可读、后面的工具只剩「名字 + 签名」——语义、参数含义、使用时机缺失。
+ * 公式取保守上界：900 + 150 × N，封顶 4000（26 工具 → 3612 ≤ 4000，契约完整可读；
+ * 工具继续增长至 ~29 个时会重新触发截断，由 context-builder.test 的护栏用例报红提醒重估）。
+ */
+export const TOOL_PROMPT_BASE_TOKENS = 900
+export const TOOL_PROMPT_PER_TOOL_TOKENS = 150
+export const TOOL_PROMPT_MAX_TOKENS = 4000
+export function computeToolPromptBudget(toolCount: number): number {
+  return Math.min(
+    TOOL_PROMPT_BASE_TOKENS + TOOL_PROMPT_PER_TOOL_TOKENS * Math.max(0, toolCount),
+    TOOL_PROMPT_MAX_TOKENS,
+  )
+}
 
 // ===== 上下文构建 =====
 
@@ -50,7 +73,7 @@ const TOTAL_BUDGET_TOKENS = 4700
  * - memory：M1 会话摘要（自动生成标注节，预算 300 tokens）+ 可扩展 M2 作品记忆（P1）
  * 语言指令由 buildAgentSystemPrompt 统一追加（保持最末尾，#30）
  */
-/** 技能目录段预算（独立于工具提示词的 1200 —— 它很小，且是模型发现技能的唯一途径） */
+/** 技能目录段预算（独立于工具提示词 —— 它很小，且是模型发现技能的唯一途径） */
 const SKILL_CATALOG_BUDGET_TOKENS = 400
 /** 目录单行的字符上限：导入技能的 description 可能是整段话，截断以免独占整段预算 */
 const SKILL_LINE_MAX_CHARS = 120
@@ -108,18 +131,19 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
   // 3. L1 — 编辑器感知上下文 (~600 tokens 预算)
   push('l1', buildL1EditorContext(), t('context.segSourceL1'))
 
-  // 4. Tool 系统提示词 (~1200 tokens 预算)
+  // 4. Tool 系统提示词（P0-3：预算随工具数伸缩 —— computeToolPromptBudget，封顶 4000）
   const toolPrompt = toolRegistry.generateToolPrompt()
   if (toolPrompt) {
-    const truncated = truncateToTokenBudget(toolPrompt, 1200)
+    const toolCount = toolRegistry.listAll().length
+    const toolBudget = computeToolPromptBudget(toolCount)
+    const truncated = truncateToTokenBudget(toolPrompt, toolBudget)
     const isTruncated = truncated.length < toolPrompt.length
     push(
       'tools',
       isTruncated
-        // 截断通知带**签名**（`name(p1?, p2?)`）而不只是名字：实测 30 个工具时提示词共 5435 tokens、
-        // 1200 的截断落在第 2 个工具内部 —— 仅列名字等于让被截断的工具**无法被调用**
-        // （模型知道有 read_memory，却不知道参数叫 name/keyword/type）。签名全长 ~240 tokens，
-        // 换来全部工具可调用（C 档第一轮 T4 实测发现）。
+        // 截断通知带**签名**（`name(p1?, p2?)`）而不只是名字：仅列名字等于让被截断的工具
+        // **无法被调用**（模型知道有 read_memory，却不知道参数叫 name/keyword/type）。
+        // 签名全长 ~240 tokens（P0-3 后仅 29+ 工具时才会走到这里），换来全部工具可调用。
         ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => {
           const required = tool.inputSchema.required ?? []
           const params = Object.keys(tool.inputSchema.properties)
@@ -127,13 +151,13 @@ export function buildAgentSystemSegments(mode: AgentMode): { base: string; memor
           return params.length > 0 ? `${tool.name}(${params.join(', ')})` : tool.name
         }).join('、'))}`
         : truncated,
-      t('context.segSourceTools').replace('{n}', String(toolRegistry.listAll().length)),
+      t('context.segSourceTools').replace('{n}', String(toolCount)),
       isTruncated,
     )
   }
 
   // 5. 技能目录（B 档第一轮）：独立成段、独立预算 —— 模型发现技能的**唯一途径**。
-  //    此前技能以 `skill__<name>` 工具形式排在工具清单末尾，而工具提示词有 1200 token 截断
+  //    此前技能以 `skill__<name>` 工具形式排在工具清单末尾，而工具提示词有固定截断
   //    → 先被砍掉的正是技能，模型只能看到一份名字清单。目录只放名字与一句话描述，
   //    全文由 skill 元工具按名加载（懒加载）。
   push('skill-catalog', buildSkillCatalogSnippet(), t('context.segSourceSkills').replace('{n}', String(skillRegistry.listAll().length)))
@@ -186,10 +210,10 @@ export function assembleFinalPrompt(segments: {
   const parts: Array<string | undefined> = [segments.base, resident, segments.memoryM2, segments.memoryM1, manual]
   const full = join(parts)
   // C 档第一轮修正 1（+ 评审 I1）：常驻段与 manual 段各有**独立预算**（各自的硬上限，
-  // 超限整段丢弃而非截断）。若把它们算进 4700，常驻一超 ~1300 tokens 就会在降级链里被整段
+  // 超限整段丢弃而非截断）。若把它们算进 SYSTEM_PROMPT_BUDGET_TOKENS，常驻一超 ~1300 tokens 就会在降级链里被整段
   // 丢掉——硬上限永远够不到，用户设了常驻/明确 @ 了文件却什么都看不到且无提示。
-  // 故最终上限 = 4700 + 常驻实际 tokens + manual 实际 tokens。
-  const budget = TOTAL_BUDGET_TOKENS + estimateTokens(resident) + estimateTokens(manual)
+  // 故最终上限 = SYSTEM_PROMPT_BUDGET_TOKENS + 常驻实际 tokens + manual 实际 tokens。
+  const budget = SYSTEM_PROMPT_BUDGET_TOKENS + estimateTokens(resident) + estimateTokens(manual)
 
   if (estimateTokens(full) <= budget) {
     return appendOutputLanguage(full, getCurrentLocale())
@@ -241,9 +265,9 @@ export function assembleFinalPrompt(segments: {
 /** 异步装配结果（C 档第一轮）：常驻段独立成段，明细段供 context 面板，M1/M2 保持既有降级语义 */
 export interface AgentSystemSegmentsAsync {
   base: string
-  /** 常驻记忆段（全文，独立预算，不进 4700 降级链） */
+  /** 常驻记忆段（全文，独立预算，不进 SYSTEM_PROMPT_BUDGET_TOKENS 降级链） */
   memoryResident: string
-  /** 本轮 @ 显式引用的 manual 正文段（独立预算，不进 4700 降级链） */
+  /** 本轮 @ 显式引用的 manual 正文段（独立预算，不进 SYSTEM_PROMPT_BUDGET_TOKENS 降级链） */
   memoryManual: string
   /** 名字目录 + 本轮显式引用的 manual 正文 */
   memoryM2: string
@@ -330,7 +354,7 @@ export async function collectMemoryLayers(userMessage: string): Promise<{
     }
     if (bodies.length > 0) {
       // 评审 I1：manual 正文有**独立预算**（同常驻段口径）——否则长书里 @ 两个大文件就能
-      // 把 M2 顶过 4700，降级链会把「本轮显式引用的正文 + 名字目录」整段丢掉且无留痕
+      // 把 M2 顶过 SYSTEM_PROMPT_BUDGET_TOKENS，降级链会把「本轮显式引用的正文 + 名字目录」整段丢掉且无留痕
       const manual = buildManualMentionSection(bodies)
       const files = bodies.map(b => b.file).join(', ')
       if (manual.overCap) {

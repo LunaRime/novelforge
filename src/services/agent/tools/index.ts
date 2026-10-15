@@ -36,17 +36,18 @@ import { taskTool } from './task.tool'
 
 /** 所有内置 Tool（供外部引用） */
 export const builtinTools = [
-  // ⚠️ 顺序敏感：工具提示词按注册序拼接、且有 1200 token 截断（context-builder），
-  //    排在后面的工具**契约不可见**。skill 元工具是模型自主加载技能的唯一入口，
-  //    必须排首位，否则模型只知道名字、不知道参数名（评审 I1）。
+  // ⚠️ 顺序敏感：工具提示词按注册序拼接、且有预算截断（context-builder 的
+  //    computeToolPromptBudget：随工具数伸缩、封顶 4000）。契约完整可读时顺序无感；
+  //    一旦工具增长到截断重新发生，排在后面的工具**prose 不可见**（签名清单仍保留，
+  //    仅保住可调用性）。skill 元工具是模型自主加载技能的唯一入口，必须排首位。
   skillTool,
-  // 多 agent 派发（C 档第二轮）：派子 agent 干可独立的子任务 —— 排在最前（工具提示词有
-  // 1200 token 截断，虽然截断通知已带签名，但 prose 描述仍要让模型读得到「这工具干什么」）
+  // 多 agent 派发（C 档第二轮）：派子 agent 干可独立的子任务 —— 排在最前
+  //（截断一旦发生，prose 描述仍要让模型读得到「这工具干什么」）
   taskTool,
   // 只读 Tool（自动执行）
   readFileTool,
-  // 记忆分层（C 档第一轮）：按名/关键词取作品记忆正文 —— 必须靠前：
-  // 工具提示词有 1200 token 截断，排太后契约不可见（技能轮 I1 的教训）
+  // 记忆分层（C 档第一轮）：按名/关键词取作品记忆正文 —— 必须靠前
+  //（工具提示词有预算截断时，排太后契约不可见；技能轮 I1 的教训）
   readMemoryTool,
   searchKnowledgeTool,
   readArchitectureTool,

@@ -5,18 +5,29 @@
  * 英文界面下 Agent 仍回中文。修复后末尾追加 appendOutputLanguage 明确语言指令。
  * P1 追加：M2/M1 分段落库、M2 在前（F2）、总上限 4700 降级顺序（F1）、章节尾部节选（F5）。
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, beforeAll } from 'vitest'
 import {
   buildAgentSystemPrompt,
   buildAgentSystemSegments,
   buildAgentSystemSegmentsAsync,
   buildAgentSystemPromptAsync,
   assembleFinalPrompt,
+  computeToolPromptBudget,
+  SYSTEM_PROMPT_BUDGET_TOKENS,
 } from './context-builder'
-import { estimateTokens } from './token-budget'
+import { estimateTokens, initTokenEngine } from './token-budget'
 import { useAgentStore } from '../../stores/agent-store'
 import { skillRegistry } from './skill-registry'
+import { toolRegistry } from './tool-registry'
+import { registerBuiltinTools } from './tools'
 import { buildSharedFile } from '../memory/shared-memory'
+
+// ⚠️ 本文件的预算断言统一按 tiktoken(cl100k) 口径（与生产一致）：强制加载编码器，
+// 避免「先跑的用例没加载、后跑的已加载」造成的 estimator 漂移
+// （实测口径：'内容'.repeat(N) ≈ N tokens、'身'.repeat(N) ≈ N tokens，2026-10-15）。
+beforeAll(async () => {
+  await initTokenEngine()
+})
 
 describe('buildAgentSystemPrompt 输出语言约束', () => {
   it('末尾包含明确输出语言指令', () => {
@@ -248,53 +259,55 @@ describe('上下文逐段明细（B 档第二轮 T5）', () => {
   })
 })
 
-describe('assembleFinalPrompt 总上限与降级顺序（F1）', () => {
-  const big = '内容'.repeat(4000) // 启发式 ~6000 tokens
+describe('assembleFinalPrompt 总上限与降级顺序（F1；P0-3 重估后按 7500 口径）', () => {
+  // tiktoken 口径：'身'.repeat(N) ≈ N tokens（单字符重复 1 token/字；实测比 '内容' 交替串编码快 5 倍）
+  const big = '身'.repeat(7800)
 
-  it('超限时最终 prompt 尺寸 ≤ 4700（新上限，P0 3800 回归）', () => {
+  it('超限时最终 prompt 尺寸 ≤ SYSTEM_PROMPT_BUDGET_TOKENS（P0 3800 → P0-3 7500 回归）', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
   it('降级顺序：先丢 M1（会话摘要），M2 保留', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: 'M2=内容' })
     expect(out).toContain('M2=内容') // M2 优先保留
     expect(out).not.toContain('M1=') // M1 已丢
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
   it('降级顺序：M1 丢后仍超限 → M2 一并丢弃', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
     expect(out).not.toContain('M1=')
     expect(out).not.toContain('M2=')
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
   it('降级顺序：M1/M2 全丢后仍超限 → L1 裁剪（base 拆节）', () => {
-    // 身份 3000 + 编辑器 1800 + 工具 900 = 5700；L1 替换后 3915 ≤ 4700 → 不需 Tool 裁剪
+    // base 自身（身份 6005 + L1 1507 + 工具 506 ≈ 8000 余 tokens）即超 7500 红线；
+    // M1/M2 用小串——本条验证的是「全丢后仍超限 → L1 替换回落（~6600），且不动 Tool」
     const base = [
-      `## 身份\n${'身'.repeat(2000)}`,
-      `## 编辑器状态\n${'编'.repeat(1200)}`,
-      `## 工具系统\n${'工'.repeat(600)}`,
+      `## 身份\n${'身'.repeat(6000)}`,
+      `## 编辑器状态\n${'编'.repeat(1500)}`,
+      `## 工具系统\n${'工'.repeat(500)}`,
     ].join('\n\n---\n\n')
-    const out = assembleFinalPrompt({ base, memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
+    const out = assembleFinalPrompt({ base, memoryM1: 'M1=小摘要', memoryM2: 'M2=小记忆' })
     expect(out).not.toContain('M1=')
     expect(out).not.toContain('M2=')
     expect(out).toContain('（内容过长已省略') // L1 段被替换为省略提示
     expect(out).not.toContain('（工具列表已截断）') // 未走到 Tool 裁剪
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
-  it('降级顺序：L1 裁剪后仍超限 → Tool 段截断 + 兜底硬截断仍保证 ≤ 4700', () => {
+  it('降级顺序：L1 裁剪后仍超限 → Tool 段截断 + 兜底硬截断仍保证 ≤ 上限', () => {
     const base = [
-      `## 身份\n${'身'.repeat(3000)}`,
-      `## 编辑器状态\n${'编'.repeat(1000)}`,
-      `## 工具系统\n${'工'.repeat(2000)}`,
+      `## 身份\n${'身'.repeat(6000)}`,
+      `## 编辑器状态\n${'编'.repeat(400)}`,
+      `## 工具系统\n${'工'.repeat(4000)}`,
     ].join('\n\n---\n\n')
-    const out = assembleFinalPrompt({ base, memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
+    const out = assembleFinalPrompt({ base, memoryM1: 'M1=小摘要', memoryM2: 'M2=小记忆' })
     expect(out).toContain('（内容过长已省略')
     expect(out).toContain('（工具列表已截断）')
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
   it('未超限时不裁剪（M1/M2 均保留）', () => {
@@ -425,32 +438,99 @@ describe('记忆分层注入（C 档第一轮）', () => {
   })
 })
 
-describe('assembleFinalPrompt 常驻段独立预算（C 档第一轮修正 1）', () => {
-  const big = '内容'.repeat(4000)
+describe('assembleFinalPrompt 常驻段独立预算（C 档第一轮修正 1；P0-3 重估后按 7500 口径）', () => {
+  const big = '身'.repeat(7800)
 
   it('常驻段不参与降级链：超限时丢的是 M1 → M2，常驻保留', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}`, memoryResident: `R=常驻原文` })
     expect(out).toContain('R=常驻原文')
     expect(out).not.toContain('M1=')
     expect(out).not.toContain('M2=')
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700 + estimateTokens('R=常驻原文'))
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS + estimateTokens('R=常驻原文'))
   })
 
-  it('不传常驻段时上限仍为 4700（既有 6 条用例的行为不变）', () => {
+  it('不传常驻段时上限仍为 SYSTEM_PROMPT_BUDGET_TOKENS（既有用例的行为不变）', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}` })
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700)
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS)
   })
 
   it('manual 段也独立预算：超限时丢的仍是 M1 → M2，本轮显式引用的正文保留', () => {
     const out = assembleFinalPrompt({ base: '## 身份', memoryM1: `M1=${big}`, memoryM2: `M2=${big}`, memoryManual: 'MAN=手动引用原文' })
     expect(out).toContain('MAN=手动引用原文')   // 用户显式 @ 的内容不该被静默丢掉
     expect(out).not.toContain('M2=')
-    expect(estimateTokens(out)).toBeLessThanOrEqual(4700 + estimateTokens('MAN=手动引用原文'))
+    expect(estimateTokens(out)).toBeLessThanOrEqual(SYSTEM_PROMPT_BUDGET_TOKENS + estimateTokens('MAN=手动引用原文'))
   })
 
   it('manual 在不相关轮次不出现时的行为不变（缺省 = 空段）', () => {
     const withEmpty = assembleFinalPrompt({ base: '## 身份', memoryM1: 'M1=小', memoryM2: 'M2=小', memoryManual: '' })
     const without = assembleFinalPrompt({ base: '## 身份', memoryM1: 'M1=小', memoryM2: 'M2=小' })
     expect(withEmpty).toBe(without)
+  })
+})
+
+describe('工具段预算随工具数伸缩（P0-3）', () => {
+  beforeAll(() => {
+    // 前置 describe 可能已通过 createConversation → initializeTools 注册；缺则补注册
+    if (toolRegistry.listAll().length === 0) registerBuiltinTools()
+  })
+
+  it('预算公式：随工具数增长、封顶 4000（单调有界）', () => {
+    expect(computeToolPromptBudget(0)).toBe(900)
+    expect(computeToolPromptBudget(10)).toBe(2400)
+    expect(computeToolPromptBudget(26)).toBe(4000)   // 900 + 150×26 = 4800 > 4000 → 封顶
+    expect(computeToolPromptBudget(100)).toBe(4000)
+    for (const n of [3, 8, 20, 30]) {
+      expect(computeToolPromptBudget(n + 1)).toBeGreaterThanOrEqual(computeToolPromptBudget(n))
+    }
+  })
+
+  it('回归护栏：当前内置工具契约完整可读（tiktoken 口径；工具增长挤爆时会红）', () => {
+    const n = toolRegistry.listAll().length
+    expect(n).toBeGreaterThanOrEqual(20)   // 注册链断裂（数量骤降）同样要红
+    const prompt = toolRegistry.generateToolPrompt()
+    // 契约 ≤ 预算：新增工具把契约顶上去 → 本条先红（提醒重估公式/上限）
+    expect(estimateTokens(prompt)).toBeLessThanOrEqual(computeToolPromptBudget(n))
+    // 段级不截断：prose（语义 / 参数含义 / 使用时机）完整可见，不只签名
+    const { segments } = buildAgentSystemSegments('balanced')
+    expect(segments.find(s => s.key === 'tools')?.truncated).toBeFalsy()
+  })
+
+  it('超限工具集：截断通知含全部工具签名（可调用性兜底，不丢工具）', () => {
+    const registered: string[] = []
+    try {
+      for (let i = 0; i < 20; i++) {
+        const name = `p0x-probe-${i}`
+        registered.push(name)
+        toolRegistry.register({
+          name,
+          description: '演示用长描述工具。'.repeat(30),
+          source: 'builtin',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              alpha: { type: 'string', description: '参数 alpha' },
+              beta: { type: 'number', description: '参数 beta' },
+            },
+            required: ['alpha'],
+          },
+          requiresConfirmation: false,
+          isReadOnly: true,
+          execute: async () => ({ success: true, content: 'ok' }),
+        })
+      }
+      const { base, segments } = buildAgentSystemSegments('balanced')
+      const toolSeg = segments.find(s => s.key === 'tools')
+      expect(toolSeg?.truncated).toBe(true)
+      // 截断后每个工具仍可调用：签名清单覆盖首/中/尾（'name(' 结尾避免前缀互串）
+      expect(base).toContain('p0x-probe-0(alpha, beta?)')
+      expect(base).toContain('p0x-probe-10(alpha, beta?)')
+      expect(base).toContain('p0x-probe-19(alpha, beta?)')
+      // 截断文本 ≤ 预算 + 签名通知余量（通知不参与预算——它是可调用性的最后保险）
+      expect(toolSeg!.tokens).toBeLessThanOrEqual(
+        computeToolPromptBudget(toolRegistry.listAll().length) + 900,
+      )
+    } finally {
+      for (const name of registered) toolRegistry.unregister(name)
+    }
   })
 })
