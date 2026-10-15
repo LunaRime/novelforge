@@ -294,6 +294,13 @@ export const workflowTexts = {
   'engine.contextActiveFileTruncated': { 'zh-CN': '…（已截断，可通过 read_file 获取完整内容）', 'en-US': '…(truncated — use read_file to get the full content)', 'ru-RU': '…(обрезано — используйте read_file для полного содержимого)' },
   'engine.contextWorkflowHeader': { 'zh-CN': '## 工作流状态', 'en-US': '## Workflow status', 'ru-RU': '## Статус рабочего процесса' },
   'engine.contextWorkflowRunning': { 'zh-CN': '当前有工作流正在运行：{title}（进度：{progress}）', 'en-US': 'A workflow is currently running: {title} (progress: {progress})', 'ru-RU': 'Сейчас выполняется рабочий процесс: {title} (прогресс: {progress})' },
+  // --- S2/W2 任务锚点（system 尾部 ≤120 tokens；每轮重建、不进历史、不参与压缩）---
+  'engine.taskAnchorHeader': { 'zh-CN': '## 当前任务锚点', 'en-US': '## Current task anchor', 'ru-RU': '## Якорь текущей задачи' },
+  'engine.taskAnchorRequest': { 'zh-CN': '用户诉求：', 'en-US': 'User request: ', 'ru-RU': 'Запрос пользователя: ' },
+  'engine.taskAnchorPending': { 'zh-CN': '未完成（上次执行失败）：', 'en-US': 'Unfinished (last attempt failed): ', 'ru-RU': 'Не завершено (прошлая попытка неудачна): ' },
+  'engine.taskAnchorNote': { 'zh-CN': '（本轮任务锚点，非历史消息；需要回顾细节请用 read_* 工具查询，不要凭印象作答）', 'en-US': '(Current-turn task anchor, not a history message; use read_* tools to review details instead of relying on memory)', 'ru-RU': '(Якорь текущей задачи, не сообщение истории; для деталей используйте инструменты read_*, а не догадки)' },
+  // --- S1 token 引擎降级（tiktoken 不可用 → CJK 启发式；全部预算按保守口径判定）---
+  'engine.tokenEngineDegraded': { 'zh-CN': 'token 计数已降级为 CJK 启发式（gpt-tokenizer 不可用）：中文下高估约 1.7 倍，压缩会比预期更早触发（预算偏保守）。功能不受影响。', 'en-US': 'Token counting fell back to the CJK heuristic (gpt-tokenizer unavailable): it over-estimates Chinese by ~1.7×, so compaction triggers earlier than expected (conservative budgets). Functionality is unaffected.', 'ru-RU': 'Подсчёт токенов перешёл на эвристику CJK (gpt-tokenizer недоступен): для китайского завышение ~1.7×, поэтому сжатие срабатывает раньше ожидаемого (консервативные бюджеты). Функциональность не затронута.' },
   'engine.toolTruncatedNotice': { 'zh-CN': '（工具描述已按预算截断，全部可用工具：{tools}）', 'en-US': '(Tool descriptions were truncated to fit the budget. All available tools: {tools})', 'ru-RU': '(Описания инструментов урезаны под бюджет. Все доступные инструменты: {tools})' },
   'engine.toolListTruncated': { 'zh-CN': '（工具列表已截断）', 'en-US': '(tool list truncated)', 'ru-RU': '(список инструментов обрезан)' },
   'engine.toolSystemTitle': { 'zh-CN': '## 工具系统', 'en-US': '## Tool system', 'ru-RU': '## Система инструментов' },

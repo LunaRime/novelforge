@@ -593,3 +593,64 @@ describe('P1-1：会话摘要注入端按分节裁剪（trimSessionSummary）', 
     expect(estimateTokens(out)).toBeLessThanOrEqual(SESSION_SUMMARY_BUDGET_TOKENS)
   })
 })
+
+describe('S2/W2：任务锚点（system 尾部；不进历史、不参与压缩）', () => {
+  beforeEach(() => {
+    if (toolRegistry.listAll().length === 0) registerBuiltinTools()
+    // 记忆读盘：本 describe 只关心锚点 → 一律空列表（不触发常驻/目录段）
+    Object.defineProperty(window, 'velaAPI', {
+      value: { invoke: vi.fn(async (ch: string) => (ch === 'memory:list' ? [] : null)) },
+      configurable: true,
+    })
+    useAgentStore.setState({ conversations: [], activeConversationId: null })
+  })
+
+  it('有诉求 → 注入锚点，且语言指令仍是最末尾（#30 语义不破）', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    const prompt = await buildAgentSystemPromptAsync('balanced', '把第三章的重逢写得更克制')
+    expect(prompt).toContain(t('engine.taskAnchorHeader'))
+    expect(prompt).toContain('把第三章的重逢写得更克制')
+    const anchorIdx = prompt.indexOf(t('engine.taskAnchorHeader'))
+    const langIdx = prompt.lastIndexOf('Do not respond in any other language')
+    expect(anchorIdx).toBeGreaterThan(0)
+    expect(langIdx).toBeGreaterThan(anchorIdx)   // 锚点在语言指令之前 = system 最贴近本轮
+  })
+
+  it('命令轮（/clear）→ 不注入锚点（命令不是创作任务）', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    const prompt = await buildAgentSystemPromptAsync('balanced', '/clear')
+    expect(prompt).not.toContain(t('engine.taskAnchorHeader'))
+  })
+
+  it('明细段含 task-anchor；面板预览（不传 userMessage）不含', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    const sent = await buildAgentSystemSegmentsAsync('balanced', '写第 5 章')
+    expect(sent.taskAnchor).toContain(t('engine.taskAnchorHeader'))
+    expect(sent.segments.some(s => s.key === 'task-anchor')).toBe(true)
+
+    const preview = await buildAgentSystemSegmentsAsync('balanced')
+    expect(preview.taskAnchor).toBe('')
+    expect(preview.segments.some(s => s.key === 'task-anchor')).toBe(false)
+  })
+
+  it('上一轮写操作失败 → 锚点带「未完成」（任务状态不依赖历史是否被压过）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id
+        ? {
+            ...c,
+            messages: [{
+              id: 'm-fail', role: 'assistant' as const, content: '写入失败', createdAt: 1,
+              toolCalls: [{
+                id: 'tc1', toolName: 'write_file', arguments: { file_path: 'drafts/c5.md' },
+                status: 'failed' as const,
+              }],
+            }],
+          }
+        : c),
+    }))
+    const prompt = await buildAgentSystemPromptAsync('balanced', '继续写第 5 章')
+    expect(prompt).toContain(t('engine.taskAnchorPending'))
+    expect(prompt).toContain('drafts/c5.md')
+  })
+})

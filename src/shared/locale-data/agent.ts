@@ -18,6 +18,8 @@ export const agentTexts = {
   'context.segSourceTools': { 'zh-CN': '{n} 个工具说明', 'en-US': '{n} tool descriptions', 'ru-RU': 'описания {n} инструментов' },
   'context.segSourceSkills': { 'zh-CN': '{n} 个技能目录', 'en-US': '{n} skills in catalog', 'ru-RU': '{n} навыков в каталоге' },
   'context.segSourceM1': { 'zh-CN': '会话摘要（M1 滚动）', 'en-US': 'Conversation summary (M1 rolling)', 'ru-RU': 'Сводка диалога (M1 прокрутка)' },
+  'context.segSourceTaskAnchor': { 'zh-CN': '本轮任务锚点（每轮重建，不进历史）', 'en-US': 'Current-turn task anchor (rebuilt each turn, not in history)', 'ru-RU': 'Якорь текущей задачи (пересобирается каждый ход, не в истории)' },
+  'context.seg.task-anchor': { 'zh-CN': '任务锚点', 'en-US': 'Task anchor', 'ru-RU': 'Якорь задачи' },
   'context.seg.identity': { 'zh-CN': '身份与行为指导', 'en-US': 'Identity and guidance', 'ru-RU': 'Роль и инструкции' },
   'context.seg.l0': { 'zh-CN': '项目上下文', 'en-US': 'Project context', 'ru-RU': 'Контекст проекта' },
   'context.seg.l1': { 'zh-CN': '编辑器上下文', 'en-US': 'Editor context', 'ru-RU': 'Контекст редактора' },
@@ -67,6 +69,8 @@ export const agentTexts = {
   'ccr.historyPanelVsSent': { 'zh-CN': '历史：面板 {panel} · 实发 {sent}', 'en-US': 'History: panel {panel} · sent {sent}', 'ru-RU': 'История: панель {panel} · отправлено {sent}' },
   'ccr.prefixChanged': { 'zh-CN': '前缀：已变化（与上轮共享 {n} 字符）', 'en-US': 'Prefix: changed (shares {n} chars with last turn)', 'ru-RU': 'Префикс: изменён (общих символов: {n})' },
   'ccr.prefixStable': { 'zh-CN': '前缀：稳定', 'en-US': 'Prefix: stable', 'ru-RU': 'Префикс: стабилен' },
+  // S1：token 引擎降级徽标（明细弹层；悬停看解释）
+  'ccr.tokenDegradedBadge': { 'zh-CN': 'token 估算：降级（启发式，预算偏保守）', 'en-US': 'Token counting: degraded (heuristic, conservative budgets)', 'ru-RU': 'Подсчёт токенов: деградация (эвристика, консервативные бюджеты)' },
   'ccr.batchInvalidated': { 'zh-CN': '已失效（历史已变动）', 'en-US': 'invalidated (history changed)', 'ru-RU': 'недействительно (история изменилась)' },
   'ccr.removeCompaction': { 'zh-CN': '移除该压缩', 'en-US': 'Remove this compaction', 'ru-RU': 'Убрать это сжатие' },
   'ccr.originalUnavailable': { 'zh-CN': '原文不可用（分卷已丢失）', 'en-US': 'Original text unavailable (shard lost)', 'ru-RU': 'Исходный текст недоступен (фрагмент утерян)' },

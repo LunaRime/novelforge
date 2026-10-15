@@ -27,6 +27,7 @@ import {
   type MemoryLayerEntry,
 } from './memory-layers'
 import { toolRegistry } from './tool-registry'
+import { buildTaskAnchor } from './task-anchor'
 import { skillRegistry, sortSkillsBySource } from './skill-registry'
 import type { ContextSegment } from './context-usage'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
@@ -292,13 +293,22 @@ export function assembleFinalPrompt(segments: {
   memoryM2: string
   memoryResident?: string
   memoryManual?: string
+  /**
+   * S2/W2 任务锚点（≤120 tokens，system 尾部、语言指令之前）。
+   * 与常驻/manual 不同，它**计入** SYSTEM_PROMPT_BUDGET_TOKENS（体量小、且是每轮必需的提醒），
+   * 但不参与降级链的丢弃顺序（链只丢 M1/M2、裁 L1/Tool）。
+   */
+  taskAnchor?: string
 }): string {
   const join = (xs: Array<string | undefined>) => xs.filter((x): x is string => Boolean(x)).join('\n\n---\n\n')
-  // 索引：0=base，1=memoryResident，2=M2，3=M1，4=memoryManual
-  // （manual 放最末：它是**本轮**才有的易变内容，放末尾可最大化稳定前缀的缓存命中）
+  // 索引：0=base，1=memoryResident，2=M2，3=M1，4=memoryManual，5=taskAnchor
+  // （manual 与锚点放最末：都是**本轮**才有的易变内容，放末尾可最大化稳定前缀的缓存命中；
+  //   锚点在最后 = 最贴近"当前轮"，对弱模型的提醒效果最强）
   const resident = segments.memoryResident ?? ''
   const manual = segments.memoryManual ?? ''
-  const parts: Array<string | undefined> = [segments.base, resident, segments.memoryM2, segments.memoryM1, manual]
+  const parts: Array<string | undefined> = [
+    segments.base, resident, segments.memoryM2, segments.memoryM1, manual, segments.taskAnchor,
+  ]
   const full = join(parts)
   // C 档第一轮修正 1（+ 评审 I1）：常驻段与 manual 段各有**独立预算**（各自的硬上限，
   // 超限整段丢弃而非截断）。若把它们算进 SYSTEM_PROMPT_BUDGET_TOKENS，常驻一超 ~1300 tokens 就会在降级链里被整段
@@ -343,7 +353,7 @@ export function assembleFinalPrompt(segments: {
   }
   // 5. 兜底硬截断（各节独立预算下理论不可达）：主体按预算截断，语言指令保持最末尾（#30）。
   //    预算预留截断提示 token——tokenizer 分段拼接非可加，硬截断可能切掉尾部提示，补回保持语义不变量
-  const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2], parts[3], parts[4]])
+  const main = join([baseSections.join('\n\n---\n\n'), parts[1], parts[2], parts[3], parts[4], parts[5]])
   const mainBudget = budget - langTokens - (toolMarked ? markerTokens : 0)
   if (estimateTokens(main) > mainBudget) {
     const cut = truncateToTokenBudget(main, mainBudget)
@@ -363,6 +373,8 @@ export interface AgentSystemSegmentsAsync {
   /** 名字目录 + 本轮显式引用的 manual 正文 */
   memoryM2: string
   memoryM1: string
+  /** S2/W2：本轮任务锚点（无诉求/命令轮为空串；仅真实发送路径会构建——面板预览无用户消息故为空） */
+  taskAnchor: string
   segments: ContextSegment[]
 }
 
@@ -484,22 +496,38 @@ export async function buildAgentSystemSegmentsAsync(mode: AgentMode, userMessage
   //    再塞进 M2 就是同一段正文注入两次（每轮白烧 ~body tokens + 提前触发 M1→M2 降级链）
   const parts = [layers.catalog].filter(Boolean)
   const m2 = parts.length > 0 ? `${t('memory.injectedHeader')}\n\n${parts.join('\n\n')}` : ''
+  // S2/W2 任务锚点：只依赖「本轮用户消息 + 最近回执」，每轮重建、不进历史、不参与压缩。
+  // 面板预览（AgentConversation 的 useAsyncSegments）不传 userMessage → 锚点为空串（见接口注释）。
+  const taskAnchor = buildTaskAnchor({
+    userMessage,
+    messages: useAgentStore.getState().getActiveConversation()?.messages ?? [],
+  })
+  const segments = [...baseSegments, ...layers.segments]
+  if (taskAnchor) {
+    segments.push({
+      key: 'task-anchor',
+      tokens: estimateTokens(taskAnchor),
+      chars: taskAnchor.length,
+      source: t('context.segSourceTaskAnchor'),
+    })
+  }
   return {
     base,
     memoryResident: layers.resident,
     memoryManual: layers.manual,
     memoryM2: m2,
     memoryM1: m1,
-    segments: [...baseSegments, ...layers.segments],
+    taskAnchor,
+    segments,
   }
 }
 
-/** 异步版最终拼装：base + 常驻段 + M2 + M1 + manual 段 + 语言指令（语言指令保持最末尾） */
+/** 异步版最终拼装：base + 常驻段 + M2 + M1 + manual 段 + 任务锚点 + 语言指令（语言指令保持最末尾） */
 export async function buildAgentSystemPromptAsync(mode: AgentMode, userMessage = ''): Promise<string> {
   const s = await buildAgentSystemSegmentsAsync(mode, userMessage)
   return assembleFinalPrompt({
     base: s.base, memoryM1: s.memoryM1, memoryM2: s.memoryM2,
-    memoryResident: s.memoryResident, memoryManual: s.memoryManual,
+    memoryResident: s.memoryResident, memoryManual: s.memoryManual, taskAnchor: s.taskAnchor,
   })
 }
 
