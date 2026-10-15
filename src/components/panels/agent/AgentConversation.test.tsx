@@ -149,16 +149,17 @@ describe('RecentConversationItem hover 行为', () => {
     return conv
   }
 
-  /** 会话行外层（外层 token 恰为 group；内层按钮为 group-hover:* 不算） */
+  /** 会话行外层（命名 group `group/row`；内层按钮的 group-hover:* 不算）——
+   *  ⚠️ 2026-10-16 起行容器改用**命名** group：行自身要点亮（整行 = 选中范围），
+   *  同时避免误触发外层 EmptyState 的无名 `group`（其 group-hover 用于别处） */
   const rowOf = (container: HTMLElement, text?: string): HTMLElement => {
-    const rows = Array.from(container.querySelectorAll<HTMLElement>('.group'))
-      .filter(el => el.className.split(' ').includes('group'))
+    const rows = Array.from(container.querySelectorAll<HTMLElement>('.group\\/row'))
     const row = text ? rows.find(r => r.textContent?.includes(text)) : rows[0]
     expect(row).toBeTruthy()
     return row!
   }
 
-  it('右侧容器按内容自适应（不再写死 88px），时间/操作组 opacity 交叉渐隐 + 键盘等价', () => {
+  it('整行 = 选中范围：行自身点亮（悬停底），主按钮不再自亮；时间/操作组交叉渐隐 + 键盘等价', () => {
     makeEmptyStateRow()
     const { container, root } = render(<AgentConversation />)
     const row = rowOf(container)
@@ -168,23 +169,32 @@ describe('RecentConversationItem hover 行为', () => {
     const rightBox = row.lastElementChild as HTMLElement
     expect(rightBox.style.width).toBe('')
     expect(rightBox.className).toContain('grid')
-    // 断言 2：时间元素走类而非内联 opacity（内联会压过 group-hover:opacity-0，hover 永不淡出）
-    const timeSpan = rightBox.querySelector<HTMLSpanElement>('span[class*="group-hover:opacity-0"]')!
+    // 断言 2：时间元素走类而非内联 opacity（内联会压过 group-hover/row:opacity-0，hover 永不淡出）
+    const timeSpan = rightBox.querySelector<HTMLSpanElement>('span[class*="group-hover/row:opacity-0"]')!
     expect(timeSpan).toBeTruthy()
     expect(timeSpan.style.opacity).toBe('')
     expect(timeSpan.className).toContain('opacity-60')
     // 断言 3：操作组容器做 opacity 淡入，hover 与 focus-within（键盘等价）两半都在
-    const actions = rightBox.querySelector<HTMLElement>('[class*="group-hover:opacity-100"]')!
+    const actions = rightBox.querySelector<HTMLElement>('[class*="group-hover/row:opacity-100"]')!
     expect(actions).toBeTruthy()
-    expect(actions.className).toContain('group-focus-within:opacity-100')
+    expect(actions.className).toContain('group-focus-within/row:opacity-100')
     // 反向的一半：悬停隐藏同样要有键盘等价
-    expect(timeSpan.className).toContain('group-focus-within:opacity-0')
+    expect(timeSpan.className).toContain('group-focus-within/row:opacity-0')
     // 无 display 切换（hidden）——防布局跳动
     expect(actions.className).not.toContain('hidden')
     expect(timeSpan.className).not.toContain('hidden')
 
+    // 断言 4（用户 2026-10-16 的核心诉求）：**整行**才是选中范围 ——
+    // 行容器自身带悬停底（此前只有标题那一小块亮，右侧按钮旁是一片「亮了点不动」的空档）
+    expect(row.className).toContain('hover:bg-[var(--color-hover)]')
+    expect(row.className).toContain('group/row')
+    // 主按钮不再自亮（否则出现「主按钮一块 + 行另一块」双底，且两块之间有空档）
+    const mainBtn = row.querySelector<HTMLButtonElement>('button')!
+    expect(mainBtn.className).not.toContain('hover:bg-')
+    // 行容器不挂 cursor-pointer（手型只属于真能点的主按钮 —— §4 光标纪律）
+    expect(row.className).not.toContain('cursor-pointer')
+
     // 形态 A：外层行是纯视觉 div（无 role / tabIndex / 点击处理器），操作按钮作兄弟
-    expect(row.className).toContain('group')
     expect(row.getAttribute('role')).toBeNull()
     expect(row.getAttribute('tabindex')).toBeNull()
     // 嵌套按钮：恒为 0
@@ -193,17 +203,18 @@ describe('RecentConversationItem hover 行为', () => {
     act(() => { root.unmount() })
   })
 
-  it('行内图标按钮热区 32×32；删除入口收在「更多」菜单内，点击后回调携带该会话 id', async () => {
+  it('行内图标按钮为原样式 20×20；删除入口收在「更多」菜单内，点击后回调携带该会话 id', async () => {
     const conv = makeEmptyStateRow()
     const spy = vi.spyOn(useAgentStore.getState(), 'deleteConversation').mockImplementation(() => {})
     const { container, root } = render(<AgentConversation />)
     const row = rowOf(container)
 
-    // 「更多」触发按钮：32×32 + aria-label + aria-haspopup
+    // 「更多」触发按钮：原样式 20×20（类写 w-[20px] h-[20px]）+ aria-label + aria-haspopup
     const more = row.querySelector<HTMLButtonElement>(`[title="${t('tip.moreOptions')}"]`)!
     expect(more).toBeTruthy()
-    expect(more.style.width).toBe('32px')
-    expect(more.style.height).toBe('32px')
+    expect(more.className).toContain('w-[20px]')
+    expect(more.className).toContain('h-[20px]')
+    expect(more.style.width).toBe('')
     expect(more.getAttribute('aria-label')).toBe(t('tip.moreOptions'))
     expect(more.getAttribute('aria-haspopup')).toBe('menu')
     expect(more.getAttribute('aria-expanded')).toBe('false')
@@ -291,11 +302,9 @@ describe('EmptyState 历史条数配置', () => {
     useAgentStore.setState({ activeConversationId: null })
   }
 
-  /** 统计最近会话行数（RecentConversationItem 外层 token 恰为 group；2026-09-27 起为普通 div，
-   *  主区域/工具条按钮是其子节点——不再用 role="button" 的 div） */
+  /** 统计最近会话行数（RecentConversationItem 外层 = 命名 group `group/row`；2026-10-16 起） */
   const recentRowCount = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLElement>('.group'))
-      .filter(el => el.className.split(' ').includes('group')).length
+    container.querySelectorAll('.group\\/row').length
 
   it('按 config recentConversationCount 显示条数（mock 5 → 显示 5 条）', async () => {
     configValue = { recentConversationCount: 5 }
@@ -357,11 +366,10 @@ describe('AgentHistoryPanel fork 层级', () => {
     return { rootConv, childConv }
   }
 
-  /** RecentConversationItem 外层行（外层 token 恰为 group；内层按钮为 group-hover:* 不算）。
-   *  2026-09-27 起外层是普通 div，主区域/工具条按钮是其子节点 */
+  /** RecentConversationItem 外层行（命名 group `group/row`；2026-10-16 起）。
+   *  外层是普通 div，主区域/工具条按钮是其子节点 */
   const historyRows = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLElement>('.group'))
-      .filter(el => el.className.split(' ').includes('group'))
+    Array.from(container.querySelectorAll<HTMLElement>('.group\\/row'))
 
   it('fork 子会话缩进显示 + GitFork 图标 + 父会话标注', () => {
     const { rootConv, childConv } = makeForkState()
@@ -403,22 +411,23 @@ describe('AgentHistoryPanel fork 层级', () => {
     act(() => { root.unmount() })
   })
 
-  it('会话行：置顶/重命名作兄弟按钮（32×32），分叉/归档/删除在「更多」菜单内', () => {
+  it('会话行：置顶/重命名作兄弟按钮（原样式 20×20），分叉/归档/删除在「更多」菜单内', () => {
     makeForkState()
     const { container, root } = render(<AgentConversation />)
     const row = historyRows(container).find(r => r.textContent?.includes('父会话A'))!
 
-    // 兄弟按钮：置顶 + 重命名 + 更多 —— 全部 32×32（card-affordance-standard §5.2）
+    // 兄弟按钮：置顶 + 重命名 + 更多 —— 20×20 原生 px（`w-[20px] h-[20px]`，2026-10-16 用户裁决回退）
     const siblings = ['置顶', '重命名', t('tip.moreOptions')]
     for (const title of siblings) {
       const btn = row.querySelector<HTMLButtonElement>(`[title="${title}"]`)
       expect(btn, `缺少按钮：${title}`).toBeTruthy()
-      expect(btn!.style.width).toBe('32px')
-      expect(btn!.style.height).toBe('32px')
+      // ⚠️ 尺寸走类（w-[20px]）而非内联 style；不要再写成 w-5 h-5（那是 17.5px 的历史坑）
+      expect(btn!.className).toContain('w-[20px]')
+      expect(btn!.className).toContain('h-[20px]')
+      expect(btn!.style.width).toBe('')
       expect(btn!.getAttribute('aria-label')).toBe(title)
-      expect(btn!.className).toContain('hover:bg-[var(--color-hover)]')
     }
-    // 行内不再横排 5 个按钮（旧形态 5×20 + gap 溢出 88px 容器 = 用户报的「窄且不含功能按钮」）
+    // 行内不再横排 5 个按钮（5 个按钮横排在窄面板里会溢出，故分叉/归档/删除收进「更多」菜单）
     expect(row.querySelectorAll('button[title]')).toHaveLength(3)
     expect(container.querySelectorAll('button button')).toHaveLength(0)
 

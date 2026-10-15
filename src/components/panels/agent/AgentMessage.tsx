@@ -25,20 +25,20 @@ import '../../../styles/agent-tools.css'
 /**
  * 消息操作区单图标按钮统一样式。
  *
- * ⚠️ 热区 32×32（card-affordance-standard §5.2 桌面口径）——`style` 里用**固定像素**写，
- * 不要用 `p-*` / `w-*` 的 rem 档位倒推（本仓 `html{font-size:14px}` 下 `w-5 h-5` 只有 17.5px）。
- * 图标视觉仍 12px，只涨热区。hover 一律同令牌 `--color-hover`（§1 共性硬约束）。
+ * ⚠️ **2026-10-16 用户裁决：本文件的尺寸改动全部回退**（近 4 周里第三次试改这一处）。
+ * 「对话框下面的按钮」不在本次要改的范围内 —— 用户要改的是**历史会话行的选中范围**，
+ * 不是消息气泡下面那排按钮。按「用户的裁决 > 通用标准」处理。
+ *
+ * 现行口径（= 2026-09-22 起的历史形态）：
+ * - 尺寸 `22×22`、图标 12px、间距 `gap-0.5`；hover 反馈用 `hover:opacity-70`（不是底色块）；
+ * - 与 `card-affordance-standard` §5.2「桌面图标按钮 ≥32×32」**不一致**，属**已裁决的豁免**：
+ *   这排按钮是行尾的次级操作、且用户明确要求保持原样。**不要再按标准把它改成 32×32**，
+ *   除非用户再次提出（本轮之前已有两次回退记录）。
  */
-const ACTION_BTN_SIZE = { width: 32, height: 32 }
-const ACTION_BTN =
-  'flex items-center justify-center rounded enabled:cursor-pointer hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-/** 禁用态：无 hover 反馈（三件套之一），淡化与 not-allowed 走内联样式 */
-const ACTION_BTN_DISABLED = 'flex items-center justify-center rounded'
-/**
- * 操作条排布：`gap-2.5`（8.75px）+ 32px = **相邻中心距 40.75px**，
- * 同时满足 §5.2 的「间距 ≥40px」与「热区 ≥32×32」两个下限（§5.3 的推荐改法）。
- */
-const ACTION_BAR = 'flex items-center gap-2.5'
+const ACTION_BTN_SIZE = { width: 22, height: 22 }
+const ACTION_BTN = 'flex items-center justify-center rounded cursor-pointer hover:opacity-70'
+/** 操作条排布：`gap-0.5`（1.75px）——原样，与按钮 22px 同批 */
+const ACTION_BAR = 'flex items-center gap-0.5'
 
 interface Props {
   message: AgentMessageType
@@ -77,7 +77,6 @@ function CopyButton({ text }: { text: string }) {
       className={ACTION_BTN}
       style={ACTION_BTN_SIZE}
       title={t('tip.copyMessage')}
-      aria-label={t('tip.copyMessage')}
     >
       <Copy size={12} />
     </button>
@@ -97,7 +96,6 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
         className={ACTION_BTN}
         style={{ ...ACTION_BTN_SIZE, color: fb === 'up' ? 'var(--color-success)' : 'var(--color-text-muted)' }}
         title={t('agent.feedbackUp')}
-        aria-label={t('agent.feedbackUp')}
       >
         <ThumbsUp size={12} />
       </button>
@@ -107,7 +105,6 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
         className={ACTION_BTN}
         style={{ ...ACTION_BTN_SIZE, color: fb === 'down' ? 'var(--color-error)' : 'var(--color-text-muted)' }}
         title={t('agent.feedbackDown')}
-        aria-label={t('agent.feedbackDown')}
       >
         <ThumbsDown size={12} />
       </button>
@@ -121,7 +118,6 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
 
   // 分支操作区（2026-09-22：由 hover 显隐改为**持续显示**；
   // 用于用户消息时渲染在气泡**外**，不再嵌在对话卡片里）
-  // 热区（2026-10-13）：与复制/反馈同一口径 32×32，图标视觉不变
   const actionArea = onFork || onRewind ? (
     <div className={`${ACTION_BAR} flex-shrink-0`}>
       {onFork && (
@@ -131,7 +127,6 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
           className={ACTION_BTN}
           style={{ ...ACTION_BTN_SIZE, color: 'var(--color-text-muted)' }}
           title={t('agent.forkConversation')}
-          aria-label={t('agent.forkConversation')}
         >
           <GitFork size={12} />
         </button>
@@ -141,11 +136,10 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
           type="button"
           onClick={() => onRewind(message.id)}
           disabled={rewindDisabled}
-          className={rewindDisabled ? ACTION_BTN_DISABLED : ACTION_BTN}
-          // 禁用态用内联 opacity/cursor（且不带 hover 底色类，hover 时禁用态不失效）
+          className={ACTION_BTN}
+          // 禁用态用内联 opacity/cursor（inline 压过 hover:opacity-70 类，hover 时禁用态不失效）
           style={{ ...ACTION_BTN_SIZE, color: 'var(--color-text-muted)', opacity: rewindDisabled ? 0.4 : undefined, cursor: rewindDisabled ? 'not-allowed' : undefined }}
           title={rewindDisabled ? t('agent.rewindLastMessage') : t('agent.rewindToHere')}
-          aria-label={rewindDisabled ? t('agent.rewindLastMessage') : t('agent.rewindToHere')}
         >
           <Undo2 size={12} />
         </button>
@@ -169,14 +163,11 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
           {content}
         </div>
         {/* 气泡**下方**一排（右对齐）：发送时间 + 复制 + 分支/回退
-            （2026-09-22 用户要求：按钮不在气泡内、改到气泡下方，并补时间与复制）
-            2026-10-13 热区收口：本行容器**不点亮**（时间仍是纯文本，无 hover 底色、无手型），
-            只有复制按钮在自身 32×32 热区内出 hover 底色 —— hover 亮起的边界 ⊆ 可点边界，
-            不存在「亮了却点不动」的死带（card-affordance-standard §3） */}
-        <div className="mt-0.5 flex items-center gap-2.5 px-0.5 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
+            （2026-09-22 用户要求：按钮不在气泡内、改到气泡下方，并补时间与复制） */}
+        <div className="mt-0.5 flex items-center gap-0.5 px-0.5 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
           {/* 用户气泡下方只留「时间 + 复制」（2026-09-22 用户指定）；
               分支 / 回退只在模型回复下方出现 */}
-          <span className="tabular-nums">{formatLocaleTime(createdAt)}</span>
+          <span className="mr-0.5 tabular-nums">{formatLocaleTime(createdAt)}</span>
           <CopyButton text={content} />
         </div>
       </div>
@@ -235,8 +226,8 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
 
         {/* 底部操作区（2026-09-22）：复制 + 满意/不满意 + 分支/回退 ——
             放在整条回复（含工具块与产物卡）的**最下方**，不再夹在正文与工具块之间。
-            2026-10-13：整条操作条 = 全部按钮 32×32 热区 + 同令牌 hover 底色，
-            容器自身不点亮（不留死带） */}
+            ⚠️ 2026-10-16 用户裁决：这排按钮**改回原样式**（22×22 + gap-0.5 + hover:opacity-70），
+            它不在本次「历史会话行选中范围」的改动范围内 —— 见文件顶部 ACTION_BTN 的注释 */}
         <div className={`mt-1 ${ACTION_BAR}`} style={{ color: 'var(--color-text-muted)' }}>
           <CopyButton text={content} />
           <FeedbackButtons message={message} />

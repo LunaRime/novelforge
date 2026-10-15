@@ -98,7 +98,7 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
-  it('底部操作条：5 个图标按钮热区均 32×32（图标视觉仍 12px）+ aria-label + 同令牌 hover', () => {
+  it('底部操作条：5 个图标按钮为原样式（22×22、gap-0.5、hover:opacity-70）', () => {
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onFork={vi.fn()} onRewind={vi.fn()} />)
     // 复制 / 满意 / 不满意 / 分支 / 回退 —— 按 zh-CN title 逐个取（键值断言，避免键名 cast）
@@ -106,33 +106,33 @@ describe('AgentMessage 分支操作', () => {
     for (const title of titles) {
       const btn = container.querySelector<HTMLButtonElement>(`[title="${title}"]`)
       expect(btn, `缺少按钮：${title}`).toBeTruthy()
-      // card-affordance-standard §5.2：桌面热区 ≥32×32，固定像素（不是 rem 档位倒推）
-      expect(btn!.style.width).toBe('32px')
-      expect(btn!.style.height).toBe('32px')
-      // ui-interaction-standard §3.2：title 服务看得见的人，aria-label 服务读屏，两者都要
-      expect(btn!.getAttribute('aria-label')).toBe(title)
-      // 单图标按钮必须有 hover 底色变化，且与行片同令牌
-      expect(btn!.className).toContain('hover:bg-[var(--color-hover)]')
+      // ⚠️ 2026-10-16 用户裁决：**改回原样式** —— 22×22 固定像素（2026-09-22 起的形态）。
+      // 这一排按钮不在「历史会话行选中范围」的改动范围内；不要再按 §5.2 把它改成 32×32。
+      expect(btn!.style.width).toBe('22px')
+      expect(btn!.style.height).toBe('22px')
+      // hover 反馈是透明度变化（原样式），不是底色块
+      expect(btn!.className).toContain('hover:opacity-70')
     }
-    // §5.2 相邻中心距 ≥40px：32px + gap-2.5(8.75px) = 40.75px
+    // 原间距 gap-0.5
     const bar = container.querySelector<HTMLElement>('[title="复制消息"]')!.parentElement!
-    expect(bar.className).toContain('gap-2.5')
-    // 操作条容器自身不点亮（否则留死带）
+    expect(bar.className).toContain('gap-0.5')
+    // 操作条容器自身不点亮
     expect(bar.className).not.toContain('hover:bg-')
     // 形态 A：操作按钮是外层 div 的兄弟，不存在 button 嵌 button
     expect(container.querySelectorAll('button button')).toHaveLength(0)
     act(() => { root.unmount() })
   })
 
-  it('末条回退禁用：热区仍 32×32，但禁用态不挂 hover 底色（禁用三件套之一）', () => {
+  it('末条回退禁用：原样式 22×22 + 禁用态三件套（淡化 / not-allowed / hover 不生效）', () => {
     const msg = { id: 'm1', role: 'assistant' as const, content: '正文', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onRewind={vi.fn()} rewindDisabled />)
     const btn = container.querySelector<HTMLButtonElement>('[title="最后一条消息，无需回退"]')
     expect(btn).toBeTruthy()
     expect(btn!.disabled).toBe(true)
-    expect(btn!.style.width).toBe('32px')
-    expect(btn!.style.height).toBe('32px')
-    expect(btn!.className).not.toContain('hover:bg-')
+    expect(btn!.style.width).toBe('22px')
+    expect(btn!.style.height).toBe('22px')
+    // 内联 opacity 压过 hover:opacity-70（禁用态 hover 不生效）
+    expect(btn!.style.opacity).toBe('0.4')
     expect(btn!.style.cursor).toBe('not-allowed')
     act(() => { root.unmount() })
   })
@@ -164,15 +164,14 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
-  it('用户消息那一行：时间 + 复制同处一条，复制热区 32×32；行容器不点亮（无死带）', () => {
+  it('用户消息那一行：时间 + 复制同处一条（原样式：复制 22×22）', () => {
     const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} />)
     const copy = container.querySelector<HTMLButtonElement>('[title="复制消息"]')
     expect(copy).toBeTruthy()
-    // 热区口径与助手消息一致：32×32 固定像素
-    expect(copy!.style.width).toBe('32px')
-    expect(copy!.style.height).toBe('32px')
-    expect(copy!.getAttribute('aria-label')).toBe('复制消息')
+    // ⚠️ 2026-10-16 用户裁决：这排按钮**改回原样式**（22×22，闲置快照 = 2026-09-22 起的形态）
+    expect(copy!.style.width).toBe('22px')
+    expect(copy!.style.height).toBe('22px')
     // 时间与按钮同处一条（同一行容器）
     const row = copy!.parentElement as HTMLElement
     expect(row.className).toContain('items-center')
@@ -182,8 +181,6 @@ describe('AgentMessage 分支操作', () => {
     expect(time).toBeTruthy()
     expect(time.className).not.toContain('cursor-pointer')
     expect(time.className).not.toContain('hover:bg-')
-    // 死带禁令（§3）：行容器自身不点亮 —— hover 亮起的边界只有按钮的 32×32 热区，
-    // 不存在「亮了却点不动」的时间段/内边距
     expect(row.className).not.toContain('hover:bg-')
     expect(row.getAttribute('role')).toBeNull()
     expect(container.querySelectorAll('button button')).toHaveLength(0)

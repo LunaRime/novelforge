@@ -467,13 +467,17 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
   },
 
   updateModelRoutes: (config) => {
+    // ⚠️ 2026-10-16 修复：此前 router 为 null 时**整段静默 no-op** ——
+    //    router 只在 `init()`（AIPanel 挂载时）创建，而设置页可以更早打开（`openSettings('llm')`）。
+    //    于是「在模型路由里勾好模型 → 保存」什么都不发生：卡片显示不变、也没落盘，
+    //    用户看到的就是「这条路由不显示/不生效」。现在按当前 state 现造一个 router，
+    //    保存永远生效（模型列表为空也照样写 routes —— 路由与模型列表是两件事）。
     const { modelRouter } = get()
-    if (modelRouter) {
-      modelRouter.updateConfig(config)
-      const routes = modelRouter.getConfig()
-      set({ modelRoutes: routes })
-      // 持久化到全局配置（重启恢复，此前仅内存导致手动路由重启丢失）
-      ipc.invoke('llm:set-routes', routes).catch(() => {})
-    }
+    const router = modelRouter ?? new ModelRouter(get().modelRoutes, get().models)
+    router.updateConfig(config)
+    const routes = router.getConfig()
+    set({ modelRouter: router, modelRoutes: routes })
+    // 持久化到全局配置（重启恢复，此前仅内存导致手动路由重启丢失）
+    ipc.invoke('llm:set-routes', routes).catch(() => {})
   },
 }))

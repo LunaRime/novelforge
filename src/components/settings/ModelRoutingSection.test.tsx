@@ -55,7 +55,7 @@ const tierCard = (tier: string) =>
 /** 「编辑优先级」入口 */
 const editBtn = (tier: string) =>
   document.body.querySelector<HTMLButtonElement>(`[data-testid="route-edit-${tier}"]`)!
-/** 行内摘要文案 */
+/** 层卡上的状态行（数量 / 回退口径；卡片不显示型号名） */
 const summaryOf = (tier: string) => tierCard(tier)!.querySelector('p')!.textContent ?? ''
 
 afterEach(() => {
@@ -100,27 +100,16 @@ describe('ModelRoutingSection 层卡排版', () => {
     expect(summaryOf('elite')).toContain('未指定（回退默认模型）')
   })
 
-  it('有模型：摘要在层名下方显示「N 个模型 · 首选 xxx」，模型名按数组顺序出现', () => {
+  it('非空层显示数量（型号名与顺序不上卡片 —— 2026-10-16 用户要求）', () => {
     state.modelRoutes.elite = ['e1', 'e2']
     render()
     expect(summaryOf('elite')).toContain('2 个模型')
-    expect(summaryOf('elite')).toContain('首选 Elite One (openai)')
+    // ⚠️ 卡片上**不显示模型型号**：选了哪些一律进「编辑优先级」弹窗看
     const body = tierCard('elite')!.textContent ?? ''
-    expect(body.indexOf('Elite One')).toBeLessThan(body.indexOf('Elite Two'))
-  })
-
-  it('超过 3 个：前 3 个带 ①②③，第 4 个起折叠为 +N', () => {
-    state.modelRoutes.elite = ['e1', 'e2', 'e3', 'e4']
-    render()
-    const body = tierCard('elite')!.textContent ?? ''
-    expect(body).toContain('①')
-    expect(body).toContain('②')
-    expect(body).toContain('③')
-    expect(body).toContain('+1')
-    // 第 4 个不再逐个铺开
-    expect(body).not.toContain('Elite Four')
-    // 摘要仍是全量计数
-    expect(summaryOf('elite')).toContain('4 个模型')
+    expect(body).not.toContain('Elite One')
+    expect(body).not.toContain('Elite Two')
+    expect(body).not.toContain('①')
+    expect(body).not.toContain('(openai)')
   })
 })
 

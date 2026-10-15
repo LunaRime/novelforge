@@ -51,8 +51,8 @@ export const noticeTexts = {
   'route.editPriority': { 'zh-CN': '编辑优先级', 'en-US': 'Edit priority', 'ru-RU': 'Изменить приоритет' },
   'route.tierCount': { 'zh-CN': '{n} 个模型', 'en-US': '{n} models', 'ru-RU': '{n} моделей' },
   'route.tierEmpty': { 'zh-CN': '未指定（回退默认模型）', 'en-US': 'Unset (falls back to the default model)', 'ru-RU': 'Не задано (используется модель по умолчанию)' },
-  'route.tierFirst': { 'zh-CN': '首选 {name}', 'en-US': 'First: {name}', 'ru-RU': 'Первый: {name}' },
-  'route.moreCount': { 'zh-CN': '+{n}', 'en-US': '+{n}', 'ru-RU': '+{n}' },
+  // ⚠️ 原 `route.tierFirst`（首选 {name}）与 `route.moreCount`（+{n}）已删除（2026-10-16 用户要求）：
+  //    卡片上**不再显示模型型号与优先级序号**，名单/顺序一律进「编辑优先级」弹窗看。不要再加回来。
   'route.dialogTitle': { 'zh-CN': '设置「{tier}」层的模型与优先级', 'en-US': 'Models and priority for the "{tier}" tier', 'ru-RU': 'Модели и приоритет уровня «{tier}»' },
   'route.dialogHint': { 'zh-CN': '勾选加入该层；序号 1 最先尝试，失败或超限时按序号依次回退。一个都不勾 = 该层回退到默认模型。', 'en-US': 'Tick to add a model to this tier. Number 1 is tried first; on failure or limit the next number is used. None ticked = this tier falls back to the default model.', 'ru-RU': 'Отметьте модели для этого уровня. Номер 1 пробуется первым, далее по порядку. Если ничего не отмечено — уровень использует модель по умолчанию.' },
   'route.selectedTitle': { 'zh-CN': '已选（顺序即优先级）', 'en-US': 'Selected (order = priority)', 'ru-RU': 'Выбрано (порядок = приоритет)' },

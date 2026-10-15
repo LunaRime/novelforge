@@ -616,7 +616,7 @@ function AgentHistoryPanel() {
                     <span className="truncate">{g.name}</span>
                     <span className="flex-shrink-0 opacity-60">({g.items.length})</span>
                   </button>
-                  {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示；热区同会话行 32×32） */}
+                  {/* 工作区操作：新建对话 / 重命名 / 删除（hover 显示；尺寸与间距同会话行 —— 2026-10-16 回退到 20×20 + gap-0.5） */}
                   <div
                     className={`${ACT_BAR} flex-shrink-0 opacity-0 group-hover/ws:opacity-100 group-focus-within/ws:opacity-100 transition-opacity duration-150`}
                     style={{ color: 'var(--color-text-secondary)' }}
@@ -624,7 +624,6 @@ function AgentHistoryPanel() {
                     <button
                       type="button"
                       className={ACT_BTN}
-                      style={ACT_BTN_SIZE}
                       title={t('agent.newChatInWorkspace')}
                       aria-label={t('agent.newChatInWorkspace')}
                       onClick={() => createConversation({
@@ -638,7 +637,6 @@ function AgentHistoryPanel() {
                     <button
                       type="button"
                       className={ACT_BTN}
-                      style={ACT_BTN_SIZE}
                       title={t('agent.renameWorkspace')}
                       aria-label={t('agent.renameWorkspace')}
                       onClick={() => { setWsDraft(g.name); setRenamingWs(g.key) }}
@@ -648,7 +646,6 @@ function AgentHistoryPanel() {
                     <button
                       type="button"
                       className={ACT_BTN}
-                      style={ACT_BTN_SIZE}
                       title={t('agent.deleteWorkspace')}
                       aria-label={t('agent.deleteWorkspace')}
                       onClick={async () => {
@@ -705,17 +702,14 @@ function AgentHistoryPanel() {
  * 会话列表行内的小图标按钮统一样式。
  * ⚠️ 2026-09-27：原写 `w-5 h-5`（rem 制）在本仓 `html{font-size:14px}` 下实渲染 17.5px，
  * 低于 20×20 底线——旧注释写了「16×16 → 20×20」但数值没改对（标准 §5 的 rem 陷阱）。
- * ⚠️ 2026-10-13：热区由 20×20 收到 **32×32**（card-affordance-standard §5.2 桌面口径，
- * §5.3 登记的 `ACT_BTN` 差距按批核销）；尺寸走 `ACT_BTN_SIZE` 固定像素，不写进类名。
- * 图标视觉仍 12px，只涨热区；hover 一律同令牌 `--color-hover`。
+ * ⚠️ 2026-10-16 用户裁决：本轮 32×32 的改动**全部回退**到 20×20（近 4 周里第三次试改这一处）。
+ * 用户要动的是**行的选中范围**，不是按钮尺寸；按「用户的裁决 > 通用标准」处理。
+ * 尺寸走 `w-[20px] h-[20px]` 原生 px 任意值（**不要**写 `w-5 h-5`：那是 17.5px 的历史坑）。
+ * **不要再按标准把它改成 32×32**，除非用户再次提出。
  */
-const ACT_BTN = 'flex items-center justify-center rounded cursor-pointer hover:bg-[var(--color-hover)] focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
-const ACT_BTN_SIZE = { width: 32, height: 32 }
-/**
- * 操作组排布：`gap-2.5`（8.75px）+ 32px = **相邻中心距 40.75px**，
- * 同时满足 §5.2 的「间距 ≥40px」与「热区 ≥32×32」两个下限。
- */
-const ACT_BAR = 'flex items-center gap-2.5'
+const ACT_BTN = 'flex items-center justify-center w-[20px] h-[20px] rounded cursor-pointer hover:opacity-70 focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]'
+/** 操作组排布：`gap-0.5`——原样（与 20px 按钮同批） */
+const ACT_BAR = 'flex items-center gap-0.5'
 
 function RecentConversationItem({
   title,
@@ -789,15 +783,22 @@ function RecentConversationItem({
   }
 
   return (
+    /* ⚠️ 命名 group（`group/row`）：本行**自身**点亮 —— 悬停/键盘聚焦时整行出 `--color-hover` 底，
+       这就是「选中历史对话的范围」= 整行（此前只有标题那一小块亮，右侧按钮旁边是一片
+       「亮了却点不动」的空档 —— 用户 2026-10-16 明确指出的问题）。
+       ⚠️ 不能用无名 `group`：外层 `EmptyState` 的最近会话列表也带无名 group（`group-hover` 用于
+       别处），同名会互相触发。 */
     <div
-      className={`group w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors${parentTitle ? ' pl-5' : ''}`}
-      style={{ backgroundColor: isActive ? 'var(--color-hover)' : 'transparent' }}
+      className={`group/row w-full flex flex-row items-center justify-between overflow-hidden rounded py-1.5 text-left px-2 box-border transition-colors hover:bg-[var(--color-hover)]${parentTitle ? ' pl-5' : ''}`}
+      style={{ backgroundColor: isActive ? 'var(--color-hover)' : undefined }}
     >
-      {/* 主区域 = 原生 button（键盘 Tab/Enter/Space 可达）；hover 反馈 = 热区 */}
+      {/* 主区域 = 原生 button（键盘 Tab/Enter/Space 可达）。**自身不再点亮**：整行的悬停底由上面的
+          行容器承担 —— 否则会出现「主按钮一块亮 + 行另一块亮」的双底，且两者之间有空档。
+          点击面 = 这一块 + 右侧操作按钮之外的整行；行内没有别的可点元素，故不存在死带。 */}
       <button
         type="button"
         onClick={onClick}
-        className="flex items-center gap-x-1 overflow-hidden flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
+        className="flex items-center gap-x-1 overflow-hidden flex-1 min-w-0 text-left cursor-pointer"
       >
         {pinned && <Pin size={10} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />}
         <span
@@ -819,23 +820,27 @@ function RecentConversationItem({
 
       {/* 右侧：**按内容自适应**（不再写死 88px —— 那正是「hover 亮起却点不动」的根因：
           5×20 + 4×gap = 107px 已溢出容器）。时间与操作组用 grid 叠在同一格做 opacity 交叉渐隐，
-          hover/focus 时**零布局跳动**；容器自身不点亮，只有按钮在各自 32×32 热区内亮
-          —— hover 边界 ⊆ 热区边界（死带禁令，card-affordance-standard §3） */}
-      <div ref={rightRef} className="flex-shrink-0 ml-1 grid items-center justify-items-end" style={{ minHeight: 32 }}>
+          hover/focus 时**零布局跳动**。
+          ⚠️ 2026-10-16 用户裁决：**要修的是「这一行的选中范围」** —— 行的悬停/点击必须覆盖整行，
+          不能只有标题那一小块亮、右侧按钮旁边却是一片「亮了点不动」的空档。做法是让悬停底色
+          与点击面都落在**整行**上（行容器 `group` + 覆盖整行的主按钮），操作按钮作覆盖其上的兄弟，
+          只有按钮自己那一小块拦截点击。按钮尺寸回退到 20×20（用户要求改回原样式）。 */}
+      <div ref={rightRef} className="flex-shrink-0 ml-1 grid items-center justify-items-end" style={{ minHeight: 20 }}>
         <span
           className={`col-start-1 row-start-1 text-micro whitespace-nowrap transition-opacity duration-150 ${
-            menuOpen ? 'opacity-0' : 'opacity-60 group-hover:opacity-0 group-focus-within:opacity-0'
+            menuOpen ? 'opacity-0' : 'opacity-60 group-hover/row:opacity-0 group-focus-within/row:opacity-0'
           }`}
           style={{ color: 'var(--color-text-muted)' }}
         >
           {formatRelativeTime(updatedAt)}
         </span>
         {/* 操作组（2026-09-22）：置顶 / 重命名 常驻为兄弟按钮，分叉 / 归档 / 删除 收进「更多」菜单
-            （5 个横排按 32×32 需 167px，而 AI 面板仅 264px 宽 —— §5.3 的「必须先收进更多菜单」）。
-            2026-09-27：不再需要 stopPropagation（外层已无点击处理器） */}
+            （5 个横排按原尺寸也会溢出窄面板 —— 保持「更多」菜单的收纳）。
+            2026-09-27：不再需要 stopPropagation（外层已无点击处理器）；
+            2026-10-16：按钮尺寸/间距回退到 20×20 + gap-0.5（用户要求改回原样式） */}
         <div
           className={`col-start-1 row-start-1 ${ACT_BAR} transition-opacity duration-150 ${
-            menuOpen ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 group-focus-within:opacity-100'
+            menuOpen ? 'opacity-100' : 'opacity-0 group-hover/row:opacity-100 group-focus-within/row:opacity-100'
           }`}
           style={{ color: 'var(--color-text-secondary)' }}
         >
@@ -844,7 +849,6 @@ function RecentConversationItem({
             <button
               type="button"
               className={ACT_BTN}
-              style={ACT_BTN_SIZE}
               title={pinned ? t('agent.unpinConversation') : t('agent.pinConversation')}
               aria-label={pinned ? t('agent.unpinConversation') : t('agent.pinConversation')}
               onClick={() => onTogglePin?.()}
@@ -856,7 +860,6 @@ function RecentConversationItem({
             <button
               type="button"
               className={ACT_BTN}
-              style={ACT_BTN_SIZE}
               title={t('agent.renameConversation')}
               aria-label={t('agent.renameConversation')}
               onClick={() => { onMenuOpenChange(false); setDraft(title); setEditing(true) }}
@@ -864,12 +867,11 @@ function RecentConversationItem({
               <Pencil size={12} />
             </button>
           )}
-          {/* 「更多」触发器：自身 32×32 且 hover 覆盖自身全热区；菜单项不参与行 hover */}
+          {/* 「更多」触发器：自身尺寸同 ACT_BTN；菜单项不参与行 hover */}
           <div className="relative" ref={moreAnchorRef}>
             <button
               type="button"
               className={ACT_BTN}
-              style={ACT_BTN_SIZE}
               title={t('tip.moreOptions')}
               aria-label={t('tip.moreOptions')}
               aria-haspopup="menu"

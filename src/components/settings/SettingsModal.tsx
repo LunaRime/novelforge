@@ -228,11 +228,6 @@ export function ModelRoutingSection() {
 
   const candidates = models.filter((m) => !m.purposes?.includes('embedding'))
 
-  const labelOf = (id: string) => {
-    const m = models.find(x => x.id === id)
-    return m ? `${m.name || m.modelName} (${m.provider})` : id
-  }
-
   const tiers: Array<{ id: ModelTier; label: string; desc: string }> = [
     { id: 'elite', label: t('settings.routeElite'), desc: t('settings.routeEliteDesc') },
     { id: 'standard', label: t('settings.routeStandard'), desc: t('settings.routeStandardDesc') },
@@ -278,12 +273,11 @@ export function ModelRoutingSection() {
         </Disclosure>
       </div>
 
-      {/* 三层：每层一块层卡 —— 层名 + 摘要（N 个模型 · 首选 xxx）+「编辑优先级」入口 */}
+      {/* 三层：每层一块层卡 —— 层名 + 数量/回退口径 +「编辑优先级」入口
+          （⚠️ 卡片上**不显示模型型号**：名单与顺序进弹窗看 —— 2026-10-16 用户要求） */}
       <div className="mt-3 space-y-2">
         {tiers.map(tier => {
           const ids = modelRoutes[tier.id] ?? []
-          const shown = ids.slice(0, 3)
-          const more = ids.length - shown.length
           return (
             <div
               key={tier.id}
@@ -300,54 +294,31 @@ export function ModelRoutingSection() {
                   >
                     {tier.label}
                   </h4>
-                  {/* 无模型时说明回退口径（与弹窗内 `route.dialogHint` 同一口径） */}
+                  {/* ⚠️ 2026-10-16 用户要求：卡片上**不显示模型型号信息**（此前在这里列
+                      「N 个模型 · 首选 <模型名>」+ 层内 ①②③ 型号芯片）。现在只给数量/回退口径，
+                      选了哪些、什么顺序一律进「编辑优先级」弹窗看。
+                      **不要再把型号名/优先级序号加回卡片**。 */}
                   <p className="text-micro" style={{ color: 'var(--color-text-muted)' }} title={tier.desc}>
                     {ids.length === 0
                       ? t('route.tierEmpty')
-                      : `${t('route.tierCount').replace('{n}', String(ids.length))} · ${t('route.tierFirst').replace('{name}', labelOf(ids[0]))}`}
+                      : t('route.tierCount').replace('{n}', String(ids.length))}
                   </p>
                 </div>
-                <button
+                {/* 「编辑优先级」= 设置页的**描边小按钮**（`Button variant="outline" size="sm"`）。
+                    ⚠️ 2026-10-16 用户指出：此前是手写的「accent 文字 + 悬停下划线」空心链接形态 ——
+                    全设置页唯一一处（其余 20+ 处动作全走 Button 的 outline/ghost），既没有可点的
+                    「面」、形状语言也与同页不一致。改为同页一致的描边按钮（悬停变 accent 描边 + 悬停底）。 */}
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   data-testid={`route-edit-${tier.id}`}
                   onClick={() => setEditingTier(tier.id)}
-                  className="text-xs whitespace-nowrap py-1 flex-shrink-0 rounded transition-colors hover:underline"
-                  style={{ color: 'var(--color-accent)' }}
+                  className="flex-shrink-0"
                 >
                   {t('route.editPriority')}
-                </button>
+                </Button>
               </div>
-
-              {/* 层内按优先级展示前 3 个（① ② ③ + 模型名），其余折叠为 +N；顺序调整一律进弹窗 */}
-              {ids.length > 0 ? (
-                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                  {shown.map((id, i) => (
-                    <span
-                      key={id}
-                      className="flex items-center gap-1.5 text-micro min-w-0"
-                      style={{ color: 'var(--color-text-secondary)' }}
-                    >
-                      <span
-                        className="font-mono flex-shrink-0"
-                        style={{ color: 'var(--color-accent)' }}
-                        aria-hidden="true"
-                      >
-                        {['①', '②', '③'][i]}
-                      </span>
-                      <span className="truncate" style={{ maxWidth: 180 }} title={labelOf(id)}>{labelOf(id)}</span>
-                    </span>
-                  ))}
-                  {more > 0 && (
-                    <span
-                      className="text-micro flex-shrink-0"
-                      style={{ color: 'var(--color-text-muted)' }}
-                      title={ids.slice(3).map(labelOf).join('、')}
-                    >
-                      {t('route.moreCount').replace('{n}', String(more))}
-                    </span>
-                  )}
-                </div>
-              ) : null}
             </div>
           )
         })}
