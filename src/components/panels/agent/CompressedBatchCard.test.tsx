@@ -10,10 +10,12 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import CompressedBatchCard from './CompressedBatchCard'
 import type { CompressedBatch } from '../../../services/agent/archive-codec'
+import { UI_TEXTS } from '../../../shared/locale'
 
 const storeMock = vi.hoisted(() => ({
   removeCompaction: vi.fn(async () => {}),
-  regenerateBatchSummary: vi.fn(async () => {}),
+  // P1-3：返回失败文案（null = 成功）——卡片据此给内联提示
+  regenerateBatchSummary: vi.fn(async (): Promise<string | null> => null),
   generating: false,
   loadBatchOriginal: vi.fn(async () => [
     { id: 'o1', role: 'user' as const, content: '被压缩的原文', createdAt: 1 },
@@ -71,6 +73,19 @@ describe('CompressedBatchCard（B 档第二轮 T7）', () => {
     expect(el.textContent).toContain('write_file → drafts/c1.md (ok)')
   })
 
+  it('回执拆段按**全语变体**匹配：存档用 en-US 标题、界面 zh-CN 也能拆出来（切语言不退化）', () => {
+    const enHeader = (UI_TEXTS as Record<string, Record<string, string>>)['ccr.receiptsHeader']['en-US']
+    const el = render(<CompressedBatchCard batch={batch({
+      summary: `${enHeader}\n- write_file → drafts/c1.md (ok)\n\n摘要正文`,
+    })} />)
+    // 回执头独立成段（text-micro 那行）→ 说明匹配成功；失败时会整条落在摘要正文里
+    const headerRow = Array.from(el.querySelectorAll('div.text-micro')).find(d => d.textContent === enHeader)
+    expect(headerRow).toBeTruthy()
+    const body = el.querySelector('.whitespace-pre-wrap')
+    expect(body?.textContent).toContain('摘要正文')
+    expect(body?.textContent).not.toContain('write_file')
+  })
+
   it('recoverable=false → 展开显示「原文不可用」且不去读分卷', async () => {
     const el = render(<CompressedBatchCard batch={batch({ recoverable: false })} />)
     const btn = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('展开'))!
@@ -122,6 +137,21 @@ describe('CompressedBatchCard（B 档第二轮 T7）', () => {
   it('P1-3：健康批次不出现重生成入口（避免无失效时误触重算）', () => {
     const el = render(<CompressedBatchCard batch={batch()} />)
     expect(Array.from(el.querySelectorAll('button')).some(b => b.textContent?.includes('重生成'))).toBe(false)
+  })
+
+  it('P1-3：重生成失败 → 卡片内联展示 store 返回的文案（不再只进 LogsView）', async () => {
+    storeMock.regenerateBatchSummary.mockResolvedValueOnce('摘要重生成失败：分卷已丢失')
+    const el = render(<CompressedBatchCard batch={batch({ invalidated: true })} />)
+    const btn = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('重生成'))!
+    await act(async () => { btn.click() })
+    expect(el.textContent).toContain('摘要重生成失败：分卷已丢失')
+  })
+
+  it('P1-3：成功（返回 null）→ 不出现内联错误', async () => {
+    const el = render(<CompressedBatchCard batch={batch({ invalidated: true })} />)
+    const btn = Array.from(el.querySelectorAll('button')).find(b => b.textContent?.includes('重生成'))!
+    await act(async () => { btn.click() })
+    expect(el.textContent).not.toContain('失败')
   })
 
   // ===== P1-2：保真告警标注 =====

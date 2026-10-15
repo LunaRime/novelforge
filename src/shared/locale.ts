@@ -120,3 +120,15 @@ export function t(key: TextKey): string {
   if (!entry) return key
   return entry[currentLocale] ?? entry['zh-CN']
 }
+
+/**
+ * 某文案键的**全部语言变体**——供「跨语言解析锚点」匹配（唯一真源，勿在调用处另写副本）。
+ *
+ * 为什么需要：存档里的文本（压缩摘要 / 副作用回执）是用**写入时 locale** 生成的，
+ * 读取端若只拿当前 locale 的 `t(key)` 去 indexOf/startsWith，用户切语言后匹配即失败
+ * （回执不再独立成段、摘要分节裁剪回落保头截断）——静默退化、不报错，故必须按全语变体匹配。
+ */
+export function localeVariants(key: TextKey): string[] {
+  const entry = (UI_TEXTS as Record<string, Record<SupportedLocale, string>>)[key]
+  return entry ? Object.values(entry) : []
+}

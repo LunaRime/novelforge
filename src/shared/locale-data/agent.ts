@@ -76,6 +76,9 @@ export const agentTexts = {
   'ccr.regenerateFailed': { 'zh-CN': '摘要重生成失败：{error}', 'en-US': 'Failed to regenerate summary: {error}', 'ru-RU': 'Не удалось перегенерировать сводку: {error}' },
   'ccr.regenerateNoOriginal': { 'zh-CN': '原文不可用（分卷已丢失），无法重生成', 'en-US': 'Original unavailable (shard lost); cannot regenerate', 'ru-RU': 'Оригинал недоступен (фрагмент утерян); регенерация невозможна' },
   'ccr.regenerateNoModel': { 'zh-CN': '未配置可用模型，无法重生成摘要', 'en-US': 'No model available; cannot regenerate the summary', 'ru-RU': 'Нет доступной модели; невозможно перегенерировать сводку' },
+  // 卡片内联反馈（此前失败只进 LogsView，按钮复位后用户看不到任何提示）
+  'ccr.regenerateBusy': { 'zh-CN': '正在生成回复，稍后再重生成摘要', 'en-US': 'A reply is being generated; regenerate the summary afterwards', 'ru-RU': 'Идёт генерация ответа; пересоздайте сводку позже' },
+  'ccr.regenerateNoBatch': { 'zh-CN': '该压缩批次已不存在（会话已变更），请刷新后重试', 'en-US': 'That compaction batch no longer exists (conversation changed); refresh and retry', 'ru-RU': 'Этот пакет сжатия больше не существует (диалог изменился); обновите и повторите' },
   'ccr.compressionSkipped': { 'zh-CN': '本次压缩无收益（{before} → {after} tokens），已跳过', 'en-US': 'Compaction had no gain ({before} → {after} tokens); skipped', 'ru-RU': 'Сжатие без выигрыша ({before} → {after} токенов); пропущено' },
   'ccr.historyTruncated': { 'zh-CN': '本轮历史超出预算：{n} 条最旧消息未发送（约 {tokens} tokens，消息未删除）', 'en-US': 'History over budget: {n} oldest message(s) not sent this turn (~{tokens} tokens; not deleted)', 'ru-RU': 'История превышает бюджет: {n} старейших сообщений не отправлено (~{tokens} токенов; не удалены)' },
   // P1-2：保真检查（实体保留率；只告警不拦截）

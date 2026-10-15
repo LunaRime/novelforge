@@ -3,14 +3,14 @@ import type { CompressedBatch } from '../../../services/agent/archive-codec'
 import type { AgentMessage } from '../../../stores/agent-store'
 import { useAgentStore } from '../../../stores/agent-store'
 import { shouldWarnFidelity } from '../../../services/agent/ccr-fidelity'
-import { t } from '../../../shared/locale'
+import { localeVariants, t } from '../../../shared/locale'
 
 /**
  * 回执段的起始标记（B5：回执头插在摘要里，展示时拆出来独立成段）。
- * ⚠️ 必须与写入端同源（都取 `t('ccr.receiptsHeader')`）—— 硬编码中文字面量做解析锚点
- * 会让 en-US/ru-RU 下拆段静默失效（评审 I7）。
+ * ⚠️ 必须与写入端同源（都取 `t('ccr.receiptsHeader')`），且匹配要按**全语变体**：
+ * 摘要用**写入时** locale 生成，只按当前 locale 匹配会让「压缩后切语言」的回执拆段静默失效
+ * （不崩、不报错，回执被当成摘要正文一起渲染）。
  */
-const receiptsMarker = (): string => t('ccr.receiptsHeader')
 
 /**
  * CCR 压缩事件卡片（B 档第二轮 T7）
@@ -32,6 +32,8 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
   const [expanded, setExpanded] = useState(false)
   const [originals, setOriginals] = useState<AgentMessage[] | null>(null)
   const [regenerating, setRegenerating] = useState(false)
+  /** P1-3：重生成失败的内联提示（失败文案由 store 返回，已 i18n） */
+  const [regenerateError, setRegenerateError] = useState<string | null>(null)
   const loadBatchOriginal = useAgentStore(s => s.loadBatchOriginal)
   const removeCompaction = useAgentStore(s => s.removeCompaction)
   const regenerateBatchSummary = useAgentStore(s => s.regenerateBatchSummary)
@@ -43,16 +45,25 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
   const after = batch.afterTokens ?? Math.max(0, batch.originalTokens - (hasRealDelta ? batch.changeTokens! : 0))
   const savedTokens = before - after
 
-  // 回执拆段展示（B5）：标记与写入端同源（i18n），跨语言不失效
-  const marker = receiptsMarker()
-  const receiptsIndex = batch.summary.indexOf(marker)
+  // 回执拆段展示（B5）：按**全语变体**定位（切语言后旧摘要仍能被正确拆分）；取最早命中者
+  let receiptsIndex = -1
+  let marker = ''
+  for (const variant of localeVariants('ccr.receiptsHeader')) {
+    const idx = batch.summary.indexOf(variant)
+    if (idx >= 0 && (receiptsIndex < 0 || idx < receiptsIndex)) {
+      receiptsIndex = idx
+      marker = variant
+    }
+  }
+  // 回执块边界：回执在**头部**，其后（空行之后）才是模型写的摘要正文。
+  // ⚠️ 正文必须从回执块**之后**开始切——只跳过标题行会让回执行在正文里**再出现一次**
+  // （回执块已单独渲染），用户看到重复内容（新增用例暴露的既有缺陷）。
+  const receiptsBlockEnd = receiptsIndex >= 0 ? batch.summary.indexOf('\n\n', receiptsIndex) : -1
   const summaryText = receiptsIndex >= 0
-    ? batch.summary.slice(receiptsIndex + marker.length).trim()   // 回执在头部，摘要其后
+    ? (receiptsBlockEnd > 0 ? batch.summary.slice(receiptsBlockEnd).trim() : '')
     : batch.summary
   const receiptsText = receiptsIndex >= 0
-    ? batch.summary.slice(receiptsIndex, batch.summary.indexOf('\n\n', receiptsIndex) > 0
-      ? batch.summary.indexOf('\n\n', receiptsIndex)
-      : batch.summary.length).trim()
+    ? batch.summary.slice(receiptsIndex, receiptsBlockEnd > 0 ? receiptsBlockEnd : batch.summary.length).trim()
     : ''
 
   // 旧档案（升级前产出）的原文是 inline 数组、且无 recoverable 字段 —— 必须仍可展开（评审 I3）
@@ -73,12 +84,15 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
     setExpanded(v => !v)
   }
 
-  /** P1-3：重生成摘要（以该批分卷原文为唯一输入；busy 期间防双击） */
+  /** P1-3：重生成摘要（以该批分卷原文为唯一输入；busy 期间防双击）。
+   *  失败原因由 store 以**已 i18n 的文案**返回 → 内联展示（此前只能去 LogsView 找）。 */
   const handleRegenerate = async () => {
     if (regenerating) return
     setRegenerating(true)
+    setRegenerateError(null)
     try {
-      await regenerateBatchSummary(batch.batch)
+      const err = await regenerateBatchSummary(batch.batch)
+      if (err) setRegenerateError(err)
     } finally {
       setRegenerating(false)
     }
@@ -137,6 +151,7 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
             type="button"
             onClick={() => void handleRegenerate()}
             disabled={regenerating || generating}
+            title={generating ? t('ccr.regenerateBusy') : undefined}
             style={{ color: 'var(--color-accent)' }}
             className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -144,6 +159,11 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
           </button>
         )}
       </div>
+
+      {/* P1-3：重生成失败的内联提示（不静默；成功即清除） */}
+      {regenerateError && (
+        <div className="mt-1 text-micro" style={{ color: 'var(--color-warning)' }}>{regenerateError}</div>
+      )}
 
       <div className="mt-1 whitespace-pre-wrap">{summaryText}</div>
 
