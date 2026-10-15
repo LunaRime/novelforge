@@ -266,6 +266,8 @@ function ActiveConversation() {
   const subSessions = activeConv?.subSessions
   // P0-1：本轮实发口径（发送后写入；未发送过/历史变更后被清空 → undefined，保持旧行为）
   const sendObs = useAgentStore(s => (activeConv ? s.sendObservations[activeConv.id] : undefined))
+  /** S1：token 引擎降级标记（预算偏保守，需在面板可见） */
+  const tokenEngineDegraded = useAgentStore(s => s.tokenEngineDegraded)
   // 可见消息列表（过滤 system——显示层与 store 层独立：store 按物理序截断，展示按可见序）
   const visibleMessages = useMemo(() => (activeConv?.messages ?? []).filter(m => m.role !== 'system'), [activeConv?.messages])
   // C 档第二轮：子会话卡的消息归属——按 task 工具调用的 description 匹配（同一子会话只挂一次：
@@ -418,7 +420,7 @@ function ActiveConversation() {
         <PendingToolConfirmation />
         <AgentInputBox />
         <div className="mt-1.5 flex items-center justify-between gap-2 px-0.5">
-          <ContextBudgetBar usage={contextUsage} />
+          <ContextBudgetBar usage={contextUsage} tokenEngineDegraded={tokenEngineDegraded} />
           <AgentToolbar />
         </div>
       </div>

@@ -18,14 +18,32 @@ let gptEncoder: {
   decode: (tokens: number[]) => string
 } | null = null
 
+/**
+ * token 引擎状态（S1：降级必须**可见**）
+ * - `unknown`：尚未初始化（启动早期）——调用方不要据此报警
+ * - `exact`：tiktoken（cl100k）精确计数
+ * - `heuristic`：CJK 启发式**降级**——中文样本实测高估 ≈1.68×（工具契约 6059 vs 3612），
+ *   会让**全部**预算（历史/工具/M1/L1）按保守口径判定 → 压缩提前约 40% 触发、降级链更早生效。
+ *   方向是安全（偏保守），代价是静默损失质量，所以必须让用户能看见，而不是只 console.warn。
+ */
+export type TokenEngineState = 'unknown' | 'exact' | 'heuristic'
+let engineState: TokenEngineState = 'unknown'
+
+/** 当前引擎状态（面板/日志据此留痕；未初始化时返回 'unknown'） */
+export function getTokenEngineState(): TokenEngineState {
+  return engineState
+}
+
 async function loadEncoder(): Promise<void> {
   if (gptEncoder) return
   try {
     // 动态导入避免阻塞主线程
     const { encode, decode } = await import('gpt-tokenizer')
     gptEncoder = { encode, decode }
+    engineState = 'exact'
   } catch {
-    // gpt-tokenizer 不可用时使用启发式
+    // gpt-tokenizer 不可用时使用启发式（状态置 heuristic，由调用方留痕 + 面板标注）
+    engineState = 'heuristic'
     console.warn('[TokenBudget] gpt-tokenizer 不可用，使用 CJK 启发式估算')
   }
 }
@@ -328,9 +346,14 @@ export class TokenBudget {
 
 // ===== 懒加载初始化 =====
 
-/** 预加载编码器（在应用启动时调用） */
-export async function initTokenEngine(): Promise<void> {
+/**
+ * 预加载编码器（在应用启动时调用）。
+ * @returns 初始化后的引擎状态——`'heuristic'` 表示**降级**，调用方必须留痕（日志 + 面板标注）：
+ *          该模式下全部预算按保守口径判定，用户会看到"压缩比预期更早触发"，需要解释来源。
+ */
+export async function initTokenEngine(): Promise<TokenEngineState> {
   await loadEncoder()
   const method = gptEncoder ? 'tiktoken (精确)' : 'CJK 启发式'
   console.log(`[TokenEngine] 已初始化，使用 ${method} 计数`)
+  return engineState
 }

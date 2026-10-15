@@ -149,6 +149,12 @@ interface AgentState {
    * 切换会话 / `/clear` / rewind / 恢复归档 / 移除压缩时清空（历史已变，读数即失效）。
    */
   sendObservations: Record<string, SendObservation>
+  /**
+   * S1：token 引擎是否**降级**（tiktoken 不可用 → CJK 启发式）。
+   * 该模式下全部预算按保守口径判定（中文高估 ≈1.7× → 压缩更早触发），必须在面板可见，
+   * 否则用户只会看到「压缩怎么这么频繁」而无从解释。启动后由 initializeTools 写入。
+   */
+  tokenEngineDegraded: boolean
 
   // ===== 计算属性（Getters） =====
   /** 获取当前活跃会话 */
@@ -435,6 +441,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   pendingSubAgentConfirmation: null,
   toolsInitialized: false,
   sendObservations: {},
+  tokenEngineDegraded: false,
 
   getActiveConversation: () => {
     const { conversations, activeConversationId } = get()
@@ -446,8 +453,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     registerBuiltinTools()
     // 加载 Skill（内置 + 用户 + 项目级）
     skillRegistry.loadAll().catch(e => console.warn('[Agent] Skill 加载失败:', e))
-    // 初始化 Token 引擎（异步，不阻塞）
-    initTokenEngine().catch(e => console.warn('[Agent] Token 引擎初始化失败:', e))
+    // 初始化 Token 引擎（异步，不阻塞）；S1：降级必须**可见**——用启发式时全部预算变保守，
+    // 用户会看到"压缩比预期更早触发"，所以要同时落日志与面板标记，而不是只 console.warn
+    void initTokenEngine().then(state => {
+      if (state !== 'heuristic') return
+      set({ tokenEngineDegraded: true })
+      renderLog('warn', 'Agent', t('engine.tokenEngineDegraded'))
+    }).catch(e => console.warn('[Agent] Token 引擎初始化失败:', e))
     set({ toolsInitialized: true })
   },
 

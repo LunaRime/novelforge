@@ -20,7 +20,11 @@ function fmtK(n: number): string {
  * - **点击圆环**展开该对话的上下文明细（四段 token + 合计 / 模型上限）；
  *   弹层走 useFloatingPosition 浮在窗口之上 —— 264px 的窄面板里绝对定位会被容器裁掉
  */
-export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null }) {
+export default function ContextBudgetBar({ usage, tokenEngineDegraded = false }: {
+  usage: ContextUsage | null
+  /** S1：token 引擎降级（启发式）——全部预算按保守口径判定，必须在面板可见 */
+  tokenEngineDegraded?: boolean
+}) {
   const [open, setOpen] = useState(false)
   const anchorRef = useRef<HTMLDivElement>(null)
   const menuRef = useFloatingPosition<HTMLDivElement>(anchorRef, open, { placement: 'above', align: 'end' })
@@ -143,6 +147,14 @@ export default function ContextBudgetBar({ usage }: { usage: ContextUsage | null
               {usage.prefix.changed
                 ? t('ccr.prefixChanged').replace('{n}', String(usage.prefix.sharedChars))
                 : t('ccr.prefixStable')}
+            </div>
+          )}
+
+          {/* S1：token 引擎降级标记 —— 该模式下全部预算按保守口径判定（压缩更早触发），
+              不标出来用户只会觉得"压缩怎么这么频繁" */}
+          {tokenEngineDegraded && (
+            <div className="text-micro" style={{ color: 'var(--color-warning)' }}>
+              {t('ccr.tokenDegradedBadge')}
             </div>
           )}
 

@@ -10,6 +10,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import ContextBudgetBar from './ContextBudgetBar'
 import type { ContextUsage } from '../../../services/agent/context-usage'
+import { t } from '../../../shared/locale'
 
 const usage = (over: Partial<ContextUsage> = {}): ContextUsage => ({
   base: 100, memory: 50, history: 200, current: 30, modelMax: 10000, total: 380,
@@ -76,5 +77,18 @@ describe('ContextBudgetBar 明细弹层（B 档第二轮 T6）', () => {
     const el = render(<ContextBudgetBar usage={usage({ segments: undefined, prefix: undefined })} />)
     openPopover()
     expect(el.textContent).toContain('380')
+  })
+
+  // ===== S1：token 引擎降级必须可见（预算偏保守，否则用户无法解释"压缩怎么这么频繁"）=====
+  it('S1：降级时明细弹层出现降级标记；默认（精确口径）不出现', () => {
+    const degraded = render(<ContextBudgetBar usage={usage()} tokenEngineDegraded />)
+    openPopover()
+    expect(degraded.textContent).toContain(t('ccr.tokenDegradedBadge'))
+  })
+
+  it('S1：未降级 → 不显示标记（零变化）', () => {
+    const normal = render(<ContextBudgetBar usage={usage()} />)
+    openPopover()
+    expect(normal.textContent).not.toContain(t('ccr.tokenDegradedBadge'))
   })
 })
