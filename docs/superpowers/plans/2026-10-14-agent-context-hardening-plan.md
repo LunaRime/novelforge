@@ -183,3 +183,22 @@
 **占比换算**：占设计上限 4700 的 46%；占 128k 窗口 1.6%、32k 窗口 6.7%、16k 小窗口 13%；占默认 16k 消息预算 13%、64k 上限 3.4%。可选层最坏叠加（常驻 4000 + 目录 800 + M1 300 + manual 4000）后 system ≈ 11.3k tokens（≈128k 窗口 8.6%，不含 RAG 800 与 @预取 1200）。
 
 > ⚠️ 分段 token 数**不可加**（分隔符与 tokenizer 边界效应，`subagent/prompt.ts:50` 有同款注释）；复测请以整段 `estimateTokens(full)` 为准。
+
+---
+
+## 附录 B：实施后评审修复（2026-10-15）
+
+对落地结果做了一轮评审（含独立交叉核查 + 实跑门禁），确认计划项全部正确接线，随后修掉 6 处缺陷 + 补 12 条用例。**门禁实测：typecheck 0 错 / lint 0 警告 / 229 文件 2702 测试全绿。**
+
+| # | 缺陷（严重度） | 修法 | 位置 |
+|---|---|---|---|
+| 1 | **前缀基线跨会话不重置**（中）：基线是模块级裸变量，只有写没有重置 → 新会话首轮的「前缀：已变化」与「缓存命中归零」是拿**上一个会话**的 system 段比较，面板与日志都在说谎 | 抽成 `src/services/agent/prefix-baseline.ts`（`resetPrefixBaseline` / `peekPrefixChange` / `updatePrefixBaseline`，唯一真源且可单测），在 createConversation / selectConversation / deleteConversation / clearAll 四处与 `clearReadState()` 同址重置；`/clear` **不重置**（同会话内 system 段确实变了，如实报告） | `prefix-baseline.ts`（新）、`agent-store.ts` 四处、`prefix-baseline.test.ts`（新，4 例） |
+| 2 | **硬截断统计长期不落盘**（中）：`stats.truncations` 不计入 `changed`，而调用侧门是「attempted 或 dropped」→「只发生硬截断」的会话里计数每轮被推高又被丢弃，设置页「截断 N」永远停在旧值 | 截断计数纳入 `changed`（代价可控：仅上下文真的丢消息时写盘，健康会话零写），并更正文件头注释 | `compression-learning.ts`（统计判定 + 头注释）、`compression-learning.test.ts`（改写既有口径用例） |
+| 3 | **设置页陈旧快照覆盖实时学习状态**（中）：mount 时读一次 + dirty 就整段写回；开关「开→关」不做值比较仍 dirty | 保存时按**用户意图**合并：点过重置 → 清零（保留开关值）；否则只在**盘上最新状态**之上覆盖「开关」一项（重读一次 `config:get`，失败回落快照） | `ContextCompactionSection.tsx` |
+| 4 | **`version` 从不校验**（低-中，与 spec §3.6 字面不符） | 显式版本失配 → 整段回默认（不做部分解析）；缺 version 仍宽容解析 | `compression-learning.ts` |
+| 5 | **重生成路径不带学习提示 + 失败无内联反馈**（中低） | `regenerateBatchSummary` 注入 `composeLearningHints`（与自动压缩同口径）；返回值改为 `Promise<string \| null>`（失败文案已 i18n），卡片内联展示 + 按钮 title 解释禁用态 | `agent-store.ts`、`CompressedBatchCard.tsx`、新 i18n 键 `ccr.regenerateBusy` / `ccr.regenerateNoBatch`（三语） |
+| 6 | **回执拆段只按当前 locale 匹配**（中低）：摘要用**写入时** locale 生成 → 压缩后切语言，回执不再独立成段（静默退化） | 共享 `localeVariants()`（`locale.ts` 导出，context-builder 改用它）按**全语变体**匹配；顺带修掉新用例暴露的**既有渲染缺陷**：正文此前只跳过标题行 → 回执行在正文里重复出现，现从回执块之后起切 | `locale.ts`、`context-builder.ts`、`CompressedBatchCard.tsx` |
+
+**测试卫生同步修复**：`mockInvoke` 全局 `mockClear()`（此前学习用例用 `.find()` 扫全历史，可能被前序用例假通过）；去掉依赖中文标点切分的断言（`split('：')` → 断言规则名/错误正文）；补 reverts/regenerations 积分、跨语言拆段、失败内联文案、基线重置、version 失配、截断落盘等 12 条用例。
+
+**仍未做（P2，非阻塞）**：退役→复活的退避上限（`compression-learning.ts` 可 2/3 周期振荡）、设置页「重置学习数据」二次确认（同目录其他破坏性动作均有）、以及 P1-6 中「集成层阈值逐字等于用户值」的直接断言（当前由 `effectiveMinChangeTokens` 单测覆盖）。
