@@ -793,6 +793,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         toolBudgetTokens: contextPolicy.toolBudgetTokens,
         m1BudgetTokens: contextPolicy.m1BudgetTokens,
         l1BudgetTokens: contextPolicy.l1BudgetTokens,
+        // W3（批 3）：仅弱档自动召回记忆（强模型自己会 @ / read_memory）
+        autoRecall: contextPolicy.autoRecall,
       })
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
@@ -1345,6 +1347,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           modelContextWindow: llmStore.models.find(m => m.id === modelId)?.contextWindow,
           budgetPercent: prefs.budgetPercent,
           maxMessageBudgetTokens: contextPolicy.historyCeilingTokens,
+          // W4（批 3）：仅弱档开启未完成自检（每会话至多一次；强/标准档自己做得到）
+          unfinishedCheck: contextPolicy.unfinishedCheck,
         },
         agentDeps,
       )

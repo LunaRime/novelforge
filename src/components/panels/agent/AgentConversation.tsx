@@ -195,6 +195,7 @@ function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode; modelId?:
       toolBudgetTokens: policy.toolBudgetTokens,
       m1BudgetTokens: policy.m1BudgetTokens,
       l1BudgetTokens: policy.l1BudgetTokens,
+      autoRecall: policy.autoRecall,
     })
       .then(segments => { if (!cancelled) setLoaded({ key, segments }) })
       .catch(() => { /* M2 读盘失败降级：保持同步兜底 */ })
@@ -317,6 +318,7 @@ function ActiveConversation() {
     toolBudgetTokens: policyForPanel.toolBudgetTokens,
     m1BudgetTokens: policyForPanel.m1BudgetTokens,
     l1BudgetTokens: policyForPanel.l1BudgetTokens,
+    autoRecall: policyForPanel.autoRecall,
   })
   const usageSegments: AsyncSegments = asyncSegments ?? {
     base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '', memoryResident: '', segments: syncSegments.segments,

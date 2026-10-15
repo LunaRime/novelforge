@@ -40,6 +40,16 @@ export interface ContextPolicy {
   l1BudgetTokens: number
   /** 是否启用任务锚点（S2/W2；当前三档皆开——锚点对强模型的多步任务同样有益） */
   taskAnchor: boolean
+  /**
+   * W3 自动召回（命中本轮请求的 manual 记忆正文）：**仅弱档**。
+   * 强模型会自己 `read_memory` / `@`，自动注入只会挤占它的上下文预算。
+   */
+  autoRecall: boolean
+  /**
+   * W4 未完成自检（弱模型过早收尾的兜底提醒）：**仅弱档**，且每会话至多一次。
+   * 强档自己做得到"检查是否还有未完成步骤"，注入提醒是噪音。
+   */
+  unfinishedCheck: boolean
 }
 
 /** 弱档窗口上限：窗口小于它 → 塞满上下文对模型是干扰而非帮助 */
@@ -49,7 +59,7 @@ export const STRONG_WINDOW = 200_000
 /** 路由 elite **且**窗口达到它才算强档（避免小窗口 + 90% 挤掉输出空间） */
 export const STRONG_MIN_WINDOW_FOR_ELITE = 128_000
 
-/** 强档：长窗口/elite —— 少压多留、契约给足、摘要更长 */
+/** 强档：长窗口/elite —— 少压多留、契约给足、摘要更长（W3/W4 关：它会自助） */
 const POLICY_STRONG: Omit<ContextPolicy, 'tier'> = {
   historyPercent: 90,
   historyCeilingTokens: 128_000,
@@ -57,9 +67,11 @@ const POLICY_STRONG: Omit<ContextPolicy, 'tier'> = {
   m1BudgetTokens: 400,
   l1BudgetTokens: 600,
   taskAnchor: true,
+  autoRecall: false,
+  unfinishedCheck: false,
 }
 
-/** 标准档：**与引入前逐字一致**（80 / 64k / 4000 / 300 / 600） */
+/** 标准档：**与引入前逐字一致**（80 / 64k / 4000 / 300 / 600 + W3/W4 关） */
 const POLICY_STANDARD: Omit<ContextPolicy, 'tier'> = {
   historyPercent: 80,
   historyCeilingTokens: 64_000,
@@ -67,9 +79,11 @@ const POLICY_STANDARD: Omit<ContextPolicy, 'tier'> = {
   m1BudgetTokens: 300,
   l1BudgetTokens: 600,
   taskAnchor: true,
+  autoRecall: false,
+  unfinishedCheck: false,
 }
 
-/** 弱档：更早压（上下文更干净）、摘要更短更结构化 */
+/** 弱档：更早压（上下文更干净）、摘要更短更结构化，并开启 W3/W4 两条弱模型脚手架 */
 const POLICY_WEAK: Omit<ContextPolicy, 'tier'> = {
   historyPercent: 60,
   historyCeilingTokens: 32_000,
@@ -77,6 +91,8 @@ const POLICY_WEAK: Omit<ContextPolicy, 'tier'> = {
   m1BudgetTokens: 200,
   l1BudgetTokens: 300,
   taskAnchor: true,
+  autoRecall: true,
+  unfinishedCheck: true,
 }
 
 /**
