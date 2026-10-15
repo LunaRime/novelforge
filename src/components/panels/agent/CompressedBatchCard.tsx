@@ -2,6 +2,7 @@ import { useState } from 'react'
 import type { CompressedBatch } from '../../../services/agent/archive-codec'
 import type { AgentMessage } from '../../../stores/agent-store'
 import { useAgentStore } from '../../../stores/agent-store'
+import { shouldWarnFidelity } from '../../../services/agent/ccr-fidelity'
 import { t } from '../../../shared/locale'
 
 /**
@@ -105,6 +106,18 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
           {savedTokens > 0 && ` · ${t('ccr.savedTokens').replace('{n}', String(savedTokens))}`}
           {hasRealDelta && ` (${before} → ${after})`}
           {batch.invalidated && ` · ${t('ccr.batchInvalidated')}`}
+          {/* P1-2：保真告警标注（只标注不拦截——历史仍按降幅判定正常替换） */}
+          {batch.fidelity && shouldWarnFidelity(batch.fidelity) && (
+            <span title={t('ccr.fidelityWarn')
+              .replace('{retained}', String(batch.fidelity.retained))
+              .replace('{extracted}', String(batch.fidelity.extracted))}
+              style={{ color: 'var(--color-warning)' }}
+            >
+              {` · ⚠ ${t('ccr.fidelityBadge')
+                .replace('{retained}', String(batch.fidelity.retained))
+                .replace('{extracted}', String(batch.fidelity.extracted))}`}
+            </span>
+          )}
           <span className="ml-1" style={{ color: 'var(--color-accent)' }}>
             {expanded ? t('ccr.collapse') : t('ccr.expand')}
           </span>

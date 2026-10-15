@@ -78,6 +78,9 @@ export const agentTexts = {
   'ccr.regenerateNoModel': { 'zh-CN': '未配置可用模型，无法重生成摘要', 'en-US': 'No model available; cannot regenerate the summary', 'ru-RU': 'Нет доступной модели; невозможно перегенерировать сводку' },
   'ccr.compressionSkipped': { 'zh-CN': '本次压缩无收益（{before} → {after} tokens），已跳过', 'en-US': 'Compaction had no gain ({before} → {after} tokens); skipped', 'ru-RU': 'Сжатие без выигрыша ({before} → {after} токенов); пропущено' },
   'ccr.historyTruncated': { 'zh-CN': '本轮历史超出预算：{n} 条最旧消息未发送（约 {tokens} tokens，消息未删除）', 'en-US': 'History over budget: {n} oldest message(s) not sent this turn (~{tokens} tokens; not deleted)', 'ru-RU': 'История превышает бюджет: {n} старейших сообщений не отправлено (~{tokens} токенов; не удалены)' },
+  // P1-2：保真检查（实体保留率；只告警不拦截）
+  'ccr.fidelityWarn': { 'zh-CN': '压缩保真告警：本次摘要可能丢失细节（实体保留 {retained}/{extracted}）', 'en-US': 'Fidelity warning: the summary may have dropped details (entities kept {retained}/{extracted})', 'ru-RU': 'Предупреждение о точности: сводка могла потерять детали (сохранено сущностей {retained}/{extracted})' },
+  'ccr.fidelityBadge': { 'zh-CN': '可能丢细节 {retained}/{extracted}', 'en-US': 'may have dropped details {retained}/{extracted}', 'ru-RU': 'возможна потеря деталей {retained}/{extracted}' },
   'agent.skillCatalogOmitted': { 'zh-CN': '（还有 {n} 个技能未列出，可用 skill 工具查看全部）', 'en-US': '({n} more skills not listed — use the skill tool to see all)', 'ru-RU': '(ещё {n} навыков не показано — используйте инструмент skill)' },
   'agentConfirm.writeFile': { 'zh-CN': '将写入文件：{path}', 'en-US': 'Will write file: {path}', 'ru-RU': 'Запишет файл: {path}' },
   'agentConfirm.openEditor': { 'zh-CN': '将在编辑器中打开：{path}', 'en-US': 'Will open in editor: {path}', 'ru-RU': 'Откроет в редакторе: {path}' },

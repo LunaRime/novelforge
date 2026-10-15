@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
+import { useCharacterStore } from './character-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
 import { startChapterWorkflow } from '../services/workflows/workflow-starter'
@@ -1448,5 +1449,86 @@ describe('P1-3：regenerateBatchSummary', () => {
     expect(generateMock).not.toHaveBeenCalled()
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     expect(after.compressed![0].summary).toBe('旧摘要1')
+  })
+})
+
+// ===== P1-2：压缩保真检查（实体保留率，只告警不拦截） =====
+describe('P1-2：压缩保真检查', () => {
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+    useCharacterStore.setState({ characters: [] })
+  })
+
+  it('摘要漏掉批内实体（角色/章节/写入目标）→ 留痕告警 + 批次记录，且历史仍正常替换', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    // 角色卡项目：名字只在出现在批次文本里时才被抽取
+    useCharacterStore.setState({ characters: [{ name: '苏晚晴' }] as never })
+    const msgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `f${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: i === 0 ? `苏晚晴要写第 3 章。${'历史消息占位。'.repeat(40)}` : '历史消息占位。'.repeat(40),
+      createdAt: i,
+      // i=1 挂一个写类工具调用 → 写入目标实体（drafts/c3.md）
+      ...(i === 1
+        ? { toolCalls: [{ id: 'tc1', toolName: 'write_file', arguments: { file_path: 'drafts/c3.md' }, status: 'completed' as const }] }
+        : {}),
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs } : c),
+    }))
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: '短摘要', usage: undefined })) as never })
+    configResponse = { compaction: { historyMaxTokens: 1000 } }
+    const renderLogMock = vi.mocked(renderLog)
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const batch = after.compressed?.[0]
+    expect(batch).toBeTruthy()
+    // 三实体：写入目标 / 角色 / 章节号；写入目标因**回执段（B5）按设计保留**而命中，
+    // 角色与章节号缺失 → 保留率 1/3 < 0.6 → 告警
+    expect(batch!.fidelity).toEqual({ extracted: 3, retained: 1, ratio: 1 / 3 })
+    expect(renderLogMock).toHaveBeenCalledWith('warn', 'Agent',
+      expect.stringContaining(t('ccr.fidelityWarn').split('：')[0]))
+    // 只告警不拦截：历史仍按降幅判定正常替换
+    expect(after.messages.length).toBeLessThan(msgs.length)
+  })
+
+  it('实体被摘要保留 → 不告警（零成本检查的正路径）', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useCharacterStore.setState({ characters: [{ name: '苏晚晴' }] as never })
+    const msgs = Array.from({ length: 12 }, (_, i) => ({
+      id: `g${i}`,
+      role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: i === 0 ? `苏晚晴要写第 3 章。${'历史消息占位。'.repeat(40)}` : '历史消息占位。'.repeat(40),
+      createdAt: i,
+      ...(i === 1
+        ? { toolCalls: [{ id: 'tc2', toolName: 'write_file', arguments: { file_path: 'drafts/c3.md' }, status: 'completed' as const }] }
+        : {}),
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, messages: msgs } : c),
+    }))
+    useLLMStore.setState({
+      generate: vi.fn(async () => ({
+        success: true,
+        content: '苏晚晴负责第三章，已写入 drafts/c3.md。',
+        usage: undefined,
+      })) as never,
+    })
+    configResponse = { compaction: { historyMaxTokens: 1000 } }
+    const renderLogMock = vi.mocked(renderLog)
+    renderLogMock.mockClear()
+
+    await useAgentStore.getState().sendMessage('新消息')
+
+    const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
+    const batch = after.compressed?.[0]
+    expect(batch!.fidelity).toEqual({ extracted: 3, retained: 3, ratio: 1 })
+    // 摘要比原文短得多 → 正常替换；且无保真告警
+    expect(renderLogMock).not.toHaveBeenCalledWith('warn', 'Agent',
+      expect.stringContaining(t('ccr.fidelityWarn').split('：')[0]))
   })
 })

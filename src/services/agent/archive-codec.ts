@@ -26,6 +26,8 @@ export interface CompressedBatch {
   /** 产物依赖的历史指纹（历史变更后失配 → invalidated） */
   dependencyHash?: string
   invalidated?: boolean
+  /** P1-2：保真检查结果（实体保留率；旧档案无此字段） */
+  fidelity?: { extracted: number; retained: number; ratio: number }
 }
 
 /**

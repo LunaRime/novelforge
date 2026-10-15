@@ -123,4 +123,16 @@ describe('CompressedBatchCard（B 档第二轮 T7）', () => {
     const el = render(<CompressedBatchCard batch={batch()} />)
     expect(Array.from(el.querySelectorAll('button')).some(b => b.textContent?.includes('重生成'))).toBe(false)
   })
+
+  // ===== P1-2：保真告警标注 =====
+  it('P1-2：保真缺失达阈值 → 卡片出现「可能丢细节」标注（含保留计数）', () => {
+    const el = render(<CompressedBatchCard batch={batch({ fidelity: { extracted: 8, retained: 3, ratio: 0.375 } })} />)
+    expect(el.textContent).toContain('可能丢细节')
+    expect(el.textContent).toContain('3/8')
+  })
+
+  it('P1-2：保真达标 → 不标注（旧档案无 fidelity 字段同理，见既有用例）', () => {
+    const el = render(<CompressedBatchCard batch={batch({ fidelity: { extracted: 8, retained: 7, ratio: 0.875 } })} />)
+    expect(el.textContent).not.toContain('可能丢细节')
+  })
 })

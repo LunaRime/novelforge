@@ -21,6 +21,7 @@ import { serializeArchive, parseArchive, selectCompressionBatch, extractSideEffe
 import { writeBatchOriginal, readBatchOriginal, deleteBatchOriginal, deleteBatchOriginals, deleteAllOriginals, copyAllOriginals } from '../services/agent/compaction-originals'
 import { computePrefixFingerprint, comparePrefix } from '../services/agent/prefix-accounting'
 import { generateConversationSummary } from '../services/agent/ccr-summary'
+import { collectBatchEntities, checkSummaryFidelity, shouldWarnFidelity } from '../services/agent/ccr-fidelity'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { useProjectStore } from './project-store'
@@ -843,6 +844,19 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               ? `${t('ccr.receiptsHeader')}\n${receipts.map(r => `- ${r.tool} → ${r.target} (${r.outcome})`).join('\n')}\n\n${summary}`
               : summary
 
+            // ===== P1-2：零成本保真检查（实体保留率）——只告警不拦截 =====
+            // 摘要丢关键实体（写入目标 / 角色名 / 章节号）时留痕 + 批次卡标注；
+            // 不阻断替换：阻断会造成「为了完美而丢更多」（与 B2 可证明性取舍一致）
+            const fidelityEntities = collectBatchEntities(batch, {
+              characterNames: useCharacterStore.getState().characters.map(c => c.name),
+            })
+            const fidelity = checkSummaryFidelity(fidelityEntities, summaryWithReceipts)
+            if (shouldWarnFidelity(fidelity)) {
+              renderLog('warn', 'Agent', t('ccr.fidelityWarn')
+                .replace('{retained}', String(fidelity.retained))
+                .replace('{extracted}', String(fidelity.extracted)))
+            }
+
             // ===== B2 可证明性：压缩后重算降幅，无收益则不替换历史 =====
             // "压完即信"是本节的原病：摘要比原文还长时照样替换，等于白丢上下文。
             // ⚠️ 口径必须含回执（评审 I9）：否则"有收益"可能是净增长
@@ -885,6 +899,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
                 changeTokens,
                 // B7：记下生成时的历史指纹（诊断用；失效由 rewind/恢复等事件驱动标记）
                 dependencyHash: computeConversationDependencyHash({ messages: rest }),
+                // P1-2：保真检查结果（批次卡标注「可能丢细节」+ 自学习信号源）
+                fidelity: { extracted: fidelity.extracted, retained: fidelity.retained, ratio: fidelity.ratio },
               }
               let compressed = [...(currentConv.compressed ?? []), newBatch]
               // §7.1-C2 keepBatches：仅当用户**显式**设了 N>0 才裁剪更旧的批次
