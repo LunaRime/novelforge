@@ -17,6 +17,7 @@ import WorkflowProgressEntry from './WorkflowProgressEntry'
 import type { SubAgentSession } from '../../../services/agent/subagent/types'
 import { computeContextUsage, type ContextSegment } from '../../../services/agent/context-usage'
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
+import { resolveContextPolicyFor } from '../../../services/agent/context-policy'
 import { ipc } from '../../../services/ipc-client'
 import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
@@ -176,21 +177,29 @@ type AsyncSegments = {
   segments: ContextSegment[]
 }
 
-function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode } | null): AsyncSegments | null {
+function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode; modelId?: string | null } | null): AsyncSegments | null {
   const [loaded, setLoaded] = useState<{ key: string; segments: AsyncSegments } | null>(null)
   const projectPath = useProjectStore.getState().currentProject?.path ?? null
   const convId = activeConv?.id ?? ''
   const mode = activeConv?.mode ?? 'quick'
-  const key = `${convId}|${mode}|${projectPath}`
+  // W1 批 2：面板预览与真实发送**同口径**（按模型档位取段预算）；否则强档面板显示 M1 300、
+  // 实发却是 400（弱档反之），用户看到的分段数字会与真实请求不符
+  const modelId = activeConv?.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
+  const key = `${convId}|${mode}|${modelId ?? ''}|${projectPath}`
 
   useEffect(() => {
     if (!convId) return
     let cancelled = false
-    buildAgentSystemSegmentsAsync(mode)
+    const policy = resolveContextPolicyFor(modelId)
+    buildAgentSystemSegmentsAsync(mode, '', {
+      toolBudgetTokens: policy.toolBudgetTokens,
+      m1BudgetTokens: policy.m1BudgetTokens,
+      l1BudgetTokens: policy.l1BudgetTokens,
+    })
       .then(segments => { if (!cancelled) setLoaded({ key, segments }) })
       .catch(() => { /* M2 读盘失败降级：保持同步兜底 */ })
     return () => { cancelled = true }
-  }, [convId, mode, projectPath, key])
+  }, [convId, mode, modelId, projectPath, key])
 
   return loaded && loaded.key === key ? loaded.segments : null
 }
@@ -301,12 +310,18 @@ function ActiveConversation() {
 
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
   // F3：与注入共用 async 数据源（M1+M2 真实值）；async 未就绪时同步 M1-only 兜底，避免闪烁
-  const syncSegments = buildAgentSystemSegments(activeConv.mode)
+  // W1 批 2：同步兜底同样按档位取段预算（与 useAsyncSegments / 真实发送同口径）
+  const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
+  const policyForPanel = resolveContextPolicyFor(modelId ?? undefined)
+  const syncSegments = buildAgentSystemSegments(activeConv.mode, {
+    toolBudgetTokens: policyForPanel.toolBudgetTokens,
+    m1BudgetTokens: policyForPanel.m1BudgetTokens,
+    l1BudgetTokens: policyForPanel.l1BudgetTokens,
+  })
   const usageSegments: AsyncSegments = asyncSegments ?? {
     base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '', memoryResident: '', segments: syncSegments.segments,
   }
   const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
-  const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
   // 占用条的分母是**上下文窗口**，不是最大输出（2026-09-25 拆字段前二者混用同一个 maxTokens）。
   // contextWindow 由 llm-store.loadModels 的归一化保证存在，故不再需要 ?? 兜底。
   const modelMax = useLLMStore.getState().models.find(m => m.id === modelId)?.contextWindow ?? 0

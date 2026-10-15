@@ -16,6 +16,7 @@ import {
 } from '../services/agent/prefix-baseline'
 import { t } from '../shared/locale'
 import type { AgentConversation } from './agent-store'
+import type { ModelProfile } from '../shared/ipc-channels'
 
 // ===== 意图预路由 mock（A3）：writing-intent / workflow-starter / agent-engine =====
 // locale 不 mock（A4 起真实键已齐备）——意图层断言直接用真实 t() 文案
@@ -1413,6 +1414,85 @@ describe('P0-1：sendObservations（实发口径，仅内存态）', () => {
     expect(Object.keys(useAgentStore.getState().sendObservations).length).toBeGreaterThan(0)
     useAgentStore.getState().invalidateCompactions()
     expect(useAgentStore.getState().sendObservations).toEqual({})
+  })
+})
+
+// ===== W1 批 2：档位策略进入发送链路（真实接线，而非仅纯函数） =====
+describe('W1：上下文策略按模型档位进入发送链路', () => {
+  const profile = (id: string, contextWindow: number): ModelProfile => ({
+    id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
+    baseUrl: 'https://example.invalid', temperature: 0.7, maxTokens: 4096, contextWindow,
+    purposes: ['generation'],
+  })
+
+  beforeEach(() => {
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useAgentStore.setState({ generating: false })
+    useLLMStore.setState({ generate: vi.fn(async () => ({ success: true, content: 'S', usage: undefined })) as never })
+  })
+
+  /** 取最后一次 runAgentLoop 调用的 options（第 8 个实参） */
+  const lastEngineOptions = () => {
+    const calls = vi.mocked(runAgentLoop).mock.calls
+    return calls[calls.length - 1]?.[7] as { maxMessageBudgetTokens?: number; budgetPercent?: number } | undefined
+  }
+
+  it('大窗口模型（200k）→ 强档：消息预算上限 128k、历史百分比 90', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ models: [profile('big', 200_000)] as never, defaultModelId: 'big' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, modelId: 'big' } : c),
+    }))
+    vi.mocked(runAgentLoop).mockClear()
+    await useAgentStore.getState().sendMessage('写第 1 章')
+    const options = lastEngineOptions()
+    expect(options?.maxMessageBudgetTokens).toBe(128_000)
+    expect(options?.budgetPercent).toBe(90)
+  })
+
+  it('小窗口模型（32k）→ 弱档：上限 32k、历史百分比 60', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ models: [profile('small', 32_000)] as never, defaultModelId: 'small' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, modelId: 'small' } : c),
+    }))
+    vi.mocked(runAgentLoop).mockClear()
+    await useAgentStore.getState().sendMessage('写第 1 章')
+    const options = lastEngineOptions()
+    expect(options?.maxMessageBudgetTokens).toBe(32_000)
+    expect(options?.budgetPercent).toBe(60)
+  })
+
+  it('用户显式配置优先：手写 budgetPercent 70 不被强档的 90 覆盖', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ models: [profile('big', 200_000)] as never, defaultModelId: 'big' })
+    // ⚠️ 必须喂够历史：`config:get` 只在 totalHistoryTokens > 1000 时才读（评审 Minor 8 的性能优化，
+    //    短对话每次发消息多一次同步 readFileSync+parse 纯属浪费）——历史太短时策略缺省生效属预期
+    const msgs = Array.from({ length: 8 }, (_, i) => ({
+      id: `h${i}`, role: (i % 2 === 0 ? 'user' : 'assistant') as 'user' | 'assistant',
+      content: '历史消息占位。'.repeat(60), createdAt: i,
+    }))
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, modelId: 'big', messages: msgs } : c),
+    }))
+    configResponse = { compaction: { budgetPercent: 70 } }
+    vi.mocked(runAgentLoop).mockClear()
+    await useAgentStore.getState().sendMessage('写第 1 章')
+    expect(lastEngineOptions()?.budgetPercent).toBe(70)
+    // 上限仍按档位（上限是安全边界，不是用户偏好）
+    expect(lastEngineOptions()?.maxMessageBudgetTokens).toBe(128_000)
+  })
+
+  it('短对话不读配置（性能优化）：策略缺省生效，不因此报错', async () => {
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ models: [profile('big', 200_000)] as never, defaultModelId: 'big' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c => c.id === conv.id ? { ...c, modelId: 'big' } : c),
+    }))
+    configResponse = { compaction: { budgetPercent: 70 } }
+    vi.mocked(runAgentLoop).mockClear()
+    await useAgentStore.getState().sendMessage('写第 1 章')
+    expect(lastEngineOptions()?.budgetPercent).toBe(90)   // 未读配置 → 用强档缺省
   })
 })
 

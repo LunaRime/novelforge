@@ -36,7 +36,8 @@ import { useProjectStore } from './project-store'
 import type { SubAgentSession, SubAgentTask } from '../services/agent/subagent/types'
 import { MAX_SUB_SESSIONS, SUBAGENT_CONFIRM_TIMEOUT_MS } from '../services/agent/subagent/types'
 import { computeSubAgentTaskRef, resolveSubAgentTools } from '../services/agent/subagent/taskref'
-import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs, computeHistoryBudget } from '../services/agent/compaction-prefs'
+import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompactionPrefs, computeHistoryBudget, type CompactionPrefs } from '../services/agent/compaction-prefs'
+import { resolveContextPolicyFor } from '../services/agent/context-policy'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
 import type { LLMGenerateFn } from '../services/agent/agent-engine'
@@ -781,9 +782,18 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         return
       }
 
+      // ===== W1 批 2：按模型档位解析上下文策略（窗口为主信号、路由档位为辅）=====
+      // 强档（elite/长窗口）→ 少压多留 + 工具契约读全；弱档（budget/小窗口）→ 更早压 + 摘要更短。
+      // 策略只提供**缺省值**：用户在手写 config.compaction 里给过的值优先（见 resolveCompactionPrefs defaults 参数）。
+      const contextPolicy = resolveContextPolicyFor(modelId)
+
       // 构建系统提示词（含项目上下文 + Tool 列表 + 记忆分层；manual 硬门控需要本轮用户消息，
       // 只影响本轮 system 段、不进会话历史，故后续轮次不继承）
-      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode, content.trim())
+      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode, content.trim(), {
+        toolBudgetTokens: contextPolicy.toolBudgetTokens,
+        m1BudgetTokens: contextPolicy.m1BudgetTokens,
+        l1BudgetTokens: contextPolicy.l1BudgetTokens,
+      })
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
       if (currentConv.roleplayCharacter) {
@@ -861,13 +871,20 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       )
       // 只在历史**够得着**任何偏好的下界时才读配置（评审 Minor 8）：短对话下每次发消息都多一次
       // 同步 config:get（主进程 readFileSync + JSON.parse）纯属浪费；下界取钳制下限 1000
-      let prefs = DEFAULT_COMPACTION_PREFS
+      // W1 批 2：缺省值改由**档位策略**给（强档 90% / 弱档 60%）——用户显式写过的值仍然优先
+      let prefs: CompactionPrefs = {
+        ...DEFAULT_COMPACTION_PREFS,
+        budgetPercent: contextPolicy.historyPercent,
+      }
       // 自学习压缩 v1（默认关闭）：与 compaction 同一次 config:get 读取，零新增 IPC
       let learning: CompressionLearningState = defaultCompressionLearning()
       if (totalHistoryTokens > COMPACTION_HISTORY_MIN_TOKENS) {
         try {
           const cfg = await ipc.invoke('config:get') as { compaction?: unknown; compactionLearning?: unknown } | null
-          prefs = resolveCompactionPrefs(cfg)
+          prefs = resolveCompactionPrefs(cfg, {
+            ...DEFAULT_COMPACTION_PREFS,
+            budgetPercent: contextPolicy.historyPercent,
+          })
           learning = resolveCompressionLearning(cfg?.compactionLearning)
         } catch { /* 读配置失败：用缺省（与旧行为逐字一致），不阻断对话 */ }
       }
@@ -880,11 +897,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       let compressionGainRatio: number | undefined
       let fidelityMissingKinds: FidelityEntityKind[] | undefined
       let fidelityWarned = false
-      // 线③ 后续：百分比预算——预算 = clamp(模型窗口 × budgetPercent%, 1000, 32000)；
-      // 无窗口信息回退固定 historyMaxTokens（旧模式）
+      // 线③ 后续：百分比预算——预算 = clamp(模型窗口 × budgetPercent%, 1000, 上限)；
+      // 无窗口信息回退固定 historyMaxTokens（旧模式）。W1 批 2：上限由档位给（强档 128k）。
       const HISTORY_MAX_TOKENS = computeHistoryBudget(
         prefs,
         llmStore.models.find(m => m.id === modelId)?.contextWindow,
+        contextPolicy.historyCeilingTokens,
       )
       if (totalHistoryTokens > HISTORY_MAX_TOKENS) {
         try {
@@ -897,6 +915,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               modelId,
               // 自学习压缩：激活规则的保留/省略提示（关闭或无激活规则 → 空数组，prompt 逐字同引入前）
               hints: composeLearningHints(learning),
+              // W1 批 2：生成长度指令与注入上限同源（强档 400 / 弱档 200），避免"死额度"
+              maxTokens: contextPolicy.m1BudgetTokens,
             })
             const batchTokens = batch.reduce((sum, m) => sum + estimateTokens(m.content), 0)
 
@@ -1319,11 +1339,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           },
         },
         abortController.signal,
-        // options：模型上下文窗口 + 百分比预算（线③ 后续：预算 = clamp(窗口 × %, 16k, 32k)，默认 80）
-        // ⚠️ 取 contextWindow 而非 maxTokens —— 前者是「输入+输出总容量」，后者只是输出上限
+        // options：模型上下文窗口 + 百分比预算（线③ 后续）；W1 批 2：百分比与上限均按档位策略，
+        // 用户显式配置优先。⚠️ 取 contextWindow 而非 maxTokens —— 前者是「输入+输出总容量」
         {
           modelContextWindow: llmStore.models.find(m => m.id === modelId)?.contextWindow,
           budgetPercent: prefs.budgetPercent,
+          maxMessageBudgetTokens: contextPolicy.historyCeilingTokens,
         },
         agentDeps,
       )
@@ -1773,7 +1794,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     let summary: string
     try {
-      summary = await generateConversationSummary({ oldSummary: '', batch: originals, modelId, hints })
+      // W1 批 2：重生成同样按档位给长度指令（此前固定 250，与注入上限脱钩）
+      const regenPolicy = resolveContextPolicyFor(modelId)
+      summary = await generateConversationSummary({
+        oldSummary: '', batch: originals, modelId, hints, maxTokens: regenPolicy.m1BudgetTokens,
+      })
     } catch (e) {
       // 失败不污染状态（批次/摘要保持原样，用户可重试）
       const msg = t('ccr.regenerateFailed').replace('{error}', String(e))
