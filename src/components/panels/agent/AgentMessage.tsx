@@ -17,6 +17,8 @@ import TurnErrorRow from './TurnErrorRow'
 // 注：brief 声明使用 ForkRight，实测 lucide-react 1.8.0 无此导出；改用 lucide 规范 fork 图标 GitFork（语义等同「从此分支」）
 import { GitFork, Undo2, Copy, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { splitMentionRefs } from '../../../services/agent/mention-refs'
+import { openChapterFile } from '../sidebar/SidebarShared'
 import { useAgentStore } from '../../../stores/agent-store'
 import { formatLocaleTime } from '../../../shared/locale'
 import { toast } from '../../ui/Toast'
@@ -58,6 +60,40 @@ function splitThinking(content: string): { thinking: string | null; rest: string
   const m = content.match(/^_[^_\n]+_\n>[\s\S]*?(?=\n\n)/)
   if (!m) return { thinking: null, rest: content }
   return { thinking: m[0], rest: content.slice(m[0].length + 2) }
+}
+
+/**
+ * 渲染用户消息正文：把 `@` 引用切成可点 chip（约束④「上下文引用可点击跳转」）。
+ *
+ * - 纯解析在 `services/agent/mention-refs.ts`（无 React/store），此处只负责渲染与跳转
+ * - chip 用原生 `<button>`（不是 `<span onClick>`）——键盘可达
+ * - 跳转复用侧栏既定入口 `openChapterFile`（`SidebarShared.tsx:113`，内部处理 vela://）
+ * - ⚠️ 已知限制：`openChapterFile` 按**当前项目**解析相对路径，跨项目会话点 chip 会读不到文件
+ *   （会话与当前项目不一致时 `AgentConversation.tsx` 顶部已有提示条）
+ */
+function renderUserContent(content: string): React.ReactNode {
+  const segments = splitMentionRefs(content)
+  if (segments.length === 1 && segments[0].kind === 'text') return content
+  return segments.map((seg, i) => {
+    if (seg.kind === 'text') return <span key={i}>{seg.text}</span>
+    return (
+      <button
+        key={i}
+        type="button"
+        title={seg.target}
+        onClick={() => { void openChapterFile(seg.target, seg.target) }}
+        className="inline rounded px-1 cursor-pointer hover:underline"
+        style={{
+          backgroundColor: 'rgba(var(--color-accent-rgb), 0.18)',
+          color: 'var(--color-accent)',
+          border: 'none',
+          font: 'inherit',
+        }}
+      >
+        {seg.raw}
+      </button>
+    )
+  })
 }
 
 /** 复制消息全文（2026-09-22）：成功/失败都给 toast 反馈 */
@@ -160,7 +196,7 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
             color: 'var(--color-text)',
           }}
         >
-          {content}
+          {renderUserContent(content)}
         </div>
         {/* 气泡**下方**一排（右对齐）：发送时间 + 复制 + 分支/回退
             （2026-09-22 用户要求：按钮不在气泡内、改到气泡下方，并补时间与复制） */}
