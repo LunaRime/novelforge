@@ -15,6 +15,7 @@ import {
   MAX_SUBAGENT_MESSAGES, SUBAGENT_MAX_MS, SUBAGENT_RESULT_MAX_TOKENS,
   type SubAgentSession, type SubAgentTask,
 } from './types'
+import type { AgentProgress } from '../progress-tracker'
 
 export interface SubAgentDeps {
   generate: LLMGenerateFn
@@ -26,6 +27,11 @@ export interface SubAgentDeps {
   signal?: AbortSignal
   /** 转录/状态回写（父端 50ms 缓冲 flush） */
   onUpdate?: (session: SubAgentSession) => void
+  /**
+   * 子 agent 进度（阶段 + 工具轮次）。父端**只用于 UI**，不写进 session
+   * ——`subSessions` 整体 JSON 落盘，挂进 session 会改动持久化格式。
+   */
+  onProgress?: (progress: AgentProgress) => void
   /** 时钟注入（墙钟判定可测，不依赖真实时间） */
   now?: () => number
 }
@@ -114,6 +120,7 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
       else if (cleanedFull) session.messages.push({ id: `sa-${session.messages.length}`, role: 'assistant', content: cleanedFull, createdAt: Date.now() })
     },
     onError: (error) => { session.error = error },
+    onProgress: (p) => deps.onProgress?.(p),
   }
 
   /** 终态判定：超时 → failed（spec §3.9）；父取消 → cancelled；引擎报错 → failed；否则 completed */

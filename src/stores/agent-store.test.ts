@@ -1821,3 +1821,85 @@ describe('自学习压缩 v1：接线', () => {
     })
   })
 })
+
+// ===== 进度接线（约束③「计划步骤有序、有状态」）=====
+describe('agentProgress 接线与竞态守卫', () => {
+  const mockRunAgentLoop = vi.mocked(runAgentLoop)
+  /** 捕获每次 runAgentLoop 收到的回调对象，供用例按需手动触发 */
+  let cbSeen: AgentEngineCallbacks[] = []
+
+  const progress = (description: string, completedSteps: number) => ({
+    phase: 'tool_execution' as const,
+    toolIndex: 1,
+    totalTools: 1,
+    completedSteps,
+    totalSteps: 8,
+    tokensUsed: 0,
+    elapsedMs: 0,
+    percentage: 0,
+    description,
+  })
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    cbSeen = []
+    // 桩：不抛错、不 resolve —— 由用例手动触发 onProgress / onDone
+    mockRunAgentLoop.mockImplementation(((...args: unknown[]) => {
+      cbSeen.push(args[5] as AgentEngineCallbacks)
+      return new Promise(() => {})
+    }) as never)
+  })
+
+  afterEach(() => {
+    useAgentStore.getState().cancelGeneration()
+  })
+
+  it('onProgress 写入 agentProgress（此前引擎在发、store 未接）', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+
+    void useAgentStore.getState().sendMessage('你好')
+    await vi.waitFor(() => expect(cbSeen.length).toBe(1))
+    expect(useAgentStore.getState().agentProgress).toBeNull()
+
+    cbSeen[0].onProgress?.(progress('正在执行工具: read_file', 3))
+
+    expect(useAgentStore.getState().agentProgress?.completedSteps).toBe(3)
+    expect(useAgentStore.getState().agentProgress?.description).toBe('正在执行工具: read_file')
+  })
+
+  it('旧请求的晚到 progress 不覆盖新请求（seq 守卫）', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+
+    // 第 1 轮：捕获其回调（桩不 resolve，保持「生成中」）
+    void useAgentStore.getState().sendMessage('第一轮')
+    await vi.waitFor(() => expect(cbSeen.length).toBe(1))
+
+    // 取消第 1 轮（否则 sendMessage 被「已在生成中」守卫拦下）
+    await useAgentStore.getState().cancelGeneration()
+
+    // 第 2 轮：generationSeq 自增 → 第 1 轮的回调变陈旧
+    void useAgentStore.getState().sendMessage('第二轮')
+    await vi.waitFor(() => expect(cbSeen.length).toBe(2))
+
+    // 新请求先写入自己的进度
+    cbSeen[1].onProgress?.(progress('正在执行工具: write_file', 5))
+    expect(useAgentStore.getState().agentProgress?.completedSteps).toBe(5)
+
+    // 旧请求的 progress 晚到 —— 必须被丢弃，不得回退成 3
+    cbSeen[0].onProgress?.(progress('正在执行工具: read_file', 3))
+    expect(useAgentStore.getState().agentProgress?.completedSteps).toBe(5)
+    expect(useAgentStore.getState().agentProgress?.description).toBe('正在执行工具: write_file')
+  })
+
+  it('子 agent 进度写入 subAgentProgress，且不进入 subSessions（不落盘）', () => {
+    useAgentStore.getState().setSubAgentProgress('task-1', progress('正在执行工具: read_task', 2))
+
+    const state = useAgentStore.getState()
+    expect(state.subAgentProgress['task-1']?.completedSteps).toBe(2)
+    // 硬约束 4：progress 绝不进 subSessions（session 整体 JSON 落盘）
+    const serialized = JSON.stringify(state.conversations)
+    expect(serialized).not.toContain('subAgentProgress')
+  })
+})

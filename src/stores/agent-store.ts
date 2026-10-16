@@ -4,6 +4,7 @@ import { useLLMStore } from './llm-store'
 import { agentModeToTier } from '../services/llm/model-router'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage, type AgentEngineDeps } from '../services/agent/agent-engine'
+import type { AgentProgress } from '../services/agent/progress-tracker'
 import { clearReadState } from '../services/agent/tools/read-file.tool'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { detectWritingIntent, type WritingIntent } from '../services/agent/writing-intent'
@@ -139,6 +140,17 @@ interface AgentState {
   defaultMode: AgentMode
   /** 当前是否正在生成（用于 UI 状态） */
   generating: boolean
+  /**
+   * 本轮 Agent 的实时进度（阶段 + 工具轮次），由引擎 `onProgress` 写入。
+   * 仅 UI 消费，**不参与会话落盘**（sendMessage 起始置 null、收尾置 null）。
+   */
+  agentProgress: AgentProgress | null
+  /**
+   * 运行中子 agent 的进度（taskId → 快照）。与 `subSessions` 分离是**刻意的**：
+   * `subSessions` 整体 JSON 落盘/归档（`flush` 的 snapshot、`serializeArchive`），
+   * 若把 progress 挂进 session 就会改动持久化格式——本档硬约束禁止。
+   */
+  subAgentProgress: Record<string, AgentProgress>
   /** 当前流式请求 ID（用于取消） */
   activeRequestId: string | null
   /** C 档第二轮：子 agent 的待审批写操作（非 null 时输入框上方渲染带来源标签的确认卡） */
@@ -213,6 +225,8 @@ interface AgentState {
   }>
   /** 取消某个子 agent（只中止它，不取消父） */
   cancelSubAgent: (sessionId: string) => void
+  /** 子 agent 进度写入（仅 UI 消费；不参与落盘） */
+  setSubAgentProgress: (taskId: string, progress: AgentProgress) => void
   /** 回放子会话转录（null = 未找到） */
   replaySubAgent: (sessionId: string) => string | null
   /** 可用子会话清单（错误文案里给出） */
@@ -438,6 +452,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   memoryView: false,
   defaultMode: 'deep',
   generating: false,
+  agentProgress: null,
+  subAgentProgress: {},
   activeRequestId: null,
   pendingSubAgentConfirmation: null,
   toolsInitialized: false,
@@ -729,6 +745,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 把用户消息 + 空助手消息写入会话
     set(state => ({
       generating: true,
+      agentProgress: null,
+      subAgentProgress: {},
       conversations: state.conversations.map(c =>
         c.id === convId
           ? {
@@ -1299,6 +1317,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               pendingConfirmations.set(toolCall.id, { resolve, decision, projectPath, args })
             })
           },
+          // 进度接线（约束③）：引擎每轮都发 onProgress，此前无人接 → 数据被丢弃。
+          // ⚠️ 必须与 onDone 同款 seq 守卫（见 :423 generationSeq 注释）：取消后立即发新消息时，
+          //    旧请求的晚到 progress 不得覆盖新请求的进度。
+          onProgress: (p) => {
+            if (mySeq !== generationSeq) return
+            set({ agentProgress: p })
+          },
           onDone: (fullText, toolCalls, artifacts) => {
             // 旧请求晚到（取消后已发新消息）：忽略，避免覆盖新请求的 generating 状态
             if (mySeq !== generationSeq) return
@@ -1535,6 +1560,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           pending = s
           if (!flushTimer) flushTimer = setTimeout(flush, 50)
         },
+        // 子 agent 进度：只进 subAgentProgress（UI），**不进 session**（session 整体落盘）
+        onProgress: (p) => get().setSubAgentProgress(taskId, p),
       })
       pending = session
       flush()
@@ -1558,6 +1585,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     // 中止飞行中的流式请求（signal 只作用于轮次之间，请求本身要 llm:cancel）
     const ids = activeSubAgentRequests.get(sessionId)
     if (ids) for (const id of ids) void useLLMStore.getState().cancelGeneration(id)
+  },
+
+  /** 子 agent 进度写入（仅 UI；不落盘——见 subAgentProgress 字段注释） */
+  setSubAgentProgress: (taskId, progress) => {
+    set(state => ({ subAgentProgress: { ...state.subAgentProgress, [taskId]: progress } }))
   },
 
   replaySubAgent: (sessionId) => {

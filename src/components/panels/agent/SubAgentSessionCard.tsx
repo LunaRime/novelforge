@@ -30,6 +30,8 @@ export default function SubAgentSessionCard({ session }: { session: SubAgentSess
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const cancelSubAgent = useAgentStore(s => s.cancelSubAgent)
+  // 进度只挂在运行中；子会话 id === taskId（runner 的幂等指纹约定）
+  const progress = useAgentStore(s => s.subAgentProgress[session.id])
 
   return (
     <div className="mx-2 my-1.5 rounded-lg border" style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
@@ -56,6 +58,12 @@ export default function SubAgentSessionCard({ session }: { session: SubAgentSess
           <span className="text-2xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
             {t('subagent.cardTools').replace('{n}', String(session.toolCalls.length))}
           </span>
+          {/* 进度（约束③）：仅运行中显示；来自 transient subAgentProgress（不落盘） */}
+          {session.status === 'running' && progress && (
+            <span className="text-2xs flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
+              {progress.totalSteps ? `${progress.completedSteps}/${progress.totalSteps}` : ''}
+            </span>
+          )}
         </button>
         {session.status === 'running' && (
           <button
