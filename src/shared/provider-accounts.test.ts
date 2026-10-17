@@ -109,17 +109,19 @@ describe('syncAccountModels', () => {
       modelNames: [],
     }
 
-    it('modelNames 空数组 = 继承内置目录全集（名序 = models 序 + embeddingModels 序）', () => {
+    it('modelNames 空数组 = 继承内置目录全集（名序 = models 序 + embeddingModels 序 + 生成表键）', () => {
       const out = syncAccountModels(heir, [], (n) => presetModelDefaults(heir.provider, n))
 
       expect(out.map(m => m.modelName)).toEqual(builtinCatalogFor('openai'))
-      // 名序 = 预设 models 序 + embeddingModels 序（用预设本身做 oracle，不另写字面量）
+      // 名序 = 预设 models 序 + embeddingModels 序 + pi-ai 生成表键（按 builtinCatalogFor 同款去重）
       const preset = BUILTIN_PRESETS.find(p => p.provider === 'openai')!
-      expect(out.map(m => m.modelName)).toEqual([
+      const expected = [...new Set([
         ...preset.models.map(m => m.name),
         ...preset.embeddingModels,
-      ])
-      expect(out.length).toBeGreaterThan(preset.models.length) // 向量模型确实进来了
+        ...Object.keys(PI_AI_MODEL_SPECS['openai'] ?? {}),
+      ])]
+      expect(out.map(m => m.modelName)).toEqual(expected)
+      expect(out.length).toBeGreaterThan(preset.models.length) // 其它来源的模型确实进来了
     })
 
     it('继承而来的派生条目只带凭据**引用**（apiKeyRef 随账户走；条目上没有密钥值）', () => {
@@ -153,13 +155,23 @@ describe('syncAccountModels', () => {
     })
 
     it('生成表（PI_AI_MODEL_SPECS）的键并入继承目录，排在两个手写来源之后', () => {
-      const provider = 'deepseek'
-      const preset = BUILTIN_PRESETS.find(p => p.provider === provider)!
-      const handwritten = [...preset.models.map(m => m.name), ...preset.embeddingModels]
-      const generated = Object.keys(PI_AI_MODEL_SPECS[provider] ?? {})
+      // 找一个「生成表带来手写来源之外新键」的 provider（pi-ai 升级后 deepseek 已全被手写覆盖，
+      // 不能写死 provider —— 否则断言会随目录数据漂移变成空转/误报）
+      const handwrittenOf = (provider: string): string[] => {
+        const preset = BUILTIN_PRESETS.find(p => p.provider === provider)
+        return [...(preset?.models.map(m => m.name) ?? []), ...(preset?.embeddingModels ?? [])]
+      }
+      const provider = Object.keys(PI_AI_MODEL_SPECS).find((candidate) => {
+        const handwritten = new Set(handwrittenOf(candidate))
+        return Object.keys(PI_AI_MODEL_SPECS[candidate] ?? {}).some(id => !handwritten.has(id))
+      })
+      expect(provider, '应有 provider 的生成表键超出 NF 手写来源').toBeTruthy()
 
-      expect(builtinCatalogFor(provider)).toEqual([...new Set([...handwritten, ...generated])])
-      expect(builtinCatalogFor(provider).length).toBeGreaterThan(handwritten.length) // 生成表确实带来新键
+      const handwritten = handwrittenOf(provider!)
+      const generated = Object.keys(PI_AI_MODEL_SPECS[provider!] ?? {})
+
+      expect(builtinCatalogFor(provider!)).toEqual([...new Set([...handwritten, ...generated])])
+      expect(builtinCatalogFor(provider!).length).toBeGreaterThan(handwritten.length) // 生成表确实带来新键
     })
 
     it('手写 models 刻意留空的 provider 由生成表兜住（继承不再为空）', () => {

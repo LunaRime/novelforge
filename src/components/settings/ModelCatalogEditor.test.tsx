@@ -22,7 +22,7 @@ import {
   ModelCatalogEditor, catalogModelNames, catalogOverrides, initialCatalogDraft, type ModelDraft,
 } from './ModelCatalogEditor'
 import { formatCapacity } from '../../shared/capacity'
-import { builtinCatalogFor } from '../../shared/provider-presets'
+import { builtinCatalogFor, presetModelDefaults } from '../../shared/provider-presets'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 「获取可用模型」的拉取（T8：入口在目录区，候选 Modal 由它拉起） */
@@ -178,10 +178,16 @@ describe('ModelCatalogEditor 目录区', () => {
     render({ provider: 'openai' })
     expect(inputByLabel('上下文窗口 1')).toBeNull() // 收起时没有容量框
 
-    expand(1)
-    // openai 的 text-embedding-3-large 排在目录末尾 → 显示层第 1 行是它（向量用途）
-    expect(inputByLabel('上下文窗口 1')!.placeholder).toBe('131072')
-    expect(inputByLabel('最大输出 token 1')!.placeholder).toBe('131072')
+    // 目录 = models + embeddingModels + pi-ai 生成表键；显示层倒序。
+    // 按名字定位向量模型所在显示行（不能依赖「末行 = embedding」——生成表会持续追加新键）
+    const embedding = 'text-embedding-3-large'
+    const rowIndex = idInputs().findIndex(input => input.value === embedding)
+    expect(rowIndex, `${embedding} 应在内置目录里`).toBeGreaterThanOrEqual(0)
+    expand(rowIndex + 1)
+    const spec = presetModelDefaults('openai', embedding)
+    const n = rowIndex + 1
+    expect(inputByLabel(`上下文窗口 ${n}`)!.placeholder).toBe(formatCapacity(spec.contextWindow))
+    expect(inputByLabel(`最大输出 token ${n}`)!.placeholder).toBe(formatCapacity(spec.maxTokens))
     expect(container!.textContent).toContain('向量')
   })
 

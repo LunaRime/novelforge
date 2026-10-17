@@ -60,7 +60,16 @@ const pickApi = (raw) => {
   return null
 }
 
-// ① 规格表：两键并收（规格与协议无关，只看 modelId 对得上）
+// ① 规格表：pi-ai 1.1.0 起单个 provider 文件按**协议键**分组
+//    （openai-completions / openai-responses / anthropic-messages / google-* …），
+//    条目键可能带 `chat:` 前缀，**真实模型 id 在 entry.id**；classifier/image 等非聊天条目要排除。
+//    规格与协议无关：合并全部 chat 条目、按 id 去重（先到者保留；缺字段用后到条目补齐）。
+const isChatEntry = (m) => !!m && (m.type === undefined || m.type === 'chat')
+const entryModelId = (key, m) => {
+  const id = typeof m.id === 'string' ? m.id.trim() : ''
+  // 旧 schema（<= 1.0.x）没有 entry.id，键就是 id；新 schema 键是 `chat:<id>`
+  return id.length > 0 ? id : key.replace(/^chat:/, '')
+}
 const specs = {}
 for (const [nfId, piId] of Object.entries(EXISTING_MAP)) {
   let raw
@@ -70,15 +79,22 @@ for (const [nfId, piId] of Object.entries(EXISTING_MAP)) {
     console.warn(`[migrate] 跳过 ${nfId}：pi-ai 无 ${piId}.json`)
     continue
   }
-  const models = { ...(raw['openai-completions'] ?? {}), ...(raw['anthropic-messages'] ?? {}) }
+  const merged = {}
+  for (const apiEntries of Object.values(raw)) {
+    if (!apiEntries || typeof apiEntries !== 'object' || Array.isArray(apiEntries)) continue
+    for (const [key, m] of Object.entries(apiEntries)) {
+      if (!isChatEntry(m)) continue
+      const id = entryModelId(key, m)
+      const spec = (merged[id] ??= {})
+      const cw = posInt(m.contextWindow)
+      const mt = posInt(m.maxTokens)
+      if (cw !== undefined && spec.contextWindow === undefined) spec.contextWindow = cw
+      if (mt !== undefined && spec.maxTokens === undefined) spec.maxTokens = mt
+    }
+  }
   const entry = {}
-  for (const [modelId, m] of Object.entries(models)) {
-    const spec = {}
-    const cw = posInt(m.contextWindow)
-    const mt = posInt(m.maxTokens)
-    if (cw !== undefined) spec.contextWindow = cw
-    if (mt !== undefined) spec.maxTokens = mt
-    if (Object.keys(spec).length > 0) entry[modelId] = spec
+  for (const [id, spec] of Object.entries(merged)) {
+    if (Object.keys(spec).length > 0) entry[id] = spec
   }
   if (Object.keys(entry).length > 0) specs[nfId] = entry
 }
@@ -99,32 +115,44 @@ for (const [piId, displayName] of Object.entries(NEW_PROVIDERS)) {
     console.warn(`[migrate] 跳过新供应商 ${piId}：无可服务协议键（需 openai-completions 或 anthropic-messages）`)
     continue
   }
-  const entries = Object.values(raw[picked.key])
-  const baseUrl = entries[0].baseUrl
-  newPresets.push({
-    provider: piId,
-    displayName,
-    baseUrl,
-    protocol: picked.protocol,
-    models: entries.map((m) => {
-      const mt = posInt(m.maxTokens) ?? 8192
-      const cw = posInt(m.contextWindow)
-      const out = { name: m.id, maxTokens: mt }
-      if (cw !== undefined && cw !== mt) out.contextWindow = cw
-      return out
-    }),
-    embeddingModels: [],
-  })
+  const entries = Object.entries(raw[picked.key])
+    .filter(([, m]) => isChatEntry(m))
+    .map(([key, m]) => ({ id: entryModelId(key, m), m }))
+  const seen = new Set()
+  const models = []
+  for (const { id, m } of entries) {
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    const mt = posInt(m.maxTokens) ?? 8192
+    const cw = posInt(m.contextWindow)
+    const out = { name: id, maxTokens: mt }
+    if (cw !== undefined && cw !== mt) out.contextWindow = cw
+    models.push(out)
+  }
+  if (models.length === 0) {
+    console.warn(`[migrate] 跳过新供应商 ${piId}：${picked.key} 下没有 chat 模型`)
+    continue
+  }
+  const baseUrl = entries.find(({ m }) => typeof m.baseUrl === 'string' && m.baseUrl.length > 0)?.m.baseUrl ?? ''
+  newPresets.push({ provider: piId, displayName, baseUrl, protocol: picked.protocol, models, embeddingModels: [] })
 }
 
 const header = `/**
- * ⚠️ 自动生成（scripts/migrate-pi-ai-catalog.cjs，2026-09-28 一次性）；请勿手改。
+ * ⚠️ 自动生成（scripts/migrate-pi-ai-catalog.cjs）；请勿手改。
  *
- * 数据来源：@earendil-works/pi-ai（MIT）dist/providers/data/*.json 的 openai-completions 条目。
+ * 数据来源：@earendil-works/pi-ai（MIT，Copyright Mario Zechner）dist/providers/data/*.json。
+ *   版本基准：DSH（deepseek-harness）0.2.1-rc.1 的 pnpm-lock 锁定 pi-ai 1.1.0；
+ *   取包方式（无需安装依赖）：npm pack @earendil-works/pi-ai@1.1.0 解包到临时目录后
+ *   按 <源根>/node_modules/.pnpm/@earendil-works+pi-ai@<ver>/node_modules/@earendil-works/pi-ai 摆放。
+ *
+ * 1.1.0 schema：单文件按协议键分组（openai-completions / openai-responses / anthropic-messages /
+ * google-* …），条目键可能带 \`chat:\` 前缀，真实模型 id 取 entry.id；仅收 type=chat
+ * （classifier / image 条目排除）。规格与协议无关，因此跨协议键合并、按 id 去重。
+ *
  * 用途：
  *   ① PI_AI_MODEL_SPECS —— presetModelDefaults 在 NF 手写字面量**缺省时**补全规格（字面量优先）；
- *   ② PI_AI_PROVIDER_PRESETS —— 并入 BUILTIN_PRESETS 的新供应商（OpenAI 兼容 + key 鉴权）。
- * 刷新：node scripts/migrate-pi-ai-catalog.cjs --source <deepseek-harness 仓库根>
+ *   ② PI_AI_PROVIDER_PRESETS —— 并入 BUILTIN_PRESETS 的新供应商（OpenAI 兼容 / anthropic 原生 + key 鉴权）。
+ * 刷新：node scripts/migrate-pi-ai-catalog.cjs --source <含 node_modules 的源根>
  */
 import type { ProviderPreset } from './provider-presets'
 

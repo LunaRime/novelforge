@@ -132,9 +132,17 @@ export const BUILTIN_PRESETS: ProviderPreset[] = [
     baseUrl: 'https://api.deepseek.com',
     protocol: 'openai',
     models: [
-      // V4 系列（2026-07-24 起 deepseek-chat / deepseek-reasoner 已停用）
-      { name: 'deepseek-v4-flash', maxTokens: 131072 },
-      { name: 'deepseek-v4-pro', maxTokens: 131072 },
+      // 2026-10 对齐 DSH 0.2.1-rc.1 官方目录（packages/llm/llm-deepseek/src/models.ts）：
+      //   deepseek-flash = DeepSeek-V4.1-Flash（默认；1M 窗口 / 384k 输出能力，支持图片输入）
+      //   deepseek-v4-pro = DeepSeek-V4-Pro（1M 窗口 / 384k 输出能力）
+      // 规格与 pi-ai 1.1.0 生成表一致（contextWindow 1,000,000 / maxTokens 384,000）。
+      // ⚠️ NF 全局输出上限 MAX_TOKENS_CAP = 131072（设置页与主进程同一常量），故这里
+      //    maxTokens 仍取 131072；contextWindow 必须显式写真实窗口 —— 缺字段会被读取路径
+      //    用 maxTokens 兜底，用户实际只拿到 131k 上下文（2026-10-17 真机配置即如此）。
+      { name: 'deepseek-flash', maxTokens: 131072, contextWindow: 1000000 },
+      { name: 'deepseek-v4-pro', maxTokens: 131072, contextWindow: 1000000 },
+      // 旧 ID 保留（pi-ai 1.1.0 官方目录已不列；存量配置/账户仍可能引用）
+      { name: 'deepseek-v4-flash', maxTokens: 131072, contextWindow: 1000000 },
     ],
     embeddingModels: [],
   },

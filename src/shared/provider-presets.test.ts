@@ -11,18 +11,38 @@ describe('pi-ai 目录移植（2026-09-28，MIT 数据）', () => {
   })
 
   it('presetModelDefaults 在 NF 字面量缺省时从生成表补全规格（字面量优先）', () => {
-    const deepseek = PI_AI_MODEL_SPECS['deepseek']
-    // 构造"NF 字面量未收录、生成表有规格"的模型来验证补全路径（不能用在两处都有的 id——
-    // 那走的是字面量优先分支，另一条语义）
-    const nfModels = new Set(
-      (BUILTIN_PRESETS.find(p => p.provider === 'deepseek')?.models ?? []).map(m => m.name),
-    )
-    const entry = Object.entries(deepseek).find(([id, s]) => !nfModels.has(id) && s.maxTokens !== undefined)
-    expect(entry, '生成表里应存在 NF 未收录的 deepseek 模型').toBeTruthy()
-    const [id, spec] = entry!
-    const out = presetModelDefaults('deepseek', id)
+    // 在任意 provider 的生成表里找「NF 字面量未收录」的模型来验证补全路径
+    // （不能用在两处都有的 id——那走的是字面量优先分支，另一条语义）
+    let found: { provider: string; id: string; spec: { contextWindow?: number; maxTokens?: number } } | undefined
+    for (const [provider, models] of Object.entries(PI_AI_MODEL_SPECS)) {
+      const nfModels = new Set(
+        (BUILTIN_PRESETS.find(p => p.provider === provider)?.models ?? []).map(m => m.name),
+      )
+      const entry = Object.entries(models).find(([id, s]) => !nfModels.has(id) && s.maxTokens !== undefined)
+      if (entry) {
+        found = { provider, id: entry[0], spec: entry[1] }
+        break
+      }
+    }
+    expect(found, '生成表里应存在 NF 未收录的模型规格项').toBeTruthy()
+    const { provider, id, spec } = found!
+    const out = presetModelDefaults(provider, id)
     expect(out.maxTokens).toBe(spec.maxTokens)
     if (spec.contextWindow !== undefined) expect(out.contextWindow).toBe(spec.contextWindow)
+  })
+
+  // 2026-10-17 内置模型刷新：DeepSeek 手写目录对齐 DSH 官方目录（llm-deepseek/src/models.ts）
+  it('DeepSeek 内置目录含官方 V4.1 模型，且窗口按真实 1M（不被 maxTokens 兜底成 131k）', () => {
+    const preset = BUILTIN_PRESETS.find(p => p.provider === 'deepseek')!
+    const names = preset.models.map(m => m.name)
+    expect(names).toContain('deepseek-flash') // DSH 默认模型（V4.1-Flash）
+    expect(names).toContain('deepseek-v4-pro')
+    for (const name of ['deepseek-flash', 'deepseek-v4-pro']) {
+      const defaults = presetModelDefaults('deepseek', name)
+      expect(defaults.contextWindow, name).toBe(1_000_000)
+      // NF 全局输出上限（MAX_TOKENS_CAP）——窗口与输出拆字段后两者不再相等
+      expect(defaults.maxTokens, name).toBe(131_072)
+    }
   })
 
   it('新增供应商已并入 BUILTIN_PRESETS（含 MiniMax 等 ≥8 家，模型非空）', () => {
