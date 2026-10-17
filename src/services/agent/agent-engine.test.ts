@@ -543,7 +543,7 @@ describe('恢复阶梯边界（第 8 轮，final review 回归）', () => {
     toolRegistry.unregister(NOOP_TOOL_NAME)
   })
 
-  it('第 8 轮可恢复失败 → 错误透传 onError，不误报 maxToolRoundsReached 且不吞错', async () => {
+  it('第 8 步可恢复失败 → 错误透传 onError，不误报 maxStepsReached 且不吞错', async () => {
     let calls = 0
     const generateFn = vi.fn(async (): Promise<string> => {
       calls++
@@ -552,9 +552,9 @@ describe('恢复阶梯边界（第 8 轮，final review 回归）', () => {
     })
     const callbacks = createCallbacks()
     await runAgentLoop('system', [], '用户消息', 'test-model', generateFn, callbacks, undefined, { modelContextWindow: 32_000 })
-    expect(generateFn).toHaveBeenCalledTimes(8) // 前 7 轮工具循环 + 第 8 轮失败调用（不得第 9 次）
+    expect(generateFn).toHaveBeenCalledTimes(8) // 前 7 步工具循环 + 第 8 步失败调用（不得第 9 次）
     expect(callbacks.onError).toHaveBeenCalledTimes(1)
-    expect(callbacks.onDone).not.toHaveBeenCalled() // 错误不得被 maxToolRoundsReached 路径吞掉
+    expect(callbacks.onDone).not.toHaveBeenCalled() // 错误不得被 maxStepsReached 路径吞掉
   })
 })
 
@@ -839,6 +839,82 @@ describe('工具分批并发（M1，对齐 CC toolOrchestration.ts）', () => {
     expect(observation).toContain(`<tool_result name="m1_solo">\nresult:m1_solo\n</tool_result>`)
     expect(callbacks.onError).not.toHaveBeenCalled()
     expect(callbacks.onDone).toHaveBeenCalled()
+  })
+})
+
+describe('正文与工具调用交错元数据（contentOffset，2026-10-17）', () => {
+  const layoutTools: string[] = []
+
+  /** 注册只读测试工具（回显成功结果；执行不触碰 IPC） */
+  function registerLayoutTool(name: string): void {
+    toolRegistry.register(
+      buildAgentTool({
+        name,
+        description: 'layout test read tool',
+        source: 'builtin',
+        inputSchema: { type: 'object', properties: {} },
+        requiresConfirmation: false,
+        execute: async () => ({ success: true, content: `${name}: ok` }),
+      }),
+    )
+    layoutTools.push(name)
+  }
+
+  const call = (name: string): string => `<tool_call>{"name":"${name}","arguments":{}}</tool_call>`
+
+  afterEach(() => {
+    for (const name of layoutTools.splice(0)) toolRegistry.unregister(name)
+  })
+
+  it('一轮多个调用 offset 相同；跨轮单调不减且等于当轮正文累计长度', async () => {
+    const round1Text = '先读取两个文件。'
+    const round2Text = '再写入结果。'
+    registerLayoutTool('layout_ro_a')
+    registerLayoutTool('layout_ro_b')
+    registerLayoutTool('layout_ro_c')
+    const { callbacks } = await runLoopWithResponses([
+      `${round1Text}\n${call('layout_ro_a')}\n${call('layout_ro_b')}`,
+      `${round2Text}\n${call('layout_ro_c')}`,
+      '全部完成。',
+    ])
+
+    // 工具按解析顺序全部落到同一扁平数组（渲染层再按 offset 分批）
+    const doneCalls = callbacks.onDone.mock.calls[0][1] as ToolCallInfo[]
+    expect(doneCalls.map(tc => tc.toolName)).toEqual(['layout_ro_a', 'layout_ro_b', 'layout_ro_c'])
+    const offsets = doneCalls.map(tc => tc.contentOffset)
+    // 同轮相同；跨轮 = 当轮正文累计长度（第一轮开头 = round1Text 长度，第二轮 = 两者之和）
+    expect(offsets).toEqual([
+      round1Text.length,
+      round1Text.length,
+      round1Text.length + round2Text.length,
+    ])
+    // 单调不减（渲染层按此排序分批）
+    expect(offsets[0]!).toBeLessThanOrEqual(offsets[1]!)
+    expect(offsets[1]!).toBeLessThanOrEqual(offsets[2]!)
+    // offset 语义 = 调用发生前已生成的正文累计长度：onDone 全文在此切开的正是当轮正文
+    const fullText = callbacks.onDone.mock.calls[0][0] as string
+    expect(fullText.slice(0, offsets[0])).toBe(round1Text)
+    expect(fullText.slice(offsets[0], offsets[2])).toBe(round2Text)
+  })
+
+  it('流式路径同口径：onToolCallStart/onToolCallComplete 回调里已带 contentOffset', async () => {
+    const round1Text = '我先查一下。'
+    registerLayoutTool('layout_ro_live')
+    const { callbacks } = await runLoopWithResponses([
+      `${round1Text}\n${call('layout_ro_live')}`,
+      '查完了。',
+    ])
+    // onToolCallStart 先于执行发出（UI 流式期间即可交错），此时 contentOffset 已就位
+    const started = callbacks.onToolCallStart.mock.calls[0][0] as ToolCallInfo
+    expect(started.contentOffset).toBe(round1Text.length)
+    // complete 回调沿用同一对象引用，offset 不丢失
+    const completed = callbacks.onToolCallComplete.mock.calls[0][0] as ToolCallInfo
+    expect(completed.contentOffset).toBe(round1Text.length)
+  })
+
+  it('无工具调用的普通回复不产生 offset 元数据（toolCalls 为空）', async () => {
+    const { callbacks } = await runLoopWithResponses(['纯文本回复。'])
+    expect(callbacks.onDone.mock.calls[0][1]).toEqual([])
   })
 })
 

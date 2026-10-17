@@ -226,7 +226,7 @@ export const agentTexts = {
   'agent.phaseGenerating': { 'zh-CN': '正在生成回复...', 'en-US': 'Generating response...', 'ru-RU': 'Генерация ответа...' },
   'agent.phaseDone': { 'zh-CN': '完成', 'en-US': 'Done', 'ru-RU': 'Готово' },
   'agent.thinkingPrefix': { 'zh-CN': '思考过程：', 'en-US': 'Thinking process:', 'ru-RU': 'Процесс мышления:' },
-  'agent.maxToolRoundsReached': { 'zh-CN': '已达到最大工具调用次数限制，自动停止。', 'en-US': 'Reached the maximum tool call limit; stopped automatically.', 'ru-RU': 'Достигнут лимит вызовов инструментов; остановлено автоматически.' },
+  'agent.maxStepsReached': { 'zh-CN': '已达到单次任务的工具**执行步骤**上限（最多 {maxSteps} 步；同一步可包含多个工具调用，这不是调用次数限制），已自动停止。你可以再发一条消息让我继续。', 'en-US': 'Reached the tool-**execution step** limit for this task (up to {maxSteps} steps; each step may contain multiple tool calls — this is not a call-count limit), stopped automatically. Send another message if you want me to continue.', 'ru-RU': 'Достигнут лимит **шагов выполнения** инструментов в рамках задачи (до {maxSteps} шагов; на одном шаге может быть несколько вызовов инструментов — это не ограничение числа вызовов), выполнение остановлено автоматически. Отправьте новое сообщение, чтобы продолжить.' },
   'agent.addFile': { 'zh-CN': '添加文件', 'en-US': 'Add file', 'ru-RU': 'Добавить файл' },
   'agent.searchFiles': { 'zh-CN': '搜索项目文件…', 'en-US': 'Search project files…', 'ru-RU': 'Поиск файлов проекта…' },
   'agent.noFilesFound': { 'zh-CN': '未找到可添加的文件', 'en-US': 'No files found', 'ru-RU': 'Файлы не найдены' },

@@ -8,7 +8,7 @@
  * 自持计时器（而非复用宿主的）：宿主只需传 `startTime`，无需改动其 `formatDuration`
  * 签名（硬约束之二禁止改公开接口签名）。
  *
- * ⚠️ **不得据此画百分比进度条**：`totalSteps` 是 ReAct 轮次预算（`MAX_TOOL_ROUNDS = 8`），
+ * ⚠️ **不得据此画百分比进度条**：`totalSteps` 是单次轮次的**步骤（step）**预算（`MAX_STEPS = 8`），
  * 不是模型自拟待办清单——进度条会误导用户以为剩余工作量可精确预测。
  */
 import { useEffect, useState } from 'react'

@@ -23,9 +23,21 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useLLMStore } from '../../stores/llm-store'
 import type { CredentialInfo, ModelProfile } from '../../shared/ipc-channels'
 import { LLM_PROTOCOLS, type LLMProtocol } from '../../shared/llm-protocols'
-import type { ModelPreset, ProviderPreset } from '../../shared/provider-presets'
+import { DEFAULT_CONTEXT_WINDOW_TOKENS, type ModelPreset, type ProviderPreset } from '../../shared/provider-presets'
 import { MAX_TOKENS_CAP } from '../../shared/llm-constants'
 import { credentialFieldState } from './credential-field'
+
+/**
+ * 上下文窗口快捷挡位（2026-10-17 百万时代）：常见真实窗口的快速填入。
+ *
+ * 文案直接用数字字符串（300K / 600K / 1M）—— 这是规格值本身，不是句子，无需 i18n key。
+ * 只服务生成模型（向量模型不渲染窗口参数，见下方 `!isEmbedding` 分支）。
+ */
+const CONTEXT_WINDOW_QUICK_TIERS: Array<{ label: string; value: number }> = [
+  { label: '300K', value: 300_000 },
+  { label: '600K', value: 600_000 },
+  { label: '1M', value: 1_000_000 },
+]
 
 /**
  * 从预设取「该模型的 token 规格」—— `maxTokens`（输出）与 `contextWindow`（窗口）**成对**返回。
@@ -33,15 +45,16 @@ import { credentialFieldState } from './credential-field'
  * 成对的理由：切换预设模型 = 切换它的规格，两个数本就属于同一个模型，分开更新会留下
  * 「旧窗口 + 新输出上限」这种自相矛盾的组合。
  *
- * `contextWindow` 省略时取 `maxTokens`（预设里只在该模型真实窗口 ≠ 上限时才显式写它，
- * 避免 30+ 条重复数字漂移 —— 见 `provider-presets.ts` 的类型注释）。
+ * `contextWindow` 省略时回落 `DEFAULT_CONTEXT_WINDOW_TOKENS`（1M，百万时代默认窗口），
+ * 不再取 `maxTokens` —— 后者是单次**输出**上限，不是上下文窗口。`maxTokens` 仍保持
+ * `fallbackMaxTokens` 兜底（NF 全局输出上限 131072，见 llm-constants）。
  */
 export function tokenSpec(
   presetModel: ModelPreset | null | undefined,
   fallbackMaxTokens: number,
 ): Pick<ModelProfile, 'maxTokens' | 'contextWindow'> {
   const maxTokens = presetModel?.maxTokens ?? fallbackMaxTokens
-  return { maxTokens, contextWindow: presetModel?.contextWindow ?? maxTokens }
+  return { maxTokens, contextWindow: presetModel?.contextWindow ?? DEFAULT_CONTEXT_WINDOW_TOKENS }
 }
 
 /**
@@ -433,11 +446,25 @@ export function ModelForm({
                 onChange={(e) => up('contextWindow', (e.target.value === '' ? '' : parseInt(e.target.value)) as number)}
                 onBlur={() => {
                   // 只兜下界：本字段仅本地消费（占用条分母 / 压缩预算），**不发往 API**，
-                  // 故不像 maxTokens 那样需要上限（那个上限是为了防 API 400）
+                  // 故不像 maxTokens 那样需要上限（那个上限是为了防 API 400）。
+                  // 留空/非法回填百万时代默认窗口（1M）——此分支只服务生成模型。
                   const v = Number(model.contextWindow);
-                  if (isNaN(v) || v < 1) up('contextWindow', MAX_TOKENS_CAP)
+                  if (isNaN(v) || v < 1) up('contextWindow', DEFAULT_CONTEXT_WINDOW_TOKENS)
                 }}
               />
+              {/* 快捷挡位：点一下填入常见真实窗口（原生 button，Tab 可达） */}
+              <div className="flex items-center gap-1 mt-1">
+                {CONTEXT_WINDOW_QUICK_TIERS.map((tier) => (
+                  <button
+                    key={tier.value}
+                    type="button"
+                    onClick={() => up('contextWindow', tier.value)}
+                    className="text-2xs px-1.5 py-0.5 rounded border border-[var(--color-border)] text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)] transition-colors cursor-pointer"
+                  >
+                    {tier.label}
+                  </button>
+                ))}
+              </div>
               <p className="text-2xs mt-1" style={{ color: 'var(--color-text-muted)' }}>
                 {t('form.contextWindowHint')}
               </p>

@@ -18,6 +18,8 @@ import { outputPostProcessor } from './output-post-processor'
 import { looksMultiStep } from './task-anchor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
+// 只读批并发上限的唯一来源（2026-10-17 起抽到 tool-scheduling.ts，提示词 {maxParallel} 同源注入）
+import { MAX_PARALLEL_READ_TOOLS } from './tool-scheduling'
 import {
   buildUnparsedDsmlError,
   containsDsmlMarkup,
@@ -29,8 +31,15 @@ import {
 
 // ===== 常量 =====
 
-/** ReAct 循环最大次数（防止死循环） */
-const MAX_TOOL_ROUNDS = 8
+/**
+ * 单次用户轮次（turn）内允许的**步骤（step）**上限（防止死循环）。
+ *
+ * 术语对齐 DSH `packages/core/agent-loop`：
+ * - **turn / 轮次** = 一条用户输入驱动的整个过程（可含多个 step，到最终回复为止）；
+ * - **step / 步骤** = 一次模型请求 + 该次回复里全部工具调用的执行与结果回填。
+ * 同一步可包含**多个**工具调用（只读并行、写/确认串行）；本常量限制的是**步数**，不是调用个数。
+ */
+const MAX_STEPS = 8
 
 /** Tool 执行超时（毫秒） */
 const TOOL_TIMEOUT_MS = 30_000
@@ -58,9 +67,6 @@ const RESULT_SUMMARY_MAX_TOKENS = 200
 /** 写盘内容上限（字符）——超出回退截断注入（read_file 再读受 fs:read-external-file 1MB 限制） */
 const MAX_SPILL_CHARS = 512 * 1024
 
-/** M1 只读并行批内并发上限（对齐 CC toolOrchestration.ts 工具编排；连续只读归批并行，批间串行） */
-const MAX_PARALLEL_READ_TOOLS = 10
-
 // ===== 类型 =====
 
 /** Tool 调用信息 */
@@ -78,6 +84,13 @@ export interface ToolCallInfo {
    * 供 ConfirmCard 展示风险级别与「本项目内始终允许」提案。
    */
   approval?: ApprovalDecision
+  /**
+   * 交错排版元数据（2026-10-17）：该调用**被解析时** `fullAssistantText` 的累计长度，
+   * 即本条 assistant 消息里「这次调用发生前已生成正文」的字符偏移；同一轮多个调用 offset 相同。
+   * 仅渲染层消费（`AgentMessage` 按它把工具批插回对应正文段之后，见 `buildTimeline`）。
+   * 可选字段：旧归档没有它 → 保持「正文在前、工具块在底部」的旧布局；archive 必填形状不变。
+   */
+  contentOffset?: number
 }
 
 /** Agent Engine 回调 */
@@ -156,7 +169,7 @@ export type LLMGenerateFn = (
  * 1. 将系统提示（含 Tool 描述）+ 历史消息 + 用户消息发送给 LLM
  * 2. 解析 LLM 回复中的 <tool_call> 标签
  * 3. 如果有 tool_call → 执行 Tool → 将结果作为 observation 追加到消息历史 → 重新调用 LLM
- * 4. 循环直到 LLM 不再调用 Tool 或达到 MAX_TOOL_ROUNDS
+ * 4. 循环直到 LLM 不再调用 Tool 或达到 MAX_STEPS（单步可含多个工具调用）
  * 5. 返回最终文本回复
  */
 export async function runAgentLoop(
@@ -182,13 +195,13 @@ export async function runAgentLoop(
 
   // 初始化进度追踪
   const progress = new ProgressTracker()
-  progress.start(MAX_TOOL_ROUNDS)
+  progress.start(MAX_STEPS)
 
-  let rounds = 0
+  let steps = 0
   let fullAssistantText = ''
 
   // 恢复阶梯状态（withhold-then-recover，P0-2）：可恢复错误先恢复后放行；
-  // 单次调用生命周期（跨调用持久化 deferred）；重试消耗 rounds 计数（最多 3 round，MAX=8 仍剩 5 轮工具循环）
+  // 单次调用生命周期（跨调用持久化 deferred）；重试消耗 steps 计数（最多 3 次恢复，MAX_STEPS=8 仍剩 5 步工具循环）
   type RecoveryStage = 'none' | 'compacting' | 'meta-injected'
   let recoveryStage: RecoveryStage = 'none'
   let consecutiveRecoveryFailures = 0
@@ -196,21 +209,21 @@ export async function runAgentLoop(
   let unfinishedCheckUsed = false
   /**
    * DSML 诊断是否已用过（2026-10-17）：DeepSeek V4 系列会把原生工具标记当正文回传，
-   * 若解析器没能还原出可执行调用，注入一次诊断让模型改用规定的 XML 协议；一次性防烧轮次。
+   * 若解析器没能还原出可执行调用，注入一次诊断让模型改用规定的 XML 协议；一次性防烧步骤。
    */
   let dsmlDiagnosticUsed = false
   let currentBudget = computeMessageBudget(
     options?.modelContextWindow, options?.budgetPercent, options?.maxMessageBudgetTokens,
   )
 
-  while (rounds < MAX_TOOL_ROUNDS) {
+  while (steps < MAX_STEPS) {
     // 检查中止信号
     if (abortSignal?.aborted) {
       callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
       return
     }
 
-    rounds++
+    steps++
 
     // 调用 LLM（支持流式：onChunk 实时推送文本，引擎收到流式文本后不再重复输出）
     // 发送前按当前预算压缩消息副本（完整 messages 仍保留给后处理使用）
@@ -219,7 +232,7 @@ export async function runAgentLoop(
     let streamed = false
     // DSML 流式守卫（2026-10-17）：DeepSeek V4.1 会把原生工具调用标记（<｜｜DSML｜｜ ...>）
     // 当正文流回来。先在本层截住，避免 Markdown 面板闪现原始标记；全文解析在生成返回后做。
-    // 过滤器按轮新建；本轮残余（未闭合 DSML 残片）由全文 parse/strip 兜底。
+    // 过滤器按步新建（每次模型请求一份）；本步残余（未闭合 DSML 残片）由全文 parse/strip 兜底。
     const dsmlStreamFilter = createDsmlStreamFilter()
     try {
       llmResponse = await generateFn(budgetedMessages, modelId, (chunk) => {
@@ -244,9 +257,9 @@ export async function runAgentLoop(
       // 可恢复错误（上下文超限类）→ withhold-then-recover：降档压缩 → meta 注入 → 熔断放行。
       // 非可恢复错误直接放行（无额外调用 = 无额外费用）。
       const errText = String(error)
-      // 已到最后一轮（rounds >= MAX_TOOL_ROUNDS）：continue 会退出循环 → 走 maxToolRoundsReached
+      // 已到最后一步（steps >= MAX_STEPS）：continue 会退出循环 → 走 maxStepsReached
       // 误报并吞掉真实错误——重试无意义时错误透传（final review 回归：工具循环后段超限错误最高发）
-      if (rounds >= MAX_TOOL_ROUNDS) {
+      if (steps >= MAX_STEPS) {
         callbacks.onError(t('agent.llmCallFailed').replace('{error}', errText))
         return
       }
@@ -283,7 +296,7 @@ export async function runAgentLoop(
       // 留诊断证据：模型回退到原生格式是上游行为（issue #1678），日志里应可追踪修复发生
       console.warn(`[AgentEngine] 检测到 DeepSeek DSML 工具标记，已解析为 ${toolCalls.length} 个工具调用`)
     }
-    // 部分失败场景的诊断反馈（每轮重置；仅部分成功 + 部分解析失败时被赋值，
+    // 部分失败场景的诊断反馈（每步重置；仅部分成功 + 部分解析失败时被赋值，
     // 延迟到 observation 组装时注入，避免与全失败路径重复 push）
     let parseFeedbackForObservation: string | undefined
 
@@ -327,7 +340,7 @@ export async function runAgentLoop(
     // 上游行为（deepseek-ai/DeepSeek-V3 issue #1678）：V4 系列在没有 tools 参数但历史带工具痕迹时，
     // 会把原生 DSML 工具标记当正文回传（finish_reason=stop、tool_calls=null）。常规块已由
     // parseDsmlToolCalls 还原；若仍没还原出调用，**不能当最终回复收尾**——注入一次诊断让模型
-    // 改用规定的 <tool_call> XML 重新调用（一次性，避免反复烧轮次）。
+    // 改用规定的 <tool_call> XML 重新调用（一次性，避免反复消耗步骤）。
     if (
       toolCalls.length === 0
       && parseErrors.length === 0
@@ -410,6 +423,9 @@ export async function runAgentLoop(
         toolName: tc.name,
         arguments: tc.arguments,
         status: 'pending',
+        // 交错排版（2026-10-17）：记录解析时刻的正文累计长度——同一轮多个调用 offset 相同；
+        // 渲染层据此把这一轮工具批插到「本轮正文」之后（旧归档无此字段 → 保持底部布局）
+        contentOffset: fullAssistantText.length,
       }
       allToolCalls.push(info)
       const registered = toolRegistry.get(tc.name)
@@ -485,9 +501,10 @@ export async function runAgentLoop(
     messages.push({ role: 'user', content: observation })
   }
 
-  // 达到最大循环次数
-  if (rounds >= MAX_TOOL_ROUNDS) {
-    fullAssistantText += '\n\n⚠️ ' + t('agent.maxToolRoundsReached')
+  // 达到单次轮次的步骤上限
+  if (steps >= MAX_STEPS) {
+    // 文案占位符 {maxSteps}：步数上限的唯一来源是 MAX_STEPS（不在文案里硬编码 8）
+    fullAssistantText += '\n\n⚠️ ' + t('agent.maxStepsReached').replace('{maxSteps}', String(MAX_STEPS))
   }
 
   // 运行后处理管道

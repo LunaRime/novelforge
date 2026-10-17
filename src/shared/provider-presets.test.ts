@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { BUILTIN_PRESETS, presetModelDefaults } from './provider-presets'
+import { BUILTIN_PRESETS, DEFAULT_CONTEXT_WINDOW_TOKENS, presetModelDefaults } from './provider-presets'
 import { PI_AI_MODEL_SPECS, PI_AI_PROVIDER_PRESETS } from './model-specs.generated'
 import { LLM_PROTOCOLS } from './llm-protocols'
 
@@ -61,3 +61,46 @@ describe('pi-ai 目录移植（2026-09-28，MIT 数据）', () => {
     }
   })
 })
+
+// 2026-10-17 百万上下文时代：新增模型默认窗口 1M，不再回落 maxTokens（131k 输出上限）
+describe('新增模型默认窗口（DEFAULT_CONTEXT_WINDOW_TOKENS）', () => {
+  it('常量锁定 1,000,000', () => {
+    expect(DEFAULT_CONTEXT_WINDOW_TOKENS).toBe(1_000_000)
+  })
+
+  it('未知 provider / 未知生成模型 → 窗口 1M；输出上限仍回落 131072（两者各管各的）', () => {
+    const out = presetModelDefaults('no-such-provider', 'no-such-model')
+    expect(out.purposes).toEqual(['generation'])
+    expect(out.contextWindow).toBe(1_000_000)
+    expect(out.maxTokens).toBe(131_072)
+    expect(out.contextWindow).not.toBe(out.maxTokens) // 旧行为的回归标志：曾拿输出上限当窗口
+  })
+
+  it('未知 provider 下疑似向量模型仍按 maxTokens 回落（不给向量模型套 1M 窗口）', () => {
+    const out = presetModelDefaults('no-such-provider', 'text-embedding-3-small')
+    expect(out.purposes).toEqual(['embedding'])
+    expect(out.contextWindow).toBe(out.maxTokens) // 向量模型保持旧行为
+    expect(out.maxTokens).toBe(131_072)
+  })
+
+  it('优先级不回归：手写字面量 > pi-ai 生成表 > 1M 默认', () => {
+    // ① 手写优先：deepseek-flash 的 maxTokens 手写为 131072，pi-ai 表里是 384000 → 取手写
+    const literal = presetModelDefaults('deepseek', 'deepseek-flash')
+    expect(literal.maxTokens).toBe(131_072)
+    expect(literal.contextWindow).toBe(1_000_000)
+
+    // ② 生成表补缺：找「NF 手写未收录、但 pi-ai 给了 contextWindow」的模型 → 取生成表值
+    let found: { provider: string; id: string; contextWindow: number } | undefined
+    for (const [provider, models] of Object.entries(PI_AI_MODEL_SPECS)) {
+      const nfModels = new Set(
+        (BUILTIN_PRESETS.find(p => p.provider === provider)?.models ?? []).map(m => m.name),
+      )
+      const entry = Object.entries(models)
+        .find(([id, s]) => !nfModels.has(id) && s.contextWindow !== undefined)
+      if (entry) { found = { provider, id: entry[0], contextWindow: entry[1].contextWindow! }; break }
+    }
+    expect(found, '生成表里应存在 NF 未收录但带窗口的规格项').toBeTruthy()
+    expect(presetModelDefaults(found!.provider, found!.id).contextWindow).toBe(found!.contextWindow)
+  })
+})
+

@@ -11,6 +11,7 @@
  */
 
 import { t } from '../../shared/locale'
+import { MAX_PARALLEL_READ_TOOLS } from './tool-scheduling'
 
 // ===== JSON Schema 简化类型 =====
 
@@ -187,7 +188,9 @@ class ToolRegistryImpl {
   generateToolPrompt(tools: AgentTool[] = this.listAll()): string {
     if (tools.length === 0) return ''
 
-    let prompt = `${t('engine.toolSystemTitle')}\n\n${t('engine.toolSystemBody')}\n\n`
+    // `{maxParallel}` = 同一步内只读工具批内并发上限（唯一来源 tool-scheduling.ts）
+    const systemBody = t('engine.toolSystemBody').replace('{maxParallel}', String(MAX_PARALLEL_READ_TOOLS))
+    let prompt = `${t('engine.toolSystemTitle')}\n\n${systemBody}\n\n`
     for (const tool of tools) {
       const displayName = tool.userFacingName ?? tool.name
       const sourceTag = tool.source === 'mcp' ? ' [MCP]' : tool.source === 'skill' ? ' [Skill]' : ''

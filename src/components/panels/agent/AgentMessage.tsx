@@ -8,6 +8,7 @@
  */
 import { memo } from 'react'
 import type { AgentMessage as AgentMessageType } from '../../../stores/agent-store'
+import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 import MarkdownContent, { StreamingCursor } from '../../ui/MarkdownContent'
 import ToolCallBlock from './ToolCallBlock'
 import ThinkingCollapse from './ThinkingCollapse'
@@ -60,6 +61,64 @@ function splitThinking(content: string): { thinking: string | null; rest: string
   const m = content.match(/^_[^_\n]+_\n>[\s\S]*?(?=\n\n)/)
   if (!m) return { thinking: null, rest: content }
   return { thinking: m[0], rest: content.slice(m[0].length + 2) }
+}
+
+/** 交错时间线的一段：正文段 / 工具批（同一 offset 的调用归为一批） */
+type TimelineSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'tools'; calls: ToolCallInfo[] }
+
+/** 工具批渲染：连续 ≥2 个沿用 ProcessGroup 降噪，单个走 ToolCallBlock 单行 */
+function renderToolBatch(calls: ToolCallInfo[]): React.ReactNode {
+  if (calls.length >= 2) return <ProcessGroup toolCalls={calls} />
+  return calls.map(tc => <ToolCallBlock key={tc.id} toolCall={tc} />)
+}
+
+/**
+ * 构建「正文段 → 工具批 → 正文段 …」的交错时间线（2026-10-17，对齐 dsh 的 step 排版）。
+ *
+ * 引擎解析 tool_call 时把当时的正文累计长度写进 `contentOffset`（同轮多个调用相同），
+ * 这里按 offset 把调用切成批、插回对应正文段之后 —— 修复旧渲染「全部正文先渲染、
+ * 工具卡全堆到底部」导致的多轮 ReAct 内容与工具错位（看起来是一坨文字 + 一坨工具）。
+ *
+ * 兼容与容错：
+ * - 任一调用没有 `contentOffset`（旧归档 / 旧消息）→ 返回 null，调用方保持原有底部布局；
+ * - offset 越界（正文经后处理改写、或思考前缀被拆走后变短）→ clamp 到正文长度，
+ *   宁可贴底也不把工具卡放到正文前面；
+ * - 空的正文片段（trim 后为空）不产出文本段，避免交错布局多出 8px 空档。
+ */
+function buildTimeline(rest: string, toolCalls: ToolCallInfo[]): TimelineSegment[] | null {
+  if (!toolCalls.some(tc => typeof tc.contentOffset === 'number' && Number.isFinite(tc.contentOffset))) {
+    return null
+  }
+  // 按 clamp 后的 offset 分批：同一轮多个调用 offset 相同 → 同一工具批
+  const batches = new Map<number, ToolCallInfo[]>()
+  const unpositioned: ToolCallInfo[] = []
+  for (const tc of toolCalls) {
+    const offset = tc.contentOffset
+    if (typeof offset !== 'number' || !Number.isFinite(offset)) {
+      unpositioned.push(tc)
+      continue
+    }
+    const clamped = Math.min(Math.max(offset, 0), rest.length)
+    const batch = batches.get(clamped)
+    if (batch) batch.push(tc)
+    else batches.set(clamped, [tc])
+  }
+
+  const segments: TimelineSegment[] = []
+  let cursor = 0
+  for (const offset of [...batches.keys()].sort((a, b) => a - b)) {
+    const text = rest.slice(cursor, offset)
+    if (text.trim()) segments.push({ kind: 'text', text })
+    segments.push({ kind: 'tools', calls: batches.get(offset)! })
+    cursor = offset
+  }
+  const tail = rest.slice(cursor)
+  if (tail.trim()) segments.push({ kind: 'text', text: tail })
+  // 混入的无 offset 调用（理论上仅半新半旧数据）统一落到末尾，不丢调用
+  if (unpositioned.length > 0) segments.push({ kind: 'tools', calls: unpositioned })
+  return segments
 }
 
 /**
@@ -220,34 +279,58 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
         {/* Turn 级错误行（线②）：失败回执走专用错误行，不写正文 markdown */}
         {error && <TurnErrorRow message={error.message} code={error.code} />}
 
-        {/* 文本内容（思考块拆分：默认折叠头部 + 正文 markdown） */}
-        {!error && content ? (() => {
+        {/* 正文与工具调用（交错时间线，2026-10-17）：
+            - 有 contentOffset（引擎按轮写入）→ 按 offset 把工具批插回对应正文段之后（dsh 的 step 节奏）；
+            - 旧归档无 offset → 保持原底部布局（全部正文在前后接工具块）；
+            - waiting_confirm 的审批卡已接管输入区，由 PendingToolConfirmation 渲染，流内不双渲染 */}
+        {!error && (() => {
           const { thinking, rest } = splitThinking(content)
+          const processCalls = (toolCalls ?? []).filter(tc => tc.status !== 'waiting_confirm')
+          const timeline = processCalls.length > 0 ? buildTimeline(rest, processCalls) : null
+
+          // 交错时间线：正文段与工具批统一 8px（gap-2）节奏，空正文段不占间距
+          if (timeline) {
+            const lastIndex = timeline.length - 1
+            // 光标只跟最后一个正文段走；末段是工具批时在整条时间线尾部补光标
+            const cursorAtEnd = streaming && timeline[lastIndex]?.kind !== 'text'
+            return (
+              <>
+                {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
+                <div className="flex flex-col gap-2" data-agent-timeline="interleaved">
+                  {timeline.map((seg, i) =>
+                    seg.kind === 'text' ? (
+                      <MarkdownContent key={`text-${i}`} content={seg.text} streaming={streaming && i === lastIndex} />
+                    ) : (
+                      <div key={`tools-${i}`}>{renderToolBatch(seg.calls)}</div>
+                    )
+                  )}
+                  {cursorAtEnd && (
+                    <span className="inline-flex items-center h-4">
+                      <StreamingCursor />
+                    </span>
+                  )}
+                </div>
+              </>
+            )
+          }
+
+          // 旧布局（旧归档无 contentOffset / 无工具调用）
           return (
             <>
-              {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
-              {rest && <MarkdownContent content={rest} streaming={streaming} />}
-            </>
-          )
-        })() : streaming ? (
-          <span className="inline-flex items-center h-4">
-            <StreamingCursor />
-          </span>
-        ) : null}
-
-        {/* Tool 调用区块列表（线②：≥2 个连续工具折叠为过程组；waiting_confirm 的审批卡
-            已接管输入区由 PendingToolConfirmation 渲染，流内不双渲染） */}
-        {toolCalls && toolCalls.length > 0 && (() => {
-          const processCalls = toolCalls.filter(tc => tc.status !== 'waiting_confirm')
-          if (processCalls.length === 0) return null
-          return (
-            <div className="mt-2">
-              {processCalls.length >= 2 ? (
-                <ProcessGroup toolCalls={processCalls} />
-              ) : (
-                processCalls.map(tc => <ToolCallBlock key={tc.id} toolCall={tc} />)
+              {content ? (
+                <>
+                  {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
+                  {rest && <MarkdownContent content={rest} streaming={streaming} />}
+                </>
+              ) : streaming ? (
+                <span className="inline-flex items-center h-4">
+                  <StreamingCursor />
+                </span>
+              ) : null}
+              {processCalls.length > 0 && (
+                <div className="mt-2">{renderToolBatch(processCalls)}</div>
               )}
-            </div>
+            </>
           )
         })()}
 

@@ -11,11 +11,12 @@ export interface ModelPreset {
   /** 单次请求最大**输出** token 数（发给 API 的 max_tokens） */
   maxTokens: number
   /**
-   * 上下文窗口（**可省略**）。省略时由 `tokenSpec` / `normalizeModelProfile` 取 `maxTokens` ——
-   * 2026-09-25 把窗口与输出上限拆成两个字段时的**忠实搬运**，不代表它是真实窗口。
+   * 上下文窗口（**可省略**）。省略时由 `presetModelDefaults` 兜底：
+   * 生成模型取 `DEFAULT_CONTEXT_WINDOW_TOKENS`（1M，2026-10-17 百万时代），
+   * 向量模型取 `maxTokens`（旧行为，不给向量模型编造窗口）。
    *
-   * 只在该模型**真实窗口 ≠ maxTokens** 时才显式写这里（差异即例外）——
-   * 逐条照抄 maxTokens 会多出 30+ 个必然会漂移的重复数字。
+   * 只在该模型**真实窗口 ≠ 默认值**时才显式写这里（差异即例外）——
+   * 逐条照抄默认值会多出 30+ 个必然会漂移的重复数字。
    *
    * ⚠️ 本文件会持久化到 `~/.novelforge/provider-presets.json`，新增字段**一律可选**，
    * 否则旧文件读进来会缺字段。
@@ -40,10 +41,23 @@ export interface ProviderPreset {
 }
 
 /**
+ * 百万上下文时代的**生成模型**默认窗口（2026-10-17）。
+ *
+ * 规格来源（手写预设 / pi-ai 生成表）都缺省时用它，而**不再回落 `maxTokens`** ——
+ * 后者是单次请求的**输出上限**（NF 全局 `MAX_TOKENS_CAP` = 131072），拿它当窗口，
+ * 新增的未知模型就只拿到 131k 上下文，与 300K / 600K / 1M 的上下文档位脱节。
+ *
+ * ⚠️ 只适用于生成模型：向量模型没有「上下文窗口」概念，仍按 `maxTokens` 回落。
+ */
+export const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000
+
+/**
  * 勾选某个模型时，它的**逐模型设置初值**（2026-09-25，供供应商账户同步用）。
  *
- * 窗口省缺时取 `maxTokens` —— 与 `tokenSpec`（SettingsModal）/ `normalizeModelProfile`
- * （llm-constants）同一约定，三处不可各写一套。
+ * 窗口与输出上限**分开兜底**（两者含义不同、不可互相推导）：
+ * - `contextWindow`：手写 `model.contextWindow` → pi-ai `spec.contextWindow` →
+ *   生成模型 `DEFAULT_CONTEXT_WINDOW_TOKENS` / 向量模型 `maxTokens`（旧行为，避免编造向量窗口）
+ * - `maxTokens`：手写 → pi-ai → 131072（NF 全局输出上限，保持不动）
  *
  * 用途：账户同步**新建**派生条目时用；**已存在**的条目不碰（用户的逐模型调参是权威值）。
  */
@@ -57,11 +71,13 @@ export function presetModelDefaults(
   // 规格来源三级（2026-09-28 目录移植）：NF 手写字面量优先 → pi-ai 生成表补缺 → 常量兜底
   const spec = PI_AI_MODEL_SPECS[provider]?.[modelName]
   const maxTokens = model?.maxTokens ?? spec?.maxTokens ?? 131072
+  const contextWindow = model?.contextWindow ?? spec?.contextWindow
+    ?? (isEmbedding ? maxTokens : DEFAULT_CONTEXT_WINDOW_TOKENS)
 
   return {
     temperature: 0.7,
     maxTokens,
-    contextWindow: model?.contextWindow ?? spec?.contextWindow ?? maxTokens,
+    contextWindow,
     purposes: [isEmbedding ? 'embedding' : 'generation'],
   }
 }

@@ -5,12 +5,16 @@
  * 验证渲染层拆分解析 `_思考过程：_\n> ...` 前缀：助手消息的思考块默认
  * 折叠为「思考过程」头部（点击展开后正文可见），正文不受影响；无思考块
  * 的普通内容原样渲染。另含 ToolCallBlock 头部 📄/📖/👤 摘要。
+ *
+ * 2026-10-17 追加：正文段与工具批按 `contentOffset` 交错渲染（dsh step 节奏）——
+ * 多轮 ReAct 回复应为「正文段 → 工具行/过程组 → 正文段」，旧归档（无 offset）保持底部布局。
  */
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import AgentMessage from './AgentMessage'
 import ToolCallBlock from './ToolCallBlock'
+import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 
 function render(ui: React.ReactElement): { container: HTMLElement; root: Root } {
   const container = document.createElement('div')
@@ -18,6 +22,31 @@ function render(ui: React.ReactElement): { container: HTMLElement; root: Root } 
   const root = createRoot(container)
   act(() => { root.render(ui) })
   return { container, root }
+}
+
+/** 构造工具调用夹具（contentOffset 缺省 = 旧归档形态） */
+function toolCall(id: string, toolName: string, contentOffset?: number): ToolCallInfo {
+  return {
+    id,
+    toolName,
+    arguments: {},
+    status: 'completed',
+    ...(contentOffset === undefined ? {} : { contentOffset }),
+  }
+}
+
+/**
+ * 提取「正文段 / 思考行 / 工具行 / 过程组」在 DOM 中的顺序标记。
+ * querySelectorAll 返回文档顺序 —— 直接用来断言交错顺序，而不是靠整体 textContent。
+ */
+function domOrder(container: HTMLElement): string[] {
+  const nodes = container.querySelectorAll('.assistant-content, [data-variant="think"], [data-tool], [data-process-group]')
+  return [...nodes].map(el => {
+    if (el.classList.contains('assistant-content')) return `text:${(el.textContent ?? '').trim()}`
+    if (el.getAttribute('data-variant') === 'think') return 'think'
+    if (el.hasAttribute('data-process-group')) return 'group'
+    return `tool:${el.getAttribute('data-tool')}`
+  })
 }
 
 describe('AgentMessage 思考折叠', () => {
@@ -193,6 +222,167 @@ describe('AgentMessage 分支操作', () => {
     expect(container.querySelector('[title="从此处分支"]')).toBeNull()
     expect(container.querySelector('[title="回退到此处"]')).toBeNull()
     expect(container.querySelector('[class*="group-hover:opacity-100"]')).toBeNull()
+    act(() => { root.unmount() })
+  })
+})
+
+describe('正文与工具调用交错渲染（contentOffset，2026-10-17）', () => {
+  afterEach(() => { document.body.innerHTML = '' })
+
+  it('正文段 → 工具行 → 正文段：按 offset 插回对应位置，不再所有工具卡堆在底部', () => {
+    const content = '先读文件。然后写入。最后完成。'
+    const first = '先读文件。'.length
+    const second = '先读文件。然后写入。'.length
+    const msg = {
+      id: 'a1',
+      role: 'assistant' as const,
+      content,
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file', first), toolCall('t2', 'write_file', second)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    // 交错容器存在 + 统一 8px 节奏（gap-2，不是任意值字号/间距）
+    const timeline = container.querySelector<HTMLElement>('[data-agent-timeline]')
+    expect(timeline).toBeTruthy()
+    expect(timeline!.className).toContain('flex-col')
+    expect(timeline!.className).toContain('gap-2')
+    expect(domOrder(container)).toEqual([
+      'text:先读文件。',
+      'tool:read_file',
+      'text:然后写入。',
+      'tool:write_file',
+      'text:最后完成。',
+    ])
+    act(() => { root.unmount() })
+  })
+
+  it('同一轮多个调用（offset 相同）合并为一个过程组，插在当轮正文之后', () => {
+    const content = '并行读取两个文件后汇总。'
+    const offset = '并行读取'.length
+    const msg = {
+      id: 'a2',
+      role: 'assistant' as const,
+      content,
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file', offset), toolCall('t2', 'read_file', offset)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    // ≥2 个连续工具沿用 ProcessGroup（过程组降噪），单行折叠在正文段之间
+    expect(domOrder(container)).toEqual(['text:并行读取', 'group', 'text:两个文件后汇总。'])
+    act(() => { root.unmount() })
+  })
+
+  it('旧归档（无 contentOffset）保持旧布局：正文整体在前、工具组在底部', () => {
+    const msg = {
+      id: 'a3',
+      role: 'assistant' as const,
+      content: '旧归档正文',
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file'), toolCall('t2', 'write_file')],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(container.querySelector('[data-agent-timeline]')).toBeNull()
+    expect(domOrder(container)).toEqual(['text:旧归档正文', 'group'])
+    act(() => { root.unmount() })
+  })
+
+  it('offset 超出正文长度：clamp 到正文末尾（不崩、不误置顶）', () => {
+    const msg = {
+      id: 'a4',
+      role: 'assistant' as const,
+      content: '正文只有这些。',
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file', 9999)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(domOrder(container)).toEqual(['text:正文只有这些。', 'tool:read_file'])
+    act(() => { root.unmount() })
+  })
+
+  it('思考前缀 + 越界 offset：按实际正文（rest）长度 clamp，工具卡不跑到正文之前', () => {
+    const msg = {
+      id: 'a5',
+      role: 'assistant' as const,
+      content: '_思考过程：_\n> 想一想\n\n正文段落。',
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file', 9999)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    // 思考折叠行恒在最前，工具卡贴正文末尾——不会出现在正文段之前
+    expect(domOrder(container)).toEqual(['think', 'text:正文段落。', 'tool:read_file'])
+    act(() => { root.unmount() })
+  })
+
+  it('调用发生在正文之前（offset=0）：工具行先于正文段（首轮先调工具再叙述）', () => {
+    const msg = {
+      id: 'a6',
+      role: 'assistant' as const,
+      content: '结果如下。',
+      createdAt: 0,
+      toolCalls: [toolCall('t1', 'read_file', 0)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(domOrder(container)).toEqual(['tool:read_file', 'text:结果如下。'])
+    act(() => { root.unmount() })
+  })
+
+  it('流式初期（正文为空、已有工具调用）不崩，工具行在时间线内且光标在末尾', () => {
+    const msg = {
+      id: 'a7',
+      role: 'assistant' as const,
+      content: '',
+      createdAt: 0,
+      streaming: true,
+      toolCalls: [toolCall('t1', 'read_file', 0)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(domOrder(container)).toEqual(['tool:read_file'])
+    // 末段是工具批 → 光标单独补在时间线尾部（不丢流式反馈）
+    const timeline = container.querySelector<HTMLElement>('[data-agent-timeline]')
+    expect(timeline!.lastElementChild!.className).toContain('inline-flex')
+    act(() => { root.unmount() })
+  })
+
+  it('末段是工具批：正文段不残留流式光标，光标只补在时间线末尾', () => {
+    const content = '第一段。第二段。'
+    const msg = {
+      id: 'a8',
+      role: 'assistant' as const,
+      content,
+      createdAt: 0,
+      streaming: true,
+      // 第二段正文之后还有一批工具 → 正文段都已结束，streaming 不得传给任何正文段
+      toolCalls: [toolCall('t1', 'read_file', '第一段。'.length), toolCall('t2', 'write_file', content.length)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    const cursors = container.querySelectorAll('span[style*="agent-cursor-blink"]')
+    expect(cursors).toHaveLength(1)
+    // 光标不在任何正文 markdown 段内部（否则会看起来「正文一直在流式」）
+    expect(container.querySelector('.assistant-content span[style*="agent-cursor-blink"]')).toBeNull()
+    // 唯一光标位于交错时间线末尾（工具批之后）；外层是 inline-flex 包装 span，光标是其子节点
+    const timeline = container.querySelector<HTMLElement>('[data-agent-timeline]')
+    expect(timeline!.lastElementChild!.querySelector('span[style*="agent-cursor-blink"]')).not.toBeNull()
+    expect(timeline!.lastElementChild!.className).toContain('inline-flex')
+    act(() => { root.unmount() })
+  })
+
+  it('末段是正文：流式光标只跟最后一个正文段走（同样只出现一次）', () => {
+    const content = '第一段。第二段。'
+    const msg = {
+      id: 'a9',
+      role: 'assistant' as const,
+      content,
+      createdAt: 0,
+      streaming: true,
+      // 工具之后没有正文 → 末段是正文，光标应落在最后一个正文段末尾
+      toolCalls: [toolCall('t1', 'read_file', '第一段。'.length)],
+    }
+    const { container, root } = render(<AgentMessage message={msg} />)
+    expect(container.querySelectorAll('span[style*="agent-cursor-blink"]')).toHaveLength(1)
+    const mdSegments = container.querySelectorAll('.assistant-content')
+    expect(mdSegments).toHaveLength(2)
+    expect(mdSegments[0]!.querySelector('span[style*="agent-cursor-blink"]')).toBeNull()
+    expect(mdSegments[1]!.querySelector('span[style*="agent-cursor-blink"]')).toBeTruthy()
     act(() => { root.unmount() })
   })
 })
