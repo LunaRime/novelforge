@@ -48,8 +48,9 @@ describe('computeHistoryBudget（百分比压缩：上下阈值钳制）', () =>
     expect(computeHistoryBudget(prefs, 32_000)).toBe(25_600)
   })
 
-  it('大窗口 80% 超过上阈值 64000 → 钳制到 64000', () => {
-    expect(computeHistoryBudget(prefs, 128_000)).toBe(64_000)
+  it('大窗口 80% 不再被旧 64k 天花板截断（缺省上限 = 最小挡位 300K）', () => {
+    expect(computeHistoryBudget(prefs, 128_000)).toBe(102_400)
+    expect(computeHistoryBudget(prefs, 1_000_000)).toBe(300_000)   // 800k 被缺省 300K 挡位夹住
   })
 
   it('小窗口 80% 低于下阈值 1000 → 钳制到 1000', () => {
@@ -79,11 +80,14 @@ describe('W1 批 2：档位缺省值 + 历史预算绝对上限', () => {
     expect(resolveCompactionPrefs({ compaction: { budgetPercent: '90' } }, strongDefaults).budgetPercent).toBe(90)
   })
 
-  it('上限可放宽：200k 窗口 × 90% 不再被 64k 天花板吃掉', () => {
+  it('挡位上限可放宽：200k 窗口 × 90% 被显式 128k 上限截断；缺省上限已抬到 300K', () => {
     const strong = { ...DEFAULT_COMPACTION_PREFS, budgetPercent: 90 }
     expect(computeHistoryBudget(strong, 200_000, 128_000)).toBe(128_000)  // min(180k, 128k)
     expect(computeHistoryBudget(strong, 100_000, 128_000)).toBe(90_000)   // 90k < 128k，不触上限
-    expect(computeHistoryBudget(strong, 200_000)).toBe(64_000)            // 缺省上限 = 引入前行为
+    expect(computeHistoryBudget(strong, 200_000)).toBe(180_000)           // 缺省上限 = 最小挡位 300K
+    // 百万上下文：600K / 1M 挡位
+    expect(computeHistoryBudget(strong, 600_000, 600_000)).toBe(540_000)
+    expect(computeHistoryBudget(strong, 1_000_000, 1_000_000)).toBe(900_000)
   })
 
   it('弱档：60% + 32k 上限（更早压、上下文更干净）', () => {

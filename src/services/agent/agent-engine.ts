@@ -40,8 +40,12 @@ export const TOOL_RESULT_MAX_TOKENS = 800
 
 /** 默认消息压缩预算（无模型窗口信息 / 小窗口模型）——与既有行为一致 */
 const DEFAULT_MESSAGE_BUDGET_TOKENS = 16_000
-/** 动态预算工程上限（2026-10-14 32k→64k：让 128k 窗口模型从 25% 用到 50%，仍留成本余地） */
-const MAX_MESSAGE_BUDGET_TOKENS = 64_000
+/**
+ * 动态预算上限的**兜底默认值** = 最小上下文挡位 300K（2026-10-17 百万上下文时代）。
+ * 正常链路由 `context-policy.resolveContextBudgetCeiling` 按模型窗口给 300K / 600K / 1M，
+ * 经 `AgentEngineOptions.maxMessageBudgetTokens` 传入；只有不读策略的调用方才落到这里。
+ */
+const MAX_MESSAGE_BUDGET_TOKENS = 300_000
 /** 启用动态预算的最小模型窗口（小窗口模型压缩语义不变——压缩是成本控制非防超窗） */
 const MIN_DYNAMIC_WINDOW_TOKENS = 16_000
 /** 恢复阶梯降档预算下限（对话质量底线） */
@@ -875,7 +879,8 @@ function sanitizeObservation(content: string): string {
  * 无窗口 / 窗口 < 16k → 默认 16_000（现状不变）。
  * percent 默认 80 = 留 20% 余量，防止单轮对话（输入+输出）把上下文推过窗口。
  *
- * @param maxBudgetTokens 上限（W1 批 2：由 `context-policy` 按档位给出；默认 64k = 引入前行为）
+ * @param maxBudgetTokens 上限（2026-10-17 起由 `context-policy` 按窗口给挡位：
+ *   300K / 600K / 1M；默认 300K = 最小挡位）
  */
 export function computeMessageBudget(
   modelContextWindow?: number,

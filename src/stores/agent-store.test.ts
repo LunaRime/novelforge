@@ -1446,7 +1446,7 @@ describe('W1：上下文策略按模型档位进入发送链路', () => {
     return calls[calls.length - 1]?.[7] as { maxMessageBudgetTokens?: number; budgetPercent?: number } | undefined
   }
 
-  it('大窗口模型（200k）→ 强档：消息预算上限 128k、历史百分比 90', async () => {
+  it('大窗口模型（200k）→ 强档：预算上限按窗口挡位 300K、历史百分比 90', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ models: [profile('big', 200_000)] as never, defaultModelId: 'big' })
     useAgentStore.setState(state => ({
@@ -1455,11 +1455,26 @@ describe('W1：上下文策略按模型档位进入发送链路', () => {
     vi.mocked(runAgentLoop).mockClear()
     await useAgentStore.getState().sendMessage('写第 1 章')
     const options = lastEngineOptions()
-    expect(options?.maxMessageBudgetTokens).toBe(128_000)
+    expect(options?.maxMessageBudgetTokens).toBe(300_000)
     expect(options?.budgetPercent).toBe(90)
   })
 
-  it('小窗口模型（32k）→ 弱档：上限 32k、历史百分比 60', async () => {
+  // 2026-10-17 百万上下文时代：预算上限按模型窗口自动分档（<600K→300K、600K–1M→600K、≥1M→1M）
+  it('600K 窗口模型 → 600K 挡位；1M 窗口模型 → 1M 挡位', async () => {
+    for (const [windowSize, expected] of [[600_000, 600_000], [1_000_000, 1_000_000]] as const) {
+      const conv = useAgentStore.getState().createConversation({ title: 'T' })
+      const id = `gear-${windowSize}`
+      useLLMStore.setState({ models: [profile(id, windowSize)] as never, defaultModelId: id })
+      useAgentStore.setState(state => ({
+        conversations: state.conversations.map(c => c.id === conv.id ? { ...c, modelId: id } : c),
+      }))
+      vi.mocked(runAgentLoop).mockClear()
+      await useAgentStore.getState().sendMessage('写第 1 章')
+      expect(lastEngineOptions()?.maxMessageBudgetTokens, id).toBe(expected)
+    }
+  })
+
+  it('小窗口模型（32k）→ 弱档：预算上限仍取该窗口带挡位 300K、历史百分比 60', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
     useLLMStore.setState({ models: [profile('small', 32_000)] as never, defaultModelId: 'small' })
     useAgentStore.setState(state => ({
@@ -1468,7 +1483,7 @@ describe('W1：上下文策略按模型档位进入发送链路', () => {
     vi.mocked(runAgentLoop).mockClear()
     await useAgentStore.getState().sendMessage('写第 1 章')
     const options = lastEngineOptions()
-    expect(options?.maxMessageBudgetTokens).toBe(32_000)
+    expect(options?.maxMessageBudgetTokens).toBe(300_000)
     expect(options?.budgetPercent).toBe(60)
   })
 
@@ -1488,8 +1503,8 @@ describe('W1：上下文策略按模型档位进入发送链路', () => {
     vi.mocked(runAgentLoop).mockClear()
     await useAgentStore.getState().sendMessage('写第 1 章')
     expect(lastEngineOptions()?.budgetPercent).toBe(70)
-    // 上限仍按档位（上限是安全边界，不是用户偏好）
-    expect(lastEngineOptions()?.maxMessageBudgetTokens).toBe(128_000)
+    // 上限仍按窗口挡位（上限是安全边界，不是用户偏好）
+    expect(lastEngineOptions()?.maxMessageBudgetTokens).toBe(300_000)
   })
 
   it('短对话不读配置（性能优化）：策略缺省生效，不因此报错', async () => {

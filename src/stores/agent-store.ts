@@ -919,7 +919,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       let fidelityMissingKinds: FidelityEntityKind[] | undefined
       let fidelityWarned = false
       // 线③ 后续：百分比预算——预算 = clamp(模型窗口 × budgetPercent%, 1000, 上限)；
-      // 无窗口信息回退固定 historyMaxTokens（旧模式）。W1 批 2：上限由档位给（强档 128k）。
+      // 无窗口信息回退固定 historyMaxTokens（旧模式）。
+      // 2026-10-17 百万上下文时代：上限改为按窗口自动分档 300K / 600K / 1M（context-policy）。
       const HISTORY_MAX_TOKENS = computeHistoryBudget(
         prefs,
         llmStore.models.find(m => m.id === modelId)?.contextWindow,

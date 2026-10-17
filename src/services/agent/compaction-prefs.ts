@@ -65,14 +65,14 @@ export function resolveCompactionPrefs(
  * 计算历史上下文预算（线③ 后续：百分比压缩）：
  * 有模型窗口 → clamp(窗口 × budgetPercent%, 1000, ceiling)；无窗口 → 回退固定 historyMaxTokens。
  *
- * @param ceilingTokens 绝对上限（W1 批 2：由 `context-policy` 按档位给出）。
- *   默认 64k 与引入前一致；**它才是"长窗口用不满"的真凶**——200k 窗口的 90% 会被 64k 吃掉，
- *   所以策略必须同时放宽上限，改百分比才有意义。
+ * @param ceilingTokens 绝对上限（2026-10-17 百万上下文时代改为**按窗口自动分档**：
+ *   窗口 <600K → 300K、600K–1M → 600K、≥1M → 1M；由 `context-policy` 给出，默认取最小挡位 300K）。
+ *   有效预算 = min(挡位, 窗口×百分比)——挡位只是天花板，小窗口不会因此超窗。
  */
 export function computeHistoryBudget(
   prefs: CompactionPrefs,
   modelContextWindow?: number,
-  ceilingTokens: number = 64_000,
+  ceilingTokens: number = 300_000,
 ): number {
   if (!modelContextWindow || modelContextWindow <= 0) return prefs.historyMaxTokens
   const percentBudget = Math.floor(modelContextWindow * (prefs.budgetPercent / 100))

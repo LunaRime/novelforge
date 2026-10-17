@@ -393,8 +393,8 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
   it('computeMessageBudget：窗口 32000 × 80% → 25600', () => {
     expect(computeMessageBudget(32_000)).toBe(25_600)
   })
-  it('computeMessageBudget：窗口 131072 × 80% → 64000（上阈值钳制）', () => {
-    expect(computeMessageBudget(131_072)).toBe(64_000)
+  it('computeMessageBudget：窗口 131072 × 80% → 104857（默认上限 300K，不再被 64k 截断）', () => {
+    expect(computeMessageBudget(131_072)).toBe(104_857)
   })
   it('computeMessageBudget：窗口 8000（小窗口）→ 默认 16000', () => {
     expect(computeMessageBudget(8_000)).toBe(16_000)
@@ -405,11 +405,14 @@ describe('动态预算与恢复阶梯（D7-1）', () => {
   it('computeMessageBudget：百分比可配（窗口 32000 × 50% → 16000）', () => {
     expect(computeMessageBudget(32_000, 50)).toBe(16_000)
   })
-  it('W1：上限可放宽（强档 128k）——缺省仍是 64k，行为不变', () => {
-    expect(computeMessageBudget(200_000, 90, 128_000)).toBe(128_000)   // min(180k, 128k)
+  it('上下文挡位（2026-10-17 百万上下文）：上限按窗口 300K/600K/1M 生效', () => {
+    expect(computeMessageBudget(200_000, 90, 128_000)).toBe(128_000)   // 显式上限仍被尊重（既有调用方）
     expect(computeMessageBudget(100_000, 90, 128_000)).toBe(90_000)    // 90k < 128k，不触上限
-    expect(computeMessageBudget(200_000, 90)).toBe(64_000)             // 缺省上限 = 引入前行为
-    expect(computeMessageBudget(32_000, 60, 32_000)).toBe(19_200)      // 弱档：60% 且上限 32k
+    expect(computeMessageBudget(200_000, 90)).toBe(180_000)            // 缺省上限 = 最小挡位 300K
+    expect(computeMessageBudget(32_000, 60, 32_000)).toBe(19_200)      // 弱档：60% 且显式上限 32k
+    expect(computeMessageBudget(1_000_000, 80, 1_000_000)).toBe(800_000) // 1M 挡位：窗口×80%
+    expect(computeMessageBudget(600_000, 80, 600_000)).toBe(480_000)     // 600K 挡位
+    expect(computeMessageBudget(500_000, 80, 300_000)).toBe(300_000)     // 500K 窗口 → 落在 300K 挡位
   })
   it('isRecoverableError：英文上下文类 → true', () => {
     expect(isRecoverableError('This model\'s maximum context length is 32768 tokens')).toBe(true)

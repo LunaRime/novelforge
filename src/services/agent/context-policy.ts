@@ -5,18 +5,26 @@
  * 精简/压缩对强模型近无损、对弱模型是灾难；而结构化契约与更短的上下文对弱模型是脚手架、
  * 对强模型是噪音。所以同一个"最优预算"不存在，必须按档位分：
  *
- * | 档位 | 判定 | 历史 | 历史上限 | 工具契约 | M1 | L1 |
+ * | 档位 | 判定 | 历史 | 预算上限（2026-10-17 起按窗口分档） | 工具契约 | M1 | L1 |
  * |---|---|---|---|---|---|---|
- * | 强 | 路由 elite（且窗口 ≥128k）或窗口 ≥200k | 90% | 128k | 6000 | 400 | 600 |
- * | 标准 | 其余（**与引入前逐字一致**） | 80% | 64k | 4000 | 300 | 600 |
- * | 弱 | 路由 budget 或窗口 <64k | 60% | 32k | 4000 | 200 | 300 |
+ * | 强 | 路由 elite（且窗口 ≥128k）或窗口 ≥200k | 90% | 300K / 600K / 1M | 6000 | 400 | 600 |
+ * | 标准 | 其余（百分比与引入前一致） | 80% | 300K / 600K / 1M | 4000 | 300 | 600 |
+ * | 弱 | 路由 budget 或窗口 <64k | 60% | 300K / 600K / 1M | 4000 | 200 | 300 |
+ *
+ * **百万上下文时代（2026-10-17 用户裁决）**：预算绝对上限不再固定 32k/64k/128k，而是按
+ * **模型窗口自动分三档**（`resolveContextBudgetCeiling`）：
+ *   - 窗口 < 600K       → 300K
+ *   - 600K ≤ 窗口 < 1M  → 600K
+ *   - 窗口 ≥ 1M         → 1M
+ * 有效预算仍是 `min(挡位, 窗口 × historyPercent%)`——挡位只是天花板，小窗口模型算出来天然更小
+ * （如 32k 窗口 × 60% = 19.2k），不会因挡位变大而超窗。
  *
  * 几条刻意的不变量：
- * - **标准档 = 现状常量**：绝大多数用户走这一档，行为必须零变化（有专门用例锁定）。
+ * - **百分比档位语义不变**：标准档 80% 仍是绝大多数用户的缺省；挡位只放宽绝对上限。
  * - **窗口是主信号，路由档位是辅信号**：窗口是客观规格；路由档位只说明"用户把它配在哪一层"，
  *   它既可能高估（elite 配了小窗口模型）也可能低估，故强档额外要求窗口 ≥128k——
  *   否则 90% 会把输出空间与系统提示挤掉。
- * - **无窗口信息 → 标准档**（保守，不猜）。
+ * - **无窗口信息 → 标准档 + 最小挡位 300K**（保守，不猜）。
  * - **用户显式配置优先**：本模块只提供**缺省值**，由 `resolveCompactionPrefs(cfg, defaults)` 消费，
  *   用户在手写 `config.compaction` 里给过的值不会被策略覆盖。
  * - **弱档不砍工具契约**（工具预算同为 4000）：看不见的工具 = 不可调用，而弱模型最不会
@@ -30,7 +38,10 @@ export interface ContextPolicy {
   tier: ModelTier
   /** 历史预算百分比（作为用户未配置时的缺省） */
   historyPercent: number
-  /** 历史预算绝对上限；同时用作引擎侧消息预算上限 */
+  /**
+   * 历史/消息预算的**绝对上限**（2026-10-17 起按模型窗口自动分档：300K / 600K / 1M，
+   * 见 `resolveContextBudgetCeiling`；不再按 strong/standard/weak 固定 128k/64k/32k）。
+   */
   historyCeilingTokens: number
   /** 工具契约段预算 */
   toolBudgetTokens: number
@@ -59,10 +70,42 @@ export const STRONG_WINDOW = 200_000
 /** 路由 elite **且**窗口达到它才算强档（避免小窗口 + 90% 挤掉输出空间） */
 export const STRONG_MIN_WINDOW_FOR_ELITE = 128_000
 
+// ===== 上下文预算挡位（百万上下文时代，2026-10-17 用户裁决）=====
+//
+// 按**模型窗口**自动分三档，作为历史/消息预算的绝对上限（有效预算 = min(挡位, 窗口×百分比)）。
+// 窗口不足时百分比自然算出更小值，挡位不会让小窗口超窗。
+/** 挡位 1：窗口 < 600K（含未知窗口）→ 300K 预算上限 */
+export const CONTEXT_CEILING_300K = 300_000
+/** 挡位 2：600K ≤ 窗口 < 1M → 600K 预算上限 */
+export const CONTEXT_CEILING_600K = 600_000
+/** 挡位 3：窗口 ≥ 1M → 1M 预算上限 */
+export const CONTEXT_CEILING_1M = 1_000_000
+/** 600K 挡位的窗口门槛 */
+export const CEILING_600K_MIN_WINDOW = 600_000
+/** 1M 挡位的窗口门槛 */
+export const CEILING_1M_MIN_WINDOW = 1_000_000
+
+/**
+ * 按模型窗口解析**预算绝对上限**（纯函数；无窗口/非法窗口 → 最小挡位 300K，保守不猜）。
+ *
+ * 分档依据（用户 2026-10-17 裁决，百万上下文时代）：
+ * - 窗口 < 600K       → 300K
+ * - 600K ≤ 窗口 < 1M  → 600K
+ * - 窗口 ≥ 1M         → 1M
+ */
+export function resolveContextBudgetCeiling(contextWindow?: number): number {
+  const window = contextWindow && contextWindow > 0 ? contextWindow : 0
+  if (window >= CEILING_1M_MIN_WINDOW) return CONTEXT_CEILING_1M
+  if (window >= CEILING_600K_MIN_WINDOW) return CONTEXT_CEILING_600K
+  return CONTEXT_CEILING_300K
+}
+
+/** 档位策略中**与窗口无关**的部分（预算上限由 `resolveContextBudgetCeiling` 另行给出） */
+type PolicyBody = Omit<ContextPolicy, 'tier' | 'historyCeilingTokens'>
+
 /** 强档：长窗口/elite —— 少压多留、契约给足、摘要更长（W3/W4 关：它会自助） */
-const POLICY_STRONG: Omit<ContextPolicy, 'tier'> = {
+const POLICY_STRONG: PolicyBody = {
   historyPercent: 90,
-  historyCeilingTokens: 128_000,
   toolBudgetTokens: 6000,
   m1BudgetTokens: 400,
   l1BudgetTokens: 600,
@@ -71,10 +114,9 @@ const POLICY_STRONG: Omit<ContextPolicy, 'tier'> = {
   unfinishedCheck: false,
 }
 
-/** 标准档：**与引入前逐字一致**（80 / 64k / 4000 / 300 / 600 + W3/W4 关） */
-const POLICY_STANDARD: Omit<ContextPolicy, 'tier'> = {
+/** 标准档：百分比与引入前逐字一致（80 / 4000 / 300 / 600 + W3/W4 关）；上限改由窗口挡位给 */
+const POLICY_STANDARD: PolicyBody = {
   historyPercent: 80,
-  historyCeilingTokens: 64_000,
   toolBudgetTokens: 4000,
   m1BudgetTokens: 300,
   l1BudgetTokens: 600,
@@ -84,9 +126,8 @@ const POLICY_STANDARD: Omit<ContextPolicy, 'tier'> = {
 }
 
 /** 弱档：更早压（上下文更干净）、摘要更短更结构化，并开启 W3/W4 两条弱模型脚手架 */
-const POLICY_WEAK: Omit<ContextPolicy, 'tier'> = {
+const POLICY_WEAK: PolicyBody = {
   historyPercent: 60,
-  historyCeilingTokens: 32_000,
   toolBudgetTokens: 4000,
   m1BudgetTokens: 200,
   l1BudgetTokens: 300,
@@ -111,11 +152,13 @@ const POLICY_WEAK: Omit<ContextPolicy, 'tier'> = {
 export function resolveContextPolicy(input: { contextWindow?: number; tier?: ModelTier }): ContextPolicy {
   const window = input.contextWindow && input.contextWindow > 0 ? input.contextWindow : 0
   const tier = input.tier
-  if (tier === 'budget') return { tier: 'budget', ...POLICY_WEAK }
-  if (window >= STRONG_WINDOW) return { tier: 'elite', ...POLICY_STRONG }
-  if (window > 0 && window < WEAK_WINDOW_MAX) return { tier: 'budget', ...POLICY_WEAK }
-  if (tier === 'elite' && window >= STRONG_MIN_WINDOW_FOR_ELITE) return { tier: 'elite', ...POLICY_STRONG }
-  return { tier: 'standard', ...POLICY_STANDARD }
+  // 预算上限只由**窗口挡位**决定（与强/标准/弱档正交）：300K / 600K / 1M
+  const historyCeilingTokens = resolveContextBudgetCeiling(window)
+  if (tier === 'budget') return { tier: 'budget', historyCeilingTokens, ...POLICY_WEAK }
+  if (window >= STRONG_WINDOW) return { tier: 'elite', historyCeilingTokens, ...POLICY_STRONG }
+  if (window > 0 && window < WEAK_WINDOW_MAX) return { tier: 'budget', historyCeilingTokens, ...POLICY_WEAK }
+  if (tier === 'elite' && window >= STRONG_MIN_WINDOW_FOR_ELITE) return { tier: 'elite', historyCeilingTokens, ...POLICY_STRONG }
+  return { tier: 'standard', historyCeilingTokens, ...POLICY_STANDARD }
 }
 
 /**
