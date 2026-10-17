@@ -89,6 +89,15 @@ const mockInvoke = vi.fn(async (ch: string, ...args: unknown[]) => {
 /** §7.1-C2：config:get 的返回值（逐用例覆写） */
 let configResponse: unknown = null
 
+/** DeepSeek V4.1 原生 DSML 工具调用真实形态（双全角竖线 U+FF5C；开标签 calls> 前有空格） */
+const dsmlSample = [
+  '<｜｜DSML｜｜ calls>',
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="file_path" string="true">a.txt</｜｜DSML｜｜ parameter>',
+  '</｜｜DSML｜｜ invoke>',
+  '</｜｜DSML｜｜ calls>',
+].join('\n')
+
 beforeEach(() => {
   archiveFiles.clear()
   originals.clear()
@@ -1901,5 +1910,24 @@ describe('agentProgress 接线与竞态守卫', () => {
     // 硬约束 4：progress 绝不进 subSessions（session 整体 JSON 落盘）
     const serialized = JSON.stringify(state.conversations)
     expect(serialized).not.toContain('subAgentProgress')
+  })
+
+  // 2026-10-17 DeepSeek V4.1 DSML 文本泄漏：引擎层已过滤，store 落盘侧再兜一道（旧版/异常路径）
+  it('DSML 落盘防线：onTextChunk/onDone 含原生 DSML 标记 → content 不含原文，正文保留', async () => {
+    useAgentStore.getState().createConversation({ title: 'T' })
+    useLLMStore.setState({ defaultModelId: 'test-model' })
+
+    void useAgentStore.getState().sendMessage('你好')
+    await vi.waitFor(() => expect(cbSeen.length).toBe(1))
+
+    cbSeen[0].onTextChunk?.(`先读文件。\n${dsmlSample}`)
+    cbSeen[0].onDone?.(`先读文件。\n${dsmlSample}`, [], [])
+
+    const conv = useAgentStore.getState().conversations[0]!
+    const last = conv.messages[conv.messages.length - 1]!
+    expect(last.role).toBe('assistant')
+    expect(last.content).not.toContain('DSML')
+    expect(last.content).not.toContain('｜')
+    expect(last.content).toContain('先读文件。')
   })
 })

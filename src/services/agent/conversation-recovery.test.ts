@@ -18,6 +18,20 @@ const makeMsg = (
 
 const toolCallBlock = '<tool_call>\n{"name": "read_drafts", "arguments": {}}\n</tool_call>'
 
+/**
+ * DeepSeek V4.1 原生 DSML 工具调用真实样本（2026-10-17 泄漏会话）：
+ * 双全角竖线 U+FF5C；开标签 `calls>` 前有空格；参数含 Windows 路径与数字字面量。
+ */
+const dsmlSample = [
+  '<｜｜DSML｜｜ calls>',
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="file_path" string="true">C:\\Users\\0\\.novelforge\\agent-results\\3252294d1e4f.txt</｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="offset" string="false">440</｜｜DSML｜｜ parameter>',
+  '<｜｜DSML｜｜ parameter name="limit" string="false">2000</｜｜DSML｜｜ parameter>',
+  '</｜｜DSML｜｜ invoke>',
+  '</｜｜DSML｜｜ calls>',
+].join('\n')
+
 // ===== 文本残片清理 =====
 
 describe('cleanupMessageText', () => {
@@ -56,6 +70,20 @@ describe('cleanupMessageText', () => {
     expect(cleanupMessageText(withQuote)).toBe(withQuote)
     // 标签形态字符串（实体转义/残缺拼写）不属于协议残片，不得误删
     expect(cleanupMessageText('请解释 &lt;tool_call&gt; 标签的用法')).toBe('请解释 &lt;tool_call&gt; 标签的用法')
+  })
+
+  // 2026-10-17 DeepSeek V4.1 把原生工具调用以 DSML 文本泄漏进 assistant content：
+  // 归档恢复时同属协议残片，整块清理且正文零改动（无 DSML 时逐字原样返回，见上一条用例）
+  it('清除 DeepSeek 原生 DSML 工具块（V4.1 真实样本），仅保留正文', () => {
+    const cleaned = cleanupMessageText(`我先看一下结果文件。\n${dsmlSample}`)
+    expect(cleaned).not.toContain('DSML')
+    expect(cleaned).not.toContain('｜')
+    expect(cleaned).toContain('我先看一下结果文件。')
+  })
+
+  it('无 DSML 文本逐字不变（新增 DSML 清理层不改变既有零改动语义）', () => {
+    const normal = '  带空白的正文\n\n\n连续空行  '
+    expect(cleanupMessageText(normal)).toBe(normal)
   })
 })
 
@@ -162,6 +190,27 @@ describe('sanitizeMessageList', () => {
     expect(out[0]!.content).toBe('请问  和  标签的用途？')
     expect(out[1]!.content).toBe('\n正文')
     expect(out[2]!.content).toBe('半截')
+  })
+
+  // 2026-10-17 DeepSeek V4.1 原生 DSML 文本泄漏：恢复旧档案时 assistant 正文必须洗干净；
+  // user/system 仍按 F1 纪律零清洗（用户可粘贴/讨论标记形态文本，逐字保留）
+  it('DSML：assistant 含真实 DSML 块 → 清理后只剩正文；user/system 含字面 DSML → 逐字保留', () => {
+    const assistant = makeMsg('a1', 'assistant', `先读文件。\n${dsmlSample}`)
+    const user = makeMsg('u1', 'user', `我贴一段原生标记：\n${dsmlSample}`)
+    const system = makeMsg('s1', 'system', `规则：不要把 DSML 原文输出给用户\n${dsmlSample}`)
+    const out = sanitizeMessageList([user, system, assistant])
+    expect(out.map(m => m.id)).toEqual(['u1', 's1', 'a1'])
+    // F1 纪律：user/system 写链零清洗 → 含字面 DSML 也逐字保留（返回原引用）
+    expect(out[0]).toBe(user)
+    expect(out[1]).toBe(system)
+    // assistant：协议残片清理，正文保留
+    expect(out[2]!.content).not.toContain('DSML')
+    expect(out[2]!.content).toContain('先读文件。')
+  })
+
+  it('DSML：assistant 仅含 DSML 无正文 → 清理后纯空白整条过滤', () => {
+    const list = [makeMsg('u1', 'user', '查一下'), makeMsg('a1', 'assistant', dsmlSample)]
+    expect(sanitizeMessageList(list).map(m => m.id)).toEqual(['u1'])
   })
 })
 

@@ -2,6 +2,7 @@ import type { AgentMessage, AgentConversation, RewoundBranch } from '../../store
 import { toolRegistry } from './tool-registry'
 import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
+import { stripDsmlMarkup } from './dsml-tool-calls'
 import { computePrefixFingerprint } from './prefix-accounting'
 import { MAX_SUB_SESSIONS, MAX_SUBAGENT_MESSAGES, type SubAgentSession } from './subagent/types'
 import { t } from '../../shared/locale'
@@ -189,7 +190,9 @@ export function parseArchive(raw: string): AgentConversation | null {
             toolCalls: Array.isArray(s.toolCalls) ? s.toolCalls : [],
             artifacts: Array.isArray(s.artifacts) ? s.artifacts : [],
             allowedTools: Array.isArray(s.allowedTools) ? s.allowedTools : [],
-            result: typeof s.result === 'string' ? s.result : '',
+            // 2026-10-17（核查反例 G）：旧版 runner 泄漏的 DSML 可能落在 result（不在 messages）；
+            // result 会经 formatSubAgentResult 幂等重放进父上下文，恢复时必须同口径净化。
+            result: typeof s.result === 'string' ? stripDsmlMarkup(s.result) : '',
             messages: sanitizeMessageList(s.messages).slice(-MAX_SUBAGENT_MESSAGES),
           }))
           .sort((a, b) => b.startedAt - a.startedAt)

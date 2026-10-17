@@ -20,12 +20,14 @@
  *   非崩溃残片 → 本层不动，留 UI/后续裁决（C4 report 记录）。
  * - streaming:true 持久化 = 崩溃/错误后未收尾（正常 onDone 清 flag 后才落盘）→ 恢复时清 flag；
  *   纯空白消息（含崩溃留下的流式占位符）→ 整条过滤。
- * - 本层为纯函数：零运行时依赖（仅 import type），archive-codec.parseArchive 与
- *   workflow-store.restoreCheckpoint 共用；L2（checkpoint 迁 DB）迁移时直接复用，勿双写实现。
+ * - 本层为纯函数：无 store / IPC 运行时依赖（仅 import type + 纯清洗函数 stripDsmlMarkup），
+ *   archive-codec.parseArchive 与 workflow-store.restoreCheckpoint 共用；L2（checkpoint 迁 DB）
+ *   迁移时直接复用，勿双写实现。
  */
 
 import type { AgentMessage } from '../../stores/agent-store'
 import type { CheckpointData, WorkflowRun, WorkflowStep, WorkflowType, WorkflowParams } from '../../stores/workflow-store'
+import { stripDsmlMarkup } from './dsml-tool-calls'
 
 // ===== 文本残片清理（tool_call / tool_result / think 标签） =====
 
@@ -46,15 +48,19 @@ const THINK_TAG_RE = /<\/?think>/gi
  * 清理单段文本中的协议残片：完整/断裂 tool_call、tool_result 块与孤立标签、think 块。
  * 只移除标签形态文本——不 trim、不折叠空白（用户正文的空白/换行必须逐字保留，
  * 行为兼容：正常内容不含上述标签时逐字原样返回）。
+ *
+ * DeepSeek 原生 DSML 工具标记（模型把原生调用以文本泄漏）同属协议残片：
+ * 归档中残留的 DSML 块在恢复时清理；无 DSML 时 stripDsmlMarkup 逐字原样返回（零改动不变量保持）。
  */
 export function cleanupMessageText(content: string): string {
-  return content
+  const withoutToolTags = content
     .replace(TOOL_CALL_BLOCK_RE, '')
     .replace(TOOL_RESULT_BLOCK_RE, '')
     .replace(TOOL_CALL_TAG_RE, '')
     .replace(TOOL_RESULT_TAG_RE, '')
     .replace(THINK_BLOCK_RE, '')
     .replace(THINK_TAG_RE, '')
+  return stripDsmlMarkup(withoutToolTags)
 }
 
 /** 合法消息 role（净化入口的 role 白名单——手改/损坏归档可能带任意 role 值） */

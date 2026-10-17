@@ -315,6 +315,24 @@ describe('归档 subSessions（C 档第二轮 T4）', () => {
     expect(s.allowedTools).toEqual([])
     expect(s.result).toBe('')
   })
+
+  // 2026-10-17 安全核查反例 G：旧版 runner 把 DSML 泄漏写进 result（不在 messages 里），
+  // result 会经 formatSubAgentResult 幂等重放进父上下文 → 恢复时必须同口径净化。
+  it('旧档 subSessions[].result 中的 DSML 恢复时净化（result 不在 messages 净化范围）', () => {
+    const dsmlBlock = [
+      '<｜｜DSML｜｜ calls>',
+      '<｜｜DSML｜｜ invoke name="read_file">',
+      '<｜｜DSML｜｜ parameter name="file_path" string="true">a.txt</｜｜DSML｜｜ parameter>',
+      '</｜｜DSML｜｜ invoke>',
+      '</｜｜DSML｜｜ calls>',
+    ].join('\n')
+    const dirty = sess({ result: `子结论正文。\n${dsmlBlock}` })
+    const parsed = parseArchive(serializeArchive({ ...baseConv(), subSessions: [dirty] }))!
+    const s = parsed.subSessions![0]
+    expect(s.result).not.toContain('DSML')
+    expect(s.result).not.toContain('｜')
+    expect(s.result).toContain('子结论正文。')
+  })
 })
 
 describe('归档 running 归一（C 档第二轮评审 I4）', () => {

@@ -18,6 +18,14 @@ import { outputPostProcessor } from './output-post-processor'
 import { looksMultiStep } from './task-anchor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
+import {
+  buildUnparsedDsmlError,
+  containsDsmlMarkup,
+  createDsmlStreamFilter,
+  parseDsmlToolCalls,
+  stripDsmlMarkup,
+  stripDsmlTokens,
+} from './dsml-tool-calls'
 
 // ===== 常量 =====
 
@@ -182,6 +190,11 @@ export async function runAgentLoop(
   let consecutiveRecoveryFailures = 0
   /** W4（批 3）：未完成自检是否已用过（每会话/每次 runAgentLoop 至多一次） */
   let unfinishedCheckUsed = false
+  /**
+   * DSML 诊断是否已用过（2026-10-17）：DeepSeek V4 系列会把原生工具标记当正文回传，
+   * 若解析器没能还原出可执行调用，注入一次诊断让模型改用规定的 XML 协议；一次性防烧轮次。
+   */
+  let dsmlDiagnosticUsed = false
   let currentBudget = computeMessageBudget(
     options?.modelContextWindow, options?.budgetPercent, options?.maxMessageBudgetTokens,
   )
@@ -200,11 +213,18 @@ export async function runAgentLoop(
     let budgetedMessages = compressMessagesToBudget(messages, currentBudget)
     let llmResponse: string
     let streamed = false
+    // DSML 流式守卫（2026-10-17）：DeepSeek V4.1 会把原生工具调用标记（<｜｜DSML｜｜ ...>）
+    // 当正文流回来。先在本层截住，避免 Markdown 面板闪现原始标记；全文解析在生成返回后做。
+    // 过滤器按轮新建；本轮残余（未闭合 DSML 残片）由全文 parse/strip 兜底。
+    const dsmlStreamFilter = createDsmlStreamFilter()
     try {
       llmResponse = await generateFn(budgetedMessages, modelId, (chunk) => {
         streamed = true
-        callbacks.onTextChunk(chunk)
+        const safe = dsmlStreamFilter.push(chunk)
+        if (safe) callbacks.onTextChunk(safe)
       })
+      const streamTail = dsmlStreamFilter.flush()
+      if (streamTail) callbacks.onTextChunk(streamTail)
       // 调用成功：恢复计数清零、预算复原（下次调用生效）
       consecutiveRecoveryFailures = 0
       recoveryStage = 'none'
@@ -253,14 +273,20 @@ export async function runAgentLoop(
       return
     }
 
-    // 解析 LLM 回复：分离文本和 tool_call
+    // 解析 LLM 回复：分离文本和 tool_call（含 DeepSeek DSML 原生标记 repair，见 dsml-tool-calls.ts）
     const { textParts, toolCalls, parseErrors } = parseToolCalls(llmResponse)
+    if (containsDsmlMarkup(llmResponse)) {
+      // 留诊断证据：模型回退到原生格式是上游行为（issue #1678），日志里应可追踪修复发生
+      console.warn(`[AgentEngine] 检测到 DeepSeek DSML 工具标记，已解析为 ${toolCalls.length} 个工具调用`)
+    }
     // 部分失败场景的诊断反馈（每轮重置；仅部分成功 + 部分解析失败时被赋值，
     // 延迟到 observation 组装时注入，避免与全失败路径重复 push）
     let parseFeedbackForObservation: string | undefined
 
     // 输出文本部分（清理可能残留的 tool_call/tool_result 标记）
     let textContent = textParts.join('')
+    // DSML 兜底清洗：解析阶段已摘除常规块，这里再清残留/半截标记（无 DSML 时逐字不变）
+    textContent = stripDsmlMarkup(textContent)
     textContent = textContent
       .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
       .replace(/<tool_result[\s\S]*?<\/tool_result>/g, '')
@@ -291,6 +317,30 @@ export async function runAgentLoop(
       // 部分失败：解析诊断追加到本轮 observation 头部（toolCalls 继续正常执行）
       // 诊断段延迟到 observation 组装时注入——此处仅保存，避免重复 push
       parseFeedbackForObservation = errorFeedback
+    }
+
+    // ===== DeepSeek DSML 兜底（2026-10-17）=====
+    // 上游行为（deepseek-ai/DeepSeek-V3 issue #1678）：V4 系列在没有 tools 参数但历史带工具痕迹时，
+    // 会把原生 DSML 工具标记当正文回传（finish_reason=stop、tool_calls=null）。常规块已由
+    // parseDsmlToolCalls 还原；若仍没还原出调用，**不能当最终回复收尾**——注入一次诊断让模型
+    // 改用规定的 <tool_call> XML 重新调用（一次性，避免反复烧轮次）。
+    if (
+      toolCalls.length === 0
+      && parseErrors.length === 0
+      && !dsmlDiagnosticUsed
+      && containsDsmlMarkup(llmResponse)
+    ) {
+      dsmlDiagnosticUsed = true
+      messages.push({ role: 'assistant', content: llmResponse })
+      messages.push({
+        role: 'user',
+        content: t('engine.parseDiagnosis').replace(
+          '{feedback}',
+          formatParseErrorsForLLM([buildUnparsedDsmlError(llmResponse)]),
+        ),
+      })
+      console.warn('[AgentEngine] DSML 标记未能还原为工具调用，注入一次性诊断后重试')
+      continue
     }
 
     // ===== W4（批 3，弱档）：未完成自检 =====
@@ -610,12 +660,12 @@ export interface ToolParseError {
 }
 
 /**
- * 从 LLM 输出中解析 <tool_call>...</tool_call> 标签
+ * 从 LLM 输出中解析 <tool_call>...</tool_call> 标签（既有 XML 协议，内部实现）
  *
  * 返回分离后的文本片段、tool 调用列表和解析错误详情。
  * 增强版：支持 JSON 前后有多余文字的容错解析 + 详细错误诊断。
  */
-export function parseToolCalls(text: string): {
+function parseXmlToolCalls(text: string): {
   textParts: string[]
   toolCalls: ParsedToolCall[]
   /** AI 自检：解析失败的错误详情，可反馈给 LLM 让其自我修正 */
@@ -712,6 +762,35 @@ export function parseToolCalls(text: string): {
 }
 
 /**
+ * 从 LLM 输出中解析工具调用（对外统一入口）。
+ *
+ * 历史协议是 `<tool_call>{"name","arguments"}</tool_call>` 文本块；2026-10-17 起追加
+ * DeepSeek V4 系列原生 DSML 标记的 repair（`<｜｜DSML｜｜ calls>` / `<｜DSML｜function_calls>`，
+ * 见 `dsml-tool-calls.ts` 与上游 issue deepseek-ai/DeepSeek-V3#1678）。
+ *
+ * **快路径保证**：不含 DSML token 时逐字复用既有 XML 解析，行为与历史完全一致（零回归）。
+ * 命中 DSML 时先由 DSML 解析器摘标记/收集调用，再对剩余正文跑 XML 解析后合并。
+ * ⚠️ 合并顺序固定为「DSML 调用在前、XML 调用在后」，**不保证与正文出现顺序一致**；
+ * 同一回合混用两种协议极罕见，若两个调用存在先后依赖需注意（核查报告反例 B，已知限制）。
+ */
+export function parseToolCalls(text: string): {
+  textParts: string[]
+  toolCalls: ParsedToolCall[]
+  parseErrors: ToolParseError[]
+} {
+  if (!containsDsmlMarkup(text)) return parseXmlToolCalls(text)
+
+  const dsml = parseDsmlToolCalls(text)
+  // DSML 块先摘除，剩余正文里可能还混有既有 XML 协议的工具块
+  const xml = parseXmlToolCalls(dsml.textParts.join(''))
+  return {
+    textParts: xml.textParts,
+    toolCalls: [...dsml.toolCalls, ...xml.toolCalls],
+    parseErrors: [...dsml.parseErrors, ...xml.parseErrors],
+  }
+}
+
+/**
  * 将解析错误格式化为 LLM 可理解的反馈消息
  * 用于注入到 observation 中，让 LLM 自我修正
  */
@@ -778,9 +857,12 @@ function sanitizeErrorText(err: unknown): string {
  * <tool_result> / <tool_call> 标签时破坏 XML 结构（注入污染，P2 修复）。
  * 历史事故：只剥离 tool_result 未剥离 tool_call——读到含 <tool_call> 指令的不可信文件
  * （外部导入草稿/知识库文档）原样回喂 LLM，下一轮可能被 parseToolCalls 当真实工具调用执行。
+ *
+ * 2026-10-17 补 DSML token（安全核查反例 A）：DSML repair 让「工具结果 → 模型回吐」这条
+ * 既有防守路径多了一种可被解析的调用格式；只剥 token、不整块删（不污染 read_file 正文）。
  */
 function sanitizeObservation(content: string): string {
-  return content
+  return stripDsmlTokens(content)
     .replace(/<\/tool_result>/gi, '')
     .replace(/<tool_result/gi, '')
     .replace(/<\/tool_call>/gi, '')

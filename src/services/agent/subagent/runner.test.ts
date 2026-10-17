@@ -18,6 +18,15 @@ type GenFn = (messages: { role: string; content: string }[]) => Promise<string>
 /** 带流式回调的形态（I3 清洗用例用） */
 type GenFn3 = (messages: { role: string; content: string }[], modelId: string, onChunk?: (chunk: string) => void) => Promise<string>
 
+/** DeepSeek V4.1 原生 DSML 工具调用真实形态（双全角竖线 U+FF5C；开标签 calls> 前有空格） */
+const dsmlSample = [
+  '<｜｜DSML｜｜ calls>',
+  '<｜｜DSML｜｜ invoke name="read_file">',
+  '<｜｜DSML｜｜ parameter name="file_path" string="true">a.txt</｜｜DSML｜｜ parameter>',
+  '</｜｜DSML｜｜ invoke>',
+  '</｜｜DSML｜｜ calls>',
+].join('\n')
+
 const task = (over: Partial<SubAgentTask> = {}): SubAgentTask =>
   ({ taskId: 'abc123', description: '查玉佩伏笔', prompt: '查清玉佩伏笔', allowedTools: ['read_drafts'], modelId: 'm', ...over })
 
@@ -181,5 +190,37 @@ describe('评审修复：写入侧净化与产物合并（C 档第二轮）', ()
     const s = await runSubAgent(task(), baseDeps({ generate: generate as never }))
     expect(s.result).not.toContain('<tool_call>')
     expect(s.messages.map(m => m.content).join('\n')).not.toContain('<tool_call>')
+  })
+})
+
+// 2026-10-17（DeepSeek V4.1 DSML 文本泄漏）：子 agent 转录会回放给父，DSML 原文不得进入转录/result
+describe('DSML 原生工具标记清洗（2026-10-17 泄漏样本）', () => {
+  it('onChunk 传入含完整 DSML 块的文本 → 流式转录中任何快照都不含 DSML', async () => {
+    const snapshots: string[] = []
+    const generate = vi.fn<GenFn3>(async (_m, _id, onChunk) => {
+      onChunk?.(dsmlSample)
+      onChunk?.('玉佩在第 3 章。')
+      return '玉佩在第 3 章。'
+    })
+    const s = await runSubAgent(task(), baseDeps({
+      generate: generate as never,
+      // 深拷贝成字符串快照：onUpdate 传的是可变 session 引用，留引用会被后续改写掩盖
+      onUpdate: snap => snapshots.push(snap.messages.map(m => m.content).join('\n')),
+    }))
+    expect(snapshots.length).toBeGreaterThan(0)
+    expect(snapshots.every(t => !t.includes('DSML'))).toBe(true)
+    expect(s.messages.map(m => m.content).join('\n')).not.toContain('DSML')
+  })
+
+  it('onDone 全文含 DSML → session.result 与最后一条 assistant content 已清洗', async () => {
+    const generate = vi.fn<GenFn3>(async () => `先读文件。\n${dsmlSample}`)
+    const s = await runSubAgent(task(), baseDeps({ generate: generate as never }))
+    expect(s.result).not.toContain('DSML')
+    expect(s.result).not.toContain('｜')
+    expect(s.result).toContain('先读文件。')
+    const last = s.messages[s.messages.length - 1]!
+    expect(last.role).toBe('assistant')
+    expect(last.content).not.toContain('DSML')
+    expect(last.content).toContain('先读文件。')
   })
 })

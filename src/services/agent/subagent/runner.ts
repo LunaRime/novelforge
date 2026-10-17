@@ -9,6 +9,7 @@
 import { t } from '../../../shared/locale'
 import { runAgentLoop, type AgentEngineCallbacks, type LLMGenerateFn } from '../agent-engine'
 import { estimateTokens, truncateToTokenBudget } from '../token-budget'
+import { stripDsmlMarkup } from '../dsml-tool-calls'
 import type { AgentMessage } from '../../../stores/agent-store'
 import type { ToolCallInfo } from '../agent-engine'
 import {
@@ -42,12 +43,16 @@ export interface SubAgentDeps {
  * `<tool_call>{"name":"read_drafts"…}</tool_call>` 这样的原始 JSON：卡片把它给用户看、
  * 归档净化会因此删掉整条消息（转录静默少步）、回放还会把它灌回父上下文。
  * 跨 chunk 被切开的标签由 onDone 的全文重写兜住（父也是这么兜的）。
+ * DeepSeek 原生 DSML 工具标记同样按协议残片清理（子 agent 转录会回放给父，
+ * 泄漏文本不得进入卡片与父上下文；无 DSML 时 stripDsmlMarkup 逐字原样返回）。
  */
 function stripToolTags(text: string): string {
-  return text
-    .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
-    .replace(/<\/?tool_call>/g, '')
-    .replace(/<\/?tool_result[^>]*>/g, '')
+  return stripDsmlMarkup(
+    text
+      .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
+      .replace(/<\/?tool_call>/g, '')
+      .replace(/<\/?tool_result[^>]*>/g, ''),
+  )
 }
 
 /** 转录尾部追加文本（末条 assistant 若仍在流式则续写，否则新起一条） */
@@ -110,11 +115,12 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
     onToolCallComplete: (tc) => { upsertToolCall(session, tc); emit() },
     onToolCallConfirmRequired: (tc) => deps.confirm(tc),
     onDone: (fullText, toolCalls, artifacts) => {
-      session.result = fullText
+      // 用清洗后的全文**重写**最后一条 assistant 消息（跨 chunk 切开的标签只有这里能清干净）；
+      // result 同样取清洗后文本 —— 父端 formatSubAgentResult 会把 result 灌回父上下文，DSML 原文不得外溢
+      const cleanedFull = stripToolTags(fullText)
+      session.result = cleanedFull
       session.toolCalls = toolCalls
       session.artifacts = artifacts
-      // 用清洗后的全文**重写**最后一条 assistant 消息（跨 chunk 切开的标签只有这里能清干净）
-      const cleanedFull = stripToolTags(fullText)
       const last = session.messages[session.messages.length - 1]
       if (last?.role === 'assistant') last.content = cleanedFull
       else if (cleanedFull) session.messages.push({ id: `sa-${session.messages.length}`, role: 'assistant', content: cleanedFull, createdAt: Date.now() })

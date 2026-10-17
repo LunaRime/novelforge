@@ -41,6 +41,7 @@ import { COMPACTION_HISTORY_MIN_TOKENS, DEFAULT_COMPACTION_PREFS, resolveCompact
 import { resolveContextPolicyFor } from '../services/agent/context-policy'
 import { formatSubAgentResult, formatSubAgentTranscript, runSubAgent } from '../services/agent/subagent/runner'
 import { buildSubAgentPrompt } from '../services/agent/subagent/prompt'
+import { stripDsmlMarkup } from '../services/agent/dsml-tool-calls'
 import type { LLMGenerateFn } from '../services/agent/agent-engine'
 
 // ===== 类型定义 =====
@@ -1248,11 +1249,12 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         {
           onTextChunk: (chunk) => {
             // 清理所有形式的 tool_call/tool_result 标签（完整对 + 孤立片段）
-            const cleaned = chunk
+            const withoutToolTags = chunk
               .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
               .replace(/<\/?tool_call>/g, '')
               .replace(/<\/?tool_result[^>]*>/g, '')
-              .trim()
+            // 原生 DSML 工具标记同属协议残片（无 DSML 时逐字原样返回）
+            const cleaned = stripDsmlMarkup(withoutToolTags).trim()
             if (!cleaned) return
             chunkBuffer += cleaned
             // 仅时间驱动：两次 flush 之间强制 ≥50ms，大小不再立即触发
@@ -1330,11 +1332,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             // 刷新任何残留的缓冲区
             flushChunkBuffer()
             // 最终文本全量清洗，去除所有形式的 tool_call / tool_result 标签
-            const cleanedText = fullText
+            const withoutToolTags = fullText
               .replace(/<tool_call>[\s\S]*?<\/tool_call>/g, '')
               .replace(/<tool_result[\s\S]*?<\/tool_result>/g, '')
               .replace(/<\/?tool_call>/g, '')
               .replace(/<\/?tool_result[^>]*>/g, '')
+            // 原生 DSML 工具标记同属协议残片（无 DSML 时逐字原样返回）
+            const cleanedText = stripDsmlMarkup(withoutToolTags)
               .replace(/\n{3,}/g, '\n\n')
               .trim()
             updateAssistantMsg(m => ({
