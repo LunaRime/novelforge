@@ -60,6 +60,7 @@
     "@storybook/react-vite": "^10.3.5",
     "@tailwindcss/typography": "^0.5.19",
     "@tailwindcss/vite": "^4.2.2",
+    "@tanstack/react-virtual": "^3.14.21",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^25.9.1",
     "@types/react": "^19.2.14",

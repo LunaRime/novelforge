@@ -5,6 +5,7 @@
  * 2026-08-05 升级：级别筛选 / 复制 / 日志文件查看器 / 打开日志目录。
  */
 import { useState, useRef, useEffect, memo, useMemo } from 'react'
+import { useVirtualizer } from '@tanstack/react-virtual'
 import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
@@ -40,6 +41,15 @@ export default memo(function LogsView() {
     // 12 小时制 locale 下 time 字符串比较也会错乱——用数字 ts 排序）
     return [...filtered].sort((a, b) => (sortAsc ? a.ts - b.ts : b.ts - a.ts))
   }, [globalLogs, filter, sortAsc])
+
+  // 日志虚拟化：上限 500 条 + 流式期间每 100ms 追加，只渲染可视区 + overscan；
+  // 行高可变（长消息换行），measureElement 动态测量真实高度
+  const virtualizer = useVirtualizer({
+    count: visibleLogs.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: () => 20,
+    overscan: 10,
+  })
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
@@ -121,15 +131,33 @@ export default memo(function LogsView() {
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 pb-2 font-mono text-xs leading-5">
-        {visibleLogs.length === 0 && (
+        {visibleLogs.length === 0 ? (
           <EmptyState message={t('status.noLogs')} size="xs" className="text-center" />
-        )}
-        {visibleLogs.map((log) => (
-          <div key={log.ts} className="flex gap-2">
-            <span style={{ color: 'var(--color-text-muted)' }}>{log.time}</span>
-            <span style={{ color: levelColor(log.level) }}>{log.message}</span>
+        ) : (
+          <div style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}>
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const log = visibleLogs[virtualRow.index]
+              return (
+                <div
+                  key={virtualRow.key}
+                  data-index={virtualRow.index}
+                  ref={virtualizer.measureElement}
+                  className="flex gap-2"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    transform: `translateY(${virtualRow.start}px)`,
+                  }}
+                >
+                  <span style={{ color: 'var(--color-text-muted)' }}>{log.time}</span>
+                  <span style={{ color: levelColor(log.level) }}>{log.message}</span>
+                </div>
+              )
+            })}
           </div>
-        ))}
+        )}
       </div>
 
       <LogFileDialog open={fileDialogOpen} onOpenChange={setFileDialogOpen} />
