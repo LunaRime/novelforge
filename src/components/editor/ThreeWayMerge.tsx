@@ -38,17 +38,28 @@ function HunkLines({ lines, padCount, cls, emptyLabel }: {
   )
 }
 
-/** contentEditable 子组件 — 仅在挂载时设置内容 */
+/** 受控 contentEditable 子组件 —— 仅在「外部 text 变化」时写回 DOM（避免每次渲染重置光标） */
 function EditableCell({ text, onChange }: { text: string; onChange: (t: string) => void }) {
   const ref = useRef<HTMLDivElement>(null)
-  const initialTextRef = useRef(text)
+  // 最近一次「已知」文本：用户输入时同步（避免外部写回覆盖光标/IME 组合态）；
+  // 首次挂载（null）或外部程序化变更（applyAll/revertAll/toggleHunk）时检测到差异才写回 DOM。
+  const lastTextRef = useRef<string | null>(null)
   useLayoutEffect(() => {
-    if (ref.current) ref.current.textContent = initialTextRef.current || '\u00A0'
-  }, [])
+    const el = ref.current
+    if (!el) return
+    if (lastTextRef.current !== text) {
+      el.textContent = text || '\u00A0'
+      lastTextRef.current = text
+    }
+  }, [text])
   return (
     <div ref={ref} className="twm-editable" contentEditable
       suppressContentEditableWarning
-      onInput={e => onChange((e.target as HTMLDivElement).innerText)} />
+      onInput={e => {
+        const val = (e.target as HTMLDivElement).innerText
+        lastTextRef.current = val
+        onChange(val)
+      }} />
   )
 }
 
