@@ -35,8 +35,13 @@ import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
  * - 有会话：消息列表 + 底部固定输入框
  */
 export default function AgentConversation() {
-  const { getActiveConversation, showHistory, memoryView } = useAgentStore()
-  const activeConv = getActiveConversation()
+  // 原子 selector：仅订阅本组件渲染依赖的三项（原始布尔），流式期间值稳定不重渲染
+  const showHistory = useAgentStore(s => s.showHistory)
+  const memoryView = useAgentStore(s => s.memoryView)
+  const hasActiveMessages = useAgentStore(s => {
+    const conv = s.conversations.find(c => c.id === s.activeConversationId)
+    return !!conv && conv.messages.length > 0
+  })
 
   // 历史面板模式
   if (showHistory) {
@@ -49,7 +54,7 @@ export default function AgentConversation() {
   }
 
   // 空状态（无活跃会话）
-  if (!activeConv || activeConv.messages.length === 0) {
+  if (!hasActiveMessages) {
     return <EmptyState />
   }
 
@@ -60,7 +65,9 @@ export default function AgentConversation() {
 // ===== 空状态视图 =====
 
 function EmptyState() {
-  const { conversations, selectConversation } = useAgentStore()
+  // 原子 selector：仅订阅列表与切换 action，不随 generating/showHistory 等无关字段重渲染
+  const conversations = useAgentStore(s => s.conversations)
+  const selectConversation = useAgentStore(s => s.selectConversation)
   const { t } = useTranslation()
   // 最近会话条数默认 3，可通过全局配置 recentConversationCount 覆盖（读取失败/非法值静默降级为 3）
   const [recentCount, setRecentCount] = useState(3)
@@ -215,9 +222,10 @@ function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode; modelId?:
 }
 
 function ActiveConversation() {
-  const { getActiveConversation, generating } = useAgentStore()
+  // 原子 selector：generating 为原始布尔；activeConv 订阅活跃会话对象（流式期间消息变化需重渲染）
+  const generating = useAgentStore(s => s.generating)
+  const activeConv = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId) ?? null)
   const { t } = useTranslation()
-  const activeConv = getActiveConversation()
   const scrollRef = useRef<HTMLDivElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const [isAtBottom, setIsAtBottom] = useState(true)
@@ -315,6 +323,24 @@ function ActiveConversation() {
     return map
   }, [visibleMessages, subSessions])
 
+  // 面板预算/模型信息改响应式订阅（供 syncSegments useMemo 作稳定依赖；此前 getState() 靠频繁重渲染兜底）
+  const defaultModelId = useLLMStore(s => s.defaultModelId)
+  const projectPath = useProjectStore(s => s.currentProject?.path ?? null)
+  // 同步分段兜底（P0 近似）：mode/modelId 稳定时复用上次结果——buildAgentSystemSegments 含
+  // L0 项目上下文 + L1 编辑上下文 + 工具提示词截断（estimateTokens 编码），流式每 50ms 重算开销大
+  const syncSegments = useMemo(() => {
+    if (!activeConv) return null
+    const mid = activeConv.modelId ?? defaultModelId
+    const policy = resolveContextPolicyFor(mid ?? undefined)
+    return buildAgentSystemSegments(activeConv.mode, {
+      toolBudgetTokens: policy.toolBudgetTokens,
+      m1BudgetTokens: policy.m1BudgetTokens,
+      l1BudgetTokens: policy.l1BudgetTokens,
+      autoRecall: policy.autoRecall,
+    })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeConv?.mode, activeConv?.modelId, defaultModelId, projectPath])
+
   if (!activeConv) return null
 
   /** 末条可见消息 id（F6/D1）：rewind 到末条无内容可截断（store 静默 no-op）——按钮禁用 + 解释性 tooltip */
@@ -323,16 +349,10 @@ function ActiveConversation() {
   // 上下文占用分段（P0 近似：history 用当前 messages 估算，非实际发送副本）
   // F3：与注入共用 async 数据源（M1+M2 真实值）；async 未就绪时同步 M1-only 兜底，避免闪烁
   // W1 批 2：同步兜底同样按档位取段预算（与 useAsyncSegments / 真实发送同口径）
-  const modelId = activeConv.modelId ?? useLLMStore.getState().defaultModelId
-  const policyForPanel = resolveContextPolicyFor(modelId ?? undefined)
-  const syncSegments = buildAgentSystemSegments(activeConv.mode, {
-    toolBudgetTokens: policyForPanel.toolBudgetTokens,
-    m1BudgetTokens: policyForPanel.m1BudgetTokens,
-    l1BudgetTokens: policyForPanel.l1BudgetTokens,
-    autoRecall: policyForPanel.autoRecall,
-  })
+  const modelId = activeConv.modelId ?? defaultModelId
+  // syncSegments 见上方 useMemo（流式期间 mode/modelId 稳定，复用缓存结果）
   const usageSegments: AsyncSegments = asyncSegments ?? {
-    base: syncSegments.base, memoryM1: syncSegments.memory, memoryM2: '', memoryResident: '', segments: syncSegments.segments,
+    base: syncSegments!.base, memoryM1: syncSegments!.memory, memoryM2: '', memoryResident: '', segments: syncSegments!.segments,
   }
   const currentProjectName = useProjectStore.getState().currentProject?.name ?? null
   // 占用条的分母是**上下文窗口**，不是最大输出（2026-09-25 拆字段前二者混用同一个 maxTokens）。

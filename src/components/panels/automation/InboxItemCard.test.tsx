@@ -17,7 +17,8 @@ const actions = vi.hoisted(() => ({
 }))
 
 vi.mock('../../../stores/automation-store', () => ({
-  useAutomationStore: () => actions,
+  useAutomationStore: (selector?: (s: unknown) => unknown) =>
+    selector ? selector(actions) : actions,
 }))
 
 let container: HTMLDivElement | null = null

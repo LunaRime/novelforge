@@ -8,6 +8,7 @@
 export const editorTexts = {
   'diff.original': { 'zh-CN': '原稿', 'en-US': 'Original', 'ru-RU': 'Оригинал' },
   'diff.modified': { 'zh-CN': '修稿', 'en-US': 'Revised', 'ru-RU': 'Изменённый' },
+  'editor.bold': { 'zh-CN': '加粗', 'en-US': 'Bold', 'ru-RU': 'Жирный' },
   'chapterCard.saveFailed': { 'zh-CN': '保存失败: {error}', 'en-US': 'Save failed: {error}', 'ru-RU': 'Ошибка сохранения: {error}' },
   'chapterCard.saveAllFailed': { 'zh-CN': '全量保存失败: {error}', 'en-US': 'Save all failed: {error}', 'ru-RU': 'Ошибка сохранения всего: {error}' },
   'chapterCard.deleteFailed': { 'zh-CN': '删除第 {n} 章蓝图失败: {error}', 'en-US': 'Failed to delete blueprint Ch.{n}: {error}', 'ru-RU': 'Ошибка удаления плана гл.{n}: {error}' },

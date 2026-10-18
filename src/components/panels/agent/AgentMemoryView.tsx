@@ -28,7 +28,11 @@ export default function AgentMemoryView() {
   const { t } = useTranslation()
   const setMemoryView = useAgentStore(s => s.setMemoryView)
   const projectPath = useProjectStore(s => s.currentProject?.path)
-  const { files, loading, load, refresh } = useMemoryStore()
+  // 原子 selector：仅订阅本组件依赖字段，避免无关 store 变化触发重渲染
+  const files = useMemoryStore(s => s.files)
+  const loading = useMemoryStore(s => s.loading)
+  const load = useMemoryStore(s => s.load)
+  const refresh = useMemoryStore(s => s.refresh)
   const { handleRebuild } = useMemoryRebuild()
 
   // 挂载 + 项目切换时加载记忆文件列表（与 MemoryGroup 同约定）

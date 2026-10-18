@@ -19,7 +19,8 @@ interface Props {
 
 export default function ConfirmCard({ toolCall }: Props) {
   const { t } = useTranslation()
-  const { resolveToolConfirmation } = useAgentStore()
+  // 原子 selector：action 引用稳定，流式期间不随整 store 每 50ms 重渲染
+  const resolveToolConfirmation = useAgentStore(s => s.resolveToolConfirmation)
   const { id, toolName, arguments: args, approval } = toolCall
 
   // 生成操作描述

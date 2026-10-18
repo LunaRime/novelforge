@@ -17,7 +17,10 @@ import { useTranslation } from '../../../hooks/useTranslation'
  * Agent 面板顶部工具栏
  */
 export default function AgentHeader() {
-  const { createConversation, toggleHistory, getActiveConversation, toggleMemoryView } = useAgentStore()
+  // 原子 selector：action 引用稳定，流式期间不随整 store 每 50ms 重渲染
+  const createConversation = useAgentStore(s => s.createConversation)
+  const toggleHistory = useAgentStore(s => s.toggleHistory)
+  const toggleMemoryView = useAgentStore(s => s.toggleMemoryView)
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
@@ -31,8 +34,9 @@ export default function AgentHeader() {
   useOutsideClick(moreRef, () => { setShowMore(false); setSubView('main') }, showMore)
   useEscapeKey(() => { setShowMore(false); setSubView('main') }, showMore)
 
-  // MCP 状态
-  const { servers: mcpServers, tools: mcpTools } = useMCPStore()
+  // MCP 状态（原子 selector，流式期间不重渲染）
+  const mcpServers = useMCPStore(s => s.servers)
+  const mcpTools = useMCPStore(s => s.tools)
   const connectedCount = mcpServers.filter(s => s.status === 'connected').length
 
   // Skill 列表
@@ -48,9 +52,11 @@ export default function AgentHeader() {
     toggleAIPanel()
   }
 
-  // 当前会话为空（无消息）时禁止新建
-  const activeConv = getActiveConversation()
-  const isCurrentEmpty = !activeConv || activeConv.messages.filter(m => m.role !== 'system').length === 0
+  // 当前会话为空（无消息）时禁止新建 —— 订阅派生布尔（原始值），流式期间值稳定不重渲染
+  const isCurrentEmpty = useAgentStore(s => {
+    const conv = s.conversations.find(c => c.id === s.activeConversationId)
+    return !conv || conv.messages.every(m => m.role === 'system')
+  })
 
   return (
     <div

@@ -71,7 +71,12 @@ export default function AgentInputBox() {
   const [inputText, setInputText] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
-  const { generating, sendMessage, cancelGeneration, getActiveConversation, setMode, setModelId } = useAgentStore()
+  // 原子 selector：action/原始值引用稳定，流式期间不随整 store 每 50ms 重渲染
+  const generating = useAgentStore(s => s.generating)
+  const sendMessage = useAgentStore(s => s.sendMessage)
+  const cancelGeneration = useAgentStore(s => s.cancelGeneration)
+  const setMode = useAgentStore(s => s.setMode)
+  const setModelId = useAgentStore(s => s.setModelId)
   const defaultMode = useAgentStore(s => s.defaultMode)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
@@ -79,11 +84,13 @@ export default function AgentInputBox() {
   // 过滤出非仅限 embedding 专用的模型
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
-  const activeConv = getActiveConversation()
+  // 活跃会话的 mode/modelId（原始值 selector，流式期间值稳定，不触发重渲染）
+  const activeMode = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId)?.mode)
+  const activeModelId = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId)?.modelId)
   // 无会话时回退 defaultMode（setMode 无会话只更新 defaultMode）——
   // 否则无会话时拉条拖动后 value 不变（拉不动）
-  const currentMode = activeConv?.mode ?? defaultMode
-  const currentModelId = activeConv?.modelId ?? defaultModelId
+  const currentMode = activeMode ?? defaultMode
+  const currentModelId = activeModelId ?? defaultModelId
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)

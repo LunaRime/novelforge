@@ -22,7 +22,9 @@ const EVIDENCE_PREVIEW = 3
 
 export default function InboxItemCard({ item }: Props) {
   const { t } = useTranslation()
-  const { confirmInboxItem, dismissInboxItem } = useAutomationStore()
+  // 原子 selector：action 引用稳定，列表项不随 inbox 轮询（30s）整体重渲染
+  const confirmInboxItem = useAutomationStore(s => s.confirmInboxItem)
+  const dismissInboxItem = useAutomationStore(s => s.dismissInboxItem)
   const [expanded, setExpanded] = useState(false)
 
   const evidence: TriggerEvidence[] = item.evidence ?? []

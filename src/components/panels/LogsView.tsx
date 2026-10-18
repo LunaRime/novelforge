@@ -124,8 +124,8 @@ export default memo(function LogsView() {
         {visibleLogs.length === 0 && (
           <EmptyState message={t('status.noLogs')} size="xs" className="text-center" />
         )}
-        {visibleLogs.map((log, i) => (
-          <div key={i} className="flex gap-2">
+        {visibleLogs.map((log) => (
+          <div key={log.ts} className="flex gap-2">
             <span style={{ color: 'var(--color-text-muted)' }}>{log.time}</span>
             <span style={{ color: levelColor(log.level) }}>{log.message}</span>
           </div>

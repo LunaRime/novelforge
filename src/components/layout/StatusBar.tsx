@@ -421,7 +421,7 @@ function AITaskCapsule() {
 }
 
 
-/** 状态栏分段（可点击） */
+/** 状态栏分段（可点击）——原生 button：键盘可达（Tab/Enter/Space），符合可访问性 */
 function StatusBarSegment({
   children,
   title,
@@ -432,7 +432,8 @@ function StatusBarSegment({
   onClick?: () => void
 }) {
   return (
-    <div
+    <button
+      type="button"
       className="flex items-center gap-1 px-2 h-full cursor-default transition-colors"
       title={title}
       onClick={onClick}
@@ -447,7 +448,7 @@ function StatusBarSegment({
       }}
     >
       {children}
-    </div>
+    </button>
   )
 }
 
@@ -464,7 +465,11 @@ function StatusBarDivider() {
  */
 function ZoomControl() {
   const { t } = useTranslation()
-  const { zoom, zoomIn, zoomOut, zoomReset } = useThemeStore()
+  // 原子 selector：仅订阅缩放相关字段，不随主题/字体等无关字段变化重渲染
+  const zoom = useThemeStore(s => s.zoom)
+  const zoomIn = useThemeStore(s => s.zoomIn)
+  const zoomOut = useThemeStore(s => s.zoomOut)
+  const zoomReset = useThemeStore(s => s.zoomReset)
   const mod = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl'
   const zoomLabel = `${Math.round(zoom * 100)}%`
   const btn: React.CSSProperties = {

@@ -588,7 +588,11 @@ function FontSelect({
 }
 
 function EditorSection() {
-  const { writingFont, setWritingFont, uiFont, setUiFont } = useThemeStore()
+  // 原子 selector：仅订阅字体相关字段
+  const writingFont = useThemeStore(s => s.writingFont)
+  const setWritingFont = useThemeStore(s => s.setWritingFont)
+  const uiFont = useThemeStore(s => s.uiFont)
+  const setUiFont = useThemeStore(s => s.setUiFont)
   const { t, locale } = useTranslation()
 
   return (

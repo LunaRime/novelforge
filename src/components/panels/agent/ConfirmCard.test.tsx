@@ -16,7 +16,8 @@ import type { ToolCallInfo } from '../../../services/agent/agent-engine'
 const mockResolve = vi.hoisted(() => vi.fn())
 
 vi.mock('../../../stores/agent-store', () => ({
-  useAgentStore: () => ({ resolveToolConfirmation: mockResolve }),
+  useAgentStore: (selector?: (s: unknown) => unknown) =>
+    selector ? selector({ resolveToolConfirmation: mockResolve }) : { resolveToolConfirmation: mockResolve },
 }))
 
 let container: HTMLDivElement | null = null

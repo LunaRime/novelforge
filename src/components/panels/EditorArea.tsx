@@ -1,5 +1,5 @@
 import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite } from 'lucide-react'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import {
@@ -21,6 +21,7 @@ import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
+import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useMemoryStore } from '../../stores/memory-store'
 import { countUndecided } from '../../services/diff/hunk-model'
@@ -134,128 +135,96 @@ interface EditorAreaProps {
   onNewProject: () => void
 }
 
-/** 中间主编辑区 */
-export default function EditorArea({ onNewProject }: EditorAreaProps) {
+/** Tab 图标 —— 模块级组件：保持组件类型稳定，避免每次渲染新类型导致 Tab 图标 unmount/remount */
+function TabIcon({ type }: { type: EditorTab['type'] }) {
+  if (type === 'config') return <Settings size={14} />
+  if (type === 'character') return <Users size={14} />
+  if (type === 'diff') return <ArrowLeftRight size={14} />
+  if (type === 'chapter-card') return <BookOpen size={14} />
+  if (type === 'world-building') return <Globe size={14} />
+  if (type === 'version-history') return <History size={14} />
+  if (type === 'review-report') return <ClipboardCheck size={14} />
+  if (type === 'memory') return <Brain size={14} />
+  if (type === 'publication') return <Satellite size={14} />
+  return <FileText size={14} />
+}
+
+/**
+ * Tab 元数据相等比较 —— 供 Tab 条订阅用。
+ * Tab 条只渲染 id/name/type/dirty/pinned，与高频变化的 content/originalContent/inlineSession
+ * 无关；此处忽略这些字段，键入（updateTabContent 每键新建 tabs 数组）时 Tab 条不重渲染。
+ */
+function tabsMetaEqual(a: EditorTab[], b: EditorTab[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i]
+    const y = b[i]
+    if (x.id !== y.id || x.name !== y.name || x.type !== y.type || x.dirty !== y.dirty || x.pinned !== y.pinned) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
+ * Tab 条（独立 memo 组件 + 元数据专属订阅）
+ *
+ * 性能关键：EditorArea 订阅整个 `tabs` 数组，键入时 updateTabContent 每键新建数组 → 整树
+ * 重渲染。Tab 条/菜单/关闭确认弹窗只依赖 Tab 元数据，用 tabsMetaEqual 忽略 content 变化，
+ * 键入时不再重渲染；需要实时数据（inlineSession 未决数等）的操作一律走 getState() 取最新值。
+ * onActivateTab 由 EditorArea 传入（稳定引用），用于知识库视图下点击 Tab 退出检索界面。
+ */
+const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateTab: (id: string) => void }) {
   const { t } = useTranslation()
-  const currentProject = useProjectStore((s) => s.currentProject)
-  const tabs = useEditorStore(s => s.tabs)
+  const tabs = useStoreWithEqualityFn(useEditorStore, s => s.tabs, tabsMetaEqual)
   const activeTabId = useEditorStore(s => s.activeTabId)
-  const closeTab = useEditorStore(s => s.closeTab)
-  const setActiveTab = useEditorStore(s => s.setActiveTab)
-  const sidebarView = useLayoutStore((s) => s.sidebarView)
 
-
-
-  // ===== 所有 Hooks 必须在条件 return 之前 =====
-
-  // 防御性兜底：tabs 有内容但 activeTabId 无效时，激活第一个 tab
-  const activeTab = tabs.find((t) => t.id === activeTabId)
-  useEffect(() => {
-    if (tabs.length > 0 && !activeTab) {
-      setActiveTab(tabs[0].id)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tabs.length, activeTab])
-
-  // 侧栏切到「角色管理」时：自动打开角色编辑器 Tab（图谱/编辑可见，
-  // Tab 栏保持可管理 — 其他 Tab 可正常关闭/切换）；
-  // 切走角色管理时自动关闭角色 Tab（视图驱动 Tab 的生命周期与视图绑定，
-  // 避免残留：切到知识库/工作台后编辑器仍显示角色编辑区）
-  useEffect(() => {
-    const { tabs: ts, openFile, closeTab } = useEditorStore.getState()
-    if (sidebarView === 'characters') {
-      if (ts.some(tab => tab.type === 'character')) return
-      openFile({ id: 'character-editor', name: t('charList.title'), type: 'character' })
-    } else {
-      // dirty 的角色 Tab 保留（有未保存修改，避免静默丢内容），仅关闭干净 Tab
-      ts.filter(tab => tab.type === 'character' && !tab.dirty).forEach(tab => closeTab(tab.id))
-    }
-  }, [sidebarView, t])
-
-  // Tab 条自动滚动到当前活跃 Tab
   const tabBarRef = useRef<HTMLDivElement>(null)
   const activeTabRef = useRef<HTMLDivElement>(null)
+  const moreButtonRef = useRef<HTMLButtonElement>(null)
+
+  // ===== 三个点菜单状态 =====
+  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
+  const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
+  // ===== Tab 右键菜单状态 =====
+  const [tabMenu, setTabMenu] = useState<{
+    tabId: string
+    position: { x: number; y: number }
+  } | null>(null)
+  // ===== 批量关闭确认：待关闭的 tabId 列表（含 dirty / inline 未决的） =====
+  const [batchCloseConfirm, setBatchCloseConfirm] = useState<string[] | null>(null)
+
+  // Tab 条自动滚动到当前活跃 Tab
   useEffect(() => {
     if (activeTabRef.current && tabBarRef.current) {
       activeTabRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
     }
   }, [activeTabId])
 
-  // ===== 知识库视图优先 =====
-  // 从项目结构/工作台切到知识库时，残留的其他部件 Tab 不再抢占中间区域——
-  // 固定显示 KnowledgeOverview（检索界面），无需手动关闭编辑区；
-  // Tab 保留在 Tab 栏（dirty 数据安全），用户主动点击 Tab 可切回内容。
-  // 视图切换 / 关闭全部 Tab 后回到「视图优先」。
-  const [knowledgeTabActive, setKnowledgeTabActive] = useState(false)
-
-  /** 用户主动激活 Tab（Tab 栏/箭头/菜单 goto）：知识库视图下切到 Tab 内容 */
-  const activateTab = useCallback((id: string) => {
-    if (sidebarView === 'knowledge') setKnowledgeTabActive(true)
-    setActiveTab(id)
-  }, [sidebarView, setActiveTab])
-
-  // 进入知识库视图 → 重置为视图优先（微任务 setState，规避 effect 同步 setState 的级联渲染）
-  useEffect(() => {
-    if (sidebarView === 'knowledge') {
-      Promise.resolve().then(() => setKnowledgeTabActive(false))
-    }
-  }, [sidebarView])
-
-  // 知识库视图下关闭全部 Tab → 回到视图优先（检索界面）
-  useEffect(() => {
-    if (sidebarView === 'knowledge' && !activeTabId) {
-      Promise.resolve().then(() => setKnowledgeTabActive(false))
-    }
-  }, [sidebarView, activeTabId])
-
-  // 记忆标签页是**用户点击记忆行**直接打开的（不是程序性后台加载）→ 与「主动点击 Tab」同等对待。
-  // 否则在知识库视图下（侧栏为知识库、AI 面板可见）点记忆会开了标签却仍显示检索界面，
-  // 看起来像「点了没反应」（review Minor 5）。其他类型的程序化打开仍不抢占视图（见上方注释）。
-  useEffect(() => {
-    if (sidebarView === 'knowledge' && activeTab?.type === 'memory') {
-      Promise.resolve().then(() => setKnowledgeTabActive(true))
-    }
-  }, [sidebarView, activeTab])
-
-  /** 点击左右箭头时切换到上/下一个 Tab */
+  /** 点击左右箭头时切换到上/下一个 Tab（实时取 tabs，避免闭包旧列表） */
   const switchTab = useCallback((direction: 'left' | 'right') => {
-    if (tabs.length === 0) return
-    const currentIndex = tabs.findIndex(t => t.id === activeTabId)
+    const { tabs: ts, activeTabId: aid } = useEditorStore.getState()
+    if (ts.length === 0) return
+    const currentIndex = ts.findIndex(t => t.id === aid)
     let nextIndex: number
     if (direction === 'left') {
-      nextIndex = currentIndex <= 0 ? tabs.length - 1 : currentIndex - 1
+      nextIndex = currentIndex <= 0 ? ts.length - 1 : currentIndex - 1
     } else {
-      nextIndex = currentIndex >= tabs.length - 1 ? 0 : currentIndex + 1
+      nextIndex = currentIndex >= ts.length - 1 ? 0 : currentIndex + 1
     }
-    activateTab(tabs[nextIndex].id)
-  }, [tabs, activeTabId, activateTab])
+    onActivateTab(ts[nextIndex].id)
+  }, [onActivateTab])
 
-  // ===== 三个点菜单状态 =====
-  const [moreMenuOpen, setMoreMenuOpen] = useState(false)
-  const moreButtonRef = useRef<HTMLButtonElement>(null)
-  const [closeConfirm, setCloseConfirm] = useState<string | null>(null)
-
-  // ===== Tab 右键菜单状态 =====
-  const [tabMenu, setTabMenu] = useState<{
-    tabId: string
-    position: { x: number; y: number }
-  } | null>(null)
-
-  // ===== 批量关闭确认：待关闭的 tabId 列表（含 dirty / inline 未决的）
-  const [batchCloseConfirm, setBatchCloseConfirm] = useState<string[] | null>(null)
-
-  /** 尝试关闭 Tab：未保存修改 → 弹确认弹窗；inline 会话有未决建议（不 dirty）→
-   *  二次确认（M-4 收口：与浮条 closeSession 同一未决口径，避免静默丢弃建议）；否则直接关 */
+  /** 尝试关闭 Tab：未保存修改 → 弹确认；inline 会话有未决建议（不 dirty）→ 二次确认；否则直接关 */
   const tryCloseTab = useCallback(async (tabId: string) => {
-    const tab = tabs.find(t => t.id === tabId)
+    const { tabs: ts, closeTab } = useEditorStore.getState()
+    const tab = ts.find(t => t.id === tabId)
     if (!tab || tab.pinned) return
     if (tab.dirty) {
-      // 有未保存修改（含已接受但未落库内容），弹确认弹窗
       setCloseConfirm(tabId)
       return
     }
-    // M-4：pending 建议未处理但 doc 未变（不 dirty）——静默关闭会丢弃建议，
-    // 补与浮条 onClose 一致的确认（inlineAccept.closeConfirm）
+    // M-4：pending 建议未处理但 doc 未变（不 dirty）——静默关闭会丢弃建议
     const unhandled = countUndecided(tab.inlineSession)
     if (unhandled > 0) {
       const { confirm } = await import('../ui/Confirm')
@@ -263,25 +232,25 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       if (!ok) return
     }
     closeTab(tabId)
-  }, [tabs, closeTab, setCloseConfirm, t])
+  }, [t])
 
   /** 尝试批量关闭 Tab：收集待关闭列表，若有 dirty 或有 inline 未决建议的 tab 则弹确认弹窗 */
   const tryBatchClose = useCallback((tabIds: string[]) => {
+    const { tabs: ts, closeTab } = useEditorStore.getState()
     const cleanIds = tabIds.filter(id => {
-      const t = tabs.find(t => t.id === id)
+      const t = ts.find(x => x.id === id)
       return t && !t.pinned
     })
     const riskyIds = cleanIds.filter(id => {
-      const t = tabs.find(t => t.id === id)
+      const t = ts.find(x => x.id === id)
       return t && (t.dirty || countUndecided(t.inlineSession) > 0)
     })
     if (riskyIds.length > 0) {
-      // 待关闭列表都放入批量确认弹窗中，一次性关闭
       setBatchCloseConfirm(cleanIds)
     } else {
       cleanIds.forEach(id => closeTab(id))
     }
-  }, [tabs, closeTab, setBatchCloseConfirm])
+  }, [])
 
   // 绑定 ⌘W 快捷键：关闭当前 Tab（带 dirty/inline 未决检查——统一走 tryCloseTab 口径）
   useEffect(() => {
@@ -297,61 +266,53 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   }, [tryCloseTab])
 
   /** 构建 Tab 右键菜单项 */
-  const buildTabMenuItems = useCallback(
-    (tabId: string): ContextMenuEntry[] => {
-      const tab = tabs.find(t => t.id === tabId)
-      const tabIndex = tabs.findIndex(t => t.id === tabId)
-      const hasOthers = tabs.length > 1
-      const hasRight = tabIndex < tabs.length - 1
+  const buildTabMenuItems = (tabId: string): ContextMenuEntry[] => {
+    const tab = tabs.find(t => t.id === tabId)
+    const tabIndex = tabs.findIndex(t => t.id === tabId)
+    const hasOthers = tabs.length > 1
+    const hasRight = tabIndex < tabs.length - 1
 
-      return [
-        {
-          key: 'close',
-          label: t('action.close'),
-          shortcut: '⌘W',
-          disabled: tab?.pinned,
-          onClick: () => tryCloseTab(tabId),
+    return [
+      {
+        key: 'close',
+        label: t('action.close'),
+        shortcut: '⌘W',
+        disabled: tab?.pinned,
+        onClick: () => tryCloseTab(tabId),
+      },
+      {
+        key: 'close-others',
+        label: t('editor.closeOther'),
+        disabled: !hasOthers || tab?.pinned,
+        onClick: () => {
+          const others = tabs.filter(t => t.id !== tabId && !t.pinned).map(t => t.id)
+          tryBatchClose(others)
         },
-        {
-          key: 'close-others',
-          label: t('editor.closeOther'),
-          disabled: !hasOthers || tab?.pinned,
-          onClick: () => {
-            const others = tabs
-              .filter(t => t.id !== tabId && !t.pinned)
-              .map(t => t.id)
-            tryBatchClose(others)
-          },
+      },
+      {
+        key: 'close-right',
+        label: t('editor.closeRight'),
+        disabled: !hasRight,
+        onClick: () => {
+          const right = tabs.slice(tabIndex + 1).filter(t => !t.pinned).map(t => t.id)
+          tryBatchClose(right)
         },
-        {
-          key: 'close-right',
-          label: t('editor.closeRight'),
-          disabled: !hasRight,
-          onClick: () => {
-            const right = tabs
-              .slice(tabIndex + 1)
-              .filter(t => !t.pinned)
-              .map(t => t.id)
-            tryBatchClose(right)
-          },
+      },
+      { key: 'div1', type: 'divider' as const },
+      {
+        key: 'close-all',
+        label: t('editor.closeAll'),
+        danger: true,
+        onClick: () => {
+          const all = tabs.filter(t => !t.pinned).map(t => t.id)
+          tryBatchClose(all)
         },
-        { key: 'div1', type: 'divider' as const },
-        {
-          key: 'close-all',
-          label: t('editor.closeAll'),
-          danger: true,
-          onClick: () => {
-            const all = tabs.filter(t => !t.pinned).map(t => t.id)
-            tryBatchClose(all)
-          },
-        },
-      ]
-    },
-    [tabs, tryCloseTab, tryBatchClose, t]
-  )
+      },
+    ]
+  }
 
   /** 构建三个点菜单项（Tab 操作 + 已打开 Tab 列表） */
-  const buildMoreMenuItems = useCallback((): ContextMenuEntry[] => {
+  const buildMoreMenuItems = (): ContextMenuEntry[] => {
     const hasActive = !!activeTabId
     const activeTab = tabs.find(t => t.id === activeTabId)
     const activeIndex = tabs.findIndex(t => t.id === activeTabId)
@@ -371,9 +332,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         label: t('editor.closeOther'),
         disabled: !hasActive || !hasOthers,
         onClick: () => {
-          const others = tabs
-            .filter(t => t.id !== activeTabId && !t.pinned)
-            .map(t => t.id)
+          const others = tabs.filter(t => t.id !== activeTabId && !t.pinned).map(t => t.id)
           tryBatchClose(others)
         },
       },
@@ -382,10 +341,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         label: t('editor.closeRight'),
         disabled: !hasActive || !hasRight,
         onClick: () => {
-          const right = tabs
-            .slice(activeIndex + 1)
-            .filter(t => !t.pinned)
-            .map(t => t.id)
+          const right = tabs.slice(activeIndex + 1).filter(t => !t.pinned).map(t => t.id)
           tryBatchClose(right)
         },
       },
@@ -408,100 +364,14 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           icon: t.id === activeTabId
             ? <span style={{ color: 'var(--color-accent)', fontWeight: 'bold' }}>●</span>
             : undefined,
-          onClick: () => activateTab(t.id),
+          onClick: () => onActivateTab(t.id),
         })),
       ] : []),
     ]
-  }, [tabs, activeTabId, tryCloseTab, tryBatchClose, activateTab, t])
-
-  // ===== 条件渲染 =====
-
-  // 侧栏为「主页」时，中间区域显示欢迎页（有活跃 Tab 时优先显示 Tab 内容）
-  if (sidebarView === 'home' && !activeTab) {
-    return (
-      <WelcomePage
-        onNewProject={() => {
-          useLayoutStore.getState().openNewProject()
-        }}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-        onOpenSettings={() => {
-          useLayoutStore.getState().openSettings()
-        }}
-      />
-    )
-  }
-
-  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面——
-  // 残留的其他部件 Tab 不抢占（knowledgeTabActive 仅在用户主动点击 Tab 后置真）
-  if (sidebarView === 'knowledge' && !knowledgeTabActive) {
-    return <KnowledgeOverview />
-  }
-
-  // 未打开项目时显示欢迎页（有活跃 Tab 时优先显示 Tab 内容，如项目详情 Tab）
-  if (!currentProject && !activeTab) {
-    return (
-      <WelcomePage
-        onNewProject={onNewProject}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-      />
-    )
-  }
-
-  // 有项目但没有打开的 Tab
-  if (tabs.length === 0) {
-    return (
-      <div
-        className="w-full h-full flex flex-col overflow-hidden"
-        style={{ backgroundColor: 'var(--color-editor-bg)' }}
-      >
-        <div className="flex-1 flex items-center justify-center">
-          {/* 图标与文字间距由 EmptyState 的 gap-3（12px）提供，与原 margin-bottom 12px 等值 */}
-          <EmptyState
-            icon={<PenTool size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />}
-            message={t('editor.noProject')}
-            opacity={0.4}
-            className="text-center text-[var(--color-text-secondary)]"
-          />
-        </div>
-      </div>
-    )
-  }
-
-  /** Tab 图标 */
-  const TabIcon = ({ type }: { type: EditorTab['type'] }) => {
-    if (type === 'config') return <Settings size={14} />
-    if (type === 'character') return <Users size={14} />
-    if (type === 'diff') return <ArrowLeftRight size={14} />
-    if (type === 'chapter-card') return <BookOpen size={14} />
-    if (type === 'world-building') return <Globe size={14} />
-    if (type === 'version-history') return <History size={14} />
-    if (type === 'review-report') return <ClipboardCheck size={14} />
-    if (type === 'memory') return <Brain size={14} />
-    if (type === 'publication') return <Satellite size={14} />
-    return <FileText size={14} />
   }
 
   return (
-    <div
-      className="w-full h-full flex flex-col overflow-hidden"
-      style={{ backgroundColor: 'var(--color-editor-bg)' }}
-    >
+    <>
       {/* Tab 条：左右箭头 + 可横向滚动区域 + 三个点菜单 */}
       <div
         className="no-select flex items-center flex-shrink-0"
@@ -536,10 +406,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                   ? 'var(--color-text)'
                   : 'var(--color-text-secondary)',
               }}
-              onClick={() => activateTab(tab.id)}
+              onClick={() => onActivateTab(tab.id)}
               onContextMenu={e => {
                 e.preventDefault()
-                activateTab(tab.id)
+                onActivateTab(tab.id)
                 setTabMenu({ tabId: tab.id, position: { x: e.clientX, y: e.clientY } })
               }}
               onMouseEnter={e => {
@@ -618,7 +488,251 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         </div>
       </div>
 
+      {/* Tab 右键菜单 */}
+      {tabMenu && (
+        <ContextMenu
+          items={buildTabMenuItems(tabMenu.tabId)}
+          position={tabMenu.position}
+          onClose={() => setTabMenu(null)}
+        />
+      )}
 
+      {/* 三个点菜单（已打开的编辑器列表 + Tab 操作） */}
+      {/* eslint-disable-next-line react-hooks/refs */}
+      {moreMenuOpen && moreButtonRef.current && (() => {
+        const rect = moreButtonRef.current!.getBoundingClientRect()
+        return (
+          <ContextMenu
+            items={buildMoreMenuItems()}
+            position={{ x: rect.right - 200, y: rect.bottom + 4 }}
+            onClose={() => setMoreMenuOpen(false)}
+          />
+        )
+      })()}
+
+      {/* 关闭未保存 Tab 确认弹窗 */}
+      <Dialog
+        open={closeConfirm !== null}
+        onOpenChange={v => !v && setCloseConfirm(null)}
+      >
+        <DialogContent className="max-w-[380px]">
+          <DialogHeader>
+            <DialogTitle>{t('dialog.closeUnsaved')}</DialogTitle>
+            <DialogDescription>
+              {t('editor.fileHasUnsaved') + ' «' + (tabs.find(t => t.id === closeConfirm)?.name ?? '') + '» ' + t('editor.unsavedWarning')}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setCloseConfirm(null)}>
+              {t('action.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (closeConfirm) useEditorStore.getState().closeTab(closeConfirm)
+                setCloseConfirm(null)
+              }}
+            >
+              {t('dialog.confirmDiscard')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量关闭未保存 Tab 确认弹窗 */}
+      <Dialog
+        open={batchCloseConfirm !== null}
+        onOpenChange={v => !v && setBatchCloseConfirm(null)}
+      >
+        <DialogContent className="max-w-[400px]">
+          <DialogHeader>
+            <DialogTitle>{t('dialog.closeMultiple')}</DialogTitle>
+            <DialogDescription>
+              {(() => {
+                const dirtyCount = (batchCloseConfirm ?? []).filter(
+                  id => tabs.find(t => t.id === id)?.dirty
+                ).length
+                const total = (batchCloseConfirm ?? []).length
+                return dirtyCount > 0
+                  ? (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + ', ' + dirtyCount + ' ' + t('editor.unsavedWarning'))
+                  : (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + '.')
+              })()}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setBatchCloseConfirm(null)}>
+              {t('action.cancel')}
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (batchCloseConfirm) {
+                  const { closeTab } = useEditorStore.getState()
+                  batchCloseConfirm.forEach(id => closeTab(id))
+                }
+                setBatchCloseConfirm(null)
+              }}
+            >
+              {t('dialog.confirmDiscardClose')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+})
+
+/** 中间主编辑区 */
+export default function EditorArea({ onNewProject }: EditorAreaProps) {
+  const { t } = useTranslation()
+  const currentProject = useProjectStore((s) => s.currentProject)
+  const tabs = useEditorStore(s => s.tabs)
+  const activeTabId = useEditorStore(s => s.activeTabId)
+  const setActiveTab = useEditorStore(s => s.setActiveTab)
+  const sidebarView = useLayoutStore((s) => s.sidebarView)
+
+
+
+  // ===== 所有 Hooks 必须在条件 return 之前 =====
+
+  // 防御性兜底：tabs 有内容但 activeTabId 无效时，激活第一个 tab
+  const activeTab = tabs.find((t) => t.id === activeTabId)
+  useEffect(() => {
+    if (tabs.length > 0 && !activeTab) {
+      setActiveTab(tabs[0].id)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tabs.length, activeTab])
+
+  // 侧栏切到「角色管理」时：自动打开角色编辑器 Tab（图谱/编辑可见，
+  // Tab 栏保持可管理 — 其他 Tab 可正常关闭/切换）；
+  // 切走角色管理时自动关闭角色 Tab（视图驱动 Tab 的生命周期与视图绑定，
+  // 避免残留：切到知识库/工作台后编辑器仍显示角色编辑区）
+  useEffect(() => {
+    const { tabs: ts, openFile, closeTab } = useEditorStore.getState()
+    if (sidebarView === 'characters') {
+      if (ts.some(tab => tab.type === 'character')) return
+      openFile({ id: 'character-editor', name: t('charList.title'), type: 'character' })
+    } else {
+      // dirty 的角色 Tab 保留（有未保存修改，避免静默丢内容），仅关闭干净 Tab
+      ts.filter(tab => tab.type === 'character' && !tab.dirty).forEach(tab => closeTab(tab.id))
+    }
+  }, [sidebarView, t])
+
+  // Tab 条自动滚动已随 Tab 条组件（EditorTabBar）抽离
+
+  // ===== 知识库视图优先 =====
+  // 从项目结构/工作台切到知识库时，残留的其他部件 Tab 不再抢占中间区域——
+  // 固定显示 KnowledgeOverview（检索界面），无需手动关闭编辑区；
+  // Tab 保留在 Tab 栏（dirty 数据安全），用户主动点击 Tab 可切回内容。
+  // 视图切换 / 关闭全部 Tab 后回到「视图优先」。
+  const [knowledgeTabActive, setKnowledgeTabActive] = useState(false)
+
+  /** 用户主动激活 Tab（Tab 栏/箭头/菜单 goto）：知识库视图下切到 Tab 内容。稳定引用，供 memo(EditorTabBar) 使用 */
+  const onActivateTab = useCallback((id: string) => {
+    if (sidebarView === 'knowledge') setKnowledgeTabActive(true)
+    useEditorStore.getState().setActiveTab(id)
+  }, [sidebarView])
+
+  // 进入知识库视图 → 重置为视图优先（微任务 setState，规避 effect 同步 setState 的级联渲染）
+  useEffect(() => {
+    if (sidebarView === 'knowledge') {
+      Promise.resolve().then(() => setKnowledgeTabActive(false))
+    }
+  }, [sidebarView])
+
+  // 知识库视图下关闭全部 Tab → 回到视图优先（检索界面）
+  useEffect(() => {
+    if (sidebarView === 'knowledge' && !activeTabId) {
+      Promise.resolve().then(() => setKnowledgeTabActive(false))
+    }
+  }, [sidebarView, activeTabId])
+
+  // 记忆标签页是**用户点击记忆行**直接打开的（不是程序性后台加载）→ 与「主动点击 Tab」同等对待。
+  // 否则在知识库视图下（侧栏为知识库、AI 面板可见）点记忆会开了标签却仍显示检索界面，
+  // 看起来像「点了没反应」（review Minor 5）。其他类型的程序化打开仍不抢占视图（见上方注释）。
+  useEffect(() => {
+    if (sidebarView === 'knowledge' && activeTab?.type === 'memory') {
+      Promise.resolve().then(() => setKnowledgeTabActive(true))
+    }
+  }, [sidebarView, activeTab])
+
+  // ===== 条件渲染 =====
+
+  // 侧栏为「主页」时，中间区域显示欢迎页（有活跃 Tab 时优先显示 Tab 内容）
+  if (sidebarView === 'home' && !activeTab) {
+    return (
+      <WelcomePage
+        onNewProject={() => {
+          useLayoutStore.getState().openNewProject()
+        }}
+        onOpenProject={async () => {
+          const folder = await ipc.invoke('dialog:select-folder')
+          if (folder) {
+            useProjectStore.getState().openProject(folder)
+          }
+        }}
+        onImportNovel={() => {
+          useLayoutStore.getState().openImportNovel()
+        }}
+        onOpenSettings={() => {
+          useLayoutStore.getState().openSettings()
+        }}
+      />
+    )
+  }
+
+  // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面——
+  // 残留的其他部件 Tab 不抢占（knowledgeTabActive 仅在用户主动点击 Tab 后置真）
+  if (sidebarView === 'knowledge' && !knowledgeTabActive) {
+    return <KnowledgeOverview />
+  }
+
+  // 未打开项目时显示欢迎页（有活跃 Tab 时优先显示 Tab 内容，如项目详情 Tab）
+  if (!currentProject && !activeTab) {
+    return (
+      <WelcomePage
+        onNewProject={onNewProject}
+        onOpenProject={async () => {
+          const folder = await ipc.invoke('dialog:select-folder')
+          if (folder) {
+            useProjectStore.getState().openProject(folder)
+          }
+        }}
+        onImportNovel={() => {
+          useLayoutStore.getState().openImportNovel()
+        }}
+      />
+    )
+  }
+
+  // 有项目但没有打开的 Tab
+  if (tabs.length === 0) {
+    return (
+      <div
+        className="w-full h-full flex flex-col overflow-hidden"
+        style={{ backgroundColor: 'var(--color-editor-bg)' }}
+      >
+        <div className="flex-1 flex items-center justify-center">
+          {/* 图标与文字间距由 EmptyState 的 gap-3（12px）提供，与原 margin-bottom 12px 等值 */}
+          <EmptyState
+            icon={<PenTool size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />}
+            message={t('editor.noProject')}
+            opacity={0.4}
+            className="text-center text-[var(--color-text-secondary)]"
+          />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className="w-full h-full flex flex-col overflow-hidden"
+      style={{ backgroundColor: 'var(--color-editor-bg)' }}
+    >
+      {/* Tab 条：独立 memo 组件（键入时元数据订阅不触发重渲染，见 EditorTabBar） */}
+      <EditorTabBar onActivateTab={onActivateTab} />
 
       {/* 编辑区主体 */}
       <div className="flex-1 overflow-hidden">
@@ -833,96 +947,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         </Dialog>
 
       </div>
-
-      {/* Tab 右键菜单 */}
-      {tabMenu && (
-        <ContextMenu
-          items={buildTabMenuItems(tabMenu.tabId)}
-          position={tabMenu.position}
-          onClose={() => setTabMenu(null)}
-        />
-      )}
-
-      {/* 三个点菜单（已打开的编辑器列表 + Tab 操作） */}
-      {/* eslint-disable-next-line react-hooks/refs */}
-      {moreMenuOpen && moreButtonRef.current && (() => {
-        const rect = moreButtonRef.current!.getBoundingClientRect()
-        return (
-          <ContextMenu
-            items={buildMoreMenuItems()}
-            position={{ x: rect.right - 200, y: rect.bottom + 4 }}
-            onClose={() => setMoreMenuOpen(false)}
-          />
-        )
-      })()}
-
-      {/* 关闭未保存 Tab 确认弹窗 */}
-      <Dialog
-        open={closeConfirm !== null}
-        onOpenChange={v => !v && setCloseConfirm(null)}
-      >
-        <DialogContent className="max-w-[380px]">
-          <DialogHeader>
-            <DialogTitle>{t('dialog.closeUnsaved')}</DialogTitle>
-            <DialogDescription>
-              {t('editor.fileHasUnsaved') + ' «' + (tabs.find(t => t.id === closeConfirm)?.name ?? '') + '» ' + t('editor.unsavedWarning')}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setCloseConfirm(null)}>
-              {t('action.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (closeConfirm) closeTab(closeConfirm)
-                setCloseConfirm(null)
-              }}
-            >
-              {t('dialog.confirmDiscard')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* 批量关闭未保存 Tab 确认弹窗 */}
-      <Dialog
-        open={batchCloseConfirm !== null}
-        onOpenChange={v => !v && setBatchCloseConfirm(null)}
-      >
-        <DialogContent className="max-w-[400px]">
-          <DialogHeader>
-            <DialogTitle>{t('dialog.closeMultiple')}</DialogTitle>
-            <DialogDescription>
-              {(() => {
-                const dirtyCount = (batchCloseConfirm ?? []).filter(
-                  id => tabs.find(t => t.id === id)?.dirty
-                ).length
-                const total = (batchCloseConfirm ?? []).length
-                return dirtyCount > 0
-                  ? (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + ', ' + dirtyCount + ' ' + t('editor.unsavedWarning'))
-                  : (t('editor.closingFiles') + ' ' + total + ' ' + t('unit.items') + '.')
-              })()}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2">
-            <Button variant="ghost" onClick={() => setBatchCloseConfirm(null)}>
-              {t('action.cancel')}
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                if (batchCloseConfirm) {
-                  batchCloseConfirm.forEach(id => closeTab(id))
-                }
-                setBatchCloseConfirm(null)
-              }}
-            >
-              {t('dialog.confirmDiscardClose')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }

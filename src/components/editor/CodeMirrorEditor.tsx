@@ -996,6 +996,7 @@ export default function CodeMirrorEditor({
                   <button
                     className="p-1 rounded"
                     title={t('action.undo')}
+                    aria-label={t('action.undo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -1007,6 +1008,7 @@ export default function CodeMirrorEditor({
                   <button
                     className="p-1 rounded"
                     title={t('action.redo')}
+                    aria-label={t('action.redo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -1022,6 +1024,8 @@ export default function CodeMirrorEditor({
                 <>
                   <button
                     className="p-1 rounded"
+                    title={t('editor.bold')}
+                    aria-label={t('editor.bold')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}

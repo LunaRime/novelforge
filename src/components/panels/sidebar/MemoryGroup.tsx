@@ -39,7 +39,12 @@ interface Props {
 
 export default function MemoryGroup({ projectPath }: Props) {
   const { t } = useTranslation()
-  const { files, loading, loadFailed, load, refresh } = useMemoryStore()
+  // 原子 selector：仅订阅本组件依赖字段，避免无关 store 变化触发重渲染
+  const files = useMemoryStore(s => s.files)
+  const loading = useMemoryStore(s => s.loading)
+  const loadFailed = useMemoryStore(s => s.loadFailed)
+  const load = useMemoryStore(s => s.load)
+  const refresh = useMemoryStore(s => s.refresh)
   const { handleRebuild } = useMemoryRebuild()
   const [open, setOpen] = useState(true)
 
