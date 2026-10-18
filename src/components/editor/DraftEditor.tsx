@@ -99,7 +99,7 @@ export default function DraftEditor({ filePath, content }: Props) {
    * - 手动：toast 视觉反馈（成功/失败）+ info 日志
    * - 自动（useAutoSave 30s）：仅 debug 日志（不 toast，避免高频打扰）
    */
-  const doSave = async (text: string, opts?: { manual?: boolean }) => {
+  const doSave = useCallback(async (text: string, opts?: { manual?: boolean }) => {
     const manual = opts?.manual ?? false
     const t0 = Date.now()
     setSaving(true)
@@ -149,7 +149,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     } finally {
       setSaving(false)
     }
-  }
+  }, [filePath, t])
 
   // 自动保存定时器（通过 useAutoSave hook 复用）
   useAutoSave(filePath, currentBodyRef, doSave)
@@ -193,7 +193,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   }
 
   /** 定稿 */
-  const doFinalize = async () => {
+  const doFinalize = useCallback(async () => {
     if (!meta || isChapterBusy) return
     const ok = await confirm(
       t('editor.confirmFinalizeMsg').replace('{n}', String(meta.chapterNumber)),
@@ -213,7 +213,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     } catch (e) {
       toast.error(t('error.finalizeFailed').replace('{error}', String(e)))
     }
-  }
+  }, [meta, isChapterBusy, filePath, t])
 
   /** 修复定稿后处理 */
   const doRepairFinalize = useCallback(async () => {
@@ -233,7 +233,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   }, [meta, isChapterBusy, t])
 
   /** 打开待合并修稿 */
-  const openPendingRevision = async (rev: RevisionEntry) => {
+  const openPendingRevision = useCallback(async (rev: RevisionEntry) => {
     if (!meta) return
     const revPath = `${VELA.REVISION}${rev.id}`
     const [origContent, revContent] = await Promise.all([
@@ -242,7 +242,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     ])
     if (!origContent && !revContent) return
     setMergeData({ originalContent: origContent, modifiedContent: revContent, revisionPath: revPath })
-  }
+  }, [meta, filePath])
 
   /** 合并完成回调 */
   const handleMergeComplete = async (mergedText: string) => {
@@ -269,7 +269,7 @@ export default function DraftEditor({ filePath, content }: Props) {
   }
 
   /** 打开最新审稿报告 */
-  const openLatestReview = async () => {
+  const openLatestReview = useCallback(async () => {
     if (!meta) return
     const chapterDir = `${VELA.DRAFT}ch${meta.chapterNumber}`
     const { getLatestReview } = await import('../../services/draft-index')
@@ -287,10 +287,10 @@ export default function DraftEditor({ filePath, content }: Props) {
       chapterNumber: meta.chapterNumber,
       chapterDir,
     })
-  }
+  }, [meta, filePath, t])
 
   /** 正文翻译：目标语言 → LLM 翻译 → 新建 source='translation' 草稿 → 打开新 Tab（原文保留） */
-  const doTranslate = async (lang: 'zh' | 'en' | 'ru') => {
+  const doTranslate = useCallback(async (lang: 'zh' | 'en' | 'ru') => {
     const text = currentBodyRef.current
     if (!text?.trim()) return
     try {
@@ -332,7 +332,18 @@ export default function DraftEditor({ filePath, content }: Props) {
     } catch (e) {
       toast.error(t('translate.failed').replace('{error}', String(e)))
     }
-  }
+  }, [meta, t])
+
+  // 稳定回调（配合 memo(EditorToolbar) / CodeMirrorEditor 的 handleUpdate 依赖）——
+  // 否则流式期间（activeRuns 每 100ms 变化）内联函数重建，EditorToolbar 的 memo 形同虚设
+  const handleToolbarSave = useCallback(() => doSave(currentBodyRef.current, { manual: true }), [doSave])
+  const handleToolbarRefine = useCallback(() => { setUserRefinePrompt(''); setConfirmAction('refine') }, [])
+  const handleToolbarReview = useCallback(() => setConfirmAction('review'), [])
+  const handleEditorChange = useCallback((text: string) => {
+    currentBodyRef.current = text
+    useEditorStore.getState().updateTabContent(filePath, text)
+  }, [filePath])
+  const handleEditorSave = useCallback((text: string) => doSave(text, { manual: true }), [doSave])
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -347,9 +358,9 @@ export default function DraftEditor({ filePath, content }: Props) {
         pendingRevisions={pendingRevisions}
         reviewCount={reviewCount}
         hasProcessFailure={hasProcessFailure}
-        onSave={() => doSave(currentBodyRef.current, { manual: true })}
-        onRefine={() => { setUserRefinePrompt(''); setConfirmAction('refine') }}
-        onReview={() => setConfirmAction('review')}
+        onSave={handleToolbarSave}
+        onRefine={handleToolbarRefine}
+        onReview={handleToolbarReview}
         onTranslate={doTranslate}
         onFinalize={doFinalize}
         onRepairFinalize={doRepairFinalize}
@@ -377,11 +388,8 @@ export default function DraftEditor({ filePath, content }: Props) {
           editable={!isReadonly && !isChapterBusy}
           hideStatusBar
           onCharCountChange={setCharCount}
-          onChange={(text) => {
-            currentBodyRef.current = text
-            useEditorStore.getState().updateTabContent(filePath, text)
-          }}
-          onSave={(text) => doSave(text, { manual: true })}
+          onChange={handleEditorChange}
+          onSave={handleEditorSave}
         />
       </div>
 
