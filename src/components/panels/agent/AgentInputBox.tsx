@@ -7,6 +7,7 @@ import {
   FileText,
   AtSign,
   Workflow,
+  Slash,
   BrainCircuit,
   Zap,
   Gauge,
@@ -381,6 +382,25 @@ export default function AgentInputBox() {
               </PopoverSurface>
             )}
           </div>
+
+          {/* / @ 能力入口（10-18 评审：核心能力不再只藏在 placeholder 灰字与 + 菜单里，
+              直接暴露两个常驻图标按钮 —— 点击即插入触发字符并弹出对应菜单） */}
+          <ToolbarIconBtn title={t('agent.atMention')} onClick={() => {
+            const next = inputText + '@'
+            setInputText(next)
+            handleInputChange(next)
+            textareaRef.current?.focus()
+          }}>
+            <AtSign size={14} />
+          </ToolbarIconBtn>
+          <ToolbarIconBtn title={t('agent.workflowCmd')} onClick={() => {
+            const next = '/'
+            setInputText(next)
+            handleInputChange(next)
+            textareaRef.current?.focus()
+          }}>
+            <Slash size={14} />
+          </ToolbarIconBtn>
 
           {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板）
               flex-shrink-0：档位名偏长（俄语「Глубоко」约为「深度」的 3 倍宽），不加会被

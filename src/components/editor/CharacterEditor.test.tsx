@@ -71,7 +71,9 @@ describe('CharacterEditor — 工具栏只留主操作 + 更多菜单', () => {
   it('低频操作默认不在工具栏上（生成档案 / 试演 / 存为模板 / 删除）', () => {
     const box = render()
 
-    expect(byText(box, t('action.save'))).toBeTruthy()
+    // 保存按钮已改图标（10-18 评审统一入口形态），靠 title 定位，不再有「保存」文字
+    const saveBtn = buttons(box).find((b) => b.title === t('tip.saveShortcut'))
+    expect(saveBtn).toBeTruthy()
     expect(moreButton(box)).toBeTruthy()
 
     for (const key of ['character.archiveBtn', 'roleplay.enter', 'template.saveAs', 'action.delete'] as const) {

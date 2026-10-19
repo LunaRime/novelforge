@@ -33,6 +33,8 @@ interface EditorState {
   tabs: EditorTab[]
   /** 当前活跃的 Tab ID */
   activeTabId: string | null
+  /** 当前激活章节的实时字数（由 ProseEditorWrapper 上抛，供状态栏显示；0 = 无章节激活） */
+  activeCharCount: number
 
   // ===== Actions =====
   /** 打开文件（如果已打开则激活） */
@@ -41,6 +43,8 @@ interface EditorState {
   closeTab: (tabId: string) => void
   /** 激活 Tab */
   setActiveTab: (tabId: string) => void
+  /** 更新当前激活章节字数（状态栏实时显示） */
+  setActiveCharCount: (count: number) => void
   /**
    * 更新 Tab 内容（标记 dirty）
    * 仅在「用户修改」时调用，会亮起未保存指示灯。
@@ -71,6 +75,7 @@ interface EditorState {
 export const useEditorStore = create<EditorState>()((set, get) => ({
   tabs: [],
   activeTabId: null,
+  activeCharCount: 0,
 
   openFile: (tab) => {
     // diff 类型每次内容不同，只按 id 精确匹配（不走 filePath 去重）
@@ -125,6 +130,11 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
 
   setActiveTab: (tabId) => {
     set({ activeTabId: tabId })
+  },
+
+  // 更新当前激活章节字数（状态栏实时显示；切走/关闭章节由 ProseEditorWrapper 卸载时清零）
+  setActiveCharCount: (count) => {
+    set({ activeCharCount: count })
   },
 
   updateTabContent: (tabId, content) => {

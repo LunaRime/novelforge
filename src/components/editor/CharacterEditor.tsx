@@ -276,12 +276,18 @@ export default function CharacterEditor() {
         </div>
 
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {/* 保存 = 唯一主操作：未保存时点亮成 accent（`dirty` 的全局提示就靠它）
-              只在两个可编辑视图出现 —— 图谱/反向链接是只读视图，摆个保存键是噪音 */}
+          {/* 保存 = 唯一主操作：图标按钮（与正文编辑器头部同款 icon-btn，10-18 评审统一入口形态）；
+              dirty 时点亮 accent；只在两个可编辑视图出现 —— 图谱/反向链接是只读视图，摆个保存键是噪音 */}
           {selectedCard && (viewMode === 'edit' || viewMode === 'state') && (
-            <Button variant={dirty ? 'default' : 'outline'} size="sm" onClick={handleSave} disabled={saving}>
-              <Save size={12} /> {saving ? t('status.saving') : t('action.save')}
-            </Button>
+            <button
+              className="icon-btn"
+              style={{ width: 28, height: 28, color: dirty ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
+              onClick={handleSave}
+              disabled={saving}
+              title={saving ? t('status.saving') : t('tip.saveShortcut')}
+            >
+              <Save size={13} strokeWidth={1.5} />
+            </button>
           )}
 
           {selectedCard ? (
@@ -446,8 +452,9 @@ export default function CharacterEditor() {
                   ⚠️ 列数不能用 `grid-cols-3`：编辑区下限 320px（`EDITOR_MIN_PX`），
                   三列各 ~100px 时「★★★ 核心」「🌟 主角」会被折成两行（截图实测）。
                   用 auto-fit 按**容器宽度**（而非视口宽度）自动降到 2 列/1 列 ——
-                  Tailwind 的 `sm:` 断点看视口，1440px 窗口里塞个 320px 编辑区时不会降级。 */}
-              <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(160px,1fr))]">
+                  Tailwind 的 `sm:` 断点看视口，1440px 窗口里塞个 320px 编辑区时不会降级。
+                  最小宽统一为 200px（原 160px，与下方字段组 200px 基准不一致 → 10-18 评审统一）。 */}
+              <div className="grid gap-3 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
                 <div><Label>{t('character.name')}</Label><Input ref={nameInputRef} value={selectedCard.name} onChange={(e) => updateField(selectedCard.name, 'name', e.target.value)} /></div>
                 <div>
                   <Label>{t('character.tier')}</Label>

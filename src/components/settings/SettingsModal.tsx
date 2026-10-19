@@ -130,9 +130,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               className={cn(
                 'flex items-center gap-2.5 mx-2 px-3 py-2.5 rounded-lg text-left text-sm transition-colors',
                 section === s.id
-                  ? 'bg-[var(--color-accent)] text-white'
+                  ? 'text-[var(--color-text)]'
                   : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]',
               )}
+              style={section === s.id
+                ? { background: 'var(--color-active)', boxShadow: 'inset 2px 0 0 var(--color-accent)' }
+                : undefined}
             >
               {s.icon}
               {s.label}
@@ -464,7 +467,7 @@ function ProxySection() {
   }
 
   return (
-    <div className="max-w-[480px] space-y-5">
+    <div className="max-w-[640px] space-y-5">
       {/* 启用开关 */}
       <div
         className="flex items-center justify-between p-4 rounded-xl"
@@ -710,7 +713,7 @@ function AboutSection() {
   }
 
   return (
-    <div className="space-y-6 max-w-[600px] p-2">
+    <div className="space-y-6 max-w-[640px] p-2">
       {/* 品牌标识 */}
       <div className="flex flex-col items-center justify-center py-10 rounded-xl space-y-3" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
         <h1 className="text-2xl font-bold brand-gradient tracking-wider">NovelForge</h1>

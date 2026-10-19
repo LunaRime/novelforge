@@ -127,15 +127,15 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
             onClick={onNewProject}
             className="group flex flex-col items-center gap-2.5 p-5 rounded-xl transition-all hover:scale-[1.02]"
             style={{
-              backgroundColor: 'var(--color-sidebar)',
-              border: '1px solid var(--color-border)',
+              backgroundColor: 'rgba(var(--color-accent-rgb), 0.07)',
+              border: '1px solid rgba(var(--color-accent-rgb), 0.45)',
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(var(--color-accent-rgb), 0.4)'
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(var(--color-accent-rgb), 0.10)'
+              e.currentTarget.style.borderColor = 'rgba(var(--color-accent-rgb), 0.7)'
+              e.currentTarget.style.boxShadow = '0 4px 20px rgba(var(--color-accent-rgb), 0.16)'
             }}
             onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--color-border)'
+              e.currentTarget.style.borderColor = 'rgba(var(--color-accent-rgb), 0.45)'
               e.currentTarget.style.boxShadow = 'none'
             }}
           >

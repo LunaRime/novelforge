@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Wifi, BookOpen, DollarSign, CheckCircle2, Thermometer, ZoomIn, ZoomOut } from 'lucide-react'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useEditorStore } from '../../stores/editor-store'
 import { t } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowStore } from '../../stores/workflow-store'
@@ -50,6 +51,10 @@ export default function StatusBar() {
         {/* 设置入口已于 2026-09-22 迁到左侧图标栏底部（图标形式）——
             这里的文字入口对非中文使用者不友好，移除避免重复入口 */}
 
+        {/* 当前激活章节的写作信息（章节名 / 字数 / dirty 点）——10-18 评审补齐
+            （写作中确认状态无需再把视线移到编辑器头部） */}
+        <EditorStatusSegment />
+
       </div>
 
       {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
@@ -76,6 +81,45 @@ export default function StatusBar() {
 
 
 // ===== 水温控制（temperature 快速调节）=====
+
+/**
+ * 状态栏左段 —— 当前激活章节的写作信息（章节名 + 字数 + 未保存圆点）。
+ *
+ * 用三个**独立原子 selector** 订阅（各自返回原始值，值不变不重渲染）：
+ *   - name / dirty：从 activeTab 派生，只在切 Tab / 置脏 / 保存时变化；
+ *   - activeCharCount：ProseEditorWrapper 在 onCharCountChange 里上抛（随输入实时变）。
+ * 整段在键入时只有字数这个 number 变化触发重渲染，不影响状态栏其余分段（模型/温度等）。
+ */
+function EditorStatusSegment() {
+  const { t } = useTranslation()
+  const name = useEditorStore(s => {
+    const tab = s.tabs.find(x => x.id === s.activeTabId)
+    return tab && tab.type === 'chapter' ? tab.name : ''
+  })
+  const dirty = useEditorStore(s => {
+    const tab = s.tabs.find(x => x.id === s.activeTabId)
+    return tab ? tab.type === 'chapter' && !!tab.dirty : false
+  })
+  const charCount = useEditorStore(s => s.activeCharCount)
+
+  if (!name) return null
+
+  return (
+    <StatusBarSegment title={`${name}${charCount > 0 ? ` · ${charCount.toLocaleString()} ${t('unit.chars')}` : ''}`}>
+      <span className="opacity-80 truncate max-w-[160px]">{name}</span>
+      {charCount > 0 && (
+        <span className="opacity-80 tabular-nums">{charCount.toLocaleString()} {t('unit.chars')}</span>
+      )}
+      {dirty && (
+        <span
+          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
+          style={{ backgroundColor: 'var(--color-warning)' }}
+          title={t('statusbar.unsaved')}
+        />
+      )}
+    </StatusBarSegment>
+  )
+}
 
 /**
  * 右下角的**模型选择器**（2026-09-25）。

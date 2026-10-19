@@ -54,18 +54,18 @@
   --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
   --font-writing: 'Noto Serif SC', 'Source Han Serif SC', Georgia, serif;
 
-  /* 文字尺寸 —— 12px 以下的两档（2026-09-25 收敛）
+  /* 文字尺寸 —— 12px 以下的下限统一为 11px（2026-10-18 布局整改，原 2026-09-25 收敛）
      此前 12px 以下有 **10 档手写值**（8.8/9/9.6/9.92/10/10.4/10.88/11/11.2/12.8px，共 253 处），
      挤在 3px 区间内、肉眼无法区分，纯属逐次微调漂移（同一面板内常并存 3–4 档）。
-     现收敛为两档：
-       text-2xs   10px —— 密集徽标/标签（原 8.8/9/9.6/9.92/10px 共 70 处）
-       text-micro 11px —— 侧栏与面板的次级文字（原 10.4/10.88/11/11.2px 共 181 处）
-     12.8px 归入既有的 text-xs（12px）。
+     09-25 收敛为两档（text-2xs 10px 密集徽标 / text-micro 11px 次级文字）；
+     10-18 评审（AUDIT Top10 / review 五·#8）判定 10px 是可读性下限问题 ——
+     把 text-2xs 从 10px 抬到 11px，与 text-micro 同值（token 名保留作语义别名，
+     避免改 113 处引用；不再设 10px 档）。12.8px 归入既有的 text-xs（12px）。
 
      ⚠️ **故意不定义 `--line-height` 伴随值**：Tailwind 的 `text-2xs` 这类任意值**只设字号**，
      若这里带上行高，253 处替换会连带改变行高、把布局节奏一起改掉。中性替换优先。
      （此前存在的 `--text-2xs--line-height` 已移除——该档当时零引用。） */
-  --text-2xs: 0.625rem;
+  --text-2xs: 0.6875rem;
   --text-micro: 0.6875rem;
 
   /* 间距 */
@@ -199,7 +199,7 @@
     /* 文字层次 */
     --color-text: #1A2233;
     --color-text-secondary: #4A5568;
-    --color-text-muted: #8A9AAB;
+    --color-text-muted: #5A6B7E;
 
     /* 「边界线叠加层」= 10% 的 --color-text 叠在元素**实际所在的表面**上（2026-09-28 走查：边界线整体加强）。
        ⚠️ 与 --color-hover 同族机制，值必须保持派生式，不要改回固定 hex —— 固定色必然在某个面上失效，
@@ -237,13 +237,13 @@
 
     /* 状态栏 */
     --color-statusbar: #EFF2F7;
-    --color-statusbar-text: #8994A7;
+    --color-statusbar-text: #57657A;
 
     /* 标题栏文字 */
     --color-titlebar-text: #2D3748;
 
     /* 活动栏图标颜色 */
-    --color-activity-icon: #8994A7;
+    --color-activity-icon: #57657A;
     --color-activity-icon-active: #1A2233;
     --color-activity-indicator: #5B9ED6;
 
@@ -329,7 +329,7 @@
     /* 文字层次 — 冰蓝色阶梯，与Logo蓝色调和谐 */
     --color-text: #E0ECF4;
     --color-text-secondary: #8BA4BE;
-    --color-text-muted: #5A7A96;
+    --color-text-muted: #6E8EAA;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
@@ -418,7 +418,7 @@
 
     --color-text: #2C2520;
     --color-text-secondary: #6B6058;
-    --color-text-muted: #A89888;
+    --color-text-muted: #6F6157;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
@@ -445,11 +445,11 @@
     --color-tab-indicator: #9B8EC8;
 
     --color-statusbar: #EDE8E0;
-    --color-statusbar-text: #A09488;
+    --color-statusbar-text: #61564C;
 
     --color-titlebar-text: #4A4038;
 
-    --color-activity-icon: #A09488;
+    --color-activity-icon: #61564C;
     --color-activity-icon-active: #2C2520;
     --color-activity-indicator: #9B8EC8;
 
