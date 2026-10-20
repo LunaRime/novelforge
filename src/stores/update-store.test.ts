@@ -20,3 +20,13 @@ describe('downloadUpdate 启动语义', () => {
     expect(useUpdateStore.getState().loading).toBe(false)
   })
 })
+
+describe('checkForUpdates 错误语义', () => {
+  it('检查失败时保持 error，而不是改写成 no-update', async () => {
+    invokeMock.mockResolvedValue({ hasUpdate: false, error: 'network down' })
+    const ok = await useUpdateStore.getState().checkForUpdates()
+    expect(ok).toBe(false)
+    expect(useUpdateStore.getState().status).toBe('error')
+    expect(useUpdateStore.getState().error).toBe('network down')
+  })
+})

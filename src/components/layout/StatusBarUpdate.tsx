@@ -48,8 +48,19 @@ export default function StatusBarUpdate() {
     align: 'end',
   })
 
-  useOutsideClick(anchorRef, () => setOpen(false), open)
-  useEscapeKey(() => setOpen(false), open)
+  /**
+   * 关闭弹窗。前台下载期间用户手动关闭 → 视为后台下载：
+   * 完成时仍用 toast 提示重启（spec §9），否则唯一的完成反馈就消失了。
+   */
+  const closePopover = () => {
+    setOpen(false)
+    if (status === 'downloading' && downloadModeRef.current === 'foreground') {
+      downloadModeRef.current = 'background'
+    }
+  }
+
+  useOutsideClick(anchorRef, closePopover, open)
+  useEscapeKey(closePopover, open)
 
   // 初始化：版本号 + 状态/进度监听 + 菜单「检查更新」
   useEffect(() => {
@@ -166,7 +177,7 @@ export default function StatusBarUpdate() {
               ? `${t('update.checkFailed')}${error ?? ''}`
               : t('update.latest')
         }
-        onClick={canOpen ? () => setOpen(v => !v) : undefined}
+        onClick={canOpen ? () => (open ? closePopover() : setOpen(true)) : undefined}
         aria-haspopup={canOpen ? 'menu' : undefined}
         aria-expanded={canOpen ? open : undefined}
       >

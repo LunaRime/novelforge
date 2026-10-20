@@ -1,5 +1,6 @@
 import type { WorkflowContext, StepCallbacks, WorkflowStep } from '../../../stores/workflow-store'
 import { t } from '../../../shared/locale'
+import { STRUCTURED_JSON_TEMPERATURE } from '../../../shared/thinking-level'
 import { useLLMStore } from '../../../stores/llm-store'
 import type { CallPurpose } from '../../llm/model-router'
 import { globalEventBus, EventPayloadMap } from '../../../shared/event-bus'
@@ -36,9 +37,6 @@ export abstract class BaseWorkflowCommand<TResult = string> {
   protected getLastStreamText(): string {
     return this.lastStreamText
   }
-
-  /** JSON 模式默认温度：结构化输出需要确定性 */
-  private static readonly STRUCTURED_JSON_TEMPERATURE = 0.3
 
   /**
    * 结构化任务温度表（降幻觉）：审稿/提取/分类等低温保真。
@@ -82,7 +80,7 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     // 温度：显式 > JSON 模式 0.3 > 结构化 purpose 表 > undefined（交给 llm-store 注入全局档位）
     const temperature = options?.temperature
       ?? (options?.responseFormat?.type === 'json_object'
-        ? BaseWorkflowCommand.STRUCTURED_JSON_TEMPERATURE
+        ? STRUCTURED_JSON_TEMPERATURE
         : undefined)
       ?? BaseWorkflowCommand.STRUCTURED_TEMPERATURE[options?.purpose ?? 'default']
 

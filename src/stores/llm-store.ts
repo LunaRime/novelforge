@@ -4,6 +4,7 @@ import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { getThinkingTemperature } from './thinking-store'
+import { STRUCTURED_JSON_TEMPERATURE } from '../shared/thinking-level'
 
 /**
  * 正在删除中的模型 id（防重复点击）—— 真机反馈：删除耗时较长且删除按钮**没有任何等待反馈**，
@@ -20,6 +21,23 @@ interface StreamCallbacks {
   onChunk?: (chunk: string) => void
   onDone?: (fullText: string, usage?: TokenUsage) => void
   onError?: (error: string) => void
+}
+
+/**
+ * 请求温度解析：显式 > JSON 模式兜底 0.3 > 全局思考等级。
+ *
+ * JSON 兜底必须放在这里而不只是 `callLLM`：部分工作流（spawn-reviewers、
+ * 多草稿评分、architecture-workflow、character-archive-workflow）直连
+ * `generate` / `generateStream`，只传 `responseFormat: json_object`。
+ * 若只在 workflow 命令层兜底，Max 档会把它们拉到 1.2。
+ */
+function resolveRequestTemperature(options?: {
+  temperature?: number
+  responseFormat?: { type: string }
+}): number {
+  if (options?.temperature !== undefined) return options.temperature
+  if (options?.responseFormat?.type === 'json_object') return STRUCTURED_JSON_TEMPERATURE
+  return getThinkingTemperature()
 }
 
 interface LLMState {
@@ -381,7 +399,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return ipc.invoke('llm:generate', {
       modelId: mid,
       messages,
-      temperature: options?.temperature ?? getThinkingTemperature(),
+      temperature: resolveRequestTemperature(options),
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,
@@ -437,7 +455,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       modelId: mid,
       messages,
       stream: true,
-      temperature: options?.temperature ?? getThinkingTemperature(),
+      temperature: resolveRequestTemperature(options),
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,

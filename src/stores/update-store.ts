@@ -90,6 +90,13 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
         set({ updateInfo: result.info, status: 'available' })
         return true
       }
+      // 检查失败与「无更新」是两种结果：主进程先发 error 事件、再返回
+      // { hasUpdate: false, error }；若无条件置 no-update，断网/限流会被
+      // 显示成「已是最新版本」，且与自动检查路径表现不一致。
+      if (result.error) {
+        set({ status: 'error', error: result.error })
+        return false
+      }
       set({ status: 'no-update' })
       return false
     } catch (err) {

@@ -55,6 +55,13 @@ export const THINKING_LEVELS: readonly ThinkingLevelSpec[] = [
 
 export const DEFAULT_THINKING_LEVEL: ThinkingLevel = 'high'
 
+/**
+ * JSON 结构化输出的兜底温度。
+ * 任何 `responseFormat: { type: 'json_object' }` 的调用都不得被全局档位拉高：
+ * 审稿、评分、提取类站点无论走 callLLM 还是直连 llm-store，都保持低温。
+ */
+export const STRUCTURED_JSON_TEMPERATURE = 0.3
+
 export function isThinkingLevel(v: unknown): v is ThinkingLevel {
   return typeof v === 'string' && Object.prototype.hasOwnProperty.call(SPEC_BY_ID, v)
 }

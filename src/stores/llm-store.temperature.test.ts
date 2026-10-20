@@ -38,4 +38,32 @@ describe('llm-store 全局温度注入', () => {
     const call = invokeMock.mock.calls.find(c => c[0] === 'llm:generate-stream')
     expect((call?.[2] as { temperature?: number }).temperature).toBe(1.2)
   })
+
+  // 回归：直接调用 llm-store 的 JSON 站点（spawn-reviewers / 多草稿评分 /
+  // architecture-workflow / character-archive-workflow）不经过 callLLM，
+  // 不能让 Max 档把它们拉到 1.2。
+  it('JSON 模式在 Max 档下仍用低温 0.3', async () => {
+    await useLLMStore.getState().generate([{ role: 'user', content: 'hi' }], undefined, {
+      responseFormat: { type: 'json_object' },
+    })
+    const call = invokeMock.mock.calls.find(c => c[0] === 'llm:generate')
+    expect((call?.[1] as { temperature?: number }).temperature).toBe(0.3)
+  })
+
+  it('流式 JSON 模式同样低温 0.3', async () => {
+    await useLLMStore.getState().generateStream([{ role: 'user', content: 'hi' }], {}, 'm1', {
+      responseFormat: { type: 'json_object' },
+    })
+    const call = invokeMock.mock.calls.find(c => c[0] === 'llm:generate-stream')
+    expect((call?.[2] as { temperature?: number }).temperature).toBe(0.3)
+  })
+
+  it('显式温度优先于 JSON 兜底', async () => {
+    await useLLMStore.getState().generate([{ role: 'user', content: 'hi' }], undefined, {
+      temperature: 0.2,
+      responseFormat: { type: 'json_object' },
+    })
+    const call = invokeMock.mock.calls.find(c => c[0] === 'llm:generate')
+    expect((call?.[1] as { temperature?: number }).temperature).toBe(0.2)
+  })
 })
