@@ -237,28 +237,9 @@ export const agentTexts = {
   'agent.atMention': { 'zh-CN': '@提及', 'en-US': '@Mention', 'ru-RU': '@Упоминание' },
   'agent.workflowCmd': { 'zh-CN': '工作流命令', 'en-US': 'Workflow command', 'ru-RU': 'Команда рабочего процесса' },
   'agent.placeholder': { 'zh-CN': '输入消息，@ 提及，/ 使用工作流...', 'en-US': 'Type a message, @ mention, / workflow...', 'ru-RU': 'Сообщение, @упоминание, /команда...' },
-  'agent.depthTitle': { 'zh-CN': '思考等级', 'en-US': 'Thinking level', 'ru-RU': 'Уровень мышления' },
-  /* 思考档位名：**对称阶梯 + 英文简写**（用户 2026-09-22 指定）。
-     ① 三语言显示同一组英文 —— 各语言长度差异极大（俄语「Стремительно」13 字符会把窄面板的
-        输入工具栏撑变形），统一后长度可预期；
-     ② 命名沿 MIN→MAX 的强度阶梯，而不是"能力描述"（原先 Quick/Swift/Balanced/Reflective/Deep
-        既不成阶梯、也没有用户预期的 MIN/LOW 这类低端档位名）。
-     六档：MIN / LOW / MID / HIGH / DEEP / MAX */
   'ccr.contextUsage': { 'zh-CN': '上下文占用', 'en-US': 'Context usage', 'ru-RU': 'Использование контекста' },
   'ccr.clickForDetail': { 'zh-CN': '点击查看上下文明细', 'en-US': 'Click for context details', 'ru-RU': 'Нажмите для подробностей' },
   'ccr.total': { 'zh-CN': '合计', 'en-US': 'Total', 'ru-RU': 'Итого' },
-  'agent.depthL1': { 'zh-CN': 'MIN', 'en-US': 'MIN', 'ru-RU': 'MIN' },
-  'agent.depthL1Desc': { 'zh-CN': '直接执行，适合简单快速任务', 'en-US': 'Direct execution, suitable for simple quick tasks', 'ru-RU': 'Прямое выполнение, для простых задач' },
-  'agent.depthL2': { 'zh-CN': 'LOW', 'en-US': 'LOW', 'ru-RU': 'LOW' },
-  'agent.depthL2Desc': { 'zh-CN': '快速响应，在保证基础质量的前提下尽量简洁', 'en-US': 'Quick response, concise while keeping basic quality', 'ru-RU': 'Быстрый ответ, лаконично при сохранении базового качества' },
-  'agent.depthL3': { 'zh-CN': 'MID', 'en-US': 'MID', 'ru-RU': 'MID' },
-  'agent.depthL3Desc': { 'zh-CN': '先评估复杂度：简单直接执行，复杂先规划', 'en-US': 'Assess complexity: execute simple directly, plan complex ones', 'ru-RU': 'Оценка сложности: простые сразу, сложные — с планом' },
-  'agent.depthL4': { 'zh-CN': 'HIGH', 'en-US': 'HIGH', 'ru-RU': 'HIGH' },
-  'agent.depthL4Desc': { 'zh-CN': '先分析再行动，注重完成质量，可适当多轮推演', 'en-US': 'Analyze before acting, emphasize quality, allow multi-pass reasoning', 'ru-RU': 'Сначала анализ, затем действие; акцент на качестве' },
-  'agent.depthL5': { 'zh-CN': 'DEEP', 'en-US': 'DEEP', 'ru-RU': 'DEEP' },
-  'agent.depthL5Desc': { 'zh-CN': '深度规划后执行，适合复杂多步骤任务', 'en-US': 'Deep planning before execution, for complex multi-step tasks', 'ru-RU': 'Глубокое планирование перед выполнением' },
-  'agent.depthL6': { 'zh-CN': 'MAX', 'en-US': 'MAX', 'ru-RU': 'MAX' },
-  'agent.depthL6Desc': { 'zh-CN': '全力模式：深度规划 + 完整工具链，逐步严谨验证', 'en-US': 'MAX: deep planning + full toolchain, rigorously verified step by step', 'ru-RU': 'МАКС: глубокое планирование + полный набор инструментов' },
   'agent.chatMode': { 'zh-CN': '对话模式', 'en-US': 'Chat mode', 'ru-RU': 'Режим диалога' },
   'agent.selectModel': { 'zh-CN': '选择模型', 'en-US': 'Select model', 'ru-RU': 'Выбрать модель' },
   'agent.noModel': { 'zh-CN': '请先在设置中配置模型', 'en-US': 'Please configure model in settings first', 'ru-RU': 'Настройте модель в параметрах' },

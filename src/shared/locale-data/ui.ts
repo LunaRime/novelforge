@@ -364,7 +364,6 @@ export const uiTexts = {
   'form.modelId': { 'zh-CN': '模型 ID', 'en-US': 'Model ID', 'ru-RU': 'ID модели' },
   'form.apiAddress': { 'zh-CN': 'API 地址', 'en-US': 'API Address', 'ru-RU': 'Адрес API' },
   'form.apiKey': { 'zh-CN': 'API Key', 'en-US': 'API Key', 'ru-RU': 'Ключ API' },
-  'form.temperature': { 'zh-CN': '温度 (Temperature)', 'en-US': 'Temperature', 'ru-RU': 'Температура' },
   // 2026-09-25 拆字段：原先只写「最大 Tokens」，语义模糊 —— 它其实是**输出上限**，
   // 上下文占用条却拿它当**窗口**用。两个标签现在都把话说全。
   'form.maxTokens': { 'zh-CN': '最大输出 Tokens', 'en-US': 'Max output tokens', 'ru-RU': 'Макс. выходных токенов' },

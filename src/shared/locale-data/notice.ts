@@ -22,7 +22,6 @@ export const noticeTexts = {
   'notice.title': { 'zh-CN': '通知中心', 'en-US': 'Notification center', 'ru-RU': 'Центр уведомлений' },
   'notice.runningSection': { 'zh-CN': '正在执行', 'en-US': 'Running now', 'ru-RU': 'Выполняется' },
   'notice.resultSection': { 'zh-CN': '任务结果', 'en-US': 'Task results', 'ru-RU': 'Результаты задач' },
-  'notice.updateSection': { 'zh-CN': '应用更新', 'en-US': 'App updates', 'ru-RU': 'Обновления' },
   'notice.empty': { 'zh-CN': '暂无通知', 'en-US': 'No notifications', 'ru-RU': 'Уведомлений нет' },
   'notice.emptyHint': { 'zh-CN': '任务开始与结束提醒会出现在这里', 'en-US': 'Running and finished tasks show up here', 'ru-RU': 'Здесь появятся запущенные и завершённые задачи' },
   'notice.markAllRead': { 'zh-CN': '全部已读', 'en-US': 'Mark all read', 'ru-RU': 'Прочитать все' },
@@ -38,13 +37,6 @@ export const noticeTexts = {
   'notice.runStatusRunning': { 'zh-CN': '执行中', 'en-US': 'Running', 'ru-RU': 'Выполняется' },
   'notice.runStatusWaiting': { 'zh-CN': '等待确认', 'en-US': 'Waiting', 'ru-RU': 'Ожидание' },
   'notice.runStatusPaused': { 'zh-CN': '已暂停', 'en-US': 'Paused', 'ru-RU': 'Приостановлено' },
-  'notice.updateAvailable': { 'zh-CN': '发现新版本 v{version}', 'en-US': 'New version v{version} available', 'ru-RU': 'Доступна новая версия v{version}' },
-  'notice.updateDownloaded': { 'zh-CN': 'v{version} 已下载，重启后安装', 'en-US': 'v{version} downloaded — restart to install', 'ru-RU': 'v{version} загружена — перезапустите для установки' },
-  'notice.updateFailed': { 'zh-CN': '更新检查失败', 'en-US': 'Update check failed', 'ru-RU': 'Не удалось проверить обновления' },
-  'notice.download': { 'zh-CN': '下载', 'en-US': 'Download', 'ru-RU': 'Скачать' },
-  'notice.downloading': { 'zh-CN': '下载中 {percent}%', 'en-US': 'Downloading {percent}%', 'ru-RU': 'Загрузка {percent}%' },
-  'notice.restartInstall': { 'zh-CN': '重启安装', 'en-US': 'Restart & install', 'ru-RU': 'Перезапустить и установить' },
-  'notice.openRelease': { 'zh-CN': '查看版本说明', 'en-US': 'Release notes', 'ru-RU': 'Описание версии' },
   'notice.unreadMany': { 'zh-CN': '99+', 'en-US': '99+', 'ru-RU': '99+' },
 
   // ===== route.* —— 模型路由（分层调度） =====
