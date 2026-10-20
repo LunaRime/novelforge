@@ -13,6 +13,7 @@ import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMemoryStore } from '../../../stores/memory-store'
 import { ipc } from '../../../services/ipc-client'
+import { globalEventBus } from '../../../shared/event-bus'
 import { Button } from '../../ui/Button'
 import { EmptyState } from '../../ui/EmptyState'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -89,6 +90,15 @@ export default function ProjectTree() {
     setArchStatus(status)
     setBlueprintCount(count)
   }, [])  // ✅ 空依赖：内部用 getState() 获取最新 action，不依赖闭包
+
+  const handleReorderChapter = useCallback(async (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => {
+    const res = await ipc.invoke('db:binder-reorder', { chapterNumber, toVolumeNumber, targetIndex })
+    if (res.success) {
+      await refreshAll()
+      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
+    }
+  }, [refreshAll])
+
 
   // 项目切换时刷新
   useEffect(() => {
@@ -276,6 +286,7 @@ export default function ProjectTree() {
         chaptersForVolume={volumeChapterIndex.chaptersForVolume}
         finalizedCountForVolume={volumeChapterIndex.finalizedCountForVolume}
         onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
+        onReorderChapter={handleReorderChapter}
       />
 
       {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}

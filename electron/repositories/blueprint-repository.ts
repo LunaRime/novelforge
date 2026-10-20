@@ -20,6 +20,7 @@ export interface BlueprintRow {
     notes_updated_at: string
     sort_order: number
     priority: number
+    volume_number: number | null
     created_at: number
     updated_at: number
 }
@@ -38,6 +39,7 @@ export interface BlueprintData {
     notesUpdatedAt: string
     sortOrder: number
     priority: number
+    volumeNumber?: number | null
 }
 
 /** 蓝图排序方式 */
@@ -65,6 +67,7 @@ function rowToData(row: BlueprintRow): BlueprintData {
         notesUpdatedAt: row.notes_updated_at,
         sortOrder: row.sort_order ?? 0,
         priority: row.priority ?? 0,
+        volumeNumber: (row.volume_number as number | null) ?? null,
     }
 }
 
@@ -221,8 +224,8 @@ export class BlueprintRepository {
       INSERT INTO blueprints (
         chapter_number, title, role, purpose, key_events, characters,
         suspense_hook, user_guidance, notes, notes_updated_at,
-        sort_order, priority
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        sort_order, priority, volume_number
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(chapter_number) DO UPDATE SET
         title = excluded.title,
         role = excluded.role,
@@ -235,6 +238,7 @@ export class BlueprintRepository {
         notes_updated_at = excluded.notes_updated_at,
         sort_order = excluded.sort_order,
         priority = excluded.priority,
+        volume_number = excluded.volume_number,
         updated_at = unixepoch() * 1000
     `).run(
             data.chapterNumber,
@@ -249,6 +253,7 @@ export class BlueprintRepository {
             data.notesUpdatedAt,
             data.sortOrder ?? 0,
             data.priority ?? 0,
+            data.volumeNumber ?? null,
         )
     }
 

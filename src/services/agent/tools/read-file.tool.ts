@@ -14,6 +14,8 @@ import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { validatePath } from './safe-path'
 import type { ReadFileRangeOptions } from '../../../shared/ipc-channels'
+import { isVelaProtocol, readVelaContent } from '../../vela-protocol'
+import { resolveAgentFilePath } from '../agent-file-resolver'
 
 /** 绝对路径判定（Windows 盘符 / UNC，与 intent-router 一致） */
 function isAbsolutePath(p: string): boolean {
@@ -139,6 +141,7 @@ export const readFileTool = buildAgentTool({
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
+    const resolvedPath = resolveAgentFilePath(filePath)
 
     // 项目外文件：用户显式提供的绝对路径（"添加外部文件"对话框选择），
     // 走专用只读通道 fs:read-external-file——fs:read-file 有沙箱（项目/主目录内），
@@ -171,8 +174,19 @@ export const readFileTool = buildAgentTool({
       return { success: true, content: composeWindowedRead(String(res.content ?? ''), res, offset, limit) }
     }
 
+    // vela:// 伪协议（DB 草稿/修稿/架构/记忆）——这些不是物理文件，validatePath 不适用
+    if (isVelaProtocol(resolvedPath)) {
+      if (!windowed) {
+        const state = readState.get(resolvedPath)
+        if (state) return { success: true, content: FILE_UNCHANGED_STUB(resolvedPath, state.length) }
+      }
+      const content = await readVelaContent(resolvedPath)
+      if (!windowed) readState.set(resolvedPath, { length: content.length })
+      return { success: true, content: applyReadWindow(content, offset, limit) }
+    }
+
     // 项目内文件：路径安全校验
-    const pathCheck = validatePath(project.path, filePath)
+    const pathCheck = validatePath(project.path, resolvedPath)
     if (!pathCheck.valid) {
       return { success: false, content: '', error: pathCheck.error }
     }

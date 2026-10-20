@@ -91,6 +91,8 @@ export default function DraftEditor({ filePath, content }: Props) {
   const [charCount, setCharCount] = useState(0)
   const isDirty = useDirtyCheck(filePath)
   const currentBodyRef = useRef(content)
+  // 外部（Agent/同步）更新 content 时同步 ref；否则 30s 自动保存会把旧文本写回 DB
+  useEffect(() => { currentBodyRef.current = content }, [content])
 
   const currentProject = useProjectStore(s => s.currentProject)
 

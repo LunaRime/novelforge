@@ -7,6 +7,12 @@ import { ProjectCoreRepository, ProjectCoreData } from '../repositories/project-
 import { BlueprintRepository, BlueprintData } from '../repositories/blueprint-repository'
 import { CharacterRepository, CharacterData, CharacterStateData } from '../repositories/character-repository'
 import { DraftRepository } from '../repositories/draft-repository'
+import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
+import { maybeCreateAutoSnapshot } from '../services/draft-snapshot-service'
+import { DraftBranchRepository } from '../repositories/draft-branch-repository'
+import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
+import { reorderChapter } from '../services/binder-service'
+import { SceneRepository } from '../repositories/scene-repository'
 import { RevisionRepository } from '../repositories/revision-repository'
 import { ReviewRepository } from '../repositories/review-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
@@ -301,6 +307,139 @@ export function registerDatabaseController() {
   guardedHandle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number) => {
     try {
       DraftRepository.updateContent(id, content, wordCount)
+      try { maybeCreateAutoSnapshot(id) } catch (e) { logger.warn('DB', '自动快照失败（不阻断保存）: ' + String(e)) }
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-apply-content', async (_event, params: {
+    draftId: number
+    expectedHash: string
+    expectedUpdatedAt: number
+    content: string
+    wordCount: number
+  }) => {
+    try {
+      const meta = DraftRepository.getMeta(params.draftId)
+      const before = DraftRepository.getFull(params.draftId)
+      if (!meta || !before) return { success: false, error: 'draft-not-found' }
+      if (meta.status === 'finalized') return { success: false, error: 'draft-finalized-readonly' }
+      if (meta.contentHash !== params.expectedHash || meta.updatedAt !== params.expectedUpdatedAt) {
+        return { success: false, conflict: true, currentHash: meta.contentHash, currentUpdatedAt: meta.updatedAt }
+      }
+      // pre-agent 快照：先存旧内容，再 CAS（CAS 仍会二次校验，防并发覆盖）
+      DraftSnapshotRepository.create({
+        chapterNumber: meta.chapterNumber,
+        draftId: meta.id,
+        branchId: meta.branchId,
+        label: '',
+        kind: 'pre-agent',
+        content: before.content,
+        contentHash: meta.contentHash,
+        wordCount: meta.wordCount,
+        createdBy: 'agent',
+      })
+      const res = DraftRepository.applyContentIfUnchanged(
+        params.draftId,
+        params.expectedHash,
+        params.expectedUpdatedAt,
+        params.content,
+        params.wordCount,
+      )
+      return res.ok ? { success: true } : { success: false, conflict: true, currentHash: res.currentHash, currentUpdatedAt: res.currentUpdatedAt }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-snapshot-create', async (_event, params: {
+    chapterNumber: number
+    draftId: number
+    branchId?: number | null
+    label?: string
+    kind: 'auto' | 'manual' | 'pre-agent' | 'pre-restore' | 'branch-base'
+    content: string
+    contentHash: string
+    wordCount: number
+    createdBy: 'user' | 'agent' | 'system'
+  }) => {
+    try {
+      const id = DraftSnapshotRepository.create(params)
+      return { success: true, id }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-snapshot-list', async (_event, chapterNumber: number, limit?: number) => {
+    return DraftSnapshotRepository.listByChapter(chapterNumber, limit)
+  })
+
+  guardedHandle('db:draft-snapshot-get-full', async (_event, id: number) => {
+    return DraftSnapshotRepository.getFull(id)
+  })
+
+  guardedHandle('db:draft-snapshot-prune', async (_event, chapterNumber: number, keep?: number) => {
+    try {
+      const removed = DraftSnapshotRepository.pruneAuto(chapterNumber, keep ?? 50)
+      return { success: true, removed }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-branch-list', async (_event, chapterNumber: number) => {
+    return DraftBranchRepository.listByChapter(chapterNumber)
+  })
+
+  guardedHandle('db:draft-branch-create', async (_event, chapterNumber: number, name: string, baseDraftId?: number) => {
+    try {
+      return { success: true, ...createDraftBranch(chapterNumber, name, baseDraftId) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-branch-merge', async (_event, branchId: number) => {
+    try {
+      return { success: true, ...mergeDraftBranch(branchId) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-branch-archive', async (_event, branchId: number) => {
+    try {
+      DraftBranchRepository.archive(branchId)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:binder-reorder', async (_event, params: { chapterNumber: number; toVolumeNumber: number | null; targetIndex?: number }) => {
+    try {
+      return { success: true, ...reorderChapter(params.chapterNumber, params.toVolumeNumber, params.targetIndex) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:scene-list', async (_event, chapterNumber: number) => SceneRepository.listByChapter(chapterNumber))
+
+  guardedHandle('db:scene-upsert', async (_event, data: { id?: number; chapterNumber: number; title: string; summary: string; status: string; sortOrder: number; wordCount: number; contentId?: number | null }) => {
+    try {
+      return { success: true, id: SceneRepository.upsert(data) }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:scene-delete', async (_event, id: number) => {
+    try {
+      SceneRepository.delete(id)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }

@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { getCurrentLocale } from '../../shared/locale'
+import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import { History, RotateCcw, ArrowLeftRight, AlertCircle, Camera } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useEditorStore } from '../../stores/editor-store'
@@ -9,7 +9,9 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
   getChapters, getChapterVersions, getVersionContent, getChapterLatestContent, revertToVersion,
-  type VersionRecord,
+  getChapterSnapshots, createChapterSnapshot, getSnapshotContent, getChapterLatestDraft,
+  getDraftBranches, createDraftBranch, mergeDraftBranch, archiveDraftBranch, getDraftFullById,
+  type VersionRecord, type SnapshotRecord, type DraftBranchRecord,
 } from '../../services/version-service'
 import { toast } from '../ui/Toast'
 
@@ -31,6 +33,8 @@ export default function VersionHistory() {
   const [loading, setLoading] = useState(true)
   const [loadFailed, setLoadFailed] = useState(false)
   const [versionsFailed, setVersionsFailed] = useState(false)
+  const [snapshots, setSnapshots] = useState<SnapshotRecord[]>([])
+  const [branches, setBranches] = useState<DraftBranchRecord[]>([])
 
   const loadChapters = useCallback(async () => {
     if (!currentProject) return
@@ -59,8 +63,15 @@ export default function VersionHistory() {
   // 加载版本列表
   const loadVersions = async (chapterId: string) => {
     try {
-      const vers = await getChapterVersions(chapterId)
+      const chapterNumber = parseInt(chapterId, 10)
+      const [vers, snaps, brs] = await Promise.all([
+        getChapterVersions(chapterId),
+        getChapterSnapshots(chapterNumber),
+        getDraftBranches(chapterNumber),
+      ])
       setVersions(vers)
+      setSnapshots(snaps)
+      setBranches(brs)
       setVersionsFailed(false)
     } catch (e) { console.warn('[VersionHistory] 加载版本列表失败:', e); setVersions([]); setVersionsFailed(true) }
   }
@@ -111,20 +122,109 @@ export default function VersionHistory() {
     await loadVersions(selectedChapter)
   }
 
-  /** 手动快照：把当前最新正文复制成一个新版本（不覆盖任何历史） */
+  /** 手动快照：写入 draft_snapshots，不创建/覆盖 draft */
   const handleSnapshot = async () => {
     if (!selectedChapter) return
     const chapter = chapters.find((c) => c.id === selectedChapter)
     if (!chapter) return
     try {
-      const current = await getChapterLatestContent(chapter.chapter_number)
-      const ok = await revertToVersion(chapter.chapter_number, current)
-      if (!ok) throw new Error('draft-create failed')
+      const current = await getChapterLatestDraft(chapter.chapter_number)
+      if (!current) throw new Error(t('version.noContent'))
+      const defaultName = `${t('version.snapshot')} ${new Date().toLocaleString(getCurrentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}`
+      const label = window.prompt(t('version.snapshotName'), defaultName)
+      if (label === null) return
+      const ok = await createChapterSnapshot({
+        chapterNumber: chapter.chapter_number,
+        draftId: current.id,
+        label: label.trim() || defaultName,
+        kind: 'manual',
+        content: current.content,
+        contentHash: current.contentHash,
+        wordCount: current.wordCount,
+        createdBy: 'user',
+      })
+      if (!ok) throw new Error('snapshot-create failed')
       await loadVersions(selectedChapter)
       toast.success(t('version.snapshotCreated'))
     } catch (e) {
       toast.error(t('version.snapshotFailed').replace('{error}', String(e)))
     }
+  }
+
+  const handleSnapshotDiff = async (snap: SnapshotRecord) => {
+    if (!selectedChapter) return
+    const chapter = chapters.find((c) => c.id === selectedChapter)
+    if (!chapter) return
+    const oldContent = await getSnapshotContent(snap.id)
+    if (!oldContent) return
+    const current = await getChapterLatestContent(chapter.chapter_number)
+    useEditorStore.getState().openFile({
+      id: `diff-snapshot-${snap.id}`,
+      name: t('version.snapshotVsCurrent').replace('{label}', snap.label || t('version.snapshot')),
+      type: 'diff',
+      originalContent: oldContent,
+      content: current,
+      filePath: `vela://draft/ch${chapter.chapter_number}`,
+    })
+  }
+
+  const openDraftById = async (draftId: number, name: string) => {
+    const full = await getDraftFullById(draftId)
+    if (!full) return
+    useEditorStore.getState().openFile({
+      id: 'vela://draft/' + draftId,
+      name,
+      type: 'chapter',
+      filePath: 'vela://draft/' + draftId,
+      content: full.content,
+    })
+  }
+
+  const handleBranchCreate = async () => {
+    if (!selectedChapter) return
+    const chapter = chapters.find((c) => c.id === selectedChapter)
+    if (!chapter) return
+    const name = window.prompt(t('branch.namePrompt'), t('branch.defaultName').replace('{n}', String(branches.length + 1)))
+    if (!name?.trim()) return
+    const current = await getChapterLatestDraft(chapter.chapter_number)
+    const created = await createDraftBranch(chapter.chapter_number, name.trim(), current?.id)
+    if (!created) {
+      toast.error(t('branch.createFailed'))
+      return
+    }
+    await loadVersions(selectedChapter)
+    await openDraftById(created.draftId, t('chapter.label').replace('{n}', String(chapter.chapter_number)) + ' · ' + created.branch.name)
+  }
+
+  const handleBranchSwitch = async (branch: DraftBranchRecord) => {
+    if (!branch.headDraftId) return
+    await openDraftById(branch.headDraftId, t('chapter.label').replace('{n}', String(branch.chapterNumber)) + ' · ' + branch.name)
+  }
+
+  const handleBranchMerge = async (branch: DraftBranchRecord) => {
+    const merged = await mergeDraftBranch(branch.id)
+    if (!merged) {
+      toast.error(t('branch.mergeFailed'))
+      return
+    }
+    if (selectedChapter) await loadVersions(selectedChapter)
+    await openDraftById(merged.draftId, t('branch.mergedName').replace('{name}', branch.name))
+    toast.success(t('branch.merged'))
+  }
+
+  const handleBranchArchive = async (branch: DraftBranchRecord) => {
+    const ok = await archiveDraftBranch(branch.id)
+    if (ok && selectedChapter) await loadVersions(selectedChapter)
+  }
+
+  const handleSnapshotRestore = async (snap: SnapshotRecord) => {
+    if (!selectedChapter) return
+    const chapter = chapters.find((c) => c.id === selectedChapter)
+    if (!chapter) return
+    const content = await getSnapshotContent(snap.id)
+    if (!content) return
+    await revertToVersion(chapter.chapter_number, content)
+    await loadVersions(selectedChapter)
   }
 
   const TYPE_LABELS: Record<string, string> = {
@@ -210,6 +310,84 @@ export default function VersionHistory() {
             <h3 className="text-sm font-bold text-[var(--color-text)] mb-3">
               {t('version.history')}
             </h3>
+            <div className="mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-micro font-semibold" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('branch.title')}
+                </h4>
+                <Button variant="outline" size="sm" onClick={() => void handleBranchCreate()}>
+                  <Camera size={12} /> {t('branch.create')}
+                </Button>
+              </div>
+              {branches.length === 0 ? (
+                <div className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('branch.empty')}</div>
+              ) : (
+                <div className="space-y-2">
+                  {branches.map((branch) => (
+                    <div key={branch.id} className="flex items-center justify-between px-3 py-2 rounded-md border border-[var(--color-border)]">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-micro px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-hover)', color: branch.status === 'active' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+                          {t(('branch.status.' + branch.status) as TextKey)}
+                        </span>
+                        <span className="text-xs truncate" style={{ color: 'var(--color-text)' }}>{branch.name}</span>
+                      </div>
+                      {branch.status === 'active' && (
+                        <div className="flex items-center gap-1 flex-shrink-0">
+                          <Button variant="outline" size="sm" onClick={() => void handleBranchSwitch(branch)}>
+                            {t('branch.switch')}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => void handleBranchMerge(branch)}>
+                            {t('branch.merge')}
+                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => void handleBranchArchive(branch)}>
+                            {t('branch.archive')}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {snapshots.length > 0 && (
+              <div className="mb-4">
+                <h4 className="text-micro font-semibold mb-2" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('version.snapshots')}
+                </h4>
+                <div className="space-y-2">
+                  {snapshots.map((snap) => (
+                    <div
+                      key={snap.id}
+                      className="flex items-center justify-between px-3 py-2 rounded-md border border-[var(--color-border)]"
+                    >
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-micro px-1.5 py-0.5 rounded" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}>
+                          {t(('version.snapshotKind.' + snap.kind) as TextKey)}
+                        </span>
+                        <span className="text-xs truncate" style={{ color: 'var(--color-text)' }}>
+                          {snap.label || t('version.snapshot')}
+                        </span>
+                        <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                          {snap.wordCount} {t('unit.chars')}
+                        </span>
+                        <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
+                          {new Date(snap.createdAt).toLocaleString(getCurrentLocale(), { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Button variant="outline" size="sm" onClick={() => void handleSnapshotDiff(snap)}>
+                          <ArrowLeftRight size={12} /> {t('action.compare')}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => void handleSnapshotRestore(snap)}>
+                          <RotateCcw size={12} /> {t('version.restoreSnapshot')}
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             {versionsFailed ? (
               /* 错误态与空态必须分开：失败渲染成「无版本记录」会让用户以为本来就没有 */
               <div className="flex flex-col items-center gap-2 py-8 text-xs text-[var(--color-text-muted)]">

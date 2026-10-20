@@ -8,6 +8,7 @@
 import { ipc } from './ipc-client'
 import { t } from '../shared/locale'
 import { computeTextStats } from './text-stats'
+import type { DraftFull } from '../../electron/repositories/draft-repository'
 
 /** 章节元数据（从数据库返回） */
 export interface ChapterRecord {
@@ -26,6 +27,20 @@ export interface VersionRecord {
   type: string
   word_count: number
   created_at: string
+}
+
+export interface SnapshotRecord {
+  id: number
+  chapterNumber: number
+  draftId: number
+  branchId: number | null
+  label: string
+  kind: string
+  contentId: number
+  contentHash: string
+  wordCount: number
+  createdBy: string
+  createdAt: number
 }
 
 /** 获取项目的所有章节 (现在从蓝图获取) */
@@ -74,12 +89,19 @@ export async function getChapterLatestContent(chapterNumber: number): Promise<st
  */
 export async function getChapterLatestDraft(
   chapterNumber: number,
-): Promise<{ id: number; content: string } | null> {
+): Promise<{ id: number; content: string; contentHash: string; updatedAt: number; wordCount: number } | null> {
   const draft = (await ipc.invoke('db:draft-get-latest', chapterNumber)) as { id?: number } | null
   if (!draft || draft.id === undefined) return null
   const full = (await ipc.invoke('db:draft-get-full', draft.id)) as { content?: string } | null
   if (!full) return null
-  return { id: draft.id, content: full.content ?? '' }
+  const meta = await ipc.invoke('db:draft-get-latest', chapterNumber)
+  return {
+    id: draft.id,
+    content: full.content ?? '',
+    contentHash: meta?.contentHash ?? '',
+    updatedAt: meta?.updatedAt ?? 0,
+    wordCount: meta?.wordCount ?? 0,
+  }
 }
 
 /** 回退到某个历史版本，创建新草稿 */
@@ -93,4 +115,66 @@ export async function revertToVersion(chapterNumber: number, content: string): P
     wordCount: computeTextStats(content).novelWordCount,
   })
   return res.success
+}
+
+/** 章节快照列表（v20） */
+export async function getChapterSnapshots(chapterNumber: number, limit = 100): Promise<SnapshotRecord[]> {
+  return (await ipc.invoke('db:draft-snapshot-list', chapterNumber, limit)) as SnapshotRecord[]
+}
+
+/** 创建快照（手动/外部入口） */
+export async function createChapterSnapshot(params: {
+  chapterNumber: number
+  draftId: number
+  label?: string
+  kind: 'auto' | 'manual' | 'pre-agent' | 'pre-restore' | 'branch-base'
+  content: string
+  contentHash: string
+  wordCount: number
+  createdBy: 'user' | 'agent' | 'system'
+}): Promise<boolean> {
+  const res = await ipc.invoke('db:draft-snapshot-create', params)
+  return res.success
+}
+
+/** 快照正文 */
+export async function getSnapshotContent(id: number): Promise<string | null> {
+  const snap = await ipc.invoke('db:draft-snapshot-get-full', id)
+  return snap?.content ?? null
+}
+
+export interface DraftBranchRecord {
+  id: number
+  chapterNumber: number
+  name: string
+  status: 'active' | 'merged' | 'archived'
+  baseSnapshotId: number | null
+  headDraftId: number | null
+  createdAt: number
+  updatedAt: number
+  mergedAt: number | null
+}
+
+export async function getDraftBranches(chapterNumber: number): Promise<DraftBranchRecord[]> {
+  return (await ipc.invoke('db:draft-branch-list', chapterNumber)) as DraftBranchRecord[]
+}
+
+export async function createDraftBranch(chapterNumber: number, name: string, baseDraftId?: number): Promise<{ branch: DraftBranchRecord; draftId: number } | null> {
+  const res = await ipc.invoke('db:draft-branch-create', chapterNumber, name, baseDraftId)
+  if (!res.success || !res.branch || !res.draftId) return null
+  return { branch: res.branch as DraftBranchRecord, draftId: res.draftId }
+}
+
+export async function mergeDraftBranch(branchId: number): Promise<{ branch: DraftBranchRecord; draftId: number } | null> {
+  const res = await ipc.invoke('db:draft-branch-merge', branchId)
+  if (!res.success || !res.branch || !res.draftId) return null
+  return { branch: res.branch as DraftBranchRecord, draftId: res.draftId }
+}
+
+export async function archiveDraftBranch(branchId: number): Promise<boolean> {
+  return (await ipc.invoke('db:draft-branch-archive', branchId)).success
+}
+
+export async function getDraftFullById(id: number): Promise<DraftFull | null> {
+  return await ipc.invoke('db:draft-get-full', id)
 }

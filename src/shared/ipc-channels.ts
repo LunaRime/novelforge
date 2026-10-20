@@ -701,6 +701,10 @@ export interface DatabaseChannels {
   'db:blueprint-delete': { args: [chapterNumber: number]; return: { success: boolean; error?: string } }
   'db:blueprint-get-gaps': { args: [totalChapters: number]; return: number[] }
   'db:blueprint-update-sort-order': { args: [orders: Array<{ chapterNumber: number; sortOrder: number }>]; return: { success: boolean; error?: string } }
+  'db:binder-reorder': { args: [params: { chapterNumber: number; toVolumeNumber: number | null; targetIndex?: number }]; return: { success: boolean; chapterNumber?: number; volumeNumber?: number | null; error?: string } }
+  'db:scene-list': { args: [chapterNumber: number]; return: Array<{ id: number; chapterNumber: number; title: string; summary: string; status: string; sortOrder: number; wordCount: number; contentId: number | null }> }
+  'db:scene-upsert': { args: [data: { id?: number; chapterNumber: number; title: string; summary: string; status: string; sortOrder: number; wordCount: number; contentId?: number | null }]; return: { success: boolean; id?: number; error?: string } }
+  'db:scene-delete': { args: [id: number]; return: { success: boolean; error?: string } }
   'db:blueprint-update-priority': { args: [chapterNumber: number, priority: number]; return: { success: boolean; error?: string } }
   'db:blueprint-update-priority-batch': { args: [items: Array<{ chapterNumber: number; priority: number }>]; return: { success: boolean; error?: string } }
 
@@ -729,6 +733,15 @@ export interface DatabaseChannels {
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number]; return: { success: boolean; error?: string } }
+  'db:draft-apply-content': { args: [params: { draftId: number; expectedHash: string; expectedUpdatedAt: number; content: string; wordCount: number }]; return: { success: boolean; conflict?: boolean; currentHash?: string; currentUpdatedAt?: number; error?: string } }
+  'db:draft-snapshot-create': { args: [params: { chapterNumber: number; draftId: number; branchId?: number | null; label?: string; kind: 'auto' | 'manual' | 'pre-agent' | 'pre-restore' | 'branch-base'; content: string; contentHash: string; wordCount: number; createdBy: 'user' | 'agent' | 'system' }]; return: { success: boolean; id?: number; error?: string } }
+  'db:draft-snapshot-list': { args: [chapterNumber: number, limit?: number]; return: Array<{ id: number; chapterNumber: number; draftId: number; branchId: number | null; label: string; kind: string; contentId: number; contentHash: string; wordCount: number; createdBy: string; createdAt: number }> }
+  'db:draft-snapshot-get-full': { args: [id: number]; return: { id: number; chapterNumber: number; draftId: number; branchId: number | null; label: string; kind: string; contentId: number; contentHash: string; wordCount: number; createdBy: string; createdAt: number; content: string } | null }
+  'db:draft-snapshot-prune': { args: [chapterNumber: number, keep?: number]; return: { success: boolean; removed?: number; error?: string } }
+  'db:draft-branch-list': { args: [chapterNumber: number]; return: Array<{ id: number; chapterNumber: number; name: string; status: 'active' | 'merged' | 'archived'; baseSnapshotId: number | null; headDraftId: number | null; createdAt: number; updatedAt: number; mergedAt: number | null }> }
+  'db:draft-branch-create': { args: [chapterNumber: number, name: string, baseDraftId?: number]; return: { success: boolean; branch?: { id: number; chapterNumber: number; name: string; status: 'active' | 'merged' | 'archived'; baseSnapshotId: number | null; headDraftId: number | null; createdAt: number; updatedAt: number; mergedAt: number | null }; draftId?: number; error?: string } }
+  'db:draft-branch-merge': { args: [branchId: number]; return: { success: boolean; branch?: { id: number; chapterNumber: number; name: string; status: 'active' | 'merged' | 'archived'; baseSnapshotId: number | null; headDraftId: number | null; createdAt: number; updatedAt: number; mergedAt: number | null }; draftId?: number; error?: string } }
+  'db:draft-branch-archive': { args: [branchId: number]; return: { success: boolean; error?: string } }
 
   // 5. revisions
   'db:revision-create': { args: [params: { baseDraftId: number; revisionIndex: number; revisionType: 'refine' | 'review-fix'; userPrompt?: string; reviewSourceId?: number; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }

@@ -14,6 +14,7 @@ import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
+import { ipc } from '../../services/ipc-client'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 import NotificationCenter from './NotificationCenter'
@@ -148,10 +149,35 @@ function EditorStatusSegment() {
 function BranchStatusSegment() {
   const { t } = useTranslation()
   const hasProject = useProjectStore((s) => !!s.currentProject)
+  const activeFilePath = useEditorStore((s) => {
+    const tab = s.tabs.find((x) => x.id === s.activeTabId)
+    return tab?.type === 'chapter' ? (tab.filePath ?? '') : ''
+  })
   const chapterName = useEditorStore((s) => {
     const tab = s.tabs.find((x) => x.id === s.activeTabId)
     return tab?.type === 'chapter' ? tab.name : ''
   })
+  const [branchName, setBranchName] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      const match = /^vela:\/\/draft\/(\d+)$/.exec(activeFilePath)
+      if (!match) { if (!cancelled) setBranchName(null); return }
+      try {
+        const meta = await ipc.invoke('db:draft-get-meta', Number(match[1]))
+        if (!meta || meta.branchId === null) { if (!cancelled) setBranchName(null); return }
+        const branches = await ipc.invoke('db:draft-branch-list', meta.chapterNumber)
+        const branch = branches.find((b) => b.id === meta.branchId)
+        if (!cancelled) setBranchName(branch?.name ?? null)
+      } catch {
+        if (!cancelled) setBranchName(null)
+      }
+    }
+    void run()
+    return () => { cancelled = true }
+  }, [activeFilePath])
+
   if (!hasProject && !chapterName) return null
 
   const openHistory = () => {
@@ -164,7 +190,7 @@ function BranchStatusSegment() {
   return (
     <StatusBarSegment title={chapterName ? t('statusbar.branchTip') : t('version.history')} onClick={openHistory}>
       <GitBranch size={11} />
-      <span>{t('statusbar.branchMain')}</span>
+      <span>{branchName ?? t('statusbar.branchMain')}</span>
     </StatusBarSegment>
   )
 }

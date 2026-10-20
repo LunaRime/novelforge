@@ -167,8 +167,17 @@
 
 .confirm-card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 6px;
   justify-content: flex-end;
+  min-width: 0;
+}
+
+/* 窄 Agent 面板（260–400px）里三个动作按钮不能撑破卡片；允许换行，按钮自身仍不超容器 */
+.confirm-card-actions > * {
+  min-width: 0;
+  max-width: 100%;
+  flex-shrink: 0;
 }
 
 /* ===== ArtifactCard — 产物卡片 ===== */

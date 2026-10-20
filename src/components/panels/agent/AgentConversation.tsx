@@ -148,13 +148,20 @@ function EmptyState() {
             </div>
             {conversations.filter(c => c.messages.length > 0).length > recentCount && (
               <button
+                type="button"
                 onClick={() => useAgentStore.getState().setShowHistory(true)}
-                className="mt-4 text-left text-xs transition-all hover:underline"
-                style={{ color: 'var(--color-text-muted)' }}
-                onMouseEnter={e => (e.currentTarget.style.opacity = '0.8')}
-                onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
+                className="mt-1 w-full flex items-center justify-between rounded px-2 py-1.5 text-left transition-colors hover:bg-[var(--color-hover)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                title={t('action.loadMore')}
               >
-                {t('action.loadMore')}
+                <span className="truncate text-xs" style={{ color: 'var(--color-text)', opacity: 0.65 }}>
+                  {t('action.loadMore')}
+                </span>
+                <span className="flex items-center gap-1 flex-shrink-0">
+                  <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+                    {conversations.filter(c => c.messages.length > 0).length}
+                  </span>
+                  <ChevronRight size={12} style={{ color: 'var(--color-text-muted)' }} />
+                </span>
               </button>
             )}
           </div>

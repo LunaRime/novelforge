@@ -14,6 +14,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 import type { TextKey } from '../../../shared/locale'
 import { ipc } from '../../../services/ipc-client'
 import { simpleLineDiff, type DiffLine } from '../../../services/diff/simple-line-diff'
+import { resolveAgentFilePath } from '../../../services/agent/agent-file-resolver'
 
 interface Props {
   toolCall: ToolCallInfo
@@ -41,7 +42,8 @@ export default function ConfirmCard({ toolCall }: Props) {
 
     const load = async () => {
       if (toolName !== 'write_file' && toolName !== 'edit_file') return
-      const path = typeof args.file_path === 'string' ? args.file_path : ''
+      const rawPath = typeof args.file_path === 'string' ? args.file_path : ''
+      const path = resolveAgentFilePath(rawPath)
       if (!path) return
 
       let before = ''
@@ -53,13 +55,23 @@ export default function ConfirmCard({ toolCall }: Props) {
           const result = await ipc.invoke('fs:read-file', path) as { success?: boolean; content?: string }
           before = result?.success ? (result.content ?? '') : ''
         }
+      } else if (path.startsWith('vela://')) {
+        const { readVelaContent } = await import('../../../services/vela-protocol')
+        before = await readVelaContent(path).catch(() => '')
       } else {
-        before = typeof args.old_text === 'string' ? args.old_text : ''
+        const result = await ipc.invoke('fs:read-file', path) as { success?: boolean; content?: string }
+        before = result?.success ? (result.content ?? '') : ''
       }
 
+      const oldText = typeof args.old_string === 'string'
+        ? args.old_string
+        : typeof args.old_text === 'string' ? args.old_text : ''
+      const newText = typeof args.new_string === 'string'
+        ? args.new_string
+        : typeof args.new_text === 'string' ? args.new_text : ''
       const after = toolName === 'write_file'
         ? String(args.content ?? '')
-        : String(args.new_text ?? '')
+        : (oldText && before.includes(oldText) ? before.replace(oldText, newText) : before)
       if (cancelled) return
       setDiffIsNewFile(toolName === 'write_file' && before === '')
       setDiffLines(simpleLineDiff(before, after))

@@ -7,6 +7,10 @@ import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
+import { computeTextStats } from '../../text-stats'
+import { useEditorStore } from '../../../stores/editor-store'
+import { isVelaProtocol, VELA } from '../../vela-protocol'
+import { resolveAgentFilePath } from '../agent-file-resolver'
 
 export const writeFileTool = buildAgentTool({
   name: 'write_file',
@@ -40,9 +44,52 @@ export const writeFileTool = buildAgentTool({
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
+    const resolvedPath = resolveAgentFilePath(filePath)
+
+    // vela://draft/{id}：数据库草稿直接 CAS 写，不导出成物理文件
+    if (isVelaProtocol(resolvedPath)) {
+      if (!resolvedPath.startsWith(VELA.DRAFT)) {
+        return {
+          success: false,
+          content: '',
+          error: resolvedPath.startsWith(VELA.MANUSCRIPT) ? t('tool.draftReadonly') : t('tool.unsupportedProtocol'),
+        }
+      }
+      const rawId = resolvedPath.slice(VELA.DRAFT.length)
+      if (!/^\d+$/.test(rawId)) return { success: false, content: '', error: t('tool.draftNotFound') }
+      const draftId = Number(rawId)
+      const openTab = useEditorStore.getState().tabs.find(x => x.filePath === resolvedPath || x.id === resolvedPath)
+      if (openTab?.dirty) return { success: false, content: '', error: t('tool.draftDirty') }
+      const full = await ipc.invoke('db:draft-get-full', draftId)
+      if (!full) return { success: false, content: '', error: t('tool.draftNotFound') }
+      if (full.status === 'finalized') return { success: false, content: '', error: t('tool.draftReadonly') }
+      const res = await ipc.invoke('db:draft-apply-content', {
+        draftId,
+        expectedHash: full.contentHash,
+        expectedUpdatedAt: full.updatedAt,
+        content,
+        wordCount: computeTextStats(content).novelWordCount,
+      })
+      if (!res.success) {
+        if (res.conflict) return { success: false, content: '', error: t('tool.draftConflict') }
+        return { success: false, content: '', error: res.error ?? t('tool.writeFileFailed') }
+      }
+      clearReadState(filePath)
+      const tab = useEditorStore.getState().tabs.find(x => x.filePath === filePath || x.id === filePath)
+      if (tab) {
+        if (tab.inlineSession) useEditorStore.getState().endInlineSession(tab.id)
+        useEditorStore.getState().markTabSaved(tab.id)
+        useEditorStore.getState().syncTabContent(tab.id, content)
+      }
+      return {
+        success: true,
+        content: t('tool.fileWritten').replace('{path}', filePath).replace('{length}', String(content.length)),
+        artifacts: [{ type: 'file_modified', path: resolvedPath, name: filePath }],
+      }
+    }
 
     // 路径安全校验
-    const pathCheck = validatePath(project.path, filePath)
+    const pathCheck = validatePath(project.path, resolvedPath)
     if (!pathCheck.valid) {
       return { success: false, content: '', error: pathCheck.error }
     }

@@ -6,6 +6,10 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const editorTexts = {
+  'editor.refresh': { 'zh-CN': '刷新', 'en-US': 'Refresh', 'ru-RU': 'Обновить' },
+  'editor.refreshConfirm': { 'zh-CN': '当前正文有未保存修改，刷新会丢弃这些修改。继续？', 'en-US': 'The editor has unsaved changes; refreshing will discard them. Continue?', 'ru-RU': 'В тексте есть несохранённые правки; обновление их удалит. Продолжить?' },
+  'editor.refreshed': { 'zh-CN': '已重新载入', 'en-US': 'Reloaded', 'ru-RU': 'Перезагружено' },
+  'editor.refreshFailed': { 'zh-CN': '刷新失败：{error}', 'en-US': 'Refresh failed: {error}', 'ru-RU': 'Ошибка обновления: {error}' },
   'diff.original': { 'zh-CN': '原稿', 'en-US': 'Original', 'ru-RU': 'Оригинал' },
   'diff.modified': { 'zh-CN': '修稿', 'en-US': 'Revised', 'ru-RU': 'Изменённый' },
   'editor.bold': { 'zh-CN': '加粗', 'en-US': 'Bold', 'ru-RU': 'Жирный' },

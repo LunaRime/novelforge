@@ -7,6 +7,7 @@
 import Database from 'better-sqlite3'
 import path from 'node:path'
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dialog } from 'electron'
 import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
@@ -120,7 +121,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号（v18：写作自动化三表——D 档） */
-const CURRENT_SCHEMA_VERSION = 19
+const CURRENT_SCHEMA_VERSION = 22
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -233,6 +234,7 @@ function createTables(db: BetterSqlite3.Database) {
       notes_updated_at INTEGER DEFAULT 0,           -- notes 提取时间（毫秒戳）
       sort_order INTEGER DEFAULT 0,              -- 自定义排序序号
       priority INTEGER DEFAULT 0,                -- 优先级 (0=普通, 1=高, 2=关键)
+      volume_number INTEGER,                     -- v22: 卷成员唯一真相（NULL=未分卷）
       created_at INTEGER DEFAULT (unixepoch() * 1000),
       updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
@@ -294,6 +296,9 @@ function createTables(db: BetterSqlite3.Database) {
       source TEXT DEFAULT 'write',                -- write/rewrite
       content_id INTEGER NOT NULL,                -- FK -> contents
       word_count INTEGER DEFAULT 0,               -- 字数缓存
+      content_hash TEXT DEFAULT '',                -- v20: 正文 SHA-256（CAS/快照去重）
+      last_auto_snapshot_at INTEGER DEFAULT 0,      -- v20: 自动快照节流
+      branch_id INTEGER,                          -- v21: NULL=主线
       created_at INTEGER DEFAULT (unixepoch() * 1000),
       updated_at INTEGER DEFAULT (unixepoch() * 1000),
       FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
@@ -303,6 +308,56 @@ function createTables(db: BetterSqlite3.Database) {
     CREATE INDEX IF NOT EXISTS idx_drafts_status ON drafts(status);
     CREATE INDEX IF NOT EXISTS idx_drafts_chapter_status ON drafts(chapter_number, status);
     -- 注：chapter_number 与 blueprints 无硬 FK，因导入流程先建草稿后推演蓝图
+
+    -- v20: 草稿快照（追加式历史；自动/手动/Agent 编辑前）
+    CREATE TABLE IF NOT EXISTS draft_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chapter_number INTEGER NOT NULL,
+      draft_id INTEGER NOT NULL,
+      branch_id INTEGER,
+      label TEXT DEFAULT '',
+      kind TEXT NOT NULL,
+      content_id INTEGER NOT NULL,
+      content_hash TEXT NOT NULL,
+      word_count INTEGER DEFAULT 0,
+      created_by TEXT DEFAULT 'user',
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
+      FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
+    );
+    CREATE INDEX IF NOT EXISTS idx_snapshots_chapter ON draft_snapshots(chapter_number, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_snapshots_draft ON draft_snapshots(draft_id, created_at DESC);
+
+    -- v21: 实验分支（章内命名分支；NULL branch_id 为主line）
+    CREATE TABLE IF NOT EXISTS draft_branches (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chapter_number INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      base_snapshot_id INTEGER,
+      head_draft_id INTEGER,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000),
+      merged_at INTEGER,
+      UNIQUE(chapter_number, name)
+    );
+    CREATE INDEX IF NOT EXISTS idx_branches_chapter ON draft_branches(chapter_number, status);
+    CREATE INDEX IF NOT EXISTS idx_drafts_chapter_branch ON drafts(chapter_number, branch_id, version DESC);
+
+    -- v22: 场景卡（活页夹卷→章→场景；先做摘要/状态，正文可后挂）
+    CREATE TABLE IF NOT EXISTS scene_cards (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      chapter_number INTEGER NOT NULL,
+      title TEXT DEFAULT '',
+      summary TEXT DEFAULT '',
+      status TEXT DEFAULT 'planned',
+      sort_order INTEGER DEFAULT 0,
+      word_count INTEGER DEFAULT 0,
+      content_id INTEGER,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
+    );
+    CREATE INDEX IF NOT EXISTS idx_scenes_chapter ON scene_cards(chapter_number, sort_order);
 
     -- ============================================================
     -- 6. revisions — 修稿（派生自 draft）
@@ -538,6 +593,7 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   safeAddColumn(db, 'blueprints', 'notes_updated_at', 'INTEGER DEFAULT 0')
   safeAddColumn(db, 'blueprints', 'sort_order', 'INTEGER DEFAULT 0')
   safeAddColumn(db, 'blueprints', 'priority', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'blueprints', 'volume_number', 'INTEGER')
 
   // contents — v1 新增 updated_at
   safeAddColumn(db, 'contents', 'updated_at', "INTEGER DEFAULT (unixepoch() * 1000)")
@@ -559,6 +615,11 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   // llm_calls — v19 新增前缀记账两列（B 档第二轮 B4）
   safeAddColumn(db, 'llm_calls', 'prefix_fingerprint', "TEXT DEFAULT ''")
   safeAddColumn(db, 'llm_calls', 'prefix_shared_chars', 'INTEGER DEFAULT 0')
+
+  // drafts — v20 快照/CAS
+  safeAddColumn(db, 'drafts', 'content_hash', "TEXT DEFAULT ''")
+  safeAddColumn(db, 'drafts', 'last_auto_snapshot_at', 'INTEGER DEFAULT 0')
+  safeAddColumn(db, 'drafts', 'branch_id', 'INTEGER')
 
   // characters — v14 新增 aliases（别名/称呼注册表，角色名匹配的变体形态）
   safeAddColumn(db, 'characters', 'aliases', "TEXT DEFAULT '[]'")
@@ -990,5 +1051,97 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     }
   } catch (e) {
     logger.warn('DB', `v17 迁移未完成（非关键）: ${e}`)
+  }
+
+  // 18. v20: 快照表 + 正文 hash 回填（幂等；非关键失败不阻断启动）
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS draft_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chapter_number INTEGER NOT NULL,
+        draft_id INTEGER NOT NULL,
+        branch_id INTEGER,
+        label TEXT DEFAULT '',
+        kind TEXT NOT NULL,
+        content_id INTEGER NOT NULL,
+        content_hash TEXT NOT NULL,
+        word_count INTEGER DEFAULT 0,
+        created_by TEXT DEFAULT 'user',
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        FOREIGN KEY (draft_id) REFERENCES drafts(id) ON DELETE CASCADE,
+        FOREIGN KEY (content_id) REFERENCES contents(id) ON DELETE RESTRICT
+      );
+      CREATE INDEX IF NOT EXISTS idx_snapshots_chapter ON draft_snapshots(chapter_number, created_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_snapshots_draft ON draft_snapshots(draft_id, created_at DESC);
+    `)
+    const cols = db.pragma('table_info(drafts)') as Array<{ name: string }>
+    if (cols.some(c => c.name === 'content_hash')) {
+      const rows = db.prepare(`
+        SELECT d.id AS id, c.body AS body FROM drafts d
+        JOIN contents c ON c.id = d.content_id
+        WHERE d.content_hash IS NULL OR d.content_hash = ''
+      `).all() as Array<{ id: number; body: string | null }>
+      const update = db.prepare('UPDATE drafts SET content_hash = ? WHERE id = ?')
+      for (const row of rows) update.run(createHash('sha256').update(row.body ?? '').digest('hex'), row.id)
+      logger.info('DB', 'v20 迁移: 快照表已建，' + rows.length + ' 条草稿 hash 已回填')
+    }
+  } catch (e) {
+    logger.warn('DB', 'v20 迁移未完成（非关键）: ' + String(e))
+  }
+
+  // 19. v21: 分支表（幂等；非关键失败不阻断启动）
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS draft_branches (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chapter_number INTEGER NOT NULL,
+        name TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        base_snapshot_id INTEGER,
+        head_draft_id INTEGER,
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000),
+        merged_at INTEGER,
+        UNIQUE(chapter_number, name)
+      );
+      CREATE INDEX IF NOT EXISTS idx_branches_chapter ON draft_branches(chapter_number, status);
+      CREATE INDEX IF NOT EXISTS idx_drafts_chapter_branch ON drafts(chapter_number, branch_id, version DESC);
+    `)
+    logger.info('DB', 'v21 迁移: 分支表已建')
+  } catch (e) {
+    logger.warn('DB', 'v21 迁移未完成（非关键）: ' + String(e))
+  }
+
+  // 20. v22: 活页夹卷成员 + 场景卡（幂等；非关键失败不阻断启动）
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS scene_cards (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        chapter_number INTEGER NOT NULL,
+        title TEXT DEFAULT '',
+        summary TEXT DEFAULT '',
+        status TEXT DEFAULT 'planned',
+        sort_order INTEGER DEFAULT 0,
+        word_count INTEGER DEFAULT 0,
+        content_id INTEGER,
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000)
+      );
+      CREATE INDEX IF NOT EXISTS idx_scenes_chapter ON scene_cards(chapter_number, sort_order);
+    `)
+    const cols = db.pragma('table_info(blueprints)') as Array<{ name: string }>
+    if (cols.some(c => c.name === 'volume_number')) {
+      db.exec(`
+        UPDATE blueprints SET volume_number = (
+          SELECT volume_number FROM volumes v
+          WHERE v.chapter_start <= blueprints.chapter_number
+            AND (v.chapter_end = 0 OR blueprints.chapter_number <= v.chapter_end)
+          ORDER BY v.volume_number ASC LIMIT 1
+        ) WHERE volume_number IS NULL;
+      `)
+    }
+    logger.info('DB', 'v22 迁移: 场景表已建，卷成员已回填')
+  } catch (e) {
+    logger.warn('DB', 'v22 迁移未完成（非关键）: ' + String(e))
   }
 }

@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite, LayoutGrid } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite, LayoutGrid, RefreshCw } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -32,10 +32,12 @@ import { ipc } from '../../services/ipc-client'
 import { computeTextStats } from '../../services/text-stats'
 import { isValidMemoryContent, stripStatusFrontmatter } from '../../services/memory/memory-codec'
 import { toast } from '../ui/Toast'
+import { confirm } from '../ui/Confirm'
 import { renderLog } from '../../services/render-logger'
 import { useTranslation } from '../../hooks/useTranslation'
 
 import { clearChapterTitleCache } from './Sidebar'
+import { readVelaContent } from '../../services/vela-protocol'
 import '../editor/novel-editor.css'
 
 // ─── 正文章节编辑器包装层（含字数信息栏） ─────────────────────────────────────────────
@@ -49,6 +51,7 @@ function ProseEditorWrapper({
   const { t } = useTranslation()
   const [wordCount, setWordCount] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
   const fileName = tab.name
   // 追踪当前编辑器内容，供保存按钮使用（不触发重渲染）
   const currentContentRef = useRef(tab.content ?? '')
@@ -62,6 +65,39 @@ function ProseEditorWrapper({
       await onSave(text)
     } finally {
       setSaving(false)
+    }
+  }
+
+  /** 重新读取当前 Tab（DB 草稿或物理文件），不重开 Tab */
+  const handleRefresh = async () => {
+    if (!tab.filePath || refreshing) return
+    if (tab.dirty) {
+      const ok = await confirm(t('editor.refreshConfirm'), { title: t('editor.refresh'), confirmText: t('editor.refresh') })
+      if (!ok) return
+    }
+    setRefreshing(true)
+    try {
+      let text = ''
+      if (tab.filePath.startsWith('vela://')) {
+        text = await readVelaContent(tab.filePath)
+      } else {
+        const res = await ipc.invoke('fs:read-file', tab.filePath)
+        if (!res.success) throw new Error(res.error ?? t('status.unknown'))
+        text = res.content ?? ''
+      }
+      const store = useEditorStore.getState()
+      if (tab.inlineSession) store.endInlineSession(tab.id)
+      store.markTabSaved(tab.id)
+      store.syncTabContent(tab.id, text)
+      currentContentRef.current = text
+      const count = computeTextStats(text).novelWordCount
+      setWordCount(count)
+      store.setActiveCharCount(count)
+      toast.success(t('editor.refreshed'))
+    } catch (e) {
+      toast.error(t('editor.refreshFailed').replace('{error}', String(e)))
+    } finally {
+      setRefreshing(false)
     }
   }
 
@@ -95,6 +131,17 @@ function ProseEditorWrapper({
               title={t('statusbar.unsaved')}
             />
           )}
+          {/* 刷新：从 DB/磁盘重新读当前 Tab，不重开文件 */}
+          <button
+            className="icon-btn"
+            style={{ width: 24, height: 22 }}
+            onClick={() => void handleRefresh()}
+            disabled={refreshing}
+            title={t('editor.refresh')}
+            aria-label={t('editor.refresh')}
+          >
+            <RefreshCw size={13} strokeWidth={1.5} className={refreshing ? 'animate-spin' : ''} />
+          </button>
           {/* 保存按钮（有改动时显示） */}
           {tab.dirty && (
             <button
@@ -686,6 +733,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         onOpenSettings={() => {
           useLayoutStore.getState().openSettings()
         }}
+        onStartCreate={() => {
+          if (useProjectStore.getState().currentProject) useLayoutStore.getState().openChapterCreation()
+          else useLayoutStore.getState().openNewProject()
+        }}
       />
     )
   }
@@ -710,6 +761,10 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         onImportNovel={() => {
           useLayoutStore.getState().openImportNovel()
         }}
+        onOpenSettings={() => {
+          useLayoutStore.getState().openSettings()
+        }}
+        onStartCreate={() => useLayoutStore.getState().openNewProject()}
       />
     )
   }

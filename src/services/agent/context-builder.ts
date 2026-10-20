@@ -716,7 +716,9 @@ function buildL1EditorContext(budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): s
     const tabSummaries = editorState.tabs.slice(0, 5).map(tab => {
       const active = tab.id === editorState.activeTabId ? t('engine.contextTabActive') : ''
       const dirty = tab.dirty ? t('engine.contextTabDirty') : ''
-      return `  - ${tab.name} (${tab.type})${active}${dirty}`
+      // 必须给真实 filePath：否则模型只能看到 Tab 名，会猜出 chapter_01_xxx.txt 这类不存在的路径
+      const pathHint = tab.filePath ? ` [${tab.filePath}]` : ''
+      return `  - ${tab.name} (${tab.type})${pathHint}${active}${dirty}`
     }).join('\n')
 
     let tabSection = `${t('engine.contextEditorHeader')}\n${t('engine.contextEditorOpenFiles')}\n${tabSummaries}`

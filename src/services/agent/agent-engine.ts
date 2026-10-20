@@ -20,6 +20,8 @@ import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 // 只读批并发上限的唯一来源（2026-10-17 起抽到 tool-scheduling.ts，提示词 {maxParallel} 同源注入）
 import { MAX_PARALLEL_READ_TOOLS } from './tool-scheduling'
+import { createToolProtocolStreamFilter } from './tool-protocol-stream-filter'
+import { parseBareJsonToolCalls } from './bare-json-tool-calls'
 import {
   buildUnparsedDsmlError,
   containsDsmlMarkup,
@@ -236,13 +238,15 @@ export async function runAgentLoop(
     // 当正文流回来。先在本层截住，避免 Markdown 面板闪现原始标记；全文解析在生成返回后做。
     // 过滤器按步新建（每次模型请求一份）；本步残余（未闭合 DSML 残片）由全文 parse/strip 兜底。
     const dsmlStreamFilter = createDsmlStreamFilter()
+    const xmlStreamFilter = createToolProtocolStreamFilter()
     try {
       llmResponse = await generateFn(budgetedMessages, modelId, (chunk) => {
         streamed = true
-        const safe = dsmlStreamFilter.push(chunk)
+        const safe = dsmlStreamFilter.push(xmlStreamFilter.push(chunk))
         if (safe) callbacks.onTextChunk(safe)
       })
-      const streamTail = dsmlStreamFilter.flush()
+      const xmlTail = xmlStreamFilter.flush()
+      const streamTail = dsmlStreamFilter.push(xmlTail) + dsmlStreamFilter.flush()
       if (streamTail) callbacks.onTextChunk(streamTail)
       // 调用成功：恢复计数清零、预算复原（下次调用生效）
       consecutiveRecoveryFailures = 0
@@ -293,7 +297,17 @@ export async function runAgentLoop(
     }
 
     // 解析 LLM 回复：分离文本和 tool_call（含 DeepSeek DSML 原生标记 repair，见 dsml-tool-calls.ts）
-    const { textParts, toolCalls, parseErrors } = parseToolCalls(llmResponse)
+    const parsed = parseToolCalls(llmResponse)
+    let { textParts, toolCalls } = parsed
+    const { parseErrors } = parsed
+    // 裸 JSON 工具调用兜底（Qwen 等 OpenAI-compatible 模型）
+    if (toolCalls.length === 0) {
+      const bare = parseBareJsonToolCalls(llmResponse, (name) => !!toolRegistry.get(name))
+      if (bare) {
+        textParts = bare.textParts
+        toolCalls = bare.toolCalls
+      }
+    }
     if (containsDsmlMarkup(llmResponse)) {
       // 留诊断证据：模型回退到原生格式是上游行为（issue #1678），日志里应可追踪修复发生
       console.warn(`[AgentEngine] 检测到 DeepSeek DSML 工具标记，已解析为 ${toolCalls.length} 个工具调用`)
@@ -382,6 +396,11 @@ export async function runAgentLoop(
 
     // 如果没有 tool_call，循环结束
     if (toolCalls.length === 0) {
+      // 空响应守卫：模型返回 0 可见文本且无工具调用时，不能静默 onDone（UI 只剩用户消息）
+      if (!fullAssistantText.trim()) {
+        callbacks.onError(t('engine.emptyResponse'))
+        return
+      }
       progress.setPhase('generating')
       callbacks.onProgress?.(progress.getProgress())
 

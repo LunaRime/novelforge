@@ -263,3 +263,68 @@ describe('区域感知引号回填（评审 Finding 2 修复）', () => {
     expect(mockInvoke.mock.calls.map(c => c[0])).toEqual(['fs:read-file']) // 只有读，无写
   })
 })
+
+describe('edit_file · vela://draft 数据库草稿', () => {
+  it('读取 DB 草稿 → CAS 写回，不产生物理文件', async () => {
+    let captured: Record<string, unknown> | null = null
+    mockInvoke.mockImplementation(async (ch: string, ...args: unknown[]) => {
+      if (ch === 'db:draft-get-full') {
+        return {
+          id: 7, chapterNumber: 1, version: 1, status: 'draft', source: 'write',
+          contentId: 1, wordCount: 7, createdAt: 1, updatedAt: 10,
+          contentHash: 'hash-before', content: '第一段\n第二段',
+        }
+      }
+      if (ch === 'db:draft-apply-content') {
+        captured = args[0] as Record<string, unknown>
+        return { success: true }
+      }
+      return { success: false, error: `unexpected channel: ${ch}` }
+    })
+
+    const r = await editFileTool.execute({
+      file_path: 'vela://draft/7',
+      old_string: '第二段',
+      new_string: '第二段改',
+    })
+    expect(r.success).toBe(true)
+    expect(captured).toMatchObject({
+      draftId: 7,
+      expectedHash: 'hash-before',
+      expectedUpdatedAt: 10,
+      content: '第一段\n第二段改',
+    })
+    expect(mockInvoke.mock.calls.map(c => c[0])).toEqual(['db:draft-get-full', 'db:draft-apply-content'])
+  })
+
+  it('hash 冲突返回明确错误，不写 DB', async () => {
+    mockInvoke.mockImplementation(async (ch: string, ..._args: unknown[]) => {
+      void _args
+      if (ch === 'db:draft-get-full') {
+        return {
+          id: 7, chapterNumber: 1, version: 1, status: 'draft', source: 'write',
+          contentId: 1, wordCount: 7, createdAt: 1, updatedAt: 10,
+          contentHash: 'hash-before', content: '第一段',
+        }
+      }
+      if (ch === 'db:draft-apply-content') return { success: false, conflict: true, currentHash: 'new', currentUpdatedAt: 11 }
+      return { success: false }
+    })
+    const r = await editFileTool.execute({ file_path: 'vela://draft/7', old_string: '第一段', new_string: '改' })
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('tool.draftConflict'))
+  })
+
+  it('定稿草稿拒绝写入', async () => {
+    mockInvoke.mockImplementation(async (ch: string, ..._args: unknown[]) => {
+      void _args
+      if (ch === 'db:draft-get-full') {
+        return { id: 7, status: 'finalized', content: 'x', contentHash: 'h', updatedAt: 1 }
+      }
+      return { success: false }
+    })
+    const r = await editFileTool.execute({ file_path: 'vela://draft/7', old_string: 'x', new_string: 'y' })
+    expect(r.success).toBe(false)
+    expect(r.error).toBe(t('tool.draftReadonly'))
+  })
+})

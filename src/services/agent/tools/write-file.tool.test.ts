@@ -110,3 +110,23 @@ describe('write_file 数据目录保护（I-1 修复回归矩阵）', () => {
     })
   }
 })
+
+describe('write_file · vela://draft 数据库草稿', () => {
+  it('整篇替换走 CAS，不写物理文件', async () => {
+    let captured: Record<string, unknown> | null = null
+    mockInvoke.mockImplementation(async (ch: string, ...args: unknown[]) => {
+      if (ch === 'db:draft-get-full') {
+        return { id: 9, status: 'draft', content: '旧', contentHash: 'h0', updatedAt: 5, wordCount: 1 }
+      }
+      if (ch === 'db:draft-apply-content') {
+        captured = args[0] as Record<string, unknown>
+        return { success: true }
+      }
+      return { success: false, error: `unexpected channel: ${ch}` }
+    })
+    const r = await writeFileTool.execute({ file_path: 'vela://draft/9', content: '新正文' })
+    expect(r.success).toBe(true)
+    expect(captured).toMatchObject({ draftId: 9, expectedHash: 'h0', expectedUpdatedAt: 5, content: '新正文' })
+    expect(writeCalls).toHaveLength(0)
+  })
+})

@@ -17,6 +17,7 @@ import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { openDraftByChapter } from '../sidebar/SidebarShared'
 import { ipc } from '../../../services/ipc-client'
+import { isVelaProtocol, readVelaContent } from '../../../services/vela-protocol'
 import { t } from '../../../shared/locale'
 
 interface Props {
@@ -70,17 +71,20 @@ export default function ArtifactCard({ artifact }: Props) {
 
   /** 文件类产物：先读内容再打开编辑器（避免空白 Tab） */
   const openFileArtifact = async () => {
+    if (!path) return
     let content = ''
     try {
-      const result = await ipc.invoke('fs:read-file', path!)
-      if (result.success) {
-        content = result.content
+      if (isVelaProtocol(path)) {
+        content = await readVelaContent(path)
+      } else {
+        const result = await ipc.invoke('fs:read-file', path)
+        if (result.success) content = result.content
       }
     } catch {
       // 读取失败时仍然打开，显示空白
     }
     useEditorStore.getState().openFile({
-      id: `artifact-${Date.now()}`,
+      id: path,
       name,
       type: 'chapter',
       filePath: path,

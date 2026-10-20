@@ -15,6 +15,10 @@ import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
+import { computeTextStats } from '../../text-stats'
+import { useEditorStore } from '../../../stores/editor-store'
+import { isVelaProtocol, VELA } from '../../vela-protocol'
+import { resolveAgentFilePath } from '../agent-file-resolver'
 import {
   adaptTextToQuoteStyle,
   applySpanEdit,
@@ -70,10 +74,70 @@ export const editFileTool = buildAgentTool({
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
+    // 模型可能把 Tab 名当 file_path；先映射到真实 filePath（vela://draft/{id} 等）
+    const resolvedPath = resolveAgentFilePath(filePath)
+
+    // vela://draft/{id}：数据库草稿，本地工具直接走 CAS，不导出成物理文件
+    if (isVelaProtocol(resolvedPath)) {
+      if (!resolvedPath.startsWith(VELA.DRAFT)) {
+        return {
+          success: false,
+          content: '',
+          error: resolvedPath.startsWith(VELA.MANUSCRIPT) ? t('tool.draftReadonly') : t('tool.unsupportedProtocol'),
+        }
+      }
+      const rawId = resolvedPath.slice(VELA.DRAFT.length)
+      if (!/^\d+$/.test(rawId)) return { success: false, content: '', error: t('tool.draftNotFound') }
+      const draftId = Number(rawId)
+      const openTab = useEditorStore.getState().tabs.find(x => x.filePath === resolvedPath || x.id === resolvedPath)
+      if (openTab?.dirty) return { success: false, content: '', error: t('tool.draftDirty') }
+      const full = await ipc.invoke('db:draft-get-full', draftId)
+      if (!full) return { success: false, content: '', error: t('tool.draftNotFound') }
+      if (full.status === 'finalized') return { success: false, content: '', error: t('tool.draftReadonly') }
+
+      const currentText = full.content
+      const match = findEditMatch(currentText, oldString)
+      if (!match) return { success: false, content: '', error: t('tool.editNotFound') }
+      const rawNew = desanitizeText(newString)
+      const styles = detectRegionAwareQuoteStyle(match.matchedText, currentText)
+      const adaptedNew = adaptTextToQuoteStyle(rawNew, styles)
+      const edit = applySpanEdit(currentText, match.start, match.end, oldString, adaptedNew)
+      if (edit.content === currentText) {
+        return { success: true, content: t('tool.editNoChange').replace('{path}', filePath) }
+      }
+
+      const res = await ipc.invoke('db:draft-apply-content', {
+        draftId,
+        expectedHash: full.contentHash,
+        expectedUpdatedAt: full.updatedAt,
+        content: edit.content,
+        wordCount: computeTextStats(edit.content).novelWordCount,
+      })
+      if (!res.success) {
+        if (res.conflict) return { success: false, content: '', error: t('tool.draftConflict') }
+        return { success: false, content: '', error: res.error ?? t('tool.writeFileFailed') }
+      }
+      clearReadState(filePath)
+      const tab = useEditorStore.getState().tabs.find(x => x.filePath === filePath || x.id === filePath)
+      if (tab) {
+        if (tab.inlineSession) useEditorStore.getState().endInlineSession(tab.id)
+        useEditorStore.getState().markTabSaved(tab.id)
+        useEditorStore.getState().syncTabContent(tab.id, edit.content)
+      }
+      return {
+        success: true,
+        content: t('tool.fileEdited')
+          .replace('{path}', filePath)
+          .replace('{line}', String(currentText.slice(0, match.start).split('\n').length))
+          .replace('{removed}', String(edit.removedChars))
+          .replace('{added}', String(edit.addedChars)),
+        artifacts: [{ type: 'file_modified', path: resolvedPath, name: filePath }],
+      }
+    }
 
     // 路径安全校验（与 write_file 同源：validatePath 返回规范化相对路径 → 数据目录保护首段判定，
     // './.novelforge/x'、'x/../.novelforge/x' 等混淆形态经归一化后必命中——I-1 修复）
-    const pathCheck = validatePath(project.path, filePath)
+    const pathCheck = validatePath(project.path, resolvedPath)
     if (!pathCheck.valid) {
       return { success: false, content: '', error: pathCheck.error }
     }

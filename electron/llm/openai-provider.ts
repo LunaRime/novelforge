@@ -3,11 +3,13 @@ import { LLMModelCandidate } from '../../src/shared/ipc-channels'
 import { readListingJson, toCandidates } from './model-listing'
 import { withRetry, withStreamRetry } from './retry-handler'
 import { buildOpenAIUrl } from './url-utils'
-import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { proxyFetch } from '../net/proxy-fetch'
 import { fetchWithTimeout } from '../net/fetch-with-timeout'
+import { createStreamAdapter } from './stream-adapter'
+import type { InternalStreamEvent } from '../../src/shared/llm-stream-events'
+import type { LLMUsage } from './provider.interface'
 
 /** 带 HTTP 状态码的错误对象，用于重试判断 */
 class HttpError extends Error {
@@ -155,95 +157,69 @@ export class OpenAIProvider implements ILLMProvider {
       const decoder = new TextDecoder()
       let fullText = ''
       let isThinking = false
-      let failedChunkCount = 0
-      let buffer = '' // 跨 read 边界的行缓冲
-      // 流式输出的最后一帧通常携带 usage（OpenAI/DeepSeek 等兼容 API）
-      let lastUsage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
+      let lastUsage: LLMUsage | undefined
+      const adapter = createStreamAdapter('openai', model.modelName)
+      if (!adapter) {
+        opts.onError(t('error.streamReadFailed'))
+        return
+      }
 
-      const hasMore = true
-      while (hasMore) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += decoder.decode(value, { stream: true })
-        const parts = buffer.split('\n')
-        buffer = parts.pop() ?? ''
-        const lines = parts.filter((l) => l.startsWith('data: '))
-
-        for (const line of lines) {
-          const json = line.slice(6).trim()
-          if (json === '[DONE]') continue
-          try {
-            const parsed = JSON.parse(json) as {
-              choices: Array<{ delta: { content?: string, reasoning_content?: string } }>
-              usage?: {
-                prompt_tokens: number; completion_tokens: number; total_tokens: number
-                prompt_cache_hit_tokens?: number
-                prompt_tokens_details?: { cached_tokens?: number }
-              }
+      const consumeEvents = (events: InternalStreamEvent[]): boolean => {
+        for (const event of events) {
+          if (event.type === 'error') {
+            opts.onError(event.message)
+            return false
+          }
+          if (event.type === 'finish') {
+            if (event.usage) lastUsage = event.usage
+            continue
+          }
+          if (event.type === 'reasoning_delta') {
+            let emit = ''
+            if (!isThinking) {
+              isThinking = true
+              emit += ' thinking\n'
             }
-            const delta = parsed.choices?.[0]?.delta
-
-            // 提取 usage（通常在最后一个有效 chunk 中携带）
-            if (parsed.usage) {
-              lastUsage = {
-                promptTokens: parsed.usage.prompt_tokens,
-                completionTokens: parsed.usage.completion_tokens,
-                totalTokens: parsed.usage.total_tokens,
-                cachedTokens: parsed.usage.prompt_cache_hit_tokens ?? parsed.usage.prompt_tokens_details?.cached_tokens ?? 0,
-              }
+            emit += event.delta
+            fullText += emit
+            emittedAny = true
+            opts.onChunk(emit)
+            continue
+          }
+          if (event.type === 'text_delta') {
+            let emit = ''
+            if (isThinking) {
+              isThinking = false
+              emit += '\n response\n\n'
             }
-
-            let emitChunk = ''
-
-            if (delta?.reasoning_content) {
-              if (!isThinking) {
-                isThinking = true
-                emitChunk += '<think>\n'
-              }
-              emitChunk += delta.reasoning_content
-            }
-
-            if (delta?.content !== undefined && delta?.content !== null) {
-              if (isThinking) {
-                isThinking = false
-                emitChunk += '\n</think>\n\n'
-              }
-              if (delta?.content) {
-                emitChunk += delta.content
-              }
-            }
-
-            if (emitChunk) {
-              fullText += emitChunk
-              emittedAny = true
-              opts.onChunk(emitChunk)
-            }
-          } catch (parseError) {
-            failedChunkCount++
-            const snippet = json.slice(0, 200)
-            logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailedWithSnippet')
-              .replace('{n}', String(failedChunkCount))
-              .replace('{err}', String(parseError).slice(0, 100))
-              .replace('{snippet}', snippet))
-            if (failedChunkCount > 10) {
-              const msg = t('log.llmStream.aborted').replace('{n}', String(failedChunkCount))
-              logger.error('LLM:Stream', msg)
-              opts.onError(msg)
-              return
-            }
+            emit += event.delta
+            fullText += emit
+            emittedAny = true
+            opts.onChunk(emit)
+            continue
+          }
+          if (event.type === 'tool_call_complete') {
+            const xml = `<tool_call>${JSON.stringify({ name: event.name, arguments: event.args })}</tool_call>`
+            fullText += xml
+            emittedAny = true
+            opts.onChunk(xml)
           }
         }
+        return true
       }
+
+      let reading = true
+      while (reading) {
+        const { done, value } = await reader.read()
+        if (done) { reading = false; break }
+        if (!consumeEvents(adapter.push(decoder.decode(value, { stream: true })))) return
+      }
+      if (!consumeEvents(adapter.flush())) return
 
       if (isThinking) {
-        const closeTag = '\n</think>\n\n'
+        const closeTag = '\n response\n\n'
         fullText += closeTag
         opts.onChunk(closeTag)
-      }
-
-      if (failedChunkCount > 0) {
-        logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailures').replace('{n}', String(failedChunkCount)))
       }
 
       const cleanText = fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()

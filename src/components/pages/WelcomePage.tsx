@@ -26,11 +26,13 @@ interface WelcomePageProps {
   onOpenProject: () => void
   onImportNovel?: () => void
   onOpenSettings?: () => void
+  /** 第 3 步快捷入口：有项目时新建章节，无项目时回落到新建项目 */
+  onStartCreate?: () => void
 }
 
 /** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导
  *  （2026-09-28：「最近项目」列表已迁至侧栏主页 HomeSidebarPanel，本页不再渲染） */
-export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings }: WelcomePageProps) {
+export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings, onStartCreate }: WelcomePageProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const [showGuide, setShowGuide] = useState(isFirstRun())
@@ -116,6 +118,7 @@ export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel
                 title={t('welcome.startCreate')}
                 desc={t('welcome.startCreateDesc')}
                 icon={<PenLine size={14} />}
+                action={{ label: t('welcome.startCreateAction'), onClick: onStartCreate ?? onNewProject }}
               />
             </div>
           </div>

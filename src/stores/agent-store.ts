@@ -1112,11 +1112,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         let usage: { promptTokens: number; completionTokens: number; totalTokens: number; cachedTokens?: number } | undefined
 
         try {
-          const text = await new Promise<string>((resolve, reject) => {
+          let streamHadText = false
+          let text = await new Promise<string>((resolve, reject) => {
             useLLMStore.getState().generateStream(
               messages.map(m => ({ role: m.role, content: m.content })),
               {
                 onChunk: (chunk) => {
+                  if (chunk.trim()) streamHadText = true
                   onChunk?.(chunk)
                 },
                 onDone: (fullText, u) => {
@@ -1132,6 +1134,23 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               activeStreamRequestId = requestId
             }).catch((error) => reject(error))
           })
+
+          // 兼容少数 OpenAI-compatible 模型：流式通道成功但 visible content 为空。
+          // 同一模型降级到非流式一次，避免 UI 只剩用户消息。
+          if (!text.trim() && !streamHadText) {
+            const fallback = await ipc.invoke('llm:generate', {
+              modelId: mid,
+              messages: messages.map(m => ({ role: m.role, content: m.content })),
+              priority: 12,
+            })
+            if (fallback.success && fallback.content?.trim()) {
+              text = fallback.content
+              usage = fallback.usage
+              onChunk?.(fallback.content)
+            } else {
+              throw new Error(fallback.error || t('engine.emptyResponse'))
+            }
+          }
 
           // 记录 LLM 调用日志（流式 usage 真实统计 + 缓存命中费用真实化）
           const model = llmStore.models.find(m => m.id === mid)

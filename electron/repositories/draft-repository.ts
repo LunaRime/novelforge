@@ -7,6 +7,7 @@
 import { getProjectDb } from '../database'
 import { t } from '../../src/shared/locale'
 import { ContentRepository } from './content-repository'
+import { createHash } from 'node:crypto'
 
 /** 草稿元数据（不含正文，适合列表查询） */
 export interface DraftMeta {
@@ -19,6 +20,9 @@ export interface DraftMeta {
     wordCount: number
     createdAt: number
     updatedAt: number
+    contentHash: string
+    lastAutoSnapshotAt: number
+    branchId: number | null
 }
 
 /** 草稿完整数据（含正文） */
@@ -38,6 +42,9 @@ function rowToMeta(row: Record<string, unknown>): DraftMeta {
         wordCount: row.word_count as number,
         createdAt: row.created_at as number,
         updatedAt: row.updated_at as number,
+        contentHash: (row.content_hash as string) || '',
+        lastAutoSnapshotAt: (row.last_auto_snapshot_at as number) || 0,
+        branchId: (row.branch_id as number | null) ?? null,
     }
 }
 
@@ -52,6 +59,7 @@ export class DraftRepository {
         source: 'write' | 'rewrite' | 'translation'
         content: string
         wordCount: number
+        branchId?: number | null
     }): number {
         const db = getProjectDb()
         if (!db) throw new Error(t('error.repoDbNotConnected').replace('{repo}', '[DraftRepository]'))
@@ -60,14 +68,16 @@ export class DraftRepository {
         const tx = db.transaction(() => {
             const contentId = ContentRepository.create(params.content)
             const result = db.prepare(`
-        INSERT INTO drafts (chapter_number, version, source, content_id, word_count)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO drafts (chapter_number, version, source, content_id, word_count, content_hash, branch_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
                 params.chapterNumber,
                 params.version,
                 params.source,
                 contentId,
                 params.wordCount,
+                createHash('sha256').update(params.content).digest('hex'),
+                params.branchId ?? null,
             )
             return Number(result.lastInsertRowid)
         })
@@ -115,16 +125,16 @@ export class DraftRepository {
         return { ...meta, content: (row.body as string) ?? '' }
     }
 
-    /** 获取章节最新版本的草稿 */
-    static getLatestByChapter(chapterNumber: number): DraftMeta | null {
+    /** 获取章节最新版本的草稿（默认主线；分支传 branchId） */
+    static getLatestByChapter(chapterNumber: number, branchId: number | null = null): DraftMeta | null {
         const db = getProjectDb()
         if (!db) return null
 
         const row = db.prepare(`
       SELECT * FROM drafts
-      WHERE chapter_number = ?
+      WHERE chapter_number = ? AND ${branchId === null ? 'branch_id IS NULL' : 'branch_id = ?'}
       ORDER BY version DESC LIMIT 1
-    `).get(chapterNumber) as Record<string, unknown> | undefined
+    `).get(...(branchId === null ? [chapterNumber] : [chapterNumber, branchId])) as Record<string, unknown> | undefined
 
         return row ? rowToMeta(row) : null
     }
@@ -143,16 +153,27 @@ export class DraftRepository {
         return row ? rowToMeta(row) : null
     }
 
-    /** 获取下一个可用版本号 */
-    static getNextVersion(chapterNumber: number): number {
+    /** 获取下一个可用版本号（默认主线；分支内独立编号） */
+    static getNextVersion(chapterNumber: number, branchId: number | null = null): number {
         const db = getProjectDb()
         if (!db) return 1
 
         const row = db.prepare(`
-      SELECT MAX(version) as maxVer FROM drafts WHERE chapter_number = ?
-    `).get(chapterNumber) as { maxVer: number | null }
+      SELECT MAX(version) as maxVer FROM drafts
+      WHERE chapter_number = ? AND ${branchId === null ? 'branch_id IS NULL' : 'branch_id = ?'}
+    `).get(...(branchId === null ? [chapterNumber] : [chapterNumber, branchId])) as { maxVer: number | null }
 
         return (row.maxVer ?? 0) + 1
+    }
+
+    /** 分支内草稿列表 */
+    static listByBranch(chapterNumber: number, branchId: number): DraftMeta[] {
+        const db = getProjectDb()
+        if (!db) return []
+        const rows = db.prepare(`
+      SELECT * FROM drafts WHERE chapter_number = ? AND branch_id = ? ORDER BY version DESC
+    `).all(chapterNumber, branchId) as Record<string, unknown>[]
+        return rows.map(rowToMeta)
     }
 
     /** 获取最大的已定稿章节号，如果没有则返回 0 */
@@ -254,14 +275,54 @@ export class DraftRepository {
         const meta = DraftRepository.getMeta(id)
         if (!meta) return
 
+        const hash = createHash('sha256').update(content).digest('hex')
         const tx = db.transaction(() => {
             ContentRepository.updateBody(meta.contentId, content)
             db.prepare(`
-          UPDATE drafts SET word_count = ?, updated_at = unixepoch() * 1000
+          UPDATE drafts SET word_count = ?, content_hash = ?, updated_at = unixepoch() * 1000
           WHERE id = ?
-        `).run(wordCount, id)
+        `).run(wordCount, hash, id)
         })
         tx()
+    }
+
+    /** CAS 写正文：hash/updated_at 任一不符即 conflict（Agent 编辑用） */
+    static applyContentIfUnchanged(
+        id: number,
+        expectedHash: string,
+        expectedUpdatedAt: number,
+        content: string,
+        wordCount: number,
+    ): { ok: boolean; conflict?: boolean; currentHash?: string; currentUpdatedAt?: number } {
+        const db = getProjectDb()
+        if (!db) return { ok: false }
+        const meta = DraftRepository.getMeta(id)
+        if (!meta) return { ok: false }
+
+        const tx = db.transaction(() => {
+            const current = db.prepare(
+                'SELECT content_hash, updated_at FROM drafts WHERE id = ?'
+            ).get(id) as { content_hash: string; updated_at: number } | undefined
+            if (!current) throw new Error('draft-not-found')
+            if ((current.content_hash || '') !== expectedHash || current.updated_at !== expectedUpdatedAt) {
+                return { ok: false, conflict: true, currentHash: current.content_hash || '', currentUpdatedAt: current.updated_at }
+            }
+            const hash = createHash('sha256').update(content).digest('hex')
+            ContentRepository.updateBody(meta.contentId, content)
+            db.prepare(`
+              UPDATE drafts SET word_count = ?, content_hash = ?, updated_at = unixepoch() * 1000
+              WHERE id = ?
+            `).run(wordCount, hash, id)
+            return { ok: true }
+        })
+        return tx()
+    }
+
+    /** 自动快照节流时间（仅主进程调用） */
+    static touchAutoSnapshotAt(id: number, at: number): void {
+        const db = getProjectDb()
+        if (!db) return
+        db.prepare('UPDATE drafts SET last_auto_snapshot_at = ? WHERE id = ?').run(at, id)
     }
 
     /** 删除草稿（级联删除 revisions/reviews，但 contents 需手动清理） */

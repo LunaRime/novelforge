@@ -39,6 +39,8 @@ interface VolumeGroupProps {
   finalizedCountForVolume: (volume: VolumeData) => number
   /** 自动划分的章节总数（0 = 隐藏自动划分按钮） */
   totalChapters?: number
+  /** 拖拽/键盘重排章节（章节号不变，只改卷成员与顺序） */
+  onReorderChapter?: (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => void
 }
 
 export default function VolumeGroup({
@@ -47,6 +49,7 @@ export default function VolumeGroup({
   onOpenDraft,
   finalizedCountForVolume,
   totalChapters = 0,
+  onReorderChapter,
 }: VolumeGroupProps) {
   const { t } = useTranslation()
   const volumes = useVolumeStore(s => s.volumes)
@@ -157,6 +160,7 @@ export default function VolumeGroup({
               onEdit={() => setVolumeDialog({ open: true, editing: v })}
               onDelete={() => handleDeleteVolume(v)}
               onOpenDraft={onOpenDraft}
+              onReorderChapter={onReorderChapter}
             />
           ))}
         </div>
@@ -193,6 +197,7 @@ function VolumeRow({
   onEdit,
   onDelete,
   onOpenDraft,
+  onReorderChapter,
 }: {
   volume: VolumeData
   chapters: VolumeChapter[]
@@ -200,6 +205,7 @@ function VolumeRow({
   onEdit: () => void
   onDelete: () => void
   onOpenDraft: (chapterNumber: number, chapterTitle?: string) => void
+  onReorderChapter?: (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => void
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -228,6 +234,14 @@ function VolumeRow({
       <div
         className="menu-chip group flex items-center gap-1.5 select-none"
         title={volume.description || undefined}
+        onDragOver={(e) => { if (onReorderChapter) e.preventDefault() }}
+        onDrop={(e) => {
+          if (!onReorderChapter) return
+          const raw = e.dataTransfer.getData('application/x-novelforge-chapter')
+          if (!raw) return
+          e.preventDefault()
+          onReorderChapter(Number(raw), volume.volumeNumber)
+        }}
       >
         <button
           type="button"
@@ -282,10 +296,32 @@ function VolumeRow({
             <button
               key={dc.chapterNumber}
               type="button"
+              draggable={!!onReorderChapter}
+              onDragStart={(e) => {
+                e.dataTransfer.setData('application/x-novelforge-chapter', String(dc.chapterNumber))
+                e.dataTransfer.effectAllowed = 'move'
+              }}
+              onDragOver={(e) => { if (onReorderChapter) e.preventDefault() }}
+              onDrop={(e) => {
+                if (!onReorderChapter) return
+                const raw = e.dataTransfer.getData('application/x-novelforge-chapter')
+                if (!raw) return
+                e.preventDefault()
+                e.stopPropagation()
+                const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
+                onReorderChapter(Number(raw), volume.volumeNumber, idx + 1)
+              }}
+              onKeyDown={(e) => {
+                if (!onReorderChapter || !e.altKey) return
+                const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
+                if (e.key === 'ArrowUp') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, Math.max(0, idx - 1)) }
+                if (e.key === 'ArrowDown') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, idx + 1) }
+              }}
               onClick={() => onOpenDraft(dc.chapterNumber, dc.chapterTitle)}
               className="w-full flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-micro text-left transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
               style={{ color: 'var(--color-text-secondary)' }}
               title={t('action.openDraft')}
+              aria-label={t('chapter.label').replace('{n}', String(dc.chapterNumber)) + (dc.chapterTitle ? ' ' + dc.chapterTitle : '')}
             >
               {dc.hasFinalized
                 ? <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />

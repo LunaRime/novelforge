@@ -6,6 +6,11 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const toolTexts = {
+  'tool.draftReadonly': { 'zh-CN': '数据库草稿已定稿，不能由 Agent 直接修改', 'en-US': 'This database draft is finalized and cannot be edited by the Agent', 'ru-RU': 'Этот черновик финализирован и не может быть изменён Agent' },
+  'tool.draftNotFound': { 'zh-CN': '数据库草稿不存在', 'en-US': 'Database draft not found', 'ru-RU': 'Черновик в базе не найден' },
+  'tool.draftDirty': { 'zh-CN': '当前草稿有未保存的编辑，请先保存再让 Agent 修改', 'en-US': 'The open draft has unsaved edits; save it before the Agent edits it', 'ru-RU': 'В открытом черновике есть несохранённые правки; сохраните его перед изменением Agent' },
+  'tool.draftConflict': { 'zh-CN': '草稿在你读取后已被修改，请重新读取后再编辑', 'en-US': 'The draft changed after you read it; read it again before editing', 'ru-RU': 'Черновик изменился после чтения; прочитайте его снова перед редактированием' },
+  'tool.unsupportedProtocol': { 'zh-CN': '该 vela:// 路径不支持写入', 'en-US': 'This vela:// path is not writable', 'ru-RU': 'Этот путь vela:// недоступен для записи' },
   'toolCall.copyResult': { 'zh-CN': '复制结果', 'en-US': 'Copy result', 'ru-RU': 'Копировать результат' },
   'toolCall.builtin': { 'zh-CN': '内置', 'en-US': 'Built-in', 'ru-RU': 'Встроенный' },
   'toolCall.input': { 'zh-CN': '输入', 'en-US': 'Input', 'ru-RU': 'Ввод' },
