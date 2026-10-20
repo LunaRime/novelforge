@@ -1,4 +1,10 @@
-import type { ReactNode } from 'react'
+import type { ButtonHTMLAttributes, ReactNode } from 'react'
+
+/** 弹层触发器需要的 ARIA 属性（状态栏分段可选透传） */
+type AriaPopupProps = Pick<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  'aria-haspopup' | 'aria-expanded'
+>
 
 /**
  * 状态栏分段（可点击）——原生 button：键盘可达（Tab/Enter/Space），符合可访问性。
@@ -10,14 +16,16 @@ export function StatusBarSegment({
   children,
   title,
   onClick,
+  ...aria
 }: {
   children: ReactNode
   title?: string
   onClick?: () => void
-}) {
+} & AriaPopupProps) {
   return (
     <button
       type="button"
+      {...aria}
       className="flex items-center gap-1 px-2 h-full cursor-default transition-colors"
       title={title}
       onClick={onClick}

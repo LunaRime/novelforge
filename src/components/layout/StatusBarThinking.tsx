@@ -40,6 +40,8 @@ export default function StatusBarThinking() {
       <StatusBarSegment
         title={`${t('agent.thinkingLevelTitle')}: ${t(spec.labelKey)}`}
         onClick={() => setOpen(v => !v)}
+        aria-haspopup="menu"
+        aria-expanded={open}
       >
         <ThinkingLevelIcon level={spec.id} />
         <span>{t(spec.labelKey)}</span>

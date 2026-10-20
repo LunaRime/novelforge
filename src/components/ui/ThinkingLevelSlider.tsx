@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ChangeEvent } from 'react'
+import type { ChangeEvent } from 'react'
 import { BrainCircuit, Flame, Gauge, Zap, type LucideIcon } from 'lucide-react'
 import { THINKING_LEVELS, thinkingLevelSpec, type ThinkingLevel } from '../../shared/thinking-level'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -92,15 +92,6 @@ function applyVisual(input: HTMLInputElement, index: number): void {
   if (fill) fill.style.width = fillWidthFor(index)
 }
 
-/** 从 range 当前 DOM 值取档并回调 */
-function emitLevel(input: HTMLInputElement, onChange: (level: ThinkingLevel) => void): void {
-  const index = Number(input.value) - 1
-  const next = THINKING_LEVELS[index]
-  if (!next) return
-  onChange(next.id)
-  applyVisual(input, index)
-}
-
 export default function ThinkingLevelSlider({
   value,
   onChange,
@@ -112,25 +103,12 @@ export default function ThinkingLevelSlider({
   const activeIndex = Math.max(0, THINKING_LEVELS.findIndex(l => l.id === activeSpec.id))
   const isMax = activeSpec.id === 'max'
 
-  const inputRef = useRef<HTMLInputElement>(null)
-  const controlledValue = String(activeIndex + 1)
-
-  // 原生 change 兜底：React 的 value tracker 会把「程序化赋值 + dispatch change」
-  // 去重（自动化/测试走这条路时合成 onChange 根本不触发）。
-  // 只处理「DOM 值 != 当前受控档」的事件 —— 真实拖动/已由合成 onChange 处理的
-  // 手势在松手时 React 已把 DOM 回写成受控值，这里自然跳过，不会二次回调。
-  useEffect(() => {
-    const input = inputRef.current
-    if (!input) return
-    const onNativeChange = () => {
-      if (input.value !== controlledValue) emitLevel(input, onChange)
-    }
-    input.addEventListener('change', onNativeChange)
-    return () => input.removeEventListener('change', onNativeChange)
-  }, [onChange, controlledValue])
-
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    emitLevel(e.currentTarget, onChange)
+    const index = Number(e.target.value) - 1
+    const next = THINKING_LEVELS[index]
+    if (!next) return
+    onChange(next.id)
+    applyVisual(e.currentTarget, index)
   }
 
   return (
@@ -195,7 +173,6 @@ export default function ThinkingLevelSlider({
 
         {/* 交互层：透明 range（仅捕获拖动/点击；opacity 0 不影响交互） */}
         <input
-          ref={inputRef}
           type="range"
           min={1}
           max={THINKING_LEVELS.length}
