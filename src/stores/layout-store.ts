@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 /** 左侧活动栏的视图类型（工作台已并入项目结构视图：ProjectTree 为完整超集） */
 export type SidebarView = 'home' | 'project' | 'knowledge' | 'characters' | 'settings'
@@ -50,6 +51,8 @@ interface LayoutState {
   // ===== Actions =====
   toggleSidebar: () => void
   setSidebarView: (view: SidebarView) => void
+  /** 打开侧栏并切到指定视图（命令面板/快捷键用；不会像 setSidebarView 那样再点一次就收起） */
+  showSidebarView: (view: SidebarView) => void
   toggleAIPanel: () => void
   setAIPanelOpen: (open: boolean) => void
   setRightView: (view: RightView) => void
@@ -86,7 +89,7 @@ interface LayoutState {
   closeChapterCreation: () => void
 }
 
-export const useLayoutStore = create<LayoutState>()((set) => ({
+export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   // 默认值（home：历史项目方块列表入口，替换原 Archive 图标）
   sidebarOpen: true,
   sidebarView: 'home',
@@ -116,6 +119,7 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
       sidebarView: view,
       sidebarOpen: s.sidebarView === view ? !s.sidebarOpen : true,
     })),
+  showSidebarView: (view) => set({ sidebarView: view, sidebarOpen: true }),
 
   toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
   setAIPanelOpen: (open) => set({ aiPanelOpen: open }),
@@ -145,4 +149,16 @@ export const useLayoutStore = create<LayoutState>()((set) => ({
   closeImportNovel: () => set({ importNovelOpen: false }),
   openChapterCreation: (prefill = null) => set({ chapterCreationOpen: true, chapterCreationPrefill: prefill }),
   closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
+}), {
+  name: 'novelforge:layout',
+  // 只记住「工作台形状」：面板开合与当前视图。
+  // 弹窗、专注模式、章节预填属于一次性会话状态，重启后恢复会让人措手不及。
+  partialize: (state) => ({
+    sidebarOpen: state.sidebarOpen,
+    sidebarView: state.sidebarView,
+    aiPanelOpen: state.aiPanelOpen,
+    rightView: state.rightView,
+    bottomPanelOpen: state.bottomPanelOpen,
+    bottomTab: state.bottomTab,
+  }),
 }))

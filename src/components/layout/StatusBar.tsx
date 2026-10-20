@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, Thermometer, ZoomIn, ZoomOut } from 'lucide-react'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, Thermometer, ZoomIn, ZoomOut, Bot, GitBranch } from 'lucide-react'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { t } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowStore } from '../../stores/workflow-store'
+import { useAgentStore } from '../../stores/agent-store'
+import { useProjectStore } from '../../stores/project-store'
 import { useUsageStore } from '../../stores/usage-store'
 import { useThemeStore } from '../../stores/theme-store'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
@@ -18,7 +20,7 @@ import { MenuItem } from '../ui/MenuItem'
 import NotificationCenter from './NotificationCenter'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
-/** 底部状态栏 — JetBrains 风格：22px、深灰底、多分段、hover 可点击感 */
+/** 底部状态栏 — Cursor / VS Code 口径：24px、深底、多分段、hover 可点击感 */
 export default function StatusBar() {
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
@@ -30,7 +32,7 @@ export default function StatusBar() {
     <div
       className="no-select flex items-center justify-between"
       style={{
-        height: 'var(--height-statusbar)',  /* 22px */
+        height: 'var(--height-statusbar)',  /* 24px */
         backgroundColor: 'var(--color-statusbar)',
         color: 'var(--color-statusbar-text)',
         fontSize: "var(--text-micro)",
@@ -54,11 +56,13 @@ export default function StatusBar() {
         {/* 当前激活章节的写作信息（章节名 / 字数 / dirty 点）——10-18 评审补齐
             （写作中确认状态无需再把视线移到编辑器头部） */}
         <EditorStatusSegment />
+        <BranchStatusSegment />
 
       </div>
 
       {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
       <div className="flex items-center h-full">
+        <AgentStatusSegment />
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
@@ -101,22 +105,83 @@ function EditorStatusSegment() {
     return tab ? tab.type === 'chapter' && !!tab.dirty : false
   })
   const charCount = useEditorStore(s => s.activeCharCount)
+  // 初次打开草稿时 CodeMirror 尚未触发 onCharCountChange（只在上抛路径更新），
+  // 状态栏不能因此空着——用当前 tab 内容长度兜底，保存/切换后仍以实时上抛值优先。
+  const fallbackCharCount = useEditorStore(s => {
+    const tab = s.tabs.find(x => x.id === s.activeTabId)
+    return tab && tab.type === 'chapter' ? (tab.content?.length ?? 0) : 0
+  })
+  const effectiveCharCount = charCount > 0 ? charCount : fallbackCharCount
 
   if (!name) return null
 
   return (
     <StatusBarSegment title={`${name}${charCount > 0 ? ` · ${charCount.toLocaleString()} ${t('unit.chars')}` : ''}`}>
-      <span className="opacity-80 truncate max-w-[160px]">{name}</span>
-      {charCount > 0 && (
-        <span className="opacity-80 tabular-nums">{charCount.toLocaleString()} {t('unit.chars')}</span>
+      <span className="truncate max-w-[180px]">{name}</span>
+      {effectiveCharCount > 0 && (
+        <span className="tabular-nums">{effectiveCharCount.toLocaleString()} {t('unit.chars')}</span>
       )}
-      {dirty && (
-        <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0"
-          style={{ backgroundColor: 'var(--color-warning)' }}
-          title={t('statusbar.unsaved')}
-        />
-      )}
+      <span
+        className="inline-flex items-center gap-1 flex-shrink-0"
+        style={{ color: dirty ? 'var(--color-warning)' : 'var(--color-text-muted)' }}
+      >
+        {dirty ? (
+          <>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: 'var(--color-warning)' }} />
+            {t('statusbar.unsavedShort')}
+          </>
+        ) : (
+          <>
+            <CheckCircle2 size={10} />
+            {t('statusbar.saved')}
+          </>
+        )}
+      </span>
+    </StatusBarSegment>
+  )
+}
+
+/** 版本线（分支）常显段：当前章节的版本/分支入口，点击打开版本历史与 diff。 */
+function BranchStatusSegment() {
+  const { t } = useTranslation()
+  const hasProject = useProjectStore((s) => !!s.currentProject)
+  const chapterName = useEditorStore((s) => {
+    const tab = s.tabs.find((x) => x.id === s.activeTabId)
+    return tab?.type === 'chapter' ? tab.name : ''
+  })
+  if (!hasProject && !chapterName) return null
+
+  const openHistory = () => {
+    const store = useEditorStore.getState()
+    const existing = store.tabs.find((tab) => tab.type === 'version-history')
+    if (existing) store.setActiveTab(existing.id)
+    else store.openFile({ id: 'version-history', name: t('version.history'), type: 'version-history' })
+  }
+
+  return (
+    <StatusBarSegment title={chapterName ? t('statusbar.branchTip') : t('version.history')} onClick={openHistory}>
+      <GitBranch size={11} />
+      <span>{t('statusbar.branchMain')}</span>
+    </StatusBarSegment>
+  )
+}
+
+/** Agent 常显段：空闲/生成中一眼可见，点击聚焦右侧 Agent 面板。 */
+function AgentStatusSegment() {
+  const { t } = useTranslation()
+  const generating = useAgentStore((s) => s.generating)
+  const openRightPanel = useLayoutStore((s) => s.openRightPanel)
+
+  return (
+    <StatusBarSegment
+      title={generating ? t('statusbar.agentWorkingTip') : t('statusbar.agentIdleTip')}
+      onClick={() => openRightPanel('agent')}
+    >
+      <Bot size={11} style={{ color: generating ? 'var(--color-accent)' : undefined }} />
+      <span>Agent</span>
+      <span style={{ color: generating ? 'var(--color-accent)' : 'var(--color-text-muted)' }}>
+        {generating ? t('statusbar.agentWorking') : t('statusbar.agentIdle')}
+      </span>
     </StatusBarSegment>
   )
 }

@@ -155,7 +155,12 @@ describe('agent-engine 工具解析错误反馈', () => {
     // 工具真实执行成功
     expect(callbacks.onToolCallComplete).toHaveBeenCalledTimes(1)
     expect(callbacks.onToolCallComplete).toHaveBeenCalledWith(
-      expect.objectContaining({ toolName: TEST_TOOL_NAME, status: 'completed' }),
+      expect.objectContaining({
+        toolName: TEST_TOOL_NAME,
+        status: 'completed',
+        // 工具耗时（UI 工具行展示）必须在 complete 回调前写入
+        duration_ms: expect.any(Number),
+      }),
     )
     expect(callbacks.onDone).toHaveBeenCalled()
     expect(callbacks.onError).not.toHaveBeenCalled()

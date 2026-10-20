@@ -96,6 +96,9 @@ export default function ThinkingCollapse({ thinking, streaming = false }: Props)
             style={{
               padding: '4px 0 4px 22px',
               minWidth: 0,
+              // 规范：展开后固定高滚动，长思考不能把整条事件流顶开
+              maxHeight: '38vh',
+              overflowY: 'auto',
               fontSize: 13,
               lineHeight: 1.6,
               color: 'var(--color-text-secondary)',

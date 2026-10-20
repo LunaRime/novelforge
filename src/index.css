@@ -271,12 +271,14 @@
     --color-badge-bg: rgba(91, 158, 214, 0.10);
     --color-badge-text: #5B9ED6;
 
-    /* ===== 尺寸规范 ===== */
-    --height-statusbar: 28px;
+    /* ===== 尺寸规范 =====
+       VS Code / Cursor 口径：活动栏 48px、状态栏 24px。
+       @theme 里的 --spacing-* 是同一组数字的 Tailwind 侧来源，改动时两处同步。 */
+    --height-statusbar: 24px;
     --height-tab: 36px;
     --height-panel-header: 36px;
-    --width-left-bar: 44px;
-    --width-right-bar: 44px;
+    --width-left-bar: 48px;
+    --width-right-bar: 48px;
     --width-bottom-bar: 32px;
 
     /* 阴影（蓝调弥散阴影） */
@@ -485,36 +487,36 @@
     --z-tooltip: 1200;
   }
 
-  /* 🌃 黑夜主题 — VS Code / IDEA 深灰极客风（真正的暗黑模式） */
+  /* 🌃 黑夜主题 — Linear / Cursor 口径：近黑背景 + 一档抬升面板 + 靛蓝强调 */
   .dark {
-    --color-bg: #1E1E1E;
-    --color-sidebar: #252526;
-    --color-panel: #252526;
+    --color-bg: #0E0E10;
+    --color-sidebar: #141416;
+    --color-panel: #141416;
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
-    --color-activity-bar: #333333;
+    --color-activity-bar: #0E0E10;
     /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
-    --color-active: #37373D;
-    /* 卡片浮起感：VSCode 深灰画布上的黑色投影，与 `--color-border` 边框共同界定卡片 */
+    --color-active: #1D1D21;
+    /* 卡片浮起感：近黑画布上的克制投影，与 `--color-border` 共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
     /* 编辑区专用：边框提亮一档 + 投影加重 */
-    --color-card-edge: #4E4E4E;
+    --color-card-edge: #2A2A2E;
     --color-card-shadow-strong: 0 2px 10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45);
-    /* 画布底色：比四个区域的面色都更浅一档（缝隙透光） */
-    --color-canvas: #3A3A3A;
+    /* 画布底色：比四个区域的面色更暗一档（缝隙是「负空间」，不再像浅色主题那样发亮） */
+    --color-canvas: #08080A;
 
-    --color-text: #D4D4D4;
-    --color-text-secondary: #A0A0A0;
-    --color-text-muted: #888888;
+    --color-text: #E8E8EA;
+    --color-text-secondary: #B8B8BE;
+    --color-text-muted: #9A9AA0;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
-    --color-accent: #0E639C;
-    --color-accent-hover: #1177BB;
-    --color-accent-rgb: 14, 99, 156;
-    --color-info-rgb: 55, 148, 255;
+    --color-accent: #7C8CFF;
+    --color-accent-hover: #94A1FF;
+    --color-accent-rgb: 124, 140, 255;
+    --color-info-rgb: 90, 200, 250;
     --color-success-rgb: 137, 209, 133;
     --color-warning-rgb: 204, 167, 0;
     --color-error-rgb: 241, 76, 76;
@@ -524,36 +526,36 @@
     --color-success: #89D185;
     --color-warning: #CCA700;
     --color-error: #F14C4C;
-    --color-info: #3794FF;
+    --color-info: #5AC8FA;
 
     --color-tab-bg: transparent;
-    --color-tab-active: #1E1E1E;
+    --color-tab-active: #141416;
     --color-tab-border: transparent;
-    --color-tab-indicator: #0E639C;
+    --color-tab-indicator: #7C8CFF;
 
-    --color-statusbar: #181818;
-    --color-statusbar-text: #909090;
+    --color-statusbar: #0E0E10;
+    --color-statusbar-text: #9A9AA0;
 
-    --color-titlebar-text: #CCCCCC;
+    --color-titlebar-text: #E8E8EA;
 
-    --color-activity-icon: #858585;
-    --color-activity-icon-active: #FFFFFF;
-    --color-activity-indicator: #FFFFFF;
+    --color-activity-icon: #9A9AA0;
+    --color-activity-icon-active: #E8E8EA;
+    --color-activity-indicator: #7C8CFF;
 
-    --color-editor-bg: #1E1E1E;
+    --color-editor-bg: #0E0E10;
     --color-editor-line-highlight: rgba(255, 255, 255, 0.04);
-    --color-editor-selection: rgba(38, 79, 120, 0.6);
+    --color-editor-selection: rgba(124, 140, 255, 0.28);
 
     --color-sash: transparent;
-    --color-sash-hover: rgba(0, 122, 204, 0.5);
+    --color-sash-hover: rgba(124, 140, 255, 0.5);
 
-    --color-focus-ring: rgba(0, 122, 204, 0.4);
+    --color-focus-ring: rgba(124, 140, 255, 0.45);
     --color-backdrop: rgba(0, 0, 0, 0.4);
-    --color-tooltip-bg: #252526;
-    --color-tooltip-text: #CCCCCC;
+    --color-tooltip-bg: #141416;
+    --color-tooltip-text: #E8E8EA;
     --color-skeleton: rgba(255, 255, 255, 0.05);
-    --color-badge-bg: #4D4D4D;
-    --color-badge-text: #FFFFFF;
+    --color-badge-bg: #232327;
+    --color-badge-text: #E8E8EA;
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);

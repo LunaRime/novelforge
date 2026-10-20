@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect } from 'react'
+import { X } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ContextMenu } from '../ui/ContextMenu'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -23,6 +24,7 @@ import {
 export default function Sidebar() {
   const { t } = useTranslation()
   const sidebarView = useLayoutStore(s => s.sidebarView)
+  const toggleSidebar = useLayoutStore(s => s.toggleSidebar)
   // 全局右键菜单状态
   const [sidebarMenu, setSidebarMenu] = useState<SidebarMenuState | null>(null)
 
@@ -49,6 +51,17 @@ export default function Sidebar() {
     >
       <div className="panel-header">
         <span>{viewTitles[sidebarView]}</span>
+        <span className="flex-1" />
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          title={t('tip.closePanel')}
+          aria-label={t('tip.closePanel')}
+          className="icon-btn"
+          style={{ width: 18, height: 18 }}
+        >
+          <X size={12} strokeWidth={1.5} />
+        </button>
       </div>
       <div className="flex-1 overflow-y-auto py-1 min-h-0">
         {sidebarView === 'home'       && <HomeSidebarPanel />}

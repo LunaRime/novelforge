@@ -15,10 +15,12 @@ import ThinkingCollapse from './ThinkingCollapse'
 import ArtifactCard from './ArtifactCard'
 import ProcessGroup from './ProcessGroup'
 import TurnErrorRow from './TurnErrorRow'
+import PlanSteps from './PlanSteps'
 // 注：brief 声明使用 ForkRight，实测 lucide-react 1.8.0 无此导出；改用 lucide 规范 fork 图标 GitFork（语义等同「从此分支」）
 import { GitFork, Undo2, Copy, ThumbsUp, ThumbsDown } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { splitMentionRefs } from '../../../services/agent/mention-refs'
+import { extractPlanSteps } from '../../../services/agent/plan-steps'
 import { openChapterFile } from '../sidebar/SidebarShared'
 import { useAgentStore } from '../../../stores/agent-store'
 import { formatLocaleTime } from '../../../shared/locale'
@@ -244,26 +246,22 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
 
   if (role === 'user') {
     return (
-      <div className="flex flex-col items-end mb-2 group">
+      <div className="mb-3 group" data-role="user" data-layout="log">
+        {/* 操作日志式：左对齐、标签 + 正文竖线，不使用聊天气泡 */}
+        <div className="mb-1 flex items-center gap-2 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
+          <span className="font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('agent.you')}</span>
+          <span className="tabular-nums">{formatLocaleTime(createdAt)}</span>
+          <CopyButton text={content} />
+        </div>
         <div
-          /* 2026-09-22 UI 重做：rounded-2xl + px-3/py-2 是"聊天 App"手感，
-             窄面板 IDE 里改成 rounded-lg + px-2.5/py-1.5，更紧凑、更工具化 */
-          className="max-w-[88%] px-2.5 py-1.5 rounded-lg text-xs leading-relaxed break-words whitespace-pre-wrap"
+          className="text-xs leading-relaxed break-words whitespace-pre-wrap"
           style={{
-            backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)',
-            border: '1px solid rgba(var(--color-accent-rgb), 0.2)',
+            borderLeft: '2px solid var(--color-border)',
+            paddingLeft: 10,
             color: 'var(--color-text)',
           }}
         >
           {renderUserContent(content)}
-        </div>
-        {/* 气泡**下方**一排（右对齐）：发送时间 + 复制 + 分支/回退
-            （2026-09-22 用户要求：按钮不在气泡内、改到气泡下方，并补时间与复制） */}
-        <div className="mt-0.5 flex items-center gap-0.5 px-0.5 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
-          {/* 用户气泡下方只留「时间 + 复制」（2026-09-22 用户指定）；
-              分支 / 回退只在模型回复下方出现 */}
-          <span className="mr-0.5 tabular-nums">{formatLocaleTime(createdAt)}</span>
-          <CopyButton text={content} />
         </div>
       </div>
     )
@@ -286,7 +284,10 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
         {!error && (() => {
           const { thinking, rest } = splitThinking(content)
           const processCalls = (toolCalls ?? []).filter(tc => tc.status !== 'waiting_confirm')
-          const timeline = processCalls.length > 0 ? buildTimeline(rest, processCalls) : null
+          const { steps: planSteps, rest: planRest } = extractPlanSteps(rest, {
+            finalize: !streaming && processCalls.some(tc => tc.status === 'completed'),
+          })
+          const timeline = processCalls.length > 0 ? buildTimeline(planRest, processCalls) : null
 
           // 交错时间线：正文段与工具批统一 8px（gap-2）节奏，空正文段不占间距
           if (timeline) {
@@ -296,6 +297,7 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
             return (
               <>
                 {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
+                <PlanSteps steps={planSteps} />
                 <div className="flex flex-col gap-2" data-agent-timeline="interleaved">
                   {timeline.map((seg, i) =>
                     seg.kind === 'text' ? (
@@ -317,10 +319,11 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
           // 旧布局（旧归档无 contentOffset / 无工具调用）
           return (
             <>
-              {content ? (
+              {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
+              <PlanSteps steps={planSteps} />
+              {planRest ? (
                 <>
-                  {thinking && <ThinkingCollapse thinking={thinking} streaming={streaming} />}
-                  {rest && <MarkdownContent content={rest} streaming={streaming} />}
+                  <MarkdownContent content={planRest} streaming={streaming} />
                 </>
               ) : streaming ? (
                 <span className="inline-flex items-center h-4">

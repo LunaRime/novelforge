@@ -81,7 +81,7 @@ describe('ModalShell', () => {
       const style = card.getAttribute('style') ?? ''
       expect(style).toContain('--color-sidebar')
       expect(style).toContain('--color-border')
-      expect(style).toContain('--radius-2xl')
+      expect(style).toContain('--radius-lg')
       expect(style).toContain('--shadow-popover')
       expect(style).toContain('20px 24px')
     })

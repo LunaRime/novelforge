@@ -71,7 +71,7 @@ export default function AgentHeader() {
         className="flex min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap gap-1"
         style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-micro)', fontWeight: 500 }}
       >
-        AGENT
+        Agent
       </div>
 
       {/* 右侧工具按钮组 */}

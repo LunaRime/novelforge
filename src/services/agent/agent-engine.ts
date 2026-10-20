@@ -79,6 +79,8 @@ export interface ToolCallInfo {
   error?: string
   /** Tool 来源标记 */
   source?: string
+  /** 执行耗时（毫秒；store 在 complete 回调写入，旧归档可能没有） */
+  duration_ms?: number
   /**
    * 审批决策（A 档）：waiting_confirm 时由 agent-store 的审批策略层注入，
    * 供 ConfirmCard 展示风险级别与「本项目内始终允许」提案。
@@ -607,6 +609,7 @@ async function executeToolJob(
   // 执行 Tool
   info.status = 'running'
   callbacks.onToolCallStart(info)
+  const executeStartedAt = Date.now()
 
   try {
     // 工具级超时覆盖（C 档第二轮 C1）：`task` 派子 agent 的设计上限 300s + 审批卡 120s，
@@ -618,6 +621,7 @@ async function executeToolJob(
 
     info.status = result.success ? 'completed' : 'failed'
     info.result = truncatedContent
+    info.duration_ms = Date.now() - executeStartedAt
     if (result.error) info.error = result.error
     if (result.artifacts) artifacts.push(...result.artifacts)
 
@@ -661,6 +665,7 @@ async function executeToolJob(
     }
   } catch (error) {
     info.status = 'failed'
+    info.duration_ms = Date.now() - executeStartedAt
     info.error = t('agent.executionError').replace('{error}', sanitizeErrorText(error))
     callbacks.onToolCallComplete(info)
     return {

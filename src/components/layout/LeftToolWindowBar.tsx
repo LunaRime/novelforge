@@ -9,7 +9,7 @@ import ProjectSquareList from './ProjectSquareList'
 
 /**
  * 左侧工具窗口栏（LeftToolWindowBar）
- * JetBrains 风格：44px 宽，全高，竖排
+ * VS Code / Cursor 风格：48px 宽，全高，竖排
  * 顶部：Home + 视图图标（角色管理为最后一个）；
  * 中部：项目方块列表（紧挨角色管理，上下边界清晰）；底部：面板 Tab
  */
@@ -75,6 +75,7 @@ export default function LeftToolWindowBar() {
         <button
           onClick={() => setSidebarView('home')}
           title={t('panel.welcome')}
+          aria-label={t('panel.welcome')}
           className="tool-btn"
           style={{
             boxShadow: homeActive ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
@@ -95,6 +96,7 @@ export default function LeftToolWindowBar() {
               key={id}
               onClick={() => setSidebarView(id)}
               title={label}
+              aria-label={label}
               className="tool-btn"
               style={{
                 boxShadow: isActive ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
@@ -139,6 +141,7 @@ export default function LeftToolWindowBar() {
               <button
                 onClick={() => setBottomTab(id)}
                 title={label}
+                aria-label={label}
                 className="tool-btn"
                 style={{
                   boxShadow: isActive ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
@@ -166,6 +169,7 @@ export default function LeftToolWindowBar() {
           <button
             onClick={() => openActivityDialog()}
             title={t('panel.activityShort')}
+            aria-label={t('panel.activityShort')}
             className="tool-btn"
             style={{
               boxShadow: activityDialogOpen ? 'inset 2px 0 0 var(--color-activity-indicator)' : 'none',
@@ -182,6 +186,7 @@ export default function LeftToolWindowBar() {
           <button
             onClick={() => openSettings()}
             title={t('settings.title')}
+            aria-label={t('settings.title')}
             className="tool-btn"
             style={{ color: 'var(--color-activity-icon)' }}
           >

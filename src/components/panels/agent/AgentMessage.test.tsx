@@ -166,25 +166,23 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
-  it('用户消息（role=user）气泡变体：右对齐 + 内容原样 + 气泡下方只有时间与复制', () => {
+  it('用户消息（role=user）操作日志式：左对齐 + 内容原样 + 标签行含时间与复制', () => {
     const onFork = vi.fn()
     const onRewind = vi.fn()
     const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} onFork={onFork} onRewind={onRewind} />)
     const wrap = container.firstElementChild as HTMLElement
-    // 用户消息右对齐（助手消息为 left）。
-    // 2026-09-22 起改为纵向布局（flex-col items-end）：气泡在上、时间与操作在气泡**下方**
-    expect(wrap.className).toContain('items-end')
-    expect(wrap.className).not.toContain('items-start')
-    // 气泡样式：accent 半透明背景（内联 style，用户消息专用视觉）。
-    // 2026-09-22 起操作区移到气泡**外**，气泡不再是 wrap 的第一个子元素 —— 改为按内容定位。
-    const bubble = [...wrap.children].find(el => (el.textContent || '').includes('用户输入的原样文本')) as HTMLElement
-    expect(bubble).toBeTruthy()
-    expect(bubble.style.backgroundColor).toBe('rgba(var(--color-accent-rgb), 0.12)')
+    // 2026-10-20 UI 冒烟：用户消息改为操作日志式（非聊天气泡）
+    expect(wrap.getAttribute('data-layout')).toBe('log')
+    expect(wrap.className).not.toContain('items-end')
+    // 正文用左侧竖线分隔，不再有 accent 气泡底色
+    const body = [...wrap.children].find(el => (el.textContent || '').includes('用户输入的原样文本')) as HTMLElement
+    expect(body).toBeTruthy()
+    expect(body.style.borderLeft).toContain('2px')
+    expect(body.style.backgroundColor).toBe('')
     // 内容原样渲染（不走 Markdown/思考块拆分）
     expect(container.textContent).toContain('用户输入的原样文本')
-    // 2026-09-22：用户气泡下方只保留「时间 + 复制」——
-    // 分支 / 回退只在模型回复下方渲染，用户消息不再出现这两个按钮
+    // 分支 / 回退只在模型回复下方渲染，用户消息不出现这两个按钮
     expect(container.querySelector('[title="从此处分支"]')).toBeNull()
     expect(container.querySelector('[title="回退到此处"]')).toBeNull()
     expect(container.querySelector('[title="复制消息"]')).toBeTruthy()
@@ -193,7 +191,7 @@ describe('AgentMessage 分支操作', () => {
     act(() => { root.unmount() })
   })
 
-  it('用户消息那一行：时间 + 复制同处一条（原样式：复制 22×22）', () => {
+  it('用户消息标签行：你 + 时间 + 复制同处一条（复制 22×22）', () => {
     const msg = { id: 'u1', role: 'user' as const, content: '用户输入的原样文本', createdAt: 0 }
     const { container, root } = render(<AgentMessage message={msg} />)
     const copy = container.querySelector<HTMLButtonElement>('[title="复制消息"]')
@@ -201,15 +199,12 @@ describe('AgentMessage 分支操作', () => {
     // ⚠️ 2026-10-16 用户裁决：这排按钮**改回原样式**（22×22，闲置快照 = 2026-09-22 起的形态）
     expect(copy!.style.width).toBe('22px')
     expect(copy!.style.height).toBe('22px')
-    // 时间与按钮同处一条（同一行容器）
+    // 时间与按钮同处标签行（复制按钮的父容器 = 标签行）
     const row = copy!.parentElement as HTMLElement
     expect(row.className).toContain('items-center')
     expect(row.querySelectorAll('button')).toHaveLength(1)
-    // 时间仍是纯文本：不可点、无手型、无 hover 暗示
-    const time = row.querySelector('span') as HTMLElement
-    expect(time).toBeTruthy()
-    expect(time.className).not.toContain('cursor-pointer')
-    expect(time.className).not.toContain('hover:bg-')
+    expect(row.textContent).toContain('你')
+    expect(row.textContent).toMatch(/\d{1,2}:\d{2}/)
     expect(row.className).not.toContain('hover:bg-')
     expect(row.getAttribute('role')).toBeNull()
     expect(container.querySelectorAll('button button')).toHaveLength(0)

@@ -639,7 +639,8 @@ ${t('engine.identityRuleLanguage')}
 ${t('engine.identityRuleProfessional')}
 ${t('engine.identityRuleUseTools')}
 ${t('engine.identityRuleExplainWriteOps')}
-${t('engine.identityRuleMultiStep')}`
+${t('engine.identityRuleMultiStep')}
+${t('engine.identityRulePlan')}`
 }
 
 /**

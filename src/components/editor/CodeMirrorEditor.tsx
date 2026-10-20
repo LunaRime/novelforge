@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
-import CodeMirror, { ReactCodeMirrorRef, EditorView, ViewUpdate } from '@uiw/react-codemirror'
-import { keymap } from '@codemirror/view'
+import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
+import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { EditorState, Transaction } from '@codemirror/state'
@@ -14,6 +14,8 @@ import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
 import { useEditorStore } from '../../stores/editor-store'
+import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import {
   INLINE_ACCEPT_EVENT,
   changesIntersectRanges,
@@ -29,6 +31,106 @@ import { countUndecided, type SubHunk } from '../../services/diff/hunk-model'
 import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
 import './inline-accept.css'
+
+/**
+ * 正文段落的视觉扩展（规范：段间距 1em / 当前段落高亮 / 专注模式压暗其它段）。
+ *
+ * CodeMirror 的 `.cm-line` 对应一个文档行，换行由浏览器在行内折行——因此给
+ * 「段落末行」加 padding 不会把折行当成新段落。段落边界仍以空行为准：
+ * 下一个文档行为空（或已是末行）即段落结束。
+ */
+function buildParagraphDecorations(view: EditorView, highlight: boolean): DecorationSet {
+  const { doc, selection } = view.state
+  const classes = new Map<number, string[]>()
+
+  const addClass = (lineNumber: number, cls: string) => {
+    const list = classes.get(lineNumber)
+    if (list) {
+      if (!list.includes(cls)) list.push(cls)
+    } else {
+      classes.set(lineNumber, [cls])
+    }
+  }
+
+  for (const range of view.visibleRanges) {
+    const startLine = doc.lineAt(range.from).number
+    const endLine = doc.lineAt(range.to).number
+    for (let n = startLine; n <= endLine; n++) {
+      const line = doc.line(n)
+      const isParagraphEnd = n === doc.lines || doc.line(n + 1).text.trim() === ''
+      if (isParagraphEnd && line.text.trim() !== '') addClass(n, 'cm-paragraph-end')
+    }
+  }
+
+  if (highlight) {
+    const cursorLine = doc.lineAt(selection.main.head).number
+    // 空行上不强行高亮一段空白；光标落在段内才扩张到整段
+    if (doc.line(cursorLine).text.trim() !== '') {
+      let from = cursorLine
+      let to = cursorLine
+      while (from > 1 && doc.line(from - 1).text.trim() !== '') from--
+      while (to < doc.lines && doc.line(to + 1).text.trim() !== '') to++
+      for (let n = from; n <= to; n++) addClass(n, 'cm-focus-paragraph')
+    }
+  }
+
+  const ranges = [...classes.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([lineNumber, list]) => Decoration.line({ class: list.join(' ') }).range(doc.line(lineNumber).from))
+
+  return Decoration.set(ranges, true)
+}
+
+function paragraphVisuals(highlight: boolean) {
+  return ViewPlugin.fromClass(class {
+    decorations: DecorationSet
+    constructor(view: EditorView) {
+      this.decorations = buildParagraphDecorations(view, highlight)
+    }
+    update(update: ViewUpdate) {
+      if (update.docChanged || update.viewportChanged || update.selectionSet) {
+        this.decorations = buildParagraphDecorations(update.view, highlight)
+      }
+    }
+  }, {
+    decorations: (value) => value.decorations,
+  })
+}
+
+/**
+ * 打字机滚动：输入/移动光标后把光标所在行拉到视口垂直 40%。
+ *
+ * 只在编辑器已有焦点时执行——初次挂载、鼠标滚轮浏览时不应被强行拉回。
+ * 选区内拖动（非折叠）同样按光标头定位，符合「光标保持 40%」的规范。
+ */
+function typewriterScroll() {
+  return ViewPlugin.fromClass(class {
+    private frame = 0
+    constructor(view: EditorView) {
+      this.schedule(view)
+    }
+    update(update: ViewUpdate) {
+      if (update.selectionSet || update.docChanged) this.schedule(update.view)
+    }
+    destroy() {
+      if (this.frame) cancelAnimationFrame(this.frame)
+    }
+    private schedule(view: EditorView) {
+      if (!view.hasFocus || view.composing) return
+      if (this.frame) cancelAnimationFrame(this.frame)
+      this.frame = requestAnimationFrame(() => {
+        this.frame = 0
+        const head = view.state.selection.main.head
+        const coords = view.coordsAtPos(head)
+        if (!coords) return
+        const rect = view.scrollDOM.getBoundingClientRect()
+        const target = rect.top + rect.height * 0.4
+        const delta = coords.top - target
+        if (Math.abs(delta) > 1) view.scrollDOM.scrollTop += delta
+      })
+    }
+  })
+}
 
 /** 统计字数（简单字符数统计，包含空格换行等格式符） */
 function countWords(text: string): number {
@@ -183,6 +285,12 @@ export default function CodeMirrorEditor({
   mode = 'document',
 }: CodeMirrorEditorProps) {
   const { t, locale } = useTranslation()
+  // 正文偏好：只订阅原始值，设置变化时才重算 CM 主题/扩展
+  const proseFontSize = useEditorPrefsStore((s) => s.proseFontSize)
+  const measureWidth = useEditorPrefsStore((s) => s.measureWidth)
+  const typewriter = useEditorPrefsStore((s) => s.typewriter)
+  const paragraphFocus = useEditorPrefsStore((s) => s.paragraphFocus)
+  const focusMode = useLayoutStore((s) => s.focusMode)
   // t 是稳定引用（useCallback []），语言切换时 locale 变化必须重算操作标签/指令（eslint 仅看数据流，误判 locale 不必要）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t, locale])
@@ -598,7 +706,7 @@ export default function CodeMirrorEditor({
       height: "100%",
       // prose/document 都是写作场景，使用写作字体
       // 其他模式（如代码等）继承父元素 UI 字体
-      fontSize: mode === 'prose' ? "16px" : "14px",
+      fontSize: mode === 'prose' ? `${proseFontSize}px` : "14px",
       backgroundColor: "transparent",
       fontFamily: (mode === 'prose' || mode === 'document') ? "var(--font-writing)" : "inherit"
     },
@@ -609,23 +717,34 @@ export default function CodeMirrorEditor({
     },
     ".cm-content": {
       width: "100%",
-      maxWidth: "800px",
+      // 规范：正文栏宽 720–800px，居中；默认 760px（两侧留呼吸，又不至于像移动端）
+      maxWidth: `${measureWidth}px`,
       margin: "0 auto",
       padding: "40px",
       lineHeight: "1.8",
       color: "var(--color-text)",
+      // 段间距 1em（由段落末行 decoration 实现，不影响段内折行）
+      fontSize: "inherit",
     },
     "&.cm-focused": { outline: "none" },
     ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
     ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
-    ".cm-line": { padding: "0" },
+    ".cm-line": { padding: "0", transition: "opacity 140ms ease, background-color 140ms ease" },
+    ".cm-line.cm-paragraph-end": { paddingBottom: "1em" },
+    ".cm-line.cm-focus-paragraph": {
+      backgroundColor: "color-mix(in srgb, var(--color-accent) 6%, transparent)",
+      boxShadow: "inset 2px 0 0 color-mix(in srgb, var(--color-accent) 55%, transparent)",
+    },
+    // 专注模式：当前段保持全亮，其余段压暗（iA Writer 的「只看见这一段」）
+    "&.cm-focus-writing .cm-line": { opacity: "0.52" },
+    "&.cm-focus-writing .cm-line.cm-focus-paragraph": { opacity: "1" },
     // 防御性兜底（非渲染来源）：当前依赖下 `**文字**`/`*文字*` 的粗体/斜体渲染由
     // defaultHighlightStyle（basicSetup 的 syntaxHighlighting）提供的散列类名实现，
     // .cm-strong/.cm-em 并不匹配任何实际 DOM 类；保留以防未来替换高亮主题后丢失
     ".cm-strong": { fontWeight: "bold" },
     ".cm-em": { fontStyle: "italic" },
-  }), [mode])
+  }), [mode, proseFontSize, measureWidth])
 
   // 构建扩展
   const extensions = useMemo(() => {
@@ -679,8 +798,16 @@ export default function CodeMirrorEditor({
     if (mode === 'document' || mode === 'prose') {
       exts.push(markdown({ base: markdownLanguage, codeLanguages: languages }))
     }
+    // 正文排版扩展只在 prose 生效：文档/架构编辑器保持紧凑，不抢文字工作区的视觉节奏
+    if (mode === 'prose') {
+      // 段间距始终有；当前段高亮/压暗只属于专注模式（规范：专注模式隐藏面板 + 当前段落高亮）
+      const focusParagraph = focusMode && paragraphFocus
+      exts.push(paragraphVisuals(focusParagraph))
+      if (typewriter) exts.push(typewriterScroll())
+      if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
+    }
     return exts
-  }, [mode])
+  }, [mode, paragraphFocus, typewriter, focusMode])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {
@@ -856,6 +983,8 @@ export default function CodeMirrorEditor({
     indentOnInput: false,
     highlightActiveLine: false,
     highlightActiveLineGutter: false,
+    // 写作正文不要浏览器拼写检查的红色波浪线
+    spellcheck: false,
     searchKeymap: true,
   }), [])
 

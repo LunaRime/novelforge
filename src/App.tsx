@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle } from 'react-resizable-panels'
+import { Panel, Group as PanelGroup, Separator as PanelResizeHandle, useDefaultLayout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useThemeStore } from './stores/theme-store'
 import { useLayoutStore } from './stores/layout-store'
@@ -35,6 +35,9 @@ import { globalEventBus } from './shared/event-bus'
 import UpdateNotification from './components/UpdateNotification'
 import { loadCustomPrompts } from './services/prompt-templates'
 import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
+import CommandPalette from './components/command-palette/CommandPalette'
+import { useCommandStore } from './stores/command-store'
+import { Search } from 'lucide-react'
 
 // L2 任务6：恢复前加载所有 workflow 模块，触发顶层 registerWorkflow（须在 restoreCheckpoint 调用之前，
 // 否则恢复时 registry 空 → 所有 run 走降级）。
@@ -47,7 +50,9 @@ import './services/workflows/workflow-registry-init'
  * `"20%"` 是百分比、`"176px"` 是像素）。此前写的 `minSize={10}` 一直是 **10 像素**，
  * 等于没有下限——这正是「区域能一路收缩到底」的原因。
  */
-const REGION_MIN_PX = { sidebar: 176, ai: 232, bottom: 88 } as const
+const REGION_MIN_PX = { sidebar: 220, ai: 260, bottom: 120 } as const
+/** 上限同样按规范：侧栏 220–400、Agent 面板 260–460（底栏用视口百分比由 Panel maxSize 管） */
+const REGION_MAX_PX = { sidebar: 400, ai: 460 } as const
 
 /**
  * ⚠️ **单位必须显式写清**（2026-09-20 连环踩坑的根源）：
@@ -58,11 +63,11 @@ const REGION_MIN_PX = { sidebar: 176, ai: 232, bottom: 88 } as const
  * 才看起来像 20%:60%:20%。所以一旦引入 176/232 像素下限，下限就会把默认布局顶开、比例失真
  * （真机现象：重启后各区域大小不对）。**默认尺寸一律写成百分比字符串，下限一律写成像素。**
  */
-const SIDEBAR_DEFAULT = '20%'
-const AI_PANEL_DEFAULT = '20%'
-const EDITOR_DEFAULT = '60%'
+const SIDEBAR_DEFAULT = '22%'
+const AI_PANEL_DEFAULT = '22%'
+const EDITOR_DEFAULT = '56%'
 /** 编辑区下限：两侧面板现在都有真实下限，编辑区不能被挤成一条缝 */
-const EDITOR_MIN_PX = 320
+const EDITOR_MIN_PX = 360
 
 /**
  * 顶栏 —— 系统窗口控件覆盖层（WCO）留位 + **窗口拖拽区** + 应用标识。
@@ -82,6 +87,8 @@ const EDITOR_MIN_PX = 320
  */
 function TitleStrip() {
   const currentProject = useProjectStore((s) => s.currentProject)
+  const openPalette = useCommandStore((s) => s.openPalette)
+  const shortcut = navigator.userAgent.includes('Mac') ? '⌘K' : 'Ctrl K'
   return (
     <div
       className="flex items-center gap-2 pl-2.5 pr-3 overflow-hidden select-none flex-shrink-0"
@@ -111,6 +118,27 @@ function TitleStrip() {
       <span className="text-xs truncate min-w-0" style={{ color: 'var(--color-text)' }}>
         {currentProject?.name ?? 'NovelForge'}
       </span>
+      <span className="flex-1" />
+      {/* 命令面板入口：标题栏是拖拽区，按钮必须显式 no-drag */}
+      <button
+        type="button"
+        onClick={() => openPalette('commands')}
+        title={t('command.title')}
+        aria-label={t('command.title')}
+        className="inline-flex items-center gap-1.5 rounded px-2"
+        style={{
+          height: 20,
+          border: '1px solid var(--color-border)',
+          backgroundColor: 'var(--color-panel)',
+          color: 'var(--color-text-muted)',
+          fontSize: 10.5,
+          cursor: 'pointer',
+          WebkitAppRegion: 'no-drag',
+        } as React.CSSProperties}
+      >
+        <Search size={10} />
+        <span>{shortcut}</span>
+      </button>
     </div>
   )
 }
@@ -179,6 +207,10 @@ export default function App() {
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const currentProject = useProjectStore((s) => s.currentProject)
+  // 面板尺寸记忆：react-resizable-panels 自己按 group id 存 localStorage。
+  // 折叠态由 layout-store 持久化，两者合起来 = 重启后回到同一工作台。
+  const horizontalLayout = useDefaultLayout({ id: 'novelforge-main-horizontal', storage: localStorage })
+  const verticalLayout = useDefaultLayout({ id: 'novelforge-middle-vertical', storage: localStorage })
   // 订阅 locale 只为让下面那个「窗口标题」effect 在**切语言时重跑**（回落标题是本地化的）
   const { locale } = useTranslation()
 
@@ -249,10 +281,10 @@ export default function App() {
       useAgentStore.getState().appendWorkflowCompletion(latest.title, payload.status ?? 'success')
       // 线③ 第 3 条：错误面统一——失败弹失败提示（此前无论成败都弹「✅ 完成」，误导用户）
       if (payload.status === 'failed') {
-        toast.error(`❌ 「${shortTitle}」${t('agent.taskFailed')}`)
+        toast.error(`「${shortTitle}」${t('agent.taskFailed')}`)
       } else {
         toast.workflowComplete(
-          `✅ 「${shortTitle}」${t('agent.taskComplete')}`,
+          `「${shortTitle}」${t('agent.taskComplete')}`,
           () => useLayoutStore.getState().openRightPanel('ai-output')
         )
       }
@@ -271,17 +303,33 @@ export default function App() {
     }
   }, [initTheme, initLLM, loadRecentProjects])
 
-  // 全局快捷键: Cmd+N 新建项目，Cmd+O 打开项目，Cmd+=/-/0 缩放，F11 专注模式
-  // （缩放与 F11 原由 TitleBar.tsx 注册；2026-09-22 标题栏移除后统一并入此处）
+  // 全局快捷键：命令面板优先，其后是工作台导航与原有缩放/项目操作。
+  // F11 专注模式本身不带修饰键，须在 mod 判断之前拦截。
   useEffect(() => {
+    const isTypingTarget = (target: EventTarget | null): boolean => {
+      if (!(target instanceof HTMLElement)) return false
+      const tag = target.tagName.toLowerCase()
+      return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable
+    }
     const handleKeyDown = async (e: KeyboardEvent) => {
-      // F11 — 专注模式（本身不带修饰键，须在 mod 判断之前拦截，并阻止浏览器默认全屏）
       if (e.key === 'F11') {
         e.preventDefault()
         useLayoutStore.getState().toggleFocusMode()
         return
       }
       const mod = e.metaKey || e.ctrlKey
+      // Cmd+K / Ctrl+K — 命令面板（所有工作台操作的键盘入口）
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        useCommandStore.getState().togglePalette('commands')
+        return
+      }
+      // ? — 快捷键速查（输入框/正文内不抢字符）
+      if (!mod && e.key === '?' && !isTypingTarget(e.target)) {
+        e.preventDefault()
+        useCommandStore.getState().openPalette('shortcuts')
+        return
+      }
       if (!mod) return
       if (e.key === '=' || e.key === '+') {
         e.preventDefault()
@@ -301,6 +349,18 @@ export default function App() {
         if (folder) {
           useProjectStore.getState().openProject(folder)
         }
+      } else if (e.key === 'b' || e.key === 'B') {
+        e.preventDefault()
+        useLayoutStore.getState().toggleSidebar()
+      } else if (e.key === 'j' || e.key === 'J') {
+        e.preventDefault()
+        useLayoutStore.getState().toggleBottomPanel()
+      } else if ((e.key === 'a' || e.key === 'A') && e.shiftKey) {
+        e.preventDefault()
+        useLayoutStore.getState().toggleAIPanel()
+      } else if (e.key === ',') {
+        e.preventDefault()
+        useLayoutStore.getState().openSettings()
       } else if (e.key === 'u' || e.key === 'U') {
         // 检查更新（原原生菜单 accelerator CmdOrCtrl+U，菜单已迁移至设置界面）
         e.preventDefault()
@@ -355,12 +415,23 @@ export default function App() {
           {/* 横向 PanelGroup：侧边栏 | 中列（编辑区 + 底栏） | AI 面板。
               ⚠️ 底栏只占**中列**（编辑区正下方），两侧面板向下延伸到底——2026-09-22 用户定的布局；
               此前底栏是全宽（挂在纵向 group 的下层），侧栏/AI 够不到底部。 */}
-          <PanelGroup orientation="horizontal" className="flex-1">
+          <PanelGroup
+            orientation="horizontal"
+            className="flex-1"
+            defaultLayout={horizontalLayout.defaultLayout}
+            onLayoutChanged={horizontalLayout.onLayoutChanged}
+          >
 
             {/* 左侧边栏 — 专注模式下隐藏 */}
             {(sidebarOpen && !focusMode) && (
               <>
-                <Panel id="sidebar" defaultSize={SIDEBAR_DEFAULT} minSize={REGION_MIN_PX.sidebar} aria-label={t('panel.sidebar')}>
+                <Panel
+                  id="sidebar"
+                  defaultSize={SIDEBAR_DEFAULT}
+                  minSize={REGION_MIN_PX.sidebar}
+                  maxSize={REGION_MAX_PX.sidebar}
+                  aria-label={t('panel.sidebar')}
+                >
                   {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
                       ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
                       拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
@@ -377,7 +448,12 @@ export default function App() {
 
             {/* 中列：编辑区（上）+ 底栏（下）。这一列的宽度下限就是编辑区下限（EDITOR_MIN_PX） */}
             <Panel id="middle" defaultSize={EDITOR_DEFAULT} minSize={EDITOR_MIN_PX}>
-              <PanelGroup orientation="vertical" className="h-full">
+              <PanelGroup
+                orientation="vertical"
+                className="h-full"
+                defaultLayout={verticalLayout.defaultLayout}
+                onLayoutChanged={verticalLayout.onLayoutChanged}
+              >
 
                 {/* 编辑区 — 专注模式下居中 + 大字号 */}
                 <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
@@ -392,7 +468,13 @@ export default function App() {
                 {/* 底栏 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
                 {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
                 {(bottomPanelOpen && !focusMode) && (
-                  <Panel id="bottom" defaultSize="25%" minSize={REGION_MIN_PX.bottom} aria-label={t('panel.bottom')}>
+                  <Panel
+                    id="bottom"
+                    defaultSize="25%"
+                    minSize={REGION_MIN_PX.bottom}
+                    maxSize="55%"
+                    aria-label={t('panel.bottom')}
+                  >
                     <div data-region="bottom" className="h-full">
                       <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
                         <BottomPanel />
@@ -408,7 +490,13 @@ export default function App() {
               <>
                 {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
                 <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
-                <Panel id="ai-panel" defaultSize={AI_PANEL_DEFAULT} minSize={REGION_MIN_PX.ai} aria-label={t('panel.ai')}>
+                <Panel
+                  id="ai-panel"
+                  defaultSize={AI_PANEL_DEFAULT}
+                  minSize={REGION_MIN_PX.ai}
+                  maxSize={REGION_MAX_PX.ai}
+                  aria-label={t('panel.ai')}
+                >
                   <div data-region="ai" className="h-full">
                     <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
                       {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
@@ -462,6 +550,11 @@ export default function App() {
           open={settingsOpen}
           onClose={closeSettings}
         />
+      </ErrorBoundary>
+
+      {/* Cmd+K 命令面板 — 全局键盘入口，层级高于面板、低于确认框 */}
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <CommandPalette />
       </ErrorBoundary>
 
     </div>

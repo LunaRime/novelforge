@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList } from 'lucide-react'
+import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
@@ -243,6 +243,22 @@ export default function ProjectTree() {
           </span>
         }
         onTitleClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
+        actions={(
+          <button
+            type="button"
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+            style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+            title={t('board.title')}
+            onClick={() => {
+              const state = useEditorStore.getState()
+              const existing = state.tabs.find((tab) => tab.type === 'manuscript-board')
+              if (existing) state.setActiveTab(existing.id)
+              else state.openFile({ id: 'manuscript-board', name: t('board.title'), type: 'manuscript-board' })
+            }}
+          >
+            <LayoutGrid size={12} />
+          </button>
+        )}
         onContextMenu={e => showSidebarMenu([
           {
             key: 'open',

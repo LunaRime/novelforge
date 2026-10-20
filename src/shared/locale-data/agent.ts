@@ -6,6 +6,9 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const agentTexts = {
+  'agentConfirm.diffPreview': { 'zh-CN': '变更预览', 'en-US': 'Change preview', 'ru-RU': 'Предпросмотр изменений' },
+  'agentConfirm.diffNewFile': { 'zh-CN': '新文件', 'en-US': 'new file', 'ru-RU': 'новый файл' },
+  'agentConfirm.diffMore': { 'zh-CN': '还有 {n} 行未显示', 'en-US': '{n} more lines not shown', 'ru-RU': 'Ещё {n} строк не показано' },
   'agent.taskComplete': { 'zh-CN': '已完成', 'en-US': 'completed', 'ru-RU': 'завершено' },
   'agent.taskFailed': { 'zh-CN': '失败，详见任务面板', 'en-US': 'failed — see the task panel for details', 'ru-RU': 'не выполнено — см. панель задач' },
   'agent.skillCatalogHeader': { 'zh-CN': '可用技能（需要时用 skill 工具按名加载全文）：', 'en-US': 'Available skills (load full text by name with the skill tool):', 'ru-RU': 'Доступные навыки (полный текст загружается инструментом skill по имени):' },

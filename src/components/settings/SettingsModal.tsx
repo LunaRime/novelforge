@@ -3,7 +3,7 @@ import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
   ExternalLink, RefreshCw, Download, LogOut,
-  BookMarked, Plug, BarChart3,
+  BookMarked, Plug, BarChart3, Search,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
@@ -14,6 +14,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useConcurrencyStore } from '../../stores/concurrency-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
+import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import type { ModelTier, ModelRouteConfig } from '../../services/llm/model-router'
 import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
@@ -31,6 +32,7 @@ import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import { Disclosure } from '../ui/Disclosure'
 import AutomationSection from './AutomationSection'
 import ContextCompactionSection from './ContextCompactionSection'
@@ -84,6 +86,12 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       ? settingsSection as SettingsSection
       : 'llm')
   )
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+  const normalizedQuery = query.trim().toLowerCase()
+  const visibleSections = normalizedQuery
+    ? sections.filter((s) => `${s.label} ${s.description}`.toLowerCase().includes(normalizedQuery))
+    : sections
 
   // Esc 关闭：本组件自绘全屏模态（未走 ui/Dialog / Radix），此前**没有** Esc ——
   // 键盘用户只能靠 Tab 找到 × 或点遮罩。hooks 必须在 `if (!open) return null` 之前。
@@ -101,15 +109,22 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         role="dialog"
         aria-modal="true"
         aria-label={t('settings.title')}
-        className="relative flex w-[880px] h-[600px] rounded-2xl overflow-hidden shadow-[var(--shadow-popover)]"
+        className="relative flex w-[min(90vw,960px)] h-[min(85vh,720px)] rounded-[10px] overflow-hidden shadow-[var(--shadow-popover)]"
         style={{
           backgroundColor: 'var(--color-editor-bg)',
           border: '1px solid var(--color-border)',
         }}
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+            e.preventDefault()
+            searchRef.current?.focus()
+            searchRef.current?.select()
+          }
+        }}
       >
         {/* 左侧导航 */}
         <aside
-          className="flex flex-col w-52 flex-shrink-0 py-5 gap-1"
+          className="flex flex-col w-[200px] flex-shrink-0 py-5 gap-1"
           style={{
             backgroundColor: 'var(--color-sidebar)',
             borderRight: '1px solid var(--color-border)',
@@ -123,7 +138,41 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             </span>
           </div>
 
-          {sections.map((s) => (
+          {/* 设置搜索：只做分区级过滤（二级页内容仍由各分区自己承载），
+              Cmd+F 直接从任意位置聚焦到这里 */}
+          <div className="px-2 mb-3">
+            <div
+              className="flex items-center gap-1.5 px-2 rounded-md"
+              style={{
+                height: 28,
+                border: '1px solid var(--color-border)',
+                backgroundColor: 'var(--color-bg)',
+              }}
+            >
+              <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
+              <input
+                ref={searchRef}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t('settings.searchPlaceholder')}
+                aria-label={t('settings.searchPlaceholder')}
+                className="flex-1 min-w-0 bg-transparent outline-none"
+                style={{ color: 'var(--color-text)', fontSize: 11 }}
+              />
+              {query && (
+                <button
+                  type="button"
+                  onClick={() => setQuery('')}
+                  aria-label={t('action.close')}
+                  style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0 }}
+                >
+                  <X size={11} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {visibleSections.map((s) => (
             <button
               key={s.id}
               onClick={() => setSection(s.id)}
@@ -141,6 +190,11 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               {s.label}
             </button>
           ))}
+          {visibleSections.length === 0 && (
+            <div className="px-4 py-3 text-micro" style={{ color: 'var(--color-text-muted)' }}>
+              {t('settings.searchEmpty')}
+            </div>
+          )}
         </aside>
 
         {/* 右侧内容区 */}
@@ -168,7 +222,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
 
           {/* 区域内容 */}
-          <div className="flex-1 overflow-y-auto px-6 py-5">
+          <div className="flex-1 overflow-y-auto px-8 py-6">
             {section === 'llm' && (
               <>
                 {/* 模型（一体卡，v2）：供应商凭据与其名下模型（生成/向量混排）同卡管理；
@@ -596,10 +650,18 @@ function EditorSection() {
   const setWritingFont = useThemeStore(s => s.setWritingFont)
   const uiFont = useThemeStore(s => s.uiFont)
   const setUiFont = useThemeStore(s => s.setUiFont)
+  const proseFontSize = useEditorPrefsStore(s => s.proseFontSize)
+  const setProseFontSize = useEditorPrefsStore(s => s.setProseFontSize)
+  const measureWidth = useEditorPrefsStore(s => s.measureWidth)
+  const setMeasureWidth = useEditorPrefsStore(s => s.setMeasureWidth)
+  const typewriter = useEditorPrefsStore(s => s.typewriter)
+  const toggleTypewriter = useEditorPrefsStore(s => s.toggleTypewriter)
+  const paragraphFocus = useEditorPrefsStore(s => s.paragraphFocus)
+  const toggleParagraphFocus = useEditorPrefsStore(s => s.toggleParagraphFocus)
   const { t, locale } = useTranslation()
 
   return (
-    <div className="max-w-md space-y-5">
+    <div className="max-w-[640px] space-y-5">
       {/* 界面主题（用户建议 5）：卡片网格，与右侧图标栏底部的主题菜单同源 */}
       <ThemeSection />
 
@@ -620,7 +682,7 @@ function EditorSection() {
           <SelectContent>
             {SUPPORTED_LOCALES.map((loc) => (
               <SelectItem key={loc} value={loc}>
-                {loc === 'zh-CN' ? '🇨🇳' : loc === 'en-US' ? '🇺🇸' : '🇷🇺'} {LOCALE_LABELS[loc]} ({loc})
+                {loc === 'zh-CN' ? 'ZH' : loc === 'en-US' ? 'EN' : 'RU'}  {LOCALE_LABELS[loc]} ({loc})
               </SelectItem>
             ))}
           </SelectContent>
@@ -649,6 +711,50 @@ function EditorSection() {
           </p>
         </div>
         <FontSelect value={writingFont} onChange={setWritingFont} />
+      </div>
+
+      {/* 正文排版（规范：17–18px / 栏宽 720–800 / 打字机 40% / 当前段落高亮） */}
+      <div className="space-y-3 pt-1">
+        <div>
+          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('settings.typography')}</p>
+          <p className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('settings.typographyDesc')}</p>
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.fontSize')}</span>
+          <SegmentedControl<'17' | '18'>
+            size="sm"
+            value={String(proseFontSize) as '17' | '18'}
+            onChange={(value) => setProseFontSize(value === '18' ? 18 : 17)}
+            items={[{ value: '17', label: '17px' }, { value: '18', label: '18px' }]}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.measure')}</span>
+          <SegmentedControl<'720' | '760' | '800'>
+            size="sm"
+            value={String(measureWidth) as '720' | '760' | '800'}
+            onChange={(value) => setMeasureWidth(Number(value))}
+            items={[{ value: '720', label: '720' }, { value: '760', label: '760' }, { value: '800', label: '800' }]}
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.typewriter')}</span>
+            <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.typewriterDesc')}</p>
+          </div>
+          <Switch checked={typewriter} onCheckedChange={() => toggleTypewriter()} />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.paragraphFocus')}</span>
+            <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.paragraphFocusDesc')}</p>
+          </div>
+          <Switch checked={paragraphFocus} onCheckedChange={() => toggleParagraphFocus()} />
+        </div>
       </div>
 
       {/* 说明 */}

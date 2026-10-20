@@ -55,7 +55,8 @@ export function ModalShell({
         style={{
           backgroundColor: 'var(--color-sidebar)',
           border: '1px solid var(--color-border)',
-          borderRadius: 'var(--radius-2xl)',
+          // 规范：弹窗圆角 6–10px（20px 的 rounded-2xl 过于柔软，与 IDE 密度不符）
+          borderRadius: 'var(--radius-lg)',
           boxShadow: 'var(--shadow-popover)',
           padding: '20px 24px',
           minWidth,

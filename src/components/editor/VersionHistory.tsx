@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
-import { History, RotateCcw, ArrowLeftRight, AlertCircle } from 'lucide-react'
+import { History, RotateCcw, ArrowLeftRight, AlertCircle, Camera } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
@@ -11,6 +11,7 @@ import {
   getChapters, getChapterVersions, getVersionContent, getChapterLatestContent, revertToVersion,
   type VersionRecord,
 } from '../../services/version-service'
+import { toast } from '../ui/Toast'
 
 /** 章节元数据 */
 interface ChapterMeta {
@@ -110,6 +111,22 @@ export default function VersionHistory() {
     await loadVersions(selectedChapter)
   }
 
+  /** 手动快照：把当前最新正文复制成一个新版本（不覆盖任何历史） */
+  const handleSnapshot = async () => {
+    if (!selectedChapter) return
+    const chapter = chapters.find((c) => c.id === selectedChapter)
+    if (!chapter) return
+    try {
+      const current = await getChapterLatestContent(chapter.chapter_number)
+      const ok = await revertToVersion(chapter.chapter_number, current)
+      if (!ok) throw new Error('draft-create failed')
+      await loadVersions(selectedChapter)
+      toast.success(t('version.snapshotCreated'))
+    } catch (e) {
+      toast.error(t('version.snapshotFailed').replace('{error}', String(e)))
+    }
+  }
+
   const TYPE_LABELS: Record<string, string> = {
     draft: t('version.draft'), refined: t('version.refined'), reviewed: t('version.reviewed'), final: t('version.final'),
   }
@@ -138,6 +155,17 @@ export default function VersionHistory() {
             <History size={13} className="inline mr-1" />
             {t('version.chapterList')}
           </span>
+          <span className="flex-1" />
+          <button
+            type="button"
+            onClick={() => void handleSnapshot()}
+            disabled={!selectedChapter}
+            title={t('version.snapshot')}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] disabled:opacity-40"
+            style={{ width: 28, height: 28, color: 'var(--color-text-muted)', cursor: selectedChapter ? 'pointer' : 'not-allowed' }}
+          >
+            <Camera size={13} />
+          </button>
         </div>
         <div className="flex-1 overflow-y-auto p-1">
           {loadFailed ? (

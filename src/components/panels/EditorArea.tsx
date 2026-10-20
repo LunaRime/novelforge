@@ -1,4 +1,4 @@
-import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite } from 'lucide-react'
+import { X, FileText, Settings, Users, ArrowLeftRight, MoreHorizontal, BookOpen, History, ClipboardCheck, Globe, Save, ChevronLeft, ChevronRight, PenTool, Brain, Satellite, LayoutGrid } from 'lucide-react'
 import { useEffect, useRef, useState, useCallback, memo } from 'react'
 import { VELA } from '../../services/vela-protocol'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
@@ -15,6 +15,7 @@ import WorldBuildingEditor from '../editor/WorldBuildingEditor'
 import ArchFileViewer from '../editor/ArchFileViewer'
 import DraftEditor from '../editor/DraftEditor'
 import VersionHistory from '../editor/VersionHistory'
+import ManuscriptBoard from '../editor/ManuscriptBoard'
 import ReviewReport from '../editor/ReviewReport'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
@@ -149,6 +150,7 @@ function TabIcon({ type }: { type: EditorTab['type'] }) {
   if (type === 'chapter-card') return <BookOpen size={14} />
   if (type === 'world-building') return <Globe size={14} />
   if (type === 'version-history') return <History size={14} />
+  if (type === 'manuscript-board') return <LayoutGrid size={14} />
   if (type === 'review-report') return <ClipboardCheck size={14} />
   if (type === 'memory') return <Brain size={14} />
   if (type === 'publication') return <Satellite size={14} />
@@ -865,6 +867,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         )}
         {activeTab?.type === 'version-history' && (
           <VersionHistory />
+        )}
+        {activeTab?.type === 'manuscript-board' && (
+          <ManuscriptBoard />
         )}
         {activeTab?.type === 'review-report' && activeTab.content && (
           <ReviewReport

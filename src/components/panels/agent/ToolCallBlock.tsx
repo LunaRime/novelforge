@@ -64,7 +64,7 @@ function fileSummary(toolName: string, args: Record<string, unknown>, t: (key: T
 export default function ToolCallBlock({ toolCall }: Props) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
-  const { toolName, arguments: args, status, result, error } = toolCall
+  const { toolName, arguments: args, status, result, error, duration_ms } = toolCall
 
   const summary = useMemo(() => fileSummary(toolName, args, t), [toolName, args, t])
   const running = status === 'running' || status === 'pending'
@@ -102,7 +102,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
             <div style={{ display: 'grid', gridTemplateColumns: 'max-content 1fr', columnGap: 14, alignItems: 'baseline', padding: '8px 12px', maxHeight: 150, overflowY: 'auto' }}>
               <span style={{ color: 'var(--color-text-muted)', alignSelf: 'start' }}>{t('toolCall.output')}</span>
               <span style={{ minWidth: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', color: error ? 'var(--color-error)' : 'var(--color-text-secondary)' }}>
-                {error ? `❌ ${error}` : result}
+                {error ? `${t('status.failed')}: ${error}` : result}
               </span>
             </div>
           </>
@@ -123,7 +123,7 @@ export default function ToolCallBlock({ toolCall }: Props) {
         keepContentWhenOpen
         onToggle={() => setExpanded(v => !v)}
         collapsedContent={
-          summaryText ? (
+          summaryText || (!running && typeof duration_ms === 'number') ? (
             <>
               {/* 2px 点分隔 */}
               <span aria-hidden style={{ flex: 'none', width: 2, height: 2, margin: '0 8px', borderRadius: 1, background: 'var(--color-text-muted)' }} />
@@ -141,6 +141,21 @@ export default function ToolCallBlock({ toolCall }: Props) {
               >
                 <TextShimmer active={running}>{summaryText}</TextShimmer>
               </span>
+              {!running && typeof duration_ms === 'number' && (
+                <span
+                  title={t('toolCall.duration')}
+                  style={{
+                    flexShrink: 0,
+                    marginLeft: 8,
+                    fontSize: 10.5,
+                    lineHeight: '24px',
+                    color: 'var(--color-text-muted)',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {duration_ms < 1000 ? `${Math.max(1, Math.round(duration_ms))}ms` : `${(duration_ms / 1000).toFixed(1)}s`}
+                </span>
+              )}
             </>
           ) : null
         }
