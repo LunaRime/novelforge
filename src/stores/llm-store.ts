@@ -3,6 +3,7 @@ import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
+import { getThinkingTemperature } from './thinking-store'
 
 /**
  * 正在删除中的模型 id（防重复点击）—— 真机反馈：删除耗时较长且删除按钮**没有任何等待反馈**，
@@ -380,7 +381,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
     return ipc.invoke('llm:generate', {
       modelId: mid,
       messages,
-      temperature: options?.temperature,
+      temperature: options?.temperature ?? getThinkingTemperature(),
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,
@@ -436,7 +437,7 @@ export const useLLMStore = create<LLMState>()((set, get) => ({
       modelId: mid,
       messages,
       stream: true,
-      temperature: options?.temperature,
+      temperature: options?.temperature ?? getThinkingTemperature(),
       responseFormat: options?.responseFormat as { type: 'json_object' | 'text' } | undefined,
       thinking: options?.thinking,
       priority: options?.priority ?? 10,
