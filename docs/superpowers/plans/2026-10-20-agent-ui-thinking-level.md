@@ -30,6 +30,75 @@
 
 ---
 
+## Part 0 — 前置文案
+
+### Task 0: 新增三语文案
+
+**Files:**
+- Modify: `src/shared/locale-data/agent.ts`
+- Modify: `src/shared/locale-data/project.ts`
+- Modify: `src/shared/locale-data/settings.ts`
+
+**Interfaces:**
+- Produces: Task 7–12 使用的全部新 i18n key（三语齐全）。
+
+- [ ] **Step 1: Add all new keys**
+
+`agent.ts`：
+
+- `agent.thinkingLevelTitle` — 思考等级 / Thinking level / Уровень мышления
+- `agent.thinkingOff` — 关闭 / Off / Выкл.
+- `agent.thinkingOffDesc` — 直接执行，不做额外推演 / Execute directly, no extra reasoning / Выполнять сразу, без дополнительных рассуждений
+- `agent.thinkingLow` — 低 / Low / Низкий
+- `agent.thinkingLowDesc` — 先快速分析再执行 / Quick analysis before acting / Сначала быстрый анализ, затем действие
+- `agent.thinkingHigh` — 高 / High / Высокий
+- `agent.thinkingHighDesc` — 深度规划后执行 / Plan deeply before acting / Глубокое планирование, затем действие
+- `agent.thinkingMax` — 最高 / Max / Макс.
+- `agent.thinkingMaxDesc` — 多轮推演与自我验证，追求最佳结果 / Multi-pass reasoning and verification for the best result / Многораундовые рассуждения и проверка ради лучшего результата
+- `agent.thinkingGlobalHint` — 所有对话与 AI 调用共用 / Shared by all conversations and AI calls / Общий для всех диалогов и вызовов ИИ
+- `agent.modelSectionTitle` — 本对话模型 / Conversation model / Модель диалога
+- `agent.commandsBuiltin` — 内置命令 / Built-in commands / Встроенные команды
+- `agent.commandsSkills` — 技能 / Skills / Навыки
+
+`project.ts`：
+
+- `update.newVersionShort` — 新版本 {version} / New version {version} / Новая версия {version}
+- `update.downloadForeground` — 下载 / Download / Скачать
+- `update.downloadBackground` — 后台下载 / Download in background / Скачать в фоне
+- `update.backgroundStarted` — 已开始后台下载 / Background download started / Загрузка в фоне начата
+- `update.backgroundDone` — 更新已下载完成 / Update downloaded / Обновление загружено
+- `update.restartPrompt` — 是否重启以完成更新？ / Restart to finish updating? / Перезапустить для завершения обновления?
+- `update.restartLater` — 稍后 / Later / Позже
+- `update.latest` — 已是最新版本 / You're up to date / У вас последняя версия
+- `update.downloadFailed` — 下载失败：{error} / Download failed: {error} / Ошибка загрузки: {error}
+- `update.checkingShort` — 检查中 / Checking / Проверка
+- `update.availableShort` — 新版本 {version} / v{version} available / Доступна версия {version}
+- `update.downloadingShort` — 下载中 {percent}% / Downloading {percent}% / Загрузка {percent}%
+- `update.downloadedShort` — 可重启更新 / Restart to update / Перезапустите для обновления
+
+`settings.ts`：
+
+- `settings.updateInStatusBar` — 请在底部状态栏下载或安装更新 / Download or install from the status bar / Скачайте или установите обновление в строке состояния
+
+- [ ] **Step 2: Run i18n guards**
+
+Run:
+
+```bash
+pnpm exec vitest run src/shared/i18n-structure-guard.test.ts src/shared/i18n-key-guard.test.ts
+```
+
+Expected: PASS.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add src/shared/locale-data
+git commit -m "chore: 新增思考等级与状态栏更新三语文案"
+```
+
+---
+
 ## Part A — 全局思考等级与温度链路
 
 ### Task 1: 思考等级规格模块
@@ -1267,55 +1336,24 @@ git commit -m "refactor: 状态栏独占更新操作，设置页与通知中心�
 ### Task 14: i18n 与全量门禁
 
 **Files:**
-- Modify: `src/shared/locale-data/agent.ts`
-- Modify: `src/shared/locale-data/project.ts`（update keys）
-- Modify: `src/shared/locale-data/settings.ts`（`settings.updateInStatusBar`）
 - Modify: `src/shared/locale-data/notice.ts`（删除更新条目 key）
 - Modify: `src/shared/locale-data/ui.ts`（删除 `form.temperature`）
 - Modify: `src/shared/locale-data/workflow.ts`（删除 `statusbar.temperature*`）
 - Test: i18n 结构/key 守卫
 
 **Interfaces:**
-- Consumes: 前述任务使用的所有 key。
+- Consumes: Task 0 新增的 key（本任务只做清理与验证）。
 - Produces: 三语字典与实现一致。
 
-- [ ] **Step 1: Add new keys (all three locales)**
+- [ ] **Step 1: Verify Task 0 keys exist**
 
-`agent.ts`：
+Run:
 
-- `agent.thinkingLevelTitle` — 思考等级 / Thinking level / Уровень мышления
-- `agent.thinkingOff` — 关闭 / Off / Выкл.
-- `agent.thinkingOffDesc` — 直接执行，不做额外推演 / Execute directly, no extra reasoning / Выполнять сразу, без дополнительных рассуждений
-- `agent.thinkingLow` — 低 / Low / Низкий
-- `agent.thinkingLowDesc` — 先快速分析再执行 / Quick analysis before acting / Сначала быстрый анализ, затем действие
-- `agent.thinkingHigh` — 高 / High / Высокий
-- `agent.thinkingHighDesc` — 深度规划后执行 / Plan deeply before acting / Глубокое планирование, затем действие
-- `agent.thinkingMax` — 最高 / Max / Макс.
-- `agent.thinkingMaxDesc` — 多轮推演与自我验证，追求最佳结果 / Multi-pass reasoning and verification for the best result / Многораундовые рассуждения и проверка ради лучшего результата
-- `agent.thinkingGlobalHint` — 所有对话与 AI 调用共用 / Shared by all conversations and AI calls / Общий для всех диалогов и вызовов ИИ
-- `agent.modelSectionTitle` — 本对话模型 / Conversation model / Модель диалога
-- `agent.commandsBuiltin` — 内置命令 / Built-in commands / Встроенные команды
-- `agent.commandsSkills` — 技能 / Skills / Навыки
+```bash
+rg -n "agent\.thinking(LevelTitle|Off|Low|High|Max|GlobalHint)|agent\.modelSectionTitle|agent\.commands(Builtin|Skills)|update\.(newVersionShort|downloadForeground|downloadBackground|backgroundStarted|backgroundDone|restartPrompt|restartLater|latest|downloadFailed|checkingShort|availableShort|downloadingShort|downloadedShort)|settings\.updateInStatusBar" src/shared/locale-data
+```
 
-`project.ts`：
-
-- `update.newVersionShort` — 新版本 {version} / New version {version} / Новая версия {version}
-- `update.downloadForeground` — 下载 / Download / Скачать
-- `update.downloadBackground` — 后台下载 / Download in background / Скачать в фоне
-- `update.backgroundStarted` — 已开始后台下载 / Background download started / Загрузка в фоне начата
-- `update.backgroundDone` — 更新已下载完成 / Update downloaded / Обновление загружено
-- `update.restartPrompt` — 是否重启以完成更新？ / Restart to finish updating? / Перезапустить для завершения обновления?
-- `update.restartLater` — 稍后 / Later / Позже
-- `update.latest` — 已是最新版本 / You're up to date / У вас последняя версия
-- `update.downloadFailed` — 下载失败：{error} / Download failed: {error} / Ошибка загрузки: {error}
-- `update.checkingShort` — 检查中 / Checking / Проверка
-- `update.availableShort` — 新版本 {version} / v{version} available / Доступна версия {version}
-- `update.downloadingShort` — 下载中 {percent}% / Downloading {percent}% / Загрузка {percent}%
-- `update.downloadedShort` — 可重启更新 / Restart to update / Перезапустите для обновления
-
-`settings.ts`：
-
-- `settings.updateInStatusBar` — 请在底部状态栏下载或安装更新 / Download or install from the status bar / Скачайте или установите обновление в строке состояния
+Expected: 每个 key 均在三语字典分片中出现。
 
 - [ ] **Step 2: Remove stale keys**
 
