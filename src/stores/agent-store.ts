@@ -143,8 +143,6 @@ interface AgentState {
   showHistory: boolean
   /** 是否显示记忆查看器（AgentHeader 记忆按钮 → AgentMemoryView，P3 Task 3） */
   memoryView: boolean
-  /** 全局默认模式 */
-  defaultMode: AgentMode
   /** 当前是否正在生成（用于 UI 状态） */
   generating: boolean
   /**
@@ -211,8 +209,6 @@ interface AgentState {
   toggleMemoryView: () => void
   /** 设置记忆查看器可见性 */
   setMemoryView: (show: boolean) => void
-  /** 设置当前会话模式 */
-  setMode: (mode: AgentMode) => void
   /** 设置当前会话使用的模型 */
   setModelId: (modelId: string | null) => void
   /** 发送消息（触发 Agent ReAct 循环） */
@@ -457,7 +453,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   activeConversationId: null,
   showHistory: false,
   memoryView: false,
-  defaultMode: 'deep',
   generating: false,
   agentProgress: null,
   subAgentProgress: {},
@@ -499,7 +494,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       messages: [],
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      mode: get().defaultMode,
+      // 不再写 mode：思考等级是全局配置（useThinkingStore），运行时只读它
       modelId: llmStore.defaultModelId,
       roleplayCharacter: opts?.roleplayCharacter,
       // 显式指定优先（历史面板的「在该工作区新建对话」）；未指定则取当前项目（普通新建）
@@ -581,20 +576,6 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
   setMemoryView: (show) => {
     set({ memoryView: show, showHistory: false })
-  },
-
-  setMode: (mode) => {
-    const conv = get().getActiveConversation()
-    if (!conv) {
-      set({ defaultMode: mode })
-      return
-    }
-    set(state => ({
-      defaultMode: mode,
-      conversations: state.conversations.map(c =>
-        c.id === conv.id ? { ...c, mode } : c
-      ),
-    }))
   },
 
   setModelId: (modelId) => {

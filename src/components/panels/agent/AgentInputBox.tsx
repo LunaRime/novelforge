@@ -12,10 +12,12 @@ import {
   Zap,
   Gauge,
   Flame,
+  type LucideIcon,
 } from 'lucide-react'
-import type { TextKey } from '../../../shared/locale'
-import { useAgentStore, type AgentMode } from '../../../stores/agent-store'
+import { useAgentStore } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
+import { useThinkingStore } from '../../../stores/thinking-store'
+import { thinkingLevelSpec, type ThinkingLevel } from '../../../shared/thinking-level'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
@@ -26,6 +28,7 @@ import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
+import ThinkingLevelSlider from '../../ui/ThinkingLevelSlider'
 import {
   getAllSlashCommands,
   type SlashCommand,
@@ -35,37 +38,12 @@ import {
 /** 输入框最大高度（px），超出后框内滚动 */
 const MAX_HEIGHT = 200
 
-/**
- * 思考等级（Claude Code effort 风格：六个独立等级胶囊，选中高亮）
- * 每个等级是独立 AgentMode（quick/swift/balanced/reflective/deep/max）——
- * 引擎提示词六分支，等级之间行为有真实差异
- */
-const DEPTH_LEVELS: Array<{
-  level: number
-  mode: AgentMode
-  labelKey: TextKey
-  descKey: TextKey
-}> = [
-  { level: 1, mode: 'quick', labelKey: 'agent.depthL1', descKey: 'agent.depthL1Desc' },
-  { level: 2, mode: 'swift', labelKey: 'agent.depthL2', descKey: 'agent.depthL2Desc' },
-  { level: 3, mode: 'balanced', labelKey: 'agent.depthL3', descKey: 'agent.depthL3Desc' },
-  { level: 4, mode: 'reflective', labelKey: 'agent.depthL4', descKey: 'agent.depthL4Desc' },
-  { level: 5, mode: 'deep', labelKey: 'agent.depthL5', descKey: 'agent.depthL5Desc' },
-  { level: 6, mode: 'max', labelKey: 'agent.depthL6', descKey: 'agent.depthL6Desc' },
-]
-
-/** 等级图标（输入框工具栏按钮；低档闪电 → 高档火焰） */
-function depthIcon(mode: AgentMode): React.ReactNode {
-  if (mode === 'max') {
-    return <Flame size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
-  }
-  if (mode === 'deep' || mode === 'reflective') {
-    return <BrainCircuit size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
-  }
-  if (mode === 'balanced' || mode === 'swift') {
-    return <Gauge size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-accent)' }} />
-  }
-  return <Zap size={13} strokeWidth={1.5} className="flex-shrink-0" style={{ color: 'var(--color-warning)' }} />
+/** 档位图标（触发器徽章；与共享滑块一致：低档闪电 → 高档火焰） */
+const LEVEL_ICONS: Record<ThinkingLevel, LucideIcon> = {
+  off: Zap,
+  low: Gauge,
+  high: BrainCircuit,
+  max: Flame,
 }
 
 /**
@@ -80,30 +58,31 @@ export default function AgentInputBox() {
   const generating = useAgentStore(s => s.generating)
   const sendMessage = useAgentStore(s => s.sendMessage)
   const cancelGeneration = useAgentStore(s => s.cancelGeneration)
-  const setMode = useAgentStore(s => s.setMode)
   const setModelId = useAgentStore(s => s.setModelId)
-  const defaultMode = useAgentStore(s => s.defaultMode)
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
+  // 思考等级是全局配置（所有对话与 AI 调用共用），不随会话切换
+  const level = useThinkingStore(s => s.level)
+  const setLevel = useThinkingStore(s => s.setLevel)
 
   // 过滤出非仅限 embedding 专用的模型
   const chatModels = models.filter(m => !(m.purposes.length === 1 && m.purposes[0] === 'embedding'))
 
-  // 活跃会话的 mode/modelId（原始值 selector，流式期间值稳定，不触发重渲染）
-  const activeMode = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId)?.mode)
+  // 活跃会话的 modelId（原始值 selector，流式期间值稳定，不触发重渲染）
   const activeModelId = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId)?.modelId)
-  // 无会话时回退 defaultMode（setMode 无会话只更新 defaultMode）——
-  // 否则无会话时拉条拖动后 value 不变（拉不动）
-  const currentMode = activeMode ?? defaultMode
   const currentModelId = activeModelId ?? defaultModelId
 
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)
 
+  // 当前档位规格 + 图标（触发器徽章与滑块同源）
+  const levelSpec = thinkingLevelSpec(level)
+  const LevelIcon = LEVEL_ICONS[levelSpec.id]
+
   // 下拉菜单状态
   const [showContextMenu, setShowContextMenu] = useState(false)
-  const [showModeMenu, setShowModeMenu] = useState(false)
-  const [showModelMenu, setShowModelMenu] = useState(false)
+  // 模型 + 思考等级合并弹窗（单一入口）
+  const [showModelThinkingMenu, setShowModelThinkingMenu] = useState(false)
   // 可视化添加文件选择器（+ 菜单 → 添加文件）
   const [showFilePicker, setShowFilePicker] = useState(false)
   // + 菜单 → 工作流命令展开态（分组列出内置命令 / Skill）
@@ -175,8 +154,7 @@ export default function AgentInputBox() {
   }, [inputText])
 
   const contextRef = useRef<HTMLDivElement>(null)
-  const modeRef = useRef<HTMLDivElement>(null)
-  const modelRef = useRef<HTMLDivElement>(null)
+  const modelThinkingRef = useRef<HTMLDivElement>(null)
   const filePickerRef = useRef<HTMLDivElement>(null)
   /** 输入区容器 = 三个辅助菜单（@提及 / 斜杠命令 / 文件选择）的定位锚点 */
   const inputAreaRef = useRef<HTMLDivElement>(null)
@@ -225,16 +203,14 @@ export default function AgentInputBox() {
     setShowContextMenu(false)
     setShowCommands(false)
   }, showContextMenu)
-  useOutsideClick(modeRef, () => setShowModeMenu(false), showModeMenu)
-  useOutsideClick(modelRef, () => setShowModelMenu(false), showModelMenu)
+  useOutsideClick(modelThinkingRef, () => setShowModelThinkingMenu(false), showModelThinkingMenu)
   useOutsideClick(filePickerRef, () => setShowFilePicker(false), showFilePicker)
   // Esc 与点击外部成对：四个自绘浮层此前只有后者（同应用内 Radix 系/右键菜单/气泡菜单都有 Esc）
   useEscapeKey(() => {
     setShowContextMenu(false)
     setShowCommands(false)
   }, showContextMenu)
-  useEscapeKey(() => setShowModeMenu(false), showModeMenu)
-  useEscapeKey(() => setShowModelMenu(false), showModelMenu)
+  useEscapeKey(() => setShowModelThinkingMenu(false), showModelThinkingMenu)
   useEscapeKey(() => setShowFilePicker(false), showFilePicker)
 
   /** 可视化选择文件后追加 "@路径 " 到输入框（与 @ 提及同解析/预取链路） */
@@ -351,8 +327,7 @@ export default function AgentInputBox() {
             <ToolbarIconBtn
               title={t('tip.addContext')}
               onClick={() => {
-                setShowModeMenu(false)
-                setShowModelMenu(false)
+                setShowModelThinkingMenu(false)
                 setShowFilePicker(false)
                 setShowCommands(false)
                 setShowContextMenu(v => !v)
@@ -451,22 +426,23 @@ export default function AgentInputBox() {
             )}
           </div>
 
-          {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板）
-              flex-shrink-0：档位名偏长（俄语「Глубоко」约为「深度」的 3 倍宽），不加会被
-              模型选择器那一侧挤到换行——控件高度立刻变形（2026-09-22 切 ru-RU 实测）。 */}
-          <div ref={modeRef} className="relative flex-shrink-0">
+          {/* 模型 + 思考等级合并入口：模型按对话选择，思考等级全局共用。
+              触发器 = 模型名（truncate）+ 当前档位徽章，不再用「·」拆分两段 meta。 */}
+          <div ref={modelThinkingRef} className="relative min-w-0">
             <button
               onClick={() => {
                 setShowContextMenu(false)
-                setShowModelMenu(false)
                 setShowFilePicker(false)
-                setShowModeMenu(v => !v)
+                setShowModelThinkingMenu(v => !v)
               }}
-              className="flex items-center gap-1 py-1 pl-1 pr-1.5 rounded-md text-xs transition-colors"
+              className="flex items-center gap-1.5 py-1 pl-1 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
               style={{
                 color: 'var(--color-text-secondary)',
                 opacity: 0.75,
-                anchorName: '--menu-depth',
+                // 与旧模型触发器同一条约束：button 即使 display:flex 也是 shrink-to-fit，
+                // 固定宽度会顶出窄面板；min(...) 兜住上限，模型名再靠 truncate 收进剩余空间
+                maxWidth: 'min(220px, 100%)',
+                anchorName: '--menu-model-thinking',
               } as React.CSSProperties}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
@@ -477,200 +453,31 @@ export default function AgentInputBox() {
                 e.currentTarget.style.opacity = '0.75'
               }}
             >
-              {depthIcon(currentMode)}
-              {/* whitespace-nowrap：档位名绝不换行（换行会撑高整条工具栏） */}
-              <span className="select-none font-medium whitespace-nowrap">
-                {t((DEPTH_LEVELS.find(l => l.mode === currentMode) ?? DEPTH_LEVELS[0]).labelKey)}
-              </span>
-              <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
-            </button>
-
-            {/* 思考等级面板（温度滑块式：等比例紧凑 + 首末节点被条包裹 + 适度特效） */}
-            {showModeMenu && (() => {
-              const currentLv = DEPTH_LEVELS.find(l => l.mode === currentMode) ?? DEPTH_LEVELS[0]
-              // 滑块条高 = 大圆直径（thumb 上下限与条贴齐内嵌）
-              const TRACK_H = 18
-              // 大圆半径：大圆端点与条边完全贴合（内切）；首末节点小点仍被条包裹（4px 点在 9px 处，左缘 7px）
-              const INSET = TRACK_H / 2
-              const isMax = currentLv.level === 6
-              // 含内缩的档位位置（大圆圆心）：calc(9px + (100% - 18px) * frac)
-              const posCalc = (level: number, minusHalf?: boolean) =>
-                `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((level - 1) / 5).toFixed(3)})${minusHalf ? ' - 2px' : ''})`
-              // 温度计填充宽度 = 大圆圆心位置（填充延伸进大圆左半，大圆作为填充的球头——
-              // 填充层 z 高于大圆 → 半透明渐变罩住大圆左半 → "深度绑定"一体视觉）
-              const fillWidth = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((currentLv.level - 1) / 5).toFixed(3)}))`
-
-              return (
-                <PopoverSurface
-                  anchorName="--menu-depth"
-                  placement="above-start"
-                  className="p-2.5"
-                  style={{ width: 210 }}
-                >
-                  {/* 标题行：思考等级 + 当前档位名 */}
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
-                      {t('agent.depthTitle')}
-                    </span>
-                    <span className="text-micro font-semibold" style={{ color: isMax ? 'var(--color-warning)' : 'var(--color-accent)' }}>
-                      {t(currentLv.labelKey)} · {currentLv.level}/6
-                    </span>
-                  </div>
-
-                  {/* 温度滑块：轨道条 + 温度计填充（延伸进大圆）+ 六节点小点 + 自定义大圆（球头） */}
-                  <div className="relative" style={{ height: TRACK_H }}>
-                    {/* 轨道条（纯背景） */}
-                    <div
-                      className="absolute inset-0 rounded-full"
-                      style={{ backgroundColor: 'var(--color-border)' }}
-                    />
-
-                    {/* 已滑过区域（温度计填充：右端 = 大圆圆心，盖住大圆左半 → 与大圆一体；
-                        拖动时由 onChange 直接写 DOM 同帧） */}
-                    <div
-                      className="depth-fill absolute left-0 top-0 bottom-0"
-                      style={{
-                        width: fillWidth,
-                        borderRadius: '999px 0 0 999px',
-                        zIndex: 1,
-                        background: isMax
-                          ? 'linear-gradient(to right, rgba(var(--color-warning-rgb), 0.15), rgba(var(--color-warning-rgb), 0.55))'
-                          : 'linear-gradient(to right, rgba(var(--color-accent-rgb), 0.12), rgba(var(--color-accent-rgb), 0.5))',
-                      }}
-                    />
-
-                    {/* 六节点（未滑到 = 缩小点；已滑过 = accent 淡点；当前档被大圆覆盖 → 隐藏；首末点被条包裹） */}
-                    {DEPTH_LEVELS.map(lv => {
-                      const lit = lv.level <= currentLv.level
-                      const hidden = lv.level === currentLv.level
-                      return (
-                        <span
-                          key={lv.level}
-                          className="absolute top-1/2 -translate-y-1/2 rounded-full pointer-events-none"
-                          style={{
-                            left: posCalc(lv.level, true),
-                            width: 4,
-                            height: 4,
-                            zIndex: 2,
-                            backgroundColor: lit ? 'var(--color-accent)' : 'var(--color-text-muted)',
-                            opacity: hidden ? 0 : (lit ? 0.85 : 0.4),
-                            boxShadow: lit ? '0 0 3px rgba(var(--color-accent-rgb), 0.6)' : undefined,
-                          }}
-                        />
-                      )
-                    })}
-
-                    {/* 自定义大圆（球头：位置 JS 精确计算——圆心 = INSET + (100%-2*INSET)×frac，
-                        端点圆心 = INSET = 半径 → 外缘与条边完全贴合；z 低于填充 →
-                        左半被填充半透明渐变罩住（深度绑定一体视觉）；拖动时 onChange 同帧直写） */}
-                    <div
-                      className={`depth-thumb absolute rounded-full pointer-events-none ${isMax ? 'depth-thumb--max' : ''}`}
-                      style={{
-                        width: TRACK_H,
-                        height: TRACK_H,
-                        left: `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${((currentLv.level - 1) / 5).toFixed(3)}) - ${TRACK_H / 2}px)`,
-                        top: 0,
-                        zIndex: 0,
-                        backgroundColor: isMax ? 'var(--color-warning)' : 'var(--color-accent)',
-                        // 边框与中心同色（不再用 sidebar 白/浅色外圈），仅保留 1px 外描边定界
-                        border: `2px solid ${isMax ? 'var(--color-warning)' : 'var(--color-accent)'}`,
-                        boxShadow: '0 0 0 1px var(--color-border), 0 2px 6px rgba(0,0,0,0.25)',
-                      }}
-                    />
-
-                    {/* 交互层：透明 range（仅捕获拖动/点击；opacity 0 不影响交互） */}
-                    <input
-                      type="range"
-                      min={1}
-                      max={6}
-                      step={1}
-                      value={currentLv.level}
-                      onChange={e => {
-                        const lv = DEPTH_LEVELS[parseInt(e.target.value, 10) - 1]
-                        setMode(lv.mode)
-                        // 同帧 DOM 直写：大圆 + 填充跟随（不经 React 渲染，无帧延迟）
-                        const wrap = e.currentTarget.parentElement
-                        const thumb = wrap?.querySelector<HTMLElement>('.depth-thumb')
-                        const fill = wrap?.querySelector<HTMLElement>('.depth-fill')
-                        const frac = ((lv.level - 1) / 5).toFixed(3)
-                        if (thumb) {
-                          thumb.style.left = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${frac}) - ${TRACK_H / 2}px)`
-                        }
-                        if (fill) {
-                          fill.style.width = `calc(${INSET}px + ((100% - ${INSET * 2}px) * ${frac}))`
-                        }
-                      }}
-                      className="depth-slider absolute top-0 bottom-0"
-                      style={{ left: `${INSET}px`, right: `${INSET}px`, opacity: 0, zIndex: 3 }}
-                    />
-                  </div>
-
-                  {/* 当前等级说明（固定 2 行高度 + 截断 → 面板高度恒定，滑块不上下跳动） */}
-                  <div
-                    className="mt-2 text-2xs leading-relaxed overflow-hidden"
-                    style={{
-                      color: 'var(--color-text-muted)',
-                      minHeight: 31,
-                      display: '-webkit-box',
-                      WebkitBoxOrient: 'vertical',
-                      WebkitLineClamp: 2,
-                    }}
-                  >
-                    {t(currentLv.descKey)}
-                  </div>
-                </PopoverSurface>
-              )
-            })()}
-          </div>
-
-          {/* 模型选择 */}
-          <div ref={modelRef} className="relative min-w-0">
-            <button
-              onClick={() => {
-                setShowContextMenu(false)
-                setShowModeMenu(false)
-                setShowFilePicker(false)
-                setShowModelMenu(v => !v)
-              }}
-              className="flex items-center gap-0.5 py-1 pl-0.5 pr-1.5 rounded-md text-xs min-w-0 transition-colors"
-              style={{
-                color: 'var(--color-text-secondary)',
-                opacity: 0.75,
-                // ⚠️ 用 min(140px, 100%) 而不是固定 140：button 即使 display:flex 也是
-                // shrink-to-fit，宽度不会自己收进容器。固定 140 时它在窄面板（AI 面板 ~264px）
-                // 下会直接顶出容器（俄语实测 98px 内容塞在 71px 容器里）。100% 兜住上限，
-                // 140px 仍保留「超长模型名不占满」的意图。
-                maxWidth: 'min(140px, 100%)',
-                anchorName: '--menu-model',
-              } as React.CSSProperties}
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-                e.currentTarget.style.opacity = '1'
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = 'transparent'
-                e.currentTarget.style.opacity = '0.75'
-              }}
-            >
-              <ChevronDown size={13} strokeWidth={1.5} className="flex-shrink-0" />
               {/* min-w-0 + truncate：flex item 默认 min-width:auto 不收缩到内容以下，
                   只写 truncate 时模型名会顶出容器（俄语下实测 71px 容器装 98px 内容） */}
               <span className="truncate select-none min-w-0">
                 {currentModel?.name ?? (chatModels.length === 0 ? t('statusbar.noModel') : t('agent.selectModel'))}
               </span>
+              <Badge variant="muted" className="gap-1 px-1.5 font-normal flex-shrink-0">
+                <LevelIcon
+                  size={11}
+                  strokeWidth={2}
+                  style={{ color: levelSpec.id === 'max' ? 'var(--color-warning)' : 'var(--color-accent)' }}
+                />
+                {t(levelSpec.labelKey)}
+              </Badge>
+              <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
             </button>
 
-            {/* 模型选择下拉 */}
-            {showModelMenu && (
-              /* 触发器靠面板右侧：左对齐会让菜单右缘顶出窗口 25px 被裁 →
-                 右对齐锚点（换面板宽度也不会复现，见 index.css 的 .floating-menu） */
+            {/* 合并弹窗：上半「本对话模型」（按会话），下半「全局思考等级」（全局共用） */}
+            {showModelThinkingMenu && (
               <PopoverSurface
-                anchorName="--menu-model"
+                anchorName="--menu-model-thinking"
                 className="py-1"
-                style={{ width: 220, maxHeight: 280 }}
+                style={{ width: 260, maxWidth: 'calc(100vw - 32px)' }}
               >
                 <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
-                  {t('agent.selectModel')}
+                  {t('agent.modelSectionTitle')}
                 </div>
                 {chatModels.length === 0 ? (
                   <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
@@ -691,11 +498,23 @@ export default function AgentInputBox() {
                       }
                       onClick={() => {
                         setModelId(model.id)
-                        setShowModelMenu(false)
+                        setShowModelThinkingMenu(false)
                       }}
                     />
                   ))
                 )}
+
+                <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
+
+                <div className="text-micro px-3 pb-1" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('agent.thinkingGlobalTitle')}
+                </div>
+                <div className="px-3">
+                  <ThinkingLevelSlider value={level} onChange={setLevel} showDescription />
+                </div>
+                <div className="px-3 pt-1 text-micro" style={{ color: 'var(--color-text-muted)' }}>
+                  {t('agent.thinkingGlobalHint')}
+                </div>
               </PopoverSurface>
             )}
           </div>

@@ -448,6 +448,7 @@ export const agentTexts = {
   'agent.thinkingMax': { 'zh-CN': '最高', 'en-US': 'Max', 'ru-RU': 'Макс.' },
   'agent.thinkingMaxDesc': { 'zh-CN': '多轮推演与自我验证，追求最佳结果', 'en-US': 'Multi-pass reasoning and verification for the best result', 'ru-RU': 'Многораундовые рассуждения и проверка ради лучшего результата' },
   'agent.thinkingGlobalHint': { 'zh-CN': '所有对话与 AI 调用共用', 'en-US': 'Shared by all conversations and AI calls', 'ru-RU': 'Общий для всех диалогов и вызовов ИИ' },
+  'agent.thinkingGlobalTitle': { 'zh-CN': '全局思考等级', 'en-US': 'Global thinking level', 'ru-RU': 'Глобальный уровень мышления' },
   'agent.modelSectionTitle': { 'zh-CN': '本对话模型', 'en-US': 'Conversation model', 'ru-RU': 'Модель диалога' },
   'agent.commandsBuiltin': { 'zh-CN': '内置命令', 'en-US': 'Built-in commands', 'ru-RU': 'Встроенные команды' },
   'agent.commandsSkills': { 'zh-CN': '技能', 'en-US': 'Skills', 'ru-RU': 'Навыки' },
