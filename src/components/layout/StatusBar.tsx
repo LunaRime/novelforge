@@ -18,6 +18,7 @@ import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 import NotificationCenter from './NotificationCenter'
 import StatusBarThinking from './StatusBarThinking'
+import StatusBarUpdate from './StatusBarUpdate'
 import { StatusBarDivider, StatusBarSegment } from './StatusBarSegment'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
@@ -67,6 +68,9 @@ export default function StatusBar() {
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
+
+        {/* 更新状态（唯一操作面；仅在 checking/available/downloading/… 时出现） */}
+        <StatusBarUpdate />
 
         {/* 思考等级（全局四档，取代旧的水温控件） */}
         <StatusBarThinking />

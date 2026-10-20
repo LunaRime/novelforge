@@ -33,7 +33,6 @@ import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { toast } from './components/ui/Toast'
 import { globalEventBus } from './shared/event-bus'
-import UpdateNotification from './components/UpdateNotification'
 import { loadCustomPrompts } from './services/prompt-templates'
 import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 import CommandPalette from './components/command-palette/CommandPalette'
@@ -378,9 +377,6 @@ export default function App() {
     <div className="flex flex-col w-full h-full overflow-hidden">
       {/* 顶栏：系统窗口按钮留位 + 拖拽区 + 应用标识（见 TitleStrip 的说明） */}
       <TitleStrip />
-
-      {/* 更新通知栏 */}
-      <UpdateNotification />
 
       {/* 全局 title 悬停提示代理 — 原生 title 属性 → 现代化 Tooltip UI */}
       <GlobalTitleTooltip />
