@@ -73,7 +73,6 @@ function mkModel(over: Partial<ModelProfile> & { id: string; modelName: string }
     provider: 'openai',
     protocol: 'openai',
     baseUrl: '',
-    temperature: 0.7,
     maxTokens: 4096,
     contextWindow: 131_072,
     purposes: ['generation'],

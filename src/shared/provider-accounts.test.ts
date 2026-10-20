@@ -20,7 +20,6 @@ function mkModel(over: Partial<ModelProfile> & { id: string }): ModelProfile {
     protocol: 'openai',
     modelName: 'gpt-4o',
     baseUrl: '',
-    temperature: 0.7,
     maxTokens: 4096,
     contextWindow: 131072,
     purposes: ['generation'],
@@ -29,7 +28,6 @@ function mkModel(over: Partial<ModelProfile> & { id: string }): ModelProfile {
 }
 
 const DEFAULTS = {
-  temperature: 0.7,
   maxTokens: 8192,
   contextWindow: 128000,
   purposes: ['generation'] as ModelProfile['purposes'],
@@ -71,11 +69,10 @@ describe('syncAccountModels', () => {
   })
 
   describe('⚠️ 合并语义（不是覆盖）：逐模型设置必须保留', () => {
-    it('改账户凭据 → 只更新连通字段（ref/地址/协议/家），用户改过的显示名/温度/上限/窗口/用途原样保留', () => {
+    it('改账户凭据 → 只更新连通字段（ref/地址/协议/家），用户改过的显示名/上限/窗口/用途原样保留', () => {
       const mine = mkModel({
         id: 'acc-1::deepseek-v4-pro',
         name: '我的主力模型',
-        temperature: 1.2,
         maxTokens: 16384,
         contextWindow: 200000,
         purposes: ['generation', 'refinement'],
@@ -91,7 +88,6 @@ describe('syncAccountModels', () => {
       expect(got.provider).toBe('custom')
 
       expect(got.name, '显示名被同步冲掉了').toBe('我的主力模型')
-      expect(got.temperature).toBe(1.2)
       expect(got.maxTokens).toBe(16384)
       expect(got.contextWindow).toBe(200000)
       expect(got.purposes).toEqual(['generation', 'refinement'])
@@ -144,12 +140,10 @@ describe('syncAccountModels', () => {
         id: deriveModelId(heir.id, 'gpt-5.6-sol'),
         modelName: 'gpt-5.6-sol',
         name: '我的主力',
-        temperature: 1.1,
       })
       const out = syncAccountModels(heir, [mine], (n) => presetModelDefaults(heir.provider, n))
       const got = out.find(m => m.id === mine.id)!
       expect(got.name).toBe('我的主力')
-      expect(got.temperature).toBe(1.1)
       expect(got.apiKeyRef).toBe('OPENAI_API_KEY')
       expect(out).toHaveLength(builtinCatalogFor('openai').length) // 不重复追加
     })
@@ -206,9 +200,8 @@ describe('syncAccountModels', () => {
       expect(got.maxTokens).toBe(24_576)
       expect(got.inputTypes).toEqual(['text', 'image'])
       expect(got.modelName).toBe('deepseek-v4-pro') // id 语义不变
-      // 未列出的字段仍取 preset 默认（purposes / temperature）
+      // 未列出的字段仍取 preset 默认（purposes）
       expect(got.purposes).toEqual(DEFAULTS.purposes)
-      expect(got.temperature).toBe(DEFAULTS.temperature)
       // 没被 overrides 提到的另一行完全不受影响
       expect(out.find(m => m.modelName === 'deepseek-v4-flash')!.name).toBe('deepseek-v4-flash')
     })
@@ -218,7 +211,6 @@ describe('syncAccountModels', () => {
         id: deriveModelId(ACCOUNT.id, 'deepseek-v4-pro'),
         modelName: 'deepseek-v4-pro',
         name: '我的主力',
-        temperature: 1.1,
         contextWindow: 65_536,
         purposes: ['generation', 'refinement'],
       })
@@ -231,7 +223,6 @@ describe('syncAccountModels', () => {
       const got = out.find(m => m.id === mine.id)!
       expect(got.contextWindow).toBe(256_000)   // 所列字段：覆盖
       expect(got.name).toBe('我的主力')          // 未列出的用户设置：原样保留
-      expect(got.temperature).toBe(1.1)
       expect(got.purposes).toEqual(['generation', 'refinement'])
     })
 
@@ -263,7 +254,6 @@ describe('syncAccountModels', () => {
         modelName: 'deepseek-v4-pro',
         contextWindow: 9_999,
         maxTokens: 4_096,
-        temperature: 1.1,
         purposes: ['generation', 'refinement'],
       })
       const out = syncAccountModels(
@@ -277,7 +267,6 @@ describe('syncAccountModels', () => {
       expect(got.contextWindow).toBe(DEFAULTS.contextWindow) // 回落内置规格（= 新建条目时的值）
       expect(got.contextWindow).not.toBe(9_999)
       expect(got.maxTokens).toBe(4_096)                      // 未列出的字段零影响
-      expect(got.temperature).toBe(1.1)                      // 其它用户字段零影响
       expect(got.purposes).toEqual(['generation', 'refinement'])
     })
 

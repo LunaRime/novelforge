@@ -38,7 +38,6 @@ const BASE: ModelProfile = {
   protocol: 'openai',
   modelName: 'my-model',
   baseUrl: 'https://api.example.com',
-  temperature: 0.7,
   maxTokens: 4096,
   contextWindow: 131_072,
   purposes: ['generation'],

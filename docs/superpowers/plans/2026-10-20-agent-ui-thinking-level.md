@@ -980,8 +980,8 @@ Expected: FAIL — module not found.
 
 - 把 `StatusBarSegment` / `StatusBarDivider` 从 `StatusBar.tsx` 抽到 `StatusBarSegment.tsx` 并导出；StatusBar 改为 import。
 - 新建 `StatusBarThinking`：`StatusBarSegment`（档位图标 + `labelKey`）→ 点击弹出 `PopoverSurface`（宽 210）内含 `ThinkingLevelSlider` + 描述。
-- 删除 `StatusBar.tsx` 的 `TemperatureControl`、`tempDraft`、`saveTimer`、`Thermometer`、`SegmentedControl` 引用。
-- 在 StatusBar 中用 `<StatusBarThinking />` 替换 `<TemperatureControl defaultModel={defaultModel} />`。
+- Task 5 已按裁定删除 `TemperatureControl` 及其 `Thermometer` / `SegmentedControl` 引用；本任务只需确认无残留引用，不要重复删除。
+- 在 StatusBar 中挂载 `<StatusBarThinking />`（原来 `TemperatureControl` 的位置）。
 
 - [ ] **Step 4: Run test to verify it passes**
 

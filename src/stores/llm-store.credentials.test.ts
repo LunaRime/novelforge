@@ -262,7 +262,7 @@ describe('返回值形状（评审 m5：error 要能被消费）', () => {
       'llm:save-model': () => ({ success: true }),
       'llm:list-models': () => [{
         id: 'm1', name: 'm1', provider: 'custom', protocol: 'openai', modelName: 'm1',
-        apiKeyRef: 'M1_API_KEY', baseUrl: '', temperature: 0.7,
+        apiKeyRef: 'M1_API_KEY', baseUrl: '',
         maxTokens: 4096, contextWindow: 4096, purposes: ['generation'],
       }],
       'credential:describe': () => ({ M1_API_KEY: { configured: true, source: 'store', writable: true } }),

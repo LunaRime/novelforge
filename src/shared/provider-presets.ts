@@ -64,7 +64,7 @@ export const DEFAULT_CONTEXT_WINDOW_TOKENS = 1_000_000
 export function presetModelDefaults(
   provider: string,
   modelName: string,
-): { temperature: number; maxTokens: number; contextWindow: number; purposes: Array<'generation' | 'embedding'> } {
+): { maxTokens: number; contextWindow: number; purposes: Array<'generation' | 'embedding'> } {
   const preset = BUILTIN_PRESETS.find((p) => p.provider === provider)
   const isEmbedding = preset?.embeddingModels.includes(modelName) || looksLikeEmbeddingModel(modelName)
   const model = preset?.models.find((m) => m.name === modelName)
@@ -75,7 +75,6 @@ export function presetModelDefaults(
     ?? (isEmbedding ? maxTokens : DEFAULT_CONTEXT_WINDOW_TOKENS)
 
   return {
-    temperature: 0.7,
     maxTokens,
     contextWindow,
     purposes: [isEmbedding ? 'embedding' : 'generation'],

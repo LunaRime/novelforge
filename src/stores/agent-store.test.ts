@@ -1430,7 +1430,7 @@ describe('P0-1：sendObservations（实发口径，仅内存态）', () => {
 describe('W1：上下文策略按模型档位进入发送链路', () => {
   const profile = (id: string, contextWindow: number): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
-    baseUrl: 'https://example.invalid', temperature: 0.7, maxTokens: 4096, contextWindow,
+    baseUrl: 'https://example.invalid', maxTokens: 4096, contextWindow,
     purposes: ['generation'],
   })
 

@@ -46,7 +46,7 @@ export function effectiveCatalogFor(account: { provider: string; modelNames?: st
 /** 新建派生条目时，逐模型设置的初值（由调用方按预设给出） */
 export type NewModelDefaults = Pick<
   ModelProfile,
-  'temperature' | 'maxTokens' | 'contextWindow' | 'purposes'
+  'maxTokens' | 'contextWindow' | 'purposes'
 >
 
 /**
@@ -123,7 +123,7 @@ function mergeOverride(
 /**
  * 按账户的勾选清单同步派生条目。
  *
- * ⚠️ **合并语义，不是覆盖**：派生条目上的 `name` / `temperature` / `maxTokens` /
+ * ⚠️ **合并语义，不是覆盖**：派生条目上的 `name` / `maxTokens` /
  * `contextWindow` / `purposes` 是用户在「模型卡片」里改的，**账户同步必须原样保留**；
  * 只更新由账户提供的连通字段（`provider` / `protocol` / `baseUrl` / `apiKeyRef`）。
  * 否则改一次账户配置就会把用户的逐模型调参全部冲掉。

@@ -22,7 +22,6 @@ const profile = (id: string, contextWindow: number): ModelProfile => ({
   protocol: 'openai',
   modelName: id,
   baseUrl: 'https://example.invalid',
-  temperature: 0.7,
   maxTokens: 4096,
   contextWindow,
   purposes: ['generation'],

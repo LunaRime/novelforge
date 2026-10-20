@@ -92,7 +92,6 @@ function embeddingFixture(over: Partial<LegacyEmbeddingModel> = {}): LegacyEmbed
     modelName: 'text-embedding-3-small',
     apiKey: 'sk-plain',
     baseUrl: 'https://api.example.com/v1',
-    temperature: 0,
     maxTokens: 0,
     contextWindow: 0,
     purposes: ['embedding'],

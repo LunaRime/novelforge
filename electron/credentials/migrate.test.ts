@@ -91,7 +91,6 @@ function model(over: Partial<LegacyModel> = {}): LegacyModel {
     modelName: 'deepseek-chat',
     apiKey: 'sk-plain',
     baseUrl: 'https://api.deepseek.com',
-    temperature: 0.7,
     maxTokens: 128,
     contextWindow: 8192,
     purposes: ['generation'],

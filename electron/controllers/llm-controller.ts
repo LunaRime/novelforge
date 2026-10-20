@@ -24,6 +24,9 @@ import { refreshOutboundProxy } from '../net/proxy-fetch'
 
 const activeStreams = new Map<string, AbortController>()
 
+/** 请求未显式给温度时的兜底（模型条目上已无 temperature，正常路径由渲染层注入全局思考等级） */
+const DEFAULT_REQUEST_TEMPERATURE = 0.7
+
 /** 懒迁移是否已排过（进程内去重；见 scheduleCredentialMigration） */
 let credentialMigrationScheduled = false
 
@@ -262,7 +265,7 @@ export function registerLLMController() {
 
         const provider = LLMFactory.getProvider(model)
         return await provider.generate(model, request.messages, {
-          temperature: request.temperature ?? model.temperature,
+          temperature: request.temperature ?? DEFAULT_REQUEST_TEMPERATURE,
           maxTokens: resolveMaxTokens(request.maxTokens, model),
           responseFormat: request.responseFormat,
           thinking: request.thinking,
@@ -306,7 +309,7 @@ export function registerLLMController() {
 
         return new Promise<void>((resolve, reject) => {
           provider.generateStream(model, request.messages, {
-            temperature: request.temperature ?? model.temperature,
+            temperature: request.temperature ?? DEFAULT_REQUEST_TEMPERATURE,
             maxTokens: resolveMaxTokens(request.maxTokens, model),
             responseFormat: request.responseFormat,
             thinking: request.thinking,

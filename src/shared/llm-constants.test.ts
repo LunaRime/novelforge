@@ -14,7 +14,6 @@ function mk(over: Partial<Pick<ModelProfile, 'maxTokens' | 'contextWindow'>> = {
     protocol: 'openai',
     modelName: 'gpt-4o',
     baseUrl: 'https://api.openai.com',
-    temperature: 0.7,
     maxTokens: 4096,
     purposes: [],
     ...over,

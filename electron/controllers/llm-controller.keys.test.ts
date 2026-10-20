@@ -122,7 +122,6 @@ function modelFixture(over: Partial<LegacyModelFixture> = {}): LegacyModelFixtur
     modelName: 'gpt-x',
     apiKey: 'sk-plain',
     baseUrl: 'https://api.example.com/v1',
-    temperature: 0.7,
     maxTokens: 128,
     contextWindow: 8192,
     purposes: ['generation'],

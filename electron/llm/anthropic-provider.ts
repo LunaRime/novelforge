@@ -65,7 +65,7 @@ export function toAnthropicRequest(
   if (stream) body.stream = true
   if (systemParts.length > 0) body.system = systemParts.join('\n\n')
 
-  const temperature = opts?.temperature ?? model.temperature
+  const temperature = opts?.temperature
   if (typeof temperature === 'number' && !Number.isNaN(temperature)) {
     // API 固有上限 [0,1]（本仓允许 0–2；>1 会 400，非兼容层特有）
     body.temperature = Math.min(Math.max(temperature, 0), 1)

@@ -35,7 +35,7 @@ export class OpenAIProvider implements ILLMProvider {
       if (opts.thinking) {
         body.thinking = { type: 'enabled' }
       } else {
-        body.temperature = opts.temperature ?? model.temperature
+        body.temperature = opts.temperature
       }
 
       if (opts.responseFormat) body.response_format = opts.responseFormat
@@ -118,7 +118,7 @@ export class OpenAIProvider implements ILLMProvider {
       if (opts.thinking) {
         body.thinking = { type: 'enabled' }
       } else {
-        body.temperature = opts.temperature ?? model.temperature
+        body.temperature = opts.temperature
       }
 
       if (opts.responseFormat) body.response_format = opts.responseFormat

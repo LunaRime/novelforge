@@ -67,7 +67,6 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
         protocol: 'openai',
         modelName: 'gpt-4o',
         baseUrl: 'https://api.example.com',
-        temperature: 0.7,
         maxTokens: 4096,
         contextWindow: 128000,
         purposes: ['generation'],
@@ -538,7 +537,7 @@ describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
     useLLMStore.setState({
       models: [{
         id: 'm-test', name: 'Test Model', provider: 'openai', protocol: 'openai', modelName: 'gpt-4o',
-        baseUrl: 'https://api.example.com', temperature: 0.7, maxTokens: 4096,
+        baseUrl: 'https://api.example.com', maxTokens: 4096,
         contextWindow: 128000, purposes: ['generation'],
       }],
       defaultModelId: 'm-test',

@@ -621,7 +621,6 @@ export interface ModelProfile {
   /** 输入类型（v3 §3.2）：缺省 = 继承规格 → `['text']`（目录区行内展开可改） */
   inputTypes?: Array<'text' | 'image'>
   baseUrl: string
-  temperature: number
   /** 单次请求最大**输出** token 数 —— 会作为 `max_tokens` 发给 API */
   maxTokens: number
   /**

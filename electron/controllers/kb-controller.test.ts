@@ -172,7 +172,6 @@ function setRemoteEmbeddingModel(apiKeyRef: string = REMOTE_REF): void {
     modelName: 'text-embedding-3-small',
     apiKeyRef,
     baseUrl: 'https://api.example.com/v1',
-    temperature: 0,
     maxTokens: 0,
     contextWindow: 0, // embedding 模型无输出/窗口概念，与 maxTokens 同置 0
     purposes: ['embedding'],

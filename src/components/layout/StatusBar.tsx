@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, Thermometer, ZoomIn, ZoomOut, Bot, GitBranch } from 'lucide-react'
+import { Wifi, BookOpen, DollarSign, CheckCircle2, ZoomIn, ZoomOut, Bot, GitBranch } from 'lucide-react'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
@@ -14,7 +14,6 @@ import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import { confirm } from '../ui/Confirm'
-import { SegmentedControl } from '../ui/SegmentedControl'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 import NotificationCenter from './NotificationCenter'
@@ -66,9 +65,6 @@ export default function StatusBar() {
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
-
-        {/* 水温控制（当前默认模型 temperature，拖动实时预览 + 防抖保存） */}
-        <TemperatureControl defaultModel={defaultModel} />
 
         <ModelPicker models={models} defaultModel={defaultModel} />
 
@@ -261,114 +257,6 @@ function ModelPicker({
               setOpen(false)
               openSettings('llm')
             }}
-          />
-        </PopoverSurface>
-      )}
-    </div>
-  )
-}
-
-/**
- * 右下角图标式温度控制：
- * - 状态栏段：温度计图标 + 当前温度值，点击弹出滑块面板
- * - 拖动实时预览（本地 state），300ms 防抖后保存到默认模型（llm:save-model）
- * - 预设快捷：0.3 严谨 / 0.7 平衡 / 1.2 创意
- */
-function TemperatureControl({
-  defaultModel,
-}: {
-  defaultModel: ModelProfile | undefined
-}) {
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [tempDraft, setTempDraft] = useState<number>(defaultModel?.temperature ?? 0.7)
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const panelRef = useRef<HTMLDivElement>(null)
-
-  // 水温面板浮在整个窗口之上（锚点：温度计分段；状态栏在底部 → 朝上展开）
-  const tempMenuRef = useFloatingPosition<HTMLDivElement>(panelRef, open, { placement: 'above', align: 'end' })
-
-  useOutsideClick(panelRef, () => setOpen(false), open)
-  useEscapeKey(() => setOpen(false), open)
-
-  // 打开面板时同步当前模型温度（保存成功后 loadModels 刷新引用）
-  const handleToggle = () => {
-    if (!open && defaultModel) setTempDraft(defaultModel.temperature ?? 0.7)
-    setOpen(v => !v)
-  }
-
-  const handleTempChange = (v: number) => {
-    const rounded = Math.round(v * 100) / 100
-    setTempDraft(rounded)
-    if (!defaultModel) return
-    // 防抖：拖动时只更新本地预览，停顿 300ms 后写盘
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-    saveTimer.current = setTimeout(() => {
-      void useLLMStore.getState().saveModel({ ...defaultModel, temperature: rounded })
-    }, 300)
-  }
-
-  useEffect(() => () => {
-    if (saveTimer.current) clearTimeout(saveTimer.current)
-  }, [])
-
-  if (!defaultModel) return null
-
-  const presets = [
-    { label: t('statusbar.temperatureLow'), value: 0.3 },
-    { label: t('statusbar.temperatureMid'), value: 0.7 },
-    { label: t('statusbar.temperatureHigh'), value: 1.2 },
-  ]
-
-  return (
-    <div ref={panelRef} className="relative">
-      <StatusBarSegment
-        title={`${t('statusbar.temperature')}: ${(defaultModel.temperature ?? 0.7).toFixed(2)}`}
-        onClick={handleToggle}
-      >
-        <Thermometer size={11} />
-        <span className="opacity-80 tabular-nums">{(defaultModel.temperature ?? 0.7).toFixed(2)}</span>
-      </StatusBarSegment>
-
-      {open && (
-        <PopoverSurface
-          ref={tempMenuRef}
-          className="py-2 px-3"
-          style={{ width: 200 }}
-        >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('statusbar.temperature')}
-            </span>
-            <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-              {tempDraft.toFixed(2)}
-            </span>
-          </div>
-
-          {/* 温度滑块 */}
-          <input
-            type="range"
-            min={0}
-            max={2}
-            step={0.05}
-            value={tempDraft}
-            onChange={e => handleTempChange(parseFloat(e.target.value))}
-            style={{
-              width: '100%',
-              accentColor: 'var(--color-accent)',
-              cursor: 'pointer',
-            }}
-          />
-
-          {/* 预设快捷：这是「选一个值」而非「执行一个命令」，故用分段控件（原自绘按钮组的
-              激活态是 accent 文字 + accent 10% 底，与分段条不统一） */}
-          <SegmentedControl
-            size="sm"
-            fill
-            className="mt-2"
-            value={tempDraft}
-            onChange={handleTempChange}
-            items={presets.map(p => ({ value: p.value, label: p.label }))}
           />
         </PopoverSurface>
       )}

@@ -165,7 +165,7 @@ describe('apiKeyRef 分配（主进程侧）', () => {
 
   it('手工模型条目已占用的 ref 也计入 taken（账户与手工条目共用同一命名空间）', async () => {
     files.set(MODELS_CONFIG_PATH, [
-      { id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm', apiKeyRef: 'OPENAI_API_KEY', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'] },
+      { id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm', apiKeyRef: 'OPENAI_API_KEY', baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'] },
     ])
     await call('llm:save-provider', mkAccount({ id: 'acc-1' }))
     expect(providersFile().accounts[0].apiKeyRef).toBe('OPENAI_API_KEY_2')
@@ -336,8 +336,8 @@ describe('派生条目同步', () => {
 
   it('overrides 二次保存：叠加在已有条目上（用户此前在别处改的字段不被冲掉）', async () => {
     await call('llm:save-provider', mkAccount({ id: 'acc-1', modelNames: ['gpt-5.6-sol'] }))
-    // 模拟「用户此前改过的逐模型设置」（比如 temperature —— 目录区改不了它）
-    files.set(MODELS_CONFIG_PATH, modelsFile().map((m) => ({ ...m, temperature: 1.2, purposes: ['refinement'] })))
+    // 模拟「用户此前改过的逐模型设置」（比如 purposes —— 目录区改不了它）
+    files.set(MODELS_CONFIG_PATH, modelsFile().map((m) => ({ ...m, purposes: ['refinement'] })))
 
     await call(
       'llm:save-provider',
@@ -348,8 +348,7 @@ describe('派生条目同步', () => {
 
     const sol = modelsFile().find((m) => m.modelName === 'gpt-5.6-sol')!
     expect(sol.maxTokens).toBe(4_096)
-    expect(sol.temperature).toBe(1.2)             // 目录区碰不到的字段原样保留
-    expect(sol.purposes).toEqual(['refinement'])
+    expect(sol.purposes).toEqual(['refinement'])  // 目录区碰不到的字段原样保留
   })
 
   it('并发两次保存不丢更新（整次读→改→写在同一个队列任务内）', async () => {
@@ -374,7 +373,7 @@ describe('派生条目同步', () => {
 describe('llm:save-model / llm:delete-model 入队', () => {
   const mkModel = (id: string): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
-    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+    baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'],
   })
 
   it('并发保存两个模型：都落盘（各自基于最新快照改，不丢更新）', async () => {
@@ -424,7 +423,7 @@ describe('llm:delete-provider', () => {
   it('手工条目在删账户后原样保留（逐字段相同 —— 写盘不再加解密，没有任何字段被改写）', async () => {
     const hand: ModelProfile = {
       id: 'uuid-hand', name: '手工', provider: 'openai', protocol: 'openai', modelName: 'm',
-      apiKeyRef: 'OPENAI_API_KEY_9', baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+      apiKeyRef: 'OPENAI_API_KEY_9', baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'],
     }
     await call('llm:save-provider', mkAccount({ id: 'acc-1' }))
     files.set(MODELS_CONFIG_PATH, [...modelsFile(), hand])
@@ -439,7 +438,7 @@ describe('llm:delete-provider', () => {
 describe('apiKeyDraft（一次性草稿 → 凭据库）', () => {
   const handModel = (id: string): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
-    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+    baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'],
   })
 
   /** 凭据库里的 ref 集合（`{ref → ENC: 密文}`）—— `credFile` 由用例注入 */
@@ -547,7 +546,7 @@ describe('apiKeyDraft（一次性草稿 → 凭据库）', () => {
 describe('盘上残留密钥的保全（保存不得抹掉未迁移的明文）', () => {
   const handModel = (id: string): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
-    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+    baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'],
   })
 
   it('save-model：盘上有残留明文 + 只改一个字段 → 残留**原样带过去**，其余字段同样无损', async () => {
@@ -598,7 +597,7 @@ describe('gcOrphanRefs（删除路径的孤儿 ref 回收）', () => {
   const handModel = (id: string, apiKeyRef?: string): ModelProfile => ({
     id, name: id, provider: 'openai', protocol: 'openai', modelName: id,
     ...(apiKeyRef ? { apiKeyRef } : {}),
-    baseUrl: '', temperature: 0.7, maxTokens: 1, contextWindow: 1, purposes: ['generation'],
+    baseUrl: '', maxTokens: 1, contextWindow: 1, purposes: ['generation'],
   })
 
   /** 往注入的凭据库里塞一条真密文（走 encryptApiKey，与写路径同形） */

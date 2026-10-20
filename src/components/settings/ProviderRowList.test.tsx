@@ -53,7 +53,7 @@ const CONFIGURED: CredentialInfo = { configured: true, source: 'store', writable
 const makeModel = (id: string, modelName: string): ModelProfile => ({
   id, name: modelName, provider: 'custom', protocol: 'openai',
   modelName, apiKeyRef: 'CUSTOM_API_KEY', baseUrl: 'https://gw.example.com',
-  temperature: 0.7, maxTokens: 4096, contextWindow: 4096, purposes: ['generation'],
+  maxTokens: 4096, contextWindow: 4096, purposes: ['generation'],
 } as unknown as ModelProfile)
 
 let container: HTMLDivElement | null = null

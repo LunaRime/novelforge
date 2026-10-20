@@ -11,7 +11,7 @@ vi.mock('../net/proxy-fetch', () => ({ proxyFetch: vi.fn() }))
 const model: ResolvedModelProfile = {
   id: 'a1', name: 'Claude', provider: 'custom', protocol: 'anthropic',
   modelName: 'claude-sonnet-5', apiKey: 'sk-ant-x',
-  baseUrl: 'https://api.anthropic.com', temperature: 0.7, maxTokens: 8192, contextWindow: 200000,
+  baseUrl: 'https://api.anthropic.com', maxTokens: 8192, contextWindow: 200000,
   purposes: ['generation'],
 }
 
@@ -44,9 +44,11 @@ describe('toAnthropicRequest', () => {
   })
 
   it('temperature 钳到 [0,1]（Anthropic API 固有上限，本仓允许 0–2）', () => {
-    expect(toAnthropicRequest({ ...model, temperature: 1.6 }, [{ role: 'user', content: 'hi' }]).body.temperature).toBe(1)
-    expect(toAnthropicRequest({ ...model, temperature: -1 }, [{ role: 'user', content: 'hi' }]).body.temperature).toBe(0)
-    expect(toAnthropicRequest(model, [{ role: 'user', content: 'hi' }]).body.temperature).toBe(0.7)
+    const req = (temperature: number) =>
+      toAnthropicRequest(model, [{ role: 'user', content: 'hi' }], { temperature, maxTokens: 8192 }).body.temperature
+    expect(req(1.6)).toBe(1)
+    expect(req(-1)).toBe(0)
+    expect(req(0.7)).toBe(0.7)
   })
 })
 
