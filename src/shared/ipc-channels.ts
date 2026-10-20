@@ -6,6 +6,7 @@ import type { LLMProtocol } from './llm-protocols'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
 import type { ModelOverrides } from './provider-accounts'
+import type { ThinkingLevel } from './thinking-level'
 
 // ===== 全局配置 =====
 export interface ConfigChannels {
@@ -51,6 +52,11 @@ export interface GlobalConfig {
   autoSaveInterval: number
   /** Agent 空状态显示的最近会话条数（默认 3） */
   recentConversationCount?: number
+  /**
+   * 全局思考等级（off/low/high/max）—— 决定所有 LLM 调用注入的温度与 Agent 提示词强度。
+   * 缺字段 / 旧值（旧六档模式名）由 thinking-store 校验后回退 `DEFAULT_THINKING_LEVEL`。
+   */
+  thinkingLevel?: ThinkingLevel
   proxy?: {
     enabled: boolean
     type: 'http' | 'socks5'

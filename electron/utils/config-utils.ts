@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
 import type { GlobalConfig, LocalEmbeddingConfig, ProviderAccount } from '../../src/shared/ipc-channels'
+import { DEFAULT_THINKING_LEVEL } from '../../src/shared/thinking-level'
 
 export const VELA_HOME = path.join(os.homedir(), '.novelforge')
 
@@ -343,6 +344,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   editorFontFamily: 'Noto Serif SC',
   autoSaveInterval: 30,
   recentConversationCount: 3,
+  thinkingLevel: DEFAULT_THINKING_LEVEL,
   logRetention: {
     files: 5,
     days: 7,

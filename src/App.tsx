@@ -10,6 +10,7 @@ import { useWorkflowStore } from './stores/workflow-store'
 import { useAgentStore } from './stores/agent-store'
 import { useUpdateStore } from './stores/update-store'
 import { useAutomationStore } from './stores/automation-store'
+import { useThinkingStore } from './stores/thinking-store'
 import { t } from './shared/locale'
 import { useTranslation } from './hooks/useTranslation'
 import { setWindowTitle } from './lib/window-title'
@@ -238,6 +239,8 @@ export default function App() {
     const t1 = performance.now()
     initLLM()
     console.log(`[Startup] initLLM 触发: ${(performance.now() - t1).toFixed(0)}ms`)
+    // 全局思考等级（温度 + Agent 提示词强度）：与 initLLM 同批启动，读盘失败回退默认档
+    void useThinkingStore.getState().init()
     const t2 = performance.now()
     loadRecentProjects()
     console.log(`[Startup] loadRecentProjects 触发: ${(performance.now() - t2).toFixed(0)}ms`)
