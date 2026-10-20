@@ -17,6 +17,8 @@ import { confirm } from '../ui/Confirm'
 import { PopoverSurface } from '../ui/PopoverSurface'
 import { MenuItem } from '../ui/MenuItem'
 import NotificationCenter from './NotificationCenter'
+import StatusBarThinking from './StatusBarThinking'
+import { StatusBarDivider, StatusBarSegment } from './StatusBarSegment'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
 /** 底部状态栏 — Cursor / VS Code 口径：24px、深底、多分段、hover 可点击感 */
@@ -59,12 +61,15 @@ export default function StatusBar() {
 
       </div>
 
-      {/* 右侧：费用 + AI 胶囊 + 水温 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
+      {/* 右侧：费用 + AI 胶囊 + 思考等级 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
       <div className="flex items-center h-full">
         <AgentStatusSegment />
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
         <AITaskCapsule />
+
+        {/* 思考等级（全局四档，取代旧的水温控件） */}
+        <StatusBarThinking />
 
         <ModelPicker models={models} defaultModel={defaultModel} />
 
@@ -80,15 +85,13 @@ export default function StatusBar() {
 }
 
 
-// ===== 水温控制（temperature 快速调节）=====
-
 /**
  * 状态栏左段 —— 当前激活章节的写作信息（章节名 + 字数 + 未保存圆点）。
  *
  * 用三个**独立原子 selector** 订阅（各自返回原始值，值不变不重渲染）：
  *   - name / dirty：从 activeTab 派生，只在切 Tab / 置脏 / 保存时变化；
  *   - activeCharCount：ProseEditorWrapper 在 onCharCountChange 里上抛（随输入实时变）。
- * 整段在键入时只有字数这个 number 变化触发重渲染，不影响状态栏其余分段（模型/温度等）。
+ * 整段在键入时只有字数这个 number 变化触发重渲染，不影响状态栏其余分段（模型/思考等级等）。
  */
 function EditorStatusSegment() {
   const { t } = useTranslation()
@@ -200,7 +203,7 @@ function ModelPicker({
   const openSettings = useLayoutStore((s) => s.openSettings)
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
-  // 状态栏在窗口底部 → 朝上展开（与水温面板同款）
+  // 状态栏在窗口底部 → 朝上展开（与思考等级弹层同款）
   const menuRef = useFloatingPosition<HTMLDivElement>(panelRef, open, { placement: 'above', align: 'end' })
 
   useOutsideClick(panelRef, () => setOpen(false), open)
@@ -417,44 +420,6 @@ function AITaskCapsule() {
   )
 }
 
-
-/** 状态栏分段（可点击）——原生 button：键盘可达（Tab/Enter/Space），符合可访问性 */
-function StatusBarSegment({
-  children,
-  title,
-  onClick,
-}: {
-  children: React.ReactNode
-  title?: string
-  onClick?: () => void
-}) {
-  return (
-    <button
-      type="button"
-      className="flex items-center gap-1 px-2 h-full cursor-default transition-colors"
-      title={title}
-      onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
-      onMouseEnter={e => {
-        if (onClick) {
-          e.currentTarget.style.backgroundColor = 'rgba(var(--color-accent-rgb), 0.08)'
-        }
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.backgroundColor = 'transparent'
-      }}
-    >
-      {children}
-    </button>
-  )
-}
-
-/** 状态栏分隔符 */
-function StatusBarDivider() {
-  return (
-    <span style={{ opacity: 0.25, fontSize: "var(--text-micro)", userSelect: 'none' }}>|</span>
-  )
-}
 
 /**
  * 缩放控制 — 原标题栏控件，标题栏移除后搬到状态栏右侧（VSCode 的缩放同样在状态栏）。

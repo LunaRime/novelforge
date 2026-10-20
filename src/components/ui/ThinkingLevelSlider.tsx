@@ -1,4 +1,4 @@
-import type { ChangeEvent } from 'react'
+import { useEffect, useRef, type ChangeEvent } from 'react'
 import { BrainCircuit, Flame, Gauge, Zap, type LucideIcon } from 'lucide-react'
 import { THINKING_LEVELS, thinkingLevelSpec, type ThinkingLevel } from '../../shared/thinking-level'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -31,6 +31,39 @@ const LEVEL_ICONS: Record<ThinkingLevel, LucideIcon> = {
   max: Flame,
 }
 
+export interface ThinkingLevelIconProps {
+  level: ThinkingLevel
+  size?: number
+  strokeWidth?: number
+  className?: string
+}
+
+/**
+ * 档位图标 —— 图标映射与配色的**唯一来源**。
+ *
+ * 滑块节点、Agent 输入框徽章、状态栏分段三处都渲染同一个档位图标；
+ * 此前各自维护一份 `LEVEL_ICONS` + 「max 用 warning、其余 accent」的颜色判断，
+ * 改一档就要改三处。统一收在这里，业务侧只传 level。
+ */
+export function ThinkingLevelIcon({
+  level,
+  size = 11,
+  strokeWidth = 2,
+  className,
+}: ThinkingLevelIconProps) {
+  const spec = thinkingLevelSpec(level)
+  const Icon = LEVEL_ICONS[spec.id]
+  return (
+    <Icon
+      size={size}
+      strokeWidth={strokeWidth}
+      className={className}
+      aria-hidden="true"
+      style={{ color: spec.id === 'max' ? 'var(--color-warning)' : 'var(--color-accent)' }}
+    />
+  )
+}
+
 /** 第 index 档在轨道上的比例（0 → 1） */
 function fracOf(index: number): string {
   return (index / (THINKING_LEVELS.length - 1)).toFixed(3)
@@ -59,6 +92,15 @@ function applyVisual(input: HTMLInputElement, index: number): void {
   if (fill) fill.style.width = fillWidthFor(index)
 }
 
+/** 从 range 当前 DOM 值取档并回调 */
+function emitLevel(input: HTMLInputElement, onChange: (level: ThinkingLevel) => void): void {
+  const index = Number(input.value) - 1
+  const next = THINKING_LEVELS[index]
+  if (!next) return
+  onChange(next.id)
+  applyVisual(input, index)
+}
+
 export default function ThinkingLevelSlider({
   value,
   onChange,
@@ -70,12 +112,25 @@ export default function ThinkingLevelSlider({
   const activeIndex = Math.max(0, THINKING_LEVELS.findIndex(l => l.id === activeSpec.id))
   const isMax = activeSpec.id === 'max'
 
+  const inputRef = useRef<HTMLInputElement>(null)
+  const controlledValue = String(activeIndex + 1)
+
+  // 原生 change 兜底：React 的 value tracker 会把「程序化赋值 + dispatch change」
+  // 去重（自动化/测试走这条路时合成 onChange 根本不触发）。
+  // 只处理「DOM 值 != 当前受控档」的事件 —— 真实拖动/已由合成 onChange 处理的
+  // 手势在松手时 React 已把 DOM 回写成受控值，这里自然跳过，不会二次回调。
+  useEffect(() => {
+    const input = inputRef.current
+    if (!input) return
+    const onNativeChange = () => {
+      if (input.value !== controlledValue) emitLevel(input, onChange)
+    }
+    input.addEventListener('change', onNativeChange)
+    return () => input.removeEventListener('change', onNativeChange)
+  }, [onChange, controlledValue])
+
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const index = Number(e.target.value) - 1
-    const next = THINKING_LEVELS[index]
-    if (!next) return
-    onChange(next.id)
-    applyVisual(e.currentTarget, index)
+    emitLevel(e.currentTarget, onChange)
   }
 
   return (
@@ -105,7 +160,6 @@ export default function ThinkingLevelSlider({
         {THINKING_LEVELS.map((level, index) => {
           const lit = index <= activeIndex
           const hidden = index === activeIndex
-          const Icon = LEVEL_ICONS[level.id]
           return (
             <span
               key={level.id}
@@ -116,11 +170,10 @@ export default function ThinkingLevelSlider({
                 left: `calc(${centerExpr(index)})`,
                 transform: 'translate(-50%, -50%)',
                 zIndex: 2,
-                color: level.id === 'max' ? 'var(--color-warning)' : 'var(--color-accent)',
                 opacity: hidden ? 0 : (lit ? 0.9 : 0.4),
               }}
             >
-              <Icon size={11} strokeWidth={2} />
+              <ThinkingLevelIcon level={level.id} />
             </span>
           )
         })}
@@ -142,6 +195,7 @@ export default function ThinkingLevelSlider({
 
         {/* 交互层：透明 range（仅捕获拖动/点击；opacity 0 不影响交互） */}
         <input
+          ref={inputRef}
           type="range"
           min={1}
           max={THINKING_LEVELS.length}

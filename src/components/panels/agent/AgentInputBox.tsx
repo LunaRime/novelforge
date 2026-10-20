@@ -8,16 +8,12 @@ import {
   AtSign,
   Workflow,
   Sparkles,
-  BrainCircuit,
   Zap,
-  Gauge,
-  Flame,
-  type LucideIcon,
 } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useThinkingStore } from '../../../stores/thinking-store'
-import { thinkingLevelSpec, type ThinkingLevel } from '../../../shared/thinking-level'
+import { thinkingLevelSpec } from '../../../shared/thinking-level'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
@@ -28,7 +24,7 @@ import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
-import ThinkingLevelSlider from '../../ui/ThinkingLevelSlider'
+import ThinkingLevelSlider, { ThinkingLevelIcon } from '../../ui/ThinkingLevelSlider'
 import {
   getAllSlashCommands,
   type SlashCommand,
@@ -37,14 +33,6 @@ import {
 
 /** 输入框最大高度（px），超出后框内滚动 */
 const MAX_HEIGHT = 200
-
-/** 档位图标（触发器徽章；与共享滑块一致：低档闪电 → 高档火焰） */
-const LEVEL_ICONS: Record<ThinkingLevel, LucideIcon> = {
-  off: Zap,
-  low: Gauge,
-  high: BrainCircuit,
-  max: Flame,
-}
 
 /**
  * Agent 输入框组件（参考 agent1.html 第 69-155 行）
@@ -75,9 +63,8 @@ export default function AgentInputBox() {
   // 找到当前模型信息
   const currentModel = models.find(m => m.id === currentModelId)
 
-  // 当前档位规格 + 图标（触发器徽章与滑块同源）
+  // 当前档位规格（触发器徽章与滑块同源）
   const levelSpec = thinkingLevelSpec(level)
-  const LevelIcon = LEVEL_ICONS[levelSpec.id]
 
   // 下拉菜单状态
   const [showContextMenu, setShowContextMenu] = useState(false)
@@ -459,11 +446,7 @@ export default function AgentInputBox() {
                 {currentModel?.name ?? (chatModels.length === 0 ? t('statusbar.noModel') : t('agent.selectModel'))}
               </span>
               <Badge variant="muted" className="gap-1 px-1.5 font-normal flex-shrink-0">
-                <LevelIcon
-                  size={11}
-                  strokeWidth={2}
-                  style={{ color: levelSpec.id === 'max' ? 'var(--color-warning)' : 'var(--color-accent)' }}
-                />
+                <ThinkingLevelIcon level={levelSpec.id} />
                 {t(levelSpec.labelKey)}
               </Badge>
               <ChevronDown size={12} strokeWidth={1.5} className="flex-shrink-0 opacity-60" />
