@@ -37,30 +37,32 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     return this.lastStreamText
   }
 
+  /** JSON 模式默认温度：结构化输出需要确定性 */
+  private static readonly STRUCTURED_JSON_TEMPERATURE = 0.3
+
+  /**
+   * 结构化任务温度表（降幻觉）：审稿/提取/分类等低温保真。
+   * 创作类 purpose（draft_chapter / first_draft / refine_chapter /
+   * blueprint_gen / architecture_gen / config_gen）刻意不在表内，
+   * 未命中时返回 undefined，交由 llm-store 注入全局思考等级温度。
+   */
+  private static readonly STRUCTURED_TEMPERATURE: Partial<Record<CallPurpose, number>> = {
+    review_chapter: 0.2,
+    consistency_check: 0.2,
+    mutual_eval: 0.2,
+    style_analysis: 0.3,
+    character_extract: 0.3,
+    extract_json: 0.3,
+    summarize: 0.3,
+    classify: 0.1,
+  }
+
   /** 获取 LLM 大模型连接代理（支持取消 + Prompt 缓存）
    *
    * 选模（产品决策「路由优先，默认模型兜底」）：
    * - 传 purpose → getModelForPurpose(purpose)：用户配置了对应层路由则用路由模型
    * - 不传 purpose → 走 standard 层（default 用途）；路由未配置 → 用户默认模型
    */
-  /**
-   * 温度分派表（H 级降幻觉）：创作类高温探索、审稿/提取低温保真。
-   * 显式传 temperature 时优先；未传时按 purpose 分派；default 走模型默认。
-   */
-  private static readonly PURPOSE_TEMPERATURE: Partial<Record<CallPurpose, number>> = {
-    draft_chapter: 0.9,
-    first_draft: 0.9,
-    refine_chapter: 0.6,
-    review_chapter: 0.2,
-    style_analysis: 0.3,
-    consistency_check: 0.2,
-    extract_json: 0.3,
-    blueprint_gen: 0.4,
-    architecture_gen: 0.4,
-    config_gen: 0.4,
-    summarize: 0.3,
-  }
-
   protected async callLLM(
     prompt: string,
     systemPrompt: string,
@@ -77,10 +79,12 @@ export abstract class BaseWorkflowCommand<TResult = string> {
     const model = llmStore.models.find(m => m.id === modelId)
     const startTime = Date.now()
 
-    // 温度：显式 > purpose 分派 > 模型默认（undefined 透传）
+    // 温度：显式 > JSON 模式 0.3 > 结构化 purpose 表 > undefined（交给 llm-store 注入全局档位）
     const temperature = options?.temperature
-      ?? BaseWorkflowCommand.PURPOSE_TEMPERATURE[options?.purpose ?? 'default']
-      ?? undefined
+      ?? (options?.responseFormat?.type === 'json_object'
+        ? BaseWorkflowCommand.STRUCTURED_JSON_TEMPERATURE
+        : undefined)
+      ?? BaseWorkflowCommand.STRUCTURED_TEMPERATURE[options?.purpose ?? 'default']
 
     // LLM 提取日志流：发起调用（debug 级，开发环境全量可见）
     renderLog('debug', 'LLM', t('log.render.llmCallStart')
