@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { t } from '../shared/locale'
 import { useLLMStore } from './llm-store'
+import { useThinkingStore } from './thinking-store'
+import { thinkingLevelSpec } from '../shared/thinking-level'
 import { agentModeToTier } from '../services/llm/model-router'
 import { buildAgentSystemPromptAsync } from '../services/agent/context-builder'
 import { runAgentLoop, type ToolCallInfo, type LLMMessage, type AgentEngineDeps } from '../services/agent/agent-engine'
@@ -97,8 +99,12 @@ export interface AgentConversation {
   messages: AgentMessage[]
   createdAt: number
   updatedAt: number
-  /** 当前会话使用的模式 */
-  mode: AgentMode
+  /**
+   * 会话创建时的模式快照——**仅归档兼容**（旧 archive 仍带此字段），
+   * 运行时不再读取：路由与 system prompt 由全局思考等级决定。
+   * @deprecated 待旧归档彻底淘汰后移除
+   */
+  mode?: AgentMode
   /** 当前会话使用的模型 ID（null 表示使用默认） */
   modelId: string | null
   /** 角色试演：绑定的角色名（Agent 以该角色身份回复；无此字段为普通会话） */
@@ -784,12 +790,13 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       const mySeq = ++generationSeq
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
-      // A 档动态策略：strategy='dynamic' 时按对话档位（用户可见的投入旋钮）决定路由层；
+      // A 档动态策略：strategy='dynamic' 时按全局思考等级（用户可见的投入旋钮）决定路由层；
       // 静态（默认）保持现状 —— 直接取默认模型、不走路由（Agent 主对话此前完全绕过路由器）
+      const agentMode = thinkingLevelSpec(useThinkingStore.getState().level).agentMode
       const routeStrategy = llmStore.modelRoutes?.strategy ?? 'static'
       const modelId = currentConv.modelId
         ?? (routeStrategy === 'dynamic'
-          ? llmStore.getModelForTier(agentModeToTier(currentConv.mode))
+          ? llmStore.getModelForTier(agentModeToTier(agentMode))
           : llmStore.defaultModelId)
         ?? undefined
 
@@ -808,7 +815,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
       // 构建系统提示词（含项目上下文 + Tool 列表 + 记忆分层；manual 硬门控需要本轮用户消息，
       // 只影响本轮 system 段、不进会话历史，故后续轮次不继承）
-      let systemPrompt = await buildAgentSystemPromptAsync(currentConv.mode, content.trim(), {
+      let systemPrompt = await buildAgentSystemPromptAsync(agentMode, content.trim(), {
         toolBudgetTokens: contextPolicy.toolBudgetTokens,
         m1BudgetTokens: contextPolicy.m1BudgetTokens,
         l1BudgetTokens: contextPolicy.l1BudgetTokens,

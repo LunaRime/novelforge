@@ -4,6 +4,8 @@ import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
+import { useThinkingStore } from '../../../stores/thinking-store'
+import { thinkingLevelSpec } from '../../../shared/thinking-level'
 import AgentMessage from './AgentMessage'
 import AgentInputBox from './AgentInputBox'
 import AgentMemoryView from './AgentMemoryView'
@@ -19,7 +21,6 @@ import { computeContextUsage, type ContextSegment } from '../../../services/agen
 import { buildAgentSystemSegments, buildAgentSystemSegmentsAsync } from '../../../services/agent/context-builder'
 import { resolveContextPolicyFor } from '../../../services/agent/context-policy'
 import { ipc } from '../../../services/ipc-client'
-import type { AgentMode } from '../../../stores/agent-store'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
@@ -180,7 +181,7 @@ function EmptyState() {
 /**
  * 预算条记忆段数据源（F3）：与真实注入共用 buildAgentSystemSegmentsAsync——
  * 注入实际含 M1+M2（~1.1k tokens），此前预算条走同步 M1-only（~300）显示与实况不符。
- * 竞态/卸载安全：cancelled 标志丢弃过期响应；loaded 携带 key（会话/模式/项目），
+ * 竞态/卸载安全：cancelled 标志丢弃过期响应；loaded 携带 key（会话/思考等级/项目），
  * 过期响应即使已 setState 也在渲染时按 key 丢弃——避免 effect 内同步 setState 级联渲染。
  */
 type AsyncSegments = {
@@ -193,15 +194,17 @@ type AsyncSegments = {
   segments: ContextSegment[]
 }
 
-function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode; modelId?: string | null } | null): AsyncSegments | null {
+function useAsyncSegments(activeConv: { id?: string; modelId?: string | null } | null): AsyncSegments | null {
   const [loaded, setLoaded] = useState<{ key: string; segments: AsyncSegments } | null>(null)
   const projectPath = useProjectStore.getState().currentProject?.path ?? null
   const convId = activeConv?.id ?? ''
-  const mode = activeConv?.mode ?? 'quick'
+  // 运行时口径：思考等级（全局）→ Agent 模式；会话自身的 mode 不再参与（仅归档兼容）
+  const level = useThinkingStore(s => s.level)
+  const mode = thinkingLevelSpec(level).agentMode
   // W1 批 2：面板预览与真实发送**同口径**（按模型档位取段预算）；否则强档面板显示 M1 300、
   // 实发却是 400（弱档反之），用户看到的分段数字会与真实请求不符
   const modelId = activeConv?.modelId ?? useLLMStore.getState().defaultModelId ?? undefined
-  const key = `${convId}|${mode}|${modelId ?? ''}|${projectPath}`
+  const key = `${convId}|${level}|${modelId ?? ''}|${projectPath}`
 
   useEffect(() => {
     if (!convId) return
@@ -216,7 +219,7 @@ function useAsyncSegments(activeConv: { id?: string; mode?: AgentMode; modelId?:
       .then(segments => { if (!cancelled) setLoaded({ key, segments }) })
       .catch(() => { /* M2 读盘失败降级：保持同步兜底 */ })
     return () => { cancelled = true }
-  }, [convId, mode, modelId, projectPath, key])
+  }, [convId, level, mode, modelId, projectPath, key])
 
   return loaded && loaded.key === key ? loaded.segments : null
 }
@@ -326,20 +329,22 @@ function ActiveConversation() {
   // 面板预算/模型信息改响应式订阅（供 syncSegments useMemo 作稳定依赖；此前 getState() 靠频繁重渲染兜底）
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   const projectPath = useProjectStore(s => s.currentProject?.path ?? null)
-  // 同步分段兜底（P0 近似）：mode/modelId 稳定时复用上次结果——buildAgentSystemSegments 含
+  // 全局思考等级：同步兜底与异步分段同源（会话 mode 不再参与运行时）
+  const thinkingLevel = useThinkingStore(s => s.level)
+  // 同步分段兜底（P0 近似）：档位/modelId 稳定时复用上次结果——buildAgentSystemSegments 含
   // L0 项目上下文 + L1 编辑上下文 + 工具提示词截断（estimateTokens 编码），流式每 50ms 重算开销大
   const syncSegments = useMemo(() => {
     if (!activeConv) return null
     const mid = activeConv.modelId ?? defaultModelId
     const policy = resolveContextPolicyFor(mid ?? undefined)
-    return buildAgentSystemSegments(activeConv.mode, {
+    return buildAgentSystemSegments(thinkingLevelSpec(thinkingLevel).agentMode, {
       toolBudgetTokens: policy.toolBudgetTokens,
       m1BudgetTokens: policy.m1BudgetTokens,
       l1BudgetTokens: policy.l1BudgetTokens,
       autoRecall: policy.autoRecall,
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeConv?.mode, activeConv?.modelId, defaultModelId, projectPath])
+  }, [thinkingLevel, activeConv?.modelId, defaultModelId, projectPath])
 
   if (!activeConv) return null
 

@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAgentStore } from './agent-store'
 import { useProjectStore } from './project-store'
 import { useLLMStore } from './llm-store'
+import { useThinkingStore } from './thinking-store'
 import { useCharacterStore } from './character-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
@@ -107,6 +108,8 @@ beforeEach(() => {
   // 会被**前序用例**的调用满足（假通过）。全局 beforeEach 清一次即可（用例内断言都在动作之后）。
   mockInvoke.mockClear()
   useAgentStore.setState({ conversations: [], activeConversationId: null })
+  // 全局思考等级随用例复位（默认档 High）——避免前序用例改档后污染路由断言
+  useThinkingStore.setState({ level: 'high' })
   // 项目快照 fixture：createConversation 读取 currentProject 写入 projectPath/projectName
   useProjectStore.setState({
     currentProject: {
@@ -680,6 +683,34 @@ describe('sendMessage 意图预路由', () => {
     } finally {
       useAgentStore.setState({ handleWritingIntent: original })
     }
+  })
+})
+
+describe('Agent 运行时使用全局思考等级', () => {
+  it('动态路由按全局思考等级选层', async () => {
+    // 前序 describe 用例可能留下非 none 的意图（跨用例 mock 不自动复位）——本用例走纯 ReAct 链路
+    vi.mocked(detectWritingIntent).mockReturnValue({ kind: 'none' })
+    useLLMStore.setState({
+      defaultModelId: 'test-model',
+      modelRoutes: { elite: [], standard: [], budget: [], strategy: 'dynamic' },
+    })
+    // 动态路由分支只在会话级 modelId 为空时进入（否则直接取会话模型）——
+    // 故显式清空 modelId，并把会话 mode 设为 quick：若运行时仍读会话 mode，会落 budget（RED 原因）；
+    // 全局档位 max 应落 elite。
+    const conv = useAgentStore.getState().createConversation({ title: 'T' })
+    useAgentStore.setState(state => ({
+      conversations: state.conversations.map(c =>
+        c.id === conv.id ? { ...c, modelId: null, mode: 'quick' as const } : c
+      ),
+      generating: false,
+    }))
+    const tierSpy = vi.spyOn(useLLMStore.getState(), 'getModelForTier').mockReturnValue('test-model')
+    useThinkingStore.setState({ level: 'max' })
+
+    await useAgentStore.getState().sendMessage('你好')
+
+    expect(tierSpy).toHaveBeenCalledWith('elite')
+    tierSpy.mockRestore()
   })
 })
 
