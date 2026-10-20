@@ -51,6 +51,23 @@ type UpdateStatus = 'idle' | 'checking' | 'available' | 'downloading' | 'downloa
 let currentStatus: UpdateStatus = 'idle'
 let currentInfo: UpdateInfo | null = null
 let currentError: string | null = null
+let downloadInProgress = false
+
+/** 仅测试用：重置下载守卫 */
+export function resetDownloadStateForTest(): void {
+  downloadInProgress = false
+}
+
+/**
+ * 启动下载并立即返回是否启动成功。
+ * 并发调用只允许一个下载任务；完成/失败/进度一律走事件推送。
+ */
+export function beginDownloadOnce(start: () => Promise<void>): boolean {
+  if (downloadInProgress) return false
+  downloadInProgress = true
+  void start().finally(() => { downloadInProgress = false })
+  return true
+}
 
 function sendStatusToRenderer(status: UpdateStatus, info?: UpdateInfo | null, error?: string) {
   currentStatus = status
@@ -305,17 +322,20 @@ export function registerUpdateController(): void {
   guardedHandle('update:check', async () => runCheck())
 
   guardedHandle('update:download', async () => {
-    if (!currentInfo) return { success: false, error: t('status.noUpdateInfo') }
-    try {
-      sendStatusToRenderer('downloading', currentInfo)
-      const installerPath = await downloadInstaller(currentInfo, sendProgressToRenderer)
-      sendStatusToRenderer('downloaded', currentInfo)
-      return { success: true, installerPath }
-    } catch (err) {
-      const msg = safeErrorMessage(err)
-      sendStatusToRenderer('error', null, msg)
-      return { success: false, error: msg }
-    }
+    const info = currentInfo
+    if (!info) return { success: false, error: t('status.noUpdateInfo') }
+    const started = beginDownloadOnce(async () => {
+      sendStatusToRenderer('downloading', info)
+      try {
+        await downloadInstaller(info, sendProgressToRenderer)
+        sendStatusToRenderer('downloaded', info)
+      } catch (err) {
+        const msg = safeErrorMessage(err)
+        sendStatusToRenderer('error', null, msg)
+      }
+    })
+    if (!started) return { success: false, error: 'already-downloading' }
+    return { success: true }
   })
 
   guardedHandle('update:install', () => {

@@ -103,7 +103,10 @@ export const useUpdateStore = create<UpdateState>((set, get) => ({
     try {
       const result = await ipc.invoke('update:download')
       set({ loading: false })
-      if (result.success) set({ status: 'downloaded' })
+      // 启动即返回：状态完全由 update:status-changed 事件驱动
+      if (!result.success && result.error !== 'already-downloading') {
+        set({ error: result.error ?? null, status: 'error' })
+      }
       return result.success
     } catch (err) {
       set({ loading: false, error: String(err), status: 'error' })
