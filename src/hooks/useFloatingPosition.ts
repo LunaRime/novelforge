@@ -11,7 +11,7 @@ export interface FloatingPositionOptions {
 
 /**
  * 让浮层**浮在整个程序窗口之上**：返回一个绑定到菜单元素的 ref，挂载/打开时用锚点位置算出
- * `position: fixed` 坐标并夹在视口内。
+ * `position: fixed` 坐标并夹在视口内；窗口 resize 与**浮层内容尺寸变化**（ResizeObserver）时重算。
  *
  * 为什么用 JS 而不是 CSS 锚点定位（`position-anchor` + `anchor()`）：
  * 后者在「锚点是容器」时**不解析** —— 实测锚点为使用者的祖先、或锚点在 DOM 中排在使用者之后时，
@@ -38,6 +38,8 @@ export function useFloatingPosition<T extends HTMLElement>(
 ): RefCallback<T> {
   const { placement = 'above', align = 'start', offset = 6 } = options
   const elRef = useRef<T | null>(null)
+  /** 内容尺寸观察器：菜单展开/收起导致高度变化时重新定位（否则会停在旧坐标，可能越出视口） */
+  const resizeObserverRef = useRef<ResizeObserver | null>(null)
 
   const position = useCallback(() => {
     const el = elRef.current
@@ -80,7 +82,19 @@ export function useFloatingPosition<T extends HTMLElement>(
    */
   const setRef = useCallback<RefCallback<T>>((node) => {
     elRef.current = node
-    if (node) position()
+    // 节点换了（含卸载）就重建观察器：旧节点可能已被移除，继续观察只会让浮层停在新节点之外
+    resizeObserverRef.current?.disconnect()
+    resizeObserverRef.current = null
+    if (!node) return
+
+    position()
+    // 内容尺寸变化（如 + 菜单展开工作流命令列表）时重新定位：
+    // 否则浮层会保持展开前的坐标，向上展开的部分可能顶出视口。
+    if (typeof ResizeObserver !== 'undefined') {
+      const ro = new ResizeObserver(() => position())
+      ro.observe(node)
+      resizeObserverRef.current = ro
+    }
   }, [position])
 
   useLayoutEffect(() => {

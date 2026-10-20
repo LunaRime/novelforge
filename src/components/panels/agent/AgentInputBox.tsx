@@ -7,7 +7,7 @@ import {
   FileText,
   AtSign,
   Workflow,
-  Slash,
+  Sparkles,
   BrainCircuit,
   Zap,
   Gauge,
@@ -26,7 +26,11 @@ import SlashCommandMenu from './SlashCommandMenu'
 import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
-import type { SlashCommand, MentionTarget } from '../../../services/agent/intent-router'
+import {
+  getAllSlashCommands,
+  type SlashCommand,
+  type MentionTarget,
+} from '../../../services/agent/intent-router'
 
 /** 输入框最大高度（px），超出后框内滚动 */
 const MAX_HEIGHT = 200
@@ -102,6 +106,8 @@ export default function AgentInputBox() {
   const [showModelMenu, setShowModelMenu] = useState(false)
   // 可视化添加文件选择器（+ 菜单 → 添加文件）
   const [showFilePicker, setShowFilePicker] = useState(false)
+  // + 菜单 → 工作流命令展开态（分组列出内置命令 / Skill）
+  const [showCommands, setShowCommands] = useState(false)
 
   // / 命令和 @ 提及菜单状态
   const [showSlashMenu, setShowSlashMenu] = useState(false)
@@ -214,12 +220,19 @@ export default function AgentInputBox() {
   }, [inputText, adjustHeight])
 
   // 点击外部关闭下拉（用 useOutsideClick 统一管理三个 ref）
-  useOutsideClick(contextRef, () => setShowContextMenu(false), showContextMenu)
+  // 关闭 + 菜单时同时收起工作流命令展开态——下次打开从折叠状态开始
+  useOutsideClick(contextRef, () => {
+    setShowContextMenu(false)
+    setShowCommands(false)
+  }, showContextMenu)
   useOutsideClick(modeRef, () => setShowModeMenu(false), showModeMenu)
   useOutsideClick(modelRef, () => setShowModelMenu(false), showModelMenu)
   useOutsideClick(filePickerRef, () => setShowFilePicker(false), showFilePicker)
   // Esc 与点击外部成对：四个自绘浮层此前只有后者（同应用内 Radix 系/右键菜单/气泡菜单都有 Esc）
-  useEscapeKey(() => setShowContextMenu(false), showContextMenu)
+  useEscapeKey(() => {
+    setShowContextMenu(false)
+    setShowCommands(false)
+  }, showContextMenu)
   useEscapeKey(() => setShowModeMenu(false), showModeMenu)
   useEscapeKey(() => setShowModelMenu(false), showModelMenu)
   useEscapeKey(() => setShowFilePicker(false), showFilePicker)
@@ -341,6 +354,7 @@ export default function AgentInputBox() {
                 setShowModeMenu(false)
                 setShowModelMenu(false)
                 setShowFilePicker(false)
+                setShowCommands(false)
                 setShowContextMenu(v => !v)
               }}
             >
@@ -352,7 +366,7 @@ export default function AgentInputBox() {
               <PopoverSurface
                 ref={contextMenuRef}
                 className="py-1"
-                style={{ width: 180 }}
+                style={{ width: 240, maxWidth: 'calc(100vw - 32px)' }}
               >
                 <div className="text-micro px-3 pb-1 pt-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('tip.addContext')}
@@ -360,10 +374,12 @@ export default function AgentInputBox() {
                 {/* 可视化添加文件：打开文件选择器，选择后以 @路径 追加到输入框 */}
                 <MenuItem icon={<FileText size={13} />} label={t('agent.addFile')} onClick={() => {
                   setShowContextMenu(false)
+                  setShowCommands(false)
                   setShowFilePicker(true)
                 }} />
                 <MenuItem icon={<AtSign size={13} />} label={t('agent.atMention')} onClick={() => {
                   setShowContextMenu(false)
+                  setShowCommands(false)
                   // 插入 @ 字符并触发 MentionMenu（handleInputChange 与 setInputText 用同源值，
                   // 避免闭包旧值在连续点击时丢字符）
                   const next = inputText + '@'
@@ -371,36 +387,69 @@ export default function AgentInputBox() {
                   handleInputChange(next)
                   textareaRef.current?.focus()
                 }} />
-                <MenuItem icon={<Workflow size={13} />} label={t('agent.workflowCmd')} onClick={() => {
-                  setShowContextMenu(false)
-                  // 插入 / 字符并触发 SlashCommandMenu
-                  const next = '/'
-                  setInputText(next)
-                  handleInputChange(next)
-                  textareaRef.current?.focus()
-                }} />
+                {/* 工作流命令：原地展开（不关闭菜单），列表按来源分组，内容高度变化由
+                    useFloatingPosition 的 ResizeObserver 重新定位 */}
+                <MenuItem
+                  icon={<Workflow size={13} />}
+                  label={t('agent.workflowCmd')}
+                  trailing={
+                    <ChevronDown
+                      size={12}
+                      strokeWidth={1.5}
+                      className="flex-shrink-0 transition-transform duration-150 motion-reduce:transition-none"
+                      style={{
+                        color: 'var(--color-text-muted)',
+                        transform: showCommands ? 'rotate(180deg)' : undefined,
+                      }}
+                    />
+                  }
+                  onClick={() => setShowCommands(v => !v)}
+                />
+                {showCommands && (() => {
+                  const commands = getAllSlashCommands()
+                  const builtin = commands.filter(c => c.source === 'builtin_command')
+                  const skills = commands.filter(c => c.source === 'skill')
+                  const selectCommand = (cmd: SlashCommand) => {
+                    setShowContextMenu(false)
+                    setShowCommands(false)
+                    handleSlashSelect(cmd)
+                  }
+                  return (
+                    <div
+                      style={{
+                        maxHeight: 240,
+                        overflowY: 'auto',
+                        marginTop: 4,
+                        paddingTop: 4,
+                        borderTop: '1px solid var(--color-border)',
+                      }}
+                    >
+                      {builtin.length > 0 && (
+                        <>
+                          <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+                            {t('agent.commandsBuiltin')}
+                          </div>
+                          {builtin.map(cmd => (
+                            <CommandMenuItem key={cmd.name} command={cmd} onSelect={selectCommand} />
+                          ))}
+                        </>
+                      )}
+                      {skills.length > 0 && (
+                        <>
+                          <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+                            {t('agent.commandsSkills')}
+                          </div>
+                          {skills.map(cmd => (
+                            <CommandMenuItem key={cmd.name} command={cmd} onSelect={selectCommand} />
+                          ))}
+                        </>
+                      )}
+                    </div>
+                  )
+                })()}
               </PopoverSurface>
             )}
           </div>
-
-          {/* / @ 能力入口（10-18 评审：核心能力不再只藏在 placeholder 灰字与 + 菜单里，
-              直接暴露两个常驻图标按钮 —— 点击即插入触发字符并弹出对应菜单） */}
-          <ToolbarIconBtn title={t('agent.atMention')} onClick={() => {
-            const next = inputText + '@'
-            setInputText(next)
-            handleInputChange(next)
-            textareaRef.current?.focus()
-          }}>
-            <AtSign size={14} />
-          </ToolbarIconBtn>
-          <ToolbarIconBtn title={t('agent.workflowCmd')} onClick={() => {
-            const next = '/'
-            setInputText(next)
-            handleInputChange(next)
-            textareaRef.current?.focus()
-          }}>
-            <Slash size={14} />
-          </ToolbarIconBtn>
 
           {/* 思考等级选择（图标式：档位图标 + 等级名 + 下拉；弹出六档拉条面板）
               flex-shrink-0：档位名偏长（俄语「Глубоко」约为「深度」的 3 倍宽），不加会被
@@ -684,6 +733,45 @@ export default function AgentInputBox() {
 }
 
 // ===== 子组件 =====
+
+/** `+` 菜单里的工作流命令行：`/name` + 显示名 + 描述（点击走既有的 handleSlashSelect 语义） */
+function CommandMenuItem({
+  command,
+  onSelect,
+}: {
+  command: SlashCommand
+  onSelect: (command: SlashCommand) => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect(command)}
+      className="w-full flex items-center gap-2 px-3 py-1.5 text-left text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+      style={{ color: 'var(--color-text)', backgroundColor: 'transparent' }}
+      onMouseEnter={e => {
+        e.currentTarget.style.backgroundColor = 'var(--color-hover)'
+      }}
+      onMouseLeave={e => {
+        e.currentTarget.style.backgroundColor = 'transparent'
+      }}
+    >
+      <span className="flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
+        {command.source === 'skill' ? <Sparkles size={13} /> : <Zap size={13} />}
+      </span>
+      <span className="flex-1 min-w-0">
+        <span className="flex items-baseline gap-1.5 min-w-0">
+          <span className="font-medium flex-shrink-0">/{command.name}</span>
+          <span className="text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>
+            {command.displayName}
+          </span>
+        </span>
+        <span className="block text-micro truncate" style={{ color: 'var(--color-text-muted)' }}>
+          {command.description}
+        </span>
+      </span>
+    </button>
+  )
+}
 
 /** 工具栏图标按钮 */
 function ToolbarIconBtn({
