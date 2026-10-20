@@ -5,8 +5,9 @@
  * 弹层朝上展开（状态栏在窗口底部），分区顺序即优先级：
  *
  *   1. 正在执行 —— `workflow-store.activeRuns` 实时派生，**永远置顶、不可移除、不计未读**
- *   2. 应用更新 —— `update-store`（可用 / 下载中 / 已下载 / 检查失败）
- *   3. 任务结果 —— `workflow-store.history` 的完成 / 失败，可「查看输出」
+ *   2. 任务结果 —— `workflow-store.history` 的完成 / 失败，可「查看输出」
+ *
+ * 应用更新不进入通知中心（2026-10-20）：状态栏 `StatusBarUpdate` 是唯一操作面。
  *
  * 条目派生全部在 `stores/notice-store`（派生式，不在业务代码里 push 通知）；
  * 本组件只做三件事：订阅来源 store → 触发 `sync()` → 渲染。文案一律走 `t()`。
@@ -16,13 +17,12 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import {
-  AlertCircle, Bell, Check, CheckCircle2, Download, ExternalLink, Loader2, RotateCw, X, XCircle,
+  Bell, Check, CheckCircle2, X, XCircle,
 } from 'lucide-react'
 import {
   countUnread, UNREAD_BADGE_MAX, useNoticeStore,
-  type ResultNotice, type RunningNotice, type RunningNoticeStatus, type UpdateNotice,
+  type ResultNotice, type RunningNotice, type RunningNoticeStatus,
 } from '../../stores/notice-store'
-import { useUpdateStore } from '../../stores/update-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -57,17 +57,12 @@ export default function NotificationCenter() {
   useOutsideClick(anchorRef, () => setOpen(false), open)
   useEscapeKey(() => setOpen(false), open)
 
-  // 订阅两个来源 store：任一变化就重派生。sync() 幂等且无变化不写 state，
+  // 订阅工作流 store：任一变化就重派生。sync() 幂等且无变化不写 state，
   // 故工作流每写一条日志都触发它也不会造成多余渲染。
   useEffect(() => {
     const sync = useNoticeStore.getState().sync
     sync()
-    const unsubWorkflow = useWorkflowStore.subscribe(sync)
-    const unsubUpdate = useUpdateStore.subscribe(sync)
-    return () => {
-      unsubWorkflow()
-      unsubUpdate()
-    }
+    return useWorkflowStore.subscribe(sync)
   }, [])
 
   const label = unread > 0 ? t('notice.bell').replace('{n}', String(unread)) : t('notice.bellNone')
@@ -139,7 +134,6 @@ function NoticePanel({ onClose }: { onClose: () => void }) {
   const unread = countUnread(items)
 
   const running = items.filter((i): i is RunningNotice => i.kind === 'running')
-  const updates = items.filter((i): i is UpdateNotice => i.kind === 'update')
   const results = items.filter((i): i is ResultNotice => i.kind === 'result')
 
   return (
@@ -172,11 +166,6 @@ function NoticePanel({ onClose }: { onClose: () => void }) {
             {running.length > 0 && (
               <Section title={t('notice.runningSection')}>
                 {running.map((item) => <RunningRow key={item.id} item={item} onNavigate={onClose} />)}
-              </Section>
-            )}
-            {updates.length > 0 && (
-              <Section title={t('notice.updateSection')}>
-                {updates.map((item) => <UpdateRow key={item.id} item={item} />)}
               </Section>
             )}
             {results.length > 0 && (
@@ -345,86 +334,6 @@ function RunningRow({ item, onNavigate }: { item: RunningNotice; onNavigate: () 
         />
       </div>
       <ProgressBar className="mt-1" value={item.percent} height={2} />
-    </NoticeRow>
-  )
-}
-
-/** 应用更新：可用（下载）/ 下载中（进度）/ 已下载（重启安装）/ 检查失败 */
-function UpdateRow({ item }: { item: UpdateNotice }) {
-  const { t } = useTranslation()
-  const downloadUpdate = useUpdateStore((s) => s.downloadUpdate)
-  const installUpdate = useUpdateStore((s) => s.installUpdate)
-  const openReleasesPage = useUpdateStore((s) => s.openReleasesPage)
-
-  const version = item.version ?? ''
-  const title = item.variant === 'available'
-    ? t('notice.updateAvailable').replace('{version}', version)
-    : item.variant === 'downloaded'
-      ? t('notice.updateDownloaded').replace('{version}', version)
-      : t('notice.updateFailed')
-
-  return (
-    <NoticeRow unread={item.unread} danger={item.variant === 'error'}>
-      <div className="flex items-start gap-1.5">
-        <span
-          className="flex-shrink-0"
-          style={{
-            marginTop: 1,
-            color: item.variant === 'error'
-              ? 'var(--color-error)'
-              : item.variant === 'downloaded'
-                ? 'var(--color-success)'
-                : 'var(--color-accent)',
-          }}
-        >
-          {item.variant === 'error'
-            ? <AlertCircle size={12} />
-            : item.variant === 'downloaded'
-              ? <CheckCircle2 size={12} />
-              : <Download size={12} />}
-        </span>
-        <span className="flex-1 text-xs" style={{ color: 'var(--color-text)' }}>{title}</span>
-        <RowActions id={item.id} unread={item.unread} />
-      </div>
-
-      {item.variant === 'error' && item.error && (
-        <div className="mt-0.5 text-2xs break-all" style={{ color: 'var(--color-text-muted)' }}>{item.error}</div>
-      )}
-
-      {item.variant === 'available' && item.downloading && (
-        <div className="mt-1 flex items-center gap-2">
-          <span className="flex items-center gap-1 flex-shrink-0 text-2xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-            <Loader2 size={11} className="animate-spin" />
-            {t('notice.downloading').replace('{percent}', String(item.percent ?? 0))}
-          </span>
-          <ProgressBar value={item.percent ?? 0} height={2} />
-        </div>
-      )}
-
-      {!(item.variant === 'available' && item.downloading) && (
-        <div className="mt-1 flex items-center gap-1">
-          {item.variant === 'available' && (
-            <TextAction
-              label={t('notice.download')}
-              icon={<Download size={11} />}
-              onClick={() => void downloadUpdate()}
-            />
-          )}
-          {item.variant === 'downloaded' && (
-            <TextAction
-              label={t('notice.restartInstall')}
-              icon={<RotateCw size={11} />}
-              onClick={() => void installUpdate()}
-            />
-          )}
-          <TextAction
-            label={t('notice.openRelease')}
-            icon={<ExternalLink size={11} />}
-            tone="muted"
-            onClick={openReleasesPage}
-          />
-        </div>
-      )}
     </NoticeRow>
   )
 }

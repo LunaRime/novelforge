@@ -2,23 +2,24 @@
  * 通知中心 Store（状态栏「消息收纳」）—— 2026-10 六项 UI 改进 · 第 1 项
  *
  * **设计口径：派生式，不 push。**
- * 不在 workflow / update 各处埋点 `pushNotice()` —— 那样每加一个通知源就要改业务代码，
- * 且状态与 UI 会两头漂移。这里只暴露 `sync()`：从 `update-store` / `workflow-store` 的
+ * 不在 workflow 各处埋点 `pushNotice()` —— 那样每加一个通知源就要改业务代码，
+ * 且状态与 UI 会两头漂移。这里只暴露 `sync()`：从 `workflow-store` 的
  * **当前状态**重新派生条目列表，按稳定 id 去重。谁变了谁触发 sync（见 `NotificationCenter`），
  * 派生逻辑本身无状态、可反复调用（幂等；结果无变化时**不写 state**，避免每帧日志都重渲染）。
  *
  * 条目 id 约定（已读 / 移除集合以 id 为键，跨重启仍能对上）：
  * - `run:<runId>:running`   → 运行中（activeRuns 实时派生）**永远置顶、不可移除、不计未读**
  * - `run:<runId>:completed` / `run:<runId>:failed` → 任务结果（history）
- * - `update:available:<version>` → 更新可用（下载中沿用同一 id，避免「点了下载条目就消失」）
- * - `update:downloaded:<version>` / `update:error`
+ *
+ * 应用更新不再进入通知中心（2026-10-20）：状态栏更新段是唯一操作面，
+ * 避免出现第二套下载/重启入口。
  *
  * 已读 + 已移除集合持久化到 localStorage `vela-notice`（读写都 try/catch：隐私模式 / 配额
  * 满 / JSON 损坏都只是「回到全未读」，绝不让一条坏数据把界面打白屏）。集合在 `sync()` 时
  * 按当前候选 id **剪枝**，否则跑几百个任务后这两个数组会无限增长。
  *
  * **首次运行 seed**：`vela-notice` 键**不存在**（真正首次运行）时，`sync()` 会先把
- * **本次会话之前就存在**的派生条目（任务结果 + 更新条目，不含运行中条目）一次性记为已读并落盘 ——
+ * **本次会话之前就存在**的派生条目（任务结果，不含运行中条目）一次性记为已读并落盘 ——
  * 否则装完本轮改动第一次打开会凭空冒出一串未读角标。键一旦写下（哪怕内容是空数组）就不再 seed，
  * 故之后新产生的条目照常未读。
  * 两个条件各管一段，缺一不可：**「键是否存在」**是持久化判据（跨重启也成立，且用户点过
@@ -26,7 +27,6 @@
  * `seeded` 则保证一次会话内只判定一次（localStorage 不可用时 getItem 每次抛错，没有它就会反复 seed）。
  */
 import { create } from 'zustand'
-import { useUpdateStore } from './update-store'
 import { useWorkflowStore } from './workflow-store'
 
 /** 已读 / 已移除集合的持久化 key */
@@ -55,22 +55,6 @@ export interface RunningNotice {
   percent: number
 }
 
-/** 更新条目：可用 / 已下载 / 检查失败 */
-export interface UpdateNotice {
-  id: string
-  kind: 'update'
-  pinned: false
-  unread: boolean
-  variant: 'available' | 'downloaded' | 'error'
-  version: string | null
-  /** `variant === 'available'` 且正在下载（同一 id 存活，故条目不闪断） */
-  downloading: boolean
-  /** 下载百分比（仅 downloading 时非 null） */
-  percent: number | null
-  /** 检查失败原因（仅 variant === 'error'） */
-  error: string | null
-}
-
 /** 任务结果条目：完成 / 失败的工作流（workflow-store.history） */
 export interface ResultNotice {
   id: string
@@ -82,7 +66,7 @@ export interface ResultNotice {
   variant: 'completed' | 'failed'
 }
 
-export type NoticeItem = RunningNotice | UpdateNotice | ResultNotice
+export type NoticeItem = RunningNotice | ResultNotice
 
 /** 未读条目数 —— 运行中条目不计未读（它没有「已读」语义） */
 export function countUnread(items: NoticeItem[]): number {
@@ -181,62 +165,6 @@ function deriveRunning(): RunningNotice[] {
   return out
 }
 
-function deriveUpdate(readIds: Set<string>, dismissedIds: Set<string>): UpdateNotice[] {
-  const { status, updateInfo, downloadProgress, error } = useUpdateStore.getState()
-  const version = updateInfo?.version ?? null
-
-  /** 更新条目与结果条目共用的未读口径：没被读过、也没被移除过 */
-  const unreadOf = (id: string) => !readIds.has(id) && !dismissedIds.has(id)
-
-  // 下载中沿用 `available` 的 id：否则用户一点「下载」条目就消失，进度无处可看
-  if (status === 'available' || status === 'downloading') {
-    const id = `update:available:${version ?? 'unknown'}`
-    return [{
-      id,
-      kind: 'update',
-      pinned: false,
-      unread: unreadOf(id),
-      variant: 'available',
-      version,
-      downloading: status === 'downloading',
-      percent: status === 'downloading' ? Math.round(downloadProgress?.percent ?? 0) : null,
-      error: null,
-    }]
-  }
-
-  if (status === 'downloaded') {
-    const id = `update:downloaded:${version ?? 'unknown'}`
-    return [{
-      id,
-      kind: 'update',
-      pinned: false,
-      unread: unreadOf(id),
-      variant: 'downloaded',
-      version,
-      downloading: false,
-      percent: null,
-      error: null,
-    }]
-  }
-
-  if (status === 'error') {
-    const id = 'update:error'
-    return [{
-      id,
-      kind: 'update',
-      pinned: false,
-      unread: unreadOf(id),
-      variant: 'error',
-      version,
-      downloading: false,
-      percent: null,
-      error: error ?? null,
-    }]
-  }
-
-  return []
-}
-
 function deriveResults(readIds: Set<string>, dismissedIds: Set<string>): ResultNotice[] {
   const history = useWorkflowStore.getState().history
   const out: ResultNotice[] = []
@@ -260,7 +188,7 @@ function deriveResults(readIds: Set<string>, dismissedIds: Set<string>): ResultN
 }
 
 /**
- * 全量派生（分区顺序即优先级）：正在执行 → 应用更新 → 任务结果。
+ * 全量派生（分区顺序即优先级）：正在执行 → 任务结果。
  * 顺序稳定，不依赖 Map/Set 的迭代顺序之外的任何东西。
  */
 function derive(): Derived {
@@ -269,7 +197,6 @@ function derive(): Derived {
 
   const candidates = [
     ...deriveRunning(),
-    ...deriveUpdate(readIds, dismissedIds),
     ...deriveResults(readIds, dismissedIds),
   ]
 
@@ -295,9 +222,6 @@ function sameItems(a: NoticeItem[], b: NoticeItem[]): boolean {
     if (x.kind === 'running' && y.kind === 'running') {
       if (x.title !== y.title || x.status !== y.status || x.stepName !== y.stepName
         || x.stepDone !== y.stepDone || x.stepTotal !== y.stepTotal || x.percent !== y.percent) return false
-    } else if (x.kind === 'update' && y.kind === 'update') {
-      if (x.variant !== y.variant || x.version !== y.version || x.downloading !== y.downloading
-        || x.percent !== y.percent || x.error !== y.error) return false
     } else if (x.kind === 'result' && y.kind === 'result') {
       if (x.variant !== y.variant || x.title !== y.title) return false
     } else {
@@ -325,7 +249,7 @@ interface NoticeState {
   /** 「首次运行」判定是否已做过（进程内一次性；测试可重置以复现首次运行） */
   seeded: boolean
 
-  /** 从 update-store / workflow-store 当前状态重新派生（幂等；无变化不写 state） */
+  /** 从 workflow-store 当前状态重新派生（幂等；无变化不写 state） */
   sync: () => void
   /** 单条标记已读（运行中条目忽略） */
   markRead: (id: string) => void

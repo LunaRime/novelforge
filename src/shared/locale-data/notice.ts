@@ -24,7 +24,7 @@ export const noticeTexts = {
   'notice.resultSection': { 'zh-CN': '任务结果', 'en-US': 'Task results', 'ru-RU': 'Результаты задач' },
   'notice.updateSection': { 'zh-CN': '应用更新', 'en-US': 'App updates', 'ru-RU': 'Обновления' },
   'notice.empty': { 'zh-CN': '暂无通知', 'en-US': 'No notifications', 'ru-RU': 'Уведомлений нет' },
-  'notice.emptyHint': { 'zh-CN': '任务开始、结束与应用更新提醒会出现在这里', 'en-US': 'Running tasks, finished tasks and app updates show up here', 'ru-RU': 'Здесь появятся задачи, их результаты и обновления' },
+  'notice.emptyHint': { 'zh-CN': '任务开始与结束提醒会出现在这里', 'en-US': 'Running and finished tasks show up here', 'ru-RU': 'Здесь появятся запущенные и завершённые задачи' },
   'notice.markAllRead': { 'zh-CN': '全部已读', 'en-US': 'Mark all read', 'ru-RU': 'Прочитать все' },
   'notice.dismiss': { 'zh-CN': '移除该通知', 'en-US': 'Dismiss', 'ru-RU': 'Убрать' },
   'notice.markRead': { 'zh-CN': '标记已读', 'en-US': 'Mark as read', 'ru-RU': 'Отметить прочитанным' },

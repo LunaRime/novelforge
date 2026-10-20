@@ -203,13 +203,9 @@ describe('NotificationCenter — 入口与弹层', () => {
     const el = render()
     setSource(() => {
       useWorkflowStore.setState({ history: [makeRun('r-done')] })
-      useUpdateStore.setState({
-        status: 'available',
-        updateInfo: { version: '9.9.9', releaseDate: '2026-10-01', files: [] },
-      })
     })
 
-    expect(badge(el)?.textContent).toBe('2')
+    expect(badge(el)?.textContent).toBe('1')
 
     openPanel(el)
     const markAll = [...el.querySelectorAll('button')].find((b) => b.textContent?.includes('全部已读'))
@@ -228,29 +224,31 @@ describe('NotificationCenter — 入口与弹层', () => {
     expect(bell.getAttribute('title')).toBe(bell.getAttribute('aria-label'))
   })
 
-  it('分区顺序：正在执行 → 应用更新 → 任务结果', () => {
+  it('分区顺序：正在执行 → 任务结果', () => {
     const el = render()
     setSource(() => {
       useWorkflowStore.setState({ activeRuns: [RUNNING_RUN], history: [makeRun('r-done')] })
-      useUpdateStore.setState({
-        status: 'available',
-        updateInfo: { version: '9.9.9', releaseDate: '2026-10-01', files: [] },
-      })
     })
 
     openPanel(el)
 
     const text = el.textContent ?? ''
     const iRunning = text.indexOf('正在执行')
-    const iUpdate = text.indexOf('应用更新')
     const iResult = text.indexOf('任务结果')
     expect(iRunning).toBeGreaterThanOrEqual(0)
-    expect(iUpdate).toBeGreaterThan(iRunning)
-    expect(iResult).toBeGreaterThan(iUpdate)
-    // 运行中行 = 当前步骤 + 步骤计数；更新行带版本号
+    expect(iResult).toBeGreaterThan(iRunning)
+    // 运行中行 = 当前步骤 + 步骤计数
     expect(text).toContain('修稿')
     expect(text).toContain('1/2 步')
-    expect(text).toContain('9.9.9')
+  })
+
+  it('应用更新不再进入通知中心', () => {
+    setSource(() => {
+      useUpdateStore.setState({ status: 'available', updateInfo: { version: '9.9.9' } as never })
+    })
+    const el = render()
+    openPanel(el)
+    expect(el.textContent).not.toContain('应用更新')
   })
 
   it('弹层 Esc 可关（浮层四件套之一）', () => {

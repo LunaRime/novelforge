@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
-  ExternalLink, RefreshCw, Download, LogOut,
+  ExternalLink, RefreshCw, LogOut,
   BookMarked, Plug, BarChart3, Search,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -775,11 +775,9 @@ function AboutSection() {
   const { t } = useTranslation()
   const {
     status, updateInfo, error,
-    checkForUpdates, downloadUpdate, installUpdate,
-    openReleasesPage, triggerUninstall,
+    checkForUpdates, openReleasesPage, triggerUninstall,
   } = useUpdateStore()
   const [checking, setChecking] = useState(false)
-  const [downloading, setDownloading] = useState(false)
 
   const isChecking = checking || status === 'checking'
 
@@ -787,12 +785,6 @@ function AboutSection() {
     setChecking(true)
     await checkForUpdates()
     setChecking(false)
-  }
-
-  const handleDownload = async () => {
-    setDownloading(true)
-    await downloadUpdate()
-    setDownloading(false)
   }
 
   /** 退出应用 — confirm 二次确认（替代原 onMouseLeave 复位，键盘/触屏可操作） */
@@ -877,18 +869,12 @@ function AboutSection() {
             <p style={{ color: 'var(--color-accent)' }}>
               ✨ {t('update.newVersion')} v{updateInfo.version}
             </p>
-            <div className="flex items-center gap-2">
-              <Button size="sm" onClick={handleDownload} disabled={downloading}>
-                {downloading
-                  ? <Spinner size={13}  />
-                  : <Download size={13} />}
-                {downloading ? t('status.downloading') : t('update.installing')}
-              </Button>
-              <Button size="sm" variant="ghost" onClick={openReleasesPage}>
-                <ExternalLink size={13} />
-                {t('action.details')}
-              </Button>
-            </div>
+            {/* 下载/安装统一由状态栏执行，避免出现第二套入口 */}
+            <p style={{ color: 'var(--color-text-muted)' }}>{t('settings.updateInStatusBar')}</p>
+            <Button size="sm" variant="ghost" onClick={openReleasesPage}>
+              <ExternalLink size={13} />
+              {t('action.details')}
+            </Button>
           </div>
         )}
         {status === 'downloaded' && (
@@ -896,10 +882,7 @@ function AboutSection() {
             <p style={{ color: 'var(--color-success)' }}>
               ✅ {t('update.downloaded')}
             </p>
-            <Button size="sm" onClick={() => installUpdate()}>
-              <RefreshCw size={13} />
-              {t('action.restart')}
-            </Button>
+            <p style={{ color: 'var(--color-text-muted)' }}>{t('settings.updateInStatusBar')}</p>
           </div>
         )}
         {status === 'error' && (
