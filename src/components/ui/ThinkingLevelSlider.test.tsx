@@ -17,9 +17,14 @@ describe('ThinkingLevelSlider', () => {
     expect(container.querySelectorAll('[data-thinking-node]').length).toBe(4)
     const input = container.querySelector('input[type="range"]') as HTMLInputElement
     act(() => {
-      input.value = '4'
+      // 绕过 React 的 value tracker（直接赋值会被 tracker 同步，合成 onChange 被去重）
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, '4')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+      // range 释放时的原生 change 不应造成第二次回调
       input.dispatchEvent(new Event('change', { bubbles: true }))
     })
+    expect(onChange).toHaveBeenCalledTimes(1)
     expect(onChange).toHaveBeenCalledWith('max')
   })
 

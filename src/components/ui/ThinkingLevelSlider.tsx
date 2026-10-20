@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type ChangeEvent } from 'react'
+import type { ChangeEvent } from 'react'
 import { BrainCircuit, Flame, Gauge, Zap, type LucideIcon } from 'lucide-react'
 import { THINKING_LEVELS, thinkingLevelSpec, type ThinkingLevel } from '../../shared/thinking-level'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -65,55 +65,28 @@ export default function ThinkingLevelSlider({
   showDescription,
 }: ThinkingLevelSliderProps) {
   const { t } = useTranslation()
-  const inputRef = useRef<HTMLInputElement>(null)
   // 防御非法/旧档位值：回退默认档规格
   const activeSpec = thinkingLevelSpec(value)
   const activeIndex = Math.max(0, THINKING_LEVELS.findIndex(l => l.id === activeSpec.id))
   const isMax = activeSpec.id === 'max'
 
-  // 当前档位的最新值：外部（状态栏/磁盘加载）改动时同步；本组件发出后乐观更新。
-  // 原生 change（拖动结束）与 React 合成 onChange（拖动中的 input 事件）都会到达，
-  // 借此对同一档位去重，避免调用方收到两次相同回调。
-  const currentLevelRef = useRef<ThinkingLevel>(activeSpec.id)
-  useEffect(() => {
-    currentLevelRef.current = activeSpec.id
-  }, [activeSpec.id])
-
-  const emitLevel = useCallback((level: ThinkingLevel) => {
-    if (currentLevelRef.current === level) return
-    currentLevelRef.current = level
-    onChange(level)
-  }, [onChange])
-
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const index = Number(e.target.value) - 1
     const next = THINKING_LEVELS[index]
     if (!next) return
-    emitLevel(next.id)
+    onChange(next.id)
     applyVisual(e.currentTarget, index)
   }
 
-  // React 19 会对 range 的 change 事件做值跟踪去重（直接赋值再派发 change 不触发合成
-  // onChange），浏览器原生 change 则在拖动结束必然发生——补一条原生监听兜底。
-  useEffect(() => {
-    const input = inputRef.current
-    if (!input) return
-    const handleNativeChange = () => {
-      const index = Number(input.value) - 1
-      const next = THINKING_LEVELS[index]
-      if (!next) return
-      emitLevel(next.id)
-      applyVisual(input, index)
-    }
-    input.addEventListener('change', handleNativeChange)
-    return () => input.removeEventListener('change', handleNativeChange)
-  }, [emitLevel])
-
   return (
     <div>
-      <div className="relative" style={{ height: TRACK_H }}>
-        {/* 轨道条（纯背景） */}
-        <div className="absolute inset-0 rounded-full" style={{ backgroundColor: 'var(--color-border)' }} />
+      {/* group：让键盘焦点环画在可见轨道上，而非 opacity:0 的 range input 上 */}
+      <div className="relative group" style={{ height: TRACK_H }}>
+        {/* 轨道条（纯背景 + 焦点环） */}
+        <div
+          className="absolute inset-0 rounded-full group-focus-within:ring-2 group-focus-within:ring-[var(--color-focus-ring)]"
+          style={{ backgroundColor: 'var(--color-border)' }}
+        />
 
         {/* 已滑过区域（温度计填充：右端 = 球头圆心，盖住大圆左半 → 与大圆一体） */}
         <div
@@ -169,7 +142,6 @@ export default function ThinkingLevelSlider({
 
         {/* 交互层：透明 range（仅捕获拖动/点击；opacity 0 不影响交互） */}
         <input
-          ref={inputRef}
           type="range"
           min={1}
           max={THINKING_LEVELS.length}
@@ -177,6 +149,7 @@ export default function ThinkingLevelSlider({
           value={activeIndex + 1}
           onChange={handleChange}
           aria-label={t('agent.thinkingLevelTitle')}
+          aria-valuetext={t(activeSpec.labelKey)}
           className="depth-slider absolute top-0 bottom-0"
           style={{ left: `${INSET}px`, right: `${INSET}px`, opacity: 0, zIndex: 3 }}
         />
