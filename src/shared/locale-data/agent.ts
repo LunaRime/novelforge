@@ -437,4 +437,18 @@ export const agentTexts = {
   'agent.completedFor': { 'zh-CN': '已完成，用时 {duration}', 'en-US': 'Completed in {duration}', 'ru-RU': 'Завершено за {duration}' },
   'duration.seconds': { 'zh-CN': '{s}s', 'en-US': '{s}s', 'ru-RU': '{s}с' },
   'duration.minutes': { 'zh-CN': '{m}m {s}s', 'en-US': '{m}m {s}s', 'ru-RU': '{m}м {s}с' },
+  // --- 思考等级四档（滑块 + 合并浮层 + 状态栏） ---
+  'agent.thinkingLevelTitle': { 'zh-CN': '思考等级', 'en-US': 'Thinking level', 'ru-RU': 'Уровень мышления' },
+  'agent.thinkingOff': { 'zh-CN': '关闭', 'en-US': 'Off', 'ru-RU': 'Выкл.' },
+  'agent.thinkingOffDesc': { 'zh-CN': '直接执行，不做额外推演', 'en-US': 'Execute directly, no extra reasoning', 'ru-RU': 'Выполнять сразу, без дополнительных рассуждений' },
+  'agent.thinkingLow': { 'zh-CN': '低', 'en-US': 'Low', 'ru-RU': 'Низкий' },
+  'agent.thinkingLowDesc': { 'zh-CN': '先快速分析再执行', 'en-US': 'Quick analysis before acting', 'ru-RU': 'Сначала быстрый анализ, затем действие' },
+  'agent.thinkingHigh': { 'zh-CN': '高', 'en-US': 'High', 'ru-RU': 'Высокий' },
+  'agent.thinkingHighDesc': { 'zh-CN': '深度规划后执行', 'en-US': 'Plan deeply before acting', 'ru-RU': 'Глубокое планирование, затем действие' },
+  'agent.thinkingMax': { 'zh-CN': '最高', 'en-US': 'Max', 'ru-RU': 'Макс.' },
+  'agent.thinkingMaxDesc': { 'zh-CN': '多轮推演与自我验证，追求最佳结果', 'en-US': 'Multi-pass reasoning and verification for the best result', 'ru-RU': 'Многораундовые рассуждения и проверка ради лучшего результата' },
+  'agent.thinkingGlobalHint': { 'zh-CN': '所有对话与 AI 调用共用', 'en-US': 'Shared by all conversations and AI calls', 'ru-RU': 'Общий для всех диалогов и вызовов ИИ' },
+  'agent.modelSectionTitle': { 'zh-CN': '本对话模型', 'en-US': 'Conversation model', 'ru-RU': 'Модель диалога' },
+  'agent.commandsBuiltin': { 'zh-CN': '内置命令', 'en-US': 'Built-in commands', 'ru-RU': 'Встроенные команды' },
+  'agent.commandsSkills': { 'zh-CN': '技能', 'en-US': 'Skills', 'ru-RU': 'Навыки' },
 } as const

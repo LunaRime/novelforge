@@ -98,6 +98,7 @@ export const settingsTexts = {
   'settings.currentVersion': { 'zh-CN': '当前版本', 'en-US': 'Current version', 'ru-RU': 'Текущая версия' },
   'settings.checkUpdate': { 'zh-CN': '检查更新', 'en-US': 'Check for updates', 'ru-RU': 'Проверить обновления' },
   'settings.upToDate': { 'zh-CN': '已是最新版本', 'en-US': 'You are up to date', 'ru-RU': 'Установлена актуальная версия' },
+  'settings.updateInStatusBar': { 'zh-CN': '请在底部状态栏下载或安装更新', 'en-US': 'Download or install from the status bar', 'ru-RU': 'Скачайте или установите обновление в строке состояния' },
   'settings.quitApp': { 'zh-CN': '退出应用', 'en-US': 'Quit NovelForge', 'ru-RU': 'Выйти из NovelForge' },
   'settings.quitAppDesc': { 'zh-CN': '关闭应用前会自动检查未保存的修改', 'en-US': 'Unsaved changes are checked before closing', 'ru-RU': 'Перед закрытием будут проверены несохранённые изменения' },
   'settings.releasesPage': { 'zh-CN': '查看发布页面', 'en-US': 'View releases page', 'ru-RU': 'Страница релизов' },
