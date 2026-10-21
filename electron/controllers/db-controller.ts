@@ -13,6 +13,7 @@ import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
 import { reorderChapter } from '../services/binder-service'
 import { SceneRepository } from '../repositories/scene-repository'
+import { WorldRepository } from '../repositories/world-repository'
 import { RevisionRepository } from '../repositories/revision-repository'
 import { ReviewRepository } from '../repositories/review-repository'
 import { PostProcessRepository } from '../repositories/post-process-repository'
@@ -444,6 +445,28 @@ export function registerDatabaseController() {
     } catch (err) {
       return { success: false, error: String(err) }
     }
+  })
+
+  guardedHandle('world:entity-list', async (_event, kind?: string) => WorldRepository.listEntities(kind))
+  guardedHandle('world:entity-upsert', async (_event, data: Parameters<typeof WorldRepository.upsertEntity>[0]) => {
+    try { return { success: true, uid: WorldRepository.upsertEntity(data) } } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('world:entity-delete', async (_event, uid: string) => {
+    try { WorldRepository.deleteEntity(uid); return { success: true } } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('world:relation-list', async (_event, fromUid?: string) => WorldRepository.listRelations(fromUid))
+  guardedHandle('world:relation-upsert', async (_event, data: Parameters<typeof WorldRepository.upsertRelation>[0]) => {
+    try { WorldRepository.upsertRelation(data); return { success: true } } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('world:relation-delete', async (_event, id: number) => {
+    try { WorldRepository.deleteRelation(id); return { success: true } } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('timeline:event-list', async () => WorldRepository.listEvents())
+  guardedHandle('timeline:event-upsert', async (_event, data: Parameters<typeof WorldRepository.upsertEvent>[0]) => {
+    try { return { success: true, uid: WorldRepository.upsertEvent(data) } } catch (err) { return { success: false, error: String(err) } }
+  })
+  guardedHandle('timeline:event-delete', async (_event, uid: string) => {
+    try { WorldRepository.deleteEvent(uid); return { success: true } } catch (err) { return { success: false, error: String(err) } }
   })
 
   // ============================================================

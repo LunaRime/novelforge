@@ -16,6 +16,7 @@ import ArchFileViewer from '../editor/ArchFileViewer'
 import DraftEditor from '../editor/DraftEditor'
 import VersionHistory from '../editor/VersionHistory'
 import ManuscriptBoard from '../editor/ManuscriptBoard'
+import WorldTimelineView from '../editor/WorldTimelineView'
 import ReviewReport from '../editor/ReviewReport'
 import ThreeWayMerge from '../editor/ThreeWayMerge'  // 保留引用以防其他入口使用
 import WelcomePage from '../pages/WelcomePage'
@@ -198,6 +199,7 @@ function TabIcon({ type }: { type: EditorTab['type'] }) {
   if (type === 'world-building') return <Globe size={14} />
   if (type === 'version-history') return <History size={14} />
   if (type === 'manuscript-board') return <LayoutGrid size={14} />
+  if (type === 'world-timeline') return <Globe size={14} />
   if (type === 'review-report') return <ClipboardCheck size={14} />
   if (type === 'memory') return <Brain size={14} />
   if (type === 'publication') return <Satellite size={14} />
@@ -925,6 +927,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
         )}
         {activeTab?.type === 'manuscript-board' && (
           <ManuscriptBoard />
+        )}
+        {activeTab?.type === 'world-timeline' && (
+          <WorldTimelineView />
         )}
         {activeTab?.type === 'review-report' && activeTab.content && (
           <ReviewReport

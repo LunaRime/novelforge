@@ -23,6 +23,7 @@ beforeEach(() => {
   db.exec(`
     CREATE TABLE characters (
       name TEXT PRIMARY KEY,
+      uid TEXT,
       role TEXT DEFAULT 'supporting',
       gender TEXT DEFAULT '',
       age TEXT DEFAULT '',

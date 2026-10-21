@@ -705,6 +705,15 @@ export interface DatabaseChannels {
   'db:scene-list': { args: [chapterNumber: number]; return: Array<{ id: number; chapterNumber: number; title: string; summary: string; status: string; sortOrder: number; wordCount: number; contentId: number | null }> }
   'db:scene-upsert': { args: [data: { id?: number; chapterNumber: number; title: string; summary: string; status: string; sortOrder: number; wordCount: number; contentId?: number | null }]; return: { success: boolean; id?: number; error?: string } }
   'db:scene-delete': { args: [id: number]; return: { success: boolean; error?: string } }
+  'world:entity-list': { args: [kind?: string]; return: Array<{ uid: string; kind: string; name: string; aliases: string[]; description: string; metadata: Record<string, unknown>; createdAt: number; updatedAt: number }> }
+  'world:entity-upsert': { args: [data: { uid?: string; kind: string; name: string; aliases?: string[]; description?: string; metadata?: Record<string, unknown> }]; return: { success: boolean; uid?: string; error?: string } }
+  'world:entity-delete': { args: [uid: string]; return: { success: boolean; error?: string } }
+  'world:relation-list': { args: [fromUid?: string]; return: Array<{ id: number; fromUid: string; toUid: string; type: string; label: string; createdAt: number }> }
+  'world:relation-upsert': { args: [data: { fromUid: string; toUid: string; type: string; label?: string }]; return: { success: boolean; error?: string } }
+  'world:relation-delete': { args: [id: number]; return: { success: boolean; error?: string } }
+  'timeline:event-list': { args: []; return: Array<{ uid: string; title: string; lane: string; timeValue: number; timeLabel: string; chapterNumber: number | null; description: string; entityUids: string[]; locationUid: string | null; createdAt: number; updatedAt: number }> }
+  'timeline:event-upsert': { args: [data: { uid?: string; title: string; lane?: string; timeValue?: number; timeLabel?: string; chapterNumber?: number | null; description?: string; entityUids?: string[]; locationUid?: string | null }]; return: { success: boolean; uid?: string; error?: string } }
+  'timeline:event-delete': { args: [uid: string]; return: { success: boolean; error?: string } }
   'db:blueprint-update-priority': { args: [chapterNumber: number, priority: number]; return: { success: boolean; error?: string } }
   'db:blueprint-update-priority-batch': { args: [items: Array<{ chapterNumber: number; priority: number }>]; return: { success: boolean; error?: string } }
 

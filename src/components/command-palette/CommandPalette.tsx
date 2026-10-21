@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
-  Bot, BookOpen, Brain, ChevronDown, FilePlus2, FolderOpen, Focus,
+  Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
   PanelLeft, Plus, Search, Settings2, Sparkles, Sun, TextCursorInput,
   Users, Wand2, ZoomIn,
@@ -64,6 +64,13 @@ function openVersionHistory(name: string) {
     return
   }
   store.openFile({ id: 'version-history', name, type: 'version-history' })
+}
+
+function openWorldTimeline(name: string) {
+  const store = useEditorStore.getState()
+  const existing = store.tabs.find((tab) => tab.type === 'world-timeline')
+  if (existing) { store.setActiveTab(existing.id); return }
+  store.openFile({ id: 'world-timeline', name, type: 'world-timeline' })
 }
 
 function openManuscriptBoard(name: string) {
@@ -160,6 +167,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         id: 'version-history', label: t('version.history'), category: t('command.group.general'),
         icon: <History size={15} />, keywords: 'version diff rollback 版本 回滚',
         run: () => openVersionHistory(t('version.history')),
+      },
+      {
+        id: 'world-timeline', label: t('world.entities') + ' / ' + t('world.timeline'), category: t('command.group.general'),
+        icon: <Globe size={15} />, keywords: 'world entities timeline 世界观 时间线 实体',
+        run: () => openWorldTimeline(t('world.entities')),
       },
       {
         id: 'manuscript-board', label: t('board.title'), category: t('command.group.general'),

@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid } from 'lucide-react'
+import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { useDraftStore } from '../../../stores/draft-store'
@@ -339,6 +339,22 @@ function WorldBuildingGroup({
       }
       onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
       titleHint={t('tip.openArchEditor')}
+      actions={(
+        <button
+          type="button"
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+          title={t('world.entities') + ' / ' + t('world.timeline')}
+          onClick={() => {
+            const state = useEditorStore.getState()
+            const existing = state.tabs.find(tab => tab.type === 'world-timeline')
+            if (existing) state.setActiveTab(existing.id)
+            else state.openFile({ id: 'world-timeline', name: t('world.entities'), type: 'world-timeline' })
+          }}
+        >
+          <Globe size={12} />
+        </button>
+      )}
     >
       {/* 子文件列表（点击直接在 Markdown 编辑器打开） */}
       <div className="mt-1">

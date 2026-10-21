@@ -6,6 +6,7 @@
 import { getProjectDb } from '../database'
 import { t } from '../../src/shared/locale'
 import { isNoChangeValue } from '../../src/services/character-normalize'
+import { randomUUID } from 'node:crypto'
 
 /** 角色卡动态状态 */
 export interface CharacterStateData {
@@ -21,6 +22,8 @@ export interface CharacterStateData {
 /** 角色卡完整数据（前端驼峰接口） */
 export interface CharacterData {
     name: string
+    /** v23: 稳定实体 ID；改名不破链接 */
+    uid?: string
     role: string
     gender: string
     age: string
@@ -65,6 +68,7 @@ export interface CharacterRelation {
 function rowToData(row: Record<string, unknown>): CharacterData {
     const data: CharacterData = {
         name: row.name as string,
+        uid: (row.uid as string) || undefined,
         role: (row.role as string) || 'supporting',
         gender: (row.gender as string) || '',
         age: (row.age as string) || '',
@@ -163,14 +167,15 @@ export class CharacterRepository {
         const cs = data.currentState
         db.prepare(`
       INSERT INTO characters (
-        name, role, gender, age, appearance, personality, background,
+        name, uid, role, gender, age, appearance, personality, background,
         abilities, motivation, relationships, arc, notes,
         tier, tags, appear_chapters, relations, aliases,
         appear_count, first_chapter, last_chapter, status,
         cs_location, cs_power_level, cs_physical_state, cs_mental_state,
         cs_key_items, cs_recent_events, cs_updated_at_chapter
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(name) DO UPDATE SET
+        uid = COALESCE(NULLIF(characters.uid, ''), excluded.uid),
         role = excluded.role,
         gender = excluded.gender,
         age = excluded.age,
@@ -201,6 +206,7 @@ export class CharacterRepository {
         updated_at = unixepoch() * 1000
     `).run(
             data.name,
+            data.uid || randomUUID(),
             data.role,
             data.gender,
             data.age,

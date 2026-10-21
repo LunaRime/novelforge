@@ -121,7 +121,7 @@ export function getProjectDb(): BetterSqlite3.Database | null {
 
 // ===== Schema 版本管理 =====
 /** 当前数据库 schema 版本号（v18：写作自动化三表——D 档） */
-const CURRENT_SCHEMA_VERSION = 22
+const CURRENT_SCHEMA_VERSION = 23
 
 /** 检查并执行 schema 迁移（仅在版本号低于当前版本时运行） */
 function ensureSchemaVersion(db: BetterSqlite3.Database): void {
@@ -235,6 +235,7 @@ function createTables(db: BetterSqlite3.Database) {
       sort_order INTEGER DEFAULT 0,              -- 自定义排序序号
       priority INTEGER DEFAULT 0,                -- 优先级 (0=普通, 1=高, 2=关键)
       volume_number INTEGER,                     -- v22: 卷成员唯一真相（NULL=未分卷）
+      character_uids TEXT DEFAULT '[]',          -- v23: 关联角色稳定 ID
       created_at INTEGER DEFAULT (unixepoch() * 1000),
       updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
@@ -244,6 +245,7 @@ function createTables(db: BetterSqlite3.Database) {
     -- ============================================================
     CREATE TABLE IF NOT EXISTS characters (
       name TEXT PRIMARY KEY,                      -- 角色名
+      uid TEXT,                                   -- v23: 稳定实体 ID（改名不破链接）
       role TEXT DEFAULT 'supporting',             -- protagonist/antagonist/supporting/minor
       gender TEXT DEFAULT '',
       age TEXT DEFAULT '',
@@ -358,6 +360,45 @@ function createTables(db: BetterSqlite3.Database) {
       updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
     CREATE INDEX IF NOT EXISTS idx_scenes_chapter ON scene_cards(chapter_number, sort_order);
+
+    -- v23: 世界实体、实体关系、时间线事件
+    CREATE TABLE IF NOT EXISTS world_entities (
+      uid TEXT PRIMARY KEY,
+      kind TEXT NOT NULL,
+      name TEXT NOT NULL,
+      aliases TEXT DEFAULT '[]',
+      description TEXT DEFAULT '',
+      metadata TEXT DEFAULT '{}',
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000),
+      UNIQUE(kind, name)
+    );
+    CREATE TABLE IF NOT EXISTS entity_relations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      from_uid TEXT NOT NULL,
+      to_uid TEXT NOT NULL,
+      type TEXT NOT NULL,
+      label TEXT DEFAULT '',
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      UNIQUE(from_uid, to_uid, type)
+    );
+    CREATE TABLE IF NOT EXISTS timeline_events (
+      uid TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      lane TEXT NOT NULL DEFAULT 'main',
+      time_value INTEGER DEFAULT 0,
+      time_label TEXT DEFAULT '',
+      chapter_number INTEGER,
+      description TEXT DEFAULT '',
+      entity_uids TEXT DEFAULT '[]',
+      location_uid TEXT,
+      created_at INTEGER DEFAULT (unixepoch() * 1000),
+      updated_at INTEGER DEFAULT (unixepoch() * 1000)
+    );
+    CREATE INDEX IF NOT EXISTS idx_entities_kind ON world_entities(kind, name);
+    CREATE INDEX IF NOT EXISTS idx_entity_relations_from ON entity_relations(from_uid);
+    CREATE INDEX IF NOT EXISTS idx_timeline_lane ON timeline_events(lane, time_value);
+    CREATE INDEX IF NOT EXISTS idx_timeline_chapter ON timeline_events(chapter_number);
 
     -- ============================================================
     -- 6. revisions — 修稿（派生自 draft）
@@ -620,6 +661,10 @@ function ensureMigrationColumns(db: BetterSqlite3.Database) {
   safeAddColumn(db, 'drafts', 'content_hash', "TEXT DEFAULT ''")
   safeAddColumn(db, 'drafts', 'last_auto_snapshot_at', 'INTEGER DEFAULT 0')
   safeAddColumn(db, 'drafts', 'branch_id', 'INTEGER')
+
+  // v23: 角色稳定 ID + 蓝图角色 ID 列表
+  safeAddColumn(db, 'characters', 'uid', 'TEXT')
+  safeAddColumn(db, 'blueprints', 'character_uids', "TEXT DEFAULT '[]'")
 
   // characters — v14 新增 aliases（别名/称呼注册表，角色名匹配的变体形态）
   safeAddColumn(db, 'characters', 'aliases', "TEXT DEFAULT '[]'")
@@ -1143,5 +1188,53 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
     logger.info('DB', 'v22 迁移: 场景表已建，卷成员已回填')
   } catch (e) {
     logger.warn('DB', 'v22 迁移未完成（非关键）: ' + String(e))
+  }
+
+  // 21. v23: 世界实体/关系/时间线 + 角色稳定 uid（幂等；非关键失败不阻断启动）
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS world_entities (
+        uid TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        name TEXT NOT NULL,
+        aliases TEXT DEFAULT '[]',
+        description TEXT DEFAULT '',
+        metadata TEXT DEFAULT '{}',
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000),
+        UNIQUE(kind, name)
+      );
+      CREATE TABLE IF NOT EXISTS entity_relations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        from_uid TEXT NOT NULL,
+        to_uid TEXT NOT NULL,
+        type TEXT NOT NULL,
+        label TEXT DEFAULT '',
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        UNIQUE(from_uid, to_uid, type)
+      );
+      CREATE TABLE IF NOT EXISTS timeline_events (
+        uid TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        lane TEXT NOT NULL DEFAULT 'main',
+        time_value INTEGER DEFAULT 0,
+        time_label TEXT DEFAULT '',
+        chapter_number INTEGER,
+        description TEXT DEFAULT '',
+        entity_uids TEXT DEFAULT '[]',
+        location_uid TEXT,
+        created_at INTEGER DEFAULT (unixepoch() * 1000),
+        updated_at INTEGER DEFAULT (unixepoch() * 1000)
+      );
+      CREATE INDEX IF NOT EXISTS idx_entities_kind ON world_entities(kind, name);
+      CREATE INDEX IF NOT EXISTS idx_entity_relations_from ON entity_relations(from_uid);
+      CREATE INDEX IF NOT EXISTS idx_timeline_lane ON timeline_events(lane, time_value);
+      CREATE INDEX IF NOT EXISTS idx_timeline_chapter ON timeline_events(chapter_number);
+    `)
+    db.exec(`UPDATE characters SET uid = lower(hex(randomblob(16))) WHERE uid IS NULL OR uid = '';`)
+    db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_characters_uid ON characters(uid)')
+    logger.info('DB', 'v23 迁移: 世界实体/时间线表已建，角色 uid 已回填')
+  } catch (e) {
+    logger.warn('DB', 'v23 迁移未完成（非关键）: ' + String(e))
   }
 }
