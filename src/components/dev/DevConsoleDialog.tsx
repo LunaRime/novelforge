@@ -15,6 +15,8 @@ import DevIpcTab from './DevIpcTab'
 import DevDatabaseTab from './DevDatabaseTab'
 import DevLogsTab from './DevLogsTab'
 import DevPerformanceTab from './DevPerformanceTab'
+import DevAgentTab from './DevAgentTab'
+import DevModelsTab from './DevModelsTab'
 
 type DevTab = 'instances' | 'ipc' | 'agent' | 'models' | 'database' | 'logs' | 'performance'
 
@@ -91,11 +93,8 @@ export default function DevConsoleDialog({ open, onClose }: { open: boolean; onC
               {tab === 'database' && <DevDatabaseTab active />}
               {tab === 'logs' && <DevLogsTab active />}
               {tab === 'performance' && <DevPerformanceTab active />}
-              {(tab === 'agent' || tab === 'models') && (
-                <div className="flex h-full items-center justify-center p-6">
-                  <EmptyState message={t('dev.consoleComingSoon')} />
-                </div>
-              )}
+              {tab === 'agent' && <DevAgentTab active />}
+              {tab === 'models' && <DevModelsTab active />}
             </>
           )}
         </div>
