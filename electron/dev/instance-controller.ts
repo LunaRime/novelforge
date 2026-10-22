@@ -28,7 +28,8 @@ function cliPath(): string {
 async function runCli(args: string[], timeoutMs: number): Promise<string> {
   try {
     const { stdout } = await execFileAsync(process.execPath, [cliPath(), ...args], {
-      cwd: app.getAppPath(),
+      // 不能用 app.getAppPath()：打包后它是 app.asar 文件，spawn 会 ENOTDIR
+      cwd: path.dirname(cliPath()),
       env: {
         ...process.env,
         ELECTRON_RUN_AS_NODE: '1',

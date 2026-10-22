@@ -21,6 +21,10 @@ import { exec } from 'node:child_process'
 // 构建产物目录结构
 process.env.APP_ROOT = path.join(__dirname, '..')
 
+// 打包版开发者控制台显式开关：--devtools 等价于 NOVELFORGE_DEVTOOLS=1
+// （开发态/CLI 隔离实例默认开启；正式用户必须显式传参）
+if (process.argv.includes('--devtools')) process.env.NOVELFORGE_DEVTOOLS = '1'
+
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
 export const RENDERER_DIST = path.join(process.env.APP_ROOT, 'dist')
