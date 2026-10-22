@@ -454,6 +454,95 @@ git commit -m "feat: 开发者控制台日志与性能页"
 
 ---
 
+### Task 5.5: Agent 运行与模型表现监控
+
+**Files:**
+- Create: `src/components/dev/DevAgentTab.tsx`
+- Create: `src/components/dev/DevModelsTab.tsx`
+- Modify: `src/components/dev/DevConsoleDialog.tsx`（接入两个 tab）
+- Modify: `src/shared/locale-data/settings.ts`（三语）
+- Test: `src/components/dev/dev-monitor-utils.test.ts`（纯聚合/格式化函数）
+
+**Interfaces:**
+- 复用现有通道，不新增后端：
+  - `useAgentStore`（渲染层）：会话列表、当前会话、流式状态、消息数、工具调用/计划步骤（按 store 实际字段展示）。
+  - `fs:agent-archive-list`：历史会话归档列表。
+  - `db:usage-dashboard`：模型调用次数/tokens/cost/duration 聚合（已有）。
+  - `db:get-llm-history`：最近 LLM 调用记录（已有；展示 model/purpose/success/error/duration/tokens/cost）。
+- 纯函数（`dev-monitor-utils.ts`）：
+  ```ts
+  export function successRate(success: number, total: number): string
+  export function formatDuration(ms: number): string
+  export function aggregateRecentByModel(rows: LlmHistoryRow[]): Array<{ model: string; calls: number; errors: number; avgMs: number }>
+  ```
+
+- [ ] **Step 1: 写纯函数测试**
+
+```ts
+import { describe, it, expect } from 'vitest'
+import { successRate, formatDuration, aggregateRecentByModel } from './dev-monitor-utils'
+
+describe('dev-monitor-utils', () => {
+  it('成功率与耗时格式化', () => {
+    expect(successRate(9, 10)).toBe('90.0%')
+    expect(successRate(0, 0)).toBe('—')
+    expect(formatDuration(1234)).toBe('1.23s')
+  })
+
+  it('按模型聚合最近调用', () => {
+    const rows = [
+      { model: 'a', success: 1, durationMs: 100 },
+      { model: 'a', success: 0, durationMs: 300 },
+      { model: 'b', success: 1, durationMs: 50 },
+    ]
+    expect(aggregateRecentByModel(rows)).toEqual([
+      { model: 'a', calls: 2, errors: 1, avgMs: 200 },
+      { model: 'b', calls: 1, errors: 0, avgMs: 50 },
+    ])
+  })
+})
+```
+
+- [ ] **Step 2: 运行测试确认失败**
+
+Run: `pnpm exec vitest run src/components/dev/dev-monitor-utils.test.ts`
+Expected: FAIL — module not found.
+
+- [ ] **Step 3: 实现纯函数与 Agent 页**
+
+`DevAgentTab`：
+- 从 `useAgentStore` 读 `sessions` / `activeSessionId` / `isStreaming` / 当前消息数（按 store 字段命名，编码前先读 `src/stores/agent-store.ts` 确认）。
+- 每个会话一行：标题、消息数、是否流式、最近活动时间；点击激活。
+- 计划步骤：若当前会话有 plan steps，展示 done/total。
+- 历史归档：`fs:agent-archive-list` 最近 20 条，只显示标题/时间/大小。
+- 5s 轮询归档列表；实时会话直接订阅 store。
+
+- [ ] **Step 4: 实现模型页**
+
+`DevModelsTab`：
+- `db:usage-dashboard`（今天/近 7 天）→ 按模型表：calls、tokens、cost、avg duration。
+- `db:get-llm-history(200)` → 最近调用表：时间、model、purpose、success、duration、tokens、cost；错误列展示脱敏后的 error（若返回）。
+- 失败率用 `aggregateRecentByModel`；不展示 prompt/response 正文。
+- 2s/5s 轮询；打开 tab 时加载。
+
+- [ ] **Step 5: 接入 DevConsoleDialog**
+
+Tabs 增加 `agent` 与 `models`，默认顺序：实例 / IPC / Agent / 模型 / 数据库 / 日志 / 性能。i18n 键：`dev.consoleAgent`、`dev.consoleModels`、`dev.agentActive`、`dev.agentStreaming`、`dev.agentMessages`、`dev.agentPlan`、`dev.agentArchive`、`dev.agentEmpty`、`dev.modelsByModel`、`dev.modelsRecent`、`dev.modelsCalls`、`dev.modelsSuccess`、`dev.modelsDuration`、`dev.modelsTokens`、`dev.modelsCost`、`dev.modelsEmpty`。
+
+- [ ] **Step 6: 运行测试 + 类型检查 + lint**
+
+Run: `pnpm exec vitest run src/components/dev/dev-monitor-utils.test.ts && pnpm run typecheck && pnpm run lint`
+Expected: PASS。
+
+- [ ] **Step 7: 提交**
+
+```bash
+git add src/components/dev/DevAgentTab.tsx src/components/dev/DevModelsTab.tsx src/components/dev/dev-monitor-utils.ts src/components/dev/dev-monitor-utils.test.ts src/components/dev/DevConsoleDialog.tsx src/shared/locale-data/settings.ts
+git commit -m "feat: 开发者控制台 Agent 与模型监控"
+```
+
+---
+
 ### Task 6: 打包白名单、门禁与真机验证
 
 **Files:**
@@ -512,7 +601,7 @@ git commit -m "chore: 开发者控制台打包与使用说明"
 ## 非目标（下一轮）
 
 - CDP eval/screenshot/console 的 UI 内嵌（CLI 已提供，先够用）。
-- LLM 调用详情/提示词查看（避免敏感内容进入 UI）。
+- LLM 提示词/响应正文查看（避免敏感内容进入 UI；只展示调用元数据与聚合指标）。
 - 自动化测试夹具生成（多卷/多角色/失败后处理）。
 - 远程实例/多机调试。
 - 生产版默认开放（明确不开放）。
