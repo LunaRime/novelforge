@@ -46,6 +46,7 @@ function getWorkflowDisplayName(workflow: string): string {
     case 'generate_blueprint': return t('tool.wfBlueprint')
     case 'generate_architecture': return t('tool.wfArchitecture')
     case 'config_generation': return t('tool.wfConfig')
+    case 'generate_book': return t('tool.wfBook')
     default: return workflow
   }
 }
@@ -135,6 +136,72 @@ export async function startArchitectureWorkflow(): Promise<{ runId: string; disp
   const { createArchitectureWorkflow } = await import('./architecture-workflow')
   const runId = await startWithReceipt(createArchitectureWorkflow())
   return { runId, displayName }
+}
+
+/**
+ * 启动整本流水线：逐章串行「写稿 → 自审/重写 → 定稿 → KB/记忆」。
+ *
+ * 与 generate_draft 区间模式的本质区别：
+ *   - 区间模式把每章独立启动，第 2 章会因前一章未定稿而中止；
+ *   - 本入口把前一章的 finalize 后处理作为下一章写稿的硬前置，失败即停。
+ */
+export async function startBookPipelineWorkflow(params: {
+  chapterStart: number
+  chapterEnd: number
+  autoReview?: boolean
+  reuseExistingDrafts?: boolean
+}): Promise<{ runId: string; displayName: string; chapterTag: string }> {
+  const displayName = getWorkflowDisplayName('generate_book')
+  const { chapterStart, chapterEnd } = params
+
+  if (!Number.isInteger(chapterStart) || !Number.isInteger(chapterEnd) || chapterStart < 1 || chapterEnd < chapterStart) {
+    throw new WorkflowStartError('ERR_GUARD', t('tool.wfRangeInvalid'))
+  }
+  if (chapterEnd - chapterStart + 1 > 100) {
+    throw new WorkflowStartError('ERR_GUARD', t('tool.wfRangeTooLarge').replace('{max}', '100'))
+  }
+
+  const { useProjectStore } = await import('../../stores/project-store')
+  const project = useProjectStore.getState().currentProject
+  if (!project) throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
+
+  const totalChapters = project.novelConfig.totalChapters || 0
+  if (totalChapters > 0 && chapterEnd > totalChapters) {
+    throw new WorkflowStartError('ERR_GUARD', t('workflow.bookPipelineOutOfRange')
+      .replace('{end}', String(chapterEnd))
+      .replace('{total}', String(totalChapters)))
+  }
+
+  // 复用单章 guard：蓝图存在、角色卡存在、若 start>1 则前一章已定稿且后处理通过
+  const { guardChapterWriting } = await import('./workflow-guards')
+  const guard = await guardChapterWriting(chapterStart)
+  if (!guard.ok) {
+    throw new WorkflowStartError('ERR_GUARD', guard.message || t('error.prereqNotMet'))
+  }
+
+  // 范围内每一章都必须有蓝图，否则流水线跑到中间才失败，浪费前面章节的 token
+  const blueprints = await ipc.invoke('db:blueprint-get-all') as Array<{ chapterNumber: number }> | null
+  const existing = new Set((blueprints ?? []).map(b => Number(b.chapterNumber)))
+  for (let n = chapterStart; n <= chapterEnd; n++) {
+    if (!existing.has(n)) {
+      throw new WorkflowStartError('ERR_GUARD', t('workflow.bookPipelineMissingBlueprint').replace('{n}', String(n)))
+    }
+  }
+
+  const { createBookPipelineWorkflow } = await import('./book-pipeline-workflow')
+  const runId = await startWithReceipt(createBookPipelineWorkflow({
+    chapterStart,
+    chapterEnd,
+    autoReview: params.autoReview,
+    reuseExistingDrafts: params.reuseExistingDrafts,
+  }))
+  return {
+    runId,
+    displayName,
+    chapterTag: t('tool.chapterRangeTag')
+      .replace('{start}', String(chapterStart))
+      .replace('{end}', String(chapterEnd)),
+  }
 }
 
 /**

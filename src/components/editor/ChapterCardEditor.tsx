@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
-  Sparkles, PenLine, ScanSearch, X
+  Sparkles, PenLine, ScanSearch, X, ListChecks
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
@@ -20,6 +20,7 @@ import {
   type DirectoryWorkflowParams,
 } from '../../services/workflows/directory-workflow'
 import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
+import { startBookPipelineWorkflow } from '../../services/workflows/workflow-starter'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import { generateVerificationReport, type VerificationReport, type BlueprintGap } from '../../services/blueprint-verification-service'
 import { createGapFillWorkflow } from '../../services/workflows/verification-workflow'
@@ -311,6 +312,27 @@ export default function ChapterCardEditor() {
     addLog('info', 'Blueprint generation started')
   }
 
+  /** 整本流水线：逐章 写稿→审查→定稿→KB/记忆（应用级入口，不依赖 Agent） */
+  const handleRunBookPipeline = async () => {
+    if (useWorkflowStore.getState().isTypeRunning('book_pipeline')) {
+      toast.warning(t('chapter.bookPipelineRunning'))
+      return
+    }
+    const configured = currentProject?.novelConfig.totalChapters ?? 0
+    const maxBlueprint = blueprints.reduce((max, bp) => Math.max(max, bp.chapterNumber), 0)
+    const end = Math.max(configured, maxBlueprint)
+    if (end < 1) {
+      toast.warning(t('chapter.bookPipelineNoBlueprint'))
+      return
+    }
+    try {
+      await startBookPipelineWorkflow({ chapterStart: 1, chapterEnd: end, autoReview: true })
+      toast.success(t('chapter.bookPipelineStarted').replace('{n}', String(end)))
+    } catch (e) {
+      toast.error(t('chapter.bookPipelineFailed').replace('{error}', e instanceof Error ? e.message : String(e)))
+    }
+  }
+
   /**
    * 写作此章 — 将当前蓝图信息注入创作弹窗
    * 支持指定章节（默认为当前选中章）
@@ -382,6 +404,16 @@ export default function ChapterCardEditor() {
           >
             <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
             {verifying ? t('verify.verifying') : t('verify.title')}
+          </Button>
+          {/* 整本流水线：应用级入口，任何模型/新会话都可继续 */}
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleRunBookPipeline}
+            title={t('chapter.bookPipelineTip')}
+          >
+            <ListChecks size={12} />
+            {t('chapter.bookPipeline')}
           </Button>
           {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
           <Button

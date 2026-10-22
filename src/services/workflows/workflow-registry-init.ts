@@ -3,6 +3,7 @@
 // 为保证恢复前所有注册生效，应用启动初始化时 import 本模块（须在 restoreCheckpoint 调用之前）。
 import './architecture-workflow'
 import './chapter-workflow'
+import './book-pipeline-workflow'
 import './directory-workflow'
 import './import-workflow'
 import './mutual-evaluation-workflow'

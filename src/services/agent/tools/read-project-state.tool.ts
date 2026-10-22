@@ -5,6 +5,7 @@ import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { useProjectStore } from '../../../stores/project-store'
 import { ipc } from '../../ipc-client'
+import { useWorkflowStore } from '../../../stores/workflow-store'
 
 
 export const readProjectStateTool = buildAgentTool({
@@ -93,6 +94,17 @@ export const readProjectStateTool = buildAgentTool({
       } else {
         parts.push(t('tool.readStateNoNotes'))
       }
+    }
+
+    // 整本流水线状态（应用级 run，不依赖当前对话；任何 Agent 都能读到）
+    const pipeline = useWorkflowStore.getState().activeRuns.find(r => r.type === 'book_pipeline')
+    if (pipeline) {
+      const done = pipeline.steps.filter(step => step.status === 'completed').length
+      parts.push(t('tool.readStatePipeline')
+        .replace('{title}', pipeline.title)
+        .replace('{status}', pipeline.status)
+        .replace('{done}', String(done))
+        .replace('{total}', String(pipeline.steps.length)))
     }
 
     return { success: true, content: parts.join('\n\n') }

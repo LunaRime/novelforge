@@ -16,6 +16,7 @@ import {
   startBlueprintWorkflow,
   startArchitectureWorkflow,
   startConfigGenerationWorkflow,
+  startBookPipelineWorkflow,
   WorkflowStartError,
 } from '../../workflows/workflow-starter'
 
@@ -32,7 +33,7 @@ export const startWorkflowTool = buildAgentTool({
       workflow: {
         type: 'string',
         description: t('tool.startWorkflowType'),
-        enum: ['generate_draft', 'review', 'refine', 'finalize', 'generate_blueprint', 'generate_architecture', 'config_generation'],
+        enum: ['generate_book', 'generate_draft', 'review', 'refine', 'finalize', 'generate_blueprint', 'generate_architecture', 'config_generation'],
       },
       chapter_number: {
         type: 'number',
@@ -45,6 +46,10 @@ export const startWorkflowTool = buildAgentTool({
       idea: {
         type: 'string',
         description: t('tool.startWorkflowIdea'),
+      },
+      auto_review: {
+        type: 'boolean',
+        description: t('tool.startWorkflowAutoReview'),
       },
     },
     required: ['workflow'],
@@ -60,6 +65,38 @@ export const startWorkflowTool = buildAgentTool({
 
     if (!workflow) {
       return { success: false, content: '', error: t('error.missingWorkflow') }
+    }
+
+    // 整本流水线：逐章串行「写稿 → 自审/重写 → 定稿 → KB/记忆」。
+    // 与 generate_draft 区间模式不同，前一章 finalize 后处理通过后才会进入下一章。
+    if (workflow === 'generate_book') {
+      const start = chapterNumber ?? 1
+      const end = chapterEnd ?? start
+      if (!Number.isInteger(start) || !Number.isInteger(end) || start < 1 || end < start) {
+        return { success: false, content: '', error: t('tool.wfRangeInvalid') }
+      }
+      if (end - start + 1 > 100) {
+        return { success: false, content: '', error: t('tool.wfRangeTooLarge').replace('{max}', '100') }
+      }
+      try {
+        const result = await startBookPipelineWorkflow({
+          chapterStart: start,
+          chapterEnd: end,
+          autoReview: args.auto_review !== false,
+        })
+        return {
+          success: true,
+          content: t('tool.bookPipelineStarted')
+            .replace('{name}', result.displayName)
+            .replace('{range}', result.chapterTag),
+          artifacts: [{ type: 'workflow_started' as const, name: `${result.displayName} ${result.chapterTag}` }],
+        }
+      } catch (e) {
+        if (e instanceof WorkflowStartError) {
+          return { success: false, content: '', error: e.message || t('error.prereqNotMet') }
+        }
+        throw e
+      }
     }
 
     const chapterWorkflows = ['generate_draft', 'review', 'refine', 'finalize']
