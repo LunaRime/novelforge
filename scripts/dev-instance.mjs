@@ -34,6 +34,7 @@ const instancesRoot = process.env.NOVELFORGE_DEV_INSTANCES_ROOT
 const require = createRequire(import.meta.url)
 
 function electronBinary() {
+  if (process.env.NOVELFORGE_ELECTRON_BIN) return process.env.NOVELFORGE_ELECTRON_BIN
   if (process.env.ELECTRON_BIN) return process.env.ELECTRON_BIN
   try {
     const resolved = require('electron')
@@ -113,11 +114,10 @@ async function start(options) {
   const logPath = path.join(dir, 'instance.log')
   const logFd = fs.openSync(logPath, 'a')
   const bin = electronBinary()
-  const args = [
-    '.',
-    '--no-sandbox',
-    `--remote-debugging-port=${port}`,
-  ]
+  const args = []
+  // 开发态：electron 二进制需要应用路径 `.`；打包版：app 可执行文件自身就是入口
+  if (process.env.NOVELFORGE_ELECTRON_PACKAGED !== '1') args.push('.')
+  args.push('--no-sandbox', `--remote-debugging-port=${port}`)
   if (project) args.push(`--project=${project}`)
   if (options['dev-console']) args.push('--dev-console')
   if (options['user-data-dir']) args.push(`--user-data-dir=${path.resolve(String(options['user-data-dir']))}`)

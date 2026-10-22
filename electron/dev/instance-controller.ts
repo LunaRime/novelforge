@@ -18,14 +18,24 @@ const execFileAsync = promisify(execFile)
 const DISABLED = '开发者控制台未启用（设置 → 开发者选项，或使用 --devtools 启动）'
 
 function cliPath(): string {
-  return path.join(app.getAppPath(), 'scripts', 'dev-instance.mjs')
+  const root = app.getAppPath()
+  // 打包后 app.getAppPath() 指向 app.asar；脚本被 asarUnpack 到 .asar.unpacked，
+  // ELECTRON_RUN_AS_NODE 下必须用真实磁盘路径执行。
+  const scriptRoot = root.endsWith('.asar') ? `${root}.unpacked` : root
+  return path.join(scriptRoot, 'scripts', 'dev-instance.mjs')
 }
 
 async function runCli(args: string[], timeoutMs: number): Promise<string> {
   try {
     const { stdout } = await execFileAsync(process.execPath, [cliPath(), ...args], {
       cwd: app.getAppPath(),
-      env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: '1',
+        // 让 CLI 用当前应用自身启动新实例（打包版 process.execPath 是 app 可执行文件）
+        NOVELFORGE_ELECTRON_BIN: process.execPath,
+        NOVELFORGE_ELECTRON_PACKAGED: app.isPackaged ? '1' : '0',
+      },
       timeout: timeoutMs,
       maxBuffer: 2 * 1024 * 1024,
       windowsHide: true,

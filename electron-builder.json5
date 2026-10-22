@@ -11,7 +11,10 @@
     "node_modules/@lancedb/lancedb-linux-*/**/*",
     "node_modules/@lancedb/lancedb-win32-*/**/*",
     // jieba-wasm：nodejs target 在模块加载期同步读 pkg/nodejs/*.wasm，asar 内路径不可 fs 读
-    "node_modules/jieba-wasm/**/*"
+    "node_modules/jieba-wasm/**/*",
+    // 开发者控制台 CLI：ELECTRON_RUN_AS_NODE 下从真实磁盘执行，必须解包
+    "scripts/dev-instance.mjs",
+    "scripts/dev-instance-lib.mjs"
   ],
   // 覆盖根 package.json 的 "type":"module"，确保主进程以 CommonJS 运行
   // Electron 主进程使用 CJS require，ESM 模式会导致 Rolldown CJS shim 崩溃
@@ -29,6 +32,9 @@
     "dist-electron/**/*",
     "build/**/*",
     "index.html",
+    // 开发者控制台 CLI（由主进程以 ELECTRON_RUN_AS_NODE 调用；同时 asarUnpack）
+    "scripts/dev-instance.mjs",
+    "scripts/dev-instance-lib.mjs",
     // 排除项
     "!src",
     "!electron",

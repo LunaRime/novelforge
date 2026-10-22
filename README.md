@@ -191,6 +191,30 @@ pnpm run build
 > - `NovelForge-{version}-Installer/NovelForge-{version}-Installer.exe` — NSIS 安装程序
 > - `latest.yml` / `.blockmap` — electron-updater 自动更新元数据
 
+#### 开发者控制台与隔离实例
+
+仅开发态可用（打包版需 `--devtools` 启动，或在「设置 → 开发者选项」启用）：
+
+- **应用内**：`Ctrl+K` → 开发者控制台；或「设置 → 开发者选项 → 打开开发者控制台」。
+  面板包含：隔离实例、IPC 调用指标、Agent 运行、模型表现、项目数据库（只读）、日志、性能。
+- **CLI**（隔离 HOME + 独立项目 + 独立 CDP 端口，不污染当前项目）：
+
+```bash
+# 只开开发者控制台，不打开项目
+node scripts/dev-instance.mjs start --dev-console --json
+
+# 带项目启动；列出 / 远程打开控制台 / 执行 JS / 截图 / 停止 / 清理
+node scripts/dev-instance.mjs start --project /tmp/nf-test --json
+node scripts/dev-instance.mjs list
+node scripts/dev-instance.mjs console-ui <id>
+node scripts/dev-instance.mjs eval <id> 'document.title'
+node scripts/dev-instance.mjs shot <id> /tmp/nf-shot.png
+node scripts/dev-instance.mjs stop <id>
+node scripts/dev-instance.mjs clean <id> --yes
+```
+
+实例数据位于 `~/.novelforge/dev-instances/<id>/`（manifest / 隔离 HOME / 日志）。
+
 #### 构建卡点（Windows）
 
 | 卡点 | 解决方案 |

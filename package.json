@@ -23,6 +23,7 @@
   },
   "scripts": {
     "dev": "node scripts/dev-utf8.cjs && vite",
+    "dev:instance": "node scripts/dev-instance.mjs",
     "build": "node scripts/build.cjs",
     "typecheck": "tsc --noEmit",
     "build:vite": "vite build",
