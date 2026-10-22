@@ -1,4 +1,4 @@
-import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, Brain, History } from 'lucide-react'
+import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMCPStore } from '../../../stores/mcp-store'
@@ -20,7 +20,6 @@ export default function AgentHeader() {
   // 原子 selector：action 引用稳定，流式期间不随整 store 每 50ms 重渲染
   const createConversation = useAgentStore(s => s.createConversation)
   const toggleHistory = useAgentStore(s => s.toggleHistory)
-  const toggleMemoryView = useAgentStore(s => s.toggleMemoryView)
   const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
@@ -118,11 +117,6 @@ export default function AgentHeader() {
                     label={t('tip.historyConversations')}
                     icon={<History size={13} />}
                     onClick={() => { setShowMore(false); toggleHistory() }}
-                  />
-                  <MenuItem
-                    label={t('memory.menuTitle')}
-                    icon={<Brain size={13} />}
-                    onClick={() => { setShowMore(false); toggleMemoryView() }}
                   />
                   <MenuItem
                     label={t('agent.mcpServers')}

@@ -52,8 +52,13 @@ describe('extractPlanSteps', () => {
     ])
   })
 
-  it('本轮已结束且确有工具执行 → 未勾选步骤收敛为 done', () => {
+  it('回合结束不会把未完成步骤伪造为 done', () => {
     const result = extractPlanSteps('- [ ] 读取草稿\n- [ ] 统计段落', { finalize: true })
-    expect(result.steps.map((s) => s.status)).toEqual(['done', 'done'])
+    expect(result.steps.map((s) => s.status)).toEqual(['pending', 'pending'])
+  })
+
+  it('active 在回合结束后回落为 pending', () => {
+    const result = extractPlanSteps('- [~] 正在写稿\n- [ ] 定稿', { finalize: true })
+    expect(result.steps.map((s) => s.status)).toEqual(['pending', 'pending'])
   })
 })

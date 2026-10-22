@@ -14,7 +14,6 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import AgentMemoryView from './AgentMemoryView'
-import AgentHeader from './AgentHeader'
 import AgentConversation from './AgentConversation'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -122,21 +121,6 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     const back = [...container.querySelectorAll('button')].find(b => b.title === '返回对话')!
     act(() => { back.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     expect(useAgentStore.getState().memoryView).toBe(false)
-    act(() => { root.unmount() })
-  })
-
-  it('AgentHeader「记忆」入口（更多选项菜单内）：点击切换 memoryView', async () => {
-    const { container, root } = render(<AgentHeader />)
-    // 2026-09-22 UI 重做：记忆与历史从标题栏独立图标收进「更多选项」菜单
-    // （264px 窄面板里五个图标过于拥挤）
-    const moreBtn = [...container.querySelectorAll('button')].find(b => b.title === '更多选项')!
-    expect(moreBtn).toBeTruthy()
-    act(() => { moreBtn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    // 菜单里的「记忆」项（MenuItem 渲染为 button）
-    const item = [...container.querySelectorAll('button')].find(b => (b.textContent || '').trim() === '记忆')!
-    expect(item).toBeTruthy()
-    act(() => { item.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(useAgentStore.getState().memoryView).toBe(true)
     act(() => { root.unmount() })
   })
 

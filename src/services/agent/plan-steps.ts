@@ -63,9 +63,10 @@ export function extractPlanSteps(content: string, options?: { finalize?: boolean
   const steps = chosen.map((step, index) => ({
     ...step,
     id: `step-${index + 1}`,
-    // 模型有时只在正文里用内联 `[x]` 更新、没有重写清单行；本轮已结束且确有工具执行时，
-    // 把仍为 pending/active 的步骤收敛为 done，避免出现「活干完了但计划显示 0/2」。
-    status: options?.finalize && step.status !== 'done' ? 'done' as const : step.status,
+    // 回合结束只做展示收口：active 回落为 pending。
+    // 绝不能把未完成步骤自动改成 done——那会把「已启动」误报成「已完成」。
+    // done 只认模型显式 [x]（且模型应只在该步骤工具回执成功后才打勾）。
+    status: options?.finalize && step.status === 'active' ? 'pending' as const : step.status,
   }))
   return { steps, rest }
 }
