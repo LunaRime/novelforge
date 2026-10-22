@@ -40,6 +40,7 @@ import ThemeSection from './ThemeSection'
 import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
+import ShortcutsSection from './ShortcutsSection'
 import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
@@ -86,6 +87,15 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       ? settingsSection as SettingsSection
       : 'llm')
   )
+
+  // 设置页已打开时，支持再次深链切区（用量页「样式设置」→ 编辑器）
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- 同步外部深链，目标值来自 store
+  useEffect(() => {
+    if (!open || !settingsSection) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- 同步外部深链，目标值来自 store
+    if (sections.some(s => s.id === settingsSection)) setSection(settingsSection as SettingsSection)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- sections 由 t 派生，随语言变化，不需要触发切区
+  }, [open, settingsSection])
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement>(null)
   const normalizedQuery = query.trim().toLowerCase()
@@ -756,6 +766,9 @@ function EditorSection() {
           <Switch checked={paragraphFocus} onCheckedChange={() => toggleParagraphFocus()} />
         </div>
       </div>
+
+      {/* 快捷键（分类折叠，默认收起） */}
+      <ShortcutsSection />
 
       {/* 说明 */}
       <div

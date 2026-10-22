@@ -23,6 +23,7 @@ import WelcomePage from '../pages/WelcomePage'
 import KnowledgeOverview from '../pages/KnowledgeOverview'
 import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
+import { formatBinding, matchesBinding, shortcutBinding } from '../../stores/shortcut-store'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useMemoryStore } from '../../stores/memory-store'
@@ -312,7 +313,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
   // 绑定 ⌘W 快捷键：关闭当前 Tab（带 dirty/inline 未决检查——统一走 tryCloseTab 口径）
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'w' || e.key === 'W')) {
+      if (matchesBinding(e, shortcutBinding('close-tab'))) {
         e.preventDefault()
         const { activeTabId: aid } = useEditorStore.getState()
         if (aid) void tryCloseTab(aid)
@@ -333,7 +334,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
       {
         key: 'close',
         label: t('action.close'),
-        shortcut: '⌘W',
+        shortcut: formatBinding(shortcutBinding('close-tab')),
         disabled: tab?.pinned,
         onClick: () => tryCloseTab(tabId),
       },
@@ -380,7 +381,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
       {
         key: 'close-current',
         label: t('action.close'),
-        shortcut: '⌘W',
+        shortcut: formatBinding(shortcutBinding('close-tab')),
         disabled: !hasActive || activeTab?.pinned,
         onClick: () => { if (activeTabId) tryCloseTab(activeTabId) },
       },

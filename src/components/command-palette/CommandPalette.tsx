@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
@@ -12,6 +12,7 @@ import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
+import { SHORTCUT_DEFINITIONS, formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
 
 interface CommandItem {
   id: string
@@ -28,9 +29,6 @@ interface ShortcutItem {
   label: string
   shortcut: string
 }
-
-const isMac = typeof navigator !== 'undefined' && /Mac/i.test(navigator.userAgent)
-const MOD = isMac ? '⌘' : 'Ctrl'
 
 function Kbd({ children }: { children: ReactNode }) {
   return (
@@ -101,6 +99,7 @@ export default function CommandPalette() {
 
 function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const { t } = useTranslation()
+  const bindings = useShortcutStore(s => s.bindings)
   const close = useCommandStore((s) => s.closePalette)
   const openPalette = useCommandStore((s) => s.openPalette)
 
@@ -117,6 +116,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const sidebar = (view: SidebarView) => () => {
     useLayoutStore.getState().showSidebarView(view)
   }
+  const sc = useCallback((id: string) => formatBinding(shortcutBinding(id, bindings)), [bindings])
 
   const commands = useMemo<CommandItem[]>(() => {
     const layout = useLayoutStore.getState()
@@ -134,12 +134,12 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
     return [
       {
         id: 'new-project', label: t('dialog.newProject'), category: t('command.group.general'),
-        shortcut: `${MOD} N`, icon: <FilePlus2 size={15} />, keywords: 'new project 新建',
+        shortcut: sc('new-project'), icon: <FilePlus2 size={15} />, keywords: 'new project 新建',
         run: () => layout.openNewProject(),
       },
       {
         id: 'open-project', label: t('action.openProject'), category: t('command.group.general'),
-        shortcut: `${MOD} O`, icon: <FolderOpen size={15} />, keywords: 'open folder 打开 项目',
+        shortcut: sc('open-project'), icon: <FolderOpen size={15} />, keywords: 'open folder 打开 项目',
         run: async () => {
           const folder = await ipc.invoke('dialog:select-folder')
           if (folder) {
@@ -180,13 +180,13 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       },
       {
         id: 'settings', label: t('settings.title'), category: t('command.group.general'),
-        shortcut: `${MOD} ,`, icon: <Settings2 size={15} />, keywords: 'preferences 设置',
+        shortcut: sc('settings'), icon: <Settings2 size={15} />, keywords: 'preferences 设置',
         run: () => layout.openSettings(),
       },
 
       {
         id: 'toggle-sidebar', label: t('command.toggleSidebar'), category: t('command.group.view'),
-        shortcut: `${MOD} B`, icon: <PanelLeft size={15} />, keywords: 'sidebar 侧栏',
+        shortcut: sc('toggle-sidebar'), icon: <PanelLeft size={15} />, keywords: 'sidebar 侧栏',
         run: () => layout.toggleSidebar(),
       },
       {
@@ -206,12 +206,12 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       },
       {
         id: 'toggle-agent', label: t('command.toggleAgent'), category: t('command.group.view'),
-        shortcut: `${MOD} ⇧ A`, icon: <Bot size={15} />, keywords: 'agent ai chat 智能体',
+        shortcut: sc('toggle-agent'), icon: <Bot size={15} />, keywords: 'agent ai chat 智能体',
         run: () => layout.toggleAIPanel(),
       },
       {
         id: 'toggle-bottom', label: t('command.toggleBottom'), category: t('command.group.view'),
-        shortcut: `${MOD} J`, icon: <PanelBottom size={15} />, keywords: 'bottom panel tasks 底栏',
+        shortcut: sc('toggle-bottom'), icon: <PanelBottom size={15} />, keywords: 'bottom panel tasks 底栏',
         run: () => layout.toggleBottomPanel(),
       },
       {
@@ -261,41 +261,35 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       themeCommand('theme-dark', t('theme.dark'), 'dark', <Brain size={15} />),
       {
         id: 'zoom-in', label: t('zoom.in'), category: t('command.group.theme'),
-        shortcut: `${MOD} +`, icon: <ZoomIn size={15} />,
+        shortcut: sc('zoom-in'), icon: <ZoomIn size={15} />,
         run: () => useThemeStore.getState().zoomIn(),
       },
       {
         id: 'zoom-out', label: t('zoom.out'), category: t('command.group.theme'),
-        shortcut: `${MOD} -`, icon: <Minus size={15} />,
+        shortcut: sc('zoom-out'), icon: <Minus size={15} />,
         run: () => useThemeStore.getState().zoomOut(),
       },
       {
         id: 'zoom-reset', label: t('zoom.reset'), category: t('command.group.theme'),
-        shortcut: `${MOD} 0`, icon: <Gauge size={15} />,
+        shortcut: sc('zoom-reset'), icon: <Gauge size={15} />,
         run: () => useThemeStore.getState().zoomReset(),
       },
       {
         id: 'shortcuts', label: t('command.shortcuts'), category: t('command.group.help'),
-        shortcut: '?', icon: <Keyboard size={15} />, keywords: 'keyboard shortcuts 快捷键',
+        shortcut: sc('shortcuts-help'), icon: <Keyboard size={15} />, keywords: 'keyboard shortcuts 快捷键',
         run: () => openPalette('shortcuts'),
       },
     ]
-  }, [t, openPalette])
+  }, [t, openPalette, sc])
 
   const shortcuts = useMemo<ShortcutItem[]>(() => [
-    { id: 'cmdk', label: t('command.title'), shortcut: `${MOD} K` },
-    { id: 'save', label: t('action.save'), shortcut: `${MOD} S` },
-    { id: 'search', label: t('command.shortcut.search'), shortcut: `${MOD} F` },
-    { id: 'new-project', label: t('dialog.newProject'), shortcut: `${MOD} N` },
-    { id: 'open-project', label: t('action.openProject'), shortcut: `${MOD} O` },
-    { id: 'settings', label: t('settings.title'), shortcut: `${MOD} ,` },
-    { id: 'sidebar', label: t('command.toggleSidebar'), shortcut: `${MOD} B` },
-    { id: 'agent', label: t('command.toggleAgent'), shortcut: `${MOD} ⇧ A` },
-    { id: 'bottom', label: t('command.toggleBottom'), shortcut: `${MOD} J` },
-    { id: 'focus', label: t('command.focusMode'), shortcut: 'F11' },
-    { id: 'shortcuts', label: t('command.shortcuts'), shortcut: '?' },
+    ...SHORTCUT_DEFINITIONS.map(def => ({
+      id: def.id,
+      label: t(def.labelKey),
+      shortcut: formatBinding(shortcutBinding(def.id, bindings)),
+    })),
     { id: 'palette-nav', label: t('command.shortcut.nav'), shortcut: '↑ ↓ / Enter' },
-  ], [t])
+  ], [t, bindings])
 
   const normalized = query.trim().toLowerCase()
   const filteredCommands = useMemo(() => {

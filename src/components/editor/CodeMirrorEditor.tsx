@@ -4,7 +4,7 @@ import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type Vi
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
 import { languages } from '@codemirror/language-data'
 import { EditorState, Transaction } from '@codemirror/state'
-import { openSearchPanel, closeSearchPanel, search } from '@codemirror/search'
+import { openSearchPanel, closeSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
@@ -16,6 +16,7 @@ import { extractPreferencePair, recordPreference } from '../../services/preferen
 import { useEditorStore } from '../../stores/editor-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { formatBinding, matchesBinding, shortcutBinding, toCodeMirrorKey, useShortcutStore } from '../../stores/shortcut-store'
 import {
   INLINE_ACCEPT_EVENT,
   changesIntersectRanges,
@@ -291,6 +292,7 @@ export default function CodeMirrorEditor({
   const typewriter = useEditorPrefsStore((s) => s.typewriter)
   const paragraphFocus = useEditorPrefsStore((s) => s.paragraphFocus)
   const focusMode = useLayoutStore((s) => s.focusMode)
+  const shortcutBindings = useShortcutStore((s) => s.bindings)
   // t 是稳定引用（useCallback []），语言切换时 locale 变化必须重算操作标签/指令（eslint 仅看数据流，误判 locale 不必要）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t, locale])
@@ -753,7 +755,16 @@ export default function CodeMirrorEditor({
       search({ top: true }),
       EditorView.lineWrapping,
       keymap.of([
-        ...historyKeymap,           // Ctrl+Z 撤销, Ctrl+Y/Ctrl+Shift+Z 重做
+        // 撤销/重做：默认历史键位由设置里的动态绑定替换；Ctrl+Shift+Z 作为重做副键保留
+        { key: toCodeMirrorKey(shortcutBinding('undo', shortcutBindings)), run: undo },
+        { key: toCodeMirrorKey(shortcutBinding('redo', shortcutBindings)), run: redo },
+        ...(toCodeMirrorKey(shortcutBinding('redo', shortcutBindings)) === 'Mod-Shift-z'
+          || toCodeMirrorKey(shortcutBinding('undo', shortcutBindings)) === 'Mod-Shift-z'
+          ? []
+          : [{ key: 'Mod-Shift-z', run: redo }]),
+        ...historyKeymap.filter((binding) => !['Mod-z', 'Mod-y', 'Mod-Shift-z'].includes(binding.key ?? '')),
+        // 查找主键由外部 capture 处理（支持改键）；F3 / Mod-g 等次键保留
+        ...searchKeymap.filter((binding) => binding.key !== 'Mod-f'),
         {
           key: 'Tab',
           run: (target) => {
@@ -807,7 +818,7 @@ export default function CodeMirrorEditor({
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
-  }, [mode, paragraphFocus, typewriter, focusMode])
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {
@@ -985,14 +996,14 @@ export default function CodeMirrorEditor({
     highlightActiveLineGutter: false,
     // 写作正文不要浏览器拼写检查的红色波浪线
     spellcheck: false,
-    searchKeymap: true,
+    searchKeymap: false,
   }), [])
 
   return (
     <div className="relative h-full flex flex-col min-h-0"
       onKeyDownCapture={(e) => {
         // 全局捕获 Ctrl+F 实现搜索框 Toggle（解决搜索框内焦点时快捷键失效的问题）
-        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
+        if (matchesBinding(e.nativeEvent, shortcutBinding('find', shortcutBindings))) {
           e.preventDefault()
           e.stopPropagation()
           const view = editorRef.current?.view
@@ -1008,8 +1019,8 @@ export default function CodeMirrorEditor({
         }
       }}
       onKeyDown={(e) => {
-        // 捕获 Cmd+S 保存
-        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+        // 捕获保存快捷键
+        if (matchesBinding(e.nativeEvent, shortcutBinding('save', shortcutBindings))) {
           e.preventDefault()
           onSave?.(lastEmittedContentRef.current)
         }
@@ -1124,8 +1135,8 @@ export default function CodeMirrorEditor({
                 <>
                   <button
                     className="p-1 rounded"
-                    title={t('action.undo')}
-                    aria-label={t('action.undo')}
+                    title={`${t('shortcut.undo')} (${formatBinding(shortcutBinding('undo', shortcutBindings))})`}
+                    aria-label={t('shortcut.undo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
@@ -1136,8 +1147,8 @@ export default function CodeMirrorEditor({
                   ><Undo2 size={14} /></button>
                   <button
                     className="p-1 rounded"
-                    title={t('action.redo')}
-                    aria-label={t('action.redo')}
+                    title={`${t('shortcut.redo')} (${formatBinding(shortcutBinding('redo', shortcutBindings))})`}
+                    aria-label={t('shortcut.redo')}
                     style={{ color: 'var(--color-text-secondary)' }}
                     onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
                     onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}

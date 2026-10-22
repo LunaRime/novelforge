@@ -9,6 +9,7 @@ import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useAgentStore } from './stores/agent-store'
 import { useUpdateStore } from './stores/update-store'
+import { matchesBinding, shortcutBinding } from './stores/shortcut-store'
 import { useAutomationStore } from './stores/automation-store'
 import { useThinkingStore } from './stores/thinking-store'
 import { t } from './shared/locale'
@@ -263,6 +264,13 @@ export default function App() {
     // 初始化 ProjectService — 注册全局事件监听（生命周期与 App 一致）
     import('./services/project-service').then(({ initProjectService }) => {
       initProjectService()
+      // 自动化/CLI 入口：主进程通过 --project=<路径> 注入 ?project=；打开后清掉 query，避免刷新重复打开
+      const requestedProject = new URLSearchParams(window.location.search).get('project')
+      if (requestedProject) {
+        window.history.replaceState({}, '', window.location.pathname)
+        void useProjectStore.getState().openProject(requestedProject)
+          .catch(e => console.warn('[Startup] 打开指定项目失败:', e))
+      }
     }).catch(e => console.warn('[ProjectService] 初始化失败:', e))
 
     // 初始化 TransferHub — 中枢消息路由（中间件管道 + 请求响应）
@@ -314,56 +322,55 @@ export default function App() {
       return tag === 'input' || tag === 'textarea' || tag === 'select' || target.isContentEditable
     }
     const handleKeyDown = async (e: KeyboardEvent) => {
-      if (e.key === 'F11') {
+      const binding = (id: string) => shortcutBinding(id)
+      if (matchesBinding(e, binding('focus-mode'))) {
         e.preventDefault()
         useLayoutStore.getState().toggleFocusMode()
         return
       }
-      const mod = e.metaKey || e.ctrlKey
-      // Cmd+K / Ctrl+K — 命令面板（所有工作台操作的键盘入口）
-      if (mod && e.key.toLowerCase() === 'k') {
+      // 命令面板（所有工作台操作的键盘入口）
+      if (matchesBinding(e, binding('command-palette'))) {
         e.preventDefault()
         useCommandStore.getState().togglePalette('commands')
         return
       }
-      // ? — 快捷键速查（输入框/正文内不抢字符）
-      if (!mod && e.key === '?' && !isTypingTarget(e.target)) {
+      // 快捷键速查（输入框/正文内不抢字符）
+      if (matchesBinding(e, binding('shortcuts-help')) && !isTypingTarget(e.target)) {
         e.preventDefault()
         useCommandStore.getState().openPalette('shortcuts')
         return
       }
-      if (!mod) return
-      if (e.key === '=' || e.key === '+') {
+      if (matchesBinding(e, binding('zoom-in'))) {
         e.preventDefault()
         useThemeStore.getState().zoomIn()
-      } else if (e.key === '-') {
+      } else if (matchesBinding(e, binding('zoom-out'))) {
         e.preventDefault()
         useThemeStore.getState().zoomOut()
-      } else if (e.key === '0') {
+      } else if (matchesBinding(e, binding('zoom-reset'))) {
         e.preventDefault()
         useThemeStore.getState().zoomReset()
-      } else if (e.key === 'n' || e.key === 'N') {
+      } else if (matchesBinding(e, binding('new-project'))) {
         e.preventDefault()
         useLayoutStore.getState().openNewProject()
-      } else if (e.key === 'o' || e.key === 'O') {
+      } else if (matchesBinding(e, binding('open-project'))) {
         e.preventDefault()
         const folder = await ipc.invoke('dialog:select-folder')
         if (folder) {
           useProjectStore.getState().openProject(folder)
         }
-      } else if (e.key === 'b' || e.key === 'B') {
+      } else if (matchesBinding(e, binding('toggle-sidebar'))) {
         e.preventDefault()
         useLayoutStore.getState().toggleSidebar()
-      } else if (e.key === 'j' || e.key === 'J') {
+      } else if (matchesBinding(e, binding('toggle-bottom'))) {
         e.preventDefault()
         useLayoutStore.getState().toggleBottomPanel()
-      } else if ((e.key === 'a' || e.key === 'A') && e.shiftKey) {
+      } else if (matchesBinding(e, binding('toggle-agent'))) {
         e.preventDefault()
         useLayoutStore.getState().toggleAIPanel()
-      } else if (e.key === ',') {
+      } else if (matchesBinding(e, binding('settings'))) {
         e.preventDefault()
         useLayoutStore.getState().openSettings()
-      } else if (e.key === 'u' || e.key === 'U') {
+      } else if (matchesBinding(e, binding('check-updates'))) {
         // 检查更新（原原生菜单 accelerator CmdOrCtrl+U，菜单已迁移至设置界面）
         e.preventDefault()
         useUpdateStore.getState().checkForUpdates()

@@ -262,11 +262,15 @@ function createWindow() {
     }
   })
 
+  // 自动化/CLI 入口：--project=<路径> 直接打开项目，避免依赖原生文件选择框与桌面焦点
+  const projectArg = process.argv.find(a => a.startsWith('--project='))?.slice('--project='.length)
   if (VITE_DEV_SERVER_URL) {
-    win.loadURL(VITE_DEV_SERVER_URL)
-    logger.info('Main', t('log.main.devMode').replace('{url}', VITE_DEV_SERVER_URL))
+    const url = new URL(VITE_DEV_SERVER_URL)
+    if (projectArg) url.searchParams.set('project', projectArg)
+    win.loadURL(url.toString())
+    logger.info('Main', t('log.main.devMode').replace('{url}', url.toString()))
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'))
+    win.loadFile(path.join(RENDERER_DIST, 'index.html'), projectArg ? { query: { project: projectArg } } : undefined)
     logger.info('Main', t('log.main.productionStart'))
   }
 }
