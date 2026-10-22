@@ -28,7 +28,8 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(__dirname, '..')
-const instancesRoot = path.join(os.homedir(), '.novelforge', 'dev-instances')
+const instancesRoot = process.env.NOVELFORGE_DEV_INSTANCES_ROOT
+  || path.join(os.homedir(), '.novelforge', 'dev-instances')
 const require = createRequire(import.meta.url)
 
 function electronBinary() {
@@ -117,16 +118,22 @@ async function start(options) {
   ]
   if (options['user-data-dir']) args.push(`--user-data-dir=${path.resolve(String(options['user-data-dir']))}`)
 
+  // 从 UI 启动时，CLI 自己由 ELECTRON_RUN_AS_NODE=1 执行；
+// 该变量绝不能传给新窗口，否则 Electron 会以纯 Node 模式跑 main.js。
+  const childEnv = {
+    ...process.env,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    ELECTRON_ENABLE_LOGGING: '1',
+    NOVELFORGE_DEVTOOLS: '1',
+    NOVELFORGE_DEV_INSTANCE: id,
+    NOVELFORGE_DEV_INSTANCES_ROOT: instancesRoot,
+  }
+  delete childEnv.ELECTRON_RUN_AS_NODE
+
   const child = spawn(bin, args, {
     cwd: repoRoot,
-    env: {
-      ...process.env,
-      HOME: home,
-      XDG_CONFIG_HOME: path.join(home, '.config'),
-      ELECTRON_ENABLE_LOGGING: '1',
-      NOVELFORGE_DEVTOOLS: '1',
-      NOVELFORGE_DEV_INSTANCE: id,
-    },
+    env: childEnv,
     detached: true,
     stdio: ['ignore', logFd, logFd],
   })

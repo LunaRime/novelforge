@@ -6,7 +6,7 @@
  * 安全：base URL 由主进程读取（LLM 只能传相对 path）；仅 http/https；响应 1MB 截断。
  */
 import { useState, useEffect } from 'react'
-import { Save, Plug, ShieldAlert, HelpCircle, Globe, FileText } from 'lucide-react'
+import { Save, Plug, ShieldAlert, HelpCircle, Globe, FileText, Terminal } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -17,6 +17,7 @@ import { Textarea } from '../ui/Textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
+import { useLayoutStore } from '../../stores/layout-store'
 import type { GlobalConfig } from '../../shared/ipc-channels'
 
 /** 默认超时（ms） */
@@ -25,6 +26,7 @@ const DEFAULT_TIMEOUT = 15000
 export default function DeveloperModeSection() {
   const { t } = useTranslation()
   const [enabled, setEnabled] = useState(false)
+  const [consoleEnabled, setConsoleEnabled] = useState(false)
   const [apiBaseUrl, setApiBaseUrl] = useState('')
   const [headersText, setHeadersText] = useState('{}')
   const [timeoutMs, setTimeoutMs] = useState(DEFAULT_TIMEOUT)
@@ -47,6 +49,7 @@ export default function DeveloperModeSection() {
       const dev = cfg2?.devMode
       if (dev) {
         setEnabled(dev.enabled ?? false)
+        setConsoleEnabled(dev.consoleEnabled ?? false)
         setApiBaseUrl(dev.apiBaseUrl ?? '')
         setHeadersText(dev.headers ? JSON.stringify(dev.headers, null, 2) : '{}')
         setTimeoutMs(dev.timeoutMs ?? DEFAULT_TIMEOUT)
@@ -87,7 +90,7 @@ export default function DeveloperModeSection() {
     setSaving(true)
     try {
       await ipc.invoke('config:set', {
-        devMode: { enabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
+        devMode: { enabled, consoleEnabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
         devBrowser: { enabled: browserEnabled, cdpPort: browserPort || 9222 },
         // 日志保留（钳制：1-30 个文件 / 1-365 天）
         logRetention: {
@@ -144,6 +147,36 @@ export default function DeveloperModeSection() {
       <div className="flex items-start gap-2 p-3 rounded-xl text-xs" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-muted)' }}>
         <ShieldAlert size={13} style={{ flexShrink: 0, marginTop: 1 }} />
         <span>{t('dev.hint')}</span>
+      </div>
+
+      {/* 开发者控制台 */}
+      <div className="p-3 rounded-xl space-y-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <Terminal size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
+            <div className="min-w-0">
+              <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.consoleEnable')}</div>
+              <div className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('dev.consoleEnableHint')}</div>
+            </div>
+          </div>
+          <input
+            type="checkbox"
+            checked={consoleEnabled}
+            onChange={(e) => setConsoleEnabled(e.target.checked)}
+            className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer flex-shrink-0"
+          />
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            useLayoutStore.getState().closeSettings()
+            useLayoutStore.getState().openDevConsole()
+          }}
+        >
+          <Terminal size={12} />
+          {t('dev.consoleOpen')}
+        </Button>
       </div>
 
       {/* 配置表单 */}

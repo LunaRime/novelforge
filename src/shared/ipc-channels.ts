@@ -1221,6 +1221,33 @@ export interface DevIpcMetricsData {
   recent: DevIpcRecentCall[]
 }
 
+/** 开发者控制台 — 隔离实例 */
+export interface DevInstanceInfo {
+  id: string
+  pid: number
+  pgid?: number
+  port: number
+  project: string
+  home: string
+  log: string
+  startedAt: number
+  status: string
+  alive: boolean
+  stoppedAt?: number
+  error?: string
+}
+
+export interface DevInstanceStartInput {
+  project?: string
+  port?: number
+  name?: string
+}
+
+export interface DevConsoleStatus {
+  enabled: boolean
+  reason?: string
+}
+
 export interface DevChannels {
   /** 调用开发者模式配置的外部 API（主进程代理 fetch，绕过渲染 CSP） */
   'dev:invoke': {
@@ -1246,6 +1273,31 @@ export interface DevChannels {
   'dev:ipc-clear': {
     args: []
     return: { success: boolean }
+  }
+  /** 开发者控制台：当前是否可用 */
+  'dev:console-status': {
+    args: []
+    return: DevConsoleStatus
+  }
+  /** 开发者控制台：列出隔离实例 */
+  'dev:instance-list': {
+    args: []
+    return: DevInstanceInfo[]
+  }
+  /** 开发者控制台：启动隔离实例 */
+  'dev:instance-start': {
+    args: [input: DevInstanceStartInput]
+    return: { success: boolean; instance?: DevInstanceInfo; error?: string }
+  }
+  /** 开发者控制台：停止隔离实例 */
+  'dev:instance-stop': {
+    args: [id: string]
+    return: { success: boolean; error?: string }
+  }
+  /** 开发者控制台：停止并删除隔离实例目录 */
+  'dev:instance-clean': {
+    args: [id: string]
+    return: { success: boolean; error?: string }
   }
 }
 

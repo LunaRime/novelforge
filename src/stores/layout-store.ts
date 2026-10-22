@@ -37,6 +37,8 @@ interface LayoutState {
   settingsOpen: boolean
   /** 写作统计弹窗是否打开（2026-09-22 由"编辑区页面"改为弹窗） */
   activityDialogOpen: boolean
+  /** 开发者控制台是否打开 */
+  devConsoleOpen: boolean
   /** 打开设置时指定的初始分区（无则回默认 llm） */
   settingsSection?: string
   /** 新建项目对话框是否打开 */
@@ -81,6 +83,9 @@ interface LayoutState {
   closeSettings: () => void
   openActivityDialog: () => void
   closeActivityDialog: () => void
+  /** 开发者控制台（仅开发态/显式开启） */
+  openDevConsole: () => void
+  closeDevConsole: () => void
   openNewProject: () => void
   closeNewProject: () => void
   openImportNovel: () => void
@@ -106,6 +111,7 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   // 全局弹窗默认关闭
   settingsOpen: false,
   activityDialogOpen: false,
+  devConsoleOpen: false,
   settingsSection: undefined,
   newProjectOpen: false,
   importNovelOpen: false,
@@ -143,6 +149,8 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   closeSettings: () => set({ settingsOpen: false }),
   openActivityDialog: () => set({ activityDialogOpen: true }),
   closeActivityDialog: () => set({ activityDialogOpen: false }),
+  openDevConsole: () => set({ devConsoleOpen: true }),
+  closeDevConsole: () => set({ devConsoleOpen: false }),
   openNewProject: () => set({ newProjectOpen: true }),
   closeNewProject: () => set({ newProjectOpen: false }),
   openImportNovel: () => set({ importNovelOpen: true }),

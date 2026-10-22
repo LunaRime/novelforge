@@ -18,6 +18,7 @@ import { registerUpdateController } from './controllers/update-controller'
 import { registerExportController } from './controllers/export-controller'
 import { registerSkillController } from './controllers/skill-controller'
 import { registerDevController } from './controllers/dev-controller'
+import { registerInstanceController } from './dev/instance-controller'
 import { registerBrowserController } from './controllers/browser-controller'
 import { registerReportController } from './controllers/report-controller'
 import { registerTemplatesController } from './controllers/templates-controller'
@@ -51,6 +52,7 @@ export function registerIPCHandlers() {
   registerExportController()
   registerSkillController()
   registerDevController()
+  registerInstanceController()
   registerBrowserController()
   registerReportController()
   registerTemplatesController()

@@ -29,6 +29,7 @@ import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
+import DevConsoleDialog from './components/dev/DevConsoleDialog'
 import ActivityDialog from './components/dialogs/ActivityDialog'
 import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -187,6 +188,7 @@ export default function App() {
     chapterCreationPrefill, closeChapterCreation,
     focusMode, bottomPanelOpen,
     activityDialogOpen, closeActivityDialog,
+    devConsoleOpen, closeDevConsole,
   } = useLayoutStore(useShallow(s => ({
     sidebarOpen: s.sidebarOpen,
     aiPanelOpen: s.aiPanelOpen,
@@ -204,6 +206,8 @@ export default function App() {
     bottomPanelOpen: s.bottomPanelOpen,
     activityDialogOpen: s.activityDialogOpen,
     closeActivityDialog: s.closeActivityDialog,
+    devConsoleOpen: s.devConsoleOpen,
+    closeDevConsole: s.closeDevConsole,
   })))
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
@@ -547,6 +551,13 @@ export default function App() {
         <ActivityDialog
           open={activityDialogOpen}
           onClose={closeActivityDialog}
+        />
+      </ErrorBoundary>
+      {/* 开发者控制台（仅开发态/显式开启；内部有门禁） */}
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <DevConsoleDialog
+          open={devConsoleOpen}
+          onClose={closeDevConsole}
         />
       </ErrorBoundary>
       {/* 全屏设置弹窗 — key 随开关变化重新挂载，保证每次打开回到默认分区 */}
