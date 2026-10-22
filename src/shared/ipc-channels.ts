@@ -1269,6 +1269,22 @@ export interface DevDbQueryResult {
   error?: string
 }
 
+/** 开发者控制台 — 性能快照 */
+export interface DevPerfSnapshot {
+  main: {
+    pid: number
+    rss: number
+    heapUsed: number
+    heapTotal: number
+    external: number
+    uptimeSec: number
+    eventLoopDelayMs: number
+  }
+  app: Array<{ type: string; pid: number; cpuPercent: number; memoryKB: number }>
+  db: { projectPath: string | null; size: number; walSize: number }
+  logs: { dir: string; files: number; bytes: number }
+}
+
 export interface DevChannels {
   /** 调用开发者模式配置的外部 API（主进程代理 fetch，绕过渲染 CSP） */
   'dev:invoke': {
@@ -1334,6 +1350,11 @@ export interface DevChannels {
   'dev:db-query': {
     args: [sql: string, limit?: number]
     return: DevDbQueryResult
+  }
+  /** 开发者控制台：主进程/DB/日志性能快照 */
+  'dev:perf': {
+    args: []
+    return: DevPerfSnapshot
   }
 }
 

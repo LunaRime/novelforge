@@ -204,6 +204,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'dev:db-tables': { authority: 'read-project' },
   'dev:db-schema': { authority: 'read-project' },
   'dev:db-query': { authority: 'read-project' },
+  'dev:perf': { authority: 'dev-bridge' },
   'dialog:save-file': { authority: 'dialog' },
   'dialog:select-files': { authority: 'dialog' },
   'dialog:select-folder': { authority: 'dialog' },

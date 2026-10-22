@@ -13,6 +13,8 @@ import type { DevConsoleStatus } from '../../shared/ipc-channels'
 import DevInstancesTab from './DevInstancesTab'
 import DevIpcTab from './DevIpcTab'
 import DevDatabaseTab from './DevDatabaseTab'
+import DevLogsTab from './DevLogsTab'
+import DevPerformanceTab from './DevPerformanceTab'
 
 type DevTab = 'instances' | 'ipc' | 'agent' | 'models' | 'database' | 'logs' | 'performance'
 
@@ -87,7 +89,9 @@ export default function DevConsoleDialog({ open, onClose }: { open: boolean; onC
               {tab === 'instances' && <DevInstancesTab active />}
               {tab === 'ipc' && <DevIpcTab active />}
               {tab === 'database' && <DevDatabaseTab active />}
-              {(tab === 'agent' || tab === 'models' || tab === 'logs' || tab === 'performance') && (
+              {tab === 'logs' && <DevLogsTab active />}
+              {tab === 'performance' && <DevPerformanceTab active />}
+              {(tab === 'agent' || tab === 'models') && (
                 <div className="flex h-full items-center justify-center p-6">
                   <EmptyState message={t('dev.consoleComingSoon')} />
                 </div>

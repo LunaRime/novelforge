@@ -15,6 +15,7 @@ import { app } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { isIpcMetricsEnabled, setIpcMetricsEnabled, getIpcMetrics, clearIpcMetrics } from '../dev/ipc-metrics'
 import { listTables, getSchema, runQuery } from '../dev/db-inspector'
+import { getPerfSnapshot } from '../dev/perf-snapshot'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
@@ -154,6 +155,12 @@ export function registerDevController() {
   guardedHandle('dev:db-query', async (_event, sql: string, limit?: number) => {
     assertDevConsoleEnabled()
     return runQuery(sql, limit)
+  })
+
+  /** 开发者控制台：性能快照 */
+  guardedHandle('dev:perf', async () => {
+    assertDevConsoleEnabled()
+    return getPerfSnapshot()
   })
 
   /** 调用外部 API（AI 工具 call_external_api 与设置页测试共用） */
