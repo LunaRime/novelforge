@@ -79,7 +79,7 @@ export default function DevPerformanceTab({ active }: { active: boolean }) {
             <Card label={t('dev.perfDb')} value={formatBytes(snapshot.db.size)} hint={snapshot.db.projectPath ?? '—'} />
             <Card label={t('dev.perfWal')} value={formatBytes(snapshot.db.walSize)} />
             <Card label={t('dev.perfLogs')} value={formatBytes(snapshot.logs.bytes)} hint={`${snapshot.logs.files} ${t('dev.perfFiles')}`} />
-            {rendererMemory !== undefined && <Card label="Renderer heap" value={formatBytes(rendererMemory)} />}
+            {rendererMemory !== undefined && <Card label={t('dev.perfRenderer')} value={formatBytes(rendererMemory)} />}
           </div>
 
           <div className="mt-4 text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.perfProcesses')}</div>

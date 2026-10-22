@@ -124,9 +124,9 @@ export default function DevDatabaseTab({ active }: { active: boolean }) {
                 <thead>
                   <tr style={{ color: 'var(--color-text-muted)' }}>
                     <th className="px-2 py-1 text-left font-medium">{t('dev.dbColumns')}</th>
-                    <th className="px-2 py-1 text-left font-medium">Type</th>
-                    <th className="px-2 py-1 text-left font-medium">PK</th>
-                    <th className="px-2 py-1 text-left font-medium">Not null</th>
+                    <th className="px-2 py-1 text-left font-medium">{t('dev.dbType')}</th>
+                    <th className="px-2 py-1 text-left font-medium">{t('dev.dbPk')}</th>
+                    <th className="px-2 py-1 text-left font-medium">{t('dev.dbNotNull')}</th>
                   </tr>
                 </thead>
                 <tbody>

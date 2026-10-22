@@ -36,8 +36,16 @@ declare global {
   interface Window {
     __VELA_HTML_READY?: number
     __vela_hasDirtyTabs?: () => boolean
+    /** 隔离实例身份（CLI 注入；CDP 客户端用它确认没有连到外部 Chrome/另一实例） */
+    __velaDevInstanceId?: string
+    /** CLI/自动化远程打开开发者控制台 */
+    __velaOpenDevConsole?: () => void
   }
 }
+
+// 必须在 React 挂载前写入：CLI 的 start/console-ui 会立即通过 CDP 读取该标记
+const isolatedInstanceId = new URLSearchParams(window.location.search).get('instance')
+if (isolatedInstanceId) window.__velaDevInstanceId = isolatedInstanceId
 
 // 暴露给主进程的关闭前检查（主进程 window.on('close') 通过 executeJavaScript 调用）
 // #34 块 D：纳入角色卡未保存编辑（此前只查编辑器 Tab——角色 dirty 从不传播，

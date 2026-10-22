@@ -6,6 +6,8 @@
  * 2. db-inspector 仍使用 better-sqlite3 的 readonly 连接（第二道防线）。
  */
 
+import { t } from '../../src/shared/locale'
+
 export type SqlGuardResult =
   | { ok: true; sql: string }
   | { ok: false; reason: string }
@@ -30,32 +32,32 @@ function stripComments(sql: string): string {
 
 export function isReadOnlySql(sql: string): SqlGuardResult {
   const original = (sql ?? '').trim()
-  if (!original) return { ok: false, reason: 'SQL 不能为空' }
+  if (!original) return { ok: false, reason: t('dev.sqlEmpty') }
 
   const normalized = stripComments(original).trim()
-  if (!normalized) return { ok: false, reason: 'SQL 不能只有注释' }
+  if (!normalized) return { ok: false, reason: t('dev.sqlOnlyComments') }
 
   // 只允许末尾一个分号；其余分号视为多语句
   const withoutTrailing = normalized.replace(/;\s*$/, '').trim()
-  if (withoutTrailing.includes(';')) return { ok: false, reason: '不允许多条语句' }
-  if (!withoutTrailing) return { ok: false, reason: 'SQL 不能为空' }
+  if (withoutTrailing.includes(';')) return { ok: false, reason: t('dev.sqlMultiStatement') }
+  if (!withoutTrailing) return { ok: false, reason: t('dev.sqlEmpty') }
 
   const first = withoutTrailing.match(/^([a-z]+)\b/i)?.[1]?.toLowerCase()
   if (!first || !['select', 'with', 'pragma'].includes(first)) {
-    return { ok: false, reason: '仅允许 SELECT / WITH / PRAGMA' }
+    return { ok: false, reason: t('dev.sqlOnlyRead') }
   }
 
   if (FORBIDDEN.test(withoutTrailing)) {
-    return { ok: false, reason: '包含写操作或 DDL' }
+    return { ok: false, reason: t('dev.sqlWrite') }
   }
 
   if (first === 'pragma') {
     if (withoutTrailing.includes('=')) {
-      return { ok: false, reason: 'PRAGMA 不允许赋值' }
+      return { ok: false, reason: t('dev.sqlPragmaAssign') }
     }
     const pragma = withoutTrailing.match(/^pragma\s+([a-z_]+)\b/i)?.[1]?.toLowerCase()
     if (!pragma || !ALLOWED_PRAGMAS.has(pragma)) {
-      return { ok: false, reason: 'PRAGMA 仅允许只读查询' }
+      return { ok: false, reason: t('dev.sqlPragmaReadOnly') }
     }
   }
 

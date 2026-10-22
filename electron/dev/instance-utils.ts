@@ -1,3 +1,4 @@
+import { t } from '../../src/shared/locale'
 import type { DevInstanceInfo, DevInstanceStartInput } from '../../src/shared/ipc-channels'
 
 export type StartInputValidation =
@@ -8,24 +9,24 @@ export type StartInputValidation =
 export function validateStartInput(input: unknown): StartInputValidation {
   if (input === undefined || input === null) return { ok: true, value: {} }
   if (typeof input !== 'object' || Array.isArray(input)) {
-    return { ok: false, error: '实例参数必须是对象' }
+    return { ok: false, error: t('dev.instanceInputObject') }
   }
 
   const raw = input as Record<string, unknown>
   const value: DevInstanceStartInput = {}
 
   if (raw.project !== undefined) {
-    if (typeof raw.project !== 'string') return { ok: false, error: 'project 必须是字符串' }
+    if (typeof raw.project !== 'string') return { ok: false, error: t('dev.instanceProjectString') }
     if (raw.project.trim()) value.project = raw.project.trim()
   }
   if (raw.port !== undefined) {
     if (typeof raw.port !== 'number' || !Number.isInteger(raw.port) || raw.port < 1024 || raw.port > 65535) {
-      return { ok: false, error: 'port 必须是 1024-65535 的整数' }
+      return { ok: false, error: t('dev.instancePortInvalid') }
     }
     value.port = raw.port
   }
   if (raw.name !== undefined) {
-    if (typeof raw.name !== 'string') return { ok: false, error: 'name 必须是字符串' }
+    if (typeof raw.name !== 'string') return { ok: false, error: t('dev.instanceNameString') }
     if (raw.name.trim()) value.name = raw.name.trim()
   }
 

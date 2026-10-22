@@ -113,13 +113,42 @@ export async function pickFreePort(startPort) {
   throw new Error(`no free port in ${start}-${start + 99}`)
 }
 
-function isPortFree(port) {
+export async function isPortFree(port) {
   return new Promise((resolve) => {
     const server = net.createServer()
     server.once('error', () => resolve(false))
     server.once('listening', () => server.close(() => resolve(true)))
     server.listen(port, '127.0.0.1')
   })
+}
+
+/** 构造隔离子进程环境（Windows 需要 USERPROFILE/APPDATA/LOCALAPPDATA，HOME/XDG 不生效） */
+export function buildChildEnv(baseEnv, home, platform = process.platform) {
+  const env = {
+    ...baseEnv,
+    HOME: home,
+    XDG_CONFIG_HOME: path.join(home, '.config'),
+    ELECTRON_ENABLE_LOGGING: '1',
+    NOVELFORGE_DEVTOOLS: '1',
+  }
+  if (platform === 'win32') {
+    const parsed = path.win32.parse(home)
+    env.USERPROFILE = home
+    env.APPDATA = path.win32.join(home, 'AppData', 'Roaming')
+    env.LOCALAPPDATA = path.win32.join(home, 'AppData', 'Local')
+    if (parsed.root) {
+      env.HOMEDRIVE = parsed.root.replace(/\\$/, '')
+      env.HOMEPATH = home.slice(parsed.root.length)
+    }
+  }
+  delete env.ELECTRON_RUN_AS_NODE
+  return env
+}
+
+/** 进程归属校验：只认 CLI 注入的 --dev-instance=<id>，防 PID 复用误杀 */
+export function isOwnedProcessCommand(commandLine, id) {
+  if (!commandLine || !id) return false
+  return commandLine.includes(`--dev-instance=${id}`)
 }
 
 /** 取 CDP 页面 target（实例启动后用） */

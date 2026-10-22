@@ -270,16 +270,21 @@ function createWindow() {
   const projectArg = process.argv.find(a => a.startsWith('--project='))?.slice('--project='.length)
   // 开发者控制台独立入口：不依赖项目，由 CLI 的 --dev-console 触发
   const devConsoleArg = process.argv.includes('--dev-console')
+  // 隔离实例身份（CLI 注入）：供 CDP 客户端确认连到的确实是本实例
+  const devInstanceArg = process.argv.find(a => a.startsWith('--dev-instance='))?.slice('--dev-instance='.length)
+  const devInstanceId = process.env.NOVELFORGE_DEV_INSTANCE || devInstanceArg
   if (VITE_DEV_SERVER_URL) {
     const url = new URL(VITE_DEV_SERVER_URL)
     if (projectArg) url.searchParams.set('project', projectArg)
     if (devConsoleArg) url.searchParams.set('devconsole', '1')
+    if (devInstanceId) url.searchParams.set('instance', devInstanceId)
     win.loadURL(url.toString())
     logger.info('Main', t('log.main.devMode').replace('{url}', url.toString()))
   } else {
     const query: Record<string, string> = {}
     if (projectArg) query.project = projectArg
     if (devConsoleArg) query.devconsole = '1'
+    if (devInstanceId) query.instance = devInstanceId
     win.loadFile(
       path.join(RENDERER_DIST, 'index.html'),
       Object.keys(query).length > 0 ? { query } : undefined,

@@ -50,6 +50,17 @@ export default function DevAgentTab({ active }: { active: boolean }) {
 
   const activeConversations = conversations.slice(0, 30)
 
+  const statusLabel = (status: string): string => {
+    switch (status) {
+      case 'pending': return t('dev.agentStatusPending')
+      case 'running': return t('dev.agentStatusRunning')
+      case 'completed': return t('dev.agentStatusCompleted')
+      case 'failed': return t('dev.agentStatusFailed')
+      case 'waiting_confirm': return t('dev.agentStatusWaitingConfirm')
+      default: return status
+    }
+  }
+
   return (
     <div className="flex h-full min-h-0">
       <div className="flex w-[300px] flex-shrink-0 flex-col" style={{ borderRight: '1px solid var(--color-border)' }}>
@@ -117,7 +128,7 @@ export default function DevAgentTab({ active }: { active: boolean }) {
                 </span>
               )}
               <span className="text-micro" style={{ color: 'var(--color-text-muted)' }}>
-                {current.messages.length} {t('dev.agentMessages')} · {current.modelId ?? 'default'}
+                {current.messages.length} {t('dev.agentMessages')} · {current.modelId ?? t('dev.agentDefaultModel')}
               </span>
             </div>
 
@@ -125,7 +136,7 @@ export default function DevAgentTab({ active }: { active: boolean }) {
               <div className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('dev.agentProgress')}</div>
               {progress ? (
                 <div className="mt-2 grid gap-x-6 gap-y-1 text-xs sm:grid-cols-2" style={{ color: 'var(--color-text-secondary)' }}>
-                  <span>phase: <span className="font-mono">{progress.phase}</span></span>
+                  <span>{t('dev.agentPhase')}: <span className="font-mono">{progress.phase}</span></span>
                   <span>{progress.percentage}%</span>
                   <span>{t('dev.agentPlan')}: {progress.completedSteps}/{progress.totalSteps}</span>
                   <span>{t('dev.agentTools')}: {progress.toolIndex}/{progress.totalTools}</span>
@@ -146,7 +157,7 @@ export default function DevAgentTab({ active }: { active: boolean }) {
               <table className="mt-1 w-full border-collapse text-micro">
                 <thead>
                   <tr style={{ color: 'var(--color-text-muted)' }}>
-                    <th className="py-1.5 text-left font-medium">Tool</th>
+                    <th className="py-1.5 text-left font-medium">{t('dev.agentTool')}</th>
                     <th className="py-1.5 text-left font-medium">{t('dev.agentToolStatus')}</th>
                     <th className="py-1.5 text-right font-medium">{t('dev.agentToolDuration')}</th>
                   </tr>
@@ -156,7 +167,7 @@ export default function DevAgentTab({ active }: { active: boolean }) {
                     <tr key={call.id} style={{ borderTop: '1px solid var(--color-border)' }}>
                       <td className="max-w-[280px] truncate py-1.5 font-mono" style={{ color: 'var(--color-text-secondary)' }}>{call.toolName}</td>
                       <td className="py-1.5" style={{ color: call.status === 'failed' ? 'var(--color-error)' : call.status === 'completed' ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
-                        {call.status}
+                        {statusLabel(call.status)}
                       </td>
                       <td className="py-1.5 text-right tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
                         {typeof call.duration_ms === 'number' ? formatDuration(call.duration_ms) : '—'}

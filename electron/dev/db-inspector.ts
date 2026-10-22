@@ -11,6 +11,7 @@ import { getCurrentProjectPath } from '../database'
 import { getProjectVelaDir } from '../utils/config-utils'
 import { isReadOnlySql } from './sql-guard'
 import { redactSecrets } from './ipc-metrics'
+import { t } from '../../src/shared/locale'
 import type { DevDbQueryResult, DevDbSchema, DevDbTable } from '../../src/shared/ipc-channels'
 
 function projectDbPath(): string | null {
@@ -101,7 +102,7 @@ export function runQuery(sql: string, limit = 200): DevDbQueryResult {
   if (!guard.ok) return { success: false, error: guard.reason }
 
   const db = openReadOnly()
-  if (!db) return { success: false, error: '当前没有打开的项目数据库' }
+  if (!db) return { success: false, error: t('dev.dbNoProject') }
 
   const max = Math.min(Math.max(Math.trunc(limit) || 200, 1), 500)
   try {

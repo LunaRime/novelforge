@@ -90,7 +90,9 @@ export default function DevInstancesTab({ active }: { active: boolean }) {
   }
 
   const copyCommand = async (instance: DevInstanceInfo) => {
-    const command = `node scripts/dev-instance.mjs start --project "${instance.project}" --port ${instance.port}`
+    const command = instance.project
+      ? `node scripts/dev-instance.mjs start --project "${instance.project}" --port ${instance.port}`
+      : 'node scripts/dev-instance.mjs start --dev-console'
     try {
       await navigator.clipboard.writeText(command)
       setCopiedId(instance.id)
@@ -167,7 +169,7 @@ export default function DevInstancesTab({ active }: { active: boolean }) {
                     <div className="mt-1 grid gap-x-4 gap-y-0.5 text-micro md:grid-cols-2" style={{ color: 'var(--color-text-muted)' }}>
                       <span>{t('dev.instanceProjectLabel')}: {instance.project}</span>
                       <span>{t('dev.instancePortLabel')}: {instance.port} · {t('dev.instancePidLabel')}: {instance.pid}</span>
-                      <span className="truncate md:col-span-2">log: {instance.log}</span>
+                      <span className="truncate md:col-span-2">{t('dev.instanceLogLabel')}: {instance.log}</span>
                     </div>
                   </div>
                   <div className="flex flex-shrink-0 items-center gap-1">

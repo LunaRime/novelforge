@@ -12,10 +12,14 @@ import { guardedHandle } from '../security/ipc-guard'
 import { isDevConsoleEnabled } from '../controllers/dev-controller'
 import { redactSecrets } from './ipc-metrics'
 import { isValidInstanceId, parseInstanceList, validateStartInput } from './instance-utils'
+import { t } from '../../src/shared/locale'
 import type { DevInstanceInfo, DevInstanceStartInput } from '../../src/shared/ipc-channels'
 
 const execFileAsync = promisify(execFile)
-const DISABLED = '开发者控制台未启用（设置 → 开发者选项，或使用 --devtools 启动）'
+
+function disabledMessage(): string {
+  return t('dev.consoleDisabled')
+}
 
 function cliPath(): string {
   const root = app.getAppPath()
@@ -52,7 +56,7 @@ async function runCli(args: string[], timeoutMs: number): Promise<string> {
 export function registerInstanceController(): void {
   guardedHandle('dev:console-status', async () => {
     const enabled = isDevConsoleEnabled()
-    return enabled ? { enabled } : { enabled, reason: DISABLED }
+    return enabled ? { enabled } : { enabled, reason: disabledMessage() }
   })
 
   guardedHandle('dev:instance-list', async (): Promise<DevInstanceInfo[]> => {
@@ -65,7 +69,7 @@ export function registerInstanceController(): void {
   })
 
   guardedHandle('dev:instance-start', async (_event, input: DevInstanceStartInput) => {
-    if (!isDevConsoleEnabled()) return { success: false, error: DISABLED }
+    if (!isDevConsoleEnabled()) return { success: false, error: disabledMessage() }
     const validated = validateStartInput(input)
     if (!validated.ok) return { success: false, error: validated.error }
 
@@ -77,7 +81,7 @@ export function registerInstanceController(): void {
     try {
       const stdout = await runCli(args, 60_000)
       const instance = parseInstanceList(`[${stdout}]`)[0]
-      if (!instance) return { success: false, error: '实例已启动，但 manifest 解析失败' }
+      if (!instance) return { success: false, error: t('dev.instanceParseFailed') }
       return { success: true, instance }
     } catch (error) {
       return { success: false, error: redactSecrets(String(error instanceof Error ? error.message : error)) }
@@ -85,8 +89,8 @@ export function registerInstanceController(): void {
   })
 
   guardedHandle('dev:instance-stop', async (_event, id: string) => {
-    if (!isDevConsoleEnabled()) return { success: false, error: DISABLED }
-    if (!isValidInstanceId(id)) return { success: false, error: '无效的实例 ID' }
+    if (!isDevConsoleEnabled()) return { success: false, error: disabledMessage() }
+    if (!isValidInstanceId(id)) return { success: false, error: t('dev.instanceInvalidId') }
     try {
       await runCli(['stop', id], 20_000)
       return { success: true }
@@ -96,8 +100,8 @@ export function registerInstanceController(): void {
   })
 
   guardedHandle('dev:instance-clean', async (_event, id: string) => {
-    if (!isDevConsoleEnabled()) return { success: false, error: DISABLED }
-    if (!isValidInstanceId(id)) return { success: false, error: '无效的实例 ID' }
+    if (!isDevConsoleEnabled()) return { success: false, error: disabledMessage() }
+    if (!isValidInstanceId(id)) return { success: false, error: t('dev.instanceInvalidId') }
     try {
       await runCli(['clean', id, '--yes'], 25_000)
       return { success: true }

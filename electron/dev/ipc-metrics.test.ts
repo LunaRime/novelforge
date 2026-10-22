@@ -41,4 +41,19 @@ describe('ipc-metrics', () => {
     expect(text).not.toContain('sk-1234567890')
     expect(text).not.toContain('xyz')
   })
+
+  it('脱敏 JSON 引号值 / Basic / access_token / URL key', () => {
+    const cases = [
+      '{"apiKey":"AIzaSyABC123"}',
+      'Authorization: Basic dXNlcjpwYXNz',
+      'access_token=secret123',
+      'refresh_token: abc.def',
+      'client_secret=topsecret',
+      'https://example.com/v1?key=AIzaSyABC123&x=1',
+    ]
+    const text = redactSecrets(cases.join('\n'))
+    for (const secret of ['AIzaSyABC123', 'dXNlcjpwYXNz', 'secret123', 'abc.def', 'topsecret']) {
+      expect(text).not.toContain(secret)
+    }
+  })
 })

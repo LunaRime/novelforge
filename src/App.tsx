@@ -3,6 +3,7 @@ import { Panel, Group as PanelGroup, Separator as PanelResizeHandle, useDefaultL
 import { useShallow } from 'zustand/shallow'
 import { useThemeStore } from './stores/theme-store'
 import { useLayoutStore } from './stores/layout-store'
+import { useDevConsoleStore } from './stores/dev-console-store'
 import { useLLMStore } from './stores/llm-store'
 import { useProjectStore } from './stores/project-store'
 import { useMCPStore } from './stores/mcp-store'
@@ -272,6 +273,9 @@ export default function App() {
       const savedZoom = localStorage.getItem('vela-zoom-level')
       if (savedZoom) ipc.setZoomLevel(parseFloat(savedZoom))
     }
+    // 渲染层门禁：未启用时隐藏命令面板/设置页入口
+    void useDevConsoleStore.getState().refresh()
+
     // 初始化 ProjectService — 注册全局事件监听（生命周期与 App 一致）
     import('./services/project-service').then(({ initProjectService }) => {
       initProjectService()
@@ -280,7 +284,8 @@ export default function App() {
       const params = new URLSearchParams(window.location.search)
       const requestedProject = params.get('project')
       const openDevConsoleOnStart = params.get('devconsole') === '1'
-      if (requestedProject || openDevConsoleOnStart) {
+      const isolatedInstanceId = params.get('instance')
+      if (requestedProject || openDevConsoleOnStart || isolatedInstanceId) {
         window.history.replaceState({}, '', window.location.pathname)
       }
       if (requestedProject) {

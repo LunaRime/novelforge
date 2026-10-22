@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { parseArgs, buildInstanceId, sanitizeName, isPidAlive, readManifests } from './dev-instance-lib.mjs'
+import { parseArgs, buildInstanceId, sanitizeName, isPidAlive, readManifests, buildChildEnv, isOwnedProcessCommand } from './dev-instance-lib.mjs'
 
 describe('dev-instance-lib', () => {
   it('解析 start 参数', () => {
@@ -38,5 +38,20 @@ describe('dev-instance-lib', () => {
     const dir = '/tmp/nf-dev-instance-lib-test'
     // 纯函数测试不写盘：不存在的目录返回空数组
     expect(readManifests(dir)).toEqual([])
+  })
+
+  it('Windows 隔离 USERPROFILE/APPDATA/LOCALAPPDATA，并移除 ELECTRON_RUN_AS_NODE', () => {
+    const env = buildChildEnv({ PATH: 'x', ELECTRON_RUN_AS_NODE: '1' }, 'C:\\temp\\home', 'win32')
+    expect(env.HOME).toBe('C:\\temp\\home')
+    expect(env.USERPROFILE).toBe('C:\\temp\\home')
+    expect(env.APPDATA).toContain('AppData')
+    expect(env.LOCALAPPDATA).toContain('AppData')
+    expect(env.ELECTRON_RUN_AS_NODE).toBeUndefined()
+  })
+
+  it('进程归属校验只认 --dev-instance=<id>', () => {
+    expect(isOwnedProcessCommand('novelforge --remote-debugging-port=9224 --dev-instance=dev-a', 'dev-a')).toBe(true)
+    expect(isOwnedProcessCommand('novelforge --remote-debugging-port=9224 --dev-instance=dev-b', 'dev-a')).toBe(false)
+    expect(isOwnedProcessCommand('', 'dev-a')).toBe(false)
   })
 })

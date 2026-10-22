@@ -115,7 +115,7 @@ export function isDevConsoleEnabled(): boolean {
 }
 
 function assertDevConsoleEnabled(): void {
-  if (!isDevConsoleEnabled()) throw new Error('开发者控制台未启用（设置 → 开发者选项，或使用 --devtools 启动）')
+  if (!isDevConsoleEnabled()) throw new Error(t('dev.consoleDisabled'))
 }
 
 export function registerDevController() {

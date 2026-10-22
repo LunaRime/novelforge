@@ -18,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useDevConsoleStore } from '../../stores/dev-console-store'
 import type { GlobalConfig } from '../../shared/ipc-channels'
 
 /** 默认超时（ms） */
@@ -27,6 +28,7 @@ export default function DeveloperModeSection() {
   const { t } = useTranslation()
   const [enabled, setEnabled] = useState(false)
   const [consoleEnabled, setConsoleEnabled] = useState(false)
+  const devConsoleEnabled = useDevConsoleStore((s) => s.enabled)
   const [apiBaseUrl, setApiBaseUrl] = useState('')
   const [headersText, setHeadersText] = useState('{}')
   const [timeoutMs, setTimeoutMs] = useState(DEFAULT_TIMEOUT)
@@ -100,6 +102,7 @@ export default function DeveloperModeSection() {
       })
       renderLog('info', 'Save:Settings', t('log.render.devModeSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
+      void useDevConsoleStore.getState().refresh()
     } catch (e) {
       renderLog('error', 'Save:Settings', t('log.render.devModeSaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
@@ -166,17 +169,19 @@ export default function DeveloperModeSection() {
             className="w-4 h-4 accent-[var(--color-accent)] cursor-pointer flex-shrink-0"
           />
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            useLayoutStore.getState().closeSettings()
-            useLayoutStore.getState().openDevConsole()
-          }}
-        >
-          <Terminal size={12} />
-          {t('dev.consoleOpen')}
-        </Button>
+        {devConsoleEnabled && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              useLayoutStore.getState().closeSettings()
+              useLayoutStore.getState().openDevConsole()
+            }}
+          >
+            <Terminal size={12} />
+            {t('dev.consoleOpen')}
+          </Button>
+        )}
       </div>
 
       {/* 配置表单 */}

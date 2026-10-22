@@ -13,6 +13,7 @@ import { useThemeStore, type Theme } from '../../stores/theme-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { SHORTCUT_DEFINITIONS, formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
+import { useDevConsoleStore } from '../../stores/dev-console-store'
 
 interface CommandItem {
   id: string
@@ -100,6 +101,7 @@ export default function CommandPalette() {
 function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
   const { t } = useTranslation()
   const bindings = useShortcutStore(s => s.bindings)
+  const devConsoleEnabled = useDevConsoleStore(s => s.enabled)
   const close = useCommandStore((s) => s.closePalette)
   const openPalette = useCommandStore((s) => s.openPalette)
 
@@ -158,11 +160,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         icon: <Plus size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
       },
-      {
+      ...(devConsoleEnabled ? [{
         id: 'dev-console', label: t('dev.consoleTitle'), category: t('command.group.general'),
         icon: <Terminal size={15} />, keywords: 'developer console devtools debug ipc db 开发者 控制台',
         run: () => layout.openDevConsole(),
-      },
+      }] : []),
       {
         id: 'activity', label: t('panel.activityShort'), category: t('command.group.general'),
         icon: <Gauge size={15} />, keywords: 'writing stats 统计',
@@ -285,7 +287,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         run: () => openPalette('shortcuts'),
       },
     ]
-  }, [t, openPalette, sc])
+  }, [t, openPalette, sc, devConsoleEnabled])
 
   const shortcuts = useMemo<ShortcutItem[]>(() => [
     ...SHORTCUT_DEFINITIONS.map(def => ({
