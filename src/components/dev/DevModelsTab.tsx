@@ -3,6 +3,7 @@ import { EmptyState } from '../ui/EmptyState'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../../services/ipc-client'
 import type { UsageDashboardData } from '../../shared/ipc-channels'
 import { aggregateRecentByModel, formatDuration, successRate, type LlmHistoryRow } from './dev-monitor-utils'
@@ -32,6 +33,7 @@ function formatCost(cost: number): string {
 
 export default function DevModelsTab({ active }: { active: boolean }) {
   const { t } = useTranslation()
+  const currentProject = useProjectStore((s) => s.currentProject)
   const [range, setRange] = useState<RangeKey>('7')
   const [dashboard, setDashboard] = useState<UsageDashboardData | null>(null)
   const [rows, setRows] = useState<LlmRow[]>([])
@@ -39,6 +41,12 @@ export default function DevModelsTab({ active }: { active: boolean }) {
   const [error, setError] = useState('')
 
   const load = useCallback(async () => {
+    if (!currentProject) {
+      setLoading(false)
+      setDashboard(null)
+      setRows([])
+      return
+    }
     setLoading(true)
     try {
       const from = rangeStart(range)
@@ -55,7 +63,7 @@ export default function DevModelsTab({ active }: { active: boolean }) {
     } finally {
       setLoading(false)
     }
-  }, [range])
+  }, [range, currentProject])
 
   useEffect(() => {
     if (!active) return
@@ -89,7 +97,9 @@ export default function DevModelsTab({ active }: { active: boolean }) {
         </div>
       )}
 
-      {loading && !dashboard ? (
+      {!currentProject ? (
+        <EmptyState message={t('dev.dbNoProject')} />
+      ) : loading && !dashboard ? (
         <div className="flex h-[240px] items-center justify-center"><Spinner size={18} /></div>
       ) : !dashboard || (dashboard.byModel.length === 0 && rows.length === 0) ? (
         <EmptyState message={t('dev.modelsEmpty')} />

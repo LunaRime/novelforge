@@ -264,13 +264,22 @@ function createWindow() {
 
   // 自动化/CLI 入口：--project=<路径> 直接打开项目，避免依赖原生文件选择框与桌面焦点
   const projectArg = process.argv.find(a => a.startsWith('--project='))?.slice('--project='.length)
+  // 开发者控制台独立入口：不依赖项目，由 CLI 的 --dev-console 触发
+  const devConsoleArg = process.argv.includes('--dev-console')
   if (VITE_DEV_SERVER_URL) {
     const url = new URL(VITE_DEV_SERVER_URL)
     if (projectArg) url.searchParams.set('project', projectArg)
+    if (devConsoleArg) url.searchParams.set('devconsole', '1')
     win.loadURL(url.toString())
     logger.info('Main', t('log.main.devMode').replace('{url}', url.toString()))
   } else {
-    win.loadFile(path.join(RENDERER_DIST, 'index.html'), projectArg ? { query: { project: projectArg } } : undefined)
+    const query: Record<string, string> = {}
+    if (projectArg) query.project = projectArg
+    if (devConsoleArg) query.devconsole = '1'
+    win.loadFile(
+      path.join(RENDERER_DIST, 'index.html'),
+      Object.keys(query).length > 0 ? { query } : undefined,
+    )
     logger.info('Main', t('log.main.productionStart'))
   }
 }

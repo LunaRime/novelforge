@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-env node */
 /**
  * NovelForge 隔离实例 CLI
  *
@@ -81,17 +82,19 @@ function killTree(pid, signal = 'SIGTERM') {
 async function start(options) {
   const projectArg = options.project ? path.resolve(String(options.project)) : null
   if (projectArg && !fs.existsSync(projectArg)) throw new Error(`project not found: ${projectArg}`)
+  // --dev-console 且未指定项目：只开开发者控制台，不创建/打开项目
+  const consoleOnly = Boolean(options['dev-console']) && !projectArg
   const port = Number.isInteger(options.port) ? options.port : await pickFreePort(9223)
   const label = options.name ? sanitizeName(String(options.name)) : 'nf'
   const id = buildInstanceId(projectArg ?? label, new Date(), port)
   const dir = instanceDir(id)
   const home = path.join(dir, 'home')
-  const project = projectArg ?? path.join(dir, 'project')
+  const project = projectArg ?? (consoleOnly ? null : path.join(dir, 'project'))
 
   ensureDir(dir)
   ensureDir(path.join(home, '.novelforge'))
   ensureDir(path.join(home, '.config'))
-  if (!projectArg) ensureDir(project)
+  if (project) ensureDir(project)
 
   const sourceHome = path.join(os.homedir(), '.novelforge')
   for (const file of ['config.json', 'models.json', 'credentials.json']) {
@@ -114,8 +117,9 @@ async function start(options) {
     '.',
     '--no-sandbox',
     `--remote-debugging-port=${port}`,
-    `--project=${project}`,
   ]
+  if (project) args.push(`--project=${project}`)
+  if (options['dev-console']) args.push('--dev-console')
   if (options['user-data-dir']) args.push(`--user-data-dir=${path.resolve(String(options['user-data-dir']))}`)
 
   // 从 UI 启动时，CLI 自己由 ELECTRON_RUN_AS_NODE=1 执行；
@@ -145,7 +149,7 @@ async function start(options) {
     pid: child.pid,
     pgid: child.pid,
     port,
-    project,
+    project: project ?? '',
     home,
     log: logPath,
     startedAt: Date.now(),
@@ -217,6 +221,28 @@ async function hasCdp(id) {
   return { manifest: m, page }
 }
 
+async function waitForDocument(cdp, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      if (await cdp.evaluate('document.readyState') === 'complete') return true
+    } catch { /* page not ready yet */ }
+    await sleep(200)
+  }
+  return false
+}
+
+async function waitForDevConsoleHook(cdp, timeoutMs = 15000) {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() < deadline) {
+    try {
+      if (await cdp.evaluate("typeof window.__velaOpenDevConsole === 'function'")) return true
+    } catch { /* App not mounted yet */ }
+    await sleep(200)
+  }
+  return false
+}
+
 async function main() {
   const { command, options, positional } = parseArgs(process.argv.slice(2))
 
@@ -276,6 +302,7 @@ async function main() {
       const { page } = await hasCdp(id)
       const cdp = await openCdp(page.webSocketDebuggerUrl)
       try {
+        await waitForDocument(cdp)
         const value = await cdp.evaluate(expression)
         printJson(value)
       } finally {
@@ -290,6 +317,7 @@ async function main() {
       const { page } = await hasCdp(id)
       const cdp = await openCdp(page.webSocketDebuggerUrl)
       try {
+        await waitForDocument(cdp)
         await cdp.screenshot(path.resolve(out))
         console.log(`saved ${path.resolve(out)}`)
       } finally {
@@ -304,6 +332,7 @@ async function main() {
       const { page } = await hasCdp(id)
       const cdp = await openCdp(page.webSocketDebuggerUrl)
       try {
+        await waitForDocument(cdp)
         const events = await cdp.collectConsole(ms)
         const lines = events.map((e) => {
           if (e.method === 'Runtime.consoleAPICalled') {
@@ -320,11 +349,29 @@ async function main() {
       }
       return
     }
+    case 'console-ui': {
+      const id = positional[0]
+      if (!id) throw new Error('usage: console-ui <id>')
+      const { page } = await hasCdp(id)
+      const cdp = await openCdp(page.webSocketDebuggerUrl)
+      try {
+        await waitForDocument(cdp)
+        if (!(await waitForDevConsoleHook(cdp))) {
+          console.log('no-hook')
+          return
+        }
+        await cdp.evaluate('window.__velaOpenDevConsole()')
+        console.log('opened')
+      } finally {
+        cdp.close()
+      }
+      return
+    }
     case 'help':
     default:
       console.log(`NovelForge isolated instance CLI
 
-  start [--project <path>] [--port <n>] [--name <label>] [--json]
+  start [--project <path>] [--port <n>] [--name <label>] [--dev-console] [--json]
   list [--json]
   stop <id>
   clean <id> --yes
@@ -333,6 +380,7 @@ async function main() {
   eval <id> <js>
   shot <id> <png>
   console <id> [ms]
+  console-ui <id>        open the in-app Developer Console
 
 Instances live under ${instancesRoot}`)
   }

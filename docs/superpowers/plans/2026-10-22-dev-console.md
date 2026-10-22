@@ -543,6 +543,44 @@ git commit -m "feat: 开发者控制台 Agent 与模型监控"
 
 ---
 
+### Task 5.6: 控制台脱离项目与 CLI 启动
+
+**Files:**
+- Modify: `electron/main.ts`（`--dev-console` → `?devconsole=1`）
+- Modify: `src/App.tsx`（启动时自动开控制台 + `window.__velaOpenDevConsole`）
+- Modify: `src/components/command-palette/CommandPalette.tsx`（全局命令入口）
+- Modify: `src/components/dev/DevModelsTab.tsx`（无项目时空态）
+- Modify: `scripts/dev-instance.mjs`（`start --dev-console`、`console-ui <id>`）
+
+- [ ] **Step 1: 主进程参数**
+
+`--dev-console` 通过 URL query / `loadFile({ query })` 注入 `devconsole=1`；与 `--project` 可组合，也可单独使用（不打开项目）。
+
+- [ ] **Step 2: 渲染端自动打开 + 远程入口**
+
+`App.tsx` 读取 `devconsole=1` 后调用 `openDevConsole()`，并清掉 query；
+挂载 `window.__velaOpenDevConsole` 供 CLI/CDP 远程打开（只负责开弹窗，后端仍走门禁）。
+
+- [ ] **Step 3: 全局命令入口**
+
+命令面板新增「开发者控制台」，无项目时也可用；模型页在无项目时显示「当前没有打开的项目数据库」。
+
+- [ ] **Step 4: CLI**
+
+`node scripts/dev-instance.mjs start --dev-console` 启动后自动打开控制台；
+`node scripts/dev-instance.mjs console-ui <id>` 对已运行实例远程打开控制台。
+
+- [ ] **Step 5: 真机验证**
+
+```bash
+node scripts/dev-instance.mjs start --dev-console --json
+node scripts/dev-instance.mjs console-ui <id>
+```
+
+Expected：控制台直接打开；实例/IPC/日志/性能页可用；DB/模型页在无项目时显示空态。
+
+---
+
 ### Task 6: 打包白名单、门禁与真机验证
 
 **Files:**

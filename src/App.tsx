@@ -209,6 +209,13 @@ export default function App() {
     devConsoleOpen: s.devConsoleOpen,
     closeDevConsole: s.closeDevConsole,
   })))
+  // 开发者控制台可由 CLI/自动化远程打开（只负责开弹窗；后端仍有门禁）
+  useEffect(() => {
+    const target = window as Window & { __velaOpenDevConsole?: () => void }
+    target.__velaOpenDevConsole = () => useLayoutStore.getState().openDevConsole()
+    return () => { delete target.__velaOpenDevConsole }
+  }, [])
+
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const currentProject = useProjectStore((s) => s.currentProject)
@@ -268,12 +275,20 @@ export default function App() {
     // 初始化 ProjectService — 注册全局事件监听（生命周期与 App 一致）
     import('./services/project-service').then(({ initProjectService }) => {
       initProjectService()
-      // 自动化/CLI 入口：主进程通过 --project=<路径> 注入 ?project=；打开后清掉 query，避免刷新重复打开
-      const requestedProject = new URLSearchParams(window.location.search).get('project')
-      if (requestedProject) {
+      // 自动化/CLI 入口：主进程通过 --project=<路径> / --dev-console 注入 query；
+      // 打开后清掉 query，避免刷新重复打开。
+      const params = new URLSearchParams(window.location.search)
+      const requestedProject = params.get('project')
+      const openDevConsoleOnStart = params.get('devconsole') === '1'
+      if (requestedProject || openDevConsoleOnStart) {
         window.history.replaceState({}, '', window.location.pathname)
+      }
+      if (requestedProject) {
         void useProjectStore.getState().openProject(requestedProject)
           .catch(e => console.warn('[Startup] 打开指定项目失败:', e))
+      }
+      if (openDevConsoleOnStart) {
+        useLayoutStore.getState().openDevConsole()
       }
     }).catch(e => console.warn('[ProjectService] 初始化失败:', e))
 

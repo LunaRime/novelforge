@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
-  PanelLeft, Plus, Search, Settings2, Sparkles, Sun, TextCursorInput,
+  PanelLeft, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
   Users, Wand2, ZoomIn,
 } from 'lucide-react'
 import { useCommandStore } from '../../stores/command-store'
@@ -157,6 +157,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         id: 'new-chapter', label: t('chapter.newChapter'), category: t('command.group.general'),
         icon: <Plus size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
+      },
+      {
+        id: 'dev-console', label: t('dev.consoleTitle'), category: t('command.group.general'),
+        icon: <Terminal size={15} />, keywords: 'developer console devtools debug ipc db 开发者 控制台',
+        run: () => layout.openDevConsole(),
       },
       {
         id: 'activity', label: t('panel.activityShort'), category: t('command.group.general'),
