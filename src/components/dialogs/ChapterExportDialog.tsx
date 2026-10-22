@@ -145,43 +145,47 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
                 ({t('export.selectedCount').replace('{n}', String(selected.size)).replace('{total}', String(displayChapters.length))})
               </span>
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex flex-wrap items-center justify-end gap-1">
               {/* 排序：章节号 / 标题 + 方向 */}
-              <button
+              <Button
                 type="button"
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-micro transition-colors"
-                style={{ color: sortKey === 'number' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+                variant="outline"
+                size="sm"
+                className={`gap-0.5 px-1.5 text-micro${sortKey === 'number' ? ' border-[var(--color-accent)] text-[var(--color-accent)]' : ''}`}
                 onClick={() => toggleSort('number')}
               >
                 {t('export.sortNumber')}
                 {sortKey === 'number' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="flex items-center gap-0.5 px-1.5 py-0.5 rounded text-micro transition-colors"
-                style={{ color: sortKey === 'title' ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
+                variant="outline"
+                size="sm"
+                className={`gap-0.5 px-1.5 text-micro${sortKey === 'title' ? ' border-[var(--color-accent)] text-[var(--color-accent)]' : ''}`}
                 onClick={() => toggleSort('title')}
               >
                 {t('export.sortTitle')}
                 {sortKey === 'title' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
-              </button>
+              </Button>
               {/* 全选 / 清空 */}
-              <button
+              <Button
                 type="button"
-                className="px-1.5 py-0.5 rounded text-micro transition-colors hover:opacity-80"
-                style={{ color: 'var(--color-text-muted)' }}
+                variant="outline"
+                size="sm"
+                className="px-1.5 text-micro"
                 onClick={() => setSelected(new Set(displayChapters.map(c => c.number)))}
               >
                 {t('export.selectAll')}
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
-                className="px-1.5 py-0.5 rounded text-micro transition-colors hover:opacity-80"
-                style={{ color: 'var(--color-text-muted)' }}
+                variant="outline"
+                size="sm"
+                className="px-1.5 text-micro"
                 onClick={() => setSelected(new Set())}
               >
                 {t('export.selectNone')}
-              </button>
+              </Button>
             </div>
           </div>
           <div

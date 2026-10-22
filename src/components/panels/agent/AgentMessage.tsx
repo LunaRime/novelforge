@@ -143,7 +143,7 @@ function renderUserContent(content: string): React.ReactNode {
         type="button"
         title={seg.target}
         onClick={() => { void openChapterFile(seg.target, seg.target) }}
-        className="inline rounded px-1 cursor-pointer hover:underline"
+        className="inline rounded px-1 cursor-pointer transition-opacity hover:opacity-90"
         style={{
           backgroundColor: 'rgba(var(--color-accent-rgb), 0.18)',
           color: 'var(--color-accent)',

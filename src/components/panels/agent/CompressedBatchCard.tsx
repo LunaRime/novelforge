@@ -4,6 +4,7 @@ import type { AgentMessage } from '../../../stores/agent-store'
 import { useAgentStore } from '../../../stores/agent-store'
 import { shouldWarnFidelity } from '../../../services/agent/ccr-fidelity'
 import { localeVariants, t } from '../../../shared/locale'
+import { Button } from '../../ui/Button'
 
 /**
  * 回执段的起始标记（B5：回执头插在摘要里，展示时拆出来独立成段）。
@@ -136,29 +137,31 @@ export default function CompressedBatchCard({ batch, summaryStale = false }: {
             {expanded ? t('ccr.collapse') : t('ccr.expand')}
           </span>
         </button>
-        {recoverable && (
-          <button
+      </div>
+      {recoverable && (
+        <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => void removeCompaction(batch.batch)}
-            style={{ color: 'var(--color-accent)' }}
-            className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer"
           >
             {t('ccr.removeCompaction')}
-          </button>
-        )}
-        {recoverable && needsRegenerate && (
-          <button
-            type="button"
-            onClick={() => void handleRegenerate()}
-            disabled={regenerating || generating}
-            title={generating ? t('ccr.regenerateBusy') : undefined}
-            style={{ color: 'var(--color-accent)' }}
-            className="py-1 -my-1 hover:underline flex-shrink-0 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {regenerating ? t('ccr.regenerating') : t('ccr.regenerateSummary')}
-          </button>
-        )}
-      </div>
+          </Button>
+          {needsRegenerate && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => void handleRegenerate()}
+              disabled={regenerating || generating}
+              title={generating ? t('ccr.regenerateBusy') : undefined}
+            >
+              {regenerating ? t('ccr.regenerating') : t('ccr.regenerateSummary')}
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* P1-3：重生成失败的内联提示（不静默；成功即清除） */}
       {regenerateError && (

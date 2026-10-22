@@ -27,6 +27,8 @@ import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
 import { Button } from '../ui/Button'
+import CountBadge from '../ui/CountBadge'
+import EditorPageHeader from '../ui/EditorPageHeader'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
@@ -346,23 +348,17 @@ export default function ChapterCardEditor() {
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
-      <div
-        className="flex items-center justify-between gap-2 px-3 h-10 flex-shrink-0 border-b"
-        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}
-      >
-        <div className="flex items-center gap-1.5">
-          <BookOpen size={13} style={{ color: 'var(--color-text-muted)' }} />
-          <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-            {t('chapter.blueprintTitle')}
-            {blueprints.length > 0 && (
-              <span style={{ color: 'var(--color-text-muted)' }} className="ml-1 font-normal">
-                ({blueprints.length} {t('unit.chapters')})
-              </span>
-            )}
-          </span>
-          {dirty && <span className="text-micro" style={{ color: 'var(--color-accent)' }}>{t('blueprint.unsaved')}</span>}
-        </div>
-        <div className="flex items-center gap-1">
+      <EditorPageHeader
+        icon={<BookOpen size={13} />}
+        title={t('chapter.blueprintTitle')}
+        meta={(
+          <>
+            <CountBadge value={blueprints.length} unit={t('unit.chapters')} />
+            {dirty && <span className="text-micro" style={{ color: 'var(--color-accent)' }}>{t('blueprint.unsaved')}</span>}
+          </>
+        )}
+        actions={(
+          <>
           {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
           {nextWriteBlueprint && (
             <Button
@@ -408,8 +404,9 @@ export default function ChapterCardEditor() {
               <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
             </Button>
           )}
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {/* 线③ 第 5 条：校检报告（缺口列表 + 逐处补全） */}
       {verificationReport && (

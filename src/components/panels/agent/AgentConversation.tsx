@@ -24,6 +24,7 @@ import { ipc } from '../../../services/ipc-client'
 import { formatRelativeTime } from '../../../utils/time'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
+import { Button } from '../../ui/Button'
 import { MenuItem } from '../../ui/MenuItem'
 import { PopoverSurface } from '../../ui/PopoverSurface'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
@@ -586,25 +587,25 @@ function AgentHistoryPanel() {
         <div className="flex items-center gap-1">
           {/* 归档开关（有归档项时才出现，2026-09-22） */}
           {archivedCount > 0 && (
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => setShowArchived(v => !v)}
-              className="text-xs px-2 py-0.5 rounded transition-colors"
-              style={{ color: showArchived ? 'var(--color-accent)' : 'var(--color-text-muted)' }}
-              onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-              onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+              className={showArchived ? 'text-xs text-[var(--color-accent)]' : 'text-xs text-[var(--color-text-muted)]'}
             >
               {t('agent.showArchived')} ({archivedCount})
-            </button>
+            </Button>
           )}
-          <button
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             onClick={() => setShowHistory(false)}
-            className="text-xs px-2 py-0.5 rounded transition-colors"
-            style={{ color: 'var(--color-text-muted)' }}
-            onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-            onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+            className="text-xs text-[var(--color-text-muted)]"
           >
             {t('action.close')}
-          </button>
+          </Button>
         </div>
       </div>
 

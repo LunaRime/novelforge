@@ -14,6 +14,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 import { showSidebarMenu, openChapterFile } from './SidebarShared'
 import ChapterExportDialog from '../../dialogs/ChapterExportDialog'
 import SidebarGroup from './SidebarGroup'
+import CountBadge from '../../ui/CountBadge'
 
 // ===== 章节标题缓存 =====
 
@@ -165,7 +166,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
       title={t('manuscript.title')}
       defaultOpen={false}
       count={chapterFiles.length > 0
-        ? t('draftbox.count').replace('{n}', String(chapterFiles.length))
+        ? <CountBadge value={chapterFiles.length} unit={t('unit.chapters')} />
         : undefined}
       actions={chapterFiles.length > 0 && (
         <button

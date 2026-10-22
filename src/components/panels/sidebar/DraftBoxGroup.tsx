@@ -8,6 +8,8 @@ import type { DraftMeta } from '../../../stores/draft-store'
 import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { confirm } from '../../ui/Confirm'
+import { Button } from '../../ui/Button'
+import CountBadge from '../../ui/CountBadge'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
 import type { TextKey } from '../../../shared/locale'
 import { showSidebarMenu } from './SidebarShared'
@@ -59,7 +61,7 @@ export default function DraftBoxGroup({
       titleHint={t('tip.draftBox')}
       defaultOpen={false}
       count={activeChapterCount > 0
-        ? t('draftbox.count').replace('{n}', String(activeChapterCount))
+        ? <CountBadge value={activeChapterCount} unit={t('unit.chapters')} />
         : undefined}
     >
       {chapterNums.length === 0 ? (
@@ -134,9 +136,7 @@ function DraftChapterGroup({
           <span className="text-sm flex-1 truncate" style={{ color: 'var(--color-text-secondary)' }}>
             {displayTitle}
           </span>
-          <span className="ml-auto text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            {t('draftbox.revisionCount').replace('{n}', String(activeDrafts.length))}
-          </span>
+          <CountBadge value={activeDrafts.length} unit={t('unit.drafts')} />
         </button>
       </div>
 
@@ -158,15 +158,15 @@ function DraftChapterGroup({
               style={{ paddingLeft: 54 }}
             >
               {/* 2026-09-25 重构：切换此前在 `<div onClick>` 上 —— 键盘完全够不到。 */}
-              <button
+              <Button
                 type="button"
+                variant="ghost"
+                size="sm"
                 onClick={() => setShowArchived(v => !v)}
-                className="flex items-center gap-1 flex-1 min-w-0 py-1 -my-1 text-left cursor-pointer"
+                className="h-auto min-h-5 w-full justify-start whitespace-normal px-1.5 py-0.5 text-left text-micro leading-tight text-[var(--color-text-muted)]"
               >
-                <span className="text-micro" style={{ color: 'var(--color-text-muted)', opacity: 0.6 }}>
-                  {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
-                </span>
-              </button>
+                {showArchived ? t('draftbox.hideArchived') : t('draftbox.showArchived').replace('{n}', String(archivedDrafts.length))}
+              </Button>
             </div>
           )}
           {showArchived && archivedDrafts.map(draft => (

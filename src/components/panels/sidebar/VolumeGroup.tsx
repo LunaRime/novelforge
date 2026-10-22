@@ -11,6 +11,7 @@ import {
   CheckCircle2, Circle,
 } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
+import CountBadge from '../../ui/CountBadge'
 import { useVolumeStore } from '../../../stores/volume-store'
 import { globalEventBus } from '../../../shared/event-bus'
 import type { VolumeData } from '../../../../electron/repositories/volume-repository'
@@ -113,7 +114,7 @@ export default function VolumeGroup({
       <MenuRow
         icon={<BookMarked size={12} />}
         title={t('volume.title')}
-        count={volumes.length}
+        count={<CountBadge value={volumes.length} unit={t('unit.volumes')} />}
         swap="expand"
         expanded={open}
         onPrimary={() => setOpen(v => !v)}
@@ -257,12 +258,13 @@ function VolumeRow({
               : t('volume.ordinal').replace('{n}', String(volume.volumeNumber))}
           </span>
           <span className="ml-auto text-2xs opacity-50 flex-shrink-0">{rangeText}</span>
-          <span
-            className="text-2xs flex-shrink-0"
-            style={{ color: doneAll ? 'var(--color-success)' : 'var(--color-text-muted)' }}
-          >
-            {progressText}
-          </span>
+          <CountBadge
+            value={doneCount}
+            total={totalCount > 0 ? totalCount : undefined}
+            progress={totalCount > 0}
+            tone={doneAll ? 'success' : 'muted'}
+            title={progressText}
+          />
         </button>
         <button
           type="button"

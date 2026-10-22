@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react'
 import { Satellite, Plus, Trash2 } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
+import CountBadge from '../../ui/CountBadge'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { ipc } from '../../../services/ipc-client'
 import { useEditorStore } from '../../../stores/editor-store'
@@ -83,7 +84,7 @@ export default function PublicationGroup({ projectPath }: Props) {
       <MenuRow
         icon={<Satellite size={12} />}
         title={t('pub.title')}
-        count={entries.length}
+        count={<CountBadge value={entries.length} unit={t('unit.items')} />}
         swap="expand"
         expanded={open}
         onPrimary={() => setOpen(v => !v)}

@@ -208,13 +208,14 @@ export default function ArchitectureConfirmDialog({
               <p className="text-xs font-medium" style={{ color: 'var(--color-text-muted)' }}>
                 {t('archConfirm.selectSteps')}
               </p>
-              <button
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
                 onClick={() => setChecked({ premise: true, characters: true, worldbuilding: true, synopsis: true })}
-                className="text-xs underline"
-                style={{ color: 'var(--color-text-muted)' }}
               >
                 {t('archConfirm.selectAll')}
-              </button>
+              </Button>
             </div>
 
             {archFiles.map(f => {

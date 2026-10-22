@@ -10,6 +10,8 @@ import type { TextKey } from '../../shared/locale'
 import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 
 import { Button } from '../ui/Button'
+import CountBadge from '../ui/CountBadge'
+import EditorPageHeader from '../ui/EditorPageHeader'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
 import { VELA } from '../../services/vela-protocol'
@@ -194,24 +196,24 @@ export default function WorldBuildingEditor() {
   }
 
   const generatedCount = archFiles.filter(f => archStatus[f.key]).length
+  const allDone = archFiles.length > 0 && generatedCount === archFiles.length
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
-      <div
-        className="flex items-center justify-between gap-2 px-3 h-10 flex-shrink-0 border-b"
-        style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}
-      >
-        <div className="flex items-center gap-1.5">
-          <FolderTree size={14} style={{ color: 'var(--color-text-muted)' }} />
-          <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-            {t('editor.storyArch')}
-          </span>
-          <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-            {t('arch.progress').replace('{n}', String(generatedCount)).replace('{total}', String(archFiles.length))}
-          </span>
-        </div>
-        <div className="flex items-center gap-1.5">
+      <EditorPageHeader
+        icon={<FolderTree size={14} />}
+        title={t('editor.storyArch')}
+        meta={(
+          <CountBadge
+            value={generatedCount}
+            total={archFiles.length}
+            progress
+            tone={allDone ? 'success' : generatedCount > 0 ? 'warning' : 'muted'}
+          />
+        )}
+        actions={(
+          <>
           <Button
             variant="ghost"
             size="icon"
@@ -230,8 +232,9 @@ export default function WorldBuildingEditor() {
             <Sparkles size={12} />
             {t('arch.aiGenBtn')}
           </Button>
-        </div>
-      </div>
+          </>
+        )}
+      />
 
       {/* 文件卡片列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">

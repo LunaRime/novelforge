@@ -312,10 +312,12 @@ export function ModelForm({
         <div>
           <div className="flex items-center justify-between mb-1">
             <Label className="mb-0">{t('form.modelId')}</Label>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
               {presetModels.length > 0 && (
-                <button
+                <Button
                   type="button"
+                  variant="outline"
+                  size="sm"
                   onClick={() => {
                     if (customModelName) {
                       // 切回预设列表
@@ -328,25 +330,25 @@ export function ModelForm({
                       up('modelName', '')
                     }
                   }}
-                  className="text-xs transition-colors"
-                  style={{ color: 'var(--color-accent)' }}
                 >
                   {customModelName ? t('form.selectFromList') : t('form.manualInput')}
-                </button>
+                </Button>
               )}
               {/* 获取模型（2026-09-28）：用当前表单值探测端点——与供应商区同一 action；
                   anchorName 供下方候选面板定位（CSS 锚点模式） */}
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                className="gap-1"
                 onClick={() => void doFetchModels()}
                 disabled={fetching || !model.baseUrl}
                 aria-expanded={fetchPanelOpen}
-                className="inline-flex items-center gap-1 text-xs transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                style={{ color: 'var(--color-accent)', anchorName: '--model-fetch' } as React.CSSProperties}
+                style={{ anchorName: '--model-fetch' } as React.CSSProperties}
               >
                 <Download size={12} />
                 {fetching ? t('provider.fetching') : t('provider.fetchModels')}
-              </button>
+              </Button>
             </div>
           </div>
 

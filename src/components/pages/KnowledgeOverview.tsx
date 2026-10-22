@@ -393,12 +393,15 @@ export default function KnowledgeOverview() {
                 <span className="text-xs font-medium text-[var(--color-text-muted)]">
                   {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
                 </span>
-                <button
-                  className="text-micro text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-micro"
                   onClick={() => setSearchResults([])}
                 >
                   {t('knowledge.clear')}
-                </button>
+                </Button>
               </div>
               <div className="max-h-[400px] overflow-y-auto">
                 {[...searchResults].reverse().map((r, i) => (

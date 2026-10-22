@@ -18,6 +18,7 @@ import type { DailyActivityData, DailyActivityRow } from '../../../shared/ipc-ch
 import { useProjectStore } from '../../../stores/project-store'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../../ui/Select'
+import { Button } from '../../ui/Button'
 import { ipc } from '../../../services/ipc-client'
 import { toast } from '../../ui/Toast'
 import { SegmentedControl } from '../../ui/SegmentedControl'
@@ -190,16 +191,18 @@ export default function ActivityView() {
         </div>
         {/* 报告 + 刷新：紧邻的右侧操作组（报告按钮带文字标签，明确功能入口） */}
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1 px-1.5 text-micro"
             onClick={handleGenerateReport}
-            className="flex items-center gap-1 px-1.5 h-5 rounded text-micro transition-colors cursor-pointer hover:opacity-80"
-            style={{ color: 'var(--color-accent)' }}
             title={t('report.generate')}
             disabled={!data}
           >
             <Sparkles size={11} />
             {t('report.generateShort')}
-          </button>
+          </Button>
           <button onClick={handleRefresh} className="icon-btn flex-shrink-0" style={{ width: 20, height: 20 }} title={t('action.refresh')}>
             <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
           </button>

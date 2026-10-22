@@ -15,6 +15,7 @@ import { useMemoryStore } from '../../../stores/memory-store'
 import { ipc } from '../../../services/ipc-client'
 import { globalEventBus } from '../../../shared/event-bus'
 import { Button } from '../../ui/Button'
+import CountBadge from '../../ui/CountBadge'
 import { EmptyState } from '../../ui/EmptyState'
 import { useTranslation } from '../../../hooks/useTranslation'
 
@@ -26,7 +27,6 @@ import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
 import VolumeGroup from './VolumeGroup'
 import PublicationGroup from './PublicationGroup'
-import MemoryGroup from './MemoryGroup'
 import SidebarGroup from './SidebarGroup'
 import type { VolumeData } from '../../../../electron/repositories/volume-repository'
 
@@ -47,6 +47,8 @@ export default function ProjectTree() {
   const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
   // 章节蓝图数量
   const [blueprintCount, setBlueprintCount] = useState<number>(-1)
+  // 世界观实体 / 时间线事件数量（侧栏入口展示）
+  const [worldCounts, setWorldCounts] = useState({ entities: 0, events: 0 })
 
   // 卷 → 章节映射缓存（依赖 draftsByChapter 引用）：此前每次渲染都
   // Object.entries 全量遍历 + parseInt + sort（N 章 × M 卷重复计算），
@@ -83,12 +85,15 @@ export default function ProjectTree() {
     useMemoryStore.getState().load() // 记忆文件（定稿/失效标记后刷新列表与 stale 徽标）
     // 通过 Service 层获取架构状态和蓝图数量（避免直接 IPC）
     const { checkArchStatus, getBlueprintCount } = await import('../../../services/architecture-service')
-    const [status, count] = await Promise.all([
+    const [status, count, entities, events] = await Promise.all([
       checkArchStatus(),
       getBlueprintCount(),
+      ipc.invoke('world:entity-list').catch(() => []),
+      ipc.invoke('timeline:event-list').catch(() => []),
     ])
     setArchStatus(status)
     setBlueprintCount(count)
+    setWorldCounts({ entities: entities.length, events: events.length })
   }, [])  // ✅ 空依赖：内部用 getState() 获取最新 action，不依赖闭包
 
   const handleReorderChapter = useCallback(async (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => {
@@ -203,11 +208,7 @@ export default function ProjectTree() {
         icon={<BookOpen size={12} />}
         title={t('editor.novelConfig')}
         collapsible={false}
-        count={
-          <span style={{ color: configDone ? 'var(--color-success)' : 'var(--color-text-muted)' }}>
-            {configDone ? t('status.configured') : t('status.pendingConfig')}
-          </span>
-        }
+        count={<CountBadge value={configDone ? t('status.configured') : t('status.pendingConfig')} tone={configDone ? 'success' : 'muted'} />}
         onTitleClick={() => {
           const state = useEditorStore.getState()
           const configTab = state.tabs.find(t => t.type === 'config')
@@ -235,23 +236,39 @@ export default function ProjectTree() {
       {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
       <WorldBuildingGroup archStatus={archStatus} archDone={archDone} archFiles={archFiles} />
 
+      {/* 世界观与时间线 — 独立单行入口（不再与「故事架构」共用一张卡的两个热区） */}
+      <SidebarGroup
+        icon={<Globe size={12} />}
+        title={t('world.title')}
+        collapsible={false}
+        count={(
+          <span className="flex items-center gap-1">
+            <CountBadge value={worldCounts.entities} unit={t('unit.entities')} />
+            <CountBadge value={worldCounts.events} unit={t('unit.events')} />
+          </span>
+        )}
+        onTitleClick={() => {
+          const state = useEditorStore.getState()
+          const existing = state.tabs.find(tab => tab.type === 'world-timeline')
+          if (existing) state.setActiveTab(existing.id)
+          else state.openFile({ id: 'world-timeline', name: t('world.title'), type: 'world-timeline' })
+        }}
+      />
+
       {/* 3. 章节蓝图（单行入口块：标题行点击打开编辑器页） */}
       <SidebarGroup
         icon={<LayoutList size={12} />}
         title={t('mention.blueprint')}
         collapsible={false}
-        count={
-          <span style={{
-            color: blueprintCount >= nc.totalChapters
-              ? 'var(--color-success)'
-              : blueprintCount > 0
-                ? 'var(--color-warning)'
-                : 'var(--color-text-muted)',
-          }}
-          >
-            {blueprintCount > 0 ? `${blueprintCount}/${nc.totalChapters} ${t('unit.chapters')}` : t('status.pendingGen')}
-          </span>
-        }
+        count={blueprintCount > 0
+          ? <CountBadge
+              value={blueprintCount}
+              total={nc.totalChapters > 0 ? nc.totalChapters : undefined}
+              unit={t('unit.chapters')}
+              progress={nc.totalChapters > 0}
+              tone={blueprintCount >= nc.totalChapters ? 'success' : 'warning'}
+            />
+          : <CountBadge value={t('status.pendingGen')} />}
         onTitleClick={() => openBuiltinEditor('chapter-card-editor', t('mention.blueprint'), 'chapter-card')}
         actions={(
           <button
@@ -292,9 +309,6 @@ export default function ProjectTree() {
       {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}
       <PublicationGroup projectPath={p} />
 
-      {/* 3.7 AI 记忆 — 三级摘要文件（章节/分卷/全书）只读查看 + stale 徽标 + 手动重建 */}
-      <MemoryGroup projectPath={p} />
-
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
       <DraftBoxGroup draftsByChapter={draftsByChapter} />
 
@@ -325,36 +339,14 @@ function WorldBuildingGroup({
       icon={<FolderTree size={12} />}
       title={t('editor.storyArch')}
       defaultOpen={false}
-      count={
-        <span style={{
-          color: allDone
-            ? 'var(--color-success)'
-            : archDone > 0
-              ? 'var(--color-warning)'
-              : 'var(--color-text-muted)',
-        }}
-        >
-          {archDone}/{archFiles.length}
-        </span>
-      }
+      count={<CountBadge
+        value={archDone}
+        total={archFiles.length}
+        progress
+        tone={allDone ? 'success' : archDone > 0 ? 'warning' : 'muted'}
+      />}
       onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
       titleHint={t('tip.openArchEditor')}
-      actions={(
-        <button
-          type="button"
-          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
-          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
-          title={t('world.entities') + ' / ' + t('world.timeline')}
-          onClick={() => {
-            const state = useEditorStore.getState()
-            const existing = state.tabs.find(tab => tab.type === 'world-timeline')
-            if (existing) state.setActiveTab(existing.id)
-            else state.openFile({ id: 'world-timeline', name: t('world.entities'), type: 'world-timeline' })
-          }}
-        >
-          <Globe size={12} />
-        </button>
-      )}
     >
       {/* 子文件列表（点击直接在 Markdown 编辑器打开） */}
       <div className="mt-1">

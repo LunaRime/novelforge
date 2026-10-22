@@ -74,14 +74,15 @@ export default function InboxItemCard({ item }: Props) {
           ))}
           {hiddenCount > 0 && (
             <li>
-              <button
+              <Button
                 type="button"
+                variant="outline"
+                size="sm"
+                className="mt-1 text-micro"
                 onClick={() => setExpanded(true)}
-                className="text-micro cursor-pointer"
-                style={{ color: 'var(--color-accent)' }}
               >
                 {t('automation.inbox.moreEvidence').replace('{n}', String(hiddenCount))}
-              </button>
+              </Button>
             </li>
           )}
         </ul>

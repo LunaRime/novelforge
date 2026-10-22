@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react'
-import { BookOpen, FileText, LayoutGrid, List, ListTree, Route, Users } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { BookOpen, FileText, LayoutGrid, List, ListTree, RefreshCw, Route, Users } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { useProjectStore } from '../../stores/project-store'
@@ -9,6 +9,9 @@ import { useCharacterStore } from '../../stores/character-store'
 import { SegmentedControl } from '../ui/SegmentedControl'
 import { EmptyState } from '../ui/EmptyState'
 import { Spinner } from '../ui/Spinner'
+import { Button } from '../ui/Button'
+import CountBadge from '../ui/CountBadge'
+import EditorPageHeader from '../ui/EditorPageHeader'
 import { useTranslation } from '../../hooks/useTranslation'
 import { openDraftByChapter, openBuiltinEditor } from '../panels/sidebar/SidebarShared'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
@@ -47,28 +50,27 @@ export default function ManuscriptBoard() {
   const loadVolumes = useVolumeStore((s) => s.load)
   const [blueprints, setBlueprints] = useState<BlueprintData[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [view, setView] = useState<BoardView>('list')
   const [selected, setSelected] = useState<number | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      setLoading(true)
-      try {
-        const rows = await ipc.invoke('db:blueprint-get-all') as BlueprintData[]
-        if (!cancelled) {
-          setBlueprints(rows.map((b) => ({ ...b, role: normalizeBlueprintRole(b.role) })))
-          setSelected((prev) => prev ?? rows[0]?.chapterNumber ?? null)
-        }
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
+  const load = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true)
+    try {
+      const rows = await ipc.invoke('db:blueprint-get-all') as BlueprintData[]
+      setBlueprints(rows.map((b) => ({ ...b, role: normalizeBlueprintRole(b.role) })))
+      setSelected((prev) => prev ?? rows[0]?.chapterNumber ?? null)
+    } finally {
+      if (!silent) setLoading(false)
+      setRefreshing(false)
     }
-    void load()
+  }, [])
+
+  useEffect(() => {
+    Promise.resolve().then(() => { void load() })
     void useDraftStore.getState().loadAllDrafts()
     void loadVolumes()
-    return () => { cancelled = true }
-  }, [project?.path, loadVolumes])
+  }, [project?.path, load, loadVolumes])
 
   const rows = useMemo<ChapterRow[]>(() => blueprints.map((blueprint) => {
     const latest = draftsByChapter[blueprint.chapterNumber]?.[0]
@@ -78,6 +80,8 @@ export default function ManuscriptBoard() {
       words: latest?.wordCount ?? 0,
     }
   }), [blueprints, draftsByChapter])
+
+  const finalCount = rows.filter((row) => row.status === 'final').length
 
   const groups = useMemo(() => {
     const used = new Set<number>()
@@ -126,36 +130,46 @@ export default function ManuscriptBoard() {
   return (
     <div className="flex h-full min-h-0">
       <div className="flex-1 min-w-0 flex flex-col">
-        <div
-          className="flex items-center gap-3 px-4 flex-shrink-0"
-          style={{ height: 40, borderBottom: '1px solid var(--color-border)' }}
-        >
-          <span className="text-xs font-medium" style={{ color: 'var(--color-text)' }}>{t('board.title')}</span>
-          <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-            {t('draftbox.count').replace('{n}', String(rows.length))}
-          </span>
-          <span className="flex-1" />
-          <SegmentedControl<BoardView>
-            size="sm"
-            value={view}
-            onChange={setView}
-            items={[
-              { value: 'list', label: t('board.view.list'), icon: <List size={11} /> },
-              { value: 'card', label: t('board.view.card'), icon: <LayoutGrid size={11} /> },
-              { value: 'outline', label: t('board.view.outline'), icon: <ListTree size={11} /> },
-              { value: 'timeline', label: t('board.view.timeline'), icon: <Route size={11} /> },
-            ]}
-          />
-        </div>
+        <EditorPageHeader
+          icon={<LayoutGrid size={13} />}
+          title={t('board.title')}
+          meta={(
+            <>
+              <CountBadge value={rows.length} unit={t('unit.chapters')} />
+              <CountBadge value={finalCount} unit={t('board.status.final')} tone={finalCount > 0 ? 'success' : 'muted'} />
+            </>
+          )}
+          actions={(
+            <>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => { setRefreshing(true); void load(true); void useDraftStore.getState().loadAllDrafts(); void loadVolumes() }}
+                title={t('action.refresh')}
+              >
+                <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+              </Button>
+              <SegmentedControl<BoardView>
+                size="sm"
+                value={view}
+                onChange={setView}
+                items={[
+                  { value: 'list', label: t('board.view.list'), icon: <List size={11} /> },
+                  { value: 'card', label: t('board.view.card'), icon: <LayoutGrid size={11} /> },
+                  { value: 'outline', label: t('board.view.outline'), icon: <ListTree size={11} /> },
+                  { value: 'timeline', label: t('board.view.timeline'), icon: <Route size={11} /> },
+                ]}
+              />
+            </>
+          )}
+        />
 
         <div className="flex-1 min-h-0 overflow-y-auto p-4" data-board-view={view}>
           {groups.map((group) => (
             <section key={group.key} className="mb-5">
               <div className="mb-2 flex items-center gap-2">
                 <span className="text-micro font-medium" style={{ color: 'var(--color-text-secondary)' }}>{group.title}</span>
-                <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
-                  {group.chapters.length}
-                </span>
+                <CountBadge value={group.chapters.length} unit={t('unit.chapters')} />
                 <span className="h-px flex-1" style={{ backgroundColor: 'var(--color-border)' }} />
               </div>
 
@@ -196,12 +210,11 @@ export default function ManuscriptBoard() {
                   ))}
                 </div>
               ) : (
-                <div className="rounded-md overflow-hidden" style={{ border: '1px solid var(--color-border)' }}>
-                  {group.chapters.map((row, index) => (
+                <div className="space-y-0.5">
+                  {group.chapters.map((row) => (
                     <ListRow
                       key={row.blueprint.chapterNumber}
                       row={row}
-                      last={index === group.chapters.length - 1}
                       selected={selected === row.blueprint.chapterNumber}
                       onSelect={() => setSelected(row.blueprint.chapterNumber)}
                       onOpen={() => openRow(row)}
@@ -219,8 +232,11 @@ export default function ManuscriptBoard() {
         className="w-[236px] flex-shrink-0 flex flex-col"
         style={{ borderLeft: '1px solid var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}
       >
-        <div className="px-3 flex items-center" style={{ height: 40, borderBottom: '1px solid var(--color-border)' }}>
+        <div className="px-3 flex items-center gap-2" style={{ height: 40, borderBottom: '1px solid var(--color-border)' }}>
           <span className="text-micro font-medium" style={{ color: 'var(--color-text-secondary)' }}>{t('board.backlinks')}</span>
+          {selectedRow && selectedRow.blueprint.characters.length > 0 && (
+            <CountBadge value={selectedRow.blueprint.characters.length} unit={t('unit.items')} />
+          )}
         </div>
         {selectedRow ? (
           <div className="p-3 space-y-3 overflow-y-auto">
@@ -293,8 +309,8 @@ function StatusDot({ status }: { status: ChapterRow['status'] }) {
   )
 }
 
-function ListRow({ row, last, selected, onSelect, onOpen }: {
-  row: ChapterRow; last: boolean; selected: boolean; onSelect: () => void; onOpen: () => void
+function ListRow({ row, selected, onSelect, onOpen }: {
+  row: ChapterRow; selected: boolean; onSelect: () => void; onOpen: () => void
 }) {
   const { t } = useTranslation()
   return (
@@ -302,10 +318,9 @@ function ListRow({ row, last, selected, onSelect, onOpen }: {
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
-      className="flex w-full items-center gap-3 px-3 text-left"
+      className="flex w-full items-center gap-3 rounded-md px-2.5 py-2 text-left transition-colors hover:bg-[var(--color-hover)]"
       style={{
-        height: 36,
-        borderBottom: last ? 'none' : '1px solid var(--color-border)',
+        minHeight: 36,
         backgroundColor: selected ? 'var(--color-active)' : 'transparent',
         color: 'var(--color-text)',
         cursor: 'pointer',
@@ -333,10 +348,9 @@ function ChapterCard({ row, selected, onSelect, onOpen }: {
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
-      className="text-left rounded-[10px] p-3"
+      className={`text-left rounded-md p-3 transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-bg)] hover:bg-[var(--color-hover)]'}`}
       style={{
         border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        backgroundColor: selected ? 'var(--color-active)' : 'var(--color-bg)',
         color: 'var(--color-text)',
         cursor: 'pointer',
       }}
@@ -384,10 +398,9 @@ function OutlineRow({ row, selected, onSelect, onOpen }: {
       onClick={onSelect}
       onDoubleClick={onOpen}
       onKeyDown={(event) => { if (event.key === 'Enter') onSelect() }}
-      className="rounded-[10px] px-3 py-2.5"
+      className={`rounded-md px-3 py-2.5 transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-bg)] hover:bg-[var(--color-hover)]'}`}
       style={{
         border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        backgroundColor: selected ? 'var(--color-active)' : 'var(--color-bg)',
         cursor: 'pointer',
       }}
     >
@@ -421,11 +434,10 @@ function TimelineEvent({ row, selected, onSelect, onOpen }: {
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
-      className="text-left rounded-[10px] p-2.5 flex-shrink-0"
+      className={`text-left rounded-md p-2.5 flex-shrink-0 transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-bg)] hover:bg-[var(--color-hover)]'}`}
       style={{
         width: 190,
         border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        backgroundColor: selected ? 'var(--color-active)' : 'var(--color-bg)',
         color: 'var(--color-text)',
         cursor: 'pointer',
       }}
