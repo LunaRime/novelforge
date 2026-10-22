@@ -117,4 +117,74 @@ export class LLMHistoryRepository {
 
     return { byPurpose, byModel, total }
   }
+
+  /**
+   * 用量仪表盘聚合（当前项目）：总计 / 按天 / 用途 / 模型。
+   *
+   * 与 getUsageStats 同一口径（success=1、毫秒时间戳闭区间）。仪表盘需要
+   * token、耗时与按天序列，单列一个查询避免把旧面板的返回结构撑大。
+   */
+  static getUsageDashboard(from: number, to: number): {
+    totals: { calls: number; tokens: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number; durationMs: number }
+    daily: Array<{ day: string; calls: number; tokens: number; cost: number; durationMs: number }>
+    byPurpose: Array<{ purpose: string; calls: number; tokens: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number; durationMs: number }>
+    byModel: Array<{ model: string; calls: number; tokens: number; cost: number; durationMs: number }>
+  } {
+    const empty = {
+      totals: { calls: 0, tokens: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, durationMs: 0 },
+      daily: [],
+      byPurpose: [],
+      byModel: [],
+    }
+    const db = getProjectDb()
+    if (!db) return empty
+
+    const totals = db.prepare(`
+      SELECT
+        COUNT(*) as calls,
+        COALESCE(SUM(total_tokens), 0) as tokens,
+        COALESCE(SUM(prompt_tokens), 0) as promptTokens,
+        COALESCE(SUM(completion_tokens), 0) as completionTokens,
+        COALESCE(SUM(cached_tokens), 0) as cachedTokens,
+        COALESCE(SUM(cost), 0) as cost,
+        COALESCE(SUM(duration_ms), 0) as durationMs
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+    `).get(from, to) as { calls: number; tokens: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number; durationMs: number }
+
+    const daily = db.prepare(`
+      SELECT
+        strftime('%Y-%m-%d', created_at / 1000, 'unixepoch', 'localtime') as day,
+        COUNT(*) as calls,
+        COALESCE(SUM(total_tokens), 0) as tokens,
+        COALESCE(SUM(cost), 0) as cost,
+        COALESCE(SUM(duration_ms), 0) as durationMs
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+      GROUP BY day ORDER BY day ASC
+    `).all(from, to) as Array<{ day: string; calls: number; tokens: number; cost: number; durationMs: number }>
+
+    const byPurpose = db.prepare(`
+      SELECT purpose,
+        COUNT(*) as calls,
+        COALESCE(SUM(total_tokens), 0) as tokens,
+        COALESCE(SUM(prompt_tokens), 0) as promptTokens,
+        COALESCE(SUM(completion_tokens), 0) as completionTokens,
+        COALESCE(SUM(cached_tokens), 0) as cachedTokens,
+        COALESCE(SUM(cost), 0) as cost,
+        COALESCE(SUM(duration_ms), 0) as durationMs
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+      GROUP BY purpose ORDER BY tokens DESC
+    `).all(from, to) as Array<{ purpose: string; calls: number; tokens: number; promptTokens: number; completionTokens: number; cachedTokens: number; cost: number; durationMs: number }>
+
+    const byModel = db.prepare(`
+      SELECT model_name as model,
+        COUNT(*) as calls,
+        COALESCE(SUM(total_tokens), 0) as tokens,
+        COALESCE(SUM(cost), 0) as cost,
+        COALESCE(SUM(duration_ms), 0) as durationMs
+      FROM llm_calls WHERE success = 1 AND created_at >= ? AND created_at <= ?
+      GROUP BY model_name ORDER BY tokens DESC
+    `).all(from, to) as Array<{ model: string; calls: number; tokens: number; cost: number; durationMs: number }>
+
+    return { totals, daily, byPurpose, byModel }
+  }
 }

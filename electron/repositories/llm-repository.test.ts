@@ -65,3 +65,24 @@ describe('usage-stats SQL 构建契约（与 database.ts llm_calls 表结构对�
     expect(src).toContain('created_at <= ?')
   })
 })
+
+describe('LLMHistoryRepository.getUsageDashboard', () => {
+  it('无项目 DB 时返回空仪表盘（含 daily/用途/模型）', () => {
+    const result = LLMHistoryRepository.getUsageDashboard(0, Date.now())
+    expect(result.totals).toEqual({ calls: 0, tokens: 0, promptTokens: 0, completionTokens: 0, cachedTokens: 0, cost: 0, durationMs: 0 })
+    expect(result.daily).toEqual([])
+    expect(result.byPurpose).toEqual([])
+    expect(result.byModel).toEqual([])
+  })
+
+  it('SQL 契约：成功口径、按天分组、用途/模型汇总含 token 与耗时', () => {
+    const src = LLMHistoryRepository.getUsageDashboard.toString()
+    expect(src).toContain('success = 1')
+    expect(src).toContain("strftime('%Y-%m-%d'")
+    expect(src).toContain('GROUP BY day')
+    expect(src).toContain('GROUP BY purpose')
+    expect(src).toContain('GROUP BY model_name')
+    expect(src).toContain('SUM(total_tokens)')
+    expect(src).toContain('SUM(duration_ms)')
+  })
+})

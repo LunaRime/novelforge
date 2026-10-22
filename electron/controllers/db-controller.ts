@@ -752,6 +752,11 @@ export function registerDatabaseController() {
     return LLMHistoryRepository.getUsageStats(range.from, range.to)
   })
 
+  // 用量仪表盘（当前项目：总计/按天/用途/模型；同 success=1 与毫秒时间戳口径）
+  guardedHandle('db:usage-dashboard', async (_event, range: { from: number; to: number }) => {
+    return LLMHistoryRepository.getUsageDashboard(range.from, range.to)
+  })
+
   // 全局用量统计（跨项目聚合：最近项目 + 当前项目逐项目只读；主进程 60s 缓存）
   guardedHandle('db:usage-stats-global', async () => {
     return getGlobalUsageStats(getCurrentProjectPath() ?? undefined)

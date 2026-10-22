@@ -185,6 +185,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:revision-next-index': { authority: 'write-project' },
   'db:save-summary-snapshot': { authority: 'write-project' },
   'db:usage-stats': { authority: 'read-project' },
+  'db:usage-dashboard': { authority: 'read-project' },
   'db:usage-stats-global': { authority: 'read-global' },
   'db:volume-delete': { authority: 'destructive' },
   'db:volume-get-all': { authority: 'read-project' },

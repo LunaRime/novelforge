@@ -231,6 +231,52 @@ export interface GlobalUsageStatsData {
   degradedProjects: string[]
 }
 
+/** 用量仪表盘 — 按天聚合 */
+export interface UsageDashboardDailyRow {
+  day: string
+  calls: number
+  tokens: number
+  cost: number
+  durationMs: number
+}
+
+/** 用量仪表盘 — 用途维度 */
+export interface UsageDashboardPurposeRow {
+  purpose: string
+  calls: number
+  tokens: number
+  promptTokens: number
+  completionTokens: number
+  cachedTokens: number
+  cost: number
+  durationMs: number
+}
+
+/** 用量仪表盘 — 模型维度 */
+export interface UsageDashboardModelRow {
+  model: string
+  calls: number
+  tokens: number
+  cost: number
+  durationMs: number
+}
+
+/** 用量仪表盘（当前项目；success=1 口径） */
+export interface UsageDashboardData {
+  totals: {
+    calls: number
+    tokens: number
+    promptTokens: number
+    completionTokens: number
+    cachedTokens: number
+    cost: number
+    durationMs: number
+  }
+  daily: UsageDashboardDailyRow[]
+  byPurpose: UsageDashboardPurposeRow[]
+  byModel: UsageDashboardModelRow[]
+}
+
 // ===== 文件系统 =====
 
 /**
@@ -821,6 +867,7 @@ export interface DatabaseChannels {
   'db:get-llm-history': { args: [limit?: number]; return: unknown[] }
   // 用量统计（当前项目维度：purpose/模型两维度 + 合计；区间过滤毫秒时间戳）
   'db:usage-stats': { args: [range: { from: number; to: number }]; return: UsageStatsData }
+  'db:usage-dashboard': { args: [range: { from: number; to: number }]; return: UsageDashboardData }
   // 全局用量统计（跨项目聚合：项目维度表 + 合计；旧库缺 cached_tokens 列按 0 统计并标记 degraded）
   'db:usage-stats-global': { args: []; return: GlobalUsageStatsData }
   'db:get-daily-activity': { args: [days?: number, projectPath?: string, currentProjectPath?: string]; return: DailyActivityData }
