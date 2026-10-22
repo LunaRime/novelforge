@@ -14,6 +14,7 @@
 import { app } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
 import { isIpcMetricsEnabled, setIpcMetricsEnabled, getIpcMetrics, clearIpcMetrics } from '../dev/ipc-metrics'
+import { listTables, getSchema, runQuery } from '../dev/db-inspector'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
@@ -135,6 +136,24 @@ export function registerDevController() {
     assertDevConsoleEnabled()
     clearIpcMetrics()
     return { success: true }
+  })
+
+  /** 开发者控制台：项目数据库表列表 */
+  guardedHandle('dev:db-tables', async () => {
+    assertDevConsoleEnabled()
+    return listTables()
+  })
+
+  /** 开发者控制台：表结构 */
+  guardedHandle('dev:db-schema', async (_event, table: string) => {
+    assertDevConsoleEnabled()
+    return getSchema(table)
+  })
+
+  /** 开发者控制台：只读 SQL */
+  guardedHandle('dev:db-query', async (_event, sql: string, limit?: number) => {
+    assertDevConsoleEnabled()
+    return runQuery(sql, limit)
   })
 
   /** 调用外部 API（AI 工具 call_external_api 与设置页测试共用） */

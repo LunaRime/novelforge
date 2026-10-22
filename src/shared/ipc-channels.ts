@@ -1248,6 +1248,27 @@ export interface DevConsoleStatus {
   reason?: string
 }
 
+/** 开发者控制台 — 项目数据库表 */
+export interface DevDbTable {
+  name: string
+  rows: number
+}
+
+export interface DevDbSchema {
+  name: string
+  columns: Array<{ name: string; type: string; notnull: number; pk: number; dfltValue: string | null }>
+  indexes: Array<{ name: string; unique: number; columns: string[] }>
+}
+
+export interface DevDbQueryResult {
+  success: boolean
+  columns?: string[]
+  rows?: unknown[][]
+  rowCount?: number
+  truncated?: boolean
+  error?: string
+}
+
 export interface DevChannels {
   /** 调用开发者模式配置的外部 API（主进程代理 fetch，绕过渲染 CSP） */
   'dev:invoke': {
@@ -1298,6 +1319,21 @@ export interface DevChannels {
   'dev:instance-clean': {
     args: [id: string]
     return: { success: boolean; error?: string }
+  }
+  /** 开发者控制台：列出当前项目数据库的表与行数 */
+  'dev:db-tables': {
+    args: []
+    return: DevDbTable[]
+  }
+  /** 开发者控制台：读取表结构 */
+  'dev:db-schema': {
+    args: [table: string]
+    return: DevDbSchema | null
+  }
+  /** 开发者控制台：只读 SQL 查询（最多 500 行） */
+  'dev:db-query': {
+    args: [sql: string, limit?: number]
+    return: DevDbQueryResult
   }
 }
 
