@@ -11,12 +11,14 @@
  * - 响应大小限制（1MB 截断，防大响应拖垮主进程）
  * - 错误信息 sanitize（不含敏感请求头）
  */
+import { app } from 'electron'
 import { readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from '../utils/config-utils'
+import { isIpcMetricsEnabled, setIpcMetricsEnabled, getIpcMetrics, clearIpcMetrics } from '../dev/ipc-metrics'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
 import { isValidHttpUrl, isValidRelativePath, buildDevApiUrl, truncateResponse } from '../utils/dev-api-utils'
-import type { DevApiRequest, DevApiResponse, GlobalConfig } from '../../src/shared/ipc-channels'
+import type { DevApiRequest, DevApiResponse, DevIpcMetricsData, GlobalConfig } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { proxyFetch } from '../net/proxy-fetch'
 
@@ -98,7 +100,43 @@ async function invokeDevApi(req: DevApiRequest, baseUrlOverride?: string): Promi
   }
 }
 
+/** 开发者控制台门禁：开发态默认开；打包版需显式开关或 --devtools */
+export function isDevConsoleEnabled(): boolean {
+  if (process.env.NOVELFORGE_DEVTOOLS === '1') return true
+  if (!app.isPackaged) return true
+  try {
+    const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
+    return config.devMode?.consoleEnabled === true
+  } catch {
+    return false
+  }
+}
+
+function assertDevConsoleEnabled(): void {
+  if (!isDevConsoleEnabled()) throw new Error('开发者控制台未启用（设置 → 开发者选项，或使用 --devtools 启动）')
+}
+
 export function registerDevController() {
+  /** 开发者控制台：打开/关闭 IPC 指标采集 */
+  guardedHandle('dev:ipc-set-enabled', async (_event, enabled: boolean) => {
+    assertDevConsoleEnabled()
+    setIpcMetricsEnabled(Boolean(enabled))
+    return { success: true }
+  })
+
+  /** 开发者控制台：读取 IPC 指标 */
+  guardedHandle('dev:ipc-metrics', async (): Promise<DevIpcMetricsData> => {
+    assertDevConsoleEnabled()
+    return { enabled: isIpcMetricsEnabled(), ...getIpcMetrics() }
+  })
+
+  /** 开发者控制台：清空 IPC 指标 */
+  guardedHandle('dev:ipc-clear', async () => {
+    assertDevConsoleEnabled()
+    clearIpcMetrics()
+    return { success: true }
+  })
+
   /** 调用外部 API（AI 工具 call_external_api 与设置页测试共用） */
   guardedHandle('dev:invoke', async (_event, req: DevApiRequest): Promise<DevApiResponse> => {
     try {

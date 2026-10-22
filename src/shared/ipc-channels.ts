@@ -88,6 +88,8 @@ export interface GlobalConfig {
   /** 开发者模式：接入外部程序 API（如本地浏览器服务），AI 工具 call_external_api 可调用 */
   devMode?: {
     enabled: boolean
+    /** 开发者控制台开关（打包版默认关闭；开发态 / --devtools 始终可用） */
+    consoleEnabled?: boolean
     /** 外部 API 基础地址（http/https，如 http://localhost:9223） */
     apiBaseUrl: string
     /** 请求头（JSON 对象，如 {"Authorization": "Bearer xxx"}） */
@@ -1192,6 +1194,33 @@ export interface DevApiResponse {
   error?: string
 }
 
+/** 开发者控制台 — 单通道 IPC 聚合指标 */
+export interface DevIpcMetric {
+  channel: string
+  calls: number
+  errors: number
+  totalMs: number
+  lastMs: number
+  avgMs: number
+  lastAt: number
+  lastError?: string
+}
+
+/** 开发者控制台 — 最近一次 IPC 调用 */
+export interface DevIpcRecentCall {
+  channel: string
+  at: number
+  durationMs: number
+  ok: boolean
+  error?: string
+}
+
+export interface DevIpcMetricsData {
+  enabled: boolean
+  metrics: DevIpcMetric[]
+  recent: DevIpcRecentCall[]
+}
+
 export interface DevChannels {
   /** 调用开发者模式配置的外部 API（主进程代理 fetch，绕过渲染 CSP） */
   'dev:invoke': {
@@ -1202,6 +1231,21 @@ export interface DevChannels {
   'dev:test': {
     args: [override?: { apiBaseUrl?: string }]
     return: { success: boolean; status?: number; error?: string }
+  }
+  /** 开发者控制台：开启/关闭 IPC 指标采集 */
+  'dev:ipc-set-enabled': {
+    args: [enabled: boolean]
+    return: { success: boolean }
+  }
+  /** 开发者控制台：读取 IPC 指标与最近调用 */
+  'dev:ipc-metrics': {
+    args: []
+    return: DevIpcMetricsData
+  }
+  /** 开发者控制台：清空 IPC 指标 */
+  'dev:ipc-clear': {
+    args: []
+    return: { success: boolean }
   }
 }
 

@@ -96,28 +96,28 @@ describe('guardedHandle 接线（策略表 + 来源校验）', () => {
     expect(() => guardedHandle('nope:channel' as never, (() => undefined) as never)).toThrow(/未登记策略/)
   })
 
-  it('未登记窗口调用 → 抛错；登记后 → 放行且返回 handler 结果', () => {
-    // 同步 handler：guardedHandle 不做 await 包装，返回值原样透出（便于断言接线未被改变）
+  it('未登记窗口调用 → 抛错；登记后 → 放行且返回 handler 结果', async () => {
+    // guardedHandle 统一 async（指标采集需要计时），返回值以 Promise 透出
     guardedHandle('styles:list', (() => 'ok') as never)
     expect(handleMock).toHaveBeenCalledTimes(1)
-    const wrapper = handleMock.mock.calls[0][1] as (e: unknown) => unknown
+    const wrapper = handleMock.mock.calls[0][1] as (e: unknown) => Promise<unknown>
 
     // 未登记 webContents → 默认拒绝
-    expect(() => wrapper(fakeEvent(7, 'file:///app/index.html'))).toThrow(/sender not trusted/)
+    await expect(wrapper(fakeEvent(7, 'file:///app/index.html'))).rejects.toThrow(/sender not trusted/)
 
     // 显式登记后放行
     trustWebContents(7)
-    expect(wrapper(fakeEvent(7, 'file:///app/index.html'))).toBe('ok')
+    await expect(wrapper(fakeEvent(7, 'file:///app/index.html'))).resolves.toBe('ok')
 
     // 注销后再次拒绝（窗口销毁 → 不留后门）
     untrustWebContents(7)
-    expect(() => wrapper(fakeEvent(7, 'file:///app/index.html'))).toThrow(/sender not trusted/)
+    await expect(wrapper(fakeEvent(7, 'file:///app/index.html'))).rejects.toThrow(/sender not trusted/)
   })
 
-  it('非 top frame 即使窗口已登记 → 仍拒绝', () => {
+  it('非 top frame 即使窗口已登记 → 仍拒绝', async () => {
     trustWebContents(7)
     guardedHandle('styles:get', (() => 'ok') as never)
-    const wrapper = handleMock.mock.calls[0][1] as (e: unknown) => unknown
-    expect(() => wrapper(fakeEvent(7, 'file:///app/index.html', { parent: 'x' }))).toThrow(/sender not trusted/)
+    const wrapper = handleMock.mock.calls[0][1] as (e: unknown) => Promise<unknown>
+    await expect(wrapper(fakeEvent(7, 'file:///app/index.html', { parent: 'x' }))).rejects.toThrow(/sender not trusted/)
   })
 })

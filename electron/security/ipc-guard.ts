@@ -21,6 +21,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNEL_POLICY } from '../../src/shared/ipc-policy'
 import type { InvokeChannel } from '../../src/shared/ipc-channels'
 import { logger } from '../utils/logger'
+import { isIpcMetricsEnabled, recordIpcCall } from '../dev/ipc-metrics'
 
 /** 与 `ipcMain.handle` 一致的回调签名（刻意不改，见文件头） */
 export type GuardedHandler = (event: IpcMainInvokeEvent, ...args: never[]) => unknown
@@ -124,7 +125,7 @@ export function guardedHandle(channel: InvokeChannel, handler: GuardedHandler): 
     throw new Error(`[ipc-guard] 未登记策略的通道: ${channel}`)
   }
 
-  ipcMain.handle(channel, (event, ...args) => {
+  ipcMain.handle(channel, async (event, ...args) => {
     // S6：来源校验。失败即拒绝（默认拒绝），并留下可诊断的日志——
     //   ⚠️ 这条日志是「真机启动后 IPC 全被拒」时唯一的排查线索，字段必须齐全。
     const probe = probeFrom(event)
@@ -137,6 +138,16 @@ export function guardedHandle(channel: InvokeChannel, handler: GuardedHandler): 
       throw new Error(`[ipc-guard] sender not trusted: ${channel}`)
     }
     // S8 将在此前插入 assertPathArgs(channel, policy, args)
-    return handler(event, ...(args as never[]))
+    if (!isIpcMetricsEnabled()) return handler(event, ...(args as never[]))
+
+    const started = performance.now()
+    try {
+      const result = await handler(event, ...(args as never[]))
+      recordIpcCall(channel, performance.now() - started)
+      return result
+    } catch (error) {
+      recordIpcCall(channel, performance.now() - started, error)
+      throw error
+    }
   })
 }
