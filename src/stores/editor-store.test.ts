@@ -163,3 +163,43 @@ describe('editor-store inlineSession（L1 会话层）', () => {
     expect(tab.inlineSession!.decisions['h0.s0']).toBe('rejected')
   })
 })
+
+describe('editor-store retargetTab', () => {
+  it('原位切换草稿版本并清 dirty', () => {
+    useEditorStore.setState({
+      tabs: [{
+        id: 'vela://draft/1', name: '第1章 v1', type: 'chapter',
+        filePath: 'vela://draft/1', content: '旧', dirty: true, chapterNumber: 1,
+      }],
+      activeTabId: 'vela://draft/1',
+    })
+
+    useEditorStore.getState().retargetTab('vela://draft/1', {
+      id: 'vela://draft/2', name: '第1章 v2', filePath: 'vela://draft/2', content: '新',
+    })
+
+    const s = useEditorStore.getState()
+    expect(s.tabs).toHaveLength(1)
+    expect(s.tabs[0]).toMatchObject({
+      id: 'vela://draft/2', filePath: 'vela://draft/2', name: '第1章 v2',
+      content: '新', dirty: false, chapterNumber: 1,
+    })
+    expect(s.activeTabId).toBe('vela://draft/2')
+  })
+
+  it('非激活 Tab 切换版本不影响 activeTabId', () => {
+    useEditorStore.setState({
+      tabs: [
+        { id: 'a', name: 'A', type: 'chapter', filePath: 'a', content: '' },
+        { id: 'vela://draft/1', name: '第1章 v1', type: 'chapter', filePath: 'vela://draft/1', content: '旧' },
+      ],
+      activeTabId: 'a',
+    })
+    useEditorStore.getState().retargetTab('vela://draft/1', {
+      id: 'vela://draft/2', name: '第1章 v2', filePath: 'vela://draft/2', content: '新',
+    })
+    const s = useEditorStore.getState()
+    expect(s.activeTabId).toBe('a')
+    expect(s.tabs[1].id).toBe('vela://draft/2')
+  })
+})

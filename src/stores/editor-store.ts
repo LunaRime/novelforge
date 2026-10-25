@@ -60,6 +60,16 @@ interface EditorState {
    * 在保存成功后调用，使警示灯、Tab 圆点消失。
    */
   markTabSaved: (tabId: string) => void
+  /**
+   * 原位切换草稿版本：替换 id/name/filePath/content 并清 dirty。
+   * 用于 AI 自审产生新版本后，已打开 Tab 自动切到新版本（保持 Tab 顺序）。
+   */
+  retargetTab: (tabId: string, next: {
+    id: string
+    name: string
+    filePath: string
+    content: string
+  }) => void
   /** 开始 inline 会话（A 入口 AI 输出进入会话；同 tab 已有会话则覆盖） */
   beginInlineSession: (tabId: string, session: DiffSession) => void
   /** 更新单子 hunk 决策（决策表 + 组聚合单写路径；未知 subHunkId no-op） */
@@ -154,6 +164,14 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   markTabSaved: (tabId) => {
     set((s) => ({
       tabs: s.tabs.map((t) => t.id === tabId ? { ...t, dirty: false } : t),
+    }))
+  },
+
+  // 原位切换草稿版本：保持 Tab 顺序和其他字段，仅替换版本相关字段
+  retargetTab: (tabId, next) => {
+    set((s) => ({
+      tabs: s.tabs.map((t) => t.id === tabId ? { ...t, ...next, dirty: false } : t),
+      activeTabId: s.activeTabId === tabId ? next.id : s.activeTabId,
     }))
   },
 
