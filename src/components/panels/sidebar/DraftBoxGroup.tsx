@@ -3,9 +3,10 @@
  */
 
 import { useState, useEffect } from 'react'
-import { CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, ChevronRight, ChevronDown } from 'lucide-react'
+import { CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, ChevronRight, ChevronDown, Plus } from 'lucide-react'
 import type { DraftMeta } from '../../../stores/draft-store'
 import { useDraftStore } from '../../../stores/draft-store'
+import { useLayoutStore } from '../../../stores/layout-store'
 import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import CountBadge from '../../ui/CountBadge'
@@ -62,6 +63,18 @@ export default function DraftBoxGroup({
       count={activeChapterCount > 0
         ? <CountBadge value={activeChapterCount} unit={t('unit.chapters')} />
         : undefined}
+      actions={
+        <button
+          type="button"
+          onClick={() => useLayoutStore.getState().openBlankChapter()}
+          className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
+          style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
+          title={t('dialog.newBlankChapter')}
+          aria-label={t('dialog.newBlankChapter')}
+        >
+          <Plus size={12} />
+        </button>
+      }
     >
       {chapterNums.length === 0 ? (
         <div className="text-xs py-1" style={{ paddingLeft: 24, color: 'var(--color-text-muted)' }}>

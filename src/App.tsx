@@ -30,6 +30,7 @@ import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
+import BlankChapterDialog from './components/dialogs/BlankChapterDialog'
 import DevConsoleDialog from './components/dev/DevConsoleDialog'
 import ActivityDialog from './components/dialogs/ActivityDialog'
 import SettingsModal from './components/settings/SettingsModal'
@@ -187,6 +188,7 @@ export default function App() {
     newProjectOpen, closeNewProject,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
+    blankChapterOpen, closeBlankChapter,
     focusMode, bottomPanelOpen,
     activityDialogOpen, closeActivityDialog,
     devConsoleOpen, closeDevConsole,
@@ -203,6 +205,8 @@ export default function App() {
     chapterCreationOpen: s.chapterCreationOpen,
     chapterCreationPrefill: s.chapterCreationPrefill,
     closeChapterCreation: s.closeChapterCreation,
+    blankChapterOpen: s.blankChapterOpen,
+    closeBlankChapter: s.closeBlankChapter,
     focusMode: s.focusMode,
     bottomPanelOpen: s.bottomPanelOpen,
     activityDialogOpen: s.activityDialogOpen,
@@ -564,6 +568,12 @@ export default function App() {
           isOpen={chapterCreationOpen}
           prefill={chapterCreationPrefill}
           onClose={closeChapterCreation}
+        />
+      </ErrorBoundary>
+      <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
+        <BlankChapterDialog
+          open={blankChapterOpen}
+          onClose={closeBlankChapter}
         />
       </ErrorBoundary>
       {/* 写作统计弹窗（2026-09-22 由"编辑区页面"改为弹窗） */}

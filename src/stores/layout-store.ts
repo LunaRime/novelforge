@@ -47,6 +47,8 @@ interface LayoutState {
   importNovelOpen: boolean
   /** 章节创建对话框是否打开 */
   chapterCreationOpen: boolean
+  /** 空白章节对话框是否打开 */
+  blankChapterOpen: boolean
   /** 章节创建对话框的预填参数 */
   chapterCreationPrefill: ChapterCreationPrefill
 
@@ -92,6 +94,8 @@ interface LayoutState {
   closeImportNovel: () => void
   openChapterCreation: (prefill?: ChapterCreationPrefill) => void
   closeChapterCreation: () => void
+  openBlankChapter: () => void
+  closeBlankChapter: () => void
 }
 
 export const useLayoutStore = create<LayoutState>()(persist((set) => ({
@@ -117,6 +121,7 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   importNovelOpen: false,
   chapterCreationOpen: false,
   chapterCreationPrefill: null,
+  blankChapterOpen: false,
 
   // Actions
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
@@ -157,6 +162,8 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   closeImportNovel: () => set({ importNovelOpen: false }),
   openChapterCreation: (prefill = null) => set({ chapterCreationOpen: true, chapterCreationPrefill: prefill }),
   closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
+  openBlankChapter: () => set({ blankChapterOpen: true }),
+  closeBlankChapter: () => set({ blankChapterOpen: false }),
 }), {
   name: 'novelforge:layout',
   // 只记住「工作台形状」：面板开合与当前视图。

@@ -98,7 +98,13 @@ export async function openDraftById(input: {
       return false
     }
   }
-  useEditorStore.getState().openFile(buildDraftTab({ ...input, content }))
+  const tab = buildDraftTab({ ...input, content })
+  // 未提供标题时沿用已打开 Tab 的名字，避免“第2章 第二夜”被降级成“第2章”
+  if (!input.chapterTitle?.trim()) {
+    const existing = useEditorStore.getState().tabs.find(t => t.filePath === tab.filePath)
+    if (existing) tab.name = existing.name
+  }
+  useEditorStore.getState().openFile(tab)
   return true
 }
 

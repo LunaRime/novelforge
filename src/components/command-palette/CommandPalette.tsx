@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
-  PanelLeft, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
+  PanelLeft, PenLine, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
   Users, Wand2, ZoomIn,
 } from 'lucide-react'
 import { useCommandStore } from '../../stores/command-store'
@@ -159,6 +159,11 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         id: 'new-chapter', label: t('chapter.newChapter'), category: t('command.group.general'),
         icon: <Plus size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
+      },
+      {
+        id: 'new-blank-chapter', label: t('dialog.newBlankChapter'), category: t('command.group.general'),
+        icon: <PenLine size={15} />, keywords: 'blank chapter write 空白 新建 章节 手写',
+        run: () => layout.openBlankChapter(),
       },
       ...(devConsoleEnabled ? [{
         id: 'dev-console', label: t('dev.consoleTitle'), category: t('command.group.general'),

@@ -111,6 +111,16 @@ export default function ProjectTree() {
     if (currentProject) refreshAll()
   }, [currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不每次都需重跑
 
+  // 空白章节等入口会新建蓝图：监听资源刷新，避免“章节蓝图”仍显示待生成
+  useEffect(() => {
+    const unsub = globalEventBus.on('REFRESH_RESOURCE', (payload) => {
+      if (payload.resources.includes('all') || payload.resources.includes('blueprints')) {
+        void refreshAll()
+      }
+    })
+    return unsub
+  }, [refreshAll])
+
   // 工作流步骤状态或整体状态变化时刷新侧边栏（适配多任务）
   // 合并为单一 effect + 防抖，避免一次步骤完成同时触发多次刷新
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
