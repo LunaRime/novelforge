@@ -5,14 +5,13 @@
 import { useState, useEffect } from 'react'
 import { CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, ChevronRight, ChevronDown } from 'lucide-react'
 import type { DraftMeta } from '../../../stores/draft-store'
-import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
-import { useEditorStore } from '../../../stores/editor-store'
+import { useDraftStore } from '../../../stores/draft-store'
 import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import CountBadge from '../../ui/CountBadge'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
 import type { TextKey } from '../../../shared/locale'
-import { showSidebarMenu } from './SidebarShared'
+import { openDraftById, showSidebarMenu } from './SidebarShared'
 import { ipc } from '../../../services/ipc-client'
 import { useTranslation } from '../../../hooks/useTranslation'
 import SidebarGroup from './SidebarGroup'
@@ -198,13 +197,11 @@ function DraftItem({
 
   /** 打开草稿到编辑器 */
   const openDraft = async () => {
-    const content = await readDraftBody(draft.filePath)
-    useEditorStore.getState().openFile({
-      id: draft.filePath,
-      name: `${chapterTitleText} v${draft.version}`,
-      type: 'chapter',
-      filePath: draft.filePath,
-      content,
+    await openDraftById({
+      draftId: draft.id,
+      chapterNumber: draft.chapterNumber,
+      chapterTitle: chapterTitleText,
+      version: draft.version,
     })
   }
 

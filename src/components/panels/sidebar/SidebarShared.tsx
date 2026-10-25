@@ -45,6 +45,7 @@ export function showSidebarMenu(items: ContextMenuEntry[], e: React.MouseEvent) 
 
 import { useEditorStore } from '../../../stores/editor-store'
 import { ipc } from '../../../services/ipc-client'
+import { buildDraftTab } from '../../../services/draft-tab'
 
 /** 打开架构文件（带 AI 生成工具栏；若 tab 已存在则刷新内容） */
 export async function openArchFile(filePath: string, name: string) {
@@ -79,6 +80,28 @@ export function openBuiltinEditor(id: string, name: string, type: 'chapter-card'
   useEditorStore.getState().openFile({ id, name, type })
 }
 
+/** 打开指定草稿（按真实 draft id）；内容可预给，避免重复读库 */
+export async function openDraftById(input: {
+  draftId: number
+  chapterNumber: number
+  chapterTitle?: string
+  version: number
+  content?: string
+}): Promise<boolean> {
+  let content = input.content
+  if (content === undefined) {
+    try {
+      const { readDraftBody } = await import('../../../stores/draft-store')
+      content = await readDraftBody(`vela://draft/${input.draftId}`)
+    } catch (e) {
+      console.warn('[SidebarShared] 读取草稿失败:', e)
+      return false
+    }
+  }
+  useEditorStore.getState().openFile(buildDraftTab({ ...input, content }))
+  return true
+}
+
 /** 打开指定章最新草稿（工作台/项目结构共用；无草稿时 toast 反馈） */
 export async function openDraftByChapter(chapterNumber: number, chapterTitle?: string): Promise<boolean> {
   const { getChapterLatestDraft } = await import('../../../services/version-service')
@@ -94,19 +117,20 @@ export async function openDraftByChapter(chapterNumber: number, chapterTitle?: s
     toast.warning(t('workspace.noDraft').replace('{n}', String(chapterNumber)))
     return false
   }
-  const filePath = `vela://draft/${draft.id}`
-  const { t } = await import('../../../shared/locale')
-  // Tab 名必须带章节号（与正式稿/草稿箱命名一致；标题已含"第N章"前缀则不重复拼接）
-  const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
-  const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
-  useEditorStore.getState().openFile({
-    id: filePath,
-    name: `${chLabel}${titlePart}（草稿）`,
-    type: 'chapter',
-    filePath,
+
+  let version = 1
+  try {
+    const meta = await ipc.invoke('db:draft-get-meta', draft.id) as { version?: number } | null
+    version = meta?.version ?? 1
+  } catch { /* 元数据读取失败时按 v1 展示，保存不受影响 */ }
+
+  return openDraftById({
+    draftId: draft.id,
+    chapterNumber,
+    chapterTitle,
+    version,
     content: draft.content,
   })
-  return true
 }
 
 /** 打开章节文件 */
