@@ -20,6 +20,8 @@ export type GlobalEventType =
   | 'ARCH_FILE_UPDATED'
   // --- 定稿完成 ---
   | 'FINALIZE_COMPLETE'
+  // --- AI 自审/重写产生新草稿版本 ---
+  | 'DRAFT_VERSION_CREATED'
   // --- 项目级事件 ---
   | 'PROJECT_CHANGED'
   // --- 系统通知 ---
@@ -49,6 +51,11 @@ export interface EventPayloadMap {
   }
   'FINALIZE_COMPLETE': {
     chapterNumber: number
+  }
+  'DRAFT_VERSION_CREATED': {
+    chapterNumber: number
+    draftId: number
+    version: number
   }
   'PROJECT_CHANGED': {
     projectPath: string

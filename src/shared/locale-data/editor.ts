@@ -41,6 +41,8 @@ export const editorTexts = {
   'blankChapter.noProject': { 'zh-CN': '请先打开项目', 'en-US': 'Open a project first', 'ru-RU': 'Сначала откройте проект' },
   'blankChapter.invalidNumber': { 'zh-CN': '章节号必须是大于 0 的整数', 'en-US': 'Chapter number must be a positive integer', 'ru-RU': 'Номер главы должен быть положительным целым' },
   'blankChapter.hint': { 'zh-CN': '创建后可在草稿箱继续手写；AI 流水线仍可正常使用。', 'en-US': 'After creation, continue writing from the draft box; the AI pipeline still works.', 'ru-RU': 'После создания продолжайте писать из черновиков; ИИ-конвейер продолжит работать.' },
+  'editor.switchedToVersion': { 'zh-CN': 'AI 已生成新版本，已切换到 v{version}', 'en-US': 'AI produced a new version; switched to v{version}', 'ru-RU': 'ИИ создал новую версию; переключено на v{version}' },
+  'editor.newVersionDirty': { 'zh-CN': 'AI 已生成 v{version}；当前编辑未保存，未自动切换', 'en-US': 'AI produced v{version}; unsaved edits were kept, so the tab was not switched', 'ru-RU': 'ИИ создал v{version}; несохранённые правки сохранены, вкладка не переключена' },
   'chapter.blueprintNotes': { 'zh-CN': '已生成章节要点', 'en-US': 'Chapter notes generated', 'ru-RU': 'Заметки главы сгенерированы' },
   'chapter.generateDraft': { 'zh-CN': '以当前蓝图信息生成草稿', 'en-US': 'Generate draft from blueprint', 'ru-RU': 'Создать черновик по блюпринту' },
   'chapter.deleteChapter': { 'zh-CN': '删除此章', 'en-US': 'Delete chapter', 'ru-RU': 'Удалить главу' },

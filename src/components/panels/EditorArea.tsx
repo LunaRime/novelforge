@@ -28,6 +28,8 @@ import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useMemoryStore } from '../../stores/memory-store'
 import { countUndecided } from '../../services/diff/hunk-model'
+import { globalEventBus } from '../../shared/event-bus'
+import { refreshOpenDraftVersion } from '../../services/draft-version-refresh'
 
 
 import { ipc } from '../../services/ipc-client'
@@ -691,6 +693,19 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     if (sidebarView === 'knowledge') setKnowledgeTabActive(true)
     useEditorStore.getState().setActiveTab(id)
   }, [sidebarView])
+
+  // AI 自审/重写生成新版本：干净 Tab 原位切换，脏 Tab 只提示、不覆盖
+  useEffect(() => {
+    return globalEventBus.on('DRAFT_VERSION_CREATED', (payload) => {
+      void refreshOpenDraftVersion(payload).then((result) => {
+        if (result.action === 'retargeted') {
+          toast.success(t('editor.switchedToVersion').replace('{version}', String(result.newVersion)))
+        } else if (result.action === 'dirty') {
+          toast.warning(t('editor.newVersionDirty').replace('{version}', String(result.newVersion)))
+        }
+      }).catch(() => { /* 刷新失败不影响工作流 */ })
+    })
+  }, [t])
 
   // 进入知识库视图 → 重置为视图优先（微任务 setState，规避 effect 同步 setState 的级联渲染）
   useEffect(() => {

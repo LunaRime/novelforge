@@ -116,16 +116,24 @@ export class SelfReviewCommand extends BaseWorkflowCommand<void> {
     if (rewrote) {
       const latest = await ipc.invoke('db:draft-get-latest', this.params.chapterNumber) as { version?: number } | null
       const nextVersion = (latest?.version ?? 1) + 1
-      await ipc.invoke('db:draft-create', {
+      const created = await ipc.invoke('db:draft-create', {
         chapterNumber: this.params.chapterNumber,
         version: nextVersion,
         content: current,
         wordCount: computeTextStats(current).novelWordCount,
         source: 'rewrite',
-      })
+      }) as { success: boolean; id?: number; error?: string }
+      if (!created.success || !created.id) {
+        throw new Error(created.error ?? 'draft create failed')
+      }
       callbacks.log(t('log.selfReview.rewriteSaved').replace('{version}', String(nextVersion)))
       const { globalEventBus } = await import('../../../shared/event-bus')
       globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
+      globalEventBus.emit('DRAFT_VERSION_CREATED', {
+        chapterNumber: this.params.chapterNumber,
+        draftId: created.id,
+        version: nextVersion,
+      })
     } else {
       callbacks.log(t('log.selfReview.done').replace('{rounds}', String(rounds)))
     }
