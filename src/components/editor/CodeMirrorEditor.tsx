@@ -16,6 +16,10 @@ import { extractPreferencePair, recordPreference } from '../../services/preferen
 import { useEditorStore } from '../../stores/editor-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useProjectStore } from '../../stores/project-store'
+import {
+  clampEditorViewState, loadEditorViewState, saveEditorViewState,
+} from '../../services/editor-view-state'
 import { formatBinding, matchesBinding, shortcutBinding, toCodeMirrorKey, useShortcutStore } from '../../stores/shortcut-store'
 import {
   INLINE_ACCEPT_EVENT,
@@ -293,6 +297,7 @@ export default function CodeMirrorEditor({
   const paragraphFocus = useEditorPrefsStore((s) => s.paragraphFocus)
   const focusMode = useLayoutStore((s) => s.focusMode)
   const shortcutBindings = useShortcutStore((s) => s.bindings)
+  const projectPath = useProjectStore((s) => s.currentProject?.path ?? '')
   // t 是稳定引用（useCallback []），语言切换时 locale 变化必须重算操作标签/指令（eslint 仅看数据流，误判 locale 不必要）
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const aiActions = useMemo(() => getAIActions(t as (key: string) => string), [t, locale])
@@ -573,6 +578,70 @@ export default function CodeMirrorEditor({
     }
   }, [aiResult])
 
+  // ===== 光标/滚动位置缓存（按项目 + filePath；300ms 去抖，卸载时 flush） =====
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // 关键：在 schedule 时快照状态，而不是卸载时再读 DOM——
+  // Tab 切换会先让 view 脱离文档，卸载 cleanup 里读到的是 scrollTop=0。
+  const pendingStateRef = useRef<{ anchor: number; head: number; scrollTop: number } | null>(null)
+
+  const scheduleSaveViewState = useCallback((view: EditorView) => {
+    const path = projectPath
+    const file = filePath
+    if (!file || !path) return
+    const selection = view.state.selection.main
+    pendingStateRef.current = {
+      anchor: selection.anchor,
+      head: selection.head,
+      scrollTop: view.scrollDOM.scrollTop,
+    }
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current)
+    saveTimerRef.current = setTimeout(() => {
+      saveTimerRef.current = null
+      const pending = pendingStateRef.current
+      pendingStateRef.current = null
+      if (pending) saveEditorViewState(path, file, pending)
+    }, 300)
+  }, [filePath, projectPath])
+
+  const flushSaveViewState = useCallback(() => {
+    const path = projectPath
+    const file = filePath
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current)
+      saveTimerRef.current = null
+    }
+    const pending = pendingStateRef.current
+    pendingStateRef.current = null
+    if (pending && file && path) saveEditorViewState(path, file, pending)
+  }, [filePath, projectPath])
+
+  const handleCreateEditor = useCallback((view: EditorView) => {
+    setCmView(view)
+    if (!filePath || !projectPath) return
+    const saved = loadEditorViewState(projectPath, filePath)
+    if (!saved) return
+    requestAnimationFrame(() => {
+      const clamped = clampEditorViewState(saved, view.state.doc.length, view.scrollDOM.scrollHeight)
+      view.dispatch({ selection: { anchor: clamped.anchor, head: clamped.head } })
+      requestAnimationFrame(() => {
+        view.scrollDOM.scrollTop = clamped.scrollTop
+        // 程序化设置 scrollTop 可能早于 scroll 监听器挂载，显式快照一次
+        scheduleSaveViewState(view)
+      })
+    })
+  }, [filePath, projectPath, scheduleSaveViewState])
+
+  useEffect(() => {
+    const view = cmView
+    if (!view || !filePath || !projectPath) return
+    const onScroll = () => scheduleSaveViewState(view)
+    view.scrollDOM.addEventListener('scroll', onScroll, { passive: true })
+    return () => {
+      view.scrollDOM.removeEventListener('scroll', onScroll)
+      flushSaveViewState()
+    }
+  }, [cmView, filePath, projectPath, scheduleSaveViewState, flushSaveViewState])
+
   const handleUpdate = useCallback((v: ViewUpdate) => {
     if (v.docChanged) {
       // L1 inline 会话（R6 + 评审 I1）：任何「非会话知情」的 doc 改动都视为漂移并退出会话——
@@ -629,7 +698,9 @@ export default function CodeMirrorEditor({
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t])
+
+    if (v.selectionSet || v.docChanged) scheduleSaveViewState(v.view)
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, scheduleSaveViewState])
 
   // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
   useEffect(() => {
@@ -1050,7 +1121,7 @@ export default function CodeMirrorEditor({
             readOnly={!editable}
             basicSetup={cmBasicSetup}
             onUpdate={handleUpdate}
-            onCreateEditor={(view) => setCmView(view)}
+            onCreateEditor={handleCreateEditor}
           />
         </div>
       </div>
