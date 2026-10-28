@@ -390,4 +390,10 @@ export const workflowTexts = {
   'workflow.bookPipelineMissingBlueprint': { 'zh-CN': '第{n}章缺少章节蓝图，无法启动整本流水线', 'en-US': 'Ch.{n} has no blueprint; the book pipeline cannot start', 'ru-RU': 'У гл.{n} нет плана; конвейер книги не может запуститься' },
   'workflow.bookPipelineOutOfRange': { 'zh-CN': '结束章号 {end} 超出全书总章数 {total}', 'en-US': 'End chapter {end} exceeds the configured total of {total}', 'ru-RU': 'Конечная глава {end} превышает общее число глав {total}' },
   'workflow.bookPipelineReviewSkipped': { 'zh-CN': '已关闭自动审查，第{n}章直接进入定稿', 'en-US': 'Auto-review disabled — Ch.{n} goes straight to finalize', 'ru-RU': 'Авторецензия отключена — гл.{n} сразу переходит к финализации' },
+  'workflow.bookPipelineQuality': { 'zh-CN': '第{n}章质量闸门：{words}字（目标 {min}–{max} 字）', 'en-US': 'Ch.{n} quality gate: {words} words (target {min}–{max})', 'ru-RU': 'Проверка гл.{n}: {words} слов (цель {min}–{max})' },
+  'workflow.bookPipelineQualityOk': { 'zh-CN': '第{n}章通过质量闸门（{words}字）', 'en-US': 'Ch.{n} passed the quality gate ({words} words)', 'ru-RU': 'Гл.{n} прошла проверку ({words} слов)' },
+  'workflow.bookPipelineRepairLength': { 'zh-CN': '第{n}章字数 {words}，正在{direction}到 {min}–{max} 字', 'en-US': 'Ch.{n} has {words} words — {direction} to {min}–{max}', 'ru-RU': 'Гл.{n}: {words} слов — {direction} до {min}–{max}' },
+  'workflow.bookPipelineRegenerateRunaway': { 'zh-CN': '第{n}章检测到循环重复（最长重复 {count} 次），已归档并重新生成', 'en-US': 'Ch.{n} has a repetition loop (max repeat {count}); archived and regenerating', 'ru-RU': 'В гл.{n} обнаружен цикл повторов (макс. {count}); архивировано и создаётся заново' },
+  'workflow.bookPipelineQualityBlocked': { 'zh-CN': '第{n}章未通过质量闸门：{reason}', 'en-US': 'Ch.{n} failed the quality gate: {reason}', 'ru-RU': 'Гл.{n} не прошла проверку качества: {reason}' },
+  'workflow.bookPipelineQualityWarn': { 'zh-CN': '第{n}章字数 {words} 不在 {min}–{max} 区间，继续执行（不阻断）', 'en-US': 'Ch.{n} is {words} words, outside {min}–{max}; continuing', 'ru-RU': 'Гл.{n}: {words} слов, вне {min}–{max}; продолжаем' },
 } as const

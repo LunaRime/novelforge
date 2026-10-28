@@ -23,6 +23,7 @@ import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { useProjectStore } from '../../stores/project-store'
 import { computeTextStats } from '../text-stats'
+import { assessDraftQuality, type DraftQualityReport } from '../text-quality-guard'
 import { getChapterFinalizeScope, readPostProcessStatus } from './workflow-utils'
 import { registerWorkflow } from './workflow-registry'
 import type { ChapterInfo } from './chapter-workflow'
@@ -135,6 +136,95 @@ function logDraftLength(callbacks: StepCallbacks, chapterNumber: number, content
   }
 }
 
+async function ensureDraftQuality(
+  chapterNumber: number,
+  info: ChapterInfo,
+  initial: DraftSnapshot,
+  step: WorkflowStep,
+  context: WorkflowContext,
+  callbacks: StepCallbacks,
+  options: { allowRepair: boolean },
+): Promise<DraftSnapshot> {
+  const target = useProjectStore.getState().currentProject?.novelConfig.wordsPerChapter ?? 2000
+  let draft = initial
+  let report: DraftQualityReport = assessDraftQuality(draft.content, target)
+  callbacks.log(t('workflow.bookPipelineQuality')
+    .replace('{n}', String(chapterNumber))
+    .replace('{words}', String(report.words))
+    .replace('{min}', String(report.minWords))
+    .replace('{max}', String(report.maxWords)))
+
+  // 循环重复是硬故障：AI 新稿可归档重生成；复用稿不擅自改写用户内容，直接停
+  if (report.severity === 'block' && report.repetition.runaway) {
+    if (!options.allowRepair) {
+      throw new Error(t('workflow.bookPipelineQualityBlocked')
+        .replace('{n}', String(chapterNumber))
+        .replace('{reason}', report.reason))
+    }
+    callbacks.log(t('workflow.bookPipelineRegenerateRunaway')
+      .replace('{n}', String(chapterNumber))
+      .replace('{count}', String(report.repetition.maxRepeat)))
+    await ipc.invoke('db:draft-update-status', draft.id, 'archived')
+    const { GenerateDraftCommand } = await import('./commands/generate-draft.command')
+    const antiLoop = [
+      '【硬约束，最高优先级】',
+      `本章正文必须控制在 ${report.minWords}–${report.maxWords} 字。`,
+      '严禁重复同一段落、同一句式或同一信息；每段必须推进情节或人物状态。',
+      '如果发现自己在重复，立即换场景或结束本章，不得循环复写。',
+    ].join('\n')
+    await new GenerateDraftCommand({
+      ...info,
+      userGuidance: [info.userGuidance, antiLoop].filter(Boolean).join('\n'),
+    }).execute({ step, context, callbacks })
+    const regenerated = await loadLatestDraft(chapterNumber)
+    if (!regenerated) throw new Error(t('workflow.bookPipelineDraftMissing').replace('{n}', String(chapterNumber)))
+    draft = regenerated
+    report = assessDraftQuality(draft.content, target)
+  }
+
+  // 字数偏离只对本次新生成的稿子做一次自动修补；复用稿保持原样，仅提示
+  if (options.allowRepair && report.severity === 'warn') {
+    const direction = report.words > report.maxWords ? '压缩' : '扩写'
+    callbacks.log(t('workflow.bookPipelineRepairLength')
+      .replace('{n}', String(chapterNumber))
+      .replace('{direction}', direction)
+      .replace('{words}', String(report.words))
+      .replace('{min}', String(report.minWords))
+      .replace('{max}', String(report.maxWords)))
+    const { RefineDraftCommand } = await import('./commands/refine-draft.command')
+    await new RefineDraftCommand({
+      draftPath: draft.filePath,
+      draftContent: draft.content,
+      chapterNumber,
+      chapterInfo: info,
+      userRefinePrompt: `请将本章正文${direction}到 ${report.minWords}–${report.maxWords} 字（目标 ${Math.round((report.minWords + report.maxWords) / 2)} 字）。保留全部关键事件、人物关系、伏笔和结尾钩子；不要重复段落，不要增加无关情节。当前约 ${report.words} 字。`,
+    }).execute({ step, context, callbacks })
+    const refined = await loadLatestDraft(chapterNumber)
+    if (!refined) throw new Error(t('workflow.bookPipelineDraftMissing').replace('{n}', String(chapterNumber)))
+    draft = refined
+    report = assessDraftQuality(draft.content, target)
+  }
+
+  if (report.severity === 'block') {
+    throw new Error(t('workflow.bookPipelineQualityBlocked')
+      .replace('{n}', String(chapterNumber))
+      .replace('{reason}', report.reason))
+  }
+  // 字数区间是软约束：修补一轮后仍偏离不阻断整本流水线，只留记录
+  if (report.severity === 'warn') {
+    callbacks.log(t('workflow.bookPipelineQualityWarn')
+      .replace('{n}', String(chapterNumber))
+      .replace('{words}', String(report.words))
+      .replace('{min}', String(report.minWords))
+      .replace('{max}', String(report.maxWords)))
+    return draft
+  }
+  callbacks.log(t('workflow.bookPipelineQualityOk')
+    .replace('{n}', String(chapterNumber))
+    .replace('{words}', String(report.words)))
+  return draft
+}
+
 async function executeWriteStep(
   chapterNumber: number,
   params: BookPipelineParams,
@@ -150,25 +240,24 @@ async function executeWriteStep(
     return
   }
 
-  if (params.reuseExistingDrafts !== false) {
-    const existing = await loadLatestDraft(chapterNumber)
-    if (existing) {
-      saveDraftToContext(context, chapterNumber, existing)
-      callbacks.log(t('workflow.bookPipelineReuseDraft')
-        .replace('{n}', String(chapterNumber))
-        .replace('{version}', String(existing.version)))
-      return
-    }
+  const reused = params.reuseExistingDrafts !== false ? await loadLatestDraft(chapterNumber) : null
+  let draft = reused
+  if (draft) {
+    callbacks.log(t('workflow.bookPipelineReuseDraft')
+      .replace('{n}', String(chapterNumber))
+      .replace('{version}', String(draft.version)))
+  } else {
+    const chapterInfo = await loadChapterInfo(chapterNumber)
+    const { GenerateDraftCommand } = await import('./commands/generate-draft.command')
+    await new GenerateDraftCommand(chapterInfo).execute({ step, context, callbacks })
+    draft = await loadLatestDraft(chapterNumber)
   }
-
-  const info = await loadChapterInfo(chapterNumber)
-  const { GenerateDraftCommand } = await import('./commands/generate-draft.command')
-  await new GenerateDraftCommand(info).execute({ step, context, callbacks })
-
-  const draft = await loadLatestDraft(chapterNumber)
   if (!draft) {
     throw new Error(t('workflow.bookPipelineDraftMissing').replace('{n}', String(chapterNumber)))
   }
+
+  const info = await loadChapterInfo(chapterNumber)
+  draft = await ensureDraftQuality(chapterNumber, info, draft, step, context, callbacks, { allowRepair: !reused })
   saveDraftToContext(context, chapterNumber, draft)
   logDraftLength(callbacks, chapterNumber, draft.content)
 }
@@ -198,9 +287,12 @@ async function executeReviewStep(
     draftId: draft.id,
   }).execute({ step, context, callbacks })
 
-  // 自审可能产出新版本；后续定稿必须使用最新版本
+  // 自审可能产出新版本；重写也可能改变字数，因此再跑一次质量闸门
   const latest = await loadLatestDraft(chapterNumber)
-  if (latest) saveDraftToContext(context, chapterNumber, latest)
+  if (latest) {
+    const fixed = await ensureDraftQuality(chapterNumber, info, latest, step, context, callbacks, { allowRepair: true })
+    saveDraftToContext(context, chapterNumber, fixed)
+  }
 }
 
 async function executeFinalizeStep(
@@ -215,6 +307,14 @@ async function executeFinalizeStep(
     throw new Error(t('workflow.bookPipelineDraftMissing').replace('{n}', String(chapterNumber)))
   }
   const info = await loadChapterInfo(chapterNumber)
+  // 定稿前只有硬故障（循环重复 / 字数膨胀到硬上限）才拦；字数区间偏离属软约束
+  const target = useProjectStore.getState().currentProject?.novelConfig.wordsPerChapter ?? 2000
+  const report = assessDraftQuality(draft.content, target)
+  if (report.severity === 'block') {
+    throw new Error(t('workflow.bookPipelineQualityBlocked')
+      .replace('{n}', String(chapterNumber))
+      .replace('{reason}', report.reason))
+  }
 
   const { FinalizeChapterCommand } = await import('./commands/finalize-chapter.command')
   await new FinalizeChapterCommand({

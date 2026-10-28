@@ -195,4 +195,5 @@ export const errorTexts = {
   'error.repoCharacterMergeSourceMissing': { 'zh-CN': '源角色不存在：{name}', 'en-US': 'Source character not found: {name}', 'ru-RU': 'Исходный персонаж не найден: {name}' },
   'error.repoVolumeCannotSave': { 'zh-CN': '{repo} 数据库未连接，无法保存分卷', 'en-US': '{repo}: database not connected — cannot save volume', 'ru-RU': '{repo}: БД не подключена — невозможно сохранить том' },
   'error.repoVolumeCannotDelete': { 'zh-CN': '{repo} 数据库未连接，无法删除分卷', 'en-US': '{repo}: database not connected — cannot delete volume', 'ru-RU': '{repo}: БД не подключена — невозможно удалить том' },
+  'error.textRepetitionBlocked': { 'zh-CN': '第{n}章检测到循环重复（最长重复 {count} 次），已阻止定稿；请重新生成或修复后再定稿。', 'en-US': 'Ch.{n} contains a repetition loop (max repeat {count}); finalization blocked. Regenerate or repair it first.', 'ru-RU': 'В гл.{n} обнаружен цикл повторов (макс. {count}); финализация заблокирована. Создайте заново или исправьте главу.' },
 } as const

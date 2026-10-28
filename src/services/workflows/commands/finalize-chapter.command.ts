@@ -1,5 +1,6 @@
 import { t } from '../../../shared/locale'
 import { computeTextStats } from '../../text-stats'
+import { detectRunawayRepetition } from '../../text-quality-guard'
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -611,6 +612,15 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     const refinedDraftText = this.params.draftContent
     if (!refinedDraftText) throw new Error(t('error.noFinalizedContent'))
+
+    // 确定性硬闸门：模型循环输出（同一段落重复 ≥5 次且占比 ≥20%）不得进入定稿。
+    // content_audit 是非关键后处理，不能承担这个职责。
+    const repetition = detectRunawayRepetition(refinedDraftText)
+    if (repetition.runaway) {
+      throw new Error(t('error.textRepetitionBlocked')
+        .replace('{n}', String(this.params.chapterNumber))
+        .replace('{count}', String(repetition.maxRepeat)))
+    }
 
     callbacks.log(t('log.finalize.start'))
 
