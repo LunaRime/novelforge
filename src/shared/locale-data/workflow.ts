@@ -140,6 +140,8 @@ export const workflowTexts = {
   'review.colorLegend': { 'zh-CN': '颜色标记说明', 'en-US': 'Color Mark Legend', 'ru-RU': 'Легенда цветовых меток' },
   'review.overallAssessment': { 'zh-CN': '总体评价：', 'en-US': 'Overall assessment: ', 'ru-RU': 'Общая оценка: ' },
   'review.allPassed': { 'zh-CN': '审稿通过，未发现问题', 'en-US': 'Review passed, no issues found', 'ru-RU': 'Рецензия пройдена, проблем нет' },
+  'review.parseFailed': { 'zh-CN': '审稿报告解析失败，不能判定为通过', 'en-US': 'Review report could not be parsed — not a pass', 'ru-RU': 'Не удалось разобрать отчёт — это не «пройдено»' },
+  'review.parseFailedHint': { 'zh-CN': '模型输出不是可识别的 JSON / 报告格式。请检查下方原始文本，或重新发起审稿。', 'en-US': 'The model output is not recognizable JSON or report format. Check the raw text below, or run the review again.', 'ru-RU': 'Ответ модели не распознан как JSON или формат отчёта. Проверьте исходный текст ниже или запустите рецензию заново.' },
   'review.rawText': { 'zh-CN': '查看原始审稿文本', 'en-US': 'View raw review text', 'ru-RU': 'Исходный текст рецензии' },
   'review.aiFixBtn': { 'zh-CN': 'AI 一键修稿', 'en-US': 'AI One-click Fix', 'ru-RU': 'ИИ-исправление одним кликом' },
   'review.aiFixDesc': { 'zh-CN': 'AI 将根据上方审稿报告中发现的问题精准修复草稿，生成修稿版本供您在合并视图中审阅。', 'en-US': 'AI will precisely fix issues found in the review report and generate a revision for your review in the merge view.', 'ru-RU': 'ИИ исправит проблемы из отчёта и создаст версию для проверки.' },

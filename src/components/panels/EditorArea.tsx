@@ -449,7 +449,10 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
             <div
               key={tab.id}
               ref={tab.id === activeTabId ? activeTabRef : undefined}
-              className="flex items-center gap-1.5 px-3 h-full text-sm cursor-pointer group flex-shrink-0 relative transition-colors"
+              role="tab"
+              aria-selected={activeTabId === tab.id}
+              tabIndex={activeTabId === tab.id ? 0 : -1}
+              className="flex items-center gap-1.5 px-3 h-full text-sm cursor-pointer group flex-shrink-0 relative transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--color-focus-ring)]"
               style={{
                 backgroundColor: activeTabId === tab.id
                   ? 'var(--color-tab-active)'
@@ -465,6 +468,12 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
                   : 'var(--color-text-secondary)',
               }}
               onClick={() => onActivateTab(tab.id)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onActivateTab(tab.id)
+                }
+              }}
               onContextMenu={e => {
                 e.preventDefault()
                 onActivateTab(tab.id)
@@ -488,10 +497,12 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
 
               {/* 关闭按钮区域：dirty 时显示实心圆点（英文黑点），鼠标悬停展示关闭按钮 */}
               {tab.dirty ? (
-                <span
+                <button
+                  type="button"
                   className="relative w-3.5 h-3.5 flex items-center justify-center ml-0.5 flex-shrink-0 rounded group/close hover:bg-[var(--color-hover)] cursor-pointer transition-colors"
                   onClick={e => { e.stopPropagation(); tryCloseTab(tab.id) }}
                   title={t('tip.closeWithoutSaving')}
+                  aria-label={t('tip.closeWithoutSaving')}
                 >
                   {/* 默认显示实心圆点，颜色与标题栏警示灯一致 */}
                   <span
@@ -500,7 +511,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
                   />
                   {/* hover 时显示 X */}
                   <X size={10} className="hidden group-hover/close:block" style={{ color: 'var(--color-text-muted)' }} />
-                </span>
+                </button>
               ) : (
                 <button
                   className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ml-0.5 p-0.5 rounded transition-opacity"
@@ -981,34 +992,33 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                   originalContent={activeTab.originalContent}
                   modifiedContent={activeTab.content}
                   onComplete={async (mergedText) => {
+                    const filePath = activeTab.filePath
+                    const chapterNum = activeTab.chapterNumber
+
+                    // 缺上下文就不写库：此前直接进 finally 关 Tab，用户看到「完成」却没落盘
+                    if (!filePath) {
+                      toast.error(t('editor.mergeMissingContext'))
+                      return
+                    }
                     try {
-                      const chapterDir = activeTab.chapterDir
-                      const filePath = activeTab.filePath
-                      const revPath = activeTab.revisionPath
-                      const chapterNum = activeTab.chapterNumber
+                      const { useDraftStore } = await import('../../stores/draft-store')
+                      const result = await useDraftStore.getState().applyMergedRevision(
+                        activeTab.chapterDir ?? '',
+                        chapterNum,
+                        filePath,
+                        activeTab.revisionPath ?? '',
+                        mergedText
+                      )
 
-                      if (chapterDir && filePath && revPath) {
-                        const { useDraftStore } = await import('../../stores/draft-store')
-                        const result = await useDraftStore.getState().applyMergedRevision(
-                          chapterDir,
-                          chapterNum,
-                          filePath,
-                          revPath,
-                          mergedText
-                        )
-
-
-                        if (result.success) {
-                          toast.success('✅ ' + t('editor.mergeComplete'))
-                        } else {
-                          toast.error(t('error.mergeFailed').replace('{error}', result.error ?? ''))
-                        }
+                      if (result.success) {
+                        toast.success('✅ ' + t('editor.mergeComplete'))
+                        useEditorStore.getState().closeTab(activeTab.id)
+                      } else {
+                        // 失败保留 Tab，避免「合并没有发生但 Tab 关了」的假成功
+                        toast.error(t('error.mergeFailed').replace('{error}', result.error ?? ''))
                       }
                     } catch (e) {
-
                       toast.error(t('error.mergeError').replace('{error}', String(e)))
-                    } finally {
-                      useEditorStore.getState().closeTab(activeTab.id)
                     }
                   }}
                   onCancel={() => useEditorStore.getState().closeTab(activeTab.id)}

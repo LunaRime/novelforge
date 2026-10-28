@@ -113,7 +113,8 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     <div
       className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center"
       style={{ backgroundColor: 'var(--color-backdrop)', backdropFilter: 'blur(4px)' }}
-      onClick={(e) => e.target === e.currentTarget && onClose()}
+      // 遮罩不再关闭：设置页承载供应商密钥/代理/并发/自动化等未保存草稿，
+      // 误点一下全丢（审计 P0-5）。关闭只走 × 或 Esc 这两个显式动作。
     >
       <div
         role="dialog"

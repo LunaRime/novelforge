@@ -624,12 +624,13 @@ export default function CodeMirrorEditor({
       } else {
         setSelectionRange({ from: sel.from, to: sel.to })
         // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
-        if (!aiResult) {
+        // 只读（已定稿/归档/章节忙）不得弹出 AI 气泡：readOnly 只挡键盘，挡不住这里
+        if (!aiResult && editable) {
           setBubbleOpen(true)
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t])
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, editable])
 
   // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
   useEffect(() => {
@@ -953,6 +954,13 @@ export default function CodeMirrorEditor({
    *  - 偏好记忆快照（aiAcceptedRef 旧整段替换链路）在新路径不适用：detectPreferenceChange 保留
    *    但不再写快照（接受在会话内逐句发生），偏好记忆链留 v1.1 评估。 */
   const handleAcceptAI = async () => {
+    // 只读态不得落入写路径（含 inline 会话）：气泡可能存在残留，这里再守一道
+    if (!editable) {
+      const { toast } = await import('../ui/Toast')
+      toast.warning(t('editor.readonlyNoEdit'))
+      handleRejectAI()
+      return
+    }
     if (selectionRange && aiResult && editorRef.current?.view) {
       const view = editorRef.current.view
       // v1 仅 DraftEditor（必带 filePath）接入；无 filePath 的宿主无法挂会话 → toast 拒绝

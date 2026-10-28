@@ -93,8 +93,13 @@ export default function VersionHistory() {
     const chapter = chapters.find((c) => c.id === selectedChapter)
     if (!chapter) return
 
-    // 获取最新草稿内容进行比对
-    const currentContent = await getChapterLatestContent(chapter.chapter_number)
+    // 必须用真实 draft id 构造 vela://draft/{id}：`ch{n}` 解析不出 id，合并「完成」会静默不写库
+    const latest = await getChapterLatestDraft(chapter.chapter_number)
+    if (!latest) {
+      toast.error(t('version.noDraft'))
+      return
+    }
+    const currentContent = latest.content
 
     useEditorStore.getState().openFile({
       id: `diff-version-${versionId}`,
@@ -102,7 +107,8 @@ export default function VersionHistory() {
       type: 'diff',
       originalContent: oldContent,
       content: currentContent,
-      filePath: `vela://draft/ch${chapter.chapter_number}`, // 不再指向实体文件
+      filePath: `vela://draft/${latest.id}`,
+      chapterNumber: chapter.chapter_number,
     })
   }
 

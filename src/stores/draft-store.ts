@@ -188,10 +188,10 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
         await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedWordCount)
       }
 
-      // 标记修稿为已合并
+      // 标记修稿为已合并（旧版文件索引才有 revPath；DB 化后 diff Tab 不传，跳过即可）
       const revFileName = revPath.split('/').pop() || ''
       const origFileName = targetDraftId ? targetDraftId.toString() : (filePath.split('/').pop() || '')
-      if (revFileName) {
+      if (revFileName && chapterDir) {
         await markRevisionMerged(chapterDir, revFileName, origFileName)
       }
 

@@ -7,7 +7,7 @@
 > 隔离实例：`/tmp/nf-ui-audit`（源码副本）、`/tmp/nf-ui-audit-home`（HOME）、`/tmp/nf-ui-audit-userdata`（Electron userData）、`/tmp/nf-audit-project`（测试项目）。审查过程未修改仓库内任何文件；本报告是唯一新增文件。  
 > **文档状态：只读审查记录，未实施任何修复。** 所有 `文件:行号` 以审查时快照为准；后续代码变动后行号可能漂移。
 >
-> **2026-10-28 更新**：§6 批次 1 的 P0-2「审稿假通过」已修复——新增 `src/services/text-quality-guard.ts`（字数区间 + 循环重复确定性判定），接入 `book-pipeline-workflow` 写稿/自审/定稿三步与 `FinalizeChapterCommand` 定稿入口；其余批次仍未实施。
+> **2026-10-28 更新**：§6 批次 1（P0-1..P0-8）已实施，逐项记录见 §6.1。其中 P0-2 除 UI 侧 `parseFailed` 外，另新增 `src/services/text-quality-guard.ts`（字数区间 + 循环重复确定性判定），接入 `book-pipeline-workflow` 与 `FinalizeChapterCommand`，从数据侧堵住「审稿假通过」。批次 2–8 未实施。
 
 ---
 
@@ -555,7 +555,9 @@
 
 ---
 
-## 6. 建议修复批次（未实施）
+## 6. 建议修复批次
+
+> **实施状态（2026-10-28）**：批次 1 已实施，逐项结果见 §6.1；批次 2–8 未开始。
 
 1. **假成功/数据完整性**：P0-1..P0-8。先修架构编辑器入口、审稿假通过、版本 diff no-op、导出 0 选、MCP 文案、只读 AI、标签页键盘。
 2. **模态与脏数据**：设置页 Esc 栈/焦点陷阱/焦点归还/dirty 守卫；9 个表单弹窗禁遮罩；命令面板与通知中心补显式关闭出口；ModalShell/Confirm 语义。
@@ -565,6 +567,21 @@
 6. **热区批处理**：单图标按钮 32×32（视觉图标不动，透明 padding/伪元素）；文字型 20×20；相邻中心距 40 或竖线分隔。
 7. **视觉/令牌/i18n 清理**：硬编码 `#fff`/hex/渐变/模糊光晕、字号与图标离群档、死 CSS、英文错误串、10.5/9px 内联字号。
 8. **文档/标准更新**：根字号 16px、真实控件尺寸、`/NN` 可用、`--color-bg-elevated` 已定义；避免后续按旧数字改错。
+
+### 6.1 批次 1 实施记录（2026-10-28）
+
+| ID | 状态 | 改动 |
+|---|---|---|
+| P0-1 | 已修 | `detectStepKey` 识别 `vela://core/{key}`（保留 `.md` 兼容）；AI 生成/角色提取入口恢复 |
+| P0-2 | 已修 | `parseReport` 增加 `parseFailed`（两种解析都为空才算失败）；渲染红色告警而不是「全部通过」；定稿侧另有确定性循环重复闸门 |
+| P0-3 | 已修 | 版本 diff 用真实 `vela://draft/{id}` + `chapterNumber` 打开；缺上下文时提示且不关 Tab；写库失败保留 Tab（不再 `finally` 关闭） |
+| P0-4 | 已修 | 导出弹窗 0 选禁用按钮 + 明确提示；不再把 `undefined` 传给主进程（其语义是「全部章节」） |
+| P0-5 | **部分** | Esc 栈：`useEscapeKey` 在子层（Radix popper/listbox/menu）打开时让出 Esc；设置页遮罩不再关闭。**dirty 守卫未做**——设置页各分区无统一脏标记，需先建 `SettingsDirtyContext` 再逐区接入（转批次 2） |
+| P0-6 | 已修 | 标签页 `role="tab"` + `tabIndex` + Enter/Space 激活；dirty 关闭入口从 `<span onClick>` 改为 `<button>` |
+| P0-7 | 已修 | 选区气泡只在 `editable` 时打开；`handleAcceptAI` 只读态拒绝并提示 |
+| P0-8 | 已修 | 新增 `mcp.statusConnected/statusDisconnected/mcp.removed` 三语键；状态与删除提示不再复用动作文案 |
+
+未纳入本批：设置页焦点陷阱/焦点归还（批次 2）、其余 8 个表单弹窗的遮罩关闭（批次 2）。
 
 ---
 

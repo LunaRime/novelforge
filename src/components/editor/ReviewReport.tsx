@@ -6,26 +6,7 @@ import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { Disclosure } from '../ui/Disclosure'
 import AIActionDialog from './AIActionDialog'
-
-/** 审稿问题条目（JSON 格式） */
-interface ReviewIssue {
-  category: string
-  severity: 'error' | 'warning' | 'pass'
-  description: string
-  /** 引用的原文片段（有问题时提供） */
-  quote?: string
-}
-
-/** AI 返回的 JSON 审稿结构 */
-interface ReviewJSON {
-  items: Array<{
-    category: string
-    severity: string
-    description: string
-    quote?: string
-  }>
-  summary: string
-}
+import { parseReport, type ReviewIssue } from './review-report-parser'
 
 interface ReviewReportProps {
   /** 原始审稿报告文本（JSON 或旧版 markdown） */
@@ -38,110 +19,6 @@ interface ReviewReportProps {
   chapterDir?: string
 }
 
-// ===== 解析器 =====
-
-/** 标准化 severity 值 */
-function normalizeSeverity(raw: string): ReviewIssue['severity'] {
-  const s = raw.toLowerCase().trim()
-  if (s === 'error' || s === 'critical' || s === 'severe') return 'error'
-  if (s === 'warning' || s === 'warn' || s === 'minor') return 'warning'
-  return 'pass'
-}
-
-/** 尝试从文本中提取 JSON（兼容 ```json 包裹） */
-function extractJSON(text: string): string | null {
-  // 先尝试直接解析
-  const trimmed = text.trim()
-  if (trimmed.startsWith('{')) return trimmed
-
-  // 尝试从 ```json ... ``` 中提取
-  const codeBlockMatch = trimmed.match(/```(?:json)?\s*\n?([\s\S]*?)```/)
-  if (codeBlockMatch) return codeBlockMatch[1].trim()
-
-  // 尝试找第一个 { 和最后一个 }
-  const firstBrace = trimmed.indexOf('{')
-  const lastBrace = trimmed.lastIndexOf('}')
-  if (firstBrace !== -1 && lastBrace > firstBrace) {
-    return trimmed.slice(firstBrace, lastBrace + 1)
-  }
-
-  return null
-}
-
-/** 解析审稿报告（优先 JSON，回退到旧版文本解析） */
-function parseReport(text: string): { issues: ReviewIssue[]; summary: string } {
-  const jsonStr = extractJSON(text)
-  if (jsonStr) {
-    try {
-      const data = JSON.parse(jsonStr) as ReviewJSON
-      if (data.items && Array.isArray(data.items)) {
-        const issues: ReviewIssue[] = data.items.map(item => ({
-          category: item.category || '综合检查',
-          severity: normalizeSeverity(item.severity),
-          description: item.description || '',
-          quote: item.quote || undefined,
-        }))
-        return { issues, summary: data.summary || '' }
-      }
-    } catch {
-      // JSON 解析失败，回退到文本解析
-    }
-  }
-
-  // 回退：旧版 markdown 文本解析（兼容历史数据）
-  return parseLegacyReport(text)
-}
-
-/** 旧版文本解析器（兼容历史审稿报告） */
-function parseLegacyReport(text: string): { issues: ReviewIssue[]; summary: string } {
-  const issues: ReviewIssue[] = []
-  const lines = text.split('\n')
-  let currentCategory = '综合检查'
-  const summaryLines: string[] = []
-  let inSummary = false
-
-  for (const line of lines) {
-    const trimmed = line.trim()
-    if (!trimmed) continue
-
-    // 匹配标题行
-    const headingMatch = trimmed.match(/^#{2,3}\s+(.+)/)
-    if (headingMatch) {
-      const heading = headingMatch[1].replace(/[*_]/g, '')
-      if (/总体评价|总结|总评/.test(heading)) {
-        inSummary = true
-      } else {
-        inSummary = false
-        currentCategory = heading
-      }
-      continue
-    }
-
-    if (inSummary) {
-      summaryLines.push(trimmed.replace(/^[-*]\s*/, ''))
-      continue
-    }
-
-    // 检测 emoji 严重级别
-    let severity: ReviewIssue['severity'] = 'pass'
-    if (trimmed.includes('🔴')) severity = 'error'
-    else if (trimmed.includes('🟡')) severity = 'warning'
-    else if (trimmed.includes('🟢') || trimmed.includes('✅')) severity = 'pass'
-    else if (trimmed.startsWith('-') || trimmed.startsWith('*')) severity = 'warning'
-    else continue
-
-    const cleanDesc = trimmed
-      .replace(/^[-*]\s*/, '')
-      .replace(/[🔴🟡🟢✅]\s*/u, '')
-      .replace(/\*\*/g, '')
-
-    if (cleanDesc) {
-      issues.push({ category: currentCategory, severity, description: cleanDesc })
-    }
-  }
-
-  return { issues, summary: summaryLines.join(' ') }
-}
 
 // ===== 视觉配置 =====
 
@@ -188,7 +65,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
   const { t } = useTranslation()
   const severityMeta = useMemo(() => getSeverityMeta(t), [t])
 
-  const { issues: rawIssues, summary } = parseReport(reportText)
+  const { issues: rawIssues, summary, parseFailed } = parseReport(reportText)
   // 将默认分类名「综合检查」替换为本地化文本
   const comprehensiveCheckLabel = t('review.comprehensiveCheck')
   const issues = useMemo(() => rawIssues.map(issue => ({
@@ -343,7 +220,26 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
         )}
 
         {/* 分类展示 */}
-        {issues.length === 0 ? (
+        {parseFailed ? (
+          <div
+            className="rounded-lg border p-4 text-sm"
+            style={{
+              borderColor: 'var(--color-error)',
+              backgroundColor: 'rgba(var(--color-error-rgb), 0.08)',
+            }}
+            role="alert"
+          >
+            <div className="flex items-start gap-2">
+              <AlertTriangle size={16} className="text-[var(--color-error)] flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="font-medium text-[var(--color-error)]">{t('review.parseFailed')}</div>
+                <p className="mt-1 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  {t('review.parseFailedHint')}
+                </p>
+              </div>
+            </div>
+          </div>
+        ) : issues.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
             <CheckCircle size={36} className="mx-auto mb-2 text-[var(--color-success)]" />
             {t('review.allPassed')}

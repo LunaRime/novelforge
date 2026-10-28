@@ -106,7 +106,7 @@ export default function MCPSettings() {
     if (!ok) return
     const result = await ipc.invoke('mcp:remove-server', server.id)
     if (result.success) {
-      toast.success(t('mcp.added')) // 复用"已添加"文案语义（操作成功）
+      toast.success(t('mcp.removed'))
       load()
     } else {
       toast.error(result.error ?? t('status.unknown'))
@@ -134,10 +134,10 @@ export default function MCPSettings() {
 
   const statusLabel = (id: string): { text: string; color: string } => {
     const st = statuses[id]
-    if (st === 'connected') return { text: t('mcp.connect'), color: 'var(--color-success)' }
+    if (st === 'connected') return { text: t('mcp.statusConnected'), color: 'var(--color-success)' }
     if (st === 'connecting') return { text: t('status.loading'), color: 'var(--color-warning)' }
     if (st === 'error') return { text: t('status.error'), color: 'var(--color-error)' }
-    return { text: t('mcp.disconnect'), color: 'var(--color-text-muted)' }
+    return { text: t('mcp.statusDisconnected'), color: 'var(--color-text-muted)' }
   }
 
   return (

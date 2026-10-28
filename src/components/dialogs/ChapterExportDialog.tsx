@@ -84,13 +84,18 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
 
   const doExport = async () => {
     if (!project) return
+    // 0 选不得落到「导出全部」：明确拦住并提示（此前传 undefined，主进程语义是全部章节）
+    if (selected.size === 0) {
+      toast.show({ type: 'warning', message: t('export.noSelection') })
+      return
+    }
     setExporting(true)
     try {
       const outputDir = await ipc.invoke('export:select-output-dir')
       if (!outputDir) { setExporting(false); return }
 
       const result = await ipc.invoke('export:export-chapters', {
-        chapterNumbers: selected.size > 0 ? [...selected].sort((a, b) => a - b) : undefined,
+        chapterNumbers: [...selected].sort((a, b) => a - b),
         format,
         fileFormat,
         outputPath: outputDir,
@@ -283,7 +288,12 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
           <Button variant="outline" onClick={onClose} disabled={exporting}>
             {t('action.cancel')}
           </Button>
-          <Button variant="ai" onClick={doExport} disabled={exporting}>
+          <Button
+            variant="ai"
+            onClick={doExport}
+            disabled={exporting || selected.size === 0}
+            title={selected.size === 0 ? t('export.noSelection') : undefined}
+          >
             {exporting ? (
               <>
                 <Spinner size={14} className="mr-1" />

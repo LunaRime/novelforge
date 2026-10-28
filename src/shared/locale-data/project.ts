@@ -7,6 +7,7 @@
  */
 export const projectTexts = {
   'version.noContent': { 'zh-CN': '（章节尚无内容）', 'en-US': '(No content in this chapter)', 'ru-RU': '(В главе нет содержимого)' },
+  'version.noDraft': { 'zh-CN': '本章还没有草稿，无法对比', 'en-US': 'No draft for this chapter yet — nothing to compare', 'ru-RU': 'В этой главе ещё нет черновика — нечего сравнивать' },
   'import.summaryLine': { 'zh-CN': '类型: {genre} | 子类型: {subGenre} | 受众: {audience}\n大纲: {outline}\n世界观: {world}\n金手指: {goldenFinger}\n主角: {protagonist}', 'en-US': 'Genre: {genre} | Subgenre: {subGenre} | Audience: {audience}\nOutline: {outline}\nWorld setting: {world}\nGolden finger: {goldenFinger}\nProtagonist: {protagonist}', 'ru-RU': 'Жанр: {genre} | Поджанр: {subGenre} | Аудитория: {audience}\nПлан: {outline}\nМир: {world}\nКозырь: {goldenFinger}\nГерой: {protagonist}' },
   'activity.lastDays': { 'zh-CN': '最近 {n} 天', 'en-US': 'Last {n} days', 'ru-RU': 'Последние {n} дней' },
   'activity.totalWritten': { 'zh-CN': '写作字数', 'en-US': 'Written', 'ru-RU': 'Написано' },
@@ -322,6 +323,7 @@ export const projectTexts = {
   'export.sortTitle': { 'zh-CN': '标题', 'en-US': 'Title', 'ru-RU': 'Название' },
   'export.selectAll': { 'zh-CN': '全选', 'en-US': 'All', 'ru-RU': 'Все' },
   'export.selectNone': { 'zh-CN': '清空', 'en-US': 'None', 'ru-RU': 'Сброс' },
+  'export.noSelection': { 'zh-CN': '请至少选择一章再导出（清空后不会默认导出全部）', 'en-US': 'Select at least one chapter — clearing does not mean "export all"', 'ru-RU': 'Выберите хотя бы одну главу — пустой выбор не означает «экспорт всех»' },
   // --- 连载监控（手动导入平台章节） ---
   'pub.title': { 'zh-CN': '连载监控', 'en-US': 'Publication', 'ru-RU': 'Публикация' },
   'pub.import': { 'zh-CN': '导入平台章节', 'en-US': 'Import Published Chapter', 'ru-RU': 'Импорт опубликованной главы' },

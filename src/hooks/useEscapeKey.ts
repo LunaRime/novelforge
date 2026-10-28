@@ -16,8 +16,21 @@ import { useEffect } from 'react'
 export function useEscapeKey(onClose: () => void, active: boolean): void {
   useEffect(() => {
     if (!active) return
+    /**
+     * 子层优先：Radix Select/Menu 打开时，它们的 Esc 只关自己且不阻断冒泡，
+     * 结果设置页这种上层模态也被一起关掉（审计 P0-5）。这里用「DOM 里是否还有
+     * 打开的 popper/listbox/menu/dialog」判断，把这一次 Esc 让给子层。
+     */
+    const hasOpenNestedLayer = (): boolean => {
+      if (typeof document === 'undefined') return false
+      return !!document.querySelector(
+        '[data-radix-popper-content-wrapper], [role="listbox"][data-state="open"], [role="menu"][data-state="open"], [role="dialog"][data-state="open"]',
+      )
+    }
     const onKeyDown = (e: KeyboardEvent): void => {
       if (e.key !== 'Escape') return
+      if (e.defaultPrevented) return
+      if (hasOpenNestedLayer()) return
       e.preventDefault()
       onClose()
     }

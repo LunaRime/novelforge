@@ -19,7 +19,7 @@ import { runArchCharacterExtract, createArchitectureWorkflow } from '../../servi
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { globalEventBus } from '../../shared/event-bus'
 
-type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
+import { detectStepKey, type ArchStepKey } from './arch-step-key'
 
 /** 与 Sidebar / WorldBuildingEditor 保持一致的架构文件元信息（i18n key 引用） */
 const ARCH_META_KEYS: Record<ArchStepKey, { iconName: string; labelKey: string; descKey: string }> = {
@@ -37,14 +37,6 @@ function useArchMeta(stepKey: ArchStepKey | null) {
   return { iconName: keys.iconName, label: t(keys.labelKey as never), desc: t(keys.descKey as never) }
 }
 
-/** 从文件路径推断出 ArchStepKey */
-function detectStepKey(filePath: string): ArchStepKey | null {
-  if (filePath.endsWith('premise.md')) return 'premise'
-  if (filePath.endsWith('characters.md')) return 'characters'
-  if (filePath.endsWith('worldbuilding.md')) return 'worldbuilding'
-  if (filePath.endsWith('synopsis.md')) return 'synopsis'
-  return null
-}
 
 interface Props {
   filePath: string

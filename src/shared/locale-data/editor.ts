@@ -174,6 +174,8 @@ export const editorTexts = {
   'editor.confirmFinalize': { 'zh-CN': '确定要将第 {n} 章定稿吗？此操作不可撤销。', 'en-US': 'Finalize chapter {n}? This action cannot be undone.', 'ru-RU': 'Финализировать главу {n}? Необратимо.' },
   'editor.confirmFinalizeMsg': { 'zh-CN': '确定要将第 {n} 章定稿吗？\n\n定稿后章节将标记为完成，不再支持修改和重新后处理。', 'en-US': 'Finalize chapter {n}?\n\nAfter finalization, the chapter will be marked as complete and no further edits or reprocessing will be allowed.', 'ru-RU': 'Финализировать главу {n}?\n\nПосле финализации глава будет помечена как завершённая, редактирование и повторная обработка запрещены.' },
   'editor.mergeComplete': { 'zh-CN': '合并完成，草稿已更新', 'en-US': 'Merge complete, draft updated', 'ru-RU': 'Слияние завершено, черновик обновлён' },
+  'editor.mergeMissingContext': { 'zh-CN': '缺少草稿上下文，无法写回；请从版本历史重新打开对比', 'en-US': 'Missing draft context — nothing written. Reopen the diff from version history.', 'ru-RU': 'Нет контекста черновика — изменения не сохранены. Откройте сравнение из истории версий.' },
+  'editor.readonlyNoEdit': { 'zh-CN': '当前稿件只读（已定稿或章节处理中），不能应用 AI 修改', 'en-US': 'This draft is read-only (finalized or busy) — AI edits cannot be applied', 'ru-RU': 'Черновик только для чтения (финализирован или занят) — правки ИИ недоступны' },
   'editor.mergeSuccessToast': { 'zh-CN': '✅ 合并完成，草稿已更新', 'en-US': '✅ Merge complete, draft updated', 'ru-RU': '✅ Слияние завершено, черновик обновлён' },
   'editor.noProject': { 'zh-CN': '在左侧项目树中单击文件开始编辑', 'en-US': 'Click a file in the project tree to start editing', 'ru-RU': 'Нажмите на файл в дереве проекта' },
   'editor.archDoc': { 'zh-CN': '架构文档', 'en-US': 'Architecture Document', 'ru-RU': 'Документ архитектуры' },
