@@ -447,6 +447,15 @@ export function registerDatabaseController() {
     }
   })
 
+  guardedHandle('db:scene-reorder', async (_event, params: { chapterNumber: number; orderedIds: number[] }) => {
+    try {
+      SceneRepository.reorder(params.chapterNumber, params.orderedIds)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
   guardedHandle('world:entity-list', async (_event, kind?: string) => WorldRepository.listEntities(kind))
   guardedHandle('world:entity-upsert', async (_event, data: Parameters<typeof WorldRepository.upsertEntity>[0]) => {
     try { return { success: true, uid: WorldRepository.upsertEntity(data) } } catch (err) { return { success: false, error: String(err) } }

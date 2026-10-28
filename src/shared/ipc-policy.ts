@@ -93,6 +93,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:scene-list': { authority: 'read-project' },
   'db:scene-upsert': { authority: 'write-project' },
   'db:scene-delete': { authority: 'write-project' },
+  'db:scene-reorder': { authority: 'write-project' },
   'world:entity-list': { authority: 'read-project' },
   'world:entity-upsert': { authority: 'write-project' },
   'world:entity-delete': { authority: 'write-project' },

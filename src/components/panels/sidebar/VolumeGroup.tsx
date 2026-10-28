@@ -18,6 +18,7 @@ import type { VolumeData } from '../../../../electron/repositories/volume-reposi
 import type { VolumeSplitResult } from '../../../services/volume-utils'
 import VolumeDialog from '../../dialogs/VolumeDialog'
 import AutoSplitDialog from '../../dialogs/AutoSplitDialog'
+import SceneList from './SceneList'
 import { confirm } from '../../ui/Confirm'
 import { toast } from '../../ui/Toast'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -210,6 +211,8 @@ function VolumeRow({
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
+  /** 章 → 场景层是否展开（第三层独立于卷折叠状态） */
+  const [openScenes, setOpenScenes] = useState<Record<number, boolean>>({})
 
   // 进度徽标：卷有明确终点 → done/total；进行中（end=0）→ 仅显示已定稿数
   const totalCount = volume.chapterEnd > 0
@@ -294,46 +297,70 @@ function VolumeRow({
             <div className="text-micro py-1 pl-1.5 opacity-40" style={{ color: 'var(--color-text-muted)' }}>
               {t('charList.emptyProject')}
             </div>
-          ) : chapters.map(dc => (
-            <button
-              key={dc.chapterNumber}
-              type="button"
-              draggable={!!onReorderChapter}
-              onDragStart={(e) => {
-                e.dataTransfer.setData('application/x-novelforge-chapter', String(dc.chapterNumber))
-                e.dataTransfer.effectAllowed = 'move'
-              }}
-              onDragOver={(e) => { if (onReorderChapter) e.preventDefault() }}
-              onDrop={(e) => {
-                if (!onReorderChapter) return
-                const raw = e.dataTransfer.getData('application/x-novelforge-chapter')
-                if (!raw) return
-                e.preventDefault()
-                e.stopPropagation()
-                const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
-                onReorderChapter(Number(raw), volume.volumeNumber, idx + 1)
-              }}
-              onKeyDown={(e) => {
-                if (!onReorderChapter || !e.altKey) return
-                const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
-                if (e.key === 'ArrowUp') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, Math.max(0, idx - 1)) }
-                if (e.key === 'ArrowDown') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, idx + 1) }
-              }}
-              onClick={() => onOpenDraft(dc.chapterNumber, dc.chapterTitle)}
-              className="w-full flex items-center gap-1.5 py-1 px-1.5 rounded-lg text-micro text-left transition-colors cursor-pointer hover:bg-[var(--color-hover)]"
-              style={{ color: 'var(--color-text-secondary)' }}
-              title={t('action.openDraft')}
-              aria-label={t('chapter.label').replace('{n}', String(dc.chapterNumber)) + (dc.chapterTitle ? ' ' + dc.chapterTitle : '')}
-            >
-              {dc.hasFinalized
-                ? <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
-                : <Circle size={7} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />}
-              <span className="truncate">
-                {t('chapter.label').replace('{n}', String(dc.chapterNumber))}
-                {dc.chapterTitle ? ` ${dc.chapterTitle}` : ''}
-              </span>
-            </button>
-          ))}
+          ) : chapters.map(dc => {
+            const scenesOpen = !!openScenes[dc.chapterNumber]
+            return (
+              <div key={dc.chapterNumber}>
+                <div
+                  className="group flex items-center gap-0.5 rounded-lg transition-colors hover:bg-[var(--color-hover)]"
+                  draggable={!!onReorderChapter}
+                  onDragStart={(e) => {
+                    if (!onReorderChapter) return
+                    e.dataTransfer.setData('application/x-novelforge-chapter', String(dc.chapterNumber))
+                    e.dataTransfer.effectAllowed = 'move'
+                  }}
+                  onDragOver={(e) => { if (onReorderChapter) e.preventDefault() }}
+                  onDrop={(e) => {
+                    if (!onReorderChapter) return
+                    const raw = e.dataTransfer.getData('application/x-novelforge-chapter')
+                    if (!raw) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
+                    onReorderChapter(Number(raw), volume.volumeNumber, idx + 1)
+                  }}
+                >
+                  {/* 场景层展开（第三层：卷 → 章 → 场景） */}
+                  <button
+                    type="button"
+                    onClick={() => setOpenScenes(prev => ({ ...prev, [dc.chapterNumber]: !prev[dc.chapterNumber] }))}
+                    className="flex items-center justify-center rounded cursor-pointer flex-shrink-0 hover:bg-[var(--color-hover)]"
+                    style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
+                    aria-expanded={scenesOpen}
+                    aria-label={scenesOpen ? t('scene.collapse') : t('scene.expand')}
+                    title={scenesOpen ? t('scene.collapse') : t('scene.expand')}
+                  >
+                    {scenesOpen
+                      ? <ChevronDown size={9} />
+                      : <ChevronRight size={9} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onOpenDraft(dc.chapterNumber, dc.chapterTitle)}
+                    onKeyDown={(e) => {
+                      if (!onReorderChapter || !e.altKey) return
+                      const idx = chapters.findIndex(x => x.chapterNumber === dc.chapterNumber)
+                      if (e.key === 'ArrowUp') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, Math.max(0, idx - 1)) }
+                      if (e.key === 'ArrowDown') { e.preventDefault(); onReorderChapter(dc.chapterNumber, volume.volumeNumber, idx + 1) }
+                    }}
+                    className="flex-1 min-w-0 flex items-center gap-1.5 py-1 px-1 rounded-lg text-micro text-left cursor-pointer"
+                    style={{ color: 'var(--color-text-secondary)' }}
+                    title={t('action.openDraft')}
+                    aria-label={t('chapter.label').replace('{n}', String(dc.chapterNumber)) + (dc.chapterTitle ? ' ' + dc.chapterTitle : '')}
+                  >
+                    {dc.hasFinalized
+                      ? <CheckCircle2 size={10} style={{ color: 'var(--color-success)', flexShrink: 0 }} />
+                      : <Circle size={7} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />}
+                    <span className="truncate">
+                      {t('chapter.label').replace('{n}', String(dc.chapterNumber))}
+                      {dc.chapterTitle ? ` ${dc.chapterTitle}` : ''}
+                    </span>
+                  </button>
+                </div>
+                {scenesOpen && <SceneList chapterNumber={dc.chapterNumber} />}
+              </div>
+            )
+          })}
         </div>
       )}
     </div>

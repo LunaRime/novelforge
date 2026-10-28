@@ -55,4 +55,26 @@ export class SceneRepository {
     if (!db) return
     db.prepare('DELETE FROM scene_cards WHERE id = ?').run(id)
   }
+
+  /**
+   * 按给定顺序重排某章的场景卡（步长 10，留出手工插入余量）。
+   *
+   * 显式 BEGIN/COMMIT 而非 better-sqlite3 的 `db.transaction()`——测试用 node:sqlite 的
+   * DatabaseSync 没有该 API（见 automation-repository 同一取舍）。只更新属于本章的 id，
+   * 跨章 id 会被静默跳过（调用方传错时不会污染别的章）。
+   */
+  static reorder(chapterNumber: number, orderedIds: number[]): void {
+    const db = getProjectDb()
+    if (!db) return
+    if (orderedIds.length === 0) return
+    const stmt = db.prepare('UPDATE scene_cards SET sort_order = ?, updated_at = unixepoch() * 1000 WHERE id = ? AND chapter_number = ?')
+    db.exec('BEGIN')
+    try {
+      orderedIds.forEach((id, index) => { stmt.run((index + 1) * 10, id, chapterNumber) })
+      db.exec('COMMIT')
+    } catch (err) {
+      db.exec('ROLLBACK')
+      throw err
+    }
+  }
 }
