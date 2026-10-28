@@ -415,11 +415,9 @@ export default function DraftEditor({ filePath, content }: Props) {
 
       {/* 弹出式三栏合并视图 */}
       <Dialog open={mergeData !== null} onOpenChange={(v) => !v && setMergeData(null)}>
-        <DialogContent
+        <DialogContent preventOutsideClose
           className="p-0"
           style={{ width: '90vw', maxWidth: '90vw', height: '85vh', maxHeight: '85vh', overflow: 'hidden' }}
-          onPointerDownOutside={(e) => e.preventDefault()}
-          onEscapeKeyDown={(e) => e.preventDefault()}
         >
           <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
             <DialogTitle className="flex items-center gap-2 text-xs">

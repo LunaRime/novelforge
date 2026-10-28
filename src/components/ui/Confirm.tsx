@@ -86,9 +86,11 @@ function ConfirmDialog({
 
   const handleCancel = useCallback(() => exitThen(() => onResolve(false)), [exitThen, onResolve])
 
-  // 进场聚焦确认按钮
+  // 进场聚焦确认按钮；卸载时把焦点还给打开前的元素（审计 P0-5：焦点归还）
   useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
     confirmBtnRef.current?.focus()
+    return () => { prev?.focus?.() }
   }, [])
 
   // ESC 关闭（alert 模式等同确认，否则等同取消）
@@ -216,7 +218,9 @@ function ConfirmDeleteProjectDialog({ onResolve }: ConfirmDeleteProjectProps) {
   const handleCancel = useCallback(() => handleAction('cancel'), [handleAction])
 
   useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
     deleteBtnRef.current?.focus()
+    return () => { prev?.focus?.() }
   }, [])
 
   useEffect(() => {

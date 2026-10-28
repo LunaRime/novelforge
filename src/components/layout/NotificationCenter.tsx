@@ -150,9 +150,22 @@ function NoticePanel({ onClose }: { onClose: () => void }) {
         <span className="text-micro font-medium" style={{ color: 'var(--color-text)' }}>
           {t('notice.title')}
         </span>
-        {unread > 0 && (
-          <TextAction label={t('notice.markAllRead')} icon={<Check size={11} />} onClick={markAllRead} />
-        )}
+        <div className="flex items-center gap-1 ml-auto">
+          {unread > 0 && (
+            <TextAction label={t('notice.markAllRead')} icon={<Check size={11} />} onClick={markAllRead} />
+          )}
+          {/* 显式关闭出口：此前只有 Esc/点外部（审计 P1-A3 同类问题） */}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t('action.close')}
+            title={t('action.close')}
+            className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer"
+            style={{ width: 20, height: 20, color: 'var(--color-text-muted)' }}
+          >
+            <X size={11} />
+          </button>
+        </div>
       </div>
 
       <div style={{ overflowY: 'auto', maxHeight: LIST_MAX_HEIGHT }}>

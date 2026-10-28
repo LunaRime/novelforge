@@ -135,7 +135,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent 
+      <DialogContent preventOutsideClose 
         className="max-w-[520px]"
         onInteractOutside={e => {
           // 当全局 Confirm 弹窗弹出时，点击 Confirm （由于渲染在 Body）

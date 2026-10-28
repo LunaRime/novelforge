@@ -118,7 +118,7 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[560px]">
+      <DialogContent preventOutsideClose className="max-w-[560px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileUp size={16} className="text-[var(--color-accent)]" />

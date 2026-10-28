@@ -6,6 +6,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { Plus, Trash2, Plug, Unplug, Server } from 'lucide-react'
 import { ipc } from '../../services/ipc-client'
+import { useSettingsDirty } from './settings-dirty'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
@@ -43,6 +44,9 @@ export default function MCPSettings() {
   const [showAdd, setShowAdd] = useState(false)
   const [newId, setNewId] = useState('')
   const [newCommand, setNewCommand] = useState('')
+
+  // 添加表单有内容即算未保存：关闭设置页前确认，避免白填一场
+  useSettingsDirty(showAdd && (newId.trim() !== '' || newCommand.trim() !== ''))
   const [newArgs, setNewArgs] = useState('')
 
   const load = useCallback(async () => {

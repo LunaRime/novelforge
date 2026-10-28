@@ -126,7 +126,7 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[460px]">
+      <DialogContent preventOutsideClose className="max-w-[460px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Download size={16} className="text-[var(--color-accent)]" />

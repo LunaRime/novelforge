@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
@@ -7,6 +7,8 @@ import {
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
+import { hasUnsavedSettings, useSettingsDirty } from './settings-dirty'
+import { useFocusTrap } from '../../hooks/useFocusTrap'
 import PromptSettings from './PromptSettings'
 import SkillsSettings from './SkillsSettings'
 import MCPSettings from './MCPSettings'
@@ -103,9 +105,25 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     ? sections.filter((s) => `${s.label} ${s.description}`.toLowerCase().includes(normalizedQuery))
     : sections
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useFocusTrap(dialogRef, open)
+
+  // 有分区登记了未保存改动时，关闭要确认（审计 P0-5）。× 与 Esc 都走这里。
+  const requestClose = useCallback(async () => {
+    if (hasUnsavedSettings()) {
+      const ok = await confirm(t('settings.discardConfirm'), {
+        title: t('settings.title'),
+        confirmText: t('action.discard'),
+        danger: true,
+      })
+      if (!ok) return
+    }
+    onClose()
+  }, [onClose, t])
+
   // Esc 关闭：本组件自绘全屏模态（未走 ui/Dialog / Radix），此前**没有** Esc ——
   // 键盘用户只能靠 Tab 找到 × 或点遮罩。hooks 必须在 `if (!open) return null` 之前。
-  useEscapeKey(onClose, open)
+  useEscapeKey(() => { void requestClose() }, open)
 
   if (!open) return null
 
@@ -117,6 +135,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       // 误点一下全丢（审计 P0-5）。关闭只走 × 或 Esc 这两个显式动作。
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t('settings.title')}
@@ -224,7 +243,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               </p>
             </div>
             <button
-              onClick={onClose}
+              onClick={() => { void requestClose() }}
               className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)]"
               style={{ color: 'var(--color-text-muted)' }}
             >
@@ -501,25 +520,32 @@ function ProxySection() {
   }>({ enabled: false, type: 'http', host: '', port: 7890 })
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  /** 已保存基线：与当前表单不一致即视为有未保存改动（关闭设置页时确认） */
+  const [baseline, setBaseline] = useState<string>('')
 
   useEffect(() => {
     ipc.invoke('config:get').then((cfg) => {
       if (cfg?.proxy) {
-        setProxy({
+        const loaded = {
           enabled: cfg.proxy.enabled ?? false, // 明确默认关闭
           type: cfg.proxy.type ?? 'http',
           host: cfg.proxy.host ?? '',
           port: cfg.proxy.port ?? 7890,
-        })
+        }
+        setProxy(loaded)
+        setBaseline(JSON.stringify(loaded))
       }
     }).catch(() => { })
   }, [])
+
+  useSettingsDirty(baseline !== '' && JSON.stringify(proxy) !== baseline)
 
   const handleSave = async () => {
     const t0 = Date.now()
     setSaving(true)
     try {
       await ipc.invoke('config:set', { proxy })
+      setBaseline(JSON.stringify(proxy))
       // 保存行为日志流：成功 info（视觉反馈已有 setSaved 局部文本）
       renderLog('info', 'Save:Settings', t('log.render.proxySaveSuccess').replace('{ms}', String(Date.now() - t0)))
     } catch (e) {

@@ -584,7 +584,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
         open={closeConfirm !== null}
         onOpenChange={v => !v && setCloseConfirm(null)}
       >
-        <DialogContent className="max-w-[380px]">
+        <DialogContent preventOutsideClose className="max-w-[380px]">
           <DialogHeader>
             <DialogTitle>{t('dialog.closeUnsaved')}</DialogTitle>
             <DialogDescription>
@@ -613,7 +613,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
         open={batchCloseConfirm !== null}
         onOpenChange={v => !v && setBatchCloseConfirm(null)}
       >
-        <DialogContent className="max-w-[400px]">
+        <DialogContent preventOutsideClose className="max-w-[400px]">
           <DialogHeader>
             <DialogTitle>{t('dialog.closeMultiple')}</DialogTitle>
             <DialogDescription>
@@ -969,7 +969,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             }
           }}
         >
-          <DialogContent
+          <DialogContent preventOutsideClose
             className="p-0"
             style={{
               width: '90vw',
@@ -978,9 +978,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
               maxHeight: '85vh',
               overflow: 'hidden',
             }}
-            onPointerDownOutside={(e) => e.preventDefault()}
-            onEscapeKeyDown={(e) => e.preventDefault()}
-          >
+              >
             <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
               <DialogTitle className="flex items-center gap-2 text-xs">
                 {t('editor.mergeTitleShort').replace('{name}', activeTab?.name ?? '...')}

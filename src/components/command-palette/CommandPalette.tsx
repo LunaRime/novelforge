@@ -3,7 +3,7 @@ import {
   Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
   PanelLeft, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
-  Users, Wand2, ZoomIn,
+  Users, Wand2, X, ZoomIn,
 } from 'lucide-react'
 import { useCommandStore } from '../../stores/command-store'
 import { useLayoutStore, type SidebarView } from '../../stores/layout-store'
@@ -465,6 +465,20 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
               {t('command.backToCommands')}
             </button>
           )}
+          {/* 显式关闭出口：此前只有 Esc 与点遮罩（审计 P1-A3） */}
+          <button
+            type="button"
+            onClick={() => close()}
+            aria-label={t('action.close')}
+            title={t('action.close')}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              width: 24, height: 24, borderRadius: 6, border: 'none',
+              background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', flexShrink: 0,
+            }}
+          >
+            <X size={13} />
+          </button>
         </div>
 
         <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 6px' }}>

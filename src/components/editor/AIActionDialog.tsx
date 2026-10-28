@@ -88,7 +88,7 @@ export default memo(function AIActionDialog({
 
   return (
     <Dialog open={action !== null} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[440px]">
+      <DialogContent preventOutsideClose className="max-w-[440px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={14} className="text-[var(--color-accent)]" />

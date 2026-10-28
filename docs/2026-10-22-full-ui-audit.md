@@ -557,7 +557,7 @@
 
 ## 6. 建议修复批次
 
-> **实施状态（2026-10-28）**：批次 1 已实施，逐项结果见 §6.1；批次 2–8 未开始。
+> **实施状态（2026-10-28）**：批次 1、批次 2 已实施，逐项结果见 §6.1 / §6.2；批次 3–8 未开始。
 
 1. **假成功/数据完整性**：P0-1..P0-8。先修架构编辑器入口、审稿假通过、版本 diff no-op、导出 0 选、MCP 文案、只读 AI、标签页键盘。
 2. **模态与脏数据**：设置页 Esc 栈/焦点陷阱/焦点归还/dirty 守卫；9 个表单弹窗禁遮罩；命令面板与通知中心补显式关闭出口；ModalShell/Confirm 语义。
@@ -582,6 +582,20 @@
 | P0-8 | 已修 | 新增 `mcp.statusConnected/statusDisconnected/mcp.removed` 三语键；状态与删除提示不再复用动作文案 |
 
 未纳入本批：设置页焦点陷阱/焦点归还（批次 2）、其余 8 个表单弹窗的遮罩关闭（批次 2）。
+
+### 6.2 批次 2 实施记录（2026-10-28）
+
+| 项 | 状态 | 改动 |
+|---|---|---|
+| 表单弹窗禁遮罩 | 已修 | `ui/Dialog.tsx` 新增 `preventOutsideClose`；16 处 `DialogContent` 接入（P1-A2 的 9 个 + P1-A5 的 ModelPicker/ModelRoutingTier/AIAction/DraftEditor/EditorArea 三个确认框） |
+| 模态内 Esc 一致性 | 已修 | 合并/改稿弹窗原先 `onPointerDownOutside` + `onEscapeKeyDown` 双双 `preventDefault`，Esc 不可关；现只禁遮罩，Esc 保留（显式键盘动作） |
+| 设置页焦点 | 已修 | 新增 `hooks/useFocusTrap`：打开时焦点入内、Tab/Shift+Tab 在弹窗内循环、关闭归还打开前元素 |
+| 设置页脏守卫 | **部分** | 新增 `settings/settings-dirty.ts` 登记表 + `useSettingsDirty`；关闭（×/Esc）时有脏即 `confirm`。**已接入：代理分区、MCP 添加表单**；供应商密钥、自动化、编辑器偏好等分区尚未登记（各自缺保存基线，需逐个补） |
+| 命令面板关闭出口 | 已修 | 头部补关闭按钮（此前只有 Esc/点遮罩） |
+| 通知中心关闭出口 | 已修 | 面板头部补关闭按钮 |
+| Confirm 焦点归还 | 已修 | 关闭后焦点回到触发元素（两个确认框） |
+
+未纳入本批：设置页各分区脏登记的全面接入、切换分区时的脏提示、`aria-hidden` 背景屏蔽（均转批次 5/批次 2 后续）。
 
 ---
 

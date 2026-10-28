@@ -81,7 +81,7 @@ export function ModelRoutingTierDialog({
 
   return (
     <Dialog open onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent className="max-w-[520px]" data-testid="route-tier-dialog">
+      <DialogContent preventOutsideClose className="max-w-[520px]" data-testid="route-tier-dialog">
         <DialogHeader>
           <DialogTitle>{t('route.dialogTitle').replace('{tier}', tierLabel)}</DialogTitle>
           <DialogDescription className="text-micro leading-relaxed">

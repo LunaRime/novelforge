@@ -106,7 +106,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[480px]">
+      <DialogContent preventOutsideClose className="max-w-[480px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <FileText size={16} className="text-[var(--color-accent)]" />

@@ -111,7 +111,7 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[420px]">
+      <DialogContent preventOutsideClose className="max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookMarked size={16} className="text-[var(--color-accent)]" />

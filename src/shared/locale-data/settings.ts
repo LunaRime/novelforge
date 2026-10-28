@@ -55,6 +55,7 @@ export const settingsTexts = {
   'settings.aboutDesc': { 'zh-CN': '版本信息、检查更新与卸载', 'en-US': 'Version info, updates, and uninstall', 'ru-RU': 'Информация о версии, обновления и удаление' },
   'settings.skills': { 'zh-CN': '技能库', 'en-US': 'Skills', 'ru-RU': 'Навыки' },
   'settings.skillsDesc': { 'zh-CN': '导入与管理 AI 技能文件（.md）', 'en-US': 'Import and manage AI skill files (.md)', 'ru-RU': 'Импорт и управление файлами навыков (.md)' },
+  'settings.discardConfirm': { 'zh-CN': '还有未保存的设置，确定关闭？', 'en-US': 'Some settings are unsaved. Close anyway?', 'ru-RU': 'Есть несохранённые настройки. Всё равно закрыть?' },
   'settings.mcp': { 'zh-CN': 'MCP 服务器', 'en-US': 'MCP Servers', 'ru-RU': 'MCP-серверы' },
   'settings.mcpDesc': { 'zh-CN': '管理外部工具服务器（模型上下文协议）', 'en-US': 'Manage external tool servers (Model Context Protocol)', 'ru-RU': 'Управление внешними серверами инструментов (MCP)' },
   'settings.usage': { 'zh-CN': '用量统计', 'en-US': 'Usage Stats', 'ru-RU': 'Статистика расхода' },

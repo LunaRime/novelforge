@@ -54,7 +54,7 @@ export default function NewProjectDialog({ open, onClose }: NewProjectDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[420px]">
+      <DialogContent preventOutsideClose className="max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={16} className="text-[var(--color-accent)]" />

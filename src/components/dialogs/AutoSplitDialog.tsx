@@ -72,7 +72,7 @@ export default function AutoSplitDialog({ isOpen, onClose, totalChapters, existi
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && !applying && onClose()}>
-      <DialogContent className="max-w-[420px]">
+      <DialogContent preventOutsideClose className="max-w-[420px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Layers size={16} className="text-[var(--color-accent)]" />

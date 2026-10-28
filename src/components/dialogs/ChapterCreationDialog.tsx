@@ -207,7 +207,7 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-[540px]">
+      <DialogContent preventOutsideClose className="max-w-[540px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={16} className="text-[var(--color-accent)]" />

@@ -31,10 +31,19 @@ const DialogOverlay = React.forwardRef<
 DialogOverlay.displayName = DialogPrimitive.Overlay.displayName
 
 /** 对话框主体 - 增强的阴影和动画 */
+type DialogContentProps = React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content> & {
+  /**
+   * 表单/配置类弹窗：点遮罩不关闭。
+   * 这类弹窗持有未保存输入，误点遮罩直接丢弃（审计 P1-A2）。
+   * Esc 仍然有效——键盘关闭是显式动作。
+   */
+  preventOutsideClose?: boolean
+}
+
 const DialogContent = React.forwardRef<
   React.ComponentRef<typeof DialogPrimitive.Content>,
-  React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
+  DialogContentProps
+>(({ className, children, preventOutsideClose, onPointerDownOutside, ...props }, ref) => (
   <DialogPortal>
     <DialogOverlay />
     <DialogPrimitive.Content
@@ -53,6 +62,10 @@ const DialogContent = React.forwardRef<
       )}
       style={{
         boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.05)',
+      }}
+      onPointerDownOutside={(e) => {
+        onPointerDownOutside?.(e)
+        if (preventOutsideClose) e.preventDefault()
       }}
       {...props}
     >

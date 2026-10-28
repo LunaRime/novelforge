@@ -162,7 +162,7 @@ export function ModelPickerDialog({ open, credentials, existing, onAdopt, onClos
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) onClose() }}>
-      <DialogContent>
+      <DialogContent preventOutsideClose>
         <DialogHeader>
           <DialogTitle>{t('modelPicker.title')}</DialogTitle>
           <DialogDescription>{t('provider.hintBeforeFetch')}</DialogDescription>
