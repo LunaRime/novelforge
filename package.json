@@ -15,7 +15,7 @@
   "dependencies": {
     "@lancedb/lancedb": "^0.27.2",
     "apache-arrow": "^18.1.0",
-    "better-sqlite3": "^13.0.3",
+    "better-sqlite3": "^12.11.1",
     "eventsource-parser": "^4.1.2",
     "flatbuffers": "^25.9.23",
     "jieba-wasm": "^2.4.0",
@@ -75,7 +75,7 @@
     "@vitest/coverage-v8": "^4.1.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "electron": "^44.10.0",
+    "electron": "^43.8.4",
     "electron-builder": "^26.8.1",
     "esbuild": "^0.28.0",
     "eslint": "^8.57.1",
