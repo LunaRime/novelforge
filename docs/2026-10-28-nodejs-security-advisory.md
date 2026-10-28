@@ -199,8 +199,41 @@ headers: { ...init?.headers, 'accept-encoding': 'gzip, deflate' }
 
 ---
 
-## 9. 本轮边界声明
+## 9. 评估阶段边界声明（2026-10-28 报告初版）
 
 - 未修改 `package.json`、`pnpm-lock.yaml` 或任何源文件。
 - 未执行依赖安装、未重新打包、未提交 commit。
 - 上文所有"受影响"判定基于静态代码检索 + 版本比对 + `process.versions` 实测，未做漏洞利用验证（不建议在有真实用户数据的环境做）。
+
+---
+
+## 10. 处置结果（2026-10-28 实施）
+
+按 §5 的 P0/P1 执行，实际改动如下：
+
+| 项 | 变更前 | 变更后 |
+|---|---|---|
+| electron | 41.2.0 | **44.10.0** |
+| 内置 Node | 24.14.0 | **24.22.1** |
+| 内置 Chromium | 146.0.7680.179 | **152.0.7977.169** |
+| 内置 undici | 7.21.0 | **7.30.1** |
+| 内置 c-ares | 1.34.6 | **1.34.9** |
+| 内置 brotli | 1.0.9 | **1.2.0** |
+| npm undici | 8.9.0 | **8.12.3** |
+| better-sqlite3 | 12.8.0 | **13.0.3** |
+| @electron/rebuild | 4.0.3 | **4.2.1**（+ 显式 node-abi 4.40.0） |
+
+升级过程中踩到并解决的两个坑（后续升级必看）：
+
+1. **`node-abi` 不认识 Electron 44**：`@electron/rebuild@4.0.3` 依赖的 `node-abi@4.28.0` 查不到 44.10.0 的 ABI，报 `Could not detect abi for version 44.10.0`。升到 `@electron/rebuild@4.2.1` + `node-abi@4.40.0`（ABI 149）后正常。
+2. **better-sqlite3 12.x 编译不过 V8 15.2**：报 `v8::External::Value` 不接受 0 个参数、`SetNativeDataProperty` 重载不明确等——12.x 的源码不兼容 Electron 44 的 V8。升到 **13.0.3** 后 `node-gyp` 编译通过。
+
+验证（全部在本机执行）：
+
+- `ELECTRON_RUN_AS_NODE=1 electron -e process.versions` → 上表数值全部达标。
+- `better-sqlite3` 在 Electron 44 下 `new Database(':memory:')` + `SELECT 1` 通过（ABI 149 原生模块可加载）。
+- `pnpm run typecheck` / `pnpm run lint --max-warnings 0` / `pnpm run test`（275 文件全绿）。
+- `pnpm run build` 产出 `release/beta/0.1.7-beta.3/`：NSIS 安装包 + `.blockmap` + Portable + `latest.yml`。
+- 打包版启动冒烟：进程存活 12s 无崩溃、无 stderr 输出。
+
+遗留（既有问题，非本次引入）：`latest.yml` 的 `url` 仍是 electron-builder 默认名 `novelforge-setup-0.1.7-beta.3.exe`，与真实资产 `NovelForge-0.1.7-beta.3-Installer.exe` 不一致；按 `novelforge-release` 技能在发版前 `sed` 修正，否则 electron-updater 拉不到包。
