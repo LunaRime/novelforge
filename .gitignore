@@ -6,6 +6,10 @@ dist
 dist-electron
 release
 
+# 测试临时产物（真机冒烟/隔离实例产生，含截图与临时工程）
+.test-artifacts
+.test-projects
+
 # 日志
 logs
 *.log
