@@ -196,6 +196,14 @@ export abstract class BaseWorkflowCommand<TResult = string> {
               reject(new Error(t('error.workflowCancelled')))
               return
             }
+            const raw = text || fullContent
+            const cleaned = this.stripThinkingTags(raw)
+            if (!cleaned) {
+              const error = t('error.llmEmptyResponse')
+              logLLMCall(false, error)
+              reject(new Error(error))
+              return
+            }
             // 更新 token 用量（如果 provider 提供了 usage）
             if (usage) {
               logLLMCall(true, undefined, usage)
@@ -203,8 +211,6 @@ export abstract class BaseWorkflowCommand<TResult = string> {
               logLLMCall(true)
             }
             callbacks.setProgress(90)
-            const raw = text || fullContent
-            const cleaned = this.stripThinkingTags(raw)
             resolve(cleaned)
           },
           onError: (err) => {

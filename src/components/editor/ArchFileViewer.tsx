@@ -298,7 +298,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               title={t('arch.save')}
             >
               <Save size={12} />
-              保存
+              {t('action.save')}
             </Button>
           )}
 

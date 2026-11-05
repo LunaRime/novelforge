@@ -56,6 +56,13 @@ beforeEach(() => {
 })
 
 describe('callLLM 流式原文保存（issue #34）', () => {
+  it('reasoning-only response remains visible but cannot become successful document content', async () => {
+    script.chunks = ['<think>Only reasoning</think>']
+    script.cleaned = ''
+    const cmd = new StreamProbe()
+    await expect(cmd.runLLM(makeCallbacks())).rejects.toThrow()
+    expect(cmd.streamText()).toBe('<think>Only reasoning</think>')
+  })
   it('保存含 <think> 的流式原文，返回值仍为清洗后文本（既有语义不回归）', async () => {
     script.chunks = ['<think>推理过程', '继续推理</think>', '正文内容']
     script.cleaned = '正文内容'
