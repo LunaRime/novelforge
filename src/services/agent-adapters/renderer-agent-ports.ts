@@ -7,6 +7,7 @@ import { useVectorConfigStore } from '../../stores/vector-config-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useDraftStore } from '../../stores/draft-store'
 import { installAgentRuntimePorts, type AgentRuntimePorts } from '../agent/runtime-ports'
+import { startWorkflow } from '../workflows/start-workflow'
 
 export function createRendererAgentPorts(): AgentRuntimePorts {
   return {
@@ -20,6 +21,7 @@ export function createRendererAgentPorts(): AgentRuntimePorts {
       openFile: tab => useEditorStore.getState().openFile(tab),
     },
     workflows: {
+      start: request => startWorkflow(request),
       snapshot: () => { const { currentRun, activeRuns, hasActiveRun } = useWorkflowStore.getState(); return { currentRun, activeRuns, hasActiveRun } },
       openOutput: () => useLayoutStore.getState().openRightPanel('ai-output'),
     },

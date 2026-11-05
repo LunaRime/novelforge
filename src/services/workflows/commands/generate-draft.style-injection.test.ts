@@ -6,6 +6,7 @@ import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { GenerateDraftCommand } from './generate-draft.command'
 import type { CommandExecuteParams } from './base-command'
 import type { ChapterInfo } from '../chapter-workflow'
+import { useEditorStore } from '../../../stores/editor-store'
 
 // mock ipc-client（命令内部经 style-registry / db 通道读盘）
 vi.mock('../../ipc-client', () => ({
@@ -78,6 +79,17 @@ beforeEach(() => {
 })
 
 describe('GenerateDraftCommand 输出风格注入接线（C3 命令级回归）', () => {
+  it('failed draft creation never publishes a synthetic draft URI or opens a tab', async () => {
+    makeProject('')
+    useEditorStore.getState().clearTabs()
+    const implementation = mockInvoke.getMockImplementation()!
+    mockInvoke.mockImplementation(async (...args) => args[0] === 'db:draft-create'
+      ? { success: false, error: 'create failed' } : implementation(...args))
+    const params = makeParams()
+    await expect(new TestableGenerateDraft().execute(params)).rejects.toThrow()
+    expect(params.context.data.draftPath).toBeUndefined()
+    expect(useEditorStore.getState().tabs).toHaveLength(0)
+  })
   it('无 default.md → writing_style 变量 === config.writingStyle 原值（含边界空格，逐字不变）', async () => {
     makeProject('既有文风（含边界空格）  ')
     const spy = vi.spyOn(ChapterPromptBuilder.prototype, 'withWritingStyle')

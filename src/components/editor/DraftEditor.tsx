@@ -34,6 +34,7 @@ import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils
 import { guardRepairPostProcess } from '../../services/workflows/workflow-guards'
 
 interface Props {
+  tabId: string
   filePath: string
   content: string
 }
@@ -43,10 +44,10 @@ interface Props {
  * — 子组件：EditorToolbar（工具栏）、AIActionDialog（AI 确认弹窗）
  * — 正文：CodeMirrorEditor + ThreeWayMerge
  */
-export default function DraftEditor({ filePath, content }: Props) {
+export default function DraftEditor({ tabId, filePath, content }: Props) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
-  const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string; filePath?: string }) | null>(null)
+  const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string }) | null>(null)
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
   const [mergeData, setMergeData] = useState<{
@@ -70,7 +71,7 @@ export default function DraftEditor({ filePath, content }: Props) {
       assertProject()
       if (cancelled) return
       const bp = Array.isArray(bps) ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber) : null
-      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : t('editor.unknownTitle'), filePath, fileName: `v${m.version}`, createdAt: m.updatedAt ?? m.createdAt })
+      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : t('editor.unknownTitle'), createdAt: m.updatedAt ?? m.createdAt })
 
       const pending = await getPendingRevisions(m.id, m.version)
       assertProject()
@@ -129,7 +130,7 @@ export default function DraftEditor({ filePath, content }: Props) {
       }
       assertProject()
       const tabs = useEditorStore.getState().tabs
-      const targetTab = tabs.find(t => t.filePath === filePath)
+      const targetTab = tabs.find(t => t.id === tabId)
       if (targetTab && currentBodyRef.current === text) {
         useEditorStore.getState().markTabSaved(targetTab.id)
         useEditorStore.getState().syncTabContent(targetTab.id, text)
@@ -149,7 +150,7 @@ export default function DraftEditor({ filePath, content }: Props) {
     } finally {
       setSaving(false)
     }
-  }, [filePath, t, currentProject])
+  }, [tabId, filePath, t, currentProject])
 
   // 自动保存定时器（通过 useAutoSave hook 复用）
   useAutoSave(filePath, currentBodyRef, doSave)
@@ -359,8 +360,8 @@ export default function DraftEditor({ filePath, content }: Props) {
   const handleToolbarReview = useCallback(() => setConfirmAction('review'), [])
   const handleEditorChange = useCallback((text: string) => {
     currentBodyRef.current = text
-    useEditorStore.getState().updateTabContent(filePath, text)
-  }, [filePath])
+    useEditorStore.getState().updateTabContent(tabId, text)
+  }, [tabId])
   const handleEditorSave = useCallback((text: string) => doSave(text, { manual: true }), [doSave])
 
   return (
@@ -400,6 +401,7 @@ export default function DraftEditor({ filePath, content }: Props) {
       {/* 正文区 */}
       <div className="flex-1 overflow-hidden relative">
         <CodeMirrorEditor
+          tabId={tabId}
           mode="prose"
           content={content}
           filePath={filePath}

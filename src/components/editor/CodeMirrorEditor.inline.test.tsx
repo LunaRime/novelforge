@@ -20,8 +20,9 @@ import { act } from 'react'
 import { EditorState, Transaction } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { undo } from '@codemirror/commands'
-import CodeMirrorEditor from './CodeMirrorEditor'
+import CodeMirrorEditor, { finishSelectionSession } from './CodeMirrorEditor'
 import { useEditorStore } from '../../stores/editor-store'
+import { useProjectStore } from '../../stores/project-store'
 import type { DiffSession, SubHunk } from '../../services/diff/hunk-model'
 import { ipc } from '../../services/ipc-client'
 import {
@@ -74,6 +75,11 @@ beforeAll(() => {
 })
 
 const roots: Root[] = []
+beforeEach(() => {
+  useProjectStore.setState({ currentProject: { path: '/inline-test' } as never, projectSession: 1 })
+})
+
+const tabId = (path: string) => useEditorStore.getState().tabs.find(tab => tab.type === 'chapter' && tab.filePath === path)!.id
 
 const ORIG = 'AAA BBB CCC'
 
@@ -132,7 +138,7 @@ function userInput(view: EditorView, text: string, time: number): void {
 function seedSession(filePath: string) {
   useEditorStore.setState({ tabs: [], activeTabId: null })
   useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: ORIG })
-  useEditorStore.getState().beginInlineSession(filePath, mkSession())
+  useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
 }
 
 /** 会话同步 effect 在 commit 后 dispatch setHunkRanges；等一帧保证 field 就位 */
@@ -164,7 +170,7 @@ function clickButton(container: HTMLElement, actKey: string): void {
 }
 
 function storeSession(filePath: string): DiffSession | undefined {
-  return useEditorStore.getState().tabs.find(t => t.id === filePath)?.inlineSession
+  return useEditorStore.getState().tabs.find(t => t.filePath === filePath)?.inlineSession
 }
 
 afterEach(() => {
@@ -366,7 +372,7 @@ describe('inline 会话接线（store 注入）', () => {
       const r = fieldOf(view).ranges.find(x => x.id === 'h0.s0')
       expect(r).toBeTruthy()
       dispatchAcceptChange(view, r!, 'AAA1', 5000)
-      useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+      useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'accepted')
     })
     await flushSessionSync()
     expect(fieldOf(view).ranges.find(r => r.id === 'h0.s0')).toBeUndefined()
@@ -380,7 +386,7 @@ describe('inline 会话接线（store 注入）', () => {
     const { container } = renderEditor(ORIG, undefined, filePath)
     const view = getView(container)
     act(() => {
-      useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'rejected')
+      useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s1', 'rejected')
     })
     expect(view.state.doc.toString()).toBe(ORIG) // 拒绝不产生 doc 事务
     act(() => { undo(view) })
@@ -472,7 +478,7 @@ describe('inline 会话接线（store 注入）', () => {
     act(() => {
       const r = fieldOf(view).ranges.find(x => x.id === 'h0.s0')
       dispatchAcceptChange(view, r!, 'AAA1', 5000)
-      useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+      useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'accepted')
     })
     await flushSessionSync()
     expect(view.state.doc.toString()).toBe('AAA1 BBB CCC')
@@ -658,7 +664,7 @@ describe('inline 接受浮层与浮条交互', () => {
     expect(container.querySelector('.nf-ia-popover')).toBeFalsy()
 
     // 新会话 begin（另一轮「应用为修改建议」）→ 不复活旧浮层（M-1 修复断言）
-    await act(async () => { useEditorStore.getState().beginInlineSession(filePath, mkSession()) })
+    await act(async () => { useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession()) })
     await flushSessionSync()
     expect(storeSession(filePath)).toBeTruthy()
     expect(container.querySelector('.nf-ia-bar')).toBeTruthy()
@@ -716,6 +722,38 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
 
   beforeEach(resetInvoke)
 
+  it('chapter inline completion ignores an earlier diff tab sharing its locator', async () => {
+    const filePath = 'vela://draft/42'
+    const store = useEditorStore.getState()
+    seedSession(filePath)
+    store.openFile({ id: 'diff-42', type: 'diff', name: 'Diff', filePath, content: ORIG })
+    useEditorStore.setState(state => ({ tabs: [...state.tabs].reverse() }))
+    store.updateHunkDecision('doc:42', 'h0.s0', 'accepted')
+    await finishSelectionSession(filePath, 'AAA1 BBB CCC')
+    expect(vi.mocked(ipc.invoke)).toHaveBeenCalledWith('db:revision-create', expect.objectContaining({ baseDraftId: 42 }))
+    expect(useEditorStore.getState().tabs.find(tab => tab.id === 'doc:42')?.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(tab => tab.id === 'diff-42')?.content).toBe(ORIG)
+  })
+
+  it('project switching during inline completion prevents subsequent revision mutations', async () => {
+    const filePath = 'vela://draft/43'
+    seedSession(filePath)
+    useEditorStore.getState().updateHunkDecision('doc:43', 'h0.s0', 'accepted')
+    vi.mocked(ipc.invoke).mockImplementation(async (...args: unknown[]) => {
+      const channel = String(args[0])
+      if (channel === 'db:revision-get-pending') {
+        useProjectStore.setState({ currentProject: { path: '/next-project' } as never, projectSession: 2 })
+        return [{ id: 1 }]
+      }
+      return { success: true }
+    })
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    try {
+      await finishSelectionSession(filePath, 'AAA1 BBB CCC')
+      expect(vi.mocked(ipc.invoke).mock.calls.map(call => call[0])).toEqual(['db:revision-get-pending'])
+    } finally { error.mockRestore() }
+  })
+
   it('A 收尾：完成会话 → 旧 pending 清理 + revision-create 恰一次；正文不在此落库（验收 4）', async () => {
     const invoke = vi.mocked(ipc.invoke)
     invoke.mockImplementation(async (...args: unknown[]) => {
@@ -730,12 +768,12 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const doc = '雨下了一整夜。\n天亮了。\n她推开窗。'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession())
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s1', 'accepted')
     // finishSelectionSession 以导出纯异步函数白盒调用（组件浮条 onFinish 接线同一函数）
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     await act(async () => {
-      await finishSelectionSession(filePath, useEditorStore.getState().tabs.find(t => t.id === filePath)!.content!)
+      await finishSelectionSession(filePath, useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.content!)
     })
     const calls = invoke.mock.calls.map(c => String(c[0]))
     expect(calls.filter(c => c === 'db:revision-mark-discarded')).toHaveLength(2)
@@ -744,7 +782,7 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const createArg = invoke.mock.calls.find(c => String(c[0]) === 'db:revision-create')![1] as { content: string; revisionType: string }
     expect(createArg.content).toBe(doc) // content = 会话最终 doc 实况
     expect(createArg.revisionType).toBe('refine')
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession).toBeUndefined()
   })
 
   it('无接受（全部 pending/拒绝）→ 不落 revision、会话结束（拒绝无 revision）', async () => {
@@ -753,15 +791,15 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const doc = '雨下了一整夜。\n天亮了。'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession())
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'rejected')
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'rejected')
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s2', 'rejected')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'rejected')
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s1', 'rejected')
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s2', 'rejected')
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     await act(async () => { await finishSelectionSession(filePath, doc) })
     const calls = invoke.mock.calls.map(c => String(c[0]))
     expect(calls.some(c => c.startsWith('db:revision-'))).toBe(false)
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession).toBeUndefined()
   })
 
   it('非 vela://draft 宿主完成 → 仅关会话，零 db:revision 侧链', async () => {
@@ -769,12 +807,12 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const filePath = '/mnt/notes/raw.md'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'raw', type: 'chapter', filePath, content: ORIG })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession())
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'accepted')
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     await act(async () => { await finishSelectionSession(filePath, 'AAA1 BBB CCC') })
     expect(invoke).not.toHaveBeenCalled()
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession).toBeUndefined()
   })
 
   // ===== 评审 I-1 修复（round 1）：收尾重入防护（per-session in-flight + 会话身份 end） =====
@@ -793,8 +831,8 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const doc = '雨下了一整夜。\n天亮了。\n她推开窗。'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession())
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s1', 'accepted')
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     // 同一会话的两次 finish 并发（双击「完成」的等价形态：两链都在旧链 finally 前启动）
     await act(async () => {
@@ -807,7 +845,7 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     expect(calls.filter(c => c === 'db:revision-get-pending')).toHaveLength(1) // 第二条链被 in-flight 挡掉
     expect(calls.filter(c => c === 'db:revision-mark-discarded')).toHaveLength(2)
     expect(calls.filter(c => c === 'db:revision-create')).toHaveLength(1) // R9：双击也只产生一条 pending refine
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession).toBeUndefined()
   })
 
   it('浮条双击「完成」→ 仅一条收尾链（I-1 UI 路径：按钮重复点击不产生第二链）', async () => {
@@ -816,7 +854,7 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const { container } = renderEditor(ORIG, undefined, filePath)
     const view = getView(container)
     await flushSessionSync()
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'accepted')
     // 双击：同一 act tick 内连点两次——第二条点击在旧链 finally 清会话前到达（bar 仍挂载），
     // 必须被 in-flight 挡掉（若分两次 act，第一次点击的 flush 已把链跑完并卸 bar，非双击形态）
     act(() => {
@@ -851,19 +889,19 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const doc = '雨下了一整夜。\n天亮了。'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession()) // sessionId 's1'
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s0', 'accepted')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession()) // sessionId 's1'
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s0', 'accepted')
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     let chain!: Promise<void>
     await act(async () => { chain = finishSelectionSession(filePath, doc) }) // 挂起在 get-pending
     // 窗口期内用户开启新会话（另一轮「应用为修改建议」beginInlineSession 覆盖）
     const takeover = { ...mkSession(), sessionId: 's2' }
-    await act(async () => { useEditorStore.getState().beginInlineSession(filePath, takeover) })
+    await act(async () => { useEditorStore.getState().beginInlineSession(tabId(filePath), takeover) })
     await act(async () => {
       releasePending([]) // 旧链收尾完成（旧链 finally 执行 endSessionIfSame）
       await chain
     })
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession?.sessionId).toBe('s2')
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession?.sessionId).toBe('s2')
   })
 
   it('legacy vela://draft/ch{n}（非数字 id）→ 不建 revision、仅关会话（M-1 防 NaN 入参）', async () => {
@@ -872,11 +910,11 @@ describe('A 收尾落库链 finishSelectionSession（Task 5）', () => {
     const doc = 'AAA BBB CCC'
     useEditorStore.setState({ tabs: [], activeTabId: null })
     useEditorStore.getState().openFile({ id: filePath, name: 'd', type: 'chapter', filePath, content: doc })
-    useEditorStore.getState().beginInlineSession(filePath, mkSession())
-    useEditorStore.getState().updateHunkDecision(filePath, 'h0.s1', 'accepted')
+    useEditorStore.getState().beginInlineSession(tabId(filePath), mkSession())
+    useEditorStore.getState().updateHunkDecision(tabId(filePath), 'h0.s1', 'accepted')
     const { finishSelectionSession } = await import('./CodeMirrorEditor')
     await act(async () => { await finishSelectionSession(filePath, doc) })
     expect(invoke).not.toHaveBeenCalled() // NaN 不进入 db:revision-* 查询
-    expect(useEditorStore.getState().tabs.find(t => t.id === filePath)!.inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().tabs.find(t => t.filePath === filePath)!.inlineSession).toBeUndefined()
   })
 })

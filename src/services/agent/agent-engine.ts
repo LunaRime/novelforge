@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../core'
 /**
  * Agent 核心引擎 — ReAct（Reasoning + Acting）循环
  *
@@ -13,7 +13,7 @@ import type { RuntimeEvent } from '../../core/domain/runtime-event'
  */
 
 import { t } from '../../shared/locale'
-import { canExecuteConcurrently, requiresToolApproval } from '../../core/runtime/tool-execution'
+import { canExecuteConcurrently, requiresToolApproval } from '../../core'
 import { toolRegistry, type AgentTool, type ToolResult } from './tool-registry'
 import type { ApprovalDecision } from './approval'
 import { outputPostProcessor } from './output-post-processor'

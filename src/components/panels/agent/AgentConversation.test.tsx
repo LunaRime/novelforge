@@ -104,7 +104,8 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     expect(memoryTokens).toBeGreaterThan(100)
     expect(memoryTokens).toBeLessThanOrEqual(RESIDENT_MEMORY_BUDGET_TOKENS)
     act(() => { root.unmount() })
-  })
+  // Cold renderer imports during this async integration test exceed 5s on Windows CI.
+  }, 15_000)
 
   it('M2 读盘失败降级：记忆段回落同步 M1-only（不阻塞渲染）', async () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })

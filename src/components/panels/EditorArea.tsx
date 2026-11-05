@@ -818,6 +818,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
           // 草稿文件：使用 DraftEditor（工具栏含修稿/审稿/定稿按鈕）
           <DraftEditor
             key={activeTab.id}
+            tabId={activeTab.id}
             filePath={activeTab.filePath}
             content={activeTab.content ?? ''}
           />

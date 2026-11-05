@@ -24,6 +24,11 @@ function check(source: string, area = 'core', agentStoreFiles = 0) {
 }
 
 describe('boundary CLI', () => {
+  test('rejects external imports of core internals', () => {
+    const result = check(`import type { Chapter } from '../../core/domain/chapter'`, 'services')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('core public entry')
+  })
   test('counts store access even without a direct store import', () => {
     const result = check(`const store = useProjectStore.getState()`, 'services/agent')
     expect(result.status, result.stdout).toBe(1)

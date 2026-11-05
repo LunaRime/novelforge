@@ -12,7 +12,7 @@
  *  - **没有可达目标的类型不再假装可点**：渲染为静态卡片（无 hover、无手型）。
  */
 import { FileText, Play, Edit3, CheckCircle, XCircle } from 'lucide-react'
-import type { RuntimeEvent } from '../../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../../core'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { ipc } from '../../../services/ipc-client'

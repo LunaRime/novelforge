@@ -1,3 +1,4 @@
+import { draftUri } from '../../../services/vela-protocol'
 /**
  * DraftBoxGroup — 草稿箱折叠组（含章节分组和单条草稿条目）
  */
@@ -104,7 +105,7 @@ function DraftChapterGroup({
 
   // 已定稿的草稿存在时，章节显示绿色标记
   const hasFinalized = drafts.some(d => d.status === 'finalized')
-  const baseTitle = bpTitle || drafts[0]?.chapterTitle || ''
+  const baseTitle = bpTitle || ''
   // 前缀判断与显示用同一语言文案（此前硬编码中文「第{n}章」，英文/俄文界面下匹配不到前缀导致重复）
   const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
   const displayTitle = baseTitle.startsWith(chLabel) ? baseTitle : (baseTitle ? `${chLabel} ${baseTitle}` : chLabel)
@@ -145,7 +146,7 @@ function DraftChapterGroup({
         <div>
           {activeDrafts.map(draft => (
             <DraftItem
-              key={draft.filePath}
+              key={draftUri(draft.id)}
               draft={draft}
               chapterTitleText={displayTitle}
             />
@@ -171,7 +172,7 @@ function DraftChapterGroup({
           )}
           {showArchived && archivedDrafts.map(draft => (
             <DraftItem
-              key={draft.filePath}
+              key={draftUri(draft.id)}
               draft={draft}
               chapterTitleText={displayTitle}
               archived
@@ -198,12 +199,12 @@ function DraftItem({
 
   /** 打开草稿到编辑器 */
   const openDraft = async () => {
-    const content = await readDraftBody(draft.filePath)
+    const content = await readDraftBody(draftUri(draft.id))
     useEditorStore.getState().openFile({
-      id: draft.filePath,
+      id: draftUri(draft.id),
       name: `${chapterTitleText} v${draft.version}`,
       type: 'chapter',
-      filePath: draft.filePath,
+      filePath: draftUri(draft.id),
       content,
     })
   }
@@ -216,7 +217,7 @@ function DraftItem({
       { title: t('dialog.confirmArchive'), confirmText: t('draftbox.archiveAction'), danger: true }
     )
     if (!ok) return
-    await useDraftStore.getState().markDraftStatus(draft.filePath, draft.chapterNumber, 'archived')
+    await useDraftStore.getState().markDraftStatus(draftUri(draft.id), draft.chapterNumber, 'archived')
   }
 
   const isFinalized = draft.status === 'finalized'
@@ -239,7 +240,7 @@ function DraftItem({
           key: 'copy-path',
           label: t('action.copyPath'),
           icon: <Copy size={13} />,
-          onClick: () => navigator.clipboard.writeText(draft.filePath).catch(() => { }),
+          onClick: () => navigator.clipboard.writeText(draftUri(draft.id)).catch(() => { }),
         },
         { key: 'div2', type: 'divider' as const },
         {

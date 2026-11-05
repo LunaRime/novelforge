@@ -1,4 +1,4 @@
-import type { RuntimeEvent } from '../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../core'
 /**
  * NovelForge Agent Tool 注册表
  *
@@ -12,7 +12,7 @@ import type { RuntimeEvent } from '../../core/domain/runtime-event'
  */
 
 import { t } from '../../shared/locale'
-import type { ToolExecutionPolicy } from '../../core/runtime/tool-execution'
+import type { ToolExecutionPolicy } from '../../core'
 import { MAX_PARALLEL_READ_TOOLS } from './tool-scheduling'
 
 // ===== JSON Schema 简化类型 =====

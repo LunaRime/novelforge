@@ -5,6 +5,8 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
+import { draftUri } from '../../vela-protocol'
+import { captureDraftProject } from '../../draft-index'
 import { getActiveStyle, appendWritingStyle } from '../../agent/style-registry'
 import {
   DIR_PROMPTS
@@ -20,6 +22,7 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
+    const assertProject = captureDraftProject(project.path)
 
     callbacks.log(t('log.generateDraft.assembling'))
 
@@ -246,7 +249,9 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
 
     // 落于数据库（wordCount 用统一"有效字数"口径：汉字 + 英文单词，非 length）
     const novelWordCount = computeTextStats(cleanDraftText).novelWordCount
+    assertProject()
     const nextVersion: number = await ipc.invoke('db:draft-next-version', this.chapterInfo.chapterNumber)
+    assertProject()
     const createResult = await ipc.invoke('db:draft-create', {
       chapterNumber: this.chapterInfo.chapterNumber,
       version: nextVersion,
@@ -255,7 +260,12 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       wordCount: novelWordCount,
     })
 
-    const pseudoPath = createResult.id ? `vela://draft/${createResult.id}` : `vela://draft/ch${this.chapterInfo.chapterNumber}/v${nextVersion}`
+    assertProject()
+    if (!createResult.success) throw new Error(t('error.saveFailed').replace('{error}', createResult.error ?? ''))
+    if (typeof createResult.id !== 'number' || !Number.isSafeInteger(createResult.id) || createResult.id <= 0) {
+      throw new Error(t('error.noBaseDraft'))
+    }
+    const pseudoPath = draftUri(createResult.id)
 
     context.data.draft = cleanDraftText
     context.data.draftContent = cleanDraftText
@@ -271,8 +281,10 @@ export class GenerateDraftCommand extends BaseWorkflowCommand {
       await useDraftStore.getState().loadAllDrafts()
     } catch { /* 忽略 */ }
 
+    assertProject()
     try {
       const { useEditorStore } = await import('../../../stores/editor-store')
+      assertProject()
       useEditorStore.getState().openFile({
         id: pseudoPath,
         name: t('draft.versionName')

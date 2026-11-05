@@ -59,10 +59,9 @@ export default function ProjectTree() {
       .map(([num, drafts]) => {
         const n = parseInt(num, 10)
         // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
-        const latest = drafts[0]
         return {
           n,
-          chapterTitle: latest?.chapterTitle || '',
+          chapterTitle: '',
           hasFinalized: drafts.some(d => d.status === 'finalized'),
         }
       })

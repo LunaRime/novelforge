@@ -1,5 +1,5 @@
-import { commitDraftContent } from '../../src/core/application/commit-draft-content'
-import type { DraftContentWrite, DraftWriteResult } from '../../src/core/ports/draft-write'
+import { commitDraftContent } from '../../src/core'
+import type { DraftContentWrite, DraftWriteResult } from '../../src/core'
 import { getProjectDb } from '../database'
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'

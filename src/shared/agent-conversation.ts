@@ -1,5 +1,5 @@
 import type { ToolCallInfo } from '../services/agent/agent-engine'
-import type { RuntimeEvent } from '../core/domain/runtime-event'
+import type { RuntimeEvent } from '../core'
 import type { ArchivedArtifactCard } from './archived-artifact'
 import type { CompressedBatch } from '../services/agent/archive-codec'
 import type { SubAgentSession } from '../services/agent/subagent/types'

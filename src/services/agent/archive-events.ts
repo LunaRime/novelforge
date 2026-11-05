@@ -1,5 +1,5 @@
 import type { TextKey } from '../../shared/locale'
-import type { RuntimeEvent } from '../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../core'
 import type { ArchivedArtifactCard } from '../../shared/archived-artifact'
 import type { AgentMessage } from '../../shared/agent-conversation'
 

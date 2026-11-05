@@ -3,7 +3,7 @@ import type { EditorTab } from '../../shared/editor-tab'
 import type { AgentConversation } from '../../shared/agent-conversation'
 import type { WorkflowRun } from '../../shared/workflow-types'
 import type { ModelRouteConfig, CallPurpose } from '../llm/model-router'
-import type { RuntimeEvent } from '../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../core'
 
 /** Capabilities consumed by the renderer agent. No Zustand state/actions escape this contract. */
 export interface AgentRuntimePorts {
@@ -17,6 +17,7 @@ export interface AgentRuntimePorts {
     openFile(tab: EditorTab): void
   }
   workflows: {
+    start(request: import('../../core').WorkflowStartRequest): Promise<import('../../core').WorkflowReceipt>
     snapshot(): { currentRun: WorkflowRun | null; activeRuns: WorkflowRun[]; hasActiveRun(): boolean }
     openOutput(): void
   }
@@ -64,7 +65,7 @@ export const defaultAgentRuntimePorts: AgentRuntimePorts = {
   get conversation() { return getAgentRuntimePorts().conversation },
   get drafts() { return getAgentRuntimePorts().drafts },
 }
-import { createContainer, createRuntime, RuntimeScopeChanged } from '../../core/runtime/container'
+import { createContainer, createRuntime, RuntimeScopeChanged } from '../../core'
 import { buildAgentTool } from './tool-registry'
 import { t } from '../../shared/locale'
 

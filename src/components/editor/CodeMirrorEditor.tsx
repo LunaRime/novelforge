@@ -14,6 +14,7 @@ import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
 import { useEditorStore } from '../../stores/editor-store'
+import { useProjectStore } from '../../stores/project-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { formatBinding, matchesBinding, shortcutBinding, toCodeMirrorKey, useShortcutStore } from '../../stores/shortcut-store'
@@ -165,6 +166,7 @@ function stripThinkStream(chunk: string, state: { inThink: boolean }): string {
 
 export type CodeMirrorEditorProps = {
   content: string
+  tabId?: string
   filePath?: string
   editable?: boolean
   onChange?: (content: string) => void
@@ -210,13 +212,20 @@ function getAIActions(t: (key: string) => string) {
  */
 const selectionFinishInFlight = new Set<string>()
 
+function resolveHostTab(filePath: string | undefined, tabId?: string) {
+  const tabs = useEditorStore.getState().tabs
+  if (tabId) return tabs.find(tab => tab.id === tabId)
+  return tabs.find(tab => tab.type === 'chapter' && tab.filePath === filePath)
+    ?? tabs.find(tab => tab.id === filePath || tab.filePath === filePath)
+}
+
 export async function finishSelectionSession(
   filePath: string | undefined,
   docText: string,
   actionLabel?: string,
+  tabId?: string,
 ): Promise<void> {
-  const store = useEditorStore.getState()
-  const tab = filePath ? store.tabs.find(t => t.id === filePath || t.filePath === filePath) : undefined
+  const tab = filePath ? resolveHostTab(filePath, tabId) : undefined
   const session = tab?.inlineSession
   const sessionId = session?.sessionId
   // ② 会话身份检查：仅当 tab 仍持同一 inlineSession（sessionId 未变）才 end——旧链
@@ -248,14 +257,28 @@ export async function finishSelectionSession(
   // ① 重入防护：async 链入口登记（同步完成于首个 await 前），重复调用直接 return
   if (selectionFinishInFlight.has(sessionId)) return
   selectionFinishInFlight.add(sessionId)
+  const sourceProject = useProjectStore.getState().currentProject
+  const sourceSession = useProjectStore.getState().projectSession
+  const assertProject = () => {
+    const current = useProjectStore.getState()
+    if (!sourceProject || current.currentProject?.path !== sourceProject.path || current.projectSession !== sourceSession) {
+      throw new Error(tStatic('error.noProject'))
+    }
+  }
   try {
+    assertProject()
     const draftId = parseInt(draftIdRaw, 10)
     const { ipc } = await import('../../services/ipc-client')
+    assertProject()
     const pending = await ipc.invoke('db:revision-get-pending', draftId) as Array<{ id: number }>
+    assertProject()
     for (const rev of pending) {
+      assertProject()
       await ipc.invoke('db:revision-mark-discarded', rev.id)
+      assertProject()
     }
     const nextIdx = await ipc.invoke('db:revision-next-index', draftId) as number
+    assertProject()
     await ipc.invoke('db:revision-create', {
       baseDraftId: draftId,
       revisionIndex: nextIdx,
@@ -278,6 +301,7 @@ export async function finishSelectionSession(
 
 export default function CodeMirrorEditor({
   content,
+  tabId,
   filePath,
   editable = true,
   onChange,
@@ -305,13 +329,15 @@ export default function CodeMirrorEditor({
 
   // ===== L1 inline 接受会话（Task 4）=====
   // 会话决策态存 editor-store（R5：切 tab/重挂载不丢）；本文档仅订阅 + 派发事务。
-  // vela 草稿 tab 的 id === filePath（DraftEditor:373-376 语义）；filePath 缺失/未命中 → 无会话零影响。
+  // filePath is a locator; draft tab identity is doc:{draftId}.
   const inlineSession = useEditorStore((s) =>
-    filePath ? (s.tabs.find(tab => tab.id === filePath || tab.filePath === filePath)?.inlineSession ?? null) : null,
+    filePath ? ((tabId ? s.tabs.find(tab => tab.id === tabId) : s.tabs.find(tab => tab.type === 'chapter' && tab.filePath === filePath) ?? s.tabs.find(tab => tab.filePath === filePath))?.inlineSession ?? null) : null,
   )
   // handleUpdate 以 ref 读会话（避免每次决策更新重建回调）；filePath 对 tab 固定
   const inlineSessionRef = useRef(inlineSession)
   const filePathRef = useRef(filePath)
+  const tabIdRef = useRef(tabId)
+  useEffect(() => { tabIdRef.current = tabId }, [tabId])
   useEffect(() => { inlineSessionRef.current = inlineSession }, [inlineSession])
   useEffect(() => { filePathRef.current = filePath }, [filePath])
 
@@ -358,7 +384,7 @@ export default function CodeMirrorEditor({
    *  已不在 field（I1：防 undo 被触碰区间判定误判成漂移退出） */
   const applyAcceptSub = useCallback((sub: SubHunk) => {
     const view = cmViewRef.current
-    const tabId = filePathRef.current
+    const tabId = resolveHostTab(filePathRef.current, tabIdRef.current)?.id
     if (!view || !tabId) return
     const ranges = view.state.field(inlineAcceptField).ranges
     const r = ranges.find(x => x.id === sub.id)
@@ -378,7 +404,7 @@ export default function CodeMirrorEditor({
 
   /** 拒绝 = 纯决策态（无 doc 事务、无 undo 事件）；只翻动当前 pending 的子句 */
   const rejectSubs = useCallback((subs: SubHunk[]) => {
-    const tabId = filePathRef.current
+    const tabId = resolveHostTab(filePathRef.current, tabIdRef.current)?.id
     const session = inlineSessionRef.current
     if (!tabId || !session) return
     for (const sub of subs) {
@@ -392,20 +418,20 @@ export default function CodeMirrorEditor({
    *  动作标签直接读 activeAIAction state（A 入口会话由某次 AI 动作进入，标签至完成保持不变；
    *  v1 后动作标签定格进会话元数据留给 v1.1）。 */
   const finishSession = useCallback(() => {
-    const tabId = filePathRef.current
+    const tabId = resolveHostTab(filePathRef.current, tabIdRef.current)?.id
     const view = cmViewRef.current
     const session = inlineSessionRef.current
     setActiveRange(null)
     setPopoverPos(null)
     if (!tabId) return
     const docText = view ? view.state.doc.toString() : (session?.baseDocSnapshot ?? '')
-    void finishSelectionSession(tabId, docText, activeAIAction ?? undefined)
+    void finishSelectionSession(filePathRef.current, docText, activeAIAction ?? undefined, tabIdRef.current)
   }, [activeAIAction])
 
   /** 关闭：仍有未决修改 → 二次确认；确认后丢弃未决建议并关会话——不落 revision
    *  （discard 语义，设计 §4.5；已接受文本保留在 doc，走 Ctrl+S 保存链） */
   const closeSession = useCallback(async () => {
-    const tabId = filePathRef.current
+    const tabId = resolveHostTab(filePathRef.current, tabIdRef.current)?.id
     const session = inlineSessionRef.current
     if (!tabId || !session) return
     const unhandled = countUndecided(session)
@@ -476,7 +502,7 @@ export default function CodeMirrorEditor({
   }, [popoverHunk, rejectSubs])
   /** 恢复误拒子句为待定（final review I-1）：resetHunkDecision → 装饰回 pending，可再接受 */
   const handlePopoverRestoreSub = useCallback((subId: string) => {
-    const tabId = filePathRef.current
+    const tabId = resolveHostTab(filePathRef.current, tabIdRef.current)?.id
     if (!tabId) return
     useEditorStore.getState().resetHunkDecision(tabId, subId)
   }, [])
@@ -597,7 +623,8 @@ export default function CodeMirrorEditor({
             // 下一会话 begin 时（无点击）复活错位的旧浮层
             setActiveRange(null)
             setPopoverPos(null)
-            useEditorStore.getState().endInlineSession(filePathRef.current)
+            const targetTab = resolveHostTab(filePathRef.current, tabIdRef.current)
+            if (targetTab) useEditorStore.getState().endInlineSession(targetTab.id)
             void import('../ui/Toast').then(({ toast }) => {
               toast.info(t('inlineAccept.manualEditExit'))
             })
@@ -982,7 +1009,9 @@ export default function CodeMirrorEditor({
         return
       }
       // 进会话：doc 保持原样（验收 1/2）——会话 action 标签由 finishSession 读 activeAIAction
-      useEditorStore.getState().beginInlineSession(filePath, session)
+      const targetTab = resolveHostTab(filePath, tabId)
+      if (!targetTab) return
+      useEditorStore.getState().beginInlineSession(targetTab.id, session)
       setAiResult(null)
       setBubbleOpen(false)
     }

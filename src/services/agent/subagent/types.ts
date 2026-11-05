@@ -3,7 +3,7 @@
  * 设计依据：`docs/superpowers/specs/2026-09-26-multi-agent-dispatch-design.md`
  */
 import type { AgentMessage } from '../../../shared/agent-conversation'
-import type { RuntimeEvent } from '../../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../../core'
 import type { ToolCallInfo } from '../agent-engine'
 
 export type SubAgentStatus = 'running' | 'completed' | 'failed' | 'cancelled'

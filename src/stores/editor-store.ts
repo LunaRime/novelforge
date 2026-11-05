@@ -55,6 +55,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   activeCharCount: 0,
 
   openFile: (tab) => {
+    if (tab.type === 'chapter') {
+      const match = /^vela:\/\/draft\/([1-9]\d*)$/.exec(tab.filePath ?? '')
+      const docId = match ? Number(match[1]) : tab.docId
+      if ((match || !tab.filePath) && docId !== undefined && Number.isSafeInteger(docId) && docId > 0) {
+        tab = { ...tab, docId, id: `doc:${docId}`, filePath: `vela://draft/${docId}` }
+      }
+    }
     // diff 类型每次内容不同，只按 id 精确匹配（不走 filePath 去重）
     // 其他类型（含 review-report）按 filePath + type 去重
     const idOnly = tab.type === 'diff'

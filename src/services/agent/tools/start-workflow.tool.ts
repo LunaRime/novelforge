@@ -1,4 +1,4 @@
-import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
+import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * start_workflow — 触发创作工作流
  *
@@ -10,10 +10,7 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 本工具层只负责参数校验与错误语义映射（WorkflowStartError.code → 用户可见文案）。
  */
 import { t } from '../../../shared/locale'
-import {
-  startWorkflow,
-  WorkflowStartError,
-} from '../../workflows/start-workflow'
+import { WorkflowStartError, type WorkflowStartRequest } from '../../../core'
 
 /** 区间单次最多章数（2026-10-02 评审 I1：模型幻觉大区间 → 无界静默启动的护栏） */
 const MAX_RANGE_CHAPTERS = 20
@@ -53,6 +50,11 @@ return buildRuntimeAgentTool(ports, {
   requiresConfirmation: true,
   isReadOnly: false,
   execute: async (args) => {
+    const sourceProject = captureAgentProject(ports)
+    const startWorkflow = (request: WorkflowStartRequest) => {
+      if (!sourceProject.isCurrent()) throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
+      return ports.workflows.start(request)
+    }
     const workflow = args.workflow as string
     // null 归一（2026-10-02 复审 M1）：模型对未用的可选参数常发 null——一律视为未传（否则误报「区间无效」）
     const chapterNumber = args.chapter_number == null ? undefined : (args.chapter_number as number)

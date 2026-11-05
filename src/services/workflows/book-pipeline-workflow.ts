@@ -1,3 +1,4 @@
+import { draftUri } from '../vela-protocol'
 /**
  * 整本流水线 — 逐章串行执行「写稿 → 自审/重写 → 定稿 → 知识库/记忆」。
  *
@@ -98,7 +99,7 @@ async function loadLatestDraft(chapterNumber: number): Promise<DraftSnapshot | n
   return {
     id: latest.id as number,
     version: Number(latest.version ?? 1),
-    filePath: `vela://draft/${latest.id}`,
+    filePath: draftUri(latest.id),
     content: full.content,
   }
 }

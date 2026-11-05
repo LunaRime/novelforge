@@ -107,6 +107,19 @@ const current = {
   agentStoreRefs: agentRefs,
 }
 
+// M4: callers consume the public core entry; unit tests inside core remain local.
+const coreEntryViolations = []
+for (const area of ['src', 'electron', 'scripts']) {
+  for (const file of walk(join(ROOT, area))) {
+    if (relative(join(ROOT, 'src', 'core'), file).match(/^(?!\.\.)[^:]/)) continue
+    for (const spec of inspectSource(file).specifiers) {
+      if (/(^|\/)core\/(domain|application|ports|runtime|adapters|migration)\//.test(spec)) {
+        coreEntryViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
+}
+
 // M2: UI sends typed application requests; adapters construct workflow definitions.
 const uiWorkflowViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
@@ -121,7 +134,11 @@ for (const key of ['coreForbidden', 'agentStoreFiles', 'agentStoreRefs']) {
   console.log(`  ${key.padEnd(15)} ${String(baseline[key]).padStart(3)} → ${current[key]}`)
 }
 
-let failed = uiWorkflowViolations.length > 0
+let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0
+if (coreEntryViolations.length) {
+  console.error('\ncore public entry: import from core/index instead of internal modules')
+  for (const violation of coreEntryViolations) console.error(`  - ${violation}`)
+}
 for (const key of Object.keys(baseline)) {
   if (current[key] > baseline[key]) {
     failed = true

@@ -17,3 +17,4 @@ export { startWorkflow, WorkflowStartError, WorkflowValidationError } from './ap
 export type { WorkflowStartRequest, WorkflowStartPort, WorkflowReceipt, PreparedWorkflow, EditorDraft, BlueprintGeneration, BlueprintGapRequest } from './application/start-workflow'
 export { createContainer, createRuntime, RuntimeScopeChanged } from './runtime/container'
 export type { RuntimeEvent, RuntimeEventPresentation } from './domain/runtime-event'
+export type { ArchitectureGeneration, ConfigGenerationSize } from './application/start-workflow'

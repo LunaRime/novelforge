@@ -10,7 +10,7 @@
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import type { RuntimeEvent } from '../../core/domain/runtime-event'
+import type { RuntimeEvent } from '../../core'
 import type { LLMMessage } from './agent-engine'
 
 // ===== 类型定义 =====

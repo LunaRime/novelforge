@@ -19,6 +19,12 @@ export const VELA = {
   MEMORY: 'vela://memory/',
 } as const
 
+/** URI is a projection of database draft identity, never stored draft metadata. */
+export function draftUri(id: number): string {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid draft identity')
+    return `${VELA.DRAFT}${id}`
+}
+
 // ===== vela://core/ 架构字段映射 =====
 
 /** 路径 key → ProjectCoreData 中的驼峰字段名 */

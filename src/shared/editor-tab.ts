@@ -3,6 +3,8 @@ import type { DiffSession } from '../services/diff/hunk-model'
 /** 编辑器 Tab 数据 */
 export interface EditorTab {
   id: string
+  /** Database draft identity; URI locators never determine tab identity. */
+  docId?: number
   name: string
   type: 'chapter' | 'outline' | 'character' | 'config' | 'diff' | 'chapter-card' | 'world-building' | 'arch-file' | 'version-history' | 'review-report' | 'memory' | 'publication' | 'manuscript-board' | 'world-timeline'
   filePath?: string
