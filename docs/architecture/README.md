@@ -20,6 +20,8 @@
 | 08 | [自审与迁移](08-self-review-and-migration.md) | 用项目自己的规范审这套文档；15 个 0.1.x 用户怎么迁 | **必读（3 条 P0）** |
 | 09 | [本轮实施计划](09-core-implementation-plan.md) | 核心与离线迁移，不切应用入口 | 2026-11-05 |
 | 10 | [核心使用与验证](10-core-usage.md) | 当前 API、离线导出命令与限制 | 2026-11-05 |
+| 11 | [M2 合流计划](11-write-flow-implementation-plan.md) | 应用入口、真实草稿身份与写入用例 | 已验证 |
+| 12 | [M2 与公开构建验收](12-m2-and-public-build.md) | 控制台裁剪、议题 #41/#42 与最终验证 | 2026-11-05 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
