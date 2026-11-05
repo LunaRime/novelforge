@@ -1,3 +1,4 @@
+import { getAgentRuntimePorts } from './runtime-ports'
 /**
  * 上下文策略（W1，上下文治理二期批 2）——按**模型档位**决定上下文预算，取代"全局常量"。
  *
@@ -31,7 +32,6 @@
  *   从签名反推参数语义——"按意图给子集"需要可靠的意图→工具映射，本批没有，故不做。
  */
 import type { ModelTier } from '../llm/model-router'
-import { useLLMStore } from '../../stores/llm-store'
 
 export interface ContextPolicy {
   /** 命中的档位（面板/日志可据此解释"为什么这个模型的预算不同"） */
@@ -169,7 +169,7 @@ export function resolveContextPolicy(input: { contextWindow?: number; tier?: Mod
  * elite（本批实现中实际踩到，用例已锁定）。没配路由 → 档位未知 → 只看窗口信号。
  */
 export function resolveContextPolicyFor(modelId: string | undefined): ContextPolicy {
-  const llm = useLLMStore.getState()
+  const llm = getAgentRuntimePorts().models.snapshot()
   const model = modelId ? llm.models.find(m => m.id === modelId) : undefined
   let tier: ModelTier | undefined
   if (modelId) {

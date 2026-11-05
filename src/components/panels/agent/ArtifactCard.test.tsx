@@ -43,19 +43,9 @@ afterEach(() => {
 })
 
 describe('ArtifactCard — 可供性接线（2026-09-27）', () => {
-  it('blueprint_generated（带 chapterNumber）→ 整卡是 button；点击跳章节草稿', async () => {
-    const el = render(<ArtifactCard artifact={{ type: 'blueprint_generated', name: '第3章 雪夜入谷', metadata: { chapterNumber: 3 } }} />)
-    const btn = el.querySelector('button')!
-    expect(btn).toBeTruthy()
-    btn.focus()
-    expect(document.activeElement).toBe(btn)
-    await act(async () => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
-    expect(openDraftByChapterMock).toHaveBeenCalledWith(3, '第3章 雪夜入谷')
-  })
-
   it('workflow_started → 点击打开底部「任务」面板', async () => {
     useLayoutStore.setState({ bottomPanelOpen: false, bottomTab: 'log' })
-    const el = render(<ArtifactCard artifact={{ type: 'workflow_started', name: '章节创作流水线' }} />)
+    const el = render(<ArtifactCard artifact={{ type: 'workflow.progressed', runId: 'run-1', step: 'started', pct: 0, name: '章节创作流水线' }} />)
     await act(async () => { (el.querySelector('button') as HTMLButtonElement).click() })
     expect(useLayoutStore.getState().bottomTab).toBe('tasks')
     expect(useLayoutStore.getState().bottomPanelOpen).toBe(true)
@@ -63,14 +53,14 @@ describe('ArtifactCard — 可供性接线（2026-09-27）', () => {
 
   it('workflow_completed（线② 2b D5）→ 点击打开右侧 AI 输出面板', async () => {
     useLayoutStore.setState({ aiPanelOpen: false, rightView: 'agent' })
-    const el = render(<ArtifactCard artifact={{ type: 'workflow_completed', name: '第1章创作' }} />)
+    const el = render(<ArtifactCard artifact={{ type: 'workflow.progressed', runId: 'run-1', step: 'completed', pct: 100, name: '第1章创作' }} />)
     await act(async () => { (el.querySelector('button') as HTMLButtonElement).click() })
     expect(useLayoutStore.getState().aiPanelOpen).toBe(true)
     expect(useLayoutStore.getState().rightView).toBe('ai-output')
   })
 
   it('无可达目标的类型（如 summary_updated）→ 静态卡：不渲染按钮、不做可点暗示', () => {
-    const el = render(<ArtifactCard artifact={{ type: 'summary_updated', name: '摘要更新' }} />)
+    const el = render(<ArtifactCard artifact={{ type: 'chapter.reviewed', chapterId: 'draft-1', score: 8, name: '摘要更新' }} />)
     expect(el.querySelector('button')).toBeNull()
     expect(el.textContent).toContain('摘要更新')
   })

@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * update_config 工具测试（真机 bug 修复回归，2026-09-13）
@@ -96,3 +97,5 @@ describe('update_config（丢更新回归）', () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 })
+
+installRendererAgentPorts()

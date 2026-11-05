@@ -5,7 +5,7 @@ import path from 'node:path'
 import os from 'node:os'
 import { createHash } from 'node:crypto'
 import { FileNode, WorkflowOutputTailOptions } from '../../src/shared/ipc-channels'
-import { VELA_HOME } from '../utils/config-utils'
+import { NOVELFORGE_HOME } from '../utils/config-utils'
 import { getCurrentProjectPath } from '../database'
 import {
   assertPathAllowed,
@@ -26,9 +26,9 @@ import { assertProjectWriteHasNoLinks } from '../security/project-write-path'
 /**
  * 路径权限（L4 S8）——判定逻辑在 `electron/security/grants.ts`（纯模块，可离线单测）。
  *
- * 改造前这里是 `SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` + 黑名单，实质等于
+ * 改造前这里是 `SANDBOX_ROOTS = [NOVELFORGE_HOME, os.homedir()]` + 黑名单，实质等于
  * **整个用户主目录可读写**，且授权可由渲染层自行登记（`fs:grant-external-file`）。现在：
- *   白名单 = VELA_HOME ∪ 当前项目根 ∪ 会话内**由主进程签发**的授权
+ *   白名单 = NOVELFORGE_HOME ∪ 当前项目根 ∪ 会话内**由主进程签发**的授权
  *   + 意图分级（读/写/删分别判定）
  *   + 拒绝名单（纵深防御）
  * ⚠️ `legacyHomeDir` 在 S8 过渡期仍等于主目录（与改造前等价）；**S9 置空即完成收紧**。
@@ -101,10 +101,10 @@ async function windowFromHugeFile(
 
 /**
  * 工作流任务输出文件仓库（M2，CC §三.4 双轨补充通道）：
- * `{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`——纯 fs 单测见 utils 测试。
+ * `{NOVELFORGE_HOME}/workflow-output/<runId>/<stepIndex>.txt`——纯 fs 单测见 utils 测试。
  * 崩溃残留兜底清理窗口：7 天（超龄 run 目录启动时 sweep；保留窗口内文件供恢复续读）
  */
-const WORKFLOW_OUTPUT_DIR = path.join(VELA_HOME, 'workflow-output')
+const WORKFLOW_OUTPUT_DIR = path.join(NOVELFORGE_HOME, 'workflow-output')
 const WORKFLOW_OUTPUT_RETENTION_MS = 7 * 24 * 60 * 60 * 1000
 const workflowOutputStore = new WorkflowOutputFileStore(WORKFLOW_OUTPUT_DIR)
 
@@ -133,13 +133,13 @@ const BLOCKED_PATHS = [
  */
 function currentPathPolicy(): PathPolicy {
   return {
-    velaHome: VELA_HOME,
+    velaHome: NOVELFORGE_HOME,
     projectRoot: getCurrentProjectPath(),
     granted: currentGrants(),
     blockedPaths: BLOCKED_PATHS,
     // ⚠️ S9（本行即「移除主目录根」的**单点开关**）：
-    //   改造前 `SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` —— 整个用户主目录可读写。
-    //   现在起边界 = VELA_HOME ∪ 当前项目根 ∪ 主进程对话框签发的授权，其余默认拒绝。
+    //   改造前 `SANDBOX_ROOTS = [NOVELFORGE_HOME, os.homedir()]` —— 整个用户主目录可读写。
+    //   现在起边界 = NOVELFORGE_HOME ∪ 当前项目根 ∪ 主进程对话框签发的授权，其余默认拒绝。
     //   回滚方式：把本行改回 `os.homedir()` 即恢复 S8 的过渡态（行为与改造前等价）。
     //   注意：项目根是 `getCurrentProjectPath()`，与盘符无关 —— 因此「主目录之外的
     //   项目」（如 D:\…）反而因此**修好了**（改造前它连文件树都读不出来）。
@@ -409,19 +409,19 @@ export function registerFSController() {
   })
 
   // ===== Agent 会话归档（~/.novelforge/agent-archive/<id>.json，CCR 持久化层） =====
-  // 渲染进程不持有 VELA_HOME 路径，归档目录由主进程统一定位（同模板/技能/日志惯例）
+  // 渲染进程不持有 NOVELFORGE_HOME 路径，归档目录由主进程统一定位（同模板/技能/日志惯例）
   const archivePath = (id: string): string => {
     const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '') // uuid 防御性清洗，防路径穿越
-    return path.join(VELA_HOME, 'agent-archive', `${safe}.json`)
+    return path.join(NOVELFORGE_HOME, 'agent-archive', `${safe}.json`)
   }
   /** 被压缩对话的原文分卷（B 档第二轮）：与会话 JSON 同目录、不同后缀 */
   const archiveOriginalsPath = (id: string): string => {
     const safe = String(id).replace(/[^a-zA-Z0-9_-]/g, '')
-    return path.join(VELA_HOME, 'agent-archive', `${safe}.originals.json`)
+    return path.join(NOVELFORGE_HOME, 'agent-archive', `${safe}.originals.json`)
   }
 
   guardedHandle('fs:agent-archive-list', async (): Promise<{ id: string; title: string; updatedAt: number }[]> => {
-    const dir = path.join(VELA_HOME, 'agent-archive')
+    const dir = path.join(NOVELFORGE_HOME, 'agent-archive')
     try {
       await fsPromises.mkdir(dir, { recursive: true })
       const entries = await fsPromises.readdir(dir, { withFileTypes: true })
@@ -453,7 +453,7 @@ export function registerFSController() {
 
   guardedHandle('fs:agent-archive-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
     try {
-      const dir = path.join(VELA_HOME, 'agent-archive')
+      const dir = path.join(NOVELFORGE_HOME, 'agent-archive')
       await fsPromises.mkdir(dir, { recursive: true })
       const target = archivePath(id)
       const temp = `${target}.${Date.now()}.tmp`
@@ -488,7 +488,7 @@ export function registerFSController() {
   })
   guardedHandle('fs:agent-archive-original-write', async (_e, id: string, content: string): Promise<{ success: boolean }> => {
     try {
-      const dir = path.join(VELA_HOME, 'agent-archive')
+      const dir = path.join(NOVELFORGE_HOME, 'agent-archive')
       await fsPromises.mkdir(dir, { recursive: true })
       const target = archiveOriginalsPath(id)
       const temp = `${target}.${Date.now()}.tmp`
@@ -514,7 +514,7 @@ export function registerFSController() {
   guardedHandle('fs:agent-result-write', async (_e, content: unknown): Promise<{ success: boolean; path?: string; error?: string }> => {
     try {
       const text = typeof content === 'string' ? content : String(content ?? '')
-      const dir = path.join(VELA_HOME, 'agent-results')
+      const dir = path.join(NOVELFORGE_HOME, 'agent-results')
       await fsPromises.mkdir(dir, { recursive: true })
       const hash = createHash('sha1').update(text).digest('hex').slice(0, 12)
       const target = path.join(dir, `${hash}.txt`)
@@ -538,7 +538,7 @@ export function registerFSController() {
   // ===== 工作流任务输出落盘（~/.novelforge/workflow-output/<runId>/<stepIndex>.txt，M2 CC §三.4） =====
   // 双轨补充通道：渲染层在既有 appendText 100ms 共享 flush 点把流式文本镜像到文件（fd 'w' 直写、
   // 显式字节偏移），内存 step.result 流式渲染不变；文件供崩溃恢复续读 + 尾部轮询。
-  // 渲染进程不持有 VELA_HOME 路径，目录由主进程统一定位（同 agent-archive/agent-results 惯例）。
+  // 渲染进程不持有 NOVELFORGE_HOME 路径，目录由主进程统一定位（同 agent-archive/agent-results 惯例）。
   guardedHandle('fs:workflow-output-append', async (_e, runId: string, stepIndex: number, text: string) => {
     return workflowOutputStore.append(runId, stepIndex, text)
   })

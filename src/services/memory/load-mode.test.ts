@@ -18,7 +18,7 @@ beforeEach(() => {
     if (ch === 'memory:write') return { success: true }
     return null
   })
-  Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 })
 
 describe('changeMemoryLoadMode', () => {

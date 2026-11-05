@@ -16,7 +16,7 @@ import { join } from 'path'
 import { logger } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t } from '../../src/shared/locale'
-import { VELA_HOME } from '../utils/config-utils'
+import { NOVELFORGE_HOME } from '../utils/config-utils'
 
 // ===== 类型定义 =====
 
@@ -113,7 +113,7 @@ class MCPManagerImpl {
 
   /** 获取 MCP 配置文件默认路径 */
   getDefaultConfigPath(): string {
-    return join(VELA_HOME, 'mcp_config.json')
+    return join(NOVELFORGE_HOME, 'mcp_config.json')
   }
 
   /**

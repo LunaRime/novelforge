@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import fs from 'node:fs'
 import path from 'node:path'
 import Database from 'better-sqlite3'
-import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectVelaDir } from '../utils/config-utils'
+import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectDataDir } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
 import { getProjectDb, getCurrentProjectPath } from '../database'
@@ -258,7 +258,7 @@ export function registerProjectController() {
       //   `fs.rmSync(recursive, force)`。改造前只查 existsSync + isDirectory ——
       //   等于「渲染层给什么路径就递归删什么」，可 `rm -rf` 用户主目录下任意目录。
       //   现在要求：① 确实是一个 NovelForge 项目目录（存在项目库）；② 通过路径策略断言。
-      if (!fs.existsSync(path.join(getProjectVelaDir(projectPath), 'vela.db'))) {
+      if (!fs.existsSync(path.join(getProjectDataDir(projectPath), 'vela.db'))) {
         return { success: false, error: t('error.notAProjectFolder') }
       }
       assertPathAllowedForIpc(projectPath, 'delete')
@@ -311,7 +311,7 @@ export function registerProjectController() {
 
   // ===== 项目摘要（当前项目走主连接；历史项目只读打开，不打开项目）=====
   guardedHandle('project:get-summary', async (_event, projectPath: string): Promise<ProjectSummary | null> => {
-    const dbPath = path.join(getProjectVelaDir(projectPath), 'vela.db')
+    const dbPath = path.join(getProjectDataDir(projectPath), 'vela.db')
     if (!fs.existsSync(dbPath)) return null
 
     // 当前已打开的项目：直接用主连接（WAL 多连接只读有 -shm 依赖，

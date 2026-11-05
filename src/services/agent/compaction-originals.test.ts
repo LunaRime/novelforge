@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 /**
  * 分卷存储测试（B 档第二轮 T1）
  *
@@ -38,6 +39,16 @@ beforeEach(() => {
 })
 
 describe('分卷存储（compaction-originals）', () => {
+  it('过滤损坏的原文条目并恢复旧卡片，不因 null 丢弃有效消息', async () => {
+    files.c1 = JSON.stringify({ version: 1, batches: { 1: [null, 3, { content: {} }, {
+      ...msg('m1'), role: 'assistant', content: '', artifacts: [{ type: 'workflow_completed', name: 'Old run' }],
+    }] } })
+    const messages = await readBatchOriginal('c1', 1)
+    expect(messages).toHaveLength(1)
+    expect(messages?.[0].artifacts).toEqual([])
+    expect(messages?.[0].legacyArtifacts?.[0].name).toBe('Old run')
+  })
+
   it('写入后读回', async () => {
     await writeBatchOriginal('c1', 1, [msg('m1')])
     expect((await readBatchOriginal('c1', 1))?.[0].id).toBe('m1')
@@ -111,3 +122,5 @@ describe('deleteBatchOriginals（§7.1-C2 评审 I1：批量删必须一次读-�
     expect(Object.keys(JSON.parse(files['c1']).batches)).toEqual(['2'])
   })
 })
+
+installRendererAgentPorts()

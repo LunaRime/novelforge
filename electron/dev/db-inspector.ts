@@ -8,7 +8,7 @@ import Database from 'better-sqlite3'
 import fs from 'node:fs'
 import path from 'node:path'
 import { getCurrentProjectPath } from '../database'
-import { getProjectVelaDir } from '../utils/config-utils'
+import { getProjectDataDir } from '../utils/config-utils'
 import { isReadOnlySql } from './sql-guard'
 import { redactSecrets } from './ipc-metrics'
 import { t } from '../../src/shared/locale'
@@ -17,7 +17,7 @@ import type { DevDbQueryResult, DevDbSchema, DevDbTable } from '../../src/shared
 function projectDbPath(): string | null {
   const project = getCurrentProjectPath()
   if (!project) return null
-  const file = path.join(getProjectVelaDir(project), 'vela.db')
+  const file = path.join(getProjectDataDir(project), 'vela.db')
   return fs.existsSync(file) ? file : null
 }
 

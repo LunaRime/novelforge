@@ -93,7 +93,7 @@ describe('EditorArea — 记忆文件标签页', () => {
       if (ch === 'memory:write') { writeCalls.push([ch, ...args]); return { success: true } }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke, on: () => () => {}, once: () => {}, send: () => {}, setZoomLevel: () => {}, setZoomFactor: () => {}, getZoomLevel: () => 0 },
       configurable: true,
     })

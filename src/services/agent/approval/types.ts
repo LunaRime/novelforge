@@ -58,7 +58,7 @@ export interface ApprovalRequest {
   toolName: string
   args: Record<string, unknown>
   /** 工具声明的静态属性 */
-  descriptor: { requiresConfirmation: boolean; isReadOnly: boolean }
+  descriptor: { requiresConfirmation: boolean; isReadOnly: boolean; isDestructive?: boolean }
   /** 工具来源：builtin / mcp（参数 schema 未知，不可固化）/ skill */
   source: 'builtin' | 'mcp' | 'skill'
   /** 该项目已固化的规则 */

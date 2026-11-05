@@ -1,3 +1,4 @@
+import { getAgentRuntimePorts } from './runtime-ports'
 /**
  * 意图路由 + / 命令解析
  *
@@ -9,7 +10,6 @@
 
 import { skillRegistry, type LoadedSkill } from './skill-registry'
 import { t } from '../../shared/locale'
-import { useProjectStore } from '../../stores/project-store'
 
 // ===== 类型定义 =====
 
@@ -222,7 +222,7 @@ function flattenReadableFiles(
  * 供 @ 提及选择文件 → 插入路径 → 发送时 read_file 预取内容
  */
 export function searchProjectFiles(query: string, limit = 8): MentionTarget[] {
-  const tree = useProjectStore.getState().fileTree
+  const tree = getAgentRuntimePorts().project.files()
   if (!tree || tree.length === 0) return []
   const q = query.trim().toLowerCase()
   const files = flattenReadableFiles(tree)

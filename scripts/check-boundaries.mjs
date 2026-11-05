@@ -95,9 +95,9 @@ const agentFiles = []
 let agentRefs = 0
 for (const file of walk(join(ROOT, 'src', 'services', 'agent'))) {
   const source = inspectSource(file)
+  agentRefs += source.storeRefs
   if (source.specifiers.some(s => STORE_SPECIFIER.test(s))) {
     agentFiles.push(file)
-    agentRefs += source.storeRefs
   }
 }
 

@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * count_characters — 文本字数统计工具
  *
@@ -7,12 +8,11 @@
  * - chapter_number：统计某章最新草稿
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 import { computeTextStats, formatTextStats } from '../../text-stats'
 
-export const countCharactersTool = buildAgentTool({
+export function createCountCharactersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'count_characters',
   description: t('tool.countDesc'),
   source: 'builtin',
@@ -49,7 +49,7 @@ export const countCharactersTool = buildAgentTool({
 
     // 按章节号读取最新草稿统计
     if (chapterNum !== undefined) {
-      const project = useProjectStore.getState().currentProject
+      const project = ports.project.current()
       if (!project) {
         return { success: false, content: '', error: t('error.noProject') }
       }
@@ -83,3 +83,6 @@ export const countCharactersTool = buildAgentTool({
     }
   },
 })
+}
+
+export const countCharactersTool = createCountCharactersTool()

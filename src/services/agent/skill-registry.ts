@@ -1,3 +1,4 @@
+import { getAgentRuntimePorts } from './runtime-ports'
 /**
  * Skill 注册中心
  *
@@ -11,7 +12,6 @@
  */
 
 import { ipc } from '../ipc-client'
-import { useProjectStore } from '../../stores/project-store'
 import { toolRegistry } from './tool-registry'
 import { t, type TextKey } from '../../shared/locale'
 import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
@@ -184,7 +184,7 @@ class SkillRegistryImpl {
     }
 
     // 加载项目 Skill（项目/.novelforge/skills/）
-    const project = useProjectStore.getState().currentProject
+    const project = getAgentRuntimePorts().project.current()
     if (project) {
       const projectSkillsDir = `${project.path}/${DIR_VELA_INTERNAL}/skills`
       const projectCount = await this.loadFromDirectory(projectSkillsDir, 'project')

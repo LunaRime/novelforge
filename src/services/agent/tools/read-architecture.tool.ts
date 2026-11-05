@@ -1,13 +1,13 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_architecture — 读取故事架构文件
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 
-export const readArchitectureTool = buildAgentTool({
+export function createReadArchitectureTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_architecture',
   description: t('tool.readArchDesc'),
   source: 'builtin',
@@ -22,7 +22,7 @@ export const readArchitectureTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -69,3 +69,6 @@ export const readArchitectureTool = buildAgentTool({
     }
   },
 })
+}
+
+export const readArchitectureTool = createReadArchitectureTool()

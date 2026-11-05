@@ -1,4 +1,5 @@
-import type { AgentMessage, AgentConversation, RewoundBranch } from '../../stores/agent-store'
+import { decodeArchivedMessageEvents, decodeArchivedEvents } from './archive-events'
+import type { AgentMessage, AgentConversation, RewoundBranch } from '../../shared/agent-conversation'
 import { toolRegistry } from './tool-registry'
 import { estimateTokens } from './token-budget'
 import { sanitizeMessageList } from './conversation-recovery'
@@ -188,12 +189,12 @@ export function parseArchive(raw: string): AgentConversation | null {
             status: s.status === 'running' ? 'cancelled' : s.status,
             error: s.status === 'running' ? t('subagent.interrupted') : s.error,
             toolCalls: Array.isArray(s.toolCalls) ? s.toolCalls : [],
-            artifacts: Array.isArray(s.artifacts) ? s.artifacts : [],
+            artifacts: decodeArchivedEvents(s.artifacts).artifacts,
             allowedTools: Array.isArray(s.allowedTools) ? s.allowedTools : [],
             // 2026-10-17（核查反例 G）：旧版 runner 泄漏的 DSML 可能落在 result（不在 messages）；
             // result 会经 formatSubAgentResult 幂等重放进父上下文，恢复时必须同口径净化。
             result: typeof s.result === 'string' ? stripDsmlMarkup(s.result) : '',
-            messages: sanitizeMessageList(s.messages).slice(-MAX_SUBAGENT_MESSAGES),
+            messages: sanitizeMessageList(s.messages.map(decodeArchivedMessageEvents)).slice(-MAX_SUBAGENT_MESSAGES),
           }))
           .sort((a, b) => b.startedAt - a.startedAt)
           .slice(0, MAX_SUB_SESSIONS)
@@ -201,9 +202,9 @@ export function parseArchive(raw: string): AgentConversation | null {
     // C4 会话恢复净化：形状防御之后再净化（四处消息数组同口径——CC §三.8 对齐）
     return {
       ...data,
-      messages: sanitizeMessageList(messages),
-      compressed: compressed.map(b => ({ ...b, original: sanitizeMessageList(b.original) })),
-      rewound: rewound.map(e => ({ ...e, messages: sanitizeMessageList(e.messages) })),
+      messages: sanitizeMessageList(messages.map(decodeArchivedMessageEvents)),
+      compressed: compressed.map(b => ({ ...b, original: sanitizeMessageList(b.original.map(decodeArchivedMessageEvents)) })),
+      rewound: rewound.map(e => ({ ...e, messages: sanitizeMessageList(e.messages.map(decodeArchivedMessageEvents)) })),
       subSessions,
     } as AgentConversation
   } catch {

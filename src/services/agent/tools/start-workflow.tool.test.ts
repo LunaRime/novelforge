@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { startWorkflowTool } from './start-workflow.tool'
@@ -177,3 +178,5 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
     expect(r2.error).toBe(t('tool.wfNeedChapter').replace('{workflow}', 'generate_draft'))
   })
 })
+
+installRendererAgentPorts()

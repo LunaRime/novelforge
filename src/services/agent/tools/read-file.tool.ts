@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_file — 读取文件内容
  * - 相对路径：项目内文件（validatePath 防越界）
@@ -9,9 +10,7 @@
  * 无 offset/limit 的全量读路径保持原样（行为兼容：读去重桩 / applyReadWindow 截断提示）。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 import { validatePath } from './safe-path'
 import type { ReadFileRangeOptions } from '../../../shared/ipc-channels'
 import { isVelaProtocol, readVelaContent } from '../../vela-protocol'
@@ -110,7 +109,8 @@ function parseReadRange(args: Record<string, unknown>): {
   }
 }
 
-export const readFileTool = buildAgentTool({
+export function createReadFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_file',
   description: t('tool.readFileDesc'),
   source: 'builtin',
@@ -137,11 +137,11 @@ export const readFileTool = buildAgentTool({
     const filePath = args.file_path as string
     // offset/limit 解析必须先于去重短路判断（P0-1 契约：短路豁免条件 = !args.offset && !args.limit）
     const { windowed, offset, limit, rangeOptions } = parseReadRange(args)
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
-    const resolvedPath = resolveAgentFilePath(filePath)
+    const resolvedPath = resolveAgentFilePath(filePath, ports)
 
     // 项目外文件：用户显式提供的绝对路径（"添加外部文件"对话框选择），
     // 走专用只读通道 fs:read-external-file——fs:read-file 有沙箱（项目/主目录内），
@@ -216,3 +216,6 @@ export const readFileTool = buildAgentTool({
     return { success: true, content: composeWindowedRead(String(result.content ?? ''), result, offset, limit) }
   },
 })
+}
+
+export const readFileTool = createReadFileTool()

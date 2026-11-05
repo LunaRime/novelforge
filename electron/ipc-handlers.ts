@@ -1,4 +1,4 @@
-import { ensureVelaHome, VELA_HOME } from './utils/config-utils'
+import { ensureVelaHome, NOVELFORGE_HOME } from './utils/config-utils'
 import { logger } from './utils/logger'
 import { t } from '../src/shared/locale'
 
@@ -65,5 +65,5 @@ export function registerIPCHandlers() {
   // L4：MCP 桥（11 个 mcp: 通道）——并入唯一入口，不再由 main.ts 单独注册
   registerMCPHandlers()
 
-  logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', VELA_HOME))
+  logger.info('IPC', t('log.ipc.allControllersRegistered').replace('{path}', NOVELFORGE_HOME))
 }

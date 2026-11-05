@@ -313,7 +313,7 @@ export default function App() {
       if (!latest) return
       const shortTitle = latest.title.replace(/^[^\s]+\s/, '')
       // D5：对话内卡片为主——往活跃会话追加 workflow_completed 产物（无活跃会话时静默 no-op）
-      useAgentStore.getState().appendWorkflowCompletion(latest.title, payload.status ?? 'success')
+      useAgentStore.getState().appendWorkflowCompletion(latest.id, latest.title, payload.status ?? 'success')
       // 线③ 第 3 条：错误面统一——失败弹失败提示（此前无论成败都弹「✅ 完成」，误导用户）
       if (payload.status === 'failed') {
         toast.error(`「${shortTitle}」${t('agent.taskFailed')}`)

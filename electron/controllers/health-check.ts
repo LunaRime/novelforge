@@ -60,7 +60,7 @@ function checkDatabase(): HealthCheckResult {
 function checkDiskSpace(projectPath?: string): HealthCheckResult {
   try {
     // 默认检查 ~/.novelforge 配置目录
-    const targetPath = projectPath || process.env.VELA_HOME || ''
+    const targetPath = projectPath || process.env.NOVELFORGE_HOME || ''
     if (!targetPath || !fs.existsSync(targetPath)) {
       // 无法确定路径时返回 neutral
       return { ok: true, message: t('health.diskSkippedNoPath') }

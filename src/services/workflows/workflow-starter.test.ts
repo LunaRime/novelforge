@@ -5,7 +5,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 
-// ---- ipc 通道路由（window.velaAPI.invoke——参照 agent-store.test.ts:10-28/:59 模式）----
+// ---- ipc 通道路由（window.novelforgeAPI.invoke——参照 agent-store.test.ts:10-28/:59 模式）----
 // 默认全部为空/缺失；各用例按需覆盖。未路由通道（如 db:post-process-get-latest-run）返回 null——
 // 后处理状态文件不存在视为旧版定稿，兼容放行（guardChapterWriting 行为）
 let blueprintGetAll: unknown[]
@@ -49,7 +49,7 @@ beforeEach(() => {
   draftListResult = []
   draftGetFinalizedResult = null
   draftMetaResult = null
-  Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
   // 项目 fixture（guardChapterWriting / readPostProcessStatus 读取 currentProject）
   useProjectStore.setState({
     currentProject: {

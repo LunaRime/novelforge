@@ -32,7 +32,7 @@ function checkChannel(channel: string, allowed: readonly string[]): void {
   }
 }
 
-contextBridge.exposeInMainWorld('velaAPI', {
+contextBridge.exposeInMainWorld('novelforgeAPI', {
   // ===== 双向请求/响应（invoke/handle） =====
   /** 调用主进程并等待结果 */
   invoke: (channel: string, ...args: unknown[]) => {

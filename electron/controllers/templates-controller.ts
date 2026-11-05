@@ -7,11 +7,11 @@
  */
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { VELA_HOME } from '../utils/config-utils'
+import { NOVELFORGE_HOME } from '../utils/config-utils'
 import { validateCharacterTemplate } from '../../src/services/template-validator'
 import { guardedHandle } from '../security/ipc-guard'
 
-const TEMPLATES_DIR = path.join(VELA_HOME, 'templates')
+const TEMPLATES_DIR = path.join(NOVELFORGE_HOME, 'templates')
 
 /** 模板元信息（列表返回，不含 data） */
 export interface TemplateInfo {

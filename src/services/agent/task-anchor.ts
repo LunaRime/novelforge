@@ -13,7 +13,7 @@
  * - **只列失败的副作用回执**作为"未完成"：成功的写入不需要提醒（模型已知），失败的写入才是
  *   "打算做但没做"的可信来源（同 target 只留最新，避免了"失败后又成功"的误报）。
  */
-import type { AgentMessage } from '../../stores/agent-store'
+import type { AgentMessage } from '../../shared/agent-conversation'
 import { extractSideEffectReceipts } from './archive-codec'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
 import { t } from '../../shared/locale'

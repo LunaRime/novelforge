@@ -1,3 +1,4 @@
+import { getAgentRuntimePorts } from './runtime-ports'
 /**
  * Agent 智能上下文构建器
  *
@@ -11,10 +12,7 @@
  * （C 档第一轮，见 assembleFinalPrompt 注释）。
  */
 
-import { useProjectStore } from '../../stores/project-store'
-import { useEditorStore } from '../../stores/editor-store'
-import { useWorkflowStore } from '../../stores/workflow-store'
-import { useAgentStore, type AgentMode } from '../../stores/agent-store'
+import type { AgentMode } from '../../shared/agent-conversation'
 import { t, getCurrentLocale, localeVariants, type TextKey } from '../../shared/locale'
 import { appendOutputLanguage } from '../prompt-templates'
 import { ipc } from '../ipc-client'
@@ -278,7 +276,7 @@ export function buildAgentSystemSegments(
 
   // ===== M1 会话摘要节（CCR 滚动摘要，自动生成非用户输入；M2 作品记忆 P1 追加于此） =====
   const memoryParts: string[] = []
-  const activeConv = useAgentStore.getState().getActiveConversation()
+  const activeConv = getAgentRuntimePorts().conversation.active()
   const summary = activeConv?.rollingSummary
   // B7 失效语义：历史已变动（rewind/恢复原文/编辑消息）时，旧摘要与当前历史不符 ——
   // 宁可不注入，也不能让模型拿着过期摘要当事实
@@ -569,7 +567,7 @@ export async function buildAgentSystemSegmentsAsync(
   // 面板预览（AgentConversation 的 useAsyncSegments）不传 userMessage → 锚点为空串（见接口注释）。
   const taskAnchor = buildTaskAnchor({
     userMessage,
-    messages: useAgentStore.getState().getActiveConversation()?.messages ?? [],
+    messages: getAgentRuntimePorts().conversation.active()?.messages ?? [],
   })
   const segments = [...baseSegments, ...layers.segments]
   if (taskAnchor) {
@@ -649,7 +647,7 @@ ${t('engine.identityRulePlan')}`
  * （C 档第二轮起 export：子 agent 的 scoped 提示词也要项目事实）
  */
 export function buildL0ProjectContext(): string | null {
-  const project = useProjectStore.getState().currentProject
+  const project = getAgentRuntimePorts().project.current()
   if (!project) return null
 
   // 旧项目数据库可能缺 novelConfig（类型上非可选），运行时兜底避免崩溃
@@ -710,7 +708,7 @@ function buildL1EditorContext(budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): s
   const parts: string[] = []
 
   // 当前打开的编辑器 Tab
-  const editorState = useEditorStore.getState()
+  const editorState = getAgentRuntimePorts().editor.snapshot()
   if (editorState.tabs.length > 0) {
     const activeTab = editorState.tabs.find(tab => tab.id === editorState.activeTabId)
     const tabSummaries = editorState.tabs.slice(0, 5).map(tab => {
@@ -741,7 +739,7 @@ function buildL1EditorContext(budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): s
   }
 
   // 当前工作流状态
-  const workflowState = useWorkflowStore.getState()
+  const workflowState = getAgentRuntimePorts().workflows.snapshot()
   if (workflowState.hasActiveRun()) {
     const run = workflowState.currentRun
     if (run) {

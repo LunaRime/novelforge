@@ -31,7 +31,7 @@ export function renderLog(level: RenderLogLevel, source: string, message: string
   try {
     ipc.invoke('log:write', level, source, message).catch(() => { /* 主进程侧失败静默 */ })
   } catch {
-    // 测试/浏览器模式（velaAPI 未注入）时静默
+    // 测试/浏览器模式（novelforgeAPI 未注入）时静默
   }
 }
 

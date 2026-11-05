@@ -382,7 +382,7 @@ export interface FileChannels {
   },
   /**
    * 工作流任务输出落盘（M2，CC 对比 §三.4）——渲染层在既有 100ms 共享 flush 点把步骤流式
-   * 文本镜像到 `{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`（补充通道，双轨）。
+   * 文本镜像到 `{NOVELFORGE_HOME}/workflow-output/<runId>/<stepIndex>.txt`（补充通道，双轨）。
    * 主进程 open 'w'（截断）+ 显式字节偏移追加；同 key 串行队列保证字节序。
    */
   'fs:workflow-output-append': {

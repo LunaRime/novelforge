@@ -55,7 +55,7 @@ describe('PublicationGroup — 可供性（2026-09-27）', () => {
       if (ch === 'db:publication-list') return [ENTRY]
       return null
     })
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke, on: () => () => {}, once: () => {}, send: () => {}, setZoomLevel: () => {}, setZoomFactor: () => {}, getZoomLevel: () => 0 },
       configurable: true,
     })

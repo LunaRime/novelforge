@@ -3,22 +3,21 @@
  *
  * 将 Agent 的原始输出经过一系列处理步骤，提取结构化信息：
  * 1. ThinkingDetectionStep — 检测并折叠 <think> 标签
- * 2. ArtifactExtractionStep — 扫描输出中的结构化产物
- * 3. SummaryGenerationStep — 提取内容摘要
- * 4. CodeBlockCleanupStep — 规范化 Markdown 代码块
+ * 2. SummaryGenerationStep — 提取内容摘要
+ * 3. CodeBlockCleanupStep — 规范化 Markdown 代码块
+ * 运行事实只来自成功工具；模型文字不会推断为已持久化的改动。
  */
 
 /* eslint-disable @typescript-eslint/no-unused-vars */
 
-import type { ToolArtifact } from './tool-registry'
+import type { RuntimeEvent } from '../../core/domain/runtime-event'
 import type { LLMMessage } from './agent-engine'
-import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
 
 /** 后处理上下文 */
 export interface PostProcessContext {
-  artifacts: ToolArtifact[]
+  artifacts: RuntimeEvent[]
   messages: LLMMessage[]
   modelId: string
 }
@@ -32,7 +31,7 @@ export interface PostProcessResult {
   /** 输出的摘要（前 200 字符） */
   summary: string
   /** 从输出中提取的产物 */
-  extractedArtifacts: ToolArtifact[]
+  extractedArtifacts: RuntimeEvent[]
 }
 
 /** 后处理步骤接口 */
@@ -72,65 +71,6 @@ const ThinkingDetectionStep: PostProcessStep = {
         thinkingContent: thinkingContent.trim(),
         hadThinking: thinkingContent.length > 0,
       },
-    }
-  },
-}
-
-/** 扫描输出中的结构化产物 */
-const ArtifactExtractionStep: PostProcessStep = {
-  name: 'artifact-extraction',
-  process: async (input, _) => {
-    const extracted: ToolArtifact[] = []
-
-    // 检测可能含有的蓝图/章节标记
-    // 收紧规则：必须位于行首，且为"第N章 + 冒号/空格 + 短标题"格式，
-    // 避免把对话中的"第 2 章的开头节奏较慢"误判为产物（此前无行首锚定 + 无长度限制，高频误报）
-    // ⚠️ M 级修复：第二模式排除「的/了/是/在」等语气词开头——"第2章 的开头节奏较慢"
-    //    曾被误判为章节产物（元数据幻觉）
-    const chapterMatch: string[] = [
-      ...(input.match(/^第(\d+)章\s*[:：]\s*(.+)$/gm) ?? []),
-      ...(input.match(/^第(\d+)章\s+[^\n。，！？的的了是在]{2,40}$/gm) ?? []),
-    ]
-    if (chapterMatch.length > 0) {
-      const seen = new Set<number>()
-      for (const cm of chapterMatch) {
-        const numMatch = cm.match(/第(\d+)章/)
-        if (numMatch) {
-          const num = parseInt(numMatch[1], 10)
-          if (seen.has(num)) continue // 同一章节只提取一次
-          seen.add(num)
-          extracted.push({
-            type: 'blueprint_generated',
-            name: cm.trim(),
-            summary: `章节蓝图: ${cm.trim()}`,
-            metadata: { chapterNumber: num },
-            timestamp: Date.now(),
-          })
-        }
-      }
-      // 限制最多提取 10 章，避免产物爆炸
-      if (extracted.length > 10) {
-        extracted.splice(10)
-      }
-    }
-
-    // 检测审稿报告标记
-    if (
-      input.includes('审稿报告') ||
-      input.includes('review report') ||
-      input.includes('一致性审查')
-    ) {
-      extracted.push({
-        type: 'review_completed',
-        name: t('agent.reviewReportArtifact'),
-        summary: t('agent.reviewDoneSummary'),
-        timestamp: Date.now(),
-      })
-    }
-
-    return {
-      output: input,
-      metadata: { extractedArtifacts: extracted },
     }
   },
 }
@@ -192,7 +132,6 @@ const CodeBlockCleanupStep: PostProcessStep = {
 export class OutputPostProcessor {
   private steps: PostProcessStep[] = [
     ThinkingDetectionStep,
-    ArtifactExtractionStep,
     SummaryGenerationStep,
     CodeBlockCleanupStep,
   ]
@@ -248,14 +187,12 @@ export class OutputPostProcessor {
 
     const thinkingContent = (metadata.thinkingContent as string) || ''
     const summary = (metadata.summary as string) || currentOutput.slice(0, 200)
-    const extractedArtifacts =
-      (metadata.extractedArtifacts as ToolArtifact[]) || []
 
     return {
       cleanedOutput: currentOutput,
       thinkingContent,
       summary,
-      extractedArtifacts: [...context.artifacts, ...extractedArtifacts],
+      extractedArtifacts: [...context.artifacts],
     }
   }
 }

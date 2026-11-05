@@ -16,7 +16,7 @@ import { skillRegistry } from '../services/agent/skill-registry'
 import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
 import { evaluateApproval, loadApprovalRules, appendApprovalRule, ruleFromApproval, type ApprovalDecision } from '../services/agent/approval'
-import type { ToolArtifact } from '../services/agent/tool-registry'
+import type { RuntimeEvent } from '../core/domain/runtime-event'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
 import { retrieveContextForQuery, DEFAULT_RAG_CONFIG, getRAGSummary } from '../services/agent/rag-context-provider'
 import { calculateCost } from '../services/llm/prompt-cache'
@@ -48,89 +48,8 @@ import type { LLMGenerateFn } from '../services/agent/agent-engine'
 
 // ===== 类型定义 =====
 
-/** 对话模式：Planning（深度推理）/ Fast（快速执行） */
-/** 思考等级（6 级）：quick → swift → balanced → reflective → deep → max */
-export type AgentMode = 'quick' | 'swift' | 'balanced' | 'reflective' | 'deep' | 'max'
-
-/** 单条消息 */
-export interface AgentMessage {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  createdAt: number
-  /** 是否正在流式生成中 */
-  streaming?: boolean
-  /** Tool 调用信息（Agent 回复时） */
-  toolCalls?: ToolCallInfo[]
-  /** 产物列表（Agent 创建/修改的文件、触发的工作流等） */
-  artifacts?: ToolArtifact[]
-  /** 用户反馈（2026-09-22）：对模型回复满意/不满意；再次点击同一档即取消。随会话一起落盘 */
-  feedback?: 'up' | 'down'
-  /** Turn 级错误（线②）：有值 = 该 assistant 消息是失败回执，渲染为专用错误行 */
-  error?: { message: string; code?: string }
-}
-
-/** fork/rewind 分支：rewind 归档（可恢复） */
-export interface RewoundBranch {
-  messageId: string
-  messages: AgentMessage[]
-  rewoundAt: number
-}
-
-/**
- * 本轮**实发口径**观测（P0-1 面板闭环）：预算条明细里「面板 X · 实发 Y」的数据源。
- * 仅内存态（不随 archive 落盘——体积与恢复语义都不值得），切换会话 / 历史变更时清空。
- */
-export interface SendObservation {
-  /** 实发历史 token（发送前按预算裁剪后的真实值） */
-  historySentTokens: number
-  /** 同一时刻面板口径的历史 token（裁剪前全量；与实发不等时 UI 分列展示） */
-  panelHistoryTokens: number
-  /** 前缀记账（与上轮比较；无上轮基线时缺省——首轮不渲染该行） */
-  prefix?: { changed: boolean; sharedChars: number }
-  at: number
-}
-
-/** 单个会话 */
-export interface AgentConversation {
-  id: string
-  /** 会话标题（取自第一条用户消息前 20 个字符） */
-  title: string
-  messages: AgentMessage[]
-  createdAt: number
-  updatedAt: number
-  /**
-   * 会话创建时的模式快照——**仅归档兼容**（旧 archive 仍带此字段），
-   * 运行时不再读取：路由与 system prompt 由全局思考等级决定。
-   * @deprecated 待旧归档彻底淘汰后移除
-   */
-  mode?: AgentMode
-  /** 当前会话使用的模型 ID（null 表示使用默认） */
-  modelId: string | null
-  /** 角色试演：绑定的角色名（Agent 以该角色身份回复；无此字段为普通会话） */
-  roleplayCharacter?: string
-  /** CCR：已压缩批次（保留 2-3 代原文，供压缩卡片展开恢复） */
-  compressed?: CompressedBatch[]
-  /** CCR：滚动摘要（M1，注入 system 尾部标注节） */
-  rollingSummary?: string
-  /** C 档第二轮：子 agent 会话（派发转录；随归档落盘，/clear 一并清空） */
-  subSessions?: SubAgentSession[]
-  /** B7 失效语义：历史已变动，该摘要与当前历史不符 —— 不注入上下文 */
-  rollingSummaryInvalidated?: boolean
-  /** 创建时项目快照（仅展示与恢复提示，P0 不做按快照注入） */
-  projectPath?: string
-  projectName?: string
-  /** fork 自哪个会话（无此字段为根会话） */
-  parentId?: string
-  /** fork 起点消息 id（该消息及之前的历史已复制进新会话） */
-  forkMessageId?: string
-  /** rewind 归档：被截断消息，可 restoreRewound 恢复 */
-  rewound?: RewoundBranch[]
-  /** 归档（2026-09-22）：默认从历史列表隐藏，可切换显示 */
-  archived?: boolean
-  /** 置顶（2026-09-22）：排在同工作区（同项目）最前 */
-  pinned?: boolean
-}
+import type { AgentMessage, RewoundBranch, SendObservation, AgentConversation } from '../shared/agent-conversation'
+export type { AgentMode, AgentMessage, RewoundBranch, SendObservation, AgentConversation } from '../shared/agent-conversation'
 
 // ===== Store 状态接口 =====
 
@@ -224,7 +143,7 @@ interface AgentState {
   runSubAgentTask: (input: { description: string; prompt?: string; tools?: string[] }) => Promise<{
     text: string
     ok: boolean
-    artifacts?: ToolArtifact[]
+    artifacts?: RuntimeEvent[]
   }>
   /** 取消某个子 agent（只中止它，不取消父） */
   cancelSubAgent: (sessionId: string) => void
@@ -269,7 +188,7 @@ interface AgentState {
   /** 设置某条消息的反馈（满意/不满意）；再次传入相同值即取消该反馈 */
   setMessageFeedback: (messageId: string, feedback: 'up' | 'down') => void
   /** 线② 2b D5：工作流完成回执——往活跃会话追加一条 workflow_completed 产物消息（对话内卡片为主） */
-  appendWorkflowCompletion: (title: string, status: 'success' | 'failed') => void
+  appendWorkflowCompletion: (runId: string, title: string, status: 'success' | 'failed') => void
 }
 
 // ===== 工具函数 =====
@@ -1169,7 +1088,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             const cost = usage && model
               ? calculateCost(model, usage.promptTokens, usage.completionTokens, (usage.cachedTokens ?? 0) > 0).totalCost
               : 0
-            await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('db:log-llm-call', {
+            await (window as unknown as { novelforgeAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).novelforgeAPI.invoke('db:log-llm-call', {
               model_id: mid,
               model_name: model?.name ?? model?.modelName ?? '',
               purpose: 'agent',
@@ -1191,7 +1110,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           // 记录失败日志
           const model = llmStore.models.find(m => m.id === mid)
           try {
-            await (window as unknown as { velaAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).velaAPI.invoke('db:log-llm-call', {
+            await (window as unknown as { novelforgeAPI: { invoke: (ch: string, ...args: unknown[]) => Promise<unknown> } }).novelforgeAPI.invoke('db:log-llm-call', {
               model_id: mid,
               model_name: model?.name ?? model?.modelName ?? '',
               purpose: 'agent',
@@ -1218,7 +1137,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       set({ activeRequestId: assistantMsg.id })
 
       // 引擎依赖注入（P0-1 写盘引用）：真实 IPC 实现；失败回退由引擎降级（截断注入）。
-      // 走 ipc.invoke（带 30s 超时，同 fs:agent-archive-* 调用惯例）——裸 window.velaAPI.invoke
+      // 走 ipc.invoke（带 30s 超时，同 fs:agent-archive-* 调用惯例）——裸 window.novelforgeAPI.invoke
       // 无超时保护，写盘挂起会让 ReAct 循环该轮永卡；超时 reject → catch → {success:false} → 引擎降级
       const agentDeps: AgentEngineDeps = {
         writeResult: async (content) => {
@@ -1304,6 +1223,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
               descriptor: {
                 requiresConfirmation: tool?.requiresConfirmation ?? true,
                 isReadOnly: tool?.isReadOnly ?? false,
+                isDestructive: tool?.isDestructive ?? false,
               },
               source: toolCall.toolName.startsWith('mcp__') ? 'mcp'
                 : toolCall.toolName.startsWith('skill__') ? 'skill' : 'builtin',
@@ -1514,8 +1434,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     if (!conv) return { text: t('subagent.noActiveConversation'), ok: false }
     const allowed = resolveSubAgentTools(tools)
     const taskId = computeSubAgentTaskRef(conv.id, description, allowed)
-    // 顺序执行（spec §1.2）：引擎会把连续只读工具并发成批（task 的 requiresConfirmation:false
-    // ⇒ isReadOnly:true），故模型同轮发两个 task 会**真并发** —— 同指纹的会互相覆盖快照、
+    // 顺序执行（spec §1.2）：M3 通过 isConcurrencySafe:false 将 task 排除并发批；
+    // 这里仍防御来自其他调用方的重入 —— 同指纹的会互相覆盖快照、
     // 先完成的会把后者从 activeSubAgents 删掉（取消失灵）；异指纹的会让单槽审批卡互相覆盖
     // （第二张卡被第一张的超时清掉 = 再也无法批准）。故此处单飞。
     if (activeSubAgents.has(taskId)) {
@@ -1628,6 +1548,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       descriptor: {
         requiresConfirmation: tool?.requiresConfirmation ?? true,
         isReadOnly: tool?.isReadOnly ?? false,
+        isDestructive: tool?.isDestructive ?? false,
       },
       source: toolCall.toolName.startsWith('mcp__') ? 'mcp'
         : toolCall.toolName.startsWith('skill__') ? 'skill' : 'builtin',
@@ -1943,7 +1864,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     get().persistCurrent(activeConversationId)
   },
 
-  appendWorkflowCompletion: (title, status) => {
+  appendWorkflowCompletion: (runId, title, status) => {
     // 线② 2b D5：工作流完成回执（对话内卡片为主）。无活跃会话（自动化 headless）时静默 no-op——
     // 该场景无对话上下文可挂卡，完成通知仍由 App.tsx 的 ActionToast 兜底。
     const { conversations, activeConversationId } = get()
@@ -1955,7 +1876,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       role: 'assistant',
       content: '',
       createdAt: Date.now(),
-      artifacts: [{ type: 'workflow_completed', name: title, metadata: { status } }],
+      artifacts: [{ type: 'workflow.progressed', runId, step: status === 'failed' ? 'failed' : 'completed', pct: 100, name: title, metadata: { status } }],
     }
     set({
       conversations: conversations.map(c =>

@@ -1,16 +1,16 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * write_file — 写入或修改项目文件
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 import { isChapterWritePath, isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 import { isVelaProtocol, VELA } from '../../vela-protocol'
 import { resolveAgentFilePath } from '../agent-file-resolver'
 
-export const writeFileTool = buildAgentTool({
+export function createWriteFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'write_file',
   description: t('tool.writeFileDesc'),
   source: 'builtin',
@@ -30,6 +30,7 @@ export const writeFileTool = buildAgentTool({
   },
   requiresConfirmation: true,
   isReadOnly: false,
+  isDestructive: true,
   execute: async (args) => {
     const filePath = args.file_path as string
     const content = args.content as string
@@ -38,11 +39,11 @@ export const writeFileTool = buildAgentTool({
       return { success: false, content: '', error: t('error.missingFilePathContent') }
     }
 
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
-    const resolvedPath = resolveAgentFilePath(filePath)
+    const resolvedPath = resolveAgentFilePath(filePath, ports)
 
     if (isChapterWritePath(resolvedPath)) {
       return { success: false, content: '', error: t('tool.chapterWorkflowRequired') }
@@ -80,7 +81,10 @@ export const writeFileTool = buildAgentTool({
     return {
       success: true,
       content: t('tool.fileWritten').replace('{path}', filePath).replace('{length}', String(content.length)),
-      artifacts: [{ type: 'file_modified', path: pathCheck.fullPath, name: filePath }],
+      artifacts: [{ type: 'document.changed', id: pathCheck.fullPath, path: pathCheck.fullPath, name: filePath }],
     }
   },
 })
+}
+
+export const writeFileTool = createWriteFileTool()

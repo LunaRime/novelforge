@@ -1,7 +1,7 @@
 import { BrowserWindow, shell } from 'electron'
 import fs from 'node:fs'
 import path from 'node:path'
-import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, VELA_HOME } from '../utils/config-utils'
+import { readJsonFile, writeJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG, NOVELFORGE_HOME } from '../utils/config-utils'
 import { logger, LogLevel, LogEnvironment, LOG_DIRS, getLogPathFor } from '../utils/logger'
 import { safeErrorMessage } from '../utils/error-utils'
 import { t, setCurrentLocale, type SupportedLocale } from '../../src/shared/locale'
@@ -67,7 +67,7 @@ export function registerConfigController() {
 
   /** 获取 ~/.novelforge 路径 */
   guardedHandle('config:get-vela-home', async () => {
-    return VELA_HOME
+    return NOVELFORGE_HOME
   })
 
   /** 同步 UI 语言到主进程（主进程对话框/菜单用 t() 读取当前 locale） */

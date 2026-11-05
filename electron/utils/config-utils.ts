@@ -4,9 +4,9 @@ import os from 'node:os'
 import type { GlobalConfig, LocalEmbeddingConfig, ProviderAccount } from '../../src/shared/ipc-channels'
 import { DEFAULT_THINKING_LEVEL } from '../../src/shared/thinking-level'
 
-export const VELA_HOME = path.join(os.homedir(), '.novelforge')
+export const NOVELFORGE_HOME = path.join(os.homedir(), '.novelforge')
 
-/** 项目内运行时数据目录名（与 VELA_HOME 同步改名：.vela → .novelforge） */
+/** 项目内运行时数据目录名（与 NOVELFORGE_HOME 同步改名：.vela → .novelforge） */
 export const PROJECT_VELA_DIR = '.novelforge'
 
 /** 目录内容是否仅含 .log 文件（含空目录）——日志是应用自身副产物
@@ -20,7 +20,7 @@ function isLogsOnlyDir(dir: string): boolean {
   }
 }
 
-/** 应用在 VELA_HOME 下自动创建的运行时目录（空建副产物）：
+/** 应用在 NOVELFORGE_HOME 下自动创建的运行时目录（空建副产物）：
  *  ensureVelaHome 产物 prompts/ + skills:list 空建 skills/ + templates:list 空建 templates/
  *  + agent-archive-list/write 空建 agent-archive/（logs 单独处理，见下） */
 const AUTO_CREATED_DIRS = ['prompts', 'skills', 'templates', 'agent-archive']
@@ -80,7 +80,7 @@ function isAutoCreatedHome(dir: string): boolean {
  *  Win32 目录 rename 到已存在目录会 EPERM；非 auto 形态（含用户数据）绝不删除 */
 export async function migrateLegacyDirs(): Promise<void> {
   const oldHome = path.join(os.homedir(), '.vela')
-  const newHome = VELA_HOME
+  const newHome = NOVELFORGE_HOME
   if (fs.existsSync(oldHome) && !fs.existsSync(GLOBAL_CONFIG_PATH)) {
     // Win32：目录 rename 到已存在目录会 EPERM——重试前识别并清理新目录树
     // （auto 形态：ensureVelaHome 空建产物 + skills/templates/agent-archive 空建 + 日志副产物）；
@@ -103,7 +103,7 @@ export async function migrateLegacyDirs(): Promise<void> {
 /** 项目库目录：优先 .novelforge；旧 .vela 存在且新目录不存在时惰性迁移（P0-6：覆盖未打开项目的
  *  跨项目聚合直开点——activity/usage 只读扫 B/C 项目时同样触发迁移，不再静默漏读）；
  *  迁移失败回退旧路径（双路径兜底，数据不丢） */
-export function getProjectVelaDir(projectPath: string): string {
+export function getProjectDataDir(projectPath: string): string {
   const newDir = path.join(projectPath, PROJECT_VELA_DIR)
   if (fs.existsSync(newDir)) return newDir
   const oldDir = path.join(projectPath, '.vela')
@@ -121,9 +121,9 @@ export function getProjectVelaDir(projectPath: string): string {
 
 export function ensureVelaHome() {
   const dirs = [
-    VELA_HOME,
-    path.join(VELA_HOME, 'prompts'),
-    path.join(VELA_HOME, 'logs'),
+    NOVELFORGE_HOME,
+    path.join(NOVELFORGE_HOME, 'prompts'),
+    path.join(NOVELFORGE_HOME, 'logs'),
   ]
   for (const dir of dirs) {
     if (!fs.existsSync(dir)) {
@@ -161,10 +161,10 @@ export function readJsonFile<T>(filePath: string, fallback: T): T {
     if (fs.existsSync(filePath)) {
       return JSON.parse(fs.readFileSync(filePath, 'utf-8'))
     }
-    // 全局迁移失败兜底：VELA_HOME 下文件缺失 + ~/.vela 旧文件仍在（迁移失败残留）
+    // 全局迁移失败兜底：NOVELFORGE_HOME 下文件缺失 + ~/.vela 旧文件仍在（迁移失败残留）
     // → 回读旧文件（优雅降级，模型列表/主题/最近项目不消失）；新路径存在则读新（不回读旧）；
     // 全新安装（~/.vela 无文件）→ 无回读；文件存在的读取失败（JSON 损坏）→ 不回退（另一类问题）
-    if (filePath.startsWith(VELA_HOME + path.sep)) {
+    if (filePath.startsWith(NOVELFORGE_HOME + path.sep)) {
       const legacyPath = path.join(os.homedir(), '.vela', path.basename(filePath))
       if (fs.existsSync(legacyPath)) {
         return JSON.parse(fs.readFileSync(legacyPath, 'utf-8'))
@@ -245,10 +245,10 @@ export function backupFileOnce(filePath: string): BackupOutcome {
   }
 }
 
-export const GLOBAL_CONFIG_PATH = path.join(VELA_HOME, 'config.json')
-export const MODELS_CONFIG_PATH = path.join(VELA_HOME, 'models.json')
+export const GLOBAL_CONFIG_PATH = path.join(NOVELFORGE_HOME, 'config.json')
+export const MODELS_CONFIG_PATH = path.join(NOVELFORGE_HOME, 'models.json')
 /** 供应商账户（一份凭据挂多个模型）—— 派生条目的凭据来源，见 src/shared/provider-accounts.ts */
-export const PROVIDERS_CONFIG_PATH = path.join(VELA_HOME, 'providers.json')
+export const PROVIDERS_CONFIG_PATH = path.join(NOVELFORGE_HOME, 'providers.json')
 
 /** providers.json 当前形状版本（v1 = 裸数组，无版本号） */
 export const PROVIDERS_FILE_VERSION = 2
@@ -299,8 +299,8 @@ export function writeProvidersFile(state: ProvidersFileState): void {
  * 或「整份读-改-写」的路径都会顺带搬运密文；搬出来之后配置文件的形状里**不再有密码字段**，
  * 且 set/unset 只碰本文件（T4 迁移会把存量 `ENC:` 值原样搬进来）。
  */
-export const CREDENTIALS_CONFIG_PATH = path.join(VELA_HOME, 'credentials.json')
-export const RECENT_PROJECTS_PATH = path.join(VELA_HOME, 'recent-projects.json')
+export const CREDENTIALS_CONFIG_PATH = path.join(NOVELFORGE_HOME, 'credentials.json')
+export const RECENT_PROJECTS_PATH = path.join(NOVELFORGE_HOME, 'recent-projects.json')
 
 /**
  * 本地 Ollama 向量档默认值（T4 **唯一字面量**）。

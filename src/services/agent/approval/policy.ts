@@ -3,6 +3,7 @@
  *
  * 优先级**不可调换**：
  *   ① 危险硬拒绝（matchCritical，fail-closed）
+ *   ①b 破坏性操作每次询问（不复用固化规则）
  *   ② 只读工具直接放行
  *   ③ 已固化规则命中（workspace 级批准记忆）
  *   ④ 兜底：prompt（可固化时附提案）
@@ -25,6 +26,11 @@ export function evaluateApproval(req: ApprovalRequest): ApprovalDecision {
       reasonKey: critical.reasonKey,
       reasonParams: critical.reasonParams,
     }
+  }
+
+  // Destructive operations need a fresh decision; remembered directory rules cannot approve overwrites.
+  if (req.descriptor.isDestructive) {
+    return { action: 'prompt', risk: 'high', ruleId: 'prompt_one_shot', reasonKey: 'approval.promptOneShot' }
   }
 
   // ② 只读工具：无副作用，直接放行

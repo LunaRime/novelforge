@@ -9,10 +9,10 @@
 import { dialog, BrowserWindow } from 'electron'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
-import { VELA_HOME } from '../utils/config-utils'
+import { NOVELFORGE_HOME } from '../utils/config-utils'
 import { guardedHandle } from '../security/ipc-guard'
 
-const SKILLS_DIR = path.join(VELA_HOME, 'skills')
+const SKILLS_DIR = path.join(NOVELFORGE_HOME, 'skills')
 
 /** 技能文件信息 */
 export interface SkillInfo {

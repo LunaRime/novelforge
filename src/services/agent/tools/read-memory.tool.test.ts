@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * read_memory — 模型按名/关键词取作品记忆正文（C 档第一轮）。
@@ -22,7 +23,7 @@ const BODIES: Record<string, string> = {
 }
 
 beforeEach(() => {
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: vi.fn(async (ch: string, file?: string) => {
         if (ch === 'memory:list') return LIST
@@ -78,7 +79,7 @@ describe('read_memory 工具', () => {
   })
 
   it('无记忆文件 → 明确空态提示（不是失败）', async () => {
-    const invokeMock = window.velaAPI.invoke as ReturnType<typeof vi.fn>
+    const invokeMock = window.novelforgeAPI.invoke as ReturnType<typeof vi.fn>
     invokeMock.mockImplementation(async (ch: string) => (ch === 'memory:list' ? [] : null))
     const res = await readMemoryTool.execute({})
     expect(res.success).toBe(true)
@@ -89,6 +90,8 @@ describe('read_memory 工具', () => {
 describe('read_memory 在工具提示词中的契约可见性（1200 token 截断线内）', () => {
   it('被截断也要给得出签名：base 段含 read_memory(name?, keyword?, type?)', async () => {
     vi.resetModules()   // 干净模块图：工具/上下文构建器共用同一注册表单例
+    const { installRendererAgentPorts: installFreshPorts } = await import('../../agent-adapters/renderer-agent-ports')
+    installFreshPorts()
     const { registerBuiltinTools } = await import('./index')
     const { buildAgentSystemSegments } = await import('../context-builder')
     const { toolRegistry } = await import('../tool-registry')
@@ -101,3 +104,5 @@ describe('read_memory 在工具提示词中的契约可见性（1200 token 截�
     expect(toolRegistry.get('read_memory')?.requiresConfirmation).toBe(false)
   })
 })
+
+installRendererAgentPorts()

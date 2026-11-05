@@ -28,9 +28,9 @@ vi.mock('../services/ipc-client', () => ({
   ipc: { invoke: (...a: unknown[]) => h.invoke(...(a as [])) },
 }))
 
-// IPC 桩：renderLog（addLog → log:write）在测试环境静默，避免 velaAPI 未注入告警噪音
+// IPC 桩：renderLog（addLog → log:write）在测试环境静默，避免 novelforgeAPI 未注入告警噪音
 beforeEach(() => {
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: async () => null,
       on: () => () => {},

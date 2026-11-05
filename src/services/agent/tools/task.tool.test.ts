@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * task 工具（C 档第二轮 T5）——模型侧唯一派发通道。
@@ -137,7 +138,7 @@ describe('评审修复：工具名校验与失败如实上报（C 档第二轮�
 describe('产物合并与超时契约（spec §3.6 / 评审 C1）', () => {
   it('子 agent 的产物并入工具结果（父消息能看到它改过哪些文件）', async () => {
     setConv()
-    const artifacts = [{ type: 'file_modified' as const, path: 'drafts/c30.md', name: 'c30.md' }]
+    const artifacts = [{ type: 'document.changed' as const, id: 'drafts/c30.md', path: 'drafts/c30.md', name: 'c30.md' }]
     const spy = vi.spyOn(useAgentStore.getState(), 'runSubAgentTask')
       .mockResolvedValue({ text: 'R', ok: true, artifacts })
     const res = await taskTool.execute({ description: '查玉佩' })
@@ -149,3 +150,5 @@ describe('产物合并与超时契约（spec §3.6 / 评审 C1）', () => {
     expect(taskTool.timeoutMs).toBeGreaterThanOrEqual(SUBAGENT_MAX_MS + SUBAGENT_CONFIRM_TIMEOUT_MS)
   })
 })
+
+installRendererAgentPorts()

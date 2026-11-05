@@ -13,13 +13,13 @@ vi.mock('node:os', () => ({
   default: { homedir: () => fakeHome },
 }))
 
-// config-utils 模块级计算 VELA_HOME = path.join(os.homedir(), '.novelforge')——
+// config-utils 模块级计算 NOVELFORGE_HOME = path.join(os.homedir(), '.novelforge')——
 // 静态 import 在 vi.mock 生效后求值，拿到的是 mock home
 import {
-  VELA_HOME,
+  NOVELFORGE_HOME,
   GLOBAL_CONFIG_PATH,
   migrateLegacyDirs,
-  getProjectVelaDir,
+  getProjectDataDir,
   readJsonFile,
   backupFileOnce,
   CREDENTIAL_MIGRATION_BACKUP_SUFFIX,
@@ -42,31 +42,31 @@ afterEach(() => {
 })
 
 describe('全局迁移 ~/.vela → ~/.novelforge', () => {
-  it('旧目录存在且新目录不存在 → rename（VELA_HOME 已是新路径）', async () => {
-    expect(VELA_HOME).toBe(path.join(fakeHome, '.novelforge'))
+  it('旧目录存在且新目录不存在 → rename（NOVELFORGE_HOME 已是新路径）', async () => {
+    expect(NOVELFORGE_HOME).toBe(path.join(fakeHome, '.novelforge'))
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
 
     await migrateLegacyDirs()
 
     expect(fs.existsSync(legacyHome)).toBe(false)
-    expect(fs.existsSync(VELA_HOME)).toBe(true)
+    expect(fs.existsSync(NOVELFORGE_HOME)).toBe(true)
     // 内容随目录整体迁移
-    expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"dark"}')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"dark"}')
   })
 
   it('新 home 已有 config.json（用户手动新建过/已迁移）→ 不覆盖，保留双读（双路径兜底）', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
-    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'old-marker.txt'), 'old')
-    fs.writeFileSync(path.join(VELA_HOME, 'config.json'), '{"theme":"dark"}')
-    fs.writeFileSync(path.join(VELA_HOME, 'new-marker.txt'), 'new')
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'config.json'), '{"theme":"dark"}')
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'new-marker.txt'), 'new')
 
     await migrateLegacyDirs()
 
     // config.json 哨兵存在 → 不迁移：新 home 内容未被覆盖
-    expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"dark"}')
-    expect(fs.readFileSync(path.join(VELA_HOME, 'new-marker.txt'), 'utf-8')).toBe('new')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"dark"}')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'new-marker.txt'), 'utf-8')).toBe('new')
     // 旧目录保留（双读兜底，数据不丢）
     expect(fs.existsSync(legacyHome)).toBe(true)
     expect(fs.readFileSync(path.join(legacyHome, 'old-marker.txt'), 'utf-8')).toBe('old')
@@ -76,7 +76,7 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
     await migrateLegacyDirs()
 
     expect(fs.existsSync(legacyHome)).toBe(false)
-    expect(fs.existsSync(VELA_HOME)).toBe(false)
+    expect(fs.existsSync(NOVELFORGE_HOME)).toBe(false)
   })
 
   it('rename 失败 → 静默回退，不阻塞启动（console.error 后继续用旧路径）', async () => {
@@ -89,7 +89,7 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
 
     expect(errorSpy).toHaveBeenCalled()
     expect(fs.existsSync(legacyHome)).toBe(true)   // 旧目录保留
-    expect(fs.existsSync(VELA_HOME)).toBe(false)   // 新目录未创建
+    expect(fs.existsSync(NOVELFORGE_HOME)).toBe(false)   // 新目录未创建
   })
 
   it('迁移重试：真实失败会话副产物（logs 含当日 .log + dev/ 空或仅 .log）→ 判定 auto → 清理后真实 rename 成功', async () => {
@@ -108,12 +108,12 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
     // 模拟同次启动后续的运行时副产物（运行时可达状态）：
     // ensureVelaHome 空建 {path,prompts,logs} + main.ts logger 首写 logs/vela-<date>.log
     // + Dev 模式 logs/dev/vela-dev-<date>.log。仍无 config.json 哨兵
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'prompts'), { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'logs'), { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'logs', 'vela-2026-08-27.log'), '[info] fake session log')
-    fs.mkdirSync(path.join(VELA_HOME, 'logs', 'dev'), { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'logs', 'dev', 'vela-dev-2026-08-27.log'), '[debug] fake dev log')
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'prompts'), { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'logs'), { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'logs', 'vela-2026-08-27.log'), '[info] fake session log')
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'logs', 'dev'), { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'logs', 'dev', 'vela-dev-2026-08-27.log'), '[debug] fake dev log')
     expect(fs.existsSync(GLOBAL_CONFIG_PATH)).toBe(false)
 
     // 第二次调用（下次启动）：auto 形态（空 prompts + 仅 .log 的 logs/dev）被识别并通过
@@ -122,27 +122,27 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
 
     expect(renameSpy).toHaveBeenCalledTimes(2)
     expect(fs.existsSync(legacyHome)).toBe(false)
-    expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
-    expect(fs.readFileSync(path.join(VELA_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
     // 副产物日志随 auto 树清理（oldHome 无 logs——迁移正确性以旧数据为准）
-    expect(fs.existsSync(path.join(VELA_HOME, 'logs'))).toBe(false)
+    expect(fs.existsSync(path.join(NOVELFORGE_HOME, 'logs'))).toBe(false)
   })
 
   it('安全边界：newHome 含用户数据（非 auto 形态）→ 绝不删除，rename 失败静默回退（双读兜底）', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'user-notes.txt'), 'mine') // 用户手工放入的数据
-    fs.mkdirSync(path.join(VELA_HOME, 'prompts'), { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'prompts', 'premise.json'), '{}')
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'user-notes.txt'), 'mine') // 用户手工放入的数据
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'prompts'), { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'prompts', 'premise.json'), '{}')
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await migrateLegacyDirs()
 
     // 安全边界：含用户数据的新目录未被删除；rename 失败（Win32 目标已存在 EPERM 实测）→
     // 静默回退——旧目录保留（双路径兜底，数据不丢）
-    expect(fs.readFileSync(path.join(VELA_HOME, 'user-notes.txt'), 'utf-8')).toBe('mine')
-    expect(fs.readFileSync(path.join(VELA_HOME, 'prompts', 'premise.json'), 'utf-8')).toBe('{}')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'user-notes.txt'), 'utf-8')).toBe('mine')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'prompts', 'premise.json'), 'utf-8')).toBe('{}')
     expect(fs.existsSync(legacyHome)).toBe(true)
     expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
   })
@@ -162,10 +162,10 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
 
     // 模拟失败会话中的运行时副产物：skills:list 空建 skills/、templates:list 空建 templates/、
     // agent-archive-list 空建 agent-archive/（仍无 config.json 哨兵）
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'skills'), { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'templates'), { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'agent-archive'), { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'skills'), { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'templates'), { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'agent-archive'), { recursive: true })
     expect(fs.existsSync(GLOBAL_CONFIG_PATH)).toBe(false)
 
     // 第二次调用（下次启动）：空建目录均在 auto 形态白名单（应用自有空目录）→ 清理 → 真实 rename 成功
@@ -173,22 +173,22 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
 
     expect(renameSpy).toHaveBeenCalledTimes(2)
     expect(fs.existsSync(legacyHome)).toBe(false)
-    expect(fs.readFileSync(path.join(VELA_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
-    expect(fs.readFileSync(path.join(VELA_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'old-marker.txt'), 'utf-8')).toBe('old')
   })
 
   it('安全边界：skills/ 含用户导入技能（非空）→ 判定非 auto → 绝不删除，双读兜底', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'skills'), { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'skills', 'my-skill.md'), 'imported skill') // 用户导入的技能
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'skills'), { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'skills', 'my-skill.md'), 'imported skill') // 用户导入的技能
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await migrateLegacyDirs()
 
     // 非空 skills → 非 auto（应用副产物判定失败）→ 绝不删除 → rename 失败静默回退
-    expect(fs.readFileSync(path.join(VELA_HOME, 'skills', 'my-skill.md'), 'utf-8')).toBe('imported skill')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'skills', 'my-skill.md'), 'utf-8')).toBe('imported skill')
     expect(fs.existsSync(legacyHome)).toBe(true)
     expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
   })
@@ -196,14 +196,14 @@ describe('全局迁移 ~/.vela → ~/.novelforge', () => {
   it('安全边界：logs 含用户文件（非 .log，如 memo.txt）→ 判定非 auto → 不删，双读兜底', async () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"light"}')
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.mkdirSync(path.join(VELA_HOME, 'logs'), { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'logs', 'memo.txt'), 'user memo') // 用户放入 logs 的非日志文件
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.mkdirSync(path.join(NOVELFORGE_HOME, 'logs'), { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'logs', 'memo.txt'), 'user memo') // 用户放入 logs 的非日志文件
 
     await migrateLegacyDirs()
 
     // logs 含非 .log 文件 → 非 auto（应用副产物判定失败）→ 绝不删除 → rename 失败静默回退
-    expect(fs.readFileSync(path.join(VELA_HOME, 'logs', 'memo.txt'), 'utf-8')).toBe('user memo')
+    expect(fs.readFileSync(path.join(NOVELFORGE_HOME, 'logs', 'memo.txt'), 'utf-8')).toBe('user memo')
     expect(fs.existsSync(legacyHome)).toBe(true)
     expect(fs.readFileSync(path.join(legacyHome, 'config.json'), 'utf-8')).toBe('{"theme":"light"}')
   })
@@ -220,8 +220,8 @@ describe('readJsonFile 全局配置旧路径回读（迁移失败残留兜底）
   it('新路径存在 → 读新的（不回读旧）', () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'config.json'), '{"theme":"light"}')
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'config.json'), '{"theme":"light"}')
 
     expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ theme: 'light' })
   })
@@ -233,21 +233,21 @@ describe('readJsonFile 全局配置旧路径回读（迁移失败残留兜底）
   it('新路径存在但 JSON 损坏 → 不回退旧路径（仅对「文件不存在」回退，保持现状）', () => {
     fs.mkdirSync(legacyHome, { recursive: true })
     fs.writeFileSync(path.join(legacyHome, 'config.json'), '{"theme":"dark"}')
-    fs.mkdirSync(VELA_HOME, { recursive: true })
-    fs.writeFileSync(path.join(VELA_HOME, 'config.json'), '{broken')
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
+    fs.writeFileSync(path.join(NOVELFORGE_HOME, 'config.json'), '{broken')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
 
     expect(readJsonFile(GLOBAL_CONFIG_PATH, { fallback: true })).toEqual({ fallback: true })
   })
 })
 
-describe('项目目录迁移 + 双路径（getProjectVelaDir）', () => {
+describe('项目目录迁移 + 双路径（getProjectDataDir）', () => {
   it('.vela 存在且 .novelforge 不存在 → 惰性迁移后返回新路径', () => {
     const proj = path.join(fakeHome, 'proj-a')
     fs.mkdirSync(path.join(proj, '.vela'), { recursive: true })
     fs.writeFileSync(path.join(proj, '.vela', 'vela.db'), 'sqlite')
 
-    const result = getProjectVelaDir(proj)
+    const result = getProjectDataDir(proj)
 
     expect(result).toBe(path.join(proj, '.novelforge'))
     expect(fs.existsSync(path.join(proj, '.vela'))).toBe(false)
@@ -260,7 +260,7 @@ describe('项目目录迁移 + 双路径（getProjectVelaDir）', () => {
     fs.mkdirSync(path.join(proj, '.vela'), { recursive: true })
     fs.writeFileSync(path.join(proj, '.vela', 'legacy-db'), 'old')
 
-    const result = getProjectVelaDir(proj)
+    const result = getProjectDataDir(proj)
 
     expect(result).toBe(path.join(proj, '.novelforge'))
     expect(fs.existsSync(path.join(proj, '.vela', 'legacy-db'))).toBe(true) // 旧目录未被清
@@ -272,7 +272,7 @@ describe('项目目录迁移 + 双路径（getProjectVelaDir）', () => {
     vi.spyOn(fs, 'renameSync').mockImplementationOnce(() => { throw new Error('EPERM') })
     vi.spyOn(console, 'error').mockImplementation(() => {})
 
-    const result = getProjectVelaDir(proj)
+    const result = getProjectDataDir(proj)
 
     // 回退旧路径而非新路径——激活上述直开点 existsSync 检查继续读到旧库
     expect(result).toBe(path.join(proj, '.vela'))
@@ -284,7 +284,7 @@ describe('项目目录迁移 + 双路径（getProjectVelaDir）', () => {
     const proj = path.join(fakeHome, 'proj-d')
     fs.mkdirSync(proj, { recursive: true })
 
-    const result = getProjectVelaDir(proj)
+    const result = getProjectDataDir(proj)
 
     expect(result).toBe(path.join(proj, '.novelforge'))
     // 函数本身只返回路径，实际创建由调用方（database.ts mkdirSync）负责
@@ -317,7 +317,7 @@ describe('T4 默认值：DEFAULT_GLOBAL_CONFIG.localEmbedding', () => {
 
 describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', () => {
   const writeGlobalConfig = (value: unknown) => {
-    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
     fs.writeFileSync(GLOBAL_CONFIG_PATH, JSON.stringify(value), 'utf-8')
   }
 
@@ -332,7 +332,7 @@ describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', (
   })
 
   it('JSON 损坏 → 默认值（不抛，不阻塞 IPC）', () => {
-    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
     fs.writeFileSync(GLOBAL_CONFIG_PATH, '{ this is not json', 'utf-8')
     vi.spyOn(console, 'warn').mockImplementation(() => {})
 
@@ -388,11 +388,11 @@ describe('readLocalEmbeddingConfig（读失败/缺字段 → 回退默认）', (
  * 本组钉住：字节一致、已存在不覆盖、中转文件不残留、**写的是 tmp 再 rename**。
  */
 describe('backupFileOnce（*.pre-credentials.bak）', () => {
-  const srcPath = () => path.join(VELA_HOME, 'providers.json')
+  const srcPath = () => path.join(NOVELFORGE_HOME, 'providers.json')
   const bakPath = () => srcPath() + CREDENTIAL_MIGRATION_BACKUP_SUFFIX
 
   const seedSource = (text: string) => {
-    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
     fs.writeFileSync(srcPath(), text, 'utf-8')
   }
 
@@ -420,11 +420,11 @@ describe('backupFileOnce（*.pre-credentials.bak）', () => {
     expect(copyDest.startsWith(bakPath() + '.tmp.')).toBe(true)
     expect(renameSpy).toHaveBeenCalledWith(copyDest, bakPath())
     // 中转产物不残留（成功路径）
-    expect(fs.readdirSync(VELA_HOME).filter((n) => n.includes('.tmp.'))).toEqual([])
+    expect(fs.readdirSync(NOVELFORGE_HOME).filter((n) => n.includes('.tmp.'))).toEqual([])
   })
 
   it('源不存在 → missing（不产生 .bak）；目标已存在时源消失也只是 skipped', () => {
-    fs.mkdirSync(VELA_HOME, { recursive: true })
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true })
     expect(backupFileOnce(srcPath())).toBe('missing')
     expect(fs.existsSync(bakPath())).toBe(false)
 

@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 /**
  * skill-registry 装载测试（B 档第一轮 T3）
  *
@@ -112,3 +113,5 @@ describe('seedNovelSkills（小说创作 skill 预填充落盘）', () => {
     expect(writeCount).toBe(0)
   })
 })
+
+installRendererAgentPorts()

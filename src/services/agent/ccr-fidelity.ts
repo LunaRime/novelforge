@@ -14,7 +14,7 @@
  * ⚠️ 已知误报面：别名 / 代词指代 / 章节号书写变体（如「十一」→「11」以外的复杂形态）
  * 会被记为缺失 —— 故阈值保守、只告警；不做 LLM 二次判定（成本随轮次线性上升）。
  */
-import type { AgentMessage } from '../../stores/agent-store'
+import type { AgentMessage } from '../../shared/agent-conversation'
 import { extractSideEffectReceipts } from './archive-codec'
 
 export type FidelityEntityKind = 'write-target' | 'character' | 'chapter'

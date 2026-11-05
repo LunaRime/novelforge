@@ -24,7 +24,7 @@ import { exec } from 'node:child_process'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import {
-  VELA_HOME,
+  NOVELFORGE_HOME,
   DEFAULT_GLOBAL_CONFIG,
   GLOBAL_CONFIG_PATH,
   readJsonFile,
@@ -37,7 +37,7 @@ import { safeErrorMessage } from '../utils/error-utils'
 import type { GlobalConfig, UpdateInfo, UpdateProgressInfo } from '../../src/shared/ipc-channels'
 
 const GITHUB_API_RELEASES = 'https://api.github.com/repos/LunaRime/novelforge/releases'
-const UPDATE_DIR = path.join(VELA_HOME, 'updates')
+const UPDATE_DIR = path.join(NOVELFORGE_HOME, 'updates')
 
 /** 启动后首次检查的延迟（避免拖慢启动） */
 const STARTUP_CHECK_DELAY_MS = 10_000
@@ -281,7 +281,7 @@ function triggerUninstall(): { success: boolean; error?: string } {
 function cleanUserData(): { success: boolean; error?: string } {
   try {
     const legacyHome = path.join(os.homedir(), '.vela')
-    const targets = [VELA_HOME, legacyHome]
+    const targets = [NOVELFORGE_HOME, legacyHome]
     const cleanedDirs: string[] = []
     for (const dir of targets) {
       if (fs.existsSync(dir)) {

@@ -64,7 +64,7 @@ vi.mock('../utils/logger', () => ({
   logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn(), getLogDir: () => '' },
 }))
 
-import { GLOBAL_CONFIG_PATH, VELA_HOME, writeJsonFile } from '../utils/config-utils'
+import { GLOBAL_CONFIG_PATH, NOVELFORGE_HOME, writeJsonFile } from '../utils/config-utils'
 import { trustWebContents, resetTrustedWebContentsForTest } from '../security/ipc-guard'
 import { registerLocalEmbeddingController } from './local-embedding-controller'
 
@@ -331,7 +331,7 @@ describe('embedding:local-get-config / local-set-config（读全局配置）', (
     expect(cfg.enabled).toBe(false) // 非严格真值不启用
     expect(cfg.baseUrl).toBe('http://localhost:11434') // 空串回退默认
     expect(cfg.model).toBe('bge-m3')
-    expect(fs.existsSync(VELA_HOME)).toBe(true)
+    expect(fs.existsSync(NOVELFORGE_HOME)).toBe(true)
   })
 })
 

@@ -1,3 +1,4 @@
+import type { RuntimeEvent } from '../../core/domain/runtime-event'
 /**
  * Agent 核心引擎 — ReAct（Reasoning + Acting）循环
  *
@@ -12,7 +13,8 @@
  */
 
 import { t } from '../../shared/locale'
-import { toolRegistry, type AgentTool, type ToolResult, type ToolArtifact } from './tool-registry'
+import { canExecuteConcurrently, requiresToolApproval } from '../../core/runtime/tool-execution'
+import { toolRegistry, type AgentTool, type ToolResult } from './tool-registry'
 import type { ApprovalDecision } from './approval'
 import { outputPostProcessor } from './output-post-processor'
 import { looksMultiStep } from './task-anchor'
@@ -110,7 +112,7 @@ export interface AgentEngineCallbacks {
   /** 进度更新 */
   onProgress?: (progress: AgentProgress) => void
   /** 全部完成 */
-  onDone: (fullText: string, toolCalls: ToolCallInfo[], artifacts: ToolArtifact[]) => void
+  onDone: (fullText: string, toolCalls: ToolCallInfo[], artifacts: RuntimeEvent[]) => void
   /** 错误 */
   onError: (error: string) => void
 }
@@ -188,7 +190,7 @@ export async function runAgentLoop(
   deps?: AgentEngineDeps,
 ): Promise<void> {
   const allToolCalls: ToolCallInfo[] = []
-  const allArtifacts: ToolArtifact[] = []
+  const allArtifacts: RuntimeEvent[] = []
 
   // 构建消息列表
   const messages: LLMMessage[] = [
@@ -463,10 +465,8 @@ export async function runAgentLoop(
       ? { ...deps, allowedTools: options.allowedTools }
       : deps
 
-    // 分批规则（分类依据 = tool.isReadOnly，勿按 source——read_file 等 builtin 只读，
-    // index-content/embed-text/compare-texts 同属 builtin 但语义经 isReadOnly 已正确区分：
-    // embed/compare 纯计算只读；index_content 写库 conf=true → isReadOnly=false 归写）：
-    // 1. 连续只读工具归入当前只读批，满 MAX_PARALLEL_READ_TOOLS 封批（批内并发上限）
+    // 分批使用显式并发元数据；只读只是必要条件，task 等有共享状态的工具仍串行。
+    // 1. 连续只读且并发安全工具归入当前只读批，满 MAX_PARALLEL_READ_TOOLS 封批
     // 2. 写工具 / 需确认工具 / 未知工具：先封只读批，再各自单元素批——逐个串行、不与
     //    任何工具并行；确认流程（onToolCallConfirmRequired）先于并行决策完成——批内绝不
     //    混入需确认工具（防御：requiresConfirmation 工具即使误标 isReadOnly 也单独成批）
@@ -482,7 +482,7 @@ export async function runAgentLoop(
     }
     for (const job of jobs) {
       const tool = job.tool
-      const parallelEligible = tool !== undefined && tool.isReadOnly && !tool.requiresConfirmation
+      const parallelEligible = canExecuteConcurrently(tool)
       if (parallelEligible) {
         openReadBatch.push(job)
         if (openReadBatch.length >= MAX_PARALLEL_READ_TOOLS) flushReadBatch()
@@ -568,7 +568,7 @@ interface ToolCallJob {
 /** 单工具执行产出（供分批器按 tool_call 原始顺序拼接 observation / 产物） */
 interface ToolJobOutcome {
   observation: string
-  artifacts: ToolArtifact[]
+  artifacts: RuntimeEvent[]
 }
 
 /**
@@ -587,7 +587,7 @@ async function executeToolJob(
   deps: AgentEngineDeps | undefined,
 ): Promise<ToolJobOutcome> {
   const { tc, tool, info } = job
-  const artifacts: ToolArtifact[] = []
+  const artifacts: RuntimeEvent[] = []
 
   // 查找 Tool（预扫描已定位；此处 tool 不存在走「不在白名单」/「未知工具」两条错误注入）
   if (!tool) {
@@ -609,7 +609,7 @@ async function executeToolJob(
   }
 
   // 需要用户确认的 Tool
-  if (tool.requiresConfirmation) {
+  if (requiresToolApproval(tool)) {
     info.status = 'waiting_confirm'
     callbacks.onToolCallStart(info)
 

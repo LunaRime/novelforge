@@ -1,14 +1,13 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_project_state — 读取项目全局状态
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
-import { useProjectStore } from '../../../stores/project-store'
 import { ipc } from '../../ipc-client'
-import { useWorkflowStore } from '../../../stores/workflow-store'
 
 
-export const readProjectStateTool = buildAgentTool({
+export function createReadProjectStateTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_project_state',
   description: t('tool.readStateDesc'),
   source: 'builtin',
@@ -29,7 +28,7 @@ export const readProjectStateTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -97,7 +96,7 @@ export const readProjectStateTool = buildAgentTool({
     }
 
     // 整本流水线状态（应用级 run，不依赖当前对话；任何 Agent 都能读到）
-    const pipeline = useWorkflowStore.getState().activeRuns.find(r => r.type === 'book_pipeline')
+    const pipeline = ports.workflows.snapshot().activeRuns.find(r => r.type === 'book_pipeline')
     if (pipeline) {
       const done = pipeline.steps.filter(step => step.status === 'completed').length
       parts.push(t('tool.readStatePipeline')
@@ -110,4 +109,7 @@ export const readProjectStateTool = buildAgentTool({
     return { success: true, content: parts.join('\n\n') }
   },
 })
+}
+
+export const readProjectStateTool = createReadProjectStateTool()
 

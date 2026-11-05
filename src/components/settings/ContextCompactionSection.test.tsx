@@ -32,7 +32,7 @@ beforeEach(() => {
     if (ch === 'config:set') return { success: true }
     return null
   })
-  Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 })
 
 describe('ContextCompactionSection', () => {
@@ -116,7 +116,7 @@ describe('ContextCompactionSection', () => {
       if (ch === 'config:set') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
@@ -167,7 +167,7 @@ describe('ContextCompactionSection', () => {
       if (ch === 'config:set') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
@@ -204,7 +204,7 @@ describe('ContextCompactionSection', () => {
       if (ch === 'config:set') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })
@@ -263,7 +263,7 @@ describe('ContextCompactionSection', () => {
       if (ch === 'config:set') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 
     const { container, root } = render()
     await act(async () => { await new Promise(r => setTimeout(r, 20)) })

@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * task — 派发子 agent（C 档第二轮）
  *
@@ -5,10 +6,11 @@
  * （只有 store 能接触会话、取消控制器与审批卡）。与 `read_project_state` 等同构。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool, toolRegistry } from '../tool-registry'
+import { toolRegistry } from '../tool-registry'
 import { SUBAGENT_CONFIRM_TIMEOUT_MS, SUBAGENT_MAX_MS } from '../subagent/types'
 
-export const taskTool = buildAgentTool({
+export function createTaskTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'task',
   description: t('tool.taskDesc'),
   source: 'builtin',
@@ -26,12 +28,12 @@ export const taskTool = buildAgentTool({
     required: ['description'],
   },
   requiresConfirmation: false,
+  isConcurrencySafe: false,
   execute: async (args) => {
     // ⚠️ 动态 import（不用顶层静态 import）：`task.tool → agent-store → tools/index → task.tool`
     // 是静态环，在「tools/index 先被求值」的顺序下 `builtinTools` 数组里的 taskTool 会是
     // undefined（registerBuiltinTools 崩在 tool.name 上）。延迟到调用时解析即断开环。
-    const { useAgentStore } = await import('../../../stores/agent-store')
-    const store = useAgentStore.getState()
+    const store = ports.conversation
     const taskId = (args.task_id as string | undefined)?.trim()
     if (taskId) {
       const replay = store.replaySubAgent(taskId)
@@ -45,7 +47,7 @@ export const taskTool = buildAgentTool({
     }
     const description = (args.description as string | undefined)?.trim()
     if (!description) return { success: false, content: '', error: t('tool.taskNeedDescription') }
-    if (!store.getActiveConversation()) return { success: false, content: '', error: t('subagent.noActiveConversation') }
+    if (!store.active()) return { success: false, content: '', error: t('subagent.noActiveConversation') }
     // ToolInputSchema 不支持数组 → 线上格式是逗号分隔字符串；空/全空白视为「未指定」（用默认白名单）
     const tools = ((args.tools as string | undefined) ?? '').split(',').map(s => s.trim()).filter(Boolean)
     // 评审 M2：给的工具名**全部**不存在 → 立即失败。否则白名单的只读交集为空、只剩写工具，
@@ -77,3 +79,6 @@ export const taskTool = buildAgentTool({
     }
   },
 })
+}
+
+export const taskTool = createTaskTool()

@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * index_content — 将文本索引到知识库（向量化 + 存储）
  *
@@ -5,11 +6,10 @@
  * 供后续的语义搜索和 RAG 管道使用。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
-export const indexContentTool = buildAgentTool({
+export function createIndexContentTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'index_content',
   description: t('tool.indexDesc'),
   source: 'builtin',
@@ -51,7 +51,7 @@ export const indexContentTool = buildAgentTool({
     }
 
     try {
-      const project = useProjectStore.getState().currentProject
+      const project = ports.project.current()
       if (!project) {
         return { success: false, content: '', error: t('error.noProject') }
       }
@@ -96,3 +96,6 @@ export const indexContentTool = buildAgentTool({
     }
   },
 })
+}
+
+export const indexContentTool = createIndexContentTool()

@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ipc } from '../../ipc-client'
@@ -254,3 +255,5 @@ describe('read_file token 约束与分页', () => {
     expect(estimateTokens(r.content)).toBeLessThanOrEqual(TOOL_RESULT_MAX_TOKENS)
   })
 })
+
+installRendererAgentPorts()

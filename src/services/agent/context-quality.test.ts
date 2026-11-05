@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * 上下文质量用例集（§4 度量口径的 **A 部分：确定性**）
@@ -42,7 +43,7 @@ const memoryList = (): MemoryFileMeta[] => [
 ]
 
 const setupIpc = (): void => {
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: vi.fn(async (ch: string, file?: string) => {
         if (ch === 'memory:list') return memoryList()
@@ -122,6 +123,8 @@ describe('A2 降级链末端的工具仍可调用（P0-3 教训）', () => {
         },
         requiresConfirmation: false,
         isReadOnly: true,
+        isConcurrencySafe: true,
+        isDestructive: false,
         execute: async () => ({ success: true, content: 'ok' }),
       })
     }
@@ -214,3 +217,5 @@ describe('A4 三档预算不变量与 A5 M1 注入不越界', () => {
     expect(weakPolicy.m1BudgetTokens).toBeLessThan(SESSION_SUMMARY_BUDGET_TOKENS)   // 弱档确实比缺省更紧
   })
 })
+
+installRendererAgentPorts()

@@ -14,7 +14,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import os from 'node:os'
-import { VELA_HOME, readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from './config-utils'
+import { NOVELFORGE_HOME, readJsonFile, GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG } from './config-utils'
 import type { GlobalConfig } from '../../src/shared/ipc-channels'
 import { t } from '../../src/shared/locale'
 
@@ -65,8 +65,8 @@ export enum LogEnvironment {
 
 /** 各环境的日志目录 */
 export const LOG_DIRS: Record<LogEnvironment, string> = {
-  [LogEnvironment.Dev]: path.join(VELA_HOME, 'logs', 'dev'),
-  [LogEnvironment.Release]: path.join(VELA_HOME, 'logs'),
+  [LogEnvironment.Dev]: path.join(NOVELFORGE_HOME, 'logs', 'dev'),
+  [LogEnvironment.Release]: path.join(NOVELFORGE_HOME, 'logs'),
 }
 
 /**

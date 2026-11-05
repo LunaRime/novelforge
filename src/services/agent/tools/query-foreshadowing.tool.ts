@@ -1,18 +1,18 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * query_foreshadowing — 未回收伏笔查询工具
  *
  * 写稿/规划剧情前调用：返回尚未回收的伏笔清单（含埋设章节），
  * LLM 据此自然回应旧伏笔、避免断裂或提前回收。
  */
-import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
 import { loadAllForeshadowing, formatPendingForPrompt } from '../../foreshadowing-manager'
-import { useProjectStore } from '../../../stores/project-store'
 
 /** 单次注入上限（避免 prompt 膨胀，超出取最近埋设的） */
 const MAX_ITEMS = 5
 
-export const queryForeshadowingTool = buildAgentTool({
+export function createQueryForeshadowingTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'query_foreshadowing',
   description: t('tool.foreshadowDesc'),
   source: 'builtin',
@@ -32,7 +32,7 @@ export const queryForeshadowingTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -77,3 +77,6 @@ export const queryForeshadowingTool = buildAgentTool({
     }
   },
 })
+}
+
+export const queryForeshadowingTool = createQueryForeshadowingTool()

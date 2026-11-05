@@ -11,12 +11,12 @@ import { mcpManager } from './mcp-manager'
 import { logger } from '../utils/logger'
 import { t } from '../../src/shared/locale'
 import { safeErrorMessage } from '../utils/error-utils'
-import { VELA_HOME } from '../utils/config-utils'
+import { NOVELFORGE_HOME } from '../utils/config-utils'
 import { guardedHandle } from '../security/ipc-guard'
 
 /** MCP 配置文件路径（与 mcpManager.getDefaultConfigPath 一致） */
 function mcpConfigPath(): string {
-  return path.join(VELA_HOME, 'mcp_config.json')
+  return path.join(NOVELFORGE_HOME, 'mcp_config.json')
 }
 
 /** 读写 MCP 配置（Claude Desktop 兼容格式 { mcpServers: { id: { command, args, env } } }） */

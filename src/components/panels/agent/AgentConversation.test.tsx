@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../../services/agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * AgentConversation — 预算条记忆段数据源测试（F3）
@@ -43,7 +44,7 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
     // M2 有内容：book 文件多段落 ~1600 tokens → 节选到 800 预算
     // （注意 truncateToTokenBudget 按段落保留：单段落超预算会被整段丢弃，故用多段落）
     const bookBody = Array.from({ length: 40 }, (_, i) => `第${i + 1}节 ${'详'.repeat(30)}`).join('\n\n')
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => {
           // C 档第一轮：常驻（resident）才是全文注入；auto 只进名字目录
@@ -113,7 +114,7 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
         messages: [{ id: 'm1', role: 'user', content: '你好', createdAt: Date.now() }],
       } : c),
     }))
-    ;(window.velaAPI.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('no project'))
+    ;(window.novelforgeAPI.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('no project'))
     const { container, root } = render(<AgentConversation />)
     await act(async () => { await new Promise(r => setTimeout(r, 30)) })
     expect(readMemoryToken(container)).toBe(0) // 无 M1（无摘要）且 M2 失败 → 0
@@ -124,7 +125,7 @@ describe('AgentConversation 预算条记忆段（F3）', () => {
 describe('RecentConversationItem hover 行为', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async () => null),
       },
@@ -270,7 +271,7 @@ describe('EmptyState 历史条数配置', () => {
     document.body.innerHTML = ''
     configValue = null
     configError = null
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => {
           if (ch === 'config:get') {
@@ -329,7 +330,7 @@ describe('EmptyState 历史条数配置', () => {
 describe('AgentHistoryPanel fork 层级', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async () => null),
       },
@@ -466,7 +467,7 @@ describe('AgentHistoryPanel fork 层级', () => {
 describe('AgentConversation 末条消息 rewind 禁用（D1/F6）', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async () => null),
       },
@@ -523,7 +524,7 @@ describe('ContextBudgetBar 常驻告警标记（C 档第一轮 T6）', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     // 常驻合计超硬上限 → 该段以 tokens=0 + warning 进明细（不静默截断的可见面）
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => {
           if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '全书精要', stale: false, mtime: 1 }]
@@ -606,7 +607,7 @@ describe('SubAgentSessionCard / SubAgentConfirmCard（C 档第二轮 T7）', () 
 
   beforeEach(() => {
     document.body.innerHTML = ''
-    Object.defineProperty(window, 'velaAPI', { value: { invoke: vi.fn(async () => null) }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: vi.fn(async () => null) }, configurable: true })
     useProjectStore.setState({ currentProject: null })
     useLLMStore.setState({ models: [], defaultModelId: null })
   })
@@ -703,3 +704,5 @@ describe('SubAgentSessionCard / SubAgentConfirmCard（C 档第二轮 T7）', () 
     act(() => { root.unmount() })
   })
 })
+
+installRendererAgentPorts()

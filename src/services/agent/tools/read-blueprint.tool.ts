@@ -1,13 +1,13 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_blueprint — 读取章节蓝图
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 
-export const readBlueprintTool = buildAgentTool({
+export function createReadBlueprintTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_blueprint',
   description: t('tool.readBlueprintDesc'),
   source: 'builtin',
@@ -22,7 +22,7 @@ export const readBlueprintTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -64,3 +64,6 @@ export const readBlueprintTool = buildAgentTool({
     }
   },
 })
+}
+
+export const readBlueprintTool = createReadBlueprintTool()

@@ -10,7 +10,7 @@ import { t } from '../../../shared/locale'
 import { runAgentLoop, type AgentEngineCallbacks, type LLMGenerateFn } from '../agent-engine'
 import { estimateTokens, truncateToTokenBudget } from '../token-budget'
 import { stripDsmlMarkup } from '../dsml-tool-calls'
-import type { AgentMessage } from '../../../stores/agent-store'
+import type { AgentMessage } from '../../../shared/agent-conversation'
 import type { ToolCallInfo } from '../agent-engine'
 import {
   MAX_SUBAGENT_MESSAGES, SUBAGENT_MAX_MS, SUBAGENT_RESULT_MAX_TOKENS,

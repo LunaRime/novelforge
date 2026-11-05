@@ -1,13 +1,13 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_drafts — 读取草稿内容及状态
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 
-export const readDraftsTool = buildAgentTool({
+export function createReadDraftsTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_drafts',
   description: t('tool.readDraftsDesc'),
   source: 'builtin',
@@ -29,7 +29,7 @@ export const readDraftsTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -86,3 +86,6 @@ export const readDraftsTool = buildAgentTool({
     }
   },
 })
+}
+
+export const readDraftsTool = createReadDraftsTool()

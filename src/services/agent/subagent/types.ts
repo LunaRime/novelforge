@@ -2,8 +2,8 @@
  * 子 agent 派发（C 档第二轮）——类型与预算常量。
  * 设计依据：`docs/superpowers/specs/2026-09-26-multi-agent-dispatch-design.md`
  */
-import type { AgentMessage } from '../../../stores/agent-store'
-import type { ToolArtifact } from '../tool-registry'
+import type { AgentMessage } from '../../../shared/agent-conversation'
+import type { RuntimeEvent } from '../../../core/domain/runtime-event'
 import type { ToolCallInfo } from '../agent-engine'
 
 export type SubAgentStatus = 'running' | 'completed' | 'failed' | 'cancelled'
@@ -30,7 +30,7 @@ export interface SubAgentSession {
   /** 子转录（与父消息同形状，复用既有渲染；空白起步，不含父历史） */
   messages: AgentMessage[]
   toolCalls: ToolCallInfo[]
-  artifacts: ToolArtifact[]
+  artifacts: RuntimeEvent[]
   /** 完整结论（未截断；注入父端的版本另经截断，见 runner.formatSubAgentResult） */
   result: string
   error?: string

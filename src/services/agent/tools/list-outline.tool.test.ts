@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * list_outline 工具测试（2026-09-13 真机反馈新增）
@@ -96,3 +97,5 @@ describe('list_outline', () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 })
+
+installRendererAgentPorts()

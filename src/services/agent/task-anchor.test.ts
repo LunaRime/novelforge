@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 /**
  * task-anchor（S2/W2）——任务锚点纯函数契约：
  * 只在有真实诉求时出现；命令轮不注入；失败回执才进"未完成"；硬上限 120 tokens。
@@ -109,3 +110,5 @@ describe('looksMultiStep（W4 未完成自检的触发判据）', () => {
     expect(looksMultiStep('把这一章重写一遍'.repeat(8))).toBe(true)
   })
 })
+
+installRendererAgentPorts()

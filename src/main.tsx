@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from './services/agent-adapters/renderer-agent-ports'
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App'
@@ -8,6 +9,8 @@ import { useAgentStore } from './stores/agent-store'
 import { installRendererErrorCapture, renderLog } from './services/render-logger'
 import { t, getCurrentLocale } from './shared/locale'
 import { ipc } from './services/ipc-client'
+
+installRendererAgentPorts()
 
 // 渲染进程全局错误捕获 → ERROR 落盘（必须先注册，确保早期错误也被记录）
 installRendererErrorCapture()

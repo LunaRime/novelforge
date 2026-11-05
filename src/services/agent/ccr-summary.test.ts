@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { buildCcrSummaryPrompt, generateConversationSummary } from './ccr-summary'
 import type { AgentMessage } from '../../stores/agent-store'
@@ -144,3 +145,5 @@ describe('SharedContext：压缩摘要附带提取可复用事实（P3）', () =
     expect(writes).toHaveLength(0)
   })
 })
+
+installRendererAgentPorts()

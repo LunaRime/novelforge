@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * 子 agent 的 scoped 提示词装配（C 档第二轮 T2）。
@@ -20,7 +21,7 @@ const TASK = {
 beforeEach(() => {
   registerBuiltinTools()
   useProjectStore.setState({ currentProject: null })
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: vi.fn(async (ch: string, file?: string) => {
         if (ch === 'memory:list') return [{ file: 'book-state.md', kind: 'book', loadMode: 'resident', brief: '主角是苏晚晴', stale: false, mtime: 1 }]
@@ -66,10 +67,12 @@ describe('buildSubAgentPrompt（scoped 装配）', () => {
   })
 
   it('记忆读盘失败：装配照常（不抛，只是没有记忆段）', async () => {
-    const invokeMock = window.velaAPI.invoke as ReturnType<typeof vi.fn>
+    const invokeMock = window.novelforgeAPI.invoke as ReturnType<typeof vi.fn>
     invokeMock.mockRejectedValue(new Error('no project'))
     const p = await buildSubAgentPrompt(TASK)
     expect(p).toContain('查玉佩伏笔')
     expect(p).toContain('read_drafts')
   })
 })
+
+installRendererAgentPorts()

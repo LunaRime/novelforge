@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * compare_texts — 语义相似度比较
  *
@@ -5,11 +6,10 @@
  * 适用于一致性检查、去重检测、情节对比等场景。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useVectorConfigStore } from '../../../stores/vector-config-store'
 
-export const compareTextsTool = buildAgentTool({
+export function createCompareTextsTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'compare_texts',
   description: t('tool.compareDesc'),
   source: 'builtin',
@@ -58,7 +58,7 @@ export const compareTextsTool = buildAgentTool({
 
     try {
       // 检查向量模型是否可用
-      const vectorConfig = useVectorConfigStore.getState()
+      const vectorConfig = ports.vectors.snapshot()
 
       if (!vectorConfig.canUseEmbeddingAPI()) {
         // 降级：使用本地启发式比较（基于字符重叠率和长度相似度）
@@ -144,6 +144,9 @@ export const compareTextsTool = buildAgentTool({
     }
   },
 })
+}
+
+export const compareTextsTool = createCompareTextsTool()
 
 /**
  * 本地文本相似度计算（不依赖 Embedding API）

@@ -1,14 +1,14 @@
+import { defaultAgentRuntimePorts, type AgentRuntimePorts } from './runtime-ports'
 /**
  * Agent 文件路径解析：模型常把「当前 Tab 名」当 file_path（例如「第1章 冒烟章节 v1」），
  * 而不是 vela://draft/1。这里把 Tab 名/id 统一映射到真实 filePath，工具与确认卡共用。
  */
-import { useEditorStore } from '../../stores/editor-store'
 
-export function resolveAgentFilePath(input: string): string {
+export function resolveAgentFilePath(input: string, ports: Pick<AgentRuntimePorts, 'editor'> = defaultAgentRuntimePorts): string {
   const raw = (input || '').trim()
   if (!raw) return raw
   if (raw.startsWith('vela://')) return raw
-  const editor = useEditorStore.getState()
+  const editor = ports.editor.snapshot()
   const tabs = editor.tabs
   const tab = tabs.find(t => t.name === raw)
     ?? tabs.find(t => t.id === raw)

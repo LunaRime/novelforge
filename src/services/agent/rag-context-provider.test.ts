@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * rag-context-provider 注入链测试（P2-3）——此前只有 kb 层的 FTS 豁免断言，
@@ -79,3 +80,5 @@ describe('RAG 注入链（P2-3）', () => {
     expect(await retrieveContextForQuery('q', DEFAULT_RAG_CONFIG)).toBeNull()
   })
 })
+
+installRendererAgentPorts()

@@ -14,7 +14,7 @@ const CONTENT = '---\nrange: 1-3\n---\n\n# 章节记忆 1-3\n\n## 第 1 章 · �
 
 describe('vela://memory/ 伪协议路由', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => (ch === 'memory:read' ? CONTENT : null)),
       },
@@ -29,16 +29,16 @@ describe('vela://memory/ 伪协议路由', () => {
   it('readVelaContent：vela://memory/<file> → memory:read(file)，文件名原样透传', async () => {
     const content = await readVelaContent('vela://memory/chapters-1-3.md')
     expect(content).toBe(CONTENT)
-    expect(window.velaAPI.invoke).toHaveBeenCalledWith('memory:read', 'chapters-1-3.md')
+    expect(window.novelforgeAPI.invoke).toHaveBeenCalledWith('memory:read', 'chapters-1-3.md')
 
     // 文件名不做 basename/编码等改写（路径安全由主进程 safeFile 兜底）：
     // 含空格与多点的名字必须逐字传出，否则读到的是另一个文件
     await readVelaContent('vela://memory/my notes.v2.md')
-    expect(window.velaAPI.invoke).toHaveBeenCalledWith('memory:read', 'my notes.v2.md')
+    expect(window.novelforgeAPI.invoke).toHaveBeenCalledWith('memory:read', 'my notes.v2.md')
   })
 
   it('readVelaContent：读盘失败（主进程返回 null）降级空串，不抛错', async () => {
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke: vi.fn(async () => null) },
       configurable: true,
     })

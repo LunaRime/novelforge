@@ -1,12 +1,12 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * update_config — 更新小说配置
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
-export const updateConfigTool = buildAgentTool({
+export function createUpdateConfigTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'update_config',
   description: t('tool.updateConfigDesc'),
   source: 'builtin',
@@ -32,6 +32,7 @@ export const updateConfigTool = buildAgentTool({
   },
   requiresConfirmation: true,
   isReadOnly: false,
+  isDestructive: true,
   execute: async (args) => {
     const field = args.field as string
     const value = args.value as string
@@ -61,7 +62,7 @@ export const updateConfigTool = buildAgentTool({
       finalValue = n
     }
 
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -92,3 +93,6 @@ export const updateConfigTool = buildAgentTool({
     }
   },
 })
+}
+
+export const updateConfigTool = createUpdateConfigTool()

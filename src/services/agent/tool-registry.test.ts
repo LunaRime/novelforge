@@ -116,3 +116,24 @@ describe('F: 工具调用语义 — 一轮多次调用 + 只读并行并发上�
     }
   })
 })
+
+describe('M3 execution metadata', () => {
+  const definition = {
+    name: 'metadata', description: 'metadata', source: 'builtin' as const,
+    inputSchema: { type: 'object' as const, properties: {} },
+    requiresConfirmation: false,
+    execute: async () => ({ success: true, content: '' }),
+  }
+  it('defaults pure builtin reads to safe, external tools to serial', () => {
+    expect(buildAgentTool(definition).isConcurrencySafe).toBe(true)
+    expect(buildAgentTool({ ...definition, source: 'mcp' }).isConcurrencySafe).toBe(false)
+    expect(buildAgentTool({ ...definition, source: 'skill' }).isConcurrencySafe).toBe(false)
+  })
+  it('destructive metadata overrides contradictory read/approval flags', () => {
+    const tool = buildAgentTool({ ...definition, isDestructive: true, isReadOnly: true, isConcurrencySafe: true })
+    expect(tool.isDestructive).toBe(true)
+    expect(tool.isConcurrencySafe).toBe(false)
+    expect(tool.isReadOnly).toBe(false)
+    expect(tool.requiresConfirmation).toBe(true)
+  })
+})

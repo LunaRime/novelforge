@@ -15,7 +15,7 @@ declare namespace NodeJS {
 
 // 通过 contextBridge 在 preload.ts 中暴露到渲染进程的 API
 interface Window {
-  velaAPI: {
+  novelforgeAPI: {
     invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
     on: (channel: string, callback: (...args: unknown[]) => void) => () => void
     once: (channel: string, callback: (...args: unknown[]) => void) => void
