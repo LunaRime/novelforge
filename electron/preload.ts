@@ -36,6 +36,9 @@ contextBridge.exposeInMainWorld('velaAPI', {
   // ===== 双向请求/响应（invoke/handle） =====
   /** 调用主进程并等待结果 */
   invoke: (channel: string, ...args: unknown[]) => {
+    if (!__DEV_CONSOLE__ && channel.startsWith('dev:') && !['dev:invoke', 'dev:test'].includes(channel)) {
+      throw new Error(t('error.ipcChannelNotAllowed').replace('{channel}', channel))
+    }
     checkChannel(channel, ALLOWED_INVOKE_CHANNELS)
     return ipcRenderer.invoke(channel, ...args)
   },

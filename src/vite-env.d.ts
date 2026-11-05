@@ -2,3 +2,5 @@
 
 /** 由 vite.config.ts define 注入的版本号（来自 package.json） */
 declare const __APP_VERSION__: string
+
+declare const __DEV_CONSOLE__: boolean

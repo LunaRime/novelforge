@@ -160,7 +160,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         icon: <Plus size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
       },
-      ...(devConsoleEnabled ? [{
+      ...(__DEV_CONSOLE__ && devConsoleEnabled ? [{
         id: 'dev-console', label: t('dev.consoleTitle'), category: t('command.group.general'),
         icon: <Terminal size={15} />, keywords: 'developer console devtools debug ipc db 开发者 控制台',
         run: () => layout.openDevConsole(),

@@ -37,6 +37,7 @@ try {
   run('node scripts/verify-build-contract.cjs')
   run('tsc')
   run('vite build')
+  run('node scripts/check-public-console.mjs')
   run('electron-builder')
   run('node scripts/verify-packed-app.cjs')
   run('node scripts/organize-release.cjs')

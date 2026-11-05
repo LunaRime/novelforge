@@ -7,6 +7,9 @@ import electronRenderer from 'vite-plugin-electron-renderer';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { readFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { devConsoleBuildGuard } from './scripts/dev-console-build-plugin';
+const { includesDevConsole } = createRequire(import.meta.url)('./scripts/dev-console-policy.cjs');
 
 // ESM 中不存在 __dirname，需要用 import.meta.url 来模拟
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,21 +18,25 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf-8'));
 
 // https://vitejs.dev/config/
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   // index.html %VITE_CSP_SCRIPT% 占位替换（HTML 环境变量机制）：
   // dev（Vite 服务器）需要 'unsafe-inline'——@vitejs/plugin-react 的 react-refresh
   // preamble 是内联脚本；生产构建替换为 'self'（严格模式，内联脚本已外移至 public/）。
   // 注意：必须在返回配置前设置 process.env（HTML 替换读 process.env）。
   process.env.VITE_CSP_SCRIPT = mode === 'development' ? "'unsafe-inline'" : "'self'"
 
+  const consoleEnabled = includesDevConsole(command, pkg.version)
+  const consoleDefine = { __DEV_CONSOLE__: JSON.stringify(consoleEnabled) }
   return {
-    plugins: [tailwindcss(), react(), electron({
+    plugins: [devConsoleBuildGuard(consoleEnabled), tailwindcss(), react(), electron({
       main: {
         // Shortcut of `build.lib.entry`.
         // 格式由 vite-plugin-electron 根据 package.json 的 type 字段自动选择。
         // 移除 type:module 后自动输出 CJS，不再需要显式 format。
         entry: 'electron/main.ts',
         vite: {
+          define: consoleDefine,
+          plugins: [devConsoleBuildGuard(consoleEnabled)],
           build: {
             rollupOptions: {
               // 原生/wasm 模块必须 externalize：Rolldown 无法打包 .node 二进制，
@@ -49,6 +56,8 @@ export default defineConfig(({ mode }) => {
         // Preload scripts may contain Web assets, so use the `build.rollupOptions.input` instead `build.lib.entry`.
         input: path.join(__dirname, 'electron/preload.ts'),
         vite: {
+          define: consoleDefine,
+          plugins: [devConsoleBuildGuard(consoleEnabled)],
           build: {
             rollupOptions: {
               output: {
@@ -70,7 +79,8 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       // 构建时将 package.json 版本注入为全局常量，避免 StatusBar 硬编码版本号
-      __APP_VERSION__: JSON.stringify(pkg.version)
+      __APP_VERSION__: JSON.stringify(pkg.version),
+      ...consoleDefine
     },
     optimizeDeps: {
       entries: ['index.html', 'src/**/*.{ts,tsx}']
