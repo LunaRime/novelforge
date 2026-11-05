@@ -58,6 +58,20 @@ jobs:
     - name: Test (Vitest)
       run: pnpm run test
 
+    # 真实文件存储契约（全量 test 也覆盖，单独运行便于定位）
+    - name: Contracts (Vitest)
+      if: matrix.os == 'ubuntu-latest'
+      run: pnpm run test:contracts
+
+    # 边界棘轮：core 越界硬失败；agent 依赖 stores 只许降
+    - name: Boundary ratchet
+      if: matrix.os == 'ubuntu-latest'
+      run: pnpm run check:boundaries
+
+    - name: Core type check (without DOM or Electron)
+      if: matrix.os == 'ubuntu-latest'
+      run: pnpm run typecheck:core
+
     - name: Type check (TypeScript)
       if: matrix.os == 'ubuntu-latest'
       run: pnpm tsc --noEmit

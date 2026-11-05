@@ -26,6 +26,7 @@
     "dev:instance": "node scripts/dev-instance.mjs",
     "build": "node scripts/build.cjs",
     "typecheck": "tsc --noEmit",
+    "typecheck:core": "tsc -p tsconfig.core.json",
     "build:vite": "vite build",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
     "lint": "eslint . --ext ts,tsx --max-warnings 0",
@@ -35,6 +36,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:contracts": "vitest run src/contracts",
+    "check:boundaries": "node scripts/check-boundaries.mjs",
+    "migrate:files": "node scripts/migrate-to-files.mjs",
     "gen:tokens": "node scripts/extract-tokens.cjs",
     "check:native": "node scripts/detect-native-deps.cjs"
   },
