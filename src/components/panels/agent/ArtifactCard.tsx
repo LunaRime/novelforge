@@ -11,63 +11,39 @@
  *    workflow_started → 打开底部「任务」面板。
  *  - **没有可达目标的类型不再假装可点**：渲染为静态卡片（无 hover、无手型）。
  */
-import { FileText, FolderOpen, Play, ExternalLink, BookOpen, Edit3, CheckCircle, XCircle, UserPlus, FileBarChart, Database, Users } from 'lucide-react'
-import type { ToolArtifact } from '../../../services/agent/tool-registry'
+import { FileText, Play, Edit3, CheckCircle, XCircle } from 'lucide-react'
+import type { RuntimeEvent } from '../../../core'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
-import { openDraftByChapter } from '../sidebar/SidebarShared'
 import { ipc } from '../../../services/ipc-client'
 import { isVelaProtocol, readVelaContent } from '../../../services/vela-protocol'
 import { t } from '../../../shared/locale'
 
 interface Props {
-  artifact: ToolArtifact
+  artifact: RuntimeEvent
 }
 
-/** 根据产物类型选择图标 */
-function ArtifactIcon({ artifact }: { artifact: ToolArtifact }) {
-  const { type } = artifact
-  switch (type) {
-    case 'file_created':       return <FileText size={13} />
-    case 'file_modified':      return <FolderOpen size={13} />
-    case 'workflow_started':   return <Play size={13} />
-    case 'tab_opened':         return <ExternalLink size={13} />
-    case 'blueprint_generated': return <BookOpen size={13} />
-    case 'draft_generated':    return <Edit3 size={13} />
-    case 'review_completed':   return <CheckCircle size={13} />
-    case 'character_extracted': return <UserPlus size={13} />
-    case 'summary_updated':    return <FileBarChart size={13} />
-    case 'verification_report': return <FileBarChart size={13} />
-    case 'embedding_indexed':  return <Database size={13} />
-    case 'mutual_review_completed': return <Users size={13} />
-    // 线② 2b：完成回执按 status 区分图标（失败 = XCircle，成功 = CheckCircle）
-    case 'workflow_completed': return artifact.metadata?.status === 'failed' ? <XCircle size={13} /> : <CheckCircle size={13} />
-    default:                   return <FileText size={13} />
+function ArtifactIcon({ artifact }: { artifact: RuntimeEvent }) {
+  switch (artifact.type) {
+    case 'document.changed': return <FileText size={13} />
+    case 'chapter.draft_written': return <Edit3 size={13} />
+    case 'chapter.reviewed': return <CheckCircle size={13} />
+    case 'workflow.progressed': return artifact.step === 'failed' ? <XCircle size={13} />
+      : artifact.step === 'completed' ? <CheckCircle size={13} /> : <Play size={13} />
   }
 }
-
-/** 产物类型标签（模块级 t() 读取当前 locale） */
-function typeLabel(type: ToolArtifact['type']): string {
-  switch (type) {
-    case 'file_created':         return t('artifact.fileCreated')
-    case 'file_modified':        return t('artifact.fileModified')
-    case 'workflow_started':     return t('artifact.workflowStarted')
-    case 'tab_opened':           return t('artifact.tabOpened')
-    case 'blueprint_generated':  return t('artifact.blueprintGenerated')
-    case 'draft_generated':      return t('artifact.draftGenerated')
-    case 'review_completed':     return t('artifact.reviewCompleted')
-    case 'character_extracted':  return t('artifact.characterExtracted')
-    case 'summary_updated':      return t('artifact.summaryUpdated')
-    case 'verification_report':  return t('artifact.verificationReport')
-    case 'embedding_indexed':    return t('artifact.embeddingIndexed')
-    case 'mutual_review_completed': return t('artifact.mutualReview')
-    case 'workflow_completed':   return t('artifact.workflowCompleted')
-    default:                     return ''
+function typeLabel(event: RuntimeEvent): string {
+  switch (event.type) {
+    case 'document.changed': return t('artifact.fileModified')
+    case 'chapter.draft_written': return t('artifact.draftGenerated')
+    case 'chapter.reviewed': return t('artifact.reviewCompleted')
+    case 'workflow.progressed': return t(event.step === 'started' ? 'artifact.workflowStarted' : 'artifact.workflowCompleted')
   }
 }
 
 export default function ArtifactCard({ artifact }: Props) {
-  const { type, name, path, metadata } = artifact
+  const { type, path } = artifact
+  const name = artifact.name ?? (type === 'workflow.progressed' ? artifact.runId : type === 'document.changed' ? artifact.id : artifact.chapterId)
 
   /** 文件类产物：先读内容再打开编辑器（避免空白 Tab） */
   const openFileArtifact = async () => {
@@ -94,18 +70,11 @@ export default function ArtifactCard({ artifact }: Props) {
 
   /** 解析该产物的可达目标；null = 没有可达目标（不得渲染可点形态） */
   const action: (() => void) | null = (() => {
-    if (path && (type === 'file_created' || type === 'file_modified' || type === 'tab_opened')) {
-      return () => void openFileArtifact()
-    }
-    if (type === 'blueprint_generated') {
-      const n = metadata?.chapterNumber
-      if (typeof n === 'number') return () => void openDraftByChapter(n, name)
-    }
-    if (type === 'workflow_started') {
-      return () => useLayoutStore.getState().openBottomTab('tasks')
-    }
-    if (type === 'workflow_completed') {
-      return () => useLayoutStore.getState().openRightPanel('ai-output')
+    if (path && type === 'document.changed') return () => void openFileArtifact()
+    if (type === 'workflow.progressed') {
+      return artifact.step === 'started'
+        ? () => useLayoutStore.getState().openBottomTab('tasks')
+        : () => useLayoutStore.getState().openRightPanel('ai-output')
     }
     return null
   })()
@@ -116,7 +85,7 @@ export default function ArtifactCard({ artifact }: Props) {
         <ArtifactIcon artifact={artifact} />
       </div>
       <span className="artifact-name">{name}</span>
-      <span className="artifact-type">{typeLabel(type)}</span>
+      <span className="artifact-type">{typeLabel(artifact)}</span>
     </>
   )
 

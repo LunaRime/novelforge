@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * edit_file 工具集成测试（C2 / CC §三.3）——mock IPC（参照 read-file.tool.test.ts 的 mockInvoke 模式）：
@@ -91,7 +92,7 @@ describe('edit_file 成功路径', () => {
     expect(r.success).toBe(true)
     expect(disk).toBe('他是配角。\n第二天，他出发了。\n') // 命中区外原样
     expect(r.content).toBe(fileEditedMsg('chap1.md', '1', '2', '2'))
-    expect(r.artifacts).toEqual([{ type: 'file_modified', path: `${projectPath}/chap1.md`, name: 'chap1.md' }])
+    expect(r.artifacts).toEqual([{ type: 'document.changed', id: `${projectPath}/chap1.md`, path: `${projectPath}/chap1.md`, name: 'chap1.md' }])
     // IPC 顺序：一次 read + 一次 write（全量写回，无新通道）
     expect(mockInvoke.mock.calls.map(c => c[0])).toEqual(['fs:read-file', 'fs:write-file'])
     expect(mockInvoke).toHaveBeenLastCalledWith('fs:write-file', `${projectPath}/chap1.md`, disk)
@@ -289,3 +290,5 @@ describe('edit_file chapter writes use workflow', () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 })
+
+installRendererAgentPorts()

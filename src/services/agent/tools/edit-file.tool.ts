@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * edit_file — 局部编辑项目文件（CC FileEditTool 对齐，Task C2 / CC §三.3）
  *
@@ -9,9 +10,7 @@
  * → 失效读去重缓存（clearReadState，与 write_file P0-2 同语义）。无新 IPC 通道。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 import { isChapterWritePath, isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 import { isVelaProtocol, VELA } from '../../vela-protocol'
@@ -24,7 +23,8 @@ import {
   findEditMatch,
 } from './edit-file-utils'
 
-export const editFileTool = buildAgentTool({
+export function createEditFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'edit_file',
   description: t('tool.editFileDesc'),
   source: 'builtin',
@@ -48,6 +48,7 @@ export const editFileTool = buildAgentTool({
   },
   requiresConfirmation: true,
   isReadOnly: false,
+  isDestructive: true,
   execute: async (args) => {
     // 类型归一化铁律：inputSchema 的 string 只是声明，LLM 可能传任意类型
     const filePath = typeof args.file_path === 'string' ? args.file_path : ''
@@ -67,12 +68,13 @@ export const editFileTool = buildAgentTool({
       return { success: false, content: '', error: t('tool.editEmptyOldString') }
     }
 
-    const project = useProjectStore.getState().currentProject
+    const sourceProject = captureAgentProject(ports)
+    const project = sourceProject.project
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
     // 模型可能把 Tab 名当 file_path；先映射到真实 filePath（vela://draft/{id} 等）
-    const resolvedPath = resolveAgentFilePath(filePath)
+    const resolvedPath = resolveAgentFilePath(filePath, ports)
 
     if (isChapterWritePath(resolvedPath)) {
       return { success: false, content: '', error: t('tool.chapterWorkflowRequired') }
@@ -126,6 +128,7 @@ export const editFileTool = buildAgentTool({
       }
     }
 
+    if (!sourceProject.isCurrent()) return { success: false, content: '', error: t('error.noProject') }
     const writeRes = await ipc.invoke('fs:write-file', pathCheck.fullPath, edit.content)
     if (!writeRes.success) {
       return { success: false, content: '', error: writeRes.error ?? t('tool.writeFileFailed') }
@@ -157,7 +160,10 @@ export const editFileTool = buildAgentTool({
     return {
       success: true,
       content,
-      artifacts: [{ type: 'file_modified', path: pathCheck.fullPath, name: filePath }],
+      artifacts: [{ type: 'document.changed', id: pathCheck.fullPath, path: pathCheck.fullPath, name: filePath }],
     }
   },
 })
+}
+
+export const editFileTool = createEditFileTool()

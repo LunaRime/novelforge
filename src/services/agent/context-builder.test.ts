@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * context-builder — Agent system prompt 输出语言约束测试（#30）
@@ -88,7 +89,7 @@ describe('M2 作品记忆节（P1）', () => {
       if (ch === 'memory:read') return '---\nrange: 001-015\n---\n\n## 第 1 章 · 开局\n- 关键事件：主角觉醒'
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
     useAgentStore.setState({ conversations: [], activeConversationId: null })
   })
 
@@ -327,7 +328,7 @@ describe('记忆分层注入（C 档第一轮）', () => {
   let mockInvoke: ReturnType<typeof vi.fn>
   beforeEach(() => {
     mockInvoke = vi.fn(async (ch: string): Promise<unknown> => (ch === 'memory:list' ? [] : null))
-    Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
     useAgentStore.setState({ conversations: [], activeConversationId: null })
   })
 
@@ -519,6 +520,8 @@ describe('工具段预算随工具数伸缩（P0-3）', () => {
           },
           requiresConfirmation: false,
           isReadOnly: true,
+          isConcurrencySafe: true,
+          isDestructive: false,
           execute: async () => ({ success: true, content: 'ok' }),
         })
       }
@@ -599,7 +602,7 @@ describe('S2/W2：任务锚点（system 尾部；不进历史、不参与压缩�
   beforeEach(() => {
     if (toolRegistry.listAll().length === 0) registerBuiltinTools()
     // 记忆读盘：本 describe 只关心锚点 → 一律空列表（不触发常驻/目录段）
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke: vi.fn(async (ch: string) => (ch === 'memory:list' ? [] : null)) },
       configurable: true,
     })
@@ -659,7 +662,7 @@ describe('S2/W2：任务锚点（system 尾部；不进历史、不参与压缩�
 describe('W1 批 2：按档位的段预算（ContextBudgets）', () => {
   beforeEach(() => {
     if (toolRegistry.listAll().length === 0) registerBuiltinTools()
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke: vi.fn(async (ch: string) => (ch === 'memory:list' ? [] : null)) },
       configurable: true,
     })
@@ -713,3 +716,5 @@ function edgesDefault(segments: Array<{ key: string; truncated?: boolean }>): bo
   const tools = segments.find(s => s.key === 'tools')
   return tools !== undefined && !tools.truncated
 }
+
+installRendererAgentPorts()

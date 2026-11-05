@@ -673,6 +673,25 @@ describe('工具分批并发（M1，对齐 CC toolOrchestration.ts）', () => {
     }))
   }
 
+  it('M3: an unsafe read forms a serial barrier despite being read-only', async () => {
+    registerReadTool('m3_safe_a', 10)
+    registerReadTool('m3_unsafe', 10)
+    registerReadTool('m3_safe_b', 10)
+    toolRegistry.get('m3_unsafe')!.isConcurrencySafe = false
+    await runLoopWithResponses([callsLine(['m3_safe_a', 'm3_unsafe', 'm3_safe_b']), 'done'])
+    expect(peakConcurrency()).toBe(1)
+    expect(eventIndex('m3_safe_a', 'end')).toBeLessThan(eventIndex('m3_unsafe', 'start'))
+    expect(eventIndex('m3_unsafe', 'end')).toBeLessThan(eventIndex('m3_safe_b', 'start'))
+  })
+
+  it('M3: destructive flags cannot bypass approval even on a malformed registered tool', async () => {
+    registerReadTool('m3_destructive', 1)
+    Object.assign(toolRegistry.get('m3_destructive')!, { isDestructive: true, requiresConfirmation: false })
+    const { callbacks } = await runLoopWithResponses([callsLine(['m3_destructive']), 'done'])
+    expect(callbacks.onToolCallConfirmRequired).toHaveBeenCalledTimes(1)
+    expect(eventIndex('m3_destructive', 'start')).toBe(-1)
+  })
+
   it('连续只读工具并行执行（并发峰 = 批内工具数，非串行 1）', async () => {
     registerReadTool('m1_ro_a', 25)
     registerReadTool('m1_ro_b', 25)

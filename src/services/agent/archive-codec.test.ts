@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 import { describe, it, expect } from 'vitest'
 import { selectCompressionBatch, serializeArchive, parseArchive, extractSideEffectReceipts } from './archive-codec'
 import { registerBuiltinTools } from './tools'
@@ -352,3 +353,5 @@ describe('归档 running 归一（C 档第二轮评审 I4）', () => {
     expect(s.error).toBeTruthy()      // 带原因（不静默）
   })
 })
+
+installRendererAgentPorts()

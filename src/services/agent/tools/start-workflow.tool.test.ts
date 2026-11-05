@@ -1,20 +1,17 @@
+import { installAgentRuntimePorts, type AgentRuntimePorts } from '../runtime-ports'
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { startWorkflowTool } from './start-workflow.tool'
-import { startWorkflow, WorkflowStartError } from '../../workflows/start-workflow'
+import { startWorkflowTool, createStartWorkflowTool } from './start-workflow.tool'
+import { WorkflowStartError } from '../../../core/application/start-workflow'
 import { t } from '../../../shared/locale'
 
-// 工具层触发由 workflow-starter 驱动——mock 掉全部启动入口（仅保留 WorkflowStartError 等真实导出）
-vi.mock('../../workflows/start-workflow', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../workflows/start-workflow')>()
+const mockStartChapter = vi.fn()
+function fakePorts(start = mockStartChapter, scope = { path: '/A', session: 1 }): AgentRuntimePorts {
   return {
-    ...actual,
-    startWorkflow: vi.fn(),
-  }
-})
-
-const mockStartChapter = vi.mocked(startWorkflow)
-
+    project: { current: () => ({ id: scope.path, path: scope.path }), session: () => scope.session },
+    workflows: { start, openOutput: vi.fn() },
+  } as unknown as AgentRuntimePorts
+}
 describe('start_workflow 错误语义映射', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -132,7 +129,7 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
   })
 
   it('非章节工作流携带 chapter_end → 忽略（不报错，按原路径执行）', async () => {
-    vi.mocked(startWorkflow).mockResolvedValue({ runId: 'rb', displayName: t('tool.wfBlueprint'), chapterTag: '' })
+    mockStartChapter.mockResolvedValue({ runId: 'rb', displayName: t('tool.wfBlueprint'), chapterTag: '' })
 
     const r = await startWorkflowTool.execute({ workflow: 'generate_blueprint', chapter_end: 9 })
 
@@ -175,5 +172,31 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
     const r2 = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: null })
     expect(r2.success).toBe(false)
     expect(r2.error).toBe(t('tool.wfNeedChapter').replace('{workflow}', 'generate_draft'))
+  })
+})
+
+installAgentRuntimePorts(fakePorts())
+
+describe('injected workflow dispatch', () => {
+  it('dispatches through each instance own workflow port', async () => {
+    const a = vi.fn().mockResolvedValue({ runId: 'a', displayName: 'A', chapterTag: '1' })
+    const b = vi.fn().mockResolvedValue({ runId: 'b', displayName: 'B', chapterTag: '1' })
+    const result = await createStartWorkflowTool(fakePorts(a)).execute({ workflow: 'generate_draft', chapter_number: 1 })
+    expect(result.success).toBe(true)
+    expect(a).toHaveBeenCalledTimes(1)
+    expect(b).not.toHaveBeenCalled()
+    await createStartWorkflowTool(fakePorts(b)).execute({ workflow: 'generate_draft', chapter_number: 1 })
+    expect(b).toHaveBeenCalledTimes(1)
+  })
+  it('does not dispatch the next chapter after source project changes', async () => {
+    const scope = { path: '/A', session: 1 }
+    const start = vi.fn().mockImplementation(async () => {
+      scope.path = '/B'
+      scope.session++
+      return { runId: 'a', displayName: 'A', chapterTag: '1' }
+    })
+    const result = await createStartWorkflowTool(fakePorts(start, scope)).execute({ workflow: 'generate_draft', chapter_number: 1, chapter_end: 2 })
+    expect(result.success).toBe(false)
+    expect(start).toHaveBeenCalledTimes(1)
   })
 })

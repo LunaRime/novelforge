@@ -1,13 +1,13 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * read_characters — 读取角色卡档案
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 
-export const readCharactersTool = buildAgentTool({
+export function createReadCharactersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'read_characters',
   description: t('tool.readCharsDesc'),
   source: 'builtin',
@@ -22,7 +22,7 @@ export const readCharactersTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -82,3 +82,6 @@ export const readCharactersTool = buildAgentTool({
     }
   },
 })
+}
+
+export const readCharactersTool = createReadCharactersTool()

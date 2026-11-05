@@ -17,6 +17,15 @@ beforeEach(() => {
 })
 
 describe('draft identity bridge', () => {
+  test('metadata and cached draft lists contain identity without projected file fields', async () => {
+    state.invoke.mockResolvedValue({ id: 42, chapterNumber: 7, version: 2, status: 'draft', source: 'write' })
+    const meta = await parseDraftMeta('vela://draft/42')
+    expect(meta).not.toHaveProperty('filePath')
+    expect(meta).not.toHaveProperty('fileName')
+    state.invoke.mockResolvedValue([meta])
+    await useDraftStore.getState().loadChapterDrafts(7)
+    expect(useDraftStore.getState().draftsByChapter[7][0]).not.toHaveProperty('filePath')
+  })
   test.each(['body', 'meta'])('%s helper dispatches into the initiating project and rejects stale results', async kind => {
     let readProject: string | undefined
     state.invoke.mockImplementation(async () => { readProject = state.project?.path; return { id: 42, content: 'body' } })

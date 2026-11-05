@@ -8,7 +8,7 @@
  *  - **失败不阻断**：备份/写盘失败一律「不抛 + 保留原状 + 留日志」，下次再试。
  *
  * ⚠️ 测试卫生（硬性）：**绝不触真实 `~/.novelforge`**。两道防线 ——
- *  ① `node:os` 的 `homedir` 打桩到临时目录（`VELA_HOME` 随之落在 tmp 里，kb-controller.test.ts 同款）；
+ *  ① `node:os` 的 `homedir` 打桩到临时目录（`NOVELFORGE_HOME` 随之落在 tmp 里，kb-controller.test.ts 同款）；
  *  ② 需要制造 IO 失败时改用注入件（`__setConfigFilesForTest` / `__setCredentialFileForTest`）。
  *
  * ⚠️ CI 一致性（ci-parity-standard）：import 到 electron（`secure-config` → `safeStorage`）
@@ -23,7 +23,7 @@ const h = vi.hoisted(() => ({
   available: true,
   encryptString: vi.fn((s: string) => Buffer.from(s, 'utf-8')),
   decryptString: vi.fn((buf: Buffer) => buf.toString('utf-8')),
-  /** 假 home（tmp 子目录）—— VELA_HOME / 三个配置文件路径全部派生自它 */
+  /** 假 home（tmp 子目录）—— NOVELFORGE_HOME / 三个配置文件路径全部派生自它 */
   home: `${process.env.TEMP ?? process.env.TMP ?? process.cwd()}/nf-migrate-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 }))
 
@@ -53,7 +53,7 @@ import {
   PROVIDERS_CONFIG_PATH,
   CREDENTIALS_CONFIG_PATH,
   CREDENTIAL_MIGRATION_BACKUP_SUFFIX,
-  VELA_HOME,
+  NOVELFORGE_HOME,
   readProvidersFile,
   __setConfigFilesForTest,
 } from '../utils/config-utils'
@@ -266,7 +266,7 @@ const rawRead = (p: string): string => fs.readFileSync(p, 'utf-8')
 describe('runCredentialMigration（真实文件层 · tmp home）', () => {
   beforeEach(() => {
     fs.rmSync(h.home, { recursive: true, force: true })
-    fs.mkdirSync(VELA_HOME, { recursive: true }) // ~/.novelforge（假 home 下）—— 三个配置文件都在它里面
+    fs.mkdirSync(NOVELFORGE_HOME, { recursive: true }) // ~/.novelforge（假 home 下）—— 三个配置文件都在它里面
     __setStoredForTest({}) // 清 store 的进程内明文缓存（换了一份盘上数据，缓存必须失效）
   })
 

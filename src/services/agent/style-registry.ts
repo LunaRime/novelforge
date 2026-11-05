@@ -1,7 +1,7 @@
 /**
  * 输出风格注册中心（渲染层）——零代码注册：styles/*.md 即风格
  *
- * 双层加载：{project}/.novelforge/styles/*.md（项目级）+ {VELA_HOME}/styles/*.md（用户级），
+ * 双层加载：{project}/.novelforge/styles/*.md（项目级）+ {NOVELFORGE_HOME}/styles/*.md（用户级），
  * 项目覆盖用户（同名取项目）。解析/合并纯逻辑在 electron/utils/style-codec.ts（与主进程共享，
  * 此处 re-export——渲染层经同一模块取纯函数与类型），本模块经 IPC（styles:list / styles:get）读盘
  * ——引擎（workflow command 层）不依赖 electron。

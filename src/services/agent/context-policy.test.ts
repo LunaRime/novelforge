@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 /**
  * context-policy（W1，批 2）——按模型档位的上下文策略契约。
  *
@@ -135,3 +136,5 @@ describe('resolveContextPolicyFor：读 store 的档位解析', () => {
     expect(resolveContextPolicyFor('不存在').tier).toBe('standard')
   })
 })
+
+installRendererAgentPorts()

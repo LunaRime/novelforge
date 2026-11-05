@@ -8,13 +8,31 @@ beforeEach(() => {
 })
 
 describe('editor-store openFile', () => {
+  it('uses one document identity across draft entry points and preserves dirty edits', () => {
+    const store = useEditorStore.getState()
+    store.openFile({ id: 'translation-42', type: 'chapter', name: 'Translation', filePath: 'vela://draft/42', content: 'initial' })
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:42', docId: 42 })
+    store.updateTabContent('doc:42', 'edited')
+    store.openFile({ id: 'sidebar-42', type: 'chapter', name: 'Draft', filePath: 'vela://draft/42', content: 'stale' })
+    expect(useEditorStore.getState().tabs).toHaveLength(1)
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:42', content: 'edited', dirty: true })
+    store.closeTab('doc:42')
+    expect(useEditorStore.getState().tabs).toHaveLength(0)
+  })
   it('新文件打开并激活', () => {
     const s = useEditorStore.getState()
     s.openFile({ id: 'vela://draft/1', name: '第一章 · 草稿', type: 'chapter', filePath: 'vela://draft/1', content: '旧内容' })
     const st = useEditorStore.getState()
     expect(st.tabs.length).toBe(1)
-    expect(st.activeTabId).toBe('vela://draft/1')
+    expect(st.activeTabId).toBe('doc:1')
     expect(st.tabs[0].content).toBe('旧内容')
+  })
+  it('keeps the manuscript view separate from the editable draft identity', () => {
+    const store = useEditorStore.getState()
+    store.openFile({ id: 'draft', docId: 42, name: 'Draft', type: 'chapter', filePath: 'vela://draft/42' })
+    store.openFile({ id: 'vela://manuscript/42', docId: 42, name: 'Manuscript', type: 'chapter', filePath: 'vela://manuscript/42' })
+    expect(useEditorStore.getState().tabs.map(tab => tab.id)).toEqual(['doc:42', 'vela://manuscript/42'])
+    expect(useEditorStore.getState().tabs[1].filePath).toBe('vela://manuscript/42')
   })
 
   it('重复打开同 id：激活 + 更新名称 + 非 dirty 刷新内容', () => {
@@ -33,13 +51,13 @@ describe('editor-store openFile', () => {
     s.openFile({ id: 'vela://draft/9', name: '第二章 · 草稿', type: 'chapter', filePath: 'vela://draft/9', content: '原文' })
     // 用户开始编辑（dirty）
     useEditorStore.setState(s => ({
-      tabs: s.tabs.map(t => t.id === 'vela://draft/9' ? { ...t, content: '用户编辑中', dirty: true } : t),
+      tabs: s.tabs.map(t => t.id === 'doc:9' ? { ...t, content: '用户编辑中', dirty: true } : t),
     }))
     // 工作台再次点击同一草稿（读到 DB 最新内容）
     s.openFile({ id: 'vela://draft/9', name: '第二章 · 草稿', type: 'chapter', filePath: 'vela://draft/9', content: 'DB 最新' })
     const st = useEditorStore.getState()
     expect(st.tabs[0].content).toBe('用户编辑中') // 不覆盖未保存编辑
-    expect(st.activeTabId).toBe('vela://draft/9')
+    expect(st.activeTabId).toBe('doc:9')
   })
 
   it('按 filePath + type 去重（不同 id 同一文件）', () => {
@@ -100,8 +118,8 @@ describe('editor-store inlineSession（L1 会话层）', () => {
   it('beginInlineSession：tab 挂会话，content/dirty 不变', () => {
     const s = useEditorStore.getState()
     s.openFile({ id: 'vela://draft/1', name: 'd', type: 'chapter', filePath: 'vela://draft/1', content: '他走了。她没答话。' })
-    s.beginInlineSession('vela://draft/1', mkSession())
-    const tab = useEditorStore.getState().tabs.find(t => t.id === 'vela://draft/1')!
+    s.beginInlineSession('doc:1', mkSession())
+    const tab = useEditorStore.getState().tabs.find(t => t.id === 'doc:1')!
     expect(tab.inlineSession?.sessionId).toBe('sess-1')
     expect(tab.content).toBe('他走了。她没答话。')
     expect(tab.dirty).toBeFalsy()

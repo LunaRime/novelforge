@@ -1,7 +1,7 @@
 /**
  * 输出风格文件 codec —— 纯函数层（零 electron 依赖，主进程 styles-controller 与渲染层共享）
  *
- * 风格文件 = {项目}/.novelforge/styles/*.md 或 {VELA_HOME}/styles/*.md（用户级）
+ * 风格文件 = {项目}/.novelforge/styles/*.md 或 {NOVELFORGE_HOME}/styles/*.md（用户级）
  * 零代码注册语义：文件名 = 风格名（去 .md），frontmatter = 描述（可选），正文 = prompt（写作风格指令）。
  *
  * frontmatter 格式（与 parseMemoryFile 同风格的简单 YAML 行解析）：

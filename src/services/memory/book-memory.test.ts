@@ -45,7 +45,7 @@ beforeEach(() => {
         return null
     }
   })
-  Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
 })
 
 /** P1 卷摘要文件形态（buildVolumeSummaryFile 产物），用于 rebuildBookState 聚合输入 */

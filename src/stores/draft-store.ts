@@ -67,15 +67,13 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
 
     const assertProject = captureDraftProject()
     try {
-      // 直接调用后端 DB 获取列表，返回的结构已经转换为兼容的 DraftMeta 格式
+      // 直接调用后端 DB 获取列表，正文与展示 URI 不进入列表元数据
       const list = await ipc.invoke('db:draft-list', chapterNumber)
       assertProject()
       const metas: DraftMeta[] = list.map((m) => ({
         ...m,
         status: m.status as DraftStatus,
         source: m.source as DraftMeta['source'],
-        fileName: `draft_v${m.version}.md`,
-        filePath: `${VELA.DRAFT}${m.id}`
       }))
 
       // 按版本号排序（新 → 旧）
@@ -113,8 +111,6 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
           ...m,
           status: m.status as DraftStatus,
           source: m.source as DraftMeta['source'],
-          fileName: `draft_v${m.version}.md`,
-          filePath: `${VELA.DRAFT}${m.id}`
         }))
 
         metas.sort((a, b) => b.version - a.version)

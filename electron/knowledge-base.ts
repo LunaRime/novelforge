@@ -15,7 +15,7 @@ import { randomUUID } from 'node:crypto'
 import type { LocalEmbeddingConfig } from '../src/shared/ipc-channels'
 import { logger } from './utils/logger'
 import { safeErrorMessage } from './utils/error-utils'
-import { getProjectVelaDir, readLocalEmbeddingConfig } from './utils/config-utils'
+import { getProjectDataDir, readLocalEmbeddingConfig } from './utils/config-utils'
 import { Field, FixedSizeList as ArrowFixedSizeList, Float32, Int32, Utf8, Schema as ArrowSchema } from 'apache-arrow'
 import { chunkText, generateEmbeddings } from './embedding'
 import { resolveEmbeddingOrder, hasUsableVectors, firstVectorDim } from './embedding-order'
@@ -45,7 +45,7 @@ async function ensureMigration(projectPath: string): Promise<void> {
   if (migratedProjects.has(projectPath)) return
   migratedProjects.add(projectPath)
 
-  const jsonPath = path.join(getProjectVelaDir(projectPath), 'vectors.json')
+  const jsonPath = path.join(getProjectDataDir(projectPath), 'vectors.json')
   if (fs.existsSync(jsonPath)) {
     await migrateFromJSON(projectPath)
   }

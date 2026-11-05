@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * start_workflow — 触发创作工作流
  *
@@ -8,18 +9,14 @@
  * 工作流启动统一经过 services/workflows/start-workflow 应用入口；
  * 本工具层只负责参数校验与错误语义映射（WorkflowStartError.code → 用户可见文案）。
  */
-import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
-import { useLayoutStore } from '../../../stores/layout-store'
-import {
-  startWorkflow,
-  WorkflowStartError,
-} from '../../workflows/start-workflow'
+import { WorkflowStartError, type WorkflowStartRequest } from '../../../core'
 
 /** 区间单次最多章数（2026-10-02 评审 I1：模型幻觉大区间 → 无界静默启动的护栏） */
 const MAX_RANGE_CHAPTERS = 20
 
-export const startWorkflowTool = buildAgentTool({
+export function createStartWorkflowTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'start_workflow',
   description: t('tool.startWorkflowDesc'),
   source: 'builtin',
@@ -53,6 +50,11 @@ export const startWorkflowTool = buildAgentTool({
   requiresConfirmation: true,
   isReadOnly: false,
   execute: async (args) => {
+    const sourceProject = captureAgentProject(ports)
+    const startWorkflow = (request: WorkflowStartRequest) => {
+      if (!sourceProject.isCurrent()) throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
+      return ports.workflows.start(request)
+    }
     const workflow = args.workflow as string
     // null 归一（2026-10-02 复审 M1）：模型对未用的可选参数常发 null——一律视为未传（否则误报「区间无效」）
     const chapterNumber = args.chapter_number == null ? undefined : (args.chapter_number as number)
@@ -86,7 +88,7 @@ export const startWorkflowTool = buildAgentTool({
           content: t('tool.bookPipelineStarted')
             .replace('{name}', result.displayName)
             .replace('{range}', result.chapterTag),
-          artifacts: [{ type: 'workflow_started' as const, name: `${result.displayName} ${result.chapterTag}` }],
+          artifacts: [{ type: 'workflow.progressed' as const, runId: result.runId, step: 'started', pct: 0, name: `${result.displayName} ${result.chapterTag}` }],
         }
       } catch (e) {
         if (e instanceof WorkflowStartError) {
@@ -118,7 +120,7 @@ export const startWorkflowTool = buildAgentTool({
     }
 
     // 打开右侧面板到 AI 输出视图
-    useLayoutStore.getState().openRightPanel('ai-output')
+    ports.workflows.openOutput()
 
     try {
       switch (workflow) {
@@ -147,14 +149,14 @@ export const startWorkflowTool = buildAgentTool({
               content: started.map(r =>
                 t('tool.workflowStarted').replace('{name}', r.displayName).replace('{chapter}', r.chapterTag),
               ).join('\n'),
-              artifacts: started.map(r => ({ type: 'workflow_started' as const, name: `${r.displayName} ${r.chapterTag}` })),
+              artifacts: started.map(r => ({ type: 'workflow.progressed' as const, runId: r.runId, step: 'started', pct: 0, name: `${r.displayName} ${r.chapterTag}` })),
             }
           }
           const result = await startWorkflow({ workflow, chapterNumber: chapterNumber! })
           return {
             success: true,
             content: t('tool.workflowStarted').replace('{name}', result.displayName).replace('{chapter}', result.chapterTag),
-            artifacts: [{ type: 'workflow_started', name: `${result.displayName} ${result.chapterTag}` }],
+            artifacts: [{ type: 'workflow.progressed', runId: result.runId, step: 'started', pct: 0, name: `${result.displayName} ${result.chapterTag}` }],
           }
         }
         case 'generate_blueprint': {
@@ -162,7 +164,7 @@ export const startWorkflowTool = buildAgentTool({
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
-            artifacts: [{ type: 'workflow_started', name: result.displayName }],
+            artifacts: [{ type: 'workflow.progressed', runId: result.runId, step: 'started', pct: 0, name: result.displayName }],
           }
         }
         case 'generate_architecture': {
@@ -170,7 +172,7 @@ export const startWorkflowTool = buildAgentTool({
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
-            artifacts: [{ type: 'workflow_started', name: result.displayName }],
+            artifacts: [{ type: 'workflow.progressed', runId: result.runId, step: 'started', pct: 0, name: result.displayName }],
           }
         }
         case 'config_generation': {
@@ -182,7 +184,7 @@ export const startWorkflowTool = buildAgentTool({
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
-            artifacts: [{ type: 'workflow_started', name: result.displayName }],
+            artifacts: [{ type: 'workflow.progressed', runId: result.runId, step: 'started', pct: 0, name: result.displayName }],
           }
         }
         default:
@@ -211,3 +213,6 @@ export const startWorkflowTool = buildAgentTool({
     }
   },
 })
+}
+
+export const startWorkflowTool = createStartWorkflowTool()

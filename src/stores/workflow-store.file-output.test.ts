@@ -20,7 +20,7 @@ const tailFixture = new Map<string, { content: string; exists?: boolean }>()
 beforeEach(() => {
   invokeCalls.length = 0
   tailFixture.clear()
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: async (channel: string, ...args: unknown[]) => {
         invokeCalls.push({ channel, args })

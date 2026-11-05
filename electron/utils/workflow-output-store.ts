@@ -7,7 +7,7 @@
  * - **'w' 标志 + 显式字节偏移**：libuv 'a'/O_APPEND 在 MSYS2/Cygwin 有探测坑（静默丢输出），
  *   因此打开一律 `fsPromises.open(path, 'w')`（截断重建），后续每次写用显式 byte offset
  *   （不依赖 fd 隐式位置推进）；重开即覆盖 = 同 run 崩溃重启后旧文件被新输出截断重写；
- * - **目录/命名**：`{VELA_HOME}/workflow-output/<runId>/<stepIndex>.txt`——runId 为 UUID 天然
+ * - **目录/命名**：`{NOVELFORGE_HOME}/workflow-output/<runId>/<stepIndex>.txt`——runId 为 UUID 天然
  *   分目录（任务级清理 = 删目录），stepIndex.txt = 每步一份（崩溃后按 run+step 续读）；
  * - **生命周期**：任务级删除（完成/取消时渲染层调 delete-run）；崩溃残留由启动 sweep 兜底
  *   （超龄目录清理，保留窗口内供恢复续读）；

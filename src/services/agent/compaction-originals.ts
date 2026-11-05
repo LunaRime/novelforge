@@ -1,3 +1,4 @@
+import { decodeArchivedMessageEvents } from './archive-events'
 /**
  * 分卷存储 —— 被压缩对话的原文（B 档第二轮）
  *
@@ -5,12 +6,12 @@
  * - 原文会让 archive 无界增长（长对话可达数十 MB），而清理逻辑此前还有 bug（只清下标 0）
  * - 分卷后：会话 JSON 只留引用、原文**永不丢失**、摘要可重生成、展开原文按需读
  *
- * 文件：`<VELA_HOME>/agent-archive/<convId>.originals.json`（与会话 JSON 同目录、不同后缀）。
+ * 文件：`<NOVELFORGE_HOME>/agent-archive/<convId>.originals.json`（与会话 JSON 同目录、不同后缀）。
  * 形状：`{ version: 1, batches: { [batchNumber]: AgentMessage[] } }`。
  * 全程 fail-safe：损坏/缺失一律按"无原文"处理（不抛、不崩）。
  */
 import { ipc } from '../ipc-client'
-import type { AgentMessage } from '../../stores/agent-store'
+import type { AgentMessage } from '../../shared/agent-conversation'
 
 interface OriginalsFile {
   version: 1
@@ -64,7 +65,10 @@ export async function copyAllOriginals(fromConvId: string, toConvId: string): Pr
 export async function readBatchOriginal(convId: string, batch: number): Promise<AgentMessage[] | null> {
   const file = await readAll(convId)
   const entry = file.batches[String(batch)]
-  return Array.isArray(entry) && entry.length > 0 ? entry : null
+  if (!Array.isArray(entry)) return null
+  const messages = entry.filter(message => !!message && typeof message === 'object' && typeof message.content === 'string')
+    .map(decodeArchivedMessageEvents)
+  return messages.length ? messages : null
 }
 
 /** 删除会话的全部分卷（会话删除时级联调用） */

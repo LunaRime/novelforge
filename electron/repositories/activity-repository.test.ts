@@ -6,7 +6,7 @@
  * 此处验证无 DB 时的空分支与 SQL 构建逻辑，运行时聚合由 Electron 集成验证。
  *
  * config-utils 整体 mock：消除真实 ~/.novelforge/config.json（GLOBAL_CONFIG_PATH）
- * 环境依赖——readJsonFile 返回受控假数据、getProjectVelaDir 返回临时/恒不存在路径，
+ * 环境依赖——readJsonFile 返回受控假数据、getProjectDataDir 返回临时/恒不存在路径，
  * 断言基于受控数据而非本机真实配置与真实最近项目（clean CI 无 config.json 时若读真实
  * home 则回退旧 .vela 路径，属环境性红）。
  */
@@ -25,17 +25,17 @@ const configUtils = vi.hoisted(() => ({
   readJsonFile: vi.fn<() => { recentProjects: Array<{ name: string; path: string }> }>(
     () => ({ recentProjects: [] }),
   ),
-  getProjectVelaDir: vi.fn<(projectPath: string) => string>(
+  getProjectDataDir: vi.fn<(projectPath: string) => string>(
     (projectPath: string) => path.join(projectPath, '.novelforge'),
   ),
 }))
 
 // mock config-utils：不读真实 home（readJsonFile 假数据 + GLOBAL_CONFIG_PATH 假常量 +
-// getProjectVelaDir 走传入路径（项目路径由测试控制，与真实 home 无关））
+// getProjectDataDir 走传入路径（项目路径由测试控制，与真实 home 无关））
 vi.mock('../utils/config-utils', () => ({
   readJsonFile: configUtils.readJsonFile,
   GLOBAL_CONFIG_PATH: '/__mock-global-config__/config.json',
-  getProjectVelaDir: configUtils.getProjectVelaDir,
+  getProjectDataDir: configUtils.getProjectDataDir,
 }))
 
 // 延迟导入（mock 生效后）
@@ -45,7 +45,7 @@ const { GLOBAL_CONFIG_PATH } = await import('../utils/config-utils')
 beforeEach(() => {
   // 每次重置为受控默认值（空最近项目），隔离测试间的覆写
   configUtils.readJsonFile.mockReset().mockReturnValue({ recentProjects: [] })
-  configUtils.getProjectVelaDir.mockReset().mockImplementation(
+  configUtils.getProjectDataDir.mockReset().mockImplementation(
     (projectPath: string) => path.join(projectPath, '.novelforge'),
   )
 })

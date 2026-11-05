@@ -6,7 +6,7 @@
  */
 import { ipc } from './ipc-client'
 import { t } from '../shared/locale'
-import { VELA } from './vela-protocol'
+
 import { useProjectStore } from '../stores/project-store'
 import { computeTextStats } from './text-stats'
 import type { DraftStatus } from '../shared/draft-status'
@@ -16,21 +16,16 @@ import type { DraftMeta as DB_DraftMeta } from '../../electron/repositories/draf
 import type { RevisionMeta as DB_RevisionMeta } from '../../electron/repositories/revision-repository'
 import type { ReviewMeta as DB_ReviewMeta } from '../../electron/repositories/review-repository'
 
-// ===== DraftMeta 兼容类型 =====
+// ===== 草稿身份与状态（URI 在使用处投影） =====
 export interface DraftMeta {
   id: number
   chapterNumber: number
-  chapterTitle?: string       // 为了兼容保留（UI极少直接从draft拿），实际上可不填
   version: number
   status: DraftStatus
   wordCount?: number
   createdAt: number
   updatedAt?: number
   source: 'write' | 'rewrite'
-
-  // 为了尽量不改 UI，我们伪造这两个字段
-  filePath: string
-  fileName: string
 }
 
 // ===== RevisionEntry 兼容类型 =====
@@ -70,9 +65,6 @@ function mapDraftMeta(dbMeta: DB_DraftMeta): DraftMeta {
     ...dbMeta,
     status: dbMeta.status as DraftStatus,
     source: dbMeta.source as 'write' | 'rewrite',
-    // 虚拟字段，UI通过 parse 得到版本号或者展示
-    fileName: `draft_v${dbMeta.version}.md`,
-    filePath: `${VELA.DRAFT}${dbMeta.id}`, // 伪协议路径，用于 editor-store
   }
 }
 

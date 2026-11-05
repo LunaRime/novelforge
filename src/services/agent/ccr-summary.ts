@@ -1,5 +1,5 @@
-import type { AgentMessage } from '../../stores/agent-store'
-import { useLLMStore } from '../../stores/llm-store'
+import { getAgentRuntimePorts } from './runtime-ports'
+import type { AgentMessage } from '../../shared/agent-conversation'
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { calculateCost } from '../llm/prompt-cache'
@@ -61,16 +61,16 @@ export async function generateConversationSummary(opts: {
   //    Constraints）——此前直接传 opts.modelId（Agent 的 elite/standard 模型），
   //    摘要成本高且与路由策略冲突。getModelForPurpose 无配置时返回 null，
   //    回退 opts.modelId（调用方语义不变）。
-  const mid = useLLMStore.getState().getModelForPurpose('summarize') ?? opts.modelId
+  const mid = getAgentRuntimePorts().models.forPurpose('summarize') ?? opts.modelId
 
   const startTime = Date.now()
-  const response = await useLLMStore.getState().generate(
+  const response = await getAgentRuntimePorts().models.generate(
     [{ role: 'user', content: prompt }],
     mid,
     { temperature: 0.2, priority: 12 },
   )
   const duration = Date.now() - startTime
-  const model = useLLMStore.getState().models.find(m => m.id === mid)
+  const model = getAgentRuntimePorts().models.snapshot().models.find(m => m.id === mid)
   const usage = response.usage
 
   if (!response.success) {

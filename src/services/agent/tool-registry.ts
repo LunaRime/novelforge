@@ -1,3 +1,4 @@
+import type { RuntimeEvent } from '../../core'
 /**
  * NovelForge Agent Tool 注册表
  *
@@ -11,6 +12,7 @@
  */
 
 import { t } from '../../shared/locale'
+import type { ToolExecutionPolicy } from '../../core'
 import { MAX_PARALLEL_READ_TOOLS } from './tool-scheduling'
 
 // ===== JSON Schema 简化类型 =====
@@ -29,36 +31,6 @@ export interface ToolInputSchema {
 
 // ===== Tool 执行结果 =====
 
-/** Tool 执行产物（Agent 创建/修改的文件等） */
-export interface ToolArtifact {
-  type:
-    | 'file_created'
-    | 'file_modified'
-    | 'workflow_started'
-    | 'tab_opened'
-    // 新增产物类型
-    | 'blueprint_generated'
-    | 'draft_generated'
-    | 'review_completed'
-    | 'character_extracted'
-    | 'summary_updated'
-    | 'verification_report'
-    | 'embedding_indexed'
-    | 'mutual_review_completed'
-    // 线② 2b：工作流完成回执（D5——对话内卡片为主）
-    | 'workflow_completed'
-  /** 文件路径或资源标识 */
-  path?: string
-  /** 显示名称 */
-  name: string
-  /** 单行摘要（UI 快速预览） */
-  summary?: string
-  /** 结构化元数据 */
-  metadata?: Record<string, unknown>
-  /** 创建时间戳 */
-  timestamp?: number
-}
-
 /** Tool 执行结果 */
 export interface ToolResult {
   /** 是否执行成功 */
@@ -66,7 +38,7 @@ export interface ToolResult {
   /** 文本结果（注入回 Agent 的对话上下文） */
   content: string
   /** 执行产物列表（可选） */
-  artifacts?: ToolArtifact[]
+  artifacts?: RuntimeEvent[]
   /** 错误信息（失败时） */
   error?: string
 }
@@ -77,7 +49,7 @@ export interface ToolResult {
 export type ToolSource = 'builtin' | 'mcp' | 'skill'
 
 /** Agent Tool 接口 — 所有种类的 Tool 都实现此接口 */
-export interface AgentTool {
+export interface AgentTool extends ToolExecutionPolicy {
   /** 唯一标识符（MCP Tool 使用 mcp__serverId__toolName 命名空间） */
   name: string
   /** Tool 用途描述（Agent 凭此决定何时调用） */
@@ -86,10 +58,6 @@ export interface AgentTool {
   source: ToolSource
   /** 参数 JSON Schema */
   inputSchema: ToolInputSchema
-  /** 是否需要用户确认后才执行（写入型操作 = true） */
-  requiresConfirmation: boolean
-  /** 是否为只读操作 */
-  isReadOnly: boolean
   /**
    * 工具级执行超时覆盖（C 档第二轮）：缺省 = 引擎全局 `TOOL_TIMEOUT_MS`（30s）。
    * 长耗时工具必须自己声明 —— 否则会在 30s 处被腰斩，而调用方（模型）只看到「超时」，
@@ -239,10 +207,18 @@ export const toolRegistry = new ToolRegistryImpl()
  * 提供合理的默认值，减少样板代码。
  */
 export function buildAgentTool(
-  def: Omit<AgentTool, 'isReadOnly'> & { isReadOnly?: boolean }
+  def: Omit<AgentTool, 'isReadOnly' | 'isConcurrencySafe' | 'isDestructive'>
+    & Partial<Pick<AgentTool, 'isReadOnly' | 'isConcurrencySafe' | 'isDestructive'>>
 ): AgentTool {
+  const isDestructive = def.isDestructive ?? false
+  const requiresConfirmation = def.requiresConfirmation || isDestructive
+  const isReadOnly = !isDestructive && (def.isReadOnly ?? !requiresConfirmation)
   return {
-    isReadOnly: !def.requiresConfirmation,
     ...def,
+    isDestructive,
+    requiresConfirmation,
+    isReadOnly,
+    isConcurrencySafe: isReadOnly && !requiresConfirmation
+      && (def.isConcurrencySafe ?? def.source === 'builtin'),
   }
 }

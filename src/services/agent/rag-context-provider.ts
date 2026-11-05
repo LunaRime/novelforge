@@ -1,3 +1,4 @@
+import { getAgentRuntimePorts } from './runtime-ports'
 /**
  * NovelForge RAG 上下文提供器 — 向量检索增强生成
  *
@@ -11,7 +12,6 @@
 
 import { ipc } from '../ipc-client'
 import { estimateTokens } from './token-budget'
-import { useVectorConfigStore } from '../../stores/vector-config-store'
 import { t } from '../../shared/locale'
 
 // ===== 类型定义 =====
@@ -71,7 +71,7 @@ export async function retrieveContextForQuery(
   if (!config.enabled || !userQuery.trim()) return null
 
   // 检查向量配置：如果全部禁用则跳过 RAG
-  const vectorConfig = useVectorConfigStore.getState()
+  const vectorConfig = getAgentRuntimePorts().vectors.snapshot()
   if (!vectorConfig.isAnyVectorAvailable()) {
     console.debug('[RAG] 向量功能已全部禁用，跳过 RAG 检索')
     return null

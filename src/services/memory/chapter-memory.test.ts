@@ -57,7 +57,7 @@ beforeEach(() => {
         return null
     }
   })
-  Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
   useLLMStore.setState({
     models: [],
     getModelForPurpose: () => null,

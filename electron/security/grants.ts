@@ -5,10 +5,10 @@
  *  - `isPathAllowed(candidate, intent, policy)`：**判定**。纯函数，根与授权集都由入参给定。
  *  - `grantPath/revokeGrant/...`：**登记**。会话级授权集（进程重启即失效，与改造前一致）。
  *
- * 改造前的边界（`fs-controller.ts` 的 `SANDBOX_ROOTS = [VELA_HOME, os.homedir()]` + 黑名单）
+ * 改造前的边界（`fs-controller.ts` 的 `SANDBOX_ROOTS = [NOVELFORGE_HOME, os.homedir()]` + 黑名单）
  * 实质等于「整个用户主目录可读写」，且 `fs:grant-external-file` 允许渲染层自报路径登记授权。
  * 本模块把边界换成**显式白名单 + 意图分级**：
- *   VELA_HOME ∪ 当前项目根 ∪ 会话内由主进程签发的授权，其余默认拒绝。
+ *   NOVELFORGE_HOME ∪ 当前项目根 ∪ 会话内由主进程签发的授权，其余默认拒绝。
  *
  * ⚠️ S8/S9 的过渡：`PathPolicy.legacyHomeDir` 保留主目录根（与改造前等价），
  * 便于先接线、后收紧；S9 只需把它置空（单点可回滚）。

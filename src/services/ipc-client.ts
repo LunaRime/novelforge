@@ -13,8 +13,8 @@ import type {
 } from '../shared/ipc-channels'
 import { t } from '../shared/locale'
 
-/** 从 preload 暴露的 velaAPI */
-interface VelaAPI {
+/** 从 preload 暴露的 novelforgeAPI */
+interface NovelForgeAPI {
   invoke: (channel: string, ...args: unknown[]) => Promise<unknown>
   on: (channel: string, callback: (...args: unknown[]) => void) => () => void
   once: (channel: string, callback: (...args: unknown[]) => void) => void
@@ -24,12 +24,12 @@ interface VelaAPI {
   getZoomLevel: () => number
 }
 
-/** 获取 velaAPI（由 preload 注入到 window） */
-function getAPI(): VelaAPI {
-  const api = (window as unknown as { velaAPI: VelaAPI }).velaAPI
+/** 获取 novelforgeAPI（由 preload 注入到 window） */
+function getAPI(): NovelForgeAPI {
+  const api = (window as unknown as { novelforgeAPI: NovelForgeAPI }).novelforgeAPI
   if (!api) {
     // 浏览器模式下的降级处理（开发时直接浏览器打开的情况）
-    console.warn('[NovelForge IPC] velaAPI 未注入，可能不在 Electron 环境中运行')
+    console.warn('[NovelForge IPC] novelforgeAPI 未注入，可能不在 Electron 环境中运行')
     return {
       invoke: async () => { throw new Error(t('error.notElectron')) },
       on: () => () => {},
@@ -125,7 +125,7 @@ export const ipc = {
 
   /** 是否在 Electron 环境中 */
   get isElectron(): boolean {
-    return !!(window as unknown as { velaAPI: VelaAPI }).velaAPI
+    return !!(window as unknown as { novelforgeAPI: NovelForgeAPI }).novelforgeAPI
   },
 
   /** 设置窗口缩放级别 */

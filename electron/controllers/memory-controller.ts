@@ -3,14 +3,14 @@ import fsPromises from 'node:fs/promises'
 import path from 'node:path'
 import { getCurrentProjectPath } from '../database'
 import { parseMemoryFile, markStaleFrontmatter, extractMemoryBrief, normalizeLoadMode } from '../utils/memory-codec'
-import { getProjectVelaDir } from '../utils/config-utils'
+import { getProjectDataDir } from '../utils/config-utils'
 import type { MemoryFileMeta } from '../utils/memory-codec'
 import { guardedHandle } from '../security/ipc-guard'
 
 const memoryDir = (): string => {
   const p = getCurrentProjectPath()
   if (!p) throw new Error('no project')
-  return path.join(getProjectVelaDir(p), 'memory')
+  return path.join(getProjectDataDir(p), 'memory')
 }
 
 /**

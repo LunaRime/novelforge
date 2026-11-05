@@ -1,13 +1,13 @@
+import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * list_chapters — 列出所有章节状态概览
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 
-export const listChaptersTool = buildAgentTool({
+export function createListChaptersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'list_chapters',
   description: t('tool.listChaptersDesc'),
   source: 'builtin',
@@ -17,7 +17,8 @@ export const listChaptersTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async () => {
-    const project = useProjectStore.getState().currentProject
+    const sourceProject = captureAgentProject(ports)
+    const project = sourceProject.project
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -25,13 +26,12 @@ export const listChaptersTool = buildAgentTool({
     try {
       const blueprints = await ipc.invoke('db:blueprint-get-all')
       const bpNums = new Set<number>((Array.isArray(blueprints) ? blueprints : []).map((b: unknown) => (b as { chapterNumber?: number }).chapterNumber).filter((n): n is number => n !== undefined))
-      const { useDraftStore } = await import('../../../stores/draft-store')
-      const draftsByChapter = useDraftStore.getState().draftsByChapter
-      const draftNums = new Set<number>(Object.keys(draftsByChapter).map(k => parseInt(k, 10)))
+      const draftNums = new Set<number>(ports.drafts.chapterNumbers())
 
       // 定稿状态从 DB 查询而非 FS 扫描
       const msNums = new Set<number>()
       for (const bp of (Array.isArray(blueprints) ? blueprints : [])) {
+        if (!sourceProject.isCurrent()) return { success: false, content: '', error: t('error.noProject') }
         const finalized = await ipc.invoke('db:draft-get-finalized', bp.chapterNumber)
         if (finalized) msNums.add(bp.chapterNumber)
       }
@@ -67,3 +67,6 @@ export const listChaptersTool = buildAgentTool({
     }
   },
 })
+}
+
+export const listChaptersTool = createListChaptersTool()

@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * setting_sampler — 冷门设定采样工具
  *
@@ -5,10 +6,8 @@
  * 作为可选参考喂给 LLM，提示在合适契机化用、避免套路。
  * 判定标准：用随机低频词检索，取相关度最低的尾部结果。
  */
-import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 /** 低频检索词池（与常见网文套路词拉开距离） */
 const COLD_QUERY_POOL = [
@@ -20,8 +19,8 @@ const COLD_QUERY_POOL = [
  * 从知识库采样冷门设定片段（低相关度尾部）
  * @param count 采样条数
  */
-export async function sampleColdSettings(count = 2): Promise<string> {
-  const project = useProjectStore.getState().currentProject
+export async function sampleColdSettings(count = 2, ports: AgentRuntimePorts = defaultAgentRuntimePorts): Promise<string> {
+  const project = ports.project.current()
   if (!project) return ''
 
   try {
@@ -47,7 +46,8 @@ export async function sampleColdSettings(count = 2): Promise<string> {
   }
 }
 
-export const settingSamplerTool = buildAgentTool({
+export function createSettingSamplerTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'setting_sampler',
   description: t('tool.samplerDesc'),
   source: 'builtin',
@@ -63,12 +63,12 @@ export const settingSamplerTool = buildAgentTool({
   },
   requiresConfirmation: false,
   execute: async (args) => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
     const count = Math.min(Math.max(Number(args.count ?? 2), 1), 3)
-    const sampled = await sampleColdSettings(count)
+    const sampled = await sampleColdSettings(count, ports)
     if (!sampled) {
       return { success: true, content: t('tool.samplerEmpty') }
     }
@@ -78,3 +78,6 @@ export const settingSamplerTool = buildAgentTool({
     }
   },
 })
+}
+
+export const settingSamplerTool = createSettingSamplerTool()

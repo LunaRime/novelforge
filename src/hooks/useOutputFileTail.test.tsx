@@ -18,7 +18,7 @@ let tailCalls: number
 beforeEach(() => {
   tailResponses = []
   tailCalls = 0
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: async (channel: string) => {
         if (channel === 'fs:workflow-output-tail') {

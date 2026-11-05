@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * 派发链路的**集成**用例（C 档第二轮评审建议）。
@@ -129,3 +130,5 @@ describe('派发链路集成（引擎 → task → store → runner）', () => {
     expect(taskTool.timeoutMs ?? 0).toBeGreaterThanOrEqual(SUBAGENT_MAX_MS + SUBAGENT_CONFIRM_TIMEOUT_MS)
   })
 })
+
+installRendererAgentPorts()

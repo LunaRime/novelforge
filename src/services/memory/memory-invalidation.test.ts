@@ -73,12 +73,12 @@ describe('collectAffectedFiles（diff 式失效区间——reviewer F1 修正）
 
 describe('invalidateMemoryFiles（批量失效标记）', () => {
   beforeEach(() => {
-    Object.defineProperty(window, 'velaAPI', { value: { invoke: vi.fn() }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: vi.fn() }, configurable: true })
   })
 
   it('逐文件调用 memory:mark-stale，返回成功数', async () => {
     const invoke = vi.fn(async () => ({ success: true }))
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
     const ok = await invalidateMemoryFiles(['chapters-001-015.md', 'chapters-016-030.md'])
     expect(ok).toBe(2)
     expect(invoke).toHaveBeenCalledTimes(2)
@@ -88,7 +88,7 @@ describe('invalidateMemoryFiles（批量失效标记）', () => {
 
   it('失败文件不计入成功数，不中断后续文件', async () => {
     const invoke = vi.fn(async (_ch: string, file: string) => ({ success: file !== 'chapters-016-030.md' }))
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
     const ok = await invalidateMemoryFiles(['chapters-001-015.md', 'chapters-016-030.md'])
     expect(ok).toBe(1)
   })

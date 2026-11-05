@@ -13,7 +13,7 @@ const invokeCalls: Array<{ channel: string; args: unknown[] }> = []
 
 beforeEach(() => {
   invokeCalls.length = 0
-  Object.defineProperty(window, 'velaAPI', {
+  Object.defineProperty(window, 'novelforgeAPI', {
     value: {
       invoke: async (channel: string, ...args: unknown[]) => {
         invokeCalls.push({ channel, args })

@@ -1,14 +1,13 @@
+import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * open_editor — 在编辑器中打开文件
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
-import { useEditorStore } from '../../../stores/editor-store'
-import { useProjectStore } from '../../../stores/project-store'
 import { ipc } from '../../ipc-client'
 import { validatePath } from './safe-path'
 
-export const openEditorTool = buildAgentTool({
+export function createOpenEditorTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'open_editor',
   description: t('tool.openEditorDesc'),
   source: 'builtin',
@@ -44,7 +43,8 @@ export const openEditorTool = buildAgentTool({
       return { success: false, content: '', error: t('error.missingFilePath') }
     }
 
-    const project = useProjectStore.getState().currentProject
+    const sourceProject = captureAgentProject(ports)
+    const project = sourceProject.project
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -63,7 +63,8 @@ export const openEditorTool = buildAgentTool({
 
     // 在编辑器中打开
     const fileName = filePath.split('/').pop() ?? filePath
-    useEditorStore.getState().openFile({
+    if (!sourceProject.isCurrent()) return { success: false, content: '', error: t('error.noProject') }
+    ports.editor.openFile({
       id: `agent-${Date.now()}`,
       name: fileName,
       type: tabType as 'chapter' | 'outline' | 'character' | 'config' | 'arch-file',
@@ -74,7 +75,9 @@ export const openEditorTool = buildAgentTool({
     return {
       success: true,
       content: t('tool.openEditorSuccess').replace('{name}', fileName),
-      artifacts: [{ type: 'tab_opened', path: fullPath, name: fileName }],
     }
   },
 })
+}
+
+export const openEditorTool = createOpenEditorTool()

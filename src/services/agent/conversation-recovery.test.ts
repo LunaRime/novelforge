@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 import { describe, it, expect } from 'vitest'
 import {
   cleanupMessageText,
@@ -350,3 +351,5 @@ describe('sanitizeCheckpointData', () => {
     expect(bad!.contextData).toBeUndefined()
   })
 })
+
+installRendererAgentPorts()

@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 import { describe, it, expect, beforeEach } from 'vitest'
 import { parseMentions, mentionsToToolCalls, getAllMentionTargets, searchProjectFiles, searchMentionTargets } from './intent-router'
 import { useProjectStore } from '../../stores/project-store'
@@ -173,3 +174,5 @@ describe('parseMentions 项目外文件（绝对路径）', () => {
     expect(mentions[0].target.value).toBe('C:\\笔记(上).md')
   })
 })
+
+installRendererAgentPorts()

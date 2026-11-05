@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * embed_text — 将文本转换为向量嵌入
  *
@@ -5,11 +6,10 @@
  * 用于语义比较、相似度分析、文本聚类等场景。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useVectorConfigStore } from '../../../stores/vector-config-store'
 
-export const embedTextTool = buildAgentTool({
+export function createEmbedTextTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'embed_text',
   description: t('tool.embedDesc'),
   source: 'builtin',
@@ -38,7 +38,7 @@ export const embedTextTool = buildAgentTool({
     }
 
     // 检查向量模型是否可用
-    const vectorConfig = useVectorConfigStore.getState()
+    const vectorConfig = ports.vectors.snapshot()
     if (!vectorConfig.canUseEmbeddingAPI()) {
       return {
         success: true,
@@ -85,3 +85,6 @@ export const embedTextTool = buildAgentTool({
     }
   },
 })
+}
+
+export const embedTextTool = createEmbedTextTool()

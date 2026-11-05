@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../agent-adapters/renderer-agent-ports'
 /**
  * ccr-fidelity — 压缩保真检查（P1-2）纯函数测试：
  * 实体抽取（写入目标 / 角色名 / 章节号）+ 保留率 + 阈值分支。
@@ -23,6 +24,8 @@ beforeAll(() => {
     inputSchema: { type: 'object', properties: { file_path: { type: 'string', description: '路径' } }, required: ['file_path'] },
     requiresConfirmation: true,
     isReadOnly: false,
+    isConcurrencySafe: false,
+    isDestructive: false,
     execute: async () => ({ success: true, content: 'ok' }),
   })
   toolRegistry.register({
@@ -32,6 +35,8 @@ beforeAll(() => {
     inputSchema: { type: 'object', properties: {}, required: [] },
     requiresConfirmation: false,
     isReadOnly: true,
+    isConcurrencySafe: true,
+    isDestructive: false,
     execute: async () => ({ success: true, content: 'ok' }),
   })
 })
@@ -119,3 +124,5 @@ describe('shouldWarnFidelity：阈值分支', () => {
     expect(shouldWarnFidelity({ extracted: 10, ratio: FIDELITY_WARN_RATIO - 0.01 })).toBe(true)
   })
 })
+
+installRendererAgentPorts()

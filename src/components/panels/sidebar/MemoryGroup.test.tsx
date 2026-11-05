@@ -69,7 +69,7 @@ describe('MemoryGroup — 侧栏记忆导航（点击开编辑器标签页）', 
       if (ch === 'memory:write' || ch === 'memory:delete' || ch === 'memory:mark-stale') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke, on: () => () => {}, once: () => {}, send: () => {}, setZoomLevel: () => {}, setZoomFactor: () => {}, getZoomLevel: () => 0 },
       configurable: true,
     })

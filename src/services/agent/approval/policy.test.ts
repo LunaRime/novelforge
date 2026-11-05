@@ -16,6 +16,15 @@ function base(over: Partial<ApprovalRequest> = {}): ApprovalRequest {
 }
 
 describe('evaluateApproval 优先级：deny > 规则命中 > prompt', () => {
+  it('M3 destructive execution requires fresh approval despite saved rule or readonly flags', () => {
+    const req = base({ toolName: 'write_file', args: { file_path: 'notes/a.md', content: 'replacement' } })
+    const rule = makeRule(proposeRule(req)!, req.projectPath!, req.args)
+    const decision = evaluateApproval({ ...req, rules: [rule], descriptor: {
+      isReadOnly: true, requiresConfirmation: false, isDestructive: true,
+    } })
+    expect(decision.action).toBe('prompt')
+    expect(decision.remember).toBeUndefined()
+  })
   it('危险命中 → deny（即使存在匹配的已固化规则也拒绝）', () => {
     const dangerous = base({ toolName: 'write_file', args: { file_path: '.novelforge/x.json', content: 'x' } })
     const proposal = proposeRule(dangerous)!

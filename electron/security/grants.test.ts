@@ -37,7 +37,7 @@ const INTENTS: PathIntent[] = ['read', 'write', 'delete']
 
 describe('isPathAllowed —— 5 形态 × 3 意图交叉矩阵', () => {
   const matrix: Array<{ name: string; file: string; base: Partial<PathPolicy>; expect: [boolean, boolean, boolean] }> = [
-    { name: '① VELA_HOME 内', file: path.join(VELA, 'vela.db'), base: {}, expect: [true, true, true] },
+    { name: '① NOVELFORGE_HOME 内', file: path.join(VELA, 'vela.db'), base: {}, expect: [true, true, true] },
     { name: '② 当前项目根内', file: path.join(PROJ, 'ch1.md'), base: {}, expect: [true, true, true] },
     {
       name: '③ 授权目录内（仅授 write）',
@@ -85,12 +85,12 @@ describe('越界与凭据保护', () => {
     expect(isPathAllowed(escaped, 'read', policy())).toBe(false)
   })
 
-  it('用 .. 从项目根逃到 VELA_HOME → 放行（确实落在 velaHome 内，属合法数据）', () => {
+  it('用 .. 从项目根逃到 NOVELFORGE_HOME → 放行（确实落在 velaHome 内，属合法数据）', () => {
     const intoVela = path.join(PROJ, '..', '..', 'home', '.novelforge', 'x.txt')
     expect(isPathAllowed(intoVela, 'write', policy())).toBe(true)
   })
 
-  it('凭据文件：VELA_HOME 根级 config.json / mcp_config.json 三种意图一律拒绝', () => {
+  it('凭据文件：NOVELFORGE_HOME 根级 config.json / mcp_config.json 三种意图一律拒绝', () => {
     for (const name of ['config.json', 'mcp_config.json']) {
       for (const intent of INTENTS) {
         expect(isPathAllowed(path.join(VELA, name), intent, policy()), `${name}/${intent}`).toBe(false)
@@ -98,7 +98,7 @@ describe('越界与凭据保护', () => {
     }
   })
 
-  it('凭据拒绝只管 VELA_HOME 根级：子目录同名文件不受影响（项目内 config.json 合法）', () => {
+  it('凭据拒绝只管 NOVELFORGE_HOME 根级：子目录同名文件不受影响（项目内 config.json 合法）', () => {
     expect(isPathAllowed(path.join(VELA, 'sub', 'config.json'), 'read', policy())).toBe(true)
     expect(isPathAllowed(path.join(PROJ, 'config.json'), 'read', policy())).toBe(true)
   })

@@ -1,3 +1,4 @@
+import { draftUri } from '../vela-protocol'
 /**
  * Renderer workflow adapter. Concrete builders and project guards live here;
  * UI and tools use start-workflow.ts, which injects this port into the pure core.
@@ -10,7 +11,7 @@ import type { WorkflowDefinition } from '../../stores/workflow-store'
 import { toast } from '../../components/ui/Toast'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import type { DirectoryWorkflowParams } from './directory-workflow'
-import { WorkflowStartError, type WorkflowStartPort, type EditorDraft, type ArchitectureGeneration, type ConfigGenerationSize } from '../../core/application/start-workflow'
+import { WorkflowStartError, type WorkflowStartPort, type EditorDraft, type ArchitectureGeneration, type ConfigGenerationSize } from '../../core'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 export interface WorkflowAdapterOptions {
@@ -353,7 +354,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
       assertProject()
       if (!full) return null
       return {
-        filePath: `vela://draft/${latest.id}`,
+        filePath: draftUri(latest.id),
         content: full.content,
         title: (latest.title as string) || t('tool.chapterTag').replace('{n}', String(chapterNumber)),
         meta: latest,

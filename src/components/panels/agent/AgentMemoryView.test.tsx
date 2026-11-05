@@ -48,7 +48,7 @@ const resetView = () => {
 describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: {
         invoke: vi.fn(async (ch: string) => {
           if (ch === 'memory:list') {
@@ -92,7 +92,7 @@ describe('AgentMemoryView 记忆查看器（AI 面板入口）', () => {
     const row = rowButtons[rowButtons.length - 1]!
     act(() => { row.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
     await act(async () => { await new Promise(r => setTimeout(r, 10)) })
-    const invoke = (window.velaAPI.invoke as ReturnType<typeof vi.fn>)
+    const invoke = (window.novelforgeAPI.invoke as ReturnType<typeof vi.fn>)
     expect(invoke).toHaveBeenCalledWith('memory:read', 'book-state.md')
     // 内容在编辑器标签页打开（AI 面板不再行内展开）
     const st = useEditorStore.getState()
@@ -151,7 +151,7 @@ describe('AgentMemoryView 加载方式选择器 + 常驻总量（C 档第一轮�
       if (ch === 'memory:write') return { success: true }
       return null
     })
-    Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+    Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
     openProject()
   })
 

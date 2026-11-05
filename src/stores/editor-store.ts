@@ -2,29 +2,8 @@ import { create } from 'zustand'
 import { aggregateDecision } from '../services/diff/hunk-model'
 import type { DiffSession } from '../services/diff/hunk-model'
 
-/** 编辑器 Tab 数据 */
-export interface EditorTab {
-  id: string
-  name: string
-  type: 'chapter' | 'outline' | 'character' | 'config' | 'diff' | 'chapter-card' | 'world-building' | 'arch-file' | 'version-history' | 'review-report' | 'memory' | 'publication' | 'manuscript-board' | 'world-timeline'
-  filePath?: string
-  content?: string
-  /** diff 视图的原始内容 */
-  originalContent?: string
-  dirty?: boolean
-  /** 固定 Tab，不可关闭 */
-  pinned?: boolean
-  /** 修稿文件路径（三栏合并用） */
-  revisionPath?: string
-  /** 审稿报告内容（供「根据意见修稿」使用） */
-  reviewReport?: string
-  /** 草稿所属章节号 */
-  chapterNumber?: number
-  /** 审稿报告存放路径 */
-  reportPath?: string
-  /** L1 inline 接受会话（决策态随 tab 持久；正文文本仍走 content） */
-  inlineSession?: DiffSession
-}
+import type { EditorTab } from '../shared/editor-tab'
+export type { EditorTab } from '../shared/editor-tab'
 
 interface EditorState {
   /** 打开的 Tab 列表 */
@@ -76,6 +55,13 @@ export const useEditorStore = create<EditorState>()((set, get) => ({
   activeCharCount: 0,
 
   openFile: (tab) => {
+    if (tab.type === 'chapter') {
+      const match = /^vela:\/\/draft\/([1-9]\d*)$/.exec(tab.filePath ?? '')
+      const docId = match ? Number(match[1]) : tab.docId
+      if ((match || !tab.filePath) && docId !== undefined && Number.isSafeInteger(docId) && docId > 0) {
+        tab = { ...tab, docId, id: `doc:${docId}`, filePath: `vela://draft/${docId}` }
+      }
+    }
     // diff 类型每次内容不同，只按 id 精确匹配（不走 filePath 去重）
     // 其他类型（含 review-report）按 filePath + type 去重
     const idOnly = tab.type === 'diff'

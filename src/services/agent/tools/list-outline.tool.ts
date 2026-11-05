@@ -1,3 +1,4 @@
+import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts } from '../runtime-ports'
 /**
  * list_outline — 一次调用汇总「小说大纲」相关的全部数据源
  *
@@ -9,9 +10,7 @@
  * 只读、免确认（与 read_architecture / read_project_state 同类）。
  */
 import { t } from '../../../shared/locale'
-import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
-import { useProjectStore } from '../../../stores/project-store'
 
 /** 架构字段预览长度上限——避免把整篇世界观灌进上下文（需要全文时让 LLM 调 read_architecture） */
 const PREVIEW_LIMIT = 200
@@ -22,7 +21,8 @@ function preview(text: string | undefined | null): string {
   return s.length > PREVIEW_LIMIT ? s.slice(0, PREVIEW_LIMIT) + '…' : s
 }
 
-export const listOutlineTool = buildAgentTool({
+export function createListOutlineTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(ports, {
   name: 'list_outline',
   description: t('tool.listOutlineDesc'),
   source: 'builtin',
@@ -30,7 +30,7 @@ export const listOutlineTool = buildAgentTool({
   requiresConfirmation: false,
   isReadOnly: true,
   execute: async () => {
-    const project = useProjectStore.getState().currentProject
+    const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -86,3 +86,6 @@ export const listOutlineTool = buildAgentTool({
     }
   },
 })
+}
+
+export const listOutlineTool = createListOutlineTool()

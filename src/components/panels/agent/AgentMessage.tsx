@@ -211,7 +211,7 @@ function FeedbackButtons({ message }: { message: AgentMessageType }) {
 
 export default memo(function AgentMessage({ message, onFork, onRewind, rewindDisabled }: Props) {
   const { t } = useTranslation()
-  const { role, content, createdAt, streaming, toolCalls, artifacts, error } = message
+  const { role, content, createdAt, streaming, toolCalls, artifacts, legacyArtifacts, error } = message
 
   // 分支操作区（2026-09-22：由 hover 显隐改为**持续显示**；
   // 用于用户消息时渲染在气泡**外**，不再嵌在对话卡片里）
@@ -338,10 +338,16 @@ export default memo(function AgentMessage({ message, onFork, onRewind, rewindDis
         })()}
 
         {/* 产物卡片列表 */}
-        {artifacts && artifacts.length > 0 && (
+        {(!!artifacts?.length || !!legacyArtifacts?.length) && (
           <div className="mt-2">
-            {artifacts.map((a, i) => (
+            {artifacts?.map((a, i) => (
               <ArtifactCard key={`artifact-${i}`} artifact={a} />
+            ))}
+            {legacyArtifacts?.map((a, i) => (
+              <div key={`legacy-${i}`} className="artifact-card artifact-card-static">
+                <span className="artifact-name">{a.name}</span>
+                <span className="artifact-type">{t(a.labelKey)}</span>
+              </div>
             ))}
           </div>
         )}

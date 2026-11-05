@@ -8,7 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { monitorEventLoopDelay } from 'node:perf_hooks'
 import { getCurrentProjectPath } from '../database'
-import { getProjectVelaDir, VELA_HOME } from '../utils/config-utils'
+import { getProjectDataDir, NOVELFORGE_HOME } from '../utils/config-utils'
 import type { DevPerfSnapshot } from '../../src/shared/ipc-channels'
 
 const loopDelay = monitorEventLoopDelay({ resolution: 20 })
@@ -42,8 +42,8 @@ function walkLogs(dir: string): { files: number; bytes: number } {
 export function getPerfSnapshot(): DevPerfSnapshot {
   const memory = process.memoryUsage()
   const projectPath = getCurrentProjectPath()
-  const dbFile = projectPath ? path.join(getProjectVelaDir(projectPath), 'vela.db') : ''
-  const logDir = path.join(VELA_HOME, 'logs')
+  const dbFile = projectPath ? path.join(getProjectDataDir(projectPath), 'vela.db') : ''
+  const logDir = path.join(NOVELFORGE_HOME, 'logs')
 
   let appMetrics: DevPerfSnapshot['app'] = []
   try {

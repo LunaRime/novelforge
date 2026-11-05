@@ -44,7 +44,7 @@ describe('ManuscriptGroup — RM-SB-01 导出弹窗（2026-09-27）', () => {
   beforeEach(() => {
     document.body.innerHTML = ''
     const invoke = vi.fn(async () => null)
-    Object.defineProperty(window, 'velaAPI', {
+    Object.defineProperty(window, 'novelforgeAPI', {
       value: { invoke, on: () => () => {}, once: () => {}, send: () => {}, setZoomLevel: () => {}, setZoomFactor: () => {}, getZoomLevel: () => 0 },
       configurable: true,
     })

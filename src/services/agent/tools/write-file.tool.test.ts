@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../../agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 /**
  * write_file 工具测试（I-1 修复新增——此前无独立测试文件）：
@@ -74,7 +75,7 @@ describe('write_file 成功路径（行为兼容：正常路径零变化）', ()
     expect(r.success).toBe(true)
     expect(writeCalls).toEqual([{ fullPath: `${projectPath}/稿子/第一章.md`, content: '正文内容' }])
     expect(r.content).toBe(t('tool.fileWritten').replace('{path}', '稿子/第一章.md').replace('{length}', '4'))
-    expect(r.artifacts).toEqual([{ type: 'file_modified', path: `${projectPath}/稿子/第一章.md`, name: '稿子/第一章.md' }])
+    expect(r.artifacts).toEqual([{ type: 'document.changed', id: `${projectPath}/稿子/第一章.md`, path: `${projectPath}/稿子/第一章.md`, name: '稿子/第一章.md' }])
   })
 
   it('多级子目录不误报（保护判定只认首段数据目录）', async () => {
@@ -136,3 +137,5 @@ describe('write_file chapter writes use workflow', () => {
     expect(mockInvoke).not.toHaveBeenCalled()
   })
 })
+
+installRendererAgentPorts()

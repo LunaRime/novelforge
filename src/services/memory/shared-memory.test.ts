@@ -15,7 +15,7 @@ import {
   upsertSharedFacts,
 } from './shared-memory'
 
-// mock IPC（memory:read/write，chapter-memory.test.ts 先例：window.velaAPI）
+// mock IPC（memory:read/write，chapter-memory.test.ts 先例：window.novelforgeAPI）
 const memoryFiles = new Map<string, string>()
 const invoke = vi.fn(async (ch: string, ...args: unknown[]) => {
   switch (ch) {
@@ -33,7 +33,7 @@ const invoke = vi.fn(async (ch: string, ...args: unknown[]) => {
 beforeEach(() => {
   memoryFiles.clear()
   invoke.mockClear()
-  Object.defineProperty(window, 'velaAPI', { value: { invoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke }, configurable: true })
 })
 
 describe('parseSharedFacts', () => {

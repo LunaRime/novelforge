@@ -1,4 +1,4 @@
-import { startWorkflow as executeStartWorkflow, WorkflowValidationError, WorkflowStartError, type WorkflowStartRequest } from '../../core/application/start-workflow'
+import { startWorkflow as executeStartWorkflow, WorkflowValidationError, WorkflowStartError, type WorkflowStartRequest } from '../../core'
 import { createWorkflowStartPort, type WorkflowAdapterOptions } from './workflow-starter'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'

@@ -172,6 +172,8 @@ export const useMCPStore = create<MCPState>()((set, get) => ({
         },
         requiresConfirmation: true, // MCP Tool 默认需要确认（保守策略）
         isReadOnly: false,
+        isConcurrencySafe: false,
+        isDestructive: false,
         userFacingName: `${mcpTool.name} (${mcpTool.serverId})`,
         execute: async (args) => {
           const result = await ipc.invoke('mcp:call-tool', mcpTool.serverId, mcpTool.name, args)

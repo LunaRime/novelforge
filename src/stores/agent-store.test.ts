@@ -1,3 +1,4 @@
+import { installRendererAgentPorts } from '../services/agent-adapters/renderer-agent-ports'
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useAgentStore } from './agent-store'
@@ -135,7 +136,7 @@ beforeEach(() => {
       updatedAt: 0,
     },
   })
-  Object.defineProperty(window, 'velaAPI', { value: { invoke: mockInvoke }, configurable: true })
+  Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
 })
 
 describe('agent-store 持久化', () => {
@@ -487,7 +488,7 @@ describe('sendMessage 意图预路由', () => {
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     // 直出退场（方案 B）：不经本地工作流启动；由模型经 start_workflow 工具（确认后）处理
     expect(mockStartChapter).not.toHaveBeenCalled()
-    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow.progressed'))).toBe(false)
     // 原文恰好 1 次（ReAct 主流程 append）+ 首条标题合同保持
     const userMsgs = after.messages.filter(m => m.role === 'user')
     expect(userMsgs).toHaveLength(1)
@@ -522,7 +523,7 @@ describe('sendMessage 意图预路由', () => {
     expect(mockStartChapter).not.toHaveBeenCalled()
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow.progressed'))).toBe(false)
   })
 
   it('弱命中 hint=chapter：注入 intentClarifyChapter 文案（M2：clarifyChapter 键可达——「帮我写」不再收通用模糊句）', async () => {
@@ -587,7 +588,7 @@ describe('sendMessage 意图预路由', () => {
     expect(mockDetect).not.toHaveBeenCalled()
     expect(mockRunAgentLoop).toHaveBeenCalledTimes(1)
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
-    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow_started'))).toBe(false)
+    expect(after.messages.some(m => m.artifacts?.some(a => a.type === 'workflow.progressed'))).toBe(false)
     expect(after.messages.filter(m => m.role === 'user')[0].content).toBe('/status 写第三章')
   })
 
@@ -1072,7 +1073,7 @@ describe('子 agent 写操作审批（C 档第二轮 T6）', () => {
     expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
   })
 
-  it('workspace 规则命中 → 放行且不出卡（沿用用户自己的常驻批准）', async () => {
+  it('覆盖操作即使命中 workspace 规则仍需本次确认', async () => {
     const args = { file_path: 'drafts/c30.md', content: '正文' }
     const req = {
       projectPath: '/mock/proj', toolName: 'write_file', args,
@@ -1082,7 +1083,11 @@ describe('子 agent 写操作审批（C 档第二轮 T6）', () => {
     }
     const proposal = proposeRule(req)!
     vi.mocked(loadApprovalRules).mockResolvedValue([makeRule(proposal, '/mock/proj', args)])
-    await expect(ask(call('write_file', args))).resolves.toBe(true)
+    const pending = ask(call('write_file', args))
+    await tick()
+    expect(useAgentStore.getState().pendingSubAgentConfirmation).not.toBeNull()
+    useAgentStore.getState().resolveSubAgentConfirmation(false)
+    await expect(pending).resolves.toBe(false)
     expect(useAgentStore.getState().pendingSubAgentConfirmation).toBeNull()
   })
 
@@ -1359,19 +1364,19 @@ describe('Minor 8：短对话不读配置（省掉无谓的 config:get）', () =
 describe('appendWorkflowCompletion（线② 2b D5：完成回执对话内卡片为主）', () => {
   it('往活跃会话追加 workflow_completed 产物消息（assistant + artifacts）', () => {
     const conv = useAgentStore.getState().createConversation({ title: 'T' })
-    useAgentStore.getState().appendWorkflowCompletion('第1章创作', 'success')
+    useAgentStore.getState().appendWorkflowCompletion('run-1', '第1章创作', 'success')
     const after = useAgentStore.getState().conversations.find(c => c.id === conv.id)!
     const last = after.messages[after.messages.length - 1]
     expect(last.role).toBe('assistant')
     expect(last.artifacts).toHaveLength(1)
-    expect(last.artifacts![0].type).toBe('workflow_completed')
+    expect(last.artifacts![0]).toMatchObject({ type: 'workflow.progressed', runId: 'run-1', step: 'completed', pct: 100 })
     expect(last.artifacts![0].name).toBe('第1章创作')
     expect(last.artifacts![0].metadata).toEqual({ status: 'success' })
   })
 
   it('无活跃会话（自动化 headless）→ 静默 no-op，不新建会话', () => {
     useAgentStore.setState({ conversations: [], activeConversationId: null })
-    useAgentStore.getState().appendWorkflowCompletion('x', 'success')
+    useAgentStore.getState().appendWorkflowCompletion('run-x', 'x', 'success')
     expect(useAgentStore.getState().conversations).toHaveLength(0)
   })
 })
@@ -1977,3 +1982,5 @@ describe('agentProgress 接线与竞态守卫', () => {
     expect(last.content).toContain('先读文件。')
   })
 })
+
+installRendererAgentPorts()
