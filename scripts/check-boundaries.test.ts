@@ -24,6 +24,17 @@ function check(source: string, area = 'core', agentStoreFiles = 0) {
 }
 
 describe('boundary CLI', () => {
+  test('rejects workflow factory construction in UI components', () => {
+    const result = check(`import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
+      const definition = createChapterWorkflow({ chapterNumber: 1 })`, 'components/editor')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('UI workflow')
+  })
+  test('allows UI to call the application workflow entry', () => {
+    const result = check(`import { startWorkflow } from '../../services/workflows/start-workflow'
+      startWorkflow({workflow:'generate_draft', chapterNumber:1})`, 'components/editor')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test('ignores comments and string literals that describe imports', () => {
     const result = check(`// import React from 'react'
       /* require('electron') */

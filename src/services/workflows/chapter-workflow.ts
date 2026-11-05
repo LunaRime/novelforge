@@ -1,8 +1,9 @@
+import { captureDraftProject, draftIdFromPath, getDraftMeta, updateDraftStatus as updateStatus } from '../draft-index'
+import { ipc } from '../ipc-client'
+import { VELA } from '../vela-protocol'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
 import type { DraftMeta } from '../draft-index'
-import { VELA } from '../vela-protocol'
 import { t } from '../../shared/locale'
-import { ipc } from '../ipc-client'
 
 import type { DraftStatus } from '../../shared/draft-status'
 import { registerWorkflow } from './workflow-registry'
@@ -63,53 +64,15 @@ export interface FinalizeOnlyParams {
 // 2. 草稿文件工具函数 (供前端 UI 侧调用)
 // ==========================================
 
-export function getDraftDir(_projectPath: string, chapterNumber: number): string {
-  return `${VELA.DRAFT}ch${chapterNumber}`
-}
-
-export function getDraftPath(_projectPath: string, chapterNumber: number, version: number): string {
-  return `${VELA.DRAFT}ch${chapterNumber}/v${version}`
-}
-
 export async function parseDraftMeta(filePath: string): Promise<DraftMeta | null> {
-  const { ipc } = await import('../ipc-client')
-
-  // 优先处理 vela://draft/{id} 纯数字 ID 格式（DB 化后的标准路径）
-  const idMatch = filePath.match(/^vela:\/\/(?:draft|manuscript)\/(\d+)$/)
-  if (idMatch) {
-    const draftId = parseInt(idMatch[1])
-    const dbMeta = await ipc.invoke('db:draft-get-meta', draftId)
-    if (!dbMeta) return null
-    return {
-      ...dbMeta,
-      status: dbMeta.status as DraftStatus,
-      source: dbMeta.source as 'write' | 'rewrite',
-      fileName: `draft_v${dbMeta.version}.md`,
-      filePath: `${VELA.DRAFT}${dbMeta.id}`,
-    } as unknown as DraftMeta
-  }
-
-  // 兼容旧格式 draft_v(\d+).md 和 vela://draft/ch{N}/v{V}
-  const versionMatch = filePath.match(/v(\d+)(?:\.md)?$/)
-  if (!versionMatch) return null
-  const version = parseInt(versionMatch[1])
-
-  // 提取章节号
-  const chMatch = filePath.match(/ch(\d+)/)
-  if (!chMatch) return null
-  const chapterNumber = parseInt(chMatch[1])
-
-  const drafts = await ipc.invoke('db:draft-list', chapterNumber)
-  const d = (drafts as unknown as Array<Record<string, unknown>>).find((d) => d.version === version)
-  return d ? (d as unknown as DraftMeta) : null
+  const assertProject = captureDraftProject()
+  const meta = await getDraftMeta(draftIdFromPath(filePath))
+  assertProject()
+  return meta
 }
 
 export async function updateDraftStatus(filePath: string, newStatus: DraftStatus): Promise<void> {
-  const meta = await parseDraftMeta(filePath)
-  if (meta) {
-    const { ipc } = await import('../ipc-client')
-    await ipc.invoke('db:draft-update-status', meta.id, newStatus)
-  }
+  await updateStatus(draftIdFromPath(filePath), newStatus)
 }
 
 // ==========================================

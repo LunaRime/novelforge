@@ -10,6 +10,7 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 import { registerWorkflow } from './workflow-registry'
 import { getFieldLabel, type GeneratableField } from './commands/generate-field.command'
+import { startWorkflow } from './start-workflow'
 
 // ==========================================
 // 1. 类型定义
@@ -488,9 +489,8 @@ export function createArchCharacterExtractWorkflow(params: ArchCharacterExtractW
 
 /** 架构角色卡后处理 启动入口（fire-and-forget；§5.2 重构后保持原调用签名，可 rehydrate） */
 export function runArchCharacterExtract(projectPath: string, characterDynamicsContent: string, genre: string): void {
-  import('../../stores/workflow-store').then(async ({ useWorkflowStore }) => {
-    await useWorkflowStore.getState().startWorkflow(createArchCharacterExtractWorkflow({ projectPath, characterDynamicsContent, genre }))
-  })
+  void startWorkflow({ workflow: 'extract_arch_characters', projectPath, characterDynamicsContent, genre })
+    .catch(error => console.error('[Workflow] Character extraction start failed', error))
 }
 
 export interface RepairArchCharacterCardsWorkflowParams {
@@ -534,8 +534,7 @@ export function createRepairArchCharacterCardsWorkflow(params: RepairArchCharact
 
 /** 修复架构角色卡 启动入口（async；§5.2 重构后保持原调用签名，可 rehydrate） */
 export async function repairArchCharacterCards(projectPath: string): Promise<void> {
-  const { useWorkflowStore } = await import('../../stores/workflow-store')
-  await useWorkflowStore.getState().startWorkflow(createRepairArchCharacterCardsWorkflow({ projectPath }))
+  await startWorkflow({ workflow: 'repair_arch_characters', projectPath })
 }
 
 // ==========================================

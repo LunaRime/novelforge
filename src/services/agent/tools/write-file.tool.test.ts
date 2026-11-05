@@ -8,6 +8,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { ipc } from '../../ipc-client'
 import { useProjectStore } from '../../../stores/project-store'
 import { t } from '../../../shared/locale'
+import { useEditorStore } from '../../../stores/editor-store'
 import { writeFileTool } from './write-file.tool'
 
 vi.mock('../../ipc-client', () => ({
@@ -111,22 +112,27 @@ describe('write_file 数据目录保护（I-1 修复回归矩阵）', () => {
   }
 })
 
-describe('write_file · vela://draft 数据库草稿', () => {
-  it('整篇替换走 CAS，不写物理文件', async () => {
-    let captured: Record<string, unknown> | null = null
-    mockInvoke.mockImplementation(async (ch: string, ...args: unknown[]) => {
-      if (ch === 'db:draft-get-full') {
-        return { id: 9, status: 'draft', content: '旧', contentHash: 'h0', updatedAt: 5, wordCount: 1 }
-      }
-      if (ch === 'db:draft-apply-content') {
-        captured = args[0] as Record<string, unknown>
-        return { success: true }
-      }
-      return { success: false, error: `unexpected channel: ${ch}` }
-    })
-    const r = await writeFileTool.execute({ file_path: 'vela://draft/9', content: '新正文' })
-    expect(r.success).toBe(true)
-    expect(captured).toMatchObject({ draftId: 9, expectedHash: 'h0', expectedUpdatedAt: 5, content: '新正文' })
-    expect(writeCalls).toHaveLength(0)
+describe('write_file chapter writes use workflow', () => {
+  it.each(['vela://draft/9', 'chapters/0001.md', './chapters/0001.md', 'x/../chapters/0001.md', 'x\\..\\Chapters\\0001.md', 'doc://chapter/ch_12345678'])('rejects %s before any IPC', async (filePath) => {
+    const result = await writeFileTool.execute({ file_path: filePath, content: 'new' })
+    expect(result.success).toBe(false)
+    expect(result.error).toContain('start_workflow')
+    expect(mockInvoke).not.toHaveBeenCalled()
+  })
+  it.each(['vela://draft/9', 'x/../chapters/0001.md'])('resolves tab aliases to %s before refusing chapter writes', async (target) => {
+    useEditorStore.setState({ tabs: [{ id: 'chapter-tab', name: 'Current draft alias', type: 'chapter', filePath: target }] })
+    try {
+      const filePath = 'Current draft alias'
+      const result = await writeFileTool.execute({ file_path: filePath, content: 'new' })
+      expect(result.success).toBe(false)
+      expect(result.error).toContain('start_workflow')
+      expect(mockInvoke).not.toHaveBeenCalled()
+    } finally { useEditorStore.setState({ tabs: [], activeTabId: null }) }
+  })
+  it('keeps manuscript URI read-only', async () => {
+    const filePath = 'vela://manuscript/9'
+    const result = await writeFileTool.execute({ file_path: filePath, content: 'new' })
+    expect(result.error).toBe(t('tool.draftReadonly'))
+    expect(mockInvoke).not.toHaveBeenCalled()
   })
 })

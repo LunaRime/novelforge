@@ -15,15 +15,13 @@ import {
   loadDirectoryBlueprints,
   saveChapterBlueprint,
   saveAllBlueprints,
-  createDirectoryWorkflow,
   type ChapterBlueprint,
   type DirectoryWorkflowParams,
 } from '../../services/workflows/directory-workflow'
 import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
-import { startBookPipelineWorkflow } from '../../services/workflows/workflow-starter'
+import { startWorkflow as startApplicationWorkflow } from '../../services/workflows/start-workflow'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import { generateVerificationReport, type VerificationReport, type BlueprintGap } from '../../services/blueprint-verification-service'
-import { createGapFillWorkflow } from '../../services/workflows/verification-workflow'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
@@ -66,7 +64,6 @@ export default function ChapterCardEditor() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
-  const startWorkflow = useWorkflowStore.getState().startWorkflow
   const addLog = useWorkflowStore.getState().addLog
   // 分卷归属（蓝图列表每章显示所属卷）
   const volumes = useVolumeStore(s => s.volumes)
@@ -161,8 +158,9 @@ export default function ChapterCardEditor() {
   }
 
   /** 线③ 第 5 条：补全指定缺口（走 startWorkflow，完成后监听里刷新 + 重新校检） */
-  const handleFillGap = (gap: BlueprintGap) => {
-    startWorkflow(createGapFillWorkflow([gap]))
+  const handleFillGap = async (gap: BlueprintGap) => {
+    try { await startApplicationWorkflow({ workflow: 'fill_blueprint_gaps', gaps: [gap] }) }
+    catch (error) { toast.error(String(error)) }
   }
 
   const selected = blueprints[selectedIdx] ?? null
@@ -308,7 +306,8 @@ export default function ChapterCardEditor() {
       if (!yes) return
     }
 
-    startWorkflow(createDirectoryWorkflow(params))
+    try { await startApplicationWorkflow({ workflow: 'generate_blueprint', directory: params }) }
+    catch (error) { toast.error(String(error)); return }
     addLog('info', 'Blueprint generation started')
   }
 
@@ -326,7 +325,7 @@ export default function ChapterCardEditor() {
       return
     }
     try {
-      await startBookPipelineWorkflow({ chapterStart: 1, chapterEnd: end, autoReview: true })
+      await startApplicationWorkflow({ workflow: 'generate_book', chapterStart: 1, chapterEnd: end, autoReview: true })
       toast.success(t('chapter.bookPipelineStarted').replace('{n}', String(end)))
     } catch (e) {
       toast.error(t('chapter.bookPipelineFailed').replace('{error}', e instanceof Error ? e.message : String(e)))

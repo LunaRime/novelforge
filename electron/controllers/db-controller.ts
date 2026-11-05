@@ -8,7 +8,7 @@ import { BlueprintRepository, BlueprintData } from '../repositories/blueprint-re
 import { CharacterRepository, CharacterData, CharacterStateData } from '../repositories/character-repository'
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
-import { maybeCreateAutoSnapshot } from '../services/draft-snapshot-service'
+import { commitDatabaseDraft } from '../services/draft-write-service'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
 import { reorderChapter } from '../services/binder-service'
@@ -307,9 +307,7 @@ export function registerDatabaseController() {
 
   guardedHandle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number) => {
     try {
-      DraftRepository.updateContent(id, content, wordCount)
-      try { maybeCreateAutoSnapshot(id) } catch (e) { logger.warn('DB', '自动快照失败（不阻断保存）: ' + String(e)) }
-      return { success: true }
+      return commitDatabaseDraft({ draftId: id, content, wordCount, actor: 'user' })
     } catch (err) {
       return { success: false, error: String(err) }
     }
@@ -323,33 +321,7 @@ export function registerDatabaseController() {
     wordCount: number
   }) => {
     try {
-      const meta = DraftRepository.getMeta(params.draftId)
-      const before = DraftRepository.getFull(params.draftId)
-      if (!meta || !before) return { success: false, error: 'draft-not-found' }
-      if (meta.status === 'finalized') return { success: false, error: 'draft-finalized-readonly' }
-      if (meta.contentHash !== params.expectedHash || meta.updatedAt !== params.expectedUpdatedAt) {
-        return { success: false, conflict: true, currentHash: meta.contentHash, currentUpdatedAt: meta.updatedAt }
-      }
-      // pre-agent 快照：先存旧内容，再 CAS（CAS 仍会二次校验，防并发覆盖）
-      DraftSnapshotRepository.create({
-        chapterNumber: meta.chapterNumber,
-        draftId: meta.id,
-        branchId: meta.branchId,
-        label: '',
-        kind: 'pre-agent',
-        content: before.content,
-        contentHash: meta.contentHash,
-        wordCount: meta.wordCount,
-        createdBy: 'agent',
-      })
-      const res = DraftRepository.applyContentIfUnchanged(
-        params.draftId,
-        params.expectedHash,
-        params.expectedUpdatedAt,
-        params.content,
-        params.wordCount,
-      )
-      return res.ok ? { success: true } : { success: false, conflict: true, currentHash: res.currentHash, currentUpdatedAt: res.currentUpdatedAt }
+      return commitDatabaseDraft({ ...params, actor: 'agent' })
     } catch (err) {
       return { success: false, error: String(err) }
     }

@@ -55,6 +55,7 @@ function walk(dir) {
 function inspectSource(file) {
   const tree = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   const specifiers = []
+  const workflowFactories = []
   let storeRefs = 0
   function visit(node) {
     let specifier
@@ -64,6 +65,7 @@ function inspectSource(file) {
       specifier = node.moduleReference.expression
     } else if (ts.isCallExpression(node)) {
       const callee = node.expression
+      if (ts.isIdentifier(callee) && /^create\w*Workflow$/.test(callee.text)) workflowFactories.push(callee.text)
       if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) {
         specifier = node.arguments[0]
       }
@@ -76,7 +78,7 @@ function inspectSource(file) {
     ts.forEachChild(node, visit)
   }
   visit(tree)
-  return { specifiers, storeRefs }
+  return { specifiers, storeRefs, workflowFactories }
 }
 
 // ---- 1) core 硬门禁 ----
@@ -105,13 +107,21 @@ const current = {
   agentStoreRefs: agentRefs,
 }
 
+// M2: UI sends typed application requests; adapters construct workflow definitions.
+const uiWorkflowViolations = []
+for (const file of walk(join(ROOT, 'src', 'components'))) {
+  for (const factory of inspectSource(file).workflowFactories) {
+    uiWorkflowViolations.push(`${relative(ROOT, file)} → ${factory}`)
+  }
+}
+
 const baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8'))
 console.log('边界检查（基线 → 当前）')
 for (const key of ['coreForbidden', 'agentStoreFiles', 'agentStoreRefs']) {
   console.log(`  ${key.padEnd(15)} ${String(baseline[key]).padStart(3)} → ${current[key]}`)
 }
 
-let failed = false
+let failed = uiWorkflowViolations.length > 0
 for (const key of Object.keys(baseline)) {
   if (current[key] > baseline[key]) {
     failed = true
@@ -124,6 +134,10 @@ for (const key of Object.keys(baseline)) {
 if (coreViolations.length) {
   console.error('\ncore 越界：')
   for (const v of coreViolations.slice(0, 30)) console.error(`  - ${v}`)
+}
+if (uiWorkflowViolations.length) {
+  console.error('\nUI workflow 越界：请调用应用层 startWorkflow')
+  for (const violation of uiWorkflowViolations) console.error(`  - ${violation}`)
 }
 
 process.exit(failed ? 1 : 0)

@@ -3,7 +3,16 @@
  * validatePath 的 relativePath 契约。node 环境（safe-path 仅依赖 locale，localStorage 有 try/catch 兜底）。
  */
 import { describe, it, expect } from 'vitest'
-import { isProtectedRelativePath, resolveSafeRelativePath, validatePath } from './safe-path'
+import { isChapterWritePath, isProtectedRelativePath, resolveSafeRelativePath, validatePath } from './safe-path'
+
+describe('isChapterWritePath', () => {
+  it.each(['chapters', 'chapters/0001.md', 'x/../chapters/0001.md', 'x\\..\\Chapters\\0001.md', 'vela://draft/4', 'doc://chapter/ch_12345678'])('protects normalized chapter target %s', path => {
+    expect(isChapterWritePath(path)).toBe(true)
+  })
+  it.each(['chapters-notes/a.md', 'notes/chapters/a.md', 'chapters/../notes/a.md', 'notes.md'])('allows ordinary project file %s', path => {
+    expect(isChapterWritePath(path)).toBe(false)
+  })
+})
 
 describe('resolveSafeRelativePath（规范化相对路径，与落盘同解析链）', () => {
   it('反斜杠归一化 + 去除空段与 ./', () => {

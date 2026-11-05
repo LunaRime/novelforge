@@ -7,7 +7,7 @@ import { useThinkingStore } from './thinking-store'
 import { useCharacterStore } from './character-store'
 import { readFileTool, clearReadState } from '../services/agent/tools/read-file.tool'
 import { detectWritingIntent } from '../services/agent/writing-intent'
-import { startChapterWorkflow } from '../services/workflows/workflow-starter'
+import { startWorkflow } from '../services/workflows/start-workflow'
 import { runAgentLoop, type AgentEngineCallbacks, type ToolCallInfo } from '../services/agent/agent-engine'
 import { registerBuiltinTools } from '../services/agent/tools'
 import { skillRegistry } from '../services/agent/skill-registry'
@@ -27,11 +27,11 @@ vi.mock('../services/agent/writing-intent', () => ({
   detectWritingIntent: vi.fn(() => ({ kind: 'none' } as const)),
 }))
 
-vi.mock('../services/workflows/workflow-starter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../services/workflows/workflow-starter')>()
+vi.mock('../services/workflows/start-workflow', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../services/workflows/start-workflow')>()
   return {
     ...actual,
-    startChapterWorkflow: vi.fn(),
+    startWorkflow: vi.fn(),
     startBlueprintWorkflow: vi.fn(),
     startArchitectureWorkflow: vi.fn(),
   }
@@ -469,7 +469,7 @@ describe('压缩产物失效语义（B 档第二轮 T4）', () => {
 
 describe('sendMessage 意图预路由', () => {
   const mockDetect = vi.mocked(detectWritingIntent)
-  const mockStartChapter = vi.mocked(startChapterWorkflow)
+  const mockStartChapter = vi.mocked(startWorkflow)
   const mockRunAgentLoop = vi.mocked(runAgentLoop)
 
   beforeEach(() => {

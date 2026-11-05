@@ -5,7 +5,7 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 
 import { useProjectStore } from '../../stores/project-store'
-import { createConfigGenerationWorkflow } from '../../services/workflows/architecture-workflow'
+import { startWorkflow } from '../../services/workflows/start-workflow'
 import { confirm } from '../ui/Confirm'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { toast } from '../ui/Toast'
@@ -30,7 +30,6 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   // ✅ 用 getState() 获取 action，不订阅 workflow store 的 globalLogs 高频更新
   const addLog = useWorkflowStore.getState().addLog
-  const startWorkflow = useWorkflowStore.getState().startWorkflow
   const currentProject = useProjectStore(s => s.currentProject)
   const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
   // 线③ 第 2 条：config_generation 运行中守卫（批量 + 单字段共用同一 type）
@@ -111,14 +110,11 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
       addLog('info', t('genConfig.generatingLog').replace('{totalChapters}', String(totalChapters)).replace('{wordsPerChapter}', String(wordsPerChapter)))
 
       // 后台执行 LLM 调用（由 WorkflowEngine 接管并显示全局状态面板）
-      startWorkflow(
-        createConfigGenerationWorkflow({
+      await startWorkflow({ workflow: 'config_generation',
           idea,
           totalChapters: totalChapters || 100,
           wordsPerChapter: wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER,
-          onGenerated,
-        })
-      )
+      }, { onGenerated })
     } finally {
       isSubmittingRef.current = false
       setIsSubmitting(false)

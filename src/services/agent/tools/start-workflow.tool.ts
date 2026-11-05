@@ -5,20 +5,16 @@
  * 生成蓝图、生成架构）时，调用此 Tool 真正启动对应的多步骤工作流。
  * 工作流启动后会自动在底部任务面板和右侧 AI 输出面板中展示进度。
  *
- * 工作流构建逻辑已提取至 services/workflows/workflow-starter（与意图预路由 A3 共用）；
+ * 工作流启动统一经过 services/workflows/start-workflow 应用入口；
  * 本工具层只负责参数校验与错误语义映射（WorkflowStartError.code → 用户可见文案）。
  */
 import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
 import { useLayoutStore } from '../../../stores/layout-store'
 import {
-  startChapterWorkflow,
-  startBlueprintWorkflow,
-  startArchitectureWorkflow,
-  startConfigGenerationWorkflow,
-  startBookPipelineWorkflow,
+  startWorkflow,
   WorkflowStartError,
-} from '../../workflows/workflow-starter'
+} from '../../workflows/start-workflow'
 
 /** 区间单次最多章数（2026-10-02 评审 I1：模型幻觉大区间 → 无界静默启动的护栏） */
 const MAX_RANGE_CHAPTERS = 20
@@ -79,7 +75,8 @@ export const startWorkflowTool = buildAgentTool({
         return { success: false, content: '', error: t('tool.wfRangeTooLarge').replace('{max}', '100') }
       }
       try {
-        const result = await startBookPipelineWorkflow({
+        const result = await startWorkflow({
+          workflow: 'generate_book',
           chapterStart: start,
           chapterEnd: end,
           autoReview: args.auto_review !== false,
@@ -135,7 +132,7 @@ export const startWorkflowTool = buildAgentTool({
             const started: { runId: string; displayName: string; chapterTag: string }[] = []
             try {
               for (let n = chapterNumber!; n <= chapterEnd; n++) {
-                started.push(await startChapterWorkflow(workflow as 'generate_draft' | 'review' | 'refine' | 'finalize', n))
+                started.push(await startWorkflow({ workflow: workflow as 'generate_draft' | 'review' | 'refine' | 'finalize', chapterNumber: n }))
               }
             } catch (e) {
               // 部分失败（2026-10-02 评审 I3）：已启动清单并入错误——否则模型会重发整个区间（重复启动/重复花费）
@@ -153,10 +150,7 @@ export const startWorkflowTool = buildAgentTool({
               artifacts: started.map(r => ({ type: 'workflow_started' as const, name: `${r.displayName} ${r.chapterTag}` })),
             }
           }
-          const result = await startChapterWorkflow(
-            workflow as 'generate_draft' | 'review' | 'refine' | 'finalize',
-            chapterNumber!,
-          )
+          const result = await startWorkflow({ workflow, chapterNumber: chapterNumber! })
           return {
             success: true,
             content: t('tool.workflowStarted').replace('{name}', result.displayName).replace('{chapter}', result.chapterTag),
@@ -164,7 +158,7 @@ export const startWorkflowTool = buildAgentTool({
           }
         }
         case 'generate_blueprint': {
-          const result = await startBlueprintWorkflow()
+          const result = await startWorkflow({ workflow })
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
@@ -172,7 +166,7 @@ export const startWorkflowTool = buildAgentTool({
           }
         }
         case 'generate_architecture': {
-          const result = await startArchitectureWorkflow()
+          const result = await startWorkflow({ workflow })
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),
@@ -184,7 +178,7 @@ export const startWorkflowTool = buildAgentTool({
           if (!idea) {
             return { success: false, content: '', error: t('tool.wfNeedIdea') }
           }
-          const result = await startConfigGenerationWorkflow(idea)
+          const result = await startWorkflow({ workflow, idea })
           return {
             success: true,
             content: t('tool.workflowStartedNoChapter').replace('{name}', result.displayName),

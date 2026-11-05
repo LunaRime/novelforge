@@ -267,26 +267,7 @@ export class DraftRepository {
         }
     }
 
-    /** 更新草稿正文（事务保护：contents + word_count 原子更新） */
-    static updateContent(id: number, content: string, wordCount: number): void {
-        const db = getProjectDb()
-        if (!db) return
-
-        const meta = DraftRepository.getMeta(id)
-        if (!meta) return
-
-        const hash = createHash('sha256').update(content).digest('hex')
-        const tx = db.transaction(() => {
-            ContentRepository.updateBody(meta.contentId, content)
-            db.prepare(`
-          UPDATE drafts SET word_count = ?, content_hash = ?, updated_at = unixepoch() * 1000
-          WHERE id = ?
-        `).run(wordCount, hash, id)
-        })
-        tx()
-    }
-
-    /** CAS 写正文：hash/updated_at 任一不符即 conflict（Agent 编辑用） */
+    /** Adapter primitive: application writes must go through commitDatabaseDraft. */
     static applyContentIfUnchanged(
         id: number,
         expectedHash: string,

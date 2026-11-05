@@ -1,19 +1,20 @@
 /**
  * 草稿状态管理 — 管理各章节草稿列表、定稿操作等
  *
- * 数据来源：drafts/ch{N}/index.json（md+json 分离方案）
- * .md 文件保持纯正文，元数据全部由 index.json 管理
+ * 当前项目仍以 DB 为事实源，虚拟 URI 仅携带真实 draftId。
  */
 import { create } from 'zustand'
-import { VELA } from '../services/vela-protocol'
+import { VELA, readVelaContent } from '../services/vela-protocol'
+import { useEditorStore } from './editor-store'
+import { t } from '../shared/locale'
 import { computeTextStats } from '../services/text-stats'
 import { ipc } from '../services/ipc-client'
 import {
   updateDraftStatus as updateDraftStatusInIndex,
   type DraftMeta,
+  assertDraftWrite, captureDraftProject, draftIdFromPath, markRevisionMerged,
 } from '../services/draft-index'
 import type { DraftStatus } from '../shared/draft-status'
-import { getDraftDir } from '../services/workflows/chapter-workflow'
 import { useProjectStore } from './project-store'
 
 // ===== 类型定义 =====
@@ -41,7 +42,6 @@ interface DraftState {
   invalidateChapter: (chapterNumber: number) => void
   /** 应用合并后的修稿，更新文件和各类状态 */
   applyMergedRevision: (
-    chapterDir: string,
     chapterNumber: number | undefined,
     filePath: string,
     revPath: string,
@@ -57,6 +57,7 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
   loading: false,
 
   reset: () => {
+    ++draftLoadSeq
     set({ draftsByChapter: {}, loading: false })
   },
 
@@ -64,9 +65,11 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     const project = useProjectStore.getState().currentProject
     if (!project) return
 
+    const assertProject = captureDraftProject()
     try {
       // 直接调用后端 DB 获取列表，返回的结构已经转换为兼容的 DraftMeta 格式
       const list = await ipc.invoke('db:draft-list', chapterNumber)
+      assertProject()
       const metas: DraftMeta[] = list.map((m) => ({
         ...m,
         status: m.status as DraftStatus,
@@ -91,15 +94,19 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     if (!project) return
 
     // 请求序号：项目快速切换时旧项目的慢响应不得覆盖当前项目数据
+    const assertProject = captureDraftProject()
     const seq = ++draftLoadSeq
     set({ loading: true })
     try {
       // 获取所有有草稿的章节号（不仅限有蓝图的章节，导入流程先建草稿后推演蓝图）
       const chapterNums: number[] = await ipc.invoke('db:draft-get-all-chapter-numbers')
+      assertProject()
       const newDraftsByChapter: DraftsByChapter = {}
 
       for (const chNum of chapterNums) {
+        assertProject()
         const list = await ipc.invoke('db:draft-list', chNum)
+        assertProject()
         if (!list || list.length === 0) continue
 
         const metas: DraftMeta[] = list.map((m) => ({
@@ -123,25 +130,9 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
 
 
   markDraftStatus: async (draftPath, chapterNumber, status) => {
-    // 新路径：vela://draft/{id} → 直接解析真实 id（归档/状态更新走 DB）
-    if (draftPath.startsWith(VELA.DRAFT)) {
-      const idRaw = draftPath.replace(VELA.DRAFT, '')
-      if (/^\d+$/.test(idRaw)) {
-        await ipc.invoke('db:draft-update-status', parseInt(idRaw, 10), status)
-        await get().loadChapterDrafts(chapterNumber)
-        return
-      }
-    }
-
-    // 旧路径兼容：draft_v{N}.md → 经 draft-index（已 DB 桥接）更新
-    const versionMatch = draftPath.match(/draft_v(\d+)\.md$/)
-    if (!versionMatch) return
-    const version = parseInt(versionMatch[1])
-    const project = useProjectStore.getState().currentProject
-    if (!project) return
-    const chapterDir = getDraftDir(project.path, chapterNumber)
-    await updateDraftStatusInIndex(chapterDir, version, status)
-    // 重新加载该章草稿以刷新缓存
+    const assertProject = captureDraftProject()
+    await updateDraftStatusInIndex(draftIdFromPath(draftPath), status)
+    assertProject()
     await get().loadChapterDrafts(chapterNumber)
   },
 
@@ -153,62 +144,39 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     })
   },
 
-  applyMergedRevision: async (chapterDir, chapterNumber, filePath, revPath, mergedText) => {
+  applyMergedRevision: async (chapterNumber, filePath, revPath, mergedText) => {
     try {
-      const { markRevisionMerged } = await import('../services/draft-index')
-
-      const versionMatch = filePath.match(/v(\d+)/)
-      const version = versionMatch ? parseInt(versionMatch[1]) : 1
-
-      // 统一"有效字数"口径（汉字 + 英文单词）
+      const assertProject = captureDraftProject()
+      const targetDraftId = draftIdFromPath(filePath)
+      const submittedTabs = useEditorStore.getState().tabs.map(tab => ({ ...tab }))
+      const revisionMatch = /^(?:vela:\/\/revision\/)?(\d+)$/.exec(revPath)
+      const revisionId = revisionMatch ? Number(revisionMatch[1]) : NaN
+      if (!Number.isSafeInteger(revisionId) || revisionId <= 0) throw new Error(t('error.noBaseDraft'))
+      const target = await ipc.invoke('db:draft-get-meta', targetDraftId)
+      assertProject()
+      if (!target || (chapterNumber !== undefined && target.chapterNumber !== chapterNumber)) throw new Error(t('error.noBaseDraft'))
+      const revision = await ipc.invoke('db:revision-get-full', revisionId)
+      assertProject()
+      if (!revision || revision.baseDraftId !== targetDraftId || revision.status !== 'pending') throw new Error(t('error.noBaseDraft'))
       const mergedWordCount = computeTextStats(mergedText).novelWordCount
-
-      let targetDraftId: number | undefined
-      // 统一通过 DB 更新草稿内容
-      if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
-        const prefix = filePath.startsWith(VELA.DRAFT) ? VELA.DRAFT : VELA.MANUSCRIPT
-        targetDraftId = parseInt(filePath.replace(prefix, ''))
-        await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount)
-      } else {
-        // 从 filePath 解析 chapterNumber 和 version，查出 draftId 再更新
-        const chMatch = filePath.match(/ch(\d+)/)
-        const chNum = chMatch ? parseInt(chMatch[1]) : chapterNumber
-        if (chNum !== undefined) {
-          const drafts = await ipc.invoke('db:draft-list', chNum)
-          const target = (drafts as unknown as Array<Record<string, unknown>>).find((d) => d.version === version)
-          if (target) {
-            targetDraftId = target.id as number
-            await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount)
-          }
+      assertDraftWrite(await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount))
+      assertProject()
+      assertDraftWrite(await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedWordCount))
+      assertProject()
+      await markRevisionMerged(revisionId, targetDraftId)
+      assertProject()
+      const editorState = useEditorStore.getState()
+      for (const tab of editorState.tabs) {
+        const submitted = submittedTabs.find(before => before.id === tab.id && before.filePath === tab.filePath)
+        if (!submitted || submitted.dirty || tab.dirty || submitted.content !== tab.content || tab.type === 'diff' || !tab.filePath) continue
+        if (tab.filePath === VELA.DRAFT + targetDraftId || tab.filePath === VELA.MANUSCRIPT + targetDraftId) {
+          editorState.syncTabContent(tab.id, mergedText)
+          editorState.markTabSaved(tab.id)
         }
       }
-
-      // 更新草稿状态为 revised（直接调用 DB，不走 legacy index）
-      if (targetDraftId && version) {
-        await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedWordCount)
-      }
-
-      // 标记修稿为已合并（旧版文件索引才有 revPath；DB 化后 diff Tab 不传，跳过即可）
-      const revFileName = revPath.split('/').pop() || ''
-      const origFileName = targetDraftId ? targetDraftId.toString() : (filePath.split('/').pop() || '')
-      if (revFileName && chapterDir) {
-        await markRevisionMerged(chapterDir, revFileName, origFileName)
-      }
-
-      // 同步到编辑器（需通过 filePath 查找对应 tab 的 id）
-      const { useEditorStore } = await import('./editor-store')
-      const editorState = useEditorStore.getState()
-      const targetTab = editorState.tabs.find(t => t.filePath === filePath)
-      if (targetTab) {
-        editorState.syncTabContent(targetTab.id, mergedText)
-        editorState.markTabSaved(targetTab.id)
-      }
-
-      if (chapterNumber !== undefined) {
-        await get().loadChapterDrafts(chapterNumber)
-      }
-      useProjectStore.getState().refreshFileTree()
-
+      await get().loadChapterDrafts(target.chapterNumber)
+      assertProject()
+      void useProjectStore.getState().refreshFileTree()
       return { success: true }
     } catch (e) {
       return { success: false, error: String(e) }
@@ -223,8 +191,10 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
  * @deprecated 建议直接使用 readVelaContent()
  */
 export async function readDraftBody(filePath: string): Promise<string> {
-  const { readVelaContent } = await import('../services/vela-protocol')
-  return readVelaContent(filePath)
+  const assertProject = captureDraftProject()
+  const content = await readVelaContent(filePath)
+  assertProject()
+  return content
 }
 
 export type { DraftMeta, DraftStatus }

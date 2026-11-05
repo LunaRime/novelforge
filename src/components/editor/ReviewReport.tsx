@@ -6,6 +6,10 @@ import type { TextKey } from '../../shared/locale'
 import { Button } from '../ui/Button'
 import { Disclosure } from '../ui/Disclosure'
 import AIActionDialog from './AIActionDialog'
+import { useProjectStore } from '../../stores/project-store'
+import { captureDraftProject } from '../../services/draft-index'
+import { startWorkflow } from '../../services/workflows/start-workflow'
+import { toast } from '../ui/Toast'
 import { parseReport, type ReviewIssue } from './review-report-parser'
 
 interface ReviewReportProps {
@@ -15,8 +19,6 @@ interface ReviewReportProps {
   draftPath?: string
   /** 章节号 */
   chapterNumber?: number
-  /** 章节目录 */
-  chapterDir?: string
 }
 
 
@@ -61,8 +63,9 @@ function getSeverityMeta(t: TFunc): Record<ReviewIssue['severity'], {
 }
 
 /** 审稿报告查看器 */
-export default function ReviewReport({ reportText, draftPath, chapterNumber, chapterDir }: ReviewReportProps) {
+export default function ReviewReport({ reportText, draftPath, chapterNumber }: ReviewReportProps) {
   const { t } = useTranslation()
+  const currentProject = useProjectStore(s => s.currentProject)
   const severityMeta = useMemo(() => getSeverityMeta(t), [t])
 
   const { issues: rawIssues, summary, parseFailed } = parseReport(reportText)
@@ -93,42 +96,27 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
 
   /** 根据审稿意见修稿 */
   const doRefineFromReview = async () => {
-    if (!draftPath || !chapterDir) return
+    if (!draftPath || !currentProject) return
     setProcessing(true)
     setShowRefineDialog(false)
     try {
-      const { useWorkflowStore } = await import('../../stores/workflow-store')
-
-      const { createRefineFromReviewWorkflow } = await import('../../services/workflows/chapter-workflow')
-      const { getLatestReview } = await import('../../services/draft-index')
+      const assertProject = captureDraftProject(currentProject.path)
+      const { parseDraftMeta } = await import('../../services/workflows/chapter-workflow')
+      assertProject()
+      const meta = await parseDraftMeta(draftPath)
+      assertProject()
+      if (!meta || (chapterNumber !== undefined && meta.chapterNumber !== chapterNumber)) throw new Error(t('error.noBaseDraft'))
       const { readDraftBody } = await import('../../stores/draft-store')
-
+      assertProject()
       const draftContent = await readDraftBody(draftPath)
-      if (!draftContent) return
-
-      // 提取版本信息
-      const versionMatch = draftPath.match(/draft_v(\d+)\.md$/)
-      const baseVersion = versionMatch ? parseInt(versionMatch[1]) : 1
-      const chapterNum = chapterNumber || 0
-
-      // 获取最新审稿文件名（用于关联）
-      const latestReview = await getLatestReview(chapterDir, baseVersion)
-      const reviewFileName = latestReview?.fileName || ''
-
-      // 从 index.json 读取章节标题
-      const { readDraftIndex } = await import('../../services/draft-index')
-      const index = await readDraftIndex()
-      const chapterTitle = index.chapterTitle || t('chapter.nLabel').replace('{n}', String(chapterNum))
-
-      useWorkflowStore.getState().startWorkflow(createRefineFromReviewWorkflow({
-        chapterNumber: chapterNum,
-        chapterTitle,
-        draftPath,
-        draftContent,
-        reviewReport: reportText,
-        reviewFileName,
+      assertProject()
+      await startWorkflow({ workflow: 'refine', chapterNumber: meta.chapterNumber, draft: {
+        chapterTitle: t('chapter.nLabel').replace('{n}', String(meta.chapterNumber)),
+        draftPath, draftContent, reviewReport: reportText,
         userRefinePrompt: userRefinePrompt.trim() || undefined,
-      }), false)
+      } })
+    } catch (error) {
+      toast.error(t('error.polishFailed').replace('{error}', String(error)))
     } finally {
       setProcessing(false)
     }
@@ -141,7 +129,7 @@ export default function ReviewReport({ reportText, draftPath, chapterNumber, cha
   }
 
   // 是否可以触发修稿（有草稿路径和章节信息时）
-  const canRefine = !!(draftPath && chapterDir)
+  const canRefine = !!(draftPath && /^vela:\/\/(?:draft|manuscript)\/[1-9]\d*$/.test(draftPath))
 
   return (
     <div className="h-full overflow-y-auto">
