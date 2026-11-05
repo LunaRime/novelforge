@@ -31,6 +31,7 @@ import { countUndecided } from '../../services/diff/hunk-model'
 
 
 import { ipc } from '../../services/ipc-client'
+import { captureDraftProject } from '../../services/draft-index'
 import { computeTextStats } from '../../services/text-stats'
 import { isValidMemoryContent, stripStatusFrontmatter } from '../../services/memory/memory-codec'
 import { toast } from '../ui/Toast'
@@ -948,7 +949,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
             reportText={activeTab.content}
             draftPath={activeTab.filePath}
             chapterNumber={activeTab.chapterNumber}
-            chapterDir={activeTab.chapterDir}
           />
         )}
         {activeTab?.type === 'publication' && (
@@ -999,15 +999,18 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                       return
                     }
                     try {
+                      if (!currentProject) throw new Error(t('error.noProject'))
+                      const assertProject = captureDraftProject(currentProject.path)
                       const { useDraftStore } = await import('../../stores/draft-store')
+                      assertProject()
                       const result = await useDraftStore.getState().applyMergedRevision(
-                        activeTab.chapterDir ?? '',
                         chapterNum,
                         filePath,
                         activeTab.revisionPath ?? '',
                         mergedText
                       )
 
+                      assertProject()
                       if (result.success) {
                         toast.success('✅ ' + t('editor.mergeComplete'))
                         useEditorStore.getState().closeTab(activeTab.id)

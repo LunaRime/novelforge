@@ -96,11 +96,11 @@ export class GeminiProvider implements ILLMProvider {
       }
 
       const data = await res.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+        candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
         usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number }
       }
 
-      const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      const text = (data.candidates?.[0]?.content?.parts ?? []).filter(part => !part.thought).map(part => part.text ?? '').join('')
       const usage = data.usageMetadata ? {
         promptTokens: data.usageMetadata.promptTokenCount ?? 0,
         completionTokens: data.usageMetadata.candidatesTokenCount ?? 0,
@@ -108,6 +108,7 @@ export class GeminiProvider implements ILLMProvider {
         cachedTokens: 0, // Gemini 无缓存命中计数字段（缓存机制不同）
       } : undefined
 
+      if (!text.trim()) return { success: false, content: '', error: t('error.llmEmptyResponse') }
       return { success: true, content: text, usage }
     }).catch((error) => {
       if (error instanceof HttpError) {
@@ -200,13 +201,13 @@ export class GeminiProvider implements ILLMProvider {
           if (!json) continue
           try {
             const parsed = JSON.parse(json) as {
-              candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>
+              candidates?: Array<{ content?: { parts?: Array<{ text?: string; thought?: boolean }> } }>
               usageMetadata?: { promptTokenCount?: number; candidatesTokenCount?: number; totalTokenCount?: number }
             }
-            const chunk = parsed.candidates?.[0]?.content?.parts?.[0]?.text
-            if (chunk) {
-              fullText += chunk
-              opts.onChunk(chunk)
+            for (const part of parsed.candidates?.[0]?.content?.parts ?? []) {
+              if (!part.text) continue
+              if (part.thought) opts.onChunk('<think>' + part.text + '</think>')
+              else { fullText += part.text; opts.onChunk(part.text) }
             }
             if (parsed.usageMetadata) {
               usage = {
@@ -233,6 +234,7 @@ export class GeminiProvider implements ILLMProvider {
       if (failedChunkCount > 0) {
         logger.warn('LLM:Stream', t('log.llmStream.chunkParseFailures').replace('{n}', String(failedChunkCount)))
       }
+      if (!fullText.trim()) { opts.onError(t('error.llmEmptyResponse')); return }
       opts.onDone(fullText, usage)
     }).catch((error) => {
       // withStreamRetry 重试耗尽后的最终错误处理

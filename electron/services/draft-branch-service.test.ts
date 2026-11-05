@@ -76,7 +76,8 @@ describe('draft-branch-service', () => {
 
   it('合并分支：生成新的主线版本，不覆盖旧主线', () => {
     const { branch, draftId } = createDraftBranch(1, '实验二')
-    DraftRepository.updateContent(draftId, '分支改写正文', 6)
+    const before = DraftRepository.getFull(draftId)!
+    expect(DraftRepository.applyContentIfUnchanged(draftId, before.contentHash, before.updatedAt, '分支改写正文', 6).ok).toBe(true)
     const merged = mergeDraftBranch(branch.id)
     expect(merged.branch.status).toBe('merged')
     expect(DraftRepository.getFull(merged.draftId)?.content).toBe('分支改写正文')

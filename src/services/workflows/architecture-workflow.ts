@@ -10,6 +10,7 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 import { registerWorkflow } from './workflow-registry'
 import { getFieldLabel, type GeneratableField } from './commands/generate-field.command'
+import { startWorkflow } from './start-workflow'
 
 // ==========================================
 // 1. 类型定义
@@ -150,58 +151,23 @@ export function createFieldGenerationWorkflow(fieldKey: GeneratableField): Workf
 // ==========================================
 
 export function getPlotStructureGuide(structure: string, totalChapters: number): string {
-  const ch20 = Math.round(totalChapters * 0.2)
-  const ch25 = Math.round(totalChapters * 0.25)
-  const ch50 = Math.round(totalChapters * 0.5)
-  const ch75 = Math.round(totalChapters * 0.75)
-
-  switch (structure) {
-    case 'heros_journey':
-      return `【英雄之旅·十二阶段】（严格按以下阶段组织大纲）\n建议章节分配：全书共 ${totalChapters} 章...` // 为了简洁截断，后台已由架构掌控
-    case 'save_the_cat':
-      return `【节拍表·十五拍】（严格按以下节拍组织大纲）\n建议章节分配：全书共 ${totalChapters} 章...`
-    case 'kishotenketsu':
-      return `【起承转合·四段式】（严格按以下四段组织大纲）
-建议章节分配：全书共 ${totalChapters} 章
-起（约第1章~第${ch25}章，占总篇幅约25%）：介绍世界、角色和日常，建立读者认同
-承（约第${ch25 + 1}章~第${ch50}章，占总篇幅约25%）：延续与深化，展现角色关系和冲突苗头
-转（约第${ch50 + 1}章~第${ch75}章，占总篇幅约25%）：核心转折，出人意料的变化打破既有格局
-合（约第${ch75 + 1}章~第${totalChapters}章，占总篇幅约25%）：收束所有线索，揭示主题，给出结局`
-    case 'multi_thread':
-      return `【多线叙事】（按多条故事线并行推进的方式组织大纲）
-建议章节分配：全书共 ${totalChapters} 章
-需要明确以下要素：
-1. 主线数量：设定2-4条独立又交织的故事线，每条有独立主角或视角
-2. 交汇节点：每条线在第${ch25}章、第${ch50}章、第${ch75}章左右安排交汇碰撞
-3. 节奏编排：各线交替出现的节奏，避免某条线长期消失
-4. 最终合流：在第${ch75}章前后所有线索开始汇聚，走向统一高潮`
-    case 'freeform':
-      return `【自由结构】（不限定特定叙事框架，根据故事内容自然编排）
-全书共 ${totalChapters} 章。
-请根据故事类型和内容特点自行设计最合适的叙事节奏。
-核心原则：
-1. 保证每10-20章有一个小高潮或悬念释放点
-2. 全书应有清晰的开篇建置（前10-15%）和收尾段落（后10-15%）
-3. 中段避免节奏单一，适时安排转折点
-4. 允许插叙、倒叙、片段式叙事等灵活手法`
-    case 'three_act':
-    default:
-      return `【三幕结构】（严格按以下结构组织大纲）
-建议章节分配：全书共 ${totalChapters} 章
-第一幕：建置（约第1章~第${ch20}章，占总篇幅约20%）
-第二幕：对抗与发展（约第${ch20 + 1}章~第${ch75}章，占总篇幅约55%）
-第三幕：高潮与结局（约第${ch75 + 1}章~第${totalChapters}章，占总篇幅约25%）`
+  const keys = { heros_journey: 'engine.plotGuideHero', save_the_cat: 'engine.plotGuideCat',
+    kishotenketsu: 'engine.plotGuideFour', multi_thread: 'engine.plotGuideMulti', freeform: 'engine.plotGuideFree', three_act: 'engine.plotGuideThree' } as const
+  const key = keys[structure as keyof typeof keys] ?? keys.three_act
+  let guide: string = t(key)
+  guide = guide.replaceAll('{totalChapters}', String(totalChapters))
+  for (const percentage of [20, 25, 50, 75]) {
+    const boundary = Math.round(totalChapters * percentage / 100)
+    guide = guide.replaceAll('{ch' + percentage + '}', String(boundary)).replaceAll('{after' + percentage + '}', String(boundary + 1))
   }
+  return guide
 }
 
 export function getNarrativePOVLabel(pov: string): string {
-  const labels: Record<string, string> = {
-    first_person: '第一人称',
-    third_limited: '第三人称有限视角',
-    third_omniscient: '第三人称全知视角',
-    multi_pov: '多视角轮换',
-  }
-  return labels[pov] || pov
+  const keys = { first_person: 'engine.povFirstPerson', third_limited: 'engine.povThirdLimited',
+    third_omniscient: 'engine.povThirdOmniscient', multi_pov: 'engine.povMulti' } as const
+  const key = keys[pov as keyof typeof keys]
+  return key ? t(key) : pov
 }
 
 // ==========================================
@@ -488,9 +454,8 @@ export function createArchCharacterExtractWorkflow(params: ArchCharacterExtractW
 
 /** 架构角色卡后处理 启动入口（fire-and-forget；§5.2 重构后保持原调用签名，可 rehydrate） */
 export function runArchCharacterExtract(projectPath: string, characterDynamicsContent: string, genre: string): void {
-  import('../../stores/workflow-store').then(async ({ useWorkflowStore }) => {
-    await useWorkflowStore.getState().startWorkflow(createArchCharacterExtractWorkflow({ projectPath, characterDynamicsContent, genre }))
-  })
+  void startWorkflow({ workflow: 'extract_arch_characters', projectPath, characterDynamicsContent, genre })
+    .catch(error => console.error('[Workflow] Character extraction start failed', error))
 }
 
 export interface RepairArchCharacterCardsWorkflowParams {
@@ -534,8 +499,7 @@ export function createRepairArchCharacterCardsWorkflow(params: RepairArchCharact
 
 /** 修复架构角色卡 启动入口（async；§5.2 重构后保持原调用签名，可 rehydrate） */
 export async function repairArchCharacterCards(projectPath: string): Promise<void> {
-  const { useWorkflowStore } = await import('../../stores/workflow-store')
-  await useWorkflowStore.getState().startWorkflow(createRepairArchCharacterCardsWorkflow({ projectPath }))
+  await startWorkflow({ workflow: 'repair_arch_characters', projectPath })
 }
 
 // ==========================================

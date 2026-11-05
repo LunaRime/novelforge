@@ -1,0 +1,6 @@
+{
+  "_comment": "2026-11-05 M2 实测收紧。口径：src/services/agent/**（排除 .test/.stories）内引用 /stores/ 的文件数与 useXStore.getState() 次数；src/core/** 的越界导入数。棘轮只许降。",
+  "coreForbidden": 0,
+  "agentStoreFiles": 34,
+  "agentStoreRefs": 37
+}

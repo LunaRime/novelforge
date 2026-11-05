@@ -20,8 +20,6 @@ export interface EditorTab {
   reviewReport?: string
   /** 草稿所属章节号 */
   chapterNumber?: number
-  /** 草稿所在章节目录 */
-  chapterDir?: string
   /** 审稿报告存放路径 */
   reportPath?: string
   /** L1 inline 接受会话（决策态随 tab 持久；正文文本仍走 content） */

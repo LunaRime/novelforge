@@ -79,6 +79,14 @@ export function isProtectedRelativePath(canonicalRelative: string): boolean {
   return (PROJECT_DATA_DIR_SEGMENTS as readonly string[]).includes(first)
 }
 
+/** Chapter bodies must be changed through the chapter workflow, never generic file tools. */
+export function isChapterWritePath(path: string): boolean {
+  if (/^(?:vela:\/\/draft\/|doc:\/\/chapter\/)/i.test(path)) return true
+  const canonical = resolveSafeRelativePath(path)
+  // Windows project paths are case insensitive; apply the same protection on every platform.
+  return canonical?.split('/')[0].toLowerCase() === 'chapters'
+}
+
 /**
  * 校验路径安全性的便捷包装
  * 如果不安全，直接返回 ToolResult 错误

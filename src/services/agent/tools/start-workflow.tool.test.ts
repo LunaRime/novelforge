@@ -1,21 +1,19 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { startWorkflowTool } from './start-workflow.tool'
-import { startChapterWorkflow, startBlueprintWorkflow, WorkflowStartError } from '../../workflows/workflow-starter'
+import { startWorkflow, WorkflowStartError } from '../../workflows/start-workflow'
 import { t } from '../../../shared/locale'
 
 // 工具层触发由 workflow-starter 驱动——mock 掉全部启动入口（仅保留 WorkflowStartError 等真实导出）
-vi.mock('../../workflows/workflow-starter', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../../workflows/workflow-starter')>()
+vi.mock('../../workflows/start-workflow', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../workflows/start-workflow')>()
   return {
     ...actual,
-    startChapterWorkflow: vi.fn(),
-    startBlueprintWorkflow: vi.fn(),
-    startArchitectureWorkflow: vi.fn(),
+    startWorkflow: vi.fn(),
   }
 })
 
-const mockStartChapter = vi.mocked(startChapterWorkflow)
+const mockStartChapter = vi.mocked(startWorkflow)
 
 describe('start_workflow 错误语义映射', () => {
   beforeEach(() => {
@@ -85,17 +83,17 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
   })
 
   it('闭区间：串行启动每一章，逐章返回文案与产物', async () => {
-    mockStartChapter.mockImplementation(async (_wf, n) => ({
-      runId: `run-${n}`,
+    mockStartChapter.mockImplementation(async (request) => ({
+      runId: `run-${'chapterNumber' in request ? request.chapterNumber : 0}`,
       displayName: t('tool.wfDraft'),
-      chapterTag: t('tool.chapterTag').replace('{n}', String(n)),
+      chapterTag: t('tool.chapterTag').replace('{n}', String('chapterNumber' in request ? request.chapterNumber : 0)),
     }))
 
     const r = await startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 5, chapter_end: 7 })
 
     expect(r.success).toBe(true)
     expect(mockStartChapter).toHaveBeenCalledTimes(3)
-    expect(mockStartChapter.mock.calls.map(c => c[1])).toEqual([5, 6, 7])
+    expect(mockStartChapter.mock.calls.map(c => 'chapterNumber' in c[0] ? c[0].chapterNumber : undefined)).toEqual([5, 6, 7])
     expect(r.artifacts).toHaveLength(3)
     expect(r.content).toContain(t('tool.chapterTag').replace('{n}', '7'))
   })
@@ -134,7 +132,7 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
   })
 
   it('非章节工作流携带 chapter_end → 忽略（不报错，按原路径执行）', async () => {
-    vi.mocked(startBlueprintWorkflow).mockResolvedValue({ runId: 'rb', displayName: t('tool.wfBlueprint') })
+    vi.mocked(startWorkflow).mockResolvedValue({ runId: 'rb', displayName: t('tool.wfBlueprint'), chapterTag: '' })
 
     const r = await startWorkflowTool.execute({ workflow: 'generate_blueprint', chapter_end: 9 })
 

@@ -5,6 +5,7 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
+import { assertDraftWrite, captureDraftProject } from '../../draft-index'
 import { getActiveStyle, appendWritingStyle } from '../../agent/style-registry'
 
 import type { ChapterInfo } from '../chapter-workflow'
@@ -28,6 +29,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
+    const assertProject = captureDraftProject(project.path)
 
     const draft = this.params.draftContent
     if (!draft) throw new Error(t('error.noDraft'))
@@ -48,10 +50,14 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     let voiceProfileText = ''
     try {
       const { loadCharacterVoiceProfiles, formatVoiceForPrompt } = await import('../../character-voice-analyzer')
+      assertProject()
       const profiles = await loadCharacterVoiceProfiles()
+      assertProject()
       voiceProfileText = formatVoiceForPrompt(profiles)
-    } catch { /* 声音档案加载失败不阻断 */ }
+    } catch { assertProject() /* 同项目声音档案故障可降级，跨项目取消不可吞。 */ }
+    assertProject()
     const characterStates = await this.readCharacterStates()
+    assertProject()
     const shortSummary = this.params.shortSummary?.trim() || t('inject.review.noContextReference')
 
     // ==========================================
@@ -61,6 +67,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     const activeStyleBody = project.path
       ? ((await getActiveStyle(project.path))?.promptBody ?? '')
       : ''
+    assertProject()
     const writingStyleValue = appendWritingStyle(project.novelConfig.writingStyle || '', activeStyleBody)
 
     const promptBuilder = new ChapterPromptBuilder(template)
@@ -75,21 +82,24 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       .withWordNumber(project.novelConfig.wordsPerChapter)
       .withUserRefinePrompt(userPromptBlock)
 
+    assertProject()
     const refined = await this.callLLMWithBuilder(promptBuilder, callbacks, { purpose: 'refine_chapter' })
 
     const cleanRefined = this.stripThinkingTags(refined)
 
+    assertProject()
     const { parseDraftMeta } = await import('../chapter-workflow')
+    assertProject()
     const baseDraft = await parseDraftMeta(this.params.draftPath)
+    assertProject()
     if (!baseDraft) throw new Error(t('error.noBaseDraft'))
 
     const revIndex = await ipc.invoke('db:revision-next-index', baseDraft.id)
+    assertProject()
 
-    // 清理该草稿下已有的 pending 状态修稿，保证只保留最新的一条
+    // Read existing revisions first; discard only after the replacement is persisted.
     const pendingRevs = await ipc.invoke('db:revision-get-pending', baseDraft.id)
-    for (const rev of pendingRevs) {
-      await ipc.invoke('db:revision-mark-discarded', rev.id)
-    }
+    assertProject()
 
     const createRes = await ipc.invoke('db:revision-create', {
       baseDraftId: baseDraft.id,
@@ -97,9 +107,17 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       revisionType: 'refine',
       content: cleanRefined,
       wordCount: computeTextStats(cleanRefined).novelWordCount,
-    }) as { success: boolean; id: number }
+    })
+    assertDraftWrite(createRes)
+    assertProject()
+    if (!createRes.id) throw new Error(t('error.noBaseDraft'))
+    for (const rev of pendingRevs) {
+      assertProject()
+      assertDraftWrite(await ipc.invoke('db:revision-mark-discarded', rev.id))
+    }
 
     const { useEditorStore } = await import('../../../stores/editor-store')
+    assertProject()
     useEditorStore.getState().openFile({
       id: `diff-${this.params.draftPath}-${createRes.id}`,
       name: t('workflow.refineMerge').replace('{n}', String(this.params.chapterNumber)),
@@ -108,9 +126,7 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
       originalContent: this.params.draftContent,
       content: cleanRefined,
       revisionPath: String(createRes.id),
-      chapterNumber: this.params.chapterNumber,
-      chapterDir: `vela://draft/ch${this.params.chapterNumber}`,
-    })
+      chapterNumber: this.params.chapterNumber,    })
 
     context.data.refined = cleanRefined
     context.data.refinedPath = this.params.draftPath

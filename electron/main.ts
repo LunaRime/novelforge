@@ -23,7 +23,7 @@ process.env.APP_ROOT = path.join(__dirname, '..')
 
 // 打包版开发者控制台显式开关：--devtools 等价于 NOVELFORGE_DEVTOOLS=1
 // （开发态/CLI 隔离实例默认开启；正式用户必须显式传参）
-if (process.argv.includes('--devtools')) process.env.NOVELFORGE_DEVTOOLS = '1'
+if (__DEV_CONSOLE__ && process.argv.includes('--devtools')) process.env.NOVELFORGE_DEVTOOLS = '1'
 
 export const VITE_DEV_SERVER_URL = process.env['VITE_DEV_SERVER_URL']
 export const MAIN_DIST = path.join(process.env.APP_ROOT, 'dist-electron')
@@ -269,10 +269,10 @@ function createWindow() {
   // 自动化/CLI 入口：--project=<路径> 直接打开项目，避免依赖原生文件选择框与桌面焦点
   const projectArg = process.argv.find(a => a.startsWith('--project='))?.slice('--project='.length)
   // 开发者控制台独立入口：不依赖项目，由 CLI 的 --dev-console 触发
-  const devConsoleArg = process.argv.includes('--dev-console')
+  const devConsoleArg = __DEV_CONSOLE__ && process.argv.includes('--dev-console')
   // 隔离实例身份（CLI 注入）：供 CDP 客户端确认连到的确实是本实例
   const devInstanceArg = process.argv.find(a => a.startsWith('--dev-instance='))?.slice('--dev-instance='.length)
-  const devInstanceId = process.env.NOVELFORGE_DEV_INSTANCE || devInstanceArg
+  const devInstanceId = __DEV_CONSOLE__ ? (process.env.NOVELFORGE_DEV_INSTANCE || devInstanceArg) : undefined
   if (VITE_DEV_SERVER_URL) {
     const url = new URL(VITE_DEV_SERVER_URL)
     if (projectArg) url.searchParams.set('project', projectArg)

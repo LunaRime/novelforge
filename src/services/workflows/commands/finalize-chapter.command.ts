@@ -7,6 +7,7 @@ import { useLLMStore } from '../../../stores/llm-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { PostProcessPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
+import { assertDraftWrite, captureDraftProject } from '../../draft-index'
 
 import {
   runPostProcessPipeline,
@@ -609,6 +610,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
   async execute({ callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
+    const assertProject = captureDraftProject(project.path)
 
     const refinedDraftText = this.params.draftContent
     if (!refinedDraftText) throw new Error(t('error.noFinalizedContent'))
@@ -627,12 +629,15 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     // 1. 获取对应草稿并将库内状态变更为 finalized（同时同步定稿期可能微调过的正文）
     const { parseDraftMeta } = await import('../chapter-workflow')
     const dbDraft = await parseDraftMeta(this.params.draftPath)
-    if (!dbDraft) throw new Error(t('error.draftStateFlow'))
+    assertProject()
+    if (!dbDraft || dbDraft.chapterNumber !== this.params.chapterNumber) throw new Error(t('error.draftStateFlow'))
 
     // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
     const novelWordCount = computeTextStats(refinedDraftText).novelWordCount
-    await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, novelWordCount)
-    await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', novelWordCount)
+    assertDraftWrite(await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, novelWordCount))
+    assertProject()
+    assertDraftWrite(await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', novelWordCount))
+    assertProject()
 
     // 【重要】：除了写入 DB，对于已定稿的章节需要实体化为物理文件放在根目录，供外部系统读取或备份
     const safeTitle = this.params.chapterInfo.title ? ` ${this.params.chapterInfo.title.replace(/[/\\]/g, '_')}` : ''
@@ -659,6 +664,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
       .replace('{title}', safeTitle))
 
     // 3. 通过 PostProcessPipeline 执行后处理（状态持久化 + 支持重试）
+    assertProject()
     callbacks.log(t('log.finalize.startingPostProcess'))
 
     const scope = getChapterFinalizeScope(this.params.chapterNumber)
@@ -671,6 +677,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     )
 
     await runPostProcessPipeline(project.path, scope, sourceLabel, steps, callbacks)
+    assertProject()
 
     callbacks.log(t('log.finalize.allDone').replace('{chapter}', String(this.params.chapterNumber)))
     useProjectStore.getState().refreshFileTree()

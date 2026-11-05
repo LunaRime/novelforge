@@ -1,0 +1,2 @@
+# 生成物：架构图的 HTML 由 docs/diagrams/*.json 渲染而来
+docs/diagrams/*.html linguist-generated=true -diff

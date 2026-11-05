@@ -15,6 +15,7 @@ interface DevConsoleState {
 export const useDevConsoleStore = create<DevConsoleState>()((set) => ({
   enabled: null,
   refresh: async () => {
+    if (!__DEV_CONSOLE__) { set({ enabled: false }); return }
     try {
       const status = await ipc.invoke('dev:console-status')
       set({ enabled: status.enabled })

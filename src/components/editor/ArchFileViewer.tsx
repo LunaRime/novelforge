@@ -1,3 +1,4 @@
+import { startWorkflow } from '../../services/workflows/start-workflow'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Save, RefreshCw, Sparkles, AlertTriangle, FileText } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -15,7 +16,7 @@ import { readCoreContent, writeCoreContent, VELA } from '../../services/vela-pro
 import CodeMirrorEditor from './CodeMirrorEditor'
 import { useProjectStore } from '../../stores/project-store'
 import { useCharacterStore } from '../../stores/character-store'
-import { runArchCharacterExtract, createArchitectureWorkflow } from '../../services/workflows/architecture-workflow'
+import { runArchCharacterExtract } from '../../services/workflows/architecture-workflow'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { globalEventBus } from '../../shared/event-bus'
 
@@ -169,7 +170,8 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
 
   /** 确认后启动架构生成工作流 */
   const handleConfirm = async (selectedSteps: ArchStepKey[], stepGuidance: Record<string, string>) => {
-    useWorkflowStore.getState().startWorkflow(createArchitectureWorkflow({ selectedSteps, stepGuidance }))
+    try { await startWorkflow({ workflow: 'generate_architecture', architecture: { selectedSteps, stepGuidance } }) }
+    catch (error) { toast.error(String(error)) }
   }
 
   const handleOpenDialog = async () => {
@@ -296,7 +298,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
               title={t('arch.save')}
             >
               <Save size={12} />
-              保存
+              {t('action.save')}
             </Button>
           )}
 

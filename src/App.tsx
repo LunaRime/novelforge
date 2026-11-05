@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { lazy, Suspense, useEffect } from 'react'
 import { Panel, Group as PanelGroup, Separator as PanelResizeHandle, useDefaultLayout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useThemeStore } from './stores/theme-store'
@@ -30,7 +30,7 @@ import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
-import DevConsoleDialog from './components/dev/DevConsoleDialog'
+const DevConsoleDialog = __DEV_CONSOLE__ ? lazy(() => import('./components/dev/DevConsoleDialog')) : null
 import ActivityDialog from './components/dialogs/ActivityDialog'
 import SettingsModal from './components/settings/SettingsModal'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -212,6 +212,7 @@ export default function App() {
   })))
   // 开发者控制台可由 CLI/自动化远程打开（只负责开弹窗；后端仍有门禁）
   useEffect(() => {
+    if (!__DEV_CONSOLE__) return
     const target = window as Window & { __velaOpenDevConsole?: () => void }
     target.__velaOpenDevConsole = () => useLayoutStore.getState().openDevConsole()
     return () => { delete target.__velaOpenDevConsole }
@@ -274,7 +275,7 @@ export default function App() {
       if (savedZoom) ipc.setZoomLevel(parseFloat(savedZoom))
     }
     // 渲染层门禁：未启用时隐藏命令面板/设置页入口
-    void useDevConsoleStore.getState().refresh()
+    if (__DEV_CONSOLE__) void useDevConsoleStore.getState().refresh()
 
     // 初始化 ProjectService — 注册全局事件监听（生命周期与 App 一致）
     import('./services/project-service').then(({ initProjectService }) => {
@@ -283,7 +284,7 @@ export default function App() {
       // 打开后清掉 query，避免刷新重复打开。
       const params = new URLSearchParams(window.location.search)
       const requestedProject = params.get('project')
-      const openDevConsoleOnStart = params.get('devconsole') === '1'
+      const openDevConsoleOnStart = __DEV_CONSOLE__ && params.get('devconsole') === '1'
       const isolatedInstanceId = params.get('instance')
       if (requestedProject || openDevConsoleOnStart || isolatedInstanceId) {
         window.history.replaceState({}, '', window.location.pathname)
@@ -575,10 +576,10 @@ export default function App() {
       </ErrorBoundary>
       {/* 开发者控制台（仅开发态/显式开启；内部有门禁） */}
       <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
-        <DevConsoleDialog
+        {DevConsoleDialog && <Suspense fallback={null}><DevConsoleDialog
           open={devConsoleOpen}
           onClose={closeDevConsole}
-        />
+        /></Suspense>}
       </ErrorBoundary>
       {/* 全屏设置弹窗 — key 随开关变化重新挂载，保证每次打开回到默认分区 */}
       <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>

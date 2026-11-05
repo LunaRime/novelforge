@@ -21,7 +21,8 @@ import type { IpcMainInvokeEvent } from 'electron'
 import { IPC_CHANNEL_POLICY } from '../../src/shared/ipc-policy'
 import type { InvokeChannel } from '../../src/shared/ipc-channels'
 import { logger } from '../utils/logger'
-import { isIpcMetricsEnabled, recordIpcCall } from '../dev/ipc-metrics'
+let metrics: typeof import('../dev/ipc-metrics') | undefined
+if (__DEV_CONSOLE__) void import('../dev/ipc-metrics').then(module => { metrics = module })
 
 /** 与 `ipcMain.handle` 一致的回调签名（刻意不改，见文件头） */
 export type GuardedHandler = (event: IpcMainInvokeEvent, ...args: never[]) => unknown
@@ -138,15 +139,15 @@ export function guardedHandle(channel: InvokeChannel, handler: GuardedHandler): 
       throw new Error(`[ipc-guard] sender not trusted: ${channel}`)
     }
     // S8 将在此前插入 assertPathArgs(channel, policy, args)
-    if (!isIpcMetricsEnabled()) return handler(event, ...(args as never[]))
+    if (!__DEV_CONSOLE__ || !metrics?.isIpcMetricsEnabled()) return handler(event, ...(args as never[]))
 
     const started = performance.now()
     try {
       const result = await handler(event, ...(args as never[]))
-      recordIpcCall(channel, performance.now() - started)
+      metrics!.recordIpcCall(channel, performance.now() - started)
       return result
     } catch (error) {
-      recordIpcCall(channel, performance.now() - started, error)
+      metrics!.recordIpcCall(channel, performance.now() - started, error)
       throw error
     }
   })

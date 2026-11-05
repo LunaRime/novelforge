@@ -1,0 +1,237 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "改造路线：五个里程碑，把真相搬进文件",
+    "subtitle": "每个里程碑都有可执行出口，不留兼容层",
+    "locale": "zh-CN",
+    "animation": "none",
+    "visual_preset": "editorial",
+    "quality_profile": "showcase",
+    "output": "novelforge-roadmap.zh.html"
+  },
+  "lanes": [
+    {
+      "id": "store",
+      "label": "① 存储：文件为真相"
+    },
+    {
+      "id": "path",
+      "label": "② 执行路径"
+    },
+    {
+      "id": "core",
+      "label": "③ 核心运行时"
+    },
+    {
+      "id": "gate",
+      "label": "④ 门禁",
+      "variant": "exception"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p0",
+      "label": "M0 · 上锁",
+      "fromCol": 0,
+      "toCol": 0,
+      "variant": "security"
+    },
+    {
+      "id": "p1",
+      "label": "M1 · 文件仓储",
+      "fromCol": 1,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p2",
+      "label": "M1-2 · 索引与用例",
+      "fromCol": 2,
+      "toCol": 2,
+      "variant": "default"
+    },
+    {
+      "id": "p3",
+      "label": "M2-3 · 合流与抽核",
+      "fromCol": 3,
+      "toCol": 3,
+      "variant": "dashed"
+    },
+    {
+      "id": "p4",
+      "label": "M4 · 成型",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "security"
+    }
+  ],
+  "mainPath": [
+    "contracts",
+    "file-store",
+    "indexer",
+    "core",
+    "ci"
+  ],
+  "nodes": [
+    {
+      "id": "contracts",
+      "lane": "gate",
+      "col": 0,
+      "type": "security",
+      "label": "契约 + 边界棘轮",
+      "sublabel": "先红：test.fails",
+      "tag": "M0",
+      "width": 150
+    },
+    {
+      "id": "file-store",
+      "lane": "store",
+      "col": 1,
+      "type": "database",
+      "label": "文件仓储",
+      "sublabel": "原子写 · history · 锁",
+      "width": 150
+    },
+    {
+      "id": "indexer",
+      "lane": "store",
+      "col": 2,
+      "type": "database",
+      "label": "索引 + FTS5",
+      "sublabel": "删 index.db 可重建",
+      "width": 150
+    },
+    {
+      "id": "doctor",
+      "lane": "store",
+      "col": 3,
+      "type": "backend",
+      "label": "doctor 自愈",
+      "sublabel": "索引≠文件即修",
+      "width": 150
+    },
+    {
+      "id": "write-usecase",
+      "lane": "path",
+      "col": 2,
+      "type": "backend",
+      "label": "writeChapter 用例",
+      "sublabel": "唯一正文入口",
+      "width": 150
+    },
+    {
+      "id": "cut-wf",
+      "lane": "path",
+      "col": 3,
+      "type": "backend",
+      "label": "砍 5 个直调",
+      "sublabel": "13 处调用收敛",
+      "width": 150
+    },
+    {
+      "id": "core",
+      "lane": "core",
+      "col": 3,
+      "type": "backend",
+      "label": "src/core 成型",
+      "sublabel": "禁 stores / electron",
+      "width": 150
+    },
+    {
+      "id": "tsc",
+      "lane": "core",
+      "col": 4,
+      "type": "backend",
+      "label": "core 独立编译",
+      "sublabel": "tsconfig.core.json",
+      "width": 150
+    },
+    {
+      "id": "ci",
+      "lane": "gate",
+      "col": 4,
+      "type": "security",
+      "label": "门禁上锁",
+      "sublabel": "契约 + 边界进 CI",
+      "tag": "防回潮",
+      "width": 150
+    }
+  ],
+  "edges": [
+    {
+      "id": "e1",
+      "from": "contracts",
+      "to": "file-store",
+      "label": "先上锁",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e2",
+      "from": "file-store",
+      "to": "indexer",
+      "label": "文件后写索引",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e4",
+      "from": "indexer",
+      "to": "core",
+      "label": "读模型"
+    },
+    {
+      "id": "e5",
+      "from": "write-usecase",
+      "to": "cut-wf",
+      "label": "合流"
+    },
+    {
+      "id": "e6",
+      "from": "indexer",
+      "to": "doctor",
+      "label": "校验",
+      "variant": "dashed"
+    },
+    {
+      "id": "e8",
+      "from": "core",
+      "to": "tsc",
+      "label": "编译验证"
+    },
+    {
+      "id": "e9",
+      "from": "core",
+      "to": "ci",
+      "label": "固化",
+      "variant": "emphasis"
+    },
+    {
+      "id": "e10",
+      "from": "doctor",
+      "to": "ci",
+      "label": "故障可修",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "三条激进规矩",
+      "items": [
+        "不写双写、不留开关：回滚靠备份 + revert",
+        "删除索引是日常：恢复能力靠 rescan，不靠不删",
+        "先上锁再删到绿：契约与边界的 PR 必须先合"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "出口条件（可执行）",
+      "items": [
+        "M1：rm index.db 后重启，一章不少",
+        "M2：全仓只有一处能写正文",
+        "M3：core 下 grep 不到 stores / electron",
+        "M4：tsc -p tsconfig.core.json 通过"
+      ]
+    }
+  ]
+}

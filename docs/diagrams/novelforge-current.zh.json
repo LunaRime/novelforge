@@ -1,0 +1,383 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "NovelForge 现状：一个章节的六种身份",
+    "subtitle": "业务与 UI 同进程双向穿透，agent 与 workflow 双轨并行",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1240,
+      800
+    ],
+    "output": "novelforge-current.zh.html",
+    "legend": {
+      "mode": "auto"
+    }
+  },
+  "components": [
+    {
+      "id": "user",
+      "type": "external",
+      "label": "作者",
+      "sublabel": "写 · 点",
+      "pos": [
+        20,
+        130
+      ],
+      "size": [
+        100,
+        56
+      ]
+    },
+    {
+      "id": "agent",
+      "type": "frontend",
+      "label": "Agent 对话",
+      "sublabel": "另有编辑器入口",
+      "pos": [
+        200,
+        40
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "wfpanel",
+      "type": "frontend",
+      "label": "流程面板",
+      "sublabel": "步骤进度",
+      "pos": [
+        700,
+        40
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "engine",
+      "type": "backend",
+      "label": "agent-engine",
+      "sublabel": "ReAct 1032 行",
+      "pos": [
+        200,
+        200
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "tools",
+      "type": "backend",
+      "label": "26 个工具",
+      "sublabel": "20 个依赖 store",
+      "tag": "越界",
+      "pos": [
+        370,
+        200
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "starter",
+      "type": "backend",
+      "label": "wf-starter",
+      "sublabel": "5 个启动入口",
+      "pos": [
+        550,
+        200
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "wf",
+      "type": "backend",
+      "label": "工作流引擎",
+      "sublabel": "命令式 steps",
+      "pos": [
+        720,
+        200
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "draft",
+      "type": "backend",
+      "label": "draft-index",
+      "sublabel": "虚拟 URI filePath",
+      "tag": "兼容层",
+      "pos": [
+        890,
+        200
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "db",
+      "type": "backend",
+      "label": "database",
+      "sublabel": "23 张表 · 273 IPC",
+      "pos": [
+        330,
+        400
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "kbvec",
+      "type": "backend",
+      "label": "KB + 向量",
+      "sublabel": "分块 · 嵌入",
+      "pos": [
+        520,
+        400
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite",
+      "sublabel": "contents + drafts",
+      "pos": [
+        330,
+        600
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "files",
+      "type": "database",
+      "label": "章节文件",
+      "sublabel": "txt / md",
+      "pos": [
+        520,
+        600
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "lancedb",
+      "type": "database",
+      "label": "LanceDB",
+      "sublabel": "向量块",
+      "pos": [
+        700,
+        600
+      ],
+      "size": [
+        150,
+        58
+      ]
+    },
+    {
+      "id": "membp",
+      "type": "database",
+      "label": "记忆 + 大纲",
+      "sublabel": "notes 回写",
+      "pos": [
+        880,
+        600
+      ],
+      "size": [
+        160,
+        58
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "UI 层 · 与业务无隔离",
+      "wraps": [
+        "agent",
+        "wfpanel"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "region",
+      "label": "业务层 · 同进程编排",
+      "wraps": [
+        "engine",
+        "tools",
+        "starter",
+        "wf",
+        "draft"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "region",
+      "label": "主进程 · 只做 IO",
+      "wraps": [
+        "db",
+        "kbvec"
+      ],
+      "pad": 24
+    },
+    {
+      "kind": "region",
+      "label": "本地数据 · 同一章节 6 份",
+      "wraps": [
+        "sqlite",
+        "files",
+        "lancedb",
+        "membp"
+      ],
+      "pad": 24
+    }
+  ],
+  "connections": [
+    {
+      "id": "u-agent",
+      "from": "user",
+      "to": "agent",
+      "label": "下指令"
+    },
+    {
+      "id": "agent-engine",
+      "from": "agent",
+      "to": "engine",
+      "label": "消息 + 澄清",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "engine-tools",
+      "from": "engine",
+      "to": "tools",
+      "label": "调度",
+      "variant": "emphasis"
+    },
+    {
+      "id": "tools-starter",
+      "from": "tools",
+      "to": "starter",
+      "label": "start_workflow",
+      "variant": "emphasis"
+    },
+    {
+      "id": "starter-wf",
+      "from": "starter",
+      "to": "wf",
+      "label": "启动"
+    },
+    {
+      "id": "wf-draft",
+      "from": "wf",
+      "to": "draft",
+      "label": "写稿 / 定稿"
+    },
+    {
+      "id": "tools-agent",
+      "from": "tools",
+      "to": "agent",
+      "label": "直接开面板改 UI",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom",
+      "width": 1.6
+    },
+    {
+      "id": "wf-panel",
+      "from": "wf",
+      "to": "wfpanel",
+      "label": "进度事件",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "draft-db",
+      "from": "draft",
+      "to": "db",
+      "label": "DB 调用",
+      "fromSide": "bottom",
+      "toSide": "right"
+    },
+    {
+      "id": "wf-membp",
+      "from": "wf",
+      "to": "membp",
+      "label": "定稿后写记忆",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "db-sqlite",
+      "from": "db",
+      "to": "sqlite",
+      "label": "落库",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "kb-files",
+      "from": "kbvec",
+      "to": "files",
+      "label": "导出",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "kb-lance",
+      "from": "kbvec",
+      "to": "lancedb",
+      "label": "建索引",
+      "fromSide": "bottom",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "rose",
+      "title": "三处结构性缺口",
+      "items": [
+        "双轨：agent 与 workflow 都能写章节，进度/撤销/失败恢复不一致",
+        "越界：工具直接改 UI，agent 无法脱离 Electron 单测",
+        "分散：正文 / 元数据 / 文件 / 大纲 / 记忆 / 向量各存一份"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "为什么改不动",
+      "items": [
+        "draft-index 用 vela:// URI 充当文件路径",
+        "chapter_number 当主键，与 blueprints 无硬外键",
+        "一致性靠定稿后 8 路 DAG 事后补偿"
+      ]
+    }
+  ]
+}

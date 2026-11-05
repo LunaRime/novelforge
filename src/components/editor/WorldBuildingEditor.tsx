@@ -1,3 +1,5 @@
+import { toast } from '../ui/Toast'
+import { startWorkflow } from '../../services/workflows/start-workflow'
 import { useState, useEffect, useCallback } from 'react'
 import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTriangle, FolderTree } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -17,7 +19,7 @@ import { EmptyState } from '../ui/EmptyState'
 import { VELA } from '../../services/vela-protocol'
 import { ipc } from '../../services/ipc-client'
 
-import { ARCH_CHARACTER_SCOPE, runArchCharacterExtract, createArchitectureWorkflow } from '../../services/workflows/architecture-workflow'
+import { ARCH_CHARACTER_SCOPE, runArchCharacterExtract } from '../../services/workflows/architecture-workflow'
 import { readPostProcessStatus, type PostProcessStatus } from '../../services/workflows/workflow-utils'
 import { globalEventBus } from '../../shared/event-bus'
 
@@ -168,8 +170,8 @@ export default function WorldBuildingEditor() {
 
   /** 确认后启动架构工作流 */
   const handleConfirm = async (selectedSteps: ArchStepKey[], stepGuidance: Record<string, string>) => {
-    const { useWorkflowStore } = await import('../../stores/workflow-store')
-    useWorkflowStore.getState().startWorkflow(createArchitectureWorkflow({ selectedSteps, stepGuidance }))
+    try { await startWorkflow({ workflow: 'generate_architecture', architecture: { selectedSteps, stepGuidance } }) }
+    catch (error) { toast.error(String(error)) }
   }
 
   if (!currentProject) {

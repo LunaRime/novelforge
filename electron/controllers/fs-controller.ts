@@ -21,6 +21,7 @@ import { scanTextWindow } from '../utils/read-text-window'
 import { logger } from '../utils/logger'
 import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
 import { guardedHandle } from '../security/ipc-guard'
+import { assertProjectWriteHasNoLinks } from '../security/project-write-path'
 
 /**
  * 路径权限（L4 S8）——判定逻辑在 `electron/security/grants.ts`（纯模块，可离线单测）。
@@ -169,7 +170,9 @@ export function revokeGrantedPath(absPath: string): void {
  * @throws 越界 → error.fsAccessDenied；命中拒绝名单/凭据文件 → error.fsAccessProtected
  */
 function validateSandbox(filePath: string, intent: PathIntent = 'read'): string {
-  return assertPathAllowed(filePath, intent, currentPathPolicy())
+  const safePath = assertPathAllowed(filePath, intent, currentPathPolicy())
+  if (intent === 'write') assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
+  return safePath
 }
 
 /**
@@ -307,8 +310,10 @@ export function registerFSController() {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         const tempPath = `${safePath}.${Date.now()}.tmp`
         await fsPromises.writeFile(tempPath, Buffer.from(content))
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         await fsPromises.rename(tempPath, safePath)
         return { success: true }
       })
@@ -323,9 +328,11 @@ export function registerFSController() {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         // 先写到临时文件再原位替换，绝对防止 0KB 碎屑踩空现象
         const tempPath = `${safePath}.${Date.now()}.tmp`
         await fsPromises.writeFile(tempPath, content, 'utf-8')
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         await fsPromises.rename(tempPath, safePath)
         return { success: true }
       })
@@ -389,8 +396,10 @@ export function registerFSController() {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         const tempPath = `${safePath}.${Date.now()}.tmp`
         await fsPromises.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')
+        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         await fsPromises.rename(tempPath, safePath)
         return { success: true }
       })

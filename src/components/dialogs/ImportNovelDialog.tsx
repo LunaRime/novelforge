@@ -2,10 +2,11 @@ import { useState, useCallback } from 'react'
 import { FileUp, FolderOpen, BookOpen, Zap, Clock, AlertTriangle } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
-import { useWorkflowStore } from '../../stores/workflow-store'
+import { startWorkflow } from '../../services/workflows/start-workflow'
+import { toast } from '../ui/Toast'
 import { t } from '../../shared/locale'
 import { ipc } from '../../services/ipc-client'
-import { createImportWorkflow, estimateImportCost } from '../../services/workflows/import-workflow'
+import { estimateImportCost } from '../../services/workflows/import-workflow'
 import type { ImportedChapter } from '../../services/workflows/commands/import-novel.command'
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -22,7 +23,6 @@ interface ImportNovelDialogProps {
 /** 导入小说向导对话框 */
 export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogProps) {
   const createProject = useProjectStore((s) => s.createProject)
-  const startWorkflow = useWorkflowStore((s) => s.startWorkflow)
 
   // 表单状态
   const [name, setName] = useState('')
@@ -100,16 +100,20 @@ export default function ImportNovelDialog({ open, onClose }: ImportNovelDialogPr
       }
 
       // 2. 启动导入工作流
-      const workflow = createImportWorkflow({ chapters })
-      await startWorkflow(workflow, true) // 步进模式，方便用户观察
+      const project = useProjectStore.getState().currentProject
+      const normalize = (path: string) => path.replace(/\\/g, '/').replace(/\/+$/, '')
+      const expectedPath = normalize(savePath.trim()) + '/' + name.trim()
+      if (!project || normalize(project.path) !== expectedPath) throw new Error(t('error.noProject'))
+      await startWorkflow({ workflow: 'import_novel', chapters }) // 适配器保留步进模式
 
       onClose()
     } catch (e) {
       console.error('[ImportNovel]', t('import.importFailed') + ':', e)
+      toast.error(t('import.importFailed') + ': ' + String(e))
     } finally {
       setImporting(false)
     }
-  }, [name, savePath, chapters, createProject, startWorkflow, onClose])
+  }, [name, savePath, chapters, createProject, onClose])
 
   // 成本预估
   const costEstimate = splitDone && chapters.length > 0

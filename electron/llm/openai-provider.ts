@@ -76,6 +76,7 @@ export class OpenAIProvider implements ILLMProvider {
       let finalContent = data.choices?.[0]?.message?.content ?? ''
       finalContent = finalContent.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
 
+      if (!finalContent) return { success: false, content: '', error: t('error.llmEmptyResponse') }
       return {
         success: true,
         content: finalContent,
@@ -178,10 +179,9 @@ export class OpenAIProvider implements ILLMProvider {
             let emit = ''
             if (!isThinking) {
               isThinking = true
-              emit += ' thinking\n'
+              emit += '<think>'
             }
             emit += event.delta
-            fullText += emit
             emittedAny = true
             opts.onChunk(emit)
             continue
@@ -190,15 +190,19 @@ export class OpenAIProvider implements ILLMProvider {
             let emit = ''
             if (isThinking) {
               isThinking = false
-              emit += '\n response\n\n'
+              emit += '</think>'
             }
             emit += event.delta
-            fullText += emit
+            fullText += event.delta
             emittedAny = true
             opts.onChunk(emit)
             continue
           }
           if (event.type === 'tool_call_complete') {
+            if (isThinking) {
+              isThinking = false
+              opts.onChunk('</think>')
+            }
             const xml = `<tool_call>${JSON.stringify({ name: event.name, arguments: event.args })}</tool_call>`
             fullText += xml
             emittedAny = true
@@ -217,12 +221,12 @@ export class OpenAIProvider implements ILLMProvider {
       if (!consumeEvents(adapter.flush())) return
 
       if (isThinking) {
-        const closeTag = '\n response\n\n'
-        fullText += closeTag
+        const closeTag = '</think>'
         opts.onChunk(closeTag)
       }
 
       const cleanText = fullText.replace(/<think>[\s\S]*?(?:<\/think>|$)/gi, '').trim()
+      if (!cleanText) { opts.onError(t('error.llmEmptyResponse')); return }
       opts.onDone(cleanText, lastUsage)
     }, { canRetry: () => !emittedAny }).catch((error) => {
       // withStreamRetry 重试耗尽后的最终错误处理

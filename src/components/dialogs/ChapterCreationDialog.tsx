@@ -8,7 +8,8 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 import { DIR_VELA_INTERNAL } from '../../shared/project-paths'
 
-import { createChapterWorkflow } from '../../services/workflows/chapter-workflow'
+import { startWorkflow } from '../../services/workflows/start-workflow'
+import { captureDraftProject, assertDraftWrite } from '../../services/draft-index'
 import { guardChapterWriting } from '../../services/workflows/workflow-guards'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
@@ -41,7 +42,6 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
   const currentProject = useProjectStore(s => s.currentProject)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
   // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
-  const startWorkflow = useWorkflowStore.getState().startWorkflow
   const addLog = useWorkflowStore.getState().addLog
   const [chapterNumber, setChapterNumber] = useState<number | ''>(1)
   const [title, setTitle] = useState('')
@@ -141,7 +141,9 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
     try {
       // 读取已有 log
       let log: { lastUsed?: object; history?: object[] } = {}
+      const assertProject = captureDraftProject(currentProject.path)
       const existing = await ipc.invoke('fs:read-json', `${currentProject.path}/${CREATION_LOG_REL}`)
+      assertProject()
       if (existing.success && existing.data) {
         log = existing.data as typeof log
       }
@@ -153,7 +155,8 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
         ...((log.history || []) as object[]).slice(0, 49), // 最多保留 50 条历史
       ]
 
-      await ipc.invoke('fs:write-json', `${currentProject.path}/${CREATION_LOG_REL}`, log)
+      assertProject()
+      assertDraftWrite(await ipc.invoke('fs:write-json', `${currentProject.path}/${CREATION_LOG_REL}`, log))
     } catch (e) {
       console.warn('[ChapterCreation] 参数持久化失败:', e)
     }
@@ -172,32 +175,38 @@ export default function ChapterCreationDialog({ isOpen, onClose, prefill }: Prop
       return
     }
 
-    // 前置校验：章节蓝图是否已生成，以及（若篇章>1）前一章是否已定稿
-    const targetChapter = Number(chapterNumber) || 1
-    const guard = await guardChapterWriting(targetChapter)
-    if (!guard.ok) {
-      setGuardError(guard.message || t('error.prereqNotMet'))
-      return
+    try {
+      const assertProject = captureDraftProject(currentProject.path)
+      // 前置校验：章节蓝图是否已生成，以及（若篇章>1）前一章是否已定稿
+      const targetChapter = Number(chapterNumber) || 1
+      const guard = await guardChapterWriting(targetChapter)
+      assertProject()
+      if (!guard.ok) {
+        setGuardError(guard.message || t('error.prereqNotMet'))
+        return
+      }
+      setGuardError(null)
+
+      // 持久化本次参数
+      await saveParams()
+
+      assertProject()
+      await startWorkflow({ workflow: 'generate_draft', chapterNumber: targetChapter, chapterInfo: {
+        chapterNumber: Number(chapterNumber) || 1,
+        title: title || t('chapter.label').replace('{n}', String(chapterNumber || 1)),
+        role,
+        purpose,
+        characters: characters.split(/[、,，]/).map(s => s.trim()).filter(Boolean),
+        keyEvents,
+        userGuidance,
+        knowledgeQueryHint: knowledgeHint.trim() || undefined,
+      } })
+
+      // 启动任务后关闭设定弹窗，由全局 Overlay 接管展示
+      onClose()
+    } catch (error) {
+      toast.error(String(error))
     }
-    setGuardError(null)
-
-    // 持久化本次参数
-    await saveParams()
-
-    const workflow = createChapterWorkflow({
-      chapterNumber: Number(chapterNumber) || 1,
-      title: title || t('chapter.label').replace('{n}', String(chapterNumber || 1)),
-      role,
-      purpose,
-      characters: characters.split(/[、,，]/).map(s => s.trim()).filter(Boolean),
-      keyEvents,
-      userGuidance,
-      knowledgeQueryHint: knowledgeHint.trim() || undefined,
-    })
-
-    // 启动任务后关闭设定弹窗，由全局 Overlay 接管展示
-    startWorkflow(workflow, false)
-    onClose()
   }
 
   const handleOpenChange = (open: boolean) => {

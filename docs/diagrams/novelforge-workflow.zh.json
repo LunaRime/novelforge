@@ -1,0 +1,331 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "NovelForge 创作全流程",
+    "subtitle": "AI 自动跑的部分，和你亲手接管的地方",
+    "locale": "zh-CN",
+    "animation": "trace",
+    "visual_preset": "signal-flow",
+    "quality_profile": "showcase",
+    "output": "novelforge-workflow.zh.html"
+  },
+  "lanes": [
+    {
+      "id": "author",
+      "label": "你 · 手动"
+    },
+    {
+      "id": "agent",
+      "label": "AI Agent · 自动"
+    },
+    {
+      "id": "engine",
+      "label": "创作引擎 · 工作流"
+    },
+    {
+      "id": "local",
+      "label": "本机数据"
+    }
+  ],
+  "phases": [
+    {
+      "id": "p_idea",
+      "label": "立意 · 大纲",
+      "fromCol": 0,
+      "toCol": 1,
+      "variant": "emphasis"
+    },
+    {
+      "id": "p_write",
+      "label": "下令 · 写稿",
+      "fromCol": 2,
+      "toCol": 3,
+      "variant": "default"
+    },
+    {
+      "id": "p_review",
+      "label": "审阅 · 验收",
+      "fromCol": 4,
+      "toCol": 4,
+      "variant": "dashed"
+    },
+    {
+      "id": "p_settle",
+      "label": "定稿 · 沉淀",
+      "fromCol": 5,
+      "toCol": 5,
+      "variant": "emphasis"
+    }
+  ],
+  "mainPath": [
+    "a_start",
+    "outline",
+    "split",
+    "draft",
+    "review",
+    "a_gate",
+    "post",
+    "mem"
+  ],
+  "nodes": [
+    {
+      "id": "a_start",
+      "lane": "author",
+      "col": 0,
+      "type": "external",
+      "label": "作者",
+      "sublabel": "定目标 · 写设定",
+      "tag": "你亲手定",
+      "width": 132
+    },
+    {
+      "id": "a_manual",
+      "lane": "author",
+      "col": 4,
+      "type": "external",
+      "label": "手动写正文",
+      "sublabel": "自己写正文",
+      "tag": "Ctrl+S 落盘",
+      "width": 132
+    },
+    {
+      "id": "a_gate",
+      "lane": "author",
+      "col": 5,
+      "type": "security",
+      "label": "人工验收",
+      "sublabel": "接受 / 退回",
+      "tag": "关键闸门",
+      "width": 132
+    },
+    {
+      "id": "convo",
+      "lane": "agent",
+      "col": 1,
+      "type": "frontend",
+      "label": "发起请求",
+      "sublabel": "对话 · 侧栏按钮 · /命令",
+      "tag": "意图预路由",
+      "width": 140
+    },
+    {
+      "id": "react",
+      "lane": "agent",
+      "col": 2,
+      "type": "backend",
+      "label": "ReAct 循环",
+      "sublabel": "规划 → 工具 → 观察",
+      "tag": "23 个工具 · 需确认",
+      "width": 132
+    },
+    {
+      "id": "outline",
+      "lane": "engine",
+      "col": 0,
+      "type": "backend",
+      "label": "大纲 · 细纲",
+      "sublabel": "世界观 · 角色 · 卷",
+      "width": 132
+    },
+    {
+      "id": "split",
+      "lane": "engine",
+      "col": 1,
+      "type": "backend",
+      "label": "自动拆章",
+      "sublabel": "章数 · 高潮章",
+      "width": 132
+    },
+    {
+      "id": "draft",
+      "lane": "engine",
+      "col": 3,
+      "type": "backend",
+      "label": "流式写稿",
+      "sublabel": "注入前 3 章卡片",
+      "tag": "逐章生成",
+      "width": 132
+    },
+    {
+      "id": "review",
+      "lane": "engine",
+      "col": 4,
+      "type": "backend",
+      "label": "自审 + 评审",
+      "sublabel": "重写 ≤2 轮 · 5 角色",
+      "tag": "加权打分",
+      "width": 132
+    },
+    {
+      "id": "post",
+      "lane": "engine",
+      "col": 5,
+      "type": "messagebus",
+      "label": "定稿后处理",
+      "sublabel": "剧情 · 角色 · 伏笔 · 记忆",
+      "tag": "DAG 并行",
+      "width": 140
+    },
+    {
+      "id": "files",
+      "lane": "local",
+      "col": 3,
+      "type": "database",
+      "label": "项目文件",
+      "sublabel": "章节 · 设定",
+      "width": 132
+    },
+    {
+      "id": "db",
+      "lane": "local",
+      "col": 4,
+      "type": "database",
+      "label": "项目库",
+      "sublabel": "SQLite + 向量库",
+      "width": 132
+    },
+    {
+      "id": "mem",
+      "lane": "local",
+      "col": 5,
+      "type": "database",
+      "label": "三级记忆",
+      "sublabel": "章 · 卷 · 全书",
+      "width": 132
+    }
+  ],
+  "edges": [
+    {
+      "id": "goal-outline",
+      "from": "a_start",
+      "to": "outline",
+      "label": "定目标",
+      "variant": "emphasis"
+    },
+    {
+      "id": "outline-split",
+      "from": "outline",
+      "to": "split",
+      "label": "大纲成形"
+    },
+    {
+      "id": "split-draft",
+      "from": "split",
+      "to": "draft",
+      "label": "章节细纲",
+      "toSide": "left"
+    },
+    {
+      "id": "draft-review",
+      "from": "draft",
+      "to": "review",
+      "label": "初稿",
+      "variant": "emphasis",
+      "toSide": "left"
+    },
+    {
+      "id": "review-gate",
+      "from": "review",
+      "to": "a_gate",
+      "label": "评分报告",
+      "variant": "emphasis"
+    },
+    {
+      "id": "gate-post",
+      "from": "a_gate",
+      "to": "post",
+      "label": "定稿",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "post-mem",
+      "from": "post",
+      "to": "mem",
+      "label": "写回记忆"
+    },
+    {
+      "id": "convo-react",
+      "from": "convo",
+      "to": "react",
+      "label": "解析 + 澄清"
+    },
+    {
+      "id": "react-draft",
+      "from": "react",
+      "to": "draft",
+      "label": "start_workflow",
+      "variant": "emphasis",
+      "role": "main",
+      "toSide": "top"
+    },
+    {
+      "id": "manual-review",
+      "from": "a_manual",
+      "to": "review",
+      "label": "自己写完交审",
+      "variant": "dashed",
+      "role": "branch",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "gate-retry",
+      "from": "a_gate",
+      "to": "a_manual",
+      "label": "退回",
+      "variant": "security",
+      "role": "error"
+    },
+    {
+      "id": "draft-files",
+      "from": "draft",
+      "to": "files",
+      "label": "落盘",
+      "variant": "dashed"
+    },
+    {
+      "id": "files-db",
+      "from": "files",
+      "to": "db",
+      "label": "入库 + 索引",
+      "variant": "dashed"
+    },
+    {
+      "id": "post-db",
+      "from": "post",
+      "to": "db",
+      "label": "写回剧情 / 角色 / 伏笔",
+      "variant": "dashed",
+      "role": "async"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "两条路都通向定稿",
+      "items": [
+        "Agent 从大纲一路写到自审，你只在验收点点头",
+        "想自己写就直接开编辑器，写完照样进同一套审阅"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "执行前一定过你的手",
+      "items": [
+        "意图预路由只做解析和澄清，不直接开工",
+        "侧栏按钮与对话共用执行通道，启动和退回都由你点"
+      ]
+    },
+    {
+      "dot": "violet",
+      "title": "定稿只是开始",
+      "items": [
+        "6 路并行提取：剧情 / 角色 / 关系 / 伏笔 / 声音 / 文风",
+        "结果写回本地库与三级记忆，下一章自动带上"
+      ]
+    }
+  ]
+}

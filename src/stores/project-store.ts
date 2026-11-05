@@ -56,6 +56,8 @@ async function callProjectClosed() {
 interface ProjectState {
   /** 当前打开的项目 */
   currentProject: ProjectData | null
+  /** Invalidates async work even when a project is closed and reopened at the same path. */
+  projectSession: number
   /** 项目文件树 */
   fileTree: FileNode[]
   /** 最近项目列表 */
@@ -99,13 +101,14 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>()((set, get) => ({
   currentProject: null,
+  projectSession: 0,
   fileTree: [],
   recentProjects: [],
   loading: false,
   configSnapshot: null,
 
   createProject: async (config) => {
-    set({ loading: true })
+    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
     try {
       const result = await ipc.invoke('project:create', config)
       if (!result.success) {
@@ -135,7 +138,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       toast.warning(t('tip.characterSaving'))
       return false
     }
-    set({ loading: true })
+    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
     try {
       const result = await ipc.invoke('project:open', projectPath)
       if (result.success && result.project) {
@@ -246,6 +249,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   closeProject: () => {
+    set(state => ({ projectSession: state.projectSession + 1 }))
     // 统一清空 Layer 2 Store + 编辑器 Tab
     callProjectClosed()
     clearProjectCustomPrompts()

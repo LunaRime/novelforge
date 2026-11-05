@@ -8,10 +8,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useProjectStore } from './project-store'
 import type { ProjectData } from '../shared/ipc-channels'
+import { ipc } from '../services/ipc-client'
 
 vi.mock('../services/ipc-client', () => ({
   ipc: { invoke: vi.fn().mockResolvedValue(true) },
 }))
+vi.mock('./character-store', () => ({ useCharacterStore: { getState: () => ({ saving: false }) } }))
+vi.mock('../services/project-service', () => ({ onProjectClosed: vi.fn(), onProjectOpened: vi.fn().mockResolvedValue(undefined) }))
 
 const BASE: ProjectData = {
   id: 'p1',
@@ -48,6 +51,28 @@ afterEach(() => {
 })
 
 describe('project-store 快照机制（线③）', () => {
+  it('opening invalidates the previous session before IPC completion', async () => {
+    const before = useProjectStore.getState().projectSession
+    let resolveOpen!: (value: unknown) => void
+    vi.mocked(ipc.invoke).mockImplementation((...args) => {
+      const channel = args[0]
+      if (channel === 'project:open') return new Promise(resolve => { resolveOpen = resolve }) as never
+      return Promise.resolve(channel === 'fs:list-dir' ? [] : { success: true }) as never
+    })
+    const opening = useProjectStore.getState().openProject('/new', { keepView: true })
+    await vi.waitFor(() => expect(resolveOpen).toBeTypeOf('function'))
+    expect(useProjectStore.getState().projectSession).toBe(before + 1)
+    resolveOpen({ success: true, project: { ...BASE, path: '/new' } })
+    await expect(opening).resolves.toBe(true)
+  })
+  it('closing changes the session; ordinary config updates keep it', () => {
+    const before = useProjectStore.getState().projectSession
+    expect(typeof before).toBe('number')
+    useProjectStore.getState().updateNovelConfig({ coreOutline: '改动' })
+    expect(useProjectStore.getState().projectSession).toBe(before)
+    useProjectStore.getState().closeProject()
+    expect(useProjectStore.getState().projectSession).toBe(before + 1)
+  })
   it('snapshot 深拷贝当前配置；update 后 restore 恢复原值', () => {
     const { snapshotNovelConfig, updateNovelConfig, restoreNovelConfigSnapshot } = useProjectStore.getState()
 

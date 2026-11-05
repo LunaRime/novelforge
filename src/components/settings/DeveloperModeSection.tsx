@@ -92,7 +92,7 @@ export default function DeveloperModeSection() {
     setSaving(true)
     try {
       await ipc.invoke('config:set', {
-        devMode: { enabled, consoleEnabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
+        devMode: { enabled, consoleEnabled: __DEV_CONSOLE__ && consoleEnabled, apiBaseUrl: apiBaseUrl.trim(), headers, timeoutMs: timeoutMs || DEFAULT_TIMEOUT },
         devBrowser: { enabled: browserEnabled, cdpPort: browserPort || 9222 },
         // 日志保留（钳制：1-30 个文件 / 1-365 天）
         logRetention: {
@@ -102,7 +102,7 @@ export default function DeveloperModeSection() {
       })
       renderLog('info', 'Save:Settings', t('log.render.devModeSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
-      void useDevConsoleStore.getState().refresh()
+      if (__DEV_CONSOLE__) void useDevConsoleStore.getState().refresh()
     } catch (e) {
       renderLog('error', 'Save:Settings', t('log.render.devModeSaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))
@@ -153,7 +153,7 @@ export default function DeveloperModeSection() {
       </div>
 
       {/* 开发者控制台 */}
-      <div className="p-3 rounded-xl space-y-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+      {__DEV_CONSOLE__ && <div className="p-3 rounded-xl space-y-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
         <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
             <Terminal size={14} style={{ color: 'var(--color-accent)', flexShrink: 0 }} />
@@ -184,6 +184,7 @@ export default function DeveloperModeSection() {
         )}
       </div>
 
+      }
       {/* 配置表单 */}
       <div className="space-y-3">
         <div>

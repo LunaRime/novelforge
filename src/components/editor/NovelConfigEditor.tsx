@@ -12,7 +12,7 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
-import { createFieldGenerationWorkflow } from '../../services/workflows/architecture-workflow'
+import { startWorkflow } from '../../services/workflows/start-workflow'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import type { TextKey } from '../../shared/locale'
@@ -86,13 +86,14 @@ export default function NovelConfigEditor() {
   }
 
   /** 单字段 AI 生成（线③ 第 2 条：走 startWorkflow，删假 step——可取消/流式/进面板/统一失败面） */
-  const handleFieldGenerate = (fieldKey: GeneratableField) => {
+  const handleFieldGenerate = async (fieldKey: GeneratableField) => {
     if (!defaultModelId) {
       addLog('error', t('tip.configModelFirst'))
       return
     }
     if (generatingField) return // 防止并发（generatingField 推导自 activeRuns 的 config_generation）
-    useWorkflowStore.getState().startWorkflow(createFieldGenerationWorkflow(fieldKey))
+    try { await startWorkflow({ workflow: 'generate_config_field', fieldKey }) }
+    catch (error) { toast.error(String(error)) }
   }
 
   // 题材 value 保持中文原文（数据兼容），显示文本走 i18n
