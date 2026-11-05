@@ -1,0 +1,400 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "目标架构：把事实放回中间",
+    "subtitle": "依赖单向向下，UI 只是投影；章节文件是唯一真相",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      980,
+      800
+    ],
+    "output": "novelforge-target.zh.html",
+    "legend": {
+      "mode": "auto"
+    }
+  },
+  "components": [
+    {
+      "id": "ui-editor",
+      "type": "frontend",
+      "label": "编辑器",
+      "sublabel": "只渲染",
+      "pos": [
+        110,
+        30
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "ui-chat",
+      "type": "frontend",
+      "label": "对话",
+      "sublabel": "提交命令",
+      "pos": [
+        320,
+        30
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "ui-panel",
+      "type": "frontend",
+      "label": "进度面板",
+      "sublabel": "订阅事件",
+      "pos": [
+        530,
+        30
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "app-write",
+      "type": "backend",
+      "label": "写章用例",
+      "sublabel": "编排 · 无 UI 依赖",
+      "pos": [
+        110,
+        160
+      ],
+      "size": [
+        170,
+        58
+      ]
+    },
+    {
+      "id": "app-review",
+      "type": "backend",
+      "label": "审稿用例",
+      "sublabel": "可独立调用",
+      "pos": [
+        320,
+        160
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "app-publish",
+      "type": "backend",
+      "label": "定稿用例",
+      "sublabel": "状态机推进",
+      "pos": [
+        530,
+        160
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "domain",
+      "type": "backend",
+      "label": "领域核心",
+      "sublabel": "Chapter · Draft · 不变量",
+      "tag": "纯 TS",
+      "pos": [
+        110,
+        296
+      ],
+      "size": [
+        220,
+        62
+      ]
+    },
+    {
+      "id": "runtime",
+      "type": "backend",
+      "label": "agent runtime",
+      "sublabel": "loop · tools · context",
+      "tag": "可单测",
+      "pos": [
+        430,
+        296
+      ],
+      "size": [
+        220,
+        62
+      ]
+    },
+    {
+      "id": "repo",
+      "type": "backend",
+      "label": "文件仓储",
+      "sublabel": "FileChapterStore",
+      "pos": [
+        60,
+        432
+      ],
+      "size": [
+        170,
+        58
+      ]
+    },
+    {
+      "id": "export",
+      "type": "backend",
+      "label": "导出服务",
+      "sublabel": "md / txt",
+      "pos": [
+        270,
+        432
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "bus",
+      "type": "messagebus",
+      "label": "领域事件总线",
+      "sublabel": "单向广播",
+      "pos": [
+        470,
+        432
+      ],
+      "size": [
+        180,
+        58
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "LLM provider",
+      "sublabel": "多协议适配",
+      "pos": [
+        690,
+        432
+      ],
+      "size": [
+        170,
+        58
+      ]
+    },
+    {
+      "id": "sqlite",
+      "type": "database",
+      "label": "SQLite 索引",
+      "sublabel": "可删可重建",
+      "pos": [
+        60,
+        580
+      ],
+      "size": [
+        170,
+        58
+      ]
+    },
+    {
+      "id": "filestore",
+      "type": "database",
+      "label": "章节文件",
+      "sublabel": "唯一真相 · md",
+      "pos": [
+        270,
+        580
+      ],
+      "size": [
+        160,
+        58
+      ]
+    },
+    {
+      "id": "vector",
+      "type": "database",
+      "label": "向量索引",
+      "sublabel": "派生 · 可重建",
+      "pos": [
+        470,
+        580
+      ],
+      "size": [
+        180,
+        58
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "UI · 只订阅事件，禁止 import 业务",
+      "wraps": [
+        "ui-editor",
+        "ui-chat",
+        "ui-panel"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "应用层 · 用例编排，不 import stores",
+      "wraps": [
+        "app-write",
+        "app-review",
+        "app-publish"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "核心 · 纯 TS，无 Electron / React",
+      "wraps": [
+        "domain",
+        "runtime"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "适配层 · 唯一允许碰 IO 的地方",
+      "wraps": [
+        "repo",
+        "export",
+        "bus",
+        "llm"
+      ],
+      "pad": 30
+    },
+    {
+      "kind": "region",
+      "label": "数据 · 文件是真相，索引是派生",
+      "wraps": [
+        "sqlite",
+        "filestore",
+        "vector"
+      ],
+      "pad": 30
+    }
+  ],
+  "connections": [
+    {
+      "id": "chat-cmd",
+      "from": "ui-chat",
+      "to": "app-write",
+      "label": "命令",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "editor-save",
+      "from": "ui-editor",
+      "to": "app-write",
+      "label": "保存",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "app-domain",
+      "from": "app-write",
+      "to": "domain",
+      "label": "读模型",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "app-runtime",
+      "from": "app-review",
+      "to": "runtime",
+      "label": "起任务",
+      "variant": "emphasis",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "runtime-domain",
+      "from": "runtime",
+      "to": "domain",
+      "label": "经 ports 读写",
+      "fromSide": "left",
+      "toSide": "right"
+    },
+    {
+      "id": "runtime-bus",
+      "from": "runtime",
+      "to": "bus",
+      "label": "发事件",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "bus-ui",
+      "from": "bus",
+      "to": "ui-panel",
+      "label": "订阅渲染",
+      "variant": "dashed",
+      "fromSide": "right",
+      "toSide": "right"
+    },
+    {
+      "id": "repo-sqlite",
+      "from": "repo",
+      "to": "sqlite",
+      "label": "更新索引",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "export-file",
+      "from": "export",
+      "to": "filestore",
+      "label": "写正文 · 原子",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "runtime-llm",
+      "from": "runtime",
+      "to": "llm",
+      "label": "调模型",
+      "variant": "dashed",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "publish-domain",
+      "from": "app-publish",
+      "to": "domain",
+      "label": "定稿落库",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "variant": "dashed"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "三条硬规则",
+      "items": [
+        "UI 不许 import 业务层（lint: no-restricted-imports）",
+        "领域核心不 import Electron / React / stores",
+        "只有适配层可以碰 IO，其余层靠接口"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "改完之后你得到",
+      "items": [
+        "agent 能脱离 Electron 跑单元测试与回放",
+        "章节只有一个 ID，导出/索引失效可重建",
+        "workflow 与 agent 共用同一套用例，不再双轨"
+      ]
+    }
+  ]
+}
