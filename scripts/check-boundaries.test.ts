@@ -8,14 +8,14 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true })
 })
 
-function check(source: string, area = 'core', agentStoreFiles = 0) {
+function check(source: string, area = 'core', agentStoreFiles = 0, filename = 'sample.ts') {
   // Keep fixtures under the repo so Node resolves the installed TypeScript package.
   const root = mkdtempSync(resolve('.tmp-boundary-'))
   roots.push(root)
   mkdirSync(join(root, 'scripts'))
   const directory = join(root, 'src', area)
   mkdirSync(directory, { recursive: true })
-  writeFileSync(join(directory, 'sample.ts'), source)
+  writeFileSync(join(directory, filename), source)
   writeFileSync(join(root, 'scripts/check-boundaries.mjs'), readFileSync(resolve('scripts/check-boundaries.mjs')))
   writeFileSync(join(root, 'scripts/boundary-baseline.json'), JSON.stringify({
     coreForbidden: 0, agentStoreFiles, agentStoreRefs: 0,
@@ -24,6 +24,16 @@ function check(source: string, area = 'core', agentStoreFiles = 0) {
 }
 
 describe('boundary CLI', () => {
+  test.each(['../../services/ipc-client', '../../stores/llm-store', '../../stores/draft-store', '../../services/workflows/start-workflow'])('keeps DraftEditor behind application ports: %s', specifier => {
+    const result = check(`import * as dependency from '${specifier}'`, 'components/editor', 0, 'DraftEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('allows editor application adapter and UI state', () => {
+    const result = check(`import { app } from '../../services/editor/draft-editor-application'
+      import { useEditorStore } from '../../stores/editor-store'`, 'components/editor', 0, 'DraftEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test('rejects external imports of core internals', () => {
     const result = check(`import type { Chapter } from '../../core/domain/chapter'`, 'services')
     expect(result.status, result.stdout).toBe(1)

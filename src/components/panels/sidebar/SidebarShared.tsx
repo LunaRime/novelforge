@@ -44,34 +44,32 @@ export function showSidebarMenu(items: ContextMenuEntry[], e: React.MouseEvent) 
 // ===== 辅助打开文件函数 =====
 
 import { useEditorStore } from '../../../stores/editor-store'
-import { ipc } from '../../../services/ipc-client'
+import { openRendererEditorDocument } from '../../../services/editor/open-editor-document'
+import { EditorOpenScopeChanged, type EditorOpenRequest } from '../../../core'
+import { toast } from '../../ui/Toast'
+import { t } from '../../../shared/locale'
+import { renderLog } from '../../../services/render-logger'
 
-/** 打开架构文件（带 AI 生成工具栏；若 tab 已存在则刷新内容） */
+/** UI feedback stays here; resource loading and project isolation live in the application use case. */
+async function openDocument(request: EditorOpenRequest): Promise<boolean> {
+  try {
+    const result = await openRendererEditorDocument(request)
+    if (result.status === 'missing') {
+      if (request.kind === 'latest-draft') toast.warning(t('workspace.noDraft').replace('{n}', String(request.chapterNumber)))
+      return false
+    }
+    return true
+  } catch (error) {
+    if (error instanceof EditorOpenScopeChanged) return false
+    renderLog('error', 'Open:Editor', String(error))
+    toast.error(`${t('common.loadFailed')}: ${String(error)}`)
+    return false
+  }
+}
+
+/** Opening again preserves unsaved content through the central editor tab policy. */
 export async function openArchFile(filePath: string, name: string) {
-  let content = ''
-  // 支持 vela://core/ 伪协议路径，从 DB 读取架构字段
-  const { VELA, readCoreContent } = await import('../../../services/vela-protocol')
-  if (filePath.startsWith(VELA.CORE)) {
-    content = await readCoreContent(filePath)
-  } else {
-    const result = await ipc.invoke('fs:read-file', filePath)
-    content = result.success ? result.content : ''
-  }
-  const store = useEditorStore.getState()
-  const existingTab = store.tabs.find(t => t.id === filePath)
-  if (existingTab) {
-    // tab 已存在：切换 + 静默刷新磁盘内容（不标记脏数据）
-    store.setActiveTab(filePath)
-    store.syncTabContent(filePath, content)
-  } else {
-    store.openFile({
-      id: filePath,
-      name,
-      type: 'arch-file',
-      filePath,
-      content,
-    })
-  }
+  await openDocument({ kind: 'path', locator: filePath, name, documentKind: 'arch-file' })
 }
 
 /** 打开内置编辑器 */
@@ -80,52 +78,13 @@ export function openBuiltinEditor(id: string, name: string, type: 'chapter-card'
 }
 
 /** 打开指定章最新草稿（工作台/项目结构共用；无草稿时 toast 反馈） */
-export async function openDraftByChapter(chapterNumber: number, chapterTitle?: string): Promise<boolean> {
-  const { getChapterLatestDraft } = await import('../../../services/version-service')
-  let draft: { id: number; content: string } | null = null
-  try {
-    draft = await getChapterLatestDraft(chapterNumber)
-  } catch (e) {
-    console.warn('[SidebarShared] 读取草稿失败:', e)
-  }
-  if (!draft) {
-    const { toast } = await import('../../ui/Toast')
-    const { t } = await import('../../../shared/locale')
-    toast.warning(t('workspace.noDraft').replace('{n}', String(chapterNumber)))
-    return false
-  }
-  const filePath = `vela://draft/${draft.id}`
-  const { t } = await import('../../../shared/locale')
-  // Tab 名必须带章节号（与正式稿/草稿箱命名一致；标题已含"第N章"前缀则不重复拼接）
-  const chLabel = t('chapter.label').replace('{n}', String(chapterNumber))
-  const titlePart = chapterTitle && !chapterTitle.startsWith(chLabel) ? ` ${chapterTitle}` : (chapterTitle ?? '')
-  useEditorStore.getState().openFile({
-    id: filePath,
-    name: `${chLabel}${titlePart}（草稿）`,
-    type: 'chapter',
-    filePath,
-    content: draft.content,
-  })
-  return true
+export function openDraftByChapter(chapterNumber: number, chapterTitle?: string): Promise<boolean> {
+  return openDocument({ kind: 'latest-draft', chapterNumber, chapterTitle })
 }
 
 /** 打开章节文件 */
 export async function openChapterFile(filePath: string, name: string) {
-  let content = ''
-  const { isVelaProtocol, readVelaContent } = await import('../../../services/vela-protocol')
-  if (isVelaProtocol(filePath)) {
-    content = await readVelaContent(filePath)
-  } else {
-    const result = await ipc.invoke('fs:read-file', filePath)
-    content = result.success ? result.content : ''
-  }
-  useEditorStore.getState().openFile({
-    id: filePath,
-    name,
-    type: 'chapter',
-    filePath,
-    content,
-  })
+  await openDocument({ kind: 'path', locator: filePath, name, documentKind: 'chapter' })
 }
 
 // ===== 架构文件元信息 =====

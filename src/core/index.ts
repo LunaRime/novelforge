@@ -18,3 +18,8 @@ export type { WorkflowStartRequest, WorkflowStartPort, WorkflowReceipt, Prepared
 export { createContainer, createRuntime, RuntimeScopeChanged } from './runtime/container'
 export type { RuntimeEvent, RuntimeEventPresentation } from './domain/runtime-event'
 export type { ArchitectureGeneration, ConfigGenerationSize } from './application/start-workflow'
+export { openEditorDocument, EditorOpenScopeChanged } from './application/open-editor-document'
+export type { EditorOpenResult } from './application/open-editor-document'
+export type { EditorOpenPort, EditorOpenRequest, OpenedEditorDocument, EditorOpenScope } from './ports/editor-open'
+export { createDraftEditorApplication } from './application/draft-editor'
+export type { DraftEditorPorts, EditorDraftIdentity } from './application/draft-editor'
