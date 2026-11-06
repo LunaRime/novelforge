@@ -37,3 +37,5 @@ export { createArchitectureOverviewApplication } from './application/architectur
 export type { ArchitectureOverviewPorts, ArchitectureOverviewResult, ArchitectureFieldOverview, ArchitectureFieldRead } from './ports/architecture-overview'
 export { createNovelConfigApplication, NovelConfigRequestCancelled, NovelConfigSaveRejected, NovelConfigBusy } from './application/novel-config'
 export type { NovelConfigPorts, NovelConfigScope, ConfigGenerationSnapshot, ConfigUndoToken, ConfigFieldVersions } from './ports/novel-config'
+export { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, ChapterBlueprintBusy } from './application/chapter-blueprints'
+export type { ChapterBlueprintPorts, ChapterBlueprintScope, ChapterBlueprintSort, ChapterBlueprintSaveReceipt } from './ports/chapter-blueprints'

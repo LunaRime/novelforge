@@ -140,6 +140,16 @@ const editorApplicationViolations = []
 const knowledgeApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
   const source = inspectSource(file)
+  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ChapterCardEditor.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/services\/workflows\/directory-workflow$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+    }
+    for (const channel of source.ipcChannels) {
+      if (['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many'].includes(channel)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${channel}`)
+      }
+    }
+  }
   if (['src/components/panels/KnowledgePanel.tsx', 'src/components/pages/KnowledgeOverview.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
     for (const spec of source.runtimeSpecifiers) {
       if (/\/(?:ipc-client|stores\/llm-store|knowledge-service)$/.test(spec)) {

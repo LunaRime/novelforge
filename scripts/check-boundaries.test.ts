@@ -24,6 +24,20 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many'])('keeps blueprint editor load/save behind use cases: %s', channel => {
+    const result = check(`ipc.invoke('${channel}')`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('rejects legacy blueprint load/save runtime helpers', () => {
+    const result = check(`import { loadDirectoryBlueprints } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test('allows blueprint DTO and remaining separate delete operation', () => {
+    const result = check(`import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'
+      ipc.invoke('db:blueprint-delete', 1)`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../services/architecture-service', '../../services/vela-protocol', '../../services/workflows/architecture-workflow', '../../services/workflows/workflow-utils'])('keeps WorldBuildingEditor behind architecture use cases: %s', specifier => {
     const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'WorldBuildingEditor.tsx')
     expect(result.status, result.stdout).toBe(1)
