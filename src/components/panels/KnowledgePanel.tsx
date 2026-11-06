@@ -1,215 +1,199 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
+import { KnowledgeRequestCancelled } from '../../core'
 import {
   Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2, AlertCircle, Sparkles,
 } from 'lucide-react'
-import { ipc } from '../../services/ipc-client'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { useProjectStore } from '../../stores/project-store'
-import { useLLMStore } from '../../stores/llm-store'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
-import { loadKBData, type KBDocument } from '../../services/knowledge-service'
+import type { KBDocument, KBStatsData, SearchResult } from '../../services/knowledge-service'
+import { createRendererKnowledgeApplication } from '../../services/knowledge/knowledge-adapter'
+import { renderLog } from '../../services/render-logger'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
-
-
-/** 知识库管理面板（侧栏）— 只读展示 + 搜索 + 删除，数据由定稿自动驱动 */
+/** A new project session gets a fresh view, with no previous project's transient results. */
 export default function KnowledgePanel() {
   const { t } = useTranslation()
+  const project = useProjectStore(s => s.currentProject)
+  const session = useProjectStore(s => s.projectSession)
+  if (!project) return <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} className="pb-[15vh]" opacity={0.4} />
+  return <KnowledgePanelContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+}
+
+function KnowledgePanelContent({ source }: { source: { id: string; path: string; session: number } }) {
+  const { t } = useTranslation()
+  const [application] = useState(() => createRendererKnowledgeApplication(source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const sequences = useRef({ load: 0, search: 0, summary: 0, titles: 0 })
+  const deleting = useRef(new Set<string>())
   const [documents, setDocuments] = useState<KBDocument[]>([])
   const [loadFailed, setLoadFailed] = useState(false)
-  const [stats, setStats] = useState({ documentCount: 0, totalChunks: 0 })
+  const [stats, setStats] = useState<KBStatsData>({ documentCount: 0, totalChunks: 0, vectorDimension: 0 })
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
-  // 排序方式：chapter = 章节号（升序，默认——章节是主索引）/ time = 导入时间（降序）/ name = 名称（升序）
   const [sortMode, setSortMode] = useState<'time' | 'chapter' | 'name'>('chapter')
-  // P2-1：知识库内容搜索（结果视图）
   const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<Array<{ text: string; score: number; fileName: string }>>([])
+  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
-  // 导出状态
   const [exportOpen, setExportOpen] = useState(false)
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
-
-  // 线③ 第 5 条：知识文档 AI 总结
   const [summarizing, setSummarizing] = useState(false)
   const [summaryDoc, setSummaryDoc] = useState<KBDocument | null>(null)
   const [summaryText, setSummaryText] = useState('')
+  const active = useCallback(() => {
+    const current = useProjectStore.getState()
+    return mounted.current && current.currentProject?.id === source.id && current.currentProject.path === source.path && current.projectSession === source.session
+  }, [source.id, source.path, source.session])
 
-  /** 线③ 第 5 条：AI 总结文档（读文档 → LLM → 摘要） */
-  const handleSummarize = async (doc: KBDocument) => {
-    if (summarizing) return
-    setSummarizing(true)
-    setSummaryDoc(doc)
-    setSummaryText('')
-    try {
-      const res = await ipc.invoke('fs:read-file', doc.filePath) as { content?: string }
-      const content = res.content ?? ''
-      if (!content.trim()) {
-        toast.warning(t('knowledge.searchEmpty'))
-        setSummaryDoc(null)
-        return
-      }
-      const { generate } = useLLMStore.getState()
-      const resp = await generate([
-        { role: 'system', content: t('knowledge.summarySystemPrompt') },
-        { role: 'user', content: content.slice(0, 30000) },
-      ])
-      if (resp.success && resp.content) {
-        setSummaryText(resp.content)
-      } else {
-        throw new Error(resp.error || 'empty summary')
-      }
-    } catch (e) {
-      toast.error(t('knowledge.summaryFailed').replace('{error}', String(e)))
-      setSummaryDoc(null)
-    } finally {
-      setSummarizing(false)
-    }
-  }
-
-  /** 从文档文件名提取章节号 */
-  const extractChapterNumber = (doc: KBDocument): number => {
-    const rawName = doc.fileName.replace(/\.[^.]+$/, '')
-    const chMatch = rawName.match(/^(?:chapter_(\d+)|第(\d+)章)/)
-    return chMatch ? parseInt(chMatch[1] || chMatch[2], 10) : 0
-  }
-
-  /** 单章导出 */
-  const openSingleExport = (doc: KBDocument) => {
-    const cn = extractChapterNumber(doc)
-    setExportChapters([cn])
-    setExportTitleMap({ [cn]: titleMap[doc.id] || doc.fileName })
-    setExportOpen(true)
-  }
-
-  /** 批量导出所有已入库章节 */
-  const openBatchExport = () => {
-    const chapters: number[] = []
-    const titles: Record<number, string> = {}
-    for (const doc of documents) {
-      const cn = extractChapterNumber(doc)
-      if (cn > 0) {
-        chapters.push(cn)
-        titles[cn] = titleMap[doc.id] || doc.fileName
-      }
-    }
-    setExportChapters(chapters)
-    setExportTitleMap(titles)
-    setExportOpen(true)
-  }
-
-  // P2-1：知识库搜索（输入防抖省略——列表页轻量查询，Enter/按钮触发）
-  const handleSearch = async () => {
-    const q = searchQuery.trim()
-    if (!q) {
-      setSearchResults([])
-      return
-    }
-    setSearching(true)
-    try {
-      const results = await ipc.invoke('kb:search', q, 10) as Array<{ text: string; score: number; fileName: string }>
-      setSearchResults(Array.isArray(results) ? results : [])
-    } catch (e) {
-      toast.error(t('knowledge.searchFailed').replace('{error}', () => String(e)))
-    } finally {
-      setSearching(false)
-    }
-  }
-
-  // P2-1：删除文档（确认 + IPC + 刷新）
-  const handleDelete = async (doc: KBDocument) => {
-    const ok = await confirm(
-      t('knowledge.deleteConfirm').replace('{name}', titleMap[doc.id] || doc.fileName),
-      { title: t('action.delete'), confirmText: t('action.delete'), danger: true },
-    )
-    if (!ok) return
-    try {
-      const res = await ipc.invoke('kb:remove-document', doc.id)
-      if (!res.success) throw new Error('remove failed')
-      toast.success(t('knowledge.deleteSuccess').replace('{name}', titleMap[doc.id] || doc.fileName))
-      await loadData()
-    } catch (e) {
-      toast.error(t('knowledge.deleteFailed').replace('{error}', () => String(e)))
-    }
-  }
-
-  /** 加载文档列表 + 统计（通过 Service 层） */
-  const loadData = useCallback(async () => {
-    try {
-      const { documents: docs, stats: s } = await loadKBData()
-      setDocuments(docs)
-      setStats(s)
-      setLoadFailed(false)
-    } catch (e) {
-      // 2026-09-25 修：此前只 console.warn → documents 停在 []，渲染出「还没有已入库的章节」**空态**
-      // —— 加载失败被伪装成"没有数据"，用户既不重试也不知道出了问题。
-      console.warn('[KnowledgePanel] 加载知识库数据失败:', e)
-      setLoadFailed(true)
-    }
-  }, [])
-
-  useEffect(() => { 
-    let mounted = true
-    Promise.resolve().then(() => { if (mounted) loadData() })
-    return () => { mounted = false }
-  }, [loadData])
-
-  // 通过 EventBus 监听资源刷新和定稿完成事件
   useEffect(() => {
-    const unsub1 = globalEventBus.on('REFRESH_RESOURCE', () => { loadData() })
-    const unsub2 = globalEventBus.on('FINALIZE_COMPLETE', () => { loadData() })
+    mounted.current = true
+    const lifecycle = lifetime.current
+    const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      // React StrictMode rehearses cleanup/setup synchronously; dispose only a real unmount.
+      queueMicrotask(() => { if (!mounted.current && lifecycle.generation === generation) application.dispose() })
+    }
+  }, [application])
+
+  const loadData = useCallback(async () => {
+    const seq = ++sequences.current.load
+    try {
+      const data = await application.load()
+      if (!active() || seq !== sequences.current.load) return
+      setDocuments(data.documents); setStats(data.stats); setLoadFailed(false)
+    } catch (error) {
+      if (!active() || seq !== sequences.current.load || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Load:Knowledge', String(error)); setLoadFailed(true)
+    }
+  }, [application, active])
+  useEffect(() => { void loadData() }, [loadData])
+  useEffect(() => {
+    const refresh = () => { void loadData() }
+    const unsub1 = globalEventBus.on('REFRESH_RESOURCE', refresh)
+    const unsub2 = globalEventBus.on('FINALIZE_COMPLETE', refresh)
     return () => { unsub1(); unsub2() }
   }, [loadData])
 
   useEffect(() => {
-    let cancelled = false
-    const loadTitles = async () => {
-      if (documents.length === 0) return
-      const missing = documents.filter(d => d.filePath && !titleMap[d.id])
-      if (missing.length === 0) return
-
-      const newTitles: Record<string, string> = {}
-      await Promise.all(
-        missing.map(async (doc) => {
-          let title = doc.fileName
-          const rawName = doc.fileName.replace(/\.[^.]+$/, '')
-          const chMatch = rawName.match(/^(?:chapter_(\d+)|第(\d+)章)\s*(.*)$/)
-          if (chMatch) {
-            const num = chMatch[1] ? parseInt(chMatch[1], 10) : parseInt(chMatch[2], 10)
-            const rest = (chMatch[3] || '').trim()
-            const chLabel = t('chapter.nLabel').replace('{n}', String(num))
-            title = rest ? `${chLabel} ${rest}` : chLabel
+    const requests = sequences.current
+    const seq = ++requests.titles
+    if (!documents.length) return
+    void application.titles(documents).then(titles => {
+      if (!active() || seq !== sequences.current.titles) return
+      const projected: Record<string, string> = {}
+      for (const doc of documents) {
+        let title = titles[doc.id] || doc.fileName
+        if (title === doc.fileName) {
+          const match = doc.fileName.replace(/\.[^.]+$/, '').match(/^(?:chapter_(\d+)|第(\d+)章)\s*(.*)$/)
+          if (match) {
+            const label = t('chapter.nLabel').replace('{n}', match[1] || match[2])
+            title = match[3]?.trim() ? `${label} ${match[3].trim()}` : label
           }
+        }
+        projected[doc.id] = title
+      }
+      setTitleMap(projected)
+    }).catch(error => {
+      if (active() && seq === sequences.current.titles && !(error instanceof KnowledgeRequestCancelled)) renderLog('debug', 'Load:Knowledge', String(error))
+    })
+    return () => { if (seq === requests.titles) ++requests.titles }
+  }, [documents, application, active, t])
 
-          try {
-            const res = await ipc.invoke('fs:read-file', doc.filePath)
-            if (res.success && res.content) {
-              const firstLine = res.content.split('\n').find((l: string) => l.trim())
-              if (firstLine) {
-                title = firstLine.replace(/^#+\s*/, '').trim() || title
-              }
-            }
-          } catch { /* 忽略 — 非关键路径，单个文档标题读取失败不影响整体 */ }
-          newTitles[doc.id] = title
-        })
-      )
-      if (!cancelled) setTitleMap(prev => ({ ...prev, ...newTitles }))
+  const changeSearch = (query: string) => {
+    ++sequences.current.search; application.cancelSearch()
+    setSearchQuery(query); setSearchResults([]); setSearching(false)
+  }
+  const handleSearch = async () => {
+    const query = searchQuery.trim()
+    if (!query) { changeSearch(''); return }
+    const seq = ++sequences.current.search
+    setSearching(true)
+    try {
+      const results = await application.search(query)
+      if (active() && seq === sequences.current.search) setSearchResults(results)
+    } catch (error) {
+      if (active() && seq === sequences.current.search && !(error instanceof KnowledgeRequestCancelled)) toast.error(t('knowledge.searchFailed').replace('{error}', () => String(error)))
+    } finally {
+      if (active() && seq === sequences.current.search) setSearching(false)
     }
-    loadTitles()
-    return () => { cancelled = true }
-  }, [documents]) // eslint-disable-line react-hooks/exhaustive-deps -- titleMap 不需要作为依赖：内部通过 prev => 合并即可获取最新值
-
-  const currentProject = useProjectStore(s => s.currentProject)
+  }
+  const closeSummary = () => {
+    ++sequences.current.summary; application.cancelSummary()
+    setSummaryDoc(null); setSummaryText(''); setSummarizing(false)
+  }
+  const handleSummarize = async (doc: KBDocument) => {
+    if (summarizing) return
+    const seq = ++sequences.current.summary
+    setSummarizing(true); setSummaryDoc(doc); setSummaryText('')
+    try {
+      const result = await application.summarize(doc, t('knowledge.summarySystemPrompt'))
+      if (!active() || seq !== sequences.current.summary) return
+      if (result.status === 'empty') { toast.warning(t('knowledge.searchEmpty')); setSummaryDoc(null) }
+      else setSummaryText(result.text)
+    } catch (error) {
+      if (!active() || seq !== sequences.current.summary || error instanceof KnowledgeRequestCancelled) return
+      toast.error(t('knowledge.summaryFailed').replace('{error}', () => String(error))); setSummaryDoc(null)
+    } finally {
+      if (active() && seq === sequences.current.summary) setSummarizing(false)
+    }
+  }
+  const handleDelete = async (doc: KBDocument) => {
+    if (deleting.current.has(doc.id)) return
+    deleting.current.add(doc.id)
+    const label = titleMap[doc.id] || doc.fileName
+    try {
+      const ok = await confirm(t('knowledge.deleteConfirm').replace('{name}', () => label), { title: t('action.delete'), confirmText: t('action.delete'), danger: true })
+      if (!ok || !active()) return
+      ++sequences.current.load; ++sequences.current.titles
+      changeSearch(''); closeSummary()
+      const result = await application.remove(doc)
+      if (!active()) return
+      // Requests may have completed while persistence was pending. Clear those projections too.
+      ++sequences.current.load; ++sequences.current.titles
+      changeSearch(''); closeSummary()
+      const message = t('knowledge.deleteSuccess').replace('{name}', () => label)
+      renderLog('info', 'Delete:Knowledge', message); toast.success(message)
+      setDocuments(prev => prev.filter(item => item.id !== doc.id))
+      setTitleMap(prev => { const next = { ...prev }; delete next[doc.id]; return next })
+      if (result.data) { setDocuments(result.data.documents); setStats(result.data.stats); setLoadFailed(false) }
+      if (result.refreshError) {
+        setLoadFailed(true); renderLog('error', 'Load:Knowledge', result.refreshError)
+        toast.error(t('common.loadFailed'))
+      }
+    } catch (error) {
+      if (!active() || error instanceof KnowledgeRequestCancelled) return
+      const message = t('knowledge.deleteFailed').replace('{error}', () => String(error))
+      renderLog('error', 'Delete:Knowledge', message); toast.error(message)
+    } finally { deleting.current.delete(doc.id) }
+  }
+  const extractChapterNumber = (doc: KBDocument): number => {
+    const match = doc.fileName.replace(/\.[^.]+$/, '').match(/^(?:chapter_(\d+)|第(\d+)章)/)
+    return match ? parseInt(match[1] || match[2], 10) : 0
+  }
+  const openSingleExport = (doc: KBDocument) => {
+    const number = extractChapterNumber(doc)
+    setExportChapters([number]); setExportTitleMap({ [number]: titleMap[doc.id] || doc.fileName }); setExportOpen(true)
+  }
+  const openBatchExport = () => {
+    const chapters: number[] = [], titles: Record<number, string> = {}
+    for (const doc of documents) {
+      const number = extractChapterNumber(doc)
+      if (number > 0) { chapters.push(number); titles[number] = titleMap[doc.id] || doc.fileName }
+    }
+    setExportChapters(chapters); setExportTitleMap(titles); setExportOpen(true)
+  }
 
   // 排序 + 分页（提前计算，避免 JSX 内嵌 IIFE 的深层括号）
   const sortedDocs = useMemo(() => {
@@ -224,17 +208,6 @@ export default function KnowledgePanel() {
   }, [documents, sortMode])
   const totalPages = Math.max(1, Math.ceil(documents.length / pageSize))
   const pageDocs = sortedDocs.slice((currentPage - 1) * pageSize, currentPage * pageSize)
-
-  if (!currentProject) {
-    return (
-      <EmptyState 
-        icon={<BookOpen size={36} />} 
-        message={t('empty.pleaseOpenProject')}
-        className="pb-[15vh]" 
-        opacity={0.4} 
-      />
-    )
-  }
 
   return (
     <div className="h-full flex flex-col overflow-hidden text-sm">
@@ -279,14 +252,14 @@ export default function KnowledgePanel() {
           <Input
             type="text"
             value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); if (!e.target.value) setSearchResults([]) }}
+            onChange={(e) => changeSearch(e.target.value)}
             onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
             placeholder={t('knowledge.searchPlaceholder')}
             className="flex-1 min-w-0 h-6 px-1.5 text-micro"
           />
           {searchResults.length > 0 && (
             <button
-              onClick={() => { setSearchQuery(''); setSearchResults([]) }}
+              onClick={() => changeSearch('')}
               title={t('knowledge.closeSearch')}
               className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
               style={{ color: 'var(--color-text-muted)' }}
@@ -341,7 +314,7 @@ export default function KnowledgePanel() {
       </div>
 
       {/* 线③ 第 5 条：知识文档 AI 总结对话框 */}
-      <Dialog open={summaryDoc !== null} onOpenChange={(v) => !v && setSummaryDoc(null)}>
+      <Dialog open={summaryDoc !== null} onOpenChange={(v) => !v && closeSummary()}>
         <DialogContent className="max-w-[520px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">

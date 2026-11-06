@@ -41,7 +41,7 @@ export function createRendererEditorOpenPort(): EditorOpenPort {
   }
 }
 
-async function readDocument(locator: string, assertCurrent: () => void): Promise<string> {
+export async function readDocument(locator: string, assertCurrent: () => void): Promise<string> {
   assertCurrent()
   if (locator.startsWith('vela://') && !useProjectStore.getState().currentProject) throw new Error(t('error.noProject'))
   const match = /^vela:\/\/(draft|manuscript|revision|review)\/([1-9]\d*)$/.exec(locator)

@@ -7,28 +7,8 @@
 
 import { ipc } from './ipc-client'
 
-/** 已导入文档 */
-export interface KBDocument {
-  id: string
-  fileName: string
-  importedAt: string
-  chunkCount: number
-  filePath: string
-}
-
-/** 检索结果 */
-export interface SearchResult {
-  text: string
-  score: number
-  fileName: string
-}
-
-/** 知识库统计 */
-export interface KBStatsData {
-  documentCount: number
-  totalChunks: number
-  vectorDimension: number
-}
+import type { KnowledgeDocument as KBDocument, KnowledgeSearchResult as SearchResult, KnowledgeStats as KBStatsData } from '../core'
+export type { KBDocument, SearchResult, KBStatsData }
 
 /** 加载文档列表 */
 export async function listDocuments(): Promise<KBDocument[]> {

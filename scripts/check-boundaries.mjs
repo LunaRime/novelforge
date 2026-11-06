@@ -55,13 +55,20 @@ function walk(dir) {
 function inspectSource(file) {
   const tree = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   const specifiers = []
+  const runtimeSpecifiers = []
   const workflowFactories = []
   const ipcChannels = []
   let storeRefs = 0
   function visit(node) {
     let specifier
+    let typeOnly = false
     if (ts.isImportDeclaration(node) || ts.isExportDeclaration(node)) {
       specifier = node.moduleSpecifier
+      typeOnly = ts.isExportDeclaration(node) ? !!node.isTypeOnly : !!node.importClause?.isTypeOnly
+      if (ts.isImportDeclaration(node) && node.importClause && !node.importClause.name
+        && node.importClause.namedBindings && ts.isNamedImports(node.importClause.namedBindings)
+        && node.importClause.namedBindings.elements.length > 0
+        && node.importClause.namedBindings.elements.every(item => item.isTypeOnly)) typeOnly = true
     } else if (ts.isImportEqualsDeclaration(node) && ts.isExternalModuleReference(node.moduleReference)) {
       specifier = node.moduleReference.expression
     } else if (ts.isCallExpression(node)) {
@@ -78,11 +85,14 @@ function inspectSource(file) {
         storeRefs++
       }
     }
-    if (specifier && ts.isStringLiteralLike(specifier)) specifiers.push(specifier.text)
+    if (specifier && ts.isStringLiteralLike(specifier)) {
+      specifiers.push(specifier.text)
+      if (!typeOnly) runtimeSpecifiers.push(specifier.text)
+    }
     ts.forEachChild(node, visit)
   }
   visit(tree)
-  return { specifiers, storeRefs, workflowFactories, ipcChannels }
+  return { specifiers, runtimeSpecifiers, storeRefs, workflowFactories, ipcChannels }
 }
 
 // ---- 1) core 硬门禁 ----
@@ -127,8 +137,16 @@ for (const area of ['src', 'electron', 'scripts']) {
 // M2: UI sends typed application requests; adapters construct workflow definitions.
 const uiWorkflowViolations = []
 const editorApplicationViolations = []
+const knowledgeApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
   const source = inspectSource(file)
+  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/panels/KnowledgePanel.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/(?:ipc-client|stores\/llm-store|knowledge-service)$/.test(spec)) {
+        knowledgeApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
   if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/DraftEditor.tsx') {
     for (const spec of source.specifiers) {
       if (/\/(?:ipc-client|stores\/(?:llm|draft)-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
@@ -151,7 +169,11 @@ for (const key of ['coreForbidden', 'agentStoreFiles', 'agentStoreRefs']) {
   console.log(`  ${key.padEnd(15)} ${String(baseline[key]).padStart(3)} → ${current[key]}`)
 }
 
-let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0 || editorApplicationViolations.length > 0 || draftMutationViolations.length > 0
+let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0 || editorApplicationViolations.length > 0 || draftMutationViolations.length > 0 || knowledgeApplicationViolations.length > 0
+if (knowledgeApplicationViolations.length) {
+  console.error('\nknowledge application: panel IO must use knowledge application ports')
+  for (const violation of knowledgeApplicationViolations) console.error(`  - ${violation}`)
+}
 if (draftMutationViolations.length) {
   console.error('\ndraft store projection: revision merging must use the atomic application command')
   for (const channel of draftMutationViolations) console.error(`  - ${channel}`)
