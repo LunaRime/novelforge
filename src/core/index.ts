@@ -1,4 +1,6 @@
 export { ChapterError } from './domain/chapter'
+export { commitRevisionMerge } from './application/commit-revision-merge'
+export type { RevisionMergeInput, RevisionMergeResult, RevisionMergePort } from './ports/revision-merge'
 export { canExecuteConcurrently, requiresToolApproval } from './runtime/tool-execution'
 export type { ToolExecutionPolicy } from './runtime/tool-execution'
 export type { Chapter, ChapterMeta, ChapterStatus, StoredChapter } from './domain/chapter'

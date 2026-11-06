@@ -182,6 +182,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:revision-get-pending': { authority: 'read-project' },
   'db:revision-list': { authority: 'read-project' },
   'db:revision-mark-discarded': { authority: 'write-project' },
+  'db:revision-merge': { authority: 'write-project' },
   'db:revision-mark-merged': { authority: 'write-project' },
   'db:revision-next-index': { authority: 'write-project' },
   'db:save-summary-snapshot': { authority: 'write-project' },

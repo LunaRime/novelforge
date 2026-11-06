@@ -14,6 +14,17 @@ function fixture() {
   return { ports, change: () => { scope = { path: '/b', session: 2 } }, reopen: () => { scope = { ...scope, session: scope.session + 1 } } }
 }
 describe('draft editor application', () => {
+  it('forwards the initial merge base without rereading a newer draft body', async () => {
+    const f = fixture(); const app = createDraftEditorApplication(f.ports)
+    await app.merge(meta, 'draft', 'revision', 'merged', 'initial merge base')
+    expect(f.ports.merge).toHaveBeenCalledWith(2, 'draft', 'revision', 'merged', 'initial merge base')
+    expect(f.ports.read).not.toHaveBeenCalled()
+  })
+  it('preserves committed adapter refresh failures in the application receipt', async () => {
+    const f = fixture(); const app = createDraftEditorApplication(f.ports)
+    f.ports.merge = vi.fn(async () => ({ success: true, refreshError: 'cache failed' }))
+    expect(await app.merge(meta, 'draft', 'revision', 'merged', 'initial')).toMatchObject({ success: true, refreshError: 'cache failed' })
+  })
   it('captures source identity by value even when a port mutates its scope object', async () => {
     const f = fixture(); const scope = { path: '/a', session: 1 }
     f.ports.project = () => scope

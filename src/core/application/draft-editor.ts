@@ -12,7 +12,7 @@ export interface DraftEditorPorts<Meta extends EditorDraftIdentity, Revision> {
   refresh(): void
   start(request: WorkflowStartRequest): Promise<unknown>
   repairGuard(chapterNumber: number): Promise<{ ok: boolean; message?: string }>
-  merge(chapterNumber: number, path: string, revision: string, text: string): Promise<{ success: boolean; error?: string }>
+  merge(chapterNumber: number, path: string, revision: string, text: string, expectedContent: string | undefined): Promise<{ success: boolean; error?: string; refreshError?: string }>
   latestReview(id: number, version: number): Promise<{ id: number } | null>
   translate(prompt: string, system: string): Promise<string>
   nextVersion(chapterNumber: number): Promise<number>
@@ -56,15 +56,15 @@ export function createDraftEditorApplication<Meta extends EditorDraftIdentity, R
       const [originalContent, modifiedContent] = await step(() => Promise.all([ports.read(path), ports.read(revisionPath)]))
       return { originalContent, modifiedContent, revisionPath }
     },
-    async merge(meta: Meta, path: string, revision: string, text: string) {
-      const result = await step(() => ports.merge(meta.chapterNumber, path, revision, text))
+    async merge(meta: Meta, path: string, revision: string, text: string, expectedContent?: string) {
+      const result = await step(() => ports.merge(meta.chapterNumber, path, revision, text, expectedContent))
       if (!result.success) return { ...result, pending: undefined, refreshError: undefined }
       try {
         const pending = await step(() => ports.pending(meta.id, meta.version))
-        return { success: true as const, pending, refreshError: undefined }
+        return { success: true as const, pending, refreshError: result.refreshError }
       } catch (error) {
         assertCurrent()
-        return { success: true as const, pending: undefined, refreshError: String(error) }
+        return { success: true as const, pending: undefined, refreshError: [result.refreshError, String(error)].filter(Boolean).join('; ') }
       }
     },
     async review(meta: Meta) {

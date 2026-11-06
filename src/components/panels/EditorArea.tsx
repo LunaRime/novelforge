@@ -32,6 +32,7 @@ import { countUndecided } from '../../services/diff/hunk-model'
 
 import { ipc } from '../../services/ipc-client'
 import { captureDraftProject } from '../../services/draft-index'
+import { mergeRendererRevision } from '../../services/editor/merge-revision'
 import { computeTextStats } from '../../services/text-stats'
 import { isValidMemoryContent, stripStatusFrontmatter } from '../../services/memory/memory-codec'
 import { toast } from '../ui/Toast'
@@ -1002,24 +1003,22 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
                     try {
                       if (!currentProject) throw new Error(t('error.noProject'))
                       const assertProject = captureDraftProject(currentProject.path)
-                      const { useDraftStore } = await import('../../stores/draft-store')
-                      assertProject()
-                      const result = await useDraftStore.getState().applyMergedRevision(
-                        chapterNum,
-                        filePath,
-                        activeTab.revisionPath ?? '',
-                        mergedText
-                      )
+                      const result = await mergeRendererRevision({ chapterNumber: chapterNum, draftPath: filePath,
+                        revisionPath: activeTab.revisionPath ?? '', content: mergedText, expectedContent: activeTab.originalContent })
 
                       assertProject()
                       if (result.success) {
                         toast.success('✅ ' + t('editor.mergeComplete'))
+                        renderLog('info', 'Save:Draft', t('editor.mergeComplete'))
+                        if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
                         useEditorStore.getState().closeTab(activeTab.id)
                       } else {
                         // 失败保留 Tab，避免「合并没有发生但 Tab 关了」的假成功
+                        renderLog('error', 'Save:Draft', result.error ?? t('status.unknown'))
                         toast.error(t('error.mergeFailed').replace('{error}', result.error ?? ''))
                       }
                     } catch (e) {
+                      renderLog('error', 'Save:Draft', String(e))
                       toast.error(t('error.mergeError').replace('{error}', String(e)))
                     }
                   }}

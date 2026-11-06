@@ -25,6 +25,7 @@
 | 13 | [M3 运行时实施与验证](13-m3-runtime-implementation-plan.md) | 端口注入、四类事件与显式调度语义 | 2026-11-06 |
 | 14 | [M4 草稿与编辑器身份](14-m4-document-identity.md) | 元数据清理与 doc 标签身份 | 2026-11-06 |
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
+| 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
