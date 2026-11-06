@@ -24,6 +24,17 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['../../services/ipc-client', '../../services/architecture-service', '../../services/vela-protocol', '../../services/workflows/architecture-workflow', '../../services/workflows/workflow-utils'])('keeps WorldBuildingEditor behind architecture use cases: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'WorldBuildingEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('allows overview neutral DTO imports and character/workflow projections', () => {
+    const result = check(`import type { ArchitectureOverviewResult } from '../../core'
+      import { useCharacterStore } from '../../stores/character-store'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'WorldBuildingEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['NovelConfigEditor.tsx', 'GenerateConfigDialog.tsx'])('keeps %s behind config use cases', filename => {
     const area = filename === 'NovelConfigEditor.tsx' ? 'components/editor' : 'components/dialogs'
     for (const specifier of ['../../services/ipc-client', '../../stores/llm-store', '../../services/workflows/start-workflow']) {

@@ -1,6 +1,6 @@
 # NovelForge 架构文档
 
-> 当前实施边界（2026-11-06）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付；知识库总览 A1–A4（19）与架构文档 B1（20）已本地提交，小说配置 B2 已实施并验证（21）。后续从 B3 继续，路线见 18。本分支未推送或取得本批远程 CI。应用入口仍读写现有 DB；文件真相切换与旧表冻结尚未启用。离线迁移输出使用独立空目录，不修改原项目。
+> 当前实施边界（2026-11-06）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付；本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22）。后续从 C1 的章节蓝图小批次继续，路线见 18。本分支未推送或取得本批远程 CI。应用入口仍读写现有 DB；文件真相切换与旧表冻结尚未启用。离线迁移输出使用独立空目录，不修改原项目。
 
 > 2026-10-28 起，这一组文档是改造的权威依据。旧的 `docs/architecture-review.md`、`docs/project-structure-review.md` 回答的是"目录整不整齐"，这里回答的是"事实放在哪、一次改动要跨几层"。
 
@@ -27,10 +27,11 @@
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
 | 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | 17 | [知识库侧栏应用层抽离](17-knowledge-panel-application-plan.md) | 搜索/摘要/删除用例及请求失效保护 | 已实现并通过本地验证 |
-| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | A/B1 已提交、B2 本地完成；B3–F 后续任务与验收矩阵 | 下一批 B3 |
+| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | A/B 已本地完成；C–F 后续任务与验收矩阵 | 下一批 C1 |
 | 19 | [知识库总览应用层实施](19-knowledge-overview-application.md) | 维护互斥、导出元数据、项目隔离及总览组件回归 | 本地提交 0c1375c |
 | 20 | [架构文档应用层实施](20-architecture-document-application-plan.md) | B1 读写/生成用例、dirty 会话与运行归属 | 本地实施与验证记录 |
 | 21 | [小说配置应用层实施](21-novel-config-application-plan.md) | B2 保存、字段版本、生成冲突与撤销保护 | 本地实施与验证记录 |
+| 22 | [世界观与架构状态应用层](22-architecture-overview-application-plan.md) | B3 部分失败、来源隔离、提取取消与编辑会话保护 | 本地实施与验证记录 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

@@ -1,10 +1,10 @@
 import { toast } from '../ui/Toast'
-import { startWorkflow } from '../../services/workflows/start-workflow'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTriangle, FolderTree } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
 import { useCharacterStore } from '../../stores/character-store'
+import { useWorkflowStore } from '../../stores/workflow-store'
 import { renderIcon } from '../panels/sidebar/SidebarShared'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -16,14 +16,12 @@ import CountBadge from '../ui/CountBadge'
 import EditorPageHeader from '../ui/EditorPageHeader'
 import { confirm } from '../ui/Confirm'
 import { EmptyState } from '../ui/EmptyState'
-import { VELA } from '../../services/vela-protocol'
-import { ipc } from '../../services/ipc-client'
-
-import { ARCH_CHARACTER_SCOPE, runArchCharacterExtract } from '../../services/workflows/architecture-workflow'
-import { readPostProcessStatus, type PostProcessStatus } from '../../services/workflows/workflow-utils'
+import { ArchitectureRequestCancelled, EditorOpenScopeChanged, type ArchitectureScope, type ArchitectureStep } from '../../core'
+import { createRendererArchitectureOverviewApplication } from '../../services/architecture/architecture-adapter'
+import { renderLog } from '../../services/render-logger'
 import { globalEventBus } from '../../shared/event-bus'
 
-type ArchStepKey = 'premise' | 'characters' | 'worldbuilding' | 'synopsis'
+type ArchStepKey = ArchitectureStep
 
 type ArchFileItem = {
   key: ArchStepKey
@@ -44,136 +42,9 @@ function getArchFiles(t: (key: TextKey) => string): ArchFileItem[] {
 
 /** 故事架构编辑器 — 显示四个架构文件状态，并提供 AI 生成入口 */
 export default function WorldBuildingEditor() {
-  // ✅ 精确订阅，避免 novelConfig 等变化导致不必要的 loadStatus 重建
   const currentProject = useProjectStore(s => s.currentProject)
-  const characters = useCharacterStore(s => s.characters)
-  // 角色数据由 ProjectService 统一加载，组件只消费
-  const characterCount = characters.length
-  const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
-  const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
-  const [loading, setLoading] = useState(true)
-  const [showArchDialog, setShowArchDialog] = useState(false)
-  const [extracting, setExtracting] = useState(false)
-  // 用于强制刷新 PostProcessStatusPanel 的 key
-  const [, setPostProcessKey] = useState(0)
-  // 角色卡后处理状态（用于控制卡片边框颜色）
-  const [charExtractStatus, setCharExtractStatus] = useState<PostProcessStatus | null>(null)
-
+  const session = useProjectStore(s => s.projectSession)
   const { t } = useTranslation()
-  const archFiles = getArchFiles(t)
-
-  /** 加载各架构文件状态（通过 Service 层获取，不直接调 IPC） */
-  const loadStatus = useCallback(async () => {
-    if (!currentProject) return
-    setLoading(true)
-    const { checkArchStatusWithWordCount } = await import('../../services/architecture-service')
-    const { status, wordCounts: counts } = await checkArchStatusWithWordCount()
-    setArchStatus(status)
-    setWordCounts(counts)
-    setLoading(false)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.path])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadStatus() }, [loadStatus])
-
-  /** 加载角色卡后处理状态 */
-  const loadCharExtractStatus = useCallback(async () => {
-    if (!currentProject) return
-    const s = await readPostProcessStatus(currentProject.path, ARCH_CHARACTER_SCOPE)
-    setCharExtractStatus(s)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.path])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { loadCharExtractStatus() }, [loadCharExtractStatus])
-
-  // 监听 EventBus 事件，刷新后处理状态面板
-  useEffect(() => {
-    const unsub1 = globalEventBus.on('ARCH_POSTPROCESS_UPDATED', () => {
-      setPostProcessKey(k => k + 1)
-      loadCharExtractStatus()
-      setExtracting(false)
-    })
-    const unsub2 = globalEventBus.on('CHARACTER_EXTRACT_FAILED', () => {
-      setPostProcessKey(k => k + 1)
-      loadCharExtractStatus()
-      setExtracting(false)
-    })
-    // 每步架构文件写完后实时刷新状态
-    const unsub3 = globalEventBus.on('ARCH_FILE_UPDATED', () => {
-      loadStatus()
-    })
-    // 整个工作流完成后也刷新一次
-    const unsub4 = globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
-      if (payload.type === 'architecture_generation') {
-        loadStatus()
-      }
-    })
-    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
-  }, [loadCharExtractStatus, loadStatus])
-
-
-
-  /** 从角色图谱提取角色卡（首次提取 / 重新提取） */
-  const handleExtractCharacters = useCallback(async () => {
-    if (!currentProject || extracting) return
-    // 已有角色卡时确认覆盖（提取=重建，会覆盖手动编辑内容）
-    try {
-      const existing = (await ipc.invoke('db:character-get-all')) as unknown[]
-      if (existing.length > 0) {
-        const ok = await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })
-        if (!ok) return
-      }
-    } catch { /* 确认检查失败不阻断提取 */ }
-    setExtracting(true)
-    try {
-      const core = await ipc.invoke('db:project-core-get')
-      const charArch = core?.charactersArch ?? ''
-      if (charArch.length < 50) {
-        console.error('角色图谱不存在或内容不完整')
-        setExtracting(false)
-        return
-      }
-      runArchCharacterExtract(currentProject.path, charArch, currentProject.novelConfig.genre)
-    } catch (e) {
-      console.error('角色卡提取失败', e)
-      setExtracting(false)
-    }
-  }, [currentProject, extracting, t])
-
-  /** 打开单个架构文件（arch-file 类型；若 tab 已存在则刷新磁盘内容） */
-  const openArchFile = async (f: ArchFileItem) => {
-    if (!currentProject) return
-    const filePath = `${VELA.CORE}${f.key}`
-    const core = (await ipc.invoke('db:project-core-get')) as Record<string, unknown> | null
-    const propertyKey = f.key === 'characters' ? 'charactersArch' : f.key
-    const content = (core && (core[propertyKey] as string)) || ''
-
-    const { useEditorStore } = await import('../../stores/editor-store')
-    const store = useEditorStore.getState()
-    const existingTab = store.tabs.find(t => t.id === filePath)
-    if (existingTab) {
-      // tab 已存在：切换 + 静默刷新磁盘内容（不标记脚数据）
-      store.setActiveTab(filePath)
-      store.syncTabContent(filePath, content)
-    } else {
-      store.openFile({
-        id: filePath,
-        name: `${f.label}`,
-        type: 'arch-file',
-        filePath,
-        content,
-      })
-    }
-  }
-
-  /** 确认后启动架构工作流 */
-  const handleConfirm = async (selectedSteps: ArchStepKey[], stepGuidance: Record<string, string>) => {
-    try { await startWorkflow({ workflow: 'generate_architecture', architecture: { selectedSteps, stepGuidance } }) }
-    catch (error) { toast.error(String(error)) }
-  }
-
   if (!currentProject) {
     return (
       <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
@@ -195,6 +66,151 @@ export default function WorldBuildingEditor() {
         </div>
       </div>
     )
+  }
+
+  return <ArchitectureOverviewContent key={`${currentProject.id}:${currentProject.path}:${session}`} source={{ id: currentProject.id, path: currentProject.path, session }} genre={currentProject.novelConfig.genre} />
+}
+
+function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureScope; genre: string }) {
+  const { t } = useTranslation()
+  const [application] = useState(() => createRendererArchitectureOverviewApplication(source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const sequence = useRef(0)
+  const extractingBusy = useRef(false)
+  const generatingBusy = useRef(false)
+  const extractionRun = useRef<string | null>(null)
+  const characterCount = useCharacterStore(s => s.characters.length)
+  const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
+  const [wordCounts, setWordCounts] = useState<Record<string, number>>({})
+  const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
+  const [showArchDialog, setShowArchDialog] = useState(false)
+  const [extracting, setExtracting] = useState(false)
+  const [extractionRunId, setExtractionRunId] = useState<string | null>(null)
+  const [charExtractStatus, setCharExtractStatus] = useState<{ allCriticalPassed: boolean } | null>(null)
+  const extractionOutcome = useWorkflowStore(s => extractionRunId
+    ? (s.activeRuns.find(run => run.id === extractionRunId)?.status ?? s.history.find(run => run.id === extractionRunId)?.status ?? 'missing')
+    : null)
+  const active = useCallback(() => {
+    if (!mounted.current) return false
+    try { application.assertCurrent(); return true } catch { return false }
+  }, [application])
+  const archFiles = getArchFiles(t)
+
+  useEffect(() => {
+    mounted.current = true
+    const lifecycle = lifetime.current; const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => { if (!mounted.current && lifecycle.generation === generation) application.dispose() })
+    }
+  }, [application])
+
+  const loadStatus = useCallback(async () => {
+    if (!active()) return
+    const request = ++sequence.current
+    setLoading(true)
+    try {
+      const result = await application.load()
+      if (!active() || request !== sequence.current) return
+      const valid: Record<string, boolean> = {}
+      const counts: Record<string, number> = {}
+      const errors: string[] = []
+      for (const key of Object.keys(result.fields) as ArchitectureStep[]) {
+        const field = result.fields[key]
+        if (field.status === 'ready') { valid[key] = field.generated; counts[key] = field.wordCount }
+        else errors.push(field.status === 'failed' ? field.error : `${key}: missing`)
+      }
+      setArchStatus(previous => ({ ...previous, ...valid }))
+      setWordCounts(previous => ({ ...previous, ...counts }))
+      if (result.postProcess.status === 'ready') {
+        const passed = result.postProcess.allCriticalPassed
+        setCharExtractStatus(passed === null ? null : { allCriticalPassed: passed })
+      } else errors.push(result.postProcess.error)
+      setLoadFailed(errors.length > 0)
+      if (errors.length) renderLog('error', 'Load:ArchitectureOverview', errors.join('\n'))
+    } catch (error) {
+      if (!active() || request !== sequence.current || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Load:ArchitectureOverview', String(error)); setLoadFailed(true)
+    } finally {
+      if (active() && request === sequence.current) setLoading(false)
+    }
+  }, [application, active])
+  useEffect(() => { queueMicrotask(() => { if (active()) void loadStatus() }) }, [loadStatus, active])
+
+  useEffect(() => {
+    // Legacy events carry no source data: they only request a fresh read of this bound project.
+    const refresh = () => { void loadStatus() }
+    const unsub1 = globalEventBus.on('ARCH_POSTPROCESS_UPDATED', refresh)
+    const unsub2 = globalEventBus.on('CHARACTER_EXTRACT_FAILED', refresh)
+    const unsub3 = globalEventBus.on('ARCH_FILE_UPDATED', refresh)
+    const unsub4 = globalEventBus.on('WORKFLOW_COMPLETE', payload => {
+      if (!active() || !payload.runId || !application.ownsRun(payload.runId)) return
+      if (payload.type === 'architecture_generation' || payload.type === 'post_process') void loadStatus()
+      if (payload.runId === extractionRun.current) {
+        extractionRun.current = null; extractingBusy.current = false
+        setExtracting(false); setExtractionRunId(null)
+      }
+    })
+    return () => { unsub1(); unsub2(); unsub3(); unsub4() }
+  }, [application, active, loadStatus])
+
+  useEffect(() => {
+    if (!extractionRunId || !['completed', 'failed', 'missing'].includes(extractionOutcome ?? '')) return
+    queueMicrotask(() => {
+      if (!active() || extractionRun.current !== extractionRunId) return
+      extractionRun.current = null; extractingBusy.current = false
+      setExtracting(false); setExtractionRunId(null); void loadStatus()
+    })
+  }, [extractionRunId, extractionOutcome, active, loadStatus])
+
+  const handleExtractCharacters = async () => {
+    if (!active() || extractingBusy.current) return
+    extractingBusy.current = true; setExtracting(true)
+    let started = false
+    try {
+      const existing = await application.existingCharacterCount()
+      if (!active()) return
+      if (existing > 0 && !await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })) return
+      if (!active()) return
+      const result = await application.extract(genre)
+      if (!active()) return
+      if (result.status === 'started') {
+        started = true; extractionRun.current = result.runId; setExtractionRunId(result.runId)
+      } else toast.error(t('arch.charExtractFailed'))
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Extract:ArchitectureOverview', String(error)); toast.error(t('arch.charExtractFailed'))
+    } finally {
+      if (!started) {
+        extractingBusy.current = false
+        if (active()) setExtracting(false)
+      }
+    }
+  }
+
+  const openArchFile = async (file: ArchFileItem) => {
+    if (!active()) return
+    try {
+      const result = await application.open(file.key, file.label)
+      if (active() && result.status === 'missing') toast.error(t('common.loadFailed'))
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled || error instanceof EditorOpenScopeChanged) return
+      renderLog('error', 'Open:ArchitectureOverview', String(error)); toast.error(t('common.loadFailed'))
+    }
+  }
+
+  const handleConfirm = async (selectedSteps: ArchStepKey[], stepGuidance: Record<string, string>) => {
+    if (!active() || generatingBusy.current) return
+    generatingBusy.current = true
+    try {
+      await application.generate(selectedSteps, stepGuidance)
+      if (active()) setShowArchDialog(false)
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Generate:ArchitectureOverview', String(error)); toast.error(String(error))
+    } finally { generatingBusy.current = false }
   }
 
   const generatedCount = archFiles.filter(f => archStatus[f.key]).length
@@ -240,6 +256,13 @@ export default function WorldBuildingEditor() {
 
       {/* 文件卡片列表 */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {loadFailed && (
+          <div role="alert" className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}>
+            <AlertTriangle size={14} />
+            <span>{t('common.loadFailed')}</span>
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void loadStatus()}>{t('action.retry')}</Button>
+          </div>
+        )}
         {archFiles.map(f => {
           const generated = archStatus[f.key]
           const words = wordCounts[f.key] ?? 0
@@ -255,17 +278,19 @@ export default function WorldBuildingEditor() {
           return (
             <div key={f.key} className="space-y-2">
               <div
-                className="rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
+                className="relative rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
                 style={{
                   borderColor: cardBorderColor,
                   backgroundColor: charExtractFailed ? 'rgba(var(--color-error-rgb), 0.03)' : 'var(--color-panel)',
                   opacity: loading ? 0.6 : 1,
                 }}
-                onClick={() => openArchFile(f)}
                 onMouseEnter={e => (e.currentTarget as HTMLElement).style.borderColor = 'var(--color-accent)'}
                 onMouseLeave={e => (e.currentTarget as HTMLElement).style.borderColor = cardBorderColor}
                 title={`${t('tip.clickView')} — ${f.desc}`}
               >
+                <button type="button" aria-label={f.label}
+                  className="absolute inset-0 rounded-lg cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-[var(--color-accent)]"
+                  onClick={() => void openArchFile(f)} />
                 {/* 状态图标 */}
                 {generated
                   ? <CheckCircle2 size={16} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
@@ -309,7 +334,7 @@ export default function WorldBuildingEditor() {
                     <Button
                       size="sm"
                       disabled={extracting}
-                      className="gap-1.5 mt-0.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-[var(--shadow-sm)] hover:brightness-90 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
+                      className="relative gap-1.5 mt-0.5 bg-gradient-to-r from-[var(--color-error)] to-[var(--color-warning)] text-white shadow-[var(--shadow-sm)] hover:brightness-90 border-none hover:shadow hover:-translate-y-[0.5px] transition-all"
                       onClick={(e) => {
                         e.stopPropagation()
                         handleExtractCharacters()

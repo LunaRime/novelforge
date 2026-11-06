@@ -154,9 +154,9 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
       }
     }
   }
-  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ArchFileViewer.tsx') {
+  if (['src/components/editor/ArchFileViewer.tsx', 'src/components/editor/WorldBuildingEditor.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
     for (const spec of source.runtimeSpecifiers) {
-      if (/\/(?:ipc-client|vela-protocol|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+      if (/\/(?:ipc-client|vela-protocol|architecture-service|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
         editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
       }
     }

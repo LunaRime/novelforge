@@ -33,5 +33,7 @@ export { createKnowledgeMaintenanceApplication, KnowledgeMaintenanceBusy } from 
 export type { KnowledgeMaintenancePorts, MaintenanceKind, MaintenanceResult, MaintenanceReceipt } from './ports/knowledge-maintenance'
 export { createArchitectureDocumentApplication, ArchitectureRequestCancelled, ArchitectureDocumentBusy } from './application/architecture-document'
 export type { ArchitectureDocumentPorts, ArchitectureScope, ArchitectureStep } from './ports/architecture-document'
+export { createArchitectureOverviewApplication } from './application/architecture-overview'
+export type { ArchitectureOverviewPorts, ArchitectureOverviewResult, ArchitectureFieldOverview, ArchitectureFieldRead } from './ports/architecture-overview'
 export { createNovelConfigApplication, NovelConfigRequestCancelled, NovelConfigSaveRejected, NovelConfigBusy } from './application/novel-config'
 export type { NovelConfigPorts, NovelConfigScope, ConfigGenerationSnapshot, ConfigUndoToken, ConfigFieldVersions } from './ports/novel-config'
