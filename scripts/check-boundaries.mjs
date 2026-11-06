@@ -140,7 +140,7 @@ const editorApplicationViolations = []
 const knowledgeApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
   const source = inspectSource(file)
-  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/panels/KnowledgePanel.tsx') {
+  if (['src/components/panels/KnowledgePanel.tsx', 'src/components/pages/KnowledgeOverview.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
     for (const spec of source.runtimeSpecifiers) {
       if (/\/(?:ipc-client|stores\/llm-store|knowledge-service)$/.test(spec)) {
         knowledgeApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)

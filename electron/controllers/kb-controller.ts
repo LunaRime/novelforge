@@ -1,6 +1,7 @@
 import { dialog } from 'electron'
 import { t } from '../../src/shared/locale'
 import fs from 'node:fs'
+import path from 'node:path'
 import {
   importDocument, importFolder, importText, searchKnowledge, searchKnowledgeFTS,
   listDocuments, removeDocument, getKnowledgeStats,
@@ -16,6 +17,25 @@ import { embeddingService } from '../embedding-service'
 import { guardedHandle } from '../security/ipc-guard'
 // L4 S8：对话框结果由主进程直接签发授权（取代渲染层自行调用的 fs:grant-external-file）
 import { grantDirectory, grantExternalFile } from './fs-controller'
+
+const maintenanceTails = new Map<string, Promise<void>>()
+
+/** Vector backfill replaces chunks from a snapshot; token writes must not overlap it. */
+async function withProjectMaintenance<T>(projectPath: string, operation: () => Promise<T>): Promise<T> {
+  const resolved = path.resolve(projectPath)
+  const key = process.platform === 'win32' ? resolved.toLowerCase() : resolved
+  const previous = maintenanceTails.get(key)
+  let release!: () => void
+  const tail = new Promise<void>(done => { release = done })
+  maintenanceTails.set(key, tail)
+  try {
+    await previous
+    return await operation()
+  } finally {
+    release()
+    if (maintenanceTails.get(key) === tail) maintenanceTails.delete(key)
+  }
+}
 
 function getEmbeddingConfig(): { protocol: 'openai' | 'gemini'; model: { baseUrl: string; apiKey: string; modelName: string } } | null {
   const config = readJsonFile<GlobalConfig>(GLOBAL_CONFIG_PATH, DEFAULT_GLOBAL_CONFIG)
@@ -152,121 +172,125 @@ export function registerKBController() {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
 
-    // 判断可用的向量化方式
-    const embConfig = getEmbeddingConfig()
-    const canUseEmbeddingAPI = embConfig !== null
-    const canUseLLM = embeddingService.canUseLLMEmbedding()
-    // T4/A4.2：本地档开启时即使没有远端 API 模型也要进方式 1 —— T3 的 backfillVectors 内部
-    // 已按 resolveEmbeddingOrder 处理档位顺序（local → api → llm → fts），此处不重算顺序。
-    const localCfg = readLocalEmbeddingConfig()
-    const canUseLocal = localCfg.enabled
+    return withProjectMaintenance(projectPath, async () => {
+      // 判断可用的向量化方式
+      const embConfig = getEmbeddingConfig()
+      const canUseEmbeddingAPI = embConfig !== null
+      const canUseLLM = embeddingService.canUseLLMEmbedding()
+      // T4/A4.2：本地档开启时即使没有远端 API 模型也要进方式 1 —— T3 的 backfillVectors 内部
+      // 已按 resolveEmbeddingOrder 处理档位顺序（local → api → llm → fts），此处不重算顺序。
+      const localCfg = readLocalEmbeddingConfig()
+      const canUseLocal = localCfg.enabled
 
-    // 方式 1：专用 Embedding API / 本地 Ollama（内部已含 LLM 降级，失败会自动切换）
-    if (canUseLocal || canUseEmbeddingAPI) {
-      logger.info('KB', canUseLocal ? t('log.kb.rebuildWithLocalOrApi') : t('log.kb.rebuildWithEmbeddingApi'))
-      // 远端参数仅 api 档使用（本地档内部自读 readLocalEmbeddingConfig）；无 API 配置时沿用
-      // kb:import-* 既有约定（protocol='openai' + 空 model → 该档失败即降级，不误发请求）
-      const protocol = embConfig?.protocol ?? 'openai'
-      const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
-      const result = await backfillVectors(projectPath, protocol, model)
-      // T4/A4.2：维度不匹配是**终态** —— 原样透传，绝不降级到方式 2
-      // （方式 2 的 updateChunkVectors 写入路径遇到混维会静默破坏数据；改造前这里被当成
-      //  「换下一种方式」的信号 → 模块层的硬拒绝在 controller 层被静默降级了）
-      if (result.errorCode === 'dim-mismatch') return result
-      // 如果 processed > 0 说明至少部分成功了
-      if (result.success || result.processed > 0) return result
-      // 完全失败 → 降级到 LLM 向量化
-      logger.warn('KB', t('log.kb.embeddingFailedTryLlm').replace('{err}', String(result.error)))
-    }
-
-    // 方式 2：LLM 向量化
-    if (canUseLLM) {
-      logger.info('KB', t('log.kb.rebuildWithLlm'))
-      try {
-        const { count } = await getVectorlessCount(projectPath)
-        if (count === 0) return { success: true, processed: 0, failed: 0 }
-
-        // 获取所有无向量的文本块
-        const { getConnection } = await import('../vector-store')
-        const db = await getConnection(projectPath)
-        const table = await db.openTable('chunks')
-        const rows = await table.query().select(['id', 'text']).toArray()
-        const vectorless = rows.filter((r: { vector?: unknown }) => !r.vector || !Array.isArray(r.vector) || (r.vector as unknown[]).length === 0)
-
-        if (vectorless.length === 0) return { success: true, processed: 0, failed: 0 }
-
-        // 批量 LLM 向量化（自动去重合并）
-        const texts = vectorless.map((r: { text: string }) => r.text)
-        const results = await embeddingService.embedBatchWithLLM(texts)
-
-        // 写入向量（复用 vector-store 的安全逐行 update，避免 dropTable+createTable 中途失败丢数据）
-        let processed = 0
-        let failed = 0
-        if (results.length > 0) {
-          try {
-            const { updateChunkVectors } = await import('../vector-store')
-            const updates: Array<{ id: string; vector: number[] }> = []
-            vectorless.forEach((r: { id: string }, i: number) => {
-              if (results[i] && results[i].vector.length > 0) {
-                updates.push({ id: r.id, vector: results[i].vector })
-                processed++
-              } else {
-                failed++
-              }
-            })
-
-            if (updates.length > 0) {
-              const res = await updateChunkVectors(projectPath, updates)
-              if (!res.success) {
-                // T4 R1（M2）：透传 updateChunkVectors 的**具体**错误（维度拒绝时含「重建索引」指引）
-                // 与**真实**计数——旧写法只回泛化文案 `kb.llmWriteFailed`，把可操作的指引丢掉了；
-                // `failed` 含「空向量行」（未进入 updates 的那部分），即所有没拿到向量的行
-                return {
-                  success: false,
-                  processed: res.count,                  // 零成功时必然为 0（success:false 的定义）
-                  failed: vectorless.length - res.count,
-                  error: res.error ?? t('kb.llmWriteFailed'),
-                }
-              }
-              // 部分成功：`res.count` 是真正写成功的行数（T4 起 updateChunkVectors 如实上报），
-              // 用它覆盖「拿到向量的行数」，未写成功的行计入 failed
-              processed = res.count
-              failed += updates.length - res.count
-            }
-          } catch (e) {
-            failed = vectorless.length
-            return { success: false, processed: 0, failed, error: t('kb.llmWriteFailedDetail').replace('{error}', String(e)) }
-          }
-        }
-
-        return { success: true, processed, failed }
-      } catch (error) {
-        logger.warn('KB', t('log.kb.llmBackfillFailed').replace('{err}', String(error)))
+      // 方式 1：专用 Embedding API / 本地 Ollama（内部已含 LLM 降级，失败会自动切换）
+      if (canUseLocal || canUseEmbeddingAPI) {
+        logger.info('KB', canUseLocal ? t('log.kb.rebuildWithLocalOrApi') : t('log.kb.rebuildWithEmbeddingApi'))
+        // 远端参数仅 api 档使用（本地档内部自读 readLocalEmbeddingConfig）；无 API 配置时沿用
+        // kb:import-* 既有约定（protocol='openai' + 空 model → 该档失败即降级，不误发请求）
+        const protocol = embConfig?.protocol ?? 'openai'
+        const model = embConfig?.model ?? { baseUrl: '', apiKey: '' }
+        const result = await backfillVectors(projectPath, protocol, model)
+        // T4/A4.2：维度不匹配是**终态** —— 原样透传，绝不降级到方式 2
+        // （方式 2 的 updateChunkVectors 写入路径遇到混维会静默破坏数据；改造前这里被当成
+        //  「换下一种方式」的信号 → 模块层的硬拒绝在 controller 层被静默降级了）
+        if (result.errorCode === 'dim-mismatch') return result
+        // 如果 processed > 0 说明至少部分成功了
+        if (result.success || result.processed > 0) return result
+        // 完全失败 → 降级到 LLM 向量化
+        logger.warn('KB', t('log.kb.embeddingFailedTryLlm').replace('{err}', String(result.error)))
       }
-    }
 
-    // 方式 3：全部不可用 — 标记为 FTS 模式
-    logger.info('KB', t('log.kb.noVectorMethodFtsOnly'))
-    const { count } = await getVectorlessCount(projectPath)
-    return {
-      success: false,
-      processed: 0,
-      failed: count,
-      error: t('kb.noVectorMethod'),
-    }
+      // 方式 2：LLM 向量化
+      if (canUseLLM) {
+        logger.info('KB', t('log.kb.rebuildWithLlm'))
+        try {
+          const { count } = await getVectorlessCount(projectPath)
+          if (count === 0) return { success: true, processed: 0, failed: 0 }
+
+          // 获取所有无向量的文本块
+          const { getConnection } = await import('../vector-store')
+          const db = await getConnection(projectPath)
+          const table = await db.openTable('chunks')
+          const rows = await table.query().select(['id', 'text']).toArray()
+          const vectorless = rows.filter((r: { vector?: unknown }) => !r.vector || !Array.isArray(r.vector) || (r.vector as unknown[]).length === 0)
+
+          if (vectorless.length === 0) return { success: true, processed: 0, failed: 0 }
+
+          // 批量 LLM 向量化（自动去重合并）
+          const texts = vectorless.map((r: { text: string }) => r.text)
+          const results = await embeddingService.embedBatchWithLLM(texts)
+
+          // 写入向量（复用 vector-store 的安全逐行 update，避免 dropTable+createTable 中途失败丢数据）
+          let processed = 0
+          let failed = 0
+          if (results.length > 0) {
+            try {
+              const { updateChunkVectors } = await import('../vector-store')
+              const updates: Array<{ id: string; vector: number[] }> = []
+              vectorless.forEach((r: { id: string }, i: number) => {
+                if (results[i] && results[i].vector.length > 0) {
+                  updates.push({ id: r.id, vector: results[i].vector })
+                  processed++
+                } else {
+                  failed++
+                }
+              })
+
+              if (updates.length > 0) {
+                const res = await updateChunkVectors(projectPath, updates)
+                if (!res.success) {
+                  // T4 R1（M2）：透传 updateChunkVectors 的**具体**错误（维度拒绝时含「重建索引」指引）
+                  // 与**真实**计数——旧写法只回泛化文案 `kb.llmWriteFailed`，把可操作的指引丢掉了；
+                  // `failed` 含「空向量行」（未进入 updates 的那部分），即所有没拿到向量的行
+                  return {
+                    success: false,
+                    processed: res.count,                  // 零成功时必然为 0（success:false 的定义）
+                    failed: vectorless.length - res.count,
+                    error: res.error ?? t('kb.llmWriteFailed'),
+                  }
+                }
+                // 部分成功：`res.count` 是真正写成功的行数（T4 起 updateChunkVectors 如实上报），
+                // 用它覆盖「拿到向量的行数」，未写成功的行计入 failed
+                processed = res.count
+                failed += updates.length - res.count
+              }
+            } catch (e) {
+              failed = vectorless.length
+              return { success: false, processed: 0, failed, error: t('kb.llmWriteFailedDetail').replace('{error}', String(e)) }
+            }
+          }
+
+          return { success: true, processed, failed }
+        } catch (error) {
+          logger.warn('KB', t('log.kb.llmBackfillFailed').replace('{err}', String(error)))
+        }
+      }
+
+      // 方式 3：全部不可用 — 标记为 FTS 模式
+      logger.info('KB', t('log.kb.noVectorMethodFtsOnly'))
+      const { count } = await getVectorlessCount(projectPath)
+      return {
+        success: false,
+        processed: 0,
+        failed: count,
+        error: t('kb.noVectorMethod'),
+      }
+    })
   })
 
   // L3 T2：中文分词回填（纯本地 jieba 分词，无需 Embedding 配置）
   guardedHandle('kb:backfill-tokens', async () => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false, processed: 0, failed: 0, error: t('error.noProject') }
-    try {
-      return await backfillTokens(projectPath)
-    } catch (error) {
-      // T2 M4：分词回填失败用**分词**文案（复用 log.kb.backfillError「向量回填异常」会误导 LogsView）
-      logger.error('KB', t('log.kb.backfillTokensError').replace('{err}', String(error)))
-      return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
-    }
+    return withProjectMaintenance(projectPath, async () => {
+      try {
+        return await backfillTokens(projectPath)
+      } catch (error) {
+        // T2 M4：分词回填失败用**分词**文案（复用 log.kb.backfillError「向量回填异常」会误导 LogsView）
+        logger.error('KB', t('log.kb.backfillTokensError').replace('{err}', String(error)))
+        return { success: false, processed: 0, failed: 0, error: safeErrorMessage(error) }
+      }
+    })
   })
 
   guardedHandle('dialog:select-files', async () => {

@@ -29,6 +29,7 @@ const h = vi.hoisted(() => ({
   home: `${process.env.TEMP ?? process.env.TMP ?? process.cwd()}/nf-kb-ctl-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
   handlers: new Map<string, (event: unknown, ...args: unknown[]) => unknown>(),
   backfillVectors: vi.fn(),
+  backfillTokens: vi.fn(),
   getVectorlessCount: vi.fn(),
   updateChunkVectors: vi.fn(),
   getConnection: vi.fn(),
@@ -75,7 +76,7 @@ vi.mock('../knowledge-base', () => ({
   getKnowledgeStats: vi.fn(),
   getVectorlessCount: h.getVectorlessCount,
   backfillVectors: h.backfillVectors,
-  backfillTokens: vi.fn(),
+  backfillTokens: h.backfillTokens,
 }))
 
 vi.mock('../embedding-service', () => ({
@@ -216,6 +217,7 @@ beforeEach(() => {
   h.canUseLLMEmbedding.mockReturnValue(false)
   h.getVectorlessCount.mockResolvedValue({ count: 0 })
   h.backfillVectors.mockResolvedValue({ success: true, processed: 0, failed: 0 })
+  h.backfillTokens.mockResolvedValue({ success: true, processed: 0, failed: 0 })
   h.updateChunkVectors.mockResolvedValue({ success: true, count: 0, failed: 0 })
   h.rowsForLlm = null
 
@@ -226,6 +228,113 @@ beforeEach(() => {
 
 afterEach(() => {
   fs.rmSync(h.home, { recursive: true, force: true })
+})
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (error: Error) => void
+  const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail })
+  return { promise, resolve, reject }
+}
+
+function invokeTokens(event = fakeEvent): Promise<BackfillResult> {
+  return Promise.resolve(h.handlers.get('kb:backfill-tokens')!(event) as BackfillResult)
+}
+
+describe('maintenance project ownership and exclusion', () => {
+  it('prevents another window token write from being lost during a vector table replacement', async () => {
+    enableLocalOnly()
+    const secondEvent = { ...fakeEvent, sender: { id: 12, send: vi.fn() } }
+    trustWebContents(12)
+    const replaceTable = deferred<BackfillResult>()
+    let tokens = ''
+    h.backfillVectors.mockImplementationOnce(async () => {
+      // Models the real vector rebuild's full-table snapshot followed by replace.
+      const snapshot = tokens
+      const result = await replaceTable.promise
+      tokens = snapshot
+      return result
+    })
+    h.backfillTokens.mockImplementationOnce(async () => {
+      tokens = 'segmented text'
+      return { success: true, processed: 1, failed: 0 }
+    })
+    const vectors = invokeBackfill()
+    await vi.waitFor(() => expect(h.backfillVectors).toHaveBeenCalledTimes(1))
+    const local = invokeTokens(secondEvent)
+    await Promise.resolve()
+    const ranBeforeReplacement = h.backfillTokens.mock.calls.length
+    replaceTable.resolve({ success: true, processed: 1, failed: 0 })
+    await Promise.all([vectors, local])
+    expect(ranBeforeReplacement).toBe(0)
+    expect(tokens).toBe('segmented text')
+  })
+
+  it('holds the same-project vector operation until tokens finish and releases after failure', async () => {
+    enableLocalOnly()
+    const local = deferred<BackfillResult>()
+    h.backfillTokens.mockReturnValueOnce(local.promise)
+    const tokens = invokeTokens()
+    await vi.waitFor(() => expect(h.backfillTokens).toHaveBeenCalledTimes(1))
+    const vectors = invokeBackfill()
+    await Promise.resolve()
+    const ranBeforeTokens = h.backfillVectors.mock.calls.length
+    local.reject(new Error('token write failed'))
+    await expect(tokens).resolves.toMatchObject({ success: false, error: 'token write failed' })
+    await expect(vectors).resolves.toMatchObject({ success: true })
+    expect(ranBeforeTokens).toBe(0)
+  })
+
+  it('keeps queued tokens bound to their source and allows another project concurrently', async () => {
+    enableLocalOnly()
+    const pending = deferred<BackfillResult>()
+    h.backfillVectors.mockReturnValueOnce(pending.promise)
+    const vectors = invokeBackfill()
+    await vi.waitFor(() => expect(h.backfillVectors).toHaveBeenCalledTimes(1))
+    const sourceTokens = invokeTokens()
+    writeJsonFile(RECENT_PROJECTS_PATH, [{ path: '/tmp/project-y' }])
+    await expect(invokeTokens()).resolves.toMatchObject({ success: true })
+    expect(h.backfillTokens.mock.calls).toEqual([['/tmp/project-y']])
+    pending.resolve({ success: true, processed: 1, failed: 0 })
+    await Promise.all([vectors, sourceTokens])
+    expect(h.backfillTokens.mock.calls).toEqual([['/tmp/project-y'], [PROJECT]])
+  })
+
+  it('releases the source queue when vector maintenance throws without hiding the failure', async () => {
+    enableLocalOnly()
+    const pending = deferred<BackfillResult>()
+    h.backfillVectors.mockReturnValueOnce(pending.promise)
+    const vectors = invokeBackfill()
+    const assertion = expect(vectors).rejects.toThrow('vector write failed')
+    await vi.waitFor(() => expect(h.backfillVectors).toHaveBeenCalledTimes(1))
+    const tokens = invokeTokens()
+    pending.reject(new Error('vector write failed'))
+    await assertion
+    await expect(tokens).resolves.toEqual({ success: true, processed: 0, failed: 0 })
+    await expect(invokeBackfill()).resolves.toEqual({ success: true, processed: 0, failed: 0 })
+  })
+
+  it('keeps the LLM connection and eventual writes on the source across delayed awaits', async () => {
+    h.canUseLLMEmbedding.mockReturnValue(true)
+    const count = deferred<{ count: number }>()
+    const generated = deferred<Array<{ vector: number[] }>>()
+    h.getVectorlessCount.mockReturnValueOnce(count.promise)
+    h.getConnection.mockResolvedValue({
+      openTable: async () => ({ query: () => ({ select: () => ({ toArray: async () => [{ id: 'row-1', text: 'source' }] }) }) }),
+    })
+    h.embedBatchWithLLM.mockReturnValueOnce(generated.promise)
+    h.updateChunkVectors.mockResolvedValueOnce({ success: true, count: 1, failed: 0 })
+    const vectors = invokeBackfill()
+    await vi.waitFor(() => expect(h.getVectorlessCount).toHaveBeenCalledTimes(1))
+    writeJsonFile(RECENT_PROJECTS_PATH, [{ path: '/tmp/project-y' }])
+    count.resolve({ count: 1 })
+    await vi.waitFor(() => expect(h.embedBatchWithLLM).toHaveBeenCalledTimes(1))
+    writeJsonFile(RECENT_PROJECTS_PATH, [{ path: '/tmp/project-z' }])
+    generated.resolve([{ vector: [0.1, 0.2] }])
+    await expect(vectors).resolves.toEqual({ success: true, processed: 1, failed: 0 })
+    expect(h.getConnection).toHaveBeenCalledWith(PROJECT)
+    expect(h.updateChunkVectors).toHaveBeenCalledWith(PROJECT, [{ id: 'row-1', vector: [0.1, 0.2] }])
+  })
 })
 
 // ===== 用例 =====

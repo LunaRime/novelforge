@@ -24,6 +24,15 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgeOverview behind applications: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/pages', 0, 'KnowledgeOverview.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('knowledge application')
+  })
+  test('allows overview neutral DTO type imports', () => {
+    const result = check(`import type { KnowledgeStats } from '../../core'`, 'components/pages', 0, 'KnowledgeOverview.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgePanel behind knowledge use cases: %s', specifier => {
     const result = check(`import * as io from '${specifier}'`, 'components/panels', 0, 'KnowledgePanel.tsx')
     expect(result.status, result.stdout).toBe(1)
