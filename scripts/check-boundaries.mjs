@@ -122,8 +122,17 @@ for (const area of ['src', 'electron', 'scripts']) {
 
 // M2: UI sends typed application requests; adapters construct workflow definitions.
 const uiWorkflowViolations = []
+const editorApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
-  for (const factory of inspectSource(file).workflowFactories) {
+  const source = inspectSource(file)
+  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/DraftEditor.tsx') {
+    for (const spec of source.specifiers) {
+      if (/\/(?:ipc-client|stores\/(?:llm|draft)-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
+  for (const factory of source.workflowFactories) {
     uiWorkflowViolations.push(`${relative(ROOT, file)} → ${factory}`)
   }
 }
@@ -134,7 +143,11 @@ for (const key of ['coreForbidden', 'agentStoreFiles', 'agentStoreRefs']) {
   console.log(`  ${key.padEnd(15)} ${String(baseline[key]).padStart(3)} → ${current[key]}`)
 }
 
-let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0
+let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0 || editorApplicationViolations.length > 0
+if (editorApplicationViolations.length) {
+  console.error('\neditor application: DraftEditor must use application ports for IO and workflow commands')
+  for (const violation of editorApplicationViolations) console.error(`  - ${violation}`)
+}
 if (coreEntryViolations.length) {
   console.error('\ncore public entry: import from core/index instead of internal modules')
   for (const violation of coreEntryViolations) console.error(`  - ${violation}`)

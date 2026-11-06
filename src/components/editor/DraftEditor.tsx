@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 
 import { useTranslation } from '../../hooks/useTranslation'
 import type { TextKey } from '../../shared/locale'
@@ -17,21 +17,12 @@ import { confirm } from '../ui/Confirm'
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle,
 } from '../ui/Dialog'
-import {
-  parseDraftMeta,
-  type DraftMeta,
-  type DraftStatus,
-} from '../../services/workflows/chapter-workflow'
-import { captureDraftProject, saveDraftContent, getNextDraftVersion, getPendingRevisions, getReviewsForVersion, type RevisionEntry } from '../../services/draft-index'
-import { startWorkflow } from '../../services/workflows/start-workflow'
-import { readDraftBody } from '../../stores/draft-store'
-import { computeTextStats } from '../../services/text-stats'
-import { ipc } from '../../services/ipc-client'
+import type { DraftMeta, RevisionEntry } from '../../services/draft-index'
+import type { DraftStatus } from '../../shared/draft-status'
+import { createRendererDraftEditorApplication, getDraftFinalizeScope } from '../../services/editor/draft-editor-adapter'
 import { renderLog } from '../../services/render-logger'
 
 import { PostProcessStatusPanel } from '../ui/PostProcessStatusPanel'
-import { getChapterFinalizeScope } from '../../services/workflows/workflow-utils'
-import { guardRepairPostProcess } from '../../services/workflows/workflow-guards'
 
 interface Props {
   tabId: string
@@ -47,6 +38,8 @@ interface Props {
 export default function DraftEditor({ tabId, filePath, content }: Props) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const projectSession = useProjectStore(s => s.projectSession)
+  const application = useMemo(() => createRendererDraftEditorApplication(currentProject, projectSession, t), [currentProject, projectSession, t])
   const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string }) | null>(null)
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
@@ -60,30 +53,16 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   useEffect(() => {
     let cancelled = false
     const load = async () => {
-      const assertProject = captureDraftProject(currentProject?.path)
-      const m = await parseDraftMeta(filePath)
-      assertProject()
-      if (cancelled || !m) return
-      const { ipc } = await import('../../services/ipc-client')
-      if (cancelled) return
-      assertProject()
-      const bps = await ipc.invoke('db:blueprint-get-all')
-      assertProject()
-      if (cancelled) return
-      const bp = Array.isArray(bps) ? bps.find((b: unknown) => (b as { chapterNumber?: number }).chapterNumber === m.chapterNumber) : null
-      setMeta({ ...m, chapterTitle: bp ? (bp as { title?: string }).title : t('editor.unknownTitle'), createdAt: m.updatedAt ?? m.createdAt })
-
-      const pending = await getPendingRevisions(m.id, m.version)
-      assertProject()
-      if (cancelled) return
-      setPendingRevisions(pending)
-      const reviews = await getReviewsForVersion(m.id, m.version)
-      assertProject()
-      if (!cancelled) setReviewCount(reviews.length)
+      const loaded = await application.load(filePath)
+      application.assertCurrent()
+      if (cancelled || !loaded) return
+      setMeta({ ...loaded.meta, chapterTitle: loaded.meta.chapterTitle ?? t('editor.unknownTitle'), createdAt: loaded.meta.updatedAt ?? loaded.meta.createdAt })
+      setPendingRevisions(loaded.pending)
+      setReviewCount(loaded.reviewCount)
     }
     void load().catch(() => { if (!cancelled) setMeta(null) })
     return () => { cancelled = true }
-  }, [filePath, t, currentProject])
+  }, [filePath, t, application])
 
   const status: DraftStatus = meta?.status ?? 'draft'
   const isReadonly = status === 'finalized' || status === 'archived'
@@ -117,18 +96,8 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     const t0 = Date.now()
     setSaving(true)
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      if (filePath.startsWith(VELA.DRAFT) || filePath.startsWith(VELA.MANUSCRIPT)) {
-        await saveDraftContent(filePath, text, currentProject.path)
-        const { globalEventBus } = await import('../../shared/event-bus')
-        captureDraftProject(currentProject.path)()
-        globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
-      } else {
-        const res = await ipc.invoke('fs:write-file', filePath, text)
-        if (!res.success) throw new Error(res.error ?? t('status.unknown'))
-      }
-      assertProject()
+      await application.save(filePath, text)
+      application.assertCurrent()
       const tabs = useEditorStore.getState().tabs
       const targetTab = tabs.find(t => t.id === tabId)
       if (targetTab && currentBodyRef.current === text) {
@@ -150,7 +119,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     } finally {
       setSaving(false)
     }
-  }, [tabId, filePath, t, currentProject])
+  }, [tabId, filePath, t, application])
 
   // 自动保存定时器（通过 useAutoSave hook 复用）
   useAutoSave(filePath, currentBodyRef, doSave)
@@ -159,16 +128,9 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const doRefine = async () => {
     if (!currentProject || !meta) return
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      const body = await readDraftBody(filePath)
-      assertProject()
-      await startWorkflow({ workflow: 'refine', chapterNumber: meta.chapterNumber, draft: {
-        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
-        draftPath: filePath,
-        draftContent: body,
+      await application.workflow('refine', filePath, meta, meta.chapterTitle ?? t('editor.unknownTitle'), {
         userRefinePrompt: userRefinePrompt.trim() || undefined,
-      } })
+      })
     } catch (e) {
       toast.error(t('error.polishFailed').replace('{error}', String(e)))
     }
@@ -178,16 +140,9 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const doReview = async () => {
     if (!currentProject || !meta) return
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      const body = await readDraftBody(filePath)
-      assertProject()
-      await startWorkflow({ workflow: 'review', chapterNumber: meta.chapterNumber, draft: {
-        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
-        draftPath: filePath,
-        draftContent: body,
+      await application.workflow('review', filePath, meta, meta.chapterTitle ?? t('editor.unknownTitle'), {
         reviewFocus: getReviewDims(t).filter(d => reviewDims[d.key]).map(d => d.label).join('、') || undefined,
-      } })
+      })
     } catch (e) {
       toast.error(t('error.reviewFailed').replace('{error}', String(e)))
     }
@@ -202,73 +157,46 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     )
     if (!ok) return
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      const body = await readDraftBody(filePath)
-      assertProject()
-      await startWorkflow({ workflow: 'finalize', chapterNumber: meta.chapterNumber, draft: {
-        chapterTitle: meta.chapterTitle ?? t('editor.unknownTitle'),
-        draftPath: filePath,
-        draftContent: body,
-      } })
+      await application.workflow('finalize', filePath, meta, meta.chapterTitle ?? t('editor.unknownTitle'))
     } catch (e) {
       toast.error(t('error.finalizeFailed').replace('{error}', String(e)))
     }
-  }, [meta, isChapterBusy, filePath, t, currentProject])
+  }, [meta, isChapterBusy, filePath, t, application])
 
   /** 修复定稿后处理 */
   const doRepairFinalize = useCallback(async () => {
     if (!meta || isChapterBusy) return
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      const guard = await guardRepairPostProcess(meta.chapterNumber)
+      const guard = await application.repair(meta)
       if (!guard.ok) {
         toast.error(guard.message || t('error.noFixTarget'))
         return
       }
-      assertProject()
-      await startWorkflow({ workflow: 'repair_finalize', chapterNumber: meta.chapterNumber })
     } catch (e) {
       toast.error(t('error.repairFailed').replace('{error}', String(e)))
     }
-  }, [meta, isChapterBusy, t, currentProject])
+  }, [meta, isChapterBusy, t, application])
 
   /** 打开待合并修稿 */
   const openPendingRevision = useCallback(async (rev: RevisionEntry) => {
     if (!meta || !currentProject) return
-    const assertProject = captureDraftProject(currentProject.path)
-    const revPath = `${VELA.REVISION}${rev.id}`
-    const [origContent, revContent] = await Promise.all([
-      readDraftBody(filePath),
-      readDraftBody(revPath),
-    ])
-    assertProject()
-    if (!origContent && !revContent) return
-    setMergeData({ originalContent: origContent, modifiedContent: revContent, revisionPath: revPath })
-  }, [meta, filePath, currentProject])
+    const loaded = await application.revision(filePath, VELA.REVISION + rev.id)
+    if (loaded.originalContent || loaded.modifiedContent) setMergeData(loaded)
+  }, [meta, filePath, currentProject, application])
 
   /** 合并完成回调 */
   const handleMergeComplete = async (mergedText: string) => {
     if (!meta || !mergeData) return
 
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
-      const { useDraftStore } = await import('../../stores/draft-store')
-      assertProject()
-      const result = await useDraftStore.getState().applyMergedRevision(
-        meta.chapterNumber, filePath, mergeData.revisionPath, mergedText
-      )
-      assertProject()
+      const result = await application.merge(meta, filePath, mergeData.revisionPath, mergedText)
+      application.assertCurrent()
       if (result.success) {
         setMergeData(null)
         setMeta(prev => prev ? { ...prev, status: 'revised' } : prev)
         toast.success(t('editor.mergeSuccessToast'))
-        const { getPendingRevisions } = await import('../../services/draft-index')
-        const pending = await getPendingRevisions(meta.id, meta.version)
-        assertProject()
-        setPendingRevisions(pending)
+        if (result.pending) setPendingRevisions(result.pending)
+        if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
       } else {
         toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
       }
@@ -280,16 +208,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   /** 打开最新审稿报告 */
   const openLatestReview = useCallback(async () => {
     if (!meta || !currentProject) return
-    const assertProject = captureDraftProject(currentProject.path)
-
-    const { getLatestReview } = await import('../../services/draft-index')
-    assertProject()
-    const latest = await getLatestReview(meta.id, meta.version)
-    assertProject()
+    const latest = await application.review(meta)
+    application.assertCurrent()
     if (!latest) return
-    const reportContent = await readDraftBody(`${VELA.REVIEW}${latest.id}`)
-    assertProject()
-    if (!reportContent) return
+    const reportContent = latest.content
     useEditorStore.getState().openFile({
       id: `review-report-${meta.chapterNumber}-${latest.id}`,
       name: t('editor.reviewTab').replace('{version}', String(meta.version)),
@@ -299,42 +221,19 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       reviewReport: reportContent,
       chapterNumber: meta.chapterNumber,
     })
-  }, [meta, filePath, t, currentProject])
+  }, [meta, filePath, t, currentProject, application])
 
   /** 正文翻译：目标语言 → LLM 翻译 → 新建 source='translation' 草稿 → 打开新 Tab（原文保留） */
   const doTranslate = useCallback(async (lang: 'zh' | 'en' | 'ru') => {
     const text = currentBodyRef.current
     if (!text?.trim()) return
     try {
-      if (!currentProject) throw new Error(t('error.noProject'))
-      const assertProject = captureDraftProject(currentProject.path)
+      if (!meta) return
       const langLabel = t(`translate.lang.${lang}` as TextKey)
-      const { useLLMStore } = await import('../../stores/llm-store')
-      assertProject()
-      const res = await useLLMStore.getState().generate(
-        [
-          { role: 'system', content: t('ai.systemPrompt') },
-          { role: 'user', content: t('translate.prompt').replace('{lang}', langLabel).replace('{content}', text.slice(0, 12000)) },
-        ],
-        undefined,
-        { temperature: 0.3 },
-      )
-      if (!res.success || !res.content) throw new Error(res.error || 'empty response')
-      assertProject()
-      const translated = res.content.trim()
-      if (!meta) throw new Error('no draft meta')
-
-      const version = await getNextDraftVersion(meta.chapterNumber)
-      assertProject()
-      const created = await ipc.invoke('db:draft-create', {
-        chapterNumber: meta.chapterNumber,
-        version,
-        source: 'translation',
-        content: translated,
-        wordCount: computeTextStats(translated).novelWordCount,
-      })
-      assertProject()
-      if (!created.success || !created.id) throw new Error(created.error || 'create failed')
+      const created = await application.translation(meta, text,
+        t('translate.prompt').replace('{lang}', langLabel).replace('{content}', text.slice(0, 12000)), t('ai.systemPrompt'))
+      application.assertCurrent()
+      const translated = created.content
 
       // 打开新 Tab（翻译稿独立于原文，可对比/续用）
       useEditorStore.getState().openFile({
@@ -345,13 +244,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         content: translated,
       })
       toast.success(t('translate.success'))
-      // 通知侧栏刷新（草稿箱出现翻译稿）
-      const { globalEventBus } = await import('../../shared/event-bus')
-      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
     } catch (e) {
       toast.error(t('translate.failed').replace('{error}', String(e)))
     }
-  }, [meta, t, currentProject])
+  }, [meta, t, application])
 
   // 稳定回调（配合 memo(EditorToolbar) / CodeMirrorEditor 的 handleUpdate 依赖）——
   // 否则流式期间（activeRuns 每 100ms 变化）内联函数重建，EditorToolbar 的 memo 形同虚设
@@ -391,7 +287,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       {status === 'finalized' && meta && (
         <div className="px-3 py-1.5" style={{ borderBottom: '1px solid var(--color-border)' }}>
           <PostProcessStatusPanel
-            scope={getChapterFinalizeScope(meta.chapterNumber)}
+            scope={getDraftFinalizeScope(meta.chapterNumber)}
             onRetry={() => doRepairFinalize()}
             onStatusLoad={setHasProcessFailure}
           />
