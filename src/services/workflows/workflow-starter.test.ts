@@ -4,6 +4,7 @@ import { WorkflowStartError, startWorkflow } from './start-workflow'
 import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
+import { belongsToWorkflowSource } from './workflow-source'
 
 // ---- ipc 通道路由（window.novelforgeAPI.invoke——参照 agent-store.test.ts:10-28/:59 模式）----
 // 默认全部为空/缺失；各用例按需覆盖。未路由通道（如 db:post-process-get-latest-run）返回 null——
@@ -79,6 +80,23 @@ beforeEach(() => {
 })
 
 describe('workflow-starter', () => {
+  it('registers the captured session before onStarted returns, including for non-editor callers', async () => {
+    const project = useProjectStore.getState().currentProject!
+    const source = { id: project.id, path: project.path, session: useProjectStore.getState().projectSession }
+    let attributedBeforeWork = false
+    useWorkflowStore.setState({
+      startWorkflow: vi.fn(async (_def: unknown, _sb?: boolean, options?: { onStarted?: (id: string) => void }) => {
+        options?.onStarted?.('source-attributed-run')
+        attributedBeforeWork = belongsToWorkflowSource('source-attributed-run', source)
+        return 'source-attributed-run'
+      }) as never,
+    })
+    const receipt = await startWorkflow({ workflow: 'import_novel', chapters: [{ number: 1, title: 'Title', content: 'Body', wordCount: 4 }] })
+    expect(receipt.runId).toBe('source-attributed-run')
+    expect(attributedBeforeWork).toBe(true)
+    useProjectStore.setState({ projectSession: source.session + 1 })
+    expect(belongsToWorkflowSource(receipt.runId, { ...source, session: source.session + 1 })).toBe(false)
+  })
   it.each([false, true])('delayed config callbacks reject a project switch (custom callback: %s)', async custom => {
     const factories = await import('./architecture-workflow')
     const factory = vi.spyOn(factories, 'createConfigGenerationWorkflow')

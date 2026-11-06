@@ -1,4 +1,6 @@
 import { draftUri } from '../vela-protocol'
+import { registerWorkflowSource } from './workflow-source'
+import type { ArchitectureScope } from '../../core'
 /**
  * Renderer workflow adapter. Concrete builders and project guards live here;
  * UI and tools use start-workflow.ts, which injects this port into the pure core.
@@ -15,12 +17,14 @@ import { WorkflowStartError, type WorkflowStartPort, type EditorDraft, type Arch
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 export interface WorkflowAdapterOptions {
+  source?: ArchitectureScope
   onGenerated?: (config: Partial<NovelConfig>) => void
   assertProject: () => void
 }
 
 export function createWorkflowStartPort(options: WorkflowAdapterOptions): WorkflowStartPort<WorkflowDefinition> {
   const assertProject = options.assertProject
+  const source = options.source ? { ...options.source } : null
 
   // ---- 工作流类型到显示名的映射 ----
 
@@ -45,7 +49,15 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
    */
   function startWithReceipt(definition: WorkflowDefinition, stepByStep = false): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-      useWorkflowStore.getState().startWorkflow(definition, stepByStep, { onStarted: resolve }).catch(reject)
+      useWorkflowStore.getState().startWorkflow(definition, stepByStep, {
+        onStarted: runId => {
+          if (source) {
+            const { activeRuns, history } = useWorkflowStore.getState()
+            registerWorkflowSource(runId, source, [...activeRuns, ...history].map(run => run.id))
+          }
+          resolve(runId)
+        },
+      }).catch(reject)
     })
   }
 

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useProjectStore } from './project-store'
+import { registerWorkflowSource } from '../services/workflows/workflow-source'
 import { getCurrentLocale, t } from '../shared/locale'
 import { randomUUID } from '../utils/id'
 import { renderLog } from '../services/render-logger'
@@ -407,6 +409,8 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
   // ===== Checkpoint 持久化 =====
   restoreCheckpoint: async () => {
+    const { currentProject, projectSession } = useProjectStore.getState()
+    const source = currentProject ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
     // L2 v2：从 DB 读 checkpoint（loadCheckpoint 自有 localStorage 兜底迁移）。
     // 恢复决断：可重建（rehydrateWorkflow 有 factory）→ 真续跑；
     //   不可重建 → 旧兜底（waiting→failed 提示重跑 / running→paused 可取消重跑）。
@@ -462,6 +466,13 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
         Object.entries(cp.waitingRuns ?? {}).filter(([id]) => keptWaitingIds.includes(id))
       ),
     }))
+    const current = useProjectStore.getState()
+    if (source && current.currentProject?.id === source.id && current.currentProject.path === source.path
+      && current.projectSession === source.session) {
+      const { activeRuns, history } = get()
+      const retainedIds = [...activeRuns, ...history].map(run => run.id)
+      for (const run of restored) registerWorkflowSource(run.id, source, retainedIds)
+    }
     // running 自动重放：先入列（上方 set 已把 restored run 放进 activeRuns）再 fire，保证
     // executeRunFromIndex 完成判定能命中 finalRun（I-1/finalRun 正常），run 不 stuck running。
     for (const { rr, def, startIndex } of runningReplays) {

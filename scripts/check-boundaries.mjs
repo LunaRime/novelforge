@@ -154,6 +154,13 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
       }
     }
   }
+  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ArchFileViewer.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/(?:ipc-client|vela-protocol|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
   for (const factory of source.workflowFactories) {
     uiWorkflowViolations.push(`${relative(ROOT, file)} → ${factory}`)
   }
@@ -179,7 +186,7 @@ if (draftMutationViolations.length) {
   for (const channel of draftMutationViolations) console.error(`  - ${channel}`)
 }
 if (editorApplicationViolations.length) {
-  console.error('\neditor application: DraftEditor must use application ports for IO and workflow commands')
+  console.error('\neditor application: editors must use application ports for IO and workflow commands')
   for (const violation of editorApplicationViolations) console.error(`  - ${violation}`)
 }
 if (coreEntryViolations.length) {

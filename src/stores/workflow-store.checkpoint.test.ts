@@ -11,6 +11,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { useWorkflowStore } from './workflow-store'
 import { registerWorkflow } from '../services/workflows/workflow-registry'
+import { belongsToWorkflowSource } from '../services/workflows/workflow-source'
+import { useProjectStore } from './project-store'
 
 const CHECKPOINT_KEY = 'vela-workflow-checkpoint'
 
@@ -315,5 +317,62 @@ describe('workflow-checkpoint v2（L2）', () => {
     expect(useWorkflowStore.getState().activeRuns.some((r) => r.id === 'run-done')).toBe(false)
     // 零迭代重跑：无步骤被执行
     expect(h.seen).toEqual([])
+  })
+})
+
+describe('checkpoint workflow source attribution', () => {
+  function deferredCheckpoint(runId: string) {
+    const cp = {
+      activeRuns: [makeRun(runId, { type: 'architecture_generation' })],
+      waitingRuns: {},
+      savedAt: '2026-11-06T00:00:00.000Z',
+      runDefs: { [runId]: { type: 'architecture_generation', params: {} } },
+    }
+    let resolve!: (value: { success: boolean; data: typeof cp }) => void
+    const promise = new Promise<{ success: boolean; data: typeof cp }>(done => { resolve = done })
+    h.invoke.mockImplementationOnce(() => promise)
+    return () => resolve({ success: true, data: cp })
+  }
+
+  it('attributes restored architecture runs to the invocation source before replay executes', async () => {
+    const source = { id: 'restore-project', path: '/restore', session: 81 }
+    useProjectStore.setState({ currentProject: { id: source.id, path: source.path } as never, projectSession: source.session })
+    const attributionDuringReplay: boolean[] = []
+    registerWorkflow('architecture_generation', () => ({
+      type: 'architecture_generation',
+      title: 'Restored architecture',
+      steps: [{
+        name: 'generate', description: 'generate',
+        executor: async () => {
+          attributionDuringReplay.push(belongsToWorkflowSource('restored-architecture', source))
+          return 'generated'
+        },
+      }],
+    }))
+    const releaseCheckpoint = deferredCheckpoint('restored-architecture')
+    const restoring = useWorkflowStore.getState().restoreCheckpoint()
+    expect(attributionDuringReplay).toEqual([])
+    releaseCheckpoint()
+    await restoring
+    await waitFor(() => useWorkflowStore.getState().history.some(run => run.id === 'restored-architecture'))
+    expect(attributionDuringReplay).toEqual([true])
+    expect(belongsToWorkflowSource('restored-architecture', source)).toBe(true)
+  })
+
+  it('does not attribute an old checkpoint to a same-path reopened session during load', async () => {
+    const source = { id: 'reopened-project', path: '/reopened', session: 91 }
+    useProjectStore.setState({ currentProject: { id: source.id, path: source.path } as never, projectSession: source.session })
+    registerWorkflow('architecture_generation', () => ({
+      type: 'architecture_generation', title: 'Old architecture',
+      steps: [{ name: 'generate', description: 'generate', executor: async () => 'generated' }],
+    }))
+    const releaseCheckpoint = deferredCheckpoint('old-checkpoint-architecture')
+    const restoring = useWorkflowStore.getState().restoreCheckpoint()
+    useProjectStore.setState({ projectSession: source.session + 1 })
+    releaseCheckpoint()
+    await restoring
+    await waitFor(() => useWorkflowStore.getState().history.some(run => run.id === 'old-checkpoint-architecture'))
+    expect(belongsToWorkflowSource('old-checkpoint-architecture', { ...source, session: source.session + 1 })).toBe(false)
+    expect(belongsToWorkflowSource('old-checkpoint-architecture', source)).toBe(false)
   })
 })

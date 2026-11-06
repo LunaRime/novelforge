@@ -1,4 +1,3 @@
-import { startWorkflow } from '../../services/workflows/start-workflow'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Save, RefreshCw, Sparkles, AlertTriangle, FileText } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -10,13 +9,12 @@ import ArchitectureConfirmDialog from '../dialogs/ArchitectureConfirmDialog'
 import { Button } from '../ui/Button'
 import { toast } from '../ui/Toast'
 import { confirm } from '../ui/Confirm'
-import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
-import { readCoreContent, writeCoreContent, VELA } from '../../services/vela-protocol'
+import { ArchitectureRequestCancelled, type ArchitectureScope } from '../../core'
+import { createRendererArchitectureDocumentApplication } from '../../services/architecture/architecture-adapter'
 import CodeMirrorEditor from './CodeMirrorEditor'
 import { useProjectStore } from '../../stores/project-store'
 import { useCharacterStore } from '../../stores/character-store'
-import { runArchCharacterExtract } from '../../services/workflows/architecture-workflow'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { globalEventBus } from '../../shared/event-bus'
 
@@ -50,191 +48,199 @@ interface Props {
  * - 脏状态通过比较内容字符串判断，不依赖 onChange 时机
  */
 export default function ArchFileViewer({ filePath, content: initialContent }: Props) {
+  const project = useProjectStore(s => s.currentProject)
+  const session = useProjectStore(s => s.projectSession)
+  const source = project ? { id: project.id, path: project.path, session } : null
+  return <ArchitectureDocumentView key={`${project?.id}:${project?.path}:${session}:${filePath}`} filePath={filePath} content={initialContent} source={source} genre={project?.novelConfig.genre ?? ''} />
+}
+
+function ArchitectureDocumentView({ filePath, content: initialContent, source, genre }: Props & { source: ArchitectureScope | null; genre: string }) {
   const { t } = useTranslation()
   const stepKey = detectStepKey(filePath)
   const meta = useArchMeta(stepKey)
-
-  // 磁盘上的内容（已保存的基准）
+  const [application] = useState(() => createRendererArchitectureDocumentApplication(filePath, source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const active = useCallback(() => {
+    if (!mounted.current) return false
+    try { application.assertCurrent(); return true } catch { return false }
+  }, [application])
   const savedContentRef = useRef(initialContent)
-  // 编辑器当前内容（用 ref 而非 state，避免每次键入都重渲染导致光标跳末尾）
   const currentContentRef = useRef(initialContent)
-  // 传给 CodeMirrorEditor 的初始内容（只有『外部重载』时才更新，不随用户键入变化）
+  const editVersion = useRef(0)
+  const saveBusy = useRef(false)
+  const reloadVersion = useRef(0)
+  const dialogVersion = useRef(0)
+  const extractingBusy = useRef(false)
+  const generationRun = useRef<string | null>(null)
+  const extractionRun = useRef<string | null>(null)
   const [editorContent, setEditorContent] = useState(initialContent)
-
   const [saving, setSaving] = useState(false)
   const [loading, setLoading] = useState(false)
   const [showDialog, setShowDialog] = useState(false)
   const [checkingArch, setCheckingArch] = useState(false)
   const [fullArchStatus, setFullArchStatus] = useState<Record<string, boolean>>({})
   const [extracting, setExtracting] = useState(false)
-
+  const [extractionRunId, setExtractionRunId] = useState<string | null>(null)
+  const extractionOutcome = useWorkflowStore(s => extractionRunId
+    ? (s.activeRuns.find(run => run.id === extractionRunId)?.status ?? s.history.find(run => run.id === extractionRunId)?.status ?? 'missing')
+    : null)
   const characterCount = useCharacterStore(s => s.characters.length)
   const isArchRunning = useWorkflowStore(s => s.isTypeRunning('architecture_generation'))
-
-  // 中文字数（由 CodeMirrorEditor 回调更新）
   const [charCount, setCharCount] = useState(0)
-
-  // 脚状态（独立 state，不跟着 content 走）
   const [isDirty, setIsDirty] = useState(false)
 
-  // 外部内容更新时的热重载（拦截 store.syncTabContent 带来的 props.content 更新）
   useEffect(() => {
-    if (initialContent !== savedContentRef.current && initialContent !== currentContentRef.current) {
-      savedContentRef.current = initialContent
-      currentContentRef.current = initialContent
-      setEditorContent(initialContent)
-      setIsDirty(false)
+    mounted.current = true
+    const lifecycle = lifetime.current
+    const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => { if (!mounted.current && lifecycle.generation === generation) application.dispose() })
+    }
+  }, [application])
+  useEffect(() => {
+    if (saveBusy.current || currentContentRef.current !== savedContentRef.current) return
+    if (initialContent !== savedContentRef.current) {
+      editVersion.current++; reloadVersion.current++
+      savedContentRef.current = initialContent; currentContentRef.current = initialContent
+      setEditorContent(initialContent); setIsDirty(false); setLoading(false)
     }
   }, [initialContent])
 
-
-  // 内容变化回调：更新 ref，不触发重渲染，避免 content prop 回传导致光标跳末尾
   const handleChange = useCallback((md: string) => {
+    if (!mounted.current || (source && !active())) return
+    editVersion.current++
     currentContentRef.current = md
     const dirty = md !== savedContentRef.current
     setIsDirty(dirty)
-    // 同步 editor-store 的 tab.dirty，供标题栏警示灯、Tab 圆点、关闭确认使用
-    if (dirty) {
-      useEditorStore.getState().updateTabContent(filePath, md)
-    } else {
+    if (dirty) useEditorStore.getState().updateTabContent(filePath, md)
+    else {
       useEditorStore.getState().syncTabContent(filePath, md)
+      useEditorStore.getState().markTabSaved(filePath)
     }
-  }, [filePath])
+  }, [filePath, source, active])
 
-  /** 保存（统一走 vela://core/ DB 路径） */
   const handleSave = useCallback(async (md: string) => {
+    if (saveBusy.current || !active()) return
+    saveBusy.current = true; reloadVersion.current++
     const t0 = Date.now()
-    setSaving(true)
+    setSaving(true); setLoading(false)
     try {
-      let success = true
-      if (filePath.startsWith(VELA.CORE)) {
-        success = await writeCoreContent(filePath, md)
-      } else {
-        // DB 化后架构文件不应有物理路径；如果意外触发，尝试 FS 写入兜底
-        console.warn('[ArchFileViewer] 非预期的物理路径保存:', filePath)
-        const res = await ipc.invoke('fs:write-file', filePath, md)
-        success = res.success !== false
-      }
-      if (success) {
-        savedContentRef.current = md
-        setIsDirty(false)
-        useEditorStore.getState().markTabSaved(filePath)
-        // 保存行为日志流：成功 info + toast 视觉反馈
-        renderLog('info', 'Save:Arch', t('log.render.archSaveSuccess')
-          .replace('{path}', () => filePath)
-          .replace('{ms}', String(Date.now() - t0)))
-        toast.success(t('save.success'))
-      } else {
-        // 保存被拒绝（writeCoreContent 返回 false）——不再静默
-        renderLog('error', 'Save:Arch', t('log.render.archSaveRejected').replace('{path}', () => filePath))
-        toast.error(t('save.failed').replace('{error}', 'DB'))
-      }
-    } catch (e) {
-      renderLog('error', 'Save:Arch', t('log.render.archSaveFailed')
-        .replace('{path}', () => filePath)
-        .replace('{error}', () => String(e)))
-      toast.error(t('save.failed').replace('{error}', String(e)))
+      await application.save(md)
+      if (!active()) return
+      savedContentRef.current = md
+      const dirty = currentContentRef.current !== md
+      setIsDirty(dirty)
+      if (dirty) useEditorStore.getState().updateTabContent(filePath, currentContentRef.current)
+      else useEditorStore.getState().markTabSaved(filePath)
+      renderLog('info', 'Save:Arch', t('log.render.archSaveSuccess').replace('{path}', () => filePath).replace('{ms}', String(Date.now() - t0)))
+      toast.success(t('save.success'))
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Save:Arch', t('log.render.archSaveFailed').replace('{path}', () => filePath).replace('{error}', () => String(error)))
+      toast.error(t('save.failed').replace('{error}', String(error)))
     } finally {
-      setSaving(false)
+      saveBusy.current = false
+      if (active()) setSaving(false)
     }
-  }, [filePath, t])
+  }, [application, active, filePath, t])
 
-  /** 从 DB 重新加载（AI 生成后刷新用） */
-  const handleReload = useCallback(async () => {
-    setLoading(true)
-    let newContent = ''
-    if (filePath.startsWith(VELA.CORE)) {
-      newContent = await readCoreContent(filePath)
-    } else {
-      // DB 化后架构文件不应有物理路径
-      console.warn('[ArchFileViewer] 非预期的物理路径刷新:', filePath)
-      const res = await ipc.invoke('fs:read-file', filePath)
-      if (res.success) newContent = res.content
+  const handleReload = useCallback(async (manual = true) => {
+    if (!active() || saveBusy.current) return
+    const version = ++reloadVersion.current
+    const editing = editVersion.current
+    try {
+      if (currentContentRef.current !== savedContentRef.current) {
+        if (!manual || !await confirm(t('editor.refreshConfirm'), { title: t('dialog.unsavedTitle') })) return
+      }
+      if (!active() || version !== reloadVersion.current || editing !== editVersion.current || saveBusy.current) return
+      setLoading(true)
+      const result = await application.read()
+      if (!active() || version !== reloadVersion.current || editing !== editVersion.current || saveBusy.current) return
+      if (result.status === 'missing') throw new Error(t('tool.readFileFailed'))
+      savedContentRef.current = result.content; currentContentRef.current = result.content
+      setEditorContent(result.content); setIsDirty(false)
+      useEditorStore.getState().syncTabContent(filePath, result.content)
+      useEditorStore.getState().markTabSaved(filePath)
+    } catch (error) {
+      if (!active() || version !== reloadVersion.current || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Load:Arch', String(error)); toast.error(t('common.loadFailed'))
+    } finally {
+      if (active() && version === reloadVersion.current) setLoading(false)
     }
-    savedContentRef.current = newContent
-    currentContentRef.current = newContent
-    setEditorContent(newContent)
-    setIsDirty(false)
-    useEditorStore.getState().markTabSaved(filePath)
-    setLoading(false)
-  }, [filePath])
+  }, [application, active, filePath, t])
 
-  // 监听架构生成完成事件，自动刷新当前页面
+  useEffect(() => globalEventBus.on('WORKFLOW_COMPLETE', payload => {
+    if (!active() || !payload.runId) return
+    if (payload.type === 'architecture_generation' && (payload.runId === generationRun.current || application.ownsRun(payload.runId))) {
+      generationRun.current = null
+      if (payload.status !== 'failed') void handleReload(false)
+    }
+    if (payload.type === 'post_process' && payload.runId === extractionRun.current) {
+      extractionRun.current = null; extractingBusy.current = false; setExtracting(false); setExtractionRunId(null)
+      if (payload.status === 'failed') toast.error(t('arch.charExtractFailed'))
+    }
+  }), [application, active, handleReload, t])
+
   useEffect(() => {
-    return globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
-      if (payload.type === 'architecture_generation') {
-        handleReload()
-      }
+    if (!extractionRunId || !['completed', 'failed', 'missing'].includes(extractionOutcome ?? '')) return
+    queueMicrotask(() => {
+      if (!active() || extractionRun.current !== extractionRunId) return
+      extractingBusy.current = false; setExtracting(false); setExtractionRunId(null)
     })
-  }, [handleReload])
+  }, [extractionRunId, extractionOutcome, active])
 
-  /** 确认后启动架构生成工作流 */
   const handleConfirm = async (selectedSteps: ArchStepKey[], stepGuidance: Record<string, string>) => {
-    try { await startWorkflow({ workflow: 'generate_architecture', architecture: { selectedSteps, stepGuidance } }) }
-    catch (error) { toast.error(String(error)) }
+    if (!active()) return
+    try {
+      const receipt = await application.generate(selectedSteps, stepGuidance)
+      if (active()) { generationRun.current = receipt.runId; setShowDialog(false) }
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Generate:Arch', String(error)); toast.error(String(error))
+    }
   }
-
   const handleOpenDialog = async () => {
-    if (!stepKey) return
+    if (!stepKey || !active()) return
+    const version = ++dialogVersion.current
     setCheckingArch(true)
-    const core = await ipc.invoke('db:project-core-get')
-    const status: Record<string, boolean> = {
-      premise: !!core?.premise && core.premise.length > 50 && !core.premise.includes('待生成'),
-      characters: !!core?.charactersArch && core.charactersArch.length > 50 && !core.charactersArch.includes('待生成'),
-      worldbuilding: !!core?.worldbuilding && core.worldbuilding.length > 50 && !core.worldbuilding.includes('待生成'),
-      synopsis: !!core?.synopsis && core.synopsis.length > 50 && !core.synopsis.includes('待生成'),
+    try {
+      const status = await application.status()
+      if (!active() || version !== dialogVersion.current) return
+      const content = currentContentRef.current
+      if (content.length > 50 && !content.includes('待生成')) status[stepKey] = true
+      setFullArchStatus(status); setShowDialog(true)
+    } catch (error) {
+      if (!active() || version !== dialogVersion.current || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Load:Arch', String(error)); toast.error(t('common.loadFailed'))
+    } finally {
+      if (active() && version === dialogVersion.current) setCheckingArch(false)
     }
-
-    // 对于当前文件，如果编辑器内已修改但未保存，也暂时以前面的基准为准即可
-    const EditorContentLen = currentContentRef.current.length;
-    if (EditorContentLen > 50 && !currentContentRef.current.includes('待生成')) {
-      status[stepKey] = true
-    }
-    setFullArchStatus(status)
-    setCheckingArch(false)
-    setShowDialog(true)
   }
-
-  const generated = initialContent.length > 50 && !initialContent.includes('待生成')
-
+  const generated = editorContent.length > 50 && !editorContent.includes('待生成')
   const handleExtractCharacters = useCallback(async () => {
-    const project = useProjectStore.getState().currentProject
-    if (!project || extracting) return
-    // 已有角色卡时确认覆盖（提取=重建，会覆盖手动编辑内容）
+    if (!active() || extractingBusy.current) return
+    extractingBusy.current = true; setExtracting(true)
+    let started = false
     try {
-      const existing = (await ipc.invoke('db:character-get-all')) as unknown[]
-      if (existing.length > 0) {
-        const ok = await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })
-        if (!ok) return
+      const existing = await application.existingCharacterCount()
+      if (!active()) return
+      if (existing > 0 && !await confirm(t('character.extractConfirm'), { title: t('character.extractConfirmTitle') })) return
+      if (!active()) return
+      const result = await application.extract(genre)
+      if (!active()) return
+      if (result.status === 'started') { started = true; extractionRun.current = result.runId; setExtractionRunId(result.runId) }
+    } catch (error) {
+      if (!active() || error instanceof ArchitectureRequestCancelled) return
+      renderLog('error', 'Extract:Arch', String(error)); toast.error(t('arch.charExtractFailed'))
+    } finally {
+      if (!started) {
+        extractingBusy.current = false
+        if (active()) setExtracting(false)
       }
-    } catch { /* 确认检查失败不阻断提取 */ }
-    setExtracting(true)
-    try {
-      const core = await ipc.invoke('db:project-core-get')
-      const charArch = core?.charactersArch ?? ''
-      if (charArch.length < 50) {
-        setExtracting(false)
-        return
-      }
-      runArchCharacterExtract(project.path, charArch, project.novelConfig.genre)
-
-      // 通过 EventBus 监听提取完成事件
-      const unsub1 = globalEventBus.on('ARCH_POSTPROCESS_UPDATED', () => {
-        setExtracting(false)
-        unsub1()
-        unsub2()
-      })
-      const unsub2 = globalEventBus.on('CHARACTER_EXTRACT_FAILED', () => {
-        setExtracting(false)
-        unsub1()
-        unsub2()
-      })
-
-    } catch (e) {
-      console.error('角色卡提取失败', e)
-      setExtracting(false)
     }
-  }, [extracting, t])
+  }, [application, active, genre, t])
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -281,9 +287,9 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
           <Button
             variant="ghost"
             size="icon"
-            onClick={handleReload}
+            onClick={() => void handleReload()}
             title={t('arch.reloadFromDisk')}
-            disabled={loading}
+            disabled={loading || saving}
           >
             <RefreshCw size={13} className={loading ? 'animate-spin' : ''} />
           </Button>

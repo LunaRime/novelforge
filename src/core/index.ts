@@ -31,3 +31,5 @@ export { createKnowledgeExportApplication } from './application/prepare-knowledg
 export type { KnowledgeExportPorts, KnowledgeExportMetadata } from './ports/knowledge-export'
 export { createKnowledgeMaintenanceApplication, KnowledgeMaintenanceBusy } from './application/knowledge-maintenance'
 export type { KnowledgeMaintenancePorts, MaintenanceKind, MaintenanceResult, MaintenanceReceipt } from './ports/knowledge-maintenance'
+export { createArchitectureDocumentApplication, ArchitectureRequestCancelled, ArchitectureDocumentBusy } from './application/architecture-document'
+export type { ArchitectureDocumentPorts, ArchitectureScope, ArchitectureStep } from './ports/architecture-document'

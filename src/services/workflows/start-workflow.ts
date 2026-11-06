@@ -26,7 +26,7 @@ export async function startWorkflow(request: WorkflowStartRequest, options: Work
       throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
     }
   }
-  const port = createWorkflowStartPort({ onGenerated: options.onGenerated, assertProject })
+  const port = createWorkflowStartPort({ onGenerated: options.onGenerated, assertProject, source: { ...identity, session } })
   // Capture payload before any asynchronous guard, metadata lookup or module import.
   const captured = structuredClone(request)
   try {

@@ -24,6 +24,16 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['../../services/ipc-client', '../../services/vela-protocol', '../../services/workflows/start-workflow', '../../services/workflows/architecture-workflow'])('keeps ArchFileViewer behind architecture use cases: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'ArchFileViewer.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('allows architecture DTO types and UI workflow projection', () => {
+    const result = check(`import type { WorkflowReceipt } from '../../core'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'ArchFileViewer.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgeOverview behind applications: %s', specifier => {
     const result = check(`import * as io from '${specifier}'`, 'components/pages', 0, 'KnowledgeOverview.tsx')
     expect(result.status, result.stdout).toBe(1)
