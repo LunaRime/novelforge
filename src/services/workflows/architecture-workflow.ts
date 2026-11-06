@@ -11,6 +11,7 @@ import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robust
 import { registerWorkflow } from './workflow-registry'
 import { getFieldLabel, type GeneratableField } from './commands/generate-field.command'
 import { startWorkflow } from './start-workflow'
+import { captureNovelConfigGenerationSession } from '../config/novel-config-adapter'
 
 // ==========================================
 // 1. 类型定义
@@ -102,6 +103,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
 }
 
 export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowParams): WorkflowDefinition {
+  const session = captureNovelConfigGenerationSession()
   return {
     type: 'config_generation',
     title: t('workflow.generateConfig'),
@@ -111,7 +113,7 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
         description: t('workflow.configDesc').replace('{n}', String(params.totalChapters)),
         executor: async (step, context, callbacks) => {
           const { GenerateConfigCommand } = await import('./commands/architecture.command')
-          const cmd = new GenerateConfigCommand(params.idea, params.totalChapters, params.wordsPerChapter, params.onGenerated)
+          const cmd = new GenerateConfigCommand(params.idea, params.totalChapters, params.wordsPerChapter, params.onGenerated, session)
           return cmd.execute({ step, context, callbacks })
         },
       },
@@ -127,6 +129,7 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
  * rehydrateParams.mode='field' + fieldKey 供 UI 推导「哪个字段在生成」。
  */
 export function createFieldGenerationWorkflow(fieldKey: GeneratableField): WorkflowDefinition {
+  const session = captureNovelConfigGenerationSession()
   const label = getFieldLabel(fieldKey)
   return {
     type: 'config_generation',
@@ -137,7 +140,7 @@ export function createFieldGenerationWorkflow(fieldKey: GeneratableField): Workf
         description: t('workflow.generateFieldDesc').replace('{label}', label),
         executor: async (step, context, callbacks) => {
           const { GenerateFieldCommand } = await import('./commands/generate-field.command')
-          return new GenerateFieldCommand(fieldKey).execute({ step, context, callbacks })
+          return new GenerateFieldCommand(fieldKey, session).execute({ step, context, callbacks })
         },
       },
     ],

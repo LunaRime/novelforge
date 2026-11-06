@@ -6,6 +6,8 @@ import { ArchitecturePromptBuilder } from '../../prompts/prompt-builder'
 import { stripThinkingTags, stringifyField as stringifyFieldUtils, buildThinkingPrefixedOutput } from '../workflow-utils'
 import { ipc } from '../../ipc-client'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
+import { captureNovelConfigGenerationSession, type NovelConfigGenerationSession } from '../../config/novel-config-adapter'
+import { applyGeneratedNovelConfig } from '../../config/apply-generated-config'
 
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
@@ -31,11 +33,14 @@ async function writeArchToDb(key: 'premise' | 'charactersArch' | 'worldbuilding'
 // --- 独立命令类 ---
 
 export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
-  constructor(private idea: string, private totalChapters: number, private wordsPerChapter: number, private onGenerated: (config: Partial<NovelConfig>) => void) {
+  constructor(private idea: string, private totalChapters: number, private wordsPerChapter: number, private onGenerated: (config: Partial<NovelConfig>) => void, private session?: NovelConfigGenerationSession) {
     super()
   }
 
-  async execute({ callbacks }: CommandExecuteParams): Promise<string> {
+  async execute({ callbacks, context }: CommandExecuteParams): Promise<string> {
+    const { application, snapshot } = this.session ?? captureNovelConfigGenerationSession()
+    application.assertCurrent()
+    if (context.cancelled) return ''
     callbacks.log(t('log.arch.dispatchConfigAI'))
 
     const template = getPromptTemplate('generate_global_config')
@@ -49,8 +54,11 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
     const resultRaw = await this.callLLMWithBuilder(
       promptBuilder,
       callbacks,
-      { responseFormat: { type: 'json_object' }, thinking: true }
+      { responseFormat: { type: 'json_object' }, thinking: true },
+      context,
     )
+    application.assertCurrent()
+    if (context.cancelled) return ''
 
     callbacks.log(t('log.arch.parseDone'))
     let parsed: Partial<NovelConfig>
@@ -58,6 +66,10 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       parsed = this.parseJSON<Partial<NovelConfig>>(resultRaw)
     } catch (e) {
       throw new Error(t('error.jsonParse').replace('{error}', String(e)))
+    }
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed) || Object.keys(parsed).length === 0) {
+      callbacks.log(t('log.generateField.emptyResult').replace('{label}', t('novelConfig.title')))
+      return ''
     }
 
     // 枚举归一化：英文模板输出的 genre/targetAudience/结构/视角 → UI 中文规范值（未知值保留原样）
@@ -94,18 +106,15 @@ export class GenerateConfigCommand extends BaseWorkflowCommand<string> {
       }
     }
 
-    // 先更新前端 Store
-    this.onGenerated(parsed)
-    callbacks.log(t('log.arch.applying'))
-
-    // 再持久化到数据库
-    const saved = await useProjectStore.getState().saveProject()
-
-    if (saved) {
-      callbacks.log(t('log.arch.configSaved'))
-    } else {
-      callbacks.log(t('log.arch.configSaveFailed'))
-    }
+    const applied = await applyGeneratedNovelConfig(application, snapshot, parsed, {
+      cancelled: () => context.cancelled,
+      onApplied: () => {
+        application.assertCurrent()
+        this.onGenerated(parsed)
+        callbacks.log(t('log.arch.configSaved'))
+      },
+    })
+    if (applied !== 'applied') return ''
     callbacks.setProgress(100)
     // 步骤产出 = 思考过程（若有）+ 状态摘要——此前只返回摘要，模型思考随流式原文丢弃（issue #34）
     return buildThinkingPrefixedOutput(this.getLastStreamText(), t('arch.configApplied'))

@@ -335,6 +335,9 @@ export const settingsTexts = {
   'novelConfig.desc': { 'zh-CN': '定义你的小说基本信息和写作参数', 'en-US': 'Define your novel basic info and writing parameters', 'ru-RU': 'Основная информация и параметры' },
   // 线③：产出审查层——AI 配置应用后的撤销出口
   'novelConfig.aiApplied': { 'zh-CN': '已应用 AI 生成的配置', 'en-US': 'AI-generated config applied', 'ru-RU': 'Конфигурация от ИИ применена' },
+  'novelConfig.generationConflict': { 'zh-CN': '生成期间配置已被编辑，生成结果已保留。可点击“应用”确认替换。', 'en-US': 'The config was edited during generation. The result is retained; choose Apply to confirm replacement.', 'ru-RU': 'Во время генерации конфигурация была изменена. Результат сохранён; нажмите «Применить» для подтверждения замены.' },
+  'novelConfig.applyConflictConfirm': { 'zh-CN': '应用此生成结果将替换对应字段的当前内容。继续？', 'en-US': 'Applying this result will replace the current contents of its target fields. Continue?', 'ru-RU': 'Применение результата заменит текущее содержимое соответствующих полей. Продолжить?' },
+  'novelConfig.undoConflict': { 'zh-CN': '对应字段已有后续编辑，未执行撤销。', 'en-US': 'The target fields have newer edits; undo was not applied.', 'ru-RU': 'В соответствующих полях есть более новые изменения; отмена не выполнена.' },
   'novelConfig.aiReverted': { 'zh-CN': '已撤销，恢复为生成前配置', 'en-US': 'Reverted to the previous config', 'ru-RU': 'Отменено, восстановлена прежняя конфигурация' },
   'novelConfig.loading': { 'zh-CN': '加载配置中...', 'en-US': 'Loading config...', 'ru-RU': 'Загрузка конфигурации...' },
   'novelConfig.saved': { 'zh-CN': '小说配置已保存', 'en-US': 'Novel config saved', 'ru-RU': 'Конфигурация сохранена' },

@@ -161,6 +161,13 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
       }
     }
   }
+  if (['src/components/editor/NovelConfigEditor.tsx', 'src/components/dialogs/GenerateConfigDialog.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/(?:ipc-client|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
   for (const factory of source.workflowFactories) {
     uiWorkflowViolations.push(`${relative(ROOT, file)} → ${factory}`)
   }

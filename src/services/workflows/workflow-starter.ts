@@ -10,7 +10,6 @@ import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
-import { toast } from '../../components/ui/Toast'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import type { DirectoryWorkflowParams } from './directory-workflow'
 import { WorkflowStartError, type WorkflowStartPort, type EditorDraft, type ArchitectureGeneration, type ConfigGenerationSize } from '../../core'
@@ -243,21 +242,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
       wordsPerChapter,
       onGenerated: (parsed) => {
         options.assertProject()
-        if (options.onGenerated) { options.onGenerated(parsed); return }
-        const store = useProjectStore.getState()
-        store.snapshotNovelConfig()
-        store.updateNovelConfig(parsed)
-        toast.show({
-          type: 'ai',
-          message: t('novelConfig.aiApplied'),
-          actions: [{
-            label: t('action.undoShort'),
-            onClick: () => {
-              options.assertProject()
-              if (store.restoreNovelConfigSnapshot()) toast.success(t('novelConfig.aiReverted'))
-            },
-          }],
-        })
+        options.onGenerated?.(parsed)
       },
     })
     return { definition, displayName }

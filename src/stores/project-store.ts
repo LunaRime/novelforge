@@ -76,7 +76,8 @@ interface ProjectState {
   /** 打开项目 */
   openProject: (projectPath: string, opts?: { keepView?: boolean }) => Promise<boolean>
   /** 保存项目 */
-  saveProject: () => Promise<boolean>
+  saveProject: (configSnapshot?: NovelConfig) => Promise<boolean>
+  configFieldVersions: Partial<Record<keyof NovelConfig, number>>
   /** 更新小说配置 */
   updateNovelConfig: (config: Partial<NovelConfig>) => void
   /** 线③：AI 产出应用前的配置快照（撤销出口） */
@@ -106,6 +107,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   recentProjects: [],
   loading: false,
   configSnapshot: null,
+  configFieldVersions: {},
 
   createProject: async (config) => {
     set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
@@ -143,7 +145,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const result = await ipc.invoke('project:open', projectPath)
       if (result.success && result.project) {
         // 切换项目时清空配置快照——旧项目的快照不得跨项目残留（否则撤销会用 A 的快照覆盖 B）
-        set({ currentProject: result.project, configSnapshot: null })
+        set({ currentProject: result.project, configSnapshot: null, configFieldVersions: {} })
         // 加载项目级 Prompt 覆盖（此前仅在设置页挂载时加载——未打开设置页时覆盖静默失效；
         // 挂到项目打开统一入口，新建/导入/切换均生效）
         loadProjectCustomPrompts(projectPath).catch(() => {})
@@ -182,7 +184,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 
-  saveProject: async () => {
+  saveProject: async (configSnapshot) => {
     const project = get().currentProject
     console.log('[project-store.saveProject] 开始保存，项目ID:', project?.id)
     if (!project) {
@@ -192,6 +194,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     try {
       // 提取纯净数据，防止 structured clone 序列化异常属性
       const plainData = toPlainProjectData(project)
+      if (configSnapshot) plainData.novelConfig = { ...configSnapshot }
       console.log('[project-store.saveProject] 准备调用 IPC，数据大小:', JSON.stringify(plainData).length)
       const result = await withTimeout(
         ipc.invoke('project:save', plainData.id, plainData),
@@ -209,7 +212,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   updateNovelConfig: (config) => {
     const project = get().currentProject
     if (!project) return
+    const configFieldVersions = { ...get().configFieldVersions }
+    for (const field of Object.keys(config) as (keyof NovelConfig)[]) configFieldVersions[field] = (configFieldVersions[field] ?? 0) + 1
     set({
+      configFieldVersions,
       currentProject: {
         ...project,
         novelConfig: { ...project.novelConfig, ...config },
@@ -227,7 +233,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   restoreNovelConfigSnapshot: () => {
     const { configSnapshot, currentProject } = get()
     if (!configSnapshot || !currentProject) return false
+    const configFieldVersions = { ...get().configFieldVersions }
+    const restoredFields = new Set([...Object.keys(currentProject.novelConfig), ...Object.keys(configSnapshot)] as (keyof NovelConfig)[])
+    for (const field of restoredFields) configFieldVersions[field] = (configFieldVersions[field] ?? 0) + 1
     set({
+      configFieldVersions,
       currentProject: { ...currentProject, novelConfig: configSnapshot },
       configSnapshot: null,
     })
@@ -256,7 +266,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // 统一清空 Layer 2 Store + 编辑器 Tab
     callProjectClosed()
     clearProjectCustomPrompts()
-    set({ currentProject: null, fileTree: [] })
+    set({ currentProject: null, fileTree: [], configSnapshot: null, configFieldVersions: {} })
   },
 
   updateCharacterStates: async (states) => {

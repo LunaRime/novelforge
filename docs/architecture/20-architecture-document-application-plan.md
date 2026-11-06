@@ -56,4 +56,4 @@ ArchFileViewer 的直接 IPC、vela 读写及工作流实现调用已移至中�
 
 最终门禁：316 个测试文件、3,465 条测试全部通过，contracts 另复跑 2 文件/12 条通过；全量 TypeScript、ESLint（零警告）、core 独立编译、边界 0/0/0、生产 Vite 构建及公开控制台产物审计通过。`git diff --check` 通过，构建后 package.json/锁文件无变更。日志统一位于本地忽略的 `logs/tmp/architecture-*.log`。
 
-两项独立复核问题及 checkpoint 来源补充经复核无待修问题。本批作为独立本地提交交付，前批 A 的提交为 `0c1375c`。B2/B3 与 C–F 均未实施，未推送或合并本分支，不以旧主干 CI 代替本轮结果。没有执行真实项目迁移、schema/版本更新或安装包发布。
+两项独立复核问题及 checkpoint 来源补充经复核无待修问题。本批作为独立本地提交交付，前批 A 的提交为 `0c1375c`。B2 后续实施见 [21](21-novel-config-application-plan.md)；B3 与 C–F 均未实施，未推送或合并本分支，不以旧主干 CI 代替本轮结果。没有执行真实项目迁移、schema/版本更新或安装包发布。

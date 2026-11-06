@@ -24,6 +24,19 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['NovelConfigEditor.tsx', 'GenerateConfigDialog.tsx'])('keeps %s behind config use cases', filename => {
+    const area = filename === 'NovelConfigEditor.tsx' ? 'components/editor' : 'components/dialogs'
+    for (const specifier of ['../../services/ipc-client', '../../stores/llm-store', '../../services/workflows/start-workflow']) {
+      const result = check(`import * as io from '${specifier}'`, area, 0, filename)
+      expect(result.status, result.stdout).toBe(1)
+      expect(result.stderr).toContain('editor application')
+    }
+  })
+  test('allows config DTO types and workflow status projection', () => {
+    const result = check(`import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'NovelConfigEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../services/vela-protocol', '../../services/workflows/start-workflow', '../../services/workflows/architecture-workflow'])('keeps ArchFileViewer behind architecture use cases: %s', specifier => {
     const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'ArchFileViewer.tsx')
     expect(result.status, result.stdout).toBe(1)

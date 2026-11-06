@@ -1,8 +1,7 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { Save, Sparkles, Info } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
-import { useLLMStore } from '../../stores/llm-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { NovelConfig } from '../../shared/ipc-channels'
 import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
@@ -12,7 +11,8 @@ import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
-import { startWorkflow } from '../../services/workflows/start-workflow'
+import { createRendererNovelConfigApplication } from '../../services/config/novel-config-adapter'
+import { NovelConfigRequestCancelled, type NovelConfigScope } from '../../core'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import type { TextKey } from '../../shared/locale'
@@ -21,14 +21,36 @@ import { renderLog } from '../../services/render-logger'
 
 /** 小说配置编辑器 — Tab 内的可视化配置面板 */
 export default function NovelConfigEditor() {
+  const project = useProjectStore(s => s.currentProject)
+  const session = useProjectStore(s => s.projectSession)
   const { t } = useTranslation()
+  if (!project) return <div className="h-full flex items-center justify-center" style={{ color: 'var(--color-text-muted)' }}><span className="text-sm opacity-50">{t('novelConfig.loading')}</span></div>
+  return <NovelConfigContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+}
+
+function NovelConfigContent({ source }: { source: NovelConfigScope }) {
+  const { t } = useTranslation()
+  const [application] = useState(() => createRendererNovelConfigApplication(source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const saveBusy = useRef(false)
+  const generationStarting = useRef(false)
+  const active = useCallback(() => {
+    if (!mounted.current) return false
+    try { application.assertCurrent(); return true } catch { return false }
+  }, [application])
+  useEffect(() => {
+    mounted.current = true
+    const lifecycle = lifetime.current; const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => { if (!mounted.current && lifecycle.generation === generation) application.dispose() })
+    }
+  }, [application])
 
   // ✅ 用 selector 精确订阅：只有 currentProject 变化时才重新渲染
   //    不订阅 fileTree、recentProjects 等无关字段
   const currentProject = useProjectStore(s => s.currentProject)
-  const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
-  const saveProject = useProjectStore(s => s.saveProject)
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
   // ✅ addLog 用 getState() 命令式调用，不订阅 workflow store
   //    避免 AI 流式生成时 globalLogs 高频更新导致本组件被动重渲染
   const addLog = useWorkflowStore.getState().addLog
@@ -38,9 +60,11 @@ export default function NovelConfigEditor() {
   // 线③ 第 2 条：生成中字段从 workflow-store 推导（单字段走 startWorkflow，删假 step）。
   // selector 返回 fieldKey 字符串，仅 fieldKey 变化时才重渲染（避免流式 steps 高频重渲染）
   const generatingField = useWorkflowStore(s => {
-    const run = s.activeRuns.find(r => r.type === 'config_generation' && r.rehydrateParams?.mode === 'field')
+    const run = s.activeRuns.find(r => r.type === 'config_generation' && r.rehydrateParams?.mode === 'field' && application.ownsRun(r.id))
     return (run?.rehydrateParams?.fieldKey as GeneratableField | null) ?? null
   })
+  const isConfigRunning = useWorkflowStore(s => s.activeRuns.some(run => run.type === 'config_generation'
+    && ['running', 'waiting', 'paused'].includes(run.status) && application.ownsRun(run.id)))
 
   // 直接从 Store 读取配置 — 单一数据源，无需 local state 镜像
   const config = currentProject?.novelConfig ?? null
@@ -53,32 +77,36 @@ export default function NovelConfigEditor() {
 
   // 直接写 Store — 消除双向同步风险
   const update = <K extends keyof NovelConfig>(key: K, value: NovelConfig[K]) => {
-    updateNovelConfig({ [key]: value })
+    if (active()) application.update({ [key]: value })
   }
 
   /** 保存配置 — Store 已是最新数据，仅需持久化到磁盘 */
   const handleSave = async () => {
-    if (!config || saving) return
+    if (!config || saveBusy.current || !active()) return
+    saveBusy.current = true
     const t0 = Date.now()
     setSaving(true)
     try {
-      await saveProject()
+      await application.save()
+      if (!active()) return
       // 保存行为日志流：成功 info + toast 视觉反馈
       renderLog('info', 'Save:Config', t('log.render.configSaveSuccess').replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (error) {
+      if (!active() || error instanceof NovelConfigRequestCancelled) return
       // 失败：toast + error 日志（含原因）
-      console.error('[NovelConfigEditor] 保存失败:', error)
       renderLog('error', 'Save:Config', t('log.render.configSaveFailed').replace('{error}', () => String(error)))
       toast.error(t('save.failed').replace('{error}', String(error)))
     } finally {
-      setSaving(false)
+      saveBusy.current = false
+      if (active()) setSaving(false)
     }
   }
 
   /** AI 生成配置 — 打开弹框 */
   const handleAIGenerate = () => {
-    if (!defaultModelId) {
+    if (!active()) return
+    if (!application.hasModel()) {
       addLog('error', t('tip.configModelFirst'))
       return
     }
@@ -87,13 +115,23 @@ export default function NovelConfigEditor() {
 
   /** 单字段 AI 生成（线③ 第 2 条：走 startWorkflow，删假 step——可取消/流式/进面板/统一失败面） */
   const handleFieldGenerate = async (fieldKey: GeneratableField) => {
-    if (!defaultModelId) {
+    if (!active()) return
+    if (!application.hasModel()) {
       addLog('error', t('tip.configModelFirst'))
       return
     }
-    if (generatingField) return // 防止并发（generatingField 推导自 activeRuns 的 config_generation）
-    try { await startWorkflow({ workflow: 'generate_config_field', fieldKey }) }
-    catch (error) { toast.error(String(error)) }
+    if (generationStarting.current || isConfigRunning) return
+    generationStarting.current = true
+    try { await application.startField(fieldKey) }
+    catch (error) { if (active() && !(error instanceof NovelConfigRequestCancelled)) toast.error(String(error)) }
+    finally { generationStarting.current = false }
+  }
+  const handleBulkGenerate = async (idea: string, totalChapters: number, wordsPerChapter: number) => {
+    application.assertCurrent()
+    if (generationStarting.current || isConfigRunning) throw new Error(t('tip.configRunning'))
+    generationStarting.current = true
+    try { await application.startBulk(idea, totalChapters, wordsPerChapter) }
+    finally { generationStarting.current = false }
   }
 
   // 题材 value 保持中文原文（数据兼容），显示文本走 i18n
@@ -310,22 +348,12 @@ export default function NovelConfigEditor() {
       <GenerateConfigDialog
         isOpen={showGenerateConfig}
         onClose={() => setShowGenerateConfig(false)}
-        onGenerated={(parsed) => {
-          // 线③：产出审查层——应用前快照，应用后可撤销（生成后零复核 → 快照 + 撤销出口）
-          const store = useProjectStore.getState()
-          store.snapshotNovelConfig()
-          updateNovelConfig(parsed)
-          toast.show({
-            type: 'ai',
-            message: t('novelConfig.aiApplied'),
-            actions: [{
-              label: t('action.undoShort'),
-              onClick: () => {
-                if (store.restoreNovelConfigSnapshot()) toast.success(t('novelConfig.aiReverted'))
-              },
-            }],
-          })
-        }}
+        config={config}
+        isConfigRunning={isConfigRunning}
+        hasModel={() => application.hasModel()}
+        assertCurrent={() => application.assertCurrent()}
+        onUpdateConfig={patch => { if (active()) application.update(patch) }}
+        onGenerate={handleBulkGenerate}
       />
     </div>
   )
