@@ -24,6 +24,15 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgePanel behind knowledge use cases: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/panels', 0, 'KnowledgePanel.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('knowledge application')
+  })
+  test('allows knowledge view DTO type imports', () => {
+    const result = check(`import type { KBDocument } from '../../services/knowledge-service'`, 'components/panels', 0, 'KnowledgePanel.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['db:draft-update-content', 'db:draft-update-status', 'db:revision-mark-merged'])('keeps merge mutation IPC out of draft-store: %s', channel => {
     const result = check(`ipc.invoke('${channel}', 1)`, 'stores', 0, 'draft-store.ts')
     expect(result.status, result.stdout).toBe(1)

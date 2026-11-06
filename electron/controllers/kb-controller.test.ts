@@ -37,6 +37,7 @@ const h = vi.hoisted(() => ({
   // T3b R1（I1）：查询 handler 的两个出口（模块已被 mock，这里是唯一的观测点）
   searchKnowledge: vi.fn(),
   searchKnowledgeFTS: vi.fn(),
+  removeDocument: vi.fn(),
   /**
    * Final wave W7/T4-M2 专用：方式 2 读取的「缺向量行」集合。
    * null（默认）→ 沿用下面的固定单行桩；给值 → 用本值（用于注入「空向量行」等形状）。
@@ -70,7 +71,7 @@ vi.mock('../knowledge-base', () => ({
   searchKnowledge: h.searchKnowledge,
   searchKnowledgeFTS: h.searchKnowledgeFTS,
   listDocuments: vi.fn(),
-  removeDocument: vi.fn(),
+  removeDocument: h.removeDocument,
   getKnowledgeStats: vi.fn(),
   getVectorlessCount: h.getVectorlessCount,
   backfillVectors: h.backfillVectors,
@@ -182,6 +183,21 @@ function setRemoteEmbeddingModel(apiKeyRef: string = REMOTE_REF): void {
 
 beforeAll(() => {
   registerKBController()
+})
+
+describe('knowledge document deletion result', () => {
+  it('propagates a rejected deletion instead of returning success', async () => {
+    h.removeDocument.mockRejectedValueOnce(new Error('delete failed'))
+    await expect(h.handlers.get('kb:remove-document')!(fakeEvent, 'doc-1')).rejects.toThrow('delete failed')
+  })
+  it.each([true, false])('awaits the real deletion result %s before returning serializable success', async success => {
+    h.removeDocument.mockResolvedValue(success)
+    const handler = h.handlers.get('kb:remove-document')!
+    const result = await handler(fakeEvent, 'doc-1')
+    expect(result).toEqual({ success })
+    expect(h.removeDocument).toHaveBeenCalledWith('doc-1', PROJECT)
+    expect(JSON.parse(JSON.stringify(result))).toEqual({ success })
+  })
 })
 
 beforeEach(() => {

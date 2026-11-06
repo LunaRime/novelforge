@@ -133,7 +133,7 @@ export function registerKBController() {
   guardedHandle('kb:remove-document', async (_event, docId: string) => {
     const projectPath = getCurrentProjectPath()
     if (!projectPath) return { success: false }
-    return { success: removeDocument(docId, projectPath) }
+    return { success: await removeDocument(docId, projectPath) }
   })
 
   guardedHandle('kb:stats', async () => {
