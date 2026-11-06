@@ -4,7 +4,7 @@
  * 包含：小说配置、故事架构、章节蓝图、草稿箱、正文章节、全局摘要
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
@@ -25,10 +25,9 @@ import {
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
-import VolumeGroup from './VolumeGroup'
+import BinderVolumeGroup from './BinderVolumeGroup'
 import PublicationGroup from './PublicationGroup'
 import SidebarGroup from './SidebarGroup'
-import type { VolumeData } from '../../../../electron/repositories/volume-repository'
 
 export default function ProjectTree() {
   const { t } = useTranslation()
@@ -50,31 +49,6 @@ export default function ProjectTree() {
   // 世界观实体 / 时间线事件数量（侧栏入口展示）
   const [worldCounts, setWorldCounts] = useState({ entities: 0, events: 0 })
 
-  // 卷 → 章节映射缓存（依赖 draftsByChapter 引用）：此前每次渲染都
-  // Object.entries 全量遍历 + parseInt + sort（N 章 × M 卷重复计算），
-  // 章节多的项目侧栏重渲染有明显开销
-  const volumeChapterIndex = useMemo(() => {
-    // 按章节号预分组排序一次
-    const byNumber = Object.entries(draftsByChapter)
-      .map(([num, drafts]) => {
-        const n = parseInt(num, 10)
-        // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
-        return {
-          n,
-          chapterTitle: '',
-          hasFinalized: drafts.some(d => d.status === 'finalized'),
-        }
-      })
-      .sort((a, b) => a.n - b.n)
-    const chaptersForVolume = (v: VolumeData) => byNumber
-      .filter(({ n }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd))
-      .map(({ n, chapterTitle, hasFinalized }) => ({ chapterNumber: n, chapterTitle, hasFinalized }))
-    const finalizedCountForVolume = (v: VolumeData) => byNumber
-      .filter(({ n, hasFinalized }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd) && hasFinalized)
-      .length
-    return { chaptersForVolume, finalizedCountForVolume }
-  }, [draftsByChapter])
-
   /** 统一刷新：文件树 + 架构状态 + 草稿列表 + 蓝图数量 */
   // ✅ 用 getState() 获取最新的 action，不作为依赖项，避免重建导致 useEffect 循环
   const refreshAll = useCallback(async () => {
@@ -93,16 +67,8 @@ export default function ProjectTree() {
     setArchStatus(status)
     setBlueprintCount(count)
     setWorldCounts({ entities: entities.length, events: events.length })
+    globalEventBus.emit('REFRESH_RESOURCE', { resources: ['blueprints'] })
   }, [])  // ✅ 空依赖：内部用 getState() 获取最新 action，不依赖闭包
-
-  const handleReorderChapter = useCallback(async (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => {
-    const res = await ipc.invoke('db:binder-reorder', { chapterNumber, toVolumeNumber, targetIndex })
-    if (res.success) {
-      await refreshAll()
-      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
-    }
-  }, [refreshAll])
-
 
   // 项目切换时刷新
   useEffect(() => {
@@ -296,13 +262,11 @@ export default function ProjectTree() {
       />
 
       {/* 3.5 分卷 — 按卷组织章节（可新建/编辑/删除/自动划分；卷内章节直接打开草稿） */}
-      <VolumeGroup
+      <BinderVolumeGroup
         projectPath={p}
         totalChapters={nc.totalChapters}
-        chaptersForVolume={volumeChapterIndex.chaptersForVolume}
-        finalizedCountForVolume={volumeChapterIndex.finalizedCountForVolume}
         onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
-        onReorderChapter={handleReorderChapter}
+        draftsByChapter={draftsByChapter}
       />
 
       {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}

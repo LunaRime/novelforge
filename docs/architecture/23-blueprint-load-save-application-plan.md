@@ -64,4 +64,4 @@ ChapterCardEditor 按项目 id/path/session 建立视图，用当前行对象引
 
 默认排序显式传参的快速路径补了红绿回归。部分边界门禁先观察六条失败，再禁止组件中的加载/保存 IPC 与旧运行时 helper，保留未迁出的删除/生成入口及 type-only DTO 导入；没有声称整组件已无 IO。
 
-最终门禁：328 个测试文件、3,593 条测试通过；contracts 另复跑 2 文件/12 条通过。全量 TypeScript、ESLint（零警告）、core 独立编译、边界 0/0/0、生产 Vite 构建与公开产物审计通过。package.json/锁文件无变化，diff 空白检查通过。日志位于本地忽略目录 logs/tmp/blueprint-*.log。本批仅本地提交，未推送，无本批远程 CI；不改版本/schema，不迁移真实项目。C1a 之后，C1 的排序/卷归属、剩余删除/生成及草稿列表接入仍未实施；下一步为 C1b 专项设计与施工，不是 C2。
+最终门禁：328 个测试文件、3,593 条测试通过；contracts 另复跑 2 文件/12 条通过。全量 TypeScript、ESLint（零警告）、core 独立编译、边界 0/0/0、生产 Vite 构建与公开产物审计通过。package.json/锁文件无变化，diff 空白检查通过。日志位于本地忽略目录 logs/tmp/blueprint-*.log。本批仅本地提交，未推送，无本批远程 CI；不改版本/schema，不迁移真实项目。后续 C1b 活页夹卷归属与手动顺序已按 [24](24-binder-application-plan.md) 完成；C1 的剩余删除/生成及草稿列表接入仍未实施，下一步为 C1c 删除命令专项，不是 C2。

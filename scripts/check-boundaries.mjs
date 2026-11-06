@@ -140,6 +140,16 @@ const editorApplicationViolations = []
 const knowledgeApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
   const source = inspectSource(file)
+  const componentPath = relative(ROOT, file).replace(/\\/g, '/')
+  if (componentPath === 'src/components/panels/sidebar/ProjectTree.tsx' && source.ipcChannels.includes('db:binder-reorder')) {
+    editorApplicationViolations.push(`${relative(ROOT, file)} → db:binder-reorder`)
+  }
+  if (componentPath === 'src/components/panels/sidebar/BinderVolumeGroup.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/ipc-client$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+    }
+    for (const channel of source.ipcChannels) editorApplicationViolations.push(`${relative(ROOT, file)} → ${channel}`)
+  }
   if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ChapterCardEditor.tsx') {
     for (const spec of source.runtimeSpecifiers) {
       if (/\/services\/workflows\/directory-workflow$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)

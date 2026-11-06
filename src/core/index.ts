@@ -39,3 +39,5 @@ export { createNovelConfigApplication, NovelConfigRequestCancelled, NovelConfigS
 export type { NovelConfigPorts, NovelConfigScope, ConfigGenerationSnapshot, ConfigUndoToken, ConfigFieldVersions } from './ports/novel-config'
 export { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, ChapterBlueprintBusy } from './application/chapter-blueprints'
 export type { ChapterBlueprintPorts, ChapterBlueprintScope, ChapterBlueprintSort, ChapterBlueprintSaveReceipt } from './ports/chapter-blueprints'
+export { createBinderApplication, BinderRequestCancelled, BinderBusy } from './application/binder'
+export type { BinderScope, BinderChapter, BinderReorderParams, BinderReorderReceipt, BinderPorts } from './ports/binder'

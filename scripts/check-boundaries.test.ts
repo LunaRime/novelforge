@@ -24,6 +24,14 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test('keeps project tree binder writes behind the application', () => {
+    const result = check(`ipc.invoke('db:binder-reorder', {})`, 'components/panels/sidebar', 0, 'ProjectTree.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test('keeps binder volume UI free of direct IPC', () => {
+    const result = check(`import { ipc } from '../../../services/ipc-client'`, 'components/panels/sidebar', 0, 'BinderVolumeGroup.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
   test.each(['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many'])('keeps blueprint editor load/save behind use cases: %s', channel => {
     const result = check(`ipc.invoke('${channel}')`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stdout).toBe(1)

@@ -2,7 +2,7 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核；明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88，B3 为 bbb479e；C1a 蓝图加载与保存已本地实施并验证，下一批为 C1b，详见 [19](19-knowledge-overview-application.md)、[20](20-architecture-document-application-plan.md)、[21](21-novel-config-application-plan.md) 、[22](22-architecture-overview-application-plan.md) 和 [23](23-blueprint-load-save-application-plan.md)。第九至十二节补齐 B–F 的拆分、证据与准入条件。进入 B–F 各批前仍须核对当时源码并补写独立实施细则，不以本文替代数据迁移专项设计。
+执行时使用 `executing-plans` 按任务验证并复核；明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88，B3 为 bbb479e；C1a 为 632ac52；C1b 活页夹卷归属与手动顺序已本地实施并验证，下一批为 C1c，详见 [19](19-knowledge-overview-application.md)、[20](20-architecture-document-application-plan.md)、[21](21-novel-config-application-plan.md) 、[22](22-architecture-overview-application-plan.md) 、[23](23-blueprint-load-save-application-plan.md) 和 [24](24-binder-application-plan.md)。第九至十二节补齐 B–F 的拆分、证据与准入条件。进入 B–F 各批前仍须核对当时源码并补写独立实施细则，不以本文替代数据迁移专项设计。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
@@ -184,7 +184,7 @@ git status --short package.json
 
 ## 八、本次计划交付
 
-计划初稿只定义后续路线。2026-11-06 已按 A1→A2→A3→A4 在本地实施，记录见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)；已本地提交，尚无本批远程 CI 结果。B1/B2/B3 已按 20–22 号文档本地实施，C1a 加载/保存按 23 号文档完成；C1 其余及 C2–F 仍未实施，按上述出口条件推进。现有 React/Zustand 界面继续使用，视觉布局改版不作为本计划隐含工作。
+计划初稿只定义后续路线。2026-11-06 已按 A1→A2→A3→A4 在本地实施，记录见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)；已本地提交，尚无本批远程 CI 结果。B1/B2/B3 已按 20–22 号文档本地实施，C1a 加载/保存与 C1b 活页夹命令按 23–24 号文档完成；C1 其余及 C2–F 仍未实施，按上述出口条件推进。现有 React/Zustand 界面继续使用，视觉布局改版不作为本计划隐含工作。
 
 ## 九、源码核对与优先风险（2026-11-06 补充）
 
@@ -257,7 +257,7 @@ git status --short package.json
 
 ### C1：章节蓝图与草稿列表命令
 
-C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。以下覆盖整个 C1，保留未完成状态；排序/卷归属、其余删除/生成和草稿列表待后续批次。下一批 C1b 须先核对调用者与事务范围。
+C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。C1b 活页夹重排及其实际成员/顺序投影也已完成，见 [24](24-binder-application-plan.md)，沿用现有主进程事务并补真实 SQLite 失败回滚证据。以下其余项覆盖整个 C1，保留未完成状态；删除/生成和草稿列表待后续批次。下一批 C1c 先核对删除命令与失败保护，不自动扩展生成或草稿领域。
 
 **现有入口**：`src/components/editor/ChapterCardEditor.tsx`、`src/components/panels/sidebar/DraftBoxGroup.tsx`、`src/stores/draft-store.ts`。两组件分别接线验收；第一小批只抽蓝图加载/保存，排序、卷归属、删除和生成逐项追加。
 
@@ -265,7 +265,7 @@ C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和
 
 - [ ] 对照现有蓝图服务/仓储列出单项和批量保存、排序、卷归属、删除、补缺口生成的全部调用者；确定每项是原子命令还是独立操作。
 - [ ] 先测保存返回失败、批量中间项失败、切项目、保存中新编辑和删除失败保留选中项；定稿相关限制沿用现有规则。
-- [ ] 排序/卷归属的关联写入若要求全有或全无，提交到主进程单事务；新增 IPC 同步 shared 类型、策略与白名单测试。
+- [x] 活页夹排序/卷归属沿用主进程单事务，C1b 已验证关联顺序/卷区间中途失败整体回滚；本批无新增 IPC。
 - [ ] 草稿列表复用既有打开文档和修稿合并用例；不重建以章号为身份的草稿标签，不在蓝图读失败时创建空草稿补位。
 - [ ] 每项完成后跑对应组件、应用用例、主进程事务测试；一项门禁失败时不继续叠加下一项。
 
@@ -357,6 +357,6 @@ F 只在 E 验证包和 D 出口全部通过后进入；开始前另写迁移/�
 - [x] 对照当前源码核实 B/C 入口、项目保存 boolean、章节仓储端口和离线导出边界。
 - [x] 保留 A→B→C→D→E/F 顺序；将 B/C 拆成独立验收小批，补 D 的实例证据和 E/F 故障矩阵。
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
-- [x] 补充计划时所有实现均未开展；后续 A 与 B1–B3 的实际实施项已按记录勾选。C1a 加载/保存已按 23 完成；C1 其余、C2–F 与真实副本/打包验收仍未实施。
+- [x] 补充计划时所有实现均未开展；后续 A 与 B1–B3 的实际实施项已按记录勾选。C1a 加载/保存与 C1b 活页夹已按 23–24 完成；C1 其余、C2–F 与真实副本/打包验收仍未实施。
 
-A/B1/B2/B3 与 C1a 本地实施后，下一批从 C1b 开始。C–F 本次补充的是任务边界与验收要求；各批独立计划还须给出当时的确切签名、失败测试及执行命令，不能跳过该步直接开展存储迁移。
+A/B1/B2/B3 与 C1a/C1b 本地实施后，下一批从 C1c 开始。C–F 本次补充的是任务边界与验收要求；各批独立计划还须给出当时的确切签名、失败测试及执行命令，不能跳过该步直接开展存储迁移。
