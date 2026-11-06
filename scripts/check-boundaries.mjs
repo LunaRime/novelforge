@@ -56,6 +56,7 @@ function inspectSource(file) {
   const tree = ts.createSourceFile(file, readFileSync(file, 'utf8'), ts.ScriptTarget.Latest, true)
   const specifiers = []
   const workflowFactories = []
+  const ipcChannels = []
   let storeRefs = 0
   function visit(node) {
     let specifier
@@ -65,6 +66,9 @@ function inspectSource(file) {
       specifier = node.moduleReference.expression
     } else if (ts.isCallExpression(node)) {
       const callee = node.expression
+      if (ts.isPropertyAccessExpression(callee) && callee.name.text === 'invoke'
+        && ts.isIdentifier(callee.expression) && callee.expression.text === 'ipc'
+        && node.arguments[0] && ts.isStringLiteralLike(node.arguments[0])) ipcChannels.push(node.arguments[0].text)
       if (ts.isIdentifier(callee) && /^create\w*Workflow$/.test(callee.text)) workflowFactories.push(callee.text)
       if (callee.kind === ts.SyntaxKind.ImportKeyword || (ts.isIdentifier(callee) && callee.text === 'require')) {
         specifier = node.arguments[0]
@@ -78,7 +82,7 @@ function inspectSource(file) {
     ts.forEachChild(node, visit)
   }
   visit(tree)
-  return { specifiers, storeRefs, workflowFactories }
+  return { specifiers, storeRefs, workflowFactories, ipcChannels }
 }
 
 // ---- 1) core 硬门禁 ----
@@ -138,12 +142,20 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
 }
 
 const baseline = JSON.parse(readFileSync(BASELINE_FILE, 'utf8'))
+const draftStore = join(ROOT, 'src', 'stores', 'draft-store.ts')
+const draftMutationViolations = existsSync(draftStore)
+  ? inspectSource(draftStore).ipcChannels.filter(channel => ['db:draft-update-content', 'db:draft-update-status', 'db:revision-mark-merged'].includes(channel))
+  : []
 console.log('边界检查（基线 → 当前）')
 for (const key of ['coreForbidden', 'agentStoreFiles', 'agentStoreRefs']) {
   console.log(`  ${key.padEnd(15)} ${String(baseline[key]).padStart(3)} → ${current[key]}`)
 }
 
-let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0 || editorApplicationViolations.length > 0
+let failed = uiWorkflowViolations.length > 0 || coreEntryViolations.length > 0 || editorApplicationViolations.length > 0 || draftMutationViolations.length > 0
+if (draftMutationViolations.length) {
+  console.error('\ndraft store projection: revision merging must use the atomic application command')
+  for (const channel of draftMutationViolations) console.error(`  - ${channel}`)
+}
 if (editorApplicationViolations.length) {
   console.error('\neditor application: DraftEditor must use application ports for IO and workflow commands')
   for (const violation of editorApplicationViolations) console.error(`  - ${violation}`)

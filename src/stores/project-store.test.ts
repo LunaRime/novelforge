@@ -51,6 +51,27 @@ afterEach(() => {
 })
 
 describe('project-store 快照机制（线③）', () => {
+  it.each(['another project', 'same path reopened'])('does not publish a late file tree after switching to %s', async mode => {
+    let resolveTree!: (value: unknown) => void
+    vi.mocked(ipc.invoke).mockImplementation((...args: unknown[]) => args[0] === 'fs:list-dir'
+      ? new Promise(resolve => { resolveTree = resolve }) as never : Promise.resolve(true) as never)
+    useProjectStore.setState({ fileTree: [] })
+    const pending = useProjectStore.getState().refreshFileTree()
+    const session = useProjectStore.getState().projectSession
+    useProjectStore.setState({
+      currentProject: mode === 'another project' ? { ...BASE, id: 'p2', path: '/other' } : structuredClone(BASE),
+      projectSession: session + 1,
+    })
+    resolveTree([{ name: 'old.md', path: '/test/old.md', type: 'file' }])
+    await pending
+    expect(useProjectStore.getState().fileTree).toEqual([])
+  })
+  it('publishes a refreshed tree while the source project session is unchanged', async () => {
+    const tree = [{ name: 'chapter.md', path: '/test/chapter.md', type: 'file' }]
+    vi.mocked(ipc.invoke).mockResolvedValue(tree as never)
+    await useProjectStore.getState().refreshFileTree()
+    expect(useProjectStore.getState().fileTree).toEqual(tree)
+  })
   it('opening invalidates the previous session before IPC completion', async () => {
     const before = useProjectStore.getState().projectSession
     let resolveOpen!: (value: unknown) => void

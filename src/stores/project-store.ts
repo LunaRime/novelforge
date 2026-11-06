@@ -239,7 +239,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   refreshFileTree: async () => {
     const project = get().currentProject
     if (!project) return
+    const source = { id: project.id, path: project.path, session: get().projectSession }
     const tree = await ipc.invoke('fs:list-dir', project.path)
+    const current = get()
+    if (current.currentProject?.id !== source.id || current.currentProject.path !== source.path || current.projectSession !== source.session) return
     set({ fileTree: tree })
   },
 

@@ -4,15 +4,12 @@
  * 当前项目仍以 DB 为事实源，虚拟 URI 仅携带真实 draftId。
  */
 import { create } from 'zustand'
-import { VELA, readVelaContent } from '../services/vela-protocol'
-import { useEditorStore } from './editor-store'
-import { t } from '../shared/locale'
-import { computeTextStats } from '../services/text-stats'
+import { readVelaContent } from '../services/vela-protocol'
 import { ipc } from '../services/ipc-client'
 import {
   updateDraftStatus as updateDraftStatusInIndex,
   type DraftMeta,
-  assertDraftWrite, captureDraftProject, draftIdFromPath, markRevisionMerged,
+  captureDraftProject, draftIdFromPath,
 } from '../services/draft-index'
 import type { DraftStatus } from '../shared/draft-status'
 import { useProjectStore } from './project-store'
@@ -40,13 +37,6 @@ interface DraftState {
   markDraftStatus: (draftPath: string, chapterNumber: number, status: DraftStatus) => Promise<void>
   /** 清除指定章节的缓存（下次访问时重新加载） */
   invalidateChapter: (chapterNumber: number) => void
-  /** 应用合并后的修稿，更新文件和各类状态 */
-  applyMergedRevision: (
-    chapterNumber: number | undefined,
-    filePath: string,
-    revPath: string,
-    mergedText: string
-  ) => Promise<{ success: boolean; error?: string }>
 }
 
 // 草稿加载请求序号（loadAllDrafts 防跨项目切换竞态）
@@ -140,44 +130,6 @@ export const useDraftStore = create<DraftState>()((set, get) => ({
     })
   },
 
-  applyMergedRevision: async (chapterNumber, filePath, revPath, mergedText) => {
-    try {
-      const assertProject = captureDraftProject()
-      const targetDraftId = draftIdFromPath(filePath)
-      const submittedTabs = useEditorStore.getState().tabs.map(tab => ({ ...tab }))
-      const revisionMatch = /^(?:vela:\/\/revision\/)?(\d+)$/.exec(revPath)
-      const revisionId = revisionMatch ? Number(revisionMatch[1]) : NaN
-      if (!Number.isSafeInteger(revisionId) || revisionId <= 0) throw new Error(t('error.noBaseDraft'))
-      const target = await ipc.invoke('db:draft-get-meta', targetDraftId)
-      assertProject()
-      if (!target || (chapterNumber !== undefined && target.chapterNumber !== chapterNumber)) throw new Error(t('error.noBaseDraft'))
-      const revision = await ipc.invoke('db:revision-get-full', revisionId)
-      assertProject()
-      if (!revision || revision.baseDraftId !== targetDraftId || revision.status !== 'pending') throw new Error(t('error.noBaseDraft'))
-      const mergedWordCount = computeTextStats(mergedText).novelWordCount
-      assertDraftWrite(await ipc.invoke('db:draft-update-content', targetDraftId, mergedText, mergedWordCount))
-      assertProject()
-      assertDraftWrite(await ipc.invoke('db:draft-update-status', targetDraftId, 'revised', mergedWordCount))
-      assertProject()
-      await markRevisionMerged(revisionId, targetDraftId)
-      assertProject()
-      const editorState = useEditorStore.getState()
-      for (const tab of editorState.tabs) {
-        const submitted = submittedTabs.find(before => before.id === tab.id && before.filePath === tab.filePath)
-        if (!submitted || submitted.dirty || tab.dirty || submitted.content !== tab.content || tab.type === 'diff' || !tab.filePath) continue
-        if (tab.filePath === VELA.DRAFT + targetDraftId || tab.filePath === VELA.MANUSCRIPT + targetDraftId) {
-          editorState.syncTabContent(tab.id, mergedText)
-          editorState.markTabSaved(tab.id)
-        }
-      }
-      await get().loadChapterDrafts(target.chapterNumber)
-      assertProject()
-      void useProjectStore.getState().refreshFileTree()
-      return { success: true }
-    } catch (e) {
-      return { success: false, error: String(e) }
-    }
-  },
 }))
 
 // ===== 辅助工具导出 =====

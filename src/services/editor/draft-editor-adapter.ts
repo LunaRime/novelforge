@@ -1,6 +1,7 @@
 import { createDraftEditorApplication } from '../../core'
 import { useProjectStore } from '../../stores/project-store'
-import { useDraftStore, readDraftBody } from '../../stores/draft-store'
+import { readDraftBody } from '../../stores/draft-store'
+import { mergeRendererRevision } from './merge-revision'
 import { useLLMStore } from '../../stores/llm-store'
 import { parseDraftMeta } from '../workflows/chapter-workflow'
 import { startWorkflow } from '../workflows/start-workflow'
@@ -41,7 +42,7 @@ export function createRendererDraftEditorApplication(project: { path: string } |
     refresh: () => globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] }),
     start: startWorkflow,
     repairGuard: guardRepairPostProcess,
-    merge: (chapter, path, revision, text) => useDraftStore.getState().applyMergedRevision(chapter, path, revision, text),
+    merge: (chapter, path, revision, text, expectedContent) => mergeRendererRevision({ chapterNumber: chapter, draftPath: path, revisionPath: revision, content: text, expectedContent }),
     latestReview: getLatestReview,
     translate: async (prompt, system) => {
       const result = await useLLMStore.getState().generate([{ role: 'system', content: system }, { role: 'user', content: prompt }], undefined, { temperature: 0.3 })

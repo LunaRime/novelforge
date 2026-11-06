@@ -9,6 +9,8 @@ import { CharacterRepository, CharacterData, CharacterStateData } from '../repos
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
 import { commitDatabaseDraft } from '../services/draft-write-service'
+import { mergeDatabaseRevision } from '../services/revision-merge-service'
+import type { RevisionMergeInput } from '../../src/core'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
 import { reorderChapter } from '../services/binder-service'
@@ -485,6 +487,8 @@ export function registerDatabaseController() {
   guardedHandle('db:revision-next-index', async (_event, baseDraftId: number) => {
     return RevisionRepository.getNextIndex(baseDraftId)
   })
+
+  guardedHandle('db:revision-merge', async (_event, input: RevisionMergeInput) => mergeDatabaseRevision(input))
 
   guardedHandle('db:revision-mark-merged', async (_event, id: number, mergedToDraftId: number) => {
     try {

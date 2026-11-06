@@ -189,18 +189,21 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     if (!meta || !mergeData) return
 
     try {
-      const result = await application.merge(meta, filePath, mergeData.revisionPath, mergedText)
+      const result = await application.merge(meta, filePath, mergeData.revisionPath, mergedText, mergeData.originalContent)
       application.assertCurrent()
       if (result.success) {
         setMergeData(null)
         setMeta(prev => prev ? { ...prev, status: 'revised' } : prev)
         toast.success(t('editor.mergeSuccessToast'))
+        renderLog('info', 'Save:Draft', t('editor.mergeSuccessToast'))
         if (result.pending) setPendingRevisions(result.pending)
         if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
       } else {
+        renderLog('error', 'Save:Draft', String(result.error))
         toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
       }
     } catch (e) {
+      renderLog('error', 'Save:Draft', String(e))
       toast.error(t('error.mergeError').replace('{error}', String(e)))
     }
   }

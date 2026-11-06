@@ -24,6 +24,15 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test.each(['db:draft-update-content', 'db:draft-update-status', 'db:revision-mark-merged'])('keeps merge mutation IPC out of draft-store: %s', channel => {
+    const result = check(`ipc.invoke('${channel}', 1)`, 'stores', 0, 'draft-store.ts')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('draft store projection')
+  })
+  test('allows draft-store to load projections', () => {
+    const result = check(`ipc.invoke('db:draft-list', 1)`, 'stores', 0, 'draft-store.ts')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../stores/llm-store', '../../stores/draft-store', '../../services/workflows/start-workflow'])('keeps DraftEditor behind application ports: %s', specifier => {
     const result = check(`import * as dependency from '${specifier}'`, 'components/editor', 0, 'DraftEditor.tsx')
     expect(result.status, result.stdout).toBe(1)

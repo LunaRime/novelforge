@@ -3,6 +3,7 @@
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
 import type { LLMProtocol } from './llm-protocols'
+import type { RevisionMergeInput, RevisionMergeResult } from '../core'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
 import type { ModelOverrides } from './provider-accounts'
@@ -807,6 +808,7 @@ export interface DatabaseChannels {
   'db:revision-get-pending': { args: [baseDraftId: number]; return: RevisionMeta[] }
   'db:revision-get-full': { args: [id: number]; return: RevisionFull | null }
   'db:revision-next-index': { args: [baseDraftId: number]; return: number }
+  'db:revision-merge': { args: [input: RevisionMergeInput]; return: RevisionMergeResult }
   'db:revision-mark-merged': { args: [id: number, mergedToDraftId: number]; return: { success: boolean; error?: string } }
   'db:revision-mark-discarded': { args: [id: number]; return: { success: boolean; error?: string } }
 
