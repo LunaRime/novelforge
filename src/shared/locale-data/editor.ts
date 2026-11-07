@@ -16,7 +16,7 @@ export const editorTexts = {
   'chapterCard.saveFailed': { 'zh-CN': '保存失败: {error}', 'en-US': 'Save failed: {error}', 'ru-RU': 'Ошибка сохранения: {error}' },
   'chapterCard.saveAllFailed': { 'zh-CN': '全量保存失败: {error}', 'en-US': 'Save all failed: {error}', 'ru-RU': 'Ошибка сохранения всего: {error}' },
   'chapterCard.deleteFailed': { 'zh-CN': '删除第 {n} 章蓝图失败: {error}', 'en-US': 'Failed to delete blueprint Ch.{n}: {error}', 'ru-RU': 'Ошибка удаления плана гл.{n}: {error}' },
-  'chapterCard.deleteError': { 'zh-CN': '删除第 {n} 章蓝图异常: {error}', 'en-US': 'Error deleting blueprint Ch.{n}: {error}', 'ru-RU': 'Ошибка удаления плана гл.{n}: {error}' },
+  'chapterCard.deleteSuccess': { 'zh-CN': '已删除第 {n} 章蓝图', 'en-US': 'Deleted blueprint for chapter {n}', 'ru-RU': 'План главы {n} удалён' },
   'chapterCard.loadingBlueprints': { 'zh-CN': '加载章节蓝图...', 'en-US': 'Loading blueprints...', 'ru-RU': 'Загрузка планов глав...' },
   'chapter.placeholderTitle': { 'zh-CN': '引人入胜的章节标题', 'en-US': 'An engaging chapter title', 'ru-RU': 'Интригующее название главы' },
   'chapter.placeholderCharacters': { 'zh-CN': '如：主角、反派A', 'en-US': 'e.g.: protagonist, villain A', 'ru-RU': 'напр.: главный герой, антагонист' },

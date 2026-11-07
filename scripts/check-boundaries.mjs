@@ -155,7 +155,7 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
       if (/\/services\/workflows\/directory-workflow$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
     }
     for (const channel of source.ipcChannels) {
-      if (['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many'].includes(channel)) {
+      if (['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many', 'db:blueprint-delete'].includes(channel)) {
         editorApplicationViolations.push(`${relative(ROOT, file)} → ${channel}`)
       }
     }

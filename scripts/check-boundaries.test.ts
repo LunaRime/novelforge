@@ -32,7 +32,7 @@ describe('boundary CLI', () => {
     const result = check(`import { ipc } from '../../../services/ipc-client'`, 'components/panels/sidebar', 0, 'BinderVolumeGroup.tsx')
     expect(result.status, result.stdout).toBe(1)
   })
-  test.each(['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many'])('keeps blueprint editor load/save behind use cases: %s', channel => {
+  test.each(['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many', 'db:blueprint-delete'])('keeps blueprint editor operations behind use cases: %s', channel => {
     const result = check(`ipc.invoke('${channel}')`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stdout).toBe(1)
     expect(result.stderr).toContain('editor application')
@@ -41,9 +41,8 @@ describe('boundary CLI', () => {
     const result = check(`import { loadDirectoryBlueprints } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stdout).toBe(1)
   })
-  test('allows blueprint DTO and remaining separate delete operation', () => {
-    const result = check(`import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'
-      ipc.invoke('db:blueprint-delete', 1)`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+  test('allows blueprint DTO types', () => {
+    const result = check(`import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stderr).toBe(0)
   })
   test.each(['../../services/ipc-client', '../../services/architecture-service', '../../services/vela-protocol', '../../services/workflows/architecture-workflow', '../../services/workflows/workflow-utils'])('keeps WorldBuildingEditor behind architecture use cases: %s', specifier => {

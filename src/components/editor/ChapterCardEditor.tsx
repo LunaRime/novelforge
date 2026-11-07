@@ -9,7 +9,6 @@ import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useVolumeStore } from '../../stores/volume-store'
 import { useLayoutStore } from '../../stores/layout-store'
-import { ipc } from '../../services/ipc-client'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { ChapterBlueprint, DirectoryWorkflowParams } from '../../services/workflows/directory-workflow'
 import { ChapterBlueprintRequestCancelled, type ChapterBlueprintScope } from '../../core'
@@ -231,20 +230,28 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     deleteBusy.current = true; setDeleting(true)
     loadRequest.current++; editVersion.current++; setLoading(false)
     try {
-      const result = await ipc.invoke('db:blueprint-delete', target.chapterNumber)
+      await application.deleteOne(target.chapterNumber)
       if (!active()) return
-      if (!result.success) {
-        addLog('error', t('chapterCard.deleteFailed').replace('{n}', String(target.chapterNumber)).replace('{error}', result.error || t('status.unknown')))
-        return
-      }
-      const next = rows.current.filter(row => row.chapterNumber !== target.chapterNumber)
-      for (const row of rows.current) if (row.chapterNumber === target.chapterNumber) dirtyRows.current.delete(row)
+      const previous = rows.current
+      const next = previous.filter(row => row.chapterNumber !== target.chapterNumber)
+      for (const row of previous) if (row.chapterNumber === target.chapterNumber) dirtyRows.current.delete(row)
       publishRows(next)
       editVersion.current++; loadRequest.current++; setLoading(false)
-      setSelectedIdx(index => Math.max(0, Math.min(index, next.length - 1))); setDirty(dirtyRows.current.size > 0)
-      addLog('info', `Blueprint Ch.${target.chapterNumber} deleted`)
+      setSelectedIdx(index => {
+        const survivingIndex = next.indexOf(previous[index])
+        return survivingIndex >= 0 ? survivingIndex : Math.max(0, Math.min(index, next.length - 1))
+      })
+      setDirty(dirtyRows.current.size > 0)
+      const message = t('chapterCard.deleteSuccess').replace('{n}', String(target.chapterNumber))
+      renderLog('info', 'Delete:Blueprint', message)
+      toast.success(message)
+      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['blueprints'] })
     } catch (error) {
-      if (active()) addLog('error', t('chapterCard.deleteError').replace('{n}', String(target.chapterNumber)).replace('{error}', String(error)))
+      if (active()) {
+        const message = t('chapterCard.deleteFailed').replace('{n}', String(target.chapterNumber)).replace('{error}', () => error instanceof Error ? error.message : String(error))
+        renderLog('error', 'Delete:Blueprint', message)
+        toast.error(message)
+      }
     } finally {
       deleteBusy.current = false
       if (active()) setDeleting(false)

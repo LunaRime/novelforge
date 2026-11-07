@@ -7,5 +7,6 @@ export interface ChapterBlueprintPorts<C extends { chapterNumber: number }> {
   readNextWriteChapter(): Promise<number>
   saveOne(item: C): Promise<boolean>
   saveAll(items: C[]): Promise<boolean>
+  deleteOne(chapterNumber: number): Promise<boolean>
   refreshFileTree(): Promise<void>
 }

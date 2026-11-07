@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import ChapterCardEditor from './ChapterCardEditor'
 import { useProjectStore } from '../../stores/project-store'
+import { globalEventBus } from '../../shared/event-bus'
 
 const h = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), log: vi.fn(), tree: vi.fn(), volumes: vi.fn(), start: vi.fn(),
   inputs: {} as Record<string, ComponentProps<'input'>>,
@@ -130,5 +131,31 @@ describe('blueprint load/save application view', () => {
     await click('chapter.deleteChapter')
     expect(h.inputs['chapter.placeholderTitle'].value).toBe('keep selected')
     expect(host.textContent).toContain('blueprint.unsaved')
+    expect(h.error).toHaveBeenCalledWith('chapterCard.deleteFailed')
+  })
+  it('publishes only a committed delete and preserves another dirty row', async () => {
+    await mount(); await edit('keep first'); await select('Second')
+    const refresh = vi.fn(); const off = globalEventBus.on('REFRESH_RESOURCE', refresh)
+    try {
+      await click('chapter.deleteChapter')
+      expect(h.invoke).toHaveBeenCalledWith('db:blueprint-delete', 2)
+      expect(host.textContent).not.toContain('Second'); expect(host.textContent).toContain('blueprint.unsaved')
+      expect(h.success).toHaveBeenCalledWith('chapterCard.deleteSuccess')
+      expect(refresh).toHaveBeenCalledWith({ resources: ['blueprints'] })
+    } finally { off() }
+  })
+  it('does not dispatch a confirmed deletion after reopening the same project', async () => {
+    await mount(); const pending = deferred<boolean>(); h.confirm.mockReturnValueOnce(pending.promise)
+    await click('chapter.deleteChapter'); await flush(() => useProjectStore.setState({ projectSession: 2 }))
+    await flush(() => pending.resolve(true))
+    expect(h.invoke.mock.calls.some(([channel]) => channel === 'db:blueprint-delete')).toBe(false)
+  })
+  it('keeps the surviving chapter selected when a preceding row is deleted', async () => {
+    const pending = deferred<{ success: boolean }>(); const base = handler
+    handler = channel => channel === 'db:blueprint-delete' ? pending.promise
+      : channel === 'db:blueprint-get-all' ? [row(1, 'First'), row(2, 'Second'), row(3, 'Third')] : base(channel)
+    await mount(); await click('chapter.deleteChapter'); await select('Second')
+    await flush(() => pending.resolve({ success: true }))
+    expect(h.inputs['chapter.placeholderTitle'].value).toBe('Second')
   })
 })

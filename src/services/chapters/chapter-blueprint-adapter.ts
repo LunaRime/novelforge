@@ -43,6 +43,11 @@ export function createRendererChapterBlueprintApplication(source = currentScope(
       if (result?.success !== true) throw new Error(t('error.blueprintsSaveBatchFailed').replace('{error}', result?.error || t('status.unknown')))
       return true
     },
+    deleteOne: async chapterNumber => {
+      const result = await ipc.invoke('db:blueprint-delete', chapterNumber)
+      if (result?.success !== true) throw new Error(result?.error || t('status.unknown'))
+      return true
+    },
     refreshFileTree: async () => { await useProjectStore.getState().refreshFileTree() },
   }, source)
 }

@@ -11,37 +11,45 @@ export class ChapterBlueprintBusy extends Error {
 export function createChapterBlueprintApplication<C extends { chapterNumber: number }>(ports: ChapterBlueprintPorts<C>, initial: ChapterBlueprintScope | null = ports.scope()) {
   const source = initial ? Object.freeze({ ...initial }) : null
   let disposed = false
-  let saving = false
+  let writing = false
   let loadVersion = 0
   const assertCurrent = () => {
     const current = ports.scope()
     if (disposed || !source || !current || source.id !== current.id || source.path !== current.path || source.session !== current.session) throw new ChapterBlueprintRequestCancelled()
   }
-  const save = async (items: C[], batch: boolean): Promise<ChapterBlueprintSaveReceipt> => {
+  const assertWritable = () => {
     assertCurrent()
-    if (saving) throw new ChapterBlueprintBusy()
+    if (writing) throw new ChapterBlueprintBusy()
+  }
+  const write = async <T>(operation: () => Promise<T>): Promise<T> => {
+    writing = true
+    ++loadVersion
+    try {
+      const result = await operation()
+      assertCurrent()
+      return result
+    } catch (error) { assertCurrent(); throw error }
+    finally { writing = false }
+  }
+  const save = async (items: C[], batch: boolean): Promise<ChapterBlueprintSaveReceipt> => {
+    assertWritable()
     const captured = structuredClone(items)
     const numbers = new Set<number>()
     for (const item of captured) {
       if (!Number.isSafeInteger(item.chapterNumber) || item.chapterNumber <= 0 || numbers.has(item.chapterNumber)) throw new Error('Invalid or duplicate chapter number')
       numbers.add(item.chapterNumber)
     }
-    saving = true
-    ++loadVersion
-    try {
+    return write(async () => {
       const success = await (batch ? ports.saveAll(captured) : ports.saveOne(captured[0]))
       assertCurrent()
       if (!success) throw new Error('Chapter blueprint save was rejected')
       try {
         await ports.refreshFileTree()
-        assertCurrent()
         return {}
       } catch (error) {
-        assertCurrent()
         return { refreshError: error instanceof Error ? error.message : String(error) }
       }
-    } catch (error) { assertCurrent(); throw error }
-    finally { saving = false }
+    })
   }
   return {
     assertCurrent,
@@ -59,5 +67,12 @@ export function createChapterBlueprintApplication<C extends { chapterNumber: num
     },
     saveOne(item: C) { return save([item], false) },
     saveAll(items: C[]) { return save(items, true) },
+    async deleteOne(chapterNumber: number): Promise<void> {
+      assertWritable()
+      if (!Number.isSafeInteger(chapterNumber) || chapterNumber <= 0) throw new Error('Invalid chapter number')
+      return write(async () => {
+        if (await ports.deleteOne(chapterNumber) !== true) throw new Error('Chapter blueprint delete was rejected')
+      })
+    },
   }
 }

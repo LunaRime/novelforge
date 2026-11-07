@@ -6,9 +6,29 @@ const row = () => ({ chapterNumber: 1, title: 'old', characters: ['A'] })
 function fixture() {
   let scope = { id: 'a', path: '/a', session: 1 }
   const ports = { scope: () => scope, readList: vi.fn(async () => [row()]), readNextWriteChapter: vi.fn(async () => 2), saveOne: vi.fn<(item: ReturnType<typeof row>) => Promise<boolean>>().mockResolvedValue(true), saveAll: vi.fn<(items: ReturnType<typeof row>[]) => Promise<boolean>>().mockResolvedValue(true), refreshFileTree: vi.fn(async () => {}) }
-  return { ports, app: createChapterBlueprintApplication(ports), change: (patch: Partial<typeof scope>) => { scope = { ...scope, ...patch } } }
+  const completePorts = { ...ports, deleteOne: vi.fn<(chapterNumber: number) => Promise<boolean>>().mockResolvedValue(true) }
+  return { ports: completePorts, app: createChapterBlueprintApplication(completePorts), change: (patch: Partial<typeof scope>) => { scope = { ...scope, ...patch } } }
 }
 describe('chapter blueprint application', () => {
+  it('invalidates pending reads and shares the save lock while deleting', async () => {
+    const { app, ports } = fixture(); const pendingRead = deferred<ReturnType<typeof row>[]>(); const pendingDelete = deferred<boolean>()
+    ports.readList.mockReturnValueOnce(pendingRead.promise); ports.deleteOne.mockReturnValueOnce(pendingDelete.promise)
+    const reading = app.load(); const deleting = app.deleteOne(1)
+    const cancelled = expect(reading).rejects.toBeInstanceOf(ChapterBlueprintRequestCancelled)
+    await expect(app.saveOne(row())).rejects.toBeInstanceOf(ChapterBlueprintBusy)
+    expect(ports.deleteOne).toHaveBeenCalledWith(1)
+    pendingRead.resolve([row()]); await cancelled; pendingDelete.resolve(true); await deleting
+    expect(ports.refreshFileTree).not.toHaveBeenCalled()
+    await app.saveOne(row())
+  })
+  it('rejects invalid numbers, false results and a stale delete completion', async () => {
+    const { app, ports, change } = fixture()
+    await expect(app.deleteOne(0)).rejects.toThrow(); expect(ports.deleteOne).not.toHaveBeenCalled()
+    ports.deleteOne.mockResolvedValueOnce(false); await expect(app.deleteOne(1)).rejects.toThrow('delete')
+    const pending = deferred<boolean>(); ports.deleteOne.mockReturnValueOnce(pending.promise)
+    const stale = expect(app.deleteOne(1)).rejects.toBeInstanceOf(ChapterBlueprintRequestCancelled)
+    change({ session: 2 }); pending.resolve(true); await stale
+  })
   it('loads the chosen sort and next writable chapter without swallowing failures', async () => {
     const { app, ports } = fixture(); const sort = { key: 'priority' as const, direction: 'desc' as const }
     expect(await app.load(sort)).toEqual({ blueprints: [row()], nextWriteChapter: 2 }); expect(ports.readList).toHaveBeenCalledWith(sort)
