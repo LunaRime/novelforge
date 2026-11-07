@@ -34,6 +34,7 @@
 | 22 | [世界观与架构状态应用层](22-architecture-overview-application-plan.md) | B3 部分失败、来源隔离、提取取消与编辑会话保护 | 本地实施与验证记录 |
 | 23 | [章节蓝图加载与保存应用层](23-blueprint-load-save-application-plan.md) | C1a 快照保存、逐行 dirty、来源隔离与批量事务验证 | 本地实施与验证记录 |
 | 24 | [活页夹卷归属与手动顺序](24-binder-application-plan.md) | C1b 重排用例、实际成员投影与事务回滚 | 本地实施与验证记录 |
+| 25 | [UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md) | 后端交接、应用壳、写作体验、导航、AI 与验收 | 计划已写，等待后端交接 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

@@ -6,6 +6,8 @@
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
+后端重构完成并通过交接验收后，前端进入 U0 基线采集与组件样板，再按批实施应用壳、编辑区、导航及功能页改造。交接清单、阶段依赖和验收见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+
 **技术栈**：沿用 React 19、TypeScript 6、Vite 8、Zustand 5、Tailwind CSS 4、Radix UI、CodeMirror 6 和 Electron。不换框架、不拆 monorepo、不先做全仓目录改名。
 
 ## 一、当前真实状态
