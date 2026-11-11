@@ -39,6 +39,8 @@ export { createNovelConfigApplication, NovelConfigRequestCancelled, NovelConfigS
 export type { NovelConfigPorts, NovelConfigScope, ConfigGenerationSnapshot, ConfigUndoToken, ConfigFieldVersions } from './ports/novel-config'
 export { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, ChapterBlueprintBusy } from './application/chapter-blueprints'
 export type { ChapterBlueprintPorts, ChapterBlueprintScope, ChapterBlueprintSort, ChapterBlueprintSaveReceipt } from './ports/chapter-blueprints'
+export { insertMissingBlueprints, MissingBlueprintValidationError, MissingBlueprintScopeChanged } from './application/insert-missing-blueprints'
+export type { BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintRow, MissingBlueprintReceipt, MissingBlueprintResult } from './application/insert-missing-blueprints'
 export { analyzeBlueprintRoles, analyzeBlueprintSnapshot } from './application/blueprint-verification'
 export type { BlueprintRoleMismatch, BlueprintVerificationSeverity } from './application/blueprint-verification'
 export { createBinderApplication, BinderRequestCancelled, BinderBusy } from './application/binder'

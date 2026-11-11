@@ -1,12 +1,12 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot } from './chapter-blueprint-adapter'
+import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot, createMissingBlueprintWriter } from './chapter-blueprint-adapter'
 
 const { invoke, refreshFileTree, state } = vi.hoisted(() => ({ invoke: vi.fn(), refreshFileTree: vi.fn(), state: { currentProject: { id: 'a', path: '/a' }, projectSession: 1 } }))
 vi.mock('../ipc-client', () => ({ ipc: { invoke } }))
 vi.mock('../../stores/project-store', () => ({ useProjectStore: { getState: () => ({ ...state, refreshFileTree }) } }))
 const item = { chapterNumber: 1, title: 'A', role: 'Development', purpose: '', keyEvents: '', characters: ['A'], suspenseHook: '', userGuidance: '', notes: '', notesUpdatedAt: '', sortOrder: 0, priority: 0 }
 beforeEach(() => {
-  vi.clearAllMocks(); state.projectSession = 1
+  vi.clearAllMocks(); invoke.mockReset(); state.projectSession = 1
   invoke.mockImplementation(async (channel: string) => channel === 'db:draft-get-max-finalized-chapter' ? 3 : channel.startsWith('db:blueprint-get-all') ? [item] : { success: true })
   refreshFileTree.mockResolvedValue(undefined)
 })
@@ -53,6 +53,33 @@ it('uses single IPC writes and requires explicit success before refreshing', asy
     invoke.mockResolvedValueOnce(value); await expect(app.saveOne(item)).rejects.toThrow()
   }
   expect(refreshFileTree).toHaveBeenCalledTimes(2)
+})
+it('captures main-process connection scope and sends only one insert-only command', async () => {
+  invoke.mockResolvedValueOnce({ projectPath: '/a', token: 'connection-a' })
+  const writer = await createMissingBlueprintWriter({ id: 'a', path: '/a', session: 1 })
+  invoke.mockResolvedValueOnce({ success: true, insertedChapterNumbers: [1], skippedChapterNumbers: [] })
+  expect(await writer.insert([1], [item])).toEqual({ insertedChapterNumbers: [1], skippedChapterNumbers: [] })
+  expect(invoke.mock.calls).toEqual([
+    ['db:blueprint-write-scope'], ['db:blueprint-insert-missing', { scope: { projectPath: '/a', token: 'connection-a' }, targetChapterNumbers: [1], items: [item] }],
+  ])
+})
+it.each([null, {}, { projectPath: '/other', token: 'token' }, { projectPath: '/a', token: '' }])('rejects malformed or mismatched main scope %o', async value => {
+  invoke.mockResolvedValueOnce(value)
+  await expect(createMissingBlueprintWriter({ id: 'a', path: '/a', session: 1 })).rejects.toThrow()
+})
+it('rejects a same-path reopen before issuing the missing-blueprint write', async () => {
+  invoke.mockResolvedValueOnce({ projectPath: '/a', token: 'connection-a' })
+  const writer = await createMissingBlueprintWriter({ id: 'a', path: '/a', session: 1 })
+  state.projectSession++
+  await expect(writer.insert([1], [item])).rejects.toThrow()
+  expect(invoke).toHaveBeenCalledTimes(1)
+})
+it.each([{ success: false, error: 'write failed' }, {}, { success: true, insertedChapterNumbers: [2], skippedChapterNumbers: [] },
+  { success: true, insertedChapterNumbers: [1], skippedChapterNumbers: [1] }])('does not accept false or unaccounted write receipts %o', async value => {
+  invoke.mockResolvedValueOnce({ projectPath: '/a', token: 'connection-a' })
+  const writer = await createMissingBlueprintWriter({ id: 'a', path: '/a', session: 1 })
+  invoke.mockResolvedValueOnce(value)
+  await expect(writer.insert([1], [item])).rejects.toThrow()
 })
 it('keeps refresh failures separate and rejects an old project session', async () => {
   const app = createRendererChapterBlueprintApplication(); refreshFileTree.mockRejectedValueOnce(new Error('tree'))

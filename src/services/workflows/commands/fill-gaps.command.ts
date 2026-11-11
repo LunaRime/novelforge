@@ -1,127 +1,95 @@
 import { t } from '../../../shared/locale'
-/**
- * FillGapsCommand — AI 补全缺失的章节蓝图
- *
- * 利用相邻章节上下文，让 AI 生成桥接的蓝图。
- * 复用 DirectoryPromptBuilder 的 prompt 构建逻辑。
- */
-
-import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
+import { BaseWorkflowCommand, type CommandExecuteParams } from './base-command'
 import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { DirectoryPromptBuilder } from '../../prompts/prompt-builder'
-import {
-  type ChapterBlueprint,
-  parseTextBlueprints,
-  saveAllBlueprints,
-} from '../directory-workflow'
-import { type BlueprintGap } from '../../blueprint-verification-service'
+import { type ChapterBlueprint, parseTextBlueprints } from '../directory-workflow'
+import type { BlueprintGap } from '../../blueprint-verification-service'
+import type { ChapterBlueprintScope } from '../../../core'
+import { assertChapterBlueprintScope, captureChapterBlueprintScope, createMissingBlueprintWriter } from '../../chapters/chapter-blueprint-adapter'
 
-export interface FillGapsParams {
-  gaps: BlueprintGap[]
-}
+export interface FillGapsParams { gaps: BlueprintGap[]; source?: ChapterBlueprintScope }
 
+/** AI gap filling is insert-only at the transactional write point, never full-column upsert. */
 export class FillGapsCommand extends BaseWorkflowCommand<ChapterBlueprint[]> {
-  constructor(private params: FillGapsParams) {
+  private readonly source: ChapterBlueprintScope | null
+  private readonly gaps: BlueprintGap[]
+  constructor(params: FillGapsParams) {
     super()
+    const source = params.source ?? captureChapterBlueprintScope()
+    this.source = source ? { ...source } : null
+    this.gaps = structuredClone(params.gaps)
   }
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<ChapterBlueprint[]> {
-    const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
-
-    const architecture = (context.data.architecture as string) || ''
+    const source = this.source
+    const assertActive = () => {
+      if (!source) throw new Error(t('error.noProject'))
+      assertChapterBlueprintScope(source)
+      if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+    }
+    assertActive()
+    const project = useProjectStore.getState().currentProject!
+    const targets = this.gaps.flatMap(gap => gap.missingChapterNumbers)
+    if (!targets.length || new Set(targets).size !== targets.length || this.gaps.some(gap => !gap.missingChapterNumbers.length
+      || gap.gapSize !== gap.missingChapterNumbers.length || gap.missingChapterNumbers.some((chapter, index, chapters) =>
+        !Number.isSafeInteger(chapter) || chapter < 1 || (index > 0 && chapter !== chapters[index - 1] + 1)))) throw new Error(t('error.prereqNotMet'))
     const totalChapters = project.novelConfig.totalChapters
     const globalGuidance = project.novelConfig.globalGuidance || ''
+    const architecture = (context.data.architecture as string) || ''
+    const writer = await createMissingBlueprintWriter(source!)
+    assertActive()
     const allFilled: ChapterBlueprint[] = []
+    const insertedChapterNumbers: number[] = []
+    const skippedChapterNumbers: number[] = []
+    let attempted = 0
 
-    const totalGaps = this.params.gaps.reduce((s, g) => s + g.gapSize, 0)
-    let filledCount = 0
-
-    for (const gap of this.params.gaps) {
-      if (context.cancelled) {
-        callbacks.log(t('log.fillGaps.cancelled'))
-        break
-      }
-
-      const { missingChapterNumbers: chapters, context: gapContext } = gap
-      callbacks.log(
-        t('log.fillGaps.filling')
-          .replace('{start}', String(chapters[0]))
-          .replace('{end}', String(chapters[chapters.length - 1]))
-          .replace('{count}', String(chapters.length)),
-      )
-
+    for (const gap of this.gaps) {
+      assertActive()
+      const chapters = gap.missingChapterNumbers
+      const start = String(chapters[0]); const end = String(chapters[chapters.length - 1])
+      callbacks.log(t('log.fillGaps.filling').replace('{start}', start).replace('{end}', end).replace('{count}', String(chapters.length)))
       const template = getPromptTemplate('chapter_blueprint_chunk')
       if (!template) throw new Error(t('error.templateMissing'))
-
-      const systemRole =
-        getPromptTemplate('chapter_blueprint')?.systemRole ||
-        t('role.blueprintGapFiller')
-
+      const systemRole = getPromptTemplate('chapter_blueprint')?.systemRole || t('role.blueprintGapFiller')
+      // These existing Chinese bridging instructions are part of the prompt context contract.
       const prompt = new DirectoryPromptBuilder(template)
         .withNovelArchitecture(architecture)
-        .withChapterList(gapContext || '（无相邻章节上下文）')
-        .withNumberOfChapters(totalChapters)
-        .withN(chapters[0])
-        .withM(chapters[chapters.length - 1])
+        .withChapterList(gap.context || '（无相邻章节上下文）')
+        .withNumberOfChapters(totalChapters).withN(chapters[0]).withM(chapters[chapters.length - 1])
         .withGlobalGuidance(globalGuidance)
-        .withPacingGuidance(
-          `请特别注意：这是填补第 ${chapters[0]}–${chapters[chapters.length - 1]} 章的缺口。必须确保情节衔接流畅，承上启下。`,
-        )
+        .withPacingGuidance(`请特别注意：这是填补第 ${start}–${end} 章的缺口。必须确保情节衔接流畅，承上启下。`)
         .build()
-
-      const progressBase = Math.round((filledCount / totalGaps) * 90)
-      callbacks.setProgress(progressBase)
-
+      callbacks.setProgress(Math.round((attempted / targets.length) * 90))
       try {
-        // staticContext：架构入 system 前缀（同 directory/generate-draft）——批次间前缀稳定命中 + system 遵从度更高
-        const resultText = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture })
-        const parsed = parseTextBlueprints(resultText, chapters[0], chapters[chapters.length - 1])
-
-        if (parsed.length > 0) {
-          // ⚠️ M 级修复（轻量确定性闸门）：确认覆盖请求区间——LLM 补写可能漏章，
-          //   缺口残留会让后续写作在该章仍无蓝图锚点（写稿/自审都读蓝图，错误逐级放大）
-          const requested = new Set<number>()
-          for (let n = chapters[0]; n <= chapters[chapters.length - 1]; n++) requested.add(n)
-          const covered = new Set(parsed.map(p => p.chapterNumber))
-          const missingNums = [...requested].filter(n => !covered.has(n))
-          if (missingNums.length > 0) {
-            callbacks.log(t('log.fillGaps.partialCoverage')
-              .replace('{start}', String(chapters[0]))
-              .replace('{end}', String(chapters[chapters.length - 1]))
-              .replace('{missing}', missingNums.join(',')))
-          }
-          await saveAllBlueprints(parsed)
-          allFilled.push(...parsed)
-          callbacks.log(
-            t('log.fillGaps.done')
-              .replace('{start}', String(chapters[0]))
-              .replace('{end}', String(chapters[chapters.length - 1]))
-              .replace('{count}', String(parsed.length)),
-          )
-        } else {
-          callbacks.log(
-            t('log.fillGaps.empty')
-              .replace('{start}', String(chapters[0]))
-              .replace('{end}', String(chapters[chapters.length - 1])),
-          )
-        }
+        assertActive()
+        const text = await this.callLLM(prompt, systemRole, callbacks, { staticContext: architecture }, context)
+        assertActive()
+        const parsed = parseTextBlueprints(text, chapters[0], chapters[chapters.length - 1])
+        if (!parsed.length) throw new Error(t('verify.gapFillEmpty'))
+        const covered = new Set(parsed.map(item => item.chapterNumber))
+        const missing = chapters.filter(chapter => !covered.has(chapter))
+        if (missing.length) callbacks.log(t('log.fillGaps.partialCoverage').replace('{start}', start).replace('{end}', end).replace('{missing}', missing.join(',')))
+        assertActive()
+        const receipt = await writer.insert(chapters, parsed)
+        assertActive()
+        const inserted = new Set(receipt.insertedChapterNumbers)
+        allFilled.push(...parsed.filter(item => inserted.has(item.chapterNumber)))
+        insertedChapterNumbers.push(...receipt.insertedChapterNumbers)
+        skippedChapterNumbers.push(...receipt.skippedChapterNumbers)
+        context.data.gapFillReceipt = { insertedChapterNumbers: [...insertedChapterNumbers], skippedChapterNumbers: [...skippedChapterNumbers] }
+        callbacks.log(t('log.fillGaps.done').replace('{start}', start).replace('{end}', end).replace('{count}', String(inserted.size)))
+        if (receipt.skippedChapterNumbers.length) callbacks.log(t('verify.gapFillSkipped').replace('{chapters}', receipt.skippedChapterNumbers.join(',')))
       } catch (error) {
-        callbacks.log(
-          t('log.fillGaps.failed')
-            .replace('{start}', String(chapters[0]))
-            .replace('{end}', String(chapters[chapters.length - 1]))
-            .replace('{error}', () => String(error)),
-        )
+        assertActive()
+        callbacks.log(t('log.fillGaps.failed').replace('{start}', start).replace('{end}', end).replace('{error}', () => String(error)))
+        throw error
       }
-
-      filledCount += chapters.length
+      attempted += chapters.length
     }
-
+    assertActive()
     callbacks.setProgress(100)
     callbacks.log(t('log.fillGaps.total').replace('{count}', String(allFilled.length)))
-
     return allFilled
   }
 }

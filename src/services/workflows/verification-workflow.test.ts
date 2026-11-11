@@ -5,7 +5,7 @@ import type { ProjectData } from '../../shared/ipc-channels'
 import type { WorkflowContext, WorkflowStep } from '../../shared/workflow-types'
 import { useProjectStore } from '../../stores/project-store'
 import { VerifyBlueprintsCommand } from './commands/verify-blueprints.command'
-import { createVerificationWorkflow } from './verification-workflow'
+import { createVerificationWorkflow, createGapFillWorkflow } from './verification-workflow'
 
 const project: ProjectData = {
   id: 'a', path: '/a', name: 'Novel', characterStates: '', createdAt: 0, updatedAt: 0,
@@ -89,6 +89,33 @@ it('does not query a reopened project after the workflow architecture read', asy
   expect(context.data).toEqual({})
 })
 
+it('cannot rebind a gap-fill factory to a reopened project before executing', async () => {
+  const workflow = createGapFillWorkflow([{ missingChapterNumbers: [2], gapSize: 1, context: '', precedingChapter: null, followingChapter: null }])
+  useProjectStore.setState({ projectSession: 2 })
+  const { step, context, callbacks } = createRequest()
+  await expect(workflow.steps[0].executor(step, context, callbacks)).rejects.toMatchObject({ name: 'ChapterBlueprintRequestCancelled' })
+  expect(invoke).not.toHaveBeenCalled()
+})
+it('does not capture a new write token or publish architecture after gap-fill project changes during IO', async () => {
+  const workflow = createGapFillWorkflow([{ missingChapterNumbers: [2], gapSize: 1, context: '', precedingChapter: null, followingChapter: null }])
+  invoke.mockImplementation(async channel => {
+    if (channel === 'db:project-core-get') { useProjectStore.setState({ projectSession: 2 }); return { premise: 'Premise '.repeat(10) } }
+    throw new Error('Unexpected write')
+  })
+  const { step, context, callbacks } = createRequest()
+  await expect(workflow.steps[0].executor(step, context, callbacks)).rejects.toMatchObject({ name: 'ChapterBlueprintRequestCancelled' })
+  expect(invoke.mock.calls).toEqual([['db:project-core-get']])
+  expect(context.data).toEqual({})
+})
+it.each(['reopened', 'cancelled'])('does not report an empty fill as successful after %s', async mode => {
+  const workflow = createVerificationWorkflow({ autoFill: true })
+  const { step, context, callbacks } = createRequest()
+  context.data.gaps = []
+  if (mode === 'reopened') useProjectStore.setState({ projectSession: 2 })
+  else context.cancelled = true
+  await expect(workflow.steps[2].executor(step, context, callbacks)).rejects.toThrow()
+  expect(callbacks.setProgress).not.toHaveBeenCalledWith(100)
+})
 it('does not publish a report after the workflow source session changes between steps', async () => {
   const workflow = createVerificationWorkflow()
   const { step, context, callbacks } = createRequest()

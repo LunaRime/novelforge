@@ -259,7 +259,7 @@ git status --short package.json
 
 ### C1：章节蓝图与草稿列表命令
 
-C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。C1b 活页夹重排及其实际成员/顺序投影也已完成，见 [24](24-binder-application-plan.md)，沿用现有主进程事务并补真实 SQLite 失败回滚证据。C1c 手动删除已通过共享写锁、失败保留编辑和同路径重开验证，见 [26](26-blueprint-delete-application-plan.md)。C1d 目录生成入口、补缺口与校检已完成及通过 118 条相关回归，见 [27](27-blueprint-generation-verification-plan.md)；2026-11-11 完整 335 文件/3,702 条测试、标准生产构建与公开产物审计已通过本地验收。下一小批先落实执行期补缺口仅插入事务。工作流批量清理、补写仅填空事务和草稿列表继续按范围专项验收。
+C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。C1b 活页夹重排及其实际成员/顺序投影也已完成，见 [24](24-binder-application-plan.md)，沿用现有主进程事务并补真实 SQLite 失败回滚证据。C1c 手动删除已通过共享写锁、失败保留编辑和同路径重开验证，见 [26](26-blueprint-delete-application-plan.md)。C1d 目录生成入口、补缺口与校检已完成及通过 118 条相关回归，见 [27](27-blueprint-generation-verification-plan.md)；2026-11-11 完整 335 文件/3,702 条测试、标准生产构建与公开产物审计已通过本地验收。C1e 执行期补缺口仅插入事务及必要的自动/等待断点恢复来源保护已完成，见 [28](28-blueprint-gap-insert-only-plan.md)，最终338文件/3,749条测试和全部本地门禁通过。工作流full/append生成内部写入、批量清理与快照冲突协议及草稿列表继续专项验收，整个C1尚未完成。
 
 **现有入口**：`src/components/editor/ChapterCardEditor.tsx`、`src/components/panels/sidebar/DraftBoxGroup.tsx`、`src/stores/draft-store.ts`。两组件分别接线验收；第一小批只抽蓝图加载/保存，排序、卷归属、删除和生成逐项追加。
 

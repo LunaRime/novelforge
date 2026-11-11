@@ -10,6 +10,8 @@ import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
 import { commitDatabaseDraft } from '../services/draft-write-service'
 import { mergeDatabaseRevision } from '../services/revision-merge-service'
+import { captureBlueprintWriteScope, insertDatabaseMissingBlueprints } from '../services/blueprint-gap-service'
+import type { MissingBlueprintInput } from '../../src/core'
 import type { RevisionMergeInput } from '../../src/core'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
@@ -60,6 +62,9 @@ export function registerDatabaseController() {
   // ============================================================
   // 2. blueprints — 章节蓝图
   // ============================================================
+  guardedHandle('db:blueprint-write-scope', async () => captureBlueprintWriteScope())
+  guardedHandle('db:blueprint-insert-missing', async (_event, input: MissingBlueprintInput<BlueprintData>) => insertDatabaseMissingBlueprints(input))
+
   guardedHandle('db:blueprint-get-all', async () => {
     return BlueprintRepository.getAll()
   })

@@ -1,4 +1,4 @@
-import { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, type ChapterBlueprintScope, type ChapterBlueprintSort } from '../../core'
+import { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, type ChapterBlueprintScope, type ChapterBlueprintSort, type MissingBlueprintReceipt } from '../../core'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
@@ -35,6 +35,31 @@ export async function readChapterBlueprintSnapshot(source: ChapterBlueprintScope
   assertChapterBlueprintScope(source)
   try { return await readStrictChapterBlueprints() }
   finally { assertChapterBlueprintScope(source) }
+}
+
+/** Capture a connection token before model IO; never reacquire it at the write point. */
+export async function createMissingBlueprintWriter(source: ChapterBlueprintScope) {
+  const capturedSource = { ...source }
+  assertChapterBlueprintScope(capturedSource)
+  const scope = await ipc.invoke('db:blueprint-write-scope')
+  assertChapterBlueprintScope(capturedSource)
+  if (!scope || scope.projectPath !== capturedSource.path || typeof scope.token !== 'string' || !scope.token) throw readFailure()
+  const capturedScope = { ...scope }
+  return {
+    insert: async (targetChapterNumbers: number[], items: BlueprintData[]): Promise<MissingBlueprintReceipt> => {
+      assertChapterBlueprintScope(capturedSource)
+      const input = structuredClone({ scope: capturedScope, targetChapterNumbers, items })
+      const result = await ipc.invoke('db:blueprint-insert-missing', input)
+      assertChapterBlueprintScope(capturedSource)
+      if (result?.success !== true) throw new Error(result?.error || t('error.prereqNotMet'))
+      if (!Array.isArray(result.insertedChapterNumbers) || !Array.isArray(result.skippedChapterNumbers)) throw readFailure()
+      const accounted = [...result.insertedChapterNumbers, ...result.skippedChapterNumbers]
+      const expected = new Set(input.items.map(item => item.chapterNumber))
+      if (accounted.length !== expected.size || new Set(accounted).size !== expected.size
+        || accounted.some(chapter => !expected.has(chapter))) throw readFailure()
+      return { insertedChapterNumbers: [...result.insertedChapterNumbers], skippedChapterNumbers: [...result.skippedChapterNumbers] }
+    },
+  }
 }
 
 export function createRendererChapterBlueprintApplication(source = captureChapterBlueprintScope()) {

@@ -168,6 +168,8 @@ export const workflowTexts = {
   'verify.title': { 'zh-CN': '蓝图校检', 'en-US': 'Blueprint Verification', 'ru-RU': 'Проверка плана' },
   'verify.verifyFailed': { 'zh-CN': '校检失败: {error}', 'en-US': 'Verification failed: {error}', 'ru-RU': 'Проверка не удалась: {error}' },
   'verify.gapsChanged': { 'zh-CN': '所选缺口已有蓝图，请重新校检。', 'en-US': 'Some selected chapters already have blueprints. Run verification again.', 'ru-RU': 'Для некоторых выбранных глав уже есть планы. Запустите проверку ещё раз.' },
+  'verify.gapFillEmpty': { 'zh-CN': '模型未返回有效缺口蓝图，本组未写入，请重试。', 'en-US': 'The model returned no valid gap blueprints. This group was not written; retry it.', 'ru-RU': 'Модель не вернула корректных планов для пропусков. Эта группа не записана; повторите попытку.' },
+  'verify.gapFillSkipped': { 'zh-CN': '第 {chapters} 章已有蓝图，已保留原内容并跳过补写。', 'en-US': 'Chapters {chapters} already have blueprints; their original content was preserved and skipped.', 'ru-RU': 'Для глав {chapters} уже есть планы; исходное содержимое сохранено, дополнение пропущено.' },
   'verify.reverify': { 'zh-CN': '重新校验', 'en-US': 'Re-verify', 'ru-RU': 'Перепроверить' },
   'verify.verifying': { 'zh-CN': '正在校验...', 'en-US': 'Verifying...', 'ru-RU': 'Проверка...' },
   'verify.clickToStart': { 'zh-CN': '点击校验按钮开始检查蓝图完整性', 'en-US': 'Click verify button to check blueprint completeness', 'ru-RU': 'Нажмите для проверки полноты плана' },

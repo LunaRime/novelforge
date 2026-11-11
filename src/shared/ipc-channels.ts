@@ -3,7 +3,7 @@
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
 import type { LLMProtocol } from './llm-protocols'
-import type { RevisionMergeInput, RevisionMergeResult } from '../core'
+import type { RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
 import type { ModelOverrides } from './provider-accounts'
@@ -741,6 +741,8 @@ export interface DatabaseChannels {
   'db:project-core-update': { args: [data: Partial<ProjectCoreData>]; return: { success: boolean; error?: string } }
 
   // 2. blueprints
+  'db:blueprint-write-scope': { args: []; return: BlueprintWriteScope }
+  'db:blueprint-insert-missing': { args: [input: MissingBlueprintInput<BlueprintData>]; return: MissingBlueprintResult }
   'db:blueprint-get-all': { args: []; return: BlueprintData[] }
   'db:blueprint-get-all-sorted': { args: [config: { key: string; direction: string }]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }

@@ -40,9 +40,12 @@ function saveCheckpoint(state: WorkflowState): void {
   } catch { /* 持久化不可用（非 Electron / 浏览器模式）时静默 */ }
 }
 
-async function loadCheckpoint(): Promise<CheckpointData | null> {
+async function loadCheckpoint(isCurrent: () => boolean = () => true): Promise<CheckpointData | null> {
   try {
+    if (!isCurrent()) return null
     const res = await ipc.invoke('db:checkpoint-load') as { data?: unknown }
+    // Do not migrate an old local checkpoint into a project opened during the read.
+    if (!isCurrent()) return null
     if (res.data) return sanitizeCheckpointData(res.data)
     // 兜底：DB 空 → 读旧 localStorage（存量迁移，L2 迁 DB 前的旧数据仍可恢复）
     try {
@@ -129,6 +132,8 @@ const runDefs = new Map<string, { type: WorkflowType; params: WorkflowParams }>(
 /** L2 v2（IMP-1）：跨重启 waiting 续跑的断点上下文——restoreCheckpoint 时从 checkpoint contextData 快照；
  *  waiting run 恢复时无 activeContexts 条目，confirmContinue 重放用它恢复 ctx.data（否则 ?? {} 恒为空丢共享数据）。 */
 const resumeContextData = new Map<string, Record<string, unknown>>()
+/** Restored waiting runs reuse the accepted factory closure rather than rebinding on confirmation. */
+const restoredWaitingDefinitions = new Map<string, { definition: WorkflowDefinition; isCurrent: () => boolean }>()
 
 // ===== appendText 流式缓冲（共享限频调度器） =====
 // LLM 流式 chunk 逐片 setState 会高频重渲染整个面板，阻塞主线程。
@@ -264,22 +269,14 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       resolve()
       continueResolveRefs.delete(targetId)
     } else {
-      // L2：跨重启恢复后 waiting 无内存 resolve → 用断点重放续跑
-      // （动态 import 规避 store←→registry 静态循环；rehydrateWorkflow 按 run 参数重建定义）
+      // A restored factory already captured its project; never rebuild it against a new one.
       const r = get().activeRuns.find(x => x.id === targetId)
-      if (r) {
-        // 断点 index 须在下方同步删除 waitingRuns 标记前捕获——否则异步 import 完成后
-        // 读到已被删除的标记 → waitIdx=-1 → 从 index 0 重放（断点重放打不到正确位置）。
-        const waitIdx = get().waitingRuns[targetId]?.waitingAfterStepIndex ?? -1
-        import('../services/workflows/workflow-registry').then(async m => {
-          const def = m.rehydrateWorkflow(r.type, r.rehydrateParams ?? {})
-          if (def) {
-            // IMP-1：跨重启 waiting 续跑无 activeContexts 条目 → 用 restoreCheckpoint 快照的
-            // resumeContextData 恢复 ctx.data（checkpoint contextData 保存的跨步共享数据）。
-            await executeRunFromIndex(r, def, waitIdx + 1, activeContexts.get(targetId)?.data ?? resumeContextData.get(targetId) ?? {})
-          }
-        }).catch(() => {})
-      }
+      const restored = restoredWaitingDefinitions.get(targetId)
+      if (!r || !restored || !restored.isCurrent()) return
+      const waitIdx = get().waitingRuns[targetId]?.waitingAfterStepIndex ?? -1
+      restoredWaitingDefinitions.delete(targetId)
+      void executeRunFromIndex(r, restored.definition, waitIdx + 1,
+        activeContexts.get(targetId)?.data ?? resumeContextData.get(targetId) ?? {}).catch(() => {})
     }
     set(s => {
       const newWaiting = { ...s.waitingRuns }
@@ -338,6 +335,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
   cancelWorkflow: (runId) => {
     if (runId) {
+      restoredWaitingDefinitions.delete(runId)
       // 取消指定工作流
       const ctx = activeContexts.get(runId)
       if (ctx) ctx.cancelled = true
@@ -389,6 +387,7 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       })
       get().addLog('warn', '[Cancel] All workflows cancelled')
       resumeContextData.clear()
+      restoredWaitingDefinitions.clear()
       clearCheckpoint()
       // M2：取消全部 = 逐个任务级清理（被取消 run 的输出文件不再保留）
       for (const id of allRunIds) deleteRunOutput(id)
@@ -411,74 +410,70 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
   restoreCheckpoint: async () => {
     const { currentProject, projectSession } = useProjectStore.getState()
     const source = currentProject ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
-    // L2 v2：从 DB 读 checkpoint（loadCheckpoint 自有 localStorage 兜底迁移）。
-    // 恢复决断：可重建（rehydrateWorkflow 有 factory）→ 真续跑；
-    //   不可重建 → 旧兜底（waiting→failed 提示重跑 / running→paused 可取消重跑）。
-    const cp = await loadCheckpoint()
-    if (!cp || cp.activeRuns.length === 0) return cp
-    // IMP-1：清旧断点上下文（多次恢复防残留），随后按 run 快照 checkpoint 的 contextData
-    resumeContextData.clear()
-    const interruptedWaitingIds = new Set(Object.keys(cp.waitingRuns ?? {}))
-    // 动态 import 规避 store←→registry 静态循环（registry type-only import store，store 运行时 import registry）
-    const m = await import('../services/workflows/workflow-registry')
-    const restored: WorkflowRun[] = []
-    // 恢复为「等待确认」的 run（其 waitingAfterStepIndex 需保留给 confirmContinue 定位断点）
-    const keptWaitingIds: string[] = []
-    // running 中断需自动重放的 run：先统一入列（set activeRuns）再 fire executeRunFromIndex——
-    // 保证完成判定 finalRun 能命中；否则 startIndex>=steps.length（末步已完成与 run 完成间
-    // 崩溃/定义漂移）的同步零迭代路径会因 run 尚未入 activeRuns 而 finalRun undefined →
-    // 不计 completed/不触发 onComplete → run 永久 stuck running（final review Finding 2）。
-    const runningReplays: Array<{ rr: WorkflowRun; def: WorkflowDefinition; startIndex: number }> = []
-    for (const r of cp.activeRuns) {
-      // IMP-1：等待确认 run 无 activeContexts 条目，confirmContinue 重放靠此重建 ctx.data
-      resumeContextData.set(r.id, cp.contextData?.[r.id] ?? {})
-      // L2 final（§4.8）：runDefs 缺失（legacy pre-L2 localStorage checkpoint）→ 视为不可重建，走
-      // else 旧兜底，避免空 params 命中 r.type 的兜底工厂（如 chapter_creation 写稿）误路由重放，或
-      // novel_import 的 String(params.chapters.length) 解引用 undefined → TypeError 让整批 restore 拒绝。
-      const runDef = cp.runDefs?.[r.id]
-      const def = runDef ? m.rehydrateWorkflow(r.type, runDef.params) : null
-      const isWaiting = interruptedWaitingIds.has(r.id)
-      if (def) {
-        // 可重建 → 真续跑：status 置 running（running 中断立即自动重放）或 waiting（点「继续」重放）。
-        // I-1：恢复态对齐 running——executeRunFromIndex 完成判定依赖 status==='running'。
-        const rr = { ...r, status: isWaiting ? ('waiting' as const) : ('running' as const) }
-        restored.push(rr)
-        if (isWaiting) {
-          keptWaitingIds.push(r.id)
+    let sourceChanged = false
+    const matchesSource = () => {
+      const current = useProjectStore.getState()
+      return current.projectSession === projectSession && (source
+        ? current.currentProject?.id === source.id && current.currentProject.path === source.path
+        : !current.currentProject)
+    }
+    // Sticky invalidation also rejects A -> B -> A without a session increment.
+    const unsubscribe = useProjectStore.subscribe(() => { if (!matchesSource()) sourceChanged = true })
+    const isCurrent = () => !sourceChanged && matchesSource()
+    try {
+      const cp = await loadCheckpoint(isCurrent)
+      if (!isCurrent()) return null
+      if (!cp || cp.activeRuns.length === 0) return cp
+      // Factories capture project state, so validate BEFORE rebuilding after asynchronous IO.
+      const m = await import('../services/workflows/workflow-registry')
+      if (!isCurrent()) return null
+      const interruptedWaitingIds = new Set(Object.keys(cp.waitingRuns ?? {}))
+      const restored: WorkflowRun[] = []
+      const keptWaitingIds: string[] = []
+      const waitingDefinitions = new Map<string, WorkflowDefinition>()
+      const runningReplays: Array<{ rr: WorkflowRun; def: WorkflowDefinition; startIndex: number }> = []
+      for (const r of cp.activeRuns) {
+        if (!isCurrent()) return null
+        // Missing runDefs is legacy: never feed empty parameters into a live factory.
+        const runDef = cp.runDefs?.[r.id]
+        const def = runDef ? m.rehydrateWorkflow(r.type, runDef.params) : null
+        if (!isCurrent()) return null
+        const isWaiting = interruptedWaitingIds.has(r.id)
+        if (def) {
+          const rr = { ...r, status: isWaiting ? ('waiting' as const) : ('running' as const) }
+          restored.push(rr)
+          if (isWaiting) { keptWaitingIds.push(r.id); waitingDefinitions.set(r.id, def) }
+          else runningReplays.push({ rr, def, startIndex: rr.currentStepIndex })
         } else {
-          // running 中断 → 从 currentStepIndex 立即自动重放（contextData 恢复断点上下文）
-          runningReplays.push({ rr, def, startIndex: rr.currentStepIndex })
+          if (isWaiting) get().addLog('warn', t('log.workflow.restoreInterrupted').replace('{title}', () => r.title))
+          restored.push(isWaiting ? { ...r, status: 'failed' as const } : { ...r, status: 'paused' as const })
         }
-      } else {
-        // 不可重建 → 旧兜底：waiting→failed（提示重跑）、running→paused（可取消重跑）
-        if (isWaiting) {
-          // 工作流标题是用户数据，可能含 $ 等特殊字符 → 箭头函数 replacer 防 $& 语义
-          get().addLog('warn', t('log.workflow.restoreInterrupted').replace('{title}', () => r.title))
-        }
-        restored.push(isWaiting ? { ...r, status: 'failed' as const } : { ...r, status: 'paused' as const })
       }
+      if (!isCurrent()) return null
+      // Do not clear a new project's resume data until the old read has been accepted.
+      resumeContextData.clear()
+      restoredWaitingDefinitions.clear()
+      for (const [id, definition] of waitingDefinitions) restoredWaitingDefinitions.set(id, { definition, isCurrent })
+      for (const r of cp.activeRuns) resumeContextData.set(r.id, cp.contextData?.[r.id] ?? {})
+      // Publish before replay, including zero-step completion; preserve waiting continuation indices.
+      set((s) => ({
+        activeRuns: [...s.activeRuns, ...restored],
+        waitingRuns: Object.fromEntries(Object.entries(cp.waitingRuns ?? {}).filter(([id]) => keptWaitingIds.includes(id))),
+      }))
+      if (!isCurrent()) return null
+      if (source) {
+        const { activeRuns, history } = get()
+        const retainedIds = [...activeRuns, ...history].map(run => run.id)
+        for (const run of restored) registerWorkflowSource(run.id, source, retainedIds)
+      }
+      for (const { rr, def, startIndex } of runningReplays) {
+        if (!isCurrent()) return null
+        void executeRunFromIndex(rr, def, startIndex, cp.contextData?.[rr.id] ?? {})
+      }
+      return cp
+    } finally {
+      unsubscribe()
     }
-    set((s) => ({
-      activeRuns: [...s.activeRuns, ...restored],
-      // 保留「保持等待确认」的 waiting 标记（confirmContinue 依 waitingAfterStepIndex 定位断点）；
-      // 已失败/已自动重放（非等待）的 run 不保留标记，避免「继续」按钮无效假象。
-      waitingRuns: Object.fromEntries(
-        Object.entries(cp.waitingRuns ?? {}).filter(([id]) => keptWaitingIds.includes(id))
-      ),
-    }))
-    const current = useProjectStore.getState()
-    if (source && current.currentProject?.id === source.id && current.currentProject.path === source.path
-      && current.projectSession === source.session) {
-      const { activeRuns, history } = get()
-      const retainedIds = [...activeRuns, ...history].map(run => run.id)
-      for (const run of restored) registerWorkflowSource(run.id, source, retainedIds)
-    }
-    // running 自动重放：先入列（上方 set 已把 restored run 放进 activeRuns）再 fire，保证
-    // executeRunFromIndex 完成判定能命中 finalRun（I-1/finalRun 正常），run 不 stuck running。
-    for (const { rr, def, startIndex } of runningReplays) {
-      void executeRunFromIndex(rr, def, startIndex, cp.contextData?.[rr.id] ?? {})
-    }
-    return cp
   },
 
   clearCheckpoint: () => clearCheckpoint(),
