@@ -10,13 +10,12 @@ import { useWorkflowStore } from '../../stores/workflow-store'
 import { useVolumeStore } from '../../stores/volume-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useTranslation } from '../../hooks/useTranslation'
-import type { ChapterBlueprint, DirectoryWorkflowParams } from '../../services/workflows/directory-workflow'
-import { ChapterBlueprintRequestCancelled, type ChapterBlueprintScope } from '../../core'
-import { createRendererChapterBlueprintApplication } from '../../services/chapters/chapter-blueprint-adapter'
+import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'
+import { ChapterBlueprintRequestCancelled, WorkflowStartError, type ChapterBlueprintScope, type WorkflowStartRequest } from '../../core'
+import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot } from '../../services/chapters/chapter-blueprint-adapter'
 import { belongsToWorkflowSource } from '../../services/workflows/workflow-source'
-import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
 import { startWorkflow as startApplicationWorkflow } from '../../services/workflows/start-workflow'
-import { generateVerificationReport, type VerificationReport, type BlueprintGap } from '../../services/blueprint-verification-service'
+import { generateVerificationReport, type VerificationReport } from '../../services/blueprint-verification-service'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
@@ -67,13 +66,13 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const [application] = useState(() => createRendererChapterBlueprintApplication(source))
-  const [verificationReader] = useState(() => createRendererChapterBlueprintApplication(source))
   const mounted = useRef(true)
   const lifetime = useRef({ generation: 0 })
   const loadRequest = useRef(0)
   const editVersion = useRef(0)
   const saveBusy = useRef(false)
   const deleteBusy = useRef(false)
+  const blueprintStartBusy = useRef(false)
   const rows = useRef<ChapterBlueprint[]>([])
   const dirtyRows = useRef(new Set<ChapterBlueprint>())
   const active = useCallback(() => {
@@ -92,6 +91,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   const [dirty, setDirty] = useState(false)
   const [nextWriteChapter, setNextWriteChapter] = useState<number | null>(null)
   const [showBlueprintDialog, setShowBlueprintDialog] = useState(false)
+  const [startingBlueprint, setStartingBlueprint] = useState(false)
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null)
   const [verifying, setVerifying] = useState(false)
   const verifyRequest = useRef(0)
@@ -103,10 +103,10 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     return () => {
       mounted.current = false
       queueMicrotask(() => {
-        if (!mounted.current && lifecycle.generation === generation) { application.dispose(); verificationReader.dispose() }
+        if (!mounted.current && lifecycle.generation === generation) application.dispose()
       })
     }
-  }, [application, verificationReader])
+  }, [application])
   useEffect(() => {
     queueMicrotask(() => { if (active()) void loadVolumes().catch(error => renderLog('error', 'Load:BlueprintVolumes', String(error))) })
   }, [loadVolumes, active])
@@ -135,14 +135,14 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   useEffect(() => { queueMicrotask(() => { if (active()) void loadBlueprints() }) }, [loadBlueprints, active])
 
   const runVerify = useCallback(async () => {
-    if (!active() || !currentProject) return
+    if (!active() || !currentProject || saveBusy.current || deleteBusy.current) return
     const request = ++verifyRequest.current
     const totalChapters = currentProject.novelConfig.totalChapters
     setVerifying(true)
     try {
-      const latest = await verificationReader.load({ key: 'chapter_number', direction: 'asc' })
+      const latest = await readChapterBlueprintSnapshot(source)
       if (!active() || request !== verifyRequest.current) return
-      const report = await generateVerificationReport(totalChapters, latest.blueprints)
+      const report = await generateVerificationReport(totalChapters, latest)
       if (active() && request === verifyRequest.current) setVerificationReport(report)
     } catch (error) {
       if (!active() || request !== verifyRequest.current || error instanceof ChapterBlueprintRequestCancelled) return
@@ -150,7 +150,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     } finally {
       if (active() && request === verifyRequest.current) setVerifying(false)
     }
-  }, [active, currentProject, verificationReader, t])
+  }, [active, currentProject, source, t])
   useEffect(() => globalEventBus.on('WORKFLOW_COMPLETE', payload => {
     if (!active() || (payload.runId && !belongsToWorkflowSource(payload.runId, source))) return
     if (payload.type === 'directory') void loadBlueprints()
@@ -161,11 +161,6 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     }
   }), [active, source, loadBlueprints, runVerify])
 
-  const handleFillGap = async (gap: BlueprintGap) => {
-    if (!active()) return
-    try { await startApplicationWorkflow({ workflow: 'fill_blueprint_gaps', gaps: [gap] }) }
-    catch (error) { if (active()) toast.error(String(error)) }
-  }
   const selected = blueprints[selectedIdx] ?? null
   const nextWriteBlueprint = nextWriteChapter !== null ? blueprints.find(b => b.chapterNumber === nextWriteChapter) : null
 
@@ -182,10 +177,12 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   const saveRows = async (submitted: ChapterBlueprint[], batch: boolean, manual = true, clearSubmitted = true) => {
     if (!active() || saveBusy.current || deleteBusy.current) return
     saveBusy.current = true; loadRequest.current++; setLoading(false); setSaving(true)
+    verifyRequest.current++; setVerifying(false)
     const started = Date.now()
     try {
       const receipt = batch ? await application.saveAll(submitted) : await application.saveOne(submitted[0])
       if (!active()) return
+      setVerificationReport(null)
       if (clearSubmitted) for (const row of submitted) dirtyRows.current.delete(row)
       setDirty(dirtyRows.current.size > 0)
       const message = batch
@@ -229,9 +226,11 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     if (!ok || !active() || saveBusy.current || deleteBusy.current || !rows.current.includes(target)) return
     deleteBusy.current = true; setDeleting(true)
     loadRequest.current++; editVersion.current++; setLoading(false)
+    verifyRequest.current++; setVerifying(false)
     try {
       await application.deleteOne(target.chapterNumber)
       if (!active()) return
+      setVerificationReport(null)
       const previous = rows.current
       const next = previous.filter(row => row.chapterNumber !== target.chapterNumber)
       for (const row of previous) if (row.chapterNumber === target.chapterNumber) dirtyRows.current.delete(row)
@@ -258,32 +257,33 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     }
   }
 
-  /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
-  const handleBatchGenerate = async (params: DirectoryWorkflowParams) => {
-    if (!currentProject || !active()) return
-
-    // 前置校验：故事架构是否就绪
-    const guard = await guardDirectoryGeneration()
-    if (!active()) return
-    if (!guard.ok) {
-      // 校验失败：阻断并提示
-      addLog('error', `Guard failed: ${guard.message}`)
-      toast.warning(t('blueprint.cannotGenerate').replace('{message}', guard.message || ''))
-      return
-    }
-    if (guard.message) {
-      // 有警告但允许继续：弹出确认
-      const yes = await confirm(`${guard.message}\n\n${t('chapter.continueAnyway')}`, {
-        title: t('chapter.warningTitle'),
-        confirmText: t('chapter.continue'),
+  const startBlueprint = async (request: Extract<WorkflowStartRequest, { workflow: 'generate_blueprint' | 'fill_blueprint_gaps' }>) => {
+    if (!active() || blueprintStartBusy.current) return
+    blueprintStartBusy.current = true; setStartingBlueprint(true)
+    try {
+      await startApplicationWorkflow(request, {
+        isCallerCurrent: active,
+        confirmBlueprintWarning: async message => active() && await confirm(`${message}\n\n${t('chapter.continueAnyway')}`, {
+          title: t('chapter.warningTitle'), confirmText: t('chapter.continue'),
+        }) && active(),
       })
-      if (!yes || !active()) return
+      if (active() && request.workflow === 'generate_blueprint') {
+        addLog('info', t('blueprintGen.submitted'))
+        toast.info(t('blueprintGen.submitted'))
+      }
+    } catch (error) {
+      if (!active() || (error instanceof WorkflowStartError && error.code === 'ERR_CANCELLED')) return
+      const message = error instanceof Error ? error.message : String(error)
+      if (request.workflow === 'generate_blueprint') {
+        addLog('error', message)
+        const feedback = t('blueprint.cannotGenerate').replace('{message}', () => message)
+        if (error instanceof WorkflowStartError && error.code === 'ERR_GUARD') toast.warning(feedback)
+        else toast.error(feedback)
+      } else toast.error(message)
+    } finally {
+      blueprintStartBusy.current = false
+      if (active()) setStartingBlueprint(false)
     }
-
-    try { await startApplicationWorkflow({ workflow: 'generate_blueprint', directory: params }) }
-    catch (error) { if (active()) toast.error(String(error)); return }
-    if (!active()) return
-    addLog('info', 'Blueprint generation started')
   }
 
   /** 整本流水线：逐章 写稿→审查→定稿→KB/记忆（应用级入口，不依赖 Agent） */
@@ -377,7 +377,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
             variant="ghost"
             size="sm"
             onClick={runVerify}
-            disabled={verifying}
+            disabled={verifying || saving || deleting}
             title={t('verify.title')}
           >
             <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
@@ -398,6 +398,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
             variant="ai"
             size="sm"
             onClick={() => setShowBlueprintDialog(true)}
+            disabled={startingBlueprint}
             title={t('chapter.aiBlueprint')}
           >
             <Sparkles size={12} />
@@ -457,7 +458,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
                     <span style={{ color: 'var(--color-text-muted)' }}>
                       {t('verify.chapterFormat').replace('{n}', String(gap.gapSize))}
                     </span>
-                    <Button variant="outline" size="sm" onClick={() => handleFillGap(gap)}>
+                    <Button variant="outline" size="sm" disabled={startingBlueprint} onClick={() => void startBlueprint({ workflow: 'fill_blueprint_gaps', gaps: [gap] })}>
                       {t('verify.fill')}
                     </Button>
                   </div>
@@ -487,7 +488,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         isOpen={showBlueprintDialog}
         onClose={() => setShowBlueprintDialog(false)}
         existingCount={blueprints.length}
-        onConfirm={handleBatchGenerate}
+        onConfirm={directory => void startBlueprint({ workflow: 'generate_blueprint', directory })}
       />
 
       {/* 主区域：左侧列表 + 右侧编辑 */}

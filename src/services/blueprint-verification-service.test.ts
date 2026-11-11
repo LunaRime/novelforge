@@ -1,6 +1,10 @@
-import { describe, it, expect } from 'vitest'
-import { detectInconsistentRoles } from './blueprint-verification-service'
+import { describe, it, expect, vi } from 'vitest'
+import { detectInconsistentRoles, generateVerificationReport } from './blueprint-verification-service'
+import { getCurrentLocale, setCurrentLocale } from '../shared/locale'
 import type { ChapterBlueprint } from './workflows/directory-workflow'
+
+const { invoke } = vi.hoisted(() => ({ invoke: vi.fn(async () => []) }))
+vi.mock('./ipc-client', () => ({ ipc: { invoke } }))
 
 function bp(chapterNumber: number, role: string): ChapterBlueprint {
   return {
@@ -58,5 +62,39 @@ describe('detectInconsistentRoles', () => {
     const result = detectInconsistentRoles([ch(15, 'Setup')], 100) // Setup→建置，0.15 期望铺垫
     expect(result).toHaveLength(1)
     expect(result[0].role).toBe('建置')
+  })
+})
+
+describe('generateVerificationReport', () => {
+  it('uses the supplied snapshot for contiguous gaps and preserves the Chinese prompt context', async () => {
+    const before = { ...bp(1, 'Setup'), title: 'Departure', keyEvents: 'Find the letter' }
+    const after = { ...bp(4, 'Development'), title: 'Arrival', keyEvents: 'Meet the witness' }
+    const originalLocale = getCurrentLocale()
+    setCurrentLocale('en-US')
+    try {
+      const report = await generateVerificationReport(4, [after, before])
+      expect(invoke).not.toHaveBeenCalled()
+      expect(report).toMatchObject({
+        totalChapters: 4,
+        existingChapters: 2,
+        gaps: [{
+          missingChapterNumbers: [2, 3],
+          precedingChapter: before,
+          followingChapter: after,
+          gapSize: 2,
+          context: '[前一章 第1章 Departure] Find the letter\n[后一章 第4章 Arrival] Meet the witness',
+        }],
+        inconsistentRoles: [{
+          chapter: 1, role: '建置', expectedRole: '发展',
+          reason: 'Ch.1 sits at 25% of the story, usually the "Development" stage',
+        }],
+        missingTitles: [],
+        severity: 'critical',
+      })
+      expect(report.summary).toContain('1 gaps found, 2 chapters missing')
+      expect(new Date(report.generatedAt).toISOString()).toBe(report.generatedAt)
+    } finally {
+      setCurrentLocale(originalLocale)
+    }
   })
 })

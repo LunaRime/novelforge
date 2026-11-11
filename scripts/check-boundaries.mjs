@@ -152,7 +152,7 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
   }
   if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ChapterCardEditor.tsx') {
     for (const spec of source.runtimeSpecifiers) {
-      if (/\/services\/workflows\/directory-workflow$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      if (/\/services\/workflows\/(?:directory-workflow|workflow-guards)$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
     }
     for (const channel of source.ipcChannels) {
       if (['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many', 'db:blueprint-delete'].includes(channel)) {

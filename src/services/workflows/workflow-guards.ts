@@ -61,13 +61,15 @@ export function guardArchitectureGeneration(): GuardResult {
  * 要求至少有 1 个架构信息（故事前提）已生成，
  * 建议 4 个都完成，但允许继续（仅提示警告）。
  */
-export async function guardDirectoryGeneration(): Promise<GuardResult> {
+export async function guardDirectoryGeneration(assertProject: () => void): Promise<GuardResult> {
+  assertProject()
   const project = projectStore.currentProject
   if (!project) {
     return { ok: false, message: t('guard.noProject') }
   }
 
   const core = await ipc.invoke('db:project-core-get')
+  assertProject()
   const missing: string[] = []
 
   const checkHasContent = (text: string | null | undefined) => text && text.length > 50 && !text.includes('待生成')
@@ -103,6 +105,7 @@ export async function guardDirectoryGeneration(): Promise<GuardResult> {
 
   // 检查角色卡是否存在（不变量 1 的反向约束）
   const chars = await ipc.invoke('db:character-get-all')
+  assertProject()
   if (chars.length === 0) {
     return {
       ok: false,

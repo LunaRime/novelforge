@@ -17,7 +17,7 @@ export interface BlueprintRow {
     suspense_hook: string
     user_guidance: string
     notes: string
-    notes_updated_at: string
+    notes_updated_at: number | string
     sort_order: number
     priority: number
     volume_number: number | null
@@ -36,7 +36,8 @@ export interface BlueprintData {
     suspenseHook: string
     userGuidance: string
     notes: string
-    notesUpdatedAt: string
+    /** Millisecond timestamp; legacy imports may retain string values. */
+    notesUpdatedAt: number | string
     sortOrder: number
     priority: number
     volumeNumber?: number | null
@@ -75,7 +76,7 @@ export class BlueprintRepository {
     /** 获取所有蓝图（按章节号排序） */
     static getAll(): BlueprintData[] {
         const db = getProjectDb()
-        if (!db) return []
+        if (!db) throw new Error(t('log.render.blueprintLoadFailed'))
 
         const rows = db.prepare(
             'SELECT * FROM blueprints ORDER BY chapter_number ASC'
@@ -87,7 +88,7 @@ export class BlueprintRepository {
     /** 按指定排序方式获取所有蓝图 */
     static getAllSorted(config: BlueprintSortConfig): BlueprintData[] {
         const db = getProjectDb()
-        if (!db) return []
+        if (!db) throw new Error(t('log.render.blueprintLoadFailed'))
 
         let orderClause: string
         switch (config.key) {

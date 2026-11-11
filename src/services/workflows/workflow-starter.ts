@@ -8,6 +8,7 @@ import type { ArchitectureScope } from '../../core'
  */
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
+import { readStrictChapterBlueprints } from '../chapters/chapter-blueprint-adapter'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
@@ -18,6 +19,9 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 export interface WorkflowAdapterOptions {
   source?: ArchitectureScope
   onGenerated?: (config: Partial<NovelConfig>) => void
+  confirmBlueprintWarning?: (message: string) => Promise<boolean>
+  /** Optional initiating-view lifetime guard; does not cancel an already started run. */
+  isCallerCurrent?: () => boolean
   assertProject: () => void
 }
 
@@ -131,10 +135,15 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
     const displayName = getWorkflowDisplayName('generate_blueprint')
     const { guardDirectoryGeneration } = await import('./workflow-guards')
     assertProject()
-    const guard = await guardDirectoryGeneration()
+    const guard = await guardDirectoryGeneration(assertProject)
     assertProject()
     if (!guard.ok) {
       throw new WorkflowStartError('ERR_GUARD', guard.message || t('error.prereqNotMet'))
+    }
+    if (guard.message && options.confirmBlueprintWarning) {
+      const accepted = await options.confirmBlueprintWarning(guard.message)
+      assertProject()
+      if (!accepted) throw new WorkflowStartError('ERR_CANCELLED', guard.message)
     }
     const { createDirectoryWorkflow } = await import('./directory-workflow')
     assertProject()
@@ -290,6 +299,11 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
     fillGaps: async gaps => {
       const { createGapFillWorkflow } = await import('./verification-workflow')
       assertProject()
+      const existing = new Set((await readStrictChapterBlueprints()).map(row => row.chapterNumber))
+      assertProject()
+      if (gaps.some(gap => gap.missingChapterNumbers.some(chapter => existing.has(chapter)))) {
+        throw new WorkflowStartError('ERR_GUARD', t('verify.gapsChanged'))
+      }
       return { definition: createGapFillWorkflow(gaps.map(gap => ({ ...gap,
         missingChapterNumbers: [...gap.missingChapterNumbers], precedingChapter: null, followingChapter: null,
       }))), displayName: t('workflow.gapFillTitle') }

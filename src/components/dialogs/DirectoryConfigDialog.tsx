@@ -101,7 +101,6 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
       batchChapterCount: generationMode === 'batch' ? (Number(batchChapterCount) || 10) : undefined,
     })
     onClose()
-    toast.info(t('blueprintGen.submitted'))
   }
 
   return (

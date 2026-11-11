@@ -41,6 +41,10 @@ describe('boundary CLI', () => {
     const result = check(`import { loadDirectoryBlueprints } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stdout).toBe(1)
   })
+  test('keeps directory prerequisites in the workflow adapter', () => {
+    const result = check(`import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
   test('allows blueprint DTO types', () => {
     const result = check(`import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
     expect(result.status, result.stderr).toBe(0)

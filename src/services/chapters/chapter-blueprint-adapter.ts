@@ -1,32 +1,46 @@
-import { createChapterBlueprintApplication, type ChapterBlueprintScope } from '../../core'
+import { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, type ChapterBlueprintScope, type ChapterBlueprintSort } from '../../core'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
 import { normalizeBlueprintRole } from '../blueprint-role'
 
-const currentScope = (): ChapterBlueprintScope | null => {
+export function captureChapterBlueprintScope(): ChapterBlueprintScope | null {
   const { currentProject, projectSession } = useProjectStore.getState()
   return currentProject ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
 }
+export function assertChapterBlueprintScope(source: ChapterBlueprintScope): void {
+  const current = captureChapterBlueprintScope()
+  if (!current || current.id !== source.id || current.path !== source.path || current.session !== source.session) {
+    throw new ChapterBlueprintRequestCancelled()
+  }
+}
 const readFailure = () => new Error(t('log.render.blueprintLoadFailed'))
-const textFields = ['title', 'role', 'purpose', 'keyEvents', 'suspenseHook', 'userGuidance', 'notes', 'notesUpdatedAt'] as const
+const textFields = ['title', 'role', 'purpose', 'keyEvents', 'suspenseHook', 'userGuidance', 'notes'] as const
 
-/** Strict editor IO; legacy workflow helpers retain their separate behavior. */
-export function createRendererChapterBlueprintApplication(source = currentScope()) {
+export async function readStrictChapterBlueprints(sort?: ChapterBlueprintSort): Promise<BlueprintData[]> {
+  const rows = sort && (sort.key !== 'chapter_number' || sort.direction !== 'asc')
+    ? await ipc.invoke('db:blueprint-get-all-sorted', sort)
+    : await ipc.invoke('db:blueprint-get-all')
+  if (!Array.isArray(rows)) throw readFailure()
+  return rows.map(row => {
+    if (!row || !Number.isSafeInteger(row.chapterNumber) || row.chapterNumber <= 0 || !Array.isArray(row.characters)
+      || row.characters.some(character => typeof character !== 'string') || textFields.some(field => typeof row[field] !== 'string')
+      || !(typeof row.notesUpdatedAt === 'string' || (typeof row.notesUpdatedAt === 'number' && Number.isSafeInteger(row.notesUpdatedAt) && row.notesUpdatedAt >= 0))) throw readFailure()
+    return { ...row, role: normalizeBlueprintRole(row.role) }
+  })
+}
+
+export async function readChapterBlueprintSnapshot(source: ChapterBlueprintScope): Promise<BlueprintData[]> {
+  assertChapterBlueprintScope(source)
+  try { return await readStrictChapterBlueprints() }
+  finally { assertChapterBlueprintScope(source) }
+}
+
+export function createRendererChapterBlueprintApplication(source = captureChapterBlueprintScope()) {
   return createChapterBlueprintApplication<BlueprintData>({
-    scope: currentScope,
-    readList: async sort => {
-      const rows = sort && (sort.key !== 'chapter_number' || sort.direction !== 'asc')
-        ? await ipc.invoke('db:blueprint-get-all-sorted', sort)
-        : await ipc.invoke('db:blueprint-get-all')
-      if (!Array.isArray(rows)) throw readFailure()
-      return rows.map(row => {
-        if (!row || !Number.isSafeInteger(row.chapterNumber) || row.chapterNumber <= 0 || !Array.isArray(row.characters)
-          || row.characters.some(character => typeof character !== 'string') || textFields.some(field => typeof row[field] !== 'string')) throw readFailure()
-        return { ...row, role: normalizeBlueprintRole(row.role) }
-      })
-    },
+    scope: captureChapterBlueprintScope,
+    readList: readStrictChapterBlueprints,
     readNextWriteChapter: async () => {
       const max = await ipc.invoke('db:draft-get-max-finalized-chapter')
       if (max == null) return 1

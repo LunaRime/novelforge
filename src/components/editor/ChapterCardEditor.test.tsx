@@ -6,7 +6,7 @@ import ChapterCardEditor from './ChapterCardEditor'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
 
-const h = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), log: vi.fn(), tree: vi.fn(), volumes: vi.fn(), start: vi.fn(),
+const h = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), log: vi.fn(), tree: vi.fn(), volumes: vi.fn(), start: vi.fn(), report: vi.fn(),
   inputs: {} as Record<string, ComponentProps<'input'>>,
 }))
 const translate = (key: string) => key
@@ -21,11 +21,11 @@ vi.mock('../../stores/workflow-store', () => ({ useWorkflowStore: { getState: ()
 vi.mock('../../stores/volume-store', () => ({ useVolumeStore: (select: (s: unknown) => unknown) => select({ volumes: [], load: h.volumes }) }))
 vi.mock('../../stores/layout-store', () => ({ useLayoutStore: { getState: () => ({ openChapterCreation: vi.fn() }) } }))
 vi.mock('../../services/workflows/start-workflow', () => ({ startWorkflow: h.start }))
-vi.mock('../../services/workflows/workflow-guards', () => ({ guardDirectoryGeneration: vi.fn() }))
-vi.mock('../../services/blueprint-verification-service', () => ({ generateVerificationReport: vi.fn() }))
-vi.mock('../dialogs/DirectoryConfigDialog', () => ({ default: () => null }))
+vi.mock('../../services/workflows/workflow-guards', () => ({ guardDirectoryGeneration: vi.fn().mockResolvedValue({ ok: true }) }))
+vi.mock('../../services/blueprint-verification-service', () => ({ generateVerificationReport: h.report }))
+vi.mock('../dialogs/DirectoryConfigDialog', () => ({ default: ({ isOpen, onConfirm }: { isOpen: boolean; onConfirm: (params: { mode: 'append' }) => void }) => isOpen ? <button onClick={() => { onConfirm({ mode: 'append' }); onConfirm({ mode: 'append' }) }}>submit directory</button> : null }))
 vi.mock('./BlueprintSortBar', () => ({ default: () => null }))
-vi.mock('../ui/Toast', () => ({ toast: { success: h.success, error: h.error, warning: vi.fn() } }))
+vi.mock('../ui/Toast', () => ({ toast: { success: h.success, error: h.error, info: h.info, warning: vi.fn() } }))
 vi.mock('../ui/Confirm', () => ({ confirm: h.confirm }))
 vi.mock('../ui/Input', () => ({ Input: (props: ComponentProps<'input'>) => { h.inputs[props.placeholder ?? 'number'] = props; return <input {...props} /> } }))
 vi.mock('../ui/Select', () => {
@@ -53,6 +53,8 @@ async function select(title: string) {
 beforeEach(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
   vi.clearAllMocks(); h.inputs = {}; h.tree.mockResolvedValue(undefined); h.volumes.mockResolvedValue(undefined); h.confirm.mockResolvedValue(true)
+  h.report.mockReturnValue({ summary: 'verification report', gaps: [], missingTitles: [], inconsistentRoles: [] })
+  h.start.mockReset().mockResolvedValue({ runId: 'run-test' })
   useProjectStore.setState({ currentProject: { id: 'a', path: '/a', novelConfig: { totalChapters: 2 } } as never, projectSession: 1 })
   handler = channel => {
     if (channel === 'db:blueprint-get-all' || channel === 'db:blueprint-get-all-sorted') return [row(1, 'First'), row(2, 'Second')]
@@ -64,6 +66,53 @@ beforeEach(() => {
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 
 describe('blueprint load/save application view', () => {
+  it('verifies the strict list without loading the next writable chapter', async () => {
+    await mount(); h.invoke.mockClear(); await click('verify.title')
+    expect(h.invoke.mock.calls.map(([channel]) => channel)).toEqual(['db:blueprint-get-all'])
+    expect(host.textContent).toContain('verification report')
+  })
+  it('discards a verification read that started before a committed delete', async () => {
+    await mount(); const pending = deferred<ReturnType<typeof row>[]>(); const base = handler
+    handler = channel => channel === 'db:blueprint-get-all' ? pending.promise : base(channel)
+    await click('verify.title'); await click('chapter.deleteChapter')
+    await flush(() => pending.resolve([row(1, 'Deleted')]))
+    expect(h.report).not.toHaveBeenCalled(); expect(host.textContent).not.toContain('verification report')
+  })
+  it('discards a verification read that started before a committed save', async () => {
+    await mount(); const pending = deferred<ReturnType<typeof row>[]>(); const base = handler
+    handler = channel => channel === 'db:blueprint-get-all' ? pending.promise : base(channel)
+    await click('verify.title'); await click('chapter.save')
+    await flush(() => pending.resolve([row(1, 'stale snapshot')]))
+    expect(h.report).not.toHaveBeenCalled(); expect(host.textContent).not.toContain('verification report')
+  })
+  it('preserves the previous report when a new verification read fails', async () => {
+    await mount(); await click('verify.title'); const base = handler
+    handler = channel => { if (channel === 'db:blueprint-get-all') throw new Error('read failed'); return base(channel) }
+    await click('verify.title')
+    expect(host.textContent).toContain('verification report')
+    expect(h.error).toHaveBeenCalledWith('verify.verifyFailed')
+  })
+  it('does not publish a verification snapshot after the same project is reopened', async () => {
+    await mount(); const pending = deferred<ReturnType<typeof row>[]>(); const base = handler
+    handler = channel => channel === 'db:blueprint-get-all' ? pending.promise : base(channel)
+    await click('verify.title'); await flush(() => useProjectStore.setState({ projectSession: 2 }))
+    await flush(() => pending.resolve([row(1, 'old project')]))
+    expect(h.report).not.toHaveBeenCalled(); expect(host.textContent).not.toContain('verification report')
+  })
+  it('provides caller lifetime protection independently of warning confirmation', async () => {
+    await mount(); await click('chapter.aiBlueprint'); await click('submit directory')
+    const options = h.start.mock.calls[0][1]
+    expect(options.isCallerCurrent()).toBe(true)
+    await flush(() => root.render(null))
+    expect(options.isCallerCurrent()).toBe(false)
+  })
+  it('serializes directory starts and shows submission only after the start receipt', async () => {
+    await mount(); const pending = deferred<{ runId: string }>(); h.start.mockReturnValue(pending.promise)
+    await click('chapter.aiBlueprint'); await click('submit directory')
+    expect(h.start).toHaveBeenCalledTimes(1); expect(h.info).not.toHaveBeenCalled()
+    await flush(() => pending.resolve({ runId: 'started' }))
+    expect(h.info).toHaveBeenCalledWith('blueprintGen.submitted')
+  })
   it('initial read failure is not presented as an empty successful list', async () => {
     handler = () => { throw new Error('offline') }
     await mount(true)

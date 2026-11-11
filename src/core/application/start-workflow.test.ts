@@ -46,6 +46,8 @@ describe('startWorkflow', () => {
     { workflow: 'config_generation', idea: '  ' },
     { workflow: 'unknown' },
     { workflow: 'fill_blueprint_gaps', gaps: [] },
+    { workflow: 'fill_blueprint_gaps', gaps: [{ missingChapterNumbers: [1, 3], gapSize: 2, context: '' }] },
+    { workflow: 'fill_blueprint_gaps', gaps: [{ missingChapterNumbers: [1, 2], gapSize: 2, context: '' }, { missingChapterNumbers: [2, 3], gapSize: 2, context: '' }] },
     { workflow: 'generate_blueprint', directory: { mode: 'full', count: 0 } },
     { workflow: 'import_novel', chapters: [] },
     { workflow: 'generate_config_field', fieldKey: 'unknown' },

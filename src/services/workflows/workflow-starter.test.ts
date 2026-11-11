@@ -15,6 +15,7 @@ let blueprintGetResult: unknown
 let draftListResult: unknown[]
 let draftGetFinalizedResult: unknown
 let draftMetaResult: unknown
+let projectCoreResult: unknown
 
 const mockInvoke = vi.fn(async (ch: string) => {
   switch (ch) {
@@ -30,6 +31,8 @@ const mockInvoke = vi.fn(async (ch: string) => {
       return draftGetFinalizedResult
     case 'db:draft-get-meta':
       return draftMetaResult
+    case 'db:project-core-get':
+      return projectCoreResult
     default:
       return null
   }
@@ -50,6 +53,7 @@ beforeEach(() => {
   draftListResult = []
   draftGetFinalizedResult = null
   draftMetaResult = null
+  projectCoreResult = null
   Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
   // 项目 fixture（guardChapterWriting / readPostProcessStatus 读取 currentProject）
   useProjectStore.setState({
@@ -80,6 +84,69 @@ beforeEach(() => {
 })
 
 describe('workflow-starter', () => {
+  it('checks directory prerequisites once and starts only after a warning is accepted', async () => {
+    projectCoreResult = { premise: 'Story premise '.repeat(8) }
+    const confirmBlueprintWarning = vi.fn().mockResolvedValueOnce(false).mockResolvedValueOnce(true)
+    const request = { workflow: 'generate_blueprint', directory: { mode: 'append', count: 3 } } as const
+    await expect(startWorkflow(request, { confirmBlueprintWarning })).rejects.toMatchObject({ code: 'ERR_CANCELLED' })
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+    expect(mockInvoke.mock.calls.filter(([channel]) => channel === 'db:project-core-get')).toHaveLength(1)
+    await expect(startWorkflow(request, { confirmBlueprintWarning })).resolves.toMatchObject({ runId: 'run-1-test' })
+    expect(confirmBlueprintWarning).toHaveBeenCalledTimes(2)
+    expect(startWorkflowMock).toHaveBeenCalledTimes(1)
+  })
+  it('does not dispatch after reopening the project during a directory warning', async () => {
+    projectCoreResult = { premise: 'Story premise '.repeat(8) }
+    const confirmBlueprintWarning = vi.fn(async () => {
+      useProjectStore.setState(state => ({ projectSession: state.projectSession + 1 }))
+      return true
+    })
+    await expect(startWorkflow({ workflow: 'generate_blueprint' }, { confirmBlueprintWarning })).rejects.toMatchObject({ code: 'ERR_GUARD' })
+    expect(confirmBlueprintWarning).toHaveBeenCalledTimes(1)
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+  })
+  it('rejects partially filled and unreadable gap snapshots before dispatch', async () => {
+    blueprintGetAll = [{ chapterNumber: 2, title: 'Existing', role: '', purpose: '', keyEvents: '', characters: [], suspenseHook: '', userGuidance: '', notes: '', notesUpdatedAt: '', sortOrder: 0, priority: 0 }]
+    const request = { workflow: 'fill_blueprint_gaps', gaps: [{ missingChapterNumbers: [1, 2], gapSize: 2, context: '' }] } as const
+    await expect(startWorkflow(request)).rejects.toMatchObject({ code: 'ERR_GUARD' })
+    blueprintGetAll = [{ chapterNumber: 2 }]
+    await expect(startWorkflow(request)).rejects.toThrow()
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+    blueprintGetAll = []
+    await expect(startWorkflow(request)).resolves.toMatchObject({ runId: 'run-1-test' })
+    expect(startWorkflowMock).toHaveBeenCalledTimes(1)
+  })
+  it.each(['generate_blueprint', 'fill_blueprint_gaps'] as const)('does not dispatch %s after its caller becomes inactive during preparation', async workflow => {
+    let current = true
+    projectCoreResult = { premise: 'Premise '.repeat(10), charactersArch: 'Characters '.repeat(10), worldbuilding: 'World '.repeat(15), synopsis: 'Synopsis '.repeat(10) }
+    characterGetAll = [{ name: 'Hero' }]
+    const base = mockInvoke.getMockImplementation()!
+    mockInvoke.mockImplementationOnce(async channel => {
+      current = false
+      return base(channel)
+    })
+    const request = workflow === 'generate_blueprint' ? { workflow } : {
+      workflow, gaps: [{ missingChapterNumbers: [1], gapSize: 1, context: 'Context' }],
+    }
+    const confirmBlueprintWarning = vi.fn().mockResolvedValue(true)
+    await expect(startWorkflow(request, { isCallerCurrent: () => current, confirmBlueprintWarning }))
+      .rejects.toMatchObject({ code: 'ERR_CANCELLED' })
+    expect(confirmBlueprintWarning).not.toHaveBeenCalled()
+    expect(startWorkflowMock).not.toHaveBeenCalled()
+  })
+  it('captures directory parameter values before awaiting warning confirmation', async () => {
+    projectCoreResult = { premise: 'Premise '.repeat(10) }
+    const factories = await import('./directory-workflow')
+    const factory = vi.spyOn(factories, 'createDirectoryWorkflow')
+    const request = { workflow: 'generate_blueprint', directory: { mode: 'append', count: 3, pacingGuidance: 'Original' } } as const
+    try {
+      await startWorkflow(request, { confirmBlueprintWarning: async () => {
+        Object.assign(request.directory, { mode: 'full', count: 99, pacingGuidance: 'Changed' })
+        return true
+      } })
+      expect(factory).toHaveBeenCalledWith({ mode: 'append', count: 3, pacingGuidance: 'Original' })
+    } finally { factory.mockRestore() }
+  })
   it('registers the captured session before onStarted returns, including for non-editor callers', async () => {
     const project = useProjectStore.getState().currentProject!
     const source = { id: project.id, path: project.path, session: useProjectStore.getState().projectSession }

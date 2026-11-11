@@ -167,6 +167,7 @@ export const workflowTexts = {
   'review.dim.continuityDesc': { 'zh-CN': '伏笔、悬念连贯', 'en-US': 'Foreshadowing and suspense continuity', 'ru-RU': 'Непрерывность предвестий и саспенса' },
   'verify.title': { 'zh-CN': '蓝图校检', 'en-US': 'Blueprint Verification', 'ru-RU': 'Проверка плана' },
   'verify.verifyFailed': { 'zh-CN': '校检失败: {error}', 'en-US': 'Verification failed: {error}', 'ru-RU': 'Проверка не удалась: {error}' },
+  'verify.gapsChanged': { 'zh-CN': '所选缺口已有蓝图，请重新校检。', 'en-US': 'Some selected chapters already have blueprints. Run verification again.', 'ru-RU': 'Для некоторых выбранных глав уже есть планы. Запустите проверку ещё раз.' },
   'verify.reverify': { 'zh-CN': '重新校验', 'en-US': 'Re-verify', 'ru-RU': 'Перепроверить' },
   'verify.verifying': { 'zh-CN': '正在校验...', 'en-US': 'Verifying...', 'ru-RU': 'Проверка...' },
   'verify.clickToStart': { 'zh-CN': '点击校验按钮开始检查蓝图完整性', 'en-US': 'Click verify button to check blueprint completeness', 'ru-RU': 'Нажмите для проверки полноты плана' },

@@ -84,7 +84,7 @@ export interface WorkflowStartPort<Definition> {
   start(definition: Definition, stepByStep?: boolean): Promise<string>
 }
 export class WorkflowStartError extends Error {
-  constructor(readonly code: 'ERR_GUARD' | 'ERR_NO_DRAFT' | 'ERR_NO_BLUEPRINT', message: string) {
+  constructor(readonly code: 'ERR_GUARD' | 'ERR_NO_DRAFT' | 'ERR_NO_BLUEPRINT' | 'ERR_CANCELLED', message: string) {
     super(message)
     this.name = 'WorkflowStartError'
   }
@@ -129,14 +129,21 @@ export async function startWorkflow<Definition>(request: WorkflowStartRequest, p
       prepared = await port.blueprint(params)
       break
     }
-    case 'fill_blueprint_gaps':
-      if (!Array.isArray(request.gaps) || !request.gaps.length || request.gaps.some(gap =>
-        !Array.isArray(gap.missingChapterNumbers) || !gap.missingChapterNumbers.length || typeof gap.context !== 'string'
-        || gap.gapSize !== gap.missingChapterNumbers.length || gap.missingChapterNumbers.some((n: number) => !Number.isSafeInteger(n) || n < 1))) {
-        throw new WorkflowValidationError('range')
+    case 'fill_blueprint_gaps': {
+      if (!Array.isArray(request.gaps) || !request.gaps.length) throw new WorkflowValidationError('range')
+      const seen = new Set<number>()
+      for (const gap of request.gaps) {
+        if (!gap || !Array.isArray(gap.missingChapterNumbers) || !gap.missingChapterNumbers.length
+          || typeof gap.context !== 'string' || gap.gapSize !== gap.missingChapterNumbers.length) throw new WorkflowValidationError('range')
+        for (const [index, chapter] of gap.missingChapterNumbers.entries()) {
+          if (!Number.isSafeInteger(chapter) || chapter < 1 || seen.has(chapter)
+            || (index > 0 && chapter !== gap.missingChapterNumbers[index - 1] + 1)) throw new WorkflowValidationError('range')
+          seen.add(chapter)
+        }
       }
       prepared = await port.fillGaps(request.gaps)
       break
+    }
     case 'generate_architecture': prepared = await port.architecture(request.architecture); break
     case 'extract_arch_characters':
       if (!request.projectPath || typeof request.characterDynamicsContent !== 'string' || typeof request.genre !== 'string') throw new WorkflowValidationError('range')

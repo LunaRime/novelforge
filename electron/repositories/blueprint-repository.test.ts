@@ -12,7 +12,7 @@ beforeEach(() => {
   db = new DatabaseSync(':memory:')
   db.exec(`CREATE TABLE blueprints (chapter_number INTEGER PRIMARY KEY, title TEXT, role TEXT,
     purpose TEXT, key_events TEXT, characters TEXT, suspense_hook TEXT, user_guidance TEXT,
-    notes TEXT, notes_updated_at TEXT, sort_order INTEGER, priority INTEGER, volume_number INTEGER,
+    notes TEXT, notes_updated_at INTEGER DEFAULT 0, sort_order INTEGER, priority INTEGER, volume_number INTEGER,
     created_at INTEGER DEFAULT 10, updated_at INTEGER DEFAULT 20)`)
   const connection = Object.assign(db, { transaction: <T>(work: () => T) => () => {
     const name = `blueprint_tx_${++serial}`
@@ -24,10 +24,25 @@ beforeEach(() => {
 })
 afterEach(() => { vi.restoreAllMocks(); db.close() })
 
+test.each(['getAll', 'getAllSorted'] as const)('%s rejects an unavailable database instead of returning an empty successful snapshot', method => {
+  vi.mocked(getProjectDb).mockReturnValue(null)
+  expect(() => method === 'getAll' ? BlueprintRepository.getAll()
+    : BlueprintRepository.getAllSorted({ key: 'chapter_number', direction: 'asc' })).toThrow()
+})
 test('upsertMany persists complete blueprint rows in one transaction', () => {
   const items = [blueprint(1), blueprint(2)]
   BlueprintRepository.upsertMany(items)
   expect(BlueprintRepository.getAll()).toEqual(items)
+})
+test('preserves numeric notes timestamps written by post-processing on the production integer column', () => {
+  BlueprintRepository.upsert({ ...blueprint(1), notes: '', notesUpdatedAt: 0 })
+  expect(BlueprintRepository.getAll()[0].notesUpdatedAt).toBe(0)
+  BlueprintRepository.updateNotes(1, 'Extracted chapter notes')
+  const saved = BlueprintRepository.getAll()[0]
+  expect(saved.notes).toBe('Extracted chapter notes')
+  expect(typeof saved.notesUpdatedAt).toBe('number')
+  expect(Number.isSafeInteger(saved.notesUpdatedAt)).toBe(true)
+  expect(saved.notesUpdatedAt).toBeGreaterThan(0)
 })
 test.each(['update', 'insert'])('rolls back the earlier %s including characters and metadata when the second row aborts', first => {
   if (first === 'update') BlueprintRepository.upsert({ ...blueprint(1), title: 'original', characters: ['Original'], priority: 9, volumeNumber: null })

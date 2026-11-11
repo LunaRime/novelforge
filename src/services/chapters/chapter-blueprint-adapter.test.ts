@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest'
-import { createRendererChapterBlueprintApplication } from './chapter-blueprint-adapter'
+import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot } from './chapter-blueprint-adapter'
 
 const { invoke, refreshFileTree, state } = vi.hoisted(() => ({ invoke: vi.fn(), refreshFileTree: vi.fn(), state: { currentProject: { id: 'a', path: '/a' }, projectSession: 1 } }))
 vi.mock('../ipc-client', () => ({ ipc: { invoke } }))
@@ -35,6 +35,16 @@ it.each([{ value: [{ chapterNumber: 1, characters: [] }] }, { value: [{ ...item,
 it.each([-1, 1.5, Number.MAX_SAFE_INTEGER, '3'])('rejects invalid finalized maximum %s', async value => {
   invoke.mockImplementation(async (channel: string) => channel === 'db:draft-get-max-finalized-chapter' ? value : [])
   await expect(createRendererChapterBlueprintApplication().load()).rejects.toThrow()
+})
+it.each([0, Date.now(), '', new Date().toISOString()])('accepts persisted notes timestamp %s without altering it', async notesUpdatedAt => {
+  invoke.mockResolvedValueOnce([{ ...item, notesUpdatedAt }])
+  const snapshot = await readChapterBlueprintSnapshot({ id: 'a', path: '/a', session: 1 })
+  expect(snapshot[0]).toMatchObject({ role: '发展', notesUpdatedAt })
+  expect(invoke.mock.calls).toEqual([['db:blueprint-get-all']])
+})
+it.each([-1, 1.5, NaN, Infinity, null, {}, false])('rejects malformed notes timestamps %s', async notesUpdatedAt => {
+  invoke.mockResolvedValueOnce([{ ...item, notesUpdatedAt }])
+  await expect(readChapterBlueprintSnapshot({ id: 'a', path: '/a', session: 1 })).rejects.toThrow()
 })
 it('uses single IPC writes and requires explicit success before refreshing', async () => {
   const app = createRendererChapterBlueprintApplication(); await app.saveOne(item); await app.saveAll([item])
