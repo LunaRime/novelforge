@@ -63,6 +63,39 @@ describe('renderer document opening adapter', () => {
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:7', content: 'local unsaved', dirty: true, inlineSession: before.inlineSession })
   })
 
+  it('opens exact versions by draft ID, including a successful empty document', async () => {
+    invoke.mockResolvedValueOnce({ content: '' }).mockResolvedValueOnce({ content: 'branch text' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 7, name: 'Chapter 2 v3' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 8, name: 'Chapter 2 v3' })
+    expect(invoke.mock.calls).toEqual([['db:draft-get-full', 7], ['db:draft-get-full', 8]])
+    expect(useEditorStore.getState().tabs).toMatchObject([
+      { id: 'doc:7', docId: 7, filePath: 'vela://draft/7', content: '' },
+      { id: 'doc:8', docId: 8, filePath: 'vela://draft/8', content: 'branch text' },
+    ])
+  })
+
+  it('keeps clean inline content when opening an exact version already in the editor', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', docId: 7, filePath: 'vela://draft/7', type: 'chapter', name: 'Old', content: 'local' })
+    editor.beginInlineSession('doc:7', { sessionId: 'inline', sourceKind: 'selection', baseDocSnapshot: 'local', hunks: [], decisions: {} })
+    invoke.mockResolvedValue({ content: 'database text' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 7, name: 'Selected version' })
+    expect(useEditorStore.getState().tabs).toMatchObject([
+      { id: 'doc:7', content: 'local', name: 'Selected version', inlineSession: { sessionId: 'inline' } },
+    ])
+  })
+
+  it('distinguishes a missing exact draft from failure and drops a late same-path response', async () => {
+    const request = { kind: 'draft', draftId: 7, name: 'Draft' } as const
+    invoke.mockResolvedValueOnce(null)
+    await expect(openRendererEditorDocument(request)).resolves.toEqual({ status: 'missing' })
+    invoke.mockRejectedValueOnce(new Error('read failed'))
+    await expect(openRendererEditorDocument(request)).rejects.toThrow('read failed')
+    invoke.mockImplementationOnce(async () => { state.projectSession++; return { content: 'old' } })
+    await expect(openRendererEditorDocument(request)).rejects.toBeInstanceOf(EditorOpenScopeChanged)
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
   it('architecture reopening also preserves unsaved text', async () => {
     useEditorStore.getState().openFile({ id: 'vela://core/premise', filePath: 'vela://core/premise', type: 'arch-file', name: 'Premise', content: 'old' })
     useEditorStore.getState().updateTabContent('vela://core/premise', 'local')

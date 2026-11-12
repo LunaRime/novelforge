@@ -801,6 +801,10 @@ export interface DatabaseChannels {
   'db:draft-get-all-chapter-numbers': { args: []; return: number[] }
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
+  'db:draft-archive': {
+    args: [input: { projectPath: string; draftId: number; chapterNumber: number }]
+    return: { success: true; updatedAt: number } | { success: false; error: string }
+  }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number]; return: { success: boolean; error?: string } }
   'db:draft-apply-content': { args: [params: { draftId: number; expectedHash: string; expectedUpdatedAt: number; content: string; wordCount: number }]; return: { success: boolean; conflict?: boolean; currentHash?: string; currentUpdatedAt?: number; error?: string } }
   'db:draft-snapshot-create': { args: [params: { chapterNumber: number; draftId: number; branchId?: number | null; label?: string; kind: 'auto' | 'manual' | 'pre-agent' | 'pre-restore' | 'branch-base'; content: string; contentHash: string; wordCount: number; createdBy: 'user' | 'agent' | 'system' }]; return: { success: boolean; id?: number; error?: string } }

@@ -8,7 +8,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
-import { useDraftStore } from '../../../stores/draft-store'
+import { draftListScope, useDraftStore, type DraftsByChapter } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMemoryStore } from '../../../stores/memory-store'
@@ -18,6 +18,7 @@ import { Button } from '../../ui/Button'
 import CountBadge from '../../ui/CountBadge'
 import { EmptyState } from '../../ui/EmptyState'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { renderLog } from '../../../services/render-logger'
 
 import {
   getArchFiles, renderIcon, showSidebarMenu,
@@ -29,9 +30,12 @@ import BinderVolumeGroup from './BinderVolumeGroup'
 import PublicationGroup from './PublicationGroup'
 import SidebarGroup from './SidebarGroup'
 
+const emptyDrafts: DraftsByChapter = {}
+
 export default function ProjectTree() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const scope = useProjectStore(s => s.loading ? null : draftListScope(s))
 
   // refreshFileTree / loadAllDrafts 在 refreshAll 内通过 getState() 调用
   // ✅ 只订阅「工作流状态派生 key」（步骤 status 组合）——工作流运行期间
@@ -40,7 +44,7 @@ export default function ProjectTree() {
   const workflowKey = useWorkflowStore(s =>
     s.activeRuns.map(r => `${r.id}:${r.status}|${r.steps.map(st => st.status).join(',')}`).join(';'))
   // ✅ 精确订阅，避免 loadAllDrafts 执行后引用变化触发 useCallback/useEffect 循环
-  const draftsByChapter = useDraftStore(s => s.draftsByChapter)
+  const draftsByChapter = useDraftStore(s => scope && s.draftsScope === scope ? s.draftsByChapter : emptyDrafts)
 
   // 存储各架构文件是否有实际内容（已生成）
   const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
@@ -52,9 +56,11 @@ export default function ProjectTree() {
   /** 统一刷新：文件树 + 架构状态 + 草稿列表 + 蓝图数量 */
   // ✅ 用 getState() 获取最新的 action，不作为依赖项，避免重建导致 useEffect 循环
   const refreshAll = useCallback(async () => {
-
+    const source = useProjectStore.getState()
+    const refreshScope = draftListScope(source)
+    if (!refreshScope || source.loading) return
     useProjectStore.getState().refreshFileTree()
-    useDraftStore.getState().loadAllDrafts()
+    void useDraftStore.getState().loadAllDrafts().catch(error => renderLog('warn', 'Load:DraftBox', String(error)))
     useMemoryStore.getState().load() // 记忆文件（定稿/失效标记后刷新列表与 stale 徽标）
     // 通过 Service 层获取架构状态和蓝图数量（避免直接 IPC）
     const { checkArchStatus, getBlueprintCount } = await import('../../../services/architecture-service')
@@ -64,6 +70,8 @@ export default function ProjectTree() {
       ipc.invoke('world:entity-list').catch(() => []),
       ipc.invoke('timeline:event-list').catch(() => []),
     ])
+    const current = useProjectStore.getState()
+    if (current.loading || draftListScope(current) !== refreshScope) return
     setArchStatus(status)
     setBlueprintCount(count)
     setWorldCounts({ entities: entities.length, events: events.length })
@@ -73,14 +81,14 @@ export default function ProjectTree() {
   // 项目切换时刷新
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (currentProject) refreshAll()
-  }, [currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不每次都需重跑
+    if (scope) void refreshAll()
+  }, [scope, refreshAll])
 
   // 工作流步骤状态或整体状态变化时刷新侧边栏（适配多任务）
   // 合并为单一 effect + 防抖，避免一次步骤完成同时触发多次刷新
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!currentProject) return
+    if (!scope) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       refreshAll()
@@ -88,9 +96,7 @@ export default function ProjectTree() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-    // ✅ 依赖 path 字符串而非 currentProject 对象引用
-    //    避免 updateNovelConfig 改变对象引用后触发不必要的 refreshAll
-  }, [workflowKey, currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不触发，仅 path 变化需响应
+  }, [workflowKey, scope, refreshAll])
 
   if (!currentProject) {
     return (
@@ -273,7 +279,7 @@ export default function ProjectTree() {
       <PublicationGroup projectPath={p} />
 
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
-      <DraftBoxGroup draftsByChapter={draftsByChapter} />
+      <DraftBoxGroup />
 
       {/* 5. 正文章节 — 仅显示已定稿 */}
       <ManuscriptGroup files={manuscriptFiles} projectPath={p} />

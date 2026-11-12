@@ -2,10 +2,11 @@ import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { loadProjectCustomPrompts, clearProjectCustomPrompts } from '../services/prompt-templates'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
-import { alertError } from '../components/ui/Confirm'
+import { alertError, confirm } from '../components/ui/Confirm'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { t } from '../shared/locale'
+import { useEditorStore } from './editor-store'
 
 /**
  * 从 currentProject 中提取纯净的 ProjectData 字段，
@@ -38,6 +39,27 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 // 延迟导入 ProjectService，避免循环依赖
 let _onProjectOpened: (() => Promise<void>) | null = null
 let _onProjectClosed: (() => void) | null = null
+let openingProject = false
+let creatingProject = false
+type EditorTabsSnapshot = Pick<ReturnType<typeof useEditorStore.getState>, 'tabs' | 'activeTabId' | 'activeCharCount'>
+
+async function confirmEditorTabSwitch(): Promise<EditorTabsSnapshot | false> {
+  const protectedTabs = useEditorStore.getState().tabs.filter(tab => tab.dirty || tab.inlineSession)
+  if (protectedTabs.length) {
+    const accepted = await confirm(t('project.switchDiscardConfirm'), {
+      title: t('dialog.unsavedTitle'), confirmText: t('project.discardAndSwitch'), danger: true,
+    })
+    if (!accepted) return false
+    const latest = useEditorStore.getState().tabs
+    if (latest.some(tab => (tab.dirty || tab.inlineSession) && !protectedTabs.includes(tab))) {
+      toast.warning(t('project.switchEditsChanged'))
+      return false
+    }
+  }
+  const { tabs, activeTabId, activeCharCount } = useEditorStore.getState()
+  return { tabs, activeTabId, activeCharCount }
+}
+
 async function callProjectOpened() {
   if (!_onProjectOpened) {
     const { onProjectOpened } = await import('../services/project-service')
@@ -110,9 +132,24 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   configFieldVersions: {},
 
   createProject: async (config) => {
-    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
+    if (creatingProject || openingProject) return false
+    creatingProject = true
+    const source = get()
+    let session: number | undefined
+    let detachedTabs: EditorTabsSnapshot | undefined
+    let opened = false
+    let handedOff = false
     try {
+      if (source.currentProject) {
+        const tabs = await confirmEditorTabSwitch()
+        if (!tabs || get().projectSession !== source.projectSession) return false
+        detachedTabs = tabs
+      }
+      session = get().projectSession + 1
+      set({ loading: true, projectSession: session })
+      if (detachedTabs) useEditorStore.getState().clearTabs()
       const result = await ipc.invoke('project:create', config)
+      if (get().projectSession !== session) return false
       if (!result.success) {
         console.error('[Project] 创建失败:', result.error)
         alertError(result.error ?? t('status.unknown'), { title: t('dialog.createFailed') })
@@ -121,13 +158,23 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       // 使用主进程返回的实际项目路径（跨平台安全，避免路径分隔符问题）
       const projectDir = result.projectPath ?? `${config.path}/${config.name}`
       // keepView：新建/导入后保持当前视图（home），让方块列表立即显示新项目
-      return get().openProject(projectDir, { keepView: true })
+      handedOff = true
+      creatingProject = false
+      opened = await get().openProject(projectDir, { keepView: true })
+      return opened
     } catch (e) {
       console.error('[Project] createProject 异常:', e)
       alertError(String(e), { title: t('dialog.createError') })
       return false
     } finally {
-      set({ loading: false })
+      if (!handedOff) creatingProject = false
+      if (session !== undefined && get().projectSession === session) {
+        if (!opened && detachedTabs) useEditorStore.setState(detachedTabs)
+        set({ loading: false })
+      } else if (handedOff && !opened && detachedTabs && session !== undefined
+        && get().projectSession === session + 1 && get().currentProject === source.currentProject) {
+        useEditorStore.setState(detachedTabs)
+      }
     }
   },
 
@@ -140,10 +187,25 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       toast.warning(t('tip.characterSaving'))
       return false
     }
-    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
+    if (openingProject || creatingProject) return false
+    openingProject = true
+    let session: number | undefined
+    let detachedTabs: EditorTabsSnapshot | undefined
+    let opened = false
     try {
+      const source = get()
+      if (source.currentProject && source.currentProject.path !== projectPath) {
+        const tabs = await confirmEditorTabSwitch()
+        if (!tabs || get().projectSession !== source.projectSession) return false
+        detachedTabs = tabs
+      }
+      session = get().projectSession + 1
+      set({ loading: true, projectSession: session })
+      if (detachedTabs) useEditorStore.getState().clearTabs()
       const result = await ipc.invoke('project:open', projectPath)
+      if (get().projectSession !== session) return false
       if (result.success && result.project) {
+        opened = true
         // 切换项目时清空配置快照——旧项目的快照不得跨项目残留（否则撤销会用 A 的快照覆盖 B）
         set({ currentProject: result.project, configSnapshot: null, configFieldVersions: {} })
         // 加载项目级 Prompt 覆盖（此前仅在设置页挂载时加载——未打开设置页时覆盖静默失效；
@@ -180,7 +242,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       alertError(String(e), { title: t('dialog.openError') })
       return false
     } finally {
-      set({ loading: false })
+      openingProject = false
+      if (session !== undefined && get().projectSession === session) {
+        if (!opened && detachedTabs) useEditorStore.setState(detachedTabs)
+        set({ loading: false })
+      }
     }
   },
 
@@ -266,7 +332,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // 统一清空 Layer 2 Store + 编辑器 Tab
     callProjectClosed()
     clearProjectCustomPrompts()
-    set({ currentProject: null, fileTree: [], configSnapshot: null, configFieldVersions: {} })
+    set({ currentProject: null, fileTree: [], loading: false, configSnapshot: null, configFieldVersions: {} })
   },
 
   updateCharacterStates: async (states) => {

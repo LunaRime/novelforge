@@ -315,6 +315,15 @@ export function registerDatabaseController() {
     }
   })
 
+  guardedHandle('db:draft-archive', async (_event, input: { projectPath: string; draftId: number; chapterNumber: number }) => {
+    try {
+      const archived = DraftRepository.archive(input.projectPath, input.draftId, input.chapterNumber)
+      return archived ? { success: true, ...archived } : { success: false, error: t('draftbox.archiveRejected') }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
   guardedHandle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number) => {
     try {
       return commitDatabaseDraft({ draftId: id, content, wordCount, actor: 'user' })

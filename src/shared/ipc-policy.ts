@@ -156,6 +156,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:draft-branch-merge': { authority: 'write-project' },
   'db:draft-branch-archive': { authority: 'write-project' },
   'db:draft-update-status': { authority: 'write-project' },
+  'db:draft-archive': { authority: 'destructive' },
   'db:evaluation-create': { authority: 'write-project' },
   'db:evaluation-list-by-draft': { authority: 'read-project' },
   'db:get-daily-activity': { authority: 'read-project' },

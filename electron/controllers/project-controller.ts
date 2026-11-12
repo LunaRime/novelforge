@@ -7,12 +7,11 @@ import Database from 'better-sqlite3'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectDataDir } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
-import { getProjectDb, getCurrentProjectPath } from '../database'
+import { closeProjectDatabase, getProjectDb, getCurrentProjectPath, initProjectDatabase } from '../database'
 import { grantDirectory, assertPathAllowedForIpc } from './fs-controller'
 import { ProjectData } from '../../src/shared/ipc-channels'
 import type { ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
-import { initProjectDatabase } from '../database'
 import { ProjectCoreRepository } from '../repositories/project-core-repository'
 import { guardedHandle } from '../security/ipc-guard'
 
@@ -45,11 +44,23 @@ function removeRecentProject(projectPath: string) {
   writeJsonFile(RECENT_PROJECTS_PATH, filtered)
 }
 
+function restoreProjectDatabase(previousPath: string | null): void {
+  if (getCurrentProjectPath() === previousPath && (previousPath === null || getProjectDb())) return
+  try {
+    if (previousPath) initProjectDatabase(previousPath)
+    else closeProjectDatabase()
+  } catch (error) {
+    closeProjectDatabase()
+    logger.error('DB', t('log.db.openFailed').replace('{err}', () => String(error)))
+  }
+}
+
 export function registerProjectController() {
   // 创建新项目
   guardedHandle('project:create', async (_event, config: {
     name: string; path: string; genre: string; targetAudience: string
   }) => {
+    const previousPath = getCurrentProjectPath()
     try {
       const projectId = randomUUID()
       const projectDir = path.join(config.path, config.name)
@@ -99,11 +110,15 @@ export function registerProjectController() {
       return { success: true, projectId, projectPath: projectDir }
     } catch (error) {
       return { success: false, projectId: '', error: safeErrorMessage(error) }
+    } finally {
+      // Creation initializes the new database. The renderer opens it separately after creation succeeds.
+      restoreProjectDatabase(previousPath)
     }
   })
 
   // 打开现有项目
   guardedHandle('project:open', async (_event, projectPath: string) => {
+    const previousPath = getCurrentProjectPath()
     try {
       if (!fs.existsSync(projectPath)) {
         return { success: false, project: null, error: t('error.dirNotFound') }
@@ -124,6 +139,7 @@ export function registerProjectController() {
       // 组装返回给前端的数据结构
       const updatedCoreData = ProjectCoreRepository.get()
       if (!updatedCoreData) {
+        restoreProjectDatabase(previousPath)
         return { success: false, project: null, error: t('error.projectConfigReadFailed') }
       }
       const projectData: ProjectData = {
@@ -156,6 +172,7 @@ export function registerProjectController() {
 
       return { success: true, project: projectData }
     } catch (error) {
+      restoreProjectDatabase(previousPath)
       return { success: false, project: null, error: safeErrorMessage(error) }
     }
   })

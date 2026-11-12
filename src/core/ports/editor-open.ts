@@ -1,6 +1,7 @@
 export interface EditorOpenScope { projectId: string | null; projectPath: string | null; session: number }
 export type EditorOpenRequest =
   | { kind: 'latest-draft'; chapterNumber: number; chapterTitle?: string }
+  | { kind: 'draft'; draftId: number; name: string }
   | { kind: 'path'; locator: string; name: string; documentKind: 'chapter' | 'arch-file' }
 export interface OpenedEditorDocument {
   id: string

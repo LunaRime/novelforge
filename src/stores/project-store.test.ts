@@ -7,14 +7,17 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useProjectStore } from './project-store'
+import { useEditorStore } from './editor-store'
 import type { ProjectData } from '../shared/ipc-channels'
 import { ipc } from '../services/ipc-client'
+import { confirm } from '../components/ui/Confirm'
 
 vi.mock('../services/ipc-client', () => ({
   ipc: { invoke: vi.fn().mockResolvedValue(true) },
 }))
 vi.mock('./character-store', () => ({ useCharacterStore: { getState: () => ({ saving: false }) } }))
 vi.mock('../services/project-service', () => ({ onProjectClosed: vi.fn(), onProjectOpened: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../components/ui/Confirm', () => ({ confirm: vi.fn(), alertError: vi.fn() }))
 
 const BASE: ProjectData = {
   id: 'p1',
@@ -40,6 +43,8 @@ const BASE: ProjectData = {
 }
 
 beforeEach(() => {
+  vi.mocked(confirm).mockReset()
+  useEditorStore.getState().clearTabs()
   useProjectStore.setState({
     currentProject: structuredClone(BASE),
     configSnapshot: null,
@@ -51,6 +56,68 @@ afterEach(() => {
 })
 
 describe('project-store 快照机制（线③）', () => {
+  it('confirms protected edits before project creation can change the database connection', async () => {
+    useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old', dirty: true })
+    vi.mocked(confirm).mockResolvedValue(false)
+    vi.mocked(ipc.invoke).mockClear()
+    const request = { name: 'New', path: '/books', genre: '玄幻', targetAudience: '' }
+    expect(await useProjectStore.getState().createProject(request)).toBe(false)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(ipc.invoke).not.toHaveBeenCalledWith('project:create', request)
+    expect(useEditorStore.getState().tabs[0]?.content).toBe('old')
+  })
+
+  it('restores edits if the newly created project cannot be opened', async () => {
+    useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old', dirty: true })
+    vi.mocked(confirm).mockResolvedValue(true)
+    vi.mocked(ipc.invoke).mockImplementation(async (...[channel]) => (channel === 'project:create'
+      ? { success: true, projectPath: '/books/New' }
+      : { success: false, error: 'open failed' }) as never)
+    const request = { name: 'New', path: '/books', genre: '玄幻', targetAudience: '' }
+    expect(await useProjectStore.getState().createProject(request)).toBe(false)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(useProjectStore.getState().currentProject?.path).toBe('/test')
+    expect(useEditorStore.getState().tabs[0]?.content).toBe('old')
+  })
+  it('asks before switching away from protected tabs and keeps them if cancelled', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old', dirty: true })
+    vi.mocked(confirm).mockResolvedValue(false)
+    vi.mocked(ipc.invoke).mockClear()
+    expect(await useProjectStore.getState().openProject('/other', { keepView: true })).toBe(false)
+    expect(confirm).toHaveBeenCalledTimes(1)
+    expect(ipc.invoke).not.toHaveBeenCalledWith('project:open', '/other')
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:7', content: 'old', dirty: true })
+  })
+
+  it('does not expose old inline content while switching to a project with the same draft ID', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old' })
+    editor.beginInlineSession('doc:7', { sessionId: 'old', sourceKind: 'selection', baseDocSnapshot: 'old', hunks: [], decisions: {} })
+    vi.mocked(confirm).mockResolvedValue(true)
+    const tabsAtOpen: unknown[] = []
+    vi.mocked(ipc.invoke).mockImplementation(async (...[channel]) => {
+      if (channel === 'project:open') {
+        tabsAtOpen.push(...useEditorStore.getState().tabs)
+        return { success: true, project: { ...BASE, path: '/other' } } as never
+      }
+      return (channel === 'fs:list-dir' ? [] : { success: true }) as never
+    })
+    expect(await useProjectStore.getState().openProject('/other', { keepView: true })).toBe(true)
+    expect(tabsAtOpen).toEqual([])
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'New', content: 'other project' })
+    expect(useEditorStore.getState().tabs[0].content).toBe('other project')
+  })
+
+  it('restores the original tabs when the project cannot be opened', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old', dirty: true })
+    vi.mocked(confirm).mockResolvedValue(true)
+    vi.mocked(ipc.invoke).mockResolvedValue({ success: false, error: 'missing project' } as never)
+    expect(await useProjectStore.getState().openProject('/missing', { keepView: true })).toBe(false)
+    expect(useProjectStore.getState().currentProject?.path).toBe('/test')
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:7', content: 'old', dirty: true })
+  })
   it.each(['another project', 'same path reopened'])('does not publish a late file tree after switching to %s', async mode => {
     let resolveTree!: (value: unknown) => void
     vi.mocked(ipc.invoke).mockImplementation((...args: unknown[]) => args[0] === 'fs:list-dir'
