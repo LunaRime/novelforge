@@ -69,10 +69,10 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
     let params: DirectoryWorkflowParams
 
     if (rangeMode === 'full') {
-      params = { mode: overwriteMode === 'full' ? 'full' : 'append', count: 0 }
+      params = { mode: overwriteMode === 'full' ? 'full' : 'append', expectedTotalChapters: total }
     } else if (rangeMode === 'front') {
       if (existingCount > 0 && overwriteMode === 'append') {
-        params = { mode: 'append', startChapter: existingCount + 1, count: Number(frontN) || 50 }
+        params = { mode: 'append', count: Number(frontN) || 50 }
       } else {
         params = { mode: 'full', count: Number(frontN) || 50 }
       }
@@ -238,7 +238,7 @@ export default function DirectoryConfigDialog({ isOpen, onClose, existingCount, 
                 <RadioOption
                   checked={overwriteMode === 'append'}
                   onChange={() => setOverwriteMode('append')}
-                  label={t('blueprintGen.append').replace('{n}', String(existingCount + 1))}
+                  label={t('blueprintGen.append')}
                 />
                 <RadioOption
                   checked={overwriteMode === 'full'}

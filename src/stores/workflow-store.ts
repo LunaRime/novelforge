@@ -335,9 +335,13 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
 
   cancelWorkflow: (runId) => {
     if (runId) {
+      const ctx = activeContexts.get(runId)
+      if (ctx?.finalCommitStarted) {
+        get().addLog('info', t('log.workflow.finishingCommit'))
+        return
+      }
       restoredWaitingDefinitions.delete(runId)
       // 取消指定工作流
-      const ctx = activeContexts.get(runId)
       if (ctx) ctx.cancelled = true
       // 如果在步进等待，解除 Promise
       const resolve = continueResolveRefs.get(runId)
@@ -366,31 +370,35 @@ export const useWorkflowStore = create<WorkflowState>()((set, get) => ({
       saveCheckpoint(get())
     } else {
       // 取消全部
-      const allRunIds = get().activeRuns.map(r => r.id)
+      const activeRuns = get().activeRuns
+      const committingIds = new Set(activeRuns.filter(run => activeContexts.get(run.id)?.finalCommitStarted).map(run => run.id))
+      const cancelledIds = activeRuns.filter(run => !committingIds.has(run.id)).map(run => run.id)
       for (const [id, ctx] of activeContexts) {
+        if (committingIds.has(id)) continue
         ctx.cancelled = true
         const resolve = continueResolveRefs.get(id)
         if (resolve) { resolve(); continueResolveRefs.delete(id) }
       }
       set(s => {
-        const cancelledRuns = s.activeRuns.map(r => ({
+        const cancelledRuns = s.activeRuns.filter(run => !committingIds.has(run.id)).map(r => ({
           ...r, status: 'failed' as const, completedAt: new Date().toISOString(),
         }))
+        const remaining = s.activeRuns.filter(run => committingIds.has(run.id))
         return {
-          activeRuns: [],
+          activeRuns: remaining,
           waitingRuns: {},
           history: [...cancelledRuns, ...s.history].slice(0, 50),
-          currentRun: null,
-          waitingForConfirm: false,
-          waitingAfterStepIndex: -1,
+          ...computeCompat(remaining, {}),
         }
       })
-      get().addLog('warn', '[Cancel] All workflows cancelled')
+      if (committingIds.size) get().addLog('info', t('log.workflow.finishingCommit'))
+      else get().addLog('warn', '[Cancel] All workflows cancelled')
       resumeContextData.clear()
       restoredWaitingDefinitions.clear()
-      clearCheckpoint()
+      if (committingIds.size) saveCheckpoint(get())
+      else clearCheckpoint()
       // M2：取消全部 = 逐个任务级清理（被取消 run 的输出文件不再保留）
-      for (const id of allRunIds) deleteRunOutput(id)
+      for (const id of cancelledIds) deleteRunOutput(id)
     }
   },
 

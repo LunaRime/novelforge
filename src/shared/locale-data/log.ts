@@ -217,6 +217,7 @@ export const logTexts = {
   'log.dirReadingArch': { 'zh-CN': '读取项目架构信息...', 'en-US': 'Reading project architecture...', 'ru-RU': 'Чтение архитектуры проекта...' },
   'log.dirExistingLoaded': { 'zh-CN': '已加载 {n} 章已有蓝图', 'en-US': 'Loaded {n} existing blueprints', 'ru-RU': 'Загружено существующих блюпринтов: {n}' },
   'log.dirSaving': { 'zh-CN': '保存蓝图到数据库...', 'en-US': 'Saving blueprints to the database...', 'ru-RU': 'Сохранение блюпринтов в БД...' },
+  'log.workflow.finishingCommit': { 'zh-CN': '蓝图已开始提交，正在等待保存结果。', 'en-US': 'The blueprint commit has started. Waiting for the save result.', 'ru-RU': 'Запись блюпринтов началась. Ожидание результата сохранения.' },
   'log.dirKeepOld': { 'zh-CN': '  ⚠️ 第 {n} 章旧蓝图保留（有关联草稿）', 'en-US': '  ⚠️ Old blueprint for Ch.{n} kept (linked drafts exist)', 'ru-RU': '  ⚠️ Старый блюпринт гл.{n} сохранён (есть связанные черновики)' },
   'log.dirCoverageWarn': { 'zh-CN': '  ⚠️ 新蓝图仅覆盖 {percent}% 章节（{new}/{old}），保留全部旧蓝图防止数据丢失', 'en-US': '  ⚠️ New blueprints cover only {percent}% of chapters ({new}/{old}) — keeping all old blueprints to prevent data loss', 'ru-RU': '  ⚠️ Новые блюпринты покрывают лишь {percent}% глав ({new}/{old}) — старые сохранены во избежание потери данных' },
   'log.refreshProject': { 'zh-CN': '🔄 正在刷新项目数据...', 'en-US': '🔄 Refreshing project data...', 'ru-RU': '🔄 Обновление данных проекта...' },

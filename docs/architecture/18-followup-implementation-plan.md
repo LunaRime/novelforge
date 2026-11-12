@@ -2,7 +2,7 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核；明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88，B3 为 bbb479e；C1a 为 632ac52；C1b 为 288773d。C1c 蓝图手动删除已本地实施，下一批为 C1d，详见 [19](19-knowledge-overview-application.md)、[20](20-architecture-document-application-plan.md)、[21](21-novel-config-application-plan.md) 、[22](22-architecture-overview-application-plan.md) 、[23](23-blueprint-load-save-application-plan.md) 、[24](24-binder-application-plan.md) 和 [26](26-blueprint-delete-application-plan.md)。第九至十二节补齐 B–F 的拆分、证据与准入条件。进入 B–F 各批前仍须核对当时源码并补写独立实施细则，不以本文替代数据迁移专项设计。
+执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb。[C1f 目录蓝图生成写入](29-directory-blueprint-write-plan.md) 已通过本地验收，下一批为草稿列表。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
@@ -259,7 +259,7 @@ git status --short package.json
 
 ### C1：章节蓝图与草稿列表命令
 
-C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。C1b 活页夹重排及其实际成员/顺序投影也已完成，见 [24](24-binder-application-plan.md)，沿用现有主进程事务并补真实 SQLite 失败回滚证据。C1c 手动删除已通过共享写锁、失败保留编辑和同路径重开验证，见 [26](26-blueprint-delete-application-plan.md)。C1d 目录生成入口、补缺口与校检已完成及通过 118 条相关回归，见 [27](27-blueprint-generation-verification-plan.md)；2026-11-11 完整 335 文件/3,702 条测试、标准生产构建与公开产物审计已通过本地验收。C1e 执行期补缺口仅插入事务及必要的自动/等待断点恢复来源保护已完成，见 [28](28-blueprint-gap-insert-only-plan.md)，最终338文件/3,749条测试和全部本地门禁通过。工作流full/append生成内部写入、批量清理与快照冲突协议及草稿列表继续专项验收，整个C1尚未完成。
+C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和既有批量事务的真实 SQLite 回滚验证，见 [23 实施记录](23-blueprint-load-save-application-plan.md)。C1b 活页夹重排及其实际成员/顺序投影也已完成，见 [24](24-binder-application-plan.md)，沿用现有主进程事务并补真实 SQLite 失败回滚证据。C1c 手动删除已通过共享写锁、失败保留编辑和同路径重开验证，见 [26](26-blueprint-delete-application-plan.md)。C1d 目录生成入口、补缺口与校检已完成及通过 118 条相关回归，见 [27](27-blueprint-generation-verification-plan.md)；2026-11-11 完整 335 文件/3,702 条测试、标准生产构建与公开产物审计已通过本地验收。C1e 执行期补缺口仅插入事务及必要的自动/等待断点恢复来源保护已完成，见 [28](28-blueprint-gap-insert-only-plan.md)，最终338文件/3,749条测试和全部本地门禁通过。
 
 **现有入口**：`src/components/editor/ChapterCardEditor.tsx`、`src/components/panels/sidebar/DraftBoxGroup.tsx`、`src/stores/draft-store.ts`。两组件分别接线验收；第一小批只抽蓝图加载/保存，排序、卷归属、删除和生成逐项追加。
 
@@ -268,6 +268,7 @@ C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和
 - [ ] 对照现有蓝图服务/仓储列出单项和批量保存、排序、卷归属、删除、补缺口生成的全部调用者；确定每项是原子命令还是独立操作。
 - [ ] 先测保存返回失败、批量中间项失败、切项目、保存中新编辑和删除失败保留选中项；定稿相关限制沿用现有规则。
 - [x] 活页夹排序/卷归属沿用主进程单事务，C1b 已验证关联顺序/卷区间中途失败整体回滚；本批无新增 IPC。
+- [x] C1f 按 [29](29-directory-blueprint-write-plan.md) 接入目录生成原子提交、范围快照冲突及断点失效处理，342 文件、3,785 条测试通过。
 - [ ] 草稿列表复用既有打开文档和修稿合并用例；不重建以章号为身份的草稿标签，不在蓝图读失败时创建空草稿补位。
 - [ ] 每项完成后跑对应组件、应用用例、主进程事务测试；一项门禁失败时不继续叠加下一项。
 
@@ -361,4 +362,4 @@ F 只在 E 验证包和 D 出口全部通过后进入；开始前另写迁移/�
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
 - [x] 补充计划时所有实现均未开展；后续 A 与 B1–B3 的实际实施项已按记录勾选。C1a 加载/保存、C1b 活页夹与 C1c 手动删除已按 23、24、26 完成；C1 其余、C2–F 与真实副本/打包验收仍未实施。
 
-A/B1/B2/B3 与 C1a–C1c 本地实施后，下一批从 C1d 开始。C–F 本次补充的是任务边界与验收要求；各批独立计划还须给出当时的确切签名、失败测试及执行命令，不能跳过该步直接开展存储迁移。
+A、B1–B3 与 C1a–C1f 已本地实施。C1 剩余草稿列表接入。C–F 的其他批次按各自的任务边界和准入条件推进。

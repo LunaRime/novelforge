@@ -377,6 +377,7 @@ export const workflowTexts = {
   'workflow.archLoadedCount': { 'zh-CN': '架构加载完成（{n} 段）', 'en-US': 'Architecture loaded ({n} segments)', 'ru-RU': 'Архитектура загружена ({n} фрагментов)' },
   'workflow.dirGeneratedCount': { 'zh-CN': '已生成 {n} 章蓝图', 'en-US': 'Generated {n} chapter blueprints', 'ru-RU': 'Сгенерировано блюпринтов глав: {n}' },
   'workflow.dirSaved': { 'zh-CN': '已保存蓝图', 'en-US': 'Blueprints saved', 'ru-RU': 'Блюпринты сохранены' },
+  'workflow.dirNoNewBlueprints': { 'zh-CN': '计划范围内没有需要追加的章节', 'en-US': 'There are no chapters to append within the planned range', 'ru-RU': 'В запланированном диапазоне нет глав для добавления' },
   'workflow.bookPipelineTitle': { 'zh-CN': '📚 整本流水线（第{start}–{end}章）', 'en-US': '📚 Book pipeline (Ch.{start}–{end})', 'ru-RU': '📚 Конвейер книги (гл.{start}–{end})' },
   'workflow.bookPipelineWrite': { 'zh-CN': '第{n}章 · 写稿', 'en-US': 'Ch.{n} · Draft', 'ru-RU': 'Гл.{n} · Написание' },
   'workflow.bookPipelineWriteDesc': { 'zh-CN': '生成第{n}章初稿；已有未定稿草稿时默认复用', 'en-US': 'Generate the Ch.{n} draft; reuse an existing unfinalized draft by default', 'ru-RU': 'Создать черновик гл.{n}; существующий нефинализированный черновик используется повторно' },

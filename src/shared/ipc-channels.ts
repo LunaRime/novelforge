@@ -4,6 +4,7 @@
  */
 import type { LLMProtocol } from './llm-protocols'
 import type { RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
+import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot } from '../core'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
 import type { ModelOverrides } from './provider-accounts'
@@ -733,6 +734,11 @@ import type { PublicationEntry } from '../../electron/repositories/publication-r
 import type { HealthStatus } from '../../electron/controllers/health-check'
 
 // ===== 数据库操作 =====
+export interface DirectorySnapshotRead {
+  snapshot: DirectoryWriteSnapshot
+  existingBlueprints: BlueprintData[]
+}
+
 export interface DatabaseChannels {
   'db:close': { args: []; return: { success: boolean } }
 
@@ -743,6 +749,8 @@ export interface DatabaseChannels {
   // 2. blueprints
   'db:blueprint-write-scope': { args: []; return: BlueprintWriteScope }
   'db:blueprint-insert-missing': { args: [input: MissingBlueprintInput<BlueprintData>]; return: MissingBlueprintResult }
+  'db:blueprint-directory-snapshot': { args: [request: DirectorySnapshotRequest]; return: DirectorySnapshotRead }
+  'db:blueprint-directory-commit': { args: [input: DirectoryWriteInput]; return: DirectoryWriteResult }
   'db:blueprint-get-all': { args: []; return: BlueprintData[] }
   'db:blueprint-get-all-sorted': { args: [config: { key: string; direction: string }]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }

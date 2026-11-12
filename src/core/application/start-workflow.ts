@@ -1,3 +1,5 @@
+import type { DirectorySnapshotRequest } from './directory-blueprint-write'
+
 export type ChapterWorkflow = 'generate_draft' | 'review' | 'refine' | 'finalize'
 export interface ChapterCreation {
   chapterNumber: number
@@ -34,10 +36,7 @@ export interface BookWorkflowRequest {
   autoReview?: boolean
   reuseExistingDrafts?: boolean
 }
-export interface BlueprintGeneration {
-  mode: 'full' | 'append'
-  startChapter?: number
-  count?: number
+export interface BlueprintGeneration extends DirectorySnapshotRequest {
   pacingGuidance?: string
   generationMode?: 'single' | 'batch'
   batchChapterCount?: number
@@ -123,7 +122,8 @@ export async function startWorkflow<Definition>(request: WorkflowStartRequest, p
     case 'generate_blueprint': {
       const params = request.directory
       if (params && (!['full', 'append'].includes(params.mode)
-        || [params.startChapter, params.count, params.batchChapterCount].some(n => n !== undefined && (!Number.isSafeInteger(n) || n < 1)))) {
+        || [params.startChapter, params.count, params.batchChapterCount, params.expectedTotalChapters]
+          .some(n => n !== undefined && (!Number.isSafeInteger(n) || n < 1)))) {
         throw new WorkflowValidationError('range')
       }
       prepared = await port.blueprint(params)

@@ -52,7 +52,7 @@ export interface BlueprintSortConfig {
     direction: SortDirection
 }
 
-function rowToData(row: BlueprintRow): BlueprintData {
+export function blueprintRowToData(row: BlueprintRow): BlueprintData {
     let chars: string[] = []
     try { chars = JSON.parse(row.characters) } catch { /* 容错 */ }
     return {
@@ -82,7 +82,7 @@ export class BlueprintRepository {
             'SELECT * FROM blueprints ORDER BY chapter_number ASC'
         ).all() as BlueprintRow[]
 
-        return rows.map(rowToData)
+        return rows.map(blueprintRowToData)
     }
 
     /** 按指定排序方式获取所有蓝图 */
@@ -124,7 +124,7 @@ export class BlueprintRepository {
             `SELECT * FROM blueprints ORDER BY ${orderClause}`
         ).all() as BlueprintRow[]
 
-        return rows.map(rowToData)
+        return rows.map(blueprintRowToData)
     }
 
     /** 检测缺失的章节号（缺口检测） */
@@ -201,7 +201,7 @@ export class BlueprintRepository {
             'SELECT * FROM blueprints WHERE chapter_number = ?'
         ).get(chapterNumber) as BlueprintRow | undefined
 
-        return row ? rowToData(row) : null
+        return row ? blueprintRowToData(row) : null
     }
 
     /** 获取蓝图总数 */

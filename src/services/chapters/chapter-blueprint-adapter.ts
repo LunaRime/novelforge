@@ -1,4 +1,5 @@
 import { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, type ChapterBlueprintScope, type ChapterBlueprintSort, type MissingBlueprintReceipt } from '../../core'
+import { isDirectoryWriteRange, validateDirectoryWriteItems, type BlueprintWriteScope, type DirectorySnapshotRequest, type DirectoryWriteSnapshot } from '../../core'
 import type { BlueprintData } from '../../../electron/repositories/blueprint-repository'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
@@ -9,11 +10,12 @@ export function captureChapterBlueprintScope(): ChapterBlueprintScope | null {
   const { currentProject, projectSession } = useProjectStore.getState()
   return currentProject ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
 }
-export function assertChapterBlueprintScope(source: ChapterBlueprintScope): void {
+export function isChapterBlueprintScopeCurrent(source: ChapterBlueprintScope): boolean {
   const current = captureChapterBlueprintScope()
-  if (!current || current.id !== source.id || current.path !== source.path || current.session !== source.session) {
-    throw new ChapterBlueprintRequestCancelled()
-  }
+  return current?.id === source.id && current.path === source.path && current.session === source.session
+}
+export function assertChapterBlueprintScope(source: ChapterBlueprintScope): void {
+  if (!isChapterBlueprintScopeCurrent(source)) throw new ChapterBlueprintRequestCancelled()
 }
 const readFailure = () => new Error(t('log.render.blueprintLoadFailed'))
 const textFields = ['title', 'role', 'purpose', 'keyEvents', 'suspenseHook', 'userGuidance', 'notes'] as const
@@ -35,6 +37,58 @@ export async function readChapterBlueprintSnapshot(source: ChapterBlueprintScope
   assertChapterBlueprintScope(source)
   try { return await readStrictChapterBlueprints() }
   finally { assertChapterBlueprintScope(source) }
+}
+
+export function createDirectoryBlueprintWriter(source: ChapterBlueprintScope) {
+  const expired = () => new Error(t('error.directorySnapshotExpired'))
+  const readConnection = async (): Promise<BlueprintWriteScope> => {
+    assertChapterBlueprintScope(source)
+    const scope = await ipc.invoke('db:blueprint-write-scope')
+    assertChapterBlueprintScope(source)
+    if (scope?.projectPath !== source.path || typeof scope.token !== 'string' || !scope.token) throw expired()
+    return scope
+  }
+  function assertSnapshot(value: unknown): asserts value is DirectoryWriteSnapshot {
+    const snapshot = value as DirectoryWriteSnapshot | undefined
+    if (!snapshot || snapshot.scope?.projectPath !== source.path || typeof snapshot.scope.token !== 'string' || !snapshot.scope.token
+      || typeof snapshot.digest !== 'string' || !/^[a-f0-9]{64}$/.test(snapshot.digest)
+      || (snapshot.range !== null && !isDirectoryWriteRange(snapshot.range))) throw expired()
+  }
+  return {
+    readConnection,
+    read: async (request: DirectorySnapshotRequest, connection: BlueprintWriteScope) => {
+      assertChapterBlueprintScope(source)
+      const result = await ipc.invoke('db:blueprint-directory-snapshot', request)
+      assertChapterBlueprintScope(source)
+      assertSnapshot(result?.snapshot)
+      if (result.snapshot.scope.token !== connection.token) throw expired()
+      if (!Array.isArray(result.existingBlueprints)) throw readFailure()
+      return result
+    },
+    checkConnection: async (value: unknown): Promise<DirectoryWriteSnapshot> => {
+      assertChapterBlueprintScope(source)
+      assertSnapshot(value)
+      const scope = await readConnection()
+      if (scope.token !== value.scope.token) throw expired()
+      return value
+    },
+    commit: async (value: unknown, output: unknown) => {
+      assertChapterBlueprintScope(source)
+      assertSnapshot(value)
+      const range = value.range
+      if (!range) throw readFailure()
+      const items = validateDirectoryWriteItems(range, output)
+      const result = await ipc.invoke('db:blueprint-directory-commit', { snapshot: value, items })
+      if (result?.success !== true) throw new Error(result?.error || t('error.prereqNotMet'))
+      const { writtenChapterNumbers, deletedChapterNumbers } = result
+      if (!Array.isArray(writtenChapterNumbers) || writtenChapterNumbers.length !== items.length
+        || writtenChapterNumbers.some((chapter, index) => chapter !== items[index].chapterNumber)
+        || !Array.isArray(deletedChapterNumbers) || new Set(deletedChapterNumbers).size !== deletedChapterNumbers.length
+        || deletedChapterNumbers.some(chapter => range.mode !== 'replace-all' || !Number.isSafeInteger(chapter)
+          || (chapter >= range.first && chapter <= range.last))) throw readFailure()
+      return { writtenChapterNumbers, deletedChapterNumbers }
+    },
+  }
 }
 
 /** Capture a connection token before model IO; never reacquire it at the write point. */

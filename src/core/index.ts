@@ -41,6 +41,8 @@ export { createChapterBlueprintApplication, ChapterBlueprintRequestCancelled, Ch
 export type { ChapterBlueprintPorts, ChapterBlueprintScope, ChapterBlueprintSort, ChapterBlueprintSaveReceipt } from './ports/chapter-blueprints'
 export { insertMissingBlueprints, MissingBlueprintValidationError, MissingBlueprintScopeChanged } from './application/insert-missing-blueprints'
 export type { BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintRow, MissingBlueprintReceipt, MissingBlueprintResult } from './application/insert-missing-blueprints'
+export { DirectoryBlueprintValidationError, getDirectoryBlueprintDeletions, isDirectoryWriteRange, resolveDirectoryWriteRange, validateDirectoryWriteItems } from './application/directory-blueprint-write'
+export type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteRange, DirectoryWriteReceipt, DirectoryWriteResult, DirectoryWriteSnapshot, GeneratedBlueprintFields } from './application/directory-blueprint-write'
 export { analyzeBlueprintRoles, analyzeBlueprintSnapshot } from './application/blueprint-verification'
 export type { BlueprintRoleMismatch, BlueprintVerificationSeverity } from './application/blueprint-verification'
 export { createBinderApplication, BinderRequestCancelled, BinderBusy } from './application/binder'

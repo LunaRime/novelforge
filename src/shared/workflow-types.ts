@@ -69,6 +69,8 @@ export interface WorkflowContext {
   data: Record<string, unknown>
   /** 是否已取消 */
   cancelled: boolean
+  /** The final write has started and the run must settle using its result. Runtime only. */
+  finalCommitStarted?: boolean
 }
 
 /** 步骤回调 */

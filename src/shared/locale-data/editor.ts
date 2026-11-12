@@ -252,7 +252,7 @@ export const editorTexts = {
   'blueprintGen.to': { 'zh-CN': '到 第', 'en-US': 'to', 'ru-RU': 'до' },
   'blueprintGen.full': { 'zh-CN': '全量生成（共 {n} 章）', 'en-US': 'Full generation ({n} chapters)', 'ru-RU': 'Полная генерация ({n} глав)' },
   'blueprintGen.existingData': { 'zh-CN': '针对已有数据的处理方式：', 'en-US': 'Handle existing data:', 'ru-RU': 'Обработка существующих данных:' },
-  'blueprintGen.append': { 'zh-CN': '追加模式：保留现有蓝图，从第 {n} 章起往后生成', 'en-US': 'Append: keep existing, generate from Ch.{n}', 'ru-RU': 'Добавить: сохранить существующие, с Гл.{n}' },
+  'blueprintGen.append': { 'zh-CN': '追加模式：保留现有蓝图，从最后一章之后开始生成', 'en-US': 'Append: keep existing blueprints and generate after the last chapter', 'ru-RU': 'Добавить главы после последней, сохранив существующие блюпринты' },
   'blueprintGen.overwrite': { 'zh-CN': '覆盖模式：无视现有蓝图，从第 1 章起强制覆盖生成', 'en-US': 'Overwrite: ignore existing, regenerate from Ch.1', 'ru-RU': 'Перезаписать: с Гл.1' },
   'blueprintGen.styleGuide': { 'zh-CN': '节奏/风格指导（可选）', 'en-US': 'Pacing/style guidance (optional)', 'ru-RU': 'Руководство по темпу/стилю (опц.)' },
   'blueprintGen.stylePlaceholder': { 'zh-CN': '如："前30章快节奏，每章安排一个爽点。中期适当铺设伏笔和角色成长。"', 'en-US': 'e.g.: "Fast pace for first 30 chapters, with one exciting moment per chapter. Gradually lay foreshadowing and character development in the middle."', 'ru-RU': 'Напр.: "Быстрый темп для первых 30 глав, по одному яркому моменту на главу. Постепенно закладывайте предвестия и развитие персонажей в середине."' },

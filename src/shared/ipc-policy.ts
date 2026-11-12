@@ -82,6 +82,8 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'credential:unset': { authority: 'network-secret' },
   'db:blueprint-write-scope': { authority: 'read-project' },
   'db:blueprint-insert-missing': { authority: 'write-project' },
+  'db:blueprint-directory-snapshot': { authority: 'read-project' },
+  'db:blueprint-directory-commit': { authority: 'destructive' },
   'db:blueprint-delete': { authority: 'destructive' },
   'db:blueprint-get': { authority: 'read-project' },
   'db:blueprint-get-all': { authority: 'read-project' },
