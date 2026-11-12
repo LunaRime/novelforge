@@ -2,7 +2,7 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已通过合成和真实副本验收，下一批为 E4 旧版隔离与恢复。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
+执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已通过 Windows 打包版验证，下一批为 F1 切换设计与身份映射。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
@@ -156,7 +156,7 @@ interface MaintenanceReceipt {
 - [x] [E1 生命周期矩阵](37-storage-lifecycle-matrix.md) 已记录 SQLite 与文件侧的职责、缺口和验收证据。逐项适配及验证仍是应用存储切换的准入条件。
 - [x] [E2 只读诊断](10-core-usage.md#e2-只读诊断) 已报告重复身份、编号冲突、缺正文、孤儿引用、锁和临时文件。索引重建和故障恢复分别验证。
 - [x] [E3 副本验收](38-storage-export-verification.md)：一致离线库副本导出到独立目录，逐条比对正文、身份、历史和关联；重复执行、外部修改、损坏数据都按失败策略验证。
-- [ ] E4 旧版隔离与恢复：已发布旧版不会理解未来新增标记。证明旧版本不会误读冻结的旧状态；完成匹配备份恢复演练，不把新标记本身当成兼容保证。
+- [x] [E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已验证标记方案的误读风险、独立文件目录的旧版打开屏障，以及完整备份恢复与重启。
 - [ ] F1 以迁移清单映射 DB draftId 与文件 ChapterId，不把数值 id 或章号强转为稳定文件身份；UI doc 身份与仓储切换一并验收。
 - [ ] F2 切换后文件成为真相，索引可删可重建；旧表冻结保留，不删，不恢复影子双写分支。
 - [ ] F3 证明删除索引、重启恢复、定稿只读、历史/分支完整性及真实打包可运行，再考虑发布。旧表删除不早于 1.0，并另走既定验收。
@@ -319,7 +319,7 @@ C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和
 1. **[E1 生命周期矩阵](37-storage-lifecycle-matrix.md)**（已完成）：逐项列出现有命令、DB 表/关联、目标文件或保留 DB 的职责、读写入口、失败语义和测试。草稿版本、分支、快照、修稿、审稿、场景卡、归档、定稿、删除、重排、导入导出、agent 和 checkpoint 均须有归属；有未覆盖项就不进入切换。
 2. **[E2 只读诊断](10-core-usage.md#e2-只读诊断)**（已提交）：`scripts/doctor.mjs` 通过窄诊断端口扫描文件项目和离线备份，报告重复身份、编号冲突、缺正文、孤儿关联、锁和临时文件。修复与扫描分离。
 3. **[E3 副本验证包](38-storage-export-verification.md)**（合成与真实副本已验收）：用固定合成夹具和获准使用的真实项目一致离线副本分别验收；原路径只读，目标必须隔离。记录清单、正文及历史 hash、关联计数、工具/应用版本和源指纹。真实副本未提供时标记该项未验，不能拿合成夹具代替。
-4. **E4 隔离与恢复演练**：选定具体已发布旧版，用打包产物尝试打开切换副本；仅增加 `storage_version` 不算隔离。推荐迁移产物采用独立新项目入口，旧项目作为明确时间点的备份保留；目录/注册入口/旧版识别方案在专项设计中确定，并用实测证明旧版不会把备份误当最新项目。
+4. **[E4 隔离与恢复演练](39-legacy-storage-isolation-and-restore.md)**（Windows 已验收）：指定打包旧版验证了目录屏障，完整归档在独立目录中恢复并通过重启验证。文件项目发布与打开入口的准入由 F 实施。
 
 **E3 必测矩阵**：
 
@@ -362,4 +362,4 @@ F 只在 E 验证包和 D 出口全部通过后进入；开始前另写迁移/�
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
 - [x] 按各批实际交付回填 A、B、C 和 D1–D4。真实副本验证及引擎独立打包仍有各自的验收项。
 
-A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已通过合成和真实副本验收，下一批为 E4 旧版隔离与恢复。
+A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已通过 Windows 打包版验证，下一批为 F1 切换设计与身份映射。
