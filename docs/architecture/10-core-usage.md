@@ -34,7 +34,7 @@
 node scripts/migrate-to-files.mjs ./offline-vela.db ./new-export my-project-id
 ```
 
-输入必须是关闭应用后取得的一致数据库副本；存在 `-wal` 文件会拒绝。不要只复制运行中的主 DB 而丢弃 WAL。目标必须不存在；唯一允许的已有目标是同一源、同一身份且逐文件核验通过的完整导出。
+输入必须是关闭应用后取得的一致数据库副本。存在 `-wal`、`-shm` 或 `-journal` 时拒绝。首次导出使用新目录，重跑时要求同源、同身份且完整输出逐文件校验通过。
 
 输出包括：
 
@@ -46,9 +46,9 @@ node scripts/migrate-to-files.mjs ./offline-vela.db ./new-export my-project-id
 
 迁移 id 为 `ch_` 加 `sha256(JSON.stringify([projectId, draftId]))` 的前 32 位，不依赖章号。当前主章选择与全部历史映射记录在导出中；源变化必须导出到新目录，不合并覆盖旧导出。
 
-当前要求 v23 对应的草稿列，旧 schema、缺失正文、快照 hash 错误或主线版本歧义会安全失败。导出先写独立 staging，完整校验后发布，失败只清理本次创建的 staging。重复执行会拒绝源库变化、输出修改、额外文件或符号链接。
+当前要求 v23 对应的草稿列。旧库先用应用的数据库升级入口处理隔离副本。文件时间统一为 ISO 格式，支持旧式 SQLite UTC 日期和毫秒数字字符串。缺失正文、快照 hash 错误或主线版本歧义会安全失败。导出先写独立 staging，完整校验后发布，失败只清理本次创建的 staging。重复执行会拒绝源库变化、输出修改、额外文件或符号链接。
 
-应用继续通过现有 SQLite 入口读写。章节存储接入所需的关联与恢复验收见 [E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md)。
+应用继续通过现有 SQLite 入口读写。章节存储接入所需的关联见 [E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md)，导出内容和备份等价性核对见 [E3 副本验证包](38-storage-export-verification.md)。
 
 ## E2 只读诊断
 
