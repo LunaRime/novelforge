@@ -15,6 +15,7 @@ export interface NovelConfigPorts<C extends object> {
   fieldVersions(): ConfigFieldVersions<C>
   update(patch: Partial<C>): void
   save(config: C): Promise<boolean>
+  savePatch(patch: Partial<C>, onCommitted?: () => void): Promise<void>
   hasModel(): boolean
   ownsRun(runId: string, source: NovelConfigScope): boolean
   startWorkflow(request: WorkflowStartRequest): Promise<WorkflowReceipt>

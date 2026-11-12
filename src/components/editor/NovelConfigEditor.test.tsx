@@ -6,7 +6,7 @@ import NovelConfigEditor from './NovelConfigEditor'
 import { useProjectStore } from '../../stores/project-store'
 import type { ProjectData } from '../../shared/ipc-channels'
 
-const h = vi.hoisted(() => ({ invoke: vi.fn(), success: vi.fn(), error: vi.fn(), show: vi.fn(), start: vi.fn(), log: vi.fn(),
+const h = vi.hoisted(() => ({ invoke: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), show: vi.fn(), start: vi.fn(), log: vi.fn(),
   fields: {} as Record<string, ComponentProps<'textarea'>>,
 }))
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke: h.invoke } }))
@@ -14,7 +14,7 @@ vi.mock('../../services/render-logger', () => ({ renderLog: h.log }))
 vi.mock('../../services/workflows/start-workflow', () => ({ startWorkflow: h.start }))
 vi.mock('../../stores/llm-store', () => ({ useLLMStore: Object.assign((select: (s: unknown) => unknown) => select({ defaultModelId: 'model' }), { getState: () => ({ defaultModelId: 'model' }) }) }))
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
-vi.mock('../ui/Toast', () => ({ toast: { success: h.success, error: h.error, show: h.show } }))
+vi.mock('../ui/Toast', () => ({ toast: { success: h.success, error: h.error, warning: h.warning, show: h.show } }))
 vi.mock('../dialogs/GenerateConfigDialog', () => ({ default: () => null }))
 vi.mock('../ui/Textarea', () => ({ Textarea: (props: ComponentProps<'textarea'>) => { h.fields[String(props.placeholder)] = props; return <textarea {...props} /> } }))
 vi.mock('../ui/Select', () => {
@@ -51,6 +51,27 @@ describe('novel config application view', () => {
     await flush(() => pending.resolve({ success: true }))
     expect(useProjectStore.getState().currentProject!.novelConfig.worldSetting).toBe('new input')
     expect(h.invoke.mock.calls[0][2].novelConfig.worldSetting).toBe('world')
+  })
+  it('shows a pending receipt without reporting failure or resending the save', async () => {
+    vi.useFakeTimers()
+    const pending = deferred<{ success: boolean }>()
+    h.invoke.mockReturnValueOnce(pending.promise)
+    try {
+      await mount(); await click('action.save')
+      await act(async () => { await vi.advanceTimersByTimeAsync(15_000) })
+      expect(h.warning).toHaveBeenCalledOnce()
+      expect(h.error).not.toHaveBeenCalled()
+      expect(h.success).not.toHaveBeenCalled()
+      const saving = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('status.saving'))!
+      expect(saving.disabled).toBe(true)
+      await flush(() => saving.click())
+      expect(h.invoke).toHaveBeenCalledTimes(1)
+      await flush(() => pending.resolve({ success: true }))
+      expect(h.success).toHaveBeenCalledOnce()
+    } finally {
+      pending.resolve({ success: true })
+      vi.useRealTimers()
+    }
   })
   it('same-path reopen suppresses old save feedback', async () => {
     const pending = deferred<{ success: boolean }>(); h.invoke.mockReturnValueOnce(pending.promise)

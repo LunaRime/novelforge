@@ -17,6 +17,7 @@ vi.mock('../../../components/ui/Toast', () => ({
   toast: { show: vi.fn(), success: vi.fn(), info: vi.fn() },
 }))
 vi.mock('../../../stores/project-store', () => ({
+  captureProjectConfigSource: () => ({ id: 'project', path: '/project', session: 1 }),
   useProjectStore: {
     getState: () => ({
       currentProject: {

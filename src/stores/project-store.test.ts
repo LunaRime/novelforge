@@ -6,7 +6,8 @@
  * 并清空快照；无快照/无项目时 no-op 返回 false。
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { useProjectStore } from './project-store'
+import { captureProjectConfigSource, useProjectStore } from './project-store'
+import { ProjectConfigResultUnknown } from '../services/config/project-config-save'
 import { useEditorStore } from './editor-store'
 import type { ProjectData } from '../shared/ipc-channels'
 import { ipc } from '../services/ipc-client'
@@ -44,11 +45,14 @@ const BASE: ProjectData = {
 
 beforeEach(() => {
   vi.mocked(confirm).mockReset()
+  vi.mocked(ipc.invoke).mockReset().mockResolvedValue({ success: true } as never)
   useEditorStore.getState().clearTabs()
-  useProjectStore.setState({
+  useProjectStore.setState(state => ({
     currentProject: structuredClone(BASE),
+    projectSession: state.projectSession + 1,
     configSnapshot: null,
-  })
+    loading: false,
+  }))
 })
 
 afterEach(() => {
@@ -161,7 +165,7 @@ describe('project-store 快照机制（线③）', () => {
     useProjectStore.getState().closeProject()
     expect(useProjectStore.getState().projectSession).toBe(before + 1)
   })
-  it('snapshot 深拷贝当前配置；update 后 restore 恢复原值', () => {
+  it('snapshot 深拷贝当前配置；update 后 restore 恢复原值', async () => {
     const { snapshotNovelConfig, updateNovelConfig, restoreNovelConfigSnapshot } = useProjectStore.getState()
 
     snapshotNovelConfig()
@@ -170,7 +174,7 @@ describe('project-store 快照机制（线③）', () => {
     // 应用后：配置已变，快照仍在
     expect(useProjectStore.getState().currentProject!.novelConfig.coreOutline).toBe('AI 生成的新大纲')
 
-    const ok = restoreNovelConfigSnapshot()
+    const ok = await restoreNovelConfigSnapshot()
     expect(ok).toBe(true)
     // 恢复：回到快照（旧大纲 + 旧题材），快照清空
     const cfg = useProjectStore.getState().currentProject!.novelConfig
@@ -187,40 +191,119 @@ describe('project-store 快照机制（线③）', () => {
     expect(useProjectStore.getState().configSnapshot!.coreOutline).toBe('旧大纲')
   })
 
-  it('无快照时 restore 返回 false 且不改动配置', () => {
+  it('无快照时 restore 返回 false 且不改动配置', async () => {
     const { restoreNovelConfigSnapshot } = useProjectStore.getState()
-    expect(restoreNovelConfigSnapshot()).toBe(false)
+    await expect(restoreNovelConfigSnapshot()).resolves.toBe(false)
     expect(useProjectStore.getState().currentProject!.novelConfig.coreOutline).toBe('旧大纲')
   })
 
-  it('无 currentProject 时 snapshot/restore 均 no-op', () => {
+  it('无 currentProject 时 snapshot/restore 均 no-op', async () => {
     useProjectStore.setState({ currentProject: null })
     const { snapshotNovelConfig, restoreNovelConfigSnapshot } = useProjectStore.getState()
     snapshotNovelConfig()
     expect(useProjectStore.getState().configSnapshot).toBeNull()
-    expect(restoreNovelConfigSnapshot()).toBe(false)
+    await expect(restoreNovelConfigSnapshot()).resolves.toBe(false)
   })
 })
 
 describe('config field versions and captured saves', () => {
-  it('counts every supplied field edit, including equal values and legacy restore', () => {
+  it('keeps a timed out write in flight and reports its late success without resending', async () => {
+    vi.useFakeTimers()
+    let complete!: (result: { success: boolean }) => void
+    vi.mocked(ipc.invoke).mockReset().mockImplementationOnce(() => new Promise(resolve => { complete = resolve }) as never)
+    try {
+      const pending = vi.fn()
+      const store = useProjectStore.getState()
+      const save = store.saveProject(undefined, pending)
+      await vi.advanceTimersByTimeAsync(15_000)
+      expect(pending).toHaveBeenCalledOnce()
+      await expect(store.saveProject()).rejects.toThrow()
+      await expect(store.saveNovelConfigPatch(captureProjectConfigSource()!, { genre: 'another write' })).rejects.toThrow()
+      expect(ipc.invoke).toHaveBeenCalledTimes(1)
+      complete({ success: true })
+      await expect(save).resolves.toBe(true)
+    } finally {
+      complete?.({ success: true })
+      vi.useRealTimers()
+    }
+  })
+
+  it('requires reopening to verify a lost receipt, and separates definite rejection', async () => {
+    const store = useProjectStore.getState()
+    vi.mocked(ipc.invoke).mockRejectedValueOnce(new Error('IPC disconnected'))
+    await expect(store.saveProject()).rejects.toBeInstanceOf(ProjectConfigResultUnknown)
+    await expect(store.saveNovelConfigPatch(captureProjectConfigSource()!, { genre: 'retry' })).rejects.toBeInstanceOf(ProjectConfigResultUnknown)
+    expect(ipc.invoke).toHaveBeenCalledTimes(1)
+
+    vi.mocked(ipc.invoke).mockResolvedValueOnce({ success: false, error: 'could not open' } as never)
+    expect(await store.openProject('/other', { keepView: true })).toBe(false)
+    await expect(store.saveProject()).rejects.toBeInstanceOf(ProjectConfigResultUnknown)
+
+    vi.mocked(ipc.invoke).mockImplementation(async (...[channel]) => (channel === 'project:open'
+      ? { success: true, project: BASE }
+      : channel === 'fs:list-dir' ? [] : { success: true }) as never)
+    expect(await store.openProject(BASE.path, { keepView: true })).toBe(true)
+    vi.mocked(ipc.invoke).mockResolvedValueOnce({ success: false } as never)
+    await expect(store.saveProject()).resolves.toBe(false)
+    await expect(store.saveProject()).resolves.toBe(true)
+  })
+
+  it('releases the old write on a verified reopen without releasing a newer write', async () => {
+    const store = useProjectStore.getState()
+    let finishOld!: (receipt: { success: boolean }) => void
+    let finishNew!: (receipt: { success: boolean }) => void
+    vi.mocked(ipc.invoke).mockImplementationOnce(() => new Promise(resolve => { finishOld = resolve }) as never)
+    const stale = store.saveProject().catch(error => error)
+    vi.mocked(ipc.invoke).mockImplementation(async (...[channel]) => (channel === 'project:open'
+      ? { success: true, project: { ...BASE, writeToken: 'new-connection' } }
+      : channel === 'fs:list-dir' ? [] : { success: true }) as never)
+    expect(await store.openProject(BASE.path, { keepView: true })).toBe(true)
+    vi.mocked(ipc.invoke).mockImplementationOnce(() => new Promise(resolve => { finishNew = resolve }) as never)
+    const current = store.saveProject().catch(error => error)
+    try {
+      expect(finishNew).toBeTypeOf('function')
+      finishOld({ success: true })
+      expect(await stale).toBeInstanceOf(Error)
+      await expect(store.saveProject()).rejects.toThrow()
+      finishNew({ success: true })
+      await expect(current).resolves.toBe(true)
+    } finally {
+      finishOld?.({ success: true })
+      finishNew?.({ success: true })
+    }
+  })
+
+  it('rejects an old legacy undo snapshot after reopening the same project', async () => {
+    const store = useProjectStore.getState()
+    store.snapshotNovelConfig()
+    useProjectStore.setState(state => ({ projectSession: state.projectSession + 1 }))
+    store.updateNovelConfig({ coreOutline: 'new session' })
+    await expect(store.restoreNovelConfigSnapshot()).resolves.toBe(false)
+    expect(useProjectStore.getState().currentProject!.novelConfig.coreOutline).toBe('new session')
+    expect(ipc.invoke).not.toHaveBeenCalled()
+  })
+
+  it('counts every supplied field edit, including equal values and legacy restore', async () => {
     useProjectStore.setState({ configFieldVersions: {} })
     const store = useProjectStore.getState()
     store.snapshotNovelConfig()
     store.updateNovelConfig({ coreOutline: '旧大纲' })
     store.updateNovelConfig({ coreOutline: 'changed', worldSetting: 'world' })
     expect(useProjectStore.getState().configFieldVersions).toEqual({ coreOutline: 2, worldSetting: 1 })
-    store.restoreNovelConfigSnapshot()
+    await store.restoreNovelConfigSnapshot()
     expect(useProjectStore.getState().configFieldVersions.coreOutline).toBe(3)
     expect(useProjectStore.getState().configFieldVersions.worldSetting).toBe(2)
   })
-  it('legacy restore versions optional fields removed by the full snapshot', () => {
+  it('legacy restore versions optional fields removed by the full snapshot', async () => {
     useProjectStore.setState({ configFieldVersions: {} })
     const store = useProjectStore.getState()
     store.snapshotNovelConfig()
     store.updateNovelConfig({ writingStyle: 'new optional style' })
-    store.restoreNovelConfigSnapshot()
+    await store.restoreNovelConfigSnapshot()
     expect(useProjectStore.getState().currentProject?.novelConfig.writingStyle).toBeUndefined()
+    expect(ipc.invoke).toHaveBeenCalledWith('project:update-config', BASE.id, expect.objectContaining({
+      novelConfig: expect.objectContaining({ writingStyle: '' }),
+    }))
     expect(useProjectStore.getState().configFieldVersions.writingStyle).toBe(2)
   })
   it('persists an explicit config snapshot without replacing current input', async () => {

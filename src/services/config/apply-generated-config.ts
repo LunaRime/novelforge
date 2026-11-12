@@ -5,6 +5,7 @@ import { confirm } from '../../components/ui/Confirm'
 import { toast } from '../../components/ui/Toast'
 import { renderLog } from '../render-logger'
 import type { createRendererNovelConfigApplication } from './novel-config-adapter'
+import { ProjectConfigResultUnknown } from './project-config-save'
 
 type Application = ReturnType<typeof createRendererNovelConfigApplication>
 
@@ -22,9 +23,16 @@ export async function applyGeneratedNovelConfig(
     try { application.assertCurrent(); return !options.cancelled?.() }
     catch (error) { if (error instanceof NovelConfigRequestCancelled) return false; throw error }
   }
-  const failure = (error: unknown) => {
+  const failure = (error: unknown, retryUndo?: () => Promise<void>) => {
+    if (error instanceof ProjectConfigResultUnknown) {
+      renderLog('warn', 'Save:Config', error.message)
+      toast.warning(error.message)
+      return
+    }
     renderLog('error', 'Save:Config', t('log.render.configSaveFailed').replace('{error}', () => String(error)))
-    toast.error(t('save.failed').replace('{error}', () => String(error)))
+    const message = t('save.failed').replace('{error}', () => String(error))
+    if (retryUndo) toast.show({ type: 'error', message, actions: [{ label: t('action.undoShort'), onClick: retryUndo }] })
+    else toast.error(message)
   }
   const apply = async (expected: ConfigGenerationSnapshot<NovelConfig>): Promise<boolean> => {
     if (!current() || resolved) return false
@@ -32,7 +40,7 @@ export async function applyGeneratedNovelConfig(
     if (result.status === 'conflict') return false
     resolved = true
     const started = Date.now()
-    try { await application.save() }
+    try { await application.save(patch) }
     catch (error) {
       if (error instanceof NovelConfigRequestCancelled) throw error
       if (current()) failure(error)
@@ -43,20 +51,21 @@ export async function applyGeneratedNovelConfig(
     try { options.onApplied?.() }
     catch (error) { renderLog('error', 'Apply:Config', String(error)) }
     if (!current()) return true
+    let undoing = false
+    const undo = async () => {
+      if (undoing || !current()) return
+      undoing = true
+      try {
+        if (!await application.undo(result.undo)) { if (current()) toast.warning(t('novelConfig.undoConflict')); return }
+        if (current()) toast.success(options.label ? t('field.aiReverted').replace('{label}', options.label) : t('novelConfig.aiReverted'))
+      } catch (error) {
+        if (!(error instanceof NovelConfigRequestCancelled) && current()) failure(error, undo)
+      } finally { undoing = false }
+    }
     toast.show({
       type: 'ai',
       message: options.label ? t('field.aiApplied').replace('{label}', options.label) : t('novelConfig.aiApplied'),
-      actions: [{ label: t('action.undoShort'), onClick: async () => {
-        try {
-          if (!current()) return
-          if (!application.undo(result.undo)) { toast.warning(t('novelConfig.undoConflict')); return }
-          await application.save()
-          if (current()) toast.success(options.label ? t('field.aiReverted').replace('{label}', options.label) : t('novelConfig.aiReverted'))
-        } catch (error) {
-          if (error instanceof NovelConfigRequestCancelled) return
-          if (current()) failure(error)
-        }
-      } }],
+      actions: [{ label: t('action.undoShort'), onClick: undo }],
     })
     return true
   }

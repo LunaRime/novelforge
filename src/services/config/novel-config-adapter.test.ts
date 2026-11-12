@@ -7,7 +7,10 @@ const { state, llm, startWorkflow, saveProject } = vi.hoisted(() => {
   return { state: { currentProject: { id: 'a', path: '/a', novelConfig: { coreOutline: 'old', worldSetting: 'world' } }, projectSession: 1, configFieldVersions: {} as Record<string, number>, saveProject,
     updateNovelConfig(patch: Record<string, string>) { Object.assign(this.currentProject.novelConfig, patch); for (const key of Object.keys(patch)) this.configFieldVersions[key] = (this.configFieldVersions[key] ?? 0) + 1 } }, llm: { defaultModelId: 'model' as string | null }, startWorkflow: vi.fn(), saveProject }
 })
-vi.mock('../../stores/project-store', () => ({ useProjectStore: { getState: () => state } }))
+vi.mock('../../stores/project-store', () => ({
+  useProjectStore: { getState: () => state },
+  captureProjectConfigSource: () => ({ id: state.currentProject.id, path: state.currentProject.path, session: state.projectSession }),
+}))
 vi.mock('../../stores/llm-store', () => ({ useLLMStore: { getState: () => llm } }))
 vi.mock('../workflows/start-workflow', () => ({ startWorkflow }))
 beforeEach(() => {

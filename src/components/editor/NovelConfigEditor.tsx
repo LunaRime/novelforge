@@ -12,6 +12,7 @@ import { Textarea } from '../ui/Textarea'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 import GenerateConfigDialog from '../dialogs/GenerateConfigDialog'
 import { createRendererNovelConfigApplication } from '../../services/config/novel-config-adapter'
+import { ProjectConfigResultUnknown } from '../../services/config/project-config-save'
 import { NovelConfigRequestCancelled, type NovelConfigScope } from '../../core'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
@@ -94,6 +95,11 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
       toast.success(t('save.success'))
     } catch (error) {
       if (!active() || error instanceof NovelConfigRequestCancelled) return
+      if (error instanceof ProjectConfigResultUnknown) {
+        renderLog('warn', 'Save:Config', error.message)
+        toast.warning(error.message)
+        return
+      }
       // 失败：toast + error 日志（含原因）
       renderLog('error', 'Save:Config', t('log.render.configSaveFailed').replace('{error}', () => String(error)))
       toast.error(t('save.failed').replace('{error}', String(error)))

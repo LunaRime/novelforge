@@ -12,7 +12,14 @@ const h = vi.hoisted(() => ({
   project: { currentProject: { id: 'a', path: '/a' }, projectSession: 1 },
 }))
 vi.mock('../ipc-client', () => ({ ipc: { invoke: h.invoke } }))
-vi.mock('../../stores/project-store', () => ({ useProjectStore: { getState: () => h.project } }))
+vi.mock('../../stores/project-store', () => ({
+  useProjectStore: { getState: () => h.project },
+  captureProjectConfigSource: () => ({ ...h.project.currentProject, session: h.project.projectSession }),
+  isProjectConfigCurrent: (source: { id: string; path: string; session: number }) =>
+    source.session === h.project.projectSession
+    && source.id === h.project.currentProject.id
+    && source.path === h.project.currentProject.path,
+}))
 vi.mock('../../stores/llm-store', () => ({ useLLMStore: { getState: () => ({ defaultModelId: 'model', generateStream: h.stream }) } }))
 vi.mock('../render-logger', () => ({ renderLog: vi.fn() }))
 

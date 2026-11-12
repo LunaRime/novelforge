@@ -9,7 +9,7 @@
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
-import { useProjectStore } from '../../../stores/project-store'
+import { captureProjectConfigSource, isProjectConfigCurrent, useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { normalizeBlueprintRole } from '../../blueprint-role'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
@@ -137,7 +137,9 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
 export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
+    const source = captureProjectConfigSource()
+    if (!project || !source) throw new Error(t('error.noProject'))
+    const versions = useProjectStore.getState().configFieldVersions
 
     const chapters = context.data.chapters as ImportedChapter[]
     if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
@@ -227,31 +229,17 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     }>(rawResult)
 
     // ===== 写入小说配置 =====
+    if (!isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
     if (inferResult.novelConfig) {
-      const novelConfig = {
-        ...project.novelConfig,
+      const patch = {
         // 枚举归一化：英文模板输出的 genre/audience/结构/视角 → UI 中文规范值
         ...normalizeNovelConfigEnums(inferResult.novelConfig as Partial<import('../../../shared/ipc-channels').NovelConfig>),
         totalChapters: chapters.length,
         wordsPerChapter: Math.round(chapters.reduce((s, c) => s + c.wordCount, 0) / chapters.length),
       }
-      // 更新内存
-      useProjectStore.getState().updateNovelConfig(novelConfig)
-      // 持久化到 config 文件
-      const updatedProject = useProjectStore.getState().currentProject
-      if (updatedProject) {
-        // 仅提取 ProjectData 字段，防止 structured clone 序列化异常
-        const plainData = {
-          id: updatedProject.id,
-          name: updatedProject.name,
-          path: updatedProject.path,
-          novelConfig: { ...updatedProject.novelConfig },
-          characterStates: updatedProject.characterStates,
-          createdAt: updatedProject.createdAt,
-          updatedAt: updatedProject.updatedAt,
-        }
-        await ipc.invoke('project:save', plainData.id, plainData)
-      }
+      await useProjectStore.getState().commitNovelConfigPatch(source, patch, versions)
+      if (context.cancelled || !isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
+      const novelConfig = useProjectStore.getState().currentProject!.novelConfig
       callbacks.log(t('log.import.configUpdated'))
 
       // 生成配置摘要供后续步骤使用

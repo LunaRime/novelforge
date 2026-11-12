@@ -37,23 +37,27 @@ export function createNovelConfigApplication<C extends object>(ports: NovelConfi
     } catch (error) { assertCurrent(); throw error }
     finally { starting = false }
   }
+  const persist = async (write: () => Promise<void>): Promise<void> => {
+    assertCurrent()
+    if (saving) throw new NovelConfigBusy()
+    saving = true
+    try {
+      await write()
+      assertCurrent()
+    } catch (error) { assertCurrent(); throw error }
+    finally { saving = false }
+  }
   return {
     assertCurrent, snapshot,
     dispose() { disposed = true },
     hasModel() { assertCurrent(); return ports.hasModel() },
     ownsRun(runId: string) { return !disposed && !!source && sameSource(source, ports.scope()) && ports.ownsRun(runId, source) },
     update(patch: Partial<C>) { assertCurrent(); ports.update(patch) },
-    async save(): Promise<void> {
-      assertCurrent()
-      if (saving) throw new NovelConfigBusy()
-      const config = structuredClone(ports.config())
-      saving = true
-      try {
-        const success = await ports.save(config)
-        assertCurrent()
-        if (!success) throw new NovelConfigSaveRejected()
-      } catch (error) { assertCurrent(); throw error }
-      finally { saving = false }
+    save(patch?: Partial<C>): Promise<void> {
+      return persist(async () => {
+        if (patch) await ports.savePatch(structuredClone(patch))
+        else if (!await ports.save(structuredClone(ports.config()))) throw new NovelConfigSaveRejected()
+      })
     },
     applyGenerated(patch: Partial<C>, captured: ConfigGenerationSnapshot<C>): { status: 'applied'; undo: ConfigUndoToken<C> } | { status: 'conflict'; fields: (keyof C)[] } {
       assertCurrent()
@@ -73,14 +77,22 @@ export function createNovelConfigApplication<C extends object>(ports: NovelConfi
       tokens.set(undo, { patch: previous, versions: appliedVersions })
       return { status: 'applied', undo }
     },
-    undo(token: ConfigUndoToken<C>): boolean {
+    async undo(token: ConfigUndoToken<C>): Promise<boolean> {
       assertCurrent()
       const saved = tokens.get(token)
       if (!saved || !sameSource(source!, token.source)) return false
       const current = ports.fieldVersions()
       if (token.fields.some(field => (current[field] ?? 0) !== saved.versions[field])) return false
-      ports.update(structuredClone(saved.patch))
-      tokens.delete(token)
+      await persist(() => ports.savePatch(structuredClone(saved.patch), () => {
+        assertCurrent()
+        tokens.delete(token)
+        const latest = ports.fieldVersions()
+        const currentPatch: Partial<C> = {}
+        for (const field of token.fields) {
+          if ((latest[field] ?? 0) === saved.versions[field]) currentPatch[field] = saved.patch[field]
+        }
+        if (Object.keys(currentPatch).length) ports.update(currentPatch)
+      }))
       return true
     },
     startField(field: ConfigField) { return start({ workflow: 'generate_config_field', fieldKey: field }) },

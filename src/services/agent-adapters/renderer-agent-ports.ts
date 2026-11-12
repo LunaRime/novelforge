@@ -15,6 +15,7 @@ export function createRendererAgentPorts(): AgentRuntimePorts {
       current: () => useProjectStore.getState().currentProject,
       files: () => useProjectStore.getState().fileTree,
       session: () => useProjectStore.getState().projectSession,
+      updateConfig: (source, patch) => useProjectStore.getState().commitNovelConfigPatch(source, patch),
     },
     editor: {
       snapshot: () => { const { tabs, activeTabId } = useEditorStore.getState(); return { tabs, activeTabId } },

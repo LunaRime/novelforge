@@ -1,9 +1,9 @@
-import type { ProjectData, FileNode, ModelProfile, LLMResponse } from '../../shared/ipc-channels'
+import type { ProjectData, FileNode, ModelProfile, LLMResponse, NovelConfig } from '../../shared/ipc-channels'
 import type { EditorTab } from '../../shared/editor-tab'
 import type { AgentConversation } from '../../shared/agent-conversation'
 import type { WorkflowRun } from '../../shared/workflow-types'
 import type { ModelRouteConfig, CallPurpose } from '../llm/model-router'
-import type { RuntimeEvent } from '../../core'
+import type { NovelConfigScope, RuntimeEvent } from '../../core'
 
 /** Capabilities consumed by the renderer agent. No Zustand state/actions escape this contract. */
 export interface AgentRuntimePorts {
@@ -11,6 +11,7 @@ export interface AgentRuntimePorts {
     current(): ProjectData | null
     files(): FileNode[]
     session(): number
+    updateConfig(source: NovelConfigScope, patch: Partial<NovelConfig>): Promise<void>
   }
   editor: {
     snapshot(): { tabs: EditorTab[]; activeTabId: string | null }

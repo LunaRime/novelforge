@@ -113,11 +113,11 @@ export interface GlobalConfig {
 export interface ProjectChannels {
   'project:create': {
     args: [config: { name: string; path: string; genre: string; targetAudience: string }]
-    return: { success: boolean; projectId: string; projectPath?: string; error?: string }
+    return: { success: boolean; projectId: string; projectPath?: string; restoredWriteToken?: string; error?: string }
   }
   'project:open': {
     args: [projectPath: string]
-    return: { success: boolean; project: ProjectData | null; error?: string }
+    return: { success: boolean; project: ProjectData | null; restoredWriteToken?: string; error?: string }
   }
   'project:save': {
     args: [projectId: string, data: Partial<ProjectData>]
@@ -128,7 +128,7 @@ export interface ProjectChannels {
     //   再做列更新（project-controller.ts）。契约必须写成 Partial，否则调用方会被类型逼着
     //   传整份配置 —— 而整份配置一旦来自**过期缓存**，就会把别的字段写回旧值（丢更新，真机实测：
     //   连续改 genre/subGenre/writingStyle 后前两个退回旧值）。
-    args: [projectId: string, data: Partial<Omit<ProjectData, 'novelConfig'>> & { novelConfig?: Partial<NovelConfig> }]
+    args: [projectId: string, data: ProjectConfigPatch]
     return: { success: boolean; error?: string }
   }
   'project:recent-list': {
@@ -570,11 +570,14 @@ export interface ProjectData {
   id: string
   name: string
   path: string
+  writeToken?: string
   novelConfig: NovelConfig
   characterStates: string
   createdAt: number
   updatedAt: number
 }
+
+export type ProjectConfigPatch = Pick<ProjectData, 'path' | 'writeToken'> & { novelConfig: Partial<NovelConfig> }
 
 export interface NovelConfig {
   genre: string

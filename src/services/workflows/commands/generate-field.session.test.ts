@@ -88,7 +88,7 @@ describe('actual field generation session', () => {
     useProjectStore.getState().updateNovelConfig({ coreOutline: 'user edit' })
     pending.resolve('model result'); await running
     expect(useProjectStore.getState().currentProject!.novelConfig.coreOutline).toBe('user edit')
-    expect(h.invoke).not.toHaveBeenCalledWith('project:save', expect.anything(), expect.anything())
+    expect(h.invoke).not.toHaveBeenCalledWith('project:update-config', expect.anything(), expect.anything())
     expect(h.show.mock.calls.some(([toast]) => toast.actions?.some((action: { label: string }) => action.label === '应用'))).toBe(true)
   })
   it('does not overwrite a target changed and then changed back', async () => {
@@ -107,8 +107,8 @@ describe('actual field generation session', () => {
     useProjectStore.getState().updateNovelConfig({ worldSetting: 'new user world' })
     pending.resolve('model result'); await running
     expect(useProjectStore.getState().currentProject!.novelConfig).toMatchObject({ coreOutline: 'model result', worldSetting: 'new user world' })
-    const saved = h.invoke.mock.calls.find(([channel]) => channel === 'project:save')
-    expect(saved?.[2].novelConfig).toMatchObject({ coreOutline: 'model result', worldSetting: 'new user world' })
+    const saved = h.invoke.mock.calls.find(([channel]) => channel === 'project:update-config')
+    expect(saved?.[2].novelConfig).toEqual({ coreOutline: 'model result' })
   })
   it('stops before model or persistence if project changed during overwrite confirmation', async () => {
     const confirmation = deferred<boolean>(); h.confirm.mockReturnValueOnce(confirmation.promise)

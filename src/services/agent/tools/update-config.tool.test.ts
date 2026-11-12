@@ -96,6 +96,23 @@ describe('update_config（丢更新回归）', () => {
     expect((await updateConfigTool.execute({ field: 'totalChapters', value: 'abc' })).success).toBe(false)
     expect(mockInvoke).not.toHaveBeenCalled()
   })
+
+  it('shares the project save lock and preserves newer edits while publishing committed fields', async () => {
+    const store = useProjectStore.getState()
+    let finish!: (receipt: { success: boolean }) => void
+    mockInvoke.mockImplementationOnce(() => new Promise(resolve => { finish = resolve }) as never)
+    const running = updateConfigTool.execute({ field: 'genre', value: '年代' })
+    await vi.waitFor(() => expect(finish).toBeTypeOf('function'))
+    await expect(store.saveProject()).rejects.toThrow()
+    expect(mockInvoke).toHaveBeenCalledTimes(1)
+    store.updateNovelConfig({ genre: '手工编辑' })
+    finish({ success: true })
+    expect((await running).success).toBe(true)
+    expect(useProjectStore.getState().currentProject?.novelConfig.genre).toBe('手工编辑')
+
+    expect((await updateConfigTool.execute({ field: 'subGenre', value: '种田' })).success).toBe(true)
+    expect(useProjectStore.getState().currentProject?.novelConfig.subGenre).toBe('种田')
+  })
 })
 
 installRendererAgentPorts()

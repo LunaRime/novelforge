@@ -1,22 +1,19 @@
 import { createNovelConfigApplication, type NovelConfigScope, type ConfigGenerationSnapshot } from '../../core'
 import type { NovelConfig } from '../../shared/ipc-channels'
-import { useProjectStore } from '../../stores/project-store'
+import { captureProjectConfigSource, useProjectStore } from '../../stores/project-store'
 import { useLLMStore } from '../../stores/llm-store'
 import { startWorkflow } from '../workflows/start-workflow'
 import { belongsToWorkflowSource } from '../workflows/workflow-source'
 
-const currentScope = (): NovelConfigScope | null => {
-  const { currentProject, projectSession } = useProjectStore.getState()
-  return currentProject ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
-}
 /** Renderer wiring only; all generation application and conflict decisions live in core. */
-export function createRendererNovelConfigApplication(source = currentScope()) {
+export function createRendererNovelConfigApplication(source: NovelConfigScope | null = captureProjectConfigSource()) {
   return createNovelConfigApplication<NovelConfig>({
-    scope: currentScope,
+    scope: captureProjectConfigSource,
     config: () => useProjectStore.getState().currentProject!.novelConfig,
     fieldVersions: () => useProjectStore.getState().configFieldVersions,
     update: patch => useProjectStore.getState().updateNovelConfig(patch),
     save: config => useProjectStore.getState().saveProject(config),
+    savePatch: (patch, onCommitted) => useProjectStore.getState().saveNovelConfigPatch(source!, patch, onCommitted),
     hasModel: () => !!useLLMStore.getState().defaultModelId,
     ownsRun: belongsToWorkflowSource,
     startWorkflow,

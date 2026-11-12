@@ -7,14 +7,16 @@ function fixture() {
   let config = { outline: 'original', style: 'simple' }
   const versions: Partial<Record<keyof typeof config, number>> = {}
   const save = vi.fn().mockResolvedValue(true)
+  const savePatch = vi.fn().mockResolvedValue(undefined)
   const startWorkflow = vi.fn().mockResolvedValue({ runId: 'run', displayName: 'Config', chapterTag: '' })
   const ports: NovelConfigPorts<typeof config> = {
     scope: () => source, config: () => config, fieldVersions: () => versions,
     update(patch) { config = { ...config, ...patch }; for (const key of Object.keys(patch) as (keyof typeof config)[]) versions[key] = (versions[key] ?? 0) + 1 },
-    save, startWorkflow, hasModel: () => true, ownsRun: () => true,
+    save, async savePatch(patch, onCommitted) { await savePatch(patch); onCommitted?.() },
+    startWorkflow, hasModel: () => true, ownsRun: () => true,
   }
   const app = createNovelConfigApplication(ports)
-  return { app, save, startWorkflow, get config() { return config }, reopen() { source = { ...source, session: 2 } }, ports }
+  return { app, save, savePatch, startWorkflow, get config() { return config }, reopen() { source = { ...source, session: 2 } }, ports }
 }
 function delayed<T>() { let resolve!: (value: T) => void; const promise = new Promise<T>(r => { resolve = r }); return { promise, resolve } }
 
@@ -39,16 +41,33 @@ describe('novel config application', () => {
     expect(f.app.applyGenerated({ outline: 'AI' }, snapshot)).toEqual({ status: 'conflict', fields: ['outline'] })
     expect(f.app.applyGenerated({ style: 'AI style' }, snapshot).status).toBe('applied')
   })
-  it('undo restores only generated fields and rejects later edits even with equal text', () => {
+  it('undo restores only generated fields and rejects later edits even with equal text', async () => {
     const f = fixture(); const result = f.app.applyGenerated({ outline: 'AI' }, f.app.snapshot())
     if (result.status !== 'applied') throw new Error('expected applied')
     f.app.update({ style: 'new style' })
-    expect(f.app.undo(result.undo)).toBe(true)
+    await expect(f.app.undo(result.undo)).resolves.toBe(true)
+    expect(f.savePatch).toHaveBeenCalledWith({ outline: 'original' })
     expect(f.config).toEqual({ outline: 'original', style: 'new style' })
-    expect(f.app.undo(result.undo)).toBe(false)
+    await expect(f.app.undo(result.undo)).resolves.toBe(false)
     const second = f.app.applyGenerated({ outline: 'AI' }, f.app.snapshot())
     if (second.status !== 'applied') throw new Error('expected applied')
-    f.app.update({ outline: 'AI' }); expect(f.app.undo(second.undo)).toBe(false)
+    f.app.update({ outline: 'AI' }); await expect(f.app.undo(second.undo)).resolves.toBe(false)
+  })
+  it('retains an undo after explicit rejection and preserves a newer edit during the retry', async () => {
+    const f = fixture()
+    const generated = f.app.applyGenerated({ outline: 'AI' }, f.app.snapshot())
+    if (generated.status !== 'applied') throw new Error('expected applied')
+    f.savePatch.mockRejectedValueOnce(new Error('disk rejected'))
+    await expect(f.app.undo(generated.undo)).rejects.toThrow('disk rejected')
+    expect(f.config.outline).toBe('AI')
+
+    const pending = delayed<void>()
+    f.savePatch.mockReturnValueOnce(pending.promise)
+    const undo = f.app.undo(generated.undo)
+    f.app.update({ outline: 'new edit' })
+    pending.resolve()
+    await expect(undo).resolves.toBe(true)
+    expect(f.config.outline).toBe('new edit')
   })
   it('rejects reopened source sessions, including pending save and old undo tokens', async () => {
     const f = fixture(); const result = f.app.applyGenerated({ outline: 'AI' }, f.app.snapshot())
@@ -56,9 +75,9 @@ describe('novel config application', () => {
     const pending = delayed<boolean>(); f.save.mockReturnValue(pending.promise)
     const saving = f.app.save(); f.reopen(); pending.resolve(true)
     await expect(saving).rejects.toBeInstanceOf(NovelConfigRequestCancelled)
-    expect(() => f.app.undo(result.undo)).toThrow(NovelConfigRequestCancelled)
+    await expect(f.app.undo(result.undo)).rejects.toBeInstanceOf(NovelConfigRequestCancelled)
     const next = createNovelConfigApplication(f.ports)
-    expect(next.undo(result.undo)).toBe(false)
+    await expect(next.undo(result.undo)).resolves.toBe(false)
     expect(f.app.ownsRun('run')).toBe(false)
   })
   it('keeps snapshots detached and dispatches typed workflow requests', async () => {
