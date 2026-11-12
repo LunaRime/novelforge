@@ -4,22 +4,32 @@
  * 核心验证：哨兵合并下沉后（CASE WHEN 保旧值），并发定稿/慢工作流的旧快照空值
  * 不会覆盖 DB 中较新的真实状态（此前渲染进程内合并存在读快照竞态）。
  */
-import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { CharacterRepository, type CharacterData } from './character-repository'
+import { readCharacterEditSnapshot, commitDatabaseCharacterEdits, mergeDatabaseCharacterCards } from '../services/character-edits-service'
 
 // mock database 模块（避免加载 electron 依赖与原生模块 ABI 冲突）
 vi.mock('../database', () => ({
   getProjectDb: () => (globalThis as unknown as { __testDb: DatabaseSync }).__testDb,
+  getCurrentProjectPath: () => '/book',
 }))
 
 let db: DatabaseSync
 
 beforeEach(() => {
   db = new DatabaseSync(':memory:')
-  // node:sqlite 无 better-sqlite3 的 transaction() API——patch 为"返回原函数"：
-  // 语义等价 better-sqlite3 的 `const tx = db.transaction(fn); tx()`（单连接同步无并发）
-  ;(db as unknown as { transaction: (fn: () => void) => () => void }).transaction = (fn: () => void) => fn
+  Object.assign(db, { transaction: <T>(work: () => T) => () => {
+    db.exec('BEGIN')
+    try {
+      const result = work()
+      db.exec('COMMIT')
+      return result
+    } catch (error) {
+      db.exec('ROLLBACK')
+      throw error
+    }
+  } })
   db.exec(`
     CREATE TABLE characters (
       name TEXT PRIMARY KEY,
@@ -54,9 +64,12 @@ beforeEach(() => {
       created_at INTEGER DEFAULT (unixepoch() * 1000),
       updated_at INTEGER DEFAULT (unixepoch() * 1000)
     );
+    CREATE UNIQUE INDEX idx_characters_uid ON characters(uid);
+    CREATE TABLE blueprints (chapter_number INTEGER PRIMARY KEY, characters TEXT, character_uids TEXT, updated_at INTEGER);
   `)
   ;(globalThis as unknown as { __testDb: DatabaseSync }).__testDb = db
 })
+afterEach(() => db.close())
 
 function makeChar(name: string, overrides: Partial<CharacterData> = {}): CharacterData {
   return {
@@ -77,6 +90,86 @@ function state(location: string, updatedAtChapter = 1) {
     keyItems: '', recentEvents: '', updatedAtChapter,
   }
 }
+
+describe('character edit transaction', () => {
+  function setup() {
+    CharacterRepository.upsert(makeChar('A', { uid: 'uid-a' }))
+    CharacterRepository.upsert(makeChar('Observer', { relations: '[{"target":"A","label":"ally"}]' }))
+    db.exec(`UPDATE characters SET created_at = 17 WHERE name = 'A';
+      INSERT INTO blueprints VALUES (1, '["A","Observer"]', '["uid-a"]', 23)`)
+    const { scope, cards } = readCharacterEditSnapshot()
+    return { scope, before: cards.find(card => card.name === 'A')! }
+  }
+
+  it('renames in place and rewrites every structured reference while preserving a concurrent card and field', () => {
+    const { scope, before } = setup()
+    CharacterRepository.upsert(makeChar('Concurrent', { relations: '[{"target":"A"}]' }))
+    CharacterRepository.updateState('A', state('updated'))
+    const result = commitDatabaseCharacterEdits({ scope, edits: [{ before, after: { ...before, name: 'C', notes: 'edited' } }] })
+    expect(result.success).toBe(true)
+    expect(CharacterRepository.getByName('A')).toBeNull()
+    expect(CharacterRepository.getByName('C')).toMatchObject({ uid: 'uid-a', aliases: '["A"]', notes: 'edited', currentState: { location: 'updated' } })
+    expect(db.prepare("SELECT created_at FROM characters WHERE name = 'C'").get()).toMatchObject({ created_at: 17 })
+    expect(CharacterRepository.getByName('Observer')?.relations).toBe('[{"target":"C","label":"ally"}]')
+    expect(CharacterRepository.getByName('Concurrent')?.relations).toBe('[{"target":"C"}]')
+    expect(db.prepare('SELECT * FROM blueprints').get()).toMatchObject({ characters: '["C","Observer"]', character_uids: '["uid-a"]' })
+  })
+
+  it.each(['rename', 'delete'])('rolls back %s and reference cleanup if the last write fails', operation => {
+    const { scope, before } = setup()
+    const original = db.prepare('SELECT * FROM characters ORDER BY name').all()
+    db.exec("CREATE TRIGGER fail_refs BEFORE UPDATE ON blueprints BEGIN SELECT RAISE(ABORT, 'injected failure'); END")
+    const after = operation === 'rename' ? { ...before, name: 'C' } : null
+    expect(commitDatabaseCharacterEdits({ scope, edits: [{ before, after }] })).toMatchObject({ success: false })
+    expect(db.prepare('SELECT * FROM characters ORDER BY name').all()).toEqual(original)
+    expect(db.prepare('SELECT * FROM blueprints').get()).toMatchObject({ characters: '["A","Observer"]', character_uids: '["uid-a"]', updated_at: 23 })
+  })
+
+  it('deletes an existing role and clears name and UID references', () => {
+    const { scope, before } = setup()
+    expect(commitDatabaseCharacterEdits({ scope, edits: [{ before, after: null }] }).success).toBe(true)
+    expect(CharacterRepository.getByName('A')).toBeNull()
+    expect(CharacterRepository.getByName('Observer')?.relations).toBe('[]')
+    expect(db.prepare('SELECT * FROM blueprints').get()).toMatchObject({ characters: '["Observer"]', character_uids: '[]' })
+  })
+
+  it('rejects stale tokens, new-name collisions and concurrent writes to an edited field', () => {
+    const { scope, before } = setup()
+    const edit = { before, after: { ...before, notes: 'manual' } }
+    expect(commitDatabaseCharacterEdits({ scope: { ...scope, token: 'old' }, edits: [edit] }).success).toBe(false)
+    expect(commitDatabaseCharacterEdits({ scope, edits: [{ before, after: { ...before, name: 'Observer' } }] }).success).toBe(false)
+    CharacterRepository.upsert({ ...before, notes: 'concurrent' })
+    expect(commitDatabaseCharacterEdits({ scope, edits: [edit] }).success).toBe(false)
+    expect(CharacterRepository.getByName('A')?.notes).toBe('concurrent')
+  })
+
+  it('treats a zero-row delete as failure and preserves all references', () => {
+    const { scope, before } = setup()
+    db.exec("CREATE TRIGGER skip_remove BEFORE DELETE ON characters BEGIN SELECT RAISE(IGNORE); END")
+    expect(commitDatabaseCharacterEdits({ scope, edits: [{ before, after: null }] }).success).toBe(false)
+    expect(CharacterRepository.getByName('A')).toBeTruthy()
+    expect(CharacterRepository.getByName('Observer')?.relations).toContain('"A"')
+  })
+
+  it('fills current cards after renames and skips deleted identities from an older model request', () => {
+    const { scope, before } = setup()
+    const observer = CharacterRepository.getByName('Observer')!
+    const known = [before, observer]
+    expect(commitDatabaseCharacterEdits({ scope, edits: [
+      { before, after: { ...before, name: 'C', notes: 'manual' } },
+      { before: observer, after: null },
+    ] }).success).toBe(true)
+    expect(mergeDatabaseCharacterCards({ scope, known, cards: [
+      { name: 'A', notes: 'from model', appearance: 'new' },
+      { name: 'Observer', notes: 'old result' },
+      { name: 'Unseen', background: 'new character' },
+    ] })).toMatchObject({ success: true, stats: { created: 1, merged: 1, saved: 2 } })
+    expect(CharacterRepository.getByName('C')).toMatchObject({ notes: 'manual', appearance: 'new' })
+    expect(CharacterRepository.getByName('A')).toBeNull()
+    expect(CharacterRepository.getByName('Observer')).toBeNull()
+    expect(CharacterRepository.getByName('Unseen')?.background).toBe('new character')
+  })
+})
 
 describe('CharacterRepository.updateState 哨兵合并（写时刻以 DB 当前值为基准）', () => {
   it('非空值正常覆盖', () => {

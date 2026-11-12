@@ -12,6 +12,7 @@ import type { WorkflowDefinition } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 import type { ImportedChapter } from './commands/import-novel.command'
 import { registerWorkflow } from './workflow-registry'
+import { captureCharacterSource, isCharacterSourceCurrent } from '../characters/character-edits-adapter'
 
 export interface ImportWorkflowParams {
   /** 拆分后的章节数据 */
@@ -22,6 +23,10 @@ export interface ImportWorkflowParams {
  * 创建导入小说工作流
  */
 export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
+  const source = captureCharacterSource()
+  const assertCurrent = () => {
+    if (!source || !isCharacterSourceCurrent(source)) throw new Error(t('error.requestCancelled'))
+  }
   return {
     type: 'novel_import',
     rehydrateParams: { ...params },
@@ -32,7 +37,9 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importWriteKB'),
         description: t('workflow.importWriteKBDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { ImportInitializeCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new ImportInitializeCommand(params.chapters)
           return cmd.execute({ step, context, callbacks })
         },
@@ -43,7 +50,9 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importInferGlobal'),
         description: t('workflow.importInferGlobalDesc'),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { InferGlobalSettingsCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new InferGlobalSettingsCommand()
           return cmd.execute({ step, context, callbacks })
         },
@@ -54,7 +63,9 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importInferBlueprints'),
         description: t('workflow.importInferBlueprintsDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { InferBlueprintsPerChapterCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new InferBlueprintsPerChapterCommand()
           return cmd.execute({ step, context, callbacks })
         },
@@ -65,6 +76,7 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importPostProcess'),
         description: t('workflow.importPostProcessDesc'),
         executor: async (_step, _context, callbacks) => {
+          assertCurrent()
           callbacks.log(t('log.refreshProject'))
           callbacks.setProgress(30)
 

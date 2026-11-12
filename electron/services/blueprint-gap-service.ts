@@ -1,19 +1,10 @@
-import { randomUUID } from 'node:crypto'
 import { insertMissingBlueprints, MissingBlueprintScopeChanged, MissingBlueprintValidationError,
-  type BlueprintWriteScope, type MissingBlueprintInput, type MissingBlueprintResult } from '../../src/core'
+  type MissingBlueprintInput, type MissingBlueprintResult } from '../../src/core'
 import { t } from '../../src/shared/locale'
-import { getCurrentProjectPath, getProjectDb } from '../database'
+import { getProjectDb } from '../database'
 import type { BlueprintData } from '../repositories/blueprint-repository'
-
-// A reopened database is a new connection object: even an identical path gets a new token.
-const tokens = new WeakMap<object, string>()
-export function captureBlueprintWriteScope(): BlueprintWriteScope {
-  const db = getProjectDb(); const projectPath = getCurrentProjectPath()
-  if (!db || !projectPath) throw new Error(t('error.requestCancelled'))
-  let token = tokens.get(db)
-  if (!token) { token = randomUUID(); tokens.set(db, token) }
-  return { projectPath, token }
-}
+import { captureProjectWriteScope as captureBlueprintWriteScope } from './project-write-scope'
+export { captureBlueprintWriteScope }
 export function insertDatabaseMissingBlueprints(input: MissingBlueprintInput<BlueprintData>): MissingBlueprintResult {
   const db = getProjectDb()
   if (!db) return { success: false, error: t('error.repoBlueprintCannotSaveBatch').replace('{repo}', '[BlueprintRepository]') }

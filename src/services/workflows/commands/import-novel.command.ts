@@ -15,6 +15,7 @@ import { normalizeBlueprintRole } from '../../blueprint-role'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
+import { createCharacterCardMerger } from '../../character-card-merge'
 
 /** 拆分后的章节数据（从 context.data 中传递） */
 export interface ImportedChapter {
@@ -140,6 +141,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
 
     const chapters = context.data.chapters as ImportedChapter[]
     if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
+    const merger = await createCharacterCardMerger(project.path)
 
     callbacks.log(t('log.import.searching'))
     callbacks.setProgress(5)
@@ -216,6 +218,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     callbacks.log(t('log.import.parsing'))
 
     // ===== 解析 JSON 结果 =====
+    merger.assertCurrent()
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
     const inferResult = this.parseJSON<{
       novelConfig: Record<string, string>
       architectureFiles: Record<string, string>
@@ -277,7 +281,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (inferResult.characterCards && Array.isArray(inferResult.characterCards)) {
       let createdCount = 0
       // #34 块 A：构造 LLM 原始字段（role 不预 normalize、缺失字段不填空值），
-      // 由 mergeCharacterCards 仅填空合并——重跑导入不再清空存量 relations/tags/动态状态
+      // 写入时从当前角色卡填补空字段。
       const cardsToSave: Array<Record<string, unknown>> = []
       for (const card of inferResult.characterCards) {
         if (!card.name) continue
@@ -309,8 +313,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         createdCount++
       }
       if (cardsToSave.length > 0) {
-        const { mergeCharacterCards } = await import('../../character-card-merge')
-        const stats = await mergeCharacterCards(cardsToSave)
+        if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+        const stats = await merger.merge(cardsToSave)
         createdCount = stats.saved
       }
       callbacks.log(t('log.import.cardsCreated').replace('{count}', String(createdCount)))

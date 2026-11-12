@@ -140,10 +140,16 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     let opened = false
     let handedOff = false
     try {
+      const { useCharacterStore } = await import('./character-store')
+      if (get().projectSession !== source.projectSession) return false
       if (source.currentProject) {
         const tabs = await confirmEditorTabSwitch()
         if (!tabs || get().projectSession !== source.projectSession) return false
         detachedTabs = tabs
+      }
+      if (useCharacterStore.getState().saving) {
+        toast.warning(t('tip.characterSaving'))
+        return false
       }
       session = get().projectSession + 1
       set({ loading: true, projectSession: session })
@@ -198,6 +204,10 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         const tabs = await confirmEditorTabSwitch()
         if (!tabs || get().projectSession !== source.projectSession) return false
         detachedTabs = tabs
+      }
+      if (useCharacterStore.getState().saving) {
+        toast.warning(t('tip.characterSaving'))
+        return false
       }
       session = get().projectSession + 1
       set({ loading: true, projectSession: session })

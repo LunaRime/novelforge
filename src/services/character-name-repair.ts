@@ -7,13 +7,10 @@
  * - 无冲突（目标名不存在）→ 改名（连带其他角色 relations 中的引用）
  * - 有冲突（目标名已存在）→ 合并（空白字段补齐 + relations 合并去重 + 删除别名行）
  *
- * computeNameRepairPlan 为纯函数（可单测）；applyCharacterNameRepair 走 IPC 写库。
+ * computeNameRepairPlan 保留作存量迁移的纯计划，编辑器加载时只读取角色。
  * 幂等：无括号名时零变更。
  */
 import { stripNameAlias } from './character-normalize'
-import { ipc } from './ipc-client'
-import { renderLog } from './render-logger'
-import { t } from '../shared/locale'
 import type { CharacterData } from '../../electron/repositories/character-repository'
 
 /** 兼容 CharacterData 的角色行（动态字段访问用 index signature） */
@@ -111,31 +108,4 @@ export function computeNameRepairPlan(chars: CharacterCardLike[]): NameRepairPla
   }
 
   return plan
-}
-
-/** 应用修复（读全角色 → 计算 → 写回；非关键，失败仅日志） */
-export async function applyCharacterNameRepair(): Promise<void> {
-  try {
-    // #34 块 C：防跨项目写库——读取前记录项目路径，读取后/写入前校验未切换
-    //（load 慢响应期间用户切项目，DB 已切换，旧项目的角色会被写进新项目库）
-    const { useProjectStore } = await import('../stores/project-store')
-    const projectPath = useProjectStore.getState().currentProject?.path
-    const chars = (await ipc.invoke('db:character-get-all')) as unknown as CharacterCardLike[]
-    if (useProjectStore.getState().currentProject?.path !== projectPath) return
-    const plan = computeNameRepairPlan(chars)
-    if (plan.upserts.length === 0 && plan.deletes.length === 0) return
-    for (const row of plan.upserts) {
-      if (useProjectStore.getState().currentProject?.path !== projectPath) return
-      await ipc.invoke('db:character-upsert', row)
-    }
-    for (const name of plan.deletes) {
-      if (useProjectStore.getState().currentProject?.path !== projectPath) return
-      await ipc.invoke('db:character-delete', name)
-    }
-    renderLog('info', 'Repair:CharacterName', t('log.render.characterNameRepaired')
-      .replace('{renamed}', String(plan.renamed))
-      .replace('{merged}', String(plan.merged)))
-  } catch (e) {
-    renderLog('warn', 'Repair:CharacterName', `角色名修复失败（非关键）: ${String(e)}`)
-  }
 }

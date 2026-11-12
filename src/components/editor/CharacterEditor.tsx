@@ -29,6 +29,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowCompletion } from '../../hooks/useWorkflowCompletion'
 import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
 import type { TextKey } from '../../shared/locale'
+import { captureCharacterSource, CharacterEditCancelled, isCharacterSourceCurrent } from '../../services/characters/character-edits-adapter'
 
 /** 四个并列视图（视图条上的分段值） */
 type ViewMode = 'edit' | 'state' | 'graph' | 'backlinks'
@@ -109,11 +110,13 @@ export default function CharacterEditor() {
 
   const handleDelete = async () => {
     if (!selectedCard || !currentProject) return
+    const source = captureCharacterSource()
+    if (!source || source.path !== currentProject.path) return
     const ok = await confirm(
       t('character.deleteConfirm').replace('{name}', selectedCard.name || t('character.unnamed')),
       { title: t('character.deleteTitle'), confirmText: t('action.delete'), danger: true }
     )
-    if (!ok) return
+    if (!ok || !isCharacterSourceCurrent(source) || !useCharacterStore.getState().characters.includes(selectedCard)) return
     await deleteCharacter(selectedCard.name, currentProject.path)
   }
 
@@ -122,8 +125,10 @@ export default function CharacterEditor() {
   const { running: archiving, start: startArchive } = useWorkflowCompletion()
   const handleArchive = async () => {
     if (!selectedCard || !currentProject) return
+    const source = captureCharacterSource()
+    if (!source || source.path !== currentProject.path) return
     const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
-    if (!ok) return
+    if (!ok || !isCharacterSourceCurrent(source) || !useCharacterStore.getState().characters.includes(selectedCard)) return
     startArchive(
       () => runCharacterArchive(currentProject.path, selectedCard.name),
       {
@@ -236,6 +241,7 @@ export default function CharacterEditor() {
         .replace('{ms}', String(Date.now() - t0)))
       toast.success(t('save.success'))
     } catch (e) {
+      if (e instanceof CharacterEditCancelled) return
       // 失败：toast + error 日志（含原因）
       renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))
       toast.error(t('save.failed').replace('{error}', String(e)))

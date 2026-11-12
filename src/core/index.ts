@@ -1,4 +1,7 @@
 export { ChapterError } from './domain/chapter'
+export { applyCharacterDelta, hasCharacterChanges, planCharacterEdits, remapCharacterNames, remapCharacterRelations, CharacterEditConflict, CharacterNameConflict } from './application/commit-character-edits'
+export type { CharacterData, CharacterStateData } from './domain/character'
+export type { CharacterEdit, CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterWriteScope } from './ports/character-edits'
 export { commitRevisionMerge } from './application/commit-revision-merge'
 export type { RevisionMergeInput, RevisionMergeResult, RevisionMergePort } from './ports/revision-merge'
 export { canExecuteConcurrently, requiresToolApproval } from './runtime/tool-execution'

@@ -120,6 +120,7 @@ export const errorTexts = {
   'error.chapterFinalizeMissing': { 'zh-CN': '第 {n} 章的定稿记录未获取到', 'en-US': 'No finalization record found for Ch.{n}', 'ru-RU': 'Запись финализации гл.{n} не найдена' },
   'error.chapterContentFetch': { 'zh-CN': '正文提取失败: ID={id}', 'en-US': 'Failed to fetch content: ID={id}', 'ru-RU': 'Не удалось получить текст: ID={id}' },
   'error.characterCardsSave': { 'zh-CN': '角色卡保存失败: {error}', 'en-US': 'Failed to save character cards: {error}', 'ru-RU': 'Ошибка сохранения карточек персонажей: {error}' },
+  'error.characterEditConflict': { 'zh-CN': '角色数据在编辑期间发生变化，请检查最新内容后重试。', 'en-US': 'Character data changed during editing. Review the latest data and try again.', 'ru-RU': 'Данные персонажа изменились во время редактирования. Проверьте актуальные данные и повторите попытку.' },
   'error.characterDuplicateName': { 'zh-CN': '角色名重复：{name}（角色名是唯一标识，请先修改或删除重名角色）', 'en-US': 'Duplicate character name: {name} (character names must be unique — rename or delete the conflicting character first)', 'ru-RU': 'Дубликат имени персонажа: {name} (имена персонажей должны быть уникальны — переименуйте или удалите конфликтующего персонажа)' },
   'error.modelNameEmpty': { 'zh-CN': '模型名称不能为空', 'en-US': 'Model name is required', 'ru-RU': 'Имя модели не может быть пустым' },
   'error.modelPurposesEmpty': { 'zh-CN': '模型至少需要一个用途（生成/嵌入）', 'en-US': 'Model needs at least one purpose (generation/embedding)', 'ru-RU': 'Модели нужна хотя бы одна роль (генерация/эмбеддинг)' },
