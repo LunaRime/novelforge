@@ -98,8 +98,54 @@ export function remapCharacterRelations(raw: string, names: ReadonlyMap<string, 
 }
 
 export function remapCharacterNames(raw: string, names: ReadonlyMap<string, string | null>): string {
-  return remapJsonList(raw, entry => {
-    const name = typeof entry === 'string' ? names.get(entry) : undefined
-    return name === null ? removedReference : name ?? entry
+  let values: unknown
+  try { values = JSON.parse(raw) } catch { return raw }
+  if (!Array.isArray(values)) return raw
+  const remapped = remapCharacterNameList(values, names)
+  return remapped === values ? raw : JSON.stringify(remapped)
+}
+
+export function remapCharacterNameList(values: string[], names: ReadonlyMap<string, string | null>): string[] {
+  const replacements = new Set<string>()
+  const seen = new Set<string>()
+  let changed = false
+  for (const value of values) {
+    if (typeof value !== 'string') continue
+    const next = names.get(value)
+    if (next === undefined || next === value) continue
+    changed = true
+    if (next !== null) replacements.add(next)
+  }
+  if (!changed) return values
+  return values.flatMap(value => {
+    if (typeof value !== 'string') return [value]
+    const next = names.get(value)
+    if (next === null) return []
+    const name = next ?? value
+    if (replacements.has(name)) {
+      if (seen.has(name)) return []
+      seen.add(name)
+    }
+    return [name]
   })
+}
+
+export function redirectCharacterMergeRelations(raw: string, sourceName: string, targetName: string): string {
+  let relations: unknown
+  try { relations = JSON.parse(raw) } catch { return raw }
+  if (!Array.isArray(relations)) return raw
+  const isTarget = (entry: unknown, name: string): entry is Record<string, unknown> =>
+    !!entry && typeof entry === 'object' && 'target' in entry && entry.target === name
+  const source = relations.find(relation => isTarget(relation, sourceName))
+  if (!source) return raw
+  const existing = relations.find(relation => isTarget(relation, targetName))
+  const merged: Record<string, unknown> = { ...(existing ?? source), target: targetName }
+  if (existing && !existing.sinceChapter && source.sinceChapter) merged.sinceChapter = source.sinceChapter
+  let replaced = false
+  return JSON.stringify(relations.flatMap(relation => {
+    if (!isTarget(relation, targetName) && !isTarget(relation, sourceName)) return [relation]
+    if (replaced) return []
+    replaced = true
+    return [merged]
+  }))
 }

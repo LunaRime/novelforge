@@ -12,7 +12,7 @@ import { commitDatabaseDraft } from '../services/draft-write-service'
 import { mergeDatabaseRevision } from '../services/revision-merge-service'
 import { captureBlueprintWriteScope, insertDatabaseMissingBlueprints } from '../services/blueprint-gap-service'
 import { commitDirectoryBlueprints, readDirectoryBlueprintSnapshot } from '../services/directory-blueprint-write-service'
-import { commitDatabaseCharacterEdits, mergeDatabaseCharacterCards, readCharacterEditSnapshot, resolveCharacterFieldTarget } from '../services/character-edits-service'
+import { commitDatabaseCharacterEdits, mergeDatabaseCharacterCards, mergeDatabaseDuplicateCharacters, readCharacterEditSnapshot, resolveCharacterFieldTarget } from '../services/character-edits-service'
 import type { CharacterEditsInput, CharacterFieldWrite, DirectorySnapshotRequest, DirectoryWriteInput, MissingBlueprintInput } from '../../src/core'
 import type { RevisionMergeInput } from '../../src/core'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
@@ -185,14 +185,7 @@ export function registerDatabaseController() {
     }
   })
 
-  guardedHandle('db:character-merge', async (_event, target: string, source: string) => {
-    try {
-      CharacterRepository.mergeCharacters(target, source)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
-  })
+  guardedHandle('db:character-merge', async (_event, input: Parameters<typeof mergeDatabaseDuplicateCharacters>[0]) => mergeDatabaseDuplicateCharacters(input))
 
   guardedHandle('db:character-update-appearance-stats', async (_event, name: string, stats: { appearCount: number; firstChapter: number; lastChapter: number }) => {
     try {

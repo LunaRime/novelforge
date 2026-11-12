@@ -1,9 +1,10 @@
 import {
-  CharacterEditConflict, CharacterNameConflict, planCharacterEdits, remapCharacterNames, remapCharacterRelations,
-  type CharacterEditsInput, type CharacterEditsResult, type CharacterEditSnapshot,
+  CharacterEditConflict, CharacterNameConflict, planCharacterEdits, remapCharacterRelations,
+  type CharacterEditsInput, type CharacterEditsResult, type CharacterEditSnapshot, type CharacterMergeInput,
 } from '../../src/core'
 import { getProjectDb } from '../database'
 import { CharacterRepository } from '../repositories/character-repository'
+import { rewriteBlueprintCharacterReferences } from '../repositories/character-references'
 import { t } from '../../src/shared/locale'
 import { captureProjectWriteScope } from './project-write-scope'
 import { matchGeneratedCard, mergeCardRows, type CharacterMergeIdentity } from '../../src/services/character-card-merge-plan'
@@ -13,6 +14,21 @@ import type { CharacterData, CharacterFieldWrite, CharacterWriteScope } from '..
 export function readCharacterEditSnapshot(): CharacterEditSnapshot {
   const scope = captureProjectWriteScope()
   return { scope, cards: CharacterRepository.getAll() }
+}
+
+export function mergeDatabaseDuplicateCharacters(input: CharacterMergeInput): CharacterEditsResult {
+  if (!getProjectDb()) return { success: false, error: t('error.requestCancelled') }
+  try {
+    const scope = captureProjectWriteScope()
+    if (input?.scope?.projectPath !== scope.projectPath || input.scope.token !== scope.token) {
+      return { success: false, error: t('error.requestCancelled') }
+    }
+    if (!input.target || !input.source) throw new CharacterEditConflict()
+    const cards = CharacterRepository.mergeCharacters(input.target.name, input.source.name, input)
+    return { success: true, cards }
+  } catch (error) {
+    return { success: false, error: error instanceof CharacterEditConflict ? t('error.characterEditConflict') : String(error) }
+  }
 }
 
 export function resolveCharacterFieldTarget(name: string, target: CharacterFieldWrite): string {
@@ -93,16 +109,7 @@ export function commitDatabaseCharacterEdits(input: CharacterEditsInput): Charac
         }
 
         const removedUids = new Map(plan.removed.flatMap(card => card.uid ? [[card.uid, null] as const] : []))
-        const blueprints = db.prepare('SELECT chapter_number, characters, character_uids FROM blueprints').all() as {
-          chapter_number: number; characters: string; character_uids: string
-        }[]
-        const updateBlueprint = db.prepare('UPDATE blueprints SET characters = ?, character_uids = ?, updated_at = unixepoch() * 1000 WHERE chapter_number = ?')
-        for (const row of blueprints) {
-          const names = remapCharacterNames(row.characters, plan.names)
-          const uids = remapCharacterNames(row.character_uids, removedUids)
-          if ((names !== row.characters || uids !== row.character_uids)
-            && updateBlueprint.run(names, uids, row.chapter_number).changes !== 1) throw new CharacterEditConflict()
-        }
+        rewriteBlueprintCharacterReferences(db, plan.names, removedUids)
       }
       return { success: true, cards: CharacterRepository.getAll() }
     })()

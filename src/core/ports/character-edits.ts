@@ -9,4 +9,5 @@ export interface CharacterEditsInput {
   relationTargets?: Array<Pick<CharacterData, 'name' | 'uid'>>
 }
 export interface CharacterFieldWrite { scope: CharacterWriteScope; uid?: string }
+export interface CharacterMergeInput { scope: CharacterWriteScope; target: CharacterData; source: CharacterData }
 export type CharacterEditsResult = { success: true; cards: CharacterData[] } | { success: false; error: string }

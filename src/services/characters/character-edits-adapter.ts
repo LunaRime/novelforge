@@ -1,4 +1,5 @@
-import type { CharacterEdit, CharacterEditSnapshot, CharacterEditsInput, CharacterWriteScope } from '../../core'
+import type { CharacterEdit, CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterMergeInput, CharacterWriteScope } from '../../core'
+import { globalEventBus } from '../../shared/event-bus'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
@@ -35,8 +36,26 @@ export async function commitCharacterEdits(source: CharacterSource, scope: Chara
   assertCurrent(source)
   if (scope.projectPath !== source.path || useProjectStore.getState().loading) throw new CharacterEditCancelled(t('error.requestCancelled'))
   const input = relationTargets ? { scope, edits, relationTargets } : { scope, edits }
-  const result = await ipc.invoke('db:character-commit-edits', input).finally(() => assertCurrent(source))
+  return committedCards(await ipc.invoke('db:character-commit-edits', input).finally(() => assertCurrent(source)))
+}
+
+function committedCards(result: CharacterEditsResult) {
   if (!result?.success) throw new Error(result?.error || t('status.unknown'))
   if (!Array.isArray(result.cards)) throw new Error(t('status.unknown'))
   return result.cards
+}
+
+export async function mergeCharacterDuplicates(source: CharacterSource, input: CharacterMergeInput) {
+  assertCurrent(source)
+  if (input.scope.projectPath !== source.path || useProjectStore.getState().loading) throw new CharacterEditCancelled(t('error.requestCancelled'))
+  return committedCards(await ipc.invoke('db:character-merge', input).finally(() => assertCurrent(source)))
+}
+
+export async function refreshCharacterMergeProjections(origin: CharacterSource, { source, target }: CharacterMergeInput): Promise<void> {
+  assertCurrent(origin)
+  globalEventBus.emit('REFRESH_RESOURCE', {
+    resources: ['blueprints'],
+    characterMerge: { sourceName: source.name, targetName: target.name },
+  })
+  await useProjectStore.getState().refreshFileTree().finally(() => assertCurrent(origin))
 }

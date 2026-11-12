@@ -7,7 +7,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { CharacterRepository, type CharacterData } from './character-repository'
-import { readCharacterEditSnapshot, commitDatabaseCharacterEdits, mergeDatabaseCharacterCards } from '../services/character-edits-service'
+import { readCharacterEditSnapshot, commitDatabaseCharacterEdits, mergeDatabaseCharacterCards, mergeDatabaseDuplicateCharacters } from '../services/character-edits-service'
 
 // mock database 模块（避免加载 electron 依赖与原生模块 ABI 冲突）
 vi.mock('../database', () => ({
@@ -70,6 +70,63 @@ beforeEach(() => {
   ;(globalThis as unknown as { __testDb: DatabaseSync }).__testDb = db
 })
 afterEach(() => db.close())
+
+describe('scoped duplicate merge', () => {
+  function fixture() {
+    CharacterRepository.upsert(makeChar('Keep', { uid: 'keep', notes: 'Нет сведений о прошлом', relations: '[{"target":"Remove"}]' }))
+    CharacterRepository.upsert(makeChar('Remove', { uid: 'remove', notes: 'Other notes', appearance: 'Tall', relations: '[{"target":"Keep"}]' }))
+    CharacterRepository.upsert(makeChar('Observer', { relations: '[{"target":"Remove","type":"ally"}]' }))
+    db.prepare('INSERT INTO blueprints VALUES (1, ?, ?, 0)').run('["Keep","Remove"]', '["keep","remove"]')
+    return {
+      scope: readCharacterEditSnapshot().scope,
+      target: CharacterRepository.getByName('Keep')!,
+      source: CharacterRepository.getByName('Remove')!,
+    }
+  }
+
+  it('keeps handwritten fields and redirects relation and blueprint references in the merge receipt', () => {
+    const result = mergeDatabaseDuplicateCharacters(fixture())
+    expect(result).toEqual({ success: true, cards: expect.arrayContaining([
+      expect.objectContaining({ name: 'Keep', uid: 'keep', notes: 'Нет сведений о прошлом', appearance: 'Tall', relations: '[]' }),
+      expect.objectContaining({ name: 'Observer', relations: '[{"target":"Keep","type":"ally"}]' }),
+    ]) })
+    expect(CharacterRepository.getByName('Remove')).toBeNull()
+    expect(db.prepare('SELECT characters, character_uids FROM blueprints').get()).toEqual({
+      characters: '["Keep"]', character_uids: '["keep"]',
+    })
+  })
+
+  it.each([
+    "UPDATE characters SET notes = 'New hand edit' WHERE name = 'Keep'",
+    "UPDATE characters SET name = 'Renamed' WHERE name = 'Remove'",
+    "UPDATE characters SET uid = 'replacement' WHERE name = 'Remove'",
+  ])('rejects a stale preview after %s', sql => {
+    const preview = fixture()
+    db.exec(sql)
+    expect(mergeDatabaseDuplicateCharacters(preview).success).toBe(false)
+    expect(CharacterRepository.getAll()).toHaveLength(3)
+    expect(db.prepare('SELECT characters FROM blueprints').get()).toEqual({ characters: '["Keep","Remove"]' })
+  })
+
+  it('rejects a different connection scope', () => {
+    const preview = fixture()
+    expect(mergeDatabaseDuplicateCharacters({ ...preview, scope: { ...preview.scope, token: 'stale' } }).success).toBe(false)
+    expect(CharacterRepository.getAll()).toHaveLength(3)
+  })
+
+  it('rolls back card and blueprint changes if removing the source fails', () => {
+    const preview = fixture()
+    db.exec(`CREATE TRIGGER fail_remove BEFORE DELETE ON characters WHEN OLD.name = 'Remove'
+      BEGIN SELECT RAISE(ABORT, 'injected failure'); END;`)
+    expect(mergeDatabaseDuplicateCharacters(preview)).toMatchObject({ success: false, error: expect.stringContaining('injected failure') })
+    expect(CharacterRepository.getByName('Keep')).toEqual(preview.target)
+    expect(CharacterRepository.getByName('Remove')).toEqual(preview.source)
+    expect(CharacterRepository.getByName('Observer')?.relations).toContain('"Remove"')
+    expect(db.prepare('SELECT characters, character_uids FROM blueprints').get()).toEqual({
+      characters: '["Keep","Remove"]', character_uids: '["keep","remove"]',
+    })
+  })
+})
 
 function makeChar(name: string, overrides: Partial<CharacterData> = {}): CharacterData {
   return {

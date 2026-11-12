@@ -133,6 +133,20 @@ describe('blueprint load/save application view', () => {
     await select('first edit'); expect(h.inputs['chapter.placeholderTitle'].value).toBe('first edit')
     await click('chapter.saveAll'); expect(host.textContent).not.toContain('blueprint.unsaved')
   })
+  it('redirects a merged character in the open blueprint and preserves its pending title edit', async () => {
+    const base = handler
+    handler = (channel, ...args) => channel === 'db:blueprint-get-all-sorted'
+      ? [{ ...row(1, 'First'), characters: ['Old', 'Hero'] }]
+      : base(channel, ...args)
+    await mount(); await edit('Pending title')
+    await flush(() => globalEventBus.emit('REFRESH_RESOURCE', {
+      resources: ['blueprints'], characterMerge: { sourceName: 'Old', targetName: 'Hero' },
+    }))
+    expect(h.inputs['chapter.placeholderTitle'].value).toBe('Pending title')
+    expect(host.textContent).toContain('blueprint.unsaved')
+    await click('chapter.save')
+    expect(h.invoke).toHaveBeenCalledWith('db:blueprint-upsert', expect.objectContaining({ title: 'Pending title', characters: ['Hero'] }))
+  })
   it('a false write leaves inputs and dirty state intact without success feedback', async () => {
     await mount(); await edit('unsaved'); const base = handler
     handler = channel => channel === 'db:blueprint-upsert' ? { success: false, error: 'denied' } : base(channel)

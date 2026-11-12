@@ -29,7 +29,8 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { useWorkflowCompletion } from '../../hooks/useWorkflowCompletion'
 import { runCharacterArchive } from '../../services/workflows/character-archive-workflow'
 import type { TextKey } from '../../shared/locale'
-import { captureCharacterSource, CharacterEditCancelled, isCharacterSourceCurrent } from '../../services/characters/character-edits-adapter'
+import { captureCharacterSource, CharacterEditCancelled, isCharacterSourceCurrent, refreshCharacterMergeProjections } from '../../services/characters/character-edits-adapter'
+import { listCharacterTemplates, readCharacterTemplate, saveCharacterTemplate } from '../../services/characters/character-template-adapter'
 
 /** 四个并列视图（视图条上的分段值） */
 type ViewMode = 'edit' | 'state' | 'graph' | 'backlinks'
@@ -44,6 +45,7 @@ export default function CharacterEditor() {
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
   const saving = useCharacterStore(s => s.saving)
+  const mergingSelected = useCharacterStore(s => s.selectedName !== null && s.mergingNames.includes(s.selectedName))
   const updateField = useCharacterStore(s => s.updateField)
   const deleteCharacter = useCharacterStore(s => s.deleteCharacter)
   const saveAll = useCharacterStore(s => s.saveAll)
@@ -59,6 +61,28 @@ export default function CharacterEditor() {
   // 数据由 ProjectService 统一加载，组件只消费 store 数据
 
   const selectedCard = characters.find((c) => c.name === selectedName) || null
+  const selection = useRef({ version: 0 })
+  useEffect(() => {
+    const session = selection.current
+    const unsubscribe = useCharacterStore.subscribe((next, previous) => {
+      if (next.selectedName !== previous.selectedName
+        || next.characters.find(card => card.name === next.selectedName)
+          !== previous.characters.find(card => card.name === previous.selectedName)) {
+        session.version++
+      }
+    })
+    return () => {
+      unsubscribe()
+      session.version++
+    }
+  }, [])
+
+  const guardSelection = () => {
+    const source = captureCharacterSource()
+    const session = selection.current
+    const version = session.version
+    return () => source !== null && isCharacterSourceCurrent(source) && version === session.version
+  }
 
   // P2-4：新角色（默认名）自动聚焦名字输入框，引导立即改名
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -143,63 +167,60 @@ export default function CharacterEditor() {
 
   // ===== 角色卡模板（~/.novelforge/templates/）：存为模板 / 应用模板 =====
 
-  /** 模板列表（应用模板下拉用；空 = 未加载/无模板） */
-  const [templates, setTemplates] = useState<Array<{ name: string; description: string }>>([])
-  const [templatesLoaded, setTemplatesLoaded] = useState(false)
+  const [templates, setTemplates] = useState<Awaited<ReturnType<typeof listCharacterTemplates>>>([])
+  const [templateStatus, setTemplateStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const templateListRequest = useRef(0)
+  const templateApplyRequest = useRef(0)
 
-  /** 加载模板元信息（下拉展开前拉取一次） */
   const loadTemplates = async () => {
-    if (templatesLoaded) return
+    const request = ++templateListRequest.current
+    setTemplateStatus('loading')
     try {
-      const { ipc } = await import('../../services/ipc-client')
-      setTemplates(await ipc.invoke('templates:list'))
-      setTemplatesLoaded(true)
-    } catch { /* 加载失败静默（下拉显示空） */ }
+      const list = await listCharacterTemplates()
+      if (request !== templateListRequest.current) return
+      setTemplates(list)
+      setTemplateStatus('ready')
+    } catch (error) {
+      if (request !== templateListRequest.current) return
+      setTemplateStatus('error')
+      renderLog('error', 'Load:Template', String(error))
+    }
   }
 
   /** 存为模板：当前角色卡 → ~/.novelforge/templates/{角色名}.json（schema 校验在模板定义层） */
   const handleSaveTemplate = async () => {
     if (!selectedCard) return
     try {
-      const { ipc } = await import('../../services/ipc-client')
-      const res = await ipc.invoke('templates:save', {
-        name: selectedCard.name,
-        data: { ...selectedCard } as Record<string, unknown>,
-      })
-      if (!res.success) throw new Error(res.error || 'save failed')
-      setTemplatesLoaded(false) // 下次下拉重新加载（含新模板）
-      toast.success(t('template.saveSuccess').replace('{name}', selectedCard.name))
-      renderLog('info', 'Save:Template', t('template.saveSuccess').replace('{name}', selectedCard.name))
+      await saveCharacterTemplate(selectedCard)
+      const message = t('template.saveSuccess').replace('{name}', () => selectedCard.name)
+      toast.success(message)
+      renderLog('info', 'Save:Template', message)
     } catch (e) {
-      toast.error(t('template.saveFailed').replace('{error}', String(e)))
+      const message = t('template.saveFailed').replace('{error}', () => String(e))
+      renderLog('error', 'Save:Template', message)
+      toast.error(message)
     }
   }
 
-  /** 应用模板：填充角色卡字段（跳过 name 主键，其余字段覆盖）——#34 块 D：覆盖前确认（评估 P2：误触静默覆盖手写档案） */
-  const handleApplyTemplate = async (tplName: string) => {
-    if (!selectedCard || !tplName) return
-    const hasContent = Object.values(selectedCard).some(v => typeof v === 'string' && v.trim() !== '')
-    if (hasContent) {
+  const handleApplyTemplate = async (template: (typeof templates)[number]) => {
+    if (!selectedCard || mergingSelected) return
+    const selectionCurrent = guardSelection()
+    const request = ++templateApplyRequest.current
+    const isCurrent = () => selectionCurrent() && request === templateApplyRequest.current
+    try {
       const ok = await confirm(
-        t('template.applyConfirm').replace('{name}', tplName),
+        t('template.applyConfirm').replace('{name}', () => template.name),
         { title: t('template.applyTitle'), confirmText: t('template.applyBtn'), danger: true },
       )
-      if (!ok) return
-    }
-    try {
-      const { ipc } = await import('../../services/ipc-client')
-      const data = await ipc.invoke('templates:get', tplName)
-      if (!data) throw new Error('template data not found')
-      for (const [key, value] of Object.entries(data)) {
-        if (key === 'name' || key === 'relations' || key === 'appearChapters') continue // 主键/章节归属不覆盖
-        if (typeof value === 'string') {
-          // 动态 key 绕过泛型（运行时安全：模板字段均为角色卡文本字段）
-          (updateField as (name: string, key: string, value: unknown) => void)(selectedCard.name, key, value)
-        }
-      }
-      toast.success(t('template.applySuccess').replace('{name}', tplName))
+      if (!ok || !isCurrent()) return
+      const fields = await readCharacterTemplate(template.file)
+      if (!isCurrent() || !useCharacterStore.getState().applyTemplate(selectedCard, fields)) return
+      toast.success(t('template.applySuccess').replace('{name}', () => template.name))
     } catch (e) {
-      toast.error(t('template.applyFailed').replace('{error}', String(e)))
+      if (!isCurrent()) return
+      const message = t('template.applyFailed').replace('{error}', () => String(e))
+      renderLog('error', 'Apply:Template', message)
+      toast.error(message)
     }
   }
 
@@ -337,17 +358,18 @@ export default function CharacterEditor() {
                   <div className="px-3 pt-1 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
                     {t('template.apply')}
                   </div>
-                  {templates.length === 0 ? (
+                  {templateStatus !== 'ready' || templates.length === 0 ? (
                     <div className="px-3 pb-1 text-2xs" style={{ color: 'var(--color-text-muted)' }}>
-                      {t('template.empty')}
+                      {t(templateStatus === 'loading' ? 'status.loading' : templateStatus === 'error' ? 'template.loadFailed' : 'template.empty')}
                     </div>
                   ) : (
                     templates.map(tp => (
                       <MenuItem
-                        key={tp.name}
+                        key={tp.file}
                         icon={<FileInput size={12} />}
                         label={tp.name}
-                        onClick={() => { setMenuOpen(false); void handleApplyTemplate(tp.name) }}
+                        disabled={mergingSelected}
+                        onClick={() => { setMenuOpen(false); void handleApplyTemplate(tp) }}
                       />
                     ))
                   )}
@@ -394,7 +416,7 @@ export default function CharacterEditor() {
       )}
 
       {/* 主体区 */}
-      <div className="flex-1 overflow-y-auto relative">
+      <fieldset disabled={mergingSelected && (viewMode === 'edit' || viewMode === 'state')} className="flex-1 min-w-0 overflow-y-auto relative">
         {viewMode === 'graph' ? (
           <RelationshipGraph
             characters={characters}
@@ -564,7 +586,7 @@ export default function CharacterEditor() {
                 char={selectedCard}
                 characters={characters}
                 t={t}
-                onChanged={async () => { await useCharacterStore.getState().load(true) }}
+                guardSelection={guardSelection}
               />
 
               {/* tier 3 提示 */}
@@ -576,7 +598,7 @@ export default function CharacterEditor() {
             </div>
           </div>
         )}
-      </div>
+      </fieldset>
     </div>
   )
 }
@@ -614,14 +636,20 @@ const STATUS_KEYS: Record<string, TextKey> = {
   dead: 'character.statusDead',
 }
 
-function LifecycleMergeSection({ char, characters, t, onChanged }: {
+function LifecycleMergeSection({ char, characters, t, guardSelection }: {
   char: { name: string; status?: string; appearCount?: number; firstChapter?: number; lastChapter?: number }
   characters: Array<{ name: string; aliases?: unknown }>
   t: ReturnType<typeof useTranslation>['t']
-  onChanged: () => Promise<void>
+  guardSelection: () => () => boolean
 }) {
   const [merging, setMerging] = useState(false)
   const [mergeTarget, setMergeTarget] = useState('')
+  const mergePending = useRef(false)
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => { mounted.current = false }
+  }, [])
 
   // 疑似重复对（与当前角色相关；置信度降序）
   const duplicates = useMemo(
@@ -629,31 +657,44 @@ function LifecycleMergeSection({ char, characters, t, onChanged }: {
     [characters, char.name],
   )
 
-  /** 执行合并：把 source 并入 target，成功后刷新角色数据 */
   const doMerge = async (target: string, source: string) => {
-    if (!target || !source || target === source) {
-      toast.error(t('character.mergeSelf'))
-      return
-    }
-    const ok = await confirm(
-      t('character.mergeConfirm').replace('{source}', source).replace('{target}', target),
-      { title: t('character.mergeTitle'), confirmText: t('action.confirm'), danger: true },
-    )
-    if (!ok) return
+    if (mergePending.current) return
+    const isCurrent = guardSelection()
+    mergePending.current = true
     setMerging(true)
     try {
-      const { ipc } = await import('../../services/ipc-client')
-      const res = await ipc.invoke('db:character-merge', target, source)
-      if (!res.success) throw new Error(res.error || 'merge failed')
-      toast.success(t('character.mergeSuccess').replace('{source}', source).replace('{target}', target))
-      // 当前角色被合并掉（source 是当前卡）→ 选中目标角色
-      if (char.name === source) useCharacterStore.getState().setSelectedName(target)
-      await onChanged()
+      const preview = await useCharacterStore.getState().previewMerge(target, source)
+      if (!mounted.current || !isCurrent()) return
+      const names = (message: string) => message.replace(/\{source\}|\{target\}/g, key =>
+        key === '{source}' ? preview.input.source.name : preview.input.target.name)
+      const ok = await confirm(names(t('character.mergeConfirm')), {
+        title: t('character.mergeTitle'), confirmText: t('action.confirm'), danger: true,
+      })
+      if (!ok || !mounted.current || !isCurrent()) return
+      await useCharacterStore.getState().commitMerge(preview)
+      if (!isCharacterSourceCurrent(preview.origin)) return
+      const message = names(t('character.mergeSuccess'))
+      renderLog('info', 'Save:Character', message)
+      toast.success(message)
+      try {
+        await refreshCharacterMergeProjections(preview.origin, preview.input)
+      } catch (error) {
+        if (!isCharacterSourceCurrent(preview.origin)) return
+        const message = t('editor.refreshFailed').replace('{error}', () => String(error))
+        renderLog('warn', 'Refresh:Character', message)
+        toast.error(message)
+      }
     } catch (e) {
-      toast.error(t('character.mergeFailed').replace('{error}', () => String(e)))
+      if (e instanceof CharacterEditCancelled || !mounted.current || !isCurrent()) return
+      const message = t('character.mergeFailed').replace('{error}', () => String(e))
+      renderLog('error', 'Save:Character', message)
+      toast.error(message)
     } finally {
-      setMerging(false)
-      setMergeTarget('')
+      mergePending.current = false
+      if (mounted.current) {
+        setMerging(false)
+        setMergeTarget('')
+      }
     }
   }
 

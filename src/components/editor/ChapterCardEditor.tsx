@@ -11,7 +11,7 @@ import { useVolumeStore } from '../../stores/volume-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useTranslation } from '../../hooks/useTranslation'
 import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'
-import { ChapterBlueprintRequestCancelled, WorkflowStartError, type ChapterBlueprintScope, type WorkflowStartRequest } from '../../core'
+import { ChapterBlueprintRequestCancelled, remapCharacterNameList, WorkflowStartError, type ChapterBlueprintScope, type WorkflowStartRequest } from '../../core'
 import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot } from '../../services/chapters/chapter-blueprint-adapter'
 import { belongsToWorkflowSource } from '../../services/workflows/workflow-source'
 import { startWorkflow as startApplicationWorkflow } from '../../services/workflows/start-workflow'
@@ -133,6 +133,27 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     }
   }, [application, active, publishRows, t])
   useEffect(() => { queueMicrotask(() => { if (active()) void loadBlueprints() }) }, [loadBlueprints, active])
+
+  useEffect(() => globalEventBus.on('REFRESH_RESOURCE', ({ characterMerge }) => {
+    if (!characterMerge || !active()) return
+    verifyRequest.current++
+    setVerifying(false)
+    setVerificationReport(null)
+    if (rows.current.length === 0) {
+      void loadBlueprints()
+      return
+    }
+    const names = new Map([[characterMerge.sourceName, characterMerge.targetName]])
+    loadRequest.current++
+    setLoading(false)
+    publishRows(rows.current.map(row => {
+      const characters = remapCharacterNameList(row.characters, names)
+      if (characters === row.characters) return row
+      const next = { ...row, characters }
+      if (dirtyRows.current.delete(row)) dirtyRows.current.add(next)
+      return next
+    }))
+  }), [active, loadBlueprints, publishRows])
 
   const runVerify = useCallback(async () => {
     if (!active() || !currentProject || saveBusy.current || deleteBusy.current) return

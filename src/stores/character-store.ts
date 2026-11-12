@@ -1,10 +1,11 @@
 import { create } from 'zustand'
-import { applyCharacterDelta, hasCharacterChanges, remapCharacterRelations, type CharacterData, type CharacterEdit, type CharacterStateData, type CharacterWriteScope } from '../core'
+import { applyCharacterDelta, hasCharacterChanges, redirectCharacterMergeRelations, remapCharacterRelations, type CharacterData, type CharacterEdit, type CharacterMergeInput, type CharacterStateData, type CharacterWriteScope } from '../core'
 import { t } from '../shared/locale'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { randomUUID } from '../utils/id'
-import { captureCharacterSource, CharacterEditCancelled, commitCharacterEdits, isCharacterSourceCurrent, readCharacterEdits, type CharacterSource } from '../services/characters/character-edits-adapter'
+import { captureCharacterSource, CharacterEditCancelled, commitCharacterEdits, isCharacterSourceCurrent, mergeCharacterDuplicates, readCharacterEdits, type CharacterSource } from '../services/characters/character-edits-adapter'
+import type { CharacterTemplate } from '../services/characters/character-template-adapter'
 
 export type CharacterCurrentState = CharacterStateData
 export type CharacterCard = CharacterData
@@ -51,6 +52,7 @@ interface CharacterState {
   source: CharacterSource | null
   writeScope: CharacterWriteScope | null
   baseline: CharacterCard[]
+  mergingNames: readonly string[]
 
   /** force=true 时忽略 dirty 强制刷新（手动刷新确认后） */
   load: (force?: boolean) => Promise<void>
@@ -59,10 +61,19 @@ interface CharacterState {
   addCharacter: () => void
   deleteCharacter: (name: string, projectPath?: string) => Promise<void>
   updateField: <K extends keyof CharacterCard>(name: string, key: K, value: CharacterCard[K]) => void
+  applyTemplate: (card: CharacterCard, template: CharacterTemplate) => boolean
+  previewMerge: (targetName: string, sourceName: string) => Promise<CharacterMergePreview>
+  commitMerge: (preview: CharacterMergePreview) => Promise<void>
   saveAll: (projectPath?: string) => Promise<void>
 
   // 兼容旧接口
   loadCharacters: (projectPath: string) => Promise<void>
+}
+
+interface CharacterMergePreview {
+  origin: CharacterSource
+  input: CharacterMergeInput
+  localCards: readonly CharacterCard[]
 }
 
 // 加载请求序号（#34 块 C）：快速切换项目时，旧项目的慢响应不得覆盖当前项目数据
@@ -130,6 +141,42 @@ function editSource(state: CharacterState, projectPath?: string) {
   return { source: state.source, scope: state.writeScope }
 }
 
+function hasMergeParticipants(cards: CharacterCard[], participants: readonly CharacterCard[]): boolean {
+  return participants.every(participant => {
+    const matching = cards.filter(card => card.name === participant.name)
+    return matching.length === 1 && matching[0] === participant
+  })
+}
+
+function projectMergedCharacters(initial: CharacterState, latest: CharacterCard[], committed: CharacterCard[], input: CharacterMergeInput) {
+  const redirect = (card: CharacterCard) => {
+    const relations = redirectCharacterMergeRelations(card.relations, input.source.name, input.target.name)
+    return relations === card.relations ? card : retainKey({ ...card, relations }, card)
+  }
+  // Retain each dirty card's original baseline so a subsequent save still detects DB conflicts.
+  const edits = editsBetween(initial.baseline, latest)
+  const draftCards = new Map<string, CharacterCard>()
+  const draftBaselines = new Map<string, CharacterCard>()
+  for (const { before, after } of edits) {
+    if (!after) continue
+    draftCards.set(editKey(after), redirect(after))
+    if (before) draftBaselines.set(editKey(before), redirect(before))
+  }
+  const legacyCards = new Map(initial.baseline.filter(card => !card.uid).map(card => [card.name, card]))
+  const characters: CharacterCard[] = []
+  const baseline = committed.map(card => {
+    const legacy = !card.uid && legacyCards.get(card.name)
+    if (legacy) retainKey(card, legacy)
+    const key = editKey(card)
+    characters.push(draftCards.get(key) ?? card)
+    draftCards.delete(key)
+    const original = draftBaselines.get(key)
+    draftBaselines.delete(key)
+    return original ?? card
+  })
+  return { characters: [...characters, ...draftCards.values()], baseline: [...baseline, ...draftBaselines.values()] }
+}
+
 export const useCharacterStore = create<CharacterState>()((set, get) => ({
   characters: [],
   selectedName: null,
@@ -140,6 +187,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   source: null,
   writeScope: null,
   baseline: [],
+  mergingNames: [],
 
   load: async (force = false) => {
     const source = captureCharacterSource()
@@ -178,7 +226,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
   reset: () => {
     ++loadSeq
-    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {}, baseline: [], source: null, writeScope: null })
+    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {}, baseline: [], source: null, writeScope: null, mergingNames: [] })
   },
 
   setSelectedName: (name) => set({ selectedName: name }),
@@ -256,6 +304,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
   updateField: (name, key, value) => {
     set((s) => {
+      if (s.mergingNames.includes(name) || (key === 'name' && typeof value === 'string' && s.mergingNames.includes(value))) return s
       const current = s.characters.find(c => c.name === name)
       if (!current || Object.is(current[key], value)) return s
       const newChars = s.characters.map(c =>
@@ -282,6 +331,64 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
 
       return { characters: newChars, selectedName: newSelected, renameMap, dirty: true }
     })
+  },
+
+  applyTemplate: (card, template) => {
+    const state = get()
+    if (state.selectedName !== card.name || !state.characters.includes(card) || state.mergingNames.includes(card.name)) return false
+    const next = { ...card, ...template }
+    if (hasCharacterChanges(card, next)) {
+      set({ characters: state.characters.map(item => item === card ? retainKey(next, card) : item), dirty: true })
+    }
+    return true
+  },
+
+  previewMerge: async (targetName, sourceName) => {
+    const initial = get()
+    const { source: origin, scope } = editSource(initial)
+    if (initial.saving) throw new CharacterEditCancelled(t('error.requestCancelled'))
+    if (!targetName || !sourceName || targetName === sourceName) throw new Error(t('character.mergeSelf'))
+    const localCards = [targetName, sourceName].map(name => {
+      const matching = initial.characters.filter(card => card.name === name)
+      if (matching.length > 1) throw new Error(t('error.characterDuplicateName').replace('{name}', () => name))
+      const [local] = matching
+      const base = local && initial.baseline.find(card => editKey(card) === editKey(local))
+      if (!local || !base || hasCharacterChanges(base, local)) throw new Error(t('character.mergeSaveFirst'))
+      return local
+    })
+    const snapshot = await readCharacterEdits(origin)
+    if (snapshot.scope.token !== scope.token || get().writeScope !== scope || get().saving
+      || !hasMergeParticipants(get().characters, localCards)) throw new CharacterEditCancelled(t('error.requestCancelled'))
+    const [target, source] = localCards.map(local => {
+      const fresh = snapshot.cards.find(card => card.name === local.name && card.uid === local.uid)
+      if (!fresh) throw new Error(t('error.characterEditConflict'))
+      return fresh
+    })
+    return { origin, input: { scope, target, source }, localCards }
+  },
+
+  commitMerge: async ({ origin, input, localCards }) => {
+    const initial = get()
+    const { scope } = editSource(initial)
+    if (initial.saving || scope.token !== input.scope.token || !isCharacterSourceCurrent(origin)
+      || !hasMergeParticipants(initial.characters, localCards)) {
+      throw new CharacterEditCancelled(t('error.requestCancelled'))
+    }
+    const seq = ++loadSeq
+    set({ saving: true, mergingNames: [input.target.name, input.source.name] })
+    try {
+      const committed = await mergeCharacterDuplicates(origin, input)
+      if (seq !== loadSeq) throw new CharacterEditCancelled(t('error.requestCancelled'))
+      const { characters, baseline } = projectMergedCharacters(initial, get().characters, committed, input)
+      const selected = get().selectedName
+      const desired = selected === input.source.name ? input.target.name : selected
+      set({
+        characters, baseline, ...pendingEdits(baseline, characters),
+        selectedName: characters.some(card => card.name === desired) ? desired : characters[0]?.name ?? null,
+      })
+    } finally {
+      if (seq === loadSeq) set({ saving: false, mergingNames: [] })
+    }
   },
 
   saveAll: async (projectPath) => {

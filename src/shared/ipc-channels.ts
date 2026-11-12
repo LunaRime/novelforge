@@ -5,7 +5,7 @@
 import type { LLMProtocol } from './llm-protocols'
 import type { RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
 import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot } from '../core'
-import type { CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterWriteScope } from '../core'
+import type { CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterMergeInput, CharacterWriteScope } from '../core'
 import type { CharacterMergeIdentity, MergeStats } from '../services/character-card-merge-plan'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
@@ -790,7 +790,7 @@ export interface DatabaseChannels {
   'db:character-upsert': { args: [data: CharacterData]; return: { success: boolean; error?: string } }
   'db:character-save-all': { args: [items: CharacterData[]]; return: { success: boolean; error?: string } }
   'db:character-delete': { args: [name: string]; return: { success: boolean; error?: string } }
-  'db:character-merge': { args: [target: string, source: string]; return: { success: boolean; error?: string } }
+  'db:character-merge': { args: [input: CharacterMergeInput]; return: CharacterEditsResult }
   'db:character-update-appearance-stats': { args: [name: string, stats: { appearCount: number; firstChapter: number; lastChapter: number }]; return: { success: boolean; error?: string } }
   'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }, target?: CharacterFieldWrite]; return: { success: boolean; error?: string } }
   'db:character-merge-fields': { args: [name: string, fields: Record<string, string>, target?: CharacterFieldWrite]; return: { success: boolean; error?: string } }
@@ -1397,11 +1397,11 @@ export interface TemplateChannels {
   /** 模板元信息列表（不含 data） */
   'templates:list': {
     args: []
-    return: Array<{ name: string; description: string }>
+    return: Array<{ file: string; name: string; description: string }>
   }
   /** 获取完整模板 data（应用模板时填充） */
   'templates:get': {
-    args: [name: string]
+    args: [file: string]
     return: Record<string, unknown> | null
   }
   /** 保存模板（校验 schema + 名称清洗防穿越） */

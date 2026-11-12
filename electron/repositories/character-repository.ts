@@ -7,8 +7,10 @@ import { getProjectDb } from '../database'
 import { t } from '../../src/shared/locale'
 import { isNoChangeValue } from '../../src/services/character-normalize'
 import { randomUUID } from 'node:crypto'
+import { CharacterEditConflict, hasCharacterChanges, redirectCharacterMergeRelations } from '../../src/core'
+import { rewriteBlueprintCharacterReferences } from './character-references'
 
-import type { CharacterData, CharacterStateData } from '../../src/core'
+import type { CharacterData, CharacterMergeInput, CharacterStateData } from '../../src/core'
 export type { CharacterData, CharacterStateData } from '../../src/core'
 
 /** 结构化关系条目 */
@@ -329,7 +331,7 @@ export class CharacterRepository {
      * - currentState：target cs_* 空白 → 用 source 值；updatedAtChapter 取更晚
      * - status/aliases：保留 target（用户显式管理；别名不自动并入，避免误合并）
      */
-    static mergeCharacters(targetName: string, sourceName: string): void {
+    static mergeCharacters(targetName: string, sourceName: string, expected?: Pick<CharacterMergeInput, 'target' | 'source'>): CharacterData[] {
         const db = getProjectDb()
         if (!db) throw new Error(t('error.repoCharacterCannotUpdateStatus').replace('{repo}', '[CharacterRepository]'))
         if (!targetName || !sourceName || targetName === sourceName) {
@@ -339,17 +341,24 @@ export class CharacterRepository {
         const tx = db.transaction(() => {
             const target = db.prepare('SELECT * FROM characters WHERE name = ?').get(targetName) as Record<string, unknown> | undefined
             const source = db.prepare('SELECT * FROM characters WHERE name = ?').get(sourceName) as Record<string, unknown> | undefined
+            if (expected && (!target || !source)) throw new CharacterEditConflict()
             if (!target) throw new Error(t('error.repoCharacterMergeTargetMissing').replace('{name}', targetName))
             if (!source) throw new Error(t('error.repoCharacterMergeSourceMissing').replace('{name}', sourceName))
+            const targetCard = rowToData(target)
+            const sourceCard = rowToData(source)
+            if (expected && (expected.target.uid !== targetCard.uid || expected.source.uid !== sourceCard.uid
+                || hasCharacterChanges(expected.target, targetCard) || hasCharacterChanges(expected.source, sourceCard))) {
+                throw new CharacterEditConflict()
+            }
 
             const updates: Record<string, unknown> = {}
 
-            // 1. 档案文本字段：target 空白/哨兵 → source 值
+            // 1. 手工合并只补空白档案字段，保留原文。
             const textCols = ['gender', 'age', 'appearance', 'personality', 'background', 'abilities', 'motivation', 'relationships', 'arc', 'notes']
             for (const col of textCols) {
                 const tv = String(target[col] ?? '').trim()
-                const sv = String(source[col] ?? '').trim()
-                if ((tv === '' || isNoChangeValue(tv)) && sv !== '' && !isNoChangeValue(sv)) updates[col] = sv
+                const sv = String(source[col] ?? '')
+                if (!tv && sv.trim()) updates[col] = sv
             }
 
             // 2. tags 并集
@@ -373,10 +382,10 @@ export class CharacterRepository {
             updates.tier = Math.min(Number(target.tier) || 2, Number(source.tier) || 2)
 
             // 5. relations 合并
-            const targetRels = parseRelations(target.relations)
+            const targetRels = parseRelations(target.relations).filter(r => r.target !== sourceName && r.target !== targetName)
             const sourceRels = parseRelations(source.relations)
             for (const r of sourceRels) {
-                if (r.target === targetName) continue // source 指向 target → 自身，丢弃
+                if (r.target === targetName || r.target === sourceName) continue
                 const existing = targetRels.find(x => x.target === r.target)
                 if (existing) {
                     // sinceChapter 取更早；label/type 保留 target 的（用户维护优先）
@@ -394,29 +403,11 @@ export class CharacterRepository {
             updates.cs_updated_at_chapter = Math.max(Number(target.cs_updated_at_chapter) || 0, Number(source.cs_updated_at_chapter) || 0)
 
             // 7. 全库重定向：其他角色 relations 中指向 source → target（去重）
-            const others = db.prepare('SELECT name, relations FROM characters WHERE name != ?').all(targetName) as Array<{ name: string; relations: string }>
+            const others = db.prepare('SELECT name, relations FROM characters WHERE name NOT IN (?, ?)').all(targetName, sourceName) as Array<{ name: string; relations: string }>
+            const updateRelations = db.prepare('UPDATE characters SET relations = ?, updated_at = unixepoch() * 1000 WHERE name = ?')
             for (const row of others) {
-                const rels = parseRelations(row.relations)
-                let changed = false
-                for (const r of rels) {
-                    if (r.target === sourceName) {
-                        r.target = targetName
-                        changed = true
-                    }
-                }
-                if (changed) {
-                    // 重定向后去重（同目标多条只留一条，sinceChapter 取更早）
-                    const seen = new Map<string, CharacterRelation>()
-                    for (const r of rels) {
-                        const prev = seen.get(r.target)
-                        if (!prev) {
-                            seen.set(r.target, r)
-                        } else if ((prev.sinceChapter === undefined || prev.sinceChapter === 0) && r.sinceChapter) {
-                            seen.set(r.target, r)
-                        }
-                    }
-                    db.prepare('UPDATE characters SET relations = ? WHERE name = ?').run(JSON.stringify([...seen.values()]), row.name)
-                }
+                const relations = redirectCharacterMergeRelations(row.relations, sourceName, targetName)
+                if (relations !== row.relations && updateRelations.run(relations, row.name).changes !== 1) throw new CharacterEditConflict(row.name)
             }
 
             // 8. 写回 target + 删除 source
@@ -428,11 +419,16 @@ export class CharacterRepository {
             }
             if (setClauses.length > 0) {
                 setClauses.push('updated_at = unixepoch() * 1000')
-                db.prepare(`UPDATE characters SET ${setClauses.join(', ')} WHERE name = ?`).run(...params, targetName)
+                const result = db.prepare(`UPDATE characters SET ${setClauses.join(', ')} WHERE name = ?`).run(...params, targetName)
+                if (result.changes !== 1) throw new CharacterEditConflict(targetName)
             }
-            db.prepare('DELETE FROM characters WHERE name = ?').run(sourceName)
+            const { uid: sourceUid } = sourceCard
+            const { uid: targetUid } = targetCard
+            rewriteBlueprintCharacterReferences(db, new Map([[sourceName, targetName]]), new Map(sourceUid ? [[sourceUid, targetUid ?? null]] : []))
+            if (db.prepare('DELETE FROM characters WHERE name = ?').run(sourceName).changes !== 1) throw new CharacterEditConflict(sourceName)
+            return CharacterRepository.getAll()
         })
-        tx()
+        return tx()
     }
 }
 

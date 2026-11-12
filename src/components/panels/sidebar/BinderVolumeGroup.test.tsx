@@ -43,11 +43,14 @@ it('uses explicit membership and custom order, preserving legacy draft-only rang
   expect(chapters(1).map(c => c.chapterNumber)).toEqual([4])
   expect(chapters(2).find(c => c.chapterNumber === 1)).toMatchObject({ chapterTitle: 'Ch1', hasFinalized: true })
 })
-it('keeps projection and offers retry when resource reload fails', async () => {
+it('keeps projection and offers retry when blueprint reload after a character merge fails', async () => {
   await mount(); h.invoke.mockRejectedValueOnce(new Error('read'))
-  await flush(() => globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] }))
+  await flush(() => globalEventBus.emit('REFRESH_RESOURCE', {
+    resources: ['blueprints'], characterMerge: { sourceName: 'Old', targetName: 'Hero' },
+  }))
   expect(chapters(2).map(c => c.chapterNumber)).toEqual([2, 1, 4])
   expect(host.querySelector('[role="alert"]')).toBeTruthy()
+  expect(h.log).toHaveBeenCalledWith('error', 'Refresh:Blueprint', expect.stringContaining('read'))
   expect(h.props.onReorderChapter).toBeUndefined()
   await flush(() => host.querySelector('button')!.click())
   expect(host.querySelector('[role="alert"]')).toBeNull()

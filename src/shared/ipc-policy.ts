@@ -114,7 +114,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'db:character-edit-snapshot': { authority: 'read-project' },
   'db:character-commit-edits': { authority: 'destructive' },
   'db:character-merge-cards': { authority: 'write-project' },
-  'db:character-merge': { authority: 'write-project' },
+  'db:character-merge': { authority: 'destructive' },
   'db:character-merge-fields': { authority: 'write-project' },
   'db:character-save-all': { authority: 'write-project' },
   'db:character-update-appearance-stats': { authority: 'read-project' },
