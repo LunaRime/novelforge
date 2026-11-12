@@ -612,7 +612,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     super()
   }
 
-  async execute({ callbacks }: CommandExecuteParams): Promise<void> {
+  async execute({ callbacks, context }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
     const assertProject = captureDraftProject(project.path)
@@ -631,17 +631,26 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     callbacks.log(t('log.finalize.start'))
 
-    // 1. 获取对应草稿并将库内状态变更为 finalized（同时同步定稿期可能微调过的正文）
+    // Compare the saved body and finalize that exact draft in a single transaction.
     const { parseDraftMeta } = await import('../chapter-workflow')
     const dbDraft = await parseDraftMeta(this.params.draftPath)
     assertProject()
     if (!dbDraft || dbDraft.chapterNumber !== this.params.chapterNumber) throw new Error(t('error.draftStateFlow'))
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
     const novelWordCount = computeTextStats(refinedDraftText).novelWordCount
-    assertDraftWrite(await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, novelWordCount))
-    assertProject()
-    assertDraftWrite(await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', novelWordCount))
+    context.finalCommitStarted = true
+    try {
+      const result = await ipc.invoke('db:draft-finalize', {
+        projectPath: project.path, writeToken: project.writeToken, draftId: dbDraft.id,
+        chapterNumber: this.params.chapterNumber, expectedContent: refinedDraftText, wordCount: novelWordCount,
+      })
+      if (result.conflict) throw new Error(t('tool.draftConflict'))
+      if (result.error === 'draft-finalized-readonly') throw new Error(t('tool.draftReadonly'))
+      assertDraftWrite(result)
+    } finally {
+      context.finalCommitStarted = false
+    }
     assertProject()
 
     // 【重要】：除了写入 DB，对于已定稿的章节需要实体化为物理文件放在根目录，供外部系统读取或备份
@@ -689,6 +698,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     // 通过 EventBus 通知 ProjectService 执行定稿后的统一刷新
     const { globalEventBus } = await import('../../../shared/event-bus')
+    assertProject()
     globalEventBus.emit('FINALIZE_COMPLETE', { chapterNumber: this.params.chapterNumber })
   }
 }

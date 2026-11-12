@@ -3,7 +3,7 @@
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
 import type { LLMProtocol } from './llm-protocols'
-import type { RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
+import type { DraftFinalizationInput, DraftFinalizationResult, RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
 import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot } from '../core'
 import type { CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterMergeInput, CharacterWriteScope } from '../core'
 import type { CharacterMergeIdentity, MergeStats } from '../services/character-card-merge-plan'
@@ -812,6 +812,7 @@ export interface DatabaseChannels {
   'db:draft-get-all-chapter-numbers': { args: []; return: number[] }
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
+  'db:draft-finalize': { args: [input: DraftFinalizationInput & { projectPath: string; writeToken?: string }]; return: DraftFinalizationResult }
   'db:draft-archive': {
     args: [input: { projectPath: string; draftId: number; chapterNumber: number }]
     return: { success: true; updatedAt: number } | { success: false; error: string }

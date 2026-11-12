@@ -100,6 +100,12 @@ export function captureDraftProject(expectedPath?: string): () => void {
   }
 }
 
+/** Definitions may be constructed before a project is open, but their steps need a source. */
+export function captureDraftWorkflowSource(): () => void {
+  if (useProjectStore.getState().currentProject) return captureDraftProject()
+  return () => { throw new Error(t('error.noProject')) }
+}
+
 export function assertDraftWrite(result: { success: boolean; error?: string }): void {
   if (!result.success) throw new Error(result.error || t('status.unknown'))
 }

@@ -2,7 +2,7 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已本地实现，下一批为 D4 无 UI 业务链路。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
+执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已本地实现，下一批为 E1 存储生命周期矩阵。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
@@ -143,9 +143,9 @@ interface MaintenanceReceipt {
 ### D：store 与 runtime 的剩余收口
 
 - [x] 按模块清点四个 store 的异步 action 及写入编排，记录加载投影、选择状态与临时编辑会话的归属，见 [D1 清单](33-store-responsibilities.md)。
-- [ ] 对 `services/agent` 中默认安装端口、引擎与上下文构建逐步建立独立实例入口；保留审批、工具结果顺序、超时、checkpoint 和子任务语义。
-- [ ] 验证两个独立项目实例并行不串数据；超时的 Promise.race 不等于操作已取消，不把现有限制包装成取消保证。
-- [ ] 用内存端口跑打开→编辑→保存→修稿→合并→审稿/定稿的关键链路，不需要 React 或 Electron。
+- [x] 对 `services/agent` 中默认安装端口、引擎与上下文构建逐步建立独立实例入口；保留审批、工具结果顺序、超时、checkpoint 和子任务语义。
+- [x] 验证两个独立项目实例并行不串数据；超时的 Promise.race 不等于操作已取消，不把现有限制包装成取消保证。
+- [x] 用内存端口跑打开→编辑→保存→修稿→合并→审稿/定稿的关键链路，不需要 React 或 Electron。
 
 出口：不以 store 导入计数为唯一结论；业务流程确实能在中立用例中执行，renderer 只承担组合与 UI 投影。先满足这一点，再讨论抽包。
 
@@ -186,7 +186,7 @@ git status --short package.json
 
 ## 八、本次计划交付
 
-计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D3 的进度见 [架构索引](README.md)。D4 与 E/F 按各自出口条件推进，前端改造见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D4 的进度见 [架构索引](README.md)。E/F 按各自出口条件推进，前端改造见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
 
 ## 九、源码核对与优先风险（2026-11-06 补充）
 
@@ -304,13 +304,13 @@ C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和
 | [D1 状态职责清单](33-store-responsibilities.md) | `src/stores/project-store.ts`、`draft-store.ts`、`character-store.ts`、`workflow-store.ts` | 每个异步 action 的调用者、IO、作用域、提交点、投影与未迁出原因 |
 | [D2 项目保存与配置撤销](34-project-config-save-plan.md) | `src/stores/project-store.ts`、`src/services/config/novel-config-adapter.ts`、`electron/controllers/project-controller.ts` | 超时后真实提交结果可辨识；旧会话不能恢复新会话快照；保存互斥规则可测。直接写入的调用者见 D1 |
 | [D3 Runtime 实例隔离](35-runtime-instances-plan.md) | `src/services/agent/runtime-ports.ts`、`src/services/agent/agent-engine.ts`、`src/services/workflows/workflow-runtime.ts` | 两实例端口/事件/审批/checkpoint 不串用，全局默认安装点不绕过实例 |
-| D4 无 UI 业务链路 | `src/core/application/draft-editor.ts`、`commit-revision-merge.ts` 等公共用例 | 内存端口执行打开→编辑→保存→修稿→合并→审稿/定稿，断言真实状态和正文 |
+| [D4 无 UI 业务链路](36-headless-draft-lifecycle-plan.md) | `src/core/application/draft-editor.ts`、`commit-revision-merge.ts` 等公共用例 | 内存端口执行打开→编辑→保存→修稿→合并→审稿/定稿，断言真实状态和正文 |
 
 - [x] D1 每项标记“纯业务迁出 / adapter 接线 / UI 投影保留 / 编辑会话保留”，附实际用例与测试路径；不先统一改 store API。
 - [x] D2 注入延迟，让调用超时后底层成功；确认不会自动重发造成重复提交。未有操作 id/幂等协议时，明确显示结果待核验，禁止当作确定失败重试。
 - [x] D3 双实例回归覆盖取消、超时、异常、审批顺序、工具结果、事件订阅与 checkpoint 隔离。
-- [ ] D4 测合并失败保留原文、重复接受拒绝或按既定协议幂等、定稿只读、过期 revision 拒绝；核对事务 adapter 测试，内存测试不替代真实 DB 原子性。
-- [ ] 重跑独立 core 编译和边界门禁；仅在实例化与关键业务链路均通过时声明 D 出口达成。独立引擎打包仍需单独构建验证。
+- [x] D4 测合并失败保留原文、重复接受拒绝或按既定协议幂等、定稿只读、过期 revision 拒绝；核对事务 adapter 测试，内存测试不替代真实 DB 原子性。
+- [x] 实例化与关键业务链路已通过，独立 core 编译和边界门禁通过。独立引擎打包仍需单独构建验证。
 
 ## 十二、E/F：切换前验证包与恢复协议
 
@@ -360,6 +360,6 @@ F 只在 E 验证包和 D 出口全部通过后进入；开始前另写迁移/�
 - [x] 对照当前源码核实 B/C 入口、项目保存 boolean、章节仓储端口和离线导出边界。
 - [x] 保留 A→B→C→D→E/F 顺序；将 B/C 拆成独立验收小批，补 D 的实例证据和 E/F 故障矩阵。
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
-- [x] 按各批实际交付回填 A、B、C 和 D1–D3。真实副本验证及引擎独立打包仍有各自的验收项。
+- [x] 按各批实际交付回填 A、B、C 和 D1–D4。真实副本验证及引擎独立打包仍有各自的验收项。
 
-A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已本地实现，下一批为 D4 无 UI 业务链路。
+A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已本地实现，下一批为 E1 存储生命周期矩阵。

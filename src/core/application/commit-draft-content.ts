@@ -18,7 +18,7 @@ export function commitDraftContent(input: DraftContentWrite, port: DraftWritePor
     return port.atomic(() => {
       const before = port.read(input.draftId)
       if (!before) return { success: false, error: 'draft-not-found' }
-      if (input.actor === 'agent' && before.status === 'finalized') return { success: false, error: 'draft-finalized-readonly' }
+      if (before.status === 'finalized' || before.status === 'archived') return { success: false, error: 'draft-finalized-readonly' }
       if (input.expectedHash !== undefined &&
           (before.contentHash !== input.expectedHash || before.updatedAt !== input.expectedUpdatedAt)) {
         return { success: false, conflict: true, currentHash: before.contentHash, currentUpdatedAt: before.updatedAt }

@@ -5,7 +5,8 @@ import { getPromptTemplate } from '../../prompt-templates'
 import { ChapterPromptBuilder } from '../../prompts/prompt-builder'
 import { computeTextStats } from '../../text-stats'
 import { ipc } from '../../ipc-client'
-import { assertDraftWrite, captureDraftProject } from '../../draft-index'
+import { captureDraftProject } from '../../draft-index'
+import { persistWorkflowRevision } from '../draft-feedback'
 import { getActiveStyle, appendWritingStyle } from '../../agent/style-registry'
 
 import type { ChapterInfo } from '../chapter-workflow'
@@ -94,38 +95,23 @@ export class RefineDraftCommand extends BaseWorkflowCommand<string> {
     assertProject()
     if (!baseDraft) throw new Error(t('error.noBaseDraft'))
 
-    const revIndex = await ipc.invoke('db:revision-next-index', baseDraft.id)
-    assertProject()
-
-    // Read existing revisions first; discard only after the replacement is persisted.
-    const pendingRevs = await ipc.invoke('db:revision-get-pending', baseDraft.id)
-    assertProject()
-
-    const createRes = await ipc.invoke('db:revision-create', {
+    const { id: revisionId, revisionIndex: revIndex } = await persistWorkflowRevision({
       baseDraftId: baseDraft.id,
-      revisionIndex: revIndex,
       revisionType: 'refine',
       content: cleanRefined,
       wordCount: computeTextStats(cleanRefined).novelWordCount,
-    })
-    assertDraftWrite(createRes)
-    assertProject()
-    if (!createRes.id) throw new Error(t('error.noBaseDraft'))
-    for (const rev of pendingRevs) {
-      assertProject()
-      assertDraftWrite(await ipc.invoke('db:revision-mark-discarded', rev.id))
-    }
+    }, assertProject)
 
     const { useEditorStore } = await import('../../../stores/editor-store')
     assertProject()
     useEditorStore.getState().openFile({
-      id: `diff-${this.params.draftPath}-${createRes.id}`,
+      id: `diff-${this.params.draftPath}-${revisionId}`,
       name: t('workflow.refineMerge').replace('{n}', String(this.params.chapterNumber)),
       type: 'diff',
       filePath: this.params.draftPath,
       originalContent: this.params.draftContent,
       content: cleanRefined,
-      revisionPath: String(createRes.id),
+      revisionPath: String(revisionId),
       chapterNumber: this.params.chapterNumber,    })
 
     context.data.refined = cleanRefined

@@ -348,7 +348,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
   }
 
   /** 获取章节的最新草稿内容 */
-  async function getLatestDraft(chapterNumber: number): Promise<{
+  async function getLatestDraft(chapterNumber: number, options?: { excludeArchived?: boolean }): Promise<{
     filePath: string
     content: string
     title: string
@@ -360,7 +360,10 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
       assertProject()
       if (!drafts || drafts.length === 0) return null
       // 取最新版本
-      const latest = drafts.sort((a, b) => b.version - a.version)[0]
+      const latest = drafts
+        .filter(draft => !options?.excludeArchived || draft.status !== 'archived')
+        .sort((a, b) => b.version - a.version)[0]
+      if (!latest) return null
       const full = await ipc.invoke('db:draft-get-full', latest.id) as { content: string } | null
       assertProject()
       if (!full) return null
@@ -474,7 +477,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
 
   /** 构建定稿工作流 */
   async function buildFinalizeWorkflow(chapterNumber: number) {
-    const draft = await getLatestDraft(chapterNumber)
+    const draft = await getLatestDraft(chapterNumber, { excludeArchived: true })
     assertProject()
     if (!draft) return null
 

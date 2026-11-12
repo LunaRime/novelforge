@@ -1,4 +1,4 @@
-import { captureDraftProject, draftIdFromPath, getDraftMeta, updateDraftStatus as updateStatus } from '../draft-index'
+import { captureDraftProject, captureDraftWorkflowSource, draftIdFromPath, getDraftMeta, updateDraftStatus as updateStatus } from '../draft-index'
 import { ipc } from '../ipc-client'
 import { VELA } from '../vela-protocol'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
@@ -125,6 +125,7 @@ export function createChapterWorkflow(chapterInfo: ChapterInfo): WorkflowDefinit
 }
 
 export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefinition {
+  const assertSource = captureDraftWorkflowSource()
   return {
     type: 'chapter_creation',
     title: t('workflow.polishTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
@@ -135,6 +136,7 @@ export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefi
         description: t('workflow.polishDesc'),
         executor: async (step, context, callbacks) => {
           const { RefineDraftCommand } = await import('./commands/refine-draft.command')
+          assertSource()
           const cmd = new RefineDraftCommand({
             draftPath: params.draftPath,
             draftContent: params.draftContent,
@@ -151,6 +153,7 @@ export function createRefineOnlyWorkflow(params: RefineOnlyParams): WorkflowDefi
 }
 
 export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): WorkflowDefinition {
+  const assertSource = captureDraftWorkflowSource()
   return {
     type: 'chapter_creation',
     title: t('workflow.reviewFixTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
@@ -161,6 +164,7 @@ export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): 
         description: t('workflow.reviewFixDesc'),
         executor: async (step, context, callbacks) => {
           const { RefineFromReviewCommand } = await import('./commands/refine-from-review.command')
+          assertSource()
           const cmd = new RefineFromReviewCommand({
             draftPath: params.draftPath,
             draftContent: params.draftContent,
@@ -178,6 +182,7 @@ export function createRefineFromReviewWorkflow(params: RefineFromReviewParams): 
 }
 
 export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefinition {
+  const assertSource = captureDraftWorkflowSource()
   return {
     type: 'chapter_creation',
     title: t('workflow.reviewTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
@@ -188,6 +193,7 @@ export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefi
         description: t('workflow.reviewDesc'),
         executor: async (step, context, callbacks) => {
           const { ReviewChapterCommand } = await import('./commands/review-chapter.command')
+          assertSource()
           const cmd = new ReviewChapterCommand({
             draftPath: params.draftPath,
             draftContent: params.draftContent,
@@ -204,6 +210,7 @@ export function createReviewOnlyWorkflow(params: ReviewOnlyParams): WorkflowDefi
 
 export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefinition {
   const chapterInfo = { chapterNumber: params.chapterNumber, title: params.chapterTitle, role: '', purpose: '', characters: [], keyEvents: '' }
+  const assertSource = captureDraftWorkflowSource()
   return {
     type: 'chapter_creation',
     title: t('workflow.finalizeTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', params.chapterTitle),
@@ -214,6 +221,7 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
         description: t('workflow.finalizeDesc'),
         executor: async (step, context, callbacks) => {
           const { FinalizeChapterCommand } = await import('./commands/finalize-chapter.command')
+          assertSource()
           const cmd = new FinalizeChapterCommand({
             draftPath: params.draftPath,
             draftContent: params.draftContent,
@@ -226,33 +234,21 @@ export function createFinalizeWorkflow(params: FinalizeOnlyParams): WorkflowDefi
     ],
     onComplete: {
       mode: 'open', message: t('workflow.finalized').replace('{n}', String(params.chapterNumber)), openResult: async () => {
-        const { useEditorStore } = await import('../../stores/editor-store')
-        const { useProjectStore } = await import('../../stores/project-store')
-        const project = useProjectStore.getState().currentProject
-        if (!project) return
-        const { ipc } = await import('../ipc-client')
-        const draftMeta = await ipc.invoke('db:draft-get-finalized', params.chapterNumber)
-        if (draftMeta) {
-          const fullContent = await ipc.invoke('db:draft-get-full', draftMeta.id)
-          // 从数据库蓝图读取正式标题
-          let displayTitle = params.chapterTitle
-          try {
-            const bp = await ipc.invoke('db:blueprint-get', params.chapterNumber)
-            if (bp?.title) displayTitle = bp.title
-          } catch (e) {
-            console.warn('[chapter-workflow] 蓝图标题读取失败，回退使用章节参数:', e)
-          }
-          const dbPath = `${VELA.MANUSCRIPT}${draftMeta.id}`
-          useEditorStore.getState().openFile({
-            id: dbPath,
-            name: t('workflow.chapterTitle')
-              .replace('{n}', String(params.chapterNumber))
-              .replace('{title}', displayTitle),
-            type: 'chapter',
-            filePath: dbPath,
-            content: fullContent?.content || '',
-          })
+        assertSource()
+        const id = draftIdFromPath(params.draftPath)
+        let displayTitle = params.chapterTitle
+        try {
+          const blueprint = await ipc.invoke('db:blueprint-get', params.chapterNumber)
+          if (blueprint?.title) displayTitle = blueprint.title
+        } catch (error) {
+          console.warn('[chapter-workflow] 蓝图标题读取失败，回退使用章节参数:', error)
         }
+        const { openRendererEditorDocument } = await import('../editor/open-editor-document')
+        assertSource()
+        await openRendererEditorDocument({
+          kind: 'path', locator: `${VELA.MANUSCRIPT}${id}`, documentKind: 'chapter',
+          name: t('workflow.chapterTitle').replace('{n}', String(params.chapterNumber)).replace('{title}', displayTitle),
+        })
       }
     },
   }

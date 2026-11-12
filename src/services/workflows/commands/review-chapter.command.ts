@@ -4,6 +4,8 @@ import { useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { ReviewPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
+import { captureDraftProject } from '../../draft-index'
+import { persistWorkflowReview } from '../draft-feedback'
 
 
 export interface ReviewChapterParams {
@@ -19,9 +21,14 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     super()
   }
 
-  async execute({ callbacks }: CommandExecuteParams): Promise<string> {
+  async execute({ callbacks, context }: CommandExecuteParams): Promise<string> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
+    const assertProject = captureDraftProject(project.path)
+    const assertCurrent = () => {
+      assertProject()
+      if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+    }
 
     const draft = this.params.draftContent
     if (!draft) throw new Error(t('error.noDraft'))
@@ -92,12 +99,13 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       { purpose: 'review_chapter' }
     )
 
+    assertCurrent()
     const { parseDraftMeta } = await import('../chapter-workflow')
+    assertCurrent()
     const baseDraft = await parseDraftMeta(this.params.draftPath)
-    if (!baseDraft) throw new Error(t('error.noBaseDraft'))
+    assertCurrent()
+    if (!baseDraft || baseDraft.chapterNumber !== this.params.chapterNumber) throw new Error(t('error.noBaseDraft'))
     const baseVersion = baseDraft.version
-
-    const revIndex = await ipc.invoke('db:review-next-index', baseDraft.id)
 
     // 解析审稿结果 — 三层回退策略：
     //   L1: Markdown 表格解析（优先，匹配 Prompt 要求）
@@ -172,11 +180,10 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
     if (parsedResult.rawResponse) {
       dbContent.rawResponse = parsedResult.rawResponse
     }
-    await ipc.invoke('db:review-create', {
+    const { reviewIndex: revIndex } = await persistWorkflowReview({
       baseDraftId: baseDraft.id,
-      reviewIndex: revIndex,
       content: JSON.stringify(dbContent, null, 2),
-    })
+    }, assertCurrent)
 
     // Tab 内容: L1/L2 传 JSON 字符串供 ReviewReport 结构化渲染
     //           L3 传原始文本供 ReviewReport.parseLegacyReport() 旧版解析器处理
@@ -185,6 +192,7 @@ export class ReviewChapterCommand extends BaseWorkflowCommand<string> {
       : JSON.stringify(parsedResult, null, 2)
 
     const { useEditorStore } = await import('../../../stores/editor-store')
+    assertCurrent()
     const pseudoReviewPath = `vela://draft/ch${this.params.chapterNumber}/v${baseVersion}/review${revIndex}`
     useEditorStore.getState().openFile({
       id: `review-${this.params.draftPath}-${revIndex}`,

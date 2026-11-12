@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { openRendererEditorDocument } from './open-editor-document'
 import { EditorOpenScopeChanged } from '../../core'
 import { useEditorStore } from '../../stores/editor-store'
+import { createFinalizeWorkflow, createRefineFromReviewWorkflow, createRefineOnlyWorkflow, createReviewOnlyWorkflow } from '../workflows/chapter-workflow'
+import { createBookPipelineWorkflow } from '../workflows/book-pipeline-workflow'
 
 const { invoke, state } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -109,6 +111,48 @@ describe('renderer document opening adapter', () => {
     await openRendererEditorDocument({ kind: 'path', locator: 'vela://manuscript/7', name: 'Final', documentKind: 'chapter' })
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'vela://manuscript/7', filePath: 'vela://manuscript/7' })
     expect(useEditorStore.getState().tabs[0].docId).toBeUndefined()
+  })
+
+  it('opens the exact finalized branch from the workflow receipt', async () => {
+    invoke.mockResolvedValueOnce({ title: 'Rain' }).mockResolvedValueOnce({ content: 'Finalized branch' })
+    const workflow = createFinalizeWorkflow({ chapterNumber: 3, chapterTitle: 'Rain',
+      draftPath: 'vela://draft/41', draftContent: 'Finalized branch' })
+    await workflow.onComplete?.openResult?.()
+    expect(invoke.mock.calls).toEqual([['db:blueprint-get', 3], ['db:draft-get-full', 41]])
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ filePath: 'vela://manuscript/41', content: 'Finalized branch' })
+  })
+
+  it('discards a finalization projection from a previous same-path session', async () => {
+    const workflow = createFinalizeWorkflow({ chapterNumber: 3, chapterTitle: 'Rain',
+      draftPath: 'vela://draft/41', draftContent: 'Finalized branch' })
+    invoke.mockImplementationOnce(async () => { state.projectSession++; return { title: 'Rain' } })
+    await expect(workflow.onComplete?.openResult?.()).rejects.toThrow()
+    expect(invoke.mock.calls).toEqual([['db:blueprint-get', 3]])
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
+  it.each([
+    ['review', createReviewOnlyWorkflow],
+    ['refine', createRefineOnlyWorkflow],
+    ['review fix', createRefineFromReviewWorkflow],
+    ['finalize', createFinalizeWorkflow],
+  ])('rejects a delayed %s step from the previous project session', async (_name, create) => {
+    const workflow = create({ chapterNumber: 3, chapterTitle: 'Rain', draftPath: 'vela://draft/41',
+      draftContent: 'Previous session', reviewReport: 'Review', reviewFileName: 'review' })
+    const step = workflow.steps[0]
+    const running = step.executor({ id: 'step', name: '', description: '', status: 'running', logs: [] },
+      { cancelled: false, data: {} }, { log: vi.fn(), appendText: vi.fn(), setProgress: vi.fn() })
+    state.projectSession++
+    await expect(running).rejects.toThrow()
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('rejects a book finalization step before looking up a draft in the reopened project', async () => {
+    const workflow = createBookPipelineWorkflow({ chapterStart: 3, chapterEnd: 3 })
+    state.projectSession++
+    await expect(workflow.steps.at(-1)!.executor({ id: 'step', name: '', description: '', status: 'running', logs: [] },
+      { cancelled: false, data: {} }, { log: vi.fn(), appendText: vi.fn(), setProgress: vi.fn() })).rejects.toThrow()
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('rejects project-scoped URI reads without an active project', async () => {

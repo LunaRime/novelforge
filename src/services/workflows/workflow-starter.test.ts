@@ -14,6 +14,7 @@ let characterGetAll: unknown[]
 let blueprintGetResult: unknown
 let draftListResult: unknown[]
 let draftGetFinalizedResult: unknown
+let draftGetFullResult: unknown
 let draftMetaResult: unknown
 let projectCoreResult: unknown
 
@@ -29,6 +30,8 @@ const mockInvoke = vi.fn(async (ch: string) => {
       return draftListResult
     case 'db:draft-get-finalized':
       return draftGetFinalizedResult
+    case 'db:draft-get-full':
+      return draftGetFullResult
     case 'db:draft-get-meta':
       return draftMetaResult
     case 'db:project-core-get':
@@ -52,6 +55,7 @@ beforeEach(() => {
   blueprintGetResult = null
   draftListResult = []
   draftGetFinalizedResult = null
+  draftGetFullResult = null
   draftMetaResult = null
   projectCoreResult = null
   Object.defineProperty(window, 'novelforgeAPI', { value: { invoke: mockInvoke }, configurable: true })
@@ -260,6 +264,17 @@ describe('workflow-starter', () => {
     expect(err).toMatchObject({ code: 'ERR_NO_DRAFT' })
     expect(err.message).toBe(t('tool.wfNoFinalizeDraft').replace('{chapter}', '1'))
     expect(startWorkflowMock).not.toHaveBeenCalled()
+  })
+
+  it('selects the latest eligible draft for chapter-number finalization', async () => {
+    draftListResult = [{ id: 42, version: 2, status: 'archived' }, { id: 41, version: 1, status: 'revised' }]
+    draftGetFullResult = { content: 'Eligible draft' }
+    await expect(startWorkflow({ workflow: 'finalize', chapterNumber: 3 })).resolves.toMatchObject({ runId: 'run-1-test' })
+    expect(mockInvoke).toHaveBeenCalledWith('db:draft-get-full', 41)
+    expect(mockInvoke).not.toHaveBeenCalledWith('db:draft-get-full', 42)
+    expect(startWorkflowMock).toHaveBeenCalledWith(expect.objectContaining({
+      rehydrateParams: expect.objectContaining({ draftPath: 'vela://draft/41', draftContent: 'Eligible draft' }),
+    }), false, expect.anything())
   })
 
   it('蓝图缺失 → throw ERR_NO_BLUEPRINT（P0-3：不误归 ERR_GUARD）', async () => {

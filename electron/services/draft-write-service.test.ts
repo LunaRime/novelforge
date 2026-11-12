@@ -2,13 +2,14 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { DatabaseSync } from 'node:sqlite'
 import { createHash } from 'node:crypto'
 
-vi.mock('../database', () => ({ getProjectDb: vi.fn() }))
+vi.mock('../database', () => ({ getProjectDb: vi.fn(), getCurrentProjectPath: () => '/project' }))
 vi.mock('./draft-snapshot-service', () => ({ maybeCreateAutoSnapshot: vi.fn() }))
 vi.mock('../utils/logger', () => ({ logger: { debug: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 import { getProjectDb } from '../database'
 import { maybeCreateAutoSnapshot } from './draft-snapshot-service'
-import { commitDatabaseDraft } from './draft-write-service'
+import { commitDatabaseDraft, commitDatabaseDraftFinalization } from './draft-write-service'
 import { DraftRepository } from '../repositories/draft-repository'
+import { captureProjectWriteScope } from './project-write-scope'
 
 let db: DatabaseSync
 let savepoint = 0
@@ -75,4 +76,47 @@ test('malformed writes never alter draft content', () => {
 test('disconnected writes never report success', () => {
   vi.mocked(getProjectDb).mockReturnValue(null)
   expect(commitDatabaseDraft({ draftId: 1, content: 'new', wordCount: 3, actor: 'user' }).success).toBe(false)
+})
+
+test.each(['finalized', 'archived'])('manual and agent content writes respect %s status', status => {
+  db.prepare('UPDATE drafts SET status=? WHERE id=1').run(status)
+  expect(commitDatabaseDraft({ draftId: 1, content: 'new', wordCount: 3, actor: 'user' })).toEqual({
+    success: false, error: 'draft-finalized-readonly',
+  })
+  expect(commitDatabaseDraft({ draftId: 1, content: 'new', wordCount: 3, actor: 'agent', expectedHash: hash('old'), expectedUpdatedAt: 100 }).success).toBe(false)
+  expect(db.prepare('SELECT body FROM contents WHERE id=1').get()?.body).toBe('old')
+})
+
+const finalization = { draftId: 1, chapterNumber: 1, projectPath: '/project', expectedContent: 'old', wordCount: 4 }
+
+test('finalizes the saved body once and rejects a different project, chapter or body', () => {
+  expect(commitDatabaseDraftFinalization({ ...finalization, projectPath: '/other' }).success).toBe(false)
+  expect(commitDatabaseDraftFinalization({ ...finalization, chapterNumber: 2 }).success).toBe(false)
+  expect(commitDatabaseDraftFinalization({ ...finalization, expectedContent: 'stale' }).conflict).toBe(true)
+  expect(commitDatabaseDraftFinalization(finalization)).toEqual({ success: true })
+  expect(db.prepare('SELECT status, word_count, content_id FROM drafts WHERE id=1').get()).toEqual({
+    status: 'finalized', word_count: 4, content_id: 1,
+  })
+  expect(db.prepare('SELECT body, updated_at FROM contents WHERE id=1').get()).toEqual({ body: 'old', updated_at: 100 })
+  expect(commitDatabaseDraftFinalization(finalization)).toEqual({ success: true, alreadyFinalized: true })
+  expect(maybeCreateAutoSnapshot).toHaveBeenCalledOnce()
+})
+
+test('a rejected final status leaves the saved body and metadata intact', () => {
+  db.exec("CREATE TRIGGER reject_finalized BEFORE UPDATE OF status ON drafts BEGIN SELECT RAISE(ABORT, 'status rejected'); END")
+  expect(commitDatabaseDraftFinalization(finalization)).toMatchObject({ success: false, error: expect.stringContaining('status rejected') })
+  expect(db.prepare('SELECT status, word_count, content_id FROM drafts WHERE id=1').get()).toEqual({
+    status: 'draft', word_count: 3, content_id: 1,
+  })
+  expect(db.prepare('SELECT body FROM contents WHERE id=1').get()?.body).toBe('old')
+  expect(maybeCreateAutoSnapshot).not.toHaveBeenCalled()
+})
+
+test('rejects a finalization from a replaced connection at the same path', () => {
+  const previous = captureProjectWriteScope()
+  vi.mocked(getProjectDb).mockReturnValue({} as NonNullable<ReturnType<typeof getProjectDb>>)
+  expect(commitDatabaseDraftFinalization({ ...finalization, writeToken: previous.token })).toEqual({
+    success: false, error: 'project-scope-changed',
+  })
+  expect(db.prepare('SELECT status FROM drafts WHERE id=1').get()?.status).toBe('draft')
 })
