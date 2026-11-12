@@ -2,7 +2,7 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已本地实现，下一批为 E1 存储生命周期矩阵。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
+执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已完成，下一批为 E2 只读诊断。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
@@ -153,7 +153,7 @@ interface MaintenanceReceipt {
 
 这些是硬门槛，必须另写实施与恢复设计，不能在普通 UI 批次中顺手启用。
 
-- [ ] E1 生命周期：逐项适配草稿创建/版本/分支/快照、修稿与审稿关联、归档/定稿、删除/重排、导入/导出、agent 与恢复流程。
+- [x] [E1 生命周期矩阵](37-storage-lifecycle-matrix.md) 已记录 SQLite 与文件侧的职责、缺口和验收证据。逐项适配及验证仍是应用存储切换的准入条件。
 - [ ] E2 恢复工具：当前没有 doctor/repairNames 自动实现。补齐索引重建、孤儿/重复身份报告、崩溃临时文件和锁恢复策略；不能未经核验自动删活跃锁或冲突文件。
 - [ ] E3 副本验收：一致离线库副本导出到独立目录，逐条比对正文、身份、历史和关联；重复执行、外部修改、损坏数据都按失败策略验证。
 - [ ] E4 旧版隔离与恢复：已发布旧版不会理解未来新增标记。证明旧版本不会误读冻结的旧状态；完成匹配备份恢复演练，不把新标记本身当成兼容保证。
@@ -198,7 +198,7 @@ git status --short package.json
 | `src/components/editor/NovelConfigEditor.tsx`、`src/stores/project-store.ts` | 组件 `await saveProject()` 后直接显示成功，但 store 签名是 `Promise<boolean>` | B2 先覆盖返回 false 的失败语义，再抽用例；不能只测抛异常 |
 | `src/components/editor/WorldBuildingEditor.tsx` | 同时消费角色投影、架构状态、后处理状态与生成入口 | B3 拆读取组合和命令，不另建角色事实源 |
 | `src/stores/character-store.ts` | `saveAll` 组织改名映射、查旧名、删除与保存，多次 IPC 组成写链路 | C2 单列原子提交设计；搬进一个 adapter 不能自动获得事务性 |
-| `src/core/ports/chapter-repo.ts` | 当前只有 `byId/list/save/remove`，更新通过 `expectedRevision` 检查版本 | E1 补版本、分支、快照和关联协议；不能宣称已有端口覆盖全生命周期 |
+| `src/core/ports/chapter-repo.ts` | 当前只有 `byId/list/save/remove`，更新通过 `expectedRevision` 检查版本 | E1 登记版本、分支、快照与关联协议缺口，切换前补齐 |
 | `src/core/migration/export-legacy-project.ts`、`scripts/migrate-to-files.mjs` | 输出当前章与历史文件并备份完整库；命令检查部分关联内容完整性，但没有把这些关联全部转成可独立使用的文件模型 | E1/E3 区分“备份保留”与“应用可读写”，逐项验证 |
 | 同一离线导出器 | 同源、同项目、文件完整时可核验已有输出并返回 `alreadyExported`；失败 staging 在 finally 清理 | E3 按实际协议测试，不把“目录已存在一律拒绝”或“失败现场总会保留”当作现状 |
 | `src/core/adapters/file-chapter-store.ts` | 离线仓储使用项目锁，陈旧锁只报告；实时外部编辑协调另行处理 | E2/F2 不自动删除活跃锁，不把协作锁当作外部编辑器也遵守的锁 |
@@ -316,7 +316,7 @@ C1a 加载与保存已完成，含快照、来源隔离、逐行 dirty 确认和
 
 ### E 的交付顺序
 
-1. **E1 生命周期矩阵**：逐项列出现有命令、DB 表/关联、目标文件或保留 DB 的职责、读写入口、失败语义和测试。草稿版本、分支、快照、修稿、审稿、场景卡、归档、定稿、删除、重排、导入导出、agent 和 checkpoint 均须有归属；有未覆盖项就不进入切换。
+1. **[E1 生命周期矩阵](37-storage-lifecycle-matrix.md)**（已完成）：逐项列出现有命令、DB 表/关联、目标文件或保留 DB 的职责、读写入口、失败语义和测试。草稿版本、分支、快照、修稿、审稿、场景卡、归档、定稿、删除、重排、导入导出、agent 和 checkpoint 均须有归属；有未覆盖项就不进入切换。
 2. **E2 只读诊断先行**：建议新增 `src/core/application/inspect-project.ts`、窄诊断端口与 `scripts/doctor.mjs`。第一交付只报告重复身份、编号冲突、缺正文、孤儿关联、锁和临时文件；修复与扫描分离，扫描不改用户文件。新增命令实际交付前不在 README 标成可用。
 3. **E3 副本验证包**：用固定合成夹具和获准使用的真实项目一致离线副本分别验收；原路径只读，目标必须隔离。记录清单、正文及历史 hash、关联计数、工具/应用版本和源指纹。真实副本未提供时标记该项未验，不能拿合成夹具代替。
 4. **E4 隔离与恢复演练**：选定具体已发布旧版，用打包产物尝试打开切换副本；仅增加 `storage_version` 不算隔离。推荐迁移产物采用独立新项目入口，旧项目作为明确时间点的备份保留；目录/注册入口/旧版识别方案在专项设计中确定，并用实测证明旧版不会把备份误当最新项目。
@@ -362,4 +362,4 @@ F 只在 E 验证包和 D 出口全部通过后进入；开始前另写迁移/�
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
 - [x] 按各批实际交付回填 A、B、C 和 D1–D4。真实副本验证及引擎独立打包仍有各自的验收项。
 
-A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已本地实现，下一批为 E1 存储生命周期矩阵。
+A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已完成，下一批为 E2 只读诊断。

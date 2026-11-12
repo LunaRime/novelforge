@@ -48,4 +48,4 @@ node scripts/migrate-to-files.mjs ./offline-vela.db ./new-export my-project-id
 
 当前要求 v23 对应的草稿列，旧 schema、缺失正文、快照 hash 错误或主线版本歧义会安全失败。导出先写独立 staging，完整校验后发布，失败只清理本次创建的 staging。重复执行会拒绝源库变化、输出修改、额外文件或符号链接。
 
-这不是应用切换工具，也不修改源库版本标记。真实项目副本验收后，才能继续 IPC 接入、统一 UI/agent 写入口和 M2–M4。
+应用继续通过现有 SQLite 入口读写。章节存储接入所需的关联与恢复验收见 [E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md)。

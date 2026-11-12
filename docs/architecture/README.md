@@ -1,6 +1,6 @@
 # NovelForge 架构文档
 
-> 当前实施边界（2026-11-13）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付。本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22），以及 C1a–C1g（23–24、26–30）、C2（31）和 [C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md)。C3 本地验收为 350 个测试文件、3,849 条测试。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已本地实现，下一批为 E1 存储生命周期矩阵。应用入口当前读写现有 DB，离线迁移输出使用独立空目录。
+> 当前实施边界（2026-11-13）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付。本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22），以及 C1a–C1g（23–24、26–30）、C2（31）和 [C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md)。C3 本地验收为 350 个测试文件、3,849 条测试。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已完成，下一批为 E2 只读诊断。应用入口当前读写现有 DB，离线迁移输出使用独立空目录。
 
 > 2026-10-28 起，这一组文档是改造的权威依据。旧的 `docs/architecture-review.md`、`docs/project-structure-review.md` 回答的是"目录整不整齐"，这里回答的是"事实放在哪、一次改动要跨几层"。
 
@@ -27,7 +27,7 @@
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
 | 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | 17 | [知识库侧栏应用层抽离](17-knowledge-panel-application-plan.md) | 搜索/摘要/删除用例及请求失效保护 | 已实现并通过本地验证 |
-| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | A/B 已本地完成；C–F 后续任务与验收矩阵 | D4 已本地实现，E1 存储生命周期矩阵待续 |
+| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | E1 已完成，E2 只读诊断待续 |
 | 19 | [知识库总览应用层实施](19-knowledge-overview-application.md) | 维护互斥、导出元数据、项目隔离及总览组件回归 | 本地提交 0c1375c |
 | 20 | [架构文档应用层实施](20-architecture-document-application-plan.md) | B1 读写/生成用例、dirty 会话与运行归属 | 本地实施与验证记录 |
 | 21 | [小说配置应用层实施](21-novel-config-application-plan.md) | B2 保存、字段版本、生成冲突与撤销保护 | 本地实施与验证记录 |
@@ -45,7 +45,8 @@
 | 33 | [状态职责清单](33-store-responsibilities.md) | 项目、草稿、角色与工作流的异步操作、提交点及现有验证 | D1 已完成 |
 | 34 | [项目保存与配置撤销](34-project-config-save-plan.md) | 写入互斥、迟到回执、项目连接与字段撤销 | D2 已本地实现 |
 | 35 | [Runtime 实例隔离](35-runtime-instances-plan.md) | Agent 端口、审批与工作流事件、断点隔离 | D3 已本地实现 |
-| 36 | [无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) | 草稿身份、修稿与审稿、合并回滚及定稿保护 | D4 已本地实现 |
+| 36 | [无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) | 草稿身份、修稿与审稿、合并回滚及定稿保护 | D4 已提交 |
+| 37 | [存储生命周期矩阵](37-storage-lifecycle-matrix.md) | SQLite 创作入口、离线文件覆盖与切换准入 | E1 已完成 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
@@ -124,7 +125,7 @@ cp "$TMP/current.png" docs/architecture/images/01-current-state.png
 
 - **数字口径**：所有行数 = 非测试 TS/TSX 物理行；每篇注明实测日期。改代码后数字会漂，别凭记忆写。
 - **命名与改动规范**：项目文件 / 源码 / 文档三套命名规则、M1–M4 改名清单、改动前必过的 7 条检查，见 [04 附录 B](04-refactor-plan.md)。三条高压线：
-  1. **章节 id 不派生自章号**（也不直接挪用 `drafts.id`）——迁移用 `sha256(draftId)`，新建用 `randomHex(8)`。
+  1. **章节 id 独立于章号**。离线导出以项目 ID 和草稿 ID 计算哈希，实时接入须持久化身份映射。见 [存储生命周期矩阵](37-storage-lifecycle-matrix.md)。
   2. **标题不进文件名**——`chapters/{0001}.md`，标题只在 frontmatter。中文 slug 会撞 Unicode 归一化，标点会撞路径注入。
   3. **改名必须捕获 `renameMap` 联动**（引用 / 索引 / 导出 / 记忆四处）。
 - **`vela` / `.vela` 残留**：391 处 / 87 文件，按"是否落盘"三级处置，见 [04 附录 B.5](04-refactor-plan.md)。一句话判断标准：**名字会出现在磁盘 / 用户 profile / 数据库 → 不改；不会 → 随便改。** `vela.db`、`.vela` 保护段、`vela-*` localStorage 键属于前者，保留到 1.0；`velaAPI`、`VELA_HOME` 属于后者，M3 全局替换。
