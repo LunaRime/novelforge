@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * read_project_state — 读取项目全局状态
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createReadProjectStateTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadProjectStateTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_project_state',
   description: t('tool.readStateDesc'),
   source: 'builtin',
@@ -27,7 +26,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -48,7 +47,7 @@ return buildRuntimeAgentTool(ports, {
     if (includeConfig) {
       // 读取小说配置
       try {
-        const core = await ipc.invoke('db:project-core-get')
+        const core = await ports.io.invoke('db:project-core-get')
         if (core) {
           parts.push(t('tool.readStateConfigSection').replace('{json}', JSON.stringify({
             projectName: core.projectName,
@@ -72,7 +71,7 @@ return buildRuntimeAgentTool(ports, {
       // 读取最近 5 章蓝图的 notes 字段作为进度摘要
       const notesParts: string[] = []
       try {
-        const bps = await ipc.invoke('db:blueprint-get-all')
+        const bps = await ports.io.invoke('db:blueprint-get-all')
         if (bps && Array.isArray(bps)) {
           // 倒序遍历
           const sorted = bps.sort((a, b) => b.chapterNumber - a.chapterNumber)

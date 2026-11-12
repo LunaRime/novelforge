@@ -1,4 +1,5 @@
 import type { RuntimeEvent } from '../../core'
+import type { AgentRuntimePorts } from './runtime-ports'
 /**
  * NovelForge Agent Tool 注册表
  *
@@ -65,7 +66,7 @@ export interface AgentTool extends ToolExecutionPolicy {
    */
   timeoutMs?: number
   /** 执行函数 */
-  execute: (args: Record<string, unknown>) => Promise<ToolResult>
+  execute: (args: Record<string, unknown>, runtime?: AgentRuntimePorts) => Promise<ToolResult>
   /** 可选的用户友好名称（UI 显示用，比 name 更可读） */
   userFacingName?: string
 }
@@ -196,8 +197,14 @@ class ToolRegistryImpl {
   }
 }
 
-/** 全局单例 Tool 注册表 */
-export const toolRegistry = new ToolRegistryImpl()
+export function createToolRegistry(tools: readonly AgentTool[] = []) {
+  const registry = new ToolRegistryImpl()
+  registry.registerAll([...tools])
+  return registry
+}
+
+/** 应用组合层的工具目录。 */
+export const toolRegistry = createToolRegistry()
 
 // ===== 工具函数：创建 Tool 的便捷方法 =====
 

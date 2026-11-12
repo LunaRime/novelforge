@@ -10,7 +10,6 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 只读、免确认（与 read_architecture / read_project_state 同类）。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 /** 架构字段预览长度上限——避免把整篇世界观灌进上下文（需要全文时让 LLM 调 read_architecture） */
 const PREVIEW_LIMIT = 200
@@ -21,15 +20,15 @@ function preview(text: string | undefined | null): string {
   return s.length > PREVIEW_LIMIT ? s.slice(0, PREVIEW_LIMIT) + '…' : s
 }
 
-export function createListOutlineTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createListOutlineTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'list_outline',
   description: t('tool.listOutlineDesc'),
   source: 'builtin',
   inputSchema: { type: 'object', properties: {} },
   requiresConfirmation: false,
   isReadOnly: true,
-  execute: async () => {
+  execute: async (_args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -38,9 +37,9 @@ return buildRuntimeAgentTool(ports, {
     try {
       // 三个数据源并发读（都是只读通道）
       const [core, blueprints, draftChapters] = await Promise.all([
-        ipc.invoke('db:project-core-get'),
-        ipc.invoke('db:blueprint-get-all'),
-        ipc.invoke('db:draft-get-all-chapter-numbers'),
+        ports.io.invoke('db:project-core-get'),
+        ports.io.invoke('db:blueprint-get-all'),
+        ports.io.invoke('db:draft-get-all-chapter-numbers'),
       ])
 
       const parts: string[] = []

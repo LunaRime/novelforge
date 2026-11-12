@@ -6,10 +6,9 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 供后续的语义搜索和 RAG 管道使用。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
-export function createIndexContentTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createIndexContentTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'index_content',
   description: t('tool.indexDesc'),
   source: 'builtin',
@@ -32,7 +31,7 @@ return buildRuntimeAgentTool(ports, {
     required: ['content', 'file_name'],
   },
   requiresConfirmation: true,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const content = args.content as string
     const fileName = args.file_name as string
 
@@ -56,7 +55,7 @@ return buildRuntimeAgentTool(ports, {
         return { success: false, content: '', error: t('error.noProject') }
       }
 
-      const result = await ipc.invoke(
+      const result = await ports.io.invoke(
         'kb:import-text',
         content,
         fileName,

@@ -3,14 +3,13 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * write_file — 写入或修改项目文件
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 import { isChapterWritePath, isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 import { isVelaProtocol, VELA } from '../../vela-protocol'
 import { resolveAgentFilePath } from '../agent-file-resolver'
 
-export function createWriteFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createWriteFileTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'write_file',
   description: t('tool.writeFileDesc'),
   source: 'builtin',
@@ -31,7 +30,7 @@ return buildRuntimeAgentTool(ports, {
   requiresConfirmation: true,
   isReadOnly: false,
   isDestructive: true,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const filePath = args.file_path as string
     const content = args.content as string
 
@@ -69,14 +68,14 @@ return buildRuntimeAgentTool(ports, {
       return { success: false, content: '', error: t('tool.writeProtectedPath') }
     }
 
-    const result = await ipc.invoke('fs:write-file', pathCheck.fullPath, content)
+    const result = await ports.io.invoke('fs:write-file', pathCheck.fullPath, content)
     if (!result.success) {
       return { success: false, content: '', error: result.error ?? t('tool.writeFileFailed') }
     }
 
     // ⚠️ 写盘成功后失效读去重缓存（P0-2）：LLM「写盘 → 重读验证」是 ReAct 常见模式，
     //    不清除则重读仍命中桩，LLM 无法确认写入结果
-    clearReadState(pathCheck.fullPath)  // key 与 read_file 项目内分支的 pathKey（validatePath.fullPath）一致
+    clearReadState(pathCheck.fullPath, ports)
 
     return {
       success: true,

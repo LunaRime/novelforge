@@ -1,4 +1,4 @@
-import { getAgentRuntimePorts } from './runtime-ports'
+import { captureAgentProject, getAgentRuntimePorts, type AgentRuntimePorts } from './runtime-ports'
 /**
  * NovelForge RAG 上下文提供器 — 向量检索增强生成
  *
@@ -10,7 +10,6 @@ import { getAgentRuntimePorts } from './runtime-ports'
  * 与 LLM 结合后：提示词中的详细数据被替换为 top-K 相关片段，节省 40-60% tokens。
  */
 
-import { ipc } from '../ipc-client'
 import { estimateTokens } from './token-budget'
 import { t } from '../../shared/locale'
 
@@ -67,11 +66,14 @@ export async function retrieveContextForQuery(
   userQuery: string,
   config: RAGInjectionConfig = DEFAULT_RAG_CONFIG,
   chapterNumber?: number,
+  instance?: AgentRuntimePorts,
 ): Promise<RAGInjectionResult | null> {
   if (!config.enabled || !userQuery.trim()) return null
 
   // 检查向量配置：如果全部禁用则跳过 RAG
-  const vectorConfig = getAgentRuntimePorts().vectors.snapshot()
+  const runtime = instance ?? getAgentRuntimePorts()
+  const source = captureAgentProject(runtime)
+  const vectorConfig = runtime.vectors.snapshot()
   if (!vectorConfig.isAnyVectorAvailable()) {
     console.debug('[RAG] 向量功能已全部禁用，跳过 RAG 检索')
     return null
@@ -106,7 +108,7 @@ export async function retrieveContextForQuery(
     // 执行搜索
     let results: RAGChunk[] = []
     if (searchParams.chapterScope) {
-      results = await ipc.invoke(
+      results = await runtime.io.invoke(
         'kb:search-with-scope',
         userQuery,
         (searchParams.chapterScope as [number, number])[0],
@@ -114,10 +116,10 @@ export async function retrieveContextForQuery(
         config.maxChunks,
       )
     } else {
-      results = await ipc.invoke('kb:search', userQuery, config.maxChunks)
+      results = await runtime.io.invoke('kb:search', userQuery, config.maxChunks)
     }
 
-    if (!results || results.length === 0) {
+    if (!source.isCurrent() || !results || results.length === 0) {
       return null
     }
 

@@ -6,10 +6,9 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 用于语义比较、相似度分析、文本聚类等场景。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
-export function createEmbedTextTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createEmbedTextTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'embed_text',
   description: t('tool.embedDesc'),
   source: 'builtin',
@@ -24,7 +23,7 @@ return buildRuntimeAgentTool(ports, {
     required: ['text'],
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const text = args.text as string
 
     if (!text || text.trim().length === 0) {
@@ -54,7 +53,7 @@ return buildRuntimeAgentTool(ports, {
     }
 
     try {
-      const result = await ipc.invoke('embedding:generate', text)
+      const result = await ports.io.invoke('embedding:generate', text)
 
       if (!result.success) {
         return {

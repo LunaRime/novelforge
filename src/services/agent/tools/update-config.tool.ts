@@ -4,8 +4,8 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  */
 import { t } from '../../../shared/locale'
 
-export function createUpdateConfigTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createUpdateConfigTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'update_config',
   description: t('tool.updateConfigDesc'),
   source: 'builtin',
@@ -32,7 +32,7 @@ return buildRuntimeAgentTool(ports, {
   requiresConfirmation: true,
   isReadOnly: false,
   isDestructive: true,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const field = args.field as string
     const value = args.value as string
 

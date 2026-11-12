@@ -8,6 +8,7 @@
 import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
+import { scopedAgentInvoke } from '../runtime-ports'
 import { parseMemoryFile } from '../../memory/memory-codec'
 import type { MemoryFileMeta } from '../../memory/memory-codec'
 import { normalizeLoadMode } from '../../../shared/memory-types'
@@ -22,13 +23,13 @@ function toEntries(list: MemoryFileMeta[]): MemoryLayerEntry[] {
   }))
 }
 
-async function listEntries(): Promise<MemoryLayerEntry[]> {
-  const list = await ipc.invoke('memory:list') as MemoryFileMeta[] | null
+async function listEntries(invoke: typeof ipc.invoke): Promise<MemoryLayerEntry[]> {
+  const list = await invoke('memory:list') as MemoryFileMeta[] | null
   return toEntries(Array.isArray(list) ? list : [])
 }
 
-async function readBody(file: string): Promise<string | null> {
-  const raw = await ipc.invoke('memory:read', file) as string | null
+async function readBody(invoke: typeof ipc.invoke, file: string): Promise<string | null> {
+  const raw = await invoke('memory:read', file) as string | null
   if (raw === null || raw === undefined) return null
   return (parseMemoryFile(raw) ?? { body: raw }).body.trim()
 }
@@ -56,14 +57,15 @@ export const readMemoryTool = buildAgentTool({
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, runtime) => {
+    const invoke = runtime ? scopedAgentInvoke(runtime) : ipc.invoke
     const name = (args.name as string | undefined)?.trim()
     const keyword = (args.keyword as string | undefined)?.trim()
     const type = args.type as MemoryLayerEntry['kind'] | undefined
 
     let entries: MemoryLayerEntry[]
     try {
-      entries = await listEntries()
+      entries = await listEntries(invoke)
     } catch {
       return { success: false, content: '', error: t('error.noProject') }
     }
@@ -75,7 +77,7 @@ export const readMemoryTool = buildAgentTool({
       const normalized = name.replace(/\.md$/, '').toLowerCase()
       const hit = scoped.find(e => e.file.toLowerCase() === name.toLowerCase() || e.file.replace(/\.md$/, '').toLowerCase() === normalized)
       const file = hit?.file ?? (/\.md$/i.test(name) ? name : `${name}.md`)
-      const body = await readBody(file)
+      const body = await readBody(invoke, file)
       if (body === null) {
         return {
           success: false,
@@ -89,7 +91,7 @@ export const readMemoryTool = buildAgentTool({
     if (keyword) {
       const scored: Array<{ e: MemoryLayerEntry; score: number; hint: string }> = []
       for (const e of scoped) {
-        const body = await readBody(e.file)
+        const body = await readBody(invoke, e.file)
         if (body === null) continue
         const score = scoreMemoryEntry(e, body, keyword)
         if (score > 0) scored.push({ e, score, hint: findLineHint(body, keyword) })

@@ -8,11 +8,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * - chapter_number：统计某章最新草稿
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 import { computeTextStats, formatTextStats } from '../../text-stats'
 
-export function createCountCharactersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createCountCharactersTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'count_characters',
   description: t('tool.countDesc'),
   source: 'builtin',
@@ -30,7 +29,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const textArg = args.text as string | undefined
     // 数值归一化（LLM 可能传字符串 "10"——此前透传 IPC/SQLite，亲和性偶发可用）
     const chapterNumRaw = args.chapter_number
@@ -54,11 +53,11 @@ return buildRuntimeAgentTool(ports, {
         return { success: false, content: '', error: t('error.noProject') }
       }
       try {
-        const latest = await ipc.invoke('db:draft-get-latest', chapterNum) as { id?: number; version?: number } | null
+        const latest = await ports.io.invoke('db:draft-get-latest', chapterNum) as { id?: number; version?: number } | null
         if (!latest || latest.id === undefined) {
           return { success: true, content: t('tool.countNoDraft').replace('{chapter}', String(chapterNum)) }
         }
-        const full = await ipc.invoke('db:draft-get-full', latest.id) as { content?: string } | null
+        const full = await ports.io.invoke('db:draft-get-full', latest.id) as { content?: string } | null
         if (!full) {
           return { success: false, content: '', error: t('tool.countDraftReadFailed').replace('{chapter}', String(chapterNum)) }
         }

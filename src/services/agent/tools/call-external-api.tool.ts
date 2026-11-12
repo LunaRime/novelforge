@@ -10,6 +10,7 @@
 import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
+import { scopedAgentInvoke } from '../runtime-ports'
 
 export const callExternalApiTool = buildAgentTool({
   name: 'call_external_api',
@@ -25,7 +26,8 @@ export const callExternalApiTool = buildAgentTool({
     },
     required: ['path'],
   },
-  execute: async (args) => {
+  execute: async (args, runtime) => {
+    const invoke = runtime ? scopedAgentInvoke(runtime) : ipc.invoke
     // 缺 path 报错（与其他工具缺参约定一致；空 path 静默调根路径语义不明确）
     if (typeof args.path !== 'string' || !args.path.trim()) {
       return { success: false, content: '', error: t('tool.externalApiMissingPath') }
@@ -36,7 +38,7 @@ export const callExternalApiTool = buildAgentTool({
       : 'GET'
     const body = typeof args.body === 'string' ? args.body : undefined
 
-    const res = await ipc.invoke('dev:invoke', { path, method, body })
+    const res = await invoke('dev:invoke', { path, method, body })
     if (!res.success) {
       return {
         success: false,

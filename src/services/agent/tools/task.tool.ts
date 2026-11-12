@@ -6,11 +6,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * （只有 store 能接触会话、取消控制器与审批卡）。与 `read_project_state` 等同构。
  */
 import { t } from '../../../shared/locale'
-import { toolRegistry } from '../tool-registry'
 import { SUBAGENT_CONFIRM_TIMEOUT_MS, SUBAGENT_MAX_MS } from '../subagent/types'
 
-export function createTaskTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createTaskTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'task',
   description: t('tool.taskDesc'),
   source: 'builtin',
@@ -29,10 +28,7 @@ return buildRuntimeAgentTool(ports, {
   },
   requiresConfirmation: false,
   isConcurrencySafe: false,
-  execute: async (args) => {
-    // ⚠️ 动态 import（不用顶层静态 import）：`task.tool → agent-store → tools/index → task.tool`
-    // 是静态环，在「tools/index 先被求值」的顺序下 `builtinTools` 数组里的 taskTool 会是
-    // undefined（registerBuiltinTools 崩在 tool.name 上）。延迟到调用时解析即断开环。
+  execute: async (args, ports) => {
     const store = ports.conversation
     const taskId = (args.task_id as string | undefined)?.trim()
     if (taskId) {
@@ -52,13 +48,13 @@ return buildRuntimeAgentTool(ports, {
     const tools = ((args.tools as string | undefined) ?? '').split(',').map(s => s.trim()).filter(Boolean)
     // 评审 M2：给的工具名**全部**不存在 → 立即失败。否则白名单的只读交集为空、只剩写工具，
     // 子 agent 被广告一堆它不该用的写工具却看不到任何读工具 —— 白跑一轮还拿不到反馈
-    if (tools.length > 0 && tools.every(n => !toolRegistry.get(n))) {
+    if (tools.length > 0 && tools.every(n => !ports.tools.get(n))) {
       return {
         success: false,
         content: '',
         error: t('tool.taskUnknownTools')
           .replace('{tools}', tools.join('、'))
-          .replace('{available}', toolRegistry.listAll().map(x => x.name).join('、')),
+          .replace('{available}', ports.tools.listAll().map(x => x.name).join('、')),
       }
     }
     try {

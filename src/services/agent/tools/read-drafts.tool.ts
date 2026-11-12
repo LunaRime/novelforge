@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * read_drafts — 读取草稿内容及状态
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createReadDraftsTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadDraftsTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_drafts',
   description: t('tool.readDraftsDesc'),
   source: 'builtin',
@@ -28,7 +27,7 @@ return buildRuntimeAgentTool(ports, {
     required: ['chapter_number'],
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -44,7 +43,7 @@ return buildRuntimeAgentTool(ports, {
 
     try {
       // 从数据库获取章节的草稿列表
-      const draftsResult = await ipc.invoke('db:draft-list', chapterNum)
+      const draftsResult = await ports.io.invoke('db:draft-list', chapterNum)
       const drafts = (Array.isArray(draftsResult) ? draftsResult : []) as unknown as Array<Record<string, unknown>>
       if (!drafts || drafts.length === 0) {
         return { success: true, content: t('tool.readDraftsNone').replace('{chapter}', String(chapterNum)) }
@@ -73,7 +72,7 @@ return buildRuntimeAgentTool(ports, {
         targetName = `v${target.version as number}`
       }
 
-      const fullDraft = await ipc.invoke('db:draft-get-full', targetId as number) as { content?: string } | null
+      const fullDraft = await ports.io.invoke('db:draft-get-full', targetId as number) as { content?: string } | null
       if (!fullDraft) {
         return { success: false, content: '', error: t('tool.readDraftsContentFailed').replace('{id}', String(targetId)) }
       }

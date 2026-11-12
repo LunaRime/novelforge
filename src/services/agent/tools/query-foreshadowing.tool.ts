@@ -6,13 +6,13 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * LLM 据此自然回应旧伏笔、避免断裂或提前回收。
  */
 import { t } from '../../../shared/locale'
-import { loadAllForeshadowing, formatPendingForPrompt } from '../../foreshadowing-manager'
+import { formatPendingForPrompt } from '../../foreshadowing-manager'
 
 /** 单次注入上限（避免 prompt 膨胀，超出取最近埋设的） */
 const MAX_ITEMS = 5
 
-export function createQueryForeshadowingTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createQueryForeshadowingTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'query_foreshadowing',
   description: t('tool.foreshadowDesc'),
   source: 'builtin',
@@ -31,14 +31,14 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
 
     try {
-      const all = await loadAllForeshadowing()
+      const all = await ports.io.loadForeshadowing()
       const pending = all.filter(f => !f.resolved)
 
       // 按当前章节过滤：仅埋设于本章之前（至少相隔 1 章）

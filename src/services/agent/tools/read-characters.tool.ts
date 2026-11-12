@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * read_characters — 读取角色卡档案
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createReadCharactersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadCharactersTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_characters',
   description: t('tool.readCharsDesc'),
   source: 'builtin',
@@ -21,7 +20,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -30,7 +29,7 @@ return buildRuntimeAgentTool(ports, {
     const charName = args.character_name as string | undefined
 
     try {
-      const charsResult = await ipc.invoke('db:character-get-all')
+      const charsResult = await ports.io.invoke('db:character-get-all')
       const chars = (Array.isArray(charsResult) ? charsResult : []) as unknown as Array<Record<string, unknown>>
       if (!chars || chars.length === 0) {
         return { success: true, content: t('tool.readCharsEmpty') }

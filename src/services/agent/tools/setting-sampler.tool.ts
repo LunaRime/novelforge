@@ -7,7 +7,6 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 判定标准：用随机低频词检索，取相关度最低的尾部结果。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 /** 低频检索词池（与常见网文套路词拉开距离） */
 const COLD_QUERY_POOL = [
@@ -26,7 +25,7 @@ export async function sampleColdSettings(count = 2, ports: AgentRuntimePorts = d
   try {
     // 随机选一个低频词检索，取尾部（低相关度）结果
     const query = COLD_QUERY_POOL[Math.floor(Math.random() * COLD_QUERY_POOL.length)]
-    const results = (await ipc.invoke('kb:search', query, 8)) as Array<{
+    const results = (await ports.io.invoke('kb:search', query, 8)) as Array<{
       text: string; fileName: string; score: number
     }> | null
 
@@ -46,8 +45,8 @@ export async function sampleColdSettings(count = 2, ports: AgentRuntimePorts = d
   }
 }
 
-export function createSettingSamplerTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createSettingSamplerTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'setting_sampler',
   description: t('tool.samplerDesc'),
   source: 'builtin',
@@ -62,7 +61,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
