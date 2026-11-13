@@ -6,6 +6,18 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const projectTexts = {
+  'project.fileEditor': { 'zh-CN': '文件项目编辑器', 'en-US': 'File project editor', 'ru-RU': 'Редактор файлового проекта' },
+  'project.fileEditorDescription': { 'zh-CN': '选择已验证的迁移副本，打开章节或历史草稿。', 'en-US': 'Select a verified migration copy to open chapters or historical drafts.', 'ru-RU': 'Выберите проверенную копию миграции, чтобы открыть главы или историю черновиков.' },
+  'project.fileEditorChoose': { 'zh-CN': '选择项目目录', 'en-US': 'Choose project folder', 'ru-RU': 'Выбрать папку проекта' },
+  'project.fileEditorDocument': { 'zh-CN': '文档', 'en-US': 'Document', 'ru-RU': 'Документ' },
+  'project.fileEditorHistory': { 'zh-CN': '{name}（历史稿 #{id}）', 'en-US': '{name} (historical draft #{id})', 'ru-RU': '{name} (черновик из истории №{id})' },
+  'project.fileEditorBody': { 'zh-CN': '正文', 'en-US': 'Manuscript', 'ru-RU': 'Текст рукописи' },
+  'project.fileEditorUnavailable': { 'zh-CN': '部分文档已不可用。', 'en-US': 'Some documents are unavailable.', 'ru-RU': 'Некоторые документы недоступны.' },
+  'project.fileEditorEmpty': { 'zh-CN': '此项目暂无章节或历史草稿。', 'en-US': 'This project has no chapters or historical drafts.', 'ru-RU': 'В проекте пока нет глав или истории черновиков.' },
+  'project.fileEditorSaveFirst': { 'zh-CN': '请先保存或放弃当前修改。', 'en-US': 'Save or discard your changes first.', 'ru-RU': 'Сначала сохраните или отмените изменения.' },
+  'project.fileEditorDiscard': { 'zh-CN': '放弃未保存的修改', 'en-US': 'Discard unsaved changes', 'ru-RU': 'Отменить несохранённые изменения' },
+  'project.fileEditorSaveConflict': { 'zh-CN': '无法保存。请检查项目状态或正文是否已在外部修改。', 'en-US': 'Could not save. Check the project state or whether the manuscript was edited externally.', 'ru-RU': 'Не удалось сохранить. Проверьте состояние проекта и внешние изменения текста.' },
+  'project.fileEditorIndexPending': { 'zh-CN': '正文已保存，索引待重建。', 'en-US': 'Manuscript saved. The index needs rebuilding.', 'ru-RU': 'Текст сохранён. Индекс нужно перестроить.' },
   'version.noContent': { 'zh-CN': '（章节尚无内容）', 'en-US': '(No content in this chapter)', 'ru-RU': '(В главе нет содержимого)' },
   'version.noDraft': { 'zh-CN': '本章还没有草稿，无法对比', 'en-US': 'No draft for this chapter yet — nothing to compare', 'ru-RU': 'В этой главе ещё нет черновика — нечего сравнивать' },
   'import.summaryLine': { 'zh-CN': '类型: {genre} | 子类型: {subGenre} | 受众: {audience}\n大纲: {outline}\n世界观: {world}\n金手指: {goldenFinger}\n主角: {protagonist}', 'en-US': 'Genre: {genre} | Subgenre: {subGenre} | Audience: {audience}\nOutline: {outline}\nWorld setting: {world}\nGolden finger: {goldenFinger}\nProtagonist: {protagonist}', 'ru-RU': 'Жанр: {genre} | Поджанр: {subGenre} | Аудитория: {audience}\nПлан: {outline}\nМир: {world}\nКозырь: {goldenFinger}\nГерой: {protagonist}' },

@@ -1,6 +1,6 @@
 # NovelForge 架构文档
 
-> 当前实施边界（2026-11-13）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付。本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22），以及 C1a–C1g（23–24、26–30）、C2（31）和 [C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md)。C3 本地验收为 350 个测试文件、3,849 条测试。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 已提交离线映射与无界面联调（`d00c870`），已接通 Electron 候选编辑器 IPC，普通入口与自动恢复待接入。应用入口当前读写现有 DB，离线迁移输出使用独立空目录。
+> 当前实施边界（2026-11-13）：独立存储核心、M2–M4、编辑器应用层、修稿原子合并与知识库侧栏均已交付。本分支已完成知识库总览 A、架构文档 B1、小说配置 B2 与架构状态总览 B3（19–22），以及 C1a–C1g（23–24、26–30）、C2（31）和 [C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md)。C3 本地验收为 350 个测试文件、3,849 条测试。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。候选编辑器界面已通过 Windows 生产构建保存与重启复验，下一批为 F2。应用入口当前读写现有 DB，离线迁移输出使用独立空目录。
 
 > 2026-10-28 起，这一组文档是改造的权威依据。旧的 `docs/architecture-review.md`、`docs/project-structure-review.md` 回答的是"目录整不整齐"，这里回答的是"事实放在哪、一次改动要跨几层"。
 
@@ -27,7 +27,7 @@
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
 | 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | 17 | [知识库侧栏应用层抽离](17-knowledge-panel-application-plan.md) | 搜索/摘要/删除用例及请求失效保护 | 已实现并通过本地验证 |
-| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F1 候选编辑器 IPC 已接通 |
+| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F1 候选编辑器已复验，F2 待续 |
 | 19 | [知识库总览应用层实施](19-knowledge-overview-application.md) | 维护互斥、导出元数据、项目隔离及总览组件回归 | 本地提交 0c1375c |
 | 20 | [架构文档应用层实施](20-architecture-document-application-plan.md) | B1 读写/生成用例、dirty 会话与运行归属 | 本地实施与验证记录 |
 | 21 | [小说配置应用层实施](21-novel-config-application-plan.md) | B2 保存、字段版本、生成冲突与撤销保护 | 本地实施与验证记录 |

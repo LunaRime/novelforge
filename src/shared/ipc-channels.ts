@@ -113,7 +113,7 @@ export interface GlobalConfig {
 export interface ProjectChannels {
   'project:file-editor-open': {
     args: [projectPath: string, locators: string[]]
-    return: { token: string; tabs: import('../core').OpenedEditorDocument[]; missing: string[] }
+    return: { token: string; tabs: import('../core').OpenedEditorDocument[]; missing: string[]; documents: Array<{ locator: string; name: string }> }
   }
   'project:file-editor-save': {
     args: [token: string, locator: string, revision: string, content: string]

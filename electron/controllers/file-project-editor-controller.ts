@@ -48,6 +48,15 @@ export function registerFileProjectEditorController() {
     await assertCandidate()
     assertPathAllowedForIpc(path, 'write')
     const repo = await FileChapterStore.open({ projectPath: path, projectId: identity.projectId, index: new MemoryChapterIndex() })
+    const chapters = await repo.list()
+    const documents = [
+      ...chapters.map(chapter => ({ locator: `doc://chapter/${chapter.id}`, name: chapter.title || String(chapter.number) })),
+      ...identity.entries.filter(entry => entry.target.kind === 'history').map(entry => ({
+        locator: `doc://history/${entry.draftId}`,
+        name: chapters.find(chapter => chapter.id === entry.chapterId)?.title || String(entry.draftId),
+      })),
+    ]
+    const names = new Map(documents.map(document => [document.locator, document.name]))
     const scope = () => ({ projectId: identity.projectId, projectPath: path, session: requests.get(sender.id) === token ? 1 : 2 })
     const port = await createFileEditorOpenPort({ projectPath: path, identity, repo, scope, publish: () => {} })
     const tabs: OpenResult['tabs'] = []
@@ -55,11 +64,11 @@ export function registerFileProjectEditorController() {
     for (const locator of locators) {
       const result = await openEditorDocument({ kind: 'path', documentKind: 'chapter', locator, name: locator }, port)
       if (result.status === 'missing') { missing.push(locator); continue }
-      tabs.push(result.document)
+      tabs.push({ ...result.document, name: names.get(result.document.locator) ?? result.document.name })
     }
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
     sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate })
-    return { token, tabs, missing }
+    return { token, tabs, missing, documents }
   })
 
   guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {
