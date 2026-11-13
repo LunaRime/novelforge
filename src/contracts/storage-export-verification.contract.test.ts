@@ -197,7 +197,9 @@ test('opens verified file tabs through the editor use case and keeps exact old d
   const stored = (await repo.byId(current.chapterId))!
   await repo.save({ ...stored.chapter, number: 4 }, { expectedRevision: stored.revision })
   repo = await openRepo()
-  expect(await openEditorDocument(request, port)).toEqual(first)
+  expect(await openEditorDocument(request, port)).toMatchObject({
+    status: 'opened', document: { id: first.document.id, locator: first.document.locator, content: first.document.content },
+  })
   const reopened = (await repo.byId(current.chapterId))!
   await repo.save({ ...reopened.chapter, content: 'replacement', metadata: {} }, { expectedRevision: reopened.revision })
   expect(await openEditorDocument({ kind: 'draft', draftId: 2, name: 'old' }, port)).toEqual({ status: 'missing' })

@@ -63,7 +63,8 @@ export async function createFileEditorOpenPort({ projectPath, identity, scope, r
           (!chapterId && stored.chapter.metadata?.legacyDraftId !== draftId)) return null
       const documentLocator = `doc://chapter/${id}`
       return { id: documentLocator, locator: documentLocator, name: request.name, kind: 'chapter',
-        content: stored.chapter.content, readOnly: ['finalized', 'archived'].includes(stored.chapter.status) }
+        content: stored.chapter.content, readOnly: ['finalized', 'archived'].includes(stored.chapter.status),
+        revision: stored.revision }
     },
   }
 }

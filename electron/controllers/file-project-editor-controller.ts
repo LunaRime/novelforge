@@ -1,0 +1,86 @@
+import { randomUUID } from 'node:crypto'
+import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
+  createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
+import type { ProjectChannels } from '../../src/shared/ipc-channels'
+import { guardedHandle } from '../security/ipc-guard'
+import { assertPathAllowedForIpc } from './fs-controller'
+
+const candidateRecord = '.novelforge/file-editor.json'
+const identityFile = '.novelforge/draft-identity.json'
+const manifestFile = 'migration-manifest.json'
+const legacyBarrier = '.novelforge/vela.db'
+const current = /^doc:\/\/chapter\/(ch_[a-f0-9]{8,64})$/
+type OpenResult = ProjectChannels['project:file-editor-open']['return']
+
+export function registerFileProjectEditorController() {
+  const sessions = new Map<number, { token: string; projectPath: string; repo: FileChapterStore; assertCandidate: () => Promise<void> }>()
+  const observed = new WeakSet<object>()
+  const requests = new Map<number, string>()
+
+  guardedHandle('project:file-editor-open', async ({ sender }, projectPath: string, locators: string[]): Promise<OpenResult> => {
+    if (!Array.isArray(locators) || locators.length > 100 || locators.some(locator => typeof locator !== 'string' || locator.length > 200)) {
+      throw new Error('Invalid file editor tabs')
+    }
+    const path = assertPathAllowedForIpc(projectPath, 'read')
+    if (!observed.has(sender)) {
+      observed.add(sender)
+      sender.once('destroyed', () => { sessions.delete(sender.id); requests.delete(sender.id) })
+    }
+    const token = randomUUID()
+    requests.set(sender.id, token)
+    sessions.delete(sender.id)
+    const reader = await openProjectInspection(path)
+    const recordText = await reader.readText(candidateRecord)
+    const record = JSON.parse(recordText)
+    const mapping = await reader.readText(identityFile)
+    const identity = JSON.parse(mapping) as MigratedDraftIdentityMap
+    const manifest = await reader.readText(manifestFile)
+    const project = JSON.parse(await reader.readText('novel.json'))
+    if (record?.format !== 1 || project?.schemaVersion !== 1 || typeof project.id !== 'string' ||
+        record.projectId !== project.id || identity?.format !== 1 || identity.projectId !== project.id ||
+        !Array.isArray(identity.entries) || identity.manifestHash !== fileRevision(manifest) ||
+        record.identityHash !== fileRevision(mapping)) throw new Error('Invalid file editor candidate')
+    const assertCandidate = async () => {
+      if (await reader.kind(legacyBarrier) !== 'directory' || await reader.kind('.vela') !== 'missing' ||
+          await reader.readText(candidateRecord) !== recordText || await reader.readText(identityFile) !== mapping ||
+          await reader.readText(manifestFile) !== manifest) throw new Error('File editor candidate changed')
+    }
+    await assertCandidate()
+    assertPathAllowedForIpc(path, 'write')
+    const repo = await FileChapterStore.open({ projectPath: path, projectId: identity.projectId, index: new MemoryChapterIndex() })
+    const scope = () => ({ projectId: identity.projectId, projectPath: path, session: requests.get(sender.id) === token ? 1 : 2 })
+    const port = await createFileEditorOpenPort({ projectPath: path, identity, repo, scope, publish: () => {} })
+    const tabs: OpenResult['tabs'] = []
+    const missing: string[] = []
+    for (const locator of locators) {
+      const result = await openEditorDocument({ kind: 'path', documentKind: 'chapter', locator, name: locator }, port)
+      if (result.status === 'missing') { missing.push(locator); continue }
+      tabs.push(result.document)
+    }
+    if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+    sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate })
+    return { token, tabs, missing }
+  })
+
+  guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {
+    const session = sessions.get(sender.id)
+    const id = current.exec(locator)?.[1]
+    if (!session || session.token !== token || requests.get(sender.id) !== token ||
+        !id || typeof content !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new Error('Invalid file editor save')
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    await session.assertCandidate()
+    const stored = await session.repo.byId(id)
+    if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
+      throw new Error('Chapter changed or is read-only')
+    }
+    if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+    const result = await session.repo.save({ ...stored.chapter, content, updatedAt: new Date().toISOString() }, { expectedRevision: revision })
+    return { revision: result.revision, indexed: result.indexed }
+  })
+
+  guardedHandle('project:file-editor-close', ({ sender }, token: string) => {
+    if (sessions.get(sender.id)?.token !== token) return
+    sessions.delete(sender.id)
+    if (requests.get(sender.id) === token) requests.delete(sender.id)
+  })
+}

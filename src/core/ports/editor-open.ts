@@ -11,6 +11,7 @@ export interface OpenedEditorDocument {
   content: string
   docId?: number
   readOnly?: boolean
+  revision?: string
 }
 export interface EditorOpenPort {
   scope(): EditorOpenScope

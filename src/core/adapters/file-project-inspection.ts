@@ -1,7 +1,6 @@
 import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import type { ProjectInspectionReader } from '../ports/project-inspection'
-import { inspectLegacyDatabase } from './legacy-database-inspection'
 
 export async function openProjectInspection(projectPath: string): Promise<ProjectInspectionReader> {
   const requested = resolve(projectPath)
@@ -39,6 +38,9 @@ export async function openProjectInspection(projectPath: string): Promise<Projec
     kind,
     list: async path => readdir(await checkedPath(path, 'directory')),
     readText: async path => readFile(await checkedPath(path, 'file'), 'utf8'),
-    inspectLegacyDatabase: async () => inspectLegacyDatabase(await checkedPath('legacy.db', 'file')),
+    inspectLegacyDatabase: async () => {
+      const { inspectLegacyDatabase } = await import('./legacy-database-inspection')
+      return inspectLegacyDatabase(await checkedPath('legacy.db', 'file'))
+    },
   }
 }

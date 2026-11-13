@@ -111,6 +111,15 @@ export interface GlobalConfig {
 
 // ===== 项目管理 =====
 export interface ProjectChannels {
+  'project:file-editor-open': {
+    args: [projectPath: string, locators: string[]]
+    return: { token: string; tabs: import('../core').OpenedEditorDocument[]; missing: string[] }
+  }
+  'project:file-editor-save': {
+    args: [token: string, locator: string, revision: string, content: string]
+    return: { revision: string; indexed: boolean }
+  }
+  'project:file-editor-close': { args: [token: string]; return: void }
   'project:create': {
     args: [config: { name: string; path: string; genre: string; targetAudience: string }]
     return: { success: boolean; projectId: string; projectPath?: string; restoredWriteToken?: string; error?: string }
