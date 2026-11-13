@@ -24,8 +24,16 @@ export function getCurrentProjectPath(): string | null {
   return currentProjectPath
 }
 
-/** 初始化项目数据库（打开项目时调用） */
+/** 打开 SQLite 项目。文件项目描述存在时保留当前连接，并交由文件项目入口处理。 */
 export function initProjectDatabase(projectPath: string): void {
+  // The descriptor and legacy-path barrier are independent evidence of a file project.
+  // Check before closing the current DB or resolving the writable legacy directory.
+  const internalDir = path.join(projectPath, '.novelforge')
+  const descriptor = fs.lstatSync(path.join(internalDir, 'file-editor.json'), { throwIfNoEntry: false })
+  const barrier = fs.lstatSync(path.join(internalDir, 'vela.db'), { throwIfNoEntry: false })
+  if (descriptor || barrier?.isDirectory()) {
+    throw new Error(t('error.fileProjectRequiresFileEditor'))
+  }
   closeProjectDatabase()
   currentProjectPath = projectPath
 

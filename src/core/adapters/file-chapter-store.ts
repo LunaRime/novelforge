@@ -20,9 +20,9 @@ interface ScannedChapter {
 const isMissing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT'
 
 /**
- * Offline chapter repository. All cooperating writers take a project lock because
+ * File chapter repository used by offline tools and the isolated editor. Cooperating writers take a project lock because
  * chapter numbers share a namespace. A stale lock is reported, never auto-deleted.
- * Application cutover and uncooperative external-editor locking are separate steps.
+ * External editors may ignore this lock. Check the file revision before publishing a change.
  */
 export class FileChapterStore implements ChapterRepo {
   private constructor(private readonly options: StoreOptions, private readonly root: string) {}
@@ -174,49 +174,70 @@ export class FileChapterStore implements ChapterRepo {
   }
 
   async save(input: Chapter, inputOptions: SaveChapterOptions): Promise<StoredChapter> {
+    // Capture caller-owned inputs before waiting for the lock.
+    const chapter = structuredClone(input)
+    const options = { ...inputOptions }
+    return this.locked(() => this.saveLocked(chapter, options))
+  }
+
+  /** Holds the same writer lock from intent preparation through the retained DB receipt. */
+  async withCommitLock<T>(work: (repo: Pick<ChapterRepo, 'byId' | 'save'>) => Promise<T>): Promise<T> {
+    return this.locked(async () => {
+      let active = true
+      try {
+        return await work({
+          byId: id => this.byId(id),
+          save: (chapter, options) => {
+            if (!active) throw new ChapterError('locked', 'File commit lock has been released')
+            return this.saveLocked(chapter, options)
+          },
+        })
+      } finally { active = false }
+    })
+  }
+
+  private async saveLocked(input: Chapter, inputOptions: SaveChapterOptions): Promise<StoredChapter> {
     const chapter = structuredClone(input)
     const options = { ...inputOptions }
     assertChapter(chapter)
     if (chapter.projectId !== this.options.projectId) throw new ChapterError('project-mismatch', 'Cannot write a foreign chapter')
-    return this.locked(async () => {
-      const scanned = await this.scan()
-      const current = scanned.find(s => s.chapter.id === chapter.id)
-      this.checkRevision(current, options)
-      if (scanned.some(s => s.chapter.number === chapter.number && s.chapter.id !== chapter.id)) {
-        throw new ChapterError('number-conflict', 'Chapter number already belongs to another identity')
-      }
-      const name = `${String(chapter.number).padStart(4, '0')}.md`
-      const path = join(this.root, 'chapters', name)
-      const oldPath = current ? join(this.root, current.meta.path) : null
-      if (oldPath !== path) {
-        try { await fs.lstat(path); throw new ChapterError('number-conflict', 'Destination is occupied') }
-        catch (error) { if (!isMissing(error)) throw error }
-      }
-      const text = serializeChapter(chapter)
-      if (current && current.text === text && oldPath === path) {
-        return { chapter, revision: current.meta.revision, indexed: await this.updateIndex(scanned) }
-      }
-      if (current) await this.snapshot(current)
-      // Check again after snapshot IO so an intervening external edit is not lost.
-      if (current && fileRevision(await fs.readFile(oldPath!, 'utf8')) !== current.meta.revision) {
-        throw new ChapterError('conflict', 'Chapter was externally edited during save')
-      }
-      await this.assertProject()
-      if (oldPath && oldPath !== path) {
-        // Persist metadata first, then link to an unoccupied new name. A crash can
-        // leave two copies with the same id; scan refuses ambiguity instead of losing data.
-        await this.atomicWrite(oldPath, text, true)
-        await fs.link(oldPath, path)
-        await fs.unlink(oldPath)
-      } else await this.atomicWrite(path, text, !!current)
-      // Do not re-read unrelated files after commit: an external malformed file
-      // must not make a completed save appear to have failed.
-      const after = scanned.filter(s => s.chapter.id !== chapter.id)
-      after.push({ chapter, text, meta: { id: chapter.id, number: chapter.number,
-        title: chapter.title, status: chapter.status, path: `chapters/${name}`,
-        revision: fileRevision(text), wordCount: chapter.content.replace(/\s/gu, '').length } })
-      return { chapter, revision: fileRevision(text), indexed: await this.updateIndex(after) }
-    })
+    const scanned = await this.scan()
+    const current = scanned.find(s => s.chapter.id === chapter.id)
+    this.checkRevision(current, options)
+    if (scanned.some(s => s.chapter.number === chapter.number && s.chapter.id !== chapter.id)) {
+      throw new ChapterError('number-conflict', 'Chapter number already belongs to another identity')
+    }
+    const name = `${String(chapter.number).padStart(4, '0')}.md`
+    const path = join(this.root, 'chapters', name)
+    const oldPath = current ? join(this.root, current.meta.path) : null
+    if (oldPath !== path) {
+      try { await fs.lstat(path); throw new ChapterError('number-conflict', 'Destination is occupied') }
+      catch (error) { if (!isMissing(error)) throw error }
+    }
+    const text = serializeChapter(chapter)
+    if (current && current.text === text && oldPath === path) {
+      return { chapter, revision: current.meta.revision, indexed: await this.updateIndex(scanned) }
+    }
+    if (current) await this.snapshot(current)
+    // Check again after snapshot IO so an intervening external edit is not lost.
+    if (current && fileRevision(await fs.readFile(oldPath!, 'utf8')) !== current.meta.revision) {
+      throw new ChapterError('conflict', 'Chapter was externally edited during save')
+    }
+    await this.assertProject()
+    if (oldPath && oldPath !== path) {
+      // Persist metadata first, then link to an unoccupied new name. A crash can
+      // leave two copies with the same id; scan refuses ambiguity instead of losing data.
+      await this.atomicWrite(oldPath, text, true)
+      await fs.link(oldPath, path)
+      await fs.unlink(oldPath)
+    } else await this.atomicWrite(path, text, !!current)
+    // Do not re-read unrelated files after commit: an external malformed file
+    // must not make a completed save appear to have failed.
+    const after = scanned.filter(s => s.chapter.id !== chapter.id)
+    after.push({ chapter, text, meta: { id: chapter.id, number: chapter.number,
+      title: chapter.title, status: chapter.status, path: `chapters/${name}`,
+      revision: fileRevision(text), wordCount: chapter.content.replace(/\s/gu, '').length } })
+    return { chapter, revision: fileRevision(text), indexed: await this.updateIndex(after) }
   }
 
   async remove(id: string, options: SaveChapterOptions): Promise<void> {

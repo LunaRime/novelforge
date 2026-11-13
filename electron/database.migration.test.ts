@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -37,6 +37,20 @@ const roots: string[] = []
 afterEach(async () => {
   closeProjectDatabase()
   await Promise.all(roots.splice(0).map(root => rm(root, { recursive: true, force: true })))
+})
+
+test('the SQLite entry rejects a file project before creating a database or closing the current project', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nf-file-activation-'))
+  roots.push(root)
+  const candidate = join(root, 'candidate')
+  const internal = join(candidate, '.novelforge')
+  await mkdir(internal, { recursive: true })
+  await writeFile(join(internal, 'file-editor.json'), '{invalid')
+  initProjectDatabase(join(root, 'original'))
+  const original = getProjectDb()
+  expect(() => initProjectDatabase(candidate)).toThrow()
+  expect(getProjectDb()).toBe(original)
+  expect(await readdir(internal)).toEqual(['file-editor.json'])
 })
 
 test('opening a v19 project adds the branch column before indexing and preserves draft contents on reopen', async () => {

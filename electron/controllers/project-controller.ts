@@ -148,8 +148,7 @@ export function registerProjectController() {
         return { success: false, project: null, error: t('error.dirNotFound') }
       }
 
-      // TODO: 这里可以加入一个检测旧版项目的逻辑（如果有 旧的 01_novel_config.json 等），提示不支持旧格式。
-      // 因为新架构不兼容旧项目，这里我们只要初始化 DB 即可
+      // SQLite 初始化会先检查文件项目描述，再决定是否可以切换数据库连接。
       initProjectDatabase(projectPath)
 
       // 从 DB 读取配置
