@@ -1,13 +1,15 @@
 import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevision, ChapterError,
   type ChapterIndexDatabase, type FileChapterCommit, type FileChapterCommitReceipt, type MigratedDraftIdentityMap } from '../../src/core'
+import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
 
 export type FileDraftCommand = { chapterId: string; expectedRevision: string } & (
   { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
 )
 
-/** The retained database owns revision associations and receipts. Chapter status and text come from the file. */
+/** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
 export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileChapterStore,
   projectId: string, identities: MigratedDraftIdentityMap['entries'], assertCurrent?: () => void) {
+  freezeLegacyFileDrafts(db)
   const journal = new SQLiteFileCommitJournal(db, projectId)
   db.exec(`CREATE TABLE IF NOT EXISTS file_draft_states (
     project_id TEXT NOT NULL, chapter_id TEXT NOT NULL, status TEXT NOT NULL, revision TEXT NOT NULL,

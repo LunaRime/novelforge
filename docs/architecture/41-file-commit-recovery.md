@@ -23,6 +23,20 @@ F2 首批交付跨存储提交协议和 SQLite 入口保护。正常项目仍由
 - 候选项目打开时先尝试恢复待提交操作，再返回文档。存在待恢复操作时，普通保存在同一写锁下拒绝推进文件 revision。
 - IPC 测试用 SQLite 触发器模拟定稿的关联事务失败，重建控制器后重新打开，验证恢复的正文与只读状态，并验证归档。[业务服务测试](../../electron/services/file-draft-lifecycle.test.ts) · [候选 IPC 测试](../../electron/controllers/file-project-editor-controller.test.ts)
 
-候选编辑器根据当前稿状态显示可用操作。接受修稿前可预览正文，界面提交预览哈希与当前稿 revision，主进程复核后才允许提交。归档和定稿经确认后执行。提交成功后重新读取正文和只读状态；已收到提交回执但重新读取失败时提示重新打开项目。[界面回归](../../src/components/dialogs/FileProjectEditorDialog.test.tsx)
+候选界面操作已提交为 `746648c`。候选编辑器根据当前稿状态显示可用操作。接受修稿前可预览正文，界面提交预览哈希与当前稿 revision，主进程复核后才允许提交。归档和定稿经确认后执行。提交成功后重新读取正文和只读状态；已收到提交回执但重新读取失败时提示重新打开项目。[界面回归](../../src/components/dialogs/FileProjectEditorDialog.test.tsx)
+
+## 准备候选目录与冻结旧章表
+
+使用 Node 22.16+ 和仓库开发依赖准备一个独立目录：
+
+```sh
+node scripts/prepare-file-project.mjs ./offline-vela.db ./pristine-export ./file-candidate
+```
+
+命令验证暂存副本，安装旧版路径屏障，生成身份映射，并从备份创建保留业务库。候选目录在上述准备成功后发布。验证仍可针对原样导出重复运行。候选准备命令拒绝已有目标和导出目录下的目标。
+
+保留库使用持久 SQLite 触发器冻结 `drafts`、`draft_snapshots` 和 `draft_branches` 的增删改，以及这些表所引用的正文行。修稿、审稿和其他独立正文行仍可写。打开已有候选时也会安装相同保护。触发器安装使用保存点，失败时回滚并报告。
+
+Node 22 实测从一个 E3 真实副本准备候选目录，验证了 11 个当前章、14 条草稿映射，保留库拒绝旧草稿写入，原样导出仍通过校验。合成测试还覆盖第二个数据库连接、`REPLACE` 和审稿写入。
 
 其余正文写入口、正式项目激活与打包应用验收仍待接入。

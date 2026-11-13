@@ -128,6 +128,26 @@ test('rejects modified manifest counts and a rehashed backup whose associations 
   expect(result.stdout).toBe('')
 })
 
+test('prepares a separate candidate with a frozen retained database and leaves the export pristine', async () => {
+  const { source, output, other } = await fixture()
+  success(migrate(source, output))
+  const original = await readFile(join(output, 'legacy.db'))
+  const prepared = success(command('prepare-file-project', source, output, other))
+  expect(prepared).toMatchObject({ projectId, chapters: 2, drafts: 5 })
+  expect(JSON.parse(await readFile(join(other, '.novelforge/file-editor.json'), 'utf8'))).toMatchObject({ lifecycle: 1, projectId })
+  expect((await stat(join(other, '.novelforge/vela.db'))).isDirectory()).toBe(true)
+  const db = new DatabaseSync(join(other, '.novelforge/retained.db'))
+  try {
+    expect(() => db.exec('DELETE FROM drafts')).toThrow('legacy chapter data is frozen')
+    db.exec("UPDATE reviews SET content_id = 6 WHERE id = 1")
+  } finally { db.close() }
+  expect(await readFile(join(output, 'legacy.db'))).toEqual(original)
+  expect(success(command('verify-storage-export', source, output)).ok).toBe(true)
+  expect(command('prepare-file-project', source, output, other).status).toBe(1)
+  expect(command('prepare-file-project', source, output, join(output, 'nested')).status).toBe(1)
+  expect(success(command('verify-storage-export', source, output)).ok).toBe(true)
+})
+
 test('projects verified draft identities into exact current and historical targets', async () => {
   const { source, output, other } = await fixture()
   const db = new DatabaseSync(source)
