@@ -17,10 +17,12 @@ F2 首批交付跨存储提交协议和 SQLite 入口保护。正常项目仍由
 
 ## 候选项目接入
 
-恢复协议基础已提交为 `03510b4`。候选项目启用这些操作时，在 `.novelforge/file-editor.json` 中加入 `"lifecycle": 1`，并准备独立的 `.novelforge/retained.db`。候选 IPC 使用这份业务库记录操作和关联，原始迁移备份和旧库路径屏障继续保留。
+恢复协议基础已提交为 `03510b4`，候选业务 IPC 已提交为 `431024f`。候选项目启用这些操作时，在 `.novelforge/file-editor.json` 中加入 `"lifecycle": 1`，并准备独立的 `.novelforge/retained.db`。候选 IPC 使用这份业务库记录操作和关联，原始迁移备份和旧库路径屏障继续保留。
 
 - `project:file-editor-commit` 用窗口会话令牌、稳定章节 ID 和文件 revision 接收合并、归档及定稿。合并仅使用属于当前迁移草稿的待接受修稿，并在数据库提交时复核修稿正文。归档和定稿将状态写入文件并记录回执。
 - 候选项目打开时先尝试恢复待提交操作，再返回文档。存在待恢复操作时，普通保存在同一写锁下拒绝推进文件 revision。
 - IPC 测试用 SQLite 触发器模拟定稿的关联事务失败，重建控制器后重新打开，验证恢复的正文与只读状态，并验证归档。[业务服务测试](../../electron/services/file-draft-lifecycle.test.ts) · [候选 IPC 测试](../../electron/controllers/file-project-editor-controller.test.ts)
 
-候选编辑器界面的操作按钮、其余正文写入口、正式项目激活与打包应用验收仍待接入。
+候选编辑器根据当前稿状态显示可用操作。接受修稿前可预览正文，界面提交预览哈希与当前稿 revision，主进程复核后才允许提交。归档和定稿经确认后执行。提交成功后重新读取正文和只读状态；已收到提交回执但重新读取失败时提示重新打开项目。[界面回归](../../src/components/dialogs/FileProjectEditorDialog.test.tsx)
+
+其余正文写入口、正式项目激活与打包应用验收仍待接入。

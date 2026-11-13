@@ -25,6 +25,46 @@ async function click(label: string) {
 }
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset() })
 
+test('previews a proposal, commits its reviewed body, and refreshes after finalization', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  let finalized = false
+  invoke.mockImplementation(async (channel, ...args) => {
+    if (channel === 'dialog:select-folder') return '/candidate'
+    if (channel === 'project:file-editor-open') return { token: 'session', missing: [],
+      documents: [{ locator, name: 'Current' }],
+      tabs: (args[1] as string[]).map(() => ({ locator, content: finalized ? 'proposal' : 'old',
+        revision: finalized ? 'new' : 'revision', readOnly: finalized,
+        lifecycle: { canFinalize: !finalized, canArchive: true, pending: finalized ? [] : [{ id: 4 }] } })),
+    }
+    if (channel === 'project:file-editor-preview') return { content: 'proposal', contentHash: 'proposal-hash' }
+    if (channel === 'project:file-editor-commit') {
+      if (args[1].kind === 'finalize') finalized = true
+      return { status: 'committed', revision: 'new' }
+    }
+  })
+  await render()
+  await click('project.fileEditor')
+  await click('project.fileEditorChoose')
+  await click('project.fileEditorPreview')
+  expect(document.querySelector('pre')?.textContent).toBe('proposal')
+  await click('project.fileEditorMerge')
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenCalledWith('project:file-editor-commit', 'session', {
+    kind: 'merge', chapterId: 'ch_12345678', expectedRevision: 'revision', revisionId: 4, proposalHash: 'proposal-hash',
+  })
+  await click('project.fileEditorFinalize')
+  await click('dialog.confirm')
+  expect(document.querySelector('textarea')?.readOnly).toBe(true)
+  await click('project.fileEditorArchive')
+  await click('action.cancel')
+  expect(invoke.mock.calls.filter(([channel]) => channel === 'project:file-editor-commit')).toHaveLength(2)
+  await click('project.fileEditorArchive')
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenCalledWith('project:file-editor-commit', 'session', {
+    kind: 'archive', chapterId: 'ch_12345678', expectedRevision: 'new',
+  })
+})
+
 test('saves with the displayed revision and restores the selected read-only document on reopen', async () => {
   const current = 'doc://chapter/ch_12345678'
   const history = 'doc://history/1'

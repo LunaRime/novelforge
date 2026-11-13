@@ -334,6 +334,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'project:file-editor-save': { authority: 'write-project' },
   'project:file-editor-close': { authority: 'read-project' },
   'project:file-editor-commit': { authority: 'write-project' },
+  'project:file-editor-preview': { authority: 'read-project' },
   'project:recent-list': { authority: 'read-project' },
   'project:remove-recent': { authority: 'write-global' },
   'project:save': { authority: 'write-project' },

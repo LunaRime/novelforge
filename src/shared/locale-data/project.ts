@@ -6,6 +6,16 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const projectTexts = {
+  'project.fileEditorPreview': { 'zh-CN': '预览修稿', 'en-US': 'Preview revision', 'ru-RU': 'Просмотреть правку' },
+  'project.fileEditorMerge': { 'zh-CN': '接受修稿', 'en-US': 'Accept revision', 'ru-RU': 'Принять правку' },
+  'project.fileEditorFinalize': { 'zh-CN': '定稿', 'en-US': 'Finalize', 'ru-RU': 'Завершить черновик' },
+  'project.fileEditorArchive': { 'zh-CN': '归档', 'en-US': 'Archive', 'ru-RU': 'Архивировать' },
+  'project.fileEditorRevision': { 'zh-CN': '待接受修稿', 'en-US': 'Pending revision', 'ru-RU': 'Правка на рассмотрении' },
+  'project.fileEditorConfirmFinalize': { 'zh-CN': '将当前正文标为定稿并锁定编辑？', 'en-US': 'Finalize the current manuscript and lock editing?', 'ru-RU': 'Завершить текущую рукопись и запретить редактирование?' },
+  'project.fileEditorConfirmArchive': { 'zh-CN': '归档当前正文并锁定编辑？', 'en-US': 'Archive the current manuscript and lock editing?', 'ru-RU': 'Архивировать текущую рукопись и запретить редактирование?' },
+  'project.fileEditorConfirmMerge': { 'zh-CN': '用预览中的修稿替换当前正文？', 'en-US': 'Replace the current manuscript with the reviewed revision?', 'ru-RU': 'Заменить текущий текст просмотренной правкой?' },
+  'project.fileEditorOperationFailed': { 'zh-CN': '无法完成草稿操作。请重新打开项目以核对状态。', 'en-US': 'Could not complete the draft operation. Reopen the project to check its state.', 'ru-RU': 'Не удалось завершить операцию. Откройте проект заново, чтобы проверить его состояние.' },
+  'project.fileEditorReloadFailed': { 'zh-CN': '操作已保存。请重新打开项目以刷新正文。', 'en-US': 'The operation was saved. Reopen the project to refresh the manuscript.', 'ru-RU': 'Операция сохранена. Откройте проект заново, чтобы обновить текст.' },
   'project.fileEditor': { 'zh-CN': '文件项目编辑器', 'en-US': 'File project editor', 'ru-RU': 'Редактор файлового проекта' },
   'project.fileEditorDescription': { 'zh-CN': '选择已验证的迁移副本，打开章节或历史草稿。', 'en-US': 'Select a verified migration copy to open chapters or historical drafts.', 'ru-RU': 'Выберите проверенную копию миграции, чтобы открыть главы или историю черновиков.' },
   'project.fileEditorChoose': { 'zh-CN': '选择项目目录', 'en-US': 'Choose project folder', 'ru-RU': 'Выбрать папку проекта' },

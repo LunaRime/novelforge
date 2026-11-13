@@ -94,6 +94,14 @@ export function registerFileProjectEditorController() {
       if (result.status === 'missing') { missing.push(locator); continue }
       tabs.push({ ...result.document, name: names.get(result.document.locator) ?? result.document.name })
     }
+    if (withLifecycle && tabs.length) {
+      await withLifecycle(async lifecycle => {
+        for (const tab of tabs) {
+          const id = current.exec(tab.locator)?.[1]
+          if (id && tab.revision) tab.lifecycle = await lifecycle.actions(id, tab.revision)
+        }
+      })
+    }
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
     sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate, withLifecycle })
     return { token, tabs, missing, documents }
@@ -128,6 +136,17 @@ export function registerFileProjectEditorController() {
     return session.withLifecycle(lifecycle => {
       if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
       return lifecycle.commit(command)
+    })
+  })
+
+  guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {
+    const session = sessions.get(sender.id)
+    if (!session?.withLifecycle || session.token !== token || requests.get(sender.id) !== token ||
+        !Number.isSafeInteger(revisionId) || revisionId < 1) throw new Error('Invalid file editor preview')
+    assertPathAllowedForIpc(session.projectPath, 'read')
+    return session.withLifecycle(async lifecycle => {
+      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+      return lifecycle.preview(chapterId, revisionId)
     })
   })
 

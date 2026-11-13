@@ -113,7 +113,9 @@ export interface GlobalConfig {
 export interface ProjectChannels {
   'project:file-editor-open': {
     args: [projectPath: string, locators: string[]]
-    return: { token: string; tabs: import('../core').OpenedEditorDocument[]; missing: string[]; documents: Array<{ locator: string; name: string }> }
+    return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
+      lifecycle?: { canFinalize: boolean; canArchive: boolean; pending: Array<{ id: number }> }
+    }>; missing: string[]; documents: Array<{ locator: string; name: string }> }
   }
   'project:file-editor-save': {
     args: [token: string, locator: string, revision: string, content: string]
@@ -122,9 +124,13 @@ export interface ProjectChannels {
   'project:file-editor-close': { args: [token: string]; return: void }
   'project:file-editor-commit': {
     args: [token: string, command: { chapterId: string; expectedRevision: string } & (
-      { kind: 'merge'; revisionId: number } | { kind: 'archive' | 'finalize' }
+      { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
     )]
     return: import('../core').FileChapterCommitReceipt
+  }
+  'project:file-editor-preview': {
+    args: [token: string, chapterId: string, revisionId: number]
+    return: { content: string; contentHash: string }
   }
   'project:create': {
     args: [config: { name: string; path: string; genre: string; targetAudience: string }]

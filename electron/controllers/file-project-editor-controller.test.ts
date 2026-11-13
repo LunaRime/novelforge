@@ -61,9 +61,12 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     const restored = await invoke('open', project, opened.tabs.map(tab => tab.locator)) as ProjectChannels['project:file-editor-open']['return']
     expect(restored.tabs).toMatchObject([{ content: '1', readOnly: true }, { content: 'updated' }])
     await expect(invoke('save', opened.token, locator, revision, 'old session')).rejects.toThrow()
-    const merged = await invoke('commit', restored.token, {
-      kind: 'merge', chapterId, expectedRevision: restored.tabs[1].revision, revisionId: 4,
-    }) as ProjectChannels['project:file-editor-commit']['return']
+    expect(restored.tabs[1].lifecycle?.pending).toEqual([{ id: 4 }])
+    const preview = await invoke('preview', restored.token, chapterId, 4) as ProjectChannels['project:file-editor-preview']['return']
+    expect(preview.content).toBe('proposal')
+    const merge = { kind: 'merge', chapterId, expectedRevision: restored.tabs[1].revision, revisionId: 4 }
+    await expect(invoke('commit', restored.token, { ...merge, proposalHash: '0'.repeat(64) })).rejects.toThrow('after preview')
+    const merged = await invoke('commit', restored.token, { ...merge, proposalHash: preview.contentHash }) as ProjectChannels['project:file-editor-commit']['return']
     const retained = new DatabaseSync(join(project, '.novelforge/retained.db'))
     try { retained.exec("CREATE TRIGGER interrupt BEFORE UPDATE ON file_draft_states BEGIN SELECT RAISE(ABORT, 'interrupted'); END") }
     finally { retained.close() }

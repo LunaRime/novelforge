@@ -4,11 +4,15 @@ import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import type { ProjectChannels } from '../../shared/ipc-channels'
 import { Button } from '../ui/Button'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
 
 type Opened = ProjectChannels['project:file-editor-open']['return']
 type Workspace = Opened & { path: string; active: string }
+type Commit = ProjectChannels['project:file-editor-commit']['args'][1]
+type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
+
+const saveClock = () => performance.now()
 
 function storedTabs(path: string) {
   try {
@@ -27,9 +31,15 @@ export function FileProjectEditorDialog() {
   const [workspace, setWorkspace] = useState<Workspace>()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [revisionId, setRevisionId] = useState<number>()
+  const [preview, setPreview] = useState<Preview>()
+  const [confirmation, setConfirmation] = useState<Commit['kind']>()
   const pending = useRef(false)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
   const dirty = !!active && active.content !== text
+  const lifecycle = active?.lifecycle
+  const selectedRevision = revisionId ?? lifecycle?.pending[0]?.id
+  const chapterId = lifecycle ? active?.locator.slice('doc://chapter/'.length) : undefined
 
   function remember(path: string, locators: string[], active: string) {
     try { localStorage.setItem(`novelforge-file-editor:${path}`, JSON.stringify({ locators, active })) }
@@ -37,6 +47,9 @@ export function FileProjectEditorDialog() {
   }
 
   function display(path: string, result: Opened, preferred: string, requested: string[]) {
+    // A preview belongs to the previous document and revision, even if the locator stayed the same.
+    setPreview(undefined)
+    setRevisionId(undefined)
     const selected = result.tabs.find(tab => tab.locator === preferred) ?? result.tabs[0]
     setWorkspace({ ...result, path, active: selected?.locator ?? '' })
     setText(selected?.content ?? '')
@@ -70,17 +83,66 @@ export function FileProjectEditorDialog() {
     if (pending.current || !workspace || !active?.revision || active.readOnly || !dirty) return
     pending.current = true
     setBusy(true)
-    const start = Date.now()
+    const start = saveClock()
     try {
       const result = await ipc.invoke('project:file-editor-save', workspace.token, active.locator, active.revision, text)
       setWorkspace({ ...workspace, tabs: workspace.tabs.map(tab =>
-        tab.locator === active.locator ? { ...tab, content: text, revision: result.revision } : tab) })
-      renderLog('info', 'Save:FileProjectEditor', `${t('save.success')} (${Date.now() - start}ms)`)
+        tab.locator === active.locator ? { ...tab, content: text, revision: result.revision,
+          lifecycle: tab.lifecycle && { ...tab.lifecycle, canFinalize: Boolean(text.trim()) } } : tab) })
+      setPreview(undefined)
+      renderLog('info', 'Save:FileProjectEditor', `${t('save.success')} (${Math.round(saveClock() - start)}ms)`)
       if (result.indexed) toast.success(t('save.success'))
       else toast.warning(t('project.fileEditorIndexPending'))
     } catch (error) {
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t('project.fileEditorSaveConflict'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function previewRevision() {
+    if (pending.current || dirty || !workspace || !chapterId || !selectedRevision) return
+    pending.current = true
+    setBusy(true)
+    setPreview(undefined)
+    try {
+      const result = await ipc.invoke('project:file-editor-preview', workspace.token, chapterId, selectedRevision)
+      setPreview({ ...result, revisionId: selectedRevision })
+    } catch (error) {
+      renderLog('error', 'FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorOperationFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function commit(kind: Commit['kind']) {
+    if (pending.current || dirty || !workspace || !active?.revision || !chapterId) return
+    const base = { chapterId, expectedRevision: active.revision }
+    let command: Commit
+    if (kind === 'merge') {
+      if (!preview) return
+      command = { ...base, kind, revisionId: preview.revisionId, proposalHash: preview.contentHash }
+    } else {
+      if (!(kind === 'finalize' ? lifecycle?.canFinalize : lifecycle?.canArchive)) return
+      command = { ...base, kind }
+    }
+    pending.current = true
+    setBusy(true)
+    let committed = false
+    const start = saveClock()
+    try {
+      await ipc.invoke('project:file-editor-commit', workspace.token, command)
+      committed = true
+      renderLog('info', 'Save:FileProjectEditor', `${kind} (${Math.round(saveClock() - start)}ms)`)
+      // Reload authoritative text, revision and permissions together after the durable receipt.
+      const { locators } = storedTabs(workspace.path)
+      const result = await ipc.invoke('project:file-editor-open', workspace.path, [...new Set([...locators.slice(-99), active.locator])])
+      display(workspace.path, result, active.locator, locators)
+      toast.success(t('save.success'))
+    } catch (error) {
+      // A failure can follow file publication. Hide stale controls until open/recovery runs again.
+      setWorkspace(undefined)
+      setPreview(undefined)
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t(committed ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed'))
     } finally { pending.current = false; setBusy(false) }
   }
 
@@ -91,6 +153,9 @@ export function FileProjectEditorDialog() {
       if (workspace) void ipc.invoke('project:file-editor-close', workspace.token).catch(error => renderLog('warn', 'FileProjectEditor', String(error)))
       setWorkspace(undefined)
       setText('')
+      setPreview(undefined)
+      setRevisionId(undefined)
+      setConfirmation(undefined)
     }
     setOpen(next)
   }
@@ -138,9 +203,50 @@ export function FileProjectEditorDialog() {
                   </div>
                 </form>
               )}
+              {lifecycle && (
+                <div className="flex flex-col gap-2">
+                  {lifecycle.pending.length > 0 && (
+                    <div className="flex flex-wrap items-end gap-2">
+                      <label className="flex flex-col gap-1 text-sm">
+                        {t('project.fileEditorRevision')}
+                        <select value={selectedRevision} disabled={busy || dirty} onChange={event => {
+                          setRevisionId(Number(event.target.value))
+                          setPreview(undefined)
+                        }} className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2">
+                          {lifecycle.pending.map(revision => <option key={revision.id} value={revision.id}>#{revision.id}</option>)}
+                        </select>
+                      </label>
+                      <Button variant="outline" disabled={busy || dirty} onClick={() => void previewRevision()}>{t('project.fileEditorPreview')}</Button>
+                    </div>
+                  )}
+                  {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+                  <div className="flex flex-wrap gap-2">
+                    {preview && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('merge')}>{t('project.fileEditorMerge')}</Button>}
+                    {lifecycle.canFinalize && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('finalize')}>{t('project.fileEditorFinalize')}</Button>}
+                    {lifecycle.canArchive && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('archive')}>{t('project.fileEditorArchive')}</Button>}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
+        {/* Use a nested Radix dialog so the editor's focus trap yields to confirmation. */}
+        <Dialog open={Boolean(confirmation)} onOpenChange={next => { if (!next) setConfirmation(undefined) }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>{t('dialog.confirmTitle')}</DialogTitle>
+              <DialogDescription>{t(confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
+                : confirmation === 'finalize' ? 'project.fileEditorConfirmFinalize' : 'project.fileEditorConfirmArchive')}</DialogDescription>
+            </DialogHeader>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setConfirmation(undefined)}>{t('action.cancel')}</Button>
+              <Button onClick={() => {
+                if (confirmation) void commit(confirmation)
+                setConfirmation(undefined)
+              }}>{t('dialog.confirm')}</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   )

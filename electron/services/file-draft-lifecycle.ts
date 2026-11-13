@@ -2,7 +2,7 @@ import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevis
   type ChapterIndexDatabase, type FileChapterCommit, type FileChapterCommitReceipt, type MigratedDraftIdentityMap } from '../../src/core'
 
 export type FileDraftCommand = { chapterId: string; expectedRevision: string } & (
-  { kind: 'merge'; revisionId: number } | { kind: 'archive' | 'finalize' }
+  { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
 )
 
 /** The retained database owns revision associations and receipts. Chapter status and text come from the file. */
@@ -34,7 +34,26 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   }
 
   const run = (intent: FileChapterCommit) => commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent)
+  function preview(chapterId: string, revisionId: number) {
+    const [revision] = db.prepare(`SELECT c.body FROM revisions r JOIN contents c ON c.id = r.content_id
+      WHERE r.id = ? AND r.base_draft_id = ? AND r.status = 'pending'`)
+      .all(revisionId, currentDrafts.get(chapterId) ?? null) as Array<{ body: string }>
+    if (!revision || typeof revision.body !== 'string') throw new ChapterError('conflict', 'Revision is unavailable')
+    return { content: revision.body, contentHash: fileRevision(revision.body) }
+  }
   return {
+    preview,
+    async actions(chapterId: string, expectedRevision: string) {
+      const chapter = await repo.byId(chapterId)
+      const draftId = currentDrafts.get(chapterId)
+      if (!chapter || chapter.revision !== expectedRevision || !draftId ||
+          chapter.chapter.metadata?.legacyDraftId !== draftId || chapter.chapter.status === 'archived') return
+      const editable = chapter.chapter.status !== 'finalized'
+      const pending = editable ? db.prepare(`SELECT r.id FROM revisions r JOIN contents c ON c.id = r.content_id
+        WHERE r.base_draft_id = ? AND r.status = 'pending' AND typeof(c.body) = 'text' ORDER BY r.id`)
+        .all(draftId) as Array<{ id: number }> : []
+      return { canArchive: true, canFinalize: editable && Boolean(chapter.chapter.content.trim()), pending }
+    },
     async recover() {
       const intent = journal.pending()
       return intent ? run(intent) : null
@@ -53,7 +72,13 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       if (!draftId) throw new ChapterError('conflict', 'No current migrated draft for this chapter')
       const recordId = kind === 'merge' ? command.revisionId : draftId
       // The immutable request identifies retries, including those after a process restart.
-      const operationId = fileRevision(JSON.stringify([kind, chapterId, expectedRevision, recordId]))
+      const proposalHash = kind === 'merge' ? command.proposalHash : undefined
+      if (proposalHash !== undefined && !/^[a-f0-9]{64}$/.test(proposalHash)) {
+        throw new ChapterError('invalid-chapter', 'Invalid revision preview hash')
+      }
+      const operationId = fileRevision(JSON.stringify(proposalHash === undefined
+        ? [kind, chapterId, expectedRevision, recordId]
+        : [kind, chapterId, expectedRevision, recordId, proposalHash]))
       const pending = journal.pending()
       if (pending?.operationId === operationId) return run(pending)
       const completed = journal.receipt(operationId)
@@ -70,10 +95,12 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       }
       let content = chapter.content
       if (kind === 'merge') {
-        const [revision] = db.prepare(`SELECT c.body FROM revisions r JOIN contents c ON c.id = r.content_id
-          WHERE r.id = ? AND r.base_draft_id = ? AND r.status = 'pending'`).all(recordId, draftId) as Array<{ body: string }>
-        if (!revision || typeof revision.body !== 'string') throw new ChapterError('conflict', 'Revision is unavailable')
-        content = revision.body
+        const proposal = preview(chapterId, recordId)
+        // Apply the exact body reviewed by the editor, even if the retained revision changed meanwhile.
+        if (proposalHash !== undefined && proposal.contentHash !== proposalHash) {
+          throw new ChapterError('conflict', 'Revision changed after preview')
+        }
+        content = proposal.content
       }
       if (kind === 'finalize' && !content.trim()) throw new ChapterError('invalid-chapter', 'Finalization requires saved content')
       const status = kind === 'merge' ? 'revised' : kind === 'archive' ? 'archived' : 'finalized'
