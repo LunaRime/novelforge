@@ -120,6 +120,12 @@ export interface ProjectChannels {
     return: { revision: string; indexed: boolean }
   }
   'project:file-editor-close': { args: [token: string]; return: void }
+  'project:file-editor-commit': {
+    args: [token: string, command: { chapterId: string; expectedRevision: string } & (
+      { kind: 'merge'; revisionId: number } | { kind: 'archive' | 'finalize' }
+    )]
+    return: import('../core').FileChapterCommitReceipt
+  }
   'project:create': {
     args: [config: { name: string; path: string; genre: string; targetAudience: string }]
     return: { success: boolean; projectId: string; projectPath?: string; restoredWriteToken?: string; error?: string }

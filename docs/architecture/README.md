@@ -27,7 +27,7 @@
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
 | 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | 17 | [知识库侧栏应用层抽离](17-knowledge-panel-application-plan.md) | 搜索/摘要/删除用例及请求失效保护 | 已实现并通过本地验证 |
-| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F2 恢复协议已实现，业务入口待接入 |
+| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F2 候选项目业务 IPC 已接入 |
 | 19 | [知识库总览应用层实施](19-knowledge-overview-application.md) | 维护互斥、导出元数据、项目隔离及总览组件回归 | 本地提交 0c1375c |
 | 20 | [架构文档应用层实施](20-architecture-document-application-plan.md) | B1 读写/生成用例、dirty 会话与运行归属 | 本地实施与验证记录 |
 | 21 | [小说配置应用层实施](21-novel-config-application-plan.md) | B2 保存、字段版本、生成冲突与撤销保护 | 本地实施与验证记录 |
@@ -50,7 +50,7 @@
 | 38 | [副本验证包](38-storage-export-verification.md) | 独立校验、合成数据与中断恢复证据 | E3 已提交 |
 | 39 | [旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) | 打包旧版对照、隔离屏障与完整备份恢复 | E4 已提交 |
 | 40 | [文件存储切换设计](40-file-storage-cutover-design.md) | 项目级草稿映射、激活、文档身份及回退 | F1 映射及无界面联调已交付 |
-| 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 协议已实现 |
+| 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入恢复 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

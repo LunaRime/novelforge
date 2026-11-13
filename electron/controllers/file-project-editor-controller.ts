@@ -1,19 +1,32 @@
 import { randomUUID } from 'node:crypto'
+import { join } from 'node:path'
+import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
 import type { ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
+import { createFileDraftLifecycle, type FileDraftCommand } from '../services/file-draft-lifecycle'
 
 const candidateRecord = '.novelforge/file-editor.json'
 const identityFile = '.novelforge/draft-identity.json'
 const manifestFile = 'migration-manifest.json'
 const legacyBarrier = '.novelforge/vela.db'
+const retainedFile = '.novelforge/retained.db'
 const current = /^doc:\/\/chapter\/(ch_[a-f0-9]{8,64})$/
 type OpenResult = ProjectChannels['project:file-editor-open']['return']
+type Lifecycle = ReturnType<typeof createFileDraftLifecycle>
+
+interface FileEditorSession {
+  token: string
+  projectPath: string
+  repo: FileChapterStore
+  assertCandidate: () => Promise<void>
+  withLifecycle?: <T>(work: (lifecycle: Lifecycle) => Promise<T>) => Promise<T>
+}
 
 export function registerFileProjectEditorController() {
-  const sessions = new Map<number, { token: string; projectPath: string; repo: FileChapterStore; assertCandidate: () => Promise<void> }>()
+  const sessions = new Map<number, FileEditorSession>()
   const observed = new WeakSet<object>()
   const requests = new Map<number, string>()
 
@@ -39,15 +52,30 @@ export function registerFileProjectEditorController() {
     if (record?.format !== 1 || project?.schemaVersion !== 1 || typeof project.id !== 'string' ||
         record.projectId !== project.id || identity?.format !== 1 || identity.projectId !== project.id ||
         !Array.isArray(identity.entries) || identity.manifestHash !== fileRevision(manifest) ||
-        record.identityHash !== fileRevision(mapping)) throw new Error('Invalid file editor candidate')
+        record.identityHash !== fileRevision(mapping) ||
+        (record.lifecycle !== undefined && record.lifecycle !== 1)) throw new Error('Invalid file editor candidate')
     const assertCandidate = async () => {
       if (await reader.kind(legacyBarrier) !== 'directory' || await reader.kind('.vela') !== 'missing' ||
           await reader.readText(candidateRecord) !== recordText || await reader.readText(identityFile) !== mapping ||
-          await reader.readText(manifestFile) !== manifest) throw new Error('File editor candidate changed')
+          await reader.readText(manifestFile) !== manifest ||
+          (record.lifecycle === 1 && await reader.kind(retainedFile) !== 'file')) throw new Error('File editor candidate changed')
     }
     await assertCandidate()
     assertPathAllowedForIpc(path, 'write')
     const repo = await FileChapterStore.open({ projectPath: path, projectId: identity.projectId, index: new MemoryChapterIndex() })
+    const withLifecycle: FileEditorSession['withLifecycle'] = record.lifecycle === 1 ? async work => {
+      await assertCandidate()
+      // Open a separately provisioned copy. The migration backup and legacy DB barrier remain untouched.
+      const db = new Database(join(path, retainedFile), { fileMustExist: true })
+      try {
+        return await work(createFileDraftLifecycle(db, repo, identity.projectId, identity.entries, () => {
+          if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+        }))
+      }
+      finally { db.close() }
+    } : undefined
+    // Resolve pending metadata before returning writable tabs. An ambiguous recovery fails the open.
+    if (withLifecycle) await withLifecycle(lifecycle => lifecycle.recover())
     const chapters = await repo.list()
     const documents = [
       ...chapters.map(chapter => ({ locator: `doc://chapter/${chapter.id}`, name: chapter.title || String(chapter.number) })),
@@ -67,7 +95,7 @@ export function registerFileProjectEditorController() {
       tabs.push({ ...result.document, name: names.get(result.document.locator) ?? result.document.name })
     }
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-    sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate })
+    sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate, withLifecycle })
     return { token, tabs, missing, documents }
   })
 
@@ -78,13 +106,29 @@ export function registerFileProjectEditorController() {
         !id || typeof content !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new Error('Invalid file editor save')
     assertPathAllowedForIpc(session.projectPath, 'write')
     await session.assertCandidate()
-    const stored = await session.repo.byId(id)
-    if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
-      throw new Error('Chapter changed or is read-only')
-    }
-    if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-    const result = await session.repo.save({ ...stored.chapter, content, updatedAt: new Date().toISOString() }, { expectedRevision: revision })
+    const result = await session.repo.withCommitLock(async repo => {
+      // A pending cross-store operation must recover before a plain save can advance the file revision.
+      if (session.withLifecycle) await session.withLifecycle(async lifecycle => lifecycle.assertIdle())
+      const stored = await repo.byId(id)
+      if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
+        throw new Error('Chapter changed or is read-only')
+      }
+      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+      return repo.save({ ...stored.chapter, content, updatedAt: new Date().toISOString() }, { expectedRevision: revision })
+    })
     return { revision: result.revision, indexed: result.indexed }
+  })
+
+  guardedHandle('project:file-editor-commit', async ({ sender }, token: string, command: FileDraftCommand) => {
+    const session = sessions.get(sender.id)
+    if (!session?.withLifecycle || session.token !== token || requests.get(sender.id) !== token) {
+      throw new Error('Invalid file editor lifecycle session')
+    }
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    return session.withLifecycle(lifecycle => {
+      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+      return lifecycle.commit(command)
+    })
   })
 
   guardedHandle('project:file-editor-close', ({ sender }, token: string) => {

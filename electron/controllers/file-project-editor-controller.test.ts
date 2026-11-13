@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
 import { expect, test, vi } from 'vitest'
 import { exportLegacyProject } from '../../src/core/migration/export-legacy-project'
 import { fileRevision } from '../../src/core/adapters/chapter-format'
@@ -8,6 +9,7 @@ import type { ProjectChannels } from '../../src/shared/ipc-channels'
 
 const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>())
 vi.mock('electron', () => ({}))
+vi.mock('better-sqlite3', () => ({ default: DatabaseSync }))
 vi.mock('../security/ipc-guard', () => ({ guardedHandle: (key: string, handler: never) => handlers.set(key, handler) }))
 vi.mock('./fs-controller', () => ({ assertPathAllowedForIpc: (path: string) => path }))
 
@@ -34,7 +36,17 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     ] })
     await mkdir(join(project, '.novelforge/vela.db'), { recursive: true })
     await writeFile(join(project, '.novelforge/draft-identity.json'), mapping)
-    await writeFile(join(project, '.novelforge/file-editor.json'), JSON.stringify({ format: 1, projectId, identityHash: fileRevision(mapping) }))
+    const db = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try {
+      db.exec(`
+        CREATE TABLE contents (id INTEGER PRIMARY KEY, body TEXT);
+        CREATE TABLE revisions (id INTEGER PRIMARY KEY, base_draft_id INTEGER, content_id INTEGER,
+          status TEXT, merged_to_draft_id INTEGER, updated_at INTEGER);
+        INSERT INTO contents VALUES (1, 'proposal');
+        INSERT INTO revisions VALUES (4, 2, 1, 'pending', NULL, 0);
+      `)
+    } finally { db.close() }
+    await writeFile(join(project, '.novelforge/file-editor.json'), JSON.stringify({ format: 1, projectId, identityHash: fileRevision(mapping), lifecycle: 1 }))
     const sender = { id: 1, once: vi.fn() }
     const invoke = (key: string, ...args: unknown[]) => handlers.get(`project:file-editor-${key}`)!({ sender }, ...args)
     registerFileProjectEditorController()
@@ -49,9 +61,24 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     const restored = await invoke('open', project, opened.tabs.map(tab => tab.locator)) as ProjectChannels['project:file-editor-open']['return']
     expect(restored.tabs).toMatchObject([{ content: '1', readOnly: true }, { content: 'updated' }])
     await expect(invoke('save', opened.token, locator, revision, 'old session')).rejects.toThrow()
+    const merged = await invoke('commit', restored.token, {
+      kind: 'merge', chapterId, expectedRevision: restored.tabs[1].revision, revisionId: 4,
+    }) as ProjectChannels['project:file-editor-commit']['return']
+    const retained = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try { retained.exec("CREATE TRIGGER interrupt BEFORE UPDATE ON file_draft_states BEGIN SELECT RAISE(ABORT, 'interrupted'); END") }
+    finally { retained.close() }
+    await expect(invoke('commit', restored.token, { kind: 'finalize', chapterId, expectedRevision: merged.revision })).rejects.toThrow('interrupted')
+    const repaired = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try { repaired.exec('DROP TRIGGER interrupt') } finally { repaired.close() }
+    registerFileProjectEditorController()
+    const recovered = await invoke('open', project, [locator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(recovered.tabs).toMatchObject([{ content: 'proposal', readOnly: true }])
+    await expect(invoke('save', recovered.token, locator, recovered.tabs[0].revision, 'finalized')).rejects.toThrow('read-only')
+    expect(await invoke('commit', recovered.token, { kind: 'archive', chapterId, expectedRevision: recovered.tabs[0].revision }))
+      .toMatchObject({ status: 'committed' })
     const { rmdir } = await import('node:fs/promises')
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('save', restored.token, locator, restored.tabs[1].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('save', recovered.token, locator, recovered.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 })

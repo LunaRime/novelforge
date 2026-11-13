@@ -43,7 +43,12 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
     return row
   }
 
-  prepare(intent: FileChapterCommit): FileChapterCommitReceipt | null {
+  receipt(operationId: string): FileChapterCommitReceipt | null {
+    const revision = this.row(operationId)?.revision
+    return revision ? { status: 'committed', revision } : null
+  }
+
+  prepare(intent: FileChapterCommit, allowNew = true): FileChapterCommitReceipt | null {
     if (intent.chapter.projectId !== this.projectId) throw new ChapterError('project-mismatch', 'Commit belongs to another project')
     if (!intent.operationId || !Number.isSafeInteger(intent.recordId) || intent.recordId < 1 ||
         !['merge', 'archive', 'finalize'].includes(intent.kind) || !/^[a-f0-9]{64}$/.test(intent.expectedRevision)) {
@@ -51,15 +56,21 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
     }
     const payload = JSON.stringify(intent)
     const hash = intentHash(payload)
-    this.db.prepare('INSERT INTO file_chapter_commits (project_id, operation_id, payload, intent_hash) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
-      .run(this.projectId, intent.operationId, payload, hash)
+    if (allowNew) {
+      this.db.prepare('INSERT INTO file_chapter_commits (project_id, operation_id, payload, intent_hash) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
+        .run(this.projectId, intent.operationId, payload, hash)
+    }
     const row = this.row(intent.operationId)
-    if (!row) throw new ChapterError('locked', 'Another file commit is awaiting recovery')
+    if (!row) {
+      if (!allowNew) throw new ChapterError('conflict', 'Chapter changed before preparing the file commit')
+      throw new ChapterError('locked', 'Another file commit is awaiting recovery')
+    }
     if (row.intent_hash !== hash) throw new ChapterError('conflict', 'Operation ID belongs to a different file commit')
     return row.revision ? { status: 'committed', revision: row.revision } : null
   }
 
-  finish(intent: FileChapterCommit, receipt: FileChapterCommitReceipt, applyMetadata: () => void): FileChapterCommitReceipt {
+  finish(intent: FileChapterCommit, receipt: FileChapterCommitReceipt,
+    applyMetadata: (receipt: FileChapterCommitReceipt) => void): FileChapterCommitReceipt {
     // Acquire the write transaction before reading the receipt so a concurrent retry cannot apply metadata twice.
     this.db.exec('BEGIN IMMEDIATE')
     try {
@@ -71,7 +82,7 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
         this.db.exec('COMMIT')
         return { status: 'committed', revision: row.revision }
       }
-      applyMetadata()
+      applyMetadata(receipt)
       // Drop the replay payload when the receipt commits. The chapter file owns the manuscript.
       this.db.prepare('UPDATE file_chapter_commits SET revision = ?, payload = NULL WHERE project_id = ? AND operation_id = ?')
         .run(receipt.revision, this.projectId, intent.operationId)

@@ -16,8 +16,8 @@ export interface FileChapterCommitReceipt {
 }
 
 export interface FileCommitJournal {
-  prepare(intent: FileChapterCommit): FileChapterCommitReceipt | null
-  finish(intent: FileChapterCommit, receipt: FileChapterCommitReceipt, applyMetadata: () => void): FileChapterCommitReceipt
+  prepare(intent: FileChapterCommit, allowNew?: boolean): FileChapterCommitReceipt | null
+  finish(intent: FileChapterCommit, receipt: FileChapterCommitReceipt, applyMetadata: (receipt: FileChapterCommitReceipt) => void): FileChapterCommitReceipt
 }
 
 /** Complete one recorded operation. The caller supplies the retained DB mutation for that operation. */
@@ -25,28 +25,33 @@ export function commitFileChapter(
   input: FileChapterCommit,
   repo: { withCommitLock<T>(work: (locked: Pick<ChapterRepo, 'byId' | 'save'>) => Promise<T>): Promise<T> },
   journal: FileCommitJournal,
-  applyMetadata: () => void,
+  applyMetadata: (receipt: FileChapterCommitReceipt) => void,
+  assertCurrent: () => void = () => {},
 ): Promise<FileChapterCommitReceipt> {
   const intent = structuredClone(input)
-  return repo.withCommitLock(locked => commitLocked(intent, locked, journal, applyMetadata))
+  return repo.withCommitLock(locked => commitLocked(intent, locked, journal, applyMetadata, assertCurrent))
 }
 
 async function commitLocked(intent: FileChapterCommit, repo: Pick<ChapterRepo, 'byId' | 'save'>,
-  journal: FileCommitJournal, applyMetadata: () => void): Promise<FileChapterCommitReceipt> {
+  journal: FileCommitJournal, applyMetadata: (receipt: FileChapterCommitReceipt) => void,
+  assertCurrent: () => void): Promise<FileChapterCommitReceipt> {
   const { chapter, expectedRevision } = intent
   const revision = fileRevision(serializeChapter(chapter))
   const receipt = { status: 'committed', revision } as const
-  const completed = journal.prepare(intent)
-  if (completed) return completed
-
   const current = await repo.byId(chapter.id)
+  assertCurrent()
+  // A stale request may look up an existing receipt, but must not create a new recovery obligation.
+  const canPrepare = current?.chapter.projectId === chapter.projectId &&
+    current.chapter.number === chapter.number && current.revision === expectedRevision
+  const completed = journal.prepare(intent, canPrepare)
+  if (completed) return completed
   if (current?.chapter.projectId !== chapter.projectId) throw new ChapterError('project-mismatch', 'Commit chapter does not belong to this project')
 
   // A retry after file publication must skip the write, including its history snapshot.
   // A third revision may belong to an external editor. Leave the intent pending for inspection.
   if (current.revision !== revision) {
     // Renumbering has a different recovery path because it can leave two filenames after a crash.
-    if (current.revision !== expectedRevision || current.chapter.number !== chapter.number) {
+    if (!canPrepare) {
       throw new ChapterError('conflict', 'Chapter changed during file commit')
     }
     await repo.save(chapter, { expectedRevision })
