@@ -6,9 +6,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { build } from 'esbuild'
-import { afterEach, expect, test } from 'vitest'
-import { FileChapterStore, MemoryChapterIndex, SQLiteChapterIndex } from '../core'
+import { afterEach, expect, test, vi } from 'vitest'
+import { FileChapterStore, MemoryChapterIndex, SQLiteChapterIndex, openEditorDocument } from '../core'
 import { parseChapter } from '../core/adapters/chapter-format'
+import { createFileEditorOpenPort } from '../core/adapters/file-editor-open'
 import { exportLegacyProject, listExportFiles } from '../core/migration/export-legacy-project'
 
 const roots: string[] = []
@@ -125,6 +126,90 @@ test('rejects modified manifest counts and a rehashed backup whose associations 
   expect(result.status).toBe(1)
   expect(result.stderr).toContain('revisions')
   expect(result.stdout).toBe('')
+})
+
+test('projects verified draft identities into exact current and historical targets', async () => {
+  const { source, output, other } = await fixture()
+  const db = new DatabaseSync(source)
+  try {
+    db.exec(`
+      INSERT INTO contents VALUES (10, 'older archived chapter');
+      INSERT INTO drafts VALUES (6, 3, 2, NULL, 'archived', 10, '', 6, 7);
+    `)
+  } finally { db.close() }
+  success(migrate(source, output))
+  const report = success(command('verify-storage-export', source, output))
+  const map = success(command('verify-storage-export', source, output, '--identity-map'))
+  expect(map).toEqual(report.identityMap)
+  expect(map).toMatchObject({
+    format: 1, projectId, sourceFingerprint: report.sourceFingerprint, manifestHash: report.manifestHash,
+  })
+  const entries = new Map<number, typeof map.entries[number]>(map.entries.map((entry: { draftId: number }) => [entry.draftId, entry]))
+  const current = entries.get(2)!
+  const archived = entries.get(4)!
+  const otherArchived = entries.get(6)!
+  expect(current.target).toEqual({ kind: 'current', locator: `doc://chapter/${current.chapterId}` })
+  expect(entries.get(1)).toMatchObject({
+    chapterId: current.chapterId, version: 1, branchId: null,
+    target: { kind: 'history', path: `history/${current.chapterId}/1.md`, fileChapterId: current.chapterId },
+  })
+  expect(entries.get(3)).toMatchObject({ chapterId: current.chapterId, version: 1, branchId: 1, target: { kind: 'history' } })
+  expect(archived.target).toMatchObject({ kind: 'history', fileChapterId: archived.chapterId })
+  expect(otherArchived.chapterId).toBe(archived.chapterId)
+  expect(otherArchived.target.fileChapterId).not.toBe(archived.chapterId)
+  expect(otherArchived.target.path).toBe(`history/${otherArchived.target.fileChapterId}/6.md`)
+
+  success(command('migrate-to-files', source, other, 'another-project'))
+  const otherMap = success(command('verify-storage-export', source, other, '--identity-map'))
+  expect(otherMap.projectId).toBe('another-project')
+  expect(otherMap.entries.find((entry: { draftId: number }) => entry.draftId === 2).chapterId).not.toBe(current.chapterId)
+  const manifest = await readManifest(output)
+  await writeFile(join(output, manifestName), JSON.stringify({ ...manifest, projectId: 'another-project' }))
+  const invalid = command('verify-storage-export', source, output, '--identity-map')
+  expect(invalid.status).toBe(1)
+  expect(invalid.stdout).toBe('')
+})
+
+test('opens verified file tabs through the editor use case and keeps exact old draft references', async () => {
+  const { root, source, output } = await fixture()
+  success(migrate(source, output))
+  const identity = success(command('verify-storage-export', source, output, '--identity-map'))
+  const working = join(root, 'working')
+  await cp(output, working, { recursive: true })
+  const openRepo = () => FileChapterStore.open({ projectPath: working, projectId, index: new MemoryChapterIndex() })
+  let repo = await openRepo()
+  let session = 1
+  let activeProject = projectId
+  const publish = vi.fn()
+  const port = await createFileEditorOpenPort({
+    projectPath: working, identity,
+    scope: () => ({ projectId: activeProject, projectPath: working, session }),
+    repo: { byId: id => repo.byId(id) }, publish,
+  })
+  const current = identity.entries.find((entry: { draftId: number }) => entry.draftId === 2)
+  const request = { kind: 'path' as const, documentKind: 'chapter' as const, locator: current.target.locator, name: 'chapter' }
+  const first = await openEditorDocument(request, port)
+  expect(first).toMatchObject({ status: 'opened', document: { content: '合成当前稿', readOnly: false } })
+  const historical = await openEditorDocument({ kind: 'draft', draftId: 1, name: 'old' }, port)
+  expect(historical).toMatchObject({ status: 'opened', document: { content: '', readOnly: true } })
+  if (first.status !== 'opened' || historical.status !== 'opened') throw new Error('Expected two documents')
+  expect(first.document.id).not.toBe(historical.document.id)
+  const stored = (await repo.byId(current.chapterId))!
+  await repo.save({ ...stored.chapter, number: 4 }, { expectedRevision: stored.revision })
+  repo = await openRepo()
+  expect(await openEditorDocument(request, port)).toEqual(first)
+  const reopened = (await repo.byId(current.chapterId))!
+  await repo.save({ ...reopened.chapter, content: 'replacement', metadata: {} }, { expectedRevision: reopened.revision })
+  expect(await openEditorDocument({ kind: 'draft', draftId: 2, name: 'old' }, port)).toEqual({ status: 'missing' })
+  expect(await openEditorDocument(request, port)).toMatchObject({ status: 'opened', document: { content: 'replacement' } })
+  const historyPath = join(working, 'history', current.chapterId, '1.md')
+  await writeFile(historyPath, Buffer.concat([await readFile(historyPath), Buffer.from('tampered')]))
+  expect(await openEditorDocument({ kind: 'draft', draftId: 1, name: 'old' }, port)).toEqual({ status: 'missing' })
+  session++
+  expect(await openEditorDocument(request, port)).toEqual({ status: 'missing' })
+  activeProject = 'another-project'
+  expect(await openEditorDocument(request, port)).toEqual({ status: 'missing' })
+  expect(publish).toHaveBeenCalledTimes(4)
 })
 
 test('refuses source changes, missing contents, WAL and external edits', async () => {

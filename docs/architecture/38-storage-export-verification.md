@@ -38,4 +38,4 @@ E2 契约另覆盖损坏的 frontmatter、临时文件、链接和 SQLite sideca
 
 7 个项目均通过重复导出、两份独立导出的 SQLite 与文件比对、doctor 和派生索引重建，共验证 16 个当前章与 4 个历史稿。原库及现有 SQLite sidecar 的 SHA-256 前后相同。真实数据、源指纹、报告与测试副本保存在仓库外。
 
-文件仓储已可读回当前章，历史文件可按迁移映射追溯。分支、修审稿、场景和 checkpoint 的完整记录目前通过备份库查询。旧版隔离与完整备份恢复已另行验证。应用层读写等价性和存储切换仍需按计划验收。[生命周期矩阵](37-storage-lifecycle-matrix.md) · [E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md)
+文件仓储已可读回当前章，历史文件可按迁移映射追溯。分支、修审稿、场景和 checkpoint 的完整记录目前通过备份库查询。旧版隔离与完整备份恢复已另行验证。应用层读写等价性和存储切换仍需按计划验收。[生命周期矩阵](37-storage-lifecycle-matrix.md) · [E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) · [F1 身份映射](40-file-storage-cutover-design.md)

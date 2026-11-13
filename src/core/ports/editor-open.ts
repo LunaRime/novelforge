@@ -10,6 +10,7 @@ export interface OpenedEditorDocument {
   kind: 'chapter' | 'arch-file'
   content: string
   docId?: number
+  readOnly?: boolean
 }
 export interface EditorOpenPort {
   scope(): EditorOpenScope

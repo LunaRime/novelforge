@@ -7,6 +7,7 @@ import { pathToFileURL } from 'node:url'
 import { parseChapter } from '../adapters/chapter-format'
 import { inspectLegacyDatabase } from '../adapters/legacy-database-inspection'
 import { legacyDraftDate, listExportFiles, type LegacyDraft } from './export-legacy-project'
+import type { MigratedDraftIdentityMap } from '../ports/migrated-draft-identity'
 
 const manifestName = 'migration-manifest.json'
 const digest = (value: string) => createHash('sha256').update(value).digest('hex')
@@ -93,12 +94,25 @@ function expectedPaths(db: DatabaseSync, rows: LegacyDraft[], projectId: string)
     if (current.has(number)) throw new Error(`ambiguous main draft: chapter ${number}`)
     current.set(number, Number(row.id))
   }
+  // Rows are ordered by legacy ID. A chapter without a current file keeps its first exported ID as the anchor.
+  const firstDraftByChapter = new Map<number, number>()
+  for (const row of rows) {
+    if (!firstDraftByChapter.has(row.chapterNumber)) firstDraftByChapter.set(row.chapterNumber, row.id)
+  }
+  const idFor = (draftId: number) => `ch_${digest(JSON.stringify([projectId, draftId])).slice(0, 32)}`
   return rows.map(row => {
     const selected = current.get(row.chapterNumber)
-    const chapterId = `ch_${digest(JSON.stringify([projectId, selected ?? row.id])).slice(0, 32)}`
-    const path = row.id === selected ? `chapters/${String(row.chapterNumber).padStart(4, '0')}.md` :
+    const chapterId = idFor(selected ?? row.id)
+    const isCurrent = row.id === selected
+    const path = isCurrent ? `chapters/${String(row.chapterNumber).padStart(4, '0')}.md` :
       `history/${chapterId}/${row.id}.md`
-    return { row, chapterId, path }
+    const identity = {
+      draftId: row.id, chapterId: idFor(selected ?? firstDraftByChapter.get(row.chapterNumber) ?? row.id),
+      version: row.version, branchId: row.branchId,
+      target: isCurrent ? { kind: 'current' as const, locator: `doc://chapter/${chapterId}` } :
+        { kind: 'history' as const, path, fileChapterId: chapterId },
+    }
+    return { row, chapterId, path, identity }
   })
 }
 
@@ -171,12 +185,21 @@ export async function verifyStorageExport(sourceArg: string, outputArg: string) 
           await fileHash(join(output, manifestName)) !== digest(manifestText)) throw new Error('Source or export changed during verification')
       await assertNoSidecars(source)
       await assertNoSidecars(backupPath)
+      const manifestHash = digest(manifestText)
+      const identityMap: MigratedDraftIdentityMap = {
+        format: 1, projectId, sourceFingerprint, manifestHash,
+        entries: expected.map(({ identity, path }) => ({
+          ...identity,
+          target: identity.target.kind === 'current' ? identity.target : { ...identity.target, fileHash: hashes.get(path)! },
+        })),
+      }
       return {
         ok: true, source, output, backupPath, projectId, sourceFingerprint, manifestFormat: 1,
-        manifestHash: digest(manifestText), backupHash: hashes.get('legacy.db'), schemaVersion: from.schemaVersion,
+        manifestHash, backupHash: hashes.get('legacy.db'), schemaVersion: from.schemaVersion,
         counts: { ...Object.fromEntries([...from.tables].map(([name, info]) => [name, info.count])),
           current, historical: expected.length - current },
         databaseDigest: digest(JSON.stringify([from.schemaHash, from.schemaVersion, [...from.tables]])), chapters,
+        identityMap,
       }
     } finally { backupDb.close() }
   } finally { sourceDb.close() }
