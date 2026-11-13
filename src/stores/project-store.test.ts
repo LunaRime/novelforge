@@ -12,6 +12,7 @@ import { useEditorStore } from './editor-store'
 import type { ProjectData } from '../shared/ipc-channels'
 import { ipc } from '../services/ipc-client'
 import { confirm } from '../components/ui/Confirm'
+import { globalEventBus } from '../shared/event-bus'
 
 vi.mock('../services/ipc-client', () => ({
   ipc: { invoke: vi.fn().mockResolvedValue(true) },
@@ -60,6 +61,20 @@ afterEach(() => {
 })
 
 describe('project-store 快照机制（线③）', () => {
+  it('hands the candidate to the file editor while preserving the SQLite project and tabs', async () => {
+    const route = vi.fn()
+    const off = globalEventBus.on('OPEN_FILE_PROJECT_EDITOR', route)
+    try {
+      useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'unsaved', dirty: true })
+      vi.mocked(confirm).mockResolvedValue(true)
+      vi.mocked(ipc.invoke).mockResolvedValue({ success: true, project: null, fileProjectPath: '/candidate' } as never)
+      expect(await useProjectStore.getState().openProject('/candidate')).toBe(true)
+      expect(route).toHaveBeenCalledWith({ projectPath: '/candidate' })
+      expect(useProjectStore.getState().currentProject).toEqual(BASE)
+      expect(useEditorStore.getState().tabs[0]).toMatchObject({ content: 'unsaved', dirty: true })
+      expect(ipc.invoke).toHaveBeenCalledTimes(1)
+    } finally { off() }
+  })
   it('confirms protected edits before project creation can change the database connection', async () => {
     useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: 'Draft', content: 'old', dirty: true })
     vi.mocked(confirm).mockResolvedValue(false)

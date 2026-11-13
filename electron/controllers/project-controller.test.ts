@@ -8,6 +8,7 @@ const h = vi.hoisted(() => ({
   readCore: vi.fn(),
   writeCore: vi.fn(),
   writeRecent: vi.fn(),
+  isFileProject: vi.fn(),
 }))
 vi.mock('electron', () => ({}))
 vi.mock('node:fs', () => ({ default: { existsSync: () => true, mkdirSync: vi.fn() } }))
@@ -15,6 +16,7 @@ vi.mock('../security/ipc-guard', () => ({
   guardedHandle: (channel: string, handler: (_event: unknown, ...args: unknown[]) => Promise<unknown>) => h.handlers.set(channel, handler),
 }))
 vi.mock('../database', () => ({
+  isFileProjectDirectory: h.isFileProject,
   getCurrentProjectPath: () => h.currentPath,
   getProjectDb: () => h.currentPath ? h.connection : null,
   initProjectDatabase: (path: string) => { h.currentPath = path; h.connection = {} },
@@ -36,7 +38,19 @@ beforeEach(() => {
   h.readCore.mockReset()
   h.writeCore.mockReset()
   h.writeRecent.mockReset()
+  h.isFileProject.mockReset().mockReturnValue(false)
   registerProjectController()
+})
+
+it('routes a file project without replacing the current database or registering it as a SQLite recent project', async () => {
+  const connection = h.connection
+  h.isFileProject.mockReturnValue(true)
+  const result = await h.handlers.get('project:open')!(null, '/candidate')
+  expect(result).toMatchObject({ success: true, project: null, fileProjectPath: '/candidate' })
+  expect(h.currentPath).toBe('/original')
+  expect(h.connection).toBe(connection)
+  expect(h.writeRecent).not.toHaveBeenCalled()
+  expect(h.readCore).not.toHaveBeenCalled()
 })
 
 it.each(['project:save', 'project:update-config'])('rejects a stale project path before writing through %s', async channel => {

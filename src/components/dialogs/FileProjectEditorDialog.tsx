@@ -1,8 +1,9 @@
-import { useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import type { ProjectChannels } from '../../shared/ipc-channels'
+import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
@@ -25,7 +26,7 @@ function storedTabs(path: string) {
   return { locators: [], active: '' }
 }
 
-export function FileProjectEditorDialog() {
+export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: boolean }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [workspace, setWorkspace] = useState<Workspace>()
@@ -160,9 +161,19 @@ export function FileProjectEditorDialog() {
     setOpen(next)
   }
 
+  const openFromProjectEntry = useEffectEvent(({ projectPath }: { projectPath?: string }) => {
+    if (pending.current) return
+    setOpen(true)
+    if (!projectPath) return
+    // A route request must preserve any unsaved text in the existing file editor.
+    if (dirty) { toast.warning(t('project.fileEditorSaveFirst')); return }
+    void load(projectPath)
+  })
+  useEffect(() => globalEventBus.on('OPEN_FILE_PROJECT_EDITOR', request => openFromProjectEntry(request)), [])
+
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
-      <DialogTrigger asChild><Button variant="outline" className="w-full">{t('project.fileEditor')}</Button></DialogTrigger>
+      {showTrigger && <DialogTrigger asChild><Button variant="outline" className="w-full">{t('project.fileEditor')}</Button></DialogTrigger>}
       <DialogContent preventOutsideClose className="flex max-h-[85vh] max-w-3xl flex-col">
         <DialogHeader>
           <DialogTitle>{t('project.fileEditor')}</DialogTitle>

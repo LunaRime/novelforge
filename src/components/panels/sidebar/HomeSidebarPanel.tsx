@@ -14,7 +14,7 @@ import { Button } from '../../ui/Button'
 import MenuRow from '../../ui/MenuRow'
 import { confirmDeleteProject } from '../../ui/Confirm'
 import { useTranslation } from '../../../hooks/useTranslation'
-import { FileProjectEditorDialog } from '../../dialogs/FileProjectEditorDialog'
+import { globalEventBus } from '../../../shared/event-bus'
 
 export default function HomeSidebarPanel() {
   const { t } = useTranslation()
@@ -77,7 +77,9 @@ export default function HomeSidebarPanel() {
           }}
         >
           {t('action.openProject')}</Button>
-        {ipc.isElectron && <FileProjectEditorDialog />}
+        {ipc.isElectron && <Button variant="outline" className="w-full" onClick={() => {
+          globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', {})
+        }}>{t('project.fileEditor')}</Button>}
         {/* 导入小说（= 既有 ImportNovelDialog；与欢迎页第三个大按钮同源） */}
         <Button
           variant="outline"

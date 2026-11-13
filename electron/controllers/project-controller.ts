@@ -7,7 +7,7 @@ import Database from 'better-sqlite3'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectDataDir } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
-import { closeProjectDatabase, getProjectDb, getCurrentProjectPath, initProjectDatabase } from '../database'
+import { closeProjectDatabase, getProjectDb, getCurrentProjectPath, initProjectDatabase, isFileProjectDirectory } from '../database'
 import { grantDirectory, assertPathAllowedForIpc } from './fs-controller'
 import type { NovelConfig, ProjectConfigPatch, ProjectData, ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
@@ -148,7 +148,10 @@ export function registerProjectController() {
         return { success: false, project: null, error: t('error.dirNotFound') }
       }
 
-      // SQLite 初始化会先检查文件项目描述，再决定是否可以切换数据库连接。
+      // Hand candidates to the file editor before opening a database or updating SQLite recents.
+      if (isFileProjectDirectory(projectPath)) {
+        return { success: true, project: null, fileProjectPath: projectPath }
+      }
       initProjectDatabase(projectPath)
 
       // 从 DB 读取配置

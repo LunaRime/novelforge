@@ -22,6 +22,7 @@ export type GlobalEventType =
   | 'FINALIZE_COMPLETE'
   // --- 项目级事件 ---
   | 'PROJECT_CHANGED'
+  | 'OPEN_FILE_PROJECT_EDITOR'
   // --- 系统通知 ---
   | 'SYSTEM_NOTICE'
 
@@ -54,6 +55,7 @@ export interface EventPayloadMap {
   'PROJECT_CHANGED': {
     projectPath: string
   }
+  'OPEN_FILE_PROJECT_EDITOR': { projectPath?: string }
   'SYSTEM_NOTICE': {
     level: 'info' | 'success' | 'warn' | 'error'
     message: string

@@ -138,7 +138,7 @@ export interface ProjectChannels {
   }
   'project:open': {
     args: [projectPath: string]
-    return: { success: boolean; project: ProjectData | null; restoredWriteToken?: string; error?: string }
+    return: { success: boolean; project: ProjectData | null; restoredWriteToken?: string; error?: string; fileProjectPath?: string }
   }
   'project:save': {
     args: [projectId: string, data: Partial<ProjectData>]

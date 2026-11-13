@@ -3,6 +3,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 import { FileProjectEditorDialog } from './FileProjectEditorDialog'
+import { globalEventBus } from '../../shared/event-bus'
 
 const invoke = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
@@ -24,6 +25,30 @@ async function click(label: string) {
   await act(async () => button.click())
 }
 afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset() })
+
+test('opens a routed directory through the candidate IPC without another folder picker', async () => {
+  invoke.mockResolvedValue({ token: 'session', tabs: [], documents: [], missing: [] })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  expect(invoke).toHaveBeenCalledExactlyOnceWith('project:file-editor-open', '/candidate', [])
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
+})
+
+test('keeps unsaved file text when another project is routed to the editor', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  invoke.mockResolvedValue({ token: 'session', tabs: [{ locator, content: 'saved', revision: 'revision' }],
+    documents: [{ locator, name: 'Chapter' }], missing: [] })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  const body = document.querySelector('textarea')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(body, 'unsaved')
+    body.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/other' }) })
+  expect(body.value).toBe('unsaved')
+  expect(invoke).toHaveBeenCalledExactlyOnceWith('project:file-editor-open', '/candidate', [])
+})
 
 test('previews a proposal, commits its reviewed body, and refreshes after finalization', async () => {
   const locator = 'doc://chapter/ch_12345678'

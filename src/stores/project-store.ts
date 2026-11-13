@@ -6,6 +6,7 @@ import { alertError, confirm } from '../components/ui/Confirm'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { t } from '../shared/locale'
+import { globalEventBus } from '../shared/event-bus'
 import { useEditorStore } from './editor-store'
 import { NovelConfigRequestCancelled, type NovelConfigScope } from '../core'
 import { commitProjectConfig, markProjectConfigReloaded, ProjectConfigResultUnknown } from '../services/config/project-config-save'
@@ -194,6 +195,11 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       if (detachedTabs) useEditorStore.getState().clearTabs()
       const result = await ipc.invoke('project:open', projectPath)
       if (get().projectSession !== session) return false
+      if (result.success && result.fileProjectPath) {
+        // The file editor owns its own session. Restore any detached SQLite tabs in finally.
+        globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: result.fileProjectPath })
+        return true
+      }
       if (result.success && result.project) {
         opened = true
         markProjectConfigReloaded(result.project.path, result.project.writeToken)
