@@ -1,6 +1,6 @@
 import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevision, ChapterError,
   type ChapterIndexDatabase, type FileChapterCommit, type FileChapterCommitReceipt, type MigratedDraftIdentityMap } from '../../src/core'
-import type { FileDraftCommand } from '../../src/shared/ipc-channels'
+import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../../src/shared/ipc-channels'
 import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
 
 /** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
@@ -35,17 +35,15 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
 
   const run = (intent: FileChapterCommit) => commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent)
 
-  function create(command: Extract<FileDraftCommand, { kind: 'create' }>) {
+  function create(command: Omit<Extract<FileDraftCommand, { kind: 'create' }>, 'kind'>, operationId: string) {
     const { chapterId, number, title, content, createdAt } = command
-    // Reusing a migrated identity or a history-only chapter number requires an explicit restore.
+    // 迁移身份和仅历史稿占用的章号须通过显式恢复流程复用。
     const reservedNumber = historyOnlyDrafts.size > 0 && (db.prepare('SELECT id FROM drafts WHERE chapter_number = ?')
       .all(number) as Array<{ id: number }>).some(row => historyOnlyDrafts.has(row.id))
     if (reservedNumber || identities.some(entry => entry.chapterId === chapterId)) {
       throw new ChapterError('conflict', 'Chapter belongs to the migration history')
     }
-    // One creation per stable chapter ID. The journal compares the complete request on retry.
-    return run({ operationId: fileRevision(JSON.stringify(['create', chapterId])), kind: 'create',
-      recordId: number, expectedRevision: null,
+    return run({ operationId, kind: 'create', recordId: number, expectedRevision: null,
       chapter: { projectId, id: chapterId, number, title, content, status: 'draft', createdAt, updatedAt: createdAt } })
   }
 
@@ -58,6 +56,37 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   }
   return {
     preview,
+    async importChapters(firstNumber: number, chapters: FileImportChapter[]) {
+      if (!Array.isArray(chapters) || chapters.length === 0 || !Number.isSafeInteger(firstNumber) || firstNumber < 1 ||
+          !Number.isSafeInteger(firstNumber + chapters.length - 1) ||
+          chapters.some(chapter => typeof chapter?.title !== 'string' || typeof chapter.content !== 'string')) {
+        throw new ChapterError('invalid-chapter', 'Invalid file chapter import')
+      }
+      const result: ProjectChannels['project:file-editor-import']['return'] = { completed: 0 }
+      for (const [index, { title, content }] of chapters.entries()) {
+        assertCurrent?.()
+        const number = firstNumber + index
+        // 操作 ID 绑定项目、目标章号和拆章内容，重启后可用相同输入找到原回执。
+        const operationId = fileRevision(JSON.stringify(['import', projectId, number, title, content]))
+        const chapterId = `ch_${operationId}`
+        if (!journal.receipt(operationId)) {
+          try {
+            const pending = journal.pending()
+            if (pending?.operationId === operationId) await run(pending)
+            else await create({ chapterId, number, title, content, createdAt: new Date().toISOString() }, operationId)
+          } catch (error) {
+            // 章号冲突时保留已提交的章节。如果仍有待提交记录，则交给恢复流程处理。
+            if (error instanceof ChapterError && error.code === 'conflict' && !journal.pending()) {
+              if (!journal.receipt(operationId)) return { ...result, blockedNumber: number }
+            } else throw error
+          }
+        }
+        assertCurrent?.()
+        result.firstLocator ??= `doc://chapter/${chapterId}`
+        result.completed++
+      }
+      return result
+    },
     async actions(chapterId: string, expectedRevision: string) {
       const chapter = await repo.byId(chapterId)
       const draftId = currentDrafts.get(chapterId)
@@ -81,7 +110,8 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
         if (!Number.isSafeInteger(command.number) || command.number < 1) {
           throw new ChapterError('invalid-chapter', 'Invalid file chapter number')
         }
-        return create(command)
+        // 单章创建使用稳定章节 ID 计算操作 ID，重试由日志比对完整请求。
+        return create(command, fileRevision(JSON.stringify(['create', command.chapterId])))
       }
       if (!command || !['merge', 'archive', 'finalize'].includes(command.kind) ||
           !/^ch_[a-f0-9]{8,64}$/.test(command.chapterId) || !/^[a-f0-9]{64}$/.test(command.expectedRevision) ||

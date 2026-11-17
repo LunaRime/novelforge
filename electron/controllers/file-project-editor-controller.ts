@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
-import type { FileDraftCommand, ProjectChannels } from '../../src/shared/ipc-channels'
+import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
@@ -104,7 +104,9 @@ export function registerFileProjectEditorController() {
     }
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
     sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate, withLifecycle })
-    return { token, tabs, missing, documents }
+    // 默认接在当前稿之后，导入时还会检查迁移历史占用的章号。
+    const importStartNumber = withLifecycle ? chapters.reduce((latest, chapter) => Math.max(latest, chapter.number), 0) + 1 : undefined
+    return { token, tabs, missing, documents, importStartNumber }
   })
 
   guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {
@@ -127,17 +129,24 @@ export function registerFileProjectEditorController() {
     return { revision: result.revision, indexed: result.indexed }
   })
 
-  guardedHandle('project:file-editor-commit', async ({ sender }, token: string, command: FileDraftCommand) => {
-    const session = sessions.get(sender.id)
-    if (!session?.withLifecycle || session.token !== token || requests.get(sender.id) !== token) {
+  function mutate<T>(senderId: number, token: string, work: (lifecycle: Lifecycle) => Promise<T>): Promise<T> {
+    const session = sessions.get(senderId)
+    if (!session?.withLifecycle || session.token !== token || requests.get(senderId) !== token) {
       throw new Error('Invalid file editor lifecycle session')
     }
     assertPathAllowedForIpc(session.projectPath, 'write')
     return session.withLifecycle(lifecycle => {
-      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-      return lifecycle.commit(command)
+      // 打开保留库前有异步校验，执行写入前再次确认会话仍有效。
+      if (requests.get(senderId) !== token) throw new Error('File editor session changed')
+      return work(lifecycle)
     })
-  })
+  }
+
+  guardedHandle('project:file-editor-commit', async ({ sender }, token: string, command: FileDraftCommand) =>
+    mutate(sender.id, token, lifecycle => lifecycle.commit(command)))
+
+  guardedHandle('project:file-editor-import', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) =>
+    mutate(sender.id, token, lifecycle => lifecycle.importChapters(firstNumber, chapters)))
 
   guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {
     const session = sessions.get(sender.id)

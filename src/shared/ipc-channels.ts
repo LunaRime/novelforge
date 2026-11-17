@@ -117,12 +117,14 @@ export type FileDraftCommand = { chapterId: string } & (
   ))
 )
 
+export interface FileImportChapter { title: string; content: string }
+
 export interface ProjectChannels {
   'project:file-editor-open': {
     args: [projectPath: string, locators: string[]]
     return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
       lifecycle?: { canFinalize: boolean; canArchive: boolean; pending: Array<{ id: number }> }
-    }>; missing: string[]; documents: Array<{ locator: string; name: string }> }
+    }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number }
   }
   'project:file-editor-save': {
     args: [token: string, locator: string, revision: string, content: string]
@@ -132,6 +134,10 @@ export interface ProjectChannels {
   'project:file-editor-commit': {
     args: [token: string, command: FileDraftCommand]
     return: import('../core').FileChapterCommitReceipt
+  }
+  'project:file-editor-import': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { completed: number; firstLocator?: string; blockedNumber?: number }
   }
   'project:file-editor-preview': {
     args: [token: string, chapterId: string, revisionId: number]

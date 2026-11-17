@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
-import type { ProjectChannels } from '../../shared/ipc-channels'
+import type { FileImportChapter, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
@@ -12,6 +12,7 @@ type Opened = ProjectChannels['project:file-editor-open']['return']
 type Workspace = Opened & { path: string; active: string }
 type Commit = Exclude<ProjectChannels['project:file-editor-commit']['args'][1], { kind: 'create' }>
 type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
+type ImportPreview = { path: string; chapters: FileImportChapter[]; firstNumber: string }
 
 const saveClock = () => performance.now()
 
@@ -34,10 +35,13 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [busy, setBusy] = useState(false)
   const [revisionId, setRevisionId] = useState<number>()
   const [preview, setPreview] = useState<Preview>()
+  const [importPreview, setImportPreview] = useState<ImportPreview>()
   const [confirmation, setConfirmation] = useState<Commit['kind']>()
   const pending = useRef(false)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
   const dirty = !!active && active.content !== text
+  const stagedImport = importPreview?.path === workspace?.path ? importPreview : undefined
+  const firstImportNumber = Number(stagedImport?.firstNumber)
   const lifecycle = active?.lifecycle
   const selectedRevision = revisionId ?? lifecycle?.pending[0]?.id
   const chapterId = lifecycle ? active?.locator.slice('doc://chapter/'.length) : undefined
@@ -51,11 +55,57 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     // A preview belongs to the previous document and revision, even if the locator stayed the same.
     setPreview(undefined)
     setRevisionId(undefined)
+    setImportPreview(previous => previous?.path === path ? previous : undefined)
     const selected = result.tabs.find(tab => tab.locator === preferred) ?? result.tabs[0]
     setWorkspace({ ...result, path, active: selected?.locator ?? '' })
     setText(selected?.content ?? '')
     const locators = [...new Set([...result.tabs.map(tab => tab.locator), ...result.missing.filter(locator => requested.includes(locator))])]
     remember(path, locators, selected?.locator ?? preferred)
+  }
+
+  async function previewImport() {
+    if (pending.current || dirty || !workspace?.importStartNumber) return
+    pending.current = true
+    setBusy(true)
+    try {
+      const files = await ipc.invoke('dialog:select-novel-files')
+      if (!files?.length) return
+      const split = await ipc.invoke('import:split-chapters', files)
+      if (!split.success || split.chapters.length === 0) throw new Error(split.error ?? t('import.chapterSplitFailed'))
+      setImportPreview({ path: workspace.path, firstNumber: String(workspace.importStartNumber),
+        chapters: split.chapters.map(({ title, content }) => ({ title, content })) })
+    } catch (error) {
+      renderLog('error', 'FileProjectEditor', String(error))
+      toast.error(t('import.chapterSplitFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function importChapters() {
+    if (pending.current || dirty || !workspace || !stagedImport ||
+        !Number.isSafeInteger(firstImportNumber) || firstImportNumber < 1) return
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    let saved = false
+    try {
+      const result = await ipc.invoke('project:file-editor-import', workspace.token, firstImportNumber, stagedImport.chapters)
+      saved = result.completed > 0
+      const summary = t(result.blockedNumber ? 'project.fileEditorImportBlocked' : 'project.fileEditorImportDone')
+        .replace('{count}', String(result.completed)).replace('{number}', String(result.blockedNumber))
+      renderLog(result.blockedNumber ? 'warn' : 'info', 'Save:FileProjectEditor', `${summary} (${Math.round(saveClock() - start)}ms)`)
+      if (result.firstLocator) {
+        const locators = [...new Set([...storedTabs(workspace.path).locators.slice(-99), result.firstLocator])]
+        const opened = await ipc.invoke('project:file-editor-open', workspace.path, locators)
+        display(workspace.path, opened, result.firstLocator, locators)
+      }
+      if (result.blockedNumber) toast.warning(summary)
+      else { setImportPreview(undefined); toast.success(summary) }
+    } catch (error) {
+      // 重新打开项目时恢复中断的发布。同一项目保留本次拆章结果和起始章号供重试。
+      setWorkspace(undefined)
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t(saved ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed'))
+    } finally { pending.current = false; setBusy(false) }
   }
 
   async function load(path?: string, locator?: string) {
@@ -155,6 +205,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       setWorkspace(undefined)
       setText('')
       setPreview(undefined)
+      setImportPreview(undefined)
       setRevisionId(undefined)
       setConfirmation(undefined)
     }
@@ -184,6 +235,26 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           {workspace && (
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
+              {workspace.importStartNumber !== undefined && !stagedImport && (
+                <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
+              )}
+              {stagedImport && (
+                <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void importChapters() }}>
+                  <p className="text-sm">{t('project.fileEditorImportPreview').replace('{count}', String(stagedImport.chapters.length))}</p>
+                  <label className="flex flex-col gap-1 text-sm">
+                    {t('project.fileEditorImportStart')}
+                    <input type="number" min={1} step={1} required value={stagedImport.firstNumber} disabled={busy || dirty}
+                      onChange={event => setImportPreview({ ...stagedImport, firstNumber: event.target.value })}
+                      className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-2" />
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    <Button type="submit" disabled={busy || dirty || !Number.isSafeInteger(firstImportNumber) || firstImportNumber < 1}>
+                      {t(busy ? 'import.importing' : 'import.startImport')}
+                    </Button>
+                    <Button type="button" variant="outline" disabled={busy} onClick={() => setImportPreview(undefined)}>{t('action.cancel')}</Button>
+                  </div>
+                </form>
+              )}
               {workspace.missing.length > 0 && <p role="status">{t('project.fileEditorUnavailable')}</p>}
               {workspace.documents.length === 0 ? <p>{t('project.fileEditorEmpty')}</p> : (
                 <label className="flex flex-col gap-1 text-sm">

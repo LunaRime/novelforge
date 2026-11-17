@@ -104,9 +104,22 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     expect(reopened.tabs).toMatchObject([{ content: create.content, readOnly: false }])
     expect(await invoke('commit', reopened.token, create)).toEqual({ status: 'committed', revision: reopened.tabs[0].revision })
     await expect(invoke('commit', reopened.token, { ...create, content: 'different request' })).rejects.toThrow()
+    const source = [{ title: 'Imported A', content: 'text A' }, { title: 'Imported B', content: 'text B' }]
+    await expect(invoke('import', recovered.token, 4, source)).rejects.toThrow('lifecycle session')
+    await expect(invoke('import', reopened.token, 4, [source[0], { title: 'Invalid', content: null }])).rejects.toThrow()
+    expect(await readdir(join(project, 'chapters'))).not.toContain('0004.md')
+    const imported = await invoke('import', reopened.token, 4, source) as { completed: number; firstLocator: string }
+    expect(imported).toMatchObject({ completed: 2 })
+    registerFileProjectEditorController()
+    const withImports = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(withImports.tabs).toMatchObject([{ content: 'text A', readOnly: false }])
+    expect(await invoke('import', withImports.token, 4, source)).toEqual(imported)
+    expect(await invoke('import', withImports.token, 4, [source[0], { ...source[1], content: 'different' }]))
+      .toEqual({ completed: 1, firstLocator: imported.firstLocator, blockedNumber: 5 })
+    expect(parseChapter(await readFile(join(project, 'chapters/0005.md'), 'utf8')).content).toBe('text B')
     const { rmdir } = await import('node:fs/promises')
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('save', reopened.token, newLocator, reopened.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('save', withImports.token, imported.firstLocator, withImports.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 })
