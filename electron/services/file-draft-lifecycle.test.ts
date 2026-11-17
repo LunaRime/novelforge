@@ -33,6 +33,9 @@ test('merges saved revision text, recovers a failed finalization, and archives w
       target: { kind: 'current' as const, locator: `doc://chapter/${before.chapter.id}` } }]
     const service = () => createFileDraftLifecycle(db, repo, 'fixture', identity)
     service()
+    const unregistered = await repo.save({ ...before.chapter, id: 'ch_23456789', number: 2, metadata: undefined }, { expectedRevision: null })
+    expect(await service().actions(unregistered.chapter.id, unregistered.revision)).toBeUndefined()
+    await expect(service().commit({ kind: 'finalize', chapterId: unregistered.chapter.id, expectedRevision: unregistered.revision })).rejects.toThrow('association')
     for (const sql of [
       'INSERT INTO drafts VALUES (2, 1)', 'DELETE FROM drafts', 'UPDATE drafts SET content_id = 2',
       'DELETE FROM draft_branches', 'UPDATE draft_snapshots SET content_id = 2',

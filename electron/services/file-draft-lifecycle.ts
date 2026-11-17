@@ -18,6 +18,12 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
     .map(entry => [entry.chapterId, entry.draftId]))
   const historyOnlyDrafts = new Set(identities.filter(entry => !currentDrafts.has(entry.chapterId)).map(entry => entry.draftId))
 
+  function hasPublishedFileDraft(chapterId: string) {
+    // 首次发布会登记稳定身份。正文普通保存后，当前 revision 以文件为准。
+    return db.prepare('SELECT 1 FROM file_draft_states WHERE project_id = ? AND chapter_id = ?')
+      .all(projectId, chapterId).length > 0
+  }
+
   function apply(intent: FileChapterCommit, receipt: FileChapterCommitReceipt) {
     if (intent.kind === 'merge') {
       const base = currentDrafts.get(intent.chapter.id)
@@ -29,7 +35,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
         throw new ChapterError('conflict', 'Revision no longer belongs to this draft or is no longer pending')
       }
     }
-    // This receipt tracks the file operation, leaving legacy draft rows untouched.
+    // 用候选业务库记录文件状态和发布版本，旧草稿行保持冻结。
     db.prepare(`INSERT INTO file_draft_states (project_id, chapter_id, status, revision) VALUES (?, ?, ?, ?)
       ON CONFLICT(project_id, chapter_id) DO UPDATE SET status = excluded.status, revision = excluded.revision`)
       .run(projectId, intent.chapter.id, intent.chapter.status, receipt.revision)
@@ -122,10 +128,11 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
     async actions(chapterId: string, expectedRevision: string) {
       const chapter = await repo.byId(chapterId)
       const draftId = currentDrafts.get(chapterId)
-      if (!chapter || chapter.revision !== expectedRevision || !draftId ||
+      if (!chapter || chapter.revision !== expectedRevision ||
           chapter.chapter.metadata?.legacyDraftId !== draftId || chapter.chapter.status === 'archived') return
+      if (draftId === undefined && !hasPublishedFileDraft(chapterId)) return
       const editable = chapter.chapter.status !== 'finalized'
-      const pending = editable ? db.prepare(`SELECT r.id FROM revisions r JOIN contents c ON c.id = r.content_id
+      const pending = editable && draftId !== undefined ? db.prepare(`SELECT r.id FROM revisions r JOIN contents c ON c.id = r.content_id
         WHERE r.base_draft_id = ? AND r.status = 'pending' AND typeof(c.body) = 'text' ORDER BY r.id`)
         .all(draftId) as Array<{ id: number }> : []
       return { canArchive: true, canFinalize: editable && Boolean(chapter.chapter.content.trim()), pending }
@@ -152,16 +159,19 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       }
       const { kind, chapterId, expectedRevision } = command
       const draftId = currentDrafts.get(chapterId)
-      if (!draftId) throw new ChapterError('conflict', 'No current migrated draft for this chapter')
-      const recordId = kind === 'merge' ? command.revisionId : draftId
-      // The immutable request identifies retries, including those after a process restart.
+      if (draftId === undefined && (kind === 'merge' || !hasPublishedFileDraft(chapterId))) {
+        throw new ChapterError('conflict', 'No draft association for this file operation')
+      }
+      const associatedId = kind === 'merge' ? command.revisionId : draftId
+      // 保留迁移旧稿的操作 ID 算法。新建章直接用稳定章节 ID 和 revision 标识重试。
       const proposalHash = kind === 'merge' ? command.proposalHash : undefined
       if (proposalHash !== undefined && !/^[a-f0-9]{64}$/.test(proposalHash)) {
         throw new ChapterError('invalid-chapter', 'Invalid revision preview hash')
       }
-      const operationId = fileRevision(JSON.stringify(proposalHash === undefined
-        ? [kind, chapterId, expectedRevision, recordId]
-        : [kind, chapterId, expectedRevision, recordId, proposalHash]))
+      const operationKey: Array<string | number> = [kind, chapterId, expectedRevision]
+      if (associatedId !== undefined) operationKey.push(associatedId)
+      if (proposalHash !== undefined) operationKey.push(proposalHash)
+      const operationId = fileRevision(JSON.stringify(operationKey))
       const pending = journal.pending()
       if (pending?.operationId === operationId) return run(pending)
       const completed = journal.receipt(operationId)
@@ -178,8 +188,8 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       }
       let content = chapter.content
       if (kind === 'merge') {
-        const proposal = preview(chapterId, recordId)
-        // Apply the exact body reviewed by the editor, even if the retained revision changed meanwhile.
+        const proposal = preview(chapterId, command.revisionId)
+        // 只接受用户预览过的正文，期间修稿内容改变就拒绝合并。
         if (proposalHash !== undefined && proposal.contentHash !== proposalHash) {
           throw new ChapterError('conflict', 'Revision changed after preview')
         }
@@ -187,7 +197,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       }
       if (kind === 'finalize' && !content.trim()) throw new ChapterError('invalid-chapter', 'Finalization requires saved content')
       const status = kind === 'merge' ? 'revised' : kind === 'archive' ? 'archived' : 'finalized'
-      return run({ operationId, kind, recordId, expectedRevision,
+      return run({ operationId, kind, recordId: associatedId ?? chapter.number, expectedRevision,
         chapter: { ...chapter, status, content, updatedAt: new Date().toISOString() } })
     },
   }
