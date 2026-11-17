@@ -58,6 +58,9 @@ test('restores candidate operations and verifies import snapshots against receip
         CREATE TABLE project_core (id TEXT PRIMARY KEY, world_setting TEXT, core_outline TEXT,
           protagonist_profile TEXT, writing_style TEXT, updated_at INTEGER);
         INSERT INTO project_core VALUES ('main', 'Manual world', '', NULL, '', 0);
+        CREATE TABLE blueprints (chapter_number INTEGER PRIMARY KEY, title TEXT, role TEXT, purpose TEXT,
+          key_events TEXT, characters TEXT, suspense_hook TEXT, notes TEXT DEFAULT '');
+        INSERT INTO blueprints VALUES (5, 'Manual', '发展', '', '', '[]', '', 'Handwritten');
         INSERT INTO contents VALUES (1, 'proposal');
         INSERT INTO drafts VALUES (3, 3, NULL);
         INSERT INTO revisions VALUES (4, 2, 1, 'pending', NULL, 0);
@@ -149,6 +152,11 @@ test('restores candidate operations and verifies import snapshots against receip
       const context = await invoke('import-inference', withImports.token, 4, source) as ProjectChannels['project:file-editor-import-inference']['return']
       expect(context.revisions).toEqual(snapshot.chapters.map(({ chapterId, revision }) => ({ chapterId, revision })))
       expect(context.excerpts.map(excerpt => excerpt.content)).toEqual(['text A'])
+      const blueprintContext = await invoke('import-blueprints', withImports.token, 4, source) as {
+        candidates: Array<{ number: number }>; existingChapterNumbers: number[]
+      }
+      expect(blueprintContext.candidates.map(chapter => chapter.number)).toEqual([4])
+      expect(blueprintContext.existingChapterNumbers).toEqual([5])
       const ordinary = new DatabaseSync(join(root, 'ordinary.db'))
       const settings = new DatabaseSync(join(project, '.novelforge/retained.db'))
       try {
@@ -211,6 +219,29 @@ test('restores candidate operations and verifies import snapshots against receip
       .rejects.toThrow('settings offer')
     expect(await invoke('import-source', afterImportRecovery.token, 7, source))
       .toEqual({ projectId, chapters: [await importedChapter(7), await importedChapter(8)] })
+    const blueprints = await invoke('import-blueprints', afterImportRecovery.token, 7, source) as { offerId: string }
+    const blueprintRows = [7, 8].map(chapterNumber => ({ chapterNumber, title: `Proposed ${chapterNumber}`,
+      role: '发展', purpose: 'Advance the plot', keyEvents: '', characters: [], suspenseHook: '' }))
+    const applyBlueprints = (items = blueprintRows) => invoke('apply-import-blueprints', afterImportRecovery.token,
+      blueprints.offerId, 7, source, items)
+    const blueprintDb = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try {
+      const chapterPath = join(project, 'chapters/0008.md')
+      const bytes = await readFile(chapterPath, 'utf8')
+      await writeFile(chapterPath, bytes.replace('text B', 'external edit'))
+      await expect(applyBlueprints()).rejects.toThrow('Imported chapter 8 changed')
+      await writeFile(chapterPath, bytes)
+      await expect(applyBlueprints([{ ...blueprintRows[0], chapterNumber: 5 }])).rejects.toThrow()
+      blueprintDb.exec(`CREATE TRIGGER fail_blueprint BEFORE INSERT ON blueprints WHEN NEW.chapter_number = 8
+        BEGIN SELECT RAISE(ABORT, 'blueprint interrupted'); END`)
+      await expect(applyBlueprints()).rejects.toThrow('blueprint interrupted')
+      expect(blueprintDb.prepare('SELECT chapter_number FROM blueprints ORDER BY chapter_number').all()).toEqual([{ chapter_number: 5 }])
+      blueprintDb.exec(`DROP TRIGGER fail_blueprint;
+        INSERT INTO blueprints VALUES (8, 'Concurrent', '转折', '', '', '[]', '', 'Keep this')`)
+      expect(await applyBlueprints()).toEqual({ insertedChapterNumbers: [7], skippedChapterNumbers: [8] })
+      expect(blueprintDb.prepare('SELECT title, notes FROM blueprints WHERE chapter_number = 8').get())
+        .toEqual({ title: 'Concurrent', notes: 'Keep this' })
+    } finally { blueprintDb.close() }
 
     const otherProject = join(root, 'candidate-copy')
     await cp(project, otherProject, { recursive: true })

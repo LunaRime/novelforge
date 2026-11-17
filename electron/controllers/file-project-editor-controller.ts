@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
-  createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
+  createFileEditorOpenPort, openEditorDocument, type GeneratedBlueprintFields, type MigratedDraftIdentityMap } from '../../src/core'
 import type { FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
@@ -10,6 +10,7 @@ import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
 import { readFileImportSource } from '../services/file-import-source'
 import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext } from '../services/file-import-index'
 import { applyFileImportSettings, installFileImportSettingVersions, readFileImportSettingBaseline, type SettingBaseline } from '../services/file-import-settings'
+import { applyImportBlueprints, readImportBlueprintTargets } from '../services/file-import-blueprints'
 import { logger } from '../utils/logger'
 
 const candidateRecord = '.novelforge/file-editor.json'
@@ -21,10 +22,16 @@ const current = /^doc:\/\/chapter\/(ch_[a-f0-9]{8,64})$/
 type OpenResult = ProjectChannels['project:file-editor-open']['return']
 type Lifecycle = ReturnType<typeof createFileDraftLifecycle>
 type InferenceContext = ProjectChannels['project:file-editor-import-inference']['return']
+type BlueprintContext = ProjectChannels['project:file-editor-import-blueprints']['return']
 
 interface SettingsOffer {
   id: string
   snapshot?: { baseline: SettingBaseline; revisions: InferenceContext['revisions'] }
+}
+
+interface BlueprintOffer {
+  id: string
+  snapshot?: { revisions: BlueprintContext['revisions']; targetChapterNumbers: number[] }
 }
 
 interface FileEditorSession {
@@ -36,6 +43,7 @@ interface FileEditorSession {
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
   withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
   settingsOffer?: SettingsOffer
+  blueprintOffer?: BlueprintOffer
 }
 
 export function registerFileProjectEditorController() {
@@ -187,6 +195,11 @@ export function registerFileProjectEditorController() {
     } finally { db.close() }
   }
 
+  function assertImportRevisions(chapters: InferenceContext['revisions'], revisions: InferenceContext['revisions']) {
+    if (chapters.length !== revisions.length || revisions.some(({ chapterId, revision }, index) =>
+      chapters[index].chapterId !== chapterId || chapters[index].revision !== revision)) throw new Error('Imported preview source changed')
+  }
+
   guardedHandle('project:file-editor-import-source', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) => {
     const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
     assertPathAllowedForIpc(session.projectPath, 'read')
@@ -252,14 +265,57 @@ export function registerFileProjectEditorController() {
       const current = await loadImportSource(session, assertCurrent, firstNumber, chapters)
       if (session.settingsOffer !== offer) throw new Error('File editor settings offer changed')
       // 章节锁内重新核对整批正文，再打开此候选的保留库写设定。
-      if (current.chapters.length !== baseline.revisions.length || baseline.revisions.some(({ chapterId, revision }, index) => {
-        const chapter = current.chapters[index]
-        return chapter.chapterId !== chapterId || chapter.revision !== revision
-      })) throw new Error('Imported settings source changed')
+      assertImportRevisions(current.chapters, baseline.revisions)
       const db = new Database(join(session.projectPath, retainedFile), { fileMustExist: true })
       try {
         const receipt = applyFileImportSettings(db, baseline.baseline, settings)
         session.settingsOffer = undefined
+        return receipt
+      } finally { db.close() }
+    })
+  })
+
+  guardedHandle('project:file-editor-import-blueprints', async ({ sender }, token: string, firstNumber: number,
+    chapters: FileImportChapter[]): Promise<BlueprintContext> => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'read')
+    const offer: BlueprintOffer = { id: randomUUID() }
+    session.blueprintOffer = offer
+    const snapshot = await loadImportSource(session, assertCurrent, firstNumber, chapters)
+    if (session.blueprintOffer !== offer) throw new Error('File editor blueprint offer changed')
+    const db = new Database(join(session.projectPath, retainedFile), { readonly: true, fileMustExist: true })
+    try {
+      if (!snapshot.chapters.length) throw new Error('No published chapters to infer')
+      const { available, existingChapterNumbers } = readImportBlueprintTargets(db, snapshot.chapters.map(chapter => chapter.number))
+      const existing = new Set(existingChapterNumbers)
+      const candidates = snapshot.chapters.filter(chapter => !existing.has(chapter.number))
+        .map(({ number, title, content }) => ({ number, title, content: content.slice(0, 6000) }))
+      const revisions = snapshot.chapters.map(({ chapterId, revision }) => ({ chapterId, revision }))
+      const offerId = available && candidates.length ? offer.id : undefined
+      // 现有蓝图的章号不进入生成或应用名单，即便后来被删除也要重新预览才能补入。
+      if (offerId) offer.snapshot = { revisions, targetChapterNumbers: candidates.map(chapter => chapter.number) }
+      return { projectId: snapshot.projectId, candidates, existingChapterNumbers, revisions, offerId }
+    } finally { db.close() }
+  })
+
+  guardedHandle('project:file-editor-apply-import-blueprints', async ({ sender }, token: string, offerId: string,
+    firstNumber: number, chapters: FileImportChapter[], items: GeneratedBlueprintFields[]) => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    const offer = session.blueprintOffer
+    const target = offer?.snapshot
+    if (!offer || !target || offer.id !== offerId) throw new Error('Invalid file editor blueprint offer')
+    await session.assertCandidate()
+    assertCurrent()
+    return session.repo.withCommitLock(async () => {
+      const current = await loadImportSource(session, assertCurrent, firstNumber, chapters)
+      if (session.blueprintOffer !== offer) throw new Error('File editor blueprint offer changed')
+      assertImportRevisions(current.chapters, target.revisions)
+      const db = new Database(join(session.projectPath, retainedFile), { fileMustExist: true })
+      try {
+        const receipt = applyImportBlueprints(db, { projectPath: session.projectPath, token }, assertCurrent,
+          target.targetChapterNumbers, items)
+        session.blueprintOffer = undefined
         return receipt
       } finally { db.close() }
     })

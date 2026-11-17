@@ -8,6 +8,7 @@ import { t } from '../../src/shared/locale'
 import { getProjectDb } from '../database'
 import { blueprintRowToData, type BlueprintRow } from '../repositories/blueprint-repository'
 import { captureBlueprintWriteScope } from './blueprint-gap-service'
+import { generatedBlueprintInsertSql, generatedBlueprintValues } from './generated-blueprint-sql'
 
 type ProjectDatabase = NonNullable<ReturnType<typeof getProjectDb>>
 
@@ -70,16 +71,14 @@ export function commitDirectoryBlueprints(input: DirectoryWriteInput): Directory
         return { success: false, reason: 'conflict', error: t('error.directorySnapshotConflict') }
       }
 
-      const insert = `INSERT INTO blueprints (chapter_number,title,role,purpose,key_events,characters,suspense_hook)
-        VALUES (?,?,?,?,?,?,?)`
+      const insert = generatedBlueprintInsertSql
       const write = db.prepare(range.mode === 'append' ? insert : `${insert}
         ON CONFLICT(chapter_number) DO UPDATE SET
           title = excluded.title, role = excluded.role, purpose = excluded.purpose, key_events = excluded.key_events,
           characters = excluded.characters, suspense_hook = excluded.suspense_hook, updated_at = unixepoch() * 1000`)
       const writtenChapterNumbers: number[] = []
       for (const item of items) {
-        const result = write.run(item.chapterNumber, item.title, item.role, item.purpose,
-          item.keyEvents, JSON.stringify(item.characters), item.suspenseHook)
+        const result = write.run(...generatedBlueprintValues(item))
         if (result.changes !== 1) throw new Error(t('status.unknown'))
         writtenChapterNumbers.push(item.chapterNumber)
       }

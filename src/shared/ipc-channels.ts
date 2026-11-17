@@ -4,7 +4,7 @@
  */
 import type { LLMProtocol } from './llm-protocols'
 import type { DraftFinalizationInput, DraftFinalizationResult, RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
-import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot } from '../core'
+import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot, GeneratedBlueprintFields, MissingBlueprintReceipt } from '../core'
 import type { CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterMergeInput, CharacterWriteScope } from '../core'
 import type { CharacterMergeIdentity, MergeStats } from '../services/character-card-merge-plan'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
@@ -168,6 +168,20 @@ export interface ProjectChannels {
   'project:file-editor-apply-import-settings': {
     args: [token: string, offerId: string, firstNumber: number, chapters: FileImportChapter[], settings: FileImportSettings]
     return: { applied: FileImportSettingField[] }
+  }
+  'project:file-editor-import-blueprints': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: {
+      projectId: string
+      revisions: Array<{ chapterId: string; revision: string }>
+      candidates: FileImportExcerpt[]
+      existingChapterNumbers: number[]
+      offerId?: string
+    }
+  }
+  'project:file-editor-apply-import-blueprints': {
+    args: [token: string, offerId: string, firstNumber: number, chapters: FileImportChapter[], items: GeneratedBlueprintFields[]]
+    return: MissingBlueprintReceipt
   }
   'project:file-editor-preview': {
     args: [token: string, chapterId: string, revisionId: number]

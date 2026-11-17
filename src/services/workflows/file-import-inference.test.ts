@@ -1,5 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest'
-import { inferFileImport } from './file-import-inference'
+import { inferFileImport, inferFileImportBlueprints } from './file-import-inference'
 
 const h = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -59,4 +59,29 @@ test('cancels the stream if the user leaves before startup is acknowledged', asy
   expect(h.events.size).toBe(0)
   acknowledge({ started: true })
   await vi.waitFor(() => expect(h.invoke).toHaveBeenLastCalledWith('llm:cancel', id))
+})
+
+test('generates one blueprint per eligible source and owns the chapter identity', async () => {
+  const controller = new AbortController()
+  const progress = vi.fn()
+  const second = { chapterId: 'chapter-2', revision: 'published-2' }
+  h.invoke.mockResolvedValueOnce({ ...input, revisions: [...revisions, second], offerId: 'blueprints',
+    candidates: [{ ...chapters[0], number: 4 }, { title: 'Next', content: 'ending text', number: 6 }], existingChapterNumbers: [5] })
+  const run = inferFileImportBlueprints('session', 4, chapters, controller.signal, progress)
+  await vi.waitFor(() => expect(h.invoke.mock.calls.filter(([channel]) => channel === 'llm:generate-stream')).toHaveLength(1))
+  h.events.get('llm:stream-done')!({ requestId, fullText: '{"chapterNumber":5,"title":"New outline","characters":"A、B"}' })
+  await vi.waitFor(() => expect(h.invoke.mock.calls.filter(([channel]) => channel === 'llm:generate-stream')).toHaveLength(2))
+  h.invoke.mockResolvedValueOnce({ projectId: input.projectId, chapters: [...revisions, second] })
+  h.events.get('llm:stream-done')!({ requestId, fullText: '{"purpose":"Wrap up"}' })
+  await expect(run).resolves.toMatchObject({ offerId: 'blueprints', existingChapterNumbers: [5], items: [
+    { chapterNumber: 4, title: 'New outline', characters: ['A', 'B'] }, { chapterNumber: 6, title: 'Next', purpose: 'Wrap up' },
+  ] })
+  expect(progress.mock.calls).toEqual([[0, 2], [1, 2], [2, 2]])
+})
+
+test('makes no model request when the whole batch already has blueprints', async () => {
+  h.invoke.mockResolvedValueOnce({ ...input, candidates: [], existingChapterNumbers: [4] })
+  await expect(inferFileImportBlueprints('session', 4, chapters, new AbortController().signal, vi.fn()))
+    .resolves.toMatchObject({ items: [], existingChapterNumbers: [4] })
+  expect(h.invoke).toHaveBeenCalledExactlyOnceWith('project:file-editor-import-blueprints', 'session', 4, chapters)
 })

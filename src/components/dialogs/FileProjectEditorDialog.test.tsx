@@ -8,8 +8,9 @@ import { toast } from '../ui/Toast'
 
 const invoke = vi.hoisted(() => vi.fn())
 const infer = vi.hoisted(() => vi.fn())
+const inferBlueprints = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
-vi.mock('../../services/workflows/file-import-inference', () => ({ inferFileImport: infer }))
+vi.mock('../../services/workflows/file-import-inference', () => ({ inferFileImport: infer, inferFileImportBlueprints: inferBlueprints }))
 vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('../ui/Toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
@@ -27,7 +28,7 @@ async function click(label: string) {
   const button = [...document.querySelectorAll('button')].find(item => item.textContent === label)!
   await act(async () => button.click())
 }
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset() })
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset(); inferBlueprints.mockReset() })
 
 test('opens a routed directory through the candidate IPC without another folder picker', async () => {
   invoke.mockResolvedValue({ token: 'session', tabs: [], documents: [], missing: [] })
@@ -50,6 +51,7 @@ test('previews selected files and opens the imported chapter only after confirma
       return { indexed: 1, chunks: 1 }
     }
     if (channel === 'project:file-editor-apply-import-settings') return { applied: ['coreOutline'] }
+    if (channel === 'project:file-editor-apply-import-blueprints') return { insertedChapterNumbers: [4], skippedChapterNumbers: [] }
     if (channel === 'project:file-editor-open') {
       const tabs = (args[1] as string[]).map(locator => ({ locator, content: 'text', revision: 'revision' }))
       return { token: tabs.length ? 'reopened' : 'session', missing: [], importStartNumber: 4, tabs,
@@ -84,6 +86,17 @@ test('previews selected files and opens the imported chapter only after confirma
     [{ title: 'Imported', content: 'text' }], values)
   expect(toast.success).toHaveBeenCalledWith('project.fileEditorSettingsApplied')
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('project.fileEditorSettingApplied')
+
+  const blueprints = [{ chapterNumber: 4, title: 'Flood blueprint', role: '发展', purpose: 'Advance', keyEvents: '', characters: [], suspenseHook: '' }]
+  inferBlueprints.mockResolvedValueOnce({ offerId: 'blueprints', items: blueprints, existingChapterNumbers: [] })
+  await click('project.fileEditorInferBlueprints')
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Flood blueprint')
+  await click('project.fileEditorApplyBlueprints')
+  expect(invoke.mock.calls.some(([channel]) => channel === 'project:file-editor-apply-import-blueprints')).toBe(false)
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-apply-import-blueprints', 'reopened', 'blueprints', 4,
+    [{ title: 'Imported', content: 'text' }], blueprints)
+  expect(toast.success).toHaveBeenCalledWith('project.fileEditorBlueprintsApplied')
 
   let complete!: (result: { values: { worldSetting: string } }) => void
   infer.mockReturnValueOnce(new Promise(resolve => { complete = resolve }))

@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
-import { inferFileImport, type FileImportInference } from '../../services/workflows/file-import-inference'
+import { inferFileImport, inferFileImportBlueprints, type FileImportBlueprintInference, type FileImportInference } from '../../services/workflows/file-import-inference'
 import type { FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
@@ -15,11 +15,16 @@ type Commit = Exclude<ProjectChannels['project:file-editor-commit']['args'][1], 
 type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
 type ImportPreview = { path: string; chapters: FileImportChapter[]; firstNumber: string }
 type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number; indexed?: boolean }
+type BlueprintReceipt = ProjectChannels['project:file-editor-apply-import-blueprints']['return']
 
 const inferenceLabels = {
   worldSetting: 'novelConfig.worldSetting', coreOutline: 'novelConfig.coreOutline',
   protagonistProfile: 'novelConfig.protagonist', writingStyle: 'project.fileEditorInferenceStyle',
 } as const satisfies Record<FileImportSettingField, string>
+const roleLabels = {
+  建置: 'chapter.role.establishment', 铺垫: 'chapter.role.setup', 发展: 'chapter.role.development',
+  冲突: 'chapter.role.conflict', 高潮: 'chapter.role.climax', 转折: 'chapter.role.twist', 收尾: 'chapter.role.resolution',
+} as const
 
 const saveClock = () => performance.now()
 
@@ -45,8 +50,10 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [importPreview, setImportPreview] = useState<ImportPreview>()
   const [indexBatch, setIndexBatch] = useState<ImportBatch>()
   const [inferencePreview, setInferencePreview] = useState<FileImportInference & { applied?: FileImportSettingField[] }>()
-  const [inferring, setInferring] = useState(false)
-  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings'>()
+  const [blueprintPreview, setBlueprintPreview] = useState<FileImportBlueprintInference & { receipt?: BlueprintReceipt }>()
+  const [inferenceMode, setInferenceMode] = useState<'settings' | 'blueprints'>()
+  const [blueprintProgress, setBlueprintProgress] = useState<{ completed: number; total: number }>()
+  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings' | 'apply-blueprints'>()
   const pending = useRef(false)
   const inferenceRun = useRef<AbortController | undefined>(undefined)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
@@ -82,13 +89,15 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     const previous = inferenceRun.current
     inferenceRun.current = undefined
     previous?.abort()
-    setInferring(false)
+    setInferenceMode(undefined)
+    setBlueprintProgress(undefined)
     setInferencePreview(undefined)
-    setConfirmation(previous => previous === 'apply-settings' ? undefined : previous)
+    setBlueprintPreview(undefined)
+    setConfirmation(previous => previous === 'apply-settings' || previous === 'apply-blueprints' ? undefined : previous)
   }
 
   async function applyInferredSettings() {
-    if (pending.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path ||
+    if (pending.current || inferenceRun.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path ||
         !inferencePreview || !settingsOffer || !canApplySettings) return
     pending.current = true
     setBusy(true)
@@ -106,24 +115,53 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     } finally { pending.current = false; setBusy(false) }
   }
 
-  async function inferImport() {
-    if (pending.current || inferenceRun.current || dirty || !workspace || !indexBatch?.indexed || indexBatch.path !== workspace.path) return
+  async function applyInferredBlueprints() {
+    if (pending.current || inferenceRun.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path ||
+        !blueprintPreview?.offerId || !blueprintPreview.items.length || blueprintPreview.receipt) return
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      const receipt = await ipc.invoke('project:file-editor-apply-import-blueprints', workspace.token,
+        blueprintPreview.offerId, indexBatch.firstNumber, indexBatch.chapters, blueprintPreview.items)
+      const message = t('project.fileEditorBlueprintsApplied').replace('{inserted}', String(receipt.insertedChapterNumbers.length))
+        .replace('{skipped}', String(receipt.skippedChapterNumbers.length))
+      renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(message)
+      setBlueprintPreview({ ...blueprintPreview, receipt })
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorBlueprintApplyFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function inferImport(mode: 'settings' | 'blueprints') {
+    if (pending.current || inferenceRun.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path ||
+        (mode === 'settings' && !indexBatch.indexed)) return
     const run = new AbortController()
     inferenceRun.current = run
-    setInferencePreview(undefined)
-    setInferring(true)
+    if (mode === 'settings') setInferencePreview(undefined)
+    else setBlueprintPreview(undefined)
+    setBlueprintProgress(undefined)
+    setInferenceMode(mode)
     try {
-      const result = await inferFileImport(workspace.token, indexBatch.firstNumber, indexBatch.chapters, run.signal)
       // 只接受当前运行的结果，取消或换项目后丢弃迟到的回包。
-      if (inferenceRun.current === run) setInferencePreview(result)
+      if (mode === 'settings') {
+        const result = await inferFileImport(workspace.token, indexBatch.firstNumber, indexBatch.chapters, run.signal)
+        if (inferenceRun.current === run) setInferencePreview(result)
+      } else {
+        const result = await inferFileImportBlueprints(workspace.token, indexBatch.firstNumber, indexBatch.chapters, run.signal,
+          (completed, total) => { if (inferenceRun.current === run) setBlueprintProgress({ completed, total }) })
+        if (inferenceRun.current === run) setBlueprintPreview(result)
+      }
     } catch (error) {
       if (inferenceRun.current !== run) return
       renderLog('error', 'FileProjectEditor', String(error))
-      toast.error(t('project.fileEditorInferenceFailed'))
+      toast.error(t(mode === 'settings' ? 'project.fileEditorInferenceFailed' : 'project.fileEditorBlueprintInferenceFailed'))
     } finally {
       if (inferenceRun.current === run) {
         inferenceRun.current = undefined
-        setInferring(false)
+        setInferenceMode(undefined)
       }
     }
   }
@@ -338,12 +376,17 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               {indexBatch?.path === workspace.path && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void indexImport()}>{t('project.fileEditorIndexImport')}</Button>
               )}
-              {indexBatch?.path === workspace.path && indexBatch.indexed && !inferring && (
-                <Button variant="outline" disabled={busy || dirty} onClick={() => void inferImport()}>{t('project.fileEditorInferImport')}</Button>
+              {indexBatch?.path === workspace.path && indexBatch.indexed && !inferenceMode && (
+                <Button variant="outline" disabled={busy || dirty} onClick={() => void inferImport('settings')}>{t('project.fileEditorInferImport')}</Button>
               )}
-              {inferring && (
+              {indexBatch?.path === workspace.path && !inferenceMode && (
+                <Button variant="outline" disabled={busy || dirty} onClick={() => void inferImport('blueprints')}>{t('project.fileEditorInferBlueprints')}</Button>
+              )}
+              {inferenceMode && (
                 <div className="flex flex-wrap items-center gap-2">
-                  <p role="status" className="text-sm">{t('project.fileEditorInferring')}</p>
+                  <p role="status" className="text-sm">{inferenceMode === 'settings' ? t('project.fileEditorInferring')
+                    : blueprintProgress ? t('project.fileEditorBlueprintProgress').replace('{done}', String(blueprintProgress.completed))
+                      .replace('{total}', String(blueprintProgress.total)) : t('status.loading')}</p>
                   <Button variant="outline" onClick={clearInference}>{t('action.cancel')}</Button>
                 </div>
               )}
@@ -360,8 +403,37 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                     </div>
                   ))}
                   {canApplySettings && (
-                    <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('apply-settings')}>
+                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => setConfirmation('apply-settings')}>
                       {t('project.fileEditorApplySettings')}
+                    </Button>
+                  )}
+                </section>
+              )}
+              {blueprintPreview && (
+                <section className="flex flex-col gap-2" aria-label={t('project.fileEditorBlueprintPreview')}>
+                  <h3 className="font-medium">{t('project.fileEditorBlueprintPreview')}</h3>
+                  {blueprintPreview.existingChapterNumbers.length > 0 && (
+                    <p className="text-sm">{t('project.fileEditorBlueprintsExisting').replace('{count}', String(blueprintPreview.existingChapterNumbers.length))}</p>
+                  )}
+                  {blueprintPreview.items.map(item => (
+                    <details key={item.chapterNumber} className="text-sm">
+                      <summary>{item.chapterNumber}. {item.title}</summary>
+                      <dl className="flex flex-col gap-1">
+                        <dt>{t('chapter.role')}</dt><dd>{t(roleLabels[item.role as keyof typeof roleLabels] ?? 'chapter.role.development')}</dd>
+                        <dt>{t('chapter.purpose')}</dt><dd className="whitespace-pre-wrap break-words">{item.purpose}</dd>
+                        <dt>{t('chapter.keyEvents')}</dt><dd className="whitespace-pre-wrap break-words">{item.keyEvents}</dd>
+                        <dt>{t('chapter.characters')}</dt><dd>{item.characters.join(', ')}</dd>
+                        <dt>{t('project.fileEditorBlueprintHook')}</dt><dd className="whitespace-pre-wrap break-words">{item.suspenseHook}</dd>
+                      </dl>
+                    </details>
+                  ))}
+                  {blueprintPreview.items.length > 0 && !blueprintPreview.offerId && <p className="text-sm">{t('project.fileEditorSettingPreviewOnly')}</p>}
+                  {blueprintPreview.receipt && <p className="text-sm">{t('project.fileEditorBlueprintsApplied')
+                    .replace('{inserted}', String(blueprintPreview.receipt.insertedChapterNumbers.length))
+                    .replace('{skipped}', String(blueprintPreview.receipt.skippedChapterNumbers.length))}</p>}
+                  {blueprintPreview.offerId && !blueprintPreview.receipt && (
+                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => setConfirmation('apply-blueprints')}>
+                      {t('project.fileEditorApplyBlueprints')}
                     </Button>
                   )}
                 </section>
@@ -404,7 +476,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
                   <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || busy}
                     onChange={event => {
-                      if (inferenceRun.current || inferencePreview) clearInference()
+                      if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)
                     }}
                     className="resize-y rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
@@ -448,14 +520,16 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('dialog.confirmTitle')}</DialogTitle>
-              <DialogDescription>{t(confirmation === 'apply-settings' ? 'project.fileEditorConfirmApplySettings'
+              <DialogDescription>{t(confirmation === 'apply-blueprints' ? 'project.fileEditorConfirmApplyBlueprints'
+                : confirmation === 'apply-settings' ? 'project.fileEditorConfirmApplySettings'
                 : confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
                 : confirmation === 'finalize' ? 'project.fileEditorConfirmFinalize' : 'project.fileEditorConfirmArchive')}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmation(undefined)}>{t('action.cancel')}</Button>
               <Button onClick={() => {
-                if (confirmation === 'apply-settings') void applyInferredSettings()
+                if (confirmation === 'apply-blueprints') void applyInferredBlueprints()
+                else if (confirmation === 'apply-settings') void applyInferredSettings()
                 else if (confirmation) void commit(confirmation)
                 setConfirmation(undefined)
               }}>{t('dialog.confirm')}</Button>
