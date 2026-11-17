@@ -1,21 +1,28 @@
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, test, vi } from 'vitest'
 import { exportLegacyProject } from '../../src/core/migration/export-legacy-project'
+import { FileChapterStore } from '../../src/core/adapters/file-chapter-store'
 import { fileRevision, parseChapter } from '../../src/core/adapters/chapter-format'
 import type { ProjectChannels } from '../../src/shared/ipc-channels'
 
 const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>())
 vi.mock('electron', () => ({}))
-vi.mock('better-sqlite3', () => ({ default: DatabaseSync }))
+vi.mock('better-sqlite3', () => ({
+  default: class extends DatabaseSync {
+    constructor(path: string, options?: { readonly?: boolean }) {
+      super(path, { readOnly: options?.readonly ?? false })
+    }
+  },
+}))
 vi.mock('../security/ipc-guard', () => ({ guardedHandle: (key: string, handler: never) => handlers.set(key, handler) }))
 vi.mock('./fs-controller', () => ({ assertPathAllowedForIpc: (path: string) => path }))
 
 import { registerFileProjectEditorController } from './file-project-editor-controller'
 
-test('opens, saves, and restores candidate tabs via IPC with revision and sender checks', async () => {
+test('restores candidate operations and verifies import snapshots against receipts and session', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nf-file-editor-ipc-'))
   try {
     const project = join(root, 'project')
@@ -105,6 +112,7 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     expect(await invoke('commit', reopened.token, create)).toEqual({ status: 'committed', revision: reopened.tabs[0].revision })
     await expect(invoke('commit', reopened.token, { ...create, content: 'different request' })).rejects.toThrow()
     const source = [{ title: 'Imported A', content: 'text A' }, { title: 'Imported B', content: 'text B' }]
+    expect(await invoke('import-source', reopened.token, 4, source)).toEqual({ projectId, chapters: [] })
     await expect(invoke('import', recovered.token, 4, source)).rejects.toThrow('lifecycle session')
     await expect(invoke('import', reopened.token, 4, [source[0], { title: 'Invalid', content: null }])).rejects.toThrow()
     expect(await readdir(join(project, 'chapters'))).not.toContain('0004.md')
@@ -114,12 +122,70 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     const withImports = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     expect(withImports.tabs).toMatchObject([{ content: 'text A', readOnly: false }])
     expect(await invoke('import', withImports.token, 4, source)).toEqual(imported)
+    const importedChapter = async (number: number) => {
+      const text = await readFile(join(project, 'chapters', `${String(number).padStart(4, '0')}.md`), 'utf8')
+      const { id: chapterId, title, content } = parseChapter(text)
+      return { chapterId, number, title, content, revision: fileRevision(text) }
+    }
+    const snapshot = { projectId, chapters: [await importedChapter(4), await importedChapter(5)] }
+    expect(await invoke('import-source', withImports.token, 4, source)).toEqual(snapshot)
+    await expect(invoke('import-source', reopened.token, 4, source)).rejects.toThrow('lifecycle session')
+    await expect(invoke('import-source', withImports.token, Number.MAX_SAFE_INTEGER, source)).rejects.toThrow('Invalid file chapter import')
+    await expect(invoke('import-source', withImports.token, 4, [source[0], null])).rejects.toThrow('Invalid file chapter import')
     expect(await invoke('import', withImports.token, 4, [source[0], { ...source[1], content: 'different' }]))
       .toEqual({ completed: 1, firstLocator: imported.firstLocator, blockedNumber: 5 })
+    expect(await invoke('import-source', withImports.token, 4, [source[0], { ...source[1], content: 'different' }]))
+      .toEqual({ projectId, chapters: snapshot.chapters.slice(0, 1) })
     expect(parseChapter(await readFile(join(project, 'chapters/0005.md'), 'utf8')).content).toBe('text B')
+
+    const interruptedImport = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try {
+      const secondId = `ch_${fileRevision(JSON.stringify(['import', projectId, 8, source[1].title, source[1].content]))}`
+      interruptedImport.exec(`CREATE TRIGGER interrupt BEFORE INSERT ON file_draft_states WHEN NEW.chapter_id = '${secondId}'
+        BEGIN SELECT RAISE(ABORT, 'interrupted import'); END`)
+      await expect(invoke('import', withImports.token, 7, source)).rejects.toThrow('interrupted import')
+      expect(await invoke('import-source', withImports.token, 7, source)).toEqual({ projectId, chapters: [await importedChapter(7)] })
+      interruptedImport.exec('DROP TRIGGER interrupt')
+    } finally { interruptedImport.close() }
+    const afterImportRecovery = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(await invoke('import-source', afterImportRecovery.token, 7, source))
+      .toEqual({ projectId, chapters: [await importedChapter(7), await importedChapter(8)] })
+
+    const otherProject = join(root, 'candidate-copy')
+    await cp(project, otherProject, { recursive: true })
+    const copyChapter = join(otherProject, 'chapters/0005.md')
+    await writeFile(copyChapter, (await readFile(copyChapter, 'utf8')).replace('text B', 'external edit'))
+    const readByIds = FileChapterStore.prototype.readByIds
+    let markReadFinished!: () => void
+    let resumeRead!: () => void
+    const readFinished = new Promise<void>(resolve => { markReadFinished = resolve })
+    const readResumed = new Promise<void>(resolve => { resumeRead = resolve })
+    // 在实际读完原项目后暂停，验证切换项目时旧快照不会交回调用方。
+    const delayedRead = vi.spyOn(FileChapterStore.prototype, 'readByIds').mockImplementationOnce(async function (this: FileChapterStore, ids) {
+      const chapters = await readByIds.call(this, ids)
+      markReadFinished()
+      await readResumed
+      return chapters
+    })
+    try {
+      const inFlight = invoke('import-source', afterImportRecovery.token, 4, source)
+      const rejected = expect(inFlight).rejects.toThrow('session changed')
+      await readFinished
+      const copied = await invoke('open', otherProject, []) as ProjectChannels['project:file-editor-open']['return']
+      resumeRead()
+      await rejected
+      await expect(invoke('import-source', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
+    } finally {
+      resumeRead()
+      delayedRead.mockRestore()
+    }
+
+    const active = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(await invoke('import-source', active.token, 4, source)).toEqual(snapshot)
     const { rmdir } = await import('node:fs/promises')
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('save', withImports.token, imported.firstLocator, withImports.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('import-source', active.token, 4, source)).rejects.toThrow('candidate changed')
+    await expect(invoke('save', active.token, imported.firstLocator, active.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 })

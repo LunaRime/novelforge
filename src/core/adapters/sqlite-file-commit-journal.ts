@@ -10,6 +10,20 @@ interface JournalRow {
 
 const intentHash = (payload: string) => createHash('sha256').update(payload).digest('hex')
 
+function readCommitRow(db: ChapterIndexDatabase, projectId: string, operationId: string): JournalRow | undefined {
+  const [row] = db.prepare(
+    'SELECT intent_hash, revision FROM file_chapter_commits WHERE project_id = ? AND operation_id = ?',
+  ).all(projectId, operationId) as JournalRow[]
+  return row
+}
+
+/** 读取已提交回执，兼容只读连接。未完成的提交只有待恢复意图。 */
+export function readFileChapterCommitReceipt(db: ChapterIndexDatabase, projectId: string,
+  operationId: string): FileChapterCommitReceipt | null {
+  const revision = readCommitRow(db, projectId, operationId)?.revision
+  return revision ? { status: 'committed', revision } : null
+}
+
 /** Store this journal in the same retained database connection used by the metadata mutation. */
 export class SQLiteFileCommitJournal implements FileCommitJournal {
   constructor(private readonly db: ChapterIndexDatabase, private readonly projectId: string) {
@@ -36,16 +50,8 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
     return row ? JSON.parse(row.payload) : null
   }
 
-  private row(operationId: string): JournalRow | undefined {
-    const [row] = this.db.prepare(
-      'SELECT intent_hash, revision FROM file_chapter_commits WHERE project_id = ? AND operation_id = ?',
-    ).all(this.projectId, operationId) as JournalRow[]
-    return row
-  }
-
   receipt(operationId: string): FileChapterCommitReceipt | null {
-    const revision = this.row(operationId)?.revision
-    return revision ? { status: 'committed', revision } : null
+    return readFileChapterCommitReceipt(this.db, this.projectId, operationId)
   }
 
   prepare(intent: FileChapterCommit, allowNew = true): FileChapterCommitReceipt | null {
@@ -63,7 +69,7 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
       this.db.prepare('INSERT INTO file_chapter_commits (project_id, operation_id, payload, intent_hash) VALUES (?, ?, ?, ?) ON CONFLICT DO NOTHING')
         .run(this.projectId, intent.operationId, payload, hash)
     }
-    const row = this.row(intent.operationId)
+    const row = readCommitRow(this.db, this.projectId, intent.operationId)
     if (!row) {
       if (!allowNew) throw new ChapterError('conflict', 'Chapter changed before preparing the file commit')
       throw new ChapterError('locked', 'Another file commit is awaiting recovery')
@@ -77,7 +83,7 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
     // Acquire the write transaction before reading the receipt so a concurrent retry cannot apply metadata twice.
     this.db.exec('BEGIN IMMEDIATE')
     try {
-      const row = this.row(intent.operationId)
+      const row = readCommitRow(this.db, this.projectId, intent.operationId)
       if (intent.chapter.projectId !== this.projectId || !row || row.intent_hash !== intentHash(JSON.stringify(intent))) {
         throw new ChapterError('conflict', 'No matching prepared file commit')
       }

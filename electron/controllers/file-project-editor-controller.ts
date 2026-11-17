@@ -7,6 +7,7 @@ import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../..
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
+import { readFileImportSource } from '../services/file-import-source'
 
 const candidateRecord = '.novelforge/file-editor.json'
 const identityFile = '.novelforge/draft-identity.json'
@@ -19,6 +20,7 @@ type Lifecycle = ReturnType<typeof createFileDraftLifecycle>
 
 interface FileEditorSession {
   token: string
+  projectId: string
   projectPath: string
   repo: FileChapterStore
   assertCandidate: () => Promise<void>
@@ -103,7 +105,7 @@ export function registerFileProjectEditorController() {
       })
     }
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-    sessions.set(sender.id, { token, projectPath: path, repo, assertCandidate, withLifecycle })
+    sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, repo, assertCandidate, withLifecycle })
     // 默认接在当前稿之后，导入时还会检查迁移历史占用的章号。
     const importStartNumber = withLifecycle ? chapters.reduce((latest, chapter) => Math.max(latest, chapter.number), 0) + 1 : undefined
     return { token, tabs, missing, documents, importStartNumber }
@@ -129,13 +131,18 @@ export function registerFileProjectEditorController() {
     return { revision: result.revision, indexed: result.indexed }
   })
 
-  function mutate<T>(senderId: number, token: string, work: (lifecycle: Lifecycle) => Promise<T>): Promise<T> {
+  function requireLifecycleSession(senderId: number, token: string) {
     const session = sessions.get(senderId)
     if (!session?.withLifecycle || session.token !== token || requests.get(senderId) !== token) {
       throw new Error('Invalid file editor lifecycle session')
     }
+    return { session, withLifecycle: session.withLifecycle }
+  }
+
+  function mutate<T>(senderId: number, token: string, work: (lifecycle: Lifecycle) => Promise<T>): Promise<T> {
+    const { session, withLifecycle } = requireLifecycleSession(senderId, token)
     assertPathAllowedForIpc(session.projectPath, 'write')
-    return session.withLifecycle(lifecycle => {
+    return withLifecycle(lifecycle => {
       // 打开保留库前有异步校验，执行写入前再次确认会话仍有效。
       if (requests.get(senderId) !== token) throw new Error('File editor session changed')
       return work(lifecycle)
@@ -147,6 +154,24 @@ export function registerFileProjectEditorController() {
 
   guardedHandle('project:file-editor-import', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) =>
     mutate(sender.id, token, lifecycle => lifecycle.importChapters(firstNumber, chapters)))
+
+  guardedHandle('project:file-editor-import-source', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) => {
+    const { session } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'read')
+    const assertCurrent = () => {
+      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+    }
+    await session.assertCandidate()
+    assertCurrent()
+    // 单独用只读连接查询回执，读取输入时不初始化写入服务或重放待提交意图。
+    const db = new Database(join(session.projectPath, retainedFile), { readonly: true, fileMustExist: true })
+    try {
+      const snapshot = await readFileImportSource(db, session.repo, session.projectId, firstNumber, chapters)
+      await session.assertCandidate()
+      assertCurrent()
+      return snapshot
+    } finally { db.close() }
+  })
 
   guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {
     const session = sessions.get(sender.id)

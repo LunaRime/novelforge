@@ -2,6 +2,7 @@ import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevis
   type ChapterIndexDatabase, type FileChapterCommit, type FileChapterCommitReceipt, type MigratedDraftIdentityMap } from '../../src/core'
 import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../../src/shared/ipc-channels'
 import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
+import { fileImportEntries } from './file-import-source'
 
 /** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
 export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileChapterStore,
@@ -57,18 +58,9 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   return {
     preview,
     async importChapters(firstNumber: number, chapters: FileImportChapter[]) {
-      if (!Array.isArray(chapters) || chapters.length === 0 || !Number.isSafeInteger(firstNumber) || firstNumber < 1 ||
-          !Number.isSafeInteger(firstNumber + chapters.length - 1) ||
-          chapters.some(chapter => typeof chapter?.title !== 'string' || typeof chapter.content !== 'string')) {
-        throw new ChapterError('invalid-chapter', 'Invalid file chapter import')
-      }
       const result: ProjectChannels['project:file-editor-import']['return'] = { completed: 0 }
-      for (const [index, { title, content }] of chapters.entries()) {
+      for (const { operationId, chapterId, number, title, content } of fileImportEntries(projectId, firstNumber, chapters)) {
         assertCurrent?.()
-        const number = firstNumber + index
-        // 操作 ID 绑定项目、目标章号和拆章内容，重启后可用相同输入找到原回执。
-        const operationId = fileRevision(JSON.stringify(['import', projectId, number, title, content]))
-        const chapterId = `ch_${operationId}`
         if (!journal.receipt(operationId)) {
           try {
             const pending = journal.pending()

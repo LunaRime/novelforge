@@ -63,12 +63,14 @@ export class FileChapterStore implements ChapterRepo {
     if (!stat.isFile() || stat.isSymbolicLink()) throw new ChapterError('unsafe-path', 'Expected a regular file')
   }
 
-  private async directory(parts: string[]): Promise<string> {
+  private async directory(parts: string[], createIfMissing = true): Promise<string> {
     let current = this.root
     for (const part of parts) {
       current = join(current, part)
-      try { await fs.mkdir(current) } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      if (createIfMissing) {
+        try { await fs.mkdir(current) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        }
       }
       const stat = await fs.lstat(current)
       if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(current) !== current) {
@@ -78,9 +80,9 @@ export class FileChapterStore implements ChapterRepo {
     return current
   }
 
-  private async scan(): Promise<ScannedChapter[]> {
+  private async scan(createIfMissing = true): Promise<ScannedChapter[]> {
     await this.assertProject()
-    const dir = await this.directory(['chapters'])
+    const dir = await this.directory(['chapters'], createIfMissing)
     const scanned: ScannedChapter[] = []
     const ids = new Set<string>()
     const numbers = new Set<number>()
@@ -129,6 +131,18 @@ export class FileChapterStore implements ChapterRepo {
     const indexed = await this.updateIndex(scanned)
     const match = scanned.find(s => s.chapter.id === id)
     return match ? { chapter: match.chapter, revision: match.meta.revision, indexed } : null
+  }
+
+  /** 一次读取本批所需正文和对应 revision。只读取现有文件，不创建目录或更新索引。 */
+  async readByIds(ids: readonly string[]): Promise<Map<string, Pick<StoredChapter, 'chapter' | 'revision'>>> {
+    const requested = new Set(ids)
+    requested.forEach(assertChapterId)
+    const result = new Map<string, Pick<StoredChapter, 'chapter' | 'revision'>>()
+    if (!requested.size) return result
+    for (const { chapter, meta } of await this.scan(false)) {
+      if (requested.has(chapter.id)) result.set(chapter.id, { chapter, revision: meta.revision })
+    }
+    return result
   }
 
   private async locked<T>(work: () => Promise<T>): Promise<T> {
