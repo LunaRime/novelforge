@@ -7,9 +7,10 @@ import type { FileAgentEditProposal } from '../../shared/ipc-channels'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 
-export function FileProjectAgent({ token, locator, disabled, editableRevision, onApply }: {
+export function FileProjectAgent({ token, locator, disabled, editableRevision, onApply, onStage }: {
   token: string; locator?: string; disabled: boolean; editableRevision?: string
   onApply: (proposal: FileAgentEditProposal) => Promise<boolean>
+  onStage?: (proposal: FileAgentEditProposal) => Promise<boolean>
 }) {
   const { t } = useTranslation()
   const [question, setQuestion] = useState('')
@@ -27,9 +28,9 @@ export function FileProjectAgent({ token, locator, disabled, editableRevision, o
     })
   }
 
-  async function apply() {
+  async function resolve(action: (proposal: FileAgentEditProposal) => Promise<boolean>) {
     if (!proposal || disabled || !canApply) return
-    if (await onApply(proposal)) setProposal(undefined)
+    if (await action(proposal)) setProposal(undefined)
   }
 
   function cancel() {
@@ -94,7 +95,9 @@ export function FileProjectAgent({ token, locator, disabled, editableRevision, o
         </dl>
         {!canApply && <p role="status">{t('project.fileEditorAgentEditStale')}</p>}
         <div className="flex flex-wrap gap-2">
-          <Button type="button" disabled={disabled || !canApply} onClick={() => void apply()}>{t('project.fileEditorAgentAccept')}</Button>
+          <Button type="button" disabled={disabled || !canApply} onClick={() => void resolve(onApply)}>{t('project.fileEditorAgentAccept')}</Button>
+          {onStage && <Button type="button" variant="outline" disabled={disabled || !canApply}
+            onClick={() => void resolve(onStage)}>{t('project.fileEditorAgentStage')}</Button>}
           <Button type="button" variant="outline" disabled={disabled} onClick={discard}>{t('project.fileEditorAgentDiscard')}</Button>
         </div>
       </section>}

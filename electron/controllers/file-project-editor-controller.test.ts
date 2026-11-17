@@ -345,27 +345,65 @@ test('restores candidate operations and verifies import snapshots against receip
     expect(parseChapter(await readFile(join(project, 'chapters/0006.md'), 'utf8')).content).toBe(create.content)
     const continuationLocator = `doc://chapter/${continuation.chapterId}`
     const native = await invoke('open', project, [continuationLocator]) as ProjectChannels['project:file-editor-open']['return']
-    expect(native.tabs[0].lifecycle).toEqual({ canFinalize: true, canArchive: true, pending: [] })
-    const nativeSave = await invoke('save', native.token, continuationLocator, native.tabs[0].revision, 'Edited native draft') as { revision: string }
-    const finalizeNative = { kind: 'finalize', chapterId: continuation.chapterId, expectedRevision: nativeSave.revision }
-    await expect(invoke('commit', native.token, { ...finalizeNative, kind: 'merge', revisionId: 4 })).rejects.toThrow()
+    expect(native.tabs[0].lifecycle).toEqual({ canFinalize: true, canArchive: true, canStageRevision: true, pending: [] })
+    const draftRevision = native.tabs[0].revision
+    const nativeOffer = await invoke('agent-propose-edit', native.token, continuationLocator, draftRevision,
+      create.content, 'Edited native draft') as { id: string }
+    const stagedRequest = invoke('agent-resolve-edit', native.token, nativeOffer.id, 'stage') as Promise<{ status: string; revisionId: number }>
+    await expect(invoke('agent-resolve-edit', native.token, nativeOffer.id, 'apply')).rejects.toThrow('proposal')
+    const staged = await stagedRequest
+    expect(staged).toEqual({ status: 'staged', revisionId: expect.any(Number) })
+    expect(parseChapter(await readFile(join(project, 'chapters/0006.md'), 'utf8')).content).toBe(create.content)
+    const stagedWorkspace = await invoke('open', project, [continuationLocator]) as ProjectChannels['project:file-editor-open']['return']
+    let stagedToken = stagedWorkspace.token
+    expect(stagedWorkspace.tabs[0].lifecycle?.pending).toEqual([{ id: staged.revisionId }])
+    const stagedPreview = await invoke('preview', stagedToken, continuation.chapterId, staged.revisionId) as { contentHash: string }
+    expect(stagedPreview).toMatchObject({ content: 'Edited native draft', contentHash: fileRevision('Edited native draft') })
+    await expect(invoke('preview', stagedToken, imported.firstLocator!.slice('doc://chapter/'.length), staged.revisionId)).rejects.toThrow()
+    const mergeNative = { kind: 'merge', chapterId: continuation.chapterId, expectedRevision: draftRevision,
+      revisionId: staged.revisionId, proposalHash: stagedPreview.contentHash }
+    await expect(invoke('commit', stagedToken, { ...mergeNative, proposalHash: 'a'.repeat(64) })).rejects.toThrow('after preview')
+    const interruptedMerge = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try {
+      interruptedMerge.exec("CREATE TRIGGER interrupt_revision BEFORE UPDATE ON file_draft_revisions BEGIN SELECT RAISE(ABORT, 'interrupted revision'); END")
+      await expect(invoke('commit', stagedToken, mergeNative)).rejects.toThrow('interrupted revision')
+      expect(interruptedMerge.prepare('SELECT merged_revision FROM file_draft_revisions WHERE id = ?').get(staged.revisionId))
+        .toEqual({ merged_revision: null })
+      interruptedMerge.exec('DROP TRIGGER interrupt_revision')
+    } finally { interruptedMerge.close() }
+    registerFileProjectEditorController()
+    const mergedWorkspace = await invoke('open', project, [continuationLocator]) as ProjectChannels['project:file-editor-open']['return']
+    stagedToken = mergedWorkspace.token
+    expect(mergedWorkspace.tabs[0].lifecycle?.pending).toEqual([])
+    const nativeSave = await invoke('commit', stagedToken, mergeNative) as { revision: string }
+    expect(await invoke('commit', stagedToken, mergeNative)).toEqual(nativeSave)
+    expect(parseChapter(await readFile(join(project, 'chapters/0006.md'), 'utf8'))).toMatchObject({ status: 'revised', content: 'Edited native draft' })
+    const staleOffer = await invoke('agent-propose-edit', stagedToken, continuationLocator, nativeSave.revision,
+      'Edited native draft', 'Older proposal') as { id: string }
+    const stale = await invoke('agent-resolve-edit', stagedToken, staleOffer.id, 'stage') as { revisionId: number }
+    const latestDraft = await invoke('save', stagedToken, continuationLocator, nativeSave.revision, 'Latest native draft') as { revision: string }
+    await expect(invoke('preview', stagedToken, continuation.chapterId, stale.revisionId)).rejects.toThrow()
+    await expect(invoke('commit', stagedToken, { ...mergeNative, expectedRevision: latestDraft.revision,
+      revisionId: stale.revisionId, proposalHash: fileRevision('Older proposal') })).rejects.toThrow()
+    const finalizeNative = { kind: 'finalize', chapterId: continuation.chapterId, expectedRevision: latestDraft.revision }
+    await expect(invoke('commit', stagedToken, { ...finalizeNative, kind: 'merge', revisionId: 4 })).rejects.toThrow()
     const nativeDb = new DatabaseSync(join(project, '.novelforge/retained.db'))
     try {
       nativeDb.exec("CREATE TRIGGER interrupt_native BEFORE UPDATE ON file_draft_states BEGIN SELECT RAISE(ABORT, 'interrupted native draft'); END")
-      await expect(invoke('commit', native.token, finalizeNative)).rejects.toThrow('interrupted native draft')
+      await expect(invoke('commit', stagedToken, finalizeNative)).rejects.toThrow('interrupted native draft')
       nativeDb.exec('DROP TRIGGER interrupt_native')
     } finally { nativeDb.close() }
     registerFileProjectEditorController()
     const nativeRecovered = await invoke('open', project, [continuationLocator, imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     expect(nativeRecovered.tabs).toMatchObject([
-      { content: 'Edited native draft', readOnly: true, lifecycle: { canFinalize: false, canArchive: true, pending: [] } },
+      { content: 'Latest native draft', readOnly: true, lifecycle: { canFinalize: false, canArchive: true, pending: [] } },
       { lifecycle: { canFinalize: true, canArchive: true, pending: [] } },
     ])
     expect(await invoke('commit', nativeRecovered.token, finalizeNative)).toEqual({ status: 'committed', revision: nativeRecovered.tabs[0].revision })
     expect(await invoke('commit', nativeRecovered.token, { kind: 'archive', chapterId: continuation.chapterId, expectedRevision: nativeRecovered.tabs[0].revision }))
       .toMatchObject({ status: 'committed' })
     const archivedNative = await invoke('open', project, [continuationLocator]) as ProjectChannels['project:file-editor-open']['return']
-    expect(archivedNative.tabs[0]).toMatchObject({ content: 'Edited native draft', readOnly: true })
+    expect(archivedNative.tabs[0]).toMatchObject({ content: 'Latest native draft', readOnly: true })
     expect(archivedNative.tabs[0].lifecycle).toBeUndefined()
     const oldSession = await invoke('agent-propose-edit', archivedNative.token, imported.firstLocator,
       applied.revision, 'new $& text', 'other') as { id: string }

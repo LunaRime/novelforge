@@ -285,7 +285,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       }
       setWorkspace({ ...workspace, tabs: workspace.tabs.map(tab =>
         tab.locator === active.locator ? { ...tab, content, revision: result.revision,
-          lifecycle: tab.lifecycle && { ...tab.lifecycle, canFinalize: Boolean(content.trim()) } } : tab) })
+          lifecycle: tab.lifecycle && { ...tab.lifecycle, canFinalize: Boolean(content.trim()),
+            pending: tab.lifecycle.canStageRevision && result.revision !== tab.revision ? [] : tab.lifecycle.pending } } : tab) })
+      if (lifecycle?.canStageRevision && result.revision !== active.revision) setRevisionId(undefined)
       setPreview(undefined)
       renderLog('info', 'Save:FileProjectEditor', `${t('save.success')} (${Math.round(saveClock() - start)}ms)`)
       if (result.indexed) toast.success(t('save.success'))
@@ -294,6 +296,31 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     } catch (error) {
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t('project.fileEditorSaveConflict'))
+      return false
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function stageAgentRevision(proposal: FileAgentEditProposal): Promise<boolean> {
+    if (pending.current || dirty || !workspace || !active || !lifecycle?.canStageRevision ||
+        proposal.locator !== active.locator || proposal.revision !== active.revision) return false
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      const result = await ipc.invoke('project:file-editor-agent-resolve-edit', workspace.token, proposal.id, 'stage')
+      if (result.status !== 'staged') return false
+      // 待合并列表可立即预览，正文仍使用当前已保存的版本。
+      setWorkspace({ ...workspace, tabs: workspace.tabs.map(tab => tab.locator === active.locator ? {
+        ...tab, lifecycle: { ...lifecycle, pending: [...lifecycle.pending, { id: result.revisionId }] },
+      } : tab) })
+      setRevisionId(result.revisionId)
+      setPreview(undefined)
+      renderLog('info', 'Save:FileProjectEditor', `revision ${result.revisionId} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(t('project.fileEditorAgentStaged'))
+      return true
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorAgentStageFailed'))
       return false
     } finally { pending.current = false; setBusy(false) }
   }
@@ -405,7 +432,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
               {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
-                editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save} />}
+                editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save}
+                onStage={lifecycle?.canStageRevision ? stageAgentRevision : undefined} />}
               {!openingDocument && continuationSource && active && nextNumber !== undefined && <FileChapterContinuation
                 key={`${workspace.token}:${active.locator}:${active.revision}`} token={workspace.token} number={nextNumber}
                 source={continuationSource} disabled={busy || dirty} onPublish={publishContinuation} />}

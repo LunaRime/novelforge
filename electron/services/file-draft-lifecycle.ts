@@ -4,6 +4,7 @@ import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../..
 import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
 import { fileImportEntries } from './file-import-source'
 import { readFileContinuationContext } from './file-continuation-context'
+import { openFileDraftRevisions } from './file-draft-revisions'
 
 /** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
 export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileChapterStore,
@@ -16,6 +17,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   )`)
   const currentDrafts = new Map(identities.filter(entry => entry.target.kind === 'current')
     .map(entry => [entry.chapterId, entry.draftId]))
+  const fileRevisions = openFileDraftRevisions(db, projectId)
   const historyOnlyDrafts = new Set(identities.filter(entry => !currentDrafts.has(entry.chapterId)).map(entry => entry.draftId))
 
   function hasPublishedFileDraft(chapterId: string) {
@@ -27,7 +29,9 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   function apply(intent: FileChapterCommit, receipt: FileChapterCommitReceipt) {
     if (intent.kind === 'merge') {
       const base = currentDrafts.get(intent.chapter.id)
-      if (!base || !db.prepare(`UPDATE revisions SET status = 'merged', merged_to_draft_id = ?, updated_at = ?
+      if (base === undefined) {
+        fileRevisions.merge(intent.chapter.id, intent.expectedRevision, intent.recordId, intent.chapter.content, receipt.revision)
+      } else if (!db.prepare(`UPDATE revisions SET status = 'merged', merged_to_draft_id = ?, updated_at = ?
         WHERE id = ? AND base_draft_id = ? AND status = 'pending'
           AND EXISTS (SELECT 1 FROM contents c WHERE c.id = revisions.content_id AND c.body = ?)
         RETURNING id`)
@@ -45,17 +49,14 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
     commitJournal: Parameters<typeof commitFileChapter>[2] = journal) =>
     commitFileChapter(intent, repo, commitJournal, receipt => apply(intent, receipt), assertCurrent, beforePrepare)
 
-  function continuationJournal(number: number, contextRevision: string): Parameters<typeof commitFileChapter>[2] {
+  function guardedJournal(check: () => void): Parameters<typeof commitFileChapter>[2] {
     return {
       prepare(intent, allowNew = true) {
         if (!allowNew) return journal.prepare(intent, allowNew)
-        // 同一写事务内核对参与生成的字段并登记意图，避免检查后再被另一个连接改写。
+        // 同一写事务内校验业务数据并登记意图，避免校验后被另一个连接改写。
         db.exec('BEGIN IMMEDIATE')
         try {
-          if (journal.pending()?.operationId !== intent.operationId && !journal.receipt(intent.operationId) &&
-              readFileContinuationContext(db, number).contextRevision !== contextRevision) {
-            throw new ChapterError('conflict', 'Continuation context changed')
-          }
+          if (journal.pending()?.operationId !== intent.operationId && !journal.receipt(intent.operationId)) check()
           const receipt = journal.prepare(intent, allowNew)
           db.exec('COMMIT')
           return receipt
@@ -91,18 +92,44 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       if (!previous || previous.revision !== source.revision || previous.chapter.number !== number - 1 || !previous.chapter.content.trim()) {
         throw new ChapterError('conflict', 'Source chapter changed')
       }
-    }), source?.contextRevision ? continuationJournal(number, source.contextRevision) : undefined)
+    }), source?.contextRevision ? guardedJournal(() => {
+      if (readFileContinuationContext(db, number).contextRevision !== source.contextRevision) {
+        throw new ChapterError('conflict', 'Continuation context changed')
+      }
+    }) : undefined)
   }
 
-  function preview(chapterId: string, revisionId: number) {
+  function legacyRevision(chapterId: string, revisionId: number) {
     const [revision] = db.prepare(`SELECT c.body FROM revisions r JOIN contents c ON c.id = r.content_id
       WHERE r.id = ? AND r.base_draft_id = ? AND r.status = 'pending'`)
       .all(revisionId, currentDrafts.get(chapterId) ?? null) as Array<{ body: string }>
     if (!revision || typeof revision.body !== 'string') throw new ChapterError('conflict', 'Revision is unavailable')
-    return { content: revision.body, contentHash: fileRevision(revision.body) }
+    return revision.body
   }
   return {
-    preview,
+    async preview(chapterId: string, revisionId: number) {
+      if (currentDrafts.has(chapterId)) {
+        const content = legacyRevision(chapterId, revisionId)
+        return { content, contentHash: fileRevision(content) }
+      }
+      const current = (await repo.readByIds([chapterId])).get(chapterId)
+      assertCurrent?.()
+      if (!current || !hasPublishedFileDraft(chapterId) || current.chapter.metadata?.legacyDraftId !== undefined ||
+          ['finalized', 'archived'].includes(current.chapter.status)) throw new ChapterError('conflict', 'File draft revision is unavailable')
+      const content = fileRevisions.body(chapterId, current.revision, revisionId)
+      return { content, contentHash: fileRevision(content) }
+    },
+    async stageRevision(chapterId: string, revision: string, offerId: string, edit: (body: string) => string, assertOfferCurrent: () => void) {
+      return repo.withCommitLock(async locked => {
+        const current = await locked.byId(chapterId)
+        if (!current || journal.pending() || currentDrafts.has(chapterId) || !hasPublishedFileDraft(chapterId) ||
+            current.revision !== revision || current.chapter.metadata?.legacyDraftId !== undefined ||
+            ['finalized', 'archived'].includes(current.chapter.status)) throw new ChapterError('conflict', 'File draft is unavailable for staging')
+        assertOfferCurrent()
+        return fileRevisions.stage(chapterId, revision, offerId, edit(current.chapter.content))
+      })
+
+    },
     async importChapters(firstNumber: number, chapters: FileImportChapter[]) {
       const result: ProjectChannels['project:file-editor-import']['return'] = { completed: 0 }
       for (const { operationId, chapterId, number, title, content } of fileImportEntries(projectId, firstNumber, chapters)) {
@@ -132,10 +159,12 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
           chapter.chapter.metadata?.legacyDraftId !== draftId || chapter.chapter.status === 'archived') return
       if (draftId === undefined && !hasPublishedFileDraft(chapterId)) return
       const editable = chapter.chapter.status !== 'finalized'
+      const canStageRevision = editable && draftId === undefined
       const pending = editable && draftId !== undefined ? db.prepare(`SELECT r.id FROM revisions r JOIN contents c ON c.id = r.content_id
         WHERE r.base_draft_id = ? AND r.status = 'pending' AND typeof(c.body) = 'text' ORDER BY r.id`)
-        .all(draftId) as Array<{ id: number }> : []
-      return { canArchive: true, canFinalize: editable && Boolean(chapter.chapter.content.trim()), pending }
+        .all(draftId) as Array<{ id: number }> : canStageRevision ? fileRevisions.pending(chapterId, expectedRevision) : []
+      return { canArchive: true, canFinalize: editable && Boolean(chapter.chapter.content.trim()), pending,
+        ...(canStageRevision && { canStageRevision }) }
     },
     async recover() {
       const intent = journal.pending()
@@ -159,7 +188,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       }
       const { kind, chapterId, expectedRevision } = command
       const draftId = currentDrafts.get(chapterId)
-      if (draftId === undefined && (kind === 'merge' || !hasPublishedFileDraft(chapterId))) {
+      if (draftId === undefined && !hasPublishedFileDraft(chapterId)) {
         throw new ChapterError('conflict', 'No draft association for this file operation')
       }
       const associatedId = kind === 'merge' ? command.revisionId : draftId
@@ -187,18 +216,26 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
         throw new ChapterError('conflict', 'The selected draft is read-only')
       }
       let content = chapter.content
+      let mergeJournal: Parameters<typeof commitFileChapter>[2] | undefined
       if (kind === 'merge') {
-        const proposal = preview(chapterId, command.revisionId)
+        if (draftId === undefined) {
+          if (!proposalHash) throw new ChapterError('conflict', 'File draft merge requires a preview')
+          content = fileRevisions.body(chapterId, expectedRevision, command.revisionId)
+          mergeJournal = guardedJournal(() => {
+            if (fileRevisions.body(chapterId, expectedRevision, command.revisionId) !== content) {
+              throw new ChapterError('conflict', 'Revision changed after preview')
+            }
+          })
+        } else content = legacyRevision(chapterId, command.revisionId)
         // 只接受用户预览过的正文，期间修稿内容改变就拒绝合并。
-        if (proposalHash !== undefined && proposal.contentHash !== proposalHash) {
+        if (proposalHash !== undefined && fileRevision(content) !== proposalHash) {
           throw new ChapterError('conflict', 'Revision changed after preview')
         }
-        content = proposal.content
       }
       if (kind === 'finalize' && !content.trim()) throw new ChapterError('invalid-chapter', 'Finalization requires saved content')
       const status = kind === 'merge' ? 'revised' : kind === 'archive' ? 'archived' : 'finalized'
       return run({ operationId, kind, recordId: associatedId ?? chapter.number, expectedRevision,
-        chapter: { ...chapter, status, content, updatedAt: new Date().toISOString() } })
+        chapter: { ...chapter, status, content, updatedAt: new Date().toISOString() } }, undefined, mergeJournal)
     },
   }
 }

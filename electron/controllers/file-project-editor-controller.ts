@@ -42,7 +42,7 @@ interface FileEditorSession {
   projectPath: string
   repo: FileChapterStore
   documentPort: Awaited<ReturnType<typeof createFileEditorOpenPort>>
-  agentEdits: Map<string, FileAgentEditProposal & { chapterId: string; offset: number }>
+  agentEdits: Map<string, FileAgentEditProposal & { chapterId: string; offset: number; resolving?: boolean }>
   assertCandidate: () => Promise<void>
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
   withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
@@ -227,21 +227,34 @@ export function registerFileProjectEditorController() {
   })
 
   guardedHandle('project:file-editor-agent-resolve-edit', async ({ sender }, token: string, proposalId: string,
-    decision: 'apply' | 'discard'): Promise<ProjectChannels['project:file-editor-agent-resolve-edit']['return']> => {
+    decision: 'apply' | 'discard' | 'stage'): Promise<ProjectChannels['project:file-editor-agent-resolve-edit']['return']> => {
     const { session, assertCurrent } = requireAgentSession(sender.id, token)
     const proposal = session.agentEdits.get(proposalId)
-    if (!proposal || (decision !== 'apply' && decision !== 'discard')) throw new Error('Invalid file editor Agent edit proposal')
+    if (!proposal || proposal.resolving || (decision !== 'apply' && decision !== 'discard' && decision !== 'stage')) {
+      throw new Error('Invalid file editor Agent edit proposal')
+    }
     if (decision === 'discard') {
       session.agentEdits.delete(proposalId)
       return { status: 'discarded' }
     }
-    const result = await saveChapter(session, proposal.chapterId, proposal.revision, body =>
-      body.slice(0, proposal.offset) + proposal.replacement + body.slice(proposal.offset + proposal.original.length), () => {
+    const edit = (body: string) => body.slice(0, proposal.offset) + proposal.replacement + body.slice(proposal.offset + proposal.original.length)
+    const assertOfferCurrent = () => {
       assertCurrent()
       if (!session.agentEdits.has(proposalId)) throw new Error('File editor Agent edit proposal changed')
-    })
-    session.agentEdits.delete(proposalId)
-    return { status: 'saved', locator: proposal.locator, content: result.chapter.content, revision: result.revision, indexed: result.indexed }
+    }
+    // 同一提案只能有一个正在执行的处理决定。
+    proposal.resolving = true
+    try {
+      if (decision === 'stage') {
+        const revisionId = await mutate(sender.id, token, lifecycle =>
+          lifecycle.stageRevision(proposal.chapterId, proposal.revision, proposalId, edit, assertOfferCurrent))
+        session.agentEdits.delete(proposalId)
+        return { status: 'staged', revisionId }
+      }
+      const result = await saveChapter(session, proposal.chapterId, proposal.revision, edit, assertOfferCurrent)
+      session.agentEdits.delete(proposalId)
+      return { status: 'saved', locator: proposal.locator, content: result.chapter.content, revision: result.revision, indexed: result.indexed }
+    } finally { proposal.resolving = false }
   })
 
   guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {
@@ -463,6 +476,7 @@ export function registerFileProjectEditorController() {
   guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {
     const session = sessions.get(sender.id)
     if (!session?.withLifecycle || session.token !== token || requests.get(sender.id) !== token ||
+        typeof chapterId !== 'string' || !current.test(`doc://chapter/${chapterId}`) ||
         !Number.isSafeInteger(revisionId) || revisionId < 1) throw new Error('Invalid file editor preview')
     assertPathAllowedForIpc(session.projectPath, 'read')
     return session.withLifecycle(async lifecycle => {

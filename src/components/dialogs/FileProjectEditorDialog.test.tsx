@@ -92,6 +92,38 @@ test('previews an Agent edit and only sends approval when the user accepts it', 
   expect(panel.isConnected).toBe(false)
 })
 
+test('stages an Agent edit before previewing and confirming its merge', async () => {
+  const chapterId = 'ch_12345678'
+  const locator = `doc://chapter/${chapterId}`
+  let merged = false
+  invoke.mockImplementation(async channel => {
+    if (channel === 'project:file-editor-open') return { token: 'session', missing: [], documents: [], tabs: [{ locator,
+      content: merged ? 'new text' : 'old text', revision: merged ? 'next' : 'revision',
+      lifecycle: { canFinalize: true, canArchive: true, canStageRevision: true, pending: [] },
+    }] }
+    if (channel === 'project:file-editor-agent-resolve-edit') return { status: 'staged', revisionId: 9 }
+    if (channel === 'project:file-editor-preview') return { content: 'new text', contentHash: 'hash' }
+    if (channel === 'project:file-editor-commit') { merged = true; return { status: 'committed', revision: 'next' } }
+  })
+  askAgent.mockResolvedValue({ answer: 'Proposed', proposal: { id: 'edit', locator, revision: 'revision', original: 'old', replacement: 'new' } })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await askAboutManuscript('Revise the wording')
+  await click('project.fileEditorAgentStage')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-agent-resolve-edit', 'session', 'edit', 'stage')
+  expect(document.querySelector('textarea')?.value).toBe('old text')
+  await click('project.fileEditorPreview')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-preview', 'session', chapterId, 9)
+  expect(document.querySelector('pre')?.textContent).toBe('new text')
+  await click('project.fileEditorMerge')
+  expect(invoke).toHaveBeenCalledTimes(3)
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenCalledWith('project:file-editor-commit', 'session', {
+    kind: 'merge', chapterId, expectedRevision: 'revision', revisionId: 9, proposalHash: 'hash',
+  })
+  expect(document.querySelector('textarea')?.value).toBe('new text')
+})
+
 test('generates a continuation preview and opens the next chapter after explicit publication', async () => {
   const chapterId = 'ch_12345678'
   const locator = `doc://chapter/${chapterId}`

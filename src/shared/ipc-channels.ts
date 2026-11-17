@@ -141,7 +141,7 @@ export interface ProjectChannels {
     args: [projectPath: string, locators: string[]]
     return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
       number?: number
-      lifecycle?: { canFinalize: boolean; canArchive: boolean; pending: Array<{ id: number }> }
+      lifecycle?: { canFinalize: boolean; canArchive: boolean; canStageRevision?: boolean; pending: Array<{ id: number }> }
     }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number }
   }
   'project:file-editor-save': {
@@ -166,8 +166,9 @@ export interface ProjectChannels {
     return: FileAgentEditProposal
   }
   'project:file-editor-agent-resolve-edit': {
-    args: [token: string, proposalId: string, decision: 'apply' | 'discard']
-    return: { status: 'discarded' } | { status: 'saved'; locator: string; content: string; revision: string; indexed: boolean }
+    args: [token: string, proposalId: string, decision: 'apply' | 'discard' | 'stage']
+    return: { status: 'discarded' } | { status: 'staged'; revisionId: number }
+      | { status: 'saved'; locator: string; content: string; revision: string; indexed: boolean }
   }
   'project:file-editor-commit': {
     args: [token: string, command: FileDraftCommand]
