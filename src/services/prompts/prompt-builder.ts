@@ -22,12 +22,11 @@ export class BasePromptBuilder {
   public build(): string {
     let result = this.template.content
     for (const [key, value] of Object.entries(this.variables)) {
-      // 使用 replaceAll 避免正则注入风险，安全替换所有匹配项
-      // 在用户输入值周围包裹指令边界分隔符，防御 prompt 注入攻击
+      // 包裹正文边界，并用替换回调保留正文里的 $&、$' 等字面内容。
       const safeValue = value 
         ? `\n=== USER_INPUT_START ===\n${value}\n=== USER_INPUT_END ===\n`
         : ''
-      result = result.replaceAll(`{{${key}}}`, safeValue)
+      result = result.replaceAll(`{{${key}}}`, () => safeValue)
     }
 
     // 自动追加 systemSuffix（始终从内置模板获取；按当前语言解析变体）

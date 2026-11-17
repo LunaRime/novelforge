@@ -2,6 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
+import { inferFileImport, type FileImportInference } from '../../services/workflows/file-import-inference'
 import type { FileImportChapter, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
@@ -13,7 +14,12 @@ type Workspace = Opened & { path: string; active: string }
 type Commit = Exclude<ProjectChannels['project:file-editor-commit']['args'][1], { kind: 'create' }>
 type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
 type ImportPreview = { path: string; chapters: FileImportChapter[]; firstNumber: string }
-type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number }
+type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number; indexed?: boolean }
+
+const inferenceLabels = {
+  worldSetting: 'novelConfig.worldSetting', coreOutline: 'novelConfig.coreOutline',
+  protagonistProfile: 'novelConfig.protagonist', writingStyle: 'project.fileEditorInferenceStyle',
+} as const satisfies Record<keyof FileImportInference, string>
 
 const saveClock = () => performance.now()
 
@@ -38,8 +44,11 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [preview, setPreview] = useState<Preview>()
   const [importPreview, setImportPreview] = useState<ImportPreview>()
   const [indexBatch, setIndexBatch] = useState<ImportBatch>()
+  const [inferencePreview, setInferencePreview] = useState<FileImportInference>()
+  const [inferring, setInferring] = useState(false)
   const [confirmation, setConfirmation] = useState<Commit['kind']>()
   const pending = useRef(false)
+  const inferenceRun = useRef<AbortController | undefined>(undefined)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
   const dirty = !!active && active.content !== text
   const stagedImport = importPreview?.path === workspace?.path ? importPreview : undefined
@@ -66,6 +75,36 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     remember(path, locators, selected?.locator ?? preferred)
   }
 
+  function clearInference() {
+    const previous = inferenceRun.current
+    inferenceRun.current = undefined
+    previous?.abort()
+    setInferring(false)
+    setInferencePreview(undefined)
+  }
+
+  async function inferImport() {
+    if (pending.current || inferenceRun.current || dirty || !workspace || !indexBatch?.indexed || indexBatch.path !== workspace.path) return
+    const run = new AbortController()
+    inferenceRun.current = run
+    setInferencePreview(undefined)
+    setInferring(true)
+    try {
+      const result = await inferFileImport(workspace.token, indexBatch.firstNumber, indexBatch.chapters, run.signal)
+      // 只接受当前运行的结果，取消或换项目后丢弃迟到的回包。
+      if (inferenceRun.current === run) setInferencePreview(result)
+    } catch (error) {
+      if (inferenceRun.current !== run) return
+      renderLog('error', 'FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorInferenceFailed'))
+    } finally {
+      if (inferenceRun.current === run) {
+        inferenceRun.current = undefined
+        setInferring(false)
+      }
+    }
+  }
+
   async function previewImport() {
     if (pending.current || dirty || !workspace?.importStartNumber) return
     pending.current = true
@@ -86,6 +125,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   async function importChapters() {
     if (pending.current || dirty || !workspace || !stagedImport ||
         !Number.isSafeInteger(firstImportNumber) || firstImportNumber < 1) return
+    clearInference()
     pending.current = true
     setBusy(true)
     const start = saveClock()
@@ -115,6 +155,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
 
   async function indexImport() {
     if (pending.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path) return
+    clearInference()
     pending.current = true
     setBusy(true)
     const start = saveClock()
@@ -123,7 +164,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       const message = t('project.fileEditorIndexDone').replace('{count}', String(indexed))
       renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
       toast.success(message)
-      setIndexBatch(undefined)
+      setIndexBatch({ ...indexBatch, indexed: indexed > 0 })
     } catch (error) {
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t('project.fileEditorIndexFailed'))
@@ -137,6 +178,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     try {
       const selectedPath = path ?? await ipc.invoke('dialog:select-folder')
       if (!selectedPath) return
+      clearInference()
       const previous = storedTabs(selectedPath)
       const requested = locator ? [...new Set([...previous.locators.slice(-99), locator])] : previous.locators
       let result = await ipc.invoke('project:file-editor-open', selectedPath, requested)
@@ -145,6 +187,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       }
       display(selectedPath, result, locator ?? previous.active, requested)
     } catch (error) {
+      clearInference()
       renderLog('error', 'FileProjectEditor', String(error))
       toast.error(t('dialog.openFailed'))
       setWorkspace(undefined)
@@ -154,6 +197,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
 
   async function save() {
     if (pending.current || !workspace || !active?.revision || active.readOnly || !dirty) return
+    clearInference()
     pending.current = true
     setBusy(true)
     const start = saveClock()
@@ -197,6 +241,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       if (!(kind === 'finalize' ? lifecycle?.canFinalize : lifecycle?.canArchive)) return
       command = { ...base, kind }
     }
+    clearInference()
     pending.current = true
     setBusy(true)
     let committed = false
@@ -223,6 +268,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     if (!next) {
       if (pending.current) return
       if (dirty) { toast.warning(t('project.fileEditorSaveFirst')); return }
+      clearInference()
       if (workspace) void ipc.invoke('project:file-editor-close', workspace.token).catch(error => renderLog('warn', 'FileProjectEditor', String(error)))
       setWorkspace(undefined)
       setText('')
@@ -244,6 +290,11 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     void load(projectPath)
   })
   useEffect(() => globalEventBus.on('OPEN_FILE_PROJECT_EDITOR', request => openFromProjectEntry(request)), [])
+  useEffect(() => () => {
+    const run = inferenceRun.current
+    inferenceRun.current = undefined
+    run?.abort()
+  }, [])
 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
@@ -263,6 +314,26 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               )}
               {indexBatch?.path === workspace.path && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void indexImport()}>{t('project.fileEditorIndexImport')}</Button>
+              )}
+              {indexBatch?.path === workspace.path && indexBatch.indexed && !inferring && (
+                <Button variant="outline" disabled={busy || dirty} onClick={() => void inferImport()}>{t('project.fileEditorInferImport')}</Button>
+              )}
+              {inferring && (
+                <div className="flex flex-wrap items-center gap-2">
+                  <p role="status" className="text-sm">{t('project.fileEditorInferring')}</p>
+                  <Button variant="outline" onClick={clearInference}>{t('action.cancel')}</Button>
+                </div>
+              )}
+              {inferencePreview && (
+                <section className="flex flex-col gap-2" aria-label={t('project.fileEditorInferencePreview')}>
+                  <h3 className="font-medium">{t('project.fileEditorInferencePreview')}</h3>
+                  {(Object.keys(inferenceLabels) as Array<keyof FileImportInference>).map(field => inferencePreview[field] && (
+                    <div key={field}>
+                      <h4 className="text-sm font-medium">{t(inferenceLabels[field])}</h4>
+                      <p className="whitespace-pre-wrap break-words text-sm">{inferencePreview[field]}</p>
+                    </div>
+                  ))}
+                </section>
               )}
               {stagedImport && (
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void importChapters() }}>
@@ -301,7 +372,10 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               {active && (
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
                   <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || busy}
-                    onChange={event => setText(event.target.value)}
+                    onChange={event => {
+                      if (inferenceRun.current || inferencePreview) clearInference()
+                      setText(event.target.value)
+                    }}
                     className="resize-y rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t('action.save')}</Button>

@@ -111,7 +111,7 @@ test('restores candidate operations and verifies import snapshots against receip
     expect(reopened.tabs).toMatchObject([{ content: create.content, readOnly: false }])
     expect(await invoke('commit', reopened.token, create)).toEqual({ status: 'committed', revision: reopened.tabs[0].revision })
     await expect(invoke('commit', reopened.token, { ...create, content: 'different request' })).rejects.toThrow()
-    const source = [{ title: 'Imported A', content: 'text A' }, { title: 'Imported B', content: 'text B' }]
+    const source = [{ title: 'Imported World', content: 'text A' }, { title: 'Imported B', content: 'text B' }]
     expect(await invoke('import-source', reopened.token, 4, source)).toEqual({ projectId, chapters: [] })
     const indexPath = join(project, '.novelforge/file-import-index.v1.db')
     expect(await invoke('index-import', reopened.token, 4, source)).toEqual({ indexed: 0, chunks: 0 })
@@ -140,6 +140,14 @@ test('restores candidate operations and verifies import snapshots against receip
         JOIN import_chunks c ON c.id = import_fts.rowid WHERE import_fts MATCH 'text' ORDER BY c.chapter_number`).all()
       const rows = snapshot.chapters.map(({ number, revision, content }) => ({ chapter_number: number, revision, content }))
       expect(matches()).toEqual(rows)
+      index.prepare(`INSERT INTO import_chunks (chapter_id, chapter_number, revision, title, ordinal, content, tokens)
+        VALUES (?, 4, ?, 'Old', 100, 'old revision', 'world'), (?, 4, ?, 'Other', 0, 'other chapter', 'world')`)
+        .run(snapshot.chapters[0].chapterId, '0'.repeat(64), 'ch_00000000', snapshot.chapters[0].revision)
+      const context = await invoke('import-inference', withImports.token, 4, source) as {
+        projectId: string; revisions: Array<{ chapterId: string; revision: string }>; excerpts: Array<{ content: string }>
+      }
+      expect(context.revisions).toEqual(snapshot.chapters.map(({ chapterId, revision }) => ({ chapterId, revision })))
+      expect(context.excerpts.map(excerpt => excerpt.content)).toEqual(['text A'])
       index.exec(`CREATE TRIGGER fail_second BEFORE INSERT ON import_chunks WHEN NEW.chapter_number = 5
         BEGIN SELECT RAISE(ABORT, 'index interrupted'); END`)
       await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('index interrupted')
@@ -198,6 +206,7 @@ test('restores candidate operations and verifies import snapshots against receip
       resumeRead()
       await rejected
       await expect(invoke('import-source', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
+      await expect(invoke('import-inference', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
       await expect(invoke('index-import', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
     } finally {
       resumeRead()

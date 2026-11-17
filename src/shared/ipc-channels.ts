@@ -118,6 +118,7 @@ export type FileDraftCommand = { chapterId: string } & (
 )
 
 export interface FileImportChapter { title: string; content: string }
+export type FileImportExcerpt = FileImportChapter & { number: number }
 
 export interface ProjectChannels {
   'project:file-editor-open': {
@@ -146,6 +147,15 @@ export interface ProjectChannels {
   'project:file-editor-index-import': {
     args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
     return: { indexed: number; chunks: number }
+  }
+  'project:file-editor-import-inference': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: {
+      projectId: string
+      revisions: Array<{ chapterId: string; revision: string }>
+      samples: FileImportExcerpt[]
+      excerpts: FileImportExcerpt[]
+    }
   }
   'project:file-editor-preview': {
     args: [token: string, chapterId: string, revisionId: number]

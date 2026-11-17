@@ -50,7 +50,7 @@
 | 38 | [副本验证包](38-storage-export-verification.md) | 独立校验、合成数据与中断恢复证据 | E3 已提交 |
 | 39 | [旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) | 打包旧版对照、隔离屏障与完整备份恢复 | E4 已提交 |
 | 40 | [文件存储切换设计](40-file-storage-cutover-design.md) | 项目级草稿映射、激活、文档身份及回退 | F1 映射及无界面联调已交付 |
-| 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入写入恢复和正文导入 |
+| 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入写入恢复、正文导入、全文索引和设定推演预览 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

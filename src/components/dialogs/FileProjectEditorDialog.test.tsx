@@ -7,7 +7,9 @@ import { globalEventBus } from '../../shared/event-bus'
 import { toast } from '../ui/Toast'
 
 const invoke = vi.hoisted(() => vi.fn())
+const infer = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
+vi.mock('../../services/workflows/file-import-inference', () => ({ inferFileImport: infer }))
 vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('../ui/Toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
@@ -25,7 +27,7 @@ async function click(label: string) {
   const button = [...document.querySelectorAll('button')].find(item => item.textContent === label)!
   await act(async () => button.click())
 }
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset() })
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset() })
 
 test('opens a routed directory through the candidate IPC without another folder picker', async () => {
   invoke.mockResolvedValue({ token: 'session', tabs: [], documents: [], missing: [] })
@@ -69,6 +71,18 @@ test('previews selected files and opens the imported chapter only after confirma
   expect(invoke).toHaveBeenLastCalledWith('project:file-editor-index-import', 'reopened', 4, [{ title: 'Imported', content: 'text' }])
   expect(invoke.mock.calls.filter(([channel]) => channel === 'project:file-editor-import')).toHaveLength(1)
   expect(toast.success).toHaveBeenCalledWith('project.fileEditorIndexDone')
+  infer.mockResolvedValueOnce({ worldSetting: 'A flooded world' })
+  await click('project.fileEditorInferImport')
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('A flooded world')
+
+  let complete!: (result: { worldSetting: string }) => void
+  infer.mockReturnValueOnce(new Promise(resolve => { complete = resolve }))
+  await click('project.fileEditorInferImport')
+  const signal = infer.mock.lastCall![3] as AbortSignal
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/other' }) })
+  expect(signal.aborted).toBe(true)
+  await act(async () => { complete({ worldSetting: 'Late result' }) })
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Late result')
 })
 
 test('keeps unsaved file text when another project is routed to the editor', async () => {

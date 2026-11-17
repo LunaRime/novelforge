@@ -8,7 +8,7 @@ import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
 import { readFileImportSource } from '../services/file-import-source'
-import { fileImportIndexPath, indexImportedChapters } from '../services/file-import-index'
+import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext } from '../services/file-import-index'
 
 const candidateRecord = '.novelforge/file-editor.json'
 const identityFile = '.novelforge/draft-identity.json'
@@ -179,6 +179,15 @@ export function registerFileProjectEditorController() {
     return loadImportSource(session, assertCurrent, firstNumber, chapters)
   })
 
+  async function checkedImportIndexPath(session: FileEditorSession, mustExist = false) {
+    for (const suffix of ['', '-journal', '-wal', '-shm']) {
+      const kind = await session.inspectKind(fileImportIndexPath + suffix)
+      if (kind !== 'file' && kind !== 'missing') throw new Error('Unsafe file import index path')
+      if (mustExist && !suffix && kind === 'missing') throw new Error('File import index is missing')
+    }
+    return join(session.projectPath, fileImportIndexPath)
+  }
+
   guardedHandle('project:file-editor-index-import', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) => {
     const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
     assertPathAllowedForIpc(session.projectPath, 'write')
@@ -187,13 +196,19 @@ export function registerFileProjectEditorController() {
     return session.repo.withCommitLock(async () => {
       // 在同一把章节写锁内校验发布回执和 revision，再提交派生索引。
       const snapshot = await loadImportSource(session, assertCurrent, firstNumber, chapters)
-      for (const suffix of ['', '-journal', '-wal', '-shm']) {
-        const kind = await session.inspectKind(fileImportIndexPath + suffix)
-        if (kind !== 'file' && kind !== 'missing') throw new Error('Unsafe file import index path')
-      }
+      const path = await checkedImportIndexPath(session)
       assertCurrent()
-      return indexImportedChapters(join(session.projectPath, fileImportIndexPath), snapshot.chapters)
+      return indexImportedChapters(path, snapshot.chapters)
     })
+  })
+
+  guardedHandle('project:file-editor-import-inference', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'read')
+    const snapshot = await loadImportSource(session, assertCurrent, firstNumber, chapters)
+    const path = await checkedImportIndexPath(session, true)
+    assertCurrent()
+    return readImportInferenceContext(path, snapshot)
   })
 
   guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {
