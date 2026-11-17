@@ -13,7 +13,7 @@ import { mergeDatabaseRevision } from '../services/revision-merge-service'
 import { captureBlueprintWriteScope, insertDatabaseMissingBlueprints } from '../services/blueprint-gap-service'
 import { commitDirectoryBlueprints, readDirectoryBlueprintSnapshot } from '../services/directory-blueprint-write-service'
 import { commitDatabaseCharacterEdits, mergeDatabaseCharacterCards, mergeDatabaseDuplicateCharacters, readCharacterEditSnapshot, resolveCharacterFieldTarget } from '../services/character-edits-service'
-import type { CharacterEditsInput, CharacterFieldWrite, DirectorySnapshotRequest, DirectoryWriteInput, MissingBlueprintInput } from '../../src/core'
+import type { BlueprintWriteScope, CharacterEditsInput, CharacterFieldWrite, DirectorySnapshotRequest, DirectoryWriteInput, MissingBlueprintInput } from '../../src/core'
 import type { DraftFinalizationInput, RevisionMergeInput } from '../../src/core'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
@@ -77,8 +77,15 @@ export function registerDatabaseController() {
     return BlueprintRepository.getByChapter(chapterNumber)
   })
 
-  guardedHandle('db:blueprint-upsert', async (_event, data: BlueprintData) => {
+  guardedHandle('db:blueprint-upsert', async (_event, data: BlueprintData, scope?: BlueprintWriteScope) => {
     try {
+      if (scope !== undefined) {
+        // 推演结果附带原连接令牌，连接校验与写入在同一次同步执行中完成。
+        const current = captureBlueprintWriteScope()
+        if (scope?.projectPath !== current.projectPath || scope.token !== current.token) {
+          return { success: false, error: t('error.requestCancelled') }
+        }
+      }
       BlueprintRepository.upsert(data)
       return { success: true }
     } catch (err) {

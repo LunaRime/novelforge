@@ -1,6 +1,7 @@
 import { beforeEach, expect, it, vi } from 'vitest'
 import { createCharacterExtractSteps } from './architecture-workflow'
-import { InferGlobalSettingsCommand } from './commands/import-novel.command'
+import { InferBlueprintsPerChapterCommand, InferGlobalSettingsCommand } from './commands/import-novel.command'
+import { t } from '../../shared/locale'
 import { createImportWorkflow } from './import-workflow'
 import { createCharacterArchiveWorkflow } from './character-archive-workflow'
 import { buildFinalizePostProcessSteps } from './commands/finalize-chapter.command'
@@ -88,6 +89,33 @@ it('rejects an import continuation after reopening the same project', async () =
     { cancelled: false, data: { chapters } }, callbacks(),
   )).rejects.toThrow()
   expect(h.invoke).not.toHaveBeenCalled()
+})
+
+it.each(['reopen', 'cancel', 'rejected-write', 'saved'] as const)('counts only committed import blueprints (%s)', async outcome => {
+  const context = { cancelled: false, data: { chapters: [{ number: 4, title: 'Chapter', content: 'Body', wordCount: 1 }] } }
+  const feedback = callbacks()
+  h.invoke.mockImplementation(async (channel: string) => {
+    if (channel === 'db:blueprint-write-scope') return scope
+    if (channel === 'db:blueprint-upsert') return { success: outcome !== 'rejected-write', error: 'Write rejected' }
+    throw new Error(`Unexpected IPC channel: ${channel}`)
+  })
+  class ImportFixture extends InferBlueprintsPerChapterCommand {
+    protected override async callLLM() {
+      if (outcome === 'reopen') h.project.projectSession++
+      if (outcome === 'cancel') context.cancelled = true
+      return '{"title":"Generated"}'
+    }
+  }
+  const run = new ImportFixture().execute({ step: {}, context, callbacks: feedback })
+  if (outcome === 'reopen' || outcome === 'cancel') {
+    await expect(run).rejects.toThrow()
+    expect(h.invoke.mock.calls).toEqual([['db:blueprint-write-scope']])
+    return
+  }
+  await run
+  expect(h.invoke).toHaveBeenLastCalledWith('db:blueprint-upsert', expect.objectContaining({ chapterNumber: 4, title: 'Generated' }), scope)
+  expect(feedback.log).toHaveBeenCalledWith(t('log.import.blueprintResult')
+    .replace('{ok}', outcome === 'saved' ? '1' : '0').replace('{fail}', outcome === 'saved' ? '0' : '1'))
 })
 
 it.each([false, true])('keeps archive writes and pipeline status in the originating session (reopen=%s)', async reopen => {

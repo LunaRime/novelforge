@@ -791,7 +791,7 @@ export interface DatabaseChannels {
   'db:blueprint-get-all': { args: []; return: BlueprintData[] }
   'db:blueprint-get-all-sorted': { args: [config: { key: string; direction: string }]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }
-  'db:blueprint-upsert': { args: [data: BlueprintData]; return: { success: boolean; error?: string } }
+  'db:blueprint-upsert': { args: [data: BlueprintData, scope?: BlueprintWriteScope]; return: { success: boolean; error?: string } }
   'db:blueprint-upsert-many': { args: [items: BlueprintData[]]; return: { success: boolean; error?: string } }
   'db:blueprint-update-notes': { args: [chapterNumber: number, notes: string]; return: { success: boolean; error?: string } }
   'db:blueprint-delete': { args: [chapterNumber: number]; return: { success: boolean; error?: string } }

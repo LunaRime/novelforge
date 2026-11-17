@@ -4,7 +4,7 @@
  * 三个独立 Command 组成逆向推演全链路：
  * 1. ImportInitializeCommand — 写入正文 + 构建知识库
  * 2. InferGlobalSettingsCommand — 向量采样 + AI 推演全局配置/架构/角色
- * 3. InferBlueprintsPerChapterCommand — 按章逐一推演精准蓝图 + 蓝图入向量库 + 拼装轻量全局摘要
+ * 3. InferBlueprintsPerChapterCommand — 逐章推演并保存蓝图
  */
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
@@ -323,8 +323,13 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
   private static readonly CONCURRENCY_LIMIT = 3
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
-    const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
+    const source = captureProjectConfigSource()
+    if (!source) throw new Error(t('error.noProject'))
+    const stopped = () => context.cancelled || !isProjectConfigCurrent(source)
+    const assertCurrent = () => {
+      if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+      if (!isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
+    }
 
     const chapters = context.data.chapters as ImportedChapter[]
     const configSummary = (context.data.novelConfigSummary as string) || t('inject.import.configSummaryUnavailable')
@@ -332,6 +337,12 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
 
     const template = getPromptTemplate('infer_single_chapter_blueprint')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.import.templateNameInferBlueprint')))
+
+    // 在模型调用前捕获数据库连接令牌。同路径重开后也不能提交旧结果。
+    assertCurrent()
+    const scope = await ipc.invoke('db:blueprint-write-scope')
+    assertCurrent()
+    if (scope?.projectPath !== source.path || !scope.token) throw new Error(t('error.requestCancelled'))
 
     callbacks.log(t('log.import.inferringBlueprints')
       .replace('{count}', String(chapters.length))
@@ -355,6 +366,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     }
 
     const tasks = chapters.map((ch) => async () => {
+      if (stopped()) return
       try {
         const prompt = new ImportPromptBuilder(template)
           .withChapterContent(ch.content.slice(0, 6000)) // 限制单章 Prompt 长度
@@ -367,9 +379,11 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           prompt,
           template.systemRole || t('role.novelAnalyst'),
           callbacks,
-          { responseFormat: { type: 'json_object' } }
+          { responseFormat: { type: 'json_object' } },
+          context,
         )
 
+        assertCurrent()
         const blueprint = this.parseJSON<Record<string, unknown>>(rawResult)
 
         // 确保必要字段
@@ -394,11 +408,14 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           priority: 0,
         }
 
-        await ipc.invoke('db:blueprint-upsert', finalBlueprint)
+        const result = await ipc.invoke('db:blueprint-upsert', finalBlueprint, scope)
+        assertCurrent()
+        if (result?.success !== true) throw new Error(result?.error || t('status.unknown'))
 
         completedCount++
         callbacks.log(t('log.import.blueprintDone').replace('{chapter}', String(ch.number)))
       } catch (err) {
+        if (stopped()) return
         failedCount++
         callbacks.log(t('log.import.blueprintFailed')
           .replace('{chapter}', String(ch.number))
@@ -412,6 +429,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     })
 
     await runWithConcurrency(tasks, InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT)
+    assertCurrent()
 
     callbacks.log(t('log.import.blueprintDoneTitle'))
     callbacks.log(t('log.import.blueprintResult')
