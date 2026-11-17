@@ -18,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # Windows 和 macOS 的 Vitest 耗时最长，各用三个运行器分担测试文件。
+  # Windows 分三片，macOS 分两片以减少等待运行器的概率。
   # Ubuntu 用单个作业运行全量测试，三平台均保留完整覆盖。
   test:
     name: Test (${{ matrix.os }}${{ matrix.shard && format(', {0}', matrix.shard) || '' }})
@@ -27,10 +27,14 @@ jobs:
       # 保留其余系统和分片的结果，便于定位失败。
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-latest]
+        os: [windows-latest]
         shard: ['1/3', '2/3', '3/3']
         include:
           - os: ubuntu-latest
+          - os: macos-latest
+            shard: '1/2'
+          - os: macos-latest
+            shard: '2/2'
     steps:
       - uses: actions/checkout@v4
       - uses: ./.github/actions/setup-ci
