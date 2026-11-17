@@ -22,6 +22,7 @@ vi.mock('./fs-controller', () => ({ assertPathAllowedForIpc: (path: string) => p
 
 import { registerFileProjectEditorController } from './file-project-editor-controller'
 
+// 用真实文件与 SQLite 覆盖多次发布和中断恢复，给 Windows CI 的磁盘操作留出余量。
 test('restores candidate operations and verifies import snapshots against receipts and session', async () => {
   const root = await mkdtemp(join(tmpdir(), 'nf-file-editor-ipc-'))
   try {
@@ -416,4 +417,4 @@ test('restores candidate operations and verifies import snapshots against receip
     await expect(invoke('save', switched.token, imported.firstLocator, switched.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
-})
+}, 20000)
