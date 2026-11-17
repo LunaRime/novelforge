@@ -15,8 +15,8 @@ import { WorkflowStartError, type WorkflowStartRequest } from '../../../core'
 /** 区间单次最多章数（2026-10-02 评审 I1：模型幻觉大区间 → 无界静默启动的护栏） */
 const MAX_RANGE_CHAPTERS = 20
 
-export function createStartWorkflowTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createStartWorkflowTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'start_workflow',
   description: t('tool.startWorkflowDesc'),
   source: 'builtin',
@@ -49,7 +49,7 @@ return buildRuntimeAgentTool(ports, {
   },
   requiresConfirmation: true,
   isReadOnly: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const sourceProject = captureAgentProject(ports)
     const startWorkflow = (request: WorkflowStartRequest) => {
       if (!sourceProject.isCurrent()) throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))

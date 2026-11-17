@@ -22,6 +22,7 @@ import { logger } from '../utils/logger'
 import { WorkflowOutputFileStore } from '../utils/workflow-output-store'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertProjectWriteHasNoLinks } from '../security/project-write-path'
+import { assertFileProjectWritePath } from '../security/file-project-write-path'
 
 /**
  * 路径权限（L4 S8）——判定逻辑在 `electron/security/grants.ts`（纯模块，可离线单测）。
@@ -172,6 +173,7 @@ export function revokeGrantedPath(absPath: string): void {
 function validateSandbox(filePath: string, intent: PathIntent = 'read'): string {
   const safePath = assertPathAllowed(filePath, intent, currentPathPolicy())
   if (intent === 'write') assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
+  if (intent !== 'read') assertFileProjectWritePath(safePath, intent)
   return safePath
 }
 
@@ -304,17 +306,20 @@ export function registerFSController() {
     }
   })
 
-  // 二进制写入（PNG 截图导出——年度报告/分享卡；与 write-file 同安全模式）
+  // 二进制写入（PNG 截图导出）。持锁后重新检查目标，避免等待期间路径归属发生变化。
   guardedHandle('fs:write-buffer', async (_event, filePath: string, content: Uint8Array) => {
     try {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
+        validateSandbox(safePath, 'write')
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         const tempPath = `${safePath}.${Date.now()}.tmp`
-        await fsPromises.writeFile(tempPath, Buffer.from(content))
-        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
-        await fsPromises.rename(tempPath, safePath)
+        try {
+          await fsPromises.writeFile(tempPath, Buffer.from(content))
+          validateSandbox(safePath, 'write')
+          await fsPromises.rename(tempPath, safePath)
+        } finally { await fsPromises.unlink(tempPath).catch(() => {}) }
         return { success: true }
       })
     } catch (error) {
@@ -322,18 +327,21 @@ export function registerFSController() {
     }
   })
 
-  // 跨平台绝对安全异步写入（防踩空）
+  // 普通文件走临时文件替换；文件项目正文由专用编辑器提交。
   guardedHandle('fs:write-file', async (_event, filePath: string, content: string) => {
     try {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
+        validateSandbox(safePath, 'write')
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
-        // 先写到临时文件再原位替换，绝对防止 0KB 碎屑踩空现象
+        // 完整写入临时文件后才替换目标。
         const tempPath = `${safePath}.${Date.now()}.tmp`
-        await fsPromises.writeFile(tempPath, content, 'utf-8')
-        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
-        await fsPromises.rename(tempPath, safePath)
+        try {
+          await fsPromises.writeFile(tempPath, content, 'utf-8')
+          validateSandbox(safePath, 'write')
+          await fsPromises.rename(tempPath, safePath)
+        } finally { await fsPromises.unlink(tempPath).catch(() => {}) }
         return { success: true }
       })
     } catch (error) {
@@ -395,12 +403,15 @@ export function registerFSController() {
     try {
       const safePath = validateSandbox(filePath, 'write')
       return await withFileMutex(filePath, async () => {
+        validateSandbox(safePath, 'write')
         await fsPromises.mkdir(path.dirname(safePath), { recursive: true })
         assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
         const tempPath = `${safePath}.${Date.now()}.tmp`
-        await fsPromises.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')
-        assertProjectWriteHasNoLinks(safePath, getCurrentProjectPath())
-        await fsPromises.rename(tempPath, safePath)
+        try {
+          await fsPromises.writeFile(tempPath, JSON.stringify(data, null, 2), 'utf-8')
+          validateSandbox(safePath, 'write')
+          await fsPromises.rename(tempPath, safePath)
+        } finally { await fsPromises.unlink(tempPath).catch(() => {}) }
         return { success: true }
       })
     } catch (error) {

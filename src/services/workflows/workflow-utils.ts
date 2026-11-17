@@ -781,13 +781,17 @@ function parseScope(scope: string): { sourceType: string; sourceId: string } {
 export async function readPostProcessStatus(
   _projectPath: string,
   scope: string,
+  assertCurrent?: () => void,
 ): Promise<PostProcessStatus | null> {
   try {
+    assertCurrent?.()
     const { sourceType, sourceId } = parseScope(scope)
     const run = await ipc.invoke('db:post-process-get-latest-run', sourceType, sourceId)
+    assertCurrent?.()
     if (!run) return null
 
     const steps = await ipc.invoke('db:post-process-get-steps', run.id)
+    assertCurrent?.()
 
     const status: PostProcessStatus = {
       scope,
@@ -844,6 +848,7 @@ export interface PipelineOptions {
   retryCount?: number
   /** true = 只重跑失败步骤（修复模式） */
   onlyFailed?: boolean
+  assertCurrent?: () => void
 }
 
 /**
@@ -867,31 +872,38 @@ export async function runPostProcessPipeline(
 ): Promise<PostProcessStatus> {
   const retryCount = options?.retryCount ?? 2
   const onlyFailed = options?.onlyFailed ?? false
+  const assertCurrent = options?.assertCurrent
 
   const { sourceType, sourceId } = parseScope(scope)
 
   // 判断是否存在已有 instance
+  assertCurrent?.()
   let run = await ipc.invoke('db:post-process-get-latest-run', sourceType, sourceId)
+  assertCurrent?.()
 
   if (!onlyFailed || !run) {
     // 新建跑批
     callbacks.log(t('log.postProcessInit'))
+    assertCurrent?.()
     const createRes = await ipc.invoke('db:post-process-create-run', {
       triggerSourceType: sourceType,
       triggerSourceId: sourceId,
       sourceLabel,
       steps: steps.map(s => ({ key: s.key, label: s.label, critical: s.critical }))
     })
+    assertCurrent?.()
     if (!createRes.success || !createRes.id) {
       throw new Error(t('error.postProcessCreateRun').replace('{error}', String(createRes.error ?? '')))
     }
     run = await ipc.invoke('db:post-process-get-latest-run', sourceType, sourceId)
+    assertCurrent?.()
   }
 
   if (!run) throw new Error(t('error.postProcessFetch'))
 
   const runId = run.id
   const runSteps = await ipc.invoke('db:post-process-get-steps', runId)
+  assertCurrent?.()
   const stepMap = new Map((runSteps as unknown as Array<Record<string, unknown>>).map((s) => [s.stepKey, s]))
 
   // ===== DAG 拓扑排序 + 层级并行执行 =====
@@ -943,6 +955,7 @@ export async function runPostProcessPipeline(
     if (hasCriticalFailure) break
 
     const levelPromises = level.map(async (step) => {
+      assertCurrent?.()
       const existingStep = stepMap.get(step.key)
 
       if (onlyFailed && existingStep?.ok) {
@@ -952,7 +965,11 @@ export async function runPostProcessPipeline(
 
       const stepDeps = (step.dependsOn ?? []).join(', ')
       callbacks.log(t('log.stepRunning').replace('{label}', step.label) + (stepDeps ? t('log.stepDepsSuffix').replace('{deps}', stepDeps) : ''))
-      const result = await withRetry(() => step.executor(callbacks), retryCount, step.label, callbacks)
+      const result = await withRetry(() => {
+        assertCurrent?.()
+        return step.executor(callbacks)
+      }, retryCount, step.label, callbacks)
+      assertCurrent?.()
 
       if (result.ok) {
         await ipc.invoke('db:post-process-mark-step-ok', runId, step.key)
@@ -974,7 +991,8 @@ export async function runPostProcessPipeline(
   }
 
   // 返回最终状态汇总供 UI 展示
-  const status = await readPostProcessStatus(projectPath, scope)
+  const status = await readPostProcessStatus(projectPath, scope, assertCurrent)
+  assertCurrent?.()
   if (!status) {
     throw new Error(t('error.summaryFetch'))
   }

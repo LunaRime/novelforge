@@ -207,6 +207,7 @@ export const promptTexts = {
   'template.saveAs': { 'zh-CN': '存为模板', 'en-US': 'Save as Template', 'ru-RU': 'Сохранить как шаблон' },
   'template.apply': { 'zh-CN': '应用模板', 'en-US': 'Apply Template', 'ru-RU': 'Применить шаблон' },
   'template.empty': { 'zh-CN': '暂无模板', 'en-US': 'No templates', 'ru-RU': 'Нет шаблонов' },
+  'template.loadFailed': { 'zh-CN': '模板列表加载失败', 'en-US': 'Could not load templates', 'ru-RU': 'Не удалось загрузить шаблоны' },
   'template.saveSuccess': { 'zh-CN': '模板已保存: {name}', 'en-US': 'Template saved: {name}', 'ru-RU': 'Шаблон сохранён: {name}' },
   'template.saveFailed': { 'zh-CN': '模板保存失败: {error}', 'en-US': 'Failed to save template: {error}', 'ru-RU': 'Не удалось сохранить шаблон: {error}' },
   'template.applySuccess': { 'zh-CN': '已应用模板: {name}', 'en-US': 'Template applied: {name}', 'ru-RU': 'Шаблон применён: {name}' },

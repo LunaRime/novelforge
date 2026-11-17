@@ -13,10 +13,11 @@ import type { RuntimeEvent } from '../../core'
  */
 
 import { t } from '../../shared/locale'
-import { canExecuteConcurrently, requiresToolApproval } from '../../core'
+import { canExecuteConcurrently, requiresToolApproval, waitForToolApproval } from '../../core'
+import type { AgentRuntimePorts } from './runtime-ports'
 import { toolRegistry, type AgentTool, type ToolResult } from './tool-registry'
 import type { ApprovalDecision } from './approval'
-import { outputPostProcessor } from './output-post-processor'
+import { OutputPostProcessor, outputPostProcessor } from './output-post-processor'
 import { looksMultiStep } from './task-anchor'
 import { ProgressTracker, type AgentProgress } from './progress-tracker'
 import { estimateTokens, truncateToTokenBudget } from './token-budget'
@@ -119,6 +120,9 @@ export interface AgentEngineCallbacks {
 
 /** 引擎依赖注入（保持 agent-engine 无 electron 依赖可单测；agent-store 注入真实 IPC 实现） */
 export interface AgentEngineDeps {
+  tools?: Pick<typeof toolRegistry, 'get' | 'listAll'>
+  runtime?: AgentRuntimePorts
+  isCurrent?: () => boolean
   /** 长工具结果写盘（>800 tokens 落盘引用；失败返回 success:false 时引擎回退截断注入） */
   writeResult?: (content: string) => Promise<{ success: boolean; path?: string; error?: string }>
   /**
@@ -191,6 +195,10 @@ export async function runAgentLoop(
 ): Promise<void> {
   const allToolCalls: ToolCallInfo[] = []
   const allArtifacts: RuntimeEvent[] = []
+  const tools = deps?.tools ?? deps?.runtime?.tools ?? toolRegistry
+  const postProcessor = deps?.runtime || deps?.tools ? new OutputPostProcessor() : outputPostProcessor
+  const stopped = () => Boolean(abortSignal?.aborted) || deps?.isCurrent?.() === false
+  const finishStopped = () => callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
 
   // 构建消息列表
   const messages: LLMMessage[] = [
@@ -224,10 +232,7 @@ export async function runAgentLoop(
 
   while (steps < MAX_STEPS) {
     // 检查中止信号
-    if (abortSignal?.aborted) {
-      callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
-      return
-    }
+    if (stopped()) return finishStopped()
 
     steps++
 
@@ -243,10 +248,12 @@ export async function runAgentLoop(
     const xmlStreamFilter = createToolProtocolStreamFilter()
     try {
       llmResponse = await generateFn(budgetedMessages, modelId, (chunk) => {
+        if (stopped()) return
         streamed = true
         const safe = dsmlStreamFilter.push(xmlStreamFilter.push(chunk))
         if (safe) callbacks.onTextChunk(safe)
       })
+      if (stopped()) return finishStopped()
       const xmlTail = xmlStreamFilter.flush()
       const streamTail = dsmlStreamFilter.push(xmlTail) + dsmlStreamFilter.flush()
       if (streamTail) callbacks.onTextChunk(streamTail)
@@ -258,10 +265,7 @@ export async function runAgentLoop(
       )
     } catch (error) {
       // 取消导致的生成中断走"已停止"而不是错误提示
-      if (abortSignal?.aborted) {
-        callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
-        return
-      }
+      if (stopped()) return finishStopped()
       // 可恢复错误（上下文超限类）→ withhold-then-recover：降档压缩 → meta 注入 → 熔断放行。
       // 非可恢复错误直接放行（无额外调用 = 无额外费用）。
       const errText = String(error)
@@ -293,10 +297,7 @@ export async function runAgentLoop(
     }
 
     // 检查中止
-    if (abortSignal?.aborted) {
-      callbacks.onDone(fullAssistantText + '\n\n_' + t('agent.stoppedGenerating') + '_', allToolCalls, allArtifacts)
-      return
-    }
+    if (stopped()) return finishStopped()
 
     // 解析 LLM 回复：分离文本和 tool_call（含 DeepSeek DSML 原生标记 repair，见 dsml-tool-calls.ts）
     const parsed = parseToolCalls(llmResponse)
@@ -304,7 +305,7 @@ export async function runAgentLoop(
     const { parseErrors } = parsed
     // 裸 JSON 工具调用兜底（Qwen 等 OpenAI-compatible 模型）
     if (toolCalls.length === 0) {
-      const bare = parseBareJsonToolCalls(llmResponse, (name) => !!toolRegistry.get(name))
+      const bare = parseBareJsonToolCalls(llmResponse, (name) => !!tools.get(name))
       if (bare) {
         textParts = bare.textParts
         toolCalls = bare.toolCalls
@@ -408,7 +409,7 @@ export async function runAgentLoop(
 
       // 运行后处理管道
       try {
-        const processed = await outputPostProcessor.process(fullAssistantText, {
+        const processed = await postProcessor.process(fullAssistantText, {
           artifacts: allArtifacts,
           messages: messages,
           modelId,
@@ -451,7 +452,7 @@ export async function runAgentLoop(
         contentOffset: fullAssistantText.length,
       }
       allToolCalls.push(info)
-      const registered = toolRegistry.get(tc.name)
+      const registered = tools.get(tc.name)
       // 白名单 fail-closed：名单外的工具按「不可用」处理（不执行、走拒绝观察）。
       // tool 置 undefined 后，分批器已按「未知工具」单独成批（不会与只读批并行）——无需另改分批逻辑。
       const permitted = !allowed || allowed.includes(tc.name)
@@ -461,9 +462,7 @@ export async function runAgentLoop(
     })
     // 白名单与 options 同源透传给执行层（供「不在白名单」观察文案列可用集合）——
     // 两条执行路径（单元素批 / 只读并行批）共用同一个 execDeps，避免只补一处
-    const execDeps: AgentEngineDeps | undefined = options?.allowedTools
-      ? { ...deps, allowedTools: options.allowedTools }
-      : deps
+    const execDeps = { ...deps, tools, allowedTools: options?.allowedTools ?? deps?.allowedTools, stopped, signal: abortSignal }
 
     // 分批使用显式并发元数据；只读只是必要条件，task 等有共享状态的工具仍串行。
     // 1. 连续只读且并发安全工具归入当前只读批，满 MAX_PARALLEL_READ_TOOLS 封批
@@ -496,6 +495,7 @@ export async function runAgentLoop(
     // 批执行：观察注入顺序 = 各批内 job 原始顺序（并行完成先后不影响拼接顺序——严格保持
     // tool_call 出现顺序，与现状 <tool_result name=...> 顺序一致）
     for (const batch of batches) {
+      if (stopped()) return finishStopped()
       if (batch.length === 1) {
         // 单工具批（写/需确认/未知工具 + 单个只读——现状串行路径逐字节等价）
         const outcome = await executeToolJob(batch[0], callbacks, execDeps)
@@ -512,6 +512,7 @@ export async function runAgentLoop(
         if (outcome.artifacts.length > 0) allArtifacts.push(...outcome.artifacts)
       }
     }
+    if (stopped()) return finishStopped()
 
     // 将所有 tool 结果作为 user role 的 observation 注入
     // 加上明确提示，防止 LLM 误以为这是用户新发言
@@ -530,7 +531,7 @@ export async function runAgentLoop(
 
   // 运行后处理管道
   try {
-    const processed = await outputPostProcessor.process(fullAssistantText, {
+    const processed = await postProcessor.process(fullAssistantText, {
       artifacts: allArtifacts,
       messages: messages,
       modelId,
@@ -584,7 +585,7 @@ interface ToolJobOutcome {
 async function executeToolJob(
   job: ToolCallJob,
   callbacks: AgentEngineCallbacks,
-  deps: AgentEngineDeps | undefined,
+  deps: AgentEngineDeps & { tools: NonNullable<AgentEngineDeps['tools']>; stopped: () => boolean; signal?: AbortSignal },
 ): Promise<ToolJobOutcome> {
   const { tc, tool, info } = job
   const artifacts: RuntimeEvent[] = []
@@ -594,7 +595,7 @@ async function executeToolJob(
     info.status = 'failed'
     // 委派白名单（C 档第二轮）：可用集合取白名单（给定）而非全量注册表 ——
     // 否则等于告诉子 agent 去调它调不了的工具
-    const availableNames = (deps?.allowedTools ?? toolRegistry.listAll().map(x => x.name)).join(', ')
+    const availableNames = (deps.allowedTools ?? deps.tools.listAll().map(x => x.name)).join(', ')
     const reason = job.deniedByAllowlist
       ? t('engine.toolNotDelegated').replace('{name}', tc.name).replace('{tools}', availableNames)
       : t('engine.unknownToolAvailable').replace('{name}', tc.name).replace('{tools}', availableNames)
@@ -613,8 +614,8 @@ async function executeToolJob(
     info.status = 'waiting_confirm'
     callbacks.onToolCallStart(info)
 
-    const confirmed = await callbacks.onToolCallConfirmRequired(info)
-    if (!confirmed) {
+    const confirmed = await waitForToolApproval(() => callbacks.onToolCallConfirmRequired(info), deps.signal)
+    if (!confirmed || deps.stopped()) {
       info.status = 'failed'
       info.error = t('agent.userRejected')
       callbacks.onToolCallComplete(info)
@@ -633,7 +634,9 @@ async function executeToolJob(
   try {
     // 工具级超时覆盖（C 档第二轮 C1）：`task` 派子 agent 的设计上限 300s + 审批卡 120s，
     // 用全局 30s 会把所有 >30s 的子任务腰斩（结论永远回不到父端，子 agent 还在空烧 token）
-    const result = await executeToolWithTimeout(tool.execute, tc.arguments, tool.timeoutMs ?? TOOL_TIMEOUT_MS)
+    const result = await executeToolWithTimeout(
+      args => tool.execute(args, deps.runtime), tc.arguments, tool.timeoutMs ?? TOOL_TIMEOUT_MS,
+    )
 
     // 截断过长的结果
     const truncatedContent = truncateResult(result.content, TOOL_RESULT_MAX_TOKENS)

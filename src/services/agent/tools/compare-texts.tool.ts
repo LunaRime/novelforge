@@ -6,10 +6,9 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 适用于一致性检查、去重检测、情节对比等场景。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
-export function createCompareTextsTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createCompareTextsTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'compare_texts',
   description: t('tool.compareDesc'),
   source: 'builtin',
@@ -28,7 +27,7 @@ return buildRuntimeAgentTool(ports, {
     required: ['query', 'candidates'],
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const query = args.query as string
     const candidatesStr = args.candidates as string
 
@@ -87,7 +86,7 @@ return buildRuntimeAgentTool(ports, {
         }
       }
 
-      const result = await ipc.invoke('embedding:compare', query, candidates)
+      const result = await ports.io.invoke('embedding:compare', query, candidates)
 
       if (!result.success) {
         return {

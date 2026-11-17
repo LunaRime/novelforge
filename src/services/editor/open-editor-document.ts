@@ -7,6 +7,15 @@ import { t } from '../../shared/locale'
 
 const readFailure = () => new Error(t('tool.readFileFailed'))
 
+async function resolveDraft(draftId: number, name: string, assertCurrent: () => void): Promise<OpenedEditorDocument | null> {
+  if (!Number.isSafeInteger(draftId) || draftId <= 0) throw readFailure()
+  const full = await ipc.invoke('db:draft-get-full', draftId)
+  assertCurrent()
+  if (full === null) return null
+  if (typeof full?.content !== 'string') throw readFailure()
+  return { id: `doc:${draftId}`, docId: draftId, locator: draftUri(draftId), name, kind: 'chapter', content: full.content }
+}
+
 /** Renderer IO adapter: each read boundary is checked before another project-scoped IPC. */
 export function createRendererEditorOpenPort(): EditorOpenPort {
   return {
@@ -16,19 +25,21 @@ export function createRendererEditorOpenPort(): EditorOpenPort {
     },
     resolve: async (request, assertCurrent) => {
       assertCurrent()
+      if (request.kind !== 'path') {
+        const { currentProject, loading } = useProjectStore.getState()
+        if (!currentProject || loading) throw new Error(t('error.noProject'))
+      }
+      if (request.kind === 'draft') return resolveDraft(request.draftId, request.name, assertCurrent)
       if (request.kind === 'latest-draft') {
-        if (!useProjectStore.getState().currentProject) throw new Error(t('error.noProject'))
         const draft = await ipc.invoke('db:draft-get-latest', request.chapterNumber)
         assertCurrent()
         if (!draft) return null
-        const locator = draftUri(draft.id)
-        const full = await ipc.invoke('db:draft-get-full', draft.id)
-        assertCurrent()
-        if (!full || typeof full.content !== 'string') throw readFailure()
         const label = t('chapter.label').replace('{n}', String(request.chapterNumber))
         const title = request.chapterTitle
         const titlePart = title && !title.startsWith(label) ? ` ${title}` : (title ?? '')
-        return { id: `doc:${draft.id}`, docId: draft.id, locator, name: `${label}${titlePart}（${t('editor.draft')}）`, kind: 'chapter', content: full.content }
+        const document = await resolveDraft(draft.id, `${label}${titlePart}（${t('editor.draft')}）`, assertCurrent)
+        if (!document) throw readFailure()
+        return document
       }
       const content = await readDocument(request.locator, assertCurrent)
       assertCurrent()
@@ -43,7 +54,10 @@ export function createRendererEditorOpenPort(): EditorOpenPort {
 
 export async function readDocument(locator: string, assertCurrent: () => void): Promise<string> {
   assertCurrent()
-  if (locator.startsWith('vela://') && !useProjectStore.getState().currentProject) throw new Error(t('error.noProject'))
+  if (locator.startsWith('vela://')) {
+    const { currentProject, loading } = useProjectStore.getState()
+    if (!currentProject || loading) throw new Error(t('error.noProject'))
+  }
   const match = /^vela:\/\/(draft|manuscript|revision|review)\/([1-9]\d*)$/.exec(locator)
   if (match) {
     const id = Number(match[2])

@@ -1,4 +1,6 @@
 import { draftUri } from '../vela-protocol'
+import { registerWorkflowSource } from './workflow-source'
+import type { ArchitectureScope } from '../../core'
 /**
  * Renderer workflow adapter. Concrete builders and project guards live here;
  * UI and tools use start-workflow.ts, which injects this port into the pure core.
@@ -6,21 +8,26 @@ import { draftUri } from '../vela-protocol'
  */
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
+import { readStrictChapterBlueprints } from '../chapters/chapter-blueprint-adapter'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import type { WorkflowDefinition } from '../../stores/workflow-store'
-import { toast } from '../../components/ui/Toast'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import type { DirectoryWorkflowParams } from './directory-workflow'
 import { WorkflowStartError, type WorkflowStartPort, type EditorDraft, type ArchitectureGeneration, type ConfigGenerationSize } from '../../core'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 export interface WorkflowAdapterOptions {
+  source?: ArchitectureScope
   onGenerated?: (config: Partial<NovelConfig>) => void
+  confirmBlueprintWarning?: (message: string) => Promise<boolean>
+  /** Optional initiating-view lifetime guard; does not cancel an already started run. */
+  isCallerCurrent?: () => boolean
   assertProject: () => void
 }
 
 export function createWorkflowStartPort(options: WorkflowAdapterOptions): WorkflowStartPort<WorkflowDefinition> {
   const assertProject = options.assertProject
+  const source = options.source ? { ...options.source } : null
 
   // ---- 工作流类型到显示名的映射 ----
 
@@ -45,7 +52,15 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
    */
   function startWithReceipt(definition: WorkflowDefinition, stepByStep = false): Promise<string> {
     return new Promise<string>((resolve, reject) => {
-      useWorkflowStore.getState().startWorkflow(definition, stepByStep, { onStarted: resolve }).catch(reject)
+      useWorkflowStore.getState().startWorkflow(definition, stepByStep, {
+        onStarted: runId => {
+          if (source) {
+            const { activeRuns, history } = useWorkflowStore.getState()
+            registerWorkflowSource(runId, source, [...activeRuns, ...history].map(run => run.id))
+          }
+          resolve(runId)
+        },
+      }).catch(reject)
     })
   }
 
@@ -120,10 +135,15 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
     const displayName = getWorkflowDisplayName('generate_blueprint')
     const { guardDirectoryGeneration } = await import('./workflow-guards')
     assertProject()
-    const guard = await guardDirectoryGeneration()
+    const guard = await guardDirectoryGeneration(assertProject)
     assertProject()
     if (!guard.ok) {
       throw new WorkflowStartError('ERR_GUARD', guard.message || t('error.prereqNotMet'))
+    }
+    if (guard.message && options.confirmBlueprintWarning) {
+      const accepted = await options.confirmBlueprintWarning(guard.message)
+      assertProject()
+      if (!accepted) throw new WorkflowStartError('ERR_CANCELLED', guard.message)
     }
     const { createDirectoryWorkflow } = await import('./directory-workflow')
     assertProject()
@@ -231,21 +251,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
       wordsPerChapter,
       onGenerated: (parsed) => {
         options.assertProject()
-        if (options.onGenerated) { options.onGenerated(parsed); return }
-        const store = useProjectStore.getState()
-        store.snapshotNovelConfig()
-        store.updateNovelConfig(parsed)
-        toast.show({
-          type: 'ai',
-          message: t('novelConfig.aiApplied'),
-          actions: [{
-            label: t('action.undoShort'),
-            onClick: () => {
-              options.assertProject()
-              if (store.restoreNovelConfigSnapshot()) toast.success(t('novelConfig.aiReverted'))
-            },
-          }],
-        })
+        options.onGenerated?.(parsed)
       },
     })
     return { definition, displayName }
@@ -293,6 +299,11 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
     fillGaps: async gaps => {
       const { createGapFillWorkflow } = await import('./verification-workflow')
       assertProject()
+      const existing = new Set((await readStrictChapterBlueprints()).map(row => row.chapterNumber))
+      assertProject()
+      if (gaps.some(gap => gap.missingChapterNumbers.some(chapter => existing.has(chapter)))) {
+        throw new WorkflowStartError('ERR_GUARD', t('verify.gapsChanged'))
+      }
       return { definition: createGapFillWorkflow(gaps.map(gap => ({ ...gap,
         missingChapterNumbers: [...gap.missingChapterNumbers], precedingChapter: null, followingChapter: null,
       }))), displayName: t('workflow.gapFillTitle') }
@@ -337,7 +348,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
   }
 
   /** 获取章节的最新草稿内容 */
-  async function getLatestDraft(chapterNumber: number): Promise<{
+  async function getLatestDraft(chapterNumber: number, options?: { excludeArchived?: boolean }): Promise<{
     filePath: string
     content: string
     title: string
@@ -349,7 +360,10 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
       assertProject()
       if (!drafts || drafts.length === 0) return null
       // 取最新版本
-      const latest = drafts.sort((a, b) => b.version - a.version)[0]
+      const latest = drafts
+        .filter(draft => !options?.excludeArchived || draft.status !== 'archived')
+        .sort((a, b) => b.version - a.version)[0]
+      if (!latest) return null
       const full = await ipc.invoke('db:draft-get-full', latest.id) as { content: string } | null
       assertProject()
       if (!full) return null
@@ -463,7 +477,7 @@ export function createWorkflowStartPort(options: WorkflowAdapterOptions): Workfl
 
   /** 构建定稿工作流 */
   async function buildFinalizeWorkflow(chapterNumber: number) {
-    const draft = await getLatestDraft(chapterNumber)
+    const draft = await getLatestDraft(chapterNumber, { excludeArchived: true })
     assertProject()
     if (!draft) return null
 

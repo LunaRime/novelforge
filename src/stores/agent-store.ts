@@ -15,6 +15,7 @@ import { useCharacterStore } from './character-store'
 import { skillRegistry } from '../services/agent/skill-registry'
 import { parseSlashCommand, parseMentions, mentionsToToolCalls } from '../services/agent/intent-router'
 import { toolRegistry } from '../services/agent/tool-registry'
+import { captureAgentProject, getAgentRuntimePorts, type AgentRuntimePorts } from '../services/agent/runtime-ports'
 import { evaluateApproval, loadApprovalRules, appendApprovalRule, ruleFromApproval, type ApprovalDecision } from '../services/agent/approval'
 import type { RuntimeEvent } from '../core'
 import { estimateTokens, truncateToTokenBudget, initTokenEngine } from '../services/agent/token-budget'
@@ -155,7 +156,7 @@ interface AgentState {
   listSubAgents: () => string
   /** 子 agent 的写操作审批（A 档决策层 + 父方审批卡；超时/取消一律拒绝） */
   requestSubAgentConfirmation: (
-    sessionId: string, description: string, toolCall: ToolCallInfo, signal?: AbortSignal,
+    sessionId: string, description: string, toolCall: ToolCallInfo, signal?: AbortSignal, runtime?: AgentRuntimePorts,
   ) => Promise<boolean>
   /** 处理当前待审批卡（允许 / 拒绝；无卡时为 no-op） */
   resolveSubAgentConfirmation: (allow: boolean) => void
@@ -333,6 +334,7 @@ const pendingConfirmations = new Map<string, {
   decision?: ApprovalDecision
   projectPath?: string | null
   args?: Record<string, unknown>
+  isCurrent?: () => boolean
 }>()
 
 /** 当前活跃的 AbortController（用于取消 ReAct 循环） */
@@ -688,6 +690,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     try {
       // 竞态防护：记录本次生成序号，旧请求（取消后）的 onDone/onError 晚到时不覆盖新请求状态
       const mySeq = ++generationSeq
+      const runtime = getAgentRuntimePorts()
+      const projectSource = captureAgentProject(runtime)
       const llmStore = useLLMStore.getState()
       const currentConv = get().conversations.find(c => c.id === convId)!
       // A 档动态策略：strategy='dynamic' 时按全局思考等级（用户可见的投入旋钮）决定路由层；
@@ -721,7 +725,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         l1BudgetTokens: contextPolicy.l1BudgetTokens,
         // W3（批 3）：仅弱档自动召回记忆（强模型自己会 @ / read_memory）
         autoRecall: contextPolicy.autoRecall,
-      })
+      }, runtime)
 
       // ===== 角色试演注入：会话绑定角色卡时以角色身份回复（OOC 约束在 roleplay prompt 内） =====
       if (currentConv.roleplayCharacter) {
@@ -736,6 +740,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         const ragResult = await retrieveContextForQuery(
           content.trim(),
           DEFAULT_RAG_CONFIG,
+          undefined,
+          runtime,
         )
         if (ragResult && ragResult.chunks.length > 0) {
           // ⚠️ M 级修复：标注检索片段的「非事实」语义——模型曾把检索结果当既定事实直接采信
@@ -761,10 +767,11 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         let prefetchTokens = 0
         for (const call of prefetchCalls) {
           if (prefetchTokens >= MENTION_MAX_TOKENS) break
-          const tool = toolRegistry.get(call.toolName)
+          if (!projectSource.isCurrent()) break
+          const tool = runtime.tools.get(call.toolName)
           if (tool) {
             try {
-              const result = await tool.execute(call.args)
+              const result = await tool.execute(call.args, runtime)
               if (result.success && result.content) {
                 const availableBudget = MENTION_MAX_TOKENS - prefetchTokens
                 const content = availableBudget > 0
@@ -1140,6 +1147,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
       // 走 ipc.invoke（带 30s 超时，同 fs:agent-archive-* 调用惯例）——裸 window.novelforgeAPI.invoke
       // 无超时保护，写盘挂起会让 ReAct 循环该轮永卡；超时 reject → catch → {success:false} → 引擎降级
       const agentDeps: AgentEngineDeps = {
+        runtime,
+        isCurrent: projectSource.isCurrent,
         writeResult: async (content) => {
           try {
             return await ipc.invoke('fs:agent-result-write', content)
@@ -1167,6 +1176,9 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         lastFlushTime = Date.now()
       }
 
+      const unsubscribeProject = useProjectStore.subscribe(() => {
+        if (!projectSource.isCurrent()) abortController.abort()
+      })
       await runAgentLoop(
         systemPrompt,
         historyMessages,
@@ -1212,9 +1224,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           },
           onToolCallConfirmRequired: async (toolCall) => {
             // ===== A 档审批策略层：危险硬拒绝 / workspace 规则命中 → 不打扰用户 =====
-            const projectPath = useProjectStore.getState().currentProject?.path ?? null
+            const projectPath = projectSource.project?.path ?? null
             const rules = projectPath ? await loadApprovalRules(projectPath) : []
-            const tool = toolRegistry.get(toolCall.toolName)
+            if (abortController.signal.aborted || !projectSource.isCurrent()) return false
+            const tool = runtime.tools.get(toolCall.toolName)
             const args = (toolCall.arguments ?? {}) as Record<string, unknown>
             const decision = evaluateApproval({
               projectPath,
@@ -1244,7 +1257,14 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
             // 返回 Promise，等待用户通过 resolveToolConfirmation 响应
             return new Promise<boolean>((resolve) => {
-              pendingConfirmations.set(toolCall.id, { resolve, decision, projectPath, args })
+              const finish = (confirmed: boolean) => {
+                abortController.signal.removeEventListener('abort', abort)
+                pendingConfirmations.delete(toolCall.id)
+                resolve(confirmed)
+              }
+              const abort = () => finish(false)
+              abortController.signal.addEventListener('abort', abort, { once: true })
+              pendingConfirmations.set(toolCall.id, { resolve: finish, decision, projectPath, args, isCurrent: projectSource.isCurrent })
             })
           },
           // 进度接线（约束③）：引擎每轮都发 onProgress，此前无人接 → 数据被丢弃。
@@ -1308,7 +1328,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
           unfinishedCheck: contextPolicy.unfinishedCheck,
         },
         agentDeps,
-      )
+      ).finally(unsubscribeProject)
     } catch (error) {
       updateAssistantMsg(m => ({
         ...m,
@@ -1432,7 +1452,8 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   runSubAgentTask: async ({ description, prompt, tools }) => {
     const conv = get().getActiveConversation()
     if (!conv) return { text: t('subagent.noActiveConversation'), ok: false }
-    const allowed = resolveSubAgentTools(tools)
+    const runtime = getAgentRuntimePorts()
+    const allowed = resolveSubAgentTools(tools, runtime.tools)
     const taskId = computeSubAgentTaskRef(conv.id, description, allowed)
     // 顺序执行（spec §1.2）：M3 通过 isConcurrencySafe:false 将 task 排除并发批；
     // 这里仍防御来自其他调用方的重入 —— 同指纹的会互相覆盖快照、
@@ -1457,6 +1478,10 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
 
     const task: SubAgentTask = { taskId, description, prompt: prompt || description, allowedTools: allowed, modelId }
     const controller = new AbortController()
+    const projectSource = captureAgentProject(runtime)
+    const unsubscribeProject = useProjectStore.subscribe(() => {
+      if (!projectSource.isCurrent()) controller.abort()
+    })
     activeSubAgents.set(taskId, controller)
     // 该子 agent 飞行中的流式请求 id（取消时一并 llm:cancel，否则 signal abort 只作用于轮次之间）
     const requestIds = new Set<string>()
@@ -1480,13 +1505,15 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     }
     try {
       const session = await runSubAgent(task, {
+        runtime,
+        isCurrent: projectSource.isCurrent,
         generate: (messages, modelId, onChunk, onRequestId) =>
           generateForSubAgent(messages, modelId, onChunk, (id) => {
             requestIds.add(id)
             onRequestId?.(id)
           }),
-        buildPrompt: buildSubAgentPrompt,
-        confirm: (tc) => get().requestSubAgentConfirmation(taskId, description, tc, controller.signal),
+        buildPrompt: task => buildSubAgentPrompt(task, runtime),
+        confirm: (tc) => get().requestSubAgentConfirmation(taskId, description, tc, controller.signal, runtime),
         signal: controller.signal,
         onUpdate: (s) => {
           pending = s
@@ -1505,6 +1532,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
         artifacts: session.artifacts,   // spec §3.6：产物并入父消息（父能看到子 agent 改过哪些文件）
       }
     } finally {
+      unsubscribeProject()
       if (flushTimer) clearTimeout(flushTimer)
       activeSubAgents.delete(taskId)
       activeSubAgentRequests.delete(taskId)
@@ -1532,14 +1560,15 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   listSubAgents: () => (get().getActiveConversation()?.subSessions ?? [])
     .map(s => `${s.id}（${s.description}）`).join('、'),
 
-  requestSubAgentConfirmation: async (sessionId, description, toolCall, signal) => {
-    const projectPath = useProjectStore.getState().currentProject?.path ?? null
-    const tool = toolRegistry.get(toolCall.toolName)
+  requestSubAgentConfirmation: async (sessionId, description, toolCall, signal, runtime = getAgentRuntimePorts()) => {
+    const source = captureAgentProject(runtime)
+    const projectPath = source.project?.path ?? null
+    const tool = runtime.tools.get(toolCall.toolName)
     const args = (toolCall.arguments ?? {}) as Record<string, unknown>
     const rules = projectPath ? await loadApprovalRules(projectPath) : []
     // 评审 M1：读规则期间被取消（signal 已 abort）→ 立即拒绝，别再挂卡
     // （abort 事件不会再触发，挂上的卡没人能批准，会悬到 120s 超时）
-    if (signal?.aborted) return false
+    if (signal?.aborted || !source.isCurrent()) return false
     // 与父同一条决策链（A 档）：critical 硬拒绝 / 只读直跑 / 规则命中放行 / 其余 → 转人工
     const decision = evaluateApproval({
       projectPath,
@@ -1583,6 +1612,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
     const pending = pendingConfirmations.get(toolCallId)
     if (pending) {
       pendingConfirmations.delete(toolCallId)
+      if (pending.isCurrent?.() === false) { pending.resolve(false); return }
       // A 档：用户选「本项目内始终允许」且决策带可固化提案 → 落 workspace 规则。
       // 写入失败不阻断本次批准（下次仍会询问，fail-closed）。
       const rule = ruleFromApproval(pending.decision, pending.projectPath, pending.args ?? {}, confirmed, alwaysAllow)

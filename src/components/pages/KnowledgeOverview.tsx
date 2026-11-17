@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Database, BookOpen, FileText,
   Search, Layers, Zap, Server, Activity, Download, Languages, AlertCircle,
@@ -14,11 +14,11 @@ import { cn } from '../../lib/utils'
 import { toast } from '../ui/Toast'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
-import { ipc } from '../../services/ipc-client'
-import {
-  loadKBData, getVectorlessCount, searchKB, backfillVectors, backfillTokens,
-  type KBDocument, type SearchResult, type KBStatsData,
-} from '../../services/knowledge-service'
+import { KnowledgeRequestCancelled, type KnowledgeDocument as KBDocument, type KnowledgeSearchResult as SearchResult, type KnowledgeStats as KBStatsData, type MaintenanceKind } from '../../core'
+import { createRendererKnowledgeApplication } from '../../services/knowledge/knowledge-adapter'
+import { createRendererKnowledgeMaintenanceApplication } from '../../services/knowledge/knowledge-maintenance-adapter'
+import { createRendererKnowledgeExportApplication } from '../../services/knowledge/knowledge-export-adapter'
+import { renderLog } from '../../services/render-logger'
 import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
 /**
@@ -26,6 +26,36 @@ import ChapterExportDialog from '../dialogs/ChapterExportDialog'
  * 当侧栏视图为"知识库"时，作为中间编辑区的固定内容展示。
  */
 export default function KnowledgeOverview() {
+  const project = useProjectStore(s => s.currentProject)
+  const session = useProjectStore(s => s.projectSession)
+  const { t } = useTranslation()
+  if (!project) return (
+    <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
+      <div className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0" style={{ borderBottom: '1px solid var(--color-border)', backgroundColor: 'var(--color-editor-bg)' }}>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">{t('nav.knowledgeBase')}</span>
+        </div>
+      </div>
+      <div className="flex-1 overflow-y-auto relative">
+        <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} opacity={0.4} />
+      </div>
+    </div>
+  )
+  return <KnowledgeOverviewContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+}
+
+function KnowledgeOverviewContent({ source }: { source: { id: string; path: string; session: number } }) {
+  const [application] = useState(() => createRendererKnowledgeApplication(source))
+  const [maintenance] = useState(() => createRendererKnowledgeMaintenanceApplication(source))
+  const [exportApplication] = useState(() => createRendererKnowledgeExportApplication(source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const searchSequence = useRef(0)
+  const maintenanceBusy = useRef(false)
+  const active = useCallback(() => {
+    const state = useProjectStore.getState()
+    return mounted.current && state.currentProject?.id === source.id && state.currentProject.path === source.path && state.projectSession === source.session
+  }, [source.id, source.path, source.session])
   const [documents, setDocuments] = useState<KBDocument[]>([])
   const [loadFailed, setLoadFailed] = useState(false)
   const [stats, setStats] = useState<KBStatsData>({ documentCount: 0, totalChunks: 0, vectorDimension: 0 })
@@ -41,172 +71,112 @@ export default function KnowledgeOverview() {
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
 
-  const currentProject = useProjectStore(s => s.currentProject)
-
   const { t } = useTranslation()
-
-  /** 提取文档章节号 */
-  const extractChNum = (doc: KBDocument): number => {
-    const rawName = doc.fileName.replace(/\.[^.]+$/, '')
-    const chMatch = rawName.match(/^(?:chapter_(\d+)|第(\d+)章)/)
-    return chMatch ? parseInt(chMatch[1] || chMatch[2], 10) : 0
-  }
-
-  /** 批量导出所有已入库章节 */
-  const openBatchExport = async () => {
-    const chapters: number[] = []
-    const titles: Record<number, string> = {}
-    for (const doc of documents) {
-      const cn = extractChNum(doc)
-      if (cn > 0) {
-        chapters.push(cn)
-        try {
-          const res = await ipc.invoke('db:blueprint-get', cn)
-          titles[cn] = res?.title || doc.fileName
-        } catch {
-          titles[cn] = doc.fileName
+  useEffect(() => {
+    mounted.current = true
+    const lifecycle = lifetime.current
+    const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => {
+        if (!mounted.current && lifecycle.generation === generation) {
+          application.dispose(); maintenance.dispose(); exportApplication.dispose()
         }
-      }
+      })
     }
-    setExportChapters(chapters)
-    setExportTitleMap(titles)
-    setExportOpen(true)
+  }, [application, maintenance, exportApplication])
+  const openBatchExport = async () => {
+    try {
+      const metadata = await exportApplication.prepare(documents)
+      if (!active()) return
+      setExportChapters(metadata.chapterNumbers); setExportTitleMap(metadata.chapterTitles); setExportOpen(true)
+    } catch (error) {
+      if (!active() || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Export:Knowledge', String(error)); toast.error(t('common.loadFailed'))
+    }
   }
-
   const loadData = useCallback(async () => {
-    if (!currentProject) return
     try {
-      const { documents: docs, stats: s } = await loadKBData()
-      setDocuments(docs)
-      setStats(s)
-      setLoadFailed(false)
-    } catch (e) {
-      // 2026-09-25 修：此前只 console.warn → 统计卡片全 0、导出按钮消失，
-      // 用户读到的是「这本书还没入库任何内容」，而事实是加载失败
-      console.warn('[KnowledgeOverview] 加载知识库数据失败:', e)
-      setLoadFailed(true)
+      const data = await application.load()
+      if (!active()) return
+      setDocuments(data.documents); setStats(data.stats); setLoadFailed(false)
+    } catch (error) {
+      if (!active() || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Load:Knowledge', String(error)); setLoadFailed(true)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.path])
-
+  }, [application, active])
   const checkVectorless = useCallback(async () => {
-    if (!currentProject) return
     try {
-      setVectorlessCount(await getVectorlessCount())
-    } catch (e) { console.warn('[KnowledgeOverview] 查询无向量文本块数失败:', e) }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentProject?.path])
-
+      const count = await maintenance.count()
+      if (active()) setVectorlessCount(count)
+    } catch (error) {
+      if (!active() || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Refresh:Knowledge', String(error))
+    }
+  }, [maintenance, active])
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadData()
-    checkVectorless()
-  }, [loadData, checkVectorless])
-
-  // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { checkVectorless() }, [checkVectorless, documents])
-
-  // 通过 EventBus 监听资源刷新和定稿完成事件
+    queueMicrotask(() => { if (active()) { void loadData(); void checkVectorless() } })
+  }, [loadData, checkVectorless, active])
   useEffect(() => {
+    const refresh = () => { void loadData(); void checkVectorless() }
     const unsub1 = globalEventBus.on('REFRESH_RESOURCE', (payload: { resources: string[] }) => {
-      if (payload.resources.includes('all') || payload.resources.includes('fileTree')) {
-        loadData()
-        checkVectorless()
-      }
+      if (payload.resources.includes('all') || payload.resources.includes('fileTree')) refresh()
     })
-    const unsub2 = globalEventBus.on('FINALIZE_COMPLETE', () => {
-      loadData()
-      checkVectorless()
-    })
+    const unsub2 = globalEventBus.on('FINALIZE_COMPLETE', refresh)
     return () => { unsub1(); unsub2() }
   }, [loadData, checkVectorless])
-
-  // 判断检索模式
-  const hasVectors = stats.vectorDimension > 0
-  const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
-
-  if (!currentProject) {
-    return (
-      <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
-        <div
-          className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
-          style={{
-            borderBottom: '1px solid var(--color-border)',
-            backgroundColor: 'var(--color-editor-bg)',
-          }}
-        >
-          <div className="flex items-center gap-1.5 min-w-0">
-            <span className="text-xs font-medium truncate text-[var(--color-text-secondary)]">
-              {t('nav.knowledgeBase')}
-            </span>
-          </div>
-        </div>
-        <div className="flex-1 overflow-y-auto relative">
-          <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} opacity={0.4} />
-        </div>
-      </div>
-    )
+  const cancelSearch = () => {
+    searchSequence.current++; application.cancelSearch(); setSearchResults([]); setSearching(false)
   }
-
-  /** 语义检索 */
   const handleSearch = async () => {
+    const sequence = ++searchSequence.current
     setSearching(true)
     try {
-      const results = await searchKB(searchQuery, topK)
-      setSearchResults(results)
-    } catch (e) { 
-      console.warn('[KnowledgeOverview] 语义检索失败:', e)
-    }
-    setSearching(false)
-  }
-
-  /** 向量回填 */
-  const handleBackfill = async () => {
-    setBackfilling(true)
-    try {
-      const result = await backfillVectors()
-      if (result.success) {
-        if (result.failed > 0) {
-          toast.success(t('knowledge.rebuildPartialSuccess').replace('{processed}', String(result.processed)).replace('{failed}', String(result.failed)))
-        } else {
-          toast.success(t('knowledge.rebuildAllSuccess').replace('{processed}', String(result.processed)))
-        }
-      } else {
-        toast.error(result.error || t('knowledge.backfillFailed'))
-      }
-    } catch (e) {
-      toast.error(t('error.vectorBackfillFailed').replace('{error}', String(e)))
+      const results = await application.search(searchQuery, topK)
+      if (active() && sequence === searchSequence.current) setSearchResults(results)
+    } catch (error) {
+      if (!active() || sequence !== searchSequence.current || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Search:Knowledge', String(error)); toast.error(t('knowledge.searchFailed').replace('{error}', String(error)))
     } finally {
-      setBackfilling(false)
-      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
+      if (active() && sequence === searchSequence.current) setSearching(false)
     }
   }
-
-  /**
-   * 分词回填（L3 T2 / IMP-2 接线）
-   *
-   * 为存量 chunks 补齐中文分词 `tokens`（纯本地 jieba、无需 Embedding 配置、幂等）。
-   * 不触发 REFRESH_RESOURCE：tokens 只服务于 FTS 词级通道，不改变文档/统计的展示。
-   */
-  const handleTokenBackfill = async () => {
-    setTokenBackfilling(true)
+  const runMaintenance = async (kind: MaintenanceKind) => {
+    if (maintenanceBusy.current || !active()) return
+    maintenanceBusy.current = true
+    const setBusy = kind === 'vectors' ? setBackfilling : setTokenBackfilling
+    setBusy(true)
     try {
-      const result = await backfillTokens()
+      const receipt = await maintenance.run(kind)
+      if (!active()) return
+      const result = receipt.result
+      renderLog(result.success ? 'info' : 'error', 'Maintain:Knowledge', JSON.stringify({ kind, ...result }))
       if (result.success) {
-        if (result.failed > 0) {
-          toast.success(t('knowledge.tokenBackfillPartial').replace('{processed}', String(result.processed)).replace('{failed}', String(result.failed)))
-        } else {
-          toast.success(t('knowledge.tokenBackfillSuccess').replace('{processed}', String(result.processed)))
-        }
+        const key = kind === 'vectors'
+          ? (result.failed > 0 ? 'knowledge.rebuildPartialSuccess' : 'knowledge.rebuildAllSuccess')
+          : (result.failed > 0 ? 'knowledge.tokenBackfillPartial' : 'knowledge.tokenBackfillSuccess')
+        toast.success(t(key).replace('{processed}', String(result.processed)).replace('{failed}', String(result.failed)))
       } else {
-        toast.error(result.error || t('knowledge.tokenBackfillFailed'))
+        toast.error(result.error || t(kind === 'vectors' ? 'knowledge.backfillFailed' : 'knowledge.tokenBackfillFailed'))
       }
-    } catch (e) {
-      toast.error(t('error.tokenBackfillFailed').replace('{error}', String(e)))
+      if (receipt.vectorlessCount !== undefined) setVectorlessCount(receipt.vectorlessCount)
+      if (receipt.refreshError) {
+        renderLog('error', 'Refresh:Knowledge', receipt.refreshError); toast.error(t('common.loadFailed'))
+      }
+      if (kind === 'vectors' && (result.success || result.processed > 0)) globalEventBus.emit('REFRESH_RESOURCE', { resources: ['all'] })
+    } catch (error) {
+      if (!active() || error instanceof KnowledgeRequestCancelled) return
+      renderLog('error', 'Maintain:Knowledge', String(error))
+      toast.error(t(kind === 'vectors' ? 'error.vectorBackfillFailed' : 'error.tokenBackfillFailed').replace('{error}', String(error)))
     } finally {
-      setTokenBackfilling(false)
+      maintenanceBusy.current = false
+      if (active()) setBusy(false)
     }
   }
+  const handleBackfill = () => runMaintenance('vectors')
+  const handleTokenBackfill = () => runMaintenance('tokens')
+  const hasVectors = stats.vectorDimension > 0
+  const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
 
   return (
     <div className="h-full overflow-y-auto" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
@@ -237,7 +207,7 @@ export default function KnowledgeOverview() {
               className="flex-shrink-0"
               title={t('knowledge.tokenBackfillDesc')}
               onClick={handleTokenBackfill}
-              disabled={tokenBackfilling}
+              disabled={tokenBackfilling || backfilling}
             >
               {tokenBackfilling ? (
                 <><Spinner size={14} className="mr-1.5" />{t('knowledge.tokenBackfilling')}</>
@@ -324,7 +294,7 @@ export default function KnowledgeOverview() {
                 variant="outline"
                 className="text-xs border-[rgba(var(--color-warning-rgb),0.3)] text-[var(--color-warning)] hover:bg-[rgba(var(--color-warning-rgb),0.2)]"
                 onClick={handleBackfill}
-                disabled={backfilling}
+                disabled={backfilling || tokenBackfilling}
               >
                 {backfilling ? (
                   <><Spinner size={12} className="mr-1.5" />{t('knowledge.rebuilding')}</>
@@ -361,7 +331,7 @@ export default function KnowledgeOverview() {
                 className="flex-1 h-9"
                 placeholder={t('knowledge.searchPlaceholder')}
                 value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
+                onChange={(e) => { cancelSearch(); setSearchQuery(e.target.value) }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
               <div className="flex items-center gap-1 flex-shrink-0">
@@ -371,7 +341,7 @@ export default function KnowledgeOverview() {
                   min={1}
                   max={50}
                   value={topK}
-                  onChange={(e) => setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 10)))}
+                  onChange={(e) => { cancelSearch(); setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 10))) }}
                   className="w-12 h-7 text-xs rounded px-1.5 text-center"
                 />
               </div>
@@ -398,7 +368,7 @@ export default function KnowledgeOverview() {
                   variant="outline"
                   size="sm"
                   className="text-micro"
-                  onClick={() => setSearchResults([])}
+                  onClick={cancelSearch}
                 >
                   {t('knowledge.clear')}
                 </Button>

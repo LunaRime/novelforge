@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * read_architecture — 读取故事架构文件
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createReadArchitectureTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadArchitectureTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_architecture',
   description: t('tool.readArchDesc'),
   source: 'builtin',
@@ -21,7 +20,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -30,7 +29,7 @@ return buildRuntimeAgentTool(ports, {
     const fileName = args.file_name as string | undefined
 
     try {
-      const core = await ipc.invoke('db:project-core-get')
+      const core = await ports.io.invoke('db:project-core-get')
       if (!core) {
         return { success: false, content: '', error: t('error.archNotInitialized') }
       }

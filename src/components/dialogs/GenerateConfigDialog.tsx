@@ -1,11 +1,8 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Hash, FileText } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
-import { useLLMStore } from '../../stores/llm-store'
-import { useWorkflowStore } from '../../stores/workflow-store'
-
-import { useProjectStore } from '../../stores/project-store'
-import { startWorkflow } from '../../services/workflows/start-workflow'
+import { NovelConfigRequestCancelled } from '../../core'
+import { renderLog } from '../../services/render-logger'
 import { confirm } from '../ui/Confirm'
 import { DEFAULT_WORDS_PER_CHAPTER } from '../../shared/constants'
 import { toast } from '../ui/Toast'
@@ -20,28 +17,32 @@ import type { NovelConfig } from '../../shared/ipc-channels'
 interface Props {
   isOpen: boolean
   onClose: () => void
-  /** 生成完成后回调（传入 AI 生成的配置） */
-  onGenerated: (config: Partial<NovelConfig>) => void
+  config: NovelConfig
+  isConfigRunning: boolean
+  hasModel(): boolean
+  assertCurrent(): void
+  onUpdateConfig(config: Partial<NovelConfig>): void
+  onGenerate(idea: string, totalChapters: number, wordsPerChapter: number): Promise<void>
 }
 
 /** AI 生成配置对话框 — 用户输入脑洞，AI 自动生成所有配置字段 */
-export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: Props) {
+export default function GenerateConfigDialog({ isOpen, onClose, config, isConfigRunning, hasModel, assertCurrent, onUpdateConfig, onGenerate }: Props) {
   const { t } = useTranslation()
-  const defaultModelId = useLLMStore(s => s.defaultModelId)
-  // ✅ 用 getState() 获取 action，不订阅 workflow store 的 globalLogs 高频更新
-  const addLog = useWorkflowStore.getState().addLog
-  const currentProject = useProjectStore(s => s.currentProject)
-  const updateNovelConfig = useProjectStore(s => s.updateNovelConfig)
-  // 线③ 第 2 条：config_generation 运行中守卫（批量 + 单字段共用同一 type）
-  const isConfigRunning = useWorkflowStore(s => s.isTypeRunning('config_generation'))
+  const alive = useRef(true)
+  useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  const addLog = (level: 'info' | 'warn' | 'error', message: string) => renderLog(level, 'Generate:Config', message)
   const [idea, setIdea] = useState('')
 
   // 控制当外部 Confirm 弹窗显示时，阻止本 Dialog 因为"点击外部"而意外关闭
   const [confirming, setConfirming] = useState(false)
 
   // 直接从 Store 读取规模参数 — 单一数据源，无需 local state 镜像
-  const totalChapters = currentProject?.novelConfig.totalChapters ?? 100
-  const wordsPerChapter = currentProject?.novelConfig.wordsPerChapter ?? DEFAULT_WORDS_PER_CHAPTER
+  const totalChapters = config.totalChapters ?? 100
+  const wordsPerChapter = config.wordsPerChapter ?? DEFAULT_WORDS_PER_CHAPTER
+  const updateNovelConfig = (patch: Partial<NovelConfig>) => {
+    try { assertCurrent(); onUpdateConfig(patch) }
+    catch (error) { if (!(error instanceof NovelConfigRequestCancelled)) throw error }
+  }
 
   /** 修改总章数：直接写 Store，允许清空（失焦时由 Input 组件全局兜底） */
   const handleTotalChaptersChange = (val: string) => {
@@ -70,7 +71,13 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
 
   const handleGenerate = async () => {
     if (!idea.trim() || isSubmittingRef.current) return
-    if (!defaultModelId) {
+    if (!alive.current) return
+    try { assertCurrent() }
+    catch (error) {
+      if (!(error instanceof NovelConfigRequestCancelled)) { addLog('error', String(error)); toast.error(String(error)) }
+      return
+    }
+    if (!hasModel()) {
       addLog('error', '⚠️ ' + t('tip.configModelFirst'))
       return
     }
@@ -83,8 +90,9 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
     isSubmittingRef.current = true
     setIsSubmitting(true)
     try {
+      assertCurrent()
       // 检测已填写的核心字段，提示用户确认覆盖
-      const cfg = currentProject?.novelConfig
+      const cfg = config
       const filledFields: string[] = []
       if (cfg?.coreOutline?.trim()) filledFields.push(t('novelConfig.coreOutline'))
       if (cfg?.worldSetting?.trim()) filledFields.push(t('genConfig.worldSetting'))
@@ -100,24 +108,25 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
           t('genConfig.overwriteWarning') + '\n\n' + fieldList + '\n\n' + t('genConfig.confirmRegenerate'),
           { title: t('dialog.configExists'), confirmText: t('dialog.confirmOverwrite'), cancelText: t('action.cancel') }
         )
-        setConfirming(false)
+        if (!alive.current) return
+        assertCurrent(); setConfirming(false)
         if (!ok) return
       }
 
-      // 覆盖确认通过后，立即关闭弹窗
+      if (!alive.current) return
+      assertCurrent()
+      await onGenerate(idea, totalChapters || 100, wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER)
+      if (!alive.current) return
+      assertCurrent()
       onClose()
       toast.info('✨ ' + t('genConfig.generating'))
       addLog('info', t('genConfig.generatingLog').replace('{totalChapters}', String(totalChapters)).replace('{wordsPerChapter}', String(wordsPerChapter)))
-
-      // 后台执行 LLM 调用（由 WorkflowEngine 接管并显示全局状态面板）
-      await startWorkflow({ workflow: 'config_generation',
-          idea,
-          totalChapters: totalChapters || 100,
-          wordsPerChapter: wordsPerChapter || DEFAULT_WORDS_PER_CHAPTER,
-      }, { onGenerated })
+    } catch (error) {
+      if (!alive.current || error instanceof NovelConfigRequestCancelled) return
+      addLog('error', String(error)); toast.error(String(error))
     } finally {
       isSubmittingRef.current = false
-      setIsSubmitting(false)
+      if (alive.current) { setIsSubmitting(false); setConfirming(false) }
     }
   }
 
@@ -127,7 +136,7 @@ export default function GenerateConfigDialog({ isOpen, onClose, onGenerated }: P
   }
 
   // 每次打开时预填当前项目的核心大纲
-  const defaultIdea = currentProject?.novelConfig.coreOutline || ''
+  const defaultIdea = config.coreOutline || ''
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>

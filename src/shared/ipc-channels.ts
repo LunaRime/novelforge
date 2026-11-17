@@ -3,7 +3,10 @@
  * 所有 IPC 调用都通过此文件定义频道名和参数/返回值类型
  */
 import type { LLMProtocol } from './llm-protocols'
-import type { RevisionMergeInput, RevisionMergeResult } from '../core'
+import type { DraftFinalizationInput, DraftFinalizationResult, RevisionMergeInput, RevisionMergeResult, BlueprintWriteScope, MissingBlueprintInput, MissingBlueprintResult } from '../core'
+import type { DirectorySnapshotRequest, DirectoryWriteInput, DirectoryWriteResult, DirectoryWriteSnapshot, GeneratedBlueprintFields, MissingBlueprintReceipt } from '../core'
+import type { CharacterEditSnapshot, CharacterEditsInput, CharacterEditsResult, CharacterFieldWrite, CharacterMergeInput, CharacterWriteScope } from '../core'
+import type { CharacterMergeIdentity, MergeStats } from '../services/character-card-merge-plan'
 // 目录区行级覆盖（v3 T7）—— 类型与合并语义同源（provider-accounts 的 syncAccountModels 消费它）；
 // 双向都是 `import type`，编译后互相擦除，不构成运行时环。
 import type { ModelOverrides } from './provider-accounts'
@@ -107,14 +110,121 @@ export interface GlobalConfig {
 }
 
 // ===== 项目管理 =====
+export interface FileContinuationSource { chapterId: string; revision: string; contextRevision?: string }
+
+export type FileDraftCommand = { chapterId: string } & (
+  | { kind: 'create'; number: number; title: string; content: string; createdAt: string; source?: FileContinuationSource }
+  | ({ expectedRevision: string } & (
+    { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
+  ))
+)
+
+export interface FileImportChapter { title: string; content: string }
+export interface FileAgentEditProposal {
+  id: string
+  locator: string
+  revision: string
+  original: string
+  replacement: string
+}
+export type FileImportExcerpt = FileImportChapter & { number: number }
+export type FileImportSettingField = 'worldSetting' | 'coreOutline' | 'protagonistProfile' | 'writingStyle'
+export type FileImportSettings = Partial<Record<FileImportSettingField, string>>
+export interface FileImportSettingsOffer {
+  id: string
+  available: FileImportSettingField[]
+  occupied: FileImportSettingField[]
+}
+
 export interface ProjectChannels {
+  'project:file-editor-open': {
+    args: [projectPath: string, locators: string[]]
+    return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
+      number?: number
+      lifecycle?: { canFinalize: boolean; canArchive: boolean; canStageRevision?: boolean; pending: Array<{ id: number }> }
+    }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number }
+  }
+  'project:file-editor-save': {
+    args: [token: string, locator: string, revision: string, content: string]
+    return: { revision: string; indexed: boolean }
+  }
+  'project:file-editor-close': { args: [token: string]; return: void }
+  'project:file-editor-continuation-context': {
+    args: [token: string, number: number, source: FileContinuationSource]
+    return: { previous: string; settings: Record<string, string>; blueprint: Record<string, string>; contextRevision: string }
+  }
+  'project:file-editor-agent-list': {
+    args: [token: string, offset?: number, limit?: number]
+    return: { chapters: Array<{ locator: string; number: number; title: string; status: string }>; nextOffset: number | null }
+  }
+  'project:file-editor-agent-read': {
+    args: [token: string, locator: string, offset?: number, limit?: number]
+    return: { locator: string; content: string; readOnly: boolean; revision?: string; totalChars: number; nextOffset: number | null }
+  }
+  'project:file-editor-agent-propose-edit': {
+    args: [token: string, locator: string, revision: string, original: string, replacement: string]
+    return: FileAgentEditProposal
+  }
+  'project:file-editor-agent-resolve-edit': {
+    args: [token: string, proposalId: string, decision: 'apply' | 'discard' | 'stage']
+    return: { status: 'discarded' } | { status: 'staged'; revisionId: number }
+      | { status: 'saved'; locator: string; content: string; revision: string; indexed: boolean }
+  }
+  'project:file-editor-commit': {
+    args: [token: string, command: FileDraftCommand]
+    return: import('../core').FileChapterCommitReceipt
+  }
+  'project:file-editor-import': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { completed: number; firstLocator?: string; blockedNumber?: number }
+  }
+  'project:file-editor-import-source': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { projectId: string; chapters: Array<FileImportChapter & { chapterId: string; number: number; revision: string }> }
+  }
+  'project:file-editor-index-import': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { indexed: number; chunks: number }
+  }
+  'project:file-editor-import-inference': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: {
+      projectId: string
+      revisions: Array<{ chapterId: string; revision: string }>
+      samples: FileImportExcerpt[]
+      excerpts: FileImportExcerpt[]
+      settingsOffer?: FileImportSettingsOffer
+    }
+  }
+  'project:file-editor-apply-import-settings': {
+    args: [token: string, offerId: string, firstNumber: number, chapters: FileImportChapter[], settings: FileImportSettings]
+    return: { applied: FileImportSettingField[] }
+  }
+  'project:file-editor-import-blueprints': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: {
+      projectId: string
+      revisions: Array<{ chapterId: string; revision: string }>
+      candidates: FileImportExcerpt[]
+      existingChapterNumbers: number[]
+      offerId?: string
+    }
+  }
+  'project:file-editor-apply-import-blueprints': {
+    args: [token: string, offerId: string, firstNumber: number, chapters: FileImportChapter[], items: GeneratedBlueprintFields[]]
+    return: MissingBlueprintReceipt
+  }
+  'project:file-editor-preview': {
+    args: [token: string, chapterId: string, revisionId: number]
+    return: { content: string; contentHash: string }
+  }
   'project:create': {
     args: [config: { name: string; path: string; genre: string; targetAudience: string }]
-    return: { success: boolean; projectId: string; projectPath?: string; error?: string }
+    return: { success: boolean; projectId: string; projectPath?: string; restoredWriteToken?: string; error?: string }
   }
   'project:open': {
     args: [projectPath: string]
-    return: { success: boolean; project: ProjectData | null; error?: string }
+    return: { success: boolean; project: ProjectData | null; restoredWriteToken?: string; error?: string; fileProjectPath?: string }
   }
   'project:save': {
     args: [projectId: string, data: Partial<ProjectData>]
@@ -125,7 +235,7 @@ export interface ProjectChannels {
     //   再做列更新（project-controller.ts）。契约必须写成 Partial，否则调用方会被类型逼着
     //   传整份配置 —— 而整份配置一旦来自**过期缓存**，就会把别的字段写回旧值（丢更新，真机实测：
     //   连续改 genre/subGenre/writingStyle 后前两个退回旧值）。
-    args: [projectId: string, data: Partial<Omit<ProjectData, 'novelConfig'>> & { novelConfig?: Partial<NovelConfig> }]
+    args: [projectId: string, data: ProjectConfigPatch]
     return: { success: boolean; error?: string }
   }
   'project:recent-list': {
@@ -567,11 +677,14 @@ export interface ProjectData {
   id: string
   name: string
   path: string
+  writeToken?: string
   novelConfig: NovelConfig
   characterStates: string
   createdAt: number
   updatedAt: number
 }
+
+export type ProjectConfigPatch = Pick<ProjectData, 'path' | 'writeToken'> & { novelConfig: Partial<NovelConfig> }
 
 export interface NovelConfig {
   genre: string
@@ -733,6 +846,11 @@ import type { PublicationEntry } from '../../electron/repositories/publication-r
 import type { HealthStatus } from '../../electron/controllers/health-check'
 
 // ===== 数据库操作 =====
+export interface DirectorySnapshotRead {
+  snapshot: DirectoryWriteSnapshot
+  existingBlueprints: BlueprintData[]
+}
+
 export interface DatabaseChannels {
   'db:close': { args: []; return: { success: boolean } }
 
@@ -741,10 +859,14 @@ export interface DatabaseChannels {
   'db:project-core-update': { args: [data: Partial<ProjectCoreData>]; return: { success: boolean; error?: string } }
 
   // 2. blueprints
+  'db:blueprint-write-scope': { args: []; return: BlueprintWriteScope }
+  'db:blueprint-insert-missing': { args: [input: MissingBlueprintInput<BlueprintData>]; return: MissingBlueprintResult }
+  'db:blueprint-directory-snapshot': { args: [request: DirectorySnapshotRequest]; return: DirectorySnapshotRead }
+  'db:blueprint-directory-commit': { args: [input: DirectoryWriteInput]; return: DirectoryWriteResult }
   'db:blueprint-get-all': { args: []; return: BlueprintData[] }
   'db:blueprint-get-all-sorted': { args: [config: { key: string; direction: string }]; return: BlueprintData[] }
   'db:blueprint-get': { args: [chapterNumber: number]; return: BlueprintData | null }
-  'db:blueprint-upsert': { args: [data: BlueprintData]; return: { success: boolean; error?: string } }
+  'db:blueprint-upsert': { args: [data: BlueprintData, scope?: BlueprintWriteScope]; return: { success: boolean; error?: string } }
   'db:blueprint-upsert-many': { args: [items: BlueprintData[]]; return: { success: boolean; error?: string } }
   'db:blueprint-update-notes': { args: [chapterNumber: number, notes: string]; return: { success: boolean; error?: string } }
   'db:blueprint-delete': { args: [chapterNumber: number]; return: { success: boolean; error?: string } }
@@ -769,13 +891,19 @@ export interface DatabaseChannels {
 
   // 3. characters
   'db:character-get-all': { args: []; return: CharacterData[] }
+  'db:character-edit-snapshot': { args: []; return: CharacterEditSnapshot }
+  'db:character-commit-edits': { args: [input: CharacterEditsInput]; return: CharacterEditsResult }
+  'db:character-merge-cards': {
+    args: [input: { scope: CharacterWriteScope; cards: Array<Record<string, unknown>>; known: CharacterMergeIdentity[] }]
+    return: { success: true; stats: MergeStats } | { success: false; error: string }
+  }
   'db:character-upsert': { args: [data: CharacterData]; return: { success: boolean; error?: string } }
   'db:character-save-all': { args: [items: CharacterData[]]; return: { success: boolean; error?: string } }
   'db:character-delete': { args: [name: string]; return: { success: boolean; error?: string } }
-  'db:character-merge': { args: [target: string, source: string]; return: { success: boolean; error?: string } }
+  'db:character-merge': { args: [input: CharacterMergeInput]; return: CharacterEditsResult }
   'db:character-update-appearance-stats': { args: [name: string, stats: { appearCount: number; firstChapter: number; lastChapter: number }]; return: { success: boolean; error?: string } }
-  'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }]; return: { success: boolean; error?: string } }
-  'db:character-merge-fields': { args: [name: string, fields: Record<string, string>]; return: { success: boolean; error?: string } }
+  'db:character-update-state': { args: [name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }, target?: CharacterFieldWrite]; return: { success: boolean; error?: string } }
+  'db:character-merge-fields': { args: [name: string, fields: Record<string, string>, target?: CharacterFieldWrite]; return: { success: boolean; error?: string } }
 
   // 4. drafts
   'db:draft-create': { args: [params: { chapterNumber: number; version: number; source: 'write' | 'rewrite' | 'translation'; content: string; wordCount: number }]; return: { success: boolean; id?: number; error?: string } }
@@ -791,6 +919,11 @@ export interface DatabaseChannels {
   'db:draft-get-all-chapter-numbers': { args: []; return: number[] }
   'db:draft-next-version': { args: [chapterNumber: number]; return: number }
   'db:draft-update-status': { args: [id: number, status: string, wordCount?: number]; return: { success: boolean; error?: string } }
+  'db:draft-finalize': { args: [input: DraftFinalizationInput & { projectPath: string; writeToken?: string }]; return: DraftFinalizationResult }
+  'db:draft-archive': {
+    args: [input: { projectPath: string; draftId: number; chapterNumber: number }]
+    return: { success: true; updatedAt: number } | { success: false; error: string }
+  }
   'db:draft-update-content': { args: [id: number, content: string, wordCount: number]; return: { success: boolean; error?: string } }
   'db:draft-apply-content': { args: [params: { draftId: number; expectedHash: string; expectedUpdatedAt: number; content: string; wordCount: number }]; return: { success: boolean; conflict?: boolean; currentHash?: string; currentUpdatedAt?: number; error?: string } }
   'db:draft-snapshot-create': { args: [params: { chapterNumber: number; draftId: number; branchId?: number | null; label?: string; kind: 'auto' | 'manual' | 'pre-agent' | 'pre-restore' | 'branch-base'; content: string; contentHash: string; wordCount: number; createdBy: 'user' | 'agent' | 'system' }]; return: { success: boolean; id?: number; error?: string } }
@@ -1375,11 +1508,11 @@ export interface TemplateChannels {
   /** 模板元信息列表（不含 data） */
   'templates:list': {
     args: []
-    return: Array<{ name: string; description: string }>
+    return: Array<{ file: string; name: string; description: string }>
   }
   /** 获取完整模板 data（应用模板时填充） */
   'templates:get': {
-    args: [name: string]
+    args: [file: string]
     return: Record<string, unknown> | null
   }
   /** 保存模板（校验 schema + 名称清洗防穿越） */

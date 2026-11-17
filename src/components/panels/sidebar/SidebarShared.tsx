@@ -56,6 +56,7 @@ async function openDocument(request: EditorOpenRequest): Promise<boolean> {
     const result = await openRendererEditorDocument(request)
     if (result.status === 'missing') {
       if (request.kind === 'latest-draft') toast.warning(t('workspace.noDraft').replace('{n}', String(request.chapterNumber)))
+      if (request.kind === 'draft') toast.warning(t('error.noBaseDraft'))
       return false
     }
     return true
@@ -80,6 +81,10 @@ export function openBuiltinEditor(id: string, name: string, type: 'chapter-card'
 /** 打开指定章最新草稿（工作台/项目结构共用；无草稿时 toast 反馈） */
 export function openDraftByChapter(chapterNumber: number, chapterTitle?: string): Promise<boolean> {
   return openDocument({ kind: 'latest-draft', chapterNumber, chapterTitle })
+}
+
+export function openDraftById(draftId: number, name: string): Promise<boolean> {
+  return openDocument({ kind: 'draft', draftId, name })
 }
 
 /** 打开章节文件 */

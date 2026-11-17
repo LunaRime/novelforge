@@ -12,6 +12,9 @@ import { ipc } from './ipc-client'
 import { buildNamePositions } from './workflows/relation-utils'
 import { parseAliases } from './character-normalize'
 import type { ChapterContent } from './character-archive'
+import type { CharacterEditSnapshot } from '../core'
+import { commitCharacterEdits, isCharacterSourceCurrent, type CharacterSource } from './characters/character-edits-adapter'
+import { t } from '../shared/locale'
 
 /** 连续多少章未出场视为"疑似退场"（提示阈值，不自动改状态） */
 export const DEPARTED_GAP = 20
@@ -58,11 +61,12 @@ export function scanCharacterAppearances(
   // entry → 归属角色
   const ownerOf = new Map<string, string>()
   for (const c of chars) {
-    for (const form of [c.name, ...parseAliases(c.aliases)]) {
+    for (const form of parseAliases(c.aliases)) {
       const f = String(form ?? '').trim()
       if (f) ownerOf.set(f, c.name)
     }
   }
+  for (const c of chars) if (c.name.trim()) ownerOf.set(c.name.trim(), c.name)
 
   // 逐章扫描，收集每角色的出场章集合
   const chapterSets = new Map<string, Set<number>>()
@@ -97,36 +101,42 @@ export function scanCharacterAppearances(
 }
 
 /** 加载全部定稿章节正文（与 character-archive-workflow 相同的补全逻辑） */
-export async function loadFinalizedChapters(): Promise<ChapterContent[]> {
+export async function loadFinalizedChapters(source: CharacterSource): Promise<ChapterContent[]> {
+  const check = () => {
+    if (!isCharacterSourceCurrent(source)) throw new Error(t('error.requestCancelled'))
+  }
+  check()
   const chapterNumbers = (await ipc.invoke('db:draft-get-all-chapter-numbers')) as number[]
   const chapters: ChapterContent[] = []
   for (const n of [...chapterNumbers].sort((a, b) => a - b)) {
+    check()
     const meta = await ipc.invoke('db:draft-get-finalized', n) as { id: number; content?: string } | null
+    check()
     if (!meta) continue
     const full = await ipc.invoke('db:draft-get-full', meta.id) as { content?: string } | null
     if (full?.content) chapters.push({ chapterNumber: n, content: full.content })
   }
+  check()
   return chapters
 }
 
-/** 回填出场统计到 DB（逐角色 updateAppearanceStats，只更新统计三列） */
+/** Persist the scan against the character snapshots used for calculation. */
 export async function saveAppearanceStats(
   stats: CharacterAppearanceStats[],
-): Promise<{ updated: number; failed: number }> {
-  let updated = 0
-  let failed = 0
-  for (const s of stats) {
-    try {
-      const res = await ipc.invoke('db:character-update-appearance-stats', s.name, {
+  source: CharacterSource,
+  snapshot: CharacterEditSnapshot,
+): Promise<number> {
+  const baseline = new Map(snapshot.cards.map(card => [card.name, card]))
+  const edits = stats.map(s => {
+    const before = baseline.get(s.name)
+    if (!before) throw new Error(t('error.characterEditConflict'))
+    return { before, after: {
+        ...before,
         appearCount: s.appearCount,
         firstChapter: s.firstChapter,
         lastChapter: s.lastChapter,
-      })
-      if (res.success) updated++
-      else failed++
-    } catch {
-      failed++
-    }
-  }
-  return { updated, failed }
+    } }
+  })
+  if (edits.length) await commitCharacterEdits(source, snapshot.scope, edits)
+  return edits.length
 }

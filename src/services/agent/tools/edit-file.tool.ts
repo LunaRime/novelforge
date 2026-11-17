@@ -10,7 +10,6 @@ import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, t
  * → 失效读去重缓存（clearReadState，与 write_file P0-2 同语义）。无新 IPC 通道。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 import { isChapterWritePath, isProtectedRelativePath, validatePath } from './safe-path'
 import { clearReadState } from './read-file.tool'
 import { isVelaProtocol, VELA } from '../../vela-protocol'
@@ -23,8 +22,8 @@ import {
   findEditMatch,
 } from './edit-file-utils'
 
-export function createEditFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createEditFileTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'edit_file',
   description: t('tool.editFileDesc'),
   source: 'builtin',
@@ -49,7 +48,7 @@ return buildRuntimeAgentTool(ports, {
   requiresConfirmation: true,
   isReadOnly: false,
   isDestructive: true,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     // 类型归一化铁律：inputSchema 的 string 只是声明，LLM 可能传任意类型
     const filePath = typeof args.file_path === 'string' ? args.file_path : ''
     const oldString = typeof args.old_string === 'string' ? args.old_string : undefined
@@ -98,7 +97,7 @@ return buildRuntimeAgentTool(ports, {
 
     // 读全文（既有沙箱通道；> 单次全量上限 5MB 的整读由主进程拒绝 → 错误透传，
     // edit_file 只在可整读大小内工作——正常小说/设定文件不受影响）
-    const readRes = await ipc.invoke('fs:read-file', pathCheck.fullPath)
+    const readRes = await ports.io.invoke('fs:read-file', pathCheck.fullPath)
     if (!readRes.success) {
       return { success: false, content: '', error: readRes.error ?? t('tool.readFileFailed') }
     }
@@ -129,13 +128,13 @@ return buildRuntimeAgentTool(ports, {
     }
 
     if (!sourceProject.isCurrent()) return { success: false, content: '', error: t('error.noProject') }
-    const writeRes = await ipc.invoke('fs:write-file', pathCheck.fullPath, edit.content)
+    const writeRes = await ports.io.invoke('fs:write-file', pathCheck.fullPath, edit.content)
     if (!writeRes.success) {
       return { success: false, content: '', error: writeRes.error ?? t('tool.writeFileFailed') }
     }
 
     // ⚠️ 写盘成功后失效读去重缓存（P0-2 同 write_file）：LLM「编辑 → 重读验证」须拿到新内容
-    clearReadState(pathCheck.fullPath)
+    clearReadState(pathCheck.fullPath, ports)
 
     // 结果反馈：文件级摘要 + 命中层/多命中提示（保持短小——引擎侧 truncateResult(800) 兜底）
     const line = currentText.slice(0, match.start).split('\n').length

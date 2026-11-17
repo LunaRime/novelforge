@@ -30,8 +30,8 @@ export function computeSubAgentTaskRef(conversationId: string, description: stri
 }
 
 /** 内置只读工具（排除结构性排除项与写工具；MCP / skill 来源不进子 agent 白名单） */
-export function subAgentReadOnlyTools(): string[] {
-  return toolRegistry.listAll()
+export function subAgentReadOnlyTools(catalog: Pick<typeof toolRegistry, 'listAll'> = toolRegistry): string[] {
+  return catalog.listAll()
     .filter(t => t.source === 'builtin' && t.isReadOnly)
     .map(t => t.name)
     .filter(n => !SUBAGENT_WRITE_TOOLS.includes(n) && !SUBAGENT_EXCLUDED_TOOLS.includes(n))
@@ -42,8 +42,8 @@ export function subAgentReadOnlyTools(): string[] {
  * ⚠️ 未知名字**忽略但不影响其余**（Review Focus 1：一个坏名字绝不能让白名单退化成全量——
  * 那等于悄悄放大子 agent 的权限面，是 fail-open 事故）。
  */
-export function resolveSubAgentTools(requested?: string[]): string[] {
-  const readOnly = subAgentReadOnlyTools()
+export function resolveSubAgentTools(requested?: string[], catalog: Pick<typeof toolRegistry, 'listAll'> = toolRegistry): string[] {
+  const readOnly = subAgentReadOnlyTools(catalog)
   const picked = requested && requested.length > 0
     ? readOnly.filter(n => requested.includes(n))
     : readOnly

@@ -1,6 +1,6 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
-import { useProjectStore } from '../../../stores/project-store'
+import { captureProjectConfigSource, isProjectConfigCurrent, useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { BasePromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
@@ -12,9 +12,10 @@ import { ipc } from '../../ipc-client'
  * 结果写入 NovelConfig.writingStyle 以锚定后续生成/修稿。
  */
 export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
-  async execute({ callbacks }: CommandExecuteParams): Promise<string> {
-    const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
+  async execute({ callbacks, context }: CommandExecuteParams): Promise<string> {
+    const source = captureProjectConfigSource()
+    if (!source) throw new Error(t('error.noProject'))
+    const versions = useProjectStore.getState().configFieldVersions
 
     callbacks.log(t('log.analyzeStyle.sampling'))
 
@@ -72,9 +73,8 @@ export class AnalyzeWritingStyleCommand extends BaseWorkflowCommand<string> {
     }
 
     // 写入 NovelConfig
-    const { updateNovelConfig, saveProject } = useProjectStore.getState()
-    updateNovelConfig({ writingStyle: cleanResult })
-    await saveProject()
+    if (context.cancelled || !isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
+    await useProjectStore.getState().commitNovelConfigPatch(source, { writingStyle: cleanResult }, versions)
     callbacks.log(t('log.analyzeStyle.saved'))
 
     return cleanResult

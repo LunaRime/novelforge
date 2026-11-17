@@ -5,7 +5,7 @@ import { useProjectStore } from '../../stores/project-store'
 
 export { WorkflowStartError }
 export type { WorkflowStartRequest }
-export type WorkflowStartOptions = Pick<WorkflowAdapterOptions, 'onGenerated'>
+export type WorkflowStartOptions = Pick<WorkflowAdapterOptions, 'onGenerated' | 'confirmBlueprintWarning' | 'isCallerCurrent'>
 
 /** Shared application entry for UI, tools and intent routing. */
 export async function startWorkflow(request: WorkflowStartRequest, options: WorkflowStartOptions = {}) {
@@ -25,8 +25,11 @@ export async function startWorkflow(request: WorkflowStartRequest, options: Work
       || useProjectStore.getState().projectSession !== session) {
       throw new WorkflowStartError('ERR_GUARD', t('error.noProject'))
     }
+    if (options.isCallerCurrent && !options.isCallerCurrent()) {
+      throw new WorkflowStartError('ERR_CANCELLED', t('error.requestCancelled'))
+    }
   }
-  const port = createWorkflowStartPort({ onGenerated: options.onGenerated, assertProject })
+  const port = createWorkflowStartPort({ ...options, assertProject, source: { ...identity, session } })
   // Capture payload before any asynchronous guard, metadata lookup or module import.
   const captured = structuredClone(request)
   try {

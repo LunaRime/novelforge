@@ -1,0 +1,137 @@
+/* NovelForge UI Redesign v3 — fully custom DOM scrollbars.
+   Native scrollbars are hidden; every visible bar is an ordinary element
+   drawn here and driven by custom-scroll.js. */
+:root {
+  --nf-csb-width: 10px;
+  --nf-csb-tone: var(--nf-color-brand);
+  --nf-csb-thumb: color-mix(in srgb, var(--nf-color-muted) 38%, var(--nf-color-surface));
+  --nf-csb-thumb-hover: color-mix(in srgb, var(--nf-color-brand) 58%, var(--nf-color-surface));
+  --nf-csb-thumb-active: color-mix(in srgb, var(--nf-color-brand) 84%, var(--nf-color-surface));
+}
+
+/* 1. Remove every trace of the browser's own bar. */
+:is(.scroll, .document-scroll, .view, .modal-body, .settings-pane, .settings-nav,
+    .appearance-body, .command-results, .context-body, .ai-thread, .runtime-body,
+    .set-nav, .set-pane, .tab-list, .lp-rows, .heatmap) { scrollbar-width: none !important; }
+:is(.scroll, .document-scroll, .view, .modal-body, .settings-pane, .settings-nav,
+    .appearance-body, .command-results, .context-body, .ai-thread, .runtime-body,
+    .set-nav, .set-pane, .tab-list, .lp-rows, .heatmap)::-webkit-scrollbar { display: none !important; width: 0; height: 0; }
+
+/* 2. The custom bar lives in the window layer, not inside the scroller,
+      so it never scrolls away with the content. */
+.nf-scrollbar {
+  position: absolute;
+  width: var(--nf-csb-width);
+  z-index: var(--nf-z-dropdown);
+  outline: 0;
+  user-select: none;
+  touch-action: none;
+  --nf-csb-tone: var(--nf-color-brand);
+}
+.nf-scrollbar[data-tone="accent"] { --nf-csb-tone: var(--nf-color-accent); }
+.nf-scrollbar[data-tone="info"] { --nf-csb-tone: var(--nf-color-info); }
+.nf-scrollbar[data-tone="success"] { --nf-csb-tone: var(--nf-color-success); }
+.nf-scrollbar[data-tone="warning"] { --nf-csb-tone: var(--nf-color-warning); }
+.nf-scrollbar[hidden] { display: none !important; }
+
+.nf-scrollbar-track {
+  position: absolute;
+  inset: 0 2px;
+  border-radius: var(--nf-radius-pill);
+  background-color: color-mix(in srgb, var(--nf-color-panel) 62%, var(--nf-color-line));
+  background-image: repeating-linear-gradient(180deg,
+    transparent 0 7px,
+    color-mix(in srgb, var(--nf-color-line-strong) 34%, transparent) 7px 8px);
+  mask-image: linear-gradient(to bottom, transparent 0, var(--nf-color-ink) 10px,
+    var(--nf-color-ink) calc(100% - 10px), transparent 100%);
+  cursor: pointer;
+  transition: background-color var(--nf-motion-fast);
+}
+.nf-scrollbar-track:before {
+  content: "";
+  position: absolute;
+  left: 50%; top: 0; bottom: 0;
+  width: 1px;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--nf-color-line-strong) 42%, transparent);
+}
+.nf-scrollbar-track:after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 5px;
+  width: 3px; height: 3px;
+  transform: translateX(-50%);
+  border-radius: var(--nf-radius-pill);
+  background: var(--nf-csb-tone);
+  opacity: .55;
+}
+
+.nf-scrollbar-thumb {
+  position: absolute;
+  left: 1px; right: 1px;
+  min-height: 26px;
+  border: var(--nf-border-width) solid color-mix(in srgb, var(--nf-csb-tone) 42%, transparent);
+  border-radius: var(--nf-radius-pill);
+  background-color: var(--nf-csb-thumb);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--nf-color-surface-raised) 58%, transparent), transparent 62%),
+    repeating-linear-gradient(180deg, transparent 0 3px,
+      color-mix(in srgb, var(--nf-color-ink) 6%, transparent) 3px 4px);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--nf-color-surface-raised) 34%, transparent);
+  cursor: grab;
+  transition: background-color var(--nf-motion-base) var(--nf-motion-ease),
+    box-shadow var(--nf-motion-fast), transform var(--nf-motion-fast);
+}
+.nf-scrollbar-thumb:after {
+  content: "";
+  position: absolute;
+  left: 50%; top: 50%;
+  width: 4px; height: 12px;
+  transform: translate(-50%, -50%);
+  background-image: radial-gradient(circle, var(--nf-csb-tone) 1px, transparent 1.4px);
+  background-size: 4px 4px;
+  opacity: .6;
+}
+.nf-scrollbar:hover .nf-scrollbar-thumb,
+.nf-scrollbar.is-scrolling .nf-scrollbar-thumb {
+  background-color: var(--nf-csb-thumb-hover);
+  border-color: color-mix(in srgb, var(--nf-csb-tone) 68%, transparent);
+  box-shadow: 0 0 6px color-mix(in srgb, var(--nf-csb-tone) 20%, transparent);
+}
+.nf-scrollbar-thumb:hover { transform: scaleX(1.12); }
+.nf-scrollbar.dragging .nf-scrollbar-thumb {
+  background-color: var(--nf-csb-thumb-active);
+  border-color: color-mix(in srgb, var(--nf-csb-tone) 82%, transparent);
+  cursor: grabbing;
+  transform: scaleX(1.12);
+}
+.nf-scrollbar:focus-visible .nf-scrollbar-track {
+  box-shadow: 0 0 0 2px var(--nf-color-brand-soft);
+}
+
+.nf-scrollbar-value {
+  position: absolute;
+  right: calc(100% + 6px);
+  top: 0;
+  transform: translateY(-50%);
+  padding: 2px 6px;
+  border: var(--nf-border-width) solid var(--nf-color-line-strong);
+  border-radius: var(--nf-radius-sm);
+  background: var(--nf-color-surface-raised);
+  color: var(--nf-csb-tone);
+  font-family: var(--nf-font-mono);
+  font-size: var(--nf-font-size-xs);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+  box-shadow: var(--nf-shadow-float);
+  transition: opacity var(--nf-motion-fast);
+}
+.nf-scrollbar:hover .nf-scrollbar-value,
+.nf-scrollbar.is-scrolling .nf-scrollbar-value,
+.nf-scrollbar:focus-visible .nf-scrollbar-value { opacity: 1; }
+
+/* Per-region tones are copied from the scroller by custom-scroll.js. */
+.program-window[data-reduce-motion="true"] .nf-scrollbar * { transition: none !important; }
+@media(prefers-reduced-motion:reduce){ .nf-scrollbar * { transition: none !important; } }

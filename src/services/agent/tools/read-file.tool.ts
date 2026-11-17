@@ -10,10 +10,9 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * 无 offset/limit 的全量读路径保持原样（行为兼容：读去重桩 / applyReadWindow 截断提示）。
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 import { validatePath } from './safe-path'
 import type { ReadFileRangeOptions } from '../../../shared/ipc-channels'
-import { isVelaProtocol, readVelaContent } from '../../vela-protocol'
+import { isVelaProtocol } from '../../vela-protocol'
 import { resolveAgentFilePath } from '../agent-file-resolver'
 
 /** 绝对路径判定（Windows 盘符 / UNC，与 intent-router 一致） */
@@ -21,16 +20,27 @@ function isAbsolutePath(p: string): boolean {
   return /^[a-zA-Z]:[\\/]/.test(p) || p.startsWith('\\\\')
 }
 
-/**
- * 读去重状态（模块级，会话无关）；agent-store 会话切换/新建/清空时调用 clearReadState 清理。
- * 只存 length：桩判定（file_unchanged）不比较内容，length 即全部所需——省一份文件内容引用
- */
-const readState = new Map<string, { length: number }>()
+const readStates = new WeakMap<AgentRuntimePorts['editor'], {
+  source: string
+  files: Map<string, { length: number }>
+}>()
+
+function readStateFor(ports: AgentRuntimePorts) {
+  const project = ports.project.current()
+  const source = JSON.stringify([project?.id, project?.path, ports.project.session()])
+  const existing = readStates.get(ports.editor)
+  if (existing?.source === source) return existing.files
+  const files = new Map<string, { length: number }>()
+  readStates.set(ports.editor, { source, files })
+  return files
+}
 
 /** 清空读去重状态：无参全清（会话切换/清空）；带 pathKey 单键清除（write_file 成功后失效，P0-2） */
-export function clearReadState(pathKey?: string): void {
-  if (pathKey) readState.delete(pathKey)
-  else readState.clear()
+export function clearReadState(pathKey?: string, ports = defaultAgentRuntimePorts): void {
+  let editor: AgentRuntimePorts['editor']
+  try { editor = ports.editor } catch { return }
+  if (pathKey) readStates.get(editor)?.files.delete(pathKey)
+  else readStates.delete(editor)
 }
 
 /** 桩消息：文件未变化，不重发全文（省重复注入的 token）——文本走 i18n（tool.fileUnchangedStub） */
@@ -109,8 +119,8 @@ function parseReadRange(args: Record<string, unknown>): {
   }
 }
 
-export function createReadFileTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadFileTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_file',
   description: t('tool.readFileDesc'),
   source: 'builtin',
@@ -133,7 +143,7 @@ return buildRuntimeAgentTool(ports, {
     required: ['file_path'],
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const filePath = args.file_path as string
     // offset/limit 解析必须先于去重短路判断（P0-1 契约：短路豁免条件 = !args.offset && !args.limit）
     const { windowed, offset, limit, rangeOptions } = parseReadRange(args)
@@ -141,6 +151,7 @@ return buildRuntimeAgentTool(ports, {
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
     }
+    const readState = readStateFor(ports)
     const resolvedPath = resolveAgentFilePath(filePath, ports)
 
     // 项目外文件：用户显式提供的绝对路径（"添加外部文件"对话框选择），
@@ -160,8 +171,8 @@ return buildRuntimeAgentTool(ports, {
       }
       // C1：窗口读把 offset/limit 下发主进程（超大文件主进程流式扫描，不再全量回传）
       const res = rangeOptions
-        ? await ipc.invoke('fs:read-external-file', filePath, rangeOptions)
-        : await ipc.invoke('fs:read-external-file', filePath)
+        ? await ports.io.invoke('fs:read-external-file', filePath, rangeOptions)
+        : await ports.io.invoke('fs:read-external-file', filePath)
       if (!res.success) {
         return { success: false, content: '', error: res.error ?? t('tool.readFileExternalFailed') }
       }
@@ -180,7 +191,7 @@ return buildRuntimeAgentTool(ports, {
         const state = readState.get(resolvedPath)
         if (state) return { success: true, content: FILE_UNCHANGED_STUB(resolvedPath, state.length) }
       }
-      const content = await readVelaContent(resolvedPath)
+      const content = await ports.io.readVirtualFile(resolvedPath)
       if (!windowed) readState.set(resolvedPath, { length: content.length })
       return { success: true, content: applyReadWindow(content, offset, limit) }
     }
@@ -201,8 +212,8 @@ return buildRuntimeAgentTool(ports, {
     }
 
     const result = rangeOptions
-      ? await ipc.invoke('fs:read-file', pathCheck.fullPath, rangeOptions)
-      : await ipc.invoke('fs:read-file', pathCheck.fullPath)
+      ? await ports.io.invoke('fs:read-file', pathCheck.fullPath, rangeOptions)
+      : await ports.io.invoke('fs:read-file', pathCheck.fullPath)
     if (!result.success) {
       return { success: false, content: '', error: result.error ?? t('tool.readFileFailed') }
     }

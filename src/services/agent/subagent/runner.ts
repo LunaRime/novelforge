@@ -7,7 +7,7 @@
  * 「审批路由」两处被 agent-store 显式接线。
  */
 import { t } from '../../../shared/locale'
-import { runAgentLoop, type AgentEngineCallbacks, type LLMGenerateFn } from '../agent-engine'
+import { runAgentLoop, type AgentEngineCallbacks, type AgentEngineDeps, type LLMGenerateFn } from '../agent-engine'
 import { estimateTokens, truncateToTokenBudget } from '../token-budget'
 import { stripDsmlMarkup } from '../dsml-tool-calls'
 import type { AgentMessage } from '../../../shared/agent-conversation'
@@ -19,6 +19,9 @@ import {
 import type { AgentProgress } from '../progress-tracker'
 
 export interface SubAgentDeps {
+  tools?: AgentEngineDeps['tools']
+  runtime?: AgentEngineDeps['runtime']
+  isCurrent?: () => boolean
   generate: LLMGenerateFn
   /** 系统提示词装配（注入以便单测；真实实现 = buildSubAgentPrompt） */
   buildPrompt: (task: SubAgentTask) => Promise<string>
@@ -103,7 +106,8 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
   // 真实定时器是**兜底**：LLM 调用真的挂住时用它中断；正常路径由「跑完后的墙钟比对」判定
   const timer = setTimeout(() => { timedOut = true; controller.abort() }, SUBAGENT_MAX_MS)
   const onParentAbort = (): void => controller.abort()
-  deps.signal?.addEventListener('abort', onParentAbort, { once: true })
+  if (deps.signal?.aborted) onParentAbort()
+  else deps.signal?.addEventListener('abort', onParentAbort, { once: true })
   emit()
 
   const callbacks: AgentEngineCallbacks = {
@@ -135,7 +139,7 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
     if (timedOut || elapsed > SUBAGENT_MAX_MS) {
       session.status = 'failed'
       session.error = t('subagent.timeout')
-    } else if (controller.signal.aborted) {
+    } else if (controller.signal.aborted || deps.isCurrent?.() === false) {
       session.status = 'cancelled'
       session.error = t('subagent.cancelled')
     } else if (session.error) {
@@ -150,7 +154,7 @@ export async function runSubAgent(task: SubAgentTask, deps: SubAgentDeps): Promi
     await runAgentLoop(
       systemPrompt, [], task.prompt, task.modelId, deps.generate, callbacks, controller.signal,
       { allowedTools: task.allowedTools },
-      { allowedTools: task.allowedTools },
+      { tools: deps.tools, runtime: deps.runtime, isCurrent: deps.isCurrent, allowedTools: task.allowedTools },
     )
     settle()
   } catch (e) {

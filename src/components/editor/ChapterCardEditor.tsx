@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { getCurrentLocale, type TextKey } from '../../shared/locale'
 import {
   Save, BookOpen, RefreshCw, Plus, Trash2,
@@ -9,19 +9,13 @@ import { useProjectStore } from '../../stores/project-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { useVolumeStore } from '../../stores/volume-store'
 import { useLayoutStore } from '../../stores/layout-store'
-import { ipc } from '../../services/ipc-client'
 import { useTranslation } from '../../hooks/useTranslation'
-import {
-  loadDirectoryBlueprints,
-  saveChapterBlueprint,
-  saveAllBlueprints,
-  type ChapterBlueprint,
-  type DirectoryWorkflowParams,
-} from '../../services/workflows/directory-workflow'
-import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'
+import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'
+import { ChapterBlueprintRequestCancelled, remapCharacterNameList, WorkflowStartError, type ChapterBlueprintScope, type WorkflowStartRequest } from '../../core'
+import { createRendererChapterBlueprintApplication, readChapterBlueprintSnapshot } from '../../services/chapters/chapter-blueprint-adapter'
+import { belongsToWorkflowSource } from '../../services/workflows/workflow-source'
 import { startWorkflow as startApplicationWorkflow } from '../../services/workflows/start-workflow'
-import { normalizeBlueprintRole } from '../../services/blueprint-role'
-import { generateVerificationReport, type VerificationReport, type BlueprintGap } from '../../services/blueprint-verification-service'
+import { generateVerificationReport, type VerificationReport } from '../../services/blueprint-verification-service'
 import DirectoryConfigDialog from '../dialogs/DirectoryConfigDialog'
 import BlueprintSortBar from './BlueprintSortBar'
 import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
@@ -61,258 +55,261 @@ const ROLE_COLORS: Record<string, string> = {
 
 /** 章节蓝图编辑器 — 读写 directory.json */
 export default function ChapterCardEditor() {
+  const project = useProjectStore(s => s.currentProject)
+  const session = useProjectStore(s => s.projectSession)
+  const { t } = useTranslation()
+  if (!project) return <div className="flex flex-col items-center justify-center h-full gap-3 opacity-40"><BookOpen size={36} /><span className="text-sm">{t('empty.pleaseOpenProject')}</span></div>
+  return <ChapterCardContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+}
+
+function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
-  // ✅ action 用 getState() 获取，不订阅 workflow store 高频更新
+  const [application] = useState(() => createRendererChapterBlueprintApplication(source))
+  const mounted = useRef(true)
+  const lifetime = useRef({ generation: 0 })
+  const loadRequest = useRef(0)
+  const editVersion = useRef(0)
+  const saveBusy = useRef(false)
+  const deleteBusy = useRef(false)
+  const blueprintStartBusy = useRef(false)
+  const rows = useRef<ChapterBlueprint[]>([])
+  const dirtyRows = useRef(new Set<ChapterBlueprint>())
+  const active = useCallback(() => {
+    if (!mounted.current) return false
+    try { application.assertCurrent(); return true } catch { return false }
+  }, [application])
   const addLog = useWorkflowStore.getState().addLog
-  // 分卷归属（蓝图列表每章显示所属卷）
   const volumes = useVolumeStore(s => s.volumes)
   const loadVolumes = useVolumeStore(s => s.load)
   const [blueprints, setBlueprints] = useState<ChapterBlueprint[]>([])
-  const [selectedIdx, setSelectedIdx] = useState<number>(0)
+  const [selectedIdx, setSelectedIdx] = useState(0)
   const [saving, setSaving] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [dirty, setDirty] = useState(false)
-  // 下一个可写的章节号
   const [nextWriteChapter, setNextWriteChapter] = useState<number | null>(null)
-
-  // 蓝图生成弹窗（替代原 inline 批量面板）
   const [showBlueprintDialog, setShowBlueprintDialog] = useState(false)
-
-  // 线③ 第 5 条：蓝图校检（校检报告 + 逐处补全入口）
+  const [startingBlueprint, setStartingBlueprint] = useState(false)
   const [verificationReport, setVerificationReport] = useState<VerificationReport | null>(null)
   const [verifying, setVerifying] = useState(false)
+  const verifyRequest = useRef(0)
+  const publishRows = useCallback((next: ChapterBlueprint[]) => { rows.current = next; setBlueprints(next) }, [])
 
-  // 加载分卷（蓝图列表显示所属卷徽标）
   useEffect(() => {
-    let mounted = true
-    Promise.resolve().then(() => { if (mounted) loadVolumes() })
-    return () => { mounted = false }
-  }, [loadVolumes])
-
-  const loadBlueprints = useCallback(async () => {
-    if (!currentProject) return
-    setLoading(true)
-    try {
-      const sortConfig = useBlueprintSortStore.getState().config
-      // 如果按章节号排序且升序，使用默认 get-all（最快路径）
-      let data: ChapterBlueprint[]
-      if (sortConfig.key === 'chapter_number' && sortConfig.direction === 'asc') {
-        data = await loadDirectoryBlueprints()
-      } else {
-        data = await ipc.invoke('db:blueprint-get-all-sorted', sortConfig) as ChapterBlueprint[]
-      }
-      // 读取侧清洗：旧库英文/历史变体 role 值归一化为规范值（保存时随蓝图写回 DB）
-      setBlueprints(data.map(b => ({ ...b, role: normalizeBlueprintRole(b.role) })))
-      if (data.length > 0) setSelectedIdx(0)
-      // 获取下一个待写章节号
-      const maxFinalized = await ipc.invoke('db:draft-get-max-finalized-chapter')
-      setNextWriteChapter(maxFinalized !== null ? maxFinalized + 1 : 1)
-    } catch {
-      addLog('error', t('log.render.blueprintLoadFailed'))
+    mounted.current = true
+    const lifecycle = lifetime.current; const generation = ++lifecycle.generation
+    return () => {
+      mounted.current = false
+      queueMicrotask(() => {
+        if (!mounted.current && lifecycle.generation === generation) application.dispose()
+      })
     }
+  }, [application])
+  useEffect(() => {
+    queueMicrotask(() => { if (active()) void loadVolumes().catch(error => renderLog('error', 'Load:BlueprintVolumes', String(error))) })
+  }, [loadVolumes, active])
+
+  const loadBlueprints = useCallback(async (manual = false) => {
+    if (!active() || saveBusy.current || deleteBusy.current) return
+    const request = ++loadRequest.current
+    const editing = editVersion.current
+    try {
+      if (dirtyRows.current.size) {
+        if (!manual || !await confirm(t('editor.refreshConfirm'), { title: t('dialog.unsavedTitle') })) return
+      }
+      if (!active() || request !== loadRequest.current || editing !== editVersion.current || saveBusy.current) return
+      setLoading(true)
+      const result = await application.load(useBlueprintSortStore.getState().config)
+      if (!active() || request !== loadRequest.current || editing !== editVersion.current || saveBusy.current) return
+      publishRows(result.blueprints); dirtyRows.current.clear()
+      setDirty(false); setLoadFailed(false); setSelectedIdx(0); setNextWriteChapter(result.nextWriteChapter)
+    } catch (error) {
+      if (!active() || request !== loadRequest.current || error instanceof ChapterBlueprintRequestCancelled) return
+      setLoadFailed(true); renderLog('error', 'Load:Blueprint', String(error))
+    } finally {
+      if (active() && request === loadRequest.current) setLoading(false)
+    }
+  }, [application, active, publishRows, t])
+  useEffect(() => { queueMicrotask(() => { if (active()) void loadBlueprints() }) }, [loadBlueprints, active])
+
+  useEffect(() => globalEventBus.on('REFRESH_RESOURCE', ({ characterMerge }) => {
+    if (!characterMerge || !active()) return
+    verifyRequest.current++
+    setVerifying(false)
+    setVerificationReport(null)
+    if (rows.current.length === 0) {
+      void loadBlueprints()
+      return
+    }
+    const names = new Map([[characterMerge.sourceName, characterMerge.targetName]])
+    loadRequest.current++
     setLoading(false)
-    setDirty(false)
-  }, [currentProject, addLog, t])
+    publishRows(rows.current.map(row => {
+      const characters = remapCharacterNameList(row.characters, names)
+      if (characters === row.characters) return row
+      const next = { ...row, characters }
+      if (dirtyRows.current.delete(row)) dirtyRows.current.add(next)
+      return next
+    }))
+  }), [active, loadBlueprints, publishRows])
 
-  useEffect(() => {
-    let mounted = true
-    Promise.resolve().then(() => { if (mounted) loadBlueprints() })
-    return () => { mounted = false }
-  }, [loadBlueprints])
-
-  // 监听工作流完成事件，如果蓝图生成完毕则自动刷新
-  useEffect(() => {
-    return globalEventBus.on('WORKFLOW_COMPLETE', (payload) => {
-      if (payload.type === 'directory') {
-        loadBlueprints()
-      }
-      // 线③ 第 5 条：补全缺口完成后，刷新蓝图 + 重新校检（用 DB 最新数据）。
-      // 仅响应 gap_fill 子流——角色档案等其他 post_process 完成不触发蓝图重新校检
-      if (payload.type === 'post_process' && payload.status !== 'failed') {
-        const run = payload.runId
-          ? useWorkflowStore.getState().activeRuns.find(r => r.id === payload.runId)
-          : undefined
-        if (run?.rehydrateParams?.__subflow === 'gap_fill') {
-          loadBlueprints()
-          void runVerify()
-        }
-      }
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadBlueprints, currentProject])
-
-  /** 线③ 第 5 条：校检蓝图——扫描缺口 + 角色不一致 + 缺标题（用 DB 最新蓝图） */
-  const runVerify = async () => {
-    if (!currentProject) return
+  const runVerify = useCallback(async () => {
+    if (!active() || !currentProject || saveBusy.current || deleteBusy.current) return
+    const request = ++verifyRequest.current
+    const totalChapters = currentProject.novelConfig.totalChapters
     setVerifying(true)
     try {
-      const latest = await loadDirectoryBlueprints()
-      const report = await generateVerificationReport(currentProject.novelConfig.totalChapters, latest)
-      setVerificationReport(report)
-    } catch (e) {
-      toast.error(t('verify.verifyFailed').replace('{error}', String(e)))
+      const latest = await readChapterBlueprintSnapshot(source)
+      if (!active() || request !== verifyRequest.current) return
+      const report = await generateVerificationReport(totalChapters, latest)
+      if (active() && request === verifyRequest.current) setVerificationReport(report)
+    } catch (error) {
+      if (!active() || request !== verifyRequest.current || error instanceof ChapterBlueprintRequestCancelled) return
+      toast.error(t('verify.verifyFailed').replace('{error}', String(error)))
     } finally {
-      setVerifying(false)
+      if (active() && request === verifyRequest.current) setVerifying(false)
     }
-  }
-
-  /** 线③ 第 5 条：补全指定缺口（走 startWorkflow，完成后监听里刷新 + 重新校检） */
-  const handleFillGap = async (gap: BlueprintGap) => {
-    try { await startApplicationWorkflow({ workflow: 'fill_blueprint_gaps', gaps: [gap] }) }
-    catch (error) { toast.error(String(error)) }
-  }
+  }, [active, currentProject, source, t])
+  useEffect(() => globalEventBus.on('WORKFLOW_COMPLETE', payload => {
+    if (!active() || (payload.runId && !belongsToWorkflowSource(payload.runId, source))) return
+    if (payload.type === 'directory') void loadBlueprints()
+    if (payload.type === 'post_process' && payload.status !== 'failed') {
+      const state = useWorkflowStore.getState()
+      const run = [...state.activeRuns, ...state.history].find(item => item.id === payload.runId)
+      if (run?.rehydrateParams?.__subflow === 'gap_fill') { void loadBlueprints(); void runVerify() }
+    }
+  }), [active, source, loadBlueprints, runVerify])
 
   const selected = blueprints[selectedIdx] ?? null
+  const nextWriteBlueprint = nextWriteChapter !== null ? blueprints.find(b => b.chapterNumber === nextWriteChapter) : null
 
-  // 下一章待写蓝图（仅在对应蓝图存在时非 null）
-  const nextWriteBlueprint = nextWriteChapter !== null
-    ? blueprints.find(b => b.chapterNumber === nextWriteChapter)
-    : null
-
-  /** 更新选中章节蓝图的字段 */
   const updateField = <K extends keyof ChapterBlueprint>(key: K, value: ChapterBlueprint[K]) => {
-    setBlueprints(prev =>
-      prev.map((b, i) => (i === selectedIdx ? { ...b, [key]: value } : b))
-    )
-    setDirty(true)
+    if (!active() || deleteBusy.current) return
+    const previous = rows.current[selectedIdx]
+    if (!previous) return
+    const next = { ...previous, [key]: value }
+    dirtyRows.current.delete(previous); dirtyRows.current.add(next)
+    publishRows(rows.current.map((row, index) => index === selectedIdx ? next : row))
+    editVersion.current++; loadRequest.current++; setLoading(false); setDirty(true)
   }
 
-  /** 保存当前章节蓝图 */
-  const handleSaveOne = async () => {
-    if (!currentProject || !selected) return
-    const t0 = Date.now()
-    setSaving(true)
+  const saveRows = async (submitted: ChapterBlueprint[], batch: boolean, manual = true, clearSubmitted = true) => {
+    if (!active() || saveBusy.current || deleteBusy.current) return
+    saveBusy.current = true; loadRequest.current++; setLoading(false); setSaving(true)
+    verifyRequest.current++; setVerifying(false)
+    const started = Date.now()
     try {
-      await saveChapterBlueprint(selected)
-      useProjectStore.getState().refreshFileTree()
-      setDirty(false)
-      // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Blueprint', t('log.render.blueprintSaveSuccess')
-        .replace('{num}', String(selected.chapterNumber))
-        .replace('{ms}', String(Date.now() - t0)))
-      toast.success(t('save.success'))
-    } catch (e) {
-      renderLog('error', 'Save:Blueprint', t('log.render.blueprintSaveFailed')
-        .replace('{num}', String(selected.chapterNumber))
-        .replace('{error}', () => String(e)))
-      toast.error(t('save.failed').replace('{error}', String(e)))
+      const receipt = batch ? await application.saveAll(submitted) : await application.saveOne(submitted[0])
+      if (!active()) return
+      setVerificationReport(null)
+      if (clearSubmitted) for (const row of submitted) dirtyRows.current.delete(row)
+      setDirty(dirtyRows.current.size > 0)
+      const message = batch
+        ? t('log.render.blueprintSaveAllSuccess').replace('{count}', String(submitted.length))
+        : t('log.render.blueprintSaveSuccess').replace('{num}', String(submitted[0].chapterNumber))
+      renderLog(manual ? 'info' : 'debug', 'Save:Blueprint', message.replace('{ms}', String(Date.now() - started)))
+      if (manual) toast.success(t('save.success'))
+      if (receipt.refreshError) { renderLog('error', 'Refresh:Blueprint', receipt.refreshError); toast.error(t('common.loadFailed')) }
+    } catch (error) {
+      if (!active() || error instanceof ChapterBlueprintRequestCancelled) return
+      const message = batch ? t('log.render.blueprintSaveAllFailed') : t('log.render.blueprintSaveFailed').replace('{num}', String(submitted[0].chapterNumber))
+      renderLog('error', 'Save:Blueprint', message.replace('{error}', () => String(error)))
+      toast.error(t('save.failed').replace('{error}', () => String(error)))
+    } finally {
+      saveBusy.current = false
+      if (active()) setSaving(false)
     }
-    setSaving(false)
   }
+  const handleSaveOne = () => { if (selected) return saveRows([selected], false) }
+  const handleSaveAll = () => saveRows([...rows.current], true)
 
-  /** 全量保存 */
-  const handleSaveAll = async () => {
-    if (!currentProject) return
-    const t0 = Date.now()
-    setSaving(true)
-    try {
-      await saveAllBlueprints(blueprints)
-      useProjectStore.getState().refreshFileTree()
-      setDirty(false)
-      // 保存行为日志流：成功 info + toast 视觉反馈
-      renderLog('info', 'Save:Blueprint', t('log.render.blueprintSaveAllSuccess')
-        .replace('{count}', String(blueprints.length))
-        .replace('{ms}', String(Date.now() - t0)))
-      toast.success(t('save.success'))
-    } catch (e) {
-      renderLog('error', 'Save:Blueprint', t('log.render.blueprintSaveAllFailed').replace('{error}', () => String(e)))
-      toast.error(t('save.failed').replace('{error}', String(e)))
-    }
-    setSaving(false)
-  }
-
-  /** 新建空章节 */
   const handleAddChapter = async () => {
-    if (!currentProject) return
-    const maxNum = blueprints.reduce((m, b) => Math.max(m, b.chapterNumber), 0)
+    if (!active() || saveBusy.current || deleteBusy.current || loadFailed) return
+    const maxNum = rows.current.reduce((max, row) => Math.max(max, row.chapterNumber), 0)
     const newBlueprint: ChapterBlueprint = {
-      chapterNumber: maxNum + 1,
-      title: '',
-      role: '发展',
-      purpose: '',
-      keyEvents: '',
-      characters: [],
-      suspenseHook: '',
-      userGuidance: '',
-      notes: '',
-      notesUpdatedAt: '',
-      sortOrder: maxNum + 1,
-      priority: 0,
+      chapterNumber: maxNum + 1, title: '', role: '发展', purpose: '', keyEvents: '', characters: [],
+      suspenseHook: '', userGuidance: '', notes: '', notesUpdatedAt: '', sortOrder: maxNum + 1, priority: 0,
     }
-    setBlueprints(prev => [...prev, newBlueprint])
-    setSelectedIdx(blueprints.length)
-    // 自动保存到数据库
-    try {
-      await saveChapterBlueprint(newBlueprint)
-      useProjectStore.getState().refreshFileTree()
-    } catch {
-      addLog('error', t('log.render.blueprintAutoSaveFailed'))
-    }
-    setDirty(true)
+    dirtyRows.current.add(newBlueprint)
+    publishRows([...rows.current, newBlueprint]); setSelectedIdx(rows.current.length - 1)
+    editVersion.current++; loadRequest.current++; setDirty(true)
+    await saveRows([newBlueprint], false, false, false)
   }
 
-  /** 删除选中章节 */
   const handleDeleteChapter = async () => {
-    if (!selected) return
-    const ok = await confirm(t('chapter.confirmDeleteMsg').replace('{n}', String(selected.chapterNumber)), {
-      title: t('chapter.confirmDeleteTitle'),
-      confirmText: t('chapter.confirmDelete'),
-      danger: true,
+    if (!selected || !active() || saveBusy.current || deleteBusy.current) return
+    const target = selected
+    const ok = await confirm(t('chapter.confirmDeleteMsg').replace('{n}', String(target.chapterNumber)), {
+      title: t('chapter.confirmDeleteTitle'), confirmText: t('chapter.confirmDelete'), danger: true,
     })
-    if (!ok) return
+    if (!ok || !active() || saveBusy.current || deleteBusy.current || !rows.current.includes(target)) return
+    deleteBusy.current = true; setDeleting(true)
+    loadRequest.current++; editVersion.current++; setLoading(false)
+    verifyRequest.current++; setVerifying(false)
     try {
-      // ★ 立即从数据库删除，避免刷新后重新出现
-      const result = await ipc.invoke('db:blueprint-delete', selected.chapterNumber)
-      if (!result.success) {
-        addLog('error', t('chapterCard.deleteFailed')
-          .replace('{n}', String(selected.chapterNumber))
-          .replace('{error}', result.error || t('status.unknown')))
-        return
+      await application.deleteOne(target.chapterNumber)
+      if (!active()) return
+      setVerificationReport(null)
+      const previous = rows.current
+      const next = previous.filter(row => row.chapterNumber !== target.chapterNumber)
+      for (const row of previous) if (row.chapterNumber === target.chapterNumber) dirtyRows.current.delete(row)
+      publishRows(next)
+      editVersion.current++; loadRequest.current++; setLoading(false)
+      setSelectedIdx(index => {
+        const survivingIndex = next.indexOf(previous[index])
+        return survivingIndex >= 0 ? survivingIndex : Math.max(0, Math.min(index, next.length - 1))
+      })
+      setDirty(dirtyRows.current.size > 0)
+      const message = t('chapterCard.deleteSuccess').replace('{n}', String(target.chapterNumber))
+      renderLog('info', 'Delete:Blueprint', message)
+      toast.success(message)
+      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['blueprints'] })
+    } catch (error) {
+      if (active()) {
+        const message = t('chapterCard.deleteFailed').replace('{n}', String(target.chapterNumber)).replace('{error}', () => error instanceof Error ? error.message : String(error))
+        renderLog('error', 'Delete:Blueprint', message)
+        toast.error(message)
       }
-    } catch (e) {
-      addLog('error', t('chapterCard.deleteError')
-        .replace('{n}', String(selected.chapterNumber))
-        .replace('{error}', String(e)))
-      return
+    } finally {
+      deleteBusy.current = false
+      if (active()) setDeleting(false)
     }
-    const newList = blueprints.filter((_, i) => i !== selectedIdx)
-    setBlueprints(newList)
-    // 删除后选中同一位置（如果已经是最后一项则选中新的最后一项）
-    const newIdx = Math.min(selectedIdx, newList.length - 1)
-    setSelectedIdx(Math.max(0, newIdx))
-    // 已经直接入库删除了，不需要标记 dirty
-    addLog('info', `Blueprint Ch.${selected.chapterNumber} deleted`)
   }
 
-  /** 触发蓝图批量生成（来自 DirectoryConfigDialog 的确认回调） */
-  const handleBatchGenerate = async (params: DirectoryWorkflowParams) => {
-    if (!currentProject) return
-
-    // 前置校验：故事架构是否就绪
-    const guard = await guardDirectoryGeneration()
-    if (!guard.ok) {
-      // 校验失败：阻断并提示
-      addLog('error', `Guard failed: ${guard.message}`)
-      toast.warning(t('blueprint.cannotGenerate').replace('{message}', guard.message || ''))
-      return
-    }
-    if (guard.message) {
-      // 有警告但允许继续：弹出确认
-      const yes = await confirm(`${guard.message}\n\n${t('chapter.continueAnyway')}`, {
-        title: t('chapter.warningTitle'),
-        confirmText: t('chapter.continue'),
+  const startBlueprint = async (request: Extract<WorkflowStartRequest, { workflow: 'generate_blueprint' | 'fill_blueprint_gaps' }>) => {
+    if (!active() || blueprintStartBusy.current) return
+    blueprintStartBusy.current = true; setStartingBlueprint(true)
+    try {
+      await startApplicationWorkflow(request, {
+        isCallerCurrent: active,
+        confirmBlueprintWarning: async message => active() && await confirm(`${message}\n\n${t('chapter.continueAnyway')}`, {
+          title: t('chapter.warningTitle'), confirmText: t('chapter.continue'),
+        }) && active(),
       })
-      if (!yes) return
+      if (active() && request.workflow === 'generate_blueprint') {
+        addLog('info', t('blueprintGen.submitted'))
+        toast.info(t('blueprintGen.submitted'))
+      }
+    } catch (error) {
+      if (!active() || (error instanceof WorkflowStartError && error.code === 'ERR_CANCELLED')) return
+      const message = error instanceof Error ? error.message : String(error)
+      if (request.workflow === 'generate_blueprint') {
+        addLog('error', message)
+        const feedback = t('blueprint.cannotGenerate').replace('{message}', () => message)
+        if (error instanceof WorkflowStartError && error.code === 'ERR_GUARD') toast.warning(feedback)
+        else toast.error(feedback)
+      } else toast.error(message)
+    } finally {
+      blueprintStartBusy.current = false
+      if (active()) setStartingBlueprint(false)
     }
-
-    try { await startApplicationWorkflow({ workflow: 'generate_blueprint', directory: params }) }
-    catch (error) { toast.error(String(error)); return }
-    addLog('info', 'Blueprint generation started')
   }
 
   /** 整本流水线：逐章 写稿→审查→定稿→KB/记忆（应用级入口，不依赖 Agent） */
   const handleRunBookPipeline = async () => {
+    if (!active()) return
     if (useWorkflowStore.getState().isTypeRunning('book_pipeline')) {
       toast.warning(t('chapter.bookPipelineRunning'))
       return
@@ -326,8 +323,10 @@ export default function ChapterCardEditor() {
     }
     try {
       await startApplicationWorkflow({ workflow: 'generate_book', chapterStart: 1, chapterEnd: end, autoReview: true })
+      if (!active()) return
       toast.success(t('chapter.bookPipelineStarted').replace('{n}', String(end)))
     } catch (e) {
+      if (!active()) return
       toast.error(t('chapter.bookPipelineFailed').replace('{error}', e instanceof Error ? e.message : String(e)))
     }
   }
@@ -337,6 +336,7 @@ export default function ChapterCardEditor() {
    * 支持指定章节（默认为当前选中章）
    */
   const handleWriteChapter = (bp: ChapterBlueprint) => {
+    if (!active()) return
     // 通过 layout-store openChapterCreation 传递预填参数，替代 window.dispatchEvent
     useLayoutStore.getState().openChapterCreation({
       chapterNumber: bp.chapterNumber,
@@ -349,7 +349,7 @@ export default function ChapterCardEditor() {
     })
   }
 
-  if (loading) {
+  if (loading && !blueprints.length && !loadFailed) {
     return (
       <div className="flex items-center justify-center h-full gap-2" style={{ color: 'var(--color-text-muted)' }}>
         <Spinner size={16}  /> {t('chapterCard.loadingBlueprints')}
@@ -398,7 +398,7 @@ export default function ChapterCardEditor() {
             variant="ghost"
             size="sm"
             onClick={runVerify}
-            disabled={verifying}
+            disabled={verifying || saving || deleting}
             title={t('verify.title')}
           >
             <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
@@ -419,25 +419,33 @@ export default function ChapterCardEditor() {
             variant="ai"
             size="sm"
             onClick={() => setShowBlueprintDialog(true)}
+            disabled={startingBlueprint}
             title={t('chapter.aiBlueprint')}
           >
             <Sparkles size={12} />
             {t('blueprint.aiGenerate')}
           </Button>
-          <Button variant="ghost" size="icon" onClick={() => loadBlueprints()} title={t('chapter.reload')} disabled={loading}>
+          <Button variant="ghost" size="icon" onClick={() => void loadBlueprints(true)} title={t('chapter.reload')} disabled={loading || saving || deleting}>
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')}>
+          <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
             <Plus size={14} />
           </Button>
           {dirty && (
-            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving}>
+            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
               <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
             </Button>
           )}
           </>
         )}
       />
+
+      {loadFailed && (
+        <div role="alert" className="flex items-center gap-2 border-b px-3 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}>
+          <span>{t('common.loadFailed')}</span>
+          <Button variant="ghost" size="sm" className="ml-auto" onClick={() => void loadBlueprints(true)}>{t('action.retry')}</Button>
+        </div>
+      )}
 
       {/* 线③ 第 5 条：校检报告（缺口列表 + 逐处补全） */}
       {verificationReport && (
@@ -471,7 +479,7 @@ export default function ChapterCardEditor() {
                     <span style={{ color: 'var(--color-text-muted)' }}>
                       {t('verify.chapterFormat').replace('{n}', String(gap.gapSize))}
                     </span>
-                    <Button variant="outline" size="sm" onClick={() => handleFillGap(gap)}>
+                    <Button variant="outline" size="sm" disabled={startingBlueprint} onClick={() => void startBlueprint({ workflow: 'fill_blueprint_gaps', gaps: [gap] })}>
                       {t('verify.fill')}
                     </Button>
                   </div>
@@ -501,7 +509,7 @@ export default function ChapterCardEditor() {
         isOpen={showBlueprintDialog}
         onClose={() => setShowBlueprintDialog(false)}
         existingCount={blueprints.length}
-        onConfirm={handleBatchGenerate}
+        onConfirm={directory => void startBlueprint({ workflow: 'generate_blueprint', directory })}
       />
 
       {/* 主区域：左侧列表 + 右侧编辑 */}
@@ -514,7 +522,7 @@ export default function ChapterCardEditor() {
           {blueprints.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 opacity-40 p-4">
               <BookOpen size={36} />
-              <span className="text-xs text-center">{t('blueprint.emptyHint')}</span>
+              <span className="text-xs text-center">{t(loadFailed ? 'common.loadFailed' : 'blueprint.emptyHint')}</span>
             </div>
           ) : (
           <div className="flex-1 overflow-y-auto p-1">
@@ -584,7 +592,7 @@ export default function ChapterCardEditor() {
         {/* 右侧编辑区 */}
         <div className="flex-1 overflow-y-auto">
           {selected ? (
-            <div className="max-w-2xl mx-auto px-5 py-4">
+            <fieldset className="min-w-0 max-w-2xl mx-auto px-5 py-4" disabled={deleting}>
               {/* 编辑区头部 */}
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
@@ -602,10 +610,10 @@ export default function ChapterCardEditor() {
                       <PenLine size={12} /> {t('chapter.writeThisChapter')}
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" onClick={handleDeleteChapter} title={t('chapter.deleteChapter')}>
+                  <Button variant="ghost" size="icon" onClick={handleDeleteChapter} title={t('chapter.deleteChapter')} disabled={saving || deleting}>
                     <Trash2 size={13} style={{ color: 'var(--color-text-muted)' }} />
                   </Button>
-                  <Button variant="outline" size="sm" onClick={handleSaveOne} disabled={saving}>
+                  <Button variant="outline" size="sm" onClick={handleSaveOne} disabled={saving || deleting}>
                     <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.save')}
                   </Button>
                 </div>
@@ -748,7 +756,7 @@ export default function ChapterCardEditor() {
                   />
                 </div>
               </div>
-            </div>
+            </fieldset>
           ) : (
             <div className="flex flex-col items-center justify-center h-full gap-3 opacity-30">
               <BookOpen size={36} />

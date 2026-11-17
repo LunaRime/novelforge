@@ -7,7 +7,7 @@
  * 记忆两段复用父的 `collectMemoryLayers`（唯一真源，避免两处漂移）。
  */
 import { t } from '../../../shared/locale'
-import { toolRegistry } from '../tool-registry'
+import { captureAgentProject, getAgentRuntimePorts, scopedAgentInvoke } from '../runtime-ports'
 import { estimateTokens, truncateToTokenBudget } from '../token-budget'
 import { buildL0ProjectContext, collectMemoryLayers } from '../context-builder'
 import { SUBAGENT_PROMPT_BUDGET_TOKENS, type SubAgentTask } from './types'
@@ -17,15 +17,18 @@ function buildSubAgentIdentity(description: string): string {
   return `${t('subagent.identity')}\n\n${t('subagent.taskHeader').replace('{description}', description)}`
 }
 
-export async function buildSubAgentPrompt(task: SubAgentTask): Promise<string> {
-  const layers = await collectMemoryLayers('') // userMessage='' → 不带 manual（@ 注入是父轮次语义）
+export async function buildSubAgentPrompt(task: SubAgentTask, runtime = getAgentRuntimePorts()): Promise<string> {
+  const source = captureAgentProject(runtime)
+  const layers = await collectMemoryLayers('', undefined, scopedAgentInvoke(runtime))
+  if (!source.isCurrent()) throw new Error(t('error.requestCancelled'))
+  const catalog = runtime.tools
   const tools = task.allowedTools
-    .map(n => toolRegistry.get(n))
+    .map(n => catalog.get(n))
     .filter((x): x is NonNullable<typeof x> => Boolean(x))
   const identity = buildSubAgentIdentity(task.description)
   const taskBlock = task.prompt.trim()
-  const l0 = buildL0ProjectContext() ?? ''
-  const toolPrompt = toolRegistry.generateToolPrompt(tools)
+  const l0 = buildL0ProjectContext(runtime) ?? ''
+  const toolPrompt = catalog.generateToolPrompt(tools)
 
   // 降级顺序：常驻 → 目录 → 工具描述（身份与任务说明尽量保底）
   const candidates: string[][] = [

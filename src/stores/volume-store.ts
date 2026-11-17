@@ -15,7 +15,7 @@ interface VolumeState {
   loaded: boolean
 
   /** 加载分卷；返回是否生效（loadSeq 竞态守卫：被更新请求取代/读取失败 → false，调用方应跳过失效） */
-  load: () => Promise<boolean>
+  load: (isCurrent?: () => boolean) => Promise<boolean>
   reset: () => void
   /** 插入/更新分卷（卷号冲突时按卷号覆盖） */
   upsert: (data: VolumeData) => Promise<boolean>
@@ -63,21 +63,23 @@ export const useVolumeStore = create<VolumeState>()((set, get) => ({
   volumes: [],
   loaded: false,
 
-  load: async () => {
+  load: async (isCurrent = () => true) => {
+    if (!isCurrent()) return false
     const seq = ++loadSeq
     try {
       const volumes = (await ipc.invoke('db:volume-get-all')) ?? []
-      if (seq !== loadSeq) return false // 已被更新的加载请求取代（项目已切换）——volumes 未更新
+      if (seq !== loadSeq || !isCurrent()) return false // 已被更新的加载请求取代（项目已切换）——volumes 未更新
       set({ volumes, loaded: true })
       return true
     } catch {
-      if (seq !== loadSeq) return false
+      if (seq !== loadSeq || !isCurrent()) return false
       set({ volumes: [], loaded: true })
       return false // 读取失败：无最新卷列表可用，调用方应跳过失效（避免用错数据打 stale）
     }
   },
 
   reset: () => {
+    ++loadSeq
     set({ volumes: [], loaded: false })
   },
 

@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, t
  * list_chapters — 列出所有章节状态概览
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createListChaptersTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createListChaptersTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'list_chapters',
   description: t('tool.listChaptersDesc'),
   source: 'builtin',
@@ -16,7 +15,7 @@ return buildRuntimeAgentTool(ports, {
     properties: {},
   },
   requiresConfirmation: false,
-  execute: async () => {
+  execute: async (_args, ports) => {
     const sourceProject = captureAgentProject(ports)
     const project = sourceProject.project
     if (!project) {
@@ -24,7 +23,7 @@ return buildRuntimeAgentTool(ports, {
     }
 
     try {
-      const blueprints = await ipc.invoke('db:blueprint-get-all')
+      const blueprints = await ports.io.invoke('db:blueprint-get-all')
       const bpNums = new Set<number>((Array.isArray(blueprints) ? blueprints : []).map((b: unknown) => (b as { chapterNumber?: number }).chapterNumber).filter((n): n is number => n !== undefined))
       const draftNums = new Set<number>(ports.drafts.chapterNumbers())
 
@@ -32,7 +31,7 @@ return buildRuntimeAgentTool(ports, {
       const msNums = new Set<number>()
       for (const bp of (Array.isArray(blueprints) ? blueprints : [])) {
         if (!sourceProject.isCurrent()) return { success: false, content: '', error: t('error.noProject') }
-        const finalized = await ipc.invoke('db:draft-get-finalized', bp.chapterNumber)
+        const finalized = await ports.io.invoke('db:draft-get-finalized', bp.chapterNumber)
         if (finalized) msNums.add(bp.chapterNumber)
       }
 

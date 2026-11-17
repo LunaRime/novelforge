@@ -7,13 +7,12 @@ import Database from 'better-sqlite3'
 import { readJsonFile, writeJsonFile, RECENT_PROJECTS_PATH, getProjectDataDir } from '../utils/config-utils'
 import { safeErrorMessage } from '../utils/error-utils'
 import { logger } from '../utils/logger'
-import { getProjectDb, getCurrentProjectPath } from '../database'
+import { closeProjectDatabase, getProjectDb, getCurrentProjectPath, initProjectDatabase, isFileProjectDirectory } from '../database'
 import { grantDirectory, assertPathAllowedForIpc } from './fs-controller'
-import { ProjectData } from '../../src/shared/ipc-channels'
-import type { ProjectSummary } from '../../src/shared/ipc-channels'
+import type { NovelConfig, ProjectConfigPatch, ProjectData, ProjectSummary } from '../../src/shared/ipc-channels'
 import { DIR_VELA_INTERNAL, DIR_PROMPTS } from '../../src/shared/project-paths'
-import { initProjectDatabase } from '../database'
-import { ProjectCoreRepository } from '../repositories/project-core-repository'
+import { ProjectCoreRepository, type ProjectCoreData } from '../repositories/project-core-repository'
+import { captureProjectWriteScope } from '../services/project-write-scope'
 import { guardedHandle } from '../security/ipc-guard'
 
 interface RecentProject {
@@ -45,11 +44,48 @@ function removeRecentProject(projectPath: string) {
   writeJsonFile(RECENT_PROJECTS_PATH, filtered)
 }
 
+function restoreProjectDatabase(previousPath: string | null): string | undefined {
+  const samePath = getCurrentProjectPath() === previousPath
+  try {
+    if (previousPath) {
+      if (!samePath || !getProjectDb()) initProjectDatabase(previousPath)
+      return captureProjectWriteScope().token
+    }
+    if (!samePath) closeProjectDatabase()
+  } catch (error) {
+    closeProjectDatabase()
+    logger.error('DB', t('log.db.openFailed').replace('{err}', () => String(error)))
+  }
+}
+
+function requireProjectConfigPath(data: Pick<Partial<ProjectData>, 'path' | 'writeToken'>): string {
+  if (!data.path) throw new Error(t('error.missingProjectPath'))
+  if (getCurrentProjectPath() !== data.path
+    || (data.writeToken !== undefined && captureProjectWriteScope().token !== data.writeToken)) {
+    throw new Error(t('error.requestCancelled'))
+  }
+  return data.path
+}
+
+function projectConfigColumns(config?: Partial<NovelConfig>): Partial<ProjectCoreData> {
+  if (!config) return {}
+  const fields = [
+    'genre', 'subGenre', 'targetAudience', 'totalChapters', 'wordsPerChapter',
+    'plotStructure', 'goldenFinger', 'globalGuidance', 'writingStyle', 'referenceWorks',
+    'coreOutline', 'worldSetting', 'protagonistProfile',
+  ] as const satisfies readonly (keyof NovelConfig & keyof ProjectCoreData)[]
+  const values: Partial<ProjectCoreData> = Object.fromEntries(fields.flatMap(field =>
+    config[field] === undefined ? [] : [[field, config[field]]]))
+  if (config.narrativePOV !== undefined) values.narrativePov = config.narrativePOV
+  return values
+}
+
 export function registerProjectController() {
   // 创建新项目
   guardedHandle('project:create', async (_event, config: {
     name: string; path: string; genre: string; targetAudience: string
   }) => {
+    const previousPath = getCurrentProjectPath()
     try {
       const projectId = randomUUID()
       const projectDir = path.join(config.path, config.name)
@@ -96,21 +132,26 @@ export function registerProjectController() {
       // 添加到最近项目列表
       addRecentProject({ name: config.name, path: projectDir, updatedAt: projectData.updatedAt })
 
-      return { success: true, projectId, projectPath: projectDir }
+      // Creation initializes the new database. Opening it is a separate renderer step.
+      const restoredWriteToken = restoreProjectDatabase(previousPath)
+      return { success: true, projectId, projectPath: projectDir, restoredWriteToken }
     } catch (error) {
-      return { success: false, projectId: '', error: safeErrorMessage(error) }
+      return { success: false, projectId: '', error: safeErrorMessage(error), restoredWriteToken: restoreProjectDatabase(previousPath) }
     }
   })
 
   // 打开现有项目
   guardedHandle('project:open', async (_event, projectPath: string) => {
+    const previousPath = getCurrentProjectPath()
     try {
       if (!fs.existsSync(projectPath)) {
         return { success: false, project: null, error: t('error.dirNotFound') }
       }
 
-      // TODO: 这里可以加入一个检测旧版项目的逻辑（如果有 旧的 01_novel_config.json 等），提示不支持旧格式。
-      // 因为新架构不兼容旧项目，这里我们只要初始化 DB 即可
+      // Hand candidates to the file editor before opening a database or updating SQLite recents.
+      if (isFileProjectDirectory(projectPath)) {
+        return { success: true, project: null, fileProjectPath: projectPath }
+      }
       initProjectDatabase(projectPath)
 
       // 从 DB 读取配置
@@ -124,12 +165,13 @@ export function registerProjectController() {
       // 组装返回给前端的数据结构
       const updatedCoreData = ProjectCoreRepository.get()
       if (!updatedCoreData) {
-        return { success: false, project: null, error: t('error.projectConfigReadFailed') }
+        return { success: false, project: null, error: t('error.projectConfigReadFailed'), restoredWriteToken: restoreProjectDatabase(previousPath) }
       }
       const projectData: ProjectData = {
         id: 'main',
         name: updatedCoreData.projectName,
         path: projectPath,
+        writeToken: captureProjectWriteScope().token,
         novelConfig: {
           genre: updatedCoreData.genre,
           subGenre: updatedCoreData.subGenre,
@@ -156,85 +198,35 @@ export function registerProjectController() {
 
       return { success: true, project: projectData }
     } catch (error) {
-      return { success: false, project: null, error: safeErrorMessage(error) }
+      return { success: false, project: null, error: safeErrorMessage(error), restoredWriteToken: restoreProjectDatabase(previousPath) }
     }
   })
 
-  // 保存/更新项目配置
-  // 注意：novelConfig 字段与 DB project_core 列的映射关系（前后端字段名不同）
   guardedHandle('project:save', async (_event, _projectId: string, data: Partial<ProjectData>) => {
+    let projectPath: string
     try {
-      if (!data.path) return { success: false, error: t('error.missingProjectPath') }
-
-      // 收集所有需要更新的字段，合并为单次 UPDATE
-      const updateData: Partial<import('../repositories/project-core-repository').ProjectCoreData> = {}
-
-      if (data.name) {
-        updateData.projectName = data.name
-      }
-
-      if (data.novelConfig) {
-        const nc = data.novelConfig
-        if (nc.genre !== undefined) updateData.genre = nc.genre
-        if (nc.subGenre !== undefined) updateData.subGenre = nc.subGenre
-        if (nc.targetAudience !== undefined) updateData.targetAudience = nc.targetAudience
-        if (nc.totalChapters !== undefined) updateData.totalChapters = nc.totalChapters
-        if (nc.wordsPerChapter !== undefined) updateData.wordsPerChapter = nc.wordsPerChapter
-        if (nc.plotStructure !== undefined) updateData.plotStructure = nc.plotStructure
-        if (nc.narrativePOV !== undefined) updateData.narrativePov = nc.narrativePOV
-        if (nc.goldenFinger !== undefined) updateData.goldenFinger = nc.goldenFinger
-        if (nc.globalGuidance !== undefined) updateData.globalGuidance = nc.globalGuidance
-        if (nc.writingStyle !== undefined) updateData.writingStyle = nc.writingStyle
-        if (nc.referenceWorks !== undefined) updateData.referenceWorks = nc.referenceWorks
-        // v13 解耦（#27）：小说配置写入独立列，不再反向映射到架构列（避免覆盖故事架构内容）
-        if (nc.coreOutline !== undefined) updateData.coreOutline = nc.coreOutline
-        if (nc.worldSetting !== undefined) updateData.worldSetting = nc.worldSetting
-        if (nc.protagonistProfile !== undefined) updateData.protagonistProfile = nc.protagonistProfile
-      }
-
-      if (data.characterStates !== undefined) {
-        updateData.characterStates = data.characterStates
-      }
-
-      // 单次批量更新
+      projectPath = requireProjectConfigPath(data)
+      const updateData = projectConfigColumns(data.novelConfig)
+      if (data.name) updateData.projectName = data.name
+      if (data.characterStates !== undefined) updateData.characterStates = data.characterStates
       ProjectCoreRepository.update(updateData)
-      logger.info('Project', t('log.project.configPersisted').replace('{count}', String(Object.keys(updateData).length)))
-
-      addRecentProject({
-        name: data.name ?? 'Unknown',
-        path: data.path,
-        updatedAt: Date.now(),
-      })
-
-      return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
     }
+
+    // The database update is committed. Recent-list IO has a separate outcome.
+    try {
+      addRecentProject({ name: data.name ?? 'Unknown', path: projectPath, updatedAt: Date.now() })
+    } catch (error) {
+      logger.warn('Project', safeErrorMessage(error))
+    }
+    return { success: true }
   })
 
-  // project:update-config 同理
-  guardedHandle('project:update-config', async (_event, _projectId: string, data: Partial<ProjectData>) => {
+  guardedHandle('project:update-config', async (_event, _projectId: string, data: ProjectConfigPatch) => {
     try {
-      if (data.novelConfig) {
-        const nc = data.novelConfig
-        const updateData: Partial<import('../repositories/project-core-repository').ProjectCoreData> = {}
-        if (nc.genre !== undefined) updateData.genre = nc.genre
-        if (nc.subGenre !== undefined) updateData.subGenre = nc.subGenre
-        if (nc.targetAudience !== undefined) updateData.targetAudience = nc.targetAudience
-        if (nc.totalChapters !== undefined) updateData.totalChapters = nc.totalChapters
-        if (nc.wordsPerChapter !== undefined) updateData.wordsPerChapter = nc.wordsPerChapter
-        if (nc.plotStructure !== undefined) updateData.plotStructure = nc.plotStructure
-        if (nc.narrativePOV !== undefined) updateData.narrativePov = nc.narrativePOV
-        if (nc.goldenFinger !== undefined) updateData.goldenFinger = nc.goldenFinger
-        if (nc.globalGuidance !== undefined) updateData.globalGuidance = nc.globalGuidance
-        if (nc.writingStyle !== undefined) updateData.writingStyle = nc.writingStyle
-        if (nc.referenceWorks !== undefined) updateData.referenceWorks = nc.referenceWorks
-        // v13 解耦（#27）：同 project:save，写入独立列
-        if (nc.coreOutline !== undefined) updateData.coreOutline = nc.coreOutline
-        if (nc.worldSetting !== undefined) updateData.worldSetting = nc.worldSetting
-        if (nc.protagonistProfile !== undefined) updateData.protagonistProfile = nc.protagonistProfile
-        ProjectCoreRepository.update(updateData)
-      }
+      requireProjectConfigPath(data)
+      ProjectCoreRepository.update(projectConfigColumns(data.novelConfig))
       return { success: true }
     } catch (error) {
       return { success: false, error: safeErrorMessage(error) }
@@ -257,11 +249,11 @@ export function registerProjectController() {
       // ⚠️ L4 S8 安全修复（评审 blocker B1）：入参来自渲染层，而紧接着就是
       //   `fs.rmSync(recursive, force)`。改造前只查 existsSync + isDirectory ——
       //   等于「渲染层给什么路径就递归删什么」，可 `rm -rf` 用户主目录下任意目录。
-      //   现在要求：① 确实是一个 NovelForge 项目目录（存在项目库）；② 通过路径策略断言。
+      // Check authorization and the candidate guard before resolving a potentially writable legacy directory.
+      assertPathAllowedForIpc(projectPath, 'delete')
       if (!fs.existsSync(path.join(getProjectDataDir(projectPath), 'vela.db'))) {
         return { success: false, error: t('error.notAProjectFolder') }
       }
-      assertPathAllowedForIpc(projectPath, 'delete')
       fs.rmSync(projectPath, { recursive: true, force: true })
       // 同时从最近列表中移除
       removeRecentProject(projectPath)

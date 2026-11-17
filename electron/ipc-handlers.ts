@@ -4,6 +4,7 @@ import { t } from '../src/shared/locale'
 
 import { registerConfigController } from './controllers/config-controller'
 import { registerProjectController } from './controllers/project-controller'
+import { registerFileProjectEditorController } from './controllers/file-project-editor-controller'
 import { registerFSController } from './controllers/fs-controller'
 import { registerLLMController } from './controllers/llm-controller'
 // 模型管理 v3 T1：凭据层三通道（credential:describe/set/unset）——紧邻 LLM 控制器注册，
@@ -40,6 +41,7 @@ export function registerIPCHandlers() {
   // 挂载控制器路由
   registerConfigController()
   registerProjectController()
+  registerFileProjectEditorController()
   registerFSController()
   registerLLMController()
   registerCredentialController() // 模型管理 v3 T1：密钥本体（describe/set/unset）

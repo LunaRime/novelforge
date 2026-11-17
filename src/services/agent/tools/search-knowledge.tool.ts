@@ -7,6 +7,7 @@
 import { t } from '../../../shared/locale'
 import { buildAgentTool } from '../tool-registry'
 import { ipc } from '../../ipc-client'
+import { scopedAgentInvoke } from '../runtime-ports'
 
 export const searchKnowledgeTool = buildAgentTool({
   name: 'search_knowledge',
@@ -41,7 +42,8 @@ export const searchKnowledgeTool = buildAgentTool({
     required: ['query'],
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, runtime) => {
+    const invoke = runtime ? scopedAgentInvoke(runtime) : ipc.invoke
     const query = args.query as string
     // 参数钳制（P1 修复）：top_k 保底 1（-5 此前透传主进程）、min_score 钳制 [0,1]
     // （-1 让过滤失效、99 让所有结果被丢弃且误导 LLM）、倒序章节范围自动交换
@@ -85,7 +87,7 @@ export const searchKnowledgeTool = buildAgentTool({
 
     // 根据是否有章节范围选择搜索方式
     if (chapterFrom !== undefined && chapterTo !== undefined) {
-      results = await ipc.invoke(
+      results = await invoke(
         'kb:search-with-scope',
         query,
         chapterFrom,
@@ -93,7 +95,7 @@ export const searchKnowledgeTool = buildAgentTool({
         topK,
       )
     } else {
-      results = await ipc.invoke('kb:search', query, topK)
+      results = await invoke('kb:search', query, topK)
     }
 
     if (!results || results.length === 0) {

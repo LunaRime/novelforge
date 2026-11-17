@@ -20,6 +20,9 @@ import type { CharacterData } from '../../../../electron/repositories/character-
 import type { StepCallbacks } from '../../../stores/workflow-store'
 import { isNoChangeValue, normalizeCharacterRole, normalizeTagsValue, matchCharacterName, stripNameAlias } from '../../character-normalize'
 import { buildNamePositions, hasProximity, closestNamePair, hasDialogueMarker } from '../relation-utils'
+import { captureCharacterSource, commitCharacterEdits, isCharacterSourceCurrent, readCharacterEdits } from '../../characters/character-edits-adapter'
+import { createCharacterCardMerger } from '../../character-card-merge'
+import type { CharacterEdit } from '../../../core'
 
 export interface FinalizeChapterParams {
   draftPath: string
@@ -123,6 +126,13 @@ export function buildFinalizePostProcessSteps(
   draftContent: string,
 ): PostProcessStep[] {
   const steps: PostProcessStep[] = []
+  const characterSource = captureCharacterSource()
+  const assertCharacterSource = () => {
+    if (!characterSource || characterSource.path !== _project.path || !isCharacterSourceCurrent(characterSource)) {
+      throw new Error(t('error.requestCancelled'))
+    }
+    return characterSource
+  }
 
   // ─── 步骤 1: 导入知识库（无依赖，可独立执行）─────────────────────
   steps.push({
@@ -176,7 +186,10 @@ export function buildFinalizePostProcessSteps(
       dependsOn: ['kb_import'],  // 仅依赖 KB 导入完成，可与 chapter_notes 并行
       executor: async (callbacks) => {
         // 读取现有角色卡
-        const allChars = (await ipc.invoke('db:character-get-all')) as unknown as CharacterData[]
+        const source = assertCharacterSource()
+        const snapshot = await readCharacterEdits(source)
+        const { scope, cards: allChars } = snapshot
+        const merger = await createCharacterCardMerger(_project.path, source, snapshot)
         const simpleCards = allChars.map((c) => ({ name: c.name, role: c.role }))
 
         // ⚠️ M 级修复：分段注入（首 5000 + 尾 3000 + 中间抽样）——此前只喂前 5000 字，
@@ -304,10 +317,12 @@ export function buildFinalizePostProcessSteps(
                 updatedAtChapter: chapterNumber,
               }
               // 标签/核心动机：有更新才覆盖（COALESCE），LLM 输出"无"变体保留旧值
-              await ipc.invoke('db:character-update-state', dbChar.name, newState, {
+              assertCharacterSource()
+              const result = await ipc.invoke('db:character-update-state', dbChar.name, newState, {
                 tags: normalizeTagsValue(row.tags ?? '') || null,
                 motivation: cleanOptional(row.motivation ?? ''),
-              })
+              }, { scope, uid: dbChar.uid })
+              if (!result.success) throw new Error(result.error || t('error.characterEditConflict'))
               callbacks.log(t('log.finalize.charStateUpdated').replace('{name}', name))
             } else {
               // 角色已被删除但 LLM 仍输出 → 记录可诊断日志（此前静默丢弃，排查无线索）
@@ -317,7 +332,7 @@ export function buildFinalizePostProcessSteps(
         }
 
         if (newRows.length > 0) {
-          let newCharCount = 0
+          const newCards: Array<Record<string, unknown>> = []
           for (const row of newRows) {
             // #34：写入端剥离括号别名（「无名老乞丐（前魂师）」→「无名老乞丐」），
             // 保证主键稳定——带括号名落库后与后续无括号输出分裂成两条记录
@@ -325,10 +340,9 @@ export function buildFinalizePostProcessSteps(
             // NEW 表哨兵：LLM 用「无」/「-」表示无新出场角色——此前会真的创建名为「无」的角色；
             // 去重用 matchCharacterName（精确 + 别名双形态）：已有角色被 LLM 误写进 NEW 时跳过创建
             if (!name || isNoChangeValue(name) || matchCharacterName(allChars, row.name || '')) continue
-            newCharCount++
             // ⚠️ P1 加固：role 枚举归一化（'Protagonist' 大写入库此前绕过 tier 推导/排序/UI 分级）
             const role = normalizeCharacterRole(row.role)
-            await ipc.invoke('db:character-upsert', {
+            newCards.push({
               name: name,
               role,
               gender: '', age: '',
@@ -353,8 +367,9 @@ export function buildFinalizePostProcessSteps(
               }
             })
           }
-          if (newCharCount > 0) {
-            callbacks.log(t('log.finalize.newChars').replace('{count}', String(newCharCount)))
+          if (newCards.length) {
+            const stats = await merger.merge(newCards)
+            if (stats.created) callbacks.log(t('log.finalize.newChars').replace('{count}', String(stats.created)))
           }
         }
       },
@@ -370,7 +385,10 @@ export function buildFinalizePostProcessSteps(
     executor: async (callbacks: StepCallbacks) => {
       callbacks.log(t('log.finalize.detectingRelations'))
       try {
-        const allChars = await ipc.invoke('db:character-get-all') as CharacterData[]
+        const source = assertCharacterSource()
+        const { scope, cards: allChars } = await readCharacterEdits(source)
+        const edits: CharacterEdit[] = []
+        const targets = new Map<string, Pick<CharacterData, 'name' | 'uid'>>()
         let detected = 0
 
         // P1-6：只对 active 角色做关系检测与出场统计——dead/departed 退出候选，
@@ -434,28 +452,24 @@ export function buildFinalizePostProcessSteps(
                 label: t('workflow.chapterInteraction').replace('{n}', String(chapterNumber)),
                 sinceChapter: chapterNumber,
               })
+              targets.set(other.name, { name: other.name, uid: other.uid })
               detectedForChar++
             }
           }
           detected += detectedForChar
 
-          // 仅在确有变更时 upsert；**全量回填所有字段**——此前 payload 只带 7 个字段，
-          // 仓库 upsert 是全列覆盖 → gender/age/appearance/.../notes（含 [VOICE:] 块）/currentState 全被清空
           if (chapsChanged || detectedForChar > 0) {
-            await ipc.invoke('db:character-upsert', {
+            edits.push({ before: char, after: {
               ...char,
-              name: char.name,
-              role: String(char.role || 'supporting'),
-              tier: Number(char.tier ?? 2),
-              tags: String(char.tags || ''),
               appearChapters: JSON.stringify(chaps),
               relations: JSON.stringify(rels),
               appearCount,
               firstChapter,
               lastChapter,
-            })
+            } })
           }
         }
+        if (edits.length) await commitCharacterEdits(source, scope, edits, [...targets.values()])
         if (detected > 0) callbacks.log(t('log.finalize.relationsDetected').replace('{count}', String(detected)))
         else callbacks.log(t('log.finalize.noRelations'))
       } catch (e) {
@@ -567,25 +581,16 @@ export function buildFinalizePostProcessSteps(
       callbacks.log(t('log.finalize.analyzingVoice'))
       try {
         const { analyzeCharacterVoice, upsertVoiceProfile } = await import('../../character-voice-analyzer')
-        const characters = await ipc.invoke('db:character-get-all') as CharacterData[]
+        const source = assertCharacterSource()
+        const { scope, cards: characters } = await readCharacterEdits(source)
         let analyzed = 0
         for (const char of characters) {
           if (!char.name) continue
           try {
-            // ⚠️ P0 修复：get-all 返回全列（含 currentState/tier/tags/appearChapters/relations），
-            //    upsert 用 ...existing 全量回填——此前只带 12 个字段，仓库 upsert 全列覆盖
-            //    把 v7 元数据与动态状态（cs_*）全部清空（注释声称"防止覆写"实际正是覆写）
-            const existing = char
             const profile = analyzeCharacterVoice(draftContent, char.name)
             if (profile.topWords.length > 0) {
-              // upsert：剥离旧 VOICE 块 → 合并新旧档案 → 单块写回（防止 notes 膨胀 + 读端取到旧档案）
-              const updatedNotes = upsertVoiceProfile(existing.notes || '', profile)
-              await ipc.invoke('db:character-upsert', {
-                ...existing,
-                name: existing.name,
-                role: existing.role || 'supporting',
-                notes: updatedNotes,
-              } as never)
+              const notes = upsertVoiceProfile(char.notes || '', profile)
+              await commitCharacterEdits(source, scope, [{ before: char, after: { ...char, notes } }])
               analyzed++
             }
           } catch { /* skip */ }
@@ -607,7 +612,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
     super()
   }
 
-  async execute({ callbacks }: CommandExecuteParams): Promise<void> {
+  async execute({ callbacks, context }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
     const assertProject = captureDraftProject(project.path)
@@ -626,17 +631,26 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     callbacks.log(t('log.finalize.start'))
 
-    // 1. 获取对应草稿并将库内状态变更为 finalized（同时同步定稿期可能微调过的正文）
+    // Compare the saved body and finalize that exact draft in a single transaction.
     const { parseDraftMeta } = await import('../chapter-workflow')
     const dbDraft = await parseDraftMeta(this.params.draftPath)
     assertProject()
     if (!dbDraft || dbDraft.chapterNumber !== this.params.chapterNumber) throw new Error(t('error.draftStateFlow'))
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
 
-    // wordCount 用统一"有效字数"口径（汉字 + 英文单词）
     const novelWordCount = computeTextStats(refinedDraftText).novelWordCount
-    assertDraftWrite(await ipc.invoke('db:draft-update-content', dbDraft.id, refinedDraftText, novelWordCount))
-    assertProject()
-    assertDraftWrite(await ipc.invoke('db:draft-update-status', dbDraft.id, 'finalized', novelWordCount))
+    context.finalCommitStarted = true
+    try {
+      const result = await ipc.invoke('db:draft-finalize', {
+        projectPath: project.path, writeToken: project.writeToken, draftId: dbDraft.id,
+        chapterNumber: this.params.chapterNumber, expectedContent: refinedDraftText, wordCount: novelWordCount,
+      })
+      if (result.conflict) throw new Error(t('tool.draftConflict'))
+      if (result.error === 'draft-finalized-readonly') throw new Error(t('tool.draftReadonly'))
+      assertDraftWrite(result)
+    } finally {
+      context.finalCommitStarted = false
+    }
     assertProject()
 
     // 【重要】：除了写入 DB，对于已定稿的章节需要实体化为物理文件放在根目录，供外部系统读取或备份
@@ -676,7 +690,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
       refinedDraftText,
     )
 
-    await runPostProcessPipeline(project.path, scope, sourceLabel, steps, callbacks)
+    await runPostProcessPipeline(project.path, scope, sourceLabel, steps, callbacks, { assertCurrent: assertProject })
     assertProject()
 
     callbacks.log(t('log.finalize.allDone').replace('{chapter}', String(this.params.chapterNumber)))
@@ -684,6 +698,7 @@ export class FinalizeChapterCommand extends BaseWorkflowCommand<void> {
 
     // 通过 EventBus 通知 ProjectService 执行定稿后的统一刷新
     const { globalEventBus } = await import('../../../shared/event-bus')
+    assertProject()
     globalEventBus.emit('FINALIZE_COMPLETE', { chapterNumber: this.params.chapterNumber })
   }
 }

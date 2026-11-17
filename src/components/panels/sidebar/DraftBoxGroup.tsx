@@ -3,29 +3,39 @@ import { draftUri } from '../../../services/vela-protocol'
  * DraftBoxGroup — 草稿箱折叠组（含章节分组和单条草稿条目）
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { CheckCircle2, Circle, FileText, FolderOpen, Copy, Trash2, FilePen, ChevronRight, ChevronDown } from 'lucide-react'
-import type { DraftMeta } from '../../../stores/draft-store'
-import { useDraftStore, readDraftBody } from '../../../stores/draft-store'
-import { useEditorStore } from '../../../stores/editor-store'
+import { draftListScope, isDraftListCurrent, useDraftStore, type DraftMeta, type DraftsByChapter } from '../../../stores/draft-store'
+import { useProjectStore } from '../../../stores/project-store'
+import { captureChapterBlueprintScope, readChapterBlueprintSnapshot } from '../../../services/chapters/chapter-blueprint-adapter'
+import { renderLog } from '../../../services/render-logger'
+import { globalEventBus } from '../../../shared/event-bus'
 import { confirm } from '../../ui/Confirm'
+import { toast } from '../../ui/Toast'
 import { Button } from '../../ui/Button'
 import CountBadge from '../../ui/CountBadge'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../../shared/draft-status'
 import type { TextKey } from '../../../shared/locale'
-import { showSidebarMenu } from './SidebarShared'
-import { ipc } from '../../../services/ipc-client'
+import { openDraftById, showSidebarMenu } from './SidebarShared'
 import { useTranslation } from '../../../hooks/useTranslation'
 import SidebarGroup from './SidebarGroup'
 
 // ===== 草稿箱卡片组 =====
 
-export default function DraftBoxGroup({
-  draftsByChapter,
-}: {
-  draftsByChapter: Record<number, DraftMeta[]>
-}) {
+const emptyDrafts: DraftsByChapter = {}
+
+export default function DraftBoxGroup() {
+  const scope = useProjectStore(state => state.loading ? null : draftListScope(state))
+  const draftsByChapter = useDraftStore(state => state.draftsScope === scope ? state.draftsByChapter : emptyDrafts)
+  if (!scope) return null
+  return <DraftBoxContent key={scope} scope={scope} draftsByChapter={draftsByChapter} />
+}
+
+type DraftAction = (draft: DraftMeta, name: string) => Promise<void>
+
+function DraftBoxContent({ scope, draftsByChapter }: { scope: string; draftsByChapter: DraftsByChapter }) {
   const { t } = useTranslation()
+  const pendingArchives = useRef(new Set<number>())
 
   // 所有章节号排序
   const chapterNums = Object.keys(draftsByChapter)
@@ -37,23 +47,59 @@ export default function DraftBoxGroup({
     (draftsByChapter[n] || []).some(d => d.status !== 'archived')
   ).length
 
-  // 一次拉取全部蓝图标题建 map（此前每章分组挂载各发一次 db:blueprint-get IPC，
-  // 展开 50 章 = 50 次请求）；章节集合变化时重拉
   const [bpTitleMap, setBpTitleMap] = useState<Record<number, string>>({})
   const chaptersDep = chapterNums.join(',')
   useEffect(() => {
-    if (chapterNums.length === 0) return
-    let cancelled = false
-    ipc.invoke('db:blueprint-get-all').then(bps => {
-      if (cancelled) return
-      const map: Record<number, string> = {}
-      for (const bp of bps || []) {
-        if (bp?.title) map[bp.chapterNumber] = bp.title
+    if (!chaptersDep) return
+    const source = captureChapterBlueprintScope()
+    if (!source || !isDraftListCurrent(scope)) return
+    let request = 0
+    const loadTitles = async () => {
+      const seq = ++request
+      if (!isDraftListCurrent(scope)) return
+      try {
+        const blueprints = await readChapterBlueprintSnapshot(source)
+        if (seq !== request || !isDraftListCurrent(scope)) return
+        setBpTitleMap(Object.fromEntries(blueprints.filter(bp => bp.title).map(bp => [bp.chapterNumber, bp.title])))
+      } catch (error) {
+        if (seq === request && isDraftListCurrent(scope)) renderLog('warn', 'Load:DraftBox', String(error))
       }
-      setBpTitleMap(map)
-    }).catch(() => { /* 蓝图读取失败仅缺标题，不阻断 */ })
-    return () => { cancelled = true }
-  }, [chaptersDep]) // eslint-disable-line react-hooks/exhaustive-deps -- chapterNums 每次渲染新建，用派生字符串做依赖
+    }
+    void loadTitles()
+    const unsubscribe = globalEventBus.on('REFRESH_RESOURCE', ({ resources }) => {
+      if (resources.includes('blueprints') || resources.includes('all')) void loadTitles()
+    })
+    return () => { ++request; unsubscribe() }
+  }, [chaptersDep, scope])
+
+  const openDraft: DraftAction = async (draft, name) => {
+    if (isDraftListCurrent(scope)) await openDraftById(draft.id, name)
+  }
+
+  const archiveDraft: DraftAction = async (draft, name) => {
+    if (draft.status === 'finalized' || draft.status === 'archived' || !isDraftListCurrent(scope)
+      || pendingArchives.current.has(draft.id)) return
+    pendingArchives.current.add(draft.id)
+    try {
+      const accepted = await confirm(
+        t('draftbox.archiveConfirm').replace('{name}', () => name),
+        { title: t('dialog.confirmArchive'), confirmText: t('draftbox.archiveAction'), danger: true }
+      )
+      if (!accepted || !isDraftListCurrent(scope)) return
+      await useDraftStore.getState().archiveDraft(draft.id, draft.chapterNumber, scope)
+      if (!isDraftListCurrent(scope)) return
+      const message = t('draftbox.archiveSuccess')
+      renderLog('info', 'Delete:Draft', message)
+      toast.success(message)
+    } catch (error) {
+      if (!isDraftListCurrent(scope)) return
+      const message = t('draftbox.archiveFailed').replace('{error}', () => String(error))
+      renderLog('error', 'Delete:Draft', message)
+      toast.error(message)
+    } finally {
+      pendingArchives.current.delete(draft.id)
+    }
+  }
 
   return (
     <SidebarGroup
@@ -76,6 +122,8 @@ export default function DraftBoxGroup({
             chapterNumber={chNum}
             drafts={draftsByChapter[chNum] || []}
             bpTitle={bpTitleMap[chNum]}
+            onOpen={openDraft}
+            onArchive={archiveDraft}
           />
         ))
       )}
@@ -89,11 +137,14 @@ function DraftChapterGroup({
   chapterNumber,
   drafts,
   bpTitle,
+  onOpen,
+  onArchive,
 }: {
   chapterNumber: number
   drafts: DraftMeta[]
-  /** 蓝图标题（父组件一次 db:blueprint-get-all 提供，子组件零 IPC） */
   bpTitle?: string
+  onOpen: DraftAction
+  onArchive: DraftAction
 }) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -149,6 +200,8 @@ function DraftChapterGroup({
               key={draftUri(draft.id)}
               draft={draft}
               chapterTitleText={displayTitle}
+              onOpen={onOpen}
+              onArchive={onArchive}
             />
           ))}
 
@@ -175,6 +228,8 @@ function DraftChapterGroup({
               key={draftUri(draft.id)}
               draft={draft}
               chapterTitleText={displayTitle}
+              onOpen={onOpen}
+              onArchive={onArchive}
               archived
             />
           ))}
@@ -190,36 +245,18 @@ function DraftItem({
   draft,
   chapterTitleText,
   archived = false,
+  onOpen,
+  onArchive,
 }: {
   draft: DraftMeta
   chapterTitleText: string
   archived?: boolean
+  onOpen: DraftAction
+  onArchive: DraftAction
 }) {
   const { t } = useTranslation()
-
-  /** 打开草稿到编辑器 */
-  const openDraft = async () => {
-    const content = await readDraftBody(draftUri(draft.id))
-    useEditorStore.getState().openFile({
-      id: draftUri(draft.id),
-      name: `${chapterTitleText} v${draft.version}`,
-      type: 'chapter',
-      filePath: draftUri(draft.id),
-      content,
-    })
-  }
-
-  /** 将草稿标记为归档（软删除） */
-  const deleteDraft = async () => {
-    if (isFinalized) return
-    const ok = await confirm(
-      t('draftbox.archiveConfirm').replace('{name}', `${chapterTitleText} v${draft.version}`),
-      { title: t('dialog.confirmArchive'), confirmText: t('draftbox.archiveAction'), danger: true }
-    )
-    if (!ok) return
-    await useDraftStore.getState().markDraftStatus(draftUri(draft.id), draft.chapterNumber, 'archived')
-  }
-
+  const name = `${chapterTitleText} v${draft.version}`
+  const openDraft = () => onOpen(draft, name)
   const isFinalized = draft.status === 'finalized'
 
   return (
@@ -248,8 +285,8 @@ function DraftItem({
           label: t('action.deleteDraft'),
           icon: <Trash2 size={13} />,
           danger: true,
-          disabled: isFinalized,
-          onClick: deleteDraft,
+          disabled: isFinalized || archived,
+          onClick: () => onArchive(draft, name),
         },
       ], e)}
       title={t('draftbox.tooltip')

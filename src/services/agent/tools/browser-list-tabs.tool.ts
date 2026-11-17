@@ -8,6 +8,7 @@
 import { buildAgentTool } from '../tool-registry'
 import { t } from '../../../shared/locale'
 import { ipc } from '../../ipc-client'
+import { scopedAgentInvoke } from '../runtime-ports'
 
 export const browserListTabsTool = buildAgentTool({
   name: 'browser_list_tabs',
@@ -18,8 +19,9 @@ export const browserListTabsTool = buildAgentTool({
     type: 'object',
     properties: {},
   },
-  execute: async () => {
-    const res = await ipc.invoke('browser:list-tabs')
+  execute: async (_args, runtime) => {
+    const invoke = runtime ? scopedAgentInvoke(runtime) : ipc.invoke
+    const res = await invoke('browser:list-tabs')
     if (!res.success) {
       return {
         success: false,

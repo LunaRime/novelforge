@@ -11,8 +11,8 @@ export interface LegacyDraft {
   title: string
   content: string
   contentHash: string
-  createdAt: number
-  updatedAt: number
+  createdAt: number | string
+  updatedAt: number | string
 }
 export interface LegacySource {
   /** Rows and backup must describe the same offline database snapshot. */
@@ -33,6 +33,20 @@ interface Manifest {
 const hash = (s: string | Buffer) => createHash('sha256').update(s).digest('hex')
 const idFor = (project: string, id: number) => `ch_${hash(JSON.stringify([project, id])).slice(0, 32)}`
 const fileHash = async (p: string) => hash(await readFile(p))
+
+/** Legacy SQLite TEXT columns can contain both UTC datetime text and millisecond strings. */
+export function legacyDraftDate(value: unknown): Date {
+  if (typeof value === 'number') return new Date(value)
+  if (typeof value !== 'string') return new Date(NaN)
+  const text = value.trim()
+  if (/^-?\d+$/.test(text)) return new Date(Number(text))
+  if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,3})?$/.test(text)) {
+    return new Date(text.replace(' ', 'T') + 'Z')
+  }
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(text)) return new Date(text)
+  return new Date(NaN)
+}
+
 async function exists(p: string) {
   try { await lstat(p); return true } catch (e) {
     if ((e as NodeJS.ErrnoException).code === 'ENOENT') return false
@@ -41,8 +55,8 @@ async function exists(p: string) {
 }
 function serialize(projectId: string, id: string, row: LegacyDraft) {
   const metadata = { projectId, id, number: row.chapterNumber, title: row.title,
-    status: row.status, createdAt: new Date(row.createdAt).toISOString(),
-    updatedAt: new Date(row.updatedAt).toISOString(), legacyDraftId: row.id }
+    status: row.status, createdAt: legacyDraftDate(row.createdAt).toISOString(),
+    updatedAt: legacyDraftDate(row.updatedAt).toISOString(), legacyDraftId: row.id }
   return `---\n${Object.entries(metadata).map(([k, v]) => `${k}: ${JSON.stringify(v)}`).join('\n')}\n---\n${row.content}`
 }
 function validate(rows: LegacyDraft[]) {
@@ -53,7 +67,7 @@ function validate(rows: LegacyDraft[]) {
     if (!Number.isSafeInteger(row.chapterNumber) || row.chapterNumber < 1 ||
         !Number.isSafeInteger(row.version) || row.version < 1 || typeof row.content !== 'string' ||
         typeof row.title !== 'string' || typeof row.status !== 'string' ||
-        !Number.isFinite(new Date(row.createdAt).getTime()) || !Number.isFinite(new Date(row.updatedAt).getTime()) ||
+        !Number.isFinite(legacyDraftDate(row.createdAt).getTime()) || !Number.isFinite(legacyDraftDate(row.updatedAt).getTime()) ||
         !['draft', 'revised', 'reviewed', 'finalized', 'archived'].includes(row.status) ||
         (row.branchId !== null && (!Number.isSafeInteger(row.branchId) || row.branchId < 1))) throw new Error(`invalid draft ${row.id}`)
     if (row.contentHash && row.contentHash !== hash(row.content)) throw new Error(`content hash mismatch: draft ${row.id}`)
@@ -69,21 +83,28 @@ export async function exportLegacyProject({ source, destination, projectId }: Op
   const target = resolve(destination)
   if (await exists(target)) {
     if ((await lstat(target)).isSymbolicLink()) throw new Error('destination must not be a symlink')
+    const actualNames = await listExportFiles(target)
+    if (!actualNames.includes('migration-manifest.json')) throw new Error('export manifest missing')
     const manifest = JSON.parse(await readFile(join(target, 'migration-manifest.json'), 'utf8')) as Manifest
     if (manifest.format !== 1 || manifest.projectId !== projectId || manifest.sourceHash !== sourceHash ||
         manifest.sourceFingerprint !== sourceFingerprint) throw new Error('source changed or destination belongs to another export')
     // Derive the file list from source rows rather than trusting editable manifest paths.
     const expected = buildFiles(projectId, rows)
+    const chapters = [...expected.keys()].filter(k => k.startsWith('chapters/')).length
     expected.set('novel.json', JSON.stringify({ id: projectId, schemaVersion: 1 }, null, 2))
     const names = [...expected.keys(), 'legacy.db', 'migration-manifest.json'].sort()
-    if (JSON.stringify(await listExportFiles(target)) !== JSON.stringify(names)) throw new Error('export modified: unexpected or missing files')
+    const manifestNames = [...Object.keys(manifest.files ?? {}), 'migration-manifest.json'].sort()
+    if (manifest.chapters !== chapters || JSON.stringify(manifestNames) !== JSON.stringify(names) ||
+        JSON.stringify(manifest.drafts) !== JSON.stringify(rows)) throw new Error('manifest modified')
+    if (JSON.stringify(actualNames) !== JSON.stringify(names)) throw new Error('export modified: unexpected or missing files')
     for (const [name, content] of expected) {
       const p = join(target, name)
-      if ((await lstat(p)).isSymbolicLink() || await fileHash(p) !== hash(content)) throw new Error(`export modified: ${name}`)
+      const expectedHash = hash(content)
+      if (manifest.files[name] !== expectedHash) throw new Error(`manifest modified: ${name}`)
+      if (!(await lstat(p)).isFile() || await fileHash(p) !== expectedHash) throw new Error(`export modified: ${name}`)
     }
     if (await fileHash(join(target, 'legacy.db')) !== manifest.files['legacy.db']) throw new Error('backup modified')
-    if (JSON.stringify(manifest.drafts) !== JSON.stringify(rows)) throw new Error('manifest modified')
-    return { chapters: manifest.chapters, drafts: rows.length, alreadyExported: true }
+    return { chapters, drafts: rows.length, alreadyExported: true }
   }
   await mkdir(dirname(target), { recursive: true })
   const staging = await mkdtemp(join(dirname(target), '.nf-export-'))
@@ -138,7 +159,8 @@ export async function listExportFiles(directory: string): Promise<string[]> {
   for (const entry of await readdir(directory, { withFileTypes: true })) {
     if (entry.isSymbolicLink()) throw new Error('export contains symlink')
     if (entry.isDirectory()) result.push(...(await listExportFiles(join(directory, entry.name))).map(p => `${entry.name}/${p}`))
-    else result.push(entry.name)
+    else if (entry.isFile()) result.push(entry.name)
+    else throw new Error('export contains a non-regular file')
   }
   return result.sort()
 }

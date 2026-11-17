@@ -2,42 +2,38 @@ import { create } from 'zustand'
 import { ipc } from '../services/ipc-client'
 import { loadProjectCustomPrompts, clearProjectCustomPrompts } from '../services/prompt-templates'
 import type { ProjectData, NovelConfig, FileNode } from '../shared/ipc-channels'
-import { alertError } from '../components/ui/Confirm'
+import { alertError, confirm } from '../components/ui/Confirm'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
 import { t } from '../shared/locale'
-
-/**
- * 从 currentProject 中提取纯净的 ProjectData 字段，
- * 防止 Zustand 状态中混入非序列化属性导致 Electron IPC structured clone 挂起。
- */
-function toPlainProjectData(p: ProjectData): ProjectData {
-  return {
-    id: p.id,
-    name: p.name,
-    path: p.path,
-    novelConfig: p.novelConfig ? { ...p.novelConfig } : p.novelConfig,
-    characterStates: p.characterStates,
-    createdAt: p.createdAt,
-    updatedAt: p.updatedAt,
-  }
-}
-
-/** 给 Promise 包裹超时保护，防止 IPC 调用永远不返回 */
-function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
-  return new Promise<T>((resolve, reject) => {
-    const timer = setTimeout(() => {
-      reject(new Error(t('error.timeoutMs').replace('{label}', label).replace('{ms}', String(ms))))
-    }, ms)
-    promise.then(
-      (v) => { clearTimeout(timer); resolve(v) },
-      (e) => { clearTimeout(timer); reject(e) },
-    )
-  })
-}
+import { globalEventBus } from '../shared/event-bus'
+import { useEditorStore } from './editor-store'
+import { NovelConfigRequestCancelled, type NovelConfigScope } from '../core'
+import { commitProjectConfig, markProjectConfigReloaded, ProjectConfigResultUnknown } from '../services/config/project-config-save'
 // 延迟导入 ProjectService，避免循环依赖
 let _onProjectOpened: (() => Promise<void>) | null = null
 let _onProjectClosed: (() => void) | null = null
+let openingProject = false
+let creatingProject = false
+type EditorTabsSnapshot = Pick<ReturnType<typeof useEditorStore.getState>, 'tabs' | 'activeTabId' | 'activeCharCount'>
+
+async function confirmEditorTabSwitch(): Promise<EditorTabsSnapshot | false> {
+  const protectedTabs = useEditorStore.getState().tabs.filter(tab => tab.dirty || tab.inlineSession)
+  if (protectedTabs.length) {
+    const accepted = await confirm(t('project.switchDiscardConfirm'), {
+      title: t('dialog.unsavedTitle'), confirmText: t('project.discardAndSwitch'), danger: true,
+    })
+    if (!accepted) return false
+    const latest = useEditorStore.getState().tabs
+    if (latest.some(tab => (tab.dirty || tab.inlineSession) && !protectedTabs.includes(tab))) {
+      toast.warning(t('project.switchEditsChanged'))
+      return false
+    }
+  }
+  const { tabs, activeTabId, activeCharCount } = useEditorStore.getState()
+  return { tabs, activeTabId, activeCharCount }
+}
+
 async function callProjectOpened() {
   if (!_onProjectOpened) {
     const { onProjectOpened } = await import('../services/project-service')
@@ -76,15 +72,19 @@ interface ProjectState {
   /** 打开项目 */
   openProject: (projectPath: string, opts?: { keepView?: boolean }) => Promise<boolean>
   /** 保存项目 */
-  saveProject: () => Promise<boolean>
+  saveProject: (configSnapshot?: NovelConfig, onPending?: () => void) => Promise<boolean>
+  saveNovelConfigPatch: (source: NovelConfigScope, patch: Partial<NovelConfig>, onCommitted?: () => void) => Promise<void>
+  commitNovelConfigPatch: (source: NovelConfigScope, patch: Partial<NovelConfig>, expectedVersions?: ProjectState['configFieldVersions']) => Promise<void>
+  configFieldVersions: Partial<Record<keyof NovelConfig, number>>
   /** 更新小说配置 */
   updateNovelConfig: (config: Partial<NovelConfig>) => void
   /** 线③：AI 产出应用前的配置快照（撤销出口） */
   configSnapshot: NovelConfig | null
+  configSnapshotSource: NovelConfigScope | null
   /** 线③：快照当前配置（AI 产出应用前调用，供撤销恢复） */
   snapshotNovelConfig: () => void
   /** 线③：恢复快照（撤销 AI 产出）；无快照时 no-op 返回 false */
-  restoreNovelConfigSnapshot: () => boolean
+  restoreNovelConfigSnapshot: () => Promise<boolean>
   /** 刷新文件树 */
   refreshFileTree: () => Promise<void>
   /** 加载最近项目 */
@@ -106,11 +106,37 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   recentProjects: [],
   loading: false,
   configSnapshot: null,
+  configSnapshotSource: null,
+  configFieldVersions: {},
 
   createProject: async (config) => {
-    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
+    if (creatingProject || openingProject) return false
+    creatingProject = true
+    const source = get()
+    let session: number | undefined
+    let detachedTabs: EditorTabsSnapshot | undefined
+    let opened = false
+    let handedOff = false
     try {
+      const { useCharacterStore } = await import('./character-store')
+      if (get().projectSession !== source.projectSession) return false
+      if (source.currentProject) {
+        const tabs = await confirmEditorTabSwitch()
+        if (!tabs || get().projectSession !== source.projectSession) return false
+        detachedTabs = tabs
+      }
+      if (useCharacterStore.getState().saving) {
+        toast.warning(t('tip.characterSaving'))
+        return false
+      }
+      session = get().projectSession + 1
+      set({ loading: true, projectSession: session })
+      if (detachedTabs) useEditorStore.getState().clearTabs()
       const result = await ipc.invoke('project:create', config)
+      if (get().projectSession !== session) return false
+      if (result.restoredWriteToken && source.currentProject) {
+        set({ currentProject: { ...get().currentProject!, writeToken: result.restoredWriteToken } })
+      }
       if (!result.success) {
         console.error('[Project] 创建失败:', result.error)
         alertError(result.error ?? t('status.unknown'), { title: t('dialog.createFailed') })
@@ -119,13 +145,23 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       // 使用主进程返回的实际项目路径（跨平台安全，避免路径分隔符问题）
       const projectDir = result.projectPath ?? `${config.path}/${config.name}`
       // keepView：新建/导入后保持当前视图（home），让方块列表立即显示新项目
-      return get().openProject(projectDir, { keepView: true })
+      handedOff = true
+      creatingProject = false
+      opened = await get().openProject(projectDir, { keepView: true })
+      return opened
     } catch (e) {
       console.error('[Project] createProject 异常:', e)
       alertError(String(e), { title: t('dialog.createError') })
       return false
     } finally {
-      set({ loading: false })
+      if (!handedOff) creatingProject = false
+      if (session !== undefined && get().projectSession === session) {
+        if (!opened && detachedTabs) useEditorStore.setState(detachedTabs)
+        set({ loading: false })
+      } else if (handedOff && !opened && detachedTabs && session !== undefined
+        && get().projectSession === session + 1 && get().currentProject?.path === source.currentProject?.path) {
+        useEditorStore.setState(detachedTabs)
+      }
     }
   },
 
@@ -138,12 +174,37 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       toast.warning(t('tip.characterSaving'))
       return false
     }
-    set(state => ({ loading: true, projectSession: state.projectSession + 1 }))
+    if (openingProject || creatingProject) return false
+    openingProject = true
+    let session: number | undefined
+    let detachedTabs: EditorTabsSnapshot | undefined
+    let opened = false
     try {
+      const source = get()
+      if (source.currentProject && source.currentProject.path !== projectPath) {
+        const tabs = await confirmEditorTabSwitch()
+        if (!tabs || get().projectSession !== source.projectSession) return false
+        detachedTabs = tabs
+      }
+      if (useCharacterStore.getState().saving) {
+        toast.warning(t('tip.characterSaving'))
+        return false
+      }
+      session = get().projectSession + 1
+      set({ loading: true, projectSession: session })
+      if (detachedTabs) useEditorStore.getState().clearTabs()
       const result = await ipc.invoke('project:open', projectPath)
+      if (get().projectSession !== session) return false
+      if (result.success && result.fileProjectPath) {
+        // The file editor owns its own session. Restore any detached SQLite tabs in finally.
+        globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: result.fileProjectPath })
+        return true
+      }
       if (result.success && result.project) {
+        opened = true
+        markProjectConfigReloaded(result.project.path, result.project.writeToken)
         // 切换项目时清空配置快照——旧项目的快照不得跨项目残留（否则撤销会用 A 的快照覆盖 B）
-        set({ currentProject: result.project, configSnapshot: null })
+        set({ currentProject: result.project, configSnapshot: null, configSnapshotSource: null, configFieldVersions: {} })
         // 加载项目级 Prompt 覆盖（此前仅在设置页挂载时加载——未打开设置页时覆盖静默失效；
         // 挂到项目打开统一入口，新建/导入/切换均生效）
         loadProjectCustomPrompts(projectPath).catch(() => {})
@@ -166,6 +227,9 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         await callProjectOpened()
         return true
       }
+      if (result.restoredWriteToken && source.currentProject) {
+        set({ currentProject: { ...get().currentProject!, writeToken: result.restoredWriteToken } })
+      }
       console.error('[Project] 打开失败:', result.error)
       alertError(result.error ?? t('status.unknown'), { title: t('dialog.openFailed') })
       return false
@@ -178,38 +242,56 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       alertError(String(e), { title: t('dialog.openError') })
       return false
     } finally {
-      set({ loading: false })
+      openingProject = false
+      if (session !== undefined && get().projectSession === session) {
+        if (!opened && detachedTabs) useEditorStore.setState(detachedTabs)
+        set({ loading: false })
+      }
     }
   },
 
-  saveProject: async () => {
+  saveProject: async (configSnapshot, onPending = notifyPendingConfigSave) => {
+    const source = captureProjectConfigSource()
     const project = get().currentProject
-    console.log('[project-store.saveProject] 开始保存，项目ID:', project?.id)
-    if (!project) {
-      console.log('[project-store.saveProject] 项目为空，跳过保存')
-      return false
-    }
-    try {
-      // 提取纯净数据，防止 structured clone 序列化异常属性
-      const plainData = toPlainProjectData(project)
-      console.log('[project-store.saveProject] 准备调用 IPC，数据大小:', JSON.stringify(plainData).length)
-      const result = await withTimeout(
-        ipc.invoke('project:save', plainData.id, plainData),
-        15_000,
-        'project:save',
-      )
-      console.log('[project-store.saveProject] IPC 调用完成，结果:', result)
-      return result.success
-    } catch (err) {
-      console.error('[project-store.saveProject] 保存失败:', err)
-      return false
-    }
+    if (!source || !project) return false
+    const data = { path: project.path, writeToken: project.writeToken, name: project.name, novelConfig: { ...(configSnapshot ?? project.novelConfig) } }
+    const result = await commitProjectConfig(source, () => isProjectConfigCurrent(source),
+      () => ipc.invoke('project:save', source.id, data), onPending)
+    return result.success
+  },
+
+  saveNovelConfigPatch: async (source, patch, onCommitted) => {
+    const writeToken = get().currentProject?.writeToken
+    const novelConfig = { ...patch }
+    // SQLite represents an unset optional text field as an empty string.
+    if ('writingStyle' in novelConfig && novelConfig.writingStyle === undefined) novelConfig.writingStyle = ''
+    if ('referenceWorks' in novelConfig && novelConfig.referenceWorks === undefined) novelConfig.referenceWorks = ''
+    const result = await commitProjectConfig(source, () => isProjectConfigCurrent(source),
+      () => ipc.invoke('project:update-config', source.id, { path: source.path, writeToken, novelConfig }), notifyPendingConfigSave, onCommitted)
+    if (!result.success) throw new Error(result.error ?? t('novelConfig.saveRejected'))
+  },
+
+  commitNovelConfigPatch: async (source, patch, expectedVersions = get().configFieldVersions) => {
+    if (!isProjectConfigCurrent(source)) throw new NovelConfigRequestCancelled()
+    const submitted = { ...patch }
+    const fields = Object.keys(submitted) as Array<keyof NovelConfig>
+    const current = () => get().configFieldVersions
+    const unchanged = (field: keyof NovelConfig) => (current()[field] ?? 0) === (expectedVersions[field] ?? 0)
+    if (fields.some(field => !unchanged(field))) throw new Error(t('novelConfig.generationConflict'))
+    await get().saveNovelConfigPatch(source, submitted, () => {
+      const applied = Object.fromEntries(fields.filter(unchanged).map(field => [field, submitted[field]]))
+      if (Object.keys(applied).length) get().updateNovelConfig(applied)
+    })
+    if (!isProjectConfigCurrent(source)) throw new NovelConfigRequestCancelled()
   },
 
   updateNovelConfig: (config) => {
     const project = get().currentProject
     if (!project) return
+    const configFieldVersions = { ...get().configFieldVersions }
+    for (const field of Object.keys(config) as (keyof NovelConfig)[]) configFieldVersions[field] = (configFieldVersions[field] ?? 0) + 1
     set({
+      configFieldVersions,
       currentProject: {
         ...project,
         novelConfig: { ...project.novelConfig, ...config },
@@ -219,21 +301,27 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
 
   snapshotNovelConfig: () => {
     const project = get().currentProject
-    if (!project) return
+    const source = captureProjectConfigSource()
+    if (!project || !source) return
     // 深拷贝快照（避免后续 updateNovelConfig 浅合并污染快照引用）
-    set({ configSnapshot: JSON.parse(JSON.stringify(project.novelConfig)) as NovelConfig })
+    set({ configSnapshot: structuredClone(project.novelConfig), configSnapshotSource: source })
   },
 
-  restoreNovelConfigSnapshot: () => {
-    const { configSnapshot, currentProject } = get()
-    if (!configSnapshot || !currentProject) return false
-    set({
-      currentProject: { ...currentProject, novelConfig: configSnapshot },
-      configSnapshot: null,
-    })
-    // 撤销后落盘（快照是应用前的旧值，恢复即回到已保存状态）
-    void get().saveProject()
-    return true
+  restoreNovelConfigSnapshot: async () => {
+    const { configSnapshot, configSnapshotSource, currentProject, configFieldVersions } = get()
+    if (!configSnapshot || !configSnapshotSource || !currentProject || !isProjectConfigCurrent(configSnapshotSource)) return false
+    const fields = new Set([...Object.keys(currentProject.novelConfig), ...Object.keys(configSnapshot)] as (keyof NovelConfig)[])
+    const patch = Object.fromEntries([...fields].map(field => [field, configSnapshot[field]]))
+    try {
+      await get().commitNovelConfigPatch(configSnapshotSource, patch, configFieldVersions)
+      if (isProjectConfigCurrent(configSnapshotSource) && get().configSnapshot === configSnapshot) {
+        set({ configSnapshot: null, configSnapshotSource: null })
+      }
+      return true
+    } catch (error) {
+      if (isProjectConfigCurrent(configSnapshotSource)) reportLegacySaveError(error)
+      return false
+    }
   },
 
   refreshFileTree: async () => {
@@ -256,22 +344,20 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     // 统一清空 Layer 2 Store + 编辑器 Tab
     callProjectClosed()
     clearProjectCustomPrompts()
-    set({ currentProject: null, fileTree: [] })
+    set({ currentProject: null, fileTree: [], loading: false, configSnapshot: null, configSnapshotSource: null, configFieldVersions: {} })
   },
 
   updateCharacterStates: async (states) => {
+    const source = captureProjectConfigSource()
     const project = get().currentProject
-    if (!project) return
-    const updated = { ...project, characterStates: states }
-    set({ currentProject: updated })
+    if (!project || !source) return
     try {
-      await withTimeout(
-        ipc.invoke('project:save', project.id, toPlainProjectData(updated)),
-        15_000,
-        'project:save(characterStates)',
-      )
-    } catch (err) {
-      console.error('[project-store.updateCharacterStates] 持久化失败:', err)
+      const result = await commitProjectConfig(source, () => isProjectConfigCurrent(source),
+        () => ipc.invoke('project:save', source.id, { path: source.path, writeToken: project.writeToken, name: project.name, characterStates: states }),
+        notifyPendingConfigSave, () => set(state => ({ currentProject: { ...state.currentProject!, characterStates: states } })))
+      if (!result.success) throw new Error(result.error ?? t('novelConfig.saveRejected'))
+    } catch (error) {
+      if (isProjectConfigCurrent(source)) reportLegacySaveError(error)
     }
   },
 
@@ -311,3 +397,30 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 }))
+
+export function captureProjectConfigSource(): NovelConfigScope | null {
+  const { currentProject, projectSession, loading } = useProjectStore.getState()
+  return currentProject && !loading ? { id: currentProject.id, path: currentProject.path, session: projectSession } : null
+}
+
+export function isProjectConfigCurrent(source: NovelConfigScope): boolean {
+  const current = captureProjectConfigSource()
+  return current?.id === source.id && current.path === source.path && current.session === source.session
+}
+
+function notifyPendingConfigSave() {
+  const message = t('novelConfig.savePending')
+  renderLog('warn', 'Save:Config', message)
+  toast.warning(message)
+}
+
+function reportLegacySaveError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error)
+  if (error instanceof ProjectConfigResultUnknown) {
+    renderLog('warn', 'Save:Config', message)
+    toast.warning(message)
+    return
+  }
+  renderLog('error', 'Save:Config', message)
+  toast.error(t('save.failed').replace('{error}', () => message))
+}

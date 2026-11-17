@@ -2,9 +2,21 @@
 // Offline verification export. This command does not switch application storage.
 import { DatabaseSync, backup } from 'node:sqlite'
 import { readFile, realpath, lstat } from 'node:fs/promises'
-import { resolve, relative, isAbsolute } from 'node:path'
+import { resolve, relative, isAbsolute, sep } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import ts from 'typescript'
 import { createHash } from 'node:crypto'
+
+async function assertNoSidecars(path) {
+  for (const suffix of ['-wal', '-shm', '-journal']) {
+    try { await lstat(path + suffix) }
+    catch (e) {
+      if (e.code === 'ENOENT') continue
+      throw e
+    }
+    throw new Error(`source has SQLite sidecar (${suffix}); provide a consistent offline database copy`)
+  }
+}
 
 const [sourceArg, destinationArg, projectId, ...extra] = process.argv.slice(2)
 if (!sourceArg || !destinationArg || !projectId || extra.length) {
@@ -15,12 +27,18 @@ if (!sourceArg || !destinationArg || !projectId || extra.length) {
   try {
     const sourcePath = await realpath(sourceArg)
     const destination = resolve(destinationArg)
-    const inside = relative(destination, sourcePath)
-    if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) throw new Error('source database must be outside export directory')
-    // Require an offline copy: WAL would indicate that copying only the database may have lost committed rows.
-    try { await lstat(`${sourcePath}-wal`); throw new Error('source has WAL sidecar; provide a consistent offline database copy') }
-    catch (e) { if (e.code !== 'ENOENT') throw e }
-    db = new DatabaseSync(sourcePath, { readOnly: true })
+    if (!(await lstat(sourcePath)).isFile()) throw new Error('source must be a regular database file')
+    const resolvedDestination = await realpath(destination).catch(error => {
+      if (error.code !== 'ENOENT') throw error
+      return destination
+    })
+    const inside = relative(resolvedDestination, sourcePath)
+    if (!inside || (!inside.startsWith(`..${sep}`) && !isAbsolute(inside))) throw new Error('source database must be outside export directory')
+    // Sidecars can contain committed changes or recovery state outside the main database.
+    await assertNoSidecars(sourcePath)
+    const sourceUri = pathToFileURL(sourcePath)
+    sourceUri.searchParams.set('immutable', '1')
+    db = new DatabaseSync(sourceUri.href, { readOnly: true })
     // Every content-pool owner in database.ts must remain reconstructable from the backup.
     // scene_cards.content_id is nullable by design; the other tables require a body.
     for (const table of ['draft_snapshots', 'revisions', 'reviews', 'scene_cards']) {
@@ -48,7 +66,10 @@ if (!sourceArg || !destinationArg || !projectId || extra.length) {
       LEFT JOIN blueprints b ON b.chapter_number = d.chapter_number
       ORDER BY d.id
     `).all()
-    const fingerprint = async () => createHash('sha256').update(await readFile(sourcePath)).digest('hex')
+    const fingerprint = async () => {
+      await assertNoSidecars(sourcePath)
+      return createHash('sha256').update(await readFile(sourcePath)).digest('hex')
+    }
     const report = await exportLegacyProject({ source: { listDrafts, backup: p => backup(db, p), fingerprint }, destination, projectId })
     console.log(JSON.stringify({ ...report, destination, applicationStorageChanged: false }, null, 2))
   } catch (e) {

@@ -14,6 +14,14 @@ const existingRow = (name: string, extra: Record<string, unknown> = {}) => ({
 })
 
 describe('mergeCardRows 已存在角色', () => {
+  it('fills only empty fields in the live card and preserves populated manual state', () => {
+    const existing = [existingRow('苏晚晴', { appearance: 'manual', currentState: { location: 'manual place', updatedAtChapter: 3 } })]
+    const cards = [{ name: '苏晚晴', role: 'protagonist', appearance: 'model', notes: 'new notes',
+      currentState: { location: 'model place', keyItems: 'new item', updatedAtChapter: 1 } }]
+    const { rows } = mergeCardRows(existing, cards)
+    expect(rows[0]).toMatchObject({ role: 'supporting', appearance: 'manual', notes: 'new notes',
+      currentState: { location: 'manual place', keyItems: 'new item', updatedAtChapter: 3 } })
+  })
   it('LLM 非空字段覆盖，空白/缺失字段保留 DB 现值', () => {
     const existing = [existingRow('苏晚晴')]
     const cards = [{ name: '苏晚晴', role: 'protagonist', appearance: '新外貌' }]

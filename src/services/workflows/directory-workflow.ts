@@ -1,4 +1,6 @@
 import type { WorkflowDefinition } from '../../stores/workflow-store'
+import type { BlueprintGeneration } from '../../core'
+import type { WorkflowContext } from '../../shared/workflow-types'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
 import { ipc } from '../ipc-client'
@@ -7,6 +9,9 @@ import { stripThinkingTags, extractAndRepairJSON, parseMarkdownTable } from './w
 import { renderLog } from '../render-logger'
 import { normalizeBlueprintRole } from '../blueprint-role'
 import { registerWorkflow } from './workflow-registry'
+import {
+  assertChapterBlueprintScope, captureChapterBlueprintScope, createDirectoryBlueprintWriter, isChapterBlueprintScopeCurrent,
+} from '../chapters/chapter-blueprint-adapter'
 
 // ==========================================
 // 1. 结构与类型导出 (保留对外的向后兼容)
@@ -29,21 +34,7 @@ const EMPTY_BLUEPRINT: ChapterBlueprint = {
   priority: 0,
 }
 
-export interface DirectoryWorkflowParams {
-  mode: 'full' | 'append'
-  startChapter?: number
-  count?: number
-  /** 节奏/风格指导（可选） */
-  pacingGuidance?: string
-  /**
-   * 生成方式：
-   * - single（默认）：一次对话生成所选范围（费用最低；大范围时中后段质量可能下降）
-   * - batch：分批生成，每批 batchChapterCount 章（每批重新注入架构上下文，质量更稳，费用略高）
-   */
-  generationMode?: 'single' | 'batch'
-  /** batch 模式的每批章数 */
-  batchChapterCount?: number
-}
+export type DirectoryWorkflowParams = BlueprintGeneration
 
 // ==========================================
 // 2. 蓝图解析与文件访问
@@ -293,13 +284,6 @@ export async function saveChapterBlueprint(blueprint: ChapterBlueprint): Promise
   }
 }
 
-export async function saveAllBlueprints(blueprints: ChapterBlueprint[]): Promise<void> {
-  const result = await ipc.invoke('db:blueprint-upsert-many', blueprints)
-  if (!result.success) {
-    throw new Error(t('error.blueprintsSaveBatchFailed').replace('{error}', result.error || t('status.unknown')))
-  }
-}
-
 export async function getBlueprintCount(): Promise<number> {
   try {
     const blueprints = await ipc.invoke('db:blueprint-get-all')
@@ -314,12 +298,23 @@ export async function getBlueprintCount(): Promise<number> {
 // ==========================================
 
 export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode: 'full' }): WorkflowDefinition {
+  const request = { ...params }
+  const source = captureChapterBlueprintScope()
+  if (request.mode === 'full' && !request.count) {
+    request.expectedTotalChapters ??= useProjectStore.getState().currentProject?.novelConfig.totalChapters
+  }
+  const assertActive = (context: WorkflowContext) => {
+    if (!source) throw new Error(t('error.noProject'))
+    assertChapterBlueprintScope(source)
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+    return source
+  }
   return {
     type: 'directory',
-    rehydrateParams: { ...params },
-    title: params.mode === 'append'
-      ? (params.startChapter
-        ? t('workflow.dirTitleAppendFrom').replace('{n}', String(params.startChapter))
+    rehydrateParams: { ...request },
+    title: request.mode === 'append'
+      ? (request.startChapter
+        ? t('workflow.dirTitleAppendFrom').replace('{n}', String(request.startChapter))
         : t('workflow.dirTitleAppend'))
       : t('workflow.dirTitleFull'),
     steps: [
@@ -327,11 +322,13 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
         name: t('workflow.dirReadArch'),
         description: t('workflow.dirReadArchDesc'),
         executor: async (_step, context, callbacks) => {
-          const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error(t('error.noProject'))
-
           callbacks.log(t('log.dirReadingArch'))
+          const source = assertActive(context)
+          const writer = createDirectoryBlueprintWriter(source)
+          const connection = await writer.readConnection()
+          assertActive(context)
           const core = await ipc.invoke('db:project-core-get')
+          assertActive(context)
           if (!core) throw new Error(t('error.coreNotInitialized'))
 
           const parts: string[] = []
@@ -342,14 +339,17 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
 
           if (parts.length === 0) throw new Error(t('error.noArchitecture'))
 
-          context.data.architecture = parts.join('\n\n---\n\n')
-          // 注入节奏指导到 context，供 Command 读取
-          if (params.pacingGuidance) context.data.pacingGuidance = params.pacingGuidance
-          if (params.mode === 'append') {
-            const existing = await loadDirectoryBlueprints()
-            context.data.existingBlueprints = existing
-            callbacks.log(t('log.dirExistingLoaded').replace('{n}', String(existing.length)))
+          const { mode, startChapter, count, expectedTotalChapters } = request
+          const { snapshot, existingBlueprints } = await writer.read({ mode, startChapter, count, expectedTotalChapters }, connection)
+          assertActive(context)
+          if (mode === 'append') {
+            callbacks.log(t('log.dirExistingLoaded').replace('{n}', String(existingBlueprints.length)))
           }
+          assertActive(context)
+          context.data.directoryWriteSnapshot = snapshot
+          context.data.architecture = parts.join('\n\n---\n\n')
+          context.data.pacingGuidance = request.pacingGuidance
+          context.data.existingBlueprints = mode === 'append' ? existingBlueprints : []
           return t('workflow.archLoadedCount').replace('{n}', String(parts.length))
         },
       },
@@ -357,8 +357,17 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
         name: t('workflow.dirGenerate'),
         description: t('workflow.dirGenerateDesc'),
         executor: async (_step, context, callbacks) => {
+          const source = assertActive(context)
+          const snapshot = await createDirectoryBlueprintWriter(source).checkConnection(context.data.directoryWriteSnapshot)
+          assertActive(context)
+          delete context.data.newBlueprints
+          if (!snapshot.range) {
+            context.data.newBlueprints = []
+            return t('workflow.dirNoNewBlueprints')
+          }
           const { GenerateDirectoryCommand } = await import('./commands/directory.command')
-          const cmd = new GenerateDirectoryCommand(params)
+          assertActive(context)
+          const cmd = new GenerateDirectoryCommand(request, source, snapshot.range)
           const blueprints = await cmd.execute({ step: _step, context, callbacks })
           return t('workflow.dirGeneratedCount').replace('{n}', String(blueprints.length))
         },
@@ -367,55 +376,31 @@ export function createDirectoryWorkflow(params: DirectoryWorkflowParams = { mode
         name: t('workflow.dirSave'),
         description: t('workflow.dirSaveDesc'),
         executor: async (_step, context, callbacks) => {
-          const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error(t('error.noProject'))
-
-          const newBlueprints = context.data.newBlueprints as ChapterBlueprint[]
-          const existingBlueprints = context.data.existingBlueprints as ChapterBlueprint[]
-
           callbacks.log(t('log.dirSaving'))
-
-          let merged: ChapterBlueprint[]
-          if (params.mode === 'full') {
-            merged = newBlueprints
-            // 全量模式：删除不在新列表中的旧蓝图
-            const newChapterNums = new Set(newBlueprints.map(b => b.chapterNumber))
-            const allExisting = await loadDirectoryBlueprints()
-            const coverageRatio = allExisting.length > 0
-              ? newBlueprints.length / Math.max(allExisting.length, newBlueprints.length)
-              : 1
-
-            if (coverageRatio >= 0.5 || newBlueprints.length >= project.novelConfig.totalChapters * 0.8) {
-              for (const existing of allExisting) {
-                if (!newChapterNums.has(existing.chapterNumber)) {
-                  try {
-                    await ipc.invoke('db:blueprint-delete', existing.chapterNumber)
-                  } catch {
-                    callbacks.log(t('log.dirKeepOld').replace('{n}', String(existing.chapterNumber)))
-                  }
-                }
-              }
-            } else {
-              callbacks.log(t('log.dirCoverageWarn')
-                .replace('{percent}', (coverageRatio * 100).toFixed(0))
-                .replace('{new}', String(newBlueprints.length))
-                .replace('{old}', String(allExisting.length)))
-            }
-          } else {
-            const existingMap = new Map(existingBlueprints.map(b => [b.chapterNumber, b]))
-            for (const nb of newBlueprints) existingMap.set(nb.chapterNumber, nb)
-            merged = Array.from(existingMap.values()).sort((a, b) => a.chapterNumber - b.chapterNumber)
+          const source = assertActive(context)
+          const writer = createDirectoryBlueprintWriter(source)
+          const snapshot = context.data.directoryWriteSnapshot
+          const output = context.data.newBlueprints
+          if (Array.isArray(output) && output.length === 0) {
+            const checked = await writer.checkConnection(snapshot)
+            assertActive(context)
+            if (!checked.range) return t('workflow.dirNoNewBlueprints')
           }
-
-          await saveAllBlueprints(merged)
-          useProjectStore.getState().refreshFileTree()
+          context.finalCommitStarted = true
+          await writer.commit(snapshot, output)
+          if (!isChapterBlueprintScopeCurrent(source)) return t('workflow.dirSaved')
+          try {
+            await useProjectStore.getState().refreshFileTree()
+          } catch (error) {
+            callbacks.log(t('editor.refreshFailed').replace('{error}', () => String(error)))
+          }
           return t('workflow.dirSaved')
         },
       },
     ],
     onComplete: {
       mode: 'silent',
-      message: params.mode === 'append' ? t('workflow.dirDoneAppend') : t('workflow.dirDoneFull'),
+      message: request.mode === 'append' ? t('workflow.dirDoneAppend') : t('workflow.dirDoneFull'),
     },
   }
 }

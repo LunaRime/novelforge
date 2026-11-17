@@ -1,4 +1,4 @@
-import { getAgentRuntimePorts } from './runtime-ports'
+import { captureAgentProject, getAgentRuntimePorts, scopedAgentInvoke, type AgentRuntimePorts } from './runtime-ports'
 /**
  * Agent 智能上下文构建器
  *
@@ -25,7 +25,6 @@ import {
   MANUAL_MENTION_BUDGET_TOKENS, RESIDENT_MEMORY_BUDGET_TOKENS, RESIDENT_MEMORY_WARN_TOKENS, AUTO_RECALL_BUDGET_TOKENS,
   type MemoryLayerEntry,
 } from './memory-layers'
-import { toolRegistry } from './tool-registry'
 import { buildTaskAnchor } from './task-anchor'
 import { skillRegistry, sortSkillsBySource } from './skill-registry'
 import type { ContextSegment } from './context-usage'
@@ -100,8 +99,8 @@ const SKILL_LINE_MAX_CHARS = 120
  * 技能目录段：每技能一行（名字 + 一句话描述），超预算按行截断并提示剩余数量。
  * `userInvocable` 不参与过滤 —— 该字段只约束 `/命令`，不约束模型。
  */
-function buildSkillCatalogSnippet(): string {
-  const skills = sortSkillsBySource(skillRegistry.listAll())
+function buildSkillCatalogSnippet(entries: ReturnType<typeof skillRegistry.listAll>): string {
+  const skills = sortSkillsBySource(entries)
   if (skills.length === 0) return ''
   const header = t('agent.skillCatalogHeader')
   const lines: string[] = []
@@ -222,7 +221,9 @@ export function trimSessionSummary(summary: string, budget = SESSION_SUMMARY_BUD
 export function buildAgentSystemSegments(
   mode: AgentMode,
   budgets?: ContextBudgets,
+  instance?: AgentRuntimePorts,
 ): { base: string; memory: string; segments: ContextSegment[] } {
+  const runtime = instance ?? getAgentRuntimePorts()
   const sections: string[] = []
   // B 档第二轮 B6：逐段明细（tokens + 字符数 + 来源 + 截断标记），供 context 明细面板展示
   const segments: ContextSegment[] = []
@@ -236,15 +237,15 @@ export function buildAgentSystemSegments(
   push('identity', buildIdentityPrompt(mode))
 
   // 2. L0 — 始终注入的项目上下文 (~800 tokens 预算)
-  push('l0', buildL0ProjectContext(), t('context.segSourceL0'))
+  push('l0', buildL0ProjectContext(runtime), t('context.segSourceL0'))
 
   // 3. L1 — 编辑器感知上下文（缺省 600 tokens 预算；弱档由 W1 策略降到 300）
-  push('l1', buildL1EditorContext(budgets?.l1BudgetTokens), t('context.segSourceL1'))
+  push('l1', buildL1EditorContext(runtime, budgets?.l1BudgetTokens), t('context.segSourceL1'))
 
   // 4. Tool 系统提示词（P0-3：预算随工具数伸缩；W1：上限由档位给 —— 强档 6000 让长窗口模型读全契约）
-  const toolPrompt = toolRegistry.generateToolPrompt()
+  const toolPrompt = runtime.tools.generateToolPrompt()
   if (toolPrompt) {
-    const toolCount = toolRegistry.listAll().length
+    const toolCount = runtime.tools.listAll().length
     const toolBudget = computeToolPromptBudget(toolCount, budgets?.toolBudgetTokens)
     const truncated = truncateToTokenBudget(toolPrompt, toolBudget)
     const isTruncated = truncated.length < toolPrompt.length
@@ -254,7 +255,7 @@ export function buildAgentSystemSegments(
         // 截断通知带**签名**（`name(p1?, p2?)`）而不只是名字：仅列名字等于让被截断的工具
         // **无法被调用**（模型知道有 read_memory，却不知道参数叫 name/keyword/type）。
         // 签名全长 ~240 tokens（P0-3 后仅 29+ 工具时才会走到这里），换来全部工具可调用。
-        ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', toolRegistry.listAll().map(tool => {
+        ? `${truncated}\n\n${t('engine.toolTruncatedNotice').replace('{tools}', runtime.tools.listAll().map(tool => {
           const required = tool.inputSchema.required ?? []
           const params = Object.keys(tool.inputSchema.properties)
             .map(p => (required.includes(p) ? p : `${p}?`))
@@ -270,13 +271,14 @@ export function buildAgentSystemSegments(
   //    此前技能以 `skill__<name>` 工具形式排在工具清单末尾，而工具提示词有固定截断
   //    → 先被砍掉的正是技能，模型只能看到一份名字清单。目录只放名字与一句话描述，
   //    全文由 skill 元工具按名加载（懒加载）。
-  push('skill-catalog', buildSkillCatalogSnippet(), t('context.segSourceSkills').replace('{n}', String(skillRegistry.listAll().length)))
+  const skills = runtime.skills?.listAll() ?? []
+  push('skill-catalog', buildSkillCatalogSnippet(skills), t('context.segSourceSkills').replace('{n}', String(skills.length)))
 
   const base = sections.join('\n\n---\n\n')
 
   // ===== M1 会话摘要节（CCR 滚动摘要，自动生成非用户输入；M2 作品记忆 P1 追加于此） =====
   const memoryParts: string[] = []
-  const activeConv = getAgentRuntimePorts().conversation.active()
+  const activeConv = runtime.conversation.active()
   const summary = activeConv?.rollingSummary
   // B7 失效语义：历史已变动（rewind/恢复原文/编辑消息）时，旧摘要与当前历史不符 ——
   // 宁可不注入，也不能让模型拿着过期摘要当事实
@@ -411,7 +413,7 @@ export interface AgentSystemSegmentsAsync {
  * 返回的三段文本各自可独立拼装（父按 `injectedHeader + 目录 + manual` 拼 M2；子 agent 只取前两段）。
  * 记忆读盘失败降级：返回全空，不抛（调用方照常继续）。
  */
-export async function collectMemoryLayers(userMessage: string, opts?: { autoRecall?: boolean }): Promise<{
+export async function collectMemoryLayers(userMessage: string, opts?: { autoRecall?: boolean }, invoke: typeof ipc.invoke = ipc.invoke): Promise<{
   resident: string
   catalog: string
   manual: string
@@ -425,7 +427,7 @@ export async function collectMemoryLayers(userMessage: string, opts?: { autoReca
   let manualText = ''
   let autoRecallText = ''
   try {
-    const list = (await ipc.invoke('memory:list')) as MemoryFileMeta[]
+    const list = (await invoke('memory:list')) as MemoryFileMeta[]
     // stale 先行过滤（与既有口径一致）；F9 白名单保留——但**用户显式声明 resident 时尊重其选择**
     const entries: MemoryLayerEntry[] = list
       .filter(f => !f.stale)
@@ -439,7 +441,7 @@ export async function collectMemoryLayers(userMessage: string, opts?: { autoReca
     if (residents.length > 0) {
       const contents: Array<{ file: string; body: string }> = []
       for (const e of residents) {
-        const raw = await ipc.invoke('memory:read', e.file) as string | null
+        const raw = await invoke('memory:read', e.file) as string | null
         if (!raw) continue // 读失败/已被删除：跳过该条，不阻断其余条目
         contents.push({ file: e.file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
       }
@@ -482,7 +484,7 @@ export async function collectMemoryLayers(userMessage: string, opts?: { autoReca
     const bodies: Array<{ file: string; body: string }> = []
     const mentionedFiles = matchMentionedManuals(userMessage, entries)
     for (const file of mentionedFiles) {
-      const raw = await ipc.invoke('memory:read', file) as string | null
+      const raw = await invoke('memory:read', file) as string | null
       if (!raw) continue
       bodies.push({ file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
     }
@@ -517,7 +519,7 @@ export async function collectMemoryLayers(userMessage: string, opts?: { autoReca
       const autoFiles = matchAutoRecallManuals(userMessage, entries).filter(f => !explicit.has(f))
       const autoBodies: Array<{ file: string; body: string }> = []
       for (const file of autoFiles) {
-        const raw = await ipc.invoke('memory:read', file) as string | null
+        const raw = await invoke('memory:read', file) as string | null
         if (!raw) continue
         autoBodies.push({ file, body: (parseMemoryFile(raw) ?? { body: raw }).body })
       }
@@ -556,9 +558,13 @@ export async function buildAgentSystemSegmentsAsync(
   mode: AgentMode,
   userMessage = '',
   budgets?: ContextBudgets,
+  instance?: AgentRuntimePorts,
 ): Promise<AgentSystemSegmentsAsync> {
-  const { base, memory: m1, segments: baseSegments } = buildAgentSystemSegments(mode, budgets)
-  const layers = await collectMemoryLayers(userMessage, { autoRecall: budgets?.autoRecall })
+  const runtime = instance ?? getAgentRuntimePorts()
+  const source = captureAgentProject(runtime)
+  const { base, memory: m1, segments: baseSegments } = buildAgentSystemSegments(mode, budgets, runtime)
+  const layers = await collectMemoryLayers(userMessage, { autoRecall: budgets?.autoRecall }, scopedAgentInvoke(runtime))
+  if (!source.isCurrent()) throw new Error(t('error.requestCancelled'))
   // ⚠️ M2 只放**目录**：manual 正文已由 assembleFinalPrompt 作为独立 part（memoryManual）拼在末尾，
   //    再塞进 M2 就是同一段正文注入两次（每轮白烧 ~body tokens + 提前触发 M1→M2 降级链）
   const parts = [layers.catalog].filter(Boolean)
@@ -567,7 +573,7 @@ export async function buildAgentSystemSegmentsAsync(
   // 面板预览（AgentConversation 的 useAsyncSegments）不传 userMessage → 锚点为空串（见接口注释）。
   const taskAnchor = buildTaskAnchor({
     userMessage,
-    messages: getAgentRuntimePorts().conversation.active()?.messages ?? [],
+    messages: runtime.conversation.active()?.messages ?? [],
   })
   const segments = [...baseSegments, ...layers.segments]
   if (taskAnchor) {
@@ -595,8 +601,9 @@ export async function buildAgentSystemPromptAsync(
   mode: AgentMode,
   userMessage = '',
   budgets?: ContextBudgets,
+  runtime?: AgentRuntimePorts,
 ): Promise<string> {
-  const s = await buildAgentSystemSegmentsAsync(mode, userMessage, budgets)
+  const s = await buildAgentSystemSegmentsAsync(mode, userMessage, budgets, runtime)
   return assembleFinalPrompt({
     base: s.base, memoryM1: s.memoryM1, memoryM2: s.memoryM2,
     memoryResident: s.memoryResident, memoryManual: s.memoryManual,
@@ -646,8 +653,8 @@ ${t('engine.identityRulePlan')}`
  * Token 预算：~800 tokens
  * （C 档第二轮起 export：子 agent 的 scoped 提示词也要项目事实）
  */
-export function buildL0ProjectContext(): string | null {
-  const project = getAgentRuntimePorts().project.current()
+export function buildL0ProjectContext(runtime = getAgentRuntimePorts()): string | null {
+  const project = runtime.project.current()
   if (!project) return null
 
   // 旧项目数据库可能缺 novelConfig（类型上非可选），运行时兜底避免崩溃
@@ -704,11 +711,11 @@ export function buildL0ProjectContext(): string | null {
  * L1 — 编辑器感知上下文
  * Token 预算：缺省 ~600 tokens（`L1_EDITOR_BUDGET_TOKENS`）；W1 批 2 起由档位覆盖（弱档 300）
  */
-function buildL1EditorContext(budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): string | null {
+function buildL1EditorContext(runtime: AgentRuntimePorts, budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): string | null {
   const parts: string[] = []
 
   // 当前打开的编辑器 Tab
-  const editorState = getAgentRuntimePorts().editor.snapshot()
+  const editorState = runtime.editor.snapshot()
   if (editorState.tabs.length > 0) {
     const activeTab = editorState.tabs.find(tab => tab.id === editorState.activeTabId)
     const tabSummaries = editorState.tabs.slice(0, 5).map(tab => {
@@ -739,7 +746,7 @@ function buildL1EditorContext(budgetTokens: number = L1_EDITOR_BUDGET_TOKENS): s
   }
 
   // 当前工作流状态
-  const workflowState = getAgentRuntimePorts().workflows.snapshot()
+  const workflowState = runtime.workflows.snapshot()
   if (workflowState.hasActiveRun()) {
     const run = workflowState.currentRun
     if (run) {

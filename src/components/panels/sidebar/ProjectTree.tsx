@@ -4,11 +4,11 @@
  * 包含：小说配置、故事架构、章节蓝图、草稿箱、正文章节、全局摘要
  */
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
-import { useDraftStore } from '../../../stores/draft-store'
+import { draftListScope, useDraftStore, type DraftsByChapter } from '../../../stores/draft-store'
 import { useEditorStore } from '../../../stores/editor-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useMemoryStore } from '../../../stores/memory-store'
@@ -18,6 +18,7 @@ import { Button } from '../../ui/Button'
 import CountBadge from '../../ui/CountBadge'
 import { EmptyState } from '../../ui/EmptyState'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { renderLog } from '../../../services/render-logger'
 
 import {
   getArchFiles, renderIcon, showSidebarMenu,
@@ -25,14 +26,16 @@ import {
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
-import VolumeGroup from './VolumeGroup'
+import BinderVolumeGroup from './BinderVolumeGroup'
 import PublicationGroup from './PublicationGroup'
 import SidebarGroup from './SidebarGroup'
-import type { VolumeData } from '../../../../electron/repositories/volume-repository'
+
+const emptyDrafts: DraftsByChapter = {}
 
 export default function ProjectTree() {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const scope = useProjectStore(s => s.loading ? null : draftListScope(s))
 
   // refreshFileTree / loadAllDrafts 在 refreshAll 内通过 getState() 调用
   // ✅ 只订阅「工作流状态派生 key」（步骤 status 组合）——工作流运行期间
@@ -41,7 +44,7 @@ export default function ProjectTree() {
   const workflowKey = useWorkflowStore(s =>
     s.activeRuns.map(r => `${r.id}:${r.status}|${r.steps.map(st => st.status).join(',')}`).join(';'))
   // ✅ 精确订阅，避免 loadAllDrafts 执行后引用变化触发 useCallback/useEffect 循环
-  const draftsByChapter = useDraftStore(s => s.draftsByChapter)
+  const draftsByChapter = useDraftStore(s => scope && s.draftsScope === scope ? s.draftsByChapter : emptyDrafts)
 
   // 存储各架构文件是否有实际内容（已生成）
   const [archStatus, setArchStatus] = useState<Record<string, boolean>>({})
@@ -50,37 +53,14 @@ export default function ProjectTree() {
   // 世界观实体 / 时间线事件数量（侧栏入口展示）
   const [worldCounts, setWorldCounts] = useState({ entities: 0, events: 0 })
 
-  // 卷 → 章节映射缓存（依赖 draftsByChapter 引用）：此前每次渲染都
-  // Object.entries 全量遍历 + parseInt + sort（N 章 × M 卷重复计算），
-  // 章节多的项目侧栏重渲染有明显开销
-  const volumeChapterIndex = useMemo(() => {
-    // 按章节号预分组排序一次
-    const byNumber = Object.entries(draftsByChapter)
-      .map(([num, drafts]) => {
-        const n = parseInt(num, 10)
-        // 最新草稿 = 数组首位（loadAllDrafts 按 version 降序）
-        return {
-          n,
-          chapterTitle: '',
-          hasFinalized: drafts.some(d => d.status === 'finalized'),
-        }
-      })
-      .sort((a, b) => a.n - b.n)
-    const chaptersForVolume = (v: VolumeData) => byNumber
-      .filter(({ n }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd))
-      .map(({ n, chapterTitle, hasFinalized }) => ({ chapterNumber: n, chapterTitle, hasFinalized }))
-    const finalizedCountForVolume = (v: VolumeData) => byNumber
-      .filter(({ n, hasFinalized }) => n >= v.chapterStart && (v.chapterEnd === 0 || n <= v.chapterEnd) && hasFinalized)
-      .length
-    return { chaptersForVolume, finalizedCountForVolume }
-  }, [draftsByChapter])
-
   /** 统一刷新：文件树 + 架构状态 + 草稿列表 + 蓝图数量 */
   // ✅ 用 getState() 获取最新的 action，不作为依赖项，避免重建导致 useEffect 循环
   const refreshAll = useCallback(async () => {
-
+    const source = useProjectStore.getState()
+    const refreshScope = draftListScope(source)
+    if (!refreshScope || source.loading) return
     useProjectStore.getState().refreshFileTree()
-    useDraftStore.getState().loadAllDrafts()
+    void useDraftStore.getState().loadAllDrafts().catch(error => renderLog('warn', 'Load:DraftBox', String(error)))
     useMemoryStore.getState().load() // 记忆文件（定稿/失效标记后刷新列表与 stale 徽标）
     // 通过 Service 层获取架构状态和蓝图数量（避免直接 IPC）
     const { checkArchStatus, getBlueprintCount } = await import('../../../services/architecture-service')
@@ -90,31 +70,25 @@ export default function ProjectTree() {
       ipc.invoke('world:entity-list').catch(() => []),
       ipc.invoke('timeline:event-list').catch(() => []),
     ])
+    const current = useProjectStore.getState()
+    if (current.loading || draftListScope(current) !== refreshScope) return
     setArchStatus(status)
     setBlueprintCount(count)
     setWorldCounts({ entities: entities.length, events: events.length })
+    globalEventBus.emit('REFRESH_RESOURCE', { resources: ['blueprints'] })
   }, [])  // ✅ 空依赖：内部用 getState() 获取最新 action，不依赖闭包
-
-  const handleReorderChapter = useCallback(async (chapterNumber: number, toVolumeNumber: number, targetIndex?: number) => {
-    const res = await ipc.invoke('db:binder-reorder', { chapterNumber, toVolumeNumber, targetIndex })
-    if (res.success) {
-      await refreshAll()
-      globalEventBus.emit('REFRESH_RESOURCE', { resources: ['drafts'] })
-    }
-  }, [refreshAll])
-
 
   // 项目切换时刷新
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (currentProject) refreshAll()
-  }, [currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不每次都需重跑
+    if (scope) void refreshAll()
+  }, [scope, refreshAll])
 
   // 工作流步骤状态或整体状态变化时刷新侧边栏（适配多任务）
   // 合并为单一 effect + 防抖，避免一次步骤完成同时触发多次刷新
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => {
-    if (!currentProject) return
+    if (!scope) return
     if (debounceRef.current) clearTimeout(debounceRef.current)
     debounceRef.current = setTimeout(() => {
       refreshAll()
@@ -122,9 +96,7 @@ export default function ProjectTree() {
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current)
     }
-    // ✅ 依赖 path 字符串而非 currentProject 对象引用
-    //    避免 updateNovelConfig 改变对象引用后触发不必要的 refreshAll
-  }, [workflowKey, currentProject?.path, refreshAll]) // eslint-disable-line react-hooks/exhaustive-deps -- currentProject 对象引用变化不触发，仅 path 变化需响应
+  }, [workflowKey, scope, refreshAll])
 
   if (!currentProject) {
     return (
@@ -296,20 +268,18 @@ export default function ProjectTree() {
       />
 
       {/* 3.5 分卷 — 按卷组织章节（可新建/编辑/删除/自动划分；卷内章节直接打开草稿） */}
-      <VolumeGroup
+      <BinderVolumeGroup
         projectPath={p}
         totalChapters={nc.totalChapters}
-        chaptersForVolume={volumeChapterIndex.chaptersForVolume}
-        finalizedCountForVolume={volumeChapterIndex.finalizedCountForVolume}
         onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
-        onReorderChapter={handleReorderChapter}
+        draftsByChapter={draftsByChapter}
       />
 
       {/* 3.6 连载监控 — 手动导入平台章节，对比本地定稿相似度 + 审计 */}
       <PublicationGroup projectPath={p} />
 
       {/* 4. 草稿箱 — 独立分区，按章节分组展示草稿 */}
-      <DraftBoxGroup draftsByChapter={draftsByChapter} />
+      <DraftBoxGroup />
 
       {/* 5. 正文章节 — 仅显示已定稿 */}
       <ManuscriptGroup files={manuscriptFiles} projectPath={p} />

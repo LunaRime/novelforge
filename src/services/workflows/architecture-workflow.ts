@@ -5,12 +5,15 @@ import { useProjectStore } from '../../stores/project-store'
 import { getPromptTemplate } from '../prompt-templates'
 import { ipc } from '../ipc-client'
 import { stripNameAlias } from '../character-normalize'
+import { createCharacterCardMerger } from '../character-card-merge'
+import { captureCharacterSource, isCharacterSourceCurrent } from '../characters/character-edits-adapter'
 import type { NovelConfig } from '../../shared/ipc-channels'
 
 import { runPostProcessPipeline, stripThinkingTags, extractAndRepairJSON, robustParseJSON, stringifyField as stringifyFieldUtils } from './workflow-utils'
 import { registerWorkflow } from './workflow-registry'
 import { getFieldLabel, type GeneratableField } from './commands/generate-field.command'
 import { startWorkflow } from './start-workflow'
+import { captureNovelConfigGenerationSession } from '../config/novel-config-adapter'
 
 // ==========================================
 // 1. 类型定义
@@ -102,6 +105,7 @@ export function createArchitectureWorkflow(params: ArchitectureWorkflowParams = 
 }
 
 export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowParams): WorkflowDefinition {
+  const session = captureNovelConfigGenerationSession()
   return {
     type: 'config_generation',
     title: t('workflow.generateConfig'),
@@ -111,7 +115,7 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
         description: t('workflow.configDesc').replace('{n}', String(params.totalChapters)),
         executor: async (step, context, callbacks) => {
           const { GenerateConfigCommand } = await import('./commands/architecture.command')
-          const cmd = new GenerateConfigCommand(params.idea, params.totalChapters, params.wordsPerChapter, params.onGenerated)
+          const cmd = new GenerateConfigCommand(params.idea, params.totalChapters, params.wordsPerChapter, params.onGenerated, session)
           return cmd.execute({ step, context, callbacks })
         },
       },
@@ -127,6 +131,7 @@ export function createConfigGenerationWorkflow(params: ConfigGenerationWorkflowP
  * rehydrateParams.mode='field' + fieldKey 供 UI 推导「哪个字段在生成」。
  */
 export function createFieldGenerationWorkflow(fieldKey: GeneratableField): WorkflowDefinition {
+  const session = captureNovelConfigGenerationSession()
   const label = getFieldLabel(fieldKey)
   return {
     type: 'config_generation',
@@ -137,7 +142,7 @@ export function createFieldGenerationWorkflow(fieldKey: GeneratableField): Workf
         description: t('workflow.generateFieldDesc').replace('{label}', label),
         executor: async (step, context, callbacks) => {
           const { GenerateFieldCommand } = await import('./commands/generate-field.command')
-          return new GenerateFieldCommand(fieldKey).execute({ step, context, callbacks })
+          return new GenerateFieldCommand(fieldKey, session).execute({ step, context, callbacks })
         },
       },
     ],
@@ -314,13 +319,15 @@ function extractByNamePattern(text: string): Array<Record<string, unknown>> {
 
   return results
 }
-export function createCharacterExtractSteps(_projectPath: string, characterDynamicsContent: string, genre: string) {
+export function createCharacterExtractSteps(projectPath: string, characterDynamicsContent: string, genre: string) {
+  const source = captureCharacterSource()
   return [
     {
       key: 'extract_character_cards',
       label: t('workflow.extractInitialCards'),
       critical: true,
       executor: async (cb: { appendText: (t: string) => void; log: (m: string) => void }) => {
+        const merger = await createCharacterCardMerger(projectPath, source)
         const { ArchitecturePromptBuilder } = await import('../prompts/prompt-builder')
         const template = getPromptTemplate('extract_initial_characters')
         if (!template) throw new Error(t('error.templateNotFound').replace('{name}', 'extract_initial_characters'))
@@ -360,14 +367,10 @@ export function createCharacterExtractSteps(_projectPath: string, characterDynam
         // 防御：AI 可能将文本字段生成为对象或数组，统一转为字符串（workflow-utils 单一出口）
         const stringifyField = (val: unknown): string => stringifyFieldUtils(val)
 
-        // 构建角色卡数据列表（#34 块 A：role 不在此处 normalize——mergeCharacterCards
-        // 内部处理且仅当 LLM 原始值非空才覆盖；写入端剥离括号别名保证主键稳定）
+        // 角色定位与别名在写入时按当前库合并。
         const characterDataList = assembleCharacterCards(parsedCards, stringifyField)
 
-        // 批量写入（#34 块 A：仅填空合并——已存在角色 LLM 非空字段覆盖、空白保留 DB 现值，
-        // 防重跑提取全列覆盖清空手写档案/tags/动态状态）
-        const { mergeCharacterCards } = await import('../character-card-merge')
-        const stats = await mergeCharacterCards(characterDataList)
+        const stats = await merger.merge(characterDataList)
         cb.log(t('log.extractCardsDone').replace('{n}', String(stats.saved)))
       },
     },
@@ -419,6 +422,7 @@ export interface ArchCharacterExtractWorkflowParams {
 export function createArchCharacterExtractWorkflow(params: ArchCharacterExtractWorkflowParams): WorkflowDefinition {
   const { projectPath, characterDynamicsContent, genre } = params
   const steps = createCharacterExtractSteps(projectPath, characterDynamicsContent, genre)
+  const source = captureCharacterSource()
   return {
     type: 'post_process',
     title: t('workflow.postProcessCards'),
@@ -427,9 +431,15 @@ export function createArchCharacterExtractWorkflow(params: ArchCharacterExtractW
       {
         name: t('workflow.extractCards'),
         description: t('workflow.extractCardsDesc'),
-        executor: async (_step, _ctx, callbacks) => {
+        executor: async (_step, context, callbacks) => {
+          const assertCurrent = () => {
+            if (!source || source.path !== projectPath || !isCharacterSourceCurrent(source) || context.cancelled) {
+              throw new Error(t('error.requestCancelled'))
+            }
+          }
           const { globalEventBus } = await import('../../shared/event-bus')
-          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks)
+          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks, { assertCurrent })
+          assertCurrent()
           if (archStatus.allCriticalPassed) {
             // 角色卡提取成功 → 通过 EventBus 通知 ProjectService 刷新
             globalEventBus.emit('ARCH_POSTPROCESS_UPDATED', {})
@@ -465,6 +475,7 @@ export interface RepairArchCharacterCardsWorkflowParams {
 /** 修复架构角色卡 工作流定义工厂（可 rehydrate；§5.2 由 repairArchCharacterCards 重构而来） */
 export function createRepairArchCharacterCardsWorkflow(params: RepairArchCharacterCardsWorkflowParams): WorkflowDefinition {
   const { projectPath } = params
+  const source = captureCharacterSource()
   return {
     type: 'post_process',
     title: t('workflow.fixCards'),
@@ -473,19 +484,27 @@ export function createRepairArchCharacterCardsWorkflow(params: RepairArchCharact
       {
         name: t('workflow.retryCards'),
         description: t('workflow.retryCardsDesc'),
-        executor: async (_step, _ctx, callbacks) => {
+        executor: async (_step, context, callbacks) => {
           // charactersArch/genre 运行时 DB/项目解析（§5.2：让工厂重建时同样查库）。
           // 【已知限制·review Important 接受】原 repairArchCharacterCards 在 startWorkflow 前校验
           // （无 core.charactersArch / 无 project 则 throw、工作流不启动）；因 WorkflowRehydrateFactory
           // 须同步返回 definition、无法在工厂内同步 await 查库，故校验迁到步骤执行时触发（步骤运行即 fail）。
           // 当前无该函数调用点，无行为回归，不恢复启动前校验。
+          const assertCurrent = () => {
+            if (!source || source.path !== projectPath || !isCharacterSourceCurrent(source) || context.cancelled) {
+              throw new Error(t('error.requestCancelled'))
+            }
+          }
+          assertCurrent()
           const core = await ipc.invoke('db:project-core-get')
+          assertCurrent()
           if (!core?.charactersArch || core.charactersArch.length < 50) throw new Error(t('error.cannotExtractCards'))
           const project = useProjectStore.getState().currentProject
           if (!project) throw new Error(t('error.noProject'))
           const steps = createCharacterExtractSteps(projectPath, core.charactersArch, project.novelConfig.genre)
           const { globalEventBus } = await import('../../shared/event-bus')
-          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks, { onlyFailed: true })
+          const archStatus = await runPostProcessPipeline(projectPath, ARCH_CHARACTER_SCOPE, t('workflow.archCharacterSource'), steps, callbacks, { onlyFailed: true, assertCurrent })
+          assertCurrent()
           if (archStatus.allCriticalPassed) {
             globalEventBus.emit('ARCH_POSTPROCESS_UPDATED', {})
           } else {

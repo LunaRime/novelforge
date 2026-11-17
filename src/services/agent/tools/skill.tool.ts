@@ -13,8 +13,8 @@ import { buildAgentTool } from '../tool-registry'
 import { skillRegistry, sortSkillsBySource } from '../skill-registry'
 
 /** 技能目录（模型据此决定要不要按名加载） */
-export function buildSkillCatalog(): string {
-  const skills = sortSkillsBySource(skillRegistry.listAll())
+export function buildSkillCatalog(entries = skillRegistry.listAll()): string {
+  const skills = sortSkillsBySource(entries)
   if (skills.length === 0) return t('tool.skill.empty')
   return skills
     .map(s => {
@@ -44,18 +44,20 @@ export const skillTool = buildAgentTool({
   },
   requiresConfirmation: false,
   isReadOnly: true,
-  execute: async (input) => {
+  execute: async (input, runtime) => {
+    const registry = runtime ? runtime.skills : skillRegistry
+    const catalog = () => buildSkillCatalog(registry?.listAll() ?? [])
     const name = typeof input.name === 'string' ? input.name.trim() : ''
 
     // 无参：列目录（模型的第一步）
     if (!name) {
       return {
         success: true,
-        content: `${t('tool.skill.catalogTitle')}\n${buildSkillCatalog()}`,
+        content: `${t('tool.skill.catalogTitle')}\n${catalog()}`,
       }
     }
 
-    const skill = skillRegistry.get(name)
+    const skill = registry?.get(name)
     if (!skill) {
       // 附带目录，便于模型下一轮自我纠正（而不是盲目重试）
       return {
@@ -63,7 +65,7 @@ export const skillTool = buildAgentTool({
         content: '',
         error: t('tool.skill.notFound')
           .replace('{name}', name)
-          .replace('{catalog}', buildSkillCatalog()),
+          .replace('{catalog}', catalog()),
       }
     }
 

@@ -1,0 +1,35 @@
+# 知识库总览应用层实施记录
+
+2026-11-06。实施基线 `c2709ad`，对应 [18 后续计划](18-followup-implementation-plan.md) 的 A1–A4。本批提交为 `0c1375c`，只接入知识库总览；后续 B1 记录见 [20](20-architecture-document-application-plan.md)。本分支尚未推送，尚无本批远程 CI 结果。
+
+## 应用用例与适配器
+
+- `src/core/application/knowledge-maintenance.ts`：绑定不可变 id/path/session；独立统计请求采用最新请求语义；向量与分词维护实例内互斥。异常释放互斥，dispose 后禁止继续发起 IO。
+- 维护 receipt 保留真实 success/processed/failed/error/errorCode。维护后的统计失败通过 `refreshError` 返回；同项目新统计淘汰旧刷新时保留提交结果，只省略过期计数。项目已过期则停止 UI 发布，不宣称撤销已发出的操作。
+- `src/services/knowledge/knowledge-maintenance-adapter.ts`：复用知识库底层服务，完整保留 IPC 结果，组件不再直接调用这些服务。
+- `src/core/application/prepare-knowledge-export.ts`：复制输入文件名、解析合法正章号、去重并准备标题；缺失/失败标题回退源文件名。每个 await 后校验来源，过期时不继续下一章查询。
+- `src/services/knowledge/knowledge-export-adapter.ts`：连接蓝图标题读取。章号只服务现有导出接口，不构造新的章节或草稿身份。
+
+## 总览组件与主进程
+
+`KnowledgeOverview` 按项目 id/path/session 建立独立视图，复用侧栏的公共 load/search 应用用例。输入编辑、清空、修改 topK 都使旧搜索失效；旧请求的结果、异常与 finally 不覆盖新状态。EventBus 刷新同样使用最新请求语义。
+
+保留原页面布局、无项目提示、topK 1–50、分词回填入口、部分成功计数与既有三语反馈。两类维护互相禁用冲突入口，另有应用层互斥保护；成功、失败和后续统计刷新错误分别留日志。旧项目操作完成不向新项目发布 toast、结果、导出弹窗或刷新事件。
+
+主进程审计确认：向量回填按旧快照重建 chunks 表，可能覆盖同时写入的 tokens。`kb-controller.ts` 为两类维护增加按规范化项目路径串行执行；等待之前捕获来源路径，不阻塞其他项目，失败后释放。它只协调这两个维护 handler，不是所有知识库写入的全局事务或外部进程锁。
+
+没有调整现有向量维度、分词、RRF、检索候选数、阈值与后端降级算法。维度不匹配仍为失败终态，不因前端接入改为重试或分词降级。没有新增 IPC 通道、改 schema/版本、切换存储或迁移真实用户项目。
+
+## 验证证据
+
+测试先观察到失败，再补实现：维护核心初轮 17 条失败；维护提交后统计被更新请求淘汰的修正先复现 2 条失败；组件初轮 6 条失败；新增总览导入门禁先复现 3 条失败；导出核心接线占位时 5 条失败；主进程维护并发先复现 3 条失败。
+
+新增覆盖包括：同路径重开、请求乱序、维护重入、异常释放、部分成功、dim-mismatch 透传、刷新失败不抹掉提交结果、StrictMode、输入编辑/清空、旧错误不结束新 loading、导出途中切项目、分词入口可达、topK 边界、跨窗口维护串行与不同项目并行。主进程测试显式 mock Electron，不依赖本机二进制。
+
+最终门禁：312 个测试文件、3,411 条测试全部通过；全量 TypeScript、ESLint（零警告）、core 独立编译、边界 0/0/0、生产 Vite 构建和公开产物控制台审计通过。构建后 `package.json` 无变动；`git diff --check` 通过。原始测试、构建与检查日志位于本地忽略目录 `logs/tmp/knowledge-*.log`，不提交日志。
+
+独立代码复核检查了会话隔离、StrictMode 生命周期、维护提交与刷新分离、导出元数据及主进程排队路径；发现的 A1 统计过期吞掉提交结果已补失败回归并修复，最终复核无待修 P1/P2。未执行真实项目迁移或打包真机测试；本批不以这些本地门禁冒充远程 CI 或 E/F 验收。
+
+## 后续
+
+本批之后的 B1 架构文档读取/保存/生成入口已接续实施，见 20；B2 小说配置已接续实施，见 [21](21-novel-config-application-plan.md)，下一批为 B3。文件真相切换、生命周期恢复和旧版隔离仍受 D/E/F 的独立验收约束。

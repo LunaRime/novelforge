@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { assertChapter, assertChapterId, ChapterError, type Chapter, type ChapterMeta, type StoredChapter } from '../domain/chapter'
 import type { ChapterIndex } from '../ports/chapter-index'
-import type { ChapterRepo, SaveChapterOptions } from '../ports/chapter-repo'
+import type { ChapterRepo, LockedFileChapterRepo, SaveChapterOptions } from '../ports/chapter-repo'
 import { fileRevision, parseChapter, serializeChapter } from './chapter-format'
 
 interface StoreOptions {
@@ -20,9 +20,9 @@ interface ScannedChapter {
 const isMissing = (error: unknown) => (error as NodeJS.ErrnoException).code === 'ENOENT'
 
 /**
- * Offline chapter repository. All cooperating writers take a project lock because
+ * File chapter repository used by offline tools and the isolated editor. Cooperating writers take a project lock because
  * chapter numbers share a namespace. A stale lock is reported, never auto-deleted.
- * Application cutover and uncooperative external-editor locking are separate steps.
+ * External editors may ignore this lock. Check the file revision before publishing a change.
  */
 export class FileChapterStore implements ChapterRepo {
   private constructor(private readonly options: StoreOptions, private readonly root: string) {}
@@ -63,12 +63,14 @@ export class FileChapterStore implements ChapterRepo {
     if (!stat.isFile() || stat.isSymbolicLink()) throw new ChapterError('unsafe-path', 'Expected a regular file')
   }
 
-  private async directory(parts: string[]): Promise<string> {
+  private async directory(parts: string[], createIfMissing = true): Promise<string> {
     let current = this.root
     for (const part of parts) {
       current = join(current, part)
-      try { await fs.mkdir(current) } catch (error) {
-        if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+      if (createIfMissing) {
+        try { await fs.mkdir(current) } catch (error) {
+          if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+        }
       }
       const stat = await fs.lstat(current)
       if (!stat.isDirectory() || stat.isSymbolicLink() || await fs.realpath(current) !== current) {
@@ -78,9 +80,9 @@ export class FileChapterStore implements ChapterRepo {
     return current
   }
 
-  private async scan(): Promise<ScannedChapter[]> {
+  private async scan(createIfMissing = true): Promise<ScannedChapter[]> {
     await this.assertProject()
-    const dir = await this.directory(['chapters'])
+    const dir = await this.directory(['chapters'], createIfMissing)
     const scanned: ScannedChapter[] = []
     const ids = new Set<string>()
     const numbers = new Set<number>()
@@ -123,12 +125,29 @@ export class FileChapterStore implements ChapterRepo {
     return this.options.index.list()
   }
 
+  /** Agent 读取即时章节元数据，沿用身份和路径校验，只扫描当前已存在的文件。 */
+  async readChapterMetadata(): Promise<ChapterMeta[]> {
+    return (await this.scan(false)).map(item => item.meta).sort((a, b) => a.number - b.number)
+  }
+
   async byId(id: string): Promise<StoredChapter | null> {
     assertChapterId(id)
     const scanned = await this.scan()
     const indexed = await this.updateIndex(scanned)
     const match = scanned.find(s => s.chapter.id === id)
     return match ? { chapter: match.chapter, revision: match.meta.revision, indexed } : null
+  }
+
+  /** 一次读取本批所需正文和对应 revision。只读取现有文件，不创建目录或更新索引。 */
+  async readByIds(ids: readonly string[]): Promise<Map<string, Pick<StoredChapter, 'chapter' | 'revision'>>> {
+    const requested = new Set(ids)
+    requested.forEach(assertChapterId)
+    const result = new Map<string, Pick<StoredChapter, 'chapter' | 'revision'>>()
+    if (!requested.size) return result
+    for (const { chapter, meta } of await this.scan(false)) {
+      if (requested.has(chapter.id)) result.set(chapter.id, { chapter, revision: meta.revision })
+    }
+    return result
   }
 
   private async locked<T>(work: () => Promise<T>): Promise<T> {
@@ -160,63 +179,109 @@ export class FileChapterStore implements ChapterRepo {
     await this.atomicWrite(join(dir, `${Date.now()}-${randomUUID()}.md`), current.text, false)
   }
 
-  private async atomicWrite(path: string, text: string, replace: boolean): Promise<void> {
+  private async atomicWrite(path: string, text: string, replace: boolean, beforePublish?: () => Promise<void>): Promise<void> {
     const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`
     const handle = await fs.open(tmp, 'wx')
     try {
-      await handle.writeFile(text, 'utf8')
-      await handle.sync()
-    } finally { await handle.close() }
-    try {
+      try {
+        await handle.writeFile(text, 'utf8')
+        await handle.sync()
+      } finally { await handle.close() }
+      await beforePublish?.()
       if (replace) await fs.rename(tmp, path)
       else await fs.link(tmp, path) // Exclusive publication; never overwrite an occupied filename.
     } finally { await fs.unlink(tmp).catch(error => { if (!isMissing(error)) throw error }) }
   }
 
   async save(input: Chapter, inputOptions: SaveChapterOptions): Promise<StoredChapter> {
+    // Capture caller-owned inputs before waiting for the lock.
+    const chapter = structuredClone(input)
+    const options = { ...inputOptions }
+    return this.locked(() => this.saveLocked(chapter, options))
+  }
+
+  /** Holds the same writer lock from intent preparation through the retained DB receipt. */
+  async withCommitLock<T>(work: (repo: LockedFileChapterRepo) => Promise<T>): Promise<T> {
+    return this.locked(async () => {
+      let active = true
+      try {
+        return await work({
+          byId: id => this.byId(id),
+          canCreate: chapter => {
+            if (!active) throw new ChapterError('locked', 'File commit lock has been released')
+            return this.canCreateLocked(chapter)
+          },
+          save: (chapter, options) => {
+            if (!active) throw new ChapterError('locked', 'File commit lock has been released')
+            return this.saveLocked(chapter, options)
+          },
+        })
+      } finally { active = false }
+    })
+  }
+
+  private chapterFileName(number: number): string {
+    return `${String(number).padStart(4, '0')}.md`
+  }
+
+  private async pathIsVacant(path: string): Promise<boolean> {
+    try { await fs.lstat(path); return false }
+    catch (error) { if (isMissing(error)) return true; throw error }
+  }
+
+  private async canCreateLocked(chapter: Chapter): Promise<boolean> {
+    assertChapter(chapter)
+    if (chapter.projectId !== this.options.projectId) throw new ChapterError('project-mismatch', 'Cannot write a foreign chapter')
+    const scanned = await this.scan()
+    return !scanned.some(s => s.chapter.id === chapter.id || s.chapter.number === chapter.number) &&
+      await this.pathIsVacant(join(this.root, 'chapters', this.chapterFileName(chapter.number)))
+  }
+
+  private async saveLocked(input: Chapter, inputOptions: SaveChapterOptions): Promise<StoredChapter> {
     const chapter = structuredClone(input)
     const options = { ...inputOptions }
     assertChapter(chapter)
     if (chapter.projectId !== this.options.projectId) throw new ChapterError('project-mismatch', 'Cannot write a foreign chapter')
-    return this.locked(async () => {
-      const scanned = await this.scan()
-      const current = scanned.find(s => s.chapter.id === chapter.id)
-      this.checkRevision(current, options)
-      if (scanned.some(s => s.chapter.number === chapter.number && s.chapter.id !== chapter.id)) {
-        throw new ChapterError('number-conflict', 'Chapter number already belongs to another identity')
-      }
-      const name = `${String(chapter.number).padStart(4, '0')}.md`
-      const path = join(this.root, 'chapters', name)
-      const oldPath = current ? join(this.root, current.meta.path) : null
-      if (oldPath !== path) {
-        try { await fs.lstat(path); throw new ChapterError('number-conflict', 'Destination is occupied') }
-        catch (error) { if (!isMissing(error)) throw error }
-      }
-      const text = serializeChapter(chapter)
-      if (current && current.text === text && oldPath === path) {
-        return { chapter, revision: current.meta.revision, indexed: await this.updateIndex(scanned) }
-      }
-      if (current) await this.snapshot(current)
-      // Check again after snapshot IO so an intervening external edit is not lost.
+    const scanned = await this.scan()
+    const current = scanned.find(s => s.chapter.id === chapter.id)
+    this.checkRevision(current, options)
+    if (scanned.some(s => s.chapter.number === chapter.number && s.chapter.id !== chapter.id)) {
+      throw new ChapterError('number-conflict', 'Chapter number already belongs to another identity')
+    }
+    const name = this.chapterFileName(chapter.number)
+    const path = join(this.root, 'chapters', name)
+    const oldPath = current ? join(this.root, current.meta.path) : null
+    if (oldPath !== path && !(await this.pathIsVacant(path))) {
+      throw new ChapterError('number-conflict', 'Destination is occupied')
+    }
+    const text = serializeChapter(chapter)
+    if (current && current.text === text && oldPath === path) {
+      options.assertCurrent?.()
+      return { chapter, revision: current.meta.revision, indexed: await this.updateIndex(scanned) }
+    }
+    if (current) await this.snapshot(current)
+    await this.assertProject()
+    const beforePublish = async () => {
+      // 临时文件写完后再核对原文件与会话，把检查放到替换发布之前。
       if (current && fileRevision(await fs.readFile(oldPath!, 'utf8')) !== current.meta.revision) {
         throw new ChapterError('conflict', 'Chapter was externally edited during save')
       }
-      await this.assertProject()
-      if (oldPath && oldPath !== path) {
-        // Persist metadata first, then link to an unoccupied new name. A crash can
-        // leave two copies with the same id; scan refuses ambiguity instead of losing data.
-        await this.atomicWrite(oldPath, text, true)
-        await fs.link(oldPath, path)
-        await fs.unlink(oldPath)
-      } else await this.atomicWrite(path, text, !!current)
-      // Do not re-read unrelated files after commit: an external malformed file
-      // must not make a completed save appear to have failed.
-      const after = scanned.filter(s => s.chapter.id !== chapter.id)
-      after.push({ chapter, text, meta: { id: chapter.id, number: chapter.number,
-        title: chapter.title, status: chapter.status, path: `chapters/${name}`,
-        revision: fileRevision(text), wordCount: chapter.content.replace(/\s/gu, '').length } })
-      return { chapter, revision: fileRevision(text), indexed: await this.updateIndex(after) }
-    })
+      options.assertCurrent?.()
+    }
+    if (oldPath && oldPath !== path) {
+      // Persist metadata first, then link to an unoccupied new name. A crash can
+      // leave two copies with the same id; scan refuses ambiguity instead of losing data.
+      await this.atomicWrite(oldPath, text, true, beforePublish)
+      await fs.link(oldPath, path)
+      await fs.unlink(oldPath)
+    } else await this.atomicWrite(path, text, !!current, beforePublish)
+    // Do not re-read unrelated files after commit: an external malformed file
+    // must not make a completed save appear to have failed.
+    const after = scanned.filter(s => s.chapter.id !== chapter.id)
+    after.push({ chapter, text, meta: { id: chapter.id, number: chapter.number,
+      title: chapter.title, status: chapter.status, path: `chapters/${name}`,
+      revision: fileRevision(text), wordCount: chapter.content.replace(/\s/gu, '').length } })
+    return { chapter, revision: fileRevision(text), indexed: await this.updateIndex(after) }
   }
 
   async remove(id: string, options: SaveChapterOptions): Promise<void> {

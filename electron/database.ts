@@ -13,6 +13,7 @@ import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
 import { AUTOMATION_SCHEMA_SQL } from './repositories/automation-schema'
 import { getProjectDataDir } from './utils/config-utils'
+import { isFileProjectDirectory } from './security/file-project-write-path'
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
@@ -24,8 +25,13 @@ export function getCurrentProjectPath(): string | null {
   return currentProjectPath
 }
 
-/** 初始化项目数据库（打开项目时调用） */
+export { isFileProjectDirectory } from './security/file-project-write-path'
+
+/** 打开 SQLite 项目。候选文件项目由其独立入口验证并打开。 */
 export function initProjectDatabase(projectPath: string): void {
+  if (isFileProjectDirectory(projectPath)) {
+    throw new Error(t('error.fileProjectRequiresFileEditor'))
+  }
   closeProjectDatabase()
   currentProjectPath = projectPath
 
@@ -167,6 +173,8 @@ function ensureSchemaVersion(db: BetterSqlite3.Database): void {
     )
   }
 }
+const DRAFT_BRANCH_INDEX = 'CREATE INDEX IF NOT EXISTS idx_drafts_chapter_branch ON drafts(chapter_number, branch_id, version DESC);'
+
 function createTables(db: BetterSqlite3.Database) {
   db.exec(`
     -- ============================================================
@@ -344,7 +352,6 @@ function createTables(db: BetterSqlite3.Database) {
       UNIQUE(chapter_number, name)
     );
     CREATE INDEX IF NOT EXISTS idx_branches_chapter ON draft_branches(chapter_number, status);
-    CREATE INDEX IF NOT EXISTS idx_drafts_chapter_branch ON drafts(chapter_number, branch_id, version DESC);
 
     -- v22: 场景卡（活页夹卷→章→场景；先做摘要/状态，正文可后挂）
     CREATE TABLE IF NOT EXISTS scene_cards (
@@ -610,10 +617,13 @@ function createTables(db: BetterSqlite3.Database) {
   // 对于旧数据库（user_version<CURRENT_SCHEMA_VERSION），执行增量迁移补加缺失的列/约束
   const currentVersion = db.pragma('user_version', { simple: true }) as number
   if (currentVersion === 0) {
+    db.exec(DRAFT_BRANCH_INDEX)
     db.pragma(`user_version = ${CURRENT_SCHEMA_VERSION}`)
     logger.info('DB', t('log.db.freshSchemaMarked').replace('{version}', String(CURRENT_SCHEMA_VERSION)))
   } else {
     ensureSchemaVersion(db)
+    // Existing databases must add drafts.branch_id before creating the index.
+    if (currentVersion <= CURRENT_SCHEMA_VERSION) db.exec(DRAFT_BRANCH_INDEX)
   }
 }
 
@@ -1150,7 +1160,7 @@ function migrateExistingTables(db: BetterSqlite3.Database) {
         UNIQUE(chapter_number, name)
       );
       CREATE INDEX IF NOT EXISTS idx_branches_chapter ON draft_branches(chapter_number, status);
-      CREATE INDEX IF NOT EXISTS idx_drafts_chapter_branch ON drafts(chapter_number, branch_id, version DESC);
+      ${DRAFT_BRANCH_INDEX}
     `)
     logger.info('DB', 'v21 迁移: 分支表已建')
   } catch (e) {

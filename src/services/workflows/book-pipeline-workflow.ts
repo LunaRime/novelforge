@@ -22,6 +22,7 @@ import type {
 } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 import { ipc } from '../ipc-client'
+import { captureDraftWorkflowSource } from '../draft-index'
 import { useProjectStore } from '../../stores/project-store'
 import { computeTextStats } from '../text-stats'
 import { assessDraftQuality, type DraftQualityReport } from '../text-quality-guard'
@@ -301,13 +302,17 @@ async function executeFinalizeStep(
   step: WorkflowStep,
   context: WorkflowContext,
   callbacks: StepCallbacks,
+  assertSource: () => void,
 ): Promise<void> {
+  assertSource()
   if (context.data[skipKey(chapterNumber)] === true) return
   const draft = readDraftFromContext(context, chapterNumber) ?? await loadLatestDraft(chapterNumber)
+  assertSource()
   if (!draft) {
     throw new Error(t('workflow.bookPipelineDraftMissing').replace('{n}', String(chapterNumber)))
   }
   const info = await loadChapterInfo(chapterNumber)
+  assertSource()
   // 定稿前只有硬故障（循环重复 / 字数膨胀到硬上限）才拦；字数区间偏离属软约束
   const target = useProjectStore.getState().currentProject?.novelConfig.wordsPerChapter ?? 2000
   const report = assessDraftQuality(draft.content, target)
@@ -318,6 +323,7 @@ async function executeFinalizeStep(
   }
 
   const { FinalizeChapterCommand } = await import('./commands/finalize-chapter.command')
+  assertSource()
   await new FinalizeChapterCommand({
     draftPath: draft.filePath,
     draftContent: draft.content,
@@ -325,11 +331,14 @@ async function executeFinalizeStep(
     chapterInfo: info,
   }).execute({ step, context, callbacks })
 
+  assertSource()
   const status = await readPostProcessStatus('', getChapterFinalizeScope(chapterNumber))
+  assertSource()
   if (status && !status.allCriticalPassed) {
     throw new Error(t('workflow.bookPipelineFinalizeUnhealthy').replace('{n}', String(chapterNumber)))
   }
   const finalized = await ipc.invoke('db:draft-get-finalized', chapterNumber)
+  assertSource()
   if (!finalized) {
     throw new Error(t('workflow.bookPipelineFinalizeMissing').replace('{n}', String(chapterNumber)))
   }
@@ -337,6 +346,7 @@ async function executeFinalizeStep(
 }
 
 export function createBookPipelineWorkflow(params: BookPipelineParams): WorkflowDefinition {
+  const assertSource = captureDraftWorkflowSource()
   const plan = buildBookPipelinePlan(params)
   const total = params.chapterEnd - params.chapterStart + 1
   const steps = plan.map((item) => {
@@ -361,7 +371,7 @@ export function createBookPipelineWorkflow(params: BookPipelineParams): Workflow
       name: t('workflow.bookPipelineFinalize').replace('{n}', String(n)),
       description: t('workflow.bookPipelineFinalizeDesc').replace('{n}', String(n)),
       executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) =>
-        executeFinalizeStep(n, step, context, callbacks),
+        executeFinalizeStep(n, step, context, callbacks, assertSource),
     }
   })
 

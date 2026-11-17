@@ -8,13 +8,26 @@ import { useAgentStore } from '../../stores/agent-store'
 import { useDraftStore } from '../../stores/draft-store'
 import { installAgentRuntimePorts, type AgentRuntimePorts } from '../agent/runtime-ports'
 import { startWorkflow } from '../workflows/start-workflow'
+import { ipc } from '../ipc-client'
+import { readVelaContent } from '../vela-protocol'
+import { loadAllForeshadowing } from '../foreshadowing-manager'
+import { toolRegistry } from '../agent/tool-registry'
+import { skillRegistry } from '../agent/skill-registry'
 
 export function createRendererAgentPorts(): AgentRuntimePorts {
   return {
+    tools: toolRegistry,
+    skills: skillRegistry,
+    io: {
+      invoke: (channel, ...args) => ipc.invoke(channel, ...args),
+      readVirtualFile: readVelaContent,
+      loadForeshadowing: loadAllForeshadowing,
+    },
     project: {
       current: () => useProjectStore.getState().currentProject,
       files: () => useProjectStore.getState().fileTree,
       session: () => useProjectStore.getState().projectSession,
+      updateConfig: (source, patch) => useProjectStore.getState().commitNovelConfigPatch(source, patch),
     },
     editor: {
       snapshot: () => { const { tabs, activeTabId } = useEditorStore.getState(); return { tabs, activeTabId } },

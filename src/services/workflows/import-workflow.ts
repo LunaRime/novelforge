@@ -4,7 +4,7 @@
  * 逆向推演全流程：
  * 步骤1: 写入正文 + 构建知识库
  * 步骤2: 向量采样 + AI 推演全局配置/架构/角色
- * 步骤3: AI 按章推演精准蓝图 + 蓝图入向量库 + 拼装轻量全局摘要
+ * 步骤3: AI 逐章推演并保存蓝图
  * 步骤4: 完成后处理（刷新 UI 状态）
  */
 
@@ -12,6 +12,7 @@ import type { WorkflowDefinition } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 import type { ImportedChapter } from './commands/import-novel.command'
 import { registerWorkflow } from './workflow-registry'
+import { captureCharacterSource, isCharacterSourceCurrent } from '../characters/character-edits-adapter'
 
 export interface ImportWorkflowParams {
   /** 拆分后的章节数据 */
@@ -22,6 +23,10 @@ export interface ImportWorkflowParams {
  * 创建导入小说工作流
  */
 export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefinition {
+  const source = captureCharacterSource()
+  const assertCurrent = () => {
+    if (!source || !isCharacterSourceCurrent(source)) throw new Error(t('error.requestCancelled'))
+  }
   return {
     type: 'novel_import',
     rehydrateParams: { ...params },
@@ -32,7 +37,9 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importWriteKB'),
         description: t('workflow.importWriteKBDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { ImportInitializeCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new ImportInitializeCommand(params.chapters)
           return cmd.execute({ step, context, callbacks })
         },
@@ -43,18 +50,22 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importInferGlobal'),
         description: t('workflow.importInferGlobalDesc'),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { InferGlobalSettingsCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new InferGlobalSettingsCommand()
           return cmd.execute({ step, context, callbacks })
         },
       },
 
-      // ===== 步骤 3: AI 按章推演蓝图 + 蓝图入向量库 + 拼装摘要 =====
+      // ===== 步骤 3: AI 逐章推演并保存蓝图 =====
       {
         name: t('workflow.importInferBlueprints'),
         description: t('workflow.importInferBlueprintsDesc').replace('{n}', String(params.chapters.length)),
         executor: async (step, context, callbacks) => {
+          assertCurrent()
           const { InferBlueprintsPerChapterCommand } = await import('./commands/import-novel.command')
+          assertCurrent()
           const cmd = new InferBlueprintsPerChapterCommand()
           return cmd.execute({ step, context, callbacks })
         },
@@ -65,6 +76,7 @@ export function createImportWorkflow(params: ImportWorkflowParams): WorkflowDefi
         name: t('workflow.importPostProcess'),
         description: t('workflow.importPostProcessDesc'),
         executor: async (_step, _context, callbacks) => {
+          assertCurrent()
           callbacks.log(t('log.refreshProject'))
           callbacks.setProgress(30)
 
@@ -104,7 +116,7 @@ registerWorkflow('novel_import', (p) => createImportWorkflow(p as unknown as Imp
 
 /**
  * 预估导入的 Token 消耗
- * @param totalWords 总字数
+ * @param _totalWords 总字数，当前估算公式按章数计算
  * @param chapterCount 章节数
  * @returns 预估信息
  */
@@ -115,9 +127,8 @@ export function estimateImportCost(_totalWords: number, chapterCount: number): {
 } {
   // 粗略预估（偏保守）：
   // 1. 全局推演：首章+末章(约6000字) × 2(输入+输出) ≈ 12000 tokens
-  // 2. 按章蓝图：每章正文(平址3000字) + 蓝图输出(约500字) ≈ 3500 tokens/章
-  // 3. 全局摘要：从蓝图拼装，零 LLM 调用
-  // 4. 知识库向量化不计入 LLM Token
+  // 2. 按章蓝图：估算按平均 3000 字正文和约 500 字蓝图输出计算。
+  // 3. 知识库向量化不计入 LLM Token。
 
   const globalInferTokens = 15000
   const blueprintTokensPerChapter = 4000
@@ -132,7 +143,6 @@ export function estimateImportCost(_totalWords: number, chapterCount: number): {
   const breakdown = [
     `· 全局推演：~${(globalInferTokens / 1000).toFixed(0)}K tokens`,
     `· 蓝图推演：~${(totalBlueprintTokens / 1000).toFixed(0)}K tokens（${chapterCount} 章 × ${(blueprintTokensPerChapter / 1000).toFixed(1)}K）`,
-    `· 全局摘要：零消耗（从蓝图拼装）`,
     `· 总计：~${(estimatedTokens / 1000).toFixed(0)}K tokens`,
   ].join('\n')
 

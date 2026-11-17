@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, captureAgentProject, buildRuntimeAgentTool, t
  * open_editor — 在编辑器中打开文件
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 import { validatePath } from './safe-path'
 
-export function createOpenEditorTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createOpenEditorTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'open_editor',
   description: t('tool.openEditorDesc'),
   source: 'builtin',
@@ -29,7 +28,7 @@ return buildRuntimeAgentTool(ports, {
   },
   requiresConfirmation: true,
   isReadOnly: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const filePath = args.file_path as string
     const tabType = (args.tab_type as string) ?? 'chapter'
 
@@ -56,7 +55,7 @@ return buildRuntimeAgentTool(ports, {
     const fullPath = fullPath_check.fullPath
 
     // 读取文件内容
-    const result = await ipc.invoke('fs:read-file', fullPath)
+    const result = await ports.io.invoke('fs:read-file', fullPath)
     if (!result.success) {
       return { success: false, content: '', error: t('tool.openEditorReadFailed').replace('{error}', result.error ?? '') }
     }

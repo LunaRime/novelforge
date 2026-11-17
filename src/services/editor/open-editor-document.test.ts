@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { openRendererEditorDocument } from './open-editor-document'
 import { EditorOpenScopeChanged } from '../../core'
 import { useEditorStore } from '../../stores/editor-store'
+import { createFinalizeWorkflow, createRefineFromReviewWorkflow, createRefineOnlyWorkflow, createReviewOnlyWorkflow } from '../workflows/chapter-workflow'
+import { createBookPipelineWorkflow } from '../workflows/book-pipeline-workflow'
 
 const { invoke, state } = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -63,6 +65,39 @@ describe('renderer document opening adapter', () => {
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:7', content: 'local unsaved', dirty: true, inlineSession: before.inlineSession })
   })
 
+  it('opens exact versions by draft ID, including a successful empty document', async () => {
+    invoke.mockResolvedValueOnce({ content: '' }).mockResolvedValueOnce({ content: 'branch text' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 7, name: 'Chapter 2 v3' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 8, name: 'Chapter 2 v3' })
+    expect(invoke.mock.calls).toEqual([['db:draft-get-full', 7], ['db:draft-get-full', 8]])
+    expect(useEditorStore.getState().tabs).toMatchObject([
+      { id: 'doc:7', docId: 7, filePath: 'vela://draft/7', content: '' },
+      { id: 'doc:8', docId: 8, filePath: 'vela://draft/8', content: 'branch text' },
+    ])
+  })
+
+  it('keeps clean inline content when opening an exact version already in the editor', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', docId: 7, filePath: 'vela://draft/7', type: 'chapter', name: 'Old', content: 'local' })
+    editor.beginInlineSession('doc:7', { sessionId: 'inline', sourceKind: 'selection', baseDocSnapshot: 'local', hunks: [], decisions: {} })
+    invoke.mockResolvedValue({ content: 'database text' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 7, name: 'Selected version' })
+    expect(useEditorStore.getState().tabs).toMatchObject([
+      { id: 'doc:7', content: 'local', name: 'Selected version', inlineSession: { sessionId: 'inline' } },
+    ])
+  })
+
+  it('distinguishes a missing exact draft from failure and drops a late same-path response', async () => {
+    const request = { kind: 'draft', draftId: 7, name: 'Draft' } as const
+    invoke.mockResolvedValueOnce(null)
+    await expect(openRendererEditorDocument(request)).resolves.toEqual({ status: 'missing' })
+    invoke.mockRejectedValueOnce(new Error('read failed'))
+    await expect(openRendererEditorDocument(request)).rejects.toThrow('read failed')
+    invoke.mockImplementationOnce(async () => { state.projectSession++; return { content: 'old' } })
+    await expect(openRendererEditorDocument(request)).rejects.toBeInstanceOf(EditorOpenScopeChanged)
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
   it('architecture reopening also preserves unsaved text', async () => {
     useEditorStore.getState().openFile({ id: 'vela://core/premise', filePath: 'vela://core/premise', type: 'arch-file', name: 'Premise', content: 'old' })
     useEditorStore.getState().updateTabContent('vela://core/premise', 'local')
@@ -76,6 +111,48 @@ describe('renderer document opening adapter', () => {
     await openRendererEditorDocument({ kind: 'path', locator: 'vela://manuscript/7', name: 'Final', documentKind: 'chapter' })
     expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'vela://manuscript/7', filePath: 'vela://manuscript/7' })
     expect(useEditorStore.getState().tabs[0].docId).toBeUndefined()
+  })
+
+  it('opens the exact finalized branch from the workflow receipt', async () => {
+    invoke.mockResolvedValueOnce({ title: 'Rain' }).mockResolvedValueOnce({ content: 'Finalized branch' })
+    const workflow = createFinalizeWorkflow({ chapterNumber: 3, chapterTitle: 'Rain',
+      draftPath: 'vela://draft/41', draftContent: 'Finalized branch' })
+    await workflow.onComplete?.openResult?.()
+    expect(invoke.mock.calls).toEqual([['db:blueprint-get', 3], ['db:draft-get-full', 41]])
+    expect(useEditorStore.getState().tabs[0]).toMatchObject({ filePath: 'vela://manuscript/41', content: 'Finalized branch' })
+  })
+
+  it('discards a finalization projection from a previous same-path session', async () => {
+    const workflow = createFinalizeWorkflow({ chapterNumber: 3, chapterTitle: 'Rain',
+      draftPath: 'vela://draft/41', draftContent: 'Finalized branch' })
+    invoke.mockImplementationOnce(async () => { state.projectSession++; return { title: 'Rain' } })
+    await expect(workflow.onComplete?.openResult?.()).rejects.toThrow()
+    expect(invoke.mock.calls).toEqual([['db:blueprint-get', 3]])
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
+  it.each([
+    ['review', createReviewOnlyWorkflow],
+    ['refine', createRefineOnlyWorkflow],
+    ['review fix', createRefineFromReviewWorkflow],
+    ['finalize', createFinalizeWorkflow],
+  ])('rejects a delayed %s step from the previous project session', async (_name, create) => {
+    const workflow = create({ chapterNumber: 3, chapterTitle: 'Rain', draftPath: 'vela://draft/41',
+      draftContent: 'Previous session', reviewReport: 'Review', reviewFileName: 'review' })
+    const step = workflow.steps[0]
+    const running = step.executor({ id: 'step', name: '', description: '', status: 'running', logs: [] },
+      { cancelled: false, data: {} }, { log: vi.fn(), appendText: vi.fn(), setProgress: vi.fn() })
+    state.projectSession++
+    await expect(running).rejects.toThrow()
+    expect(invoke).not.toHaveBeenCalled()
+  })
+
+  it('rejects a book finalization step before looking up a draft in the reopened project', async () => {
+    const workflow = createBookPipelineWorkflow({ chapterStart: 3, chapterEnd: 3 })
+    state.projectSession++
+    await expect(workflow.steps.at(-1)!.executor({ id: 'step', name: '', description: '', status: 'running', logs: [] },
+      { cancelled: false, data: {} }, { log: vi.fn(), appendText: vi.fn(), setProgress: vi.fn() })).rejects.toThrow()
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('rejects project-scoped URI reads without an active project', async () => {

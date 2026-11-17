@@ -9,9 +9,11 @@
 import type { WorkflowDefinition, WorkflowStep, WorkflowContext, StepCallbacks } from '../../stores/workflow-store'
 import { t } from '../../shared/locale'
 import { useProjectStore } from '../../stores/project-store'
-import { loadDirectoryBlueprints, type ChapterBlueprint } from './directory-workflow'
+import type { ChapterBlueprint } from './directory-workflow'
 import { FillGapsCommand } from './commands/fill-gaps.command'
 import { generateVerificationReport, type BlueprintGap } from '../blueprint-verification-service'
+import { assertChapterBlueprintScope, captureChapterBlueprintScope, readChapterBlueprintSnapshot } from '../chapters/chapter-blueprint-adapter'
+import { ipc } from '../ipc-client'
 import type { ProjectCoreData } from '../../../electron/repositories/project-core-repository'
 import { registerWorkflow } from './workflow-registry'
 
@@ -23,17 +25,20 @@ export interface VerificationWorkflowParams {
 export function createVerificationWorkflow(
   params: VerificationWorkflowParams = { autoFill: false },
 ): WorkflowDefinition {
+  const source = captureChapterBlueprintScope()
   const steps: WorkflowDefinition['steps'] = [
     {
       name: t('workflow.loadBlueprints'),
       description: t('workflow.verifyLoadBlueprintsDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
         const project = useProjectStore.getState().currentProject
-        if (!project) throw new Error(t('error.noProject'))
+        if (!source || !project) throw new Error(t('error.noProject'))
+        assertChapterBlueprintScope(source)
+        const totalChapters = project.novelConfig.totalChapters
 
         // 加载架构（用于补全时提供上下文）
+        let architecture: string | undefined
         try {
-          const { ipc } = await import('../ipc-client')
           const core = await ipc.invoke('db:project-core-get')
           if (core) {
             const parts: string[] = []
@@ -42,14 +47,17 @@ export function createVerificationWorkflow(
             if (c.charactersArch?.length > 50) parts.push(c.charactersArch)
             if (c.worldbuilding?.length > 50) parts.push(c.worldbuilding)
             if (c.synopsis?.length > 50) parts.push(c.synopsis)
-            context.data.architecture = parts.join('\n\n---\n\n')
+            architecture = parts.join('\n\n---\n\n')
           }
         } catch { /* 架构加载失败不阻塞 */ }
 
+        assertChapterBlueprintScope(source)
         callbacks.log(t('log.loadingBlueprints'))
-        const blueprints = await loadDirectoryBlueprints()
+        const blueprints = await readChapterBlueprintSnapshot(source)
+        assertChapterBlueprintScope(source)
+        if (architecture !== undefined) context.data.architecture = architecture
         context.data.blueprints = blueprints
-        context.data.totalChapters = project.novelConfig.totalChapters
+        context.data.totalChapters = totalChapters
         callbacks.log(t('log.blueprintsLoaded').replace('{n}', String(blueprints.length)))
         return t('workflow.verifyLoadedCount').replace('{n}', String(blueprints.length))
       },
@@ -58,11 +66,13 @@ export function createVerificationWorkflow(
       name: t('workflow.scanGaps'),
       description: t('workflow.verifyScanGapsDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
+        if (!source) throw new Error(t('error.noProject'))
+        assertChapterBlueprintScope(source)
         const blueprints = context.data.blueprints as ChapterBlueprint[]
         const totalChapters = context.data.totalChapters as number
 
         callbacks.log(t('log.analyzingCompleteness'))
-        const report = await generateVerificationReport(totalChapters, blueprints)
+        const report = generateVerificationReport(totalChapters, blueprints)
 
         context.data.verificationReport = report
         context.data.gaps = report.gaps
@@ -81,6 +91,9 @@ export function createVerificationWorkflow(
       name: t('workflow.aiFill'),
       description: t('workflow.verifyAiFillDesc'),
       executor: async (_step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
+        if (!source) throw new Error(t('error.noProject'))
+        assertChapterBlueprintScope(source)
+        if (context.cancelled) throw new Error(t('error.workflowCancelled'))
         const gaps = context.data.gaps as BlueprintGap[]
 
         if (!gaps || gaps.length === 0) {
@@ -89,7 +102,7 @@ export function createVerificationWorkflow(
           return t('workflow.noGaps')
         }
 
-        const cmd = new FillGapsCommand({ gaps })
+        const cmd = new FillGapsCommand({ gaps, source })
         const filled = await cmd.execute({
           step: _step,
           context,
@@ -124,9 +137,11 @@ registerWorkflow('post_process', (p) => createVerificationWorkflow(p as Verifica
  * 跳过扫描，直接对指定 gaps 执行 FillGapsCommand。
  */
 export function createGapFillWorkflow(gaps: BlueprintGap[]): WorkflowDefinition {
+  const source = captureChapterBlueprintScope()
+  const capturedGaps = structuredClone(gaps)
   return {
     type: 'post_process',
-    rehydrateParams: { gaps, __subflow: 'gap_fill' },
+    rehydrateParams: { gaps: capturedGaps, __subflow: 'gap_fill' },
     title: t('workflow.gapFillTitle'),
     steps: [
       {
@@ -134,11 +149,14 @@ export function createGapFillWorkflow(gaps: BlueprintGap[]): WorkflowDefinition 
         description: t('workflow.verifyAiFillDesc'),
         executor: async (step: WorkflowStep, context: WorkflowContext, callbacks: StepCallbacks) => {
           const project = useProjectStore.getState().currentProject
-          if (!project) throw new Error(t('error.noProject'))
+          if (!project || !source) throw new Error(t('error.noProject'))
+          assertChapterBlueprintScope(source)
           // 加载架构（补全上下文，与 verification-workflow 同款）
           try {
             const { ipc } = await import('../ipc-client')
+            assertChapterBlueprintScope(source)
             const core = await ipc.invoke('db:project-core-get')
+            assertChapterBlueprintScope(source)
             if (core) {
               const parts: string[] = []
               const c = core as ProjectCoreData
@@ -149,7 +167,8 @@ export function createGapFillWorkflow(gaps: BlueprintGap[]): WorkflowDefinition 
               context.data.architecture = parts.join('\n\n---\n\n')
             }
           } catch { /* 架构加载失败不阻塞 */ }
-          const cmd = new FillGapsCommand({ gaps })
+          assertChapterBlueprintScope(source)
+          const cmd = new FillGapsCommand({ gaps: capturedGaps, source })
           const filled = await cmd.execute({ step, context, callbacks })
           return t('workflow.filledCount').replace('{n}', String(filled.length))
         },

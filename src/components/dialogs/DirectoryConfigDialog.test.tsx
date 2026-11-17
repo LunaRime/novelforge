@@ -66,6 +66,31 @@ describe('DirectoryConfigDialog 生成方式', () => {
     })
   })
 
+  it('全书范围使用默认数量并可通过工作流参数校验', () => {
+    const onConfirm = vi.fn()
+    const { root } = render(<DirectoryConfigDialog isOpen onClose={() => {}} existingCount={2} onConfirm={onConfirm} />)
+    clickByText('全量生成（共 100 章）')
+    clickByText('覆盖模式')
+    const start = [...document.body.querySelectorAll('button')].find(button => button.textContent?.trim() === '开始生成')
+    expect(start).toBeDefined()
+    act(() => { start!.click() })
+    expect(onConfirm.mock.calls[0][0].mode).toBe('full')
+    expect(onConfirm.mock.calls[0][0].expectedTotalChapters).toBe(100)
+    expect(onConfirm.mock.calls[0][0].count).toBeUndefined()
+    act(() => { root.unmount() })
+  })
+
+  it('按数量续写让工作流从实际目录末尾推导起点', () => {
+    const onConfirm = vi.fn()
+    const { root } = render(<DirectoryConfigDialog isOpen onClose={() => {}} existingCount={2} onConfirm={onConfirm} />)
+    const start = [...document.body.querySelectorAll('button')].find(button => button.textContent?.trim() === '开始生成')
+    expect(start).toBeDefined()
+    act(() => { start!.click() })
+    expect(onConfirm.mock.calls[0][0]).toMatchObject({ mode: 'append', count: 50 })
+    expect(onConfirm.mock.calls[0][0].startChapter).toBeUndefined()
+    act(() => { root.unmount() })
+  })
+
   it('默认单次生成：confirm 后 generationMode=single 且无 batchChapterCount', () => {
     let captured: DirectoryWorkflowParams | null = null
     const { root } = render(

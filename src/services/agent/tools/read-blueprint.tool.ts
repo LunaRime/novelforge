@@ -3,11 +3,10 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * read_blueprint — 读取章节蓝图
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
 
-export function createReadBlueprintTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createReadBlueprintTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'read_blueprint',
   description: t('tool.readBlueprintDesc'),
   source: 'builtin',
@@ -21,7 +20,7 @@ return buildRuntimeAgentTool(ports, {
     },
   },
   requiresConfirmation: false,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const project = ports.project.current()
     if (!project) {
       return { success: false, content: '', error: t('error.noProject') }
@@ -31,7 +30,7 @@ return buildRuntimeAgentTool(ports, {
 
     if (chapterNum !== undefined) {
       // 读取指定章节蓝图
-      const bp = await ipc.invoke('db:blueprint-get', chapterNum)
+      const bp = await ports.io.invoke('db:blueprint-get', chapterNum)
       if (!bp) {
         return { success: false, content: '', error: t('tool.readBlueprintNotFound').replace('{chapter}', String(chapterNum)) }
       }
@@ -50,7 +49,7 @@ return buildRuntimeAgentTool(ports, {
 
     // 列出所有蓝图文件
     try {
-      const bps = await ipc.invoke('db:blueprint-get-all')
+      const bps = await ports.io.invoke('db:blueprint-get-all')
       if (!bps || bps.length === 0) {
         return { success: true, content: t('tool.readBlueprintEmpty') }
       }

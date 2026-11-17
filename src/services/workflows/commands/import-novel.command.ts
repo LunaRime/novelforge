@@ -4,17 +4,18 @@
  * 三个独立 Command 组成逆向推演全链路：
  * 1. ImportInitializeCommand — 写入正文 + 构建知识库
  * 2. InferGlobalSettingsCommand — 向量采样 + AI 推演全局配置/架构/角色
- * 3. InferBlueprintsPerChapterCommand — 按章逐一推演精准蓝图 + 蓝图入向量库 + 拼装轻量全局摘要
+ * 3. InferBlueprintsPerChapterCommand — 逐章推演并保存蓝图
  */
 
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
-import { useProjectStore } from '../../../stores/project-store'
+import { captureProjectConfigSource, isProjectConfigCurrent, useProjectStore } from '../../../stores/project-store'
 import { getPromptTemplate } from '../../prompt-templates'
 import { normalizeBlueprintRole } from '../../blueprint-role'
 import { normalizeNovelConfigEnums } from '../../novel-config-normalize'
 import { ImportPromptBuilder } from '../../prompts/prompt-builder'
 import { ipc } from '../../ipc-client'
+import { createCharacterCardMerger } from '../../character-card-merge'
 
 /** 拆分后的章节数据（从 context.data 中传递） */
 export interface ImportedChapter {
@@ -136,10 +137,13 @@ export class ImportInitializeCommand extends BaseWorkflowCommand<void> {
 export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
     const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
+    const source = captureProjectConfigSource()
+    if (!project || !source) throw new Error(t('error.noProject'))
+    const versions = useProjectStore.getState().configFieldVersions
 
     const chapters = context.data.chapters as ImportedChapter[]
     if (!chapters || chapters.length === 0) throw new Error(t('error.noChapters'))
+    const merger = await createCharacterCardMerger(project.path)
 
     callbacks.log(t('log.import.searching'))
     callbacks.setProgress(5)
@@ -216,6 +220,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     callbacks.log(t('log.import.parsing'))
 
     // ===== 解析 JSON 结果 =====
+    merger.assertCurrent()
+    if (context.cancelled) throw new Error(t('error.workflowCancelled'))
     const inferResult = this.parseJSON<{
       novelConfig: Record<string, string>
       architectureFiles: Record<string, string>
@@ -223,31 +229,17 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     }>(rawResult)
 
     // ===== 写入小说配置 =====
+    if (!isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
     if (inferResult.novelConfig) {
-      const novelConfig = {
-        ...project.novelConfig,
+      const patch = {
         // 枚举归一化：英文模板输出的 genre/audience/结构/视角 → UI 中文规范值
         ...normalizeNovelConfigEnums(inferResult.novelConfig as Partial<import('../../../shared/ipc-channels').NovelConfig>),
         totalChapters: chapters.length,
         wordsPerChapter: Math.round(chapters.reduce((s, c) => s + c.wordCount, 0) / chapters.length),
       }
-      // 更新内存
-      useProjectStore.getState().updateNovelConfig(novelConfig)
-      // 持久化到 config 文件
-      const updatedProject = useProjectStore.getState().currentProject
-      if (updatedProject) {
-        // 仅提取 ProjectData 字段，防止 structured clone 序列化异常
-        const plainData = {
-          id: updatedProject.id,
-          name: updatedProject.name,
-          path: updatedProject.path,
-          novelConfig: { ...updatedProject.novelConfig },
-          characterStates: updatedProject.characterStates,
-          createdAt: updatedProject.createdAt,
-          updatedAt: updatedProject.updatedAt,
-        }
-        await ipc.invoke('project:save', plainData.id, plainData)
-      }
+      await useProjectStore.getState().commitNovelConfigPatch(source, patch, versions)
+      if (context.cancelled || !isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
+      const novelConfig = useProjectStore.getState().currentProject!.novelConfig
       callbacks.log(t('log.import.configUpdated'))
 
       // 生成配置摘要供后续步骤使用
@@ -277,7 +269,7 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
     if (inferResult.characterCards && Array.isArray(inferResult.characterCards)) {
       let createdCount = 0
       // #34 块 A：构造 LLM 原始字段（role 不预 normalize、缺失字段不填空值），
-      // 由 mergeCharacterCards 仅填空合并——重跑导入不再清空存量 relations/tags/动态状态
+      // 写入时从当前角色卡填补空字段。
       const cardsToSave: Array<Record<string, unknown>> = []
       for (const card of inferResult.characterCards) {
         if (!card.name) continue
@@ -309,8 +301,8 @@ export class InferGlobalSettingsCommand extends BaseWorkflowCommand<void> {
         createdCount++
       }
       if (cardsToSave.length > 0) {
-        const { mergeCharacterCards } = await import('../../character-card-merge')
-        const stats = await mergeCharacterCards(cardsToSave)
+        if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+        const stats = await merger.merge(cardsToSave)
         createdCount = stats.saved
       }
       callbacks.log(t('log.import.cardsCreated').replace('{count}', String(createdCount)))
@@ -331,8 +323,13 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
   private static readonly CONCURRENCY_LIMIT = 3
 
   async execute({ context, callbacks }: CommandExecuteParams): Promise<void> {
-    const project = useProjectStore.getState().currentProject
-    if (!project) throw new Error(t('error.noProject'))
+    const source = captureProjectConfigSource()
+    if (!source) throw new Error(t('error.noProject'))
+    const stopped = () => context.cancelled || !isProjectConfigCurrent(source)
+    const assertCurrent = () => {
+      if (context.cancelled) throw new Error(t('error.workflowCancelled'))
+      if (!isProjectConfigCurrent(source)) throw new Error(t('error.requestCancelled'))
+    }
 
     const chapters = context.data.chapters as ImportedChapter[]
     const configSummary = (context.data.novelConfigSummary as string) || t('inject.import.configSummaryUnavailable')
@@ -340,6 +337,12 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
 
     const template = getPromptTemplate('infer_single_chapter_blueprint')
     if (!template) throw new Error(t('error.templateNotFound').replace('{name}', t('inject.import.templateNameInferBlueprint')))
+
+    // 在模型调用前捕获数据库连接令牌。同路径重开后也不能提交旧结果。
+    assertCurrent()
+    const scope = await ipc.invoke('db:blueprint-write-scope')
+    assertCurrent()
+    if (scope?.projectPath !== source.path || !scope.token) throw new Error(t('error.requestCancelled'))
 
     callbacks.log(t('log.import.inferringBlueprints')
       .replace('{count}', String(chapters.length))
@@ -363,6 +366,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     }
 
     const tasks = chapters.map((ch) => async () => {
+      if (stopped()) return
       try {
         const prompt = new ImportPromptBuilder(template)
           .withChapterContent(ch.content.slice(0, 6000)) // 限制单章 Prompt 长度
@@ -375,9 +379,11 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           prompt,
           template.systemRole || t('role.novelAnalyst'),
           callbacks,
-          { responseFormat: { type: 'json_object' } }
+          { responseFormat: { type: 'json_object' } },
+          context,
         )
 
+        assertCurrent()
         const blueprint = this.parseJSON<Record<string, unknown>>(rawResult)
 
         // 确保必要字段
@@ -402,11 +408,14 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
           priority: 0,
         }
 
-        await ipc.invoke('db:blueprint-upsert', finalBlueprint)
+        const result = await ipc.invoke('db:blueprint-upsert', finalBlueprint, scope)
+        assertCurrent()
+        if (result?.success !== true) throw new Error(result?.error || t('status.unknown'))
 
         completedCount++
         callbacks.log(t('log.import.blueprintDone').replace('{chapter}', String(ch.number)))
       } catch (err) {
+        if (stopped()) return
         failedCount++
         callbacks.log(t('log.import.blueprintFailed')
           .replace('{chapter}', String(ch.number))
@@ -420,6 +429,7 @@ export class InferBlueprintsPerChapterCommand extends BaseWorkflowCommand<void> 
     })
 
     await runWithConcurrency(tasks, InferBlueprintsPerChapterCommand.CONCURRENCY_LIMIT)
+    assertCurrent()
 
     callbacks.log(t('log.import.blueprintDoneTitle'))
     callbacks.log(t('log.import.blueprintResult')

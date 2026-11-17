@@ -1,0 +1,134 @@
+/* NovelForge UI Redesign v3 — custom-drawn controls, motion and polish.
+   Loaded last. No native control chrome: dropdowns, sliders, switches,
+   progress, disclosure and menus are all drawn here with semantic tokens. */
+/* ------------------------------------------------------- custom dropdown */
+.nf-select{position:relative;display:inline-flex;align-items:center;flex-shrink:0}
+.nf-select-trigger{display:flex;align-items:center;gap:6px;min-height:32px;padding:0 var(--nf-space-3);border:var(--nf-border-width) solid var(--nf-stage-line);border-radius:var(--nf-radius-sm);background:var(--nf-stage-surface);color:var(--nf-stage-ink);font-size:var(--nf-font-size-sm);white-space:nowrap;transition:border-color var(--nf-motion-fast),box-shadow var(--nf-motion-fast),background var(--nf-motion-fast)}
+.nf-select-trigger:hover{border-color:var(--nf-color-brand);box-shadow:0 0 0 3px var(--nf-color-brand-soft)}
+.nf-select.open .nf-select-trigger{border-color:var(--nf-color-brand);box-shadow:0 0 0 3px var(--nf-color-brand-soft)}
+.nf-select-trigger .caret{width:12px;height:12px;opacity:.65;transition:transform var(--nf-motion-base) var(--nf-motion-ease)}
+.nf-select.open .nf-select-trigger .caret{transform:rotate(180deg)}
+.nf-select-menu{position:absolute;top:calc(100% + 6px);left:0;min-width:100%;padding:5px;display:grid;gap:2px;border:var(--nf-border-width) solid var(--nf-color-line-strong);border-radius:var(--nf-radius-md);background:var(--nf-color-surface-raised);box-shadow:var(--nf-shadow-modal);z-index:var(--nf-z-dropdown);opacity:0;visibility:hidden;transform:translateY(-6px) scale(.98);transform-origin:top left;pointer-events:none;transition:opacity var(--nf-motion-fast) var(--nf-motion-ease),transform var(--nf-motion-base) var(--nf-motion-ease),visibility var(--nf-motion-fast)}
+.nf-select.open .nf-select-menu{opacity:1;visibility:visible;transform:translateY(0) scale(1);pointer-events:auto}
+.nf-select-menu.align-right{left:auto;right:0;transform-origin:top right}
+.nf-select.up .nf-select-menu{top:auto;bottom:calc(100% + 6px);transform-origin:bottom left;transform:translateY(6px) scale(.98)}
+.nf-select.up.open .nf-select-menu{transform:translateY(0) scale(1)}
+.nf-option{display:flex;align-items:center;gap:var(--nf-space-2);width:100%;min-height:30px;padding:0 var(--nf-space-3);border-radius:var(--nf-radius-sm);text-align:left;font-size:var(--nf-font-size-sm);color:var(--nf-color-text);white-space:nowrap;transition:background var(--nf-motion-fast),color var(--nf-motion-fast)}
+.nf-option:hover,.nf-option.cursor{background:var(--nf-color-surface-hover);color:var(--nf-color-ink)}
+.nf-option[aria-selected="true"]{color:var(--nf-color-brand);background:var(--nf-color-brand-soft);font-weight:var(--nf-font-weight-medium)}
+.nf-option .tick{width:12px;height:12px;margin-left:auto;opacity:0;color:var(--nf-color-brand)}
+.nf-option[aria-selected="true"] .tick{opacity:1}
+.nf-option .icon{width:13px;height:13px}
+.nf-select-caption{padding:4px var(--nf-space-3) 6px;font-family:var(--nf-font-mono);font-size:var(--nf-font-size-xs);letter-spacing:.08em;color:var(--nf-color-faint);text-transform:uppercase}
+
+/* --------------------------------------------------------- custom slider */
+.nf-slider{display:grid;gap:6px;padding:4px 0 8px;outline:0}
+.nf-slider-label{display:flex;align-items:center;justify-content:space-between;gap:var(--nf-space-2);font-size:var(--nf-font-size-xs);color:var(--nf-color-muted)}
+.nf-slider-output{font-family:var(--nf-font-mono);font-variant-numeric:tabular-nums;color:var(--nf-color-brand)}
+.nf-slider-track{position:relative;height:16px;display:flex;align-items:center;cursor:pointer;touch-action:none}
+.nf-slider-track:before{content:"";position:absolute;left:0;right:0;height:4px;border-radius:var(--nf-radius-pill);background:var(--nf-color-line);transition:background var(--nf-motion-fast)}
+.nf-slider-fill{position:absolute;left:0;height:4px;border-radius:var(--nf-radius-pill);background:var(--nf-color-brand);transition:width var(--nf-motion-fast) var(--nf-motion-ease)}
+.nf-slider-thumb{position:absolute;width:14px;height:14px;border-radius:var(--nf-radius-pill);background:var(--nf-color-surface-raised);border:2px solid var(--nf-color-brand);box-shadow:0 1px 5px var(--nf-color-overlay);transform:translateX(-50%) scale(1);transition:transform var(--nf-motion-fast) var(--nf-motion-ease),box-shadow var(--nf-motion-fast)}
+.nf-slider:hover .nf-slider-thumb{transform:translateX(-50%) scale(1.18)}
+.nf-slider:focus-visible .nf-slider-track,.nf-slider.dragging .nf-slider-thumb{transform:translateX(-50%) scale(1.25);box-shadow:0 0 0 5px var(--nf-color-brand-soft)}
+.nf-slider.dragging .nf-slider-fill{transition:none}
+.nf-slider-hint{font-size:var(--nf-font-size-xs);color:var(--nf-color-faint);line-height:1.6}
+
+/* ------------------------------------------------------ switches & progress */
+.switch{position:relative;overflow:clip;transition:background var(--nf-motion-base) var(--nf-motion-ease),box-shadow var(--nf-motion-fast)}
+.switch:after{box-shadow:0 1px 3px var(--nf-color-overlay);transition:transform var(--nf-motion-base) var(--nf-motion-ease)}
+.switch:active:after{width:16px}
+.switch:focus-visible{box-shadow:0 0 0 4px var(--nf-color-brand-soft)}
+.progress>span{position:relative;overflow:clip;transition:width var(--nf-motion-slow) var(--nf-motion-ease)}
+.progress>span:after{content:"";position:absolute;inset:0;background-image:linear-gradient(90deg,var(--nf-color-transparent),color-mix(in srgb,var(--nf-color-on-brand) 45%,transparent),var(--nf-color-transparent));transform:translateX(-100%);animation:progress-shine 2.4s linear infinite}
+@keyframes progress-shine{to{transform:translateX(100%)}}
+.dot.pulse{animation:pulse 1.6s var(--nf-motion-ease) infinite}
+
+/* ---------------------------------------------------- disclosure animation */
+.tree-group>.tree-children{max-height:720px;opacity:1;overflow:clip;transition:max-height var(--nf-motion-slow) var(--nf-motion-ease),opacity var(--nf-motion-base) var(--nf-motion-ease)}
+.tree-group.collapsed>.tree-children{display:block;max-height:0;opacity:0;padding-top:0;padding-bottom:0}
+.tree-group-head .caret{transition:transform var(--nf-motion-base) var(--nf-motion-ease)}
+.tree-group.collapsed .tree-group-head .caret{transform:rotate(-90deg)}
+.tree-row{transition:background var(--nf-motion-fast),color var(--nf-motion-fast),transform var(--nf-motion-fast)}
+.tree-row:hover{transform:translateX(2px)}
+.tree-row.active{animation:row-activate var(--nf-motion-base) var(--nf-motion-ease)}
+
+/* -------------------------------------------------------------- motion */
+@keyframes row-activate{from{transform:translateX(-3px);opacity:.6}to{transform:translateX(0);opacity:1}}
+@keyframes fade-rise{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:translateY(0)}}
+@keyframes row-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+/* Workspace changes never fade from transparent: that reads as a blank page. */
+@keyframes sheet-rise{from{transform:translateY(7px)}to{transform:translateY(0)}}
+.editor-content>.view,.editor-content>.document-scroll{animation:sheet-rise var(--nf-motion-base) var(--nf-motion-ease) both}
+.sheet{animation:sheet-rise var(--nf-motion-base) var(--nf-motion-ease) both}
+.command-row{animation:row-in var(--nf-motion-base) var(--nf-motion-ease) both;animation-delay:calc(var(--i,0)*14ms)}
+.brief-item,.feature-card,.comparison-row{animation:fade-rise var(--nf-motion-slow) var(--nf-motion-ease) both}
+.brief-item:nth-child(2){animation-delay:60ms}.brief-item:nth-child(3){animation-delay:120ms}
+.feature-card:nth-child(3n+2){animation-delay:50ms}.feature-card:nth-child(3n){animation-delay:100ms}
+.btn{transition:background var(--nf-motion-fast),border-color var(--nf-motion-fast),color var(--nf-motion-fast),transform var(--nf-motion-fast),box-shadow var(--nf-motion-fast)}
+.btn:hover:not(:disabled){transform:translateY(-1px);box-shadow:0 3px 10px var(--nf-color-overlay)}
+.btn:active:not(:disabled){transform:translateY(1px);box-shadow:none}
+.btn:disabled{opacity:.42;cursor:not-allowed}
+.icon-btn,.rail-btn,.window-control{transition:background var(--nf-motion-fast),color var(--nf-motion-fast),transform var(--nf-motion-fast)}
+.icon-btn:active,.rail-btn:active{transform:scale(.92)}
+.board-card,.char-card,.panel,.review-role{transition:border-color var(--nf-motion-fast),transform var(--nf-motion-base) var(--nf-motion-ease),box-shadow var(--nf-motion-base)}
+.board-card:hover,.char-card:hover{transform:translateY(-2px);box-shadow:var(--nf-shadow-float)}
+.tab.active{position:relative;animation:row-in var(--nf-motion-base) var(--nf-motion-ease) both}
+.toast-pop{animation:fade-rise var(--nf-motion-base) var(--nf-motion-ease)}
+#toast{transition:opacity var(--nf-motion-base),transform var(--nf-motion-base) var(--nf-motion-ease)}
+
+/* Native dialog stays only as a top-layer container; its whole surface,
+   backdrop, entry and exit are drawn here. */
+dialog{opacity:1;transform:translateY(0) scale(1);transition:opacity var(--nf-motion-base) var(--nf-motion-ease),transform var(--nf-motion-base) var(--nf-motion-ease),display var(--nf-motion-base) allow-discrete,overlay var(--nf-motion-base) allow-discrete}
+dialog:not([open]){opacity:0;transform:translateY(12px) scale(.985)}
+@starting-style{dialog[open]{opacity:0;transform:translateY(12px) scale(.985)}}
+dialog::backdrop{background:var(--nf-color-overlay);backdrop-filter:blur(4px);opacity:1;transition:opacity var(--nf-motion-base),display var(--nf-motion-base) allow-discrete,overlay var(--nf-motion-base) allow-discrete}
+dialog:not([open])::backdrop{opacity:0}
+@starting-style{dialog[open]::backdrop{opacity:0}}
+.program-window .appearance-panel{animation:fade-rise var(--nf-motion-base) var(--nf-motion-ease) both}
+
+/* View Transitions are retired: the old manuscript snapshot stayed in the
+   top layer when switching to a non-sheet tab, so the page seemed to linger
+   over the new view. Updates are synchronous; the sheet morphs via width. */
+.sheet{transition:width var(--nf-motion-base) var(--nf-motion-ease),box-shadow var(--nf-motion-base) var(--nf-motion-ease)}
+
+/* ------------------------------------------------------- surface polish */
+.program-window{font-optical-sizing:auto;font-variant-numeric:tabular-nums}
+.program-window .brand-lockup{font-variation-settings:"opsz" 18}
+.sheet-head h2,.overview-hero h2,.partner-intro h3{text-wrap:balance}
+.brief-item p,.feature-card li,.proposal-note,.partner-note p,.appearance-description{text-wrap:pretty}
+.sheet-body{caret-color:var(--nf-color-brand)}
+.sheet-body p{text-wrap:pretty}
+.sheet-body p:focus{outline:0}
+.sheet-body::selection,::selection{background:var(--nf-color-selection);color:var(--nf-color-ink)}
+.program-window[data-workmode="compose"] .sheet{background-image:repeating-linear-gradient(to bottom,var(--nf-color-transparent) 0 31px,color-mix(in srgb,var(--nf-color-paper-line) 52%,var(--nf-color-transparent)) 31px 32px)}
+.program-window[data-workmode="compose"] .sheet-body p:first-of-type{text-indent:0}
+.program-window[data-workmode="compose"] .sheet-body p:first-of-type::first-letter{float:left;font-size:2.7em;line-height:1;margin:.08em .12em 0 0;color:var(--nf-color-brand);font-weight:var(--nf-font-weight-medium)}
+.note-anchor{background:var(--nf-color-paper-mark);border-bottom:2px dotted var(--nf-color-accent);border-radius:var(--nf-radius-xs);padding:0 2px;transition:background var(--nf-motion-base)}
+.note-anchor:hover{background:var(--nf-color-accent-soft)}
+.scroll,.document-scroll,.sheet{scrollbar-gutter:stable;overscroll-behavior:contain}
+:focus-visible{outline:var(--nf-focus-width) solid var(--nf-color-brand);outline-offset:2px;border-radius:var(--nf-radius-xs)}
+textarea{field-sizing:content;max-height:150px}
+.empty:before{content:"";display:block;width:34px;height:26px;margin:0 auto var(--nf-space-3);border:var(--nf-border-width) solid var(--nf-color-line-strong);border-radius:var(--nf-radius-sm);background:linear-gradient(135deg,var(--nf-color-surface),var(--nf-color-brand-soft));box-shadow:3px 3px 0 var(--nf-color-line)}
+.swatch,.book-cover,.goal-card{position:relative;overflow:clip}
+.swatch:after,.goal-card:after{content:"";position:absolute;inset:0;pointer-events:none;background:linear-gradient(120deg,color-mix(in srgb,var(--nf-color-on-brand) 14%,transparent),transparent 42%)}
+.comparison-row{transition:background var(--nf-motion-fast)}
+.comparison-row:hover .comparison-cell{background:var(--nf-stage-surface)}
+.comparison-row:hover .comparison-cell.v3{background:color-mix(in srgb,var(--nf-color-brand-soft) 78%,var(--nf-stage-surface))}
+
+/* ------------------------------------------------ custom pane resizers */
+.pane-resizer{position:absolute;top:0;bottom:0;width:9px;z-index:var(--nf-z-dropdown);cursor:col-resize;touch-action:none;outline:0}
+.pane-resizer[data-pane="context"]{left:calc(var(--nf-layout-rail) + var(--nf-layout-context) - 4px)}
+.pane-resizer[data-pane="assistant"]{right:calc(var(--nf-layout-assistant) - 4px)}
+.pane-resizer:after{content:"";position:absolute;top:22%;bottom:22%;left:3px;width:2px;border-radius:var(--nf-radius-pill);background:var(--nf-color-line-strong);opacity:0;transition:opacity var(--nf-motion-fast),background var(--nf-motion-fast)}
+.pane-resizer:hover:after,.pane-resizer:focus-visible:after,.pane-resizer.dragging:after{opacity:1;background:var(--nf-color-brand)}
+.pane-resizer:focus-visible{box-shadow:0 0 0 2px var(--nf-color-brand-soft)}
+.program-window[data-workmode="compose"] .pane-resizer[data-pane="context"],
+.is-focus .pane-resizer{display:none}
+@container forge (max-width:860px){.pane-resizer{display:none}}
+
+/* ------------------------------------------------------- reduced motion */
+.program-window[data-reduce-motion="true"] *,
+.program-window[data-reduce-motion="true"] *:before,
+.program-window[data-reduce-motion="true"] *:after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
+@media(prefers-reduced-motion:reduce){*,*:before,*:after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important;scroll-behavior:auto!important}}

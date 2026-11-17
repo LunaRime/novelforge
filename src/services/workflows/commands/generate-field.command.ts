@@ -1,7 +1,8 @@
 import { BaseWorkflowCommand, CommandExecuteParams } from './base-command'
 import { t } from '../../../shared/locale'
 import { useProjectStore } from '../../../stores/project-store'
-import { toast } from '../../../components/ui/Toast'
+import { captureNovelConfigGenerationSession, type NovelConfigGenerationSession } from '../../config/novel-config-adapter'
+import { applyGeneratedNovelConfig } from '../../config/apply-generated-config'
 import { confirm } from '../../../components/ui/Confirm'
 import type { NovelConfig } from '../../../shared/ipc-channels'
 
@@ -35,15 +36,18 @@ export function getFieldLabel(fieldKey: GeneratableField): string {
  * 根据已有的 NovelConfig 上下文，只生成指定字段的内容
  */
 export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
-  constructor(private fieldKey: GeneratableField) {
+  constructor(private fieldKey: GeneratableField, private session?: NovelConfigGenerationSession) {
     super()
   }
 
-  async execute({ callbacks }: CommandExecuteParams): Promise<string> {
+  async execute({ callbacks, context: workflowContext }: CommandExecuteParams): Promise<string> {
+    const { application, snapshot } = this.session ?? captureNovelConfigGenerationSession()
+    application.assertCurrent()
+    if (workflowContext.cancelled) return ''
     const project = useProjectStore.getState().currentProject
     if (!project) throw new Error(t('error.noProject'))
 
-    const config = project.novelConfig
+    const config = snapshot.config
     const label = getFieldLabel(this.fieldKey)
 
     // 线③：单字段覆盖确认（与批量同级的覆盖确认——此前单字段无覆盖确认，直接覆盖）
@@ -53,6 +57,8 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
         t('field.overwriteWarning').replace('{label}', label),
         { title: t('field.overwriteTitle'), confirmText: t('dialog.confirmOverwrite'), cancelText: t('action.cancel') },
       )
+      application.assertCurrent()
+      if (workflowContext.cancelled) return ''
       if (!ok) {
         callbacks.log(t('log.generateField.cancelled').replace('{label}', label))
         return ''
@@ -67,7 +73,9 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
     const prompt = this.buildPrompt(config, context)
     const systemPrompt = t('role.configDesigner')
 
-    const result = await this.callLLM(prompt, systemPrompt, callbacks, { purpose: 'architecture_gen' })
+    const result = await this.callLLM(prompt, systemPrompt, callbacks, { purpose: 'architecture_gen' }, workflowContext)
+    application.assertCurrent()
+    if (workflowContext.cancelled) return ''
     const cleanResult = this.stripThinkingTags(result).trim()
 
     if (!cleanResult) {
@@ -75,24 +83,8 @@ export class GenerateFieldCommand extends BaseWorkflowCommand<string> {
       return ''
     }
 
-    // 线③：产出审查层——应用前快照，应用后可撤销（单字段此前无覆盖确认，至少补快照 + 撤销出口）
-    const { snapshotNovelConfig, updateNovelConfig, saveProject } = useProjectStore.getState()
-    snapshotNovelConfig()
-    updateNovelConfig({ [this.fieldKey]: cleanResult })
-    await saveProject()
-    callbacks.log(t('log.generateField.saved').replace('{label}', label))
-    toast.show({
-      type: 'ai',
-      message: t('field.aiApplied').replace('{label}', label),
-      actions: [{
-        label: t('action.undoShort'),
-        onClick: () => {
-          if (useProjectStore.getState().restoreNovelConfigSnapshot()) {
-            toast.success(t('field.aiReverted').replace('{label}', label))
-          }
-        },
-      }],
-    })
+    const applied = await applyGeneratedNovelConfig(application, snapshot, { [this.fieldKey]: cleanResult }, { label, cancelled: () => workflowContext.cancelled })
+    if (applied === 'applied') callbacks.log(t('log.generateField.saved').replace('{label}', label))
 
     return cleanResult
   }

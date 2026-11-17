@@ -24,6 +24,74 @@ function check(source: string, area = 'core', agentStoreFiles = 0, filename = 's
 }
 
 describe('boundary CLI', () => {
+  test('keeps project tree binder writes behind the application', () => {
+    const result = check(`ipc.invoke('db:binder-reorder', {})`, 'components/panels/sidebar', 0, 'ProjectTree.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test('keeps binder volume UI free of direct IPC', () => {
+    const result = check(`import { ipc } from '../../../services/ipc-client'`, 'components/panels/sidebar', 0, 'BinderVolumeGroup.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test.each(['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many', 'db:blueprint-delete'])('keeps blueprint editor operations behind use cases: %s', channel => {
+    const result = check(`ipc.invoke('${channel}')`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('rejects legacy blueprint load/save runtime helpers', () => {
+    const result = check(`import { loadDirectoryBlueprints } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test('keeps directory prerequisites in the workflow adapter', () => {
+    const result = check(`import { guardDirectoryGeneration } from '../../services/workflows/workflow-guards'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+  })
+  test('allows blueprint DTO types', () => {
+    const result = check(`import type { ChapterBlueprint } from '../../services/workflows/directory-workflow'`, 'components/editor', 0, 'ChapterCardEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
+  test.each(['../../services/ipc-client', '../../services/architecture-service', '../../services/vela-protocol', '../../services/workflows/architecture-workflow', '../../services/workflows/workflow-utils'])('keeps WorldBuildingEditor behind architecture use cases: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'WorldBuildingEditor.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('allows overview neutral DTO imports and character/workflow projections', () => {
+    const result = check(`import type { ArchitectureOverviewResult } from '../../core'
+      import { useCharacterStore } from '../../stores/character-store'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'WorldBuildingEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
+  test.each(['NovelConfigEditor.tsx', 'GenerateConfigDialog.tsx'])('keeps %s behind config use cases', filename => {
+    const area = filename === 'NovelConfigEditor.tsx' ? 'components/editor' : 'components/dialogs'
+    for (const specifier of ['../../services/ipc-client', '../../stores/llm-store', '../../services/workflows/start-workflow']) {
+      const result = check(`import * as io from '${specifier}'`, area, 0, filename)
+      expect(result.status, result.stdout).toBe(1)
+      expect(result.stderr).toContain('editor application')
+    }
+  })
+  test('allows config DTO types and workflow status projection', () => {
+    const result = check(`import type { GeneratableField } from '../../services/workflows/commands/generate-field.command'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'NovelConfigEditor.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
+  test.each(['../../services/ipc-client', '../../services/vela-protocol', '../../services/workflows/start-workflow', '../../services/workflows/architecture-workflow'])('keeps ArchFileViewer behind architecture use cases: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/editor', 0, 'ArchFileViewer.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('editor application')
+  })
+  test('allows architecture DTO types and UI workflow projection', () => {
+    const result = check(`import type { WorkflowReceipt } from '../../core'
+      import { useWorkflowStore } from '../../stores/workflow-store'`, 'components/editor', 0, 'ArchFileViewer.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
+  test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgeOverview behind applications: %s', specifier => {
+    const result = check(`import * as io from '${specifier}'`, 'components/pages', 0, 'KnowledgeOverview.tsx')
+    expect(result.status, result.stdout).toBe(1)
+    expect(result.stderr).toContain('knowledge application')
+  })
+  test('allows overview neutral DTO type imports', () => {
+    const result = check(`import type { KnowledgeStats } from '../../core'`, 'components/pages', 0, 'KnowledgeOverview.tsx')
+    expect(result.status, result.stderr).toBe(0)
+  })
   test.each(['../../services/ipc-client', '../../stores/llm-store', '../../services/knowledge-service'])('keeps KnowledgePanel behind knowledge use cases: %s', specifier => {
     const result = check(`import * as io from '${specifier}'`, 'components/panels', 0, 'KnowledgePanel.tsx')
     expect(result.status, result.stdout).toBe(1)

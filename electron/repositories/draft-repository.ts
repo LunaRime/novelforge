@@ -4,7 +4,7 @@
  * 草稿是创作栈的主线。status='finalized' 代表定稿。
  * 正文统一存储在 contents 表中，drafts 只持有 content_id 外键。
  */
-import { getProjectDb } from '../database'
+import { getCurrentProjectPath, getProjectDb } from '../database'
 import { t } from '../../src/shared/locale'
 import { ContentRepository } from './content-repository'
 import { createHash } from 'node:crypto'
@@ -247,6 +247,19 @@ export class DraftRepository {
             SELECT DISTINCT chapter_number as cn FROM drafts ORDER BY cn ASC
         `).all() as Array<{ cn: number }>
         return rows.map(r => r.cn)
+    }
+
+    /** Archive one draft while rechecking its chapter and writable status at the write point. */
+    static archive(projectPath: string, id: number, chapterNumber: number): { updatedAt: number } | null {
+        const db = getProjectDb()
+        if (!db || !projectPath || getCurrentProjectPath() !== projectPath
+            || !Number.isSafeInteger(id) || id <= 0 || !Number.isSafeInteger(chapterNumber) || chapterNumber <= 0) return null
+        const row = db.prepare(`
+            UPDATE drafts SET status = 'archived', updated_at = unixepoch() * 1000
+            WHERE id = ? AND chapter_number = ? AND status IN ('draft', 'revised', 'reviewed')
+            RETURNING updated_at AS updatedAt
+        `).get(id, chapterNumber) as { updatedAt: number } | undefined
+        return row ?? null
     }
 
     /** 更新草稿状态 */

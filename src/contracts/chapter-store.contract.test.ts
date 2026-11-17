@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest'
+import { readFileSync, readdirSync } from 'node:fs'
 import { mkdtemp, readFile, readdir, rename, rm, writeFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -55,6 +56,21 @@ describe('章节存储契约', () => {
     expect(changed?.chapter.content).toContain('外部正文')
     expect((await repo.list())[0].revision).toBe(changed?.revision)
     await expect(repo.save(chapter(), { expectedRevision: saved.revision })).rejects.toMatchObject({ code: 'conflict' })
+  })
+  test('会话失效时阻止已写好的临时文件发布并清理临时文件', async () => {
+    const { repo, root } = await fixture()
+    const saved = await repo.save(chapter(), { expectedRevision: null })
+    const directory = join(root, 'chapters')
+    await expect(repo.save(chapter({ content: '待发布正文' }), {
+      expectedRevision: saved.revision,
+      assertCurrent() {
+        const temporary = readdirSync(directory).find(name => name.endsWith('.tmp'))!
+        expect(readFileSync(join(directory, temporary), 'utf8')).toContain('待发布正文')
+        throw new Error('会话已切换')
+      },
+    })).rejects.toThrow('会话已切换')
+    expect(await readdir(directory)).toEqual(['0001.md'])
+    expect(await repo.byId(saved.chapter.id)).toEqual(saved)
   })
   test('索引可重建，重复 id 不会悄悄吞章', async () => {
     const { repo, root, index } = await fixture()

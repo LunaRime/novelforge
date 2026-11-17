@@ -3,10 +3,9 @@ import { defaultAgentRuntimePorts, buildRuntimeAgentTool, type AgentRuntimePorts
  * update_config — 更新小说配置
  */
 import { t } from '../../../shared/locale'
-import { ipc } from '../../ipc-client'
 
-export function createUpdateConfigTool(ports: AgentRuntimePorts = defaultAgentRuntimePorts) {
-return buildRuntimeAgentTool(ports, {
+export function createUpdateConfigTool(configuredPorts: AgentRuntimePorts = defaultAgentRuntimePorts) {
+return buildRuntimeAgentTool(configuredPorts, {
   name: 'update_config',
   description: t('tool.updateConfigDesc'),
   source: 'builtin',
@@ -33,7 +32,7 @@ return buildRuntimeAgentTool(ports, {
   requiresConfirmation: true,
   isReadOnly: false,
   isDestructive: true,
-  execute: async (args) => {
+  execute: async (args, ports) => {
     const field = args.field as string
     const value = args.value as string
 
@@ -76,13 +75,10 @@ return buildRuntimeAgentTool(ports, {
     // 实测症状：连续改 genre → subGenre → writingStyle 后回读，writingStyle 是新的，
     // 而 genre/subGenre 退回旧值，Agent 只得反复重提，最终撞上工具调用次数上限。
     // 只发单字段后，主进程的逐字段合并语义才真正成立（也是该 handler 的原始设计意图）。
-    const updateData = {
-      novelConfig: { [field]: finalValue },
-    }
-
-    const result = await ipc.invoke('project:update-config', project.id, updateData)
-    if (!result.success) {
-      return { success: false, content: '', error: result.error ?? t('tool.updateConfigFailed') }
+    try {
+      await ports.project.updateConfig({ id: project.id, path: project.path, session: ports.project.session() }, { [field]: finalValue })
+    } catch (error) {
+      return { success: false, content: '', error: error instanceof Error ? error.message : t('tool.updateConfigFailed') }
     }
 
     return {

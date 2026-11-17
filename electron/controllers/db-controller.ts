@@ -8,9 +8,13 @@ import { BlueprintRepository, BlueprintData } from '../repositories/blueprint-re
 import { CharacterRepository, CharacterData, CharacterStateData } from '../repositories/character-repository'
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
-import { commitDatabaseDraft } from '../services/draft-write-service'
+import { commitDatabaseDraft, commitDatabaseDraftFinalization } from '../services/draft-write-service'
 import { mergeDatabaseRevision } from '../services/revision-merge-service'
-import type { RevisionMergeInput } from '../../src/core'
+import { captureBlueprintWriteScope, insertDatabaseMissingBlueprints } from '../services/blueprint-gap-service'
+import { commitDirectoryBlueprints, readDirectoryBlueprintSnapshot } from '../services/directory-blueprint-write-service'
+import { commitDatabaseCharacterEdits, mergeDatabaseCharacterCards, mergeDatabaseDuplicateCharacters, readCharacterEditSnapshot, resolveCharacterFieldTarget } from '../services/character-edits-service'
+import type { BlueprintWriteScope, CharacterEditsInput, CharacterFieldWrite, DirectorySnapshotRequest, DirectoryWriteInput, MissingBlueprintInput } from '../../src/core'
+import type { DraftFinalizationInput, RevisionMergeInput } from '../../src/core'
 import { DraftBranchRepository } from '../repositories/draft-branch-repository'
 import { createDraftBranch, mergeDraftBranch } from '../services/draft-branch-service'
 import { reorderChapter } from '../services/binder-service'
@@ -60,6 +64,11 @@ export function registerDatabaseController() {
   // ============================================================
   // 2. blueprints — 章节蓝图
   // ============================================================
+  guardedHandle('db:blueprint-write-scope', async () => captureBlueprintWriteScope())
+  guardedHandle('db:blueprint-insert-missing', async (_event, input: MissingBlueprintInput<BlueprintData>) => insertDatabaseMissingBlueprints(input))
+  guardedHandle('db:blueprint-directory-snapshot', async (_event, request: DirectorySnapshotRequest) => readDirectoryBlueprintSnapshot(request))
+  guardedHandle('db:blueprint-directory-commit', async (_event, input: DirectoryWriteInput) => commitDirectoryBlueprints(input))
+
   guardedHandle('db:blueprint-get-all', async () => {
     return BlueprintRepository.getAll()
   })
@@ -68,8 +77,15 @@ export function registerDatabaseController() {
     return BlueprintRepository.getByChapter(chapterNumber)
   })
 
-  guardedHandle('db:blueprint-upsert', async (_event, data: BlueprintData) => {
+  guardedHandle('db:blueprint-upsert', async (_event, data: BlueprintData, scope?: BlueprintWriteScope) => {
     try {
+      if (scope !== undefined) {
+        // 推演结果附带原连接令牌，连接校验与写入在同一次同步执行中完成。
+        const current = captureBlueprintWriteScope()
+        if (scope?.projectPath !== current.projectPath || scope.token !== current.token) {
+          return { success: false, error: t('error.requestCancelled') }
+        }
+      }
       BlueprintRepository.upsert(data)
       return { success: true }
     } catch (err) {
@@ -145,6 +161,9 @@ export function registerDatabaseController() {
   guardedHandle('db:character-get-all', async () => {
     return CharacterRepository.getAll()
   })
+  guardedHandle('db:character-edit-snapshot', async () => readCharacterEditSnapshot())
+  guardedHandle('db:character-commit-edits', async (_event, input: CharacterEditsInput) => commitDatabaseCharacterEdits(input))
+  guardedHandle('db:character-merge-cards', async (_event, input: Parameters<typeof mergeDatabaseCharacterCards>[0]) => mergeDatabaseCharacterCards(input))
 
   guardedHandle('db:character-upsert', async (_event, data: CharacterData) => {
     try {
@@ -173,14 +192,7 @@ export function registerDatabaseController() {
     }
   })
 
-  guardedHandle('db:character-merge', async (_event, target: string, source: string) => {
-    try {
-      CharacterRepository.mergeCharacters(target, source)
-      return { success: true }
-    } catch (err) {
-      return { success: false, error: String(err) }
-    }
-  })
+  guardedHandle('db:character-merge', async (_event, input: Parameters<typeof mergeDatabaseDuplicateCharacters>[0]) => mergeDatabaseDuplicateCharacters(input))
 
   guardedHandle('db:character-update-appearance-stats', async (_event, name: string, stats: { appearCount: number; firstChapter: number; lastChapter: number }) => {
     try {
@@ -191,18 +203,18 @@ export function registerDatabaseController() {
     }
   })
 
-  guardedHandle('db:character-update-state', async (_event, name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }) => {
+  guardedHandle('db:character-update-state', async (_event, name: string, state: CharacterStateData, extra?: { tags?: string | null; motivation?: string | null }, target?: CharacterFieldWrite) => {
     try {
-      CharacterRepository.updateState(name, state, extra)
+      CharacterRepository.updateState(target ? resolveCharacterFieldTarget(name, target) : name, state, extra)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
     }
   })
 
-  guardedHandle('db:character-merge-fields', async (_event, name: string, fields: Record<string, string>) => {
+  guardedHandle('db:character-merge-fields', async (_event, name: string, fields: Record<string, string>, target?: CharacterFieldWrite) => {
     try {
-      CharacterRepository.mergeFields(name, fields)
+      CharacterRepository.mergeFields(target ? resolveCharacterFieldTarget(name, target) : name, fields)
       return { success: true }
     } catch (err) {
       return { success: false, error: String(err) }
@@ -306,6 +318,18 @@ export function registerDatabaseController() {
       return { success: false, error: String(err) }
     }
   })
+
+  guardedHandle('db:draft-archive', async (_event, input: { projectPath: string; draftId: number; chapterNumber: number }) => {
+    try {
+      const archived = DraftRepository.archive(input.projectPath, input.draftId, input.chapterNumber)
+      return archived ? { success: true, ...archived } : { success: false, error: t('draftbox.archiveRejected') }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  guardedHandle('db:draft-finalize', async (_event, input: DraftFinalizationInput & { projectPath: string; writeToken?: string }) =>
+    commitDatabaseDraftFinalization(input))
 
   guardedHandle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number) => {
     try {

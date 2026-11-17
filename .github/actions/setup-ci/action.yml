@@ -1,0 +1,22 @@
+name: Set up CI dependencies
+description: Enable pnpm, select Node.js 22, and install dependencies for CI checks.
+
+runs:
+  using: composite
+  steps:
+    - name: Enable pnpm (via corepack)
+      shell: pwsh
+      run: corepack enable pnpm
+
+    - name: Use Node.js 22.x
+      uses: actions/setup-node@v4
+      with:
+        node-version: 22.x
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: pwsh
+      env:
+        # 行为测试覆盖没有 Electron 二进制的 CI 安装环境。
+        ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      run: pnpm install --frozen-lockfile

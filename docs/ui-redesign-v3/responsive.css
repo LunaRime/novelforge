@@ -1,0 +1,91 @@
+/* NovelForge UI Redesign v3 — layout containment at small sizes.
+   Flex/grid children default to min-width:auto and get pushed wider by long
+   text; that produces clipped glyphs, horizontal overflow and a misplaced
+   custom scrollbar. Keep every level shrinkable and hide lateral overflow. */
+:is(.program-window, .window-content, .window-titlebar, .window-app-title,
+    #app, .app-shell, .workbench, .workspace, .editor-area, .editor-content,
+    .context, .assistant, .runtime, .title-strip, .statusbar, .status-left,
+    .status-right, .document-toolbar, .doc-meta, .doc-tools, .tab-bar, .tab-list,
+    .set-layout, .set-nav, .set-pane, .set-card, .set-card-head, .set-row,
+    .set-row-label, .set-value, .set-value-copy, .set-summary, .set-metric,
+    .ai-head, .ai-thread, .ai-compose, .compose-tools, .runtime-tabs,
+    .runtime-body, .task-row, .task-main, .task-actions, .context-head,
+    .context-actions, .context-body, .sheet, .sheet-head, .sheet-head>div,
+    .sheet-foot, .sheet-foot-right, .view, .view-head, .panel, .stat,
+    .char-card, .board-card, .proposal-card, .proposal-head, .modal-head,
+    .modal-foot, .modal-body, .appearance-panel, .appearance-body,
+    .appearance-head, .appearance-foot, .command-results, .command-row) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* Only the custom vertical bar should ever appear. */
+:is(.program-window, .window-content, #app, .app-shell, .workbench, .workspace,
+    .editor-area, .editor-content, .context, .assistant, .runtime, .set-layout,
+    .set-nav, .set-pane, .document-scroll, .view, .title-strip, .statusbar,
+    .document-toolbar, .tab-bar, .tab-list, .runtime-tabs, .runtime-body,
+    .appearance-panel, .appearance-body, .modal-body, .command-results,
+    .context-body, .ai-thread) {
+  overflow-x: clip;
+}
+
+/* Single-line labels truncate instead of widening their parent. */
+:is(.window-title-note, .project-crumb span, .status-btn span, .tab-label,
+    .set-nav-copy strong, .set-nav-copy small, .set-row-label, .set-card-head h4,
+    .set-value-copy>span, .view-head h2, .task-main strong, .task-main small,
+    .set-head-copy h3, .context-head strong, .runtime-tab span,
+    .command-row span, .kicker, .set-metric strong, .set-nav-label span) {
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Descriptive copy wraps anywhere so long English / paths never spill. */
+:is(.set-card-head p, .set-head-copy p, .view-head p, .brief-item p,
+    .feature-card li, .proposal-note, .partner-note p, .sheet-body p,
+    .set-foot-note, .appearance-description, .context-callout, .modal-body p,
+    .set-edit-note, .overview-hero p, .next-entry p, .icon-map-head p,
+    .comparison-cell, .feature-map-head p) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Container breakpoints: reduce density before anything has to overflow. */
+@container forge (max-width:1000px) {
+  .set-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .set-grid { grid-template-columns: minmax(0, 1fr) }
+  .set-card.span-2 { grid-column: span 1 }
+  .set-route-grid { grid-template-columns: repeat(3, minmax(0, 1fr)) }
+  .statusbar .status-right .optional { display: none }
+}
+@container forge (max-width:760px) {
+  .program-window {
+    --nf-font-size-base: 12px;
+    --nf-font-size-md: 11px;
+    --nf-font-size-lg: 14px;
+  }
+  .project-crumb .truncate { display: none }
+  .cmd-trigger { min-width: 110px; width: 130px }
+  .mode-switch button span { display: none }
+  .set-route-grid { grid-template-columns: minmax(0, 1fr) }
+  .doc-meta .badge { display: none }
+  .task-actions { flex-wrap: wrap }
+  .runtime-tab span { font-size: var(--nf-font-size-xs) }
+  .statusbar .status-sep { display: none }
+}
+@container forge (max-width:560px) {
+  .set-summary { grid-template-columns: minmax(0, 1fr) }
+  .sheet { padding: var(--nf-space-4) }
+  .document-toolbar .btn span { display: none }
+  .title-strip .title-sep { display: none }
+  .window-app-title .window-title-note { display: none }
+}
+
+@media(max-width:900px) {
+  dialog { max-width: calc(100% - 16px) }
+  .set-layout { height: min(560px, calc(86dvh - 112px)) }
+  .set-head { grid-template-columns: 40px minmax(0, 1fr) }
+  .set-head-state { display: none }
+}

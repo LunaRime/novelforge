@@ -12,7 +12,6 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Trash2, FolderOpen, AlertTriangle } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
-import { useEditorStore } from '../../stores/editor-store'
 import { ipc } from '../../services/ipc-client'
 import { formatLocaleDateTime } from '../../shared/locale'
 import { cn } from '../../lib/utils'
@@ -118,10 +117,8 @@ export default function ProjectSquareList() {
     const ok = await openProject(projectPath, { keepView: true })
     if (!ok) return
     // 竞态保护：openProject 异步期间用户可能已切换视图（角色管理/项目结构等），
-    // 此时不覆盖用户选择、不清 Tab —— 只有视图未被用户改变时才进工作台
+    // 只有视图未被用户改变时才进工作台
     if (useLayoutStore.getState().sidebarView !== prevView) return
-    // 切换项目：清空旧项目残留的编辑器 Tab（避免内容错乱）
-    useEditorStore.getState().clearTabs()
     useLayoutStore.setState({ sidebarOpen: true, sidebarView: 'project' })
     // 前置检查：故事架构未填充完成（<4/4）时弹窗提示（不阻塞工作台进入）
     try {

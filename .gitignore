@@ -80,3 +80,4 @@ scripts/font-char-set.txt
 
 # WorkBuddy 本地工作记忆（与 .codex/.claude/.agents 同类，不随仓库分发）
 .workbuddy/
+.workbuddy-ai/

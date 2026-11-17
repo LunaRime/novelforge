@@ -1,9 +1,11 @@
 import { create } from 'zustand'
-import { ipc } from '../services/ipc-client'
+import { applyCharacterDelta, hasCharacterChanges, redirectCharacterMergeRelations, remapCharacterRelations, type CharacterData, type CharacterEdit, type CharacterMergeInput, type CharacterStateData, type CharacterWriteScope } from '../core'
 import { t } from '../shared/locale'
 import { renderLog } from '../services/render-logger'
 import { toast } from '../components/ui/Toast'
-import type { CharacterData, CharacterStateData } from '../../electron/repositories/character-repository'
+import { randomUUID } from '../utils/id'
+import { captureCharacterSource, CharacterEditCancelled, commitCharacterEdits, isCharacterSourceCurrent, mergeCharacterDuplicates, readCharacterEdits, type CharacterSource } from '../services/characters/character-edits-adapter'
+import type { CharacterTemplate } from '../services/characters/character-template-adapter'
 
 export type CharacterCurrentState = CharacterStateData
 export type CharacterCard = CharacterData
@@ -47,6 +49,10 @@ interface CharacterState {
   dirty: boolean
   /** 改名映射 oldName → newName（#34 块 B：编辑时捕获，保存时级联重写 relations） */
   renameMap: Record<string, string>
+  source: CharacterSource | null
+  writeScope: CharacterWriteScope | null
+  baseline: CharacterCard[]
+  mergingNames: readonly string[]
 
   /** force=true 时忽略 dirty 强制刷新（手动刷新确认后） */
   load: (force?: boolean) => Promise<void>
@@ -55,16 +61,121 @@ interface CharacterState {
   addCharacter: () => void
   deleteCharacter: (name: string, projectPath?: string) => Promise<void>
   updateField: <K extends keyof CharacterCard>(name: string, key: K, value: CharacterCard[K]) => void
+  applyTemplate: (card: CharacterCard, template: CharacterTemplate) => boolean
+  previewMerge: (targetName: string, sourceName: string) => Promise<CharacterMergePreview>
+  commitMerge: (preview: CharacterMergePreview) => Promise<void>
   saveAll: (projectPath?: string) => Promise<void>
 
   // 兼容旧接口
   loadCharacters: (projectPath: string) => Promise<void>
 }
 
+interface CharacterMergePreview {
+  origin: CharacterSource
+  input: CharacterMergeInput
+  localCards: readonly CharacterCard[]
+}
+
 // 加载请求序号（#34 块 C）：快速切换项目时，旧项目的慢响应不得覆盖当前项目数据
 //（对齐 volume-store / draft-store 的 loadSeq 模式——此前 character-store 缺失，
 //  旧项目角色覆盖新项目 + repair 跨项目写库）
 let loadSeq = 0
+const editKeys = new WeakMap<CharacterCard, string>()
+
+function editKey(card: CharacterCard): string {
+  let key = editKeys.get(card)
+  if (!key) {
+    key = card.uid || randomUUID()
+    editKeys.set(card, key)
+  }
+  return key
+}
+
+function retainKey(card: CharacterCard, previous: CharacterCard): CharacterCard {
+  editKeys.set(card, editKey(previous))
+  return card
+}
+
+function editsBetween(baseline: CharacterCard[], cards: CharacterCard[]): CharacterEdit[] {
+  const originals = new Map(baseline.map(card => [editKey(card), card]))
+  return cards.flatMap(card => {
+    const before = originals.get(editKey(card)) ?? null
+    return !before || hasCharacterChanges(before, card) ? [{ before, after: card }] : []
+  })
+}
+
+function rebaseCharacters(submitted: CharacterCard[], latest: CharacterCard[], committed: CharacterCard[], names = new Map<string, string | null>()): CharacterCard[] {
+  const byKey = new Map(submitted.map(card => [editKey(card), card]))
+  const byName = new Map(submitted.filter(card => !card.uid).map(card => [card.name, card]))
+  const recent = new Map(latest.map(card => [editKey(card), card]))
+  const rebased = committed.map(card => {
+    const before = byKey.get(editKey(card)) ?? byName.get(card.name)
+    if (!before) return card
+    retainKey(card, before)
+    const after = recent.get(editKey(before))
+    if (!after || !hasCharacterChanges(before, after)) return card
+    const result = applyCharacterDelta(before, after, card)
+    result.relations = remapCharacterRelations(result.relations, names)
+    return retainKey(result, before)
+  })
+  const added = latest.filter(card => !byKey.has(editKey(card))).map(card => {
+    const relations = remapCharacterRelations(card.relations, names)
+    return relations === card.relations ? card : retainKey({ ...card, relations }, card)
+  })
+  return [...rebased, ...added]
+}
+
+function pendingEdits(baseline: CharacterCard[], characters: CharacterCard[]) {
+  const edits = editsBetween(baseline, characters)
+  return {
+    dirty: edits.length > 0,
+    renameMap: Object.fromEntries(edits.flatMap(({ before, after }) =>
+      before && after && before.name !== after.name ? [[before.name, after.name]] : [])),
+  }
+}
+
+function editSource(state: CharacterState, projectPath?: string) {
+  if (!state.source || (projectPath !== undefined && projectPath !== state.source.path)
+    || !isCharacterSourceCurrent(state.source)) throw new CharacterEditCancelled(t('error.requestCancelled'))
+  if (!state.writeScope) throw new Error(t('error.characterEditConflict'))
+  return { source: state.source, scope: state.writeScope }
+}
+
+function hasMergeParticipants(cards: CharacterCard[], participants: readonly CharacterCard[]): boolean {
+  return participants.every(participant => {
+    const matching = cards.filter(card => card.name === participant.name)
+    return matching.length === 1 && matching[0] === participant
+  })
+}
+
+function projectMergedCharacters(initial: CharacterState, latest: CharacterCard[], committed: CharacterCard[], input: CharacterMergeInput) {
+  const redirect = (card: CharacterCard) => {
+    const relations = redirectCharacterMergeRelations(card.relations, input.source.name, input.target.name)
+    return relations === card.relations ? card : retainKey({ ...card, relations }, card)
+  }
+  // Retain each dirty card's original baseline so a subsequent save still detects DB conflicts.
+  const edits = editsBetween(initial.baseline, latest)
+  const draftCards = new Map<string, CharacterCard>()
+  const draftBaselines = new Map<string, CharacterCard>()
+  for (const { before, after } of edits) {
+    if (!after) continue
+    draftCards.set(editKey(after), redirect(after))
+    if (before) draftBaselines.set(editKey(before), redirect(before))
+  }
+  const legacyCards = new Map(initial.baseline.filter(card => !card.uid).map(card => [card.name, card]))
+  const characters: CharacterCard[] = []
+  const baseline = committed.map(card => {
+    const legacy = !card.uid && legacyCards.get(card.name)
+    if (legacy) retainKey(card, legacy)
+    const key = editKey(card)
+    characters.push(draftCards.get(key) ?? card)
+    draftCards.delete(key)
+    const original = draftBaselines.get(key)
+    draftBaselines.delete(key)
+    return original ?? card
+  })
+  return { characters: [...characters, ...draftCards.values()], baseline: [...baseline, ...draftBaselines.values()] }
+}
 
 export const useCharacterStore = create<CharacterState>()((set, get) => ({
   characters: [],
@@ -73,38 +184,39 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   loaded: false,
   dirty: false,
   renameMap: {},
+  source: null,
+  writeScope: null,
+  baseline: [],
+  mergingNames: [],
 
   load: async (force = false) => {
-    // #34 块 D：自动刷新（定稿完成/档案生成/提取失败）尊重未保存编辑——
-    // dirty 时跳过（手动刷新经 confirm 后传 force=true）
-    if (get().dirty && !force) {
+    const source = captureCharacterSource()
+    if (!source || get().saving) return
+    const previous = get()
+    const sameSource = previous.source && isCharacterSourceCurrent(previous.source)
+    if (sameSource && previous.writeScope && previous.dirty && !force) {
       renderLog('warn', 'Load:Character', t('log.render.characterLoadSkippedDirty'))
       return
     }
     const seq = ++loadSeq
+    if (!sameSource) set({ characters: [], baseline: [], selectedName: null, dirty: false, renameMap: {}, loaded: false, source, writeScope: null })
+    const editing = get().characters
     try {
-      // #34：存量角色名括号别名一次性修复（幂等——无括号名时零操作），
-      // 修复后再读取，保证 store 与 DB 一致；repair 内部带项目切换校验
-      const { applyCharacterNameRepair } = await import('../services/character-name-repair')
-      await applyCharacterNameRepair()
-      if (seq !== loadSeq) return // 项目已切换，丢弃旧响应
-      const cards = await ipc.invoke('db:character-get-all')
+      const snapshot = await readCharacterEdits(source)
       if (seq !== loadSeq) return
-
-      const { selectedName } = get()
+      const latest = get()
+      if (latest.writeScope && latest.characters !== editing) return
+      const characters = latest.writeScope ? snapshot.cards : [...snapshot.cards, ...latest.characters]
+      const selected = get().selectedName
       set({
-        characters: cards,
-        loaded: true,
-        dirty: false,
-        selectedName: cards.find(c => c.name === selectedName)
-          ? selectedName
-          : (cards.length > 0 ? cards[0].name : null),
+        characters, baseline: snapshot.cards, source, writeScope: snapshot.scope,
+        loaded: true, ...pendingEdits(snapshot.cards, characters),
+        selectedName: characters.some(card => card.name === selected) ? selected : characters[0]?.name ?? null,
       })
-    } catch (e) {
-      if (seq !== loadSeq) return
-      // 加载失败打日志（此前静默清空列表，无从排查）
-      renderLog('error', 'Load:Character', t('log.render.characterLoadFailed').replace('{error}', () => String(e)))
-      set({ characters: [], selectedName: null, loaded: true, dirty: false })
+    } catch (error) {
+      if (seq !== loadSeq || !isCharacterSourceCurrent(source)) return
+      renderLog('error', 'Load:Character', t('log.render.characterLoadFailed').replace('{error}', () => String(error)))
+      set({ loaded: true })
     }
   },
 
@@ -113,7 +225,8 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
   },
 
   reset: () => {
-    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {} })
+    ++loadSeq
+    set({ characters: [], selectedName: null, saving: false, loaded: false, dirty: false, renameMap: {}, baseline: [], source: null, writeScope: null, mergingNames: [] })
   },
 
   setSelectedName: (name) => set({ selectedName: name }),
@@ -132,6 +245,7 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     const newCard: CharacterCard = {
       ...EMPTY_CARD,
       name,
+      uid: randomUUID(),
     }
     set((s) => ({
       characters: [...s.characters, newCard],
@@ -140,59 +254,61 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     }))
   },
 
-  deleteCharacter: async (name) => {
-    const { characters } = get()
-    const card = characters.find(c => c.name === name)
+  deleteCharacter: async (name, projectPath) => {
+    const initial = get()
+    if (initial.saving) return
+    const card = initial.characters.find(item => item.name === name)
     if (!card) return
-
-    // SQLite 删除——失败时回滚 store（P1 修复：此前 catch 忽略 + 乐观移除，
-    // DB 删除失败时 UI 显示已删、下次 load 角色复活且 upsert-only 语义下永久残留）
-    const result = await ipc.invoke('db:character-delete', name).catch(() => null)
-    if (!result?.success) {
-      renderLog('error', 'Delete:Character', t('log.render.characterDeleteFailed').replace('{error}', () => String(result?.error ?? t('status.unknown'))))
-      toast.error(t('character.deleteFailed').replace('{error}', String(result?.error ?? t('status.unknown'))))
-      return
-    }
-
-    // 级联清理其他角色 relations 中对被删角色的引用（防悬空边/图谱断边）——
-    // #34 块 C：store 同步更新（此前只写 DB，store 残留悬空引用 → 下次 saveAll
-    // 用旧数据写回，级联清理被完全抵消）；级联写库用清理后的数据。
-    // P0-3：批量一次 save-all（此前逐角色 upsert = N 次 IPC + N 次 SQL）
-    const remaining = characters
-      .filter(c => c.name !== name)
-      .map(c => {
-        let rels: Array<{ target: string }> = []
-        try { rels = JSON.parse(c.relations || '[]') } catch { return c }
-        if (!rels.some(r => r.target === name)) return c
-        return { ...c, relations: JSON.stringify(rels.filter(r => r.target !== name)) }
+    let seq: number | undefined
+    try {
+      const { source, scope } = editSource(initial, projectPath)
+      const key = editKey(card)
+      const before = initial.baseline.find(item => editKey(item) === key)
+      const removals = new Map<string, string | null>([[name, null]])
+      if (before) removals.set(before.name, null)
+      const remaining = () => {
+        const latest = get().characters
+        const deleting = latest.find(item => editKey(item) === key)
+        if (deleting) removals.set(deleting.name, null)
+        return latest.filter(item => editKey(item) !== key).map(item => {
+          const relations = remapCharacterRelations(item.relations, removals)
+          return relations === item.relations ? item : retainKey({ ...item, relations }, item)
+        })
+      }
+      let baseline = initial.baseline
+      let characters: CharacterCard[]
+      if (before) {
+        seq = ++loadSeq
+        set({ saving: true })
+        baseline = await commitCharacterEdits(source, scope, [{ before, after: null }])
+        if (seq !== loadSeq) return
+        characters = rebaseCharacters(initial.baseline, remaining(), baseline)
+      } else characters = remaining()
+      const selected = get().selectedName
+      set({
+        characters, baseline, ...pendingEdits(baseline, characters),
+        selectedName: characters.some(item => item.name === selected) ? selected : characters[0]?.name ?? null,
       })
-    const changed = remaining.filter((c, i) => c.relations !== characters[i]?.relations)
-    if (changed.length > 0) {
-      await ipc.invoke('db:character-save-all', changed as never[]).catch(() => {})
+      if (!isCharacterSourceCurrent(source)) return
+      renderLog('info', 'Delete:Character', t('log.render.characterDeleted').replace('{name}', () => name))
+      toast.success(t('character.deleted').replace('{name}', () => name))
+    } catch (error) {
+      if (error instanceof CharacterEditCancelled || (seq !== undefined && seq !== loadSeq)) return
+      const detail = error instanceof Error ? error.message : String(error)
+      renderLog('error', 'Delete:Character', t('log.render.characterDeleteFailed').replace('{error}', () => detail))
+      toast.error(t('character.deleteFailed').replace('{error}', () => detail))
+    } finally {
+      if (seq !== undefined && seq === loadSeq) set({ saving: false })
     }
-
-    // 清理改名映射中指向被删角色的条目（改名 A→B 后删除 B，A→B 映射作废）
-    const renameMap = { ...get().renameMap }
-    for (const [old, n] of Object.entries(renameMap)) {
-      if (n === name) delete renameMap[old]
-    }
-
-    set({
-      characters: remaining,
-      selectedName: remaining.length > 0 ? remaining[0].name : null,
-      dirty: true,
-      renameMap,
-    })
-
-    // #34 块 D：删除成功反馈（此前静默，违反 save-feedback-standard 双通道）
-    renderLog('info', 'Delete:Character', t('log.render.characterDeleted').replace('{name}', name))
-    toast.success(t('character.deleted').replace('{name}', name))
   },
 
   updateField: (name, key, value) => {
     set((s) => {
+      if (s.mergingNames.includes(name) || (key === 'name' && typeof value === 'string' && s.mergingNames.includes(value))) return s
+      const current = s.characters.find(c => c.name === name)
+      if (!current || Object.is(current[key], value)) return s
       const newChars = s.characters.map(c =>
-        c.name === name ? { ...c, [key]: value } : c
+        c === current ? retainKey({ ...c, [key]: value }, c) : c
       )
 
       let newSelected = s.selectedName
@@ -208,7 +324,8 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
           for (const [old, n] of Object.entries(renameMap)) {
             if (n === name) { renameMap[old] = newName; found = true }
           }
-          if (!found) renameMap[name] = newName
+          if (!found) renameMap = { ...renameMap, [name]: newName }
+          renameMap = Object.fromEntries(Object.entries(renameMap).filter(([from, to]) => from !== to))
         }
       }
 
@@ -216,72 +333,98 @@ export const useCharacterStore = create<CharacterState>()((set, get) => ({
     })
   },
 
-  saveAll: async () => {
-    set({ saving: true })
-    const { characters, renameMap } = get()
-    // #34 块 C：记录保存起点——保存期间的新编辑不得被无条件清 dirty
-    const snapshot = characters
+  applyTemplate: (card, template) => {
+    const state = get()
+    if (state.selectedName !== card.name || !state.characters.includes(card) || state.mergingNames.includes(card.name)) return false
+    const next = { ...card, ...template }
+    if (hasCharacterChanges(card, next)) {
+      set({ characters: state.characters.map(item => item === card ? retainKey(next, card) : item), dirty: true })
+    }
+    return true
+  },
 
+  previewMerge: async (targetName, sourceName) => {
+    const initial = get()
+    const { source: origin, scope } = editSource(initial)
+    if (initial.saving) throw new CharacterEditCancelled(t('error.requestCancelled'))
+    if (!targetName || !sourceName || targetName === sourceName) throw new Error(t('character.mergeSelf'))
+    const localCards = [targetName, sourceName].map(name => {
+      const matching = initial.characters.filter(card => card.name === name)
+      if (matching.length > 1) throw new Error(t('error.characterDuplicateName').replace('{name}', () => name))
+      const [local] = matching
+      const base = local && initial.baseline.find(card => editKey(card) === editKey(local))
+      if (!local || !base || hasCharacterChanges(base, local)) throw new Error(t('character.mergeSaveFirst'))
+      return local
+    })
+    const snapshot = await readCharacterEdits(origin)
+    if (snapshot.scope.token !== scope.token || get().writeScope !== scope || get().saving
+      || !hasMergeParticipants(get().characters, localCards)) throw new CharacterEditCancelled(t('error.requestCancelled'))
+    const [target, source] = localCards.map(local => {
+      const fresh = snapshot.cards.find(card => card.name === local.name && card.uid === local.uid)
+      if (!fresh) throw new Error(t('error.characterEditConflict'))
+      return fresh
+    })
+    return { origin, input: { scope, target, source }, localCards }
+  },
+
+  commitMerge: async ({ origin, input, localCards }) => {
+    const initial = get()
+    const { scope } = editSource(initial)
+    if (initial.saving || scope.token !== input.scope.token || !isCharacterSourceCurrent(origin)
+      || !hasMergeParticipants(initial.characters, localCards)) {
+      throw new CharacterEditCancelled(t('error.requestCancelled'))
+    }
+    const seq = ++loadSeq
+    set({ saving: true, mergingNames: [input.target.name, input.source.name] })
     try {
-      // #34 块 B：重名校验——改名撞名时后者会静默覆盖前者整卡（ON CONFLICT 全列覆盖）
-      const names = characters.map(c => c.name)
-      const dup = names.find((n, i) => n && names.indexOf(n) !== i)
-      if (dup) throw new Error(t('error.characterDuplicateName').replace('{name}', dup))
-
-      // 级联重写 relations（#34 块 B）：改名映射应用到其他角色的 relations target。
-      // ⚠️ 无稳定 id，改名映射只能在编辑时捕获（renameMap），保存时无法从 diff 推断
-      let toSave = characters
-      if (Object.keys(renameMap).length > 0) {
-        const resolve = (n: string): string => {
-          let cur = n
-          const seen = new Set<string>()
-          while (renameMap[cur] && !seen.has(cur)) { seen.add(cur); cur = renameMap[cur] }
-          return cur
-        }
-        toSave = characters.map(c => {
-          if (!c.relations) return c
-          let rels: Array<Record<string, unknown>> = []
-          try { rels = JSON.parse(c.relations) } catch { return c }
-          let changed = false
-          const next = rels.map(r => {
-            const t = String(r.target ?? '')
-            const mapped = resolve(t)
-            if (mapped !== t) { changed = true; return { ...r, target: mapped } }
-            return r
-          })
-          return changed ? { ...c, relations: JSON.stringify(next) } : c
-        })
-      }
-
-      // 旧名清理（#34 块 C 收敛）：只删「改名映射的旧名」且 DB 存在 store 无 的行——
-      // 此前 diff 删除所有「DB 有 store 无」的行，会把工作流并发写入、store 尚未
-      // load 到的新角色静默误删（AI 生成数据丢失）
-      const dbChars = await ipc.invoke('db:character-get-all').catch(() => [])
-      const storeNames = new Set(toSave.map(c => c.name))
-      const staleOldNames = new Set(Object.keys(renameMap))
-      for (const dbChar of (Array.isArray(dbChars) ? dbChars : [])) {
-        const dbName = (dbChar as { name?: string }).name
-        if (dbName && !storeNames.has(dbName) && staleOldNames.has(dbName)) {
-          await ipc.invoke('db:character-delete', dbName).catch(() => {})
-        }
-      }
-
-      // 提交到 DB 批量保存——#34 块 C：校验主进程返回值（此前忽略 {success:false}，
-      // DB 事务失败被当成成功、dirty 被清为已保存）
-      const result = await ipc.invoke('db:character-save-all', toSave)
-      if (!result.success) {
-        throw new Error(result.error || t('error.characterCardsSave').replace('{error}', t('status.unknown')))
-      }
-
-      // #34 块 C：保存期间若有新编辑（引用变化），dirty 与 renameMap 保留
-      const stillDirty = get().characters !== snapshot
-      set({ dirty: stillDirty, renameMap: stillDirty ? get().renameMap : {} })
-    } catch (e) {
-      // 失败向上抛——CharacterEditor handleSave 的 catch 负责 renderLog + toast（此前无 catch，未捕获 rejection）
-      renderLog('error', 'Save:Character', t('log.render.characterSaveFailed').replace('{error}', () => String(e)))
-      throw e
+      const committed = await mergeCharacterDuplicates(origin, input)
+      if (seq !== loadSeq) throw new CharacterEditCancelled(t('error.requestCancelled'))
+      const { characters, baseline } = projectMergedCharacters(initial, get().characters, committed, input)
+      const selected = get().selectedName
+      const desired = selected === input.source.name ? input.target.name : selected
+      set({
+        characters, baseline, ...pendingEdits(baseline, characters),
+        selectedName: characters.some(card => card.name === desired) ? desired : characters[0]?.name ?? null,
+      })
     } finally {
-      set({ saving: false })
+      if (seq === loadSeq) set({ saving: false, mergingNames: [] })
+    }
+  },
+
+  saveAll: async (projectPath) => {
+    const initial = get()
+    if (initial.saving) throw new CharacterEditCancelled(t('error.requestCancelled'))
+    const uniqueNames = new Set<string>()
+    for (const card of initial.characters) {
+      if (uniqueNames.has(card.name)) throw new Error(t('error.characterDuplicateName').replace('{name}', () => card.name))
+      uniqueNames.add(card.name)
+    }
+    const { source, scope } = editSource(initial, projectPath)
+    const baselineNames = new Set(initial.baseline.map(card => card.name))
+    const localNames = new Map(Object.entries(initial.renameMap).filter(([name]) => !baselineNames.has(name)))
+    const submitted = initial.characters.map(card => {
+      const relations = remapCharacterRelations(card.relations, localNames)
+      return relations === card.relations ? card : retainKey({ ...card, relations }, card)
+    })
+    const edits = editsBetween(initial.baseline, submitted)
+    const names = new Map<string, string | null>([
+      ...localNames,
+      ...edits.flatMap(({ before, after }): Array<[string, string]> =>
+        before && after && before.name !== after.name ? [[before.name, after.name]] : []),
+    ])
+    const seq = ++loadSeq
+    set({ saving: true })
+    try {
+      const baseline = await commitCharacterEdits(source, scope, edits)
+      if (seq !== loadSeq) throw new CharacterEditCancelled(t('error.requestCancelled'))
+      const characters = rebaseCharacters(initial.characters, get().characters, baseline, names)
+      const selected = get().selectedName
+      set({
+        characters, baseline, ...pendingEdits(baseline, characters),
+        selectedName: characters.some(card => card.name === selected) ? selected : characters[0]?.name ?? null,
+      })
+    } finally {
+      if (seq === loadSeq) set({ saving: false })
     }
   },
 }))

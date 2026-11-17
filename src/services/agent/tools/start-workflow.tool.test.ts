@@ -178,6 +178,23 @@ describe('start_workflow 区间（chapter_end，2026-10-02 方案 B 配套）', 
 installAgentRuntimePorts(fakePorts())
 
 describe('injected workflow dispatch', () => {
+  it('keeps the captured default instance for the entire range after default reinstallation', async () => {
+    let complete!: (value: { runId: string; displayName: string; chapterTag: string }) => void
+    const a = vi.fn().mockImplementationOnce(() => new Promise(resolve => { complete = resolve }))
+      .mockResolvedValue({ runId: 'a2', displayName: 'A', chapterTag: '2' })
+    const b = vi.fn().mockResolvedValue({ runId: 'b', displayName: 'B', chapterTag: '2' })
+    installAgentRuntimePorts(fakePorts(a))
+    try {
+      const running = startWorkflowTool.execute({ workflow: 'generate_draft', chapter_number: 1, chapter_end: 2 })
+      installAgentRuntimePorts(fakePorts(b))
+      complete({ runId: 'a1', displayName: 'A', chapterTag: '1' })
+      expect((await running).artifacts?.map(event => event.type === 'workflow.progressed' && event.runId)).toEqual(['a1', 'a2'])
+      expect(b).not.toHaveBeenCalled()
+    } finally {
+      installAgentRuntimePorts(fakePorts())
+    }
+  })
+
   it('dispatches through each instance own workflow port', async () => {
     const a = vi.fn().mockResolvedValue({ runId: 'a', displayName: 'A', chapterTag: '1' })
     const b = vi.fn().mockResolvedValue({ runId: 'b', displayName: 'B', chapterTag: '1' })

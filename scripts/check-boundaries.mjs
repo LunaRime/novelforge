@@ -140,7 +140,27 @@ const editorApplicationViolations = []
 const knowledgeApplicationViolations = []
 for (const file of walk(join(ROOT, 'src', 'components'))) {
   const source = inspectSource(file)
-  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/panels/KnowledgePanel.tsx') {
+  const componentPath = relative(ROOT, file).replace(/\\/g, '/')
+  if (componentPath === 'src/components/panels/sidebar/ProjectTree.tsx' && source.ipcChannels.includes('db:binder-reorder')) {
+    editorApplicationViolations.push(`${relative(ROOT, file)} → db:binder-reorder`)
+  }
+  if (componentPath === 'src/components/panels/sidebar/BinderVolumeGroup.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/ipc-client$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+    }
+    for (const channel of source.ipcChannels) editorApplicationViolations.push(`${relative(ROOT, file)} → ${channel}`)
+  }
+  if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/ChapterCardEditor.tsx') {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/services\/workflows\/(?:directory-workflow|workflow-guards)$/.test(spec)) editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+    }
+    for (const channel of source.ipcChannels) {
+      if (['db:blueprint-get-all', 'db:blueprint-get-all-sorted', 'db:draft-get-max-finalized-chapter', 'db:blueprint-upsert', 'db:blueprint-upsert-many', 'db:blueprint-delete'].includes(channel)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${channel}`)
+      }
+    }
+  }
+  if (['src/components/panels/KnowledgePanel.tsx', 'src/components/pages/KnowledgeOverview.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
     for (const spec of source.runtimeSpecifiers) {
       if (/\/(?:ipc-client|stores\/llm-store|knowledge-service)$/.test(spec)) {
         knowledgeApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
@@ -150,6 +170,20 @@ for (const file of walk(join(ROOT, 'src', 'components'))) {
   if (relative(ROOT, file).replace(/\\/g, '/') === 'src/components/editor/DraftEditor.tsx') {
     for (const spec of source.specifiers) {
       if (/\/(?:ipc-client|stores\/(?:llm|draft)-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
+  if (['src/components/editor/ArchFileViewer.tsx', 'src/components/editor/WorldBuildingEditor.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/(?:ipc-client|vela-protocol|architecture-service|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
+        editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
+      }
+    }
+  }
+  if (['src/components/editor/NovelConfigEditor.tsx', 'src/components/dialogs/GenerateConfigDialog.tsx'].includes(relative(ROOT, file).replace(/\\/g, '/'))) {
+    for (const spec of source.runtimeSpecifiers) {
+      if (/\/(?:ipc-client|stores\/llm-store)$/.test(spec) || /\/services\/workflows\//.test(spec)) {
         editorApplicationViolations.push(`${relative(ROOT, file)} → ${spec}`)
       }
     }
@@ -179,7 +213,7 @@ if (draftMutationViolations.length) {
   for (const channel of draftMutationViolations) console.error(`  - ${channel}`)
 }
 if (editorApplicationViolations.length) {
-  console.error('\neditor application: DraftEditor must use application ports for IO and workflow commands')
+  console.error('\neditor application: editors must use application ports for IO and workflow commands')
   for (const violation of editorApplicationViolations) console.error(`  - ${violation}`)
 }
 if (coreEntryViolations.length) {

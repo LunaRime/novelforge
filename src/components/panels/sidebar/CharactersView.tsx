@@ -21,6 +21,7 @@ import { openBuiltinEditor } from './SidebarShared'
 import { runCharacterArchive } from '../../../services/workflows/character-archive-workflow'
 import { parseAliases } from '../../../services/character-normalize'
 import { renderLog } from '../../../services/render-logger'
+import { captureCharacterSource, isCharacterSourceCurrent, readCharacterEdits } from '../../../services/characters/character-edits-adapter'
 
 // 角色定位 / 戏份等级 i18n 映射（不使用 store 硬编码常量，语言切换即时更新）
 const ROLE_LABEL_KEYS: Record<CharacterCard['role'], TextKey> = {
@@ -47,6 +48,8 @@ export default function CharactersView() {
 
   /** 刷新：有未保存编辑时先确认（P3 修复——此前一键 load 直接丢弃全部未保存修改） */
   const handleRefresh = async () => {
+    const source = captureCharacterSource()
+    if (!source) return
     if (dirty) {
       const ok = await confirm(t('character.refreshConfirm'), {
         title: t('charList.refresh'),
@@ -55,17 +58,17 @@ export default function CharactersView() {
       })
       if (!ok) return
     }
-    load(true) // 手动刷新（已确认）→ force 跳过 dirty 检查
+    if (isCharacterSourceCurrent(source)) void load(true)
   }
   // 「从定稿生成档案」执行中状态：线③ 第 3 条——状态机抽 useWorkflowCompletion（60s 超时显式失败）
   const { running: archiving, start: startArchive } = useWorkflowCompletion()
   const handleArchive = async () => {
+    const source = captureCharacterSource()
+    if (!source) return
     const ok = await confirm(t('character.archiveConfirm'), { title: t('character.archiveBtn'), confirmText: t('action.confirm') })
-    if (!ok) return
-    const project = currentProject
-    if (!project) return
+    if (!ok || !isCharacterSourceCurrent(source)) return
     startArchive(
-      () => runCharacterArchive(project.path),
+      () => runCharacterArchive(source.path),
       {
         workflowType: 'post_process',
         onDone: (status) => {
@@ -84,37 +87,42 @@ export default function CharactersView() {
   // P2-1：出场统计扫描（存量项目生命周期字段回填 + 疑似退场提示）
   const [scanning, setScanning] = useState(false)
   const handleScan = async () => {
+    const source = captureCharacterSource()
+    if (!source) return
     if (dirty) {
       const ok = await confirm(t('character.refreshConfirm'), {
         title: t('charList.refresh'),
         confirmText: t('charList.refresh'),
         danger: true,
       })
-      if (!ok) return
+      if (!ok || !isCharacterSourceCurrent(source)) return
     }
     const ok2 = await confirm(t('charList.scanConfirm'), { title: t('charList.scanAppearances'), confirmText: t('action.confirm') })
-    if (!ok2) return
+    if (!ok2 || !isCharacterSourceCurrent(source)) return
+    const confirmedCards = useCharacterStore.getState().characters
     setScanning(true)
     try {
       const { loadFinalizedChapters, scanCharacterAppearances, saveAppearanceStats, DEPARTED_GAP } =
         await import('../../../services/character-appearance-scan')
-      const chars = useCharacterStore.getState().characters
-      const chapters = await loadFinalizedChapters()
+      const snapshot = await readCharacterEdits(source)
+      const chapters = await loadFinalizedChapters(source)
       if (chapters.length === 0) {
         toast.warning(t('charList.scanNoFinalized'))
         return
       }
-      const result = scanCharacterAppearances(chapters, chars)
-      const { updated, failed } = await saveAppearanceStats(result.stats)
-      renderLog('info', 'Scan:Appearances', t('charList.scanDone').replace('{n}', String(updated)) + (failed > 0 ? ` (failed: ${failed})` : ''))
+      const result = scanCharacterAppearances(chapters, snapshot.cards)
+      const updated = await saveAppearanceStats(result.stats, source, snapshot)
+      if (!isCharacterSourceCurrent(source)) return
+      renderLog('info', 'Scan:Appearances', t('charList.scanDone').replace('{n}', String(updated)))
       toast.success(t('charList.scanDone').replace('{n}', String(updated)))
       if (result.departed.length > 0) {
         toast.warning(t('charList.scanDeparted')
           .replace('{gap}', String(DEPARTED_GAP))
           .replace('{names}', result.departed.join('、')))
       }
-      await load(true) // 扫描已完成且用户已确认丢弃未保存编辑 → force 刷新统计展示
+      await load(useCharacterStore.getState().characters === confirmedCards)
     } catch (e) {
+      if (!isCharacterSourceCurrent(source)) return
       renderLog('error', 'Scan:Appearances', t('charList.scanFailed').replace('{error}', () => String(e)))
       toast.error(t('charList.scanFailed').replace('{error}', () => String(e)))
     } finally {

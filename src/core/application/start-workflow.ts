@@ -1,3 +1,5 @@
+import type { DirectorySnapshotRequest } from './directory-blueprint-write'
+
 export type ChapterWorkflow = 'generate_draft' | 'review' | 'refine' | 'finalize'
 export interface ChapterCreation {
   chapterNumber: number
@@ -34,10 +36,7 @@ export interface BookWorkflowRequest {
   autoReview?: boolean
   reuseExistingDrafts?: boolean
 }
-export interface BlueprintGeneration {
-  mode: 'full' | 'append'
-  startChapter?: number
-  count?: number
+export interface BlueprintGeneration extends DirectorySnapshotRequest {
   pacingGuidance?: string
   generationMode?: 'single' | 'batch'
   batchChapterCount?: number
@@ -84,7 +83,7 @@ export interface WorkflowStartPort<Definition> {
   start(definition: Definition, stepByStep?: boolean): Promise<string>
 }
 export class WorkflowStartError extends Error {
-  constructor(readonly code: 'ERR_GUARD' | 'ERR_NO_DRAFT' | 'ERR_NO_BLUEPRINT', message: string) {
+  constructor(readonly code: 'ERR_GUARD' | 'ERR_NO_DRAFT' | 'ERR_NO_BLUEPRINT' | 'ERR_CANCELLED', message: string) {
     super(message)
     this.name = 'WorkflowStartError'
   }
@@ -123,20 +122,28 @@ export async function startWorkflow<Definition>(request: WorkflowStartRequest, p
     case 'generate_blueprint': {
       const params = request.directory
       if (params && (!['full', 'append'].includes(params.mode)
-        || [params.startChapter, params.count, params.batchChapterCount].some(n => n !== undefined && (!Number.isSafeInteger(n) || n < 1)))) {
+        || [params.startChapter, params.count, params.batchChapterCount, params.expectedTotalChapters]
+          .some(n => n !== undefined && (!Number.isSafeInteger(n) || n < 1)))) {
         throw new WorkflowValidationError('range')
       }
       prepared = await port.blueprint(params)
       break
     }
-    case 'fill_blueprint_gaps':
-      if (!Array.isArray(request.gaps) || !request.gaps.length || request.gaps.some(gap =>
-        !Array.isArray(gap.missingChapterNumbers) || !gap.missingChapterNumbers.length || typeof gap.context !== 'string'
-        || gap.gapSize !== gap.missingChapterNumbers.length || gap.missingChapterNumbers.some((n: number) => !Number.isSafeInteger(n) || n < 1))) {
-        throw new WorkflowValidationError('range')
+    case 'fill_blueprint_gaps': {
+      if (!Array.isArray(request.gaps) || !request.gaps.length) throw new WorkflowValidationError('range')
+      const seen = new Set<number>()
+      for (const gap of request.gaps) {
+        if (!gap || !Array.isArray(gap.missingChapterNumbers) || !gap.missingChapterNumbers.length
+          || typeof gap.context !== 'string' || gap.gapSize !== gap.missingChapterNumbers.length) throw new WorkflowValidationError('range')
+        for (const [index, chapter] of gap.missingChapterNumbers.entries()) {
+          if (!Number.isSafeInteger(chapter) || chapter < 1 || seen.has(chapter)
+            || (index > 0 && chapter !== gap.missingChapterNumbers[index - 1] + 1)) throw new WorkflowValidationError('range')
+          seen.add(chapter)
+        }
       }
       prepared = await port.fillGaps(request.gaps)
       break
+    }
     case 'generate_architecture': prepared = await port.architecture(request.architecture); break
     case 'extract_arch_characters':
       if (!request.projectPath || typeof request.characterDynamicsContent !== 'string' || typeof request.genre !== 'string') throw new WorkflowValidationError('range')
