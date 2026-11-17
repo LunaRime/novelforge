@@ -311,11 +311,32 @@ test('restores candidate operations and verifies import snapshots against receip
     const previousPath = join(project, 'chapters/0005.md')
     const previousText = await readFile(previousPath, 'utf8')
     const previousId = parseChapter(previousText).id
-    const continuation = { ...create, chapterId: 'ch_123456abcdef', number: 6, source: { chapterId: previousId, revision: fileRevision(previousText) } }
+    const previousSource = { chapterId: previousId, revision: fileRevision(previousText) }
+    const contextDb = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    let contextRevision: string
+    try {
+      contextDb.exec("UPDATE project_core SET world_setting = 'Candidate world' WHERE id = 'main'; INSERT INTO blueprints (chapter_number, title, key_events, notes) VALUES (6, 'The crossing', 'Cross the river', 'Private note')")
+      const context = await invoke('continuation-context', active.token, 6, previousSource) as { contextRevision: string }
+      expect(context).toEqual({ previous: 'text B', settings: expect.objectContaining({ worldSetting: 'Candidate world' }),
+        blueprint: { title: 'The crossing', keyEvents: 'Cross the river' }, contextRevision: expect.stringMatching(/^[a-f0-9]{64}$/) })
+      contextDb.exec("UPDATE blueprints SET title = 'Unrelated' WHERE chapter_number = 5")
+      expect(await invoke('continuation-context', active.token, 6, previousSource)).toEqual(context)
+      const contextual = { ...create, chapterId: 'ch_123456abcdee', number: 6, source: { ...previousSource, contextRevision: context.contextRevision } }
+      contextDb.exec("UPDATE blueprints SET key_events = 'Follow the river' WHERE chapter_number = 6")
+      await expect(invoke('commit', active.token, contextual)).rejects.toThrow('Continuation context changed')
+      const updated = await invoke('continuation-context', active.token, 6, previousSource) as { contextRevision: string }
+      expect(updated.contextRevision).not.toBe(context.contextRevision)
+      contextDb.exec("UPDATE project_core SET world_setting = 'New world' WHERE id = 'main'")
+      await expect(invoke('commit', active.token, { ...contextual, source: { ...previousSource, contextRevision: updated.contextRevision } }))
+        .rejects.toThrow('Continuation context changed')
+      await expect(readFile(join(project, 'chapters/0006.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+      contextRevision = (await invoke('continuation-context', active.token, 6, previousSource) as { contextRevision: string }).contextRevision
+    } finally { contextDb.close() }
+    const continuation = { ...create, chapterId: 'ch_123456abcdef', number: 6, source: { ...previousSource, contextRevision } }
     await writeFile(previousPath, previousText.replace('text B', 'external edit'))
     await expect(invoke('commit', active.token, continuation)).rejects.toThrow('Source chapter changed')
     await expect(readFile(join(project, 'chapters/0006.md'))).rejects.toMatchObject({ code: 'ENOENT' })
-    const updatedContinuation = { ...continuation, source: { chapterId: previousId, revision: fileRevision(await readFile(previousPath, 'utf8')) } }
+    const updatedContinuation = { ...continuation, source: { ...continuation.source, revision: fileRevision(await readFile(previousPath, 'utf8')) } }
     const published = await invoke('commit', active.token, updatedContinuation)
     await writeFile(previousPath, previousText)
     expect(await invoke('commit', active.token, updatedContinuation)).toEqual(published)

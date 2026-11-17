@@ -327,7 +327,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   }
 
   async function publishContinuation(command: ContinuationCommand) {
-    if (!continuationSource || command.number !== nextNumber || command.source?.chapterId !== continuationSource.chapterId ||
+    if (!continuationSource || !command.source?.contextRevision || command.number !== nextNumber || command.source.chapterId !== continuationSource.chapterId ||
         command.source.revision !== continuationSource.revision) return
     await persistCommit(command, `doc://chapter/${command.chapterId}`)
   }
@@ -407,7 +407,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
                 editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save} />}
               {!openingDocument && continuationSource && active && nextNumber !== undefined && <FileChapterContinuation
-                key={`${workspace.token}:${active.locator}:${active.revision}`} number={nextNumber} previous={active.content}
+                key={`${workspace.token}:${active.locator}:${active.revision}`} token={workspace.token} number={nextNumber}
                 source={continuationSource} disabled={busy || dirty} onPublish={publishContinuation} />}
               {workspace.importStartNumber !== undefined && !stagedImport && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>

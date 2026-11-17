@@ -110,8 +110,10 @@ export interface GlobalConfig {
 }
 
 // ===== 项目管理 =====
+export interface FileContinuationSource { chapterId: string; revision: string; contextRevision?: string }
+
 export type FileDraftCommand = { chapterId: string } & (
-  | { kind: 'create'; number: number; title: string; content: string; createdAt: string; source?: { chapterId: string; revision: string } }
+  | { kind: 'create'; number: number; title: string; content: string; createdAt: string; source?: FileContinuationSource }
   | ({ expectedRevision: string } & (
     { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
   ))
@@ -147,6 +149,10 @@ export interface ProjectChannels {
     return: { revision: string; indexed: boolean }
   }
   'project:file-editor-close': { args: [token: string]; return: void }
+  'project:file-editor-continuation-context': {
+    args: [token: string, number: number, source: FileContinuationSource]
+    return: { previous: string; settings: Record<string, string>; blueprint: Record<string, string>; contextRevision: string }
+  }
   'project:file-editor-agent-list': {
     args: [token: string, offset?: number, limit?: number]
     return: { chapters: Array<{ locator: string; number: number; title: string; status: string }>; nextOffset: number | null }

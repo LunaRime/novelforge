@@ -3,6 +3,7 @@ import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevis
 import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../../src/shared/ipc-channels'
 import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
 import { fileImportEntries } from './file-import-source'
+import { readFileContinuationContext } from './file-continuation-context'
 
 /** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
 export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileChapterStore,
@@ -34,13 +35,38 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       .run(projectId, intent.chapter.id, intent.chapter.status, receipt.revision)
   }
 
-  const run = (intent: FileChapterCommit, beforePrepare?: Parameters<typeof commitFileChapter>[5]) =>
-    commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent, beforePrepare)
+  const run = (intent: FileChapterCommit, beforePrepare?: Parameters<typeof commitFileChapter>[5],
+    commitJournal: Parameters<typeof commitFileChapter>[2] = journal) =>
+    commitFileChapter(intent, repo, commitJournal, receipt => apply(intent, receipt), assertCurrent, beforePrepare)
+
+  function continuationJournal(number: number, contextRevision: string): Parameters<typeof commitFileChapter>[2] {
+    return {
+      prepare(intent, allowNew = true) {
+        if (!allowNew) return journal.prepare(intent, allowNew)
+        // 同一写事务内核对参与生成的字段并登记意图，避免检查后再被另一个连接改写。
+        db.exec('BEGIN IMMEDIATE')
+        try {
+          if (journal.pending()?.operationId !== intent.operationId && !journal.receipt(intent.operationId) &&
+              readFileContinuationContext(db, number).contextRevision !== contextRevision) {
+            throw new ChapterError('conflict', 'Continuation context changed')
+          }
+          const receipt = journal.prepare(intent, allowNew)
+          db.exec('COMMIT')
+          return receipt
+        } catch (error) {
+          db.exec('ROLLBACK')
+          throw error
+        }
+      },
+      finish: (intent, receipt, apply) => journal.finish(intent, receipt, apply),
+    }
+  }
 
   function create(command: Omit<Extract<FileDraftCommand, { kind: 'create' }>, 'kind'>, operationId: string) {
     const { chapterId, number, title, content, createdAt, source } = command
     if (source !== undefined && (!source || typeof source.chapterId !== 'string' || !/^ch_[a-f0-9]{8,64}$/.test(source.chapterId) ||
-        typeof source.revision !== 'string' || !/^[a-f0-9]{64}$/.test(source.revision))) {
+        typeof source.revision !== 'string' || !/^[a-f0-9]{64}$/.test(source.revision) ||
+        (source.contextRevision !== undefined && (typeof source.contextRevision !== 'string' || !/^[a-f0-9]{64}$/.test(source.contextRevision))))) {
       throw new ChapterError('invalid-chapter', 'Invalid source chapter')
     }
     // 迁移身份和仅历史稿占用的章号须通过显式恢复流程复用。
@@ -51,7 +77,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
     }
     return run({ operationId, kind: 'create', recordId: number, expectedRevision: null,
       chapter: { projectId, id: chapterId, number, title, content, status: 'draft', createdAt, updatedAt: createdAt },
-      ...(source && { source: { chapterId: source.chapterId, revision: source.revision } }),
+      ...(source && { source: { chapterId: source.chapterId, revision: source.revision, contextRevision: source.contextRevision } }),
     }, source && (async locked => {
       // 首次登记前核对续写来源，已登记的发布继续按原请求恢复。
       if (journal.pending()?.operationId === operationId || journal.receipt(operationId)) return
@@ -59,7 +85,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       if (!previous || previous.revision !== source.revision || previous.chapter.number !== number - 1 || !previous.chapter.content.trim()) {
         throw new ChapterError('conflict', 'Source chapter changed')
       }
-    }))
+    }), source?.contextRevision ? continuationJournal(number, source.contextRevision) : undefined)
   }
 
   function preview(chapterId: string, revisionId: number) {

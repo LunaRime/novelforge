@@ -102,7 +102,7 @@ test('generates a continuation preview and opens the next chapter after explicit
       tabs: [{ locator: argument.at(-1), content: 'New draft', number: 2, revision: 'published revision' }], documents: [], importStartNumber: 3 }
     return { token: 'session', missing: [], tabs: [previous], documents: [], importStartNumber: 2 }
   })
-  generateContinuation.mockResolvedValue('New draft')
+  generateContinuation.mockResolvedValue({ content: 'New draft', contextRevision: 'context hash' })
   await render()
   await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
   const title = document.querySelector('input[aria-label="project.fileEditorContinuationTitle"]')!
@@ -111,12 +111,13 @@ test('generates a continuation preview and opens the next chapter after explicit
     title.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await click('project.fileEditorContinuationGenerate')
-  expect(generateContinuation).toHaveBeenCalledWith(expect.objectContaining({ previous: 'Saved ending', title: 'Next chapter', number: 2 }), expect.any(AbortSignal))
+  expect(generateContinuation).toHaveBeenCalledWith(expect.objectContaining({ token: 'session', title: 'Next chapter', number: 2,
+    source: { chapterId, revision: 'old revision' } }), expect.any(AbortSignal))
   expect(document.querySelector('[aria-label="project.fileEditorContinuationPreview"]')?.textContent).toContain('New draft')
   expect(invoke).toHaveBeenCalledTimes(1)
   await click('project.fileEditorContinuationPublish')
   const command = expect.objectContaining({ kind: 'create', chapterId: expect.stringMatching(/^ch_[a-f0-9]+$/), number: 2,
-    title: 'Next chapter', content: 'New draft', source: { chapterId, revision: 'old revision' } })
+    title: 'Next chapter', content: 'New draft', source: { chapterId, revision: 'old revision', contextRevision: 'context hash' } })
   expect(invoke).toHaveBeenNthCalledWith(2, 'project:file-editor-commit', 'session', command)
   const newId = invoke.mock.calls[1][2].chapterId
   expect(invoke).toHaveBeenNthCalledWith(3, 'project:file-editor-open', '/candidate', [locator, `doc://chapter/${newId}`])

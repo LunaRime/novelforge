@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type GeneratedBlueprintFields, type MigratedDraftIdentityMap } from '../../src/core'
-import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
+import type { FileAgentEditProposal, FileContinuationSource, FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
@@ -11,6 +11,7 @@ import { readFileImportSource } from '../services/file-import-source'
 import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext } from '../services/file-import-index'
 import { applyFileImportSettings, installFileImportSettingVersions, readFileImportSettingBaseline, type SettingBaseline } from '../services/file-import-settings'
 import { applyImportBlueprints, readImportBlueprintTargets } from '../services/file-import-blueprints'
+import { readFileContinuationContext } from '../services/file-continuation-context'
 import { logger } from '../utils/logger'
 
 const candidateRecord = '.novelforge/file-editor.json'
@@ -162,7 +163,7 @@ export function registerFileProjectEditorController() {
     return { session, assertCurrent }
   }
 
-  async function readForAgent<T>(senderId: number, token: string,
+  async function readCandidate<T>(senderId: number, token: string,
     work: (session: FileEditorSession, assertCurrent: () => void) => Promise<T>): Promise<T> {
     const { session, assertCurrent } = requireAgentSession(senderId, token)
     assertPathAllowedForIpc(session.projectPath, 'read')
@@ -177,7 +178,7 @@ export function registerFileProjectEditorController() {
 
   guardedHandle('project:file-editor-agent-list', async ({ sender }, token: string, offset = 0, limit = 10) => {
     const end = offset + agentReadLimit(offset, limit, 20)
-    return readForAgent(sender.id, token, async session => {
+    return readCandidate(sender.id, token, async session => {
       const chapters = await session.repo.readChapterMetadata()
       return { chapters: chapters.slice(offset, end).map(({ id, number, title, status }) => ({
         locator: `doc://chapter/${id}`, number, title: title.slice(0, 160), status,
@@ -188,7 +189,7 @@ export function registerFileProjectEditorController() {
   guardedHandle('project:file-editor-agent-read', async ({ sender }, token: string, locator: string, offset = 0, limit = 440) => {
     if (typeof locator !== 'string' || !(current.test(locator) || historical.test(locator))) throw new Error('Invalid file editor Agent locator')
     const end = offset + agentReadLimit(offset, limit, 440)
-    return readForAgent(sender.id, token, async (session, assertCurrent) => {
+    return readCandidate(sender.id, token, async (session, assertCurrent) => {
       // 当前稿与历史稿共用编辑器定位符解析，历史文件继续校验原始映射与摘要。
       const document = await session.documentPort.resolve({ kind: 'path', documentKind: 'chapter', locator, name: locator }, assertCurrent)
       if (!document) throw new Error('File editor Agent chapter is unavailable')
@@ -205,7 +206,7 @@ export function registerFileProjectEditorController() {
       throw new Error('Invalid file editor Agent edit proposal')
     }
     const { session, assertCurrent } = requireAgentSession(sender.id, token)
-    const { proposal, offset } = await readForAgent(sender.id, token, async () => {
+    const { proposal, offset } = await readCandidate(sender.id, token, async () => {
       const stored = (await session.repo.readByIds([id])).get(id)
       assertCurrent()
       if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
@@ -295,6 +296,27 @@ export function registerFileProjectEditorController() {
 
   guardedHandle('project:file-editor-commit', async ({ sender }, token: string, command: FileDraftCommand) =>
     mutate(sender.id, token, lifecycle => lifecycle.commit(command)))
+
+  guardedHandle('project:file-editor-continuation-context', async ({ sender }, token: string, number: number, source: FileContinuationSource) => {
+    if (!Number.isSafeInteger(number) || number < 2 || typeof source?.chapterId !== 'string' || !current.test(`doc://chapter/${source.chapterId}`) ||
+        typeof source.revision !== 'string' || !/^[a-f0-9]{64}$/.test(source.revision)) throw new Error('Invalid continuation source')
+    requireLifecycleSession(sender.id, token)
+    return readCandidate(sender.id, token, async (session, assertCurrent) => {
+      const chapter = (await session.repo.readByIds([source.chapterId])).get(source.chapterId)
+      assertCurrent()
+      if (!chapter || chapter.revision !== source.revision || chapter.chapter.number + 1 !== number || !chapter.chapter.content.trim()) {
+        throw new Error('Source chapter changed')
+      }
+      // 生成输入只读候选保留库，不触发迁移、恢复或当前 SQLite 项目查询。
+      const db = new Database(join(session.projectPath, retainedFile), { readonly: true, fileMustExist: true })
+      try {
+        db.exec('BEGIN')
+        const context = readFileContinuationContext(db, number)
+        db.exec('COMMIT')
+        return { ...context, previous: chapter.chapter.content.slice(-4000) }
+      } finally { db.close() }
+    })
+  })
 
   guardedHandle('project:file-editor-import', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) =>
     mutate(sender.id, token, lifecycle => lifecycle.importChapters(firstNumber, chapters)))

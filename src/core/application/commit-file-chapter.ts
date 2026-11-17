@@ -7,7 +7,7 @@ export type FileChapterCommit = {
   recordId: number
   chapter: Chapter
 } & (
-  | { kind: 'create'; expectedRevision: null; source?: { chapterId: string; revision: string } }
+  | { kind: 'create'; expectedRevision: null; source?: { chapterId: string; revision: string; contextRevision?: string } }
   | { kind: 'merge' | 'archive' | 'finalize'; expectedRevision: string }
 )
 

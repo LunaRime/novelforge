@@ -9,8 +9,8 @@ import { Textarea } from '../ui/Textarea'
 
 export type ContinuationCommand = Extract<FileDraftCommand, { kind: 'create' }>
 
-export function FileChapterContinuation({ number, previous, source, disabled, onPublish }: {
-  number: number; previous: string; source: NonNullable<ContinuationCommand['source']>; disabled: boolean
+export function FileChapterContinuation({ token, number, source, disabled, onPublish }: {
+  token: string; number: number; source: NonNullable<ContinuationCommand['source']>; disabled: boolean
   onPublish: (command: ContinuationCommand) => Promise<void>
 }) {
   const { t } = useTranslation()
@@ -40,11 +40,11 @@ export function FileChapterContinuation({ number, previous, source, disabled, on
     current.current = run
     setStatus('running')
     try {
-      const content = await generateFileChapterContinuation({ number, title: chapterTitle, previous, guidance: guidance.trim() }, run.signal)
+      const { content, contextRevision } = await generateFileChapterContinuation({ token, source, number, title: chapterTitle, guidance: guidance.trim() }, run.signal)
       if (current.current !== run) return
       // 创建请求保持稳定，预览仅保存在界面内，确认时才发送写入命令。
       setProposal({ kind: 'create', chapterId: `ch_${crypto.randomUUID().replaceAll('-', '')}`,
-        number, title: chapterTitle, content, createdAt: new Date().toISOString(), source })
+        number, title: chapterTitle, content, createdAt: new Date().toISOString(), source: { ...source, contextRevision } })
       setStatus(undefined)
     } catch (error) {
       if (current.current !== run) return
