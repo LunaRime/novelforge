@@ -7,7 +7,7 @@ export type FileChapterCommit = {
   recordId: number
   chapter: Chapter
 } & (
-  | { kind: 'create'; expectedRevision: null }
+  | { kind: 'create'; expectedRevision: null; source?: { chapterId: string; revision: string } }
   | { kind: 'merge' | 'archive' | 'finalize'; expectedRevision: string }
 )
 
@@ -28,14 +28,15 @@ export function commitFileChapter(
   journal: FileCommitJournal,
   applyMetadata: (receipt: FileChapterCommitReceipt) => void,
   assertCurrent: () => void = () => {},
+  beforePrepare?: (repo: LockedFileChapterRepo) => Promise<void>,
 ): Promise<FileChapterCommitReceipt> {
   const intent = structuredClone(input)
-  return repo.withCommitLock(locked => commitLocked(intent, locked, journal, applyMetadata, assertCurrent))
+  return repo.withCommitLock(locked => commitLocked(intent, locked, journal, applyMetadata, assertCurrent, beforePrepare))
 }
 
 async function commitLocked(intent: FileChapterCommit, repo: LockedFileChapterRepo,
   journal: FileCommitJournal, applyMetadata: (receipt: FileChapterCommitReceipt) => void,
-  assertCurrent: () => void): Promise<FileChapterCommitReceipt> {
+  assertCurrent: () => void, beforePrepare?: (repo: LockedFileChapterRepo) => Promise<void>): Promise<FileChapterCommitReceipt> {
   const { chapter, expectedRevision } = intent
   const revision = fileRevision(serializeChapter(chapter))
   const receipt = { status: 'committed', revision } as const
@@ -45,6 +46,7 @@ async function commitLocked(intent: FileChapterCommit, repo: LockedFileChapterRe
     ? !current && await repo.canCreate(chapter)
     : current?.chapter.projectId === chapter.projectId &&
       current.chapter.number === chapter.number && current.revision === expectedRevision
+  if (beforePrepare) await beforePrepare(repo)
   assertCurrent()
   const completed = journal.prepare(intent, canPrepare)
   if (completed) return completed

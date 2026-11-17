@@ -121,6 +121,7 @@ export function registerFileProjectEditorController() {
       })),
     ]
     const names = new Map(documents.map(document => [document.locator, document.name]))
+    const numbers = new Map(chapters.map(chapter => [`doc://chapter/${chapter.id}`, chapter.number]))
     const scope = () => ({ projectId: identity.projectId, projectPath: path, session: requests.get(sender.id) === token ? 1 : 2 })
     const portOptions = { projectPath: path, identity, scope, publish: () => {} }
     const port = await createFileEditorOpenPort({ ...portOptions, repo })
@@ -129,7 +130,7 @@ export function registerFileProjectEditorController() {
     for (const locator of locators) {
       const result = await openEditorDocument({ kind: 'path', documentKind: 'chapter', locator, name: locator }, port)
       if (result.status === 'missing') { missing.push(locator); continue }
-      tabs.push({ ...result.document, name: names.get(result.document.locator) ?? result.document.name })
+      tabs.push({ ...result.document, name: names.get(result.document.locator) ?? result.document.name, number: numbers.get(result.document.locator) })
     }
     if (withLifecycle && tabs.length) {
       await withLifecycle(async lifecycle => {

@@ -308,6 +308,19 @@ test('restores candidate operations and verifies import snapshots against receip
     const applied = await resolveEdit(accepted.id, 'apply') as { revision: string }
     expect(applied).toMatchObject({ status: 'saved', locator: imported.firstLocator, content: 'new $& text edited' })
     expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('new $& text edited')
+    const previousPath = join(project, 'chapters/0005.md')
+    const previousText = await readFile(previousPath, 'utf8')
+    const previousId = parseChapter(previousText).id
+    const continuation = { ...create, chapterId: 'ch_123456abcdef', number: 6, source: { chapterId: previousId, revision: fileRevision(previousText) } }
+    await writeFile(previousPath, previousText.replace('text B', 'external edit'))
+    await expect(invoke('commit', active.token, continuation)).rejects.toThrow('Source chapter changed')
+    await expect(readFile(join(project, 'chapters/0006.md'))).rejects.toMatchObject({ code: 'ENOENT' })
+    const updatedContinuation = { ...continuation, source: { chapterId: previousId, revision: fileRevision(await readFile(previousPath, 'utf8')) } }
+    const published = await invoke('commit', active.token, updatedContinuation)
+    await writeFile(previousPath, previousText)
+    expect(await invoke('commit', active.token, updatedContinuation)).toEqual(published)
+    await expect(invoke('commit', active.token, continuation)).rejects.toThrow('different file commit')
+    expect(parseChapter(await readFile(join(project, 'chapters/0006.md'), 'utf8')).content).toBe(create.content)
     await expect(resolveEdit(accepted.id, 'apply')).rejects.toThrow('proposal')
     const oldSession = await prepare(applied.revision, 'new $& text', 'other')
     const switched = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']

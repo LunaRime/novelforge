@@ -3,11 +3,12 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { inferFileImport, inferFileImportBlueprints, type FileImportBlueprintInference, type FileImportInference } from '../../services/workflows/file-import-inference'
-import type { FileAgentEditProposal, FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
+import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
+import { FileChapterContinuation, type ContinuationCommand } from './FileChapterContinuation'
 import { FileProjectAgent } from './FileProjectAgent'
 
 type Opened = ProjectChannels['project:file-editor-open']['return']
@@ -65,6 +66,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const lifecycle = active?.lifecycle
   const selectedRevision = revisionId ?? lifecycle?.pending[0]?.id
   const chapterId = lifecycle ? active?.locator.slice('doc://chapter/'.length) : undefined
+  const nextNumber = workspace?.importStartNumber
+  const continuationSource = active?.number !== undefined && active.number + 1 === nextNumber && active.revision && active.content.trim()
+    ? { chapterId: active.locator.slice('doc://chapter/'.length), revision: active.revision } : undefined
   const settingsOffer = inferencePreview?.settingsOffer
   const canApplySettings = !inferencePreview?.applied && (settingsOffer?.available.some(field =>
     !settingsOffer.occupied.includes(field) && Boolean(inferencePreview?.values[field])) ?? false)
@@ -319,6 +323,17 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       if (!(kind === 'finalize' ? lifecycle?.canFinalize : lifecycle?.canArchive)) return
       command = { ...base, kind }
     }
+    await persistCommit(command, active.locator)
+  }
+
+  async function publishContinuation(command: ContinuationCommand) {
+    if (!continuationSource || command.number !== nextNumber || command.source?.chapterId !== continuationSource.chapterId ||
+        command.source.revision !== continuationSource.revision) return
+    await persistCommit(command, `doc://chapter/${command.chapterId}`)
+  }
+
+  async function persistCommit(command: FileDraftCommand, locator: string) {
+    if (pending.current || dirty || !workspace) return
     clearInference()
     pending.current = true
     setBusy(true)
@@ -327,11 +342,13 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     try {
       await ipc.invoke('project:file-editor-commit', workspace.token, command)
       committed = true
-      renderLog('info', 'Save:FileProjectEditor', `${kind} (${Math.round(saveClock() - start)}ms)`)
-      // Reload authoritative text, revision and permissions together after the durable receipt.
+      renderLog('info', 'Save:FileProjectEditor', `${command.kind} (${Math.round(saveClock() - start)}ms)`)
+      // 收到持久化回执后，重新读取正文、revision 和可用操作。
       const { locators } = storedTabs(workspace.path)
-      const result = await ipc.invoke('project:file-editor-open', workspace.path, [...new Set([...locators.slice(-99), active.locator])])
-      display(workspace.path, result, active.locator, locators)
+      const requested = [...new Set([...locators.slice(-99), locator])]
+      const result = await ipc.invoke('project:file-editor-open', workspace.path, requested)
+      if (command.kind === 'create' && !result.tabs.some(tab => tab.locator === locator)) throw new Error('Created chapter could not be reopened')
+      display(workspace.path, result, locator, requested)
       toast.success(t('save.success'))
     } catch (error) {
       // A failure can follow file publication. Hide stale controls until open/recovery runs again.
@@ -389,6 +406,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
               {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
                 editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save} />}
+              {!openingDocument && continuationSource && active && nextNumber !== undefined && <FileChapterContinuation
+                key={`${workspace.token}:${active.locator}:${active.revision}`} number={nextNumber} previous={active.content}
+                source={continuationSource} disabled={busy || dirty} onPublish={publishContinuation} />}
               {workspace.importStartNumber !== undefined && !stagedImport && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
               )}

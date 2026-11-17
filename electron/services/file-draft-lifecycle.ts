@@ -34,10 +34,15 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       .run(projectId, intent.chapter.id, intent.chapter.status, receipt.revision)
   }
 
-  const run = (intent: FileChapterCommit) => commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent)
+  const run = (intent: FileChapterCommit, beforePrepare?: Parameters<typeof commitFileChapter>[5]) =>
+    commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent, beforePrepare)
 
   function create(command: Omit<Extract<FileDraftCommand, { kind: 'create' }>, 'kind'>, operationId: string) {
-    const { chapterId, number, title, content, createdAt } = command
+    const { chapterId, number, title, content, createdAt, source } = command
+    if (source !== undefined && (!source || typeof source.chapterId !== 'string' || !/^ch_[a-f0-9]{8,64}$/.test(source.chapterId) ||
+        typeof source.revision !== 'string' || !/^[a-f0-9]{64}$/.test(source.revision))) {
+      throw new ChapterError('invalid-chapter', 'Invalid source chapter')
+    }
     // 迁移身份和仅历史稿占用的章号须通过显式恢复流程复用。
     const reservedNumber = historyOnlyDrafts.size > 0 && (db.prepare('SELECT id FROM drafts WHERE chapter_number = ?')
       .all(number) as Array<{ id: number }>).some(row => historyOnlyDrafts.has(row.id))
@@ -45,7 +50,16 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       throw new ChapterError('conflict', 'Chapter belongs to the migration history')
     }
     return run({ operationId, kind: 'create', recordId: number, expectedRevision: null,
-      chapter: { projectId, id: chapterId, number, title, content, status: 'draft', createdAt, updatedAt: createdAt } })
+      chapter: { projectId, id: chapterId, number, title, content, status: 'draft', createdAt, updatedAt: createdAt },
+      ...(source && { source: { chapterId: source.chapterId, revision: source.revision } }),
+    }, source && (async locked => {
+      // 首次登记前核对续写来源，已登记的发布继续按原请求恢复。
+      if (journal.pending()?.operationId === operationId || journal.receipt(operationId)) return
+      const previous = await locked.byId(source.chapterId)
+      if (!previous || previous.revision !== source.revision || previous.chapter.number !== number - 1 || !previous.chapter.content.trim()) {
+        throw new ChapterError('conflict', 'Source chapter changed')
+      }
+    }))
   }
 
   function preview(chapterId: string, revisionId: number) {

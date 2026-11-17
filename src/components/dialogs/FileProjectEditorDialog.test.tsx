@@ -10,9 +10,11 @@ const invoke = vi.hoisted(() => vi.fn())
 const infer = vi.hoisted(() => vi.fn())
 const inferBlueprints = vi.hoisted(() => vi.fn())
 const askAgent = vi.hoisted(() => vi.fn())
+const generateContinuation = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
 vi.mock('../../services/workflows/file-import-inference', () => ({ inferFileImport: infer, inferFileImportBlueprints: inferBlueprints }))
 vi.mock('../../services/agent-adapters/file-project-agent', () => ({ askFileProjectAgent: askAgent }))
+vi.mock('../../services/workflows/file-chapter-continuation', () => ({ generateFileChapterContinuation: generateContinuation }))
 vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('../ui/Toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
@@ -30,7 +32,7 @@ async function click(label: string) {
   const button = [...document.querySelectorAll('button')].find(item => item.textContent === label)!
   await act(async () => button.click())
 }
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset(); inferBlueprints.mockReset(); askAgent.mockReset() })
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset(); inferBlueprints.mockReset(); askAgent.mockReset(); generateContinuation.mockReset() })
 
 test('opens a routed directory through the candidate IPC without another folder picker', async () => {
   invoke.mockResolvedValue({ token: 'session', tabs: [], documents: [], missing: [] })
@@ -88,6 +90,38 @@ test('previews an Agent edit and only sends approval when the user accepts it', 
   expect(invoke).toHaveBeenLastCalledWith('project:file-editor-agent-resolve-edit', 'session', 'edit-id', 'apply')
   expect(document.querySelector('textarea')?.value).toBe('new text')
   expect(panel.isConnected).toBe(false)
+})
+
+test('generates a continuation preview and opens the next chapter after explicit publication', async () => {
+  const chapterId = 'ch_12345678'
+  const locator = `doc://chapter/${chapterId}`
+  const previous = { locator, name: 'Previous', number: 1, revision: 'old revision', content: 'Saved ending' }
+  invoke.mockImplementation(async (channel, _scope, argument) => {
+    if (channel === 'project:file-editor-commit') return { status: 'committed', revision: 'published revision' }
+    if (channel === 'project:file-editor-open' && argument.length) return { token: 'reopened', missing: [],
+      tabs: [{ locator: argument.at(-1), content: 'New draft', number: 2, revision: 'published revision' }], documents: [], importStartNumber: 3 }
+    return { token: 'session', missing: [], tabs: [previous], documents: [], importStartNumber: 2 }
+  })
+  generateContinuation.mockResolvedValue('New draft')
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  const title = document.querySelector('input[aria-label="project.fileEditorContinuationTitle"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(title, 'Next chapter')
+    title.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await click('project.fileEditorContinuationGenerate')
+  expect(generateContinuation).toHaveBeenCalledWith(expect.objectContaining({ previous: 'Saved ending', title: 'Next chapter', number: 2 }), expect.any(AbortSignal))
+  expect(document.querySelector('[aria-label="project.fileEditorContinuationPreview"]')?.textContent).toContain('New draft')
+  expect(invoke).toHaveBeenCalledTimes(1)
+  await click('project.fileEditorContinuationPublish')
+  const command = expect.objectContaining({ kind: 'create', chapterId: expect.stringMatching(/^ch_[a-f0-9]+$/), number: 2,
+    title: 'Next chapter', content: 'New draft', source: { chapterId, revision: 'old revision' } })
+  expect(invoke).toHaveBeenNthCalledWith(2, 'project:file-editor-commit', 'session', command)
+  const newId = invoke.mock.calls[1][2].chapterId
+  expect(invoke).toHaveBeenNthCalledWith(3, 'project:file-editor-open', '/candidate', [locator, `doc://chapter/${newId}`])
+  expect([...document.querySelectorAll('textarea')].some(field => field.value === 'New draft')).toBe(true)
+  expect(document.querySelector('[aria-label="project.fileEditorContinuationPreview"]')).toBeNull()
 })
 
 test('previews selected files and opens the imported chapter only after confirmation', async () => {

@@ -111,7 +111,7 @@ export interface GlobalConfig {
 
 // ===== 项目管理 =====
 export type FileDraftCommand = { chapterId: string } & (
-  | { kind: 'create'; number: number; title: string; content: string; createdAt: string }
+  | { kind: 'create'; number: number; title: string; content: string; createdAt: string; source?: { chapterId: string; revision: string } }
   | ({ expectedRevision: string } & (
     { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
   ))
@@ -138,6 +138,7 @@ export interface ProjectChannels {
   'project:file-editor-open': {
     args: [projectPath: string, locators: string[]]
     return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
+      number?: number
       lifecycle?: { canFinalize: boolean; canArchive: boolean; pending: Array<{ id: number }> }
     }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number }
   }
