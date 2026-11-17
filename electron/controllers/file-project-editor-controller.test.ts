@@ -113,6 +113,9 @@ test('restores candidate operations and verifies import snapshots against receip
     await expect(invoke('commit', reopened.token, { ...create, content: 'different request' })).rejects.toThrow()
     const source = [{ title: 'Imported A', content: 'text A' }, { title: 'Imported B', content: 'text B' }]
     expect(await invoke('import-source', reopened.token, 4, source)).toEqual({ projectId, chapters: [] })
+    const indexPath = join(project, '.novelforge/file-import-index.v1.db')
+    expect(await invoke('index-import', reopened.token, 4, source)).toEqual({ indexed: 0, chunks: 0 })
+    await expect(readFile(indexPath)).rejects.toMatchObject({ code: 'ENOENT' })
     await expect(invoke('import', recovered.token, 4, source)).rejects.toThrow('lifecycle session')
     await expect(invoke('import', reopened.token, 4, [source[0], { title: 'Invalid', content: null }])).rejects.toThrow()
     expect(await readdir(join(project, 'chapters'))).not.toContain('0004.md')
@@ -129,7 +132,27 @@ test('restores candidate operations and verifies import snapshots against receip
     }
     const snapshot = { projectId, chapters: [await importedChapter(4), await importedChapter(5)] }
     expect(await invoke('import-source', withImports.token, 4, source)).toEqual(snapshot)
+    expect(await invoke('index-import', withImports.token, 4, source)).toEqual({ indexed: 2, chunks: 2 })
+    expect(await invoke('index-import', withImports.token, 4, source)).toEqual({ indexed: 2, chunks: 2 })
+    const index = new DatabaseSync(indexPath)
+    try {
+      const matches = () => index.prepare(`SELECT c.chapter_number, c.revision, c.content FROM import_fts
+        JOIN import_chunks c ON c.id = import_fts.rowid WHERE import_fts MATCH 'text' ORDER BY c.chapter_number`).all()
+      const rows = snapshot.chapters.map(({ number, revision, content }) => ({ chapter_number: number, revision, content }))
+      expect(matches()).toEqual(rows)
+      index.exec(`CREATE TRIGGER fail_second BEFORE INSERT ON import_chunks WHEN NEW.chapter_number = 5
+        BEGIN SELECT RAISE(ABORT, 'index interrupted'); END`)
+      await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('index interrupted')
+      expect(matches()).toEqual(rows)
+      index.exec('DROP TRIGGER fail_second')
+    } finally { index.close() }
     await expect(invoke('import-source', reopened.token, 4, source)).rejects.toThrow('lifecycle session')
+    await expect(invoke('index-import', reopened.token, 4, source)).rejects.toThrow('lifecycle session')
+    const unsafeSidecar = `${indexPath}-journal`
+    await mkdir(unsafeSidecar)
+    const { rmdir } = await import('node:fs/promises')
+    await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('Unsafe file import index path')
+    await rmdir(unsafeSidecar)
     await expect(invoke('import-source', withImports.token, Number.MAX_SAFE_INTEGER, source)).rejects.toThrow('Invalid file chapter import')
     await expect(invoke('import-source', withImports.token, 4, [source[0], null])).rejects.toThrow('Invalid file chapter import')
     expect(await invoke('import', withImports.token, 4, [source[0], { ...source[1], content: 'different' }]))
@@ -175,6 +198,7 @@ test('restores candidate operations and verifies import snapshots against receip
       resumeRead()
       await rejected
       await expect(invoke('import-source', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
+      await expect(invoke('index-import', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
     } finally {
       resumeRead()
       delayedRead.mockRestore()
@@ -182,7 +206,6 @@ test('restores candidate operations and verifies import snapshots against receip
 
     const active = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     expect(await invoke('import-source', active.token, 4, source)).toEqual(snapshot)
-    const { rmdir } = await import('node:fs/promises')
     await rmdir(join(project, '.novelforge/vela.db'))
     await expect(invoke('import-source', active.token, 4, source)).rejects.toThrow('candidate changed')
     await expect(invoke('save', active.token, imported.firstLocator, active.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')

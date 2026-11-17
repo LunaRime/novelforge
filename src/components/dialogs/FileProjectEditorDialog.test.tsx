@@ -4,6 +4,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { afterEach, expect, test, vi } from 'vitest'
 import { FileProjectEditorDialog } from './FileProjectEditorDialog'
 import { globalEventBus } from '../../shared/event-bus'
+import { toast } from '../ui/Toast'
 
 const invoke = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
@@ -37,13 +38,18 @@ test('opens a routed directory through the candidate IPC without another folder 
 test('previews selected files and opens the imported chapter only after confirmation', async () => {
   const locator = 'doc://chapter/ch_12345678'
   const chapter = { number: 1, title: 'Imported', content: 'text', wordCount: 4 }
+  let indexAttempts = 0
   invoke.mockImplementation(async (channel, ...args) => {
     if (channel === 'dialog:select-novel-files') return ['/selected.txt']
     if (channel === 'import:split-chapters') return { success: true, chapters: [chapter], totalWords: 4 }
     if (channel === 'project:file-editor-import') return { completed: 1, firstLocator: locator }
+    if (channel === 'project:file-editor-index-import') {
+      if (++indexAttempts === 1) throw new Error('index failed')
+      return { indexed: 1, chunks: 1 }
+    }
     if (channel === 'project:file-editor-open') {
       const tabs = (args[1] as string[]).map(locator => ({ locator, content: 'text', revision: 'revision' }))
-      return { token: 'session', missing: [], importStartNumber: 4, tabs,
+      return { token: tabs.length ? 'reopened' : 'session', missing: [], importStartNumber: 4, tabs,
         documents: tabs.map(tab => ({ locator: tab.locator, name: 'Imported' })) }
     }
   })
@@ -56,6 +62,13 @@ test('previews selected files and opens the imported chapter only after confirma
   expect(invoke).toHaveBeenCalledWith('project:file-editor-import', 'session', 4, [{ title: 'Imported', content: 'text' }])
   expect(invoke).toHaveBeenCalledWith('project:file-editor-open', '/candidate', [locator])
   expect(document.querySelector('textarea')?.value).toBe('text')
+  await click('project.fileEditorIndexImport')
+  expect(toast.error).toHaveBeenCalledWith('project.fileEditorIndexFailed')
+  expect(document.querySelector('textarea')?.value).toBe('text')
+  await click('project.fileEditorIndexImport')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-index-import', 'reopened', 4, [{ title: 'Imported', content: 'text' }])
+  expect(invoke.mock.calls.filter(([channel]) => channel === 'project:file-editor-import')).toHaveLength(1)
+  expect(toast.success).toHaveBeenCalledWith('project.fileEditorIndexDone')
 })
 
 test('keeps unsaved file text when another project is routed to the editor', async () => {

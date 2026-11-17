@@ -143,6 +143,10 @@ export interface ProjectChannels {
     args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
     return: { projectId: string; chapters: Array<FileImportChapter & { chapterId: string; number: number; revision: string }> }
   }
+  'project:file-editor-index-import': {
+    args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { indexed: number; chunks: number }
+  }
   'project:file-editor-preview': {
     args: [token: string, chapterId: string, revisionId: number]
     return: { content: string; contentHash: string }

@@ -13,6 +13,7 @@ type Workspace = Opened & { path: string; active: string }
 type Commit = Exclude<ProjectChannels['project:file-editor-commit']['args'][1], { kind: 'create' }>
 type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
 type ImportPreview = { path: string; chapters: FileImportChapter[]; firstNumber: string }
+type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number }
 
 const saveClock = () => performance.now()
 
@@ -36,6 +37,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [revisionId, setRevisionId] = useState<number>()
   const [preview, setPreview] = useState<Preview>()
   const [importPreview, setImportPreview] = useState<ImportPreview>()
+  const [indexBatch, setIndexBatch] = useState<ImportBatch>()
   const [confirmation, setConfirmation] = useState<Commit['kind']>()
   const pending = useRef(false)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
@@ -56,6 +58,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     setPreview(undefined)
     setRevisionId(undefined)
     setImportPreview(previous => previous?.path === path ? previous : undefined)
+    setIndexBatch(previous => previous?.path === path ? previous : undefined)
     const selected = result.tabs.find(tab => tab.locator === preferred) ?? result.tabs[0]
     setWorkspace({ ...result, path, active: selected?.locator ?? '' })
     setText(selected?.content ?? '')
@@ -94,6 +97,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
         .replace('{count}', String(result.completed)).replace('{number}', String(result.blockedNumber))
       renderLog(result.blockedNumber ? 'warn' : 'info', 'Save:FileProjectEditor', `${summary} (${Math.round(saveClock() - start)}ms)`)
       if (result.firstLocator) {
+        // 保留发布时的请求，索引失败后可以沿用原回执单独重试。
+        setIndexBatch({ path: workspace.path, firstNumber: firstImportNumber, chapters: stagedImport.chapters })
         const locators = [...new Set([...storedTabs(workspace.path).locators.slice(-99), result.firstLocator])]
         const opened = await ipc.invoke('project:file-editor-open', workspace.path, locators)
         display(workspace.path, opened, result.firstLocator, locators)
@@ -105,6 +110,23 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       setWorkspace(undefined)
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t(saved ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
+  async function indexImport() {
+    if (pending.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path) return
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      const { indexed } = await ipc.invoke('project:file-editor-index-import', workspace.token, indexBatch.firstNumber, indexBatch.chapters)
+      const message = t('project.fileEditorIndexDone').replace('{count}', String(indexed))
+      renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(message)
+      setIndexBatch(undefined)
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorIndexFailed'))
     } finally { pending.current = false; setBusy(false) }
   }
 
@@ -206,6 +228,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       setText('')
       setPreview(undefined)
       setImportPreview(undefined)
+      setIndexBatch(undefined)
       setRevisionId(undefined)
       setConfirmation(undefined)
     }
@@ -237,6 +260,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
               {workspace.importStartNumber !== undefined && !stagedImport && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
+              )}
+              {indexBatch?.path === workspace.path && (
+                <Button variant="outline" disabled={busy || dirty} onClick={() => void indexImport()}>{t('project.fileEditorIndexImport')}</Button>
               )}
               {stagedImport && (
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void importChapters() }}>
