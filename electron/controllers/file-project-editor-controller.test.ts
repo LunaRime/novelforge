@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { expect, test, vi } from 'vitest'
 import { exportLegacyProject } from '../../src/core/migration/export-legacy-project'
-import { fileRevision } from '../../src/core/adapters/chapter-format'
+import { fileRevision, parseChapter } from '../../src/core/adapters/chapter-format'
 import type { ProjectChannels } from '../../src/shared/ipc-channels'
 
 const handlers = vi.hoisted(() => new Map<string, (event: unknown, ...args: unknown[]) => Promise<unknown>>())
@@ -21,18 +21,23 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     const project = join(root, 'project')
     const projectId = 'project'
     await exportLegacyProject({ destination: project, projectId, source: {
-      listDrafts: async () => [1, 2].map(id => ({ id, chapterNumber: 1, version: id, branchId: null,
-        status: 'draft', title: 'chapter', content: String(id), contentHash: '', createdAt: 1, updatedAt: 2 })),
+      listDrafts: async () => [1, 2, 3].map(id => ({ id, chapterNumber: id === 3 ? 3 : 1, version: id, branchId: null,
+        status: id === 3 ? 'archived' : 'draft', title: 'chapter', content: String(id), contentHash: '', createdAt: 1, updatedAt: 2 })),
       backup: async path => { await writeFile(path, 'fixture') },
     } })
-    const [chapterId] = await readdir(join(project, 'history'))
+    const chapterId = parseChapter(await readFile(join(project, 'chapters/0001.md'), 'utf8')).id
+    const [archivedId] = (await readdir(join(project, 'history'))).filter(id => id !== chapterId)
     const history = `history/${chapterId}/1.md`
+    const archivedHistory = `history/${archivedId}/3.md`
     const manifest = await readFile(join(project, 'migration-manifest.json'), 'utf8')
     const locator = `doc://chapter/${chapterId}`
     const mapping = JSON.stringify({ format: 1, projectId, manifestHash: fileRevision(manifest), entries: [
       { draftId: 1, chapterId, version: 1, branchId: null,
         target: { kind: 'history', path: history, fileChapterId: chapterId, fileHash: fileRevision(await readFile(join(project, history), 'utf8')) } },
       { draftId: 2, chapterId, version: 2, branchId: null, target: { kind: 'current', locator } },
+      { draftId: 3, chapterId: archivedId, version: 3, branchId: null,
+        target: { kind: 'history', path: archivedHistory, fileChapterId: archivedId,
+          fileHash: fileRevision(await readFile(join(project, archivedHistory), 'utf8')) } },
     ] })
     await mkdir(join(project, '.novelforge/vela.db'), { recursive: true })
     await writeFile(join(project, '.novelforge/draft-identity.json'), mapping)
@@ -40,9 +45,11 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     try {
       db.exec(`
         CREATE TABLE contents (id INTEGER PRIMARY KEY, body TEXT);
+        CREATE TABLE drafts (id INTEGER PRIMARY KEY, chapter_number INTEGER, content_id INTEGER);
         CREATE TABLE revisions (id INTEGER PRIMARY KEY, base_draft_id INTEGER, content_id INTEGER,
           status TEXT, merged_to_draft_id INTEGER, updated_at INTEGER);
         INSERT INTO contents VALUES (1, 'proposal');
+        INSERT INTO drafts VALUES (3, 3, NULL);
         INSERT INTO revisions VALUES (4, 2, 1, 'pending', NULL, 0);
       `)
     } finally { db.close() }
@@ -79,9 +86,27 @@ test('opens, saves, and restores candidate tabs via IPC with revision and sender
     await expect(invoke('save', recovered.token, locator, recovered.tabs[0].revision, 'finalized')).rejects.toThrow('read-only')
     expect(await invoke('commit', recovered.token, { kind: 'archive', chapterId, expectedRevision: recovered.tabs[0].revision }))
       .toMatchObject({ status: 'committed' })
+    const create = { kind: 'create', chapterId: 'ch_abcd1234', number: 2, title: 'New chapter', content: 'first draft',
+      createdAt: '2026-01-01T00:00:00.000Z' }
+    await expect(invoke('commit', opened.token, create)).rejects.toThrow('lifecycle session')
+    await expect(invoke('commit', recovered.token, { ...create, number: 3 })).rejects.toThrow('migration history')
+    await expect(invoke('commit', recovered.token, { ...create, chapterId: archivedId })).rejects.toThrow('migration history')
+    const interrupted = new DatabaseSync(join(project, '.novelforge/retained.db'))
+    try {
+      interrupted.exec("CREATE TRIGGER interrupt BEFORE INSERT ON file_draft_states BEGIN SELECT RAISE(ABORT, 'interrupted'); END")
+      await expect(invoke('commit', recovered.token, create)).rejects.toThrow('interrupted')
+      interrupted.exec('DROP TRIGGER interrupt')
+    } finally { interrupted.close() }
+    registerFileProjectEditorController()
+    const newLocator = `doc://chapter/${create.chapterId}`
+    const reopened = await invoke('open', project, [newLocator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(reopened.documents).toContainEqual({ locator: newLocator, name: create.title })
+    expect(reopened.tabs).toMatchObject([{ content: create.content, readOnly: false }])
+    expect(await invoke('commit', reopened.token, create)).toEqual({ status: 'committed', revision: reopened.tabs[0].revision })
+    await expect(invoke('commit', reopened.token, { ...create, content: 'different request' })).rejects.toThrow()
     const { rmdir } = await import('node:fs/promises')
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('save', recovered.token, locator, recovered.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('save', reopened.token, newLocator, reopened.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 })

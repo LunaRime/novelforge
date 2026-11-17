@@ -50,8 +50,11 @@ export class SQLiteFileCommitJournal implements FileCommitJournal {
 
   prepare(intent: FileChapterCommit, allowNew = true): FileChapterCommitReceipt | null {
     if (intent.chapter.projectId !== this.projectId) throw new ChapterError('project-mismatch', 'Commit belongs to another project')
+    const validKindAndRevision = intent.kind === 'create'
+      ? intent.expectedRevision === null
+      : ['merge', 'archive', 'finalize'].includes(intent.kind) && /^[a-f0-9]{64}$/.test(intent.expectedRevision)
     if (!intent.operationId || !Number.isSafeInteger(intent.recordId) || intent.recordId < 1 ||
-        !['merge', 'archive', 'finalize'].includes(intent.kind) || !/^[a-f0-9]{64}$/.test(intent.expectedRevision)) {
+        !validKindAndRevision) {
       throw new ChapterError('invalid-chapter', 'Invalid file commit intent')
     }
     const payload = JSON.stringify(intent)

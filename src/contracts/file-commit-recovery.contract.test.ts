@@ -65,3 +65,45 @@ test('resumes after file publication and rolls back partial metadata without wri
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('recovers first chapter publication and keeps occupied chapter numbers out of the journal', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'nf-file-create-'))
+  const path = join(root, 'retained.db')
+  const openRepo = () => FileChapterStore.open({ projectPath: root, projectId: 'fixture', index: new MemoryChapterIndex() })
+  const db = new DatabaseSync(path)
+  let restarted: DatabaseSync | undefined
+  try {
+    const repo = await openRepo()
+    const journal = new SQLiteFileCommitJournal(db, 'fixture')
+    const intent: FileChapterCommit = {
+      operationId: 'import-1', kind: 'create', recordId: 1, expectedRevision: null,
+      chapter: {
+        projectId: 'fixture', id: 'ch_12345678', number: 1, title: 'Chapter', status: 'draft', content: 'imported',
+        createdAt: '2001-01-01T00:00:00Z', updatedAt: '2001-01-01T00:00:00Z',
+      },
+    }
+    // Preparation survives a stop before file publication, and metadata failure leaves it recoverable.
+    expect(journal.prepare(intent)).toBeNull()
+    expect(await repo.byId(intent.chapter.id)).toBeNull()
+    await expect(commitFileChapter(intent, repo, journal, () => {
+      throw new Error('interrupted metadata commit')
+    })).rejects.toThrow('interrupted metadata commit')
+    expect((await repo.byId(intent.chapter.id))?.chapter).toEqual(intent.chapter)
+    restarted = new DatabaseSync(path)
+    const reopened = new SQLiteFileCommitJournal(restarted, 'fixture')
+    const restartedRepo = await openRepo()
+    const apply = vi.fn()
+    const receipt = await commitFileChapter(reopened.pending()!, restartedRepo, reopened, apply)
+    expect(await commitFileChapter(intent, restartedRepo, reopened, apply)).toEqual(receipt)
+    expect(apply).toHaveBeenCalledTimes(1)
+
+    const occupied = { ...intent, operationId: 'import-2', chapter: { ...intent.chapter, id: 'ch_87654321' } }
+    await expect(commitFileChapter(occupied, restartedRepo, reopened, apply)).rejects.toMatchObject({ code: 'conflict' })
+    expect(reopened.pending()).toBeNull()
+    expect(await restartedRepo.byId(occupied.chapter.id)).toBeNull()
+  } finally {
+    restarted?.close()
+    db.close()
+    await rm(root, { recursive: true, force: true })
+  }
+})

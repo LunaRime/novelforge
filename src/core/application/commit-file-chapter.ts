@@ -1,14 +1,15 @@
 import { fileRevision, serializeChapter } from '../adapters/chapter-format'
 import { ChapterError, type Chapter } from '../domain/chapter'
-import type { ChapterRepo } from '../ports/chapter-repo'
+import type { LockedFileChapterRepo } from '../ports/chapter-repo'
 
-export interface FileChapterCommit {
+export type FileChapterCommit = {
   operationId: string
-  kind: 'merge' | 'archive' | 'finalize'
   recordId: number
-  expectedRevision: string
   chapter: Chapter
-}
+} & (
+  | { kind: 'create'; expectedRevision: null }
+  | { kind: 'merge' | 'archive' | 'finalize'; expectedRevision: string }
+)
 
 export interface FileChapterCommitReceipt {
   status: 'committed'
@@ -23,7 +24,7 @@ export interface FileCommitJournal {
 /** Complete one recorded operation. The caller supplies the retained DB mutation for that operation. */
 export function commitFileChapter(
   input: FileChapterCommit,
-  repo: { withCommitLock<T>(work: (locked: Pick<ChapterRepo, 'byId' | 'save'>) => Promise<T>): Promise<T> },
+  repo: { withCommitLock<T>(work: (locked: LockedFileChapterRepo) => Promise<T>): Promise<T> },
   journal: FileCommitJournal,
   applyMetadata: (receipt: FileChapterCommitReceipt) => void,
   assertCurrent: () => void = () => {},
@@ -32,24 +33,28 @@ export function commitFileChapter(
   return repo.withCommitLock(locked => commitLocked(intent, locked, journal, applyMetadata, assertCurrent))
 }
 
-async function commitLocked(intent: FileChapterCommit, repo: Pick<ChapterRepo, 'byId' | 'save'>,
+async function commitLocked(intent: FileChapterCommit, repo: LockedFileChapterRepo,
   journal: FileCommitJournal, applyMetadata: (receipt: FileChapterCommitReceipt) => void,
   assertCurrent: () => void): Promise<FileChapterCommitReceipt> {
   const { chapter, expectedRevision } = intent
   const revision = fileRevision(serializeChapter(chapter))
   const receipt = { status: 'committed', revision } as const
   const current = await repo.byId(chapter.id)
+  // Check the number and canonical destination before creating a new recovery obligation.
+  const canPrepare = intent.kind === 'create'
+    ? !current && await repo.canCreate(chapter)
+    : current?.chapter.projectId === chapter.projectId &&
+      current.chapter.number === chapter.number && current.revision === expectedRevision
   assertCurrent()
-  // A stale request may look up an existing receipt, but must not create a new recovery obligation.
-  const canPrepare = current?.chapter.projectId === chapter.projectId &&
-    current.chapter.number === chapter.number && current.revision === expectedRevision
   const completed = journal.prepare(intent, canPrepare)
   if (completed) return completed
-  if (current?.chapter.projectId !== chapter.projectId) throw new ChapterError('project-mismatch', 'Commit chapter does not belong to this project')
+  if ((current || intent.kind !== 'create') && current?.chapter.projectId !== chapter.projectId) {
+    throw new ChapterError('project-mismatch', 'Commit chapter does not belong to this project')
+  }
 
   // A retry after file publication must skip the write, including its history snapshot.
   // A third revision may belong to an external editor. Leave the intent pending for inspection.
-  if (current.revision !== revision) {
+  if (current?.revision !== revision) {
     // Renumbering has a different recovery path because it can leave two filenames after a crash.
     if (!canPrepare) {
       throw new ChapterError('conflict', 'Chapter changed during file commit')

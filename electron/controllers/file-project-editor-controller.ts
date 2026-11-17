@@ -3,10 +3,10 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
-import type { ProjectChannels } from '../../src/shared/ipc-channels'
+import type { FileDraftCommand, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
-import { createFileDraftLifecycle, type FileDraftCommand } from '../services/file-draft-lifecycle'
+import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
 
 const candidateRecord = '.novelforge/file-editor.json'
 const identityFile = '.novelforge/draft-identity.json'

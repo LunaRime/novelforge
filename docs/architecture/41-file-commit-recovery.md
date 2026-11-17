@@ -47,8 +47,16 @@ Windows Electron 生产构建实测从常规打开按钮进入候选编辑器，
 
 ## 通用文件写入边界
 
-常规打开分流已提交为 `696e878`。主进程的通用文件写入和删除入口拒绝修改候选项目的章节、历史、业务库、身份文件和迁移备份。保护依据磁盘上的候选标记，覆盖目录别名以及尚未创建的目标。成品导出校验每个实际写入路径，避免目录授权绕过正文的 revision 提交。普通导出目录仍可写入。[文件 IPC 回归](../../electron/controllers/fs-file-project.test.ts) · [目录别名回归](../../electron/security/file-project-write-path.test.ts)
+常规打开分流已提交为 `696e878`，通用写入保护已提交为 `6dd8f3d`。主进程的通用文件写入和删除入口拒绝修改候选项目的章节、历史、业务库、身份文件和迁移备份。保护依据磁盘上的候选标记，覆盖目录别名以及尚未创建的目标。成品导出校验每个实际写入路径，避免目录授权绕过正文的 revision 提交。普通导出目录仍可写入。[文件 IPC 回归](../../electron/controllers/fs-file-project.test.ts) · [目录别名回归](../../electron/security/file-project-write-path.test.ts)
 
 Windows Electron 生产构建复用 E3 旧项目验证包的副本和隔离配置。自动化提供目录选择结果并通过 preload 调用 `fs:write-file`，确认章节覆盖请求被拒、原文件字节一致、普通导出文件可写。随后通过专用编辑器保存当前稿，重启后恢复只读历史稿选择。
 
-Agent、导入和工作流的文件项目正文适配，以及正式激活和打包应用验收仍待接入。
+## 新章首次发布
+
+`project:file-editor-commit` 接受 `create`，在候选项目的有效生命周期会话中首次发布正文。调用方提供稳定的 `chapterId`、章号、标题、正文和创建时间，重试沿用同一请求。主进程在写锁下检查章节身份、章号和目标路径，以空 revision 独占发布，再在保留库的同一事务记录初始状态与回执。迁移身份和仅历史稿占用的章号留给显式恢复流程。
+
+恢复时若文件已发布，只补交数据库事务；文件仍缺失时按已登记的请求创建；文件被外部修改时保留待恢复记录。契约测试覆盖事务回滚、重开后重试、章号冲突和重复请求。候选 IPC 测试验证回执修复后，新稿可以按 `doc://chapter/{chapterId}` 重新打开。[提交恢复契约](../../src/contracts/file-commit-recovery.contract.test.ts) · [候选 IPC 回归](../../electron/controllers/file-project-editor-controller.test.ts)
+
+Windows Electron 生产构建在 E3 旧项目验证包的隔离副本中，通过 preload 首次发布第 999 章。重启后可按相同定位符读取原正文和可编辑状态，使用同一请求重试得到相同回执。
+
+Agent、导入和工作流仍需接入新章创建，并补齐后续版本和业务关联。正式激活和打包应用验收仍待完成。

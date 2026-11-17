@@ -110,6 +110,13 @@ export interface GlobalConfig {
 }
 
 // ===== 项目管理 =====
+export type FileDraftCommand = { chapterId: string } & (
+  | { kind: 'create'; number: number; title: string; content: string; createdAt: string }
+  | ({ expectedRevision: string } & (
+    { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
+  ))
+)
+
 export interface ProjectChannels {
   'project:file-editor-open': {
     args: [projectPath: string, locators: string[]]
@@ -123,9 +130,7 @@ export interface ProjectChannels {
   }
   'project:file-editor-close': { args: [token: string]; return: void }
   'project:file-editor-commit': {
-    args: [token: string, command: { chapterId: string; expectedRevision: string } & (
-      { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
-    )]
+    args: [token: string, command: FileDraftCommand]
     return: import('../core').FileChapterCommitReceipt
   }
   'project:file-editor-preview': {

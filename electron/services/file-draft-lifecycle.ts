@@ -1,10 +1,7 @@
 import { FileChapterStore, SQLiteFileCommitJournal, commitFileChapter, fileRevision, ChapterError,
   type ChapterIndexDatabase, type FileChapterCommit, type FileChapterCommitReceipt, type MigratedDraftIdentityMap } from '../../src/core'
+import type { FileDraftCommand } from '../../src/shared/ipc-channels'
 import { freezeLegacyFileDrafts } from './freeze-legacy-file-drafts'
-
-export type FileDraftCommand = { chapterId: string; expectedRevision: string } & (
-  { kind: 'merge'; revisionId: number; proposalHash?: string } | { kind: 'archive' | 'finalize' }
-)
 
 /** The retained database owns revision associations and receipts. Its legacy chapter rows are frozen. */
 export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileChapterStore,
@@ -17,6 +14,7 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   )`)
   const currentDrafts = new Map(identities.filter(entry => entry.target.kind === 'current')
     .map(entry => [entry.chapterId, entry.draftId]))
+  const historyOnlyDrafts = new Set(identities.filter(entry => !currentDrafts.has(entry.chapterId)).map(entry => entry.draftId))
 
   function apply(intent: FileChapterCommit, receipt: FileChapterCommitReceipt) {
     if (intent.kind === 'merge') {
@@ -36,6 +34,21 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
   }
 
   const run = (intent: FileChapterCommit) => commitFileChapter(intent, repo, journal, receipt => apply(intent, receipt), assertCurrent)
+
+  function create(command: Extract<FileDraftCommand, { kind: 'create' }>) {
+    const { chapterId, number, title, content, createdAt } = command
+    // Reusing a migrated identity or a history-only chapter number requires an explicit restore.
+    const reservedNumber = historyOnlyDrafts.size > 0 && (db.prepare('SELECT id FROM drafts WHERE chapter_number = ?')
+      .all(number) as Array<{ id: number }>).some(row => historyOnlyDrafts.has(row.id))
+    if (reservedNumber || identities.some(entry => entry.chapterId === chapterId)) {
+      throw new ChapterError('conflict', 'Chapter belongs to the migration history')
+    }
+    // One creation per stable chapter ID. The journal compares the complete request on retry.
+    return run({ operationId: fileRevision(JSON.stringify(['create', chapterId])), kind: 'create',
+      recordId: number, expectedRevision: null,
+      chapter: { projectId, id: chapterId, number, title, content, status: 'draft', createdAt, updatedAt: createdAt } })
+  }
+
   function preview(chapterId: string, revisionId: number) {
     const [revision] = db.prepare(`SELECT c.body FROM revisions r JOIN contents c ON c.id = r.content_id
       WHERE r.id = ? AND r.base_draft_id = ? AND r.status = 'pending'`)
@@ -64,6 +77,12 @@ export function createFileDraftLifecycle(db: ChapterIndexDatabase, repo: FileCha
       if (journal.pending()) throw new ChapterError('locked', 'A file operation is awaiting recovery')
     },
     async commit(command: FileDraftCommand) {
+      if (command?.kind === 'create') {
+        if (!Number.isSafeInteger(command.number) || command.number < 1) {
+          throw new ChapterError('invalid-chapter', 'Invalid file chapter number')
+        }
+        return create(command)
+      }
       if (!command || !['merge', 'archive', 'finalize'].includes(command.kind) ||
           !/^ch_[a-f0-9]{8,64}$/.test(command.chapterId) || !/^[a-f0-9]{64}$/.test(command.expectedRevision) ||
           (command.kind === 'merge' && (!Number.isSafeInteger(command.revisionId) || command.revisionId < 1))) {

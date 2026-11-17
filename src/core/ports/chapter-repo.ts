@@ -11,3 +11,8 @@ export interface ChapterRepo {
   save(chapter: Chapter, options: SaveChapterOptions): Promise<StoredChapter>
   remove(id: string, options: SaveChapterOptions): Promise<void>
 }
+
+export interface LockedFileChapterRepo extends Pick<ChapterRepo, 'byId' | 'save'> {
+  /** Check the live files under the writer lock before recording a first publication. */
+  canCreate(chapter: Chapter): Promise<boolean>
+}

@@ -10,7 +10,7 @@ import { toast } from '../ui/Toast'
 
 type Opened = ProjectChannels['project:file-editor-open']['return']
 type Workspace = Opened & { path: string; active: string }
-type Commit = ProjectChannels['project:file-editor-commit']['args'][1]
+type Commit = Exclude<ProjectChannels['project:file-editor-commit']['args'][1], { kind: 'create' }>
 type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revisionId: number }
 
 const saveClock = () => performance.now()

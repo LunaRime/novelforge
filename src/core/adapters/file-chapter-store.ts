@@ -3,7 +3,7 @@ import { join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { assertChapter, assertChapterId, ChapterError, type Chapter, type ChapterMeta, type StoredChapter } from '../domain/chapter'
 import type { ChapterIndex } from '../ports/chapter-index'
-import type { ChapterRepo, SaveChapterOptions } from '../ports/chapter-repo'
+import type { ChapterRepo, LockedFileChapterRepo, SaveChapterOptions } from '../ports/chapter-repo'
 import { fileRevision, parseChapter, serializeChapter } from './chapter-format'
 
 interface StoreOptions {
@@ -181,12 +181,16 @@ export class FileChapterStore implements ChapterRepo {
   }
 
   /** Holds the same writer lock from intent preparation through the retained DB receipt. */
-  async withCommitLock<T>(work: (repo: Pick<ChapterRepo, 'byId' | 'save'>) => Promise<T>): Promise<T> {
+  async withCommitLock<T>(work: (repo: LockedFileChapterRepo) => Promise<T>): Promise<T> {
     return this.locked(async () => {
       let active = true
       try {
         return await work({
           byId: id => this.byId(id),
+          canCreate: chapter => {
+            if (!active) throw new ChapterError('locked', 'File commit lock has been released')
+            return this.canCreateLocked(chapter)
+          },
           save: (chapter, options) => {
             if (!active) throw new ChapterError('locked', 'File commit lock has been released')
             return this.saveLocked(chapter, options)
@@ -194,6 +198,23 @@ export class FileChapterStore implements ChapterRepo {
         })
       } finally { active = false }
     })
+  }
+
+  private chapterFileName(number: number): string {
+    return `${String(number).padStart(4, '0')}.md`
+  }
+
+  private async pathIsVacant(path: string): Promise<boolean> {
+    try { await fs.lstat(path); return false }
+    catch (error) { if (isMissing(error)) return true; throw error }
+  }
+
+  private async canCreateLocked(chapter: Chapter): Promise<boolean> {
+    assertChapter(chapter)
+    if (chapter.projectId !== this.options.projectId) throw new ChapterError('project-mismatch', 'Cannot write a foreign chapter')
+    const scanned = await this.scan()
+    return !scanned.some(s => s.chapter.id === chapter.id || s.chapter.number === chapter.number) &&
+      await this.pathIsVacant(join(this.root, 'chapters', this.chapterFileName(chapter.number)))
   }
 
   private async saveLocked(input: Chapter, inputOptions: SaveChapterOptions): Promise<StoredChapter> {
@@ -207,12 +228,11 @@ export class FileChapterStore implements ChapterRepo {
     if (scanned.some(s => s.chapter.number === chapter.number && s.chapter.id !== chapter.id)) {
       throw new ChapterError('number-conflict', 'Chapter number already belongs to another identity')
     }
-    const name = `${String(chapter.number).padStart(4, '0')}.md`
+    const name = this.chapterFileName(chapter.number)
     const path = join(this.root, 'chapters', name)
     const oldPath = current ? join(this.root, current.meta.path) : null
-    if (oldPath !== path) {
-      try { await fs.lstat(path); throw new ChapterError('number-conflict', 'Destination is occupied') }
-      catch (error) { if (!isMissing(error)) throw error }
+    if (oldPath !== path && !(await this.pathIsVacant(path))) {
+      throw new ChapterError('number-conflict', 'Destination is occupied')
     }
     const text = serializeChapter(chapter)
     if (current && current.text === text && oldPath === path) {
