@@ -289,9 +289,34 @@ test('restores candidate operations and verifies import snapshots against receip
 
     const active = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     expect(await invoke('import-source', active.token, 4, source)).toEqual(snapshot)
+    const currentRevision = active.tabs[0].revision
+    const agentTarget = join(project, 'chapters/0004.md')
+    const prepare = (revision: string | undefined, original = 'text A', replacement = 'new $& text') =>
+      invoke('agent-propose-edit', active.token, imported.firstLocator, revision, original, replacement) as Promise<{ id: string }>
+    const resolveEdit = (id: string, decision: string) => invoke('agent-resolve-edit', active.token, id, decision)
+    await expect(invoke('agent-propose-edit', active.token, locator, recovered.tabs[0].revision, 'proposal', 'other')).rejects.toThrow()
+    await expect(prepare(currentRevision, 'missing')).rejects.toThrow('unique')
+    const cancelled = await prepare(currentRevision)
+    expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('text A')
+    expect(await resolveEdit(cancelled.id, 'discard')).toEqual({ status: 'discarded' })
+    await expect(resolveEdit(cancelled.id, 'apply')).rejects.toThrow('proposal')
+    const outdated = await prepare(currentRevision)
+    const manual = await invoke('save', active.token, imported.firstLocator, currentRevision, 'text A edited') as { revision: string }
+    await expect(resolveEdit(outdated.id, 'apply')).rejects.toThrow('changed')
+    expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('text A edited')
+    const accepted = await prepare(manual.revision)
+    const applied = await resolveEdit(accepted.id, 'apply') as { revision: string }
+    expect(applied).toMatchObject({ status: 'saved', locator: imported.firstLocator, content: 'new $& text edited' })
+    expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('new $& text edited')
+    await expect(resolveEdit(accepted.id, 'apply')).rejects.toThrow('proposal')
+    const oldSession = await prepare(applied.revision, 'new $& text', 'other')
+    const switched = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    await expect(resolveEdit(oldSession.id, 'apply')).rejects.toThrow('session')
+    await expect(invoke('agent-resolve-edit', switched.token, oldSession.id, 'apply')).rejects.toThrow('proposal')
+    expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('new $& text edited')
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('import-source', active.token, 4, source)).rejects.toThrow('candidate changed')
-    await expect(invoke('save', active.token, imported.firstLocator, active.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('import-source', switched.token, 4, source)).rejects.toThrow('candidate changed')
+    await expect(invoke('save', switched.token, imported.firstLocator, switched.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 })

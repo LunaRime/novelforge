@@ -40,27 +40,54 @@ test('opens a routed directory through the candidate IPC without another folder 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
 })
 
+async function askAboutManuscript(question: string) {
+  await act(async () => document.querySelector('summary')?.click())
+  const input = document.querySelector('input[aria-label="project.fileEditorAgentQuestion"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, question)
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await click('project.fileEditorAgentAsk')
+}
+
 test('cancels the candidate Agent and discards its answer when the editor changes project', async () => {
   const locator = 'doc://chapter/ch_12345678'
   invoke.mockImplementation(async (_channel, path) => ({ token: path, missing: [],
     tabs: [{ locator, content: 'saved', revision: 'revision' }], documents: [{ locator, name: 'Current' }] }))
-  let complete!: (result: string) => void
+  let complete!: (result: { answer: string }) => void
   askAgent.mockReturnValue(new Promise(resolve => { complete = resolve }))
   await render()
   await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
-  await act(async () => document.querySelector('summary')?.click())
-  const input = document.querySelector('input[aria-label="project.fileEditorAgentQuestion"]')!
-  await act(async () => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'What happens?')
-    input.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  await click('project.fileEditorAgentAsk')
-  expect(askAgent).toHaveBeenCalledWith('/candidate', locator, 'What happens?', expect.any(AbortSignal))
+  await askAboutManuscript('What happens?')
+  expect(askAgent).toHaveBeenCalledWith('/candidate', locator, 'What happens?', expect.any(AbortSignal), true)
   const signal = askAgent.mock.lastCall![3] as AbortSignal
   await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/other' }) })
   expect(signal.aborted).toBe(true)
-  await act(async () => { complete('Late manuscript answer') })
+  await act(async () => { complete({ answer: 'Late manuscript answer' }) })
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Late manuscript answer')
+})
+
+test('previews an Agent edit and only sends approval when the user accepts it', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  invoke.mockImplementation(async channel => {
+    if (channel === 'project:file-editor-open') return { token: 'session', missing: [],
+      tabs: [{ locator, content: 'old text', revision: 'revision' }], documents: [{ locator, name: 'Current' }] }
+    if (channel === 'project:file-editor-agent-resolve-edit') return { status: 'saved', locator, content: 'new text', revision: 'next', indexed: true }
+  })
+  askAgent.mockResolvedValue({ answer: 'One edit proposed.', proposal: {
+    id: 'edit-id', locator, revision: 'revision', original: 'old', replacement: 'new',
+  } })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await askAboutManuscript('Revise the wording')
+  const panel = document.querySelector('[aria-label="project.fileEditorAgentPreview"]')!
+  expect([...panel.querySelectorAll('dd')].map(node => node.textContent)).toEqual(['old', 'new'])
+  expect(document.querySelector('textarea')?.value).toBe('old text')
+  expect(invoke).toHaveBeenCalledTimes(1)
+  await click('project.fileEditorAgentAccept')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-agent-resolve-edit', 'session', 'edit-id', 'apply')
+  expect(document.querySelector('textarea')?.value).toBe('new text')
+  expect(panel.isConnected).toBe(false)
 })
 
 test('previews selected files and opens the imported chapter only after confirmation', async () => {

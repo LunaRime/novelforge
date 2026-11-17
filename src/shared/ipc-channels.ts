@@ -118,6 +118,13 @@ export type FileDraftCommand = { chapterId: string } & (
 )
 
 export interface FileImportChapter { title: string; content: string }
+export interface FileAgentEditProposal {
+  id: string
+  locator: string
+  revision: string
+  original: string
+  replacement: string
+}
 export type FileImportExcerpt = FileImportChapter & { number: number }
 export type FileImportSettingField = 'worldSetting' | 'coreOutline' | 'protagonistProfile' | 'writingStyle'
 export type FileImportSettings = Partial<Record<FileImportSettingField, string>>
@@ -146,6 +153,14 @@ export interface ProjectChannels {
   'project:file-editor-agent-read': {
     args: [token: string, locator: string, offset?: number, limit?: number]
     return: { locator: string; content: string; readOnly: boolean; revision?: string; totalChars: number; nextOffset: number | null }
+  }
+  'project:file-editor-agent-propose-edit': {
+    args: [token: string, locator: string, revision: string, original: string, replacement: string]
+    return: FileAgentEditProposal
+  }
+  'project:file-editor-agent-resolve-edit': {
+    args: [token: string, proposalId: string, decision: 'apply' | 'discard']
+    return: { status: 'discarded' } | { status: 'saved'; locator: string; content: string; revision: string; indexed: boolean }
   }
   'project:file-editor-commit': {
     args: [token: string, command: FileDraftCommand]

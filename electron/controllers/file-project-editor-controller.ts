@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type GeneratedBlueprintFields, type MigratedDraftIdentityMap } from '../../src/core'
-import type { FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
+import type { FileAgentEditProposal, FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
@@ -41,6 +41,7 @@ interface FileEditorSession {
   projectPath: string
   repo: FileChapterStore
   documentPort: Awaited<ReturnType<typeof createFileEditorOpenPort>>
+  agentEdits: Map<string, FileAgentEditProposal & { chapterId: string; offset: number }>
   assertCandidate: () => Promise<void>
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
   withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
@@ -144,20 +145,25 @@ export function registerFileProjectEditorController() {
     } })
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
     sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, repo, documentPort,
-      assertCandidate, inspectKind: reader.kind, withLifecycle })
+      assertCandidate, inspectKind: reader.kind, withLifecycle, agentEdits: new Map() })
     // 默认接在当前稿之后，导入时还会检查迁移历史占用的章号。
     const importStartNumber = withLifecycle ? chapters.reduce((latest, chapter) => Math.max(latest, chapter.number), 0) + 1 : undefined
     return { token, tabs, missing, documents, importStartNumber }
   })
 
-  async function readForAgent<T>(senderId: number, token: string,
-    work: (session: FileEditorSession, assertCurrent: () => void) => Promise<T>): Promise<T> {
+  function requireAgentSession(senderId: number, token: string) {
     const session = sessions.get(senderId)
     const assertCurrent = () => {
       if (!session || session.token !== token || requests.get(senderId) !== token) throw new Error('Invalid file editor Agent session')
     }
     if (!session) throw new Error('Invalid file editor Agent session')
     assertCurrent()
+    return { session, assertCurrent }
+  }
+
+  async function readForAgent<T>(senderId: number, token: string,
+    work: (session: FileEditorSession, assertCurrent: () => void) => Promise<T>): Promise<T> {
+    const { session, assertCurrent } = requireAgentSession(senderId, token)
     assertPathAllowedForIpc(session.projectPath, 'read')
     await session.assertCandidate()
     assertCurrent()
@@ -190,25 +196,80 @@ export function registerFileProjectEditorController() {
     })
   })
 
+  guardedHandle('project:file-editor-agent-propose-edit', async ({ sender }, token: string, locator: string, revision: string,
+    original: string, replacement: string): Promise<FileAgentEditProposal> => {
+    const id = typeof locator === 'string' ? current.exec(locator)?.[1] : undefined
+    if (!id || typeof revision !== 'string' || !/^[a-f0-9]{64}$/.test(revision) || typeof original !== 'string' || !original.trim() ||
+        original.length > 50000 || typeof replacement !== 'string' || replacement.length > 50000 || original === replacement) {
+      throw new Error('Invalid file editor Agent edit proposal')
+    }
+    const { session, assertCurrent } = requireAgentSession(sender.id, token)
+    const { proposal, offset } = await readForAgent(sender.id, token, async () => {
+      const stored = (await session.repo.readByIds([id])).get(id)
+      assertCurrent()
+      if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
+        throw new Error('Chapter changed or is read-only')
+      }
+      const offset = stored.chapter.content.indexOf(original)
+      if (offset < 0 || stored.chapter.content.indexOf(original, offset + 1) !== -1) {
+        throw new Error('Agent edit requires a unique original passage')
+      }
+      return { proposal: { id: randomUUID(), locator, revision, original, replacement }, offset }
+    })
+    assertCurrent()
+    // 保留匹配位点。取消中的旧轮次即使迟到，也只能清理自己的提案。
+    const oldest = session.agentEdits.keys().next().value
+    if (oldest && session.agentEdits.size >= 8) session.agentEdits.delete(oldest)
+    session.agentEdits.set(proposal.id, { ...proposal, chapterId: id, offset })
+    return proposal
+  })
+
+  guardedHandle('project:file-editor-agent-resolve-edit', async ({ sender }, token: string, proposalId: string,
+    decision: 'apply' | 'discard'): Promise<ProjectChannels['project:file-editor-agent-resolve-edit']['return']> => {
+    const { session, assertCurrent } = requireAgentSession(sender.id, token)
+    const proposal = session.agentEdits.get(proposalId)
+    if (!proposal || (decision !== 'apply' && decision !== 'discard')) throw new Error('Invalid file editor Agent edit proposal')
+    if (decision === 'discard') {
+      session.agentEdits.delete(proposalId)
+      return { status: 'discarded' }
+    }
+    const result = await saveChapter(session, proposal.chapterId, proposal.revision, body =>
+      body.slice(0, proposal.offset) + proposal.replacement + body.slice(proposal.offset + proposal.original.length), () => {
+      assertCurrent()
+      if (!session.agentEdits.has(proposalId)) throw new Error('File editor Agent edit proposal changed')
+    })
+    session.agentEdits.delete(proposalId)
+    return { status: 'saved', locator: proposal.locator, content: result.chapter.content, revision: result.revision, indexed: result.indexed }
+  })
+
   guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {
     const session = sessions.get(sender.id)
     const id = current.exec(locator)?.[1]
     if (!session || session.token !== token || requests.get(sender.id) !== token ||
         !id || typeof content !== 'string' || !/^[a-f0-9]{64}$/.test(revision)) throw new Error('Invalid file editor save')
+    const result = await saveChapter(session, id, revision, () => content, () => {
+      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
+    })
+    return { revision: result.revision, indexed: result.indexed }
+  })
+
+  async function saveChapter(session: FileEditorSession, id: string, revision: string, nextContent: (body: string) => string,
+    assertCurrent: () => void) {
     assertPathAllowedForIpc(session.projectPath, 'write')
     await session.assertCandidate()
-    const result = await session.repo.withCommitLock(async repo => {
-      // A pending cross-store operation must recover before a plain save can advance the file revision.
+    assertCurrent()
+    return session.repo.withCommitLock(async repo => {
+      // 跨存储操作须先完成恢复，普通保存才能推进正文 revision。
       if (session.withLifecycle) await session.withLifecycle(async lifecycle => lifecycle.assertIdle())
       const stored = await repo.byId(id)
       if (!stored || stored.revision !== revision || ['finalized', 'archived'].includes(stored.chapter.status)) {
         throw new Error('Chapter changed or is read-only')
       }
-      if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-      return repo.save({ ...stored.chapter, content, updatedAt: new Date().toISOString() }, { expectedRevision: revision })
+      assertCurrent()
+      const content = nextContent(stored.chapter.content)
+      return repo.save({ ...stored.chapter, content, updatedAt: new Date().toISOString() }, { expectedRevision: revision, assertCurrent })
     })
-    return { revision: result.revision, indexed: result.indexed }
-  })
+  }
 
   function requireLifecycleSession(senderId: number, token: string) {
     const session = sessions.get(senderId)

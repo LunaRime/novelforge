@@ -81,6 +81,8 @@ Windows Electron 生产构建在 E3 旧项目验证包的隔离副本中测试�
 4. 「应用到空白设定」经确认后调用 `project:file-editor-apply-import-settings`，写入当前候选项目保留库的 `project_core`。预览会话记录源 revision 与目标字段版本。主进程在章节锁内重新核对来源，并在一个 SQLite 事务内只填入预览开始时为空且版本吻合的字段。已有设定保留，任一拟填字段发生变更会使本次应用失败。候选保留库的独立版本触发器跟踪实际字段变化，支持检测改动后又还原的情况。旧副本缺少字段时仍可查看预览，可应用字段以保留库现有列为准。常规 SQLite 项目继续使用原入口。[候选写入与回滚回归](../../electron/controllers/file-project-editor-controller.test.ts)
 5. 「用 AI 推演缺失蓝图」通过 `project:file-editor-import-blueprints` 从已发布章节快照读取候选输入，排除预览开始时已有蓝图的章号。按章调用模型并显示进度，以已发布章节的章号为准，完成后再次核对来源 revision。用户确认后，`project:file-editor-apply-import-blueprints` 在同一候选会话的章节锁内核对来源和预览目标，再使用一个 SQLite 事务补入缺失行。确认时已有的蓝图和笔记保留，任一实际写入失败时回滚整批。旧副本缺少蓝图列时仍可查看预览。[模型回归](../../src/services/workflows/file-import-inference.test.ts) [候选蓝图回滚回归](../../electron/controllers/file-project-editor-controller.test.ts)
 
-## Agent 正文读取
+## Agent 正文问答与修改提案
 
 候选编辑器的「与 Agent 讨论已保存的正文」使用现有 ReAct 循环，每次提问拥有独立的工具目录。`list_chapters` 按章号列出当前稿和定位符，每页最多 20 项。`read_file` 按 `doc://chapter`、`doc://history` 或可解析的 `vela://draft` 定位符分页读取，每次最多 440 个字符。历史稿继续校验迁移映射和原文件摘要。主进程在前后检查窗口令牌和候选目录。切换项目或关闭编辑器时取消旧轮次，当前问答保留在编辑器会话内。[Agent 循环与工具隔离](../../src/services/agent-adapters/file-project-agent.test.ts) [候选 IPC 回归](../../electron/controllers/file-project-editor-controller.test.ts)
+
+当前打开的章节可编辑且没有未保存修改时，本轮可以调用 `propose_edit`。工具沿用本轮实际读取的 revision，主进程核对章节状态及原文的唯一匹配，返回原文和替换文本供预览。用户点击「接受并保存」时，主进程在章节锁内核对 revision，并在正文发布前再检查会话和提案。成功后编辑器采用落盘回执刷新正文与 revision。丢弃提案只释放会话中的提案记录。

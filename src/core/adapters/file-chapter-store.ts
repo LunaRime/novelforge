@@ -179,14 +179,15 @@ export class FileChapterStore implements ChapterRepo {
     await this.atomicWrite(join(dir, `${Date.now()}-${randomUUID()}.md`), current.text, false)
   }
 
-  private async atomicWrite(path: string, text: string, replace: boolean): Promise<void> {
+  private async atomicWrite(path: string, text: string, replace: boolean, beforePublish?: () => Promise<void>): Promise<void> {
     const tmp = `${path}.${process.pid}.${randomUUID()}.tmp`
     const handle = await fs.open(tmp, 'wx')
     try {
-      await handle.writeFile(text, 'utf8')
-      await handle.sync()
-    } finally { await handle.close() }
-    try {
+      try {
+        await handle.writeFile(text, 'utf8')
+        await handle.sync()
+      } finally { await handle.close() }
+      await beforePublish?.()
       if (replace) await fs.rename(tmp, path)
       else await fs.link(tmp, path) // Exclusive publication; never overwrite an occupied filename.
     } finally { await fs.unlink(tmp).catch(error => { if (!isMissing(error)) throw error }) }
@@ -255,21 +256,25 @@ export class FileChapterStore implements ChapterRepo {
     }
     const text = serializeChapter(chapter)
     if (current && current.text === text && oldPath === path) {
+      options.assertCurrent?.()
       return { chapter, revision: current.meta.revision, indexed: await this.updateIndex(scanned) }
     }
     if (current) await this.snapshot(current)
-    // Check again after snapshot IO so an intervening external edit is not lost.
-    if (current && fileRevision(await fs.readFile(oldPath!, 'utf8')) !== current.meta.revision) {
-      throw new ChapterError('conflict', 'Chapter was externally edited during save')
-    }
     await this.assertProject()
+    const beforePublish = async () => {
+      // 临时文件写完后再核对原文件与会话，把检查放到替换发布之前。
+      if (current && fileRevision(await fs.readFile(oldPath!, 'utf8')) !== current.meta.revision) {
+        throw new ChapterError('conflict', 'Chapter was externally edited during save')
+      }
+      options.assertCurrent?.()
+    }
     if (oldPath && oldPath !== path) {
       // Persist metadata first, then link to an unoccupied new name. A crash can
       // leave two copies with the same id; scan refuses ambiguity instead of losing data.
-      await this.atomicWrite(oldPath, text, true)
+      await this.atomicWrite(oldPath, text, true, beforePublish)
       await fs.link(oldPath, path)
       await fs.unlink(oldPath)
-    } else await this.atomicWrite(path, text, !!current)
+    } else await this.atomicWrite(path, text, !!current, beforePublish)
     // Do not re-read unrelated files after commit: an external malformed file
     // must not make a completed save appear to have failed.
     const after = scanned.filter(s => s.chapter.id !== chapter.id)

@@ -3,6 +3,8 @@ import type { Chapter, ChapterMeta, StoredChapter } from '../domain/chapter'
 export interface SaveChapterOptions {
   /** null creates a new identity; updates require the revision the caller read. */
   expectedRevision: string | null
+  /** 文件正式发布前重新检查调用方会话。 */
+  assertCurrent?: () => void
 }
 
 export interface ChapterRepo {

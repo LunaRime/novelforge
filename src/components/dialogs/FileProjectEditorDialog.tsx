@@ -3,7 +3,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { inferFileImport, inferFileImportBlueprints, type FileImportBlueprintInference, type FileImportInference } from '../../services/workflows/file-import-inference'
-import type { FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
+import type { FileAgentEditProposal, FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
@@ -259,24 +259,38 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     } finally { pending.current = false; setBusy(false); setOpeningDocument(false) }
   }
 
-  async function save() {
-    if (pending.current || !workspace || !active?.revision || active.readOnly || !dirty) return
+  async function save(proposal?: FileAgentEditProposal): Promise<boolean> {
+    if (pending.current || !workspace || !active?.revision || active.readOnly) return false
+    if (proposal ? dirty || proposal.locator !== active.locator || proposal.revision !== active.revision : !dirty) return false
     clearInference()
     pending.current = true
     setBusy(true)
     const start = saveClock()
     try {
-      const result = await ipc.invoke('project:file-editor-save', workspace.token, active.locator, active.revision, text)
+      // 采纳提案只传编号，使用主进程实际落盘的正文更新编辑器。
+      let content = text
+      let result: { indexed: boolean; revision: string }
+      if (proposal) {
+        const applied = await ipc.invoke('project:file-editor-agent-resolve-edit', workspace.token, proposal.id, 'apply')
+        if (applied.status !== 'saved') return false
+        content = applied.content
+        result = applied
+        setText(content)
+      } else {
+        result = await ipc.invoke('project:file-editor-save', workspace.token, active.locator, active.revision, content)
+      }
       setWorkspace({ ...workspace, tabs: workspace.tabs.map(tab =>
-        tab.locator === active.locator ? { ...tab, content: text, revision: result.revision,
-          lifecycle: tab.lifecycle && { ...tab.lifecycle, canFinalize: Boolean(text.trim()) } } : tab) })
+        tab.locator === active.locator ? { ...tab, content, revision: result.revision,
+          lifecycle: tab.lifecycle && { ...tab.lifecycle, canFinalize: Boolean(content.trim()) } } : tab) })
       setPreview(undefined)
       renderLog('info', 'Save:FileProjectEditor', `${t('save.success')} (${Math.round(saveClock() - start)}ms)`)
       if (result.indexed) toast.success(t('save.success'))
       else toast.warning(t('project.fileEditorIndexPending'))
+      return true
     } catch (error) {
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t('project.fileEditorSaveConflict'))
+      return false
     } finally { pending.current = false; setBusy(false) }
   }
 
@@ -373,7 +387,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           {workspace && (
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
-              {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy} />}
+              {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
+                editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save} />}
               {workspace.importStartNumber !== undefined && !stagedImport && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
               )}
