@@ -263,11 +263,13 @@ export function registerExportController(): void {
       if (format === 'folder') {
         // 文件夹格式 — 逐文件写入
         const folderPath = path.join(outputPath, safeProjectName)
+        assertPathAllowedForIpc(folderPath, 'write')
         await fsPromises.mkdir(folderPath, { recursive: true })
 
         for (const ch of chapters) {
           const fileName = chapterFileName(ch, ext)
-          await fsPromises.writeFile(path.join(folderPath, fileName), getChapterText(ch), 'utf-8')
+          const target = assertPathAllowedForIpc(path.join(folderPath, fileName), 'write')
+          await fsPromises.writeFile(target, getChapterText(ch), 'utf-8')
         }
 
         logger.info('Export', t('log.export.folderDone')
@@ -277,7 +279,7 @@ export function registerExportController(): void {
         return { success: true, path: folderPath, chapterCount: chapters.length }
       } else {
         // ZIP 格式
-        const zipPath = path.join(outputPath, `${safeProjectName}.zip`)
+        const zipPath = assertPathAllowedForIpc(path.join(outputPath, `${safeProjectName}.zip`), 'write')
         const zip = new ZipWriter()
 
         for (const ch of chapters) {

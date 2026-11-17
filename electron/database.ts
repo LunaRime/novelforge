@@ -13,6 +13,7 @@ import { t } from '../src/shared/locale'
 import { logger } from './utils/logger'
 import { AUTOMATION_SCHEMA_SQL } from './repositories/automation-schema'
 import { getProjectDataDir } from './utils/config-utils'
+import { isFileProjectDirectory } from './security/file-project-write-path'
 import type BetterSqlite3 from 'better-sqlite3'
 
 let projectDb: BetterSqlite3.Database | null = null
@@ -24,15 +25,7 @@ export function getCurrentProjectPath(): string | null {
   return currentProjectPath
 }
 
-/** Either marker identifies a candidate, even if the other is damaged or missing. */
-export function isFileProjectDirectory(projectPath: string): boolean {
-  // The descriptor and legacy-path barrier are independent evidence of a file project.
-  // Check before closing the current DB or resolving the writable legacy directory.
-  const internalDir = path.join(projectPath, '.novelforge')
-  const descriptor = fs.lstatSync(path.join(internalDir, 'file-editor.json'), { throwIfNoEntry: false })
-  const barrier = fs.lstatSync(path.join(internalDir, 'vela.db'), { throwIfNoEntry: false })
-  return Boolean(descriptor || barrier?.isDirectory())
-}
+export { isFileProjectDirectory } from './security/file-project-write-path'
 
 /** 打开 SQLite 项目。候选文件项目由其独立入口验证并打开。 */
 export function initProjectDatabase(projectPath: string): void {

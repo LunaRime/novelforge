@@ -180,6 +180,7 @@ export const errorTexts = {
   'error.requestTimeout': { 'zh-CN': '请求超时（{timeout}s）', 'en-US': 'Request timed out ({timeout}s)', 'ru-RU': 'Таймаут запроса ({timeout} с)' },
   'error.requestCancelled': { 'zh-CN': '请求已取消', 'en-US': 'Request cancelled', 'ru-RU': 'Запрос отменён' },
   'error.fileProjectRequiresFileEditor': { 'zh-CN': '请通过「文件项目编辑器」打开此目录。', 'en-US': 'Open this folder from the File project editor.', 'ru-RU': 'Откройте эту папку в редакторе файлового проекта.' },
+  'error.fileProjectManagedPath': { 'zh-CN': '此路径由文件项目编辑器管理。', 'en-US': 'This path is managed by the File project editor.', 'ru-RU': 'Этот путь управляется редактором файлового проекта.' },
   'error.allRequestsCancelled': { 'zh-CN': '所有排队请求已取消', 'en-US': 'All queued requests cancelled', 'ru-RU': 'Все запросы в очереди отменены' },
   'error.vectorFilterInvalid': { 'zh-CN': 'VectorStore: {context} 过滤值无效', 'en-US': 'VectorStore: invalid filter value for {context}', 'ru-RU': 'VectorStore: недопустимое значение фильтра {context}' },
   'error.repoDbNotConnected': { 'zh-CN': '{repo} 数据库未连接', 'en-US': '{repo}: database not connected', 'ru-RU': '{repo}: база данных не подключена' },
