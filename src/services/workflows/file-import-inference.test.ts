@@ -13,7 +13,8 @@ vi.mock('../../stores/llm-store', () => ({ useLLMStore: { getState: () => ({ get
 
 const chapters = [{ title: 'World', content: 'published $& text' }]
 const revisions = [{ chapterId: 'chapter', revision: 'published' }]
-const input = { projectId: 'candidate', revisions, samples: [{ ...chapters[0], number: 4 }], excerpts: [] }
+const input = { projectId: 'candidate', revisions, samples: [{ ...chapters[0], number: 4 }], excerpts: [],
+  settingsOffer: { id: 'offer', available: ['worldSetting'], occupied: [] } }
 let requestId: string
 
 beforeEach(() => {
@@ -36,7 +37,7 @@ test.each(['published', 'changed'])('checks the source again before showing mode
     ]) })))
   if (revision === 'changed') h.invoke.mockResolvedValueOnce({ projectId: input.projectId, chapters: [{ ...revisions[0], revision }] })
   const assertion = revision === 'published'
-    ? expect(run).resolves.toEqual({ worldSetting: 'Flooded cities' })
+    ? expect(run).resolves.toEqual({ values: { worldSetting: 'Flooded cities' }, settingsOffer: input.settingsOffer })
     : expect(run).rejects.toThrow()
   h.events.get('llm:stream-done')!({ requestId, fullText: '{"worldSetting":"Flooded cities","unrelated":"unused"}' })
   await assertion

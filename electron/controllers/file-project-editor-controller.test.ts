@@ -55,6 +55,9 @@ test('restores candidate operations and verifies import snapshots against receip
         CREATE TABLE drafts (id INTEGER PRIMARY KEY, chapter_number INTEGER, content_id INTEGER);
         CREATE TABLE revisions (id INTEGER PRIMARY KEY, base_draft_id INTEGER, content_id INTEGER,
           status TEXT, merged_to_draft_id INTEGER, updated_at INTEGER);
+        CREATE TABLE project_core (id TEXT PRIMARY KEY, world_setting TEXT, core_outline TEXT,
+          protagonist_profile TEXT, writing_style TEXT, updated_at INTEGER);
+        INSERT INTO project_core VALUES ('main', 'Manual world', '', NULL, '', 0);
         INSERT INTO contents VALUES (1, 'proposal');
         INSERT INTO drafts VALUES (3, 3, NULL);
         INSERT INTO revisions VALUES (4, 2, 1, 'pending', NULL, 0);
@@ -143,11 +146,35 @@ test('restores candidate operations and verifies import snapshots against receip
       index.prepare(`INSERT INTO import_chunks (chapter_id, chapter_number, revision, title, ordinal, content, tokens)
         VALUES (?, 4, ?, 'Old', 100, 'old revision', 'world'), (?, 4, ?, 'Other', 0, 'other chapter', 'world')`)
         .run(snapshot.chapters[0].chapterId, '0'.repeat(64), 'ch_00000000', snapshot.chapters[0].revision)
-      const context = await invoke('import-inference', withImports.token, 4, source) as {
-        projectId: string; revisions: Array<{ chapterId: string; revision: string }>; excerpts: Array<{ content: string }>
-      }
+      const context = await invoke('import-inference', withImports.token, 4, source) as ProjectChannels['project:file-editor-import-inference']['return']
       expect(context.revisions).toEqual(snapshot.chapters.map(({ chapterId, revision }) => ({ chapterId, revision })))
       expect(context.excerpts.map(excerpt => excerpt.content)).toEqual(['text A'])
+      const ordinary = new DatabaseSync(join(root, 'ordinary.db'))
+      const settings = new DatabaseSync(join(project, '.novelforge/retained.db'))
+      try {
+        ordinary.exec("CREATE TABLE project_core (world_setting TEXT); INSERT INTO project_core VALUES ('Ordinary world')")
+        expect(context.settingsOffer?.occupied).toContain('worldSetting')
+        const values = { worldSetting: 'Generated world', coreOutline: 'Generated outline', protagonistProfile: 'Generated hero' }
+        const apply = (offerId: string) => invoke('apply-import-settings', withImports.token, offerId, 4, source, values)
+        settings.exec("UPDATE project_core SET core_outline = 'edited' WHERE id = 'main'; UPDATE project_core SET core_outline = '' WHERE id = 'main'")
+        await expect(apply(context.settingsOffer!.id)).rejects.toThrow('settings changed')
+        const next = await invoke('import-inference', withImports.token, 4, source) as typeof context
+        await expect(apply(context.settingsOffer!.id)).rejects.toThrow('settings offer')
+        const sourcePath = join(project, 'chapters/0005.md')
+        const original = await readFile(sourcePath, 'utf8')
+        await writeFile(sourcePath, original.replace('text B', 'edited manuscript'))
+        await expect(apply(next.settingsOffer!.id)).rejects.toThrow('Imported chapter 5 changed')
+        await writeFile(sourcePath, original)
+        const read = () => settings.prepare('SELECT world_setting, core_outline, protagonist_profile FROM project_core').get()
+        settings.exec(`CREATE TRIGGER interrupt_settings BEFORE UPDATE OF protagonist_profile ON project_core
+          BEGIN SELECT RAISE(ABORT, 'settings interrupted'); END`)
+        await expect(apply(next.settingsOffer!.id)).rejects.toThrow('settings interrupted')
+        expect(read()).toEqual({ world_setting: 'Manual world', core_outline: '', protagonist_profile: null })
+        settings.exec('DROP TRIGGER interrupt_settings')
+        expect(await apply(next.settingsOffer!.id)).toEqual({ applied: ['coreOutline', 'protagonistProfile'] })
+        expect(read()).toEqual({ world_setting: 'Manual world', core_outline: 'Generated outline', protagonist_profile: 'Generated hero' })
+        expect(ordinary.prepare('SELECT * FROM project_core').get()).toEqual({ world_setting: 'Ordinary world' })
+      } finally { settings.close(); ordinary.close() }
       index.exec(`CREATE TRIGGER fail_second BEFORE INSERT ON import_chunks WHEN NEW.chapter_number = 5
         BEGIN SELECT RAISE(ABORT, 'index interrupted'); END`)
       await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('index interrupted')
@@ -178,7 +205,10 @@ test('restores candidate operations and verifies import snapshots against receip
       expect(await invoke('import-source', withImports.token, 7, source)).toEqual({ projectId, chapters: [await importedChapter(7)] })
       interruptedImport.exec('DROP TRIGGER interrupt')
     } finally { interruptedImport.close() }
+    const beforeReopen = await invoke('import-inference', withImports.token, 4, source) as ProjectChannels['project:file-editor-import-inference']['return']
     const afterImportRecovery = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    await expect(invoke('apply-import-settings', afterImportRecovery.token, beforeReopen.settingsOffer!.id, 4, source, { writingStyle: 'old' }))
+      .rejects.toThrow('settings offer')
     expect(await invoke('import-source', afterImportRecovery.token, 7, source))
       .toEqual({ projectId, chapters: [await importedChapter(7), await importedChapter(8)] })
 

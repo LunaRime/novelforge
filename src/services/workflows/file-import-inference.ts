@@ -1,4 +1,4 @@
-import type { FileImportChapter, FileImportExcerpt, LLMRequest } from '../../shared/ipc-channels'
+import type { FileImportChapter, FileImportExcerpt, FileImportSettings, FileImportSettingsOffer, LLMRequest } from '../../shared/ipc-channels'
 import { t } from '../../shared/locale'
 import { STRUCTURED_JSON_TEMPERATURE } from '../../shared/thinking-level'
 import { useLLMStore } from '../../stores/llm-store'
@@ -7,7 +7,10 @@ import { ImportPromptBuilder } from '../prompts/prompt-builder'
 import { robustParseJSON, stripThinkingTags } from './workflow-utils'
 
 const fields = ['worldSetting', 'coreOutline', 'protagonistProfile', 'writingStyle'] as const
-export type FileImportInference = Partial<Record<(typeof fields)[number], string>>
+export interface FileImportInference {
+  values: FileImportSettings
+  settingsOffer?: FileImportSettingsOffer
+}
 
 function generatePreview(request: LLMRequest, signal: AbortSignal): Promise<string> {
   signal.throwIfAborted()
@@ -74,13 +77,13 @@ export async function inferFileImport(token: string, firstNumber: number, chapte
       })) throw new Error(t('error.requestCancelled'))
 
   const parsed = robustParseJSON(stripThinkingTags(raw))
-  const preview: FileImportInference = {}
+  const values: FileImportSettings = {}
   if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
     for (const field of fields) {
       const content = (parsed as Record<string, unknown>)[field]
-      if (typeof content === 'string' && content.trim()) preview[field] = content.trim()
+      if (typeof content === 'string' && content.trim()) values[field] = content.trim()
     }
   }
-  if (!Object.keys(preview).length) throw new Error(t('project.fileEditorInferenceFailed'))
-  return preview
+  if (!Object.keys(values).length) throw new Error(t('project.fileEditorInferenceFailed'))
+  return { values, settingsOffer: source.settingsOffer }
 }

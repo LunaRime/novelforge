@@ -49,6 +49,7 @@ test('previews selected files and opens the imported chapter only after confirma
       if (++indexAttempts === 1) throw new Error('index failed')
       return { indexed: 1, chunks: 1 }
     }
+    if (channel === 'project:file-editor-apply-import-settings') return { applied: ['coreOutline'] }
     if (channel === 'project:file-editor-open') {
       const tabs = (args[1] as string[]).map(locator => ({ locator, content: 'text', revision: 'revision' }))
       return { token: tabs.length ? 'reopened' : 'session', missing: [], importStartNumber: 4, tabs,
@@ -71,17 +72,26 @@ test('previews selected files and opens the imported chapter only after confirma
   expect(invoke).toHaveBeenLastCalledWith('project:file-editor-index-import', 'reopened', 4, [{ title: 'Imported', content: 'text' }])
   expect(invoke.mock.calls.filter(([channel]) => channel === 'project:file-editor-import')).toHaveLength(1)
   expect(toast.success).toHaveBeenCalledWith('project.fileEditorIndexDone')
-  infer.mockResolvedValueOnce({ worldSetting: 'A flooded world' })
+  const values = { worldSetting: 'A flooded world', coreOutline: 'The flood begins' }
+  infer.mockResolvedValueOnce({ values, settingsOffer: { id: 'offer', available: ['worldSetting', 'coreOutline'], occupied: ['worldSetting'] } })
   await click('project.fileEditorInferImport')
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('A flooded world')
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('project.fileEditorSettingOccupied')
+  await click('project.fileEditorApplySettings')
+  expect(invoke.mock.calls.some(([channel]) => channel === 'project:file-editor-apply-import-settings')).toBe(false)
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-apply-import-settings', 'reopened', 'offer', 4,
+    [{ title: 'Imported', content: 'text' }], values)
+  expect(toast.success).toHaveBeenCalledWith('project.fileEditorSettingsApplied')
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('project.fileEditorSettingApplied')
 
-  let complete!: (result: { worldSetting: string }) => void
+  let complete!: (result: { values: { worldSetting: string } }) => void
   infer.mockReturnValueOnce(new Promise(resolve => { complete = resolve }))
   await click('project.fileEditorInferImport')
   const signal = infer.mock.lastCall![3] as AbortSignal
   await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/other' }) })
   expect(signal.aborted).toBe(true)
-  await act(async () => { complete({ worldSetting: 'Late result' }) })
+  await act(async () => { complete({ values: { worldSetting: 'Late result' } }) })
   expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Late result')
 })
 

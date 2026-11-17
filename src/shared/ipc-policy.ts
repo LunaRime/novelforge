@@ -338,6 +338,7 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'project:file-editor-import-source': { authority: 'read-project' },
   'project:file-editor-index-import': { authority: 'write-project' },
   'project:file-editor-import-inference': { authority: 'read-project' },
+  'project:file-editor-apply-import-settings': { authority: 'write-project' },
   'project:file-editor-preview': { authority: 'read-project' },
   'project:recent-list': { authority: 'read-project' },
   'project:remove-recent': { authority: 'write-global' },

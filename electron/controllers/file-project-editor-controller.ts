@@ -3,12 +3,14 @@ import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type MigratedDraftIdentityMap } from '../../src/core'
-import type { FileDraftCommand, FileImportChapter, ProjectChannels } from '../../src/shared/ipc-channels'
+import type { FileDraftCommand, FileImportChapter, FileImportSettingField, FileImportSettings, ProjectChannels } from '../../src/shared/ipc-channels'
 import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
 import { readFileImportSource } from '../services/file-import-source'
 import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext } from '../services/file-import-index'
+import { applyFileImportSettings, installFileImportSettingVersions, readFileImportSettingBaseline, type SettingBaseline } from '../services/file-import-settings'
+import { logger } from '../utils/logger'
 
 const candidateRecord = '.novelforge/file-editor.json'
 const identityFile = '.novelforge/draft-identity.json'
@@ -18,6 +20,12 @@ const retainedFile = '.novelforge/retained.db'
 const current = /^doc:\/\/chapter\/(ch_[a-f0-9]{8,64})$/
 type OpenResult = ProjectChannels['project:file-editor-open']['return']
 type Lifecycle = ReturnType<typeof createFileDraftLifecycle>
+type InferenceContext = ProjectChannels['project:file-editor-import-inference']['return']
+
+interface SettingsOffer {
+  id: string
+  snapshot?: { baseline: SettingBaseline; revisions: InferenceContext['revisions'] }
+}
 
 interface FileEditorSession {
   token: string
@@ -26,7 +34,8 @@ interface FileEditorSession {
   repo: FileChapterStore
   assertCandidate: () => Promise<void>
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
-  withLifecycle?: <T>(work: (lifecycle: Lifecycle) => Promise<T>) => Promise<T>
+  withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
+  settingsOffer?: SettingsOffer
 }
 
 export function registerFileProjectEditorController() {
@@ -74,12 +83,17 @@ export function registerFileProjectEditorController() {
       try {
         return await work(createFileDraftLifecycle(db, repo, identity.projectId, identity.entries, () => {
           if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-        }))
+        }), db)
       }
       finally { db.close() }
     } : undefined
     // Resolve pending metadata before returning writable tabs. An ambiguous recovery fails the open.
-    if (withLifecycle) await withLifecycle(lifecycle => lifecycle.recover())
+    if (withLifecycle) await withLifecycle(async (lifecycle, db) => {
+      await lifecycle.recover()
+      // 旧候选库缺少设定列时仍可打开正文。只有能跟踪版本的字段才可应用推演。
+      try { installFileImportSettingVersions(db) }
+      catch (error) { logger.warn('FileProjectEditor', String(error)) }
+    })
     const chapters = await repo.list()
     const documents = [
       ...chapters.map(chapter => ({ locator: `doc://chapter/${chapter.id}`, name: chapter.title || String(chapter.number) })),
@@ -202,13 +216,53 @@ export function registerFileProjectEditorController() {
     })
   })
 
-  guardedHandle('project:file-editor-import-inference', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]) => {
+  guardedHandle('project:file-editor-import-inference', async ({ sender }, token: string, firstNumber: number, chapters: FileImportChapter[]): Promise<InferenceContext> => {
     const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
     assertPathAllowedForIpc(session.projectPath, 'read')
+    // 只保留当前会话最近一次预览，较早请求的回包不能替换它。
+    const offer: SettingsOffer = { id: randomUUID() }
+    session.settingsOffer = offer
     const snapshot = await loadImportSource(session, assertCurrent, firstNumber, chapters)
     const path = await checkedImportIndexPath(session, true)
     assertCurrent()
-    return readImportInferenceContext(path, snapshot)
+    if (session.settingsOffer !== offer) throw new Error('File editor settings offer changed')
+    const context = readImportInferenceContext(path, snapshot)
+    const db = new Database(join(session.projectPath, retainedFile), { readonly: true, fileMustExist: true })
+    try {
+      const baseline = readFileImportSettingBaseline(db)
+      const available = Object.keys(baseline) as FileImportSettingField[]
+      if (available.length) {
+        offer.snapshot = { baseline, revisions: context.revisions }
+        context.settingsOffer = { id: offer.id, available, occupied: available.filter(field => baseline[field]?.occupied) }
+      }
+      return context
+    } finally { db.close() }
+  })
+
+  guardedHandle('project:file-editor-apply-import-settings', async ({ sender }, token: string, offerId: string,
+    firstNumber: number, chapters: FileImportChapter[], settings: FileImportSettings) => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    const offer = session.settingsOffer
+    const baseline = offer?.snapshot
+    if (!offer || !baseline || offer.id !== offerId) throw new Error('Invalid file editor settings offer')
+    await session.assertCandidate()
+    assertCurrent()
+    return session.repo.withCommitLock(async () => {
+      const current = await loadImportSource(session, assertCurrent, firstNumber, chapters)
+      if (session.settingsOffer !== offer) throw new Error('File editor settings offer changed')
+      // 章节锁内重新核对整批正文，再打开此候选的保留库写设定。
+      if (current.chapters.length !== baseline.revisions.length || baseline.revisions.some(({ chapterId, revision }, index) => {
+        const chapter = current.chapters[index]
+        return chapter.chapterId !== chapterId || chapter.revision !== revision
+      })) throw new Error('Imported settings source changed')
+      const db = new Database(join(session.projectPath, retainedFile), { fileMustExist: true })
+      try {
+        const receipt = applyFileImportSettings(db, baseline.baseline, settings)
+        session.settingsOffer = undefined
+        return receipt
+      } finally { db.close() }
+    })
   })
 
   guardedHandle('project:file-editor-preview', async ({ sender }, token: string, chapterId: string, revisionId: number) => {

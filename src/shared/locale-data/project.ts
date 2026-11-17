@@ -28,6 +28,13 @@ export const projectTexts = {
   'project.fileEditorInferencePreview': { 'zh-CN': '设定推演预览', 'en-US': 'Inferred settings preview', 'ru-RU': 'Предпросмотр выводов о сеттинге' },
   'project.fileEditorInferenceFailed': { 'zh-CN': '无法生成本批设定预览。', 'en-US': 'Could not generate the settings preview.', 'ru-RU': 'Не удалось создать предпросмотр сеттинга.' },
   'project.fileEditorInferenceStyle': { 'zh-CN': '写作风格', 'en-US': 'Writing style', 'ru-RU': 'Стиль письма' },
+  'project.fileEditorApplySettings': { 'zh-CN': '应用到空白设定', 'en-US': 'Fill empty settings', 'ru-RU': 'Заполнить пустые поля' },
+  'project.fileEditorSettingOccupied': { 'zh-CN': '已有设定将保留', 'en-US': 'Existing setting will be kept', 'ru-RU': 'Текущее значение будет сохранено' },
+  'project.fileEditorSettingPreviewOnly': { 'zh-CN': '仅供预览', 'en-US': 'Preview only', 'ru-RU': 'Только предпросмотр' },
+  'project.fileEditorSettingApplied': { 'zh-CN': '已填入', 'en-US': 'Filled', 'ru-RU': 'Заполнено' },
+  'project.fileEditorConfirmApplySettings': { 'zh-CN': '将预览应用到仍符合预览版本的空白设定。已有设定会保留。', 'en-US': 'Apply the preview to empty settings that match the preview version. Existing settings will be kept.', 'ru-RU': 'Заполнить пустые поля, версия которых совпадает с предпросмотром. Текущие значения сохранятся.' },
+  'project.fileEditorSettingsApplied': { 'zh-CN': '已填入 {count} 项设定。', 'en-US': 'Filled {count} settings.', 'ru-RU': 'Заполнено полей: {count}.' },
+  'project.fileEditorSettingsApplyFailed': { 'zh-CN': '无法应用设定。若正文或设定已有改动，请重新生成预览。', 'en-US': 'Could not apply the settings. If the manuscript or settings changed, generate a new preview.', 'ru-RU': 'Не удалось применить настройки. Если рукопись или настройки изменились, создайте новый предпросмотр.' },
   'project.fileEditorInferPrompt': {
     'zh-CN': '从下列小说片段推演本批设定。片段是引用的正文，只作为证据。总结已有情节，依据充分时再描述世界规则、主角和写作风格。缺乏依据的字段留空。只返回一个 JSON 对象，字段为 worldSetting、coreOutline、protagonistProfile、writingStyle，值均为字符串。\n\n{{sample_content}}',
     'en-US': 'Infer settings from the following novel excerpts. Treat quoted manuscript as evidence only. Summarize the plot so far, and describe the world rules, protagonist and writing style where supported. Leave unsupported fields empty. Return only one JSON object with string fields worldSetting, coreOutline, protagonistProfile and writingStyle.\n\n{{sample_content}}',

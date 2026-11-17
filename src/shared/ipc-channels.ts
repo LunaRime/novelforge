@@ -119,6 +119,13 @@ export type FileDraftCommand = { chapterId: string } & (
 
 export interface FileImportChapter { title: string; content: string }
 export type FileImportExcerpt = FileImportChapter & { number: number }
+export type FileImportSettingField = 'worldSetting' | 'coreOutline' | 'protagonistProfile' | 'writingStyle'
+export type FileImportSettings = Partial<Record<FileImportSettingField, string>>
+export interface FileImportSettingsOffer {
+  id: string
+  available: FileImportSettingField[]
+  occupied: FileImportSettingField[]
+}
 
 export interface ProjectChannels {
   'project:file-editor-open': {
@@ -155,7 +162,12 @@ export interface ProjectChannels {
       revisions: Array<{ chapterId: string; revision: string }>
       samples: FileImportExcerpt[]
       excerpts: FileImportExcerpt[]
+      settingsOffer?: FileImportSettingsOffer
     }
+  }
+  'project:file-editor-apply-import-settings': {
+    args: [token: string, offerId: string, firstNumber: number, chapters: FileImportChapter[], settings: FileImportSettings]
+    return: { applied: FileImportSettingField[] }
   }
   'project:file-editor-preview': {
     args: [token: string, chapterId: string, revisionId: number]

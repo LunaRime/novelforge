@@ -3,7 +3,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { inferFileImport, type FileImportInference } from '../../services/workflows/file-import-inference'
-import type { FileImportChapter, ProjectChannels } from '../../shared/ipc-channels'
+import type { FileImportChapter, FileImportSettingField, ProjectChannels } from '../../shared/ipc-channels'
 import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
@@ -19,7 +19,7 @@ type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number; i
 const inferenceLabels = {
   worldSetting: 'novelConfig.worldSetting', coreOutline: 'novelConfig.coreOutline',
   protagonistProfile: 'novelConfig.protagonist', writingStyle: 'project.fileEditorInferenceStyle',
-} as const satisfies Record<keyof FileImportInference, string>
+} as const satisfies Record<FileImportSettingField, string>
 
 const saveClock = () => performance.now()
 
@@ -44,9 +44,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [preview, setPreview] = useState<Preview>()
   const [importPreview, setImportPreview] = useState<ImportPreview>()
   const [indexBatch, setIndexBatch] = useState<ImportBatch>()
-  const [inferencePreview, setInferencePreview] = useState<FileImportInference>()
+  const [inferencePreview, setInferencePreview] = useState<FileImportInference & { applied?: FileImportSettingField[] }>()
   const [inferring, setInferring] = useState(false)
-  const [confirmation, setConfirmation] = useState<Commit['kind']>()
+  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings'>()
   const pending = useRef(false)
   const inferenceRun = useRef<AbortController | undefined>(undefined)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
@@ -56,6 +56,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const lifecycle = active?.lifecycle
   const selectedRevision = revisionId ?? lifecycle?.pending[0]?.id
   const chapterId = lifecycle ? active?.locator.slice('doc://chapter/'.length) : undefined
+  const settingsOffer = inferencePreview?.settingsOffer
+  const canApplySettings = !inferencePreview?.applied && (settingsOffer?.available.some(field =>
+    !settingsOffer.occupied.includes(field) && Boolean(inferencePreview?.values[field])) ?? false)
 
   function remember(path: string, locators: string[], active: string) {
     try { localStorage.setItem(`novelforge-file-editor:${path}`, JSON.stringify({ locators, active })) }
@@ -81,6 +84,26 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     previous?.abort()
     setInferring(false)
     setInferencePreview(undefined)
+    setConfirmation(previous => previous === 'apply-settings' ? undefined : previous)
+  }
+
+  async function applyInferredSettings() {
+    if (pending.current || dirty || !workspace || !indexBatch || indexBatch.path !== workspace.path ||
+        !inferencePreview || !settingsOffer || !canApplySettings) return
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      const { applied } = await ipc.invoke('project:file-editor-apply-import-settings', workspace.token,
+        settingsOffer.id, indexBatch.firstNumber, indexBatch.chapters, inferencePreview.values)
+      const message = t('project.fileEditorSettingsApplied').replace('{count}', String(applied.length))
+      renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(message)
+      setInferencePreview({ ...inferencePreview, applied })
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorSettingsApplyFailed'))
+    } finally { pending.current = false; setBusy(false) }
   }
 
   async function inferImport() {
@@ -327,12 +350,20 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               {inferencePreview && (
                 <section className="flex flex-col gap-2" aria-label={t('project.fileEditorInferencePreview')}>
                   <h3 className="font-medium">{t('project.fileEditorInferencePreview')}</h3>
-                  {(Object.keys(inferenceLabels) as Array<keyof FileImportInference>).map(field => inferencePreview[field] && (
+                  {(Object.keys(inferenceLabels) as FileImportSettingField[]).map(field => inferencePreview.values[field] && (
                     <div key={field}>
                       <h4 className="text-sm font-medium">{t(inferenceLabels[field])}</h4>
-                      <p className="whitespace-pre-wrap break-words text-sm">{inferencePreview[field]}</p>
+                      {settingsOffer?.occupied.includes(field) && <p className="text-sm">{t('project.fileEditorSettingOccupied')}</p>}
+                      {!settingsOffer?.available.includes(field) && <p className="text-sm">{t('project.fileEditorSettingPreviewOnly')}</p>}
+                      {inferencePreview.applied?.includes(field) && <p className="text-sm">{t('project.fileEditorSettingApplied')}</p>}
+                      <p className="whitespace-pre-wrap break-words text-sm">{inferencePreview.values[field]}</p>
                     </div>
                   ))}
+                  {canApplySettings && (
+                    <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('apply-settings')}>
+                      {t('project.fileEditorApplySettings')}
+                    </Button>
+                  )}
                 </section>
               )}
               {stagedImport && (
@@ -417,13 +448,15 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('dialog.confirmTitle')}</DialogTitle>
-              <DialogDescription>{t(confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
+              <DialogDescription>{t(confirmation === 'apply-settings' ? 'project.fileEditorConfirmApplySettings'
+                : confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
                 : confirmation === 'finalize' ? 'project.fileEditorConfirmFinalize' : 'project.fileEditorConfirmArchive')}</DialogDescription>
             </DialogHeader>
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmation(undefined)}>{t('action.cancel')}</Button>
               <Button onClick={() => {
-                if (confirmation) void commit(confirmation)
+                if (confirmation === 'apply-settings') void applyInferredSettings()
+                else if (confirmation) void commit(confirmation)
                 setConfirmation(undefined)
               }}>{t('dialog.confirm')}</Button>
             </DialogFooter>
