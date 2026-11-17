@@ -1,0 +1,226 @@
+/* NovelForge UI Redesign v3 — refinement pass.
+   Scrollbars, icon/type rhythm, functional icon tones and the icon map.
+   Every colour derives from tokens.css via CSS variables. */
+:root {
+  /* Scrollbar system */
+  --nf-scroll-size: 10px;
+  --nf-scroll-size-thin: 7px;
+  --nf-scroll-size-sheet: 12px;
+  --nf-scroll-track: color-mix(in srgb, var(--nf-color-panel) 68%, var(--nf-color-line));
+  --nf-scroll-thumb: color-mix(in srgb, var(--nf-color-muted) 42%, var(--nf-color-surface));
+  --nf-scroll-thumb-hover: color-mix(in srgb, var(--nf-color-brand) 58%, var(--nf-color-surface));
+  --nf-scroll-thumb-active: color-mix(in srgb, var(--nf-color-brand) 82%, var(--nf-color-surface));
+  --nf-scroll-progress: 0;
+
+  /* Icon / text rhythm */
+  --nf-icon-inline: 14px;
+  --nf-icon-control: 16px;
+  --nf-icon-leading: 18px;
+  --nf-gap-icon: 6px;
+  --nf-gap-icon-tight: 5px;
+}
+
+/* ------------------------------------------------------------- scrollbars */
+/* Standard properties first (Firefox and conforming engines). */
+.scroll, .document-scroll, .view, .modal-body, .settings-pane, .settings-nav,
+.appearance-body, .command-results, .context-body, .ai-thread, .runtime-body {
+  scrollbar-width: thin;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
+}
+/* scrollbar-color would override ::-webkit-scrollbar in Chromium, so the
+   two-colour fallback is scoped to engines without the pseudo-elements. */
+@supports not selector(::-webkit-scrollbar) {
+  .scroll, .document-scroll, .view, .modal-body, .settings-pane, .settings-nav,
+  .appearance-body, .command-results, .context-body, .ai-thread, .runtime-body {
+    scrollbar-color: var(--nf-scroll-thumb) var(--nf-scroll-track);
+  }
+}
+/* Fine scrollers inside panels; the manuscript keeps a wider grab area. */
+.context-body, .ai-thread, .runtime-body, .appearance-body, .command-results,
+.modal-body, .settings-pane, .settings-nav { --nf-scroll-size: var(--nf-scroll-size-thin); }
+.document-scroll { --nf-scroll-size: var(--nf-scroll-size-sheet); }
+
+.scroll::-webkit-scrollbar, .document-scroll::-webkit-scrollbar, .view::-webkit-scrollbar,
+.modal-body::-webkit-scrollbar, .settings-pane::-webkit-scrollbar, .settings-nav::-webkit-scrollbar,
+.appearance-body::-webkit-scrollbar, .command-results::-webkit-scrollbar,
+.context-body::-webkit-scrollbar, .ai-thread::-webkit-scrollbar, .runtime-body::-webkit-scrollbar {
+  width: var(--nf-scroll-size);
+  height: var(--nf-scroll-size);
+}
+.scroll::-webkit-scrollbar-track, .document-scroll::-webkit-scrollbar-track, .view::-webkit-scrollbar-track,
+.modal-body::-webkit-scrollbar-track, .settings-pane::-webkit-scrollbar-track, .settings-nav::-webkit-scrollbar-track,
+.appearance-body::-webkit-scrollbar-track, .command-results::-webkit-scrollbar-track,
+.context-body::-webkit-scrollbar-track, .ai-thread::-webkit-scrollbar-track, .runtime-body::-webkit-scrollbar-track {
+  background: var(--nf-scroll-track);
+  border-radius: var(--nf-radius-pill);
+}
+.scroll::-webkit-scrollbar-thumb, .document-scroll::-webkit-scrollbar-thumb, .view::-webkit-scrollbar-thumb,
+.modal-body::-webkit-scrollbar-thumb, .settings-pane::-webkit-scrollbar-thumb, .settings-nav::-webkit-scrollbar-thumb,
+.appearance-body::-webkit-scrollbar-thumb, .command-results::-webkit-scrollbar-thumb,
+.context-body::-webkit-scrollbar-thumb, .ai-thread::-webkit-scrollbar-thumb, .runtime-body::-webkit-scrollbar-thumb {
+  background: var(--nf-scroll-thumb);
+  background-clip: padding-box;
+  border: 2px solid var(--nf-color-transparent);
+  border-radius: var(--nf-radius-pill);
+  transition: background var(--nf-motion-fast) var(--nf-motion-ease), box-shadow var(--nf-motion-fast);
+}
+.scroll::-webkit-scrollbar-thumb:hover, .document-scroll::-webkit-scrollbar-thumb:hover, .view::-webkit-scrollbar-thumb:hover,
+.modal-body::-webkit-scrollbar-thumb:hover, .appearance-body::-webkit-scrollbar-thumb:hover,
+.command-results::-webkit-scrollbar-thumb:hover, .context-body::-webkit-scrollbar-thumb:hover,
+.ai-thread::-webkit-scrollbar-thumb:hover, .runtime-body::-webkit-scrollbar-thumb:hover {
+  background: var(--nf-scroll-thumb-hover);
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px var(--nf-color-brand-soft);
+}
+.scroll::-webkit-scrollbar-thumb:active, .document-scroll::-webkit-scrollbar-thumb:active {
+  background: var(--nf-scroll-thumb-active);
+  background-clip: padding-box;
+}
+.scroll::-webkit-scrollbar-corner, .document-scroll::-webkit-scrollbar-corner,
+.view::-webkit-scrollbar-corner, .modal-body::-webkit-scrollbar-corner { background: var(--nf-color-panel); }
+
+/* Compose mode: the sheet scroller recedes until hovered. */
+.program-window[data-workmode="compose"] .document-scroll::-webkit-scrollbar-track { background: var(--nf-color-transparent); }
+.program-window[data-workmode="compose"] .document-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--nf-color-muted) 24%, var(--nf-color-transparent));
+  background-clip: padding-box;
+}
+.program-window[data-workmode="compose"] .document-scroll:hover::-webkit-scrollbar-thumb {
+  background: var(--nf-scroll-thumb-hover);
+  background-clip: padding-box;
+}
+/* Custom wallpapers need a more solid thumb to stay legible. */
+.has-wallpaper .scroll::-webkit-scrollbar-thumb,
+.has-wallpaper .document-scroll::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--nf-color-muted) 62%, var(--nf-color-surface));
+  background-clip: padding-box;
+}
+
+/* Reading progress line on the manuscript scroller (driven by JS). */
+.document-scroll:before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0;
+  height: 2px;
+  width: calc(var(--nf-scroll-progress, 0) * 100%);
+  background: var(--nf-color-brand);
+  opacity: .72;
+  border-radius: 0 var(--nf-radius-pill) var(--nf-radius-pill) 0;
+  z-index: var(--nf-z-sticky);
+  pointer-events: none;
+  transition: width 90ms linear;
+}
+.program-window[data-reduce-motion="true"] .document-scroll:before { transition: none; }
+
+/* ----------------------------------------------- icon / text rhythm */
+svg.icon {
+  width: var(--nf-icon-control);
+  height: var(--nf-icon-control);
+  stroke-width: 1.7;
+  flex: none;
+}
+svg.icon.sm { width: var(--nf-icon-inline); height: var(--nf-icon-inline); stroke-width: 1.85; }
+svg.icon.lg { width: 20px; height: 20px; stroke-width: 1.6; }
+svg.icon.inline { width: 1em; height: 1em; vertical-align: -.14em; stroke-width: 1.8; }
+button { line-height: 1.25; font-variant-numeric: tabular-nums; }
+.btn, .tab, .tree-row, .command-row, .nf-option, .context-item,
+.runtime-tab, .ai-tab, .list-row, .status-btn, .chip { gap: var(--nf-gap-icon); }
+.status-btn, .chip, .badge { gap: var(--nf-gap-icon-tight); }
+.btn>.icon, .tab>.icon, .tree-row>.icon, .status-btn>.icon,
+.chip>.icon, .command-row>.icon, .nf-option>.icon { transform: translateY(.5px); }
+.icon-btn .icon { width: var(--nf-icon-control); height: var(--nf-icon-control); }
+.icon-btn.small .icon { width: var(--nf-icon-inline); height: var(--nf-icon-inline); }
+.tree-row .icon { width: var(--nf-icon-inline); height: var(--nf-icon-inline); }
+.tab .icon { width: 13px; height: 13px; stroke-width: 1.9; }
+.command-row .icon { width: var(--nf-icon-inline); height: var(--nf-icon-inline); }
+.badge .icon { width: 11px; height: 11px; stroke-width: 2; }
+.window-control .icon { width: 13px; height: 13px; }
+/* Numeric columns align to the right; labels stay left. */
+.num, .value, .stat strong, .doc-meta .mono, .sheet-foot .mono,
+.kb-row .mono, .setting-line .value { text-align: right; font-variant-numeric: tabular-nums; }
+.label-strong { font-size: var(--nf-font-size-md); font-weight: var(--nf-font-weight-semibold); color: var(--nf-color-ink); }
+.meta-line { font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); line-height: 1.65; }
+.icon-label { display: inline-flex; align-items: center; gap: var(--nf-gap-icon); min-width: 0; }
+
+/* ------------------------------------------- functional icon tones */
+.rail-btn:not(.active)[data-value="home"] .icon { color: var(--nf-color-brand); }
+.rail-btn:not(.active)[data-value="project"] .icon { color: var(--nf-color-info); }
+.rail-btn:not(.active)[data-value="knowledge"] .icon { color: var(--nf-color-accent); }
+.rail-btn:not(.active)[data-value="characters"] .icon { color: var(--nf-color-success); }
+.tree-group[data-group="config"] .tree-group-head .icon.sm { color: var(--nf-color-muted); }
+.tree-group[data-group="architecture"] .tree-group-head .icon.sm { color: var(--nf-color-info); }
+.tree-group[data-group="world"] .tree-group-head .icon.sm { color: var(--nf-color-info); }
+.tree-group[data-group="blueprint"] .tree-group-head .icon.sm { color: var(--nf-color-brand); }
+.tree-group[data-group="volumes"] .tree-group-head .icon.sm { color: var(--nf-color-info); }
+.tree-group[data-group="serial"] .tree-group-head .icon.sm { color: var(--nf-color-warning); }
+.tree-group[data-group="drafts"] .tree-group-head .icon.sm { color: var(--nf-color-brand); }
+.tree-group[data-group="chapters"] .tree-group-head .icon.sm { color: var(--nf-color-success); }
+.tree-group[data-group="memory"] .tree-group-head .icon.sm { color: var(--nf-color-accent); }
+.command-row .icon { color: var(--nf-color-muted); }
+.command-row:hover .icon, .command-row.active .icon { color: var(--nf-color-brand); }
+.settings-nav-item .icon { color: var(--nf-color-muted); }
+.settings-nav-item.active .icon { color: var(--nf-color-brand); }
+
+/* ------------------------------------------------ function icon map */
+.icon-map {
+  background: var(--nf-stage-surface);
+  border: var(--nf-border-width) solid var(--nf-stage-line);
+  border-radius: var(--nf-radius-lg);
+  padding: var(--nf-space-5);
+}
+.icon-map-head { margin-bottom: var(--nf-space-4) }
+.icon-map-head h2 { font-size: var(--nf-font-size-lg); font-weight: var(--nf-font-weight-semibold); margin: var(--nf-space-1) 0 }
+.icon-map-head p { font-size: var(--nf-font-size-sm); color: var(--nf-stage-muted); max-width: 900px; line-height: 1.75 }
+.icon-map-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--nf-space-3) }
+.icon-group-card { border: var(--nf-border-width) solid var(--nf-stage-line); border-radius: var(--nf-radius-md); padding: var(--nf-space-4); display: grid; gap: var(--nf-space-3); align-content: start }
+.icon-group-card h3 { font-size: var(--nf-font-size-md); color: var(--nf-stage-ink); display: flex; align-items: center; justify-content: space-between }
+.icon-group-card h3 small { font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-stage-muted) }
+.icon-entry { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: var(--nf-space-2); align-items: center; padding: 5px 0; border-top: var(--nf-border-width) solid var(--nf-stage-line) }
+.icon-entry:first-of-type { border-top: 0 }
+.icon-glyph { width: 30px; height: 30px; display: grid; place-items: center; border: var(--nf-border-width) solid var(--nf-stage-line); border-radius: var(--nf-radius-sm); background: var(--nf-stage-canvas) }
+.icon-glyph .icon { width: 16px; height: 16px }
+.tone-brand .icon-glyph .icon { color: var(--nf-color-brand) }
+.tone-info .icon-glyph .icon { color: var(--nf-color-info) }
+.tone-accent .icon-glyph .icon { color: var(--nf-color-accent) }
+.tone-warning .icon-glyph .icon { color: var(--nf-color-warning) }
+.tone-success .icon-glyph .icon { color: var(--nf-color-success) }
+.icon-entry strong { display: block; font-size: var(--nf-font-size-sm); color: var(--nf-stage-ink); font-weight: var(--nf-font-weight-medium) }
+.icon-entry code { font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-stage-muted) }
+@media(max-width:900px){ .icon-map-grid { grid-template-columns: minmax(0,1fr) } }
+
+/* ------------------------------------- scrollbar refinement: depth & motion
+   Layered highlight, page-edge hatching, an inset hairline and a short
+   brightness boost while scrolling. Written last so it wins over the flat
+   single-colour thumb above without touching that fallback. */
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane) {
+  --nf-scroll-thumb-current: var(--nf-scroll-thumb);
+}
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane).is-scrolling {
+  --nf-scroll-thumb-current: var(--nf-scroll-thumb-hover);
+}
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane)::-webkit-scrollbar-track {
+  box-shadow: inset 1px 0 0 var(--nf-color-line-strong);
+}
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane)::-webkit-scrollbar-thumb {
+  background-color: var(--nf-scroll-thumb-current);
+  background-image:
+    linear-gradient(180deg, color-mix(in srgb, var(--nf-color-surface-raised) 52%, transparent), transparent 62%),
+    repeating-linear-gradient(180deg, transparent 0 3px, color-mix(in srgb, var(--nf-color-ink) 7%, transparent) 3px 4px);
+  background-clip: padding-box;
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--nf-color-line-strong) 55%, transparent);
+  transition: background-color var(--nf-motion-base) var(--nf-motion-ease), box-shadow var(--nf-motion-fast);
+}
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane)::-webkit-scrollbar-thumb:hover {
+  background-color: var(--nf-scroll-thumb-hover);
+  box-shadow: inset 0 0 0 1px var(--nf-color-brand-soft), 0 0 8px var(--nf-color-brand-soft);
+}
+:is(.scroll,.document-scroll,.view,.modal-body,.settings-pane,.settings-nav,
+    .appearance-body,.command-results,.context-body,.ai-thread,.runtime-body,.set-nav,.set-pane)::-webkit-scrollbar-thumb:active {
+  background-color: var(--nf-scroll-thumb-active);
+}

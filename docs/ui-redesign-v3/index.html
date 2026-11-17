@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="description" content="NovelForge UI Redesign v3 · Editorial Workbench — a synthesis of v1's reading experience and v2's complete workbench, with two work modes, a three-way comparison and design tokens.">
+  <title>NovelForge · Editorial Workbench v3</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect width='40' height='40' rx='9' fill='%23405c47'/%3E%3Cpath d='M11 29V11l18 18V11M11 20h18' stroke='%23fffefa' stroke-width='2' fill='none'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="./tokens.css">
+  <link rel="stylesheet" href="./prototype.css">
+  <link rel="stylesheet" href="./components.css">
+  <link rel="stylesheet" href="./v3.css">
+  <link rel="stylesheet" href="./controls.css">
+  <link rel="stylesheet" href="./refine.css">
+  <link rel="stylesheet" href="./settings.css">
+  <link rel="stylesheet" href="./dialogs.css">
+  <link rel="stylesheet" href="./custom-scroll.css">
+  <link rel="stylesheet" href="./responsive.css">
+  <link rel="stylesheet" href="./workbench.css">
+  <script src="./data.js" defer></script>
+  <script src="./ui.js" defer></script>
+  <script src="./views.js" defer></script>
+  <script src="./v3-views.js" defer></script>
+  <script src="./v3-controls.js" defer></script>
+  <script src="./app.js" defer></script>
+  <script src="./v3-controls-runtime.js" defer></script>
+  <script src="./custom-scroll.js" defer></script>
+</head>
+<body>
+  <!-- The surrounding review stage is documentation, not part of the app. -->
+  <div class="review-stage" id="review-stage">
+    <header class="showcase-header">
+      <div class="showcase-heading">
+        <div class="showcase-kicker" id="showcase-kicker"></div>
+        <h1 id="showcase-title"></h1>
+        <p id="showcase-subtitle"></p>
+      </div>
+      <div class="showcase-controls" id="showcase-controls"></div>
+    </header>
+
+    <section class="brief" id="brief" aria-labelledby="brief-title">
+      <h2 id="brief-title"></h2>
+      <div class="brief-grid" id="brief-grid"></div>
+    </section>
+
+    <section class="comparison" id="comparison" aria-labelledby="comparison-title">
+      <div class="comparison-head">
+        <div class="showcase-kicker" id="comparison-kicker"></div>
+        <h2 id="comparison-title"></h2>
+        <p id="comparison-desc"></p>
+      </div>
+      <div class="comparison-grid" id="comparison-grid"></div>
+    </section>
+
+    <section class="program-window" id="program-window"
+             data-mode="light" data-palette="jade" data-density="normal"
+             data-writing-size="18" data-paper="auto" data-workmode="forge"
+             aria-label="NovelForge Editorial Workbench v3 prototype">
+      <header class="window-titlebar" id="window-titlebar"></header>
+      <div class="window-content" id="window-content">
+        <div class="window-wallpaper" aria-hidden="true"></div>
+        <div class="window-grid" aria-hidden="true"></div>
+        <div id="app"></div>
+        <aside class="appearance-panel" id="appearance-panel" aria-labelledby="appearance-title" hidden></aside>
+        <div id="toast" role="status" aria-live="polite"></div>
+      </div>
+      <div class="window-placeholder" id="window-placeholder" hidden></div>
+      <dialog id="modal" aria-labelledby="modal-title"></dialog>
+    </section>
+
+    <section class="feature-map" id="feature-map" aria-labelledby="feature-map-title">
+      <div class="feature-map-head">
+        <div>
+          <div class="showcase-kicker" id="feature-map-kicker"></div>
+          <h2 id="feature-map-title"></h2>
+          <p id="feature-map-desc"></p>
+        </div>
+        <div class="feature-legend" id="feature-legend"></div>
+      </div>
+      <div class="feature-map-grid" id="feature-map-grid"></div>
+      <div class="feature-backend" id="feature-backend"></div>
+    </section>
+
+    <section class="icon-map" id="icon-map" aria-labelledby="icon-map-title">
+      <div class="icon-map-head">
+        <div class="showcase-kicker" id="icon-map-kicker"></div>
+        <h2 id="icon-map-title"></h2>
+        <p id="icon-map-desc"></p>
+      </div>
+      <div class="icon-map-grid" id="icon-map-grid"></div>
+    </section>
+
+    <footer class="showcase-footer" id="showcase-footer"></footer>
+  </div>
+  <noscript>请启用 JavaScript 以查看交互原型。 / Enable JavaScript to view the interactive prototype. / Включите JavaScript для просмотра прототипа.</noscript>
+</body>
+</html>

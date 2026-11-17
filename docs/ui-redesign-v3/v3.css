@@ -1,0 +1,136 @@
+/* NovelForge UI Redesign v3 / Editorial Workbench — synthesis layer.
+   Loaded after v2's layout + components. All colours come from tokens.css. */
+/* ------------------------------------------------- three-way comparison table */
+.comparison{background:var(--nf-stage-surface);border:var(--nf-border-width) solid var(--nf-stage-line);border-radius:var(--nf-radius-lg);padding:var(--nf-space-5)}
+.comparison-head{margin-bottom:var(--nf-space-4)}
+.comparison-head h2{font-size:var(--nf-font-size-lg);font-weight:var(--nf-font-weight-semibold);margin:var(--nf-space-1) 0}
+.comparison-head p{font-size:var(--nf-font-size-sm);color:var(--nf-stage-muted);max-width:900px;line-height:1.75}
+.comparison-grid{display:grid;gap:1px;background:var(--nf-stage-line);border:var(--nf-border-width) solid var(--nf-stage-line);border-radius:var(--nf-radius-md);overflow:clip}
+.comparison-row{display:grid;grid-template-columns:148px repeat(3,minmax(0,1fr));gap:1px;background:var(--nf-stage-line)}
+.comparison-cell{background:var(--nf-stage-surface);padding:var(--nf-space-3) var(--nf-space-4);font-size:var(--nf-font-size-sm);line-height:1.7;color:var(--nf-stage-muted)}
+.comparison-cell.dim{font-weight:var(--nf-font-weight-semibold);color:var(--nf-stage-ink);background:color-mix(in srgb,var(--nf-stage-canvas) 70%,var(--nf-stage-surface))}
+.comparison-cell.v3{background:color-mix(in srgb,var(--nf-color-brand-soft) 62%,var(--nf-stage-surface));color:var(--nf-stage-ink);box-shadow:inset 2px 0 0 var(--nf-color-brand)}
+.comparison-row.head .comparison-cell{font-family:var(--nf-font-mono);font-size:var(--nf-font-size-xs);letter-spacing:.1em;text-transform:uppercase;font-weight:var(--nf-font-weight-semibold);color:var(--nf-stage-ink);padding-top:var(--nf-space-2);padding-bottom:var(--nf-space-2)}
+.comparison-row.head .comparison-cell.v3{color:var(--nf-color-brand)}
+.comparison-cell b{color:var(--nf-stage-ink);font-weight:var(--nf-font-weight-medium)}
+@media(max-width:900px){.comparison-row{grid-template-columns:minmax(0,1fr)}.comparison-cell.dim{padding-bottom:2px}}
+
+/* ------------------------------------------------------- program window v3 */
+.program-window{--nf-window-radius:14px}
+.program-window .window-titlebar{background:var(--nf-color-rail)}
+.program-window .window-app-title .brand-glyph{color:var(--nf-color-brand)}
+.program-window .tab.active{background:var(--nf-color-surface);box-shadow:inset 0 2px 0 var(--nf-color-brand)}
+.program-window .rail-btn{border-radius:var(--nf-radius-sm)}
+.program-window .sheet{border-radius:var(--nf-radius-md);box-shadow:var(--nf-shadow-float)}
+.program-window .document-toolbar,.program-window .ai-compose{background:var(--nf-color-panel)}
+
+/* Work modes: one workbench, two states. */
+.program-window[data-workmode="compose"]{
+  --nf-layout-manuscript:760px;
+  --nf-line-height-writing:2.15;
+}
+.program-window[data-workmode="compose"] .context,
+.program-window[data-workmode="compose"] .runtime{display:none}
+.program-window[data-workmode="compose"] .workbench,
+.program-window[data-workmode="compose"].context-collapsed .workbench{grid-template-columns:var(--nf-layout-rail) minmax(0,1fr) var(--nf-layout-assistant)}
+.program-window[data-workmode="compose"] .workbench.assistant-collapsed{grid-template-columns:var(--nf-layout-rail) minmax(0,1fr)}
+.program-window[data-workmode="compose"] .workbench.assistant-collapsed .assistant{display:none}
+.program-window[data-workmode="compose"] .workspace{grid-template-rows:minmax(0,1fr)}
+.program-window[data-workmode="compose"] .document-scroll{padding:var(--nf-space-8)}
+.program-window[data-workmode="compose"] .editor-area{grid-template-rows:32px minmax(0,1fr)}
+.program-window[data-workmode="compose"] .assistant{border-left:var(--nf-border-width) solid var(--nf-color-line)}
+.program-window[data-workmode="forge"]{--nf-layout-manuscript:680px;--nf-line-height-writing:1.95}
+
+/* Mode switch in the title strip */
+.mode-switch{display:inline-flex;align-items:center;gap:2px;padding:2px;border:var(--nf-border-width) solid var(--nf-color-line-strong);border-radius:var(--nf-radius-md);background:var(--nf-color-surface);flex-shrink:0}
+.mode-switch button{display:flex;align-items:center;gap:6px;min-height:26px;padding:0 var(--nf-space-3);border-radius:var(--nf-radius-sm);font-size:var(--nf-font-size-sm);color:var(--nf-color-muted);white-space:nowrap}
+.mode-switch button:hover{background:var(--nf-color-surface-hover);color:var(--nf-color-ink)}
+.mode-switch button.active{background:var(--nf-color-brand-soft);color:var(--nf-color-brand);font-weight:var(--nf-font-weight-medium)}
+.mode-switch .icon{width:14px;height:14px}
+.mode-hint{display:flex;align-items:center;gap:var(--nf-space-2);padding:var(--nf-space-2) var(--nf-space-3);border-bottom:var(--nf-border-width) solid var(--nf-color-line);background:var(--nf-color-panel);font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.6}
+.mode-hint .icon{width:14px;height:14px;color:var(--nf-color-brand)}
+
+/* Reading-side components inherited from v1's vocabulary */
+.goal-card{border:var(--nf-border-width) solid var(--nf-color-line);border-radius:var(--nf-radius-md);background:var(--nf-color-surface);padding:var(--nf-space-3);display:grid;gap:var(--nf-space-2)}
+.goal-card .row{justify-content:space-between;font-size:var(--nf-font-size-xs);color:var(--nf-color-muted)}
+.goal-card strong{font-size:var(--nf-font-size-lg);font-family:var(--nf-font-mono);color:var(--nf-color-ink);font-variant-numeric:tabular-nums}
+.overview-hero{display:grid;grid-template-columns:minmax(0,1fr) 200px;gap:var(--nf-space-8);padding:var(--nf-space-6) var(--nf-space-8);background:var(--nf-color-brand-soft);border-radius:var(--nf-radius-lg);margin-bottom:var(--nf-space-5)}
+.overview-hero h2{font-family:var(--nf-font-writing);font-size:var(--nf-font-size-display);color:var(--nf-color-ink);line-height:1.4;margin:var(--nf-space-2) 0 var(--nf-space-3)}
+.overview-hero p{font-size:var(--nf-font-size-md);line-height:1.9;color:var(--nf-color-text);max-width:540px}
+.overview-hero .btn{margin-top:var(--nf-space-5)}
+.book-art{display:grid;place-items:center;min-height:170px}
+.book-cover{width:132px;height:176px;border:var(--nf-border-width) solid var(--nf-color-brand);background:var(--nf-color-paper);color:var(--nf-color-brand);padding:var(--nf-space-4);display:flex;flex-direction:column;justify-content:space-between;transform:rotate(-5deg);box-shadow:6px 6px 0 var(--nf-color-line-strong);font-family:var(--nf-font-writing)}
+.book-cover h3{font-size:var(--nf-font-size-xl);line-height:1.5;letter-spacing:.12em;color:var(--nf-color-brand)}
+.book-cover .cover-lines{height:26px;border-top:var(--nf-border-width) solid var(--nf-color-brand);border-bottom:var(--nf-border-width) solid var(--nf-color-brand);opacity:.45}
+.next-list{display:grid;gap:var(--nf-space-2)}
+.next-entry{display:grid;grid-template-columns:16px minmax(0,1fr);gap:var(--nf-space-3);padding:var(--nf-space-2) 0;border-bottom:var(--nf-border-width) solid var(--nf-color-line)}
+.next-entry:last-child{border-bottom:0}
+.next-entry .axis{position:relative;display:flex;justify-content:center;padding-top:5px}
+.next-entry .axis:before{content:"";position:absolute;top:0;bottom:-8px;width:1px;background:var(--nf-color-line-strong)}
+.next-entry .axis:after{content:"";position:absolute;top:6px;width:7px;height:7px;border-radius:var(--nf-radius-pill);background:var(--nf-color-brand)}
+.next-entry strong{font-size:var(--nf-font-size-sm);color:var(--nf-color-ink)}
+.next-entry p{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.7}
+
+/* Editorial proposals: per-change decisions, never a whole-chapter overwrite */
+.proposal-card{border:var(--nf-border-width) solid var(--nf-color-line);border-left:3px solid var(--nf-color-accent);border-radius:var(--nf-radius-md);background:var(--nf-color-surface);padding:var(--nf-space-4);display:grid;gap:var(--nf-space-3);margin-bottom:var(--nf-space-3)}
+.proposal-card.decided-accept{border-left-color:var(--nf-color-success)}
+.proposal-card.decided-reject{border-left-color:var(--nf-color-line-strong);opacity:.85}
+.proposal-head{display:flex;align-items:center;justify-content:space-between;gap:var(--nf-space-3);flex-wrap:wrap}
+.proposal-head strong{font-size:var(--nf-font-size-md);color:var(--nf-color-ink)}
+.proposal-body{font-family:var(--nf-font-writing);font-size:var(--nf-font-size-base);line-height:1.95;color:var(--nf-color-text)}
+.diff-old{display:block;padding:var(--nf-space-2) var(--nf-space-3);background:var(--nf-color-danger-soft);color:var(--nf-color-danger);border-radius:var(--nf-radius-sm);text-decoration:line-through;margin-bottom:var(--nf-space-2)}
+.diff-new{display:block;padding:var(--nf-space-2) var(--nf-space-3);background:var(--nf-color-success-soft);color:var(--nf-color-success);border-radius:var(--nf-radius-sm)}
+.proposal-actions{display:flex;align-items:center;gap:var(--nf-space-2);flex-wrap:wrap}
+.proposal-note{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.7}
+.review-layout{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(220px,1fr);gap:var(--nf-space-5)}
+
+/* Writing partner (compose mode) */
+.partner-note{border:var(--nf-border-width) solid var(--nf-color-line);border-left:3px solid var(--nf-color-accent);border-radius:var(--nf-radius-md);background:var(--nf-color-surface);padding:var(--nf-space-3);display:grid;gap:var(--nf-space-2)}
+.partner-note strong{font-size:var(--nf-font-size-sm);color:var(--nf-color-accent)}
+.partner-note p{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.8}
+.partner-note blockquote{margin:0;padding:var(--nf-space-2) var(--nf-space-3);background:var(--nf-color-surface-soft);border-radius:var(--nf-radius-sm);font-family:var(--nf-font-writing);font-size:var(--nf-font-size-sm);color:var(--nf-color-text);line-height:1.8}
+.partner-intro{display:grid;gap:var(--nf-space-2);padding:var(--nf-space-3);border-bottom:var(--nf-border-width) solid var(--nf-color-line)}
+.partner-intro h3{font-family:var(--nf-font-writing);font-size:var(--nf-font-size-lg);color:var(--nf-color-ink);line-height:1.6}
+.partner-intro p{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.8}
+.context-item{display:flex;align-items:center;gap:var(--nf-space-2);width:100%;padding:var(--nf-space-2) var(--nf-space-3);border:var(--nf-border-width) solid var(--nf-color-line);border-radius:var(--nf-radius-sm);background:var(--nf-color-surface);font-size:var(--nf-font-size-xs);color:var(--nf-color-text);margin-bottom:var(--nf-space-2)}
+.context-item:hover{border-color:var(--nf-color-brand);color:var(--nf-color-brand)}
+
+/* Design-system specimen page (v1 tradition, v3 tokens) */
+.v3-section{margin-bottom:var(--nf-space-6)}
+.v3-section h3{font-size:var(--nf-font-size-md);color:var(--nf-color-ink);margin-bottom:var(--nf-space-3);font-weight:var(--nf-font-weight-semibold)}
+.swatch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--nf-space-3)}
+.swatch{border:var(--nf-border-width) solid var(--nf-color-line);border-radius:var(--nf-radius-md);overflow:clip;background:var(--nf-color-surface)}
+.swatch-color{height:52px;border-bottom:var(--nf-border-width) solid var(--nf-color-line)}
+.swatch-info{padding:var(--nf-space-2) var(--nf-space-3);display:grid;gap:2px}
+.swatch-info strong{font-size:var(--nf-font-size-xs);color:var(--nf-color-ink)}
+.swatch-info code{font-family:var(--nf-font-mono);font-size:var(--nf-font-size-xs);color:var(--nf-color-muted)}
+.specimen-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--nf-space-3)}
+.type-specimen{border:var(--nf-border-width) solid var(--nf-color-line);border-radius:var(--nf-radius-md);padding:var(--nf-space-4);background:var(--nf-color-surface);display:grid;gap:var(--nf-space-2)}
+.type-specimen .display{font-size:var(--nf-font-size-xl);color:var(--nf-color-ink)}
+.type-specimen.writing .display{font-family:var(--nf-font-writing);font-size:var(--nf-font-size-heading);line-height:1.6}
+.type-specimen p{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.8}
+.token-scale{display:flex;align-items:flex-end;gap:var(--nf-space-3);flex-wrap:wrap;padding:var(--nf-space-4);border:var(--nf-border-width) solid var(--nf-color-line);border-radius:var(--nf-radius-md);background:var(--nf-color-surface)}
+.scale-item{display:grid;gap:4px;justify-items:center;font-family:var(--nf-font-mono);font-size:var(--nf-font-size-xs);color:var(--nf-color-muted)}
+.scale-item i{display:block;background:var(--nf-color-brand-soft);border:var(--nf-border-width) solid var(--nf-color-brand);border-radius:var(--nf-radius-xs)}
+.token-note{font-size:var(--nf-font-size-xs);color:var(--nf-color-muted);line-height:1.85;margin-top:var(--nf-space-3)}
+
+/* Marked sentence inside the manuscript (proposal anchor) */
+.note-anchor{background:var(--nf-color-paper-mark);border-bottom:2px dotted var(--nf-color-accent);border-radius:var(--nf-radius-xs);padding:0 2px}
+.paper-chip{font-family:var(--nf-font-mono);font-size:var(--nf-font-size-xs);color:var(--nf-color-paper-muted);border:var(--nf-border-width) solid var(--nf-color-paper-line);border-radius:var(--nf-radius-xs);padding:1px 5px}
+
+/* Compose mode keeps the status bar quiet */
+.program-window[data-workmode="compose"] .statusbar .forge-only{display:none}
+.program-window[data-workmode="compose"] .statusbar{background:var(--nf-color-panel)}
+
+@container forge (max-width:1130px){
+  .review-layout{grid-template-columns:minmax(0,1fr)}
+  .swatch-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@container forge (max-width:860px){
+  .overview-hero{grid-template-columns:minmax(0,1fr);padding:var(--nf-space-5)}
+  .book-art{display:none}
+  .specimen-grid{grid-template-columns:minmax(0,1fr)}
+  .swatch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .program-window[data-workmode="compose"] .workbench{grid-template-columns:var(--nf-layout-rail) minmax(0,1fr)}
+  .program-window[data-workmode="compose"] .assistant{display:none}
+}

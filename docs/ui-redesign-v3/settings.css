@@ -1,0 +1,248 @@
+/* NovelForge UI Redesign v3 — Settings workbench.
+   Replaces the v2 long-form settings with grouped navigation, a section
+   dashboard and card-based option groups. Custom-drawn controls only. */
+.set-layout {
+  display: grid;
+  grid-template-columns: 236px minmax(0, 1fr);
+  height: min(640px, calc(86dvh - 112px));
+  min-height: 380px;
+  background: var(--nf-color-shell);
+}
+.set-nav {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--nf-space-4) var(--nf-space-3);
+  border-right: var(--nf-border-width) solid var(--nf-color-line);
+  background: var(--nf-color-panel);
+  --nf-scroll-thumb: color-mix(in srgb, var(--nf-color-brand) 26%, var(--nf-color-surface));
+}
+.set-search { position: sticky; top: 0; z-index: var(--nf-z-sticky); padding-bottom: var(--nf-space-3); background: var(--nf-color-panel) }
+.set-search .field { height: 32px; background: var(--nf-color-surface); border-color: var(--nf-color-line-strong) }
+.set-search .field:focus-within { border-color: var(--nf-color-brand); box-shadow: 0 0 0 3px var(--nf-color-brand-soft) }
+.set-search .field input { font-size: var(--nf-font-size-sm) }
+.set-nav-kicker { display: flex; align-items: center; justify-content: flex-start; padding: 0 var(--nf-space-2) var(--nf-space-3); font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); letter-spacing: .1em; text-transform: uppercase; color: var(--nf-color-faint) }
+.set-nav-kicker span { font-variant-numeric: tabular-nums }
+.set-nav-group { margin-bottom: var(--nf-space-4) }
+.set-nav-label { display: flex; align-items: center; gap: 6px; padding: 0 var(--nf-space-2) var(--nf-space-2); font-size: var(--nf-font-size-xs); font-weight: var(--nf-font-weight-semibold); color: var(--nf-color-muted) }
+.set-nav-label .icon { width: 12px; height: 12px; color: var(--nf-color-brand) }
+.set-nav-label small { margin-left: auto; font-family: var(--nf-font-mono); color: var(--nf-color-faint) }
+.set-nav-item {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--nf-gap-icon, 6px);
+  width: 100%;
+  min-height: 46px;
+  padding: 5px var(--nf-space-2);
+  border: var(--nf-border-width) solid var(--nf-color-transparent);
+  border-radius: var(--nf-radius-md);
+  text-align: left;
+  color: var(--nf-color-text);
+  transition: background var(--nf-motion-fast), border-color var(--nf-motion-fast), transform var(--nf-motion-fast);
+}
+.set-nav-item:hover { background: var(--nf-color-surface-hover); transform: translateX(2px) }
+.set-nav-item.active { background: var(--nf-color-brand-soft); border-color: var(--nf-color-brand); color: var(--nf-color-brand) }
+.set-nav-item.active:before { content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 3px; border-radius: var(--nf-radius-pill); background: var(--nf-color-brand) }
+.set-nav-glyph { width: 28px; height: 28px; display: grid; place-items: center; border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-sm); background: var(--nf-color-surface); color: var(--nf-color-muted) }
+.set-nav-glyph .icon { width: 15px; height: 15px }
+.set-nav-item.active .set-nav-glyph { border-color: var(--nf-color-brand); background: var(--nf-color-surface); color: var(--nf-color-brand) }
+.set-nav-copy { min-width: 0; display: grid; gap: 1px }
+.set-nav-copy strong { font-size: var(--nf-font-size-sm); font-weight: var(--nf-font-weight-medium); color: var(--nf-color-ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.set-nav-item.active .set-nav-copy strong { color: var(--nf-color-brand) }
+.set-nav-copy small { font-size: var(--nf-font-size-xs); color: var(--nf-color-faint); overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.set-nav-mark .icon { width: 12px; height: 12px; color: var(--nf-color-faint) }
+.set-nav-item.active .set-nav-mark .icon { color: var(--nf-color-brand) }
+.set-nav-foot { margin-top: auto; padding: var(--nf-space-3); border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-md); background: var(--nf-color-surface); font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); line-height: 1.7 }
+.set-nav-foot strong { display: block; color: var(--nf-color-ink); margin-bottom: 3px }
+
+/* ------------------------------------------------------------- right pane */
+.set-pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: var(--nf-space-5) var(--nf-space-6) var(--nf-space-8);
+  background: var(--nf-color-shell);
+  --nf-scroll-thumb: color-mix(in srgb, var(--nf-color-brand) 22%, var(--nf-color-surface));
+}
+.set-head {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--nf-space-4);
+  padding: var(--nf-space-4) var(--nf-space-5);
+  border: var(--nf-border-width) solid var(--nf-color-line);
+  border-radius: var(--nf-radius-lg);
+  background: linear-gradient(120deg, var(--nf-color-brand-soft), var(--nf-color-surface) 72%);
+  margin-bottom: var(--nf-space-4);
+}
+.set-head-glyph { width: 46px; height: 46px; display: grid; place-items: center; border: var(--nf-border-width) solid var(--nf-color-brand); border-radius: var(--nf-radius-md); background: var(--nf-color-surface); color: var(--nf-color-brand); box-shadow: 0 3px 10px var(--nf-color-overlay) }
+.set-head-glyph .icon { width: 22px; height: 22px }
+.set-head-copy { min-width: 0; display: grid; gap: 3px }
+.set-head-copy .kicker { color: var(--nf-color-brand) }
+.set-head-copy h3 { font-size: var(--nf-font-size-xl); font-weight: var(--nf-font-weight-semibold); color: var(--nf-color-ink); text-wrap: balance }
+.set-head-copy p { font-size: var(--nf-font-size-sm); color: var(--nf-color-muted); line-height: 1.7; text-wrap: pretty }
+.set-head-state { display: grid; justify-items: end; gap: 5px }
+.set-head-state .badge { white-space: nowrap }
+
+.set-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--nf-space-2); margin-bottom: var(--nf-space-4) }
+.set-metric { padding: var(--nf-space-3) var(--nf-space-4); border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-md); background: var(--nf-color-surface); display: grid; gap: 2px }
+.set-metric span { font-size: var(--nf-font-size-xs); color: var(--nf-color-muted) }
+.set-metric strong { font-family: var(--nf-font-mono); font-variant-numeric: tabular-nums; font-size: var(--nf-font-size-lg); color: var(--nf-color-ink); font-weight: var(--nf-font-weight-medium) }
+.set-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--nf-space-3); align-items: start }
+.set-card { border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-lg); background: var(--nf-color-surface); padding: var(--nf-space-4); display: grid; gap: var(--nf-space-3); align-content: start; transition: border-color var(--nf-motion-fast), transform var(--nf-motion-base) var(--nf-motion-ease), box-shadow var(--nf-motion-base) }
+.set-card:hover { border-color: var(--nf-color-line-strong); transform: translateY(-1px); box-shadow: var(--nf-shadow-float) }
+.set-card.span-2 { grid-column: span 2 }
+.set-card-head { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; align-items: start; gap: var(--nf-space-3); padding-bottom: var(--nf-space-3); border-bottom: var(--nf-border-width) solid var(--nf-color-line) }
+.set-card-icon { width: 30px; height: 30px; display: grid; place-items: center; border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-sm); background: var(--nf-color-panel); color: var(--nf-color-brand) }
+.set-card-icon .icon { width: 16px; height: 16px }
+.set-card-head h4 { font-size: var(--nf-font-size-md); font-weight: var(--nf-font-weight-semibold); color: var(--nf-color-ink) }
+.set-card-head p { font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); line-height: 1.65; margin-top: 2px }
+.set-card-count { font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-color-faint); padding: 2px 6px; border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-pill) }
+.set-rows { display: grid }
+.set-row { display: flex; align-items: center; justify-content: space-between; gap: var(--nf-space-3); min-height: 38px; padding: var(--nf-space-1) var(--nf-space-2); border-bottom: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-sm); transition: background var(--nf-motion-fast) }
+.set-row:last-child { border-bottom: 0 }
+.set-row:hover { background: var(--nf-color-surface-soft) }
+.set-row-label { font-size: var(--nf-font-size-sm); color: var(--nf-color-text); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.set-row-control { display: flex; align-items: center; gap: var(--nf-space-2); flex-shrink: 0 }
+.set-value { display: inline-flex; align-items: center; gap: 6px; max-width: 210px; padding: 4px 8px; border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-sm); background: var(--nf-color-panel); font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-color-ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; transition: border-color var(--nf-motion-fast), background var(--nf-motion-fast), color var(--nf-motion-fast) }
+.set-value:hover { border-color: var(--nf-color-brand); background: var(--nf-color-brand-soft); color: var(--nf-color-brand) }
+.set-value .icon { width: 12px; height: 12px; flex-shrink: 0; color: var(--nf-color-muted) }
+.set-value:hover .icon { color: var(--nf-color-brand) }
+.set-row .switch { flex-shrink: 0 }
+
+/* Model routing card */
+.set-route-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: var(--nf-space-2) }
+.set-route { display: grid; gap: 5px; padding: var(--nf-space-3); border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-md); background: var(--nf-color-panel); text-align: left; transition: border-color var(--nf-motion-fast), background var(--nf-motion-fast), transform var(--nf-motion-fast) }
+.set-route:hover { transform: translateY(-2px); border-color: var(--nf-color-brand) }
+.set-route.active { border-color: var(--nf-color-brand); background: var(--nf-color-brand-soft); box-shadow: inset 0 0 0 1px var(--nf-color-brand) }
+.set-route-head { display: flex; align-items: center; justify-content: space-between; gap: 6px }
+.set-route-head .icon { width: 15px; height: 15px; color: var(--nf-color-brand) }
+.set-route-head .tick { opacity: 0; color: var(--nf-color-brand); width: 13px; height: 13px }
+.set-route.active .tick { opacity: 1 }
+.set-route strong { font-size: var(--nf-font-size-sm); color: var(--nf-color-ink) }
+.set-route small { font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); text-transform: uppercase; letter-spacing: .06em }
+.set-route code { font-family: var(--nf-font-mono); font-size: var(--nf-font-size-xs); color: var(--nf-color-brand) }
+
+.set-foot-note { margin-top: var(--nf-space-4); padding: var(--nf-space-3) var(--nf-space-4); border-left: 2px solid var(--nf-color-accent); border-radius: var(--nf-radius-sm); background: var(--nf-color-surface); font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); line-height: 1.75 }
+
+/* Edit-value dialog */
+.set-edit-body { display: grid; gap: var(--nf-space-3) }
+.set-edit-field { display: grid; gap: 5px }
+.set-edit-field span { font-size: var(--nf-font-size-xs); color: var(--nf-color-muted) }
+.set-edit-field input { width: 100%; min-height: 36px; padding: 0 var(--nf-space-3); border: var(--nf-border-width) solid var(--nf-color-line-strong); border-radius: var(--nf-radius-sm); background: var(--nf-color-surface); font-family: var(--nf-font-mono); font-size: var(--nf-font-size-sm); color: var(--nf-color-ink) }
+.set-edit-field input:focus { border-color: var(--nf-color-brand); box-shadow: 0 0 0 3px var(--nf-color-brand-soft); outline: 0 }
+.set-edit-note { font-size: var(--nf-font-size-xs); color: var(--nf-color-muted); line-height: 1.7 }
+
+@media(max-width:900px) {
+  .set-layout { grid-template-columns: minmax(0, 1fr); height: auto }
+  .set-nav { border-right: 0; border-bottom: var(--nf-border-width) solid var(--nf-color-line); max-height: 180px }
+  .set-nav-groups { display: flex; flex-wrap: wrap; gap: var(--nf-space-2) }
+  .set-nav-group { margin-bottom: 0 }
+  .set-nav-item { min-height: 38px; grid-template-columns: 24px minmax(0, 1fr); width: auto }
+  .set-nav-glyph { width: 24px; height: 24px }
+  .set-nav-mark, .set-nav-copy small { display: none }
+  .set-nav-foot { display: none }
+  .set-pane { padding: var(--nf-space-4) }
+  .set-grid, .set-summary { grid-template-columns: repeat(2, minmax(0, 1fr)) }
+  .set-card.span-2 { grid-column: span 2 }
+  .set-route-grid { grid-template-columns: minmax(0, 1fr) }
+}
+
+/* ------------------------------------- settings polish: tone, rhythm, detail */
+.set-layout { --nf-set-tone: var(--nf-color-brand) }
+.set-layout[data-tone="accent"] { --nf-set-tone: var(--nf-color-accent) }
+.set-layout[data-tone="info"] { --nf-set-tone: var(--nf-color-info) }
+.set-nav-group[data-tone="brand"] { --nf-group-tone: var(--nf-color-brand) }
+.set-nav-group[data-tone="accent"] { --nf-group-tone: var(--nf-color-accent) }
+.set-nav-group[data-tone="info"] { --nf-group-tone: var(--nf-color-info) }
+.set-nav-group { padding-bottom: var(--nf-space-3); border-bottom: var(--nf-border-width) solid var(--nf-color-line); animation: fade-rise var(--nf-motion-slow) var(--nf-motion-ease) both; animation-delay: calc(var(--i, 0) * 70ms) }
+.set-nav-group:last-child { border-bottom: 0 }
+.set-nav-label .icon { color: var(--nf-group-tone, var(--nf-color-brand)) }
+.set-nav-label small { letter-spacing: .08em }
+.set-nav-item.active { background: color-mix(in srgb, var(--nf-set-tone) 12%, var(--nf-color-surface)); border-color: color-mix(in srgb, var(--nf-set-tone) 46%, var(--nf-color-line)); color: var(--nf-set-tone) }
+.set-nav-item.active:before { background: var(--nf-set-tone) }
+.set-nav-item.active .set-nav-glyph { border-color: var(--nf-set-tone); color: var(--nf-set-tone) }
+.set-nav-item.active .set-nav-copy strong, .set-nav-item.active .set-nav-mark .icon { color: var(--nf-set-tone) }
+
+.set-head { position: relative; overflow: clip; background: linear-gradient(120deg, color-mix(in srgb, var(--nf-set-tone) 12%, var(--nf-color-surface)), var(--nf-color-surface) 72%); border-color: color-mix(in srgb, var(--nf-set-tone) 30%, var(--nf-color-line)) }
+.set-head-glyph { border-color: var(--nf-set-tone); color: var(--nf-set-tone) }
+.set-head-copy .kicker { color: var(--nf-set-tone) }
+.set-head-watermark { position: absolute; right: 12px; bottom: -26px; color: var(--nf-set-tone); opacity: .085; pointer-events: none }
+.set-head-watermark .icon { width: 108px; height: 108px; stroke-width: 1 }
+.set-head-state .badge.brand { background: color-mix(in srgb, var(--nf-set-tone) 14%, var(--nf-color-surface)); color: var(--nf-set-tone) }
+
+.set-card { position: relative; overflow: clip; animation: fade-rise var(--nf-motion-slow) var(--nf-motion-ease) both; animation-delay: calc(var(--i, 0) * 70ms) }
+.set-card:before { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px; background: linear-gradient(90deg, var(--nf-set-tone), transparent 78%) }
+/* No absolutely positioned card index: it used to sit on top of the row-count
+   badge and the header copy. Section order is carried by --i alone. */
+.set-card-icon { color: var(--nf-set-tone); border-color: color-mix(in srgb, var(--nf-set-tone) 32%, var(--nf-color-line)) }
+
+.set-row-label { display: flex; align-items: center; gap: var(--nf-gap-icon, 6px) }
+.set-row-icon { width: 22px; height: 22px; display: grid; place-items: center; flex-shrink: 0; border: var(--nf-border-width) solid var(--nf-color-line); border-radius: var(--nf-radius-sm); background: var(--nf-color-panel); color: var(--nf-set-tone) }
+.set-row-icon .icon { width: 13px; height: 13px }
+.set-switch-wrap { display: flex; align-items: center; gap: var(--nf-space-2) }
+.set-switch-state { min-width: 36px; text-align: right; font-size: var(--nf-font-size-xs); color: var(--nf-color-faint) }
+.set-switch-state.on { color: var(--nf-set-tone) }
+.set-value { padding: 3px 8px; gap: var(--nf-space-2) }
+.set-value-copy { display: grid; gap: 1px; text-align: right }
+.set-value-copy small { font-size: 9px; letter-spacing: .06em; text-transform: uppercase; color: var(--nf-color-faint) }
+.set-value-copy>span { font-size: var(--nf-font-size-xs); color: var(--nf-color-ink) }
+.set-metric-bar { height: 2px; margin-top: 6px; border-radius: var(--nf-radius-pill); background: var(--nf-color-line); overflow: clip }
+.set-metric-bar>span { display: block; height: 100%; border-radius: var(--nf-radius-pill); background: var(--nf-set-tone); transition: width var(--nf-motion-slow) var(--nf-motion-ease) }
+.set-route.active { border-color: var(--nf-set-tone); background: color-mix(in srgb, var(--nf-set-tone) 10%, var(--nf-color-surface)); box-shadow: inset 0 0 0 1px var(--nf-set-tone) }
+.set-route-default { justify-self: start; font-family: var(--nf-font-mono); font-size: 9px; color: var(--nf-color-on-brand); background: var(--nf-set-tone); border-radius: var(--nf-radius-pill); padding: 1px 6px }
+
+.set-search { display: flex; align-items: center; gap: 6px }
+.set-search .field { flex: 1; width: auto }
+.set-clear { width: 24px; height: 24px; display: grid; place-items: center; border-radius: var(--nf-radius-sm); color: var(--nf-color-muted) }
+.set-clear:hover { background: var(--nf-color-danger-soft); color: var(--nf-color-danger) }
+.set-foot-note { position: relative; transform: rotate(-.35deg); border: var(--nf-border-width) solid var(--nf-color-line); border-left: 2px solid var(--nf-set-tone); box-shadow: var(--nf-shadow-float); padding: var(--nf-space-3) var(--nf-space-4) }
+.set-foot-note:after { content: ""; position: absolute; right: 0; top: 0; width: 12px; height: 12px; background: linear-gradient(225deg, var(--nf-color-shell) 50%, var(--nf-color-line-strong) 50%); border-top-right-radius: var(--nf-radius-sm) }
+.set-foot-note strong { display: block; color: var(--nf-color-ink); font-size: var(--nf-font-size-sm); margin-bottom: 3px }
+.program-window[data-reduce-motion="true"] .set-nav-group,
+.program-window[data-reduce-motion="true"] .set-card { animation: none }
+
+/* ---------------------------------------------------------------------------
+   Text / overlay collision guards. Two-class selectors are used deliberately:
+   they outrank the generic :is() containment rules in responsive.css.
+   --------------------------------------------------------------------------- */
+
+/* A row is a two-sided bargain: the label keeps a guaranteed share of the
+   width; a long value ellipsises inside its capsule instead of covering text. */
+.set-row .set-row-label { flex: 1 1 auto; min-width: 0; max-width: 58% }
+.set-row .set-row-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+.set-row .set-row-control { flex: 0 1 auto; min-width: 0; max-width: 54%; justify-content: flex-end }
+.set-row .set-switch-wrap { min-width: 0; overflow: clip }
+.set-row .set-switch-state { white-space: nowrap }
+.set-row .set-value { max-width: 100%; min-width: 0 }
+.set-row .set-value-copy { min-width: 0; overflow: clip }
+.set-row .set-value-copy>span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap }
+
+/* Absolutely positioned decorations paint above in-flow copy by default.
+   Keep the watermark behind the header, and reserve room for the note fold. */
+.set-head .set-head-watermark { z-index: 0 }
+.set-head > :not(.set-head-watermark) { position: relative; z-index: 1 }
+.set-foot-note { padding-right: calc(var(--nf-space-4) + 16px) }
+.set-foot-note:after { pointer-events: none }
+
+/* One clear control only: no native search chrome, hidden when unused. */
+.set-search input::-webkit-search-cancel-button,
+.set-search input::-webkit-search-decoration { -webkit-appearance: none; display: none }
+.set-clear[hidden] { display: none }
+
+/* No opacity-based entrance: replaying it on every section click looked like
+   the panel going blank. First open gets a small translate only; partial
+   updates (data-animate=instant) get no animation at all. */
+@keyframes set-rise { from { transform: translateY(6px) } to { transform: translateY(0) } }
+.set-nav-group, .set-card { animation: none }
+.set-layout[data-animate="enter"] .set-nav-group,
+.set-layout[data-animate="enter"] .set-card {
+  animation: set-rise var(--nf-motion-base) var(--nf-motion-ease) both;
+  animation-delay: calc(var(--i, 0) * 60ms);
+}
+.set-layout[data-animate="instant"] .set-nav-group,
+.set-layout[data-animate="instant"] .set-card { animation: none }
+.set-layout[data-animate="instant"] .set-pane { scroll-behavior: auto }
