@@ -9,8 +9,10 @@ import { toast } from '../ui/Toast'
 const invoke = vi.hoisted(() => vi.fn())
 const infer = vi.hoisted(() => vi.fn())
 const inferBlueprints = vi.hoisted(() => vi.fn())
+const askAgent = vi.hoisted(() => vi.fn())
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke } }))
 vi.mock('../../services/workflows/file-import-inference', () => ({ inferFileImport: infer, inferFileImportBlueprints: inferBlueprints }))
+vi.mock('../../services/agent-adapters/file-project-agent', () => ({ askFileProjectAgent: askAgent }))
 vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: (key: string) => key }) }))
 vi.mock('../ui/Toast', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
@@ -28,7 +30,7 @@ async function click(label: string) {
   const button = [...document.querySelectorAll('button')].find(item => item.textContent === label)!
   await act(async () => button.click())
 }
-afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset(); inferBlueprints.mockReset() })
+afterEach(async () => { await act(async () => root.unmount()); host.remove(); localStorage.clear(); invoke.mockReset(); infer.mockReset(); inferBlueprints.mockReset(); askAgent.mockReset() })
 
 test('opens a routed directory through the candidate IPC without another folder picker', async () => {
   invoke.mockResolvedValue({ token: 'session', tabs: [], documents: [], missing: [] })
@@ -36,6 +38,29 @@ test('opens a routed directory through the candidate IPC without another folder 
   await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
   expect(invoke).toHaveBeenCalledExactlyOnceWith('project:file-editor-open', '/candidate', [])
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
+})
+
+test('cancels the candidate Agent and discards its answer when the editor changes project', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  invoke.mockImplementation(async (_channel, path) => ({ token: path, missing: [],
+    tabs: [{ locator, content: 'saved', revision: 'revision' }], documents: [{ locator, name: 'Current' }] }))
+  let complete!: (result: string) => void
+  askAgent.mockReturnValue(new Promise(resolve => { complete = resolve }))
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await act(async () => document.querySelector('summary')?.click())
+  const input = document.querySelector('input[aria-label="project.fileEditorAgentQuestion"]')!
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(input, 'What happens?')
+    input.dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  await click('project.fileEditorAgentAsk')
+  expect(askAgent).toHaveBeenCalledWith('/candidate', locator, 'What happens?', expect.any(AbortSignal))
+  const signal = askAgent.mock.lastCall![3] as AbortSignal
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/other' }) })
+  expect(signal.aborted).toBe(true)
+  await act(async () => { complete('Late manuscript answer') })
+  expect(document.querySelector('[role="dialog"]')?.textContent).not.toContain('Late manuscript answer')
 })
 
 test('previews selected files and opens the imported chapter only after confirmation', async () => {

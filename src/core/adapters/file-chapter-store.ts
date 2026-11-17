@@ -125,6 +125,11 @@ export class FileChapterStore implements ChapterRepo {
     return this.options.index.list()
   }
 
+  /** Agent 读取即时章节元数据，沿用身份和路径校验，只扫描当前已存在的文件。 */
+  async readChapterMetadata(): Promise<ChapterMeta[]> {
+    return (await this.scan(false)).map(item => item.meta).sort((a, b) => a.number - b.number)
+  }
+
   async byId(id: string): Promise<StoredChapter | null> {
     assertChapterId(id)
     const scanned = await this.scan()

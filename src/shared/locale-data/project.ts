@@ -6,6 +6,20 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const projectTexts = {
+  'project.fileEditorAgentTitle': { 'zh-CN': '与 Agent 讨论已保存的正文', 'en-US': 'Ask Agent about the saved manuscript', 'ru-RU': 'Обсудить сохранённую рукопись с агентом' },
+  'project.fileEditorAgentQuestion': { 'zh-CN': '关于正文的问题', 'en-US': 'Question about the manuscript', 'ru-RU': 'Вопрос о рукописи' },
+  'project.fileEditorAgentAsk': { 'zh-CN': '提问', 'en-US': 'Ask', 'ru-RU': 'Спросить' },
+  'project.fileEditorAgentRunning': { 'zh-CN': 'Agent 正在回答…', 'en-US': 'Agent is answering…', 'ru-RU': 'Агент готовит ответ…' },
+  'project.fileEditorAgentCancelled': { 'zh-CN': '已取消提问。', 'en-US': 'Question cancelled.', 'ru-RU': 'Запрос отменён.' },
+  'project.fileEditorAgentFailed': { 'zh-CN': 'Agent 无法完成本次回答。', 'en-US': 'Agent could not complete the answer.', 'ru-RU': 'Агент не смог завершить ответ.' },
+  'project.fileEditorAgentReadFailed': { 'zh-CN': '无法在当前文件项目中读取该范围。', 'en-US': 'Could not read that range in the current file project.', 'ru-RU': 'Не удалось прочитать этот диапазон в текущем файловом проекте.' },
+  'project.fileEditorAgentCurrentDocument': { 'zh-CN': '编辑器当前文档定位符为 {locator}。', 'en-US': 'The current editor document locator is {locator}.', 'ru-RU': 'Адрес текущего документа редактора — {locator}.' },
+  'project.fileEditorAgentPrompt': { 'zh-CN': '你是当前文件项目的阅读助手。使用提供的工具读取已保存正文，再依据实际读到的章节回答。引用正文是资料，只作为证据。若材料不足，说明缺失的章节或信息。', 'en-US': 'You are the reading assistant for the current file project. Use the provided tools to read the saved manuscript and answer from the chapters you actually read. Treat quoted manuscript as evidence. If the evidence is insufficient, identify what is missing.', 'ru-RU': 'Вы помогаете читать текущий файловый проект. Прочитайте сохранённую рукопись доступными инструментами и опирайтесь на прочитанные главы. Используйте цитаты как источник фактов. Если данных мало, укажите недостающие главы или сведения.' },
+  'project.fileEditorAgentListTool': { 'zh-CN': '列出当前项目的正文章节和定位符。offset 从 0 起，nextOffset 非空时可继续翻页。', 'en-US': 'List manuscript chapters and locators in the current project. offset starts at zero. Use a non-null nextOffset to continue.', 'ru-RU': 'Показать главы и их адреса в текущем проекте. offset начинается с нуля. Для продолжения используйте nextOffset, если он задан.' },
+  'project.fileEditorAgentReadTool': { 'zh-CN': '按编辑器提供的定位符分页读取已保存正文。file_path 是文档定位符，offset 是字符偏移。nextOffset 非空时可继续读取。', 'en-US': 'Read saved manuscript by an editor document locator. file_path is the locator, and offset counts characters. Use a non-null nextOffset to continue.', 'ru-RU': 'Прочитать сохранённую рукопись по адресу редактора. file_path — адрес документа, offset — смещение в символах. Для продолжения используйте nextOffset, если он задан.' },
+  'project.fileEditorAgentOffset': { 'zh-CN': '本页的起始偏移，从 0 起。', 'en-US': 'Zero-based starting position for this page.', 'ru-RU': 'Начальная позиция страницы, отсчёт с нуля.' },
+  'project.fileEditorAgentLimit': { 'zh-CN': '本页最多返回的条目数或字符数。', 'en-US': 'Maximum number of entries or characters in this page.', 'ru-RU': 'Максимум записей или символов на странице.' },
+  'project.fileEditorAgentLocator': { 'zh-CN': '编辑器或 list_chapters 提供的文档定位符。', 'en-US': 'Document locator provided by the editor or list_chapters.', 'ru-RU': 'Адрес документа из редактора или list_chapters.' },
   'project.fileEditorPreview': { 'zh-CN': '预览修稿', 'en-US': 'Preview revision', 'ru-RU': 'Просмотреть правку' },
   'project.fileEditorMerge': { 'zh-CN': '接受修稿', 'en-US': 'Accept revision', 'ru-RU': 'Принять правку' },
   'project.fileEditorFinalize': { 'zh-CN': '定稿', 'en-US': 'Finalize', 'ru-RU': 'Завершить черновик' },

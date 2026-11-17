@@ -333,6 +333,8 @@ export const IPC_CHANNEL_POLICY: Record<InvokeChannel, ChannelPolicy> = {
   'project:file-editor-open': { authority: 'read-project' },
   'project:file-editor-save': { authority: 'write-project' },
   'project:file-editor-close': { authority: 'read-project' },
+  'project:file-editor-agent-list': { authority: 'read-project' },
+  'project:file-editor-agent-read': { authority: 'read-project' },
   'project:file-editor-commit': { authority: 'write-project' },
   'project:file-editor-import': { authority: 'write-project' },
   'project:file-editor-import-source': { authority: 'read-project' },

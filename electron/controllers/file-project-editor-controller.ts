@@ -19,6 +19,7 @@ const manifestFile = 'migration-manifest.json'
 const legacyBarrier = '.novelforge/vela.db'
 const retainedFile = '.novelforge/retained.db'
 const current = /^doc:\/\/chapter\/(ch_[a-f0-9]{8,64})$/
+const historical = /^(?:doc:\/\/history|vela:\/\/draft)\/[1-9][0-9]{0,15}$/
 type OpenResult = ProjectChannels['project:file-editor-open']['return']
 type Lifecycle = ReturnType<typeof createFileDraftLifecycle>
 type InferenceContext = ProjectChannels['project:file-editor-import-inference']['return']
@@ -39,11 +40,19 @@ interface FileEditorSession {
   projectId: string
   projectPath: string
   repo: FileChapterStore
+  documentPort: Awaited<ReturnType<typeof createFileEditorOpenPort>>
   assertCandidate: () => Promise<void>
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
   withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
   settingsOffer?: SettingsOffer
   blueprintOffer?: BlueprintOffer
+}
+
+function agentReadLimit(offset: number, limit: number, max: number): number {
+  if (!Number.isSafeInteger(offset) || offset < 0 || !Number.isSafeInteger(limit) || limit < 1) {
+    throw new Error('Invalid file editor Agent read range')
+  }
+  return Math.min(limit, max)
 }
 
 export function registerFileProjectEditorController() {
@@ -112,7 +121,8 @@ export function registerFileProjectEditorController() {
     ]
     const names = new Map(documents.map(document => [document.locator, document.name]))
     const scope = () => ({ projectId: identity.projectId, projectPath: path, session: requests.get(sender.id) === token ? 1 : 2 })
-    const port = await createFileEditorOpenPort({ projectPath: path, identity, repo, scope, publish: () => {} })
+    const portOptions = { projectPath: path, identity, scope, publish: () => {} }
+    const port = await createFileEditorOpenPort({ ...portOptions, repo })
     const tabs: OpenResult['tabs'] = []
     const missing: string[] = []
     for (const locator of locators) {
@@ -128,11 +138,56 @@ export function registerFileProjectEditorController() {
         }
       })
     }
+    // Agent 使用相同的定位符与历史映射，只读取现有文件，不刷新编辑器索引。
+    const documentPort = await createFileEditorOpenPort({ ...portOptions, repo: {
+      byId: async id => (await repo.readByIds([id])).get(id) ?? null,
+    } })
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-    sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, repo, assertCandidate, inspectKind: reader.kind, withLifecycle })
+    sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, repo, documentPort,
+      assertCandidate, inspectKind: reader.kind, withLifecycle })
     // 默认接在当前稿之后，导入时还会检查迁移历史占用的章号。
     const importStartNumber = withLifecycle ? chapters.reduce((latest, chapter) => Math.max(latest, chapter.number), 0) + 1 : undefined
     return { token, tabs, missing, documents, importStartNumber }
+  })
+
+  async function readForAgent<T>(senderId: number, token: string,
+    work: (session: FileEditorSession, assertCurrent: () => void) => Promise<T>): Promise<T> {
+    const session = sessions.get(senderId)
+    const assertCurrent = () => {
+      if (!session || session.token !== token || requests.get(senderId) !== token) throw new Error('Invalid file editor Agent session')
+    }
+    if (!session) throw new Error('Invalid file editor Agent session')
+    assertCurrent()
+    assertPathAllowedForIpc(session.projectPath, 'read')
+    await session.assertCandidate()
+    assertCurrent()
+    const result = await work(session, assertCurrent)
+    // 文件读取期间可能重开或切换项目，回包前再次核验目录与会话。
+    await session.assertCandidate()
+    assertCurrent()
+    return result
+  }
+
+  guardedHandle('project:file-editor-agent-list', async ({ sender }, token: string, offset = 0, limit = 10) => {
+    const end = offset + agentReadLimit(offset, limit, 20)
+    return readForAgent(sender.id, token, async session => {
+      const chapters = await session.repo.readChapterMetadata()
+      return { chapters: chapters.slice(offset, end).map(({ id, number, title, status }) => ({
+        locator: `doc://chapter/${id}`, number, title: title.slice(0, 160), status,
+      })), nextOffset: end < chapters.length ? end : null }
+    })
+  })
+
+  guardedHandle('project:file-editor-agent-read', async ({ sender }, token: string, locator: string, offset = 0, limit = 440) => {
+    if (typeof locator !== 'string' || !(current.test(locator) || historical.test(locator))) throw new Error('Invalid file editor Agent locator')
+    const end = offset + agentReadLimit(offset, limit, 440)
+    return readForAgent(sender.id, token, async (session, assertCurrent) => {
+      // 当前稿与历史稿共用编辑器定位符解析，历史文件继续校验原始映射与摘要。
+      const document = await session.documentPort.resolve({ kind: 'path', documentKind: 'chapter', locator, name: locator }, assertCurrent)
+      if (!document) throw new Error('File editor Agent chapter is unavailable')
+      return { locator: document.locator, content: document.content.slice(offset, end), readOnly: Boolean(document.readOnly),
+        revision: document.revision, totalChars: document.content.length, nextOffset: end < document.content.length ? end : null }
+    })
   })
 
   guardedHandle('project:file-editor-save', async ({ sender }, token: string, locator: string, revision: string, content: string) => {

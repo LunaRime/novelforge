@@ -1,10 +1,11 @@
 import type { GeneratedBlueprintFields } from '../../core'
-import type { FileImportChapter, FileImportExcerpt, FileImportSettings, FileImportSettingsOffer, LLMRequest, ProjectChannels } from '../../shared/ipc-channels'
+import type { FileImportChapter, FileImportExcerpt, FileImportSettings, FileImportSettingsOffer, ProjectChannels } from '../../shared/ipc-channels'
 import { t } from '../../shared/locale'
 import { STRUCTURED_JSON_TEMPERATURE } from '../../shared/thinking-level'
 import { useLLMStore } from '../../stores/llm-store'
 import { normalizeBlueprintRole } from '../blueprint-role'
 import { ipc } from '../ipc-client'
+import { requestStreamText } from '../llm/request-stream-text'
 import { getPromptTemplate } from '../prompt-templates'
 import { ImportPromptBuilder } from '../prompts/prompt-builder'
 import { robustParseJSON, stripThinkingTags } from './workflow-utils'
@@ -19,43 +20,6 @@ export interface FileImportBlueprintInference {
   items: GeneratedBlueprintFields[]
   existingChapterNumbers: number[]
   offerId?: string
-}
-
-function generatePreview(request: LLMRequest, signal: AbortSignal): Promise<string> {
-  signal.throwIfAborted()
-  return new Promise((resolve, reject) => {
-    const requestId = crypto.randomUUID()
-    let started = false
-    const stop = () => {
-      if (started) void ipc.invoke('llm:cancel', requestId).catch(() => {})
-    }
-    const onAbort = () => {
-      cleanup()
-      stop()
-      reject(signal.reason)
-    }
-    const fail = (error: unknown) => { cleanup(); reject(error) }
-    const done = ipc.on('llm:stream-done', event => {
-      if (event.requestId !== requestId) return
-      cleanup()
-      resolve(event.fullText)
-    })
-    const failed = ipc.on('llm:stream-error', event => {
-      if (event.requestId === requestId) fail(new Error(event.error))
-    })
-    function cleanup() {
-      signal.removeEventListener('abort', onAbort)
-      done()
-      failed()
-    }
-    signal.addEventListener('abort', onAbort, { once: true })
-    // 先订阅结果再发起推演。若启动回执晚于取消，收到回执时补发取消。
-    void ipc.invoke('llm:generate-stream', requestId, request).then(result => {
-      started = result?.started === true
-      if (signal.aborted) stop()
-      else if (!started) fail(new Error(t('project.fileEditorInferenceFailed')))
-    }).catch(fail)
-  })
 }
 
 async function assertImportSource(token: string, firstNumber: number, chapters: FileImportChapter[], signal: AbortSignal,
@@ -83,7 +47,7 @@ export async function inferFileImport(token: string, firstNumber: number, chapte
     key: 'file_import_inference_preview', name: t('project.fileEditorInferImport'), description: '',
     content: t('project.fileEditorInferPrompt'), variables: { sample_content: '' },
   }).withSampleContent([...source.samples, ...source.excerpts].map(formatExcerpt).join('\n\n')).build()
-  const raw = await generatePreview({ modelId, messages: [
+  const raw = await requestStreamText({ modelId, messages: [
     { role: 'system', content: t('role.editorAnalyst') }, { role: 'user', content: prompt },
   ], stream: true, responseFormat: { type: 'json_object' }, temperature: STRUCTURED_JSON_TEMPERATURE,
   maxTokens: 1800, thinking: false }, signal)
@@ -118,7 +82,7 @@ export async function inferFileImportBlueprints(token: string, firstNumber: numb
     // 可信章号直接填进模板的 JSON 示例，正文与标题继续由 Builder 包裹为引用内容。
     const builder = new ImportPromptBuilder({ ...template, content: template.content.replaceAll('{{chapter_number}}', String(chapter.number)) })
       .withChapterContent(chapter.content).withChapterTitle(chapter.title).withNovelConfigSummary('')
-    const raw = await generatePreview({ modelId, messages: [
+    const raw = await requestStreamText({ modelId, messages: [
       { role: 'system', content: builder.getSystemRole() || t('role.novelAnalyst') }, { role: 'user', content: builder.build() },
     ], stream: true, responseFormat: { type: 'json_object' }, temperature: STRUCTURED_JSON_TEMPERATURE,
     maxTokens: 900, thinking: false }, signal)

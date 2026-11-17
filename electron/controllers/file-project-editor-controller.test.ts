@@ -72,6 +72,15 @@ test('restores candidate operations and verifies import snapshots against receip
     registerFileProjectEditorController()
     const opened = await invoke('open', project, ['vela://draft/1', locator]) as ProjectChannels['project:file-editor-open']['return']
     expect(opened.tabs).toMatchObject([{ content: '1', readOnly: true }, { content: '2', readOnly: false }])
+    expect(await invoke('agent-list', opened.token, 0, 1)).toEqual({ chapters: [{ locator, number: 1, title: 'chapter', status: 'draft' }], nextOffset: null })
+    expect(await invoke('agent-read', opened.token, locator, 0, 1)).toMatchObject({ locator, content: '2', nextOffset: null, totalChars: 1 })
+    expect(await invoke('agent-read', opened.token, 'vela://draft/1', 0, 1)).toMatchObject({ locator: 'doc://history/1', content: '1', readOnly: true })
+    const historyBytes = await readFile(join(project, history), 'utf8')
+    await writeFile(join(project, history), `${historyBytes}tampered`)
+    await expect(invoke('agent-read', opened.token, 'doc://history/1', 0, 1)).rejects.toThrow('unavailable')
+    await writeFile(join(project, history), historyBytes)
+    await expect(invoke('agent-read', opened.token, '../legacy.db', 0, 1)).rejects.toThrow('Invalid')
+    await expect(handlers.get('project:file-editor-agent-read')!({ sender: { id: 2 } }, opened.token, locator, 0, 1)).rejects.toThrow('session')
     const revision = opened.tabs[1].revision
     await expect(invoke('save', opened.token, 'doc://history/1', revision, 'bad')).rejects.toThrow()
     await expect(handlers.get('project:file-editor-save')!({ sender: { id: 2 } }, opened.token, locator, revision, 'bad')).rejects.toThrow()
@@ -80,6 +89,8 @@ test('restores candidate operations and verifies import snapshots against receip
     registerFileProjectEditorController()
     const restored = await invoke('open', project, opened.tabs.map(tab => tab.locator)) as ProjectChannels['project:file-editor-open']['return']
     expect(restored.tabs).toMatchObject([{ content: '1', readOnly: true }, { content: 'updated' }])
+    await expect(invoke('agent-read', opened.token, locator, 0, 1)).rejects.toThrow('session')
+    expect(await invoke('agent-read', restored.token, locator, 2, 3)).toMatchObject({ content: 'dat', totalChars: 7, nextOffset: 5 })
     await expect(invoke('save', opened.token, locator, revision, 'old session')).rejects.toThrow()
     expect(restored.tabs[1].lifecycle?.pending).toEqual([{ id: 4 }])
     const preview = await invoke('preview', restored.token, chapterId, 4) as ProjectChannels['project:file-editor-preview']['return']
@@ -263,9 +274,11 @@ test('restores candidate operations and verifies import snapshots against receip
       const inFlight = invoke('import-source', afterImportRecovery.token, 4, source)
       const rejected = expect(inFlight).rejects.toThrow('session changed')
       await readFinished
+      const agentRead = expect(invoke('agent-read', afterImportRecovery.token, imported.firstLocator, 0, 4)).rejects.toThrow('Agent session')
       const copied = await invoke('open', otherProject, []) as ProjectChannels['project:file-editor-open']['return']
       resumeRead()
       await rejected
+      await agentRead
       await expect(invoke('import-source', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
       await expect(invoke('import-inference', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')
       await expect(invoke('index-import', copied.token, 4, source)).rejects.toThrow('Imported chapter 5 changed')

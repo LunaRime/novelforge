@@ -139,6 +139,14 @@ export interface ProjectChannels {
     return: { revision: string; indexed: boolean }
   }
   'project:file-editor-close': { args: [token: string]; return: void }
+  'project:file-editor-agent-list': {
+    args: [token: string, offset?: number, limit?: number]
+    return: { chapters: Array<{ locator: string; number: number; title: string; status: string }>; nextOffset: number | null }
+  }
+  'project:file-editor-agent-read': {
+    args: [token: string, locator: string, offset?: number, limit?: number]
+    return: { locator: string; content: string; readOnly: boolean; revision?: string; totalChars: number; nextOffset: number | null }
+  }
   'project:file-editor-commit': {
     args: [token: string, command: FileDraftCommand]
     return: import('../core').FileChapterCommitReceipt

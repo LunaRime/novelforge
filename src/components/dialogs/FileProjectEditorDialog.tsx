@@ -8,6 +8,7 @@ import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
+import { FileProjectAgent } from './FileProjectAgent'
 
 type Opened = ProjectChannels['project:file-editor-open']['return']
 type Workspace = Opened & { path: string; active: string }
@@ -45,6 +46,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [workspace, setWorkspace] = useState<Workspace>()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [openingDocument, setOpeningDocument] = useState(false)
   const [revisionId, setRevisionId] = useState<number>()
   const [preview, setPreview] = useState<Preview>()
   const [importPreview, setImportPreview] = useState<ImportPreview>()
@@ -239,6 +241,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     try {
       const selectedPath = path ?? await ipc.invoke('dialog:select-folder')
       if (!selectedPath) return
+      setOpeningDocument(true)
       clearInference()
       const previous = storedTabs(selectedPath)
       const requested = locator ? [...new Set([...previous.locators.slice(-99), locator])] : previous.locators
@@ -253,7 +256,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       toast.error(t('dialog.openFailed'))
       setWorkspace(undefined)
       setText('')
-    } finally { pending.current = false; setBusy(false) }
+    } finally { pending.current = false; setBusy(false); setOpeningDocument(false) }
   }
 
   async function save() {
@@ -370,6 +373,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           {workspace && (
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
+              {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy} />}
               {workspace.importStartNumber !== undefined && !stagedImport && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
               )}

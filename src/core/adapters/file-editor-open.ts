@@ -1,5 +1,5 @@
 import { resolve } from 'node:path'
-import type { ChapterRepo } from '../ports/chapter-repo'
+import type { StoredChapter } from '../domain/chapter'
 import type { EditorOpenPort } from '../ports/editor-open'
 import type { MigratedDraftIdentityMap } from '../ports/migrated-draft-identity'
 import { fileRevision, parseChapter } from './chapter-format'
@@ -13,7 +13,7 @@ interface Options {
   projectPath: string
   identity: MigratedDraftIdentityMap
   scope: EditorOpenPort['scope']
-  repo: Pick<ChapterRepo, 'byId'>
+  repo: { byId(id: string): Promise<Pick<StoredChapter, 'chapter' | 'revision'> | null> }
   publish: EditorOpenPort['publish']
 }
 
