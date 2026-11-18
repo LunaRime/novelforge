@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto'
-import { join } from 'node:path'
+import { join, relative } from 'node:path'
+import { open, realpath, rename, unlink } from 'node:fs/promises'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type GeneratedBlueprintFields, type MigratedDraftIdentityMap } from '../../src/core'
@@ -40,12 +41,14 @@ interface FileEditorSession {
   token: string
   projectId: string
   projectPath: string
+  canonicalPath: string
   repo: FileChapterStore
   documentPort: Awaited<ReturnType<typeof createFileEditorOpenPort>>
   agentEdits: Map<string, FileAgentEditProposal & { chapterId: string; offset: number; resolving?: boolean }>
   assertCandidate: () => Promise<void>
   inspectKind: Awaited<ReturnType<typeof openProjectInspection>>['kind']
   withLifecycle?: <T>(work: (lifecycle: Lifecycle, db: Database.Database) => Promise<T>) => Promise<T>
+  activate?: (assertCurrent: () => void) => Promise<void>
   settingsOffer?: SettingsOffer
   blueprintOffer?: BlueprintOffer
 }
@@ -75,6 +78,7 @@ export function registerFileProjectEditorController() {
     requests.set(sender.id, token)
     sessions.delete(sender.id)
     const reader = await openProjectInspection(path)
+    const canonicalPath = await realpath(path)
     const recordText = await reader.readText(candidateRecord)
     const record = JSON.parse(recordText)
     const mapping = await reader.readText(identityFile)
@@ -86,10 +90,18 @@ export function registerFileProjectEditorController() {
         !Array.isArray(identity.entries) || identity.manifestHash !== fileRevision(manifest) ||
         record.identityHash !== fileRevision(mapping) ||
         (record.lifecycle !== undefined && record.lifecycle !== 1)) throw new Error('Invalid file editor candidate')
+    const activation = record.activation
+    if (activation !== undefined && (record.lifecycle !== 1 || !activation || activation.format !== 1 ||
+        activation.projectId !== identity.projectId || activation.identityHash !== record.identityHash ||
+        activation.manifestHash !== identity.manifestHash || typeof activation.projectPath !== 'string' ||
+        relative(canonicalPath, activation.projectPath) !== '' || typeof activation.generation !== 'string' ||
+        !/^[a-f0-9-]{36}$/.test(activation.generation) || typeof activation.activatedAt !== 'string' ||
+        !Number.isFinite(Date.parse(activation.activatedAt)))) throw new Error('Invalid file project activation')
     const assertCandidate = async () => {
       if (await reader.kind(legacyBarrier) !== 'directory' || await reader.kind('.vela') !== 'missing' ||
           await reader.readText(candidateRecord) !== recordText || await reader.readText(identityFile) !== mapping ||
           await reader.readText(manifestFile) !== manifest ||
+          JSON.parse(await reader.readText('novel.json')).id !== identity.projectId ||
           (record.lifecycle === 1 && await reader.kind(retainedFile) !== 'file')) throw new Error('File editor candidate changed')
     }
     await assertCandidate()
@@ -145,12 +157,45 @@ export function registerFileProjectEditorController() {
     const documentPort = await createFileEditorOpenPort({ ...portOptions, repo: {
       byId: async id => (await repo.readByIds([id])).get(id) ?? null,
     } })
+    await assertCandidate()
     if (requests.get(sender.id) !== token) throw new Error('File editor session changed')
-    sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, repo, documentPort,
-      assertCandidate, inspectKind: reader.kind, withLifecycle, agentEdits: new Map() })
+    const activate: FileEditorSession['activate'] = withLifecycle && !activation ? async assertCurrent => {
+      await repo.withCommitLock(async () => {
+        await withLifecycle(async (lifecycle, db) => {
+          lifecycle.assertIdle()
+          const checks = db.prepare('PRAGMA quick_check').all() as Array<{ quick_check: string }>
+          if (checks.length !== 1 || checks[0].quick_check !== 'ok') throw new Error('File project retained database is invalid')
+        })
+        const currentIds = identity.entries.filter(entry => entry.target.kind === 'current').map(entry => entry.chapterId)
+        const chapters = await repo.readByIds(currentIds)
+        if (!currentIds.length) await repo.readChapterMetadata()
+        for (const { target, chapterId, draftId } of identity.entries) {
+          const valid = target.kind === 'current' ? target.locator === `doc://chapter/${chapterId}` &&
+            chapters.get(chapterId)?.chapter.metadata?.legacyDraftId === draftId : target.kind === 'history' &&
+            await documentPort.resolve({ kind: 'draft', draftId, name: String(draftId) }, assertCurrent)
+          if (!valid) throw new Error('File project activation target is unavailable')
+        }
+        await publishActivation(canonicalPath, { ...record, activation: { format: 1, projectId: identity.projectId,
+          projectPath: canonicalPath, identityHash: record.identityHash, manifestHash: identity.manifestHash,
+          generation: randomUUID(), activatedAt: new Date().toISOString() } }, async () => {
+          await assertCandidate()
+          assertCurrent()
+        })
+        // 旧会话必须重开，重新核验已激活的描述文件。
+        for (const [id, session] of sessions) {
+          if (relative(canonicalPath, session.canonicalPath) === '') {
+            sessions.delete(id)
+            requests.delete(id)
+          }
+        }
+      })
+    } : undefined
+    sessions.set(sender.id, { token, projectId: identity.projectId, projectPath: path, canonicalPath, repo, documentPort,
+      assertCandidate, inspectKind: reader.kind, withLifecycle, activate, agentEdits: new Map() })
     // 默认接在当前稿之后，导入时还会检查迁移历史占用的章号。
     const importStartNumber = withLifecycle ? chapters.reduce((latest, chapter) => Math.max(latest, chapter.number), 0) + 1 : undefined
-    return { token, tabs, missing, documents, importStartNumber }
+    return { token, tabs, missing, documents, importStartNumber, canActivate: Boolean(activate),
+      activation: activation && { generation: activation.generation, activatedAt: activation.activatedAt } }
   })
 
   function requireAgentSession(senderId: number, token: string) {
@@ -309,6 +354,13 @@ export function registerFileProjectEditorController() {
 
   guardedHandle('project:file-editor-commit', async ({ sender }, token: string, command: FileDraftCommand) =>
     mutate(sender.id, token, lifecycle => lifecycle.commit(command)))
+
+  guardedHandle('project:file-editor-activate', async ({ sender }, token: string) => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    if (!session.activate) throw new Error('File project is already active')
+    await session.activate(assertCurrent)
+  })
 
   guardedHandle('project:file-editor-continuation-context', async ({ sender }, token: string, number: number, source: FileContinuationSource) => {
     if (!Number.isSafeInteger(number) || number < 2 || typeof source?.chapterId !== 'string' || !current.test(`doc://chapter/${source.chapterId}`) ||
@@ -490,4 +542,21 @@ export function registerFileProjectEditorController() {
     sessions.delete(sender.id)
     if (requests.get(sender.id) === token) requests.delete(sender.id)
   })
+}
+
+async function publishActivation(root: string, record: object, beforePublish: () => Promise<void>) {
+  const destination = join(root, candidateRecord)
+  const temporary = `${destination}.${randomUUID()}.tmp`
+  const file = await open(temporary, 'wx')
+  try {
+    try {
+      await file.writeFile(JSON.stringify(record), 'utf8')
+      await file.sync()
+    } finally { await file.close() }
+    await beforePublish()
+    // 同目录替换让启动只看到完整的候选或激活记录。
+    await rename(temporary, destination)
+  } finally {
+    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error })
+  }
 }

@@ -42,6 +42,24 @@ test('opens a routed directory through the candidate IPC without another folder 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
 })
 
+test('confirms activation and reopens the file editor with a fresh session', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  const tab = { locator, content: 'Saved text', revision: 'revision' }
+  invoke.mockResolvedValueOnce({ token: 'candidate', canActivate: true, tabs: [tab], missing: [], documents: [] })
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce({ token: 'activated', canActivate: false, tabs: [tab], missing: [], documents: [],
+      activation: { generation: 'generation', activatedAt: '2026-11-18T00:00:00Z' } })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await click('project.fileEditorActivate')
+  expect(invoke).toHaveBeenCalledTimes(1)
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenNthCalledWith(2, 'project:file-editor-activate', 'candidate')
+  expect(invoke).toHaveBeenNthCalledWith(3, 'project:file-editor-open', '/candidate', [locator])
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('project.fileEditorActivated')
+  expect(document.querySelector('textarea')?.value).toBe('Saved text')
+})
+
 async function askAboutManuscript(question: string) {
   await act(async () => document.querySelector('summary')?.click())
   const input = document.querySelector('input[aria-label="project.fileEditorAgentQuestion"]')!

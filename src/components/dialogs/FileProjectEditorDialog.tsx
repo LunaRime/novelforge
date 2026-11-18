@@ -56,7 +56,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [blueprintPreview, setBlueprintPreview] = useState<FileImportBlueprintInference & { receipt?: BlueprintReceipt }>()
   const [inferenceMode, setInferenceMode] = useState<'settings' | 'blueprints'>()
   const [blueprintProgress, setBlueprintProgress] = useState<{ completed: number; total: number }>()
-  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings' | 'apply-blueprints'>()
+  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings' | 'apply-blueprints' | 'activate'>()
   const pending = useRef(false)
   const inferenceRun = useRef<AbortController | undefined>(undefined)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
@@ -359,6 +359,28 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     await persistCommit(command, `doc://chapter/${command.chapterId}`)
   }
 
+  async function activateProject() {
+    if (pending.current || dirty || !workspace?.canActivate) return
+    pending.current = true
+    setBusy(true)
+    clearInference()
+    const start = saveClock()
+    let activated = false
+    try {
+      await ipc.invoke('project:file-editor-activate', workspace.token)
+      activated = true
+      const locators = workspace.tabs.map(tab => tab.locator)
+      const reopened = await ipc.invoke('project:file-editor-open', workspace.path, locators)
+      display(workspace.path, reopened, workspace.active, locators)
+      renderLog('info', 'Save:FileProjectEditor', `${t('project.fileEditorActivated')} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(t('project.fileEditorActivated'))
+    } catch (error) {
+      if (activated) setWorkspace(undefined)
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t(activated ? 'project.fileEditorReloadFailed' : 'project.fileEditorActivateFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
   async function persistCommit(command: FileDraftCommand, locator: string) {
     if (pending.current || dirty || !workspace) return
     clearInference()
@@ -431,6 +453,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           {workspace && (
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
+              {workspace.activation && <p className="text-sm">{t('project.fileEditorActivated')}</p>}
+              {workspace.canActivate && <Button variant="outline" disabled={busy || dirty}
+                onClick={() => setConfirmation('activate')}>{t('project.fileEditorActivate')}</Button>}
               {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
                 editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save}
                 onStage={lifecycle?.canStageRevision ? stageAgentRevision : undefined} />}
@@ -587,7 +612,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
           <DialogContent>
             <DialogHeader>
               <DialogTitle>{t('dialog.confirmTitle')}</DialogTitle>
-              <DialogDescription>{t(confirmation === 'apply-blueprints' ? 'project.fileEditorConfirmApplyBlueprints'
+              <DialogDescription>{t(confirmation === 'activate' ? 'project.fileEditorConfirmActivate'
+                : confirmation === 'apply-blueprints' ? 'project.fileEditorConfirmApplyBlueprints'
                 : confirmation === 'apply-settings' ? 'project.fileEditorConfirmApplySettings'
                 : confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
                 : confirmation === 'finalize' ? 'project.fileEditorConfirmFinalize' : 'project.fileEditorConfirmArchive')}</DialogDescription>
@@ -595,7 +621,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmation(undefined)}>{t('action.cancel')}</Button>
               <Button onClick={() => {
-                if (confirmation === 'apply-blueprints') void applyInferredBlueprints()
+                if (confirmation === 'activate') void activateProject()
+                else if (confirmation === 'apply-blueprints') void applyInferredBlueprints()
                 else if (confirmation === 'apply-settings') void applyInferredSettings()
                 else if (confirmation) void commit(confirmation)
                 setConfirmation(undefined)

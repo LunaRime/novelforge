@@ -412,9 +412,33 @@ test('restores candidate operations and verifies import snapshots against receip
     await expect(invoke('agent-resolve-edit', archivedNative.token, oldSession.id, 'apply')).rejects.toThrow('session')
     await expect(invoke('agent-resolve-edit', switched.token, oldSession.id, 'apply')).rejects.toThrow('proposal')
     expect(parseChapter(await readFile(agentTarget, 'utf8')).content).toBe('new $& text edited')
+    const descriptor = join(project, '.novelforge/file-editor.json')
+    const candidateDescriptor = await readFile(descriptor, 'utf8')
+    expect(switched.canActivate).toBe(true)
+    await writeFile(join(project, history), `${historyBytes}damaged`)
+    await expect(invoke('activate', switched.token)).rejects.toThrow('target is unavailable')
+    expect(await readFile(descriptor, 'utf8')).toBe(candidateDescriptor)
+    await writeFile(join(project, history), historyBytes)
+    const secondSender = { id: 2, once: vi.fn() }
+    const otherWindow = await handlers.get('project:file-editor-open')!({ sender: secondSender }, project, [locator]) as ProjectChannels['project:file-editor-open']['return']
+    await invoke('activate', switched.token)
+    await expect(handlers.get('project:file-editor-save')!({ sender: secondSender }, otherWindow.token, locator,
+      otherWindow.tabs[0].revision, 'stale')).rejects.toThrow('Invalid file editor save')
+    registerFileProjectEditorController()
+    const activated = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
+    expect(activated.canActivate).toBe(false)
+    expect(activated.activation).toMatchObject({ generation: expect.any(String), activatedAt: expect.any(String) })
+    await expect(invoke('activate', activated.token)).rejects.toThrow('already active')
+    const activationDescriptor = await readFile(descriptor, 'utf8')
+    const damaged = JSON.parse(activationDescriptor)
+    damaged.activation.manifestHash = '0'.repeat(64)
+    await writeFile(descriptor, JSON.stringify(damaged))
+    await expect(invoke('open', project, [locator])).rejects.toThrow('Invalid file project activation')
+    await writeFile(descriptor, activationDescriptor)
+    const restoredActivation = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     await rmdir(join(project, '.novelforge/vela.db'))
-    await expect(invoke('import-source', switched.token, 4, source)).rejects.toThrow('candidate changed')
-    await expect(invoke('save', switched.token, imported.firstLocator, switched.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
+    await expect(invoke('import-source', restoredActivation.token, 4, source)).rejects.toThrow('candidate changed')
+    await expect(invoke('save', restoredActivation.token, imported.firstLocator, restoredActivation.tabs[0].revision, 'missing barrier')).rejects.toThrow('candidate changed')
     await expect(invoke('open', project, [locator])).rejects.toThrow('candidate changed')
   } finally { await rm(root, { recursive: true, force: true }) }
 }, 20000)
