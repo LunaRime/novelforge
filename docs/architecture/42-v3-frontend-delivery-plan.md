@@ -126,6 +126,8 @@
 
 **落点**。`SettingsModal.tsx`、`ThemeSection.tsx`、`WelcomePage.tsx`、`components/ui/`、`CommandPalette.tsx`、三语字典及现有 Storybook。
 
+- [ ] 接入 V3 启动画面，验证首帧、快慢启动及真实失败恢复。[启动样板与接入清单](45-v3-startup-design.md)
+
 - [ ] 把 V3 外观、稿纸、阅读宽度和密度落到已有设置位置，补齐作用范围、反馈和恢复默认。切设置页或退出弹窗时明确处理未保存输入。
 - [ ] 欢迎页验收新建、打开、导入与最近项目。公共控件先走真实场景再逐页替换，复核焦点、Tooltip、模态退出、滚动锁和三语溢出。
 

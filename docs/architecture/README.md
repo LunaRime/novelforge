@@ -54,6 +54,7 @@
 | 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | U0 已验收，正式接线待交接 |
 | 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 交互矩阵、长文输入及现有接口 | 本地验证记录 |
 | 44 | [V3 U1 工作台施工与交互验收](44-v3-u1-workbench-plan.md) | 两态画面、模式切换、窄窗、键盘和正式接线清单 | 施工计划 |
+| 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 设计样板 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
