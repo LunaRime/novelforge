@@ -1,8 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react' // eslint-disable-line storybook/no-renderer-packages
-import { useId, useState } from 'react'
+import { Ellipsis } from 'lucide-react'
+import { useId, useRef, useState } from 'react'
 import CodeMirrorEditor from '../components/editor/CodeMirrorEditor'
 import { Button } from '../components/ui/Button'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/Dialog'
+import { MenuItem } from '../components/ui/MenuItem'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
+import { useTranslation } from '../hooks/useTranslation'
 import './v3-workbench.story.css'
 
 const chapters = [
@@ -18,12 +22,22 @@ const modes: Array<{ value: Mode; label: string }> = [
   { value: 'compose', label: '写作态' },
 ]
 
-function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveFailure = false, dirty = false }: {
+const versionActions = [
+  { id: 'polish', label: 'editor.aiPolishBtn' },
+  { id: 'review', label: 'editor.aiReviewBtn' },
+  { id: 'finalize', label: 'editor.finalizeBtn' },
+] as const
+
+type VersionAction = typeof versionActions[number]
+
+function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveFailure = false, dirty = false, showVersionActions = false }: {
   mode?: Mode
   chapterId?: ChapterId
   saveFailure?: boolean
   dirty?: boolean
+  showVersionActions?: boolean
 }) {
+  const { t } = useTranslation()
   const [mode, setMode] = useState(initialMode)
   const [selected, setSelected] = useState(chapterId)
   const [partnerOpen, setPartnerOpen] = useState(true)
@@ -32,14 +46,25 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
   const [drafts, setDrafts] = useState<Partial<Record<ChapterId, string>>>(dirty ? { harbour: `${chapters[0].body}\n\n她把信收进口袋。` } : {})
   const [failedChapter, setFailedChapter] = useState<ChapterId>()
   const [suggestionOpen, setSuggestionOpen] = useState(false)
+  const [activeAction, setActiveAction] = useState<VersionAction>()
+  const [finalizedChapter, setFinalizedChapter] = useState<ChapterId>()
   const panelId = useId()
+  const menuId = `${panelId}-version-actions`
+  const menuAnchor = `--v3-version-${panelId.replace(/[^\w-]/g, '')}`
+  const menu = useRef<HTMLDivElement>(null)
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const actionTrigger = useRef<HTMLButtonElement>(null)
+  const documentTitle = useRef<HTMLHeadingElement>(null)
   const chapter = chapters.find(item => item.id === selected) ?? chapters[0]
+  const title = showVersionActions && chapter.id === 'harbour'
+    ? '雾港退潮前的最后一封信与消失的渡口灯塔' : chapter.title
   const body = drafts[chapter.id] ?? saved[chapter.id] ?? chapter.body
   const changed = body !== (saved[chapter.id] ?? chapter.body)
+  const readOnly = chapter.readOnly || finalizedChapter === chapter.id
   const tasksOpen = tasksByMode[mode]
 
   function save(content: string) {
-    if (!changed || chapter.readOnly) return
+    if (!changed || readOnly) return
     // 样板只记录内存中的提交结果，产品的保存与版本校验仍由现有用例负责。
     if (saveFailure) {
       setFailedChapter(chapter.id)
@@ -73,15 +98,47 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
         <div className="v3-sample-sheet">
           <header className="v3-sample-document">
             <div>
-              <h2>{chapter.title}</h2>
-              <p aria-live="polite">{chapter.readOnly ? '已定稿，只读' : changed ? '有未保存修改' : '已保存到样本'}</p>
+              <h2 ref={documentTitle} tabIndex={-1}>{title}</h2>
+              <p aria-live="polite">{readOnly ? t('status.readOnly') : changed ? t('statusbar.unsavedShort') : t('statusbar.saved')}</p>
             </div>
-            <Button size="sm" disabled={!changed || chapter.readOnly} onClick={() => save(body)}>保存正文</Button>
+            <div className="v3-sample-tools">
+              <Button size="sm" disabled={!changed || readOnly} onClick={() => save(body)}>{t('common.save')}</Button>
+              {showVersionActions && !readOnly && (
+                <>
+                  <div className="v3-sample-version-inline">
+                    {versionActions.map(action => (
+                      <Button key={action.id} size="sm" variant="outline" disabled={action.id === 'finalize' && changed}
+                        onClick={event => { actionTrigger.current = event.currentTarget; setActiveAction(action) }}>
+                        {t(action.label)}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="v3-sample-version-overflow">
+                    {/* 原生浮层进入顶层，窄窗滚动容器不会裁掉操作项。 */}
+                    <Button ref={moreButton} size="icon" variant="outline" popoverTarget={menuId} aria-controls={menuId}
+                      aria-label={t('tip.moreOptions')} title={t('tip.moreOptions')} style={{ anchorName: menuAnchor }}>
+                      <Ellipsis size={16} aria-hidden="true" />
+                    </Button>
+                    <div ref={menu} id={menuId} popover="auto" className="floating-menu v3-sample-version-menu"
+                      style={{ positionAnchor: menuAnchor }}>
+                      {versionActions.map(action => (
+                        <MenuItem key={action.id} label={t(action.label)} disabled={action.id === 'finalize' && changed}
+                          onClick={() => {
+                            actionTrigger.current = moreButton.current
+                            menu.current?.hidePopover()
+                            setActiveAction(action)
+                          }} />
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
           </header>
           {failedChapter === chapter.id && <p role="alert" className="v3-sample-error">保存失败，输入已保留。</p>}
           <div className="v3-sample-editor" aria-label="正文编辑区" role="region">
             {/* 工作状态只改变区域样式，正文编辑器仅在切换文档时重建。 */}
-            <CodeMirrorEditor key={chapter.id} mode="prose" content={body} editable={!chapter.readOnly}
+            <CodeMirrorEditor key={chapter.id} mode="prose" content={body} editable={!readOnly}
               onChange={content => setDrafts(previous => ({ ...previous, [chapter.id]: content }))} onSave={save} />
           </div>
         </div>
@@ -95,6 +152,29 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
       </aside>
       {/* 两态各自记住任务区开关，并显示同一个运行状态。 */}
       <footer id={`${panelId}-tasks`} className="v3-sample-runtime" hidden={!tasksOpen}>渡口场景连续性检查正在运行</footer>
+      <Dialog open={!!activeAction} onOpenChange={open => { if (!open) setActiveAction(undefined) }}>
+        <DialogContent className="v3-sample-version-dialog" onCloseAutoFocus={event => {
+          event.preventDefault()
+          // 定稿或调整宽度可能移除触发按钮，此时焦点回到文档标题。
+          const trigger = actionTrigger.current
+          if (trigger?.getClientRects().length) trigger.focus()
+          else documentTitle.current?.focus()
+        }}>
+          <DialogHeader>
+            <DialogTitle>{activeAction?.id === 'finalize' ? t('dialog.confirmFinalize') : activeAction && t(activeAction.label)}</DialogTitle>
+            <DialogDescription>{title}</DialogDescription>
+          </DialogHeader>
+          {activeAction?.id === 'polish' && <p className="v3-sample-version-preview">{body}{'\n\n她攥紧湿透的来信，望向对岸。'}</p>}
+          {activeAction?.id === 'review' && <p className="v3-sample-version-preview">{t('codeEditor.aiPreview')}{'\n渡口最后一盏灯熄灭的时间与港钟响起的时间一致。'}</p>}
+          <DialogFooter>
+            <DialogClose asChild><Button variant="outline" size="sm">{t('common.cancel')}</Button></DialogClose>
+            {activeAction?.id === 'finalize' && <DialogClose asChild>
+              {/* 定稿只标记已保存的合成稿，方便在样板中核对只读状态。 */}
+              <Button size="sm" onClick={() => setFinalizedChapter(chapter.id)}>{t('editor.finalizeBtn')}</Button>
+            </DialogClose>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -112,3 +192,4 @@ export const Forge: Story = {}
 export const Compose: Story = { args: { mode: 'compose' } }
 export const ReadOnly: Story = { args: { chapterId: 'crossing' } }
 export const SaveFailure: Story = { args: { dirty: true, saveFailure: true } }
+export const VersionActions: Story = { args: { dirty: true, showVersionActions: true } }

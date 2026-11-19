@@ -15,6 +15,10 @@
 
 稿纸参照 V3 原型与 U0 样板，正式页面先保留 `editor-prefs-store.ts` 的正文行宽设置，再用容器宽度约束排版。四个主题使用现有稿纸、正文和焦点语义令牌。已定稿和归档状态在标题区可见，所显示的操作取决于当前文档的读写权限。[稿纸样板](../../src/stories/v3-workbench.story.css)、[正文偏好](../../src/stores/editor-prefs-store.ts)
 
+## Storybook 预验收
+
+在 **NovelForge Workbench → V3 → Version Actions** 打开带长章名和未保存正文的合成稿。菜单按编辑区宽度收纳，靠近视口边缘时翻转。已在 Chromium 用中、英、俄三语验证 1440×900 下直达及 684×428 下的 32×32 CSS px 入口、菜单项点击命中、键盘预览和 Esc 焦点归还。俄语场景另验取消定稿后返回入口、确认后焦点回到章标题，以及实际键入时正文保持只读。修稿、审稿和定稿均使用样板内存数据，打包版验收见下文。[样板源码](../../src/stories/V3Workbench.stories.tsx)
+
 ## 施工顺序
 
 ### 1. 整理标签与文档视图

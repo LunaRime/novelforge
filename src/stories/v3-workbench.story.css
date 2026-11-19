@@ -42,7 +42,7 @@
 .v3-sample-document p, .v3-sample-runtime { font-size: .875rem; color: var(--color-text-secondary); }
 .v3-sample-partner p, .v3-sample-partner blockquote { margin: .75rem 0; line-height: 1.7; }
 .v3-sample-partner blockquote { border-inline-start: 2px solid var(--color-accent); padding-inline-start: .75rem; }
-.v3-sample-main { min-width: 0; padding: clamp(.75rem, 3vw, 2rem); }
+.v3-sample-main { min-width: 0; padding: clamp(.75rem, 3vw, 2rem); container: v3-editor / inline-size; }
 .v3-sample-sheet {
   max-width: 42rem;
   min-height: 100%;
@@ -53,6 +53,36 @@
   background: var(--color-editor-bg);
 }
 .v3-sample-document { padding-bottom: 1rem; }
+.v3-sample-document h2 { overflow-wrap: anywhere; }
+.v3-sample-version-inline { display: flex; gap: .5rem; }
+.v3-sample-version-overflow { display: none; }
+.v3-sample-version-overflow > button { min-width: 2rem; min-height: 2rem; }
+.v3-sample-version-menu {
+  /* 默认在触发按钮下方，靠近视口边缘时翻转，避免俄语窄窗裁掉菜单。 */
+  inset: auto;
+  top: anchor(bottom);
+  right: anchor(right);
+  position-try-fallbacks: flip-block, flip-inline, flip-block flip-inline;
+  margin: .375rem 0 0;
+  min-inline-size: 9rem;
+  padding: .25rem;
+  color: var(--color-text);
+  background: var(--color-sidebar);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-popover);
+}
+.v3-sample-version-dialog {
+  max-inline-size: min(32rem, calc(100vw - 2rem));
+  max-block-size: calc(100dvh - 2rem);
+  overflow-y: auto;
+}
+.v3-sample-version-preview { padding: 1rem 1.5rem; white-space: pre-wrap; }
+
+@container v3-editor (max-width: 42rem) {
+  .v3-sample-version-inline { display: none; }
+  .v3-sample-version-overflow { display: block; }
+}
 .v3-sample-editor {
   /* CodeMirror 的内部滚动区按父容器高度计算。 */
   height: clamp(14rem, 42dvh, 30rem);
