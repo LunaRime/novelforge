@@ -160,6 +160,7 @@ interface MaintenanceReceipt {
 - [x] [F1 切换设计与身份映射](40-file-storage-cutover-design.md) 已核验项目级映射、候选编辑器保存及重启恢复。正式项目激活随 F2/F3 验收。
 - [x] [F2 文件项目提交与恢复](41-file-commit-recovery.md) 激活项目的当前正文由文件编辑器写入 Markdown，旧章表冻结保留，派生索引可从正文重建。
 - [x] [F3 Windows 文件项目验收](52-f3-file-storage-acceptance.md) 打包应用通过索引缺失重建、重启恢复、定稿只读、历史与分支完整性及隔离回退。验收范围为激活文件项目的现有专用入口。
+- [x] [V3 后端交接](53-v3-backend-handoff.md) 核定 C/D 交付和生产契约。U1 首批使用现有普通 SQLite 工作台，文件项目沿用专用编辑器分流。
 - [ ] 发布验收按目标平台和实际交付范围执行。旧表删除不早于 1.0，并另走既定验收。
 
 ## 七、每批质量门禁与交付规则
