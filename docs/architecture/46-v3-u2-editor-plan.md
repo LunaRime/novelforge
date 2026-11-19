@@ -23,10 +23,11 @@
 
 ### 1. 整理标签与文档视图
 
-- [ ] 将 `EditorArea.tsx` 内已有的 `EditorTabBar` 移到独立模块，保留元数据订阅、固定标签、单个和批量关闭、脏稿及未决 inline 建议的确认。把按文档类型分派视图的职责集中在编辑区，保持正文编辑器的组件类型与挂载位置稳定。
-- [ ] 通过项目导航和已有打开动作两次打开同一 SQLite 草稿，确认复用 `doc:{draftId}` 标签。用同章不同草稿及同名章节验证身份隔离。选中修稿、审稿或历史时显示对应记录，返回正文后保留输入及未决建议。
-- [ ] 复测取消关闭、确认丢弃、固定标签、批量关闭和项目切换。模拟同一路径关闭后重开，确保前一会话迟到的读取不会打开旧标签。重开作品后回读已保存的正文及版本状态。
-- [ ] 复跑 `EditorArea.test.tsx` 与 `open-editor-document.test.ts`。对抽离后的关闭确认和去重补足实际入口的缺口。[编辑区](../../src/components/panels/EditorArea.tsx)、[打开适配器](../../src/services/editor/open-editor-document.ts)
+- [x] 将标签栏和文档分派分别抽到 `EditorTabBar` 与 `EditorDocumentView`。保留元数据订阅、固定标签关闭保护和正文编辑器的挂载边界。关闭确认绑定发起时的项目会话及标签快照。
+- [x] 在 Windows 打包应用中，从分卷和草稿箱打开同一 SQLite 草稿，复用 `doc:{draftId}` 标签与编辑实例。同章不同草稿、同名不同章各自显示正确正文。修稿、审稿和历史对比读取各自记录，返回正文保留未保存输入和测试夹具中的未决建议。
+- [x] 复测取消关闭、确认丢弃、固定标签、批量关闭和项目切换。模拟同一路径关闭后重开，确认打开适配器的迟到读取及旧标签关闭确认无法作用到新会话。Windows 打包应用重启后，经草稿箱重开原草稿，回读已保存的正文与版本号。
+- [x] 复跑 `EditorArea.test.tsx` 与 `open-editor-document.test.ts`，覆盖关闭确认、未决建议和不同入口打开同一草稿。[编辑区](../../src/components/panels/EditorArea.tsx)、[打开适配器](../../src/services/editor/open-editor-document.ts)
+- [ ] 重开 SQLite 作品时自动恢复上次打开的正文标签及选中项。验证项目之间的恢复记录隔离，并从 SQLite 重新读取正文。
 
 ### 2. 接入稿纸与正文偏好
 

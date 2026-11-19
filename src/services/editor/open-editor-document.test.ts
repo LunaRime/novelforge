@@ -55,7 +55,9 @@ describe('renderer document opening adapter', () => {
   })
 
   it('reopens a canonical draft without overwriting dirty text or inline state', async () => {
-    useEditorStore.getState().openFile({ id: 'doc:7', docId: 7, filePath: 'vela://draft/7', type: 'chapter', name: 'Old', content: 'initial' })
+    // 草稿箱按 ID 打开历史版本，章节入口按最新版本打开同一草稿。
+    invoke.mockResolvedValueOnce({ content: 'initial' })
+    await openRendererEditorDocument({ kind: 'draft', draftId: 7, name: 'Old' })
     useEditorStore.getState().updateTabContent('doc:7', 'local unsaved')
     useEditorStore.getState().beginInlineSession('doc:7', { sessionId: 'inline', sourceKind: 'selection', baseDocSnapshot: 'initial', hunks: [], decisions: {} })
     const before = useEditorStore.getState().tabs[0]

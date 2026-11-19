@@ -11,13 +11,13 @@
  * 3. 保存成功：stripStatusFrontmatter 去 status（编辑后不再 stale）→ 刷新记忆列表
  *    → 清 dirty；日志走 Save:Memory / log:write（LogsView 可观测）
  */
-import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import EditorArea from './EditorArea'
 import { VELA } from '../../services/vela-protocol'
 import { stripStatusFrontmatter } from '../../services/memory/memory-codec'
-import { useEditorStore } from '../../stores/editor-store'
+import { type EditorTab, useEditorStore } from '../../stores/editor-store'
 import { useMemoryStore } from '../../stores/memory-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
@@ -55,6 +55,10 @@ function render(content: string): { container: HTMLElement; root: Root } {
     tabs: [{ id: TAB_ID, name: FILE, type: 'memory', filePath: TAB_ID, content }],
     activeTabId: TAB_ID,
   })
+  return mountEditorArea()
+}
+
+function mountEditorArea(): { container: HTMLElement; root: Root } {
   const container = document.createElement('div')
   container.style.width = '800px'
   container.dataset.testRoot = '1'
@@ -193,5 +197,107 @@ describe('EditorArea — 记忆文件标签页', () => {
     expect(container.querySelector('.cm-editor')).toBeTruthy()
     expect(container.querySelector('.cm-content')?.textContent).toContain('第 1 章 · 开端')
     act(() => { root.unmount() })
+  })
+})
+
+describe('EditorArea — 标签关闭', () => {
+  // 使用占位视图，单独验证标签栏操作和存储状态。
+  const draft: EditorTab = { id: 'doc:7', name: '正文', type: 'publication', content: '未保存正文', dirty: true }
+  let view: ReturnType<typeof mountEditorArea>
+  const button = (key: Parameters<typeof t>[0]) => [...document.querySelectorAll('button')]
+    .find(element => element.textContent?.trim() === t(key))
+  const closeByShortcut = () => act(() => {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'w', ctrlKey: true }))
+  })
+
+  beforeEach(() => {
+    useProjectStore.setState({ currentProject: { path: '/mock/proj' } as never })
+    useLayoutStore.setState({ sidebarView: 'project' })
+    useEditorStore.setState({ tabs: [draft], activeTabId: draft.id })
+    view = mountEditorArea()
+  })
+
+  afterEach(() => {
+    act(() => { view.root.unmount() })
+    view.container.remove()
+  })
+
+  it('取消后保留未保存正文，再次确认后才关闭标签', () => {
+    closeByShortcut()
+    expect(button('dialog.confirmDiscard')).toBeDefined()
+    act(() => { button('action.cancel')!.click() })
+    expect(useEditorStore.getState().tabs).toEqual([draft])
+
+    closeByShortcut()
+    act(() => { button('dialog.confirmDiscard')!.click() })
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
+  it('批量关闭先确认，关闭后保留固定标签', () => {
+    const pinned: EditorTab = { ...draft, id: 'pinned', name: '固定标签', dirty: false, pinned: true }
+    const clean: EditorTab = { ...draft, id: 'clean', name: '已保存标签', dirty: false }
+    act(() => { useEditorStore.setState({ tabs: [pinned, draft, clean] }) })
+    act(() => {
+      view.container.querySelector('[aria-selected="true"]')!.dispatchEvent(
+        new MouseEvent('contextmenu', { bubbles: true }),
+      )
+    })
+    act(() => { button('editor.closeAll')!.click() })
+    expect(useEditorStore.getState().tabs).toEqual([pinned, draft, clean])
+    act(() => { button('dialog.confirmDiscardClose')!.click() })
+    expect(useEditorStore.getState().tabs).toEqual([pinned])
+    expect(useEditorStore.getState().activeTabId).toBe(pinned.id)
+  })
+
+  it('正文干净但有未决建议时，迟到的确认不能关闭新会话标签', async () => {
+    act(() => {
+      const editor = useEditorStore.getState()
+      editor.markTabSaved(draft.id)
+      editor.beginInlineSession(draft.id, {
+        sessionId: 'pending',
+        sourceKind: 'selection',
+        baseDocSnapshot: draft.content ?? '',
+        hunks: [{ id: 'group', kind: 'MATCH', decision: 'pending', modText: '建议正文', sub: [
+          { id: 'change', parentId: 'group', origRange: { from: 0, to: 5 }, origText: '未保存正文', modText: '建议正文' },
+        ] }],
+        decisions: {},
+      })
+    })
+    await act(async () => {
+      closeByShortcut()
+      await vi.dynamicImportSettled()
+    })
+    expect(document.body.textContent).toContain(t('inlineAccept.closeConfirm').replace('{n}', '1'))
+
+    const reopenedTab = { ...draft, content: '新会话正文', dirty: false }
+    act(() => {
+      useProjectStore.setState(state => ({ projectSession: state.projectSession + 1 }))
+      useEditorStore.setState({ tabs: [reopenedTab], activeTabId: reopenedTab.id })
+    })
+    vi.useFakeTimers()
+    try {
+      await act(async () => {
+        button('dialog.confirm')!.click()
+        await vi.runAllTimersAsync()
+      })
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(useEditorStore.getState().tabs).toEqual([reopenedTab])
+  })
+
+  it('同一路径重开后，旧关闭确认不能丢弃新会话里同 ID 的标签', () => {
+    closeByShortcut()
+    expect(button('dialog.confirmDiscard')).toBeDefined()
+
+    const reopenedTab = { ...draft, content: '新会话内容', dirty: false }
+    act(() => {
+      useProjectStore.setState(state => ({ projectSession: state.projectSession + 1 }))
+      useEditorStore.setState({ tabs: [reopenedTab], activeTabId: reopenedTab.id })
+    })
+    act(() => { button('dialog.confirmDiscard')?.click() })
+
+    expect(button('dialog.confirmDiscard')).toBeUndefined()
+    expect(useEditorStore.getState().tabs).toEqual([reopenedTab])
   })
 })
