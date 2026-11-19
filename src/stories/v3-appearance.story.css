@@ -1,0 +1,59 @@
+.v3-appearance-sample {
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.v3-appearance-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1.25rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.v3-appearance-header h1 { font-size: 1.125rem; font-weight: 600; }
+.v3-appearance-canvas { padding: clamp(1rem, 3vw, 2.5rem); }
+
+.v3-appearance-paper {
+  width: 100%;
+  margin-inline: auto;
+  padding: 1rem 1.25rem;
+  line-height: 1.7;
+  color: var(--color-text);
+  background: var(--color-editor-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.v3-appearance-paper p:first-child { margin-block-end: .5rem; font-weight: 600; }
+
+.v3-appearance-dialog {
+  max-inline-size: min(64rem, calc(100vw - 2rem));
+  max-block-size: calc(100dvh - 2rem);
+  display: flex;
+  flex-direction: column;
+  /* 弹窗挂在 body 下，标签文字从预览主题取色。 */
+  color: var(--color-text);
+}
+
+/* 预览主题切换时文字、控件和底色同帧更新，避免浅底短暂承载深色主题的浅文字。 */
+.v3-appearance-dialog, .v3-appearance-dialog button { transition-property: transform, opacity; }
+
+.v3-appearance-dialog-header { padding-inline-end: 3.5rem; }
+.v3-appearance-body { min-height: 0; overflow-y: auto; padding: 1rem 1.5rem; }
+.v3-appearance-settings { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); gap: 1rem; margin-block-end: 1rem; }
+.v3-appearance-settings fieldset { min-inline-size: 0; }
+.v3-appearance-settings legend { margin-block-end: .5rem; font-weight: 600; }
+.v3-appearance-themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem; }
+.v3-appearance-themes button { min-height: 2rem; height: auto; white-space: normal; }
+.v3-appearance-typography > div { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin-block-end: .5rem; }
+.v3-appearance-typography input { flex: 1 0 100%; accent-color: var(--color-accent); }
+.v3-appearance-typography output { margin-inline-start: auto; color: var(--color-text-secondary); }
+
+/* 窄窗仅滚动设置内容，底部的重置、确认与取消始终可达。 */
+.v3-appearance-footer { flex: 0 0 auto; flex-wrap: wrap; gap: .5rem; }
+.v3-appearance-footer p { color: var(--color-text-secondary); }

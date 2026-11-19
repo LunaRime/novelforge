@@ -134,6 +134,8 @@
 
 **落点**。`SettingsModal.tsx`、`ThemeSection.tsx`、`WelcomePage.tsx`、`components/ui/`、`CommandPalette.tsx`、三语字典及现有 Storybook。
 
+首帧交付条件、设置作用范围和欢迎页回归见 [U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md)。
+
 - [ ] 接入 V3 启动画面，验证首帧、快慢启动及真实失败恢复。[启动样板与接入清单](45-v3-startup-design.md)
 
 - [ ] 把 V3 外观、稿纸、阅读宽度和密度落到已有设置位置，补齐作用范围、反馈和恢复默认。切设置页或退出弹窗时明确处理未保存输入。

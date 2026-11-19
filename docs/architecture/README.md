@@ -59,6 +59,7 @@
 | 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 施工计划 |
 | 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 施工计划 |
 | 49 | [V3 U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md) | 任务召回、审批、修稿与取消回执 | 施工计划 |
+| 50 | [V3 U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md) | 首帧、设置预览和关闭、欢迎页入口 | 施工计划 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
