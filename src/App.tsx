@@ -1,5 +1,4 @@
 import { lazy, Suspense, useEffect } from 'react'
-import { Panel, Group as PanelGroup, Separator as PanelResizeHandle, useDefaultLayout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useThemeStore } from './stores/theme-store'
 import { useLayoutStore } from './stores/layout-store'
@@ -18,15 +17,9 @@ import { useTranslation } from './hooks/useTranslation'
 import { setWindowTitle } from './lib/window-title'
 import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
-import LeftToolWindowBar from './components/layout/LeftToolWindowBar'
-import RightToolWindowBar from './components/layout/RightToolWindowBar'
+import WorkspaceLayout from './components/layout/WorkspaceLayout'
 // 应用图标：直接引用**打包用的那个文件**（而非在 public/ 放一份副本），保证单一来源
 import appIcon from '../build/icon.png'
-import Sidebar from './components/panels/Sidebar'
-import EditorArea from './components/panels/EditorArea'
-import AIPanel from './components/panels/AIPanel'
-import AIOutputPanel from './components/panels/AIOutputPanel'
-import BottomPanel from './components/panels/BottomPanel'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
@@ -48,32 +41,6 @@ import { Search } from 'lucide-react'
 import './services/workflows/workflow-registry-init'
 
 /**
- * 各区域的**内容下限（像素）**——低于这个宽度就看不出这块是什么功能了，所以它就是拖拽下限。
- *
- * ⚠️ `react-resizable-panels` 的尺寸 prop **数字按像素解释**（只有带单位的字符串才是其它语义：
- * `"20%"` 是百分比、`"176px"` 是像素）。此前写的 `minSize={10}` 一直是 **10 像素**，
- * 等于没有下限——这正是「区域能一路收缩到底」的原因。
- */
-const REGION_MIN_PX = { sidebar: 220, ai: 260, bottom: 120 } as const
-/** 上限同样按规范：侧栏 220–400、Agent 面板 260–460（底栏用视口百分比由 Panel maxSize 管） */
-const REGION_MAX_PX = { sidebar: 400, ai: 460 } as const
-
-/**
- * ⚠️ **单位必须显式写清**（2026-09-20 连环踩坑的根源）：
- * `react-resizable-panels` 的尺寸 prop —— **数字 = 像素**（`dist/…js:95-110` 用 `sizeStyleToPx` 换算），
- * 只有带单位的字符串才是别的语义（`"20%"` 百分比、`"176px"` 像素）。
- *
- * 原代码的 `defaultSize={20}/{60}/{20}` 其实是 **20px/60px/20px**，只因库把各面板尺寸做了**比例归一化**
- * 才看起来像 20%:60%:20%。所以一旦引入 176/232 像素下限，下限就会把默认布局顶开、比例失真
- * （真机现象：重启后各区域大小不对）。**默认尺寸一律写成百分比字符串，下限一律写成像素。**
- */
-const SIDEBAR_DEFAULT = '22%'
-const AI_PANEL_DEFAULT = '22%'
-const EDITOR_DEFAULT = '56%'
-/** 编辑区下限：两侧面板现在都有真实下限，编辑区不能被挤成一条缝 */
-const EDITOR_MIN_PX = 360
-
-/**
  * 顶栏 —— 系统窗口控件覆盖层（WCO）留位 + **窗口拖拽区** + 应用标识。
  *
  * ⚠️ 为什么必须是**独立元素**、而不是给根容器加 `paddingTop`（2026-09-25 真机两轮反馈）：
@@ -86,8 +53,7 @@ const EDITOR_MIN_PX = 360
  * （macOS / 浏览器），此时它不占位、内容被 overflow 裁掉 —— macOS 的交通灯在**左上角**，
  * 标识放那里会撞，所以 macOS 走它自己的 28px 留位（见 LeftToolWindowBar）。
  *
- * ⚠️ 拖拽区内的交互元素若要可点，必须显式 `-webkit-app-region: no-drag`（本元素暂无按钮；
- * 将来放命令面板入口时记得加）。
+ * 命令面板按钮设为 `-webkit-app-region: no-drag`，可以在拖拽区内正常点击。
  */
 function TitleStrip() {
   const currentProject = useProjectStore((s) => s.currentProject)
@@ -147,54 +113,17 @@ function TitleStrip() {
   )
 }
 
-/** 区域 → 我们自己的 DOM 标记属性值（`[data-region]`，见面板内的包装 div） */
-const REGION_PANEL_ID = { sidebar: 'sidebar', ai: 'ai', bottom: 'bottom' } as const
-
-/**
- * 分隔条**松手**时：若该区域已贴到内容下限 → 关闭它。
- *
- * 三个设计决定，都是踩坑换来的（2026-09-20，勿回退）：
- * - **直接量 DOM**（我们自己的 `[data-region]` 标记 div 的 `getBoundingClientRect`），不引入 ref / 模块级可变状态：
- *   `App.tsx` 每次热更新都会重新求值模块顶层，模块级变量与 `window.addEventListener` 会**累积**，
- *   旧闭包不失效 → 表现为「区域莫名自己关掉」。
- * - **不用 `collapsible`**：库按 panel id 记账折叠态，关闭时卸载、重开时同 id 注册，可能恢复
- *   「已折叠」记忆 → 区域看似回来了却仍是 0 宽；而且 `collapsible` 是「一过下限立刻折到 0」，
- *   没有「停在下限」这一步。
- * - **只在松手后关闭**：拖拽中库持有布局，此时卸载面板会让「注册 N 个 / DOM N−1 个」不一致，
- *   `ResizeObserver` 回调随即抛 `Invalid N panel layout: …` 并刷屏。
- */
-function closeIfAtFloor(region: 'sidebar' | 'ai' | 'bottom'): void {
-  const el = document.querySelector(`[data-region="${REGION_PANEL_ID[region]}"]`)
-  if (!(el instanceof HTMLElement)) return
-  const rect = el.getBoundingClientRect()
-  const px = region === 'bottom' ? rect.height : rect.width
-  // 容差 1px：`minSize` 也是像素，贴住下限时两者应当相等
-  if (px > 0 && px <= REGION_MIN_PX[region] + 1) {
-    useLayoutStore.getState().closeRegion(region)
-  }
-}
-
-/**
- * NovelForge 主应用组件
- * 使用 react-resizable-panels 实现可拖拽调整大小的四区布局：
- * 每个区域有**内容下限**（到下限即停住）；在下限处松手 → 该区域**关闭（消失）**，
- * 从活动栏 / 右侧图标栏可重新打开。实现细节见 `closeIfAtFloor` 的注释。
- */
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
   // 合并 layout selector 为单次 subscribe（useShallow 浅比较），避免过度订阅导致全树重渲染
   const {
-    sidebarOpen, aiPanelOpen, rightView, settingsOpen, closeSettings,
+    settingsOpen, closeSettings,
     newProjectOpen, closeNewProject,
     importNovelOpen, closeImportNovel, chapterCreationOpen,
     chapterCreationPrefill, closeChapterCreation,
-    focusMode, bottomPanelOpen,
     activityDialogOpen, closeActivityDialog,
     devConsoleOpen, closeDevConsole,
   } = useLayoutStore(useShallow(s => ({
-    sidebarOpen: s.sidebarOpen,
-    aiPanelOpen: s.aiPanelOpen,
-    rightView: s.rightView,
     settingsOpen: s.settingsOpen,
     closeSettings: s.closeSettings,
     newProjectOpen: s.newProjectOpen,
@@ -204,8 +133,6 @@ export default function App() {
     chapterCreationOpen: s.chapterCreationOpen,
     chapterCreationPrefill: s.chapterCreationPrefill,
     closeChapterCreation: s.closeChapterCreation,
-    focusMode: s.focusMode,
-    bottomPanelOpen: s.bottomPanelOpen,
     activityDialogOpen: s.activityDialogOpen,
     closeActivityDialog: s.closeActivityDialog,
     devConsoleOpen: s.devConsoleOpen,
@@ -222,10 +149,6 @@ export default function App() {
   const initLLM = useLLMStore((s) => s.init)
   const loadRecentProjects = useProjectStore((s) => s.loadRecentProjects)
   const currentProject = useProjectStore((s) => s.currentProject)
-  // 面板尺寸记忆：react-resizable-panels 自己按 group id 存 localStorage。
-  // 折叠态由 layout-store 持久化，两者合起来 = 重启后回到同一工作台。
-  const horizontalLayout = useDefaultLayout({ id: 'novelforge-main-horizontal', storage: localStorage })
-  const verticalLayout = useDefaultLayout({ id: 'novelforge-middle-vertical', storage: localStorage })
   // 订阅 locale 只为让下面那个「窗口标题」effect 在**切语言时重跑**（回落标题是本地化的）
   const { locale } = useTranslation()
 
@@ -415,136 +338,7 @@ export default function App() {
       {/* 全局 title 悬停提示代理 — 原生 title 属性 → 现代化 Tooltip UI */}
       <GlobalTitleTooltip />
 
-      {/*
-        主体：flex 行 = LeftBar | 纵向PanelGroup | RightBar
-        ┌───┬──────────────────────────────┬───┐
-        │   │  Sidebar | Editor | AIPanel  │   │
-        │ L │──────────────────────────────│ R │
-        │   │     BottomPanel (全宽)        │   │
-        └───┴──────────────────────────────┴───┘
-      */}
-      {/* 键盘导航跳过链接（仅 focus 时可见），直达编辑区主内容 */}
-      <a
-        href="#main-editor-area"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded"
-      >
-        {t('tip.skipToContent')}
-      </a>
-
-      {/* 整块内容区就是「画布」：padding 3px = 外围缝隙，恰为卡片之间内部缝隙（6px）的一半，
-          且与内部缝隙同为画布色、连成一体。图标栏与相邻面板之间不留缝——它们绑定成一张卡片。
-          （标题栏已于 2026-09-22 移除，四边缝因此等宽对称。） */}
-      <div
-        className="flex flex-1 overflow-hidden"
-        style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
-      >
-
-        {/* 左侧工具窗口栏（全高，包括底部面板区域）— 专注模式下隐藏（与其余面板一致） */}
-        {!focusMode && <LeftToolWindowBar />}
-
-        {/* 卡片层：卡片之间的缝隙露出的就是画布底色 */}
-        <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
-
-          {/* 横向 PanelGroup：侧边栏 | 中列（编辑区 + 底栏） | AI 面板。
-              ⚠️ 底栏只占**中列**（编辑区正下方），两侧面板向下延伸到底——2026-09-22 用户定的布局；
-              此前底栏是全宽（挂在纵向 group 的下层），侧栏/AI 够不到底部。 */}
-          <PanelGroup
-            orientation="horizontal"
-            className="flex-1"
-            defaultLayout={horizontalLayout.defaultLayout}
-            onLayoutChanged={horizontalLayout.onLayoutChanged}
-          >
-
-            {/* 左侧边栏 — 专注模式下隐藏 */}
-            {(sidebarOpen && !focusMode) && (
-              <>
-                <Panel
-                  id="sidebar"
-                  defaultSize={SIDEBAR_DEFAULT}
-                  minSize={REGION_MIN_PX.sidebar}
-                  maxSize={REGION_MAX_PX.sidebar}
-                  aria-label={t('panel.sidebar')}
-                >
-                  {/* data-region 是**我们自己**的标记：`closeIfAtFloor` 靠它量尺寸。
-                      ⚠️ 不要改用库的 `data-panel` —— 那是无值属性（渲染成 data-panel="true"），
-                      拿 id 去选永远匹配不到（2026-09-20 实测踩过）。 */}
-                  <div data-region="sidebar" className="h-full">
-                    <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
-                      <Sidebar />
-                    </ErrorBoundary>
-                  </div>
-                </Panel>
-                {/* 松手时若侧栏已贴到内容下限 → 关闭它（见组件内 closeIfAtFloor 注释） */}
-                <PanelResizeHandle onPointerUp={() => closeIfAtFloor('sidebar')} />
-              </>
-            )}
-
-            {/* 中列：编辑区（上）+ 底栏（下）。这一列的宽度下限就是编辑区下限（EDITOR_MIN_PX） */}
-            <Panel id="middle" defaultSize={EDITOR_DEFAULT} minSize={EDITOR_MIN_PX}>
-              <PanelGroup
-                orientation="vertical"
-                className="h-full"
-                defaultLayout={verticalLayout.defaultLayout}
-                onLayoutChanged={verticalLayout.onLayoutChanged}
-              >
-
-                {/* 编辑区 — 专注模式下居中 + 大字号 */}
-                <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
-                  <div id="main-editor-area" />
-                  <div data-region="editor" className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
-                    <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
-                      <EditorArea onNewProject={() => useLayoutStore.getState().openNewProject()} />
-                    </ErrorBoundary>
-                  </div>
-                </Panel>
-
-                {/* 底栏 — bottomPanelOpen 控制显隐（镜像右侧 aiPanelOpen 模式） */}
-                {(bottomPanelOpen && !focusMode) && <PanelResizeHandle onPointerUp={() => closeIfAtFloor('bottom')} />}
-                {(bottomPanelOpen && !focusMode) && (
-                  <Panel
-                    id="bottom"
-                    defaultSize="25%"
-                    minSize={REGION_MIN_PX.bottom}
-                    maxSize="55%"
-                    aria-label={t('panel.bottom')}
-                  >
-                    <div data-region="bottom" className="h-full">
-                      <ErrorBoundary fallbackLabel={t('error.taskPanelFailed')}>
-                        <BottomPanel />
-                      </ErrorBoundary>
-                    </div>
-                  </Panel>
-                )}
-              </PanelGroup>
-            </Panel>
-
-            {/* 右侧面板（Agent 对话 / AI 输出）— 专注模式下隐藏 */}
-            {(aiPanelOpen && !focusMode) && (
-              <>
-                {/* 松手时若 AI 面板已贴到内容下限 → 关闭它 */}
-                <PanelResizeHandle onPointerUp={() => closeIfAtFloor('ai')} />
-                <Panel
-                  id="ai-panel"
-                  defaultSize={AI_PANEL_DEFAULT}
-                  minSize={REGION_MIN_PX.ai}
-                  maxSize={REGION_MAX_PX.ai}
-                  aria-label={t('panel.ai')}
-                >
-                  <div data-region="ai" className="h-full">
-                    <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
-                    </ErrorBoundary>
-                  </div>
-                </Panel>
-              </>
-            )}
-          </PanelGroup>
-        </div>
-
-        {/* 右侧工具窗口栏 — 专注模式下隐藏 */}
-        {!focusMode && <RightToolWindowBar />}
-      </div>
-
+      <WorkspaceLayout />
 
       {/* 状态栏（全宽） */}
       <StatusBar />
