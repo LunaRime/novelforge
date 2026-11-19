@@ -41,9 +41,11 @@ Storybook 样板用工具栏的「任务」按钮验收写作态召回，构建�
 
 ### 4. 真机交付
 
-- [ ] Windows 打包版比对构建态、写作态、搭档召回及未保存正文四组画面。沿用长章名和运行中 Agent 的测试稿，覆盖三语、四主题和 100%/125%/150% 应用内容缩放。通过对应设备核对 Windows 系统缩放、macOS 原生控件及中文输入法。
-- [ ] 对最小窗 1024×640 和 1440×900 截图，记录实际 CSS 视口、区域宽度与交互命中。已登记的正文修稿、审稿和定稿裁切由 U2 复测。U1 验收模式、搭档、任务、窗口与正文入口的可达性。
-- [ ] 完成「打开作品 → 写入未保存正文 → 往返切换 → Ctrl+S / Cmd+S → 关闭 → 重开」并回读正文。将已验的平台、代码提交、包版本与截图写入验收记录。
+- [x] Windows x64 的 `0823002` 打包应用在隔离普通 SQLite 项目完成 72 组验收。矩阵覆盖三语、四主题、100%/125%/150% 应用内容缩放，以及 1024×640 和 1440×900 两种窗口。保留构建态、写作态、流式搭档召回及未保存长稿画面。
+- [x] 记录实际 CSS 视口、面板尺寸和交互命中。1024×640 窗口在应用缩放 150% 时为 684×428 CSS px，构建态的正文区宽约 244 px，写作态展开搭档及任务时约 412 px。模式、召回、命令、缩放、正文区域及未保存稿件的保存按钮均可达。已登记的修稿、审稿和定稿裁切随 U2 复测。
+- [x] 两态往返及收起召回期间，同一条 Agent 流式回复继续接收后续内容。打开作品、输入未保存正文、往返切换、Ctrl+S、关闭并重启后，重选原草稿即可读回保存内容。验收使用本机模拟模型服务。
+- [x] 在实机 Windows 系统缩放 125% 下验证最大化、恢复及标题区控件命中。另用 Chromium CDP 模拟中文组合输入，核对提交后切换两态仍保留正文。
+- [ ] 在对应设备复验 macOS 原生窗口控件、Cmd+S、系统级中文输入法和其余 Windows 系统缩放档位。正文标签的自动恢复由 U2 的重开回归验证。
 
 ```powershell
 corepack pnpm run test src/stores/layout-store.test.ts src/stores/shortcut-store.test.ts src/components/command-palette/CommandPalette.test.tsx src/components/panels/EditorArea.test.tsx src/components/editor/DraftEditor.test.tsx --maxWorkers 4
