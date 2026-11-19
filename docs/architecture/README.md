@@ -51,8 +51,9 @@
 | 39 | [旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) | 打包旧版对照、隔离屏障与完整备份恢复 | E4 已提交 |
 | 40 | [文件存储切换设计](40-file-storage-cutover-design.md) | 项目级草稿映射、激活、文档身份及回退 | F1 映射及无界面联调已交付 |
 | 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入写入恢复、正文导入、全文索引、空白设定应用、缺失蓝图补入、Agent 正文问答及修改提案、结合作品设定与蓝图的下一章续写 |
-| 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | U0 样板已验证，正式接线待交接 |
-| 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 对照及现有应用接口 | 本地验证记录 |
+| 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | U0 已验收，正式接线待交接 |
+| 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 交互矩阵、长文输入及现有接口 | 本地验证记录 |
+| 44 | [V3 U1 工作台施工与交互验收](44-v3-u1-workbench-plan.md) | 两态画面、模式切换、窄窗、键盘和正式接线清单 | 施工计划 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

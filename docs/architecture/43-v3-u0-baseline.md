@@ -39,8 +39,32 @@
 | 文件候选项目修稿与生命周期 | `project:file-editor-preview` 返回正文与 `contentHash`。合并、定稿、归档通过 `project:file-editor-commit` 返回 `{ status: 'committed', revision }`。合并可携带已预览的 `proposalHash` | 用 token、ChapterId 和预期 revision 校验。关闭编辑器使会话失效，已进入提交协议的操作按后端恢复回执核验。[提交恢复协议](41-file-commit-recovery.md)、[生命周期测试](../../electron/services/file-draft-lifecycle.test.ts) |
 | 写作搭档与任务 | 工作台沿用 Agent/工作流运行时，文件编辑器另有候选项目提案入口，`project:file-editor-agent-resolve-edit` 返回 `discarded`、`staged` 或 `saved` | 候选提案绑定 token、proposalId 与内容版本。工作流按 runId 跟踪取消，进入提交区间的结果等待真实回执。U5 按项目和会话投影运行进度，复测超时待核验与切换后的审批归属。[Agent 适配器测试](../../src/services/agent-adapters/file-project-agent.test.ts)、[工作流运行时测试](../../src/services/workflows/workflow-runtime.test.ts) |
 
-## 待补证据
+## Windows 交互、缩放与输入补测
 
-- 采集蓝图表单及带实际消息的 Agent 会话，补齐四主题、三语和 Windows 显示缩放矩阵。已采集的设置和任务区基线见上表。
-- 在固定测试设备和合成小说上至少重复三次。测相同尺寸下拖拽松手后的恢复、长正文输入及受控流式输出时的输入延迟，按中位数和抖动记录对照。当前已测面板显隐及稿纸宽度。
-- 核对后端验收范围和交接提交，再为 U1 落定窗口、模式、布局偏好和编辑器持续挂载的施工清单。
+复用 `abb0aa8` Windows Portable，在隔离的 SQLite 项目中加入 100,258 字符的合成稿和带长章名的蓝图。取同一台 Windows 11、同一块 125% 缩放的屏幕，窗口为 1440×900 和请求的最小尺寸 1024×640。通过应用快捷键切换 100%、125%、150% 的内容缩放，并核对实际视口和状态栏读数。结果保存在本地 `.test-artifacts/v3-u0-desktop/`。
+
+| 验证 | 实测结果 | 截图 / 数据 |
+| --- | --- | --- |
+| 三语与缩放 | 浅色主题下实测中文、英文、俄语各 6 组窗口与缩放组合。最小窗口在 150% 应用缩放时，视口约 684×428 CSS px，正文区域宽约 244 CSS px | `matrix-results.json`、`windows-ru-RU-min-100.png`、`windows-ru-RU-min-125.png`、`windows-ru-RU-min-150.png` |
+| 四主题 | 中文在 1440×900、100% 下核对浅色、星空、纸色、深色。长章名和中文正文均可见，编辑区操作中心点可点击 | `windows-theme-galaxy.png`、`windows-theme-paper.png`、`windows-theme-dark.png` |
+| 正文操作裁切 | 三语在最小窗口、150% 缩放时，AI 修稿、AI 审稿和定稿按钮的中心点无法命中。俄语在 1440×900、100% 时已经裁切定稿。已纳入 U2 回归，U1 同时复用这组窄窗场景核对面板布局 | `matrix-results.json`、对应语言最小窗截图 |
+| 缩放控件裁切 | 最小窗、150% 缩放时，三语的状态栏缩小、重置和放大控件中心均无法命中。俄语在最小窗、125% 即出现。缩放快捷键可用，U1 补验鼠标可操作的缩放入口 | `matrix-results.json`、`windows-ru-RU-min-125.png` |
+| 设置键盘操作 | 最小窗口、125% 应用缩放下，从左侧设置按钮打开，连续 14 次 Tab 焦点均在弹窗内，Esc 关闭后回到原按钮 | `windows-settings-min-125.png` |
+| 拖拽与恢复 | 三次将侧栏拖到约 220 CSS px。按住时侧栏保留，松手后收起。Ctrl+B 重新打开均约 220 CSS px，未保存正文保留 | `desktop-results.json` |
+| 蓝图与 Agent 状态 | 打开已有蓝图并核对表单内容。采集 Agent 空会话、流式生成、完成和 HTTP 400 失败，正文未保存提示及输入在任务状态变化后仍可读 | `windows-blueprint.png`、`windows-agent-empty.png`、`windows-agent-streaming.png`、`windows-agent-stream-completed.png`、`windows-agent-error.png` |
+
+### 输入延迟基线
+
+使用同一份长稿、1440×900 和 100% 应用缩放。每轮空闲与流式期间各输入 8 次，共 3 轮、每种条件 24 次。回环模型服务每 150 ms 返回一段内容。浏览器从 `beforeinput` 到下一帧回调计时，每次核对新文本已进入正文，最后按 Ctrl+S 后回读数据库。指标作为本机帧延迟基线，端到端按键呈现、真实服务波动和 IME 组合另行验收。
+
+| 条件 | 中位数 | P95 | 最大值 |
+| --- | ---: | ---: | ---: |
+| Agent 空闲 | 4.7 ms | 6.3 ms | 6.5 ms |
+| Agent 流式输出中 | 4.4 ms | 5.6 ms | 6.0 ms |
+
+本机样本未显示稳定的延迟增量。U1/U2 应复用相同窗口、稿件和分段节奏核对正文实例和撤销状态。U5 在较长会话中重跑并检查无关区域的更新次数。
+
+## 仍待验证
+
+- Windows 系统级 DPI 100%/150%、原生窗口控件画面、macOS 交通灯及真实输入法组合，在 U1/U7 的相应设备验收。
+- U1 正式接入等待适用范围的后端交接确认。[U1 施工与交互验收](44-v3-u1-workbench-plan.md)
