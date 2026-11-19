@@ -1,15 +1,15 @@
+import { useLayoutEffect, useRef } from 'react'
 import { Group, Panel, Separator, useDefaultLayout, type Layout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useTranslation } from '../../hooks/useTranslation'
-import { selectWorkbenchPanels, useLayoutStore, type WorkbenchMode } from '../../stores/layout-store'
+import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
+import { selectWorkbenchPanels, useLayoutStore } from '../../stores/layout-store'
 import { ErrorBoundary } from '../ErrorBoundary'
 import AIPanel from '../panels/AIPanel'
 import AIOutputPanel from '../panels/AIOutputPanel'
 import BottomPanel from '../panels/BottomPanel'
 import EditorArea from '../panels/EditorArea'
 import Sidebar from '../panels/Sidebar'
-import { Button } from '../ui/Button'
-import { SegmentedControl } from '../ui/SegmentedControl'
 import LeftToolWindowBar from './LeftToolWindowBar'
 import RightToolWindowBar from './RightToolWindowBar'
 
@@ -42,15 +42,15 @@ function saveVisibleLayout(layout: Layout, panelIds: string[], save: (layout: La
 
 export default function WorkspaceLayout() {
   const { t } = useTranslation()
-  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, bottomTab } = useLayoutStore(useShallow(state => {
+  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen } = useLayoutStore(useShallow(state => {
     const panels = selectWorkbenchPanels(state)
     return {
       sidebarOpen: panels.sidebarOpen, aiPanelOpen: panels.aiPanelOpen, rightView: panels.rightView,
-      bottomPanelOpen: panels.bottomPanelOpen, bottomTab: panels.bottomTab,
+      bottomPanelOpen: panels.bottomPanelOpen,
     }
   }))
-  const { focusMode, workbenchMode, setWorkbenchMode, openNewProject } = useLayoutStore(useShallow(state => ({
-    focusMode: state.focusMode, workbenchMode: state.workbenchMode, setWorkbenchMode: state.setWorkbenchMode,
+  const { focusMode, workbenchMode, openNewProject } = useLayoutStore(useShallow(state => ({
+    focusMode: state.focusMode, workbenchMode: state.workbenchMode,
     openNewProject: state.openNewProject,
   })))
   const writing = workbenchMode === 'write'
@@ -66,8 +66,14 @@ export default function WorkspaceLayout() {
   // 构建态沿用旧存储键。写作态独立保存尺寸，编辑区与两层 Group 始终挂载。
   const horizontalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-horizontal' : 'novelforge-main-horizontal', storage: localStorage })
   const verticalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-vertical' : 'novelforge-middle-vertical', storage: localStorage })
-  const partnerExpanded = showAI && rightView === 'agent'
-  const tasksExpanded = showBottom && bottomTab === 'tasks'
+  const lastFocused = useRef<HTMLElement | null>(null)
+  useLayoutEffect(() => {
+    // 只接管因区域卸载而丢失的焦点，编辑器或弹窗仍有焦点时保持原位。
+    if (lastFocused.current && !lastFocused.current.isConnected && document.activeElement === document.body) {
+      focusActiveWorkbenchMode()
+      lastFocused.current = null
+    }
+  }, [focusMode, workbenchMode, showSidebar, showAI, showBottom, rightView])
 
   return (
     <>
@@ -77,30 +83,8 @@ export default function WorkspaceLayout() {
       >
         {t('tip.skipToContent')}
       </a>
-      <div className="flex flex-wrap items-center justify-center gap-2 bg-[var(--color-canvas)] px-2 py-1">
-        <SegmentedControl<WorkbenchMode>
-          items={[{ value: 'build', label: t('workbench.build') }, { value: 'write', label: t('workbench.write') }]}
-          value={workbenchMode}
-          onChange={setWorkbenchMode}
-        />
-        {writing && !focusMode && (
-          <>
-            <Button type="button" variant="ghost" active={partnerExpanded} aria-expanded={partnerExpanded} aria-controls={partnerExpanded ? aiId : undefined}
-              onClick={() => {
-                const { setAIPanelOpen, openRightPanel } = useLayoutStore.getState()
-                if (partnerExpanded) setAIPanelOpen(false)
-                else openRightPanel('agent')
-              }}
-            >{t('workbench.partner')}</Button>
-            <Button type="button" variant="ghost" active={tasksExpanded} aria-expanded={tasksExpanded} aria-controls={tasksExpanded ? bottomId : undefined}
-              onClick={() => {
-                useLayoutStore.getState().setBottomTab('tasks')
-              }}
-            >{t('panel.tasks')}</Button>
-          </>
-        )}
-      </div>
-      <div data-workbench-mode={workbenchMode} className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}>
+      <div data-workbench-mode={workbenchMode} className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
+        onFocusCapture={event => { lastFocused.current = event.target }}>
         {!writing && !focusMode && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
           <Group

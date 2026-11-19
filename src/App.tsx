@@ -9,7 +9,7 @@ import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useAgentStore } from './stores/agent-store'
 import { useUpdateStore } from './stores/update-store'
-import { matchesBinding, shortcutBinding } from './stores/shortcut-store'
+import { formatBinding, matchesBinding, shortcutBinding, useShortcutStore } from './stores/shortcut-store'
 import { useAutomationStore } from './stores/automation-store'
 import { useThinkingStore } from './stores/thinking-store'
 import { t } from './shared/locale'
@@ -18,6 +18,7 @@ import { setWindowTitle } from './lib/window-title'
 import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
+import WorkbenchControls from './components/layout/WorkbenchControls'
 // 应用图标：直接引用**打包用的那个文件**（而非在 public/ 放一份副本），保证单一来源
 import appIcon from '../build/icon.png'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
@@ -40,30 +41,21 @@ import { Search } from 'lucide-react'
 // 否则恢复时 registry 空 → 所有 run 走降级）。
 import './services/workflows/workflow-registry-init'
 
-/**
- * 顶栏 —— 系统窗口控件覆盖层（WCO）留位 + **窗口拖拽区** + 应用标识。
- *
- * ⚠️ 为什么必须是**独立元素**、而不是给根容器加 `paddingTop`（2026-09-25 真机两轮反馈）：
- *   ① `padding` 区**不属于任何拖拽元素** → 顶部那一条**拖不动窗口**（用户反馈）
- *   ② 只在图标栏留位不够 —— 覆盖层宽度覆盖到右侧 AGENT 面板头部，而覆盖层底色是
- *      `--color-canvas`（最外围缝隙色）、盖住的却是面板头部（另一种底色）→ 右上角出现**看得见的接缝**
- *   做成独立元素后：它自己既是留位、又是拖拽区、还是应用标识的落点，且底色与覆盖层同色 → 无缝。
- *
- * 高度由系统通过 `env(titlebar-area-height)` 告知；**未启用覆盖层时为 0**
- * （macOS / 浏览器），此时它不占位、内容被 overflow 裁掉 —— macOS 的交通灯在**左上角**，
- * 标识放那里会撞，所以 macOS 走它自己的 28px 留位（见 LeftToolWindowBar）。
- *
- * 命令面板按钮设为 `-webkit-app-region: no-drag`，可以在拖拽区内正常点击。
- */
+/** 顶栏提供窗口拖拽区，模式和命令控件位于原生窗口按钮之外。 */
 function TitleStrip() {
+  const { t } = useTranslation()
   const currentProject = useProjectStore((s) => s.currentProject)
   const openPalette = useCommandStore((s) => s.openPalette)
-  const shortcut = navigator.userAgent.includes('Mac') ? '⌘K' : 'Ctrl K'
+  const shortcut = useShortcutStore((s) => formatBinding(shortcutBinding('command-palette', s.bindings)))
+  const isMac = navigator.userAgent.includes('Mac')
   return (
     <div
-      className="flex items-center gap-2 pl-2.5 pr-3 overflow-hidden select-none flex-shrink-0"
+      className="flex min-w-0 shrink-0 items-center gap-2 pl-2.5 pr-3 select-none"
       style={{
-        height: 'env(titlebar-area-height, 0px)',
+        height: 'max(32px, env(titlebar-area-height, 0px))',
+        // Windows/Linux 使用覆盖层给出的可用宽度，macOS 在左侧给交通灯留位。
+        width: isMac ? undefined : 'env(titlebar-area-width, 100%)',
+        paddingInlineStart: isMac ? 80 : undefined,
         backgroundColor: 'var(--color-canvas)',
         WebkitAppRegion: 'drag',
       } as React.CSSProperties}
@@ -89,13 +81,14 @@ function TitleStrip() {
         {currentProject?.name ?? 'NovelForge'}
       </span>
       <span className="flex-1" />
+      <WorkbenchControls />
       {/* 命令面板入口：标题栏是拖拽区，按钮必须显式 no-drag */}
       <button
         type="button"
         onClick={() => openPalette('commands')}
         title={t('command.title')}
         aria-label={t('command.title')}
-        className="inline-flex items-center gap-1.5 rounded px-2"
+        className="inline-flex shrink-0 items-center gap-1.5 rounded px-2"
         style={{
           height: 20,
           border: '1px solid var(--color-border)',
@@ -287,6 +280,11 @@ export default function App() {
       if (matchesBinding(e, binding('shortcuts-help')) && !isTypingTarget(e.target)) {
         e.preventDefault()
         useCommandStore.getState().openPalette('shortcuts')
+        return
+      }
+      if (matchesBinding(e, binding('toggle-workbench-mode')) && !e.isComposing && !useCommandStore.getState().open) {
+        e.preventDefault()
+        if (!e.repeat) useLayoutStore.getState().toggleWorkbenchMode()
         return
       }
       if (matchesBinding(e, binding('zoom-in'))) {

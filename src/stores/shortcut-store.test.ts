@@ -5,6 +5,7 @@ import {
   formatBinding,
   matchesBinding,
   normalizeBinding,
+  shortcutBinding,
   useShortcutStore,
 } from './shortcut-store'
 
@@ -43,6 +44,20 @@ describe('shortcut-store — 绑定规范化与匹配', () => {
 })
 
 describe('shortcut-store — 冲突与重置', () => {
+  it('工作模式默认未分配快捷键，可自定义且保护已存在的用户绑定', () => {
+    const id = 'toggle-workbench-mode'
+    expect(shortcutBinding(id)).toBe('')
+    const { setBinding, resetBinding } = useShortcutStore.getState()
+    expect(setBinding('save', 'Mod+Alt+Q')).toEqual({ ok: true })
+    expect(setBinding(id, 'Mod+Alt+Q')).toEqual({ ok: false, conflictId: 'save' })
+    expect(setBinding(id, 'Mod+Alt+M')).toEqual({ ok: true })
+    expect(matchesBinding(key({ key: 'm', ctrlKey: true, altKey: true }), shortcutBinding(id))).toBe(true)
+    expect(matchesBinding(key({ key: 'm', metaKey: true, altKey: true }), shortcutBinding(id))).toBe(true)
+    expect(setBinding('save', 'Mod+Alt+M')).toEqual({ ok: false, conflictId: id })
+    resetBinding(id)
+    expect(shortcutBinding(id)).toBe('')
+  })
+
   it('重复绑定被拒绝并返回冲突项', () => {
     const result = useShortcutStore.getState().setBinding('save', 'Mod+K')
     expect(result).toEqual({ ok: false, conflictId: 'command-palette' })

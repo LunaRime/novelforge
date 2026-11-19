@@ -38,6 +38,7 @@ export const settingsTexts = {
   'shortcut.title': { 'zh-CN': '快捷键', 'en-US': 'Keyboard shortcuts', 'ru-RU': 'Горячие клавиши' },
   'shortcut.desc': { 'zh-CN': '按分类查看并修改应用快捷键。点击键位后按下新组合，Esc 取消。', 'en-US': 'Review and change app shortcuts by category. Click a binding, then press the new combination; Esc cancels.', 'ru-RU': 'Просматривайте и меняйте сочетания по категориям. Нажмите на сочетание, затем введите новое; Esc отменяет.' },
   'shortcut.recording': { 'zh-CN': '按下组合键…', 'en-US': 'Press keys…', 'ru-RU': 'Нажмите клавиши…' },
+  'shortcut.unassigned': { 'zh-CN': '未设置', 'en-US': 'Unassigned', 'ru-RU': 'Не задано' },
   'shortcut.conflict': { 'zh-CN': '与「{name}」冲突', 'en-US': 'Conflicts with “{name}”', 'ru-RU': 'Конфликт с «{name}»' },
   'shortcut.invalid': { 'zh-CN': '请使用带修饰键的组合（F1–F12、? 除外）', 'en-US': 'Use a modifier combination (except F1–F12 and ?)', 'ru-RU': 'Используйте сочетание с модификатором (кроме F1–F12 и ?)' },
   'shortcut.reset': { 'zh-CN': '恢复默认', 'en-US': 'Reset', 'ru-RU': 'Сбросить' },

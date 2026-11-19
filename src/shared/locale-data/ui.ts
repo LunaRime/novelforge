@@ -26,6 +26,7 @@ export const uiTexts = {
   'command.group.help': { 'zh-CN': '帮助', 'en-US': 'Help', 'ru-RU': 'Помощь' },
   'command.toggleSidebar': { 'zh-CN': '切换侧边栏', 'en-US': 'Toggle sidebar', 'ru-RU': 'Показать/скрыть панель' },
   'command.toggleAgent': { 'zh-CN': '切换 Agent 面板', 'en-US': 'Toggle Agent panel', 'ru-RU': 'Показать/скрыть панель Agent' },
+  'command.toggleWorkbenchMode': { 'zh-CN': '切换工作模式', 'en-US': 'Switch workbench mode', 'ru-RU': 'Переключить режим работы' },
   'command.toggleBottom': { 'zh-CN': '切换底部面板', 'en-US': 'Toggle bottom panel', 'ru-RU': 'Показать/скрыть нижнюю панель' },
   'command.focusMode': { 'zh-CN': '专注写作模式', 'en-US': 'Focus writing mode', 'ru-RU': 'Режим сосредоточения' },
   'command.typewriter': { 'zh-CN': '打字机滚动（光标保持 40%）', 'en-US': 'Typewriter scrolling (cursor at 40%)', 'ru-RU': 'Прокрутка печатной машинки (курсор на 40%)' },

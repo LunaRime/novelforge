@@ -14,6 +14,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { SHORTCUT_DEFINITIONS, formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
 import { useDevConsoleStore } from '../../stores/dev-console-store'
+import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
 
 interface CommandItem {
   id: string
@@ -93,6 +94,17 @@ function openManuscriptBoard(name: string) {
 export default function CommandPalette() {
   const open = useCommandStore((s) => s.open)
   const mode = useCommandStore((s) => s.mode)
+  useEffect(() => {
+    if (!open) return
+    const origin = document.activeElement
+    const fromWorkbench = origin?.closest('[data-workbench-mode]')
+    return () => {
+      // 子面板可以切换模式。仅在整条命令面板关闭且焦点落到页面时归还焦点。
+      if (document.activeElement !== document.body || !(origin instanceof HTMLElement) || origin === document.body) return
+      if (origin.isConnected) origin.focus({ preventScroll: true })
+      else if (fromWorkbench) focusActiveWorkbenchMode()
+    }
+  }, [open])
   if (!open) return null
   // key 让每次打开/切换模式都从空查询、第一项开始，不需要在 effect 里清状态
   return <PalettePanel key={mode} mode={mode} />
@@ -222,8 +234,14 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         run: () => layout.toggleBottomPanel(),
       },
       {
+        id: 'toggle-workbench-mode', label: t('command.toggleWorkbenchMode'), category: t('command.group.view'),
+        shortcut: sc('toggle-workbench-mode'), icon: <LayoutGrid size={15} />,
+        keywords: `workbench build write ${t('workbench.build')} ${t('workbench.write')}`,
+        run: () => layout.toggleWorkbenchMode(),
+      },
+      {
         id: 'focus-mode', label: t('command.focusMode'), category: t('command.group.view'),
-        shortcut: 'F11', icon: <Focus size={15} />, keywords: 'focus zen 专注',
+        shortcut: sc('focus-mode'), icon: <Focus size={15} />, keywords: 'focus zen 专注',
         run: () => layout.toggleFocusMode(),
       },
       {
@@ -377,7 +395,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
           }}
         >
           <span style={{ flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.label}</span>
-          <Kbd>{item.shortcut}</Kbd>
+          <Kbd>{item.shortcut || t('shortcut.unassigned')}</Kbd>
         </div>,
       )
     })
@@ -481,7 +499,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
           </button>
         </div>
 
-        <div ref={listRef} style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 6px' }}>
+        <div ref={listRef} className="overscroll-contain" style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '4px 0 6px' }}>
           {itemCount === 0 ? (
             <div style={{ padding: '28px 14px', textAlign: 'center', color: 'var(--color-text-muted)', fontSize: 12 }}>
               {t('command.empty')}

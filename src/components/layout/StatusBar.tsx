@@ -10,6 +10,7 @@ import { useAgentStore } from '../../stores/agent-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useUsageStore } from '../../stores/usage-store'
 import { useThemeStore } from '../../stores/theme-store'
+import { formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
 import { useOutsideClick } from '../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../hooks/useFloatingPosition'
@@ -33,7 +34,7 @@ export default function StatusBar() {
 
   return (
     <div
-      className="no-select flex items-center justify-between"
+      className="@container no-select flex min-w-0 items-center justify-between"
       style={{
         height: 'var(--height-statusbar)',  /* 24px */
         backgroundColor: 'var(--color-statusbar)',
@@ -46,12 +47,14 @@ export default function StatusBar() {
       {/* 左侧：品牌 + 版本。**项目名不在这里** —— 它已归顶栏（2026-09-25 拍板：
           同一信息只出现一次；顶栏那条同时是任务栏/Alt-Tab 看得到的窗口标题来源，
           见 lib/window-title）。版本号留在状态栏的理由：截图报 bug 时它是必需的。 */}
-      <div className="flex items-center h-full">
-        <StatusBarSegment title="NovelForge IDE">
-          <BookOpen size={11} />
-          <span className="font-medium brand-gradient">NovelForge</span>
-          <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
-        </StatusBarSegment>
+      <div className="flex h-full min-w-0 items-center overflow-hidden">
+        <div className="h-full shrink-0 @max-[760px]:hidden">
+          <StatusBarSegment title="NovelForge IDE">
+            <BookOpen size={11} />
+            <span className="font-medium brand-gradient">NovelForge</span>
+            <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
+          </StatusBarSegment>
+        </div>
 
         {/* 设置入口已于 2026-09-22 迁到左侧图标栏底部（图标形式）——
             这里的文字入口对非中文使用者不友好，移除避免重复入口 */}
@@ -59,12 +62,12 @@ export default function StatusBar() {
         {/* 当前激活章节的写作信息（章节名 / 字数 / dirty 点）——10-18 评审补齐
             （写作中确认状态无需再把视线移到编辑器头部） */}
         <EditorStatusSegment />
-        <BranchStatusSegment />
+        <div className="h-full @max-[760px]:hidden"><BranchStatusSegment /></div>
 
       </div>
 
       {/* 右侧：费用 + AI 胶囊 + 思考等级 + 模型名 + 缩放（缩放由 ZoomControl 提供） */}
-      <div className="flex items-center h-full">
+      <div className="flex h-full min-w-0 items-center justify-end">
         <AgentStatusSegment />
         <SessionCost />
         {/* AI 任务胶囊指示器（右下角） */}
@@ -73,10 +76,11 @@ export default function StatusBar() {
         {/* 更新状态（唯一操作面；仅在 checking/available/downloading/… 时出现） */}
         <StatusBarUpdate />
 
-        {/* 思考等级（全局四档，取代旧的水温控件） */}
-        <StatusBarThinking />
-
-        <ModelPicker models={models} defaultModel={defaultModel} />
+        {/* 窄窗将模型和思考等级留在搭档输入区，给保存状态和缩放让出空间。 */}
+        <div className="flex h-full items-center @max-[760px]:hidden">
+          <StatusBarThinking />
+          <ModelPicker models={models} defaultModel={defaultModel} />
+        </div>
 
         {/* 消息收纳中心（铃铛 + 未读角标）— 落在状态栏最右段、缩放控件左侧 */}
         <NotificationCenter />
@@ -462,7 +466,8 @@ function ZoomControl() {
   const zoomIn = useThemeStore(s => s.zoomIn)
   const zoomOut = useThemeStore(s => s.zoomOut)
   const zoomReset = useThemeStore(s => s.zoomReset)
-  const mod = navigator.userAgent.includes('Mac') ? '⌘' : 'Ctrl'
+  const bindings = useShortcutStore(s => s.bindings)
+  const shortcut = (id: string) => formatBinding(shortcutBinding(id, bindings))
   const zoomLabel = `${Math.round(zoom * 100)}%`
   const btn: React.CSSProperties = {
     display: 'flex',
@@ -479,10 +484,12 @@ function ZoomControl() {
     transition: 'opacity var(--transition-fast)',
   }
   return (
-    <div className="flex items-center h-full gap-0.5 px-1">
+    <div className="flex h-full shrink-0 items-center gap-0.5 px-1">
       <button
+        type="button"
         onClick={zoomOut}
-        title={`${t('zoom.out')} (${mod}+-)`}
+        aria-label={t('zoom.out')}
+        title={`${t('zoom.out')} (${shortcut('zoom-out')})`}
         style={btn}
         onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
         onMouseLeave={e => { e.currentTarget.style.opacity = '0.75' }}
@@ -491,8 +498,10 @@ function ZoomControl() {
       </button>
       {/* 百分比：点击重置为 100%；非 100% 时用强调色提示已缩放 */}
       <button
+        type="button"
         onClick={zoomReset}
-        title={`${t('zoom.reset')} (${mod}+0)`}
+        aria-label={`${t('zoom.reset')} (${zoomLabel})`}
+        title={`${t('zoom.reset')} (${shortcut('zoom-reset')})`}
         style={{
           ...btn,
           minWidth: 34,
@@ -506,8 +515,10 @@ function ZoomControl() {
         {zoomLabel}
       </button>
       <button
+        type="button"
         onClick={zoomIn}
-        title={`${t('zoom.in')} (${mod}+=)`}
+        aria-label={t('zoom.in')}
+        title={`${t('zoom.in')} (${shortcut('zoom-in')})`}
         style={btn}
         onMouseEnter={e => { e.currentTarget.style.opacity = '1' }}
         onMouseLeave={e => { e.currentTarget.style.opacity = '0.75' }}

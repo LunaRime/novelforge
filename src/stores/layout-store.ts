@@ -37,6 +37,7 @@ interface LayoutState extends WorkbenchPanels {
   workbenchMode: WorkbenchMode
   writingPanels: WorkbenchPanels
   setWorkbenchMode: (mode: WorkbenchMode) => void
+  toggleWorkbenchMode: () => void
 
   // ===== 全局弹窗状态（替代 window.dispatchEvent 事件总线）=====
   /** 设置弹窗是否打开 */
@@ -112,7 +113,7 @@ function updatePanels(update: (panels: WorkbenchPanels) => Partial<WorkbenchPane
   }
 }
 
-export const useLayoutStore = create<LayoutState>()(persist((set) => ({
+export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
   // 默认值（home：历史项目方块列表入口，替换原 Archive 图标）
   sidebarOpen: true,
   sidebarView: 'home',
@@ -126,6 +127,7 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   workbenchMode: 'build',
   writingPanels: WRITING_PANELS,
   setWorkbenchMode: (workbenchMode) => set({ workbenchMode }),
+  toggleWorkbenchMode: () => get().setWorkbenchMode(get().workbenchMode === 'build' ? 'write' : 'build'),
 
   focusMode: false,
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
