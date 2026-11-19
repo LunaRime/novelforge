@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="32" height="32" role="img" aria-labelledby="title desc">
+  <title id="title">NovelForge · 小尺寸优化图标</title>
+  <desc id="desc">16 至 48 像素使用。去除折页明暗细节，加宽笔画并略微放大火种。</desc>
+  <style>:root { --nf-logo-brand: #405c47; --nf-logo-paper: #fffefa; --nf-logo-ember: #d9b87c; } .tile { fill: var(--nf-logo-brand); } .paper { fill: var(--nf-logo-paper); } .ember { fill: var(--nf-logo-ember); }</style>
+  <rect class="tile" x="16" y="16" width="480" height="480" rx="108"/>
+  <g transform="translate(-6 0)">
+    <path class="paper" d="M90 142H190L318 297V178L406 124V404L322 425L178 252V388L90 422Z"/>
+    <path class="ember" d="M424 66L451 93L424 120L397 93Z"/>
+  </g>
+</svg>

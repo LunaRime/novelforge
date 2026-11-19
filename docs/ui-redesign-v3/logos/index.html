@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>NovelForge · Logo</title>
+  <link rel="icon" href="./novelforge-icon-small.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="../tokens.css">
+  <style>
+    @font-face { font-family: "NF Inter"; src: url("../fonts/Inter-VariableFont_opsz,wght.ttf") format("truetype"); font-display: swap; }
+    @font-face { font-family: "NF Sans"; src: url("../fonts/NotoSansSC-VariableFont_wght.subset.ttf") format("truetype"); font-display: swap; }
+    :root { --logo-fold: #eadfc7; --logo-ember: #d9b87c; --logo-radius: 24px; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--nf-color-panel); color: var(--nf-color-ink); font-family: var(--nf-font-ui); -webkit-font-smoothing: antialiased; }
+    main { max-width: 1140px; margin: auto; padding: 32px 40px 44px; }
+    header { display: flex; align-items: center; justify-content: space-between; padding-bottom: 24px; border-bottom: 1px solid var(--nf-color-line); gap: 16px; }
+    .brand { display: flex; align-items: center; gap: 10px; }
+    .brand img { width: 40px; height: 40px; }
+    .wordmark { font-size: 21px; font-weight: 620; letter-spacing: -0.8px; }
+    .langs { display: flex; gap: 4px; }
+    button { border: 1px solid var(--nf-color-line); background: var(--nf-color-surface); color: var(--nf-color-text); padding: 8px 12px; border-radius: 8px; font: inherit; font-size: 12px; cursor: pointer; }
+    button[aria-pressed="true"] { border-color: var(--nf-color-brand); color: var(--nf-color-brand); background: var(--nf-color-brand-soft); }
+    a { color: var(--nf-color-brand); text-underline-offset: 4px; }
+    a:focus-visible, button:focus-visible { outline: 2px solid var(--nf-color-brand); outline-offset: 4px; }
+    .hero { display: grid; grid-template-columns: 1.1fr 0.9fr; align-items: center; gap: 56px; padding: 48px 12px 42px; }
+    .eyebrow { font-size: 11px; letter-spacing: 0.15em; font-weight: 600; color: var(--nf-color-muted); }
+    h1 { font-size: clamp(32px, 4vw, 48px); letter-spacing: -0.045em; line-height: 1.2; margin: 18px 0 22px; font-weight: 600; }
+    .intro { font-size: 15px; line-height: 1.85; color: var(--nf-color-text); max-width: 430px; }
+    .tag { display: inline-flex; border: 1px solid var(--nf-color-line); border-radius: var(--nf-radius-pill); padding: 7px 12px; font-size: 11px; margin-top: 14px; color: var(--nf-color-muted); }
+    .hero-art { margin: 0; display: grid; place-items: center; }
+    .hero-art img { width: min(100%, 308px); height: auto; }
+    .hero-art figcaption { font-size: 11px; color: var(--nf-color-muted); margin-top: 10px; letter-spacing: 0.05em; }
+    .concepts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 23px 0 26px; border-top: 1px solid var(--nf-color-line); border-bottom: 1px solid var(--nf-color-line); }
+    .concept { display: grid; grid-template-columns: 24px 1fr; gap: 12px; }
+    .number { font-size: 11px; color: var(--nf-color-faint); padding-top: 4px; font-family: var(--nf-font-mono); }
+    h2, h3 { font-weight: 600; }
+    .concept h3 { font-size: 14px; margin: 0 0 7px; }
+    .concept p { font-size: 12px; line-height: 1.75; color: var(--nf-color-muted); margin: 0; }
+    .section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding: 30px 0 16px; }
+    h2 { font-size: 16px; margin: 0; }
+    .section-head p { margin: 0; font-size: 11px; color: var(--nf-color-muted); }
+    .variants { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+    .variant { margin: 0; padding: 22px; background: var(--nf-color-surface); border: 1px solid var(--nf-color-line); border-radius: var(--nf-radius-lg); }
+    .sample { height: 116px; display: grid; place-items: center; }
+    .sample > img { width: 134px; height: 134px; }
+    .inverse-tile { width: 116px; height: 116px; border-radius: 27px; background: var(--nf-color-brand); display: grid; place-items: center; }
+    .inverse-tile img { width: 116px; height: 116px; }
+    .variant figcaption { display: flex; justify-content: space-between; align-items: center; margin-top: 24px; font-size: 12px; }
+    .variant a { font-size: 11px; font-family: var(--nf-font-mono); }
+    .sizes { display: flex; align-items: end; justify-content: space-around; gap: 20px; padding: 24px; background: var(--nf-color-surface); border: 1px solid var(--nf-color-line); border-radius: var(--nf-radius-lg); }
+    .size { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+    .size span { font-size: 10px; font-family: var(--nf-font-mono); color: var(--nf-color-muted); }
+    .size img { display: block; }
+    .delivery { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 28px; }
+    .palette { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 14px; }
+    .swatch { display: flex; align-items: center; gap: 8px; font-family: var(--nf-font-mono); font-size: 10px; color: var(--nf-color-muted); }
+    .swatch i { width: 19px; height: 19px; border: 1px solid var(--nf-color-line); border-radius: 6px; background: var(--swatch-color); }
+    .files { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .files a { border: 1px solid var(--nf-color-line); border-radius: 7px; padding: 8px 12px; font-size: 11px; text-decoration: none; background: var(--nf-color-surface); }
+    footer { border-top: 1px solid var(--nf-color-line); margin-top: 30px; padding-top: 16px; display: flex; justify-content: space-between; gap: 18px; font-size: 10px; line-height: 1.7; color: var(--nf-color-muted); }
+    @media (max-width: 700px) {
+      main { padding: 24px 20px; }
+      .hero { grid-template-columns: 1fr; gap: 24px; padding: 32px 0; }
+      .hero-art img { max-width: 252px; }
+      .concepts, .variants, .delivery { grid-template-columns: 1fr; }
+      .concepts { gap: 18px; }
+      .sample { height: 100px; }
+      .section-head { align-items: start; flex-direction: column; gap: 8px; }
+      .sizes { gap: 12px; padding: 20px 10px; flex-wrap: wrap; }
+      footer { flex-direction: column; }
+      .wordmark { font-size: 18px; }
+      button { padding: 7px 8px; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="brand"><img src="./novelforge-mark.svg" alt="NovelForge"><span class="wordmark">NovelForge</span></div>
+      <nav class="langs" aria-label="Language">
+        <button type="button" data-lang="zh-CN" aria-pressed="true">中文</button>
+        <button type="button" data-lang="en-US" aria-pressed="false">EN</button>
+        <button type="button" data-lang="ru-RU" aria-pressed="false">RU</button>
+      </nav>
+    </header>
+    <section class="hero">
+      <div>
+        <div class="eyebrow">NOVELFORGE / BRAND IDENTITY 03</div>
+        <h1 data-i18n="headline">折页与火种。</h1>
+        <p class="intro" data-i18n="intro">把一页稿纸折成 N，让一点灵感成为火种。新的标识保留写作的温度，也表达将故事反复打磨、锻造成形的创作过程。</p>
+        <span class="tag" data-i18n="tag">Editorial Workbench v3 · 独立品牌提案</span>
+      </div>
+      <figure class="hero-art"><img src="./novelforge-icon.svg" alt="NovelForge Logo"><figcaption data-i18n="primary">主标识 · 苔绿 / 暖白 / 麦金</figcaption></figure>
+    </section>
+    <section class="concepts" aria-label="Design concept">
+      <article class="concept"><span class="number">01</span><div><h3 data-i18n="c1">折页，也是 N</h3><p data-i18n="d1">以稿纸折叠构成品牌首字母，不再堆叠书本、铅笔与文字。</p></div></article>
+      <article class="concept"><span class="number">02</span><div><h3 data-i18n="c2">火种，不是装饰</h3><p data-i18n="d2">一枚克制的菱形呼应 Forge：从灵感到成稿，持续锻造。</p></div></article>
+      <article class="concept"><span class="number">03</span><div><h3 data-i18n="c3">为小图标而设计</h3><p data-i18n="d3">小尺寸去除折页明暗、加粗笔画，保留轮廓与火种。</p></div></article>
+    </section>
+    <div class="section-head"><h2 data-i18n="variants">同一个标识，三种用法</h2><p data-i18n="variantsNote">透明底 / 单色 / 反白 · 全部为矢量</p></div>
+    <section class="variants">
+      <figure class="variant"><div class="sample"><img src="./novelforge-mark.svg" alt="NovelForge"></div><figcaption><span data-i18n="mark">品牌标识</span><a href="./novelforge-mark.svg" download>SVG ↗</a></figcaption></figure>
+      <figure class="variant"><div class="sample"><img src="./novelforge-mono.svg" alt="NovelForge"></div><figcaption><span data-i18n="mono">单色印刷</span><a href="./novelforge-mono.svg" download>SVG ↗</a></figcaption></figure>
+      <figure class="variant"><div class="sample"><div class="inverse-tile"><img src="./novelforge-inverse.svg" alt="NovelForge"></div></div><figcaption><span data-i18n="inverse">品牌底反白</span><a href="./novelforge-inverse.svg" download>SVG ↗</a></figcaption></figure>
+    </section>
+    <div class="section-head"><h2 data-i18n="sizes">真实尺寸检查</h2><p data-i18n="sizesNote">16–48 px 使用简化版 · 以下按 1× 显示</p></div>
+    <section class="sizes" aria-label="Icon size samples">
+      <div class="size"><img src="./novelforge-icon-16.png" width="16" height="16" alt="16 px"><span>16 px</span></div>
+      <div class="size"><img src="./novelforge-icon-24.png" width="24" height="24" alt="24 px"><span>24 px</span></div>
+      <div class="size"><img src="./novelforge-icon-32.png" width="32" height="32" alt="32 px"><span>32 px</span></div>
+      <div class="size"><img src="./novelforge-icon-48.png" width="48" height="48" alt="48 px"><span>48 px</span></div>
+      <div class="size"><img src="./novelforge-icon-64.png" width="64" height="64" alt="64 px"><span>64 px</span></div>
+      <div class="size"><img src="./novelforge-icon-128.png" width="128" height="128" alt="128 px"><span>128 px</span></div>
+    </section>
+    <section class="delivery">
+      <div><h2 data-i18n="palette">延续 v3 的编辑室色调</h2><div class="palette">
+        <span class="swatch"><i style="--swatch-color: var(--nf-color-brand)"></i>#405C47</span>
+        <span class="swatch"><i style="--swatch-color: var(--nf-color-paper)"></i>#FFFEFA</span>
+        <span class="swatch"><i style="--swatch-color: var(--logo-ember)"></i>#D9B87C</span>
+        <span class="swatch"><i style="--swatch-color: var(--logo-fold)"></i>#EADFC7</span>
+      </div></div>
+      <div><h2 data-i18n="download">交付文件</h2><div class="files">
+        <a href="./novelforge-icon.svg" download data-i18n="downloadSvg">主图标 SVG</a>
+        <a href="./novelforge-icon-1024.png" download>PNG · 1024</a>
+        <a href="./novelforge-icon.ico" download>Windows ICO</a>
+        <a href="./Design_one_refined_professiona_2026-11-18T05-14-26.png" download data-i18n="reference">生成参考图</a>
+      </div></div>
+    </section>
+    <footer><span data-i18n="footer">矢量精修版为交付主稿；参考图仅保留设计来源。尚未替换正式应用或 v3 原型的现有图标。</span><span>NovelForge / 2026.11</span></footer>
+  </main>
+  <script>
+    const copy = {
+      'zh-CN': {
+        headline: '折页与火种。', intro: '把一页稿纸折成 N，让一点灵感成为火种。新的标识保留写作的温度，也表达将故事反复打磨、锻造成形的创作过程。', tag: 'Editorial Workbench v3 · 独立品牌提案', primary: '主标识 · 苔绿 / 暖白 / 麦金',
+        c1: '折页，也是 N', d1: '以稿纸折叠构成品牌首字母，不再堆叠书本、铅笔与文字。', c2: '火种，不是装饰', d2: '一枚克制的菱形呼应 Forge：从灵感到成稿，持续锻造。', c3: '为小图标而设计', d3: '小尺寸去除折页明暗、加粗笔画，保留轮廓与火种。',
+        variants: '同一个标识，三种用法', variantsNote: '透明底 / 单色 / 反白 · 全部为矢量', mark: '品牌标识', mono: '单色印刷', inverse: '品牌底反白', sizes: '真实尺寸检查', sizesNote: '16–48 px 使用简化版 · 以下按 1× 显示', palette: '延续 v3 的编辑室色调', download: '交付文件', downloadSvg: '主图标 SVG', reference: '生成参考图', footer: '矢量精修版为交付主稿；参考图仅保留设计来源。尚未替换正式应用或 v3 原型的现有图标。'
+      },
+      'en-US': {
+        headline: 'A page. A spark.', intro: 'A manuscript page folds into an N; a small ember carries the first idea. The new mark preserves the warmth of writing and the craft of forging a story into its final form.', tag: 'Editorial Workbench v3 · Brand proposal', primary: 'Primary mark · Moss / Paper / Brass',
+        c1: 'A folded page, an N', d1: 'The initial is built from a folded manuscript, without stacking book, pencil and letter motifs.', c2: 'An ember with purpose', d2: 'A restrained diamond echoes Forge: shaping an idea into a finished story.', c3: 'Made for small sizes', d3: 'Small icons remove fold shading and thicken the strokes while retaining the silhouette and ember.',
+        variants: 'One identity, three applications', variantsNote: 'Transparent / Monochrome / Reversed · All vector', mark: 'Brand mark', mono: 'Monochrome', inverse: 'Reversed mark', sizes: 'Actual-size checks', sizesNote: 'Simplified artwork at 16–48 px · Shown at 1×', palette: 'The editorial palette of v3', download: 'Deliverables', downloadSvg: 'Primary SVG', reference: 'Generated reference', footer: 'The refined vector is the master artwork; the generated image is retained as a reference. Existing app and v3 prototype icons have not been replaced.'
+      },
+      'ru-RU': {
+        headline: 'Страница и искра.', intro: 'Лист рукописи складывается в N, а маленькая искра становится началом замысла. Новый знак соединяет теплоту письма с мастерством, которое превращает идею в законченную историю.', tag: 'Editorial Workbench v3 · Концепция бренда', primary: 'Основной знак · Мох / Бумага / Латунь',
+        c1: 'Сложенный лист и N', d1: 'Буква образована листом рукописи, без сочетания книги, карандаша и дополнительных букв.', c2: 'Искра со смыслом', d2: 'Сдержанный ромб отсылает к Forge: превращению замысла в готовую историю.', c3: 'Для малых размеров', d3: 'Малые значки имеют более толстые линии и не используют тень сгиба, сохраняя силуэт и искру.',
+        variants: 'Один знак, три применения', variantsNote: 'Прозрачный / Одноцветный / Инверсный · Вектор', mark: 'Знак бренда', mono: 'Одноцветная печать', inverse: 'Светлый знак', sizes: 'Проверка реальных размеров', sizesNote: 'Упрощённый знак при 16–48 px · Масштаб 1×', palette: 'Редакторская палитра v3', download: 'Готовые файлы', downloadSvg: 'Основной SVG', reference: 'Исходный эскиз', footer: 'Основной файл — уточнённый вектор; сгенерированное изображение сохранено как эскиз. Значки приложения и прототипа v3 не заменены.'
+      }
+    };
+    function t(key, lang) { return copy[lang]?.[key] ?? copy['zh-CN'][key] ?? key; }
+    function setLanguage(lang) {
+      document.documentElement.lang = lang;
+      document.querySelectorAll('[data-i18n]').forEach(el => { el.textContent = t(el.dataset.i18n, lang); });
+      document.querySelectorAll('[data-lang]').forEach(el => { el.setAttribute('aria-pressed', String(el.dataset.lang === lang)); });
+    }
+    document.querySelectorAll('[data-lang]').forEach(el => el.addEventListener('click', () => setLanguage(el.dataset.lang)));
+    setLanguage('zh-CN');
+  </script>
+</body>
+</html>
