@@ -1,5 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react' // eslint-disable-line storybook/no-renderer-packages
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import CodeMirrorEditor from '../components/editor/CodeMirrorEditor'
 import { Button } from '../components/ui/Button'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
@@ -27,13 +27,16 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
   const [mode, setMode] = useState(initialMode)
   const [selected, setSelected] = useState(chapterId)
   const [partnerOpen, setPartnerOpen] = useState(true)
+  const [tasksByMode, setTasksByMode] = useState({ forge: true, compose: false })
   const [saved, setSaved] = useState<Partial<Record<ChapterId, string>>>({})
   const [drafts, setDrafts] = useState<Partial<Record<ChapterId, string>>>(dirty ? { harbour: `${chapters[0].body}\n\n她把信收进口袋。` } : {})
   const [failedChapter, setFailedChapter] = useState<ChapterId>()
   const [suggestionOpen, setSuggestionOpen] = useState(false)
+  const panelId = useId()
   const chapter = chapters.find(item => item.id === selected) ?? chapters[0]
   const body = drafts[chapter.id] ?? saved[chapter.id] ?? chapter.body
   const changed = body !== (saved[chapter.id] ?? chapter.body)
+  const tasksOpen = tasksByMode[mode]
 
   function save(content: string) {
     if (!changed || chapter.readOnly) return
@@ -51,7 +54,12 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
       <header className="v3-sample-header">
         <h1>雾港来信</h1>
         <SegmentedControl items={modes} value={mode} onChange={setMode} />
-        <Button variant="outline" size="sm" aria-pressed={partnerOpen} onClick={() => setPartnerOpen(current => !current)}>写作搭档</Button>
+        <div className="v3-sample-tools">
+          <Button variant="outline" size="sm" aria-expanded={partnerOpen} aria-controls={`${panelId}-partner`}
+            onClick={() => setPartnerOpen(current => !current)}>写作搭档</Button>
+          <Button variant="outline" size="sm" aria-expanded={tasksOpen} aria-controls={`${panelId}-tasks`}
+            onClick={() => setTasksByMode(current => ({ ...current, [mode]: !current[mode] }))}>任务</Button>
+        </div>
       </header>
       <nav className="v3-sample-context" aria-label="项目章节" hidden={mode === 'compose'}>
         <h2>第一卷</h2>
@@ -78,14 +86,15 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
           </div>
         </div>
       </main>
-      <aside className="v3-sample-partner" aria-label="写作搭档" hidden={!partnerOpen}>
+      <aside id={`${panelId}-partner`} className="v3-sample-partner" aria-label="写作搭档" hidden={!partnerOpen}>
         <h2>写作搭档</h2>
         <p>林澈读信前，渡口最后一盏灯熄灭。可以把这处细节留作下一章的线索。</p>
         <Button variant="outline" size="sm" aria-expanded={suggestionOpen}
           onClick={() => setSuggestionOpen(current => !current)}>{suggestionOpen ? '收起建议' : '预览建议'}</Button>
         {suggestionOpen && <blockquote>她还来不及拆信，渡口最后一盏灯便熄了。</blockquote>}
       </aside>
-      <footer className="v3-sample-runtime" hidden={mode === 'compose'}>渡口场景连续性检查正在运行</footer>
+      {/* 两态各自记住任务区开关，并显示同一个运行状态。 */}
+      <footer id={`${panelId}-tasks`} className="v3-sample-runtime" hidden={!tasksOpen}>渡口场景连续性检查正在运行</footer>
     </div>
   )
 }

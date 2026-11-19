@@ -19,6 +19,7 @@
 }
 
 .v3-sample-header, .v3-sample-runtime { padding: .75rem 1.25rem; }
+.v3-sample-tools { display: flex; flex-wrap: wrap; gap: .5rem; }
 .v3-sample-header, .v3-sample-document { border-bottom: 1px solid var(--color-border); }
 .v3-sample-runtime { border-top: 1px solid var(--color-border); }
 .v3-sample-context, .v3-sample-partner { min-width: 0; padding: 1.25rem; background: var(--color-panel); }
@@ -65,6 +66,17 @@
 .v3-workbench-sample > [hidden] { display: none; }
 
 @media (max-width: 860px) {
-  .v3-workbench-sample[data-mode][data-partner] { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto; }
+  .v3-workbench-sample[data-mode][data-partner] {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto;
+    max-height: calc(100dvh - 2rem);
+    overflow-y: auto;
+  }
   .v3-sample-context, .v3-sample-partner { border-inline: 0; border-block: 1px solid var(--color-border); }
+  .v3-sample-runtime {
+    /* 窄窗在工具栏下展示任务，召回时可直接看到状态。 */
+    grid-row: 2;
+    border-top: 0;
+    border-bottom: 1px solid var(--color-border);
+  }
 }
