@@ -188,6 +188,10 @@ export interface ProjectChannels {
     args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
     return: { indexed: number; chunks: number }
   }
+  'project:file-editor-rebuild-index': {
+    args: [token: string]
+    return: { indexed: number; chunks: number }
+  }
   'project:file-editor-import-inference': {
     args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
     return: {

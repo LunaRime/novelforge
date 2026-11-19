@@ -238,6 +238,24 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     } finally { pending.current = false; setBusy(false) }
   }
 
+  async function rebuildIndex() {
+    if (pending.current || dirty || !workspace) return
+    clearInference()
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      // 重建以磁盘上已保存的正文为准，编辑器只传当前会话凭据。
+      const { indexed } = await ipc.invoke('project:file-editor-rebuild-index', workspace.token)
+      const message = t('project.fileEditorRebuildIndexDone').replace('{count}', String(indexed))
+      renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(message)
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorRebuildIndexFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
   async function load(path?: string, locator?: string) {
     if (pending.current || dirty) return
     pending.current = true
@@ -462,8 +480,13 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               {!openingDocument && continuationSource && active && nextNumber !== undefined && <FileChapterContinuation
                 key={`${workspace.token}:${active.locator}:${active.revision}`} token={workspace.token} number={nextNumber}
                 source={continuationSource} disabled={busy || dirty} onPublish={publishContinuation} />}
-              {workspace.importStartNumber !== undefined && !stagedImport && (
-                <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
+              {workspace.importStartNumber !== undefined && (
+                <>
+                  {!stagedImport && <Button variant="outline" disabled={busy || dirty}
+                    onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>}
+                  <Button variant="outline" disabled={busy || dirty}
+                    onClick={() => void rebuildIndex()}>{t('project.fileEditorRebuildIndex')}</Button>
+                </>
               )}
               {indexBatch?.path === workspace.path && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void indexImport()}>{t('project.fileEditorIndexImport')}</Button>

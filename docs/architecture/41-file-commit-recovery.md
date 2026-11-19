@@ -80,10 +80,16 @@ Windows Electron 生产构建在 E3 旧项目验证包的隔离副本中测试�
 旧 SQLite 导入的蓝图推演在调用模型前捕获项目会话和数据库连接令牌。模型返回后重新核对会话和取消状态，主进程在实际写入前同步核验连接令牌。单章写入失败计入失败数，后续章节仍可处理。此步骤负责逐章保存蓝图，完成日志记录实际成功和失败数量。
 
 1. 候选项目通过 `project:file-editor-import-source` 读取推演输入。调用方传入当前候选会话令牌、原起始章号和拆章结果。主进程从只读保留库查询回执，在第一处缺失或待恢复回执停止，再从章节文件读取连续已发布的正文。返回项目 ID、章节 ID、章号、标题、正文及 revision。已提交的章缺失或 revision 变化会使本次快照读取失败。重开后携带新令牌可查询同一批，读取期间切换项目会拒绝返回旧会话的结果。候选 IPC 回归覆盖重复导入、占用章号、发布中断后恢复、正文外部修改和读取期间切换项目。
-2. 候选编辑器通过 `project:file-editor-index-import` 建立本批正文的 SQLite FTS5 索引。索引沿用正文快照校验，在章节写锁内核验当前会话，用同一事务按章 ID 替换分块。每块保留发布 revision。独立的 `.novelforge/file-import-index.v1.db` 可由已发布正文重建，失败时保留上次索引结果，编辑器可用同一请求单独重试。重新打开后可重选原文件和起始章号找回导入回执，再建立索引。
+2. 候选编辑器通过 `project:file-editor-index-import` 建立本批正文的 SQLite FTS5 索引。索引沿用正文快照校验，在章节写锁内核验当前会话，用同一事务按章 ID 替换分块。每块保留发布 revision。重新打开后可重选原文件和起始章号找回导入回执，再为该批建立索引。
 3. 索引后选择「用 AI 推演本批设定」生成预览。`project:file-editor-import-inference` 在全文检索排序及截取前按当前批次的章 ID 和 revision 过滤，附上首、中、末章的正文样本。编辑器调用已配置的模型生成世界观、核心大纲、主角人设与写作风格。在显示前再次核对候选会话与完整 revision 列表。取消和切换项目会中止模型调用并丢弃迟到结果。预览仅在当前编辑器会话中展示。[索引与会话回归](../../electron/controllers/file-project-editor-controller.test.ts) [模型取消与结果校验](../../src/services/workflows/file-import-inference.test.ts)
 4. 「应用到空白设定」经确认后调用 `project:file-editor-apply-import-settings`，写入当前候选项目保留库的 `project_core`。预览会话记录源 revision 与目标字段版本。主进程在章节锁内重新核对来源，并在一个 SQLite 事务内只填入预览开始时为空且版本吻合的字段。已有设定保留，任一拟填字段发生变更会使本次应用失败。候选保留库的独立版本触发器跟踪实际字段变化，支持检测改动后又还原的情况。旧副本缺少字段时仍可查看预览，可应用字段以保留库现有列为准。常规 SQLite 项目继续使用原入口。[候选写入与回滚回归](../../electron/controllers/file-project-editor-controller.test.ts)
 5. 「用 AI 推演缺失蓝图」通过 `project:file-editor-import-blueprints` 从已发布章节快照读取候选输入，排除预览开始时已有蓝图的章号。按章调用模型并显示进度，以已发布章节的章号为准，完成后再次核对来源 revision。用户确认后，`project:file-editor-apply-import-blueprints` 在同一候选会话的章节锁内核对来源和预览目标，再使用一个 SQLite 事务补入缺失行。确认时已有的蓝图和笔记保留，任一实际写入失败时回滚整批。旧副本缺少蓝图列时仍可查看预览。[模型回归](../../src/services/workflows/file-import-inference.test.ts) [候选蓝图回滚回归](../../electron/controllers/file-project-editor-controller.test.ts)
+
+## 全文索引重建
+
+候选与已激活的文件项目均可在文件项目编辑器选择「重建全文索引」。重启后也可直接使用该入口。保存当前编辑后，主进程在章节写锁内读取 `chapters/` 中的 Markdown，按正文及对应 revision 重建 `.novelforge/file-import-index.v1.db`。同一事务替换所有分块及全文索引，清除旧 revision 和已移出当前目录的章节。索引文件缺失时会重新创建，事务失败时保留已有索引。重建期间正文、历史快照及 `retained.db` 保持原样。[主进程回归](../../electron/controllers/file-project-editor-controller.test.ts) [编辑器回归](../../src/components/dialogs/FileProjectEditorDialog.test.tsx)
+
+Windows x64 打包应用在独立配置和合成项目副本中完成重建验收。退出后删除索引，重新启动并通过编辑器重建，三章的 revision 与磁盘正文一致，FTS 查询命中。核对重建前后的正文、历史稿和保留库哈希相同，按原定位符打开的历史稿保持只读。
 
 ## Agent 正文问答与修改提案
 

@@ -42,6 +42,20 @@ test('opens a routed directory through the candidate IPC without another folder 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
 })
 
+test('rebuilds the project index without an import batch and supports retry', async () => {
+  invoke.mockResolvedValueOnce({ token: 'session', tabs: [], documents: [], missing: [], importStartNumber: 2 })
+    .mockRejectedValueOnce(new Error('index interrupted'))
+    .mockResolvedValueOnce({ indexed: 1, chunks: 2 })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await click('project.fileEditorRebuildIndex')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-rebuild-index', 'session')
+  expect(toast.error).toHaveBeenLastCalledWith('project.fileEditorRebuildIndexFailed')
+  await click('project.fileEditorRebuildIndex')
+  expect(invoke).toHaveBeenCalledTimes(3)
+  expect(toast.success).toHaveBeenLastCalledWith('project.fileEditorRebuildIndexDone')
+})
+
 test('confirms activation and reopens the file editor with a fresh session', async () => {
   const locator = 'doc://chapter/ch_12345678'
   const tab = { locator, content: 'Saved text', revision: 'revision' }

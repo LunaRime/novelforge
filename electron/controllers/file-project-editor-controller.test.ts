@@ -1,4 +1,4 @@
-import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, link, mkdir, mkdtemp, readFile, readdir, rm, unlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -199,14 +199,24 @@ test('restores candidate operations and verifies import snapshots against receip
         BEGIN SELECT RAISE(ABORT, 'index interrupted'); END`)
       await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('index interrupted')
       expect(matches()).toEqual(rows)
+      const beforeRebuild = index.prepare('SELECT * FROM import_chunks ORDER BY id').all()
+      await expect(invoke('rebuild-index', withImports.token)).rejects.toThrow('index interrupted')
+      expect(index.prepare('SELECT * FROM import_chunks ORDER BY id').all()).toEqual(beforeRebuild)
+      expect(matches()).toEqual(rows)
       index.exec('DROP TRIGGER fail_second')
+      await invoke('rebuild-index', withImports.token)
+      expect(index.prepare("SELECT chapter_id FROM import_chunks WHERE chapter_id = 'ch_00000000'").all()).toEqual([])
+      expect(index.prepare(`SELECT c.content FROM import_fts JOIN import_chunks c ON c.id = import_fts.rowid
+        WHERE import_fts MATCH 'world'`).all()).toEqual([{ content: 'text A' }])
     } finally { index.close() }
     await expect(invoke('import-source', reopened.token, 4, source)).rejects.toThrow('lifecycle session')
     await expect(invoke('index-import', reopened.token, 4, source)).rejects.toThrow('lifecycle session')
+    await expect(invoke('rebuild-index', reopened.token)).rejects.toThrow('lifecycle session')
     const unsafeSidecar = `${indexPath}-journal`
     await mkdir(unsafeSidecar)
     const { rmdir } = await import('node:fs/promises')
     await expect(invoke('index-import', withImports.token, 4, source)).rejects.toThrow('Unsafe file import index path')
+    await expect(invoke('rebuild-index', withImports.token)).rejects.toThrow('Unsafe file import index path')
     await rmdir(unsafeSidecar)
     await expect(invoke('import-source', withImports.token, Number.MAX_SAFE_INTEGER, source)).rejects.toThrow('Invalid file chapter import')
     await expect(invoke('import-source', withImports.token, 4, [source[0], null])).rejects.toThrow('Invalid file chapter import')
@@ -428,6 +438,23 @@ test('restores candidate operations and verifies import snapshots against receip
     const activated = await invoke('open', project, [imported.firstLocator]) as ProjectChannels['project:file-editor-open']['return']
     expect(activated.canActivate).toBe(false)
     expect(activated.activation).toMatchObject({ generation: expect.any(String), activatedAt: expect.any(String) })
+    const retainedPath = join(project, '.novelforge/retained.db')
+    const retainedBytes = await readFile(retainedPath)
+    const expectedIndex = await Promise.all((await readdir(join(project, 'chapters')))
+      .filter(name => /^\d+\.md$/.test(name)).map(name => importedChapter(Number.parseInt(name, 10))))
+    await unlink(indexPath)
+    await link(retainedPath, indexPath)
+    await expect(invoke('rebuild-index', activated.token)).rejects.toThrow('Unsafe file import index path')
+    await unlink(indexPath)
+    await expect(readFile(indexPath)).rejects.toMatchObject({ code: 'ENOENT' })
+    expect(await invoke('rebuild-index', activated.token)).toEqual({ indexed: expectedIndex.length, chunks: expectedIndex.length })
+    const rebuiltIndex = new DatabaseSync(indexPath, { readOnly: true })
+    try {
+      expect(rebuiltIndex.prepare(`SELECT chapter_id AS chapterId, chapter_number AS number, title, revision, content
+        FROM import_chunks ORDER BY chapter_number`).all()).toEqual(expectedIndex.sort((a, b) => a.number - b.number))
+    } finally { rebuiltIndex.close() }
+    expect(await readFile(retainedPath)).toEqual(retainedBytes)
+    expect(await readFile(join(project, history), 'utf8')).toBe(historyBytes)
     await expect(invoke('activate', activated.token)).rejects.toThrow('already active')
     const activationDescriptor = await readFile(descriptor, 'utf8')
     const damaged = JSON.parse(activationDescriptor)

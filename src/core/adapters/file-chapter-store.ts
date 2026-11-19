@@ -130,6 +130,11 @@ export class FileChapterStore implements ChapterRepo {
     return (await this.scan(false)).map(item => item.meta).sort((a, b) => a.number - b.number)
   }
 
+  /** 扫描当前章节目录，正文与 revision 来自同一次文件读取。 */
+  async readCurrentChapters(): Promise<Array<Pick<StoredChapter, 'chapter' | 'revision'>>> {
+    return (await this.scan(false)).map(({ chapter, meta }) => ({ chapter, revision: meta.revision }))
+  }
+
   async byId(id: string): Promise<StoredChapter | null> {
     assertChapterId(id)
     const scanned = await this.scan()

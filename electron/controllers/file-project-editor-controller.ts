@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import { join, relative } from 'node:path'
-import { open, realpath, rename, unlink } from 'node:fs/promises'
+import { lstat, open, realpath, rename, unlink } from 'node:fs/promises'
 import Database from 'better-sqlite3'
 import { FileChapterStore, MemoryChapterIndex, openProjectInspection, fileRevision,
   createFileEditorOpenPort, openEditorDocument, type GeneratedBlueprintFields, type MigratedDraftIdentityMap } from '../../src/core'
@@ -9,7 +9,7 @@ import { guardedHandle } from '../security/ipc-guard'
 import { assertPathAllowedForIpc } from './fs-controller'
 import { createFileDraftLifecycle } from '../services/file-draft-lifecycle'
 import { readFileImportSource } from '../services/file-import-source'
-import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext } from '../services/file-import-index'
+import { fileImportIndexPath, indexImportedChapters, readImportInferenceContext, rebuildFileImportIndex } from '../services/file-import-index'
 import { applyFileImportSettings, installFileImportSettingVersions, readFileImportSettingBaseline, type SettingBaseline } from '../services/file-import-settings'
 import { applyImportBlueprints, readImportBlueprintTargets } from '../services/file-import-blueprints'
 import { readFileContinuationContext } from '../services/file-continuation-context'
@@ -412,9 +412,15 @@ export function registerFileProjectEditorController() {
 
   async function checkedImportIndexPath(session: FileEditorSession, mustExist = false) {
     for (const suffix of ['', '-journal', '-wal', '-shm']) {
-      const kind = await session.inspectKind(fileImportIndexPath + suffix)
+      const relativePath = fileImportIndexPath + suffix
+      const kind = await session.inspectKind(relativePath)
       if (kind !== 'file' && kind !== 'missing') throw new Error('Unsafe file import index path')
       if (mustExist && !suffix && kind === 'missing') throw new Error('File import index is missing')
+      if (kind === 'file') {
+        // 避免索引文件或 SQLite 辅助文件通过硬链接指向保留库等权威数据。
+        const stat = await lstat(join(session.projectPath, relativePath))
+        if (!stat.isFile() || stat.nlink !== 1) throw new Error('Unsafe file import index path')
+      }
     }
     return join(session.projectPath, fileImportIndexPath)
   }
@@ -430,6 +436,22 @@ export function registerFileProjectEditorController() {
       const path = await checkedImportIndexPath(session)
       assertCurrent()
       return indexImportedChapters(path, snapshot.chapters)
+    })
+  })
+
+  guardedHandle('project:file-editor-rebuild-index', async ({ sender }, token: string) => {
+    const { session, assertCurrent } = requireLifecycleSession(sender.id, token)
+    assertPathAllowedForIpc(session.projectPath, 'write')
+    return session.repo.withCommitLock(async () => {
+      // 持有章节写锁，从当前 Markdown 生成完整快照并提交全文索引。
+      await session.assertCandidate()
+      assertCurrent()
+      const chapters = (await session.repo.readCurrentChapters()).map(({ chapter, revision }) => ({
+        chapterId: chapter.id, number: chapter.number, title: chapter.title, content: chapter.content, revision,
+      }))
+      const path = await checkedImportIndexPath(session)
+      assertCurrent()
+      return rebuildFileImportIndex(path, chapters)
     })
   })
 
