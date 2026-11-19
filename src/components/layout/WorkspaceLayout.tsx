@@ -1,13 +1,15 @@
-import { Group, Panel, Separator, useDefaultLayout } from 'react-resizable-panels'
+import { Group, Panel, Separator, useDefaultLayout, type Layout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useTranslation } from '../../hooks/useTranslation'
-import { useLayoutStore } from '../../stores/layout-store'
+import { selectWorkbenchPanels, useLayoutStore, type WorkbenchMode } from '../../stores/layout-store'
 import { ErrorBoundary } from '../ErrorBoundary'
 import AIPanel from '../panels/AIPanel'
 import AIOutputPanel from '../panels/AIOutputPanel'
 import BottomPanel from '../panels/BottomPanel'
 import EditorArea from '../panels/EditorArea'
 import Sidebar from '../panels/Sidebar'
+import { Button } from '../ui/Button'
+import { SegmentedControl } from '../ui/SegmentedControl'
 import LeftToolWindowBar from './LeftToolWindowBar'
 import RightToolWindowBar from './RightToolWindowBar'
 
@@ -31,20 +33,41 @@ function closeIfAtFloor(region: keyof typeof REGION_MIN_PX): void {
   }
 }
 
+function saveVisibleLayout(layout: Layout, panelIds: string[], save: (layout: Layout) => void) {
+  // 切换或专注时会短暂报告旧布局或单面板布局，避免它们覆盖当前模式的尺寸。
+  if (panelIds.length > 1 && Object.keys(layout).length === panelIds.length && panelIds.every(id => id in layout)) {
+    save(layout)
+  }
+}
+
 export default function WorkspaceLayout() {
   const { t } = useTranslation()
-  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, focusMode, openNewProject } = useLayoutStore(useShallow(state => ({
-    sidebarOpen: state.sidebarOpen,
-    aiPanelOpen: state.aiPanelOpen,
-    rightView: state.rightView,
-    bottomPanelOpen: state.bottomPanelOpen,
-    focusMode: state.focusMode,
+  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, bottomTab } = useLayoutStore(useShallow(state => {
+    const panels = selectWorkbenchPanels(state)
+    return {
+      sidebarOpen: panels.sidebarOpen, aiPanelOpen: panels.aiPanelOpen, rightView: panels.rightView,
+      bottomPanelOpen: panels.bottomPanelOpen, bottomTab: panels.bottomTab,
+    }
+  }))
+  const { focusMode, workbenchMode, setWorkbenchMode, openNewProject } = useLayoutStore(useShallow(state => ({
+    focusMode: state.focusMode, workbenchMode: state.workbenchMode, setWorkbenchMode: state.setWorkbenchMode,
     openNewProject: state.openNewProject,
   })))
+  const writing = workbenchMode === 'write'
+  const showSidebar = !focusMode && sidebarOpen
+  const showAI = !focusMode && aiPanelOpen
+  const showBottom = !focusMode && bottomPanelOpen
+  const sidebarId = writing ? 'writing-sidebar' : 'sidebar'
+  const aiId = writing ? 'writing-ai-panel' : 'ai-panel'
+  const bottomId = writing ? 'writing-bottom' : 'bottom'
+  const horizontalIds = [...(showSidebar ? [sidebarId] : []), 'middle', ...(showAI ? [aiId] : [])]
+  const verticalIds = showBottom ? ['editor', bottomId] : ['editor']
 
-  // 保留两组尺寸存储键与面板 ID，重启时可继续读取已有布局偏好。
-  const horizontalLayout = useDefaultLayout({ id: 'novelforge-main-horizontal', storage: localStorage })
-  const verticalLayout = useDefaultLayout({ id: 'novelforge-middle-vertical', storage: localStorage })
+  // 构建态沿用旧存储键。写作态独立保存尺寸，编辑区与两层 Group 始终挂载。
+  const horizontalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-horizontal' : 'novelforge-main-horizontal', storage: localStorage })
+  const verticalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-vertical' : 'novelforge-middle-vertical', storage: localStorage })
+  const partnerExpanded = showAI && rightView === 'agent'
+  const tasksExpanded = showBottom && bottomTab === 'tasks'
 
   return (
     <>
@@ -54,19 +77,42 @@ export default function WorkspaceLayout() {
       >
         {t('tip.skipToContent')}
       </a>
-      <div className="flex flex-1 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}>
-        {!focusMode && <LeftToolWindowBar />}
+      <div className="flex flex-wrap items-center justify-center gap-2 bg-[var(--color-canvas)] px-2 py-1">
+        <SegmentedControl<WorkbenchMode>
+          items={[{ value: 'build', label: t('workbench.build') }, { value: 'write', label: t('workbench.write') }]}
+          value={workbenchMode}
+          onChange={setWorkbenchMode}
+        />
+        {writing && !focusMode && (
+          <>
+            <Button type="button" variant="ghost" active={partnerExpanded} aria-expanded={partnerExpanded} aria-controls={partnerExpanded ? aiId : undefined}
+              onClick={() => {
+                const { setAIPanelOpen, openRightPanel } = useLayoutStore.getState()
+                if (partnerExpanded) setAIPanelOpen(false)
+                else openRightPanel('agent')
+              }}
+            >{t('workbench.partner')}</Button>
+            <Button type="button" variant="ghost" active={tasksExpanded} aria-expanded={tasksExpanded} aria-controls={tasksExpanded ? bottomId : undefined}
+              onClick={() => {
+                useLayoutStore.getState().setBottomTab('tasks')
+              }}
+            >{t('panel.tasks')}</Button>
+          </>
+        )}
+      </div>
+      <div data-workbench-mode={workbenchMode} className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}>
+        {!writing && !focusMode && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
           <Group
             orientation="horizontal"
             className="flex-1"
             defaultLayout={horizontalLayout.defaultLayout}
-            onLayoutChanged={horizontalLayout.onLayoutChanged}
+            onLayoutChanged={layout => saveVisibleLayout(layout, horizontalIds, horizontalLayout.onLayoutChanged)}
           >
-            {sidebarOpen && !focusMode && (
+            {showSidebar && (
               <>
                 <Panel
-                  id="sidebar"
+                  id={sidebarId}
                   defaultSize={SIDEBAR_DEFAULT}
                   minSize={REGION_MIN_PX.sidebar}
                   maxSize={REGION_MAX_PX.sidebar}
@@ -88,7 +134,7 @@ export default function WorkspaceLayout() {
                 orientation="vertical"
                 className="h-full"
                 defaultLayout={verticalLayout.defaultLayout}
-                onLayoutChanged={verticalLayout.onLayoutChanged}
+                onLayoutChanged={layout => saveVisibleLayout(layout, verticalIds, verticalLayout.onLayoutChanged)}
               >
                 {/* 专注模式仅改变外层布局，正文编辑区始终在同一位置挂载。 */}
                 <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
@@ -100,10 +146,10 @@ export default function WorkspaceLayout() {
                   </div>
                 </Panel>
 
-                {bottomPanelOpen && !focusMode && <Separator onPointerUp={() => closeIfAtFloor('bottom')} />}
-                {bottomPanelOpen && !focusMode && (
+                {showBottom && <Separator onPointerUp={() => closeIfAtFloor('bottom')} />}
+                {showBottom && (
                   <Panel
-                    id="bottom"
+                    id={bottomId}
                     defaultSize="25%"
                     minSize={REGION_MIN_PX.bottom}
                     maxSize="55%"
@@ -119,11 +165,11 @@ export default function WorkspaceLayout() {
               </Group>
             </Panel>
 
-            {aiPanelOpen && !focusMode && (
+            {showAI && (
               <>
                 <Separator onPointerUp={() => closeIfAtFloor('ai')} />
                 <Panel
-                  id="ai-panel"
+                  id={aiId}
                   defaultSize={AI_PANEL_DEFAULT}
                   minSize={REGION_MIN_PX.ai}
                   maxSize={REGION_MAX_PX.ai}
@@ -139,7 +185,7 @@ export default function WorkspaceLayout() {
             )}
           </Group>
         </div>
-        {!focusMode && <RightToolWindowBar />}
+        {!writing && !focusMode && <RightToolWindowBar />}
       </div>
     </>
   )
