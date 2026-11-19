@@ -6,7 +6,7 @@
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
-后端重构完成并通过交接验收后，前端进入 U0 基线采集与组件样板，再按批实施应用壳、编辑区、导航及功能页改造。交接清单、阶段依赖和验收见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+前端可先开展 U0 合成样板和基线采集。通过后端交接验收后，再按批实施应用壳、编辑区、导航和功能页改造。交接清单、阶段依赖和验收见 [42 V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md)。
 
 **技术栈**：沿用 React 19、TypeScript 6、Vite 8、Zustand 5、Tailwind CSS 4、Radix UI、CodeMirror 6 和 Electron。不换框架、不拆 monorepo、不先做全仓目录改名。
 
@@ -186,7 +186,7 @@ git status --short package.json
 
 ## 八、本次计划交付
 
-计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D4 的进度见 [架构索引](README.md)。E/F 按各自出口条件推进，前端改造见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D4 的进度见 [架构索引](README.md)。E/F 按各自出口条件推进，前端改造见 [42 V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md)。
 
 ## 九、源码核对与优先风险（2026-11-06 补充）
 

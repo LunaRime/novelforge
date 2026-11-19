@@ -34,7 +34,7 @@
 | 22 | [世界观与架构状态应用层](22-architecture-overview-application-plan.md) | B3 部分失败、来源隔离、提取取消与编辑会话保护 | 本地实施与验证记录 |
 | 23 | [章节蓝图加载与保存应用层](23-blueprint-load-save-application-plan.md) | C1a 快照保存、逐行 dirty、来源隔离与批量事务验证 | 本地实施与验证记录 |
 | 24 | [活页夹卷归属与手动顺序](24-binder-application-plan.md) | C1b 重排用例、实际成员投影与事务回滚 | 本地实施与验证记录 |
-| 25 | [UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md) | 后端交接、应用壳、写作体验、导航、AI 与验收 | 计划已写，等待后端交接 |
+| 25 | [原 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md) | 历史入口与原稿查阅方式 | 已并入 42 |
 | 26 | [蓝图删除命令](26-blueprint-delete-application-plan.md) | C1c 手动删除、会话隔离与写入互斥 | 本地实施与验证记录 |
 | 27 | [蓝图生成入口、补缺口与校检](27-blueprint-generation-verification-plan.md) | 严格快照、连续缺口、确认与派发失效保护 | 本地提交 7f04bbe |
 | 28 | [补缺口执行期仅插入协议](28-blueprint-gap-insert-only-plan.md) | 写时不覆盖、连接身份、取消与断点恢复来源保护 | 本地提交 133c8bb |
@@ -51,6 +51,8 @@
 | 39 | [旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) | 打包旧版对照、隔离屏障与完整备份恢复 | E4 已提交 |
 | 40 | [文件存储切换设计](40-file-storage-cutover-design.md) | 项目级草稿映射、激活、文档身份及回退 | F1 映射及无界面联调已交付 |
 | 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入写入恢复、正文导入、全文索引、空白设定应用、缺失蓝图补入、Agent 正文问答及修改提案、结合作品设定与蓝图的下一章续写 |
+| 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | U0 样板已验证，正式接线待交接 |
+| 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 对照及现有应用接口 | 本地验证记录 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
