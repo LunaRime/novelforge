@@ -57,6 +57,7 @@
 | 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 设计样板 |
 | 46 | [V3 U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md) | 标签、稿纸、窄栏修稿与保存回执 | 施工计划 |
 | 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 施工计划 |
+| 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 施工计划 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 
