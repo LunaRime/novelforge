@@ -419,7 +419,8 @@
 
   function updateSettings(instant) {
     const pane = $("settings-pane");
-    if (pane && typeof V.settingsPane === "function") pane.innerHTML = V.settingsPane();
+    // 保留已注册滚动条的设置容器，只刷新当前分类的内容。
+    if (pane && typeof V.settingsPaneInner === "function") pane.innerHTML = V.settingsPaneInner();
     const layout = document.querySelector(".set-layout");
     if (layout) {
       if (instant) layout.dataset.animate = "instant";

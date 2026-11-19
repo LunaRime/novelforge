@@ -178,8 +178,8 @@
       '<div class="set-nav-foot"><strong>' + E(T("pageMemory")) + '</strong>' + E(T("setSearchNote")) + '</div></aside>';
   }
 
-  /* Pane markup is reusable so a section switch replaces only this column. */
-  function settingsPaneMarkup() {
+  // 初次打开时由 settingsPaneMarkup 包装。切换分类时只替换子节点，避免重复嵌套 #settings-pane。
+  function settingsPaneInner() {
     const st = S();
     const sec = D.settingsSections.find(function (x) { return x.id === st.settingsSection; }) || D.settingsSections[0];
     const group = settingsGroupOf(sec.id);
@@ -207,8 +207,7 @@
       settingCard(T("setCoreTitle"), T("setCoreDesc"), sec.icon, sec, sec.rows.slice(0, half), 0, false, 1) +
       settingCard(T("setAdvancedTitle"), T("setAdvancedDesc"), "sliders", sec, sec.rows.slice(half), half, false, 2);
 
-    return '<section class="set-pane scroll" id="settings-pane">' +
-      '<header class="set-head"><span class="set-head-watermark">' + I(sec.icon) + '</span>' +
+    return '<header class="set-head"><span class="set-head-watermark">' + I(sec.icon) + '</span>' +
       '<span class="set-head-glyph">' + I(sec.icon) + '</span>' +
       '<div class="set-head-copy"><div class="kicker">SETTINGS / ' + E(sec.id.toUpperCase()) +
       (group ? ' · ' + E(X(group.title)) : '') + '</div>' +
@@ -220,11 +219,16 @@
       metric(T("setEnabledCount"), enabled, toggles ? enabled / toggles * 100 : 0) +
       metric(T("setStateLabel"), T("setStateValue"), 100) + '</div>' +
       '<div class="set-grid">' + cards + '</div>' +
-      '<div class="set-foot-note"><strong>' + E(T("setNoteTitle")) + '</strong>' + E(T("setDialogNote")) + '</div></section>';
+      '<div class="set-foot-note"><strong>' + E(T("setNoteTitle")) + '</strong>' + E(T("setDialogNote")) + '</div>';
   }
 
-  /* Exposed to app.js for partial, flicker-free updates. */
-  V.settingsPane = settingsPaneMarkup;
+  function settingsPaneMarkup() {
+    return '<section class="set-pane scroll" id="settings-pane">' +
+      settingsPaneInner() + '</section>';
+  }
+
+  // app.js 使用这些入口更新已打开的设置面板。
+  V.settingsPaneInner = settingsPaneInner;
   V.settingsNav = settingsNavMarkup;
   V.settingsTone = function () { return settingsToneFor(S().settingsSection); };
 
