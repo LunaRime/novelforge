@@ -3,7 +3,7 @@ import type { DiffSession } from '../services/diff/hunk-model'
 /** 编辑器 Tab 数据 */
 export interface EditorTab {
   id: string
-  /** Database draft identity; URI locators never determine tab identity. */
+  /** SQLite 草稿 ID，用于生成统一的 doc 标签身份。 */
   docId?: number
   name: string
   type: 'chapter' | 'outline' | 'character' | 'config' | 'diff' | 'chapter-card' | 'world-building' | 'arch-file' | 'version-history' | 'review-report' | 'memory' | 'publication' | 'manuscript-board' | 'world-timeline'
@@ -22,7 +22,7 @@ export interface EditorTab {
   chapterNumber?: number
   /** 审稿报告存放路径 */
   reportPath?: string
-  /** L1 inline 接受会话（决策态随 tab 持久；正文文本仍走 content） */
+  /** 行内建议保存在当前内存标签，切换视图时保留，重开作品时从已保存正文开始。 */
   inlineSession?: DiffSession
 }
 

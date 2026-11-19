@@ -27,7 +27,7 @@
 - [x] 在 Windows 打包应用中，从分卷和草稿箱打开同一 SQLite 草稿，复用 `doc:{draftId}` 标签与编辑实例。同章不同草稿、同名不同章各自显示正确正文。修稿、审稿和历史对比读取各自记录，返回正文保留未保存输入和测试夹具中的未决建议。
 - [x] 复测取消关闭、确认丢弃、固定标签、批量关闭和项目切换。模拟同一路径关闭后重开，确认打开适配器的迟到读取及旧标签关闭确认无法作用到新会话。Windows 打包应用重启后，经草稿箱重开原草稿，回读已保存的正文与版本号。
 - [x] 复跑 `EditorArea.test.tsx` 与 `open-editor-document.test.ts`，覆盖关闭确认、未决建议和不同入口打开同一草稿。[编辑区](../../src/components/panels/EditorArea.tsx)、[打开适配器](../../src/services/editor/open-editor-document.ts)
-- [ ] 重开 SQLite 作品时自动恢复上次打开的正文标签及选中项。验证项目之间的恢复记录隔离，并从 SQLite 重新读取正文。
+- [x] Windows 打包应用重启后，打开原作品会恢复草稿标签的顺序和选中项，并从 SQLite 读回已保存正文。已验证不同项目的同 ID 草稿各自恢复，手动关闭的标签不再打开。自动化回归还覆盖定稿标签、固定状态、跳过已删除草稿，以及同一路径旧读取失效。离开作品前若在历史等临时视图，重开时恢复最后选中的正文。[恢复服务](../../src/services/editor/draft-tab-session.ts)、[项目切换回归](../../src/stores/project-store.test.ts)
 
 ### 2. 接入稿纸与正文偏好
 

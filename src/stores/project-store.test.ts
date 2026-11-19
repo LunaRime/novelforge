@@ -45,6 +45,7 @@ const BASE: ProjectData = {
 }
 
 beforeEach(() => {
+  localStorage.clear()
   vi.mocked(confirm).mockReset()
   vi.mocked(ipc.invoke).mockReset().mockResolvedValue({ success: true } as never)
   useEditorStore.getState().clearTabs()
@@ -58,6 +59,125 @@ beforeEach(() => {
 
 afterEach(() => {
   useProjectStore.setState({ currentProject: null, configSnapshot: null })
+})
+
+describe('SQLite 正文标签恢复', () => {
+  const other = { ...BASE, path: '/other' }
+  const openProject = (path: string) => useProjectStore.getState().openProject(path, { keepView: true })
+
+  beforeEach(() => {
+    vi.mocked(confirm).mockResolvedValue(true)
+    vi.mocked(ipc.invoke).mockImplementation(async (...[channel, arg]) => {
+      if (channel === 'project:open') return { success: true, project: arg === other.path ? other : BASE } as never
+      if (channel === 'fs:list-dir') return [] as never
+      if (channel === 'db:draft-get-full') return { content: `已保存:${useProjectStore.getState().currentProject?.path}:${arg}` } as never
+      return { success: true } as never
+    })
+  })
+
+  it('按作品恢复 SQLite 正文的顺序、选中项和固定状态，正文重新读库', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '原稿', content: '未保存的修改', dirty: true })
+    editor.beginInlineSession('doc:7', { sessionId: '未保存的建议', sourceKind: 'selection', baseDocSnapshot: '', hunks: [], decisions: {} })
+    editor.openFile({ id: 'vela://manuscript/8', type: 'chapter', filePath: 'vela://manuscript/8', name: '定稿', pinned: true })
+    editor.setActiveTab('doc:7')
+    editor.openFile({ id: 'history', type: 'version-history', name: '历史' })
+
+    expect(await openProject(other.path)).toBe(true)
+    expect(useEditorStore.getState().tabs).toEqual([])
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '另一部作品' })
+
+    expect(await openProject(BASE.path)).toBe(true)
+    expect(useEditorStore.getState().tabs).toEqual([
+      expect.objectContaining({ id: 'doc:7', name: '原稿', content: '已保存:/test:7' }),
+      expect.objectContaining({ id: 'vela://manuscript/8', name: '定稿', content: '已保存:/test:8', pinned: true }),
+    ])
+    expect(useEditorStore.getState().tabs[0].dirty).toBeFalsy()
+    expect(useEditorStore.getState().tabs[0].inlineSession).toBeUndefined()
+    expect(useEditorStore.getState().activeTabId).toBe('doc:7')
+    const stored = Object.values(localStorage).join()
+    expect(stored).not.toContain('未保存的修改')
+    expect(stored).not.toContain('未保存的建议')
+
+    useProjectStore.getState().closeProject()
+    expect(await openProject(other.path)).toBe(true)
+    expect(useEditorStore.getState().tabs).toEqual([
+      expect.objectContaining({ id: 'doc:7', name: '另一部作品', content: '已保存:/other:7' }),
+    ])
+  })
+
+  it('忽略已经删除的草稿，手动关闭后不会在重开时复现', async () => {
+    const editor = useEditorStore.getState()
+    editor.openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '保留' })
+    editor.openFile({ id: 'doc:8', type: 'chapter', filePath: 'vela://draft/8', name: '已删' })
+    const invoke = vi.mocked(ipc.invoke).getMockImplementation()!
+    vi.mocked(ipc.invoke).mockImplementation((...args) => args[0] === 'db:draft-get-full' && args[1] === 8
+      ? Promise.resolve(null) as never
+      : invoke(...args))
+
+    useProjectStore.getState().closeProject()
+    expect(await openProject(BASE.path)).toBe(true)
+    expect(useEditorStore.getState().tabs.map(tab => tab.id)).toEqual(['doc:7'])
+    expect(useEditorStore.getState().activeTabId).toBe('doc:7')
+
+    editor.closeTab('doc:7')
+    useProjectStore.getState().closeProject()
+    expect(await openProject(BASE.path)).toBe(true)
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
+
+  it('项目关闭并从同一路径重开时，丢弃上一会话的迟到恢复', async () => {
+    useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '草稿' })
+    useProjectStore.getState().closeProject()
+    const invoke = vi.mocked(ipc.invoke).getMockImplementation()!
+    let finishOldRead: ((value: { content: string }) => void) | undefined
+    vi.mocked(ipc.invoke).mockImplementation((...args) => {
+      if (args[0] !== 'db:draft-get-full' || finishOldRead) return invoke(...args)
+      return new Promise(resolve => { finishOldRead = resolve }) as never
+    })
+
+    const previous = openProject(BASE.path)
+    await vi.waitFor(() => expect(finishOldRead).toBeDefined())
+    useProjectStore.getState().closeProject()
+    expect(await openProject(BASE.path)).toBe(true)
+    finishOldRead!({ content: '迟到的正文' })
+    await previous
+
+    expect(useEditorStore.getState().tabs).toEqual([
+      expect.objectContaining({ id: 'doc:7', content: '已保存:/test:7' }),
+    ])
+  })
+
+  it('恢复期间主动打开的草稿保持选中，迟到结果不替换正文', async () => {
+    const editor = useEditorStore.getState()
+    const draft = { id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '草稿' } as const
+    editor.openFile(draft)
+    useProjectStore.getState().closeProject()
+    const invoke = vi.mocked(ipc.invoke).getMockImplementation()!
+    let finishRead: ((value: { content: string }) => void) | undefined
+    vi.mocked(ipc.invoke).mockImplementation((...args) => args[0] === 'db:draft-get-full'
+      ? new Promise(resolve => { finishRead = resolve }) as never
+      : invoke(...args))
+
+    const opening = openProject(BASE.path)
+    await vi.waitFor(() => expect(finishRead).toBeDefined())
+    editor.openFile({ ...draft, name: '主动打开', content: '当前正文' })
+    editor.updateTabContent(draft.id, '正在编辑')
+    finishRead!({ content: '恢复读取' })
+    await opening
+
+    expect(useEditorStore.getState().tabs).toEqual([
+      expect.objectContaining({ id: draft.id, name: '主动打开', content: '正在编辑', dirty: true }),
+    ])
+    expect(useEditorStore.getState().activeTabId).toBe(draft.id)
+  })
+
+  it('删除作品成功后清除恢复记录，同一路径可用于新作品', async () => {
+    useEditorStore.getState().openFile({ id: 'doc:7', type: 'chapter', filePath: 'vela://draft/7', name: '旧作品' })
+    expect(await useProjectStore.getState().deleteProjectFolder(BASE.path)).toBe(true)
+    expect(await openProject(BASE.path)).toBe(true)
+    expect(useEditorStore.getState().tabs).toEqual([])
+  })
 })
 
 describe('project-store 快照机制（线③）', () => {

@@ -10,6 +10,7 @@ import { globalEventBus } from '../shared/event-bus'
 import { useEditorStore } from './editor-store'
 import { NovelConfigRequestCancelled, type NovelConfigScope } from '../core'
 import { commitProjectConfig, markProjectConfigReloaded, ProjectConfigResultUnknown } from '../services/config/project-config-save'
+import { forgetDraftTabs, rememberDraftTabs, restoreDraftTabs } from '../services/editor/draft-tab-session'
 // 延迟导入 ProjectService，避免循环依赖
 let _onProjectOpened: (() => Promise<void>) | null = null
 let _onProjectClosed: (() => void) | null = null
@@ -46,13 +47,14 @@ async function callProjectClosed() {
     const { onProjectClosed } = await import('../services/project-service')
     _onProjectClosed = onProjectClosed
   }
-  _onProjectClosed()
+  // 延迟加载期间可能已打开另一部作品，旧关闭操作不能重置其数据。
+  if (!useProjectStore.getState().currentProject) _onProjectClosed()
 }
 
 interface ProjectState {
   /** 当前打开的项目 */
   currentProject: ProjectData | null
-  /** Invalidates async work even when a project is closed and reopened at the same path. */
+  /** 项目关闭和重开会使前一会话的异步任务失效，包括重开相同路径。 */
   projectSession: number
   /** 项目文件树 */
   fileTree: FileNode[]
@@ -179,6 +181,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     let session: number | undefined
     let detachedTabs: EditorTabsSnapshot | undefined
     let opened = false
+    let restorePath: string | undefined
     try {
       const source = get()
       if (source.currentProject && source.currentProject.path !== projectPath) {
@@ -196,7 +199,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       const result = await ipc.invoke('project:open', projectPath)
       if (get().projectSession !== session) return false
       if (result.success && result.fileProjectPath) {
-        // The file editor owns its own session. Restore any detached SQLite tabs in finally.
+        // 文件编辑器使用独立会话，暂时分离的 SQLite 标签在 finally 中恢复。
         globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: result.fileProjectPath })
         return true
       }
@@ -225,6 +228,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
         }
         // 统一初始化 Layer 2 Store（角色卡、草稿等）
         await callProjectOpened()
+        if (source.currentProject?.path !== result.project.path) restorePath = result.project.path
         return true
       }
       if (result.restoredWriteToken && source.currentProject) {
@@ -246,6 +250,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       if (session !== undefined && get().projectSession === session) {
         if (!opened && detachedTabs) useEditorStore.setState(detachedTabs)
         set({ loading: false })
+        if (restorePath) await restoreDraftTabs(restorePath, session)
       }
     }
   },
@@ -340,11 +345,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
   },
 
   closeProject: () => {
-    set(state => ({ projectSession: state.projectSession + 1 }))
-    // 统一清空 Layer 2 Store + 编辑器 Tab
+    // 先退出作品会话，再清空内存标签，以保留该作品的恢复记录。
+    set(state => ({ projectSession: state.projectSession + 1, currentProject: null, fileTree: [], loading: false,
+      configSnapshot: null, configSnapshotSource: null, configFieldVersions: {} }))
+    useEditorStore.getState().clearTabs()
     callProjectClosed()
     clearProjectCustomPrompts()
-    set({ currentProject: null, fileTree: [], loading: false, configSnapshot: null, configSnapshotSource: null, configFieldVersions: {} })
   },
 
   updateCharacterStates: async (states) => {
@@ -370,6 +376,7 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
       }
       const result = await ipc.invoke('project:delete-folder', projectPath)
       if (result.success) {
+        forgetDraftTabs(projectPath)
         // 从本地状态中移除
         set((s) => ({
           recentProjects: s.recentProjects.filter((p) => p.path !== projectPath),
@@ -397,6 +404,12 @@ export const useProjectStore = create<ProjectState>()((set, get) => ({
     }
   },
 }))
+
+// 项目切换期间会临时清空标签。只保存已就绪作品里的主动标签变更。
+useEditorStore.subscribe((next, previous) => {
+  const { currentProject, loading } = useProjectStore.getState()
+  if (currentProject && !loading) rememberDraftTabs(currentProject.path, next, previous)
+})
 
 export function captureProjectConfigSource(): NovelConfigScope | null {
   const { currentProject, projectSession, loading } = useProjectStore.getState()
