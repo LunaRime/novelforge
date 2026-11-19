@@ -1,0 +1,45 @@
+.v3-partner-sample {
+  container: v3-partner / inline-size;
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.v3-partner-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: .75rem;
+  padding: .875rem 1.25rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.v3-partner-header h1, .v3-partner-panel h2 { font-size: 1.125rem; font-weight: 600; }
+.v3-partner-status { margin-inline-start: auto; color: var(--color-text-secondary); }
+.v3-partner-actions { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; }
+
+.v3-partner-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 16rem;
+}
+
+.v3-partner-main[data-open='true'] { grid-template-columns: minmax(0, 1fr) minmax(22rem, 2fr); }
+.v3-partner-manuscript, .v3-partner-panel { min-width: 0; padding: 1.25rem; }
+.v3-partner-manuscript { background: var(--color-editor-bg); }
+.v3-partner-panel { border-inline-start: 1px solid var(--color-border); }
+.v3-partner-panel h3 { margin-block: .75rem .5rem; font-weight: 500; }
+.v3-partner-diff { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem; margin-block-end: 1rem; }
+.v3-partner-diff > div { min-width: 0; padding: .75rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); }
+.v3-partner-diff dt { margin-block-end: .375rem; color: var(--color-text-secondary); font-weight: 500; }
+.v3-partner-diff dd { overflow-wrap: anywhere; }
+.v3-partner-task { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-block-start: .75rem; }
+.v3-partner-actions button, .v3-partner-task button { white-space: normal; height: auto; min-height: 2rem; }
+
+@container v3-partner (max-width: 700px) {
+  /* 窄窗将任务与审批放在工具栏下，打开后可直接到达操作。 */
+  .v3-partner-main[data-open='true'], .v3-partner-diff { grid-template-columns: minmax(0, 1fr); }
+  .v3-partner-panel { order: -1; border-inline-start: 0; border-block-end: 1px solid var(--color-border); }
+  .v3-partner-status { flex-basis: 100%; margin-inline-start: 0; }
+}

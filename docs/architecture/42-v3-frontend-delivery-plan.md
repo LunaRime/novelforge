@@ -121,6 +121,8 @@
 
 **落点**。`AIPanel.tsx`、`AIOutputPanel.tsx`、`AgentConversation.tsx`、`AgentInputBox.tsx`、`PendingToolConfirmation.tsx`、`WorkflowProgressEntry.tsx`、`BottomPanel.tsx`。
 
+面板召回、提案回执和取消终态见 [U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md)。
+
 - [ ] 将 V3 的简洁搭档面板接到现有 Agent 会话、引用和模型选择。切工作状态或暂时隐藏面板后，运行、审批、取消和输出归属可恢复。
 - [ ] 分别显示预览、保存待合并修稿和确认应用。先用候选文件现有的 Agent 修稿链路验证单条建议，再按交接记录覆盖 SQLite 的修稿与合并流程。并排显示原文和建议，标明已处理、冲突或过期结果。
 - [ ] 对长对话、滚动到旧消息、流式输出来回切模式、后台任务和审批做回归。以实际任务事件确定终态，已提交但刷新失败显示对应状态。
