@@ -83,6 +83,8 @@
 
 **落点**。`EditorArea.tsx`、`DraftEditor.tsx`、`CodeMirrorEditor.tsx`、`novel-editor.css`、`VersionHistory.tsx`、`ReviewReport.tsx`、`src/services/editor/`、`FileProjectEditorDialog.tsx`。
 
+施工顺序、窄栏操作与两个项目入口的版本回执见 [U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md)。
+
 - [ ] 核对现有打开适配器与编辑器 store，再从 `EditorArea` 提取标签栏和按文档类型选择的视图。覆盖多入口打开同稿、切标签、关闭脏稿、重开后恢复。正文、修稿 diff、审稿与历史标签分别验证。
 - [ ] 将稿纸和正文标题样式接入现有编辑器。验证动态栏宽、手动字号、暗色稿纸和暖白稿纸；稿纸样式随环境变化时，CodeMirror 保持同一编辑会话。
 - [ ] 将窄栏放不下的正文操作放入可聚焦的溢出菜单。用三语和长章名复测 `1024×640`、150% 内容缩放的修稿、审稿和定稿，保证各操作能通过鼠标或键盘执行。
