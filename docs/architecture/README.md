@@ -56,6 +56,7 @@
 | 44 | [V3 U1 工作台施工与交互验收](44-v3-u1-workbench-plan.md) | 两态画面、模式切换、窄窗、键盘和正式接线清单 | 施工计划 |
 | 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 设计样板 |
 | 46 | [V3 U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md) | 标签、稿纸、窄栏修稿与保存回执 | 施工计划 |
+| 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 施工计划 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

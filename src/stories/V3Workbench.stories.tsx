@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react' // eslint-disable-line storybook/no-renderer-packages
-import { Ellipsis } from 'lucide-react'
+import { BookOpen, Ellipsis, FileText } from 'lucide-react'
 import { useId, useRef, useState } from 'react'
 import CodeMirrorEditor from '../components/editor/CodeMirrorEditor'
 import { Button } from '../components/ui/Button'
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../components/ui/Dialog'
 import { MenuItem } from '../components/ui/MenuItem'
+import MenuRow from '../components/ui/MenuRow'
 import { SegmentedControl } from '../components/ui/SegmentedControl'
 import { useTranslation } from '../hooks/useTranslation'
 import './v3-workbench.story.css'
@@ -16,6 +17,38 @@ const chapters = [
 
 type ChapterId = typeof chapters[number]['id']
 type Mode = 'forge' | 'compose'
+
+const sampleVolumes = [
+  { number: 1, chapters: [chapters[0]] },
+  { number: 2, chapters: [chapters[1]] },
+]
+
+function SampleVolumeNavigation({ selected, onSelect }: { selected: ChapterId; onSelect: (id: ChapterId) => void }) {
+  const { t } = useTranslation()
+  const id = useId()
+  const [expanded, setExpanded] = useState<number[]>([1])
+
+  return sampleVolumes.map(volume => {
+    const open = expanded.includes(volume.number)
+    const contentId = `${id}-volume-${volume.number}`
+    // 卷行只控制展开，当前正文由章节行的稳定 ID 决定。
+    return (
+      <section key={volume.number}>
+        <MenuRow icon={<BookOpen size={14} aria-hidden="true" />} count={volume.chapters.length}
+          title={t('volume.ordinal').replace('{n}', String(volume.number))} swap="expand" expanded={open}
+          controlsId={contentId} onPrimary={() => setExpanded(previous => previous.includes(volume.number)
+            ? previous.filter(number => number !== volume.number) : [...previous, volume.number])} />
+        <div id={contentId} className="v3-sample-volume-chapters" hidden={!open}>
+          {volume.chapters.map(chapter => (
+            <MenuRow key={chapter.id} icon={<FileText size={14} aria-hidden="true" />} title={chapter.title}
+              titleHint={chapter.title} swap="nav" active={selected === chapter.id}
+              current={selected === chapter.id ? 'page' : undefined} onPrimary={() => onSelect(chapter.id)} />
+          ))}
+        </div>
+      </section>
+    )
+  })
+}
 
 const modes: Array<{ value: Mode; label: string }> = [
   { value: 'forge', label: '构建态' },
@@ -30,12 +63,13 @@ const versionActions = [
 
 type VersionAction = typeof versionActions[number]
 
-function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveFailure = false, dirty = false, showVersionActions = false }: {
+function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveFailure = false, dirty = false, showVersionActions = false, showVolumeNavigation = false }: {
   mode?: Mode
   chapterId?: ChapterId
   saveFailure?: boolean
   dirty?: boolean
   showVersionActions?: boolean
+  showVolumeNavigation?: boolean
 }) {
   const { t } = useTranslation()
   const [mode, setMode] = useState(initialMode)
@@ -86,13 +120,18 @@ function V3Workbench({ mode: initialMode = 'forge', chapterId = 'harbour', saveF
             onClick={() => setTasksByMode(current => ({ ...current, [mode]: !current[mode] }))}>任务</Button>
         </div>
       </header>
-      <nav className="v3-sample-context" aria-label="项目章节" hidden={mode === 'compose'}>
-        <h2>第一卷</h2>
-        {chapters.map(item => (
-          <button type="button" key={item.id} aria-current={selected === item.id ? 'page' : undefined} onClick={() => setSelected(item.id)}>
-            {item.title}
-          </button>
-        ))}
+      <nav className="v3-sample-context" aria-label={t('nav.projectTree')} hidden={mode === 'compose'}>
+        {/* 写作态隐藏导航，保留当前卷的展开状态供回切时使用。 */}
+        {showVolumeNavigation ? <SampleVolumeNavigation selected={selected} onSelect={setSelected} /> : (
+          <>
+            <h2>第一卷</h2>
+            {chapters.map(item => (
+              <button type="button" key={item.id} aria-current={selected === item.id ? 'page' : undefined} onClick={() => setSelected(item.id)}>
+                {item.title}
+              </button>
+            ))}
+          </>
+        )}
       </nav>
       <main className="v3-sample-main">
         <div className="v3-sample-sheet">
@@ -193,3 +232,4 @@ export const Compose: Story = { args: { mode: 'compose' } }
 export const ReadOnly: Story = { args: { chapterId: 'crossing' } }
 export const SaveFailure: Story = { args: { dirty: true, saveFailure: true } }
 export const VersionActions: Story = { args: { dirty: true, showVersionActions: true } }
+export const VolumeNavigation: Story = { args: { dirty: true, showVolumeNavigation: true } }

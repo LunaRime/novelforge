@@ -25,7 +25,8 @@
 .v3-sample-context, .v3-sample-partner { min-width: 0; padding: 1.25rem; background: var(--color-panel); }
 .v3-sample-context { border-inline-end: 1px solid var(--color-border); }
 .v3-sample-partner { border-inline-start: 1px solid var(--color-border); }
-.v3-sample-context button {
+/* 简单章节列表的样式仅适用于直接子按钮，卷导航复用 MenuRow 的行片样式。 */
+.v3-sample-context > button {
   display: block;
   width: 100%;
   min-height: 2rem;
@@ -33,9 +34,10 @@
   text-align: start;
   border-radius: var(--radius-md);
 }
-.v3-sample-context button:hover, .v3-sample-context button[aria-current] { background: var(--color-hover); }
-.v3-sample-context button[aria-current] { font-weight: 600; }
-.v3-sample-context button:focus-visible { outline: 2px solid var(--color-focus-ring); }
+.v3-sample-context > button:hover, .v3-sample-context > button[aria-current] { background: var(--color-hover); }
+.v3-sample-context > button[aria-current] { font-weight: 600; }
+.v3-sample-context > button:focus-visible { outline: 2px solid var(--color-focus-ring); }
+.v3-sample-volume-chapters { margin-inline-start: .75rem; }
 .v3-workbench-sample h1 { font-size: 1.125rem; font-weight: 600; }
 .v3-workbench-sample h2 { font-weight: 600; margin-bottom: .5rem; }
 .v3-sample-document h2 { font-size: 1.5rem; line-height: 1.3; }

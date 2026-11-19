@@ -97,6 +97,8 @@
 
 **落点**。`Sidebar.tsx`、`panels/sidebar/ProjectTree.tsx`、`BinderVolumeGroup.tsx`、`DraftBoxGroup.tsx`、`ManuscriptGroup.tsx`。
 
+入口对照、重排契约和真机清单见 [U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md)。
+
 - [ ] 先统一项目导航的当前项、展开、打开和更多操作。复用 `MenuRow` 与现有卷归属顺序，验证隐藏蓝图、无蓝图旧草稿、搜索后的定位与重排权限。
 - [ ] 让导航消费已交接的项目投影，复核手动顺序和过滤后的真实重排目标。按项目和文档身份隔离当前项、折叠与滚动，覆盖切项目和同路径重开。
 - [ ] 制作现有入口到 V3 入口的对照。先测大列表，再针对证据优化，并保留键盘可达、拖放与当前项定位。

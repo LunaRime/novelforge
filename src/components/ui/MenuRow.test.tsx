@@ -72,4 +72,22 @@ describe('MenuRow — 行片（唯一实现）', () => {
     expect(document.activeElement).toBe(main)
     expect(el.querySelectorAll('button button')).toHaveLength(0)
   })
+
+  it('折叠行向辅助技术公布展开状态与受控区域', () => {
+    const el = render(<MenuRow title="第一卷" swap="expand" expanded={false} controlsId="volume-one" onPrimary={() => {}} />)
+    const button = el.querySelector('button')!
+    expect(button.getAttribute('aria-expanded')).toBe('false')
+    expect(button.getAttribute('aria-controls')).toBe('volume-one')
+  })
+
+  it('导航行可标记当前页，通用高亮不声明当前页或展开状态', () => {
+    const el = render(<>
+      <MenuRow title="雾港来信" swap="nav" current="page" active onPrimary={() => {}} />
+      <MenuRow title="草稿箱" swap="nav" expanded active onPrimary={() => {}} />
+    </>)
+    const [currentPage, highlighted] = el.querySelectorAll('button')
+    expect(currentPage.getAttribute('aria-current')).toBe('page')
+    expect(highlighted.hasAttribute('aria-current')).toBe(false)
+    expect(highlighted.hasAttribute('aria-expanded')).toBe(false)
+  })
 })
