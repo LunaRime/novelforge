@@ -289,7 +289,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 工具栏 — 提取到 EditorToolbar */}
+      {/* 当前稿件的写作、保存与版本操作集中在章头上方。 */}
       <EditorToolbar
         meta={meta}
         charCount={charCount}
@@ -329,7 +329,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
           paperHeading={meta && <>
             <div className="nf-prose-meta">
               <span>{t('chapter.label').replace('{n}', String(meta.chapterNumber))}</span>
-              <span>v{meta.version}</span>
+              <span className="nf-prose-version">v{meta.version}</span>
             </div>
             <h1>{meta.chapterTitle}</h1>
           </>}

@@ -753,10 +753,10 @@ export default function CodeMirrorEditor({
     },
     ".cm-content": {
       width: "100%",
-      // 规范：正文栏宽 720–800px，居中；默认 760px（两侧留呼吸，又不至于像移动端）
+      // 作者设置给出内容栏宽上限，窄窗口继续按可用宽度排版。
       maxWidth: 'var(--prose-measure)',
       margin: "0 auto",
-      padding: mode === 'prose' ? '24px var(--prose-inset) 100px' : "40px",
+      padding: mode === 'prose' ? 'var(--prose-body-start) var(--prose-inset) 100px' : "40px",
       backgroundColor: mode === 'prose' ? 'var(--color-editor-bg)' : 'transparent',
       minHeight: mode === 'prose' ? '100%' : 'auto',
       boxSizing: 'border-box',
@@ -816,28 +816,19 @@ export default function CodeMirrorEditor({
           }
         }
       ]),
-      // 汉化 Search / UI 文本（涵盖官方大小写所有变种）
+      // 键使用 CodeMirror 查找面板的原始短语，显示文本走应用字典。
       EditorState.phrases.of({
-        "Find": "Find",
-        "find": "Find",
-        "Replace": "Replace",
-        "replace": "Replace",
-        "Replace all": "Replace All",
-        "replace all": "Replace All",
-        "Next": "Next",
-        "next": "Next",
-        "Previous": "Previous",
-        "previous": "Previous",
-        "All": "All",
-        "all": "All",
-        "Match case": "Match Case",
-        "match case": "Match Case",
-        "Regexp": "Regexp",
-        "regexp": "Regexp",
-        "by word": "By Word",
-        "By word": "By Word",
-        "Close": "Close",
-        "close": "Close"
+        Find: t('search.find'),
+        Replace: t('search.replace'),
+        replace: t('search.replace'),
+        'replace all': t('search.replaceAll'),
+        next: t('search.next'),
+        previous: t('search.previous'),
+        all: t('search.selectAll'),
+        'match case': t('search.matchCase'),
+        regexp: t('search.regex'),
+        'by word': t('search.wholeWord'),
+        close: t('search.close'),
       })
     ]
     // L1 inline 接受（Task 4）：StateField 常驻但无会话时空值零可见影响（R3）；
@@ -855,7 +846,9 @@ export default function CodeMirrorEditor({
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
-  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings])
+    // t 的引用保持稳定，语言切换时仍需更新 CodeMirror 短语。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {

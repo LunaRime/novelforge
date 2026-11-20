@@ -1,45 +1,82 @@
 /* ===== NovelForge 统一编辑器样式 ===== */
 
-/* 稿纸宽度沿用作者偏好。容器收窄仅约束当前排版，不回写已保存的栏宽。 */
+/* 章头与正文共用稿纸宽度、侧边距和滚动条空间。 */
 .nf-prose-editor {
   container-type: inline-size;
-  --prose-gutter: clamp(8px, 3cqi, 32px);
-  --prose-inset: clamp(16px, 5cqi, 40px);
+  --prose-gutter: clamp(8px, 3.2cqi, 40px);
+  --prose-inset: clamp(18px, 6cqi, 56px);
+  --prose-body-start: clamp(16px, 3cqi, 28px);
+  --prose-edge: inset 1px 0 var(--color-border), inset -1px 0 var(--color-border);
   background: var(--color-panel);
 }
 
 .nf-prose-heading-gutter {
   flex-shrink: 0;
+  max-height: 40%;
   padding: var(--prose-gutter) var(--prose-gutter) 0;
-  /* 与正文滚动区预留相同滚动条宽度，让窄栏标题和正文保持对齐。 */
   overflow-y: auto;
   scrollbar-gutter: stable;
 }
 
 .nf-prose-heading {
+  position: relative;
   max-width: var(--prose-measure);
   margin-inline: auto;
-  padding: 24px var(--prose-inset) 0;
+  padding: clamp(20px, 5cqi, 52px) var(--prose-inset) 0;
+  border-start-start-radius: var(--radius-md);
   background: var(--color-editor-bg);
+  box-shadow: var(--prose-edge), inset 0 1px var(--color-border);
   color: var(--color-text);
 }
+
+.nf-prose-heading::before {
+  content: '';
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  border: 7px solid transparent;
+  border-block-start-color: var(--color-workbench-fold);
+  border-inline-end-color: var(--color-workbench-fold);
+  pointer-events: none;
+}
+
+.nf-prose-heading::after {
+  content: '';
+  display: block;
+  width: 3rem;
+  margin-block-start: clamp(12px, 3cqi, 24px);
+  border-block-end: 1px solid var(--color-gold);
+}
+
+.nf-prose-editor .cm-content { box-shadow: var(--prose-edge); }
 
 .nf-prose-meta {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  align-items: center;
+  gap: 0.5rem;
   color: var(--color-text-muted);
-  font-size: var(--text-xs);
+  font-size: var(--text-micro);
+  font-weight: 600;
+}
+
+.nf-prose-version {
+  padding-inline: 0.375rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  font-variant-numeric: tabular-nums;
 }
 
 .nf-prose-heading h1 {
-  margin: 8px 0 0;
+  margin: 0;
   font-family: var(--font-writing);
-  font-size: var(--text-2xl);
+  font-size: clamp(var(--text-xl), 4.6cqi, var(--text-3xl));
   font-weight: 600;
-  line-height: 1.4;
+  line-height: 1.25;
   overflow-wrap: anywhere;
 }
+
+.nf-prose-meta + h1 { margin-block-start: 0.5rem; }
 
 /* ── 消除浏览器默认焦点样式（黄色边框来源）─────────────────────────────── */
 .vela-editor-content:focus,

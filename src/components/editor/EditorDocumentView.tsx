@@ -11,6 +11,7 @@ import { readVelaContent, VELA } from '../../services/vela-protocol'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useMemoryStore } from '../../stores/memory-store'
 import { clearChapterTitleCache } from '../panels/Sidebar'
+import { Button } from '../ui/Button'
 import { confirm } from '../ui/Confirm'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
@@ -91,21 +92,14 @@ function ProseEditorWrapper({
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 顶部信息栏（背景与编辑区一致） */}
-      <div
-        className="flex items-center justify-between px-3 h-9 flex-shrink-0"
-        style={{
-          borderBottom: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-editor-bg)',
-        }}
-      >
+      <div className="nf-document-toolbar" role="group" aria-label={t('panel.editor')}>
         {/* 左侧：文件名 */}
         <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
           {fileName}
         </span>
 
         {/* 右侧：字数 + dirty 指示灯 + 保存按钮 */}
-        <div className="flex items-center gap-1.5 flex-shrink-0">
+        <div className="nf-document-actions">
           {wordCount > 0 && (
             <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
               {wordCount.toLocaleString()} {t('unit.chars')}
@@ -114,33 +108,29 @@ function ProseEditorWrapper({
           {/* 未保存圆点指示灯 */}
           {tab.dirty && (
             <span
-              className="w-1.5 h-1.5 rounded-full"
-              style={{ backgroundColor: 'var(--color-warning)' }}
+              className="nf-document-dirty"
               title={t('statusbar.unsaved')}
             />
           )}
           {/* 刷新：从 DB/磁盘重新读当前 Tab，不重开文件 */}
-          <button
-            className="icon-btn"
-            style={{ width: 24, height: 22 }}
+          <Button type="button" variant="ghost" size="icon" className="size-8"
             onClick={() => void handleRefresh()}
             disabled={refreshing}
             title={t('editor.refresh')}
             aria-label={t('editor.refresh')}
           >
             <RefreshCw size={13} strokeWidth={1.5} className={refreshing ? 'animate-spin' : ''} />
-          </button>
+          </Button>
           {/* 保存按钮（有改动时显示） */}
           {tab.dirty && (
-            <button
-              className="icon-btn"
-              style={{ width: 24, height: 22 }}
+            <Button type="button" variant="default" size="icon" className="size-8"
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
               title={t('tip.saveShortcut')}
+              aria-label={t('editor.save')}
             >
               <Save size={13} strokeWidth={1.5} />
-            </button>
+            </Button>
           )}
         </div>
       </div>

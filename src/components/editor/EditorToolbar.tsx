@@ -5,10 +5,11 @@
  * 从 DraftEditor 提取，减少父组件复杂度。
  */
 import { memo } from 'react'
-import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages } from 'lucide-react'
+import { Sparkles, Search, BadgeCheck, Save, FileStack, FileText, Wrench, Languages, Type } from 'lucide-react'
 import { Button } from '../ui/Button'
 import { Select, SelectTrigger, SelectContent, SelectItem } from '../ui/Select'
 import { useTranslation } from '../../hooks/useTranslation'
+import { useLayoutStore } from '../../stores/layout-store'
 import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-workflow'
 import type { RevisionEntry } from '../../services/draft-index'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
@@ -96,6 +97,12 @@ function EditorToolbar({
         )}
       </div>
       <div className="nf-document-actions">
+        {/* 稿纸外观从当前文档直达，设置和正文继续使用同一套作者偏好。 */}
+        <Button type="button" variant="ghost" size="icon" className="nf-document-appearance size-8"
+          title={t('settings.typography')} aria-label={t('settings.typography')}
+          onClick={() => useLayoutStore.getState().openSettings('editor')}>
+          <Type size={15} aria-hidden="true" />
+        </Button>
         {!isReadonly && (
           <DraftVersionActions
             isChapterBusy={isChapterBusy} pendingRevisions={pendingRevisions} reviewCount={reviewCount}
@@ -103,7 +110,7 @@ function EditorToolbar({
             onOpenRevision={onOpenRevision} onOpenReview={onOpenReview} />
         )}
         {!isReadonly && isDirty && (
-          <Button type="button" variant="default" size="sm" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
+          <Button type="button" variant="default" className="min-h-8" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
             <Save size={13} aria-hidden="true" />
             {saving ? t('status.saving') : t('editor.save')}
           </Button>

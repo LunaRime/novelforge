@@ -326,7 +326,7 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
         />
       )}
 
-      {/* 三个点菜单（已打开的编辑器列表 + Tab 操作） */}
+      {/* 文档列表菜单提供跳转及批量关闭操作。 */}
       {/* eslint-disable-next-line react-hooks/refs */}
       {moreMenuOpen && moreButtonRef.current && (() => {
         const rect = moreButtonRef.current!.getBoundingClientRect()
