@@ -45,7 +45,7 @@ function scanTextOverflow(root: HTMLElement) {
   return issues
 }
 
-/** Check layout after renderer updates. Deliberate scrolling, truncation and the prose editor are excluded. */
+/** 渲染后检查文字越界，跳过刻意滚动或截断的内容以及正文编辑器。 */
 export function startTextOverflowCheck(root: HTMLElement): () => void {
   let active = true
   let timer: ReturnType<typeof setTimeout> | undefined

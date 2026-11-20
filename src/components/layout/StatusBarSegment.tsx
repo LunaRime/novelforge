@@ -6,12 +6,7 @@ type AriaPopupProps = Pick<
   'aria-haspopup' | 'aria-expanded'
 >
 
-/**
- * 状态栏分段（可点击）——原生 button：键盘可达（Tab/Enter/Space），符合可访问性。
- *
- * 从 StatusBar.tsx 抽出（Task 10）：状态栏里的思考等级控件也用它，
- * 避免为了一个分段把整份 StatusBar 的私有实现再抄一遍。
- */
+/** 状态栏分段。有操作时用原生按钮，纯状态信息使用文本容器。 */
 export function StatusBarSegment({
   children,
   title,
@@ -22,22 +17,16 @@ export function StatusBarSegment({
   title?: string
   onClick?: () => void
 } & AriaPopupProps) {
+  const className = 'flex h-full min-w-0 items-center gap-1 whitespace-nowrap px-2'
+  if (!onClick) return <span className={className} title={title}>{children}</span>
+
   return (
     <button
       type="button"
       {...aria}
-      className="flex items-center gap-1 px-2 h-full cursor-default transition-colors"
+      className={`${className} cursor-pointer hover:bg-[color-mix(in_srgb,var(--color-accent)_8%,transparent)] transition-colors`}
       title={title}
       onClick={onClick}
-      style={{ cursor: onClick ? 'pointer' : 'default' }}
-      onMouseEnter={e => {
-        if (onClick) {
-          e.currentTarget.style.backgroundColor = 'rgba(var(--color-accent-rgb), 0.08)'
-        }
-      }}
-      onMouseLeave={e => {
-        e.currentTarget.style.backgroundColor = 'transparent'
-      }}
     >
       {children}
     </button>

@@ -24,7 +24,7 @@ import StatusBarUpdate from './StatusBarUpdate'
 import { StatusBarDivider, StatusBarSegment } from './StatusBarSegment'
 import type { ModelProfile } from '../../shared/ipc-channels'
 
-/** 底部状态栏 — Cursor / VS Code 口径：24px、深底、多分段、hover 可点击感 */
+/** 工作台底部状态栏，展示文档状态、运行反馈和应用缩放。 */
 export default function StatusBar() {
   const models = useLLMStore(s => s.models)
   const defaultModelId = useLLMStore(s => s.defaultModelId)
@@ -56,11 +56,6 @@ export default function StatusBar() {
           </StatusBarSegment>
         </div>
 
-        {/* 设置入口已于 2026-09-22 迁到左侧图标栏底部（图标形式）——
-            这里的文字入口对非中文使用者不友好，移除避免重复入口 */}
-
-        {/* 当前激活章节的写作信息（章节名 / 字数 / dirty 点）——10-18 评审补齐
-            （写作中确认状态无需再把视线移到编辑器头部） */}
         <EditorStatusSegment />
         <div className="h-full @max-[760px]:hidden"><BranchStatusSegment /></div>
 
@@ -85,7 +80,7 @@ export default function StatusBar() {
         {/* 消息收纳中心（铃铛 + 未读角标）— 落在状态栏最右段、缩放控件左侧 */}
         <NotificationCenter />
 
-        {/* 缩放控制 — 原标题栏控件，标题栏移除后搬入状态栏右侧（VSCode 的缩放也在这个位置） */}
+        {/* 缩放控件固定在状态栏右侧。 */}
         <StatusBarDivider />
         <ZoomControl />
       </div>
@@ -97,10 +92,7 @@ export default function StatusBar() {
 /**
  * 状态栏左段 —— 当前激活章节的写作信息（章节名 + 字数 + 未保存圆点）。
  *
- * 用三个**独立原子 selector** 订阅（各自返回原始值，值不变不重渲染）：
- *   - name / dirty：从 activeTab 派生，只在切 Tab / 置脏 / 保存时变化；
- *   - activeCharCount：ProseEditorWrapper 在 onCharCountChange 里上抛（随输入实时变）。
- * 整段在键入时只有字数这个 number 变化触发重渲染，不影响状态栏其余分段（模型/思考等级等）。
+ * 直接订阅当前标签的状态和编辑器字数，避免输入连带更新整个状态栏。
  */
 function EditorStatusSegment() {
   const { t } = useTranslation()
@@ -124,10 +116,11 @@ function EditorStatusSegment() {
   if (!name) return null
 
   return (
-    <StatusBarSegment title={`${name}${charCount > 0 ? ` · ${charCount.toLocaleString()} ${t('unit.chars')}` : ''}`}>
-      <span className="truncate max-w-[180px]">{name}</span>
+    <StatusBarSegment title={`${name}${effectiveCharCount > 0 ? `\n${effectiveCharCount.toLocaleString()} ${t('unit.chars')}` : ''}`}>
+      {/* 宽度紧张时先缩短章名，字数和保存状态始终保持单行。 */}
+      <span className="min-w-0 truncate max-w-[180px]">{name}</span>
       {effectiveCharCount > 0 && (
-        <span className="tabular-nums">{effectiveCharCount.toLocaleString()} {t('unit.chars')}</span>
+        <span className="shrink-0 whitespace-nowrap tabular-nums">{effectiveCharCount.toLocaleString()} {t('unit.chars')}</span>
       )}
       <span
         className="inline-flex items-center gap-1 flex-shrink-0"
