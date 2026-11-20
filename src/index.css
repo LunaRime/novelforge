@@ -154,129 +154,74 @@
   /* Logo 核心色：深邃蓝 #0A1628 · 冰蓝 #7EC8E3 · 星空蓝 #5B9ED6
      薰衣草紫 #9B8EC8 · 星辰金 #C9A76C */
   :root {
-    /* ☀️ 浅色主题 — 清冷蓝调（从 Logo 蓝紫色系延伸） */
+    /* 浅色主题以定稿 Logo 的苔绿、棉纸和麦金为色彩来源。 */
+    --color-workbench-spine: #405c47;
+    --color-workbench-spine-text: #fffefa;
+    --color-workbench-fold: #d9b87c;
+    --color-prose-warm-bg: #faf3e4;
+    --color-prose-warm-text: #2f3027;
+    --color-prose-warm-muted: #61594c;
+    --color-prose-warm-accent: #405c47;
+    --color-prose-warm-selection: rgba(64, 92, 71, 0.23);
 
-    /* 恒亮稿纸独立于工作台主题，正文和设置预览共用。 */
-    --color-prose-warm-bg: #F8F3EB;
-    --color-prose-warm-text: #2C2520;
-    --color-prose-warm-muted: #61564C;
-    --color-prose-warm-accent: #775C99;
-    --color-prose-warm-selection: rgba(155, 142, 200, 0.30);
-
-    /* 背景层次（冷白蓝调，与Logo深蓝形成呼应） */
-    --color-bg: #F7F9FC;
-    --color-sidebar: #EFF2F7;
-    --color-panel: #EFF2F7;
-    /* 「抬升面」：比所在容器高一档的表面（对话框内的列表/图例/输入区、卡片内的提示条）。
-       2026-09-25 补：此前 13 处引用它但**四套主题都没定义**，且 12 处没写兜底
-       → `var()` 无兜底即整条声明失效，background 回落到 transparent（"有框无底"）。
-       取值 = --color-panel（四套主题里两者逐一同值），故不引入新色值。 */
+    /* 画布衔接原生标题栏。工具区使用淡苔色，暖纸白留给内容。 */
+    --color-bg: #f4f5ee;
+    --color-sidebar: #edf0e7;
+    --color-panel: #f0f2e9;
     --color-bg-elevated: var(--color-panel);
-    /* 与画布同色（用户 2026-09-22 指定）：标题栏与卡片之间的缝隙连成一片背景，
-       顶部白 → 缝隙白 是连续的，卡片才像浮在同一张画布上。改用变量引用而非复制色值，
-       两者永远一致；要单独调标题栏时再拆开。 */
     --color-titlebar: var(--color-canvas);
-    --color-activity-bar: #E5E9F0;
-    /* 「悬停叠加层」= 5% 的 --color-text 叠在元素**实际所在的表面**上（2026-09-28 走查修复 FB-1/FB-2）。
-       ⚠️ 值必须保持派生式，不要改回固定 hex —— 固定色只对某一种表面成立：
-       旧值 #EBF0F7 对 sidebar/panel #EFF2F7 只差 ΔL* 0.79（浅色主题悬停「看不见」，FB-1）；
-       且行片（.menu-chip）与其内部图标按钮取同一固定色时同时点亮 → 净变化为零（FB-2）。
-       派生式下 text 深则加深、浅则提亮（浅色/纸色 vs 星空/深色），方向自动正确：
-       单层悬停对任意表面 ≈ ΔL* 3.5（对齐 VS Code 官方 list.hover 基线），
-       嵌套按钮在已点亮的行片上自动叠出第二层（净变化 ≈ ΔL* 3.4）—— 一条令牌覆盖两级。
-       取 5%：单层可见性达基线，且与 --color-active 保持 ≈ ΔL* 1.8 分离（同 VS Code 梯度结构）。
-       ⚠️ 四套主题**逐一同值**（本仓惯例，勿只改这里）——分量 --color-text 按当前主题惰性求值。
-       守卫测试：src/shared/color-token-guard.test.ts「悬停底色守卫」。 */
+    --color-activity-bar: #e3e9dc;
+    --color-canvas: #f4f5ee;
     --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
-    --color-active: #DDE3ED;
-    /* 卡片浮起感（区域卡片化后的极轻投影）。⚠️ 不能省：浅色主题下 `--color-bg` 与
-       `--color-editor-bg` 同为 #F7F9FC，编辑区卡片与画布底色一模一样，
-       边界只剩 `--color-border` 的 1px 边框可依靠，太弱——加这层阴影才"浮"得起来。 */
-    --color-card-shadow: 0 1px 3px rgba(26, 34, 51, 0.07), 0 1px 2px rgba(26, 34, 51, 0.04);
-    /* 编辑区专用：边框比通用 --color-border 深一档 + 投影更重，突出它是主工作区 */
-    --color-card-edge: #C3CEDF;
-    --color-card-shadow-strong: 0 2px 10px rgba(26, 34, 51, 0.10), 0 1px 3px rgba(26, 34, 51, 0.06);
-    /* 「画布」底色 = 卡片之间那 6px 缝隙露出的那层。⚠️ 两条要求（2026-09-22 用户定的方向，勿回退）：
-       ① **比四个区域的面色（sidebar/panel/editor-bg）都更浅**——缝隙是"透光"的，不是凹槽；
-          反过来取更深一档时缝隙会读成"埂/坎"，与卡片式布局的语义冲突；
-       ② 浅到什么程度：要浅过最浅的那个区域（编辑区 `--color-editor-bg` #F7F9FC），否则缝隙隐形。
-       边界靠卡片自己那圈 1px `--color-border` 细线来标（浅画布 + 深细线，界限最清楚）。 */
-    --color-canvas: #FFFFFF;
+    --color-active: #e0eadd;
+    --color-card-shadow: 0 1px 3px rgba(37, 45, 41, 0.07);
+    --color-card-shadow-strong: 0 3px 12px rgba(37, 45, 41, 0.08);
+    --color-card-edge: #d3dacd;
 
-    /* 文字层次 */
-    --color-text: #1A2233;
-    --color-text-secondary: #4A5568;
-    --color-text-muted: #5A6B7E;
-
-    /* 「边界线叠加层」= 10% 的 --color-text 叠在元素**实际所在的表面**上（2026-09-28 走查：边界线整体加强）。
-       ⚠️ 与 --color-hover 同族机制，值必须保持派生式，不要改回固定 hex —— 固定色必然在某个面上失效，
-       实测四个死点：浅色/纸色的**活动栏面** ΔL* 2.1/1.9、深色/星空的**画布面** 0.90/2.90
-       （深色旧值 #3C3C3C 与画布 #3A3A3A 几乎同色）；叠加式下四主题 × 五表面收敛到 ΔL* 6.4~10.5。
-       ⚠️ 四套主题**逐一同值**（本仓惯例，勿只改这里）；守卫：color-token-guard.test.ts「边框可见性守卫」。 */
+    --color-text: #252d29;
+    --color-text-secondary: #4a5b50;
+    --color-text-muted: #59695f;
+    /* 在当前表面上叠加，保持主题切换和嵌套控件处的边界对比。 */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
-    /* 强调色（Logo 星空蓝） */
-    --color-accent: #5B9ED6;
-    --color-accent-hover: #4A8DC5;
-    --color-accent-rgb: 91, 158, 214;
-    /* ⚠️ info 必须与 accent 可区分：此前两者在本主题**完全同值**（#5B9ED6 / 同 rgb 三元组），
-       导致 5 处「并列但必须可区分」的语义失效——最严重的是上下文占用条相邻两段同色。
-       改取 logo 自带的薰衣草紫（与 accent 蓝拉开），四套主题里 .paper/.dark 本就不同值。 */
-    --color-info-rgb: 155, 142, 200;
+    --color-accent: #405c47;
+    --color-accent-hover: #334b3a;
+    --color-accent-rgb: 64, 92, 71;
+    --color-info-rgb: 112, 96, 157;
     --color-success-rgb: 16, 185, 129;
     --color-warning-rgb: 245, 158, 11;
     --color-error-rgb: 244, 63, 94;
 
-    /* 品牌金色（Logo 星辰点睛） */
-    --color-gold: #C9A76C;
-
-    /* 语义色（莫兰迪低饱和度高通透感） */
+    --color-gold: #a47c3e;
     --color-success: #10b981;
     --color-warning: #f59e0b;
     --color-error: #f43f5e;
-    --color-info: #9B8EC8;
+    --color-info: #70609d;
 
-    /* Tab 系统 */
-    --color-tab-bg: transparent;
-    --color-tab-active: #FFFFFF;
+    --color-tab-bg: var(--color-panel);
+    --color-tab-active: var(--color-editor-bg);
     --color-tab-border: transparent;
-    --color-tab-indicator: #5B9ED6;
+    --color-tab-indicator: var(--color-accent);
 
-    /* 状态栏 */
-    --color-statusbar: #EFF2F7;
-    --color-statusbar-text: #57657A;
+    --color-statusbar: var(--color-canvas);
+    --color-statusbar-text: var(--color-text-secondary);
+    --color-titlebar-text: var(--color-text);
+    --color-activity-icon: var(--color-text-secondary);
+    --color-activity-icon-active: var(--color-text);
+    --color-activity-indicator: var(--color-accent);
 
-    /* 标题栏文字 */
-    --color-titlebar-text: #2D3748;
-
-    /* 活动栏图标颜色 */
-    --color-activity-icon: #57657A;
-    --color-activity-icon-active: #1A2233;
-    --color-activity-indicator: #5B9ED6;
-
-    /* 编辑器 */
-    --color-editor-bg: #F7F9FC;
-    --color-editor-line-highlight: rgba(91, 158, 214, 0.04);
-    --color-editor-selection: rgba(91, 158, 214, 0.30);
-
-    /* 分割条 Sash */
+    --color-editor-bg: #fffefa;
+    --color-editor-line-highlight: rgba(var(--color-accent-rgb), 0.04);
+    --color-editor-selection: rgba(var(--color-accent-rgb), 0.23);
     --color-sash: transparent;
-    --color-sash-hover: rgba(91, 158, 214, 0.15);
-
-    /* ===== 语义令牌 ===== */
-
-    /* 焦点环 */
-    --color-focus-ring: rgba(91, 158, 214, 0.45);
-    /* 遮罩层 */
-    --color-backdrop: rgba(10, 22, 40, 0.20);
-    /* Tooltip */
-    --color-tooltip-bg: #0F1A2E;
-    --color-tooltip-text: #E8ECF2;
-    /* 骨架屏 */
-    --color-skeleton: rgba(91, 158, 214, 0.08);
-    /* Badge */
-    --color-badge-bg: rgba(91, 158, 214, 0.10);
-    --color-badge-text: #5B9ED6;
+    --color-sash-hover: rgba(var(--color-accent-rgb), 0.55);
+    --color-focus-ring: rgba(var(--color-accent-rgb), 0.55);
+    --color-backdrop: rgba(37, 45, 41, 0.27);
+    --color-tooltip-bg: #252d29;
+    --color-tooltip-text: #fffefa;
+    --color-skeleton: rgba(var(--color-accent-rgb), 0.08);
+    --color-badge-bg: rgba(var(--color-accent-rgb), 0.10);
+    --color-badge-text: var(--color-accent);
 
     /* ===== 尺寸规范 =====
        VS Code / Cursor 口径：活动栏 48px、状态栏 24px。
@@ -287,12 +232,12 @@
     --width-left-bar: 48px;
     --width-bottom-bar: 32px;
 
-    /* 阴影（蓝调弥散阴影） */
-    --shadow-sm: 0 1px 2px rgba(10, 22, 40, 0.05);
-    --shadow-md: 0 4px 12px rgba(10, 22, 40, 0.07);
-    --shadow-lg: 0 12px 32px rgba(10, 22, 40, 0.09);
-    --shadow-popover: 0 16px 40px -8px rgba(10, 22, 40, 0.14), 0 4px 16px -4px rgba(10, 22, 40, 0.07);
-    --shadow-tooltip: 0 4px 12px rgba(10, 22, 40, 0.18);
+    /* 浮层阴影沿用墨色，边缘和阴影共同区分稿纸与浮层。 */
+    --shadow-sm: 0 1px 2px rgba(37, 45, 41, 0.05);
+    --shadow-md: 0 4px 12px rgba(37, 45, 41, 0.07);
+    --shadow-lg: 0 12px 32px rgba(37, 45, 41, 0.09);
+    --shadow-popover: 0 16px 40px -8px rgba(37, 45, 41, 0.14), 0 4px 16px -4px rgba(37, 45, 41, 0.07);
+    --shadow-tooltip: 0 4px 12px rgba(37, 45, 41, 0.18);
 
     /* 过渡（加入顺滑阻尼） */
     --transition-fast: 0.12s cubic-bezier(0.16, 1, 0.3, 1);
@@ -919,42 +864,19 @@
     animation: agent-cursor-blink 1s steps(1) infinite;
   }
 
-  /* ===== 品牌渐变文字 — 统一所有品牌标识使用（Logo 冰蓝→薰衣草紫） ===== */
+  /* 品牌文字跟随主题前景色，图标保留定稿色。 */
   .brand-gradient {
-    background: linear-gradient(135deg, #7EC8E3, #9B8EC8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+    color: var(--color-text);
   }
 
-  /* ===== Default 主按钮 — 品牌冰蓝渐变 + 玻璃高光 + 增强动效 ===== */
+  /* 主按钮用主题强调色，状态反馈保持在按钮自身的边界内。 */
   .btn-primary {
-    background: linear-gradient(180deg, var(--color-accent), var(--color-accent-hover));
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.2),
-      0 2px 4px rgba(0, 0, 0, 0.15),
-      0 0 0 0 rgba(var(--color-accent-rgb), 0);
-    transition: box-shadow var(--transition-normal),
-                transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275),
-                filter 0.15s ease;
+    background: var(--color-accent);
+    box-shadow: var(--shadow-sm);
   }
 
   .btn-primary:hover {
-    filter: brightness(1.12);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.25),
-      0 6px 20px rgba(var(--color-accent-rgb), 0.35),
-      0 0 30px rgba(var(--color-accent-rgb), 0.15);
-    transform: translateY(-2px);
-  }
-
-  .btn-primary:active {
-    transform: translateY(0);
-    filter: brightness(0.95);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.1),
-      0 1px 2px rgba(0, 0, 0, 0.1);
+    background: var(--color-accent-hover);
   }
 
   /* ===== AI 极光光效按钮 — 所有 AI 功能按钮统一使用（Logo 冰蓝→薰衣草紫） ===== */

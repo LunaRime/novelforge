@@ -8,13 +8,13 @@
 
 .nf-workbench-header-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 22rem) minmax(max-content, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(10rem, 24rem) minmax(max-content, 1fr);
   align-items: center;
   gap: 0.75rem;
   /* Windows/Linux 的可用宽度已扣除原生窗口控件，交互按钮留在该范围内。 */
   width: env(titlebar-area-width, 100%);
-  min-height: max(2.5rem, env(titlebar-area-height, 0px));
-  padding-inline: 0.75rem;
+  min-height: max(3.5rem, env(titlebar-area-height, 0px));
+  padding-inline: 1rem 0.75rem;
 }
 
 .nf-workbench-header[data-macos] .nf-workbench-header-inner {
@@ -26,19 +26,30 @@
 .nf-workbench-project {
   display: flex;
   align-items: center;
-  gap: 0.625rem;
+  gap: 0.75rem;
   min-width: 0;
   color: var(--color-text);
-  font-size: var(--text-sm);
-  font-weight: 600;
 }
 
 .nf-workbench-project img { flex: none; }
 
+.nf-workbench-identity {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.nf-workbench-wordmark { color: var(--color-text); font-size: var(--text-sm); font-weight: 700; }
+.nf-workbench-project-name { color: var(--color-text-secondary); font-size: var(--text-micro); }
+
 .nf-workbench-command {
   justify-content: flex-start;
   min-width: 0;
-  background: var(--color-panel);
+  min-height: 2.25rem;
+  background: var(--color-editor-bg);
+  border-radius: var(--radius-lg);
+  color: var(--color-text-secondary);
 }
 
 .nf-workbench-command svg { flex: none; }
@@ -48,18 +59,52 @@
   color: var(--color-text-muted);
   font-size: var(--text-micro);
   white-space: nowrap;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding-inline: 0.25rem;
 }
 
-.nf-workbench-actions {
+.nf-workbench-actions,
+.nf-workbench-appearance {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 0.125rem;
+  gap: 0.25rem;
+}
+
+.nf-workbench-appearance {
+  margin-inline-start: 0.25rem;
+  padding-inline-start: 0.5rem;
+  border-inline-start: 1px solid var(--color-border);
+}
+
+.nf-workbench-header .nf-workbench-switch {
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.nf-workbench-switch:is([aria-expanded='true'], [aria-pressed='true']) {
+  background: color-mix(in srgb, var(--color-accent) 13%, transparent);
+  color: var(--color-accent);
 }
 
 .nf-workbench-header button { -webkit-app-region: no-drag; }
 
-@container (max-width: 58rem) {
-  /* 放大后保留命令图标和快捷键，给项目名和面板按钮留出空间。 */
-  .nf-workbench-header-inner { grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 0.375rem; }
-  .nf-workbench-command-label { display: none; }
+@container (max-width: 74rem) {
+  /* 原生窗控也占用顶栏宽度，较窄时先让出面板按钮的文字空间。 */
+  .nf-workbench-action-label { display: none; }
+  .nf-workbench-header .nf-workbench-switch { width: 32px; padding-inline: 0; }
+}
+
+@container (max-width: 43rem) {
+  .nf-workbench-header-inner { grid-template-columns: minmax(0, 1fr) max-content max-content; gap: 0.25rem; padding-inline: 0.375rem; }
+  .nf-workbench-header[data-macos] .nf-workbench-header-inner { padding-inline-start: 5rem; }
+  .nf-workbench-command { width: 32px; justify-content: center; padding-inline: 0; }
+  .nf-workbench-command-label,
+  .nf-workbench-command kbd { display: none; }
+}
+
+@media (pointer: coarse) {
+  .nf-workbench-header .nf-workbench-switch,
+  .nf-workbench-header .nf-workbench-appearance button[aria-expanded] { min-width: 44px; min-height: 44px; }
 }

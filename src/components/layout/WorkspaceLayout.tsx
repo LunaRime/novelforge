@@ -17,9 +17,9 @@ import './workbench.css'
 // 面板库将数字解释为 CSS 像素，默认比例使用带百分号的字符串。
 const REGION_MIN_PX = { sidebar: 220, ai: 260, bottom: 120 } as const
 const REGION_MAX_PX = { sidebar: 400, ai: 460 } as const
-const SIDEBAR_DEFAULT = '22%'
-const AI_PANEL_DEFAULT = '22%'
-const EDITOR_DEFAULT = '56%'
+const SIDEBAR_DEFAULT = '19%'
+const AI_PANEL_DEFAULT = '23%'
+const EDITOR_DEFAULT = '58%'
 const EDITOR_MIN_PX = 360
 
 function closeIfAtFloor(region: keyof typeof REGION_MIN_PX): void {
@@ -75,11 +75,11 @@ export default function WorkspaceLayout() {
     <>
       <a
         href="#main-editor-area"
-        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-(--z-sticky) focus:px-4 focus:py-2 focus:bg-[var(--color-accent)] focus:text-white focus:rounded"
       >
         {t('tip.skipToContent')}
       </a>
-      <div data-workbench className="nf-workbench flex flex-1 min-h-0 overflow-hidden"
+      <div data-workbench data-focus-mode={focusMode || undefined} className="nf-workbench flex flex-1 min-h-0 overflow-hidden"
         onFocusCapture={event => { lastFocused.current = event.target }}>
         {!focusMode && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
@@ -120,11 +120,11 @@ export default function WorkspaceLayout() {
               >
                 {/* 专注模式仅改变外层布局，正文编辑区始终在同一位置挂载。 */}
                 <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
-                  <div id="main-editor-area" tabIndex={-1} data-region="editor" className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
+                  <main id="main-editor-area" tabIndex={-1} data-region="editor" className="h-full">
                     <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
                       <EditorArea onNewProject={openNewProject} />
                     </ErrorBoundary>
-                  </div>
+                  </main>
                 </Panel>
 
                 {showBottom && <Separator onPointerUp={() => closeIfAtFloor('bottom')} />}

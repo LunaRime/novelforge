@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Wifi, BookOpen, DollarSign, CheckCircle2, ZoomIn, ZoomOut, Bot, GitBranch } from 'lucide-react'
+import { Wifi, DollarSign, CheckCircle2, ZoomIn, ZoomOut, Bot, GitBranch } from 'lucide-react'
 import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useEditorStore } from '../../stores/editor-store'
@@ -33,10 +33,10 @@ export default function StatusBar() {
   )
 
   return (
-    <div
+    <footer
       className="@container no-select flex min-w-0 items-center justify-between"
       style={{
-        height: 'var(--height-statusbar)',  /* 24px */
+        height: 'var(--height-statusbar)',
         backgroundColor: 'var(--color-statusbar)',
         color: 'var(--color-statusbar-text)',
         fontSize: "var(--text-micro)",
@@ -44,15 +44,11 @@ export default function StatusBar() {
         borderTop: '1px solid var(--color-border)',
       }}
     >
-      {/* 左侧：品牌 + 版本。**项目名不在这里** —— 它已归顶栏（2026-09-25 拍板：
-          同一信息只出现一次；顶栏那条同时是任务栏/Alt-Tab 看得到的窗口标题来源，
-          见 lib/window-title）。版本号留在状态栏的理由：截图报 bug 时它是必需的。 */}
+      {/* 保留可截图识别的版本号。品牌与作品名由上方标题栏呈现。 */}
       <div className="flex h-full min-w-0 items-center overflow-hidden">
         <div className="h-full shrink-0 @max-[760px]:hidden">
-          <StatusBarSegment title="NovelForge IDE">
-            <BookOpen size={11} />
-            <span className="font-medium brand-gradient">NovelForge</span>
-            <span className="opacity-80 brand-gradient">v{__APP_VERSION__}</span>
+          <StatusBarSegment title={`NovelForge v${__APP_VERSION__}`}>
+            <span className="font-medium tabular-nums">v{__APP_VERSION__}</span>
           </StatusBarSegment>
         </div>
 
@@ -84,7 +80,7 @@ export default function StatusBar() {
         <StatusBarDivider />
         <ZoomControl />
       </div>
-    </div>
+    </footer>
   )
 }
 

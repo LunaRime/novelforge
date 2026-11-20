@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Focus, PanelBottom, PanelLeft, PanelRight, Search } from 'lucide-react'
+import { Focus, PanelLeft, Search, Sparkles, Zap } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import appIcon from '../../../build/icon.png'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -21,7 +21,7 @@ import './workbench-header.css'
 /** 工作台顶栏统一提供项目身份、命令入口和面板开关。 */
 export default function WorkbenchHeader() {
   const { t } = useTranslation()
-  const projectName = useProjectStore(state => state.currentProject?.name) ?? 'NovelForge'
+  const projectName = useProjectStore(state => state.currentProject?.name)
   const openPalette = useCommandStore(state => state.openPalette)
   const shortcut = useShortcutStore(state => formatBinding(shortcutBinding('command-palette', state.bindings)))
   const { focusMode, sidebarOpen, bottomPanelOpen, aiPanelOpen } = useLayoutStore(useShallow(state => ({
@@ -34,9 +34,12 @@ export default function WorkbenchHeader() {
   return (
     <header className="nf-workbench-header" data-macos={navigator.userAgent.includes('Mac') || undefined}>
       <div className="nf-workbench-header-inner">
-        <div className="nf-workbench-project" title={projectName}>
-          <img src={appIcon} width={20} height={20} alt="" />
-          <span className="truncate">{projectName}</span>
+        <div className="nf-workbench-project" title={projectName ?? 'NovelForge'}>
+          <img src={appIcon} width={28} height={28} alt="" />
+          <div className="nf-workbench-identity">
+            <span className="nf-workbench-wordmark">NovelForge</span>
+            {projectName && <span className="nf-workbench-project-name truncate">{projectName}</span>}
+          </div>
         </div>
         <Button type="button" variant="outline" className="nf-workbench-command" onClick={() => openPalette('commands')}
           title={t('command.title')} aria-label={t('command.title')}>
@@ -44,26 +47,31 @@ export default function WorkbenchHeader() {
           <span className="nf-workbench-command-label truncate">{t('command.title')}</span>
           {shortcut && <kbd>{shortcut}</kbd>}
         </Button>
+        {/* 面板开关和外观操作各自成组，窗口越窄越优先保留图标和可访问名称。 */}
         <div className="nf-workbench-actions">
           {!focusMode && <>
-            <Button type="button" variant="ghost" size="icon" className="size-8" active={sidebarOpen}
+            <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8"
               aria-expanded={sidebarOpen} aria-label={t('command.toggleSidebar')} title={t('command.toggleSidebar')} onClick={layout.toggleSidebar}>
               <PanelLeft size={16} aria-hidden="true" />
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="size-8" active={bottomPanelOpen} data-workbench-toggle="runtime"
+            <Button type="button" variant="ghost" className="nf-workbench-switch" data-workbench-toggle="runtime"
               aria-expanded={bottomPanelOpen} aria-label={t('command.toggleBottom')} title={t('command.toggleBottom')} onClick={layout.toggleBottomPanel}>
-              <PanelBottom size={16} aria-hidden="true" />
+              <Zap size={16} aria-hidden="true" />
+              <span className="nf-workbench-action-label">{t('panel.tasks')}</span>
             </Button>
-            <Button type="button" variant="ghost" size="icon" className="size-8" active={aiPanelOpen} data-workbench-toggle="companion"
+            <Button type="button" variant="ghost" className="nf-workbench-switch" data-workbench-toggle="companion"
               aria-expanded={aiPanelOpen} aria-label={t('command.toggleAgent')} title={t('command.toggleAgent')} onClick={layout.toggleAIPanel}>
-              <PanelRight size={16} aria-hidden="true" />
+              <Sparkles size={16} aria-hidden="true" />
+              <span className="nf-workbench-action-label">{t('agent.aiPanel')}</span>
             </Button>
           </>}
-          <Button type="button" variant="ghost" size="icon" className="size-8" active={focusMode}
-            aria-pressed={focusMode} aria-label={focusTitle} title={focusTitle} onClick={layout.toggleFocusMode}>
-            <Focus size={16} aria-hidden="true" />
-          </Button>
-          <WorkbenchThemeMenu />
+          <div className="nf-workbench-appearance">
+            <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8"
+              aria-pressed={focusMode} aria-label={focusTitle} title={focusTitle} onClick={layout.toggleFocusMode}>
+              <Focus size={16} aria-hidden="true" />
+            </Button>
+            <WorkbenchThemeMenu />
+          </div>
         </div>
       </div>
     </header>

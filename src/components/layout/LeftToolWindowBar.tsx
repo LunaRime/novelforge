@@ -42,11 +42,11 @@ export default function LeftToolWindowBar() {
         </div>
       )}
       <div className="nf-activity-group nf-activity-tools">
-        <Button type="button" variant="ghost" size="icon" className="nf-activity-button" active={activityDialogOpen}
+        <Button type="button" variant="ghost" size="icon" className="nf-activity-button" aria-pressed={activityDialogOpen}
           title={t('panel.activityShort')} aria-label={t('panel.activityShort')} onClick={layout.openActivityDialog}>
           <Activity size={17} aria-hidden="true" />
         </Button>
-        <Button type="button" variant="ghost" size="icon" className="nf-activity-button" active={settingsOpen}
+        <Button type="button" variant="ghost" size="icon" className="nf-activity-button" aria-pressed={settingsOpen}
           title={t('settings.title')} aria-label={t('settings.title')} onClick={() => layout.openSettings()}>
           <Settings size={17} aria-hidden="true" />
         </Button>
