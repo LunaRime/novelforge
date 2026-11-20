@@ -22,6 +22,7 @@ import { useBlueprintSortStore } from '../../stores/blueprint-sort-store'
 import { Button } from '../ui/Button'
 import CountBadge from '../ui/CountBadge'
 import EditorPageHeader from '../ui/EditorPageHeader'
+import { FeatureSplit } from '../ui/FeatureSplit'
 import { Input } from '../ui/Input'
 import { Textarea } from '../ui/Textarea'
 import { Label } from '../ui/Label'
@@ -84,6 +85,8 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   const loadVolumes = useVolumeStore(s => s.load)
   const [blueprints, setBlueprints] = useState<ChapterBlueprint[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
+  const [detailOpen, setDetailOpen] = useState(false)
+  const saveConfirmation = useRef(false)
   const [saving, setSaving] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -222,8 +225,28 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
       if (active()) setSaving(false)
     }
   }
-  const handleSaveOne = () => { if (selected) return saveRows([selected], false) }
-  const handleSaveAll = () => saveRows([...rows.current], true)
+  const confirmSave = async (submitted: ChapterBlueprint[], batch: boolean) => {
+    if (!submitted.length || !active() || saveConfirmation.current || saveBusy.current || deleteBusy.current) return
+    const caption = t(batch ? 'chapter.saveAll' : 'chapter.save')
+    const preview = submitted.map(row =>
+      t('chapter.label').replace('{n}', String(row.chapterNumber)) + (row.title ? ` ${row.title}` : ''))
+    saveConfirmation.current = true
+    try {
+      const ok = await confirm(t('blueprint.confirmSaveScope').replace('{chapters}', () => preview.join('\n')), {
+        title: caption, confirmText: caption,
+      })
+      if (!ok || !active()) return
+      if (!submitted.every(row => rows.current.includes(row))) {
+        toast.warning(t('blueprint.saveScopeChanged'))
+        return
+      }
+      await saveRows(submitted, batch)
+    } finally {
+      saveConfirmation.current = false
+    }
+  }
+  const handleSaveOne = () => { if (selected) void confirmSave([selected], false) }
+  const handleSaveAll = () => void confirmSave(rows.current.filter(row => dirtyRows.current.has(row)), true)
 
   const handleAddChapter = async () => {
     if (!active() || saveBusy.current || deleteBusy.current || loadFailed) return
@@ -233,7 +256,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
       suspenseHook: '', userGuidance: '', notes: '', notesUpdatedAt: '', sortOrder: maxNum + 1, priority: 0,
     }
     dirtyRows.current.add(newBlueprint)
-    publishRows([...rows.current, newBlueprint]); setSelectedIdx(rows.current.length - 1)
+    publishRows([...rows.current, newBlueprint]); setSelectedIdx(rows.current.length - 1); setDetailOpen(true)
     editVersion.current++; loadRequest.current++; setDirty(true)
     await saveRows([newBlueprint], false, false, false)
   }
@@ -370,6 +393,8 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     <div className="h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <EditorPageHeader
+        className="h-auto min-h-10 flex-wrap py-1"
+        actionsClassName="min-w-0 max-w-full shrink flex-wrap"
         icon={<BookOpen size={13} />}
         title={t('chapter.blueprintTitle')}
         meta={(
@@ -512,13 +537,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         onConfirm={directory => void startBlueprint({ workflow: 'generate_blueprint', directory })}
       />
 
-      {/* 主区域：左侧列表 + 右侧编辑 */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* 左侧章节列表 */}
-        <div
-          className="flex flex-col flex-shrink-0 w-[200px] border-r overflow-hidden"
-          style={{ borderColor: 'var(--color-border)', backgroundColor: 'var(--color-sidebar)' }}
-        >
+      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={<>
           {blueprints.length === 0 ? (
             <div className="flex flex-col items-center justify-center flex-1 gap-3 opacity-40 p-4">
               <BookOpen size={36} />
@@ -527,23 +546,25 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
           ) : (
           <div className="flex-1 overflow-y-auto p-1">
             {blueprints.map((bp, idx) => (
-              <div
+              <button type="button"
                 key={bp.chapterNumber}
                 className={cn(
-                  'group relative px-2.5 py-2 rounded-md text-xs cursor-pointer mb-0.5 transition-colors',
+                  'group block w-full relative px-2.5 py-2 rounded-md text-left text-xs cursor-pointer mb-[var(--v3-list-gap,2px)] transition-colors focus-visible:outline-2 focus-visible:outline-[var(--color-focus-ring)]',
                   selectedIdx === idx
                     ? 'bg-[var(--color-active)] text-[var(--color-text)]'
                     : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]'
                 )}
-                onClick={() => setSelectedIdx(idx)}
+                aria-current={selectedIdx === idx ? 'page' : undefined}
+                title={bp.title || undefined}
+                onClick={() => { setSelectedIdx(idx); setDetailOpen(true) }}
               >
-                <div className="flex items-center gap-1.5">
+                <span className="flex items-center gap-1.5">
                   <span className="font-mono text-micro opacity-40 flex-shrink-0">
                     {bp.chapterNumber}
                   </span>
                   <span className="font-medium truncate flex-1">{bp.title || t('character.unnamed')}</span>
-                </div>
-                <div className="flex items-center gap-1 mt-0.5">
+                </span>
+                <span className="flex items-center gap-1 mt-0.5">
                   {(() => {
                     const vol = volumes.find(v =>
                       v.chapterStart <= bp.chapterNumber &&
@@ -582,19 +603,17 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
                       {t('chapter.hasNotes')}
                     </span>
                   )}
-                </div>
-              </div>
+                </span>
+              </button>
             ))}
           </div>
           )}
-        </div>
-
-        {/* 右侧编辑区 */}
+      </>}>
         <div className="flex-1 overflow-y-auto">
           {selected ? (
             <fieldset className="min-w-0 max-w-2xl mx-auto px-5 py-4" disabled={deleting}>
               {/* 编辑区头部 */}
-              <div className="flex items-center justify-between mb-4">
+              <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
                 <h3 className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
                   {t('import.chapterLabel').replace('{n}', String(selected.chapterNumber)).replace('{title}', selected.title || t('chapter.unnamed'))}
                 </h3>
@@ -621,7 +640,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
 
               <div className="space-y-3">
                 {/* 基本信息 */}
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
                   <div>
                     <Label>{t('blueprint.chapterNumber')}</Label>
                     <Input
@@ -653,7 +672,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,12rem),1fr))] gap-3">
                   <div>
                     <Label>{t('blueprint.chapterPosition')}</Label>
                     <Select value={selected.role} onValueChange={(v) => updateField('role', v)}>
@@ -764,7 +783,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
             </div>
           )}
         </div>
-      </div>
+      </FeatureSplit>
     </div>
   )
 }

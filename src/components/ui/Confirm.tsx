@@ -129,6 +129,9 @@ function ConfirmDialog({
             color: 'var(--color-text-secondary)',
             lineHeight: 1.65,
             whiteSpace: 'pre-wrap',
+              overflowWrap: 'anywhere',
+              maxHeight: '45vh',
+              overflowY: 'auto',
             marginBottom: 20,
           }}
         >

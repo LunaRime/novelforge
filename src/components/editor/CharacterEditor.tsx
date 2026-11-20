@@ -1,3 +1,5 @@
+import { FeatureSplit } from '../ui/FeatureSplit'
+import MenuRow from '../ui/MenuRow'
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge, MoreHorizontal } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
@@ -51,6 +53,7 @@ export default function CharacterEditor() {
   const saveAll = useCharacterStore(s => s.saveAll)
   const dirty = useCharacterStore(s => s.dirty)
   const [viewMode, setViewMode] = useState<ViewMode>('edit')
+  const [listFor, setListFor] = useState<string | null>()
 
   /** 「更多」菜单开关（低频操作：生成档案 / 试演 / 模板 / 删除） */
   const [menuOpen, setMenuOpen] = useState(false)
@@ -386,7 +389,7 @@ export default function CharacterEditor() {
             </div>
           ) : viewMode !== 'graph' ? (
             /* 无选中角色时没有「卡」可编辑，只剩图谱值得看（点节点即回到档案） */
-            <Button variant="outline" size="sm" onClick={() => setViewMode('graph')} title={t('character.viewRelations')}>
+            <Button variant="outline" size="sm" onClick={() => { setListFor(undefined); setViewMode('graph') }} title={t('character.viewRelations')}>
               <Network size={12} /> {t('character.viewGraph')}
             </Button>
           ) : null}
@@ -415,6 +418,20 @@ export default function CharacterEditor() {
         </div>
       )}
 
+      <FeatureSplit detailOpen={(Boolean(selectedCard) || viewMode === 'graph') && listFor !== selectedName}
+        onBack={() => setListFor(selectedName)} list={
+          characters.length === 0
+            ? <BaseEmptyState icon={<Users size={24} />} message={t('character.selectOrCreate')} />
+            : characters.map(character => (
+              <MenuRow key={character.name} title={character.name || t('character.newCharacter')} titleHint={character.name}
+                current={selectedName === character.name ? 'page' : undefined} active={selectedName === character.name}
+                onPrimary={() => {
+                  useCharacterStore.getState().setSelectedName(character.name)
+                  setViewMode('edit')
+                  setListFor(undefined)
+                }} />
+            ))
+        }>
       {/* 主体区 */}
       <fieldset disabled={mergingSelected && (viewMode === 'edit' || viewMode === 'state')} className="flex-1 min-w-0 overflow-y-auto relative">
         {viewMode === 'graph' ? (
@@ -599,6 +616,7 @@ export default function CharacterEditor() {
           </div>
         )}
       </fieldset>
+      </FeatureSplit>
     </div>
   )
 }

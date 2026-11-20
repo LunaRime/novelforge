@@ -9,7 +9,7 @@ import { globalEventBus } from '../../shared/event-bus'
 const h = vi.hoisted(() => ({ invoke: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), info: vi.fn(), log: vi.fn(), tree: vi.fn(), volumes: vi.fn(), start: vi.fn(), report: vi.fn(),
   inputs: {} as Record<string, ComponentProps<'input'>>,
 }))
-const translate = (key: string) => key
+const translate = (key: string) => key === 'blueprint.confirmSaveScope' ? '{chapters}' : key
 vi.mock('../../hooks/useTranslation', () => ({ useTranslation: () => ({ t: translate }) }))
 vi.mock('../../services/ipc-client', () => ({ ipc: { invoke: h.invoke } }))
 vi.mock('../../services/render-logger', () => ({ renderLog: h.log }))
@@ -66,6 +66,32 @@ beforeEach(() => {
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 
 describe('blueprint load/save application view', () => {
+  it('confirms only the dirty rows in a batch before writing', async () => {
+    await mount(); await edit('First edited')
+    h.confirm.mockResolvedValueOnce(false)
+    h.invoke.mockClear()
+    await click('chapter.saveAll')
+    expect(h.confirm.mock.calls.at(-1)?.[0]).toContain('First edited')
+    expect(h.confirm.mock.calls.at(-1)?.[0]).not.toContain('Second')
+    expect(h.invoke).not.toHaveBeenCalled()
+    await click('chapter.saveAll')
+    expect(h.invoke).toHaveBeenCalledWith('db:blueprint-upsert-many', [expect.objectContaining({ chapterNumber: 1, title: 'First edited' })])
+  })
+
+  it('returns to the selected list row with its unsaved detail intact', async () => {
+    await mount()
+    const row = [...host.querySelectorAll('button')].find(button => button.textContent?.includes('Second'))
+    expect(row).toBeDefined()
+    await flush(() => row!.click())
+    await edit('Second edited')
+    await click('feature.backToList')
+    const current = host.querySelector<HTMLButtonElement>('[data-feature-list] button[aria-current="page"]')
+    expect(current?.textContent).toContain('Second edited')
+    expect(document.activeElement).toBe(current)
+    await flush(() => current!.click())
+    expect(h.inputs['chapter.placeholderTitle'].value).toBe('Second edited')
+  })
+
   it('verifies the strict list without loading the next writable chapter', async () => {
     await mount(); h.invoke.mockClear(); await click('verify.title')
     expect(h.invoke.mock.calls.map(([channel]) => channel)).toEqual(['db:blueprint-get-all'])

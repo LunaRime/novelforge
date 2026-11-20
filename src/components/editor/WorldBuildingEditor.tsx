@@ -1,3 +1,5 @@
+import { FeatureSplit } from '../ui/FeatureSplit'
+import MenuRow from '../ui/MenuRow'
 import { toast } from '../ui/Toast'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Sparkles, CheckCircle2, Circle, RefreshCw, FileText, BookOpen, AlertTriangle, FolderTree } from 'lucide-react'
@@ -97,6 +99,8 @@ function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureSc
     try { application.assertCurrent(); return true } catch { return false }
   }, [application])
   const archFiles = getArchFiles(t)
+  const [activeFile, setActiveFile] = useState(archFiles[0]?.key)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   useEffect(() => {
     mounted.current = true
@@ -254,8 +258,14 @@ function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureSc
         )}
       />
 
+      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={archFiles.map(file => (
+        <MenuRow key={file.key} title={file.label} titleHint={file.label}
+          icon={renderIcon(file.iconName, 13)}
+          current={activeFile === file.key ? 'page' : undefined} active={activeFile === file.key}
+          onPrimary={() => { setActiveFile(file.key); setDetailOpen(true) }} />
+      ))}>
       {/* 文件卡片列表 */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+      <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
         {loadFailed && (
           <div role="alert" className="flex items-center gap-2 rounded-lg border px-4 py-2 text-xs" style={{ borderColor: 'var(--color-error)', color: 'var(--color-error)' }}>
             <AlertTriangle size={14} />
@@ -276,9 +286,9 @@ function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureSc
               ? 'var(--color-success)'
               : 'var(--color-border)'
           return (
-            <div key={f.key} className="space-y-2">
+            <div key={f.key} hidden={activeFile !== f.key} className="space-y-2">
               <div
-                className="relative rounded-lg border p-4 flex items-center gap-4 cursor-pointer transition-all"
+                className="relative rounded-lg border p-3 flex flex-wrap items-center gap-2 cursor-pointer transition-all"
                 style={{
                   borderColor: cardBorderColor,
                   backgroundColor: charExtractFailed ? 'rgba(var(--color-error-rgb), 0.03)' : 'var(--color-panel)',
@@ -324,7 +334,7 @@ function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureSc
                   ) : (
                     <span
                       className="text-micro px-1.5 py-0.5 rounded"
-                      style={{ backgroundColor: 'rgba(var(--color-accent-rgb,99 102 241),0.1)', color: 'var(--color-accent)' }}
+                      style={{ backgroundColor: 'rgba(var(--color-accent-rgb),0.1)', color: 'var(--color-accent)' }}
                     >
                       {t('status.pendingGen')}
                     </span>
@@ -360,6 +370,7 @@ function ArchitectureOverviewContent({ source, genre }: { source: ArchitectureSc
           )
         })}
       </div>
+      </FeatureSplit>
 
       {/* AI 生成架构确认弹窗 */}
       <ArchitectureConfirmDialog

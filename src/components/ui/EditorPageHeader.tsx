@@ -8,6 +8,7 @@ interface EditorPageHeaderProps {
   meta?: ReactNode
   /** 右侧动作组 */
   actions?: ReactNode
+  actionsClassName?: string
   className?: string
 }
 
@@ -22,6 +23,7 @@ export default function EditorPageHeader({
   title,
   meta,
   actions,
+  actionsClassName,
   className,
 }: EditorPageHeaderProps) {
   return (
@@ -38,7 +40,7 @@ export default function EditorPageHeader({
         </span>
         {meta && <span className="flex min-w-0 items-center gap-1">{meta}</span>}
       </div>
-      {actions && <div className="flex flex-shrink-0 items-center gap-1">{actions}</div>}
+      {actions && <div className={cn('flex flex-shrink-0 items-center gap-1', actionsClassName)}>{actions}</div>}
     </div>
   )
 }
