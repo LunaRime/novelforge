@@ -78,7 +78,7 @@ describe('DraftEditor application boundary', () => {
     await act(async () => { resolve(); await pending })
     expect(useEditorStore.getState().tabs[0].dirty).toBe(true)
     expect(state.success).not.toHaveBeenCalled()
-    expect(state.error).toHaveBeenCalledOnce()
+    expect(state.error).not.toHaveBeenCalled()
     cleanup()
   })
   it('does not clear newer input when an earlier save completes', async () => {

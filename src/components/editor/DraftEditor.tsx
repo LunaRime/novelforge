@@ -74,6 +74,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const isChapterBusy = !!activeChapterRun
 
   const [saving, setSaving] = useState(false)
+  const actionOrigin = useRef<HTMLElement | null>(null)
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
   const [reviewDims, setReviewDims] = useState<Record<string, boolean>>(
@@ -115,6 +116,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       renderLog('error', 'Save:Draft', t('log.render.draftSaveFailed')
         .replace('{path}', () => filePath)
         .replace('{error}', () => String(e)))
+      try { application.assertCurrent() } catch { return }
       toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)
@@ -180,8 +182,12 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   /** 打开待合并修稿 */
   const openPendingRevision = useCallback(async (rev: RevisionEntry) => {
     if (!meta || !currentProject) return
+    const origin = document.activeElement as HTMLElement | null
     const loaded = await application.revision(filePath, VELA.REVISION + rev.id)
-    if (loaded.originalContent || loaded.modifiedContent) setMergeData(loaded)
+    if (loaded.originalContent || loaded.modifiedContent) {
+      actionOrigin.current = origin
+      setMergeData(loaded)
+    }
   }, [meta, filePath, currentProject, application])
 
   /** 合并完成回调 */
@@ -197,7 +203,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         toast.success(t('editor.mergeSuccessToast'))
         renderLog('info', 'Save:Draft', t('editor.mergeSuccessToast'))
         if (result.pending) setPendingRevisions(result.pending)
-        if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
+        if (result.refreshError) {
+          renderLog('error', 'Load:Draft', result.refreshError)
+          toast.warning(t('editor.mergeRefreshFailed'))
+        }
       } else {
         renderLog('error', 'Save:Draft', String(result.error))
         toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
@@ -255,8 +264,20 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   // 稳定回调（配合 memo(EditorToolbar) / CodeMirrorEditor 的 handleUpdate 依赖）——
   // 否则流式期间（activeRuns 每 100ms 变化）内联函数重建，EditorToolbar 的 memo 形同虚设
   const handleToolbarSave = useCallback(() => doSave(currentBodyRef.current, { manual: true }), [doSave])
-  const handleToolbarRefine = useCallback(() => { setUserRefinePrompt(''); setConfirmAction('refine') }, [])
-  const handleToolbarReview = useCallback(() => setConfirmAction('review'), [])
+  const handleToolbarRefine = useCallback(() => {
+    actionOrigin.current = document.activeElement as HTMLElement | null
+    setUserRefinePrompt('')
+    setConfirmAction('refine')
+  }, [])
+  const handleToolbarReview = useCallback(() => {
+    actionOrigin.current = document.activeElement as HTMLElement | null
+    setConfirmAction('review')
+  }, [])
+  const restoreActionFocus = (event: Event) => {
+    if (!actionOrigin.current?.isConnected) return
+    event.preventDefault()
+    actionOrigin.current.focus()
+  }
   const handleEditorChange = useCallback((text: string) => {
     currentBodyRef.current = text
     useEditorStore.getState().updateTabContent(tabId, text)
@@ -322,6 +343,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       {/* AI 操作确认弹窗 — 提取到 AIActionDialog */}
       <AIActionDialog
         action={confirmAction}
+        onCloseAutoFocus={restoreActionFocus}
         chapterTitle={meta?.chapterTitle}
         version={meta?.version}
         refinePrompt={userRefinePrompt}
@@ -339,7 +361,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
 
       {/* 弹出式三栏合并视图 */}
       <Dialog open={mergeData !== null} onOpenChange={(v) => !v && setMergeData(null)}>
-        <DialogContent preventOutsideClose
+        <DialogContent preventOutsideClose onCloseAutoFocus={restoreActionFocus}
           className="p-0"
           style={{ width: '90vw', maxWidth: '90vw', height: '85vh', maxHeight: '85vh', overflow: 'hidden' }}
         >

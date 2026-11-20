@@ -13,6 +13,7 @@ import type { DraftMeta, DraftStatus } from '../../services/workflows/chapter-wo
 import type { RevisionEntry } from '../../services/draft-index'
 import { DRAFT_STATUS_LABEL_KEY, DRAFT_STATUS_COLOR } from '../../shared/draft-status'
 import type { TextKey } from '../../shared/locale'
+import { VersionActions, type VersionAction } from './VersionActions'
 
 export interface EditorToolbarProps {
   /** 草稿元数据（null 时显示占位） */
@@ -75,7 +76,7 @@ function EditorToolbar({
 
   return (
     <div
-      className="flex items-center justify-between gap-2 px-3 h-9 flex-shrink-0"
+      className="nf-version-action-container flex items-center justify-between gap-2 px-2 sm:px-3 h-9 flex-shrink-0"
       style={{
         borderBottom: '1px solid var(--color-border)',
         backgroundColor: 'var(--color-editor-bg)',
@@ -155,46 +156,45 @@ function RightActions({
   onOpenReview: () => void
 }) {
   const { t } = useTranslation()
+  const actions: VersionAction[] = []
+  if (pendingRevisions.length > 0) actions.push({
+    label: t('editor.pendingMergeBtn').replace('{n}', String(pendingRevisions.length)),
+    title: t('tip.pendingMerge'), icon: <FileStack size={12} />,
+    onSelect: () => onOpenRevision(pendingRevisions[0]),
+  })
+  if (reviewCount > 0) actions.push({
+    label: t('editor.reviewReportBtn').replace('{n}', String(reviewCount)),
+    title: t('tip.viewReviewReport'), icon: <FileText size={12} />, onSelect: onOpenReview,
+  })
+  actions.push(
+    { label: t('editor.aiPolishBtn'), title: t('tip.aiPolish'), icon: <Sparkles size={12} />,
+      onSelect: onRefine, variant: 'ai', disabled: isChapterBusy },
+    { label: t('editor.aiReviewBtn'), title: t('tip.aiReview'), icon: <Search size={12} />,
+      onSelect: onReview, variant: 'ai', disabled: isChapterBusy },
+    { label: t('editor.finalizeBtn'), title: t('tip.finalize'), icon: <BadgeCheck size={12} />,
+      onSelect: onFinalize, variant: 'success', disabled: isChapterBusy },
+  )
+  const languages = ['zh', 'en', 'ru'] as const
   return (
     <div className="flex items-center gap-1.5 flex-shrink-0">
-      {/* 字数 */}
       {charCount > 0 && (
-        <span className="text-xs tabular-nums mr-1" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="nf-version-actions-wide text-xs tabular-nums mr-1" style={{ color: 'var(--color-text-muted)' }}>
           {charCount.toLocaleString()} {t('unit.chars')}
         </span>
       )}
-
-      {/* 未保存指示灯 */}
       {isDirty && (
-        <span
-          className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-0.5"
-          style={{ backgroundColor: 'var(--color-warning)' }}
-          title={t('statusbar.unsaved')}
-        />
+        <>
+          <span
+            className="w-1.5 h-1.5 rounded-full flex-shrink-0 mr-0.5"
+            style={{ backgroundColor: 'var(--color-warning)' }}
+            title={t('statusbar.unsaved')}
+          />
+          <Button variant="outline" size="sm" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
+            <Save size={12} />
+            {saving ? t('status.saving') : t('editor.save')}
+          </Button>
+        </>
       )}
-
-      {/* 保存按钮 */}
-      {isDirty && (
-        <Button variant="outline" size="sm" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
-          <Save size={12} />
-          {saving ? t('status.saving') : t('editor.save')}
-        </Button>
-      )}
-
-      {/* 翻译为（生成新草稿）——带文字触发器，入口明确 */}
-      <Select value="" onValueChange={(v) => onTranslate(v as 'zh' | 'en' | 'ru')}>
-        <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded text-micro" title={t('translate.title')}>
-          <Languages size={11} />
-          <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="zh">{t('translate.lang.zh')}</SelectItem>
-          <SelectItem value="en">{t('translate.lang.en')}</SelectItem>
-          <SelectItem value="ru">{t('translate.lang.ru')}</SelectItem>
-        </SelectContent>
-      </Select>
-
-      {/* 状态标签 */}
       <span
         className="text-micro px-1.5 py-0.5 rounded flex-shrink-0"
         style={{
@@ -204,63 +204,25 @@ function RightActions({
       >
         {t(DRAFT_STATUS_LABEL_KEY[status] as TextKey) ?? status}
       </span>
-
-      {/* 📋 待合并修稿 */}
-      {pendingRevisions.length > 0 && (
-        <Button
-          variant="outline" size="sm"
-          onClick={() => onOpenRevision(pendingRevisions[0])}
-          title={t('tip.pendingMerge')}
-        >
-          <FileStack size={12} />
-          {t('editor.pendingMergeBtn').replace('{n}', String(pendingRevisions.length))}
-        </Button>
-      )}
-
-      {/* 📝 审稿报告 */}
-      {reviewCount > 0 && (
-        <Button
-          variant="outline" size="sm"
-          onClick={onOpenReview}
-          title={t('tip.viewReviewReport')}
-        >
-          <FileText size={12} />
-          {t('editor.reviewReportBtn').replace('{n}', String(reviewCount))}
-        </Button>
-      )}
-
-      {/* AI 修稿 */}
-      <Button
-        variant="ai" size="sm"
-        onClick={onRefine}
-        disabled={isChapterBusy}
-        title={t('tip.aiPolish')}
-      >
-        <Sparkles size={12} />
-        {t('editor.aiPolishBtn')}
-      </Button>
-
-      {/* AI 审稿 */}
-      <Button
-        variant="ai" size="sm"
-        onClick={onReview}
-        disabled={isChapterBusy}
-        title={t('tip.aiReview')}
-      >
-        <Search size={12} />
-        {t('editor.aiReviewBtn')}
-      </Button>
-
-      {/* 定稿 */}
-      <Button
-        variant="success" size="sm"
-        onClick={onFinalize}
-        disabled={isChapterBusy}
-        title={t('tip.finalize')}
-      >
-        <BadgeCheck size={12} />
-        {t('editor.finalizeBtn')}
-      </Button>
+      <VersionActions
+        actions={actions}
+        overflowExtra={languages.map(lang => ({
+          label: `${t('translate.title')} ${t(`translate.lang.${lang}`)}`,
+          icon: <Languages size={12} />,
+          onSelect: () => onTranslate(lang),
+        }))}
+        wideExtra={
+          <Select value="" onValueChange={(v) => onTranslate(v as typeof languages[number])}>
+            <SelectTrigger className="h-6 w-auto min-w-[4.5rem] rounded text-micro" title={t('translate.title')}>
+              <Languages size={11} />
+              <span style={{ color: 'var(--color-text)' }}>{t('translate.title')}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {languages.map(lang => <SelectItem key={lang} value={lang}>{t(`translate.lang.${lang}`)}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        }
+      />
     </div>
   )
 }
@@ -283,7 +245,7 @@ function ReadonlyActions({
   return (
     <div className="flex items-center gap-2 flex-shrink-0">
       {charCount > 0 && (
-        <span className="text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
+        <span className="nf-version-actions-wide text-xs tabular-nums" style={{ color: 'var(--color-text-muted)' }}>
           {charCount.toLocaleString()} {t('unit.chars')}
         </span>
       )}

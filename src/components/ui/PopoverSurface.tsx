@@ -3,7 +3,7 @@ import { cn } from '../../lib/utils'
 
 export type PopoverPlacement = 'above-start' | 'above-end' | 'below-start' | 'below-end'
 
-interface Props {
+interface Props extends Pick<React.ComponentPropsWithoutRef<'div'>, 'id' | 'popover'> {
   children: React.ReactNode
   /**
    * JS 定位模式：直接接 `useFloatingPosition` 返回的回调 ref。
@@ -54,11 +54,13 @@ export function PopoverSurface({
   placement = 'above-end',
   className,
   style,
+  ...attributes
 }: Props) {
   const anchorMode = anchorName != null
 
   return (
     <div
+      {...attributes}
       ref={ref}
       className={cn(
         anchorMode ? `floating-menu floating-menu--${placement}` : 'z-[var(--z-dropdown)]',

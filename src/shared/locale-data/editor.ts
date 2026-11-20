@@ -177,6 +177,7 @@ export const editorTexts = {
   'editor.mergeMissingContext': { 'zh-CN': '缺少草稿上下文，无法写回；请从版本历史重新打开对比', 'en-US': 'Missing draft context — nothing written. Reopen the diff from version history.', 'ru-RU': 'Нет контекста черновика — изменения не сохранены. Откройте сравнение из истории версий.' },
   'editor.readonlyNoEdit': { 'zh-CN': '当前稿件只读（已定稿或章节处理中），不能应用 AI 修改', 'en-US': 'This draft is read-only (finalized or busy) — AI edits cannot be applied', 'ru-RU': 'Черновик только для чтения (финализирован или занят) — правки ИИ недоступны' },
   'editor.mergeSuccessToast': { 'zh-CN': '✅ 合并完成，草稿已更新', 'en-US': '✅ Merge complete, draft updated', 'ru-RU': '✅ Слияние завершено, черновик обновлён' },
+  'editor.mergeRefreshFailed': { 'zh-CN': '修稿已合并。列表刷新失败，重新打开稿件可回读。', 'en-US': 'Revision merged. The list could not refresh. Reopen the draft to read the result.', 'ru-RU': 'Правка объединена. Не удалось обновить список. Откройте черновик заново, чтобы прочитать результат.' },
   'editor.noProject': { 'zh-CN': '在左侧项目树中单击文件开始编辑', 'en-US': 'Click a file in the project tree to start editing', 'ru-RU': 'Нажмите на файл в дереве проекта' },
   'editor.archDoc': { 'zh-CN': '架构文档', 'en-US': 'Architecture Document', 'ru-RU': 'Документ архитектуры' },
   'editor.novelConfig': { 'zh-CN': '小说配置', 'en-US': 'Novel Config', 'ru-RU': 'Конфигурация романа' },

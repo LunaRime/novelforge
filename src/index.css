@@ -853,6 +853,15 @@
 .floating-menu--below-start { top: anchor(bottom); left: anchor(left); margin-top: 6px; }
 .floating-menu--below-end   { top: anchor(bottom); right: anchor(right); margin-top: 6px; }
 
+.nf-version-action-container { container-type: inline-size; }
+.nf-version-actions-wide { display: flex; }
+.nf-version-actions-narrow { display: none; }
+
+@container (max-width: 42rem) {
+  .nf-version-actions-wide { display: none; }
+  .nf-version-actions-narrow { display: block; }
+}
+
 /* ── 图标栏 = 窗口拖拽区（标题栏已于 2026-09-22 移除）──
    `WebkitAppRegion: 'drag'` 设在栏容器上（见 LeftToolWindowBar / RightToolWindowBar），
    栏内的交互元素必须显式恢复 no-drag，否则按钮点不动。 */

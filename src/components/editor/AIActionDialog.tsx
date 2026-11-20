@@ -59,6 +59,7 @@ export interface AIActionDialogProps {
   onReviewDimToggle: (key: string) => void
   /** 确认执行 */
   onConfirm: () => void
+  onCloseAutoFocus?: (event: Event) => void
   /** 线③：修稿场景文案定制（审稿修稿复用本壳时传入） */
   refineCopy?: AIActionRefineCopy
 }
@@ -73,6 +74,7 @@ export default memo(function AIActionDialog({
   onRefinePromptChange,
   onReviewDimToggle,
   onConfirm,
+  onCloseAutoFocus,
   refineCopy,
 }: AIActionDialogProps) {
   const { t } = useTranslation()
@@ -88,7 +90,7 @@ export default memo(function AIActionDialog({
 
   return (
     <Dialog open={action !== null} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent preventOutsideClose className="max-w-[440px]">
+      <DialogContent preventOutsideClose className="max-w-[440px]" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Sparkles size={14} className="text-[var(--color-accent)]" />
