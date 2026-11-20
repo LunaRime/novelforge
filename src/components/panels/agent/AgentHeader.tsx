@@ -1,9 +1,8 @@
-import { Plus, MoreHorizontal, X, Server, Sparkles, ChevronRight, History } from 'lucide-react'
+import { Plus, MoreHorizontal, Server, Sparkles, ChevronRight, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
-import { useLayoutStore } from '../../../stores/layout-store'
 import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
-import { useRef, useState, useMemo } from 'react'
+import { useEffect, useRef, useState, useMemo } from 'react'
 import { confirm } from '../../ui/Confirm'
 import { Button } from '../../ui/Button'
 import { MenuItem } from '../../ui/MenuItem'
@@ -20,18 +19,24 @@ export default function AgentHeader() {
   // 原子 selector：action 引用稳定，流式期间不随整 store 每 50ms 重渲染
   const createConversation = useAgentStore(s => s.createConversation)
   const toggleHistory = useAgentStore(s => s.toggleHistory)
-  const toggleAIPanel = useLayoutStore(s => s.toggleAIPanel)
+  const title = useAgentStore(s => s.conversations.find(item => item.id === s.activeConversationId)?.title)
+  const historyOpen = useAgentStore(s => s.showHistory)
   const { t } = useTranslation()
   const [showMore, setShowMore] = useState(false)
   const [subView, setSubView] = useState<'main' | 'mcp' | 'skills'>('main')
   const moreRef = useRef<HTMLDivElement>(null)
+  const moreButton = useRef<HTMLButtonElement>(null)
+  const menu = useRef<HTMLDivElement>(null)
 
   // 更多菜单浮在整个窗口之上（锚点：⋯ 按钮容器；面板顶部 → 朝下展开）
   const moreMenuRef = useFloatingPosition<HTMLDivElement>(moreRef, showMore, { placement: 'below', align: 'end' })
 
   // 点击外部关闭更多菜单
   useOutsideClick(moreRef, () => { setShowMore(false); setSubView('main') }, showMore)
-  useEscapeKey(() => { setShowMore(false); setSubView('main') }, showMore)
+  useEscapeKey(() => { setShowMore(false); setSubView('main'); moreButton.current?.focus() }, showMore)
+  useEffect(() => {
+    if (showMore) menu.current?.querySelector('button')?.focus()
+  }, [showMore, subView])
 
   // MCP 状态（原子 selector，流式期间不重渲染）
   const mcpServers = useMCPStore(s => s.servers)
@@ -41,83 +46,44 @@ export default function AgentHeader() {
   // Skill 列表
   const skills = useMemo(() => skillRegistry.listAll(), [])
 
-  /** 新建会话 */
-  const handleNew = () => {
-    createConversation()
-  }
-
-  /** 关闭 AI 面板 */
-  const handleClose = () => {
-    toggleAIPanel()
-  }
-
   // 当前会话为空（无消息）时禁止新建 —— 订阅派生布尔（原始值），流式期间值稳定不重渲染
   const isCurrentEmpty = useAgentStore(s => {
     const conv = s.conversations.find(c => c.id === s.activeConversationId)
     return !conv || conv.messages.every(m => m.role === 'system')
   })
 
+  const conversationTitle = title || t('agent.newConversation')
   return (
-    <div
-      className="no-select flex items-center justify-between gap-1.5 px-2 flex-shrink-0"
-      style={{
-        height: 'var(--height-panel-header)',
-        borderBottom: '1px solid var(--color-border)',
-      }}
-    >
-      {/* 标题 */}
-      <div
-        className="flex min-w-0 items-center overflow-hidden text-ellipsis whitespace-nowrap gap-1"
-        style={{ color: 'var(--color-text-secondary)', fontSize: 'var(--text-micro)', fontWeight: 500 }}
-      >
-        Agent
-      </div>
-
-      {/* 右侧工具按钮组 */}
-      <div className="flex items-center gap-1.5 px-0.5 flex-shrink-0">
-
-        {/* 新建对话按钮 */}
-        <Button
-          variant="ghost"
-          title={isCurrentEmpty ? t('tip.emptyAgent') : t('tip.newConversation')}
-          disabled={isCurrentEmpty}
-          onClick={handleNew}
-          style={{ width: 22, height: 22, padding: 0 }}
-        >
-          <Plus size={13} strokeWidth={1.5} />
+    <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-[var(--color-border)] px-2 py-1">
+      <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--color-text-secondary)]" title={conversationTitle}>
+        {conversationTitle}
+      </span>
+      <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+        title={isCurrentEmpty ? t('tip.emptyAgent') : t('tip.newConversation')} aria-label={t('tip.newConversation')}
+        disabled={isCurrentEmpty} onClick={() => createConversation()}>
+        <Plus size={16} aria-hidden="true" />
+      </Button>
+      <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" active={historyOpen}
+        title={t('tip.historyConversations')} aria-label={t('tip.historyConversations')} aria-pressed={historyOpen} onClick={toggleHistory}>
+        <History size={15} aria-hidden="true" />
+      </Button>
+      <div className="relative shrink-0" ref={moreRef}>
+        <Button ref={moreButton} type="button" variant="ghost" size="icon" className="size-8"
+          title={t('tip.moreOptions')} aria-label={t('tip.moreOptions')} aria-expanded={showMore}
+          active={showMore} onClick={() => { setShowMore(value => !value); setSubView('main') }}>
+          <MoreHorizontal size={16} aria-hidden="true" />
         </Button>
-
-        {/* 历史 / 记忆 已收进「更多」菜单（2026-09-22 UI 重做：264px 窄面板里
-            五个图标（+ ⟲ 🧠 ⋯ ✕）过于拥挤，只留高频的新建与更多，其余进菜单） */}
-
-        {/* 更多菜单 */}
-        <div className="relative" ref={moreRef}>
-          <Button
-            variant="ghost"
-            title={t('tip.moreOptions')}
-            onClick={() => { setShowMore(v => !v); setSubView('main') }}
-            active={showMore}
-            style={{ width: 22, height: 22, padding: 0 }}
+        {/* 更多菜单下拉 */}
+        {showMore && (
+          <PopoverSurface
+            ref={moreMenuRef}
+            className="py-1"
+            style={{ width: subView === 'main' ? 200 : 260, transition: 'width 0.15s ease' }}
           >
-            <MoreHorizontal size={14} strokeWidth={1.5} />
-          </Button>
-
-          {/* 更多菜单下拉 */}
-          {showMore && (
-            <PopoverSurface
-              ref={moreMenuRef}
-              className="py-1"
-              style={{ width: subView === 'main' ? 200 : 260, transition: 'width 0.15s ease' }}
-            >
+            <div ref={menu}>
               {/* ===== 主菜单视图 ===== */}
               {subView === 'main' && (
                 <>
-                  {/* 历史对话 / 记忆查看（原为标题栏独立图标，UI 重做后收进此处） */}
-                  <MenuItem
-                    label={t('tip.historyConversations')}
-                    icon={<History size={13} />}
-                    onClick={() => { setShowMore(false); toggleHistory() }}
-                  />
                   <MenuItem
                     label={t('agent.mcpServers')}
                     icon={<Server size={13} />}
@@ -163,19 +129,9 @@ export default function AgentHeader() {
                   onBack={() => setSubView('main')}
                 />
               )}
-            </PopoverSurface>
-          )}
-        </div>
-
-        {/* 关闭面板按钮 */}
-        <Button
-          variant="ghost"
-          title={t('agent.closeAgent')}
-          onClick={handleClose}
-          style={{ width: 22, height: 22, padding: 0 }}
-        >
-          <X size={14} strokeWidth={1.5} />
-        </Button>
+            </div>
+          </PopoverSurface>
+        )}
       </div>
     </div>
   )

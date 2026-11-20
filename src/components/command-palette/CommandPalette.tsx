@@ -99,7 +99,7 @@ export default function CommandPalette() {
     const origin = document.activeElement
     const fromWorkbench = origin?.closest('[data-workbench]')
     return () => {
-      // 命令可能关闭子面板。仅在整条命令面板关闭且焦点落到页面时归还焦点。
+      // 命令可能关闭原控件所在的面板，原控件卸载后将焦点还给编辑区。
       if (document.activeElement !== document.body || !(origin instanceof HTMLElement) || origin === document.body) return
       if (origin.isConnected) origin.focus({ preventScroll: true })
       else if (fromWorkbench) focusWorkbenchEditor()
@@ -232,6 +232,16 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         id: 'toggle-bottom', label: t('command.toggleBottom'), category: t('command.group.view'),
         shortcut: sc('toggle-bottom'), icon: <PanelBottom size={15} />, keywords: 'bottom panel tasks 底栏',
         run: () => layout.toggleBottomPanel(),
+      },
+      {
+        id: 'show-tasks', label: t('panel.tasks'), category: t('command.group.view'),
+        icon: <PanelBottom size={15} />, keywords: 'tasks workflow 任务',
+        run: () => layout.openBottomTab('tasks'),
+      },
+      {
+        id: 'show-logs', label: t('panel.log'), category: t('command.group.view'),
+        icon: <PanelBottom size={15} />, keywords: 'logs 日志',
+        run: () => layout.openBottomTab('log'),
       },
       {
         id: 'focus-mode', label: t('command.focusMode'), category: t('command.group.view'),

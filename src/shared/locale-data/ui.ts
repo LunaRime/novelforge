@@ -266,6 +266,8 @@ export const uiTexts = {
   'menu.uninstall': { 'zh-CN': '卸载 NovelForge...', 'en-US': 'Uninstall NovelForge...', 'ru-RU': 'Удалить NovelForge...' },
   'panel.welcome': { 'zh-CN': '主页', 'en-US': 'Home', 'ru-RU': 'Главная' },
   'panel.sidebar': { 'zh-CN': '导航侧边栏', 'en-US': 'Navigation Sidebar', 'ru-RU': 'Боковая панель' },
+  'workbench.chat': { 'zh-CN': '写作搭档', 'en-US': 'Writing partner', 'ru-RU': 'Помощник' },
+  'workbench.output': { 'zh-CN': '输出', 'en-US': 'Output', 'ru-RU': 'Вывод' },
   'panel.editor': { 'zh-CN': '主编辑区', 'en-US': 'Editor', 'ru-RU': 'Редактор' },
   'panel.ai': { 'zh-CN': 'AI 对话面板', 'en-US': 'AI Panel', 'ru-RU': 'Панель ИИ' },
   'panel.writingPartner': { 'zh-CN': '写作搭档', 'en-US': 'Writing partner', 'ru-RU': 'Помощник автора' },

@@ -6,14 +6,14 @@ import { focusWorkbenchEditor } from '../../lib/workbench-focus'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ErrorBoundary } from '../ErrorBoundary'
-import AIPanel from '../panels/AIPanel'
-import AIOutputPanel from '../panels/AIOutputPanel'
+import WritingCompanion from '../panels/WritingCompanion'
 import BottomPanel from '../panels/BottomPanel'
 import EditorArea from '../panels/EditorArea'
 import Sidebar from '../panels/Sidebar'
 import { createNavigationSession, NavigationSessionContext } from '../panels/sidebar/navigation-session'
 import LeftToolWindowBar from './LeftToolWindowBar'
 import RightToolWindowBar from './RightToolWindowBar'
+import './workbench.css'
 
 // 面板库将数字解释为 CSS 像素，默认比例使用带百分号的字符串。
 const REGION_MIN_PX = { sidebar: 220, ai: 260, bottom: 120 } as const
@@ -159,7 +159,7 @@ export default function WorkspaceLayout() {
                 >
                   <div data-region="ai" className="h-full">
                     <ErrorBoundary fallbackLabel={t('error.aiPanelFailed')}>
-                      {rightView === 'ai-output' ? <AIOutputPanel /> : <AIPanel />}
+                      <WritingCompanion />
                     </ErrorBoundary>
                   </div>
                 </Panel>

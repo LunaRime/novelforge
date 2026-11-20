@@ -5,9 +5,11 @@ import {
   Clock, ShieldAlert,
   Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Inbox,
 } from 'lucide-react'
+import { Button } from '../ui/Button'
+import CountBadge from '../ui/CountBadge'
 import { ProgressBar } from '../ui/ProgressBar'
 import { StateDot, type StateDotState } from '../ui/StateDot'
-import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import InboxPanel from './automation/InboxPanel'
@@ -18,12 +20,6 @@ import { useScopedWorkflowRuns, useTaskNavigation } from './agent/agent-panel-se
 /** 工作台底栏显示当前选中的页签。 */
 export default function BottomPanel() {
   const { t } = useTranslation()
-  /** 底部面板 Tab 名称映射（通过 i18n 字典统一管理）— 组件内求值，语言切换后标题跟随更新 */
-  const TAB_LABELS: Record<string, string> = {
-    tasks:    t('panel.tasks'),
-    log:      t('panel.log'),
-    inbox:    t('automation.inbox.tab'),
-  }
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
@@ -41,82 +37,33 @@ export default function BottomPanel() {
   const hasRunning = activeRuns.some(r => r.status === 'running')
   const hasWaiting = activeRuns.some(r => r.status === 'waiting')
 
-  /** 面板内 Tab 点击：切到其他 Tab 打开面板，点当前 Tab 收起（与左栏语义一致） */
-  const handleTabClick = (id: BottomTab) => {
-    if (bottomTab === id) toggleBottomPanel()
-    else openBottomTab(id)
-  }
-
-  const TAB_ICONS: Record<string, typeof Zap> = {
-    tasks: Zap,
-    log: ScrollText,
-    inbox: Inbox,
-  }
+  const views = [
+    ['tasks', Zap, t('panel.tasks'), activeRuns.length],
+    ['log', ScrollText, t('panel.log'), 0],
+    ['inbox', Inbox, t('automation.inbox.tab'), pendingInboxCount],
+  ] as const
 
   return (
-    <div
-      className="w-full h-full flex flex-col overflow-hidden"
-      style={{
-        backgroundColor: 'var(--color-panel)',
-        // 朝向缓冲带的一侧不再画 1px 边框（见 novel-editor.css [data-separator]）
-      }}
-    >
-      {/* 面板标题头 — 内置 Tab 切换（就近原则，无需移回左栏） */}
-      <div
-        className="no-select flex items-center justify-between flex-shrink-0 px-2"
-        style={{ height: 'var(--height-panel-header)', borderBottom: '1px solid var(--color-border)' }}
-      >
-        {/* 左侧：Tab 组 */}
-        <div className="flex items-center gap-1">
-          {(['tasks', 'log', 'inbox'] as const).map(id => {
-            const Icon = TAB_ICONS[id]
-            const active = effectiveTab === id
-            return (
-              <button
-                key={id}
-                type="button"
-                onClick={() => handleTabClick(id)}
-                className="flex items-center gap-1.5 px-2 py-1 rounded-md text-xs transition-colors cursor-pointer"
-                style={{
-                  color: active ? 'var(--color-text)' : 'var(--color-text-muted)',
-                  backgroundColor: active ? 'var(--color-hover)' : 'transparent',
-                }}
-              >
-                <Icon size={12} strokeWidth={active ? 2 : 1.5} />
-                {TAB_LABELS[id]}
-                {/* 任务 Tab 状态点 + 活跃数徽章 */}
-                {id === 'tasks' && activeRuns.length > 0 && (
-                  <span
-                    className="text-micro font-mono px-1 rounded"
-                    style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
-                  >
-                    {activeRuns.length}
-                  </span>
-                )}
-                {id === 'tasks' && activeRuns.length > 0 && hasRunning && (
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-accent)' }} />
-                )}
-                {id === 'tasks' && activeRuns.length > 0 && hasWaiting && !hasRunning && (
-                  <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-warning)' }} />
-                )}
-                {/* 收件箱未处理数徽章（D 档） */}
-                {id === 'inbox' && pendingInboxCount > 0 && (
-                  <span
-                    className="text-micro font-mono px-1 rounded"
-                    style={{ backgroundColor: 'rgba(var(--color-accent-rgb), 0.12)', color: 'var(--color-accent)' }}
-                  >
-                    {pendingInboxCount}
-                  </span>
-                )}
-              </button>
-            )
-          })}
+    <div className="flex h-full min-h-0 flex-col bg-[var(--color-panel)]">
+      <div className="nf-workbench-view-header">
+        <div className="nf-workbench-view-list" role="group" aria-label={t('panel.bottom')}>
+          {views.map(([id, Icon, label, count]) => (
+            <Button key={id} type="button" variant="ghost" className="nf-workbench-view"
+              active={effectiveTab === id} aria-pressed={effectiveTab === id} title={label} aria-label={label}
+              onClick={() => openBottomTab(id)}>
+              <Icon size={14} aria-hidden="true" />
+              <span className="truncate">{label}</span>
+              {count > 0 && <CountBadge value={count} tone={id === 'tasks' && hasWaiting && !hasRunning ? 'warning' : 'accent'} />}
+            </Button>
+          ))}
         </div>
-
-        {/* 右侧：关闭按钮 */}
-        <button onClick={toggleBottomPanel} title={t('tip.closePanel')} className="icon-btn" style={{ width: 18, height: 18 }}>
-          <X size={12} strokeWidth={1.5} />
-        </button>
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+          title={t('tip.closePanel')} aria-label={t('tip.closePanel')} onClick={() => {
+            toggleBottomPanel()
+            document.querySelector<HTMLButtonElement>('[data-workbench-toggle="runtime"]')?.focus()
+          }}>
+          <X size={15} aria-hidden="true" />
+        </Button>
       </div>
 
       {/* 内容区 */}
