@@ -60,7 +60,7 @@
 | 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 施工计划 |
 | 49 | [V3 U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md) | 任务召回、审批、修稿与取消回执 | 施工计划 |
 | 50 | [V3 U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md) | 首帧、设置预览和关闭、欢迎页入口 | 施工计划 |
-| 51 | [V3 U7 集成、性能与真机验收](51-v3-u7-integration-acceptance.md) | 大项目样本、性能采集与正式打包矩阵 | 预验收 |
+| 51 | [V3 U7 集成、性能与真机验收](51-v3-u7-integration-acceptance.md) | 大项目样本、性能采集与正式打包矩阵 | Windows 集成验收与交付记录 |
 | 52 | [F3 文件项目 Windows 验收与回退](52-f3-file-storage-acceptance.md) | 分支身份、打包应用重启与隔离归档恢复 | Windows 验收通过 |
 | 53 | [V3 后端交接与 U1 工作台基线](53-v3-backend-handoff.md) | C/D 交付、生产操作契约及普通 SQLite 打包基线 | 本地证据已核定 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
