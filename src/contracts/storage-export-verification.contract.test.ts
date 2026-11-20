@@ -12,6 +12,9 @@ import { parseChapter } from '../core/adapters/chapter-format'
 import { createFileEditorOpenPort } from '../core/adapters/file-editor-open'
 import { exportLegacyProject, listExportFiles } from '../core/migration/export-legacy-project'
 
+// These contracts compose several real CLI processes and SQLite exports per case.
+vi.setConfig({ testTimeout: 30_000 })
+
 const roots: string[] = []
 const projectId = 'e3-synthetic'
 const sha = (value: string | Buffer) => createHash('sha256').update(value).digest('hex')
@@ -57,8 +60,8 @@ async function fixture() {
 }
 
 function command(script: string, ...args: string[]) {
-  const result = spawnSync(process.execPath, [`scripts/${script}.mjs`, ...args], { encoding: 'utf8' })
-  expect(result.error).toBeUndefined()
+  const result = spawnSync(process.execPath, [`scripts/${script}.mjs`, ...args], { encoding: 'utf8', timeout: 15_000 })
+  expect(result.error, `${script} CLI process`).toBeUndefined()
   return result
 }
 
