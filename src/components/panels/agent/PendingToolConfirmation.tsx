@@ -1,28 +1,25 @@
-/**
- * PendingToolConfirmation — 父 agent 审批卡挂载点（线② · dsh 照搬，接管输入区）
- *
- * 从 active 会话的 messages 里收集 `waiting_confirm` 状态的 toolCall，渲染在
- * 输入区上方（与 SubAgentConfirmCard 同区域）。审批**不进聊天流**（spec §2.6「故意不双渲染」）。
- *
- * requiresConfirmation 工具在 agent-engine 里单独成批、串行确认（agent-engine.ts:348 注释），
- * 故同一时刻至多一个 waiting_confirm —— 直接取第一个即可。
- */
+import { useLayoutEffect, useRef } from 'react'
 import { useAgentStore } from '../../../stores/agent-store'
 import ConfirmCard from './ConfirmCard'
-import type { ToolCallInfo } from '../../../services/agent/agent-engine'
+import { useAgentPanelScope, useTaskNavigation } from './agent-panel-session'
 
+/** Show only the live approval for this conversation and project session. */
 export default function PendingToolConfirmation() {
-  // selector 返回 store 里的稳定对象引用（或 undefined），不会每帧新建数组触发重渲染
-  const pending = useAgentStore((s): ToolCallInfo | undefined => {
-    const conv = s.conversations.find(c => c.id === s.activeConversationId)
-    if (!conv) return undefined
-    for (const m of conv.messages) {
-      const tc = (m.toolCalls ?? []).find(t => t.status === 'waiting_confirm')
-      if (tc) return tc
-    }
-    return undefined
-  })
+  const scope = useAgentPanelScope()
+  const pending = useAgentStore(state => state.pendingToolApproval)
+  const conversation = useAgentStore(state => state.activeConversationId)
+  const target = useTaskNavigation(state => state.approval)
+  const region = useRef<HTMLDivElement>(null)
+  const current = pending?.conversationId === conversation && pending?.isCurrent() ? pending.toolCall : undefined
 
-  if (!pending) return null
-  return <ConfirmCard toolCall={pending} />
+  useLayoutEffect(() => {
+    if (target?.scope !== scope || target.id !== current?.id || !region.current) return
+    region.current.focus()
+    region.current.scrollIntoView?.({ block: 'nearest' })
+    useTaskNavigation.setState({ approval: null })
+  }, [scope, target, current?.id])
+
+  return current ? <div ref={region} tabIndex={-1} data-agent-approval={current.id}>
+    <ConfirmCard key={current.id} toolCall={current} />
+  </div> : null
 }

@@ -40,6 +40,8 @@ export interface WorkflowRun {
   currentStepIndex: number
   createdAt: string
   completedAt?: string
+  /** Cancellation state; a request is excluded from restart checkpoints. */
+  cancellation?: 'requested' | 'cancelled'
   /** L2：可重建参数快照（rehydrateParams；Task 5 save 消费；confirmContinue 跨重启重放读） */
   rehydrateParams?: WorkflowParams
 }

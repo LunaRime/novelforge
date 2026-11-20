@@ -16,13 +16,15 @@ import { Activity, ListChecks, Workflow } from 'lucide-react'
 import { DisclosureRow } from '../../ui/DisclosureRow'
 import { MetricChip, MetricRow } from '../../ui/MetricChip'
 import { StateDot, type StateDotState } from '../../ui/StateDot'
-import { useWorkflowStore, type WorkflowRun } from '../../../stores/workflow-store'
+import type { WorkflowRun } from '../../../stores/workflow-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useTranslation } from '../../../hooks/useTranslation'
 import type { TextKey } from '../../../shared/locale'
+import { useScopedWorkflowRuns, useTaskNavigation } from './agent-panel-session'
 
 /** WorkflowStatus → StateDot 五态 */
 function runDotState(run: WorkflowRun): StateDotState {
+  if (run.cancellation) return run.cancellation === 'requested' ? 'warning' : 'idle'
   switch (run.status) {
     case 'running': return 'ongoing'
     case 'waiting': case 'paused': return 'warning'
@@ -34,6 +36,7 @@ function runDotState(run: WorkflowRun): StateDotState {
 
 /** run 状态文字（i18n） */
 function runStatusLabel(run: WorkflowRun, t: (key: TextKey) => string): string {
+  if (run.cancellation) return t(run.cancellation === 'requested' ? 'status.cancelling' : 'status.cancelled')
   switch (run.status) {
     case 'running': return t('status.running')
     case 'waiting': return t('status.confirming')
@@ -46,7 +49,7 @@ function runStatusLabel(run: WorkflowRun, t: (key: TextKey) => string): string {
 
 export default function WorkflowProgressEntry() {
   const { t } = useTranslation()
-  const activeRuns = useWorkflowStore(s => s.activeRuns)
+  const { activeRuns, scope } = useScopedWorkflowRuns()
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
   const [expanded, setExpanded] = useState(false)
   const userToggled = useRef(false)
@@ -116,7 +119,10 @@ export default function WorkflowProgressEntry() {
                 <button
                   key={run.id}
                   type="button"
-                  onClick={() => openBottomTab('tasks')}
+                  onClick={() => {
+                    useTaskNavigation.setState({ workflow: { scope, id: run.id } })
+                    openBottomTab('tasks')
+                  }}
                   className="flex items-center gap-1.5 text-left rounded cursor-pointer hover:bg-[var(--color-hover)]"
                   style={{ padding: '2px 4px', height: 24, color: 'var(--color-text-secondary)' }}
                   title={t('panel.tasks')}

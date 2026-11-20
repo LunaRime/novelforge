@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react'
+import { memo, useState, useEffect, useLayoutEffect, useRef } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { useTranslation } from '../../hooks/useTranslation'
 import {
-  Clock,
+  Clock, ShieldAlert,
   Play, X, ChevronDown, ChevronRight, Zap, ScrollText, Inbox,
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
@@ -12,6 +12,8 @@ import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../sto
 import LogsView from './LogsView'
 import InboxPanel from './automation/InboxPanel'
 import { useAutomationStore } from '../../stores/automation-store'
+import { useAgentStore } from '../../stores/agent-store'
+import { useScopedWorkflowRuns, useTaskNavigation } from './agent/agent-panel-session'
 
 /** WorkspaceLayout 按当前工作状态挂载底栏，底栏读取该状态下选中的页签。 */
 export default function BottomPanel() {
@@ -26,7 +28,7 @@ export default function BottomPanel() {
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段
-  const activeRuns = useWorkflowStore(s => s.activeRuns)
+  const { activeRuns } = useScopedWorkflowRuns()
   // 收件箱未处理数（D 档徽章）：用长度而非数组本身订阅，避免每次 loadAll 都触发重渲染
   const pendingInboxCount = useAutomationStore(s => s.inbox.filter(i => i.status === 'pending').length)
 
@@ -132,15 +134,23 @@ export default function BottomPanel() {
 
 function TaskRunView() {
   const { t } = useTranslation()
-  const activeRuns = useWorkflowStore(s => s.activeRuns)
-  const history = useWorkflowStore(s => s.history)
+  const { activeRuns, history, scope } = useScopedWorkflowRuns()
+  const approval = useAgentStore(s => s.pendingToolApproval)
+  const liveApproval = approval?.isCurrent() ? approval : null
+  const target = useTaskNavigation(state => state.workflow)
+  const viewport = useRef<HTMLDivElement>(null)
   const waitingRuns = useWorkflowStore(s => s.waitingRuns)
-  const cancelWorkflow = useWorkflowStore(s => s.cancelWorkflow)
-  const confirmContinue = useWorkflowStore(s => s.confirmContinue)
 
-  console.log('[BottomPanel] TaskRunView render: activeRuns=', activeRuns.map(r => r.id.slice(0,8) + ':' + r.status + ':' + r.steps.map(s=>s.status).join('/')))
+  useLayoutEffect(() => {
+    if (target?.scope !== scope || !viewport.current) return
+    const row = [...viewport.current.querySelectorAll<HTMLButtonElement>('[data-workflow-run]')]
+      .find(button => button.dataset.workflowRun === target.id)
+    row?.focus()
+    row?.scrollIntoView?.({ block: 'nearest' })
+    useTaskNavigation.setState({ workflow: null })
+  }, [scope, target])
 
-  if (activeRuns.length === 0 && history.length === 0) {
+  if (activeRuns.length === 0 && history.length === 0 && !liveApproval) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--color-text-muted)' }}>
         <Zap size={36} style={{ opacity: 0.5 }} />
@@ -150,7 +160,19 @@ function TaskRunView() {
   }
 
   return (
-    <div className="h-full overflow-y-auto pb-4">
+    <div ref={viewport} className="h-full overflow-y-auto pb-4">
+      {liveApproval && <button type="button"
+        onClick={() => {
+          if (!liveApproval.isCurrent() || useAgentStore.getState().pendingToolApproval !== liveApproval) return
+          useTaskNavigation.setState({ approval: { scope, id: liveApproval.toolCall.id } })
+          useAgentStore.getState().selectConversation(liveApproval.conversationId)
+          useLayoutStore.getState().openRightPanel('agent')
+        }}
+        className="flex min-h-8 w-full items-center gap-2 px-3 text-left text-xs hover:bg-[var(--color-hover)]">
+        <ShieldAlert size={14} className="shrink-0 text-[var(--color-warning)]" />
+        <span>{t('agent.confirmAction')}</span>
+        <span className="truncate text-[var(--color-text-muted)]">{liveApproval.toolCall.toolName}</span>
+      </button>}
       {/* 活跃任务列表（支持多个并行） */}
       {activeRuns.length > 0 && (
         <div className="flex-shrink-0" style={{ borderBottom: history.length > 0 ? '1px solid var(--color-border)' : undefined }}>
@@ -162,8 +184,6 @@ function TaskRunView() {
                   run={run}
                   waitingForConfirm={runWaiting?.waitingForConfirm ?? false}
                   waitingAfterStepIndex={runWaiting?.waitingAfterStepIndex ?? -1}
-                  onConfirm={() => confirmContinue(run.id)}
-                  onCancel={() => cancelWorkflow(run.id)}
                 />
               </div>
             )
@@ -195,12 +215,15 @@ function TaskRunView() {
  * 2026-09-27 可供性修复：历史行此前「hover 变色但无点击处理器」——
  * 现行为主按钮（键盘可达），点击就地展开该次运行的步骤详情（复用 WorkflowStepItem）。
  */
-function HistoryRunItem({ run }: { run: WorkflowRun }) {
+const HistoryRunItem = memo(function HistoryRunItem({ run }: { run: WorkflowRun }) {
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
   return (
     <div>
       <button
         type="button"
+        data-workflow-run={run.id}
+        aria-expanded={expanded}
         onClick={() => setExpanded(v => !v)}
         className="w-full flex items-center gap-2 px-2 py-1.5 rounded text-left cursor-pointer transition-colors hover:bg-[var(--color-hover)]"
       >
@@ -215,6 +238,7 @@ function HistoryRunItem({ run }: { run: WorkflowRun }) {
         <span className="flex-1 text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
           {run.title}
         </span>
+        {run.cancellation === 'cancelled' && <span className="text-xs">{t('status.cancelled')}</span>}
         {/* 步骤计数 */}
         <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
           {run.steps.filter(s => s.status === 'completed').length}/{run.steps.length}
@@ -233,25 +257,22 @@ function HistoryRunItem({ run }: { run: WorkflowRun }) {
       )}
     </div>
   )
-}
+})
 
 // ===== 当前任务进度面板（接收 run 参数，支持多实例） =====
 
-function ActiveRunPanel({
+const ActiveRunPanel = memo(function ActiveRunPanel({
   run,
   waitingForConfirm,
   waitingAfterStepIndex,
-  onConfirm,
-  onCancel,
 }: {
   run: WorkflowRun
   waitingForConfirm: boolean
   waitingAfterStepIndex: number
-  onConfirm: () => void
-  onCancel: () => void
 }) {
   const { t } = useTranslation()
   const [expanded, setExpanded] = useState(true)
+  const header = useRef<HTMLButtonElement>(null)
 
   // 需要确认时自动展开
   useEffect(() => {
@@ -271,8 +292,6 @@ function ActiveRunPanel({
   const nextStepName = run.steps[waitingAfterStepIndex + 1]?.name
   const isActive = run.status === 'running' || run.status === 'waiting'
 
-  console.log('[BottomPanel] ActiveRunPanel render: run.status=', run.status, 'steps=', run.steps.map(s => s.status).join(','))
-
   return (
     <div>
       {/* ── 状态条（始终可见）：主按钮 = 折叠/展开（原生 button，键盘可达）；
@@ -280,6 +299,9 @@ function ActiveRunPanel({
       <div className="flex items-center gap-1 px-3 py-2 select-none">
         <button
           type="button"
+          ref={header}
+          data-workflow-run={run.id}
+          aria-expanded={expanded}
           onClick={() => setExpanded(v => !v)}
           className="flex items-center gap-2.5 flex-1 min-w-0 text-left cursor-pointer rounded hover:bg-[var(--color-hover)]"
         >
@@ -292,8 +314,9 @@ function ActiveRunPanel({
           <div className="flex-1 min-w-0">
             <div className="flex items-baseline gap-1.5 mb-1">
               <p className="text-xs font-medium truncate" style={{ color: 'var(--color-text)' }}>
-                {runningStep && isActive ? runningStep.name : run.title}
+                {run.cancellation === 'requested' ? run.title : runningStep && isActive ? runningStep.name : run.title}
               </p>
+              {run.cancellation === 'requested' && <span role="status" className="shrink-0 text-xs">{t('status.cancelling')}</span>}
               <span className="text-micro font-mono flex-shrink-0" style={{ color: 'var(--color-accent)' }}>
                 {progress}%
               </span>
@@ -314,14 +337,18 @@ function ActiveRunPanel({
           </div>
         </button>
         {/* 取消按钮（独立行为 → 兄弟节点；命中区 icon-btn = 22×22） */}
-        <button
+        {run.cancellation !== 'requested' && <button
           type="button"
-          onClick={onCancel}
-          className="icon-btn"
+          onClick={() => {
+            header.current?.focus()
+            useWorkflowStore.getState().cancelWorkflow(run.id)
+          }}
+          className="icon-btn size-[32px] shrink-0"
           title={t('tip.cancelTask')}
+          aria-label={t('tip.cancelTask')}
         >
           <X size={11} />
-        </button>
+        </button>}
       </div>
 
       {/* ── 步骤详情列表（展开时显示） ── */}
@@ -348,7 +375,7 @@ function ActiveRunPanel({
                 {t('panel.nextStep').replace('{name}', nextStepName)}
               </span>
               <button
-                onClick={onConfirm}
+              onClick={() => useWorkflowStore.getState().confirmContinue(run.id)}
                 className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
                 style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text)' }}
               >
@@ -373,7 +400,7 @@ function ActiveRunPanel({
             {t('panel.nextStep').replace('{name}', nextStepName)}
           </span>
           <button
-            onClick={(e) => { e.stopPropagation(); onConfirm() }}
+            onClick={() => useWorkflowStore.getState().confirmContinue(run.id)}
             className="flex items-center gap-1 px-2.5 py-1 rounded text-xs font-medium flex-shrink-0"
             style={{ backgroundColor: 'var(--color-accent)', color: 'var(--color-text)' }}
           >
@@ -383,7 +410,7 @@ function ActiveRunPanel({
       )}
     </div>
   )
-}
+})
 
 // ===== 工作流步骤项（扁平连接器风格） =====
 
@@ -507,6 +534,7 @@ function stepDotState(status: WorkflowStep['status']): StateDotState {
 
 /** WorkflowStatus → StateDot 五态（run 级） */
 function runDotState(run: WorkflowRun): StateDotState {
+  if (run.cancellation) return run.cancellation === 'requested' ? 'warning' : 'idle'
   switch (run.status) {
     case 'running': return 'ongoing'
     case 'waiting': case 'paused': return 'warning'

@@ -75,16 +75,40 @@ it('keeps the new project checkpoint when the former project finishes', async ()
   })
   runtime.project.session++
   const second = runtime.store.getState().startWorkflow(runtime.definition, true)
+  expect(runtime.store.getState().isRunCurrent('1')).toBe(false)
   try {
     await vi.waitFor(() => expect(runtime.checkpoint()?.activeRuns).toHaveLength(1))
     const current = runtime.checkpoint()
     expect(current?.activeRuns[0].id).not.toBe('1')
     finish()
     await first
+    expect(runtime.store.getState().isRunCurrent('1')).toBe(false)
     expect(runtime.checkpoint()).toEqual(current)
   } finally {
     finish?.()
     runtime.store.getState().cancelWorkflow()
     await Promise.all([first, second])
   }
+})
+
+it('reports cancellation as requested until the specific executor settles', async () => {
+  const runtime = fixture('A')
+  let finish!: () => void
+  const pending = runtime.store.getState().startWorkflow({
+    ...runtime.definition,
+    steps: [{ name: 'pending', description: '', executor: () => new Promise<void>(resolve => { finish = resolve }) }],
+  })
+  try {
+    runtime.store.getState().cancelWorkflow('1')
+    expect(runtime.store.getState().activeRuns[0]).toMatchObject({ id: '1', cancellation: 'requested' })
+    expect(runtime.store.getState().history).toEqual([])
+    expect(runtime.ports.output.delete).not.toHaveBeenCalled()
+  } finally {
+    finish()
+    await pending
+  }
+  expect(runtime.store.getState().activeRuns).toEqual([])
+  expect(runtime.store.getState().history[0]).toMatchObject({ id: '1', cancellation: 'cancelled', status: 'failed' })
+  expect(runtime.ports.output.delete).toHaveBeenCalledOnce()
+  expect(runtime.listener).not.toHaveBeenCalled()
 })
