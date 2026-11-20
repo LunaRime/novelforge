@@ -390,11 +390,11 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="@container h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <EditorPageHeader
-        className="h-auto min-h-10 flex-wrap py-1"
-        actionsClassName="min-w-0 max-w-full shrink flex-wrap"
+        className="h-auto min-h-10 py-1 @max-[58rem]:flex-col @max-[58rem]:items-start"
+        actionsClassName="min-w-0 max-w-full shrink flex-nowrap overflow-x-auto whitespace-nowrap px-1 py-1 @max-[58rem]:w-full [&>*]:shrink-0"
         icon={<BookOpen size={13} />}
         title={t('chapter.blueprintTitle')}
         meta={(
@@ -405,6 +405,11 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         )}
         actions={(
           <>
+          {dirty && (
+            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
+              <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
+            </Button>
+          )}
           {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
           {nextWriteBlueprint && (
             <Button
@@ -456,11 +461,6 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
           <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
             <Plus size={14} />
           </Button>
-          {dirty && (
-            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
-              <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
-            </Button>
-          )}
           </>
         )}
       />

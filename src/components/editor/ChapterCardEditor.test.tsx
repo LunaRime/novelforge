@@ -68,6 +68,8 @@ afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remov
 describe('blueprint load/save application view', () => {
   it('confirms only the dirty rows in a batch before writing', async () => {
     await mount(); await edit('First edited')
+    const saveAll = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'chapter.saveAll')
+    expect(saveAll?.parentElement?.firstElementChild?.textContent?.trim()).toBe('chapter.saveAll')
     h.confirm.mockResolvedValueOnce(false)
     h.invoke.mockClear()
     await click('chapter.saveAll')

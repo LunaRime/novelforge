@@ -49,6 +49,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     revisionPath: string
   } | null>(null)
   const [hasProcessFailure, setHasProcessFailure] = useState(false)
+  const [mergeError, setMergeError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -186,6 +187,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     const loaded = await application.revision(filePath, VELA.REVISION + rev.id)
     if (loaded.originalContent || loaded.modifiedContent) {
       actionOrigin.current = origin
+      setMergeError(null)
       setMergeData(loaded)
     }
   }, [meta, filePath, currentProject, application])
@@ -193,6 +195,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   /** 合并完成回调 */
   const handleMergeComplete = async (mergedText: string) => {
     if (!meta || !mergeData) return
+    setMergeError(null)
 
     try {
       const result = await application.merge(meta, filePath, mergeData.revisionPath, mergedText, mergeData.originalContent)
@@ -209,11 +212,11 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         }
       } else {
         renderLog('error', 'Save:Draft', String(result.error))
-        toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
+        setMergeError(t('error.mergeFailed').replace('{error}', String(result.error)))
       }
     } catch (e) {
       renderLog('error', 'Save:Draft', String(e))
-      toast.error(t('error.mergeError').replace('{error}', String(e)))
+      setMergeError(t('error.mergeError').replace('{error}', String(e)))
     }
   }
 
@@ -362,15 +365,16 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       {/* 弹出式三栏合并视图 */}
       <Dialog open={mergeData !== null} onOpenChange={(v) => !v && setMergeData(null)}>
         <DialogContent preventOutsideClose onCloseAutoFocus={restoreActionFocus}
-          className="p-0"
+          className="flex flex-col gap-0 p-0"
           style={{ width: '90vw', maxWidth: '90vw', height: '85vh', maxHeight: '85vh', overflow: 'hidden' }}
         >
-          <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
+          <DialogHeader className="min-h-[38px] shrink-0 justify-center py-1 pl-4 pr-10">
             <DialogTitle className="flex items-center gap-2 text-xs">
               {t('editor.mergeTitle').replace('{n}', String(meta?.chapterNumber)).replace('{title}', meta?.chapterTitle ?? '')}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>
+          {mergeError && <p role="alert" className="shrink-0 break-words px-4 py-2 text-xs text-[var(--color-error)]">{mergeError}</p>}
+          <div className="min-h-0 flex-1 overflow-hidden">
             {mergeData && (
               <ThreeWayMerge
                 originalContent={mergeData.originalContent}
