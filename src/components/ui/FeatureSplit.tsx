@@ -18,6 +18,7 @@ export function FeatureSplit({ detailOpen, onBack, list, children }: {
   const previous = useRef(view)
 
   useLayoutEffect(() => {
+    // 窄栏的列表与详情交替可见。返回时恢复列表滚动与键盘位置。
     const prior = previous.current
     previous.current = view
     if (view === 'detail' && prior === 'list') {
@@ -40,7 +41,7 @@ export function FeatureSplit({ detailOpen, onBack, list, children }: {
         )}
         <div className="nf-feature-detail">
           {list != null && (
-            <Button className="nf-feature-back self-start my-1 mx-2" variant="ghost" type="button" ref={back} onClick={onBack}>
+            <Button className="nf-feature-back" variant="ghost" type="button" ref={back} onClick={onBack}>
               <ChevronLeft size={14} aria-hidden="true" /> {t('feature.backToList')}
             </Button>
           )}

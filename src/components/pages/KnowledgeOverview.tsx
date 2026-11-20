@@ -197,16 +197,14 @@ function KnowledgeOverviewContent({ source, section, onSectionChange }: Knowledg
   const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
 
   return (
-    <div className="h-full min-h-0 flex flex-col" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
-      <div className="w-full min-w-0 px-4 py-3">
-
-        {/* ===== 标题 ===== */}
-        <div className="flex flex-wrap items-center gap-2">
+    <div className="flex h-full min-h-0 flex-col bg-[var(--color-panel)]">
+      {/* 管理操作与检索切换留在页首，正文区域独立滚动。 */}
+      <header className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)] px-4 pt-4 pb-3">
+        <div className="flex flex-wrap items-center gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
-            style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))' }}
+            className="grid size-10 shrink-0 place-items-center rounded-xl bg-[var(--color-panel)] text-[var(--color-accent)]"
           >
-            <Database size={20} className="text-white" />
+            <Database size={18} aria-hidden="true" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-lg font-bold text-[var(--color-text)]">{t('nav.knowledgeBase')}</h2>
@@ -247,15 +245,13 @@ function KnowledgeOverviewContent({ source, section, onSectionChange }: Knowledg
           )}
         </div>
 
-      </div>
-      <div className="shrink-0 border-b border-[var(--color-border)] px-3 pb-2">
-        <SegmentedControl<KnowledgeSection> value={section} onChange={onSectionChange} className="w-fit max-w-full"
+        <SegmentedControl<KnowledgeSection> value={section} onChange={onSectionChange} className="mt-3 w-fit max-w-full"
           items={[
             { value: 'overview', label: t('knowledge.overview') },
             { value: 'search', label: t('knowledge.semanticSearch') },
           ]} />
-      </div>
-        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+      </header>
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
         <section hidden={section !== 'overview'}>
         {/* 加载失败横幅：统计卡片全 0 不等于「没有数据」，必须区分 */}
         {loadFailed && (

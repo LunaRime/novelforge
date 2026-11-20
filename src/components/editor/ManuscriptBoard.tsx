@@ -164,7 +164,7 @@ export default function ManuscriptBoard() {
           )}
         />
 
-        <div className="flex-1 min-h-0 overflow-y-auto p-4" data-board-view={view}>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-[var(--color-panel)] p-4" data-board-view={view}>
           {groups.map((group) => (
             <section key={group.key} className="mb-5">
               <div className="mb-2 flex items-center gap-2">
@@ -348,7 +348,7 @@ function ChapterCard({ row, selected, onSelect, onOpen }: {
       type="button"
       onClick={onSelect}
       onDoubleClick={onOpen}
-      className={`text-left rounded-md p-3 transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-bg)] hover:bg-[var(--color-hover)]'}`}
+      className={`rounded-lg p-3 text-left shadow-[var(--shadow-sm)] transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-editor-bg)] hover:bg-[var(--color-hover)]'}`}
       style={{
         border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
         color: 'var(--color-text)',

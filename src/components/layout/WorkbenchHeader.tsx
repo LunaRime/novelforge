@@ -50,7 +50,7 @@ export default function WorkbenchHeader() {
         {/* 面板开关和外观操作各自成组，窗口越窄越优先保留图标和可访问名称。 */}
         <div className="nf-workbench-actions">
           {!focusMode && <>
-            <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8"
+            <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8" data-workbench-toggle="sidebar"
               aria-expanded={sidebarOpen} aria-label={t('command.toggleSidebar')} title={t('command.toggleSidebar')} onClick={layout.toggleSidebar}>
               <PanelLeft size={16} aria-hidden="true" />
             </Button>

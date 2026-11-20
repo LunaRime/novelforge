@@ -9,7 +9,7 @@
 .nf-feature-split-layout {
   display: grid;
   flex: 1;
-  grid-template-columns: clamp(12rem, 26%, 16rem) minmax(0, 1fr);
+  grid-template-columns: clamp(13rem, 30%, 18rem) minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
 }
@@ -17,12 +17,12 @@
 .nf-feature-split-layout[data-feature-view='full'] { grid-template-columns: minmax(0, 1fr); }
 
 .nf-feature-list {
-  background: var(--color-sidebar);
+  background: var(--color-panel);
   border-inline-end: 1px solid var(--color-border);
   overflow: auto;
   min-width: 0;
   min-height: 0;
-  padding: var(--v3-list-gap, 0.25rem);
+  padding: 0.625rem;
 }
 
 .nf-feature-detail {
@@ -31,9 +31,21 @@
   min-width: 0;
   min-height: 0;
   overflow: hidden;
+  background: var(--color-editor-bg);
 }
 
-.nf-feature-split .nf-feature-back { display: none; }
+.nf-feature-split .nf-feature-back {
+  display: none;
+  align-self: flex-start;
+  margin: 0.5rem 0.75rem;
+  min-height: 32px;
+  color: var(--color-accent);
+}
+
+/* 当前详情在列表内保留折页标记，窄栏返回时能定位到同一条记录。 */
+.nf-feature-list button[aria-current='page'] {
+  box-shadow: inset 2px 0 var(--color-accent);
+}
 
 @container feature-split (max-width: 44rem) {
   .nf-feature-split-layout { grid-template-columns: minmax(0, 1fr); }

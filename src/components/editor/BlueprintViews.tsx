@@ -62,7 +62,7 @@ export function BlueprintList({ blueprints, volumes, selectedIdx, loadFailed, on
                 active ? 'bg-[var(--color-active)] text-[var(--color-text)]' : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)]',
               )}>
               <span className="flex min-w-0 items-center gap-1.5">
-                <span className="shrink-0 font-mono text-micro opacity-40">{blueprint.chapterNumber}</span>
+                <span className="shrink-0 rounded bg-[var(--color-editor-bg)] px-1.5 py-0.5 text-micro tabular-nums text-[var(--color-text-muted)]">{blueprint.chapterNumber}</span>
                 <span className="truncate font-medium">{title}</span>
               </span>
               <span className="mt-0.5 flex flex-wrap items-center gap-1">
@@ -102,9 +102,9 @@ export function BlueprintDetail({ selected, canWrite, saving, deleting, updateFi
     <div className="flex-1 overflow-y-auto">
       {selected ? (
         <fieldset className="min-w-0 max-w-2xl mx-auto px-5 py-4" disabled={deleting}>
-          {/* 编辑区头部 */}
-          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-            <h3 className="text-sm font-bold" style={{ color: 'var(--color-text)' }}>
+          {/* 详情页将章节标题与写入操作放在同一页首，窄栏可以自然换行。 */}
+          <div className="mb-5 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--color-border)] pb-3">
+            <h3 className="min-w-0 break-words font-[var(--font-writing)] text-xl font-semibold text-[var(--color-text)]">
               {t('import.chapterLabel').replace('{n}', String(selected.chapterNumber)).replace('{title}', selected.title || t('chapter.unnamed'))}
             </h3>
             <div className="flex items-center gap-1.5">

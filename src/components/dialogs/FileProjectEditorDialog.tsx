@@ -90,7 +90,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   }
 
   function display(path: string, result: Opened, preferred: string, requested: string[]) {
-    // A preview belongs to the previous document and revision, even if the locator stayed the same.
+    // 预览绑定到旧文档版本，重新打开相同定位符时也要清除。
     setPreview(undefined)
     setRecovery(undefined)
     setIndexPending(previous => workspace?.path === path && previous)
@@ -480,13 +480,13 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   return (
     <Dialog open={open} onOpenChange={changeOpen}>
       {showTrigger && <DialogTrigger asChild><Button variant="outline" className="w-full">{t('project.fileEditor')}</Button></DialogTrigger>}
-      <DialogContent preventOutsideClose className="flex max-h-[85vh] max-w-3xl flex-col">
-        <DialogHeader>
-          <DialogTitle>{t('project.fileEditor')}</DialogTitle>
+      <DialogContent preventOutsideClose className="flex max-h-[90vh] max-w-5xl flex-col overflow-hidden">
+        <DialogHeader className="shrink-0 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)]">
+          <DialogTitle className="text-base">{t('project.fileEditor')}</DialogTitle>
           <DialogDescription>{t('project.fileEditorDescription')}</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-0 flex-col gap-3 overflow-auto p-4" aria-busy={busy}>
-          <Button variant="outline" disabled={busy || dirty} onClick={() => void load()}>{t('project.fileEditorChoose')}</Button>
+        <div className="flex min-h-0 flex-col gap-3 overflow-auto bg-[var(--color-panel)] p-4" aria-busy={busy}>
+          <Button variant="outline" className="w-fit" disabled={busy || dirty} onClick={() => void load()}>{t('project.fileEditorChoose')}</Button>
           {workspace && recovery && (
             <div className="flex flex-col gap-2">
               <p role="status">{t(recovery.committed ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed')}</p>
@@ -625,7 +625,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)
                     }}
-                    className="resize-y rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
+                    className="resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-4 font-[family-name:var(--font-writing)] text-base leading-relaxed shadow-[var(--shadow-sm)]" />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t(savingBody ? 'status.saving' : 'action.save')}</Button>
                     {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setText(active.content)}>

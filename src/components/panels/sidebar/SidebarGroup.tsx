@@ -33,6 +33,8 @@ interface SidebarGroupProps {
   titleHint?: string
   /** 标题行右键菜单 */
   onContextMenu?: (e: React.MouseEvent) => void
+  /** 导航指向当前编辑页时，为主按钮标出当前位置。 */
+  current?: boolean
   /** 默认展开（折叠状态由组件内部管理） */
   defaultOpen?: boolean
   navigationKey?: string
@@ -49,6 +51,7 @@ export default function SidebarGroup({
   onTitleClick,
   titleHint,
   onContextMenu,
+  current,
   defaultOpen = true,
   navigationKey,
   collapsible = true,
@@ -85,6 +88,8 @@ export default function SidebarGroup({
         count={count}
         titleHint={titleHint}
         onContextMenu={onContextMenu}
+        active={current}
+        current={current ? 'page' : undefined}
         onPrimary={onTitleClick ?? (collapsible ? toggle : undefined)}
         swap={onTitleClick || collapsible ? (onTitleClick ? 'nav' : 'expand') : undefined}
         expanded={open}
