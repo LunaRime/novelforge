@@ -182,7 +182,9 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
       {/* 项目切换时重置标签菜单和确认弹窗。文档视图沿用原有挂载边界。 */}
       <EditorTabBar key={projectSession} onActivateTab={onActivateTab} />
 
-      <EditorDocumentView activeTab={activeTab} projectPath={currentProject?.path} />
+      <div id="active-editor-document" role="tabpanel" aria-label={activeTab?.name} className="flex min-h-0 flex-1 overflow-hidden">
+        <EditorDocumentView activeTab={activeTab} projectPath={currentProject?.path} />
+      </div>
     </div>
   )
 }

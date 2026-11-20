@@ -1,4 +1,4 @@
-import { ArrowLeftRight, BookOpen, Brain, ChevronLeft, ChevronRight, ClipboardCheck, FileText, Globe, History, LayoutGrid, MoreHorizontal, Satellite, Settings, Users, X } from 'lucide-react'
+import { ArrowLeftRight, BookOpen, Brain, ChevronLeft, ChevronRight, ClipboardCheck, FileText, Globe, History, LayoutGrid, List, Satellite, Settings, Users, X } from 'lucide-react'
 import { memo, useCallback, useEffect, useRef, useState } from 'react'
 import { useStoreWithEqualityFn } from 'zustand/traditional'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -7,6 +7,7 @@ import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
 import { formatBinding, matchesBinding, shortcutBinding } from '../../stores/shortcut-store'
 import { Button } from '../ui/Button'
+import './document-toolbar.css'
 import { ContextMenu, type ContextMenuEntry } from '../ui/ContextMenu'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/Dialog'
 
@@ -85,7 +86,8 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
   // Tab 条自动滚动到当前活跃 Tab
   useEffect(() => {
     if (activeTabRef.current && tabBarRef.current) {
-      activeTabRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' })
+      const reducedMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+      activeTabRef.current.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: reducedMotion ? 'instant' : 'smooth' })
     }
   }, [activeTabId])
 
@@ -255,130 +257,63 @@ const EditorTabBar = memo(function EditorTabBar({ onActivateTab }: { onActivateT
 
   return (
     <>
-      {/* Tab 条：左右箭头 + 可横向滚动区域 + 三个点菜单 */}
-      <div
-        className="no-select flex items-center flex-shrink-0"
-        style={{
-          height: 'var(--height-tab)',
-          backgroundColor: 'var(--color-tab-bg)',
-          borderBottom: '1px solid var(--color-border)',
-        }}
-      >
-        {/* Tab 列表可滚动区域 */}
-        <div
-          ref={tabBarRef}
-          className="flex items-center flex-1 h-full overflow-x-auto"
-          style={{ scrollbarWidth: 'none' }}
-        >
-          {tabs.map((tab) => (
-            <div
-              key={tab.id}
-              ref={tab.id === activeTabId ? activeTabRef : undefined}
-              role="tab"
-              aria-selected={activeTabId === tab.id}
-              tabIndex={activeTabId === tab.id ? 0 : -1}
-              className="flex items-center gap-1.5 px-3 h-full text-sm cursor-pointer group flex-shrink-0 relative transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:outline-[var(--color-focus-ring)]"
-              style={{
-                backgroundColor: activeTabId === tab.id
-                  ? 'var(--color-tab-active)'
-                  : 'transparent',
-                /* JetBrains 激活 Tab：顶部 2px 葵紫色指示线 */
-                boxShadow: activeTabId === tab.id
-                  ? 'inset 0 2px 0 var(--color-tab-indicator)'
-                  : 'none',
-                /* 无竖分割线 */
-                borderRight: 'none',
-                color: activeTabId === tab.id
-                  ? 'var(--color-text)'
-                  : 'var(--color-text-secondary)',
-              }}
-              onClick={() => onActivateTab(tab.id)}
-              onKeyDown={e => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onActivateTab(tab.id)
-                }
-              }}
-              onContextMenu={e => {
-                e.preventDefault()
-                onActivateTab(tab.id)
-                setTabMenu({ tabId: tab.id, position: { x: e.clientX, y: e.clientY } })
-              }}
-              onMouseEnter={e => {
-                if (tab.id !== activeTabId) {
-                  e.currentTarget.style.backgroundColor = 'var(--color-hover)'
-                  e.currentTarget.style.color = 'var(--color-text)'
-                }
-              }}
-              onMouseLeave={e => {
-                if (tab.id !== activeTabId) {
-                  e.currentTarget.style.backgroundColor = 'transparent'
-                  e.currentTarget.style.color = 'var(--color-text-secondary)'
-                }
-              }}
-            >
-              <TabIcon type={tab.type} />
-              <span className="max-w-[120px] truncate">{tab.name}</span>
-
-              {/* 未保存标签默认显示圆点，鼠标悬停时显示关闭图标。 */}
-              {tab.dirty ? (
-                <button
-                  type="button"
-                  className="relative w-3.5 h-3.5 flex items-center justify-center ml-0.5 flex-shrink-0 rounded group/close hover:bg-[var(--color-hover)] cursor-pointer transition-colors"
-                  onClick={e => { e.stopPropagation(); tryCloseTab(tab.id) }}
-                  title={t('tip.closeWithoutSaving')}
-                  aria-label={t('tip.closeWithoutSaving')}
-                >
-                  {/* 默认显示实心圆点，颜色与标题栏警示灯一致 */}
-                  <span
-                    className="w-1.5 h-1.5 rounded-full group-hover/close:hidden"
-                    style={{ backgroundColor: 'var(--color-warning)' }}
-                  />
-                  {/* hover 时显示 X */}
-                  <X size={10} className="hidden group-hover/close:block" style={{ color: 'var(--color-text-muted)' }} />
+      <div className="nf-editor-tabs">
+        <div ref={tabBarRef} className="nf-editor-tab-list" role="tablist" aria-label={t('tip.openEditors')}
+          onKeyDown={event => {
+            // 方向键只接管标签本身，关闭按钮和其他控件继续使用原生键盘行为。
+            const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
+            if (!(event.target instanceof HTMLElement) || event.target.getAttribute('role') !== 'tab' || !keys.includes(event.key)) return
+            event.preventDefault()
+            const index = tabs.findIndex(tab => tab.id === activeTabId)
+            const next = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1
+              : (index + (event.key === 'ArrowRight' ? 1 : tabs.length - 1)) % tabs.length
+            const target = tabs[next]
+            if (!target) return
+            onActivateTab(target.id)
+            event.currentTarget.querySelectorAll<HTMLButtonElement>('[role="tab"]')[next]?.focus()
+          }}>
+          {tabs.map(tab => {
+            const active = tab.id === activeTabId
+            const closeLabel = tab.dirty ? t('tip.closeWithoutSaving') : t('action.close')
+            return (
+              <div key={tab.id} ref={active ? activeTabRef : undefined} className="nf-editor-tab" data-active={active} role="presentation">
+                <button type="button" role="tab" aria-selected={active} aria-controls="active-editor-document"
+                  tabIndex={active ? 0 : -1} className="nf-editor-tab-select" title={tab.name}
+                  onClick={() => onActivateTab(tab.id)}
+                  onContextMenu={event => {
+                    event.preventDefault()
+                    onActivateTab(tab.id)
+                    setTabMenu({ tabId: tab.id, position: { x: event.clientX, y: event.clientY } })
+                  }}>
+                  <TabIcon type={tab.type} />
+                  <span className="truncate">{tab.name}</span>
                 </button>
-              ) : (
-                <button
-                  className="opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ml-0.5 p-0.5 rounded transition-opacity"
-                  style={{ color: 'var(--color-text-muted)' }}
-                  onClick={e => { e.stopPropagation(); tryCloseTab(tab.id) }}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                >
-                  <X size={11} />
-                </button>
-              )}
-            </div>
-          ))}
+                <Button type="button" variant="ghost" size="icon" className="nf-editor-tab-close size-8 shrink-0"
+                  data-dirty={Boolean(tab.dirty)} title={closeLabel} aria-label={`${closeLabel} ${tab.name}`}
+                  onClick={() => tryCloseTab(tab.id)}>
+                  {tab.dirty && <span className="nf-document-dirty w-1.5" aria-hidden="true" />}
+                  <X size={11} aria-hidden="true" />
+                </Button>
+              </div>
+            )
+          })}
         </div>
-
-        {/* 右侧操作区：左箭头 + 右箭头 + 三个点菜单（始终显示，类似 VSCode） */}
-        <div
-          className="flex items-center flex-shrink-0 h-full"
-          style={{ borderLeft: '1px solid var(--color-border)' }}
-        >
-          <button
-            className="icon-btn flex-shrink-0"
-            onClick={() => switchTab('left')}
-            title={t('tip.prevEditor')}
-          >
-            <ChevronLeft size={14} />
-          </button>
-          <button
-            className="icon-btn flex-shrink-0"
-            onClick={() => switchTab('right')}
-            title={t('tip.nextEditor')}
-          >
-            <ChevronRight size={14} />
-          </button>
-          <button
-            ref={moreButtonRef}
-            className="icon-btn flex-shrink-0"
-            title={t('tip.openEditors')}
-            onClick={() => setMoreMenuOpen(prev => !prev)}
-          >
-            <MoreHorizontal size={14} />
-          </button>
+        <div className="flex shrink-0 items-center gap-0.5">
+          {tabs.length > 1 && <>
+            <Button type="button" variant="ghost" size="icon" className="size-8"
+              title={t('tip.prevEditor')} aria-label={t('tip.prevEditor')} onClick={() => switchTab('left')}>
+              <ChevronLeft size={14} aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="size-8"
+              title={t('tip.nextEditor')} aria-label={t('tip.nextEditor')} onClick={() => switchTab('right')}>
+              <ChevronRight size={14} aria-hidden="true" />
+            </Button>
+          </>}
+          <Button ref={moreButtonRef} type="button" variant="ghost" size="icon" className="size-8"
+            title={t('tip.openEditors')} aria-label={t('tip.openEditors')} aria-expanded={moreMenuOpen}
+            onClick={() => setMoreMenuOpen(open => !open)}>
+            <List size={15} aria-hidden="true" />
+          </Button>
         </div>
       </div>
 

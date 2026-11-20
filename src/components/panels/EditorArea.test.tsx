@@ -225,6 +225,18 @@ describe('EditorArea — 标签关闭', () => {
     view = mountEditorArea()
   })
 
+  it('方向键在文档标签之间移动焦点并激活目标', () => {
+    const second = { ...draft, id: 'doc:8', name: '另一章', dirty: false }
+    act(() => useEditorStore.getState().openFile(second))
+    const tabs = view.container.querySelectorAll<HTMLButtonElement>('[role="tab"]')
+    expect(tabs).toHaveLength(2)
+    tabs[1].focus()
+    act(() => tabs[1].dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', bubbles: true })))
+    expect(useEditorStore.getState().activeTabId).toBe(draft.id)
+    expect(tabs[0].getAttribute('aria-selected')).toBe('true')
+    expect(document.activeElement).toBe(tabs[0])
+  })
+
   afterEach(() => {
     act(() => { view.root.unmount() })
     view.container.remove()
