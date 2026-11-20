@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>NovelForge V3 启动画面</title>
+  <link rel="stylesheet" href="./tokens.css">
+  <script src="./startup-preview.js" defer></script>
+  <style>
+    @font-face {
+      font-family: "NF Inter";
+      src: url("./fonts/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+      font-weight: 100 900;
+      font-display: swap;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--nf-color-panel);
+      color: var(--nf-color-ink);
+      font: var(--nf-font-size-base)/var(--nf-line-height-ui) var(--nf-font-ui);
+    }
+
+    .preview {
+      width: min(100% - 2rem, 72rem);
+      margin: clamp(1rem, 4vw, 3rem) auto;
+    }
+
+    .preview-toolbar, .preview-options {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: var(--nf-space-3);
+    }
+    .preview-toolbar {
+      justify-content: space-between;
+      margin-bottom: var(--nf-space-4);
+    }
+    .preview-toolbar h1 { margin: 0; font-size: var(--nf-font-size-xl); font-weight: 600; }
+    .preview-options { color: var(--nf-color-text); }
+    .preview-options label { display: flex; align-items: center; gap: var(--nf-space-2); }
+    select, .startup-retry {
+      min-height: var(--nf-size-target);
+      border: 1px solid var(--nf-color-line-strong);
+      border-radius: var(--nf-radius-md);
+      padding-inline: var(--nf-space-3);
+      background: var(--nf-color-surface);
+      color: var(--nf-color-ink);
+      font: inherit;
+    }
+    :focus-visible {
+      outline: var(--nf-focus-width) solid var(--nf-color-brand);
+      outline-offset: 3px;
+    }
+
+    .program-window {
+      display: grid;
+      place-items: center;
+      min-height: clamp(24rem, 72dvh, 46rem);
+      padding: clamp(1.25rem, 5vw, 3rem);
+      border: 1px solid var(--nf-color-line);
+      border-radius: var(--nf-radius-lg);
+      background: var(--nf-color-shell);
+      color: var(--nf-color-ink);
+    }
+    .startup-paper {
+      display: grid;
+      justify-items: center;
+      width: min(100%, 25rem);
+      padding: clamp(1.5rem, 5vw, 2.75rem) clamp(1rem, 4vw, 2.25rem);
+      border: 1px solid var(--nf-color-paper-line);
+      border-radius: var(--nf-radius-lg);
+      background: var(--nf-color-paper);
+      box-shadow: 0 5px 0 -1px var(--nf-color-paper), 0 6px 0 -1px var(--nf-color-paper-line), var(--nf-shadow-float);
+      text-align: center;
+    }
+    .startup-mark {
+      display: grid;
+      place-items: center;
+      width: 5rem;
+      aspect-ratio: 1;
+    }
+    .startup-mark img, .startup-mark span { grid-area: 1 / 1; }
+    .startup-mark img { width: 100%; height: auto; }
+    .startup-mark span {
+      display: grid;
+      place-items: center;
+      width: 94%;
+      height: 94%;
+      border-radius: 22%;
+      background: var(--nf-color-brand);
+      color: var(--nf-color-on-brand);
+      font-size: 2.6rem;
+      font-weight: 700;
+    }
+    .startup-name {
+      margin: var(--nf-space-4) 0 0;
+      color: var(--nf-color-paper-ink);
+      font-size: clamp(1.65rem, 4vw, 2.125rem);
+      font-weight: 650;
+      letter-spacing: -.035em;
+      line-height: 1.15;
+    }
+    .startup-message { margin-top: var(--nf-space-4); }
+    .startup-message p { margin: 0; }
+    .startup-state { color: var(--nf-color-paper-text); font-weight: 550; }
+    .startup-message .startup-detail {
+      margin-top: var(--nf-space-1);
+      color: var(--nf-color-paper-muted);
+      font-size: var(--nf-font-size-sm);
+    }
+    .startup-progress {
+      width: min(100%, 9rem);
+      height: 3px;
+      margin-top: var(--nf-space-5);
+      overflow: hidden;
+      border-radius: var(--nf-radius-pill);
+      background: var(--nf-color-paper-mark);
+    }
+    .startup-progress::after {
+      /* 游移线只表达仍在启动，长度与位置不代表完成比例。 */
+      content: "";
+      display: block;
+      width: 34%;
+      height: 100%;
+      border-radius: inherit;
+      background: var(--nf-color-brand);
+      animation: startup-travel 1.8s ease-in-out infinite alternate;
+    }
+    @keyframes startup-travel {
+      from { transform: translateX(0); }
+      to { transform: translateX(194%); }
+    }
+    .startup-retry { margin-top: var(--nf-space-4); cursor: pointer; }
+    .startup-retry:hover { background: var(--nf-color-surface-hover); }
+    .startup-paper[data-state="failed"] .startup-state { color: var(--nf-color-danger); }
+    .program-window [hidden] { display: none; }
+    @media (prefers-reduced-motion: reduce) {
+      .startup-progress::after { transform: translateX(97%); animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <main class="preview">
+    <header class="preview-toolbar">
+      <h1>启动画面</h1>
+      <div class="preview-options">
+        <label>状态
+          <select id="preview-state">
+            <option value="loading">启动中</option>
+            <option value="slow">等待较久</option>
+            <option value="failed">启动失败</option>
+          </select>
+        </label>
+        <label>外观
+          <select id="preview-theme">
+            <option value="light">暖白</option>
+            <option value="dark">深色</option>
+          </select>
+        </label>
+        <label>语言
+          <select id="preview-language">
+            <option value="zh-CN">中文</option>
+            <option value="en-US">English</option>
+            <option value="ru-RU">Русский</option>
+          </select>
+        </label>
+      </div>
+    </header>
+    <section class="program-window" data-mode="light" aria-label="应用画面预览">
+      <div class="startup-paper" data-state="loading">
+        <div class="startup-mark" aria-hidden="true">
+          <span>N</span>
+          <img src="./logos/novelforge-icon.svg" alt="" width="80" height="80" hidden>
+        </div>
+        <h2 class="startup-name">NovelForge</h2>
+        <div class="startup-message" role="status" aria-atomic="true">
+          <p class="startup-state">正在打开工作台…</p>
+          <p class="startup-detail" hidden></p>
+        </div>
+        <div class="startup-progress" aria-hidden="true"></div>
+        <button class="startup-retry" type="button" hidden>重新尝试</button>
+      </div>
+    </section>
+  </main>
+</body>
+</html>

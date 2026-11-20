@@ -143,11 +143,6 @@ export async function onProjectOpened(): Promise<void> {
  * 由 project-store.closeProject 调用
  */
 export function onProjectClosed(): void {
-  // 清空编辑器 Tab
-  import('../stores/editor-store').then(m => {
-    m.useEditorStore.getState().clearTabs()
-  }).catch(() => { })
-
   // 重置 Layer 2 Store
   useCharacterStore.getState().reset()
   useDraftStore.getState().reset()

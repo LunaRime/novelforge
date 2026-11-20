@@ -23,6 +23,7 @@ function ShortcutRow({ id }: { id: string }) {
 
   const def = SHORTCUT_DEFINITIONS.find(item => item.id === id)!
   const current = shortcutBinding(id, bindings)
+  const bindingLabel = formatBinding(current) || t('shortcut.unassigned')
   const custom = bindings[id] !== undefined
 
   useEffect(() => {
@@ -83,9 +84,9 @@ function ShortcutRow({ id }: { id: string }) {
           backgroundColor: recording ? 'color-mix(in srgb, var(--color-accent) 10%, transparent)' : 'var(--color-panel)',
           color: recording ? 'var(--color-accent)' : 'var(--color-text-secondary)',
         }}
-        aria-label={`${t(def.labelKey)}: ${formatBinding(current)}`}
+        aria-label={`${t(def.labelKey)}: ${bindingLabel}`}
       >
-        {recording ? t('shortcut.recording') : formatBinding(current)}
+        {recording ? t('shortcut.recording') : bindingLabel}
       </button>
 
       <Button

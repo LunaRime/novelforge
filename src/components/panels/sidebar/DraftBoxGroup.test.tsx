@@ -9,6 +9,7 @@ import { useEditorStore } from '../../../stores/editor-store'
 import { useProjectStore } from '../../../stores/project-store'
 import DraftBoxGroup from './DraftBoxGroup'
 import { registerMenuSetter, unregisterMenuSetter, type SidebarMenuState } from './SidebarShared'
+import { createNavigationSession, NavigationSessionContext } from './navigation-session'
 
 const h = vi.hoisted(() => ({
   invoke: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(), log: vi.fn(), refresh: vi.fn(),
@@ -89,6 +90,7 @@ it('opens the selected same-version draft and keeps its identity through the exi
   await act(async () => rows()[1].click())
   expect(h.invoke).toHaveBeenCalledWith('db:draft-get-full', 8)
   expect(useEditorStore.getState().tabs).toMatchObject([{ id: 'doc:8', docId: 8, content: 'body-8' }])
+  expect(rows().map(row => row.getAttribute('aria-current'))).toEqual([null, 'page'])
   await act(async () => {
     await mergeRendererRevision({ chapterNumber: 4, draftPath: 'vela://draft/8', revisionPath: 'vela://revision/12', expectedContent: 'body-8', content: 'merged' })
   })
@@ -96,6 +98,23 @@ it('opens the selected same-version draft and keeps its identity through the exi
   expect(useEditorStore.getState().tabs[0]).toMatchObject({ id: 'doc:8', content: 'merged' })
   await act(async () => { await actionAt(0, 'open') })
   expect(useEditorStore.getState().tabs.map(tab => tab.id)).toEqual(['doc:8', 'doc:7'])
+  expect(rows().map(row => row.getAttribute('aria-current'))).toEqual(['page', null])
+})
+
+it('restores expanded chapters when the same layout session recalls navigation', async () => {
+  await mount()
+  const session = createNavigationSession('a:1')
+  const navigation = (value: typeof session) => <NavigationSessionContext.Provider value={value} key={value.scope}>
+    <DraftBoxGroup />
+  </NavigationSessionContext.Provider>
+  await act(async () => root.render(navigation(session)))
+  await expand()
+  expect(rows()).toHaveLength(2)
+  await act(async () => root.render(null))
+  await act(async () => root.render(navigation(session)))
+  expect(rows()).toHaveLength(2)
+  await act(async () => root.render(navigation(createNavigationSession('a:2'))))
+  expect(rows()).toHaveLength(0)
 })
 
 it('keeps drafts available when blueprint lookup fails and leaves editor tabs alone on body read failure', async () => {

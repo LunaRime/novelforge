@@ -78,6 +78,8 @@ interface AgentState {
   subAgentProgress: Record<string, AgentProgress>
   /** 当前流式请求 ID（用于取消） */
   activeRequestId: string | null
+  /** Runtime-only approval bound to the current tool call and source session. */
+  pendingToolApproval: { conversationId: string; toolCall: ToolCallInfo; isCurrent: () => boolean } | null
   /** C 档第二轮：子 agent 的待审批写操作（非 null 时输入框上方渲染带来源标签的确认卡） */
   pendingSubAgentConfirmation: { sessionId: string; description: string; toolCall: ToolCallInfo } | null
   /** Tool 系统是否已初始化 */
@@ -379,6 +381,7 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
   subAgentProgress: {},
   activeRequestId: null,
   pendingSubAgentConfirmation: null,
+  pendingToolApproval: null,
   toolsInitialized: false,
   sendObservations: {},
   tokenEngineDegraded: false,
@@ -1247,24 +1250,25 @@ export const useAgentStore = create<AgentState>()((set, get) => ({
             // 规则命中 / 只读：等价用户已批准，直接放行
             if (decision.action === 'allow') return true
 
-            // 更新 UI 显示确认状态（带上决策：ConfirmCard 展示 risk 与「始终允许」）
-            updateAssistantMsg(m => ({
-              ...m,
-              toolCalls: (m.toolCalls ?? []).map(tc =>
-                tc.id === toolCall.id ? { ...tc, status: 'waiting_confirm' as const, approval: decision } : tc
-              ),
-            }))
-
             // 返回 Promise，等待用户通过 resolveToolConfirmation 响应
             return new Promise<boolean>((resolve) => {
+              if (abortController.signal.aborted || !projectSource.isCurrent()) { resolve(false); return }
+              const waiting = { ...toolCall, status: 'waiting_confirm' as const, approval: decision }
+              const pending = { conversationId: convId, toolCall: waiting, isCurrent: projectSource.isCurrent }
               const finish = (confirmed: boolean) => {
                 abortController.signal.removeEventListener('abort', abort)
                 pendingConfirmations.delete(toolCall.id)
+                if (get().pendingToolApproval === pending) set({ pendingToolApproval: null })
                 resolve(confirmed)
               }
               const abort = () => finish(false)
               abortController.signal.addEventListener('abort', abort, { once: true })
               pendingConfirmations.set(toolCall.id, { resolve: finish, decision, projectPath, args, isCurrent: projectSource.isCurrent })
+              updateAssistantMsg(m => ({
+                ...m,
+                toolCalls: (m.toolCalls ?? []).map(tc => tc.id === waiting.id ? waiting : tc),
+              }))
+              set({ pendingToolApproval: pending })
             })
           },
           // 进度接线（约束③）：引擎每轮都发 onProgress，此前无人接 → 数据被丢弃。

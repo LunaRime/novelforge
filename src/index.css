@@ -156,6 +156,13 @@
   :root {
     /* ☀️ 浅色主题 — 清冷蓝调（从 Logo 蓝紫色系延伸） */
 
+    /* 恒亮稿纸独立于工作台主题，正文和设置预览共用。 */
+    --color-prose-warm-bg: #F8F3EB;
+    --color-prose-warm-text: #2C2520;
+    --color-prose-warm-muted: #61564C;
+    --color-prose-warm-accent: #775C99;
+    --color-prose-warm-selection: rgba(155, 142, 200, 0.30);
+
     /* 背景层次（冷白蓝调，与Logo深蓝形成呼应） */
     --color-bg: #F7F9FC;
     --color-sidebar: #EFF2F7;
@@ -852,6 +859,15 @@
 .floating-menu--above-end   { bottom: anchor(top); right: anchor(right); margin-bottom: 6px; }
 .floating-menu--below-start { top: anchor(bottom); left: anchor(left); margin-top: 6px; }
 .floating-menu--below-end   { top: anchor(bottom); right: anchor(right); margin-top: 6px; }
+
+.nf-version-action-container { container-type: inline-size; }
+.nf-version-actions-wide { display: flex; }
+.nf-version-actions-narrow { display: none; }
+
+@container (max-width: 42rem) {
+  .nf-version-actions-wide { display: none; }
+  .nf-version-actions-narrow { display: block; }
+}
 
 /* ── 图标栏 = 窗口拖拽区（标题栏已于 2026-09-22 移除）──
    `WebkitAppRegion: 'drag'` 设在栏容器上（见 LeftToolWindowBar / RightToolWindowBar），

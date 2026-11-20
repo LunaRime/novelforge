@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title desc">
+  <title id="title">NovelForge · 反白标识</title>
+  <desc id="desc">无底色的暖白标识，适用于品牌色底与深色图片。</desc>
+  <style>:root { --nf-logo-paper: #fffefa; } .mark { fill: var(--nf-logo-paper); }</style>
+  <g class="mark" transform="translate(-6 0)">
+    <path d="M94 142H186L322 304V172L406 118V404L326 425L171 239V388L94 422Z"/>
+    <path d="M424 73L445 94L424 115L403 94Z"/>
+  </g>
+</svg>

@@ -142,13 +142,15 @@ export interface ProjectChannels {
     return: { token: string; tabs: Array<import('../core').OpenedEditorDocument & {
       number?: number
       lifecycle?: { canFinalize: boolean; canArchive: boolean; canStageRevision?: boolean; pending: Array<{ id: number }> }
-    }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number }
+    }>; missing: string[]; documents: Array<{ locator: string; name: string }>; importStartNumber?: number
+      activation?: { generation: string; activatedAt: string }; canActivate?: boolean }
   }
   'project:file-editor-save': {
     args: [token: string, locator: string, revision: string, content: string]
     return: { revision: string; indexed: boolean }
   }
   'project:file-editor-close': { args: [token: string]; return: void }
+  'project:file-editor-activate': { args: [token: string]; return: void }
   'project:file-editor-continuation-context': {
     args: [token: string, number: number, source: FileContinuationSource]
     return: { previous: string; settings: Record<string, string>; blueprint: Record<string, string>; contextRevision: string }
@@ -184,6 +186,10 @@ export interface ProjectChannels {
   }
   'project:file-editor-index-import': {
     args: [token: string, firstNumber: number, chapters: FileImportChapter[]]
+    return: { indexed: number; chunks: number }
+  }
+  'project:file-editor-rebuild-index': {
+    args: [token: string]
     return: { indexed: number; chunks: number }
   }
   'project:file-editor-import-inference': {

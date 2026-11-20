@@ -12,6 +12,10 @@ import { describe, it, expect, beforeEach, beforeAll, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
 import AgentConversation from './AgentConversation'
+import WorkflowProgressEntry from './WorkflowProgressEntry'
+import BottomPanel from '../BottomPanel'
+import { useWorkflowStore, type WorkflowRun } from '../../../stores/workflow-store'
+import { useLayoutStore } from '../../../stores/layout-store'
 import { useAgentStore, type AgentConversation as AgentConv } from '../../../stores/agent-store'
 import { useLLMStore } from '../../../stores/llm-store'
 import { useProjectStore } from '../../../stores/project-store'
@@ -37,6 +41,78 @@ function render(ui: React.ReactElement): { container: HTMLElement; root: Root } 
   act(() => { root.render(ui) })
   return { container, root }
 }
+
+it('restores the recalled conversation draft and reading position only within the same project session', () => {
+  useProjectStore.setState({ currentProject: null, projectSession: 10 })
+  const first = useAgentStore.getState().createConversation({ title: 'First' })
+  const second = useAgentStore.getState().createConversation({ title: 'Second' })
+  useAgentStore.setState({
+    activeConversationId: first.id,
+    showHistory: false,
+    memoryView: false,
+    conversations: [first, second].map(conversation => ({ ...conversation, messages: [
+      { id: conversation.id, role: 'user', content: 'Existing message', createdAt: 1 },
+    ] })),
+  })
+
+  const view = render(<AgentConversation />)
+  const renderPanel = (open: boolean) => act(() => view.root.render(open ? <AgentConversation /> : null))
+  const textarea = () => view.container.querySelector('textarea')!
+  const history = () => view.container.querySelector<HTMLDivElement>('.overflow-y-auto')!
+  const update = (text: string) => act(() => {
+    Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value')!.set!.call(textarea(), text)
+    textarea().dispatchEvent(new Event('input', { bubbles: true }))
+  })
+  try {
+    update('Draft for the first conversation')
+    expect(textarea().value).toBe('Draft for the first conversation')
+    Object.defineProperties(history(), { scrollHeight: { value: 900 }, clientHeight: { value: 200 } })
+    act(() => { history().scrollTop = 120; history().dispatchEvent(new Event('scroll')) })
+
+    renderPanel(false)
+    renderPanel(true)
+    expect(textarea().value).toBe('Draft for the first conversation')
+    expect(history().scrollTop).toBe(120)
+
+    act(() => useAgentStore.setState({ activeConversationId: second.id }))
+    expect(textarea().value).toBe('')
+    update('Draft for the second conversation')
+    act(() => useAgentStore.setState({ activeConversationId: first.id }))
+    expect(textarea().value).toBe('Draft for the first conversation')
+    expect(history().scrollTop).toBe(120)
+
+    act(() => useProjectStore.setState({ projectSession: 11 }))
+    expect(textarea().value).toBe('')
+    expect(history().scrollTop).toBe(0)
+  } finally {
+    act(() => view.root.unmount())
+    view.container.remove()
+  }
+})
+
+it('moves keyboard focus to the selected run even when two tasks have the same title', () => {
+  const workflowState = useWorkflowStore.getState()
+  const layoutState = useLayoutStore.getState()
+  const run = (id: string): WorkflowRun => ({
+    id, type: 'directory', title: 'Parallel title', status: 'running', steps: [],
+    currentStepIndex: 0, createdAt: '2026-11-20T04:00:00.000Z',
+  })
+  useWorkflowStore.setState({ activeRuns: [run('first-run'), run('second-run')], history: [] })
+  useLayoutStore.getState().openBottomTab('tasks')
+  const { container, root } = render(<><WorkflowProgressEntry /><BottomPanel /></>)
+  try {
+    const buttons = [...container.querySelectorAll<HTMLButtonElement>('[data-workflow-progress] button')]
+      .filter(button => button.textContent?.includes('Parallel title'))
+    expect(buttons).toHaveLength(2)
+    act(() => buttons[1].click())
+    expect(document.activeElement?.getAttribute('data-workflow-run')).toBe('second-run')
+  } finally {
+    act(() => root.unmount())
+    container.remove()
+    useLayoutStore.setState(layoutState)
+    useWorkflowStore.setState(workflowState)
+  }
+})
 
 describe('AgentConversation 预算条记忆段（F3）', () => {
   beforeEach(() => {

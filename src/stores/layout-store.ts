@@ -10,27 +10,34 @@ export type BottomTab = 'tasks' | 'log' | 'activity' | 'inbox'
 /** 右侧面板视图类型 */
 export type RightView = 'agent' | 'ai-output'
 
+export type WorkbenchMode = 'build' | 'write'
+
+interface WorkbenchPanels {
+  sidebarOpen: boolean
+  aiPanelOpen: boolean
+  rightView: RightView
+  bottomPanelOpen: boolean
+  bottomTab: BottomTab
+}
+
+const WRITING_PANELS: WorkbenchPanels = {
+  sidebarOpen: false,
+  aiPanelOpen: false,
+  rightView: 'agent',
+  bottomPanelOpen: false,
+  bottomTab: 'tasks',
+}
+
 /** 章节创建对话框的预填参数 */
 export type ChapterCreationPrefill = Record<string, unknown> | null
 
-interface LayoutState {
-  // ===== 侧边栏 =====
-  sidebarOpen: boolean
+interface LayoutState extends WorkbenchPanels {
+  // 侧栏视图也驱动编辑区页面，切换工作状态时保持当前文档和视图。
   sidebarView: SidebarView
-
-  // ===== AI 对话面板 =====
-  aiPanelOpen: boolean
-  /** 右侧面板当前视图：Agent 对话 / AI 输出 */
-  rightView: RightView
-
-  // ===== 底部面板 =====
-  bottomPanelOpen: boolean
-  bottomTab: BottomTab
-
-  // ⚠️ 这里曾有 sidebarWidth / aiPanelWidth / bottomPanelHeight 三个字段与 setter，
-  //    但全仓从未被读写——四个区域的拖拽缩放实际由 App.tsx 的 react-resizable-panels
-  //    (defaultSize / minSize / collapsible) 承担。留着它们会让人误以为布局尺寸归 store 管
-  //    （2026-09-19 已因此给出过错误结论），故删除。
+  workbenchMode: WorkbenchMode
+  writingPanels: WorkbenchPanels
+  setWorkbenchMode: (mode: WorkbenchMode) => void
+  toggleWorkbenchMode: () => void
 
   // ===== 全局弹窗状态（替代 window.dispatchEvent 事件总线）=====
   /** 设置弹窗是否打开 */
@@ -64,7 +71,7 @@ interface LayoutState {
   setBottomTab: (tab: BottomTab) => void
   openBottomTab: (tab: BottomTab) => void
   /**
-   * 关闭（隐藏）某个区域 —— 由「分隔条拖过阈值后的**松手**」触发（见 `App.tsx` 的 `closeOnDragBelow`）。
+   * 分隔条到尺寸下限后松手，由 WorkspaceLayout 关闭对应区域。
    *
    * ⚠️ **只能在松手后调用，不要在拖拽过程中调用**：`react-resizable-panels` 在拖拽中持有布局，
    * 此时卸载面板会让「注册 N 个面板 / DOM N−1 个」不一致，`ResizeObserver` 回调随即抛
@@ -94,7 +101,19 @@ interface LayoutState {
   closeChapterCreation: () => void
 }
 
-export const useLayoutStore = create<LayoutState>()(persist((set) => ({
+export function selectWorkbenchPanels(state: LayoutState): WorkbenchPanels {
+  return state.workbenchMode === 'write' ? state.writingPanels : state
+}
+
+function updatePanels(update: (panels: WorkbenchPanels) => Partial<WorkbenchPanels>) {
+  return (state: LayoutState): Partial<LayoutState> => {
+    const patch = update(selectWorkbenchPanels(state))
+    // 原有顶层字段继续保存构建态偏好，写作态的召回和关闭使用独立字段。
+    return state.workbenchMode === 'write' ? { writingPanels: { ...state.writingPanels, ...patch } } : patch
+  }
+}
+
+export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
   // 默认值（home：历史项目方块列表入口，替换原 Archive 图标）
   sidebarOpen: true,
   sidebarView: 'home',
@@ -104,6 +123,11 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
 
   bottomPanelOpen: true,
   bottomTab: 'tasks',
+
+  workbenchMode: 'build',
+  writingPanels: WRITING_PANELS,
+  setWorkbenchMode: (workbenchMode) => set({ workbenchMode }),
+  toggleWorkbenchMode: () => get().setWorkbenchMode(get().workbenchMode === 'build' ? 'write' : 'build'),
 
   focusMode: false,
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
@@ -119,30 +143,32 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   chapterCreationPrefill: null,
 
   // Actions
-  toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
+  toggleSidebar: () => set(updatePanels(panels => ({ sidebarOpen: !panels.sidebarOpen }))),
+  // 显式导航到项目、知识库等视图时回到构建态。
   setSidebarView: (view) =>
     set((s) => ({
+      workbenchMode: 'build',
       sidebarView: view,
-      sidebarOpen: s.sidebarView === view ? !s.sidebarOpen : true,
+      sidebarOpen: s.workbenchMode === 'write' || s.sidebarView !== view || !s.sidebarOpen,
     })),
-  showSidebarView: (view) => set({ sidebarView: view, sidebarOpen: true }),
+  showSidebarView: (view) => set({ workbenchMode: 'build', sidebarView: view, sidebarOpen: true }),
 
-  toggleAIPanel: () => set((s) => ({ aiPanelOpen: !s.aiPanelOpen })),
-  setAIPanelOpen: (open) => set({ aiPanelOpen: open }),
-  setRightView: (view) => set({ rightView: view }),
-  openRightPanel: (view) => set({ aiPanelOpen: true, rightView: view }),
+  toggleAIPanel: () => set(updatePanels(panels => ({ aiPanelOpen: !panels.aiPanelOpen }))),
+  setAIPanelOpen: (open) => set(updatePanels(() => ({ aiPanelOpen: open }))),
+  setRightView: (view) => set(updatePanels(() => ({ rightView: view }))),
+  openRightPanel: (view) => set(updatePanels(() => ({ aiPanelOpen: true, rightView: view }))),
 
-  toggleBottomPanel: () => set((s) => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  toggleBottomPanel: () => set(updatePanels(panels => ({ bottomPanelOpen: !panels.bottomPanelOpen }))),
   setBottomTab: (tab) =>
-    set((s) => ({
+    set(updatePanels(panels => ({
       bottomTab: tab,
-      bottomPanelOpen: s.bottomTab === tab ? !s.bottomPanelOpen : true,
-    })),
-  openBottomTab: (tab) => set({ bottomPanelOpen: true, bottomTab: tab }),
+      bottomPanelOpen: panels.bottomTab !== tab || !panels.bottomPanelOpen,
+    }))),
+  openBottomTab: (tab) => set(updatePanels(() => ({ bottomPanelOpen: true, bottomTab: tab }))),
 
   // 拖过阈值后的**松手**才调用（时序见接口注释：拖拽中卸载面板会触发库的 Invalid N panel layout）
   closeRegion: (region) =>
-    set(region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false }),
+    set(updatePanels(() => region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false })),
 
   // 全局弹窗 Actions
   openSettings: (section) => set({ settingsOpen: true, settingsSection: section }),
@@ -159,8 +185,7 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
   closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
 }), {
   name: 'novelforge:layout',
-  // 只记住「工作台形状」：面板开合与当前视图。
-  // 弹窗、专注模式、章节预填属于一次性会话状态，重启后恢复会让人措手不及。
+  // 记住工作状态和面板偏好，F11 专注、弹窗和预填只在本次会话生效。
   partialize: (state) => ({
     sidebarOpen: state.sidebarOpen,
     sidebarView: state.sidebarView,
@@ -168,5 +193,7 @@ export const useLayoutStore = create<LayoutState>()(persist((set) => ({
     rightView: state.rightView,
     bottomPanelOpen: state.bottomPanelOpen,
     bottomTab: state.bottomTab,
+    workbenchMode: state.workbenchMode,
+    writingPanels: state.writingPanels,
   }),
 }))

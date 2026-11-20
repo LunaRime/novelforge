@@ -49,6 +49,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     revisionPath: string
   } | null>(null)
   const [hasProcessFailure, setHasProcessFailure] = useState(false)
+  const [mergeError, setMergeError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -74,6 +75,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const isChapterBusy = !!activeChapterRun
 
   const [saving, setSaving] = useState(false)
+  const actionOrigin = useRef<HTMLElement | null>(null)
   const [confirmAction, setConfirmAction] = useState<'refine' | 'review' | null>(null)
   const [userRefinePrompt, setUserRefinePrompt] = useState('')
   const [reviewDims, setReviewDims] = useState<Record<string, boolean>>(
@@ -115,6 +117,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       renderLog('error', 'Save:Draft', t('log.render.draftSaveFailed')
         .replace('{path}', () => filePath)
         .replace('{error}', () => String(e)))
+      try { application.assertCurrent() } catch { return }
       toast.error(t('save.failed').replace('{error}', String(e)))
     } finally {
       setSaving(false)
@@ -180,13 +183,19 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   /** 打开待合并修稿 */
   const openPendingRevision = useCallback(async (rev: RevisionEntry) => {
     if (!meta || !currentProject) return
+    const origin = document.activeElement as HTMLElement | null
     const loaded = await application.revision(filePath, VELA.REVISION + rev.id)
-    if (loaded.originalContent || loaded.modifiedContent) setMergeData(loaded)
+    if (loaded.originalContent || loaded.modifiedContent) {
+      actionOrigin.current = origin
+      setMergeError(null)
+      setMergeData(loaded)
+    }
   }, [meta, filePath, currentProject, application])
 
   /** 合并完成回调 */
   const handleMergeComplete = async (mergedText: string) => {
     if (!meta || !mergeData) return
+    setMergeError(null)
 
     try {
       const result = await application.merge(meta, filePath, mergeData.revisionPath, mergedText, mergeData.originalContent)
@@ -197,14 +206,17 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         toast.success(t('editor.mergeSuccessToast'))
         renderLog('info', 'Save:Draft', t('editor.mergeSuccessToast'))
         if (result.pending) setPendingRevisions(result.pending)
-        if (result.refreshError) renderLog('error', 'Load:Draft', result.refreshError)
+        if (result.refreshError) {
+          renderLog('error', 'Load:Draft', result.refreshError)
+          toast.warning(t('editor.mergeRefreshFailed'))
+        }
       } else {
         renderLog('error', 'Save:Draft', String(result.error))
-        toast.error(t('error.mergeFailed').replace('{error}', String(result.error)))
+        setMergeError(t('error.mergeFailed').replace('{error}', String(result.error)))
       }
     } catch (e) {
       renderLog('error', 'Save:Draft', String(e))
-      toast.error(t('error.mergeError').replace('{error}', String(e)))
+      setMergeError(t('error.mergeError').replace('{error}', String(e)))
     }
   }
 
@@ -255,8 +267,20 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   // 稳定回调（配合 memo(EditorToolbar) / CodeMirrorEditor 的 handleUpdate 依赖）——
   // 否则流式期间（activeRuns 每 100ms 变化）内联函数重建，EditorToolbar 的 memo 形同虚设
   const handleToolbarSave = useCallback(() => doSave(currentBodyRef.current, { manual: true }), [doSave])
-  const handleToolbarRefine = useCallback(() => { setUserRefinePrompt(''); setConfirmAction('refine') }, [])
-  const handleToolbarReview = useCallback(() => setConfirmAction('review'), [])
+  const handleToolbarRefine = useCallback(() => {
+    actionOrigin.current = document.activeElement as HTMLElement | null
+    setUserRefinePrompt('')
+    setConfirmAction('refine')
+  }, [])
+  const handleToolbarReview = useCallback(() => {
+    actionOrigin.current = document.activeElement as HTMLElement | null
+    setConfirmAction('review')
+  }, [])
+  const restoreActionFocus = (event: Event) => {
+    if (!actionOrigin.current?.isConnected) return
+    event.preventDefault()
+    actionOrigin.current.focus()
+  }
   const handleEditorChange = useCallback((text: string) => {
     currentBodyRef.current = text
     useEditorStore.getState().updateTabContent(tabId, text)
@@ -302,6 +326,13 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         <CodeMirrorEditor
           tabId={tabId}
           mode="prose"
+          paperHeading={meta && <>
+            <div className="nf-prose-meta">
+              <span>{t('chapter.label').replace('{n}', String(meta.chapterNumber))}</span>
+              <span>v{meta.version}</span>
+            </div>
+            <h1>{meta.chapterTitle}</h1>
+          </>}
           content={content}
           filePath={filePath}
           editable={!isReadonly && !isChapterBusy}
@@ -315,6 +346,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       {/* AI 操作确认弹窗 — 提取到 AIActionDialog */}
       <AIActionDialog
         action={confirmAction}
+        onCloseAutoFocus={restoreActionFocus}
         chapterTitle={meta?.chapterTitle}
         version={meta?.version}
         refinePrompt={userRefinePrompt}
@@ -332,16 +364,17 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
 
       {/* 弹出式三栏合并视图 */}
       <Dialog open={mergeData !== null} onOpenChange={(v) => !v && setMergeData(null)}>
-        <DialogContent preventOutsideClose
-          className="p-0"
+        <DialogContent preventOutsideClose onCloseAutoFocus={restoreActionFocus}
+          className="flex flex-col gap-0 p-0"
           style={{ width: '90vw', maxWidth: '90vw', height: '85vh', maxHeight: '85vh', overflow: 'hidden' }}
         >
-          <DialogHeader className="px-4 py-0" style={{ height: 38, display: 'flex', alignItems: 'center' }}>
+          <DialogHeader className="min-h-[38px] shrink-0 justify-center py-1 pl-4 pr-10">
             <DialogTitle className="flex items-center gap-2 text-xs">
               {t('editor.mergeTitle').replace('{n}', String(meta?.chapterNumber)).replace('{title}', meta?.chapterTitle ?? '')}
             </DialogTitle>
           </DialogHeader>
-          <div className="flex-1 overflow-hidden" style={{ height: 'calc(85vh - 38px - 1px)' }}>
+          {mergeError && <p role="alert" className="shrink-0 break-words px-4 py-2 text-xs text-[var(--color-error)]">{mergeError}</p>}
+          <div className="min-h-0 flex-1 overflow-hidden">
             {mergeData && (
               <ThreeWayMerge
                 originalContent={mergeData.originalContent}

@@ -1,0 +1,44 @@
+.v3-load-sample {
+  container: v3-load / inline-size;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  height: calc(100dvh - 2rem);
+  color: var(--color-text);
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
+.v3-load-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: .75rem;
+  padding: .75rem 1rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.v3-load-header h1, .v3-load-sheet h2, .v3-load-chat h2 { font-weight: 600; }
+.v3-load-workspace { display: grid; grid-template-columns: minmax(11rem, 1fr) minmax(0, 3fr) minmax(13rem, 1fr); }
+.v3-load-sample[data-chat='false'] .v3-load-workspace { grid-template-columns: minmax(11rem, 1fr) minmax(0, 4fr); }
+.v3-load-navigation, .v3-load-sheet, .v3-load-chat { min-inline-size: 0; min-block-size: 0; }
+.v3-load-navigation, .v3-load-messages { overflow-y: auto; }
+.v3-load-navigation { padding: .375rem; border-inline-end: 1px solid var(--color-border); }
+.v3-load-sheet { display: flex; flex-direction: column; gap: .75rem; padding: .75rem; background: var(--color-editor-bg); }
+.v3-load-editor { flex: 1; min-block-size: 0; }
+.v3-load-chat { display: grid; grid-template-rows: auto minmax(0, 1fr); border-inline-start: 1px solid var(--color-border); }
+.v3-load-chat[hidden] { display: none; }
+.v3-load-chat header { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: .5rem; padding: .75rem; }
+.v3-load-messages { padding: .75rem; }
+.v3-load-messages p { margin-block-end: .75rem; overflow-wrap: anywhere; }
+
+@container v3-load (max-width: 760px) {
+  /* 三个区域分别滚动，长列表和会话不会把正文挤出窄窗。 */
+  .v3-load-sample[data-chat] .v3-load-workspace {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(4rem, 1fr) minmax(7rem, 2fr) minmax(5rem, 1fr);
+  }
+  .v3-load-sample[data-chat='false'] .v3-load-workspace { grid-template-rows: minmax(4rem, 1fr) minmax(7rem, 3fr); }
+  .v3-load-navigation { border-inline-end: 0; border-block-end: 1px solid var(--color-border); }
+  .v3-load-chat { border-inline-start: 0; border-block-start: 1px solid var(--color-border); }
+}

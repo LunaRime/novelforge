@@ -1,23 +1,15 @@
-/**
- * layout-store —— 布局相关契约（UI 真机反馈 2026-09-19/20）
- *
- * 1. 旧的 `sidebarWidth` / `aiPanelWidth` / `bottomPanelHeight` 字段与 setter 已删除：
- *    它们从未被读写，留着会让人以为四个区域的尺寸归 store 管（2026-09-19 已因此给出过错误结论）。
- *    真实尺寸由 `App.tsx` 的 `react-resizable-panels` 承担。
- *
- * 2. `closeRegion` 是「分隔条拖过阈值 → 区域整体关闭」的落点，但**只能在松手后调用**：
- *    `react-resizable-panels` 在拖拽中持有布局，拖拽途中卸载面板会让「注册 N 个 / DOM N−1 个」
- *    不一致，`ResizeObserver` 回调随即抛 `Invalid N panel layout: …` 并刷屏（2026-09-20 实测事故）。
- *    时序由 `App.tsx` 的 `closeOnDragBelow` 保证（武装一次性 pointerup，松手后一个宏任务再关）。
- */
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it } from 'vitest'
-import { useLayoutStore } from './layout-store'
+import { selectWorkbenchPanels, useLayoutStore } from './layout-store'
+
+const state = useLayoutStore.getState
+
+beforeEach(() => {
+  useLayoutStore.setState(useLayoutStore.getInitialState(), true)
+  useLayoutStore.persist.clearStorage()
+})
 
 describe('layout-store · 拖拽关闭区域', () => {
-  beforeEach(() => {
-    useLayoutStore.setState({ sidebarOpen: true, aiPanelOpen: true, bottomPanelOpen: true })
-  })
-
   it('closeRegion(sidebar) → 只关侧栏，另两区不受影响', () => {
     useLayoutStore.getState().closeRegion('sidebar')
 
@@ -57,6 +49,53 @@ describe('layout-store · 拖拽关闭区域', () => {
     s().toggleAIPanel()
     s().toggleBottomPanel()
     expect([s().sidebarOpen, s().aiPanelOpen, s().bottomPanelOpen]).toEqual([true, true, true])
+  })
+})
+
+describe('工作台模式', () => {
+  it('没有模式字段的旧偏好在构建态恢复，切入写作态默认收起三块面板', async () => {
+    localStorage.setItem('novelforge:layout', JSON.stringify({ version: 0, state: {
+      sidebarOpen: false, sidebarView: 'project', aiPanelOpen: true, rightView: 'ai-output', bottomPanelOpen: true, bottomTab: 'log',
+    } }))
+    await useLayoutStore.persist.rehydrate()
+    expect(state().workbenchMode).toBe('build')
+    expect(selectWorkbenchPanels(state())).toMatchObject({ sidebarOpen: false, aiPanelOpen: true, rightView: 'ai-output', bottomTab: 'log' })
+    state().setWorkbenchMode('write')
+    expect(selectWorkbenchPanels(state())).toEqual({ sidebarOpen: false, aiPanelOpen: false, rightView: 'agent', bottomPanelOpen: false, bottomTab: 'tasks' })
+    expect(state().sidebarView).toBe('project')
+  })
+
+  it('写作态召回和关闭面板，构建态仍可恢复各自的开关和视图', () => {
+    state().openRightPanel('ai-output')
+    state().openBottomTab('log')
+    state().setWorkbenchMode('write')
+    state().toggleSidebar()
+    state().openRightPanel('agent')
+    state().openBottomTab('tasks')
+    state().closeRegion('sidebar')
+    expect(selectWorkbenchPanels(state())).toEqual({ sidebarOpen: false, aiPanelOpen: true, rightView: 'agent', bottomPanelOpen: true, bottomTab: 'tasks' })
+    state().setWorkbenchMode('build')
+    expect(selectWorkbenchPanels(state())).toMatchObject({ sidebarOpen: true, aiPanelOpen: true, rightView: 'ai-output', bottomPanelOpen: true, bottomTab: 'log' })
+    state().setWorkbenchMode('write')
+    expect(selectWorkbenchPanels(state())).toMatchObject({ sidebarOpen: false, aiPanelOpen: true, rightView: 'agent', bottomPanelOpen: true, bottomTab: 'tasks' })
+  })
+
+  it('重新加载恢复工作状态和写作面板，F11 专注状态只在本次会话生效', async () => {
+    state().setWorkbenchMode('write')
+    state().openRightPanel('agent')
+    state().toggleFocusMode()
+    expect(state()).toMatchObject({ workbenchMode: 'write', focusMode: true })
+    expect(selectWorkbenchPanels(state()).aiPanelOpen).toBe(true)
+    state().toggleFocusMode()
+    expect(state()).toMatchObject({ workbenchMode: 'write', focusMode: false })
+    state().toggleFocusMode()
+
+    const stored = localStorage.getItem('novelforge:layout')!
+    useLayoutStore.setState(useLayoutStore.getInitialState(), true)
+    localStorage.setItem('novelforge:layout', stored)
+    await useLayoutStore.persist.rehydrate()
+    expect(state()).toMatchObject({ workbenchMode: 'write', focusMode: false })
+    expect(selectWorkbenchPanels(state())).toMatchObject({ aiPanelOpen: true, bottomPanelOpen: false })
   })
 })
 

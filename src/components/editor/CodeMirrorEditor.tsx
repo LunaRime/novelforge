@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -33,6 +33,7 @@ import { countUndecided, type SubHunk } from '../../services/diff/hunk-model'
 import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
 import './inline-accept.css'
+import './novel-editor.css'
 
 /**
  * 正文段落的视觉扩展（规范：段间距 1em / 当前段落高亮 / 专注模式压暗其它段）。
@@ -175,6 +176,8 @@ export type CodeMirrorEditorProps = {
   placeholder?: string
   hideStatusBar?: boolean
   mode?: 'document' | 'prose'
+  /** 稿纸标题独立于正文，标题加载和排版变化沿用同一编辑实例。 */
+  paperHeading?: ReactNode
 }
 
 /** AI 段落改写操作 — 接入 RefineParagraphsCommand 的 5 种模式 */
@@ -308,9 +311,10 @@ export default function CodeMirrorEditor({
   onSave,
   onCharCountChange,
   mode = 'document',
+  paperHeading,
 }: CodeMirrorEditorProps) {
   const { t, locale } = useTranslation()
-  // 正文偏好：只订阅原始值，设置变化时才重算 CM 主题/扩展
+  // 字号和栏宽由样式变量应用，阅读模式开关通过 CodeMirror 扩展更新。
   const proseFontSize = useEditorPrefsStore((s) => s.proseFontSize)
   const measureWidth = useEditorPrefsStore((s) => s.measureWidth)
   const typewriter = useEditorPrefsStore((s) => s.typewriter)
@@ -736,21 +740,26 @@ export default function CodeMirrorEditor({
       height: "100%",
       // prose/document 都是写作场景，使用写作字体
       // 其他模式（如代码等）继承父元素 UI 字体
-      fontSize: mode === 'prose' ? `${proseFontSize}px` : "14px",
+      fontSize: mode === 'prose' ? 'var(--prose-font-size)' : "14px",
       backgroundColor: "transparent",
       fontFamily: (mode === 'prose' || mode === 'document') ? "var(--font-writing)" : "inherit"
     },
     ".cm-scroller": {
       overflow: "auto",
-      paddingBottom: "100px",
+      overflowY: mode === 'prose' ? 'scroll' : 'auto',
+      paddingBottom: mode === 'prose' ? '0' : "100px",
+      paddingInline: mode === 'prose' ? 'var(--prose-gutter)' : '0',
       fontFamily: (mode === 'prose' || mode === 'document') ? "var(--font-writing)" : "inherit"
     },
     ".cm-content": {
       width: "100%",
       // 规范：正文栏宽 720–800px，居中；默认 760px（两侧留呼吸，又不至于像移动端）
-      maxWidth: `${measureWidth}px`,
+      maxWidth: 'var(--prose-measure)',
       margin: "0 auto",
-      padding: "40px",
+      padding: mode === 'prose' ? '24px var(--prose-inset) 100px' : "40px",
+      backgroundColor: mode === 'prose' ? 'var(--color-editor-bg)' : 'transparent',
+      minHeight: mode === 'prose' ? '100%' : 'auto',
+      boxSizing: 'border-box',
       lineHeight: "1.8",
       color: "var(--color-text)",
       // 段间距 1em（由段落末行 decoration 实现，不影响段内折行）
@@ -774,7 +783,7 @@ export default function CodeMirrorEditor({
     // .cm-strong/.cm-em 并不匹配任何实际 DOM 类；保留以防未来替换高亮主题后丢失
     ".cm-strong": { fontWeight: "bold" },
     ".cm-em": { fontStyle: "italic" },
-  }), [mode, proseFontSize, measureWidth])
+  }), [mode])
 
   // 构建扩展
   const extensions = useMemo(() => {
@@ -1037,7 +1046,11 @@ export default function CodeMirrorEditor({
   }), [])
 
   return (
-    <div className="relative h-full flex flex-col min-h-0"
+    <div className={`relative h-full flex flex-col min-h-0${mode === 'prose' ? ' nf-prose-editor' : ''}`}
+      style={{
+        '--prose-font-size': `${proseFontSize}px`,
+        '--prose-measure': `${measureWidth}px`,
+      } as CSSProperties}
       onKeyDownCapture={(e) => {
         // 全局捕获 Ctrl+F 实现搜索框 Toggle（解决搜索框内焦点时快捷键失效的问题）
         if (matchesBinding(e.nativeEvent, shortcutBinding('find', shortcutBindings))) {
@@ -1070,6 +1083,11 @@ export default function CodeMirrorEditor({
           handleDocClick()
         }
       }}>
+      {mode === 'prose' && paperHeading && (
+        <div className="nf-prose-heading-gutter">
+          <header className="nf-prose-heading">{paperHeading}</header>
+        </div>
+      )}
       <div className="flex-1 relative min-h-0 overflow-hidden"
         onMouseDown={() => {
           // 点击空白处关闭 Bubble Menu

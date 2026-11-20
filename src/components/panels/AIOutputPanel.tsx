@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { CheckCircle2, Circle, Sparkles, X, ChevronRight, StopCircle, Play, HardDrive } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -8,6 +8,7 @@ import MarkdownContent from '../ui/MarkdownContent'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useOutputFileTail } from '../../hooks/useOutputFileTail'
 import { cleanupMessageText } from '../../services/agent/conversation-recovery'
+import { readAgentPosition, rememberAgentPosition, useScopedWorkflowRuns, useTaskNavigation } from './agent/agent-panel-session'
 
 /**
  * 右侧面板「AI 输出」视图
@@ -15,42 +16,14 @@ import { cleanupMessageText } from '../../services/agent/conversation-recovery'
  */
 export default function AIOutputPanel() {
   const { t } = useTranslation()
-  // ✅ 使用 selector 精确订阅，避免 globalLogs 高频更新导致整个面板重渲染
-  const activeRuns = useWorkflowStore(s => s.activeRuns)
-  const history = useWorkflowStore(s => s.history)
-  const getActiveStreamingRun = useWorkflowStore(s => s.getActiveStreamingRun)
-  const activeRun = getActiveStreamingRun()
-  const [viewRunId, setViewRunId] = useState<string | null>(null)
-
-  // 开发环境日志（生产环境自动移除）
-  if (import.meta.env.DEV) {
-    console.debug('[AIOutputPanel] render: activeRuns=', activeRuns.length, 'activeRun=', activeRun?.status)
-  }
-
-  // 自动跟随最新活跃任务
-  useEffect(() => {
-    if (activeRun) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setViewRunId(prev => prev === activeRun.id ? prev : activeRun.id)
-      return
-    }
-    // M2 崩溃恢复续读：无活跃流时仅当用户尚未选择任何视图（viewRunId===null）才自动选中
-    // 恢复回来的 paused/failed run（其步骤输出可能只存在于磁盘 workflow-output 文件，需在面板内
-    // 可见才能触发文件轮询查看）——M-5：一旦用户浏览了历史/其他 run，不再把视图抢回
-    const recovered = activeRuns.find(r => r.status === 'paused' || r.status === 'failed')
-    if (recovered) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setViewRunId(prev => prev === null ? recovered.id : prev)
-    }
-  }, [activeRun?.id, activeRun, activeRuns])
-
-  const viewRun: WorkflowRun | undefined =
-    activeRuns.find(r => r.id === viewRunId) ||
-    history.find(r => r.id === viewRunId) ||
-    activeRun ||
-    undefined
-
+  const { activeRuns, history, scope } = useScopedWorkflowRuns()
+  const selection = useTaskNavigation(state => state.output)
+  const viewRunId = selection?.scope === scope ? selection.id : null
+  const setViewRunId = useCallback((id: string) => useTaskNavigation.setState({ output: { scope, id } }), [scope])
   const recentHistory = history.slice(0, 10)
+  const allRuns = [...activeRuns, ...recentHistory]
+  const viewRun = activeRuns.find(run => run.id === viewRunId) ?? history.find(run => run.id === viewRunId)
+    ?? activeRuns.find(run => run.status === 'running' || run.status === 'waiting') ?? activeRuns[0]
 
   return (
     <div
@@ -74,6 +47,12 @@ export default function AIOutputPanel() {
         >
           {t('agent.aiOutput')}
         </span>
+        {viewRun && allRuns.length > 1 && <select aria-label={t('agent.history')} value={viewRun.id}
+          onChange={event => setViewRunId(event.target.value)}
+          className="ml-auto min-w-0 max-w-36 truncate rounded border border-[var(--color-border)] bg-[var(--color-sidebar)] px-1 text-xs">
+          {!allRuns.some(run => run.id === viewRun.id) && <option value={viewRun.id}>{viewRun.title}</option>}
+          {allRuns.map(run => <option key={run.id} value={run.id}>{run.title}</option>)}
+        </select>}
         <button
           onClick={() => useLayoutStore.getState().setAIPanelOpen(false)}
           title={t('action.close')}
@@ -88,7 +67,9 @@ export default function AIOutputPanel() {
       <div className="flex-1 overflow-hidden">
         {viewRun ? (
           <ActiveRunView
+            key={viewRun.id}
             run={viewRun}
+            scope={scope}
             activeRuns={activeRuns}
             onSwitchRun={setViewRunId}
           />
@@ -126,15 +107,18 @@ function EmptyState() {
 
 function ActiveRunView({
   run,
+  scope,
   activeRuns,
   onSwitchRun,
 }: {
   run: WorkflowRun
+  scope: string
   activeRuns: WorkflowRun[]
   onSwitchRun: (id: string) => void
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [autoScroll, setAutoScroll] = useState(true)
+  const readingKey = `workflow-output:${run.id}`
+  const [autoScroll, setAutoScroll] = useState(() => readAgentPosition(scope, readingKey)?.following ?? true)
   const isActive = run.status === 'running' || run.status === 'waiting'
   // M2：崩溃恢复回来的 paused/failed run（仅 activeRuns 内）——其空 result 步骤可从磁盘
   // workflow-output 文件续读（组件挂载/展开才 1s 轮询 tail，不可见即停）
@@ -147,6 +131,11 @@ function ActiveRunView({
   const waitingForConfirm = runWaiting?.waitingForConfirm ?? false
   const prevLenRef = useRef(0)
   const { t } = useTranslation()
+
+  useLayoutEffect(() => {
+    const position = readAgentPosition(scope, readingKey)
+    if (scrollRef.current && position && !position.following) scrollRef.current.scrollTop = position.top
+  }, [scope, readingKey])
 
   // 提取当前步骤 + 内容
   const currentStep = run.steps[run.currentStepIndex] || run.steps[0]
@@ -170,18 +159,16 @@ function ActiveRunView({
     if (!autoScroll || !scrollRef.current) return
     if (contentLen !== prevLenRef.current) {
       prevLenRef.current = contentLen
-      requestAnimationFrame(() => {
-        if (scrollRef.current) {
-          scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-        }
-      })
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
     }
   }, [contentLen, autoScroll, run.currentStepIndex])
 
   const handleScroll = () => {
     const el = scrollRef.current
     if (!el) return
-    setAutoScroll(el.scrollHeight - el.scrollTop - el.clientHeight < 60)
+    const following = el.scrollHeight - el.scrollTop - el.clientHeight < 60
+    rememberAgentPosition(scope, readingKey, { top: el.scrollTop, following })
+    setAutoScroll(following)
   }
 
   // 整体进度百分比
@@ -236,7 +223,7 @@ function ActiveRunView({
         {/* 步骤进度区及独立输出流 */}
         <div className="px-2 pt-2 pb-4">
           {run.steps.map((step, i) => (
-            <StepOutputBlock
+            <MemoStepOutputBlock
               key={step.id}
               step={step}
               index={i}
@@ -257,6 +244,9 @@ function ActiveRunView({
               {t('agent.workflowComplete')}
             </div>
           )}
+          {run.cancellation === 'cancelled' && <p role="status" className="py-2 text-center text-xs text-[var(--color-text-muted)]">
+            {t('status.cancelled')}
+          </p>}
         </div>
 
         {/* 底部操作占位符，避免滚动到底部被遮挡 */}
@@ -281,7 +271,9 @@ function ActiveRunView({
             </button>
           )}
           <button
-            onClick={() => cancelWorkflow(run.id)}
+            type="button"
+            aria-disabled={run.cancellation === 'requested'}
+            onClick={() => { if (!run.cancellation) cancelWorkflow(run.id) }}
             className="flex items-center justify-center gap-1.5 text-xs px-3 py-1.5 rounded-full transition-all shadow-[var(--shadow-md)] backdrop-blur-md"
             style={{
               color: 'var(--color-text)',
@@ -300,7 +292,7 @@ function ActiveRunView({
             }}
           >
             <StopCircle size={13} />
-            <span className="font-medium">{t('agent.abortGen')}</span>
+            <span className="font-medium" role="status">{t(run.cancellation === 'requested' ? 'status.cancelling' : 'agent.abortGen')}</span>
           </button>
         </div>
       )}
@@ -478,6 +470,8 @@ function StepOutputBlock({ step, index, total, isActiveRun, isCurrentStep, recov
 
 
 // ===== 思考区块（Cursor "Worked for" 风格） =====
+
+const MemoStepOutputBlock = memo(StepOutputBlock)
 
 function ThinkingBlock({ thinking, showCursor, hasContent }: { thinking: string; showCursor: boolean; hasContent: boolean }) {
   const { t } = useTranslation()

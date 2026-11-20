@@ -1,0 +1,40 @@
+{
+  "name": "NovelForge",
+  "concept": "折页与火种 / A page. A spark.",
+  "date": "2026-11-18",
+  "status": "design-proposal-only",
+  "scope": "docs/ui-redesign-v3/logos；不替换生产图标或现有 v3 原型图标。",
+  "master": "novelforge-icon.svg",
+  "palette": {
+    "brand": "#405c47",
+    "paper": "#fffefa",
+    "fold": "#eadfc7",
+    "ember": "#d9b87c",
+    "markFold": "#6b8161",
+    "markEmber": "#a47c3e",
+    "monochrome": "#252d29"
+  },
+  "assets": {
+    "appIcon": "novelforge-icon.svg",
+    "smallIcon": "novelforge-icon-small.svg",
+    "transparentMark": "novelforge-mark.svg",
+    "monochromeMark": "novelforge-mono.svg",
+    "reversedMark": "novelforge-inverse.svg",
+    "windowsIcon": "novelforge-icon.ico",
+    "largePng": "novelforge-icon-1024.png",
+    "transparentPng": "novelforge-mark-1024.png",
+    "previewPage": "index.html",
+    "previewImage": "novelforge-preview.png",
+    "generatedReference": "Design_one_refined_professiona_2026-11-18T05-14-26.png"
+  },
+  "pngSizes": [16, 24, 32, 48, 64, 128, 256, 512, 1024],
+  "icoSizes": [16, 24, 32, 48, 64, 128, 256],
+  "usage": {
+    "smallVariant": "16–48 px 使用专用简化版；64 px 及以上使用主稿。",
+    "background": "PNG 和 SVG 的圆角方形以外均透明；mark 系列不带方形底。",
+    "colorPolicy": "SVG 色值集中声明为 CSS 自定义属性。运行时随主题变化需要内联 SVG 并覆写变量，外部 img 不继承宿主页变量。",
+    "reversedMark": "反白版用于品牌色背景或可读性足够的深色背景，不用于浅色底。",
+    "clearSpace": "其他文字和图形应与主图标保持至少 32/512 图标边长的距离。",
+    "generatedReference": "生成参考图仅记录视觉方向，精修 SVG 与从 SVG 导出的 PNG/ICO 才是交付主稿。"
+  }
+}

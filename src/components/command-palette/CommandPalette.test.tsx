@@ -5,6 +5,7 @@ import { act } from 'react'
 import CommandPalette from './CommandPalette'
 import { useCommandStore } from '../../stores/command-store'
 import { useLayoutStore } from '../../stores/layout-store'
+import { useShortcutStore } from '../../stores/shortcut-store'
 
 let container: HTMLDivElement | null = null
 let root: Root | null = null
@@ -26,7 +27,8 @@ function key(target: HTMLElement, value: string) {
 describe('CommandPalette（Cmd+K）', () => {
   beforeEach(() => {
     useCommandStore.setState({ open: true, mode: 'commands' })
-    useLayoutStore.setState({ newProjectOpen: false, settingsOpen: false })
+    useLayoutStore.setState({ newProjectOpen: false, settingsOpen: false, workbenchMode: 'build' })
+    useShortcutStore.getState().resetAll()
   })
 
   afterEach(() => {
@@ -66,5 +68,35 @@ describe('CommandPalette（Cmd+K）', () => {
     const box = render()
     key(box.querySelector('input')!, 'Escape')
     expect(useCommandStore.getState().open).toBe(false)
+  })
+
+  it('从命令面板切换工作模式，并展示生效的自定义绑定', async () => {
+    useShortcutStore.getState().setBinding('toggle-workbench-mode', 'Mod+Alt+M')
+    const box = render()
+    const input = box.querySelector('input')!
+    act(() => {
+      Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, '写作态')
+      input.dispatchEvent(new Event('input', { bubbles: true }))
+    })
+    await act(async () => {})
+    expect(box.textContent).toContain('切换工作模式')
+    expect(box.textContent).toMatch(/Ctrl\+Alt\+M|⌘⌥M/)
+    key(input, 'Enter')
+    await act(async () => {})
+    expect(useLayoutStore.getState().workbenchMode).toBe('write')
+  })
+
+  it('关闭时把焦点归还仍挂载的原控件', () => {
+    const trigger = document.createElement('button')
+    document.body.appendChild(trigger)
+    try {
+      trigger.focus()
+      const input = render().querySelector('input')!
+      input.focus()
+      key(input, 'Escape')
+      expect(document.activeElement).toBe(trigger)
+    } finally {
+      trigger.remove()
+    }
   })
 })

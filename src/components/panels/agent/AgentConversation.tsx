@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight, MoreHorizontal } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
@@ -30,6 +30,7 @@ import { PopoverSurface } from '../../ui/PopoverSurface'
 import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { useEscapeKey } from '../../../hooks/useEscapeKey'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { readAgentPosition, rememberAgentPosition, useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
 
 /**
  * 对话区域主组件
@@ -40,10 +41,11 @@ export default function AgentConversation() {
   // 原子 selector：仅订阅本组件渲染依赖的三项（原始布尔），流式期间值稳定不重渲染
   const showHistory = useAgentStore(s => s.showHistory)
   const memoryView = useAgentStore(s => s.memoryView)
-  const hasActiveMessages = useAgentStore(s => {
+  const activeId = useAgentStore(s => {
     const conv = s.conversations.find(c => c.id === s.activeConversationId)
-    return !!conv && conv.messages.length > 0
+    return conv?.messages.length ? conv.id : null
   })
+  const scope = useAgentPanelScope()
 
   // 历史面板模式
   if (showHistory) {
@@ -56,12 +58,12 @@ export default function AgentConversation() {
   }
 
   // 空状态（无活跃会话）
-  if (!hasActiveMessages) {
+  if (!activeId) {
     return <EmptyState />
   }
 
   // 有消息的对话视图
-  return <ActiveConversation />
+  return <ActiveConversation key={JSON.stringify([scope, activeId])} scope={scope} conversationId={activeId} />
 }
 
 // ===== 空状态视图 =====
@@ -232,37 +234,24 @@ function useAsyncSegments(activeConv: { id?: string; modelId?: string | null } |
   return loaded && loaded.key === key ? loaded.segments : null
 }
 
-function ActiveConversation() {
+function ActiveConversation({ scope, conversationId }: { scope: string; conversationId: string }) {
   // 原子 selector：generating 为原始布尔；activeConv 订阅活跃会话对象（流式期间消息变化需重渲染）
   const generating = useAgentStore(s => s.generating)
   const activeConv = useAgentStore(s => s.conversations.find(c => c.id === s.activeConversationId) ?? null)
   const { t } = useTranslation()
   const scrollRef = useRef<HTMLDivElement>(null)
-  const rootRef = useRef<HTMLDivElement>(null)
-  const [isAtBottom, setIsAtBottom] = useState(true)
-  const [currentInput, setCurrentInput] = useState('')
+  const [isAtBottom, setIsAtBottom] = useState(() => readAgentPosition(scope, conversationId)?.following ?? true)
+  const [currentInput] = useAgentComposerDraft()
   const asyncSegments = useAsyncSegments(activeConv)
 
-  // 输入框内容追踪（AgentInputBox 内部状态，通过冒泡 input 事件捕获——预算条 current 段用，P0 近似）
-  useEffect(() => {
-    const onInput = (e: Event) => {
-      const el = e.target as HTMLElement | null
-      if (el && el.tagName === 'TEXTAREA' && rootRef.current?.contains(el)) {
-        setCurrentInput((el as HTMLTextAreaElement).value)
-      }
-    }
-    document.addEventListener('input', onInput)
-    return () => document.removeEventListener('input', onInput)
-  }, [])
+  useLayoutEffect(() => {
+    const position = readAgentPosition(scope, conversationId)
+    if (scrollRef.current && position && !position.following) scrollRef.current.scrollTop = position.top
+  }, [scope, conversationId])
 
   // 消息变化时自动滚动到底部
   useEffect(() => {
-    if (isAtBottom && scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth',
-      })
-    }
+    if (isAtBottom && scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
   }, [activeConv?.messages, generating, isAtBottom])
 
   // 监听滚动位置判断是否在底部
@@ -270,23 +259,24 @@ function ActiveConversation() {
     const el = scrollRef.current
     if (!el) return
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight
-    setIsAtBottom(distanceFromBottom < 60)
+    const following = distanceFromBottom < 60
+    rememberAgentPosition(scope, conversationId, { top: el.scrollTop, following })
+    setIsAtBottom(following)
   }
 
   /** 跳转到底部 */
   const scrollToBottom = () => {
-    scrollRef.current?.scrollTo({
-      top: scrollRef.current.scrollHeight,
-      behavior: 'smooth',
-    })
+    const el = scrollRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+    rememberAgentPosition(scope, conversationId, { top: el.scrollTop, following: true })
+    setIsAtBottom(true)
   }
 
   /** 分支：从指定消息 fork 新会话（B1 数据层：复制起点含历史，自动激活）
    *  useCallback：稳定引用，配合 AgentMessage 的 memo —— 流式输出时历史消息不重渲染 */
   const handleFork = useCallback((messageId: string) => {
     useAgentStore.getState().forkFromMessage(messageId)
-    // 自动滚动到新会话底部
-    requestAnimationFrame(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight }))
   }, [])
 
   /** 回退：确认后截断到指定消息（可恢复）。useCallback 理由同上（t 为稳定引用） */
@@ -389,7 +379,7 @@ function ActiveConversation() {
   })
 
   return (
-    <div ref={rootRef} className="flex flex-col h-full relative">
+    <div className="flex flex-col h-full relative">
       {/* 消息列表滚动区 */}
       <div
         ref={scrollRef}

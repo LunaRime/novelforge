@@ -10,6 +10,7 @@ import { act } from 'react'
 import PendingToolConfirmation from './PendingToolConfirmation'
 
 const mockResolve = vi.hoisted(() => vi.fn())
+const approval = vi.hoisted(() => ({ active: true }))
 
 // useAgentStore 支持两种形态：带 selector（本组件）+ 无 selector（ConfirmCard 内部）
 vi.mock('../../../stores/agent-store', () => ({
@@ -17,6 +18,10 @@ vi.mock('../../../stores/agent-store', () => ({
     const state = {
       activeConversationId: 'conv-1',
       resolveToolConfirmation: mockResolve,
+      pendingToolApproval: approval.active ? {
+        conversationId: 'conv-1', isCurrent: () => true,
+        toolCall: { id: 'tc-1', toolName: 'write_file', arguments: { file_path: 'a.md' }, status: 'waiting_confirm' },
+      } : null,
       conversations: [{
         id: 'conv-1',
         messages: [
@@ -52,6 +57,7 @@ afterEach(() => {
   root = null
   container = null
   mockResolve.mockClear()
+  approval.active = true
 })
 
 describe('PendingToolConfirmation — 审批接管输入区（线②）', () => {
@@ -64,5 +70,11 @@ describe('PendingToolConfirmation — 审批接管输入区（线②）', () => 
     const el = render(<PendingToolConfirmation />)
     // 渲染的是 ConfirmCard 结构（含「确认」标题 + 按钮），而非多个卡
     expect(el.querySelectorAll('.confirm-card')).toHaveLength(1)
+  })
+
+  it('does not recreate approval from a stale or restored conversation message', () => {
+    approval.active = false
+    const el = render(<PendingToolConfirmation />)
+    expect(el.querySelector('.confirm-card')).toBeNull()
   })
 })

@@ -42,6 +42,38 @@ test('opens a routed directory through the candidate IPC without another folder 
   expect(document.querySelector('[role="dialog"]')?.textContent).toContain('/candidate')
 })
 
+test('rebuilds the project index without an import batch and supports retry', async () => {
+  invoke.mockResolvedValueOnce({ token: 'session', tabs: [], documents: [], missing: [], importStartNumber: 2 })
+    .mockRejectedValueOnce(new Error('index interrupted'))
+    .mockResolvedValueOnce({ indexed: 1, chunks: 2 })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await click('project.fileEditorRebuildIndex')
+  expect(invoke).toHaveBeenLastCalledWith('project:file-editor-rebuild-index', 'session')
+  expect(toast.error).toHaveBeenLastCalledWith('project.fileEditorRebuildIndexFailed')
+  await click('project.fileEditorRebuildIndex')
+  expect(invoke).toHaveBeenCalledTimes(3)
+  expect(toast.success).toHaveBeenLastCalledWith('project.fileEditorRebuildIndexDone')
+})
+
+test('confirms activation and reopens the file editor with a fresh session', async () => {
+  const locator = 'doc://chapter/ch_12345678'
+  const tab = { locator, content: 'Saved text', revision: 'revision' }
+  invoke.mockResolvedValueOnce({ token: 'candidate', canActivate: true, tabs: [tab], missing: [], documents: [] })
+    .mockResolvedValueOnce(undefined)
+    .mockResolvedValueOnce({ token: 'activated', canActivate: false, tabs: [tab], missing: [], documents: [],
+      activation: { generation: 'generation', activatedAt: '2026-11-18T00:00:00Z' } })
+  await render()
+  await act(async () => { globalEventBus.emit('OPEN_FILE_PROJECT_EDITOR', { projectPath: '/candidate' }) })
+  await click('project.fileEditorActivate')
+  expect(invoke).toHaveBeenCalledTimes(1)
+  await click('dialog.confirm')
+  expect(invoke).toHaveBeenNthCalledWith(2, 'project:file-editor-activate', 'candidate')
+  expect(invoke).toHaveBeenNthCalledWith(3, 'project:file-editor-open', '/candidate', [locator])
+  expect(document.querySelector('[role="dialog"]')?.textContent).toContain('project.fileEditorActivated')
+  expect(document.querySelector('textarea')?.value).toBe('Saved text')
+})
+
 async function askAboutManuscript(question: string) {
   await act(async () => document.querySelector('summary')?.click())
   const input = document.querySelector('input[aria-label="project.fileEditorAgentQuestion"]')!

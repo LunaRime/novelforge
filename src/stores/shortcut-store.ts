@@ -29,6 +29,7 @@ export const SHORTCUT_DEFINITIONS: ShortcutDefinition[] = [
   { id: 'toggle-sidebar', category: 'view', labelKey: 'command.toggleSidebar', defaultBinding: 'Mod+B' },
   { id: 'toggle-bottom', category: 'view', labelKey: 'command.toggleBottom', defaultBinding: 'Mod+J' },
   { id: 'toggle-agent', category: 'view', labelKey: 'command.toggleAgent', defaultBinding: 'Mod+Shift+A' },
+  { id: 'toggle-workbench-mode', category: 'view', labelKey: 'command.toggleWorkbenchMode', defaultBinding: '' },
   { id: 'focus-mode', category: 'view', labelKey: 'command.focusMode', defaultBinding: 'F11' },
   { id: 'zoom-in', category: 'view', labelKey: 'shortcut.zoomIn', defaultBinding: 'Mod+=' },
   { id: 'zoom-out', category: 'view', labelKey: 'shortcut.zoomOut', defaultBinding: 'Mod+-' },

@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import type { AriaAttributes, KeyboardEventHandler, ReactNode } from 'react'
 import HoverSwapIcon from './HoverSwapIcon'
 
 interface MenuRowProps {
@@ -12,10 +12,13 @@ interface MenuRowProps {
   count?: ReactNode
   /** 主行为：导航=进入；折叠卡=展开/折叠。不传 = 该行没有主行为 */
   onPrimary?: () => void
+  onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>
   /** 悬停置换语义：nav=›；expand 收起=› / 展开=⌄（随 expanded） */
   swap?: 'nav' | 'expand'
   /** swap='expand'：当前是否已展开 */
   expanded?: boolean
+  /** 折叠主按钮控制的内容容器 ID */
+  controlsId?: string
   /** 导航+折叠卡：左端独立折叠按钮（常驻、状态可见；主按钮仍负责进入） */
   leadingButton?: ReactNode
   /** 有独立行为的操作按钮（兄弟节点，常驻） */
@@ -24,6 +27,8 @@ interface MenuRowProps {
   titleHint?: string
   /** 选中态（底色 + 左 2px accent 竖线） */
   active?: boolean
+  /** 当前导航项语义，与通用高亮样式独立 */
+  current?: AriaAttributes['aria-current']
   onContextMenu?: (e: React.MouseEvent) => void
 }
 
@@ -38,7 +43,7 @@ interface MenuRowProps {
  * 上，**不挂片容器**——容器上的 padding 会造出「hover 亮起但点不动」的死带（2026-09-27 修过的同类缺陷）。
  */
 export default function MenuRow({
-  icon, title, titleSuffix, count, onPrimary, swap, expanded, leadingButton, actions, titleHint, active, onContextMenu,
+  icon, title, titleSuffix, count, onPrimary, onPrimaryKeyDown, swap, expanded, controlsId, leadingButton, actions, titleHint, active, current, onContextMenu,
 }: MenuRowProps) {
   const content = (
     <>
@@ -61,7 +66,11 @@ export default function MenuRow({
         <button
           type="button"
           onClick={onPrimary}
+          onKeyDown={onPrimaryKeyDown}
           title={titleHint}
+          aria-current={current}
+          aria-expanded={swap === 'expand' ? expanded : undefined}
+          aria-controls={swap === 'expand' ? controlsId : undefined}
           className="flex items-center gap-1.5 flex-1 min-w-0 h-full px-2 text-left enabled:cursor-pointer"
         >
           {content}

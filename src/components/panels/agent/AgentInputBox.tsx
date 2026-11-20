@@ -25,6 +25,7 @@ import MentionMenu from './MentionMenu'
 import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
 import ThinkingLevelSlider, { ThinkingLevelIcon } from '../../ui/ThinkingLevelSlider'
+import { useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
 import {
   getAllSlashCommands,
   type SlashCommand,
@@ -39,7 +40,13 @@ const MAX_HEIGHT = 200
  * 卡片式圆角容器，底部工具栏含模式/模型/发送
  */
 export default function AgentInputBox() {
-  const [inputText, setInputText] = useState('')
+  const scope = useAgentPanelScope()
+  const id = useAgentStore(s => s.activeConversationId)
+  return <AgentComposer key={JSON.stringify([scope, id])} />
+}
+
+function AgentComposer() {
+  const [inputText, setInputText] = useAgentComposerDraft()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const { t } = useTranslation()
   // 原子 selector：action/原始值引用稳定，流式期间不随整 store 每 50ms 重渲染
@@ -111,7 +118,7 @@ export default function AgentInputBox() {
     } else {
       setShowMentionMenu(false)
     }
-  }, [])
+  }, [setInputText])
 
   // 选择 / 命令
   const handleSlashSelect = useCallback((cmd: SlashCommand) => {
@@ -125,7 +132,7 @@ export default function AgentInputBox() {
       sendMessage(`/${cmd.name}`)
     }
     textareaRef.current?.focus()
-  }, [sendMessage])
+  }, [sendMessage, setInputText])
 
   // 选择 @ 提及
   const handleMentionSelect = useCallback((target: MentionTarget) => {
@@ -138,7 +145,7 @@ export default function AgentInputBox() {
       setInputText(`${before}@${target.insertText ?? target.displayName} `)
     }
     textareaRef.current?.focus()
-  }, [inputText])
+  }, [inputText, setInputText])
 
   const contextRef = useRef<HTMLDivElement>(null)
   const modelThinkingRef = useRef<HTMLDivElement>(null)
@@ -205,7 +212,7 @@ export default function AgentInputBox() {
     setShowFilePicker(false)
     setInputText(prev => `${prev.trimEnd()}${prev.trimEnd() ? ' ' : ''}@${path} `)
     textareaRef.current?.focus()
-  }, [setShowFilePicker])
+  }, [setInputText])
 
   /** 发送或停止 */
   const handleSendOrStop = useCallback(async () => {
@@ -217,7 +224,7 @@ export default function AgentInputBox() {
     const text = inputText
     setInputText('')
     await sendMessage(text)
-  }, [generating, inputText, sendMessage, cancelGeneration])
+  }, [generating, inputText, sendMessage, cancelGeneration, setInputText])
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {

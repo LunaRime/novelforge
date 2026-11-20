@@ -8,6 +8,7 @@ import { globalEventBus } from '../../shared/event-bus'
 import { Button } from '../ui/Button'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../ui/Dialog'
 import { toast } from '../ui/Toast'
+import { VersionActions, type VersionAction } from '../editor/VersionActions'
 import { FileChapterContinuation, type ContinuationCommand } from './FileChapterContinuation'
 import { FileProjectAgent } from './FileProjectAgent'
 
@@ -18,6 +19,7 @@ type Preview = ProjectChannels['project:file-editor-preview']['return'] & { revi
 type ImportPreview = { path: string; chapters: FileImportChapter[]; firstNumber: string }
 type ImportBatch = Omit<ImportPreview, 'firstNumber'> & { firstNumber: number; indexed?: boolean }
 type BlueprintReceipt = ProjectChannels['project:file-editor-apply-import-blueprints']['return']
+type Confirmation = Commit['kind'] | 'apply-settings' | 'apply-blueprints' | 'activate'
 
 const inferenceLabels = {
   worldSetting: 'novelConfig.worldSetting', coreOutline: 'novelConfig.coreOutline',
@@ -47,6 +49,9 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [workspace, setWorkspace] = useState<Workspace>()
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const [savingBody, setSavingBody] = useState(false)
+  const [indexPending, setIndexPending] = useState(false)
+  const [recovery, setRecovery] = useState<{ locator: string; committed: boolean }>()
   const [openingDocument, setOpeningDocument] = useState(false)
   const [revisionId, setRevisionId] = useState<number>()
   const [preview, setPreview] = useState<Preview>()
@@ -56,7 +61,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const [blueprintPreview, setBlueprintPreview] = useState<FileImportBlueprintInference & { receipt?: BlueprintReceipt }>()
   const [inferenceMode, setInferenceMode] = useState<'settings' | 'blueprints'>()
   const [blueprintProgress, setBlueprintProgress] = useState<{ completed: number; total: number }>()
-  const [confirmation, setConfirmation] = useState<Commit['kind'] | 'apply-settings' | 'apply-blueprints'>()
+  const [confirmation, setConfirmation] = useState<Confirmation>()
+  const [confirmationOrigin, setConfirmationOrigin] = useState<HTMLElement | null>(null)
   const pending = useRef(false)
   const inferenceRun = useRef<AbortController | undefined>(undefined)
   const active = workspace?.tabs.find(tab => tab.locator === workspace.active)
@@ -73,6 +79,11 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   const canApplySettings = !inferencePreview?.applied && (settingsOffer?.available.some(field =>
     !settingsOffer.occupied.includes(field) && Boolean(inferencePreview?.values[field])) ?? false)
 
+  function requestConfirmation(action: Confirmation) {
+    setConfirmationOrigin(document.activeElement as HTMLElement | null)
+    setConfirmation(action)
+  }
+
   function remember(path: string, locators: string[], active: string) {
     try { localStorage.setItem(`novelforge-file-editor:${path}`, JSON.stringify({ locators, active })) }
     catch (error) { renderLog('warn', 'FileProjectEditor', String(error)) }
@@ -81,6 +92,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
   function display(path: string, result: Opened, preferred: string, requested: string[]) {
     // A preview belongs to the previous document and revision, even if the locator stayed the same.
     setPreview(undefined)
+    setRecovery(undefined)
+    setIndexPending(previous => workspace?.path === path && previous)
     setRevisionId(undefined)
     setImportPreview(previous => previous?.path === path ? previous : undefined)
     setIndexBatch(previous => previous?.path === path ? previous : undefined)
@@ -238,6 +251,25 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     } finally { pending.current = false; setBusy(false) }
   }
 
+  async function rebuildIndex() {
+    if (pending.current || dirty || !workspace) return
+    clearInference()
+    pending.current = true
+    setBusy(true)
+    const start = saveClock()
+    try {
+      // 重建以磁盘上已保存的正文为准，编辑器只传当前会话凭据。
+      const { indexed } = await ipc.invoke('project:file-editor-rebuild-index', workspace.token)
+      setIndexPending(false)
+      const message = t('project.fileEditorRebuildIndexDone').replace('{count}', String(indexed))
+      renderLog('info', 'Save:FileProjectEditor', `${message} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(message)
+    } catch (error) {
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t('project.fileEditorRebuildIndexFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
   async function load(path?: string, locator?: string) {
     if (pending.current || dirty) return
     pending.current = true
@@ -258,8 +290,10 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       clearInference()
       renderLog('error', 'FileProjectEditor', String(error))
       toast.error(t('dialog.openFailed'))
-      setWorkspace(undefined)
-      setText('')
+      if (!recovery) {
+        setWorkspace(undefined)
+        setText('')
+      }
     } finally { pending.current = false; setBusy(false); setOpeningDocument(false) }
   }
 
@@ -269,6 +303,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     clearInference()
     pending.current = true
     setBusy(true)
+    setSavingBody(!proposal)
     const start = saveClock()
     try {
       // 采纳提案只传编号，使用主进程实际落盘的正文更新编辑器。
@@ -289,6 +324,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
             pending: tab.lifecycle.canStageRevision && result.revision !== tab.revision ? [] : tab.lifecycle.pending } } : tab) })
       if (lifecycle?.canStageRevision && result.revision !== active.revision) setRevisionId(undefined)
       setPreview(undefined)
+      if (!result.indexed) setIndexPending(true)
       renderLog('info', 'Save:FileProjectEditor', `${t('save.success')} (${Math.round(saveClock() - start)}ms)`)
       if (result.indexed) toast.success(t('save.success'))
       else toast.warning(t('project.fileEditorIndexPending'))
@@ -297,7 +333,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t('project.fileEditorSaveConflict'))
       return false
-    } finally { pending.current = false; setBusy(false) }
+    } finally { pending.current = false; setBusy(false); setSavingBody(false) }
   }
 
   async function stageAgentRevision(proposal: FileAgentEditProposal): Promise<boolean> {
@@ -359,6 +395,28 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
     await persistCommit(command, `doc://chapter/${command.chapterId}`)
   }
 
+  async function activateProject() {
+    if (pending.current || dirty || !workspace?.canActivate) return
+    pending.current = true
+    setBusy(true)
+    clearInference()
+    const start = saveClock()
+    let activated = false
+    try {
+      await ipc.invoke('project:file-editor-activate', workspace.token)
+      activated = true
+      const locators = workspace.tabs.map(tab => tab.locator)
+      const reopened = await ipc.invoke('project:file-editor-open', workspace.path, locators)
+      display(workspace.path, reopened, workspace.active, locators)
+      renderLog('info', 'Save:FileProjectEditor', `${t('project.fileEditorActivated')} (${Math.round(saveClock() - start)}ms)`)
+      toast.success(t('project.fileEditorActivated'))
+    } catch (error) {
+      if (activated) setWorkspace(undefined)
+      renderLog('error', 'Save:FileProjectEditor', String(error))
+      toast.error(t(activated ? 'project.fileEditorReloadFailed' : 'project.fileEditorActivateFailed'))
+    } finally { pending.current = false; setBusy(false) }
+  }
+
   async function persistCommit(command: FileDraftCommand, locator: string) {
     if (pending.current || dirty || !workspace) return
     clearInference()
@@ -378,9 +436,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       display(workspace.path, result, locator, requested)
       toast.success(t('save.success'))
     } catch (error) {
-      // A failure can follow file publication. Hide stale controls until open/recovery runs again.
-      setWorkspace(undefined)
-      setPreview(undefined)
+      // Show the captured text and preview while the normal open path verifies the receipt.
+      setRecovery({ locator, committed })
       renderLog('error', 'Save:FileProjectEditor', String(error))
       toast.error(t(committed ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed'))
     } finally { pending.current = false; setBusy(false) }
@@ -395,6 +452,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
       setWorkspace(undefined)
       setText('')
       setPreview(undefined)
+      setRecovery(undefined)
+      setIndexPending(false)
       setImportPreview(undefined)
       setIndexBatch(undefined)
       setRevisionId(undefined)
@@ -428,17 +487,37 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
         </DialogHeader>
         <div className="flex min-h-0 flex-col gap-3 overflow-auto p-4" aria-busy={busy}>
           <Button variant="outline" disabled={busy || dirty} onClick={() => void load()}>{t('project.fileEditorChoose')}</Button>
-          {workspace && (
+          {workspace && recovery && (
+            <div className="flex flex-col gap-2">
+              <p role="status">{t(recovery.committed ? 'project.fileEditorReloadFailed' : 'project.fileEditorOperationFailed')}</p>
+              <Button type="button" variant="outline" disabled={busy} onClick={() => void load(workspace.path, recovery.locator)}>
+                {t('action.retry')}
+              </Button>
+              <textarea aria-label={t('project.fileEditorBody')} rows={10} readOnly value={text}
+                className="rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
+              {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
+            </div>
+          )}
+          {workspace && !recovery && (
             <>
               <p className="truncate text-sm" title={workspace.path}>{workspace.path}</p>
+              {workspace.activation && <p className="text-sm">{t('project.fileEditorActivated')}</p>}
+              {indexPending && <p role="status" className="text-sm">{t('project.fileEditorIndexPending')}</p>}
+              {workspace.canActivate && <Button variant="outline" disabled={busy || dirty}
+                onClick={() => requestConfirmation('activate')}>{t('project.fileEditorActivate')}</Button>}
               {!openingDocument && <FileProjectAgent key={workspace.token} token={workspace.token} locator={active?.locator} disabled={busy}
                 editableRevision={dirty || active?.readOnly ? undefined : active?.revision} onApply={save}
                 onStage={lifecycle?.canStageRevision ? stageAgentRevision : undefined} />}
               {!openingDocument && continuationSource && active && nextNumber !== undefined && <FileChapterContinuation
                 key={`${workspace.token}:${active.locator}:${active.revision}`} token={workspace.token} number={nextNumber}
                 source={continuationSource} disabled={busy || dirty} onPublish={publishContinuation} />}
-              {workspace.importStartNumber !== undefined && !stagedImport && (
-                <Button variant="outline" disabled={busy || dirty} onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>
+              {workspace.importStartNumber !== undefined && (
+                <>
+                  {!stagedImport && <Button variant="outline" disabled={busy || dirty}
+                    onClick={() => void previewImport()}>{t('project.fileEditorImport')}</Button>}
+                  <Button variant="outline" disabled={busy || dirty}
+                    onClick={() => void rebuildIndex()}>{t('project.fileEditorRebuildIndex')}</Button>
+                </>
               )}
               {indexBatch?.path === workspace.path && (
                 <Button variant="outline" disabled={busy || dirty} onClick={() => void indexImport()}>{t('project.fileEditorIndexImport')}</Button>
@@ -470,7 +549,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                     </div>
                   ))}
                   {canApplySettings && (
-                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => setConfirmation('apply-settings')}>
+                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => requestConfirmation('apply-settings')}>
                       {t('project.fileEditorApplySettings')}
                     </Button>
                   )}
@@ -499,7 +578,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                     .replace('{inserted}', String(blueprintPreview.receipt.insertedChapterNumbers.length))
                     .replace('{skipped}', String(blueprintPreview.receipt.skippedChapterNumbers.length))}</p>}
                   {blueprintPreview.offerId && !blueprintPreview.receipt && (
-                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => setConfirmation('apply-blueprints')}>
+                    <Button variant="outline" disabled={busy || dirty || !!inferenceMode} onClick={() => requestConfirmation('apply-blueprints')}>
                       {t('project.fileEditorApplyBlueprints')}
                     </Button>
                   )}
@@ -541,14 +620,14 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
               )}
               {active && (
                 <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
-                  <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || busy}
+                  <textarea aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
                     onChange={event => {
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)
                     }}
                     className="resize-y rounded border border-[var(--color-border)] bg-[var(--color-bg)] p-3" />
                   <div className="flex gap-2">
-                    <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t('action.save')}</Button>
+                    <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t(savingBody ? 'status.saving' : 'action.save')}</Button>
                     {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setText(active.content)}>
                       {t('project.fileEditorDiscard')}
                     </Button>}
@@ -556,7 +635,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                 </form>
               )}
               {lifecycle && (
-                <div className="flex flex-col gap-2">
+                <div className="nf-version-action-container flex flex-col gap-2">
                   {lifecycle.pending.length > 0 && (
                     <div className="flex flex-wrap items-end gap-2">
                       <label className="flex flex-col gap-1 text-sm">
@@ -572,11 +651,13 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                     </div>
                   )}
                   {preview && <pre className="max-h-48 overflow-auto whitespace-pre-wrap rounded border border-[var(--color-border)] p-3">{preview.content}</pre>}
-                  <div className="flex flex-wrap gap-2">
-                    {preview && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('merge')}>{t('project.fileEditorMerge')}</Button>}
-                    {lifecycle.canFinalize && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('finalize')}>{t('project.fileEditorFinalize')}</Button>}
-                    {lifecycle.canArchive && <Button variant="outline" disabled={busy || dirty} onClick={() => setConfirmation('archive')}>{t('project.fileEditorArchive')}</Button>}
-                  </div>
+                  <VersionActions actions={([
+                    { enabled: Boolean(preview), label: 'project.fileEditorMerge', kind: 'merge' },
+                    { enabled: lifecycle.canFinalize, label: 'project.fileEditorFinalize', kind: 'finalize' },
+                    { enabled: lifecycle.canArchive, label: 'project.fileEditorArchive', kind: 'archive' },
+                  ] as const).filter(action => action.enabled).map(({ label, kind }): VersionAction => ({
+                    label: t(label), disabled: busy || dirty, onSelect: () => requestConfirmation(kind),
+                  }))} />
                 </div>
               )}
             </>
@@ -584,10 +665,15 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
         </div>
         {/* Use a nested Radix dialog so the editor's focus trap yields to confirmation. */}
         <Dialog open={Boolean(confirmation)} onOpenChange={next => { if (!next) setConfirmation(undefined) }}>
-          <DialogContent>
+          <DialogContent onCloseAutoFocus={event => {
+            if (!confirmationOrigin?.isConnected) return
+            event.preventDefault()
+            confirmationOrigin.focus()
+          }}>
             <DialogHeader>
               <DialogTitle>{t('dialog.confirmTitle')}</DialogTitle>
-              <DialogDescription>{t(confirmation === 'apply-blueprints' ? 'project.fileEditorConfirmApplyBlueprints'
+              <DialogDescription>{t(confirmation === 'activate' ? 'project.fileEditorConfirmActivate'
+                : confirmation === 'apply-blueprints' ? 'project.fileEditorConfirmApplyBlueprints'
                 : confirmation === 'apply-settings' ? 'project.fileEditorConfirmApplySettings'
                 : confirmation === 'merge' ? 'project.fileEditorConfirmMerge'
                 : confirmation === 'finalize' ? 'project.fileEditorConfirmFinalize' : 'project.fileEditorConfirmArchive')}</DialogDescription>
@@ -595,7 +681,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
             <DialogFooter>
               <Button variant="outline" onClick={() => setConfirmation(undefined)}>{t('action.cancel')}</Button>
               <Button onClick={() => {
-                if (confirmation === 'apply-blueprints') void applyInferredBlueprints()
+                if (confirmation === 'activate') void activateProject()
+                else if (confirmation === 'apply-blueprints') void applyInferredBlueprints()
                 else if (confirmation === 'apply-settings') void applyInferredSettings()
                 else if (confirmation) void commit(confirmation)
                 setConfirmation(undefined)

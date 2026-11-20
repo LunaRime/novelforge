@@ -2,11 +2,11 @@
 
 2026-11-06。基线：`c2709ad`，知识库侧栏 PR #47 已合并。本文为后续计划，所有未勾选项均未实施。
 
-执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。候选编辑器界面已提交为 `bf7de59`。[F2 提交恢复协议](41-file-commit-recovery.md) 基础提交为 `03510b4`，候选业务 IPC 已提交为 `431024f`。候选界面已提交为 `746648c`，候选准备与旧章表冻结已提交为 `1cee167`。常规打开分流已提交为 `696e878`。通用写入保护已提交为 6dd8f3d，新章首次发布已提交为 4e50d73。候选编辑器已接通正文导入、全文索引、空白设定应用、缺失蓝图补入与 Agent 正文问答及确认后保存，并支持预览后创建续写草稿。续写已读取候选作品设定和目标章蓝图，导入及续写生成的章节可定稿和归档。文件稿可保存 Agent 提案为待合并修稿并确认合并，正式激活与打包验收待续。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
+执行时使用 `executing-plans` 按任务验证并复核，明确采用多 agent 执行时可使用 `subagent-driven-development`。A 已提交为 0c1375c、B1 为 5085aa0、B2 为 51dbe88、B3 为 bbb479e。C1a 为 632ac52、C1b 为 288773d、C1c 为 22ac0d2、C1d 为 7f04bbe、C1e 为 133c8bb、C1f 为 2d4c7aa、C1g 为 0373b7d，C2 为 4445a83。[C3 角色模板与重复角色合并](32-character-templates-and-merge-plan.md) 已通过本地验收。[D1 状态职责清单](33-store-responsibilities.md) 已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。候选编辑器界面已提交为 `bf7de59`。[F2 提交恢复协议](41-file-commit-recovery.md) 基础提交为 `03510b4`，候选业务 IPC 已提交为 `431024f`。候选界面已提交为 `746648c`，候选准备与旧章表冻结已提交为 `1cee167`。常规打开分流已提交为 `696e878`。通用写入保护已提交为 6dd8f3d，新章首次发布已提交为 4e50d73。候选编辑器已接通正文导入、全文索引、空白设定应用、缺失蓝图补入与 Agent 正文问答及确认后保存，并支持预览后创建续写草稿。续写已读取候选作品设定和目标章蓝图，导入及续写生成的章节可定稿和归档。文件稿可保存 Agent 提案为待合并修稿并确认合并。[F3 验收](52-f3-file-storage-acceptance.md) 已记录 Windows 打包应用的显式激活、重启和隔离回退。各批记录见 [架构索引](README.md)。第九至十二节给出 B–F 的拆分、证据与准入条件。各批按专项实施细则推进，数据迁移另按专项设计执行。
 
 **目标**：组件只处理输入、渲染与反馈，应用用例组织业务，适配器连接 IO；最终在完整生命周期验收后切换章节存储。
 
-后端重构完成并通过交接验收后，前端进入 U0 基线采集与组件样板，再按批实施应用壳、编辑区、导航及功能页改造。交接清单、阶段依赖和验收见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+前端可先开展 U0 合成样板和基线采集。通过后端交接验收后，再按批实施应用壳、编辑区、导航和功能页改造。交接清单、阶段依赖和验收见 [42 V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md)。
 
 **技术栈**：沿用 React 19、TypeScript 6、Vite 8、Zustand 5、Tailwind CSS 4、Radix UI、CodeMirror 6 和 Electron。不换框架、不拆 monorepo、不先做全仓目录改名。
 
@@ -158,8 +158,10 @@ interface MaintenanceReceipt {
 - [x] [E3 副本验收](38-storage-export-verification.md)：一致离线库副本导出到独立目录，逐条比对正文、身份、历史和关联；重复执行、外部修改、损坏数据都按失败策略验证。
 - [x] [E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已验证标记方案的误读风险、独立文件目录的旧版打开屏障，以及完整备份恢复与重启。
 - [x] [F1 切换设计与身份映射](40-file-storage-cutover-design.md) 已核验项目级映射、候选编辑器保存及重启恢复。正式项目激活随 F2/F3 验收。
-- [ ] F2 切换后文件成为真相，索引可删可重建；旧表冻结保留，不删，不恢复影子双写分支。
-- [ ] F3 证明删除索引、重启恢复、定稿只读、历史/分支完整性及真实打包可运行，再考虑发布。旧表删除不早于 1.0，并另走既定验收。
+- [x] [F2 文件项目提交与恢复](41-file-commit-recovery.md) 激活项目的当前正文由文件编辑器写入 Markdown，旧章表冻结保留，派生索引可从正文重建。
+- [x] [F3 Windows 文件项目验收](52-f3-file-storage-acceptance.md) 打包应用通过索引缺失重建、重启恢复、定稿只读、历史与分支完整性及隔离回退。验收范围为激活文件项目的现有专用入口。
+- [x] [V3 后端交接](53-v3-backend-handoff.md) 核定 C/D 交付和生产契约。U1 首批使用现有普通 SQLite 工作台，文件项目沿用专用编辑器分流。
+- [ ] 发布验收按目标平台和实际交付范围执行。旧表删除不早于 1.0，并另走既定验收。
 
 ## 七、每批质量门禁与交付规则
 
@@ -186,7 +188,7 @@ git status --short package.json
 
 ## 八、本次计划交付
 
-计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D4 的进度见 [架构索引](README.md)。E/F 按各自出口条件推进，前端改造见 [25 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md)。
+计划初稿定义了后续路线。A1–A4 的本地实施见 [19 知识库总览应用层实施](19-knowledge-overview-application.md)，B1–B3、C1a–C1g、C2–C3 和 D1–D4 的进度见 [架构索引](README.md)。E/F 按各自出口条件推进，前端改造见 [42 V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md)。
 
 ## 九、源码核对与优先风险（2026-11-06 补充）
 
@@ -353,7 +355,7 @@ F 的切换条件和身份设计见 [F1 专项设计](40-file-storage-cutover-de
 - [ ] 章节文件与仍在 DB 的修稿/审稿等跨介质关联必须有崩溃恢复协议及故障注入证据；SQLite 事务无法让文件写入自动成为同一原子提交。协议未定，不开放该链路。
 - [ ] 文件 revision 冲突时保留两份内容和来源，要求明确解决；不盲目覆盖外部编辑。活跃锁拒绝冲突写，陈旧锁修复需核验所有权和恢复状态。
 - [ ] UI 保存、agent 工具、工作流续跑和导入均跑真实入口；定稿只读、历史分支和外部编辑恢复分别验收。
-- [ ] 使用真实打包应用复验打开、保存、重启恢复和旧版隔离；前端 Vite build 与单元测试通过不能替代此项。
+- [ ] 使用目标平台的打包应用复验打开、保存、重启恢复和旧版隔离。[Windows 文件项目证据](52-f3-file-storage-acceptance.md)已收录，其余发布目标随实际交付验收。
 
 ### 本次补充的检查记录
 
@@ -362,4 +364,4 @@ F 的切换条件和身份设计见 [F1 专项设计](40-file-storage-cutover-de
 - [x] 区分正文提交、派生刷新、过期发布和实际取消；未把存储版本标记当作已发布旧版的隔离保证。
 - [x] 按各批实际交付回填 A、B、C 和 D1–D4。真实副本验证及引擎独立打包仍有各自的验收项。
 
-A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。候选编辑器界面已提交为 `bf7de59`。[F2 提交恢复协议](41-file-commit-recovery.md) 基础提交为 `03510b4`，候选业务 IPC 已提交为 `431024f`。候选界面已提交为 `746648c`，候选准备与旧章表冻结已提交为 `1cee167`。常规打开分流已提交为 `696e878`。通用写入保护已提交为 6dd8f3d，新章首次发布已提交为 4e50d73。候选编辑器已接通正文导入、全文索引、空白设定应用、缺失蓝图补入与 Agent 正文问答及确认后保存，并支持预览后创建续写草稿。续写已读取候选作品设定和目标章蓝图，导入及续写生成的章节可定稿和归档。文件稿可保存 Agent 提案为待合并修稿并确认合并，正式激活与打包验收待续。
+A、B1–B3、C1a–C1g 与 C2–C3 已本地实施。D1 状态职责清单已完成，[D2 项目保存与配置撤销](34-project-config-save-plan.md) 已提交为 `6e13992`。[D3 Runtime 实例隔离](35-runtime-instances-plan.md) 已提交为 `d5c964d`。[D4 无 UI 创作业务链路](36-headless-draft-lifecycle-plan.md) 已提交为 `45a6530`。[E1 存储生命周期矩阵](37-storage-lifecycle-matrix.md) 已提交为 `22fcdd8`。[E2 只读诊断](10-core-usage.md#e2-只读诊断) 已提交为 `46dd042`。[E3 副本验证包](38-storage-export-verification.md) 已提交为 `9f1c1ff`。[E4 旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) 已提交为 `4f3508d`。[F1 切换设计与身份映射](40-file-storage-cutover-design.md) 离线映射与候选 IPC 已提交为 `d00c870`、`80dd06e`。候选编辑器界面已提交为 `bf7de59`。[F2 提交恢复协议](41-file-commit-recovery.md) 基础提交为 `03510b4`，候选业务 IPC 已提交为 `431024f`。候选界面已提交为 `746648c`，候选准备与旧章表冻结已提交为 `1cee167`。常规打开分流已提交为 `696e878`。通用写入保护已提交为 6dd8f3d，新章首次发布已提交为 4e50d73。候选编辑器已接通正文导入、全文索引、空白设定应用、缺失蓝图补入与 Agent 正文问答及确认后保存，并支持预览后创建续写草稿。续写已读取候选作品设定和目标章蓝图，导入及续写生成的章节可定稿和归档。文件稿可保存 Agent 提案为待合并修稿并确认合并。[F3 验收](52-f3-file-storage-acceptance.md) 已记录 Windows 打包应用的显式激活、重启和隔离回退。

@@ -12,10 +12,11 @@
  *  - 操作按钮（独立行为）一律作主按钮的**兄弟**；不渲染任何 disabled 按钮（反模式）
  *  - 头部图标按钮固定像素 32×32（标准 §5.2；rem 档位在 html{font-size:14px} 下不足）
  */
-import { useState, type ReactNode } from 'react'
+import { useId, type ReactNode } from 'react'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
 import { useTranslation } from '../../../hooks/useTranslation'
+import { useNavigationExpansion } from './navigation-session'
 
 interface SidebarGroupProps {
   /** 标题图标（建议 12px，accent 色） */
@@ -34,6 +35,7 @@ interface SidebarGroupProps {
   onContextMenu?: (e: React.MouseEvent) => void
   /** 默认展开（折叠状态由组件内部管理） */
   defaultOpen?: boolean
+  navigationKey?: string
   /** 无内容时隐藏折叠按钮（单行入口块，如小说配置/章节蓝图） */
   collapsible?: boolean
   children?: ReactNode
@@ -48,13 +50,13 @@ export default function SidebarGroup({
   titleHint,
   onContextMenu,
   defaultOpen = true,
+  navigationKey,
   collapsible = true,
   children,
 }: SidebarGroupProps) {
   const { t } = useTranslation()
-  const [open, setOpen] = useState(defaultOpen)
-
-  const toggle = () => setOpen(v => !v)
+  const [open, toggle] = useNavigationExpansion(navigationKey, defaultOpen)
+  const groupId = useId()
   const iconSlot = (
     <span style={{ color: 'var(--color-accent)', flexShrink: 0, display: 'flex' }}>{icon}</span>
   )
@@ -66,6 +68,8 @@ export default function SidebarGroup({
       className="flex items-center justify-center rounded hover:bg-[var(--color-hover)] cursor-pointer flex-shrink-0"
       style={{ width: 32, height: 32, color: 'var(--color-text-muted)' }}
       title={open ? t('action.close') : t('action.open')}
+      aria-expanded={open}
+      aria-controls={groupId}
     >
       {open ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
     </button>
@@ -84,11 +88,12 @@ export default function SidebarGroup({
         onPrimary={onTitleClick ?? (collapsible ? toggle : undefined)}
         swap={onTitleClick || collapsible ? (onTitleClick ? 'nav' : 'expand') : undefined}
         expanded={open}
+        controlsId={collapsible ? groupId : undefined}
         leadingButton={onTitleClick && collapsible ? foldButton : undefined}
         actions={actions}
       />
 
-      {collapsible ? (open ? children : null) : children}
+      {collapsible ? <div id={groupId} hidden={!open}>{open ? children : null}</div> : children}
     </section>
   )
 }

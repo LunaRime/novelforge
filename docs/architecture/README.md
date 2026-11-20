@@ -27,14 +27,14 @@
 | 15 | [编辑器应用层抽离](15-editor-application-plan.md) | UI、应用用例与 renderer 适配器分工 | 已实现并通过本地验证 |
 | 16 | [修稿合并用例与原子提交](16-revision-merge-application-plan.md) | 合并业务退出 store，三项同事务 | 已实现并通过本地验证 |
 | 17 | [知识库侧栏应用层抽离](17-knowledge-panel-application-plan.md) | 搜索/摘要/删除用例及请求失效保护 | 已实现并通过本地验证 |
-| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F2 候选编辑器已接通正文文件导入 |
+| 18 | [后续重构实施计划](18-followup-implementation-plan.md) | 各批实施范围、顺序与验收条件 | F3 Windows 文件项目验收通过 |
 | 19 | [知识库总览应用层实施](19-knowledge-overview-application.md) | 维护互斥、导出元数据、项目隔离及总览组件回归 | 本地提交 0c1375c |
 | 20 | [架构文档应用层实施](20-architecture-document-application-plan.md) | B1 读写/生成用例、dirty 会话与运行归属 | 本地实施与验证记录 |
 | 21 | [小说配置应用层实施](21-novel-config-application-plan.md) | B2 保存、字段版本、生成冲突与撤销保护 | 本地实施与验证记录 |
 | 22 | [世界观与架构状态应用层](22-architecture-overview-application-plan.md) | B3 部分失败、来源隔离、提取取消与编辑会话保护 | 本地实施与验证记录 |
 | 23 | [章节蓝图加载与保存应用层](23-blueprint-load-save-application-plan.md) | C1a 快照保存、逐行 dirty、来源隔离与批量事务验证 | 本地实施与验证记录 |
 | 24 | [活页夹卷归属与手动顺序](24-binder-application-plan.md) | C1b 重排用例、实际成员投影与事务回滚 | 本地实施与验证记录 |
-| 25 | [UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md) | 后端交接、应用壳、写作体验、导航、AI 与验收 | 计划已写，等待后端交接 |
+| 25 | [原 UI 与前端重构实施计划](25-frontend-ui-refactor-plan.md) | 历史入口与原稿查阅方式 | 已并入 42 |
 | 26 | [蓝图删除命令](26-blueprint-delete-application-plan.md) | C1c 手动删除、会话隔离与写入互斥 | 本地实施与验证记录 |
 | 27 | [蓝图生成入口、补缺口与校检](27-blueprint-generation-verification-plan.md) | 严格快照、连续缺口、确认与派发失效保护 | 本地提交 7f04bbe |
 | 28 | [补缺口执行期仅插入协议](28-blueprint-gap-insert-only-plan.md) | 写时不覆盖、连接身份、取消与断点恢复来源保护 | 本地提交 133c8bb |
@@ -51,6 +51,18 @@
 | 39 | [旧版隔离与恢复](39-legacy-storage-isolation-and-restore.md) | 打包旧版对照、隔离屏障与完整备份恢复 | E4 已提交 |
 | 40 | [文件存储切换设计](40-file-storage-cutover-design.md) | 项目级草稿映射、激活、文档身份及回退 | F1 映射及无界面联调已交付 |
 | 41 | [文件与数据库提交恢复](41-file-commit-recovery.md) | 写入意图、恢复回执与 SQLite 入口保护 | F2 候选项目已接入写入恢复、正文导入、全文索引、空白设定应用、缺失蓝图补入、Agent 正文问答及修改提案、结合作品设定与蓝图的下一章续写 |
+| 42 | [V3 前端重构与落地计划](42-v3-frontend-delivery-plan.md) | V3 视觉、后端交接、工程拆分和分批验收 | 本地交接范围已核定 |
+| 43 | [V3 U0 样板、基线与接口记录](43-v3-u0-baseline.md) | Storybook、Windows 交互矩阵、长文输入及现有接口 | 本地验证记录 |
+| 44 | [V3 U1 工作台施工与交互验收](44-v3-u1-workbench-plan.md) | 两态画面、模式切换、窄窗、键盘和正式接线清单 | Windows 打包验收通过 |
+| 45 | [V3 启动画面设计与接入](45-v3-startup-design.md) | 启动样板、Logo 评审、状态及正式接入 | 设计样板 |
+| 46 | [V3 U2 正文编辑与版本操作施工计划](46-v3-u2-editor-plan.md) | 标签、稿纸、窄栏修稿与保存回执 | 施工计划 |
+| 47 | [V3 U3 项目导航与章节定位施工计划](47-v3-u3-project-navigation-plan.md) | 卷展开、活动文档、真实顺序与重排回归 | 施工计划 |
+| 48 | [V3 U4 功能页施工与验收计划](48-v3-u4-feature-pages-plan.md) | 蓝图写入确认与其余功能页回归 | 施工计划 |
+| 49 | [V3 U5 写作搭档、提案与任务施工计划](49-v3-u5-partner-tasks-plan.md) | 任务召回、审批、修稿与取消回执 | 施工计划 |
+| 50 | [V3 U6 设置、欢迎页与公共交互施工计划](50-v3-u6-settings-and-welcome-plan.md) | 首帧、设置预览和关闭、欢迎页入口 | 施工计划 |
+| 51 | [V3 U7 集成、性能与真机验收](51-v3-u7-integration-acceptance.md) | 大项目样本、性能采集与正式打包矩阵 | Windows 集成验收与交付记录 |
+| 52 | [F3 文件项目 Windows 验收与回退](52-f3-file-storage-acceptance.md) | 分支身份、打包应用重启与隔离归档恢复 | Windows 验收通过 |
+| 53 | [V3 后端交接与 U1 工作台基线](53-v3-backend-handoff.md) | C/D 交付、生产操作契约及普通 SQLite 打包基线 | 本地证据已核定 |
 | — | [调研全文](../2026-10-28-architecture-comparison.md) | 六个项目的对比与「根刺」 | 背景材料 |
 | — | [原型](prototype/chapter-store.mjs) | 纯 Node 存储原型，11 条断言 | 可运行 |
 

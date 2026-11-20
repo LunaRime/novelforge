@@ -11,7 +11,10 @@ import { useProjectStore } from '../../../stores/project-store'
 import { t } from '../../../shared/locale'
 import { useTranslation } from '../../../hooks/useTranslation'
 
-import { showSidebarMenu, openChapterFile } from './SidebarShared'
+import { showSidebarMenu, openChapterFile, SidebarRowMenu } from './SidebarShared'
+import { useEditorStore } from '../../../stores/editor-store'
+import MenuRow from '../../ui/MenuRow'
+import type { ContextMenuEntry } from '../../ui/ContextMenu'
 import ChapterExportDialog from '../../dialogs/ChapterExportDialog'
 import SidebarGroup from './SidebarGroup'
 import CountBadge from '../../ui/CountBadge'
@@ -164,6 +167,7 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
     <SidebarGroup
       icon={<PenTool size={12} />}
       title={t('manuscript.title')}
+      navigationKey="manuscript"
       defaultOpen={false}
       count={chapterFiles.length > 0
         ? <CountBadge value={chapterFiles.length} unit={t('unit.chapters')} />
@@ -185,68 +189,11 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
           {t('manuscript.empty')}
         </div>
       ) : (
-        chapterFiles.map(f => {
-              const displayName = getDisplay(f)
-              const chapterNum = extractChapterNumber(f)
-              return (
-                <div
-                  key={f.path}
-                  className="tree-item gap-1.5 group"
-                  // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
-                  style={{ paddingLeft: 0, paddingRight: 8 }}
-                  onContextMenu={e => showSidebarMenu([
-                    {
-                      key: 'open',
-                      label: t('action.openChapter'),
-                      icon: <FolderOpen size={13} />,
-                      onClick: () => openChapterFile(f.path, displayName),
-                    },
-                    {
-                      key: 'export-single',
-                      label: t('action.export'),
-                      icon: <Download size={13} />,
-                      onClick: () => openSingleExport(chapterNum),
-                    },
-                    { key: 'div1', type: 'divider' as const },
-                    {
-                      key: 'copy-path',
-                      label: t('action.copyPath'),
-                      icon: <Copy size={13} />,
-                      onClick: () => navigator.clipboard.writeText(f.path).catch(() => { }),
-                    },
-                  ], e)}
-                  title={t('manuscript.tooltip').replace('{name}', displayName)}
-                >
-                  {/* 2026-09-25 重构：章节点开此前在 `<div onClick>` 上 —— 键盘完全够不到，
-                      而它内部**本来就含**单章导出按钮，外层直接换 `<button>` 会 button 嵌 button。
-                      做法：文件图标 + 章节名包进主按钮，导出按钮降为兄弟节点
-                      （不再需要 stopPropagation，外层已无点击处理器）。 */}
-                  <button
-                    type="button"
-                    onClick={() => openChapterFile(f.path, displayName)}
-                    className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left enabled:cursor-pointer"
-                    style={{ paddingLeft: 30 }}
-                  >
-                    <FileText size={11} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-                    <span className="text-sm truncate flex-1" style={{ color: 'var(--color-text-secondary)' }}>
-                      {displayName}
-                    </span>
-                  </button>
-                  {/* 单章导出按钮 — hover/focus-within 时显示（主按钮获得焦点同样能唤出） */}
-                  <button
-                    className="flex items-center justify-center rounded transition-all opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 hover:bg-[var(--color-hover)]"
-                    style={{ width: 32, height: 32, flexShrink: 0, color: 'var(--color-text-muted)' }}
-                    title={t('export.singleExportTip')}
-                    onClick={() => openSingleExport(chapterNum)}
-                    type="button"
-                  >
-                    <Download size={12} />
-                  </button>
-                </div>
-              )
-            })
-          )}
-
+        chapterFiles.map(file => (
+          <ManuscriptRow key={file.path} locator={file.path} name={getDisplay(file)}
+            onExport={() => openSingleExport(extractChapterNumber(file))} />
+        ))
+      )}
     </SidebarGroup>
     {/* 章节导出对话框 — 2026-09-27 修复 RM-SB-01：必须挂在折叠门之外。
         此前它在 SidebarGroup 的 children 里，收起态 `open ? children : null` 不渲染 →
@@ -258,5 +205,31 @@ export default function ManuscriptGroup({ files }: { files: FileNode[]; projectP
       onClose={() => setExportOpen(false)}
     />
     </>
+  )
+}
+
+function ManuscriptRow({ locator, name, onExport }: { locator: string; name: string; onExport: () => void }) {
+  const { t } = useTranslation()
+  const current = useEditorStore(state => state.activeTabId === locator)
+  const open = () => { void openChapterFile(locator, name) }
+  const menu: ContextMenuEntry[] = [
+    { key: 'open', label: t('action.openChapter'), icon: <FolderOpen size={13} />, onClick: open },
+    { key: 'export-single', label: t('action.export'), icon: <Download size={13} />, onClick: onExport },
+    { key: 'div1', type: 'divider' },
+    { key: 'copy-path', label: t('action.copyPath'), icon: <Copy size={13} />,
+      onClick: () => navigator.clipboard.writeText(locator).catch(() => { }) },
+  ]
+  return (
+    <div className="pl-3">
+      <MenuRow icon={<FileText size={11} className="shrink-0 text-[var(--color-text-muted)]" />}
+        title={name} titleHint={name} onPrimary={open} active={current} current={current ? 'page' : undefined}
+        onContextMenu={event => showSidebarMenu(menu, event)}
+        actions={<>
+          <button type="button" className="icon-btn size-[32px] shrink-0" title={t('export.singleExportTip')}
+            aria-label={t('export.singleExportTip')} onClick={onExport}><Download size={12} /></button>
+          <SidebarRowMenu items={menu} />
+        </>}
+      />
+    </div>
   )
 }

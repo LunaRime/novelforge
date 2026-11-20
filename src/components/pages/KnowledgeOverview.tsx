@@ -1,3 +1,5 @@
+import { FeatureSplit } from '../ui/FeatureSplit'
+import MenuRow from '../ui/MenuRow'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Database, BookOpen, FileText,
@@ -62,6 +64,9 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchEmpty, setSearchEmpty] = useState(false)
+  const [section, setSection] = useState<'overview' | 'search'>('overview')
+  const [detailOpen, setDetailOpen] = useState(false)
   const [topK, setTopK] = useState(10)
   const [vectorlessCount, setVectorlessCount] = useState(0)
   const [backfilling, setBackfilling] = useState(false)
@@ -126,14 +131,18 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
     return () => { unsub1(); unsub2() }
   }, [loadData, checkVectorless])
   const cancelSearch = () => {
-    searchSequence.current++; application.cancelSearch(); setSearchResults([]); setSearching(false)
+    searchSequence.current++; application.cancelSearch(); setSearchResults([]); setSearching(false); setSearchEmpty(false)
   }
   const handleSearch = async () => {
     const sequence = ++searchSequence.current
     setSearching(true)
+    setSearchEmpty(false)
     try {
       const results = await application.search(searchQuery, topK)
-      if (active() && sequence === searchSequence.current) setSearchResults(results)
+      if (active() && sequence === searchSequence.current) {
+        setSearchResults(results)
+        setSearchEmpty(results.length === 0)
+      }
     } catch (error) {
       if (!active() || sequence !== searchSequence.current || error instanceof KnowledgeRequestCancelled) return
       renderLog('error', 'Search:Knowledge', String(error)); toast.error(t('knowledge.searchFailed').replace('{error}', String(error)))
@@ -179,11 +188,11 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
   const searchMode = hasVectors ? t('knowledge.fusion') : t('knowledge.bm25')
 
   return (
-    <div className="h-full overflow-y-auto" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
-      <div className="max-w-4xl mx-auto px-8 py-6">
+    <div className="h-full min-h-0 flex flex-col" style={{ backgroundColor: 'var(--color-editor-bg)' }}>
+      <div className="w-full min-w-0 px-4 py-3">
 
         {/* ===== 标题 ===== */}
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex flex-wrap items-center gap-2">
           <div
             className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0"
             style={{ background: 'linear-gradient(135deg, var(--color-accent), var(--color-accent-hover))' }}
@@ -229,6 +238,16 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           )}
         </div>
 
+      </div>
+      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={
+        (['overview', 'search'] as const).map(view => (
+          <MenuRow key={view} title={t(view === 'overview' ? 'knowledge.overview' : 'knowledge.semanticSearch')}
+            current={section === view ? 'page' : undefined} active={section === view}
+            onPrimary={() => { setSection(view); setDetailOpen(true) }} />
+        ))
+      }>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3">
+        <section hidden={section !== 'overview'}>
         {/* 加载失败横幅：统计卡片全 0 不等于「没有数据」，必须区分 */}
         {loadFailed && (
           <div
@@ -249,7 +268,7 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
         )}
 
         {/* ===== 统计卡片 ===== */}
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,8rem),1fr))] gap-3 mb-6">
           <StatCard icon={<FileText size={14} />} label={t('knowledge.docCount')} value={stats.documentCount} />
           <StatCard icon={<Layers size={14} />} label={t('knowledge.chunkCount')} value={stats.totalChunks} />
           <StatCard
@@ -310,12 +329,14 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           </div>
         )}
 
+        </section>
+        <section hidden={section !== 'search'}>
         {/* ===== 语义检索区域 ===== */}
         <div
           className="rounded-xl border border-[var(--color-border)] mb-6 overflow-hidden"
           style={{ backgroundColor: 'var(--color-sidebar)' }}
         >
-          <div className="flex items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 border-b border-[var(--color-border)]">
             <Search size={14} className="text-[var(--color-accent)] flex-shrink-0" />
             <span className="text-sm font-semibold text-[var(--color-text)]">{t('knowledge.semanticSearch')}</span>
             <Badge variant={hasVectors ? 'success' : 'info'} className="px-1.5">
@@ -326,7 +347,7 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
             </span>
           </div>
           <div className="px-4 py-3">
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <Input
                 className="flex-1 h-9"
                 placeholder={t('knowledge.searchPlaceholder')}
@@ -355,6 +376,8 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
               </Button>
             </div>
           </div>
+
+          {searchEmpty && <p role="status" className="px-4 py-2 text-xs text-[var(--color-text-muted)]">{t('knowledge.empty')}</p>}
 
           {/* 检索结果 */}
           {searchResults.length > 0 && (
@@ -403,7 +426,9 @@ function KnowledgeOverviewContent({ source }: { source: { id: string; path: stri
           )}
         </div>
 
-      </div>
+        </section>
+        </div>
+      </FeatureSplit>
 
       {/* 章节导出对话框 */}
       <ChapterExportDialog

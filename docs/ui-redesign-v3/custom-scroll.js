@@ -191,70 +191,45 @@
     }
   }
 
-  /* ---------------------------------------------------------- wheel routing */
-  /* Decorative overflow:hidden boxes used to be real scroll containers and
-     swallowed the wheel (they are now overflow:clip). This is the safety net:
-     the wheel always reaches the panel's own scroller, including from the
-     dialog head/foot, the custom bar, toolbars and any nested ghost box. */
-  function registeredFrom(node) {
-    let cur = node;
-    while (cur && cur.nodeType === 1) {
-      const id = cur.dataset && cur.dataset.csbId;
-      if (id && entries.has(id)) return entries.get(id);
-      cur = cur.parentNode;
+  // 根据内容高度判断是否可滚动，容器在顶部时 scrollTop 为 0。
+  function canScrollY(el) {
+    const overflowY = window.getComputedStyle(el).overflowY;
+    return (overflowY === "auto" || overflowY === "scroll") && el.scrollHeight - el.clientHeight > 1;
+  }
+
+  function scrollableAncestor(node) {
+    for (let cur = node; cur && cur.id !== "program-window"; cur = cur.parentElement) {
+      if (canScrollY(cur)) return cur;
     }
     return null;
   }
 
-  function ghostBetween(target, container) {
-    let cur = target;
-    while (cur && cur !== container && cur.nodeType === 1) {
-      if (!(cur.dataset && cur.dataset.csbId) && window.getComputedStyle) {
-        const cs = window.getComputedStyle(cur);
-        const oy = cs && cs.overflowY;
-        if (oy && oy !== "visible" && oy !== "clip") return true;
-      }
-      cur = cur.parentNode;
-    }
-    return false;
-  }
-
-  function largestScroller(accept) {
-    let best = null, area = 0;
-    entries.forEach(function (entry) {
-      const c = entry.container;
-      if (!c || !c.isConnected || entry.bar.hidden || !accept(c)) return;
-      const a = (c.clientHeight || 0) * (c.clientWidth || 0);
-      if (a > area) { area = a; best = entry; }
-    });
-    return best;
+  function entryFor(container) {
+    return entries.get(container.dataset.csbId);
   }
 
   function onWheel(e) {
-    if (e.defaultPrevented || e.ctrlKey) return; /* leave pinch zoom alone */
-    const dy = e.deltaY || 0;
-    if (!dy) return;
+    // Ctrl + 滚轮和触控板捏合由浏览器处理，页面外层也保留原生滚动。
+    if (e.defaultPrevented || e.ctrlKey || !e.deltaY) return;
     const target = e.target;
-    let entry = registeredFrom(target);
-    const inside = !!entry;
-    const ghost = inside ? ghostBetween(target, entry.container) : false;
-    if (!entry) {
-      const dlg = target && target.closest ? target.closest("dialog") : null;
-      entry = dlg
-        ? largestScroller(function (c) { return dlg.contains ? dlg.contains(c) : false; })
-        : largestScroller(function (c) { return !(c.closest && c.closest("dialog")); });
-    }
-    if (!entry) return;
-    const c = entry.container;
-    const max = Math.max(0, (c.scrollHeight || 0) - (c.clientHeight || 0));
+    if (!(target instanceof Element) || !target.closest("#program-window")) return;
+
+    // 滚动条挂在独立的覆盖层，通过登记记录把滚轮交给对应面板。
+    const bar = target.closest(".nf-scrollbar");
+    const barEntry = bar && entries.get(bar.dataset.for);
+    const scroller = barEntry ? barEntry.container : scrollableAncestor(target);
+    if (!scroller) return;
+
+    const max = scroller.scrollHeight - scroller.clientHeight;
     if (max <= 1) return;
-    /* No obstruction: let the browser scroll natively (keeps smooth/trackpad
-       behaviour). Only take over when something would swallow the wheel. */
-    if (inside && !ghost) return;
-    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? (c.clientHeight || 400) : 1;
-    c.scrollTop = Math.max(0, Math.min(max, (c.scrollTop || 0) + dy * unit));
-    if (e.preventDefault) e.preventDefault();
-    sync(entry); flash(entry);
+
+    // 滚轮增量按像素、行或页给出，统一换算成像素后只移动目标容器一次。
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? scroller.clientHeight : 1;
+    scroller.scrollTop = Math.max(0, Math.min(max, scroller.scrollTop + e.deltaY * unit));
+    e.preventDefault();
+
+    const entry = barEntry || entryFor(scroller);
+    if (entry) { sync(entry); flash(entry); }
   }
 
   function refresh() {

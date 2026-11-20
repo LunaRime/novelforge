@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
@@ -16,9 +16,11 @@ import { useLLMStore } from '../../stores/llm-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useConcurrencyStore } from '../../stores/concurrency-store'
 import { useThemeStore, FONT_OPTIONS, type FontId } from '../../stores/theme-store'
-import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
+import { selectWritingAppearance, useEditorPrefsStore, type WritingAppearance } from '../../stores/editor-prefs-store'
+import { useShallow } from 'zustand/shallow'
 import type { ModelTier, ModelRouteConfig } from '../../services/llm/model-router'
 import { Button } from '../ui/Button'
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/Dialog'
 import MarkdownContent from '../ui/MarkdownContent'
 import { switchLocale, useTranslation } from '../../hooks/useTranslation'
 import { useEscapeKey } from '../../hooks/useEscapeKey'
@@ -34,7 +36,6 @@ import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
 import { Switch } from '../ui/Switch'
-import { SegmentedControl } from '../ui/SegmentedControl'
 import { Disclosure } from '../ui/Disclosure'
 import AutomationSection from './AutomationSection'
 import ContextCompactionSection from './ContextCompactionSection'
@@ -43,6 +44,7 @@ import VectorConfigSection from './VectorConfigSection'
 import DeveloperModeSection from './DeveloperModeSection'
 import UsageStatsView from './UsageStatsView'
 import ShortcutsSection from './ShortcutsSection'
+import WritingAppearanceSection from './WritingAppearanceSection'
 import { useUpdateStore } from '../../stores/update-store'
 
 // ==================== 分类定义 ====================
@@ -108,22 +110,50 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, open)
 
-  // 有分区登记了未保存改动时，关闭要确认（审计 P0-5）。× 与 Esc 都走这里。
-  const requestClose = useCallback(async () => {
-    if (hasUnsavedSettings()) {
-      const ok = await confirm(t('settings.discardConfirm'), {
-        title: t('settings.title'),
-        confirmText: t('action.discard'),
-        danger: true,
-      })
-      if (!ok) return
-    }
+  const savedAppearance = useEditorPrefsStore(useShallow(selectWritingAppearance))
+  const [appearanceChanges, setAppearanceChanges] = useState<Partial<WritingAppearance>>({})
+  const appearance = { ...savedAppearance, ...appearanceChanges }
+  const appearanceDirty = appearance.proseFontSize !== savedAppearance.proseFontSize
+    || appearance.measureWidth !== savedAppearance.measureWidth
+    || appearance.prosePaper !== savedAppearance.prosePaper
+    || appearance.listDensity !== savedAppearance.listDensity
+  useSettingsDirty(open && appearanceDirty)
+
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
+  const settingsFocus = useRef<HTMLElement | null>(null)
+
+  function closeSettings() {
+    setConfirmDiscard(false)
+    setAppearanceChanges({})
     onClose()
-  }, [onClose, t])
+  }
+
+  function requestClose() {
+    if (!hasUnsavedSettings()) {
+      closeSettings()
+      return
+    }
+    settingsFocus.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    setConfirmDiscard(true)
+  }
+
+  function applyAppearance() {
+    const started = performance.now()
+    try {
+      useEditorPrefsStore.getState().applyWritingAppearance(appearance)
+      setAppearanceChanges({})
+      renderLog('info', 'Save:Settings', `${t('settings.typography')} ${t('save.success')} (${Math.round(performance.now() - started)}ms)`)
+      toast.success(t('save.success'))
+    } catch (error) {
+      const message = t('save.failed').replace('{error}', String(error))
+      renderLog('error', 'Save:Settings', message)
+      toast.error(message)
+    }
+  }
 
   // Esc 关闭：本组件自绘全屏模态（未走 ui/Dialog / Radix），此前**没有** Esc ——
   // 键盘用户只能靠 Tab 找到 × 或点遮罩。hooks 必须在 `if (!open) return null` 之前。
-  useEscapeKey(() => { void requestClose() }, open)
+  useEscapeKey(requestClose, open && !confirmDiscard)
 
   if (!open) return null
 
@@ -154,7 +184,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       >
         {/* 左侧导航 */}
         <aside
-          className="flex flex-col w-[200px] flex-shrink-0 py-5 gap-1"
+          className="nf-settings-navigation flex w-[200px] flex-shrink-0 flex-col gap-1 overflow-y-auto py-5"
           style={{
             backgroundColor: 'var(--color-sidebar)',
             borderRight: '1px solid var(--color-border)',
@@ -228,10 +258,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
         </aside>
 
         {/* 右侧内容区 */}
-        <main className="flex-1 flex flex-col overflow-hidden">
+        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
           {/* 区域标题栏 */}
           <div
-            className="flex items-center justify-between px-6 py-4 flex-shrink-0"
+            className="flex flex-shrink-0 items-center justify-between gap-2 px-4 py-4 sm:px-6"
             style={{ borderBottom: '1px solid var(--color-border)' }}
           >
             <div>
@@ -243,8 +273,11 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               </p>
             </div>
             <button
-              onClick={() => { void requestClose() }}
-              className="flex items-center justify-center w-7 h-7 rounded-lg transition-colors hover:bg-[var(--color-hover)]"
+              type="button"
+              onClick={requestClose}
+              aria-label={t('action.close')}
+              title={t('action.close')}
+              className="icon-btn size-[32px] shrink-0 rounded-lg"
               style={{ color: 'var(--color-text-muted)' }}
             >
               <X size={16} />
@@ -252,7 +285,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
 
           {/* 区域内容 */}
-          <div className="flex-1 overflow-y-auto px-8 py-6">
+          <div className="nf-settings-content flex-1 overflow-y-auto px-8 py-6">
             {section === 'llm' && (
               <>
                 {/* 模型（一体卡，v2）：供应商凭据与其名下模型（生成/向量混排）同卡管理；
@@ -284,7 +317,10 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
               </>
             )}
             {section === 'proxy' && <ProxySection />}
-            {section === 'editor' && <EditorSection />}
+            {section === 'editor' && (
+              <EditorSection appearance={appearance} appearanceDirty={appearanceDirty} onApplyAppearance={applyAppearance}
+                onChangeAppearance={change => setAppearanceChanges(previous => ({ ...previous, ...change }))} />
+            )}
             {section === 'prompts' && <PromptSettings />}
             {section === 'skills' && <SkillsSettings />}
             {section === 'mcp' && <MCPSettings />}
@@ -293,6 +329,22 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           </div>
         </main>
       </div>
+      <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
+        <DialogContent preventOutsideClose onCloseAutoFocus={event => {
+          event.preventDefault()
+          if (settingsFocus.current?.isConnected) settingsFocus.current.focus({ preventScroll: true })
+          settingsFocus.current = null
+        }}>
+          <DialogHeader>
+            <DialogTitle>{t('dialog.unsavedTitle')}</DialogTitle>
+            <DialogDescription>{t('settings.discardConfirm')}</DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDiscard(false)}>{t('action.cancel')}</Button>
+            <Button variant="destructive" onClick={closeSettings}>{t('action.discard')}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -681,16 +733,17 @@ function FontSelect({
   )
 }
 
-function EditorSection() {
+function EditorSection({ appearance, appearanceDirty, onChangeAppearance, onApplyAppearance }: {
+  appearance: WritingAppearance
+  appearanceDirty: boolean
+  onChangeAppearance: (change: Partial<WritingAppearance>) => void
+  onApplyAppearance: () => void
+}) {
   // 原子 selector：仅订阅字体相关字段
   const writingFont = useThemeStore(s => s.writingFont)
   const setWritingFont = useThemeStore(s => s.setWritingFont)
   const uiFont = useThemeStore(s => s.uiFont)
   const setUiFont = useThemeStore(s => s.setUiFont)
-  const proseFontSize = useEditorPrefsStore(s => s.proseFontSize)
-  const setProseFontSize = useEditorPrefsStore(s => s.setProseFontSize)
-  const measureWidth = useEditorPrefsStore(s => s.measureWidth)
-  const setMeasureWidth = useEditorPrefsStore(s => s.setMeasureWidth)
   const typewriter = useEditorPrefsStore(s => s.typewriter)
   const toggleTypewriter = useEditorPrefsStore(s => s.toggleTypewriter)
   const paragraphFocus = useEditorPrefsStore(s => s.paragraphFocus)
@@ -750,39 +803,16 @@ function EditorSection() {
         <FontSelect value={writingFont} onChange={setWritingFont} />
       </div>
 
-      {/* 正文排版（规范：17–18px / 栏宽 720–800 / 打字机 40% / 当前段落高亮） */}
-      <div className="space-y-3 pt-1">
-        <div>
-          <p className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{t('settings.typography')}</p>
-          <p className="text-micro mt-0.5" style={{ color: 'var(--color-text-muted)' }}>{t('settings.typographyDesc')}</p>
-        </div>
+      <WritingAppearanceSection appearance={appearance} dirty={appearanceDirty}
+        onChange={onChangeAppearance} onApply={onApplyAppearance} />
 
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.fontSize')}</span>
-          <SegmentedControl<'17' | '18'>
-            size="sm"
-            value={String(proseFontSize) as '17' | '18'}
-            onChange={(value) => setProseFontSize(value === '18' ? 18 : 17)}
-            items={[{ value: '17', label: '17px' }, { value: '18', label: '18px' }]}
-          />
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.measure')}</span>
-          <SegmentedControl<'720' | '760' | '800'>
-            size="sm"
-            value={String(measureWidth) as '720' | '760' | '800'}
-            onChange={(value) => setMeasureWidth(Number(value))}
-            items={[{ value: '720', label: '720' }, { value: '760', label: '760' }, { value: '800', label: '800' }]}
-          />
-        </div>
-
+      <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
           <div>
             <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.typewriter')}</span>
             <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.typewriterDesc')}</p>
           </div>
-          <Switch checked={typewriter} onCheckedChange={() => toggleTypewriter()} />
+          <Switch aria-label={t('settings.typewriter')} checked={typewriter} onCheckedChange={() => toggleTypewriter()} />
         </div>
 
         <div className="flex items-center justify-between gap-3">
@@ -790,7 +820,7 @@ function EditorSection() {
             <span className="text-micro" style={{ color: 'var(--color-text-secondary)' }}>{t('settings.paragraphFocus')}</span>
             <p className="text-micro" style={{ color: 'var(--color-text-muted)' }}>{t('settings.paragraphFocusDesc')}</p>
           </div>
-          <Switch checked={paragraphFocus} onCheckedChange={() => toggleParagraphFocus()} />
+          <Switch aria-label={t('settings.paragraphFocus')} checked={paragraphFocus} onCheckedChange={() => toggleParagraphFocus()} />
         </div>
       </div>
 

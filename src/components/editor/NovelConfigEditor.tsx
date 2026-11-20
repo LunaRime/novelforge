@@ -1,3 +1,6 @@
+import { FeatureSplit } from '../ui/FeatureSplit'
+import MenuRow from '../ui/MenuRow'
+
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { Save, Sparkles, Info } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -19,6 +22,11 @@ import { useFloatingPosition } from '../../hooks/useFloatingPosition'
 import type { TextKey } from '../../shared/locale'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
+
+const sections = [
+  'novelConfig.basicInfo', 'novelConfig.coreOutline', 'novelConfig.worldSetting', 'novelConfig.cheat',
+  'novelConfig.protagonist', 'novelConfig.globalWriting', 'novelConfig.styleConfig', 'novelConfig.referenceWorks',
+] as const
 
 /** 小说配置编辑器 — Tab 内的可视化配置面板 */
 export default function NovelConfigEditor() {
@@ -57,6 +65,8 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   const addLog = useWorkflowStore.getState().addLog
   const [saving, setSaving] = useState(false)
   const [showGenerateConfig, setShowGenerateConfig] = useState(false)
+  const [section, setSection] = useState(0)
+  const [detailOpen, setDetailOpen] = useState(false)
 
   // 线③ 第 2 条：生成中字段从 workflow-store 推导（单字段走 startWorkflow，删假 step）。
   // selector 返回 fieldKey 字符串，仅 fieldKey 变化时才重渲染（避免流式 steps 高频重渲染）
@@ -151,10 +161,10 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-8 py-6">
+    <div className="h-full min-h-0 flex flex-col">
+      <div className="w-full min-w-0 px-4 py-3">
         {/* 头部 */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
             <h2 className="text-lg font-bold" style={{ color: 'var(--color-text)' }}>
               {t('novelConfig.title')}
@@ -173,11 +183,18 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </div>
         </div>
 
-        {/* 配置表单 */}
-        <div className="space-y-5">
+      </div>
+      <FeatureSplit detailOpen={detailOpen} onBack={() => setDetailOpen(false)} list={
+        sections.map((label, index) => (
+          <MenuRow key={label} title={t(label)} titleHint={t(label)}
+            current={section === index ? 'page' : undefined} active={section === index}
+            onPrimary={() => { setSection(index); setDetailOpen(true) }} />
+        ))
+      }>
+        <div className="flex-1 min-h-0 overflow-y-auto p-3" data-config-section={section}>
           {/* 基本信息 */}
-          <Section title={t('novelConfig.basicInfo')}>
-            <div className="grid grid-cols-3 gap-4">
+          <Section hidden={section !== 0} title={t('novelConfig.basicInfo')}>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-4">
               <Field label={t('novelConfig.type')}>
                 <Select value={config.genre} onValueChange={(v) => update('genre', v)}>
                   <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
@@ -201,7 +218,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
                 </Select>
               </Field>
             </div>
-            <div className="grid grid-cols-4 gap-4 mt-4">
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-4 mt-4">
               <Field label={t('novelConfig.structure')} tipItems={[
                 t('novelConfig.structureTip1'),
                 t('novelConfig.structureTip2'),
@@ -268,7 +285,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 核心大纲 */}
-          <Section
+          <Section hidden={section !== 1}
             title={t('novelConfig.coreOutline')}
             desc={t('novelConfig.coreOutlineDesc')}
             aiFieldKey="coreOutline"
@@ -279,7 +296,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 世界观设定 */}
-          <Section
+          <Section hidden={section !== 2}
             title={t('novelConfig.worldSetting')}
             desc={t('novelConfig.worldSettingDesc')}
             aiFieldKey="worldSetting"
@@ -290,7 +307,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 金手指 */}
-          <Section
+          <Section hidden={section !== 3}
             title={t('novelConfig.cheat')}
             desc={t('novelConfig.cheatDesc')}
             aiFieldKey="goldenFinger"
@@ -301,7 +318,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 主角人设 */}
-          <Section
+          <Section hidden={section !== 4}
             title={t('novelConfig.protagonist')}
             desc={t('novelConfig.protagonistDesc')}
             aiFieldKey="protagonistProfile"
@@ -312,7 +329,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 全局写作要求 */}
-          <Section
+          <Section hidden={section !== 5}
             title={t('novelConfig.globalWriting')}
             desc={t('novelConfig.globalWritingDesc')}
             aiFieldKey="globalGuidance"
@@ -328,7 +345,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 文风配置 */}
-          <Section
+          <Section hidden={section !== 6}
             title={t('novelConfig.styleConfig')}
             desc={t('novelConfig.styleConfigDesc')}
             aiFieldKey="writingStyle"
@@ -344,11 +361,11 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
           </Section>
 
           {/* 参考作品 */}
-          <Section title={t('novelConfig.referenceWorks')} desc={t('novelConfig.referenceWorksDesc')}>
+          <Section hidden={section !== 7} title={t('novelConfig.referenceWorks')} desc={t('novelConfig.referenceWorksDesc')}>
             <Textarea value={config.referenceWorks || ''} onChange={(e) => update('referenceWorks', e.target.value)} placeholder={t('novelConfig.referenceWorksPlaceholder')} rows={2} />
           </Section>
         </div>
-      </div>
+      </FeatureSplit>
 
       {/* AI 生成配置弹框 */}
       <GenerateConfigDialog
@@ -367,6 +384,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
 
 /** 表单分组 — 支持右上角 AI 生成按钮 */
 function Section({
+  hidden,
   title,
   desc,
   children,
@@ -374,6 +392,7 @@ function Section({
   generatingField,
   onAIGenerate,
 }: {
+  hidden: boolean
   title: string
   desc?: string
   children: React.ReactNode
@@ -390,7 +409,7 @@ function Section({
   const showAIButton = aiFieldKey != null && onAIGenerate != null
 
   return (
-    <div className="p-4 rounded-xl bg-[var(--color-sidebar)] border border-[var(--color-border)]">
+    <div hidden={hidden} className="p-4 rounded-xl bg-[var(--color-sidebar)] border border-[var(--color-border)]">
       <div className="flex items-start justify-between mb-3">
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-semibold text-[var(--color-text)]">{title}</h3>

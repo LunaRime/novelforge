@@ -4,6 +4,7 @@ import { tokenizeToSpaceSeparated } from '../chinese-tokenizer'
 import { chunkText } from '../embedding'
 
 type ImportSource = ProjectChannels['project:file-editor-import-source']['return']
+type IndexResult = ProjectChannels['project:file-editor-index-import']['return']
 
 export const fileImportIndexPath = '.novelforge/file-import-index.v1.db'
 
@@ -36,8 +37,16 @@ export function readImportInferenceContext(path: string, source: ImportSource): 
   } finally { db.close() }
 }
 
-export function indexImportedChapters(path: string, chapters: ImportSource['chapters']): ProjectChannels['project:file-editor-index-import']['return'] {
+export function indexImportedChapters(path: string, chapters: ImportSource['chapters']): IndexResult {
   if (!chapters.length) return { indexed: 0, chunks: 0 }
+  return writeIndex(path, chapters, 'batch')
+}
+
+export function rebuildFileImportIndex(path: string, chapters: ImportSource['chapters']): IndexResult {
+  return writeIndex(path, chapters, 'project')
+}
+
+function writeIndex(path: string, chapters: ImportSource['chapters'], scope: 'batch' | 'project'): IndexResult {
   const db = new Database(path)
   try {
     // 派生库的分块与全文索引用同一事务提交。失败时保留上一版可检索的数据。
@@ -57,12 +66,14 @@ export function indexImportedChapters(path: string, chapters: ImportSource['chap
           INSERT INTO import_fts(import_fts, rowid, tokens) VALUES ('delete', old.id, old.tokens);
         END;
       `)
-      const remove = db.prepare('DELETE FROM import_chunks WHERE chapter_id = ?')
+      // 全量重建会清除已移除章节的分块，即使当前目录没有正文也要提交清理。
+      if (scope === 'project') db.exec('DELETE FROM import_chunks')
+      const remove = scope === 'batch' ? db.prepare('DELETE FROM import_chunks WHERE chapter_id = ?') : undefined
       const insert = db.prepare(`INSERT INTO import_chunks (chapter_id, chapter_number, revision, title, ordinal, content, tokens)
         VALUES (?, ?, ?, ?, ?, ?, ?)`)
       let chunks = 0
       for (const chapter of chapters) {
-        remove.run(chapter.chapterId)
+        remove?.run(chapter.chapterId)
         for (const [ordinal, content] of chunkText(chapter.content, 500, 50).entries()) {
           const searchable = `${chapter.title}\n${content}`
           insert.run(chapter.chapterId, chapter.number, chapter.revision, chapter.title, ordinal, content,

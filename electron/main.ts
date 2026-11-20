@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, shell, session } from 'electron'
+import { app, BrowserWindow, Menu, dialog, nativeTheme, shell, session } from 'electron'
 import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 // L4：registerMCPHandlers 已并入 electron/ipc-handlers.ts 的 registerIPCHandlers()（唯一注册入口）
@@ -146,11 +146,15 @@ function buildAppMenu() {
 
 function createWindow() {
   const isMac = process.platform === 'darwin'
-  win = new BrowserWindow({
+  // 先用系统外观绘制原生底色，首屏 HTML 会按应用偏好同步覆盖层。
+  const initialColor = nativeTheme.shouldUseDarkColors ? '#08080a' : '#fffdf9'
+  const initialText = nativeTheme.shouldUseDarkColors ? '#e8e8ea' : '#2c2520'
+  const appWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 1024,
     minHeight: 640,
+    show: false,
     title: t('window.title'),
     icon: path.join(process.env.APP_ROOT!, 'build', 'icon.png'),
     /**
@@ -171,11 +175,9 @@ function createWindow() {
     titleBarStyle: isMac ? 'hiddenInset' : 'hidden',
     ...(isMac ? { trafficLightPosition: { x: 12, y: 10 } } : {}),
     ...(isMac ? {} : {
-      // 启动瞬间的值：对齐启动闪屏品牌色（图标渐变中段 #3FB884）；渲染层一就绪就换成真实主题色
-      titleBarOverlay: { color: '#3FB884', symbolColor: '#ffffff', height: TITLEBAR_OVERLAY_HEIGHT },
+      titleBarOverlay: { color: initialColor, symbolColor: initialText, height: TITLEBAR_OVERLAY_HEIGHT },
     }),
-    // 启动瞬间的窗口底色：对齐启动闪屏品牌色（图标渐变中段 #3FB884）
-    backgroundColor: '#3FB884',
+    backgroundColor: initialColor,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       // 安全性设置
@@ -184,6 +186,16 @@ function createWindow() {
       sandbox: true,
     },
   })
+  win = appWindow
+
+  // 等待第一帧可以避免闪烁。导航很慢时仍须及时显示可关闭的窗口。
+  const revealTimer = setTimeout(reveal, 500)
+  function reveal() {
+    clearTimeout(revealTimer)
+    if (!appWindow.isDestroyed() && !appWindow.isVisible()) appWindow.show()
+  }
+  appWindow.once('ready-to-show', reveal)
+  appWindow.once('closed', () => clearTimeout(revealTimer))
 
   // L4 S6：来源校验白名单 —— 只有显式登记的己方窗口才能调 IPC，未登记者（含未来新增的、
   // 带 preload 的窗口；以及任何子帧）默认拒绝。窗口销毁时注销，避免 id 复用导致误放行。
@@ -223,8 +235,10 @@ function createWindow() {
   // 构建应用菜单
   buildAppMenu()
 
-  // 渲染进程崩溃检测 — 自动提示重载
+  // 渲染进程崩溃检测 — 自动提示重载。原导航的失败回执由同一路径处理。
+  let rendererCrashed = false
   win.webContents.on('render-process-gone', (_event, details) => {
+    rendererCrashed = true
     logger.error('Main', t('log.main.rendererGone')
       .replace('{reason}', details.reason)
       .replace('{exitCode}', String(details.exitCode)))
@@ -232,9 +246,9 @@ function createWindow() {
       t('dialog.crashTitle'),
       t('dialog.crashMsg')
     )
-    if (win && !win.isDestroyed()) {
-      win.webContents.reload()
-      win.focus()
+    if (!appWindow.isDestroyed()) {
+      appWindow.webContents.reload()
+      appWindow.focus()
     }
   })
 
@@ -273,24 +287,47 @@ function createWindow() {
   // 隔离实例身份（CLI 注入）：供 CDP 客户端确认连到的确实是本实例
   const devInstanceArg = process.argv.find(a => a.startsWith('--dev-instance='))?.slice('--dev-instance='.length)
   const devInstanceId = __DEV_CONSOLE__ ? (process.env.NOVELFORGE_DEV_INSTANCE || devInstanceArg) : undefined
-  if (VITE_DEV_SERVER_URL) {
-    const url = new URL(VITE_DEV_SERVER_URL)
-    if (projectArg) url.searchParams.set('project', projectArg)
-    if (devConsoleArg) url.searchParams.set('devconsole', '1')
-    if (devInstanceId) url.searchParams.set('instance', devInstanceId)
-    win.loadURL(url.toString())
-    logger.info('Main', t('log.main.devMode').replace('{url}', url.toString()))
-  } else {
-    const query: Record<string, string> = {}
-    if (projectArg) query.project = projectArg
-    if (devConsoleArg) query.devconsole = '1'
-    if (devInstanceId) query.instance = devInstanceId
-    win.loadFile(
-      path.join(RENDERER_DIST, 'index.html'),
-      Object.keys(query).length > 0 ? { query } : undefined,
-    )
+  const query: Record<string, string> = {}
+  if (projectArg) query.project = projectArg
+  if (devConsoleArg) query.devconsole = '1'
+  if (devInstanceId) query.instance = devInstanceId
+  function loadRenderer() {
+    if (VITE_DEV_SERVER_URL) {
+      const url = new URL(VITE_DEV_SERVER_URL)
+      for (const [key, value] of Object.entries(query)) url.searchParams.set(key, value)
+      logger.info('Main', t('log.main.devMode').replace('{url}', url.toString()))
+      return appWindow.loadURL(url.toString())
+    }
     logger.info('Main', t('log.main.productionStart'))
+    return appWindow.loadFile(path.join(RENDERER_DIST, 'index.html'), { query })
   }
+
+  async function loadWithRecovery() {
+    while (!appWindow.isDestroyed()) {
+      try {
+        await loadRenderer()
+        return
+      } catch (error) {
+        // 关闭或主动重载可能中止原导航，窗口只处理确定的入口加载失败。
+        if (appWindow.isDestroyed() || rendererCrashed || (error instanceof Error && 'code' in error && error.code === 'ERR_ABORTED')) return
+        logger.error('Startup', safeErrorMessage(error))
+        reveal()
+        const { response } = await dialog.showMessageBox(appWindow, {
+          type: 'error',
+          title: app.getName(),
+          message: t('common.loadFailed'),
+          buttons: [t('action.retry'), t('action.close')],
+          defaultId: 0,
+          cancelId: 1,
+        })
+        if (response !== 0) {
+          if (!appWindow.isDestroyed()) appWindow.close()
+          return
+        }
+      }
+    }
+  }
+  void loadWithRecovery().catch(error => logger.error('Startup', safeErrorMessage(error)))
 }
 
 // macOS: 关闭所有窗口不退出

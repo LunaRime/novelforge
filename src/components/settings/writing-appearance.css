@@ -1,0 +1,62 @@
+/* Only the manuscript surface inherits the light-paper palette. */
+:root[data-v3-prose-paper='warm'] .nf-prose-editor :is(.nf-prose-heading, .cm-scroller),
+.nf-writing-appearance-preview[data-v3-preview-paper='warm'] .nf-writing-preview-paper {
+  --color-editor-bg: var(--color-prose-warm-bg, var(--color-panel));
+  --color-text: var(--color-prose-warm-text);
+  --color-text-muted: var(--color-prose-warm-muted);
+  --color-accent: var(--color-prose-warm-accent);
+  --color-editor-selection: var(--color-prose-warm-selection);
+}
+
+[data-v3-list-density='standard'] { --v3-list-gap: 2px; }
+[data-v3-list-density='compact'] { --v3-list-gap: 1px; }
+[data-v3-list-density='comfortable'] { --v3-list-gap: 5px; }
+
+[data-v3-density-list] :is(.menu-chip, .tree-item) {
+  margin-block: var(--v3-list-gap, 2px);
+}
+
+.nf-writing-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: var(--text-micro);
+  color: var(--color-text-secondary);
+}
+
+.nf-writing-appearance-preview {
+  padding: 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-panel);
+  overflow-wrap: anywhere;
+}
+
+.nf-writing-preview-paper {
+  margin: 0 auto;
+  padding: 8px 12px;
+  color: var(--color-text);
+  background: var(--color-editor-bg);
+  font-family: var(--font-writing);
+  line-height: 1.8;
+}
+
+.nf-writing-preview-list {
+  padding-block-start: 6px;
+  color: var(--color-text-secondary);
+  font-size: var(--text-micro);
+}
+
+.nf-writing-preview-list .menu-chip {
+  min-height: 24px;
+  height: auto;
+  padding-inline: 8px;
+  background: var(--color-sidebar);
+}
+
+@media (max-width: 720px) {
+  .nf-settings-navigation { width: clamp(114px, 25vw, 180px); }
+  .nf-settings-content { padding: 12px; }
+}

@@ -6,7 +6,7 @@
  * 所有子视图已拆分到 sidebar/ 子目录。
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useContext, useLayoutEffect, useRef } from 'react'
 import { X } from 'lucide-react'
 import { useLayoutStore } from '../../stores/layout-store'
 import { ContextMenu } from '../ui/ContextMenu'
@@ -15,6 +15,7 @@ import KnowledgePanel from './KnowledgePanel'
 import HomeSidebarPanel from './sidebar/HomeSidebarPanel'
 import ProjectTree from './sidebar/ProjectTree'
 import CharactersView from './sidebar/CharactersView'
+import { NavigationSessionContext } from './sidebar/navigation-session'
 import {
   registerMenuSetter, unregisterMenuSetter,
   type SidebarMenuState,
@@ -24,6 +25,8 @@ import {
 export default function Sidebar() {
   const { t } = useTranslation()
   const sidebarView = useLayoutStore(s => s.sidebarView)
+  const navigation = useContext(NavigationSessionContext)
+  const scrollRef = useRef<HTMLDivElement>(null)
   const toggleSidebar = useLayoutStore(s => s.toggleSidebar)
   // 全局右键菜单状态
   const [sidebarMenu, setSidebarMenu] = useState<SidebarMenuState | null>(null)
@@ -33,6 +36,22 @@ export default function Sidebar() {
     registerMenuSetter(setSidebarMenu)
     return () => { unregisterMenuSetter() }
   }, [])
+
+  useLayoutEffect(() => {
+    const pane = scrollRef.current
+    if (!pane || sidebarView !== 'project' || !navigation) return
+    const target = navigation.readScrollTop()
+    pane.scrollTop = target
+    // The binder or draft projection may arrive after the first layout.
+    const tree = pane.firstElementChild
+    if (!tree || pane.scrollTop >= target) return
+    const observer = new ResizeObserver(() => {
+      pane.scrollTop = target
+      if (pane.scrollTop >= target) observer.disconnect()
+    })
+    observer.observe(tree)
+    return () => observer.disconnect()
+  }, [navigation, sidebarView])
 
   const viewTitles: Record<string, string> = {
     home:       t('nav.home'),
@@ -63,7 +82,9 @@ export default function Sidebar() {
           <X size={12} strokeWidth={1.5} />
         </button>
       </div>
-      <div className="flex-1 overflow-y-auto py-1 min-h-0">
+      <div ref={scrollRef} data-v3-density-list className="flex-1 overflow-y-auto py-1 min-h-0" onScroll={event => {
+        if (sidebarView === 'project') navigation?.saveScrollTop(event.currentTarget.scrollTop)
+      }}>
         {sidebarView === 'home'       && <HomeSidebarPanel />}
         {sidebarView === 'project'    && <ProjectTree />}
         {sidebarView === 'knowledge'  && <KnowledgePanel />}
@@ -73,9 +94,13 @@ export default function Sidebar() {
       {/* 动态右键菜单 */}
       {sidebarMenu && (
         <ContextMenu
+          autoFocus={Boolean(sidebarMenu.anchor)}
           items={sidebarMenu.items}
           position={sidebarMenu.position}
-          onClose={() => setSidebarMenu(null)}
+          onClose={() => {
+            setSidebarMenu(null)
+            sidebarMenu.anchor?.focus()
+          }}
         />
       )}
     </div>

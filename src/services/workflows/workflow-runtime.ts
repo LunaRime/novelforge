@@ -57,6 +57,7 @@ interface WorkflowState {
   hasActiveRun: () => boolean
   /** 活跃任务数量 */
   activeCount: () => number
+  isRunCurrent: (runId: string) => boolean
   /** 获取当前正在流式输出的活跃工作流（供 AI 输出面板消费） */
   getActiveStreamingRun: () => WorkflowRun | null
   /** 获取当前最活跃任务的步骤信息（供 StatusBar 胶囊显示） */
@@ -97,6 +98,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
       const active = state.activeRuns.filter(r => {
         const source = runScopes.get(r.id)
         return (!source || sameProject(source, current))
+          && !r.cancellation
           && (r.status === 'running' || r.status === 'waiting' || r.status === 'paused')
       })
       const activeIds = new Set(active.map(run => run.id))
@@ -221,6 +223,14 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
     }
   }
 
+  function pruneRunScopes() {
+    const { activeRuns, history } = store.getState()
+    const retained = new Set([...activeRuns, ...history].map(run => run.id))
+    for (const id of runScopes.keys()) {
+      if (!retained.has(id)) runScopes.delete(id)
+    }
+  }
+
   const store = createStore<WorkflowState>()((set, get) => ({
     activeRuns: [],
     history: [],
@@ -233,9 +243,14 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
     waitingAfterStepIndex: -1,
 
     // ===== 便捷查询 =====
-    isTypeRunning: (type) => get().activeRuns.some(r => r.type === type && (r.status === 'running' || r.status === 'waiting')),
+    isTypeRunning: (type) => get().activeRuns.some(r => r.type === type && !r.cancellation
+          && (r.status === 'running' || r.status === 'waiting')),
     hasActiveRun: () => get().activeRuns.length > 0,
     activeCount: () => get().activeRuns.length,
+    isRunCurrent: runId => {
+      const source = runScopes.get(runId)
+      return !source || sameProject(source, ports.project.current())
+    },
 
     getActiveStreamingRun: () => {
       const runs = get().activeRuns
@@ -260,7 +275,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
     confirmContinue: (runId) => {
       // 如果未指定 runId，使用第一个等待中的
       const targetId = runId ?? Object.keys(get().waitingRuns).find(id => get().waitingRuns[id]?.waitingForConfirm)
-      if (!targetId) return
+      if (!targetId || !get().isRunCurrent(targetId)) return
       const resolve = continueResolveRefs.get(targetId)
       if (resolve) {
         // 进程内步进等待：内存 resolve（现状语义不变），continueResolveRefs 保持进程内语义
@@ -330,82 +345,48 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
     },
 
     cancelWorkflow: (runId) => {
-      if (runId) {
-        const ctx = activeContexts.get(runId)
-        if (ctx?.finalCommitStarted) {
-          get().addLog('info', t('log.workflow.finishingCommit'))
-          return
+      const targets = get().activeRuns.filter(run => !run.cancellation && (!runId || run.id === runId))
+      const cancellable = targets.filter(run => !activeContexts.get(run.id)?.finalCommitStarted)
+      if (cancellable.length < targets.length) get().addLog('info', t('log.workflow.finishingCommit'))
+      if (!cancellable.length) return
+
+      const ids = new Set(cancellable.map(run => run.id))
+      for (const id of ids) {
+        const context = activeContexts.get(id)
+        if (context) context.cancelled = true
+        restoredWaitingDefinitions.delete(id)
+        clearAppendBuffers(id)
+        resumeContextData.delete(id)
+      }
+      set(state => {
+        const activeRuns: WorkflowRun[] = []
+        const immediatelyCancelled: WorkflowRun[] = []
+        for (const run of state.activeRuns) {
+          if (!ids.has(run.id)) activeRuns.push(run)
+          else if (activeContexts.has(run.id)) activeRuns.push({ ...run, cancellation: 'requested' })
+          else immediatelyCancelled.push({ ...run, status: 'failed', cancellation: 'cancelled', completedAt: new Date().toISOString() })
         }
-        restoredWaitingDefinitions.delete(runId)
-        // 取消指定工作流
-        if (ctx) ctx.cancelled = true
-        // 如果在步进等待，解除 Promise
-        const resolve = continueResolveRefs.get(runId)
-        if (resolve) { resolve(); continueResolveRefs.delete(runId) }
-        // 移入历史
-        set(s => {
-          const targetRun = s.activeRuns.find(r => r.id === runId)
-          const newRuns = s.activeRuns.filter(r => r.id !== runId)
-          const newWaiting = { ...s.waitingRuns }
-          delete newWaiting[runId]
-          const newHistory = targetRun
-            ? [{ ...targetRun, status: 'failed' as const, completedAt: new Date().toISOString() }, ...s.history].slice(0, 50)
-            : s.history
-          return {
-            activeRuns: newRuns,
-            history: newHistory,
-            waitingRuns: newWaiting,
-            ...computeCompat(newRuns, newWaiting),
-          }
-        })
-        get().addLog('warn', '[Cancel] Workflow cancelled')
-        clearAppendBuffers(runId)
-        resumeContextData.delete(runId)
-        // M2：取消 = 任务级清理（用户不再需要该任务输出；崩溃恢复窗口关闭）
-        ports.output.delete(runId)
-        saveCheckpoint(get(), runScopes.get(runId))
-        if (!ctx) {
-          runScopes.delete(runId)
-          runDefs.delete(runId)
+        const waitingRuns = { ...state.waitingRuns }
+        for (const id of ids) delete waitingRuns[id]
+        return {
+          activeRuns, waitingRuns,
+          history: [...immediatelyCancelled, ...state.history].slice(0, 50),
+          ...computeCompat(activeRuns, waitingRuns),
         }
-      } else {
-        // 取消全部
-        const activeRuns = get().activeRuns
-        const committingIds = new Set(activeRuns.filter(run => activeContexts.get(run.id)?.finalCommitStarted).map(run => run.id))
-        const cancelledIds = activeRuns.filter(run => !committingIds.has(run.id)).map(run => run.id)
-        for (const [id, ctx] of activeContexts) {
-          if (committingIds.has(id)) continue
-          ctx.cancelled = true
-          const resolve = continueResolveRefs.get(id)
-          if (resolve) { resolve(); continueResolveRefs.delete(id) }
-        }
-        set(s => {
-          const cancelledRuns = s.activeRuns.filter(run => !committingIds.has(run.id)).map(r => ({
-            ...r, status: 'failed' as const, completedAt: new Date().toISOString(),
-          }))
-          const remaining = s.activeRuns.filter(run => committingIds.has(run.id))
-          return {
-            activeRuns: remaining,
-            waitingRuns: {},
-            history: [...cancelledRuns, ...s.history].slice(0, 50),
-            ...computeCompat(remaining, {}),
-          }
-        })
-        if (committingIds.size) get().addLog('info', t('log.workflow.finishingCommit'))
-        else get().addLog('warn', '[Cancel] All workflows cancelled')
-        resumeContextData.clear()
-        restoredWaitingDefinitions.clear()
-        if (committingIds.size) saveCheckpoint(get())
-        else ports.checkpoint.clear(true)
-        // M2：取消全部 = 逐个任务级清理（被取消 run 的输出文件不再保留）
-        for (const id of cancelledIds) {
+      })
+
+      for (const id of ids) {
+        const release = continueResolveRefs.get(id)
+        continueResolveRefs.delete(id)
+        release?.()
+        if (!activeContexts.has(id)) {
           ports.output.delete(id)
-          if (!activeContexts.has(id)) {
-            runScopes.delete(id)
-            runDefs.delete(id)
-          }
+          runDefs.delete(id)
         }
       }
+      if (!runId && get().activeRuns.every(run => run.cancellation === 'requested')) ports.checkpoint.clear(true)
+      else saveCheckpoint(get(), runId ? runScopes.get(runId) : undefined)
+      pruneRunScopes()
     },
 
     addLog: (level, message) => {
@@ -603,11 +584,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
     // 逐步执行（从断点 startIndex 起）
     for (let i = startIndex; i < definition.steps.length; i++) {
       // 检查取消
-      if (context.cancelled) {
-        updateRunById(set, run.id, { status: 'failed' })
-        get().addLog('warn', `[Cancel] ${definition.title}`)
-        break
-      }
+      if (context.cancelled) break
 
       const stepDef = definition.steps[i]
 
@@ -626,6 +603,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
           updateStepById(set, run.id, i, { progress })
         },
         appendText: (text) => {
+          if (context.cancelled) return
           // 共享限频调度：只累积 + 安排统一 flush（timer 保证最小间隔），
           // 不在此同步 setState——避免 LLM 流式高频 chunk 阻塞主线程
           const key = `${run.id}:${i}`
@@ -636,6 +614,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
 
       try {
         const result = await stepDef.executor(run.steps[i], context, callbacks)
+        if (context.cancelled) break
         // 刷新该步骤流式缓冲残留（立即写入，避免 timer 晚于步骤完成）
         flushAppendTextNow(`${run.id}:${i}`)
         updateStepById(set, run.id, i, {
@@ -663,6 +642,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
           saveCheckpoint(get(), origin)
         }
       } catch (error) {
+        if (context.cancelled) break
         const errorMsg = error instanceof Error ? error.message : String(error)
         updateStepById(set, run.id, i, {
           status: 'failed',
@@ -678,9 +658,15 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
       }
     }
 
-    // 检查是否全部完成
     const finalRun = get().activeRuns.find(r => r.id === run.id)
-    if (finalRun && finalRun.status === 'running') {
+    if (finalRun && context.cancelled) {
+      const step = finalRun.steps[finalRun.currentStepIndex]
+      if (step?.status === 'running') {
+        updateStepById(set, run.id, finalRun.currentStepIndex, { status: 'skipped', completedAt: new Date().toISOString() })
+      }
+      updateRunById(set, run.id, { status: 'failed', cancellation: 'cancelled', completedAt: new Date().toISOString() })
+      get().addLog('warn', `[Cancel] ${definition.title}`)
+    } else if (finalRun?.status === 'running') {
       updateRunById(set, run.id, { status: 'completed', completedAt: new Date().toISOString() })
       saveCheckpoint(get(), origin)
       get().addLog('info', `[Done] ${definition.title}`)
@@ -722,7 +708,7 @@ export function createWorkflowRuntime(ports: WorkflowRuntimePorts) {
 
     // 清理上下文与流式缓冲
     activeContexts.delete(run.id)
-    runScopes.delete(run.id)
+    pruneRunScopes()
     runDefs.delete(run.id)
     continueResolveRefs.delete(run.id)
     resumeContextData.delete(run.id)
