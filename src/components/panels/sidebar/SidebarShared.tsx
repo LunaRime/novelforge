@@ -9,16 +9,19 @@ import React from 'react'
 import {
   Target, Users, Globe, Map, BookOpen, FolderTree, LayoutList,
   FilePen, PenTool, BrainCircuit, Sparkles, FolderOpen, Zap,
-  FileText, MessageCircle, GitCompare, RefreshCw,
+  FileText, MessageCircle, GitCompare, RefreshCw, Ellipsis,
 } from 'lucide-react'
 import type { ContextMenuEntry } from '../../ui/ContextMenu'
 import type { TextKey } from '../../../shared/locale'
+import { Button } from '../../ui/Button'
+import { useTranslation } from '../../../hooks/useTranslation'
 
 // ===== 右键菜单状态管理 =====
 
 export interface SidebarMenuState {
   items: ContextMenuEntry[]
   position: { x: number; y: number }
+  anchor?: HTMLElement
 }
 
 /** 全局单例右键菜单状态 setter（同一时刻只展示一个） */
@@ -38,7 +41,19 @@ export function unregisterMenuSetter() {
 export function showSidebarMenu(items: ContextMenuEntry[], e: React.MouseEvent) {
   e.preventDefault()
   e.stopPropagation()
-  _sidebarMenuSetter?.({ items, position: { x: e.clientX, y: e.clientY } })
+  const anchor = e.type === 'click' && e.currentTarget instanceof HTMLElement ? e.currentTarget : undefined
+  const bounds = anchor?.getBoundingClientRect()
+  _sidebarMenuSetter?.({ items, anchor, position: { x: bounds?.left ?? e.clientX, y: bounds?.bottom ?? e.clientY } })
+}
+
+export function SidebarRowMenu({ items }: { items: ContextMenuEntry[] }) {
+  const { t } = useTranslation()
+  return (
+    <Button type="button" variant="ghost" size="icon" className="size-[32px] shrink-0"
+      aria-label={t('tip.moreOptions')} title={t('tip.moreOptions')} onClick={event => showSidebarMenu(items, event)}>
+      <Ellipsis size={14} aria-hidden="true" />
+    </Button>
+  )
 }
 
 // ===== 辅助打开文件函数 =====

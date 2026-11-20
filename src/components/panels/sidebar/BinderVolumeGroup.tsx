@@ -14,8 +14,8 @@ import type { VolumeData } from '../../../../electron/repositories/volume-reposi
 interface Props {
   projectPath?: string
   totalChapters?: number
-  draftsByChapter: Record<number, Array<{ status: string }>>
-  onOpenDraft(chapterNumber: number, chapterTitle?: string): void
+  draftsByChapter: Record<number, Array<{ status: string; id?: number; branchId?: number | null }>>
+  onOpenDraft(chapterNumber: number, chapterTitle?: string, draftId?: number): void
 }
 
 export default function BinderVolumeGroup(props: Props) {
@@ -75,13 +75,15 @@ function BinderVolumes({ source, draftsByChapter, ...props }: Props & { source: 
     const byChapter = new Map(chapters.map(chapter => [chapter.chapterNumber, chapter]))
     const entries = Object.entries(draftsByChapter).map(([key, drafts]) => {
       const number = Number(key)
-      return { number, blueprint: byChapter.get(number), hasFinalized: drafts.some(draft => draft.status === 'finalized') }
+      return { number, blueprint: byChapter.get(number), hasFinalized: drafts.some(draft => draft.status === 'finalized'),
+        draftId: drafts.find(draft => draft.branchId == null)?.id }
     }).filter(entry => Number.isSafeInteger(entry.number) && entry.number > 0)
       .sort((a, b) => (a.blueprint?.sortOrder ?? Infinity) - (b.blueprint?.sortOrder ?? Infinity) || a.number - b.number)
     const forVolume = (volume: VolumeData): VolumeChapter[] => entries.filter(entry => entry.blueprint
       ? entry.blueprint.volumeNumber === volume.volumeNumber
       : entry.number >= volume.chapterStart && (volume.chapterEnd === 0 || entry.number <= volume.chapterEnd))
-      .map(entry => ({ chapterNumber: entry.number, chapterTitle: entry.blueprint?.title ?? '', hasFinalized: entry.hasFinalized }))
+      .map(entry => ({ chapterNumber: entry.number, chapterTitle: entry.blueprint?.title ?? '', hasFinalized: entry.hasFinalized,
+        draftId: entry.draftId, canReorder: Boolean(entry.blueprint) }))
     return { forVolume, finalized: (volume: VolumeData) => forVolume(volume).filter(entry => entry.hasFinalized).length }
   }, [chapters, draftsByChapter])
 

@@ -34,6 +34,7 @@ interface ContextMenuProps {
   position: { x: number; y: number }
   /** 请求关闭菜单 */
   onClose: () => void
+  autoFocus?: boolean
 }
 
 /**
@@ -41,8 +42,12 @@ interface ContextMenuProps {
  * - 自动检测边界、防止溢出屏幕
  * - 点击外部或按 Esc 关闭
  */
-export function ContextMenu({ items, position, onClose }: ContextMenuProps) {
+export function ContextMenu({ items, position, onClose, autoFocus }: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (autoFocus) menuRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus()
+  }, [autoFocus, items])
 
   /** 点击外部关闭 */
   useEffect(() => {

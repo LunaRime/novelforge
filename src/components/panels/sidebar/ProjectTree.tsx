@@ -22,7 +22,7 @@ import { renderLog } from '../../../services/render-logger'
 
 import {
   getArchFiles, renderIcon, showSidebarMenu,
-  openArchFile, openBuiltinEditor, openDraftByChapter,
+  openArchFile, openBuiltinEditor, openDraftByChapter, openDraftById,
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
@@ -271,7 +271,12 @@ export default function ProjectTree() {
       <BinderVolumeGroup
         projectPath={p}
         totalChapters={nc.totalChapters}
-        onOpenDraft={(n, title) => { void openDraftByChapter(n, title) }}
+        onOpenDraft={(chapterNumber, title, draftId) => {
+          if (draftId === undefined) { void openDraftByChapter(chapterNumber, title); return }
+          const label = t('chapter.label').replace('{n}', String(chapterNumber))
+          const name = title ? (title.startsWith(label) ? title : `${label} ${title}`) : label
+          void openDraftById(draftId, `${name}（${t('editor.draft')}）`)
+        }}
         draftsByChapter={draftsByChapter}
       />
 

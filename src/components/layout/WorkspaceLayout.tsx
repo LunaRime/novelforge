@@ -1,15 +1,17 @@
-import { useLayoutEffect, useRef } from 'react'
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Group, Panel, Separator, useDefaultLayout, type Layout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useTranslation } from '../../hooks/useTranslation'
 import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
 import { selectWorkbenchPanels, useLayoutStore } from '../../stores/layout-store'
+import { useProjectStore } from '../../stores/project-store'
 import { ErrorBoundary } from '../ErrorBoundary'
 import AIPanel from '../panels/AIPanel'
 import AIOutputPanel from '../panels/AIOutputPanel'
 import BottomPanel from '../panels/BottomPanel'
 import EditorArea from '../panels/EditorArea'
 import Sidebar from '../panels/Sidebar'
+import { createNavigationSession, NavigationSessionContext } from '../panels/sidebar/navigation-session'
 import LeftToolWindowBar from './LeftToolWindowBar'
 import RightToolWindowBar from './RightToolWindowBar'
 
@@ -42,6 +44,9 @@ function saveVisibleLayout(layout: Layout, panelIds: string[], save: (layout: La
 
 export default function WorkspaceLayout() {
   const { t } = useTranslation()
+  const navigationScope = useProjectStore(state => state.currentProject
+    ? `${state.currentProject.id}:${state.currentProject.path}:${state.projectSession}` : '')
+  const navigation = useMemo(() => createNavigationSession(navigationScope), [navigationScope])
   const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen } = useLayoutStore(useShallow(state => {
     const panels = selectWorkbenchPanels(state)
     return {
@@ -104,7 +109,9 @@ export default function WorkspaceLayout() {
                 >
                   <div data-region="sidebar" className="h-full">
                     <ErrorBoundary fallbackLabel={t('error.sidebarFailed')}>
-                      <Sidebar />
+                      <NavigationSessionContext.Provider value={navigation}>
+                        <Sidebar key={navigation.scope} />
+                      </NavigationSessionContext.Provider>
                     </ErrorBoundary>
                   </div>
                 </Panel>

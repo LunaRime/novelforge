@@ -1,4 +1,4 @@
-import type { AriaAttributes, ReactNode } from 'react'
+import type { AriaAttributes, KeyboardEventHandler, ReactNode } from 'react'
 import HoverSwapIcon from './HoverSwapIcon'
 
 interface MenuRowProps {
@@ -12,6 +12,7 @@ interface MenuRowProps {
   count?: ReactNode
   /** 主行为：导航=进入；折叠卡=展开/折叠。不传 = 该行没有主行为 */
   onPrimary?: () => void
+  onPrimaryKeyDown?: KeyboardEventHandler<HTMLButtonElement>
   /** 悬停置换语义：nav=›；expand 收起=› / 展开=⌄（随 expanded） */
   swap?: 'nav' | 'expand'
   /** swap='expand'：当前是否已展开 */
@@ -42,7 +43,7 @@ interface MenuRowProps {
  * 上，**不挂片容器**——容器上的 padding 会造出「hover 亮起但点不动」的死带（2026-09-27 修过的同类缺陷）。
  */
 export default function MenuRow({
-  icon, title, titleSuffix, count, onPrimary, swap, expanded, controlsId, leadingButton, actions, titleHint, active, current, onContextMenu,
+  icon, title, titleSuffix, count, onPrimary, onPrimaryKeyDown, swap, expanded, controlsId, leadingButton, actions, titleHint, active, current, onContextMenu,
 }: MenuRowProps) {
   const content = (
     <>
@@ -65,6 +66,7 @@ export default function MenuRow({
         <button
           type="button"
           onClick={onPrimary}
+          onKeyDown={onPrimaryKeyDown}
           title={titleHint}
           aria-current={current}
           aria-expanded={swap === 'expand' ? expanded : undefined}
