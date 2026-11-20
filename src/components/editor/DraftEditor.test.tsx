@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-import { act } from 'react'
+import { act, type ReactNode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { useEditorStore } from '../../stores/editor-store'
 import DraftEditor from './DraftEditor'
 const state = vi.hoisted(() => ({
-  editor: {} as { onSave(text: string): Promise<void>; onChange(text: string): void },
+  editor: {} as { onSave(text: string): Promise<void>; onChange(text: string): void; paperHeading?: ReactNode },
   save: vi.fn(), success: vi.fn(), error: vi.fn(),
   application: {} as Record<string, unknown>,
   toolbar: {} as { onOpenRevision(revision: { id: number }): Promise<void> },
@@ -21,7 +21,7 @@ vi.mock('../../hooks/useAutoSave', () => ({ useAutoSave: () => {} }))
 vi.mock('../../hooks/useDirtyCheck', () => ({ useDirtyCheck: () => true }))
 vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../ui/Toast', () => ({ toast: { success: state.success, error: state.error } }))
-vi.mock('./CodeMirrorEditor', () => ({ default: (props: typeof state.editor) => { state.editor = props; return null } }))
+vi.mock('./CodeMirrorEditor', () => ({ default: (props: typeof state.editor) => { state.editor = props; return props.paperHeading ?? null } }))
 vi.mock('./ThreeWayMerge', () => ({ default: (props: typeof state.mergeView) => { state.mergeView = props; return null } }))
 vi.mock('./EditorToolbar', () => ({ default: (props: typeof state.toolbar) => { state.toolbar = props; return null } }))
 vi.mock('./AIActionDialog', () => ({ default: () => null, getReviewDims: () => [] }))
@@ -38,6 +38,21 @@ async function mount() {
   return () => { act(() => root.unmount()); host.remove() }
 }
 describe('DraftEditor application boundary', () => {
+  it('用加载的章节标题在稿纸上呈现标题与版本号', async () => {
+    state.application.load = async () => ({
+      meta: { id: 7, chapterNumber: 2, chapterTitle: '渡口的最后一盏灯', version: 3, status: 'draft', createdAt: 1 },
+      pending: [], reviewCount: 0,
+    })
+    const cleanup = await mount()
+    try {
+      const heading = document.querySelector('h1')
+      expect(heading?.textContent).toBe('渡口的最后一盏灯')
+      expect(heading?.parentElement?.textContent).toContain('v3')
+    } finally {
+      cleanup()
+    }
+  })
+
   it('forwards the initial revision body to merge and retains the dialog on rejected commit', async () => {
     const revision = vi.fn(async () => ({ originalContent: 'initial base', modifiedContent: 'revision', revisionPath: 'vela://revision/9' }))
     const merge = vi.fn(async () => ({ success: false, error: 'conflict' }))

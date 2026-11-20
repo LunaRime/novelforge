@@ -150,6 +150,7 @@ function ProseEditorWrapper({
         <CodeMirrorEditor
           key={tab.id}
           mode="prose"
+          paperHeading={tab.type === 'chapter' ? <h1>{tab.name}</h1> : undefined}
           content={tab.content ?? ''}
           filePath={tab.filePath}
           hideStatusBar

@@ -81,16 +81,11 @@ function EditorToolbar({
         backgroundColor: 'var(--color-editor-bg)',
       }}
     >
-      {/* 左侧：章节标题 + 版本 */}
+      {/* 标题和版本显示在稿纸上，工具栏保留当前文档的操作。 */}
       <div className="flex items-center gap-1.5 min-w-0">
         <span className="text-xs font-medium truncate" style={{ color: 'var(--color-text-secondary)' }}>
-          {meta ? t('editor.chapterLabel').replace('{n}', String(meta.chapterNumber)).replace('{title}', meta.chapterTitle ?? '') : t('editor.draft')}
+          {meta ? t('chapter.label').replace('{n}', String(meta.chapterNumber)) : t('editor.draft')}
         </span>
-        {meta && (
-          <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-            v{meta.version}
-          </span>
-        )}
       </div>
 
       {/* 右侧操作区 */}

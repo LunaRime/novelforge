@@ -302,6 +302,13 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
         <CodeMirrorEditor
           tabId={tabId}
           mode="prose"
+          paperHeading={meta && <>
+            <div className="nf-prose-meta">
+              <span>{t('chapter.label').replace('{n}', String(meta.chapterNumber))}</span>
+              <span>v{meta.version}</span>
+            </div>
+            <h1>{meta.chapterTitle}</h1>
+          </>}
           content={content}
           filePath={filePath}
           editable={!isReadonly && !isChapterBusy}

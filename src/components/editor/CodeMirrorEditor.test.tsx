@@ -31,8 +31,9 @@ import { act } from 'react'
 import { EditorView } from '@codemirror/view'
 import { Transaction } from '@codemirror/state'
 import { ensureSyntaxTree } from '@codemirror/language'
-import { undo } from '@codemirror/commands'
-import CodeMirrorEditor from './CodeMirrorEditor'
+import { redo, undo } from '@codemirror/commands'
+import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
+import CodeMirrorEditor, { type CodeMirrorEditorProps } from './CodeMirrorEditor'
 
 // jsdom 未实现 scrollTo / ResizeObserver（与 AgentConversation.test 相同防护）
 beforeAll(() => {
@@ -58,17 +59,18 @@ const roots: Root[] = []
 function renderEditor(
   content: string,
   onChange?: (content: string) => void,
+  options?: Pick<CodeMirrorEditorProps, 'mode'>,
 ): { container: HTMLElement; rerender: (content: string) => void } {
   const container = document.createElement('div')
   container.style.width = '800px'
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
-  act(() => { root.render(<CodeMirrorEditor content={content} onChange={onChange} />) })
+  act(() => { root.render(<CodeMirrorEditor content={content} onChange={onChange} {...options} />) })
   return {
     container,
     rerender: (next: string) => act(() => {
-      root.render(<CodeMirrorEditor content={next} onChange={onChange} />)
+      root.render(<CodeMirrorEditor content={next} onChange={onChange} {...options} />)
     }),
   }
 }
@@ -93,6 +95,36 @@ afterEach(() => {
   roots.forEach(r => act(() => r.unmount()))
   roots.length = 0
   document.body.innerHTML = ''
+})
+
+it('正文字号和栏宽通过样式实时应用，保留编辑器实例、选区与撤销历史', () => {
+  const prefs = useEditorPrefsStore.getState()
+  const { container } = renderEditor('初稿', undefined, { mode: 'prose' })
+  const view = getView(container)
+  userInput(view, '修订', 1000)
+  act(() => { view.dispatch({ selection: { anchor: 2, head: 4 } }) })
+  const selection = view.state.selection
+  const editorWrapper = container.firstElementChild as HTMLElement
+
+  try {
+    act(() => {
+      prefs.setProseFontSize(18)
+      prefs.setMeasureWidth(800)
+    })
+    expect(editorWrapper.style.getPropertyValue('--prose-font-size')).toBe('18px')
+    expect(editorWrapper.style.getPropertyValue('--prose-measure')).toBe('800px')
+    expect(getView(container)).toBe(view)
+    expect(view.state.selection.eq(selection)).toBe(true)
+    act(() => { undo(view) })
+    expect(view.state.doc.toString()).toBe('初稿')
+    act(() => { redo(view) })
+    expect(view.state.doc.toString()).toBe('初稿修订')
+  } finally {
+    act(() => {
+      prefs.setProseFontSize(prefs.proseFontSize)
+      prefs.setMeasureWidth(prefs.measureWidth)
+    })
+  }
 })
 
 describe('CodeMirrorEditor 撤销行为（外部同步不进 undo 栈）', () => {

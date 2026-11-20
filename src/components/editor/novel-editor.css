@@ -1,5 +1,46 @@
 /* ===== NovelForge 统一编辑器样式 ===== */
 
+/* 稿纸宽度沿用作者偏好。容器收窄仅约束当前排版，不回写已保存的栏宽。 */
+.nf-prose-editor {
+  container-type: inline-size;
+  --prose-gutter: clamp(8px, 3cqi, 32px);
+  --prose-inset: clamp(16px, 5cqi, 40px);
+  background: var(--color-panel);
+}
+
+.nf-prose-heading-gutter {
+  flex-shrink: 0;
+  padding: var(--prose-gutter) var(--prose-gutter) 0;
+  /* 与正文滚动区预留相同滚动条宽度，让窄栏标题和正文保持对齐。 */
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.nf-prose-heading {
+  max-width: var(--prose-measure);
+  margin-inline: auto;
+  padding: 24px var(--prose-inset) 0;
+  background: var(--color-editor-bg);
+  color: var(--color-text);
+}
+
+.nf-prose-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+}
+
+.nf-prose-heading h1 {
+  margin: 8px 0 0;
+  font-family: var(--font-writing);
+  font-size: var(--text-2xl);
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
 /* ── 消除浏览器默认焦点样式（黄色边框来源）─────────────────────────────── */
 .vela-editor-content:focus,
 .vela-editor-content *:focus,
