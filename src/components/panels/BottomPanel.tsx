@@ -16,6 +16,7 @@ import InboxPanel from './automation/InboxPanel'
 import { useAutomationStore } from '../../stores/automation-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useScopedWorkflowRuns, useTaskNavigation } from './agent/agent-panel-session'
+import './runtime-panels.css'
 
 /** 工作台底栏显示当前选中的页签。 */
 export default function BottomPanel() {
@@ -23,15 +24,13 @@ export default function BottomPanel() {
   const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
-  // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段
+  // 徽标只依赖当前项目的运行和收件箱。
   const { activeRuns } = useScopedWorkflowRuns()
   // 收件箱未处理数（D 档徽章）：用长度而非数组本身订阅，避免每次 loadAll 都触发重渲染
   const pendingInboxCount = useAutomationStore(s => s.inbox.filter(i => i.status === 'pending').length)
 
-  // 声明为 string：兼容旧版本持久化的 bottomTab='models'（已映射到活动视图）
+  // 旧版本的活动和模型页已移走，旧持久化值统一回到任务页。
   const activeTab: string = bottomTab || 'tasks'
-  // 兼容旧持久化值：'activity'（写作统计已于 2026-09-22 搬去编辑区页面）与 'models' 一律回落到
-  // 任务视图——否则老用户升级后会看到一个空白底栏
   const effectiveTab = (activeTab === 'activity' || activeTab === 'models') ? 'tasks' : activeTab
   // 任何活跃任务运行中
   const hasRunning = activeRuns.some(r => r.status === 'running')
@@ -44,8 +43,8 @@ export default function BottomPanel() {
   ] as const
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-[var(--color-panel)]">
-      <div className="nf-workbench-view-header">
+    <section className="nf-task-drawer flex h-full min-h-0 flex-col" aria-label={t('panel.bottom')}>
+      <header className="nf-workbench-view-header">
         <div className="nf-workbench-view-list" role="group" aria-label={t('panel.bottom')}>
           {views.map(([id, Icon, label, count]) => (
             <Button key={id} type="button" variant="ghost" className="nf-workbench-view"
@@ -64,7 +63,7 @@ export default function BottomPanel() {
           }}>
           <X size={15} aria-hidden="true" />
         </Button>
-      </div>
+      </header>
 
       {/* 内容区 */}
       <div className="flex-1 overflow-hidden">
@@ -72,7 +71,7 @@ export default function BottomPanel() {
         {effectiveTab === 'log' && <LogsView />}
         {effectiveTab === 'inbox' && <InboxPanel />}
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -99,15 +98,15 @@ function TaskRunView() {
 
   if (activeRuns.length === 0 && history.length === 0 && !liveApproval) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-3" style={{ color: 'var(--color-text-muted)' }}>
-        <Zap size={36} style={{ opacity: 0.5 }} />
+      <div className="nf-task-empty">
+        <span className="nf-companion-mark"><Zap size={16} aria-hidden="true" /></span>
         <span className="text-xs">{t('empty.noTasks')}</span>
       </div>
     )
   }
 
   return (
-    <div ref={viewport} className="h-full overflow-y-auto pb-4">
+    <div ref={viewport} className="nf-task-list">
       {liveApproval && <button type="button"
         onClick={() => {
           if (!liveApproval.isCurrent() || useAgentStore.getState().pendingToolApproval !== liveApproval) return
@@ -115,14 +114,14 @@ function TaskRunView() {
           useAgentStore.getState().selectConversation(liveApproval.conversationId)
           useLayoutStore.getState().openRightPanel('agent')
         }}
-        className="flex min-h-8 w-full items-center gap-2 px-3 text-left text-xs hover:bg-[var(--color-hover)]">
+        className="flex min-h-8 w-full cursor-pointer items-center gap-2 rounded-md border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-3 text-left text-xs hover:bg-[var(--color-active)]">
         <ShieldAlert size={14} className="shrink-0 text-[var(--color-warning)]" />
         <span>{t('agent.confirmAction')}</span>
         <span className="truncate text-[var(--color-text-muted)]">{liveApproval.toolCall.toolName}</span>
       </button>}
       {/* 活跃任务列表（支持多个并行） */}
       {activeRuns.length > 0 && (
-        <div className="flex-shrink-0" style={{ borderBottom: history.length > 0 ? '1px solid var(--color-border)' : undefined }}>
+        <div className="nf-task-group">
           {activeRuns.map((run, idx) => {
             const runWaiting = waitingRuns[run.id]
             return (
@@ -141,8 +140,8 @@ function TaskRunView() {
       {/* 历史记录（简表；2026-09-27 可供性修复：行 = 主按钮，点击就地展开步骤详情 ——
           此前行有 hover 变色却无点击处理器） */}
       {history.length > 0 && (
-        <div className="flex-shrink-0">
-          <div className="px-4 pt-3 pb-1 text-micro font-semibold" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="nf-task-group">
+          <div className="px-4 pt-3 pb-1 text-xs font-semibold text-[var(--color-text-secondary)]">
             {t('panel.taskHistory')}
           </div>
           <div className="px-2 pb-2">

@@ -1,26 +1,40 @@
-import { Bot, ScrollText, X } from 'lucide-react'
+import { MessageSquare, ScrollText, Sparkles, X } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { useLayoutStore, type RightView } from '../../stores/layout-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
 import AIPanel from './AIPanel'
 import AIOutputPanel from './AIOutputPanel'
+import './runtime-panels.css'
 
 export default function WritingCompanion() {
   const { t } = useTranslation()
   const view = useLayoutStore(state => state.rightView)
   const setView = useLayoutStore(state => state.setRightView)
   // 只读取输出的活跃状态，流式正文更新无需重绘面板导航。
-  const outputActive = useWorkflowStore(state => state.currentRun?.status === 'running' || state.currentRun?.status === 'waiting')
+  const outputActive = useWorkflowStore(state => state.activeRuns.some(run =>
+    (run.status === 'running' || run.status === 'waiting') && (state.isRunCurrent?.(run.id) ?? true)))
   const views = [
-    ['agent', Bot, t('agent.aiPanel'), t('workbench.chat')],
+    ['agent', MessageSquare, t('workbench.chat'), t('workbench.chat')],
     ['ai-output', ScrollText, t('agent.aiOutput'), t('workbench.output')],
-  ] as const satisfies ReadonlyArray<readonly [RightView, typeof Bot, string, string]>
+  ] as const satisfies ReadonlyArray<readonly [RightView, typeof MessageSquare, string, string]>
 
   return (
-    <div className="nf-companion">
-      {/* 两个视图共用同一组持续挂载的切换按钮，切换内容时保留键盘焦点。 */}
-      <div className="nf-workbench-view-header">
+    <section className="nf-companion" aria-label={t('agent.aiPanel')}>
+      <header className="nf-companion-heading">
+        <span className="nf-companion-mark"><Sparkles size={16} aria-hidden="true" /></span>
+        <h2 className="min-w-0 flex-1 truncate text-sm font-semibold" title={t('agent.aiPanel')}>{t('agent.aiPanel')}</h2>
+        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+          aria-label={t('tip.closePanel')} title={t('tip.closePanel')}
+          onClick={() => {
+            useLayoutStore.getState().setAIPanelOpen(false)
+            document.querySelector<HTMLButtonElement>('[data-workbench-toggle="companion"]')?.focus()
+          }}>
+          <X size={15} aria-hidden="true" />
+        </Button>
+      </header>
+      {/* 视图开关保持挂载，关闭后仍可通过运行身份召回对话和输出。 */}
+      <div className="nf-workbench-view-header nf-companion-views">
         <div className="nf-workbench-view-list" role="group" aria-label={t('panel.ai')}>
           {views.map(([id, Icon, label, shortLabel]) => (
             <Button key={id} type="button" variant="ghost" className="nf-workbench-view"
@@ -31,18 +45,10 @@ export default function WritingCompanion() {
             </Button>
           ))}
         </div>
-        <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
-          aria-label={t('tip.closePanel')} title={t('tip.closePanel')}
-          onClick={() => {
-            useLayoutStore.getState().setAIPanelOpen(false)
-            document.querySelector<HTMLButtonElement>('[data-workbench-toggle="companion"]')?.focus()
-          }}>
-          <X size={15} aria-hidden="true" />
-        </Button>
       </div>
       <div className="flex-1 min-h-0">
         {view === 'agent' ? <AIPanel /> : <AIOutputPanel />}
       </div>
-    </div>
+    </section>
   )
 }

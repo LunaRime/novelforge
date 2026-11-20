@@ -26,6 +26,7 @@ import FilePickerMenu from './FilePickerMenu'
 import { PopoverSurface } from '../../ui/PopoverSurface'
 import ThinkingLevelSlider, { ThinkingLevelIcon } from '../../ui/ThinkingLevelSlider'
 import { useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
+import '../runtime-panels.css'
 import {
   getAllSlashCommands,
   type SlashCommand,
@@ -249,15 +250,8 @@ function AgentComposer() {
 
   return (
     <div
-      // focus-within：textarea 自身写了 outline-none（去掉默认环以避免与外框叠成双层），
-      // 但此前**没有任何替代焦点样式** → 键盘用户看不到焦点落在 AI 主输入框（全应用最主要的输入入口）。
-      // 焦点落到内部任意元素时，把容器边框点亮。
-      className="relative flex flex-col gap-0 p-1.5 transition-colors focus-within:border-[var(--color-accent)]"
-      style={{
-        backgroundColor: 'var(--color-hover)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 'var(--radius-md)',  /* 4px 方正风格 */
-      }}
+      // 输入框或菜单触发器获得焦点时，共用输入容器的边框反馈。
+      className="nf-agent-composer relative flex flex-col gap-0 p-2"
     >
       {/* 输入区域 — 同时是 @提及 / 斜杠命令 / 文件选择三个辅助菜单的定位锚点
           （三个菜单渲染在本容器内部，各自用 useFloatingPosition 算 fixed 坐标） */}
@@ -268,6 +262,7 @@ function AgentComposer() {
             onChange={e => handleInputChange(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder={t('agent.placeholder')}
+            aria-label={t('agent.placeholder')}
             rows={1}
             className="w-full resize-none outline-none bg-transparent text-xs leading-relaxed px-2 py-2"
             style={{
@@ -513,21 +508,13 @@ function AgentComposer() {
         {/* 右侧：发送/停止 */}
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
+            type="button"
             onClick={handleSendOrStop}
             disabled={!generating && !canSend}
-            className="flex items-center justify-center w-6 h-6 transition-all duration-150"
-            style={{
-              borderRadius: 'var(--radius-md)',
-              backgroundColor: generating
-                ? 'var(--color-text-secondary)'
-                : canSend
-                ? 'var(--color-accent)'
-                : 'rgba(128,128,128,0.3)',
-              color: 'var(--color-text)',
-              cursor: !generating && !canSend ? 'not-allowed' : 'pointer',
-              opacity: !generating && !canSend ? 0.5 : 1,
-            }}
+            className="nf-agent-send grid size-8 place-items-center rounded-lg"
+            data-generating={generating || undefined}
             title={generating ? t('agent.stopGen') : t('agent.sendMsg')}
+            aria-label={generating ? t('agent.stopGen') : t('agent.sendMsg')}
           >
             {generating ? (
               <Square size={10} fill="currentColor" />

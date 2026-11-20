@@ -54,7 +54,7 @@ export default function AgentHeader() {
 
   const conversationTitle = title || t('agent.newConversation')
   return (
-    <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-[var(--color-border)] px-2 py-1">
+    <div className="flex min-w-0 shrink-0 items-center gap-1 border-b border-[var(--color-border)] bg-[var(--color-editor-bg)] px-2 py-1">
       <span className="min-w-0 flex-1 truncate text-xs font-medium text-[var(--color-text-secondary)]" title={conversationTitle}>
         {conversationTitle}
       </span>

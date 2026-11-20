@@ -29,7 +29,7 @@ export default function AIOutputPanel() {
       {viewRun && allRuns.length > 1 && (
         <div className="shrink-0 border-b border-[var(--color-border)] px-2 py-1.5">
           <select aria-label={t('agent.history')} value={viewRun.id} onChange={event => setViewRunId(event.target.value)}
-            className="h-8 w-full min-w-0 truncate rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] px-2 text-xs">
+            className="h-8 w-full min-w-0 truncate rounded-md border border-[var(--color-border)] bg-[var(--color-editor-bg)] px-2 text-xs">
             {!allRuns.some(run => run.id === viewRun.id) && <option value={viewRun.id}>{viewRun.title}</option>}
             {allRuns.map(run => <option key={run.id} value={run.id}>{run.title}</option>)}
           </select>
@@ -69,7 +69,7 @@ function EmptyState() {
   return (
     <div className="flex flex-col items-center justify-center h-full gap-2 px-6" style={{ color: 'var(--color-text-muted)' }}>
       <Sparkles size={20} style={{ opacity: 0.2 }} />
-      <span className="text-xs opacity-60">{t('agent.noOutput')}</span>
+      <span className="text-xs">{t('agent.noOutput')}</span>
     </div>
   )
 }

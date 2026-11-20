@@ -97,20 +97,13 @@ function EmptyState() {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      {/* 内容区（滚动）——输入框已移至面板下部固定，此处仅保留引导内容。
-          2026-09-22 UI 重做：改成 flex-col + 顶部对齐（原 paddingTop max(8vh,32px) 把内容
-          往下推、下方留一大片空白）+ 披露声明 mt-auto 压到底部，避免它夹在内容中间。 */}
+      {/* 空会话的提示与最近对话可以滚动，输入区固定在面板底部。 */}
       <div className="flex-1 overflow-y-auto flex flex-col">
       <div
         className="px-4 flex-1 flex flex-col"
         style={{ paddingTop: 16, paddingBottom: 16 }}
       >
-        {/* 标题（紧凑：text-sm，与 IDE 工具面板风格一致） */}
-        <div className="mb-1 pl-1 text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-          NovelForge
-        </div>
-        {/* 副标题 */}
-        <div className="mb-3 pl-1 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+        <div className="mb-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-3 text-xs leading-relaxed text-[var(--color-text-secondary)]">
           {(() => {
             const text = t('agent.subtitle')
             const parts: React.ReactNode[] = []

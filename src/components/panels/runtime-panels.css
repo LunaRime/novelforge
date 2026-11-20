@@ -1,0 +1,118 @@
+/* 搭档与任务共用页签样式，两边的滚动由各自的内容区负责。 */
+.nf-companion,
+.nf-task-drawer {
+  background: var(--color-sidebar);
+  border-radius: inherit;
+}
+
+.nf-companion {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.nf-companion-heading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  min-height: 3rem;
+  gap: 0.5rem;
+  padding-inline: 0.75rem 0.5rem;
+}
+
+.nf-companion-mark {
+  display: grid;
+  flex: none;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--color-workbench-spine);
+  color: var(--color-workbench-fold);
+}
+
+.nf-workbench-view-header {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.375rem 0.625rem;
+  border-block-end: 1px solid var(--color-border);
+}
+
+.nf-companion-views { padding-block-start: 0; }
+
+.nf-workbench-view-list {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 0.25rem;
+}
+
+.nf-workbench-view-list .nf-workbench-view {
+  min-width: 0;
+  min-height: 32px;
+  padding-inline: 0.625rem;
+}
+
+.nf-companion-views .nf-workbench-view { flex: 1 1 0; }
+.nf-workbench-view :is(svg, [data-badge]) { flex: none; }
+
+.nf-workbench-view[aria-pressed='true'] {
+  background: var(--color-editor-bg);
+  color: var(--color-accent);
+  box-shadow: inset 0 -2px var(--color-workbench-fold);
+}
+
+.nf-task-empty {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 0.625rem;
+  color: var(--color-text-secondary);
+}
+
+.nf-task-list {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.625rem;
+  overflow-y: auto;
+}
+
+.nf-task-group {
+  flex: none;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-editor-bg);
+}
+
+.nf-agent-composer {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-editor-bg);
+  box-shadow: var(--shadow-sm);
+}
+
+.nf-agent-composer:focus-within { border-color: var(--color-accent); }
+
+.nf-agent-send {
+  background: var(--color-workbench-spine);
+  color: var(--color-workbench-spine-text);
+  cursor: pointer;
+}
+
+.nf-agent-send:not(:disabled):hover { filter: brightness(1.16); }
+.nf-agent-send[data-generating='true'],
+.nf-agent-send:disabled { background: var(--color-panel); color: var(--color-text-secondary); }
+.nf-agent-send:disabled { cursor: not-allowed; opacity: 0.6; }
+
+@media (pointer: coarse) {
+  .nf-agent-send,
+  .nf-companion-heading button,
+  .nf-task-drawer header > button { min-width: 44px; min-height: 44px; }
+}
