@@ -14,7 +14,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { SHORTCUT_DEFINITIONS, formatBinding, shortcutBinding, useShortcutStore } from '../../stores/shortcut-store'
 import { useDevConsoleStore } from '../../stores/dev-console-store'
-import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
+import { focusWorkbenchEditor } from '../../lib/workbench-focus'
 
 interface CommandItem {
   id: string
@@ -97,12 +97,12 @@ export default function CommandPalette() {
   useEffect(() => {
     if (!open) return
     const origin = document.activeElement
-    const fromWorkbench = origin?.closest('[data-workbench-mode]')
+    const fromWorkbench = origin?.closest('[data-workbench]')
     return () => {
-      // 子面板可以切换模式。仅在整条命令面板关闭且焦点落到页面时归还焦点。
+      // 命令可能关闭子面板。仅在整条命令面板关闭且焦点落到页面时归还焦点。
       if (document.activeElement !== document.body || !(origin instanceof HTMLElement) || origin === document.body) return
       if (origin.isConnected) origin.focus({ preventScroll: true })
-      else if (fromWorkbench) focusActiveWorkbenchMode()
+      else if (fromWorkbench) focusWorkbenchEditor()
     }
   }, [open])
   if (!open) return null
@@ -232,12 +232,6 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
         id: 'toggle-bottom', label: t('command.toggleBottom'), category: t('command.group.view'),
         shortcut: sc('toggle-bottom'), icon: <PanelBottom size={15} />, keywords: 'bottom panel tasks 底栏',
         run: () => layout.toggleBottomPanel(),
-      },
-      {
-        id: 'toggle-workbench-mode', label: t('command.toggleWorkbenchMode'), category: t('command.group.view'),
-        shortcut: sc('toggle-workbench-mode'), icon: <LayoutGrid size={15} />,
-        keywords: `workbench build write ${t('workbench.build')} ${t('workbench.write')}`,
-        run: () => layout.toggleWorkbenchMode(),
       },
       {
         id: 'focus-mode', label: t('command.focusMode'), category: t('command.group.view'),

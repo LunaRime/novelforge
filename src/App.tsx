@@ -18,7 +18,6 @@ import { setWindowTitle } from './lib/window-title'
 import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
-import WorkbenchControls from './components/layout/WorkbenchControls'
 // 应用图标：直接引用**打包用的那个文件**（而非在 public/ 放一份副本），保证单一来源
 import appIcon from '../build/icon.png'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
@@ -82,7 +81,6 @@ function TitleStrip() {
         {currentProject?.name ?? 'NovelForge'}
       </span>
       <span className="flex-1" />
-      <WorkbenchControls />
       {/* 命令面板入口：标题栏是拖拽区，按钮必须显式 no-drag */}
       <button
         type="button"
@@ -281,11 +279,6 @@ export default function App() {
       if (matchesBinding(e, binding('shortcuts-help')) && !isTypingTarget(e.target)) {
         e.preventDefault()
         useCommandStore.getState().openPalette('shortcuts')
-        return
-      }
-      if (matchesBinding(e, binding('toggle-workbench-mode')) && !e.isComposing && !useCommandStore.getState().open) {
-        e.preventDefault()
-        if (!e.repeat) useLayoutStore.getState().toggleWorkbenchMode()
         return
       }
       if (matchesBinding(e, binding('zoom-in'))) {

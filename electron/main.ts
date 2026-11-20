@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Menu, dialog, nativeTheme, shell, session } from 'electron'
+import { app, BrowserWindow, Menu, dialog, nativeTheme, screen, shell, session } from 'electron'
 import { t } from '../src/shared/locale'
 import { registerIPCHandlers } from './ipc-handlers'
 // L4：registerMCPHandlers 已并入 electron/ipc-handlers.ts 的 registerIPCHandlers()（唯一注册入口）
@@ -146,14 +146,17 @@ function buildAppMenu() {
 
 function createWindow() {
   const isMac = process.platform === 'darwin'
+  const workArea = screen.getDisplayNearestPoint(screen.getCursorScreenPoint()).workAreaSize
+  const width = Math.min(1440, workArea.width)
+  const height = Math.min(900, workArea.height)
   // 先用系统外观绘制原生底色，首屏 HTML 会按应用偏好同步覆盖层。
   const initialColor = nativeTheme.shouldUseDarkColors ? '#08080a' : '#fffdf9'
   const initialText = nativeTheme.shouldUseDarkColors ? '#e8e8ea' : '#2c2520'
   const appWindow = new BrowserWindow({
-    width: 1440,
-    height: 900,
-    minWidth: 1024,
-    minHeight: 640,
+    width,
+    height,
+    minWidth: width,
+    minHeight: height,
     show: false,
     title: t('window.title'),
     icon: path.join(process.env.APP_ROOT!, 'build', 'icon.png'),

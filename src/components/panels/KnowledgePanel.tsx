@@ -2,17 +2,16 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { getCurrentLocale } from '../../shared/locale'
 import { KnowledgeRequestCancelled } from '../../core'
 import {
-  Database, RefreshCw, BookOpen, Download, Archive, SortAsc, Search, X, Trash2, AlertCircle, Sparkles,
+  Database, RefreshCw, BookOpen, Download, SortAsc, Search, Trash2, AlertCircle, Sparkles,
 } from 'lucide-react'
 import { Button } from '../ui/Button'
-import { Input } from '../ui/Input'
 import { EmptyState } from '../ui/EmptyState'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../ui/Select'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { useProjectStore } from '../../stores/project-store'
 import { globalEventBus } from '../../shared/event-bus'
 import { useTranslation } from '../../hooks/useTranslation'
-import type { KBDocument, KBStatsData, SearchResult } from '../../services/knowledge-service'
+import type { KBDocument } from '../../services/knowledge-service'
 import { createRendererKnowledgeApplication } from '../../services/knowledge/knowledge-adapter'
 import { renderLog } from '../../services/render-logger'
 import { confirm } from '../ui/Confirm'
@@ -20,31 +19,27 @@ import { toast } from '../ui/Toast'
 import ChapterExportDialog from '../dialogs/ChapterExportDialog'
 
 /** A new project session gets a fresh view, with no previous project's transient results. */
-export default function KnowledgePanel() {
+export default function KnowledgePanel({ headerAction }: { headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
   const project = useProjectStore(s => s.currentProject)
   const session = useProjectStore(s => s.projectSession)
   if (!project) return <EmptyState icon={<BookOpen size={36} />} message={t('empty.pleaseOpenProject')} className="pb-[15vh]" opacity={0.4} />
-  return <KnowledgePanelContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} />
+  return <KnowledgePanelContent key={`${project.id}:${project.path}:${session}`} source={{ id: project.id, path: project.path, session }} headerAction={headerAction} />
 }
 
-function KnowledgePanelContent({ source }: { source: { id: string; path: string; session: number } }) {
+function KnowledgePanelContent({ source, headerAction }: { source: { id: string; path: string; session: number }; headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
   const [application] = useState(() => createRendererKnowledgeApplication(source))
   const mounted = useRef(true)
   const lifetime = useRef({ generation: 0 })
-  const sequences = useRef({ load: 0, search: 0, summary: 0, titles: 0 })
+  const sequences = useRef({ load: 0, summary: 0, titles: 0 })
   const deleting = useRef(new Set<string>())
   const [documents, setDocuments] = useState<KBDocument[]>([])
   const [loadFailed, setLoadFailed] = useState(false)
-  const [stats, setStats] = useState<KBStatsData>({ documentCount: 0, totalChunks: 0, vectorDimension: 0 })
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 20
   const [titleMap, setTitleMap] = useState<Record<string, string>>({})
   const [sortMode, setSortMode] = useState<'time' | 'chapter' | 'name'>('chapter')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResults, setSearchResults] = useState<SearchResult[]>([])
-  const [searching, setSearching] = useState(false)
   const [exportOpen, setExportOpen] = useState(false)
   const [exportChapters, setExportChapters] = useState<number[]>([])
   const [exportTitleMap, setExportTitleMap] = useState<Record<number, string>>({})
@@ -72,7 +67,7 @@ function KnowledgePanelContent({ source }: { source: { id: string; path: string;
     try {
       const data = await application.load()
       if (!active() || seq !== sequences.current.load) return
-      setDocuments(data.documents); setStats(data.stats); setLoadFailed(false)
+      setDocuments(data.documents); setLoadFailed(false)
     } catch (error) {
       if (!active() || seq !== sequences.current.load || error instanceof KnowledgeRequestCancelled) return
       renderLog('error', 'Load:Knowledge', String(error)); setLoadFailed(true)
@@ -111,24 +106,6 @@ function KnowledgePanelContent({ source }: { source: { id: string; path: string;
     return () => { if (seq === requests.titles) ++requests.titles }
   }, [documents, application, active, t])
 
-  const changeSearch = (query: string) => {
-    ++sequences.current.search; application.cancelSearch()
-    setSearchQuery(query); setSearchResults([]); setSearching(false)
-  }
-  const handleSearch = async () => {
-    const query = searchQuery.trim()
-    if (!query) { changeSearch(''); return }
-    const seq = ++sequences.current.search
-    setSearching(true)
-    try {
-      const results = await application.search(query)
-      if (active() && seq === sequences.current.search) setSearchResults(results)
-    } catch (error) {
-      if (active() && seq === sequences.current.search && !(error instanceof KnowledgeRequestCancelled)) toast.error(t('knowledge.searchFailed').replace('{error}', () => String(error)))
-    } finally {
-      if (active() && seq === sequences.current.search) setSearching(false)
-    }
-  }
   const closeSummary = () => {
     ++sequences.current.summary; application.cancelSummary()
     setSummaryDoc(null); setSummaryText(''); setSummarizing(false)
@@ -157,21 +134,22 @@ function KnowledgePanelContent({ source }: { source: { id: string; path: string;
       const ok = await confirm(t('knowledge.deleteConfirm').replace('{name}', () => label), { title: t('action.delete'), confirmText: t('action.delete'), danger: true })
       if (!ok || !active()) return
       ++sequences.current.load; ++sequences.current.titles
-      changeSearch(''); closeSummary()
+      closeSummary()
       const result = await application.remove(doc)
       if (!active()) return
       // Requests may have completed while persistence was pending. Clear those projections too.
       ++sequences.current.load; ++sequences.current.titles
-      changeSearch(''); closeSummary()
+      closeSummary()
       const message = t('knowledge.deleteSuccess').replace('{name}', () => label)
       renderLog('info', 'Delete:Knowledge', message); toast.success(message)
       setDocuments(prev => prev.filter(item => item.id !== doc.id))
       setTitleMap(prev => { const next = { ...prev }; delete next[doc.id]; return next })
-      if (result.data) { setDocuments(result.data.documents); setStats(result.data.stats); setLoadFailed(false) }
+      if (result.data) { setDocuments(result.data.documents); setLoadFailed(false) }
       if (result.refreshError) {
         setLoadFailed(true); renderLog('error', 'Load:Knowledge', result.refreshError)
         toast.error(t('common.loadFailed'))
       }
+      globalEventBus.emit('KNOWLEDGE_DOCUMENT_REMOVED', { projectSession: source.session })
     } catch (error) {
       if (!active() || error instanceof KnowledgeRequestCancelled) return
       const message = t('knowledge.deleteFailed').replace('{error}', () => String(error))
@@ -186,15 +164,6 @@ function KnowledgePanelContent({ source }: { source: { id: string; path: string;
     const number = extractChapterNumber(doc)
     setExportChapters([number]); setExportTitleMap({ [number]: titleMap[doc.id] || doc.fileName }); setExportOpen(true)
   }
-  const openBatchExport = () => {
-    const chapters: number[] = [], titles: Record<number, string> = {}
-    for (const doc of documents) {
-      const number = extractChapterNumber(doc)
-      if (number > 0) { chapters.push(number); titles[number] = titleMap[doc.id] || doc.fileName }
-    }
-    setExportChapters(chapters); setExportTitleMap(titles); setExportOpen(true)
-  }
-
   // 排序 + 分页（提前计算，避免 JSX 内嵌 IIFE 的深层括号）
   const sortedDocs = useMemo(() => {
     return [...documents].sort((a, b) => {
@@ -211,106 +180,43 @@ function KnowledgePanelContent({ source }: { source: { id: string; path: string;
 
   return (
     <div className="h-full flex flex-col overflow-hidden text-sm">
-      {/* 标题栏 */}
-      <div className="flex items-center justify-between px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1.5 min-w-0">
-          <Database size={13} />
-          <span className="truncate">{t('nav.knowledgeBase')}</span>
-          <span className="text-micro text-[var(--color-text-muted)] flex-shrink-0">
-            {t('knowledge.docChunks').replace('{docs}', String(stats.documentCount)).replace('{chunks}', String(stats.totalChunks))}
-          </span>
+      <div className="flex items-center justify-between gap-1 px-2 h-9 shrink-0 border-b border-[var(--color-border)]">
+        <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-[var(--color-text)]">
+          <Database size={13} className="shrink-0" aria-hidden="true" />
+          <span className="truncate">{t('knowledge.docCount')} ({documents.length})</span>
         </span>
-        <div className="flex items-center gap-0.5 flex-shrink-0">
-          {/* 批量导出按钮 */}
-          {documents.length > 0 && (
-            <Button
-              variant="ghost" size="icon"
-              onClick={openBatchExport}
-              title={t('export.batchExportTip')}
-              className="h-6 w-6"
-            >
-              <Archive size={12} />
-            </Button>
-          )}
-          <Button
-            variant="ghost" size="icon"
-            onClick={() => loadData()}
-            title={t('action.refresh')}
-            className="h-6 w-6"
-          >
-            <RefreshCw size={11} />
+        <div className="flex shrink-0 items-center">
+          <Button type="button" variant="ghost" size="icon" className="size-8"
+            onClick={() => globalEventBus.emit('OPEN_KNOWLEDGE_SEARCH', {})}
+            title={t('knowledge.semanticSearch')} aria-label={t('knowledge.semanticSearch')}>
+            <Search size={14} aria-hidden="true" />
           </Button>
+          <Button type="button" variant="ghost" size="icon" className="size-8" onClick={() => void loadData()}
+            title={t('action.refresh')} aria-label={t('action.refresh')}>
+            <RefreshCw size={13} aria-hidden="true" />
+          </Button>
+          {headerAction}
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
-
-        {/* P2-1：搜索框（Enter 触发；有结果时显示结果视图） */}
-        <div className="flex items-center gap-1.5 px-3 py-1.5 border-b border-[var(--color-border)]">
-          <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-          {/* 同上：面板内的紧凑搜索框，外观与交互走 ui/Input（flex-1 让它吃掉图标与清除按钮之间的余量） */}
-          <Input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => changeSearch(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void handleSearch() }}
-            placeholder={t('knowledge.searchPlaceholder')}
-            className="flex-1 min-w-0 h-6 px-1.5 text-micro"
-          />
-          {searchResults.length > 0 && (
-            <button
-              onClick={() => changeSearch('')}
-              title={t('knowledge.closeSearch')}
-              className="p-0.5 rounded hover:bg-[var(--color-hover)] cursor-pointer"
-              style={{ color: 'var(--color-text-muted)' }}
-              type="button"
-            >
-              <X size={11} />
-            </button>
-          )}
-        </div>
-
-        {/* 搜索结果视图 / 空态 / 列表视图（互斥；独立条件块避免嵌套三元+fragment 解析问题） */}
-        {searchResults.length > 0 && (
-          <div className="pb-4">
-            <div className="flex items-center justify-between px-3 py-1.5">
-              <span className="text-micro text-[var(--color-text-muted)] font-medium">
-                {t('knowledge.searchResults').replace('{n}', String(searchResults.length))}
-              </span>
-            </div>
-            {searchResults.map((r, i) => (
-              <div key={i} className="px-3 py-2 hover:bg-[var(--color-hover)] transition-colors">
-                <div className="flex items-center gap-2 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-                  <span className="truncate flex-1">{r.fileName}</span>
-                  <span className="flex-shrink-0">{Math.round(r.score * 100)}%</span>
-                </div>
-                <div className="text-xs text-[var(--color-text-secondary)] mt-0.5 line-clamp-3">{r.text.slice(0, 200)}</div>
-              </div>
-            ))}
-          </div>
-        )}
-        {searchQuery.trim() !== '' && !searching && searchResults.length === 0 && (
-          <EmptyState message={t('knowledge.searchEmpty')} size="xs" className="text-center" />
-        )}
-        {searchResults.length === 0 && !(searchQuery.trim() !== '' && !searching) && (
-          <DocListView
-            documents={documents}
-            loadFailed={loadFailed}
-            onRetry={() => { setLoadFailed(false); void loadData() }}
-            titleMap={titleMap}
-            sortMode={sortMode}
-            onSortModeChange={(v) => { setSortMode(v); setCurrentPage(1) }}
-            pageDocs={pageDocs}
-            currentPage={currentPage}
-            totalPages={totalPages}
-            onPageChange={setCurrentPage}
-            onDelete={(doc) => void handleDelete(doc)}
-            onExport={(doc) => openSingleExport(doc)}
-            onSummarize={(doc) => void handleSummarize(doc)}
-            summarizing={summarizing}
-            t={t}
-          />
-        )}
+      <div className="flex-1 min-h-0 overflow-y-auto">
+        <DocListView
+          documents={documents}
+          loadFailed={loadFailed}
+          onRetry={() => { setLoadFailed(false); void loadData() }}
+          titleMap={titleMap}
+          sortMode={sortMode}
+          onSortModeChange={(value) => { setSortMode(value); setCurrentPage(1) }}
+          pageDocs={pageDocs}
+          currentPage={currentPage}
+          totalPages={totalPages}
+          onPageChange={setCurrentPage}
+          onDelete={(doc) => void handleDelete(doc)}
+          onExport={openSingleExport}
+          onSummarize={(doc) => void handleSummarize(doc)}
+          summarizing={summarizing}
+          t={t}
+        />
       </div>
 
       {/* 线③ 第 5 条：知识文档 AI 总结对话框 */}
@@ -369,8 +275,8 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
   return (
     <>
       {/* 排序头 */}
-      <div className="flex items-center justify-between px-3 py-1.5">
-        <span className="text-micro text-[var(--color-text-muted)] font-medium">
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 px-3 py-1.5">
+        <span className="shrink-0 text-micro text-[var(--color-text-muted)] font-medium">
           {t('knowledge.indexedChapters')}
         </span>
         {/* 排序选择：章节号 / 导入时间 / 名称 */}
@@ -379,7 +285,7 @@ function DocListView({ documents, loadFailed, onRetry, titleMap, sortMode, onSor
           onValueChange={(v) => onSortModeChange(v as 'time' | 'chapter' | 'name')}
         >
           <SelectTrigger
-            className="h-6 gap-1 text-micro px-1.5"
+            className="h-6 w-auto min-w-0 max-w-full flex-1 gap-1 text-micro px-1.5"
             title={t('knowledge.sortBy')}
             style={{ minWidth: 0, borderColor: 'var(--color-border)' }}
           >

@@ -44,18 +44,14 @@ describe('shortcut-store — 绑定规范化与匹配', () => {
 })
 
 describe('shortcut-store — 冲突与重置', () => {
-  it('工作模式默认未分配快捷键，可自定义且保护已存在的用户绑定', () => {
-    const id = 'toggle-workbench-mode'
-    expect(shortcutBinding(id)).toBe('')
-    const { setBinding, resetBinding } = useShortcutStore.getState()
-    expect(setBinding('save', 'Mod+Alt+Q')).toEqual({ ok: true })
-    expect(setBinding(id, 'Mod+Alt+Q')).toEqual({ ok: false, conflictId: 'save' })
-    expect(setBinding(id, 'Mod+Alt+M')).toEqual({ ok: true })
-    expect(matchesBinding(key({ key: 'm', ctrlKey: true, altKey: true }), shortcutBinding(id))).toBe(true)
-    expect(matchesBinding(key({ key: 'm', metaKey: true, altKey: true }), shortcutBinding(id))).toBe(true)
-    expect(setBinding('save', 'Mod+Alt+M')).toEqual({ ok: false, conflictId: id })
-    resetBinding(id)
-    expect(shortcutBinding(id)).toBe('')
+  it('旧的工作模式按键移除后可分配给其他命令', async () => {
+    localStorage.setItem('novelforge:shortcuts', JSON.stringify({ version: 0, state: { bindings: {
+      'toggle-workbench-mode': 'Mod+Alt+m', save: 'Mod+Alt+s',
+    } } }))
+    await useShortcutStore.persist.rehydrate()
+    expect(shortcutBinding('toggle-workbench-mode')).toBe('')
+    expect(shortcutBinding('save')).toBe('Mod+Alt+s')
+    expect(useShortcutStore.getState().setBinding('save', 'Mod+Alt+M')).toEqual({ ok: true })
   })
 
   it('重复绑定被拒绝并返回冲突项', () => {

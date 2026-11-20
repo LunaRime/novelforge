@@ -47,7 +47,7 @@ async function click(text: string) {
 }
 async function edit(title: string) { await flush(() => h.inputs['chapter.placeholderTitle'].onChange!({ target: { value: title } } as never)) }
 async function select(title: string) {
-  const entry = [...host.querySelectorAll<HTMLElement>('.group')].find(e => e.textContent?.includes(title))
+  const entry = [...host.querySelectorAll<HTMLButtonElement>('[data-feature-list] button')].find(e => e.title === title)
   expect(entry, title).toBeDefined(); await flush(() => entry!.click())
 }
 beforeEach(() => {

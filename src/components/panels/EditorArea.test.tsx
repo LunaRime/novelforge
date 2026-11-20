@@ -22,6 +22,7 @@ import { useMemoryStore } from '../../stores/memory-store'
 import { useProjectStore } from '../../stores/project-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { t } from '../../shared/locale'
+import { globalEventBus } from '../../shared/event-bus'
 
 const FILE = 'chapters-1-3.md'
 const TAB_ID = `${VELA.MEMORY}${FILE}`
@@ -94,6 +95,9 @@ describe('EditorArea — 记忆文件标签页', () => {
     writeCalls = []
     invoke = vi.fn(async (ch: string, ...args: unknown[]) => {
       if (ch === 'memory:list') return []
+      if (ch === 'kb:list-documents') return []
+      if (ch === 'kb:stats') return { documentCount: 0, totalChunks: 0, vectorDimension: 0 }
+      if (ch === 'kb:get-vectorless-count') return { count: 0 }
       if (ch === 'memory:write') { writeCalls.push([ch, ...args]); return { success: true } }
       return null
     })
@@ -196,6 +200,10 @@ describe('EditorArea — 记忆文件标签页', () => {
     // 修复前：knowledgeTabActive 恒 false → 这里会渲染 KnowledgeOverview（点了像没反应）
     expect(container.querySelector('.cm-editor')).toBeTruthy()
     expect(container.querySelector('.cm-content')?.textContent).toContain('第 1 章 · 开端')
+    await act(async () => globalEventBus.emit('OPEN_KNOWLEDGE_SEARCH', {}))
+    const search = [...container.querySelectorAll('button')].find(button => button.textContent === t('knowledge.semanticSearch'))
+    expect(search?.getAttribute('aria-pressed')).toBe('true')
+    expect(useEditorStore.getState().tabs).toContainEqual(expect.objectContaining({ id: TAB_ID }))
     act(() => { root.unmount() })
   })
 })

@@ -71,3 +71,10 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <App />
   </React.StrictMode>,
 )
+
+if (import.meta.env.DEV) {
+  void import('./lib/dev-text-overflow').then(({ startTextOverflowCheck }) => {
+    const stop = startTextOverflowCheck(document.body)
+    import.meta.hot?.dispose(stop)
+  })
+}

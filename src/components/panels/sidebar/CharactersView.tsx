@@ -36,7 +36,7 @@ const TIER_LABEL_KEYS: Record<number, TextKey> = {
   3: 'character.tierLabel.minor',
 }
 
-export default function CharactersView() {
+export default function CharactersView({ headerAction }: { headerAction?: React.ReactNode }) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
   const characters = useCharacterStore(s => s.characters)
@@ -150,12 +150,11 @@ export default function CharactersView() {
   return (
     <div className="flex flex-col h-full overflow-hidden">
       {/* 顶部操作栏 */}
-      <div className="flex items-center justify-between px-3 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
-        <span className="text-xs font-medium text-[var(--color-text)] flex items-center gap-1">
-          <Users size={13} />
+      <div className="flex items-center justify-between gap-1 px-2 h-9 flex-shrink-0 border-b border-[var(--color-border)]">
+        <span className="text-xs font-medium text-[var(--color-text)] min-w-0 truncate" title={t('charList.title')}>
           {t('charList.title')} ({characters.length})
         </span>
-        <div className="flex items-center gap-0.5">
+        <div className="flex shrink-0 items-center gap-0.5">
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={handleRefresh} title={t('charList.refresh')}>
             <RefreshCw size={14} strokeWidth={2} />
           </Button>
@@ -169,6 +168,7 @@ export default function CharactersView() {
           <Button variant="ghost" size="icon" className="h-6 w-6" onClick={addCharacter} title={t('charList.newChar')}>
             <Plus size={14} strokeWidth={2} />
           </Button>
+          {headerAction}
         </div>
       </div>
 
@@ -243,7 +243,7 @@ export default function CharactersView() {
                     onClick={() => {
                       // 角色 Tab 可能被手动关闭——点击角色时确保重新打开并激活
                       // （openFile 已存在则仅激活；不存在则新开 'character-editor' Tab）
-                      openBuiltinEditor('character-editor', t('charList.title'), 'character')
+                      openBuiltinEditor('character-editor', t('character.viewProfile'), 'character')
                       setSelectedName(c.name)
                     }}
                   />

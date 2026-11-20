@@ -2,12 +2,13 @@ import { PenTool } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
+import { globalEventBus } from '../../shared/event-bus'
 import { useEditorStore } from '../../stores/editor-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { useProjectStore } from '../../stores/project-store'
 import EditorDocumentView from '../editor/EditorDocumentView'
 import EditorTabBar from '../editor/EditorTabBar'
-import KnowledgeOverview from '../pages/KnowledgeOverview'
+import KnowledgeOverview, { type KnowledgeSection } from '../pages/KnowledgeOverview'
 import WelcomePage from '../pages/WelcomePage'
 import { EmptyState } from '../ui/EmptyState'
 
@@ -42,7 +43,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
     const { tabs: ts, openFile, closeTab } = useEditorStore.getState()
     if (sidebarView === 'characters') {
       if (ts.some(tab => tab.type === 'character')) return
-      openFile({ id: 'character-editor', name: t('charList.title'), type: 'character' })
+      openFile({ id: 'character-editor', name: t('character.viewProfile'), type: 'character' })
     } else {
       // dirty 的角色 Tab 保留（有未保存修改，避免静默丢内容），仅关闭干净 Tab
       ts.filter(tab => tab.type === 'character' && !tab.dirty).forEach(tab => closeTab(tab.id))
@@ -55,6 +56,17 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // Tab 保留在 Tab 栏（dirty 数据安全），用户主动点击 Tab 可切回内容。
   // 视图切换 / 关闭全部 Tab 后回到「视图优先」。
   const [knowledgeTabActive, setKnowledgeTabActive] = useState(false)
+  const [knowledgeSection, setKnowledgeSection] = useState<{ session: number; section: KnowledgeSection }>()
+  const section = knowledgeSection?.session === projectSession ? knowledgeSection.section : 'overview'
+  const selectKnowledgeSection = useCallback((next: KnowledgeSection) => {
+    setKnowledgeSection({ session: projectSession, section: next })
+  }, [projectSession])
+
+  useEffect(() => globalEventBus.on('OPEN_KNOWLEDGE_SEARCH', () => {
+    if (sidebarView !== 'knowledge') return
+    selectKnowledgeSection('search')
+    setKnowledgeTabActive(false)
+  }), [selectKnowledgeSection, sidebarView])
 
   /** 用户主动激活 Tab（Tab 栏/箭头/菜单 goto）：知识库视图下切到 Tab 内容。稳定引用，供 memo(EditorTabBar) 使用 */
   const onActivateTab = useCallback((id: string) => {
@@ -117,7 +129,7 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 侧栏为「知识库」时，中间区域固定展示向量数据库查询界面——
   // 残留的其他部件 Tab 不抢占（knowledgeTabActive 仅在用户主动点击 Tab 后置真）
   if (sidebarView === 'knowledge' && !knowledgeTabActive) {
-    return <KnowledgeOverview />
+    return <KnowledgeOverview section={section} onSectionChange={selectKnowledgeSection} />
   }
 
   // 未打开项目时显示欢迎页（有活跃 Tab 时优先显示 Tab 内容，如项目详情 Tab）

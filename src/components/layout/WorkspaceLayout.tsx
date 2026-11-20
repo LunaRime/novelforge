@@ -2,8 +2,8 @@ import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Group, Panel, Separator, useDefaultLayout, type Layout } from 'react-resizable-panels'
 import { useShallow } from 'zustand/shallow'
 import { useTranslation } from '../../hooks/useTranslation'
-import { focusActiveWorkbenchMode } from '../../lib/workbench-focus'
-import { selectWorkbenchPanels, useLayoutStore } from '../../stores/layout-store'
+import { focusWorkbenchEditor } from '../../lib/workbench-focus'
+import { useLayoutStore } from '../../stores/layout-store'
 import { useProjectStore } from '../../stores/project-store'
 import { ErrorBoundary } from '../ErrorBoundary'
 import AIPanel from '../panels/AIPanel'
@@ -47,38 +47,30 @@ export default function WorkspaceLayout() {
   const navigationScope = useProjectStore(state => state.currentProject
     ? `${state.currentProject.id}:${state.currentProject.path}:${state.projectSession}` : '')
   const navigation = useMemo(() => createNavigationSession(navigationScope), [navigationScope])
-  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen } = useLayoutStore(useShallow(state => {
-    const panels = selectWorkbenchPanels(state)
-    return {
-      sidebarOpen: panels.sidebarOpen, aiPanelOpen: panels.aiPanelOpen, rightView: panels.rightView,
-      bottomPanelOpen: panels.bottomPanelOpen,
-    }
-  }))
-  const { focusMode, workbenchMode, openNewProject } = useLayoutStore(useShallow(state => ({
-    focusMode: state.focusMode, workbenchMode: state.workbenchMode,
+  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, focusMode, openNewProject } = useLayoutStore(useShallow(state => ({
+    sidebarOpen: state.sidebarOpen, aiPanelOpen: state.aiPanelOpen, rightView: state.rightView,
+    bottomPanelOpen: state.bottomPanelOpen, focusMode: state.focusMode,
     openNewProject: state.openNewProject,
   })))
-  const writing = workbenchMode === 'write'
   const showSidebar = !focusMode && sidebarOpen
   const showAI = !focusMode && aiPanelOpen
   const showBottom = !focusMode && bottomPanelOpen
-  const sidebarId = writing ? 'writing-sidebar' : 'sidebar'
-  const aiId = writing ? 'writing-ai-panel' : 'ai-panel'
-  const bottomId = writing ? 'writing-bottom' : 'bottom'
+  const sidebarId = 'sidebar'
+  const aiId = 'ai-panel'
+  const bottomId = 'bottom'
   const horizontalIds = [...(showSidebar ? [sidebarId] : []), 'middle', ...(showAI ? [aiId] : [])]
   const verticalIds = showBottom ? ['editor', bottomId] : ['editor']
 
-  // 构建态沿用旧存储键。写作态独立保存尺寸，编辑区与两层 Group 始终挂载。
-  const horizontalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-horizontal' : 'novelforge-main-horizontal', storage: localStorage })
-  const verticalLayout = useDefaultLayout({ id: writing ? 'novelforge-writing-vertical' : 'novelforge-middle-vertical', storage: localStorage })
+  const horizontalLayout = useDefaultLayout({ id: 'novelforge-main-horizontal', storage: localStorage })
+  const verticalLayout = useDefaultLayout({ id: 'novelforge-middle-vertical', storage: localStorage })
   const lastFocused = useRef<HTMLElement | null>(null)
   useLayoutEffect(() => {
     // 只接管因区域卸载而丢失的焦点，编辑器或弹窗仍有焦点时保持原位。
     if (lastFocused.current && !lastFocused.current.isConnected && document.activeElement === document.body) {
-      focusActiveWorkbenchMode()
+      focusWorkbenchEditor()
       lastFocused.current = null
     }
-  }, [focusMode, workbenchMode, showSidebar, showAI, showBottom, rightView])
+  }, [focusMode, showSidebar, showAI, showBottom, rightView])
 
   return (
     <>
@@ -88,9 +80,9 @@ export default function WorkspaceLayout() {
       >
         {t('tip.skipToContent')}
       </a>
-      <div data-workbench-mode={workbenchMode} className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
+      <div data-workbench className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
         onFocusCapture={event => { lastFocused.current = event.target }}>
-        {!writing && !focusMode && <LeftToolWindowBar />}
+        {!focusMode && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
           <Group
             orientation="horizontal"
@@ -129,8 +121,7 @@ export default function WorkspaceLayout() {
               >
                 {/* 专注模式仅改变外层布局，正文编辑区始终在同一位置挂载。 */}
                 <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
-                  <div id="main-editor-area" />
-                  <div data-region="editor" className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
+                  <div id="main-editor-area" tabIndex={-1} data-region="editor" className={focusMode ? 'max-w-[720px] mx-auto h-full text-[18px]' : 'h-full'}>
                     <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
                       <EditorArea onNewProject={openNewProject} />
                     </ErrorBoundary>
@@ -176,7 +167,7 @@ export default function WorkspaceLayout() {
             )}
           </Group>
         </div>
-        {!writing && !focusMode && <RightToolWindowBar />}
+        {!focusMode && <RightToolWindowBar />}
       </div>
     </>
   )

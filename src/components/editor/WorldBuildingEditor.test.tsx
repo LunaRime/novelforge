@@ -72,6 +72,15 @@ beforeEach(() => {
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 
 describe('architecture overview application view', () => {
+  it('exposes each architecture document as a direct open target in a single list', async () => {
+    await mount()
+    const list = host.querySelector('ul[aria-label="arch.document"]')
+    expect(list?.querySelectorAll('li')).toHaveLength(4)
+    expect(host.querySelectorAll('button[aria-label="arch.storyPremise"]')).toHaveLength(1)
+    expect(host.querySelector('[data-feature-list]')).toBeNull()
+    const last = list?.querySelector('li:last-child')
+    expect(last?.querySelector('button[aria-label="arch.plotOutline"]')).not.toBeNull()
+  })
   it('a failed refresh preserves the last successful fields and exits loading with an error', async () => {
     await mount(true); const base = handler
     handler = channel => { if (channel === 'db:project-core-get') throw new Error('offline'); return base(channel) }

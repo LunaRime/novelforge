@@ -10,9 +10,8 @@ export type BottomTab = 'tasks' | 'log' | 'activity' | 'inbox'
 /** 右侧面板视图类型 */
 export type RightView = 'agent' | 'ai-output'
 
-export type WorkbenchMode = 'build' | 'write'
-
-interface WorkbenchPanels {
+interface LayoutPreferences {
+  sidebarView: SidebarView
   sidebarOpen: boolean
   aiPanelOpen: boolean
   rightView: RightView
@@ -20,25 +19,10 @@ interface WorkbenchPanels {
   bottomTab: BottomTab
 }
 
-const WRITING_PANELS: WorkbenchPanels = {
-  sidebarOpen: false,
-  aiPanelOpen: false,
-  rightView: 'agent',
-  bottomPanelOpen: false,
-  bottomTab: 'tasks',
-}
-
 /** 章节创建对话框的预填参数 */
 export type ChapterCreationPrefill = Record<string, unknown> | null
 
-interface LayoutState extends WorkbenchPanels {
-  // 侧栏视图也驱动编辑区页面，切换工作状态时保持当前文档和视图。
-  sidebarView: SidebarView
-  workbenchMode: WorkbenchMode
-  writingPanels: WorkbenchPanels
-  setWorkbenchMode: (mode: WorkbenchMode) => void
-  toggleWorkbenchMode: () => void
-
+interface LayoutState extends LayoutPreferences {
   // ===== 全局弹窗状态（替代 window.dispatchEvent 事件总线）=====
   /** 设置弹窗是否打开 */
   settingsOpen: boolean
@@ -101,19 +85,7 @@ interface LayoutState extends WorkbenchPanels {
   closeChapterCreation: () => void
 }
 
-export function selectWorkbenchPanels(state: LayoutState): WorkbenchPanels {
-  return state.workbenchMode === 'write' ? state.writingPanels : state
-}
-
-function updatePanels(update: (panels: WorkbenchPanels) => Partial<WorkbenchPanels>) {
-  return (state: LayoutState): Partial<LayoutState> => {
-    const patch = update(selectWorkbenchPanels(state))
-    // 原有顶层字段继续保存构建态偏好，写作态的召回和关闭使用独立字段。
-    return state.workbenchMode === 'write' ? { writingPanels: { ...state.writingPanels, ...patch } } : patch
-  }
-}
-
-export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
+export const useLayoutStore = create<LayoutState>()(persist(set => ({
   // 默认值（home：历史项目方块列表入口，替换原 Archive 图标）
   sidebarOpen: true,
   sidebarView: 'home',
@@ -123,11 +95,6 @@ export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
 
   bottomPanelOpen: true,
   bottomTab: 'tasks',
-
-  workbenchMode: 'build',
-  writingPanels: WRITING_PANELS,
-  setWorkbenchMode: (workbenchMode) => set({ workbenchMode }),
-  toggleWorkbenchMode: () => get().setWorkbenchMode(get().workbenchMode === 'build' ? 'write' : 'build'),
 
   focusMode: false,
   toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
@@ -143,32 +110,20 @@ export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
   chapterCreationPrefill: null,
 
   // Actions
-  toggleSidebar: () => set(updatePanels(panels => ({ sidebarOpen: !panels.sidebarOpen }))),
-  // 显式导航到项目、知识库等视图时回到构建态。
-  setSidebarView: (view) =>
-    set((s) => ({
-      workbenchMode: 'build',
-      sidebarView: view,
-      sidebarOpen: s.workbenchMode === 'write' || s.sidebarView !== view || !s.sidebarOpen,
-    })),
-  showSidebarView: (view) => set({ workbenchMode: 'build', sidebarView: view, sidebarOpen: true }),
+  toggleSidebar: () => set(s => ({ sidebarOpen: !s.sidebarOpen })),
+  setSidebarView: view => set(s => ({ sidebarView: view, sidebarOpen: s.sidebarView !== view || !s.sidebarOpen })),
+  showSidebarView: view => set({ sidebarView: view, sidebarOpen: true }),
 
-  toggleAIPanel: () => set(updatePanels(panels => ({ aiPanelOpen: !panels.aiPanelOpen }))),
-  setAIPanelOpen: (open) => set(updatePanels(() => ({ aiPanelOpen: open }))),
-  setRightView: (view) => set(updatePanels(() => ({ rightView: view }))),
-  openRightPanel: (view) => set(updatePanels(() => ({ aiPanelOpen: true, rightView: view }))),
+  toggleAIPanel: () => set(s => ({ aiPanelOpen: !s.aiPanelOpen })),
+  setAIPanelOpen: open => set({ aiPanelOpen: open }),
+  setRightView: view => set({ rightView: view }),
+  openRightPanel: view => set({ aiPanelOpen: true, rightView: view }),
 
-  toggleBottomPanel: () => set(updatePanels(panels => ({ bottomPanelOpen: !panels.bottomPanelOpen }))),
-  setBottomTab: (tab) =>
-    set(updatePanels(panels => ({
-      bottomTab: tab,
-      bottomPanelOpen: panels.bottomTab !== tab || !panels.bottomPanelOpen,
-    }))),
-  openBottomTab: (tab) => set(updatePanels(() => ({ bottomPanelOpen: true, bottomTab: tab }))),
+  toggleBottomPanel: () => set(s => ({ bottomPanelOpen: !s.bottomPanelOpen })),
+  setBottomTab: tab => set(s => ({ bottomTab: tab, bottomPanelOpen: s.bottomTab !== tab || !s.bottomPanelOpen })),
+  openBottomTab: tab => set({ bottomPanelOpen: true, bottomTab: tab }),
 
-  // 拖过阈值后的**松手**才调用（时序见接口注释：拖拽中卸载面板会触发库的 Invalid N panel layout）
-  closeRegion: (region) =>
-    set(updatePanels(() => region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false })),
+  closeRegion: region => set(region === 'sidebar' ? { sidebarOpen: false } : region === 'ai' ? { aiPanelOpen: false } : { bottomPanelOpen: false }),
 
   // 全局弹窗 Actions
   openSettings: (section) => set({ settingsOpen: true, settingsSection: section }),
@@ -185,7 +140,14 @@ export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
   closeChapterCreation: () => set({ chapterCreationOpen: false, chapterCreationPrefill: null }),
 }), {
   name: 'novelforge:layout',
-  // 记住工作状态和面板偏好，F11 专注、弹窗和预填只在本次会话生效。
+  version: 1,
+  migrate: persisted => {
+    const preferences = { ...persisted as LayoutPreferences & { workbenchMode?: string; writingPanels?: unknown } }
+    delete preferences.workbenchMode
+    delete preferences.writingPanels
+    return preferences
+  },
+  // F11 专注状态、弹窗和预填仅在本次会话生效。
   partialize: (state) => ({
     sidebarOpen: state.sidebarOpen,
     sidebarView: state.sidebarView,
@@ -193,7 +155,5 @@ export const useLayoutStore = create<LayoutState>()(persist((set, get) => ({
     rightView: state.rightView,
     bottomPanelOpen: state.bottomPanelOpen,
     bottomTab: state.bottomTab,
-    workbenchMode: state.workbenchMode,
-    writingPanels: state.writingPanels,
   }),
 }))

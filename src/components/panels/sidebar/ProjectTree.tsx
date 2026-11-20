@@ -5,7 +5,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, CheckCircle2, Circle, FolderOpen, Copy, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
+import { RefreshCw, FolderOpen, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { draftListScope, useDraftStore, type DraftsByChapter } from '../../../stores/draft-store'
@@ -21,8 +21,7 @@ import { useTranslation } from '../../../hooks/useTranslation'
 import { renderLog } from '../../../services/render-logger'
 
 import {
-  getArchFiles, renderIcon, showSidebarMenu,
-  openArchFile, openBuiltinEditor, openDraftByChapter, openDraftById,
+  showSidebarMenu, openBuiltinEditor, openDraftByChapter, openDraftById,
 } from './SidebarShared'
 import DraftBoxGroup from './DraftBoxGroup'
 import ManuscriptGroup from './ManuscriptGroup'
@@ -156,11 +155,8 @@ export default function ProjectTree() {
   const nc = currentProject.novelConfig
   const configDone = !!(nc.coreOutline?.trim() || nc.protagonistProfile?.trim())
 
-  // 故事架构进度（翻译后的列表用于 UI 展示）
-  const archFiles = getArchFiles(t)
-
-  // 故事架构进度
-  const archDone = archFiles.filter(f => archStatus[f.key]).length
+  const architecture = Object.values(archStatus)
+  const archDone = architecture.filter(Boolean).length
 
   return (
     <div className="text-sm space-y-3">
@@ -204,8 +200,15 @@ export default function ProjectTree() {
         ], e)}
       />
 
-      {/* 2. 故事架构 — 点击标题行打开编辑器，子文件仍可单独点开 */}
-      <WorldBuildingGroup archStatus={archStatus} archDone={archDone} archFiles={archFiles} />
+      <SidebarGroup
+        icon={<FolderTree size={12} />}
+        title={t('editor.storyArch')}
+        collapsible={false}
+        count={architecture.length > 0 && <CountBadge value={archDone} total={architecture.length} progress
+          tone={archDone === architecture.length ? 'success' : archDone > 0 ? 'warning' : 'muted'} />}
+        onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
+        titleHint={t('tip.openArchEditor')}
+      />
 
       {/* 世界观与时间线 — 独立单行入口（不再与「故事架构」共用一张卡的两个热区） */}
       <SidebarGroup
@@ -288,116 +291,6 @@ export default function ProjectTree() {
 
       {/* 5. 正文章节 — 仅显示已定稿 */}
       <ManuscriptGroup files={manuscriptFiles} projectPath={p} />
-    </div>
-  )
-}
-
-
-// ===== 故事架构折叠组 =====
-
-function WorldBuildingGroup({
-  archStatus,
-  archDone,
-  archFiles,
-}: {
-  archStatus: Record<string, boolean>
-  archDone: number
-  archFiles: Array<{ key: string; fileName: string; label: string; iconName: string; desc: string }>
-}) {
-  const { t } = useTranslation()
-
-  const allDone = archDone === archFiles.length
-
-  return (
-    <SidebarGroup
-      icon={<FolderTree size={12} />}
-      title={t('editor.storyArch')}
-      defaultOpen={false}
-      count={<CountBadge
-        value={archDone}
-        total={archFiles.length}
-        progress
-        tone={allDone ? 'success' : archDone > 0 ? 'warning' : 'muted'}
-      />}
-      onTitleClick={() => openBuiltinEditor('world-building-editor', t('editor.storyArch'), 'world-building')}
-      titleHint={t('tip.openArchEditor')}
-    >
-      {/* 子文件列表（点击直接在 Markdown 编辑器打开） */}
-      <div className="mt-1">
-        {archFiles.map(f => {
-          const isGenerated = archStatus[f.key]
-          const filePath = `vela://core/${f.key}`
-          return (
-            <ArchFileRow
-              key={f.key}
-              f={f}
-              filePath={filePath}
-              isGenerated={isGenerated}
-            />
-          )
-        })}
-      </div>
-    </SidebarGroup>
-  )
-}
-
-/** 单个架构文件行 */
-function ArchFileRow({
-  f,
-  filePath,
-  isGenerated,
-}: {
-  f: { key: string; iconName: string; label: string; desc: string }
-  filePath: string
-  isGenerated: boolean
-}) {
-  const { t } = useTranslation()
-  return (
-    <div
-      className="tree-item gap-1.5 select-none"
-      // 左缩进交给主按钮：手型光标与真实可点区重合，缩进区仍可点；右侧留 8px 防贴边
-      style={{ paddingLeft: 0, paddingRight: 8 }}
-      onContextMenu={e => showSidebarMenu([
-        {
-          key: 'open',
-          label: t('action.openFile'),
-          icon: <FolderOpen size={13} />,
-          onClick: () => openArchFile(filePath, `${f.label}`),
-        },
-        { key: 'div1', type: 'divider' as const },
-        {
-          key: 'copy-path',
-          label: t('action.copyPath'),
-          icon: <Copy size={13} />,
-          onClick: () => navigator.clipboard.writeText(filePath).catch(() => { }),
-        },
-      ], e)}
-      title={f.desc}
-    >
-      {/* 2026-09-25：行的点击移到内层按钮 —— 键盘可达，且行内不再需要 stopPropagation */}
-      <button
-        type="button"
-        onClick={() => openArchFile(filePath, `${f.label}`)}
-        className="flex items-center gap-1.5 flex-1 min-w-0 h-full text-left cursor-pointer"
-        style={{ paddingLeft: 26 }}
-      >
-      {isGenerated
-        ? <CheckCircle2 size={10} style={{ flexShrink: 0, color: 'var(--color-success)' }} />
-        : <Circle size={6} style={{ flexShrink: 0, fill: 'transparent', stroke: 'var(--color-text-muted)' }} />
-      }
-      <span className="flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>{renderIcon(f.iconName, 13)}</span>
-      <span
-        className="text-sm flex-1 truncate"
-        style={{ color: isGenerated ? 'var(--color-text)' : 'var(--color-text-secondary)' }}
-      >
-        {f.label}
-      </span>
-      {!isGenerated && (
-        <span className="text-micro flex-shrink-0" style={{ color: 'var(--color-text-muted)' }}>
-          {t('status.pendingGen')}
-        </span>
-      )}
-      </button>
     </div>
   )
 }

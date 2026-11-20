@@ -16,6 +16,7 @@ import { act } from 'react'
 import CharacterEditor from './CharacterEditor'
 import { useCharacterStore, EMPTY_CARD, type CharacterCard } from '../../stores/character-store'
 import { useProjectStore } from '../../stores/project-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { t } from '../../shared/locale'
 
 let container: HTMLDivElement | null = null
@@ -68,6 +69,23 @@ afterEach(() => {
 })
 
 describe('CharacterEditor — 工具栏只留主操作 + 更多菜单', () => {
+  it('shows one roster and preserves the same profile elements when the sidebar closes', () => {
+    const layout = useLayoutStore.getState()
+    useLayoutStore.setState({ sidebarView: 'characters', sidebarOpen: true, focusMode: false })
+    try {
+      const box = render()
+      const input = [...box.querySelectorAll('input')].find(element => element.value === '小明')
+      expect(input).toBeDefined()
+      expect(box.querySelector('[data-feature-list]')).toBeNull()
+      act(() => useLayoutStore.getState().toggleSidebar())
+      expect(box.querySelector('[data-feature-list]')?.textContent).toContain('小红')
+      expect(box.contains(input!)).toBe(true)
+      act(() => useLayoutStore.getState().toggleSidebar())
+      expect(box.querySelector('[data-feature-list]')).toBeNull()
+      expect(box.contains(input!)).toBe(true)
+    } finally { act(() => useLayoutStore.setState(layout)) }
+  })
+
   it('低频操作默认不在工具栏上（生成档案 / 试演 / 存为模板 / 删除）', () => {
     const box = render()
 

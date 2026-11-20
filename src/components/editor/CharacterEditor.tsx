@@ -3,6 +3,7 @@ import MenuRow from '../ui/MenuRow'
 import { useState, useRef, useMemo, useEffect } from 'react'
 import { Save, Trash2, Users, Network, Link2, Plus, X, MessagesSquare, BookmarkPlus, FileInput, Sparkles, GitMerge, MoreHorizontal } from 'lucide-react'
 import { useProjectStore } from '../../stores/project-store'
+import { useLayoutStore } from '../../stores/layout-store'
 import { confirm } from '../ui/Confirm'
 import { toast } from '../ui/Toast'
 import { renderLog } from '../../services/render-logger'
@@ -38,12 +39,13 @@ import { listCharacterTemplates, readCharacterTemplate, saveCharacterTemplate } 
 type ViewMode = 'edit' | 'state' | 'graph' | 'backlinks'
 
 /**
- * 角色卡编辑器 — 纯编辑区域（角色列表已移至侧栏）
- * 从 character-store 读取选中角色，仅渲染编辑表单。
+ * 角色卡编辑器。角色侧栏可见时使用其名单，其他布局提供就地选择。
  */
 export default function CharacterEditor() {
   const { t, locale } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
+  const sidebarOwnsRoster = useLayoutStore(s =>
+    s.sidebarView === 'characters' && !s.focusMode && s.sidebarOpen)
   const characters = useCharacterStore(s => s.characters)
   const selectedName = useCharacterStore(s => s.selectedName)
   const saving = useCharacterStore(s => s.saving)
@@ -419,7 +421,7 @@ export default function CharacterEditor() {
       )}
 
       <FeatureSplit detailOpen={(Boolean(selectedCard) || viewMode === 'graph') && listFor !== selectedName}
-        onBack={() => setListFor(selectedName)} list={
+        onBack={() => setListFor(selectedName)} list={sidebarOwnsRoster ? null : (
           characters.length === 0
             ? <BaseEmptyState icon={<Users size={24} />} message={t('character.selectOrCreate')} />
             : characters.map(character => (
@@ -431,7 +433,7 @@ export default function CharacterEditor() {
                   setListFor(undefined)
                 }} />
             ))
-        }>
+        )}>
       {/* 主体区 */}
       <fieldset disabled={mergingSelected && (viewMode === 'edit' || viewMode === 'state')} className="flex-1 min-w-0 overflow-y-auto relative">
         {viewMode === 'graph' ? (

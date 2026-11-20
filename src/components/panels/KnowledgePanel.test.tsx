@@ -4,9 +4,9 @@ import { createRoot, type Root } from 'react-dom/client'
 import { beforeEach, afterEach, describe, it, expect, vi } from 'vitest'
 import { createKnowledgeApplication, type KnowledgePorts, type KnowledgeDocument } from '../../core'
 import KnowledgePanel from './KnowledgePanel'
+import { globalEventBus } from '../../shared/event-bus'
 
 const h = vi.hoisted(() => ({ factory: vi.fn(), confirm: vi.fn(), success: vi.fn(), error: vi.fn(), warning: vi.fn(),
-  input: {} as { onChange(e: { target: { value: string } }): void; onKeyDown(e: { key: string }): void },
   close: undefined as undefined | ((open: boolean) => void),
 }))
 vi.mock('../../services/knowledge/knowledge-adapter', () => ({ createRendererKnowledgeApplication: h.factory }))
@@ -19,7 +19,6 @@ vi.mock('../../services/render-logger', () => ({ renderLog: vi.fn() }))
 vi.mock('../ui/Confirm', () => ({ confirm: h.confirm }))
 vi.mock('../ui/Toast', () => ({ toast: { success: h.success, error: h.error, warning: h.warning } }))
 vi.mock('../dialogs/ChapterExportDialog', () => ({ default: () => null }))
-vi.mock('../ui/Input', () => ({ Input: (props: typeof h.input) => { h.input = props; return <input /> } }))
 vi.mock('../ui/Dialog', () => ({
   Dialog: ({ open, onOpenChange, children }: { open: boolean; onOpenChange(v: boolean): void; children: ReactNode }) => {
     h.close = onOpenChange; return open ? <section data-summary>{children}</section> : null
@@ -38,10 +37,6 @@ async function mount(strict = false) {
   host = document.createElement('div'); document.body.append(host); root = createRoot(host)
   await flush(() => root.render(strict ? <StrictMode><KnowledgePanel /></StrictMode> : <KnowledgePanel />))
 }
-async function search(query: string) {
-  await flush(() => h.input.onChange({ target: { value: query } }))
-  await flush(() => h.input.onKeyDown({ key: 'Enter' }))
-}
 async function click(title: string) {
   const button = host.querySelector<HTMLButtonElement>(`button[title="${title}"]`)
   expect(button).not.toBeNull(); await flush(() => button!.click())
@@ -59,38 +54,30 @@ beforeEach(() => {
 })
 afterEach(async () => { if (root) await flush(() => root.unmount()); host?.remove() })
 describe('KnowledgePanel application boundary', () => {
-  it('clears search results completed while deletion was pending once it commits', async () => {
-    const pending = deferred<void>(); vi.mocked(ports.remove).mockReturnValueOnce(pending.promise)
-    vi.mocked(ports.search).mockResolvedValue([{ text: 'DELETED CONTENT', fileName: doc.fileName, score: 1 }])
-    await mount(); await click('action.delete'); await search('during delete')
-    expect(host.textContent).toContain('DELETED CONTENT')
-    vi.mocked(ports.load).mockResolvedValue({ documents: [], stats: { documentCount: 0, totalChunks: 0, vectorDimension: 0 } })
-    await flush(() => pending.resolve())
-    expect(h.success).toHaveBeenCalledOnce()
-    expect(host.textContent).not.toContain('DELETED CONTENT')
+  it('routes semantic search to the editor while leaving the document list available', async () => {
+    const openSearch = vi.fn()
+    const unsub = globalEventBus.on('OPEN_KNOWLEDGE_SEARCH', openSearch)
+    try {
+      await mount(); await click('knowledge.semanticSearch')
+      expect(openSearch).toHaveBeenCalledOnce()
+      expect(host.querySelector('input')).toBeNull()
+      expect(host.querySelector('[title="chapter_1.md"]')).not.toBeNull()
+      expect(ports.search).not.toHaveBeenCalled()
+    } finally { unsub() }
   })
-  it('keeps only the latest search and ignores a late old rejection', async () => {
-    const old = deferred<never>(); const latest = deferred<Awaited<ReturnType<KnowledgePorts['search']>>>()
-    vi.mocked(ports.search).mockImplementationOnce(() => old.promise).mockImplementationOnce(() => latest.promise)
-    await mount(true); await search('old'); await search('new')
-    await flush(() => latest.resolve([{ text: 'LATEST', fileName: 'new', score: 1 }]))
-    await flush(() => old.reject(new Error('late old failure')))
-    expect(host.textContent).toContain('LATEST'); expect(h.error).not.toHaveBeenCalled()
-  })
-  it('clearing input invalidates a pending search', async () => {
-    const pending = deferred<Awaited<ReturnType<KnowledgePorts['search']>>>()
-    vi.mocked(ports.search).mockReturnValueOnce(pending.promise)
-    await mount(); await search('pending'); await flush(() => h.input.onChange({ target: { value: '' } }))
-    await flush(() => pending.resolve([{ text: 'OBSOLETE', fileName: 'old', score: 1 }]))
-    expect(host.textContent).not.toContain('OBSOLETE')
-  })
-  it('same-path project reopen drops old search results', async () => {
-    const pending = deferred<Awaited<ReturnType<KnowledgePorts['search']>>>()
-    vi.mocked(ports.search).mockReturnValueOnce(pending.promise)
-    await mount(); await search('pending')
-    await flush(() => useProjectStore.setState({ projectSession: 2 }))
-    await flush(() => pending.resolve([{ text: 'OLD SESSION', fileName: 'old', score: 1 }]))
-    expect(host.textContent).not.toContain('OLD SESSION')
+  it('publishes the project session only after document deletion commits', async () => {
+    const removed = vi.fn()
+    const unsub = globalEventBus.on('KNOWLEDGE_DOCUMENT_REMOVED', removed)
+    const pending = deferred<void>()
+    vi.mocked(ports.remove).mockReturnValueOnce(pending.promise)
+    try {
+      await mount(); await click('action.delete')
+      expect(removed).not.toHaveBeenCalled()
+      vi.mocked(ports.load).mockResolvedValue({ documents: [], stats: { documentCount: 0, totalChunks: 0, vectorDimension: 0 } })
+      await flush(() => pending.resolve())
+      expect(removed).toHaveBeenCalledWith({ projectSession: 1 })
+      expect(host.querySelector('[title="chapter_1.md"]')).toBeNull()
+    } finally { unsub() }
   })
   it('closing summary prevents late model output from reopening it', async () => {
     const pending = deferred<string>(); vi.mocked(ports.read).mockResolvedValue('body'); vi.mocked(ports.generate).mockReturnValueOnce(pending.promise)

@@ -7,7 +7,7 @@ import {
 } from 'lucide-react'
 import { ProgressBar } from '../ui/ProgressBar'
 import { StateDot, type StateDotState } from '../ui/StateDot'
-import { selectWorkbenchPanels, useLayoutStore, type BottomTab } from '../../stores/layout-store'
+import { useLayoutStore, type BottomTab } from '../../stores/layout-store'
 import { useWorkflowStore, type WorkflowStep, type WorkflowRun } from '../../stores/workflow-store'
 import LogsView from './LogsView'
 import InboxPanel from './automation/InboxPanel'
@@ -15,7 +15,7 @@ import { useAutomationStore } from '../../stores/automation-store'
 import { useAgentStore } from '../../stores/agent-store'
 import { useScopedWorkflowRuns, useTaskNavigation } from './agent/agent-panel-session'
 
-/** WorkspaceLayout 按当前工作状态挂载底栏，底栏读取该状态下选中的页签。 */
+/** 工作台底栏显示当前选中的页签。 */
 export default function BottomPanel() {
   const { t } = useTranslation()
   /** 底部面板 Tab 名称映射（通过 i18n 字典统一管理）— 组件内求值，语言切换后标题跟随更新 */
@@ -24,7 +24,7 @@ export default function BottomPanel() {
     log:      t('panel.log'),
     inbox:    t('automation.inbox.tab'),
   }
-  const bottomTab = useLayoutStore(s => selectWorkbenchPanels(s).bottomTab)
+  const bottomTab = useLayoutStore(s => s.bottomTab)
   const toggleBottomPanel = useLayoutStore(s => s.toggleBottomPanel)
   const openBottomTab = useLayoutStore(s => s.openBottomTab)
   // ✅ 只订阅 activeRuns，不订阅 globalLogs 等高频字段

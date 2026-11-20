@@ -14,31 +14,36 @@ export function FeatureSplit({ detailOpen, onBack, list, children }: {
   const listRef = useRef<HTMLDivElement>(null)
   const scroll = useRef(0)
   const back = useRef<HTMLButtonElement>(null)
-  const previous = useRef(detailOpen)
+  const view = list == null ? 'full' : detailOpen ? 'detail' : 'list'
+  const previous = useRef(view)
 
   useLayoutEffect(() => {
-    if (previous.current === detailOpen) return
-    previous.current = detailOpen
-    if (detailOpen) {
+    const prior = previous.current
+    previous.current = view
+    if (view === 'detail' && prior === 'list') {
       if (back.current?.checkVisibility?.() !== false) back.current?.focus()
-    } else if (listRef.current) {
+    } else if (view === 'list' && prior === 'detail' && listRef.current) {
       listRef.current.scrollTop = scroll.current
       const row = listRef.current.querySelector<HTMLElement>('[aria-current="page"]') ?? listRef.current
       row.focus({ preventScroll: true })
     }
-  }, [detailOpen])
+  }, [view])
 
   return (
     <div className="nf-feature-split">
-      <div className="nf-feature-split-layout" data-feature-view={detailOpen ? 'detail' : 'list'}>
-        <div ref={listRef} className="nf-feature-list" tabIndex={-1} data-feature-list data-v3-density-list
-          onScroll={event => { if (event.currentTarget.checkVisibility?.() !== false) scroll.current = event.currentTarget.scrollTop }}>
-          {list}
-        </div>
+      <div className="nf-feature-split-layout" data-feature-view={view}>
+        {list != null && (
+          <div ref={listRef} className="nf-feature-list" tabIndex={-1} data-feature-list data-v3-density-list
+            onScroll={event => { if (event.currentTarget.checkVisibility?.() !== false) scroll.current = event.currentTarget.scrollTop }}>
+            {list}
+          </div>
+        )}
         <div className="nf-feature-detail">
-          <Button className="nf-feature-back self-start my-1 mx-2" variant="ghost" type="button" ref={back} onClick={onBack}>
-            <ChevronLeft size={14} aria-hidden="true" /> {t('feature.backToList')}
-          </Button>
+          {list != null && (
+            <Button className="nf-feature-back self-start my-1 mx-2" variant="ghost" type="button" ref={back} onClick={onBack}>
+              <ChevronLeft size={14} aria-hidden="true" /> {t('feature.backToList')}
+            </Button>
+          )}
           {children}
         </div>
       </div>

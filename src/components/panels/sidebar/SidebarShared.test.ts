@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { openArchFile, openChapterFile, openDraftByChapter } from './SidebarShared'
+import { openChapterFile, openDraftByChapter } from './SidebarShared'
 import { EditorOpenScopeChanged } from '../../../core'
 import { t } from '../../../shared/locale'
 
@@ -30,10 +30,9 @@ describe('sidebar document opening feedback', () => {
     expect(warning).not.toHaveBeenCalled()
     expect(error).not.toHaveBeenCalled()
   })
-  it('handles read failures for fire-and-forget chapter and architecture callers', async () => {
+  it('handles read failures for fire-and-forget chapter callers', async () => {
     open.mockRejectedValue(new Error('read failed'))
     await expect(openChapterFile('/a/ch.md', 'Chapter')).resolves.toBeUndefined()
-    await expect(openArchFile('vela://core/premise', 'Premise')).resolves.toBeUndefined()
-    expect(error).toHaveBeenCalledTimes(2)
+    expect(error).toHaveBeenCalledOnce()
   })
 })
