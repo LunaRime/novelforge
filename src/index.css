@@ -156,6 +156,13 @@
   :root {
     /* ☀️ 浅色主题 — 清冷蓝调（从 Logo 蓝紫色系延伸） */
 
+    /* 恒亮稿纸独立于工作台主题，正文和设置预览共用。 */
+    --color-prose-warm-bg: #F8F3EB;
+    --color-prose-warm-text: #2C2520;
+    --color-prose-warm-muted: #61564C;
+    --color-prose-warm-accent: #775C99;
+    --color-prose-warm-selection: rgba(155, 142, 200, 0.30);
+
     /* 背景层次（冷白蓝调，与Logo深蓝形成呼应） */
     --color-bg: #F7F9FC;
     --color-sidebar: #EFF2F7;

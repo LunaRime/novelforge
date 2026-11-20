@@ -1,17 +1,24 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 
-/**
- * 正文编辑的「长时舒适」偏好。
- *
- * 与主题/字体分开：这三项只影响 CodeMirror 正文（prose），不影响章节卡片、设置表单等
- * 其它编辑器实例；持久化在 localStorage，切换项目后仍保持同一写作手感。
- */
-export interface EditorPrefsState {
-  /** 正文字号（规范 17–18px；默认 17） */
+export interface WritingAppearance {
   proseFontSize: 17 | 18
-  /** 正文栏宽（规范 720–800px；默认 760） */
   measureWidth: number
+  prosePaper: 'theme' | 'warm'
+  listDensity: 'compact' | 'standard' | 'comfortable'
+}
+
+export const DEFAULT_WRITING_APPEARANCE: WritingAppearance = {
+  proseFontSize: 17,
+  measureWidth: 760,
+  prosePaper: 'theme',
+  listDensity: 'standard',
+}
+
+/**
+ * 与主题和字体分开持久化。正文排版作用于 prose 模式，密度仅作用于显式接入的列表。
+ */
+export interface EditorPrefsState extends WritingAppearance {
   /** 打字机滚动：光标保持垂直 40% */
   typewriter: boolean
   /** 当前段落高亮（专注模式下同时压暗其它段落） */
@@ -20,22 +27,48 @@ export interface EditorPrefsState {
   setMeasureWidth: (width: number) => void
   toggleTypewriter: () => void
   toggleParagraphFocus: () => void
+  applyWritingAppearance: (appearance: WritingAppearance) => void
 }
 
 const MIN_MEASURE = 720
 const MAX_MEASURE = 800
+const clampMeasure = (width: number) => Number.isFinite(width)
+  ? Math.min(MAX_MEASURE, Math.max(MIN_MEASURE, Math.round(width)))
+  : DEFAULT_WRITING_APPEARANCE.measureWidth
 
-export const useEditorPrefsStore = create<EditorPrefsState>()(persist((set) => ({
-  proseFontSize: 17,
-  measureWidth: 760,
+export function selectWritingAppearance({ proseFontSize, measureWidth, prosePaper, listDensity }: EditorPrefsState): WritingAppearance {
+  return { proseFontSize, measureWidth, prosePaper, listDensity }
+}
+
+export const useEditorPrefsStore = create<EditorPrefsState>()(persist((set, get) => ({
+  ...DEFAULT_WRITING_APPEARANCE,
   typewriter: true,
   paragraphFocus: true,
   setProseFontSize: (proseFontSize) => set({ proseFontSize }),
-  setMeasureWidth: (measureWidth) => set({
-    measureWidth: Math.min(MAX_MEASURE, Math.max(MIN_MEASURE, Math.round(measureWidth))),
-  }),
+  setMeasureWidth: (measureWidth) => set({ measureWidth: clampMeasure(measureWidth) }),
   toggleTypewriter: () => set((s) => ({ typewriter: !s.typewriter })),
   toggleParagraphFocus: () => set((s) => ({ paragraphFocus: !s.paragraphFocus })),
+  applyWritingAppearance: (appearance) => {
+    const previous = selectWritingAppearance(get())
+    try {
+      set({ ...appearance, measureWidth: clampMeasure(appearance.measureWidth) })
+    } catch (error) {
+      // Persist writes after updating memory. Restore the visible preferences even if storage stays unavailable.
+      try { set(previous) } catch { /* The original persistence error is reported to the caller. */ }
+      throw error
+    }
+  },
 }), {
   name: 'novelforge:editor-prefs',
 }))
+
+if (typeof document !== 'undefined') {
+  const applyAppearanceToDocument = ({ prosePaper, listDensity }: WritingAppearance) => {
+    document.documentElement.dataset.v3ProsePaper = prosePaper
+    document.documentElement.dataset.v3ListDensity = listDensity
+  }
+  applyAppearanceToDocument(useEditorPrefsStore.getState())
+  useEditorPrefsStore.subscribe((next, previous) => {
+    if (next.prosePaper !== previous.prosePaper || next.listDensity !== previous.listDensity) applyAppearanceToDocument(next)
+  })
+}

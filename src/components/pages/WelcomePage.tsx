@@ -1,9 +1,9 @@
-import { useState } from 'react'
-import { Sparkles, FolderOpen, FileUp, Settings, PenLine, ArrowRight, X } from 'lucide-react'
-// 应用图标（与打包图标同一文件，见 App.tsx 的说明）
+import { useState, type ReactNode } from 'react'
+import { ArrowRight, FileUp, FolderOpen, PenLine, Settings, Sparkles, X } from 'lucide-react'
 import appIcon from '../../../build/icon.png'
 import { useProjectStore } from '../../stores/project-store'
 import { useTranslation } from '../../hooks/useTranslation'
+import { Button } from '../ui/Button'
 
 const FIRST_RUN_KEY = 'vela-first-run'
 
@@ -23,259 +23,126 @@ function markFirstRunDone(): void {
 
 interface WelcomePageProps {
   onNewProject: () => void
-  onOpenProject: () => void
+  onOpenProject: () => void | Promise<void>
   onImportNovel?: () => void
   onOpenSettings?: () => void
-  /** 第 3 步快捷入口：有项目时新建章节，无项目时回落到新建项目 */
   onStartCreate?: () => void
 }
 
-/** 欢迎页面 — 无项目打开时显示，首次使用展示 3 步引导
- *  （2026-09-28：「最近项目」列表已迁至侧栏主页 HomeSidebarPanel，本页不再渲染） */
+/** Recent projects remain available in the Home sidebar. */
 export default function WelcomePage({ onNewProject, onOpenProject, onImportNovel, onOpenSettings, onStartCreate }: WelcomePageProps) {
   const { t } = useTranslation()
   const currentProject = useProjectStore(s => s.currentProject)
-  const [showGuide, setShowGuide] = useState(isFirstRun())
+  const [showGuide, setShowGuide] = useState(isFirstRun)
+  const [opening, setOpening] = useState(false)
+  const [failedToOpen, setFailedToOpen] = useState(false)
 
   const dismissGuide = () => {
     setShowGuide(false)
     markFirstRunDone()
   }
 
+  async function openProject() {
+    setFailedToOpen(false)
+    setOpening(true)
+    try {
+      await onOpenProject()
+    } catch {
+      setFailedToOpen(true)
+    } finally {
+      setOpening(false)
+    }
+  }
+
   return (
-    <div
-      className="w-full h-full overflow-y-auto"
-      style={{ backgroundColor: 'var(--color-editor-bg)' }}
-    >
-      <div className="max-w-lg w-full mx-auto px-8 py-16">
-        {/* Logo 区域 —— 直接用**应用图标本身**
-            （此前是自绘仿制版：ai-glow 极光底 + lucide 的 BookOpen 字形，视觉上像"另一个 logo"） */}
-        <div className="text-center mb-12">
-          <div className="inline-flex items-center justify-center mb-5">
-            {/* ⚠️ 阴影必须用 `filter: drop-shadow()` 而非 `box-shadow`：
-                图标是 512×512 RGBA、圆角靠**透明通道**实现，而 box-shadow 按元素**方框**绘制
-                → 圆角图标背后会多出一个**方形阴影**。drop-shadow 跟随 alpha，形状才对。 */}
-            <img
-              src={appIcon}
-              alt="NovelForge"
-              width={80}
-              height={80}
-              style={{
-                filter:
-                  'drop-shadow(0 8px 24px rgba(var(--color-accent-rgb), 0.28)) drop-shadow(0 0 40px rgba(var(--color-accent-rgb), 0.18))',
-              }}
-            />
-          </div>
-          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text)' }}>
+    <div className="h-full w-full overflow-y-auto bg-[var(--color-editor-bg)]">
+      <div className="mx-auto w-full max-w-xl px-[clamp(1rem,4cqi,2rem)] py-8">
+        <header className="mb-8 text-center">
+          <img src={appIcon} alt="" width={72} height={72} className="mx-auto mb-4" />
+          <h1 className="mb-2 break-words text-2xl font-semibold text-[var(--color-text)]">
             {currentProject ? currentProject.name : t('welcome.title')}
           </h1>
-          <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+          <p className="break-words text-sm text-[var(--color-text-secondary)]">
             {currentProject ? currentProject.path : t('welcome.subtitle')}
           </p>
-        </div>
+        </header>
 
-        {/* 首次使用引导 — 3 步快速上手 */}
+        <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,9rem),1fr))] gap-3">
+          <WelcomeAction label={t('welcome.newProject')} description={t('welcome.createNovel')}
+            icon={<Sparkles size={18} />} onClick={onNewProject} primary />
+          <WelcomeAction label={t('welcome.openProject')} description={t('welcome.openExisting')}
+            icon={<FolderOpen size={18} />} onClick={() => void openProject()} disabled={opening} />
+          {onImportNovel && (
+            <WelcomeAction label={t('welcome.importNovel')} description={t('welcome.importExisting')}
+              icon={<FileUp size={18} />} onClick={onImportNovel} />
+          )}
+        </div>
+        {failedToOpen && <p role="alert" className="mt-3 text-sm text-[var(--color-error)]">{t('dialog.openFailed')}</p>}
+
         {showGuide && (
-          <div
-            className="mb-8 p-5 rounded-xl"
-            style={{
-              backgroundColor: 'var(--color-sidebar)',
-              border: '1px solid rgba(var(--color-accent-rgb), 0.3)',
-              boxShadow: '0 4px 24px rgba(var(--color-accent-rgb), 0.08)',
-            }}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-                {t('welcome.quickStart')}
-              </h2>
-              <button
-                onClick={dismissGuide}
-                className="p-0.5 rounded hover:opacity-70"
-                style={{ color: 'var(--color-text-muted)' }}
-                title={t('welcome.dismissGuide')}
-              >
+          <section className="mt-8 rounded-xl border border-[var(--color-border)] bg-[var(--color-sidebar)] p-4">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-semibold text-[var(--color-text)]">{t('welcome.quickStart')}</h2>
+              <Button type="button" variant="ghost" size="icon" onClick={dismissGuide}
+                className="size-[32px] shrink-0" aria-label={t('welcome.dismissGuide')} title={t('welcome.dismissGuide')}>
                 <X size={14} />
-              </button>
+              </Button>
             </div>
-
-            <div className="space-y-3">
-              <StepItem
-                step={1}
-                title={t('welcome.configAI')}
-                desc={t('welcome.configAIDesc')}
-                icon={<Settings size={14} />}
-                action={onOpenSettings ? { label: t('welcome.openSettings'), onClick: onOpenSettings } : undefined}
-              />
-              <StepItem
-                step={2}
-                title={t('welcome.newOrOpen')}
-                desc={t('welcome.newOrOpenDesc')}
-                icon={<FolderOpen size={14} />}
-                action={{ label: t('welcome.newProject'), onClick: onNewProject }}
-              />
-              <StepItem
-                step={3}
-                title={t('welcome.startCreate')}
-                desc={t('welcome.startCreateDesc')}
-                icon={<PenLine size={14} />}
-                action={{ label: t('welcome.startCreateAction'), onClick: onStartCreate ?? onNewProject }}
-              />
-            </div>
-          </div>
+            <ol className="m-0 flex list-none flex-col gap-3 p-0">
+              <StepItem title={t('welcome.configAI')} description={t('welcome.configAIDesc')} icon={<Settings size={14} />}
+                action={onOpenSettings ? { label: t('welcome.openSettings'), onClick: onOpenSettings } : undefined} />
+              <StepItem title={t('welcome.newOrOpen')} description={t('welcome.newOrOpenDesc')} icon={<FolderOpen size={14} />}
+                action={{ label: t('welcome.newProject'), onClick: onNewProject }} />
+              <StepItem title={t('welcome.startCreate')} description={t('welcome.startCreateDesc')} icon={<PenLine size={14} />}
+                action={{ label: t('welcome.startCreateAction'), onClick: onStartCreate ?? onNewProject }} />
+            </ol>
+          </section>
         )}
-
-        {/* 操作按钮 */}
-        <div className="grid grid-cols-3 gap-3 mb-10">
-          <button
-            onClick={onNewProject}
-            className="group flex flex-col items-center gap-2.5 p-5 rounded-xl transition-all hover:scale-[1.02]"
-            style={{
-              backgroundColor: 'rgba(var(--color-accent-rgb), 0.07)',
-              border: '1px solid rgba(var(--color-accent-rgb), 0.45)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(var(--color-accent-rgb), 0.7)'
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(var(--color-accent-rgb), 0.16)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'rgba(var(--color-accent-rgb), 0.45)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            <div
-              className="ai-glow flex items-center justify-center w-10 h-10 rounded-xl transition-transform group-hover:scale-105"
-            >
-              <Sparkles size={20} />
-            </div>
-            <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('welcome.newProject')}
-            </span>
-            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {t('welcome.createNovel')}
-            </span>
-          </button>
-
-          <button
-            onClick={onOpenProject}
-            className="group flex flex-col items-center gap-2.5 p-5 rounded-xl transition-all hover:scale-[1.02]"
-            style={{
-              backgroundColor: 'var(--color-sidebar)',
-              border: '1px solid var(--color-border)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(201, 167, 108, 0.4)'
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(201, 167, 108, 0.08)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--color-border)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            <div
-              className="flex items-center justify-center w-10 h-10 rounded-xl transition-transform group-hover:scale-105"
-              style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text)' }}
-            >
-              <FolderOpen size={20} />
-            </div>
-            <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('welcome.openProject')}
-            </span>
-            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {t('welcome.openExisting')}
-            </span>
-          </button>
-
-          <button
-            onClick={onImportNovel}
-            className="group flex flex-col items-center gap-2.5 p-5 rounded-xl transition-all hover:scale-[1.02]"
-            style={{
-              backgroundColor: 'var(--color-sidebar)',
-              border: '1px solid var(--color-border)',
-            }}
-            onMouseEnter={e => {
-              e.currentTarget.style.borderColor = 'rgba(var(--color-success-rgb), 0.4)'
-              e.currentTarget.style.boxShadow = '0 4px 20px rgba(var(--color-success-rgb), 0.10)'
-            }}
-            onMouseLeave={e => {
-              e.currentTarget.style.borderColor = 'var(--color-border)'
-              e.currentTarget.style.boxShadow = 'none'
-            }}
-          >
-            <div
-              className="flex items-center justify-center w-10 h-10 rounded-xl transition-transform group-hover:scale-105"
-              style={{ backgroundColor: 'rgba(var(--color-success-rgb), 0.12)', color: 'var(--color-success)' }}
-            >
-              <FileUp size={20} />
-            </div>
-            <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>
-              {t('welcome.importNovel')}
-            </span>
-            <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-              {t('welcome.importExisting')}
-            </span>
-          </button>
-        </div>
-
-        {/* 最近项目已迁至侧栏主页（HomeSidebarPanel；2026-09-28） */}
-
-        <div className="text-center mt-12">
-          <p className="text-xs" style={{ color: 'var(--color-text-muted)', opacity: 0.7 }}>
-            {t('welcome.footer')}
-          </p>
-        </div>
       </div>
     </div>
   )
 }
 
-/** 引导步骤条 */
-function StepItem({
-  step,
-  title,
-  desc,
-  icon,
-  action,
-}: {
-  step: number
+function WelcomeAction({ label, description, icon, onClick, disabled, primary }: {
+  label: string
+  description: string
+  icon: ReactNode
+  onClick: () => void
+  disabled?: boolean
+  primary?: boolean
+}) {
+  return (
+    <Button type="button" variant="outline" onClick={onClick} disabled={disabled}
+      aria-label={label} title={description}
+      className="h-auto min-w-0 justify-start gap-3 whitespace-normal rounded-lg px-3 py-3 text-left">
+      <span aria-hidden="true" className={primary ? 'shrink-0 text-[var(--color-accent)]' : 'shrink-0'}>{icon}</span>
+      <span className="min-w-0">
+        <span className="block break-words text-sm font-semibold">{label}</span>
+        <span className="mt-1 block break-words text-xs font-normal text-[var(--color-text-muted)]">{description}</span>
+      </span>
+    </Button>
+  )
+}
+
+function StepItem({ title, description, icon, action }: {
   title: string
-  desc: string
-  icon: React.ReactNode
+  description: string
+  icon: ReactNode
   action?: { label: string; onClick: () => void }
 }) {
   return (
-    <div className="flex items-start gap-3">
-      <div
-        className="flex items-center justify-center w-6 h-6 rounded-full flex-shrink-0 mt-0.5"
-        style={{
-          backgroundColor: 'var(--color-accent)',
-          color: 'var(--color-text)',
-          fontSize: 'var(--text-2xs)',
-          fontWeight: 600,
-        }}
-      >
-        {step}
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-1.5">
-          <span style={{ color: 'var(--color-text-muted)' }}>{icon}</span>
-          <span className="text-sm font-medium" style={{ color: 'var(--color-text)' }}>{title}</span>
-        </div>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>{desc}</p>
+    <li className="flex flex-wrap items-start gap-2">
+      <span aria-hidden="true" className="mt-0.5 shrink-0 text-[var(--color-text-muted)]">{icon}</span>
+      <div className="min-w-[min(100%,12rem)] flex-1">
+        <p className="text-sm font-medium text-[var(--color-text)]">{title}</p>
+        <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{description}</p>
       </div>
       {action && (
-        <button
-          onClick={action.onClick}
-          className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs flex-shrink-0 transition-colors"
-          style={{
-            backgroundColor: 'var(--color-hover)',
-            color: 'var(--color-accent)',
-            border: '1px solid var(--color-border)',
-          }}
-        >
+        <Button type="button" variant="ghost" size="sm" onClick={action.onClick} className="h-auto min-h-6 whitespace-normal text-left">
           {action.label}
-          <ArrowRight size={10} />
-        </button>
+          <ArrowRight size={10} className="shrink-0" />
+        </Button>
       )}
-    </div>
+    </li>
   )
 }
