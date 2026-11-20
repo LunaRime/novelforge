@@ -67,7 +67,7 @@ export default function MenuRow({
           type="button"
           onClick={onPrimary}
           onKeyDown={onPrimaryKeyDown}
-          title={titleHint}
+          title={titleHint ?? title}
           aria-current={current}
           aria-expanded={swap === 'expand' ? expanded : undefined}
           aria-controls={swap === 'expand' ? controlsId : undefined}

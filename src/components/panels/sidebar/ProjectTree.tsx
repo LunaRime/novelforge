@@ -154,12 +154,13 @@ export default function ProjectTree() {
   // 小说配置是否已完成（核心大纲非空视为已完成）
   const nc = currentProject.novelConfig
   const configDone = !!(nc.coreOutline?.trim() || nc.protagonistProfile?.trim())
+  const configStatus = t(configDone ? 'status.configured' : 'status.pendingConfig')
 
   const architecture = Object.values(archStatus)
   const archDone = architecture.filter(Boolean).length
 
   return (
-    <div className="text-sm space-y-3">
+    <div className="nf-project-tree text-sm space-y-3">
       {/* 项目名 + 刷新 */}
       <div className="flex items-center justify-between px-3 py-1.5 mb-0.5">
         <span className="font-semibold text-xs truncate" style={{ color: 'var(--color-text)' }}>
@@ -175,7 +176,8 @@ export default function ProjectTree() {
         icon={<BookOpen size={12} />}
         title={t('editor.novelConfig')}
         collapsible={false}
-        count={<CountBadge value={configDone ? t('status.configured') : t('status.pendingConfig')} tone={configDone ? 'success' : 'muted'} />}
+        titleHint={`${t('editor.novelConfig')}\n${configStatus}`}
+        count={<CountBadge className="nf-project-secondary" value={configStatus} tone={configDone ? 'success' : 'muted'} />}
         onTitleClick={() => {
           const state = useEditorStore.getState()
           const configTab = state.tabs.find(t => t.type === 'config')
@@ -216,7 +218,7 @@ export default function ProjectTree() {
         title={t('world.title')}
         collapsible={false}
         count={(
-          <span className="flex items-center gap-1">
+          <span className="nf-project-secondary flex items-center gap-1">
             <CountBadge value={worldCounts.entities} unit={t('unit.entities')} />
             <CountBadge value={worldCounts.events} unit={t('unit.events')} />
           </span>

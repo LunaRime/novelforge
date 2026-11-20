@@ -1,8 +1,7 @@
 /**
  * 主题元数据 —— 主题的**唯一一份**图标映射 / 展示顺序 / 名称取值。
  *
- * 2026-10 抽出（docs/ui-6items-plan.md §2.5）：主题有两个入口 —— 右侧图标栏底部的菜单
- * （`components/layout/RightToolWindowBar.tsx`）与设置 → 编辑器的主题卡片
+ * 工作台顶栏的主题菜单（`components/layout/WorkbenchHeader.tsx`）与设置 → 编辑器的主题卡片
  * （`components/settings/ThemeSection.tsx`）。图标与顺序原先各写一份，改一处两处漂移。
  *
  * ⚠️ 圆形扩散过渡**不在这里**：它在 `lib/theme-transition.ts`；
@@ -20,7 +19,7 @@ export const THEME_ICONS: Record<Theme, LucideIcon> = {
   dark: Moon,
 }
 
-/** 展示顺序（图标栏菜单与设置卡片同序 —— 改这里即两处同变） */
+/** 展示顺序（顶栏菜单与设置卡片同序） */
 export const THEME_ORDER: Theme[] = ['galaxy', 'dark', 'light', 'paper']
 
 /**

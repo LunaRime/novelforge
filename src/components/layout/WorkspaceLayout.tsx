@@ -12,7 +12,6 @@ import EditorArea from '../panels/EditorArea'
 import Sidebar from '../panels/Sidebar'
 import { createNavigationSession, NavigationSessionContext } from '../panels/sidebar/navigation-session'
 import LeftToolWindowBar from './LeftToolWindowBar'
-import RightToolWindowBar from './RightToolWindowBar'
 import './workbench.css'
 
 // 面板库将数字解释为 CSS 像素，默认比例使用带百分号的字符串。
@@ -36,7 +35,7 @@ function closeIfAtFloor(region: keyof typeof REGION_MIN_PX): void {
 }
 
 function saveVisibleLayout(layout: Layout, panelIds: string[], save: (layout: Layout) => void) {
-  // 切换或专注时会短暂报告旧布局或单面板布局，避免它们覆盖当前模式的尺寸。
+  // 面板开合时可能短暂上报旧尺寸，只保存与当前可见面板完全匹配的布局。
   if (panelIds.length > 1 && Object.keys(layout).length === panelIds.length && panelIds.every(id => id in layout)) {
     save(layout)
   }
@@ -80,7 +79,7 @@ export default function WorkspaceLayout() {
       >
         {t('tip.skipToContent')}
       </a>
-      <div data-workbench className="flex flex-1 min-h-0 overflow-hidden" style={{ backgroundColor: 'var(--color-canvas)', padding: 3 }}
+      <div data-workbench className="nf-workbench flex flex-1 min-h-0 overflow-hidden"
         onFocusCapture={event => { lastFocused.current = event.target }}>
         {!focusMode && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
@@ -167,7 +166,6 @@ export default function WorkspaceLayout() {
             )}
           </Group>
         </div>
-        {!focusMode && <RightToolWindowBar />}
       </div>
     </>
   )

@@ -1,3 +1,55 @@
+.nf-workbench {
+  gap: 0.375rem;
+  padding: 0.375rem;
+  background: var(--color-canvas);
+}
+
+.nf-activity-rail {
+  flex: 0 0 var(--width-left-bar);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
+  min-height: 0;
+  padding-block: 0.375rem;
+  background: var(--color-activity-bar);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.nf-activity-group {
+  display: grid;
+  justify-items: center;
+  gap: 0.125rem;
+}
+
+.nf-activity-rail .nf-activity-button {
+  width: 2rem;
+  height: 2rem;
+  color: var(--color-activity-icon);
+}
+
+.nf-activity-button[aria-expanded='true'] {
+  color: var(--color-activity-icon-active);
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-activity-bar));
+}
+
+.nf-activity-projects {
+  min-height: 0;
+  overflow-y: auto;
+  margin-inline: 0.25rem;
+  border-block-start: 1px solid var(--color-border);
+}
+
+.nf-activity-tools { margin-block-start: auto; }
+
+.nf-project-tree { container: project-tree / inline-size; }
+
+@container project-tree (max-width: 19rem) {
+  /* 文本状态和次要统计让位给项目入口名称，操作按钮保留原有命中区。 */
+  .nf-project-secondary { display: none; }
+}
+
 .nf-companion {
   display: flex;
   flex-direction: column;

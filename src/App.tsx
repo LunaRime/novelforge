@@ -9,7 +9,7 @@ import { useMCPStore } from './stores/mcp-store'
 import { useWorkflowStore } from './stores/workflow-store'
 import { useAgentStore } from './stores/agent-store'
 import { useUpdateStore } from './stores/update-store'
-import { formatBinding, matchesBinding, shortcutBinding, useShortcutStore } from './stores/shortcut-store'
+import { matchesBinding, shortcutBinding } from './stores/shortcut-store'
 import { useAutomationStore } from './stores/automation-store'
 import { useThinkingStore } from './stores/thinking-store'
 import { t } from './shared/locale'
@@ -18,8 +18,7 @@ import { setWindowTitle } from './lib/window-title'
 import { ipc } from './services/ipc-client'
 import StatusBar from './components/layout/StatusBar'
 import WorkspaceLayout from './components/layout/WorkspaceLayout'
-// 应用图标：直接引用**打包用的那个文件**（而非在 public/ 放一份副本），保证单一来源
-import appIcon from '../build/icon.png'
+import WorkbenchHeader from './components/layout/WorkbenchHeader'
 import NewProjectDialog from './components/dialogs/NewProjectDialog'
 import ImportNovelDialog from './components/dialogs/ImportNovelDialog'
 import ChapterCreationDialog from './components/dialogs/ChapterCreationDialog'
@@ -34,76 +33,10 @@ import { loadCustomPrompts } from './services/prompt-templates'
 import GlobalTitleTooltip from './components/ui/GlobalTitleTooltip'
 import CommandPalette from './components/command-palette/CommandPalette'
 import { useCommandStore } from './stores/command-store'
-import { Search } from 'lucide-react'
 
 // L2 任务6：恢复前加载所有 workflow 模块，触发顶层 registerWorkflow（须在 restoreCheckpoint 调用之前，
 // 否则恢复时 registry 空 → 所有 run 走降级）。
 import './services/workflows/workflow-registry-init'
-
-/** 顶栏提供窗口拖拽区，模式和命令控件位于原生窗口按钮之外。 */
-function TitleStrip() {
-  const { t } = useTranslation()
-  const currentProject = useProjectStore((s) => s.currentProject)
-  const openPalette = useCommandStore((s) => s.openPalette)
-  const shortcut = useShortcutStore((s) => formatBinding(shortcutBinding('command-palette', s.bindings)))
-  const isMac = navigator.userAgent.includes('Mac')
-  return (
-    <div
-      className="flex min-w-0 shrink-0 items-center gap-2 pl-2.5 pr-3 select-none"
-      style={{
-        height: 'max(32px, env(titlebar-area-height, 0px))',
-        // Windows/Linux 使用覆盖层给出的可用宽度，macOS 在左侧给交通灯留位。
-        width: isMac ? undefined : 'env(titlebar-area-width, 100%)',
-        paddingInlineStart: isMac ? 80 : undefined,
-        backgroundColor: 'var(--color-canvas)',
-        WebkitAppRegion: 'drag',
-      } as React.CSSProperties}
-    >
-      {/* 应用图标 —— 原生标题栏移除后，这里是唯一的应用标识处。
-          ⚠️ 必须与**打包用的图标是同一个文件**（`build/icon.png`；`icon.ico` / `icon.icns`
-          与之同源于 `docs/ui-redesign-v3/logos/`，由 scripts/sync-brand-icons.mjs 同步）：
-          复制一份到 public/ 会有两个来源、
-          改一次忘一处就会静默不一致（2026-09-25 首次实现时误用了 public/icon.svg ——
-          那是另一版设计，用户一眼看出不是他设计的那个）。
-          尺寸走**图标刻度体系的 16 档**（面板标题档），标题栏图标就是这个规格。 */}
-      <img src={appIcon} alt="" width={16} height={16} style={{ flexShrink: 0 }} />
-      {/*
-        ⚠️ 标题栏不是放 logo 的地方：首版用了 `text-2xs`(10px) + `brand-gradient`（品牌渐变字），
-        用户看出来的「不像正常应用」即此 —— 那更像宣传位而不是标题栏。
-        常规应用就是 **12px 常规文字色**。
-
-        ⚠️ 写的是**会变的东西**（当前项目名），不是固定品牌名 —— 固定字符串占着这条栏
-        等于零信息，应用名在图标、启动器、关于页、任务栏都已有。没开项目时回落品牌名。
-        `min-w-0` 不可省：flex item 默认 `min-width: auto`，少了它 `truncate` 的省略号
-        不生效，长项目名会被父容器 `overflow-hidden` 直接切掉。
-      */}
-      <span className="text-xs truncate min-w-0" style={{ color: 'var(--color-text)' }}>
-        {currentProject?.name ?? 'NovelForge'}
-      </span>
-      <span className="flex-1" />
-      {/* 命令面板入口：标题栏是拖拽区，按钮必须显式 no-drag */}
-      <button
-        type="button"
-        onClick={() => openPalette('commands')}
-        title={t('command.title')}
-        aria-label={t('command.title')}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded px-2"
-        style={{
-          height: 20,
-          border: '1px solid var(--color-border)',
-          backgroundColor: 'var(--color-panel)',
-          color: 'var(--color-text-muted)',
-          fontSize: 10.5,
-          cursor: 'pointer',
-          WebkitAppRegion: 'no-drag',
-        } as React.CSSProperties}
-      >
-        <Search size={10} />
-        <span>{shortcut}</span>
-      </button>
-    </div>
-  )
-}
 
 export default function App() {
   const initTheme = useThemeStore((s) => s.initTheme)
@@ -323,8 +256,7 @@ export default function App() {
 
   return (
     <div className="flex flex-col w-full h-full overflow-hidden">
-      {/* 顶栏：系统窗口按钮留位 + 拖拽区 + 应用标识（见 TitleStrip 的说明） */}
-      <TitleStrip />
+      <WorkbenchHeader />
       {ipc.isElectron && <FileProjectEditorDialog showTrigger={false} />}
 
       {/* 全局 title 悬停提示代理 — 原生 title 属性 → 现代化 Tooltip UI */}
