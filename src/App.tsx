@@ -61,8 +61,9 @@ function TitleStrip() {
       } as React.CSSProperties}
     >
       {/* 应用图标 —— 原生标题栏移除后，这里是唯一的应用标识处。
-          ⚠️ 必须与**打包用的图标是同一个文件**（`build/icon.png`，electron-builder 的
-          `icon.ico` 由它生成、窗口图标也用它）：复制一份到 public/ 会有两个来源、
+          ⚠️ 必须与**打包用的图标是同一个文件**（`build/icon.png`；`icon.ico` / `icon.icns`
+          与之同源于 `docs/ui-redesign-v3/logos/`，由 scripts/sync-brand-icons.mjs 同步）：
+          复制一份到 public/ 会有两个来源、
           改一次忘一处就会静默不一致（2026-09-25 首次实现时误用了 public/icon.svg ——
           那是另一版设计，用户一眼看出不是他设计的那个）。
           尺寸走**图标刻度体系的 16 档**（面板标题档），标题栏图标就是这个规格。 */}
