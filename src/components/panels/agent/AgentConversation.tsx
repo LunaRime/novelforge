@@ -1,5 +1,6 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react'
-import { GitFork, Trash2, Pin, Pencil, Archive, Plus, ChevronRight, MoreHorizontal, History, Folder, X } from 'lucide-react'
+import { GitFork, Trash2, Pin, Pencil, Archive, ChevronRight, MoreHorizontal, History, Folder, X } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useLayoutStore } from '../../../stores/layout-store'
 import { useLLMStore } from '../../../stores/llm-store'
@@ -636,7 +637,7 @@ function AgentHistoryPanel() {
                         projectName: g.name,
                       })}
                     >
-                      <Plus size={12} />
+                      <CreateIcon size={12} />
                     </button>
                     <button
                       type="button"

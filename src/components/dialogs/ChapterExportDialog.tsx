@@ -6,7 +6,8 @@
  *   子级：.md (Markdown) / .txt (纯文本)
  */
 import { useState, useMemo, useEffect } from 'react'
-import { Download, FolderArchive, FolderOpen, FileText, Check, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { SortDirectionIcon } from '../ui/ActionIcons'
+import { Download, FolderArchive, FolderOpen, FileText, Check, ListFilter } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -157,20 +158,22 @@ export default function ChapterExportDialog({ chapterNumbers, chapterTitles, ope
                 variant="outline"
                 size="sm"
                 className={`gap-0.5 px-1.5 text-micro${sortKey === 'number' ? ' border-[var(--color-accent)] text-[var(--color-accent)]' : ''}`}
+                aria-pressed={sortKey === 'number'}
                 onClick={() => toggleSort('number')}
               >
                 {t('export.sortNumber')}
-                {sortKey === 'number' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+                {sortKey === 'number' ? <SortDirectionIcon direction={sortDir} size={12} /> : <ListFilter size={12} aria-hidden="true" />}
               </Button>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className={`gap-0.5 px-1.5 text-micro${sortKey === 'title' ? ' border-[var(--color-accent)] text-[var(--color-accent)]' : ''}`}
+                aria-pressed={sortKey === 'title'}
                 onClick={() => toggleSort('title')}
               >
                 {t('export.sortTitle')}
-                {sortKey === 'title' ? (sortDir === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />) : <ArrowUpDown size={10} />}
+                {sortKey === 'title' ? <SortDirectionIcon direction={sortDir} size={12} /> : <ListFilter size={12} aria-hidden="true" />}
               </Button>
               {/* 全选 / 清空 */}
               <Button

@@ -1,3 +1,4 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * SceneList — 章节下的场景卡列表（侧栏「卷 → 章 → 场景」第三层）
  *
@@ -10,7 +11,7 @@
  * 顺序写库失败时回滚到服务端真实顺序，不做「假成功」。
  */
 import { useCallback, useEffect, useState } from 'react'
-import { GripVertical, Pencil, Plus, Trash2 } from 'lucide-react'
+import { GripVertical, Pencil, Trash2 } from 'lucide-react'
 import { useTranslation } from '../../../hooks/useTranslation'
 import { confirm } from '../../ui/Confirm'
 import { toast } from '../../ui/Toast'
@@ -207,7 +208,7 @@ export default function SceneList({ chapterNumber }: Props) {
         style={{ color: 'var(--color-text-muted)' }}
         title={t('scene.reorderHint')}
       >
-        <Plus size={9} />
+        <CreateIcon size={9} />
         {t('scene.add')}
       </button>
 

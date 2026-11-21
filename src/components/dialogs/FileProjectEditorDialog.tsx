@@ -626,7 +626,7 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()
                       setText(event.target.value)
                     }}
-                    className="resize-y rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-4 font-[family-name:var(--font-writing)] text-base leading-relaxed shadow-[var(--shadow-sm)]" />
+                    className="[field-sizing:content] min-h-64 max-h-[65vh] resize-none overflow-y-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-4 font-[family-name:var(--font-writing)] text-base leading-relaxed shadow-[var(--shadow-sm)]" />
                   <div className="flex gap-2">
                     <Button type="submit" disabled={busy || !dirty || active.readOnly}>{t(savingBody ? 'status.saving' : 'action.save')}</Button>
                     {dirty && <Button type="button" variant="outline" disabled={busy} onClick={() => setText(active.content)}>

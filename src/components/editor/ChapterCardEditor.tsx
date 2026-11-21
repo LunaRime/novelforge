@@ -1,7 +1,7 @@
+import { CreateIcon } from '../ui/ActionIcons'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
-  Save, BookOpen, RefreshCw, Plus,
-  Sparkles, PenLine, ScanSearch, X, ListChecks
+  Save, BookOpen, RefreshCw, Sparkles, PenLine, ScanSearch, X, ListChecks
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { useProjectStore } from '../../stores/project-store'
@@ -433,7 +433,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
             <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
           </Button>
           <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
-            <Plus size={14} />
+            <CreateIcon size={14} />
           </Button>
           </>
         )}

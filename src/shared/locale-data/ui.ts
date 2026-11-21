@@ -478,7 +478,7 @@ export const uiTexts = {
   'knowledge.fusionDesc': { 'zh-CN': 'BM25 + 向量近邻融合', 'en-US': 'BM25 + vector nearest-neighbor fusion', 'ru-RU': 'BM25 + векторный поиск' },
   'knowledge.bm25Desc': { 'zh-CN': '配置 Embedding 模型后自动升级为混合检索', 'en-US': 'Configure an Embedding model to auto-upgrade to hybrid search', 'ru-RU': 'Настройте модель Embedding для гибридного поиска' },
   'knowledge.searchBtn': { 'zh-CN': '检索', 'en-US': 'Search', 'ru-RU': 'Поиск' },
-  'knowledge.topK': { 'zh-CN': 'Top', 'en-US': 'Top', 'ru-RU': 'Топ' },
+  'knowledge.topK': { 'zh-CN': '结果上限', 'en-US': 'Result limit', 'ru-RU': 'Лимит результатов' },
   // --- Unit & misc ---
   'unit.characters': { 'zh-CN': '字符', 'en-US': 'chars', 'ru-RU': 'зн.' },
   // --- AIActionDialog: misc dialog strings ---

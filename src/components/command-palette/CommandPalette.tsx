@@ -1,8 +1,9 @@
+import { CreateIcon } from '../ui/ActionIcons'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import {
   Bot, BookOpen, Brain, ChevronDown, Globe, FilePlus2, FolderOpen, Focus,
   Gauge, History, Import, Keyboard, LayoutGrid, Maximize2, Minus, PanelBottom,
-  PanelLeft, Plus, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
+  PanelLeft, Search, Settings2, Sparkles, Sun, Terminal, TextCursorInput,
   Users, Wand2, X, ZoomIn,
 } from 'lucide-react'
 import { useCommandStore } from '../../stores/command-store'
@@ -169,7 +170,7 @@ function PalettePanel({ mode }: { mode: 'commands' | 'shortcuts' }) {
       },
       {
         id: 'new-chapter', label: t('chapter.newChapter'), category: t('command.group.general'),
-        icon: <Plus size={15} />, keywords: 'chapter 新建章节',
+        icon: <CreateIcon size={15} />, keywords: 'chapter 新建章节',
         run: () => layout.openChapterCreation(),
       },
       ...(__DEV_CONSOLE__ && devConsoleEnabled ? [{

@@ -1,3 +1,4 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * PublicationGroup — 连载监控（项目结构侧栏组）
  *
@@ -5,7 +6,7 @@
  * （字符频率 Dice）+ 审计告警（术语/水文）。相似度徽标分色提示平台删改风险。
  */
 import { useState, useEffect } from 'react'
-import { Satellite, Plus, Trash2 } from 'lucide-react'
+import { Satellite, Trash2 } from 'lucide-react'
 import MenuRow from '../../ui/MenuRow'
 import CountBadge from '../../ui/CountBadge'
 import { useTranslation } from '../../../hooks/useTranslation'
@@ -97,7 +98,7 @@ export default function PublicationGroup({ projectPath }: Props) {
             title={t('pub.import')}
             aria-label={t('pub.import')}
           >
-            <Plus size={12} />
+            <CreateIcon size={12} />
           </button>
         }
       />

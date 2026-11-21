@@ -1,4 +1,5 @@
-import { Plus, MoreHorizontal, Server, Sparkles, ChevronRight, History } from 'lucide-react'
+import { CreateIcon } from '../../ui/ActionIcons'
+import { MoreHorizontal, Server, Sparkles, ChevronRight, History } from 'lucide-react'
 import { useAgentStore } from '../../../stores/agent-store'
 import { useMCPStore } from '../../../stores/mcp-store'
 import { skillRegistry, type LoadedSkill } from '../../../services/agent/skill-registry'
@@ -61,7 +62,7 @@ export default function AgentHeader() {
       <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
         title={isCurrentEmpty ? t('tip.emptyAgent') : t('tip.newConversation')} aria-label={t('tip.newConversation')}
         disabled={isCurrentEmpty} onClick={() => createConversation()}>
-        <Plus size={16} aria-hidden="true" />
+        <CreateIcon size={16} />
       </Button>
       <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" active={historyOpen}
         title={t('tip.historyConversations')} aria-label={t('tip.historyConversations')} aria-pressed={historyOpen} onClick={toggleHistory}>

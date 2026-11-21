@@ -11,7 +11,9 @@ import {
   SORT_KEY_LABELS,
   SORT_DIRECTION_LABELS,
 } from '../../stores/blueprint-sort-store'
-import { ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react'
+import { ListOrdered } from 'lucide-react'
+import { SortDirectionIcon } from '../ui/ActionIcons'
+import { Button } from '../ui/Button'
 import { t, type TextKey } from '../../shared/locale'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
 
@@ -30,14 +32,14 @@ export const BlueprintSortBar: React.FC = () => {
   return (
     <div className="flex items-center gap-2 px-2 py-1 text-xs">
       <span className="flex items-center gap-1" style={{ color: 'var(--color-text-muted)' }}>
-        <ArrowUpDown size={12} />
+        <ListOrdered size={14} aria-hidden="true" />
         {t('sort.label')}
       </span>
       <Select
         value={config.key}
         onValueChange={(v) => setSortKey(v as BlueprintSortKey)}
       >
-        <SelectTrigger className="h-6 w-auto rounded text-xs" title={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
+        <SelectTrigger className="w-auto text-xs" aria-label={t('sort.chooseMethod')}><SelectValue /></SelectTrigger>
         <SelectContent>
           {SORT_OPTIONS.map((key) => (
             <SelectItem key={key} value={key}>
@@ -46,19 +48,13 @@ export const BlueprintSortBar: React.FC = () => {
           ))}
         </SelectContent>
       </Select>
-      <button
+      <Button type="button" variant="outline" size="icon" className="size-8"
         onClick={toggleDirection}
-        className="p-0.5 rounded hover:bg-[var(--color-hover)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
         title={t('sort.current').replace('{label}', t(SORT_DIRECTION_LABELS[config.direction] as TextKey))}
         aria-label={t('sort.toggleDirection')}
-        style={{ color: 'var(--color-text-muted)' }}
       >
-        {config.direction === 'asc' ? (
-          <ArrowUp size={12} />
-        ) : (
-          <ArrowDown size={12} />
-        )}
-      </button>
+        <SortDirectionIcon direction={config.direction} />
+      </Button>
     </div>
   )
 }

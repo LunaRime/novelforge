@@ -9,7 +9,7 @@ import { t } from '../../shared/locale'
  * type="number" 时自动启用步进箭头（隐藏原生 spinner）：
  * - 编辑中允许清空输入框（不会阻止删除操作）
  * - 失焦时若为空值，自动恢复为 min 属性值（若设置）或 "0"
- * - 右侧 +/- 步进按钮，遵循 min/max/step 约束
+ * - 步进按钮与数值框并排，遵循 min/max/step 约束
  */
 const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement>>(
   ({ className, type, onBlur, onChange, onFocus, disabled, min, max, step, value, style, ...props }, ref) => {
@@ -80,9 +80,9 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
       )
     }
 
-    // number 类型
+    // 数字框与步进器各占真实宽度，窄字段也不会让箭头盖住数值。
     return (
-      <div className={cn('relative flex items-center', className)} style={style}>
+      <div className={cn('nf-number-input flex h-7 min-w-0 items-stretch overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-panel)] focus-within:border-[var(--color-accent)] focus-within:ring-1 focus-within:ring-[var(--color-focus-ring)]', className)} style={style}>
         <input
           type="number"
           ref={inputRef}
@@ -95,20 +95,18 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
           step={step}
           disabled={disabled}
           className={cn(
-            inputCls,
+            'h-full min-w-0 flex-1 bg-transparent px-2 text-xs text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-muted)] disabled:opacity-50',
             '[appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none',
-            'pr-7',
           )}
           {...props}
         />
-        <div className="absolute right-0.5 inset-y-0.5 flex flex-col" style={{ width: 18 }}>
+        <div className="flex w-5 shrink-0 flex-col border-s border-[var(--color-border)]">
           <button
             type="button"
             className={cn(
-              'flex items-center justify-center flex-1 flex-shrink-0 rounded-tr-[var(--radius-sm)] cursor-pointer transition-colors',
-              'hover:bg-[var(--color-hover)]',
-              disabled && 'opacity-50 pointer-events-none',
+              'grid min-h-0 flex-1 place-items-center enabled:cursor-pointer enabled:hover:bg-[var(--color-hover)] disabled:opacity-50',
             )}
+            disabled={disabled}
             onClick={increment}
             tabIndex={-1}
             aria-label={t('input.increase')}
@@ -118,10 +116,9 @@ const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLI
           <button
             type="button"
             className={cn(
-              'flex items-center justify-center flex-1 flex-shrink-0 rounded-br-[var(--radius-sm)] cursor-pointer transition-colors',
-              'hover:bg-[var(--color-hover)]',
-              disabled && 'opacity-50 pointer-events-none',
+              'grid min-h-0 flex-1 place-items-center enabled:cursor-pointer enabled:hover:bg-[var(--color-hover)] disabled:opacity-50',
             )}
+            disabled={disabled}
             onClick={decrement}
             tabIndex={-1}
             aria-label={t('input.decrease')}

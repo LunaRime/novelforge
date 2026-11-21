@@ -359,17 +359,18 @@ function KnowledgeOverviewContent({ source, section, onSectionChange }: Knowledg
                 onChange={(e) => { cancelSearch(); setSearchQuery(e.target.value) }}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
               />
-              <label className="flex items-center gap-1 flex-shrink-0">
+              <div className="flex shrink-0 items-center gap-2">
                 <span className="text-micro text-[var(--color-text-muted)]">{t('knowledge.topK')}</span>
                 <Input
                   type="number"
+                  aria-label={t('knowledge.topK')}
                   min={1}
                   max={50}
                   value={topK}
                   onChange={(e) => { cancelSearch(); setTopK(Math.max(1, Math.min(50, Number(e.target.value) || 10))) }}
-                  className="w-16 h-7 text-xs rounded px-2 text-center tabular-nums"
+                  className="h-9 w-[4.5rem] tabular-nums"
                 />
-              </label>
+              </div>
               <Button
                 variant="ai"
                 onClick={handleSearch}

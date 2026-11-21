@@ -1,3 +1,4 @@
+import { CreateIcon } from '../../ui/ActionIcons'
 /**
  * ProjectTree — 项目导航树（侧边栏核心视图）
  *
@@ -5,7 +6,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { RefreshCw, FolderOpen, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe, Plus } from 'lucide-react'
+import { RefreshCw, FolderOpen, FolderTree, BookOpen, LayoutList, LayoutGrid, Globe } from 'lucide-react'
 import { useProjectStore } from '../../../stores/project-store'
 import { useWorkflowStore } from '../../../stores/workflow-store'
 import { draftListScope, useDraftStore, type DraftsByChapter } from '../../../stores/draft-store'
@@ -166,7 +167,7 @@ export default function ProjectTree() {
       <div className="nf-project-actions">
         <Button type="button" variant="outline" className="min-h-8 min-w-0 flex-1 justify-start"
           onClick={() => useLayoutStore.getState().openChapterCreation()} title={t('chapter.newChapter')}>
-          <Plus size={15} className="shrink-0" aria-hidden="true" />
+          <CreateIcon size={15} />
           <span className="truncate">{t('chapter.newChapter')}</span>
         </Button>
         <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0" onClick={() => void refreshAll()}
