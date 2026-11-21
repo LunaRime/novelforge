@@ -952,14 +952,14 @@ export default function CodeMirrorEditor({
       // 段间距始终有；当前段高亮/压暗只属于专注模式（规范：专注模式隐藏面板 + 当前段落高亮）
       const focusParagraph = focusMode && paragraphFocus
       exts.push(paragraphVisuals(focusParagraph), underlinePreview)
-      if (editable && filePath?.startsWith(VELA.DRAFT)) exts.push(...rightMouseSelection(showSelection))
+      if (canUnderline && (filePath?.startsWith(VELA.DRAFT) || filePath?.startsWith(VELA.MANUSCRIPT))) exts.push(...rightMouseSelection(showSelection))
       if (typewriter) exts.push(typewriterScroll())
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
     // t 的引用保持稳定，语言切换时仍需更新 CodeMirror 短语。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable, filePath, showSelection])
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable, canUnderline, filePath, showSelection])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {

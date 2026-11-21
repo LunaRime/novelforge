@@ -159,7 +159,12 @@ it('正式稿选区仅展示下划线，保存成功后显示格式且可再次�
   const { container } = renderEditor('正文保持原样。', undefined, { mode: 'prose', filePath: 'vela://manuscript/1', editable: false, onSaveUnderline })
   const view = getView(container)
   vi.spyOn(view, 'coordsAtPos').mockReturnValue({ left: 80, right: 90, top: 100, bottom: 120 })
-  act(() => { view.dispatch({ selection: { anchor: 0, head: 2 } }) })
+  vi.spyOn(view, 'posAtCoords').mockImplementation(({ x }) => x === 10 ? 0 : 2)
+  act(() => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2, buttons: 2, clientX: 10 }))
+    document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 2, clientX: 60 }))
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2, clientX: 60 }))
+  })
   await act(() => new Promise(requestAnimationFrame))
 
   const underline = [...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === t('editor.underline'))
