@@ -33,6 +33,7 @@ import { Transaction } from '@codemirror/state'
 import { ensureSyntaxTree } from '@codemirror/language'
 import { redo, undo } from '@codemirror/commands'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
+import { t } from '../../shared/locale'
 import CodeMirrorEditor, { type CodeMirrorEditorProps } from './CodeMirrorEditor'
 
 // jsdom 未实现 scrollTo / ResizeObserver（与 AgentConversation.test 相同防护）
@@ -59,7 +60,7 @@ const roots: Root[] = []
 function renderEditor(
   content: string,
   onChange?: (content: string) => void,
-  options?: Pick<CodeMirrorEditorProps, 'mode'>,
+  options?: Pick<CodeMirrorEditorProps, 'mode' | 'filePath' | 'editable' | 'onSaveUnderline'>,
 ): { container: HTMLElement; rerender: (content: string) => void } {
   const container = document.createElement('div')
   container.style.width = '800px'
@@ -95,6 +96,82 @@ afterEach(() => {
   roots.forEach(r => act(() => r.unmount()))
   roots.length = 0
   document.body.innerHTML = ''
+})
+
+it('右键拖出选区后打开草稿工具栏，可加下划线并撤销', async () => {
+  const onChange = vi.fn()
+  const { container } = renderEditor('选中文字，其余正文。', onChange, { mode: 'prose', filePath: 'vela://draft/1' })
+  const view = getView(container)
+  const pos = vi.spyOn(view, 'posAtCoords').mockImplementation(({ x }) => x === 10 ? 0 : 4)
+  const coords = vi.spyOn(view, 'coordsAtPos').mockReturnValue({ left: 80, right: 90, top: 100, bottom: 120 })
+
+  try {
+    act(() => {
+      view.contentDOM.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2, buttons: 2, clientX: 10 }))
+      document.dispatchEvent(new MouseEvent('mousemove', { bubbles: true, buttons: 2, clientX: 60 }))
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2, clientX: 60 }))
+    })
+    expect(view.state.selection.main.from).toBe(0)
+    expect(view.state.selection.main.to).toBe(4)
+    await act(() => new Promise(requestAnimationFrame))
+
+    const underline = [...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === t('editor.underline'))
+    expect(underline).toBeTruthy()
+    act(() => { underline?.click() })
+    expect(onChange).toHaveBeenLastCalledWith('<u>选中文字</u>，其余正文。')
+    expect(container.querySelector('.cm-manuscript-underline')).toMatchObject({ textContent: '选中文字' })
+    act(() => { undo(view) })
+    expect(view.state.doc.toString()).toBe('选中文字，其余正文。')
+  } finally {
+    pos.mockRestore()
+    coords.mockRestore()
+  }
+})
+
+it('草稿右键点按原选区时重新打开选区工具栏并保留 AI 动作', async () => {
+  const { container } = renderEditor('上下文里的选中文段。', undefined, { mode: 'prose', filePath: 'vela://draft/1' })
+  const view = getView(container)
+  vi.spyOn(view, 'posAtCoords').mockReturnValue(7)
+  vi.spyOn(view, 'coordsAtPos').mockReturnValue({ left: 80, right: 90, top: 100, bottom: 120 })
+  act(() => { view.dispatch({ selection: { anchor: 5, head: 10 } }) })
+  await act(() => new Promise(requestAnimationFrame))
+  act(() => { window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })) })
+  expect(container.textContent).not.toContain(t('ai.polish'))
+
+  act(() => {
+    view.contentDOM.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true, button: 2, buttons: 2 }))
+  })
+  await act(() => new Promise(requestAnimationFrame))
+  expect(container.textContent).toContain(t('ai.polish'))
+  expect(view.state.selection.main).toMatchObject({ from: 5, to: 10 })
+
+  const context = new MouseEvent('contextmenu', { bubbles: true, cancelable: true, button: 2 })
+  act(() => {
+    document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, button: 2 }))
+    view.contentDOM.dispatchEvent(context)
+  })
+  expect(context.defaultPrevented).toBe(true)
+  expect(view.state.selection.main).toMatchObject({ from: 5, to: 10 })
+})
+
+it('正式稿选区仅展示下划线，保存成功后显示格式且可再次移除', async () => {
+  const onSaveUnderline = vi.fn().mockResolvedValue(true)
+  const { container } = renderEditor('正文保持原样。', undefined, { mode: 'prose', filePath: 'vela://manuscript/1', editable: false, onSaveUnderline })
+  const view = getView(container)
+  vi.spyOn(view, 'coordsAtPos').mockReturnValue({ left: 80, right: 90, top: 100, bottom: 120 })
+  act(() => { view.dispatch({ selection: { anchor: 0, head: 2 } }) })
+  await act(() => new Promise(requestAnimationFrame))
+
+  const underline = [...container.querySelectorAll('button')].find(button => button.getAttribute('aria-label') === t('editor.underline'))
+  expect(underline).toBeTruthy()
+  expect(container.textContent).not.toContain(t('ai.polish'))
+  expect(view.state.readOnly).toBe(true)
+  await act(async () => { underline?.click() })
+  expect(onSaveUnderline).toHaveBeenLastCalledWith('正文保持原样。', '<u>正文</u>保持原样。')
+  expect(container.querySelector('.cm-manuscript-underline')).toMatchObject({ textContent: '正文' })
+  await act(async () => { underline?.click() })
+  expect(onSaveUnderline).toHaveBeenLastCalledWith('<u>正文</u>保持原样。', '正文保持原样。')
+  expect(view.state.doc.toString()).toBe('正文保持原样。')
 })
 
 it('正文字号和栏宽通过样式实时应用，保留编辑器实例、选区与撤销历史', () => {

@@ -10,6 +10,7 @@ import { computeTextStats } from '../../services/text-stats'
 import { readVelaContent, VELA } from '../../services/vela-protocol'
 import { useEditorStore, type EditorTab } from '../../stores/editor-store'
 import { useMemoryStore } from '../../stores/memory-store'
+import { useProjectStore } from '../../stores/project-store'
 import { clearChapterTitleCache } from '../panels/Sidebar'
 import { Button } from '../ui/Button'
 import MarkdownContent from '../ui/MarkdownContent'
@@ -20,6 +21,7 @@ import ArchFileViewer from './ArchFileViewer'
 import ChapterCardEditor from './ChapterCardEditor'
 import CharacterEditor from './CharacterEditor'
 import CodeMirrorEditor from './CodeMirrorEditor'
+import { saveFinalizedUnderline } from './save-finalized-underline'
 import DraftEditor from './DraftEditor'
 import ManuscriptBoard from './ManuscriptBoard'
 import NovelConfigEditor from './NovelConfigEditor'
@@ -43,6 +45,8 @@ function ProseEditorWrapper({
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
   const fileName = tab.name
+  const projectSession = useProjectStore(s => s.projectSession)
+  const manuscriptPath = tab.filePath?.startsWith(VELA.MANUSCRIPT) ? tab.filePath : undefined
   // 追踪当前编辑器内容，供保存按钮使用（不触发重渲染）
   const currentContentRef = useRef(tab.content ?? '')
 
@@ -107,7 +111,7 @@ function ProseEditorWrapper({
             </span>
           )}
           {/* 未保存圆点指示灯 */}
-          {tab.dirty && (
+          {tab.dirty && !manuscriptPath && (
             <span
               className="nf-document-dirty"
               title={t('statusbar.unsaved')}
@@ -145,20 +149,19 @@ function ProseEditorWrapper({
           content={tab.content ?? ''}
           filePath={tab.filePath}
           hideStatusBar
-          // QA 修复（正式稿只读）：vela://manuscript/{id} 是 DB 定稿行，只读保护定稿内容
-          // 不被误改/串库；物理路径终稿文件仍可编辑
-          editable={!tab.filePath?.startsWith('vela://manuscript/')}
+          editable={!manuscriptPath}
+          onSaveUnderline={manuscriptPath ? (before, after) => saveFinalizedUnderline(manuscriptPath, projectSession, before, after) : undefined}
           onCharCountChange={(n) => {
             setWordCount(n)
             useEditorStore.getState().setActiveCharCount(n)
           }}
-          onChange={(text) => {
+          onChange={manuscriptPath ? undefined : (text) => {
             // 同步 ref，供保存按钮使用
             currentContentRef.current = text
             // 标记 tab.dirty
             useEditorStore.getState().updateTabContent(tab.id, text)
           }}
-          onSave={(text) => handleSave(text)}
+          onSave={manuscriptPath ? undefined : handleSave}
         />
       </div>
     </div>
@@ -181,8 +184,6 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
         />
       )}
       {activeTab?.type === 'chapter' && !activeTab.filePath?.startsWith(VELA.DRAFT) && (
-        // 终稿文件：vela://manuscript/{id}（DB 定稿行）或物理路径 → ProseEditorWrapper（含字数信息栏）
-        // 保存链见 onSave：manuscript 前缀写 DB（drafts 行），物理路径才走 fs:write-file
         <ProseEditorWrapper
           key={activeTab.id}
           tab={activeTab}
@@ -192,19 +193,8 @@ export default function EditorDocumentView({ activeTab, projectPath }: { activeT
             //   是 try/finally（无 catch）。因此这里必须自己兜住失败：否则写盘失败后仍然
             //   markTabSaved() → 页签显示已保存、dirty 被清 → 内容没落盘却无人知晓（静默丢稿）。
             try {
-              if (activeTab.filePath.startsWith(VELA.MANUSCRIPT)) {
-                // vela://manuscript/{id}：定稿内容在 DB（drafts 行），伪协议无物理文件
-                // —— 不能走 fs:write-file（会被当作相对路径写到错误位置，内容丢失）
-                const idRaw = activeTab.filePath.replace(VELA.MANUSCRIPT, '')
-                if (/^\d+$/.test(idRaw)) {
-                  // wordCount 用统一"有效字数"口径
-                  const res = await ipc.invoke('db:draft-update-content', parseInt(idRaw, 10), text, computeTextStats(text).novelWordCount)
-                  if (!res.success) throw new Error(res.error ?? t('status.unknown'))
-                }
-              } else {
-                const res = await ipc.invoke('fs:write-file', activeTab.filePath, text)
-                if (!res.success) throw new Error(res.error ?? t('status.unknown'))
-              }
+              const res = await ipc.invoke('fs:write-file', activeTab.filePath, text)
+              if (!res.success) throw new Error(res.error ?? t('status.unknown'))
             } catch (e) {
               renderLog('error', 'Save:Editor', t('log.render.draftSaveFailed')
                 .replace('{path}', () => activeTab.filePath ?? '')

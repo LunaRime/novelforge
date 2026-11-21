@@ -7,6 +7,7 @@
  * - 纯文本 TXT
  */
 import { t, type TextKey } from '../shared/locale'
+import { stripMarkdownUnderline } from '../shared/markdown-underline'
 import { ipc } from './ipc-client'
 import { projectStore, workflowStore } from './store-facade'
 
@@ -104,7 +105,7 @@ export async function exportNovel(options: ExportOptions): Promise<{ success: bo
 
         for (const ch of chapterContents) {
           // 简单去除 Markdown 标记
-          const plainText = ch.content
+          const plainText = stripMarkdownUnderline(ch.content)
             .replace(/^#{1,6}\s+/gm, '')  // 去掉标题标记
             .replace(/\*\*(.*?)\*\*/g, '$1')  // 去掉加粗
             .replace(/\*(.*?)\*/g, '$1')  // 去掉斜体

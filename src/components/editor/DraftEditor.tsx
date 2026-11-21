@@ -6,6 +6,7 @@ import { useProjectStore } from '../../stores/project-store'
 import { useEditorStore } from '../../stores/editor-store'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import CodeMirrorEditor from './CodeMirrorEditor'
+import { saveFinalizedUnderline } from './save-finalized-underline'
 import ThreeWayMerge from './ThreeWayMerge'
 import EditorToolbar from './EditorToolbar'
 import AIActionDialog, { getReviewDims } from './AIActionDialog'
@@ -338,8 +339,10 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
           editable={!isReadonly && !isChapterBusy}
           hideStatusBar
           onCharCountChange={setCharCount}
-          onChange={handleEditorChange}
-          onSave={handleEditorSave}
+          onChange={isReadonly ? undefined : handleEditorChange}
+          onSave={isReadonly ? undefined : handleEditorSave}
+          onSaveUnderline={status === 'finalized' && !isChapterBusy
+            ? (before, after) => saveFinalizedUnderline(filePath, projectSession, before, after) : undefined}
         />
       </div>
 

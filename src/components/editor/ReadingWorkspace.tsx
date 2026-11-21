@@ -4,6 +4,7 @@ import { useTranslation } from '../../hooks/useTranslation'
 import { captureDraftProject } from '../../services/draft-index'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
+import { VELA } from '../../services/vela-protocol'
 import { draftListScope, useDraftStore } from '../../stores/draft-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useEditorStore } from '../../stores/editor-store'
@@ -41,8 +42,10 @@ export default function ReadingWorkspace({ active }: { active: boolean }) {
     return available ? [available] : []
   }).sort((a, b) => a.chapterNumber - b.chapterNumber), [draftsByChapter])
   const editorChapter = tabs.find(tab => tab.id === activeTabId && tab.type === 'chapter')
+  const editorDraftId = editorChapter?.docId ?? (editorChapter?.filePath?.startsWith(VELA.MANUSCRIPT)
+    ? Number(editorChapter.filePath.slice(VELA.MANUSCRIPT.length)) : undefined)
   const selected = chapters.find(chapter => path && chapter.chapterNumber === positions[path])
-    ?? chapters.find(chapter => chapter.chapterNumber === editorChapter?.chapterNumber || chapter.id === editorChapter?.docId)
+    ?? chapters.find(chapter => chapter.chapterNumber === editorChapter?.chapterNumber || chapter.id === editorDraftId)
     ?? chapters[0]
   const chapterNumber = selected?.chapterNumber
   const chapterName = (n: number) => {
@@ -50,14 +53,15 @@ export default function ReadingWorkspace({ active }: { active: boolean }) {
     const label = t('chapter.label').replace('{n}', String(n))
     return title ? `${label} ${title}` : label
   }
-  const matchingTab = tabs.find(tab => tab.type === 'chapter' && tab.docId === selected?.id && selected?.id !== undefined)
+  const matchingTab = selected && tabs.find(tab => tab.type === 'chapter' &&
+    (tab.docId === selected.id || tab.filePath === `${VELA.MANUSCRIPT}${selected.id}`))
   const liveChapter = selected && editorChapter &&
-    (editorChapter.chapterNumber === chapterNumber || editorChapter.docId === selected.id)
+    (editorChapter.chapterNumber === chapterNumber || editorDraftId === selected.id)
     ? editorChapter : matchingTab
   const live = liveChapter?.content
   const draftId = liveChapter?.docId ?? selected?.id
   const chapterKey = path && selected ? JSON.stringify([path, chapterNumber]) : ''
-  const requestKey = scope && draftId !== undefined ? JSON.stringify([scope, draftId, selected?.updatedAt, retry]) : ''
+  const requestKey = scope && draftId !== undefined ? JSON.stringify([scope, draftId, selected?.contentHash, selected?.updatedAt, retry]) : ''
   const content = !projectLoading ? live ?? (loaded?.key === requestKey ? loaded.content : undefined) : undefined
   const selectedIndex = selected ? chapters.indexOf(selected) : -1
 

@@ -8,7 +8,7 @@ import { BlueprintRepository, BlueprintData } from '../repositories/blueprint-re
 import { CharacterRepository, CharacterData, CharacterStateData } from '../repositories/character-repository'
 import { DraftRepository } from '../repositories/draft-repository'
 import { DraftSnapshotRepository } from '../repositories/draft-snapshot-repository'
-import { commitDatabaseDraft, commitDatabaseDraftFinalization } from '../services/draft-write-service'
+import { commitDatabaseDraft, commitDatabaseDraftFinalization, commitDatabaseFinalizedUnderline } from '../services/draft-write-service'
 import { mergeDatabaseRevision } from '../services/revision-merge-service'
 import { captureBlueprintWriteScope, insertDatabaseMissingBlueprints } from '../services/blueprint-gap-service'
 import { commitDirectoryBlueprints, readDirectoryBlueprintSnapshot } from '../services/directory-blueprint-write-service'
@@ -330,6 +330,9 @@ export function registerDatabaseController() {
 
   guardedHandle('db:draft-finalize', async (_event, input: DraftFinalizationInput & { projectPath: string; writeToken?: string }) =>
     commitDatabaseDraftFinalization(input))
+
+  guardedHandle('db:draft-format-underline', async (_event, input: Parameters<typeof commitDatabaseFinalizedUnderline>[0]) =>
+    commitDatabaseFinalizedUnderline(input))
 
   guardedHandle('db:draft-update-content', async (_event, id: number, content: string, wordCount: number) => {
     try {

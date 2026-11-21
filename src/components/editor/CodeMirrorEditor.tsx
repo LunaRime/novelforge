@@ -2,14 +2,17 @@ import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, 
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
+import { syntaxTree } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { EditorState, Transaction } from '@codemirror/state'
+import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
-import { Sparkles, Bold, Undo2, Redo2, Share2 } from 'lucide-react'
+import { Sparkles, Bold, Underline, Undo2, Redo2, Share2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { t as tStatic } from '../../shared/locale'
+import { markdownUnderlineSpans, toggleMarkdownUnderline, UNDERLINE_CLOSE, UNDERLINE_OPEN } from '../../shared/markdown-underline'
+import { VELA } from '../../services/vela-protocol'
 import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
@@ -34,6 +37,66 @@ import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
 import './inline-accept.css'
 import './novel-editor.css'
+
+function rightMouseSelection(showSelection: (view: EditorView) => void) {
+  return [
+    EditorView.mouseSelectionStyle.of((view, event) => {
+      if (event.button !== 2) return null
+      const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
+      if (position === null) return null
+      let anchor = position
+      let original = view.state.selection
+      const { clientX, clientY } = event
+      const inside = !original.main.empty && anchor >= original.main.from && anchor <= original.main.to
+      if (inside) showSelection(view)
+
+      // 复用 CodeMirror 的鼠标跟踪。右键点按保留原选区，拖动才重新圈选。
+      return {
+        get(move) {
+          if (inside && Math.hypot(move.clientX - clientX, move.clientY - clientY) < 4) return original
+          const head = view.posAtCoords({ x: move.clientX, y: move.clientY }, false)
+          return EditorSelection.single(anchor, head)
+        },
+        update(update) {
+          if (!update.docChanged) return
+          anchor = update.changes.mapPos(anchor)
+          original = original.map(update.changes)
+        },
+      }
+    }),
+    EditorView.domEventHandlers({
+      contextmenu(event, view) {
+        showSelection(view)
+        return event.button === 2 || !view.state.selection.main.empty
+      },
+    }),
+  ]
+}
+
+const underlineMark = Decoration.mark({ class: 'cm-manuscript-underline' })
+
+function underlineDecorations(view: EditorView): DecorationSet {
+  const spans = markdownUnderlineSpans(view.state.doc.toString(), syntaxTree(view.state))
+  return Decoration.set(spans.flatMap(({ from, to }) => {
+    const start = from + UNDERLINE_OPEN.length
+    const end = to - UNDERLINE_CLOSE.length
+    return start < end && end > view.viewport.from && start < view.viewport.to ? [underlineMark.range(start, end)] : []
+  }))
+}
+
+const underlinePreview = ViewPlugin.fromClass(class {
+  decorations: DecorationSet
+
+  constructor(view: EditorView) {
+    this.decorations = underlineDecorations(view)
+  }
+
+  update(update: ViewUpdate) {
+    if (update.docChanged || update.viewportChanged || syntaxTree(update.startState) !== syntaxTree(update.state)) {
+      this.decorations = underlineDecorations(update.view)
+    }
+  }
+}, { decorations: plugin => plugin.decorations })
 
 /**
  * 正文段落的视觉扩展（规范：段间距 1em / 当前段落高亮 / 专注模式压暗其它段）。
@@ -172,6 +235,7 @@ export type CodeMirrorEditorProps = {
   editable?: boolean
   onChange?: (content: string) => void
   onSave?: (content: string) => Promise<void> | void
+  onSaveUnderline?: (before: string, after: string) => Promise<boolean>
   onCharCountChange?: (count: number) => void
   placeholder?: string
   hideStatusBar?: boolean
@@ -309,6 +373,7 @@ export default function CodeMirrorEditor({
   editable = true,
   onChange,
   onSave,
+  onSaveUnderline,
   onCharCountChange,
   mode = 'document',
   paperHeading,
@@ -567,6 +632,45 @@ export default function CodeMirrorEditor({
   const [aiGenerating, setAiGenerating] = useState(false)
   const [loadingDots, setLoadingDots] = useState('.')
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
+  const [savingUnderline, setSavingUnderline] = useState(false)
+  const canUnderline = mode === 'prose' && (editable || !!onSaveUnderline)
+
+  const showSelection = useCallback((view: EditorView) => {
+    const { from, to, empty } = view.state.selection.main
+    if (empty) return
+    setSelectionRange(current => current?.from === from && current.to === to ? current : { from, to })
+    setBubbleOpen(true)
+  }, [])
+
+  const handleUnderline = async () => {
+    const view = editorRef.current?.view
+    if (!view || !canUnderline || savingUnderline) return
+    const selected = view.state.selection.main
+    const document = view.state.doc
+    const source = document.toString()
+    const markers = toggleMarkdownUnderline(source, selected.from, selected.to)
+    if (markers.length === 0) return
+
+    const changes = view.state.changes(markers)
+    const start = changes.mapPos(selected.from, 1)
+    const end = changes.mapPos(selected.to, -1)
+    const selection = selected.anchor <= selected.head ? EditorSelection.single(start, end) : EditorSelection.single(end, start)
+    if (!editable && onSaveUnderline) {
+      setSavingUnderline(true)
+      try {
+        const saved = await onSaveUnderline(source, changes.apply(document).toString())
+        if (saved && editorRef.current?.view === view && view.state.doc === document) {
+          view.dispatch({ changes, selection: view.state.selection.main.eq(selected) ? selection : undefined,
+            annotations: Transaction.addToHistory.of(false) })
+        }
+      } finally {
+        setSavingUnderline(false)
+      }
+      return
+    }
+
+    view.dispatch({ changes, selection })
+  }
   // 偏好记忆：AI 接受快照（检测用户后续手动修改 → 记录替换对）
   const aiAcceptedRef = useRef<{ aiText: string } | null>(null)
 
@@ -655,13 +759,13 @@ export default function CodeMirrorEditor({
       } else {
         setSelectionRange({ from: sel.from, to: sel.to })
         // 交由下方的 useEffect 进行精准防越界座标计算与位置同步
-        // 只读（已定稿/归档/章节忙）不得弹出 AI 气泡：readOnly 只挡键盘，挡不住这里
-        if (!aiResult && editable) {
+        // 正式稿的工具栏只提供下划线。归档稿与工作流占用的草稿没有编辑动作。
+        if (!aiResult && (editable || canUnderline)) {
           setBubbleOpen(true)
         }
       }
     }
-  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, editable])
+  }, [onChange, onCharCountChange, aiResult, detectPreferenceChange, t, editable, canUnderline])
 
   // Bubble Menu：Escape 关闭（原 InlineAIToolbar 的键盘关闭特性）
   useEffect(() => {
@@ -684,7 +788,8 @@ export default function CodeMirrorEditor({
 
     const updatePosition = () => {
       const sel = window.getSelection()
-      if (!sel || sel.rangeCount === 0 || sel.isCollapsed) {
+      if (!sel || sel.rangeCount === 0 || sel.isCollapsed || !view.contentDOM.contains(sel.anchorNode) ||
+          !view.contentDOM.contains(sel.focusNode)) {
         const coords = view.coordsAtPos(selectionRange.from)
         if (coords) {
           setBubblePos({ top: coords.top, left: coords.left })
@@ -694,12 +799,17 @@ export default function CodeMirrorEditor({
         return
       }
 
-      const range = sel.getRangeAt(0)
-      const rect = range.getBoundingClientRect()
+      const rect = sel.getRangeAt(0).getBoundingClientRect()
+      if (rect.width === 0) {
+        const coords = view.coordsAtPos(selectionRange.from)
+        if (coords) setBubblePos({ top: coords.top, left: coords.left })
+        else setBubbleOpen(false)
+        return
+      }
       const viewRect = scrollDOM.getBoundingClientRect()
 
       // 判断选区是否整体完全在视口之外
-      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom || rect.width === 0) {
+      if (rect.bottom < viewRect.top || rect.top > viewRect.bottom) {
         setBubbleOpen(false)
         return
       }
@@ -841,14 +951,15 @@ export default function CodeMirrorEditor({
     if (mode === 'prose') {
       // 段间距始终有；当前段高亮/压暗只属于专注模式（规范：专注模式隐藏面板 + 当前段落高亮）
       const focusParagraph = focusMode && paragraphFocus
-      exts.push(paragraphVisuals(focusParagraph))
+      exts.push(paragraphVisuals(focusParagraph), underlinePreview)
+      if (editable && filePath?.startsWith(VELA.DRAFT)) exts.push(...rightMouseSelection(showSelection))
       if (typewriter) exts.push(typewriterScroll())
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
     // t 的引用保持稳定，语言切换时仍需更新 CodeMirror 短语。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale])
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable, filePath, showSelection])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {
@@ -1208,7 +1319,7 @@ export default function CodeMirrorEditor({
                   <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}
-              {(mode === 'document' || mode === 'prose') && (
+              {editable && (
                 <>
                   <button
                     className="p-1 rounded"
@@ -1234,35 +1345,48 @@ export default function CodeMirrorEditor({
                       })
                     }}
                   ><Bold size={14} /></button>
-                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
                 </>
               )}
-              <div
-                className="flex items-center gap-0.5 pl-0.5 pr-1 text-2xs"
-                style={{ color: 'var(--color-text-muted)' }}
-              >
-                <Sparkles size={11} />AI
-              </div>
-              {aiActions.map(action => (
-                <button
-                  key={action.key}
-                  className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
-                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                  onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                  onClick={() => handleAIAction(action.prompt, action.key)}
-                >
-                  <span className="text-2xs">{action.label}</span>
-                </button>
-              ))}
-              <button
-                className="p-1.5 rounded transition-colors"
-                title={t('shareCard.generate')}
-                onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
-                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
-                onClick={handleShareCard}
-              >
-                <Share2 size={13} style={{ color: 'var(--color-text-muted)' }} />
-              </button>
+              {canUnderline && (
+                <button type="button"
+                  className="grid size-8 place-items-center rounded text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] disabled:opacity-50 pointer-coarse:size-11"
+                  aria-label={t('editor.underline')}
+                  data-tooltip={t('editor.underline')}
+                  disabled={savingUnderline}
+                  onClick={() => void handleUnderline()}
+                ><Underline size={14} aria-hidden="true" /></button>
+              )}
+              {editable && (
+                <>
+                  <div className="w-[1px] h-3 mx-1" style={{ backgroundColor: 'var(--color-border)' }} />
+                  <div
+                    className="flex items-center gap-0.5 pl-0.5 pr-1 text-2xs"
+                    style={{ color: 'var(--color-text-muted)' }}
+                  >
+                    <Sparkles size={11} />AI
+                  </div>
+                  {aiActions.map(action => (
+                    <button
+                      key={action.key}
+                      className={cn('p-1.5 rounded flex items-center gap-1 transition-colors', action.color)}
+                      onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                      onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                      onClick={() => handleAIAction(action.prompt, action.key)}
+                    >
+                      <span className="text-2xs">{action.label}</span>
+                    </button>
+                  ))}
+                  <button
+                    className="p-1.5 rounded transition-colors"
+                    title={t('shareCard.generate')}
+                    onMouseEnter={e => (e.currentTarget.style.backgroundColor = 'var(--color-hover)')}
+                    onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                    onClick={handleShareCard}
+                  >
+                    <Share2 size={13} style={{ color: 'var(--color-text-muted)' }} />
+                  </button>
+                </>
+              )}
             </>
           )}
         </div>
