@@ -21,6 +21,7 @@ import { selectWritingAppearance, useEditorPrefsStore, type WritingAppearance } 
 import { useShallow } from 'zustand/shallow'
 import type { ModelTier, ModelRouteConfig } from '../../services/llm/model-router'
 import { Button } from '../ui/Button'
+import { SemanticLabel } from '../ui/SemanticLabel'
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/Dialog'
 import MarkdownContent from '../ui/MarkdownContent'
 import { switchLocale, useTranslation } from '../../hooks/useTranslation'
@@ -116,7 +117,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const activeSection = sections.find(item => item.id === section)
 
   const dialogRef = useRef<HTMLDivElement>(null)
-  useFocusTrap(dialogRef, open)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const currentSectionRef = useRef<HTMLButtonElement>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  useFocusTrap(dialogRef, open, titleRef)
+  useEffect(() => {
+    if (open) currentSectionRef.current?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' })
+  }, [open, section, normalizedQuery])
 
   const savedAppearance = useEditorPrefsStore(useShallow(selectWritingAppearance))
   const [appearanceChanges, setAppearanceChanges] = useState<Partial<WritingAppearance>>({})
@@ -133,6 +140,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   function closeSettings() {
     setConfirmDiscard(false)
     setAppearanceChanges({})
+    setQuery('')
     onClose()
   }
 
@@ -182,7 +190,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
       >
         <header className="nf-settings-title">
           <Settings2 size={17} aria-hidden="true" />
-          <h2>{t('settings.title')}</h2>
+          <h2 ref={titleRef} tabIndex={-1}>{t('settings.title')}</h2>
           <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
             onClick={requestClose} aria-label={t('action.close')} title={t('action.close')}>
             <X size={16} aria-hidden="true" />
@@ -194,6 +202,13 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
             <div className="nf-settings-search">
               <Search size={14} aria-hidden="true" />
               <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)}
+                onKeyDown={event => {
+                  if (event.key !== 'Enter' || event.nativeEvent.isComposing || !normalizedQuery || !visibleSections.length) return
+                  event.preventDefault()
+                  setSection(visibleSections[0].id)
+                  setQuery('')
+                  headingRef.current?.focus()
+                }}
                 placeholder={t('settings.searchPlaceholder')} aria-label={t('settings.searchPlaceholder')} />
               {query && (
                 <Button variant="ghost" type="button" size="icon" className="size-8 shrink-0"
@@ -212,6 +227,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
                     <h3>{t(group.label)}</h3>
                     {items.map(item => (
                       <button key={item.id} type="button" onClick={() => setSection(item.id)}
+                        ref={section === item.id ? currentSectionRef : undefined}
                         className="nf-settings-section" aria-current={section === item.id ? 'page' : undefined}>
                         <span className="flex shrink-0" aria-hidden="true">{item.icon}</span>
                         <span>{item.label}</span>
@@ -227,7 +243,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           </aside>
           <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
             <header className="nf-settings-section-heading">
-              <h3 className="text-lg font-semibold text-[var(--color-text)]">{activeSection?.label}</h3>
+              <h3 ref={headingRef} tabIndex={-1} className="text-lg font-semibold text-[var(--color-text)]">{activeSection?.label}</h3>
               <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{activeSection?.description}</p>
             </header>
 
@@ -877,7 +893,7 @@ function AboutSection() {
         {status === 'available' && updateInfo && (
           <div className="text-xs space-y-2">
             <p style={{ color: 'var(--color-accent)' }}>
-              ✨ {t('update.newVersion')} v{updateInfo.version}
+              <SemanticLabel name="update">{t('update.newVersion')} v{updateInfo.version}</SemanticLabel>
             </p>
             {/* 下载/安装统一由状态栏执行，避免出现第二套入口 */}
             <p style={{ color: 'var(--color-text-muted)' }}>{t('settings.updateInStatusBar')}</p>
@@ -890,7 +906,7 @@ function AboutSection() {
         {status === 'downloaded' && (
           <div className="text-xs space-y-2">
             <p style={{ color: 'var(--color-success)' }}>
-              ✅ {t('update.downloaded')}
+              <SemanticLabel name="success">{t('update.downloaded')}</SemanticLabel>
             </p>
             <p style={{ color: 'var(--color-text-muted)' }}>{t('settings.updateInStatusBar')}</p>
           </div>

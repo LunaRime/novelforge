@@ -15,7 +15,11 @@ const FOCUSABLE = [
  * 打开时把焦点移入容器，Tab / Shift+Tab 在容器内循环；关闭时还给打开前的元素。
  * 不做 aria-hidden 背景，只解决「Tab 逃到背景」与「关掉后焦点丢失」两个可感知问题。
  */
-export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active: boolean): void {
+export function useFocusTrap(
+  containerRef: RefObject<HTMLElement | null>,
+  active: boolean,
+  initialFocus?: RefObject<HTMLElement | null>,
+): void {
   useEffect(() => {
     if (!active) return
     const container = containerRef.current
@@ -25,7 +29,7 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
     const focusables = (): HTMLElement[] => Array.from(container.querySelectorAll<HTMLElement>(FOCUSABLE))
       .filter(el => el.getClientRects().length > 0)
 
-    const first = focusables()[0]
+    const first = initialFocus?.current ?? focusables()[0]
     first?.focus()
 
     const onKeyDown = (e: KeyboardEvent): void => {
@@ -51,5 +55,5 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
       container.removeEventListener('keydown', onKeyDown)
       previouslyFocused?.focus?.()
     }
-  }, [containerRef, active])
+  }, [containerRef, active, initialFocus])
 }
