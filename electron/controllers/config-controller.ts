@@ -10,7 +10,8 @@ import { guardedHandle } from '../security/ipc-guard'
 import { refreshOutboundProxy } from '../net/proxy-fetch'
 
 /** 窗口控件覆盖层高度（px）—— 与 main.ts 建窗时的取值必须一致，否则按钮条与内容错位 */
-export const TITLEBAR_OVERLAY_HEIGHT = 32
+// 原生窗控与渲染层使用同一高度，渲染层从 titlebar-area-height 读取。
+export const TITLEBAR_OVERLAY_HEIGHT = 44
 
 /** 渲染进程日志等级字符串 → 主进程 LogLevel 映射 */
 const RENDER_LOG_LEVELS: Record<'debug' | 'info' | 'warn' | 'error', LogLevel> = {

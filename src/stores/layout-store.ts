@@ -67,6 +67,8 @@ interface LayoutState extends LayoutPreferences {
   // ===== 专注写作模式 =====
   focusMode: boolean
   toggleFocusMode: () => void
+  readingMode: boolean
+  toggleReadingMode: () => void
 
   // ===== 全局弹窗 Actions =====
   /** 打开设置弹窗，可指定初始分区（如 'llm'） */
@@ -97,7 +99,9 @@ export const useLayoutStore = create<LayoutState>()(persist(set => ({
   bottomTab: 'tasks',
 
   focusMode: false,
-  toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode })),
+  toggleFocusMode: () => set((s) => ({ focusMode: !s.focusMode, readingMode: false })),
+  readingMode: false,
+  toggleReadingMode: () => set(s => ({ readingMode: !s.readingMode, focusMode: false })),
 
   // 全局弹窗默认关闭
   settingsOpen: false,

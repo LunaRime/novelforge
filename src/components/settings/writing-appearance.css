@@ -1,5 +1,6 @@
 /* 恒亮配色只作用于实际稿纸和预览稿纸，周围控件仍跟随主题。 */
 :root[data-v3-prose-paper='warm'] .nf-prose-editor :is(.nf-prose-heading, .cm-scroller),
+:root[data-v3-prose-paper='warm'] .nf-reader-paper,
 .nf-writing-appearance-preview[data-v3-preview-paper='warm'] .nf-writing-preview-paper {
   --color-editor-bg: var(--color-prose-warm-bg, var(--color-panel));
   --color-text: var(--color-prose-warm-text);

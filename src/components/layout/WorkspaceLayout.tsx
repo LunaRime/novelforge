@@ -9,6 +9,7 @@ import { ErrorBoundary } from '../ErrorBoundary'
 import WritingCompanion from '../panels/WritingCompanion'
 import BottomPanel from '../panels/BottomPanel'
 import EditorArea from '../panels/EditorArea'
+import ReadingWorkspace from '../editor/ReadingWorkspace'
 import Sidebar from '../panels/Sidebar'
 import { createNavigationSession, NavigationSessionContext } from '../panels/sidebar/navigation-session'
 import LeftToolWindowBar from './LeftToolWindowBar'
@@ -46,14 +47,15 @@ export default function WorkspaceLayout() {
   const navigationScope = useProjectStore(state => state.currentProject
     ? `${state.currentProject.id}:${state.currentProject.path}:${state.projectSession}` : '')
   const navigation = useMemo(() => createNavigationSession(navigationScope), [navigationScope])
-  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, focusMode, openNewProject } = useLayoutStore(useShallow(state => ({
+  const { sidebarOpen, aiPanelOpen, rightView, bottomPanelOpen, focusMode, readingMode, openNewProject } = useLayoutStore(useShallow(state => ({
     sidebarOpen: state.sidebarOpen, aiPanelOpen: state.aiPanelOpen, rightView: state.rightView,
-    bottomPanelOpen: state.bottomPanelOpen, focusMode: state.focusMode,
+    bottomPanelOpen: state.bottomPanelOpen, focusMode: state.focusMode, readingMode: state.readingMode,
     openNewProject: state.openNewProject,
   })))
-  const showSidebar = !focusMode && sidebarOpen
-  const showAI = !focusMode && aiPanelOpen
-  const showBottom = !focusMode && bottomPanelOpen
+  const showWorkbench = !focusMode && !readingMode
+  const showSidebar = showWorkbench && sidebarOpen
+  const showAI = showWorkbench && aiPanelOpen
+  const showBottom = showWorkbench && bottomPanelOpen
   const sidebarId = 'sidebar'
   const aiId = 'ai-panel'
   const bottomId = 'bottom'
@@ -79,9 +81,9 @@ export default function WorkspaceLayout() {
       >
         {t('tip.skipToContent')}
       </a>
-      <div data-workbench data-focus-mode={focusMode || undefined} className="nf-workbench flex flex-1 min-h-0 overflow-hidden"
+      <div data-workbench data-focus-mode={focusMode || readingMode || undefined} data-reading-mode={readingMode || undefined} className="nf-workbench flex flex-1 min-h-0 overflow-hidden"
         onFocusCapture={event => { lastFocused.current = event.target }}>
-        {!focusMode && <LeftToolWindowBar />}
+        {showWorkbench && <LeftToolWindowBar />}
         <div data-canvas="true" className="flex-1 min-w-0 flex overflow-hidden">
           <Group
             orientation="horizontal"
@@ -118,11 +120,12 @@ export default function WorkspaceLayout() {
                 defaultLayout={verticalLayout.defaultLayout}
                 onLayoutChanged={layout => saveVisibleLayout(layout, verticalIds, verticalLayout.onLayoutChanged)}
               >
-                {/* 专注模式仅改变外层布局，正文编辑区始终在同一位置挂载。 */}
+                {/* 阅读与专注共用全宽布局，编辑器实例留在原位以保留编辑状态。 */}
                 <Panel id="editor" defaultSize="75%" minSize="25%" aria-label={t('panel.editor')}>
                   <main id="main-editor-area" tabIndex={-1} data-region="editor" className="h-full">
                     <ErrorBoundary fallbackLabel={t('error.editorFailed')}>
-                      <EditorArea onNewProject={openNewProject} />
+                      <div className="h-full" hidden={readingMode}><EditorArea onNewProject={openNewProject} /></div>
+                      <ReadingWorkspace active={readingMode} />
                     </ErrorBoundary>
                   </main>
                 </Panel>

@@ -84,6 +84,7 @@ RAG store (SQLite + LanceDB) and gated by your confirmation at every step.
 | Auto Outline & Beats | AI generates structural skeleton → chapter beats → scene/emotion/pacing requirements |
 | Auto Chapter Splitting | AI analyzes outline and suggests chapter count, volume structure, and climax positions |
 | Streaming Chapter Generation | Per-chapter streaming typewriter generation with precise context awareness |
+| Reading Mode | Read chapters on a dedicated read-only page, switch novels and chapters, and return to your place |
 | Chapter Transition Engine | Extracts scene cards from previous 3 chapters and injects into prompts for continuity |
 | Paragraph-Level Rewriting | Expand / condense / style shift / conflict enhance / polish — five modes, no full rewrite |
 | Editorial Board Review | 5-role parallel review (editor-in-chief / plot / prose / continuity / style) + weighted scoring |

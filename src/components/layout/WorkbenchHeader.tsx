@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Focus, PanelLeft, Search, Sparkles } from 'lucide-react'
+import { BookOpen, Focus, PanelLeft, Search, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import appIcon from '../../../build/icon.png'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -24,12 +24,13 @@ export default function WorkbenchHeader() {
   const projectName = useProjectStore(state => state.currentProject?.name)
   const openPalette = useCommandStore(state => state.openPalette)
   const shortcut = useShortcutStore(state => formatBinding(shortcutBinding('command-palette', state.bindings)))
-  const { focusMode, sidebarOpen, aiPanelOpen } = useLayoutStore(useShallow(state => ({
-    focusMode: state.focusMode, sidebarOpen: state.sidebarOpen,
+  const { focusMode, readingMode, sidebarOpen, aiPanelOpen } = useLayoutStore(useShallow(state => ({
+    focusMode: state.focusMode, readingMode: state.readingMode, sidebarOpen: state.sidebarOpen,
     aiPanelOpen: state.aiPanelOpen,
   })))
   const layout = useLayoutStore.getState()
   const focusTitle = t(focusMode ? 'focus.exit' : 'focus.enter')
+  const readerTitle = t(readingMode ? 'reader.exit' : 'reader.enter')
 
   return (
     <header className="nf-workbench-header" data-macos={navigator.userAgent.includes('Mac') || undefined}>
@@ -49,7 +50,7 @@ export default function WorkbenchHeader() {
         </Button>
         {/* 面板开关和外观操作各自成组，窗口越窄越优先保留图标和可访问名称。 */}
         <div className="nf-workbench-actions">
-          {!focusMode && <>
+          {!focusMode && !readingMode && <>
             <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8" data-workbench-toggle="sidebar"
               aria-expanded={sidebarOpen} aria-label={t('command.toggleSidebar')} title={t('command.toggleSidebar')} onClick={layout.toggleSidebar}>
               <PanelLeft size={16} aria-hidden="true" />
@@ -64,6 +65,10 @@ export default function WorkbenchHeader() {
             <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8"
               aria-pressed={focusMode} aria-label={focusTitle} title={focusTitle} onClick={layout.toggleFocusMode}>
               <Focus size={16} aria-hidden="true" />
+            </Button>
+            <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8"
+              data-reading-toggle aria-pressed={readingMode} aria-label={readerTitle} title={readerTitle} onClick={layout.toggleReadingMode}>
+              <BookOpen size={16} aria-hidden="true" />
             </Button>
             <WorkbenchThemeMenu />
           </div>

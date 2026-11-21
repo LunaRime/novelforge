@@ -76,6 +76,7 @@ export default function App() {
   const currentProject = useProjectStore((s) => s.currentProject)
   // 订阅 locale 只为让下面那个「窗口标题」effect 在**切语言时重跑**（回落标题是本地化的）
   const { locale } = useTranslation()
+  const readingMode = useLayoutStore(s => s.readingMode)
 
   // 窗口标题 = 「项目名 — NovelForge」（无项目回落应用标题）。见 lib/window-title 的说明：
   // 我们是自绘顶栏，系统（任务栏 / Alt-Tab / Mission Control）看不到它，只认 document.title。
@@ -197,6 +198,9 @@ export default function App() {
     }
     const handleKeyDown = async (e: KeyboardEvent) => {
       const binding = (id: string) => shortcutBinding(id)
+      // 设置打开时拦住工作台快捷键，应用级缩放仍可使用。
+      if (e.defaultPrevented || (useLayoutStore.getState().settingsOpen &&
+        !['zoom-in', 'zoom-out', 'zoom-reset'].some(id => matchesBinding(e, binding(id))))) return
       if (matchesBinding(e, binding('focus-mode'))) {
         e.preventDefault()
         useLayoutStore.getState().toggleFocusMode()
@@ -265,7 +269,7 @@ export default function App() {
       <WorkspaceLayout />
 
       {/* 状态栏（全宽） */}
-      <StatusBar />
+      {!readingMode && <StatusBar />}
 
       {/* 全局对话框 — 由 layout-store 控制开关，每个包裹独立 ErrorBoundary 防止单点崩溃 */}
       <ErrorBoundary fallbackLabel={t('error.dialogFailed')}>
