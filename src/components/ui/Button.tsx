@@ -13,7 +13,7 @@ export const buttonVariants = cva(
     variants: {
       variant: {
         default:
-          'btn-primary text-white',
+          'btn-primary',
         ai:
           'ai-glow text-white shadow-[var(--shadow-sm)] hover:shadow-[var(--shadow-md)] relative overflow-hidden',
         destructive:

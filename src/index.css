@@ -150,9 +150,8 @@
  * ===================================================================== */
 @layer base {
 
-  /* ===== CSS 变量 — 从 Logo 提取品牌色系 ===== */
-  /* Logo 核心色：深邃蓝 #0A1628 · 冰蓝 #7EC8E3 · 星空蓝 #5B9ED6
-     薰衣草紫 #9B8EC8 · 星辰金 #C9A76C */
+  /* 浅色配色同时可用于独立的主题预览，其他主题也按各自的类名作用于局部。 */
+  .light,
   :root {
     /* 浅色主题以定稿 Logo 的苔绿、棉纸和麦金为色彩来源。 */
     --color-workbench-spine: #405c47;
@@ -187,6 +186,7 @@
     --color-accent: #405c47;
     --color-accent-hover: #334b3a;
     --color-accent-rgb: 64, 92, 71;
+    --color-primary-foreground: #fffefa;
     --color-info-rgb: 112, 96, 157;
     --color-success-rgb: 16, 185, 129;
     --color-warning-rgb: 245, 158, 11;
@@ -291,6 +291,7 @@
     --color-accent: #7EC8E3;
     --color-accent-hover: #6AB8D8;
     --color-accent-rgb: 126, 200, 227;
+    --color-primary-foreground: #0c2430;
     --color-info-rgb: 155, 142, 200;
     --color-success-rgb: 74, 222, 128;
     --color-warning-rgb: 251, 191, 36;
@@ -380,6 +381,7 @@
     --color-accent: #9B8EC8;
     --color-accent-hover: #8B7EB8;
     --color-accent-rgb: 155, 142, 200;
+    --color-primary-foreground: #20192d;
     --color-info-rgb: 123, 146, 192;
     --color-success-rgb: 77, 158, 114;
     --color-warning-rgb: 200, 146, 58;
@@ -467,6 +469,7 @@
     --color-accent: #7C8CFF;
     --color-accent-hover: #94A1FF;
     --color-accent-rgb: 124, 140, 255;
+    --color-primary-foreground: #10152c;
     --color-info-rgb: 90, 200, 250;
     --color-success-rgb: 137, 209, 133;
     --color-warning-rgb: 204, 167, 0;
@@ -720,7 +723,7 @@
   }
 
   /* ===== 旧按钮类已废弃 — 请使用 <Button> 组件 (src/components/ui/Button.tsx) ===== */
-  /* .btn-primary 和 .btn-ghost 已迁移至 Button.tsx 的 cva 变体系统 */
+  /* 按钮变体由 Button.tsx 声明，主按钮颜色仍由主题令牌提供。 */
 
   /* ===== 图标按钮 — 22px 尺寸，带增强悬停效果 ===== */
   .icon-btn {
@@ -864,14 +867,10 @@
     animation: agent-cursor-blink 1s steps(1) infinite;
   }
 
-  /* 品牌文字跟随主题前景色，图标保留定稿色。 */
-  .brand-gradient {
-    color: var(--color-text);
-  }
-
   /* 主按钮用主题强调色，状态反馈保持在按钮自身的边界内。 */
   .btn-primary {
     background: var(--color-accent);
+    color: var(--color-primary-foreground);
     box-shadow: var(--shadow-sm);
   }
 

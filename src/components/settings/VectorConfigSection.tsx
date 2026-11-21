@@ -150,10 +150,10 @@ export default function VectorConfigSection() {
       </div>
 
       {/* ===== 开关控制区 ===== */}
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,17rem),1fr))] gap-3">
         {/* 向量模块 */}
         <div
-          className="p-4 rounded-lg border"
+          className="nf-settings-panel"
           style={{ borderColor: 'var(--color-border)' }}
         >
           <div className="flex items-center justify-between mb-2">
@@ -181,7 +181,7 @@ export default function VectorConfigSection() {
 
         {/* 向量模型 */}
         <div
-          className="p-4 rounded-lg border"
+          className="nf-settings-panel"
           style={{ borderColor: 'var(--color-border)' }}
         >
           <div className="flex items-center justify-between mb-2">

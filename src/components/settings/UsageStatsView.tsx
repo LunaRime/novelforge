@@ -395,7 +395,7 @@ function GlobalUsageView({ data, loading, error, onRetry }: {
   if (data.projects.length === 0) return <EmptyState onRetry={onRetry} message={t('usage.globalNoProjects')} />
   return (
     <div className="space-y-3">
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
         <StatCard icon={<Sparkles size={14} />} label={t('usage.totalCalls')} value={formatNumber(data.total.calls)} sub={t('usage.tabGlobal')} />
         <StatCard icon={<Gauge size={14} />} label={t('usage.totalCost')} value={formatCost(data.total.cost)} sub={t('usage.tabGlobal')} />
         <StatCard icon={<Layers3 size={14} />} label={t('usage.cachedTokens')} value={formatCompact(data.total.cachedTokens)} sub="tokens" tone="success" />
@@ -428,9 +428,9 @@ function StatCard({ icon, label, value, sub, tone = 'accent' }: {
 }) {
   const color = tone === 'success' ? 'var(--color-success)' : tone === 'muted' ? 'var(--color-text-muted)' : 'var(--color-accent)'
   return (
-    <div className="rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
+    <div className="nf-settings-panel">
       <div className="flex items-center gap-1.5 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-        <span style={{ color }}>{icon}</span>
+        <span className="grid size-7 shrink-0 place-items-center rounded-md bg-[var(--color-editor-bg)]" style={{ color }}>{icon}</span>
         <span className="truncate">{label}</span>
       </div>
       <div className="mt-1 text-lg font-semibold tabular-nums" style={{ color: 'var(--color-text)' }}>{value}</div>
@@ -441,11 +441,11 @@ function StatCard({ icon, label, value, sub, tone = 'accent' }: {
 
 function SectionCard({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
   return (
-    <section className="rounded-lg p-3" style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}>
-      <div className="mb-2 flex items-center justify-between gap-2">
+    <section className="nf-settings-panel">
+      <header className="nf-settings-resource-bar mb-3">
         <h3 className="text-xs font-semibold" style={{ color: 'var(--color-text)' }}>{title}</h3>
         {action}
-      </div>
+      </header>
       {children}
     </section>
   )

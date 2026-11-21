@@ -1,4 +1,4 @@
-/* Only the manuscript surface inherits the light-paper palette. */
+/* 恒亮配色只作用于实际稿纸和预览稿纸，周围控件仍跟随主题。 */
 :root[data-v3-prose-paper='warm'] .nf-prose-editor :is(.nf-prose-heading, .cm-scroller),
 .nf-writing-appearance-preview[data-v3-preview-paper='warm'] .nf-writing-preview-paper {
   --color-editor-bg: var(--color-prose-warm-bg, var(--color-panel));
@@ -21,13 +21,29 @@
   align-items: center;
   justify-content: space-between;
   flex-wrap: wrap;
-  gap: 4px 10px;
+  gap: 6px 10px;
+  padding: 0.5rem 0.625rem;
   font-size: var(--text-micro);
   color: var(--color-text-secondary);
 }
 
+.nf-writing-setting-row + .nf-writing-setting-row { border-block-start: 1px solid var(--color-border); }
+
+.nf-writing-settings { container: writing-settings / inline-size; }
+
+.nf-writing-settings-layout {
+  display: grid;
+  align-items: start;
+  gap: 0.75rem;
+}
+
+.nf-writing-settings-fields {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+
 .nf-writing-appearance-preview {
-  padding: 8px;
+  padding: 0.75rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   background: var(--color-panel);
@@ -36,7 +52,10 @@
 
 .nf-writing-preview-paper {
   margin: 0 auto;
-  padding: 8px 12px;
+  position: relative;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-block-start: 2px solid var(--color-workbench-fold);
   color: var(--color-text);
   background: var(--color-editor-bg);
   font-family: var(--font-writing);
@@ -56,7 +75,6 @@
   background: var(--color-sidebar);
 }
 
-@media (max-width: 720px) {
-  .nf-settings-navigation { width: clamp(114px, 25vw, 180px); }
-  .nf-settings-content { padding: 12px; }
+@container writing-settings (min-width: 45rem) {
+  .nf-writing-settings-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }
 }

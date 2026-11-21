@@ -187,8 +187,7 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
             {/* 行卡片壳（2026-10-01 用户要求）：与「其他」卡 / 编辑卡 / 添加卡同族的圆角描边
                 （行片本身只有 hover 底色，单看与卡片家族不统一）。展开的编辑卡仍是独立的 accent 描边卡。 */}
             <div
-              className="rounded-xl overflow-hidden mx-1 mb-1.5"
-              style={{ border: '1px solid var(--color-border)', backgroundColor: 'var(--color-panel)' }}
+              className="mx-1 mb-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-editor-bg)] p-1"
             >
             <MenuRow
               title={name}
@@ -254,15 +253,14 @@ export function ProviderRowList({ orphans }: { orphans?: ModelProfile[] }) {
           <AddProviderCard onCancel={() => setAdding(false)} onDone={announceAdded} />
         </div>
       ) : isEmpty ? (
-        <div
-          className="flex flex-col items-center justify-center py-16 gap-3 rounded-xl"
-          style={{ border: '1.5px dashed var(--color-border)' }}
-        >
-          <Zap size={36} style={{ color: 'var(--color-text-muted)', opacity: 0.5 }} />
+        <div className="flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-[var(--color-border)] bg-[var(--color-editor-bg)] px-4 py-8 text-center">
+          <span className="grid size-10 place-items-center rounded-lg bg-[var(--color-panel)] text-[var(--color-accent)]">
+            <Zap size={18} aria-hidden="true" />
+          </span>
           <span className="text-sm" style={{ color: 'var(--color-text-muted)' }}>
             {t('model.noLabelConfig').replace('{label}', '')}
           </span>
-          <Button size="sm" variant="outline" onClick={openAdd}>
+          <Button className="min-h-8" onClick={openAdd}>
             <Plus size={13} />
             {t('provider.addVendor')}
           </Button>

@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
+import appIcon from '../../../build/icon.png'
 import {
   X, Trash2, Check, Save, Globe, Cpu, Database,
   Type, Settings2, MessageSquare,
   ExternalLink, RefreshCw, LogOut,
-  BookMarked, Plug, BarChart3, Search,
+  BookMarked, Plug, BarChart3, Search, CircleHelp, Terminal,
 } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
 import { confirm } from '../ui/Confirm'
@@ -31,7 +32,6 @@ import { ModelListSection } from './ModelListSection'
 import { ModelRoutingTierDialog } from './ModelRoutingTierDialog'
 import { Label } from '../ui/Label'
 import { Select, SelectTrigger, SelectContent, SelectItem, SelectValue } from '../ui/Select'
-import { cn } from '../../lib/utils'
 import { ipc } from '../../services/ipc-client'
 import { renderLog } from '../../services/render-logger'
 import { toast } from '../ui/Toast'
@@ -46,10 +46,17 @@ import UsageStatsView from './UsageStatsView'
 import ShortcutsSection from './ShortcutsSection'
 import WritingAppearanceSection from './WritingAppearanceSection'
 import { useUpdateStore } from '../../stores/update-store'
+import './settings-window.css'
 
 // ==================== 分类定义 ====================
 
-type SettingsSection = 'llm' | 'usage' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'file' | 'dev' | 'about'
+type SettingsSection = 'llm' | 'usage' | 'embedding' | 'proxy' | 'editor' | 'prompts' | 'skills' | 'mcp' | 'dev' | 'about'
+
+const settingsGroups = [
+  { label: 'settings.groupWriting', sections: ['editor', 'prompts', 'skills'] },
+  { label: 'settings.groupConnections', sections: ['llm', 'embedding', 'mcp', 'proxy'] },
+  { label: 'settings.groupApplication', sections: ['usage', 'dev', 'about'] },
+] satisfies ReadonlyArray<{ label: TextKey; sections: SettingsSection[] }>
 
 interface SectionItem {
   id: SettingsSection
@@ -68,8 +75,8 @@ function getSections(t: (key: TextKey) => string): SectionItem[] {
     { id: 'prompts', label: t('settings.promptTemplates'), icon: <MessageSquare size={16} />, description: t('settings.promptTemplatesDesc') },
     { id: 'skills', label: t('settings.skills'), icon: <BookMarked size={16} />, description: t('settings.skillsDesc') },
     { id: 'mcp', label: t('settings.mcp'), icon: <Plug size={16} />, description: t('settings.mcpDesc') },
-    { id: 'dev', label: t('settings.developer'), icon: <Plug size={16} />, description: t('settings.developerDesc') },
-    { id: 'about', label: t('settings.about'), icon: <span style={{ color: 'var(--color-accent)', fontSize: 14 }}>?</span>, description: t('settings.aboutDesc') },
+    { id: 'dev', label: t('settings.developer'), icon: <Terminal size={16} />, description: t('settings.developerDesc') },
+    { id: 'about', label: t('settings.about'), icon: <CircleHelp size={16} />, description: t('settings.aboutDesc') },
   ]
 }
 
@@ -80,7 +87,7 @@ interface SettingsModalProps {
   onClose: () => void
 }
 
-/** 全屏设置弹窗 */
+/** 应用设置窗口，包含搜索、分区内容和未应用修改的关闭确认。 */
 export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const { t } = useTranslation()
   // 初始分区：支持 openSettings('llm') 深链；无指定或分区无效时回默认 llm
@@ -106,6 +113,7 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
   const visibleSections = normalizedQuery
     ? sections.filter((s) => `${s.label} ${s.description}`.toLowerCase().includes(normalizedQuery))
     : sections
+  const activeSection = sections.find(item => item.id === section)
 
   const dialogRef = useRef<HTMLDivElement>(null)
   useFocusTrap(dialogRef, open)
@@ -151,29 +159,19 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
     }
   }
 
-  // Esc 关闭：本组件自绘全屏模态（未走 ui/Dialog / Radix），此前**没有** Esc ——
-  // 键盘用户只能靠 Tab 找到 × 或点遮罩。hooks 必须在 `if (!open) return null` 之前。
+  // 遮罩阻挡背景操作。关闭按钮和 Esc 共用未应用修改的确认流程。
   useEscapeKey(requestClose, open && !confirmDiscard)
 
   if (!open) return null
 
   return (
-    <div
-      className="fixed inset-0 z-[var(--z-modal)] flex items-center justify-center"
-      style={{ backgroundColor: 'var(--color-backdrop)', backdropFilter: 'blur(4px)' }}
-      // 遮罩不再关闭：设置页承载供应商密钥/代理/并发/自动化等未保存草稿，
-      // 误点一下全丢（审计 P0-5）。关闭只走 × 或 Esc 这两个显式动作。
-    >
+    <div className="nf-settings-backdrop">
       <div
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={t('settings.title')}
-        className="relative flex w-[min(90vw,960px)] h-[min(85vh,720px)] rounded-[10px] overflow-hidden shadow-[var(--shadow-popover)]"
-        style={{
-          backgroundColor: 'var(--color-editor-bg)',
-          border: '1px solid var(--color-border)',
-        }}
+        className="nf-settings-window"
         onKeyDown={(e) => {
           if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') {
             e.preventDefault()
@@ -182,152 +180,92 @@ export default function SettingsModal({ open, onClose }: SettingsModalProps) {
           }
         }}
       >
-        {/* 左侧导航 */}
-        <aside
-          className="nf-settings-navigation flex w-[200px] flex-shrink-0 flex-col gap-1 overflow-y-auto py-5"
-          style={{
-            backgroundColor: 'var(--color-sidebar)',
-            borderRight: '1px solid var(--color-border)',
-          }}
-        >
-          {/* 标题 */}
-          <div className="flex items-center gap-2 px-4 mb-4">
-            <Settings2 size={16} style={{ color: 'var(--color-accent)' }} />
-            <span className="text-sm font-semibold" style={{ color: 'var(--color-text)' }}>
-              {t('settings.title')}
-            </span>
-          </div>
-
-          {/* 设置搜索：只做分区级过滤（二级页内容仍由各分区自己承载），
-              Cmd+F 直接从任意位置聚焦到这里 */}
-          <div className="px-2 mb-3">
-            <div
-              className="flex items-center gap-1.5 px-2 rounded-md"
-              style={{
-                height: 28,
-                border: '1px solid var(--color-border)',
-                backgroundColor: 'var(--color-bg)',
-              }}
-            >
-              <Search size={12} style={{ color: 'var(--color-text-muted)', flexShrink: 0 }} />
-              <input
-                ref={searchRef}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder={t('settings.searchPlaceholder')}
-                aria-label={t('settings.searchPlaceholder')}
-                className="flex-1 min-w-0 bg-transparent outline-none"
-                style={{ color: 'var(--color-text)', fontSize: 11 }}
-              />
+        <header className="nf-settings-title">
+          <Settings2 size={17} aria-hidden="true" />
+          <h2>{t('settings.title')}</h2>
+          <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0"
+            onClick={requestClose} aria-label={t('action.close')} title={t('action.close')}>
+            <X size={16} aria-hidden="true" />
+          </Button>
+        </header>
+        <div className="nf-settings-body">
+          <aside className="nf-settings-navigation">
+            {/* Ctrl/Cmd+F 聚焦搜索框，搜索结果只匹配设置分区。 */}
+            <div className="nf-settings-search">
+              <Search size={14} aria-hidden="true" />
+              <input ref={searchRef} value={query} onChange={e => setQuery(e.target.value)}
+                placeholder={t('settings.searchPlaceholder')} aria-label={t('settings.searchPlaceholder')} />
               {query && (
-                <button
-                  type="button"
-                  onClick={() => setQuery('')}
-                  aria-label={t('action.close')}
-                  style={{ border: 'none', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 0 }}
-                >
-                  <X size={11} />
-                </button>
+                <Button variant="ghost" type="button" size="icon" className="size-8 shrink-0"
+                  aria-label={t('settings.clearSearch')} title={t('settings.clearSearch')}
+                  onClick={() => { setQuery(''); searchRef.current?.focus() }}>
+                  <X size={14} aria-hidden="true" />
+                </Button>
               )}
             </div>
-          </div>
-
-          {visibleSections.map((s) => (
-            <button
-              key={s.id}
-              onClick={() => setSection(s.id)}
-              className={cn(
-                'flex items-center gap-2.5 mx-2 px-3 py-2.5 rounded-lg text-left text-sm transition-colors',
-                section === s.id
-                  ? 'text-[var(--color-text)]'
-                  : 'text-[var(--color-text-secondary)] hover:bg-[var(--color-hover)] hover:text-[var(--color-text)]',
+            <nav className="nf-settings-sections" aria-label={t('settings.title')}>
+              {settingsGroups.map(group => {
+                const items = group.sections.flatMap(id => visibleSections.filter(item => item.id === id))
+                if (items.length === 0) return null
+                return (
+                  <div className="nf-settings-nav-group" key={group.label}>
+                    <h3>{t(group.label)}</h3>
+                    {items.map(item => (
+                      <button key={item.id} type="button" onClick={() => setSection(item.id)}
+                        className="nf-settings-section" aria-current={section === item.id ? 'page' : undefined}>
+                        <span className="flex shrink-0" aria-hidden="true">{item.icon}</span>
+                        <span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                )
+              })}
+              {visibleSections.length === 0 && (
+                <p className="p-2 text-micro text-[var(--color-text-muted)]">{t('settings.searchEmpty')}</p>
               )}
-              style={section === s.id
-                ? { background: 'var(--color-active)', boxShadow: 'inset 2px 0 0 var(--color-accent)' }
-                : undefined}
-            >
-              {s.icon}
-              {s.label}
-            </button>
-          ))}
-          {visibleSections.length === 0 && (
-            <div className="px-4 py-3 text-micro" style={{ color: 'var(--color-text-muted)' }}>
-              {t('settings.searchEmpty')}
-            </div>
-          )}
-        </aside>
+            </nav>
+          </aside>
+          <div className="flex min-w-0 min-h-0 flex-1 flex-col overflow-hidden">
+            <header className="nf-settings-section-heading">
+              <h3 className="text-lg font-semibold text-[var(--color-text)]">{activeSection?.label}</h3>
+              <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">{activeSection?.description}</p>
+            </header>
 
-        {/* 右侧内容区 */}
-        <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
-          {/* 区域标题栏 */}
-          <div
-            className="flex flex-shrink-0 items-center justify-between gap-2 px-4 py-4 sm:px-6"
-            style={{ borderBottom: '1px solid var(--color-border)' }}
-          >
-            <div>
-              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text)' }}>
-                {sections.find((s) => s.id === section)?.label}
-              </h2>
-              <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-muted)' }}>
-                {sections.find((s) => s.id === section)?.description}
-              </p>
+            {/* 区域内容 */}
+            <div className="nf-settings-content" key={section}>
+              {section === 'llm' && (
+                <div className="nf-settings-stack">
+                  {/* 供应商账户集中管理凭据和模型，下面独立配置调度与运行策略。 */}
+                  <ModelListSection />
+                  <section className="nf-settings-panel">
+                    <ModelRoutingSection />
+                  </section>
+                  <section className="nf-settings-panel">
+                    <ConcurrencySection />
+                  </section>
+                  <section className="nf-settings-panel">
+                    <AutomationSection />
+                  </section>
+                  <section className="nf-settings-panel">
+                    <ContextCompactionSection />
+                  </section>
+                </div>
+              )}
+              {section === 'usage' && <UsageStatsView />}
+              {section === 'embedding' && <VectorConfigSection />}
+              {section === 'proxy' && <section className="nf-settings-panel"><ProxySection /></section>}
+              {section === 'editor' && (
+                <EditorSection appearance={appearance} appearanceDirty={appearanceDirty} onApplyAppearance={applyAppearance}
+                  onChangeAppearance={change => setAppearanceChanges(previous => ({ ...previous, ...change }))} />
+              )}
+              {section === 'prompts' && <PromptSettings />}
+              {section === 'skills' && <SkillsSettings />}
+              {section === 'mcp' && <MCPSettings />}
+              {section === 'dev' && <section className="nf-settings-panel"><DeveloperModeSection /></section>}
+              {section === 'about' && <AboutSection />}
             </div>
-            <button
-              type="button"
-              onClick={requestClose}
-              aria-label={t('action.close')}
-              title={t('action.close')}
-              className="icon-btn size-[32px] shrink-0 rounded-lg"
-              style={{ color: 'var(--color-text-muted)' }}
-            >
-              <X size={16} />
-            </button>
           </div>
-
-          {/* 区域内容 */}
-          <div className="nf-settings-content flex-1 overflow-y-auto px-8 py-6">
-            {section === 'llm' && (
-              <>
-                {/* 模型（一体卡，v2）：供应商凭据与其名下模型（生成/向量混排）同卡管理；
-                    账户的新建走「添加供应商」（目录/自定义两模式），编辑/删除在卡头 */}
-                <ModelListSection />
-                {/* 模型路由 — 三层调度（此前功能存在但无 UI 入口，静默失效） */}
-                <div className="mt-6">
-                  <ModelRoutingSection />
-                </div>
-                {/* 并发控制（此前功能存在但无 UI 入口） */}
-                <div className="mt-6">
-                  <ConcurrencySection />
-                </div>
-                {/* 写作自动化（D 档）：触发器 → 执行 → 三态处置 */}
-                <div className="mt-6">
-                  <AutomationSection />
-                </div>
-                {/* 上下文与压缩（§7.1-C2）：三个保留旋钮，只影响之后的压缩 */}
-                <div className="mt-6">
-                  <ContextCompactionSection />
-                </div>
-              </>
-            )}
-            {section === 'usage' && <UsageStatsView />}
-            {section === 'embedding' && (
-              <>
-                <VectorConfigSection />
-                {/* 嵌入模型管理已并入「AI 模型」段的一体卡（2026-09-28 v2：生成/向量同账户混排，不分段重复维护） */}
-              </>
-            )}
-            {section === 'proxy' && <ProxySection />}
-            {section === 'editor' && (
-              <EditorSection appearance={appearance} appearanceDirty={appearanceDirty} onApplyAppearance={applyAppearance}
-                onChangeAppearance={change => setAppearanceChanges(previous => ({ ...previous, ...change }))} />
-            )}
-            {section === 'prompts' && <PromptSettings />}
-            {section === 'skills' && <SkillsSettings />}
-            {section === 'mcp' && <MCPSettings />}
-            {section === 'dev' && <DeveloperModeSection />}
-            {section === 'about' && <AboutSection />}
-          </div>
-        </main>
+        </div>
       </div>
       <Dialog open={confirmDiscard} onOpenChange={setConfirmDiscard}>
         <DialogContent preventOutsideClose onCloseAutoFocus={event => {
@@ -751,8 +689,12 @@ function EditorSection({ appearance, appearanceDirty, onChangeAppearance, onAppl
   const { t, locale } = useTranslation()
 
   return (
-    <div className="max-w-[640px] space-y-5">
-      {/* 界面主题（用户建议 5）：卡片网格，与右侧图标栏底部的主题菜单同源 */}
+    <div className="max-w-3xl space-y-6">
+      {/* 正文工具栏可以直达本页，排版预览放在编辑器偏好的首位。 */}
+      <WritingAppearanceSection appearance={appearance} dirty={appearanceDirty}
+        onChange={onChangeAppearance} onApply={onApplyAppearance} />
+
+      {/* 主题卡片与工作台标题栏的主题菜单共用主题设置。 */}
       <ThemeSection />
 
       {/* 界面语言 */}
@@ -802,9 +744,6 @@ function EditorSection({ appearance, appearanceDirty, onChangeAppearance, onAppl
         </div>
         <FontSelect value={writingFont} onChange={setWritingFont} />
       </div>
-
-      <WritingAppearanceSection appearance={appearance} dirty={appearanceDirty}
-        onChange={onChangeAppearance} onApply={onApplyAppearance} />
 
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-3">
@@ -884,7 +823,8 @@ function AboutSection() {
     <div className="space-y-6 max-w-[640px] p-2">
       {/* 品牌标识 */}
       <div className="flex flex-col items-center justify-center py-10 rounded-xl space-y-3" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
-        <h1 className="text-2xl font-bold brand-gradient tracking-wider">NovelForge</h1>
+        <img src={appIcon} width={52} height={52} alt="" />
+        <h3 className="text-2xl font-semibold text-[var(--color-text)]">NovelForge</h3>
         <p className="text-sm opacity-80" style={{ color: 'var(--color-text)' }}>v{__APP_VERSION__}</p>
         <p className="text-xs mt-1 leading-relaxed text-center max-w-[320px]" style={{ color: 'var(--color-text-muted)' }}>
           {t('about.slogan')}
@@ -899,9 +839,9 @@ function AboutSection() {
 
       {/* 项目介绍 */}
       <div className="space-y-3 rounded-lg p-4" style={{ backgroundColor: 'var(--color-sidebar)', border: '1px solid var(--color-border)' }}>
-        <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text)' }}>
+        <div className="text-xs leading-relaxed" style={{ color: 'var(--color-text)' }}>
           <MarkdownContent content={t('about.intro')} />
-        </p>
+        </div>
         <p className="text-xs leading-relaxed" style={{ color: 'var(--color-text-muted)' }}>
           {t('about.opensource')}
         </p>

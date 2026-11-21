@@ -82,9 +82,9 @@ export const noticeTexts = {
 
   // ===== theme.* / learning.* —— 仅新增（既有 key 在 ui.ts） =====
   'theme.appearance': { 'zh-CN': '界面主题', 'en-US': 'Appearance', 'ru-RU': 'Оформление' },
-  'theme.appearanceDesc': { 'zh-CN': '选中即生效；与右侧图标栏底部的主题菜单同源，改一处两处同步', 'en-US': 'Applies immediately; same source as the theme menu at the bottom of the right activity bar', 'ru-RU': 'Применяется сразу; тот же источник, что и меню темы на правой панели' },
+  'theme.appearanceDesc': { 'zh-CN': '选择主题后立即生效，并同步到工作台顶栏。', 'en-US': 'Changes apply immediately and are reflected in the workbench header.', 'ru-RU': 'Тема меняется сразу и отображается в верхней панели.' },
   'theme.applied': { 'zh-CN': '当前主题', 'en-US': 'Current', 'ru-RU': 'Текущая' },
-  'theme.palettePreview': { 'zh-CN': '当前主题的配色预览', 'en-US': 'Palette preview in the current theme', 'ru-RU': 'Предпросмотр палитры в текущей теме' },
+  'theme.palettePreview': { 'zh-CN': '主题配色预览', 'en-US': 'Theme palette preview', 'ru-RU': 'Предпросмотр палитры темы' },
   'learning.summaryShort': { 'zh-CN': '默认关闭；只影响之后的压缩，可随时重置。', 'en-US': 'Off by default; affects future compactions only and can be reset anytime.', 'ru-RU': 'По умолчанию выключено; влияет только на будущие сжатия и сбрасывается в любой момент.' },
   'learning.signals': { 'zh-CN': '学习信号：跳过 / 硬截断 / 保真缺失 / 用户移除', 'en-US': 'Signals: skips / hard truncations / fidelity misses / user reverts', 'ru-RU': 'Сигналы: пропуски / обрезка / потери точности / отмены' },
   'learning.effect': { 'zh-CN': '调整范围：仅「最小有效降幅」的倍率（±50% 以内），并把学到的保留/省略要求追加到摘要提示。', 'en-US': 'Scope: only the minimum-reduction multiplier (within ±50%), plus learned keep/omit requirements appended to the summary prompt.', 'ru-RU': 'Область: только множитель минимального сокращения (±50%) и выученные требования к сводке.' },

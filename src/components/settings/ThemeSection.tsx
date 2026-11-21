@@ -1,15 +1,4 @@
-/**
- * ThemeSection — 设置 → 编辑器的「界面主题」分区（用户建议 5 · docs/ui-6items-plan.md §2.5）。
- *
- * 与右侧图标栏底部的主题菜单**同源**：同一份主题元数据（`lib/theme-meta.ts`：图标/顺序/名称）、
- * 同一个 store（`useThemeStore`）、同一个圆形扩散过渡（`lib/theme-transition.ts`）。卡片点选**立即生效**
- * （主题是本地视图偏好，与界面字体一样不走本页的「保存」）。
- *
- * ⚠️ 预览条只准用 `var(--color-*)`（color-token-standard 一）：这里拼的是**当前主题**的
- * 「画布 / 活动栏 / 强调」三色，**不硬编码四套主题的色值**（那正是取色纪律禁止的写法）。
- * 取这三色而不是 `--color-panel` / `--color-sidebar`：后两者在四套主题块里**逐一同值**，
- * 拼在一根条上会是两段同色（色值只在 src/index.css 的主题块里定义，此处不复述）。
- */
+/** 主题卡片复用顶栏菜单的元数据和切换逻辑。配色预览各自应用主题类。 */
 import { Check } from 'lucide-react'
 import { useThemeStore } from '../../stores/theme-store'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -29,7 +18,6 @@ export default function ThemeSection() {
         </p>
       </div>
 
-      {/* 2×2 网格：设置弹窗内容区约 392px（max-w-md），四列会让俄语主题名截断 */}
       <div className="grid grid-cols-2 gap-2.5">
         {THEME_ORDER.map((id) => {
           const Icon = THEME_ICONS[id]
@@ -44,10 +32,9 @@ export default function ThemeSection() {
               aria-label={t('theme.label').replace('{theme}', name)}
               data-theme-card={id}
               data-active={active ? 'true' : 'false'}
-              className="flex flex-col gap-2 rounded-lg p-2.5 text-left transition-colors hover:bg-[var(--color-hover)]"
+              className="flex cursor-pointer flex-col gap-2.5 rounded-lg p-3 text-left"
               style={{
                 backgroundColor: 'var(--color-panel)',
-                // 选中态 = accent 描边 + 右上角勾（与图标栏菜单的「选中项 accent 文字 + 勾」同一语言）
                 border: `1px solid ${active ? 'var(--color-accent)' : 'var(--color-border)'}`,
               }}
             >
@@ -69,17 +56,15 @@ export default function ThemeSection() {
                 )}
               </span>
 
-              {/* 三色预览条：画布 / 活动栏 / 强调 —— 当前主题的令牌，表达「哪一类配色」。
-                  ⚠️ 四张卡都用**当前主题**的 token 渲染（不是各卡渲染各自主题），
-                  故 title 只说「当前主题的配色预览」，不暗示逐主题真预览 */}
+              {/* 只给预览条应用主题类，按钮的焦点和选中态仍遵循当前主题。 */}
               <span
                 aria-hidden
                 title={t('theme.palettePreview')}
-                className="flex w-full h-2 overflow-hidden rounded-full"
+                className={`${id} flex h-4 w-full overflow-hidden rounded-sm`}
                 style={{ border: '1px solid var(--color-border)' }}
               >
                 <span className="flex-1" style={{ backgroundColor: 'var(--color-canvas)' }} />
-                <span className="flex-1" style={{ backgroundColor: 'var(--color-activity-bar)' }} />
+                <span className="flex-1" style={{ backgroundColor: 'var(--color-editor-bg)' }} />
                 <span className="flex-1" style={{ backgroundColor: 'var(--color-accent)' }} />
               </span>
             </button>
