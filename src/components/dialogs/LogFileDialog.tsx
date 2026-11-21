@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CalendarDays, Check, ChevronRight, Copy, FileText, FolderOpen, ListEnd, ListStart, RefreshCw, ScrollText, Search } from 'lucide-react'
+import { CalendarDays, Check, ChevronRight, Copy, FileText, FolderOpen, ListEnd, ListStart, RefreshCw, ScrollText, Search, X } from 'lucide-react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import { getCurrentLogEnv } from '../../services/render-logger'
@@ -8,7 +8,7 @@ import { SortDirectionIcon } from '../ui/ActionIcons'
 import { Button } from '../ui/Button'
 import { FilterButtons } from '../ui/ChoiceControls'
 import CountBadge from '../ui/CountBadge'
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/Dialog'
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/Dialog'
 import { EmptyState } from '../ui/EmptyState'
 import { Input } from '../ui/Input'
 import { Spinner } from '../ui/Spinner'
@@ -122,19 +122,24 @@ export default function LogFileDialog({ open, onOpenChange }: { open: boolean; o
       if (!next) { setQuery(''); setCopied(false); setFileResult(undefined); setListState('loading') }
       onOpenChange(next)
     }}>
-      <DialogContent className="nf-log-file-dialog">
+      <DialogContent className="nf-log-file-dialog" hideCloseButton>
         <DialogHeader className="nf-log-file-header">
           <div className="flex min-w-0 items-center gap-3">
             <span className="nf-log-file-mark"><ScrollText size={18} aria-hidden="true" /></span>
             <div><DialogTitle>{t('log.title')}</DialogTitle><DialogDescription>{t('log.fileHint')}</DialogDescription></div>
           </div>
-          <div className="flex flex-wrap items-center gap-1">
+          <div className="nf-log-file-header-actions">
             <FilterButtons size="sm" value={env} onChange={value => { setEnv(value); setFileName(''); setQuery('') }}
               items={[{ value: 'dev', label: t('log.envDev') }, { value: 'release', label: t('log.envRelease') }]} />
             <Button variant="ghost" size="icon" onClick={() => { setListState('loading'); setRefresh(value => value + 1) }}
               title={t('log.refresh')} aria-label={t('log.refresh')}><RefreshCw size={15} aria-hidden="true" /></Button>
             <Button variant="ghost" size="icon" onClick={() => void openDir()}
               title={t('log.openDir')} aria-label={t('log.openDir')}><FolderOpen size={15} aria-hidden="true" /></Button>
+            {/* 关闭按钮和其他工具共用标题栏的中线。 */}
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" className="nf-log-file-close"
+                title={t('dialog.close')} aria-label={t('dialog.close')}><X size={16} aria-hidden="true" /></Button>
+            </DialogClose>
           </div>
         </DialogHeader>
 

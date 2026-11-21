@@ -23,9 +23,18 @@
 .nf-log-file-header {
   flex-wrap: wrap;
   justify-content: space-between;
-  padding-inline-end: 3.5rem;
   background: var(--color-canvas);
 }
+
+.nf-log-file-header-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-inline-start: auto;
+}
+
+.nf-log-file-close { margin-inline-start: 0.25rem; }
 
 .nf-log-file-mark {
   display: grid;
