@@ -99,17 +99,15 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
 
   // ===== 条件渲染 =====
 
-  // 侧栏为「主页」时，中间区域显示欢迎页（有活跃 Tab 时优先显示 Tab 内容）
-  if (sidebarView === 'home' && !activeTab) {
+  // 主页与无项目空态共用欢迎页。知识库保留自己的未打开项目提示。
+  if (!activeTab && (sidebarView === 'home' || (!currentProject && sidebarView !== 'knowledge'))) {
     return (
       <WelcomePage
-        onNewProject={() => {
-          useLayoutStore.getState().openNewProject()
-        }}
+        onNewProject={onNewProject}
         onOpenProject={async () => {
           const folder = await ipc.invoke('dialog:select-folder')
           if (folder) {
-            useProjectStore.getState().openProject(folder)
+            await useProjectStore.getState().openProject(folder)
           }
         }}
         onImportNovel={() => {
@@ -130,28 +128,6 @@ export default function EditorArea({ onNewProject }: EditorAreaProps) {
   // 残留的其他部件 Tab 不抢占（knowledgeTabActive 仅在用户主动点击 Tab 后置真）
   if (sidebarView === 'knowledge' && !knowledgeTabActive) {
     return <KnowledgeOverview section={section} onSectionChange={selectKnowledgeSection} />
-  }
-
-  // 未打开项目时显示欢迎页（有活跃 Tab 时优先显示 Tab 内容，如项目详情 Tab）
-  if (!currentProject && !activeTab) {
-    return (
-      <WelcomePage
-        onNewProject={onNewProject}
-        onOpenProject={async () => {
-          const folder = await ipc.invoke('dialog:select-folder')
-          if (folder) {
-            useProjectStore.getState().openProject(folder)
-          }
-        }}
-        onImportNovel={() => {
-          useLayoutStore.getState().openImportNovel()
-        }}
-        onOpenSettings={() => {
-          useLayoutStore.getState().openSettings()
-        }}
-        onStartCreate={() => useLayoutStore.getState().openNewProject()}
-      />
-    )
   }
 
   // 有项目但没有打开的 Tab
