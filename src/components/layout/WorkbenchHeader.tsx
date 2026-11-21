@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Focus, PanelLeft, Search, Sparkles, Zap } from 'lucide-react'
+import { Focus, PanelLeft, Search, Sparkles } from 'lucide-react'
 import { useShallow } from 'zustand/shallow'
 import appIcon from '../../../build/icon.png'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -24,9 +24,9 @@ export default function WorkbenchHeader() {
   const projectName = useProjectStore(state => state.currentProject?.name)
   const openPalette = useCommandStore(state => state.openPalette)
   const shortcut = useShortcutStore(state => formatBinding(shortcutBinding('command-palette', state.bindings)))
-  const { focusMode, sidebarOpen, bottomPanelOpen, aiPanelOpen } = useLayoutStore(useShallow(state => ({
+  const { focusMode, sidebarOpen, aiPanelOpen } = useLayoutStore(useShallow(state => ({
     focusMode: state.focusMode, sidebarOpen: state.sidebarOpen,
-    bottomPanelOpen: state.bottomPanelOpen, aiPanelOpen: state.aiPanelOpen,
+    aiPanelOpen: state.aiPanelOpen,
   })))
   const layout = useLayoutStore.getState()
   const focusTitle = t(focusMode ? 'focus.exit' : 'focus.enter')
@@ -53,11 +53,6 @@ export default function WorkbenchHeader() {
             <Button type="button" variant="ghost" size="icon" className="nf-workbench-switch size-8" data-workbench-toggle="sidebar"
               aria-expanded={sidebarOpen} aria-label={t('command.toggleSidebar')} title={t('command.toggleSidebar')} onClick={layout.toggleSidebar}>
               <PanelLeft size={16} aria-hidden="true" />
-            </Button>
-            <Button type="button" variant="ghost" className="nf-workbench-switch" data-workbench-toggle="runtime"
-              aria-expanded={bottomPanelOpen} aria-label={t('command.toggleBottom')} title={t('command.toggleBottom')} onClick={layout.toggleBottomPanel}>
-              <Zap size={16} aria-hidden="true" />
-              <span className="nf-workbench-action-label">{t('panel.tasks')}</span>
             </Button>
             <Button type="button" variant="ghost" className="nf-workbench-switch" data-workbench-toggle="companion"
               aria-expanded={aiPanelOpen} aria-label={t('command.toggleAgent')} title={t('command.toggleAgent')} onClick={layout.toggleAIPanel}>

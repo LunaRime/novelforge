@@ -43,7 +43,8 @@ async function mount(strict = false) {
   await flush(() => root.render(strict ? <StrictMode><WorldBuildingEditor /></StrictMode> : <WorldBuildingEditor />))
 }
 function card(description: string) {
-  const found = [...host.querySelectorAll<HTMLElement>('[title]')].find(node => node.title.endsWith(description))
+  const found = [...host.querySelectorAll<HTMLLIElement>('li')].find(node =>
+    node.querySelector('[data-tooltip]')?.getAttribute('data-tooltip')?.endsWith(description))
   expect(found, description).toBeDefined(); return found!
 }
 async function click(title: string) {

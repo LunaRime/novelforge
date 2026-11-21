@@ -31,12 +31,15 @@ export default function ArchitectureDocumentList({ documents, loading, extractin
         const StatusIcon = doc.extractionFailed ? AlertTriangle : doc.generated ? CheckCircle2 : Circle
         const statusColor = doc.extractionFailed ? 'var(--color-error)' : doc.generated ? 'var(--color-success)' : 'var(--color-text-muted)'
         return (
-          <li key={doc.key} title={doc.description}
+          <li key={doc.key}
             className="flex flex-wrap items-center gap-1 rounded-lg border bg-[var(--color-panel)] p-1"
             style={{ borderColor: doc.extractionFailed ? statusColor : 'var(--color-border)', opacity: loading ? 0.6 : 1 }}>
-            <button type="button" aria-label={doc.label} onClick={() => onOpen(doc.key, doc.label)}
-              className="flex min-h-11 min-w-0 flex-1 items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-[var(--color-hover)]">
-              <span className="shrink-0 text-[var(--color-text-secondary)]">{renderIcon(doc.iconName, 16)}</span>
+            <button type="button" aria-label={doc.label} data-tooltip={doc.description} onClick={() => onOpen(doc.key, doc.label)}
+              className="flex min-h-11 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left hover:bg-[var(--color-hover)]">
+              <span className="shrink-0 text-[var(--color-text-secondary)]" aria-hidden="true"
+                data-tooltip={doc.description} data-tooltip-side="right">
+                {renderIcon(doc.iconName, 16)}
+              </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-sm font-medium text-[var(--color-text)]">{doc.label}</span>
                 <span className="block text-xs text-[var(--color-text-muted)]">{doc.description}</span>

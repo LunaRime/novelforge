@@ -13,10 +13,16 @@
   overflow: hidden;
 }
 
+.nf-workbench [data-region='sidebar'],
+.nf-workbench [data-region='bottom'],
+.nf-workbench [data-region='ai'] {
+  background: var(--color-sidebar);
+  background-clip: padding-box;
+}
+
 .nf-workbench [data-region='editor'] {
   background: var(--color-editor-bg);
   border-color: var(--color-card-edge);
-  box-shadow: var(--color-card-shadow-strong);
 }
 
 .nf-workbench [data-region='ai'] {

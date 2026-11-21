@@ -1,10 +1,4 @@
 /* 搭档与任务共用页签样式，两边的滚动由各自的内容区负责。 */
-.nf-companion,
-.nf-task-drawer {
-  background: var(--color-sidebar);
-  border-radius: inherit;
-}
-
 .nf-companion {
   display: flex;
   flex-direction: column;

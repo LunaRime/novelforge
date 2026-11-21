@@ -2,7 +2,7 @@
  * GlobalTitleTooltip — 全局 title 属性现代化代理
  *
  * 将原生 `<title>` 悬停提示（浏览器默认样式）统一替换为现代化 Tooltip UI：
- * 毛玻璃背景、圆角、缩放渐显动画、视口边缘自动翻转。
+ * 图标按钮也可用 data-tooltip 声明提示，支持键盘聚焦和右侧定位。
  *
  * 工作原理（根源性设计——title 在 DOM 中**永不存活**）：
  * 1. 挂载时全量扫描 document，提取所有 [title] 文本存入 WeakMap 并移除属性
@@ -39,10 +39,8 @@ function extractTitle(el: Element): void {
 
 interface TipAnchor {
   text: string
-  /** 锚点：元素水平中心 */
-  x: number
-  /** 锚点：元素底部 */
-  y: number
+  rect: DOMRect
+  side: 'bottom' | 'right'
 }
 
 interface TipPos {
@@ -55,7 +53,7 @@ export default function GlobalTitleTooltip() {
   const [pos, setPos] = useState<TipPos | null>(null)
   const tipElRef = useRef<HTMLDivElement>(null)
   const timerRef = useRef<number>(0)
-  const titleElRef = useRef<HTMLElement | null>(null)
+  const titleElRef = useRef<Element | null>(null)
 
   // ===== 全局 title 提取与拦截（DOM 层根除原生 tooltip） =====
   // 观察器回调在 microtask 执行：主线程再忙，当前任务一结束就处理，
@@ -106,14 +104,29 @@ export default function GlobalTitleTooltip() {
       setPos(null)
     }
 
+    const schedule = (el: Element) => {
+      hide()
+      const text = el.getAttribute('data-tooltip') ?? titleStore.get(el)
+      if (!text) return
+      titleElRef.current = el
+      timerRef.current = window.setTimeout(() => {
+        if (!el.isConnected) return
+        setAnchor({
+          text,
+          rect: el.getBoundingClientRect(),
+          side: el.getAttribute('data-tooltip-side') === 'right' ? 'right' : 'bottom',
+        })
+      }, SHOW_DELAY)
+    }
+
     const handleMouseOver = (e: MouseEvent) => {
-      const target = e.target as Element | null
-      if (!target) return
+      const target = e.target
+      if (!(target instanceof Element)) return
       // 双源查找：WeakMap 记录（观察器已提取）或 DOM 上仍存的 title 属性
       // （观察器漏网兜底——mouseover 捕获是事件最早时机，同步移除可杜绝
       //   原生提示的任何计时窗口）
       let el: Element | null = target
-      while (el && !titleStore.has(el) && !el.hasAttribute('title')) {
+      while (el && !el.hasAttribute('data-tooltip') && !titleStore.has(el) && !el.hasAttribute('title')) {
         el = el.parentElement
       }
       // 防御性全链提取（2026-10-02）：把光标路径上仍存活的 title 一律剥入 titleStore——
@@ -128,16 +141,7 @@ export default function GlobalTitleTooltip() {
         if (el === current || current.contains(target)) return
       }
       if (!el) { hide(); return }
-      hide()
-      // 文本取 titleStore（提取已由观察器 / 上方全链提取完成）
-      const text = titleStore.get(el)
-      if (!text) return // 空 title 不显示（与原生行为一致）
-      titleElRef.current = el as HTMLElement
-      timerRef.current = window.setTimeout(() => {
-        const rect = el.getBoundingClientRect()
-        setAnchor({ text, x: rect.left + rect.width / 2, y: rect.bottom })
-        setPos(null) // 等待布局测量校正
-      }, SHOW_DELAY)
+      schedule(el)
     }
 
     const handleMouseOut = (e: MouseEvent) => {
@@ -150,14 +154,23 @@ export default function GlobalTitleTooltip() {
 
     // 滚动 / 窗口变化时隐藏（与原生 tooltip 行为一致）
     const hideOnViewportChange = () => hide()
+    const handleFocusIn = (e: FocusEvent) => {
+      const target = e.target
+      if (target instanceof Element && target.matches('[data-tooltip]:focus-visible')) schedule(target)
+    }
+    const handleFocusOut = (e: FocusEvent) => { if (e.target === titleElRef.current) hide() }
 
     document.addEventListener('mouseover', handleMouseOver, true)
     document.addEventListener('mouseout', handleMouseOut, true)
+    document.addEventListener('focusin', handleFocusIn)
+    document.addEventListener('focusout', handleFocusOut)
     window.addEventListener('scroll', hideOnViewportChange, true)
     window.addEventListener('resize', hideOnViewportChange)
     return () => {
       document.removeEventListener('mouseover', handleMouseOver, true)
       document.removeEventListener('mouseout', handleMouseOut, true)
+      document.removeEventListener('focusin', handleFocusIn)
+      document.removeEventListener('focusout', handleFocusOut)
       window.removeEventListener('scroll', hideOnViewportChange, true)
       window.removeEventListener('resize', hideOnViewportChange)
       cancelTimer()
@@ -174,11 +187,13 @@ export default function GlobalTitleTooltip() {
     const vw = window.innerWidth
     const vh = window.innerHeight
     const gap = 8
-    let left = anchor.x - w / 2
-    let top = anchor.y + gap // 默认显示在元素下方
+    const { rect, side } = anchor
+    let left = side === 'right' ? rect.right + gap : rect.left + (rect.width - w) / 2
+    let top = side === 'right' ? rect.top + (rect.height - h) / 2 : rect.bottom + gap
+    if (side === 'right' && left + w > vw - gap) left = rect.left - w - gap
+    if (side === 'bottom' && top + h > vh - gap) top = rect.top - h - gap
     left = Math.max(gap, Math.min(left, vw - w - gap))
-    if (top + h > vh - gap) top = anchor.y - h - gap // 下方放不下则翻转到上方
-    top = Math.max(gap, top)
+    top = Math.max(gap, Math.min(top, vh - h - gap))
     setPos({ left, top })
   }, [anchor])
 
