@@ -10,6 +10,7 @@
  * 重构后：工具栏只留「保存 + 更多」，其余低频操作进 ⋯ 菜单；四视图各自成段；
  * 长表单按分区组织出标题锚点。
  */
+import { formatBinding, shortcutBinding } from '../../stores/shortcut-store'
 import { describe, it, expect, afterEach, beforeEach, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
@@ -100,7 +101,7 @@ describe('CharacterEditor — 工具栏只留主操作 + 更多菜单', () => {
     const box = render()
 
     // 保存按钮已改图标（10-18 评审统一入口形态），靠 title 定位，不再有「保存」文字
-    const saveBtn = buttons(box).find((b) => b.title === t('tip.saveShortcut'))
+    const saveBtn = buttons(box).find((b) => b.title === t('tip.saveShortcut').replace('{shortcut}', formatBinding(shortcutBinding('save'))))
     expect(saveBtn).toBeTruthy()
     expect(moreButton(box)).toBeTruthy()
 

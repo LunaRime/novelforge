@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { ChevronDown, ChevronRight, Globe, FolderOpen, RotateCcw, AlertTriangle } from 'lucide-react'
 import {
@@ -235,6 +236,8 @@ function TemplateItem({
   return (
     <div
       className="rounded-xl overflow-hidden transition-colors"
+      // 已有覆盖写回其原范围，新模板优先在当前项目内保存。
+      onKeyDown={event => handleSaveShortcut(event, source === 'global' || !projectPath ? handleSaveGlobal : handleSaveProject, isExpanded && !saving)}
       style={{
         border: `1px solid ${isExpanded ? 'var(--color-accent)' : 'var(--color-border)'}`,
         backgroundColor: 'var(--color-panel)',

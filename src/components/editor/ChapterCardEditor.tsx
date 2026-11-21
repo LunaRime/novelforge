@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { CreateIcon } from '../ui/ActionIcons'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import {
@@ -364,7 +365,7 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
   }
 
   return (
-    <div className="@container h-full flex flex-col overflow-hidden">
+    <div className="@container h-full flex flex-col overflow-hidden" onKeyDown={event => handleSaveShortcut(event, handleSaveAll, dirty && !saving && !deleting)}>
       {/* 顶部工具栏 */}
       <EditorPageHeader
         className="gap-y-2.5 px-4 py-2.5"

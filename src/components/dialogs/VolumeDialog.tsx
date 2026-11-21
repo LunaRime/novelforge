@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 /**
  * VolumeDialog — 分卷新建/编辑弹框
  *
@@ -111,7 +112,7 @@ export default function VolumeDialog({ isOpen, onClose, editing, existingNumbers
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent preventOutsideClose className="max-w-[420px]">
+      <DialogContent preventOutsideClose className="max-w-[420px]" onKeyDown={event => handleSaveShortcut(event, handleSave, !saving)}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <BookMarked size={16} className="text-[var(--color-accent)]" />

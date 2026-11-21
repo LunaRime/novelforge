@@ -10,6 +10,7 @@ import { EditorSelection, EditorState, Transaction } from '@codemirror/state'
 import { openSearchPanel, closeSearchPanel, search, searchKeymap } from '@codemirror/search'
 import { history, historyKeymap, undo, redo } from '@codemirror/commands'
 import { Sparkles, Bold, Underline, Undo2, Redo2, Share2 } from 'lucide-react'
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { t as tStatic } from '../../shared/locale'
@@ -1170,13 +1171,7 @@ export default function CodeMirrorEditor({
           }
         }
       }}
-      onKeyDown={(e) => {
-        // 捕获保存快捷键
-        if (matchesBinding(e.nativeEvent, shortcutBinding('save', shortcutBindings))) {
-          e.preventDefault()
-          onSave?.(lastEmittedContentRef.current)
-        }
-      }}
+      onKeyDown={onSave ? event => handleSaveShortcut(event, () => onSave(lastEmittedContentRef.current), editable) : undefined}
       onClick={(e) => {
         // L1 inline（Task 4）：仅 CM 正文点击驱动 pending 段点击 → 打开/切换接受浮层
         // （浮条/浮层/气泡按钮的点击不落在 .cm-content 内，不触发）

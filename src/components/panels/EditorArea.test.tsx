@@ -11,6 +11,7 @@
  * 3. 保存成功：stripStatusFrontmatter 去 status（编辑后不再 stale）→ 刷新记忆列表
  *    → 清 dirty；日志走 Save:Memory / log:write（LogsView 可观测）
  */
+import { formatBinding, shortcutBinding } from '../../stores/shortcut-store'
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createRoot, type Root } from 'react-dom/client'
 import { act } from 'react'
@@ -76,7 +77,7 @@ function markDirty(content: string) {
 
 /** 点击信息栏的保存按钮（仅 dirty 时渲染） */
 function clickSave(container: HTMLElement) {
-  const btn = [...container.querySelectorAll('button')].find(b => b.title === t('tip.saveShortcut'))!
+  const btn = [...container.querySelectorAll('button')].find(b => b.title === t('tip.saveShortcut').replace('{shortcut}', formatBinding(shortcutBinding('save'))))!
   expect(btn).toBeTruthy()
   act(() => { btn.dispatchEvent(new MouseEvent('click', { bubbles: true })) })
 }

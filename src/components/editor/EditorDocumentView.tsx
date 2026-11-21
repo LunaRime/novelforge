@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { RefreshCw, Save } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -41,6 +42,7 @@ function ProseEditorWrapper({
   onSave: (text: string) => Promise<void>
 }) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const [textToolsHost, setTextToolsHost] = useState<HTMLDivElement | null>(null)
   const [wordCount, setWordCount] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -97,7 +99,8 @@ function ProseEditorWrapper({
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden"
+      onKeyDown={event => handleSaveShortcut(event, () => handleSave(currentContentRef.current), !manuscriptPath && !!tab.dirty && !saving)}>
       <div className="nf-document-toolbar" role="group" aria-label={t('panel.editor')}>
         {/* 左侧：文件名 */}
         <span className="text-xs truncate" style={{ color: 'var(--color-text-muted)' }}>
@@ -132,7 +135,7 @@ function ProseEditorWrapper({
             <Button type="button" variant="default" size="icon" className="size-8"
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
-              title={t('tip.saveShortcut')}
+              title={saveTitle}
               aria-label={t('editor.save')}
             >
               <Save size={13} strokeWidth={1.5} />
@@ -164,7 +167,7 @@ function ProseEditorWrapper({
             // 标记 tab.dirty
             useEditorStore.getState().updateTabContent(tab.id, text)
           }}
-          onSave={manuscriptPath ? undefined : handleSave}
+          onSave={manuscriptPath || saving || !tab.dirty ? undefined : handleSave}
         />
       </div>
     </div>

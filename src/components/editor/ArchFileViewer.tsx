@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { useState, useCallback, useRef, useEffect } from 'react'
 import { Save, RefreshCw, Sparkles, AlertTriangle, FileText, Eye, Pencil } from 'lucide-react'
 import { Spinner } from '../ui/Spinner'
@@ -56,6 +57,7 @@ export default function ArchFileViewer({ filePath, content: initialContent }: Pr
 
 function ArchitectureDocumentView({ filePath, content: initialContent, source, genre }: Props & { source: ArchitectureScope | null; genre: string }) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const stepKey = detectStepKey(filePath)
   const meta = useArchMeta(stepKey)
   const [application] = useState(() => createRendererArchitectureDocumentApplication(filePath, source))
@@ -247,7 +249,8 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
   }, [application, active, genre, t])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden"
+      onKeyDown={event => handleSaveShortcut(event, () => handleSave(currentContentRef.current), isDirty && !saving && !loading)}>
       {/* 工具栏（背景与编辑区一致，内嵌在内容区中而非独立标题栏） */}
       <div
         className="flex min-h-9 flex-wrap items-center justify-between gap-2 px-3 py-1 flex-shrink-0"
@@ -311,7 +314,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
               size="sm"
               onClick={() => handleSave(currentContentRef.current)}
               disabled={saving}
-              title={t('arch.save')}
+              title={saveTitle}
             >
               <Save size={12} />
               {t('action.save')}
@@ -367,7 +370,7 @@ function ArchitectureDocumentView({ filePath, content: initialContent, source, g
           content={editorContent}
           filePath={filePath}
           onChange={handleChange}
-          onSave={handleSave}
+          onSave={isDirty && !saving && !loading ? handleSave : undefined}
           onCharCountChange={setCharCount}
           hideStatusBar
           placeholder={t('arch.emptyHint')}

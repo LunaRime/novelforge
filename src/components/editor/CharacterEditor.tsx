@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { SemanticLabel } from '../ui/SemanticLabel'
 import { characterRoles, characterTier } from './character-labels'
 import { FeatureSplit } from '../ui/FeatureSplit'
@@ -48,6 +49,7 @@ import './character-workspace.css'
  */
 export default function CharacterEditor() {
   const { t, locale } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const currentProject = useProjectStore(s => s.currentProject)
   const sidebarOwnsRoster = useLayoutStore(s =>
     s.sidebarView === 'characters' && !s.focusMode && s.sidebarOpen)
@@ -283,7 +285,8 @@ export default function CharacterEditor() {
   // ===== 渲染 =====
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]">
+    <div className="h-full flex flex-col overflow-hidden bg-[var(--color-bg)]"
+      onKeyDown={event => handleSaveShortcut(event, handleSave, !!selectedCard && !saving && (viewMode === 'edit' || viewMode === 'state'))}>
       {/* ═══ 工具栏：动作只剩「保存」（主操作）+「更多」（低频操作收进去）═══
           重构前这一条 36px 里塞了 **9 个控件**（4 个视图/动作按钮 + 生成档案 + 试演 +
           2 个模板图标 + 删除 + 保存）—— 光按钮就要 ~340px，而编辑区下限只有 320px
@@ -322,7 +325,7 @@ export default function CharacterEditor() {
               style={{ width: 28, height: 28, color: dirty ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
               onClick={handleSave}
               disabled={saving}
-              title={saving ? t('status.saving') : t('tip.saveShortcut')}
+              title={saving ? t('status.saving') : saveTitle}
             >
               <Save size={13} strokeWidth={1.5} />
             </button>

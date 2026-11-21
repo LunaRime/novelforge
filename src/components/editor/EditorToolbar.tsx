@@ -1,3 +1,4 @@
+import { useSaveShortcutTitle } from '../../lib/save-shortcut'
 /**
  * EditorToolbar — 草稿编辑器顶部工具栏
  *
@@ -76,6 +77,7 @@ function EditorToolbar({
   onOpenReview,
 }: EditorToolbarProps) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const status: DraftStatus = meta?.status ?? 'draft'
 
   const statusLabel = isReadonly
@@ -112,7 +114,7 @@ function EditorToolbar({
             onOpenRevision={onOpenRevision} onOpenReview={onOpenReview} />
         )}
         {!isReadonly && isDirty && (
-          <Button type="button" variant="default" className="min-h-8" onClick={onSave} disabled={saving} title={t('tip.saveShortcut')}>
+          <Button type="button" variant="default" className="min-h-8" onClick={onSave} disabled={saving} title={saveTitle}>
             <Save size={13} aria-hidden="true" />
             {saving ? t('status.saving') : t('editor.save')}
           </Button>

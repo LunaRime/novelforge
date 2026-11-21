@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
@@ -621,7 +622,8 @@ export function FileProjectEditorDialog({ showTrigger = true }: { showTrigger?: 
                 </label>
               )}
               {active && (
-                <form className="flex flex-col gap-2" onSubmit={event => { event.preventDefault(); void save() }}>
+                <form className="flex flex-col gap-2" onKeyDown={event => handleSaveShortcut(event, () => save(), !busy && dirty && !active.readOnly)}
+                  onSubmit={event => { event.preventDefault(); void save() }}>
                   <MarkdownField startInEdit aria-label={t('project.fileEditorBody')} rows={14} value={text} readOnly={active.readOnly || (busy && !savingBody)}
                     onChange={event => {
                       if (inferenceRun.current || inferencePreview || blueprintPreview) clearInference()

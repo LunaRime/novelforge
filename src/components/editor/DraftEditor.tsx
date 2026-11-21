@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 
 import { useTranslation } from '../../hooks/useTranslation'
@@ -290,7 +291,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const handleEditorSave = useCallback((text: string) => doSave(text, { manual: true }), [doSave])
 
   return (
-    <div className="h-full flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden" onKeyDown={event => handleSaveShortcut(event, handleToolbarSave, !isReadonly && isDirty && !saving)}>
       {/* 当前稿件的写作、保存与版本操作集中在章头上方。 */}
       <EditorToolbar
         textToolsRef={setTextToolsHost}
@@ -343,7 +344,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
           hideStatusBar
           onCharCountChange={setCharCount}
           onChange={isReadonly ? undefined : handleEditorChange}
-          onSave={isReadonly ? undefined : handleEditorSave}
+          onSave={isReadonly || saving || !isDirty ? undefined : handleEditorSave}
           onSaveUnderline={status === 'finalized' && !isChapterBusy
             ? (before, after) => saveFinalizedUnderline(filePath, projectSession, before, after) : undefined}
         />

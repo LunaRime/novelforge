@@ -355,7 +355,6 @@ export const editorTexts = {
   'arch.aiRegenerate': { 'zh-CN': 'AI 重新生成', 'en-US': 'AI Regenerate', 'ru-RU': 'AI Перегенерировать' },
   'arch.unsavedChanges': { 'zh-CN': '有未保存的修改', 'en-US': 'Unsaved changes', 'ru-RU': 'Несохраненные изменения' },
   'arch.reloadFromDisk': { 'zh-CN': '从磁盘重新加载（AI 生成完成后可点击刷新）', 'en-US': 'Reload from disk (click to refresh after AI generation)', 'ru-RU': 'Перезагрузить с диска' },
-  'arch.save': { 'zh-CN': '保存（Cmd+S）', 'en-US': 'Save (Cmd+S)', 'ru-RU': 'Сохранить (Cmd+S)' },
   'arch.emptyHint': { 'zh-CN': '尚无内容。选择编辑或使用 AI 生成。', 'en-US': 'No content yet. Choose Edit or generate with AI.', 'ru-RU': 'Здесь пока пусто. Нажмите «Изменить» или сгенерируйте текст с помощью ИИ.' },
   'editor.markdownPreview': { 'zh-CN': '查看排版', 'en-US': 'Preview formatting', 'ru-RU': 'Предпросмотр оформления' },
   'arch.charExtractFailed': { 'zh-CN': '角色档案为空，可能是因为上一次生成失败或被删除。点击重新提取', 'en-US': 'Character archive is empty. Previous generation may have failed. Click to re-extract', 'ru-RU': 'Архив персонажей пуст. Возможно сбой генерации. Нажмите для повторного извлечения' },

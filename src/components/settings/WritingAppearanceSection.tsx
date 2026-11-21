@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 import { BookOpen, FolderTree, LayoutList } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
@@ -22,7 +23,7 @@ export default function WritingAppearanceSection({ appearance, dirty, onChange, 
     && appearance.listDensity === DEFAULT_WRITING_APPEARANCE.listDensity
 
   return (
-    <section className="nf-writing-settings space-y-3">
+    <section className="nf-writing-settings space-y-3" onKeyDown={event => handleSaveShortcut(event, onApply, dirty)}>
       <h3 ref={heading} tabIndex={-1} className="text-base font-semibold text-[var(--color-text)]">
         {t('settings.typography')}
       </h3>

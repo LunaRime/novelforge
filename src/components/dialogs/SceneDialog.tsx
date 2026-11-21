@@ -1,3 +1,4 @@
+import { handleSaveShortcut } from '../../lib/save-shortcut'
 /**
  * SceneDialog — 场景卡新建/编辑弹框（计划书 工作流 E）
  *
@@ -86,7 +87,7 @@ export default function SceneDialog({ isOpen, onClose, chapterNumber, editing, n
 
   return (
     <Dialog open={isOpen} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="max-w-[420px]">
+      <DialogContent className="max-w-[420px]" onKeyDown={event => handleSaveShortcut(event, handleSave, !saving)}>
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Clapperboard size={16} className="text-[var(--color-accent)]" />

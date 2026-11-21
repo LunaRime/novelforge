@@ -1,3 +1,4 @@
+import { handleSaveShortcut, useSaveShortcutTitle } from '../../lib/save-shortcut'
 import { FeatureSplit } from '../ui/FeatureSplit'
 import MenuRow from '../ui/MenuRow'
 
@@ -39,6 +40,7 @@ export default function NovelConfigEditor() {
 
 function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   const { t } = useTranslation()
+  const saveTitle = useSaveShortcutTitle()
   const [application] = useState(() => createRendererNovelConfigApplication(source))
   const mounted = useRef(true)
   const lifetime = useRef({ generation: 0 })
@@ -161,7 +163,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
   }
 
   return (
-    <div className="h-full min-h-0 flex flex-col">
+    <div className="h-full min-h-0 flex flex-col" onKeyDown={event => handleSaveShortcut(event, handleSave, !saving)}>
       <div className="w-full min-w-0 px-4 py-3">
         {/* 头部 */}
         <div className="flex flex-wrap items-center justify-between gap-2">
@@ -177,7 +179,7 @@ function NovelConfigContent({ source }: { source: NovelConfigScope }) {
             <Button variant="ai" onClick={handleAIGenerate}>
               <Sparkles size={13} /> {t('tip.aiGeneratedConfig')}
             </Button>
-            <Button variant="outline" onClick={handleSave} disabled={saving}>
+            <Button variant="outline" onClick={handleSave} disabled={saving} title={saveTitle}>
               <Save size={13} /> {saving ? t('status.saving') : t('action.save')}
             </Button>
           </div>
