@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo, type CSSProperties, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import CodeMirror, { ReactCodeMirrorRef } from '@uiw/react-codemirror'
 import { Decoration, type DecorationSet, EditorView, keymap, ViewPlugin, type ViewUpdate } from '@codemirror/view'
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown'
@@ -12,12 +13,12 @@ import { cn } from '../../lib/utils'
 import { useTranslation } from '../../hooks/useTranslation'
 import { t as tStatic } from '../../shared/locale'
 import { markdownUnderlineSpans, toggleMarkdownUnderline, UNDERLINE_CLOSE, UNDERLINE_OPEN } from '../../shared/markdown-underline'
-import { VELA } from '../../services/vela-protocol'
 import { computeTextStats } from '../../services/text-stats'
 import { buildSelectionSession } from '../../services/diff/selection-session'
 import { extractPreferencePair, recordPreference } from '../../services/preferences'
 import { useEditorStore } from '../../stores/editor-store'
 import { useProjectStore } from '../../stores/project-store'
+import { draftListScope } from '../../stores/draft-store'
 import { useEditorPrefsStore } from '../../stores/editor-prefs-store'
 import { useLayoutStore } from '../../stores/layout-store'
 import { formatBinding, matchesBinding, shortcutBinding, toCodeMirrorKey, useShortcutStore } from '../../stores/shortcut-store'
@@ -33,45 +34,12 @@ import {
   setHunkRanges,
 } from './codemirror-inline-accept'
 import { countUndecided, type SubHunk } from '../../services/diff/hunk-model'
+import ManuscriptTextTools, { useManuscriptSearchTarget } from './ManuscriptTextTools'
 import { InlineAcceptBar } from './InlineAcceptBar'
 import { InlineAcceptPopover } from './InlineAcceptPopover'
 import './inline-accept.css'
 import './novel-editor.css'
 
-function rightMouseSelection(showSelection: (view: EditorView) => void) {
-  return [
-    EditorView.mouseSelectionStyle.of((view, event) => {
-      if (event.button !== 2) return null
-      const position = view.posAtCoords({ x: event.clientX, y: event.clientY })
-      if (position === null) return null
-      let anchor = position
-      let original = view.state.selection
-      const { clientX, clientY } = event
-      const inside = !original.main.empty && anchor >= original.main.from && anchor <= original.main.to
-      if (inside) showSelection(view)
-
-      // 复用 CodeMirror 的鼠标跟踪。右键点按保留原选区，拖动才重新圈选。
-      return {
-        get(move) {
-          if (inside && Math.hypot(move.clientX - clientX, move.clientY - clientY) < 4) return original
-          const head = view.posAtCoords({ x: move.clientX, y: move.clientY }, false)
-          return EditorSelection.single(anchor, head)
-        },
-        update(update) {
-          if (!update.docChanged) return
-          anchor = update.changes.mapPos(anchor)
-          original = original.map(update.changes)
-        },
-      }
-    }),
-    EditorView.domEventHandlers({
-      contextmenu(event, view) {
-        showSelection(view)
-        return event.button === 2 || !view.state.selection.main.empty
-      },
-    }),
-  ]
-}
 
 const underlineMark = Decoration.mark({ class: 'cm-manuscript-underline' })
 
@@ -235,6 +203,7 @@ export type CodeMirrorEditorProps = {
   editable?: boolean
   onChange?: (content: string) => void
   onSave?: (content: string) => Promise<void> | void
+  textToolsHost?: HTMLElement | null
   onSaveUnderline?: (before: string, after: string) => Promise<boolean>
   onCharCountChange?: (count: number) => void
   placeholder?: string
@@ -374,6 +343,7 @@ export default function CodeMirrorEditor({
   onChange,
   onSave,
   onSaveUnderline,
+  textToolsHost,
   onCharCountChange,
   mode = 'document',
   paperHeading,
@@ -424,6 +394,24 @@ export default function CodeMirrorEditor({
   // 首帧 effect 里 editorRef.current?.view 尚不存在 → 用 onCreateEditor 锁存实例触发重渲染，
   // 使会话区间同步 effect 在 view 就绪后必然执行（含「带会话重挂载」路径，R5）
   const [cmView, setCmView] = useState<EditorView | null>(null)
+  const searchTarget = useManuscriptSearchTarget(s => s.target?.path === filePath ? s.target : null)
+  useEffect(() => {
+    if (!cmView || !searchTarget) return
+    const frame = requestAnimationFrame(() => {
+      if (useManuscriptSearchTarget.getState().target !== searchTarget) return
+      if (draftListScope(useProjectStore.getState()) !== searchTarget.scope) {
+        useManuscriptSearchTarget.setState({ target: null })
+        return
+      }
+      const text = cmView.state.doc.toString()
+      const { query, start } = searchTarget
+      const from = text.slice(start, start + query.length) === query ? start : text.indexOf(query)
+      if (from >= 0) cmView.dispatch({ selection: { anchor: from, head: from + query.length }, scrollIntoView: true })
+      useManuscriptSearchTarget.setState({ target: null })
+      cmView.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [cmView, searchTarget])
   // 事件处理器经 ref 取 view（渲染期不访问 ref；cmView state 只作 effect 触发器）
   const cmViewRef = useRef<EditorView | null>(null)
   useEffect(() => { cmViewRef.current = cmView }, [cmView])
@@ -634,13 +622,6 @@ export default function CodeMirrorEditor({
   const [selectionRange, setSelectionRange] = useState<{ from: number, to: number } | null>(null)
   const [savingUnderline, setSavingUnderline] = useState(false)
   const canUnderline = mode === 'prose' && (editable || !!onSaveUnderline)
-
-  const showSelection = useCallback((view: EditorView) => {
-    const { from, to, empty } = view.state.selection.main
-    if (empty) return
-    setSelectionRange(current => current?.from === from && current.to === to ? current : { from, to })
-    setBubbleOpen(true)
-  }, [])
 
   const handleUnderline = async () => {
     const view = editorRef.current?.view
@@ -878,7 +859,7 @@ export default function CodeMirrorEditor({
     "&.cm-focused": { outline: "none" },
     ".cm-cursor": { borderLeftColor: "var(--color-accent)", borderLeftWidth: "2px" },
     ".cm-activeLine": { backgroundColor: "transparent" },
-    ".cm-selectionBackground, .cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
+    ".cm-selectionBackground, &.cm-focused .cm-selectionBackground": { backgroundColor: "var(--color-editor-selection, var(--color-hover)) !important" },
     ".cm-line": { padding: "0", transition: "opacity 140ms ease, background-color 140ms ease" },
     ".cm-line.cm-paragraph-end": { paddingBottom: "1em" },
     ".cm-line.cm-focus-paragraph": {
@@ -952,14 +933,13 @@ export default function CodeMirrorEditor({
       // 段间距始终有；当前段高亮/压暗只属于专注模式（规范：专注模式隐藏面板 + 当前段落高亮）
       const focusParagraph = focusMode && paragraphFocus
       exts.push(paragraphVisuals(focusParagraph), underlinePreview)
-      if (canUnderline && (filePath?.startsWith(VELA.DRAFT) || filePath?.startsWith(VELA.MANUSCRIPT))) exts.push(...rightMouseSelection(showSelection))
       if (typewriter) exts.push(typewriterScroll())
       if (focusParagraph) exts.push(EditorView.editorAttributes.of({ class: 'cm-focus-writing' }))
     }
     return exts
     // t 的引用保持稳定，语言切换时仍需更新 CodeMirror 短语。
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable, canUnderline, filePath, showSelection])
+  }, [mode, paragraphFocus, typewriter, focusMode, shortcutBindings, t, locale, editable])
 
   // AI 菜单处理（流式调用，实时显示生成内容）
   const handleAIAction = async (prompt: string, _actionKey: string) => {
@@ -1187,6 +1167,7 @@ export default function CodeMirrorEditor({
           handleDocClick()
         }
       }}>
+      {textToolsHost && cmView && createPortal(<ManuscriptTextTools key={filePath} view={cmView} />, textToolsHost)}
       {mode === 'prose' && paperHeading && (
         <div className="nf-prose-heading-gutter">
           <header className="nf-prose-heading">{paperHeading}</header>
@@ -1203,7 +1184,7 @@ export default function CodeMirrorEditor({
             ref={editorRef}
             value={editorContent}
             height="100%"
-            className="h-full"
+            className="h-full allow-select"
             theme={cmTheme}
             extensions={extensions}
             readOnly={!editable}

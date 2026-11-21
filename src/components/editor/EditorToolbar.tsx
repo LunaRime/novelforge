@@ -18,6 +18,7 @@ import { VersionActions, type VersionAction } from './VersionActions'
 import './document-toolbar.css'
 
 export interface EditorToolbarProps {
+  textToolsRef?: (node: HTMLDivElement | null) => void
   /** 草稿元数据（null 时显示占位） */
   meta: (DraftMeta & { chapterTitle?: string }) | null
   /** 当前字符数 */
@@ -55,6 +56,7 @@ export interface EditorToolbarProps {
 }
 
 function EditorToolbar({
+  textToolsRef,
   meta,
   charCount,
   isDirty,
@@ -120,6 +122,7 @@ function EditorToolbar({
             <Wrench size={13} aria-hidden="true" /> {t('editor.repairBtn')}
           </Button>
         )}
+        {textToolsRef && <div ref={textToolsRef} className="shrink-0" />}
       </div>
     </div>
   )

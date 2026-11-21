@@ -41,6 +41,7 @@ function ProseEditorWrapper({
   onSave: (text: string) => Promise<void>
 }) {
   const { t } = useTranslation()
+  const [textToolsHost, setTextToolsHost] = useState<HTMLDivElement | null>(null)
   const [wordCount, setWordCount] = useState(0)
   const [saving, setSaving] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -137,6 +138,7 @@ function ProseEditorWrapper({
               <Save size={13} strokeWidth={1.5} />
             </Button>
           )}
+          {tab.type === 'chapter' && <div ref={setTextToolsHost} className="shrink-0" />}
         </div>
       </div>
 
@@ -144,6 +146,7 @@ function ProseEditorWrapper({
       <div className="flex-1 overflow-hidden">
         <CodeMirrorEditor
           key={tab.id}
+          textToolsHost={textToolsHost}
           mode="prose"
           paperHeading={tab.type === 'chapter' ? <h1>{tab.name}</h1> : undefined}
           content={tab.content ?? ''}

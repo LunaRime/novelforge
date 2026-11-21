@@ -41,6 +41,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
   const currentProject = useProjectStore(s => s.currentProject)
   const projectSession = useProjectStore(s => s.projectSession)
   const application = useMemo(() => createRendererDraftEditorApplication(currentProject, projectSession, t), [currentProject, projectSession, t])
+  const [textToolsHost, setTextToolsHost] = useState<HTMLDivElement | null>(null)
   const [meta, setMeta] = useState<(DraftMeta & { chapterTitle?: string }) | null>(null)
   const [pendingRevisions, setPendingRevisions] = useState<RevisionEntry[]>([])
   const [reviewCount, setReviewCount] = useState(0)
@@ -292,6 +293,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
     <div className="h-full flex flex-col overflow-hidden">
       {/* 当前稿件的写作、保存与版本操作集中在章头上方。 */}
       <EditorToolbar
+        textToolsRef={setTextToolsHost}
         meta={meta}
         charCount={charCount}
         isDirty={isDirty}
@@ -326,6 +328,7 @@ export default function DraftEditor({ tabId, filePath, content }: Props) {
       <div className="flex-1 overflow-hidden relative">
         <CodeMirrorEditor
           tabId={tabId}
+          textToolsHost={textToolsHost}
           mode="prose"
           paperHeading={meta && <>
             <div className="nf-prose-meta">
