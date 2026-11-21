@@ -28,8 +28,7 @@ interface CountBadgeProps {
  * 侧栏/页头的紧凑计数徽标。
  *
  * 设计意图：把「裸数字」升级成有形状、有语义色、可带进度的统计单元，
- * 同时保持 11px 字号与 32px 行高内可容纳。数字用 tabular-nums 对齐，
- * 进度条只在有 total 时出现，避免每个计数都变成重型图表。
+ * 进度型徽标将实际计数和进度轨道分开着色，局部状态不会降低分母的可读性。
  */
 export default function CountBadge({
   value,
@@ -47,34 +46,35 @@ export default function CountBadge({
     ? Math.min(100, Math.max(0, (numericValue / total) * 100))
     : 0
   const showProgress = progress && total !== undefined && total > 0 && isNumeric
+  const progressColor = tone === 'warning' ? 'var(--color-gold)' : color
 
   return (
     <span
       className={cn(
         'inline-flex flex-shrink-0 flex-col items-end gap-0.5 px-1.5 py-px text-micro font-medium leading-none tabular-nums',
-        showProgress ? 'rounded-md' : 'rounded-full',
+        showProgress ? 'min-w-11 rounded-sm border border-[var(--color-border)] px-1.5 py-[3px]' : 'rounded-full',
         className,
       )}
       style={{
-        color,
-        backgroundColor: `color-mix(in srgb, ${color} 10%, transparent)`,
+        color: showProgress ? 'var(--color-text)' : color,
+        backgroundColor: showProgress ? 'var(--color-editor-bg)' : `color-mix(in srgb, ${color} 10%, transparent)`,
       }}
       title={title}
     >
       <span className="inline-flex items-baseline gap-0.5 whitespace-nowrap">
-        <span>{value}</span>
-        {total !== undefined && <span style={{ opacity: 0.55 }}>/{total}</span>}
-        {unit && <span className="font-normal" style={{ opacity: 0.72 }}>{unit}</span>}
+        <span className={showProgress ? 'font-semibold' : undefined}>{value}</span>
+        {total !== undefined && <span className={showProgress ? 'text-[var(--color-text-secondary)]' : 'opacity-55'}>/{total}</span>}
+        {unit && <span className={showProgress ? 'font-normal text-[var(--color-text-secondary)]' : 'font-normal opacity-70'}>{unit}</span>}
       </span>
       {showProgress && (
         <span
           data-count-progress
-          className="h-[2px] w-6 overflow-hidden rounded-full"
-          style={{ backgroundColor: `color-mix(in srgb, ${color} 22%, transparent)` }}
+          aria-hidden="true"
+          className="h-[3px] w-full overflow-hidden rounded-full bg-[var(--color-border)]"
         >
           <span
             className="block h-full rounded-full"
-            style={{ width: `${pct}%`, backgroundColor: color }}
+            style={{ width: `${pct}%`, backgroundColor: progressColor }}
           />
         </span>
       )}

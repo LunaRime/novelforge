@@ -878,27 +878,15 @@
     background: var(--color-accent-hover);
   }
 
-  /* ===== AI 极光光效按钮 — 所有 AI 功能按钮统一使用（Logo 冰蓝→薰衣草紫） ===== */
-  .ai-glow {
-    position: relative;
-    background: linear-gradient(135deg, #7EC8E3, #9B8EC8);
-    color: #fff;
-    border: none;
-    transition: box-shadow var(--transition-normal),
-                transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  /* AI 操作使用主题强调色，状态变化留在按钮轮廓内。 */
+  .btn-ai {
+    background: color-mix(in srgb, var(--color-accent) 12%, var(--color-editor-bg));
+    color: var(--color-accent);
+    border: 1px solid color-mix(in srgb, var(--color-accent) 28%, transparent);
   }
 
-  /* 2026-10-14 去 AI 味：移除 ::before 的 blur(8px) 模糊光晕——
-     「渐变底 + 模糊光晕」是近黑底荧光渐变这类模板化默认的经典形态，
-     按钮的 AI 语义由渐变底承担，hover 反馈保留克制的 box-shadow 即可。 */
-
-  .ai-glow:hover {
-    box-shadow: 0 6px 24px rgba(126, 200, 227, 0.35), 0 0 32px rgba(155, 142, 200, 0.25);
-    transform: translateY(-2px);
-  }
-
-  .ai-glow:active {
-    transform: translateY(0);
+  .btn-ai:hover {
+    background: color-mix(in srgb, var(--color-accent) 19%, var(--color-editor-bg));
   }
 }
 
