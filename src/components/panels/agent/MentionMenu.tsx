@@ -3,11 +3,23 @@
  *
  * 用户输入 @ 时弹出的上下文资源选择面板。
  */
-import { useState, useEffect, useCallback, type RefObject } from 'react'
+import { useState, useEffect, useCallback, useRef, type RefObject } from 'react'
+import { BookOpen, ClipboardList, FileText, FolderTree, Library, UsersRound } from 'lucide-react'
 import { searchMentionTargets, type MentionTarget } from '../../../services/agent/intent-router'
 import { t } from '../../../shared/locale'
 import { useFloatingPosition } from '../../../hooks/useFloatingPosition'
+import { useOutsideClick } from '../../../hooks/useOutsideClick'
 import { PopoverSurface } from '../../ui/PopoverSurface'
+import './agent-popovers.css'
+
+const mentionIcons = {
+  architecture: FolderTree,
+  character: UsersRound,
+  blueprint: ClipboardList,
+  knowledge: Library,
+  chapter: BookOpen,
+  file: FileText,
+} satisfies Record<MentionTarget['type'], typeof FileText>
 
 interface Props {
   /** 搜索关键词（@ 后面的文字） */
@@ -26,6 +38,8 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
   const menuRef = useFloatingPosition<HTMLDivElement>(anchorRef, true, { placement: 'above', align: 'start' })
 
   const results = searchMentionTargets(query)
+  const selectedRow = useRef<HTMLButtonElement>(null)
+  useOutsideClick(anchorRef, onClose)
 
   const [prevQuery, setPrevQuery] = useState(query)
 
@@ -35,6 +49,7 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
   }
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.isComposing) return
     // Escape 始终拦截（关闭菜单），即使列表为空
     if (e.key === 'Escape') {
       e.preventDefault()
@@ -62,43 +77,49 @@ export default function MentionMenu({ query, onSelect, onClose, anchorRef }: Pro
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  useEffect(() => {
+    selectedRow.current?.scrollIntoView?.({ block: 'nearest' })
+  }, [selectedIndex, query])
+
   if (results.length === 0) return null
 
   return (
     <PopoverSurface
       ref={menuRef}
-      className="py-1"
+      className="nf-mention-menu p-1"
       style={{
-        width: 240,
+        width: 264,
         maxWidth: 'calc(100vw - 32px)', // 窗口窄时不让菜单顶出视口
         maxHeight: 260,
         overflowY: 'auto',
       }}
     >
-      <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
+      <div className="nf-mention-heading px-2 py-1 text-micro font-semibold text-[var(--color-text-secondary)]">
         {t('agentPanel.mentionContext')}
       </div>
-      {results.map((target, i) => (
-        <button
-          key={target.value}
-          onClick={() => onSelect(target)}
-          className="w-full flex items-center gap-2 px-3 py-1.5 text-xs text-left transition-colors"
-          style={{
-            backgroundColor: i === selectedIndex ? 'var(--color-hover)' : 'transparent',
-            color: 'var(--color-text)',
-          }}
-          onMouseEnter={() => setSelectedIndex(i)}
-        >
-          <span className="text-sm">{target.icon}</span>
-          <span className="font-medium">{target.displayName}</span>
-          {/* 文件目标：右侧小字显示相对路径（插入后为 @路径 文本） */}
-          {target.type === 'file' && (
-            <span className="ml-auto text-2xs opacity-50 truncate max-w-[90px]" style={{ color: 'var(--color-text-muted)' }}>
-              {target.value}
+      {results.map((target, i) => {
+        const Icon = mentionIcons[target.type]
+        const selected = i === selectedIndex
+        const path = target.type === 'file' && target.value !== target.displayName ? target.value : undefined
+        return (
+          <button
+            key={target.value}
+            type="button"
+            ref={selected ? selectedRow : undefined}
+            data-selected={selected || undefined}
+            onMouseDown={event => event.preventDefault()}
+            onClick={() => onSelect(target)}
+            className="nf-mention-row flex w-full cursor-pointer items-center gap-2 rounded-md px-2 py-1 text-left text-xs"
+            onMouseEnter={() => setSelectedIndex(i)}
+          >
+            <span className="nf-mention-icon"><Icon size={15} aria-hidden="true" /></span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{target.displayName}</span>
+              {path && <span className="block truncate text-micro text-[var(--color-text-muted)]" data-tooltip={path}>{path}</span>}
             </span>
-          )}
-        </button>
-      ))}
+          </button>
+        )
+      })}
     </PopoverSurface>
   )
 }

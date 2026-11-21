@@ -27,6 +27,7 @@ import { PopoverSurface } from '../../ui/PopoverSurface'
 import ThinkingLevelSlider, { ThinkingLevelIcon } from '../../ui/ThinkingLevelSlider'
 import { useAgentComposerDraft, useAgentPanelScope } from './agent-panel-session'
 import '../runtime-panels.css'
+import './agent-popovers.css'
 import {
   getAllSlashCommands,
   type SlashCommand,
@@ -146,6 +147,11 @@ function AgentComposer() {
 
   const contextRef = useRef<HTMLDivElement>(null)
   const modelThinkingRef = useRef<HTMLDivElement>(null)
+  // 用工具栏剩余宽度作为锚点。切档时按钮文字宽度变化，锚点边缘仍保持原位。
+  const modelThinkingPopover = useFloatingPosition<HTMLDivElement>(modelThinkingRef, showModelThinkingMenu, {
+    placement: 'above',
+    align: 'end',
+  })
   const filePickerRef = useRef<HTMLDivElement>(null)
   /** 输入区容器 = 三个辅助菜单（@提及 / 斜杠命令 / 文件选择）的定位锚点 */
   const inputAreaRef = useRef<HTMLDivElement>(null)
@@ -190,6 +196,7 @@ function AgentComposer() {
 
   /** 键盘事件：Enter 发送，Shift+Enter 换行 */
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.nativeEvent.isComposing) return
     // / 或 @ 菜单打开时，由菜单组件处理键盘事件
     if (showSlashMenu || showMentionMenu) {
       if (['ArrowUp', 'ArrowDown', 'Enter'].includes(e.key)) {
@@ -370,8 +377,10 @@ function AgentComposer() {
 
           {/* 模型 + 思考等级合并入口：模型按对话选择，思考等级全局共用。
               触发器 = 模型名（truncate）+ 当前档位徽章，不再用「·」拆分两段 meta。 */}
-          <div ref={modelThinkingRef} className="relative min-w-0">
+          <div ref={modelThinkingRef} className="relative min-w-0 flex-1">
             <button
+              type="button"
+              aria-expanded={showModelThinkingMenu}
               onClick={() => {
                 setShowContextMenu(false)
                 setShowFilePicker(false)
@@ -384,8 +393,7 @@ function AgentComposer() {
                 // 与旧模型触发器同一条约束：button 即使 display:flex 也是 shrink-to-fit，
                 // 固定宽度会顶出窄面板；min(...) 兜住上限，模型名再靠 truncate 收进剩余空间
                 maxWidth: 'min(220px, 100%)',
-                anchorName: '--menu-model-thinking',
-              } as React.CSSProperties}
+              }}
               onMouseEnter={e => {
                 e.currentTarget.style.backgroundColor = 'var(--color-hover)'
                 e.currentTarget.style.opacity = '1'
@@ -410,37 +418,35 @@ function AgentComposer() {
             {/* 合并弹窗：上半「本对话模型」（按会话），下半「全局思考等级」（全局共用） */}
             {showModelThinkingMenu && (
               <PopoverSurface
-                anchorName="--menu-model-thinking"
-                className="py-1"
+                ref={modelThinkingPopover}
+                className="nf-model-thinking-popover py-1"
                 style={{ width: 260, maxWidth: 'calc(100vw - 32px)' }}
               >
                 <div className="text-micro px-3 py-1" style={{ color: 'var(--color-text-muted)' }}>
                   {t('agent.modelSectionTitle')}
                 </div>
-                {chatModels.length === 0 ? (
-                  <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                    {t('agent.noModel')}
-                  </div>
-                ) : (
-                  chatModels.map(model => (
-                    <MenuItem
-                      key={model.id}
-                      label={model.name}
-                      selected={model.id === currentModelId}
-                      trailing={
-                        model.provider ? (
+                <div className="max-h-32 overflow-y-auto">
+                  {chatModels.length === 0 ? (
+                    <div className="px-3 py-2 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                      {t('agent.noModel')}
+                    </div>
+                  ) : chatModels.map(model => (
+                      <MenuItem
+                        key={model.id}
+                        label={model.name}
+                        selected={model.id === currentModelId}
+                        trailing={model.provider && (
                           <Badge variant="muted" className="px-1.5 font-normal flex-shrink-0">
                             {model.provider}
                           </Badge>
-                        ) : undefined
-                      }
-                      onClick={() => {
-                        setModelId(model.id)
-                        setShowModelThinkingMenu(false)
-                      }}
-                    />
-                  ))
-                )}
+                        )}
+                        onClick={() => {
+                          setModelId(model.id)
+                          setShowModelThinkingMenu(false)
+                        }}
+                      />
+                  ))}
+                </div>
 
                 <div style={{ borderTop: '1px solid var(--color-border)', margin: '4px 0' }} />
 

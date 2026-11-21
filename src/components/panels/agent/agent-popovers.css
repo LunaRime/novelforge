@@ -1,0 +1,21 @@
+.nf-model-thinking-popover { max-height: calc(100dvh - 16px); overflow-y: auto; }
+
+.nf-mention-heading {
+  position: sticky;
+  inset-block-start: 0;
+  background: var(--color-sidebar);
+}
+
+.nf-mention-row { min-height: 32px; color: var(--color-text); }
+.nf-mention-row:is([data-selected], :hover) { background: var(--color-active); }
+
+.nf-mention-icon {
+  display: grid;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: var(--radius-sm);
+  background: var(--color-editor-bg);
+  color: var(--color-accent);
+}

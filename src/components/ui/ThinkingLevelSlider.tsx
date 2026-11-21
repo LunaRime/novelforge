@@ -186,16 +186,16 @@ export default function ThinkingLevelSlider({
         />
       </div>
 
-      {/* 当前档位描述（固定两行高度 + 截断 → 容器高度恒定，滑块不上下跳动） */}
+      {/* 为所有语言的档位说明预留同一高度，选择时上方弹窗保持原位。 */}
       {showDescription && (
         <div
           className="mt-2 text-2xs leading-relaxed overflow-hidden"
           style={{
             color: 'var(--color-text-muted)',
-            minHeight: 31,
+            blockSize: '3lh',
             display: '-webkit-box',
             WebkitBoxOrient: 'vertical',
-            WebkitLineClamp: 2,
+            WebkitLineClamp: 3,
           }}
         >
           {t(activeSpec.descKey)}
