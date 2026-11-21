@@ -150,8 +150,8 @@ function createWindow() {
   const width = Math.min(1440, workArea.width)
   const height = Math.min(900, workArea.height)
   // 先用系统外观绘制原生底色，首屏 HTML 会按应用偏好同步覆盖层。
-  const initialColor = nativeTheme.shouldUseDarkColors ? '#08080a' : '#fffdf9'
-  const initialText = nativeTheme.shouldUseDarkColors ? '#e8e8ea' : '#2c2520'
+  const initialColor = nativeTheme.shouldUseDarkColors ? '#08080a' : '#f4f5ee'
+  const initialText = nativeTheme.shouldUseDarkColors ? '#e8e8ea' : '#252d29'
   const appWindow = new BrowserWindow({
     width,
     height,

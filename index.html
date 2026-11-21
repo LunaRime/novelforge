@@ -19,12 +19,13 @@
 
       /* 首帧早于应用样式加载，自带与启动稿纸配套的主题令牌。 */
       [data-startup] {
-        --startup-canvas: #fffdf9;
-        --startup-sheet: #f8f3eb;
-        --startup-ink: #2c2520;
-        --startup-muted: #5b5349;
-        --startup-line: #d9d2c5;
-        --startup-accent: #4d6650;
+        --startup-canvas: #f4f5ee;
+        --startup-sheet: #fffefa;
+        --startup-ink: #252d29;
+        --startup-muted: #59695f;
+        --startup-line: #d3dacd;
+        --startup-accent: #405c47;
+        --startup-fold: #d9b87c;
         --startup-error: #a33c44;
         display: grid;
         place-items: center;
@@ -52,6 +53,7 @@
         -webkit-app-region: drag;
       }
       .startup-paper {
+        position: relative;
         display: grid;
         justify-items: center;
         width: min(100%, 25rem);
@@ -62,6 +64,17 @@
         background: var(--startup-sheet);
         box-shadow: 0 5px 0 -1px var(--startup-sheet), 0 6px 0 -1px var(--startup-line);
         text-align: center;
+      }
+      .startup-paper::after {
+        content: '';
+        position: absolute;
+        inset-block-start: 0;
+        inset-inline-end: 0;
+        border: 0.75rem solid transparent;
+        border-block-start-color: var(--startup-fold);
+        border-inline-end-color: var(--startup-fold);
+        border-start-end-radius: 0.75rem;
+        pointer-events: none;
       }
       .startup-mark { display: block; inline-size: 4.5rem; block-size: 4.5rem; }
       .startup-paper h1 {
