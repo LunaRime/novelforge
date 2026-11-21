@@ -1,0 +1,16 @@
+.nf-custom-theme-settings {
+  display: grid;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-panel);
+  font-size: var(--text-xs);
+}
+.nf-custom-theme-heading, .nf-custom-theme-controls, .nf-custom-theme-color { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+.nf-custom-theme-heading > svg { color: var(--color-accent); flex: none; }
+.nf-custom-theme-heading > div { flex: 1; min-width: 8rem; }
+.nf-custom-theme-heading p, .nf-custom-theme-color code { color: var(--color-text-secondary); font-size: var(--text-micro); }
+.nf-custom-theme-color { padding: 0.25rem 0.5rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: var(--color-editor-bg); cursor: pointer; }
+.nf-custom-theme-color input { width: 1.75rem; height: 1.75rem; padding: 0.125rem; border: 0; background: transparent; cursor: pointer; }
+.nf-custom-theme-color code { display: block; }

@@ -21,7 +21,7 @@ beforeAll(() => {
 })
 
 /** 卡片顺序 = `lib/theme-meta.ts` 的 THEME_ORDER（与右侧图标栏菜单同一份；此处硬编码以钉住契约） */
-const CARD_IDS: Theme[] = ['galaxy', 'dark', 'light', 'paper']
+const CARD_IDS: Theme[] = ['galaxy', 'dark', 'light', 'paper', 'custom']
 
 const render = (): { container: HTMLElement; root: Root } => {
   const container = document.createElement('div')

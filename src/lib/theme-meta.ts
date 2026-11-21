@@ -7,7 +7,7 @@
  * ⚠️ 圆形扩散过渡**不在这里**：它在 `lib/theme-transition.ts`；
  * 名称仍取 `ui.ts` 的既有 key（`theme.starry` 等），本模块不新增文案 key。
  */
-import { Moon, ScrollText, Sparkles, Sun, type LucideIcon } from 'lucide-react'
+import { Moon, Palette, ScrollText, Sparkles, Sun, type LucideIcon } from 'lucide-react'
 import type { TextKey } from '../shared/locale'
 import type { Theme } from '../stores/theme-store'
 
@@ -17,10 +17,11 @@ export const THEME_ICONS: Record<Theme, LucideIcon> = {
   galaxy: Sparkles,
   paper: ScrollText,
   dark: Moon,
+  custom: Palette,
 }
 
 /** 展示顺序（顶栏菜单与设置卡片同序） */
-export const THEME_ORDER: Theme[] = ['galaxy', 'dark', 'light', 'paper']
+export const THEME_ORDER: Theme[] = ['galaxy', 'dark', 'light', 'paper', 'custom']
 
 /**
  * 主题显示名 —— 复用既有 key：galaxy 在用户可见文案里叫「星空」= `theme.starry`。
@@ -30,5 +31,5 @@ export function themeLabel(id: Theme, t: (key: TextKey) => string): string {
   return id === 'galaxy' ? t('theme.starry')
     : id === 'paper' ? t('theme.paper')
       : id === 'dark' ? t('theme.dark')
-        : t('theme.light')
+        : id === 'custom' ? t('theme.custom') : t('theme.light')
 }

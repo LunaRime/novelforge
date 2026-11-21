@@ -70,11 +70,21 @@
 }
 
 .nf-writing-preview-list .menu-chip {
-  min-height: 24px;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 1.875rem;
   height: auto;
-  padding-inline: 8px;
-  background: var(--color-sidebar);
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-editor-bg);
+  color: var(--color-text);
+  font-size: var(--text-xs);
+  font-weight: 550;
 }
+.nf-writing-preview-list .menu-chip > svg { color: var(--color-accent); flex: none; }
+.nf-writing-preview-list .menu-chip[data-preview-active] { background: var(--color-active); border-color: var(--color-focus-ring); }
 
 @container writing-settings (min-width: 45rem) {
   .nf-writing-settings-layout { grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); }

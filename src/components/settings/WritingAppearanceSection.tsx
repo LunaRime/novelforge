@@ -1,3 +1,4 @@
+import { BookOpen, FolderTree, LayoutList } from 'lucide-react'
 import { useRef } from 'react'
 import { useTranslation } from '../../hooks/useTranslation'
 import { DEFAULT_WRITING_APPEARANCE, type WritingAppearance } from '../../stores/editor-prefs-store'
@@ -71,11 +72,11 @@ export default function WritingAppearanceSection({ appearance, dirty, onChange, 
             fontSize: appearance.proseFontSize,
             width: `${appearance.measureWidth / 8}%`,
           }}>{t('settings.appearancePreviewText')}</p>
-          <div data-v3-density-list="" className="nf-writing-preview-list">
-            <p className="menu-chip">{t('nav.projectTree')}</p>
-            <p className="menu-chip">{t('chapter.blueprintTitle')}</p>
-            <p className="menu-chip">{t('nav.knowledgeBase')}</p>
-          </div>
+          <ul data-v3-density-list="" className="nf-writing-preview-list">
+            <li className="menu-chip" data-preview-active><FolderTree size={14} aria-hidden="true" />{t('nav.projectTree')}</li>
+            <li className="menu-chip"><LayoutList size={14} aria-hidden="true" />{t('chapter.blueprintTitle')}</li>
+            <li className="menu-chip"><BookOpen size={14} aria-hidden="true" />{t('nav.knowledgeBase')}</li>
+          </ul>
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2">

@@ -259,30 +259,30 @@
     --font-writing: 'LXGW WenKai', 'Noto Serif SC', serif;
   }
 
-  /* 🌑 星空主题 — Logo 深邃星空（直接取自 Logo 背景色 #0A1628） */
+  /* 星空主题沿用 Logo 的深蓝背景，面板与正文使用不同亮度。 */
   .galaxy {
-    /* 背景层次 — Logo 深蓝背景色为基底，逐层提亮 */
-    --color-bg: #0A1628;
-    --color-sidebar: #0E1B30;
-    --color-panel: #0E1B30;
+    /* 优先区分画布、工具区和稿纸。 */
+    --color-bg: var(--color-canvas);
+    --color-sidebar: #19283b;
+    --color-panel: #19283b;
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色（同浅色主题） */
-    --color-activity-bar: #071220;
+    --color-activity-bar: #152538;
     /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
-    --color-active: #1C3050;
+    --color-active: #273e56;
     /* 卡片浮起感：深色下投影几乎不可见，靠更黑的阴影 + `--color-border` 边框共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.45), 0 1px 2px rgba(0, 0, 0, 0.3);
     /* 编辑区专用：边框提亮一档 + 投影加重（深色下靠边框亮线界定主工作区） */
     --color-card-edge: #2A4666;
     --color-card-shadow-strong: 0 2px 10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.4);
-    /* 画布底色：比四个区域的面色都更浅一档（缝隙透光），边界靠卡片 1px 细线 */
-    --color-canvas: #14243D;
+    /* 深色缝隙拉开画布与面板的层次。 */
+    --color-canvas: #111d2b;
 
     /* 文字层次 — 冰蓝色阶梯，与Logo蓝色调和谐 */
     --color-text: #E0ECF4;
-    --color-text-secondary: #8BA4BE;
-    --color-text-muted: #6E8EAA;
+    --color-text-secondary: #adbed0;
+    --color-text-muted: #92a8bd;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
@@ -305,35 +305,35 @@
     --color-error: #fb7185;
     --color-info: #9B8EC8;
 
-    --color-tab-bg: transparent;
-    --color-tab-active: #0E1E35;
+    --color-tab-bg: var(--color-panel);
+    --color-tab-active: var(--color-editor-bg);
     --color-tab-border: transparent;
-    --color-tab-indicator: #7EC8E3;
+    --color-tab-indicator: var(--color-accent);
 
-    --color-statusbar: #071220;
-    --color-statusbar-text: #4A6580;
+    --color-statusbar: var(--color-canvas);
+    --color-statusbar-text: var(--color-text-secondary);
 
-    --color-titlebar-text: #8BA4BE;
+    --color-titlebar-text: var(--color-text);
 
-    --color-activity-icon: #4A6580;
-    --color-activity-icon-active: #E0ECF4;
-    --color-activity-indicator: #7EC8E3;
+    --color-activity-icon: var(--color-workbench-spine-text);
+    --color-activity-icon-active: var(--color-workbench-spine-text);
+    --color-activity-indicator: var(--color-workbench-fold);
 
-    --color-editor-bg: #091525;
-    --color-editor-line-highlight: rgba(126, 200, 227, 0.04);
-    --color-editor-selection: rgba(126, 200, 227, 0.30);
+    --color-editor-bg: #121f30;
+    --color-editor-line-highlight: rgba(var(--color-accent-rgb), 0.06);
+    --color-editor-selection: rgba(var(--color-accent-rgb), 0.32);
 
     --color-sash: transparent;
-    --color-sash-hover: rgba(126, 200, 227, 0.15);
+    --color-sash-hover: rgba(var(--color-accent-rgb), 0.50);
 
     /* 语义令牌 */
-    --color-focus-ring: rgba(126, 200, 227, 0.50);
+    --color-focus-ring: rgba(var(--color-accent-rgb), 0.60);
     --color-backdrop: rgba(5, 10, 20, 0.65);
     --color-tooltip-bg: #E0ECF4;
     --color-tooltip-text: #0E1B30;
     --color-skeleton: rgba(126, 200, 227, 0.06);
-    --color-badge-bg: rgba(126, 200, 227, 0.12);
-    --color-badge-text: #7EC8E3;
+    --color-badge-bg: rgba(var(--color-accent-rgb), 0.14);
+    --color-badge-text: var(--color-accent);
 
     /* 阴影 — 深蓝光晕 */
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
@@ -349,39 +349,43 @@
     --z-modal: 1000;
     --z-toast: 1100;
     --z-tooltip: 1200;
+    color-scheme: dark;
+    --color-workbench-spine: var(--color-activity-bar);
+    --color-workbench-spine-text: #e0ecf4;
+    --color-workbench-fold: #c0a170;
   }
 
   /* 📜 纸质感主题 — 写作沉浸（温暖牛皮纸色调 + Logo 紫色强调） */
   .paper {
-    --color-bg: #F5F0E8;
-    --color-sidebar: #EDE8E0;
-    --color-panel: #EDE8E0;
+    --color-bg: var(--color-canvas);
+    --color-sidebar: #ece3d5;
+    --color-panel: #ece3d5;
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
-    --color-activity-bar: #E4DDD4;
+    --color-activity-bar: #ece3d5;
     /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
-    --color-active: #DCD5CB;
+    --color-active: #e4d8c5;
     /* 卡片浮起感：米色画布上的极轻暖调投影，与 `--color-border` 边框共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(44, 37, 32, 0.08), 0 1px 2px rgba(44, 37, 32, 0.05);
     /* 编辑区专用：边框加深一档 + 投影加重 */
     --color-card-edge: #C4B9A8;
     --color-card-shadow-strong: 0 2px 10px rgba(44, 37, 32, 0.10), 0 1px 3px rgba(44, 37, 32, 0.06);
     /* 画布底色：比四个区域的面色都更浅一档（缝隙透光） */
-    --color-canvas: #FFFDF9;
+    --color-canvas: #f0e8da;
 
     --color-text: #2C2520;
-    --color-text-secondary: #6B6058;
-    --color-text-muted: #6F6157;
+    --color-text-secondary: #574a3d;
+    --color-text-muted: #645749;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
     /* 强调色 — Logo 薰衣草紫 #9B8EC8 */
-    --color-accent: #9B8EC8;
-    --color-accent-hover: #8B7EB8;
-    --color-accent-rgb: 155, 142, 200;
-    --color-primary-foreground: #20192d;
+    --color-accent: #664c74;
+    --color-accent-hover: #553e64;
+    --color-accent-rgb: 102, 76, 116;
+    --color-primary-foreground: #fffbf2;
     --color-info-rgb: 123, 146, 192;
     --color-success-rgb: 77, 158, 114;
     --color-warning-rgb: 200, 146, 58;
@@ -394,35 +398,35 @@
     --color-error: #c45b5b;
     --color-info: #7B92C0;
 
-    --color-tab-bg: transparent;
-    --color-tab-active: #FAF5ED;
+    --color-tab-bg: var(--color-panel);
+    --color-tab-active: var(--color-editor-bg);
     --color-tab-border: transparent;
-    --color-tab-indicator: #9B8EC8;
+    --color-tab-indicator: var(--color-accent);
 
-    --color-statusbar: #EDE8E0;
-    --color-statusbar-text: #61564C;
+    --color-statusbar: var(--color-canvas);
+    --color-statusbar-text: var(--color-text-secondary);
 
-    --color-titlebar-text: #4A4038;
+    --color-titlebar-text: var(--color-text);
 
-    --color-activity-icon: #61564C;
-    --color-activity-icon-active: #2C2520;
-    --color-activity-indicator: #9B8EC8;
+    --color-activity-icon: var(--color-workbench-spine-text);
+    --color-activity-icon-active: var(--color-workbench-spine-text);
+    --color-activity-indicator: var(--color-workbench-fold);
 
-    --color-editor-bg: #F8F3EB;
-    --color-editor-line-highlight: rgba(155, 142, 200, 0.04);
-    --color-editor-selection: rgba(155, 142, 200, 0.30);
+    --color-editor-bg: #fffbf2;
+    --color-editor-line-highlight: rgba(var(--color-accent-rgb), 0.06);
+    --color-editor-selection: rgba(var(--color-accent-rgb), 0.32);
 
     --color-sash: transparent;
-    --color-sash-hover: rgba(155, 142, 200, 0.12);
+    --color-sash-hover: rgba(var(--color-accent-rgb), 0.50);
 
     /* 语义令牌 */
-    --color-focus-ring: rgba(155, 142, 200, 0.45);
+    --color-focus-ring: rgba(var(--color-accent-rgb), 0.60);
     --color-backdrop: rgba(44, 37, 32, 0.25);
     --color-tooltip-bg: #2C2520;
     --color-tooltip-text: #F5F0E8;
     --color-skeleton: rgba(0, 0, 0, 0.05);
-    --color-badge-bg: rgba(155, 142, 200, 0.10);
-    --color-badge-text: #9B8EC8;
+    --color-badge-bg: rgba(var(--color-accent-rgb), 0.14);
+    --color-badge-text: var(--color-accent);
 
     /* 阴影 */
     --shadow-sm: 0 1px 2px rgba(44, 37, 32, 0.06);
@@ -438,38 +442,41 @@
     --z-modal: 1000;
     --z-toast: 1100;
     --z-tooltip: 1200;
+    --color-workbench-spine: #5d5144;
+    --color-workbench-spine-text: #fff8ec;
+    --color-workbench-fold: #ad874d;
   }
 
-  /* 🌃 黑夜主题 — Linear / Cursor 口径：近黑背景 + 一档抬升面板 + 靛蓝强调 */
+  /* 深色主题采用暖墨与苔绿。 */
   .dark {
-    --color-bg: #0E0E10;
-    --color-sidebar: #141416;
-    --color-panel: #141416;
+    --color-bg: var(--color-canvas);
+    --color-sidebar: #222b24;
+    --color-panel: #222b24;
     --color-bg-elevated: var(--color-panel);
     --color-titlebar: var(--color-canvas); /* 与画布同色 */
-    --color-activity-bar: #0E0E10;
+    --color-activity-bar: #27362c;
     /* --color-hover：相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-hover: color-mix(in srgb, var(--color-text) 5%, transparent);
-    --color-active: #1D1D21;
+    --color-active: #324236;
     /* 卡片浮起感：近黑画布上的克制投影，与 `--color-border` 共同界定卡片 */
     --color-card-shadow: 0 1px 3px rgba(0, 0, 0, 0.5), 0 1px 2px rgba(0, 0, 0, 0.35);
     /* 编辑区专用：边框提亮一档 + 投影加重 */
     --color-card-edge: #2A2A2E;
     --color-card-shadow-strong: 0 2px 10px rgba(0, 0, 0, 0.6), 0 1px 3px rgba(0, 0, 0, 0.45);
     /* 画布底色：比四个区域的面色更暗一档（缝隙是「负空间」，不再像浅色主题那样发亮） */
-    --color-canvas: #08080A;
+    --color-canvas: #181e1a;
 
     --color-text: #E8E8EA;
-    --color-text-secondary: #B8B8BE;
-    --color-text-muted: #9A9AA0;
+    --color-text-secondary: #c1ccc1;
+    --color-text-muted: #a8b5a8;
 
     /* 边框 — 相对叠加派生式，与 :root 逐一同值（勿改成固定 hex，理由见 :root 注释） */
     --color-border: color-mix(in srgb, var(--color-text) 10%, transparent);
 
-    --color-accent: #7C8CFF;
-    --color-accent-hover: #94A1FF;
-    --color-accent-rgb: 124, 140, 255;
-    --color-primary-foreground: #10152c;
+    --color-accent: #b1caa4;
+    --color-accent-hover: #c4d9ba;
+    --color-accent-rgb: 177, 202, 164;
+    --color-primary-foreground: #202821;
     --color-info-rgb: 90, 200, 250;
     --color-success-rgb: 137, 209, 133;
     --color-warning-rgb: 204, 167, 0;
@@ -482,34 +489,34 @@
     --color-error: #F14C4C;
     --color-info: #5AC8FA;
 
-    --color-tab-bg: transparent;
-    --color-tab-active: #141416;
+    --color-tab-bg: var(--color-panel);
+    --color-tab-active: var(--color-editor-bg);
     --color-tab-border: transparent;
-    --color-tab-indicator: #7C8CFF;
+    --color-tab-indicator: var(--color-accent);
 
-    --color-statusbar: #0E0E10;
-    --color-statusbar-text: #9A9AA0;
+    --color-statusbar: var(--color-canvas);
+    --color-statusbar-text: var(--color-text-secondary);
 
-    --color-titlebar-text: #E8E8EA;
+    --color-titlebar-text: var(--color-text);
 
-    --color-activity-icon: #9A9AA0;
-    --color-activity-icon-active: #E8E8EA;
-    --color-activity-indicator: #7C8CFF;
+    --color-activity-icon: var(--color-workbench-spine-text);
+    --color-activity-icon-active: var(--color-workbench-spine-text);
+    --color-activity-indicator: var(--color-workbench-fold);
 
-    --color-editor-bg: #0E0E10;
-    --color-editor-line-highlight: rgba(255, 255, 255, 0.04);
-    --color-editor-selection: rgba(124, 140, 255, 0.28);
+    --color-editor-bg: #1d241f;
+    --color-editor-line-highlight: rgba(var(--color-accent-rgb), 0.06);
+    --color-editor-selection: rgba(var(--color-accent-rgb), 0.32);
 
     --color-sash: transparent;
-    --color-sash-hover: rgba(124, 140, 255, 0.5);
+    --color-sash-hover: rgba(var(--color-accent-rgb), 0.50);
 
-    --color-focus-ring: rgba(124, 140, 255, 0.45);
+    --color-focus-ring: rgba(var(--color-accent-rgb), 0.60);
     --color-backdrop: rgba(0, 0, 0, 0.4);
     --color-tooltip-bg: #141416;
     --color-tooltip-text: #E8E8EA;
     --color-skeleton: rgba(255, 255, 255, 0.05);
-    --color-badge-bg: #232327;
-    --color-badge-text: #E8E8EA;
+    --color-badge-bg: rgba(var(--color-accent-rgb), 0.14);
+    --color-badge-text: var(--color-accent);
 
     --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
     --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.5);
@@ -524,6 +531,48 @@
     --z-modal: 1000;
     --z-toast: 1100;
     --z-tooltip: 1200;
+    color-scheme: dark;
+    --color-workbench-spine: var(--color-activity-bar);
+    --color-workbench-spine-text: #edf0e7;
+    --color-workbench-fold: #b59b6c;
+  }
+
+  /* 自定义主题沿用工作区的颜色层次，具体颜色由用户选择。 */
+  .nf-custom-theme {
+    --color-bg: var(--nf-custom-canvas);
+    --color-activity-bar: var(--color-workbench-spine);
+    --color-activity-icon: var(--color-workbench-spine-text);
+    --color-activity-icon-active: var(--color-workbench-spine-text);
+    --color-activity-indicator: var(--color-workbench-fold);
+    --color-tab-bg: var(--color-panel);
+    --color-tab-active: var(--color-editor-bg);
+    --color-tab-indicator: var(--color-accent);
+    --color-statusbar: var(--color-canvas);
+    --color-statusbar-text: var(--color-text-secondary);
+    --color-titlebar-text: var(--color-text);
+    --color-editor-selection: rgba(var(--color-accent-rgb), 0.32);
+    --color-editor-line-highlight: rgba(var(--color-accent-rgb), 0.06);
+    --color-focus-ring: rgba(var(--color-accent-rgb), 0.60);
+    --color-sash-hover: rgba(var(--color-accent-rgb), 0.50);
+    --color-badge-bg: rgba(var(--color-accent-rgb), 0.14);
+    --color-badge-text: var(--color-accent);
+
+    /* 稿纸、墨色和强调色来自当前用户配色。 */
+    --color-canvas: var(--nf-custom-canvas);
+    --color-sidebar: var(--nf-custom-panel);
+    --color-panel: var(--nf-custom-panel);
+    --color-editor-bg: var(--nf-custom-paper);
+    --color-text: var(--nf-custom-ink);
+    --color-text-secondary: color-mix(in srgb, var(--nf-custom-ink) 86%, var(--nf-custom-paper));
+    --color-text-muted: color-mix(in srgb, var(--nf-custom-ink) 80%, var(--nf-custom-paper));
+    --color-accent: var(--nf-custom-accent);
+    --color-accent-rgb: var(--nf-custom-accent-rgb);
+    --color-accent-hover: color-mix(in srgb, var(--nf-custom-accent) 85%, var(--nf-custom-ink));
+    --color-primary-foreground: var(--nf-custom-primary-ink);
+    --color-active: color-mix(in srgb, var(--nf-custom-panel) 82%, var(--nf-custom-accent));
+    --color-workbench-spine: var(--nf-custom-accent);
+    --color-workbench-spine-text: var(--nf-custom-primary-ink);
+    --color-workbench-fold: var(--nf-custom-accent);
   }
 
   /* ===== 全局基础样式 ===== */

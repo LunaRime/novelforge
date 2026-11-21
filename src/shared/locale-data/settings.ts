@@ -6,6 +6,10 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const settingsTexts = {
+  'theme.custom': { 'zh-CN': "自定义", 'en-US': "Custom", 'ru-RU': "Своя тема" },
+  'theme.customHint': { 'zh-CN': "选择浅色或深色基底，再调整强调色与稿纸色。系统会微调颜色以保留文字对比度。", 'en-US': "Choose a light or dark base, then set the accent and paper colors. Colors adapt to keep text readable.", 'ru-RU': "Выберите светлую или тёмную основу и настройте цвета акцента и бумаги. Цвета адаптируются для читаемости." },
+  'theme.customAccent': { 'zh-CN': "强调色", 'en-US': "Accent color", 'ru-RU': "Цвет акцента" },
+  'theme.customPaper': { 'zh-CN': "稿纸色", 'en-US': "Paper color", 'ru-RU': "Цвет бумаги" },
   'vector.clearSelection': { 'zh-CN': '清除选择', 'en-US': 'Clear selection', 'ru-RU': 'Сбросить выбор' },
   'settings.providerOllama': { 'zh-CN': 'Ollama（本地）', 'en-US': 'Ollama (local)', 'ru-RU': 'Ollama (локально)' },
   'settings.providerBigModel': { 'zh-CN': 'BigModel（智谱）', 'en-US': 'BigModel (Zhipu)', 'ru-RU': 'BigModel (Zhipu)' },
