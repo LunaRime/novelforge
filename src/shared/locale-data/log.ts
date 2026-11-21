@@ -16,6 +16,7 @@ export const logTexts = {
   'log.sortAsc': { 'zh-CN': '时间正序（新日志在底部）', 'en-US': 'Time ascending (newest at bottom)', 'ru-RU': 'По возрастанию (новые внизу)' },
   'log.sortDesc': { 'zh-CN': '时间倒序（新日志在顶部）', 'en-US': 'Time descending (newest at top)', 'ru-RU': 'По убыванию (новые сверху)' },
   'log.filterAll': { 'zh-CN': '全部', 'en-US': 'All', 'ru-RU': 'Все' },
+  'log.filterLevel': { 'zh-CN': '筛选日志级别', 'en-US': 'Filter log level', 'ru-RU': 'Фильтр уровня журнала' },
   'log.filterInfo': { 'zh-CN': '信息', 'en-US': 'Info', 'ru-RU': 'Инфо' },
   'log.filterWarn': { 'zh-CN': '警告', 'en-US': 'Warnings', 'ru-RU': 'Предупреждения' },
   'log.filterError': { 'zh-CN': '错误', 'en-US': 'Errors', 'ru-RU': 'Ошибки' },

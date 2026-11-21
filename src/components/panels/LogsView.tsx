@@ -4,27 +4,29 @@
  * 展示工作流运行日志（内存 globalLogs，与主进程文件日志双写）。
  * 2026-08-05 升级：级别筛选 / 复制 / 日志文件查看器 / 打开日志目录。
  */
-import { useState, useRef, useEffect, memo, useMemo } from 'react'
+import { useState, useRef, useEffect, memo, useMemo, useId } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen } from 'lucide-react'
+import { Trash2, ChevronsDown, ArrowUp, ArrowDown, Copy, Check, FileText, FolderOpen, ListFilter, Info, TriangleAlert, CircleAlert } from 'lucide-react'
 import { useWorkflowStore } from '../../stores/workflow-store'
 import { Button } from '../ui/Button'
 import { EmptyState } from '../ui/EmptyState'
-import { t, type TextKey } from '../../shared/locale'
-import { SegmentedControl } from '../ui/SegmentedControl'
+import { useTranslation } from '../../hooks/useTranslation'
 import { ipc } from '../../services/ipc-client'
 import LogFileDialog from '../dialogs/LogFileDialog'
+import './log-filters.css'
 
 type LogFilter = 'all' | 'info' | 'warn' | 'error'
 
-const FILTERS: Array<{ key: LogFilter; label: TextKey }> = [
-  { key: 'all', label: 'log.filterAll' },
-  { key: 'info', label: 'log.filterInfo' },
-  { key: 'warn', label: 'log.filterWarn' },
-  { key: 'error', label: 'log.filterError' },
-]
+const FILTERS = [
+  { key: 'all', label: 'log.filterAll', icon: ListFilter },
+  { key: 'info', label: 'log.filterInfo', icon: Info },
+  { key: 'warn', label: 'log.filterWarn', icon: TriangleAlert },
+  { key: 'error', label: 'log.filterError', icon: CircleAlert },
+] as const
 
 export default memo(function LogsView() {
+  const { t } = useTranslation()
+  const filterGroup = useId()
   const globalLogs = useWorkflowStore(s => s.globalLogs)
   const clearLogs = useWorkflowStore(s => s.clearLogs)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -32,7 +34,7 @@ export default memo(function LogsView() {
   const [filter, setFilter] = useState<LogFilter>('all')
   const [fileDialogOpen, setFileDialogOpen] = useState(false)
   const [copied, setCopied] = useState(false)
-  /** 时间排序方向：true = 正序（新日志在底部，与 autoScroll 一致），false = 倒序 */
+  /** 正序时新日志在底部，倒序时新日志在顶部。 */
   const [sortAsc, setSortAsc] = useState(true)
 
   const visibleLogs = useMemo(() => {
@@ -41,6 +43,14 @@ export default memo(function LogsView() {
     // 12 小时制 locale 下 time 字符串比较也会错乱——用数字 ts 排序）
     return [...filtered].sort((a, b) => (sortAsc ? a.ts - b.ts : b.ts - a.ts))
   }, [globalLogs, filter, sortAsc])
+
+  const counts = useMemo(() => {
+    const totals = { all: globalLogs.length, info: 0, warn: 0, error: 0 }
+    for (const log of globalLogs) {
+      if (log.level === 'info' || log.level === 'warn' || log.level === 'error') totals[log.level]++
+    }
+    return totals
+  }, [globalLogs])
 
   // 日志虚拟化：上限 500 条 + 流式期间每 100ms 追加，只渲染可视区 + overscan；
   // 行高可变（长消息换行），measureElement 动态测量真实高度
@@ -53,9 +63,9 @@ export default memo(function LogsView() {
 
   useEffect(() => {
     if (autoScroll && scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+      scrollRef.current.scrollTop = sortAsc ? scrollRef.current.scrollHeight : 0
     }
-  }, [visibleLogs.length, autoScroll])
+  }, [visibleLogs, autoScroll, sortAsc])
 
   const levelColor = (level: string) => {
     switch (level) {
@@ -80,21 +90,27 @@ export default memo(function LogsView() {
 
   return (
     <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between gap-1 px-2 py-1 flex-shrink-0">
-        {/* 级别筛选 */}
-        <SegmentedControl
-          size="sm"
-          value={filter}
-          onChange={setFilter}
-          items={FILTERS.map(f => ({ value: f.key, label: t(f.label) }))}
-        />
+      <div className="nf-log-toolbar">
+        {/* 原生单选组支持 Tab 进入、方向键切换和鼠标选择。 */}
+        <fieldset className="nf-log-filters">
+          <legend className="sr-only">{t('log.filterLevel')}</legend>
+          {FILTERS.map(({ key, label, icon: Icon }) => (
+            <label className="nf-log-filter" key={key} data-level={key}>
+              <input className="sr-only" type="radio" name={filterGroup} checked={filter === key} onChange={() => setFilter(key)} />
+              <Icon size={14} aria-hidden="true" />
+              <span>{t(label)}</span>
+              <span className="nf-log-filter-count">{counts[key].toLocaleString()}</span>
+            </label>
+          ))}
+        </fieldset>
 
-        <div className="flex items-center gap-1">
+        <div className="nf-log-actions">
           <Button
             variant="ghost" size="icon"
             onClick={copyLogs}
             disabled={!visibleLogs.length}
             title={copied ? t('log.copied') : t('log.copy')}
+            aria-label={copied ? t('log.copied') : t('log.copy')}
           >
             {copied ? <Check size={13} className="text-[var(--color-accent)]" /> : <Copy size={13} />}
           </Button>
@@ -102,16 +118,18 @@ export default memo(function LogsView() {
             variant="ghost" size="icon"
             onClick={() => setFileDialogOpen(true)}
             title={t('log.viewFiles')}
+            aria-label={t('log.viewFiles')}
           >
             <FileText size={13} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={openLogDir} title={t('log.openDir')}>
+          <Button variant="ghost" size="icon" onClick={openLogDir} title={t('log.openDir')} aria-label={t('log.openDir')}>
             <FolderOpen size={13} />
           </Button>
           <Button
             variant="ghost" size="icon"
             onClick={() => setSortAsc(!sortAsc)}
             title={sortAsc ? t('log.sortAsc') : t('log.sortDesc')}
+            aria-label={sortAsc ? t('log.sortAsc') : t('log.sortDesc')}
             className={sortAsc ? 'text-[var(--color-text-muted)]' : 'text-[var(--color-accent)]'}
           >
             {sortAsc ? <ArrowDown size={13} /> : <ArrowUp size={13} />}
@@ -120,11 +138,13 @@ export default memo(function LogsView() {
             variant="ghost" size="icon"
             onClick={() => setAutoScroll(!autoScroll)}
             title={autoScroll ? t('tip.autoScrollOn') : t('tip.autoScrollOff')}
+            aria-label={autoScroll ? t('tip.autoScrollOn') : t('tip.autoScrollOff')}
+            aria-pressed={autoScroll}
             className={autoScroll ? 'text-[var(--color-accent)]' : 'text-[var(--color-text-muted)]'}
           >
             <ChevronsDown size={13} />
           </Button>
-          <Button variant="ghost" size="icon" onClick={clearLogs} title={t('tip.clearLog')}>
+          <Button variant="ghost" size="icon" onClick={clearLogs} title={t('tip.clearLog')} aria-label={t('tip.clearLog')}>
             <Trash2 size={13} />
           </Button>
         </div>
