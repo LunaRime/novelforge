@@ -1,0 +1,84 @@
+.nf-manuscript-timeline {
+  display: grid;
+  gap: 0.65rem;
+  max-width: 46rem;
+  margin-inline: auto;
+}
+
+.nf-manuscript-timeline-event {
+  position: relative;
+  display: grid;
+  grid-template-columns: 2.75rem minmax(0, 1fr);
+  gap: 0.65rem;
+}
+
+/* 章节之间的轨道延伸穿过间距，分卷标题自然切断轨道。 */
+.nf-manuscript-timeline-event:not(:last-child)::before {
+  content: '';
+  position: absolute;
+  inset-block: 1.2rem -1.8rem;
+  inset-inline-start: 1.375rem;
+  border-inline-start: 1px solid var(--color-card-edge);
+}
+
+.nf-manuscript-timeline-number {
+  position: relative;
+  align-self: start;
+  justify-self: center;
+  margin-block-start: 0.55rem;
+  display: grid;
+  place-items: center;
+  min-inline-size: 1.9rem;
+  block-size: 1.9rem;
+  padding-inline: 0.16rem;
+  border: 1px solid var(--color-card-edge);
+  border-radius: var(--radius-full);
+  font-size: var(--text-micro);
+  font-variant-numeric: tabular-nums;
+  background: var(--color-editor-bg);
+  color: var(--color-text-secondary);
+}
+
+.nf-manuscript-timeline-event[data-status='final'] .nf-manuscript-timeline-number { border-color: var(--color-success); }
+.nf-manuscript-timeline-event[data-status='draft'] .nf-manuscript-timeline-number { border-color: var(--color-warning); }
+.nf-manuscript-timeline-event[data-selected] .nf-manuscript-timeline-number {
+  background: var(--color-accent);
+  color: var(--color-primary-foreground);
+  border-color: var(--color-accent);
+}
+
+.nf-manuscript-timeline-card {
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-editor-bg);
+}
+.nf-manuscript-timeline-event[data-selected] .nf-manuscript-timeline-card { border-color: var(--color-accent); }
+
+.nf-manuscript-timeline-select {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.85rem;
+  border-radius: inherit;
+  text-align: start;
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.nf-manuscript-timeline-select:hover { background: var(--color-hover); }
+.nf-manuscript-timeline-select:focus-visible { outline: 2px solid var(--color-focus-ring); outline-offset: -2px; }
+.nf-manuscript-timeline-meta, .nf-manuscript-timeline-cast { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; }
+.nf-manuscript-timeline-detail {
+  display: grid;
+  justify-items: start;
+  gap: 0.625rem;
+  padding: 0.75rem 0.85rem 0.85rem;
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--text-xs);
+  overflow-wrap: anywhere;
+}

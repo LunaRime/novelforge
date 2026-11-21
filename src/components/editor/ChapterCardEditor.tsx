@@ -367,8 +367,8 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
     <div className="@container h-full flex flex-col overflow-hidden">
       {/* 顶部工具栏 */}
       <EditorPageHeader
-        className="h-auto min-h-10 py-1 @max-[58rem]:flex-col @max-[58rem]:items-start"
-        actionsClassName="min-w-0 max-w-full shrink flex-nowrap overflow-x-auto whitespace-nowrap px-1 py-1 @max-[58rem]:w-full [&>*]:shrink-0"
+        className="gap-y-2.5 px-4 py-2.5"
+        actionsClassName="w-full justify-between gap-x-3 gap-y-2 border-t border-[var(--color-border)] pt-2"
         icon={<BookOpen size={13} />}
         title={t('chapter.blueprintTitle')}
         meta={(
@@ -379,62 +379,65 @@ function ChapterCardContent({ source }: { source: ChapterBlueprintScope }) {
         )}
         actions={(
           <>
-          {dirty && (
-            <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
-              <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
+          <div className="flex flex-wrap items-center gap-1.5 [&_button]:h-8">
+            <BlueprintSortBar />
+            {dirty && (
+              <Button variant="outline" size="sm" onClick={handleSaveAll} disabled={saving || deleting}>
+                <Save size={12} /> {saving ? t('chapter.saving') : t('chapter.saveAll')}
+              </Button>
+            )}
+            {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
+            {nextWriteBlueprint && selected !== nextWriteBlueprint && (
+              <Button
+                variant="ai"
+                size="sm"
+                onClick={() => handleWriteChapter(nextWriteBlueprint)}
+              >
+                <PenLine size={12} />
+                {t('chapter.writeChapterN').replace('{n}', String(nextWriteChapter))}
+              </Button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-1.5 [&_button]:h-8">
+            {/* 线③ 第 5 条：蓝图校检按钮 */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={runVerify}
+              disabled={verifying || saving || deleting}
+              title={t('verify.title')}
+            >
+              <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
+              {verifying ? t('verify.verifying') : t('verify.title')}
             </Button>
-          )}
-          {/* 写作入口 — 仅下一章可写且存在对应蓝图时显示 */}
-          {nextWriteBlueprint && selected !== nextWriteBlueprint && (
+            {/* 整本流水线：应用级入口，任何模型/新会话都可继续 */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleRunBookPipeline}
+              title={t('chapter.bookPipelineTip')}
+            >
+              <ListChecks size={12} />
+              {t('chapter.bookPipeline')}
+            </Button>
+            {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
             <Button
               variant="ai"
               size="sm"
-              onClick={() => handleWriteChapter(nextWriteBlueprint)}
+              onClick={() => setShowBlueprintDialog(true)}
+              disabled={startingBlueprint}
+              title={t('chapter.aiBlueprint')}
             >
-              <PenLine size={12} />
-              {t('chapter.writeChapterN').replace('{n}', String(nextWriteChapter))}
+              <Sparkles size={12} />
+              {t('blueprint.aiGenerate')}
             </Button>
-          )}
-          {/* 排序工具栏 */}
-          <BlueprintSortBar />
-          {/* 线③ 第 5 条：蓝图校检按钮 */}
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={runVerify}
-            disabled={verifying || saving || deleting}
-            title={t('verify.title')}
-          >
-            <ScanSearch size={12} className={verifying ? 'animate-pulse' : ''} />
-            {verifying ? t('verify.verifying') : t('verify.title')}
-          </Button>
-          {/* 整本流水线：应用级入口，任何模型/新会话都可继续 */}
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleRunBookPipeline}
-            title={t('chapter.bookPipelineTip')}
-          >
-            <ListChecks size={12} />
-            {t('chapter.bookPipeline')}
-          </Button>
-          {/* AI 生成蓝图 → 弹出 DirectoryConfigDialog */}
-          <Button
-            variant="ai"
-            size="sm"
-            onClick={() => setShowBlueprintDialog(true)}
-            disabled={startingBlueprint}
-            title={t('chapter.aiBlueprint')}
-          >
-            <Sparkles size={12} />
-            {t('blueprint.aiGenerate')}
-          </Button>
-          <Button variant="ghost" size="icon" onClick={() => void loadBlueprints(true)} title={t('chapter.reload')} disabled={loading || saving || deleting}>
-            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          </Button>
-          <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
-            <CreateIcon size={14} />
-          </Button>
+            <Button variant="ghost" size="icon" onClick={() => void loadBlueprints(true)} title={t('chapter.reload')} aria-label={t('chapter.reload')} disabled={loading || saving || deleting}>
+              <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
+            </Button>
+            <Button variant="ghost" size="icon" onClick={handleAddChapter} title={t('chapter.newChapter')} aria-label={t('chapter.newChapter')} disabled={saving || deleting || loadFailed}>
+              <CreateIcon size={14} />
+            </Button>
+          </div>
           </>
         )}
       />

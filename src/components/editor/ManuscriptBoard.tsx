@@ -10,11 +10,13 @@ import { ViewTabs } from '../ui/ChoiceControls'
 import { EmptyState } from '../ui/EmptyState'
 import { Spinner } from '../ui/Spinner'
 import { Button } from '../ui/Button'
+import MarkdownContent from '../ui/MarkdownContent'
 import CountBadge from '../ui/CountBadge'
 import EditorPageHeader from '../ui/EditorPageHeader'
 import { useTranslation } from '../../hooks/useTranslation'
 import { openDraftByChapter, openBuiltinEditor } from '../panels/sidebar/SidebarShared'
 import { normalizeBlueprintRole } from '../../services/blueprint-role'
+import './manuscript-timeline.css'
 import type { TextKey } from '../../shared/locale'
 
 type BoardView = 'list' | 'card' | 'outline' | 'timeline'
@@ -174,7 +176,7 @@ export default function ManuscriptBoard() {
               </div>
 
               {view === 'timeline' ? (
-                <div className="flex gap-2 overflow-x-auto pb-2">
+                <ol className="nf-manuscript-timeline">
                   {group.chapters.map((row) => (
                     <TimelineEvent
                       key={row.blueprint.chapterNumber}
@@ -184,7 +186,7 @@ export default function ManuscriptBoard() {
                       onOpen={() => openRow(row)}
                     />
                   ))}
-                </div>
+                </ol>
               ) : view === 'card' ? (
                 <div className="grid gap-2" style={{ gridTemplateColumns: 'repeat(auto-fill,minmax(220px,1fr))' }}>
                   {group.chapters.map((row) => (
@@ -429,35 +431,27 @@ function TimelineEvent({ row, selected, onSelect, onOpen }: {
   row: ChapterRow; selected: boolean; onSelect: () => void; onOpen: () => void
 }) {
   const { t } = useTranslation()
+  const { chapterNumber, title, purpose, role, characters } = row.blueprint
   return (
-    <button
-      type="button"
-      onClick={onSelect}
-      onDoubleClick={onOpen}
-      className={`text-left rounded-md p-2.5 flex-shrink-0 transition-colors ${selected ? 'bg-[var(--color-active)]' : 'bg-[var(--color-bg)] hover:bg-[var(--color-hover)]'}`}
-      style={{
-        width: 190,
-        border: `1px solid ${selected ? 'var(--color-accent)' : 'var(--color-border)'}`,
-        color: 'var(--color-text)',
-        cursor: 'pointer',
-      }}
-    >
-      <div className="flex items-center gap-1.5">
-        <span className="text-micro tabular-nums" style={{ color: 'var(--color-text-muted)' }}>{row.blueprint.chapterNumber}</span>
-        <RoleBadge role={row.blueprint.role} />
-        <span className="flex-1" />
-        <StatusDot status={row.status} />
+    <li className="nf-manuscript-timeline-event" data-status={row.status} data-selected={selected || undefined}>
+      <span className="nf-manuscript-timeline-number" aria-hidden="true">{chapterNumber}</span>
+      <div className="nf-manuscript-timeline-card">
+        <button type="button" className="nf-manuscript-timeline-select" aria-pressed={selected}
+          onClick={onSelect} onDoubleClick={row.status !== 'empty' ? onOpen : undefined}>
+          <span className="sr-only">{t('chapter.label').replace('{n}', String(chapterNumber))}</span>
+          <strong>{title || t('chapter.unnamed')}</strong>
+          <span className="nf-manuscript-timeline-meta"><RoleBadge role={role} /><StatusDot status={row.status} /></span>
+        </button>
+        {selected && (
+          <div className="nf-manuscript-timeline-detail">
+            {purpose && <MarkdownContent content={purpose} document />}
+            {characters.length > 0 && <span className="nf-manuscript-timeline-cast"><Users size={13} aria-hidden="true" />{characters.join('、')}</span>}
+            {row.status !== 'empty' && <Button variant="outline" size="sm" onClick={onOpen}>
+              <BookOpen size={13} aria-hidden="true" />{t('board.openDraft')}
+            </Button>}
+          </div>
+        )}
       </div>
-      <div className="mt-1 text-xs font-medium truncate">{row.blueprint.title || t('chapter.unnamed')}</div>
-      {row.blueprint.characters.length > 0 && (
-        <div className="mt-1.5 flex flex-wrap gap-1">
-          {row.blueprint.characters.slice(0, 2).map((name) => (
-            <span key={name} className="rounded px-1 text-micro" style={{ backgroundColor: 'var(--color-hover)', color: 'var(--color-text-secondary)' }}>
-              {name}
-            </span>
-          ))}
-        </div>
-      )}
-    </button>
+    </li>
   )
 }

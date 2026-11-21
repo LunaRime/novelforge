@@ -29,7 +29,7 @@ export const BlueprintSortBar: React.FC = () => {
   const toggleDirection = useBlueprintSortStore((s) => s.toggleDirection)
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 text-xs">
+    <div className="flex items-center gap-1.5 text-xs">
       <SortSelect label={t('sort.chooseMethod')} value={config.key} onChange={setSortKey}
         items={SORT_OPTIONS.map(value => ({ value, label: t(SORT_KEY_LABELS[value] as TextKey) }))} />
       <Button type="button" variant="outline" size="icon" className="size-8"
