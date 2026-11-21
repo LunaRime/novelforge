@@ -24,6 +24,13 @@ test.each(['0.1.7-beta.3', '0.1.7', '0.1.7-alpha.2'])('direct builder hook enfor
   expect(config.files.includes('scripts/dev-instance.mjs')).toBe(version.includes('-alpha.'))
   expect(config.asarUnpack.includes('scripts/dev-instance.mjs')).toBe(version.includes('-alpha.'))
 })
+test.each(['0.1.7', '0.1.7-alpha.2'])('builder hook retains the normalized root allowlist for %s', async version => {
+  const config = { files: [{ filter: ['dist/**', 'dist-electron/**', '!release/**'] }], asarUnpack: [] }
+  await beforePack({ packager: { config, appInfo: { version } } })
+  const prefix = version.includes('-alpha.') ? '' : '!'
+  expect(config.files).toEqual([{ filter: ['dist/**', 'dist-electron/**', '!release/**',
+    `${prefix}scripts/dev-instance.mjs`, `${prefix}scripts/dev-instance-lib.mjs`] }])
+})
 test.each([false, true])('bundle guard checks rendered modules (console enabled=%s)', enabled => {
   const plugin = devConsoleBuildGuard(enabled)
   const hook = plugin.generateBundle as (...args: unknown[]) => void

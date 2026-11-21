@@ -36,6 +36,16 @@ fs.copyFileSync(PKG, BAK)
 try {
   run('node scripts/verify-build-contract.cjs')
   run('tsc')
+  // Electron 的多个入口共用输出目录。正式构建前清理生成物，避免旧开发模块混入安装包。
+  const realRoot = fs.realpathSync(ROOT)
+  for (const name of ['dist', 'dist-electron']) {
+    const output = path.join(realRoot, name)
+    if (!fs.existsSync(output)) continue
+    if (path.relative(realRoot, fs.realpathSync(output)) !== name) {
+      throw new Error(`Unexpected build output location: ${output}`)
+    }
+    fs.rmSync(output, { recursive: true, force: true, maxRetries: 3 })
+  }
   run('vite build')
   run('node scripts/check-public-console.mjs')
   run('electron-builder')
