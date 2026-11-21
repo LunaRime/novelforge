@@ -387,8 +387,8 @@ export default function UsageStatsView() {
               )}
             </SectionCard>
 
-            <DistributionCard title={t('usage.purposeDistribution')} icon={<Target size={15} />} rows={data.byPurpose.map(row => ({ key: row.purpose || '—', label: row.purpose || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
-            <DistributionCard title={t('usage.modelDistribution')} icon={<Cpu size={15} />} rows={data.byModel.map(row => ({ key: row.model || '—', label: row.model || '—', value: row.tokens, cost: row.cost, calls: row.calls }))} />
+            <DistributionCard title={t('usage.purposeDistribution')} icon={<Target size={15} />} rows={data.byPurpose.map(row => ({ key: row.purpose || '—', label: row.purpose || '—', value: row.tokens, cost: row.cost }))} />
+            <DistributionCard title={t('usage.modelDistribution')} icon={<Cpu size={15} />} rows={data.byModel.map(row => ({ key: row.model || '—', label: row.model || '—', value: row.tokens, cost: row.cost }))} />
           </div>
         </>
       ) : null}
@@ -407,10 +407,19 @@ function GlobalUsageView({ data, loading, error, onRetry }: {
   if (error) return <ErrorState onRetry={onRetry} />
   if (!data) return null
   if (data.projects.length === 0) return <EmptyState onRetry={onRetry} message={t('usage.globalNoProjects')} />
+  const prompt = data.projects.reduce((sum, row) => sum + row.promptTokens, 0)
+  const completion = data.projects.reduce((sum, row) => sum + row.completionTokens, 0)
+  const cached = data.total.cachedTokens
+  const segments = [
+    { label: t('usage.promptTokens'), value: Math.max(0, prompt - cached), color: DONUT_COLORS[0] },
+    { label: t('usage.cachedTokens'), value: cached, color: DONUT_COLORS[1] },
+    { label: t('usage.completionTokens'), value: completion, color: DONUT_COLORS[2] },
+  ].filter(segment => segment.value > 0)
   return (
     <div className="space-y-3">
       <div className="grid grid-cols-[repeat(auto-fit,minmax(min(100%,10rem),1fr))] gap-3">
         <StatCard icon={<Cpu size={16} />} label={t('usage.totalCalls')} value={formatNumber(data.total.calls)} />
+        <StatCard icon={<Braces size={16} />} label={t('usage.totalTokens')} value={formatCompact(prompt + completion)} sub={formatNumber(prompt + completion)} />
         <StatCard icon={<Coins size={16} />} label={t('usage.totalCost')} value={formatCost(data.total.cost)} />
         <StatCard icon={<Database size={16} />} label={t('usage.cachedTokenCount')} value={formatCompact(data.total.cachedTokens)} sub={t('usage.tokenUnit')} tone="success" />
       </div>
@@ -419,6 +428,15 @@ function GlobalUsageView({ data, loading, error, onRetry }: {
           <AlertTriangle size={12} /> {t('usage.degradedNotice')}
         </p>
       )}
+      <div className="grid gap-3 xl:grid-cols-2">
+        <DistributionCard title={t('usage.projectDistribution')} icon={<BarChart3 size={15} />}
+          rows={data.projects.filter(row => row.promptTokens + row.completionTokens > 0).map(row => ({
+            key: row.path, label: row.name || row.path, value: row.promptTokens + row.completionTokens, cost: row.cost,
+          }))} />
+        <SectionCard title={t('usage.tokenStats')} icon={<PieChart size={15} />}>
+          <DonutPanel segments={segments} centerValue={formatCompact(prompt + completion)} centerLabel={t('usage.tokenUnit')} />
+        </SectionCard>
+      </div>
       <SectionCard title={t('usage.globalProjectsTitle')} icon={<FolderOpen size={15} />}>
         <Table
           nowrapCells
@@ -525,7 +543,7 @@ function Donut({ segments, centerValue, centerLabel }: { segments: DonutSegment[
 function DistributionCard({ title, icon, rows }: {
   title: string
   icon: ReactNode
-  rows: Array<{ key: string; label: string; value: number; cost: number; calls: number }>
+  rows: Array<{ key: string; label: string; value: number; cost: number }>
 }) {
   const { t } = useTranslation()
   const sorted = [...rows].sort((a, b) => b.value - a.value).slice(0, 6)

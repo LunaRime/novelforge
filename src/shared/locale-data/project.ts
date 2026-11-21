@@ -6,6 +6,7 @@
  * 分片规则与验收见 .agents/skills/i18n-architecture/SKILL.md §4。
  */
 export const projectTexts = {
+  'usage.projectDistribution': { 'zh-CN': "项目用量对比", 'en-US': "Usage by project", 'ru-RU': "Расход по проектам" },
   'project.fileEditorAgentTitle': { 'zh-CN': '与 Agent 讨论已保存的正文', 'en-US': 'Ask Agent about the saved manuscript', 'ru-RU': 'Обсудить сохранённую рукопись с агентом' },
   'project.fileEditorAgentQuestion': { 'zh-CN': '关于正文的问题', 'en-US': 'Question about the manuscript', 'ru-RU': 'Вопрос о рукописи' },
   'project.fileEditorAgentAsk': { 'zh-CN': '提问', 'en-US': 'Ask', 'ru-RU': 'Спросить' },
