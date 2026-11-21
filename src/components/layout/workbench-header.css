@@ -8,7 +8,7 @@
 
 .nf-workbench-header-inner {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(10rem, 24rem) minmax(max-content, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(8rem, 15rem) minmax(max-content, 1fr);
   align-items: center;
   gap: 0.75rem;
   /* Windows/Linux 的可用宽度已扣除原生窗口控件，交互按钮留在该范围内。 */
@@ -47,7 +47,7 @@
 .nf-workbench-command {
   justify-content: flex-start;
   min-width: 0;
-  min-height: 2.25rem;
+  min-height: 1.875rem;
   background: var(--color-editor-bg);
   border-radius: var(--radius-lg);
   color: var(--color-text-secondary);
