@@ -48,7 +48,8 @@ try {
   }
   run('vite build')
   run('node scripts/check-public-console.mjs')
-  run('electron-builder')
+  // 构建只生成文件。发布由已验证的 GitHub Release 流程显式执行。
+  run('electron-builder --publish never')
   run('node scripts/verify-packed-app.cjs')
   run('node scripts/organize-release.cjs')
 } finally {
